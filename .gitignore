@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+
+out/
+cache/
+broadcast/
+node_modules/
+.DS_Store
+
