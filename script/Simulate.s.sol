@@ -17,10 +17,12 @@ contract Simulate is Script {
         arb.execute(
             3_533_486761808775726594,
             ArbParams({
-                borrowNumerator: 1839929197,
-                borrowDenominator: 1766743380904387863297,
+                debtAmount1: 1839929197,
+                debtAmount2: 1839929197,
                 v4TakeAmount: 3679935364,
-                v3ExactOutput: 3513427987
+                v3ExactOutput: 3513427987,
+                curveMinWstUsr: 0,
+                minProfitWstUsr: 0
             })
         );
 

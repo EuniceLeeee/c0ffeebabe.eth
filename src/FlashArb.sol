@@ -8,14 +8,17 @@ import {ISkyPSMLite, IUniswapV3Pool, ICurvePool, ICurvePoolNoReceiver, IPoolMana
 import {Constants} from "./Constants.sol";
 
 struct ArbParams {
-    uint256 borrowNumerator;   // USDC per unit collateral (numerator of borrow ratio)
-    uint256 borrowDenominator; // wstUSR per unit collateral (denominator of borrow ratio)
-    uint256 v4TakeAmount;      // USDT to take from V4 pool after DAI→USDT swap
-    uint256 v3ExactOutput;     // USDT exact output for V3 swap #2 (WETH→USDT)
+    uint256 debtAmount1;      // USDC to borrow for Fluid position 1 (computed off-chain)
+    uint256 debtAmount2;      // USDC to borrow for Fluid position 2 (computed off-chain)
+    uint256 v4TakeAmount;     // USDT to take from V4 pool after DAI→USDT swap
+    uint256 v3ExactOutput;    // USDT exact output for V3 swap #2 (WETH→USDT)
+    uint256 curveMinWstUsr;   // min wstUSR output from Curve chain (slippage guard)
+    uint256 minProfitWstUsr;  // min wstUSR profit after repay (revert if below)
 }
 
 contract FlashArb is IMorphoFlashLoanCallback {
     address public immutable owner;
+    uint256 private activeStartWstUsrBalance; // # codex修改
 
     uint160 private constant MIN_SQRT_PRICE = 4295128740;
     uint160 private constant MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341;
@@ -30,7 +33,9 @@ contract FlashArb is IMorphoFlashLoanCallback {
     }
 
     function execute(uint256 flashAmount, ArbParams calldata params) external onlyOwner {
+        activeStartWstUsrBalance = IERC20(Constants.WSTUSER).balanceOf(address(this)); // # codex修改
         IMorpho(Constants.MORPHO).flashLoan(Constants.WSTUSER, flashAmount, abi.encode(params));
+        delete activeStartWstUsrBalance; // # codex修改
     }
 
     function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
@@ -45,9 +50,9 @@ contract FlashArb is IMorphoFlashLoanCallback {
         IERC20(Constants.USDC).approve(Constants.SKY_PSM_LITE, type(uint256).max);
 
         // Fluid position #1
-        uint256 borrowed1 = _depositAndBorrow(half, params.borrowNumerator, params.borrowDenominator);
+        uint256 borrowed1 = _depositAndBorrow(half, params.debtAmount1);
         // Fluid position #2
-        uint256 borrowed2 = _depositAndBorrow(otherHalf, params.borrowNumerator, params.borrowDenominator);
+        uint256 borrowed2 = _depositAndBorrow(otherHalf, params.debtAmount2);
         uint256 totalUsdc = borrowed1 + borrowed2;
 
         // USDC → DAI via Sky PSM (1:1)
@@ -64,8 +69,13 @@ contract FlashArb is IMorphoFlashLoanCallback {
             true, // zeroForOne (WETH→USDT, WETH is token0)
             -int256(params.v3ExactOutput), // exactOutput USDT
             MIN_SQRT_PRICE,
-            abi.encode(uint8(2))
+            abi.encode(uint8(2), params.curveMinWstUsr)
         );
+
+        // Min profit check: wstUSR balance must cover flash loan repay + minimum profit
+        uint256 wstUsrBal = IERC20(Constants.WSTUSER).balanceOf(address(this));
+        uint256 requiredWstUsr = activeStartWstUsrBalance + assets + params.minProfitWstUsr; // # codex修改
+        require(wstUsrBal >= requiredWstUsr, "below min profit"); // # codex修改
 
         // Approve Morpho to pull wstUSR for repayment
         IERC20(Constants.WSTUSER).approve(Constants.MORPHO, assets);
@@ -136,7 +146,9 @@ contract FlashArb is IMorphoFlashLoanCallback {
         } else {
             // Phase 2: WETH→USDT swap
             // We already received USDT. Now route it through Curve to wstUSR, then pay WETH.
+            (, uint256 curveMinWstUsr) = abi.decode(data, (uint8, uint256));
             uint256 usdtReceived = IERC20(Constants.USDT).balanceOf(address(this));
+            uint256 wstUsrBeforeCurve = IERC20(Constants.WSTUSER).balanceOf(address(this)); // # codex修改
 
             // USDT → sUSDS (Curve: coin[1]→coin[0]), send output to DOLA/sUSDS pool
             _safeTransfer(Constants.USDT, Constants.CURVE_SUSDS_USDT, usdtReceived);
@@ -156,6 +168,12 @@ contract FlashArb is IMorphoFlashLoanCallback {
                 0, 1, dolaAmount, 0
             );
 
+            // Curve slippage guard
+            if (curveMinWstUsr > 0) {
+                uint256 wstUsrOut = IERC20(Constants.WSTUSER).balanceOf(address(this)) - wstUsrBeforeCurve; // # codex修改
+                require(wstUsrOut >= curveMinWstUsr, "curve slippage"); // # codex修改
+            }
+
             // Pay WETH owed to V3 pool
             uint256 wethOwed = uint256(amount0Delta);
             _safeTransfer(Constants.WETH, msg.sender, wethOwed);
@@ -164,17 +182,15 @@ contract FlashArb is IMorphoFlashLoanCallback {
 
     // --- Fluid vault ---
 
-    function _depositAndBorrow(uint256 colAmount, uint256 borrowNum, uint256 borrowDen) internal returns (uint256 usdcBorrowed) {
-        int256 debtAmount = int256((colAmount * borrowNum) / borrowDen);
-
+    function _depositAndBorrow(uint256 colAmount, uint256 debtAmount) internal returns (uint256 usdcBorrowed) {
         IFluidVault(Constants.FLUID_VAULT_WSTUSER_USDC).operate(
             0,
             int256(colAmount),
-            debtAmount,
+            int256(debtAmount),
             address(this)
         );
 
-        usdcBorrowed = uint256(debtAmount);
+        usdcBorrowed = debtAmount;
     }
 
     // --- Helpers ---
