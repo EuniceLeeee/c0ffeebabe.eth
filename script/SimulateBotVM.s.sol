@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Test.sol";
+import "forge-std/Script.sol";
 import {BotVM} from "../src/BotVM.sol";
-import {BotVMEncoder} from "../src/BotVMEncoder.sol";
 import {BotVMScriptBuilder, WstUsrArbParams} from "../src/BotVMScriptBuilder.sol";
 import {Constants} from "../src/Constants.sol";
 import {IERC20} from "../src/interfaces/IERC20.sol";
@@ -12,9 +11,10 @@ import {IFluidVault} from "../src/interfaces/IFluidVault.sol";
 import {ISkyPSMLite, IUniswapV3Pool, ICurvePool, ICurvePoolNoReceiver, IPoolManager, PoolKey, SwapParams} from "../src/interfaces/ISwap.sol";
 
 // ── CaptureArb ─────────────────────────────────────────────────────
-// Minimal FlashArb clone that stores intermediate values for VM script construction.
+// Minimal FlashArb clone that executes the arb and stores intermediate values.
+// Used to pre-compute values needed by the VM script builder.
 
-contract CaptureArb is IMorphoFlashLoanCallback {
+contract CaptureArbSim is IMorphoFlashLoanCallback {
     address public immutable owner;
 
     uint160 private constant MIN_SQRT_PRICE = 4295128740;
@@ -67,10 +67,8 @@ contract CaptureArb is IMorphoFlashLoanCallback {
         ISkyPSMLite(Constants.SKY_PSM_LITE).sellGem(address(this), totalUsdc);
         daiAmount = IERC20(Constants.DAI).balanceOf(address(this));
 
-        // V4 unlock → DAI→USDT + V3 swap #1 (USDT→WETH)
         IPoolManager(Constants.UNISWAP_V4_POOL_MANAGER).unlock(abi.encode(daiAmount, _v4TakeAmount));
 
-        // V3 swap #2: WETH→USDT (exactOutput)
         IUniswapV3Pool(Constants.UNISWAP_V3_USDT_WETH).swap(
             address(this), true, -int256(_v3ExactOutput), MIN_SQRT_PRICE, abi.encode(uint8(2))
         );
@@ -93,7 +91,6 @@ contract CaptureArb is IMorphoFlashLoanCallback {
         pm.swap(key, SwapParams({zeroForOne: true, amountSpecified: -int256(dai), sqrtPriceLimitX96: MIN_SQRT_PRICE}), "");
         pm.take(Constants.USDT, address(this), v4Take);
 
-        // V3 swap #1: USDT→WETH
         IUniswapV3Pool(Constants.UNISWAP_V3_USDT_WETH).swap(
             address(this), false, int256(v4Take), MAX_SQRT_PRICE, abi.encode(uint8(1))
         );
@@ -109,28 +106,22 @@ contract CaptureArb is IMorphoFlashLoanCallback {
         uint8 phase = abi.decode(data, (uint8));
 
         if (phase == 1) {
-            uint256 usdtOwed = uint256(amount1Delta);
-            _safeTransfer(Constants.USDT, msg.sender, usdtOwed);
+            _safeTransfer(Constants.USDT, msg.sender, uint256(amount1Delta));
         } else {
-            // Phase 2: capture all intermediate values
             usdtReceivedPhase2 = IERC20(Constants.USDT).balanceOf(address(this));
             wethOwed = uint256(amount0Delta);
 
-            // USDT → sUSDS
             _safeTransfer(Constants.USDT, Constants.CURVE_SUSDS_USDT, usdtReceivedPhase2);
             susdsOut = ICurvePool(Constants.CURVE_SUSDS_USDT).exchange_received(
                 1, 0, usdtReceivedPhase2, 0, Constants.CURVE_DOLA_SUSDS
             );
 
-            // sUSDS → DOLA
             ICurvePool(Constants.CURVE_DOLA_SUSDS).exchange_received(1, 0, susdsOut, 0, address(this));
             dolaAmount = IERC20(Constants.DOLA).balanceOf(address(this));
 
-            // DOLA → wstUSR
             _safeTransfer(Constants.DOLA, Constants.CURVE_DOLA_WSTUSR, dolaAmount);
             ICurvePoolNoReceiver(Constants.CURVE_DOLA_WSTUSR).exchange_received(0, 1, dolaAmount, 0);
 
-            // Pay WETH
             _safeTransfer(Constants.WETH, msg.sender, wethOwed);
         }
     }
@@ -141,112 +132,32 @@ contract CaptureArb is IMorphoFlashLoanCallback {
     }
 }
 
-// ── BotVMTest ──────────────────────────────────────────────────────
+// ── SimulateBotVM ──────────────────────────────────────────────────
+/// @notice Fork simulation script for the BotVM wstUSR arb.
+///
+/// 4-phase flow:
+///   Phase 1 — Capture: run CaptureArb to get intermediate values
+///   Phase 2 — Build:   construct VM script via BotVMScriptBuilder
+///   Phase 3 — Execute: run BotVM.execute(script) on fork
+///   Phase 4 — Report:  log profits, script size, and full calldata
+///
+/// Usage:
+///   source .env && forge script script/SimulateBotVM.s.sol:SimulateBotVM \
+///     --fork-url $MAINNET_RPC_URL -vvvv
 
-contract BotVMTest is Test {
-    using BotVMEncoder for bytes;
-
-    BotVM vm_;
-
+contract SimulateBotVM is Script {
     uint256 constant FLASH_AMOUNT = 3_533_486761808775726594;
     uint256 constant DEBT_AMOUNT_1 = 1_839_929_197;
     uint256 constant DEBT_AMOUNT_2 = 1_839_929_197;
     uint256 constant V4_TAKE_AMOUNT = 3679935364;
     uint256 constant V3_EXACT_OUTPUT = 3513427987;
-    uint256 constant ORIGINAL_TX_WSTUSR_DELTA = 273_027_995_949_757_443_717;
-    uint256 constant REPLAY_TOLERANCE = 300_000_000_000;
 
-    function setUp() public {
-        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), Constants.FORK_BLOCK);
-        vm_ = new BotVM();
-    }
-
-    // ── Basic Opcode Tests ─────────────────────────────────────────
-
-    function testSimpleCall() public view {
-        bytes memory script = BotVMEncoder.encodeCall(
-            Constants.WSTUSER,
-            abi.encodeWithSelector(IERC20.balanceOf.selector, Constants.MORPHO)
-        );
-
-        (bool ok,) = address(vm_).staticcall(abi.encodeWithSelector(BotVM.execute.selector, script));
-        assertTrue(ok, "simple call should succeed");
-    }
-
-    function testMultiCall() public {
-        bytes memory script = BotVMEncoder.encodeCall(
-            Constants.WSTUSER,
-            abi.encodeWithSelector(IERC20.approve.selector, address(0xdead), 100)
-        );
-        script = script.concat(BotVMEncoder.encodeCall(
-            Constants.USDC,
-            abi.encodeWithSelector(IERC20.approve.selector, address(0xdead), 200)
-        ));
-
-        vm_.execute(script);
-        assertEq(IERC20(Constants.WSTUSER).allowance(address(vm_), address(0xdead)), 100);
-        assertEq(IERC20(Constants.USDC).allowance(address(vm_), address(0xdead)), 200);
-    }
-
-    function testRevertOpcode() public {
-        bytes memory script = BotVMEncoder.encodeRevert(abi.encodePacked("boom"));
-
-        vm.expectRevert();
-        vm_.execute(script);
-    }
-
-    function testInvalidOpcode() public {
-        bytes memory script = abi.encodePacked(uint8(0xFF));
-
-        vm.expectRevert("invalid opcode");
-        vm_.execute(script);
-    }
-
-    function testCallFailureReverts() public {
-        bytes memory script = BotVMEncoder.encodeCall(
-            Constants.MORPHO,
-            abi.encodeWithSignature("flashLoan(address,uint256,bytes)", address(0), 0, "")
-        );
-
-        vm.expectRevert("call failed");
-        vm_.execute(script);
-    }
-
-    // ── Callback Resume Test ───────────────────────────────────────
-
-    function testCallbackResumeMorpho() public {
-        uint256 loanAmount = 1e18;
-
-        bytes memory subScript = BotVMEncoder.encodeCall(
-            Constants.WSTUSER,
-            abi.encodeWithSelector(IERC20.approve.selector, Constants.MORPHO, loanAmount)
-        );
-
-        bytes memory topScript = BotVMEncoder.encodeSetField2(100);
-        topScript = topScript.concat(BotVMEncoder.encodeCall(
-            Constants.MORPHO,
-            abi.encodeWithSelector(
-                IMorpho.flashLoan.selector,
-                Constants.WSTUSER,
-                loanAmount,
-                subScript
-            )
-        ));
-        topScript = topScript.concat(BotVMEncoder.encodeClearState());
-
-        vm_.execute(topScript);
-        assertEq(IERC20(Constants.WSTUSER).balanceOf(address(vm_)), 0);
-    }
-
-    // ── Full wstUSR Arb Replay ─────────────────────────────────────
-
-    function testReplayWstUSRArb() public {
+    function run() external {
+        // ── Phase 1: Capture intermediate values ──
         vm.rollFork(Constants.ORIGINAL_TX_HASH);
-
-        // Phase 1: Simulate with CaptureArb to get intermediate values
         uint256 snap = vm.snapshot();
 
-        CaptureArb capturer = new CaptureArb();
+        CaptureArbSim capturer = new CaptureArbSim();
         capturer.capture(FLASH_AMOUNT, DEBT_AMOUNT_1, DEBT_AMOUNT_2, V4_TAKE_AMOUNT, V3_EXACT_OUTPUT);
 
         uint256 capDaiAmount = capturer.daiAmount();
@@ -255,43 +166,54 @@ contract BotVMTest is Test {
         uint256 capSusdsOut = capturer.susdsOut();
         uint256 capDolaAmount = capturer.dolaAmount();
 
-        emit log_named_decimal_uint("Captured daiAmount", capDaiAmount, 18);
-        emit log_named_uint("Captured usdtReceived", capUsdtReceived);
-        emit log_named_uint("Captured wethOwed", capWethOwed);
-        emit log_named_uint("Captured susdsOut", capSusdsOut);
-        emit log_named_uint("Captured dolaAmount", capDolaAmount);
+        console.log("=== Phase 1: Capture ===");
+        console.log("  daiAmount:     ", capDaiAmount);
+        console.log("  usdtReceived:  ", capUsdtReceived);
+        console.log("  wethOwed:      ", capWethOwed);
+        console.log("  susdsOut:      ", capSusdsOut);
+        console.log("  dolaAmount:    ", capDolaAmount);
 
         vm.revertTo(snap);
 
-        // Phase 2: Build script using extracted BotVMScriptBuilder
-        BotVM botvm = new BotVM();
-        bytes memory script = BotVMScriptBuilder.buildWstUsrArbScript(
-            WstUsrArbParams({
-                flashAmount: FLASH_AMOUNT,
-                debtAmount1: DEBT_AMOUNT_1,
-                debtAmount2: DEBT_AMOUNT_2,
-                v4TakeAmount: V4_TAKE_AMOUNT,
-                v3ExactOutput: V3_EXACT_OUTPUT,
-                daiAmount: capDaiAmount,
-                usdtReceived: capUsdtReceived,
-                wethOwed: capWethOwed,
-                susdsOut: capSusdsOut,
-                dolaAmount: capDolaAmount
-            }),
-            address(botvm)
-        );
+        // ── Phase 2: Build script ──
+        WstUsrArbParams memory params = WstUsrArbParams({
+            flashAmount: FLASH_AMOUNT,
+            debtAmount1: DEBT_AMOUNT_1,
+            debtAmount2: DEBT_AMOUNT_2,
+            v4TakeAmount: V4_TAKE_AMOUNT,
+            v3ExactOutput: V3_EXACT_OUTPUT,
+            daiAmount: capDaiAmount,
+            usdtReceived: capUsdtReceived,
+            wethOwed: capWethOwed,
+            susdsOut: capSusdsOut,
+            dolaAmount: capDolaAmount
+        });
 
+        BotVM botvm = new BotVM(); // # codex修改
+        bytes memory script = BotVMScriptBuilder.buildWstUsrArbScript(params, address(botvm));
+
+        console.log("");
+        console.log("=== Phase 2: Build ===");
+        console.log("  BotVM address: ", address(botvm));
+        console.log("  Script length: ", script.length, "bytes");
+
+        // ── Phase 3: Execute ──
         botvm.execute(script);
 
+        // ── Phase 4: Report ──
         uint256 wstUsrProfit = IERC20(Constants.WSTUSER).balanceOf(address(botvm));
         uint256 wethProfit = IERC20(Constants.WETH).balanceOf(address(botvm));
 
-        emit log_named_decimal_uint("VM wstUSR profit", wstUsrProfit, 18);
-        emit log_named_decimal_uint("VM WETH profit", wethProfit, 18);
+        console.log("");
+        console.log("=== Phase 4: Report ===");
+        console.log("  wstUSR profit: ", wstUsrProfit);
+        console.log("  WETH profit:   ", wethProfit);
 
-        assertApproxEqAbs(
-            wstUsrProfit, ORIGINAL_TX_WSTUSR_DELTA, REPLAY_TOLERANCE,
-            "VM replay should match original tx wstUSR delta"
-        );
+        // Output the actual tx calldata
+        bytes memory txCalldata = abi.encodeWithSelector(BotVM.execute.selector, script);
+        console.log("  Calldata length:", txCalldata.length, "bytes");
+        console.log("");
+        console.log("=== Execute Calldata (hex) ===");
+        console.logBytes(txCalldata);
     }
 }
