@@ -7,6 +7,13 @@ import {IERC20} from "./interfaces/IERC20.sol";
 import {ISkyPSMLite, IUniswapV3Pool, ICurvePool, ICurvePoolNoReceiver, IPoolManager, PoolKey, SwapParams} from "./interfaces/ISwap.sol";
 import {Constants} from "./Constants.sol";
 
+struct ArbParams {
+    uint256 borrowNumerator;   // USDC per unit collateral (numerator of borrow ratio)
+    uint256 borrowDenominator; // wstUSR per unit collateral (denominator of borrow ratio)
+    uint256 v4TakeAmount;      // USDT to take from V4 pool after DAI→USDT swap
+    uint256 v3ExactOutput;     // USDT exact output for V3 swap #2 (WETH→USDT)
+}
+
 contract FlashArb is IMorphoFlashLoanCallback {
     address public immutable owner;
 
@@ -22,12 +29,13 @@ contract FlashArb is IMorphoFlashLoanCallback {
         owner = msg.sender;
     }
 
-    function execute(uint256 flashAmount) external onlyOwner {
-        IMorpho(Constants.MORPHO).flashLoan(Constants.WSTUSER, flashAmount, "");
+    function execute(uint256 flashAmount, ArbParams calldata params) external onlyOwner {
+        IMorpho(Constants.MORPHO).flashLoan(Constants.WSTUSER, flashAmount, abi.encode(params));
     }
 
-    function onMorphoFlashLoan(uint256 assets, bytes calldata) external override {
+    function onMorphoFlashLoan(uint256 assets, bytes calldata data) external override {
         require(msg.sender == Constants.MORPHO, "not morpho");
+        ArbParams memory params = abi.decode(data, (ArbParams));
 
         uint256 half = assets / 2;
         uint256 otherHalf = assets - half;
@@ -37,9 +45,9 @@ contract FlashArb is IMorphoFlashLoanCallback {
         IERC20(Constants.USDC).approve(Constants.SKY_PSM_LITE, type(uint256).max);
 
         // Fluid position #1
-        uint256 borrowed1 = _depositAndBorrow(half);
+        uint256 borrowed1 = _depositAndBorrow(half, params.borrowNumerator, params.borrowDenominator);
         // Fluid position #2
-        uint256 borrowed2 = _depositAndBorrow(otherHalf);
+        uint256 borrowed2 = _depositAndBorrow(otherHalf, params.borrowNumerator, params.borrowDenominator);
         uint256 totalUsdc = borrowed1 + borrowed2;
 
         // USDC → DAI via Sky PSM (1:1)
@@ -47,14 +55,14 @@ contract FlashArb is IMorphoFlashLoanCallback {
         uint256 daiAmount = IERC20(Constants.DAI).balanceOf(address(this));
 
         // DAI → USDT via Uniswap V4, then USDT → WETH via V3 (inside unlockCallback)
-        IPoolManager(Constants.UNISWAP_V4_POOL_MANAGER).unlock(abi.encode(daiAmount));
+        IPoolManager(Constants.UNISWAP_V4_POOL_MANAGER).unlock(abi.encode(daiAmount, params.v4TakeAmount));
 
-        // WETH → USDT via V3 swap #2 (exactOutput 3,513.43 USDT from trace)
+        // WETH → USDT via V3 swap #2
         // In v3SwapCallback phase 2: route USDT→sUSDS→DOLA→wstUSR, then pay WETH
         IUniswapV3Pool(Constants.UNISWAP_V3_USDT_WETH).swap(
             address(this),
             true, // zeroForOne (WETH→USDT, WETH is token0)
-            -int256(uint256(3513427987)), // exactOutput USDT
+            -int256(params.v3ExactOutput), // exactOutput USDT
             MIN_SQRT_PRICE,
             abi.encode(uint8(2))
         );
@@ -68,7 +76,7 @@ contract FlashArb is IMorphoFlashLoanCallback {
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         require(msg.sender == Constants.UNISWAP_V4_POOL_MANAGER, "not v4");
 
-        uint256 daiAmount = abi.decode(data, (uint256));
+        (uint256 daiAmount, uint256 v4TakeAmount) = abi.decode(data, (uint256, uint256));
         IPoolManager pm = IPoolManager(Constants.UNISWAP_V4_POOL_MANAGER);
 
         // V4 swap: DAI → USDT
@@ -90,14 +98,14 @@ contract FlashArb is IMorphoFlashLoanCallback {
             ""
         );
 
-        // Take USDT out of V4 (amount from trace)
-        pm.take(Constants.USDT, address(this), 3679935364);
+        // Take USDT out of V4
+        pm.take(Constants.USDT, address(this), v4TakeAmount);
 
         // V3 swap #1: USDT → WETH (inside V4 unlock context)
         IUniswapV3Pool(Constants.UNISWAP_V3_USDT_WETH).swap(
             address(this),
             false, // not zeroForOne (USDT→WETH, USDT is token1)
-            int256(uint256(3679935364)), // exactInput USDT
+            int256(v4TakeAmount), // exactInput USDT
             MAX_SQRT_PRICE,
             abi.encode(uint8(1)) // phase 1: pay USDT
         );
@@ -156,8 +164,8 @@ contract FlashArb is IMorphoFlashLoanCallback {
 
     // --- Fluid vault ---
 
-    function _depositAndBorrow(uint256 colAmount) internal returns (uint256 usdcBorrowed) {
-        int256 debtAmount = int256(_calcDebtForCollateral(colAmount));
+    function _depositAndBorrow(uint256 colAmount, uint256 borrowNum, uint256 borrowDen) internal returns (uint256 usdcBorrowed) {
+        int256 debtAmount = int256((colAmount * borrowNum) / borrowDen);
 
         IFluidVault(Constants.FLUID_VAULT_WSTUSER_USDC).operate(
             0,
@@ -167,11 +175,6 @@ contract FlashArb is IMorphoFlashLoanCallback {
         );
 
         usdcBorrowed = uint256(debtAmount);
-    }
-
-    function _calcDebtForCollateral(uint256 colAmount) internal pure returns (uint256) {
-        // Reference tx: 1,766,743,380,904,387,863,297 wstUSR → 1,839,929,197 USDC
-        return (colAmount * 1839929197) / 1766743380904387863297;
     }
 
     // --- Helpers ---
