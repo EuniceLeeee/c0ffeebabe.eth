@@ -276,7 +276,8 @@ contract BotVMTest is Test {
                 usdtReceived: capUsdtReceived,
                 wethOwed: capWethOwed,
                 susdsOut: capSusdsOut,
-                dolaAmount: capDolaAmount
+                dolaAmount: capDolaAmount,
+                minProfit: 100e18
             }),
             address(botvm)
         );
@@ -293,5 +294,59 @@ contract BotVMTest is Test {
             wstUsrProfit, ORIGINAL_TX_WSTUSR_DELTA, REPLAY_TOLERANCE,
             "VM replay should match original tx wstUSR delta"
         );
+    }
+
+    // ── ASSERT_BALANCE_GTE Tests ───────────────────────────────────
+
+    function testAssertBalanceGtePass() public {
+        // Morpho holds plenty of wstUSR; asserting against a tiny threshold passes.
+        bytes memory script = BotVMEncoder.encodeAssertBalanceGte(Constants.WSTUSER, 0);
+        vm_.execute(script);
+    }
+
+    function testAssertBalanceGteFail() public {
+        // VM holds zero of any token; threshold = 1 wei must revert.
+        bytes memory script = BotVMEncoder.encodeAssertBalanceGte(Constants.WSTUSER, 1);
+        vm.expectRevert("min profit");
+        vm_.execute(script);
+    }
+
+    function testReplayWstUSRArbFailsOnHighMinProfit() public {
+        vm.rollFork(Constants.ORIGINAL_TX_HASH);
+
+        // Real profit is ~273 wstUSR; demand 10_000 wstUSR to force revert.
+        uint256 snap = vm.snapshot();
+        CaptureArb capturer = new CaptureArb();
+        capturer.capture(FLASH_AMOUNT, DEBT_AMOUNT_1, DEBT_AMOUNT_2, V4_TAKE_AMOUNT, V3_EXACT_OUTPUT);
+        uint256 capDaiAmount = capturer.daiAmount();
+        uint256 capUsdtReceived = capturer.usdtReceivedPhase2();
+        uint256 capWethOwed = capturer.wethOwed();
+        uint256 capSusdsOut = capturer.susdsOut();
+        uint256 capDolaAmount = capturer.dolaAmount();
+        vm.revertTo(snap);
+
+        BotVM botvm = new BotVM();
+        bytes memory script = BotVMScriptBuilder.buildWstUsrArbScript(
+            WstUsrArbParams({
+                flashAmount: FLASH_AMOUNT,
+                debtAmount1: DEBT_AMOUNT_1,
+                debtAmount2: DEBT_AMOUNT_2,
+                v4TakeAmount: V4_TAKE_AMOUNT,
+                v3ExactOutput: V3_EXACT_OUTPUT,
+                daiAmount: capDaiAmount,
+                usdtReceived: capUsdtReceived,
+                wethOwed: capWethOwed,
+                susdsOut: capSusdsOut,
+                dolaAmount: capDolaAmount,
+                minProfit: 10_000e18
+            }),
+            address(botvm)
+        );
+
+        vm.expectRevert();
+        botvm.execute(script);
+
+        // Flash loan must have unwound — VM still holds nothing.
+        assertEq(IERC20(Constants.WSTUSER).balanceOf(address(botvm)), 0);
     }
 }

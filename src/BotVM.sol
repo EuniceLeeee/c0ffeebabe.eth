@@ -180,6 +180,18 @@ contract BotVM {
                 (,uint24 f2, uint24 f3) = _loadState();
                 _saveState(0, f2, f3);
             }
+            else if (op == 0x08) {
+                // ── ASSERT_BALANCE_GTE ──
+                // Layout: [token:20][threshold:32]
+                // Revert if balance of token held by this contract < threshold.
+                address token = _readAddress(script, ip);
+                uint256 threshold = _readUint256(script, ip + 20);
+                require(
+                    IERC20(token).balanceOf(address(this)) >= threshold,
+                    "min profit"
+                );
+                ip += 52;
+            }
             else if (op == 0x0d) {
                 // ── REVERT ──
                 // Layout: [data_len:3][data:N]
@@ -239,6 +251,13 @@ contract BotVM {
     function _readUint96(bytes memory script, uint256 offset) internal pure returns (uint96 val) {
         assembly {
             val := shr(160, mload(add(add(script, 32), offset)))
+        }
+    }
+
+    /// @dev Read 32-byte uint256 from script at offset.
+    function _readUint256(bytes memory script, uint256 offset) internal pure returns (uint256 val) {
+        assembly {
+            val := mload(add(add(script, 32), offset))
         }
     }
 

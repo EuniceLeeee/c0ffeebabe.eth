@@ -69,6 +69,28 @@ Transform tasks into verifiable goals:
 
 ## Development Workflow
 
+### Historical Replay
+
+When replaying the reference arb tx, do not assume block `24710787` or the final
+state of block `24710788` is enough. First read `docs/historical-replay.md`.
+The accurate replay target is the pre-state of tx index 8 in block `24710788`:
+
+```
+24710787 end state
+  → apply tx index 0
+  → apply tx index 1
+  → apply tx index 2
+  → apply tx index 3
+  → apply tx index 4
+  → apply tx index 5
+  → apply tx index 6
+  → apply tx index 7
+  → simulate our BotVM / FlashArb at tx index 8 pre-state
+```
+
+Use `docs/historical-replay.md` as the source of truth for the ordered tx list
+and the DOLA/wstUSR pool impact.
+
 ### Fork Testing (primary workflow)
 
 ```bash

@@ -24,6 +24,9 @@ struct WstUsrArbParams {
     uint256 wethOwed;
     uint256 susdsOut;
     uint256 dolaAmount;
+    // Min wstUSR profit required on top of flash loan principal. Script
+    // reverts before Morpho repay if held wstUSR < flashAmount + minProfit.
+    uint256 minProfit;
 }
 
 /// @title BotVMScriptBuilder — Builds packed VM scripts for the wstUSR arb route
@@ -148,7 +151,14 @@ library BotVMScriptBuilder {
         // 11. CLEAR_STATE after V3 callback
         s = s.concat(BotVMEncoder.encodeClearState());
 
-        // 12. Approve Morpho for flash loan repayment
+        // 12. ASSERT_BALANCE_GTE — guard min profit before repay.
+        //     Revert here unwinds the flash loan with no principal loss.
+        s = s.concat(BotVMEncoder.encodeAssertBalanceGte(
+            Constants.WSTUSER,
+            p.flashAmount + p.minProfit
+        ));
+
+        // 13. Approve Morpho for flash loan repayment
         s = s.concat(BotVMEncoder.encodeCall(
             Constants.WSTUSER,
             abi.encodeWithSelector(IERC20.approve.selector, Constants.MORPHO, p.flashAmount)

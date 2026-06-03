@@ -51,6 +51,12 @@ library BotVMEncoder {
         return abi.encodePacked(uint8(0x07));
     }
 
+    /// @dev Opcode 0x08: ASSERT_BALANCE_GTE
+    ///      Layout: [0x08][token:20][threshold:32]
+    function encodeAssertBalanceGte(address token, uint256 threshold) internal pure returns (bytes memory) {
+        return abi.encodePacked(uint8(0x08), token, threshold);
+    }
+
     /// @dev Opcode 0x0d: REVERT
     ///      Layout: [0x0d][data_len:3][data:N]
     function encodeRevert(bytes memory data) internal pure returns (bytes memory) {
