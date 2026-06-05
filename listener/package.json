@@ -10,7 +10,9 @@
     "equivalence": "tsx src/test-equivalence.ts",
     "replicate": "tsx src/replicate.ts",
     "replicate:batch": "tsx src/replicate-batch.ts",
-    "regression": "tsx src/test-regression.ts"
+    "regression": "tsx src/test-regression.ts",
+    "searcher:lint": "tsx src/searcher/test/boundary.ts",
+    "searcher:ac3": "tsx src/searcher/test/ac3.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
