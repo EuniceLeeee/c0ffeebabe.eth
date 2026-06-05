@@ -27,6 +27,13 @@ interface ICurvePool {
     function get_dy(int128 i, int128 j, uint256 dx) external view returns (uint256);
 }
 
+interface IChainlinkFeed {
+    function latestRoundData()
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+}
+
 interface ICurvePoolNoReceiver {
     function exchange_received(
         int128 i,

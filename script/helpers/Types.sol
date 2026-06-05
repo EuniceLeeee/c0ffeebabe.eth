@@ -9,7 +9,17 @@ enum ActionType {
 
 enum ReplayMode {
     TRIGGER,
-    EXACT
+    EXACT,
+    LIVE
+}
+
+struct ExecutionConfig {
+    address executor; // address(0) = fork-deploy mode
+    address owner; // only used when executor != address(0)
+    uint256 gasPriceWei; // # codex修改
+    uint256 builderTipWei; // # codex修改
+    uint256 minNetProfitWethWei; // # codex修改
+    uint256 wstUsrToWethPriceE18; // WETH value per 1 wstUSR, scaled 1e18. // # codex修改
 }
 
 struct ActionModule {
@@ -41,6 +51,11 @@ struct SimResult {
     bytes revertData;
     uint256 scriptLength;
     uint256 calldataLength;
+    uint256 gasUsed;
+    uint256 gasCostWei; // # codex修改
+    uint256 wstUsrProfitWethValue; // # codex修改
+    uint256 netTotalWethProfit; // # codex修改
+    bool coversNetProfit; // # codex修改
 }
 
 struct TriggerInfo {

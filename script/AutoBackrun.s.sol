@@ -3,16 +3,27 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import {Constants} from "../src/Constants.sol";
+import {ICurvePool} from "../src/interfaces/ISwap.sol";
+import {IChainlinkFeed} from "../src/interfaces/ISwap.sol";
 
 import {CompilerAdapter} from "./helpers/CompilerAdapter.sol";
 import {Detector} from "./helpers/Detector.sol";
 import {ModuleRegistry} from "./helpers/ModuleRegistry.sol";
 import {ParamSolver} from "./helpers/ParamSolver.sol";
 import {PathComposer} from "./helpers/PathComposer.sol";
+import {LocalOrderedReplayBase, OrderedReplayResult} from "./helpers/LocalOrderedReplay.sol"; // # codex修改
 import {SimulatorBase} from "./helpers/Simulator.sol";
-import {ActionModule, ActionType, CandidatePath, ReplayMode, SimResult, TriggerInfo} from "./helpers/Types.sol";
+import {
+    ActionModule,
+    ActionType,
+    CandidatePath,
+    ExecutionConfig,
+    ReplayMode,
+    SimResult,
+    TriggerInfo
+} from "./helpers/Types.sol";
 
-contract AutoBackrun is Script, SimulatorBase {
+contract AutoBackrun is Script, SimulatorBase, LocalOrderedReplayBase { // # codex修改
     uint256 private constant TARGET_BLOCK_TIMESTAMP = 1_774_155_527;
     uint256 private constant MIN_GAP_BPS = 100;
     uint256 private constant MIN_PROFIT = 50e18;
@@ -29,27 +40,40 @@ contract AutoBackrun is Script, SimulatorBase {
 
     function run() external {
         // ═══════════════════════════════════════════════════════════════
+        // Setup: read execution config from env
+        // ═══════════════════════════════════════════════════════════════
+        ExecutionConfig memory execConfig = _readExecutionConfig();
+
+        // ═══════════════════════════════════════════════════════════════
         // Phase 1: Replay
         // ═══════════════════════════════════════════════════════════════
-        vm.rollFork(Constants.FORK_BLOCK);
-        vm.roll(Constants.TARGET_BLOCK);
-        vm.warp(TARGET_BLOCK_TIMESTAMP);
-
         ReplayMode mode = _readReplayMode();
-        vm.transact(TX0);
+        bytes32[] memory replayTxs = _historicalReplayTxs(); // # codex修改
+        uint256 replayCount; // # codex修改
+        uint256 preReplaySnap; // # codex修改
 
-        if (mode == ReplayMode.EXACT) {
-            vm.transact(TX1);
-            vm.transact(TX2);
-            vm.transact(TX3);
-            vm.transact(TX4);
-            vm.transact(TX5);
-            vm.transact(TX6);
-            vm.transact(TX7);
+        if (mode == ReplayMode.LIVE) {
+            // LIVE mode: victim tx already injected externally (e.g. anvil).
+            // No vm.rollFork, no vm.transact — use current fork state as-is.
+            // Phase 7.5 ordered replay is skipped (no preReplaySnap).
+            preReplaySnap = vm.snapshotState();
+            replayCount = 0;
+            console.log("=== Phase 1: Replay (live) ===");
+            console.log("  external injection -- skip replay");
+        } else {
+            // Historical replay: roll to reference block
+            vm.rollFork(Constants.FORK_BLOCK);
+            vm.roll(Constants.TARGET_BLOCK);
+            vm.warp(TARGET_BLOCK_TIMESTAMP);
+            preReplaySnap = vm.snapshotState(); // # codex修改
+
+            replayCount = mode == ReplayMode.EXACT ? 8 : 1; // # codex修改
+            _replayHistoricalPrefix(replayTxs, replayCount); // # codex修改
+
+            string memory modeLabel = mode == ReplayMode.TRIGGER ? "trigger" : "exact";
+            console.log("=== Phase 1: Replay (%s) ===", modeLabel);
         }
-
-        console.log("=== Phase 1: Replay (%s) ===", mode == ReplayMode.TRIGGER ? "trigger" : "exact");
-        console.log("  block:", Constants.TARGET_BLOCK);
+        console.log("  block:", block.number);
 
         // ═══════════════════════════════════════════════════════════════
         // Phase 2-3: Detector
@@ -115,36 +139,87 @@ contract AutoBackrun is Script, SimulatorBase {
         console.log("=== Phase 6: Simulate ===");
 
         for (uint256 i = 0; i < supCount; i++) {
-            results[i] = _simulate(supported[i], i);
+            results[i] = _simulate(supported[i], i, execConfig);
             if (results[i].success) {
                 console.log("  sup#%d (raw#%d): SUCCESS", i, results[i].rawIndex);
                 console.log("    wstUSR:", results[i].wstUsrProfit);
                 console.log("    WETH:  ", results[i].wethProfit);
+                console.log("    gas:   ", results[i].gasUsed);
+                console.log("    wstUSR->WETH:", results[i].wstUsrProfitWethValue); // # codex修改
+                console.log("    netTotalWETH:", results[i].netTotalWethProfit); // # codex修改
+                console.log("    coversNet:", results[i].coversNetProfit); // # codex修改
             } else {
                 console.log("  sup#%d (raw#%d): REVERTED", i, results[i].rawIndex);
             }
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // Phase 7: Score — pick max profit >= minProfit
+        // Phase 7: Score — pick max profit >= minProfit (gas-aware)
         // ═══════════════════════════════════════════════════════════════
         uint256 bestIdx;
         uint256 bestProfit;
+        uint256 bestNetTotalWeth; // # codex修改
+        bool hasBest; // # codex修改
         for (uint256 i = 0; i < supCount; i++) {
-            if (results[i].success && results[i].wstUsrProfit > bestProfit) {
+            if (!results[i].success) continue; // # codex修改
+            if (!results[i].coversNetProfit) continue; // # codex修改
+            if (results[i].wstUsrProfit < MIN_PROFIT) continue; // # codex修改
+            if (
+                !hasBest
+                    || results[i].wstUsrProfit > bestProfit
+                    || (
+                        results[i].wstUsrProfit == bestProfit
+                            && results[i].netTotalWethProfit > bestNetTotalWeth
+                    )
+            ) { // # codex修改
                 bestProfit = results[i].wstUsrProfit;
+                bestNetTotalWeth = results[i].netTotalWethProfit; // # codex修改
                 bestIdx = i;
+                hasBest = true; // # codex修改
             }
         }
 
         console.log("");
         console.log("=== Phase 7: Score ===");
+        console.log("  gasPrice:  ", execConfig.gasPriceWei, "wei");
+        console.log("  builderTip:", execConfig.builderTipWei, "wei");
+        console.log("  minNetTotalWETH:", execConfig.minNetProfitWethWei, "wei"); // # codex修改
+        console.log("  wstUSRToWETH:", execConfig.wstUsrToWethPriceE18); // # codex修改
+
+        if (!hasBest) { // # codex修改
+            console.log("  SKIP: no candidate covers minProfit + total net PnL guard"); // # codex修改
+            return;
+        }
+
         console.log("  bestIdx:   ", bestIdx);
         console.log("  bestProfit:", bestProfit);
+        console.log("  bestNetTotalWETH:", bestNetTotalWeth); // # codex修改
+        console.log("  gasCost:   ", results[bestIdx].gasCostWei, "wei"); // # codex修改
 
-        if (bestProfit < MIN_PROFIT) {
-            console.log("  SKIP: profit below minimum");
-            return;
+        // ═══════════════════════════════════════════════════════════════
+        // Phase 7.5: Local ordered replay — validate historical prefix + our tx
+        // ═══════════════════════════════════════════════════════════════
+        {
+            vm.revertToState(preReplaySnap); // # codex修改
+            OrderedReplayResult memory replayResult =
+                _simulateHistoricalOrderedReplay(replayTxs, replayCount, supported[bestIdx], execConfig); // # codex修改
+
+            console.log("");
+            console.log("=== Phase 7.5: Local Ordered Replay ==="); // # codex修改
+            console.log("  replayed:", replayResult.replayedCount); // # codex修改
+            console.log("  victimOk:", replayResult.victimSuccess); // # codex修改
+            console.log("  ourOk:   ", replayResult.ourSuccess); // # codex修改
+
+            if (!replayResult.victimSuccess || !replayResult.ourSuccess || !replayResult.coversNetProfit) { // # codex修改
+                console.log("  SKIP: local ordered replay failed total net PnL check"); // # codex修改
+                return;
+            }
+
+            console.log("  wstUSR:  ", replayResult.wstUsrProfit); // # codex修改
+            console.log("  WETH:    ", replayResult.wethProfit); // # codex修改
+            console.log("  wstUSR->WETH:", replayResult.wstUsrProfitWethValue); // # codex修改
+            console.log("  gas:     ", replayResult.totalGasUsed); // # codex修改
+            console.log("  netTotalWETH:", replayResult.netTotalWethProfit); // # codex修改
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -156,10 +231,25 @@ contract AutoBackrun is Script, SimulatorBase {
         console.log("=== Phase 8: Report ===");
         console.log("  wstUSR profit:", best.wstUsrProfit);
         console.log("  WETH profit:  ", best.wethProfit);
+        console.log("  gasUsed:      ", best.gasUsed);
+        console.log("  wstUSR->WETH: ", best.wstUsrProfitWethValue); // # codex修改
+        console.log("  netTotalWETH: ", best.netTotalWethProfit); // # codex修改
         console.log("  scriptLen:    ", best.scriptLength, "bytes");
         console.log("  calldataLen:  ", best.calldataLength, "bytes");
         console.log("  rawIndex:     ", best.rawIndex);
         console.log("  supportedIdx: ", best.supportedIndex);
+
+        console.log("");
+        console.log("=== Submission Info ===");
+        if (execConfig.executor != address(0)) {
+            console.log("  to:  ", execConfig.executor);
+            console.log("  from:", execConfig.owner);
+            console.log("  mode: deployed (calldata uses real BotVM address)");
+        } else {
+            console.log("  mode: fork-deploy (calldata uses temporary address)");
+            console.log("  Set BOTVM_ADDRESS + BOTVM_OWNER env for production calldata");
+        }
+
         console.log("");
         console.log("=== Calldata (hex) ===");
         console.logBytes(best.txCalldata);
@@ -170,7 +260,59 @@ contract AutoBackrun is Script, SimulatorBase {
         if (keccak256(bytes(modeStr)) == keccak256("trigger")) {
             return ReplayMode.TRIGGER;
         }
+        if (keccak256(bytes(modeStr)) == keccak256("live")) {
+            return ReplayMode.LIVE;
+        }
         return ReplayMode.EXACT;
+    }
+
+    function _readExecutionConfig() private view returns (ExecutionConfig memory config) {
+        // If BOTVM_ADDRESS is set, use deployed mode; otherwise fork-deploy
+        string memory addr = vm.envOr("BOTVM_ADDRESS", string(""));
+        if (bytes(addr).length > 0) {
+            config.executor = vm.envAddress("BOTVM_ADDRESS");
+            config.owner = vm.envAddress("BOTVM_OWNER");
+        }
+        config.gasPriceWei = vm.envOr("GAS_PRICE_GWEI", uint256(30)) * 1e9;
+        config.builderTipWei = vm.envOr("BUILDER_TIP_WEI", uint256(0));
+        config.minNetProfitWethWei = vm.envOr("MIN_NET_PROFIT_WETH_WEI", uint256(0));
+        config.wstUsrToWethPriceE18 = _resolveWstUsrToWethPrice();
+    }
+
+    /// @dev On-chain wstUSR/WETH price: Curve spot (wstUSR→DOLA) + Chainlink ETH/USD.
+    ///      Env var WSTUSR_TO_WETH_PRICE_E18 overrides if set (for testing).
+    function _resolveWstUsrToWethPrice() private view returns (uint256 priceE18) {
+        priceE18 = vm.envOr("WSTUSR_TO_WETH_PRICE_E18", uint256(0));
+        if (priceE18 > 0) return priceE18;
+
+        // wstUSR → DOLA spot rate from Curve (18 decimals)
+        uint256 dolaPerWstUsr = ICurvePool(Constants.CURVE_DOLA_WSTUSR).get_dy(1, 0, 1e18);
+
+        // ETH/USD from Chainlink (8 decimals)
+        (, int256 ethUsdRaw,,,) = IChainlinkFeed(Constants.CHAINLINK_ETH_USD).latestRoundData();
+        require(ethUsdRaw > 0, "bad ETH/USD price");
+
+        // priceE18 = dolaPerWstUsr (18 dec) * 1e8 / ethUsdPrice (8 dec)
+        // Result: WETH per wstUSR, 18 decimals
+        priceE18 = dolaPerWstUsr * 1e8 / uint256(ethUsdRaw);
+    }
+
+    function _historicalReplayTxs() private pure returns (bytes32[] memory txs) { // # codex修改
+        txs = new bytes32[](8);
+        txs[0] = TX0;
+        txs[1] = TX1;
+        txs[2] = TX2;
+        txs[3] = TX3;
+        txs[4] = TX4;
+        txs[5] = TX5;
+        txs[6] = TX6;
+        txs[7] = TX7;
+    }
+
+    function _replayHistoricalPrefix(bytes32[] memory txs, uint256 count) private { // # codex修改
+        for (uint256 i = 0; i < count; i++) {
+            vm.transact(txs[i]);
+        }
     }
 
     function _logStep(uint256 idx, ActionModule memory step) private pure {

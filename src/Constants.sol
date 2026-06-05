@@ -26,6 +26,9 @@ library Constants {
     address constant CURVE_DOLA_SUSDS = 0x8b83c4aA949254895507D09365229BC3a8c7f710;
     address constant CURVE_DOLA_WSTUSR = 0x64273624eb57c5cA961d366CBF3968e760Bf0452;
 
+    // Oracles
+    address constant CHAINLINK_ETH_USD = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+
     // Reference
     address constant ORIGINAL_MEV_BOT = 0xE08D97e151473A848C3d9CA3f323Cb720472D015;
     bytes32 constant ORIGINAL_TX_HASH = 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970; // # codex修改

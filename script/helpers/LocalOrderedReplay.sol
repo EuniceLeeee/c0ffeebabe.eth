@@ -4,26 +4,52 @@ pragma solidity ^0.8.24;
 import {BotVM} from "../../src/BotVM.sol";
 import {Constants} from "../../src/Constants.sol";
 import {IERC20} from "../../src/interfaces/IERC20.sol";
-import {WstUsrArbParams} from "../../src/BotVMScriptBuilder.sol";
 
 import {CaptureArbSim} from "./CaptureArbSim.sol";
 import {CompilerAdapter} from "./CompilerAdapter.sol";
-import {CandidatePath, ExecutionConfig, SimResult} from "./Types.sol";
+import {WstUsrArbParams} from "../../src/BotVMScriptBuilder.sol";
+import {CandidatePath, ExecutionConfig} from "./Types.sol";
 
 import "forge-std/Vm.sol";
 
-abstract contract SimulatorBase {
-    Vm private constant _svm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+struct OrderedReplayResult {
+    bool victimSuccess;
+    bool ourSuccess;
+    uint256 replayedCount;
+    uint256 wstUsrProfit;
+    uint256 wethProfit;
+    uint256 totalGasUsed;
+    uint256 gasCostWei;
+    uint256 wstUsrProfitWethValue; // # codex修改
+    uint256 netTotalWethProfit; // # codex修改
+    bool coversNetProfit; // # codex修改
+}
 
-    function _simulate(CandidatePath memory path, uint256 supportedIndex, ExecutionConfig memory config)
-        internal
-        returns (SimResult memory result)
-    {
-        result.supportedIndex = supportedIndex;
-        result.rawIndex = path.rawIndex;
-        uint256 outerSnap = _svm.snapshotState();
+/// @notice Local historical ordered replay only. This is not a real relay/builder
+///         bundle simulation because it does not include signed tx validity,
+///         nonce, relay acceptance, or coinbase payment rules. // # codex修改
+abstract contract LocalOrderedReplayBase {
+    Vm private constant _lvm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-        // Phase A: capture intermediate values (modifies state)
+    function _simulateHistoricalOrderedReplay(
+        bytes32[] memory replayTxHashes,
+        uint256 replayCount,
+        CandidatePath memory path,
+        ExecutionConfig memory config
+    ) internal returns (OrderedReplayResult memory result) {
+        uint256 snap = _lvm.snapshotState();
+
+        for (uint256 i = 0; i < replayCount; i++) {
+            try _lvm.transact(replayTxHashes[i]) {
+                result.replayedCount++;
+            } catch {
+                result.victimSuccess = false;
+                _lvm.revertToState(snap);
+                return result;
+            }
+        }
+        result.victimSuccess = true;
+
         uint256 capDai;
         uint256 capUsdt;
         uint256 capWeth;
@@ -32,7 +58,7 @@ abstract contract SimulatorBase {
         bool captureOk;
 
         {
-            uint256 capSnap = _svm.snapshotState();
+            uint256 capSnap = _lvm.snapshotState();
             CaptureArbSim capturer = new CaptureArbSim();
             try capturer.capture(
                 path.flashAmount, path.debtAmount1, path.debtAmount2, path.v4TakeAmount, path.v3ExactOutput
@@ -43,19 +69,18 @@ abstract contract SimulatorBase {
                 capSusds = capturer.susdsOut();
                 capDola = capturer.dolaAmount();
                 captureOk = true;
-            } catch (bytes memory reason) {
-                result.success = false;
-                result.revertData = reason;
+            } catch {
+                captureOk = false;
             }
-            _svm.revertToState(capSnap);
+            _lvm.revertToState(capSnap);
         }
 
         if (!captureOk) {
-            _svm.revertToState(outerSnap);
+            result.ourSuccess = false;
+            _lvm.revertToState(snap);
             return result;
         }
 
-        // Phase B: compile and execute BotVM on clean state
         {
             WstUsrArbParams memory params = WstUsrArbParams({
                 flashAmount: path.flashAmount,
@@ -71,7 +96,6 @@ abstract contract SimulatorBase {
                 minProfit: path.minProfit
             });
 
-            // Resolve executor: fork-deploy or use provided address
             address executor;
             if (config.executor == address(0)) {
                 BotVM botvm = new BotVM();
@@ -82,18 +106,17 @@ abstract contract SimulatorBase {
 
             bytes memory script = CompilerAdapter.compile(path, params, executor);
 
-            // Prank owner if using a deployed BotVM (execute has onlyOwner)
             if (config.executor != address(0)) {
-                _svm.prank(config.owner);
+                _lvm.prank(config.owner);
             }
 
             uint256 gasBefore = gasleft();
             try BotVM(payable(executor)).execute(script) {
-                uint256 gasAfter = gasleft();
-                result.gasUsed = gasBefore - gasAfter;
-                result.gasCostWei = result.gasUsed * config.gasPriceWei; // # codex修改
+                result.ourSuccess = true;
                 result.wstUsrProfit = IERC20(Constants.WSTUSER).balanceOf(executor);
                 result.wethProfit = IERC20(Constants.WETH).balanceOf(executor);
+                result.totalGasUsed = gasBefore - gasleft();
+                result.gasCostWei = result.totalGasUsed * config.gasPriceWei;
                 result.wstUsrProfitWethValue =
                     result.wstUsrProfit * config.wstUsrToWethPriceE18 / 1e18; // # codex修改
                 uint256 grossWethValue = result.wethProfit + result.wstUsrProfitWethValue; // # codex修改
@@ -103,18 +126,13 @@ abstract contract SimulatorBase {
                     result.coversNetProfit = true; // # codex修改
                     result.netTotalWethProfit = grossWethValue - result.gasCostWei - config.builderTipWei; // # codex修改
                 }
-                result.txCalldata = abi.encodeWithSelector(BotVM.execute.selector, script);
-                result.scriptLength = script.length;
-                result.calldataLength = result.txCalldata.length;
-                result.success = true;
-            } catch (bytes memory reason) {
-                result.gasUsed = gasBefore - gasleft();
-                result.success = false;
-                result.revertData = reason;
+            } catch {
+                result.ourSuccess = false;
+                result.totalGasUsed = gasBefore - gasleft();
+                result.gasCostWei = result.totalGasUsed * config.gasPriceWei;
             }
         }
 
-        // UNCONDITIONAL: restore fork state to opportunity pre-state
-        _svm.revertToState(outerSnap);
+        _lvm.revertToState(snap);
     }
 }
