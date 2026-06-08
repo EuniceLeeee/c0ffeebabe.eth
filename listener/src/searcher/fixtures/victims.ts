@@ -5,6 +5,8 @@ export interface VictimFixture {
   blockNumber: number;
   description: string;
   expectedAffectedPool: string;
+  minProfit: bigint;
+  requiresPrefix: boolean;
 }
 
 export const VICTIM_FIXTURES: VictimFixture[] = [
@@ -15,6 +17,19 @@ export const VICTIM_FIXTURES: VictimFixture[] = [
     blockNumber: 24710788,
     description: "Large wstUSR sell into Curve DOLA/wstUSR pool",
     expectedAffectedPool: ADDR.CURVE_DOLA_WSTUSR,
+    minProfit: 543n * 10n ** 18n,
+    requiresPrefix: false,
+  },
+  {
+    // Block 24710790 tx index 1: ordinary wstUSR sell into the same pool.
+    // This fixture specifically exercises same-block prefix handling without
+    // requiring a long local prefix replay.
+    victimTxHash: "0xbb3d3e92675e0ae02b5f958f69b322af0dc1e6c04f3df8d920075e46aacab695",
+    blockNumber: 24710790,
+    description: "Prefix-state wstUSR sell into Curve DOLA/wstUSR pool",
+    expectedAffectedPool: ADDR.CURVE_DOLA_WSTUSR,
+    minProfit: 1n * 10n ** 18n,
+    requiresPrefix: true,
   },
 ];
 
@@ -26,4 +41,3 @@ export function assertVictimFixturesAreNotArbs(): void {
     }
   }
 }
-

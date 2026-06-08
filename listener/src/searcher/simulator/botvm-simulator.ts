@@ -20,11 +20,17 @@ export interface SimulationResult {
 }
 
 export class BotVMSimulator {
+  readonly executor: string;
+  readonly owner: string;
+
   constructor(
     private readonly state: StateBackend,
-    private readonly executor = DEFAULT_SEARCHER_EXECUTOR,
-    private readonly owner = DEFAULT_SEARCHER_OWNER,
-  ) {}
+    executor = DEFAULT_SEARCHER_EXECUTOR,
+    owner = DEFAULT_SEARCHER_OWNER,
+  ) {
+    this.executor = executor;
+    this.owner = owner;
+  }
 
   async simulate(plan: ResolvedPlan): Promise<SimulationResult> {
     const snap = await this.state.snapshot();

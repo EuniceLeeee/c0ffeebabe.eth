@@ -7,6 +7,14 @@ import type { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import type { BundleRouter } from "./execution/bundle-router.js";
 import type { PathTemplate } from "./templates/path-template.js";
 
+export interface FixtureResult {
+  victimTxHash: string;
+  candidatesEnumerated: number;
+  candidatesProfitable: number;
+  bestNetProfit: bigint;
+  bestPath: string;
+}
+
 export class HotPathSearcher {
   constructor(
     private readonly orderflow: ManualVictimSource,
@@ -21,23 +29,51 @@ export class HotPathSearcher {
   ) {}
 
   async run(): Promise<number> {
-    let successCount = 0;
+    const results = await this.runDetailed();
+    return results.reduce((n, r) => n + r.candidatesProfitable, 0);
+  }
+
+  /**
+   * Per-fixture detailed run. AC-3 uses this for fine-grained assertions:
+   *   - candidatesEnumerated >= 2
+   *   - bestNetProfit >= threshold
+   */
+  async runDetailed(): Promise<FixtureResult[]> {
+    const results: FixtureResult[] = [];
     for await (const event of this.orderflow.next()) {
-      console.log(`[searcher/ac3] fork at block ${event.blockNumber - 1}`);
-      await this.state.forkAt(event.blockNumber - 1);
-      console.log(`[searcher/ac3] apply victim ${event.txHash}`);
-      await this.state.applyRawTx(event.rawTx);
+      console.log(`[searcher/ac3] prepare victim post-state ${event.txHash}`);
+      const stateResult = await this.state.prepareVictimPostState({
+        txHash: event.txHash,
+        rawTx: event.rawTx,
+        blockNumber: event.blockNumber,
+        transactionIndex: event.transactionIndex ?? 0,
+        previousTxHash: event.previousTxHash,
+        from: event.from,
+        nonce: event.nonce,
+        preferSequentialPrefix: event.preferSequentialPrefix,
+      });
+      console.log(
+        `[searcher/ac3] state: mode=${stateResult.mode} nonce ${stateResult.nonceBefore}->${stateResult.nonceAfter}`,
+      );
       console.log("[searcher/ac3] install executor");
       await this.prepareExecutor?.();
 
       const opportunities = await this.detector.detect(event, this.state);
       console.log(`[searcher/ac3] detector: ${opportunities.length} opportunities`);
 
+      let candidatesEnumerated = 0;
+      let candidatesProfitable = 0;
+      let bestNetProfit = 0n;
+      let bestPath = "";
+      let reachedFixtureTarget = false;
+
       for (const opp of opportunities) {
         const plans = await this.planner.plan(opp, this.templates);
+        candidatesEnumerated += plans.length;
         console.log(`[searcher/ac3] planner: ${plans.length} candidate plans enumerated`);
 
         for (const candidate of plans) {
+          if (reachedFixtureTarget) break;
           try {
             const resolved = await this.solver.solve(candidate, this.state, this.simulator);
             const sim = await this.simulator.simulate(resolved);
@@ -47,6 +83,13 @@ export class HotPathSearcher {
               );
               continue;
             }
+            candidatesProfitable++;
+            if (sim.netProfit > bestNetProfit) {
+              bestNetProfit = sim.netProfit;
+              bestPath = candidate.tokenPath.edges
+                .map((e) => `${e.adapterId}(${shortAddr(e.tokenIn)}->${shortAddr(e.tokenOut)})`)
+                .join(" → ");
+            }
             await this.bundleRouter.submit({
               victimTxHash: event.txHash,
               backrunCalldata: sim.calldata,
@@ -54,14 +97,33 @@ export class HotPathSearcher {
               expectedProfit: sim.netProfit,
             });
             console.log(`[searcher/ac3] simulator: success netProfit=${sim.netProfit}`);
-            successCount++;
+            if (event.minProfit !== undefined && bestNetProfit >= event.minProfit) {
+              reachedFixtureTarget = true;
+              console.log(
+                `[searcher/ac3] fixture target reached: bestProfit=${bestNetProfit} ` +
+                  `threshold=${event.minProfit}`,
+              );
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             console.log(`[searcher/ac3] candidate failed: ${msg.slice(0, 180)}`);
           }
         }
+        if (reachedFixtureTarget) break;
       }
+
+      results.push({
+        victimTxHash: event.txHash,
+        candidatesEnumerated,
+        candidatesProfitable,
+        bestNetProfit,
+        bestPath,
+      });
     }
-    return successCount;
+    return results;
   }
+}
+
+function shortAddr(addr: string): string {
+  return addr.slice(0, 6);
 }

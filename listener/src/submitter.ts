@@ -97,6 +97,94 @@ export async function submitBundle(params: {
   });
 }
 
+// ─── MEV-Share Bundle (hash-only victim) ─────────────────────────
+
+/**
+ * Submit a backrun bundle via Flashbots `mev_sendBundle`.
+ * The victim tx is referenced by hash only — no rawTx needed.
+ *
+ * Format: body = [{ hash: victimHash }, { tx: signedBackrunTx, canRevert: false }]
+ * Only sent to Flashbots relay (mev_sendBundle is Flashbots-specific).
+ */
+export async function submitMevShareBundle(params: {
+  victimHash: string;
+  calldataHex: string;
+  gasUsed: number;
+  wallet: ethers.Wallet;
+  botvmAddress: string;
+  provider: ethers.JsonRpcProvider;
+  targetBlock: number;
+}): Promise<SubmitResult> {
+  const { victimHash, calldataHex, gasUsed, wallet, botvmAddress, provider, targetBlock } = params;
+
+  // Build + sign backrun tx (same logic as submitBundle)
+  const nonce = await wallet.getNonce("pending");
+  const feeData = await provider.getFeeData();
+  const gasLimit = BigInt(Math.ceil(gasUsed * 1.3));
+  const backrunTx: ethers.TransactionLike = {
+    to: botvmAddress,
+    data: calldataHex,
+    nonce,
+    chainId: 1,
+    type: 2,
+    gasLimit,
+    maxFeePerGas: feeData.maxFeePerGas ?? ethers.parseUnits("30", "gwei"),
+    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? ethers.parseUnits("2", "gwei"),
+    value: 0,
+  };
+  const signedBackrunTx = await wallet.signTransaction(backrunTx);
+
+  const bundleParams = {
+    version: "v0.1",
+    inclusion: {
+      block: `0x${targetBlock.toString(16)}`,
+      maxBlock: `0x${(targetBlock + 5).toString(16)}`,
+    },
+    body: [
+      { hash: victimHash },
+      { tx: signedBackrunTx, canRevert: false },
+    ],
+  };
+
+  const body = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "mev_sendBundle",
+    params: [bundleParams],
+  });
+
+  const bodyHash = ethers.keccak256(ethers.toUtf8Bytes(body));
+  const sig = await wallet.signMessage(ethers.getBytes(bodyHash));
+
+  const res = await fetch("https://relay.flashbots.net", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Flashbots-Signature": `${wallet.address}:${sig}`,
+    },
+    body,
+    signal: AbortSignal.timeout(5_000),
+  });
+
+  const json = (await res.json()) as {
+    result?: { bundleHash?: string };
+    error?: { message?: string };
+  };
+
+  if (json.error) {
+    return {
+      builder: "flashbots-mev-share",
+      accepted: false,
+      error: json.error.message ?? JSON.stringify(json.error),
+    };
+  }
+  return {
+    builder: "flashbots-mev-share",
+    accepted: true,
+    bundleHash: json.result?.bundleHash,
+  };
+}
+
 // ─── Per-Builder Send ──────────────────────────────────────────
 
 async function sendToBuilder(

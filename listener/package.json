@@ -12,7 +12,9 @@
     "replicate:batch": "tsx src/replicate-batch.ts",
     "regression": "tsx src/test-regression.ts",
     "searcher:lint": "tsx src/searcher/test/boundary.ts",
-    "searcher:ac3": "tsx src/searcher/test/ac3.ts"
+    "searcher:state": "tsx src/searcher/test/state.ts",
+    "searcher:ac3": "tsx src/searcher/test/ac3.ts",
+    "searcher:live": "tsx src/searcher/main.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

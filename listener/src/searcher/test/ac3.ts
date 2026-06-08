@@ -68,12 +68,37 @@ async function main(): Promise<void> {
       },
     );
 
-    console.log(`[searcher/ac3] fixture: ${VICTIM_FIXTURES[0].victimTxHash} (non-arb swap)`);
-    const successes = await searcher.run();
-    if (successes < 1) {
-      throw new Error("AC-3 failed: no profitable self-composed plan");
+    console.log(`[searcher/ac3] running ${VICTIM_FIXTURES.length} fixture(s)`);
+    if (VICTIM_FIXTURES.length < 2) {
+      throw new Error(`AC-3 requires >= 2 victim fixtures, got ${VICTIM_FIXTURES.length}`);
     }
-    console.log("AC-3 PASS");
+    const results = await searcher.runDetailed();
+
+    // AC-3 Phase 2 acceptance:
+    //   - every fixture enumerates ≥ 2 candidate paths (planner truly explores)
+    //   - every fixture finds ≥ 1 profitable plan (solver self-composes)
+    //   - every fixture's best netProfit reaches its configured raw profit-token threshold
+    const MIN_CANDIDATES = 2;
+    const fixtureByHash = new Map(VICTIM_FIXTURES.map((f) => [f.victimTxHash.toLowerCase(), f]));
+    let allPass = true;
+    for (const r of results) {
+      const fixture = fixtureByHash.get(r.victimTxHash.toLowerCase());
+      if (!fixture) throw new Error(`missing fixture config for ${r.victimTxHash}`);
+      const okCandidates = r.candidatesEnumerated >= MIN_CANDIDATES;
+      const okProfit = r.bestNetProfit >= fixture.minProfit;
+      const status = okCandidates && okProfit ? "PASS" : "FAIL";
+      console.log(
+        `[searcher/ac3][${status}] ${r.victimTxHash.slice(0, 10)}... ` +
+          `candidates=${r.candidatesEnumerated} (need >=${MIN_CANDIDATES}), ` +
+          `profitable=${r.candidatesProfitable}, ` +
+          `bestProfit=${r.bestNetProfit} (need >=${fixture.minProfit})`,
+      );
+      if (r.bestPath) console.log(`              best path: ${r.bestPath}`);
+      if (!okCandidates || !okProfit) allPass = false;
+    }
+
+    if (!allPass) throw new Error("AC-3 Phase 2 failed: see per-fixture details above");
+    console.log(`AC-3 PASS (${results.length}/${results.length} fixtures)`);
   } finally {
     state.stop();
   }

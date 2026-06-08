@@ -2,7 +2,7 @@ import type { PlanNode } from "../../shared/types/plan.js";
 import type { Opportunity } from "../detector/detector.js";
 import type { PathTemplate } from "../templates/path-template.js";
 import { passesConstraints } from "../templates/constraints.js";
-import { buildTokenPaths, defaultWstUsrGraph, type TokenPath } from "./token-graph.js";
+import { buildTokenPaths, defaultTokenGraph, type TokenEdge, type TokenPath } from "./token-graph.js";
 
 export interface CandidatePlan {
   templateName: string;
@@ -16,19 +16,27 @@ export interface Planner {
 }
 
 export class TemplatePlanner implements Planner {
+  private graph: TokenEdge[] | null = null;
+
+  /** Inject a pre-built graph (from buildTokenGraph). Falls back to hardcoded default. */
+  setGraph(graph: TokenEdge[]): void {
+    this.graph = graph;
+  }
+
   async plan(opp: Opportunity, templates: PathTemplate[]): Promise<CandidatePlan[]> {
     const candidates: CandidatePlan[] = [];
+    const baseGraph = this.graph ?? defaultTokenGraph();
 
     for (const template of templates) {
-      const graph = defaultWstUsrGraph().filter((edge) =>
+      const graph = baseGraph.filter((edge) =>
         template.slots.some((slot) => slot.adapters.includes(edge.adapterId)),
       );
       const paths = buildTokenPaths(graph, opp.startToken, opp.profitToken);
 
       for (const path of paths) {
-        if (!path.edges.some((edge) => edge.tokenIn.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")) {
-          continue;
-        }
+        // No path-specific filters here — the only gates are structural
+        // (token continuity, final-token == start-token, template constraints).
+        // Solver picks profitable ones; non-profitable get rejected at simulate.
         if (!passesConstraints(path, template.constraints, opp.startToken, opp.profitToken)) {
           continue;
         }

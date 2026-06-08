@@ -3,6 +3,8 @@ import { ethers } from "ethers";
 
 export interface StateBackend {
   forkAt(blockNumber: number): Promise<void>;
+  forkAfterTx(txHash: string): Promise<void>;
+  prepareVictimPostState(params: VictimStateParams): Promise<VictimStateResult>;
   applyRawTx(rawTx: string): Promise<string>;
   snapshot(): Promise<string>;
   revert(snapshotId: string): Promise<void>;
@@ -11,10 +13,29 @@ export interface StateBackend {
   getTokenBalance(token: string, account: string): Promise<bigint>;
 }
 
+export interface VictimStateParams {
+  txHash: string;
+  rawTx: string;
+  blockNumber: number;
+  transactionIndex: number;
+  previousTxHash?: string;
+  from: string;
+  nonce: number;
+  preferSequentialPrefix?: boolean;
+}
+
+export interface VictimStateResult {
+  mode: "tx-hash-anchor-pre" | "tx-hash-anchor-post" | "sequential-prefix";
+  appliedTxHash: string;
+  nonceBefore: number;
+  nonceAfter: number;
+  replayedPrefixCount: number;
+}
+
 const ERC20 = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
 
 export class AnvilStateBackend implements StateBackend {
-  readonly provider: ethers.JsonRpcProvider;
+  provider: ethers.JsonRpcProvider;
   private proc: ChildProcess | null = null;
 
   constructor(
@@ -27,6 +48,7 @@ export class AnvilStateBackend implements StateBackend {
 
   async start(): Promise<void> {
     if (this.proc) return;
+    this.resetProvider();
     this.proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--port", String(this.port),
@@ -38,7 +60,7 @@ export class AnvilStateBackend implements StateBackend {
 
     for (let i = 0; i < 30; i++) {
       try {
-        await this.provider.getBlockNumber();
+        await withTimeout(this.provider.send("eth_chainId", []), 2_000, "anvil readiness");
         return;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 400));
@@ -51,12 +73,201 @@ export class AnvilStateBackend implements StateBackend {
     if (!this.proc) return;
     this.proc.kill();
     this.proc = null;
+    this.provider.destroy();
   }
 
   async forkAt(blockNumber: number): Promise<void> {
-    await withTimeout(this.provider.send("anvil_reset", [{
-      forking: { jsonRpcUrl: this.rpcUrl, blockNumber },
-    }]), 60_000, `anvil_reset block ${blockNumber}`);
+    if (this.proc) {
+      try {
+        await withTimeout(
+          this.provider.send("anvil_reset", [{
+            forking: { jsonRpcUrl: this.rpcUrl, blockNumber },
+          }]),
+          60_000,
+          `anvil_reset block ${blockNumber}`,
+        );
+        return;
+      } catch {
+        // anvil_reset failed — fall through to kill/spawn
+        this.stop();
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+
+    await this.spawnForkAt(blockNumber);
+  }
+
+  private async restartForkAt(blockNumber: number): Promise<void> {
+    this.stop();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await this.spawnForkAt(blockNumber);
+  }
+
+  private async spawnForkAt(blockNumber: number): Promise<void> {
+    this.resetProvider();
+    this.proc = spawn("anvil", [
+      "--fork-url", this.rpcUrl,
+      "--fork-block-number", String(blockNumber),
+      "--port", String(this.port),
+      "--silent",
+      "--no-mining",
+      "--order", "fifo",
+    ], { stdio: "ignore" });
+    this.proc.on("exit", () => { this.proc = null; });
+
+    for (let i = 0; i < 60; i++) {
+      try {
+        await withTimeout(this.provider.send("eth_chainId", []), 2_000, "anvil block readiness");
+        return;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+    throw new Error(`anvil did not start at block ${blockNumber}`);
+  }
+
+  /**
+   * Fork to state immediately after `txHash`. Foundry/Anvil's
+   * --fork-transaction-hash anchors the fork at the cumulative state including
+   * that transaction, so callers must pass the previous tx when they need a
+   * later tx's pre-state.
+   */
+  async forkAfterTx(txHash: string): Promise<void> {
+    this.stop();
+    await new Promise((resolve) => setTimeout(resolve, 250)); // let port release
+
+    this.resetProvider();
+    this.proc = spawn("anvil", [
+      "--fork-url", this.rpcUrl,
+      "--fork-transaction-hash", txHash,
+      "--port", String(this.port),
+      "--silent",
+      "--no-mining",
+      "--order", "fifo",
+    ], { stdio: "ignore" });
+    this.proc.on("exit", () => { this.proc = null; });
+
+    for (let i = 0; i < 60; i++) {
+      try {
+        await withTimeout(this.provider.send("eth_chainId", []), 2_000, "anvil tx-hash readiness");
+        return;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+    throw new Error(`anvil did not start with --fork-transaction-hash ${txHash}`);
+  }
+
+  private resetProvider(): void {
+    this.provider = new ethers.JsonRpcProvider(this.anvilUrl);
+  }
+
+  async prepareVictimPostState(params: VictimStateParams): Promise<VictimStateResult> {
+    const txIndex = params.transactionIndex;
+    if (txIndex < 0) throw new Error(`invalid transactionIndex ${txIndex}`);
+    if (txIndex === 0 || params.preferSequentialPrefix) {
+      return this.prepareVictimPostStateByPrefix(params);
+    }
+
+    await this.forkAfterTx(params.txHash);
+
+    const from = ethers.getAddress(params.from);
+    const anchorNonce = await getTransactionCount(this.provider, from, "victim anchor");
+    if (anchorNonce === params.nonce + 1) {
+      return {
+        mode: "tx-hash-anchor-post",
+        appliedTxHash: params.txHash,
+        nonceBefore: params.nonce,
+        nonceAfter: anchorNonce,
+        replayedPrefixCount: txIndex,
+      };
+    }
+    if (anchorNonce !== params.nonce) {
+      if (txIndex > 0) {
+        return this.prepareVictimPostStateByPrefix(params);
+      }
+      throw new Error(
+        `victim tx-hash anchor nonce mismatch: ${from} nonce=${anchorNonce}, ` +
+          `expected ${params.nonce} or ${params.nonce + 1}`,
+      );
+    }
+
+    const appliedTxHash = await this.applyRawTx(params.rawTx);
+    if (appliedTxHash.toLowerCase() !== params.txHash.toLowerCase()) {
+      throw new Error(`victim apply hash mismatch: ${appliedTxHash} != ${params.txHash}`);
+    }
+
+    const nonceAfter = await getTransactionCount(this.provider, from, "victim post");
+    if (nonceAfter !== params.nonce + 1) {
+      throw new Error(
+        `victim post-state nonce mismatch: ${from} nonce=${nonceAfter}, expected ${params.nonce + 1}`,
+      );
+    }
+
+    return {
+      mode: "tx-hash-anchor-pre",
+      appliedTxHash: params.txHash,
+      nonceBefore: anchorNonce,
+      nonceAfter,
+      replayedPrefixCount: txIndex,
+    };
+  }
+
+  private async prepareVictimPostStateByPrefix(
+    params: VictimStateParams,
+  ): Promise<VictimStateResult> {
+    const txIndex = params.transactionIndex;
+    // Prefix replay is a historical exactness path. Use a fresh Anvil process
+    // so reset-mode state/mempool/mining settings cannot leak across fixtures.
+    await this.restartForkAt(params.blockNumber - 1);
+
+    const archive = new ethers.JsonRpcProvider(this.rpcUrl);
+    const block = await withTimeout(
+      archive.send("eth_getBlockByNumber", ["0x" + params.blockNumber.toString(16), true]),
+      60_000,
+      `eth_getBlockByNumber ${params.blockNumber}`,
+    );
+    const txs = Array.isArray(block?.transactions) ? block.transactions : [];
+    if (txs.length <= txIndex) {
+      throw new Error(`block ${params.blockNumber} missing tx index ${txIndex}`);
+    }
+
+    await setNextBlockContext(this.provider, block);
+
+    const rawTxs: string[] = [];
+    for (let i = 0; i <= txIndex; i++) {
+      const expectedHash = txHashAt(txs, i);
+      const raw = i === txIndex ? params.rawTx : await rawTxByHash(archive, expectedHash);
+      rawTxs.push(await sendRawTxNoMine(this.provider, raw, expectedHash));
+    }
+
+    await mineOne(this.provider, "victim-prefix-block", 180_000);
+    for (let i = 0; i < rawTxs.length; i++) {
+      const receipt = await getReceipt(this.provider, rawTxs[i], `prefix receipt ${i}`);
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(`prefix/victim tx failed at index ${i}: ${rawTxs[i]}`);
+      }
+    }
+
+    const appliedTxHash = rawTxs[rawTxs.length - 1];
+    if (appliedTxHash.toLowerCase() !== params.txHash.toLowerCase()) {
+      throw new Error(`victim apply hash mismatch: ${appliedTxHash} != ${params.txHash}`);
+    }
+
+    const from = ethers.getAddress(params.from);
+    const nonceAfter = await getTransactionCount(this.provider, from, "prefix victim post");
+    if (nonceAfter !== params.nonce + 1) {
+      throw new Error(
+        `victim post-state nonce mismatch: ${from} nonce=${nonceAfter}, expected ${params.nonce + 1}`,
+      );
+    }
+    return {
+      mode: "sequential-prefix",
+      appliedTxHash,
+      nonceBefore: params.nonce,
+      nonceAfter,
+      replayedPrefixCount: txIndex,
+    };
   }
 
   async applyRawTx(rawTx: string): Promise<string> {
@@ -66,7 +277,7 @@ export class AnvilStateBackend implements StateBackend {
       "eth_sendRawTransaction victim",
     );
     await mineOne(this.provider, "victim", 120_000);
-    const receipt = await this.provider.getTransactionReceipt(hash);
+    const receipt = await getReceipt(this.provider, hash, "victim receipt");
     if (!receipt || receipt.status !== 1) {
       throw new Error(`victim apply failed: ${hash}`);
     }
@@ -92,7 +303,7 @@ export class AnvilStateBackend implements StateBackend {
       `eth_sendTransaction ${req.to}`,
     );
     await mineOne(this.provider, "send", 120_000);
-    const receipt = await this.provider.getTransactionReceipt(hash);
+    const receipt = await getReceipt(this.provider, hash, "send receipt");
     if (!receipt || receipt.status !== 1) {
       const detail = await traceRevert(this.provider, hash);
       throw new Error(`transaction reverted: ${hash}${detail ? ` ${detail}` : ""}`);
@@ -109,10 +320,11 @@ export class AnvilStateBackend implements StateBackend {
 
 async function traceRevert(provider: ethers.JsonRpcProvider, txHash: string): Promise<string> {
   try {
-    const trace = await provider.send("debug_traceTransaction", [
-      txHash,
-      { tracer: "callTracer" },
-    ]);
+    const trace = await withTimeout(
+      provider.send("debug_traceTransaction", [txHash, { tracer: "callTracer" }]),
+      30_000,
+      `debug_traceTransaction ${txHash}`,
+    );
     const failed = findFailedCall(trace);
     if (!failed) return "";
     const to = typeof failed.to === "string" ? failed.to : "unknown";
@@ -135,12 +347,108 @@ function findFailedCall(node: any): any | null {
   return null;
 }
 
+function txHashAt(txs: any[], index: number): string {
+  const tx = txs[index];
+  const hash = typeof tx === "string" ? tx : tx?.hash;
+  if (typeof hash !== "string" || !hash.startsWith("0x")) {
+    throw new Error(`missing tx hash at block index ${index}`);
+  }
+  return hash;
+}
+
+async function rawTxByHash(
+  provider: ethers.JsonRpcProvider,
+  txHash: string,
+): Promise<string> {
+  const raw = await withTimeout(
+    provider.send("eth_getRawTransactionByHash", [txHash]),
+    45_000,
+    `eth_getRawTransactionByHash ${txHash}`,
+  );
+  if (typeof raw !== "string" || !raw.startsWith("0x")) {
+    throw new Error(`missing raw tx for ${txHash}`);
+  }
+  return raw;
+}
+
+async function sendRawTxNoMine(
+  provider: ethers.JsonRpcProvider,
+  rawTx: string,
+  expectedHash: string,
+): Promise<string> {
+  await ensureSenderHasGas(provider, rawTx);
+  const hash = await withTimeout(
+    provider.send("eth_sendRawTransaction", [rawTx]),
+    45_000,
+    `eth_sendRawTransaction ${expectedHash}`,
+  );
+  if (typeof hash !== "string" || hash.toLowerCase() !== expectedHash.toLowerCase()) {
+    throw new Error(`raw tx hash mismatch: sent=${hash} expected=${expectedHash}`);
+  }
+  return hash;
+}
+
+async function ensureSenderHasGas(
+  provider: ethers.JsonRpcProvider,
+  rawTx: string,
+): Promise<void> {
+  const tx = ethers.Transaction.from(rawTx);
+  if (!tx.from) return;
+  const from = ethers.getAddress(tx.from);
+  const balance = await withTimeout(
+    provider.getBalance(from, "latest"),
+    30_000,
+    `getBalance ${from}`,
+  );
+  const floor = 10_000n * 10n ** 18n; // local fork gas/value top-up for raw prefix replay.
+  if (balance >= floor) return;
+  await provider.send("anvil_setBalance", [from, "0x" + floor.toString(16)]);
+}
+
+async function setNextBlockContext(provider: ethers.JsonRpcProvider, block: any): Promise<void> {
+  if (typeof block?.timestamp === "string") {
+    await provider.send("evm_setNextBlockTimestamp", [Number(BigInt(block.timestamp))]);
+  }
+  if (typeof block?.baseFeePerGas === "string") {
+    try {
+      await provider.send("anvil_setNextBlockBaseFeePerGas", [block.baseFeePerGas]);
+    } catch {
+      // Older anvil builds may not support this. The raw tx gas cap will fail
+      // loudly if basefee mismatch matters for the fixture.
+    }
+  }
+}
+
 async function mineOne(provider: ethers.JsonRpcProvider, label: string, timeoutMs: number): Promise<void> {
   try {
     await withTimeout(provider.send("anvil_mine", ["0x1"]), timeoutMs, `anvil_mine ${label}`);
   } catch {
     await withTimeout(provider.send("evm_mine", []), timeoutMs, `evm_mine ${label}`);
   }
+}
+
+function getTransactionCount(
+  provider: ethers.JsonRpcProvider,
+  address: string,
+  label: string,
+): Promise<number> {
+  return withTimeout(
+    provider.getTransactionCount(address, "latest"),
+    45_000,
+    `getTransactionCount ${label}`,
+  );
+}
+
+function getReceipt(
+  provider: ethers.JsonRpcProvider,
+  txHash: string,
+  label: string,
+): Promise<ethers.TransactionReceipt | null> {
+  return withTimeout(
+    provider.getTransactionReceipt(txHash),
+    45_000,
+    `getTransactionReceipt ${label}`,
+  );
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
