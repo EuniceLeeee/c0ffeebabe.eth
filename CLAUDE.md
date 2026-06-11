@@ -126,11 +126,15 @@ cast receipt <txhash> --rpc-url $MAINNET_RPC_URL --json | jq '.logs'
 
 ## Safety Rules
 
-1. **NEVER broadcast transactions to mainnet** without explicit user confirmation.
-2. All testing happens on local forks (`anvil` or `forge test --fork-url`).
-3. Do not commit `.env` files containing real RPC URLs or private keys.
-4. Scripts default to `--broadcast` disabled; require `--broadcast` flag explicitly.
-5. When in doubt, use `--dry-run` or `vm.prank` in tests.
+1. **Broadcasting transactions to mainnet (and signing with the private key) requires explicit user authorization.**
+   The user has authorized live bundle submission for this project (granted 2026-06-10).
+   Even when authorized, only broadcast a bundle that passed a **profitable on-fork simulation**
+   this run (`sim.success` + the assert-balance flash-repay guard). **Never broadcast from an
+   unverified or half-modified pipeline** — confirm the dry-run produces a profitable bundle first.
+2. Default to dry-run (`SEARCHER_DRY_RUN=1` → `DryRunBundleRouter`); flip to production only deliberately.
+3. All correctness testing happens on local forks (`anvil` or `forge test --fork-url`).
+4. Do not commit `.env` files containing real RPC URLs or private keys.
+5. Scripts default to `--broadcast` disabled; require `--broadcast` flag explicitly.
 
 ## File Structure
 

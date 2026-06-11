@@ -1,5 +1,6 @@
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenPath } from "../planner/token-graph.js";
+import type { PoolStateCache } from "./pool-state-cache.js";
 import { quote } from "./quoter.js";
 
 /**
@@ -14,7 +15,7 @@ export async function propagateAmounts(
   path: TokenPath,
   flashAmount: bigint,
   state: StateBackend,
-  options: { fluidDebtBps?: bigint } = {},
+  options: { fluidDebtBps?: bigint; cache?: PoolStateCache } = {},
 ): Promise<bigint[]> {
   const amounts: bigint[] = [flashAmount];
   let cur = flashAmount;
@@ -28,6 +29,7 @@ export async function propagateAmounts(
         edge.tokenOut,
         cur,
         state,
+        options.cache,
       );
     if (out <= 0n) {
       throw new Error(

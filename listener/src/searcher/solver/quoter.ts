@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
+import type { PoolStateCache } from "./pool-state-cache.js";
 
 /**
  * Quoter — per-protocol amountOut estimation on the current fork state.
@@ -176,10 +177,68 @@ function quotePSM(
   throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
 }
 
-// ── UniV4 / Fluid exact quote gates ─────────────────────────────
+// ── UniV2 (constant-product) ──────────────────────────────────
 
-function quoteUniV4(): bigint {
-  throw new Error("unsupported exact quote: univ4-unlock requires dry-run quoter");
+const univ2Iface = new ethers.Interface([
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function token0() view returns (address)",
+]);
+
+async function quoteUniV2(
+  state: StateBackend,
+  pool: string,
+  tokenIn: string,
+  _tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  const t0Result = await state.call({
+    to: pool,
+    data: univ2Iface.encodeFunctionData("token0"),
+  });
+  const token0 = ethers.getAddress("0x" + t0Result.slice(-40));
+  const zeroForOne = tokenIn.toLowerCase() === token0.toLowerCase();
+
+  const reservesResult = await state.call({
+    to: pool,
+    data: univ2Iface.encodeFunctionData("getReserves"),
+  });
+  const decoded = univ2Iface.decodeFunctionResult("getReserves", reservesResult);
+  const [r0, r1] = [BigInt(decoded[0]), BigInt(decoded[1])];
+  const [reserveIn, reserveOut] = zeroForOne ? [r0, r1] : [r1, r0];
+
+  // UniV2 constant-product with 0.3% fee
+  const amountInWithFee = amountIn * 997n;
+  const numerator = amountInWithFee * reserveOut;
+  const denominator = reserveIn * 1000n + amountInWithFee;
+  return numerator / denominator;
+}
+
+// ── UniV4 (V3-delegating fallback) ────────────────────────────
+
+/**
+ * V4 quoter: delegate to a V3 pool for the same token pair.
+ * V4 concentrated-liquidity pricing is equivalent to V3 at similar fee tiers,
+ * so V3 quotes are accurate enough for binary-search solving.
+ * Actual execution still goes through the V4 PoolManager.
+ */
+const V4_V3_FALLBACK: Record<string, string> = {
+  // sorted lowercase "tokenA-tokenB" → V3 pool address
+  [`${ADDR.DAI.toLowerCase()}-${ADDR.USDT.toLowerCase()}`]: ADDR.UNISWAP_V3_USDC_USDT_100,
+  [`${ADDR.USDC.toLowerCase()}-${ADDR.USDT.toLowerCase()}`]: ADDR.UNISWAP_V3_USDC_USDT_100,
+};
+
+async function quoteUniV4(
+  state: StateBackend,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  const [lo, hi] = [tokenIn.toLowerCase(), tokenOut.toLowerCase()].sort() as [string, string];
+  const v3Pool = V4_V3_FALLBACK[`${lo}-${hi}`];
+  if (!v3Pool) {
+    throw new Error(`V4 quoter: no V3 fallback for ${tokenIn} → ${tokenOut}`);
+  }
+  return quoteUniV3(state, v3Pool, tokenIn, tokenOut, amountIn);
 }
 
 function quoteFluidVault(): bigint {
@@ -195,6 +254,7 @@ export async function quote(
   tokenOut: string,
   amountIn: bigint,
   state: StateBackend,
+  cache?: PoolStateCache,
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
   switch (adapterId) {
@@ -202,11 +262,29 @@ export async function quote(
     case "curve-exchange-nr":
     case "curve-exchange-plain":
     case "curve-exchange-received-uint":
+      // Path B: prefer warmed local math; fall back to on-chain get_dy.
+      if (cache) {
+        try {
+          return await cache.quoteCurve(state, target, tokenIn, tokenOut, amountIn);
+        } catch {
+          /* fall through to eth_call */
+        }
+      }
       return quoteCurve(state, target, tokenIn, tokenOut, amountIn);
     case "univ3-swap":
+      // Path B: prefer warmed local cross-tick math; fall back to QuoterV2.
+      if (cache) {
+        try {
+          return await cache.quoteV3(state, target, tokenIn, tokenOut, amountIn);
+        } catch {
+          /* fall through to eth_call (e.g. swap crosses beyond warmed words) */
+        }
+      }
       return quoteUniV3(state, target, tokenIn, tokenOut, amountIn);
+    case "univ2-swap":
+      return quoteUniV2(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
-      return quoteUniV4();
+      return quoteUniV4(state, tokenIn, tokenOut, amountIn);
     case "psm":
       return quotePSM(tokenIn, tokenOut, amountIn);
     case "fluid-vault":

@@ -37,6 +37,9 @@ const ERC20 = new ethers.Interface(["function balanceOf(address) view returns (u
 export class AnvilStateBackend implements StateBackend {
   provider: ethers.JsonRpcProvider;
   private proc: ChildProcess | null = null;
+  /** Fork-reuse state (see refreshFork / resetToBaseline / ensureFreshFork). */
+  private baselineSnapshot: string | null = null;
+  private forkedBlock = 0;
 
   constructor(
     private readonly rpcUrl: string,
@@ -290,6 +293,47 @@ export class AnvilStateBackend implements StateBackend {
 
   async revert(snapshotId: string): Promise<void> {
     await this.provider.send("evm_revert", [snapshotId]);
+  }
+
+  /**
+   * Fork-reuse: (re-)fork at `blockNumber` and record a baseline snapshot.
+   * This is the expensive (~seconds) anvil_reset — call it rarely (startup +
+   * periodic refresh + when a specific block is required), NOT per hint.
+   */
+  async refreshFork(blockNumber: number): Promise<void> {
+    await this.forkAt(blockNumber);
+    this.baselineSnapshot = await this.snapshot();
+    this.forkedBlock = blockNumber;
+  }
+
+  /**
+   * Fork-reuse: cheaply (~ms) reset to the baseline instead of re-forking.
+   * anvil's evm_revert consumes the snapshot, so we immediately re-snapshot to
+   * keep the baseline valid for the next hint. Requires refreshFork() first.
+   */
+  async resetToBaseline(): Promise<void> {
+    if (this.baselineSnapshot === null) {
+      throw new Error("resetToBaseline: no baseline — call refreshFork() first");
+    }
+    await this.revert(this.baselineSnapshot);
+    this.baselineSnapshot = await this.snapshot();
+  }
+
+  /**
+   * Per-hint fork management: reset to baseline (~ms) while the fork is still
+   * fresh, otherwise re-fork (~seconds) to pull recent state. Returns which.
+   */
+  async ensureFreshFork(latestBlock: number, refreshBlocks: number): Promise<"reset" | "refresh"> {
+    if (this.baselineSnapshot === null || latestBlock - this.forkedBlock >= refreshBlocks) {
+      await this.refreshFork(latestBlock);
+      return "refresh";
+    }
+    await this.resetToBaseline();
+    return "reset";
+  }
+
+  hasBaseline(): boolean {
+    return this.baselineSnapshot !== null;
   }
 
   async call(req: { to: string; data: string; from?: string }): Promise<string> {

@@ -14,6 +14,14 @@
     "searcher:lint": "tsx src/searcher/test/boundary.ts",
     "searcher:state": "tsx src/searcher/test/state.ts",
     "searcher:ac3": "tsx src/searcher/test/ac3.ts",
+    "searcher:liveready": "tsx src/searcher/test/live-readiness.ts",
+    "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
+    "searcher:amtsearch": "tsx src/searcher/test/amount-search.ts",
+    "searcher:curvemath": "tsx src/searcher/test/curve-math-equiv.ts",
+    "searcher:v3math": "tsx src/searcher/test/v3-math.ts",
+    "searcher:v3equiv": "tsx src/searcher/test/v3-equiv.ts",
+    "searcher:pool": "tsx src/searcher/test/anvil-pool.ts",
+    "searcher:forkreuse": "tsx src/searcher/test/fork-reuse.ts",
     "searcher:live": "tsx src/searcher/main.ts"
   },
   "dependencies": {

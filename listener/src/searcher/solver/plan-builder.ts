@@ -44,6 +44,7 @@ export async function buildResolvedPlanFromPath(
   executor: string,
   state: StateBackend,
   minProfit: bigint = 1n,
+  flashAdapterId: string = "morpho-flash",
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
     throw new Error(
@@ -109,20 +110,32 @@ export async function buildResolvedPlanFromPath(
     children: [],
   });
 
-  // Approve Morpho for flash repay
-  ensureApprove(flashToken, ADDR.MORPHO);
+  // Approve flash source for repay
+  const flashTarget = FLASH_ADAPTER_TARGETS[flashAdapterId];
+  if (!flashTarget) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
+  ensureApprove(flashToken, flashTarget);
 
-  // Wrap entire sequence in Morpho flash loan
+  // Wrap entire sequence in flash loan
+  const flashParams: Record<string, string[] | bigint[]> =
+    flashAdapterId === "balancer-flash"
+      ? { tokens: [flashToken], amounts: [flashAmount] }
+      : {};
+
   return {
-    adapterId: "morpho-flash",
-    target: ADDR.MORPHO,
+    adapterId: flashAdapterId,
+    target: flashTarget,
     tokenIn: flashToken,
     tokenOut: flashToken,
     amount: flashAmount,
-    params: {},
+    params: flashParams,
     children: inner,
   };
 }
+
+const FLASH_ADAPTER_TARGETS: Record<string, string> = {
+  "morpho-flash": ADDR.MORPHO,
+  "balancer-flash": ADDR.BALANCER_VAULT,
+};
 
 // ─── Per-adapter node builders ─────────────────────────────────
 
@@ -300,6 +313,37 @@ async function buildEdgeNode(
       };
     }
 
+    case "univ2-swap": {
+      // UniV2: transfer tokenIn to pair, then call swap(amount0Out, amount1Out, to, data).
+      // Callback children handle the transfer.
+      const [t0, t1] = sortedPair(edge.tokenIn, edge.tokenOut);
+      const zeroForOne = edge.tokenIn.toLowerCase() === t0.toLowerCase();
+      const callbackChildren: ResolvedPlanNode[] = [
+        {
+          adapterId: "erc20-transfer",
+          target: edge.tokenIn,
+          tokenIn: edge.tokenIn,
+          tokenOut: edge.tokenIn,
+          amount: amtIn,
+          params: { to: edge.target, amount: amtIn },
+          children: [],
+        },
+      ];
+      return {
+        adapterId: "univ2-swap",
+        target: edge.target,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amount: amtIn,
+        params: {
+          amount0Out: zeroForOne ? 0n : amtOut,
+          amount1Out: zeroForOne ? amtOut : 0n,
+          to: executor,
+        },
+        children: callbackChildren,
+      };
+    }
+
     default:
       throw new Error(`plan-builder: no handler for adapter ${edge.adapterId}`);
   }
@@ -346,9 +390,14 @@ function uniV4PoolKey(
   const b = tokenOut.toLowerCase();
   const dai = ADDR.DAI.toLowerCase();
   const usdt = ADDR.USDT.toLowerCase();
+  const usdc = ADDR.USDC.toLowerCase();
   // DAI/USDT pool with 0.0068% fee, tickSpacing 1
   if ((a === dai && b === usdt) || (a === usdt && b === dai)) {
     return { fee: 68n, tickSpacing: 1n };
+  }
+  // USDC/USDT pool with 0.01% fee, tickSpacing 1
+  if ((a === usdc && b === usdt) || (a === usdt && b === usdc)) {
+    return { fee: 100n, tickSpacing: 1n };
   }
   throw new Error(
     `UniV4 pool key not configured for ${tokenIn} <-> ${tokenOut}`,

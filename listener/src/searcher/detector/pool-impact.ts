@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 
 export interface PoolImpact {
   pool: string;
@@ -25,7 +25,11 @@ interface ImpactDecoder {
 
 const topic = (sig: string) => ethers.id(sig);
 
-const CURVE_TOKEN_EXCHANGE = topic("TokenExchange(address,int128,uint256,int128,uint256)");
+const CURVE_TOKEN_EXCHANGE_TOPICS = new Set([
+  topic("TokenExchange(address,int128,uint256,int128,uint256)"),
+  topic("TokenExchange(address,uint256,uint256,uint256,uint256)"),
+  topic("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
+]);
 const UNIV3_SWAP = topic("Swap(address,address,int256,int256,uint160,uint128,int24)");
 const UNIV2_SWAP = topic("Swap(address,uint256,uint256,uint256,uint256,address)");
 const ERC20_TRANSFER = topic("Transfer(address,address,uint256)");
@@ -57,7 +61,7 @@ const curveDecoder: ImpactDecoder = {
   ],
 
   decodeLog(log, edges) {
-    if (log.topics[0]?.toLowerCase() !== CURVE_TOKEN_EXCHANGE) return [];
+    if (!CURVE_TOKEN_EXCHANGE_TOPICS.has(log.topics[0]?.toLowerCase() ?? "")) return [];
 
     const [soldId, tokensSold, boughtId] = ethers.AbiCoder.defaultAbiCoder().decode(
       ["uint256", "uint256", "uint256", "uint256"],
@@ -216,8 +220,12 @@ interface PoolTouch {
 function collectPoolTouches(
   logs: EventLog[],
   edgesByTarget: Map<string, TokenEdge[]>,
+  broadPoolAddrs?: Map<string, string> | null,
 ): PoolTouch[] {
   const touches: PoolTouch[] = [];
+  // Use broad pool map (factory-indexed) if available, otherwise routing graph keys
+  const poolSet: { has(k: string): boolean } = broadPoolAddrs ?? new Set(edgesByTarget.keys());
+
   for (const log of logs) {
     if (log.topics[0]?.toLowerCase() !== ERC20_TRANSFER) continue;
     if (log.topics.length < 3) continue;
@@ -228,19 +236,28 @@ function collectPoolTouches(
     const value = BigInt(log.data || "0");
     if (value === 0n) continue;
 
-    if (edgesByTarget.has(to)) {
+    if (poolSet.has(to)) {
       touches.push({ pool: to, token, amount: value, direction: "in" });
     }
-    if (edgesByTarget.has(from)) {
+    if (poolSet.has(from)) {
       touches.push({ pool: from, token, amount: value, direction: "out" });
     }
   }
   return touches;
 }
 
+/** Adapter ID suffix → full swap adapter ID */
+const FACTORY_ADAPTER_MAP: Record<string, string> = {
+  univ2: "univ2-swap",
+  univ3: "univ3-swap",
+  curve: "curve-exchange",
+  "curve-nr": "curve-exchange-nr",
+};
+
 function pairedTransferImpacts(
   touches: PoolTouch[],
   edgesByTarget: Map<string, TokenEdge[]>,
+  broadPoolAddrs?: Map<string, string> | null,
 ): PoolImpact[] {
   const byPool = new Map<string, PoolTouch[]>();
   for (const t of touches) {
@@ -256,28 +273,233 @@ function pairedTransferImpacts(
     if (ins.length === 0 || outs.length === 0) continue;
 
     const edges = edgesByTarget.get(pool);
-    if (!edges) continue;
 
     for (const inT of ins) {
       for (const outT of outs) {
         if (inT.token === outT.token) continue;
-        const edge = edges.find(
-          (e) =>
-            e.tokenIn.toLowerCase() === inT.token &&
-            e.tokenOut.toLowerCase() === outT.token,
-        );
-        if (edge) {
+
+        if (edges) {
+          // Routing graph pool: match against known edges
+          const edge = edges.find(
+            (e) =>
+              e.tokenIn.toLowerCase() === inT.token &&
+              e.tokenOut.toLowerCase() === outT.token,
+          );
+          if (edge) {
+            impacts.push({
+              pool: edge.target,
+              tokenIn: edge.tokenIn,
+              tokenOut: edge.tokenOut,
+              amountIn: inT.amount,
+              matchedAdapterId: edge.adapterId,
+            });
+          }
+        } else {
+          // Factory-indexed pool without routing graph edges:
+          // create impact from Transfer log tokens directly.
+          // Look up adapter type from factory pool map.
+          const factoryAdapter = broadPoolAddrs?.get(pool);
+          const adapterId = factoryAdapter
+            ? (FACTORY_ADAPTER_MAP[factoryAdapter] ?? "univ2-swap")
+            : "univ2-swap";
           impacts.push({
-            pool: edge.target,
-            tokenIn: edge.tokenIn,
-            tokenOut: edge.tokenOut,
+            pool,
+            tokenIn: inT.token,
+            tokenOut: outT.token,
             amountIn: inT.amount,
-            matchedAdapterId: edge.adapterId,
+            matchedAdapterId: adapterId,
           });
         }
       }
     }
   }
+  return impacts;
+}
+
+/**
+ * Detect pools by correlating Swap events with Transfer events.
+ *
+ * If a log address emits a UniV2 Swap (0xd78ad95f) or UniV3 Swap (0xc42079f9),
+ * and the same address appears as from/to in Transfer events, it's a pool —
+ * even if not in our factory set or routing graph.
+ *
+ * Skips pools already covered by standard decoders or Transfer fallback.
+ */
+function swapEventCorrelatedImpacts(
+  logs: EventLog[],
+  edgesByTarget: Map<string, TokenEdge[]>,
+  broadPoolAddrs?: Map<string, string> | null,
+): PoolImpact[] {
+  // Step 1: Find addresses that emitted a Swap event
+  const swapPools = new Map<string, string>(); // address → adapter
+  for (const log of logs) {
+    const t0 = log.topics[0]?.toLowerCase();
+    const addr = log.address.toLowerCase();
+    // Skip if already in routing graph or broadPoolAddrs (handled above)
+    if (edgesByTarget.has(addr)) continue;
+    if (broadPoolAddrs?.has(addr)) continue;
+
+    if (t0 === UNIV2_SWAP) {
+      swapPools.set(addr, "univ2-swap");
+    } else if (t0 === UNIV3_SWAP) {
+      swapPools.set(addr, "univ3-swap");
+    }
+  }
+  if (swapPools.size === 0) return [];
+
+  // Step 2: Find Transfer events involving these Swap-emitting addresses
+  const transfers = new Map<string, { ins: PoolTouch[]; outs: PoolTouch[] }>();
+  for (const log of logs) {
+    if (log.topics[0]?.toLowerCase() !== ERC20_TRANSFER) continue;
+    if (log.topics.length < 3) continue;
+    const token = log.address.toLowerCase();
+    const from = ("0x" + log.topics[1].slice(26)).toLowerCase();
+    const to = ("0x" + log.topics[2].slice(26)).toLowerCase();
+    const value = BigInt(log.data || "0");
+    if (value === 0n) continue;
+
+    if (swapPools.has(to)) {
+      const entry = transfers.get(to) ?? { ins: [], outs: [] };
+      entry.ins.push({ pool: to, token, amount: value, direction: "in" });
+      transfers.set(to, entry);
+    }
+    if (swapPools.has(from)) {
+      const entry = transfers.get(from) ?? { ins: [], outs: [] };
+      entry.outs.push({ pool: from, token, amount: value, direction: "out" });
+      transfers.set(from, entry);
+    }
+  }
+
+  // Step 3: Create impacts for pools with paired in+out transfers
+  const impacts: PoolImpact[] = [];
+  for (const [pool, { ins, outs }] of transfers) {
+    if (ins.length === 0 || outs.length === 0) continue;
+    const adapter = swapPools.get(pool)!;
+    for (const inT of ins) {
+      for (const outT of outs) {
+        if (inT.token === outT.token) continue;
+        impacts.push({
+          pool,
+          tokenIn: inT.token,
+          tokenOut: outT.token,
+          amountIn: inT.amount,
+          matchedAdapterId: adapter,
+        });
+      }
+    }
+  }
+  return impacts;
+}
+
+// ─── Swap-only detection (async, queries token0/token1) ─────
+// MEV-Share sometimes exposes ONLY the Swap event — no Transfer logs.
+// Standard decoders handle this for pools in the routing graph.
+// For unknown pools (not in edgesByTarget), we query token0/token1
+// on-chain, then decode swap direction from the event data.
+
+const TOKEN0_TOKEN1_IFACE = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+]);
+
+// Module-level cache: pool address → [token0, token1].
+// Survives across calls within the same process (avoids duplicate on-chain queries).
+const poolTokenCache = new Map<string, [string, string]>();
+
+async function swapOnlyImpacts(
+  logs: EventLog[],
+  edgesByTarget: Map<string, TokenEdge[]>,
+  broadPoolAddrs: Map<string, string> | null | undefined,
+  tokenQuery: TokenQueryBackend,
+): Promise<PoolImpact[]> {
+  const impacts: PoolImpact[] = [];
+
+  // Collect Swap events at pools NOT already in routing graph
+  const unknownSwaps: Array<{ log: EventLog; addr: string; swapType: "univ2" | "univ3" }> = [];
+  for (const log of logs) {
+    const addr = log.address.toLowerCase();
+    if (edgesByTarget.has(addr)) continue; // standard decoder handles it
+    const t0 = log.topics[0]?.toLowerCase();
+    if (t0 === UNIV2_SWAP) unknownSwaps.push({ log, addr, swapType: "univ2" });
+    else if (t0 === UNIV3_SWAP) unknownSwaps.push({ log, addr, swapType: "univ3" });
+  }
+  if (unknownSwaps.length === 0) return impacts;
+
+  // Query token0/token1 for uncached pools (parallel, 2 eth_calls each)
+  const uniquePools = [...new Set(unknownSwaps.map((s) => s.addr))];
+  const uncached = uniquePools.filter((p) => !poolTokenCache.has(p));
+
+  if (uncached.length > 0) {
+    const t0Data = TOKEN0_TOKEN1_IFACE.encodeFunctionData("token0");
+    const t1Data = TOKEN0_TOKEN1_IFACE.encodeFunctionData("token1");
+
+    await Promise.allSettled(
+      uncached.map(async (pool) => {
+        try {
+          const [r0, r1] = await Promise.all([
+            tokenQuery.call({ to: pool, data: t0Data }),
+            tokenQuery.call({ to: pool, data: t1Data }),
+          ]);
+          if (!r0 || r0 === "0x" || !r1 || r1 === "0x") return;
+          const token0 = ethers.getAddress("0x" + r0.slice(-40));
+          const token1 = ethers.getAddress("0x" + r1.slice(-40));
+          if (token0 !== ethers.ZeroAddress && token1 !== ethers.ZeroAddress) {
+            poolTokenCache.set(pool, [token0, token1]);
+          }
+        } catch {
+          // Not a standard Uni pool, or RPC failure — skip silently
+        }
+      }),
+    );
+  }
+
+  for (const { log, addr, swapType } of unknownSwaps) {
+    const tokens = poolTokenCache.get(addr);
+    if (!tokens) continue;
+    const [token0, token1] = tokens;
+
+    try {
+      let tokenIn: string, tokenOut: string, amountIn: bigint;
+
+      if (swapType === "univ2") {
+        const [amount0In, amount1In] = ethers.AbiCoder.defaultAbiCoder().decode(
+          ["uint256", "uint256", "uint256", "uint256"],
+          log.data,
+        );
+        const a0In = BigInt(amount0In);
+        const a1In = BigInt(amount1In);
+        tokenIn = a0In > 0n ? token0 : token1;
+        tokenOut = a0In > 0n ? token1 : token0;
+        amountIn = a0In > 0n ? a0In : a1In;
+      } else {
+        const [amount0, amount1] = ethers.AbiCoder.defaultAbiCoder().decode(
+          ["int256", "int256", "uint160", "uint128", "int24"],
+          log.data,
+        );
+        const a0 = BigInt(amount0);
+        const a1 = BigInt(amount1);
+        // UniV3: positive amount = tokens sent TO pool (input)
+        tokenIn = a0 > 0n ? token0 : token1;
+        tokenOut = a0 > 0n ? token1 : token0;
+        amountIn = a0 > 0n ? a0 : a1;
+        if (amountIn < 0n) amountIn = -amountIn;
+      }
+
+      const factoryAdapter = broadPoolAddrs?.get(addr);
+      const adapterId = factoryAdapter
+        ? (FACTORY_ADAPTER_MAP[factoryAdapter] ?? (swapType === "univ2" ? "univ2-swap" : "univ3-swap"))
+        : (swapType === "univ2" ? "univ2-swap" : "univ3-swap");
+
+      impacts.push({ pool: addr, tokenIn, tokenOut, amountIn, matchedAdapterId: adapterId });
+      console.log(
+        `[pool-impact] swap-only decoded: pool=${addr.slice(0, 10)} ` +
+          `${tokenIn.slice(0, 10)}→${tokenOut.slice(0, 10)} amt=${amountIn}`,
+      );
+    } catch {
+      // Malformed Swap event data — skip
+    }
+  }
+
   return impacts;
 }
 
@@ -293,35 +515,58 @@ function isOutboundTouch(touch: PoolTouch): boolean {
 
 // ─── Public API ───────────────────────────────────────────────
 
-export function detectImpactFromLogs(logs: EventLog[], graph: TokenEdge[]): PoolImpact[] {
+export async function detectImpactFromLogs(
+  logs: EventLog[],
+  graph: TokenEdge[],
+  broadPoolAddrs?: Map<string, string> | null,
+  tokenQuery?: TokenQueryBackend | null,
+): Promise<PoolImpact[]> {
   const impacts: PoolImpact[] = [];
   const edgesByTarget = groupEdgesByTarget(graph);
 
   for (const log of logs) {
-    // Standard decoders: log.address is a known pool
+    // Standard decoders: log.address is a known pool in routing graph
     const edges = edgesByTarget.get(log.address.toLowerCase());
-    if (!edges || edges.length === 0) continue;
-
-    for (const decoder of IMPACT_DECODERS) {
-      if (!edges.some((edge) => decoder.adapterIds.includes(edge.adapterId))) continue;
-      try {
-        impacts.push(...decoder.decodeLog(log, edges));
-      } catch {
-        continue;
+    if (edges && edges.length > 0) {
+      for (const decoder of IMPACT_DECODERS) {
+        if (!edges.some((edge) => decoder.adapterIds.includes(edge.adapterId))) continue;
+        try {
+          impacts.push(...decoder.decodeLog(log, edges));
+        } catch {
+          continue;
+        }
       }
     }
   }
 
   // Paired Transfer fallback: tokenA→pool + pool→tokenB = swap
-  const touches = collectPoolTouches(logs, edgesByTarget);
-  impacts.push(...pairedTransferImpacts(touches, edgesByTarget));
+  // Uses broadPoolAddrs (factory-indexed) for wider matching
+  const touches = collectPoolTouches(logs, edgesByTarget, broadPoolAddrs);
+  impacts.push(...pairedTransferImpacts(touches, edgesByTarget, broadPoolAddrs));
+
+  // Swap-event correlation: detect unknown pools by correlating Swap events
+  // with Transfer events in the same log set. Works for any pool, even those
+  // not in broadPoolAddrs (created before our factory scan window).
+  impacts.push(...swapEventCorrelatedImpacts(logs, edgesByTarget, broadPoolAddrs));
+
+  // Swap-only hints: MEV-Share often exposes only the Swap event (no Transfer).
+  // For pools in the routing graph, the standard decoder already handles this.
+  // For unknown pools, query token0/token1 on-chain and decode from Swap data.
+  if (tokenQuery) {
+    impacts.push(...await swapOnlyImpacts(logs, edgesByTarget, broadPoolAddrs, tokenQuery));
+  }
 
   return dedupeImpacts(impacts);
 }
 
-export function detectPoolImpact(event: OrderflowEvent, graph: TokenEdge[]): PoolImpact[] {
+export async function detectPoolImpact(
+  event: OrderflowEvent,
+  graph: TokenEdge[],
+  broadPoolAddrs?: Map<string, string> | null,
+  tokenQuery?: TokenQueryBackend | null,
+): Promise<PoolImpact[]> {
   const directImpacts = detectDirectCalls(event, graph);
-  const logImpacts = detectImpactFromLogs(event.logs, graph);
+  const logImpacts = await detectImpactFromLogs(event.logs, graph, broadPoolAddrs, tokenQuery);
   return dedupeImpacts([...directImpacts, ...logImpacts]);
 }
 

@@ -8,16 +8,18 @@ import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-r
 import { TemplatePlanner } from "./planner/planner.js";
 import {
   buildTokenGraph,
+  buildTokenIndex,
   POOL_REGISTRY,
   type TokenEdge,
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
-import { scanActivePools, mergePoolRegistries } from "./active-pool-discovery.js";
+import { scanActivePools, indexFactoryPools, mergePoolRegistries } from "./active-pool-discovery.js";
 import { AnvilSolver } from "./solver/solver.js";
+import { PoolStateCache } from "./solver/pool-state-cache.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
-import { FLASH_LEND_SWAP_REPAY } from "./templates/path-template.js";
+import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "./templates/path-template.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
-import type { BundleRouter } from "./execution/bundle-router.js";
+import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
 import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
@@ -42,11 +44,27 @@ interface LiveConfig {
   dryRun: boolean;
   maxHints: number;
   enableHashOnly: boolean;
+  forkRefreshBlocks: number;
+  solverDeadlineMs: number;
+  oppTtlMs: number;
+  gssMaxTries: number;
+  finalSimTopN: number;
 }
 
 interface HintEnvelope {
   payload: unknown;
   hashes: string[];
+}
+
+interface StageCounters {
+  hints: number;
+  impacts: number;
+  opportunities: number;
+  plans: number;
+  solverSuccess: number;
+  simSuccess: number;
+  submitAttempts: number;
+  accepted: number;
 }
 
 function loadEnv(): void {
@@ -94,6 +112,11 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     dryRun: process.env.SEARCHER_DRY_RUN === "1",
     enableHashOnly: process.env.SEARCHER_ENABLE_HASH_ONLY === "1",
     maxHints: Number(process.env.SEARCHER_MAX_HINTS ?? "0"),
+    forkRefreshBlocks: Number(process.env.SEARCHER_FORK_REFRESH_BLOCKS ?? "5"),
+    solverDeadlineMs: Number(process.env.SEARCHER_SOLVER_DEADLINE_MS ?? "8000"),
+    oppTtlMs: Number(process.env.SEARCHER_OPP_TTL_MS ?? "5000"),
+    gssMaxTries: Number(process.env.SEARCHER_GSS_MAX_TRIES ?? "12"),
+    finalSimTopN: Number(process.env.SEARCHER_FINAL_SIM_TOP_N ?? "3"),
   };
 }
 
@@ -108,7 +131,15 @@ async function main(): Promise<void> {
   const state = new AnvilStateBackend(config.rpcUrl);
   const detector = new BackrunDetector();
   const planner = new TemplatePlanner();
+  const maxCandidates = Number(process.env.SEARCHER_MAX_CANDIDATES ?? "20");
+  planner.setMaxCandidates(maxCandidates);
+  const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
+  const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
+  planner.setMaxHops(maxHops);
+  planner.setMaxPoolsPerToken(maxPoolsPerToken);
   const solver = new AnvilSolver();
+  // Direct provider for v3 tick data — anvil-over-RPC is slow + wrong for TickLens.
+  const poolStateCache = new PoolStateCache(provider);
   const simulator = new BotVMSimulator(state, config.botvmAddress, config.wallet.address);
   const bundleRouter: BundleRouter = config.dryRun
     ? new DryRunBundleRouter()
@@ -126,25 +157,55 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] minProfitRaw=${config.minProfit}`);
   console.log(`[searcher/live] mode=${config.dryRun ? "dry-run" : "live-submit"}`);
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
+  console.log(`[searcher/live] maxCandidates=${maxCandidates}`);
+  console.log(`[searcher/live] maxHops=${maxHops} maxPoolsPerToken=${maxPoolsPerToken}`);
+  console.log(
+    `[searcher/live] solverDeadlineMs=${config.solverDeadlineMs} ` +
+      `oppTtlMs=${config.oppTtlMs} gssMaxTries=${config.gssMaxTries} ` +
+      `finalSimTopN=${config.finalSimTopN}`,
+  );
 
   await state.start();
 
   const discoveryBlocks = Number(process.env.SEARCHER_DISCOVERY_BLOCKS ?? "300");
   const discoveryTopN = Number(process.env.SEARCHER_DISCOVERY_TOP_N ?? "100");
+  const factoryBlocks = Number(process.env.SEARCHER_FACTORY_BLOCKS ?? "50000");
   const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
 
-  // Full scan: discover active pools from recent on-chain swap events
-  const discovered = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
-  const allPools = mergePoolRegistries(POOL_REGISTRY, discovered);
-  console.log(`[searcher/live] pool registry: ${POOL_REGISTRY.length} hardcoded + ${discovered.length} discovered = ${allPools.length} total`);
+  // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
+  const factoryPools = await indexFactoryPools(provider, factoryBlocks);
+  // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
+  const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
+  // Merge: hardcoded protocols + factory pools + swap-active pools
+  const allPools = mergePoolRegistries(
+    mergePoolRegistries(POOL_REGISTRY, factoryPools),
+    swapPools,
+  );
+  console.log(
+    `[searcher/live] pool registry: ${POOL_REGISTRY.length} protocol + ${factoryPools.length} factory + ${swapPools.length} swap-active = ${allPools.length} total`,
+  );
 
-  // Auto-build token graph from on-chain pool data (no hardcoded tokens)
+  // Build routing graph from ALL pools (protocol + factory + swap-active).
+  // Factory pools are queried for token0/token1 in parallel batches.
+  // This is ~1500 eth_call pairs at startup but gives full routing coverage.
   const latestBlock = await provider.getBlockNumber();
-  await state.forkAt(latestBlock);
+  await state.refreshFork(latestBlock);
   const graph = await buildTokenGraph(state, allPools);
+  const tokenIndex = buildTokenIndex(graph);
+
+  // Detection uses ALL known pool addresses (factory + swap + hardcoded)
+  // for matching hint logs. Map: address → adapter type.
+  // Routing graph is a subset for path finding.
+  const allPoolMap = new Map<string, string>();
+  for (const p of allPools) allPoolMap.set(p.address.toLowerCase(), p.adapter);
   detector.setGraph(graph);
+  detector.setPoolAddressMap(allPoolMap);
+  detector.setTokenQuery(state);
   planner.setGraph(graph);
-  console.log(`[searcher/live] token graph: ${graph.length} edges from on-chain queries`);
+  console.log(
+    `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
+      `detection pool set: ${allPoolMap.size} addresses`,
+  );
 
   // Incremental refresh: scan recent blocks for new pools every N minutes
   const knownPoolAddrs = new Set(allPools.map((p) => p.address.toLowerCase()));
@@ -174,9 +235,11 @@ async function main(): Promise<void> {
   let processedHints = 0;
   let busy = false;
   const seen = new Set<string>();
+  const counters = createStageCounters();
 
   const shutdown = () => {
     console.log("\n[searcher/live] shutting down");
+    logStageCounters(counters);
     clearInterval(refreshTimer);
     state.stop();
     process.exit(0);
@@ -187,7 +250,7 @@ async function main(): Promise<void> {
   try {
     for await (const hint of mevShareHints(config.mevShareSseUrl)) {
       processedHints++;
-      if (config.maxHints > 0 && processedHints > config.maxHints) break;
+      counters.hints++;
       if (busy) {
         console.log("[searcher/live] skip hint: simulation already running");
         continue;
@@ -200,6 +263,7 @@ async function main(): Promise<void> {
         seen.add(key);
 
         busy = true;
+        const tHint = Date.now();
         try {
           await handleHint(hint, txHash, {
             config,
@@ -211,6 +275,11 @@ async function main(): Promise<void> {
             simulator,
             bundleRouter,
             graph,
+            tokenIndex,
+            poolAddrs: allPoolMap,
+            counters,
+            startedAt: tHint,
+            cache: poolStateCache,
           });
         } catch (err) {
           console.log(
@@ -218,11 +287,15 @@ async function main(): Promise<void> {
               `${err instanceof Error ? err.message : String(err)}`,
           );
         } finally {
+          console.log(`[searcher/live] ${txHash.slice(0, 10)} end-to-end ${Date.now() - tHint}ms`);
+          logStageCounters(counters);
           busy = false;
         }
       }
+      if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
+    logStageCounters(counters);
     state.stop();
   }
 }
@@ -237,6 +310,13 @@ interface HandleCtx {
   simulator: BotVMSimulator;
   bundleRouter: BundleRouter;
   graph: TokenEdge[];
+  tokenIndex: Map<string, Set<string>>;
+  poolAddrs: Map<string, string>;
+  counters: StageCounters;
+  /** Wall-clock time the hint was received; used for the opportunity TTL budget. */
+  startedAt: number;
+  /** Warmed pool-state cache for local-math quotes (path B). Cleared per hint. */
+  cache: PoolStateCache;
 }
 
 /**
@@ -259,7 +339,14 @@ async function handleHint(
   console.log(`[searcher/live] hint tx=${txHash}`);
 
   const latestBlock = await ctx.provider.getBlockNumber();
-  await ctx.state.forkAt(latestBlock);
+  // Fork-reuse: reset to baseline (~ms) instead of re-forking (~s) each hint;
+  // only re-fork every forkRefreshBlocks to refresh state (~7x faster setup).
+  await ctx.state.ensureFreshFork(latestBlock, ctx.config.forkRefreshBlocks);
+  // Fork/pool state changes per hint (reset + impersonated victim swap), so
+  // drop warmed local-math state; it lazy-warms again on first quote this hint.
+  // v3 tick data is read directly at the fork's block.
+  ctx.cache.clear();
+  ctx.cache.setTickBlock(latestBlock);
 
   // ── Try Path A: hint-log-based impersonate simulation ──
   const hintLogs = extractLogs(hint.payload);
@@ -277,15 +364,25 @@ async function handleHint(
   } else if (hintLogs.length > 5) {
     console.log(`[searcher/live] ${txHash.slice(0, 10)} hint has ${hintLogs.length} logs (batch)`);
   }
-  const hintImpact = matchPoolImpactFromLogs(hintLogs, ctx.graph);
+  const hintImpact = await matchPoolImpactFromLogs(hintLogs, ctx.graph, ctx.poolAddrs, ctx.state);
+
+  // Token-index check: does any hint Transfer involve a token we track?
+  const hintTokenHit = hintImpact ? true : hintLogsMatchTokenIndex(hintLogs, ctx.tokenIndex);
+
   let rawTx: string | undefined;
   let eventLogs: Array<{ address: string; topics: string[]; data: string }>;
   let eventFrom = ethers.ZeroAddress;
   let eventNonce = 0;
   let eventTo: string | null = null;
   let eventInput = "0x";
+  let eventBlockNumber = latestBlock + 1;
+  let submissionMode: BundleSubmission["mode"] = "hash-only";
+  let countedHintImpact = false;
 
   if (hintImpact) {
+    ctx.counters.impacts++;
+    countedHintImpact = true;
+
     // Path A: hash-only — approximate simulation via impersonate swap
     if (!ctx.config.enableHashOnly) {
       throw new Error("hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable");
@@ -303,42 +400,82 @@ async function handleHint(
       topics: [...l.topics],
       data: l.data,
     }));
+  } else if (!hintTokenHit) {
+    // No pool match AND no token match — skip early
+    throw new Error("no matching graph pool");
   } else {
-    // ── Path B: fallback — try to fetch full tx from RPC ──
+    // Token hit but no pool impact — try to fetch full tx from RPC
+    console.log(`[searcher/live] ${txHash.slice(0, 10)} token-index hit, trying RPC fetch`);
     const tx = await ctx.provider.getTransaction(txHash);
-    if (!tx) throw new Error("tx not available from RPC (no hint logs matched graph pool)");
-    if (tx.blockNumber !== null) throw new Error(`tx already mined in block ${tx.blockNumber}`);
+    if (!tx) throw new Error("tx not available from RPC (private MEV-Share tx)");
 
-    rawTx = (await rawTxByHash(ctx.provider, txHash, tx)) ?? undefined;
-    if (!rawTx) throw new Error("raw tx unavailable");
+    if (tx.blockNumber !== null) {
+      // ── Path C: tx already mined — fork at that block, check for next-block arb ──
+      console.log(
+        `[searcher/live] ${txHash.slice(0, 10)} mined in block ${tx.blockNumber}, checking next-block arb`,
+      );
+      await ctx.state.refreshFork(tx.blockNumber);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+      submissionMode = "standalone";
+      eventBlockNumber = tx.blockNumber;
 
-    const appliedHash = await ctx.state.applyRawTx(rawTx);
-    if (appliedHash.toLowerCase() !== txHash.toLowerCase()) {
-      throw new Error(`local victim hash mismatch ${appliedHash}`);
+      const receipt = await ctx.provider.getTransactionReceipt(txHash);
+      if (!receipt || receipt.status !== 1) {
+        throw new Error("on-chain receipt missing or reverted");
+      }
+      eventFrom = tx.from;
+      eventNonce = tx.nonce;
+      eventTo = tx.to;
+      eventInput = tx.data;
+      eventLogs = receipt.logs.map((log) => ({
+        address: log.address,
+        topics: [...log.topics],
+        data: log.data,
+      }));
+      // Debug: classify receipt log events
+      const SWAP_TOPICS_DEBUG = new Set([
+        "0xd78ad95ff46318e747eaa5cff20e23073340ceaa01c11f3ebc2f1e60f7ee5c52", // UniV2 Swap
+        "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67", // UniV3 Swap
+      ]);
+      const swapCount = eventLogs.filter((l) => SWAP_TOPICS_DEBUG.has(l.topics[0]?.toLowerCase() ?? "")).length;
+      const xferCount = eventLogs.filter((l) => l.topics[0]?.toLowerCase() === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").length;
+      console.log(
+        `[searcher/live] ${txHash.slice(0, 10)} receipt: ${eventLogs.length} logs (${xferCount} Transfer, ${swapCount} Swap)`,
+      );
+    } else {
+      // ── Path B: pending tx — apply raw tx on fork ──
+      submissionMode = "victim-bundle";
+      rawTx = (await rawTxByHash(ctx.provider, txHash, tx)) ?? undefined;
+      if (!rawTx) throw new Error("raw tx unavailable");
+
+      const appliedHash = await ctx.state.applyRawTx(rawTx);
+      if (appliedHash.toLowerCase() !== txHash.toLowerCase()) {
+        throw new Error(`local victim hash mismatch ${appliedHash}`);
+      }
+
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+
+      const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
+      if (!receipt || receipt.status !== 1) {
+        throw new Error("local victim receipt missing or reverted");
+      }
+
+      eventFrom = tx.from;
+      eventNonce = tx.nonce;
+      eventTo = tx.to;
+      eventInput = tx.data;
+      eventLogs = receipt.logs.map((log) => ({
+        address: log.address,
+        topics: [...log.topics],
+        data: log.data,
+      }));
     }
-
-    await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
-
-    const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
-    if (!receipt || receipt.status !== 1) {
-      throw new Error("local victim receipt missing or reverted");
-    }
-
-    eventFrom = tx.from;
-    eventNonce = tx.nonce;
-    eventTo = tx.to;
-    eventInput = tx.data;
-    eventLogs = receipt.logs.map((log) => ({
-      address: log.address,
-      topics: [...log.topics],
-      data: log.data,
-    }));
   }
 
   // ── Common pipeline: detect → plan → solve → simulate → submit ──
   const event: OrderflowEvent = {
     txHash,
-    blockNumber: latestBlock + 1,
+    blockNumber: eventBlockNumber,
     rawTx: rawTx ?? "0x",
     from: eventFrom,
     nonce: eventNonce,
@@ -349,33 +486,68 @@ async function handleHint(
   };
 
   const opportunities = await ctx.detector.detect(event, ctx.state);
+  if (countedHintImpact) {
+    ctx.counters.impacts += Math.max(0, opportunities.length - 1);
+  } else {
+    ctx.counters.impacts += opportunities.length;
+  }
   if (opportunities.length === 0) {
     console.log(`[searcher/live] ${txHash.slice(0, 10)} no matching graph pool`);
     return;
   }
+  ctx.counters.opportunities += opportunities.length;
   console.log(`[searcher/live] detector: ${opportunities.length} opportunities`);
 
   for (const opp of opportunities) {
-    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY]);
+    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]);
+    ctx.counters.plans += plans.length;
     console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
     for (const candidate of plans) {
+      // Opportunity TTL (v7 AC-3a.5): a hint older than oppTtlMs is chasing stale
+      // state — stop solving. Each solve is further capped to the remaining budget
+      // so it never runs past the opportunity's useful life. (v7 AC-3a.3)
+      const remainingMs = ctx.config.oppTtlMs - (Date.now() - ctx.startedAt);
+      if (remainingMs <= 0) {
+        console.log(
+          `[searcher/live] opportunity expired ` +
+            `(${Date.now() - ctx.startedAt}ms > TTL ${ctx.config.oppTtlMs}ms), abandoning`,
+        );
+        return;
+      }
       try {
-        const resolved = await ctx.solver.solve(candidate, ctx.state, ctx.simulator);
+        const resolved = await ctx.solver.solve(candidate, ctx.state, ctx.simulator, {
+          deadlineMs: Math.min(ctx.config.solverDeadlineMs, remainingMs),
+          gssMaxTries: ctx.config.gssMaxTries,
+          finalSimTopN: ctx.config.finalSimTopN,
+          cache: ctx.cache,
+        });
+        ctx.counters.solverSuccess++;
+        // Terminal verify (v7 AC-3a.4): re-simulate the resolved plan and require
+        // strictly positive profit before paying gas — never submit on a plan that
+        // only broke even or drifted negative since the solver picked it.
         const sim = await ctx.simulator.simulate(resolved);
+        if (sim.success && sim.netProfit > 0n) ctx.counters.simSuccess++;
+        // The flash loan must repay (enforced by the assert-balance guard), so a
+        // successful sim with positive profit guarantees token profit > 0. Gas
+        // economics are the builder's concern — we submit with expectedProfit.
         if (!sim.success || sim.netProfit <= 0n) continue;
 
         const targetBlock = (await ctx.provider.getBlockNumber()) + 1;
-        // victimRawTx is optional — if undefined, bundle-router uses mev_sendBundle
+        ctx.counters.submitAttempts++;
         const results = await ctx.bundleRouter.submit({
           victimTxHash: txHash,
           victimRawTx: rawTx,
+          mode: submissionMode,
           backrunCalldata: sim.calldata,
           targetBlock,
           expectedProfit: sim.netProfit,
           gasUsed: sim.gasUsed > 0n ? sim.gasUsed : ctx.config.defaultGasUsed,
         });
+        ctx.counters.accepted += results.filter((r) => r.accepted).length;
         const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
-        const mode = rawTx ? "eth_sendBundle" : "mev_sendBundle";
+        const mode = submissionMode === "standalone"
+          ? "standalone eth_sendBundle"
+          : rawTx ? "eth_sendBundle" : "mev_sendBundle";
         console.log(
           `[searcher/live] submitted via ${mode} targetBlock=${targetBlock} ` +
             `profit=${sim.netProfit}` +
@@ -390,6 +562,33 @@ async function handleHint(
       }
     }
   }
+}
+
+function createStageCounters(): StageCounters {
+  return {
+    hints: 0,
+    impacts: 0,
+    opportunities: 0,
+    plans: 0,
+    solverSuccess: 0,
+    simSuccess: 0,
+    submitAttempts: 0,
+    accepted: 0,
+  };
+}
+
+function logStageCounters(counters: StageCounters): void {
+  console.log(
+    `[searcher/live] counters ` +
+      `hints=${counters.hints} ` +
+      `impacts=${counters.impacts} ` +
+      `opportunities=${counters.opportunities} ` +
+      `plans=${counters.plans} ` +
+      `solverSuccess=${counters.solverSuccess} ` +
+      `simSuccess=${counters.simSuccess} ` +
+      `submitAttempts=${counters.submitAttempts} ` +
+      `accepted=${counters.accepted}`,
+  );
 }
 
 // ─── Hint Log Parsing ─────────────────────────────────────────
@@ -412,12 +611,28 @@ function extractLogs(payload: unknown): HintLog[] {
   return [];
 }
 
-function matchPoolImpactFromLogs(
+async function matchPoolImpactFromLogs(
   logs: HintLog[],
   graph: TokenEdge[],
-): PoolImpact | null {
-  const impacts = detectImpactFromLogs(logs, graph);
+  broadPoolAddrs: Map<string, string> | undefined,
+  tokenQuery?: TokenQueryBackend,
+): Promise<PoolImpact | null> {
+  const impacts = await detectImpactFromLogs(logs, graph, broadPoolAddrs, tokenQuery);
   return impacts.length > 0 ? impacts[0] : null;
+}
+
+const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/** Check if any Transfer log's token address is in our token index. */
+function hintLogsMatchTokenIndex(
+  logs: HintLog[],
+  tokenIndex: Map<string, Set<string>>,
+): boolean {
+  for (const log of logs) {
+    if (log.topics[0]?.toLowerCase() !== ERC20_TRANSFER_TOPIC) continue;
+    if (tokenIndex.has(log.address.toLowerCase())) return true;
+  }
+  return false;
 }
 
 // ─── Impersonate Swap (Path A simulation) ─────────────────────

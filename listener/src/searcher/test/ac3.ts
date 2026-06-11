@@ -14,9 +14,10 @@ import { DryRunBundleRouter } from "../execution/bundle-router.js";
 import { HotPathSearcher } from "../hot-path.js";
 import { ManualVictimSource } from "../orderflow/manual-source.js";
 import { TemplatePlanner } from "../planner/planner.js";
+import { defaultTokenGraph } from "../planner/token-graph.js";
 import { AnvilSolver } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
-import { FLASH_LEND_SWAP_REPAY } from "../templates/path-template.js";
+import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
 function loadEnv(): void {
   const envPath = resolve("..", ".env");
@@ -48,11 +49,35 @@ async function main(): Promise<void> {
 
   try {
     const source = new ManualVictimSource(mainProvider, VICTIM_FIXTURES);
+    // AC-3 runs offline on the small hand-written graph. Inject it explicitly
+    // into BOTH detector and planner so the test never relies on hidden fallbacks
+    // (the production main.ts injects a discovered graph the same way).
+    const graph = defaultTokenGraph();
     const detector = new BackrunDetector();
+    detector.setGraph(graph);
     const planner = new TemplatePlanner();
+    planner.setGraph(graph);
     const solver = new AnvilSolver();
     const simulator = new BotVMSimulator(state, DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER);
     const router = new DryRunBundleRouter();
+
+    // Optional per-candidate solve budget (v7 AC-3a.3 [fork] verification): when
+    // SEARCHER_SOLVER_DEADLINE_MS is set, each candidate solve is hard-capped so
+    // the search can't burn through every grid×bps trial on a no-arb path. Unset
+    // ⇒ unbounded (default) so the profit regression stays apples-to-apples.
+    const deadlineEnv = process.env.SEARCHER_SOLVER_DEADLINE_MS;
+    const finalSimTopN = Number(process.env.SEARCHER_FINAL_SIM_TOP_N ?? "3");
+    const solveOptions = deadlineEnv
+      ? {
+          deadlineMs: Number(deadlineEnv),
+          gssMaxTries: Number(process.env.SEARCHER_GSS_MAX_TRIES ?? "12"),
+          finalSimTopN,
+        }
+      : { finalSimTopN };
+    console.log(
+      `[searcher/ac3] solve budget: deadlineMs=${solveOptions.deadlineMs ?? "∞"} ` +
+        `gssMaxTries=${process.env.SEARCHER_GSS_MAX_TRIES ?? "12"} finalSimTopN=${finalSimTopN}`,
+    );
 
     const searcher = new HotPathSearcher(
       source,
@@ -62,10 +87,12 @@ async function main(): Promise<void> {
       solver,
       simulator,
       router,
-      [FLASH_LEND_SWAP_REPAY],
+      [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
       async () => {
         await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
       },
+      solveOptions,
+      mainProvider, // direct RPC for v3 tick data (anvil-over-RPC is slow + wrong for TickLens)
     );
 
     console.log(`[searcher/ac3] running ${VICTIM_FIXTURES.length} fixture(s)`);

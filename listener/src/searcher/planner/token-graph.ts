@@ -16,6 +16,8 @@ export interface TokenEdge {
   curveJ?: number;
   poolToken0?: string;
   poolToken1?: string;
+  /** Activity/liquidity proxy (swap-event count from discovery). undefined = curated backbone (pinned, never pruned). */
+  score?: number;
 }
 
 export interface TokenPath {
@@ -31,19 +33,13 @@ export interface PoolEntry {
   fixedTokenIn?: string;
   fixedTokenOut?: string;
   fixedSlotKind?: "lend" | "swap";
+  /** Activity proxy from discovery (swap-event count). undefined = curated backbone (pinned). */
+  score?: number;
 }
 
+// DEX pools are discovered via scanActivePools / factory events.
+// Only protocol-specific contracts without standard factory go here.
 export const POOL_REGISTRY: PoolEntry[] = [
-  // Curve pools — tokens auto-discovered via coins()
-  { address: ADDR.CURVE_3POOL, adapter: "curve" },
-  { address: ADDR.CURVE_DOLA_WSTUSR, adapter: "curve-nr" },
-  { address: ADDR.CURVE_DOLA_SUSDS, adapter: "curve" },
-  { address: ADDR.CURVE_SUSDS_USDT, adapter: "curve" },
-
-  // UniV3 pools — tokens auto-discovered via token0()/token1()
-  { address: ADDR.UNISWAP_V3_USDT_WETH, adapter: "univ3" },
-
-  // Fixed-direction protocols
   {
     address: ADDR.SKY_PSM_LITE,
     adapter: "psm",
@@ -58,6 +54,10 @@ export const POOL_REGISTRY: PoolEntry[] = [
     fixedTokenOut: ADDR.USDC,
     fixedSlotKind: "lend",
   },
+  // 0.01% fee V3 pools — created at V3 launch, outside factory index window.
+  { address: ADDR.UNISWAP_V3_USDC_WETH_100, adapter: "univ3" },
+  { address: ADDR.UNISWAP_V3_USDC_USDT_100, adapter: "univ3" },
+  { address: ADDR.UNISWAP_V3_USDT_WETH, adapter: "univ3" },
 ];
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
@@ -97,7 +97,7 @@ export async function buildTokenGraph(
   const edges: TokenEdge[] = [];
   let skipped = 0;
 
-  const BATCH = 10;
+  const BATCH = 50;
   for (let i = 0; i < pools.length; i += BATCH) {
     const batch = pools.slice(i, i + BATCH);
     const results = await Promise.allSettled(
@@ -107,6 +107,9 @@ export async function buildTokenGraph(
       if (r.status === "fulfilled") edges.push(...r.value);
       else skipped++;
     }
+    if (pools.length > 200 && i % 500 === 0 && i > 0) {
+      console.log(`[token-graph] progress: ${i}/${pools.length} pools, ${edges.length} edges, ${skipped} skipped`);
+    }
   }
 
   console.log(
@@ -114,6 +117,26 @@ export async function buildTokenGraph(
       (skipped > 0 ? ` (${skipped} skipped)` : ""),
   );
   return edges;
+}
+
+/**
+ * Build a token→pools index from edges.
+ * Given a token address, returns all pool addresses that trade it.
+ */
+export function buildTokenIndex(edges: TokenEdge[]): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    for (const token of [edge.tokenIn, edge.tokenOut]) {
+      const key = token.toLowerCase();
+      let pools = index.get(key);
+      if (!pools) {
+        pools = new Set();
+        index.set(key, pools);
+      }
+      pools.add(edge.target.toLowerCase());
+    }
+  }
+  return index;
 }
 
 async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
@@ -153,6 +176,18 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       );
       break;
     }
+    case "univ4": {
+      // V4 pools live inside the PoolManager — no individual contracts.
+      // Edges must carry fixedTokenIn/fixedTokenOut from the registry entry.
+      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
+        throw new Error(`univ4 pool ${pool.address} requires fixedTokenIn/fixedTokenOut`);
+      }
+      edges.push(
+        { adapterId, target: pool.address, tokenIn: pool.fixedTokenIn, tokenOut: pool.fixedTokenOut, slotKind: "swap" },
+        { adapterId, target: pool.address, tokenIn: pool.fixedTokenOut, tokenOut: pool.fixedTokenIn, slotKind: "swap" },
+      );
+      break;
+    }
     case "psm":
     case "fluid-vault": {
       if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
@@ -167,6 +202,9 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
     }
   }
 
+  // Propagate the discovery activity score onto every edge of this pool.
+  // undefined (curated POOL_REGISTRY / protocol pools) stays undefined → pinned.
+  for (const edge of edges) edge.score = pool.score;
   return edges;
 }
 
@@ -321,28 +359,88 @@ export function defaultTokenGraph(): TokenEdge[] {
 
 // ─── DFS path enumeration ─────────────────────────────────────
 
+export interface PathOpts {
+  /** Max number of hops (edges) in a path. */
+  maxHops?: number;
+  /** Per-token cap on outgoing edges explored, ranked by score desc. Pinned edges are exempt. */
+  maxPoolsPerToken?: number;
+  /** Pool addresses (lowercase) exempt from top-N truncation (e.g. the victim/affected pool). */
+  pinnedPools?: Set<string>;
+  /** Hard safety cap on total enumerated paths (prevents DFS blow-up / OOM). */
+  maxPaths?: number;
+}
+
+/**
+ * Enumerate token paths from startToken to profitToken via DFS.
+ *
+ * sui-mev-style "fewer paths": at each token we only expand the top-N outgoing
+ * edges by score (activity/liquidity proxy), keeping pinned edges (curated
+ * backbone with score===undefined, plus the victim pool) regardless of rank.
+ * maxHops caps depth; maxPaths is a hard OOM guard. Defaults are unbounded
+ * (maxPoolsPerToken=Infinity, maxHops=8) so existing callers/tests are unchanged.
+ */
 export function buildTokenPaths(
   edges: TokenEdge[],
   startToken: string,
   profitToken: string,
-  maxDepth = 8,
+  opts: PathOpts = {},
 ): TokenPath[] {
+  const maxHops = opts.maxHops ?? 8;
+  const maxPoolsPerToken = opts.maxPoolsPerToken ?? Infinity;
+  const pinnedPools = opts.pinnedPools;
+  const maxPaths = opts.maxPaths ?? 20000;
+
+  const isPinned = (e: TokenEdge): boolean =>
+    e.score === undefined || (pinnedPools?.has(e.target.toLowerCase()) ?? false);
+
+  // Group outgoing edges by tokenIn, then truncate each token to its top-N by
+  // score (pinned edges always kept). This is the core path-count limiter.
+  const outByToken = new Map<string, TokenEdge[]>();
+  for (const e of edges) {
+    const k = e.tokenIn.toLowerCase();
+    const arr = outByToken.get(k);
+    if (arr) arr.push(e);
+    else outByToken.set(k, [e]);
+  }
+  if (maxPoolsPerToken !== Infinity) {
+    for (const [k, arr] of outByToken) {
+      if (arr.length <= maxPoolsPerToken) continue;
+      const pinned = arr.filter(isPinned);
+      const rest = arr
+        .filter((e) => !isPinned(e))
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, Math.max(0, maxPoolsPerToken - pinned.length));
+      outByToken.set(k, [...pinned, ...rest]);
+    }
+  }
+
   const paths: TokenPath[] = [];
 
   function walk(token: string, path: TokenEdge[]): void {
+    if (paths.length >= maxPaths) return;
     if (path.length > 0 && token.toLowerCase() === profitToken.toLowerCase()) {
       paths.push({ edges: path });
       return;
     }
-    if (path.length >= maxDepth) return;
+    if (path.length >= maxHops) return;
 
-    for (const edge of edges) {
-      if (edge.tokenIn.toLowerCase() !== token.toLowerCase()) continue;
+    const outs = outByToken.get(token.toLowerCase());
+    if (!outs) return;
+    for (const edge of outs) {
+      if (path.some((used) => sameDirectedEdge(used, edge))) continue;
       walk(edge.tokenOut, [...path, edge]);
+      if (paths.length >= maxPaths) return;
     }
   }
 
   walk(startToken, []);
   return paths;
+}
+
+function sameDirectedEdge(a: TokenEdge, b: TokenEdge): boolean {
+  return a.adapterId === b.adapterId &&
+    a.target.toLowerCase() === b.target.toLowerCase() &&
+    a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
+    a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase();
 }
 

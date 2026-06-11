@@ -1,10 +1,11 @@
 import { ethers } from "ethers";
-import { submitBundle, submitMevShareBundle } from "../../submitter.js";
+import { submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
 import type { SubmitResult } from "../../types.js";
 
 export interface BundleSubmission {
   victimTxHash: string;
   victimRawTx?: string;
+  mode?: "victim-bundle" | "hash-only" | "standalone";
   backrunCalldata: string;
   targetBlock: number;
   expectedProfit: bigint;
@@ -36,7 +37,19 @@ export class ProductionBundleRouter implements BundleRouter {
     const gasUsed = Number(bundle.gasUsed ?? this.defaultGasUsed);
     let results: SubmitResult[];
 
-    if (bundle.victimRawTx) {
+    if (bundle.mode === "standalone") {
+      // Mined-victim path: the victim is already included, so submit only the
+      // backrun tx for the next block. Do not reference the mined tx hash in
+      // mev_sendBundle.
+      results = await submitStandaloneBundle({
+        calldataHex: bundle.backrunCalldata,
+        gasUsed,
+        wallet: this.wallet,
+        botvmAddress: this.botvmAddress,
+        provider: this.provider,
+        targetBlock: bundle.targetBlock,
+      });
+    } else if (bundle.victimRawTx) {
       // Primary path: have rawTx → eth_sendBundle to all builders
       // submitBundle() handles tx signing internally
       results = await submitBundle({

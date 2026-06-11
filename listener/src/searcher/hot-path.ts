@@ -2,7 +2,9 @@ import type { StateBackend } from "../shared/state/state-backend.js";
 import type { Detector } from "./detector/detector.js";
 import type { ManualVictimSource } from "./orderflow/manual-source.js";
 import type { Planner } from "./planner/planner.js";
-import type { Solver } from "./solver/solver.js";
+import type { JsonRpcProvider } from "ethers";
+import type { Solver, SolveOptions } from "./solver/solver.js";
+import { PoolStateCache } from "./solver/pool-state-cache.js";
 import type { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import type { BundleRouter } from "./execution/bundle-router.js";
 import type { PathTemplate } from "./templates/path-template.js";
@@ -26,7 +28,13 @@ export class HotPathSearcher {
     private readonly bundleRouter: BundleRouter,
     private readonly templates: PathTemplate[],
     private readonly prepareExecutor?: () => Promise<void>,
-  ) {}
+    private readonly solveOptions?: SolveOptions,
+    mainnetProvider?: JsonRpcProvider,
+  ) {
+    this.cache = new PoolStateCache(mainnetProvider);
+  }
+
+  private readonly cache: PoolStateCache;
 
   async run(): Promise<number> {
     const results = await this.runDetailed();
@@ -57,6 +65,11 @@ export class HotPathSearcher {
       );
       console.log("[searcher/ac3] install executor");
       await this.prepareExecutor?.();
+      // Fork advanced to this fixture's victim post-state — drop stale warmed
+      // pool state so local-math quotes reflect the new balances. v3 tick data
+      // is read directly at the fixture's block.
+      this.cache.clear();
+      this.cache.setTickBlock(event.blockNumber);
 
       const opportunities = await this.detector.detect(event, this.state);
       console.log(`[searcher/ac3] detector: ${opportunities.length} opportunities`);
@@ -75,7 +88,10 @@ export class HotPathSearcher {
         for (const candidate of plans) {
           if (reachedFixtureTarget) break;
           try {
-            const resolved = await this.solver.solve(candidate, this.state, this.simulator);
+            const resolved = await this.solver.solve(candidate, this.state, this.simulator, {
+              ...this.solveOptions,
+              cache: this.cache,
+            });
             const sim = await this.simulator.simulate(resolved);
             if (!sim.success || sim.netProfit <= 0n) {
               console.log(

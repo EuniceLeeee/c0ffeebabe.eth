@@ -49,25 +49,13 @@ export async function submitBundle(params: {
   } = params;
 
   // 1. Build backrun tx
-  const nonce = await wallet.getNonce("pending");
-  const feeData = await provider.getFeeData();
-
-  const gasLimit = BigInt(Math.ceil(gasUsed * 1.3)); // 30% buffer
-
-  const backrunTx: ethers.TransactionLike = {
-    to: botvmAddress,
-    data: calldataHex,
-    nonce,
-    chainId: 1,
-    type: 2,
-    gasLimit,
-    maxFeePerGas: feeData.maxFeePerGas ?? ethers.parseUnits("30", "gwei"),
-    maxPriorityFeePerGas:
-      feeData.maxPriorityFeePerGas ?? ethers.parseUnits("2", "gwei"),
-    value: 0,
-  };
-
-  const signedBackrunTx = await wallet.signTransaction(backrunTx);
+  const { signedBackrunTx, gasLimit, nonce } = await signBackrunTx({
+    calldataHex,
+    gasUsed,
+    wallet,
+    botvmAddress,
+    provider,
+  });
 
   const ts = new Date().toISOString();
   console.log(`[${ts}] Bundle constructed:`);
@@ -118,21 +106,13 @@ export async function submitMevShareBundle(params: {
   const { victimHash, calldataHex, gasUsed, wallet, botvmAddress, provider, targetBlock } = params;
 
   // Build + sign backrun tx (same logic as submitBundle)
-  const nonce = await wallet.getNonce("pending");
-  const feeData = await provider.getFeeData();
-  const gasLimit = BigInt(Math.ceil(gasUsed * 1.3));
-  const backrunTx: ethers.TransactionLike = {
-    to: botvmAddress,
-    data: calldataHex,
-    nonce,
-    chainId: 1,
-    type: 2,
-    gasLimit,
-    maxFeePerGas: feeData.maxFeePerGas ?? ethers.parseUnits("30", "gwei"),
-    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? ethers.parseUnits("2", "gwei"),
-    value: 0,
-  };
-  const signedBackrunTx = await wallet.signTransaction(backrunTx);
+  const { signedBackrunTx } = await signBackrunTx({
+    calldataHex,
+    gasUsed,
+    wallet,
+    botvmAddress,
+    provider,
+  });
 
   const bundleParams = {
     version: "v0.1",
@@ -182,6 +162,90 @@ export async function submitMevShareBundle(params: {
     builder: "flashbots-mev-share",
     accepted: true,
     bundleHash: json.result?.bundleHash,
+  };
+}
+
+// ─── Standalone Backrun Bundle (mined victim / next block) ─────
+
+/**
+ * Submit only the backrun tx as an eth_sendBundle to builders.
+ *
+ * Used when the victim tx is already mined: the target state is known, and
+ * the mined victim hash cannot be referenced in mev_sendBundle.
+ */
+export async function submitStandaloneBundle(params: {
+  calldataHex: string;
+  gasUsed: number;
+  wallet: ethers.Wallet;
+  botvmAddress: string;
+  provider: ethers.JsonRpcProvider;
+  targetBlock: number;
+}): Promise<SubmitResult[]> {
+  const { calldataHex, gasUsed, wallet, botvmAddress, provider, targetBlock } = params;
+
+  const { signedBackrunTx, gasLimit, nonce } = await signBackrunTx({
+    calldataHex,
+    gasUsed,
+    wallet,
+    botvmAddress,
+    provider,
+  });
+
+  const ts = new Date().toISOString();
+  console.log(`[${ts}] Standalone backrun bundle constructed:`);
+  console.log(`  target block: ${targetBlock}`);
+  console.log(`  backrun to:   ${botvmAddress}`);
+  console.log(`  gasLimit:     ${gasLimit}`);
+  console.log(`  nonce:        ${nonce}`);
+
+  const bundleParams = {
+    txs: [signedBackrunTx],
+    blockNumber: `0x${targetBlock.toString(16)}`,
+  };
+
+  const results = await Promise.allSettled(
+    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet))
+  );
+
+  return results.map((r, i) => {
+    if (r.status === "fulfilled") return r.value;
+    return {
+      builder: BUILDERS[i].name,
+      accepted: false,
+      error: r.reason?.message ?? String(r.reason),
+    };
+  });
+}
+
+async function signBackrunTx(params: {
+  calldataHex: string;
+  gasUsed: number;
+  wallet: ethers.Wallet;
+  botvmAddress: string;
+  provider: ethers.JsonRpcProvider;
+}): Promise<{ signedBackrunTx: string; gasLimit: bigint; nonce: number }> {
+  const { calldataHex, gasUsed, wallet, botvmAddress, provider } = params;
+  const nonce = await wallet.getNonce("pending");
+  const feeData = await provider.getFeeData();
+  const gasLimit = BigInt(Math.ceil(gasUsed * 1.3)); // 30% buffer
+
+  const backrunTx: ethers.TransactionLike = {
+    to: botvmAddress,
+    data: calldataHex,
+    nonce,
+    chainId: 1,
+    type: 2,
+    gasLimit,
+    maxFeePerGas: feeData.maxFeePerGas ?? ethers.parseUnits("30", "gwei"),
+    maxPriorityFeePerGas:
+      feeData.maxPriorityFeePerGas ?? ethers.parseUnits("2", "gwei"),
+    value: 0,
+  };
+
+  return {
+    signedBackrunTx: await wallet.signTransaction(backrunTx),
+    gasLimit,
+    nonce,
   };
 }
 

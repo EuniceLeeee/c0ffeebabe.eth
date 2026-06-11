@@ -1,6 +1,122 @@
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
 
+// ─── Factory addresses ──────────────────────────────────────
+
+const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+const UNIV3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
+const SUSHI_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
+
+// Factory event topics
+const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
+const UNIV3_POOL_CREATED = ethers.id("PoolCreated(address,address,uint24,int24,address)");
+
+// ─── Factory-based full pool indexing ───────────────────────
+
+const FACTORY_LOG_BATCH = 5000;
+
+interface FactoryDef {
+  address: string;
+  topic: string;
+  adapter: PoolEntry["adapter"];
+  parsePool: (log: { data: string; topics: string[] }) => string;
+}
+
+const FACTORIES: FactoryDef[] = [
+  {
+    address: UNIV2_FACTORY,
+    topic: UNIV2_PAIR_CREATED,
+    adapter: "univ2",
+    // PairCreated data: pair address in first 32 bytes, then uint256
+    parsePool: (log) => ethers.getAddress("0x" + log.data.slice(26, 66)),
+  },
+  {
+    address: SUSHI_FACTORY,
+    topic: UNIV2_PAIR_CREATED,
+    adapter: "univ2",
+    parsePool: (log) => ethers.getAddress("0x" + log.data.slice(26, 66)),
+  },
+  {
+    address: UNIV3_FACTORY,
+    topic: UNIV3_POOL_CREATED,
+    adapter: "univ3",
+    // PoolCreated data: tickSpacing(int24, 32B) + pool(address, 32B)
+    parsePool: (log) => {
+      const dataHex = log.data.replace("0x", "");
+      return ethers.getAddress("0x" + dataHex.slice(-40));
+    },
+  },
+];
+
+/**
+ * Index pools from factory PairCreated/PoolCreated events over a block range.
+ *
+ * Full-history scan is too slow for standard RPCs. Two modes:
+ *   1. Startup: scan recent N blocks (default 50k ≈ 7 days)
+ *   2. Incremental: scan last 25 blocks every refresh cycle
+ *
+ * For full coverage, pre-generate a pool CSV from Dune/archive and load
+ * via loadPoolCsv() at startup.
+ */
+export async function indexFactoryPools(
+  provider: ethers.JsonRpcProvider,
+  blocksBack = 50000,
+): Promise<PoolEntry[]> {
+  const latest = await provider.getBlockNumber();
+  const fromBlock = latest - blocksBack;
+  const pools: PoolEntry[] = [];
+
+  for (const factory of FACTORIES) {
+    let count = 0;
+    for (let start = fromBlock; start <= latest; start += FACTORY_LOG_BATCH) {
+      const end = Math.min(start + FACTORY_LOG_BATCH - 1, latest);
+      const logs = await getFactoryLogs(provider, factory, start, end);
+      for (const log of logs) {
+        try {
+          // score 0: factory pools are prunable (not curated backbone), ranked
+          // below swap-active pools but still above nothing.
+          pools.push({ address: factory.parsePool(log), adapter: factory.adapter, score: 0 });
+          count++;
+        } catch { /* skip malformed */ }
+      }
+    }
+    console.log(`[discovery] ${factory.adapter} factory (${factory.address.slice(0, 10)}): ${count} new pools in last ${blocksBack} blocks`);
+  }
+
+  return pools;
+}
+
+async function getFactoryLogs(
+  provider: ethers.JsonRpcProvider,
+  factory: FactoryDef,
+  from: number,
+  to: number,
+): Promise<Array<{ data: string; topics: string[] }>> {
+  try {
+    return await provider.send("eth_getLogs", [{
+      address: factory.address,
+      fromBlock: "0x" + from.toString(16),
+      toBlock: "0x" + to.toString(16),
+      topics: [factory.topic],
+    }]);
+  } catch {
+    // Range too large — split into smaller chunks
+    const results: Array<{ data: string; topics: string[] }> = [];
+    for (let s = from; s <= to; s += 1000) {
+      const e = Math.min(s + 999, to);
+      try {
+        results.push(...await provider.send("eth_getLogs", [{
+          address: factory.address,
+          fromBlock: "0x" + s.toString(16),
+          toBlock: "0x" + e.toString(16),
+          topics: [factory.topic],
+        }]));
+      } catch { /* skip chunk */ }
+    }
+    return results;
+  }
+}
+
 // ─── Swap event topics (all variants) ────────────────────────
 
 const SWAP_TOPICS: { topic: string; adapter: PoolEntry["adapter"] }[] = [
@@ -15,6 +131,7 @@ const SWAP_TOPICS: { topic: string; adapter: PoolEntry["adapter"] }[] = [
 ];
 
 const LOG_BATCH = 50;
+const RETRY_LOG_BATCH = 10;
 
 /**
  * Scan recent blocks for swap events to discover active pools.
@@ -33,23 +150,15 @@ export async function scanActivePools(
   for (const { topic, adapter } of SWAP_TOPICS) {
     for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
       const end = Math.min(start + LOG_BATCH - 1, latest);
-      try {
-        const logs: any[] = await provider.send("eth_getLogs", [{
-          fromBlock: "0x" + start.toString(16),
-          toBlock: "0x" + end.toString(16),
-          topics: [topic],
-        }]);
-        for (const log of logs) {
-          const addr = log.address.toLowerCase();
-          const existing = poolCounts.get(addr);
-          if (existing) {
-            existing.count++;
-          } else {
-            poolCounts.set(addr, { adapter, count: 1 });
-          }
+      const logs = await getLogsWithSplitRetry(provider, topic, start, end);
+      for (const log of logs) {
+        const addr = log.address.toLowerCase();
+        const existing = poolCounts.get(addr);
+        if (existing) {
+          existing.count++;
+        } else {
+          poolCounts.set(addr, { adapter, count: 1 });
         }
-      } catch {
-        // RPC limit exceeded — skip batch
       }
     }
   }
@@ -62,10 +171,47 @@ export async function scanActivePools(
     `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size} active pools, taking top ${ranked.length}`,
   );
 
-  return ranked.map(([addr, { adapter }]) => ({
+  return ranked.map(([addr, { adapter, count }]) => ({
     address: ethers.getAddress(addr),
     adapter,
+    score: count,
   }));
+}
+
+async function getLogsWithSplitRetry(
+  provider: ethers.JsonRpcProvider,
+  topic: string,
+  fromBlock: number,
+  toBlock: number,
+): Promise<Array<{ address: string }>> {
+  try {
+    return await getLogs(provider, topic, fromBlock, toBlock);
+  } catch {
+    const logs: Array<{ address: string }> = [];
+    for (let start = fromBlock; start <= toBlock; start += RETRY_LOG_BATCH) {
+      const end = Math.min(start + RETRY_LOG_BATCH - 1, toBlock);
+      try {
+        logs.push(...await getLogs(provider, topic, start, end));
+      } catch {
+        // Keep scanning other chunks. A missed 10-block slice is less harmful
+        // than dropping the original 50-block batch.
+      }
+    }
+    return logs;
+  }
+}
+
+async function getLogs(
+  provider: ethers.JsonRpcProvider,
+  topic: string,
+  fromBlock: number,
+  toBlock: number,
+): Promise<Array<{ address: string }>> {
+  return provider.send("eth_getLogs", [{
+    fromBlock: "0x" + fromBlock.toString(16),
+    toBlock: "0x" + toBlock.toString(16),
+    topics: [topic],
+  }]);
 }
 
 export function mergePoolRegistries(base: PoolEntry[], extra: PoolEntry[]): PoolEntry[] {
