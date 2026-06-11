@@ -156,17 +156,32 @@ export class AnvilSolver implements Solver {
     }
 
     // ── Phase 2: full BotVM simulate on the top-N quote candidates ─
-    // Dedupe (grid+GSS revisit points), rank by quote profit, keep top-N.
-    const seen = new Set<string>();
-    const ranked = scored
-      .filter((c) => {
-        const key = `${c.flashAmount}-${c.fluidDebtBps}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .sort((a, b) => (b.quoteProfit > a.quoteProfit ? 1 : b.quoteProfit < a.quoteProfit ? -1 : 0))
-      .slice(0, finalSimTopN);
+    // Rank by quote profit, but diversify across fluidDebtBps first. Quote
+    // profit grows monotonically with how much we borrow (higher bps → more
+    // downstream swap → "more profit"), so a naive top-N is N copies of the
+    // single highest bps — which over-borrows past Fluid's collateral limit and
+    // reverts in operate(). Taking the best amount PER bps makes top-N span
+    // 11200/10800/10400/… so sim reaches a bps that actually executes. Non-fluid
+    // paths have a single bps (0), so this degrades to amount diversity.
+    const byQuoteDesc = (a: QuoteCandidate, b: QuoteCandidate): number =>
+      b.quoteProfit > a.quoteProfit ? 1 : b.quoteProfit < a.quoteProfit ? -1 : 0;
+    const bestPerBps = new Map<string, QuoteCandidate>();
+    for (const c of scored) {
+      const k = c.fluidDebtBps.toString();
+      const cur = bestPerBps.get(k);
+      if (!cur || c.quoteProfit > cur.quoteProfit) bestPerBps.set(k, c);
+    }
+    const ranked = [...bestPerBps.values()].sort(byQuoteDesc);
+    const seen = new Set(ranked.map((c) => `${c.flashAmount}-${c.fluidDebtBps}`));
+    for (const c of [...scored].sort(byQuoteDesc)) {
+      if (ranked.length >= finalSimTopN) break;
+      const key = `${c.flashAmount}-${c.fluidDebtBps}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      ranked.push(c);
+    }
+    // Keep enough to cover every bps (fluid) or finalSimTopN amounts (non-fluid).
+    ranked.splice(Math.max(finalSimTopN, bestPerBps.size));
 
     console.log(
       `[searcher/ac3] solver: quote search ${quoteCount} pts → ${scored.length} profitable, ` +
