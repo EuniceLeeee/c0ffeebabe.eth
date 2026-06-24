@@ -10,7 +10,12 @@ import type {
   QuoteRequest,
   QuoteResult,
 } from "../live-state-backend.js";
-import { RevmSimClient, type OverlayPreCall, type TokenBalanceHint } from "../revm-sim-client.js";
+import {
+  RevmSimClient,
+  type OverlayPreCall,
+  type TokenAllowanceHint,
+  type TokenBalanceHint,
+} from "../revm-sim-client.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import { buildVictimOverlay, overlaySupportsAdapter } from "./victim-overlay.js";
@@ -155,10 +160,19 @@ export class RevmLiveBackend implements LiveStateBackend {
     const calls: OverlayPreCall[] = [];
     const seenTargets = new Set<string>();
     const hotTokens = new Map<string, string>();
+    const allowanceHints = new Map<string, TokenAllowanceHint>();
     for (const hop of hops) {
       const targetKey = hop.target.toLowerCase();
       hotTokens.set(hop.tokenIn.toLowerCase(), hop.tokenIn);
       hotTokens.set(hop.tokenOut.toLowerCase(), hop.tokenOut);
+      const spender = overlayApproveSpender(hop);
+      if (spender) {
+        allowanceHints.set(`${hop.tokenIn.toLowerCase()}|${spender.toLowerCase()}`, {
+          token: hop.tokenIn,
+          owner: ethers.getAddress(WHALE),
+          spender,
+        });
+      }
       if (!seenTargets.has(targetKey) && calls.length < 16) {
         seenTargets.add(targetKey);
         calls.push(...(await this.encodeHopQuoteCalls(hop, hop.amountIn)));
@@ -166,12 +180,15 @@ export class RevmLiveBackend implements LiveStateBackend {
     }
     if (calls.length === 0 && hotTokens.size === 0) return;
 
-    const tokenBalanceHints: TokenBalanceHint[] = [...hotTokens.values()]
-      .slice(0, 24)
-      .map((token) => ({
-        token,
-        account: ethers.getAddress(WHALE),
-      }));
+    const storageHintsEnabled = process.env.SEARCHER_WARM_STORAGE_HINTS === "1";
+    const tokenBalanceHints: TokenBalanceHint[] = storageHintsEnabled
+      ? [...hotTokens.values()]
+          .slice(0, 24)
+          .map((token) => ({
+            token,
+            account: ethers.getAddress(WHALE),
+          }))
+      : [];
     const prewarm = [
       ethers.ZeroAddress,
       ethers.getAddress(this.owner),
@@ -186,6 +203,7 @@ export class RevmLiveBackend implements LiveStateBackend {
       rpcUrl: this.rpcUrl,
       prewarm,
       tokenBalanceHints,
+      tokenAllowanceHints: storageHintsEnabled ? [...allowanceHints.values()].slice(0, 24) : [],
       prewarmCalls: calls,
     });
   }
@@ -501,4 +519,11 @@ function quotePSM(tokenIn: string, tokenOut: string, amountIn: bigint): bigint {
   if (tIn === usdc && tOut === dai) return amountIn * 10n ** 12n;
   if (tIn === dai && tOut === usdc) return amountIn / 10n ** 12n;
   throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
+}
+
+function overlayApproveSpender(hop: { adapterId: string; target: string }): string | null {
+  if (hop.adapterId === "univ2-swap") return UNIV2_ROUTER;
+  if (hop.adapterId === "univ3-swap") return UNIV3_SWAP_ROUTER;
+  if (hop.adapterId.startsWith("curve-")) return ethers.getAddress(hop.target);
+  return null;
 }

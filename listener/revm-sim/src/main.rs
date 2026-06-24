@@ -105,6 +105,14 @@ struct TokenBalanceHint {
     account: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TokenAllowanceHint {
+    token: String,
+    owner: String,
+    spender: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SimResponse {
@@ -870,6 +878,8 @@ enum DaemonRequest {
         #[serde(default)]
         token_balance_hints: Vec<TokenBalanceHint>,
         #[serde(default)]
+        token_allowance_hints: Vec<TokenAllowanceHint>,
+        #[serde(default)]
         prewarm_calls: Vec<PreCall>,
     },
     #[serde(rename_all = "camelCase")]
@@ -1039,12 +1049,14 @@ impl Daemon {
                 rpc_url,
                 prewarm,
                 token_balance_hints,
+                token_allowance_hints,
                 prewarm_calls,
             } => self.warm(
                 block_number,
                 rpc_url,
                 prewarm,
                 token_balance_hints,
+                token_allowance_hints,
                 prewarm_calls,
                 started,
             ),
@@ -1075,6 +1087,7 @@ impl Daemon {
         rpc_url: Option<String>,
         prewarm: Vec<String>,
         token_balance_hints: Vec<TokenBalanceHint>,
+        token_allowance_hints: Vec<TokenAllowanceHint>,
         prewarm_calls: Vec<PreCall>,
         started: Instant,
     ) -> Result<DaemonResponse> {
@@ -1099,6 +1112,17 @@ impl Daemon {
             accounts.push(account);
             for idx in [0u64, 1, 2, 3, 4, 5, 9, 51] {
                 storage.push((token, erc20_balance_slot(account, idx)));
+            }
+        }
+        for hint in &token_allowance_hints {
+            let token = parse_address(&hint.token)?;
+            let owner = parse_address(&hint.owner)?;
+            let spender = parse_address(&hint.spender)?;
+            accounts.push(token);
+            accounts.push(owner);
+            accounts.push(spender);
+            for idx in [0u64, 1, 2, 3, 4, 5, 9, 51] {
+                storage.push((token, erc20_allowance_slot(owner, spender, idx)));
             }
         }
         match remote_rc.warm_batch(
@@ -1128,9 +1152,10 @@ impl Daemon {
         }
         seed_stats.round_trips = remote_rc.rpc.round_trips();
         eprintln!(
-            "[revm-sim] warm block={block_number} pools={} balanceHints={} seeded {} accounts + {} slots (wall {}ms)",
+            "[revm-sim] warm block={block_number} pools={} balanceHints={} allowanceHints={} seeded {} accounts + {} slots (wall {}ms)",
             parsed.len(),
             token_balance_hints.len(),
+            token_allowance_hints.len(),
             seed_stats.seeded_accounts,
             seed_stats.seeded_slots,
             started.elapsed().as_millis(),

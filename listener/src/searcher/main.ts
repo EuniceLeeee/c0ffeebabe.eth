@@ -388,22 +388,31 @@ async function main(): Promise<void> {
   const warmPinnedK = Number(
     process.env.SEARCHER_WARM_PINNED_K ??
       process.env.SEARCHER_WARM_TOP_K ??
-      String(config.statePinnedK),
+      "0",
   );
   const warmRecentK = Number(
     process.env.SEARCHER_WARM_RECENT_K ??
       process.env.SEARCHER_WARM_TOP_K ??
-      String(config.stateRecentK),
+      String(Math.min(config.stateRecentK, 1)),
   );
+  const warmIdleDelayMs = Number(process.env.SEARCHER_WARM_IDLE_DELAY_MS ?? "1000");
   console.log(
     `[searcher/live] warm lanes pinnedK=${warmPinnedK} recentK=${warmRecentK} ` +
-      `recentTtlBlocks=${recentWarmPools.ttl}`,
+      `recentTtlBlocks=${recentWarmPools.ttl} idleDelayMs=${warmIdleDelayMs}`,
   );
   let warming = false;
   let pendingWarmBlock: number | null = null;
+  let pendingWarmReason: "block" | "after-hint" = "block";
+  let warmTimer: NodeJS.Timeout | null = null;
+  const cancelScheduledWarm = (): void => {
+    if (!warmTimer) return;
+    clearTimeout(warmTimer);
+    warmTimer = null;
+  };
   const runWarm = (blockNumber: number, reason: "block" | "after-hint"): void => {
     if (!liveBackend.warmHotPools || warming) {
       pendingWarmBlock = blockNumber;
+      pendingWarmReason = reason;
       return;
     }
     const pinned = topPinnedWarmHops(pinnedWarmHops, warmPinnedK);
@@ -425,24 +434,40 @@ async function main(): Promise<void> {
         warming = false;
         if (!busy && pendingWarmBlock !== null) {
           const nextBlock = pendingWarmBlock;
+          const nextReason = pendingWarmReason;
           pendingWarmBlock = null;
-          runWarm(nextBlock, "after-hint");
+          scheduleWarm(nextBlock, nextReason);
         }
       });
+  };
+  const scheduleWarm = (blockNumber: number, reason: "block" | "after-hint"): void => {
+    pendingWarmBlock = blockNumber;
+    pendingWarmReason = reason;
+    if (busy || warming || warmTimer) return;
+    warmTimer = setTimeout(() => {
+      warmTimer = null;
+      if (busy || warming || pendingWarmBlock === null) return;
+      const nextBlock = pendingWarmBlock;
+      const nextReason = pendingWarmReason;
+      pendingWarmBlock = null;
+      runWarm(nextBlock, nextReason);
+    }, warmIdleDelayMs);
   };
   const flushPendingWarm = (): void => {
     if (busy || pendingWarmBlock === null || warming) return;
     const blockNumber = pendingWarmBlock;
+    const reason = pendingWarmReason;
     pendingWarmBlock = null;
-    runWarm(blockNumber, "after-hint");
+    scheduleWarm(blockNumber, reason);
   };
   if ((warmPinnedK > 0 || warmRecentK > 0) && liveBackend.warmHotPools) {
     provider.on("block", (blockNumber: number) => {
       if (busy || warming) {
         pendingWarmBlock = blockNumber;
+        pendingWarmReason = "block";
         return;
       }
-      runWarm(blockNumber, "block");
+      scheduleWarm(blockNumber, "block");
     });
   }
 
@@ -487,6 +512,7 @@ async function main(): Promise<void> {
   const shutdown = () => {
     console.log("\n[searcher/live] shutting down");
     logStageCounters(counters);
+    cancelScheduledWarm();
     clearInterval(refreshTimer);
     provider.removeAllListeners("block");
     state.stop();
@@ -510,6 +536,7 @@ async function main(): Promise<void> {
         if (seen.has(key)) continue;
         seen.add(key);
 
+        cancelScheduledWarm();
         busy = true;
         const tHint = Date.now();
         try {

@@ -6,7 +6,7 @@
  * NOT trace route hops (revmPrewarmRouteHops=0) still gets a WARM first quote —
  * instead of the cold serial-fault that costs ~1.3s inside the TTL today.
  *
- * Control vs treatment, same daemon, two different blocks:
+ * Control vs treatment, two isolated daemons, same block:
  *   - control:   prepare(no route prewarm) → first quote is COLD (faults)
  *   - treatment: warmHotPools → prepare(no route prewarm) → first quote is WARM
  */
@@ -52,11 +52,13 @@ async function main(): Promise<void> {
   const rpcUrl = process.env.MAINNET_RPC_URL;
   if (!rpcUrl) throw new Error("MAINNET_RPC_URL required");
   const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const latest = await provider.getBlockNumber();
-  console.log(`[warm-smoke] block=${latest}`);
+  const block = (await provider.getBlockNumber()) - 1;
+  console.log(`[warm-smoke] block=${block}`);
 
-  const client = new RevmSimClient({ timeoutMs: 120_000 });
-  const backend = new RevmLiveBackend(client, BOTVM, DEFAULT_SEARCHER_OWNER, provider, [], rpcUrl);
+  const coldClient = new RevmSimClient({ timeoutMs: 120_000 });
+  const warmClient = new RevmSimClient({ timeoutMs: 120_000 });
+  const coldBackend = new RevmLiveBackend(coldClient, BOTVM, DEFAULT_SEARCHER_OWNER, provider, [], rpcUrl);
+  const warmBackend = new RevmLiveBackend(warmClient, BOTVM, DEFAULT_SEARCHER_OWNER, provider, [], rpcUrl);
 
   const impact: PoolImpact = {
     pool: POOL,
@@ -65,7 +67,7 @@ async function main(): Promise<void> {
     amountIn: AMOUNT_IN,
     matchedAdapterId: "univ3-swap",
   };
-  const event = { txHash: "0x0", blockNumber: latest + 1, rawTx: "0x", from: ethers.ZeroAddress, nonce: 0, to: null, input: "0x", logs: [], minProfit: 1n };
+  const event = { txHash: "0x0", blockNumber: block + 1, rawTx: "0x", from: ethers.ZeroAddress, nonce: 0, to: null, input: "0x", logs: [], minProfit: 1n };
   // No routeHops → prepare does NOT trace the reverse-direction quote, so the
   // GSS-direction first quote is only warm if the background warmer seeded it.
   const baseInput = {
@@ -77,26 +79,27 @@ async function main(): Promise<void> {
   const gss = { adapterId: "univ3-swap", target: POOL, tokenIn: CRV, tokenOut: WETH, amountIn: GSS_AMOUNT };
 
   // ── Control: no warm, prepare without route prewarm → first quote cold ──
-  await backend.prepareVictimState({ ...baseInput, baseBlock: latest });
+  await coldBackend.prepareVictimState({ ...baseInput, baseBlock: block });
   let t = performance.now();
-  const cold = await backend.quote(gss);
+  const cold = await coldBackend.quote(gss);
   const coldMs = performance.now() - t;
   console.log(
     `[warm-smoke] CONTROL (no warm) first quote: ${coldMs.toFixed(0)}ms ` +
       `cache=${JSON.stringify(cold.cacheStats)} amountOut=${cold.amountOut}`,
   );
+  coldClient.stop();
 
-  // ── Treatment: warm the pool on a fresh block, then prepare (no route
+  // ── Treatment: warm the pool on the same block in a separate daemon, then prepare (no route
   //    prewarm) on the SAME block → first quote should be warm ──
-  const warmBlock = latest - 1;
+  const warmBlock = block;
   t = performance.now();
-  await backend.warmHotPools(warmBlock, [gss]);
+  await warmBackend.warmHotPools(warmBlock, [gss]);
   const warmMs = performance.now() - t;
   console.log(`[warm-smoke] warmHotPools(1 pool): ${warmMs.toFixed(0)}ms`);
 
-  await backend.prepareVictimState({ ...baseInput, baseBlock: warmBlock });
+  await warmBackend.prepareVictimState({ ...baseInput, baseBlock: warmBlock });
   t = performance.now();
-  const warm = await backend.quote(gss);
+  const warm = await warmBackend.quote(gss);
   const warmQuoteMs = performance.now() - t;
   console.log(
     `[warm-smoke] TREATMENT (warmed) first quote: ${warmQuoteMs.toFixed(0)}ms ` +
@@ -111,7 +114,8 @@ async function main(): Promise<void> {
   assert(warmQuoteMs < coldMs, `warmed quote (${warmQuoteMs.toFixed(0)}ms) not faster than cold (${coldMs.toFixed(0)}ms)`);
 
   console.log("[warm-smoke] PASS — background warm makes the first quote warm without route-hop prewarm");
-  client.stop();
+  coldClient.stop();
+  warmClient.stop();
 }
 
 main().catch((err) => {

@@ -23,6 +23,12 @@ export interface TokenBalanceHint {
   account: string;
 }
 
+export interface TokenAllowanceHint {
+  token: string;
+  owner: string;
+  spender: string;
+}
+
 export interface OverlayStateOverride {
   address: string;
   slot: string;
@@ -49,6 +55,8 @@ export interface WarmRequest {
   prewarm?: string[];
   /** ERC20 balance slots likely to be touched by tokenDeals in final overlay. */
   tokenBalanceHints?: TokenBalanceHint[];
+  /** ERC20 allowance slots likely to be touched by victim-overlay approve. */
+  tokenAllowanceHints?: TokenAllowanceHint[];
   /** Representative quote view-calls, one per recurring hot pool, traced to
    *  seed each pool's slots into the warm cache ahead of any hint. */
   prewarmCalls: OverlayPreCall[];
