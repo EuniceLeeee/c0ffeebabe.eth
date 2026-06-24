@@ -7,4 +7,6 @@ cache/
 broadcast/
 node_modules/
 listener/dist/
+listener/revm-sim/target/
+listener/searcher/pools/active-pools*.json
 .DS_Store

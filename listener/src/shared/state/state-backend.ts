@@ -1,6 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { ethers } from "ethers";
 
+// Anvil forks mainnet, so its chainId is always 1. Pinning a static network
+// stops ethers from running its background "detect network" retry loop, which
+// otherwise spams "JsonRpcProvider failed to detect network" once per second
+// whenever the anvil endpoint is down — e.g. in revm mode, where the fork is
+// never started. Calls still fail per-request when anvil is genuinely absent.
+function makeAnvilProvider(anvilUrl: string): ethers.JsonRpcProvider {
+  return new ethers.JsonRpcProvider(anvilUrl, ethers.Network.from(1), {
+    staticNetwork: ethers.Network.from(1),
+  });
+}
+
 export interface StateBackend {
   forkAt(blockNumber: number): Promise<void>;
   forkAfterTx(txHash: string): Promise<void>;
@@ -46,7 +57,7 @@ export class AnvilStateBackend implements StateBackend {
     readonly anvilUrl = "http://127.0.0.1:8555",
     private readonly port = 8555,
   ) {
-    this.provider = new ethers.JsonRpcProvider(anvilUrl);
+    this.provider = makeAnvilProvider(anvilUrl);
   }
 
   async start(): Promise<void> {
@@ -162,7 +173,7 @@ export class AnvilStateBackend implements StateBackend {
   }
 
   private resetProvider(): void {
-    this.provider = new ethers.JsonRpcProvider(this.anvilUrl);
+    this.provider = makeAnvilProvider(this.anvilUrl);
   }
 
   async prepareVictimPostState(params: VictimStateParams): Promise<VictimStateResult> {

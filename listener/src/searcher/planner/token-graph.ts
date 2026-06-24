@@ -29,6 +29,9 @@ export interface TokenPath {
 export interface PoolEntry {
   address: string;
   adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault";
+  /** Optional file-backed metadata for standard two-token pools. */
+  token0?: string;
+  token1?: string;
   /** For PSM/fluid where direction is protocol-fixed */
   fixedTokenIn?: string;
   fixedTokenOut?: string;
@@ -54,10 +57,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
     fixedTokenOut: ADDR.USDC,
     fixedSlotKind: "lend",
   },
-  // 0.01% fee V3 pools — created at V3 launch, outside factory index window.
-  { address: ADDR.UNISWAP_V3_USDC_WETH_100, adapter: "univ3" },
-  { address: ADDR.UNISWAP_V3_USDC_USDT_100, adapter: "univ3" },
-  { address: ADDR.UNISWAP_V3_USDT_WETH, adapter: "univ3" },
 ];
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
@@ -160,7 +159,9 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       break;
     }
     case "univ3": {
-      const [t0, t1] = await queryUniV3Tokens(backend, pool.address);
+      const [t0, t1] = pool.token0 && pool.token1
+        ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
+        : await queryUniV3Tokens(backend, pool.address);
       edges.push(
         { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
         { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
@@ -168,7 +169,9 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       break;
     }
     case "univ2": {
-      const [t0, t1] = await queryUniV3Tokens(backend, pool.address);
+      const [t0, t1] = pool.token0 && pool.token1
+        ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
+        : await queryUniV3Tokens(backend, pool.address);
       await verifyUniV2Pair(backend, pool.address);
       edges.push(
         { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
@@ -443,4 +446,3 @@ function sameDirectedEdge(a: TokenEdge, b: TokenEdge): boolean {
     a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
     a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase();
 }
-

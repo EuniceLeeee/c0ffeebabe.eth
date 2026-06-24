@@ -35,6 +35,14 @@ import {
   indexFactoryPools,
   mergePoolRegistries,
 } from "../active-pool-discovery.js";
+import {
+  DEFAULT_PINNED_WARM_POOLS_PATH,
+  loadPinnedWarmPools,
+} from "../pinned-warm-pools.js";
+import {
+  DEFAULT_POOL_UNIVERSE_PATH,
+  loadPoolUniverse,
+} from "../pool-universe.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
 
@@ -161,14 +169,51 @@ async function main(): Promise<void> {
   const factoryBlocks = Number(process.env.LR_FACTORY_BLOCKS ?? "0"); // 0 = skip factory index (fast baseline)
   const hintBlocks = Number(process.env.LR_HINT_BLOCKS ?? "5");
   const maxHints = Number(process.env.LR_MAX_HINTS ?? "200");
+  const pinnedPoolPath = process.env.SEARCHER_PINNED_WARM_POOLS ?? DEFAULT_PINNED_WARM_POOLS_PATH;
+  const poolUniversePath = process.env.LR_POOL_UNIVERSE_PATH ??
+    process.env.SEARCHER_POOL_UNIVERSE_PATH ??
+    DEFAULT_POOL_UNIVERSE_PATH;
+  const poolUniverseTopN = Number(
+    process.env.LR_POOL_UNIVERSE_TOP_N ??
+      process.env.SEARCHER_POOL_UNIVERSE_TOP_N ??
+      "0",
+  );
+  const poolUniverseMinScore = Number(
+    process.env.LR_POOL_UNIVERSE_MIN_SCORE ??
+      process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ??
+      "1",
+  );
 
   console.log("[liveready] building live pool graph (dry-run, no anvil)");
+  const pinnedPools = loadPinnedWarmPools(pinnedPoolPath);
+  const universePools = loadPoolUniverse(poolUniversePath, {
+    maxPools: poolUniverseTopN,
+    minScore: poolUniverseMinScore,
+  });
   const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
-  let allPools = mergePoolRegistries(POOL_REGISTRY, swapPools);
+  let allPools = mergePoolRegistries(
+    mergePoolRegistries(
+      mergePoolRegistries(POOL_REGISTRY, pinnedPools),
+      universePools,
+    ),
+    swapPools,
+  );
+  let factoryPoolCount = 0;
   if (factoryBlocks > 0) {
     const factoryPools = await indexFactoryPools(provider, factoryBlocks);
+    factoryPoolCount = factoryPools.length;
     allPools = mergePoolRegistries(allPools, factoryPools);
   }
+  console.log(
+    `[liveready] pool registry: ${POOL_REGISTRY.length} protocol + ` +
+      `${pinnedPools.length} pinned + ${universePools.length} universe + ` +
+      `${factoryPoolCount} factory + ${swapPools.length} swap-active = ` +
+      `${allPools.length} total`,
+  );
+  console.log(
+    `[liveready] poolUniverse=${poolUniversePath} ` +
+      `topN=${poolUniverseTopN} minScore=${poolUniverseMinScore}`,
+  );
 
   const backend: TokenQueryBackend = { call: (req) => provider.call(req) };
   const graph = await buildTokenGraph(backend, allPools);

@@ -295,13 +295,18 @@ export interface V3PoolState {
   ticks: Map<number, bigint>; // tick → liquidityNet
 }
 
+export interface V3SwapResult {
+  amountOut: bigint;
+  state: V3PoolState;
+}
+
 /**
- * Local exact-input swap; returns amountOut. Walks initialized ticks via the
- * warmed bitmap, computeSwapStep per segment, adjusting liquidity by
- * liquidityNet when crossing. Throws (→ caller falls back to eth_call) if the
- * swap reaches an un-warmed bitmap word.
+ * Local exact-input swap; returns amountOut plus the post-swap live state.
+ * Walks initialized ticks via the warmed bitmap, computeSwapStep per segment,
+ * adjusting liquidity by liquidityNet when crossing. Throws (→ caller falls
+ * back to eth_call) if the swap reaches an un-warmed bitmap word.
  */
-export function v3SwapExactInput(state: V3PoolState, zeroForOne: boolean, amountIn: bigint): bigint {
+export function v3SwapToState(state: V3PoolState, zeroForOne: boolean, amountIn: bigint): V3SwapResult {
   const sqrtPriceLimitX96 = zeroForOne ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n;
   let amountRemaining = amountIn;
   let amountCalculated = 0n;
@@ -344,5 +349,22 @@ export function v3SwapExactInput(state: V3PoolState, zeroForOne: boolean, amount
     }
   }
 
-  return -amountCalculated;
+  return {
+    amountOut: -amountCalculated,
+    state: {
+      ...state,
+      sqrtPriceX96,
+      tick,
+      liquidity,
+    },
+  };
+}
+
+/**
+ * Local exact-input swap; returns amountOut. Kept as the original quote-facing
+ * API and implemented through v3SwapToState so callers that need post-state can
+ * share the same bit-exact loop.
+ */
+export function v3SwapExactInput(state: V3PoolState, zeroForOne: boolean, amountIn: bigint): bigint {
+  return v3SwapToState(state, zeroForOne, amountIn).amountOut;
 }

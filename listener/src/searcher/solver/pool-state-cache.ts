@@ -31,9 +31,20 @@ const curveIface = new ethers.Interface([
   "function stored_rates() view returns (uint256[])",
 ]);
 const erc20Iface = new ethers.Interface(["function decimals() view returns (uint8)"]);
+const univ2Iface = new ethers.Interface([
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+]);
 
 const TICK_LENS = "0xbfd8137f7d1516D3ea5cA83523914859ec47F573";
 const V3_WORD_RADIUS = Number(process.env.SEARCHER_V3_WORD_RADIUS ?? "8");
+// How many blocks v3 tick data (bitmap + liquidityNet) may be reused before a
+// re-fetch. tick liquidityNet only changes on LP mint/burn, which is rare over a
+// few blocks, so caching by block turns the heavy TickLens walk from once-per-
+// hint into at-most-once-per-(refresh window). slot0/liquidity are always re-read
+// per hint (cheap single slots), so price/liquidity stay fresh regardless.
+const TICK_REFRESH_BLOCKS = Number(process.env.SEARCHER_V3_TICK_REFRESH_BLOCKS ?? "4");
 
 const v3PoolIface = new ethers.Interface([
   "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 a, uint16 b, uint16 c, uint8 d, bool e)",
@@ -54,15 +65,100 @@ interface CurveCached {
   ng?: CurveNgState;
 }
 
-interface V3Cached {
-  state: V3PoolState;
+/** Expensive, slow-changing v3 state: tick bitmap + liquidityNet + immutable
+ *  pool metadata. Cached by block (see TICK_REFRESH_BLOCKS), survives clear(). */
+interface V3TickCache {
+  block?: number; // tickBlock these words were read at (undefined if no provider)
+  fee: bigint;
+  tickSpacing: number;
   token0: string; // lowercase
   token1: string; // lowercase
+  tickBitmap: Map<number, bigint>;
+  ticks: Map<number, bigint>;
+}
+
+/** Per-hint v3 state: shifts with the victim swap, re-read each hint. */
+interface V3Live {
+  sqrtPriceX96: bigint;
+  tick: number;
+  liquidity: bigint;
+  blockNumber?: number;
+  source: "seed" | "lazy";
+}
+
+/** Per-hint v2 reserves: shift with the victim swap, re-read each hint. */
+interface V2Cached {
+  token0: string; // lowercase
+  token1: string; // lowercase
+  reserve0: bigint;
+  reserve1: bigint;
+  blockNumber?: number;
+  source: "seed" | "lazy";
+}
+
+export interface V2Seed {
+  pool: string;
+  token0: string;
+  token1: string;
+  reserve0: bigint;
+  reserve1: bigint;
+  blockNumber: number;
+}
+
+export interface V3LiveSeed {
+  pool: string;
+  sqrtPriceX96: bigint;
+  tick: number;
+  liquidity: bigint;
+  blockNumber: number;
+}
+
+export interface V3TicksSeed {
+  pool: string;
+  token0: string;
+  token1: string;
+  fee: bigint;
+  tickSpacing: number;
+  tickBitmap: Map<number, bigint>;
+  ticks: Map<number, bigint>;
+  blockNumber: number;
+}
+
+export interface V2PostImpactSeed extends V2Seed {
+  kind: "v2";
+}
+
+export interface V3PostImpactSeed extends V3LiveSeed {
+  kind: "v3";
+}
+
+export type PostImpactSeed = V2PostImpactSeed | V3PostImpactSeed;
+
+export interface V3Snapshot {
+  pool: string;
+  token0: string;
+  token1: string;
+  blockNumber: number;
+  state: V3PoolState;
+}
+
+export interface BeginHintOptions {
+  overlayPools?: string[];
+  postImpact?: PostImpactSeed[];
 }
 
 export class PoolStateCache {
   private curve = new Map<string, CurveCached>();
-  private v3 = new Map<string, V3Cached>();
+  // Tick data persists across clear() and is refreshed lazily by block; the live
+  // slot0/liquidity layer is dropped every hint.
+  private v3Ticks = new Map<string, V3TickCache>();
+  private v3Live = new Map<string, V3Live>();
+  // v2 reserves — per-hint (shift with the victim swap), warmed once then local.
+  private v2 = new Map<string, V2Cached>();
+  // Pools whose state is modified by the current victim overlay. These must
+  // bypass block-level seed data; quoting them from pre-victim cache would erase
+  // the arb displacement.
+  private overlayPools = new Set<string>();
   // Pools whose warm-up threw this epoch: don't retry (would re-pay the failed
   // RPC every quote) — fall straight to eth_call until the next clear().
   private failed = new Set<string>();
@@ -84,18 +180,142 @@ export class PoolStateCache {
     this.tickBlock = block;
   }
 
-  /** Drop all cached state — call whenever the fork advances. */
-  clear(): void {
-    this.curve.clear();
-    this.v3.clear();
+  /**
+   * Start a new hint/solve epoch. Keeps block-seeded non-impact state from the
+   * updater, drops lazy reads from the previous overlay, and marks impact pools
+   * as overlay-only for this hint.
+   */
+  beginHint(block?: number, overlayPoolsOrOptions: string[] | BeginHintOptions = []): void {
+    this.tickBlock = block;
+    const options: BeginHintOptions = Array.isArray(overlayPoolsOrOptions)
+      ? { overlayPools: overlayPoolsOrOptions }
+      : overlayPoolsOrOptions;
+    const postImpactTargets = new Set((options.postImpact ?? []).map((s) => s.pool.toLowerCase()));
+    this.overlayPools = new Set(
+      (options.overlayPools ?? [])
+        .map((p) => p.toLowerCase())
+        .filter((p) => !postImpactTargets.has(p)),
+    );
     this.failed.clear();
+    this.curve.clear();
+    for (const [key, live] of this.v3Live) {
+      if (live.source !== "seed") this.v3Live.delete(key);
+    }
+    for (const [key, cached] of this.v2) {
+      if (cached.source !== "seed") this.v2.delete(key);
+    }
+    for (const post of options.postImpact ?? []) {
+      if (post.kind === "v2") {
+        this.seedV2(post);
+      } else {
+        this.seedV3Live(post);
+      }
+    }
   }
 
   /**
-   * Local cross-tick exact-input quote for a Uniswap V3 pool, warming slot0 +
-   * liquidity + fee + tickSpacing and the tick data (TickLens, ±V3_WORD_RADIUS
-   * words) on first touch. Throws on any failure (or if the swap would cross
-   * beyond the warmed words) so the caller falls back to the eth_call quoter.
+   * Drop per-hint cached state — call whenever the fork advances. Clears the
+   * fork-dependent layers (curve balances/rates, v3 slot0+liquidity) so they
+   * re-read from the new overlay, but KEEPS the v3 tick cache: tick liquidityNet
+   * is stable across a few blocks, so the heavy TickLens walk is reused (refreshed
+   * lazily by block in getV3Ticks) instead of re-paid every hint.
+   */
+  clear(): void {
+    this.curve.clear();
+    this.v3Live.clear();
+    this.v2.clear();
+    this.failed.clear();
+    this.overlayPools.clear();
+  }
+
+  seedV2(seed: V2Seed): void {
+    const key = seed.pool.toLowerCase();
+    this.v2.set(key, {
+      token0: seed.token0.toLowerCase(),
+      token1: seed.token1.toLowerCase(),
+      reserve0: seed.reserve0,
+      reserve1: seed.reserve1,
+      blockNumber: seed.blockNumber,
+      source: "seed",
+    });
+    this.failed.delete(key);
+  }
+
+  seedV3Live(seed: V3LiveSeed): void {
+    const key = seed.pool.toLowerCase();
+    this.v3Live.set(key, {
+      sqrtPriceX96: seed.sqrtPriceX96,
+      tick: seed.tick,
+      liquidity: seed.liquidity,
+      blockNumber: seed.blockNumber,
+      source: "seed",
+    });
+    this.failed.delete(key);
+  }
+
+  seedV3Ticks(seed: V3TicksSeed): void {
+    const key = seed.pool.toLowerCase();
+    this.v3Ticks.set(key, {
+      block: seed.blockNumber,
+      fee: seed.fee,
+      tickSpacing: seed.tickSpacing,
+      token0: seed.token0.toLowerCase(),
+      token1: seed.token1.toLowerCase(),
+      tickBitmap: seed.tickBitmap,
+      ticks: seed.ticks,
+    });
+    this.failed.delete(key);
+  }
+
+  snapshotV2(pool: string, blockNumber?: number): V2Seed | null {
+    const key = pool.toLowerCase();
+    const cached = this.v2.get(key);
+    if (!cached || !this.liveStateFreshFor(cached.blockNumber, blockNumber)) return null;
+    return {
+      pool,
+      token0: cached.token0,
+      token1: cached.token1,
+      reserve0: cached.reserve0,
+      reserve1: cached.reserve1,
+      blockNumber: cached.blockNumber ?? blockNumber ?? 0,
+    };
+  }
+
+  snapshotV3(pool: string, blockNumber?: number): V3Snapshot | null {
+    const key = pool.toLowerCase();
+    const live = this.v3Live.get(key);
+    const ticks = this.v3Ticks.get(key);
+    if (!live || !ticks || !this.liveStateFreshFor(live.blockNumber, blockNumber)) return null;
+    if (blockNumber !== undefined && ticks.block !== undefined && !this.v3TicksFresh(pool, blockNumber)) return null;
+    return {
+      pool,
+      token0: ticks.token0,
+      token1: ticks.token1,
+      blockNumber: live.blockNumber ?? blockNumber ?? 0,
+      state: {
+        sqrtPriceX96: live.sqrtPriceX96,
+        tick: live.tick,
+        liquidity: live.liquidity,
+        fee: ticks.fee,
+        tickSpacing: ticks.tickSpacing,
+        tickBitmap: ticks.tickBitmap,
+        ticks: ticks.ticks,
+      },
+    };
+  }
+
+  v3TicksFresh(pool: string, blockNumber: number): boolean {
+    const cached = this.v3Ticks.get(pool.toLowerCase());
+    if (!cached || cached.block === undefined) return false;
+    return Math.abs(blockNumber - cached.block) < TICK_REFRESH_BLOCKS;
+  }
+
+  /**
+   * Local cross-tick exact-input quote for a Uniswap V3 pool. Tick data (the
+   * heavy TickLens walk) is warmed once per refresh window and reused across
+   * hints; slot0 + liquidity are re-read per hint from the (overlay) state.
+   * Throws on any failure (or if the swap crosses beyond the warmed words) so
+   * the caller falls back to the eth_call quoter.
    */
   async quoteV3(
     state: StateBackend,
@@ -105,27 +325,147 @@ export class PoolStateCache {
     amountIn: bigint,
   ): Promise<bigint> {
     const key = pool.toLowerCase();
+    if (this.overlayPools.has(key)) {
+      throw new Error(`v3 ${pool.slice(0, 10)} is overlay-only for this hint`);
+    }
     if (this.failed.has(key)) throw new Error(`v3 ${pool.slice(0, 10)} warm failed this epoch`);
-    let cached = this.v3.get(key);
+    let ticks: V3TickCache;
+    let live: V3Live;
+    try {
+      ticks = await this.getV3Ticks(state, pool, key);
+      live = await this.getV3Live(state, pool, key);
+    } catch (err) {
+      this.failed.add(key);
+      console.log(
+        `[poolcache] v3 warm failed ${pool.slice(0, 10)} → eth_call fallback: ` +
+          `${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`,
+      );
+      throw err;
+    }
+    const v3State: V3PoolState = {
+      sqrtPriceX96: live.sqrtPriceX96,
+      tick: live.tick,
+      liquidity: live.liquidity,
+      fee: ticks.fee,
+      tickSpacing: ticks.tickSpacing,
+      tickBitmap: ticks.tickBitmap,
+      ticks: ticks.ticks,
+    };
+    const zeroForOne = tokenIn.toLowerCase() === ticks.token0;
+    return v3SwapExactInput(v3State, zeroForOne, amountIn);
+  }
+
+  /** Tick bitmap + liquidityNet + immutable metadata, reused until the block
+   *  drifts past TICK_REFRESH_BLOCKS (or forever when no block context). */
+  private async getV3Ticks(state: StateBackend, pool: string, key: string): Promise<V3TickCache> {
+    const cached = this.v3Ticks.get(key);
+    if (cached && this.tickCacheFresh(cached)) return cached;
+    const warmed = await this.warmV3Ticks(state, pool);
+    this.v3Ticks.set(key, warmed);
+    console.log(
+      `[poolcache] warmed univ3 ticks ${pool.slice(0, 10)} (${warmed.ticks.size} ticks, ` +
+        `±${V3_WORD_RADIUS} words, block ${warmed.block ?? "n/a"})`,
+    );
+    return warmed;
+  }
+
+  private tickCacheFresh(cached: V3TickCache): boolean {
+    if (this.tickBlock === undefined || cached.block === undefined) return true;
+    return Math.abs(this.tickBlock - cached.block) < TICK_REFRESH_BLOCKS;
+  }
+
+  /** Per-hint slot0 + liquidity, read from the (overlay) state and reused for
+   *  every trial within the hint; cleared by clear(). */
+  private async getV3Live(state: StateBackend, pool: string, key: string): Promise<V3Live> {
+    const cached = this.v3Live.get(key);
+    if (cached && this.liveStateFresh(cached.blockNumber)) return cached;
+    if (cached) this.v3Live.delete(key);
+    const slot0Res = await state.call({ to: pool, data: v3PoolIface.encodeFunctionData("slot0") });
+    const slot0 = v3PoolIface.decodeFunctionResult("slot0", slot0Res);
+    const live: V3Live = {
+      sqrtPriceX96: BigInt(slot0[0]),
+      tick: Number(slot0[1]),
+      liquidity: await this.call(state, pool, v3PoolIface.encodeFunctionData("liquidity")),
+      blockNumber: this.tickBlock,
+      source: "lazy",
+    };
+    this.v3Live.set(key, live);
+    return live;
+  }
+
+  /**
+   * Local constant-product (UniV2) quote, warming token0 + reserves once per
+   * hint then computing the 0.3%-fee output locally for every trial. Reserves
+   * shift with the victim swap, so the cache is cleared each hint. Throws on
+   * any failure so the caller can fall back to the eth_call quoter.
+   */
+  async quoteV2(
+    state: StateBackend,
+    pool: string,
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: bigint,
+  ): Promise<bigint> {
+    const key = pool.toLowerCase();
+    if (this.overlayPools.has(key)) {
+      throw new Error(`v2 ${pool.slice(0, 10)} is overlay-only for this hint`);
+    }
+    if (this.failed.has(key)) throw new Error(`v2 ${pool.slice(0, 10)} warm failed this epoch`);
+    let cached = this.v2.get(key);
+    if (cached && !this.liveStateFresh(cached.blockNumber)) {
+      this.v2.delete(key);
+      cached = undefined;
+    }
     if (!cached) {
       try {
-        cached = await this.warmV3(state, pool);
+        cached = await this.warmV2(state, pool);
       } catch (err) {
         this.failed.add(key);
-        console.log(
-          `[poolcache] v3 warm failed ${pool.slice(0, 10)} → eth_call fallback: ` +
-            `${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`,
-        );
         throw err;
       }
-      this.v3.set(key, cached);
-      console.log(
-        `[poolcache] warmed univ3 ${pool.slice(0, 10)} (${cached.state.ticks.size} ticks, ` +
-          `±${V3_WORD_RADIUS} words)`,
-      );
+      this.v2.set(key, cached);
+      console.log(`[poolcache] warmed univ2 ${pool.slice(0, 10)}`);
     }
-    const zeroForOne = tokenIn.toLowerCase() === cached.token0;
-    return v3SwapExactInput(cached.state, zeroForOne, amountIn);
+    const ti = tokenIn.toLowerCase();
+    const to = tokenOut.toLowerCase();
+    const zeroForOne = ti === cached.token0 && to === cached.token1;
+    const oneForZero = ti === cached.token1 && to === cached.token0;
+    if (!zeroForOne && !oneForZero) {
+      throw new Error(`v2 ${pool.slice(0, 10)} does not trade requested pair`);
+    }
+    const [reserveIn, reserveOut] = zeroForOne
+      ? [cached.reserve0, cached.reserve1]
+      : [cached.reserve1, cached.reserve0];
+    // UniV2 constant-product with 0.3% fee (matches the eth_call quoter).
+    const amountInWithFee = amountIn * 997n;
+    return (amountInWithFee * reserveOut) / (reserveIn * 1000n + amountInWithFee);
+  }
+
+  private async warmV2(state: StateBackend, pool: string): Promise<V2Cached> {
+    const [t0Res, t1Res, resvRes] = await Promise.all([
+      state.call({ to: pool, data: univ2Iface.encodeFunctionData("token0") }),
+      state.call({ to: pool, data: univ2Iface.encodeFunctionData("token1") }),
+      state.call({ to: pool, data: univ2Iface.encodeFunctionData("getReserves") }),
+    ]);
+    const token0 = ethers.getAddress("0x" + t0Res.slice(-40)).toLowerCase();
+    const token1 = ethers.getAddress("0x" + t1Res.slice(-40)).toLowerCase();
+    const decoded = univ2Iface.decodeFunctionResult("getReserves", resvRes);
+    return {
+      token0,
+      token1,
+      reserve0: BigInt(decoded[0]),
+      reserve1: BigInt(decoded[1]),
+      blockNumber: this.tickBlock,
+      source: "lazy",
+    };
+  }
+
+  private liveStateFresh(blockNumber: number | undefined): boolean {
+    return this.tickBlock === undefined || blockNumber === this.tickBlock;
+  }
+
+  private liveStateFreshFor(blockNumber: number | undefined, expectedBlock: number | undefined): boolean {
+    return expectedBlock === undefined || blockNumber === expectedBlock;
   }
 
   /**
@@ -168,18 +508,17 @@ export class PoolStateCache {
     return BigInt(await state.call({ to, data }));
   }
 
-  private async warmV3(state: StateBackend, pool: string): Promise<V3Cached> {
-    const slot0Res = await state.call({ to: pool, data: v3PoolIface.encodeFunctionData("slot0") });
-    const slot0 = v3PoolIface.decodeFunctionResult("slot0", slot0Res);
-    const sqrtPriceX96 = BigInt(slot0[0]);
-    const tick = Number(slot0[1]);
-    const liquidity = await this.call(state, pool, v3PoolIface.encodeFunctionData("liquidity"));
+  private async warmV3Ticks(state: StateBackend, pool: string): Promise<V3TickCache> {
     const fee = await this.call(state, pool, v3PoolIface.encodeFunctionData("fee"));
     const tickSpacing = Number(await this.call(state, pool, v3PoolIface.encodeFunctionData("tickSpacing")));
     const token0Res = await state.call({ to: pool, data: v3PoolIface.encodeFunctionData("token0") });
     const token1Res = await state.call({ to: pool, data: v3PoolIface.encodeFunctionData("token1") });
     const token0 = ethers.getAddress("0x" + token0Res.slice(-40)).toLowerCase();
     const token1 = ethers.getAddress("0x" + token1Res.slice(-40)).toLowerCase();
+    // Center the word fetch on the current tick. Read slot0.tick once here; the
+    // live sqrtPrice/liquidity are read separately per hint in getV3Live.
+    const slot0Res = await state.call({ to: pool, data: v3PoolIface.encodeFunctionData("slot0") });
+    const tick = Number(v3PoolIface.decodeFunctionResult("slot0", slot0Res)[1]);
 
     const compressed = Math.floor(tick / tickSpacing);
     const currentWord = compressed >> 8;
@@ -216,8 +555,7 @@ export class PoolStateCache {
       }
     }
 
-    const v3State: V3PoolState = { sqrtPriceX96, tick, liquidity, fee, tickSpacing, tickBitmap, ticks };
-    return { state: v3State, token0, token1 };
+    return { block: this.tickBlock, fee, tickSpacing, token0, token1, tickBitmap, ticks };
   }
 
   private async warmCurve(state: StateBackend, pool: string): Promise<CurveCached> {

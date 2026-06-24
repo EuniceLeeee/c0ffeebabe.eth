@@ -282,6 +282,14 @@ export async function quote(
       }
       return quoteUniV3(state, target, tokenIn, tokenOut, amountIn);
     case "univ2-swap":
+      // Path B: prefer warmed local constant-product; fall back to on-chain reads.
+      if (cache) {
+        try {
+          return await cache.quoteV2(state, target, tokenIn, tokenOut, amountIn);
+        } catch {
+          /* fall through to eth_call */
+        }
+      }
       return quoteUniV2(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
       return quoteUniV4(state, tokenIn, tokenOut, amountIn);

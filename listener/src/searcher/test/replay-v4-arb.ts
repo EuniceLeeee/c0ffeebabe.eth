@@ -30,6 +30,11 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import { buildTokenGraph, POOL_REGISTRY, type TokenEdge } from "../planner/token-graph.js";
+import { mergePoolRegistries } from "../active-pool-discovery.js";
+import {
+  DEFAULT_PINNED_WARM_POOLS_PATH,
+  loadPinnedWarmPools,
+} from "../pinned-warm-pools.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import { AnvilSolver } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
@@ -71,8 +76,12 @@ async function main(): Promise<void> {
     console.log("=== Phase 1: V3 quote comparison ===");
     await state.forkAt(BLOCK - 1);
 
-    const graph = await buildTokenGraph(state, POOL_REGISTRY);
-    console.log(`Graph: ${graph.length} edges from ${POOL_REGISTRY.length} pool entries`);
+    const pinnedPools = loadPinnedWarmPools(
+      process.env.SEARCHER_PINNED_WARM_POOLS ?? DEFAULT_PINNED_WARM_POOLS_PATH,
+    );
+    const poolRegistry = mergePoolRegistries(POOL_REGISTRY, pinnedPools);
+    const graph = await buildTokenGraph(state, poolRegistry);
+    console.log(`Graph: ${graph.length} edges from ${poolRegistry.length} pool entries`);
 
     // Verify the 0.01% pools are in the graph
     const usdc_weth_edges = graph.filter(

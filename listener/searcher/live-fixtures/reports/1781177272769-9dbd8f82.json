@@ -1,0 +1,40 @@
+{
+  "txHash": "0x9dbd8f824c23005e24ba5a86fbb567e2e332d886386202fed04fd7a2aca66efe",
+  "receivedAt": 1781177272769,
+  "path": "hash-only",
+  "blockNumber": 25293916,
+  "pool": "0x7825dE5586E4d2FD04459091bbe783fa243E1bf3",
+  "tokenIn": "0x50D1c9771902476076eCFc8B2A83Ad6b9355a4c9",
+  "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  "amountIn": "325045561172732121285",
+  "opportunities": 1,
+  "plans": 4,
+  "stageMs": {
+    "match": 340,
+    "prep": 0,
+    "detect": 2,
+    "plan": 1,
+    "overlay": 22514,
+    "total": 22857
+  },
+  "finalState": "expired-before-solver",
+  "counters": {
+    "hints": 5,
+    "impacts": 1,
+    "opportunities": 1,
+    "plans": 4,
+    "solverEntered": 0,
+    "solverSuccess": 0,
+    "revmSimSuccess": 0,
+    "rpcVerifySuccess": 0,
+    "simSuccess": 0,
+    "submitAttempts": 0,
+    "accepted": 0,
+    "expiredBeforeSolver": 1,
+    "quoteTimeouts": 0,
+    "simReverts": 0,
+    "finalVerifyFailed": 0,
+    "missingState": 0,
+    "revmErrors": 0
+  }
+}

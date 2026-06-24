@@ -1,0 +1,162 @@
+{
+  "pools": [
+    {
+      "label": "Uniswap V3 USDC/WETH 0.01%",
+      "address": "0xE0554a476A092703abdB3Ef35c80e0D76d32939F",
+      "adapter": "univ3",
+      "warmDirections": [
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "1000000000000000000",
+          "weight": 40
+        },
+        {
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "amountIn": "1000000000",
+          "weight": 40
+        }
+      ]
+    },
+    {
+      "label": "Uniswap V3 USDC/USDT 0.01%",
+      "address": "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6",
+      "adapter": "univ3",
+      "warmDirections": [
+        {
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "amountIn": "1000000000",
+          "weight": 40
+        },
+        {
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "1000000000",
+          "weight": 40
+        }
+      ]
+    },
+    {
+      "label": "Uniswap V3 USDT/WETH",
+      "address": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+      "adapter": "univ3",
+      "warmDirections": [
+        {
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "amountIn": "1000000000",
+          "weight": 40
+        },
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "amountIn": "1000000000000000000",
+          "weight": 40
+        }
+      ]
+    },
+    {
+      "label": "Uniswap V3 USDC/WETH 0.05%",
+      "address": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+      "adapter": "univ3",
+      "warmDirections": [
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "1000000000000000000",
+          "weight": 25
+        },
+        {
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "amountIn": "1000000000",
+          "weight": 25
+        }
+      ]
+    },
+    {
+      "label": "Curve 3pool",
+      "address": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+      "adapter": "curve",
+      "warmDirections": [
+        {
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "amountIn": "1000000000",
+          "weight": 30
+        },
+        {
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+          "amountIn": "1000000000",
+          "weight": 30
+        },
+        {
+          "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "amountIn": "1000000000000000000000",
+          "weight": 30
+        }
+      ]
+    },
+    {
+      "label": "Curve sUSDS/USDT",
+      "address": "0x00836Fe54625BE242BcFA286207795405ca4fD10",
+      "adapter": "curve",
+      "warmDirections": [
+        {
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+          "amountIn": "1000000000",
+          "weight": 35
+        },
+        {
+          "tokenIn": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "amountIn": "1000000000000000000000",
+          "weight": 20
+        }
+      ]
+    },
+    {
+      "label": "Curve DOLA/sUSDS",
+      "address": "0x8b83c4aA949254895507D09365229BC3a8c7f710",
+      "adapter": "curve",
+      "warmDirections": [
+        {
+          "tokenIn": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+          "tokenOut": "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+          "amountIn": "1000000000000000000000",
+          "weight": 35
+        },
+        {
+          "tokenIn": "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+          "tokenOut": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+          "amountIn": "1000000000000000000000",
+          "weight": 20
+        }
+      ]
+    },
+    {
+      "label": "Curve DOLA/wstUSR",
+      "address": "0x64273624eb57c5cA961d366CBF3968e760Bf0452",
+      "adapter": "curve-nr",
+      "warmDirections": [
+        {
+          "tokenIn": "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+          "tokenOut": "0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055",
+          "amountIn": "1000000000000000000000",
+          "weight": 35
+        },
+        {
+          "tokenIn": "0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055",
+          "tokenOut": "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+          "amountIn": "1000000000000000000000",
+          "weight": 20
+        }
+      ]
+    }
+  ]
+}

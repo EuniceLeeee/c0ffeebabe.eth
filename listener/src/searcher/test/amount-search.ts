@@ -7,6 +7,10 @@
  */
 
 import { geometricGrid, goldenSectionMaximize, bidAmount } from "../solver/amount-bounds.js";
+import { AnvilSolver, resolveSearchCenter } from "../solver/solver.js";
+import { propagateAmounts } from "../solver/amount-propagation.js";
+import type { StateBackend } from "../../shared/state/state-backend.js";
+import type { CandidatePlan } from "../planner/planner.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -102,13 +106,222 @@ function testBid(): void {
   console.log("[amtsearch] AC-3a.2 bid math: PASS");
 }
 
+// ── Regression: victim amount units must be normalized to flash token ─
+async function testSearchCenterTokenNormalization(): Promise<void> {
+  const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+  const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+  const pool = "0x0000000000000000000000000000000000000001";
+  const quotedWeth = 17_500_000_000_000_000n;
+  let quoteCalls = 0;
+
+  const plan = {
+    opportunity: {
+      startToken: weth,
+      profitToken: weth,
+      victimAmountIn: 35_000_000n,
+      hints: {
+        impact: {
+          pool,
+          tokenIn: usdc,
+          tokenOut: weth,
+          matchedAdapterId: "univ3-swap",
+        },
+      },
+    },
+  } as unknown as Parameters<typeof resolveSearchCenter>[0];
+
+  const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
+    quoteSource: {
+      quote: async (req) => {
+        quoteCalls++;
+        assert(req.adapterId === "univ3-swap", `center quote: adapter ${req.adapterId}`);
+        assert(req.target === pool, `center quote: target ${req.target}`);
+        assert(req.tokenIn === usdc, `center quote: tokenIn ${req.tokenIn}`);
+        assert(req.tokenOut === weth, `center quote: tokenOut ${req.tokenOut}`);
+        assert(req.amountIn === 35_000_000n, `center quote: amountIn ${req.amountIn}`);
+        return { amountOut: quotedWeth, latencyMs: 0 };
+      },
+    },
+  });
+
+  assert(quoteCalls === 1, `center quote: expected one call, got ${quoteCalls}`);
+  assert(center === quotedWeth, `center quote: expected ${quotedWeth}, got ${center}`);
+  console.log("[amtsearch] center token normalization: PASS");
+}
+
+// ── Regression: default quote propagation should not haircut execution amounts ─
+async function testDefaultSafetyHasNoHaircut(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000aa";
+  const tokenB = "0x00000000000000000000000000000000000000bb";
+  const amounts = await propagateAmounts(
+    {
+      edges: [{
+        adapterId: "univ2-swap",
+        target: "0x0000000000000000000000000000000000000001",
+        tokenIn: tokenA,
+        tokenOut: tokenB,
+        slotKind: "swap",
+      }],
+    },
+    1000n,
+    {} as StateBackend,
+    {
+      quoteSource: {
+        quote: async () => ({ amountOut: 1234n, latencyMs: 0 }),
+      },
+    },
+  );
+
+  assert(amounts[1] === 1234n, `safety: expected no haircut, got ${amounts[1]}`);
+  console.log("[amtsearch] default quote safety no haircut: PASS");
+}
+
+// ── Regression: solver should score and build with the same 1bp slack ─
+async function testSolverUsesUnifiedDefaultSafety(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000aa";
+  const tokenB = "0x00000000000000000000000000000000000000bb";
+  const pool1 = "0x0000000000000000000000000000000000000001";
+  const pool2 = "0x0000000000000000000000000000000000000002";
+  let simulateCalls = 0;
+  const previousSafety = process.env.SEARCHER_QUOTE_SAFETY_BPS;
+  delete process.env.SEARCHER_QUOTE_SAFETY_BPS;
+
+  const plan: CandidatePlan = {
+    templateName: "flash-swap-repay",
+    root: {} as CandidatePlan["root"],
+    opportunity: {
+      kind: "backrun-arb",
+      victimTxHash: "0xamountsearch",
+      blockNumber: 1,
+      affectedPools: [pool1],
+      affectedTokens: [tokenA, tokenB],
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1000n,
+      targetNetProfit: 1n,
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: pool1, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap" },
+        { adapterId: "univ2-swap", target: pool2, tokenIn: tokenB, tokenOut: tokenA, slotKind: "swap" },
+      ],
+    },
+    flashAdapterIds: ["morpho-flash"],
+    flashAdapterId: "morpho-flash",
+  };
+
+  const solver = new AnvilSolver();
+  try {
+    await solver.solve(
+      plan,
+      {} as StateBackend,
+      {
+        executor: "0x00000000000000000000000000000000000000ee",
+        simulate: async (resolved) => {
+          simulateCalls++;
+          const swaps = resolved.root.children.filter((node) => node.adapterId === "univ2-swap");
+          assert(swaps.length === 2, `safety: expected 2 swap nodes, got ${swaps.length}`);
+          assert(typeof swaps[0].amount === "bigint", "safety: first swap amount must be resolved");
+          assert(typeof swaps[1].amount === "bigint", "safety: second swap amount must be resolved");
+          const firstInput = swaps[0].amount as bigint;
+          const secondInput = swaps[1].amount as bigint;
+          const exactSecondInput = firstInput * 2n;
+          const safetySecondInput = (exactSecondInput * 9999n) / 10000n;
+          assert(
+            secondInput === safetySecondInput,
+            `safety: expected ${safetySecondInput}, got ${secondInput}`,
+          );
+          assert(secondInput < exactSecondInput, "safety: build amounts should include 1bp slack");
+          return { success: true, netProfit: 1n };
+        },
+      },
+      {
+        gridHalfWidth: 0,
+        finalSimTopN: 1,
+        gssMaxTries: 3,
+        quoteSource: {
+          quote: async (req) => ({ amountOut: req.amountIn * 2n, latencyMs: 0 }),
+        },
+      },
+    );
+  } finally {
+    if (previousSafety === undefined) delete process.env.SEARCHER_QUOTE_SAFETY_BPS;
+    else process.env.SEARCHER_QUOTE_SAFETY_BPS = previousSafety;
+  }
+
+  assert(simulateCalls === 1, `safety: expected 1 sim, got ${simulateCalls}`);
+  console.log("[amtsearch] unified default solver safety: PASS");
+}
+
+// ── Diagnostic mode: near-miss quote floor admits candidates to phase-2 sim ─
+async function testQuoteProfitFloorAdmitsNearMiss(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000aa";
+  const tokenB = "0x00000000000000000000000000000000000000bb";
+  const pool = "0x0000000000000000000000000000000000000001";
+  let simulateCalls = 0;
+
+  const plan: CandidatePlan = {
+    templateName: "flash-swap-repay",
+    root: {} as CandidatePlan["root"],
+    opportunity: {
+      kind: "backrun-arb",
+      victimTxHash: "0xamountfloor",
+      blockNumber: 1,
+      affectedPools: [pool],
+      affectedTokens: [tokenA, tokenB],
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1000n,
+      targetNetProfit: 1n,
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: pool, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap" },
+      ],
+    },
+    flashAdapterIds: ["morpho-flash"],
+    flashAdapterId: "morpho-flash",
+  };
+
+  const solver = new AnvilSolver();
+  await solver.solve(
+    plan,
+    {} as StateBackend,
+    {
+      executor: "0x00000000000000000000000000000000000000ee",
+      simulate: async () => {
+        simulateCalls++;
+        return { success: true, netProfit: 1n };
+      },
+    },
+    {
+      gridHalfWidth: 0,
+      finalSimTopN: 1,
+      quoteSafetyBps: 10000n,
+      quoteProfitFloorBps: 20n,
+      quoteSource: {
+        quote: async (req) => ({ amountOut: req.amountIn - 1n, latencyMs: 0 }),
+      },
+    },
+  );
+
+  assert(simulateCalls === 1, `quote floor: expected 1 sim, got ${simulateCalls}`);
+  console.log("[amtsearch] quote profit floor admission: PASS");
+}
+
 async function main(): Promise<void> {
   testGrid();
   await testGss();
   await testGridThenGss();
   await testGssShouldStop();
   testBid();
-  console.log("amount-search PASS (5/5)");
+  await testSearchCenterTokenNormalization();
+  await testDefaultSafetyHasNoHaircut();
+  await testSolverUsesUnifiedDefaultSafety();
+  await testQuoteProfitFloorAdmitsNearMiss();
+  console.log("amount-search PASS (9/9)");
 }
 
 main().catch((err) => {

@@ -9,6 +9,8 @@ export interface CandidatePlan {
   root: PlanNode;
   opportunity: Opportunity;
   tokenPath: TokenPath;
+  flashAdapterIds: string[];
+  /** Preferred flash adapter for compatibility with older call sites. */
   flashAdapterId: string;
 }
 
@@ -50,10 +52,12 @@ export class TemplatePlanner implements Planner {
     }
     const impact = impactFromOpportunity(opp);
     const debug: string[] = [];
+    const seenPathKeys = new Set<string>();
 
     for (const template of templates) {
       const flashSlot = template.slots.find((s) => s.kind === "flash");
       const flashAdapters = flashSlot?.adapters ?? ["morpho-flash"];
+      const preferredFlash = flashAdapters[0] ?? "morpho-flash";
 
       // Full graph (template-adapter-filtered only). Relevance to the victim
       // impact is enforced at the PATH level by focusPathsOnImpact below — NOT by
@@ -71,30 +75,41 @@ export class TemplatePlanner implements Planner {
         maxPoolsPerToken: this.maxPoolsPerToken,
         pinnedPools,
       });
-      const paths = focusPathsOnImpact(rawPaths, impact);
+      const roundtripPrunedPaths = rawPaths.filter((path) => !hasImmediateSamePoolReverse(path));
+      const prunedRoundtrip = rawPaths.length - roundtripPrunedPaths.length;
+      const paths = focusPathsOnImpact(roundtripPrunedPaths, impact);
 
       let constraintPass = 0;
+      let duplicatePath = 0;
       for (const path of paths) {
+        if (!satisfiesRequiredSlots(path, template)) {
+          continue;
+        }
         if (!passesConstraints(path, template.constraints, opp.startToken, opp.profitToken)) {
           continue;
         }
         constraintPass++;
-        for (const flashId of flashAdapters) {
-          candidates.push({
-            templateName: template.name,
-            root: buildAbstractRoot(path, opp, flashId),
-            opportunity: opp,
-            tokenPath: path,
-            flashAdapterId: flashId,
-          });
-          if (candidates.length >= this.maxCandidates) break;
+        const pathKey = tokenPathKey(path);
+        if (seenPathKeys.has(pathKey)) {
+          duplicatePath++;
+          continue;
         }
+        seenPathKeys.add(pathKey);
+        candidates.push({
+          templateName: template.name,
+          root: buildAbstractRoot(path, opp, preferredFlash),
+          opportunity: opp,
+          tokenPath: path,
+          flashAdapterIds: [...flashAdapters],
+          flashAdapterId: preferredFlash,
+        });
         if (candidates.length >= this.maxCandidates) break;
       }
       if (candidates.length >= this.maxCandidates) break;
       debug.push(
         `${template.name}: edges=${graph.length}/${baseGraph.length} raw=${rawPaths.length} ` +
-          `focused=${paths.length} constraintPass=${constraintPass}`,
+          `focused=${paths.length} prunedRoundtrip=${prunedRoundtrip} ` +
+          `duplicates=${duplicatePath} constraintPass=${constraintPass}`,
       );
     }
 
@@ -191,6 +206,40 @@ function focusPathsOnImpact(paths: TokenPath[], impact: OpportunityImpact | null
   );
 }
 
+function satisfiesRequiredSlots(path: TokenPath, template: PathTemplate): boolean {
+  return template.slots.every((slot) => {
+    if ((slot.min ?? 0) <= 0 || slot.kind === "flash") return true;
+    return path.edges.some((edge) => slot.adapters.includes(edge.adapterId));
+  });
+}
+
+function hasImmediateSamePoolReverse(path: TokenPath): boolean {
+  for (let i = 0; i < path.edges.length - 1; i++) {
+    const a = path.edges[i];
+    const b = path.edges[i + 1];
+    if (
+      sameAddress(a.target, b.target) &&
+      sameAddress(a.tokenIn, b.tokenOut) &&
+      sameAddress(a.tokenOut, b.tokenIn)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function tokenPathKey(path: TokenPath): string {
+  return path.edges
+    .map((edge) =>
+      [
+        edge.adapterId,
+        edge.target.toLowerCase(),
+        edge.tokenIn.toLowerCase(),
+        edge.tokenOut.toLowerCase(),
+      ].join(":"),
+    )
+    .join("|");
+}
 
 function sameAddress(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();

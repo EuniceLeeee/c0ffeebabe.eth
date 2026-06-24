@@ -233,7 +233,8 @@ function collectPoolTouches(
     const token = log.address.toLowerCase();
     const from = ("0x" + log.topics[1].slice(26)).toLowerCase();
     const to = ("0x" + log.topics[2].slice(26)).toLowerCase();
-    const value = BigInt(log.data || "0");
+    const value = parseUintLogData(log.data);
+    if (value === null) continue;
     if (value === 0n) continue;
 
     if (poolSet.has(to)) {
@@ -355,7 +356,8 @@ function swapEventCorrelatedImpacts(
     const token = log.address.toLowerCase();
     const from = ("0x" + log.topics[1].slice(26)).toLowerCase();
     const to = ("0x" + log.topics[2].slice(26)).toLowerCase();
-    const value = BigInt(log.data || "0");
+    const value = parseUintLogData(log.data);
+    if (value === null) continue;
     if (value === 0n) continue;
 
     if (swapPools.has(to)) {
@@ -506,6 +508,15 @@ async function swapOnlyImpacts(
 function isInboundTouch(touch: PoolTouch): boolean {
   const { direction } = touch;
   return direction === "in";
+}
+
+function parseUintLogData(data: string): bigint | null {
+  if (!data || data === "0x") return null;
+  try {
+    return BigInt(data);
+  } catch {
+    return null;
+  }
 }
 
 function isOutboundTouch(touch: PoolTouch): boolean {
