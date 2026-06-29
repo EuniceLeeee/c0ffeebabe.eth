@@ -76,6 +76,27 @@ Transform tasks into verifiable goals:
 - Do not ask the user to do mechanical local steps like `tail`, `jq`, report
   generation, or redaction when the agent can do them safely in the workspace.
 
+### 6. Live-Run Follow-Up
+
+- After a live or dry-run searcher run finishes, the agent should find the
+  latest `/tmp/mev-live-*.log` and `analysis/events/searcher-*.jsonl`, generate
+  redacted review artifacts, and analyze them without waiting for another user
+  command.
+- Prefer structured JSONL events over raw log substring counts. Use
+  `pipeline_dropped` as the source of truth for loss attribution.
+- If the dominant drop is `plan/no_candidate_plans`, dig until the blocker is
+  classified into one of these buckets: flash borrowability, path template /
+  closed-loop construction, token graph coverage, or unsupported strategy shape
+  such as LP / borrow-lend / router-specific flow.
+- This first pass should be zero-CU whenever possible: read JSONL, redacted
+  logs, planner code, graph/pool registries, and local fixtures before using RPC
+  or traces.
+- Current known live-run bottleneck: filtered mempool + hybrid backend works and
+  avoids the pending-hash `getTransaction` firehose; the active blocker is
+  planner/path coverage, with repeated `plan/no_candidate_plans` on pool
+  `0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6` and pair
+  `0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC / WETH`.
+
 ---
 
 ## Development Workflow
