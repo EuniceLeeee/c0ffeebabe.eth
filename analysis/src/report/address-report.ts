@@ -33,6 +33,12 @@ export function renderMarkdown(report: AddressReport): string {
   lines.push(`Chain: \`${report.chain}\``);
   lines.push(`Range: ${report.range}`);
   lines.push("");
+  lines.push(`> **Tool A 限制(单地址视角)**:只看该地址自己的 tx,**看不到同块 victim**。`);
+  lines.push(`> 所以 sandwich / backrun 因果在此**不可靠**——夹子/backrun 腿会被当成独立 swap 归入`);
+  lines.push(`> \`atomic/standing\` 或 \`unknown\`(本报告 sandwich 计数为 0 不代表该 bot 不做夹子)。`);
+  lines.push(`> 真正的 sandwich/因果归因见 Tool B(Live Loss,有全块上下文)。`);
+  lines.push(`> \`rough_pnl\` 仅对自洽闭环(flash-arb / swap-loop)可信;LP 半腿与单向 swap 显示 n/a。`);
+  lines.push("");
   lines.push(`## Entity Cluster`);
   lines.push("");
   lines.push(`Confidence: \`${report.entityCluster.confidence}\``);
