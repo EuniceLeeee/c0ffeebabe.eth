@@ -51,12 +51,14 @@ export class BackrunDetector implements Detector {
       graph.flatMap((e) => [e.tokenIn.toLowerCase(), e.tokenOut.toLowerCase()]),
     );
 
-    return impacts.map((impact) => {
+    const opportunities: Opportunity[] = [];
+    for (const impact of impacts) {
       // Pick startToken: prefer an impact token that's in the routing graph
       // so the planner can actually build a cycle through it.
       // Fall back to the lend edge's tokenIn (wstUSR) if both are missing.
       const startToken = pickStartToken(impact, graphTokens, graph);
-      return {
+      if (startToken === null) continue;
+      opportunities.push({
         kind: "backrun-arb" as const,
         victimTxHash: event.txHash,
         blockNumber: event.blockNumber,
@@ -67,8 +69,9 @@ export class BackrunDetector implements Detector {
         victimAmountIn: impact.amountIn,
         targetNetProfit: event.minProfit,
         hints: { impact },
-      };
-    });
+      });
+    }
+    return opportunities;
   }
 }
 
@@ -86,7 +89,7 @@ function pickStartToken(
   impact: PoolImpact,
   graphTokens: Set<string>,
   graph: TokenEdge[],
-): string {
+): string | null {
   const lend = graph.find((edge) => edge.slotKind === "lend");
   const lendToken = lend?.tokenIn?.toLowerCase();
 

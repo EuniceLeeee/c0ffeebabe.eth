@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
+import { buildSignedBackrunTx, submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
 import type { SubmitResult } from "../../types.js";
 
 export interface BundleSubmission {
@@ -9,6 +9,10 @@ export interface BundleSubmission {
   backrunCalldata: string;
   targetBlock: number;
   expectedProfit: bigint;
+  /** Expected profit valued in ETH wei (for sizing the proposer bribe). */
+  expectedProfitEth?: bigint;
+  /** Fraction of expectedProfitEth to pay as priority-fee bribe, in bps. */
+  bribeBps?: number;
   gasUsed?: bigint | number;
 }
 
@@ -19,9 +23,38 @@ export interface BundleRouter {
 export class DryRunBundleRouter implements BundleRouter {
   submissions: BundleSubmission[] = [];
 
+  constructor(
+    private readonly wallet?: ethers.Wallet,
+    private readonly provider?: ethers.JsonRpcProvider,
+    private readonly botvmAddress?: string,
+    private readonly defaultGasUsed = 12_000_000,
+  ) {}
+
   async submit(bundle: BundleSubmission): Promise<SubmitResult[]> {
     this.submissions.push(bundle);
-    return [];
+    if (!this.wallet || !this.provider || !this.botvmAddress) return [];
+    try {
+      const signed = await buildSignedBackrunTx({
+        calldataHex: bundle.backrunCalldata,
+        gasUsed: Number(bundle.gasUsed ?? this.defaultGasUsed),
+        wallet: this.wallet,
+        botvmAddress: this.botvmAddress,
+        provider: this.provider,
+        expectedProfitEth: bundle.expectedProfitEth,
+        bribeBps: bundle.bribeBps,
+      });
+      return [{
+        builder: "dry-run",
+        accepted: false,
+        backrunTxHash: signed.backrunTxHash,
+      }];
+    } catch (err) {
+      return [{
+        builder: "dry-run",
+        accepted: false,
+        error: `dry-run-sign-failed: ${err instanceof Error ? err.message : String(err)}`,
+      }];
+    }
   }
 }
 
@@ -35,6 +68,10 @@ export class ProductionBundleRouter implements BundleRouter {
 
   async submit(bundle: BundleSubmission): Promise<SubmitResult[]> {
     const gasUsed = Number(bundle.gasUsed ?? this.defaultGasUsed);
+    const bribe = {
+      expectedProfitEth: bundle.expectedProfitEth,
+      bribeBps: bundle.bribeBps,
+    };
     let results: SubmitResult[];
 
     if (bundle.mode === "standalone") {
@@ -48,6 +85,7 @@ export class ProductionBundleRouter implements BundleRouter {
         botvmAddress: this.botvmAddress,
         provider: this.provider,
         targetBlock: bundle.targetBlock,
+        ...bribe,
       });
     } else if (bundle.victimRawTx) {
       // Primary path: have rawTx → eth_sendBundle to all builders
@@ -60,6 +98,7 @@ export class ProductionBundleRouter implements BundleRouter {
         botvmAddress: this.botvmAddress,
         provider: this.provider,
         targetBlock: bundle.targetBlock,
+        ...bribe,
       });
     } else {
       // Secondary path: hash-only → mev_sendBundle to Flashbots relay only
@@ -72,6 +111,7 @@ export class ProductionBundleRouter implements BundleRouter {
         botvmAddress: this.botvmAddress,
         provider: this.provider,
         targetBlock: bundle.targetBlock,
+        ...bribe,
       });
       results = [mevResult];
     }

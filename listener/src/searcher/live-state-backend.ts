@@ -3,6 +3,7 @@ import type { PoolImpact } from "./detector/pool-impact.js";
 import type { LiveFixturePath } from "./live-fixture-recorder.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { SimulationResult } from "./simulator/botvm-simulator.js";
+import type { PostImpactSeed } from "./solver/pool-state-cache.js";
 
 export type LiveBackendKind = "rpc" | "revm" | "hybrid";
 
@@ -21,6 +22,9 @@ export interface PrepareInput {
    *  representative quote per hop during prepare so the solver's amount search
    *  starts with warm pool state instead of serial-faulting slots. */
   routeHops?: Array<{ adapterId: string; target: string; tokenIn: string; tokenOut: string }>;
+  /** Locally computed post-victim pool state. When available, revm can inject raw
+   *  storage overrides instead of replaying the victim swap with debug_traceCall. */
+  postImpact?: PostImpactSeed;
 }
 
 export interface PreparedState {
@@ -50,6 +54,10 @@ export interface LiveStateBackend {
   readonly executor: string;
   supportsPath?(input: PrepareInput): boolean;
   prepareVictimState(input: PrepareInput): Promise<PreparedState>;
+  /** Current-candidate JIT warm. Unlike the between-block lane, this is scheduled
+   *  after planning for the exact candidate set and can run while local quote
+   *  search proceeds without touching the daemon. */
+  warmPrepareState?(input: PrepareInput): Promise<void>;
   /** Proactive between-block warm of recurring hot pools (revm only). Traces a
    *  representative quote per pool so a later hint's solve on the same block
    *  hits warm state instead of paying a cold route-hop trace inside the TTL. */

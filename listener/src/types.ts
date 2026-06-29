@@ -28,6 +28,8 @@ export interface SubmitResult {
   builder: string;
   accepted: boolean;
   bundleHash?: string;
+  /** Signed backrun transaction hash. Used by offline analysis to derive inclusion. */
+  backrunTxHash?: string;
   error?: string;
 }
 

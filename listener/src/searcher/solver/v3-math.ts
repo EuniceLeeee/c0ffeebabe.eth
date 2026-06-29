@@ -289,6 +289,11 @@ export interface V3PoolState {
   sqrtPriceX96: bigint;
   tick: number;
   liquidity: bigint;
+  observationIndex?: number;
+  observationCardinality?: number;
+  observationCardinalityNext?: number;
+  feeProtocol?: number;
+  unlocked?: boolean;
   fee: bigint; // feePips (e.g. 100 = 0.01%)
   tickSpacing: number;
   tickBitmap: Map<number, bigint>; // wordPos → bitmap

@@ -63,6 +63,8 @@ interface CurveCached {
   coins: string[]; // lowercase
   plain?: CurvePlainState;
   ng?: CurveNgState;
+  blockNumber?: number;
+  source: "seed" | "lazy";
 }
 
 /** Expensive, slow-changing v3 state: tick bitmap + liquidityNet + immutable
@@ -82,6 +84,11 @@ interface V3Live {
   sqrtPriceX96: bigint;
   tick: number;
   liquidity: bigint;
+  observationIndex?: number;
+  observationCardinality?: number;
+  observationCardinalityNext?: number;
+  feeProtocol?: number;
+  unlocked?: boolean;
   blockNumber?: number;
   source: "seed" | "lazy";
 }
@@ -92,6 +99,7 @@ interface V2Cached {
   token1: string; // lowercase
   reserve0: bigint;
   reserve1: bigint;
+  blockTimestampLast?: number;
   blockNumber?: number;
   source: "seed" | "lazy";
 }
@@ -102,6 +110,7 @@ export interface V2Seed {
   token1: string;
   reserve0: bigint;
   reserve1: bigint;
+  blockTimestampLast?: number;
   blockNumber: number;
 }
 
@@ -110,6 +119,11 @@ export interface V3LiveSeed {
   sqrtPriceX96: bigint;
   tick: number;
   liquidity: bigint;
+  observationIndex?: number;
+  observationCardinality?: number;
+  observationCardinalityNext?: number;
+  feeProtocol?: number;
+  unlocked?: boolean;
   blockNumber: number;
 }
 
@@ -132,7 +146,17 @@ export interface V3PostImpactSeed extends V3LiveSeed {
   kind: "v3";
 }
 
-export type PostImpactSeed = V2PostImpactSeed | V3PostImpactSeed;
+export interface CurvePostImpactSeed {
+  kind: "curve";
+  pool: string;
+  curveKind: "plain" | "ng";
+  coins: string[];
+  plain?: CurvePlainState;
+  ng?: CurveNgState;
+  blockNumber: number;
+}
+
+export type PostImpactSeed = V2PostImpactSeed | V3PostImpactSeed | CurvePostImpactSeed;
 
 export interface V3Snapshot {
   pool: string;
@@ -140,6 +164,15 @@ export interface V3Snapshot {
   token1: string;
   blockNumber: number;
   state: V3PoolState;
+}
+
+export interface CurveSnapshot {
+  pool: string;
+  kind: "plain" | "ng";
+  coins: string[];
+  plain?: CurvePlainState;
+  ng?: CurveNgState;
+  blockNumber: number;
 }
 
 export interface BeginHintOptions {
@@ -207,8 +240,10 @@ export class PoolStateCache {
     for (const post of options.postImpact ?? []) {
       if (post.kind === "v2") {
         this.seedV2(post);
-      } else {
+      } else if (post.kind === "v3") {
         this.seedV3Live(post);
+      } else {
+        this.seedCurve(post);
       }
     }
   }
@@ -235,6 +270,7 @@ export class PoolStateCache {
       token1: seed.token1.toLowerCase(),
       reserve0: seed.reserve0,
       reserve1: seed.reserve1,
+      blockTimestampLast: seed.blockTimestampLast,
       blockNumber: seed.blockNumber,
       source: "seed",
     });
@@ -247,6 +283,11 @@ export class PoolStateCache {
       sqrtPriceX96: seed.sqrtPriceX96,
       tick: seed.tick,
       liquidity: seed.liquidity,
+      observationIndex: seed.observationIndex,
+      observationCardinality: seed.observationCardinality,
+      observationCardinalityNext: seed.observationCardinalityNext,
+      feeProtocol: seed.feeProtocol,
+      unlocked: seed.unlocked,
       blockNumber: seed.blockNumber,
       source: "seed",
     });
@@ -267,6 +308,19 @@ export class PoolStateCache {
     this.failed.delete(key);
   }
 
+  seedCurve(seed: CurvePostImpactSeed): void {
+    const key = seed.pool.toLowerCase();
+    this.curve.set(key, {
+      kind: seed.curveKind,
+      coins: seed.coins.map((coin) => coin.toLowerCase()),
+      plain: seed.plain ? clonePlain(seed.plain) : undefined,
+      ng: seed.ng ? cloneNg(seed.ng) : undefined,
+      blockNumber: seed.blockNumber,
+      source: "seed",
+    });
+    this.failed.delete(key);
+  }
+
   snapshotV2(pool: string, blockNumber?: number): V2Seed | null {
     const key = pool.toLowerCase();
     const cached = this.v2.get(key);
@@ -277,6 +331,7 @@ export class PoolStateCache {
       token1: cached.token1,
       reserve0: cached.reserve0,
       reserve1: cached.reserve1,
+      blockTimestampLast: cached.blockTimestampLast,
       blockNumber: cached.blockNumber ?? blockNumber ?? 0,
     };
   }
@@ -296,11 +351,30 @@ export class PoolStateCache {
         sqrtPriceX96: live.sqrtPriceX96,
         tick: live.tick,
         liquidity: live.liquidity,
+        observationIndex: live.observationIndex,
+        observationCardinality: live.observationCardinality,
+        observationCardinalityNext: live.observationCardinalityNext,
+        feeProtocol: live.feeProtocol,
+        unlocked: live.unlocked,
         fee: ticks.fee,
         tickSpacing: ticks.tickSpacing,
         tickBitmap: ticks.tickBitmap,
         ticks: ticks.ticks,
       },
+    };
+  }
+
+  snapshotCurve(pool: string, blockNumber?: number): CurveSnapshot | null {
+    const key = pool.toLowerCase();
+    const cached = this.curve.get(key);
+    if (!cached || !this.liveStateFreshFor(cached.blockNumber, blockNumber)) return null;
+    return {
+      pool,
+      kind: cached.kind,
+      coins: [...cached.coins],
+      plain: cached.plain ? clonePlain(cached.plain) : undefined,
+      ng: cached.ng ? cloneNg(cached.ng) : undefined,
+      blockNumber: cached.blockNumber ?? blockNumber ?? 0,
     };
   }
 
@@ -386,6 +460,11 @@ export class PoolStateCache {
       sqrtPriceX96: BigInt(slot0[0]),
       tick: Number(slot0[1]),
       liquidity: await this.call(state, pool, v3PoolIface.encodeFunctionData("liquidity")),
+      observationIndex: Number(slot0[2]),
+      observationCardinality: Number(slot0[3]),
+      observationCardinalityNext: Number(slot0[4]),
+      feeProtocol: Number(slot0[5]),
+      unlocked: Boolean(slot0[6]),
       blockNumber: this.tickBlock,
       source: "lazy",
     };
@@ -455,6 +534,7 @@ export class PoolStateCache {
       token1,
       reserve0: BigInt(decoded[0]),
       reserve1: BigInt(decoded[1]),
+      blockTimestampLast: Number(decoded[2]),
       blockNumber: this.tickBlock,
       source: "lazy",
     };
@@ -480,6 +560,9 @@ export class PoolStateCache {
     amountIn: bigint,
   ): Promise<bigint> {
     const key = pool.toLowerCase();
+    if (this.overlayPools.has(key)) {
+      throw new Error(`curve ${pool.slice(0, 10)} is overlay-only for this hint`);
+    }
     if (this.failed.has(key)) throw new Error(`curve ${pool.slice(0, 10)} warm failed this epoch`);
     let cached = this.curve.get(key);
     if (!cached) {
@@ -585,7 +668,7 @@ export class PoolStateCache {
         (r) => BigInt(r),
       );
       const ng: CurveNgState = { A, fee, offpegFeeMultiplier: offpeg, balances, rates };
-      return { kind: "ng", coins, ng };
+      return { kind: "ng", coins, ng, blockNumber: this.tickBlock, source: "lazy" };
     }
 
     // Old-style plain (e.g. 3pool): rate multiplier per coin = 10^(36 - decimals).
@@ -595,7 +678,7 @@ export class PoolStateCache {
       rates.push(10n ** BigInt(36 - dec));
     }
     const plain: CurvePlainState = { A, fee, balances, rates };
-    return { kind: "plain", coins, plain };
+    return { kind: "plain", coins, plain, blockNumber: this.tickBlock, source: "lazy" };
   }
 
   private async readCoins(state: StateBackend, pool: string): Promise<string[]> {
@@ -617,4 +700,23 @@ export class PoolStateCache {
     if (coins.length === 0) throw new Error(`curve ${pool}: no coins`);
     return coins;
   }
+}
+
+function clonePlain(state: CurvePlainState): CurvePlainState {
+  return {
+    A: state.A,
+    fee: state.fee,
+    balances: [...state.balances],
+    rates: [...state.rates],
+  };
+}
+
+function cloneNg(state: CurveNgState): CurveNgState {
+  return {
+    A: state.A,
+    fee: state.fee,
+    offpegFeeMultiplier: state.offpegFeeMultiplier,
+    balances: [...state.balances],
+    rates: [...state.rates],
+  };
 }

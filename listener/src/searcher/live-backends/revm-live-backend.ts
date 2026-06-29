@@ -13,10 +13,16 @@ import type {
 import {
   RevmSimClient,
   type OverlayPreCall,
+  type OverlayStateOverride,
   type TokenAllowanceHint,
   type TokenBalanceHint,
 } from "../revm-sim-client.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
+import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
+import {
+  postImpactStateOverrides,
+  postImpactSupportsStateOverrides,
+} from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import { buildVictimOverlay, overlaySupportsAdapter } from "./victim-overlay.js";
 
@@ -34,6 +40,9 @@ const CURVE_UINT_IFACE = new ethers.Interface([
 const UNIV2_IFACE = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
   "function token0() view returns (address)",
+]);
+const BALANCE_OF_IFACE = new ethers.Interface([
+  "function balanceOf(address) view returns (uint256)",
 ]);
 const UNIV3_QUOTER_IFACE = new ethers.Interface([
   "function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
@@ -99,20 +108,39 @@ export class RevmLiveBackend implements LiveStateBackend {
       throw new Error(`revm overlay unsupported adapter ${input.impact.matchedAdapterId}`);
     }
 
-    const overlay = await buildVictimOverlay(input.impact, {
-      graph: this.graph,
-      resolveUniv3Fee: (pool) => this.resolveUniv3Fee(pool),
-    });
-    const prewarmCalls = await this.buildPrewarmCalls(input);
+    const impactPool = input.impact.pool;
+    const baseBlock = input.baseBlock;
+    const stateOverrides: OverlayStateOverride[] =
+      input.postImpact && postImpactSupportsStateOverrides(input.postImpact)
+        ? await postImpactStateOverrides(input.postImpact, (token) =>
+            this.resolveBalanceSlot(token, impactPool, baseBlock))
+        : [];
+    const usePostImpactOverrides = stateOverrides.length > 0;
+    const overlay = usePostImpactOverrides
+      ? null
+      : await buildVictimOverlay(input.impact, {
+          graph: this.graph,
+          resolveUniv3Fee: (pool) => this.resolveUniv3Fee(pool),
+        });
+    const prewarmCalls = await this.buildPrewarmCalls(input, !usePostImpactOverrides);
+    if (usePostImpactOverrides) {
+      console.log(
+        `[searcher/revm] prepare state_override ${input.postImpact!.kind} ` +
+          `overrides=${stateOverrides.length} prewarmCalls=${prewarmCalls.length}`,
+      );
+    }
 
     const resp = await this.client.prepare({
       blockNumber: input.baseBlock,
       rpcUrl: this.rpcUrl,
-      funded: [ethers.getAddress(this.owner), overlay.whale],
-      tokenDeals: overlay.tokenDeals,
-      preCalls: overlay.preCalls,
+      funded: usePostImpactOverrides
+        ? [ethers.getAddress(this.owner)]
+        : [ethers.getAddress(this.owner), overlay!.whale],
+      stateOverrides,
+      tokenDeals: overlay?.tokenDeals ?? [],
+      preCalls: overlay?.preCalls ?? [],
       // Prewarm the pool + executor so the first quote/sim is already warm.
-      prewarm: [ethers.getAddress(input.impact.pool), ethers.getAddress(this.executor)],
+      prewarm: this.buildPreparePrewarm(input, usePostImpactOverrides),
       prewarmCalls,
     });
     if (resp.seedStats) {
@@ -127,6 +155,53 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { blockNumber: input.baseBlock, mode: "hash-only" };
   }
 
+  private buildPreparePrewarm(input: PrepareInput, stateOverrideOnly: boolean): string[] {
+    const prewarm = new Map<string, string>();
+    const push = (addr: string) => prewarm.set(addr.toLowerCase(), ethers.getAddress(addr));
+    if (input.impact) push(input.impact.pool);
+    push(this.executor);
+    push(this.owner);
+    push(ADDR.MORPHO);
+    push(ADDR.BALANCER_VAULT);
+
+    if (stateOverrideOnly) {
+      for (const hop of input.routeHops ?? []) {
+        push(hop.target);
+        if (hop.adapterId === "psm") push(ADDR.SKY_PSM_LITE);
+        if (hop.adapterId === "fluid-vault") push(ADDR.FLUID_VAULT_WSTUSR_USDC);
+      }
+      return [...prewarm.values()];
+    }
+
+    push(WHALE);
+    push(ADDR.SKY_PSM_LITE);
+    push(ADDR.FLUID_VAULT_WSTUSR_USDC);
+    push(UNIV2_ROUTER);
+    push(UNIV3_SWAP_ROUTER);
+    push(UNIV3_QUOTER_V2);
+    return [...prewarm.values()];
+  }
+
+  /** Resolve a token's balanceOf mapping slot for state_override, probing the
+   *  chain at `baseBlock` (registry hit → cache → candidate-slot probe). null →
+   *  caller drops the override and falls back to the (correct) cold overlay. */
+  private resolveBalanceSlot(token: string, holder: string, blockTag: number): Promise<number | null> {
+    return resolveErc20BalanceSlot(token, holder, {
+      balanceOf: async (t, h) => {
+        const ret = await this.provider.call({
+          to: t,
+          data: BALANCE_OF_IFACE.encodeFunctionData("balanceOf", [h]),
+          blockTag,
+        });
+        return ret && ret !== "0x" ? BigInt(ret) : 0n;
+      },
+      getStorage: async (t, key) => {
+        const ret = await this.provider.getStorage(t, key, blockTag);
+        return ret && ret !== "0x" ? BigInt(ret) : 0n;
+      },
+    });
+  }
+
   /**
    * One representative quote view-call per deduped route hop, traced during
    * prepare so the solver's first quotes hit warm state. Best-effort: hops we
@@ -134,13 +209,15 @@ export class RevmLiveBackend implements LiveStateBackend {
    */
   private async buildPrewarmCalls(
     input: PrepareInput,
+    skipImpactPool: boolean,
   ): Promise<OverlayPreCall[]> {
     const hops = input.routeHops ?? [];
     if (hops.length === 0 || !input.impact) return [];
     const amountIn = input.impact.amountIn;
     const calls: OverlayPreCall[] = [];
-    // The impact pool's slots are already seeded by the victim swap trace.
-    const seenTargets = new Set<string>([input.impact.pool.toLowerCase()]);
+    const seenTargets = new Set<string>(
+      skipImpactPool ? [input.impact.pool.toLowerCase()] : [],
+    );
     for (const hop of hops) {
       if (calls.length >= 10) break;
       const targetKey = hop.target.toLowerCase();
@@ -167,11 +244,12 @@ export class RevmLiveBackend implements LiveStateBackend {
       hotTokens.set(hop.tokenOut.toLowerCase(), hop.tokenOut);
       const spender = overlayApproveSpender(hop);
       if (spender) {
-        allowanceHints.set(`${hop.tokenIn.toLowerCase()}|${spender.toLowerCase()}`, {
-          token: hop.tokenIn,
-          owner: ethers.getAddress(WHALE),
-          spender,
-        });
+        for (const token of [hop.tokenIn, hop.tokenOut]) {
+          allowanceHints.set(
+            `${token.toLowerCase()}|${spender.toLowerCase()}`,
+            tokenAllowanceHint(token, WHALE, spender),
+          );
+        }
       }
       if (!seenTargets.has(targetKey) && calls.length < 16) {
         seenTargets.add(targetKey);
@@ -180,20 +258,23 @@ export class RevmLiveBackend implements LiveStateBackend {
     }
     if (calls.length === 0 && hotTokens.size === 0) return;
 
-    const storageHintsEnabled = process.env.SEARCHER_WARM_STORAGE_HINTS === "1";
+    const storageHintsEnabled = process.env.SEARCHER_WARM_STORAGE_HINTS !== "0";
+    const warmUnknownStorage = process.env.SEARCHER_WARM_UNKNOWN_STORAGE_HINTS === "1";
     const tokenBalanceHints: TokenBalanceHint[] = storageHintsEnabled
       ? [...hotTokens.values()]
           .slice(0, 24)
-          .map((token) => ({
-            token,
-            account: ethers.getAddress(WHALE),
-          }))
+          .map((token) => tokenBalanceHint(token, WHALE))
+          .filter((hint) => warmUnknownStorage || hint.balanceSlot !== undefined)
       : [];
     const prewarm = [
       ethers.ZeroAddress,
       ethers.getAddress(this.owner),
       ethers.getAddress(this.executor),
       ethers.getAddress(WHALE),
+      ethers.getAddress(ADDR.MORPHO),
+      ethers.getAddress(ADDR.BALANCER_VAULT),
+      ethers.getAddress(ADDR.SKY_PSM_LITE),
+      ethers.getAddress(ADDR.FLUID_VAULT_WSTUSR_USDC),
       UNIV2_ROUTER,
       UNIV3_SWAP_ROUTER,
       UNIV3_QUOTER_V2,
@@ -203,9 +284,31 @@ export class RevmLiveBackend implements LiveStateBackend {
       rpcUrl: this.rpcUrl,
       prewarm,
       tokenBalanceHints,
-      tokenAllowanceHints: storageHintsEnabled ? [...allowanceHints.values()].slice(0, 24) : [],
+      tokenAllowanceHints: storageHintsEnabled
+        ? [...allowanceHints.values()]
+            .slice(0, 24)
+            .filter((hint) => warmUnknownStorage || hint.allowanceSlot !== undefined)
+        : [],
       prewarmCalls: calls,
     });
+  }
+
+  async warmPrepareState(input: PrepareInput): Promise<void> {
+    if (!input.impact || input.path !== "hash-only") return;
+    const hops: QuoteRequest[] = [{
+      adapterId: input.impact.matchedAdapterId,
+      target: input.impact.pool,
+      tokenIn: input.impact.tokenIn,
+      tokenOut: input.impact.tokenOut,
+      amountIn: input.impact.amountIn,
+    }];
+    for (const hop of input.routeHops ?? []) {
+      hops.push({
+        ...hop,
+        amountIn: input.impact.amountIn,
+      });
+    }
+    await this.warmHotPools(input.baseBlock, hops);
   }
 
   /** Encode the quote view-call(s) for one hop. Empty when the adapter quotes

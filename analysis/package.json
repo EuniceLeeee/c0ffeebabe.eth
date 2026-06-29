@@ -7,6 +7,7 @@
     "analysis": "tsx src/cli/index.ts",
     "address": "tsx src/cli/address.ts",
     "live-loss": "tsx src/cli/live-loss.ts",
+    "redact-live-run": "tsx src/cli/redact-live-run.ts",
     "build": "tsc --noEmit"
   },
   "dependencies": {

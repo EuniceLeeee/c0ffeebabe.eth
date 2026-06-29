@@ -3,6 +3,7 @@ import type { Opportunity } from "../detector/detector.js";
 import type { PathTemplate } from "../templates/path-template.js";
 import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
+import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
 
 export interface CandidatePlan {
   templateName: string;
@@ -12,6 +13,18 @@ export interface CandidatePlan {
   flashAdapterIds: string[];
   /** Preferred flash adapter for compatibility with older call sites. */
   flashAdapterId: string;
+  /** Candidate-specific flash cap from the selected provider's live balance. */
+  maxFlashAmount?: bigint;
+  /** Full cycle tokens before rotation, for observability/debugging. */
+  cycleTokens?: string[];
+  /** Borrowable cycle tokens, sorted by deepest provider balance. */
+  borrowableTokens?: BorrowableCycleToken[];
+}
+
+export interface BorrowableCycleToken {
+  token: string;
+  amount: bigint;
+  adapterId: string;
 }
 
 export interface Planner {
@@ -23,6 +36,8 @@ export class TemplatePlanner implements Planner {
   private maxCandidates = 20;
   private maxHops = 8;
   private maxPoolsPerToken = Infinity;
+  private maxRotationsPerPath = 3;
+  private flashLiquidity: FlashLiquidityView | null = null;
 
   /** Inject a pre-built graph (from buildTokenGraph). Falls back to hardcoded default. */
   setGraph(graph: TokenEdge[]): void {
@@ -42,6 +57,17 @@ export class TemplatePlanner implements Planner {
   /** Cap outgoing edges explored per token (top-N by score; pinned exempt). */
   setMaxPoolsPerToken(n: number): void {
     this.maxPoolsPerToken = n;
+  }
+
+  /** Cap borrowable start-token rotations per token path, ranked by live depth. */
+  setMaxRotationsPerPath(n: number): void {
+    this.maxRotationsPerPath = Math.max(1, n);
+  }
+
+  /** Inject live flash-borrowability. Detector stays topology-only; planner
+   *  rotates each complete cycle to borrowable start tokens here. */
+  setFlashLiquidity(liquidity: FlashLiquidityView): void {
+    this.flashLiquidity = liquidity;
   }
 
   async plan(opp: Opportunity, templates: PathTemplate[]): Promise<CandidatePlan[]> {
@@ -81,6 +107,8 @@ export class TemplatePlanner implements Planner {
 
       let constraintPass = 0;
       let duplicatePath = 0;
+      let noBorrowable = 0;
+      let rotatedPlanCount = 0;
       for (const path of paths) {
         if (!satisfiesRequiredSlots(path, template)) {
           continue;
@@ -89,27 +117,55 @@ export class TemplatePlanner implements Planner {
           continue;
         }
         constraintPass++;
-        const pathKey = tokenPathKey(path);
-        if (seenPathKeys.has(pathKey)) {
-          duplicatePath++;
+        const rotations = buildBorrowabilityRotations(
+          path,
+          opp,
+          flashAdapters,
+          preferredFlash,
+          this.flashLiquidity,
+          this.maxRotationsPerPath,
+        );
+        if (rotations.length === 0) {
+          noBorrowable++;
           continue;
         }
-        seenPathKeys.add(pathKey);
-        candidates.push({
-          templateName: template.name,
-          root: buildAbstractRoot(path, opp, preferredFlash),
-          opportunity: opp,
-          tokenPath: path,
-          flashAdapterIds: [...flashAdapters],
-          flashAdapterId: preferredFlash,
-        });
+        for (const rotation of rotations) {
+          if (!passesConstraints(
+            rotation.tokenPath,
+            template.constraints,
+            rotation.opportunity.startToken,
+            rotation.opportunity.profitToken,
+          )) {
+            continue;
+          }
+          const pathKey = `${tokenPathKey(rotation.tokenPath)}:${rotation.flashAdapterId}`;
+          if (seenPathKeys.has(pathKey)) {
+            duplicatePath++;
+            continue;
+          }
+          seenPathKeys.add(pathKey);
+          candidates.push({
+            templateName: template.name,
+            root: buildAbstractRoot(rotation.tokenPath, rotation.opportunity, rotation.flashAdapterId),
+            opportunity: rotation.opportunity,
+            tokenPath: rotation.tokenPath,
+            flashAdapterIds: [...rotation.flashAdapterIds],
+            flashAdapterId: rotation.flashAdapterId,
+            maxFlashAmount: rotation.maxFlashAmount,
+            cycleTokens: rotation.cycleTokens,
+            borrowableTokens: rotation.borrowableTokens,
+          });
+          rotatedPlanCount++;
+          if (candidates.length >= this.maxCandidates) break;
+        }
         if (candidates.length >= this.maxCandidates) break;
       }
       if (candidates.length >= this.maxCandidates) break;
       debug.push(
         `${template.name}: edges=${graph.length}/${baseGraph.length} raw=${rawPaths.length} ` +
           `focused=${paths.length} prunedRoundtrip=${prunedRoundtrip} ` +
-          `duplicates=${duplicatePath} constraintPass=${constraintPass}`,
+          `duplicates=${duplicatePath} constraintPass=${constraintPass}` +
+          (this.flashLiquidity ? ` rotatedPlans=${rotatedPlanCount} noBorrowable=${noBorrowable}` : ""),
       );
     }
 
@@ -117,6 +173,7 @@ export class TemplatePlanner implements Planner {
       console.log(
         `[planner] 0 candidates start=${opp.startToken} profit=${opp.profitToken} ` +
           `impact=${impact ? `${impact.pool} ${impact.tokenIn}->${impact.tokenOut}` : "none"} | ` +
+          (this.flashLiquidity ? "skip=no_borrowable_token_or_no_path | " : "") +
           debug.join(" | "),
       );
     }
@@ -150,6 +207,100 @@ function buildAbstractRoot(path: TokenPath, opp: Opportunity, flashAdapterId: st
     },
     children: [],
   };
+}
+
+interface CandidateRotation {
+  opportunity: Opportunity;
+  tokenPath: TokenPath;
+  flashAdapterIds: string[];
+  flashAdapterId: string;
+  maxFlashAmount?: bigint;
+  cycleTokens?: string[];
+  borrowableTokens?: BorrowableCycleToken[];
+}
+
+function buildBorrowabilityRotations(
+  path: TokenPath,
+  opp: Opportunity,
+  templateFlashAdapters: string[],
+  preferredFlash: string,
+  flashLiquidity: FlashLiquidityView | null,
+  maxRotationsPerPath: number,
+): CandidateRotation[] {
+  if (!flashLiquidity) {
+    return [{
+      opportunity: opp,
+      tokenPath: path,
+      flashAdapterIds: [...templateFlashAdapters],
+      flashAdapterId: preferredFlash,
+    }];
+  }
+
+  const cycleTokens = collectCycleTokens(path);
+  const borrowableTokens = cycleTokens
+    .map((token): BorrowableCycleToken | null => {
+      const source = flashLiquidity.source(token);
+      if (!source || source.amount <= 0n) return null;
+      return { token, amount: source.amount, adapterId: source.adapterId };
+    })
+    .filter((x): x is BorrowableCycleToken => x !== null)
+    .sort((a, b) => b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0)
+    .slice(0, maxRotationsPerPath);
+
+  const rotations: CandidateRotation[] = [];
+  const seen = new Set<string>();
+  for (const borrowable of borrowableTokens) {
+    for (const rotatedPath of rotatePathToStartToken(path, borrowable.token)) {
+      const key = tokenPathKey(rotatedPath);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const rotatedOpp: Opportunity = {
+        ...opp,
+        startToken: borrowable.token,
+        profitToken: borrowable.token,
+        affectedTokens: uniqueAddresses([...(opp.affectedTokens ?? []), ...cycleTokens]),
+      };
+      rotations.push({
+        opportunity: rotatedOpp,
+        tokenPath: rotatedPath,
+        flashAdapterIds: [borrowable.adapterId],
+        flashAdapterId: borrowable.adapterId,
+        maxFlashAmount: borrowable.amount,
+        cycleTokens,
+        borrowableTokens,
+      });
+    }
+  }
+  return rotations;
+}
+
+function collectCycleTokens(path: TokenPath): string[] {
+  if (path.edges.length === 0) return [];
+  return uniqueAddresses([
+    path.edges[0].tokenIn,
+    ...path.edges.map((edge) => edge.tokenOut),
+  ]);
+}
+
+function rotatePathToStartToken(path: TokenPath, startToken: string): TokenPath[] {
+  const rotations: TokenPath[] = [];
+  const wanted = startToken.toLowerCase();
+  for (let i = 0; i < path.edges.length; i++) {
+    if (path.edges[i].tokenIn.toLowerCase() !== wanted) continue;
+    const edges = [...path.edges.slice(i), ...path.edges.slice(0, i)];
+    if (isClosedContinuousPath(edges, startToken)) rotations.push({ edges });
+  }
+  return rotations;
+}
+
+function isClosedContinuousPath(edges: TokenEdge[], startToken: string): boolean {
+  if (edges.length === 0) return false;
+  if (!sameAddress(edges[0].tokenIn, startToken)) return false;
+  if (!sameAddress(edges[edges.length - 1].tokenOut, startToken)) return false;
+  for (let i = 1; i < edges.length; i++) {
+    if (!sameAddress(edges[i - 1].tokenOut, edges[i].tokenIn)) return false;
+  }
+  return true;
 }
 
 interface OpportunityImpact {
@@ -239,6 +390,18 @@ function tokenPathKey(path: TokenPath): string {
       ].join(":"),
     )
     .join("|");
+}
+
+function uniqueAddresses(addresses: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const address of addresses) {
+    const key = address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(address);
+  }
+  return out;
 }
 
 function sameAddress(a: string, b: string): boolean {

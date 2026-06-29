@@ -65,6 +65,17 @@ Transform tasks into verifiable goals:
 2. [Step] → verify: [check]
 ```
 
+### 5. Agent Autonomy
+
+- If logs, JSONL events, reports, or local scripts are available in this repo,
+  the agent should run the needed analysis/redaction commands directly instead
+  of asking the user to run them.
+- When sharing live-run artifacts, generate redacted outputs first and analyze
+  those outputs. Preserve public on-chain evidence such as tx hashes, pools,
+  and token addresses unless the user explicitly asks for stricter redaction.
+- Do not ask the user to do mechanical local steps like `tail`, `jq`, report
+  generation, or redaction when the agent can do them safely in the workspace.
+
 ---
 
 ## Development Workflow

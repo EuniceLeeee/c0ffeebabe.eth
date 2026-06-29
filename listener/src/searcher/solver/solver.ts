@@ -119,10 +119,15 @@ export class AnvilSolver implements Solver {
     // token. The detector stores victimAmountIn in the victim tokenIn units;
     // live opportunities often flash tokenOut (for example WETH), so using the
     // raw 6-decimal stable amount as wei would collapse the grid to dust.
-    const center = await resolveSearchCenter(plan, flashToken, state, {
+    const rawCenter = await resolveSearchCenter(plan, flashToken, state, {
       cache: opts.cache,
       quoteSource: opts.quoteSource,
     });
+    const maxFlashAmount = normalizedMaxFlashAmount(plan);
+    if (maxFlashAmount !== null && maxFlashAmount <= 0n) {
+      throw new Error(`no profitable plan (flash cap is zero)`);
+    }
+    const center = clampToMax(rawCenter, maxFlashAmount);
 
     // ── Phase 1: quote-only amount search (no Anvil sim) ──────────
     // Closed-loop arb: profitToken == startToken == flashToken, so the quote
@@ -135,6 +140,7 @@ export class AnvilSolver implements Solver {
 
     const quoteProfit = async (flashAmount: bigint, fluidDebtBps: bigint): Promise<bigint> => {
       if (flashAmount <= 0n) return FAIL_SCORE;
+      if (maxFlashAmount !== null && flashAmount > maxFlashAmount) return FAIL_SCORE;
       quoteCount++;
       let amounts: bigint[];
       try {
@@ -165,7 +171,7 @@ export class AnvilSolver implements Solver {
         break;
       }
       // Coarse pass: victim-anchored geometric grid.
-      const grid = geometricGrid(center, gridHalfWidth);
+      const grid = capGrid(geometricGrid(center, gridHalfWidth), maxFlashAmount);
       let bestX = grid[0] ?? center;
       let bestVal = FAIL_SCORE;
       for (const x of grid) {
@@ -183,10 +189,15 @@ export class AnvilSolver implements Solver {
       // below is only a phase-2 admission policy; letting negative grid points
       // trigger GSS can burn the live TTL on quotes before sim gets a chance.
       if (bestVal > 0n && !pastDeadline()) {
-        await goldenSectionMaximize(bestX / 2n, bestX * 2n, (x) => quoteProfit(x, fluidDebtBps), {
-          maxTries: gssMaxTries,
-          shouldStop: pastDeadline,
-        });
+        await goldenSectionMaximize(
+          bestX > 1n ? bestX / 2n : 1n,
+          clampToMax(bestX * 2n, maxFlashAmount),
+          (x) => quoteProfit(x, fluidDebtBps),
+          {
+            maxTries: gssMaxTries,
+            shouldStop: pastDeadline,
+          },
+        );
       }
     }
 
@@ -235,6 +246,7 @@ export class AnvilSolver implements Solver {
         `${positiveQuotes} positive${floorQuotes > 0 ? ` + ${floorQuotes} floor-admitted` : ""}, ` +
         `sim top-${ranked.length} amounts x ${adapters.length} flash ` +
         `safetyBps=${quoteSafetyBps} quoteFloorBps=${quoteProfitFloorBps} ` +
+        `maxFlash=${maxFlashAmount ?? "unbounded"} ` +
         `path=${pathSummary(plan.tokenPath)}`,
     );
 
@@ -345,6 +357,29 @@ function quoteProfitFloorAmount(flashAmount: bigint, floorBps: bigint): bigint {
   return (flashAmount * floorBps) / 10000n;
 }
 
+function normalizedMaxFlashAmount(plan: CandidatePlan): bigint | null {
+  return plan.maxFlashAmount === undefined ? null : plan.maxFlashAmount;
+}
+
+function clampToMax(amount: bigint, max: bigint | null): bigint {
+  if (amount <= 0n) return 1n;
+  return max !== null && amount > max ? max : amount;
+}
+
+function capGrid(grid: bigint[], max: bigint | null): bigint[] {
+  const seen = new Set<string>();
+  const out: bigint[] = [];
+  for (const raw of grid) {
+    const amount = clampToMax(raw, max);
+    if (amount <= 0n) continue;
+    const key = amount.toString();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(amount);
+  }
+  return out;
+}
+
 function fluidDebtBpsCandidates(
   plan: { tokenPath: { edges: { adapterId: string }[] } },
 ): bigint[] {
@@ -399,36 +434,111 @@ export async function resolveSearchCenter(
   if (victimAmount <= 0n) return 1n;
 
   const impact = impactFromOpportunity(plan.opportunity.hints.impact);
-  if (!impact || sameAddress(impact.tokenIn, flashToken)) return victimAmount;
+  if (!impact) return victimAmount;
+
+  const usePathAwareCenter = plan.maxFlashAmount !== undefined;
+  const reverseImpactIndex = usePathAwareCenter ? findReverseImpactEdgeIndex(plan, impact) : -1;
+  if (reverseImpactIndex >= 0) {
+    const desiredImpactInput = await quoteImpactOutput(impact, victimAmount, state, options);
+    if (reverseImpactIndex === 0) return desiredImpactInput;
+    return approximatePrefixInputForOutput(
+      plan,
+      reverseImpactIndex,
+      desiredImpactInput,
+      state,
+      options,
+    );
+  }
+
+  if (sameAddress(impact.tokenIn, flashToken)) return victimAmount;
 
   if (sameAddress(impact.tokenOut, flashToken)) {
     // Prefer local math (cache/state); fall back to the live quoteSource only
     // when local can't serve it — same local-first dispatch as quoteEdge.
-    let quoted: bigint;
-    try {
-      quoted = await quote(
-        impact.matchedAdapterId,
-        impact.pool,
-        impact.tokenIn,
-        flashToken,
-        victimAmount,
-        state,
-        options.cache,
-      );
-    } catch (err) {
-      if (!options.quoteSource) throw err;
-      quoted = (await options.quoteSource.quote({
-        adapterId: impact.matchedAdapterId,
-        target: impact.pool,
-        tokenIn: impact.tokenIn,
-        tokenOut: flashToken,
-        amountIn: victimAmount,
-      })).amountOut;
-    }
-    return quoted > 0n ? quoted : 1n;
+    return quoteImpactOutput(impact, victimAmount, state, options);
   }
 
   return victimAmount;
+}
+
+function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpact): number {
+  const edges = plan.tokenPath?.edges ?? [];
+  return edges.findIndex((edge) =>
+    sameAddress(edge.target, impact.pool) &&
+    sameAddress(edge.tokenIn, impact.tokenOut) &&
+    sameAddress(edge.tokenOut, impact.tokenIn),
+  );
+}
+
+async function quoteImpactOutput(
+  impact: OpportunityImpact,
+  victimAmount: bigint,
+  state: StateBackend,
+  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+): Promise<bigint> {
+  let quoted: bigint;
+  try {
+    quoted = await quote(
+      impact.matchedAdapterId,
+      impact.pool,
+      impact.tokenIn,
+      impact.tokenOut,
+      victimAmount,
+      state,
+      options.cache,
+    );
+  } catch (err) {
+    if (!options.quoteSource) throw err;
+    quoted = (await options.quoteSource.quote({
+      adapterId: impact.matchedAdapterId,
+      target: impact.pool,
+      tokenIn: impact.tokenIn,
+      tokenOut: impact.tokenOut,
+      amountIn: victimAmount,
+    })).amountOut;
+  }
+  return quoted > 0n ? quoted : 1n;
+}
+
+async function approximatePrefixInputForOutput(
+  plan: CandidatePlan,
+  reverseImpactIndex: number,
+  desiredOutput: bigint,
+  state: StateBackend,
+  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+): Promise<bigint> {
+  if (desiredOutput <= 0n) return 1n;
+  const prefix = { edges: plan.tokenPath.edges.slice(0, reverseImpactIndex) };
+  if (prefix.edges.length === 0) return desiredOutput;
+
+  const maxFlash = normalizedMaxFlashAmount(plan);
+  const quotePrefix = async (flashAmount: bigint): Promise<bigint> => {
+    const amounts = await propagateAmounts(prefix, flashAmount, state, {
+      cache: options.cache,
+      quoteSource: options.quoteSource,
+    });
+    return amounts[amounts.length - 1] ?? 0n;
+  };
+
+  let lo = 1n;
+  let hi = clampToMax(desiredOutput, maxFlash);
+  let hiOut = await quotePrefix(hi);
+  for (let i = 0; i < 16 && hiOut < desiredOutput; i++) {
+    if (maxFlash !== null && hi >= maxFlash) return hi;
+    lo = hi;
+    hi = clampToMax(hi * 2n, maxFlash);
+    if (hi <= lo) return hi;
+    hiOut = await quotePrefix(hi);
+  }
+  if (hiOut < desiredOutput) return hi;
+
+  for (let i = 0; i < 16 && hi - lo > 1n; i++) {
+    const mid = (lo + hi) / 2n;
+    const out = await quotePrefix(mid);
+    if (out < desiredOutput) lo = mid;
+    else hi = mid;
+  }
+  return hi;
 }
 
 function impactFromOpportunity(impact: unknown): OpportunityImpact | null {

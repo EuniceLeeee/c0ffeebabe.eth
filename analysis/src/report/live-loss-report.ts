@@ -9,6 +9,10 @@ export interface LiveLossOpportunity {
   pathId?: string;
   templateId?: string;
   simulatedProfit?: string;
+  submissionTargetBlock?: number;
+  dropStage?: string;
+  dropReason?: string;
+  dropError?: string;
   submitted: boolean;
   bid?: string;
   buildersSent: string[];
@@ -36,6 +40,7 @@ export interface LiveLossCompetitor {
 
 export interface LiveLossReport {
   block: number;
+  opportunityId?: string;
   ourOpportunity: LiveLossOpportunity;
   victimStatus: {
     landed: boolean;
@@ -65,6 +70,7 @@ export function renderLiveLossMarkdown(report: LiveLossReport): string {
   lines.push(`# Live Loss Report`);
   lines.push("");
   lines.push(`Block: \`${report.block}\``);
+  if (report.opportunityId) lines.push(`Opportunity: \`${report.opportunityId}\``);
   lines.push("");
   lines.push(`## Our Opportunity`);
   lines.push("");
@@ -74,6 +80,10 @@ export function renderLiveLossMarkdown(report: LiveLossReport): string {
   lines.push(`- path_id: \`${report.ourOpportunity.pathId ?? "unknown"}\``);
   lines.push(`- template_id: \`${report.ourOpportunity.templateId ?? "unknown"}\``);
   lines.push(`- simulated_profit: \`${report.ourOpportunity.simulatedProfit ?? "unknown"}\``);
+  lines.push(`- submission_target_block: \`${report.ourOpportunity.submissionTargetBlock ?? "unknown"}\``);
+  lines.push(`- drop_stage: \`${report.ourOpportunity.dropStage ?? "unknown"}\``);
+  lines.push(`- drop_reason: \`${report.ourOpportunity.dropReason ?? "unknown"}\``);
+  lines.push(`- drop_error: \`${report.ourOpportunity.dropError ?? "unknown"}\``);
   lines.push(`- submitted: \`${report.ourOpportunity.submitted}\``);
   lines.push(`- bid: \`${report.ourOpportunity.bid ?? "unknown"}\``);
   lines.push(`- builders_sent: ${redactedBuilders(report.ourOpportunity.buildersSent).join(", ") || "n/a"}`);

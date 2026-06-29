@@ -1,0 +1,1495 @@
+
+> mev-listener@0.1.0 searcher:live
+> tsx src/searcher/main.ts
+
+[searcher/live] starting V5 MEV-Share searcher
+[searcher/live] events emit → ../analysis/events/searcher-20260629-201724.jsonl
+[searcher/live] sse=https://mev-share.flashbots.net
+[searcher/live] mempool=enabled
+[searcher/live] bribeBps=10000 maxProfitBpsOfFlash=2000 ethUsd=3500
+[searcher/live] evGate=off minNetEth=0 gasBufferMult=2.0x profitHaircut=20% hashOnlySubmit=gated
+[searcher/live] wallet=<REDACTED_WALLET>
+[searcher/live] botvm=<REDACTED_BOTVM>
+[searcher/live] liveBackend=hybrid
+[searcher/live] minProfitRaw=1
+[searcher/live] mode=dry-run
+[searcher/live] hashOnly=disabled
+[searcher/live] maxCandidates=20
+[searcher/live] maxHops=3 maxPoolsPerToken=8 maxRotationsPerPath=3
+[searcher/live] revmPrewarmRouteHops=0
+[searcher/live] stateUpdater=enabled pinnedK=8 recentK=24 maxPools=32
+[searcher/live] quoteSafetyBps=9999 quoteProfitFloorBps=20 finalVerifyFloorBps=4
+[searcher/live] pinnedWarmPools=<REPO_PATH>/listener/searcher/pools/pinned-warm-pools.json
+[searcher/live] poolUniverse=<REPO_PATH>/listener/searcher/pools/active-pools.json topN=0 minScore=1
+[searcher/live] solverDeadlineMs=8000 oppTtlMs=5000 gssMaxTries=12 finalSimTopN=3
+[discovery] univ2 factory (0x5C69bEe7): 658 new pools in last 50000 blocks
+[discovery] univ2 factory (0xC0AEe478): 1 new pools in last 50000 blocks
+[discovery] univ3 factory (0x1F98431c): 1579 new pools in last 50000 blocks
+[discovery] scanned 300 blocks: 1264 active pools, taking top 100
+[searcher/live] pool registry: 2 protocol + 8 pinned + 0 universe + 2238 factory + 100 swap-active = 2329 total
+[token-graph] progress: 500/2329 pools, 1102 edges, 0 skipped
+[token-graph] progress: 1000/2329 pools, 2102 edges, 0 skipped
+[token-graph] progress: 1500/2329 pools, 3102 edges, 0 skipped
+[token-graph] progress: 2000/2329 pools, 4102 edges, 0 skipped
+[token-graph] built 4662 edges from 2329 pools (1 skipped)
+[searcher/live] flashLiquidity: 32/2286 graph tokens borrowable
+[searcher/live] routing graph: 4662 edges, 2286 tokens | detection pool set: 2329 addresses
+[searcher/live] seeded pinned warm hops: 17 directions from 8 pools
+[searcher/live] warm lanes pinnedK=0 recentK=1 recentTtlBlocks=12 idleDelayMs=1000
+[searcher/live] mempool=enabled ws=wss://eth-mainnet.g.alchemy.com/v2/<REDACTED_ALCHEMY_KEY>
+[searcher/live] mempool filtered subscription toAddress=224 routers=14
+[searcher/live] MEV-Share SSE connected
+[searcher/live] hint tx=0x79de57d7e88a6cb0d7c373002019844805cdbf1e2c7e40e8d85240696287d7c8 src=mev-share
+[searcher/live] 0x79de57d7 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x79de57d7 Transfer: token=0x62d0a845 from=0x278d858f to=0x180efc13
+[searcher/live] 0x79de57d7 Transfer: token=0xc02aaa39 from=0x180efc13 to=0x278d858f
+[searcher/live] 0x79de57d7 log: addr=0x180efc13 t0=0x1c411e9a
+[searcher/live] 0x79de57d7 log: addr=0x180efc13 t0=0xd78ad95f
+[pool-impact] swap-only decoded: pool=0x180efc13 0x62D0A845→0xC02aaA39 amt=160646169265226161132821
+[searcher/live] 0x79de57d7 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x79de57d7 end-to-end 229ms
+[searcher/live] counters hints=1 impacts=1 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x077b0d02c2d8916ec1d6d4e461876483bb776ce8fec10ca98a1cfdbe89cd3ebd src=mev-share
+[searcher/live] 0x077b0d02 Transfer: token=0x62d0a845 from=0x278d858f to=0x180efc13
+[searcher/live] 0x077b0d02 Transfer: token=0xc02aaa39 from=0x180efc13 to=0x278d858f
+[searcher/live] 0x077b0d02 log: addr=0x180efc13 t0=0x1c411e9a
+[searcher/live] 0x077b0d02 log: addr=0x180efc13 t0=0xd78ad95f
+[pool-impact] swap-only decoded: pool=0x180efc13 0x62D0A845→0xC02aaA39 amt=160646169265226161132821
+[searcher/live] 0x077b0d02 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x077b0d02 end-to-end 3ms
+[searcher/live] counters hints=2 impacts=2 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x68d25f547a218cb7f9f6b6c4aae33011cc6df8c1f3286605a3c5b81656933223 src=mev-share
+[searcher/live] 0x68d25f54 Transfer: token=0xeeeeeeee from=0xf30ba13e to=0xbb584305
+[searcher/live] 0x68d25f54 Transfer: token=0x62d0a845 from=0x278d858f to=0x180efc13
+[searcher/live] 0x68d25f54 Transfer: token=0xc02aaa39 from=0x180efc13 to=0x278d858f
+[searcher/live] 0x68d25f54 log: addr=0x180efc13 t0=0x1c411e9a
+[searcher/live] 0x68d25f54 log: addr=0x180efc13 t0=0xd78ad95f
+[pool-impact] swap-only decoded: pool=0x180efc13 0x62D0A845→0xC02aaA39 amt=160646169265226161132821
+[searcher/live] 0x68d25f54 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x68d25f54 end-to-end 2ms
+[searcher/live] counters hints=3 impacts=3 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x9307271c60f4df667941b679d8ed1645c36b73af95f4a936fe82f33bb6a0bf20 src=mev-share
+[searcher/live] 0x9307271c Transfer: token=0xeeeeeeee from=0x6063e2a1 to=0xf30ba13e
+[searcher/live] 0x9307271c Transfer: token=0x62d0a845 from=0x278d858f to=0x180efc13
+[searcher/live] 0x9307271c Transfer: token=0xc02aaa39 from=0x180efc13 to=0x278d858f
+[searcher/live] 0x9307271c log: addr=0x180efc13 t0=0x1c411e9a
+[searcher/live] 0x9307271c log: addr=0x180efc13 t0=0xd78ad95f
+[pool-impact] swap-only decoded: pool=0x180efc13 0x62D0A845→0xC02aaA39 amt=160646169265226161132821
+[searcher/live] 0x9307271c skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x9307271c end-to-end 1ms
+[searcher/live] counters hints=5 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x43f54545f29e720f4dd2731f447e08dc128d54dd465f643a70b4850ed069b148 src=mev-share
+[searcher/live] 0x43f54545 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x43f54545 Transfer: token=0x0d37af9d from=0xa7561dba to=0x9f452b7c
+[searcher/live] 0x43f54545 log: addr=0x9f452b7c t0=0xb2d93ec1
+[searcher/live] 0x43f54545 skip: no matching graph pool
+[searcher/live] 0x43f54545 end-to-end 3ms
+[searcher/live] counters hints=6 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] mempool WS connected filteredSub=0x3b9bbae80cd57d71833077e99899d99b
+[searcher/live] hint tx=0x8af7cce1443d3fe4a35bcb55d87e23365ff872b993185eb8e17babec62a712d4 src=mev-share
+[searcher/live] 0x8af7cce1 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x8af7cce1 Transfer: token=0xa0b86991 from=0xa29e9639 to=0xdf0955ae
+[searcher/live] 0x8af7cce1 token-index hit, trying RPC fetch
+[searcher/live] 0x8af7cce1 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x8af7cce1 end-to-end 449ms
+[searcher/live] counters hints=7 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x7e373be1dbe79da3697d56f6fdafa29c5f8a59cc975bb2f3fd8b7c478169c60f src=mev-share
+[searcher/live] 0x7e373be1 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x7e373be1 Transfer: token=0xeeeeeeee from=0x8e54cfa8 to=0x92b2b779
+[searcher/live] 0x7e373be1 skip: no matching graph pool
+[searcher/live] 0x7e373be1 end-to-end 2ms
+[searcher/live] counters hints=8 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb87b236f6d62067f7dbd46ec997e91fe93657e2c4459da1523cd2c1471bf1d74 src=mev-share
+[searcher/live] 0xb87b236f log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xb87b236f Transfer: token=0xdac17f95 from=0x7d9a80d0 to=0x56aeeacb
+[searcher/live] 0xb87b236f token-index hit, trying RPC fetch
+[searcher/live] 0xb87b236f skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xb87b236f end-to-end 456ms
+[searcher/live] counters hints=9 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x44aa3d32e44353cead559a1394a4b860daf8cabb6a1aefb15ec05c4d773a6021 src=mev-share
+[searcher/live] 0x44aa3d32 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x44aa3d32 skip: no matching graph pool
+[searcher/live] 0x44aa3d32 end-to-end 3ms
+[searcher/live] counters hints=10 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x44f2cdfb78ec39eae47d6b2b0edcda98804aa6e0e82753269aa23e7cafe63191 src=mev-share
+[searcher/live] 0x44f2cdfb log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x44f2cdfb Transfer: token=0xeeeeeeee from=0xe88d9b7c to=0xaca97f1b
+[searcher/live] 0x44f2cdfb skip: no matching graph pool
+[searcher/live] 0x44f2cdfb end-to-end 2ms
+[searcher/live] counters hints=11 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x2dc5d1ddd1dc7e5b24db2d5beca5d714df5dab4b64b6919b26f67fab2eae3f6d src=mev-share
+[searcher/live] 0x2dc5d1dd log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x2dc5d1dd Transfer: token=0xeeeeeeee from=0x122f9006 to=0xe4727ac0
+[searcher/live] 0x2dc5d1dd skip: no matching graph pool
+[searcher/live] 0x2dc5d1dd end-to-end 2ms
+[searcher/live] counters hints=12 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x23485321dfa10af2aa078bf6909bf06011a9e6cded644184e9929f0342105597 src=mev-share
+[searcher/live] 0x23485321 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x23485321 Transfer: token=0xa0b86991 from=0x9f30b7a1 to=0x0510b1a8
+[searcher/live] 0x23485321 token-index hit, trying RPC fetch
+[searcher/live] 0x23485321 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x23485321 end-to-end 466ms
+[searcher/live] counters hints=13 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x82a910334c42770309c92ee4038f90543ec756caa4405df81f5ecbd50a9b9701 src=mev-share
+[searcher/live] 0x82a91033 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x82a91033 Transfer: token=0xa0b86991 from=0x20bcd920 to=0xe1573e4e
+[searcher/live] 0x82a91033 token-index hit, trying RPC fetch
+[searcher/live] 0x82a91033 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x82a91033 end-to-end 456ms
+[searcher/live] counters hints=14 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x6006e5edf98eed6a5f2b9a52088232260c7940b6826f91ba01dba5feb457dad2 src=mev-share
+[searcher/live] 0x6006e5ed log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x6006e5ed Transfer: token=0xdac17f95 from=0x71dfd9b7 to=0xbe369cfe
+[searcher/live] 0x6006e5ed token-index hit, trying RPC fetch
+[searcher/live] 0x6006e5ed skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x6006e5ed end-to-end 460ms
+[searcher/live] counters hints=15 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xffdfcd32dbe9b6be51a4ecbdc56aed6667d92533d88ee6477668c485a79f71f2 src=mev-share
+[searcher/live] 0xffdfcd32 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xffdfcd32 Transfer: token=0xdac17f95 from=0x4a9a1675 to=0xda2e876c
+[searcher/live] 0xffdfcd32 token-index hit, trying RPC fetch
+[searcher/live] 0xffdfcd32 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xffdfcd32 end-to-end 772ms
+[searcher/live] counters hints=16 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x816b6dbf782ddd516c980ef9d25c3e7376114ac407764c5289af66599f5c0070 src=mev-share
+[searcher/live] 0x816b6dbf log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x816b6dbf log: addr=0xc02aaa39 t0=0x8c5be1e5
+[searcher/live] 0x816b6dbf skip: no matching graph pool
+[searcher/live] 0x816b6dbf end-to-end 3ms
+[searcher/live] counters hints=17 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x9797f023b9154f0af6c5ed5cf1c0f615cd8fe258aee42465768791f59085b85a src=mev-share
+[searcher/live] 0x9797f023 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x9797f023 Transfer: token=0xdac17f95 from=0x96798d7f to=0xc364e036
+[searcher/live] 0x9797f023 token-index hit, trying RPC fetch
+[searcher/live] 0x9797f023 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x9797f023 end-to-end 465ms
+[searcher/live] counters hints=18 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe034d51918b99fe1e7bf3bfdfd0ad7baa37bcd1be776c5ad8ee73e0fa1b782be src=mev-share
+[searcher/live] 0xe034d519 log: addr=0x00000000 t0=0x40e9cecb
+[searcher/live] 0xe034d519 log: addr=0xe0554a47 t0=0xc42079f9
+[searcher/live] 0xe034d519 log: addr=0x00000000 t0=0x40e9cecb
+[searcher/live] 0xe034d519 skip: no matching graph pool
+[searcher/live] 0xe034d519 end-to-end 2ms
+[searcher/live] counters hints=19 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x0b2d7eafa0cd1bfaf18def01c1d90f14d1709f74c576de0d5b46847021f23191 src=mev-share
+[searcher/live] 0x0b2d7eaf log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x0b2d7eaf Transfer: token=0xeeeeeeee from=0x880c9524 to=0xca11bde0
+[searcher/live] 0x0b2d7eaf Transfer: token=0xeeeeeeee from=0xca11bde0 to=0x66a9893c
+[searcher/live] 0x0b2d7eaf Transfer: token=0xeeeeeeee from=0x66a9893c to=0x159e5219
+[searcher/live] 0x0b2d7eaf skip: no matching graph pool
+[searcher/live] 0x0b2d7eaf end-to-end 2ms
+[searcher/live] counters hints=20 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x275187fcea533e6ea93cd602c00b94e3a7555d38deaed70e4a4802668f5fd927 src=mev-share
+[searcher/live] 0x275187fc log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x275187fc log: addr=0xe3431676 t0=0x98de5035
+[searcher/live] 0x275187fc Transfer: token=0xe3431676 from=0xac622a53 to=0x5f7a4c11
+[searcher/live] 0x275187fc skip: no matching graph pool
+[searcher/live] 0x275187fc end-to-end 1ms
+[searcher/live] counters hints=21 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x45f2f2aed4530f70237236996ad1c27c3d27ee1444b39b5717cf42fe5fc9394b src=mev-share
+[searcher/live] 0x45f2f2ae log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x45f2f2ae log: addr=0xa7daf8a0 t0=0xc797025f
+[searcher/live] 0x45f2f2ae log: addr=0xa7daf8a0 t0=0x0109fc6f
+[searcher/live] 0x45f2f2ae log: addr=0xa7daf8a0 t0=0x0559884f
+[searcher/live] 0x45f2f2ae skip: no matching graph pool
+[searcher/live] 0x45f2f2ae end-to-end 2ms
+[searcher/live] counters hints=22 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xd5015793e3b72ad472a2097a6bcacfc2cff8a8c9c481ca82f155ab31ffeb5c6a src=mev-share
+[searcher/live] 0xd5015793 log: addr=0xa7daf8a0 t0=0xc797025f
+[searcher/live] 0xd5015793 log: addr=0xa7daf8a0 t0=0x0109fc6f
+[searcher/live] 0xd5015793 log: addr=0xa7daf8a0 t0=0x0559884f
+[searcher/live] 0xd5015793 skip: no matching graph pool
+[searcher/live] 0xd5015793 end-to-end 1ms
+[searcher/live] counters hints=23 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x5daa029866de8b33d18a1f0104e036c82cf425b179eddfb1fc3b9afc4973df1b src=mev-share
+[searcher/live] 0x5daa0298 Transfer: token=0xeeeeeeee from=0x8e54cfa8 to=0x92b2b779
+[searcher/live] 0x5daa0298 log: addr=0xa7daf8a0 t0=0xc797025f
+[searcher/live] 0x5daa0298 log: addr=0xa7daf8a0 t0=0x0109fc6f
+[searcher/live] 0x5daa0298 log: addr=0xa7daf8a0 t0=0x0559884f
+[searcher/live] 0x5daa0298 skip: no matching graph pool
+[searcher/live] 0x5daa0298 end-to-end 2ms
+[searcher/live] counters hints=24 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x922159759710533cdf577980ce69767dbecb22ec9f702979c9caac4d0ce8e21e src=mev-share
+[searcher/live] 0x92215975 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x92215975 Transfer: token=0xdac17f95 from=0xea8b4fe5 to=0x2df649a8
+[searcher/live] 0x92215975 token-index hit, trying RPC fetch
+[searcher/live] 0x92215975 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x92215975 end-to-end 461ms
+[searcher/live] counters hints=25 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x88158d30e10d7b5bb6b41b1d03e640583d8b865c6093bef51851097f895675d2 src=mev-share
+[searcher/live] 0x88158d30 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x88158d30 Transfer: token=0xdac17f95 from=0xe6da039e to=0xc865efcb
+[searcher/live] 0x88158d30 token-index hit, trying RPC fetch
+[searcher/live] 0x88158d30 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x88158d30 end-to-end 457ms
+[searcher/live] counters hints=26 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x0cbd664e1db527851a28f662d8982eb516b7a1400056d9bed718bca97cd90d58 src=mev-share
+[searcher/live] 0x0cbd664e log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x0cbd664e Transfer: token=0x57e114b6 from=0xc8aa941d to=0x1ab4973a
+[searcher/live] 0x0cbd664e skip: no matching graph pool
+[searcher/live] 0x0cbd664e end-to-end 2ms
+[searcher/live] counters hints=28 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x73906d7668e6c8cddf837613bdcee69ac36270ea0e4efc01e49a47b2660d4f17 src=mev-share
+[searcher/live] 0x73906d76 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x73906d76 log: addr=0x3ee18b22 t0=0xcaf280c8
+[searcher/live] 0x73906d76 Transfer: token=0x13239c26 from=0x3ee18b22 to=0xa8969f3f
+[searcher/live] 0x73906d76 log: addr=0xa8969f3f t0=0xcaf280c8
+[searcher/live] 0x73906d76 Transfer: token=0x13239c26 from=0xa8969f3f to=0x1096a8de
+[searcher/live] 0x73906d76 skip: no matching graph pool
+[searcher/live] 0x73906d76 end-to-end 1ms
+[searcher/live] counters hints=29 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xda7a60a019ead51cc5f2342a8ff24ebeb7df94d449745d861b132c1872a37a2c src=mev-share
+[searcher/live] 0xda7a60a0 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xda7a60a0 log: addr=0xa0b86991 t0=0x8c5be1e5
+[searcher/live] 0xda7a60a0 skip: no matching graph pool
+[searcher/live] 0xda7a60a0 end-to-end 2ms
+[searcher/live] counters hints=30 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4a6138a25fce78ff17f77ab59172802c8184a07534ffaa56f0871ec24ab8b897 src=mev-share
+[searcher/live] 0x4a6138a2 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x4a6138a2 Transfer: token=0xdac17f95 from=0x6e861b45 to=0x1ab4973a
+[searcher/live] 0x4a6138a2 token-index hit, trying RPC fetch
+[searcher/live] 0x4a6138a2 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x4a6138a2 end-to-end 455ms
+[searcher/live] counters hints=31 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf3a1ae8f053fccfb47061d64d2db12b5e14c16a327fb3ed7a74ff12f12670e7c src=mev-share
+[searcher/live] 0xf3a1ae8f log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xf3a1ae8f Transfer: token=0xdac17f95 from=0x7464dd15 to=0xb99191b8
+[searcher/live] 0xf3a1ae8f token-index hit, trying RPC fetch
+[searcher/live] 0xf3a1ae8f skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xf3a1ae8f end-to-end 467ms
+[searcher/live] counters hints=32 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x09cf2ddceab2170d967941b9d72c2adf6c2a64e20b58c6d731192d1e1a600901 src=mev-share
+[searcher/live] 0x09cf2ddc log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x09cf2ddc Transfer: token=0xa0b86991 from=0xb685760e to=0xddd0bec0
+[searcher/live] 0x09cf2ddc log: addr=0xb685760e t0=0x7bf08731
+[searcher/live] 0x09cf2ddc token-index hit, trying RPC fetch
+[searcher/live] 0x09cf2ddc skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x09cf2ddc end-to-end 737ms
+[searcher/live] counters hints=33 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xce70751e3cc6dd16c05499d50521f1efe3a2c86654a4ac95bc55694d79b58977 src=mev-share
+[searcher/live] 0xce70751e log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xce70751e log: addr=0xdac17f95 t0=0x8c5be1e5
+[searcher/live] 0xce70751e skip: no matching graph pool
+[searcher/live] 0xce70751e end-to-end 2ms
+[searcher/live] counters hints=34 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x31f84aeb8ac6692ddb2d00185348ce086b0bc0d17d3547a17881a0783d309ed1 src=mev-share
+[searcher/live] 0x31f84aeb log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x31f84aeb Transfer: token=0xa0b86991 from=0x130f3a18 to=0x67be8ce2
+[searcher/live] 0x31f84aeb token-index hit, trying RPC fetch
+[searcher/live] 0x31f84aeb skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x31f84aeb end-to-end 465ms
+[searcher/live] counters hints=35 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x53f043703b43b47803ea1a851028078e850f3be09d5ba9a7a3336f0e24932da5 src=mev-share
+[searcher/live] 0x53f04370 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x53f04370 Transfer: token=0xdac17f95 from=0x8092f70c to=0xd0561d95
+[searcher/live] 0x53f04370 token-index hit, trying RPC fetch
+[searcher/live] 0x53f04370 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x53f04370 end-to-end 460ms
+[searcher/live] counters hints=36 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x5268bac7788e770514ec31a406418ae1c4d95bc73241b02160fac7d58b1b133d src=mev-share
+[searcher/live] 0x5268bac7 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x5268bac7 Transfer: token=0xeeeeeeee from=0xb334a61a to=0xbe056220
+[searcher/live] 0x5268bac7 skip: no matching graph pool
+[searcher/live] 0x5268bac7 end-to-end 3ms
+[searcher/live] counters hints=37 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xdff38d500faf8911928d79199bc6c9353ea6d3ce6299c5780a7fd105246550c9 src=mev-share
+[searcher/live] 0xdff38d50 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xdff38d50 Transfer: token=0xa0b86991 from=0xb08142ff to=0xb8528d66
+[searcher/live] 0xdff38d50 token-index hit, trying RPC fetch
+[searcher/live] 0xdff38d50 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xdff38d50 end-to-end 824ms
+[searcher/live] counters hints=38 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x781b3e7335b179d7455c04e0272e393ad3298dc49b902bc5acb521e4383a401f src=mev-share
+[searcher/live] 0x781b3e73 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x781b3e73 Transfer: token=0xdac17f95 from=0x630b352d to=0x8fcca58f
+[searcher/live] 0x781b3e73 token-index hit, trying RPC fetch
+[searcher/live] 0x781b3e73 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x781b3e73 end-to-end 480ms
+[searcher/live] counters hints=39 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe70744ab592987c6de0b2428658993590c078a0f0e6c2911f8c1f8916b0737da src=mev-share
+[searcher/live] 0xe70744ab log: addr=0x00000000 t0=0x40e9cecb
+[searcher/live] 0xe70744ab skip: no matching graph pool
+[searcher/live] 0xe70744ab end-to-end 2ms
+[searcher/live] counters hints=40 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x19a2ed3d8c3902952f6d25a910f58e0b9196e5d980e571bca8f8480330d00f29 src=mev-share
+[searcher/live] 0x19a2ed3d hint has 30 logs (batch)
+[searcher/live] 0x19a2ed3d skip: no matching graph pool
+[searcher/live] 0x19a2ed3d end-to-end 2ms
+[searcher/live] counters hints=41 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x092a295af470c83e39c2531dea76df339735a50975ff24db6c25a7ab99685357 src=mev-share
+[searcher/live] 0x092a295a log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x092a295a Transfer: token=0xa0b86991 from=0x63941b65 to=0xd4a0669d
+[searcher/live] 0x092a295a token-index hit, trying RPC fetch
+[searcher/live] 0x092a295a skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x092a295a end-to-end 457ms
+[searcher/live] counters hints=42 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=0 pendingFilteredReceived=0 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x294b9ebaf330804f2907d1aa821587a5350a5669b7be7fe2b8790c79724809b7 src=mev-share
+[searcher/live] 0x294b9eba log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x294b9eba Transfer: token=0xa0b86991 from=0x260b364f to=0xaffee23c
+[searcher/live] 0x294b9eba token-index hit, trying RPC fetch
+[searcher/live] 0x294b9eba skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x294b9eba end-to-end 728ms
+[searcher/live] counters hints=43 impacts=4 opportunities=0 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=6 pendingFilteredReceived=6 mempoolOpportunitySeen=0 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf00483eeecbe30f91b4ebba025f9ff34072f1df19c6071dce461cea90c90187e src=mempool
+[searcher/live] state update block=25423279 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423279 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/3 365ms
+[pool-updater] ticks block=25423279 seeded=1 417ms
+[searcher/live] state update block=25423280 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423280 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/2 230ms
+[pool-updater] ticks block=25423280 seeded=1 294ms
+[searcher/live] detector: 1 opportunities — found in 20087ms (match=3ms fork=3632ms prep=16443ms detect=9ms total=20087ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0x7Da918d7077923bBF02dBF5abc349CFCE8FEc4c1 0x3AdD95b59415a95db0a546d8e7E49CA06BC77946->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xf00483ee end-to-end 20099ms
+[searcher/live] counters hints=44 impacts=5 opportunities=1 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=9 pendingFilteredReceived=9 mempoolOpportunitySeen=1 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x1f75acdf1439d5644234a247d3687844a523f11161db0fff4dcf1362667446f2 src=mev-share
+[searcher/live] 0x1f75acdf log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x1f75acdf Transfer: token=0xdac17f95 from=0x74aa5387 to=0xcf8d076a
+[searcher/live] 0x1f75acdf token-index hit, trying RPC fetch
+[searcher/live] 0x1f75acdf skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x1f75acdf end-to-end 444ms
+[searcher/live] counters hints=45 impacts=5 opportunities=1 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=9 pendingFilteredReceived=9 mempoolOpportunitySeen=1 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf05654b2d401ed68ba3ae8c793043a78d52d9891e9d40b3e3e814b24432015da src=mempool
+[searcher/live] state update block=25423281 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423281 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 399ms
+[pool-updater] ticks block=25423281 seeded=1 397ms
+[searcher/live] state update block=25423282 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423282 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 226ms
+[searcher/live] detector: 1 opportunities — found in 17633ms (match=2ms fork=654ms prep=16968ms detect=9ms total=17633ms)
+[planner] 0 candidates start=0x3AdD95b59415a95db0a546d8e7E49CA06BC77946 profit=0x3AdD95b59415a95db0a546d8e7E49CA06BC77946 impact=0x7Da918d7077923bBF02dBF5abc349CFCE8FEc4c1 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2->0x3AdD95b59415a95db0a546d8e7E49CA06BC77946 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=1 focused=0 prunedRoundtrip=1 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=1 focused=0 prunedRoundtrip=1 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xf05654b2 end-to-end 17645ms
+[searcher/live] counters hints=46 impacts=6 opportunities=2 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=10 pendingFilteredReceived=10 mempoolOpportunitySeen=2 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x206f5f221c3f5d272589b8f0a15db23002aa98212165fd633e49d1d3751bbc00 src=mev-share
+[searcher/live] 0x206f5f22 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x206f5f22 Transfer: token=0x6e2a43be from=0xbe056220 to=0xb334a61a
+[searcher/live] 0x206f5f22 skip: no matching graph pool
+[searcher/live] 0x206f5f22 end-to-end 1ms
+[searcher/live] counters hints=47 impacts=6 opportunities=2 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=10 pendingFilteredReceived=10 mempoolOpportunitySeen=2 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x316148daa5080000f005d07acf5ecba5c74984744f167b078b251d45bb894652 src=mempool
+[searcher/live] state update block=25423283 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423283 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 226ms
+[pool-updater] ticks block=25423283 seeded=1 290ms
+[searcher/live] detector: 1 opportunities — found in 18898ms (match=1ms fork=24ms prep=18869ms detect=4ms total=18898ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0x64135D4B0C51f1F8ae75175De0BC1e3cA6BC48B5 0xDe521cC0D995187e6eB2ABAE41EfD6B070d0F757->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x316148da end-to-end 18907ms
+[searcher/live] counters hints=48 impacts=7 opportunities=3 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=12 pendingFilteredReceived=12 mempoolOpportunitySeen=3 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe5712655ab6e1282c19a585185cc6b7704584a997a652bed87ba8118a0684ba4 src=mev-share
+[searcher/live] 0xe5712655 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xe5712655 log: addr=0xdac17f95 t0=0x8c5be1e5
+[searcher/live] 0xe5712655 skip: no matching graph pool
+[searcher/live] 0xe5712655 end-to-end 1ms
+[searcher/live] counters hints=49 impacts=7 opportunities=3 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=12 pendingFilteredReceived=12 mempoolOpportunitySeen=3 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe71b8397994f312abc59a73af3ea5abcb6e3c8011491dad735d6d0161092e72f src=mempool
+[searcher/live] state update block=25423284 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423284 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 410ms
+[pool-updater] ticks block=25423284 seeded=1 403ms
+[searcher/live] state update block=25423285 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423285 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 220ms
+[pool-updater] ticks block=25423285 seeded=1 250ms
+[pool-impact] swap-only decoded: pool=0x5825eb52 0xEb8249B3→0xC02aaA39 amt=71377741216661296656453
+[searcher/live] detector: 1 opportunities — found in 12769ms (match=2ms fork=24ms prep=12524ms detect=219ms total=12769ms)
+[planner] 0 candidates start=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 profit=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 impact=0x5825eb527ee55b34ff91a5893ac50e2d6f66b257 0xeb8249b396c31d62e30de066918aa4c0cd32271d->0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=100 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=100 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xe71b8397 end-to-end 12782ms
+[searcher/live] counters hints=50 impacts=8 opportunities=4 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=13 pendingFilteredReceived=13 mempoolOpportunitySeen=4 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa54c56f6239d1bdd4ddf60cbde194cc59ecef2adefe408b8495f454d22c7ca41 src=mev-share
+[searcher/live] 0xa54c56f6 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xa54c56f6 Transfer: token=0xeeeeeeee from=0x0d070796 to=0xf584f872
+[searcher/live] 0xa54c56f6 skip: no matching graph pool
+[searcher/live] 0xa54c56f6 end-to-end 1ms
+[searcher/live] counters hints=51 impacts=8 opportunities=4 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=13 pendingFilteredReceived=13 mempoolOpportunitySeen=4 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x9d58800a37ff53ab775faaa87c65646ba9ab50394970fb4d4d2c12f9c4c92e95 src=mempool
+[searcher/live] state update block=25423286 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423286 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 226ms
+[searcher/live] 0x9d58800a no matching graph pool
+[searcher/live] 0x9d58800a end-to-end 18291ms
+[searcher/live] counters hints=52 impacts=8 opportunities=4 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=16 pendingFilteredReceived=16 mempoolOpportunitySeen=4 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x54d69b99b679736755de2c4387d990edfda5cd54919da54ec22ba1da14ed13ca src=mev-share
+[searcher/live] 0x54d69b99 hint has 12 logs (batch)
+[searcher/live] 0x54d69b99 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x54d69b99 end-to-end 2ms
+[searcher/live] counters hints=53 impacts=9 opportunities=4 plans=0 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=0 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=16 pendingFilteredReceived=16 mempoolOpportunitySeen=4 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0xf5cfea3cab1d827494d5cdc4cc89a6919774175003547372c50a5dec3741dc6a src=mempool
+[searcher/live] MEV-Share SSE connected
+[searcher/live] state update block=25423287 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423287 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 223ms
+[pool-updater] ticks block=25423287 seeded=1 367ms
+[searcher/live] state update block=25423288 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423288 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 5969ms
+[searcher/live] state update block=25423289 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] ticks block=25423288 seeded=1 7073ms
+[pool-updater] block=25423289 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 4163ms
+[searcher/live] state update block=25423290 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] ticks block=25423289 seeded=1 7468ms
+[pool-updater] block=25423290 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 2907ms
+[searcher/live] detector: 2 opportunities — found in 50602ms (match=1ms fork=24ms prep=50569ms detect=8ms total=50602ms)
+[searcher/live] planner: 6 candidate plans
+[searcher/live] opportunity expired (50617ms > TTL 5000ms) — never reached solver. stage breakdown: match=1ms fork=24ms prep=50569ms detect=8ms plan=14ms total=50617ms
+[searcher/live] 0xf5cfea3c end-to-end 50617ms
+[searcher/live] counters hints=54 impacts=11 opportunities=6 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=19 pendingFilteredReceived=19 mempoolOpportunitySeen=6 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb36343d91bbd3cb1558d7dd1c59d1311efa91e6c940b40a8b54157b785a15855 src=mev-share
+[searcher/live] 0xb36343d9 hint has 27 logs (batch)
+[searcher/live] 0xb36343d9 skip: no matching graph pool
+[searcher/live] 0xb36343d9 end-to-end 2ms
+[searcher/live] counters hints=55 impacts=11 opportunities=6 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=19 pendingFilteredReceived=19 mempoolOpportunitySeen=6 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xef07f268b8286f570e67de4dbe863036cf13e98641d181d1ed28a6dce3e8014e src=mempool
+[searcher/live] state update block=25423291 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423291 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/3 234ms
+[pool-updater] ticks block=25423291 seeded=1 238ms
+[searcher/live] 0xef07f268 no matching graph pool
+[searcher/live] 0xef07f268 end-to-end 12061ms
+[searcher/live] counters hints=56 impacts=11 opportunities=6 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=21 pendingFilteredReceived=21 mempoolOpportunitySeen=6 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xbae794c544f0479e8a9bb6f7d4013bb45457486641b4bc7879d941666884cb0d src=mev-share
+[searcher/live] 0xbae794c5 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xbae794c5 Transfer: token=0x595832f8 from=0xfd1162a5 to=0x4da74aea
+[searcher/live] 0xbae794c5 token-index hit, trying RPC fetch
+[searcher/live] 0xbae794c5 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xbae794c5 end-to-end 559ms
+[searcher/live] counters hints=57 impacts=11 opportunities=6 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=21 pendingFilteredReceived=21 mempoolOpportunitySeen=6 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xde05c5ad7de7cad9fa756a53fda92dfe27e40e5ac23e5901dfe2e74fe882b9d6 src=mempool
+[searcher/live] state update block=25423292 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423292 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/3 701ms
+[pool-updater] ticks block=25423292 seeded=1 242ms
+[searcher/live] state update block=25423293 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423293 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/3 319ms
+[searcher/live] 0xde05c5ad no matching graph pool
+[searcher/live] 0xde05c5ad end-to-end 16732ms
+[searcher/live] counters hints=58 impacts=11 opportunities=6 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=25 pendingFilteredReceived=25 mempoolOpportunitySeen=6 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x14ca95d5075b035f9e75f0a745510277d0309772f32512365565ee84a5f3f6c9 src=mev-share
+[searcher/live] 0x14ca95d5 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x14ca95d5 Transfer: token=0x13239c26 from=0x9f13d498 to=0x0d070796
+[searcher/live] 0x14ca95d5 skip: no matching graph pool
+[searcher/live] 0x14ca95d5 end-to-end 2ms
+[searcher/live] counters hints=59 impacts=11 opportunities=6 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=25 pendingFilteredReceived=25 mempoolOpportunitySeen=6 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc9cfa03be239d6b517f6fd786b484061f86b44b12fa2047c0d0251a1d2aa074c src=mempool
+[pool-updater] ticks block=25423293 seeded=1 449ms
+[searcher/live] state update block=25423294 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423294 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/2 311ms
+[pool-updater] ticks block=25423294 seeded=1 425ms
+[searcher/live] detector: 1 opportunities — found in 15502ms (match=1ms fork=24ms prep=15467ms detect=10ms total=15502ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6 0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xc9cfa03b end-to-end 15517ms
+[searcher/live] counters hints=60 impacts=12 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=28 pendingFilteredReceived=28 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x9fe8d7c1466dfb078e772acec34e7af49d5832313bb72eb1393dead18a3ffec9 src=mev-share
+[searcher/live] 0x9fe8d7c1 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x9fe8d7c1 Transfer: token=0xdac17f95 from=0xf2d60a67 to=0x1d791f12
+[searcher/live] 0x9fe8d7c1 token-index hit, trying RPC fetch
+[searcher/live] 0x9fe8d7c1 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x9fe8d7c1 end-to-end 446ms
+[searcher/live] counters hints=61 impacts=12 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=28 pendingFilteredReceived=28 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8e4e3cce2874602d77b95432373483a9b54918c28d0e2349272c9308bfa2d347 src=mempool
+[searcher/live] state update block=25423295 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423295 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/2 385ms
+[pool-updater] ticks block=25423295 seeded=1 387ms
+[searcher/live] 0x8e4e3cce no matching graph pool
+[searcher/live] 0x8e4e3cce end-to-end 14032ms
+[searcher/live] counters hints=62 impacts=12 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x3a589f84baaa881ef532e62f19b7ece760de1dec459edfda52bda53b6d4c5067 src=mev-share
+[searcher/live] 0x3a589f84 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x3a589f84 Transfer: token=0xdac17f95 from=0xa2e892ff to=0xc2b4d5f9
+[searcher/live] 0x3a589f84 token-index hit, trying RPC fetch
+[searcher/live] 0x3a589f84 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x3a589f84 end-to-end 953ms
+[searcher/live] counters hints=63 impacts=12 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0xff6a3671de36e205b7f125a80787ace622cb6417aba0e91e2f9a2592b471a39b src=mempool
+[searcher/live] 0xff6a3671 skip: victim apply failed: 0xff6a3671de36e205b7f125a80787ace622cb6417aba0e91e2f9a2592b471a39b
+[searcher/live] 0xff6a3671 end-to-end 1417ms
+[searcher/live] counters hints=64 impacts=12 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xd3bd7efa619bfd136c93df85bf6dd4679e60dc9707ca33db31d18b1f6af4e836 src=mempool
+[searcher/live] MEV-Share SSE connected
+[searcher/live] 0xd3bd7efa skip: victim apply failed: 0xd3bd7efa619bfd136c93df85bf6dd4679e60dc9707ca33db31d18b1f6af4e836
+[searcher/live] 0xd3bd7efa end-to-end 1328ms
+[searcher/live] counters hints=65 impacts=12 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8245bafb649ef4671ea333e71591344bd7336e50d05ca2f44a29574ff314aef8 src=mev-share
+[searcher/live] 0x8245bafb Transfer: token=0x42bbfa2e from=0x256bd88b to=0x278d858f
+[searcher/live] 0x8245bafb Transfer: token=0xc02aaa39 from=0x278d858f to=0x256bd88b
+[searcher/live] 0x8245bafb log: addr=0x256bd88b t0=0xc42079f9
+[pool-impact] swap-only decoded: pool=0x256bd88b 0xC02aaA39→0x42bBFa2e amt=57573188955985800
+[searcher/live] 0x8245bafb skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x8245bafb end-to-end 233ms
+[searcher/live] counters hints=66 impacts=13 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xd528bdad81e1bd53a5bc6007909122d3c0c80ae045c13a792b5e72e651452c7e src=mempool
+[searcher/live] state update block=25423296 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423296 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/2 325ms
+[searcher/live] 0xd528bdad skip: victim apply failed: 0xd528bdad81e1bd53a5bc6007909122d3c0c80ae045c13a792b5e72e651452c7e
+[searcher/live] 0xd528bdad end-to-end 1329ms
+[searcher/live] counters hints=67 impacts=13 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x0eb066d4539abffa69b84231c763c62959b424959407d2d30c96dc2399e986af src=mev-share
+[searcher/live] 0x0eb066d4 Transfer: token=0xeeeeeeee from=0x56cd59ec to=0xf30ba13e
+[searcher/live] 0x0eb066d4 Transfer: token=0x42bbfa2e from=0x256bd88b to=0x278d858f
+[searcher/live] 0x0eb066d4 Transfer: token=0xc02aaa39 from=0x278d858f to=0x256bd88b
+[searcher/live] 0x0eb066d4 log: addr=0x256bd88b t0=0xc42079f9
+[pool-impact] swap-only decoded: pool=0x256bd88b 0xC02aaA39→0x42bBFa2e amt=57573188955985800
+[searcher/live] 0x0eb066d4 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x0eb066d4 end-to-end 3ms
+[searcher/live] counters hints=68 impacts=14 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xff956bd70a7795ace692888d8dea925f48181b73b0bf5f42ad6731581f6d0535 src=mempool
+[pool-updater] ticks block=25423296 seeded=1 552ms
+[searcher/live] 0xff956bd7 no matching graph pool
+[searcher/live] 0xff956bd7 end-to-end 10638ms
+[searcher/live] counters hints=69 impacts=14 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4c6eeec8a548ed6509b0895bd71b645d24f4c97406323d2d17ec78c38aef6c05 src=mev-share
+[searcher/live] 0x4c6eeec8 hint has 12 logs (batch)
+[pool-impact] swap-only decoded: pool=0x1474c1fa 0xC02aaA39→0xaa95f26e amt=1678751332993055
+[searcher/live] 0x4c6eeec8 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x4c6eeec8 end-to-end 230ms
+[searcher/live] counters hints=70 impacts=15 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=31 pendingFilteredReceived=29 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x6754c932b0754238a2479e46018665b867fcfcc68dd83cc056b47f07baa11f57 src=mempool
+[searcher/live] state update block=25423297 reason=block recent=5/24 pinned=8/8 watched=13
+[pool-updater] block=25423297 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/2 511ms
+[pool-updater] ticks block=25423297 seeded=1 425ms
+[searcher/live] state update block=25423298 reason=block recent=5/24 pinned=8/8 watched=13
+[searcher/live] 0x6754c932 no matching graph pool
+[searcher/live] 0x6754c932 end-to-end 16337ms
+[searcher/live] counters hints=71 impacts=15 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=33 pendingFilteredReceived=31 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x1d134416f398aeca292e5bc7e7455c063d0e55a3516c3fe3ac65224e691e6823 src=mev-share
+[searcher/live] 0x1d134416 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x1d134416 Transfer: token=0xdac17f95 from=0x5b8d2b4a to=0xd0e83490
+[searcher/live] 0x1d134416 token-index hit, trying RPC fetch
+[searcher/live] 0x1d134416 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x1d134416 end-to-end 3198ms
+[searcher/live] counters hints=72 impacts=15 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=34 pendingFilteredReceived=32 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[pool-updater] block=25423298 seeded v2=0 v3=5 watched=9/32 tickRefresh=1/2 5465ms
+[searcher/live] hint tx=0x797dccdca90ed7003e9d360d363d517804c929453bf2a5fd857242af2c6923d1 src=mempool
+[pool-updater] ticks block=25423298 seeded=1 6223ms
+[searcher/live] state update block=25423299 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423299 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 2620ms
+[searcher/live] 0x797dccdc no matching graph pool
+[searcher/live] 0x797dccdc end-to-end 16012ms
+[searcher/live] counters hints=73 impacts=15 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=36 pendingFilteredReceived=34 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe76affdf1d70eb8158156899643cc2c8732c9f3dacc76d0470fcf7de9fdd0280 src=mev-share
+[searcher/live] 0xe76affdf hint has 13 logs (batch)
+[pool-impact] swap-only decoded: pool=0x1474c1fa 0xC02aaA39→0xaa95f26e amt=1678751332993055
+[searcher/live] 0xe76affdf skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0xe76affdf end-to-end 2ms
+[searcher/live] counters hints=74 impacts=16 opportunities=7 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=36 pendingFilteredReceived=34 mempoolOpportunitySeen=7 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x15488685e140f5866f56dd03c5f9efd8ebf2e8257b58bb3b4cc3875a6ecf2a14 src=mempool
+[pool-updater] ticks block=25423299 seeded=1 5858ms
+[searcher/live] state update block=25423300 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423300 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 3921ms
+[searcher/live] state update block=25423301 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423301 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 229ms
+[pool-updater] ticks block=25423301 seeded=1 650ms
+[searcher/live] detector: 1 opportunities — found in 14762ms (match=1ms fork=24ms prep=14728ms detect=9ms total=14762ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6 0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x15488685 end-to-end 14781ms
+[searcher/live] counters hints=75 impacts=17 opportunities=8 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=37 pendingFilteredReceived=35 mempoolOpportunitySeen=8 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x851f9207582636ddde8b0d67a13d5700521b7f3ac2d8ffdbf18bf938bc446b53 src=mev-share
+[searcher/live] 0x851f9207 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x851f9207 Transfer: token=0xeeeeeeee from=0x86d3e894 to=0xe930ddb8
+[searcher/live] 0x851f9207 skip: no matching graph pool
+[searcher/live] 0x851f9207 end-to-end 1ms
+[searcher/live] counters hints=76 impacts=17 opportunities=8 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=37 pendingFilteredReceived=35 mempoolOpportunitySeen=8 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8c6e174003daf331e4077157057eeeeb1572c1f70245f0e28d3eba10861a36f8 src=mempool
+[searcher/live] 0x8c6e1740 skip: victim apply failed: 0x8c6e174003daf331e4077157057eeeeb1572c1f70245f0e28d3eba10861a36f8
+[searcher/live] 0x8c6e1740 end-to-end 3136ms
+[searcher/live] counters hints=77 impacts=17 opportunities=8 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=38 pendingFilteredReceived=36 mempoolOpportunitySeen=8 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x14b86f6844298b0d4c2643cb34973e5967578e024a94359fbedc185563b889ea src=mev-share
+[searcher/live] 0x14b86f68 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x14b86f68 log: addr=0xa0b86991 t0=0x8c5be1e5
+[searcher/live] 0x14b86f68 skip: no matching graph pool
+[searcher/live] 0x14b86f68 end-to-end 4ms
+[searcher/live] counters hints=78 impacts=17 opportunities=8 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=38 pendingFilteredReceived=36 mempoolOpportunitySeen=8 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb47a75896ae35d4dd7bd3460a647c65d635fb97bf0ce17bb57a8151de13853c1 src=mempool
+[searcher/live] state update block=25423302 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423302 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 911ms
+[pool-updater] ticks block=25423302 seeded=1 349ms
+[pool-impact] swap-only decoded: pool=0x6c85888f 0x0929e37C→0xC02aaA39 amt=7825906948976159
+[pool-impact] swap-only decoded: pool=0x6c85888f 0x0929e37C→0xC02aaA39 amt=7825906948976159
+[searcher/live] detector: 1 opportunities — found in 20412ms (match=2ms fork=24ms prep=19691ms detect=695ms total=20412ms)
+[planner] 0 candidates start=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 profit=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 impact=0x6c85888fe3ef950cd0c4abfc6bb7e885ffdcbfd4 0x0929e37c282b6b23c5beace619d9b29b27120d85->0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4662/4662 raw=100 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4661/4662 raw=100 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xb47a7589 end-to-end 20424ms
+[searcher/live] counters hints=79 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=44 pendingFilteredReceived=42 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x5091114245c6dfa5f924523772c412de24419d0a24291ea09cf2d7a5c585da49 src=mev-share
+[searcher/live] 0x50911142 Transfer: token=0xdac17f95 from=0xacdb27b2 to=0x278d858f
+[searcher/live] 0x50911142 Transfer: token=0xc02aaa39 from=0x278d858f to=0xacdb27b2
+[searcher/live] 0x50911142 log: addr=0xacdb27b2 t0=0x19b47279
+[searcher/live] 0x50911142 token-index hit, trying RPC fetch
+[searcher/live] state update block=25423303 reason=block recent=0/24 pinned=8/8 watched=8
+[searcher/live] 0x50911142 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x50911142 end-to-end 463ms
+[searcher/live] counters hints=80 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=44 pendingFilteredReceived=42 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0xeeb5a6e3d2036c4027eb1dbfc41c7ed632d590b120ad8827b7cae5423e5aba09 src=mempool
+[pool-updater] block=25423303 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 236ms
+[discovery] scanned 25 blocks: 270 active pools, taking top 200
+[pool-updater] ticks block=25423303 seeded=1 366ms
+[searcher/live] MEV-Share SSE connected
+[searcher/live] 0xeeb5a6e3 skip: victim apply failed: 0xeeb5a6e3d2036c4027eb1dbfc41c7ed632d590b120ad8827b7cae5423e5aba09
+[searcher/live] 0xeeb5a6e3 end-to-end 2241ms
+[searcher/live] counters hints=81 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=44 pendingFilteredReceived=42 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xcdf8e72e443c92029b0c5d564852f48f9518155a1f690c3884583a324a399c7c src=mev-share
+[searcher/live] 0xcdf8e72e log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xcdf8e72e Transfer: token=0xeeeeeeee from=0xa3696e95 to=0xb42067d0
+[searcher/live] 0xcdf8e72e skip: no matching graph pool
+[searcher/live] 0xcdf8e72e end-to-end 3ms
+[searcher/live] counters hints=82 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=44 pendingFilteredReceived=42 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xbd06cea8ecb28e1ea9cae5062ff0a5781d5fd2fa550ebe2303b184782ae7d4d2 src=mempool
+[searcher/live] 0xbd06cea8 skip: insufficient funds for intrinsic transaction cost (transaction="<REDACTED_HEX_BLOB:2430hex>", info={ "error": { "code": -32003, "message": "Insufficient funds for gas * price + value" } }, code=INSUFFICIENT_FUNDS, version=6.16.0)
+[searcher/live] 0xbd06cea8 end-to-end 361ms
+[searcher/live] counters hints=83 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=44 pendingFilteredReceived=42 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xaf9828d84d54a669504d28d422fdc9ecfd6de9e7035baf288e966af0a7292623 src=mev-share
+[searcher/live] 0xaf9828d8 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xaf9828d8 Transfer: token=0xeeeeeeee from=0xe0fd30e0 to=0xd6c833bf
+[searcher/live] 0xaf9828d8 skip: no matching graph pool
+[searcher/live] 0xaf9828d8 end-to-end 3ms
+[searcher/live] counters hints=84 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=44 pendingFilteredReceived=42 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xbd64f592d05b3331ba4663358850747fe6347014fbd241cc487d4b20890c4f79 src=mempool
+[token-graph] built 312 edges from 129 pools
+[searcher/live] refresh: +129 pools, +312 edges (total 4974)
+[searcher/live] state update block=25423304 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423304 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 237ms
+[searcher/live] 0xbd64f592 no matching graph pool
+[searcher/live] 0xbd64f592 end-to-end 15364ms
+[searcher/live] counters hints=85 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe6d37849d8d3c0a75b0c283a3b6057f0d2c6b8fcb143269c1dcd5b27d34d58b1 src=mev-share
+[searcher/live] 0xe6d37849 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xe6d37849 Transfer: token=0xa0b86991 from=0xf210e07b to=0x0abbc482
+[searcher/live] 0xe6d37849 token-index hit, trying RPC fetch
+[searcher/live] 0xe6d37849 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xe6d37849 end-to-end 589ms
+[searcher/live] counters hints=86 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xce0a95528f4230f89bb10f73e5b024601868f0f0b654b97e92249e8b9ed5b025 src=mempool
+[searcher/live] 0xce0a9552 skip: victim apply failed: 0xce0a95528f4230f89bb10f73e5b024601868f0f0b654b97e92249e8b9ed5b025
+[searcher/live] 0xce0a9552 end-to-end 2117ms
+[searcher/live] counters hints=87 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x5c17d4fd9490110b40de4497f986b3eec7eb48d7899778a1944b58753587e6ae src=mev-share
+[searcher/live] 0x5c17d4fd log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x5c17d4fd Transfer: token=0xaea46a60 from=0x49dd2583 to=0x4a98b9f8
+[searcher/live] 0x5c17d4fd skip: no matching graph pool
+[searcher/live] 0x5c17d4fd end-to-end 3ms
+[searcher/live] counters hints=88 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x3fec5ef8c6be849a80dab5dfc8e9bba1319254f5f49ee30e1f34aea58e88dac2 src=mempool
+[searcher/live] 0x3fec5ef8 skip: insufficient funds for intrinsic transaction cost (transaction="<REDACTED_HEX_BLOB:1474hex>", info={ "error": { "code": -32003, "message": "Insufficient funds for gas * price + value" } }, code=INSUFFICIENT_FUNDS, version=6.16.0)
+[searcher/live] 0x3fec5ef8 end-to-end 741ms
+[searcher/live] counters hints=89 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xca1ff8878427ab30645ed305fd7631bb8f39e7cd349c4d7bc0d1e37261ca8845 src=mev-share
+[searcher/live] 0xca1ff887 hint has 6 logs (batch)
+[searcher/live] 0xca1ff887 skip: no matching graph pool
+[searcher/live] 0xca1ff887 end-to-end 3ms
+[searcher/live] counters hints=90 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa902e1ab45b9be7764c80939776f43cec2e56d7fa93aff72ebcb3f39f8bf50f2 src=mempool
+[searcher/live] state update block=25423305 reason=block recent=0/24 pinned=8/8 watched=8
+[searcher/live] 0xa902e1ab skip: insufficient funds for intrinsic transaction cost (transaction="<REDACTED_HEX_BLOB:1474hex>", info={ "error": { "code": -32003, "message": "Insufficient funds for gas * price + value" } }, code=INSUFFICIENT_FUNDS, version=6.16.0)
+[searcher/live] 0xa902e1ab end-to-end 345ms
+[searcher/live] counters hints=91 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=45 pendingFilteredReceived=43 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xac2c041c2b1d9c2fbf226739cae44d6137c546d725cc2c0ab9fb8d66356a0cbc src=mev-share
+[searcher/live] 0xac2c041c log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xac2c041c Transfer: token=0x51491077 from=0xb4eb2c08 to=0x79dd9327
+[searcher/live] 0xac2c041c token-index hit, trying RPC fetch
+[pool-updater] block=25423305 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 228ms
+[pool-updater] ticks block=25423305 seeded=1 357ms
+[searcher/live] 0xac2c041c skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xac2c041c end-to-end 993ms
+[searcher/live] counters hints=92 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=46 pendingFilteredReceived=44 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x15ff89e01b2339fcef4161017dd706b076571da43dc49d2d976fb750a4a15f6a src=mempool
+[searcher/live] state update block=25423306 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423306 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 233ms
+[pool-updater] ticks block=25423306 seeded=1 353ms
+[searcher/live] 0x15ff89e0 no matching graph pool
+[searcher/live] 0x15ff89e0 end-to-end 15340ms
+[searcher/live] counters hints=93 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=48 pendingFilteredReceived=46 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x1f8c4d9697bb2c2ad5a3236a47e2e655a8f212320dae062ad88fc85daca802ec src=mev-share
+[searcher/live] 0x1f8c4d96 hint has 6 logs (batch)
+[searcher/live] 0x1f8c4d96 skip: no matching graph pool
+[searcher/live] 0x1f8c4d96 end-to-end 1ms
+[searcher/live] counters hints=94 impacts=18 opportunities=9 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=48 pendingFilteredReceived=46 mempoolOpportunitySeen=9 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x27e54e8c951bd3d544acc7d793d34ed3ddc7370d6c56bf23a5f7244bfa83288a src=mempool
+[searcher/live] state update block=25423307 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423307 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 234ms
+[pool-updater] ticks block=25423307 seeded=1 350ms
+[searcher/live] detector: 1 opportunities — found in 17678ms (match=1ms fork=24ms prep=17644ms detect=9ms total=17678ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6 0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x27e54e8c end-to-end 17689ms
+[searcher/live] counters hints=95 impacts=19 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=54 pendingFilteredReceived=52 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x183670f6499c54c4172f8acb286bee57ff90dc296011532b8491949947c1bf22 src=mempool
+[searcher/live] state update block=25423308 reason=block recent=0/24 pinned=8/8 watched=8
+[searcher/live] 0x183670f6 no matching graph pool
+[searcher/live] 0x183670f6 end-to-end 5361ms
+[searcher/live] counters hints=97 impacts=19 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=56 pendingFilteredReceived=54 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xeda2ed1e4bd27d7ec57828fb66dac35a61512b4e1c009df678fd8d4f65f70fe7 src=mev-share
+[searcher/live] 0xeda2ed1e log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xeda2ed1e Transfer: token=0x643c4e15 from=0x27941a23 to=0x7833341f
+[searcher/live] 0xeda2ed1e Transfer: token=0xc02aaa39 from=0x8cc5c24a to=0x27941a23
+[searcher/live] 0xeda2ed1e log: addr=0x27941a23 t0=0xc42079f9
+[searcher/live] 0xeda2ed1e log: addr=0x8cc5c24a t0=0x6771236b
+[pool-updater] block=25423308 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 6870ms
+[pool-impact] swap-only decoded: pool=0x27941a23 0xC02aaA39→0x643C4E15 amt=1175072776096292000
+[searcher/live] 0xeda2ed1e skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0xeda2ed1e end-to-end 6603ms
+[searcher/live] counters hints=98 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x3db2450bf08162f18ad6df0ae981db5754e225795c7b0600c1a925ff70363920 src=mempool
+[searcher/live] state update block=25423309 reason=block recent=0/24 pinned=8/8 watched=8
+[searcher/live] 0x3db2450b skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:1088hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x3db2450b end-to-end 3459ms
+[searcher/live] counters hints=99 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe634b074ea40ca3bc0dee396db273407b637546fdd2aa81a1bb6b3fda95457c9 src=mev-share
+[searcher/live] 0xe634b074 hint has 6 logs (batch)
+[searcher/live] 0xe634b074 skip: no matching graph pool
+[searcher/live] 0xe634b074 end-to-end 4ms
+[searcher/live] counters hints=100 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x969a3fa96cb1948dcf9083d943957f417dd7c276deb24c2a66dd070866adddab src=mempool
+[searcher/live] 0x969a3fa9 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2428hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x969a3fa9 end-to-end 1027ms
+[searcher/live] counters hints=101 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x6c2f1f5e45bdd9032a1a97aba9da905f9a45184d98c41aab1cba078022f6cda0 src=mev-share
+[searcher/live] 0x6c2f1f5e hint has 7 logs (batch)
+[searcher/live] 0x6c2f1f5e skip: no matching graph pool
+[searcher/live] 0x6c2f1f5e end-to-end 4ms
+[searcher/live] counters hints=102 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x500b5fd0bcd0c8b3d33a275d5d9b533c3fb96c74d5ca8028c565ce71dabab599 src=mempool
+[searcher/live] 0x500b5fd0 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:1088hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x500b5fd0 end-to-end 331ms
+[searcher/live] counters hints=103 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x06cfe537ba3e4a7a06db55a87a54768fdba8597ed3402f7c0c9c33c785c233fe src=mev-share
+[searcher/live] 0x06cfe537 hint has 7 logs (batch)
+[searcher/live] 0x06cfe537 skip: no matching graph pool
+[searcher/live] 0x06cfe537 end-to-end 4ms
+[searcher/live] counters hints=104 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x5fde1ff7d593e4cb53a9201b06cd2e4d20e18c813ca3f1bbd91a0bd98676df31 src=mempool
+[searcher/live] 0x5fde1ff7 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:1088hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x5fde1ff7 end-to-end 329ms
+[searcher/live] counters hints=105 impacts=20 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf046afe51349ab2290ccbfbb22042072907e8189a368beded66d18d334923658 src=mev-share
+[searcher/live] 0xf046afe5 Transfer: token=0x643c4e15 from=0x27941a23 to=0x7833341f
+[searcher/live] 0xf046afe5 Transfer: token=0xc02aaa39 from=0x8cc5c24a to=0x27941a23
+[searcher/live] 0xf046afe5 log: addr=0x27941a23 t0=0xc42079f9
+[searcher/live] 0xf046afe5 log: addr=0x8cc5c24a t0=0x6771236b
+[pool-impact] swap-only decoded: pool=0x27941a23 0xC02aaA39→0x643C4E15 amt=1175072776096292000
+[searcher/live] 0xf046afe5 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0xf046afe5 end-to-end 4ms
+[searcher/live] counters hints=106 impacts=21 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x64efb8a854135dffff6faa7552b22a402e08ee38481d7d2fd350b5499ec4145c src=mempool
+[pool-updater] block=25423309 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 3738ms
+[searcher/live] 0x64efb8a8 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2284hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x64efb8a8 end-to-end 401ms
+[searcher/live] counters hints=107 impacts=21 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb71dacb153bbc26b2a4f6360769bea20d43f9064ec7bde70e6aef50e41346cf9 src=mev-share
+[searcher/live] 0xb71dacb1 Transfer: token=0xeeeeeeee from=0xe6f79f8b to=0xf033abd0
+[searcher/live] 0xb71dacb1 Transfer: token=0x643c4e15 from=0x27941a23 to=0x7833341f
+[searcher/live] 0xb71dacb1 Transfer: token=0xc02aaa39 from=0x8cc5c24a to=0x27941a23
+[searcher/live] 0xb71dacb1 log: addr=0x27941a23 t0=0xc42079f9
+[searcher/live] 0xb71dacb1 log: addr=0x8cc5c24a t0=0x6771236b
+[pool-impact] swap-only decoded: pool=0x27941a23 0xC02aaA39→0x643C4E15 amt=1175072776096292000
+[searcher/live] 0xb71dacb1 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0xb71dacb1 end-to-end 4ms
+[searcher/live] counters hints=108 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0x1621d17697b5703ce4d5649c5965f457b2e20cd598dc222b190d091034ccfc30 src=mempool
+[searcher/live] 0x1621d176 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:736hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x1621d176 end-to-end 324ms
+[searcher/live] counters hints=109 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x00cc85ef839157cd543e62e5ea2620051492951ec33246068359e0a4ce105b6f src=mempool
+[searcher/live] 0x00cc85ef skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2798hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x00cc85ef end-to-end 362ms
+[searcher/live] counters hints=110 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xfee16afaacf2677d285e96c79a17a93f334e1233df47b83cbd1006644a200bda src=mempool
+[searcher/live] 0xfee16afa skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:698hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xfee16afa end-to-end 367ms
+[searcher/live] counters hints=111 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf02fa2ebcbc9c5f5bc0c8bd776230bdc7e122c6b6606f327766debae6d13ce8e src=mempool
+[searcher/live] 0xf02fa2eb skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2734hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xf02fa2eb end-to-end 321ms
+[searcher/live] counters hints=112 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf1842cec192d0d3b0bbd72b3c658920482b512ddb5c479cfc2edb4d451fa84e7 src=mempool
+[searcher/live] MEV-Share SSE connected
+[searcher/live] 0xf1842cec skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:698hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xf1842cec end-to-end 623ms
+[searcher/live] counters hints=113 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x23782cac966a6b86941386383187cae41eaf788cc62a7bb4032105fa81efc42b src=mev-share
+[searcher/live] 0x23782cac log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x23782cac Transfer: token=0xeeeeeeee from=0x331d9a04 to=0x47169f78
+[searcher/live] 0x23782cac skip: no matching graph pool
+[searcher/live] 0x23782cac end-to-end 4ms
+[searcher/live] counters hints=114 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xcd6ab2aef7bc0f1c39652735562a7cb7cdf6640280e4eb821784d806916fb6b5 src=mempool
+[searcher/live] 0xcd6ab2ae skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:10282hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xcd6ab2ae end-to-end 756ms
+[searcher/live] counters hints=115 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc6f21d9570c0dddee008e2f98c0749adc823fe907100861b17a9a9d6968e82fb src=mev-share
+[searcher/live] 0xc6f21d95 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xc6f21d95 Transfer: token=0xa0b86991 from=0x46340b20 to=0xde2c846d
+[searcher/live] 0xc6f21d95 token-index hit, trying RPC fetch
+[searcher/live] 0xc6f21d95 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xc6f21d95 end-to-end 1832ms
+[searcher/live] counters hints=116 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[pool-updater] ticks block=25423309 seeded=1 4847ms
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0xf1db7f55a04c3b11cd2fd6cdaf761727659d8a689bfb0942af4cfacc83f775e6 src=mempool
+[searcher/live] 0xf1db7f55 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2798hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xf1db7f55 end-to-end 242ms
+[searcher/live] counters hints=117 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc0a76047b512155e70586ee3d15a003640a015d78915e07f0d71dd5237005f30 src=mempool
+[searcher/live] 0xc0a76047 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2430hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xc0a76047 end-to-end 324ms
+[searcher/live] counters hints=118 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc1aa926b45cddc9ae1713bcdda82147f498fe5fcb64effdd77cfac836abeb3b0 src=mempool
+[searcher/live] 0xc1aa926b skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:698hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xc1aa926b end-to-end 334ms
+[searcher/live] counters hints=119 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xeef838a1902f945580b788772d0373f4c1526bbc0c4af2426d3d8ac7fbcf742f src=mempool
+[searcher/live] 0xeef838a1 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:698hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xeef838a1 end-to-end 554ms
+[searcher/live] counters hints=120 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa7a9b4eaae5740668c37ade7218b6af709c42ec80c49008411299e68c14a1909 src=mempool
+[searcher/live] MEV-Share SSE connected
+[searcher/live] 0xa7a9b4ea skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:696hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xa7a9b4ea end-to-end 1228ms
+[searcher/live] counters hints=121 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb99858ea93fef11f51401de12dac85883f4fd6ce5f9f001226a68cc439f054df src=mev-share
+[searcher/live] 0xb99858ea log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xb99858ea skip: no matching graph pool
+[searcher/live] 0xb99858ea end-to-end 4ms
+[searcher/live] counters hints=122 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xeb82b10f33acd7cd4d8eca5ffc28d90facb36c4f2ac0a86f280204b72622814a src=mempool
+[searcher/live] 0xeb82b10f skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:736hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xeb82b10f end-to-end 340ms
+[searcher/live] counters hints=123 impacts=22 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x28d964f50b65c034ddf3dd27040ef0c3c5a574e74058ea9c27268c9ff33cede1 src=mev-share
+[searcher/live] 0x28d964f5 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x28d964f5 Transfer: token=0xc02aaa39 from=0x278d858f to=0x4a86c01d
+[searcher/live] 0x28d964f5 Transfer: token=0x0f2d7194 from=0x4a86c01d to=0x278d858f
+[searcher/live] 0x28d964f5 log: addr=0x4a86c01d t0=0x1c411e9a
+[searcher/live] 0x28d964f5 log: addr=0x4a86c01d t0=0xd78ad95f
+[searcher/live] 0x28d964f5 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x28d964f5 end-to-end 5ms
+[searcher/live] counters hints=124 impacts=23 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf4ba855ccc796b3c5f6bd18752fa92254a34a0848dd5cb4b6db01a74dc568d88 src=mempool
+[searcher/live] 0xf4ba855c skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2094hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xf4ba855c end-to-end 325ms
+[searcher/live] counters hints=125 impacts=23 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xbcd149af366631e157894a46534d04b3561a4b02db08cfa5562b033c716d80f0 src=mev-share
+[searcher/live] 0xbcd149af log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xbcd149af Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x20031ded
+[searcher/live] 0xbcd149af Transfer: token=0x9c7beba8 from=0xd862cdcf to=0xc4dbe30f
+[searcher/live] 0xbcd149af log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0xbcd149af skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0xbcd149af end-to-end 4ms
+[searcher/live] counters hints=126 impacts=24 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xff5928022407e55aa4b692d6ad20db8257061cf7182bef640a5bf76956b99feb src=mempool
+[searcher/live] 0xff592802 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:7406hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xff592802 end-to-end 325ms
+[searcher/live] counters hints=127 impacts=24 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x922625db556f0bd6823dfc6633f7c75b1f4e5199b1c83da1c1380ba2763e0230 src=mev-share
+[searcher/live] 0x922625db log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x922625db Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x278d858f
+[searcher/live] 0x922625db Transfer: token=0x9c7beba8 from=0x278d858f to=0xc4dbe30f
+[searcher/live] 0x922625db log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0x922625db skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x922625db end-to-end 4ms
+[searcher/live] counters hints=128 impacts=25 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x445fa761f6286e4a805658df76f41230683272aa93fdccc0127d71f95c0ffce8 src=mempool
+[searcher/live] state update block=25423310 reason=block recent=0/24 pinned=8/8 watched=8
+[searcher/live] 0x445fa761 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2094hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x445fa761 end-to-end 974ms
+[searcher/live] counters hints=129 impacts=25 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x413dc399eb50705a56ced3167647574cc5ce15be1d6f8e9d00719abf60647edb src=mev-share
+[searcher/live] 0x413dc399 hint has 7 logs (batch)
+[pool-updater] block=25423310 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 1470ms
+[pool-impact] swap-only decoded: pool=0x2dd35b4d 0x0f2D7194→0xC02aaA39 amt=56460729185774052529
+[searcher/live] 0x413dc399 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x413dc399 end-to-end 1040ms
+[searcher/live] counters hints=130 impacts=26 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4b6b366958a3fa10229a891aa2deb3a54795edf19fd911467168fb1a6ec4d0ab src=mempool
+[searcher/live] 0x4b6b3669 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:6766hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x4b6b3669 end-to-end 245ms
+[searcher/live] counters hints=131 impacts=26 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x0a9e9cada4bee72b3deb224d97adc7459b2e69a120dc43229ab319f3f1b81d4c src=mev-share
+[searcher/live] 0x0a9e9cad log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x0a9e9cad Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x278d858f
+[searcher/live] 0x0a9e9cad Transfer: token=0x9c7beba8 from=0x278d858f to=0xc4dbe30f
+[searcher/live] 0x0a9e9cad log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0x0a9e9cad skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x0a9e9cad end-to-end 4ms
+[searcher/live] counters hints=132 impacts=27 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=57 pendingFilteredReceived=55 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x03ffa61e0c3c14153c77e7210bbd0c7ed43cc4fa7238c27c545f51132710df47 src=mempool
+[pool-updater] ticks block=25423310 seeded=1 3386ms
+[searcher/live] 0x03ffa61e skip: victim apply failed: 0x03ffa61e0c3c14153c77e7210bbd0c7ed43cc4fa7238c27c545f51132710df47
+[searcher/live] 0x03ffa61e end-to-end 7275ms
+[searcher/live] counters hints=133 impacts=27 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=58 pendingFilteredReceived=56 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xea682411d0cdf0378c0cad5d05074bae08c2f4d5c120ee826459c00ad68969d1 src=mev-share
+[searcher/live] 0xea682411 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xea682411 Transfer: token=0xdac17f95 from=0x1a2bb95b to=0x035abb22
+[searcher/live] 0xea682411 token-index hit, trying RPC fetch
+[searcher/live] 0xea682411 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xea682411 end-to-end 574ms
+[searcher/live] counters hints=134 impacts=27 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=58 pendingFilteredReceived=56 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe8c3d9499b9a638b3bf8baa46abac57f24fa7f1613143f64f64c13a21eeab7d1 src=mempool
+[searcher/live] state update block=25423311 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423311 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 241ms
+[searcher/live] 0xe8c3d949 skip: victim apply failed: 0xe8c3d9499b9a638b3bf8baa46abac57f24fa7f1613143f64f64c13a21eeab7d1
+[searcher/live] 0xe8c3d949 end-to-end 7808ms
+[searcher/live] counters hints=135 impacts=27 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=58 pendingFilteredReceived=56 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x9a43bfc3b4a6ce695482710e6e700e735a4d8862bfcdb46843359a5416219c67 src=mev-share
+[searcher/live] 0x9a43bfc3 Transfer: token=0xeeeeeeee from=0x8d8d7ea4 to=0xb290a77d
+[searcher/live] 0x9a43bfc3 Transfer: token=0xc02aaa39 from=0x278d858f to=0x4a86c01d
+[searcher/live] 0x9a43bfc3 Transfer: token=0x0f2d7194 from=0x4a86c01d to=0x278d858f
+[searcher/live] 0x9a43bfc3 log: addr=0x4a86c01d t0=0x1c411e9a
+[searcher/live] 0x9a43bfc3 log: addr=0x4a86c01d t0=0xd78ad95f
+[searcher/live] 0x9a43bfc3 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x9a43bfc3 end-to-end 4ms
+[searcher/live] counters hints=136 impacts=28 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=58 pendingFilteredReceived=56 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x04ab46be4044983c54e40f548c5dbe6d3be033c05e43696f0fa7cad6d1c2ec16 src=mempool
+[pool-updater] ticks block=25423311 seeded=1 357ms
+[searcher/live] 0x04ab46be skip: victim apply failed: 0x04ab46be4044983c54e40f548c5dbe6d3be033c05e43696f0fa7cad6d1c2ec16
+[searcher/live] 0x04ab46be end-to-end 6848ms
+[searcher/live] counters hints=137 impacts=28 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x6115f8662e8e3f2e541c21c2084cb8992a9768fe9ec8f7cc8790fb2af4c65963 src=mev-share
+[searcher/live] 0x6115f866 Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x20031ded
+[searcher/live] 0x6115f866 Transfer: token=0x9c7beba8 from=0xd862cdcf to=0xc4dbe30f
+[searcher/live] 0x6115f866 log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0x6115f866 skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x6115f866 end-to-end 4ms
+[searcher/live] counters hints=138 impacts=29 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa20ed50ff22dd734dce496d2af36988b67b3c53420a8cdd4f6e9e38169357021 src=mempool
+[searcher/live] state update block=25423312 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423312 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 873ms
+[searcher/live] 0xa20ed50f skip: victim apply failed: 0xa20ed50ff22dd734dce496d2af36988b67b3c53420a8cdd4f6e9e38169357021
+[searcher/live] 0xa20ed50f end-to-end 9040ms
+[searcher/live] counters hints=139 impacts=29 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8c04d90c7a6000ed70959455480810f84dc32467ea0342f9efa6d5f3d6af1dc3 src=mev-share
+[searcher/live] 0x8c04d90c Transfer: token=0xeeeeeeee from=0x8d8d7ea4 to=0xb290a77d
+[searcher/live] 0x8c04d90c Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x20031ded
+[searcher/live] 0x8c04d90c Transfer: token=0x9c7beba8 from=0xd862cdcf to=0xc4dbe30f
+[searcher/live] 0x8c04d90c log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0x8c04d90c skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x8c04d90c end-to-end 4ms
+[searcher/live] counters hints=140 impacts=30 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4830a8540c41580a15f054cf8937fae84d8e9690fa4f2e3eb84c101de36f0cf9 src=mempool
+[searcher/live] 0x4830a854 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:744hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x4830a854 end-to-end 329ms
+[searcher/live] counters hints=141 impacts=30 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe1230fb7bc982e730bdc14f1775421edece993033858c1314bc9cb2462326a1c src=mev-share
+[searcher/live] 0xe1230fb7 hint has 7 logs (batch)
+[searcher/live] 0xe1230fb7 skip: no matching graph pool
+[searcher/live] 0xe1230fb7 end-to-end 3ms
+[searcher/live] counters hints=142 impacts=30 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb51dca4128f1dfaa860c38fd76d8bd44e29bef1951d7383d33fc410e0c98d7cc src=mempool
+[searcher/live] state update block=25423313 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423313 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 327ms
+[pool-updater] ticks block=25423313 seeded=1 1010ms
+[searcher/live] 0xb51dca41 no matching graph pool
+[searcher/live] 0xb51dca41 end-to-end 6967ms
+[searcher/live] counters hints=143 impacts=30 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc674676f6abab318afbb81588c31aee218dfaa7670ea51fb52d60e6a93e74a5e src=mev-share
+[searcher/live] 0xc674676f log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xc674676f Transfer: token=0x0f2d7194 from=0xbee3211a to=0xc17a4085
+[searcher/live] 0xc674676f log: addr=0xbee3211a t0=0xb67719fc
+[searcher/live] 0xc674676f token-index hit, trying RPC fetch
+[searcher/live] 0xc674676f skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xc674676f end-to-end 456ms
+[searcher/live] counters hints=144 impacts=30 opportunities=10 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=60 pendingFilteredReceived=58 mempoolOpportunitySeen=10 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x99ac3042b51751790f0fbf7825c4928d446ec2a676d2671f98b494dca6a4bfe0 src=mempool
+[searcher/live] state update block=25423314 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423314 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 1111ms
+[pool-updater] ticks block=25423314 seeded=1 351ms
+[searcher/live] detector: 1 opportunities — found in 15636ms (match=1ms fork=23ms prep=15600ms detect=12ms total=15636ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0x3b4E4C911CF0596EeBEeb9FD1A27537FB43eDF3F 0x2d8C2e053cBb4c9Aa416902e78168Fd4770e7712->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x99ac3042 end-to-end 15647ms
+[searcher/live] counters hints=145 impacts=31 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=63 pendingFilteredReceived=61 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x08ad96082ebd6955b4ab7be1c055bd0b90d7b5948afd73f73165a6fc0c78c58c src=mev-share
+[searcher/live] 0x08ad9608 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x08ad9608 Transfer: token=0xa0b86991 from=0x3507a5f6 to=0x3a5cc868
+[searcher/live] 0x08ad9608 token-index hit, trying RPC fetch
+[searcher/live] 0x08ad9608 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x08ad9608 end-to-end 461ms
+[searcher/live] counters hints=146 impacts=31 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=63 pendingFilteredReceived=61 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc74aa7d8373d15abd52b65b9aac168291c908b9bc0f80812e6256cebfc9cefb8 src=mempool
+[searcher/live] state update block=25423315 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423315 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 238ms
+[pool-updater] ticks block=25423315 seeded=1 344ms
+[searcher/live] 0xc74aa7d8 no matching graph pool
+[searcher/live] 0xc74aa7d8 end-to-end 8439ms
+[searcher/live] counters hints=147 impacts=31 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=65 pendingFilteredReceived=62 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc3347b0c3455d6d75054894f871068fa8cedba6c67c2bd90267497abb497129b src=mev-share
+[searcher/live] 0xc3347b0c Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x278d858f
+[searcher/live] 0xc3347b0c Transfer: token=0x9c7beba8 from=0x278d858f to=0xc4dbe30f
+[searcher/live] 0xc3347b0c log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0xc3347b0c skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0xc3347b0c end-to-end 2ms
+[searcher/live] counters hints=148 impacts=32 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=65 pendingFilteredReceived=62 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x3f432232788f508bda2fea4cb0d907138d3aa454573259c1624a59c6fc8245de src=mempool
+[searcher/live] state update block=25423316 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423316 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 228ms
+[searcher/live] 0x3f432232 skip: victim apply failed: 0x3f432232788f508bda2fea4cb0d907138d3aa454573259c1624a59c6fc8245de
+[searcher/live] 0x3f432232 end-to-end 12212ms
+[searcher/live] counters hints=149 impacts=32 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=68 pendingFilteredReceived=64 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x637ec55c16ffb39916860862cffe973f85dc04137cf2569c8bee35d37c44ea03 src=mev-share
+[searcher/live] 0x637ec55c Transfer: token=0xeeeeeeee from=0x8d8d7ea4 to=0xb290a77d
+[searcher/live] 0x637ec55c Transfer: token=0xa0b86991 from=0xc4dbe30f to=0x278d858f
+[searcher/live] 0x637ec55c Transfer: token=0x9c7beba8 from=0x278d858f to=0xc4dbe30f
+[searcher/live] 0x637ec55c log: addr=0xc4dbe30f t0=0xc42079f9
+[searcher/live] 0x637ec55c skip: hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable
+[searcher/live] 0x637ec55c end-to-end 4ms
+[searcher/live] counters hints=150 impacts=33 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=68 pendingFilteredReceived=64 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0xf504d5047873867c2973e0eb91ed63c3f9f0f3988916081685a337492d23bb3d src=mempool
+[searcher/live] state update block=25423317 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423317 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 230ms
+[pool-updater] ticks block=25423317 seeded=1 378ms
+[searcher/live] 0xf504d504 no matching graph pool
+[searcher/live] 0xf504d504 end-to-end 11544ms
+[searcher/live] counters hints=151 impacts=33 opportunities=11 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=69 pendingFilteredReceived=65 mempoolOpportunitySeen=11 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa298ecaa1415b551c746b7674e25d68c9a9b3434966629565b75c84041f007dc src=mempool
+[searcher/live] state update block=25423318 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423318 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 226ms
+[pool-updater] ticks block=25423318 seeded=1 494ms
+[searcher/live] MEV-Share SSE connected
+[searcher/live] detector: 1 opportunities — found in 12784ms (match=1ms fork=23ms prep=12758ms detect=2ms total=12784ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6 0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xa298ecaa end-to-end 12790ms
+[searcher/live] counters hints=152 impacts=34 opportunities=12 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=70 pendingFilteredReceived=66 mempoolOpportunitySeen=12 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x916a13cd2b45b8168cc3cf6c66c27ce749403612a36d04fc52979f84632371ff src=mev-share
+[searcher/live] 0x916a13cd log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x916a13cd Transfer: token=0xeeeeeeee from=0xd02ee0c0 to=0x65e988ef
+[searcher/live] 0x916a13cd skip: no matching graph pool
+[searcher/live] 0x916a13cd end-to-end 0ms
+[searcher/live] counters hints=153 impacts=34 opportunities=12 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=70 pendingFilteredReceived=66 mempoolOpportunitySeen=12 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4d993094dfba0b748a199236564e409f2e0489bc0d3445146066391b8ff648e2 src=mempool
+[searcher/live] state update block=25423319 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423319 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 897ms
+[pool-updater] ticks block=25423319 seeded=1 5239ms
+[searcher/live] 0x4d993094 no matching graph pool
+[searcher/live] 0x4d993094 end-to-end 13239ms
+[searcher/live] counters hints=154 impacts=34 opportunities=12 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=72 pendingFilteredReceived=68 mempoolOpportunitySeen=12 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe6bdbff5053ada1bfe395c3e5f74d601ed191cae7f67195f1158c959a8419084 src=mev-share
+[searcher/live] 0xe6bdbff5 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xe6bdbff5 log: addr=0xdac17f95 t0=0x8c5be1e5
+[searcher/live] 0xe6bdbff5 skip: no matching graph pool
+[searcher/live] 0xe6bdbff5 end-to-end 3ms
+[searcher/live] counters hints=155 impacts=34 opportunities=12 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=72 pendingFilteredReceived=68 mempoolOpportunitySeen=12 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x6bf8069619d3ec6aba622ae909502f2da8f1d6092150dce30c4889a07c1fadca src=mempool
+[searcher/live] state update block=25423320 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423320 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 4313ms
+[pool-impact] swap-only decoded: pool=0x57ef4100 0x265D17cc→0xC02aaA39 amt=9307706873166976
+[searcher/live] detector: 1 opportunities — found in 13289ms (match=2ms fork=23ms prep=12770ms detect=494ms total=13289ms)
+[planner] 0 candidates start=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 profit=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 impact=0x57ef410000cabf8349a488fb7741ab6a6f048816 0x265d17cc04b06c69d3b210edd88cdc28632dda64->0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=104 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=104 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x6bf80696 end-to-end 13302ms
+[searcher/live] counters hints=156 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=74 pendingFilteredReceived=70 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf5254894f380d0af9968a920957a4ae110aa5525b07000f963d66e6dba82d8ce src=mev-share
+[searcher/live] 0xf5254894 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xf5254894 log: addr=0xdac17f95 t0=0x8c5be1e5
+[searcher/live] 0xf5254894 skip: no matching graph pool
+[searcher/live] 0xf5254894 end-to-end 1ms
+[searcher/live] counters hints=157 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=74 pendingFilteredReceived=70 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb6b9a18a4572ad72632bb9c772920a69dc411f9b68de90d352b09184624980fe src=mempool
+[searcher/live] state update block=25423321 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423321 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 735ms
+[pool-updater] ticks block=25423321 seeded=1 408ms
+[searcher/live] 0xb6b9a18a no matching graph pool
+[searcher/live] 0xb6b9a18a end-to-end 7679ms
+[searcher/live] counters hints=158 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xcf6ef7237aab34bfb736dd290cff4e1d299d06c09b49be4bfc3346596e0c6b39 src=mev-share
+[searcher/live] 0xcf6ef723 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xcf6ef723 Transfer: token=0xdac17f95 from=0x73760cf6 to=0xd37ac934
+[searcher/live] 0xcf6ef723 token-index hit, trying RPC fetch
+[searcher/live] 0xcf6ef723 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xcf6ef723 end-to-end 707ms
+[searcher/live] counters hints=159 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x0df6c8225833e63999afc8fbff5f04d9475129ec8070f88c20410d74677435b4 src=mempool
+[searcher/live] 0x0df6c822 skip: victim apply failed: 0x0df6c8225833e63999afc8fbff5f04d9475129ec8070f88c20410d74677435b4
+[searcher/live] 0x0df6c822 end-to-end 3880ms
+[searcher/live] counters hints=160 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x628655b875250a87bd0f2127573291a298f1dd979304324e181a49e10def2fcc src=mev-share
+[searcher/live] 0x628655b8 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x628655b8 Transfer: token=0xa0b86991 from=0x708051e9 to=0x5281f575
+[searcher/live] 0x628655b8 token-index hit, trying RPC fetch
+[searcher/live] 0x628655b8 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x628655b8 end-to-end 458ms
+[searcher/live] counters hints=161 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x01481b835e5b4a9f53a44ffb9d01773f45ecbf90b263b8700497f67388e12033 src=mempool
+[searcher/live] state update block=25423322 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423322 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 249ms
+[pool-updater] ticks block=25423322 seeded=1 345ms
+[searcher/live] 0x01481b83 no matching graph pool
+[searcher/live] 0x01481b83 end-to-end 6929ms
+[searcher/live] counters hints=162 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa62a054462a7175031c1fc961a138c0de7e03e539479cc4e42c06d475579cd80 src=mev-share
+[searcher/live] 0xa62a0544 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xa62a0544 skip: no matching graph pool
+[searcher/live] 0xa62a0544 end-to-end 1ms
+[searcher/live] counters hints=163 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa6ee1e7474e52dac10557b1834d4bfd8c1b51fad6066512576cfa29de9016697 src=mempool
+[searcher/live] 0xa6ee1e74 skip: victim apply failed: 0xa6ee1e7474e52dac10557b1834d4bfd8c1b51fad6066512576cfa29de9016697
+[searcher/live] 0xa6ee1e74 end-to-end 1314ms
+[searcher/live] counters hints=164 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa13c0a9d3c201aa7694d5cdb1c902043cfc725b2505aa98b8ac151749223bc70 src=mev-share
+[searcher/live] 0xa13c0a9d log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xa13c0a9d Transfer: token=0x9aab071b from=0xfe263102 to=0x02c1ea38
+[searcher/live] 0xa13c0a9d skip: no matching graph pool
+[searcher/live] 0xa13c0a9d end-to-end 4ms
+[searcher/live] counters hints=165 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xff8a7458f4d3515caa5c1e7962beeeef50660ca416a86806f53f734abd52f546 src=mempool
+[searcher/live] 0xff8a7458 skip: victim apply failed: 0xff8a7458f4d3515caa5c1e7962beeeef50660ca416a86806f53f734abd52f546
+[searcher/live] 0xff8a7458 end-to-end 1434ms
+[searcher/live] counters hints=166 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x86c2dd8377476a63ad67a3e550f76a27579933b8a87dfe3fc17eae5cb623ea0e src=mev-share
+[searcher/live] 0x86c2dd83 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x86c2dd83 Transfer: token=0xdac17f95 from=0xd7c5d82e to=0xc364e036
+[searcher/live] 0x86c2dd83 token-index hit, trying RPC fetch
+[searcher/live] 0x86c2dd83 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x86c2dd83 end-to-end 511ms
+[searcher/live] counters hints=167 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=75 pendingFilteredReceived=71 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x03c1de57b0c392dd72612124e6ea65e0fde59219e30dc2e81bab4ddfb09b15ec src=mempool
+[searcher/live] state update block=25423323 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423323 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 326ms
+[pool-updater] ticks block=25423323 seeded=1 483ms
+[searcher/live] state update block=25423324 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423324 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 275ms
+[searcher/live] 0x03c1de57 no matching graph pool
+[searcher/live] 0x03c1de57 end-to-end 17365ms
+[searcher/live] counters hints=168 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=77 pendingFilteredReceived=72 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xfa524974f2cd62098d29cb340d89d9a850fd79961e14cf39a3f796334e838b7a src=mev-share
+[searcher/live] 0xfa524974 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xfa524974 Transfer: token=0xdac17f95 from=0xc199feb7 to=0xb5db4cda
+[searcher/live] 0xfa524974 token-index hit, trying RPC fetch
+[searcher/live] 0xfa524974 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xfa524974 end-to-end 479ms
+[searcher/live] counters hints=169 impacts=35 opportunities=13 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=77 pendingFilteredReceived=72 mempoolOpportunitySeen=13 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8e9c9046fd7e46888d05116a0a7ebca314ef0099d0e4d2afc7ff29dcff30c5ad src=mempool
+[searcher/live] state update block=25423325 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423325 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 241ms
+[pool-updater] ticks block=25423325 seeded=1 1325ms
+[searcher/live] detector: 1 opportunities — found in 15863ms (match=3ms fork=24ms prep=15828ms detect=8ms total=15863ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6 0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x8e9c9046 end-to-end 15874ms
+[searcher/live] counters hints=170 impacts=36 opportunities=14 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=77 pendingFilteredReceived=72 mempoolOpportunitySeen=14 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xa92feca75fda705655ef8aa62b90714adcf567e4aa807147fbec5684e00217dc src=mev-share
+[searcher/live] 0xa92feca7 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xa92feca7 Transfer: token=0xdac17f95 from=0x684ff5d8 to=0xc9abcaa8
+[searcher/live] 0xa92feca7 token-index hit, trying RPC fetch
+[searcher/live] 0xa92feca7 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xa92feca7 end-to-end 774ms
+[searcher/live] counters hints=171 impacts=36 opportunities=14 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=77 pendingFilteredReceived=72 mempoolOpportunitySeen=14 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0x9c42b7d5ff314ac58ec22199aa46f3caf83d5e29258c349115f505caa0b4c928 src=mempool
+[searcher/live] MEV-Share SSE connected
+[searcher/live] 0x9c42b7d5 skip: victim apply failed: 0x9c42b7d5ff314ac58ec22199aa46f3caf83d5e29258c349115f505caa0b4c928
+[searcher/live] 0x9c42b7d5 end-to-end 4952ms
+[searcher/live] counters hints=172 impacts=36 opportunities=14 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=78 pendingFilteredReceived=73 mempoolOpportunitySeen=14 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x1d727ad2808cb7ef62c9e94164f8b1af280961c4e0a61436591d377b262138c0 src=mev-share
+[searcher/live] 0x1d727ad2 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x1d727ad2 Transfer: token=0xdac17f95 from=0x5c565922 to=0x1fc13291
+[searcher/live] 0x1d727ad2 token-index hit, trying RPC fetch
+[searcher/live] 0x1d727ad2 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x1d727ad2 end-to-end 462ms
+[searcher/live] counters hints=173 impacts=36 opportunities=14 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=78 pendingFilteredReceived=73 mempoolOpportunitySeen=14 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x925354654c0fbfdd5ec05d0f2980616a6039dcea43907ed545c36188444abccc src=mempool
+[searcher/live] 0x92535465 skip: victim apply failed: 0x925354654c0fbfdd5ec05d0f2980616a6039dcea43907ed545c36188444abccc
+[searcher/live] 0x92535465 end-to-end 1189ms
+[searcher/live] counters hints=174 impacts=36 opportunities=14 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=78 pendingFilteredReceived=73 mempoolOpportunitySeen=14 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc27279e89d854854990cba8f1d61a3879e2cc61994d8ce69d6f741a334e76a68 src=mev-share
+[searcher/live] 0xc27279e8 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xc27279e8 Transfer: token=0xdac17f95 from=0xbc4e3963 to=0x79bdf462
+[searcher/live] 0xc27279e8 token-index hit, trying RPC fetch
+[searcher/live] 0xc27279e8 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xc27279e8 end-to-end 461ms
+[searcher/live] counters hints=175 impacts=36 opportunities=14 plans=6 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=1 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=78 pendingFilteredReceived=73 mempoolOpportunitySeen=14 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xb422f80cd45d884727fd9d84bb22b8f3242c0e272572e75d2c895a3697ff6623 src=mempool
+[searcher/live] state update block=25423326 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423326 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 243ms
+[pool-updater] ticks block=25423326 seeded=1 442ms
+[searcher/live] detector: 1 opportunities — found in 9273ms (match=3ms fork=23ms prep=9240ms detect=7ms total=9273ms)
+[searcher/live] planner: 20 candidate plans
+[searcher/live] opportunity expired (9285ms > TTL 5000ms) — never reached solver. stage breakdown: match=3ms fork=23ms prep=9240ms detect=7ms plan=11ms total=9285ms
+[searcher/live] 0xb422f80c end-to-end 9285ms
+[searcher/live] counters hints=176 impacts=37 opportunities=15 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=80 pendingFilteredReceived=75 mempoolOpportunitySeen=15 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x7f21f217b2ba16cde0a6b01072a275d3b3fe02b3b0379e6c056919e78c6defbc src=mev-share
+[searcher/live] 0x7f21f217 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x7f21f217 log: addr=0x1cf53fd9 t0=0xfb44433a
+[searcher/live] 0x7f21f217 skip: no matching graph pool
+[searcher/live] 0x7f21f217 end-to-end 1ms
+[searcher/live] counters hints=177 impacts=37 opportunities=15 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=80 pendingFilteredReceived=75 mempoolOpportunitySeen=15 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xec29f659ca987ffb7f9026102e6bbfc4673ce1b6e9ea41a35774510ee3b61930 src=mempool
+[searcher/live] state update block=25423327 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423327 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/5 444ms
+[pool-updater] ticks block=25423327 seeded=1 515ms
+[searcher/live] state update block=25423328 reason=block recent=6/24 pinned=8/8 watched=14
+[searcher/live] detector: 1 opportunities — found in 12998ms (match=1ms fork=24ms prep=12963ms detect=10ms total=12998ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6 0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0xec29f659 end-to-end 13007ms
+[searcher/live] counters hints=178 impacts=38 opportunities=16 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=81 pendingFilteredReceived=76 mempoolOpportunitySeen=16 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xcd38299f2dc45a825df11610b2a8aaefa6de27ee4d2a9ce7484d500510a316e4 src=mev-share
+[searcher/live] 0xcd38299f hint has 10 logs (batch)
+[searcher/live] 0xcd38299f token-index hit, trying RPC fetch
+[pool-updater] block=25423328 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 254ms
+[pool-updater] ticks block=25423328 seeded=1 368ms
+[searcher/live] 0xcd38299f skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xcd38299f end-to-end 1198ms
+[searcher/live] counters hints=179 impacts=38 opportunities=16 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=81 pendingFilteredReceived=76 mempoolOpportunitySeen=16 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xfc3617833d3e7db93bdcf7c6a22cf9b5ee2c45ea78a23640429f35fe3f223647 src=mempool
+[searcher/live] 0xfc361783 skip: victim apply failed: 0xfc3617833d3e7db93bdcf7c6a22cf9b5ee2c45ea78a23640429f35fe3f223647
+[searcher/live] 0xfc361783 end-to-end 1257ms
+[searcher/live] counters hints=180 impacts=38 opportunities=16 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=81 pendingFilteredReceived=76 mempoolOpportunitySeen=16 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc257aa5a28501bc4a2aad8d7330f0e177b433069f313bf84e327a171dfefdf02 src=mev-share
+[searcher/live] 0xc257aa5a log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xc257aa5a Transfer: token=0xdac17f95 from=0x8c8d7c46 to=0x75d02780
+[searcher/live] 0xc257aa5a token-index hit, trying RPC fetch
+[searcher/live] 0xc257aa5a skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xc257aa5a end-to-end 2969ms
+[searcher/live] counters hints=181 impacts=38 opportunities=16 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=81 pendingFilteredReceived=76 mempoolOpportunitySeen=16 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x583fadebf226b011002ea46be93424dff3d225185b9f8aff7d9c1d397d9bc3bf src=mempool
+[searcher/live] state update block=25423329 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423329 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 2723ms
+[searcher/live] detector: 1 opportunities — found in 12379ms (match=1ms fork=21ms prep=12348ms detect=9ms total=12379ms)
+[planner] 0 candidates start=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 profit=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 impact=0x3b4E4C911CF0596EeBEeb9FD1A27537FB43eDF3F 0x2d8C2e053cBb4c9Aa416902e78168Fd4770e7712->0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=4974/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=4973/4974 raw=93 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x583fadeb end-to-end 12390ms
+[searcher/live] counters hints=182 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=83 pendingFilteredReceived=78 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc2e07b36fd3b29a9f917a61f2081751419cbb814a80bc87a2cab3847557f808a src=mev-share
+[searcher/live] 0xc2e07b36 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xc2e07b36 Transfer: token=0xeeeeeeee from=0x047223b0 to=0xdd7c8f2a
+[searcher/live] 0xc2e07b36 skip: no matching graph pool
+[searcher/live] 0xc2e07b36 end-to-end 1ms
+[searcher/live] counters hints=183 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=83 pendingFilteredReceived=78 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x032d969873e569d4b401c6bd0b33137fcb38726cc9ed2482a206768b8df3c11e src=mempool
+[pool-updater] ticks block=25423329 seeded=1 3943ms
+[searcher/live] 0x032d9698 no matching graph pool
+[searcher/live] 0x032d9698 end-to-end 6786ms
+[searcher/live] counters hints=184 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=84 pendingFilteredReceived=79 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xdced933e35985ba7b39dfe32739c7730fad2341a600a12d9f22ae05d2b0a6a85 src=mev-share
+[searcher/live] 0xdced933e log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xdced933e Transfer: token=0xa0b86991 from=0xebf6c883 to=0x5413e7fb
+[searcher/live] 0xdced933e token-index hit, trying RPC fetch
+[discovery] scanned 25 blocks: 264 active pools, taking top 200
+[searcher/live] 0xdced933e skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xdced933e end-to-end 1123ms
+[searcher/live] counters hints=185 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=84 pendingFilteredReceived=79 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xcf19539899ba6c0da41444fba0249535466b3c6d2f717d8b238592ab8853837c src=mempool
+[searcher/live] state update block=25423330 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423330 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 299ms
+[pool-updater] ticks block=25423330 seeded=1 420ms
+[token-graph] built 202 edges from 99 pools
+[searcher/live] refresh: +99 pools, +202 edges (total 5176)
+[searcher/live] state update block=25423331 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423331 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 245ms
+[pool-updater] ticks block=25423331 seeded=1 447ms
+[searcher/live] 0xcf195398 no matching graph pool
+[searcher/live] 0xcf195398 end-to-end 14726ms
+[searcher/live] counters hints=186 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=85 pendingFilteredReceived=80 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x43f0f23b8fe01360f40086230ff10f73ba326dd05f4a6ca3c579674283d871f2 src=mev-share
+[searcher/live] 0x43f0f23b log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x43f0f23b Transfer: token=0xdac17f95 from=0xa7ddeb09 to=0x4931ffcf
+[searcher/live] 0x43f0f23b token-index hit, trying RPC fetch
+[searcher/live] 0x43f0f23b skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x43f0f23b end-to-end 462ms
+[searcher/live] counters hints=187 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=85 pendingFilteredReceived=80 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x20bf6a46a1b065a1955d9e7cd1ccb95d7c4b5182eda8a8d302cf426d3c00c485 src=mempool
+[searcher/live] state update block=25423332 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423332 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 245ms
+[pool-updater] ticks block=25423332 seeded=1 1719ms
+[searcher/live] state update block=25423333 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423333 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 969ms
+[pool-updater] ticks block=25423333 seeded=1 697ms
+[searcher/live] 0x20bf6a46 skip: victim apply failed: 0x20bf6a46a1b065a1955d9e7cd1ccb95d7c4b5182eda8a8d302cf426d3c00c485
+[searcher/live] 0x20bf6a46 end-to-end 29388ms
+[searcher/live] counters hints=188 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=91 pendingFilteredReceived=86 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x9646566414845846ee6cbc0c8f28312914620fd01ea7bb6d4775f72e860ad6df src=mev-share
+[searcher/live] 0x96465664 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x96465664 Transfer: token=0xa0b86991 from=0x4bc7ee13 to=0xf532576e
+[searcher/live] 0x96465664 token-index hit, trying RPC fetch
+[searcher/live] 0x96465664 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x96465664 end-to-end 603ms
+[searcher/live] counters hints=189 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=91 pendingFilteredReceived=86 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0x5136a4b310e5d16b03e1275c2ed54ee76e6bc310d2a3fcd929df4c1b40947323 src=mempool
+[searcher/live] state update block=25423334 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423334 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 248ms
+[searcher/live] 0x5136a4b3 skip: victim apply failed: 0x5136a4b310e5d16b03e1275c2ed54ee76e6bc310d2a3fcd929df4c1b40947323
+[searcher/live] 0x5136a4b3 end-to-end 1954ms
+[searcher/live] counters hints=190 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=92 pendingFilteredReceived=87 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4cf1ba76e41dd7402b5b149e5803c86f2da266196664acffc9e0c5868fbde1a4 src=mempool
+[pool-updater] ticks block=25423334 seeded=1 444ms
+[searcher/live] MEV-Share SSE connected
+[searcher/live] 0x4cf1ba76 skip: victim apply failed: 0x4cf1ba76e41dd7402b5b149e5803c86f2da266196664acffc9e0c5868fbde1a4
+[searcher/live] 0x4cf1ba76 end-to-end 1446ms
+[searcher/live] counters hints=191 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=92 pendingFilteredReceived=87 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4bce1d9a94943bc0ce770c62bea9fdc4bc8446f3fcb950fb3a3e9f6537bce4b2 src=mev-share
+[searcher/live] 0x4bce1d9a log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x4bce1d9a Transfer: token=0xdac17f95 from=0x040d6d59 to=0xc7128596
+[searcher/live] 0x4bce1d9a token-index hit, trying RPC fetch
+[searcher/live] 0x4bce1d9a skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x4bce1d9a end-to-end 1032ms
+[searcher/live] counters hints=192 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=92 pendingFilteredReceived=87 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x3d241eae6f06134979ac27db54bed260ec19fbe301e4cecee6206c024e128b14 src=mempool
+[searcher/live] state update block=25423335 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423335 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 256ms
+[pool-updater] ticks block=25423335 seeded=1 455ms
+[searcher/live] state update block=25423336 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423336 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 291ms
+[pool-updater] ticks block=25423336 seeded=1 354ms
+[searcher/live] state update block=25423337 reason=block recent=6/24 pinned=8/8 watched=14
+[pool-updater] block=25423337 seeded v2=1 v3=7 watched=10/32 tickRefresh=1/4 236ms
+[pool-updater] ticks block=25423337 seeded=1 326ms
+[searcher/live] 0x3d241eae skip: victim apply failed: 0x3d241eae6f06134979ac27db54bed260ec19fbe301e4cecee6206c024e128b14
+[searcher/live] 0x3d241eae end-to-end 31958ms
+[searcher/live] counters hints=193 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=92 pendingFilteredReceived=87 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xdba6c486a067b2fb89b03723b6db6599471c052bdf4e89f49ce2ccb527af6ca6 src=mev-share
+[searcher/live] 0xdba6c486 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xdba6c486 Transfer: token=0xdac17f95 from=0x96d0471a to=0x4797382d
+[searcher/live] 0xdba6c486 token-index hit, trying RPC fetch
+[searcher/live] 0xdba6c486 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xdba6c486 end-to-end 471ms
+[searcher/live] counters hints=194 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=93 pendingFilteredReceived=88 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xce00061b9b9e08d18e1e96a0df62ff644a9cc906fa144c9dd8791de36048efe8 src=mempool
+[searcher/live] 0xce00061b skip: victim apply failed: 0xce00061b9b9e08d18e1e96a0df62ff644a9cc906fa144c9dd8791de36048efe8
+[searcher/live] 0xce00061b end-to-end 1113ms
+[searcher/live] counters hints=195 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=93 pendingFilteredReceived=88 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xfe19b5ad3c969beb1d1a78f51475978f9993457deb8308ce2570db37ee8483e5 src=mev-share
+[searcher/live] 0xfe19b5ad log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xfe19b5ad Transfer: token=0xa0b86991 from=0x6872b663 to=0xf390201c
+[searcher/live] 0xfe19b5ad token-index hit, trying RPC fetch
+[searcher/live] 0xfe19b5ad skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xfe19b5ad end-to-end 457ms
+[searcher/live] counters hints=196 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=93 pendingFilteredReceived=88 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x71bcc834a729146ebff6c39d9df761ecf5bbed8bf9c3497fcbb4693645eaae90 src=mempool
+[searcher/live] 0x71bcc834 skip: victim apply failed: 0x71bcc834a729146ebff6c39d9df761ecf5bbed8bf9c3497fcbb4693645eaae90
+[searcher/live] 0x71bcc834 end-to-end 2400ms
+[searcher/live] counters hints=197 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=94 pendingFilteredReceived=89 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xe59013a83dfa2a0dfc55489eeeedcace0afff5a9d7b0aa0d8c5aa3badfbe78fa src=mev-share
+[searcher/live] 0xe59013a8 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xe59013a8 log: addr=0xec53bf91 t0=0x8c5be1e5
+[searcher/live] 0xe59013a8 skip: no matching graph pool
+[searcher/live] 0xe59013a8 end-to-end 3ms
+[searcher/live] counters hints=198 impacts=39 opportunities=17 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=94 pendingFilteredReceived=89 mempoolOpportunitySeen=17 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x287333d346741f30acc6f43ccd1471e6d45d803f18bf52bc72853c1644f4e69b src=mempool
+[searcher/live] state update block=25423338 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423338 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/3 522ms
+[pool-updater] ticks block=25423338 seeded=1 380ms
+[pool-impact] swap-only decoded: pool=0x369f3cb2 0x5832Fbf9→0xC02aaA39 amt=35797993887
+[searcher/live] detector: 1 opportunities — found in 8555ms (match=1ms fork=26ms prep=7717ms detect=811ms total=8555ms)
+[planner] 0 candidates start=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 profit=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 impact=0x369f3cb24f7ac80d05fa09886e994047f452f2bd 0x5832fbf930dacbdd9a1697dca7b3c518277ff0b0->0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 | skip=no_borrowable_token_or_no_path | flash-lend-swap-repay: edges=5176/5176 raw=105 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0 | flash-swap-repay: edges=5175/5176 raw=105 focused=0 prunedRoundtrip=7 duplicates=0 constraintPass=0 rotatedPlans=0 noBorrowable=0
+[searcher/live] planner: 0 candidate plans
+[searcher/live] 0x287333d3 end-to-end 8566ms
+[searcher/live] counters hints=199 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf845cafdcbc8a2fb2bb167b807faf6503fbc18ef28967c21059ef80397f63c32 src=mev-share
+[searcher/live] 0xf845cafd log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xf845cafd Transfer: token=0xa0b86991 from=0xc9f5296e to=0x973e801f
+[searcher/live] 0xf845cafd token-index hit, trying RPC fetch
+[searcher/live] 0xf845cafd skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xf845cafd end-to-end 478ms
+[searcher/live] counters hints=200 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xd1686bd7465d3526674a671cd4a1863af7fa845300c735fcace6eb796ce795b1 src=mempool
+[searcher/live] 0xd1686bd7 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2284hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xd1686bd7 end-to-end 4189ms
+[searcher/live] counters hints=201 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xcc9df547bebc8995dbd36f67f6601dc8339af1fcb324d5a050ec50d8c2066c63 src=mev-share
+[searcher/live] 0xcc9df547 hint has 6 logs (batch)
+[searcher/live] 0xcc9df547 token-index hit, trying RPC fetch
+[searcher/live] 0xcc9df547 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xcc9df547 end-to-end 2084ms
+[searcher/live] counters hints=202 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xf458c35483d5ea8177bffcb3b9ead0e29460d7897a993a55ce5cee3601520625 src=mempool
+[searcher/live] 0xf458c354 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2796hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0xf458c354 end-to-end 824ms
+[searcher/live] counters hints=203 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x007b7dbaffd7c70d7b338cec9deb29f9b83dbb6f1b33e2c2c1ca9cf1ce546872 src=mev-share
+[searcher/live] 0x007b7dba log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x007b7dba Transfer: token=0xeeeeeeee from=0xdfaa7532 to=0xbdfafffb
+[searcher/live] 0x007b7dba skip: no matching graph pool
+[searcher/live] 0x007b7dba end-to-end 2ms
+[searcher/live] counters hints=204 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x22b09e69ca3313c3ef5244c4dace844f7c541cf129e3212957fee602d2c46244 src=mempool
+[searcher/live] 0x22b09e69 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:736hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x22b09e69 end-to-end 342ms
+[searcher/live] counters hints=205 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=96 pendingFilteredReceived=91 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x521a265fc7362ffd82dff36d52ab641efc2f3b0fbef9bb1792509c74ba2b5ce6 src=mev-share
+[searcher/live] 0x521a265f log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x521a265f Transfer: token=0xa0b86991 from=0x2744dfd9 to=0xd4fff8c6
+[searcher/live] 0x521a265f token-index hit, trying RPC fetch
+[searcher/live] 0x521a265f skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x521a265f end-to-end 2972ms
+[searcher/live] counters hints=206 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=97 pendingFilteredReceived=92 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4b4447ca119a522b0a4ca41090ae17e52e8e12cc873cb0afbf61e7fd19c32e91 src=mempool
+[searcher/live] state update block=25423339 reason=block recent=0/24 pinned=8/8 watched=8
+[searcher/live] 0x4b4447ca skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2798hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x4b4447ca end-to-end 633ms
+[searcher/live] counters hints=207 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=97 pendingFilteredReceived=92 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xac02cf8353f0a2f8e005173c23b21960bf69f6523672ec35c1aee4e1337ea666 src=mev-share
+[searcher/live] 0xac02cf83 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0xac02cf83 Transfer: token=0xdac17f95 from=0x26f7c47f to=0x09f96d8d
+[searcher/live] 0xac02cf83 token-index hit, trying RPC fetch
+[searcher/live] 0xac02cf83 skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xac02cf83 end-to-end 3617ms
+[searcher/live] counters hints=208 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[pool-updater] block=25423339 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/2 3675ms
+[searcher/live] hint tx=0xb9a742bb99af4eb8468685419a1f508cd57c308b1a1987ecbf6277159132a4ef src=mempool
+[pool-updater] ticks block=25423339 seeded=1 2862ms
+[searcher/live] 0xb9a742bb no matching graph pool
+[searcher/live] 0xb9a742bb end-to-end 7015ms
+[searcher/live] counters hints=209 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x429f3bdcbc7c51fdb8bf073f4a1d91bca60208ccfe70eba5d7efee7a66de9f4a src=mev-share
+[searcher/live] 0x429f3bdc log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x429f3bdc Transfer: token=0xdac17f95 from=0x7d3da174 to=0xdd3d72c5
+[searcher/live] 0x429f3bdc token-index hit, trying RPC fetch
+[searcher/live] 0x429f3bdc skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x429f3bdc end-to-end 782ms
+[searcher/live] counters hints=210 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x71e44460651a71b35e1c87122e30cfe41450364b53c910d759a0271733918c69 src=mempool
+[searcher/live] 0x71e44460 skip: nonce has already been used (transaction="<REDACTED_HEX_BLOB:2798hex>", info={ "error": { "code": -32003, "message": "nonce too low" } }, code=NONCE_EXPIRED, version=6.16.0)
+[searcher/live] 0x71e44460 end-to-end 336ms
+[searcher/live] counters hints=211 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x229dab4ebee1770fd888a95113cbcd631403e3443eda27f8a4d1fdbafa97afb9 src=mev-share
+[searcher/live] 0x229dab4e log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x229dab4e Transfer: token=0xa0b86991 from=0x8a7f3922 to=0x0b526100
+[searcher/live] 0x229dab4e token-index hit, trying RPC fetch
+[searcher/live] 0x229dab4e skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0x229dab4e end-to-end 779ms
+[searcher/live] counters hints=212 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4934194ab86c7bc0e2ec28d2fb79e50a1182b84ba34b3be5be51bc471011be86 src=mempool
+[searcher/live] state update block=25423340 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423340 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 402ms
+[pool-updater] ticks block=25423340 seeded=1 452ms
+[searcher/live] 0x4934194a no matching graph pool
+[searcher/live] 0x4934194a end-to-end 7640ms
+[searcher/live] counters hints=213 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0xc68fbf9df66d2f252ccd1b8ccaa8496cdeb118c1d59f917fa73f73975020c85c src=mev-share
+[searcher/live] 0xc68fbf9d hint has 15 logs (batch)
+[searcher/live] 0xc68fbf9d token-index hit, trying RPC fetch
+[searcher/live] 0xc68fbf9d skip: tx not available from RPC (private MEV-Share tx)
+[searcher/live] 0xc68fbf9d end-to-end 463ms
+[searcher/live] counters hints=214 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8b0158f0c7d5da91345512709fe5fe79a1d29bac92e247692672a3dd4fdebb8f src=mempool
+[searcher/live] 0x8b0158f0 skip: victim apply failed: 0x8b0158f0c7d5da91345512709fe5fe79a1d29bac92e247692672a3dd4fdebb8f
+[searcher/live] 0x8b0158f0 end-to-end 1896ms
+[searcher/live] counters hints=215 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x43c0c3fa5ed561631bbb82b04c383e0fe93089c5b1908040383f54b8ba8692d3 src=mev-share
+[searcher/live] 0x43c0c3fa hint has 7 logs (batch)
+[searcher/live] 0x43c0c3fa skip: no matching graph pool
+[searcher/live] 0x43c0c3fa end-to-end 3ms
+[searcher/live] counters hints=216 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=98 pendingFilteredReceived=93 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x4c215100537b8753d1f67c60202f6b811e26edf1bb1c0a51a904994237525181 src=mempool
+[searcher/live] state update block=25423341 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423341 seeded v2=0 v3=3 watched=5/32 tickRefresh=0/0 227ms
+[searcher/live] state update block=25423342 reason=block recent=0/24 pinned=8/8 watched=8
+[pool-updater] block=25423342 seeded v2=0 v3=3 watched=5/32 tickRefresh=1/1 234ms
+[searcher/live] 0x4c215100 no matching graph pool
+[searcher/live] 0x4c215100 end-to-end 17042ms
+[searcher/live] counters hints=217 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=100 pendingFilteredReceived=95 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x83ed3e89e668496ca7ff996a3fd2625a33873fe6efd3344d981b996c56a09896 src=mev-share
+[searcher/live] 0x83ed3e89 log: addr=0xf78bf0da t0=0xb9c5ff08
+[searcher/live] 0x83ed3e89 Transfer: token=0xeeeeeeee from=0x5b861cad to=0x0067cc24
+[searcher/live] 0x83ed3e89 skip: no matching graph pool
+[searcher/live] 0x83ed3e89 end-to-end 2ms
+[searcher/live] counters hints=218 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=100 pendingFilteredReceived=95 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] SSE reconnect: terminated
+[searcher/live] hint tx=0x9883c46c5875664c2b9dc447e6480370b58ea163304658624f516d44c537c772 src=mempool
+[pool-updater] ticks block=25423342 seeded=1 480ms
+[searcher/live] 0x9883c46c skip: victim apply failed: 0x9883c46c5875664c2b9dc447e6480370b58ea163304658624f516d44c537c772
+[searcher/live] 0x9883c46c end-to-end 1587ms
+[searcher/live] counters hints=219 impacts=40 opportunities=18 plans=26 solverEntered=0 solverSuccess=0 revmSimSuccess=0 rpcVerifySuccess=0 simSuccess=0 submitAttempts=0 accepted=0 expiredBeforeSolver=2 quoteTimeouts=0 simReverts=0 finalVerifyFailed=0 finalVerifySkipped=0 missingState=0 revmErrors=0 pendingReceived=100 pendingFilteredReceived=95 mempoolOpportunitySeen=18 mempoolToSim=0 cuProxyRpcCalls=0
+[searcher/live] hint tx=0x8cfb237b22f97dc0f90a65114a0944d9f89d721a18158121a08afc7a506e2b2a src=mempool
+[searcher/live] MEV-Share SSE connected

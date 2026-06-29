@@ -1,5 +1,6 @@
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { applyVictimSwapLocally } from "../solver/victim-apply.js";
+import { curvePlainGetDy } from "../solver/curve-math.js";
 import { v3SwapExactInput, v3SwapToState, type V3PoolState } from "../solver/v3-math.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolImpact } from "../detector/pool-impact.js";
@@ -40,7 +41,7 @@ async function testV2VictimApply(): Promise<void> {
     matchedAdapterId: "univ2-swap",
   };
 
-  const applied = applyVictimSwapLocally(cache, impact, BLOCK);
+  const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: v2 victim apply should succeed");
   assert(applied.amountOut === expectedVictimOut, `v2 victim out ${applied.amountOut} != ${expectedVictimOut}`);
 
@@ -95,7 +96,7 @@ async function testV3VictimApply(): Promise<void> {
     matchedAdapterId: "univ3-swap",
   };
 
-  const applied = applyVictimSwapLocally(cache, impact, BLOCK);
+  const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: v3 victim apply should succeed");
   assert(applied.amountOut === expected.amountOut, `v3 victim out ${applied.amountOut} != ${expected.amountOut}`);
 
@@ -107,6 +108,55 @@ async function testV3VictimApply(): Promise<void> {
   console.log("[victim-apply] v3 post-impact cache: PASS");
 }
 
+async function testCurveVictimApply(): Promise<void> {
+  const cache = new PoolStateCache();
+  const plain = {
+    A: 4000n,
+    fee: 1_000_000n,
+    balances: [2_000_000n * 10n ** 18n, 2_000_000n * 10n ** 18n],
+    rates: [10n ** 18n, 10n ** 18n],
+  };
+  cache.seedCurve({
+    kind: "curve",
+    pool: POOL,
+    curveKind: "plain",
+    coins: [TOKEN0, TOKEN1],
+    plain,
+    blockNumber: BLOCK,
+  });
+
+  const victimAmount = 10_000n * 10n ** 18n;
+  const expectedVictimOut = curvePlainGetDy(plain, 0, 1, victimAmount);
+  const impact: PoolImpact = {
+    pool: POOL,
+    tokenIn: TOKEN0,
+    tokenOut: TOKEN1,
+    amountIn: victimAmount,
+    matchedAdapterId: "curve-exchange-plain",
+  };
+
+  const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
+  if (!applied) throw new Error("FAIL: curve victim apply should succeed");
+  assert(
+    applied.amountOut === expectedVictimOut,
+    `curve victim out ${applied.amountOut} != ${expectedVictimOut}`,
+  );
+
+  cache.beginHint(BLOCK, { postImpact: [applied.postImpact] });
+  const followAmount = 5_000n * 10n ** 18n;
+  const postPlain = {
+    ...plain,
+    balances: [
+      plain.balances[0] + victimAmount,
+      plain.balances[1] - expectedVictimOut,
+    ],
+  };
+  const expectedFollowOut = curvePlainGetDy(postPlain, 0, 1, followAmount);
+  const followOut = await cache.quoteCurve(noState, POOL, TOKEN0, TOKEN1, followAmount);
+  assert(followOut === expectedFollowOut, `curve post-state quote ${followOut} != ${expectedFollowOut}`);
+  console.log("[victim-apply] curve post-impact cache: PASS");
+}
+
 function quoteV2(reserveIn: bigint, reserveOut: bigint, amountIn: bigint): bigint {
   const amountInWithFee = amountIn * 997n;
   return (amountInWithFee * reserveOut) / (reserveIn * 1000n + amountInWithFee);
@@ -115,7 +165,8 @@ function quoteV2(reserveIn: bigint, reserveOut: bigint, amountIn: bigint): bigin
 async function main(): Promise<void> {
   await testV2VictimApply();
   await testV3VictimApply();
-  console.log("victim-apply PASS (2/2)");
+  await testCurveVictimApply();
+  console.log("victim-apply PASS (3/3)");
 }
 
 main().catch((err) => {

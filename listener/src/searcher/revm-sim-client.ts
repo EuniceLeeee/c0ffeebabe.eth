@@ -10,23 +10,27 @@ export interface OverlayPreCall {
   to: string;
   calldata: string;
   gasLimit?: number;
+  allowanceSlot?: number;
 }
 
 export interface OverlayTokenDeal {
   token: string;
   to: string;
   amount: string;
+  balanceSlot?: number;
 }
 
 export interface TokenBalanceHint {
   token: string;
   account: string;
+  balanceSlot?: number;
 }
 
 export interface TokenAllowanceHint {
   token: string;
   owner: string;
   spender: string;
+  allowanceSlot?: number;
 }
 
 export interface OverlayStateOverride {

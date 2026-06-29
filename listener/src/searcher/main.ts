@@ -4,12 +4,14 @@ import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector } from "./detector/detector.js";
+import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import {
   buildTokenGraph,
   buildTokenIndex,
   POOL_REGISTRY,
+  type PoolEntry,
   type TokenEdge,
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
@@ -25,6 +27,7 @@ import {
 } from "./pool-universe.js";
 import { AnvilSolver } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
+import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
 import { PoolStateCache } from "./solver/pool-state-cache.js";
 import { PoolStateUpdater } from "./solver/pool-state-updater.js";
 import { applyVictimSwapLocally, type LocalVictimApplyResult } from "./solver/victim-apply.js";
@@ -44,6 +47,7 @@ import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
 import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js";
+import type { ResolvedPlanNode } from "../shared/types/plan.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
@@ -59,6 +63,10 @@ interface HintLog {
 
 interface LiveConfig {
   rpcUrl: string;
+  /** WebSocket URL for public mempool pending-tx subscription (route B). */
+  wsUrl: string;
+  /** Subscribe to the public mempool as a victim source (route B). */
+  enableMempool: boolean;
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
   botvmAddress: string;
@@ -93,12 +101,81 @@ interface LiveConfig {
   poolUniverseMinScore: number;
   recordLiveFixtures: boolean;
   liveFixtureDir: string;
+  /** Phantom-profit guard: reject final profit > this many bps of the flash
+   *  notional. Real backruns are basis points; 100%+ means a bad overlay. */
+  maxProfitBpsOfFlash: bigint;
+  /** Fraction of expected profit to bribe the proposer via priority fee. */
+  bribeBps: number;
+  /** ETH/USD price for valuing stablecoin profit as an ETH bribe. */
+  ethUsd: number;
+  /** Only submit when profitETH − gas − bribe ≥ minNetEth (net +EV gate). */
+  evGate: boolean;
+  /** Minimum kept profit (ETH wei) after gas + bribe, for the EV gate. */
+  minNetEth: bigint;
+  /** Worst-case base-fee multiplier (×10) for the EV gate gas estimate AND the
+   *  submitter's maxFeePerGas cap. 20 = 2.0× current base fee. */
+  gasBufferMultX10: number;
+  /** Discount applied to simulated profit before the EV gate AND bribe sizing,
+   *  in bps. Scale-invariant margin for sim-vs-real error; calibrate from the
+   *  reconciliation of landed txs. 2000 = trust 80% of sim profit. */
+  profitHaircutBps: number;
+  /** Allow broadcasting hash-only (synthetic-overlay) bundles. Default false:
+   *  only real-victim (mempool/rawTx) bundles are submitted (Fix A). */
+  allowHashOnlySubmit: boolean;
 }
 
 interface HintEnvelope {
   payload: unknown;
   hashes: string[];
+  /** Source tag for logging. MEV-Share hints are "mev-share" (default). */
+  source?: "mev-share" | "mempool";
+  /** For mempool victims: the already-fetched full tx + raw signed bytes, so
+   *  handleHint skips MEV-Share log matching and applies the rawTx directly. */
+  prefetched?: { tx: ethers.TransactionResponse; rawTx: string };
 }
+
+// Profit-token → ETH valuation for sizing the proposer bribe (route B). WETH is
+// 1:1; the major stables convert via ethUsd; anything else returns 0 (no full
+// bribe — we fall back to the default priority fee for exotic profit tokens).
+const WETH_ADDR = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+const STABLE_DECIMALS = new Map<string, number>([
+  ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6], // USDC
+  ["0xdac17f958d2ee523a2206206994597c13d831ec7", 6], // USDT
+  ["0x6b175474e89094c44da98b954eedeac495271d0f", 18], // DAI
+]);
+
+function valueInEth(token: string, amount: bigint, ethUsd: number): bigint {
+  const t = token.toLowerCase();
+  if (t === WETH_ADDR) return amount;
+  const decimals = STABLE_DECIMALS.get(t);
+  if (decimals !== undefined && ethUsd > 0) {
+    // amount (stable units) → ETH wei: amount/10^dec USD ÷ ethUsd × 1e18
+    return (amount * 10n ** 18n) / (10n ** BigInt(decimals) * BigInt(Math.round(ethUsd)));
+  }
+  return 0n;
+}
+
+// Major DEX routers/aggregators — mempool server-side filter (route B). A
+// pending tx is only worth forking when tx.to is a tracked pool OR one of these
+// entrypoints; the fork receipt then reveals which pool was actually impacted.
+const MEMPOOL_ROUTER_ADDRESSES = new Set<string>(
+  [
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d", // UniV2 Router02
+    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45", // UniV3 SwapRouter02
+    "0xe592427a0aece92de3edee1f18e0157c05861564", // UniV3 SwapRouter
+    "0x66a9893cc07d91d95644aedd05d03f95e1dba8af", // Uniswap Universal Router (v2)
+    "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad", // Uniswap Universal Router (v1)
+    "0x000000000004444c5dc75cb358380d2e3de08a90", // Uniswap v4 PoolManager
+    "0xba12222222228d8ba445958a75a0704d566bf2c8", // Balancer Vault
+    "0x99a58482bd75cbab83b27ec03ca68ff489b5788f", // Curve Router
+    "0x16c6521dff6bab339122a0fe25a9116693265353", // Curve Router NG
+    "0x1111111254eeb25477b68fb85ed929f73a960582", // 1inch v5
+    "0x111111125421ca6dc452d289314280a0f8842a65", // 1inch v6
+    "0xdef1c0ded9bec7f1a1670819833240f027b25eff", // 0x Exchange Proxy
+    "0x6131b5fae19ea4f9d964eac0408e4408b66337b5", // KyberSwap MetaAggregator
+    "0x881d40237659c251811cec9c364ef91dc08d300c", // Metamask Swap Router
+  ].map((a) => a.toLowerCase()),
+);
 
 interface StageCounters {
   hints: number;
@@ -119,6 +196,11 @@ interface StageCounters {
   finalVerifySkipped: number;
   missingState: number;
   revmErrors: number;
+  pendingReceived: number;
+  pendingFilteredReceived: number;
+  mempoolOpportunitySeen: number;
+  mempoolToSim: number;
+  cuProxyRpcCalls: number;
 }
 
 function loadEnv(): void {
@@ -159,8 +241,14 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
   const quoteSafetyBps = BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
 
+  const wsUrl =
+    process.env.MAINNET_WS_URL ??
+    rpcUrl.replace(/^http(s?):\/\//, (_m, s) => (s ? "wss://" : "ws://"));
+
   return {
     rpcUrl,
+    wsUrl,
+    enableMempool: process.env.SEARCHER_ENABLE_MEMPOOL === "1",
     mevShareSseUrl: process.env.MEV_SHARE_SSE_URL ?? DEFAULT_MEV_SHARE_SSE_URL,
     liveBackend: parseLiveBackendKind(process.env.SEARCHER_LIVE_BACKEND ?? "rpc"),
     botvmAddress: ethers.getAddress(botvmAddress),
@@ -194,6 +282,14 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
+    maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
+    bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? "10000"),
+    ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
+    evGate: process.env.SEARCHER_EV_GATE === "1",
+    minNetEth: BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0"),
+    gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
+    profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
+    allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
   };
 }
 
@@ -212,8 +308,10 @@ async function main(): Promise<void> {
   planner.setMaxCandidates(maxCandidates);
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
+  const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
   planner.setMaxHops(maxHops);
   planner.setMaxPoolsPerToken(maxPoolsPerToken);
+  planner.setMaxRotationsPerPath(maxRotationsPerPath);
   const solver = new AnvilSolver();
   // Direct provider for v3 tick data — anvil-over-RPC is slow + wrong for TickLens.
   const poolStateCache = new PoolStateCache(provider);
@@ -230,7 +328,12 @@ async function main(): Promise<void> {
   // need it to encode the victim overlay); default to rpc until then.
   let liveBackend: LiveStateBackend = rpcLiveBackend;
   const bundleRouter: BundleRouter = config.dryRun
-    ? new DryRunBundleRouter()
+    ? new DryRunBundleRouter(
+      config.wallet,
+      provider,
+      config.botvmAddress,
+      config.defaultGasUsed,
+    )
     : new ProductionBundleRouter(
       config.wallet,
       provider,
@@ -239,7 +342,18 @@ async function main(): Promise<void> {
     );
 
   console.log("[searcher/live] starting V5 MEV-Share searcher");
+  initEvents();
   console.log(`[searcher/live] sse=${config.mevShareSseUrl}`);
+  console.log(`[searcher/live] mempool=${config.enableMempool ? "enabled" : "disabled"}`);
+  console.log(
+    `[searcher/live] bribeBps=${config.bribeBps} maxProfitBpsOfFlash=${config.maxProfitBpsOfFlash} ethUsd=${config.ethUsd}`,
+  );
+  console.log(
+    `[searcher/live] evGate=${config.evGate ? "on" : "off"} minNetEth=${config.minNetEth} ` +
+      `gasBufferMult=${(config.gasBufferMultX10 / 10).toFixed(1)}x ` +
+      `profitHaircut=${(config.profitHaircutBps / 100).toFixed(0)}% ` +
+      `hashOnlySubmit=${config.allowHashOnlySubmit ? "ALLOWED" : "gated"}`,
+  );
   console.log(`[searcher/live] wallet=${config.wallet.address}`);
   console.log(`[searcher/live] botvm=${config.botvmAddress}`);
   console.log(`[searcher/live] liveBackend=${config.liveBackend}`);
@@ -247,7 +361,10 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] mode=${config.dryRun ? "dry-run" : "live-submit"}`);
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
   console.log(`[searcher/live] maxCandidates=${maxCandidates}`);
-  console.log(`[searcher/live] maxHops=${maxHops} maxPoolsPerToken=${maxPoolsPerToken}`);
+  console.log(
+    `[searcher/live] maxHops=${maxHops} maxPoolsPerToken=${maxPoolsPerToken} ` +
+      `maxRotationsPerPath=${maxRotationsPerPath}`,
+  );
   console.log(`[searcher/live] revmPrewarmRouteHops=${config.revmPrewarmRouteHops}`);
   console.log(
     `[searcher/live] stateUpdater=${config.stateUpdaterEnabled ? "enabled" : "disabled"} ` +
@@ -325,6 +442,28 @@ async function main(): Promise<void> {
   detector.setPoolAddressMap(allPoolMap);
   detector.setTokenQuery(mainnetBackend);
   planner.setGraph(graph);
+
+  // Dynamic flash-borrowability: rotate each backrun's start/flash token to one a
+  // provider actually holds (read from chain, no hardcoded allowlist). One batched
+  // refresh over all graph tokens; refreshed on a slow cadence below.
+  const flashTokens = [...tokenIndex.keys()];
+  const flashLiquidity = new FlashLiquidityCache(provider);
+  planner.setFlashLiquidity(flashLiquidity);
+  try {
+    await flashLiquidity.refresh(flashTokens);
+    const borrowableCount = flashTokens.filter((t) => flashLiquidity.borrowable(t) > 0n).length;
+    console.log(
+      `[searcher/live] flashLiquidity: ${borrowableCount}/${flashTokens.length} graph tokens borrowable`,
+    );
+  } catch (err) {
+    console.log(
+      `[searcher/live] flashLiquidity refresh failed (borrowability candidates will skip until refresh): ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const flashLiquidityTimer = setInterval(() => {
+    void flashLiquidity.refresh(flashTokens).catch(() => {/* keep last good snapshot */});
+  }, 120_000);
   console.log(
     `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
       `detection pool set: ${allPoolMap.size} addresses`,
@@ -509,11 +648,20 @@ async function main(): Promise<void> {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
   }
 
+  // Track the latest mined block from the WS newHeads stream so the per-hint hot
+  // path doesn't issue a redundant eth_blockNumber on every hint — the number is
+  // already being pushed to us. Seed once at startup; WS keeps it fresh.
+  const blockTracker = { latest: await provider.getBlockNumber() };
+  provider.on("block", (blockNumber: number) => {
+    if (blockNumber > blockTracker.latest) blockTracker.latest = blockNumber;
+  });
+
   const shutdown = () => {
     console.log("\n[searcher/live] shutting down");
     logStageCounters(counters);
     cancelScheduledWarm();
     clearInterval(refreshTimer);
+    clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();
     process.exit(0);
@@ -521,8 +669,18 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
+  const hintStream = config.enableMempool
+    ? (() => {
+        console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
+        return mergeHints(
+          mevShareHints(config.mevShareSseUrl),
+          mempoolHints(config.wsUrl, allPools, counters),
+        );
+      })()
+    : mevShareHints(config.mevShareSseUrl);
+
   try {
-    for await (const hint of mevShareHints(config.mevShareSseUrl)) {
+    for await (const hint of hintStream) {
       processedHints++;
       counters.hints++;
       if (busy) {
@@ -561,6 +719,7 @@ async function main(): Promise<void> {
             liveBackend,
             recentWarmPools,
             pinnedWarmTargets,
+            blockTracker,
           });
         } catch (err) {
           console.log(
@@ -578,7 +737,10 @@ async function main(): Promise<void> {
     }
   } finally {
     logStageCounters(counters);
+    cancelScheduledWarm();
     clearInterval(refreshTimer);
+    clearInterval(flashLiquidityTimer);
+    provider.removeAllListeners("block");
     state.stop();
   }
 }
@@ -608,6 +770,8 @@ interface HandleCtx {
   recentWarmPools: RecentWarmTracker;
   /** Pool targets already covered by the pinned warmer lane. */
   pinnedWarmTargets: Set<string>;
+  /** Latest mined block, kept fresh by the WS newHeads stream (no per-hint poll). */
+  blockTracker: { latest: number };
 }
 
 /**
@@ -627,7 +791,7 @@ async function handleHint(
   txHash: string,
   ctx: HandleCtx,
 ): Promise<void> {
-  console.log(`[searcher/live] hint tx=${txHash}`);
+  console.log(`[searcher/live] hint tx=${txHash} src=${hint.source ?? "mev-share"}`);
 
   // Per-stage timing from hint receipt — surfaces where the wall time goes
   // (fork setup vs state prep vs detect/plan) so even a no-solver expiry is
@@ -643,7 +807,9 @@ async function handleHint(
   const segStr = (): string =>
     `${Object.entries(seg).map(([k, v]) => `${k}=${v}ms`).join(" ")} total=${Date.now() - segStart}ms`;
 
-  const latestBlock = await ctx.provider.getBlockNumber();
+  // Use the WS-tracked block instead of polling eth_blockNumber every hint; fall
+  // back to a one-off poll only if the stream hasn't delivered a block yet.
+  const latestBlock = ctx.blockTracker.latest || (await ctx.provider.getBlockNumber());
   let anvilForkReady = false;
   const ensureHintFork = async (blockNumber: number, forceRefresh = false): Promise<void> => {
     if (anvilForkReady && !forceRefresh) return;
@@ -733,7 +899,42 @@ async function handleHint(
     });
   };
 
-  if (hintImpact) {
+  if (hint.prefetched) {
+    // ── Route B: public mempool victim — apply the prefetched rawTx on fork ──
+    // We already have the full tx + raw signed bytes, so skip MEV-Share log
+    // matching/RPC fetch and go straight to the Path-B apply. Submits via
+    // eth_sendBundle to all builders (rawTx present → submissionMode set below).
+    const { tx, rawTx: prefetchedRaw } = hint.prefetched;
+    if (tx.blockNumber !== null) {
+      throw new Error("mempool victim already mined");
+    }
+    submissionMode = "victim-bundle";
+    fixturePath = "rawTx";
+    rawTx = prefetchedRaw;
+
+    await ensureHintFork(latestBlock);
+    const appliedHash = await ctx.state.applyRawTx(rawTx);
+    if (appliedHash.toLowerCase() !== txHash.toLowerCase()) {
+      throw new Error(`local victim hash mismatch ${appliedHash}`);
+    }
+
+    await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+
+    const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
+    if (!receipt || receipt.status !== 1) {
+      throw new Error("local victim receipt missing or reverted");
+    }
+
+    eventFrom = tx.from;
+    eventNonce = tx.nonce;
+    eventTo = tx.to;
+    eventInput = tx.data;
+    eventLogs = receipt.logs.map((log) => ({
+      address: log.address,
+      topics: [...log.topics],
+      data: log.data,
+    }));
+  } else if (hintImpact) {
     ctx.counters.impacts++;
     countedHintImpact = true;
 
@@ -853,17 +1054,54 @@ async function handleHint(
   fixtureOpportunities = opportunities.length;
   fixtureImpact ??= poolImpactFromOpportunity(opportunities[0]);
   ctx.counters.opportunities += opportunities.length;
+  if (hint.source === "mempool") ctx.counters.mempoolOpportunitySeen += opportunities.length;
   console.log(
     `[searcher/live] detector: ${opportunities.length} opportunities — found in ${Date.now() - segStart}ms (${segStr()})`,
   );
-
   for (const opp of opportunities) {
-    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]);
-    segMark("plan");
-    ctx.counters.plans += plans.length;
-    fixturePlans += plans.length;
-    console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
-    if (plans.length === 0) continue;
+    const opportunityId = opportunityIdFor(eventBlockNumber, txHash, opp);
+    emitEvent({
+      type: "opportunity_seen",
+      opportunity_id: opportunityId,
+      target_block: eventBlockNumber,
+      victim_hash: txHash,
+      pool: opp.affectedPools?.[0],
+      tokens: opp.affectedTokens,
+    });
+  }
+
+	  for (const opp of opportunities) {
+	    const opportunityId = opportunityIdFor(eventBlockNumber, txHash, opp);
+	    const emitPipelineDropped = (
+	      stage: string,
+	      reason: string,
+	      error?: string,
+	      extra?: { pathId?: string; templateId?: string; plans?: number },
+	    ): void => {
+	      emitEvent({
+	        type: "pipeline_dropped",
+	        opportunity_id: opportunityId,
+	        target_block: eventBlockNumber,
+	        victim_hash: txHash,
+	        stage,
+	        reason,
+	        error: error ? error.slice(0, 240) : undefined,
+	        pool: opp.affectedPools?.[0],
+	        tokens: opp.affectedTokens,
+	        path_id: extra?.pathId,
+	        template_id: extra?.templateId,
+	        plans: extra?.plans,
+	      });
+	    };
+	    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]);
+	    segMark("plan");
+	    ctx.counters.plans += plans.length;
+	    fixturePlans += plans.length;
+	    console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
+	    if (plans.length === 0) {
+	      emitPipelineDropped("plan", "no_candidate_plans", undefined, { plans: 0 });
+	      continue;
+	    }
 
     // Backend selection happens after planning. Preparing an overlay for an
     // opportunity with zero candidate paths is pure latency waste (observed as
@@ -891,21 +1129,36 @@ async function handleHint(
       }
     }
     let localVictimApply: LocalVictimApplyResult | null = null;
+    let jitWarmCurrent: Promise<void> | null = null;
     const supportsConfiguredBackend = ctx.config.liveBackend !== "rpc" &&
       (ctx.liveBackend.supportsPath?.(prepareInput) ?? true);
     if (supportsConfiguredBackend && oppImpact && isLocalVictimApplyAdapter(oppImpact.matchedAdapterId)) {
       const applyStarted = Date.now();
-      localVictimApply = applyVictimSwapLocally(ctx.cache, oppImpact, prepareInput.baseBlock);
+      ctx.cache.beginHint(prepareInput.baseBlock);
+      const localReadState = blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock);
+      localVictimApply = await applyVictimSwapLocally(
+        ctx.cache,
+        oppImpact,
+        prepareInput.baseBlock,
+        localReadState,
+      );
       if (!localVictimApply) {
         try {
-          await ctx.poolStateUpdater.update(prepareInput.baseBlock, [{
-            adapterId: oppImpact.matchedAdapterId,
-            target: oppImpact.pool,
-            tokenIn: oppImpact.tokenIn,
-            tokenOut: oppImpact.tokenOut,
-            amountIn: oppImpact.amountIn,
-          }], { awaitTicks: true, maxTickPools: 1 });
-          localVictimApply = applyVictimSwapLocally(ctx.cache, oppImpact, prepareInput.baseBlock);
+          if (oppImpact.matchedAdapterId === "univ2-swap" || oppImpact.matchedAdapterId === "univ3-swap") {
+            await ctx.poolStateUpdater.update(prepareInput.baseBlock, [{
+              adapterId: oppImpact.matchedAdapterId,
+              target: oppImpact.pool,
+              tokenIn: oppImpact.tokenIn,
+              tokenOut: oppImpact.tokenOut,
+              amountIn: oppImpact.amountIn,
+            }], { awaitTicks: true, maxTickPools: 1 });
+            localVictimApply = await applyVictimSwapLocally(
+              ctx.cache,
+              oppImpact,
+              prepareInput.baseBlock,
+              localReadState,
+            );
+          }
         } catch (err) {
           console.log(
             `[searcher/live] victim-apply seed failed, falling back to revm overlay: ` +
@@ -928,6 +1181,32 @@ async function handleHint(
       }
     }
 
+    if (
+      localVictimApply &&
+      ctx.config.liveBackend !== "rpc" &&
+      ctx.liveBackend.warmPrepareState &&
+      process.env.SEARCHER_REVM_JIT_WARM_CURRENT !== "0"
+    ) {
+      const warmStarted = Date.now();
+      jitWarmCurrent = ctx.liveBackend
+        .warmPrepareState({
+          ...prepareInput,
+          postImpact: localVictimApply.postImpact,
+        })
+        .then(() => {
+          console.log(
+            `[searcher/live] jit warm current ${localVictimApply!.postImpact.kind} ` +
+              `${oppImpact?.pool.slice(0, 10) ?? "n/a"} ${Date.now() - warmStarted}ms`,
+          );
+        })
+        .catch((err) => {
+          console.log(
+            `[searcher/live] jit warm current failed: ` +
+              `${err instanceof Error ? err.message : String(err)}`.slice(0, 160),
+          );
+        });
+    }
+
     let useConfiguredBackend = ctx.config.liveBackend === "rpc" || localVictimApply !== null;
     if (!localVictimApply && ctx.config.liveBackend !== "rpc" && supportsConfiguredBackend) {
       try {
@@ -937,22 +1216,27 @@ async function handleHint(
       } catch (err) {
         ctx.counters.revmErrors++;
         const message = err instanceof Error ? err.message : String(err);
-        if (isBalanceSlotMissingMessage(message)) {
-          lastTerminalState = "no-profitable-quote";
-          lastTerminalError = message;
+	        if (isBalanceSlotMissingMessage(message)) {
+	          lastTerminalState = "no-profitable-quote";
+	          lastTerminalError = message;
           console.log(
             `[searcher/live] revm prepare skipped (balance slot missing, no anvil fallback): ` +
               `${message.slice(0, 160)}`,
-          );
-          recordFinalState(lastTerminalState, lastTerminalError);
-          continue;
-        }
-        useConfiguredBackend = false;
-        console.log(
-          `[searcher/live] revm prepare failed, falling back to rpc/anvil: ` +
-            `${message.slice(0, 160)}`,
-        );
-      }
+	          );
+	          emitPipelineDropped("overlay", "balance_slot_missing", lastTerminalError, { plans: plans.length });
+	          recordFinalState(lastTerminalState, lastTerminalError);
+	          continue;
+	        }
+        lastTerminalState = "sim-revert";
+        lastTerminalError = `revm prepare failed: ${message}`;
+	        console.log(
+	          `[searcher/live] revm prepare skipped (no anvil fallback): ` +
+	            `${message.slice(0, 160)}`,
+	        );
+	        emitPipelineDropped("overlay", "revm_prepare_failed", lastTerminalError, { plans: plans.length });
+	        recordFinalState(lastTerminalState, lastTerminalError);
+	        continue;
+	      }
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "hash-only") {
       if (!oppImpact) throw new Error("hash-only fallback missing impact");
@@ -992,14 +1276,15 @@ async function handleHint(
       const remainingMs = ctx.config.oppTtlMs - (Date.now() - ctx.startedAt);
       if (remainingMs <= 0) {
         ctx.counters.expiredBeforeSolver++;
-        console.log(
-          `[searcher/live] opportunity expired ` +
-            `(${Date.now() - ctx.startedAt}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver. ` +
-            `stage breakdown: ${segStr()}`,
-        );
-        recordFinalState("expired-before-solver");
-        return;
-      }
+	        console.log(
+	          `[searcher/live] opportunity expired ` +
+	            `(${Date.now() - ctx.startedAt}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver. ` +
+	            `stage breakdown: ${segStr()}`,
+	        );
+	        emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
+	        recordFinalState("expired-before-solver");
+	        return;
+	      }
       try {
         ctx.counters.solverEntered++;
         const resolved = await ctx.solver.solve(candidate, solveState, solveProbe, {
@@ -1014,6 +1299,7 @@ async function handleHint(
             : undefined,
           deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
         });
+        segMark("solve");
         ctx.counters.solverSuccess++;
         // Terminal verify (v7 AC-3a.4): re-simulate the resolved plan and require
         // strictly positive profit before paying gas — never submit on a plan that
@@ -1029,33 +1315,66 @@ async function handleHint(
             lastTerminalError =
               `quoteProfit ${resolved.netProfit} below final verify floor ` +
               `${ctx.config.finalVerifyFloorBps}bps`;
-            console.log(
-              `[searcher/live] final verify skipped: ${lastTerminalError}`,
-            );
-            recordFinalState(lastTerminalState, lastTerminalError);
-            continue;
-          }
+	            console.log(
+	              `[searcher/live] final verify skipped: ${lastTerminalError}`,
+	            );
+	            emitPipelineDropped("final_verify", "below_final_verify_floor", lastTerminalError, {
+	              pathId: resolvedRouteSummary(resolved.root),
+	              templateId: candidate.templateName,
+	              plans: plans.length,
+	            });
+	            recordFinalState(lastTerminalState, lastTerminalError);
+	            continue;
+	          }
           try {
-            await ctx.liveBackend.prepareVictimState(prepareInput);
+            if (jitWarmCurrent) {
+              const waitStarted = Date.now();
+              await jitWarmCurrent;
+              const waited = Date.now() - waitStarted;
+              if (waited > 50) console.log(`[searcher/live] jit warm wait ${waited}ms`);
+            }
+            await ctx.liveBackend.prepareVictimState({
+              ...prepareInput,
+              postImpact: localVictimApply.postImpact,
+            });
             segMark("finalOverlay");
           } catch (err) {
             ctx.counters.revmErrors++;
             const message = err instanceof Error ? err.message : String(err);
             lastTerminalState = "sim-revert";
             lastTerminalError = `final overlay failed: ${message}`;
-            console.log(
-              `[searcher/live] final overlay failed after local victim-apply: ` +
-                `${message.slice(0, 160)}`,
-            );
-            recordFinalState(lastTerminalState, lastTerminalError);
-            continue;
-          }
+	            console.log(
+	              `[searcher/live] final overlay failed after local victim-apply: ` +
+	                `${message.slice(0, 160)}`,
+	            );
+	            emitPipelineDropped("overlay", "final_overlay_failed", lastTerminalError, {
+	              pathId: resolvedRouteSummary(resolved.root),
+	              templateId: candidate.templateName,
+	              plans: plans.length,
+	            });
+	            recordFinalState(lastTerminalState, lastTerminalError);
+	            continue;
+	          }
         }
         const sim = useConfiguredBackend
           ? (ctx.liveBackend.finalVerify
               ? await ctx.liveBackend.finalVerify(resolved)
               : await ctx.liveBackend.simulate(resolved))
           : await ctx.simulator.simulate(resolved);
+        if (hint.source === "mempool") ctx.counters.mempoolToSim++;
+        emitEvent({
+          type: "simulation_result",
+          opportunity_id: opportunityId,
+          target_block: eventBlockNumber,
+          victim_hash: txHash,
+          path_id: resolvedRouteSummary(resolved.root),
+          template_id: candidate.templateName,
+          ok: sim.success && sim.netProfit > 0n,
+          simulated_profit: sim.netProfit.toString(),
+          profit_token: resolved.profitToken,
+          gas_estimate: sim.gasUsed.toString(),
+          failure_reason: sim.success ? undefined : sim.revertReason,
+        });
         if (sim.success && sim.netProfit > 0n) {
           ctx.counters.simSuccess++;
           if (ctx.config.liveBackend === "rpc" || ctx.config.liveBackend === "hybrid") {
@@ -1072,6 +1391,13 @@ async function handleHint(
           ctx.counters.simReverts++;
           lastTerminalState = "sim-revert";
           lastTerminalError = sim.revertReason;
+          console.log(
+            `[searcher/live] final sim rejected: ` +
+              `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} ` +
+              `flashAmount=${resolved.flashAmount} profitToken=${resolved.profitToken} ` +
+              `route=${resolvedRouteSummary(resolved.root)} ` +
+              `reason=${sim.revertReason ?? "no-positive-profit"}`,
+          );
           recordFinalState("sim-revert", sim.revertReason, sim);
           continue;
         }
@@ -1089,7 +1415,107 @@ async function handleHint(
           continue;
         }
 
-        const targetBlock = (await ctx.provider.getBlockNumber()) + 1;
+        // Real-victim gate (Fix A): hash-only bundles reconstruct the victim with a
+        // SYNTHETIC overlay (whale swaps impact.amountIn). That overlay diverges from
+        // the real victim for EVERY adapter (not just curve) — measured: hash-only
+        // backruns that landed had NEGATIVE real profit (the sim's dislocation wasn't
+        // real). And hash-only victims overwhelmingly don't land at all (0/40). So
+        // only submit bundles that carry the REAL victim tx (mempool/rawTx path),
+        // whose on-fork apply matches what the builder re-sims. Unless explicitly
+        // re-enabled, skip every hash-only candidate at submit.
+        if (!rawTx && !ctx.config.allowHashOnlySubmit) {
+          ctx.counters.finalVerifySkipped++;
+          lastTerminalState = "no-profitable-quote";
+          lastTerminalError =
+            `hash-only unverifiable (no real victim) route=${resolvedRouteSummary(resolved.root)}`;
+	          console.log(`[searcher/live] skip hash-only submit: ${lastTerminalError}`);
+	          emitPipelineDropped("submit_gate", "hash_only_unverifiable", lastTerminalError, {
+	            pathId: resolvedRouteSummary(resolved.root),
+	            templateId: candidate.templateName,
+	            plans: plans.length,
+	          });
+	          recordFinalState(lastTerminalState, lastTerminalError, sim);
+	          continue;
+	        }
+
+        // Phantom-profit guard: a closed-loop backrun capturing a large fraction
+        // of the flash notional is not real — it means the revm victim overlay
+        // dislocated the pool (curve/univ3 state bug). Reject before submitting
+        // so we never spam builders or bribe against a fake profit.
+        if (
+          resolved.flashAmount > 0n &&
+          sim.netProfit * 10000n > resolved.flashAmount * ctx.config.maxProfitBpsOfFlash
+        ) {
+          ctx.counters.finalVerifyFailed++;
+          lastTerminalState = "final-verify-failed";
+          lastTerminalError =
+            `phantom profit ${sim.netProfit} > ${ctx.config.maxProfitBpsOfFlash}bps of ` +
+            `flash ${resolved.flashAmount} route=${resolvedRouteSummary(resolved.root)}`;
+	          console.log(`[searcher/live] reject phantom: ${lastTerminalError}`);
+	          emitPipelineDropped("submit_gate", "phantom_profit", lastTerminalError, {
+	            pathId: resolvedRouteSummary(resolved.root),
+	            templateId: candidate.templateName,
+	            plans: plans.length,
+	          });
+	          recordFinalState("final-verify-failed", lastTerminalError, sim);
+	          continue;
+	        }
+
+        // Value the profit in ETH, then apply a scale-invariant haircut to absorb
+        // sim-vs-real error. The discounted figure drives BOTH the EV gate AND the
+        // bribe size — so we never gate or bribe off an over-estimate (this also
+        // damps the adverse-selection: we'd otherwise overbribe exactly the bundles
+        // we most over-estimated, and win the losers). Calibrate the haircut from
+        // the reconciliation of landed txs (real profit vs the logged sim profit).
+        const rawProfitEth = valueInEth(
+          resolved.profitToken,
+          sim.netProfit,
+          ctx.config.ethUsd,
+        );
+        const expectedProfitEth =
+          (rawProfitEth * BigInt(10000 - ctx.config.profitHaircutBps)) / 10000n;
+        const bidEth = (expectedProfitEth * BigInt(ctx.config.bribeBps)) / 10000n;
+
+        // Net-EV gate: only go on-chain when profit ETH exceeds gas + bribe by
+        // minNetEth. Skips dust whose costs would exceed it (no more net-loss
+        // submits) and unvaluable profit tokens (profitEth=0 → fails the gate).
+        //
+        // Bug #1 fix: base fee is volatile (sub-gwei off-peak → gwei in busy
+        // blocks). The tx pays base fee AT LANDING, not at gate time, up to its
+        // capped maxFeePerGas. Estimate gas at the WORST case the tx can pay
+        // (baseFee × gasBufferMult, matching the submitter's maxFee cap) so a
+        // bundle that's only +EV at the current low base fee can't land at a loss.
+        if (ctx.config.evGate) {
+          const latest = await ctx.provider.getBlock("latest");
+          const baseFee = latest?.baseFeePerGas ?? 0n;
+          const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(ctx.config.defaultGasUsed);
+          const worstBaseFee = (baseFee * BigInt(ctx.config.gasBufferMultX10)) / 10n;
+          const gasCostEth = gasUnits * worstBaseFee;
+          const netEth = expectedProfitEth - gasCostEth - bidEth;
+          if (netEth < ctx.config.minNetEth) {
+            ctx.counters.finalVerifySkipped++;
+            lastTerminalState = "no-profitable-quote";
+            lastTerminalError =
+              `EV gate: net ${netEth} < ${ctx.config.minNetEth} ` +
+              `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
+              `token=${resolved.profitToken.slice(0, 10)})`;
+	            console.log(`[searcher/live] skip below-EV: ${lastTerminalError}`);
+	            emitPipelineDropped("submit_gate", "below_ev_gate", lastTerminalError, {
+	              pathId: resolvedRouteSummary(resolved.root),
+	              templateId: candidate.templateName,
+	              plans: plans.length,
+	            });
+	            recordFinalState(lastTerminalState, lastTerminalError, sim);
+	            continue;
+	          }
+          console.log(
+            `[searcher/live] EV ok: net=${ethers.formatEther(netEth)} ETH ` +
+              `profitEth=${ethers.formatEther(expectedProfitEth)} gas=${ethers.formatEther(gasCostEth)} ` +
+              `bribe=${ethers.formatEther(bidEth)}`,
+          );
+        }
+
+        const targetBlock = (ctx.blockTracker.latest || (await ctx.provider.getBlockNumber())) + 1;
         ctx.counters.submitAttempts++;
         const results = await ctx.bundleRouter.submit({
           victimTxHash: txHash,
@@ -1098,18 +1524,41 @@ async function handleHint(
           backrunCalldata: sim.calldata,
           targetBlock,
           expectedProfit: sim.netProfit,
+          expectedProfitEth,
+          bribeBps: ctx.config.bribeBps,
           gasUsed: sim.gasUsed > 0n ? sim.gasUsed : ctx.config.defaultGasUsed,
         });
         ctx.counters.accepted += results.filter((r) => r.accepted).length;
         const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
+        const backrunTxHash = results.find((r) => r.backrunTxHash)?.backrunTxHash;
         const mode = submissionMode === "standalone"
           ? "standalone eth_sendBundle"
           : rawTx ? "eth_sendBundle" : "mev_sendBundle";
         console.log(
           `[searcher/live] submitted via ${mode} targetBlock=${targetBlock} ` +
-            `profit=${sim.netProfit}` +
+            `profit=${sim.netProfit} route=${resolvedRouteSummary(resolved.root)}` +
             `${bundleHash ? ` bundleHash=${bundleHash}` : ""}`,
         );
+        if (backrunTxHash) {
+          emitEvent({
+            type: "bundle_submitted",
+            opportunity_id: opportunityId,
+            target_block: eventBlockNumber,
+            submission_target_block: targetBlock,
+            victim_hash: txHash,
+            mode,
+            path_id: resolvedRouteSummary(resolved.root),
+            template_id: candidate.templateName,
+            simulated_profit: sim.netProfit.toString(),
+            simulated_profit_eth: expectedProfitEth.toString(),
+            bid: bidEth.toString(),
+            tx_hash: backrunTxHash,
+            calldata_hash: ethers.keccak256(sim.calldata),
+            builders_sent: results.map((r) => r.builder),
+            bundle_hash: bundleHash,
+            accepted: results.filter((r) => r.accepted).length,
+          });
+        }
         recordFinalState("would-submit", undefined, sim);
         return;
       } catch (err) {
@@ -1118,13 +1567,14 @@ async function handleHint(
         lastTerminalError = message;
         if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
         if (message.toLowerCase().includes("missing")) ctx.counters.missingState++;
-        console.log(
-          `[searcher/live] candidate failed: ` +
-            `${message}`.slice(0, 180),
-        );
-      }
-    }
-  }
+	        console.log(
+	          `[searcher/live] candidate failed: ` +
+	            `${message}`.slice(0, 180),
+	        );
+	      }
+	    }
+	    emitPipelineDropped("solver", lastTerminalState, lastTerminalError, { plans: plans.length });
+	  }
   recordFinalState(lastTerminalState, lastTerminalError);
 }
 
@@ -1148,6 +1598,11 @@ function createStageCounters(): StageCounters {
     finalVerifySkipped: 0,
     missingState: 0,
     revmErrors: 0,
+    pendingReceived: 0,
+    pendingFilteredReceived: 0,
+    mempoolOpportunitySeen: 0,
+    mempoolToSim: 0,
+    cuProxyRpcCalls: 0,
   };
 }
 
@@ -1171,7 +1626,12 @@ function logStageCounters(counters: StageCounters): void {
       `finalVerifyFailed=${counters.finalVerifyFailed} ` +
       `finalVerifySkipped=${counters.finalVerifySkipped} ` +
       `missingState=${counters.missingState} ` +
-      `revmErrors=${counters.revmErrors}`,
+      `revmErrors=${counters.revmErrors} ` +
+      `pendingReceived=${counters.pendingReceived} ` +
+      `pendingFilteredReceived=${counters.pendingFilteredReceived} ` +
+      `mempoolOpportunitySeen=${counters.mempoolOpportunitySeen} ` +
+      `mempoolToSim=${counters.mempoolToSim} ` +
+      `cuProxyRpcCalls=${counters.cuProxyRpcCalls}`,
   );
 }
 
@@ -1218,7 +1678,41 @@ function blockReadState(
 }
 
 function isLocalVictimApplyAdapter(adapterId: string): boolean {
-  return adapterId === "univ2-swap" || adapterId === "univ3-swap";
+  return adapterId === "univ2-swap" ||
+    adapterId === "univ3-swap" ||
+    adapterId.startsWith("curve-");
+}
+
+function opportunityIdFor(
+  targetBlock: number,
+  victimHash: string,
+  opp: { affectedPools?: string[]; affectedTokens?: string[] },
+): string {
+  return makeOpportunityId({
+    targetBlock,
+    victimHash,
+    pool: opp.affectedPools?.[0],
+    tokens: opp.affectedTokens,
+  });
+}
+
+function resolvedRouteSummary(root: ResolvedPlanNode): string {
+  const route: string[] = [];
+  const visit = (node: ResolvedPlanNode): void => {
+    if (
+      !node.adapterId.endsWith("-flash") &&
+      node.adapterId !== "erc20-approve" &&
+      node.adapterId !== "erc20-transfer" &&
+      node.adapterId !== "assert-balance"
+    ) {
+      route.push(
+        `${node.tokenIn.slice(0, 6)}->${node.tokenOut.slice(0, 6)}@${node.adapterId}`,
+      );
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  return route.join(">");
 }
 
 /**
@@ -1553,16 +2047,28 @@ async function rawTxByHash(
   provider: ethers.JsonRpcProvider,
   txHash: string,
   tx: ethers.TransactionResponse,
+  allowRpcFallback = true,
 ): Promise<string | null> {
+  // Prefer local re-serialization (zero RPC): the tx we already fetched carries
+  // its signature, so we can rebuild the signed raw bytes ourselves. Only fall
+  // back to eth_getRawTransactionByHash when the local rebuild can't reproduce
+  // the exact tx (missing signature / exotic type), verified by hash match.
+  const rebuilt = rebuildSignedRawTx(txHash, tx);
+  if (rebuilt) return rebuilt;
+  if (!allowRpcFallback) return null;
+
   try {
     const raw = await provider.send("eth_getRawTransactionByHash", [txHash]);
     if (typeof raw === "string" && raw.startsWith("0x")) return raw;
   } catch {
     // Some RPC providers do not expose raw pending transactions.
   }
+  return null;
+}
 
+function rebuildSignedRawTx(txHash: string, tx: ethers.TransactionResponse): string | null {
   try {
-    return ethers.Transaction.from({
+    const rebuilt = ethers.Transaction.from({
       type: tx.type,
       to: tx.to,
       nonce: tx.nonce,
@@ -1575,50 +2081,407 @@ async function rawTxByHash(
       chainId: tx.chainId,
       accessList: tx.accessList,
       signature: tx.signature,
-    }).serialized;
+    });
+    if (rebuilt.hash?.toLowerCase() === txHash.toLowerCase()) return rebuilt.serialized;
+  } catch {
+    // Missing signature / exotic pending tx shape. Mempool filtered mode will
+    // drop it; non-mempool callers may still use the RPC fallback above.
+  }
+  return null;
+}
+
+/**
+ * Route B: subscribe to the public mempool and yield pending swaps as victims.
+ *
+ * Pre-filter: Alchemy filters by `toAddress` server-side and sends full pending
+ * tx objects (`hashesOnly:false`). We never subscribe to the hash firehose and
+ * never call getTransaction for each pending hash. Yielded envelopes carry the
+ * full tx + locally rebuilt rawTx so handleHint applies the victim on the fork.
+ */
+async function* mempoolHints(
+  wsUrl: string,
+  pools: PoolEntry[],
+  counters: StageCounters,
+): AsyncGenerator<HintEnvelope> {
+  const toAddress = buildMempoolToAddressFilter(pools);
+  const toAddressSet = new Set(toAddress.map((a) => a.toLowerCase()));
+  const interesting = (to: string | null | undefined): boolean =>
+    Boolean(to && toAddressSet.has(to.toLowerCase()));
+  console.log(
+    `[searcher/live] mempool filtered subscription toAddress=${toAddress.length} ` +
+      `routers=${MEMPOOL_ROUTER_ADDRESSES.size}`,
+  );
+
+  for (;;) {
+    let ws: WebSocket | null = null;
+    try {
+      ws = await connectFilteredMempool(wsUrl, toAddress);
+    } catch (err) {
+      if (err instanceof FatalMempoolSubscriptionError) throw err;
+      console.log(
+        `[searcher/live] mempool WS connect failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await sleep(1_000);
+      continue;
+    }
+
+    // Bounded queue: keep only the freshest victims; a stale pending tx is
+    // useless once newer blocks/txs land, so drop oldest past the cap.
+    const queue: HintEnvelope[] = [];
+    let wake: (() => void) | null = null;
+    let failed = false;
+    const seen = new Set<string>();
+
+    const fail = () => {
+      failed = true;
+      wake?.();
+    };
+    ws.addEventListener("error", fail);
+    ws.addEventListener("close", fail);
+
+    ws.addEventListener("message", (event) => {
+      const msg = parseWsJson(event.data);
+      const result = msg?.method === "eth_subscription" ? msg.params?.result : undefined;
+      if (!isRecord(result)) return;
+      counters.pendingReceived++;
+      const tx = pendingTxFromAlchemy(result);
+      if (!tx || !interesting(tx.to)) return;
+      const hash = tx.hash.toLowerCase();
+      if (seen.has(hash)) return;
+      seen.add(hash);
+      if (seen.size > 100_000) seen.clear();
+
+      const rawTx = rebuildSignedRawTx(hash, tx);
+      if (!rawTx) return;
+
+      counters.pendingFilteredReceived++;
+      queue.push({
+        payload: { mempool: true },
+        hashes: [tx.hash],
+        source: "mempool",
+        prefetched: { tx, rawTx },
+      });
+      if (queue.length > 64) queue.shift();
+      wake?.();
+    });
+
+    try {
+      for (;;) {
+        if (failed) break;
+        if (queue.length === 0) {
+          await new Promise<void>((res) => {
+            wake = res;
+          });
+          wake = null;
+          continue;
+        }
+        yield queue.shift()!;
+      }
+    } finally {
+      try { ws.close(); } catch { /* already closed */ }
+    }
+    console.log("[searcher/live] mempool WS reconnect");
+    await sleep(1_000);
+  }
+}
+
+class FatalMempoolSubscriptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FatalMempoolSubscriptionError";
+  }
+}
+
+let wsRpcId = 1;
+
+function buildMempoolToAddressFilter(pools: PoolEntry[]): string[] {
+  const hotPoolTopN = Number(process.env.SEARCHER_MEMPOOL_FILTER_TOP_N ?? "200");
+  const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
+  const fixed = [...MEMPOOL_ROUTER_ADDRESSES];
+  const pinned = pools
+    .filter((p) => p.score === undefined)
+    .map((p) => p.address);
+  const hot = pools
+    .filter((p) => p.score !== undefined)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, Math.max(0, hotPoolTopN))
+    .map((p) => p.address);
+  const candidates = [...fixed, ...pinned, ...hot]
+    .map((raw) => normalizeAddress(raw))
+    .filter((addr): addr is string => addr !== null);
+  const totalUnique = new Set(candidates.map((addr) => addr.toLowerCase())).size;
+  const addresses: string[] = [];
+  const seen = new Set<string>();
+  for (const addr of candidates) {
+    const key = addr.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    addresses.push(addr);
+    if (addresses.length >= maxAddresses) break;
+  }
+  if (addresses.length === 0) {
+    throw new FatalMempoolSubscriptionError("mempool filtered subscription has empty toAddress list");
+  }
+  if (totalUnique > addresses.length) {
+    console.log(
+      `[searcher/live] mempool toAddress truncated to ${addresses.length}/${totalUnique} entries`,
+    );
+  }
+  return addresses;
+}
+
+async function connectFilteredMempool(wsUrl: string, toAddress: string[]): Promise<WebSocket> {
+  const ws = await openWebSocket(wsUrl);
+  try {
+    const subId = await wsRequest(ws, "eth_subscribe", [
+      "alchemy_pendingTransactions",
+      { toAddress, hashesOnly: false },
+    ]);
+    if (typeof subId !== "string") {
+      throw new Error(`unexpected subscription id ${String(subId)}`);
+    }
+    console.log(`[searcher/live] mempool WS connected filteredSub=${subId}`);
+    return ws;
+  } catch (err) {
+    try { ws.close(); } catch { /* already closed */ }
+    throw new FatalMempoolSubscriptionError(
+      `filtered mempool subscription rejected; refusing hash-firehose fallback: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+function openWebSocket(wsUrl: string): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    let settled = false;
+    const timer = setTimeout(() => finish(reject, new Error("mempool websocket open timeout")), 10_000);
+    const cleanup = () => {
+      clearTimeout(timer);
+      ws.removeEventListener("open", onOpen);
+      ws.removeEventListener("error", onError);
+      ws.removeEventListener("close", onClose);
+    };
+    const finish = <T>(fn: (value: T) => void, value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const onOpen = () => finish(resolve, ws);
+    const onError = () => finish(reject, new Error("mempool websocket error"));
+    const onClose = () => finish(reject, new Error("mempool websocket closed before open"));
+    ws.addEventListener("open", onOpen);
+    ws.addEventListener("error", onError);
+    ws.addEventListener("close", onClose);
+  });
+}
+
+function wsRequest(ws: WebSocket, method: string, params: unknown[]): Promise<unknown> {
+  const id = wsRpcId++;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => finish(reject, new Error(`${method} timeout`)), 10_000);
+    const cleanup = () => {
+      clearTimeout(timer);
+      ws.removeEventListener("message", onMessage);
+      ws.removeEventListener("error", onError);
+      ws.removeEventListener("close", onClose);
+    };
+    const finish = <T>(fn: (value: T) => void, value: T) => {
+      cleanup();
+      fn(value);
+    };
+    const onMessage = (event: MessageEvent) => {
+      const msg = parseWsJson(event.data);
+      if (!msg || msg.id !== id) return;
+      if (msg.error) {
+        finish(reject, new Error(JSON.stringify(msg.error)));
+      } else {
+        finish(resolve, msg.result);
+      }
+    };
+    const onError = () => finish(reject, new Error(`${method} websocket error`));
+    const onClose = () => finish(reject, new Error(`${method} websocket closed`));
+    ws.addEventListener("message", onMessage);
+    ws.addEventListener("error", onError);
+    ws.addEventListener("close", onClose);
+    ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+  });
+}
+
+function pendingTxFromAlchemy(raw: Record<string, unknown>): ethers.TransactionResponse | null {
+  const hash = stringField(raw.hash);
+  const from = normalizeAddress(stringField(raw.from));
+  const to = normalizeAddress(stringField(raw.to));
+  const input = stringField(raw.input) ?? stringField(raw.data) ?? "0x";
+  const signature = pendingSignature(raw);
+  if (!hash || !TX_HASH_RE.test(hash) || !from || !to || !signature) return null;
+  return {
+    hash,
+    from,
+    to,
+    nonce: quantityNumber(raw.nonce),
+    gasLimit: quantityBigInt(raw.gas ?? raw.gasLimit),
+    gasPrice: optionalQuantityBigInt(raw.gasPrice),
+    maxFeePerGas: optionalQuantityBigInt(raw.maxFeePerGas),
+    maxPriorityFeePerGas: optionalQuantityBigInt(raw.maxPriorityFeePerGas),
+    data: input,
+    value: quantityBigInt(raw.value),
+    chainId: optionalQuantityBigInt(raw.chainId) ?? 1n,
+    type: quantityNumber(raw.type),
+    accessList: Array.isArray(raw.accessList) ? raw.accessList as ethers.AccessListish : [],
+    signature,
+    blockNumber: null,
+    blockHash: null,
+    index: null,
+  } as unknown as ethers.TransactionResponse;
+}
+
+function pendingSignature(raw: Record<string, unknown>): ethers.Signature | null {
+  const r = stringField(raw.r);
+  const s = stringField(raw.s);
+  if (!r || !s) return null;
+  try {
+    if (typeof raw.v === "string" || typeof raw.v === "number") {
+      return ethers.Signature.from({ r, s, v: quantityNumber(raw.v) });
+    }
+    const rawParity = typeof raw.yParity === "string" || typeof raw.yParity === "number"
+      ? quantityNumber(raw.yParity)
+      : 0;
+    const yParity: 0 | 1 = rawParity === 0 || rawParity === 27 ? 0 : 1;
+    return ethers.Signature.from({ r, s, yParity });
   } catch {
     return null;
   }
 }
 
+function parseWsJson(data: unknown): Record<string, any> | null {
+  try {
+    const text = typeof data === "string"
+      ? data
+      : data instanceof ArrayBuffer
+        ? Buffer.from(data).toString("utf8")
+        : ArrayBuffer.isView(data)
+          ? Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8")
+          : null;
+    if (!text) return null;
+    const parsed = JSON.parse(text) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function normalizeAddress(value: string | undefined | null): string | null {
+  if (!value) return null;
+  try {
+    return ethers.getAddress(value);
+  } catch {
+    return null;
+  }
+}
+
+function quantityBigInt(value: unknown): bigint {
+  return optionalQuantityBigInt(value) ?? 0n;
+}
+
+function optionalQuantityBigInt(value: unknown): bigint | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number") return BigInt(value);
+  if (typeof value !== "string" || value === "") return undefined;
+  return BigInt(value);
+}
+
+function quantityNumber(value: unknown): number {
+  return Number(quantityBigInt(value));
+}
+
+/**
+ * Merge multiple hint sources into one stream, racing each source's next() so a
+ * slow source never blocks a fast one. The downstream busy-guard serializes
+ * actual processing.
+ */
+async function* mergeHints(
+  ...sources: AsyncGenerator<HintEnvelope>[]
+): AsyncGenerator<HintEnvelope> {
+  const its = sources.map((s) => s[Symbol.asyncIterator]());
+  const live = new Set(its.map((_, i) => i));
+  const pending = its.map((it, i) => it.next().then((r) => ({ i, r })));
+  while (live.size > 0) {
+    const { i, r } = await Promise.race(
+      [...live].map((idx) => pending[idx]),
+    );
+    if (r.done) {
+      live.delete(i);
+      continue;
+    }
+    yield r.value;
+    pending[i] = its[i].next().then((r) => ({ i, r }));
+  }
+}
+
 async function* mevShareHints(url: string): AsyncGenerator<HintEnvelope> {
   for (;;) {
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | null = null;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30_000);
+      timer = setTimeout(() => controller.abort(), 30_000);
       const res = await fetch(url, {
         headers: { Accept: "text/event-stream" },
         signal: controller.signal,
       });
       clearTimeout(timer);
+      timer = null;
       if (!res.ok || !res.body) {
         throw new Error(`SSE HTTP ${res.status}`);
       }
       console.log("[searcher/live] MEV-Share SSE connected");
 
-      const reader = res.body.getReader();
+      reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
 
-        const frames = buffer.split(/\r?\n\r?\n/);
-        buffer = frames.pop() ?? "";
-        for (const frame of frames) {
-          const data = parseSseData(frame);
-          if (!data) continue;
-          const payload = JSON.parse(data) as unknown;
-          yield { payload, hashes: extractTxHashes(payload) };
+          const frames = buffer.split(/\r?\n\r?\n/);
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            const data = parseSseData(frame);
+            if (!data) continue;
+            const payload = JSON.parse(data) as unknown;
+            yield { payload, hashes: extractTxHashes(payload) };
+          }
         }
+      } finally {
+        try {
+          await reader.cancel();
+        } catch {
+          // The stream may already be closed when the server ended it.
+        }
+        reader.releaseLock();
       }
     } catch (err) {
       console.log(
         `[searcher/live] SSE reconnect: ${err instanceof Error ? err.message : String(err)}`,
       );
       await sleep(1_000);
+    } finally {
+      if (timer) clearTimeout(timer);
+      controller.abort();
     }
   }
 }

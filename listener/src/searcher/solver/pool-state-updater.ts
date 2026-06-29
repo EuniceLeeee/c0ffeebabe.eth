@@ -171,6 +171,7 @@ export class PoolStateUpdater {
         token1: stat.token1,
         reserve0: BigInt(decoded[0]),
         reserve1: BigInt(decoded[1]),
+        blockTimestampLast: Number(decoded[2]),
         blockNumber,
       };
       this.cache.seedV2(seed);
@@ -206,6 +207,11 @@ export class PoolStateUpdater {
         sqrtPriceX96: BigInt(slot0[0]),
         tick: Number(slot0[1]),
         liquidity: BigInt(v3Iface.decodeFunctionResult("liquidity", liquidityData)[0]),
+        observationIndex: Number(slot0[2]),
+        observationCardinality: Number(slot0[3]),
+        observationCardinalityNext: Number(slot0[4]),
+        feeProtocol: Number(slot0[5]),
+        unlocked: Boolean(slot0[6]),
         blockNumber,
       };
       this.cache.seedV3Live(live);

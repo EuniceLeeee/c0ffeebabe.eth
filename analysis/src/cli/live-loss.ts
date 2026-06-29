@@ -4,7 +4,7 @@ import { actionsFromLogs } from "../actions/from-logs.js";
 import { actionsFromTrace } from "../actions/from-trace.js";
 import { canonicalSequence, pathTemplate } from "../actions/canonicalize.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
-import { ADDR, lower } from "../registry/protocols.js";
+import { ADDR, TOPICS, lower, short } from "../registry/protocols.js";
 import { RpcClient, hexToBigInt, hexToNumber } from "../rpc/client.js";
 import type { Action, TxSummary } from "../types.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
@@ -17,10 +17,14 @@ import {
 
 const args = parseArgs(process.argv.slice(2));
 const eventsPath = args.events ? String(args.events) : "";
-const rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? "");
+const rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "");
 const blockArg = args.block ? Number(args.block) : undefined;
+const fromBlockArg = args["from-block"] ? Number(args["from-block"]) : undefined;
+const toBlockArg = args["to-block"] ? Number(args["to-block"]) : undefined;
 const traceTop = Number(args["trace-top"] ?? 3);
 const output = args.output ? String(args.output) : undefined;
+const opportunityArg = args.opportunity ? String(args.opportunity) : undefined;
+const watch = parseWatch(args.watch);
 
 if (!eventsPath) {
   console.error("Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl --block 123 --rpc <url>");
@@ -29,71 +33,155 @@ if (!eventsPath) {
 
 const rpc = new RpcClient(rpcUrl);
 const events = await readJsonl(eventsPath);
-const targetBlock = blockArg ?? inferBlock(events);
-const blockEvents = events.filter((e) => Number(e.target_block ?? e.block ?? targetBlock) === targetBlock);
-if (blockEvents.length === 0) throw new Error(`No events found for block ${targetBlock}`);
-
-console.error(`[analysis/live-loss] block=${targetBlock} events=${blockEvents.length} traceTop=${traceTop}`);
-
-const opportunity = aggregateOpportunity(blockEvents);
-const block = await rpc.getBlockByNumber(targetBlock, true);
-const blockTxs: any[] = Array.isArray(block.transactions) ? block.transactions : [];
-const baseFeePerGas = hexToBigInt(block.baseFeePerGas);
-const txIndexByHash = new Map<string, number>();
-for (let i = 0; i < blockTxs.length; i++) txIndexByHash.set(lower(blockTxs[i].hash), i);
-
-const victimIndex = opportunity.victim ? txIndexByHash.get(lower(opportunity.victim)) ?? null : null;
-const victimLanded = victimIndex !== null;
-const ourIncluded = opportunity.included || opportunity.ourTxHashes.some((h) => txIndexByHash.has(lower(h)));
-opportunity.included = ourIncluded;
-
-const receipts = await mapLimit(blockTxs, 8, async (tx) => {
-  const receipt = await rpc.getReceipt(tx.hash);
-  return { tx, receipt };
-});
-
-const competitors = receipts
-  .filter(({ tx, receipt }) => receipt?.status === "0x1" && !isOurOrVictim(tx.hash, opportunity))
-  .map(({ tx, receipt }) => analyzeCompetitor(tx, receipt, opportunity, victimIndex, baseFeePerGas))
-  .filter((x): x is LiveLossCompetitor => x !== null)
-  .sort((a, b) => scoreCompetitor(b) - scoreCompetitor(a));
-
-const traced = await traceCompetitors(competitors.slice(0, Math.max(0, traceTop)), block?.miner);
-for (const [hash, traceActions] of traced.entries()) {
-  const c = competitors.find((x) => lower(x.txHash) === hash);
-  if (!c || traceActions.length === 0) continue;
-  const merged = mergeKinds(c.canonicalSequence, traceActions);
-  c.canonicalSequence = merged;
-  c.pathTemplate = pathTemplate(merged);
-  c.competitorEdge = competitorEdges(merged);
+if (watch.length > 0) {
+  await runWatchMode();
+  process.exit(0);
+}
+const targetBlocks = blockArg === undefined ? inferBlocks(events) : [blockArg];
+for (const targetBlock of targetBlocks) {
+  await analyzeBlock(targetBlock);
 }
 
-const loss = decideLoss(opportunity, victimLanded, competitors);
-const outBase = output ?? `outputs/live-loss/${targetBlock}.md`;
-const mdPath = outBase.endsWith(".md") ? outBase : `${outBase}.md`;
-const jsonPath = mdPath.replace(/\.md$/, ".json");
+interface WatchReport {
+  block: number;
+  competitorTx: string;
+  competitorAddr: string[];
+  primaryReason: "not_seen" | "seen_but_lost";
+  seenScope: "same_pool" | "same_token" | "block_only" | "none";
+  canonicalSequence: string[];
+  pathTemplate: string;
+  pools: string[];
+  tokens: string[];
+  poolInOurGraph: boolean;
+  competitorEdge: string[];
+  protocols: string[];
+  roughProfit: number | null;
+  nextAction: string[];
+  rawDeltas: unknown[];
+}
 
-const report: LiveLossReport = {
-  block: targetBlock,
-  ourOpportunity: opportunity,
-  victimStatus: { landed: victimLanded, victimIndex },
-  competitors,
-  loss,
-  stats: {
-    blockTx: blockTxs.length,
-    receiptsAnalyzed: receipts.length,
-    competitorsFound: competitors.length,
-    unknownCompetitors: competitors.filter((x) => x.pathTemplate.startsWith("unknown")).length,
-    tracedTx: traced.size,
-  },
-  outputJson: jsonPath,
-  outputMarkdown: mdPath,
-};
+interface SeenSet {
+  pools: Set<string>;
+  tokens: Set<string>;
+  any: boolean;
+}
 
-await writeText(resolve(mdPath), renderLiveLossMarkdown(report));
-await writeText(resolve(jsonPath), JSON.stringify(report, jsonReplacer, 2));
-console.error(`[analysis/live-loss] wrote ${mdPath}`);
-console.error(`[analysis/live-loss] wrote ${jsonPath}`);
+interface BlockAnalysisContext {
+  targetBlock: number;
+  block: any;
+  blockTxs: any[];
+  baseFeePerGas: bigint;
+  txIndexByHash: Map<string, number>;
+  txLookupCache: Map<string, any | null>;
+  traceCache: Map<string, Action[]>;
+  receipts: { tx: any; receipt: any }[];
+  opportunityCount: number;
+}
+
+async function analyzeBlock(targetBlock: number): Promise<void> {
+  const blockEvents = events.filter((e) => Number(e.target_block ?? e.block ?? targetBlock) === targetBlock);
+  if (blockEvents.length === 0) throw new Error(`No events found for block ${targetBlock}`);
+
+  // Group by opportunity_id — one block can hold several distinct opportunities
+  // (different victim/pool/tokens). Merging them all into one record would
+  // fabricate a frankenstein opportunity (victim from one, pool from another),
+  // which is exactly what opportunity_id was added to prevent.
+  const groups = new Map<string, any[]>();
+  for (const e of blockEvents) {
+    const id = lower(String(e.opportunity_id ?? e.opportunityId ?? e.victim_hash ?? e.victimHash ?? "unknown"));
+    const arr = groups.get(id) ?? [];
+    arr.push(e);
+    groups.set(id, arr);
+  }
+  let entries = [...groups.entries()];
+  if (opportunityArg) {
+    const want = lower(opportunityArg);
+    entries = entries.filter(([id]) => id === want || id.startsWith(want));
+    if (entries.length === 0) return;
+  }
+  console.error(
+    `[analysis/live-loss] block=${targetBlock} events=${blockEvents.length} opportunities=${entries.length} traceTop=${traceTop}`,
+  );
+
+  // Fetch block + receipts ONCE, shared across every opportunity in this block.
+  const block = await rpc.getBlockByNumber(targetBlock, true);
+  const blockTxs: any[] = Array.isArray(block.transactions) ? block.transactions : [];
+  const baseFeePerGas = hexToBigInt(block.baseFeePerGas);
+  const txIndexByHash = new Map<string, number>();
+  for (let i = 0; i < blockTxs.length; i++) txIndexByHash.set(lower(blockTxs[i].hash), i);
+  const ctx: BlockAnalysisContext = {
+    targetBlock,
+    block,
+    blockTxs,
+    baseFeePerGas,
+    txIndexByHash,
+    txLookupCache: new Map<string, any | null>(),
+    traceCache: new Map<string, Action[]>(),
+    receipts: await mapLimit(blockTxs, 8, async (tx) => {
+      const receipt = await rpc.getReceipt(tx.hash);
+      return { tx, receipt };
+    }),
+    opportunityCount: entries.length,
+  };
+
+  for (const [oppId, oppEvents] of entries) {
+    await analyzeOpportunity(ctx, oppId, oppEvents);
+  }
+}
+
+async function analyzeOpportunity(ctx: BlockAnalysisContext, oppId: string, oppEvents: any[]): Promise<void> {
+  const opportunity = aggregateOpportunity(oppEvents);
+  const victimIndex = opportunity.victim ? ctx.txIndexByHash.get(lower(opportunity.victim)) ?? null : null;
+  const victimLanded = victimIndex !== null;
+  opportunity.included = opportunity.included || (await isOurTxIncluded(ctx, opportunity));
+
+  const competitors = ctx.receipts
+    .filter(({ tx, receipt }) => receipt?.status === "0x1" && !isOurOrVictim(tx.hash, opportunity))
+    .map(({ tx, receipt }) => analyzeCompetitor(tx, receipt, opportunity, victimIndex, ctx.baseFeePerGas))
+    .filter((x): x is LiveLossCompetitor => x !== null)
+    .sort((a, b) => scoreCompetitor(b) - scoreCompetitor(a));
+
+  const traced = await traceCompetitors(ctx, competitors.slice(0, Math.max(0, traceTop)), ctx.block?.miner);
+  for (const [hash, traceActions] of traced.entries()) {
+    const c = competitors.find((x) => lower(x.txHash) === hash);
+    if (!c || traceActions.length === 0) continue;
+    const merged = mergeKinds(c.canonicalSequence, traceActions);
+    c.canonicalSequence = merged;
+    c.pathTemplate = pathTemplate(merged);
+    c.competitorEdge = competitorEdges(merged);
+  }
+
+  const loss = decideLoss(opportunity, victimLanded, competitors);
+  // Single selected/only opportunity honors --output; multiple opportunities in
+  // one block each get a distinct file so they don't overwrite each other.
+  const single = targetBlocks.length === 1 && ctx.opportunityCount === 1;
+  const outBase =
+    single && output ? output : `outputs/live-loss/${ctx.targetBlock}-${oppId.slice(2, 12)}.md`;
+  const mdPath = outBase.endsWith(".md") ? outBase : `${outBase}.md`;
+  const jsonPath = mdPath.replace(/\.md$/, ".json");
+
+  const report: LiveLossReport = {
+    block: ctx.targetBlock,
+    opportunityId: oppId,
+    ourOpportunity: opportunity,
+    victimStatus: { landed: victimLanded, victimIndex },
+    competitors,
+    loss,
+    stats: {
+      blockTx: ctx.blockTxs.length,
+      receiptsAnalyzed: ctx.receipts.length,
+      competitorsFound: competitors.length,
+      unknownCompetitors: competitors.filter((x) => x.pathTemplate.startsWith("unknown")).length,
+      tracedTx: traced.size,
+    },
+    outputJson: jsonPath,
+    outputMarkdown: mdPath,
+  };
+
+  await writeText(resolve(mdPath), renderLiveLossMarkdown(report));
+  await writeText(resolve(jsonPath), JSON.stringify(report, jsonReplacer, 2));
+  console.error(`[analysis/live-loss] wrote ${mdPath}`);
+}
 
 async function readJsonl(path: string): Promise<any[]> {
   const text = await readFile(path, "utf8");
@@ -110,10 +198,189 @@ async function readJsonl(path: string): Promise<any[]> {
     });
 }
 
-function inferBlock(items: any[]): number {
+function inferBlocks(items: any[]): number[] {
   const blocks = uniq(items.map((e) => Number(e.target_block ?? e.block)).filter((n) => Number.isFinite(n)));
-  if (blocks.length !== 1) throw new Error("--block is required when JSONL has zero or multiple target blocks");
-  return blocks[0];
+  if (blocks.length === 0) throw new Error("No target_block values found in JSONL");
+  return blocks.sort((a, b) => a - b);
+}
+
+function parseWatch(value: string | boolean | undefined): string[] {
+  if (!value || value === true) return [];
+  return uniq(String(value)
+    .split(/[,\s]+/)
+    .map((x) => x.trim())
+    .filter((x) => /^0x[a-fA-F0-9]{40}$/.test(x))
+    .map(lower));
+}
+
+async function runWatchMode(): Promise<void> {
+  const range = inferWatchRange(events);
+  const seenByBlock = buildSeenByBlock(events);
+  const watchSet = new Set(watch);
+  let written = 0;
+  console.error(
+    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} traceTop=disabled`,
+  );
+
+  for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
+    const block = await rpc.getBlockByNumber(blockNumber, true);
+    const txs: any[] = Array.isArray(block.transactions) ? block.transactions : [];
+    const matches = txs.filter((tx) => {
+      const actors = [tx.from, tx.to].filter(Boolean).map(lower);
+      return actors.some((actor) => watchSet.has(actor));
+    });
+    if (matches.length === 0) continue;
+
+    console.error(`[analysis/live-loss/watch] block=${blockNumber} matches=${matches.length}`);
+    await mapLimit(matches, 4, async (tx) => {
+      const receipt = await rpc.getReceipt(tx.hash);
+      if (!receipt || receipt.status !== "0x1") return;
+      const report = buildWatchReport(blockNumber, tx, receipt, seenByBlock);
+      const outBase = watchOutputBase(blockNumber, tx.hash);
+      await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
+      await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
+      written++;
+      console.error(`[analysis/live-loss/watch] wrote ${outBase}.md`);
+    });
+  }
+  console.error(`[analysis/live-loss/watch] reports=${written}`);
+}
+
+function inferWatchRange(items: any[]): { from: number; to: number } {
+  const blocks = inferBlocks(items);
+  const from = fromBlockArg ?? blocks[0];
+  const to = toBlockArg ?? blocks[blocks.length - 1];
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    throw new Error(`Invalid watch block range: ${from}-${to}`);
+  }
+  const span = to - from + 1;
+  if (span > 200) {
+    throw new Error(`Refusing to watch-scan ${span} blocks; pass a <=200 block range with --from-block/--to-block`);
+  }
+  return { from, to };
+}
+
+function buildSeenByBlock(items: any[]): Map<number, SeenSet> {
+  const out = new Map<number, SeenSet>();
+  for (const e of items) {
+    const block = Number(e.target_block ?? e.block);
+    if (!Number.isFinite(block)) continue;
+    const seen = out.get(block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
+    seen.any = true;
+    if (e.pool) seen.pools.add(lower(String(e.pool)));
+    for (const token of Array.isArray(e.tokens) ? e.tokens : []) {
+      if (String(token).startsWith("0x")) seen.tokens.add(lower(String(token)));
+    }
+    out.set(block, seen);
+  }
+  return out;
+}
+
+function buildWatchReport(
+  block: number,
+  tx: any,
+  receipt: any,
+  seenByBlock: Map<number, SeenSet>,
+): WatchReport {
+  const matched = uniq([tx.from, tx.to].filter(Boolean).map(lower).filter((actor) => watch.includes(actor)));
+  const actors = uniq([tx.from, tx.to, ...matched].filter(Boolean));
+  const logResult = actionsFromLogs(receipt, actors);
+  const sequence = canonicalSequence(logResult.actions);
+  const pools = extractPoolAddresses(receipt);
+  const tokens = logResult.tokens.map(lower);
+  const seen = seenByBlock.get(block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
+  const samePool = pools.some((pool) => seen.pools.has(pool));
+  const sameToken = tokens.some((token) => seen.tokens.has(token));
+  const seenScope = samePool ? "same_pool" : sameToken ? "same_token" : seen.any ? "block_only" : "none";
+  const decoded = pools.length > 0 || tokens.length > 0;
+  const primaryReason = decoded
+    ? (samePool || sameToken ? "seen_but_lost" : "not_seen")
+    : (seen.any ? "seen_but_lost" : "not_seen");
+
+  return {
+    block,
+    competitorTx: tx.hash,
+    competitorAddr: matched,
+    primaryReason,
+    seenScope,
+    canonicalSequence: sequence,
+    pathTemplate: pathTemplate(sequence),
+    pools,
+    tokens,
+    poolInOurGraph: pools.some((pool) => seen.pools.has(pool)),
+    competitorEdge: competitorEdges(sequence),
+    protocols: logResult.protocols,
+    roughProfit: roughValueUsd(logResult.rawDeltas),
+    nextAction: watchNextActions(primaryReason, seenScope, pools),
+    rawDeltas: logResult.rawDeltas,
+  };
+}
+
+function extractPoolAddresses(receipt: any): string[] {
+  const poolTopics = new Set([
+    TOPICS.univ2Swap,
+    TOPICS.univ3Swap,
+    TOPICS.curveTokenExchange,
+    TOPICS.curveTokenExchangeUnderlying,
+    TOPICS.univ2Mint,
+    TOPICS.univ2Burn,
+    TOPICS.univ3Mint,
+    TOPICS.univ3Burn,
+  ].map(lower));
+  const pools = (receipt.logs ?? [])
+    .filter((log: any) => poolTopics.has(lower(log.topics?.[0])))
+    .map((log: any) => lower(log.address))
+    .filter((addr: string) => /^0x[a-f0-9]{40}$/.test(addr));
+  return uniq(pools);
+}
+
+function watchNextActions(
+  primaryReason: WatchReport["primaryReason"],
+  seenScope: WatchReport["seenScope"],
+  pools: string[],
+): string[] {
+  if (primaryReason === "not_seen") {
+    if (pools.length > 0) return ["check pool universe, pending detector coverage, and token filters for watched competitor pool"];
+    return ["decode watched tx deeper; no pool address was recovered from logs"];
+  }
+  if (seenScope === "same_pool") return ["compare planner output, solver drop reason, bid, and latency for the same pool"];
+  if (seenScope === "same_token") return ["check whether our pool graph missed the competitor venue for the same token set"];
+  return ["block had other seen opportunities; inspect detector matching before assigning a path gap"];
+}
+
+function watchOutputBase(block: number, txHash: string): string {
+  const dir = output && !output.endsWith(".md") && !output.endsWith(".json") ? output : "outputs/live-loss";
+  return `${dir}/watch-${block}-${lower(txHash).slice(2, 12)}`;
+}
+
+function renderWatchMarkdown(report: WatchReport): string {
+  const lines: string[] = [];
+  lines.push("# Live Loss Watch Report");
+  lines.push("");
+  lines.push(`Block: \`${report.block}\``);
+  lines.push(`Competitor tx: \`${report.competitorTx}\``);
+  lines.push(`Competitor addr: ${report.competitorAddr.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
+  lines.push("");
+  lines.push("## Loss");
+  lines.push("");
+  lines.push(`- primary_reason: \`${report.primaryReason}\``);
+  lines.push(`- seen_scope: \`${report.seenScope}\``);
+  lines.push(`- path_template: \`${report.pathTemplate}\``);
+  lines.push(`- canonical_sequence: \`${report.canonicalSequence.join(" -> ") || "unknown"}\``);
+  lines.push(`- competitor_edge: ${report.competitorEdge.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
+  lines.push(`- rough_profit: ${report.roughProfit == null ? "n/a" : report.roughProfit.toFixed(6)}`);
+  lines.push("");
+  lines.push("## Footprint");
+  lines.push("");
+  lines.push(`- pools: ${report.pools.map((x) => `\`${short(x)}\``).join(", ") || "n/a"}`);
+  lines.push(`- tokens: ${report.tokens.map((x) => `\`${short(x)}\``).join(", ") || "n/a"}`);
+  lines.push(`- pool_in_our_graph: \`${report.poolInOurGraph}\``);
+  lines.push(`- protocols: ${report.protocols.join(", ") || "n/a"}`);
+  lines.push("");
+  lines.push("## Next Action");
+  lines.push("");
+  for (const action of report.nextAction) lines.push(`- ${action}`);
+  return `${lines.join("\n")}\n`;
 }
 
 function aggregateOpportunity(items: any[]): LiveLossOpportunity {
@@ -124,6 +391,11 @@ function aggregateOpportunity(items: any[]): LiveLossOpportunity {
   const pathId = last(items.map((e) => e.path_id ?? e.pathId).filter(Boolean));
   const templateId = last(items.map((e) => e.template_id ?? e.templateId).filter(Boolean));
   const simulatedProfit = last(items.map((e) => e.simulated_profit ?? e.simulatedProfit).filter(Boolean));
+  const drop = last(items.filter((e) => e.type === "pipeline_dropped"));
+  const submissionTargetBlock = last(items
+    .map((e) => e.submission_target_block ?? e.submissionTargetBlock)
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x)));
   const bid = last(items.map((e) => e.bid).filter(Boolean));
   const buildersSent = uniq(items.flatMap((e) => Array.isArray(e.builders_sent) ? e.builders_sent : []));
   const ourTxHashes = uniq(items
@@ -137,12 +409,41 @@ function aggregateOpportunity(items: any[]): LiveLossOpportunity {
     pathId: pathId ? String(pathId) : undefined,
     templateId: templateId ? String(templateId) : undefined,
     simulatedProfit: simulatedProfit ? String(simulatedProfit) : undefined,
+    submissionTargetBlock,
+    dropStage: drop?.stage ? String(drop.stage) : undefined,
+    dropReason: drop?.reason ? String(drop.reason) : undefined,
+    dropError: drop?.error ? String(drop.error) : undefined,
     submitted: items.some((e) => e.type === "bundle_submitted" || e.submitted === true),
     bid: bid ? String(bid) : undefined,
     buildersSent,
     included: items.some((e) => e.type === "tx_included" || e.included === true),
     ourTxHashes,
   };
+}
+
+async function isOurTxIncluded(ctx: BlockAnalysisContext, opportunity: LiveLossOpportunity): Promise<boolean> {
+  if (opportunity.ourTxHashes.length === 0) return false;
+  for (const h of opportunity.ourTxHashes) {
+    const hash = lower(h);
+    if (ctx.txIndexByHash.has(hash)) return true;
+    const tx = await getTxByHash(ctx, hash);
+    if (tx?.blockNumber != null) return true;
+  }
+  return false;
+}
+
+async function getTxByHash(ctx: BlockAnalysisContext, hash: string): Promise<any | null> {
+  const key = lower(hash);
+  if (ctx.txLookupCache.has(key)) return ctx.txLookupCache.get(key) ?? null;
+  try {
+    const tx = await rpc.getTransaction(key);
+    ctx.txLookupCache.set(key, tx ?? null);
+    return tx ?? null;
+  } catch (err) {
+    ctx.txLookupCache.set(key, null);
+    console.error(`[analysis/live-loss] tx lookup failed ${key}: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 function isOurOrVictim(hash: string, opportunity: LiveLossOpportunity): boolean {
@@ -244,13 +545,26 @@ function scoreCompetitor(c: LiveLossCompetitor): number {
   );
 }
 
-async function traceCompetitors(items: LiveLossCompetitor[], miner?: string): Promise<Map<string, Action[]>> {
+async function traceCompetitors(
+  ctx: BlockAnalysisContext,
+  items: LiveLossCompetitor[],
+  miner?: string,
+): Promise<Map<string, Action[]>> {
   const out = new Map<string, Action[]>();
   for (const c of items) {
+    const key = lower(c.txHash);
+    const cached = ctx.traceCache.get(key);
+    if (cached) {
+      out.set(key, cached);
+      continue;
+    }
     try {
       const trace = await rpc.traceTransaction(c.txHash);
-      out.set(lower(c.txHash), actionsFromTrace(trace, miner, [c.from, c.to ?? ""]));
+      const actions = actionsFromTrace(trace, miner, [c.from, c.to ?? ""]);
+      ctx.traceCache.set(key, actions);
+      out.set(key, actions);
     } catch (err) {
+      ctx.traceCache.set(key, []);
       console.error(`[analysis/live-loss] trace failed ${c.txHash}: ${(err as Error).message}`);
     }
   }
@@ -286,6 +600,18 @@ function decideLoss(
     };
   }
   if (!opportunity.submitted) {
+    if (opportunity.dropReason) {
+      return {
+        primaryReason: opportunity.dropReason,
+        secondaryReasons: opportunity.dropStage ? [`stage_${opportunity.dropStage}`] : [],
+        confidence: "high",
+        evidence: [
+          `pipeline dropped at ${opportunity.dropStage ?? "unknown"}: ${opportunity.dropReason}`,
+          ...(opportunity.dropError ? [opportunity.dropError] : []),
+        ],
+        nextAction: nextActionsForDrop(opportunity.dropStage, opportunity.dropReason),
+      };
+    }
     return {
       primaryReason: "not_submitted",
       secondaryReasons: [],
@@ -304,6 +630,15 @@ function decideLoss(
     };
   }
   if (competitors.length === 0) {
+    if (isDryRunOpportunity(opportunity)) {
+      return {
+        primaryReason: "unknown",
+        secondaryReasons: ["dry_run_no_inclusion_truth"],
+        confidence: "low",
+        evidence: ["dry-run submission was not broadcast; inclusion and bid conclusions are disabled"],
+        nextAction: ["use this report for path/not_seen/simulation gap only"],
+      };
+    }
     return {
       primaryReason: "not_included",
       secondaryReasons: [],
@@ -333,11 +668,36 @@ function choosePrimaryReason(top: LiveLossCompetitor, opportunity: LiveLossOppor
   if (top.competitorEdge.includes("lp_leg")) return "competitor_lp_leg";
   if (top.competitorEdge.includes("peg_or_redeem_leg")) return "competitor_peg_or_redeem_leg";
   const bidWei = opportunity.bid ? BigInt(opportunity.bid) : null;
-  if (bidWei !== null && top.effectiveBidEstimateEth !== null && top.effectiveBidEstimateEth > Number(bidWei) / 1e18) {
+  if (
+    !isDryRunOpportunity(opportunity) &&
+    bidWei !== null &&
+    top.effectiveBidEstimateEth !== null &&
+    top.effectiveBidEstimateEth > Number(bidWei) / 1e18
+  ) {
     return "bid_too_low";
   }
   if (top.samePool || top.sameTokens) return "competitor_faster_same_path";
   return "unknown";
+}
+
+function isDryRunOpportunity(opportunity: LiveLossOpportunity): boolean {
+  return opportunity.buildersSent.some((b) => lower(b) === "dry-run");
+}
+
+function nextActionsForDrop(stage?: string, reason?: string): string[] {
+  if (reason === "no_candidate_plans") {
+    return ["inspect planner graph coverage, borrowable tokens, and path-template constraints"];
+  }
+  if (reason === "quote-timeout" || stage === "solver") {
+    return ["inspect solver timeout, quote source latency, and candidate pruning"];
+  }
+  if (stage === "overlay") {
+    return ["inspect victim state overlay, balance slots, and live backend support"];
+  }
+  if (stage === "submit_gate") {
+    return ["inspect submit gate policy and whether the candidate is actionable in dry-run/live mode"];
+  }
+  return ["inspect searcher stage logs for this opportunity"];
 }
 
 function edgeToReason(edge: string): string {

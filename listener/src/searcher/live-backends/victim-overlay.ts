@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import type { PoolImpact } from "../detector/pool-impact.js";
 import type { TokenEdge } from "../planner/token-graph.js";
+import { knownTokenStorageLayout } from "../solver/balance-slots.js";
 
 /**
  * Victim-state overlay for the revm backend.
@@ -40,6 +41,7 @@ export interface OverlayTokenDeal {
   token: string;
   to: string;
   amount: string;
+  balanceSlot?: number;
 }
 
 export interface OverlayPreCall {
@@ -47,6 +49,7 @@ export interface OverlayPreCall {
   to: string;
   calldata: string;
   gasLimit?: number;
+  allowanceSlot?: number;
 }
 
 export interface VictimOverlay {
@@ -93,7 +96,12 @@ export async function buildVictimOverlay(
   const dealAmount = impact.amountIn * 2n;
 
   const tokenDeals: OverlayTokenDeal[] = [
-    { token: tokenIn, to: whale, amount: dealAmount.toString() },
+    {
+      token: tokenIn,
+      to: whale,
+      amount: dealAmount.toString(),
+      balanceSlot: knownTokenStorageLayout(tokenIn)?.balanceSlot,
+    },
   ];
 
   let approveTarget: string;
@@ -164,6 +172,7 @@ export async function buildVictimOverlay(
     to: tokenIn,
     calldata: ERC20_IFACE.encodeFunctionData("approve", [approveTarget, dealAmount]),
     gasLimit: 0x1000000,
+    allowanceSlot: knownTokenStorageLayout(tokenIn)?.allowanceSlot,
   };
 
   return { whale, tokenDeals, preCalls: [approveCall, swapCall] };

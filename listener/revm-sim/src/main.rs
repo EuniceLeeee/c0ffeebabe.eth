@@ -88,6 +88,8 @@ struct PreCall {
     calldata: String,
     #[serde(default)]
     gas_limit: Option<u64>,
+    #[serde(default)]
+    allowance_slot: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +98,8 @@ struct TokenDeal {
     token: String,
     to: String,
     amount: String,
+    #[serde(default)]
+    balance_slot: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,6 +107,8 @@ struct TokenDeal {
 struct TokenBalanceHint {
     token: String,
     account: String,
+    #[serde(default)]
+    balance_slot: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +117,8 @@ struct TokenAllowanceHint {
     token: String,
     owner: String,
     spender: String,
+    #[serde(default)]
+    allowance_slot: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -312,6 +320,7 @@ struct ParsedPreCall {
     to: Address,
     calldata: Vec<u8>,
     gas_limit: u64,
+    allowance_slot: Option<u64>,
 }
 
 impl RemoteRevmDb {
@@ -786,8 +795,9 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
     )?;
     let block_env = load_block_env(&remote.rpc, req.block_number)?;
     let mut db = CacheDB::new(remote);
+    let mut balance_slots = HashMap::new();
     apply_state_overrides(&mut db, &req.state_overrides)?;
-    apply_token_deals(&mut db, &block_env, &req.token_deals)?;
+    apply_token_deals(&mut db, &block_env, &req.token_deals, &mut balance_slots)?;
     for call in pre_calls {
         let pre = execute_call(
             &mut db,
@@ -952,6 +962,10 @@ struct WarmBlock {
     /// be batched with the prepare's account/slot warm-up (one round trip, not
     /// two). `prepare` fills this on first use via `ensure_block_env`.
     block_env: Option<BlockEnv>,
+    /// True once a between-block Warm has seeded accounts/storage for this
+    /// block. A later prepare on the same block can skip debug_traceCall
+    /// prefetch and let local execution read the already-hot cache directly.
+    proactive_seeded: bool,
 }
 
 #[derive(Default)]
@@ -959,6 +973,11 @@ struct Daemon {
     warm: Option<WarmBlock>,
     prepared: Option<CacheDB<SharedRemote>>,
     block_env: Option<BlockEnv>,
+    /// Discovered ERC20 mapping base slots. Unknown tokens are probed once in
+    /// the local overlay; a hit is cached so later same-daemon prepares/warms do
+    /// not serial-try every candidate slot again.
+    balance_slots: HashMap<Address, u64>,
+    allowance_slots: HashMap<Address, u64>,
     /// Cross-block cache (contract bytecode). Survives `ensure_warm` re-forks so
     /// a new block never re-downloads router/pool/token code.
     persist: Rc<RefCell<PersistentCache>>,
@@ -1108,9 +1127,14 @@ impl Daemon {
         for hint in &token_balance_hints {
             let token = parse_address(&hint.token)?;
             let account = parse_address(&hint.account)?;
+            if let Some(slot) = hint.balance_slot {
+                self.balance_slots.insert(token, slot);
+            }
             accounts.push(token);
             accounts.push(account);
-            for idx in [0u64, 1, 2, 3, 4, 5, 9, 51] {
+            for idx in
+                mapping_slot_candidates(hint.balance_slot, self.balance_slots.get(&token).copied())
+            {
                 storage.push((token, erc20_balance_slot(account, idx)));
             }
         }
@@ -1118,10 +1142,16 @@ impl Daemon {
             let token = parse_address(&hint.token)?;
             let owner = parse_address(&hint.owner)?;
             let spender = parse_address(&hint.spender)?;
+            if let Some(slot) = hint.allowance_slot {
+                self.allowance_slots.insert(token, slot);
+            }
             accounts.push(token);
             accounts.push(owner);
             accounts.push(spender);
-            for idx in [0u64, 1, 2, 3, 4, 5, 9, 51] {
+            for idx in mapping_slot_candidates(
+                hint.allowance_slot,
+                self.allowance_slots.get(&token).copied(),
+            ) {
                 storage.push((token, erc20_allowance_slot(owner, spender, idx)));
             }
         }
@@ -1137,6 +1167,11 @@ impl Daemon {
             }
             Ok(None) => {}
             Err(err) => eprintln!("[revm-sim] warm upfront batch failed: {err}"),
+        }
+        if (!storage.is_empty() || !parsed.is_empty()) && self.warm.is_some() {
+            if let Some(w) = self.warm.as_mut() {
+                w.proactive_seeded = true;
+            }
         }
 
         let mut seed_stats = SeedStats::default();
@@ -1196,6 +1231,7 @@ impl Daemon {
             number: block_number,
             remote: Rc::new(remote),
             block_env: None,
+            proactive_seeded: false,
         });
         Ok(())
     }
@@ -1241,6 +1277,18 @@ impl Daemon {
         let need_block = warm.block_env.is_none();
         let parsed = parse_pre_calls(&pre_calls)?;
         let parsed_prewarm = parse_pre_calls(&prewarm_calls)?;
+        let proactive_same_block = same_block
+            && self
+                .warm
+                .as_ref()
+                .map(|w| w.proactive_seeded)
+                .unwrap_or(false);
+        let skip_upfront_warm_batch = proactive_same_block
+            && env::var("SEARCHER_REVM_SKIP_WARM_UPFRONT_BATCH")
+                .map(|v| v != "0")
+                .unwrap_or(true)
+            && token_deals_have_known_slots(&token_deals, &self.balance_slots)?
+            && approve_calls_have_known_slots(&parsed, &self.allowance_slots);
 
         // T2a upfront batch: in ONE round trip warm every nameable account
         // (funded, deal tokens + recipients, prewarm targets), the deal tokens'
@@ -1248,7 +1296,9 @@ impl Daemon {
         // funding / deal-slot trials / approve below all hit the warm cache
         // instead of serial-faulting (each fault is one RPC RTT). The swap's
         // deep pool/tick slots are seeded by the trace.
-        {
+        if skip_upfront_warm_batch {
+            eprintln!("[revm-sim] prepare phase warm_batch: skipped (same-block warm slots)");
+        } else {
             // Address::ZERO is the caller for every balanceOf/quote view call;
             // its account is loaded (for gas) on the first execute_call and would
             // otherwise serial-fault inside token_deals. Seed it here.
@@ -1271,13 +1321,21 @@ impl Daemon {
             for d in &token_deals {
                 let token = parse_address(&d.token)?;
                 let to = parse_address(&d.to)?;
-                for idx in [0u64, 1, 2, 3, 4, 5, 9, 51] {
+                for idx in
+                    mapping_slot_candidates(d.balance_slot, self.balance_slots.get(&token).copied())
+                {
                     storage.push((token, erc20_balance_slot(to, idx)));
                 }
             }
             for call in &parsed {
                 if let Some(spender) = decode_approve_spender(&call.calldata) {
-                    for idx in [0u64, 1, 2, 3, 4, 5, 9, 51] {
+                    if let Some(slot) = call.allowance_slot {
+                        self.allowance_slots.insert(call.to, slot);
+                    }
+                    for idx in mapping_slot_candidates(
+                        call.allowance_slot,
+                        self.allowance_slots.get(&call.to).copied(),
+                    ) {
                         storage.push((call.to, erc20_allowance_slot(call.from, spender, idx)));
                     }
                 }
@@ -1328,7 +1386,7 @@ impl Daemon {
         phase_ms("fund", &mut phase);
 
         apply_state_overrides(&mut db, &state_overrides)?;
-        apply_token_deals(&mut db, &block_env, &token_deals)?;
+        apply_token_deals(&mut db, &block_env, &token_deals, &mut self.balance_slots)?;
         phase_ms("token_deals", &mut phase);
 
         // Execute every preCall but the last one (the approve) locally first:
@@ -1360,13 +1418,19 @@ impl Daemon {
         let mut seed_stats = None;
         let mut trace_calls: Vec<&ParsedPreCall> = parsed[split..].iter().collect();
         trace_calls.extend(parsed_prewarm.iter());
-        if !trace_calls.is_empty() {
+        let skip_trace_prefetch = proactive_same_block
+            && env::var("SEARCHER_REVM_SKIP_WARM_TRACE_PREFETCH")
+                .map(|v| v != "0")
+                .unwrap_or(true);
+        if !trace_calls.is_empty() && !skip_trace_prefetch {
             match trace_prefetch(&remote_rc, &db, &trace_calls) {
                 Ok(stats) => seed_stats = Some(stats),
                 Err(err) => eprintln!(
                     "[revm-sim] trace prefetch failed; falling back to serial faults: {err}"
                 ),
             }
+        } else if !trace_calls.is_empty() {
+            eprintln!("[revm-sim] prepare phase trace_prefetch: skipped (same-block warm cache)");
         }
         phase_ms("trace_prefetch", &mut phase);
 
@@ -1750,6 +1814,7 @@ fn parse_pre_calls(calls: &[PreCall]) -> Result<Vec<ParsedPreCall>> {
                 to: parse_address(&call.to)?,
                 calldata: parse_hex_bytes(&call.calldata)?,
                 gas_limit: call.gas_limit.unwrap_or(DEFAULT_GAS_LIMIT),
+                allowance_slot: call.allowance_slot,
             })
         })
         .collect()
@@ -1785,6 +1850,7 @@ fn apply_token_deals<D>(
     db: &mut CacheDB<D>,
     block_env: &BlockEnv,
     deals: &[TokenDeal],
+    balance_slots: &mut HashMap<Address, u64>,
 ) -> Result<()>
 where
     D: DatabaseRef<Error = RpcError>,
@@ -1801,7 +1867,9 @@ where
         }
 
         let mut applied = false;
-        for slot_index in [0u64, 1, 2, 3, 4, 5, 9, 51] {
+        for slot_index in
+            mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied())
+        {
             let slot = erc20_balance_slot(to, slot_index);
             let original = db
                 .storage(token, slot)
@@ -1811,6 +1879,7 @@ where
             mark_account_touched(db, token);
             let balance = erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO);
             if balance >= amount {
+                balance_slots.insert(token, slot_index);
                 applied = true;
                 break;
             }
@@ -1823,6 +1892,59 @@ where
         }
     }
     Ok(())
+}
+
+fn token_deals_have_known_slots(
+    deals: &[TokenDeal],
+    balance_slots: &HashMap<Address, u64>,
+) -> Result<bool> {
+    for deal in deals {
+        if deal.balance_slot.is_some() {
+            continue;
+        }
+        let token = parse_address(&deal.token)?;
+        if !balance_slots.contains_key(&token) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn approve_calls_have_known_slots(
+    calls: &[ParsedPreCall],
+    allowance_slots: &HashMap<Address, u64>,
+) -> bool {
+    for call in calls {
+        if decode_approve_spender(&call.calldata).is_none() {
+            continue;
+        }
+        if call.allowance_slot.is_none() && !allowance_slots.contains_key(&call.to) {
+            return false;
+        }
+    }
+    true
+}
+
+const ERC20_MAPPING_SLOT_CANDIDATES: [u64; 8] = [0, 1, 2, 3, 4, 5, 9, 51];
+
+fn mapping_slot_candidates(primary: Option<u64>, cached: Option<u64>) -> Vec<u64> {
+    let mut out = Vec::with_capacity(ERC20_MAPPING_SLOT_CANDIDATES.len() + 2);
+    if let Some(idx) = primary {
+        push_unique_slot(&mut out, idx);
+    }
+    if let Some(idx) = cached {
+        push_unique_slot(&mut out, idx);
+    }
+    for idx in ERC20_MAPPING_SLOT_CANDIDATES {
+        push_unique_slot(&mut out, idx);
+    }
+    out
+}
+
+fn push_unique_slot(out: &mut Vec<u64>, idx: u64) {
+    if !out.contains(&idx) {
+        out.push(idx);
+    }
 }
 
 fn mark_account_touched<D>(db: &mut CacheDB<D>, address: Address) {

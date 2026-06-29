@@ -421,7 +421,26 @@ async function rawTxByHash(
     `eth_getRawTransactionByHash ${txHash}`,
   );
   if (typeof raw !== "string" || !raw.startsWith("0x")) {
-    throw new Error(`missing raw tx for ${txHash}`);
+    const tx = await withTimeout(
+      provider.getTransaction(txHash),
+      45_000,
+      `getTransaction ${txHash}`,
+    );
+    if (!tx) throw new Error(`missing raw tx for ${txHash}`);
+    return ethers.Transaction.from({
+      type: tx.type,
+      to: tx.to,
+      nonce: tx.nonce,
+      gasLimit: tx.gasLimit,
+      gasPrice: tx.gasPrice,
+      maxFeePerGas: tx.maxFeePerGas,
+      maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+      data: tx.data,
+      value: tx.value,
+      chainId: tx.chainId,
+      accessList: tx.accessList,
+      signature: tx.signature,
+    }).serialized;
   }
   return raw;
 }
