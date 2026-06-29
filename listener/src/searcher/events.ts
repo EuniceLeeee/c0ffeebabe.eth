@@ -80,6 +80,7 @@ export type SearcherEvent =
 	      path_id?: string;
 	      template_id?: string;
 	      plans?: number;
+	      no_candidate_diagnostic?: unknown;
 	    }
 	  | {
 	      type: "bundle_submitted";

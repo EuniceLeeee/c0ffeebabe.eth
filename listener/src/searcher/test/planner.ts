@@ -219,7 +219,94 @@ async function testBorrowabilitySkipsNoBorrowableCycle(): Promise<void> {
     [FLASH_SWAP_REPAY],
   );
   assert(plans.length === 0, `no borrowable cycle: expected 0 plans, got ${plans.length}`);
+  const diagnostic = planner.lastNoCandidateDiagnostic();
+  if (!diagnostic) throw new Error("FAIL: no borrowable cycle: expected diagnostic");
+  assert(
+    diagnostic.classification === "borrowability_missing",
+    `no borrowable cycle: classification ${diagnostic.classification}`,
+  );
   console.log("[planner] no borrowable cycle skips candidate: PASS");
+}
+
+async function testNoCandidateDiagnosticClassifiesImpactPoolNotInGraph(): Promise<void> {
+  const planner = new TemplatePlanner();
+  planner.setGraph([
+    swap(B, USDT, P2),
+    swap(USDT, B, P3),
+  ]);
+  planner.setMaxHops(2);
+
+  const plans = await planner.plan(
+    opportunityWithImpact(A, B, P1, B),
+    [FLASH_SWAP_REPAY],
+  );
+  assert(plans.length === 0, `pool-not-in-graph diagnostic: expected 0 plans, got ${plans.length}`);
+  const diagnostic = planner.lastNoCandidateDiagnostic();
+  if (!diagnostic) throw new Error("FAIL: pool-not-in-graph diagnostic: expected diagnostic");
+  assert(
+    diagnostic.classification === "impact_pool_not_in_routing_graph",
+    `pool-not-in-graph diagnostic: classification ${diagnostic.classification}`,
+  );
+  assert(!diagnostic.impact_pool_edge_in_routing_graph, "pool-not-in-graph diagnostic: pool should be absent");
+  console.log("[planner] no-candidate diagnostic classifies impact pool not in routing graph: PASS");
+}
+
+async function testNoCandidateDiagnosticClassifiesOnlyImmediateSamePoolReverse(): Promise<void> {
+  const planner = new TemplatePlanner();
+  planner.setGraph([
+    swap(A, B, P1),
+    swap(B, A, P1),
+  ]);
+  planner.setMaxHops(2);
+
+  const plans = await planner.plan(
+    opportunityWithImpact(A, B, P1, B),
+    [FLASH_SWAP_REPAY],
+  );
+  assert(plans.length === 0, `same-pool diagnostic: expected 0 plans, got ${plans.length}`);
+  const diagnostic = planner.lastNoCandidateDiagnostic();
+  if (!diagnostic) throw new Error("FAIL: same-pool diagnostic: expected diagnostic");
+  assert(
+    diagnostic.classification === "only_immediate_same_pool_reverse",
+    `same-pool diagnostic: classification ${diagnostic.classification}`,
+  );
+  assert(diagnostic.impact_pool_edge_in_routing_graph, "same-pool diagnostic: impact pool should be in graph");
+  assert(diagnostic.same_pool_reverse_edge_exists, "same-pool diagnostic: reverse edge should exist");
+  assert(diagnostic.same_pool_reverse_pruned > 0, "same-pool diagnostic: reverse path should be pruned");
+  assert(
+    diagnostic.impact_token_return_venues_excluding_impact_pool === 0,
+    `same-pool diagnostic: return venues ${diagnostic.impact_token_return_venues_excluding_impact_pool}`,
+  );
+  console.log("[planner] no-candidate diagnostic classifies only immediate same-pool reverse: PASS");
+}
+
+async function testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue(): Promise<void> {
+  const planner = new TemplatePlanner();
+  planner.setGraph([
+    swap(A, B, P1),
+    swap(B, USDT, P2),
+    swap(USDT, B, P3),
+  ]);
+  planner.setMaxHops(2);
+
+  const plans = await planner.plan(
+    opportunityWithImpact(A, B, P1, B),
+    [FLASH_SWAP_REPAY],
+  );
+  assert(plans.length === 0, `no-return diagnostic: expected 0 plans, got ${plans.length}`);
+  const diagnostic = planner.lastNoCandidateDiagnostic();
+  if (!diagnostic) throw new Error("FAIL: no-return diagnostic: expected diagnostic");
+  assert(
+    diagnostic.classification === "impact_token_no_supported_return_venue",
+    `no-return diagnostic: classification ${diagnostic.classification}`,
+  );
+  assert(diagnostic.impact_pool_edge_in_routing_graph, "no-return diagnostic: impact pool should be in graph");
+  assert(!diagnostic.same_pool_reverse_edge_exists, "no-return diagnostic: same-pool reverse should not exist");
+  assert(
+    diagnostic.impact_token_return_venues === 1,
+    `no-return diagnostic: return venues ${diagnostic.impact_token_return_venues}`,
+  );
+  console.log("[planner] no-candidate diagnostic classifies no supported return venue: PASS");
 }
 
 async function main(): Promise<void> {
@@ -230,7 +317,10 @@ async function main(): Promise<void> {
   await testBorrowabilityRotatesIntermediateToken();
   await testBorrowabilityChoosesDeepestProvider();
   await testBorrowabilitySkipsNoBorrowableCycle();
-  console.log("planner PASS (7/7)");
+  await testNoCandidateDiagnosticClassifiesImpactPoolNotInGraph();
+  await testNoCandidateDiagnosticClassifiesOnlyImmediateSamePoolReverse();
+  await testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue();
+  console.log("planner PASS (10/10)");
 }
 
 main().catch((err) => {

@@ -1076,7 +1076,12 @@ async function handleHint(
 	      stage: string,
 	      reason: string,
 	      error?: string,
-	      extra?: { pathId?: string; templateId?: string; plans?: number },
+	      extra?: {
+	        pathId?: string;
+	        templateId?: string;
+	        plans?: number;
+	        noCandidateDiagnostic?: unknown;
+	      },
 	    ): void => {
 	      emitEvent({
 	        type: "pipeline_dropped",
@@ -1091,6 +1096,7 @@ async function handleHint(
 	        path_id: extra?.pathId,
 	        template_id: extra?.templateId,
 	        plans: extra?.plans,
+	        no_candidate_diagnostic: extra?.noCandidateDiagnostic,
 	      });
 	    };
 	    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]);
@@ -1099,7 +1105,10 @@ async function handleHint(
 	    fixturePlans += plans.length;
 	    console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
 	    if (plans.length === 0) {
-	      emitPipelineDropped("plan", "no_candidate_plans", undefined, { plans: 0 });
+	      emitPipelineDropped("plan", "no_candidate_plans", undefined, {
+	        plans: 0,
+	        noCandidateDiagnostic: ctx.planner.lastNoCandidateDiagnostic?.(),
+	      });
 	      continue;
 	    }
 
