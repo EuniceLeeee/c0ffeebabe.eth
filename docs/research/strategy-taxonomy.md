@@ -1,150 +1,440 @@
-# MEV 对手策略分类口径(taxonomy)
+# MEV Path Analysis Rules (MVP)
 
-> 这是 `analysis/` 分类的**唯一口径源**。实现中途可重构代码,但**这些口径不变**。
-> 所有"排除"条件都写成可编码的布尔判定,classify 直接照此实现。
+> 一句话原则：先做 path profiler + live loss analyzer，不做平台。taxonomy 只作为防误判规则，所有输出都要服务“这个 path 我们能不能学、为什么现在赢不了”。
 
-## 0. 四个正交维度
+本文不是全市场 MEV taxonomy，也不是 dashboard/平台口径。它只约束 `analysis/` 两个工具：
 
-每笔 tx 同时打 4 个标签,互不混淆:
+- **Tool A: Address Path Profiler**：给 MEV 地址，分析它做过哪些 path。
+- **Tool B: Live Loss Analyzer**：我们实盘没赢时，分析为什么输。
 
-| 维度 | 取值 |
+## 0. MVP 范围
+
+### In scope
+
+- 给定地址/地址列表，拉近 N 笔交易并输出 path profile。
+- 对代表 tx 做预算内 trace，还原 action sequence。
+- 同一 entity 下拆多个 strategy clusters。
+- 识别明显排除项：sandwich / directional-CEXDEX / standing。
+- 输出 `our_support`、`our_gap`、`next_action`。
+- 实盘 JSONL 事件落块后，找同 block / 同 victim / 同 pool / 同 token competitor 并归因 loss reason。
+
+### Out of scope for MVP
+
+- 不做全市场 MEV 平台。
+- 不做长期大规模 indexer。
+- 不做复杂 dashboard。
+- 不做完整 AA / solver / v4 hook 全覆盖。
+- 不做复杂 probabilistic clustering。
+- 不做全自动 strategy promotion。
+- 不依赖 EigenPhi / ZeroMEV / mev-inspect 等外部标签。
+- 不做漂亮排行榜、完整 MAV/capture-ratio。
+
+遇到真实需求后再扩。
+
+## 1. 硬不变量
+
+1. `analysis/` 只读：不读私钥、不广播、不自动 dotenv repo root `.env`。
+2. RPC/API 只来自 CLI 参数或 `READONLY_RPC_URL`。
+3. 生产 `listener/searcher` 不 import `analysis/`。
+4. `analysis/outputs/` gitignored；不提交原始 trace 大文件。
+5. Path 先还原 `canonical_action_sequence`，再命名模板。
+6. Entity cluster != strategy cluster；不得给 entity 贴单一策略标签。
+7. Same funder 单条不能 merge；CEX/bridge/shared funder 默认 weak。
+8. EOA→contract 只是 `execution_candidate`，不等于 MEV。
+9. Unknown 分 `unknown_replayable` 和 `unknown_opaque`；`unknown_replayable` 不得丢。
+10. PnL 粗算和 trace 后净利润分开；粗算不得声称 `net_full`。
+11. 所有 label 必须带 evidence object。
+12. 最终报告必须输出 `our_gap` / `next_action`，不只是 label。
+
+## 2. 输出目标
+
+每个 tx / strategy cluster 最终尽量输出：
+
+```yaml
+canonical_action_sequence:
+  - fund.flashloan
+  - credit.deposit_collateral
+  - credit.borrow
+  - trade.swap
+  - peg.redeem
+  - trade.swap
+  - credit.repay
+  - settlement.profit_transfer
+
+path_template: flash→borrow→swap→repay
+funding: flashloan | self-funded | flash-mint | unknown
+strategy_type: pure-backrun | backrun+LP | atomic/standing | directional_suspect | sandwich_excluded | unknown
+tokens: [...]
+venues: [...]
+protocols: [...]
+rough_pnl: ...
+net_full: null | ...
+our_support: supported | unsupported | partial
+our_gap:
+  - missing_adapter
+  - missing_template
+  - missing_borrow_source
+next_action:
+  - replay representative tx
+  - add Fluid borrow adapter
+  - add LP-positioned template
+```
+
+## 3. Candidate 层级
+
+候选池追求不漏，分类追求不污染。
+
+| label | 含义 | 可进入学习/复现分析 |
+|---|---|---|
+| `execution_candidate` | 成功 tx，EOA→contract 或 live block 同块执行 tx | 否 |
+| `path_candidate` | 触碰 swap/flash/borrow/LP/peg/wrap 或多 token/多 venue/正向 delta | 是，作为 profiler 输入 |
+| `backrun_candidate` | 满足 victim 因果和非排除条件 | 是 |
+| `confirmed_path` | 代表 tx trace / PnL / 人工确认过 path | 是 |
+| `unknown_replayable` | 闭环可见、有正向粗 PnL、非明显排除、但未命名模板 | 是，必须进 review |
+| `unknown_opaque` | 闭环不明、可能链下腿/复杂 router/无法 decode | 否，单列 |
+
+## 4. Minimal action vocabulary
+
+v1 只做这些动词：
+
+```text
+fund.flashloan
+fund.self
+fund.flashmint
+
+trade.swap
+
+credit.deposit_collateral
+credit.withdraw_collateral
+credit.borrow
+credit.repay
+
+position.lp.mint
+position.lp.burn
+position.lp.rebalance
+
+peg.redeem
+peg.mint
+wrap
+unwrap
+
+settlement.profit_transfer
+settlement.coinbase_payment
+
+unknown.action
+```
+
+新增协议时，先扩 decode registry，再扩 action extractor，不要先造大 taxonomy。
+
+## 5. MVP path templates
+
+这些是已知模板；分类不能只限于它们。
+
+### 5.1 swap-loop
+
+```text
+swap -> swap -> profit_transfer
+```
+
+- 常见类型：pure backrun / standing arb。
+- 关键区分：有同块 causal victim 才能进 backrun；无 victim 是 standing。
+
+### 5.2 flash→swap→repay
+
+```text
+flashloan -> swap... -> repay -> profit_transfer
+```
+
+- 关注 flash source、repay 是否闭合、token delta。
+
+### 5.3 flash→borrow→swap→repay
+
+```text
+flashloan -> deposit_collateral -> borrow -> swap/redeem -> buyback -> repay
+```
+
+- 高优先 path。
+- wstUSR fixture 属此类。
+
+### 5.4 LP-positioned Arb
+
+不要笼统归到 JIT。
+
+```text
+mint_lp/add_liquidity -> arb/swap/price movement -> burn_lp/remove_liquidity -> settle
+```
+
+子类：
+
+- `JIT Fee Capture`: `mint_lp -> victim_swap -> burn_lp`，主要赚手续费。
+- `LP Inventory Arb`: `mint_lp -> swap/price_move -> burn_lp -> swap_residue`，LP 当临时库存/资本腿。
+- `LP Rebalance Backrun`: `burn/withdraw_lp -> swap imbalance -> mint/redeposit_lp`。
+- `LP Flash-Position Arb`: `flashloan -> mint_lp -> arb -> burn_lp -> repay`。
+
+收益来源必须拆：
+
+```text
+fee_capture | inventory_delta | price_repair_arb | mixed
+```
+
+### 5.5 peg/redeem/wrap
+
+```text
+redeem/mint/wrap/unwrap -> swap -> settle
+```
+
+- PSM、staking share price、vault share、wrap/unwrap 等。
+- 不一定是 backrun，但可能是 `research_replayable`。
+
+### 5.6 liquidation-adjacent
+
+清算本身不作为主目标；只分析清算后 AMM 偏移是否被 backrun。
+
+## 6. 排除规则
+
+排除不是说“不研究”，而是防止污染可学习 backrun 口径。
+
+### 6.1 Sandwich excluded
+
+确认 sandwich 至少满足：
+
+```text
+same actor 或 strongly-linked actors
+AND 同 block >= 2 笔
+AND 非本 cluster victim 居中
+AND pre/post 方向高度对称
+AND 共享 pool/token
+AND pre/post 库存或利润闭合
+```
+
+注意：
+
+```text
+pre swap + victim + post reverse swap = sandwich
+pre mint_lp + victim + burn_lp ≠ 自动 sandwich
+```
+
+LP mint、flash funding、borrow、deposit collateral、approve 等非 adverse price leg 不触发 sandwich 排除。
+
+若 pre/post 只通过 weak edge 相连，输出 `sandwich_suspect`，不得 confirmed sandwich。
+
+### 6.2 Directional / CEX-DEX suspect
+
+receipt/logs 阶段只标 suspect，不强判。
+
+```text
+链上不成环
+AND 单边库存变化
+AND 无 victim 依赖
+AND 无 flash 闭合
+```
+
+输出：
+
+```yaml
+label: directional_suspect
+excluded_confidence: low|medium|high
+reason: 对手腿可能在链下不可观测 / 不可复现
+```
+
+### 6.3 Standing / atomic
+
+```text
+无同块 causal victim
+AND 链上闭环获利
+```
+
+归为 `atomic/standing`，不得混进 pure-backrun。
+但如果是 recurring structural path，例如 peg/redeem/borrow-rate/vault-share 结构，标：
+
+```yaml
+research_replayable: structural
+```
+
+仍可进入研究和 replay。
+
+### 6.4 Router / solver false positive
+
+若 `to` 是已知 aggregator/router/solver domain：
+
+```text
+1inch / 0x / UniversalRouter / CoW settlement / KyberSwap / ...
+```
+
+则：
+
+```yaml
+router_or_solver_domain: true
+confidence_downranked: true
+```
+
+除非有明确 victim 因果和闭环 evidence，否则移出 backrun 主口径。
+
+## 7. Backrun candidate
+
+v1 先支持简单同块因果：
+
+```text
+同 block 前序 victim 或 victim_set
+AND 共享 pool/token
+AND victim 造成方向性 price impact
+AND bot 反向修复/获利
+AND 无同 actor adverse pre-trade leg
+AND 非 sandwich/directional
+```
+
+输出三态：
+
+```text
+backrun_candidate
+excluded
+unknown
+```
+
+不要二元过激。
+
+### causal_source
+
+```text
+single_victim
+victim_set
+state_update
+liquidation_event
+peg_deviation
+none_standing
+unknown
+```
+
+## 8. Entity cluster vs strategy cluster
+
+### 8.1 Entity cluster
+
+回答“这是谁”。
+
+v1 edges：
+
+| edge | strength | 说明 |
+|---|---|---|
+| SAME_EXECUTOR | strong | 同 executor 合约 |
+| SAME_RECEIVER | strong | 同 profit receiver |
+| SAME_BLOCK_COLLAB_WITH_SHARED_PROFIT | strong | 同块协同且收益归集一致 |
+| SAME_BYTECODE | medium | 同 bytecode/factory，可辅助归并 |
+| SAME_FACTORY | medium | 同 deployer/factory |
+| SAME_FUNDER | weak | 单条不 merge |
+| CEX_FUNDER / BRIDGE_FUNDER | ignored/negative | 不得单独 merge |
+| SAME_ROUTER / ENTRYPOINT / PUBLIC_SETTLEMENT | ignored/negative | 不得单独 merge |
+
+输出：
+
+```yaml
+entity_cluster:
+  confidence: high|medium|low
+  members: [...]
+  edges: [...]
+  overmerge_risk: low|medium|high
+```
+
+### 8.2 Strategy cluster
+
+回答“这个 searcher 做了哪些打法”。
+
+一个 entity 必须展开为多个 strategy clusters，不得贴单一策略标签。
+
+聚类 key：
+
+```text
+path_template 或 canonical_sequence_hash
++ strategy_type
++ token_family
++ venue/protocol_family
++ funding_type
++ revenue_source
++ exclusion_bucket
+```
+
+## 9. PnL 口径
+
+v1 只要求粗算可用，别 overclaim。
+
+```text
+raw_deltas: 每 token 原始 delta，永远保留，不同 token 不相加
+rough_valued_pnl: 仅 WETH/stable/可靠报价 token 求和
+unpriced_deltas: 单列
+gas_paid: receipt 可得
+net_ex_internal_bribe = rough_valued_pnl - gas_paid
+```
+
+`net_ex_internal_bribe` 是上界，漏内部 coinbase transfer。
+
+trace 后才允许：
+
+```text
+coinbase_transfer
+effective_bid = priority_fee + coinbase_transfer
+gross_before_bid
+net_after_bid
+net_full
+```
+
+Live Loss 必须尽量区分：
+
+```text
+gross 更低 = no_alpha / path 差
+gross 接近但 bid 低 = bid_too_low
+对手有 borrow/LP/peg leg = path_unsupported 或 capital_edge
+```
+
+## 10. Addressability / our gap
+
+每个高价值 path 必须输出：
+
+```yaml
+our_support: supported | partial | unsupported | unknown
+replayable_by_us_now: true|false
+addressability:
+  - public_state_replayable
+  - needs_new_adapter
+  - needs_borrow_source
+  - needs_inventory
+  - offchain_cex_required
+  - needs_private_orderflow
+  - not_replayable
+opponent_edge:
+  - routing_edge
+  - capital_edge
+  - inclusion_edge
+  - pricing_edge
+  - contract_edge
+  - private_flow_edge
+our_gap:
+  - missing_adapter
+  - missing_template
+  - missing_borrow_source
+  - missing_builder_coverage
+next_action:
+  - replay representative tx
+  - add adapter
+  - add searcher template draft
+```
+
+## 11. Fixture 最小集
+
+MVP CI 只保留硬 fixture：
+
+| fixture | expected |
 |---|---|
-| **A 资金来源** | `flashloan(morpho/balancer/aave/univ3-flash/maker)` · `self-funded` · `flash-mint` |
-| **B 路径形态** | `swap-loop` · `flash→swap→repay` · `flash→borrow→swap→repay` · `+LP(mint/burn)` · `peg/redeem/wrap` |
-| **C 策略类型** | `pure-backrun` · `backrun+LP` · `atomic/standing` · `liquidation-adjacent` · `sandwich(排除)` · `directional/cex-dex(排除)` |
-| **D 足迹** | tokens · venues(univ2/3/4,curve,balancer…) · protocols(Fluid/Morpho/Aave/Maker-Sky/Pendle…) |
+| wstUSR tx `0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970` | `flash→borrow→swap→repay` |
+| BEL token `0xA91ac63D040dEB1b7A5E4d4134aD23eb0ba07e14` | borrowable=0，标不可执行 |
+| block 25411620 sandwich pre/victim/post | confirmed sandwich excluded |
+| LP-positioned tx **TBD** | `mint_lp -> arb/swap -> burn_lp`，不得误判普通 JIT/sandwich。**Phase 1 先用人工 fixture/代表 tx;真实链上样本找到后再补入 CI,不卡 Phase 1** |
+| router false positive **TBD** | router_or_solver_domain=true，降权。**同上:真实样本补后入 CI** |
 
-### 0.1 高召回候选池分层
+fixture 断言不只看 label，还要断言：
 
-候选池追求**不漏**,分类追求**不污染**。`EOA → contract` 可以先进池,但**不等于 MEV**,更不等于
-backrun。所有报告必须区分"进入候选池"和"确认可寻址利润"。
-
-分层标签:
-
-| 层级 | 含义 | 是否进入 addressable ratio |
-|---|---|---|
-| `execution_candidate` | 高召回入口。成功 tx,`from` 是 EOA,`to` 是合约;live-shadow/目标区块模式可仅凭这一条入池。 | 否 |
-| `mev_candidate` | 候选 tx 触碰 DEX/借贷/LP/flash/peg 场所,或出现多 token/多 venue/正向 delta 等便宜信号。 | 否 |
-| `backrun_candidate` | 满足 §2.3 的 victim 因果条件,且未被 sandwich/directional 排除。 | 可进入候选口径 |
-| `confirmed_backrun` | `backrun_candidate` 经路径/PnL/人工或金标准规则确认后晋升。 | 是 |
-
-批量历史模式为控成本,可要求 `execution_candidate + 至少一个便宜 MEV 信号` 才进入深一层分析;
-live-shadow/目标区块模式可以更宽,把同块 `EOA → contract` 全部放入候选池,再用后续分类 false 掉。
-
-### 0.2 Seed address 第一页预筛
-
-给定一个 EOA seed 地址时,先用 Alchemy/RPC-compatible 分页交易查询拉**第一页历史交易**做低成本画像。
-这一步只判断"像不像 executor/operator 地址",不判断 MEV 真相。
-
-预筛信号:
-- `eoa_contract_call_ratio`:第一页成功 tx 中,`from=seed EOA` 且 `to=contract` 的比例。
-- `contract_reuse_ratio`:是否反复调用少数 executor/strategy 合约。
-- `known_venue_touch_ratio`:这些 tx 的 receipt/logs 是否触碰已知 DEX/借贷/LP/flash/peg 场所。
-- `plain_transfer_ratio`:纯 ETH/ERC20 转账、CEX 充值/提现、claim 等非执行类交易比例。
-
-预筛输出:
+```text
+canonical_action_sequence
+evidence object
+cluster edges
+exclusion reason
+rough pnl fields
 ```
-seed_profile = executor_like | mixed | low_signal
-```
-
-建议:
-- `executor_like`:第一页大多是 `EOA → contract`,且复用少数合约 → 继续归簇和 P0。
-- `mixed`:继续跑候选池,但降低优先级。
-- `low_signal`:默认不深挖,除非该地址来自 live-shadow 竞争者或人工指定。
-
-候选池不变量:
-- `execution_candidate` 的 count 可以很大,但不得计入 `addressable_profit_ratio`。
-- unknown / excluded / unpriced 必须单独披露,不得混进 `pure-backrun`。
-- 只有 `backrun_candidate` / `confirmed_backrun` 可以服务"我们能不能学"这个问题。
-
-## 1. 研究策略簇 / 模板大类
-
-> 这些是"研究单元",**不是单一维度**——每个簇是 A/B/C 的组合。下面每类显式标注它在
-> 四维上的取值,避免把资金来源/路径形态/策略类型混成一坨。
-
-1. **Pure Backrun Swap Arb** — victim 打歪池子后,bot swap 回正。
-   `A=self-funded|flashloan · B=swap-loop · C=pure-backrun`
-2. **Flashloan Swap Arb** — flash 一个 token 做 swap 闭环再还。
-   `A=flashloan · B=flash→swap→repay · C=pure-backrun|atomic`
-3. **Flashloan Borrow-leg Arb** — 带借贷腿(Fluid/Aave/Morpho 抵押借款定价),wstUSR 案例属此。**最高 alpha**。
-   `A=flashloan · B=flash→borrow→swap→repay · C=pure-backrun|atomic`
-4. **Backrun + LP / JIT** — 同块 mint/burn LP:`mint→victim→burn` / `backrun→LP rebalance` / `withdraw→swap→redeposit`。
-   `A=any · B=+LP · C=backrun+LP`
-5. **Oracle / Peg / Redemption** — 脱锚、预言机滞后、PSM、redeem、wrap/unwrap、staking share price。
-   `A=flashloan|self · B=peg/redeem/wrap · C=pure-backrun|atomic`
-6. **Liquidation-Adjacent** — 清算不做,只分析"清算后 AMM 偏移的 backrun"。
-   `A=any · B=swap-loop · C=liquidation-adjacent`
-
-## 2. 排除口径(可编码布尔)
-
-### 2.1 Sandwich(排除,主口径不计)
-判定基于 **entity cluster**(见 §3),非单地址。满足以下组合即标 `sandwich`:
-- 同 cluster 在**同一 block** 出现 ≥2 笔,且
-- 一个非 cluster 的 victim tx **居中**(cluster.pre.index < victim.index < cluster.post.index),且
-- pre 与 post 的 token 方向**高度对称**(pre 买入 X、post 卖出 X,同一 pool/对)
-
-> 退化情形:同 block 内**两笔不同地址、方向对称、夹一个 victim** → 标 `sandwich_suspect`,也排除主口径但记 confidence。
-
-### 2.2 Directional / CEX-DEX(排除,但保守)
-- receipt/logs 阶段只标 `directional_suspect`,**不过早强判**。
-- 依据:链上**不成环**(入 token ≠ 出 token,单边库存变化)+ **无 victim 依赖** + **无 flash 闭合**。
-- 报告必须显示 `excluded_confidence`;理由记为"对手腿在链下不可观测 / 不可复现"。
-
-### 2.3 Pure-backrun 正向判定(可编码,防 standing arb 混入)
-标 `backrun_candidate` **必须全部满足**(否则降级,见下):
-1. **同块前序 victim**:存在非本 cluster 的 tx,`victim.index < bot.index`,同 block。
-2. **共享 pool/token**:victim 与 bot 触碰同一 pool 或同一 token 对。
-3. **方向性 price impact**:victim 对该 pool 造成单向价格偏移(reserves/sqrtPrice 朝一个方向移动)。
-4. **bot 反向修复/获利**:bot 的方向与 victim 偏移相反(吃回错位)。
-5. **无 cluster pre-leg**:本 cluster 在该 block 没有 victim 之前的腿(有 → 是 sandwich,不是 backrun)。
-
-三态输出,**不要二元过激**:
-```
-backrun_candidate   # 1-5 全满足 → 进细分类
-excluded            # sandwich / directional / standing / liquidation
-unknown             # 条件部分满足/victim 不明 → 暂不深挖,除非利润高
-```
-> 缺 #1(无同块前序 victim)但仍成环获利 = `atomic/standing`,归 excluded,**不得混进 pure-backrun**。
-
-## 3. Entity cluster(实体簇)
-
-PnL 与策略归属的对象是**簇**,不是输入的单个地址。簇的成员关系(任一成立即归并):
-- 同 executor 合约
-- 同 funder(首次 gas 来源 / 资金注入源)
-- 同 profit receiver(利润最终归集地址)
-- 同 block 内协同(pre/post 同收益归集)
-
-> 不做簇 → 利润漏到 receiver、或把 executor 误判成亏损。
-
-## 4. PnL 口径(关键,防污染)
-
-- **raw_deltas**:永远保留每个 token 的原始 delta(不同 token 不相加)。
-- **valued_pnl(usd/eth)**:仅**稳定币 / WETH / 可可靠报价 token** 参与求和;`unknown/unpriced` token **单列,不进主口径 ratio**。
-- **两层利润**(因为 P0 不 trace,内部 coinbase 转账拿不到):
-  - `net_ex_internal_bribe`:无 trace 粗口径 = token delta − gas(含 priority fee)。**这是上界,系统性高估**(漏内部 coinbase bribe)。
-  - `net_full`:trace 后完整口径 = 再减去内部 `coinbase transfer`。
-- **同源 + 同估值**:`addressable_profit_ratio` 的分子分母必须都用我们 PnL、同一估值口径。zeromev/eigenphi 只给"桶标签",**利润数一律我们算**。
-
-**分母防失真**:用"正向可估值利润"求和,亏损与 unpriced 不污染主口径,单独报。
-```
-positive_valued_net(set) = Σ max(valued_net(tx), 0)   # 仅可报价 token
-
-addressable_profit_ratio =
-  positive_valued_net(pure-backrun ∪ backrun+LP) / positive_valued_net(ALL-mev)
-  (同源、同估值、cluster 聚合)
-
-# 单独披露,不进主分母:
-losing_valued_net (Σ min(valued_net,0))、unpriced_raw_delta_notes
-```
-- 若 `positive_valued_net(ALL-mev) == 0`(无任何可估值正利润)⇒ ratio 记 `n/a`,cluster 标 `unpriced/observe-only`。
-- `ratio < 10%`(或 `n/a`)⇒ 该 cluster 标 `observe-only`,**不进 Phase 5 深挖**。
-
-## 5. 金标准 fixture(CI 回归,pin 到 tx hash)
-
-| 名称 | pin | expected |
-|---|---|---|
-| **wstUSR**(成功金标准) | tx `0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970` block 24710788 | C=`pure-backrun`(借贷腿), B=`flash→borrow→swap→repay`(Morpho flash wstUSR → Fluid deposit/borrow → PSM/Curve → 买回 wstUSR → repay), PnL 区间见 CLAUDE.md(~273 wstUSR + ~0.078 WETH) |
-| **BEL**(不可借/不可复现基准) | token `0xA91ac63D040dEB1b7A5E4d4134aD23eb0ba07e14` | `borrowable(BEL)=0`(Morpho+Balancer 余额均 0)⇒ flashToken=BEL 的路由判定为不可执行/排除 |
-| **multi-address sandwich** | block 25411620<br>pre  idx0 `0x972c33f25a9bbab96ed7c100f233fdf246d6d3a8055e1b4c675ae6994d56e562`<br>victim idx1 `0xaca468a9762f52e9b1c1c74d75ed2d310686fe4cf855d399ea07d87dee9f39fc`<br>post idx2 `0x1ae11d530ccdc0659349c368c922cfe73a7eebd153d2a57f7b5c7edb891e4695` | C=`sandwich` 并排除;cluster 检测把 idx0/idx2 归同簇(断言:`idx0.from==idx2.from` ∧ `idx0.to==idx2.to`,均 `0xae2Fc483…`→`0x1f2F10D1…`);victim 居中 idx0<idx1<idx2 |
-
-> BEL 的 fixture 是 **token 级**(borrowable=0),不是落地 tx——它本是我们被拒的候选,不是链上成交。

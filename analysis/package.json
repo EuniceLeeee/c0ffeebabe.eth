@@ -1,0 +1,20 @@
+{
+  "name": "mev-analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "analysis": "tsx src/cli/index.ts",
+    "address": "tsx src/cli/address.ts",
+    "live-loss": "tsx src/cli/live-loss.ts",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.5.0"
+  }
+}
