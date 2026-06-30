@@ -28,6 +28,7 @@ const opportunityArg = args.opportunity ? String(args.opportunity) : undefined;
 const watch = parseWatch(args.watch);
 const coverage = Boolean(args.coverage);
 const maxBlocks = Number(args["max-blocks"] ?? 200);
+const mempoolFilterArg = args["mempool-filter"] ? String(args["mempool-filter"]) : undefined;
 
 if (!eventsPath) {
   console.error("Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl --block 123 --rpc <url>");
@@ -118,6 +119,8 @@ interface CoverageMatch {
     secondaryReasons: string[];
     victimTo: string | null;
     matchedWatchRule: string | null;
+    victimInMempoolFilter: boolean | null;
+    mempoolFilterSource: string;
   };
   pathSummary: {
     canonicalSequence: string[];
@@ -161,6 +164,11 @@ interface CoverageReport {
     sameTokenPairSeenByUs: number;
     notSeenByUs: number;
   };
+  mempoolFilter: {
+    source: string;
+    exact: boolean;
+    addressCount: number;
+  };
   classificationBreakdown: Record<string, number>;
   representativeMatches: CoverageMatch[];
   completeness: {
@@ -172,6 +180,12 @@ interface CoverageReport {
   };
   outputJson: string;
   outputMarkdown: string;
+}
+
+interface MempoolFilterIndex {
+  addresses: Set<string>;
+  source: string;
+  exact: boolean;
 }
 
 interface BlockAnalysisContext {
@@ -321,6 +335,66 @@ function parseWatch(value: string | boolean | undefined): string[] {
     .map(lower));
 }
 
+async function buildMempoolFilterIndex(items: any[], explicitSource?: string): Promise<MempoolFilterIndex> {
+  if (explicitSource) {
+    const addresses = parseAddressList(await readAddressListSource(explicitSource));
+    return { addresses: new Set(addresses), source: "--mempool-filter", exact: true };
+  }
+
+  const fromEvents: string[] = [];
+  for (const e of items) {
+    if (e.type !== "mempool_filter_config") continue;
+    const raw = e.to_addresses ?? e.toAddresses ?? e.addresses;
+    if (Array.isArray(raw)) fromEvents.push(...raw.map(String));
+  }
+  const eventAddresses = parseAddressList(fromEvents.join("\n"));
+  if (eventAddresses.length > 0) {
+    return { addresses: new Set(eventAddresses), source: "events:mempool_filter_config", exact: true };
+  }
+
+  return { addresses: new Set(), source: "none", exact: false };
+}
+
+async function readAddressListSource(source: string): Promise<string> {
+  try {
+    return await readFile(resolve(source), "utf8");
+  } catch {
+    return source;
+  }
+}
+
+function parseAddressList(text: string): string[] {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parseAddressListFromJson(parsed);
+    } catch {
+      // Fall through to token parsing; malformed JSON should still surface as
+      // zero addresses instead of crashing a coverage run.
+    }
+  }
+  return uniq((trimmed.match(/0x[a-fA-F0-9]{40}/g) ?? []).map(lower));
+}
+
+function parseAddressListFromJson(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniq(value.filter((x): x is string => typeof x === "string").filter(isAddress).map(lower));
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    for (const key of ["to_addresses", "toAddresses", "addresses"]) {
+      const raw = obj[key];
+      if (Array.isArray(raw)) return parseAddressListFromJson(raw);
+    }
+  }
+  return [];
+}
+
+function isAddress(value: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
 async function runWatchMode(): Promise<void> {
   const range = inferWatchRange(events);
   const seenByBlock = buildSeenByBlock(events);
@@ -371,13 +445,15 @@ function inferWatchRange(items: any[]): { from: number; to: number } {
 async function runCoverageMode(): Promise<void> {
   const range = inferWatchRange(events);
   const seen = buildSeenIndex(events);
+  const mempoolFilter = await buildMempoolFilterIndex(events, mempoolFilterArg);
   const totalBlocks = range.to - range.from + 1;
   const omittedBlocks: number[] = [];
   const matches: CoverageMatch[] = [];
   const watchSet = new Set(watch);
   const matchedBlocks = new Set<number>();
   console.error(
-    `[analysis/live-loss/coverage] blocks=${range.from}-${range.to} watch=${watch.length} maxBlocks=${maxBlocks}`,
+    `[analysis/live-loss/coverage] blocks=${range.from}-${range.to} watch=${watch.length} ` +
+      `maxBlocks=${maxBlocks} mempoolFilter=${mempoolFilter.source}:${mempoolFilter.addresses.size}`,
   );
 
   for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
@@ -406,7 +482,7 @@ async function runCoverageMode(): Promise<void> {
 
       const sandwichByTx = await detectLocalSandwiches(blockNumber, txs, analyses, getReceiptCached);
       for (const item of analyses) {
-        matches.push(buildCoverageMatch(item, seen, sandwichByTx.get(lower(item.tx.hash))));
+        matches.push(buildCoverageMatch(item, seen, mempoolFilter, sandwichByTx.get(lower(item.tx.hash))));
       }
     } catch (err) {
       omittedBlocks.push(blockNumber);
@@ -419,6 +495,7 @@ async function runCoverageMode(): Promise<void> {
   const report = buildCoverageReport({
     range,
     seen,
+    mempoolFilter,
     matches,
     matchedBlocks,
     scannedBlocks,
@@ -541,6 +618,7 @@ async function findVictimBetween(
 function buildCoverageMatch(
   item: CoverageTxAnalysis,
   seen: SeenIndex,
+  mempoolFilter: MempoolFilterIndex,
   sandwichEvidence?: SandwichEvidence,
 ): CoverageMatch {
   const seenSet = seen.byBlock.get(item.block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
@@ -548,6 +626,8 @@ function buildCoverageMatch(
   const sameTokenPairSeen = item.tokens.some((token) => seenSet.tokens.has(token));
   const exactVictimSeen = sandwichEvidence ? seen.victimHashes.has(lower(sandwichEvidence.victimTx)) : false;
   const sameBlockSeen = seenSet.any;
+  const victimTo = sandwichEvidence?.victimTo ? lower(sandwichEvidence.victimTo) : null;
+  const victimInMempoolFilter = victimTo ? mempoolFilter.addresses.has(victimTo) : null;
   const hasExtraNonSandwichLeg = Boolean(
     sandwichEvidence && item.pools.some((pool) => pool !== sandwichEvidence.sharedPool),
   );
@@ -558,6 +638,9 @@ function buildCoverageMatch(
     samePoolSeen,
     sameTokenPairSeen,
     hasVictim: Boolean(sandwichEvidence?.victimTx),
+    victimTo,
+    victimInMempoolFilter,
+    mempoolFilterExact: mempoolFilter.exact,
   });
   return {
     competitorTx: item.tx.hash,
@@ -572,8 +655,10 @@ function buildCoverageMatch(
       sameTokenPairSeen,
       primaryNotSeenReason: reasons.primary,
       secondaryReasons: reasons.secondary,
-      victimTo: sandwichEvidence?.victimTo ?? null,
-      matchedWatchRule: item.matched.length > 0 ? `from/to:${item.matched.join(",")}` : null,
+      victimTo,
+      matchedWatchRule: victimTo && victimInMempoolFilter ? `toAddress:${victimTo}` : null,
+      victimInMempoolFilter,
+      mempoolFilterSource: mempoolFilter.source,
     },
     pathSummary: buildPathSummary(item, sandwichEvidence),
     sandwichEvidence,
@@ -604,11 +689,23 @@ function coverageReasons(
     samePoolSeen: boolean;
     sameTokenPairSeen: boolean;
     hasVictim: boolean;
+    victimTo: string | null;
+    victimInMempoolFilter: boolean | null;
+    mempoolFilterExact: boolean;
   },
 ): { primary: string | null; secondary: string[] } {
   const reasons: string[] = [];
   if (!visibility.hasVictim && classification !== "sandwich_excluded" && classification !== "mixed") {
     reasons.push("standing_not_victim_triggered");
+  }
+  if (
+    visibility.hasVictim &&
+    !visibility.exactVictimSeen &&
+    visibility.mempoolFilterExact &&
+    visibility.victimTo &&
+    visibility.victimInMempoolFilter === false
+  ) {
+    reasons.push("router_not_watched");
   }
   if (!visibility.sameBlockSeen) reasons.push("unknown");
   if (visibility.sameBlockSeen && !visibility.samePoolSeen) reasons.push("pool_not_in_graph");
@@ -722,6 +819,15 @@ function coverageNextActions(
   primaryReason: string | null,
   hasExtraNonSandwichLeg: boolean,
 ): string[] {
+  if (primaryReason === "router_not_watched") {
+    const actions = ["add victim_to/router to filtered mempool toAddress list, then re-run coverage"];
+    if (classification === "mixed" || hasExtraNonSandwichLeg) {
+      actions.push("exclude sandwich leg", "replay non-sandwich legs before calling it a path gap");
+    } else if (classification === "sandwich_excluded") {
+      actions.push("count visibility gap, but exclude from pure backrun loss sample");
+    }
+    return actions;
+  }
   if (classification === "mixed" || hasExtraNonSandwichLeg) {
     return ["exclude sandwich leg", "replay non-sandwich legs before calling it a path gap"];
   }
@@ -740,6 +846,7 @@ function coverageNextActions(
 function buildCoverageReport(input: {
   range: { from: number; to: number };
   seen: SeenIndex;
+  mempoolFilter: MempoolFilterIndex;
   matches: CoverageMatch[];
   matchedBlocks: Set<number>;
   scannedBlocks: number;
@@ -802,6 +909,11 @@ function buildCoverageReport(input: {
       sameTokenPairSeenByUs,
       notSeenByUs,
     },
+    mempoolFilter: {
+      source: input.mempoolFilter.source,
+      exact: input.mempoolFilter.exact,
+      addressCount: input.mempoolFilter.addresses.size,
+    },
     classificationBreakdown: breakdown,
     representativeMatches: input.matches
       .sort((a, b) => bScoreCoverageMatch(b) - bScoreCoverageMatch(a))
@@ -853,6 +965,9 @@ function renderCoverageMarkdown(report: CoverageReport): string {
   lines.push(`- same_pool_seen_by_us: \`${report.competitorCoverage.samePoolSeenByUs}\``);
   lines.push(`- same_token_pair_seen_by_us: \`${report.competitorCoverage.sameTokenPairSeenByUs}\``);
   lines.push(`- not_seen_by_us: \`${report.competitorCoverage.notSeenByUs}\``);
+  lines.push(`- mempool_filter_source: \`${report.mempoolFilter.source}\``);
+  lines.push(`- mempool_filter_exact: \`${report.mempoolFilter.exact}\``);
+  lines.push(`- mempool_filter_address_count: \`${report.mempoolFilter.addressCount}\``);
   lines.push("");
   lines.push("## Classification Breakdown");
   lines.push("");
@@ -882,6 +997,9 @@ function renderCoverageMarkdown(report: CoverageReport): string {
     lines.push(`- same_pool_seen: \`${m.ourVisibility.samePoolSeen}\``);
     lines.push(`- same_token_pair_seen: \`${m.ourVisibility.sameTokenPairSeen}\``);
     lines.push(`- victim_to: ${m.ourVisibility.victimTo ? `\`${m.ourVisibility.victimTo}\`` : "`n/a`"}`);
+    lines.push(`- victim_in_mempool_filter: \`${m.ourVisibility.victimInMempoolFilter ?? "n/a"}\``);
+    lines.push(`- mempool_filter_source: \`${m.ourVisibility.mempoolFilterSource}\``);
+    lines.push(`- matched_watch_rule: ${m.ourVisibility.matchedWatchRule ? `\`${m.ourVisibility.matchedWatchRule}\`` : "`n/a`"}`);
     lines.push(`- path_template: \`${m.pathSummary.pathTemplate}\``);
     lines.push(`- canonical_sequence: \`${m.pathSummary.canonicalSequence.join(" -> ") || "unknown"}\``);
     if (m.sandwichEvidence) {

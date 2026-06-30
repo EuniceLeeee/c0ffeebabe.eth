@@ -2114,12 +2114,21 @@ async function* mempoolHints(
 ): AsyncGenerator<HintEnvelope> {
   const toAddress = buildMempoolToAddressFilter(pools);
   const toAddressSet = new Set(toAddress.map((a) => a.toLowerCase()));
+  const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
   const interesting = (to: string | null | undefined): boolean =>
     Boolean(to && toAddressSet.has(to.toLowerCase()));
   console.log(
     `[searcher/live] mempool filtered subscription toAddress=${toAddress.length} ` +
       `routers=${MEMPOOL_ROUTER_ADDRESSES.size}`,
   );
+  emitEvent({
+    type: "mempool_filter_config",
+    source: "filtered_mempool",
+    to_addresses: toAddress,
+    address_count: toAddress.length,
+    router_count: MEMPOOL_ROUTER_ADDRESSES.size,
+    max_addresses: maxAddresses,
+  });
 
   for (;;) {
     let ws: WebSocket | null = null;

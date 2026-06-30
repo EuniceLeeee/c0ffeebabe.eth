@@ -53,6 +53,14 @@ export function makeOpportunityId(input: {
 
 export type SearcherEvent =
   | {
+      type: "mempool_filter_config";
+      source: "filtered_mempool";
+      to_addresses: string[];
+      address_count: number;
+      router_count: number;
+      max_addresses?: number;
+    }
+  | {
       type: "opportunity_seen";
       opportunity_id: string;
       target_block: number;
