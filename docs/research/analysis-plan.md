@@ -853,3 +853,83 @@ MVP 完成的标准不是 taxonomy 完整，而是：
    - `analysis/` 无私钥 / 广播 / root `.env` 引用。
 6. outputs gitignored。
 7. CU 纪律:每次 profiler/live-loss run 有 CU 上限并在报告里上报实际用量;trace 受 `--trace-top`/预算约束。
+
+## 9. Production contract
+
+本节是 event / coverage 的**权威契约**。本文前面的内联 JSONL 示例是示意,可能过时;**与本节冲突时以本节为准**,真实源是 [`listener/src/searcher/events.ts`](../../listener/src/searcher/events.ts)。这一刀不是大改,只是把"方向正确"收紧成"可按它实现"。
+
+### 9.1 Event envelope(每条事件都带)
+
+```text
+type, opportunity_id, target_block, victim_hash, emitted_at_ms
+schema_version   # 整数;任何 breaking 字段变更就 +1
+run_id           # 每个 searcher 进程一个,绑定一次 run 的所有事件
+chain_id         # mainnet=1
+```
+
+- schema_version 策略(轻量):analyzer 读它;遇到未知/更高 major → 警告 + 跳过,**不静默错解析**。无需向后改写——emitter 和 analyzer 一起发版。
+
+### 9.2 Event 形状(对齐 events.ts,不是旧示例)
+
+- `opportunity_seen`:`+ pool?, tokens?`。**没有 `path_id` / `template_id` / `simulated_profit`**——detect 阶段还不知道 path/利润。(修正旧示例。)
+- `simulation_result`:`+ path_id?, template_id?, ok, simulated_profit?, profit_token?, gas_estimate?, failure_reason?`。
+- `pipeline_dropped`:`+ stage, reason, error?, pool?, tokens?, path_id?, template_id?, plans?, no_candidate_diagnostic?`。
+- `bundle_submitted`:`+ submission_target_block?, mode, path_id?, template_id?, simulated_profit?, simulated_profit_eth?, bid?, tx_hash(签名后的 backrun tx hash), calldata_hash, builders_sent?, bundle_hash?, accepted?`。
+- **没有 `tx_included` / `tx_not_included` searcher 事件。** inclusion 由 **analyzer 推导**:用 `bundle_submitted.tx_hash` +(`submission_target_block ?? target_block` 及小幅向后看几块)在落块里查。热路径绝不轮询 inclusion。
+
+### 9.3 opportunity_id(稳定、seen 阶段可算)
+
+```text
+opportunity_id = keccak256(target_block | victim_hash | pool | sorted(tokens))
+```
+
+**不得含 path_id/template_id**(seen 时未知 → 会把同一机会在不同阶段拆成不同 group)。seen / sim / dropped / submitted 全程同一个 id。
+
+### 9.4 Watch-miss 根因(not_seen 分桶 —— 让它可执行)
+
+每个 `not_seen_by_us` 必须带确定性根因,映射到**单一 owner/修复**:
+
+```text
+router_not_watched            # victim.to ∉ filtered-mempool 的 toAddress 列表  → 修:把 router 加进 mempool filter
+pool_not_in_graph             # impacted pool ∉ routing graph                   → 修:把 pool 加进 graph
+token_pair_not_in_universe    # pair 不在 token graph                           → 修:扩 universe
+private_or_builder_only       # 从未进公开 mempool                              → mempool 修不了
+seen_pool_but_no_plan         # 看到了但 planner 没建出 plan                    → planner/template gap
+standing_not_victim_triggered # 无同块 victim                                   → 另一类策略(见 9.6)
+unknown
+```
+
+每个 miss 必填:`victim_to`(tx.to)、`matched_watch_rule`(本该匹配它的 filter 规则,或 null)。**这就是把"加一个 router"和"加一个 pool"分开的关键。**
+
+### 9.5 Actor-linking / sandwich 阈值(确定性 v1)
+
+v1 confirmed sandwich 必须**全部**满足:
+
+```text
+同 executor 或 同 sender(不靠跨 actor 的 "linked")
+AND 同 block
+AND 同 pool
+AND 反向腿(pre 卖 X→Y,post 买 Y→X)
+AND inventory 在容差内闭合(|净 token delta| ≤ 腿规模的 ~1%)
+```
+
+跨 actor 的 "strongly-linked"(共享 funder/builder)→ 只标 `sandwich_suspect`,**永不 confirmed**(避免误合并假阳性)。经验:这套 same-actor 规则把某 bot 的 116 笔拆成 80 夹子对 / 17 独立 / 19 多笔块——确实能分腿。
+
+### 9.6 Standing-arb-no-victim 是终态
+
+`standing_not_victim_triggered` = competitor leg 无同块 victim → 它是**扫链上 state 的 standing/inventory arb,我们 victim-trigger 的 mempool 模型按设计就抓不到**。这类的 `next_action` **必须**写"另一类策略,不是 coverage/latency/bid 能修的"——不得归成 missed backrun,也别去"补覆盖"。
+
+### 9.7 Partial-scan completeness(轻量 degraded 行为)
+
+coverage / watch 报告必须输出:
+
+```text
+scanned_blocks / total_blocks / completeness_pct / omitted_blocks[]
+```
+
+`completeness_pct < 100` 时标 `partial: true`。(这个离线单机工具**不需要** reorg/retry/backoff 全套——只要别把截断扫描误读成完整即可。)
+
+### 9.8 两个新增 CI fixture(对应 9.4 / 9.5)
+
+- `false-sandwich-linkage`:两个无关 actor、同 pool/block,**不得**被合并成 sandwich(保持 `sandwich_suspect`)。
+- `router-miss`:competitor victim 的 `to` 不在 filter 里 → 必须分类 `router_not_watched` 且 `victim_to` 已填。
