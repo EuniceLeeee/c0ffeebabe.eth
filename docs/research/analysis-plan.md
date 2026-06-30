@@ -868,6 +868,7 @@ chain_id         # mainnet=1
 ```
 
 - schema_version 策略(轻量):analyzer 读它;遇到未知/更高 major → 警告 + 跳过,**不静默错解析**。无需向后改写——emitter 和 analyzer 一起发版。
+- **⚠️ 代码现状(必须先对齐,否则 Pro/Codex/Claude 会按文档和代码得出不同结论)**:`events.ts` 当前**还没 emit** `schema_version/run_id/chain_id`。补齐这三个 envelope 字段是 coverage 的**第一个代码任务**——在 `emitEvent` 注入:`schema_version` 常量、`run_id` 在 `initEvents` 生成一次、`chain_id` 从 config(默认 1)。**补齐之前,本节是目标契约,不能声称 events.ts 已是真实源**;analyzer 须容忍三字段缺失(当作 `schema_version=0` legacy,不报错)。
 
 ### 9.2 Event 形状(对齐 events.ts,不是旧示例)
 
@@ -883,7 +884,9 @@ chain_id         # mainnet=1
 opportunity_id = keccak256(target_block | victim_hash | pool | sorted(tokens))
 ```
 
-**不得含 path_id/template_id**(seen 时未知 → 会把同一机会在不同阶段拆成不同 group)。seen / sim / dropped / submitted 全程同一个 id。
+**不得含 path_id/template_id**(seen 时未知 → 会把同一机会在不同阶段拆成不同 group)。
+
+**只算一次(canonical-at-seen)**:`opportunity_id` 在 `opportunity_seen` 阶段生成一次即为唯一真值;`simulation_result / pipeline_dropped / bundle_submitted` 只能**复用该值**,即使后续知道了更全的 pool/tokens 也**不得重算**(否则同一机会会裂成两个 id)。验收:同一机会 seen→drop/submit 的 `opportunity_id` 必须逐字节相同。
 
 ### 9.4 Watch-miss 根因(not_seen 分桶 —— 让它可执行)
 
@@ -898,6 +901,20 @@ seen_pool_but_no_plan         # 看到了但 planner 没建出 plan             
 standing_not_victim_triggered # 无同块 victim                                   → 另一类策略(见 9.6)
 unknown
 ```
+
+**多桶冲突 → 按优先级取唯一 `primary_reason`**(其余命中进 `secondary_reasons[]`)。同一 victim 可能同时满足多个桶,必须有确定顺序:
+
+```text
+standing_not_victim_triggered   # 无 victim → 前置;下面这些(都关于 victim)都不适用
+> router_not_watched
+> private_or_builder_only
+> pool_not_in_graph
+> token_pair_not_in_universe
+> seen_pool_but_no_plan
+> unknown
+```
+
+排序逻辑 = "最早卡在哪一阶段":victim 根本没进我们视野(standing 无 victim / router 没监控 / 私有流)> 图覆盖 > planner。`primary_reason` 必须唯一,`secondary_reasons` 记其余命中。
 
 每个 miss 必填:`victim_to`(tx.to)、`matched_watch_rule`(本该匹配它的 filter 规则,或 null)。**这就是把"加一个 router"和"加一个 pool"分开的关键。**
 
@@ -925,11 +942,24 @@ coverage / watch 报告必须输出:
 
 ```text
 scanned_blocks / total_blocks / completeness_pct / omitted_blocks[]
+scan_errors: [{ block, stage, reason }]   # completeness<100 时必须能区分 rpc_timeout / receipt_missing / decode_failed
 ```
 
-`completeness_pct < 100` 时标 `partial: true`。(这个离线单机工具**不需要** reorg/retry/backoff 全套——只要别把截断扫描误读成完整即可。)
+`completeness_pct < 100` 时标 `partial: true`,且 `scan_errors` 不得为空(否则不知道是 RPC 超时、receipt 缺失还是 decode 失败)。这个离线单机工具**不需要** reorg/retry/backoff 全套——只要别把截断扫描误读成完整、且能定位漏因即可。
 
 ### 9.8 两个新增 CI fixture(对应 9.4 / 9.5)
 
 - `false-sandwich-linkage`:两个无关 actor、同 pool/block,**不得**被合并成 sandwich(保持 `sandwich_suspect`)。
 - `router-miss`:competitor victim 的 `to` 不在 filter 里 → 必须分类 `router_not_watched` 且 `victim_to` 已填。
+
+### 9.9 post_state_opportunity_candidate 三态(别把夹子 post leg 误判成可做 backrun)
+
+承接 §6 的 `excluded_sandwich_but_has_post_state_opportunity`:victim 后是否还存在 backrun-only 原子 exit,**不能只凭 transfer logs 下结论**。v1 只允许三态:
+
+```text
+yes              # 找到原子 exit path 且 replay/sim 通过,才算 yes
+requires_replay  # logs-only 最多到这(证明不了存在可原子退出的路径)
+no               # 找不到 / 确认无 exit
+```
+
+**绝不 logs-only 给 `yes`。** 否则会把 sandwich 的 post leg 误判成我们能做的 backrun,污染 path/pool gap 样本。
