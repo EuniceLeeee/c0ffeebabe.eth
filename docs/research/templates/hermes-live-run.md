@@ -99,8 +99,10 @@ Representative **non-sandwich** competitor legs (sandwich legs excluded per §6/
 ## Claude Code Review
 -
 
-## Codex Final Review
--
+## Codex Fixes / Review Response
+- **fixed:**
+- **deferred:**
+- **verification:**
 
 ## Claude Final Approval
 - **approved:** yes / no

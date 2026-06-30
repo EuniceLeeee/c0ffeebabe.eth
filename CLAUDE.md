@@ -185,7 +185,7 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
         Codex Review Of Claude   Claude Review Of Codex
         Codex Final View         Claude Final View
         Claude Final Decision + Implementation Brief + Acceptance   ← only this drives code
-        Codex implements → Claude code review → Codex fix → Claude final approval
+        Codex implements → Claude code review → Codex fixes/review response → Claude final approval
         → next 30-min live run
 ```
 
@@ -198,6 +198,10 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 3. Every claim is verified against code/data, not memory (verify-before-claim).
 4. md updates auto-commit/push; raw log / raw JSONL / secrets / `.env` never committed.
 5. One agent owns each section; do not overwrite another agent's section.
+6. **Step 13 is not a passive review.** After Claude code review, Codex must fix
+   all blocking issues and any P1 explicitly scoped to the current cycle, then
+   run verification before handoff. If Codex does not fix an issue, it must mark
+   it as `deferred` with owner, reason, and the next cycle that will carry it.
 
 ### Boundary (v1 is semi-auto)
 
