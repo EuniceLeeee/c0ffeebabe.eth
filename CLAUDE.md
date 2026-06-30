@@ -75,6 +75,10 @@ Transform tasks into verifiable goals:
   and token addresses unless the user explicitly asks for stricter redaction.
 - Do not ask the user to do mechanical local steps like `tail`, `jq`, report
   generation, or redaction when the agent can do them safely in the workspace.
+- Whenever a Markdown document (`*.md`) is updated by Codex or Claude, commit
+  and push that Markdown change to GitHub in the same turn, while still keeping
+  raw logs, raw JSONL events, secrets, and unrelated local files out of the
+  commit.
 
 ### 6. Live-Run Follow-Up
 
