@@ -185,7 +185,10 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
         Codex Review Of Claude   Claude Review Of Codex
         Codex Final View         Claude Final View
         Claude Final Decision + Implementation Brief + Acceptance   ← only this drives code
-        Codex implements → Claude code review → Codex fixes/review response → Claude final approval
+        Codex implements
+        → review/fix loop: Claude review+fix request → Codex review+fix
+                          → Claude review+fix request → Codex review+fix
+                          → max 3 passes, then Claude final approval or stop
         → next 30-min live run
 ```
 
@@ -193,15 +196,23 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 
 1. **Only `Claude Final Decision` / `Implementation Brief` drives code.** Never
    implement from scattered chat opinions or from the other agent's draft section.
-2. `Claude Final Decision` is authoritative for the md; code review is mutual; Claude
-   holds final approval.
+2. `Claude Final Decision` is authoritative for the md; code review is mutual;
+   Claude holds final approval.
 3. Every claim is verified against code/data, not memory (verify-before-claim).
 4. md updates auto-commit/push; raw log / raw JSONL / secrets / `.env` never committed.
 5. One agent owns each section; do not overwrite another agent's section.
-6. **Step 13 is not a passive review.** After Claude code review, Codex must fix
-   all blocking issues and any P1 explicitly scoped to the current cycle, then
-   run verification before handoff. If Codex does not fix an issue, it must mark
-   it as `deferred` with owner, reason, and the next cycle that will carry it.
+6. **The implementation review phase is a fix loop, not a one-shot review.**
+   After any Claude review, Codex must fix all blocking issues and any P1
+   explicitly scoped to the current cycle, then run verification before handoff.
+   If Codex does not fix an issue, it must mark it as `deferred` with owner,
+   reason, and the next cycle that will carry it.
+7. The review/fix loop is capped at **three passes** per implementation cycle.
+   A pass is one Claude review plus the corresponding Codex fix/defer response.
+   "I agree" is not a valid handoff by itself; each pass must contain either
+   code/docs fixes plus verification, or a documented defer.
+8. After pass 3, Claude must either write `Final Approval` or stop the cycle with
+   an explicit `not approved / deferred / blocked` decision and owner. Do not
+   keep ping-ponging inside the same run file.
 
 ### Boundary (v1 is semi-auto)
 

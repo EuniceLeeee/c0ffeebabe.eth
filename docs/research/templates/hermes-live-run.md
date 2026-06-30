@@ -93,16 +93,50 @@ Representative **non-sandwich** competitor legs (sandwich legs excluded per §6/
 
 ---
 
-## Codex Implementation Notes
--
+## Implementation / Review-Fix Loop
 
-## Claude Code Review
--
+Max **3** review/fix passes per implementation cycle. After pass 3, Claude must
+write Final Approval or stop with an explicit not-approved/deferred/blocked
+decision and owner.
 
-## Codex Fixes / Review Response
+### Codex Implementation Pass 1
+- **fixed:**
+- **verification:**
+
+### Claude Review Pass 1
+- **blocking:**
+- **P1 in-scope:**
+- **P2/deferred:**
+- **approve_or_continue:** continue / final_approval
+
+### Codex Fix Pass 1
 - **fixed:**
 - **deferred:**
 - **verification:**
+
+### Claude Review Pass 2
+- **blocking:**
+- **P1 in-scope:**
+- **P2/deferred:**
+- **approve_or_continue:** continue / final_approval
+
+### Codex Fix Pass 2
+- **fixed:**
+- **deferred:**
+- **verification:**
+
+### Claude Review Pass 3
+- **blocking:**
+- **P1 in-scope:**
+- **P2/deferred:**
+- **approve_or_continue:** final_approval / not_approved / deferred / blocked
+
+### Codex Fix Pass 3  <!-- only if Claude Review Pass 3 requests a final bounded fix -->
+- **fixed:**
+- **deferred:**
+- **verification:**
+
+<!-- Do not add pass 4. If pass 3 is still not acceptable, Claude stops the cycle with an explicit decision/owner. -->
 
 ## Claude Final Approval
 - **approved:** yes / no
