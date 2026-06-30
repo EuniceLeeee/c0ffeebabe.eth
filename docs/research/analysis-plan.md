@@ -433,6 +433,231 @@ pnpm analysis live-loss \
   -> live loss report
 ```
 
+### Live competitor coverage mode
+
+#### 目标
+
+这个模式回答一个比单笔 loss 更上游的问题:
+
+```text
+在同一段 live/dry-run 时间窗口里:
+  我们看见了多少 victim / opportunity?
+  watchlist MEV bot 实际上链了多少 tx?
+  其中多少是 sandwich,多少是非 sandwich path candidate?
+  我们没看见的是 pool/router 覆盖问题、private flow、还是策略排除?
+```
+
+这不是全市场 MEV indexer,只服务生产 searcher 的 loss observability。
+默认只扫本次 JSONL 覆盖的 block range,只看显式 `--watch` 地址簇。
+
+#### CLI
+
+```bash
+pnpm analysis live-loss \
+  --events ./analysis/events/searcher.jsonl \
+  --watch 0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13,0x1f2f10d1c40777ae1da742455c65828ff36df387 \
+  --coverage \
+  --trace-top 0 \
+  --rpc $READONLY_RPC_URL
+```
+
+可选:
+
+```bash
+--from-block 25427768
+--to-block 25427913
+--max-blocks 200
+--trace-top 3
+--output analysis/outputs/live-loss/coverage-<run>.md
+```
+
+#### 核心实现
+
+保持小改动,优先复用现有 Tool B 代码:
+
+```text
+live-loss.ts
+  -> 读取 searcher JSONL,建立 our_seen index:
+       seen_by_block
+       seen_by_victim_hash
+       seen_by_pool
+       seen_by_token_pair
+
+  -> scanWatchlist(range, watch):
+       每个 block 拉 full transactions
+       本地筛 from/to 命中 watchlist EOA / executor
+       只对命中 tx 拉 receipt
+       不扫描全市场、不中长期存储
+
+  -> decodeCompetitorTx(receipt):
+       复用 actions/from-logs.ts
+       输出 token transfers、swap legs、borrow/LP/peg/wrap markers
+       生成 canonical_sequence / path_template
+
+  -> classifyLocalBundle(block, watchMatches):
+       识别同 actor / strongly-linked actor 的 pre-victim-post sandwich
+       sandwich 计入 coverage,但不进入 backrun-loss 核心样本
+       若 sandwich post 后存在可原子 exit,标记 post_state_opportunity_candidate
+
+  -> compareWithOurSeen(match):
+       exact_victim_seen
+       same_block_seen
+       same_pool_seen
+       same_token_pair_seen
+       not_seen_by_us
+
+  -> renderCoverageReport()
+```
+
+新增模块建议:
+
+```text
+analysis/src/watch/scan.ts              # block range + watchlist tx scan
+analysis/src/watch/coverage.ts          # our_seen vs competitor_executed 对比
+analysis/src/classify/local-sandwich.ts # 同块 pre/victim/post 轻量识别
+analysis/src/report/coverage-report.ts  # Markdown + JSON 输出
+```
+
+如果为了保持第一刀更小,也可以先把 `watch/scan` 和 `coverage` 放在
+`cli/live-loss.ts` 内部,验收通过后再拆模块。
+
+#### Report 必填字段
+
+```yaml
+run:
+  events_file:
+  block_range:
+  duration_blocks:
+
+our_coverage:
+  opportunity_seen:
+  unique_victims_seen:
+  unique_blocks_seen:
+  submitted:
+  included:
+
+competitor_coverage:
+  watchlist:
+    - address:
+      role: eoa | executor | contract
+  executed_total:
+  executed_blocks:
+  exact_victim_seen_by_us:
+  same_block_seen_by_us:
+  same_pool_seen_by_us:
+  same_token_pair_seen_by_us:
+  not_seen_by_us:
+
+classification_breakdown:
+  sandwich_excluded:
+  sandwich_suspect:
+  non_sandwich_path_candidate:
+  standing_or_atomic:
+  directional_suspect:
+  unknown_replayable:
+  unknown_opaque:
+
+representative_matches:
+  - competitor_tx:
+    block:
+    index:
+    actor:
+    classification:
+    our_visibility:
+      exact_victim_seen:
+      same_block_seen:
+      same_pool_seen:
+      same_token_pair_seen:
+      not_seen_reason:
+    path_summary:
+      canonical_sequence:
+      path_template:
+      legs:
+        - tokens:
+          venues:
+          amounts:
+          confidence:
+      funding:
+      protocols:
+    sandwich_evidence:
+      pre_tx:
+      victim_tx:
+      post_tx:
+      shared_pool:
+      inventory_closed:
+      profit_estimate:
+    our_gap:
+    next_action:
+```
+
+#### Sandwich 处理口径
+
+Sandwich 不进入 `pure_backrun_loss` 样本,但必须进入 coverage 统计。
+原因:我们不做 sandwich,但它仍然回答"别人执行了多少、我们有没有看见 victim"。
+
+分类结果应区分:
+
+```text
+sandwich_excluded
+  -> 不算 path gap / bid gap / builder gap
+  -> 计入 competitor_executed_total
+  -> 计入 visibility gap,如果 our_seen_block=false 或 same_pool_seen=false
+
+excluded_sandwich_but_has_post_state_opportunity
+  -> sandwich 本体排除
+  -> 额外检查 victim 后状态是否存在 backrun-only 原子 exit
+  -> 有 exit:进入 path/pool gap review
+  -> 无 exit:标 inventory/sandwich-only,不污染 backrun 样本
+```
+
+例子:AI/USDC sandwich:
+
+```text
+pre:    bot sells AI -> USDC
+victim: user sells AI -> USDC
+post:   bot buys AI back with USDC
+```
+
+这说明 bot sandwich 有利润,但不自动说明 backrun-only 有闭环利润。
+coverage report 要同时输出:
+
+```yaml
+classification: sandwich_excluded
+visibility_gap: true|false
+post_state_opportunity_candidate: true|false
+reason:
+  - sandwich profit depends on pre inventory leg
+  - backrun-only requires separate atomic exit route
+```
+
+#### Path / leg 摘要口径
+
+Coverage mode 不要求完整 trace 才输出 path。logs-first 必须输出可解释的 leg:
+
+```yaml
+legs:
+  - type: swap_loop
+    tokens: [WETH, ALCX, crvFRAX, USDC, WETH]
+    venues: [UniswapV3, Balancer, Curve, UniswapV3]
+    confidence: logs
+
+  - type: credit_wrapper_loop
+    tokens: [USDC, GHO, waEthLidoGHO, waEthUSDT, USDT, USDC]
+    venues: [UniswapV3, Aave-wrapper, Balancer, Aave, Curve]
+    confidence: logs
+```
+
+如果同一 competitor tx 同时包含 sandwich leg 和 non-sandwich leg,报告必须拆开:
+
+```text
+tx classification = mixed
+leg[0] = sandwich_excluded
+leg[1] = standing_or_atomic / unknown_replayable
+```
+
+不得因为 tx 里存在 sandwich 就丢掉其它非 sandwich leg;也不得把 sandwich leg
+算成我们没赢的 pure backrun。
+
 ### Loss reason
 
 v1 只保留这些：
@@ -453,6 +678,18 @@ competitor_peg_or_redeem_leg
 competitor_faster_same_path
 no_alpha_gross_lower
 unknown
+```
+
+Coverage mode 额外输出这些 coverage reason,它们不是单笔 loss reason:
+
+```text
+not_seen_by_us
+seen_block_but_not_pool
+seen_pool_but_no_plan
+competitor_sandwich_excluded
+competitor_standing_not_victim_triggered
+competitor_non_sandwich_candidate
+watchlist_private_or_builder_only
 ```
 
 ### Report 必填字段
@@ -530,6 +767,21 @@ loss:
 - trace 只对同 victim/同 pool/高价值 competitor 触发，不对全块无差别 trace。
 - searcher 不 import analysis。
 - analysis 不读私钥、不广播。
+- Coverage mode 能在同一 run 中输出:
+  - 我们 `opportunity_seen / unique_victims_seen`
+  - watchlist `competitor_executed_total`
+  - `not_seen_by_us`
+  - `sandwich_excluded`
+  - `non_sandwich_path_candidate`
+- 给定 block `25427813` 的 Jared 样本,能识别:
+  - `0xad639...` + `0x9aac...` + `0x498e...` 的 AI/USDC sandwich leg;
+  - 该 leg 标 `sandwich_excluded`,不进入 pure backrun loss;
+  - 同一 tx 内其它 WETH/ALCX/GHO/Aave/Curve/Balancer legs 单独列为 non-sandwich / standing / unknown_replayable candidate。
+- Coverage report 中每个 representative competitor tx 必须有 `legs/path_summary`。
+- `--watch` 为空时 coverage mode 不运行,现有 live-loss 行为不回归。
+- 默认 `--trace-top 0`,logs-first 可用;只有 representative non-sandwich candidate 才允许预算内 trace。
+- block range 超过 `--max-blocks` 时拒跑,除非显式 override。
+- 不写 raw calldata / raw trace / 私钥 / RPC URL / builder 明文到 docs/reports。
 
 ## 7. Phase 5 — Manual promotion loop
 
