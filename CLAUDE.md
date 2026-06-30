@@ -213,6 +213,17 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 8. After pass 3, Claude must either write `Final Approval` or stop the cycle with
    an explicit `not approved / deferred / blocked` decision and owner. Do not
    keep ping-ponging inside the same run file.
+9. **Evaluator = whoever did NOT author the artifact under review** (the role
+   rotates: Codex writes code → Claude evaluates; Claude writes a plan → Codex
+   evaluates). The evaluator defaults to doubt and must **act, not just read**:
+   its section must record `ran_gate:` (the build / test / replay / dry-run /
+   diff-check it actually executed) and `finding:` (what it found, or
+   "ran X, found nothing → pass"). An approval with **no executed gate and no
+   finding is invalid** — that is the Nodding-loop red flag, and "two different
+   models" does not prevent it (Claude + Codex nodded three rounds on `979d126`).
+10. **Hard caps before each turn** (anti-blowout): per-run CU budget, daily CU
+    budget (the Alchemy-side cap is the backstop), and the 3-pass review cap.
+    Record `cu_spent` per turn so RPC/token blowout stays visible.
 
 ### Boundary (v1 is semi-auto)
 

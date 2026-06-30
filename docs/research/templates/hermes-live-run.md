@@ -10,6 +10,8 @@ run_id:
 date:
 window:        # block <from>..<to> (~N blocks / ~M min)
 config:        # SEARCHER_LIVE_BACKEND= / mempool= / OPP_TTL_MS= / SOLVER_DEADLINE_MS= / ...
+cu_budget:     # per-run CU cap set BEFORE the turn (anti-blowout)
+cu_spent:      # actual, fill at close
 inputs:
   redacted_log:
   redacted_events_summary:
@@ -99,11 +101,19 @@ Max **3** review/fix passes per implementation cycle. After pass 3, Claude must
 write Final Approval or stop with an explicit not-approved/deferred/blocked
 decision and owner.
 
+**Evaluator rule (anti-Nodding):** the evaluator = whoever did NOT author the
+artifact. Every Claude Review pass must fill `ran_gate:` (the build / test /
+replay / dry-run / diff-check actually executed) and `finding:` (what it found,
+or "ran X, found nothing → pass"). An approve with **neither** is invalid; "two
+models" does not substitute for a real run gate.
+
 ### Codex Implementation Pass 1
 - **fixed:**
 - **verification:**
 
 ### Claude Review Pass 1
+- **ran_gate:**
+- **finding:**
 - **blocking:**
 - **P1 in-scope:**
 - **P2/deferred:**
@@ -115,6 +125,8 @@ decision and owner.
 - **verification:**
 
 ### Claude Review Pass 2
+- **ran_gate:**
+- **finding:**
 - **blocking:**
 - **P1 in-scope:**
 - **P2/deferred:**
@@ -126,6 +138,8 @@ decision and owner.
 - **verification:**
 
 ### Claude Review Pass 3
+- **ran_gate:**
+- **finding:**
 - **blocking:**
 - **P1 in-scope:**
 - **P2/deferred:**
@@ -145,5 +159,7 @@ decision and owner.
 ---
 
 ## Next Run
+- **next_state:** continue | collect_more | analyzer_first | replay_first | implement | stop
+- **live_allowed:** yes / no   # yes only if all hard gates passed
 - **config changes:**
 - **what this run should answer:**
