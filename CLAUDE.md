@@ -160,6 +160,55 @@ cast receipt <txhash> --rpc-url $MAINNET_RPC_URL --json | jq '.logs'
 
 ---
 
+## Hermes — Live-Run Collaboration Protocol
+
+Hermes is the fixed collaboration + decision record between **Claude** and **Codex**
+after each live run. It is a 作战记录 + 决策协议, not a product. One markdown file
+per run holds the whole exchange; GitHub is the shared state both agents read/write.
+
+### Mechanics
+
+- One file per run: `docs/research/reports/live-run-<run_id>-hermes.md`, copied from
+  `docs/research/templates/hermes-live-run.md`.
+- Auto-generated inputs (follow the Live-Run Follow-Up rules — redact first, keep
+  public on-chain evidence): redacted log, redacted JSONL summary,
+  `analysis live-loss --coverage` report (our funnel vs watchlist competitors,
+  same window), key tx links.
+- Each agent writes **only its own sections**, never edits the other's. Each round =
+  exactly **one core judgment + one next_action + one not_doing** (no walls of text).
+
+### Rounds (per run)
+
+```
+auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
+        Codex Round 1            Claude Round 1            (initial core view)
+        Codex Review Of Claude   Claude Review Of Codex
+        Codex Final View         Claude Final View
+        Claude Final Decision + Implementation Brief + Acceptance   ← only this drives code
+        Codex implements → Claude code review → Codex fix → Claude final approval
+        → next 30-min live run
+```
+
+### Governance (hard rules)
+
+1. **Only `Claude Final Decision` / `Implementation Brief` drives code.** Never
+   implement from scattered chat opinions or from the other agent's draft section.
+2. `Claude Final Decision` is authoritative for the md; code review is mutual; Claude
+   holds final approval.
+3. Every claim is verified against code/data, not memory (verify-before-claim).
+4. md updates auto-commit/push; raw log / raw JSONL / secrets / `.env` never committed.
+5. One agent owns each section; do not overwrite another agent's section.
+
+### Boundary (v1 is semi-auto)
+
+Claude and Codex cannot invoke each other (separate runtimes sharing the repo/GitHub).
+v1 = shared md + auto-generated analysis; each agent fills its sections when it runs.
+Full auto round-robin (an orchestrator that shells both CLIs) is v2. **Do not build
+runner tooling yet** — run 2-3 rounds on the template first, confirm it actually
+speeds gap-finding, then automate.
+
+---
+
 ## Safety Rules
 
 1. **Broadcasting transactions to mainnet (and signing with the private key) requires explicit user authorization.**

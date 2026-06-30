@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { ethers } from "ethers";
 
@@ -16,10 +17,15 @@ import { ethers } from "ethers";
  */
 
 let eventsPath = "";
+let runId = "";
+let chainId = 1;
+const EVENT_SCHEMA_VERSION = 1;
 
 export function initEvents(path?: string): void {
   eventsPath = (path ?? process.env.SEARCHER_EVENTS_PATH ?? "").trim();
   if (eventsPath) {
+    runId = randomUUID();
+    chainId = parseChainId(process.env.SEARCHER_CHAIN_ID);
     try {
       mkdirSync(dirname(eventsPath), { recursive: true });
     } catch {
@@ -106,10 +112,21 @@ export type SearcherEvent =
 export function emitEvent(ev: SearcherEvent): void {
   if (!eventsPath) return;
   try {
-    appendFileSync(eventsPath, JSON.stringify({ ...ev, emitted_at_ms: Date.now() }) + "\n");
+    appendFileSync(eventsPath, JSON.stringify({
+      ...ev,
+      schema_version: EVENT_SCHEMA_VERSION,
+      run_id: runId || "unknown",
+      chain_id: chainId,
+      emitted_at_ms: Date.now(),
+    }) + "\n");
   } catch {
     // never let event logging break submission
   }
+}
+
+function parseChainId(value?: string): number {
+  const parsed = Number(value ?? "1");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
 function normalize(value?: string): string {

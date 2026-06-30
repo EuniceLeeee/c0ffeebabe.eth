@@ -942,10 +942,11 @@ coverage / watch 报告必须输出:
 
 ```text
 scanned_blocks / total_blocks / completeness_pct / omitted_blocks[]
-scan_errors: [{ block, stage, reason }]   # completeness<100 时必须能区分 rpc_timeout / receipt_missing / decode_failed
+scan_errors: [{ block, stage, reason }]   # P2(非第一版必须):区分 rpc_timeout / receipt_missing / decode_failed
 ```
 
-`completeness_pct < 100` 时标 `partial: true`,且 `scan_errors` 不得为空(否则不知道是 RPC 超时、receipt 缺失还是 decode 失败)。这个离线单机工具**不需要** reorg/retry/backoff 全套——只要别把截断扫描误读成完整、且能定位漏因即可。
+**v1 必须**:`completeness_pct < 100` 时标 `partial: true`,别把截断扫描误读成完整。
+**P2(可后放)**:`scan_errors` 明细——方便 debug,但第一版可不做。这个离线单机工具**不需要** reorg/retry/backoff 全套。
 
 ### 9.8 两个新增 CI fixture(对应 9.4 / 9.5)
 
