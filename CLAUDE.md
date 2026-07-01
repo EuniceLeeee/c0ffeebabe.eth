@@ -239,19 +239,29 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 10. **Hard caps before each turn** (anti-blowout): per-run CU budget, daily CU
     budget (the Alchemy-side cap is the backstop), and the 3-pass review cap.
     Record `cu_spent` per turn so RPC/token blowout stays visible.
-11. **Codex-generator fallback (single point of failure).** Codex is the only
-    generator; when it fails the gen/evaluator split is at risk. If `codex exec`
-    returns **twice consecutively with zero file changes** (stalled mid-exploration
-    — observed as exit 0 but empty `git status`), treat Codex as throttled and STOP
-    blind retries. Claude MAY then take over **only fully-specified mechanical edits**
-    (the Brief pins exact file / anchor / code — pure transcription, no design left)
-    and MUST label them `authored_by: claude (codex stalled)` in the run file. Claude
-    must **NOT** take over any **judgment / design** work (what to build, how to
-    structure, which approach) — that leaves no independent second party and is
-    blind-guessing; the turn **stops and waits** instead. Record `codex: landed |
-    stalled` every turn so the reliability pattern (and where separation was
-    compromised) stays visible. The rule: **judgment needs two actors; mechanical
-    transcription may be one, but must be declared.**
+11. **Codex-generator reliability + fallback (single point of failure).** Codex is
+    the only generator; when it fails the gen/evaluator split is at risk. **Root cause
+    (diagnosed 2026-07-01):** codex reaches OpenAI through the local GFW proxy
+    `127.0.0.1:1082`; basic connectivity is fine but the **long streaming inference
+    call (esp. `xhigh`)** drops intermittently → codex **silently exits 0 with no
+    changes, or hangs**. A zero-change run is therefore usually a **proxy hiccup, NOT a
+    hard throttle** — so:
+    - Run the loop's codex at **reduced effort** to shorten the stream:
+      `codex exec -c model_reasoning_effort=medium ...` (medium landed reliably;
+      xhigh's ~17k-token streams stalled repeatedly). Do NOT edit the global
+      `~/.codex/config.toml` (it also drives the user's desktop app) — pass the flag.
+    - **Judge success by a NEW rollout** in `~/.codex/archived_sessions/` (or real file
+      changes / a printed final summary), **never by exit code** — failed streams exit 0.
+    - **Retry** (each attempt is an independent coin-flip). Only if a minimal probe
+      (`codex exec "print HELLO"`) ALSO fails repeatedly is it a genuine outage/limit →
+      then stop and wait for the network, don't blame codex.
+    When codex genuinely can't produce: Claude MAY take over **only fully-specified
+    mechanical edits** (the Brief pins exact file / anchor / code — pure transcription,
+    no design left), labelled `authored_by: claude (codex stalled)`. Claude must **NOT**
+    take over **judgment / design** (what to build, how to structure, which approach) —
+    no independent second party = blind-guessing; the turn **stops and waits**. Record
+    `codex: landed | stalled` every turn. The rule: **judgment needs two actors;
+    mechanical transcription may be one, but must be declared.**
 12. **Repair-replay double-gate (also the anti-instrument-drift guard).** Every turn
     that claims to **improve extraction** must ship a pinned replay fixture that flips,
     run BEFORE the next dry-run:
@@ -268,6 +278,16 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
     the searcher to replay). Correctness replay is cheap (planner-level, mostly no
     anvil); **replay gates the FIX, live dry-run still gates competitiveness** — never
     conflate the two ([[feedback-validate-live-not-backtest]]).
+    **Use the EXISTING harnesses (don't build new):**
+    - correctness / coverage / path → `listener/src/searcher/test/planner.ts`
+      (`npm run searcher:planner`) — pure, deterministic, no anvil; asserts plan count +
+      `no_candidate` classification. Pin real cases as named fixtures with on-chain
+      provenance (see `REPLAY_FIXTURES` there).
+    - latency / full-pipeline → `listener/src/searcher/test/replay-live-fixtures.ts`
+      (`npm run searcher:replay-live-fixtures`) — record live with
+      `SEARCHER_RECORD_LIVE_FIXTURES=1`, then replay for per-stage `stageMs` p50/p95
+      (incl. preSolver) + revm profit equivalence (1 wei). This is the latency `seg`
+      before/after gate — with the harness-fidelity caveat above.
 
 ### Boundary (CLI-orchestrated by Claude)
 

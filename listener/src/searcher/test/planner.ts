@@ -309,6 +309,70 @@ async function testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue(): Prom
   console.log("[planner] no-candidate diagnostic classifies no supported return venue: PASS");
 }
 
+// ── Real-case regression fixtures (repair-replay gate, CLAUDE.md governance 12) ──
+// Each pins a real failing case observed live so a coverage/routing fix can be
+// confirmed deterministically (flip) and guarded against regression. Addresses are
+// public on-chain evidence. The planner is address-agnostic, so these behave exactly
+// like the synthetic unit tests above — the value is the provenance link + flip target.
+const REAL_WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const C470 = "0xc470f5E6C17a2977CeabB524D530F19024e5a719";
+const POOL_E2A1437 = "0xE2a1437e2a15CfA591AA1D70e9a75C7598C73fDB";
+const TOK_874376 = "0x27c70cd1946795b66be9d954418546998b546634";
+const POOL_874376 = "0x874376be8231dad99aabf9ef0767b3cc054c60ee";
+
+interface ReplayFixture {
+  id: string;
+  provenance: string;
+  edges: TokenEdge[];
+  impact: { tokenIn: string; tokenOut: string; pool: string; start: string };
+  expectPlans: number;      // current expected; flip target in the comment
+  expectClass?: string;     // no_candidate classification when expectPlans === 0
+}
+
+const REPLAY_FIXTURES: ReplayFixture[] = [
+  {
+    // run 20260701-032600: 7x no_candidate on E2a1437 (WETH/0xc470f5E6). On-chain
+    // cross-ref Ppost=0 (no competitor) -> genuinely non-arbable single venue.
+    // Guard: must STAY 0 (a "coverage fix" that fabricates a plan here is a regression).
+    id: "single-venue-longtail",
+    provenance: "run 20260701 block 25434876+ pool E2a1437 WETH/0xc470f5E6; competitor Ppost=0",
+    edges: [swap(REAL_WETH, C470, POOL_E2A1437), swap(C470, REAL_WETH, POOL_E2A1437)],
+    impact: { tokenIn: REAL_WETH, tokenOut: C470, pool: POOL_E2A1437, start: C470 },
+    expectPlans: 0,
+    expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    // run 20260701-t2: not_seen graph_gap -- watchlist bot arbed pool 0x874376be
+    // (WETH/0x27c70cd1) which is NOT in our routing graph. FLIP TARGET: >0 once the
+    // pool is covered (e.g. via the pool universe). Until then this asserts the gap.
+    id: "graph-gap-pool-absent",
+    provenance: "run 20260701-t2 block 25434931 pool 0x874376be WETH/0x27c70cd1; graph_gap",
+    edges: [swap(TOK_874376, USDT, P2), swap(USDT, TOK_874376, P3)], // graph WITHOUT the impact pool
+    impact: { tokenIn: REAL_WETH, tokenOut: TOK_874376, pool: POOL_874376, start: TOK_874376 },
+    expectPlans: 0,
+    expectClass: "impact_pool_not_in_routing_graph",
+  },
+];
+
+async function testRealCaseReplayFixtures(): Promise<void> {
+  for (const fx of REPLAY_FIXTURES) {
+    const planner = new TemplatePlanner();
+    planner.setGraph(fx.edges);
+    planner.setMaxHops(2);
+    const plans = await planner.plan(
+      opportunityWithImpact(fx.impact.tokenIn, fx.impact.tokenOut, fx.impact.pool, fx.impact.start),
+      [FLASH_SWAP_REPAY],
+    );
+    assert(plans.length === fx.expectPlans, `replay ${fx.id}: expected ${fx.expectPlans} plans, got ${plans.length}`);
+    if (fx.expectPlans === 0 && fx.expectClass) {
+      const diag = planner.lastNoCandidateDiagnostic();
+      if (!diag) throw new Error(`FAIL: replay ${fx.id}: expected diagnostic`);
+      assert(diag.classification === fx.expectClass, `replay ${fx.id}: class ${diag.classification} != ${fx.expectClass}`);
+    }
+    console.log(`[planner] replay fixture ${fx.id} (${fx.provenance}): PASS`);
+  }
+}
+
 async function main(): Promise<void> {
   await testPrunesSamePoolReverse();
   await testKeepsCrossVenueReverse();
@@ -320,7 +384,8 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesImpactPoolNotInGraph();
   await testNoCandidateDiagnosticClassifiesOnlyImmediateSamePoolReverse();
   await testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue();
-  console.log("planner PASS (10/10)");
+  await testRealCaseReplayFixtures();
+  console.log(`planner PASS (10/10) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length})`);
 }
 
 main().catch((err) => {
