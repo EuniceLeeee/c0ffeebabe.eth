@@ -687,7 +687,7 @@ async function main(): Promise<void> {
         console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
         return mergeHints(
           mevShareHints(config.mevShareSseUrl),
-          mempoolHints(config.wsUrl, allPools, counters),
+          mempoolHints(config.wsUrl, provider, allPools, counters),
         );
       })()
     : mevShareHints(config.mevShareSseUrl);
@@ -2122,6 +2122,7 @@ function rebuildSignedRawTx(txHash: string, tx: ethers.TransactionResponse): str
  */
 async function* mempoolHints(
   wsUrl: string,
+  provider: ethers.JsonRpcProvider,
   pools: PoolEntry[],
   counters: StageCounters,
 ): AsyncGenerator<HintEnvelope> {
@@ -2130,8 +2131,9 @@ async function* mempoolHints(
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
   const interesting = (to: string | null | undefined): boolean =>
     Boolean(to && toAddressSet.has(to.toLowerCase()));
+  const mode = parseMempoolMode();
   console.log(
-    `[searcher/live] mempool filtered subscription toAddress=${toAddress.length} ` +
+    `[searcher/live] mempool mode=${mode} toAddress=${toAddress.length} ` +
       `routers=${MEMPOOL_ROUTER_ADDRESSES.size}`,
   );
   emitEvent({
@@ -2142,13 +2144,27 @@ async function* mempoolHints(
     router_count: MEMPOOL_ROUTER_ADDRESSES.size,
     max_addresses: maxAddresses,
   });
+  if (mode === "local_firehose") {
+    yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
+    return;
+  }
 
   for (;;) {
     let ws: WebSocket | null = null;
     try {
       ws = await connectFilteredMempool(wsUrl, toAddress);
     } catch (err) {
-      if (err instanceof FatalMempoolSubscriptionError) throw err;
+      if (err instanceof FatalMempoolSubscriptionError) {
+        if (mode === "auto" && shouldUseLocalFirehoseFallback(wsUrl, err)) {
+          console.log(
+            `[searcher/live] mempool filtered subscription unsupported by local node; ` +
+              `falling back to newPendingTransactions firehose`,
+          );
+          yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
+          return;
+        }
+        throw err;
+      }
       console.log(
         `[searcher/live] mempool WS connect failed: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -2213,6 +2229,191 @@ async function* mempoolHints(
     }
     console.log("[searcher/live] mempool WS reconnect");
     await sleep(1_000);
+  }
+}
+
+type MempoolMode = "auto" | "alchemy_filtered" | "local_firehose";
+
+function parseMempoolMode(): MempoolMode {
+  const raw = (process.env.SEARCHER_MEMPOOL_MODE ?? "auto").trim().toLowerCase();
+  if (raw === "auto") return "auto";
+  if (raw === "alchemy" || raw === "alchemy_filtered" || raw === "filtered") {
+    return "alchemy_filtered";
+  }
+  if (raw === "local" || raw === "local_firehose" || raw === "firehose" || raw === "reth") {
+    return "local_firehose";
+  }
+  throw new FatalMempoolSubscriptionError(`unknown SEARCHER_MEMPOOL_MODE=${raw}`);
+}
+
+async function* localFirehoseMempoolHints(
+  wsUrl: string,
+  provider: ethers.JsonRpcProvider,
+  interesting: (to: string | null | undefined) => boolean,
+  counters: StageCounters,
+): AsyncGenerator<HintEnvelope> {
+  const maxInFlight = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_MAX_INFLIGHT ?? "64");
+  const maxQueue = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_QUEUE_MAX ?? "64");
+  const txTimeoutMs = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_TX_TIMEOUT_MS ?? "1500");
+  console.log(
+    `[searcher/live] mempool local firehose subscription ` +
+      `maxInFlight=${maxInFlight} queueMax=${maxQueue} txTimeoutMs=${txTimeoutMs}`,
+  );
+
+  for (;;) {
+    let ws: WebSocket | null = null;
+    try {
+      ws = await connectStandardMempool(wsUrl);
+    } catch (err) {
+      console.log(
+        `[searcher/live] mempool local firehose connect failed: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+      await sleep(1_000);
+      continue;
+    }
+
+    const queue: HintEnvelope[] = [];
+    const seen = new Set<string>();
+    let wake: (() => void) | null = null;
+    let failed = false;
+    let inFlight = 0;
+
+    const fail = () => {
+      failed = true;
+      wake?.();
+    };
+    const enqueue = (hint: HintEnvelope) => {
+      queue.push(hint);
+      if (queue.length > maxQueue) queue.shift();
+      wake?.();
+    };
+    const processHash = (hash: string) => {
+      const normalized = hash.toLowerCase();
+      if (!TX_HASH_RE.test(normalized)) return;
+      counters.pendingReceived++;
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      if (seen.size > 100_000) seen.clear();
+      if (inFlight >= maxInFlight) return;
+
+      inFlight++;
+      void (async () => {
+        try {
+          const tx = await withTimeout(
+            provider.getTransaction(normalized),
+            txTimeoutMs,
+            `getTransaction ${normalized.slice(0, 10)}`,
+          );
+          if (!tx || !interesting(tx.to)) return;
+          const rawTx = await withTimeout(
+            rawTxByHash(provider, normalized, tx, true),
+            txTimeoutMs,
+            `rawTx ${normalized.slice(0, 10)}`,
+          );
+          if (!rawTx) return;
+          counters.pendingFilteredReceived++;
+          enqueue({
+            payload: { mempool: true },
+            hashes: [tx.hash],
+            source: "mempool",
+            prefetched: { tx, rawTx },
+          });
+        } catch {
+          // Pending hashes can vanish or arrive before the tx is queryable.
+        } finally {
+          inFlight--;
+        }
+      })();
+    };
+
+    ws.addEventListener("error", fail);
+    ws.addEventListener("close", fail);
+    ws.addEventListener("message", (event) => {
+      const msg = parseWsJson(event.data);
+      const result = msg?.method === "eth_subscription" ? msg.params?.result : undefined;
+      if (typeof result === "string") {
+        processHash(result);
+        return;
+      }
+      if (isRecord(result)) {
+        const tx = pendingTxFromAlchemy(result);
+        if (!tx || !interesting(tx.to)) return;
+        const hash = tx.hash.toLowerCase();
+        counters.pendingReceived++;
+        if (seen.has(hash)) return;
+        seen.add(hash);
+        const rawTx = rebuildSignedRawTx(hash, tx);
+        if (!rawTx) return;
+        counters.pendingFilteredReceived++;
+        enqueue({
+          payload: { mempool: true },
+          hashes: [tx.hash],
+          source: "mempool",
+          prefetched: { tx, rawTx },
+        });
+      }
+    });
+
+    try {
+      for (;;) {
+        if (failed) break;
+        if (queue.length === 0) {
+          await new Promise<void>((res) => {
+            wake = res;
+          });
+          wake = null;
+          continue;
+        }
+        yield queue.shift()!;
+      }
+    } finally {
+      try { ws.close(); } catch { /* already closed */ }
+    }
+    console.log("[searcher/live] mempool local firehose reconnect");
+    await sleep(1_000);
+  }
+}
+
+async function connectStandardMempool(wsUrl: string): Promise<WebSocket> {
+  const ws = await openWebSocket(wsUrl);
+  try {
+    const subId = await wsRequest(ws, "eth_subscribe", ["newPendingTransactions"]);
+    if (typeof subId !== "string") {
+      throw new Error(`unexpected subscription id ${String(subId)}`);
+    }
+    console.log(`[searcher/live] mempool WS connected localFirehoseSub=${subId}`);
+    return ws;
+  } catch (err) {
+    try { ws.close(); } catch { /* already closed */ }
+    throw err;
+  }
+}
+
+function shouldUseLocalFirehoseFallback(wsUrl: string, err: Error): boolean {
+  return isLocalOrPrivateWsUrl(wsUrl) && isAlchemyFilteredUnsupported(err);
+}
+
+function isAlchemyFilteredUnsupported(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("alchemy_pendingtransactions") &&
+    (msg.includes("unknown variant") || msg.includes("invalid params") || msg.includes("-32602"))
+  );
+}
+
+function isLocalOrPrivateWsUrl(wsUrl: string): boolean {
+  try {
+    const parsed = new URL(wsUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "::1" || host === "[::1]") return true;
+    if (host.startsWith("127.")) return true;
+    if (host.startsWith("10.")) return true;
+    if (host.startsWith("192.168.")) return true;
+    const parts = host.split(".").map((part) => Number(part));
+    return parts.length === 4 && parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31;
+  } catch {
+    return false;
   }
 }
 
@@ -2555,6 +2756,22 @@ function extractTxHashes(value: unknown): string[] {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }
 
 main().catch((err) => {
