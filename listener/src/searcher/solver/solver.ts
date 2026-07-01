@@ -423,6 +423,8 @@ interface OpportunityImpact {
   tokenIn: string;
   tokenOut: string;
   matchedAdapterId: string;
+  /** v4 poolId — disambiguates pools sharing the singleton PoolManager address. */
+  poolId?: string;
 }
 
 export async function resolveSearchCenter(
@@ -473,6 +475,7 @@ function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpa
   const edges = plan.tokenPath?.edges ?? [];
   return edges.findIndex((edge) =>
     sameAddress(edge.target, impact.pool) &&
+    sameV4Pool(edge.poolId, impact.poolId) &&
     sameAddress(edge.tokenIn, impact.tokenOut) &&
     sameAddress(edge.tokenOut, impact.tokenIn),
   );
@@ -483,11 +486,19 @@ function findImpactV4PoolKey(plan: CandidatePlan, impact: OpportunityImpact): V4
   return plan.tokenPath.edges.find((edge) =>
     sameAddress(edge.target, impact.pool) &&
     edge.v4PoolKey !== undefined &&
+    sameV4Pool(edge.poolId, impact.poolId) &&
     (
       (sameAddress(edge.tokenIn, impact.tokenIn) && sameAddress(edge.tokenOut, impact.tokenOut)) ||
       (sameAddress(edge.tokenIn, impact.tokenOut) && sameAddress(edge.tokenOut, impact.tokenIn))
     ),
   )?.v4PoolKey;
+}
+
+// v4 pools share the singleton PoolManager address; when the impact carries a
+// poolId, the edge's poolId must match. Non-v4 (no impact poolId) always passes.
+function sameV4Pool(edgePoolId: string | undefined, impactPoolId: string | undefined): boolean {
+  if (!impactPoolId) return true;
+  return (edgePoolId ?? "").toLowerCase() === impactPoolId.toLowerCase();
 }
 
 async function quoteImpactOutput(
@@ -580,6 +591,7 @@ function impactFromOpportunity(impact: unknown): OpportunityImpact | null {
     tokenIn: maybe.tokenIn,
     tokenOut: maybe.tokenOut,
     matchedAdapterId: maybe.matchedAdapterId,
+    poolId: typeof maybe.poolId === "string" ? maybe.poolId : undefined,
   };
 }
 
