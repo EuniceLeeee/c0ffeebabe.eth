@@ -361,6 +361,20 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
       correctness, biased against bold searcher changes. The loop's job is not clean
       commits; it is more MEV caught. A round that shipped a clean analysis patch but
       changed nothing the searcher does is a **null round**, and must be labelled so.
+14. **Multi-round = user-away autonomy (architecture decisions self-served).** A
+    workflow of **>1 round means the user is NOT at the keyboard.** When an
+    architecture / scope decision arises that would otherwise escalate to the human
+    (rule 11 "stops and waits", rule 13 "escalates to human" / "epic escalation"),
+    do **NOT** block with `AskUserQuestion` — **pick the option you judge optimal for
+    the extraction goal (catch more MEV) and PROCEED**, then **record the decision**
+    (choice + rationale + explicit not-doing) where it belongs: Hermes md
+    `Claude Final Decision` / Findings Ledger for run-scoped calls, **CLAUDE.md** for
+    durable governance, memory for cross-session operating facts. The human reviews
+    the whole run afterward. This does NOT relax the real stop conditions, which still
+    wait for the human: **go-live / broadcast** (hard gate), spending beyond the
+    per-run / daily **CU caps**, and any **destructive / irreversible** action.
+    (Non-author evaluation still holds — Codex reviews Claude's code — but that is a
+    gate, not a human-decision block.)
 
 ### Boundary (CLI-orchestrated by Claude)
 

@@ -26,6 +26,9 @@ export interface TokenEdge {
   score?: number;
   /** Uniswap v4 PoolKey. Required for univ4-unlock quotes. */
   v4PoolKey?: V4PoolKey;
+  /** Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). Disambiguates v4 pools
+   *  that share the singleton PoolManager target (same address, different pool). */
+  poolId?: string;
 }
 
 export interface TokenPath {
@@ -62,6 +65,21 @@ export interface V4PoolKey {
   fee: number;
   tickSpacing: number;
   hooks: string;
+}
+
+const V4_POOLKEY_TUPLE =
+  "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
+
+/** Canonical Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). */
+export function v4PoolId(key: V4PoolKey): string {
+  return ethers
+    .keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        [V4_POOLKEY_TUPLE],
+        [[key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]],
+      ),
+    )
+    .toLowerCase();
 }
 
 // DEX pools are discovered via scanActivePools / factory events.
@@ -219,9 +237,10 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       const tIn = normalizeV4Currency(pool.fixedTokenIn, "fixedTokenIn");
       const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut");
       validateV4Pair(pool.address, poolKey, tIn, tOut);
+      const poolId = v4PoolId(poolKey);
       edges.push(
-        { adapterId, target: pool.address, tokenIn: tIn, tokenOut: tOut, slotKind: "swap", v4PoolKey: poolKey },
-        { adapterId, target: pool.address, tokenIn: tOut, tokenOut: tIn, slotKind: "swap", v4PoolKey: poolKey },
+        { adapterId, target: pool.address, tokenIn: tIn, tokenOut: tOut, slotKind: "swap", v4PoolKey: poolKey, poolId },
+        { adapterId, target: pool.address, tokenIn: tOut, tokenOut: tIn, slotKind: "swap", v4PoolKey: poolKey, poolId },
       );
       break;
     }

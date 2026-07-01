@@ -384,6 +384,8 @@ interface OpportunityImpact {
   pool: string;
   tokenIn: string;
   tokenOut: string;
+  /** v4 poolId — disambiguates pools sharing the singleton PoolManager address. */
+  poolId?: string;
 }
 
 function impactFromOpportunity(opp: Opportunity): OpportunityImpact | null {
@@ -401,6 +403,7 @@ function impactFromOpportunity(opp: Opportunity): OpportunityImpact | null {
     pool: maybe.pool,
     tokenIn: maybe.tokenIn,
     tokenOut: maybe.tokenOut,
+    poolId: typeof maybe.poolId === "string" ? maybe.poolId : undefined,
   };
 }
 
@@ -409,6 +412,16 @@ interface ImpactFocus {
   samePoolReverse: TokenPath[];
   crossVenueReverse: TokenPath[];
   samePoolAnyDirection: TokenPath[];
+}
+
+// Same trading venue as the impact. For v2/v3/curve the pool address is unique,
+// so an address match is enough. For v4 every pool shares the PoolManager address,
+// so when the impact carries a poolId we require the edge's poolId to match —
+// otherwise different v4 pools on the same pair would be conflated.
+function sameVenue(edge: TokenEdge, impact: OpportunityImpact): boolean {
+  if (!sameAddress(edge.target, impact.pool)) return false;
+  if (impact.poolId) return (edge.poolId ?? "").toLowerCase() === impact.poolId.toLowerCase();
+  return true;
 }
 
 function focusPathsOnImpact(paths: TokenPath[], impact: OpportunityImpact | null): ImpactFocus {
@@ -432,20 +445,20 @@ function analyzeImpactFocus(paths: TokenPath[], impact: OpportunityImpact | null
   // Best: reverse the impact through the SAME pool
   const samePoolReverse = paths.filter((path) =>
     path.edges.some((edge) =>
-      sameAddress(edge.target, impact.pool) &&
+      sameVenue(edge, impact) &&
       sameAddress(edge.tokenIn, impact.tokenOut) &&
       sameAddress(edge.tokenOut, impact.tokenIn),
     ),
   );
   const crossVenueReverse = paths.filter((path) =>
     path.edges.some((edge) =>
-      !sameAddress(edge.target, impact.pool) &&
+      !sameVenue(edge, impact) &&
       sameAddress(edge.tokenIn, impact.tokenOut) &&
       sameAddress(edge.tokenOut, impact.tokenIn),
     ),
   );
   const samePoolAnyDirection = paths.filter((path) =>
-    path.edges.some((edge) => sameAddress(edge.target, impact.pool)),
+    path.edges.some((edge) => sameVenue(edge, impact)),
   );
   return {
     paths,
@@ -633,6 +646,9 @@ function hasImmediateSamePoolReverse(path: TokenPath): boolean {
     const b = path.edges[i + 1];
     if (
       sameAddress(a.target, b.target) &&
+      // v4 pools share the PoolManager target — same address is NOT the same pool
+      // unless the poolId also matches (else a legit v4->v4 arb is mispruned).
+      (a.poolId ?? "").toLowerCase() === (b.poolId ?? "").toLowerCase() &&
       sameAddress(a.tokenIn, b.tokenOut) &&
       sameAddress(a.tokenOut, b.tokenIn)
     ) {
@@ -648,6 +664,7 @@ function tokenPathKey(path: TokenPath): string {
       [
         edge.adapterId,
         edge.target.toLowerCase(),
+        edge.poolId ?? "", // v4: distinct pools share the PoolManager target
         edge.tokenIn.toLowerCase(),
         edge.tokenOut.toLowerCase(),
       ].join(":"),

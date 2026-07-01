@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
-import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import { v4PoolId, type TokenEdge, type TokenQueryBackend } from "../planner/token-graph.js";
 
 export interface PoolImpact {
   pool: string;
@@ -8,6 +8,9 @@ export interface PoolImpact {
   tokenOut: string;
   amountIn: bigint;
   matchedAdapterId: string;
+  /** Uniswap v4 poolId — preserves pool identity across the singleton PoolManager
+   *  (all v4 pools share the same `pool` address). Undefined for v2/v3/curve. */
+  poolId?: string;
 }
 
 interface EventLog {
@@ -32,6 +35,7 @@ const CURVE_TOKEN_EXCHANGE_TOPICS = new Set([
 ]);
 const UNIV3_SWAP = topic("Swap(address,address,int256,int256,uint160,uint128,int24)");
 const UNIV2_SWAP = topic("Swap(address,uint256,uint256,uint256,uint256,address)");
+const UNIV4_SWAP = topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
 const ERC20_TRANSFER = topic("Transfer(address,address,uint256)");
 
 // ─── Curve direct-call selectors ──────────────────────────────
@@ -196,12 +200,71 @@ const uniV2Decoder: ImpactDecoder = {
   },
 };
 
+// ─── UniV4 decoder ────────────────────────────────────────────
+// V4 swaps are emitted by the singleton PoolManager (log.address == PoolManager
+// for EVERY pool), so the pool is identified by poolId = keccak256(abi.encode(
+// PoolKey)) in topics[1], not by address. Edges are matched by recomputing that
+// hash from each edge's V4PoolKey. amount0/amount1 are int128 pool-balance deltas:
+// positive = pool received (tokenIn), negative = pool paid out (tokenOut) — same
+// convention as the v3 decoder above. Verified against the on-chain USDC/USDT swap
+// in tx 0xd60d80df (amount1 +35045872323 USDT in / amount0 -35013321757 USDC out)
+// cross-checked with the V4Quoter.
+
+const uniV4Decoder: ImpactDecoder = {
+  adapterIds: ["univ4-unlock"],
+
+  decodeLog(log, edges) {
+    if (log.topics[0]?.toLowerCase() !== UNIV4_SWAP) return [];
+    const poolId = log.topics[1]?.toLowerCase();
+    if (!poolId) return [];
+
+    const [amount0, amount1] = ethers.AbiCoder.defaultAbiCoder().decode(
+      ["int128", "int128", "uint160", "uint128", "int24", "uint24"],
+      log.data,
+    );
+    const a0 = BigInt(amount0);
+    const a1 = BigInt(amount1);
+
+    // All v4 pools share the PoolManager target, so filter by poolId. Prefer the
+    // edge's precomputed poolId (set at graph build); fall back to computing it.
+    const matching = edges.filter(
+      (e) => e.v4PoolKey && (e.poolId ?? v4PoolId(e.v4PoolKey)) === poolId,
+    );
+    if (matching.length === 0) return [];
+    const key = matching[0].v4PoolKey!;
+
+    const tokenIn = a0 > 0n ? key.currency0 : key.currency1;
+    const tokenOut = a0 > 0n ? key.currency1 : key.currency0;
+    const amountIn = a0 > 0n ? a0 : a1;
+    if (amountIn <= 0n) return [];
+
+    const edge = matching.find(
+      (e) =>
+        e.tokenIn.toLowerCase() === tokenIn.toLowerCase() &&
+        e.tokenOut.toLowerCase() === tokenOut.toLowerCase(),
+    );
+    if (!edge) return [];
+
+    // poolId preserves v4 pool identity downstream (dedupe / focus), since every
+    // v4 pool shares the PoolManager `pool` address.
+    return [{
+      pool: edge.target,
+      tokenIn: edge.tokenIn,
+      tokenOut: edge.tokenOut,
+      amountIn,
+      matchedAdapterId: edge.adapterId,
+      poolId,
+    }];
+  },
+};
+
 // ─── Decoder registry ─────────────────────────────────────────
 
 const IMPACT_DECODERS: ImpactDecoder[] = [
   curveDecoder,
   uniV3Decoder,
   uniV2Decoder,
+  uniV4Decoder,
 ];
 
 // ─── Transfer-based pool detection ───────────────────────────
@@ -624,6 +687,7 @@ function dedupeImpacts(impacts: PoolImpact[]): PoolImpact[] {
   return impacts.filter((impact) => {
     const key = [
       impact.pool.toLowerCase(),
+      impact.poolId ?? "",
       impact.tokenIn.toLowerCase(),
       impact.tokenOut.toLowerCase(),
       impact.amountIn.toString(),
