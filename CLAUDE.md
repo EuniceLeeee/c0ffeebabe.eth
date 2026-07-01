@@ -199,6 +199,14 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
     specific victim (or proves none exists) from a manual trace — not inferred from one
     pool/block probe. (2026-07-01: Claude wrongly concluded "atomic, MEV-Share can't save
     us" from a single-pool probe without tracing what the competitor backran.)
+    - **Each agent works from PRIMARY sources, independently.** A read must come from
+      (a) the analysis script's RAW output artifacts (the `watch-*.json` / `--competitor-scan`
+      output itself, made available in-repo/scratchpad — NOT the prose summary) AND (b) its
+      own manual on-chain trace. **Never from the other agent's curated facts or conclusion**
+      — feeding Codex Claude's picked facts is a correlated hand-off, not independence
+      (2026-07-01: Claude did exactly this). If Codex lacks chain access, it must still be
+      handed raw DATA (block txs, indices, pools, script JSON) as data — never a conclusion —
+      and reach its own verdict.
 - Each agent writes **only its own sections**, never edits the other's. Each round =
   exactly **one core judgment + one next_action + one not_doing** (no walls of text).
 

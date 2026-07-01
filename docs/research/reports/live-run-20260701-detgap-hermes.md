@@ -42,8 +42,10 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 - **caveats (raised independently):** n=1 does not classify the whole detection_gap bucket; idx-5 v4 swap must have its poolId + state-delta checked before assuming coffeebabe backran it.
 
 ## Claude Final Decision  <!-- AUTHORITATIVE -->
-- **decision:** v4 is the confirmed money frontier this window (93% of net; the manually-traced coffeebabe tx needs v4). The round's `searcher_behavior_change` = **v4 epic slice-1 (real V4Quoter)** on branch `v4-epic-slice1` — verdict `implemented_not_validated` until the full replay gate. **Do NOT open the atomic/state-triggered-detection epic yet:** both agents' manual analysis converged that this ONE tx is atomic, but **n=1** — require ≥3–5 more manual competitor-tx traces (governance manual-analysis rule) to size how much of detection_gap is truly atomic before committing that epic. Close this tx's analysis with the idx-5 poolId/state-delta check.
-- **rationale:** both agents independently reached the same evidenced conclusion (atomic cross-venue v4, no victim) WITH the same anti-over-generalization caveats — the manual rule worked. But converging on n=1 is not a mandate for a new detection epic; measure first.
+- **user decision (2026-07-01): non-victim-backrun (atomic) — we do NOT do it.** So the manually-traced coffeebabe `0xd60d80df` (atomic cross-venue) is **out of scope**, and the atomic/state-triggered-detection epic is **KILLED** (not deferred). We stay victim-triggered (mempool + MEV-Share).
+- **decision:** the round's `searcher_behavior_change` = **v4 epic slice-1 (real V4Quoter)** on branch `v4-epic-slice1` — for the **victim-backrun** opportunities that route through v4 (graph_gap, the executable share). Verdict `implemented_not_validated` until the full replay gate.
+- **process correction:** this round's "Codex independent manual analysis" was flawed — Claude fed Codex its own curated facts instead of Codex working from the raw script artifacts + its own trace (a correlated hand-off, not independence). Rule strengthened (Step-1 mechanics: primary-source independence). Future rounds: each agent reads the raw `watch-*.json`/`--competitor-scan` output itself, never the other's conclusion.
+- **rationale:** with atomic off the table, the money we can actually pursue is victim-backrun arbs that route through v4 (v4 execution/quote gap) — which is exactly slice-1. No new detection model.
 
 ## Repair Replay Gate (governance 12)
 - **searcher_behavior_change:** yes — v4 epic slice-1 (branch `v4-epic-slice1`, commit `ccae872`).
@@ -55,8 +57,8 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 | finding | owner | carry_to_round | status |
 |---|---|---|---|
 | v4 epic slice-1 full replay gate (replay-v4-arb + 13-file review) | Claude/Codex | this round +1 | open |
-| atomic / state-triggered detection (no-victim arbs like 0xd60d80df) | epic (human-gated) | measure first | open |
-| detection_gap n=1 — trace more competitor txs before generalizing | both agents | next round | open |
+| ~~atomic / state-triggered detection~~ | — | — | **KILLED** (user 2026-07-01: non-victim-backrun not doing) |
+| Codex manual analysis must use PRIMARY sources (not Claude's curated facts) | both agents | next round | open (rule strengthened) |
 | v4 pools auto-index into graph (now pin-only) | v4 epic | slice-2 | open |
 | local v4 quote math (latency; V4Quoter eth_call is correctness-first) | v4 epic | slice-3 | open |
 
