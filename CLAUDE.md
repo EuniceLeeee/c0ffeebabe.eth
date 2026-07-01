@@ -225,13 +225,25 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
     budget (the Alchemy-side cap is the backstop), and the 3-pass review cap.
     Record `cu_spent` per turn so RPC/token blowout stays visible.
 
-### Boundary (v1 is semi-auto)
+### Boundary (CLI-orchestrated by Claude)
 
-Claude and Codex cannot invoke each other (separate runtimes sharing the repo/GitHub).
-v1 = shared md + auto-generated analysis; each agent fills its sections when it runs.
-Full auto round-robin (an orchestrator that shells both CLIs) is v2. **Do not build
-runner tooling yet** — run 2-3 rounds on the template first, confirm it actually
-speeds gap-finding, then automate.
+Claude orchestrates the loop from the terminal (Bash) — NOT via any in-app agent
+tool or `/codex` command:
+- **Codex = generator / implementer**, invoked with `codex exec "<brief>"` (and
+  `codex review` for its code review). Confirmed callable from Bash
+  (`codex exec --skip-git-repo-check` when outside a trusted git dir).
+- **Claude (this session) = orchestrator + evaluator**: runs the gates
+  (`npm run build`, tests, replay, reads node events over SSM), reviews Codex's
+  diff, commits. Claude is the non-author skeptic of Codex's code, so the
+  generator/evaluator split still holds (Codex writes, Claude judges).
+- **No nested Claude**: `claude -p` inside a Claude Code session is blocked (it
+  crashes the session) — never shell it. Claude does not spawn a second Claude;
+  it *is* the evaluator.
+
+Discipline: **one turn on demand, not a self-spinning loop.** Run 2-3 turns this
+way before adding `ScheduleWakeup` pacing. Hard backstops still apply (the
+subscription rate window + the Alchemy CU cap), and **go-live / broadcast stays a
+human gate** — the loop executes but cannot decide production.
 
 ---
 
