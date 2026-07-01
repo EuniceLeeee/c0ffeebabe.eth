@@ -7,7 +7,7 @@ import { canonicalSequence, pathTemplate } from "../actions/canonicalize.js";
 import { runCompetitorScan } from "../competitor-scan.js";
 import { decodeTransfer, formatTokenAmount } from "../decode/erc20.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
-import { priceArb, fetchEthUsd, type V4Swap } from "../pnl/arb-profit.js";
+import { aggregateNetProfit, priceArb, fetchEthUsd, type PricedLeg, type V4Swap } from "../pnl/arb-profit.js";
 import { ADDR, TOPICS, lower, short } from "../registry/protocols.js";
 import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient, hexToBigInt, hexToNumber } from "../rpc/client.js";
@@ -231,14 +231,6 @@ interface MempoolFilterIndex {
   exact: boolean;
 }
 
-interface WatchPricedTx {
-  bot: string;
-  block: number;
-  realized: number | null;
-  unsafe: boolean;
-  hasV4: boolean;
-}
-
 interface BlockAnalysisContext {
   targetBlock: number;
   block: any;
@@ -457,7 +449,7 @@ async function runWatchMode(): Promise<void> {
   };
   const ethUsd = await fetchEthUsd(rpc);
   const allowTrace = priceTrace || rpc.isLocal();
-  const pricedTxs: WatchPricedTx[] = [];
+  const pricedTxs: PricedLeg[] = [];
   let written = 0;
   console.error(
     `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} price_trace=${allowTrace ? "on" : "off"}`,
@@ -509,23 +501,10 @@ async function runWatchMode(): Promise<void> {
     `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
       `detection_gap=${notSeenByGapType.detection_gap} unknown=${notSeenByGapType.unknown}`,
   );
-  const blockNets = new Map<string, { net: number; hasV4: boolean }>();
-  for (const tx of pricedTxs) {
-    const key = `${tx.bot}:${tx.block}`;
-    const group = blockNets.get(key) ?? { net: 0, hasV4: false };
-    if (!tx.unsafe && tx.realized !== null) group.net += tx.realized;
-    if (tx.hasV4) group.hasV4 = true;
-    blockNets.set(key, group);
-  }
-  let netTotalUsd = 0;
-  let netV4Usd = 0;
-  for (const group of blockNets.values()) {
-    netTotalUsd += group.net;
-    if (group.hasV4) netV4Usd += group.net;
-  }
+  const netProfit = aggregateNetProfit(pricedTxs);
   console.error(
-    `[analysis/live-loss/watch] net_per_block total=${netTotalUsd.toFixed(0)} ` +
-      `via_v4=${netV4Usd.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
+    `[analysis/live-loss/watch] net_per_block total=${netProfit.total.toFixed(0)} ` +
+      `via_v4=${netProfit.viaV4.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
   );
 }
 

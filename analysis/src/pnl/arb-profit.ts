@@ -19,6 +19,14 @@ export interface V4Swap {
   fee: number;
 }
 
+export interface PricedLeg {
+  bot: string;
+  block: number;
+  realized: number | null;
+  unsafe: boolean;
+  hasV4: boolean;
+}
+
 export interface ArbProfit {
   /** ERC20 (incl. WETH) + native-ETH net value the bot gained, USD. null if nothing priceable. */
   realizedProfitUsd: number | null;
@@ -60,6 +68,36 @@ export function valueDeltas(
     }
   }
   return { usd: priced.length === 0 ? null : usd, priced, unpriced };
+}
+
+/**
+ * Net profit per (bot, block) over legs where realized != null AND !unsafe,
+ * INCLUDING negative legs, because arb bots can split one arbitrage across
+ * multiple txs in a block; summing only positive legs overcounts (~6x on the
+ * 20260701 window). The group key is `${bot}:${block}`. total = sum of block
+ * nets; viaV4 = sum of block nets for groups where any leg hasV4.
+ */
+export function aggregateNetProfit(legs: PricedLeg[]): {
+  total: number;
+  viaV4: number;
+  byBotBlock: Map<string, { net: number; hasV4: boolean }>;
+} {
+  const byBotBlock = new Map<string, { net: number; hasV4: boolean }>();
+  for (const leg of legs) {
+    const key = `${leg.bot}:${leg.block}`;
+    const group = byBotBlock.get(key) ?? { net: 0, hasV4: false };
+    if (!leg.unsafe && leg.realized !== null) group.net += leg.realized;
+    if (leg.hasV4) group.hasV4 = true;
+    byBotBlock.set(key, group);
+  }
+
+  let total = 0;
+  let viaV4 = 0;
+  for (const group of byBotBlock.values()) {
+    total += group.net;
+    if (group.hasV4) viaV4 += group.net;
+  }
+  return { total, viaV4, byBotBlock };
 }
 
 /** Chainlink ETH/USD (8 decimals). Falls back on any failure. */
