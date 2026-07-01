@@ -122,9 +122,16 @@ work stops and waits — never solo.
 - **result:** flipped=... | no fixture → logged observability-only (does NOT count as improving extraction)
 
 ### Codex Implementation Pass 1
+<!-- Raw evidence: /tmp/codex-pass1.out (last-message) + /tmp/codex-pass1.events.jsonl.
+     Orchestrator fills this ledger AFTER checking git diff --stat + build + replay —
+     Codex's own "done" is not sufficient (governance 11). -->
+- **status:** landed | stalled | blocked
 - **authored_by:** codex | claude (codex stalled)
 - **fixed:**
+- **changed_files:**
 - **verification:**
+- **diff_scope_check:**   <!-- git diff --stat vs brief scope: matches? over-scope? -->
+- **notes:**
 
 ### Claude Review Pass 1
 - **ran_gate:**

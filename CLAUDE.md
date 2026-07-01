@@ -239,29 +239,40 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 10. **Hard caps before each turn** (anti-blowout): per-run CU budget, daily CU
     budget (the Alchemy-side cap is the backstop), and the 3-pass review cap.
     Record `cu_spent` per turn so RPC/token blowout stays visible.
-11. **Codex-generator reliability + fallback (single point of failure).** Codex is
-    the only generator; when it fails the gen/evaluator split is at risk. **Root cause
-    (diagnosed 2026-07-01):** codex reaches OpenAI through the local GFW proxy
-    `127.0.0.1:1082`; basic connectivity is fine but the **long streaming inference
-    call (esp. `xhigh`)** drops intermittently → codex **silently exits 0 with no
-    changes, or hangs**. A zero-change run is therefore usually a **proxy hiccup, NOT a
-    hard throttle** — so:
-    - Run the loop's codex at **reduced effort** to shorten the stream:
-      `codex exec -c model_reasoning_effort=medium ...` (medium landed reliably;
-      xhigh's ~17k-token streams stalled repeatedly). Do NOT edit the global
-      `~/.codex/config.toml` (it also drives the user's desktop app) — pass the flag.
-    - **Judge success by a NEW rollout** in `~/.codex/archived_sessions/` (or real file
-      changes / a printed final summary), **never by exit code** — failed streams exit 0.
-    - **Retry** (each attempt is an independent coin-flip). Only if a minimal probe
-      (`codex exec "print HELLO"`) ALSO fails repeatedly is it a genuine outage/limit →
-      then stop and wait for the network, don't blame codex.
-    When codex genuinely can't produce: Claude MAY take over **only fully-specified
-    mechanical edits** (the Brief pins exact file / anchor / code — pure transcription,
-    no design left), labelled `authored_by: claude (codex stalled)`. Claude must **NOT**
-    take over **judgment / design** (what to build, how to structure, which approach) —
-    no independent second party = blind-guessing; the turn **stops and waits**. Record
-    `codex: landed | stalled` every turn. The rule: **judgment needs two actors;
-    mechanical transcription may be one, but must be declared.**
+11. **Codex CLI = xhigh long-running generator (calling protocol).** Codex is the only
+    generator, invoked over a local GFW proxy (`127.0.0.1:1082`); the **long `xhigh`
+    inference stream** is the fragile part (codex retries/switches its connection method
+    a few times before giving up — give it time). The earlier "stalls" were a bad
+    calling posture (reading scrolling stdout, no output file, killed too early), NOT a
+    reason to drop `xhigh`. **Default = `gpt-5.5 xhigh`, orchestrated as a slow worker:**
+    - **Invocation (verified codex 0.142.4) — always output to files, never trust stdout:**
+      ```
+      codex -s workspace-write -a never exec -C /Users/eunice/src/MEV \
+        --json -o /tmp/codex-<pass>.out "$BRIEF" > /tmp/codex-<pass>.events.jsonl 2>&1
+      ```
+      `-o` = final message (the result); `--json` events.jsonl = retry/connection evidence.
+      Do NOT edit global `~/.codex/config.toml` (it also drives the desktop app).
+    - **Timeout:** soft 10–15 min, hard 25–30 min. **Never 90s/180s** (kills xhigh
+      mid-think → looks stalled). Run in background + judge on exit; do not poll-kill.
+    - **Judge success by the OUTPUT FILE**, not stdout/exit-code (failed streams exit 0):
+      success = `-o` file has content **and** `git diff --stat` shows the expected surface.
+    - **Stalled definition (revised so xhigh isn't misjudged):** no last-message but
+      process still alive AND under the hard timeout = **running** (it's retrying). Hard
+      timeout reached **and** empty `git diff` = one **stalled attempt**. **2 consecutive
+      stalled attempts = Codex stalled.** Never declare stalled before the hard timeout.
+    - **One Codex task = one narrow patch:** ≤1–3 files, 1–2 verify commands; state
+      allowed/forbidden files in the brief; no simultaneous analyze+design+code+long-md.
+    - **No racing:** while Codex runs, Claude only monitors — must NOT edit the same
+      files or start a second `codex exec` (prevents dueling patches when Codex is slow).
+    - **resume within a cycle:** for a fix pass in the same Hermes cycle,
+      `codex exec resume <SESSION_ID> ...` (prefer the recorded session id/thread over
+      `--last`, which can attach to the wrong session).
+    **Fallback:** if Codex is genuinely stalled, Claude MAY take over **only
+    fully-specified mechanical edits** (Brief pins exact file/anchor/code — pure
+    transcription), labelled `authored_by: claude (codex stalled)`. Claude must **NOT**
+    take over **judgment/design** — no independent second party = blind-guessing; the turn
+    **stops and waits**. Record `codex: landed | stalled` every turn. Rule: **judgment
+    needs two actors; mechanical transcription may be one, but must be declared.**
 12. **Repair-replay double-gate (also the anti-instrument-drift guard).** Every turn
     that claims to **improve extraction** must ship a pinned replay fixture that flips,
     run BEFORE the next dry-run:
@@ -293,9 +304,14 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 
 Claude orchestrates the loop from the terminal (Bash) — NOT via any in-app agent
 tool or `/codex` command:
-- **Codex = generator / implementer**, invoked with `codex exec "<brief>"` (and
-  `codex review` for its code review). Confirmed callable from Bash
-  (`codex exec --skip-git-repo-check` when outside a trusted git dir).
+- **Codex = generator / implementer**, invoked per the **rule 11 protocol** (xhigh
+  long-runner): `codex -s workspace-write -a never exec -C <repo> --json -o
+  /tmp/codex-<pass>.out "<brief>" > /tmp/codex-<pass>.events.jsonl 2>&1`. Judge by the
+  `-o` output file + `git diff --stat`, never scrolling stdout. `codex review` for its
+  code review. Two-layer output: raw `/tmp` files = evidence; the **Hermes md is the
+  formal ledger** — the orchestrator writes the structured Codex Implementation Pass
+  (status / authored_by / changed_files / verification / diff_scope_check) only after
+  checking `git diff --stat` + build + replay. Codex saying "done" is not enough.
 - **Claude (this session) = orchestrator + evaluator**: runs the gates
   (`npm run build`, tests, replay, reads node events over SSM), reviews Codex's
   diff, commits. Claude is the non-author skeptic of Codex's code, so the
