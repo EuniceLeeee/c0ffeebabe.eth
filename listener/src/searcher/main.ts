@@ -220,9 +220,25 @@ function loadEnv(): void {
   }
 }
 
+// Live hot path prefers a dedicated endpoint (e.g. a local reth on 127.0.0.1)
+// and falls back to MAINNET_RPC_URL. AC-3 / forge / historical replay keep
+// reading MAINNET_RPC_URL directly so they stay on an archive node.
+function liveRpcUrl(): string {
+  const url = process.env.SEARCHER_LIVE_RPC_URL ?? process.env.MAINNET_RPC_URL;
+  if (!url) throw new Error("SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL required");
+  return url;
+}
+
+function liveWsUrl(rpcUrl: string): string {
+  return (
+    process.env.SEARCHER_LIVE_WS_URL ??
+    process.env.MAINNET_WS_URL ??
+    rpcUrl.replace(/^http(s?):\/\//, (_m, s) => (s ? "wss://" : "ws://"))
+  );
+}
+
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
-  const rpcUrl = process.env.MAINNET_RPC_URL;
-  if (!rpcUrl) throw new Error("MAINNET_RPC_URL required");
+  const rpcUrl = liveRpcUrl();
 
   const privateKey = process.env.PRIVATE_KEY ?? process.env.OWNER_PRIVATE_KEY;
   if (!privateKey) throw new Error("PRIVATE_KEY or OWNER_PRIVATE_KEY required");
@@ -241,9 +257,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
   const quoteSafetyBps = BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
 
-  const wsUrl =
-    process.env.MAINNET_WS_URL ??
-    rpcUrl.replace(/^http(s?):\/\//, (_m, s) => (s ? "wss://" : "ws://"));
+  const wsUrl = liveWsUrl(rpcUrl);
 
   return {
     rpcUrl,
@@ -296,8 +310,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
 async function main(): Promise<void> {
   loadEnv();
 
-  const rpcUrl = process.env.MAINNET_RPC_URL;
-  if (!rpcUrl) throw new Error("MAINNET_RPC_URL required");
+  const rpcUrl = liveRpcUrl();
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
