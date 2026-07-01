@@ -171,9 +171,24 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
 - One file per run: `docs/research/reports/live-run-<run_id>-hermes.md`, copied from
   `docs/research/templates/hermes-live-run.md`.
 - Auto-generated inputs (follow the Live-Run Follow-Up rules — redact first, keep
-  public on-chain evidence): redacted log, redacted JSONL summary,
-  `analysis live-loss --coverage` report (our funnel vs watchlist competitors,
-  same window), key tx links.
+  public on-chain evidence): redacted log, redacted JSONL summary, key tx links, AND
+  the **mandatory Step-1 competitor cross-reference** (below).
+- **Step 1 — competitor cross-reference (mandatory, before any conclusion).** Use the
+  EXISTING scripts, iterate them if they fall short — do NOT reinvent. Over the same
+  block window, on the local reth node (zero Alchemy CU):
+  - `analysis live-loss --watch <WATCHLIST> --events <jsonl> --rpc http://127.0.0.1:8545`
+    → what the watched MEV bots did in our window + `seenScope`/`primaryReason`
+    (`not_seen` / `seen_but_lost`) + `poolInOurGraph`.
+  - `analysis live-loss --competitor-scan --events <jsonl> --rpc <local-reth>` → per-drop
+    victim-real-block competitor take (arb-signature). (`--coverage`/`analyzeBlock` still
+    have the `target_block` vs real-block bug — see [[project-competitor-scan-tool]].)
+  - **WATCHLIST (seed, extend as found):** `0xc0ffeebabe5d496b2dde509f9fa189c25cf29671`
+    (coffeebabe), `0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13`.
+  - **Both agents must run this and cite it.** A conclusion (Claude's or Codex's) that
+    is not grounded in the competitor cross-reference is blind-guessing and is invalid.
+  - **Secondary-source validation:** after the local-node analysis, re-sample ≥1 key tx
+    via an independent source (Alchemy `$MAINNET_RPC_URL` / Tenderly) and confirm it
+    agrees (e.g. distinct-pool count) before trusting the finding.
 - Each agent writes **only its own sections**, never edits the other's. Each round =
   exactly **one core judgment + one next_action + one not_doing** (no walls of text).
 
