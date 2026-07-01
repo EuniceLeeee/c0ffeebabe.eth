@@ -7,7 +7,7 @@ import { canonicalSequence, pathTemplate } from "../actions/canonicalize.js";
 import { runCompetitorScan } from "../competitor-scan.js";
 import { decodeTransfer, formatTokenAmount } from "../decode/erc20.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
-import { priceArb, fetchEthUsd } from "../pnl/arb-profit.js";
+import { priceArb, fetchEthUsd, type V4Swap } from "../pnl/arb-profit.js";
 import { ADDR, TOPICS, lower, short } from "../registry/protocols.js";
 import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient, hexToBigInt, hexToNumber } from "../rpc/client.js";
@@ -97,6 +97,8 @@ interface WatchReport {
   v4_swaps: number;
   v4_pools: number;
   v4_pool_ids: string[];
+  v4_swaps_detail: V4Swap[];
+  trace_used: boolean;
   nextAction: string[];
   rawDeltas: unknown[];
 }
@@ -227,6 +229,14 @@ interface MempoolFilterIndex {
   addresses: Set<string>;
   source: string;
   exact: boolean;
+}
+
+interface WatchPricedTx {
+  bot: string;
+  block: number;
+  realized: number | null;
+  unsafe: boolean;
+  hasV4: boolean;
 }
 
 interface BlockAnalysisContext {
@@ -447,8 +457,7 @@ async function runWatchMode(): Promise<void> {
   };
   const ethUsd = await fetchEthUsd(rpc);
   const allowTrace = priceTrace || rpc.isLocal();
-  let profitTotalUsd = 0;
-  let profitV4Usd = 0;
+  const pricedTxs: WatchPricedTx[] = [];
   let written = 0;
   console.error(
     `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} price_trace=${allowTrace ? "on" : "off"}`,
@@ -479,10 +488,15 @@ async function runWatchMode(): Promise<void> {
       report.v4_swaps = profit.v4Swaps.length;
       report.v4_pools = profit.v4PoolIds.length;
       report.v4_pool_ids = profit.v4PoolIds;
-      if (profit.profitConfidence !== "unsafe" && profit.realizedProfitUsd !== null && profit.realizedProfitUsd > 0) {
-        profitTotalUsd += profit.realizedProfitUsd;
-        if (profit.v4Swaps.length > 0) profitV4Usd += profit.realizedProfitUsd;
-      }
+      report.v4_swaps_detail = profit.v4Swaps;
+      report.trace_used = profit.nativeTraceUsed;
+      pricedTxs.push({
+        bot: lower(report.competitorAddr[0] ?? ""),
+        block: blockNumber,
+        realized: profit.realizedProfitUsd,
+        unsafe: profit.profitConfidence === "unsafe",
+        hasV4: profit.v4Swaps.length > 0,
+      });
       const outBase = watchOutputBase(blockNumber, tx.hash);
       await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
       await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
@@ -495,9 +509,23 @@ async function runWatchMode(): Promise<void> {
     `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
       `detection_gap=${notSeenByGapType.detection_gap} unknown=${notSeenByGapType.unknown}`,
   );
+  const blockNets = new Map<string, { net: number; hasV4: boolean }>();
+  for (const tx of pricedTxs) {
+    const key = `${tx.bot}:${tx.block}`;
+    const group = blockNets.get(key) ?? { net: 0, hasV4: false };
+    if (!tx.unsafe && tx.realized !== null) group.net += tx.realized;
+    if (tx.hasV4) group.hasV4 = true;
+    blockNets.set(key, group);
+  }
+  let netTotalUsd = 0;
+  let netV4Usd = 0;
+  for (const group of blockNets.values()) {
+    netTotalUsd += group.net;
+    if (group.hasV4) netV4Usd += group.net;
+  }
   console.error(
-    `[analysis/live-loss/watch] realized_profit_usd total=${profitTotalUsd.toFixed(0)} ` +
-      `via_v4=${profitV4Usd.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
+    `[analysis/live-loss/watch] net_per_block total=${netTotalUsd.toFixed(0)} ` +
+      `via_v4=${netV4Usd.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
   );
 }
 
@@ -1254,6 +1282,8 @@ function buildWatchReport(
     v4_swaps: 0,
     v4_pools: 0,
     v4_pool_ids: [],
+    v4_swaps_detail: [],
+    trace_used: false,
     nextAction: watchNextActions(primaryReason, seenScope, pools),
     rawDeltas: logResult.rawDeltas,
   };
@@ -1301,6 +1331,10 @@ function watchOutputBase(block: number, txHash: string): string {
   return `${dir}/watch-${block}-${lower(txHash).slice(2, 12)}`;
 }
 
+function poolId8(poolId: string): string {
+  return poolId.startsWith("0x") ? poolId.slice(0, 10) : poolId.slice(0, 8);
+}
+
 function renderWatchMarkdown(report: WatchReport): string {
   const lines: string[] = [];
   lines.push("# Live Loss Watch Report");
@@ -1322,8 +1356,15 @@ function renderWatchMarkdown(report: WatchReport): string {
   const unpricedSymbols = report.unpriced_delta_symbols.map((x) => `\`${x}\``).join(", ");
   lines.push(`- unpriced_deltas: ${report.unpriced_deltas}${unpricedSymbols ? ` (${unpricedSymbols})` : ""}`);
   lines.push(`- eth_profit_usd: ${report.eth_profit_usd.toFixed(2)}`);
+  lines.push(`- trace_used: ${report.trace_used}`);
   lines.push(`- v4: swaps=${report.v4_swaps} pools=${report.v4_pool_ids.length}`);
   lines.push(`- v4_pool_ids: ${report.v4_pool_ids.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
+  if (report.v4_swaps_detail.length > 0) {
+    const swaps = report.v4_swaps_detail
+      .map((swap) => `\`${poolId8(swap.poolId)}\` a0=${swap.amount0}/a1=${swap.amount1} fee=${swap.fee}`)
+      .join("; ");
+    lines.push(`- v4_swaps: ${swaps}`);
+  }
   lines.push("");
   lines.push("## Footprint");
   lines.push("");
