@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
@@ -50,6 +50,7 @@ import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js
 import type { ResolvedPlanNode } from "../shared/types/plan.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
+const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
 
@@ -217,6 +218,29 @@ function loadEnv(): void {
     const [rawKey, ...rest] = trimmed.split("=");
     const key = rawKey.replace(/^export\s+/, "");
     if (!process.env[key]) process.env[key] = rest.join("=").replace(/^["']|["']$/g, "");
+  }
+}
+
+function dumpRuntimeGraphPools(
+  pools: PoolEntry[],
+  path = DEFAULT_RUNTIME_GRAPH_POOLS_PATH,
+): void {
+  try {
+    const normalized = pools.map((pool) => ({
+      address: pool.address.toLowerCase(),
+      adapter: pool.adapter,
+    }));
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify({
+      builtAt: new Date().toISOString(),
+      count: normalized.length,
+      pools: normalized,
+    }, null, 2)}\n`);
+    console.log(`[searcher/live] runtime graph pools dumped: ${path} count=${normalized.length}`);
+  } catch (err) {
+    console.warn(
+      `[searcher/live] warning: failed to dump runtime graph pools: ${(err as Error).message}`,
+    );
   }
 }
 
@@ -437,6 +461,7 @@ async function main(): Promise<void> {
       `${factoryPools.length} factory + ${swapPools.length} swap-active = ` +
       `${allPools.length} total`,
   );
+  dumpRuntimeGraphPools(allPools);
 
   // Build routing graph from all pools. File-backed universe entries can carry
   // token0/token1 metadata, so V2/V3 graph construction avoids per-pool token

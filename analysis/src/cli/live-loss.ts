@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { actionsFromLogs } from "../actions/from-logs.js";
@@ -19,6 +20,7 @@ import {
 
 const args = parseArgs(process.argv.slice(2));
 const eventsPath = args.events ? String(args.events) : "";
+const graphPoolsPath = args["graph-pools"] ? String(args["graph-pools"]) : "searcher/pools/runtime-graph-pools.json";
 const rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "");
 const blockArg = args.block ? Number(args.block) : undefined;
 const fromBlockArg = args["from-block"] ? Number(args["from-block"]) : undefined;
@@ -40,6 +42,20 @@ if (!eventsPath) {
 
 const rpc = new RpcClient(rpcUrl);
 const events = await readJsonl(eventsPath);
+const routingGraphPools: Set<string> | null = (() => {
+  try {
+    if (!existsSync(graphPoolsPath)) return null;
+    const j = JSON.parse(readFileSync(graphPoolsPath, "utf8"));
+    const arr = Array.isArray(j) ? j : j.pools || [];
+    return new Set(
+      arr
+        .map((pool: any) => String(pool.address || pool).toLowerCase())
+        .filter(isAddress),
+    );
+  } catch {
+    return null;
+  }
+})();
 if (competitorScan) {
   await runCompetitorScan({ eventsPath, events, rpc, notSeenScan });
   process.exit(0);
@@ -64,13 +80,17 @@ interface WatchReport {
   pathTemplate: string;
   pools: string[];
   tokens: string[];
-  poolInOurGraph: boolean;
+  pool_in_seen_events: boolean;
+  pool_in_routing_graph: boolean | null;
+  gap_type: GapType | null;
   competitorEdge: string[];
   protocols: string[];
   roughProfit: number | null;
   nextAction: string[];
   rawDeltas: unknown[];
 }
+
+type GapType = "graph_gap" | "detection_gap" | "unknown";
 
 interface SeenSet {
   pools: Set<string>;
@@ -122,6 +142,8 @@ interface CoverageMatch {
     sameBlockSeen: boolean;
     samePoolSeen: boolean;
     sameTokenPairSeen: boolean;
+    poolInRoutingGraph: boolean | null;
+    gapType: GapType | null;
     primaryNotSeenReason: string | null;
     secondaryReasons: string[];
     victimTo: string | null;
@@ -170,6 +192,7 @@ interface CoverageReport {
     samePoolSeenByUs: number;
     sameTokenPairSeenByUs: number;
     notSeenByUs: number;
+    notSeenByGapType: Record<GapType, number>;
   };
   mempoolFilter: {
     source: string;
@@ -406,6 +429,11 @@ async function runWatchMode(): Promise<void> {
   const range = inferWatchRange(events);
   const seenByBlock = buildSeenByBlock(events);
   const watchSet = new Set(watch);
+  const notSeenByGapType: Record<GapType, number> = {
+    graph_gap: 0,
+    detection_gap: 0,
+    unknown: 0,
+  };
   let written = 0;
   console.error(
     `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} traceTop=disabled`,
@@ -425,6 +453,7 @@ async function runWatchMode(): Promise<void> {
       const receipt = await rpc.getReceipt(tx.hash);
       if (!receipt || receipt.status !== "0x1") return;
       const report = buildWatchReport(blockNumber, tx, receipt, seenByBlock);
+      if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
       const outBase = watchOutputBase(blockNumber, tx.hash);
       await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
       await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
@@ -433,6 +462,10 @@ async function runWatchMode(): Promise<void> {
     });
   }
   console.error(`[analysis/live-loss/watch] reports=${written}`);
+  console.error(
+    `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
+      `detection_gap=${notSeenByGapType.detection_gap} unknown=${notSeenByGapType.unknown}`,
+  );
 }
 
 function inferWatchRange(items: any[]): { from: number; to: number } {
@@ -513,6 +546,12 @@ async function runCoverageMode(): Promise<void> {
   await writeText(resolve(`${outputBase}.md`), renderCoverageMarkdown(report));
   await writeText(resolve(`${outputBase}.json`), JSON.stringify(report, jsonReplacer, 2));
   console.error(`[analysis/live-loss/coverage] wrote ${outputBase}.md`);
+  console.error(
+    `[analysis/live-loss/coverage] not_seen_gap_types ` +
+      `graph_gap=${report.competitorCoverage.notSeenByGapType.graph_gap} ` +
+      `detection_gap=${report.competitorCoverage.notSeenByGapType.detection_gap} ` +
+      `unknown=${report.competitorCoverage.notSeenByGapType.unknown}`,
+  );
 }
 
 function buildSeenIndex(items: any[]): SeenIndex {
@@ -633,6 +672,13 @@ function buildCoverageMatch(
   const sameTokenPairSeen = item.tokens.some((token) => seenSet.tokens.has(token));
   const exactVictimSeen = sandwichEvidence ? seen.victimHashes.has(lower(sandwichEvidence.victimTx)) : false;
   const sameBlockSeen = seenSet.any;
+  const poolInRoutingGraph = routingGraphPools ? item.pools.some((pool) => routingGraphPools.has(lower(pool))) : null;
+  const notSeen =
+    !exactVictimSeen &&
+    !sameBlockSeen &&
+    !samePoolSeen &&
+    !sameTokenPairSeen;
+  const gapType = notSeen ? classifyGapType(poolInRoutingGraph) : null;
   const victimTo = sandwichEvidence?.victimTo ? lower(sandwichEvidence.victimTo) : null;
   const victimInMempoolFilter = victimTo ? mempoolFilter.addresses.has(victimTo) : null;
   const hasExtraNonSandwichLeg = Boolean(
@@ -660,6 +706,8 @@ function buildCoverageMatch(
       sameBlockSeen,
       samePoolSeen,
       sameTokenPairSeen,
+      poolInRoutingGraph,
+      gapType,
       primaryNotSeenReason: reasons.primary,
       secondaryReasons: reasons.secondary,
       victimTo,
@@ -886,12 +934,20 @@ function buildCoverageReport(input: {
   const sameBlockSeenByUs = input.matches.filter((m) => m.ourVisibility.sameBlockSeen).length;
   const samePoolSeenByUs = input.matches.filter((m) => m.ourVisibility.samePoolSeen).length;
   const sameTokenPairSeenByUs = input.matches.filter((m) => m.ourVisibility.sameTokenPairSeen).length;
-  const notSeenByUs = input.matches.filter((m) =>
+  const notSeenMatches = input.matches.filter((m) =>
     !m.ourVisibility.exactVictimSeen &&
     !m.ourVisibility.sameBlockSeen &&
     !m.ourVisibility.samePoolSeen &&
     !m.ourVisibility.sameTokenPairSeen
-  ).length;
+  );
+  const notSeenByGapType: Record<GapType, number> = {
+    graph_gap: 0,
+    detection_gap: 0,
+    unknown: 0,
+  };
+  for (const m of notSeenMatches) {
+    notSeenByGapType[m.ourVisibility.gapType ?? "unknown"]++;
+  }
   const completenessPct = input.totalBlocks === 0 ? 100 : (input.scannedBlocks / input.totalBlocks) * 100;
   return {
     run: {
@@ -914,7 +970,8 @@ function buildCoverageReport(input: {
       sameBlockSeenByUs,
       samePoolSeenByUs,
       sameTokenPairSeenByUs,
-      notSeenByUs,
+      notSeenByUs: notSeenMatches.length,
+      notSeenByGapType,
     },
     mempoolFilter: {
       source: input.mempoolFilter.source,
@@ -972,6 +1029,11 @@ function renderCoverageMarkdown(report: CoverageReport): string {
   lines.push(`- same_pool_seen_by_us: \`${report.competitorCoverage.samePoolSeenByUs}\``);
   lines.push(`- same_token_pair_seen_by_us: \`${report.competitorCoverage.sameTokenPairSeenByUs}\``);
   lines.push(`- not_seen_by_us: \`${report.competitorCoverage.notSeenByUs}\``);
+  lines.push(
+    `- not_seen_by_gap_type: graph_gap=\`${report.competitorCoverage.notSeenByGapType.graph_gap}\` ` +
+      `detection_gap=\`${report.competitorCoverage.notSeenByGapType.detection_gap}\` ` +
+      `unknown=\`${report.competitorCoverage.notSeenByGapType.unknown}\``,
+  );
   lines.push(`- mempool_filter_source: \`${report.mempoolFilter.source}\``);
   lines.push(`- mempool_filter_exact: \`${report.mempoolFilter.exact}\``);
   lines.push(`- mempool_filter_address_count: \`${report.mempoolFilter.addressCount}\``);
@@ -1003,6 +1065,8 @@ function renderCoverageMarkdown(report: CoverageReport): string {
     lines.push(`- same_block_seen: \`${m.ourVisibility.sameBlockSeen}\``);
     lines.push(`- same_pool_seen: \`${m.ourVisibility.samePoolSeen}\``);
     lines.push(`- same_token_pair_seen: \`${m.ourVisibility.sameTokenPairSeen}\``);
+    lines.push(`- pool_in_routing_graph: \`${m.ourVisibility.poolInRoutingGraph}\``);
+    lines.push(`- gap_type: \`${m.ourVisibility.gapType ?? "n/a"}\``);
     lines.push(`- victim_to: ${m.ourVisibility.victimTo ? `\`${m.ourVisibility.victimTo}\`` : "`n/a`"}`);
     lines.push(`- victim_in_mempool_filter: \`${m.ourVisibility.victimInMempoolFilter ?? "n/a"}\``);
     lines.push(`- mempool_filter_source: \`${m.ourVisibility.mempoolFilterSource}\``);
@@ -1116,6 +1180,9 @@ function buildWatchReport(
   const primaryReason = decoded
     ? (samePool || sameToken ? "seen_but_lost" : "not_seen")
     : (seen.any ? "seen_but_lost" : "not_seen");
+  const poolInSeenEvents = pools.some((pool) => seen.pools.has(pool));
+  const poolInRoutingGraph = routingGraphPools ? pools.some((p) => routingGraphPools.has(lower(p))) : null;
+  const gapType = primaryReason === "not_seen" ? classifyGapType(poolInRoutingGraph) : null;
 
   return {
     block,
@@ -1127,13 +1194,20 @@ function buildWatchReport(
     pathTemplate: pathTemplate(sequence),
     pools,
     tokens,
-    poolInOurGraph: pools.some((pool) => seen.pools.has(pool)),
+    pool_in_seen_events: poolInSeenEvents,
+    pool_in_routing_graph: poolInRoutingGraph,
+    gap_type: gapType,
     competitorEdge: competitorEdges(sequence),
     protocols: logResult.protocols,
     roughProfit: roughValueUsd(logResult.rawDeltas),
     nextAction: watchNextActions(primaryReason, seenScope, pools),
     rawDeltas: logResult.rawDeltas,
   };
+}
+
+function classifyGapType(poolInRoutingGraph: boolean | null): GapType {
+  if (poolInRoutingGraph === null) return "unknown";
+  return poolInRoutingGraph ? "detection_gap" : "graph_gap";
 }
 
 function extractPoolAddresses(receipt: any): string[] {
@@ -1194,7 +1268,9 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push("");
   lines.push(`- pools: ${report.pools.map((x) => `\`${short(x)}\``).join(", ") || "n/a"}`);
   lines.push(`- tokens: ${report.tokens.map((x) => `\`${short(x)}\``).join(", ") || "n/a"}`);
-  lines.push(`- pool_in_our_graph: \`${report.poolInOurGraph}\``);
+  lines.push(`- pool_in_seen_events: \`${report.pool_in_seen_events}\``);
+  lines.push(`- pool_in_routing_graph: \`${report.pool_in_routing_graph}\``);
+  lines.push(`- gap_type: \`${report.gap_type ?? "n/a"}\``);
   lines.push(`- protocols: ${report.protocols.join(", ") || "n/a"}`);
   lines.push("");
   lines.push("## Next Action");
