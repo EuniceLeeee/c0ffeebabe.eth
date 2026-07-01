@@ -299,6 +299,27 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
       `SEARCHER_RECORD_LIVE_FIXTURES=1`, then replay for per-stage `stageMs` p50/p95
       (incl. preSolver) + revm profit equivalence (1 wei). This is the latency `seg`
       before/after gate — with the harness-fidelity caveat above.
+13. **Convert findings to fixes — forcing functions (the "diagnosed but never fixed"
+    fix).** The loop is strong at diagnosis and weak at shipping impact: every rule 1–12
+    prevents *bad* changes, none forces *impactful* ones, so safe verifiable **analysis**
+    commits masquerade as progress while the extraction goal (catch more MEV) stays
+    untouched — the 2026-07-01 pattern (many analysis commits, searcher behavior
+    unchanged). Counterweights, all hard:
+    - **Anti-drift cap:** at most **one** consecutive `turn_class: observability-only`
+      (analysis/tooling) turn. The **next Implementation Brief MUST change searcher
+      behavior** (what it catches / builds / submits), proven by a Repair-Replay flip
+      (rule 12). If it can't, the loop **stops and escalates to the human** — it does NOT
+      run a third analysis turn.
+    - **No orphan findings:** every finding in a Hermes md / review becomes a tracked
+      item with `owner` + `carry_to_round: N`. A finding deferred past `carry_to_round`
+      **blocks new analysis/tooling work** until done or explicitly killed by the human.
+      "deferred" is not where findings go to die.
+    - **Brief gate:** every Implementation Brief carries `searcher_behavior_change:
+      yes | no`. Two consecutive `no` escalate to the human.
+    - **Impact counterweight:** CLAUDE.md's culture is skeptic/verify/gate = good for
+      correctness, biased against bold searcher changes. The loop's job is not clean
+      commits; it is more MEV caught. A round that shipped a clean analysis patch but
+      changed nothing the searcher does is a **null round**, and must be labelled so.
 
 ### Boundary (CLI-orchestrated by Claude)
 

@@ -88,12 +88,19 @@ Representative **non-sandwich** competitor legs (sandwich legs excluded per §6/
 - **rationale (1-2 lines):**
 
 ## Implementation Brief
+- **searcher_behavior_change:** yes | no   <!-- governance 13: two consecutive `no` escalate; after 1 observability turn the next MUST be `yes` -->
+
 | task | owner | files | done-when |
 |---|---|---|---|
 |  |  |  |  |
 
 ## Acceptance Criteria
 1.
+
+## Findings Ledger  <!-- governance 13: no orphan findings -->
+| finding | owner | carry_to_round | status |
+|---|---|---|---|
+|  |  |  | open / done / killed |
 
 ---
 
