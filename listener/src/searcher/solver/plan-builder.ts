@@ -235,10 +235,19 @@ async function buildEdgeNode(
 
     case "univ4-unlock": {
       // V4 unlock wrapper. Inside callback: swap → take output → sync input → transfer input → settle.
-      // We need pool key (fee + tickSpacing). For stablecoin pairs in our path
-      // we use known DAI/USDT 0.0068% pool config.
-      const { fee, tickSpacing } = uniV4PoolKey(edge.tokenIn, edge.tokenOut);
-      const [c0, c1] = sortedPair(edge.tokenIn, edge.tokenOut);
+      // The PoolKey MUST come from the edge (the exact pool the quote used) — never a
+      // hardcoded fee, because pinned v4 pools have different fee tiers (e.g. 7 vs 8);
+      // quoting one pool and executing another reverts.
+      const key = edge.v4PoolKey;
+      if (!key) {
+        throw new Error(`univ4-unlock edge missing v4PoolKey: ${edge.tokenIn} -> ${edge.tokenOut}`);
+      }
+      const c0 = key.currency0;
+      const c1 = key.currency1;
+      const hooks = key.hooks;
+      // params encode as bigint (ResolvedParam); V4PoolKey stores fee/tickSpacing as number.
+      const fee = BigInt(key.fee);
+      const tickSpacing = BigInt(key.tickSpacing);
       const zeroForOne = edge.tokenIn.toLowerCase() === c0.toLowerCase();
 
       const unlockChildren: ResolvedPlanNode[] = [
@@ -254,7 +263,7 @@ async function buildEdgeNode(
             currency1: c1,
             fee,
             tickSpacing,
-            hooks: ADDR.ZERO,
+            hooks,
             zeroForOne,
             amountSpecified: -amtIn, // V4 exactIn = negative
             sqrtPriceLimit: zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE,
@@ -376,30 +385,4 @@ async function uniV3PoolTokens(
 
 function sortedPair(a: string, b: string): [string, string] {
   return a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a];
-}
-
-/**
- * Hardcoded UniV4 pool keys for known stablecoin pairs in our token graph.
- * (V4 doesn't have a registry; fee/tickSpacing is part of the pool identity.)
- */
-function uniV4PoolKey(
-  tokenIn: string,
-  tokenOut: string,
-): { fee: bigint; tickSpacing: bigint } {
-  const a = tokenIn.toLowerCase();
-  const b = tokenOut.toLowerCase();
-  const dai = ADDR.DAI.toLowerCase();
-  const usdt = ADDR.USDT.toLowerCase();
-  const usdc = ADDR.USDC.toLowerCase();
-  // DAI/USDT pool with 0.0068% fee, tickSpacing 1
-  if ((a === dai && b === usdt) || (a === usdt && b === dai)) {
-    return { fee: 68n, tickSpacing: 1n };
-  }
-  // USDC/USDT pool with 0.01% fee, tickSpacing 1
-  if ((a === usdc && b === usdt) || (a === usdt && b === usdc)) {
-    return { fee: 100n, tickSpacing: 1n };
-  }
-  throw new Error(
-    `UniV4 pool key not configured for ${tokenIn} <-> ${tokenOut}`,
-  );
 }

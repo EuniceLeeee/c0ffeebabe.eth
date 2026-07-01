@@ -65,7 +65,10 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 | arb-profit.ts double-counts WETH→ETH unwrap (~2× overcount; `0xd60d80df` $42→real ~$20) | Claude | R2 (analysis, only when sizing needed) | open — merge WETH+native ETH as one asset |
 | v4 slice-2: auto-index the v4 singleton (pin-only today; USDC/USDT is the only pinned pool) | v4 epic | R2/R3 | open |
 | **v4-impact-detection**: 0/80 opportunities were v4 though competitors did 1655 v4 swaps/92% — v4 victims never enter our funnel (impact-extraction doesn't decode v4 `Swap`) | v4 epic (slice-2) | R3 | **done** — decoder + poolId identity (v4 `Swap` → `PoolImpact`), Final Approval |
-| v4 solver identity: `solver.ts` search-center / `findReverseImpactEdgeIndex` / `findImpactV4PoolKey` still match by PoolManager+tokens only (Codex slice-2 "secondary") | Claude | **R4** | open — inert with 1 pinned v4 pool, MUST precede R5 broad indexing |
+| v4 solver identity: `solver.ts` search-center / `findReverseImpactEdgeIndex` / `findImpactV4PoolKey` match by PoolManager+tokens only (Codex slice-2 "secondary") | Claude | R4 | **done** — `sameV4Pool` poolId guard |
+| **v4 execution PoolKey hardcoded** to fee 100 in plan-builder (`uniV4PoolKey`) — quoted fee-7/8 but executed fee-100 → revert (affected even R1) | Claude | R5 | **done** — derive from `edge.v4PoolKey`; footgun deleted; `v4-execution-poolkey` gate |
+| **native-ETH v4 execution** (settle `{value:}` path) — needs `BotVM.sol` + redeploy; blocks the ETH-paired 92% | — | **ESCALATED (user-present)** | open — [[project-univ4-coverage-frontier]] |
+| `defaultTokenGraph()` hardcoded DAI/USDT v4 fee fallback (AC-3/test only, not pinned exec path) | Claude | R6+ | open (minor, Codex caveat) |
 | no_candidate 80% is longtail noise (Z/SpaceXAI single-venue, nobody backran) — NOT a searcher fix; do not chase | Claude R2 | closed | **done** (proven on-chain, [[project-univ4-coverage-frontier]]) |
 | ~~atomic / state-triggered detection~~ | — | — | **KILLED** (user 2026-07-01: non-victim-backrun not doing) |
 | Codex manual analysis must use PRIMARY sources (not Claude's curated facts) | both agents | next round | open (rule strengthened) |
@@ -92,6 +95,17 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 - **deferred → R4:** solver identity (inert with 1 pinned v4 pool; MUST land before R5 broad indexing).
 - **infra note:** Codex pass-3 sat **suspended ~3h during macOS screen-lock** (bg process + proxy frozen; actual work was seconds). Fix going forward: `caffeinate -i` + a `ScheduleWakeup` fallback, don't passively wait on the completion notification ([[reference-codex-background-suspend]]).
 
+## R4+R5 — v4 multi-pool: solver identity + 2nd real pool + execution PoolKey (Codex 2-pass) 
+- **R4 searcher_behavior_change:** yes — solver v4 pool identity (`sameV4Pool` poolId guard in `findReverseImpactEdgeIndex`/`findImpactV4PoolKey`; `OpportunityImpact.poolId`). Completes the Codex slice-2 "secondary" defer.
+- **R5 searcher_behavior_change:** yes — pinned a 2nd REAL USDC/USDT v4 pool (fee-7 `0x0fb0e40c`, keccak-verified) so the identity fixes flip from inert→real; **plus the execution-PoolKey fix**.
+- **Codex R4+R5 review (2 passes):**
+  - pass-1 → **BLOCKING**: `plan-builder` hardcoded USDC/USDT v4 fee=100 (`uniV4PoolKey`), so pinned fee-7/8 pools quoted one pool but **executed a different PoolKey → revert** (would have broken even R1's fee-8 pool; never caught — nothing exercised the execution path). Fixed: derive `currency0/1/fee/tickSpacing/hooks` from `edge.v4PoolKey`; deleted the hardcoded footgun.
+  - pass-2 → **RESOLVED** (Codex inline-verified fee-7 AND fee-8 both preserve fee/tickSpacing/hooks/direction; no remaining fixed-fee assumption). Caveat: `defaultTokenGraph()` DAI/USDT v4 fallback is test-only (ledger).
+- **gates:** `v4-execution-poolkey` (univ4-swap nodes carry fee=8n from the edge, not hardcoded 100n) PASS; `v4-impact-detect` (2 real pools, no collapse) PASS; tsc clean; planner 10/10 + fixtures 2/2.
+- **verdict:** `fixed`. **Final Approval: yes.**
+- **key finding:** the v4 execution path was hardcoded — quote/execute pool mismatch. Detection/quote correctness (R1/R3) is NOT execution correctness; the execution path needs its own gate (now added).
+- **native-ETH v4 execution ESCALATED** (BotVM.sol value path; the ETH-paired 92% waits on it).
+
 ## Next Run
-- **next_state:** **R4 = v4-identity-completion** (thread poolId through `solver.ts` search-center / `findReverseImpactEdgeIndex` / `findImpactV4PoolKey`) + an **E2E replay** (a real v4 victim → impact → v4-routed plan). Then **R5 = broad v4 indexing** (auto-discover the singleton — the 43%/92% lever), which the R4 identity work unblocks. Then dry-run with v4.
-- **live_allowed:** no (dry-run only; go-live human gate).
+- **next_state:** **R6 = v4 dry-run** — deploy the merged v4 code to the node, run a fresh window, confirm v4 (ERC20/ERC20) victims now enter the funnel (opportunities with v4 impacts) and route/quote/build correctly. Cheap (local reth). Then R7 = arb-profit pricer double-count fix (sizing); R8-R9 = dry-run findings + wrap.
+- **live_allowed:** no (dry-run only; go-live human gate). native-ETH execution + go-live wait for the user.
