@@ -12,10 +12,12 @@ window:        # block <from>..<to> (~N blocks / ~M min)
 config:        # SEARCHER_LIVE_BACKEND= / mempool= / OPP_TTL_MS= / SOLVER_DEADLINE_MS= / ...
 cu_budget:     # per-run CU cap set BEFORE the turn (anti-blowout)
 cu_spent:      # actual, fill at close
+codex:         # landed | stalled  (governance 11 — track generator reliability)
+turn_class:    # extraction | observability-only  (governance 12 — see Repair Replay Gate)
 inputs:
   redacted_log:
   redacted_events_summary:
-  coverage_report:
+  competitor_cross_reference:   # analysis live-loss --watch <WATCHLIST> --graph-pools <dump> (mandatory Step 1)
   key_tx_links: []
 ```
 
@@ -107,7 +109,20 @@ replay / dry-run / diff-check actually executed) and `finding:` (what it found,
 or "ran X, found nothing → pass"). An approve with **neither** is invalid; "two
 models" does not substitute for a real run gate.
 
+**Codex fallback (governance 11):** if `codex exec` stalled twice (exit 0, empty
+`git status`), set `codex: stalled`. Claude may transcribe ONLY fully-specified
+mechanical edits, labelled `authored_by: claude (codex stalled)`; judgment/design
+work stops and waits — never solo.
+
+### Repair Replay Gate (governance 12 — run BEFORE the next dry-run)
+- **turn_class:** extraction | observability-only
+- **fixture:** `{ block, victim/impact, pool, tokens }` (pinned; note if it needs archive)
+- **assert (correctness):** e.g. `no_candidate → plans>0` / pool routes / `sim.success` — flipped? yes/no
+- **assert (latency):** same fixture before/after → `seg` per-stage ms delta (RELATIVE only; harness must reproduce the cold-state/backend latency source, else untrusted)
+- **result:** flipped=... | no fixture → logged observability-only (does NOT count as improving extraction)
+
 ### Codex Implementation Pass 1
+- **authored_by:** codex | claude (codex stalled)
 - **fixed:**
 - **verification:**
 

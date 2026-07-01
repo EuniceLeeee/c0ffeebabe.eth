@@ -239,6 +239,35 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
 10. **Hard caps before each turn** (anti-blowout): per-run CU budget, daily CU
     budget (the Alchemy-side cap is the backstop), and the 3-pass review cap.
     Record `cu_spent` per turn so RPC/token blowout stays visible.
+11. **Codex-generator fallback (single point of failure).** Codex is the only
+    generator; when it fails the gen/evaluator split is at risk. If `codex exec`
+    returns **twice consecutively with zero file changes** (stalled mid-exploration
+    — observed as exit 0 but empty `git status`), treat Codex as throttled and STOP
+    blind retries. Claude MAY then take over **only fully-specified mechanical edits**
+    (the Brief pins exact file / anchor / code — pure transcription, no design left)
+    and MUST label them `authored_by: claude (codex stalled)` in the run file. Claude
+    must **NOT** take over any **judgment / design** work (what to build, how to
+    structure, which approach) — that leaves no independent second party and is
+    blind-guessing; the turn **stops and waits** instead. Record `codex: landed |
+    stalled` every turn so the reliability pattern (and where separation was
+    compromised) stays visible. The rule: **judgment needs two actors; mechanical
+    transcription may be one, but must be declared.**
+12. **Repair-replay double-gate (also the anti-instrument-drift guard).** Every turn
+    that claims to **improve extraction** must ship a pinned replay fixture that flips,
+    run BEFORE the next dry-run:
+    - correctness / coverage / path fix → **deterministic replay asserts the behavior
+      flip** (`no_candidate → plans>0` / pool now routes / `sim.success`). No flip =
+      not fixed, or the change was instrument-only.
+    - latency fix → replay the **same** fixture before/after and compare `seg` per-stage
+      ms. **Relative only** (harness-bound, not a live-absolute number), and valid ONLY
+      if the harness faithfully reproduces the latency source (cold state / real
+      backend) — otherwise the timing is misleading, do not trust it.
+    A turn with **no flippable / speed-up fixture** is logged `turn_class:
+    observability-only` and does **NOT** count as improving extraction (this is how the
+    "polishing the microscope" drift gets caught — an instrument change has nothing in
+    the searcher to replay). Correctness replay is cheap (planner-level, mostly no
+    anvil); **replay gates the FIX, live dry-run still gates competitiveness** — never
+    conflate the two ([[feedback-validate-live-not-backtest]]).
 
 ### Boundary (CLI-orchestrated by Claude)
 
