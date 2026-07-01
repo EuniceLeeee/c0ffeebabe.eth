@@ -64,11 +64,20 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 | v4 epic slice-1 full replay gate (replay-v4-arb + 13-file review) | Claude/Codex | this round | **done** — `fixed`, merged `1fccf71` (quote bit-exact/0bps + univ4 routing flip) |
 | arb-profit.ts double-counts WETH→ETH unwrap (~2× overcount; `0xd60d80df` $42→real ~$20) | Claude | R2 (analysis, only when sizing needed) | open — merge WETH+native ETH as one asset |
 | v4 slice-2: auto-index the v4 singleton (pin-only today; USDC/USDT is the only pinned pool) | v4 epic | R2/R3 | open |
+| **v4-impact-detection**: 0/80 opportunities were v4 though competitors did 1655 v4 swaps/92% — v4 victims never enter our funnel (impact-extraction doesn't decode v4 `Swap`) | v4 epic | **escalated (human)** | open — highest-value next searcher change |
+| no_candidate 80% is longtail noise (Z/SpaceXAI single-venue, nobody backran) — NOT a searcher fix; do not chase | Claude R2 | closed | **done** (proven on-chain, [[project-univ4-coverage-frontier]]) |
 | ~~atomic / state-triggered detection~~ | — | — | **KILLED** (user 2026-07-01: non-victim-backrun not doing) |
 | Codex manual analysis must use PRIMARY sources (not Claude's curated facts) | both agents | next round | open (rule strengthened) |
 | v4 pools auto-index into graph (now pin-only) | v4 epic | slice-2 | open |
 | local v4 quote math (latency; V4Quoter eth_call is correctness-first) | v4 epic | slice-3 | open |
 
+## R2 — no_candidate root-cause (searcher-first locate) + epic escalation
+- **funnel:** 59 no_candidate = **46 (78%) `only_immediate_same_pool_reverse` + 13 (22%) `impact_pool_not_in_routing_graph`**. opportunity_ready=0, no_profitable=0 — everything dies at the planner.
+- **on-chain grounding (not assumed):** the 78% is dominated by two **single-venue longtail memes** — `0x1c13522c` = **"Z"** (v3 1% pool; its only v4 pools are 45-59% fee → unusable) and `0x6ccafe18` = **"SpaceXAI"** (v2 pool; **no v4 pool**). Competitor cross-ref (blocks 25436735/25436741): the impact pool had **only the victim's own swap — nobody backran them**. The 13 graph_gap = **0 v4**, all 13 distinct WETH/longtail-token pools we don't index.
+- **core finding:** this window's entire no_candidate bucket is **non-cycle-arbable longtail noise, NOT v4, NOT a one-round searcher fix**. The "80% no_candidate" headline overstates the fixable gap. Meanwhile competitors did **1655 v4 swaps / 92% of their MEV via v4**, and **0 of our 80 opportunities were v4** → the catchable money **never enters our funnel**: we don't extract v4 victim impacts (mempool watches the PoolManager but impact-extraction doesn't decode v4 Swap) and we don't index the v4 singleton.
+- **decision (rule 13 epic escalation + anti-drift):** the real lever = a **v4 epic** — (slice-2) **v4 victim/impact detection** (decode v4 `Swap` → impact pool/tokens so v4 victims become opportunities) + (slice-3) **broad v4 pool indexing** (auto-discover the singleton, not pin-only). Too big for one 30-min round. **Escalated to human** rather than faking a one-round pin that flips nothing this window. R1 (v4 quote + USDC/USDT pin) was the proven slice-1 foundation.
+- **not_doing:** will NOT pin more speculative v4 pools (no window drop routes through them → not a Repair-Replay flip); will NOT chase the longtail same_pool_reverse (proven unarbable).
+
 ## Next Run
-- **next_state:** finish v4 slice-1 full replay gate → `fixed` → merge; then v4 slice-2 (auto-index).
+- **next_state:** **human decision on the v4 epic** (slice-2 v4-impact-detection is the highest-value next searcher change; it's what makes the 92% catchable). If approved, run it as ordered slices with their own gates (`analysis-decode → replay → detector → dry-run`).
 - **live_allowed:** no (dry-run only; go-live human gate).
