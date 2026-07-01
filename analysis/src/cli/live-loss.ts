@@ -9,6 +9,7 @@ import { decodeTransfer, formatTokenAmount } from "../decode/erc20.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
 import { priceArb, fetchEthUsd } from "../pnl/arb-profit.js";
 import { ADDR, TOPICS, lower, short } from "../registry/protocols.js";
+import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient, hexToBigInt, hexToNumber } from "../rpc/client.js";
 import type { Action, TokenDelta, TxSummary } from "../types.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
@@ -466,7 +467,8 @@ async function runWatchMode(): Promise<void> {
       if (!receipt || receipt.status !== "0x1") return;
       const report = buildWatchReport(blockNumber, tx, receipt, seenByBlock);
       if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
-      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd);
+      const entityActors = inferWatchEntityActors(tx, report.competitorAddr);
+      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, { entityActors });
       report.realized_profit_usd = profit.realizedProfitUsd;
       report.profit_confidence = profit.profitConfidence;
       report.unpriced_deltas = profit.unpricedDeltas.length;
@@ -475,7 +477,7 @@ async function runWatchMode(): Promise<void> {
       report.v4_swaps = profit.v4Swaps.length;
       report.v4_pools = profit.v4PoolIds.length;
       report.v4_pool_ids = profit.v4PoolIds;
-      if (profit.realizedProfitUsd && profit.realizedProfitUsd > 0) {
+      if (profit.profitConfidence !== "unsafe" && profit.realizedProfitUsd !== null && profit.realizedProfitUsd > 0) {
         profitTotalUsd += profit.realizedProfitUsd;
         if (profit.v4Swaps.length > 0) profitV4Usd += profit.realizedProfitUsd;
       }
@@ -601,6 +603,19 @@ function buildSeenIndex(items: any[]): SeenIndex {
 
 function txMatchesWatch(tx: any, watchSet: Set<string>): boolean {
   return [tx.from, tx.to].filter(Boolean).map(lower).some((actor) => watchSet.has(actor));
+}
+
+function inferWatchEntityActors(tx: any, matched: string[]): string[] {
+  const matchedSet = new Set(matched.map(lower).filter(Boolean));
+  const actors = new Set(matchedSet);
+  const from = lower(tx?.from ?? "");
+  const to = lower(tx?.to ?? "");
+  if (from && matchedSet.has(from)) actors.add(from);
+  if (to) {
+    if (isPublicRouter(to)) actors.delete(to);
+    else actors.add(to);
+  }
+  return [...actors];
 }
 
 function analyzeCoverageTx(

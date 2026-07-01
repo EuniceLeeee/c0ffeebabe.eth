@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { actionsFromLogs } from "../actions/from-logs.js";
 import { RpcClient, hexToBigInt } from "../rpc/client.js";
 import { ADDR, TOPICS, lower, tokenMeta } from "../registry/protocols.js";
+import { isPublicRouter } from "../registry/routers.js";
 import type { TokenDelta } from "../types.js";
 
 const V4_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
@@ -24,12 +25,16 @@ export interface ArbProfit {
   erc20Usd: number | null;
   pricedDeltas: TokenDelta[];
   unpricedDeltas: TokenDelta[];
-  profitConfidence: "high" | "medium" | "requires_decode";
+  profitConfidence: "high" | "medium" | "requires_decode" | "unsafe";
   ethDeltaEth: number;
   ethProfitUsd: number;
   beneficiary: string;
   v4Swaps: V4Swap[];
   v4PoolIds: string[];
+}
+
+export interface PriceArbOptions {
+  entityActors: string[];
 }
 
 export function valueDeltas(
@@ -93,8 +98,8 @@ export function decodeV4Swaps(receipt: any): V4Swap[] {
 }
 
 /**
- * Realized profit of an arb tx = net value the bot entity (tx.to contract + tx.from
- * EOA, net of gas) gained, in USD. Covers ERC20 (incl. WETH) via Transfer logs AND
+ * Realized profit of an arb tx = net value the caller-supplied bot entity actors
+ * gained, in USD. Covers ERC20 (incl. WETH) via Transfer logs AND
  * native ETH via prestate balance diff — so Uniswap v4 native-ETH settlement, which
  * emits no Transfer log, is finally counted (turn-4's confounded −$55 was this hole
  * plus WETH being valued at 0 because ethUsd was never passed to roughValueUsd).
@@ -105,20 +110,26 @@ export async function priceArb(
   tx: any,
   receipt: any,
   ethUsd: number,
+  options: PriceArbOptions,
 ): Promise<ArbProfit> {
-  const to = lower(receipt?.to ?? tx?.to ?? "");
+  const beneficiary = lower(tx?.to ?? receipt?.to ?? "");
   const from = lower(receipt?.from ?? tx?.from ?? "");
-  const actors = [to, from].filter(Boolean);
+  const actors = [...new Set(options.entityActors.map(lower).filter(Boolean))];
 
   // ERC20 net for the bot (WETH now valued at ethUsd, not 0).
   const { rawDeltas } = actionsFromLogs(receipt, actors);
   const valuedDeltas = valueDeltas(rawDeltas, ethUsd);
   const erc20Usd = valuedDeltas.usd;
   const profitConfidence =
-    erc20Usd === null ? "requires_decode" : valuedDeltas.unpriced.length === 0 ? "high" : "medium";
+    erc20Usd === null
+      ? "requires_decode"
+      : isPublicRouter(beneficiary)
+        ? "unsafe"
+        : valuedDeltas.unpriced.length === 0
+          ? "high"
+          : "medium";
 
-  // Native ETH: contract keeps profit as-is; for the EOA add gas back to isolate the
-  // non-gas ETH flow (profit swept to owner, or a bribe paid, both show correctly).
+  // Native ETH: add gas back only when tx.from is part of the supplied entity.
   let ethWei = 0n;
   let tracedEth = false;
   try {
@@ -133,10 +144,10 @@ export async function priceArb(
       if (b0 === null && b1 === null) return 0n;
       return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
     };
-    if (to) ethWei += delta(to);
-    if (from && from !== to) {
-      const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
-      ethWei += delta(from) + gas;
+    const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
+    for (const actor of actors) {
+      ethWei += delta(actor);
+      if (from && actor === from) ethWei += gas;
     }
     tracedEth = true;
   } catch {
@@ -158,7 +169,7 @@ export async function priceArb(
     profitConfidence,
     ethDeltaEth,
     ethProfitUsd,
-    beneficiary: to,
+    beneficiary,
     v4Swaps,
     v4PoolIds,
   };
