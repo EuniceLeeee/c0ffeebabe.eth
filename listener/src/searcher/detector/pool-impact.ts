@@ -32,6 +32,7 @@ const CURVE_TOKEN_EXCHANGE_TOPICS = new Set([
 ]);
 const UNIV3_SWAP = topic("Swap(address,address,int256,int256,uint160,uint128,int24)");
 const UNIV2_SWAP = topic("Swap(address,uint256,uint256,uint256,uint256,address)");
+const UNIV4_SWAP = topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
 const ERC20_TRANSFER = topic("Transfer(address,address,uint256)");
 
 // ─── Curve direct-call selectors ──────────────────────────────
@@ -196,12 +197,82 @@ const uniV2Decoder: ImpactDecoder = {
   },
 };
 
+// ─── UniV4 decoder ────────────────────────────────────────────
+// V4 swaps are emitted by the singleton PoolManager (log.address == PoolManager
+// for EVERY pool), so the pool is identified by poolId = keccak256(abi.encode(
+// PoolKey)) in topics[1], not by address. Edges are matched by recomputing that
+// hash from each edge's V4PoolKey. amount0/amount1 are int128 pool-balance deltas:
+// positive = pool received (tokenIn), negative = pool paid out (tokenOut) — same
+// convention as the v3 decoder above. Verified against the on-chain USDC/USDT swap
+// in tx 0xd60d80df (amount1 +35045872323 USDT in / amount0 -35013321757 USDC out)
+// cross-checked with the V4Quoter.
+
+const V4_POOLKEY_TUPLE = "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
+
+function v4PoolId(key: {
+  currency0: string;
+  currency1: string;
+  fee: number;
+  tickSpacing: number;
+  hooks: string;
+}): string {
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    [V4_POOLKEY_TUPLE],
+    [[key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]],
+  );
+  return ethers.keccak256(encoded).toLowerCase();
+}
+
+const uniV4Decoder: ImpactDecoder = {
+  adapterIds: ["univ4-unlock"],
+
+  decodeLog(log, edges) {
+    if (log.topics[0]?.toLowerCase() !== UNIV4_SWAP) return [];
+    const poolId = log.topics[1]?.toLowerCase();
+    if (!poolId) return [];
+
+    const [amount0, amount1] = ethers.AbiCoder.defaultAbiCoder().decode(
+      ["int128", "int128", "uint160", "uint128", "int24", "uint24"],
+      log.data,
+    );
+    const a0 = BigInt(amount0);
+    const a1 = BigInt(amount1);
+
+    // Match only the edges whose PoolKey hashes to this poolId (all v4 edges
+    // share the PoolManager target, so filter by poolId first).
+    const matching = edges.filter((e) => e.v4PoolKey && v4PoolId(e.v4PoolKey) === poolId);
+    if (matching.length === 0) return [];
+    const key = matching[0].v4PoolKey!;
+
+    const tokenIn = a0 > 0n ? key.currency0 : key.currency1;
+    const tokenOut = a0 > 0n ? key.currency1 : key.currency0;
+    const amountIn = a0 > 0n ? a0 : a1;
+    if (amountIn <= 0n) return [];
+
+    const edge = matching.find(
+      (e) =>
+        e.tokenIn.toLowerCase() === tokenIn.toLowerCase() &&
+        e.tokenOut.toLowerCase() === tokenOut.toLowerCase(),
+    );
+    if (!edge) return [];
+
+    return [{
+      pool: edge.target,
+      tokenIn: edge.tokenIn,
+      tokenOut: edge.tokenOut,
+      amountIn,
+      matchedAdapterId: edge.adapterId,
+    }];
+  },
+};
+
 // ─── Decoder registry ─────────────────────────────────────────
 
 const IMPACT_DECODERS: ImpactDecoder[] = [
   curveDecoder,
   uniV3Decoder,
   uniV2Decoder,
+  uniV4Decoder,
 ];
 
 // ─── Transfer-based pool detection ───────────────────────────
