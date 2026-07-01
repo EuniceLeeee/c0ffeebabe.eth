@@ -22,6 +22,7 @@
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { CandidatePlan } from "../planner/planner.js";
+import type { V4PoolKey } from "../planner/token-graph.js";
 import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
 import { propagateAmounts, type AmountQuoteSource } from "./amount-propagation.js";
 import { buildResolvedPlanFromPath } from "./plan-builder.js";
@@ -438,8 +439,15 @@ export async function resolveSearchCenter(
 
   const usePathAwareCenter = plan.maxFlashAmount !== undefined;
   const reverseImpactIndex = usePathAwareCenter ? findReverseImpactEdgeIndex(plan, impact) : -1;
+  const impactV4PoolKey = findImpactV4PoolKey(plan, impact);
   if (reverseImpactIndex >= 0) {
-    const desiredImpactInput = await quoteImpactOutput(impact, victimAmount, state, options);
+    const desiredImpactInput = await quoteImpactOutput(
+      impact,
+      victimAmount,
+      state,
+      options,
+      impactV4PoolKey,
+    );
     if (reverseImpactIndex === 0) return desiredImpactInput;
     return approximatePrefixInputForOutput(
       plan,
@@ -455,7 +463,7 @@ export async function resolveSearchCenter(
   if (sameAddress(impact.tokenOut, flashToken)) {
     // Prefer local math (cache/state); fall back to the live quoteSource only
     // when local can't serve it — same local-first dispatch as quoteEdge.
-    return quoteImpactOutput(impact, victimAmount, state, options);
+    return quoteImpactOutput(impact, victimAmount, state, options, impactV4PoolKey);
   }
 
   return victimAmount;
@@ -470,11 +478,24 @@ function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpa
   );
 }
 
+function findImpactV4PoolKey(plan: CandidatePlan, impact: OpportunityImpact): V4PoolKey | undefined {
+  if (impact.matchedAdapterId !== "univ4-unlock") return undefined;
+  return plan.tokenPath.edges.find((edge) =>
+    sameAddress(edge.target, impact.pool) &&
+    edge.v4PoolKey !== undefined &&
+    (
+      (sameAddress(edge.tokenIn, impact.tokenIn) && sameAddress(edge.tokenOut, impact.tokenOut)) ||
+      (sameAddress(edge.tokenIn, impact.tokenOut) && sameAddress(edge.tokenOut, impact.tokenIn))
+    ),
+  )?.v4PoolKey;
+}
+
 async function quoteImpactOutput(
   impact: OpportunityImpact,
   victimAmount: bigint,
   state: StateBackend,
   options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+  v4PoolKey?: V4PoolKey,
 ): Promise<bigint> {
   let quoted: bigint;
   try {
@@ -486,6 +507,7 @@ async function quoteImpactOutput(
       victimAmount,
       state,
       options.cache,
+      v4PoolKey,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
@@ -495,6 +517,7 @@ async function quoteImpactOutput(
       tokenIn: impact.tokenIn,
       tokenOut: impact.tokenOut,
       amountIn: victimAmount,
+      v4PoolKey,
     })).amountOut;
   }
   return quoted > 0n ? quoted : 1n;

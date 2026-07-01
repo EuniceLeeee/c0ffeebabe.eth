@@ -4,6 +4,7 @@ import type { LiveFixturePath } from "./live-fixture-recorder.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { SimulationResult } from "./simulator/botvm-simulator.js";
 import type { PostImpactSeed } from "./solver/pool-state-cache.js";
+import type { V4PoolKey } from "./planner/token-graph.js";
 
 export type LiveBackendKind = "rpc" | "revm" | "hybrid";
 
@@ -21,7 +22,7 @@ export interface PrepareInput {
   /** Deduped route hops from the candidate plans. The revm backend traces a
    *  representative quote per hop during prepare so the solver's amount search
    *  starts with warm pool state instead of serial-faulting slots. */
-  routeHops?: Array<{ adapterId: string; target: string; tokenIn: string; tokenOut: string }>;
+  routeHops?: QuoteHop[];
   /** Locally computed post-victim pool state. When available, revm can inject raw
    *  storage overrides instead of replaying the victim swap with debug_traceCall. */
   postImpact?: PostImpactSeed;
@@ -38,7 +39,10 @@ export interface QuoteRequest {
   tokenIn: string;
   tokenOut: string;
   amountIn: bigint;
+  v4PoolKey?: V4PoolKey;
 }
+
+export type QuoteHop = Omit<QuoteRequest, "amountIn">;
 
 export interface QuoteResult {
   amountOut: bigint;

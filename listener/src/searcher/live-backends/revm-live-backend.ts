@@ -7,6 +7,7 @@ import type {
   LiveStateBackend,
   PrepareInput,
   PreparedState,
+  QuoteHop,
   QuoteRequest,
   QuoteResult,
 } from "../live-state-backend.js";
@@ -19,6 +20,10 @@ import {
 } from "../revm-sim-client.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
+import {
+  encodeUniV4QuoteExactInputSingle,
+  uniV4QuoterIface,
+} from "../solver/quoter.js";
 import {
   postImpactStateOverrides,
   postImpactSupportsStateOverrides,
@@ -47,11 +52,6 @@ const BALANCE_OF_IFACE = new ethers.Interface([
 const UNIV3_QUOTER_IFACE = new ethers.Interface([
   "function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
 ]);
-
-const V4_V3_FALLBACK: Record<string, string> = {
-  [`${ADDR.DAI.toLowerCase()}-${ADDR.USDT.toLowerCase()}`]: ADDR.UNISWAP_V3_USDC_USDT_100,
-  [`${ADDR.USDC.toLowerCase()}-${ADDR.USDT.toLowerCase()}`]: ADDR.UNISWAP_V3_USDC_USDT_100,
-};
 
 /**
  * revm-backed live backend.
@@ -163,6 +163,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     push(this.owner);
     push(ADDR.MORPHO);
     push(ADDR.BALANCER_VAULT);
+    push(ADDR.UNISWAP_V4_QUOTER);
 
     if (stateOverrideOnly) {
       for (const hop of input.routeHops ?? []) {
@@ -179,6 +180,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     push(UNIV2_ROUTER);
     push(UNIV3_SWAP_ROUTER);
     push(UNIV3_QUOTER_V2);
+    push(ADDR.UNISWAP_V4_QUOTER);
     return [...prewarm.values()];
   }
 
@@ -278,6 +280,7 @@ export class RevmLiveBackend implements LiveStateBackend {
       UNIV2_ROUTER,
       UNIV3_SWAP_ROUTER,
       UNIV3_QUOTER_V2,
+      ADDR.UNISWAP_V4_QUOTER,
     ];
     await this.client.warm({
       blockNumber,
@@ -314,7 +317,7 @@ export class RevmLiveBackend implements LiveStateBackend {
   /** Encode the quote view-call(s) for one hop. Empty when the adapter quotes
    *  via local math (psm/fluid) or the graph edge is missing. */
   private async encodeHopQuoteCalls(
-    hop: { adapterId: string; target: string; tokenIn: string; tokenOut: string },
+    hop: QuoteHop,
     amountIn: bigint,
   ): Promise<OverlayPreCall[]> {
     const calls: OverlayPreCall[] = [];
@@ -368,16 +371,16 @@ export class RevmLiveBackend implements LiveStateBackend {
           break;
         }
         case "univ4-unlock": {
-          const [lo, hi] = [hop.tokenIn.toLowerCase(), hop.tokenOut.toLowerCase()].sort() as [string, string];
-          const fallbackPool = V4_V3_FALLBACK[`${lo}-${hi}`];
-          if (!fallbackPool) break;
-          const fee = await this.resolveUniv3Fee(fallbackPool);
+          const poolKey = this.resolveV4PoolKey(hop);
           calls.push({
             from: ethers.ZeroAddress,
-            to: UNIV3_QUOTER_V2,
-            calldata: UNIV3_QUOTER_IFACE.encodeFunctionData("quoteExactInputSingle", [
-              { tokenIn: hop.tokenIn, tokenOut: hop.tokenOut, amountIn, fee, sqrtPriceLimitX96: 0n },
-            ]),
+            to: ADDR.UNISWAP_V4_QUOTER,
+            calldata: encodeUniV4QuoteExactInputSingle(
+              hop.tokenIn,
+              hop.tokenOut,
+              amountIn,
+              poolKey,
+            ),
             gasLimit: 3_000_000,
           });
           break;
@@ -491,10 +494,12 @@ export class RevmLiveBackend implements LiveStateBackend {
     const target = req.target.toLowerCase();
     const tokenIn = req.tokenIn.toLowerCase();
     const tokenOut = req.tokenOut.toLowerCase();
+    const poolKey = v4PoolKeyIdentity(req.v4PoolKey);
     return this.graph.find((edge) =>
       edge.target.toLowerCase() === target &&
       edge.tokenIn.toLowerCase() === tokenIn &&
-      edge.tokenOut.toLowerCase() === tokenOut
+      edge.tokenOut.toLowerCase() === tokenOut &&
+      (poolKey === "" || v4PoolKeyIdentity(edge.v4PoolKey) === poolKey)
     );
   }
 
@@ -604,13 +609,29 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
   }
 
-  private quoteUniV4(req: QuoteRequest): Promise<QuoteResult> {
-    const [lo, hi] = [req.tokenIn.toLowerCase(), req.tokenOut.toLowerCase()].sort() as [string, string];
-    const fallbackPool = V4_V3_FALLBACK[`${lo}-${hi}`];
-    if (!fallbackPool) {
-      throw new Error(`V4 quoter: no V3 fallback for ${req.tokenIn} → ${req.tokenOut}`);
-    }
-    return this.quoteUniV3(fallbackPool, req.tokenIn, req.tokenOut, req.amountIn);
+  private async quoteUniV4(req: QuoteRequest): Promise<QuoteResult> {
+    const poolKey = this.resolveV4PoolKey(req);
+    const data = encodeUniV4QuoteExactInputSingle(
+      req.tokenIn,
+      req.tokenOut,
+      req.amountIn,
+      poolKey,
+    );
+    const quoted = await this.callPrepared(ADDR.UNISWAP_V4_QUOTER, data, {
+      gasLimit: 3_000_000,
+    });
+    const decoded = uniV4QuoterIface.decodeFunctionResult(
+      "quoteExactInputSingle",
+      quoted.output,
+    );
+    return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
+  }
+
+  private resolveV4PoolKey(req: QuoteHop) {
+    if (req.v4PoolKey) return req.v4PoolKey;
+    const edge = this.findEdge({ ...req, amountIn: 0n });
+    if (edge?.v4PoolKey) return edge.v4PoolKey;
+    throw new Error(`V4 quoter: missing PoolKey for ${req.tokenIn} -> ${req.tokenOut}`);
   }
 }
 
@@ -629,4 +650,15 @@ function overlayApproveSpender(hop: { adapterId: string; target: string }): stri
   if (hop.adapterId === "univ3-swap") return UNIV3_SWAP_ROUTER;
   if (hop.adapterId.startsWith("curve-")) return ethers.getAddress(hop.target);
   return null;
+}
+
+function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
+  if (!key) return "";
+  return [
+    key.currency0.toLowerCase(),
+    key.currency1.toLowerCase(),
+    String(key.fee),
+    String(key.tickSpacing),
+    key.hooks.toLowerCase(),
+  ].join(":");
 }

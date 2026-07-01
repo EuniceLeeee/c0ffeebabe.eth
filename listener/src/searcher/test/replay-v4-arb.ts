@@ -12,10 +12,8 @@
  *   3. Solver converges to a profitable flash amount
  *   4. Simulator confirms netProfit > 0
  *
- * Uses all-V3 routing: the V4 USDC→USDT leg is quoted via the V3 0.01%
- * USDC/USDT pool (0x3416). This is acceptable because the V3-delegating
- * V4 quoter gives accurate enough estimates for the solver's binary search,
- * and the actual execution (via simulator on Anvil) uses real on-chain state.
+ * Legacy all-V3 comparison route: this test does not exercise the real
+ * V4Quoter-backed USDC→USDT quote path.
  */
 
 import { readFileSync } from "node:fs";
@@ -267,8 +265,7 @@ async function main(): Promise<void> {
       console.log(
         "REPLAY TEST: no profit via all-V3 routing.\n" +
           "This is expected — the reference arb routes through V4 USDC/USDT pool.\n" +
-          "V3 fallback quoter gives V3 prices, not V4. A proper V4 dry-run quoter\n" +
-          "is needed to capture V4 price dislocations.",
+          "This legacy all-V3 comparison does not capture V4 price dislocations.",
       );
       // Still a pass if the pipeline reaches this point: the V4 blockers are fixed,
       // the graph is connected, the planner finds paths, and the solver tries them.

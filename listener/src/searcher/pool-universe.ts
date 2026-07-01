@@ -10,6 +10,7 @@ export interface PoolUniverseEntry extends PoolEntry {
   token1?: string;
   fee?: number;
   tickSpacing?: number;
+  hooks?: string;
   swapCount30d?: number;
   lastSwapBlock?: number;
   source?: string;
@@ -78,17 +79,26 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
   const score = numberField(raw.score, `${field}.score`) ??
     numberField(raw.swapCount30d, `${field}.swapCount30d`) ??
     0;
+  const isV4 = adapter === "univ4";
   return {
     address: checksumField(raw.address ?? raw.pool, `${field}.address`),
     adapter: adapter as PoolEntry["adapter"],
+    poolId: stringField(raw.poolId, `${field}.poolId`),
     score,
-    fixedTokenIn: optionalAddress(raw.fixedTokenIn, `${field}.fixedTokenIn`),
-    fixedTokenOut: optionalAddress(raw.fixedTokenOut, `${field}.fixedTokenOut`),
+    fixedTokenIn: isV4
+      ? optionalCurrency(raw.fixedTokenIn, `${field}.fixedTokenIn`)
+      : optionalAddress(raw.fixedTokenIn, `${field}.fixedTokenIn`),
+    fixedTokenOut: isV4
+      ? optionalCurrency(raw.fixedTokenOut, `${field}.fixedTokenOut`)
+      : optionalAddress(raw.fixedTokenOut, `${field}.fixedTokenOut`),
     fixedSlotKind: parseFixedSlotKind(raw.fixedSlotKind, `${field}.fixedSlotKind`),
     token0: optionalAddress(raw.token0, `${field}.token0`),
     token1: optionalAddress(raw.token1, `${field}.token1`),
+    currency0: optionalCurrency(raw.currency0, `${field}.currency0`),
+    currency1: optionalCurrency(raw.currency1, `${field}.currency1`),
     fee: numberField(raw.fee, `${field}.fee`),
     tickSpacing: numberField(raw.tickSpacing, `${field}.tickSpacing`),
+    hooks: optionalCurrency(raw.hooks, `${field}.hooks`),
     swapCount30d: numberField(raw.swapCount30d, `${field}.swapCount30d`),
     lastSwapBlock: numberField(raw.lastSwapBlock, `${field}.lastSwapBlock`),
     source: typeof raw.source === "string" ? raw.source : undefined,
@@ -103,6 +113,18 @@ function checksumField(value: unknown, field: string): string {
 function optionalAddress(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   return checksumField(value, field);
+}
+
+function optionalCurrency(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "string" && value.toLowerCase() === "0x0") return ethers.ZeroAddress;
+  return checksumField(value, field);
+}
+
+function stringField(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") throw new Error(`${field} must be a string`);
+  return value;
 }
 
 function numberField(value: unknown, field: string): number | undefined {

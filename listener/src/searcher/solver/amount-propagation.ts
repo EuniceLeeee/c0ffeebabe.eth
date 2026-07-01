@@ -1,5 +1,5 @@
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import type { TokenPath } from "../planner/token-graph.js";
+import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quote } from "./quoter.js";
 import type { QuoteRequest, QuoteResult } from "../live-state-backend.js";
@@ -61,7 +61,7 @@ export async function propagateAmounts(
  * post-victim state the daemon holds — µs per trial instead of a daemon quote.
  */
 async function quoteEdge(
-  edge: { adapterId: string; target: string; tokenIn: string; tokenOut: string },
+  edge: TokenEdge,
   amountIn: bigint,
   state: StateBackend,
   options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
@@ -75,6 +75,7 @@ async function quoteEdge(
       amountIn,
       state,
       options.cache,
+      edge.v4PoolKey,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
@@ -84,6 +85,7 @@ async function quoteEdge(
       tokenIn: edge.tokenIn,
       tokenOut: edge.tokenOut,
       amountIn,
+      v4PoolKey: edge.v4PoolKey,
     })).amountOut;
   }
 }

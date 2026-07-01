@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
+import type { V4PoolKey } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 
 /**
@@ -213,32 +214,97 @@ async function quoteUniV2(
   return numerator / denominator;
 }
 
-// ── UniV4 (V3-delegating fallback) ────────────────────────────
+// ── UniV4 (V4Quoter) ─────────────────────────────────────────
 
-/**
- * V4 quoter: delegate to a V3 pool for the same token pair.
- * V4 concentrated-liquidity pricing is equivalent to V3 at similar fee tiers,
- * so V3 quotes are accurate enough for binary-search solving.
- * Actual execution still goes through the V4 PoolManager.
- */
-const V4_V3_FALLBACK: Record<string, string> = {
-  // sorted lowercase "tokenA-tokenB" → V3 pool address
-  [`${ADDR.DAI.toLowerCase()}-${ADDR.USDT.toLowerCase()}`]: ADDR.UNISWAP_V3_USDC_USDT_100,
-  [`${ADDR.USDC.toLowerCase()}-${ADDR.USDT.toLowerCase()}`]: ADDR.UNISWAP_V3_USDC_USDT_100,
-};
+export const uniV4QuoterIface = new ethers.Interface([
+  "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
+]);
+
+const MAX_UINT128 = (1n << 128n) - 1n;
 
 async function quoteUniV4(
   state: StateBackend,
   tokenIn: string,
   tokenOut: string,
   amountIn: bigint,
+  poolKey: V4PoolKey | undefined,
 ): Promise<bigint> {
-  const [lo, hi] = [tokenIn.toLowerCase(), tokenOut.toLowerCase()].sort() as [string, string];
-  const v3Pool = V4_V3_FALLBACK[`${lo}-${hi}`];
-  if (!v3Pool) {
-    throw new Error(`V4 quoter: no V3 fallback for ${tokenIn} → ${tokenOut}`);
+  const data = encodeUniV4QuoteExactInputSingle(tokenIn, tokenOut, amountIn, poolKey);
+  const result = await state.call({ to: ADDR.UNISWAP_V4_QUOTER, data });
+  const decoded = uniV4QuoterIface.decodeFunctionResult("quoteExactInputSingle", result);
+  return BigInt(decoded[0]);
+}
+
+export function encodeUniV4QuoteExactInputSingle(
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+  poolKey: V4PoolKey | undefined,
+): string {
+  if (!poolKey) {
+    throw new Error(`V4 quoter: missing PoolKey for ${tokenIn} -> ${tokenOut}`);
   }
-  return quoteUniV3(state, v3Pool, tokenIn, tokenOut, amountIn);
+  if (amountIn < 0n || amountIn > MAX_UINT128) {
+    throw new Error(`V4 quoter: exactAmount does not fit uint128: ${amountIn}`);
+  }
+  const key = normalizeV4PoolKey(poolKey);
+  const inCurrency = normalizeV4Currency(tokenIn, "tokenIn");
+  const outCurrency = normalizeV4Currency(tokenOut, "tokenOut");
+  const zeroForOne = v4ZeroForOne(key, inCurrency, outCurrency);
+  return uniV4QuoterIface.encodeFunctionData("quoteExactInputSingle", [
+    {
+      poolKey: key,
+      zeroForOne,
+      exactAmount: amountIn,
+      hookData: "0x",
+    },
+  ]);
+}
+
+export function normalizeV4PoolKey(poolKey: V4PoolKey): V4PoolKey {
+  return {
+    currency0: normalizeV4Currency(poolKey.currency0, "currency0"),
+    currency1: normalizeV4Currency(poolKey.currency1, "currency1"),
+    fee: uint24(poolKey.fee, "fee"),
+    tickSpacing: int24(poolKey.tickSpacing, "tickSpacing"),
+    hooks: normalizeV4Currency(poolKey.hooks, "hooks"),
+  };
+}
+
+function v4ZeroForOne(key: V4PoolKey, tokenIn: string, tokenOut: string): boolean {
+  const c0 = key.currency0.toLowerCase();
+  const c1 = key.currency1.toLowerCase();
+  const tIn = tokenIn.toLowerCase();
+  const tOut = tokenOut.toLowerCase();
+  if (tIn === c0 && tOut === c1) return true;
+  if (tIn === c1 && tOut === c0) return false;
+  throw new Error(
+    `V4 quoter: tokens ${tokenIn} -> ${tokenOut} do not match PoolKey ` +
+      `${key.currency0} / ${key.currency1}`,
+  );
+}
+
+function normalizeV4Currency(value: string, field: string): string {
+  if (value.toLowerCase() === "0x0") return ethers.ZeroAddress;
+  try {
+    return ethers.getAddress(value);
+  } catch {
+    throw new Error(`V4 quoter: ${field} must be an address or 0x0, got ${value}`);
+  }
+}
+
+function uint24(value: number, field: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
+    throw new Error(`V4 quoter: PoolKey ${field} must be a uint24, got ${value}`);
+  }
+  return value;
+}
+
+function int24(value: number, field: string): number {
+  if (!Number.isInteger(value) || value < -0x800000 || value > 0x7fffff) {
+    throw new Error(`V4 quoter: PoolKey ${field} must be an int24, got ${value}`);
+  }
+  return value;
 }
 
 function quoteFluidVault(): bigint {
@@ -255,6 +321,7 @@ export async function quote(
   amountIn: bigint,
   state: StateBackend,
   cache?: PoolStateCache,
+  v4PoolKey?: V4PoolKey,
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
   switch (adapterId) {
@@ -292,7 +359,7 @@ export async function quote(
       }
       return quoteUniV2(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
-      return quoteUniV4(state, tokenIn, tokenOut, amountIn);
+      return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey);
     case "psm":
       return quotePSM(tokenIn, tokenOut, amountIn);
     case "fluid-vault":
