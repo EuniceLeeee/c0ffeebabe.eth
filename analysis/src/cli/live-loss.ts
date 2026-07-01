@@ -9,6 +9,7 @@ import { decodeTransfer, formatTokenAmount } from "../decode/erc20.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
 import { aggregateNetProfit, priceArb, fetchEthUsd, type PricedLeg, type V4Swap } from "../pnl/arb-profit.js";
 import { ADDR, TOPICS, lower, short } from "../registry/protocols.js";
+import { resolveV4PoolKeys } from "../registry/v4-poolkeys.js";
 import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient, hexToBigInt, hexToNumber } from "../rpc/client.js";
 import type { Action, TokenDelta, TxSummary } from "../types.js";
@@ -24,6 +25,9 @@ const args = parseArgs(process.argv.slice(2));
 const eventsPath = args.events ? String(args.events) : "";
 const graphPoolsPath = args["graph-pools"] ? String(args["graph-pools"]) : "searcher/pools/runtime-graph-pools.json";
 const rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "");
+const v4ArchiveRpcUrl = typeof args["v4-archive-rpc"] === "string"
+  ? String(args["v4-archive-rpc"])
+  : String(process.env.MAINNET_RPC_URL ?? "");
 const blockArg = args.block ? Number(args.block) : undefined;
 const fromBlockArg = args["from-block"] ? Number(args["from-block"]) : undefined;
 const toBlockArg = args["to-block"] ? Number(args["to-block"]) : undefined;
@@ -450,6 +454,7 @@ async function runWatchMode(): Promise<void> {
   const ethUsd = await fetchEthUsd(rpc);
   const allowTrace = priceTrace || rpc.isLocal();
   const pricedTxs: PricedLeg[] = [];
+  const writtenReports: Array<{ outBase: string; report: WatchReport }> = [];
   let written = 0;
   console.error(
     `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} price_trace=${allowTrace ? "on" : "off"}`,
@@ -492,10 +497,12 @@ async function runWatchMode(): Promise<void> {
       const outBase = watchOutputBase(blockNumber, tx.hash);
       await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
       await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
+      writtenReports.push({ outBase, report });
       written++;
       console.error(`[analysis/live-loss/watch] wrote ${outBase}.md`);
     });
   }
+  await enrichWrittenV4Reports(writtenReports);
   console.error(`[analysis/live-loss/watch] reports=${written}`);
   console.error(
     `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
@@ -505,6 +512,40 @@ async function runWatchMode(): Promise<void> {
   console.error(
     `[analysis/live-loss/watch] net_per_block total=${netProfit.total.toFixed(0)} ` +
       `via_v4=${netProfit.viaV4.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
+  );
+}
+
+async function enrichWrittenV4Reports(items: Array<{ outBase: string; report: WatchReport }>): Promise<void> {
+  const poolIds = uniq(items.flatMap(({ report }) => report.v4_pool_ids.map(lower))).filter(Boolean);
+  if (poolIds.length === 0) return;
+  if (!v4ArchiveRpcUrl) {
+    console.error(
+      `[analysis/live-loss/watch] v4_poolkeys skipped: set --v4-archive-rpc or MAINNET_RPC_URL to resolve ${poolIds.length} pool ids`,
+    );
+    return;
+  }
+
+  let poolKeys: Map<string, { currency0: string; currency1: string }>;
+  try {
+    poolKeys = await resolveV4PoolKeys(poolIds, new RpcClient(v4ArchiveRpcUrl));
+  } catch (err) {
+    console.error(`[analysis/live-loss/watch] v4_poolkeys failed: ${(err as Error).message}`);
+    return;
+  }
+
+  let rewrote = 0;
+  for (const { outBase, report } of items) {
+    if (report.v4_swaps_detail.length === 0) continue;
+    report.v4_swaps_detail = report.v4_swaps_detail.map((swap) => {
+      const key = poolKeys.get(lower(swap.poolId));
+      return key ? { ...swap, currency0: key.currency0, currency1: key.currency1 } : swap;
+    });
+    await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
+    await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
+    rewrote++;
+  }
+  console.error(
+    `[analysis/live-loss/watch] v4_poolkeys requested=${poolIds.length} resolved=${poolKeys.size} rewrote=${rewrote}`,
   );
 }
 
@@ -1340,7 +1381,12 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- v4_pool_ids: ${report.v4_pool_ids.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
   if (report.v4_swaps_detail.length > 0) {
     const swaps = report.v4_swaps_detail
-      .map((swap) => `\`${poolId8(swap.poolId)}\` a0=${swap.amount0}/a1=${swap.amount1} fee=${swap.fee}`)
+      .map((swap) => {
+        const pair = swap.currency0 && swap.currency1
+          ? `pair=\`${swap.currency0}/${swap.currency1}\``
+          : "pair=`requires_poolkey_index`";
+        return `\`${poolId8(swap.poolId)}\` ${pair} a0=${swap.amount0}/a1=${swap.amount1} fee=${swap.fee}`;
+      })
       .join("; ");
     lines.push(`- v4_swaps: ${swaps}`);
   }

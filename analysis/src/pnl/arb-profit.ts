@@ -17,6 +17,8 @@ export interface V4Swap {
   amount0: string;
   amount1: string;
   fee: number;
+  currency0?: string;
+  currency1?: string;
 }
 
 export interface PricedLeg {
