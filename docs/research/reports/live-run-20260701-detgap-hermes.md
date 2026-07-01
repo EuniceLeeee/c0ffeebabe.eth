@@ -64,7 +64,8 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 | v4 epic slice-1 full replay gate (replay-v4-arb + 13-file review) | Claude/Codex | this round | **done** — `fixed`, merged `1fccf71` (quote bit-exact/0bps + univ4 routing flip) |
 | arb-profit.ts double-counts WETH→ETH unwrap (~2× overcount; `0xd60d80df` $42→real ~$20) | Claude | R2 (analysis, only when sizing needed) | open — merge WETH+native ETH as one asset |
 | v4 slice-2: auto-index the v4 singleton (pin-only today; USDC/USDT is the only pinned pool) | v4 epic | R2/R3 | open |
-| **v4-impact-detection**: 0/80 opportunities were v4 though competitors did 1655 v4 swaps/92% — v4 victims never enter our funnel (impact-extraction doesn't decode v4 `Swap`) | v4 epic | **escalated (human)** | open — highest-value next searcher change |
+| **v4-impact-detection**: 0/80 opportunities were v4 though competitors did 1655 v4 swaps/92% — v4 victims never enter our funnel (impact-extraction doesn't decode v4 `Swap`) | v4 epic (slice-2) | R3 | **done** — decoder + poolId identity (v4 `Swap` → `PoolImpact`), Final Approval |
+| v4 solver identity: `solver.ts` search-center / `findReverseImpactEdgeIndex` / `findImpactV4PoolKey` still match by PoolManager+tokens only (Codex slice-2 "secondary") | Claude | **R4** | open — inert with 1 pinned v4 pool, MUST precede R5 broad indexing |
 | no_candidate 80% is longtail noise (Z/SpaceXAI single-venue, nobody backran) — NOT a searcher fix; do not chase | Claude R2 | closed | **done** (proven on-chain, [[project-univ4-coverage-frontier]]) |
 | ~~atomic / state-triggered detection~~ | — | — | **KILLED** (user 2026-07-01: non-victim-backrun not doing) |
 | Codex manual analysis must use PRIMARY sources (not Claude's curated facts) | both agents | next round | open (rule strengthened) |
@@ -78,6 +79,19 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 - **decision (rule 13 epic escalation + anti-drift):** the real lever = a **v4 epic** — (slice-2) **v4 victim/impact detection** (decode v4 `Swap` → impact pool/tokens so v4 victims become opportunities) + (slice-3) **broad v4 pool indexing** (auto-discover the singleton, not pin-only). Too big for one 30-min round. **Escalated to human** rather than faking a one-round pin that flips nothing this window. R1 (v4 quote + USDC/USDT pin) was the proven slice-1 foundation.
 - **not_doing:** will NOT pin more speculative v4 pools (no window drop routes through them → not a Repair-Replay flip); will NOT chase the longtail same_pool_reverse (proven unarbable).
 
+## R3 — v4-impact-detection (epic slice-2, user greenlit) + Codex fix-loop
+- **searcher_behavior_change:** yes — v4 PoolManager `Swap` now decodes to a `PoolImpact` (poolId-matched to a pinned v4 edge) so v4 victims enter the funnel. Before: 0/80 opportunities were v4.
+- **fix_commit:** `97b5e13` (decoder) → identity fix → `0f4f741` (planner poolId).
+- **gate (`test/v4-impact-detect.ts`):** real on-chain v4 `Swap` (tx `0xd60d80df`) → impact `{USDT→USDC, 35045872323}` PASS; **two same-pair v4 pools (fee 8 + fee 100) → 2 distinct impacts, no collapse, correct poolId** PASS; negative control PASS. tsc clean; planner 10/10 + fixtures 2/2.
+- **expected_transition:** v4 `Swap` → no impact (before) → `PoolImpact` w/ poolId (after) ✓.
+- **Codex review fix-loop (rule 6/7, 3 passes, non-author evaluator):**
+  - pass-1 → **BLOCKING** v4 identity lost (impact had no poolId; dedupe/focus keyed on PoolManager+pair). Fixed: poolId threaded end-to-end (`TokenEdge`/`PoolImpact`/`OpportunityImpact`, `dedupeImpacts` + `sameVenue` focus).
+  - pass-2 → **BLOCKING** planner path still address-only (`hasImmediateSamePoolReverse`, `tokenPathKey`) + **secondary** solver. Fixed planner (poolId-aware); solver deferred.
+  - pass-3 → **RESOLVED**, no new single-pin blocking, all gates PASS.
+- **verdict:** `fixed` (single pinned v4 pool). **Final Approval: yes.**
+- **deferred → R4:** solver identity (inert with 1 pinned v4 pool; MUST land before R5 broad indexing).
+- **infra note:** Codex pass-3 sat **suspended ~3h during macOS screen-lock** (bg process + proxy frozen; actual work was seconds). Fix going forward: `caffeinate -i` + a `ScheduleWakeup` fallback, don't passively wait on the completion notification ([[reference-codex-background-suspend]]).
+
 ## Next Run
-- **next_state:** **human decision on the v4 epic** (slice-2 v4-impact-detection is the highest-value next searcher change; it's what makes the 92% catchable). If approved, run it as ordered slices with their own gates (`analysis-decode → replay → detector → dry-run`).
+- **next_state:** **R4 = v4-identity-completion** (thread poolId through `solver.ts` search-center / `findReverseImpactEdgeIndex` / `findImpactV4PoolKey`) + an **E2E replay** (a real v4 victim → impact → v4-routed plan). Then **R5 = broad v4 indexing** (auto-discover the singleton — the 43%/92% lever), which the R4 identity work unblocks. Then dry-run with v4.
 - **live_allowed:** no (dry-run only; go-live human gate).
