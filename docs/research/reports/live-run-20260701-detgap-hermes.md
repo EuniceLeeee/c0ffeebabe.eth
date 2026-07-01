@@ -47,16 +47,23 @@ Note: 2 of the 11 detection_gap are v4-cross arbs (incl. a $635 one) → really 
 - **process correction:** this round's "Codex independent manual analysis" was flawed — Claude fed Codex its own curated facts instead of Codex working from the raw script artifacts + its own trace (a correlated hand-off, not independence). Rule strengthened (Step-1 mechanics: primary-source independence). Future rounds: each agent reads the raw `watch-*.json`/`--competitor-scan` output itself, never the other's conclusion.
 - **rationale:** with atomic off the table, the money we can actually pursue is victim-backrun arbs that route through v4 (v4 execution/quote gap) — which is exactly slice-1. No new detection model.
 
-## Repair Replay Gate (governance 12)
-- **searcher_behavior_change:** yes — v4 epic slice-1 (branch `v4-epic-slice1`, commit `ccae872`).
-- **kind:** deterministic (quoter/graph) → REPLAY required.
-- **fix_commit:** ccae872 (branch, NOT main).
-- **verdict so far:** `implemented_not_validated` — tsc clean; V4Quoter mechanism PROVEN on-chain (ETH/USDC 1e18 → 1573 USDC ✓, wrapped selector). FULL `fixed` pending: run `test/replay-v4-arb.ts` (quoteUniV4 → planner → v4-inclusive path) + per-hunk review of the 13-file diff. Not on main until then.
+## Repair Replay Gate (governance 12) — R1 CLOSED
+- **searcher_behavior_change:** yes — v4 slice-1 (real V4Quoter) + USDC/USDT v4 pool pinned so the planner routes through `univ4-unlock`.
+- **kind:** deterministic (quoter/graph) → REPLAY.
+- **failing_sample:** USDC/USDT v4 pool `0x395f91b3…` (fee8/ts1/no-hooks); replay block 25278826.
+- **baseline_failure:** `quoteUniV4` was a V3-proxy stub (2 hardcoded pairs → V3 proxy pool, threw for the rest); v4 pool absent from graph → replay produced **0/20 plans through univ4** (22 edges), quoteUniV4 never called.
+- **fix_commit:** `ccae872` (slice-1) + `290bb15` (pin + validate) → merged to main `1fccf71`.
+- **replay_command:** `npx tsx src/searcher/test/validate-v4-quote.ts` (quote correctness) + `npx tsx src/searcher/test/replay-v4-arb.ts` (threading).
+- **replay_result:** (1) `validate-v4-quote`: encoding **bit-exact** vs independent V4Quoter call (encMatch=true ×3); reproduces the **real on-chain v4 swap** at block 25436883 (35045.87 USDT → 35012.02 quote vs 35013.32 actual) to **0 bps**. (2) `replay-v4-arb` with pin: **22→24 edges, 0→multiple plans route `univ4-unlock`**, quoteUniV4 dispatched clean ("quotes completed"); tsc clean; planner 10/10 + fixtures 2/2 (no regression).
+- **expected_transition:** (a) quoteUniV4 old=wrong-pool/throw → new=correct on-chain quote (0 bps) ✓; (b) candidate_plans through univ4: 0 → multiple ✓.
+- **verdict:** `fixed` — **scope**: v4 quote is correct + one high-value v4 pool (USDC/USDT) now routes end-to-end. Broad v4 coverage (auto-index the singleton) = slice-2; a *profitable* v4-arb replay fixture (fork block with an actual v4 dislocation) = a stronger future gate, not required for slice-1 scope.
 
 ## Findings Ledger (governance 13)
 | finding | owner | carry_to_round | status |
 |---|---|---|---|
-| v4 epic slice-1 full replay gate (replay-v4-arb + 13-file review) | Claude/Codex | this round +1 | open |
+| v4 epic slice-1 full replay gate (replay-v4-arb + 13-file review) | Claude/Codex | this round | **done** — `fixed`, merged `1fccf71` (quote bit-exact/0bps + univ4 routing flip) |
+| arb-profit.ts double-counts WETH→ETH unwrap (~2× overcount; `0xd60d80df` $42→real ~$20) | Claude | R2 (analysis, only when sizing needed) | open — merge WETH+native ETH as one asset |
+| v4 slice-2: auto-index the v4 singleton (pin-only today; USDC/USDT is the only pinned pool) | v4 epic | R2/R3 | open |
 | ~~atomic / state-triggered detection~~ | — | — | **KILLED** (user 2026-07-01: non-victim-backrun not doing) |
 | Codex manual analysis must use PRIMARY sources (not Claude's curated facts) | both agents | next round | open (rule strengthened) |
 | v4 pools auto-index into graph (now pin-only) | v4 epic | slice-2 | open |
