@@ -7,6 +7,7 @@ import { canonicalSequence, pathTemplate } from "../actions/canonicalize.js";
 import { runCompetitorScan } from "../competitor-scan.js";
 import { decodeTransfer, formatTokenAmount } from "../decode/erc20.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
+import { priceArb, fetchEthUsd } from "../pnl/arb-profit.js";
 import { ADDR, TOPICS, lower, short } from "../registry/protocols.js";
 import { RpcClient, hexToBigInt, hexToNumber } from "../rpc/client.js";
 import type { Action, TokenDelta, TxSummary } from "../types.js";
@@ -85,7 +86,11 @@ interface WatchReport {
   gap_type: GapType | null;
   competitorEdge: string[];
   protocols: string[];
-  roughProfit: number | null;
+  roughProfit: number | null;      // ERC20-only, WETH@0 (legacy; kept for continuity)
+  realized_profit_usd: number | null; // ERC20(incl WETH@ethUsd) + native ETH (v4-aware)
+  eth_profit_usd: number;
+  v4_swaps: number;
+  v4_pools: number;
   nextAction: string[];
   rawDeltas: unknown[];
 }
@@ -434,9 +439,12 @@ async function runWatchMode(): Promise<void> {
     detection_gap: 0,
     unknown: 0,
   };
+  const ethUsd = await fetchEthUsd(rpc);
+  let profitTotalUsd = 0;
+  let profitV4Usd = 0;
   let written = 0;
   console.error(
-    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} traceTop=disabled`,
+    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} traceTop=disabled`,
   );
 
   for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
@@ -454,6 +462,15 @@ async function runWatchMode(): Promise<void> {
       if (!receipt || receipt.status !== "0x1") return;
       const report = buildWatchReport(blockNumber, tx, receipt, seenByBlock);
       if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
+      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd);
+      report.realized_profit_usd = profit.realizedProfitUsd;
+      report.eth_profit_usd = profit.ethProfitUsd;
+      report.v4_swaps = profit.v4Swaps;
+      report.v4_pools = profit.v4Pools;
+      if (profit.realizedProfitUsd && profit.realizedProfitUsd > 0) {
+        profitTotalUsd += profit.realizedProfitUsd;
+        if (profit.v4Swaps > 0) profitV4Usd += profit.realizedProfitUsd;
+      }
       const outBase = watchOutputBase(blockNumber, tx.hash);
       await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
       await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
@@ -465,6 +482,10 @@ async function runWatchMode(): Promise<void> {
   console.error(
     `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
       `detection_gap=${notSeenByGapType.detection_gap} unknown=${notSeenByGapType.unknown}`,
+  );
+  console.error(
+    `[analysis/live-loss/watch] realized_profit_usd total=${profitTotalUsd.toFixed(0)} ` +
+      `via_v4=${profitV4Usd.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
   );
 }
 
@@ -1200,6 +1221,10 @@ function buildWatchReport(
     competitorEdge: competitorEdges(sequence),
     protocols: logResult.protocols,
     roughProfit: roughValueUsd(logResult.rawDeltas),
+    realized_profit_usd: null, // filled by priceArb in runWatchMode (needs rpc + ethUsd)
+    eth_profit_usd: 0,
+    v4_swaps: 0,
+    v4_pools: 0,
     nextAction: watchNextActions(primaryReason, seenScope, pools),
     rawDeltas: logResult.rawDeltas,
   };
@@ -1263,6 +1288,9 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- canonical_sequence: \`${report.canonicalSequence.join(" -> ") || "unknown"}\``);
   lines.push(`- competitor_edge: ${report.competitorEdge.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
   lines.push(`- rough_profit: ${report.roughProfit == null ? "n/a" : report.roughProfit.toFixed(6)}`);
+  lines.push(`- realized_profit_usd: ${report.realized_profit_usd == null ? "n/a" : report.realized_profit_usd.toFixed(2)}`);
+  lines.push(`- eth_profit_usd: ${report.eth_profit_usd.toFixed(2)}`);
+  lines.push(`- v4: swaps=${report.v4_swaps} pools=${report.v4_pools}`);
   lines.push("");
   lines.push("## Footprint");
   lines.push("");

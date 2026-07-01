@@ -143,6 +143,7 @@ function isSwapTopic(topic: string): boolean {
   return [
     TOPICS.univ2Swap,
     TOPICS.univ3Swap,
+    TOPICS.univ4Swap,
     TOPICS.curveTokenExchange,
     TOPICS.curveTokenExchangeUnderlying,
   ].map(lower).includes(topic);

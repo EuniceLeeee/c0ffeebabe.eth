@@ -46,6 +46,15 @@ export class RpcClient {
       { tracer: "callTracer", tracerConfig: { withLog: false } },
     ]);
   }
+
+  /** prestateTracer diffMode → { pre: {addr:{balance,...}}, post: {addr:{balance,...}} }.
+   *  Only touched fields appear; an address absent from `post` means unchanged. */
+  async tracePrestate(hash: string): Promise<{ pre?: Record<string, any>; post?: Record<string, any> }> {
+    return this.call("debug_traceTransaction", [
+      hash,
+      { tracer: "prestateTracer", tracerConfig: { diffMode: true } },
+    ]);
+  }
 }
 
 export function toQuantity(n: number | bigint): Hex {
