@@ -10,6 +10,16 @@ export interface LogActionResult {
   protocols: string[];
 }
 
+// First 32-byte word of event data as a bigint (WETH Deposit/Withdrawal wad).
+function weiFromData(data: string | undefined): bigint {
+  if (!data || data.length < 66) return 0n;
+  try {
+    return BigInt(data.slice(0, 66));
+  } catch {
+    return 0n;
+  }
+}
+
 export function actionsFromLogs(receipt: any, actorAddresses: string[]): LogActionResult {
   const actors = new Set(actorAddresses.filter(Boolean).map(lower));
   const actions: Action[] = [];
@@ -118,8 +128,17 @@ export function actionsFromLogs(receipt: any, actorAddresses: string[]): LogActi
       }));
     } else if (topic0 === lower(TOPICS.wethDeposit)) {
       actions.push(action("wrap", "WETH Deposit event", order, { protocol: "WETH", confidence: "high" }));
+      // wrap: dst GAINS WETH (and pays native ETH, captured by the prestate ETH delta).
+      // Deposit/Withdrawal emit no Transfer, so without this the WETH holding is wrong.
+      const dst = lower("0x" + (log.topics?.[1] ?? "").slice(26));
+      if (actors.has(dst)) addDelta(log.address, weiFromData(log.data));
     } else if (topic0 === lower(TOPICS.wethWithdrawal)) {
       actions.push(action("unwrap", "WETH Withdrawal event", order, { protocol: "WETH", confidence: "high" }));
+      // unwrap: src LOSES WETH (and gains native ETH, captured by the prestate ETH delta).
+      // Without subtracting it, WETH-from-Transfers double-counts with the unwrapped
+      // native ETH (a WETH-received-then-unwrapped profit was valued ~2x).
+      const src = lower("0x" + (log.topics?.[1] ?? "").slice(26));
+      if (actors.has(src)) addDelta(log.address, -weiFromData(log.data));
     }
   }
 
