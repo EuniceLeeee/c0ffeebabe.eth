@@ -28,6 +28,7 @@ export interface ArbProfit {
   profitConfidence: "high" | "medium" | "requires_decode" | "unsafe";
   ethDeltaEth: number;
   ethProfitUsd: number;
+  nativeTraceUsed: boolean;
   beneficiary: string;
   v4Swaps: V4Swap[];
   v4PoolIds: string[];
@@ -35,6 +36,7 @@ export interface ArbProfit {
 
 export interface PriceArbOptions {
   entityActors: string[];
+  allowTrace: boolean;
 }
 
 export function valueDeltas(
@@ -132,26 +134,28 @@ export async function priceArb(
   // Native ETH: add gas back only when tx.from is part of the supplied entity.
   let ethWei = 0n;
   let tracedEth = false;
-  try {
-    const tr = await rpc.tracePrestate(txHash);
-    const pre = tr?.pre ?? {};
-    const post = tr?.post ?? {};
-    const bal = (m: Record<string, any>, a: string): bigint | null =>
-      a in m && m[a]?.balance !== undefined ? hexToBigInt(m[a].balance) : null;
-    const delta = (a: string): bigint => {
-      const b0 = bal(pre, a);
-      const b1 = bal(post, a);
-      if (b0 === null && b1 === null) return 0n;
-      return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
-    };
-    const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
-    for (const actor of actors) {
-      ethWei += delta(actor);
-      if (from && actor === from) ethWei += gas;
+  if (options.allowTrace) {
+    try {
+      const tr = await rpc.tracePrestate(txHash);
+      const pre = tr?.pre ?? {};
+      const post = tr?.post ?? {};
+      const bal = (m: Record<string, any>, a: string): bigint | null =>
+        a in m && m[a]?.balance !== undefined ? hexToBigInt(m[a].balance) : null;
+      const delta = (a: string): bigint => {
+        const b0 = bal(pre, a);
+        const b1 = bal(post, a);
+        if (b0 === null && b1 === null) return 0n;
+        return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
+      };
+      const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
+      for (const actor of actors) {
+        ethWei += delta(actor);
+        if (from && actor === from) ethWei += gas;
+      }
+      tracedEth = true;
+    } catch {
+      // trace unavailable → ETH profit unknown, leave 0
     }
-    tracedEth = true;
-  } catch {
-    // trace unavailable → ETH profit unknown, leave 0
   }
   const ethDeltaEth = Number(ethWei) / 1e18;
   const ethProfitUsd = ethDeltaEth * ethUsd;
@@ -169,6 +173,7 @@ export async function priceArb(
     profitConfidence,
     ethDeltaEth,
     ethProfitUsd,
+    nativeTraceUsed: tracedEth,
     beneficiary,
     v4Swaps,
     v4PoolIds,

@@ -7,6 +7,11 @@ export class RpcClient {
     if (!url) throw new Error("RPC URL required via --rpc or READONLY_RPC_URL");
   }
 
+  isLocal(): boolean {
+    const host = new URL(this.url).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  }
+
   async call<T>(method: string, params: unknown[] = []): Promise<T> {
     const body = JSON.stringify({ jsonrpc: "2.0", id: this.id++, method, params });
     const res = await fetch(this.url, {

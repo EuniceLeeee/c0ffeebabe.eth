@@ -28,6 +28,7 @@ const blockArg = args.block ? Number(args.block) : undefined;
 const fromBlockArg = args["from-block"] ? Number(args["from-block"]) : undefined;
 const toBlockArg = args["to-block"] ? Number(args["to-block"]) : undefined;
 const traceTop = Number(args["trace-top"] ?? 3);
+const priceTrace = Boolean(args["price-trace"]);
 const output = args.output ? String(args.output) : undefined;
 const opportunityArg = args.opportunity ? String(args.opportunity) : undefined;
 const watch = parseWatch(args.watch);
@@ -445,11 +446,12 @@ async function runWatchMode(): Promise<void> {
     unknown: 0,
   };
   const ethUsd = await fetchEthUsd(rpc);
+  const allowTrace = priceTrace || rpc.isLocal();
   let profitTotalUsd = 0;
   let profitV4Usd = 0;
   let written = 0;
   console.error(
-    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} traceTop=disabled`,
+    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} price_trace=${allowTrace ? "on" : "off"}`,
   );
 
   for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
@@ -468,7 +470,7 @@ async function runWatchMode(): Promise<void> {
       const report = buildWatchReport(blockNumber, tx, receipt, seenByBlock);
       if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
       const entityActors = inferWatchEntityActors(tx, report.competitorAddr);
-      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, { entityActors });
+      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, { entityActors, allowTrace });
       report.realized_profit_usd = profit.realizedProfitUsd;
       report.profit_confidence = profit.profitConfidence;
       report.unpriced_deltas = profit.unpricedDeltas.length;
