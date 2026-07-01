@@ -189,6 +189,16 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
   - **Secondary-source validation:** after the local-node analysis, re-sample ≥1 key tx
     via an independent source (Alchemy `$MAINNET_RPC_URL` / Tenderly) and confirm it
     agrees (e.g. distinct-pool count) before trusting the finding.
+  - **Mandatory MANUAL competitor analysis (not script-only).** The script's `gap_type` /
+    `seenScope` label is a **hypothesis, not a conclusion**. Each round, BOTH Claude and
+    Codex must hand-analyze the watchlist competitor's key live-window txs (coffeebabe
+    first) at the transaction level — full trace: what the arb actually did, and crucially
+    **did it backrun a victim** (find the victim tx + its source: public-router / MEV-Share
+    / private-orderflow / none=atomic), or is it a direct/atomic take. A root-cause
+    (e.g. "needs atomic detection", "MEV-Share can't help") is INVALID unless it names the
+    specific victim (or proves none exists) from a manual trace — not inferred from one
+    pool/block probe. (2026-07-01: Claude wrongly concluded "atomic, MEV-Share can't save
+    us" from a single-pool probe without tracing what the competitor backran.)
 - Each agent writes **only its own sections**, never edits the other's. Each round =
   exactly **one core judgment + one next_action + one not_doing** (no walls of text).
 
