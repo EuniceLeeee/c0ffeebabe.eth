@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 import { actionsFromLogs } from "../actions/from-logs.js";
-import { roughValueUsd } from "./raw-delta.js";
 import { RpcClient, hexToBigInt } from "../rpc/client.js";
-import { ADDR, TOPICS, lower } from "../registry/protocols.js";
+import { ADDR, TOPICS, lower, tokenMeta } from "../registry/protocols.js";
+import type { TokenDelta } from "../types.js";
 
 const V4_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
 const V4_SWAP_IFACE = new ethers.Interface([
@@ -22,11 +22,37 @@ export interface ArbProfit {
   /** ERC20 (incl. WETH) + native-ETH net value the bot gained, USD. null if nothing priceable. */
   realizedProfitUsd: number | null;
   erc20Usd: number | null;
+  pricedDeltas: TokenDelta[];
+  unpricedDeltas: TokenDelta[];
+  profitConfidence: "high" | "medium" | "requires_decode";
   ethDeltaEth: number;
   ethProfitUsd: number;
   beneficiary: string;
   v4Swaps: V4Swap[];
   v4PoolIds: string[];
+}
+
+export function valueDeltas(
+  deltas: TokenDelta[],
+  ethUsd: number,
+): { usd: number | null; priced: TokenDelta[]; unpriced: TokenDelta[] } {
+  let usd = 0;
+  const priced: TokenDelta[] = [];
+  const unpriced: TokenDelta[] = [];
+  for (const d of deltas) {
+    const meta = tokenMeta(d.token);
+    const amount = Number(d.raw) / 10 ** d.decimals;
+    if (meta.roughUsd !== undefined) {
+      usd += amount * meta.roughUsd;
+      priced.push(d);
+    } else if (meta.symbol === "WETH") {
+      usd += amount * ethUsd;
+      priced.push(d);
+    } else {
+      unpriced.push(d);
+    }
+  }
+  return { usd: priced.length === 0 ? null : usd, priced, unpriced };
 }
 
 /** Chainlink ETH/USD (8 decimals). Falls back on any failure. */
@@ -86,7 +112,10 @@ export async function priceArb(
 
   // ERC20 net for the bot (WETH now valued at ethUsd, not 0).
   const { rawDeltas } = actionsFromLogs(receipt, actors);
-  const erc20Usd = roughValueUsd(rawDeltas, ethUsd);
+  const valuedDeltas = valueDeltas(rawDeltas, ethUsd);
+  const erc20Usd = valuedDeltas.usd;
+  const profitConfidence =
+    erc20Usd === null ? "requires_decode" : valuedDeltas.unpriced.length === 0 ? "high" : "medium";
 
   // Native ETH: contract keeps profit as-is; for the EOA add gas back to isolate the
   // non-gas ETH flow (profit swept to owner, or a bribe paid, both show correctly).
@@ -121,5 +150,16 @@ export async function priceArb(
 
   const realizedProfitUsd =
     erc20Usd === null && (!tracedEth || ethWei === 0n) ? null : (erc20Usd ?? 0) + ethProfitUsd;
-  return { realizedProfitUsd, erc20Usd, ethDeltaEth, ethProfitUsd, beneficiary: to, v4Swaps, v4PoolIds };
+  return {
+    realizedProfitUsd,
+    erc20Usd,
+    pricedDeltas: valuedDeltas.priced,
+    unpricedDeltas: valuedDeltas.unpriced,
+    profitConfidence,
+    ethDeltaEth,
+    ethProfitUsd,
+    beneficiary: to,
+    v4Swaps,
+    v4PoolIds,
+  };
 }

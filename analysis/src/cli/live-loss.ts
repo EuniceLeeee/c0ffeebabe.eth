@@ -88,6 +88,9 @@ interface WatchReport {
   protocols: string[];
   roughProfit: number | null;      // ERC20-only, WETH@0 (legacy; kept for continuity)
   realized_profit_usd: number | null; // ERC20(incl WETH@ethUsd) + native ETH (v4-aware)
+  profit_confidence: string;
+  unpriced_deltas: number;
+  unpriced_delta_symbols: string[];
   eth_profit_usd: number;
   v4_swaps: number;
   v4_pools: number;
@@ -465,6 +468,9 @@ async function runWatchMode(): Promise<void> {
       if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
       const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd);
       report.realized_profit_usd = profit.realizedProfitUsd;
+      report.profit_confidence = profit.profitConfidence;
+      report.unpriced_deltas = profit.unpricedDeltas.length;
+      report.unpriced_delta_symbols = uniq(profit.unpricedDeltas.map((delta) => delta.symbol));
       report.eth_profit_usd = profit.ethProfitUsd;
       report.v4_swaps = profit.v4Swaps.length;
       report.v4_pools = profit.v4PoolIds.length;
@@ -1224,6 +1230,9 @@ function buildWatchReport(
     protocols: logResult.protocols,
     roughProfit: roughValueUsd(logResult.rawDeltas),
     realized_profit_usd: null, // filled by priceArb in runWatchMode (needs rpc + ethUsd)
+    profit_confidence: "requires_decode",
+    unpriced_deltas: 0,
+    unpriced_delta_symbols: [],
     eth_profit_usd: 0,
     v4_swaps: 0,
     v4_pools: 0,
@@ -1292,6 +1301,9 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- competitor_edge: ${report.competitorEdge.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
   lines.push(`- rough_profit: ${report.roughProfit == null ? "n/a" : report.roughProfit.toFixed(6)}`);
   lines.push(`- realized_profit_usd: ${report.realized_profit_usd == null ? "n/a" : report.realized_profit_usd.toFixed(2)}`);
+  lines.push(`- profit_confidence: \`${report.profit_confidence}\``);
+  const unpricedSymbols = report.unpriced_delta_symbols.map((x) => `\`${x}\``).join(", ");
+  lines.push(`- unpriced_deltas: ${report.unpriced_deltas}${unpricedSymbols ? ` (${unpricedSymbols})` : ""}`);
   lines.push(`- eth_profit_usd: ${report.eth_profit_usd.toFixed(2)}`);
   lines.push(`- v4: swaps=${report.v4_swaps} pools=${report.v4_pool_ids.length}`);
   lines.push(`- v4_pool_ids: ${report.v4_pool_ids.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
