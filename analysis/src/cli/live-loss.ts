@@ -33,9 +33,9 @@ const notSeenScan = Boolean(args["not-seen-scan"]);
 const maxBlocks = Number(args["max-blocks"] ?? 200);
 const mempoolFilterArg = args["mempool-filter"] ? String(args["mempool-filter"]) : undefined;
 
-if (!eventsPath || args.help) {
-  printUsage();
-  process.exit(args.help ? 0 : 1);
+if (!eventsPath) {
+  console.error("Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl --block 123 --rpc <url>");
+  process.exit(1);
 }
 
 const rpc = new RpcClient(rpcUrl);
@@ -52,23 +52,6 @@ if (watch.length > 0) {
 const targetBlocks = blockArg === undefined ? inferBlocks(events) : [blockArg];
 for (const targetBlock of targetBlocks) {
   await analyzeBlock(targetBlock);
-}
-
-function printUsage(): void {
-  console.error([
-    "Usage:",
-    "  pnpm analysis live-loss --events ./analysis/events/searcher.jsonl --block 123 --rpc <url>",
-    "  pnpm analysis live-loss --competitor-scan --events ./analysis/events/searcher.jsonl --rpc <url>",
-    "",
-    "Modes:",
-    "  default             Analyze live-loss opportunities for one or more target blocks.",
-    "  --watch             Scan watchlist competitor txs across the inferred block range.",
-    "  --coverage          With --watch, summarize competitor coverage.",
-    "  --competitor-scan   Offline dropped-opportunity cross-reference using victim receipts and pool logs.",
-    "",
-    "Competitor scan options:",
-    "  --not-seen-scan     Best-effort bounded triage of arb-signature txs not in seen victims.",
-  ].join("\n"));
 }
 
 interface WatchReport {
@@ -224,21 +207,6 @@ interface BlockAnalysisContext {
   opportunityCount: number;
 }
 
-type SharedBlockAnalysisContext = Omit<BlockAnalysisContext, "opportunityCount">;
-
-interface OpportunityEntry {
-  oppId: string;
-  oppEvents: any[];
-}
-
-interface ResolvedOpportunityEntry extends OpportunityEntry {
-  actualBlock: number | null;
-  skipReason?: string;
-}
-
-const blockContextCache = new Map<number, Promise<SharedBlockAnalysisContext>>();
-const victimReceiptCache = new Map<string, Promise<any | null>>();
-
 async function analyzeBlock(targetBlock: number): Promise<void> {
   const blockEvents = events.filter((e) => Number(e.target_block ?? e.block ?? targetBlock) === targetBlock);
   if (blockEvents.length === 0) throw new Error(`No events found for block ${targetBlock}`);
@@ -261,80 +229,17 @@ async function analyzeBlock(targetBlock: number): Promise<void> {
     if (entries.length === 0) return;
   }
   console.error(
-    `[analysis/live-loss] target_block=${targetBlock} events=${blockEvents.length} opportunities=${entries.length} traceTop=${traceTop}`,
+    `[analysis/live-loss] block=${targetBlock} events=${blockEvents.length} opportunities=${entries.length} traceTop=${traceTop}`,
   );
 
-  const resolvedEntries = await mapLimit(entries, 8, async ([oppId, oppEvents]) =>
-    resolveOpportunityEntry({ oppId, oppEvents })
-  );
-  const byActualBlock = new Map<number, ResolvedOpportunityEntry[]>();
-  for (const entry of resolvedEntries) {
-    if (entry.actualBlock === null) {
-      await writeUnminedOpportunity(targetBlock, entry.oppId, entry.oppEvents, entries.length, entry.skipReason);
-      continue;
-    }
-    const arr = byActualBlock.get(entry.actualBlock) ?? [];
-    arr.push(entry);
-    byActualBlock.set(entry.actualBlock, arr);
-  }
-
-  for (const [actualBlock, blockEntries] of byActualBlock.entries()) {
-    console.error(
-      `[analysis/live-loss] target_block=${targetBlock} actual_block=${actualBlock} opportunities=${blockEntries.length}`,
-    );
-    const ctx = await getBlockAnalysisContext(actualBlock, entries.length);
-    for (const entry of blockEntries) {
-      await analyzeOpportunity(ctx, entry.oppId, entry.oppEvents);
-    }
-  }
-}
-
-async function resolveOpportunityEntry(entry: OpportunityEntry): Promise<ResolvedOpportunityEntry> {
-  const opportunity = aggregateOpportunity(entry.oppEvents);
-  if (!opportunity.victim) {
-    return { ...entry, actualBlock: null, skipReason: "no victim hash in event" };
-  }
-  const receipt = await getVictimReceipt(opportunity.victim);
-  if (!receipt?.blockNumber) {
-    return { ...entry, actualBlock: null, skipReason: `victim receipt unavailable: ${lower(opportunity.victim)}` };
-  }
-  const actualBlock = hexToNumber(receipt.blockNumber);
-  if (!Number.isFinite(actualBlock)) {
-    return { ...entry, actualBlock: null, skipReason: `invalid victim receipt blockNumber: ${receipt.blockNumber}` };
-  }
-  return { ...entry, actualBlock };
-}
-
-async function getVictimReceipt(hash: string): Promise<any | null> {
-  const key = lower(hash);
-  const cached = victimReceiptCache.get(key);
-  if (cached) return cached;
-  const promise = rpc.getReceipt(key).catch((err) => {
-    console.error(`[analysis/live-loss] victim receipt lookup failed ${key}: ${(err as Error).message}`);
-    return null;
-  });
-  victimReceiptCache.set(key, promise);
-  return promise;
-}
-
-async function getBlockAnalysisContext(blockNumber: number, opportunityCount: number): Promise<BlockAnalysisContext> {
-  let promise = blockContextCache.get(blockNumber);
-  if (!promise) {
-    promise = buildSharedBlockAnalysisContext(blockNumber);
-    blockContextCache.set(blockNumber, promise);
-  }
-  return { ...(await promise), opportunityCount };
-}
-
-async function buildSharedBlockAnalysisContext(blockNumber: number): Promise<SharedBlockAnalysisContext> {
-  // Fetch block + receipts ONCE, shared across every opportunity in this mined block.
-  const block = await rpc.getBlockByNumber(blockNumber, true);
+  // Fetch block + receipts ONCE, shared across every opportunity in this block.
+  const block = await rpc.getBlockByNumber(targetBlock, true);
   const blockTxs: any[] = Array.isArray(block.transactions) ? block.transactions : [];
   const baseFeePerGas = hexToBigInt(block.baseFeePerGas);
   const txIndexByHash = new Map<string, number>();
   for (let i = 0; i < blockTxs.length; i++) txIndexByHash.set(lower(blockTxs[i].hash), i);
-  return {
-    targetBlock: blockNumber,
+  const ctx: BlockAnalysisContext = {
+    targetBlock,
     block,
     blockTxs,
     baseFeePerGas,
@@ -345,52 +250,12 @@ async function buildSharedBlockAnalysisContext(blockNumber: number): Promise<Sha
       const receipt = await rpc.getReceipt(tx.hash);
       return { tx, receipt };
     }),
-  };
-}
-
-async function writeUnminedOpportunity(
-  targetBlock: number,
-  oppId: string,
-  oppEvents: any[],
-  opportunityCount: number,
-  reason?: string,
-): Promise<void> {
-  const opportunity = aggregateOpportunity(oppEvents);
-  const { mdPath, jsonPath } = liveLossOutputPaths(targetBlock, oppId, opportunityCount);
-  const report: LiveLossReport = {
-    block: targetBlock,
-    opportunityId: oppId,
-    ourOpportunity: opportunity,
-    victimStatus: { landed: false, victimIndex: null },
-    competitors: [],
-    loss: {
-      primaryReason: "v_not_mined",
-      secondaryReasons: [],
-      confidence: opportunity.victim ? "high" : "low",
-      evidence: [reason ?? "victim receipt unavailable"],
-      nextAction: ["verify victim transaction mining status"],
-    },
-    stats: {
-      blockTx: 0,
-      receiptsAnalyzed: 0,
-      competitorsFound: 0,
-      unknownCompetitors: 0,
-      tracedTx: 0,
-    },
-    outputJson: jsonPath,
-    outputMarkdown: mdPath,
+    opportunityCount: entries.length,
   };
 
-  await writeText(resolve(mdPath), renderLiveLossMarkdown(report));
-  await writeText(resolve(jsonPath), JSON.stringify(report, jsonReplacer, 2));
-  console.error(`[analysis/live-loss] wrote ${mdPath} reason=v_not_mined`);
-}
-
-function liveLossOutputPaths(block: number, oppId: string, opportunityCount: number): { mdPath: string; jsonPath: string } {
-  const single = targetBlocks.length === 1 && opportunityCount === 1;
-  const outBase = single && output ? output : `outputs/live-loss/${block}-${oppId.slice(2, 12)}.md`;
-  const mdPath = outBase.endsWith(".md") ? outBase : `${outBase}.md`;
-  return { mdPath, jsonPath: mdPath.replace(/\.md$/, ".json") };
+  for (const [oppId, oppEvents] of entries) {
+    await analyzeOpportunity(ctx, oppId, oppEvents);
+  }
 }
 
 async function analyzeOpportunity(ctx: BlockAnalysisContext, oppId: string, oppEvents: any[]): Promise<void> {
@@ -416,7 +281,13 @@ async function analyzeOpportunity(ctx: BlockAnalysisContext, oppId: string, oppE
   }
 
   const loss = decideLoss(opportunity, victimLanded, competitors);
-  const { mdPath, jsonPath } = liveLossOutputPaths(ctx.targetBlock, oppId, ctx.opportunityCount);
+  // Single selected/only opportunity honors --output; multiple opportunities in
+  // one block each get a distinct file so they don't overwrite each other.
+  const single = targetBlocks.length === 1 && ctx.opportunityCount === 1;
+  const outBase =
+    single && output ? output : `outputs/live-loss/${ctx.targetBlock}-${oppId.slice(2, 12)}.md`;
+  const mdPath = outBase.endsWith(".md") ? outBase : `${outBase}.md`;
+  const jsonPath = mdPath.replace(/\.md$/, ".json");
 
   const report: LiveLossReport = {
     block: ctx.targetBlock,
@@ -579,9 +450,8 @@ function inferWatchRange(items: any[]): { from: number; to: number } {
 }
 
 async function runCoverageMode(): Promise<void> {
-  let range = inferWatchRange(events);
-  const seen = await buildSeenIndex(events);
-  range = expandImplicitRangeToSeenBlocks(range, seen.byBlock);
+  const range = inferWatchRange(events);
+  const seen = buildSeenIndex(events);
   const mempoolFilter = await buildMempoolFilterIndex(events, mempoolFilterArg);
   const totalBlocks = range.to - range.from + 1;
   const omittedBlocks: number[] = [];
@@ -645,26 +515,8 @@ async function runCoverageMode(): Promise<void> {
   console.error(`[analysis/live-loss/coverage] wrote ${outputBase}.md`);
 }
 
-function expandImplicitRangeToSeenBlocks(
-  range: { from: number; to: number },
-  seenByBlock: Map<number, SeenSet>,
-): { from: number; to: number } {
-  const blocks = [...seenByBlock.keys()];
-  if (blocks.length === 0) return range;
-  const from = fromBlockArg === undefined ? Math.min(range.from, ...blocks) : range.from;
-  const to = toBlockArg === undefined ? Math.max(range.to, ...blocks) : range.to;
-  const span = to - from + 1;
-  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
-    throw new Error(`Invalid coverage block range after victim resolution: ${from}-${to}`);
-  }
-  if (span > maxBlocks) {
-    throw new Error(`Refusing to coverage-scan ${span} blocks after victim resolution; pass a <=${maxBlocks} block range with --from-block/--to-block or raise --max-blocks`);
-  }
-  return { from, to };
-}
-
-async function buildSeenIndex(items: any[]): Promise<SeenIndex> {
-  const byBlock = await buildSeenByResolvedBlock(items);
+function buildSeenIndex(items: any[]): SeenIndex {
+  const byBlock = buildSeenByBlock(items);
   const victimHashes = new Set<string>();
   let opportunitySeen = 0;
   let submitted = 0;
@@ -1233,41 +1085,15 @@ function buildSeenByBlock(items: any[]): Map<number, SeenSet> {
   for (const e of items) {
     const block = Number(e.target_block ?? e.block);
     if (!Number.isFinite(block)) continue;
-    addSeenEvent(out, block, e);
+    const seen = out.get(block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
+    seen.any = true;
+    if (e.pool) seen.pools.add(lower(String(e.pool)));
+    for (const token of Array.isArray(e.tokens) ? e.tokens : []) {
+      if (String(token).startsWith("0x")) seen.tokens.add(lower(String(token)));
+    }
+    out.set(block, seen);
   }
   return out;
-}
-
-async function buildSeenByResolvedBlock(items: any[]): Promise<Map<number, SeenSet>> {
-  const out = new Map<number, SeenSet>();
-  await mapLimit(items, 8, async (e) => {
-    const block = await resolvedSeenBlock(e);
-    if (block === null) return;
-    addSeenEvent(out, block, e);
-  });
-  return out;
-}
-
-async function resolvedSeenBlock(e: any): Promise<number | null> {
-  const victim = e.victim_hash ?? e.victimHash;
-  if (victim) {
-    const receipt = await getVictimReceipt(String(victim));
-    if (!receipt?.blockNumber) return null;
-    const block = hexToNumber(receipt.blockNumber);
-    return Number.isFinite(block) ? block : null;
-  }
-  const block = Number(e.target_block ?? e.block);
-  return Number.isFinite(block) ? block : null;
-}
-
-function addSeenEvent(out: Map<number, SeenSet>, block: number, e: any): void {
-  const seen = out.get(block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
-  seen.any = true;
-  if (e.pool) seen.pools.add(lower(String(e.pool)));
-  for (const token of Array.isArray(e.tokens) ? e.tokens : []) {
-    if (String(token).startsWith("0x")) seen.tokens.add(lower(String(token)));
-  }
-  out.set(block, seen);
 }
 
 function buildWatchReport(
