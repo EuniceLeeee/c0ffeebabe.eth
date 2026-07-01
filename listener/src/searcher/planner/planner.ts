@@ -646,6 +646,9 @@ function hasImmediateSamePoolReverse(path: TokenPath): boolean {
     const b = path.edges[i + 1];
     if (
       sameAddress(a.target, b.target) &&
+      // v4 pools share the PoolManager target — same address is NOT the same pool
+      // unless the poolId also matches (else a legit v4->v4 arb is mispruned).
+      (a.poolId ?? "").toLowerCase() === (b.poolId ?? "").toLowerCase() &&
       sameAddress(a.tokenIn, b.tokenOut) &&
       sameAddress(a.tokenOut, b.tokenIn)
     ) {
@@ -661,6 +664,7 @@ function tokenPathKey(path: TokenPath): string {
       [
         edge.adapterId,
         edge.target.toLowerCase(),
+        edge.poolId ?? "", // v4: distinct pools share the PoolManager target
         edge.tokenIn.toLowerCase(),
         edge.tokenOut.toLowerCase(),
       ].join(":"),
