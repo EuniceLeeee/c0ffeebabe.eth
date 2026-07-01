@@ -20,8 +20,12 @@ export class RpcClient {
     return json.result as T;
   }
 
-  async getCode(address: string): Promise<string> {
-    return this.call<string>("eth_getCode", [address, "latest"]);
+  async getCode(address: string, blockTag: Hex | "latest" = "latest"): Promise<string> {
+    return this.call<string>("eth_getCode", [address, blockTag]);
+  }
+
+  async getLogs(filter: Record<string, unknown>): Promise<any[]> {
+    return this.call<any[]>("eth_getLogs", [filter]);
   }
 
   async getTransaction(hash: string): Promise<any> {
