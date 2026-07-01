@@ -10,16 +10,16 @@ Reproduce: `analysis live-loss --watch 0xc0ffeebabe…,0xae2Fc483… --graph-poo
 
 | metric | value | meaning |
 |---|---:|---|
-| `positive_legs_only` (code window total) | **$838** | **OVERCOUNT — do not use.** Sums only per-tx legs with net>0. |
-| **true net (all legs)** | **$142** | Net of every leg; the real number. |
-| net via v4-touching blocks | **$80** | ~56% of net (not the 81% an earlier positive-legs read implied). |
+| **net (all legs, per bot+block)** | **$142** | The real number. Now what the code prints: `net_per_block total=142`. |
+| net via v4-touching blocks | **$80** | ~56% of net (`via_v4=80`). |
+| ~~`positive_legs_only`~~ | ~~$838~~ | The old overcount (summed only net>0 legs) — **fixed in patch E**, kept here as the correction record. |
 
-**Why the overcount:** these bots split one arb across multiple txs in a block, so
+**Why the old overcount:** these bots split one arb across multiple txs in a block, so
 per-tx netting shows one leg positive and the others negative (e.g. block 25434926:
-+$315 and −$288 → net +$27). The code's window total applies a `>0` gate and drops
-the negative legs → ~6× overcount. **Known bug — the aggregate must net per (bot,
-block), not sum positive legs.** Tracked as follow-up **patch E**; per-tx values below
-are correct, the code's `realized_profit_usd total` line is not.
++$315 and −$288 → net +$27). The old window total applied a `>0` gate and dropped the
+negative legs → ~6× overcount. **Fixed (patch E, commit `d160dfe`):** the aggregate now
+nets per (bot, block) — includes negative safe legs, excludes unsafe/null — and the code
+prints `net_per_block total=142 via_v4=80` (verified on the node, matches this doc).
 
 ## Per-block net (the real per-arb profit)
 
@@ -49,19 +49,22 @@ guard is in place for generality). Every v4 tx carries `v4_pool_ids[]`.
 2. unpriced/poolkey-missing not marked `high` — **met** (patch B: medium/requires_decode).
 3. public-router `tx.to` not auto-counted as bot actor — **met** (patch C: routers registry + `unsafe`).
 4. external RPC no trace by default — **met** (patch D: `--price-trace` / local-only).
-5. totals exclude `unsafe` — **met**; BUT the aggregate still overcounts by summing
-   positive legs (the separate patch-E netting bug above).
+5. totals exclude `unsafe` — **met**, and the aggregate now nets per (bot, block)
+   (patch E, `d160dfe`) so it no longer overcounts.
+
+Patch F (`d160dfe`) also persists `v4_swaps_detail` {poolId,sender,amount0,amount1,fee}
++ `trace_used` into each report (Codex re-review P1/P2a).
 
 ## Not done (slice-1 remaining)
 
-- **patch E:** window/aggregate must net per (bot, block); the current `total`/`via_v4`
-  line overcounts.
 - **poolId → token pair:** `v4_pool_ids[]` are raw poolIds; `currency0/1` mapping via the
   v4 `Initialize` event (indexed) is not built (old pools are beyond reth `--full` →
   needs archive or a cached poolkey index; mark `requires_poolkey_index`). `univ4Initialize`
   topic is staged but unused.
+- **native-only confidence** (Codex P2b): a tx whose profit is purely native ETH is still
+  conservatively `requires_decode` (won't falsely mark `high`) — acceptable, deferred.
 
-**Verdict:** patches A–D correctly make v4 visible + per-tx profit attributed with
-confidence and cost/actor guards. The **window aggregate is not yet trustworthy**
-(patch E), and v4 pool→token decode is still pending — so this is "v4 rough pricing +
-auditable per-tx evidence", not "v4 profit solved".
+**Verdict ("v4 watch sizing v1"):** patches A–F make v4 visible, attribute per-tx profit
+with confidence + cost/actor guards, and the window aggregate is now the honest net
+(`total=142 via_v4=80`, verified). Still pending: v4 pool→token decode. This is trustworthy
+v4 *sizing*, not full v4 *path* decode.
