@@ -283,6 +283,22 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
       ms. **Relative only** (harness-bound, not a live-absolute number), and valid ONLY
       if the harness faithfully reproduces the latency source (cold state / real
       backend) — otherwise the timing is misleading, do not trust it.
+    **`fixed` vs `implemented` (hard — this is the definition of "fixed").** For a
+    deterministic searcher change (path / pool / decoder / template / planner / adapter
+    / graph): `implemented` = code written + build/tests pass; **`fixed` = the SAME
+    failing sample, replayed locally, shows the expected bucket transition.** **"Build
+    passes" is NEVER enough for these.** Final Approval MUST record, or the verdict is
+    `implemented_not_validated` (not `fixed`):
+    `failing_sample: / baseline_failure: / fix_commit: / replay_command: /
+    replay_result: / expected_transition: / verdict: fixed | implemented_not_validated |
+    deferred`. Examples of `expected_transition`: graph_gap → `pool_in_routing_graph
+    false→true`; no_candidate_plans → `candidate_plans>0` (ideally `solverEntered>0`);
+    v4 decode → poolId→token pair emitted; pricing → old wrong number gone + auditable
+    artifact.
+    **Exempt from replay (use before/after METRICS instead):** pure latency, builder
+    inclusion, live mempool visibility, external-RPC/network instability, competitive
+    bid — gate these on `prep_ms p50/p95` / `solverEntered` / `pendingReceived` /
+    `cuProxyRpcCalls` / `not_seen` rate before vs after.
     A turn with **no flippable / speed-up fixture** is logged `turn_class:
     observability-only` and does **NOT** count as improving extraction (this is how the
     "polishing the microscope" drift gets caught — an instrument change has nothing in
@@ -316,6 +332,13 @@ auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
       "deferred" is not where findings go to die.
     - **Brief gate:** every Implementation Brief carries `searcher_behavior_change:
       yes | no`. Two consecutive `no` escalate to the human.
+    - **Epic escalation (big architecture out of the 30-min loop):** a finding too big
+      for one Hermes round (e.g. the v4 **searcher** adapter) must be escalated OUT of the
+      loop into an `epic`, NOT ground down in more analysis rounds. Record
+      `decision: epic` in the Findings Ledger and run the epic as ordered slices with
+      their own gates: `analysis-decode → replay → adapter → dry-run`. Without this, the
+      loop keeps polishing v4 sizing / poolId / profit-confidence and never ships the
+      production adapter.
     - **Impact counterweight:** CLAUDE.md's culture is skeptic/verify/gate = good for
       correctness, biased against bold searcher changes. The loop's job is not clean
       commits; it is more MEV caught. A round that shipped a clean analysis patch but

@@ -121,12 +121,21 @@ models" does not substitute for a real run gate.
 mechanical edits, labelled `authored_by: claude (codex stalled)`; judgment/design
 work stops and waits — never solo.
 
-### Repair Replay Gate (governance 12 — run BEFORE the next dry-run)
-- **turn_class:** extraction | observability-only
-- **fixture:** `{ block, victim/impact, pool, tokens }` (pinned; note if it needs archive)
-- **assert (correctness):** e.g. `no_candidate → plans>0` / pool routes / `sim.success` — flipped? yes/no
-- **assert (latency):** same fixture before/after → `seg` per-stage ms delta (RELATIVE only; harness must reproduce the cold-state/backend latency source, else untrusted)
-- **result:** flipped=... | no fixture → logged observability-only (does NOT count as improving extraction)
+### Repair Replay Gate (governance 12 — run BEFORE Final Approval; `build passes` is never enough)
+- **searcher_behavior_change:** yes | no
+- **kind:** deterministic (path/pool/decoder/template/planner/adapter/graph → REPLAY) | non-deterministic (latency/inclusion/mempool/network/bid → METRICS)
+
+Deterministic → replay the failing sample:
+- **failing_sample:** (block / victim / tx / pool)
+- **baseline_failure:** (the bucket/state before, e.g. `no_candidate_plans`)
+- **fix_commit:**
+- **replay_command:**
+- **replay_result:**
+- **expected_transition:** e.g. `pool_in_routing_graph false→true` / `candidate_plans>0` (ideally `solverEntered>0`) / poolId→token pair / old wrong number gone
+- **verdict:** fixed | implemented_not_validated | deferred   <!-- only replay-proven transition = fixed -->
+
+Non-deterministic → before/after metrics (no replay):
+- **metrics_before/after:** `prep_ms p50/p95` / `solverEntered` / `pendingReceived` / `cuProxyRpcCalls` / `not_seen` rate
 
 ### Codex Implementation Pass 1
 <!-- Raw evidence: /tmp/codex-pass1.out (last-message) + /tmp/codex-pass1.events.jsonl.
