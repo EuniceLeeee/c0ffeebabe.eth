@@ -39,7 +39,7 @@ import {
   type LiveFixturePath,
 } from "./live-fixture-recorder.js";
 import { parseLiveBackendKind, type LiveBackendKind } from "./live-state-backend.js";
-import type { LiveStateBackend, QuoteRequest } from "./live-state-backend.js";
+import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
 import { RevmSimClient } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
@@ -433,6 +433,7 @@ async function main(): Promise<void> {
   const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
   const mainnetBackend: TokenQueryBackend = {
     call: async (req) => provider.call(req),
+    getLogs: async (req) => provider.send("eth_getLogs", [req]),
   };
   const pinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
   const universePools = loadPoolUniverse(config.poolUniversePath, {
@@ -1777,14 +1778,14 @@ class RecentWarmTracker {
   }
 
   record(
-    hop: { adapterId: string; target: string; tokenIn: string; tokenOut: string },
+    hop: QuoteHop,
     amountIn: bigint,
     blockNumber: number,
     excludeTargets: Set<string>,
   ): void {
     if (amountIn <= 0n) return;
     if (excludeTargets.has(hop.target.toLowerCase())) return;
-    const key = `${hop.target.toLowerCase()}|${hop.tokenIn.toLowerCase()}|${hop.tokenOut.toLowerCase()}`;
+    const key = quoteHopKey(hop);
     const existing = this.hops.get(key);
     if (existing) {
       existing.count++;
@@ -1821,27 +1822,28 @@ function topPinnedWarmHops(
   return [...hops]
     .sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1))
     .slice(0, k)
-    .map(({ adapterId, target, tokenIn, tokenOut, amountIn }) => ({
+    .map(({ adapterId, target, tokenIn, tokenOut, amountIn, v4PoolKey }) => ({
       adapterId,
       target,
       tokenIn,
       tokenOut,
       amountIn,
+      v4PoolKey,
     }));
 }
 
 function dedupeRouteHops(
   plans: Array<{
-    tokenPath: { edges: Array<{ adapterId: string; target: string; tokenIn: string; tokenOut: string }> };
+    tokenPath: { edges: TokenEdge[] };
   }>,
   maxHops: number,
-): Array<{ adapterId: string; target: string; tokenIn: string; tokenOut: string }> {
+): QuoteHop[] {
   if (maxHops <= 0) return [];
   const seen = new Set<string>();
-  const hops: Array<{ adapterId: string; target: string; tokenIn: string; tokenOut: string }> = [];
+  const hops: QuoteHop[] = [];
   for (const plan of plans) {
     for (const edge of plan.tokenPath.edges) {
-      const key = `${edge.adapterId}:${edge.target.toLowerCase()}:${edge.tokenIn.toLowerCase()}:${edge.tokenOut.toLowerCase()}`;
+      const key = quoteHopKey(edge);
       if (seen.has(key)) continue;
       seen.add(key);
       hops.push({
@@ -1849,11 +1851,33 @@ function dedupeRouteHops(
         target: edge.target,
         tokenIn: edge.tokenIn,
         tokenOut: edge.tokenOut,
+        v4PoolKey: edge.v4PoolKey,
       });
       if (hops.length >= maxHops) return hops;
     }
   }
   return hops;
+}
+
+function quoteHopKey(hop: QuoteHop): string {
+  return [
+    hop.adapterId,
+    hop.target.toLowerCase(),
+    hop.tokenIn.toLowerCase(),
+    hop.tokenOut.toLowerCase(),
+    v4PoolKeyIdentity(hop.v4PoolKey),
+  ].join(":");
+}
+
+function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
+  if (!key) return "";
+  return [
+    key.currency0.toLowerCase(),
+    key.currency1.toLowerCase(),
+    String(key.fee),
+    String(key.tickSpacing),
+    key.hooks.toLowerCase(),
+  ].join(":");
 }
 
 function poolImpactFromOpportunity(

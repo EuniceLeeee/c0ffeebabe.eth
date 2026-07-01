@@ -215,13 +215,27 @@ async function getLogs(
 }
 
 export function mergePoolRegistries(base: PoolEntry[], extra: PoolEntry[]): PoolEntry[] {
-  const seen = new Set(base.map((p) => p.address.toLowerCase()));
+  const seen = new Set(base.map(poolRegistryKey));
   const merged = [...base];
   for (const p of extra) {
-    if (!seen.has(p.address.toLowerCase())) {
+    const key = poolRegistryKey(p);
+    if (!seen.has(key)) {
       merged.push(p);
-      seen.add(p.address.toLowerCase());
+      seen.add(key);
     }
   }
   return merged;
+}
+
+function poolRegistryKey(pool: PoolEntry): string {
+  if (pool.adapter !== "univ4") return pool.address.toLowerCase();
+  return [
+    pool.address.toLowerCase(),
+    pool.poolId?.toLowerCase() ?? "",
+    pool.currency0?.toLowerCase() ?? "",
+    pool.currency1?.toLowerCase() ?? "",
+    pool.fee === undefined ? "" : String(pool.fee),
+    pool.tickSpacing === undefined ? "" : String(pool.tickSpacing),
+    pool.hooks?.toLowerCase() ?? "",
+  ].join(":");
 }
