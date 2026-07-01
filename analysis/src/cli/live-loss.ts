@@ -91,6 +91,7 @@ interface WatchReport {
   eth_profit_usd: number;
   v4_swaps: number;
   v4_pools: number;
+  v4_pool_ids: string[];
   nextAction: string[];
   rawDeltas: unknown[];
 }
@@ -465,11 +466,12 @@ async function runWatchMode(): Promise<void> {
       const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd);
       report.realized_profit_usd = profit.realizedProfitUsd;
       report.eth_profit_usd = profit.ethProfitUsd;
-      report.v4_swaps = profit.v4Swaps;
-      report.v4_pools = profit.v4Pools;
+      report.v4_swaps = profit.v4Swaps.length;
+      report.v4_pools = profit.v4PoolIds.length;
+      report.v4_pool_ids = profit.v4PoolIds;
       if (profit.realizedProfitUsd && profit.realizedProfitUsd > 0) {
         profitTotalUsd += profit.realizedProfitUsd;
-        if (profit.v4Swaps > 0) profitV4Usd += profit.realizedProfitUsd;
+        if (profit.v4Swaps.length > 0) profitV4Usd += profit.realizedProfitUsd;
       }
       const outBase = watchOutputBase(blockNumber, tx.hash);
       await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
@@ -1225,6 +1227,7 @@ function buildWatchReport(
     eth_profit_usd: 0,
     v4_swaps: 0,
     v4_pools: 0,
+    v4_pool_ids: [],
     nextAction: watchNextActions(primaryReason, seenScope, pools),
     rawDeltas: logResult.rawDeltas,
   };
@@ -1290,7 +1293,8 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- rough_profit: ${report.roughProfit == null ? "n/a" : report.roughProfit.toFixed(6)}`);
   lines.push(`- realized_profit_usd: ${report.realized_profit_usd == null ? "n/a" : report.realized_profit_usd.toFixed(2)}`);
   lines.push(`- eth_profit_usd: ${report.eth_profit_usd.toFixed(2)}`);
-  lines.push(`- v4: swaps=${report.v4_swaps} pools=${report.v4_pools}`);
+  lines.push(`- v4: swaps=${report.v4_swaps} pools=${report.v4_pool_ids.length}`);
+  lines.push(`- v4_pool_ids: ${report.v4_pool_ids.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
   lines.push("");
   lines.push("## Footprint");
   lines.push("");

@@ -1,10 +1,22 @@
+import { ethers } from "ethers";
 import { actionsFromLogs } from "../actions/from-logs.js";
 import { roughValueUsd } from "./raw-delta.js";
 import { RpcClient, hexToBigInt } from "../rpc/client.js";
 import { ADDR, TOPICS, lower } from "../registry/protocols.js";
 
 const V4_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
+const V4_SWAP_IFACE = new ethers.Interface([
+  "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
+]);
 const CHAINLINK_ETH_USD = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"; // latestAnswer() → 8 decimals
+
+export interface V4Swap {
+  poolId: string;
+  sender: string;
+  amount0: string;
+  amount1: string;
+  fee: number;
+}
 
 export interface ArbProfit {
   /** ERC20 (incl. WETH) + native-ETH net value the bot gained, USD. null if nothing priceable. */
@@ -13,8 +25,8 @@ export interface ArbProfit {
   ethDeltaEth: number;
   ethProfitUsd: number;
   beneficiary: string;
-  v4Swaps: number;
-  v4Pools: number;
+  v4Swaps: V4Swap[];
+  v4PoolIds: string[];
 }
 
 /** Chainlink ETH/USD (8 decimals). Falls back on any failure. */
@@ -30,6 +42,28 @@ export async function fetchEthUsd(rpc: RpcClient, fallback = 3500): Promise<numb
     // fall through
   }
   return fallback;
+}
+
+export function decodeV4Swaps(receipt: any): V4Swap[] {
+  const out: V4Swap[] = [];
+  const swapTopic = lower(TOPICS.univ4Swap);
+  for (const log of receipt?.logs ?? []) {
+    if (lower(log.address) !== V4_MANAGER || lower(log.topics?.[0]) !== swapTopic) continue;
+    try {
+      const parsed = V4_SWAP_IFACE.parseLog({ topics: log.topics, data: log.data ?? "0x" });
+      if (!parsed) continue;
+      out.push({
+        poolId: lower(String(parsed.args[0])),
+        sender: lower(String(parsed.args[1])),
+        amount0: String(parsed.args[2]),
+        amount1: String(parsed.args[3]),
+        fee: Number(parsed.args[7]),
+      });
+    } catch {
+      // Ignore malformed logs after the address/topic guard.
+    }
+  }
+  return out;
 }
 
 /**
@@ -82,18 +116,10 @@ export async function priceArb(
   const ethDeltaEth = Number(ethWei) / 1e18;
   const ethProfitUsd = ethDeltaEth * ethUsd;
 
-  // Uniswap v4 usage: distinct poolIds swapped in the PoolManager.
-  let v4Swaps = 0;
-  const v4Pools = new Set<string>();
-  const swapTopic = lower(TOPICS.univ4Swap);
-  for (const log of receipt?.logs ?? []) {
-    if (lower(log.address) === V4_MANAGER && lower(log.topics?.[0]) === swapTopic) {
-      v4Swaps++;
-      if (log.topics?.[1]) v4Pools.add(lower(log.topics[1]));
-    }
-  }
+  const v4Swaps = decodeV4Swaps(receipt);
+  const v4PoolIds = [...new Set(v4Swaps.map((swap) => swap.poolId))];
 
   const realizedProfitUsd =
     erc20Usd === null && (!tracedEth || ethWei === 0n) ? null : (erc20Usd ?? 0) + ethProfitUsd;
-  return { realizedProfitUsd, erc20Usd, ethDeltaEth, ethProfitUsd, beneficiary: to, v4Swaps, v4Pools: v4Pools.size };
+  return { realizedProfitUsd, erc20Usd, ethDeltaEth, ethProfitUsd, beneficiary: to, v4Swaps, v4PoolIds };
 }
