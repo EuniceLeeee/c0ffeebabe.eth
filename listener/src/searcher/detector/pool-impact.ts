@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
-import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import { v4PoolId, type TokenEdge, type TokenQueryBackend } from "../planner/token-graph.js";
 
 export interface PoolImpact {
   pool: string;
@@ -8,6 +8,9 @@ export interface PoolImpact {
   tokenOut: string;
   amountIn: bigint;
   matchedAdapterId: string;
+  /** Uniswap v4 poolId — preserves pool identity across the singleton PoolManager
+   *  (all v4 pools share the same `pool` address). Undefined for v2/v3/curve. */
+  poolId?: string;
 }
 
 interface EventLog {
@@ -207,22 +210,6 @@ const uniV2Decoder: ImpactDecoder = {
 // in tx 0xd60d80df (amount1 +35045872323 USDT in / amount0 -35013321757 USDC out)
 // cross-checked with the V4Quoter.
 
-const V4_POOLKEY_TUPLE = "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
-
-function v4PoolId(key: {
-  currency0: string;
-  currency1: string;
-  fee: number;
-  tickSpacing: number;
-  hooks: string;
-}): string {
-  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    [V4_POOLKEY_TUPLE],
-    [[key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]],
-  );
-  return ethers.keccak256(encoded).toLowerCase();
-}
-
 const uniV4Decoder: ImpactDecoder = {
   adapterIds: ["univ4-unlock"],
 
@@ -238,9 +225,11 @@ const uniV4Decoder: ImpactDecoder = {
     const a0 = BigInt(amount0);
     const a1 = BigInt(amount1);
 
-    // Match only the edges whose PoolKey hashes to this poolId (all v4 edges
-    // share the PoolManager target, so filter by poolId first).
-    const matching = edges.filter((e) => e.v4PoolKey && v4PoolId(e.v4PoolKey) === poolId);
+    // All v4 pools share the PoolManager target, so filter by poolId. Prefer the
+    // edge's precomputed poolId (set at graph build); fall back to computing it.
+    const matching = edges.filter(
+      (e) => e.v4PoolKey && (e.poolId ?? v4PoolId(e.v4PoolKey)) === poolId,
+    );
     if (matching.length === 0) return [];
     const key = matching[0].v4PoolKey!;
 
@@ -256,12 +245,15 @@ const uniV4Decoder: ImpactDecoder = {
     );
     if (!edge) return [];
 
+    // poolId preserves v4 pool identity downstream (dedupe / focus), since every
+    // v4 pool shares the PoolManager `pool` address.
     return [{
       pool: edge.target,
       tokenIn: edge.tokenIn,
       tokenOut: edge.tokenOut,
       amountIn,
       matchedAdapterId: edge.adapterId,
+      poolId,
     }];
   },
 };
@@ -695,6 +687,7 @@ function dedupeImpacts(impacts: PoolImpact[]): PoolImpact[] {
   return impacts.filter((impact) => {
     const key = [
       impact.pool.toLowerCase(),
+      impact.poolId ?? "",
       impact.tokenIn.toLowerCase(),
       impact.tokenOut.toLowerCase(),
       impact.amountIn.toString(),

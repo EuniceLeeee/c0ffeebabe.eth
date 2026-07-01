@@ -1,59 +1,73 @@
-// v4-impact-detection gate (v4 epic slice): a Uniswap v4 PoolManager Swap log
-// must now produce a PoolImpact, keyed by poolId (topics[1]) matched to a pinned
-// v4 edge's PoolKey. Before this decoder, v4 victims produced NO impact (0/80
-// opportunities were v4). Uses the real on-chain swap from tx 0xd60d80df
-// (block 25436883): amount0 -35013321757 USDC out / amount1 +35045872323 USDT in.
+// v4-impact-detection gate (v4 epic slice-2): a Uniswap v4 PoolManager Swap log
+// must produce a PoolImpact, keyed by poolId (topics[1]) matched to a pinned v4
+// edge's PoolKey. Before this decoder, v4 victims produced NO impact.
+//
+// Also gates the identity fix (Codex slice-2 review, blocking): every v4 pool
+// shares the singleton PoolManager address, so the impact must carry `poolId` and
+// two same-pair v4 pools (different fee) must NOT collapse in dedupe / matching.
 import { ethers } from "ethers";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import { v4PoolId, type TokenEdge } from "../planner/token-graph.js";
 
 const POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 const ZERO = "0x0000000000000000000000000000000000000000";
-const POOL_ID = "0x395f91b34aa34a477ce3bc6505639a821b286a62b1a164fc1887fa3a5ef713a5";
-const key = { currency0: USDC, currency1: USDT, fee: 8, tickSpacing: 1, hooks: ZERO };
 
-// The two v4 edges the USDC/USDT pin produces (target = PoolManager singleton).
+// Real pinned pool: USDC/USDT fee 8 / tickSpacing 1 / no hooks.
+const key8 = { currency0: USDC, currency1: USDT, fee: 8, tickSpacing: 1, hooks: ZERO };
+// A second same-pair v4 pool at a different fee — must stay distinct.
+const key100 = { currency0: USDC, currency1: USDT, fee: 100, tickSpacing: 1, hooks: ZERO };
+const id8 = v4PoolId(key8);
+const id100 = v4PoolId(key100);
+
+const edge = (k: typeof key8, id: string, tin: string, tout: string) =>
+  ({ adapterId: "univ4-unlock", target: POOL_MANAGER, tokenIn: tin, tokenOut: tout, slotKind: "swap", v4PoolKey: k, poolId: id }) as unknown as TokenEdge;
 const edges = [
-  { adapterId: "univ4-unlock", target: POOL_MANAGER, tokenIn: USDC, tokenOut: USDT, slotKind: "swap", v4PoolKey: key },
-  { adapterId: "univ4-unlock", target: POOL_MANAGER, tokenIn: USDT, tokenOut: USDC, slotKind: "swap", v4PoolKey: key },
-] as unknown as TokenEdge[];
+  edge(key8, id8, USDC, USDT), edge(key8, id8, USDT, USDC),
+  edge(key100, id100, USDC, USDT), edge(key100, id100, USDT, USDC),
+];
 
 const UNIV4_SWAP = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
-const data = ethers.AbiCoder.defaultAbiCoder().encode(
-  ["int128", "int128", "uint160", "uint128", "int24", "uint24"],
-  [-35013321757n, 35045872323n, 0n, 0n, 0, 8],
-);
-const log = {
+const swapLog = (poolId: string, a0: bigint, a1: bigint) => ({
   address: POOL_MANAGER,
-  topics: [UNIV4_SWAP, POOL_ID, "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"],
-  data,
-};
+  topics: [UNIV4_SWAP, poolId, "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"],
+  data: ethers.AbiCoder.defaultAbiCoder().encode(
+    ["int128", "int128", "uint160", "uint128", "int24", "uint24"], [a0, a1, 0n, 0n, 0, 8]),
+});
 
 async function main() {
   let pass = true;
+  const fail = (m: string) => { pass = false; console.log("FAIL: " + m); };
 
-  // AFTER (pinned v4 edge present): the swap must yield a v4 impact, USDT->USDC.
-  const impacts = await detectImpactFromLogs([log], edges);
-  console.log("impacts:", JSON.stringify(impacts, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
-  const v4 = impacts.filter((i) => i.matchedAdapterId === "univ4-unlock");
-  if (v4.length !== 1) {
-    pass = false;
-    console.log(`FAIL: expected exactly 1 v4 impact, got ${v4.length}`);
-  } else {
-    const i = v4[0];
-    if (i.tokenIn.toLowerCase() !== USDT.toLowerCase()) { pass = false; console.log(`FAIL: tokenIn ${i.tokenIn} != USDT`); }
-    if (i.tokenOut.toLowerCase() !== USDC.toLowerCase()) { pass = false; console.log(`FAIL: tokenOut ${i.tokenOut} != USDC`); }
-    if (i.amountIn !== 35045872323n) { pass = false; console.log(`FAIL: amountIn ${i.amountIn} != 35045872323`); }
+  // Sanity: computed poolId for fee 8 matches the known on-chain poolId.
+  if (id8 !== "0x395f91b34aa34a477ce3bc6505639a821b286a62b1a164fc1887fa3a5ef713a5") {
+    fail(`v4PoolId(fee8) = ${id8} != on-chain 0x395f91b3...`);
+  }
+  if (id8 === id100) fail("fee 8 and fee 100 hashed to the same poolId");
+
+  // Real on-chain swap on the fee-8 pool (tx 0xd60d80df): USDT in / USDC out.
+  const i8 = await detectImpactFromLogs([swapLog(id8, -35013321757n, 35045872323n)], edges);
+  const v8 = i8.filter((i) => i.matchedAdapterId === "univ4-unlock");
+  if (v8.length !== 1) fail(`fee8 swap: expected 1 v4 impact, got ${v8.length}`);
+  else {
+    if (v8[0].tokenIn.toLowerCase() !== USDT.toLowerCase()) fail(`tokenIn ${v8[0].tokenIn} != USDT`);
+    if (v8[0].tokenOut.toLowerCase() !== USDC.toLowerCase()) fail(`tokenOut ${v8[0].tokenOut} != USDC`);
+    if (v8[0].amountIn !== 35045872323n) fail(`amountIn ${v8[0].amountIn} != 35045872323`);
+    if (v8[0].poolId !== id8) fail(`impact.poolId ${v8[0].poolId} != id8 (identity lost)`);
   }
 
-  // BEFORE / negative control: with no v4 edge (nothing pinned), no v4 impact.
-  const none = await detectImpactFromLogs([log], []);
-  if (none.some((i) => i.matchedAdapterId === "univ4-unlock")) {
-    pass = false;
-    console.log("FAIL: emitted a v4 impact with no v4 edge in the graph");
-  }
+  // Identity: two same-pair pools (fee 8 + fee 100) in one log batch must yield
+  // TWO distinct impacts with the right poolId — no collapse.
+  const both = await detectImpactFromLogs(
+    [swapLog(id8, -1000n, 2000n), swapLog(id100, 3000n, -4000n)], edges);
+  const vb = both.filter((i) => i.matchedAdapterId === "univ4-unlock");
+  if (vb.length !== 2) fail(`two pools: expected 2 distinct impacts, got ${vb.length} (dedupe collapsed?)`);
+  if (!vb.some((i) => i.poolId === id8) || !vb.some((i) => i.poolId === id100)) fail("missing one of the two poolIds");
+
+  // Negative control: no v4 edge => no v4 impact.
+  const none = await detectImpactFromLogs([swapLog(id8, -1n, 2n)], []);
+  if (none.some((i) => i.matchedAdapterId === "univ4-unlock")) fail("emitted v4 impact with no v4 edge");
 
   console.log(pass ? "\nV4 IMPACT DETECT: PASS" : "\nV4 IMPACT DETECT: FAIL");
   process.exit(pass ? 0 : 1);
