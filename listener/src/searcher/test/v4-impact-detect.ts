@@ -16,16 +16,16 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 
 // Real pinned pool: USDC/USDT fee 8 / tickSpacing 1 / no hooks.
 const key8 = { currency0: USDC, currency1: USDT, fee: 8, tickSpacing: 1, hooks: ZERO };
-// A second same-pair v4 pool at a different fee — must stay distinct.
-const key100 = { currency0: USDC, currency1: USDT, fee: 100, tickSpacing: 1, hooks: ZERO };
+// A second REAL pinned same-pair v4 pool at a different fee tier (fee 7).
+const key7 = { currency0: USDC, currency1: USDT, fee: 7, tickSpacing: 1, hooks: ZERO };
 const id8 = v4PoolId(key8);
-const id100 = v4PoolId(key100);
+const id7 = v4PoolId(key7);
 
 const edge = (k: typeof key8, id: string, tin: string, tout: string) =>
   ({ adapterId: "univ4-unlock", target: POOL_MANAGER, tokenIn: tin, tokenOut: tout, slotKind: "swap", v4PoolKey: k, poolId: id }) as unknown as TokenEdge;
 const edges = [
   edge(key8, id8, USDC, USDT), edge(key8, id8, USDT, USDC),
-  edge(key100, id100, USDC, USDT), edge(key100, id100, USDT, USDC),
+  edge(key7, id7, USDC, USDT), edge(key7, id7, USDT, USDC),
 ];
 
 const UNIV4_SWAP = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
@@ -40,11 +40,14 @@ async function main() {
   let pass = true;
   const fail = (m: string) => { pass = false; console.log("FAIL: " + m); };
 
-  // Sanity: computed poolId for fee 8 matches the known on-chain poolId.
+  // Sanity: computed poolIds match the TWO real pinned USDC/USDT v4 pools.
   if (id8 !== "0x395f91b34aa34a477ce3bc6505639a821b286a62b1a164fc1887fa3a5ef713a5") {
     fail(`v4PoolId(fee8) = ${id8} != on-chain 0x395f91b3...`);
   }
-  if (id8 === id100) fail("fee 8 and fee 100 hashed to the same poolId");
+  if (id7 !== "0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239") {
+    fail(`v4PoolId(fee7) = ${id7} != on-chain 0x0fb0e40c...`);
+  }
+  if (id8 === id7) fail("fee 8 and fee 7 hashed to the same poolId");
 
   // Real on-chain swap on the fee-8 pool (tx 0xd60d80df): USDT in / USDC out.
   const i8 = await detectImpactFromLogs([swapLog(id8, -35013321757n, 35045872323n)], edges);
@@ -57,13 +60,13 @@ async function main() {
     if (v8[0].poolId !== id8) fail(`impact.poolId ${v8[0].poolId} != id8 (identity lost)`);
   }
 
-  // Identity: two same-pair pools (fee 8 + fee 100) in one log batch must yield
+  // Identity: two same-pair pools (fee 8 + fee 7) in one log batch must yield
   // TWO distinct impacts with the right poolId — no collapse.
   const both = await detectImpactFromLogs(
-    [swapLog(id8, -1000n, 2000n), swapLog(id100, 3000n, -4000n)], edges);
+    [swapLog(id8, -1000n, 2000n), swapLog(id7, 3000n, -4000n)], edges);
   const vb = both.filter((i) => i.matchedAdapterId === "univ4-unlock");
   if (vb.length !== 2) fail(`two pools: expected 2 distinct impacts, got ${vb.length} (dedupe collapsed?)`);
-  if (!vb.some((i) => i.poolId === id8) || !vb.some((i) => i.poolId === id100)) fail("missing one of the two poolIds");
+  if (!vb.some((i) => i.poolId === id8) || !vb.some((i) => i.poolId === id7)) fail("missing one of the two poolIds");
 
   // Negative control: no v4 edge => no v4 impact.
   const none = await detectImpactFromLogs([swapLog(id8, -1n, 2n)], []);
