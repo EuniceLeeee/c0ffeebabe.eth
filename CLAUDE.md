@@ -582,6 +582,17 @@ discovery is needed.
     per-run / daily **CU caps**, and any **destructive / irreversible** action.
     (Non-author evaluation still holds — Codex reviews Claude's code — but that is a
     gate, not a human-decision block.)
+    - **ENFORCED, not just documented.** At the start of a multi-round / away workflow, `touch
+      /tmp/mev-workflow-active` (remove it when the workflow ends or the user resumes driving
+      interactively). While that marker exists, a PreToolUse hook
+      (`scripts/hooks/guard-workflow-noask.py`, wired in `.claude/settings.json`) **BLOCKS
+      `AskUserQuestion`** — UNLESS the question names a real stop condition (go-live/broadcast,
+      CU-cap, destructive/irreversible, private-key), which it lets through. So a run-scoped /
+      architecture / scope question can't be asked mid-workflow: decide it, PROCEED, record it.
+      This includes **auto-firing the rule-13 architecture review** when its trigger hits — do not
+      ask "should I run the architecture review?"; just run it and record the verdict. A single
+      user prompt like "跑 N 轮 hermes" is the whole instruction; everything downstream (deploy,
+      windows, blocker-discovery, arch-review firing, fixes, gates) is self-driven.
 
 ### Boundary (CLI-orchestrated by Claude)
 
