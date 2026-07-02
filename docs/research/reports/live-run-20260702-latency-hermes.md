@@ -173,3 +173,29 @@ npm run searcher:planner
 | go-live economics: bribeBps=10000 keeps nothing, `gas_estimate:"0"` in sims, `SEARCHER_MIN_NET_ETH=0` | — | pre-broadcast cycle | open (hard prerequisite before any production flip) |
 | node `/var/log/mev-live.log` ~382MB no rotation | Claude | deploy step | open (add logrotate when touching the node) |
 | `defaultTokenGraph()` hardcoded DAI/USDT v4 fallback (test-only) | — | backlog | open (minor, Codex caveat) |
+
+## Deploy + Measurement (node `mev-searcher.service`, 2026-07-02 ~03:02 UTC)
+
+- **Deployed** `main` `503c2a7` (incl. TTL fix `0c3d9ab`) to node. Node was 56 commits
+  behind (`1be834c`, pre-v4-epic) with 39 dirty files = the v4-epic/tooling work
+  hand-rsynced but never committed node-side; proven superseded by main
+  (`pinned-warm-pools.json` local == origin/main, 0 diff). `git reset --hard origin/main`
+  after a recoverable tarball backup (`/opt/MEV-deploy-backup-*.tar.gz` + `.env.bak-*`).
+  `runtime-graph-pools.json` (untracked runtime snapshot) preserved.
+- **Safety incident found + fixed:** `/opt/MEV/.env` had been truncated (02:22, by a
+  concurrent session) to 5 lines, **losing `SEARCHER_DRY_RUN=1` and all `SEARCHER_LIVE_*`/
+  mempool keys**. Since `dryRun = process.env.SEARCHER_DRY_RUN === "1"` (default false →
+  `ProductionBundleRouter`), **any restart would have gone live-submit**. The running
+  process still held the full env; `.env` reconstructed from `/proc/<pid>/environ`
+  (node-side, secrets never printed), `SEARCHER_OPP_TTL_MS=5000`, `SEARCHER_DRY_RUN=1`.
+- **Restart verified (startup banner):** `mode=dry-run` · `oppTtlMs=5000 planBudgetMs=300
+  oppMinSliceMs=500 maxCandidatesPerOpp=unlimited` · backend=revm · mempool=auto · pool
+  registry 2801. No crash loop.
+- **Before/after boundary:** events file line **3303**; after = new-code window.
+  **Old-code baseline (4000 events):** 1748 `opportunity_seen` · **286
+  `expired-before-solver`** · 1134 `plan/no_candidate_plans` · 99 `no-profitable-quote` ·
+  14 `simulation_result` · 14 `bundle_submitted`.
+- **Gate (pending window accumulation ~20–30min):** compare NEW window — expect
+  `expired-before-solver` *rate* per opp down and/or `simulation_result`/solverEntered up;
+  a new `plan/plan_budget_exhausted` bucket may appear (honest reclassification, not a
+  regression). Remember: raw expired count can rise (now counted honestly, was invisible).
