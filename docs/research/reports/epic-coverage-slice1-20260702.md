@@ -44,10 +44,19 @@ return venues.** NOT latency, NOT economics (this slice), NOT unlimited-2995.
    verify it now prints **nonzero**.
 5. **Runtime dump** — `main.ts:478 dumpRuntimeGraphPools(allPools)` already dumps; verify the promoted
    pools appear in `runtime-graph-pools.json` after the fix (no code change needed).
+6. **PERSIST across deploys (analysis D — CONFIRMED, the "why it keeps reverting").** `deploy-node.sh`
+   rebuilds `.env` from a `KEYS` allowlist recovered off the running process (line 22-24); that allowlist
+   **omits `SEARCHER_POOL_UNIVERSE_TOP_N`**, so the v3fork cycle's `=1500` was silently dropped on the
+   next deploy → back to 0. **Add `SEARCHER_POOL_UNIVERSE_TOP_N` + `SEARCHER_POOL_UNIVERSE_MIN_SCORE` +
+   `SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE` to the `KEYS` allowlist** (else my new forced-include env is
+   dropped the same way). The code-default fix (change 1) is the robust primary; the allowlist keeps
+   `.env` tuning from silently reverting. **Post-deploy banner assertion:** deploy-node.sh should FAIL
+   loud if the restarted banner shows `universe=0` (same spirit as the DRY_RUN guard).
 
 ### allowed files
 - `listener/src/searcher/main.ts` (config line 330 + the startup-log line 472-477 only)
 - `listener/src/searcher/pool-universe.ts` (line 64 + the `forceInclude` option/logic)
+- `scripts/deploy-node.sh` (KEYS allowlist + the universe!=0 banner assertion)
 - `listener/src/searcher/test/pool-universe.ts` (**new** unit test) — or the nearest existing test file
 - the real-sample replay fixture files for the `production_gap` gate (see AC-3)
 ### forbidden
@@ -69,9 +78,14 @@ score); (b) `forceInclude` promotes a specified below-cut address; (c) explicit 
 (anti-fabrication guard). This is the `coverage_planning_fixed` bar — necessary, **not sufficient**.
 
 **AC-3 — one REAL competitor +EV sample, full-pipeline replay (`production_gap_fixed` bar):**
-- Sample: **R1 `0x4cece1af`** (block 25442793; verified +0.050 WETH; return pools `0x2beb35e7` /
-  `0xe9930ea6` confirmed in active-pools.json) — or another walk sample whose missing return venue is
-  in active-pools.json. **Record the fixture SOON (reth --full prunes ~10k blocks ≈ 33h).**
+- **Primary sample (analysis D — cleaner, died at no_candidate not latency):** block **25443539**,
+  WETH/`0xff208177` via venues `0x15e86e6f` + `0x08650bb9` (both in active-pools top-1500, pruned from
+  the runtime graph). Strongest: **`0x68e77ef1` (+0.0668 WETH ≈ $200)** dropped
+  `only_immediate_same_pool_reverse` (source in-graph, closing venue missing). Pinned planner fixture:
+  WETH/`0xff208177` `0 plans → plans>0`; then revm +EV-sim flip.
+- Alt: R1 `0x4cece1af` (block 25442793; +0.050 WETH; return pools `0x2beb35e7`/`0xe9930ea6`) — but its
+  live drop was latency, so 25443539 is the cleaner coverage gate. **Record the fixture SOON (reth
+  --full prunes ~10k blocks ≈ 33h).**
 - **baseline** (graph WITHOUT the promoted return venues): `no_candidate_plans` /
   `only_immediate_same_pool_reverse`.
 - **after** (universe fix promotes them): **plans>0 AND ≥1 candidate enters the solver AND (target)
@@ -88,10 +102,26 @@ score); (b) `forceInclude` promotes a specified below-cut address; (c) explicit 
 - Slice-1 is **not accepted** until AC-3 returns either `production_gap_fixed` or an explicit
   `coverage_planning_fixed` + stop-reason.
 
+## Sufficiency caveat + parallel economics track (analysis D — 4th independent confirmation)
+- **topN=1500 was ALREADY run (v3fork window) and STILL closed simSuccess=0.** So slice-1 (coverage) is
+  NECESSARY + highest-leverage but **not proven sufficient**; economics (`bribeBps=10000`, `minNetEth=0`)
+  is the likely next wall once coverage lands.
+- **This makes AC-3's `coverage_planning_fixed` vs `production_gap_fixed` split load-bearing:** if slice-1
+  flips the planner (plans>0, solver-entry) but the sim is not +EV, that is NOT a failure — it has
+  LOCALIZED the wall to economics with a one-line config change, the progress three flat rounds couldn't make.
+- **Run Codex conclusion B (independent EV-gate re-derivation) IN PARALLEL** with slice-1 impl — don't
+  serialize; the economics slice should be ready the moment coverage lands.
+- **Open reconciliation (non-blocking):** D says `0x476548cc`=+0.0156 WETH (real arb); A/C said −0.478 WETH
+  (inventory move). Likely A/C measured the gross from+to entity flow, D isolated the arb leg. Re-trace to
+  align before pinning `0x476548cc`; the $200 `0x68e77ef1` is the primary gate regardless.
+
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
 | topN=0 universe never loads (root cause) | Pass A | slice-1 | open |
-| real-sample production_gap proof (solver-entry + +EV sim) | Pass B | slice-1 | open |
+| **deploy-node.sh KEYS allowlist omits topN → fix keeps reverting (D, confirmed)** | Pass A | slice-1 | open |
+| real-sample production_gap proof (solver-entry + +EV sim, block 25443539) | Pass B | slice-1 | open |
+| economics likely next wall (topN=1500 still simSuccess=0) — Codex-B re-derivation in parallel | Codex-B | slice-1 | open |
+| 0x476548cc profitability: D(+0.0156) vs A/C(−0.478) — re-trace to align | orchestrator | slice-1 | open |
 | latency runner-up | after slice-1 | R-after | deferred (verdict) |
 | valueInEth H3b + EV-gate-off | pre-broadcast | go-live | deferred (verdict) |
