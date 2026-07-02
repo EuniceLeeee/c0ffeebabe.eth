@@ -556,8 +556,13 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
   },
   {
     // run 9a20d602 block 25444461 tx 0x5610530b...d4511b7: TOK_1151/USDT pool A absent from routing graph.
+    // INVALIDATED as R4 "real value" evidence (2026-07-03 manual trace, arch-review-2-verdict.md step 1c):
+    // full Transfer-log trace of 0x5610530b...d4511b7 shows EOA 0x219fc40c...ec2781 spent 200 USDC and
+    // received TOK_1151 only (no return leg to USDC) -- a one-way multi-route aggregator SWAP, not a
+    // closed-loop arbitrage. Kept only as a coverage-mechanism (gap->flip) regression test; do NOT cite
+    // as "competitor closed a real-value loop" evidence for the coverage epic decision.
     id: "r4-1151-usdt-pair-gap",
-    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7; TOK_1151/USDT impact pool A absent from routing graph",
+    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7; TOK_1151/USDT impact pool A absent from routing graph (mechanism-only fixture, NOT verified arb value)",
     edges: [swap(TOK_1151, REAL_WETH, P2), swap(REAL_WETH, TOK_1151, P3)],
     impact: { tokenIn: REAL_USDT, tokenOut: TOK_1151, pool: POOL_1151_USDT_A, start: REAL_USDT },
     expectPlans: 0,
@@ -565,8 +570,9 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
   },
   {
     // run 9a20d602 blocks 25444461/25444621 txs 0x5610530b...d4511b7 + 0x26c6a22a...7523987: repeated TOK_1151/USDT lane covered.
+    // Same invalidation as r4-1151-usdt-pair-gap above -- mechanism-only, not a verified real-value case.
     id: "r4-1151-usdt-pair-flip",
-    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7 plus block 25444621 tx 0x26c6a22ade569e525225e6476849185889ca5665eb86e2c880b3855eb7523987; TOK_1151/USDT pools A+B covered",
+    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7 plus block 25444621 tx 0x26c6a22ade569e525225e6476849185889ca5665eb86e2c880b3855eb7523987; TOK_1151/USDT pools A+B covered (mechanism-only fixture, NOT verified arb value)",
     edges: [
       swap(REAL_USDT, TOK_1151, POOL_1151_USDT_A),
       swap(TOK_1151, REAL_USDT, POOL_1151_USDT_A),
