@@ -127,19 +127,47 @@ npm run searcher:planner
 - No behavior change when `deadlineAtMs` is not supplied.
 - Diff stays inside the 4 allowed files.
 
-## Codex Implementation Pass (orchestrator fills after judging output file + diff)
+## Codex Implementation Pass (orchestrator judged output file + diff)
 
-- status: _pending_
-- authored_by: codex gpt-5.5 xhigh
-- changed_files: _pending_
-- verification: _pending_
-- diff_scope_check: _pending_
+- status: **landed** (`0c3d9ab`)
+- authored_by: codex gpt-5.5 xhigh (torn down mid-cleanup — no `-o` file); **completed +
+  non-author reviewed + one fix by Claude**. Codex's edits to the 4 target files were
+  complete and green despite the teardown (its last message was a cosmetic-indent cleanup).
+- changed_files: `planner/planner.ts` (+deadline param, `plan_budget_exhausted` class,
+  timeout checks at template/path/rotation loops, diagnostic override) ·
+  `planner/token-graph.ts` (`PathOpts.deadlineAtMs` + DFS clock check every 64 expansions) ·
+  `main.ts` (per-opp slice, plan deadline, visible expired-before-solver for starved opps,
+  slice-vs-hint distinction) · `test/planner.ts` (deadline case).
+- verification: `npm run build` tsc clean; `npm run searcher:planner` → **11/11 + fixtures
+  2/2**, incl. new `plan_budget_exhausted` case; pre-existing fixtures unchanged.
+- diff_scope_check: strictly inside the 4 allowed files. (CLAUDE.md +27 in the tree was a
+  concurrent session's edit — NOT this cycle; committed separately by that session, kept.)
+- **Claude non-author finding (fixed in `0c3d9ab`):** candidate-cap branch double-emitted a
+  `pipeline_dropped` (its own `candidate-cap` + the post-loop terminal drop) → would inflate
+  the very loss-attribution metric this cycle gates on. Added `skipPostSolverDrop = true`
+  before the cap `break`. Default-off (`maxCandidatesPerOpp=0`) so inert today, correct when
+  enabled.
+
+## Final Approval (rule 12 — latency fix, replay-EXEMPT → metrics gate at deploy)
+
+- verdict: **implemented** (code + gates green). Not yet `fixed` in the extraction sense —
+  a latency change is validated by before/after METRICS on a node dry-run window, not a
+  replay flip. That is the deploy step below.
+- searcher_behavior_change: **yes** — opps that previously starved before the solver now (a)
+  get a fair time slice + a bounded planner, (b) yield to the next opp instead of killing the
+  whole hint, (c) are visibly accounted when starved.
+- **metrics gate (deploy step) — MEASURE `solverEntered`, NOT raw `expired-before-solver`.**
+  Counting semantics changed: previously starved opps died invisibly (undercount); now every
+  starved opp emits + increments the counter, so raw expired can *rise* while the pipeline
+  improves. The honest before/after signals: **`solverEntered` up**, per-hint solver-reached
+  ratio up, and no single opp consuming the whole hint TTL. Revert `SEARCHER_OPP_TTL_MS`
+  8000→5000 at deploy (band-aid measured ineffective).
 
 ## Findings Ledger (carried)
 
 | finding | owner | carry_to_round | status |
 |---|---|---|---|
-| shared-TTL serial starvation (this cycle) | Codex impl / Claude gate | this cycle | in progress |
+| shared-TTL serial starvation (this cycle) | Codex impl / Claude gate | this cycle | **implemented `0c3d9ab`** — metrics gate pending on node deploy |
 | **native-ETH v4 execution — SCOPE CORRECTED 2026-07-02:** BotVM.sol already has opcode `0x01` CALL-with-value (since first commit `f964ae5`) + `0x04` WETH_UNWRAP + payable `receive()`; TS `encodeCallValue`/`weth-withdraw` exist. **NO contract change / redeploy.** Real gap is TS-only and starts upstream: detection excludes ZeroAddress (`pool-impact.ts:511`), graph drops it (`token-graph.ts:287`). Fix = 0x0↔WETH native-flag mapping + plan-builder unwrap/settle-value/wrap legs. | next cycle (cycle 2) | cycle 2 | open — de-escalated from "user-present contract change" to normal TS slice; broadcast still human-gated |
 | TTL=8000 band-aid | Claude | this cycle (deploy step) | revert to 5000 — measured ineffective |
 | go-live economics: bribeBps=10000 keeps nothing, `gas_estimate:"0"` in sims, `SEARCHER_MIN_NET_ETH=0` | — | pre-broadcast cycle | open (hard prerequisite before any production flip) |
