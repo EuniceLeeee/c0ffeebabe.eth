@@ -321,7 +321,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     oppMinSliceMs: Number(process.env.SEARCHER_OPP_MIN_SLICE_MS ?? "500"),
     gssMaxTries: Number(process.env.SEARCHER_GSS_MAX_TRIES ?? "12"),
     finalSimTopN: Number(process.env.SEARCHER_FINAL_SIM_TOP_N ?? "3"),
-    maxCandidatesPerOpp: Number(process.env.SEARCHER_MAX_CANDIDATES_PER_OPP ?? "0"),
+    maxCandidatesPerOpp: Number(process.env.SEARCHER_MAX_CANDIDATES_PER_OPP ?? "6"),
     quoteSafetyBps,
     quoteProfitFloorBps: BigInt(
       process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (dryRun ? "20" : "0"),
