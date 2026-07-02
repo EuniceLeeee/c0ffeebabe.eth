@@ -524,7 +524,15 @@ discovery is needed.
     - **Architecture-review trigger (the production-needle forcing function — broader than the
       gap_class trigger above):** **≥2 consecutive rounds close with NO growth in a genuine +EV
       `simSuccess`** → the next step is a **mandatory architecture-level review in an INDEPENDENT
-      fresh context** (NOT another point-fix round). Step back from the per-window loop and LOCALIZE
+      fresh context** (NOT another point-fix round), **run DUAL-BLIND exactly like the per-round loop
+      (Rounds step 4): a fresh fable context produces conclusion A + Codex independently produces
+      conclusion B, BOTH from the same DATA package (the regenerated handoff — DATA + HYPOTHESES, never
+      the other's conclusion), BLIND to each other, then the orchestrator compares A vs B** (converge =
+      high-confidence lever; differ = the disagreement is the signal — dig). Codex has no chain access,
+      so hand it the pinned competitor takes as DATA; its unique code-side job is re-deriving the
+      economics / sim-fidelity numbers (EV gate, `defaultGasUsed`, profit floor, `valueInEth`) from
+      `file:line`. This is NOT one reviewer rubber-stamping the other — same anti-nodding as step 4.
+      Step back from the per-window loop and LOCALIZE
       the structural distance-to-production lever — `funnel | coverage | flow-admission |
       no-replicable-atomic-EV` — via a per-competitor-profitable-bundle counterfactual walk + a
       longer window. Output → Findings Ledger as `decision: epic` OR an explicit funnel-fix + its

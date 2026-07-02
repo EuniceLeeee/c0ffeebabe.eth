@@ -56,3 +56,16 @@ Regenerate `HANDOFF-architecture-review.md` from the CURRENT run data every time
   returns once, with no mid-run stop-point. To keep "review the plan first": **phase 1** — spawn asking
   ONLY for the analysis plan (no execution); **phase 2** — after you approve, `SendMessage` the SAME
   agent (context preserved) "execute". Do NOT rely on a "show me the plan first" line inside the prompt.
+
+## D. Dual-blind at the architecture level (CLAUDE.md rule 13 — SAME anti-nodding as Rounds step 4)
+The architecture review is dual-blind, not a single reviewer:
+- **Conclusion A = the fable sub-agent** (Agent tool, model:fable) — chain-side + code, does the traces.
+- **Conclusion B = Codex, independently** — dispatch it (rule-11 protocol, `-s read-only -a never exec`,
+  `caffeinate -i`, `-o` output file) pointed at the SAME handoff as its DATA package. Codex has no chain
+  access, so hand it the pinned competitor takes as DATA (never A, never picked facts); its unique job is
+  re-deriving the economics / sim-fidelity numbers from `file:line` (EV gate, `defaultGasUsed`, profit
+  floor, `valueInEth`, coverage/W3 inventory).
+- Run A and B **in PARALLEL** (Codex reads only the on-disk handoff → structurally cannot see A's live
+  output) → then the orchestrator **compares A vs B**: converge = high-confidence lever; differ = dig the
+  disagreement. Neither reviewer sees the other's conclusion. Only the orchestrator's post-compare
+  finalization drives the Findings Ledger `decision:`.
