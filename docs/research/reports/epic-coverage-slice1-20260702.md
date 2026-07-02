@@ -160,13 +160,28 @@ score); (b) `forceInclude` promotes a specified below-cut address; (c) explicit 
   −0.478 (tx/entity incl. Amp inventory) — use the arb-leg figure; case 2 `0x5aba954d` (+0.00874, independent
   bot, same lane) confirms it. Pass B's fork trace re-verifies before the +EV ceiling is trusted.
 
+## Codex-B economics conclusion (slice-3 spec — read-only, DONE)
+Independent re-derivation confirms economics does NOT cause `simSuccess=0` (EV gate OFF in dry-run;
+`simSuccess` upstream at main.ts:1516) — but it IS the hard pre-broadcast wall once EV gate is on:
+- `bribeBps=10000` → `bidEth = expectedProfitEth` → **`netEth = −gasCostEth`** (every +gas bundle fails the EV gate if enabled).
+- **Anvil sim returns `gasUsed=0` unconditionally (`botvm-simulator.ts:51-56`)** → the EV gate ALWAYS uses the
+  12M `defaultGasUsed` fallback ×2 buffer = 24M gas ≈ 0.024 ETH @1gwei, killing the 0.01557 lane. **A sim-fidelity bug that compounds economics.**
+- `valueInEth` H3b: the WETH/`0xff208177` lane profits in WETH → valued fine; exotic-token closed loops = latent pre-broadcast.
+- Quote floors do NOT reject the ~0.01557 WETH lane in dry-run.
+
+**Minimal slice-3 (pre-broadcast):** `SEARCHER_EV_GATE=1` + **`SEARCHER_BRIBE_BPS<10000`** (binding knob #1) +
+**realistic gas** (fix sim `gasUsed=0` / a measured `SEARCHER_BACKRUN_GAS_USED`, binding knob #2) + `MIN_NET_ETH=0`.
+Verified disproof: `bribeBps=5000`, `gas=2M`, `1 gwei` → `netEth = +0.002228 ETH > 0`.
+
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
-| topN=0 universe never loads (root cause) | Pass A | slice-1 | open |
-| **deploy-node.sh KEYS allowlist omits topN → fix keeps reverting (D, confirmed)** | Pass A | slice-1 | open |
-| real-sample production_gap proof (solver-entry + +EV sim, block 25443539) | Pass B | slice-1 | open |
-| economics likely next wall (topN=1500 still simSuccess=0) — Codex-B re-derivation in parallel | Codex-B | slice-1 | open |
-| 0x476548cc profitability: D(+0.0156) vs A/C(−0.478) — re-trace to align | orchestrator | slice-1 | open |
+| topN=0 universe never loads (root cause) | Pass A | slice-1 | **DONE** (deployed: universe 0→1500, graph 2928→4295) |
+| deploy-node.sh drops SEARCHER_* incl EVENTS_PATH → fix keeps reverting | Pass A | slice-1 | **DONE** (SEARCHER_* glob recovery; EVENTS_PATH verified preserved live) |
+| deploy banner assertion used journalctl (service logs to file) → false-abort | Pass A | slice-1 | **DONE** (claude bug-fix: log-file + byte-offset; deploy passed universe=1500) |
+| **Anvil sim returns gasUsed=0 → EV gate always uses 12M fallback (sim-fidelity)** | slice-3 | slice-3 | open (Codex-B found) |
+| real-sample production_gap proof (Layer B fork replay) | Pass B | deferred | deferred → Round 1 live is the production_gap test |
+| economics wall (bribeBps=10000 → netEth=−gas) — minimal slice-3 spec ready | slice-3 | go-live | open (Codex-B, spec above) |
+| 0x476548cc profitability: D(+0.0156) vs A/C(−0.478) — re-trace to align | orchestrator | slice-1 | open (non-blocking; case-2 confirms lane) |
 | latency runner-up | after slice-1 | R-after | deferred (verdict) |
 | valueInEth H3b + EV-gate-off | pre-broadcast | go-live | deferred (verdict) |
