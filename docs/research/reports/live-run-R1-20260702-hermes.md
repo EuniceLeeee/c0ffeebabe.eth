@@ -58,4 +58,35 @@
   after we finish quoting. Latency-class blocker (rule 12 → metrics gate, + a replay fixture that
   flips the drop bucket).
 
-## Codex Blocker-Review → Final Blocker → Brief → Implement → Gate — pending
+## Codex Blocker-Review (biwd691eq) — CONFIRMED + refined
+- Diagnosis correct: material fixable loss = bluechip v3 solver drops (no_candidate is longtail).
+- Mechanism pinned in code: local v3 warms only **±8 bitmap words** (`pool-state-cache.ts:41`,
+  `pool-state-updater.ts:12`, both `SEARCHER_V3_WORD_RADIUS ?? 8`); local v3 math walks ticks but
+  **throws on an unwarmed word** (`v3-math.ts:251/308`) → `quoter.ts:389/398` silently falls
+  through to QuoterV2 **eth_call** (revm: 3M-gas call, client timeout 60s ≫ opp TTL 5s → blows TTL).
+- **First lever = robust local-v3 word coverage** (candidate ordering/budget = 2nd guardrail).
+- Traps: v3 math is already cross-tick (issue is warmed-word COUNT); two radius constants (both
+  env-aligned); main fallback is in `quoter.ts`, not `AmountQuoteSource.quote`.
+
+## Final Blocker (Claude) + Implementation Brief — drives code
+- **Blocker (final):** bluechip large-impact v3 opps quote via local math only within ±8 warmed
+  words; a big victim impact crosses beyond → throw → QuoterV2/eth_call fallback → quote-timeout /
+  expired-before-solver, and competitors take our exact victim. **Latency-class (rule 12: fixture
+  flip that removes the fallback + metrics at next round's dry-run).**
+- **searcher_behavior_change:** yes (bluechip v3 quotes complete locally → finish in TTL).
+- **Fix goal:** a bluechip large-impact v3 quote (block 25442793, pool USDC/WETH-100
+  `0xE0554a47`, the real victim `0xd14dd150` impact) must complete via LOCAL v3 math WITHOUT
+  falling back to QuoterV2 — bounded warm-up cost (don't 8× every pool blindly).
+- **Mechanism (Codex's call, must pass the gate):** either (a) raise the warmed-word radius
+  (the `SEARCHER_V3_WORD_RADIUS` default) to cover typical bluechip impact, and/or (b) make the
+  warm ADAPTIVE — when the swap needs an unwarmed word, warm it on demand (turn the `v3-math`
+  bare throw into a "need word W" signal the cache fills) instead of dropping to eth_call. Keep
+  the two radius constants aligned (they already share the env).
+- **Allowed files:** `pool-state-cache.ts`, `pool-state-updater.ts`, `v3-math.ts`, and a NEW
+  deterministic fixture test. Forbidden: quoter.ts fallback removal (keep it as a safety net),
+  main.ts, planner, adapters.
+- **GATE (deterministic repair-replay flip):** a fixture at block 25442793 / pool
+  `0xE0554a47` / the exact victim impact amount — **baseline (radius 8) FALLS BACK; after the fix
+  the local v3 quote COMPLETES (no fallback) and matches QuoterV2** (bit-exact or ≤1 wei). Record
+  state from local reth (zero CU). Candidate ordering/budget deferred to R2/guardrail.
+- **verdict:** pending Codex impl + gate.
