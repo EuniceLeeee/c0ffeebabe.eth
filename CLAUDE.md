@@ -330,11 +330,21 @@ discovery is needed.
                    • Each agent works from PRIMARY sources independently (raw script JSON +
                      own on-chain trace), never the other's curated facts.
                  → classify what WE missed: pool gap / path gap / unanticipated gap.
-4. BLOCKER       A FRESH fable-5 sub-agent (Agent tool, model:fable — new context every round,
-   (agree first)  avoids long-session degradation) does the competitor cross-ref + NAMES the core
-                  blocker, returns it + evidence  →  Codex REVIEWS the blocker (agree on WHAT is
-                  wrong before planning the fix)  →  Claude FINALIZES the blocker + writes the
-                  Implementation Brief. Only the Brief / Final Decision drives code.
+4. BLOCKER       **Two BLIND-INDEPENDENT analyses of the same raw material, then compare** — NOT
+   (dual-blind)   "analyze then review the conclusion" (a correlated hand-off; the rule-9 nodding risk):
+                  • A FRESH fable-5 sub-agent (Agent tool, model:fable — new context every round,
+                    avoids long-session degradation; has BOTH chain + code access) does the FULL
+                    independent analysis (competitor cross-ref + code root-cause) → **conclusion A**
+                    (blocker + root cause + evidence). Claude KEEPS A hidden from Codex.
+                  • Claude hands Codex ONLY the RAW MATERIAL as DATA — mechanical results (script
+                    outputs/counts) + manual-analysis FACTS (competitor takes: victim/bot/block/pool)
+                    + funnel numbers — **never fable-5's conclusion or Claude's picked facts**. Codex
+                    (code access; chain facts as data) independently reaches **conclusion B**, BLIND to A.
+                  • Claude COMPARES A vs B: agree → high-confidence blocker; differ → dig/reconcile
+                    (the disagreement IS the signal). Then Claude FINALIZES the blocker + writes the
+                    Implementation Brief. Only the Brief / Final Decision drives code.
+                  Blind independence holds regardless of which model is stronger — two blind analyses
+                  that agree beat one reviewing the other, and neither can rubber-stamp the other.
 5. IMPLEMENT     Codex writes  →  Claude review ↔ Codex review/fix  (≤ 3 passes, then Claude
                  Final Approval or an explicit stop).
 6. GATE          • deterministic blocker (path/pool/decoder/planner/adapter/graph) → a local
