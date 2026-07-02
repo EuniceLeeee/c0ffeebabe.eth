@@ -88,12 +88,19 @@ NOT `pool-impact.ts:511` (that's a v2/v3 token0/token1 query) nor `token-graph.t
   produce it; fork test run from an isolated `/tmp/mev-2bii` worktree (node_modules + out
   symlinked) so the live dry-run searcher was never disturbed.
 
-### 2c — REMAINING to actually catch it live (coverage)
-- native-ETH v4 detect→route→quote→execute is now COMPLETE + validated, but **inert in prod
-  until a native pool is pinned**. Next: add ETH/USDC (fee-100, poolId `0x00b9edc1…`, verified
-  routable+executable above) and top ETH/USDT v4 pools to `pinned-warm-pools.json`. Config-only;
-  then a dry-run window should show native-ETH v4 `opportunity_seen` + reaching the solver.
-  Broadcast stays human-gated.
+### 2c — DONE `65003da` + DEPLOYED (native path now live in dry-run)
+- Pinned native ETH/USDC fee-100 v4 pool (poolId `0x00b9edc1…`, fork-verified routable +
+  executable). `fixedTokenIn=0x0` (real currency, passes validateV4Pair); warmDirections use
+  WETH (aliased graph token). `v4PoolId(key)==poolId` verified; loads clean; planner 12/12.
+- **Deployed to node** (`git reset --hard origin/main` → `65003da`, dry-run guard verified
+  DRY_RUN=1 + TTL=5000 before restart, backup taken). Restart banner: **mode=dry-run**,
+  **12 pinned** (was 11 → native pool loaded), oppTtlMs=5000/planBudgetMs=300, pool registry
+  4140, no crash, no native/WETH rejection. PID 63246.
+- **Remaining to confirm live catch:** a dry-run window must show a native-ETH v4
+  `opportunity_seen` (depends on a victim trading the ETH/USDC fee-100 pool appearing in the
+  mempool). `simSuccess=0` still = coverage breadth + economics (D), not the native path.
+- **Expand (follow-up):** verify + pin ETH/USDC fee-500 (most liquid) + ETH/USDT top pools via
+  the same zero-CU fork-quote check to widen the native slice. Broadcast stays human-gated.
 
 ### (superseded) 2b-ii original plan — wiring + fork test
 - **quoter.ts direction fix (2a fallout):** after 2a aliasing, `v4ZeroForOne` /
