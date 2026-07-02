@@ -426,17 +426,24 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
 // public on-chain evidence. The planner is address-agnostic, so these behave exactly
 // like the synthetic unit tests above — the value is the provenance link + flip target.
 const REAL_WETH = ADDR.WETH;
+const REAL_USDC = ADDR.USDC;
+const REAL_USDT = ADDR.USDT;
 const C470 = "0xc470f5E6C17a2977CeabB524D530F19024e5a719";
 const POOL_E2A1437 = "0xE2a1437e2a15CfA591AA1D70e9a75C7598C73fDB";
 const TOK_874376 = "0x27c70cd1946795b66be9d954418546998b546634";
 const POOL_874376 = "0x874376be8231dad99aabf9ef0767b3cc054c60ee";
+const POOL_USDC_WETH_100 = ADDR.UNISWAP_V3_USDC_WETH_100;
+const POOL_USDC_USDT_100 = ADDR.UNISWAP_V3_USDC_USDT_100;
+const POOL_V3FORK_WETH_USDT = "0x05DEF6d34631BbDD35E212cb749CACaebf8C963d";
 
 interface ReplayFixture {
   id: string;
   provenance: string;
   edges: TokenEdge[];
   impact: { tokenIn: string; tokenOut: string; pool: string; start: string };
-  expectPlans: number;      // current expected; flip target in the comment
+  expectPlans?: number;     // current expected; flip target in the comment
+  expectMinPlans?: number;
+  maxHops?: number;
   expectClass?: string;     // no_candidate classification when expectPlans === 0
 }
 
@@ -463,18 +470,59 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
     expectPlans: 0,
     expectClass: "impact_pool_not_in_routing_graph",
   },
+  {
+    // coffeebabe v3-fork triangle at block 25442109. The third leg is deliberately
+    // absent here, pinning the missing-pool gap before the covered fixture below flips.
+    id: "v3fork-triangle-gap",
+    provenance: "coffeebabe 0xa3c18c97…a90d5 block 25442109; leg-3 v3-fork pool absent from graph",
+    edges: [
+      swap(REAL_WETH, REAL_USDC, POOL_USDC_WETH_100),
+      swap(REAL_USDC, REAL_WETH, POOL_USDC_WETH_100),
+      swap(REAL_USDC, REAL_USDT, POOL_USDC_USDT_100),
+      swap(REAL_USDT, REAL_USDC, POOL_USDC_USDT_100),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: REAL_USDC, pool: POOL_USDC_WETH_100, start: REAL_WETH },
+    maxHops: 3,
+    expectPlans: 0,
+    expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    // Same sample with the missing v3-fork WETH/USDT leg covered. This is the
+    // repair-replay flip: the planner must now build at least one closed-loop plan.
+    id: "v3fork-triangle-flip",
+    provenance: "coffeebabe 0xa3c18c97…a90d5 block 25442109; leg-3 v3-fork pool absent from graph FLIPPED: pool covered",
+    edges: [
+      swap(REAL_WETH, REAL_USDC, POOL_USDC_WETH_100),
+      swap(REAL_USDC, REAL_WETH, POOL_USDC_WETH_100),
+      swap(REAL_USDC, REAL_USDT, POOL_USDC_USDT_100),
+      swap(REAL_USDT, REAL_USDC, POOL_USDC_USDT_100),
+      swap(REAL_WETH, REAL_USDT, POOL_V3FORK_WETH_USDT),
+      swap(REAL_USDT, REAL_WETH, POOL_V3FORK_WETH_USDT),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: REAL_USDC, pool: POOL_USDC_WETH_100, start: REAL_WETH },
+    maxHops: 3,
+    expectMinPlans: 1,
+  },
 ];
 
 async function testRealCaseReplayFixtures(): Promise<void> {
   for (const fx of REPLAY_FIXTURES) {
     const planner = new TemplatePlanner();
     planner.setGraph(fx.edges);
-    planner.setMaxHops(2);
+    planner.setMaxHops(fx.maxHops ?? 2);
     const plans = await planner.plan(
       opportunityWithImpact(fx.impact.tokenIn, fx.impact.tokenOut, fx.impact.pool, fx.impact.start),
       [FLASH_SWAP_REPAY],
     );
-    assert(plans.length === fx.expectPlans, `replay ${fx.id}: expected ${fx.expectPlans} plans, got ${plans.length}`);
+    if (fx.expectMinPlans !== undefined) {
+      assert(
+        plans.length >= fx.expectMinPlans,
+        `replay ${fx.id}: expected at least ${fx.expectMinPlans} plans, got ${plans.length}`,
+      );
+    } else {
+      assert(fx.expectPlans !== undefined, `replay ${fx.id}: missing expectPlans`);
+      assert(plans.length === fx.expectPlans, `replay ${fx.id}: expected ${fx.expectPlans} plans, got ${plans.length}`);
+    }
     if (fx.expectPlans === 0 && fx.expectClass) {
       const diag = planner.lastNoCandidateDiagnostic();
       if (!diag) throw new Error(`FAIL: replay ${fx.id}: expected diagnostic`);
