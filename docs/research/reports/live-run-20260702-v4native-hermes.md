@@ -34,7 +34,29 @@ NOT `pool-impact.ts:511` (that's a v2/v3 token0/token1 query) nor `token-graph.t
 - Allowed files 2a: `detector/pool-impact.ts`, `planner/token-graph.ts`,
   `test/planner.ts`. Brief pinned in the orchestrator scratchpad.
 
-## Codex Implementation Pass (2a)
-- status: _dispatched_
-- authored_by: codex gpt-5.5 xhigh
-- gate: `npm run build` + `npm run searcher:planner` (native-v4 flip case + all pre-existing)
+## Codex Implementation Pass (2a) — LANDED `d69a316`
+- status: **fixed** (deterministic flip gated).
+- authored_by: codex gpt-5.5 xhigh; Claude (evaluator) strengthened the gate.
+- changed_files (3, in-scope): `token-graph.ts` (`nativeCurrency0/1` on TokenEdge;
+  univ4 edge aliases 0x0→WETH graph tokens, keeps real PoolKey + validateV4Pair on the
+  real 0x0) · `pool-impact.ts` (uniV4Decoder aliases native ETH→WETH on emitted impact
+  tokens; edge-match stays consistent since graph tokens are also WETH) · `test/planner.ts`.
+- **non-author review finding (Claude, fixed in this commit):** Codex's test hand-built
+  already-aliased edges → it would NOT fail if the alias were reverted (weak gate). Added a
+  **true flip**: a RAW native v4 Swap log → `detectImpactFromLogs` → assert impact
+  `WETH→USDC` + poolId preserved. Reverting the decoder alias now fails the test.
+- verification: `npm run build` tsc clean; planner **12/12 + fixtures 2/2** (native-v4
+  decode-alias flip + routing + all pre-existing). Ran via `node --import tsx` (sandbox
+  blocks the `tsx` CLI IPC pipe; same source).
+- `expected_transition`: native-ETH v4 Swap → (before) impact 0x0 dead-end / 0 plans →
+  (after) impact WETH→USDC, planner routes, `candidate_plans>0`. **verdict: fixed.**
+- token-graph builder aliasing (4 lines) reviewed-correct; not separately unit-tested
+  (needs a backend) — the full native path is exercised by 2b's fork test.
+
+## Slice 2b (next) — execution legs + fork test
+- plan-builder `univ4-unlock` native path: input leg `WETH.withdraw(amountIn)` → v4
+  `settle{value: amountIn}` (encodeCallValue 0x01); output leg `take(0x0)` →
+  `WETH.deposit{value: amountOut}`. Consume `edge.nativeCurrency0/1`.
+- Gate = anvil fork: real ETH/USDC fee-100 v4 swap builds + executes + output matches.
+- Only after 2b passes: pin a native-ETH v4 pool in `pinned-warm-pools.json` (until then
+  2a is inert in prod). Broadcast stays human-gated.
