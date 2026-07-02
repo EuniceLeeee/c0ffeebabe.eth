@@ -242,6 +242,15 @@ on-chain trace on the local reth instead (nonce delta + per-tx pool classificati
 
 **Window:** blocks 25442352–25442520 (~33 min). WATCHLIST `0xc0ffeebabe…29671` (coffeebabe).
 
+Machine-readable Step-1 record (consumed by the close-gate `npm run hermes-gate`):
+```step1
+run_id: 20260702-v3fork
+window_blocks: 25442352..25442520
+watchlist: 0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13
+artifact: docs/research/reports/step1-20260702-v3fork.json
+method: manual-onchain-trace
+```
+
 **Finding — coffeebabe made exactly 1 move from its main EOA in our window** (nonce
 187915→187916): tx `0x5891adf8…977b`, block 25442447 (index 303 = backrun-shaped),
 to executor `0xe08d…d015`, **success**, dust-scale profit (same profile as the origin sample).
@@ -302,4 +311,5 @@ diff_scope_check: |
   (commit 3b20200 lineage, mtime 11:49) — NOT Codex's, NOT committed by this cycle.
 cu_spent: 0 this pass (all local; analysis earlier ~25 light Alchemy calls)
 codex: landed
+hermes_gate: PASS (cd analysis && npm run hermes-gate -- docs/research/reports/live-run-20260702-v3fork-hermes.md → exit 0; step1 block + artifact step1-20260702-v3fork.json validated)
 ```
