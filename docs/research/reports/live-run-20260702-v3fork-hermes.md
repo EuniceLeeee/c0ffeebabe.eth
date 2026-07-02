@@ -120,13 +120,16 @@ defer the state-arb detector to the next cycle as a ledgered behavior change.
 ```
 failing_sample:    coffeebabe triangle, block 25442109 tx 81 (pools E0554a / 3416cf / 05DEF6)
 baseline_failure:  planner cannot close WETH→USDC→USDT→WETH; leg-3 pool absent from graph
-                   (fixture "v3fork-triangle-gap" asserts plans=0 + recorded classification)
-fix_commit:        <fill at close>
+                   (fixture "v3fork-triangle-gap" asserts plans=0, observed classification
+                   only_immediate_same_pool_reverse)
+fix_commit:        58c8ca5
 replay_command:    cd listener && npm run searcher:planner
-replay_result:     <fill at close>
-expected_transition: with 05DEF6 edges present + maxHops 3 → candidate_plans > 0
-                   ("v3fork-triangle-flip" fixture)
-verdict:           <fixed | implemented_not_validated — fill at close>
+replay_result:     planner PASS (12/12) + replay fixtures (4/4); gap fixture 0 plans w/
+                   class=only_immediate_same_pool_reverse; flip fixture ≥1 plan (run by
+                   Claude locally, independent of Codex's pasted output)
+expected_transition: with 05DEF6 edges present + maxHops 3 → candidate_plans > 0  ✓ flipped
+verdict:           fixed (planner-level flip; live competitiveness still gated by the
+                   Slice-2 dry-run before ramping universe TOP_N)
 ```
 
 ## Implementation Brief — Codex pass 1  <!-- Claude authors; Codex implements -->
@@ -191,9 +194,24 @@ files seems required, STOP and report instead of editing.
 ## Codex Implementation Pass  <!-- orchestrator fills after gates -->
 
 ```yaml
-status:
-authored_by:
+status: landed (pass 1, no fix loop needed)
+authored_by: codex (gpt-5.5 xhigh), evaluated by claude (non-author)
 changed_files:
-verification:
-diff_scope_check:
+  - listener/src/searcher/test/planner.ts   (+54/-3: ReplayFixture maxHops/expectMinPlans + 2 fixtures)
+  - listener/searcher/pools/pinned-warm-pools.json  (+19: 0x05DEF6 univ3 entry, warm both directions)
+verification: |
+  ran_gate: cd listener && npm run build && npm run searcher:planner (run by Claude,
+  independent re-execution — Codex's own run hit a sandbox tsx-IPC EPERM and used
+  node --import tsx; both green). Result: planner PASS (12/12) + replay fixtures (4/4).
+  finding: gap fixture classification observed as only_immediate_same_pool_reverse
+  (planner diagnostic line confirms: edges=4/4 raw=1 prunedRoundtrip=1 constraintPass=0);
+  flip fixture builds ≥1 plan at maxHops=3 with the fork pool present. Diff reviewed
+  hunk-by-hunk; expectPlans made optional is guarded by an explicit missing-expectPlans
+  assert, existing fixtures untouched.
+diff_scope_check: |
+  codex events.jsonl patch paths = exactly the two allowed files. Working tree also
+  carries an out-of-scope CLAUDE.md edit from a CONCURRENT session in the same checkout
+  (commit 3b20200 lineage, mtime 11:49) — NOT Codex's, NOT committed by this cycle.
+cu_spent: 0 this pass (all local; analysis earlier ~25 light Alchemy calls)
+codex: landed
 ```
