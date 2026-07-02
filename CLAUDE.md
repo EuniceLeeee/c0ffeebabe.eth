@@ -515,6 +515,17 @@ discovery is needed.
         this trigger is the observed failure mode: coverage gaps get **parked as
         "longtail/separate" round after round and never escalated** — this converts that
         recurring signal into a forced epic instead of another parked finding.
+    - **Architecture-review trigger (the production-needle forcing function — broader than the
+      gap_class trigger above):** **≥2 consecutive rounds close with NO growth in a genuine +EV
+      `simSuccess`** → the next step is a **mandatory architecture-level review in an INDEPENDENT
+      fresh context** (NOT another point-fix round). Step back from the per-window loop and LOCALIZE
+      the structural distance-to-production lever — `funnel | coverage | flow-admission |
+      no-replicable-atomic-EV` — via a per-competitor-profitable-bundle counterfactual walk + a
+      longer window. Output → Findings Ledger as `decision: epic` OR an explicit funnel-fix + its
+      rule-12 gate; point-fixing on that theme PAUSES until it lands. Brief:
+      `docs/research/reports/HANDOFF-architecture-review.md`. (This catches the failure the
+      gap_class trigger can't: 3 clean point-fixes that each moved nothing — R1/R2/R3 flat
+      simSuccess — the loop busy but the production needle unmoved.)
     - **Impact counterweight:** CLAUDE.md's culture is skeptic/verify/gate = good for
       correctness, biased against bold searcher changes. The loop's job is not clean
       commits; it is more MEV caught. A round that shipped a clean analysis patch but

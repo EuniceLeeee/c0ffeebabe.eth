@@ -72,9 +72,18 @@ artifact of a too-small 30-min sample / a flow-admission problem the window can'
   we saw and dropped — e.g. R1 `0x4cece1af…` netted +0.0502 WETH following `0xd14dd150…` (a public
   Uni V3 SwapRouter swap) on USDC/WETH-100, a pool we index. So real, capturable value exists on
   swaps we DO see — we just can't make it +EV.
-- A competitor-coverage KPI (out-of-graph arb legs, A/B closable-vs-single-venue-noise) is being
-  built into `hermes-gate` in a parallel session — check `analysis/src/cli/hermes-gate.ts` +
-  `docs/research/reports/step1-*.json` for whatever numbers exist.
+- A competitor-coverage KPI (out-of-graph arb legs, A/B closable-vs-single-venue-noise) is built
+  into `hermes-gate` (`analysis/src/cli/hermes-gate.ts` + `docs/research/reports/step1-*.json`).
+- **W3 IS ALREADY LANDED (`a3c8cb2`): learn→close auto-enqueue** — closable out-of-graph pools
+  found by Step-1 flow AUTOMATICALLY into the pool universe (`build-active-pool-universe.ts`:
+  `isClosablePair` + `probePoolShape` + `consumeDiscoveryQueue`; `discovery-queue.json` seeded with
+  6 v3-fork closable pools). **If your conclusion is `coverage`, you must FIRST inventory what W3
+  already covers vs not — it is a TRAILING mechanism (adds a pool only AFTER a competitor
+  demonstrates it). Your epic slices must NOT reinvent W3.** The real architectural question for a
+  coverage verdict is: **is this trailing "add-after-competitor-shows-us" mechanism structurally
+  enough, or does closing the distance need PROACTIVE universe expansion** (index the venue class
+  before a competitor proves it)? Non-closable / non-standard-shape pools are `blocked` by W3 and
+  feed the epic — that boundary is where the structural gap likely lives.
 
 ## The architecture question
 Why can't we produce a +EV `simSuccess` when competitors profit on the same source swaps we see?
