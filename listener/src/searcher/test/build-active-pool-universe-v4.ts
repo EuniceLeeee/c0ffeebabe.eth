@@ -105,6 +105,7 @@ function assertEntry(
   fixture: PoolFixture,
   score: number,
   lastSwapBlock: number,
+  source = "alchemy-v4-initialize",
 ): PoolUniverseEntry {
   assert(entry !== undefined, `missing entry for ${fixture.poolId}`);
   assert(entry.address === poolManager, "PoolManager address should be preserved");
@@ -120,7 +121,7 @@ function assertEntry(
   assert(entry.score === score, `score should be ${score}`);
   assert(entry.swapCount30d === score, `swapCount30d should be ${score}`);
   assert(entry.lastSwapBlock === lastSwapBlock, `lastSwapBlock should be ${lastSwapBlock}`);
-  assert(entry.source === "alchemy-v4-initialize", "source should mark v4 Initialize discovery");
+  assert(entry.source === source, `source should be ${source}`);
   return entry;
 }
 
@@ -136,6 +137,7 @@ async function main(): Promise<void> {
   const aboveA = poolFixture(address(0x1001), address(0x1002), 500, 10, address(0));
   const below = poolFixture(address(0x2001), address(0x2002), 3000, 60, address(0x9999));
   const aboveB = poolFixture(address(0x3001), address(0x3002), 100, 1, address(0x7777));
+  const oldPool = poolFixture(address(0x4001), address(0x4002), 10000, 200, address(0x8888));
   const minSwaps = 2;
 
   const initLogs = [
@@ -143,6 +145,7 @@ async function main(): Promise<void> {
     initLog(below, 11),
     initLog(aboveB, 12),
   ];
+  const oldPoolInitLog = initLog(oldPool, 5);
   const swapLogs = [
     swapLog(aboveA.poolId, 20),
     swapLog(aboveA.poolId, 22),
@@ -150,9 +153,11 @@ async function main(): Promise<void> {
     swapLog(below.poolId, 23),
     swapLog(aboveB.poolId, 30),
     swapLog(aboveB.poolId, 31),
+    swapLog(oldPool.poolId, 40),
+    swapLog(oldPool.poolId, 41),
   ];
 
-  const entries = buildV4PoolEntries(initLogs, swapLogs, minSwaps);
+  const entries = await buildV4PoolEntries(initLogs, swapLogs, minSwaps);
   assert(entries.length === 2, `expected 2 v4 entries above minSwaps, got ${entries.length}`);
 
   const byPoolId = new Map<string, PoolUniverseEntry>();
@@ -163,7 +168,27 @@ async function main(): Promise<void> {
   const entryA = assertEntry(byPoolId.get(aboveA.poolId), aboveA, 3, 22);
   assertEntry(byPoolId.get(aboveB.poolId), aboveB, 2, 31);
   assert(!byPoolId.has(below.poolId), "pool below minSwaps should be excluded");
+  assert(!byPoolId.has(oldPool.poolId), "baseline_failure: old v4 pool without resolver should be excluded");
   console.log("[pool-universe-v4] buildV4PoolEntries fixtures: PASS");
+
+  const resolverCalls: string[] = [];
+  const backfilledEntries = await buildV4PoolEntries(initLogs, swapLogs, minSwaps, async (poolId) => {
+    resolverCalls.push(poolId);
+    return poolId === oldPool.poolId ? oldPoolInitLog : null;
+  });
+  const backfilledByPoolId = new Map<string, PoolUniverseEntry>();
+  for (const entry of backfilledEntries) {
+    assert(entry.poolId !== undefined, "v4 entry must include poolId");
+    backfilledByPoolId.set(entry.poolId, entry);
+  }
+  assert(resolverCalls.length === 1, `expected one missing-init resolver call, got ${resolverCalls.length}`);
+  assert(resolverCalls[0] === oldPool.poolId, "resolver should only be called for above-threshold missing init");
+  assert(backfilledEntries.length === 3, `expected 3 v4 entries with backfill, got ${backfilledEntries.length}`);
+  assertEntry(backfilledByPoolId.get(aboveA.poolId), aboveA, 3, 22);
+  assertEntry(backfilledByPoolId.get(aboveB.poolId), aboveB, 2, 31);
+  assert(!backfilledByPoolId.has(below.poolId), "pool below minSwaps should remain excluded");
+  assertEntry(backfilledByPoolId.get(oldPool.poolId), oldPool, 2, 41, "v4-initialize-backfill");
+  console.log("[pool-universe-v4] expected_transition old v4 Initialize backfill: PASS");
 
   const dir = mkdtempSync(join(tmpdir(), "pool-universe-v4-"));
   try {
@@ -206,7 +231,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (3/3)");
+  console.log("pool-universe-v4 PASS (4/4)");
 }
 
 main().catch((err) => {

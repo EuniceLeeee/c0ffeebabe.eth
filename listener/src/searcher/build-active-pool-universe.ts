@@ -77,6 +77,15 @@ interface PoolActivity {
   lastSwapBlock: number;
 }
 
+interface ParsedV4Initialize {
+  poolId: string;
+  currency0: string;
+  currency1: string;
+  fee: number;
+  tickSpacing: number;
+  hooks: string;
+}
+
 function loadEnv(): void {
   const envPath = resolve("..", ".env");
   let text = "";
@@ -163,7 +172,19 @@ async function main(): Promise<void> {
       ADDR.UNISWAP_V4_POOL_MANAGER,
     ));
   }
-  const v4Pools = buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps);
+  const v4Pools = await buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps, async (poolId) => {
+    try {
+      const logs = await provider.send("eth_getLogs", [{
+        address: ADDR.UNISWAP_V4_POOL_MANAGER,
+        topics: [V4_INITIALIZE_TOPIC, poolId],
+        fromBlock: "0x0",
+        toBlock: "latest",
+      }]);
+      return Array.isArray(logs) && logs.length > 0 ? logs[0] as RawLog : null;
+    } catch {
+      return null;
+    }
+  });
   console.log(`[pool-universe] univ4: ${v4InitLogs.length} Initialize events, ${v4Pools.length} above minSwaps`);
 
   const ranked = [...activity.values()]
@@ -245,11 +266,12 @@ async function getLogsWithSplitRetry(
   }
 }
 
-export function buildV4PoolEntries(
+export async function buildV4PoolEntries(
   initLogs: RawLog[],
   swapLogs: RawLog[],
   minSwaps: number,
-): PoolUniverseEntry[] {
+  resolveMissingInit?: (poolId: string) => Promise<RawLog | null>,
+): Promise<PoolUniverseEntry[]> {
   const activity = new Map<string, { count: number; lastSwapBlock: number }>();
   for (const log of swapLogs) {
     const poolId = normalizeBytes32Topic(log.topics[1], "Swap.id");
@@ -260,39 +282,80 @@ export function buildV4PoolEntries(
     activity.set(poolId, item);
   }
 
-  const entries: PoolUniverseEntry[] = [];
+  const initByPoolId = new Map<string, ParsedV4Initialize>();
   for (const log of initLogs) {
-    const parsed = v4InitializeIface.parseLog({ topics: log.topics, data: log.data });
-    if (!parsed) throw new Error("failed to parse univ4 Initialize log");
-    const poolId = normalizeBytes32Topic(String(parsed.args.id), "Initialize.id");
-    const item = activity.get(poolId);
-    if (!item || item.count < minSwaps) continue;
+    const parsed = parseV4InitializeLog(log);
+    initByPoolId.set(parsed.poolId, parsed);
+  }
 
-    const currency0 = ethers.getAddress(String(parsed.args.currency0));
-    const currency1 = ethers.getAddress(String(parsed.args.currency1));
-    const hooks = ethers.getAddress(String(parsed.args.hooks));
-    entries.push({
-      address: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
-      adapter: "univ4",
-      poolId,
-      currency0,
-      currency1,
-      fee: Number(parsed.args.fee),
-      tickSpacing: Number(parsed.args.tickSpacing),
-      hooks,
-      fixedTokenIn: currency0,
-      fixedTokenOut: currency1,
-      score: item.count,
-      swapCount30d: item.count,
-      lastSwapBlock: item.lastSwapBlock,
-      source: "alchemy-v4-initialize",
+  const qualifying = [...activity.entries()]
+    .filter(([, item]) => item.count >= minSwaps);
+  const resolved = new Map<string, { parsed: ParsedV4Initialize; source: string }>();
+  for (const [poolId] of qualifying) {
+    const parsed = initByPoolId.get(poolId);
+    if (parsed) resolved.set(poolId, { parsed, source: "alchemy-v4-initialize" });
+  }
+
+  if (resolveMissingInit) {
+    const missing = qualifying
+      .map(([poolId]) => poolId)
+      .filter((poolId) => !resolved.has(poolId));
+    const backfilled = await mapLimit(missing, 24, async (poolId) => {
+      const log = await resolveMissingInit(poolId);
+      return log ? { poolId, parsed: parseV4InitializeLog(log) } : null;
     });
+    for (const item of backfilled) {
+      if (item) resolved.set(item.poolId, { parsed: item.parsed, source: "v4-initialize-backfill" });
+    }
+  }
+
+  const entries: PoolUniverseEntry[] = [];
+  for (const [poolId, item] of qualifying) {
+    const init = resolved.get(poolId);
+    if (!init) continue;
+    entries.push(v4PoolEntryFromInitialize(init.parsed, item, init.source));
   }
 
   return entries.sort((a, b) =>
     (b.score ?? 0) - (a.score ?? 0) ||
     (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
   );
+}
+
+function parseV4InitializeLog(log: RawLog): ParsedV4Initialize {
+  const parsed = v4InitializeIface.parseLog({ topics: log.topics, data: log.data });
+  if (!parsed) throw new Error("failed to parse univ4 Initialize log");
+  return {
+    poolId: normalizeBytes32Topic(String(parsed.args.id), "Initialize.id"),
+    currency0: ethers.getAddress(String(parsed.args.currency0)),
+    currency1: ethers.getAddress(String(parsed.args.currency1)),
+    fee: Number(parsed.args.fee),
+    tickSpacing: Number(parsed.args.tickSpacing),
+    hooks: ethers.getAddress(String(parsed.args.hooks)),
+  };
+}
+
+function v4PoolEntryFromInitialize(
+  parsed: ParsedV4Initialize,
+  activity: { count: number; lastSwapBlock: number },
+  source: string,
+): PoolUniverseEntry {
+  return {
+    address: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
+    adapter: "univ4",
+    poolId: parsed.poolId,
+    currency0: parsed.currency0,
+    currency1: parsed.currency1,
+    fee: parsed.fee,
+    tickSpacing: parsed.tickSpacing,
+    hooks: parsed.hooks,
+    fixedTokenIn: parsed.currency0,
+    fixedTokenOut: parsed.currency1,
+    score: activity.count,
+    swapCount30d: activity.count,
+    lastSwapBlock: activity.lastSwapBlock,
+    source,
+  };
 }
 
 function dedupeV4ByPoolId(pools: PoolUniverseEntry[]): PoolUniverseEntry[] {
