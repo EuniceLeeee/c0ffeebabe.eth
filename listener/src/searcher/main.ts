@@ -82,6 +82,12 @@ interface LiveConfig {
   oppTtlMs: number;
   gssMaxTries: number;
   finalSimTopN: number;
+  /** Max candidate plans fully solved per opportunity before bailing to free the
+   *  shared per-hint TTL budget. 0 = unlimited (legacy). Measured waste: a single
+   *  opp can spawn ~20 candidate plans, each running a 7-pt quote search + top-N
+   *  sim that virtually all revert (unprofitable), burning the whole TTL and
+   *  starving later candidates/opps into `expired-before-solver`. */
+  maxCandidatesPerOpp: number;
   quoteSafetyBps: bigint;
   /** Near-miss admission floor in bps of the flash amount (magnitude; 20 = -20bps).
    *  Lets the solver sim near-break-even quotes; in DRY-RUN only it also lets the
@@ -301,6 +307,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     oppTtlMs: Number(process.env.SEARCHER_OPP_TTL_MS ?? "5000"),
     gssMaxTries: Number(process.env.SEARCHER_GSS_MAX_TRIES ?? "12"),
     finalSimTopN: Number(process.env.SEARCHER_FINAL_SIM_TOP_N ?? "3"),
+    maxCandidatesPerOpp: Number(process.env.SEARCHER_MAX_CANDIDATES_PER_OPP ?? "0"),
     quoteSafetyBps,
     quoteProfitFloorBps: BigInt(
       process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (dryRun ? "20" : "0"),
@@ -421,7 +428,8 @@ async function main(): Promise<void> {
   console.log(
     `[searcher/live] solverDeadlineMs=${config.solverDeadlineMs} ` +
       `oppTtlMs=${config.oppTtlMs} gssMaxTries=${config.gssMaxTries} ` +
-      `finalSimTopN=${config.finalSimTopN}`,
+      `finalSimTopN=${config.finalSimTopN} ` +
+      `maxCandidatesPerOpp=${config.maxCandidatesPerOpp || "unlimited"}`,
   );
   if (config.recordLiveFixtures) {
     console.log(`[searcher/live] recording live fixtures to ${config.liveFixtureDir}`);
@@ -1317,7 +1325,23 @@ async function handleHint(
         ? blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock)
       : ctx.state;
 
+    let candidatesTried = 0;
     for (const candidate of plans) {
+      // Candidate cap: a single opportunity can spawn ~20 candidate plans, each
+      // running a full quote search + top-N sim that virtually all revert
+      // (unprofitable). Grinding every one burns the shared per-hint TTL and
+      // starves later candidates/opps into `expired-before-solver`. Bail after
+      // maxCandidatesPerOpp to leave budget for the rest of the hint. (0 = off)
+      if (ctx.config.maxCandidatesPerOpp > 0 && candidatesTried >= ctx.config.maxCandidatesPerOpp) {
+        console.log(
+          `[searcher/live] candidate cap: tried ${candidatesTried}/${plans.length} for this opp ` +
+            `(hintOpps=${opportunities.length}) — bail to free TTL budget. ${segStr()}`,
+        );
+        emitPipelineDropped("solver", "candidate-cap", lastTerminalError, {
+          plans: plans.length,
+        });
+        break;
+      }
       // Opportunity TTL (v7 AC-3a.5): a hint older than oppTtlMs is chasing stale
       // state — stop solving. Each solve is further capped to the remaining budget
       // so it never runs past the opportunity's useful life. (v7 AC-3a.3)
@@ -1326,13 +1350,15 @@ async function handleHint(
         ctx.counters.expiredBeforeSolver++;
 	        console.log(
 	          `[searcher/live] opportunity expired ` +
-	            `(${Date.now() - ctx.startedAt}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver. ` +
+	            `(${Date.now() - ctx.startedAt}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver ` +
+	            `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
 	            `stage breakdown: ${segStr()}`,
 	        );
 	        emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
 	        recordFinalState("expired-before-solver");
 	        return;
 	      }
+      candidatesTried++;
       try {
         ctx.counters.solverEntered++;
         const resolved = await ctx.solver.solve(candidate, solveState, solveProbe, {
