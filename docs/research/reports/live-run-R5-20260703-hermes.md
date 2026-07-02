@@ -44,3 +44,31 @@ this is a process/safety hold, not an analysis turn)
 Scheduled to re-check at the next `hermes-hourly` cron fire (external scheduler, not
 self-scheduled). If PID 77146/77145 has exited and the working tree is clean (or the other
 session's changes are committed), resume the normal round protocol from R4's carry items.
+
+## Re-check @ 01:37 (self-scheduled wakeup, +25min)
+- **PID 77146/77145 still alive** (14h50m elapsed, up from 14h22m — actively running, not exited).
+- **`git status --short` is now clean** — the slice-2 diff (`main.ts`/`pool-universe.ts`/
+  `test/pool-universe.ts`, 287 insertions) observed at 01:08 is **no longer in the working tree**.
+  Confirmed via `grep -n "SEARCHER_PAIR_FLOOR\|selectPairFloorPools"` on both files: zero matches.
+  Not stashed (`git stash list` empty), not committed locally or on `origin/main` (`git fetch` +
+  `git log origin/main` show no new commit past this round's own `468b413`), not on another
+  branch tip. The other session appears to have discarded/reverted its own slice-2 WIP rather than
+  landing it — consistent with (though not confirmed as caused by) R4's kill-the-epic verdict,
+  since slice-2 was only conditional on R4 finding a real non-dust case, which it did not.
+- **Verdict: partially resolved, not fully.** The immediate blocking condition (a conflicting
+  uncommitted diff in files this round would need to touch) has cleared, so there is no live merge
+  conflict to step on right now. But the session itself has **not exited** and could resume editing
+  the same files at any moment — the re-check instruction's exit condition ("session has exited
+  AND working tree is clean") is only half met. Proceeding with a full deploy+dry-run round now
+  would still risk a same-file collision mid-flight.
+- **Decision:** stand down one more cycle, reschedule at a slightly longer interval since the
+  acute risk (an active conflicting diff) has dropped. Not treating this as license to proceed
+  merely because the tree is momentarily clean — that would race a live process on a coin-flip
+  timing basis, which is exactly the failure mode rule 14/"no racing" (CLAUDE.md rule 11) exists
+  to prevent for Codex; the same logic applies to a concurrent Claude session.
+
+## Findings Ledger (updated)
+| finding | owner | carry_to | status |
+|---|---|---|---|
+| concurrent-session collision: R4 kill-epic verdict vs. live slice-2 productionization build | human | next wakeup (~01:57) | **half-open** — conflicting diff cleared (reverted, not landed), but source session still alive; re-check exit before resuming |
+| R4 carry: measure EV-gate flip (unblocked by `gasUsed` sim-fidelity fix, commit `f721651`) | R4 | next available round | carried, unchanged — blocked by the same collision |
