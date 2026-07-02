@@ -173,17 +173,13 @@ async function main(): Promise<void> {
     ));
   }
   const v4Pools = await buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps, async (poolId) => {
-    try {
-      const logs = await provider.send("eth_getLogs", [{
-        address: ADDR.UNISWAP_V4_POOL_MANAGER,
-        topics: [V4_INITIALIZE_TOPIC, poolId],
-        fromBlock: "0x0",
-        toBlock: "latest",
-      }]);
-      return Array.isArray(logs) && logs.length > 0 ? logs[0] as RawLog : null;
-    } catch {
-      return null;
-    }
+    return resolveV4InitBackward(
+      provider,
+      ADDR.UNISWAP_V4_POOL_MANAGER,
+      V4_INITIALIZE_TOPIC,
+      poolId,
+      fromBlock,
+    );
   });
   console.log(`[pool-universe] univ4: ${v4InitLogs.length} Initialize events, ${v4Pools.length} above minSwaps`);
 
@@ -263,6 +259,80 @@ async function getLogsWithSplitRetry(
     const left = await getLogsWithSplitRetry(provider, topic, fromBlock, mid, address);
     const right = await getLogsWithSplitRetry(provider, topic, mid + 1, toBlock, address);
     return [...left, ...right];
+  }
+}
+
+export async function resolveV4InitBackward(
+  provider: ethers.JsonRpcProvider,
+  poolManagerAddr: string,
+  topic: string,
+  poolId: string,
+  searchFromBlock: number,
+  chunkSize = 100_000,
+): Promise<RawLog | null> {
+  const configuredLookback = Number(process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ?? "2000000");
+  const maxLookbackBlocks = Number.isFinite(configuredLookback)
+    ? Math.max(0, Math.floor(configuredLookback))
+    : 2_000_000;
+  const normalizedChunkSize = Number.isFinite(chunkSize)
+    ? Math.max(1, Math.floor(chunkSize))
+    : 100_000;
+  let remaining = maxLookbackBlocks;
+  let chunkEnd = Math.max(0, Math.floor(searchFromBlock));
+
+  while (remaining > 0 && chunkEnd >= 0) {
+    const blockCount = Math.min(normalizedChunkSize, remaining, chunkEnd + 1);
+    const chunkStart = chunkEnd - blockCount + 1;
+    const filter = {
+      address: poolManagerAddr,
+      topics: [topic, poolId],
+      fromBlock: "0x" + chunkStart.toString(16),
+      toBlock: "0x" + chunkEnd.toString(16),
+    };
+
+    try {
+      const logs = await provider.send("eth_getLogs", [filter]);
+      if (Array.isArray(logs) && logs.length > 0) return logs[0] as RawLog;
+    } catch (err) {
+      if (isPrunedHistoryError(err)) return null;
+      try {
+        const logs = await provider.send("eth_getLogs", [filter]);
+        if (Array.isArray(logs) && logs.length > 0) return logs[0] as RawLog;
+      } catch (retryErr) {
+        if (isPrunedHistoryError(retryErr)) return null;
+        console.warn(
+          `[pool-universe] v4 initialize backfill failed for ${poolId} ` +
+            `blocks ${chunkStart}-${chunkEnd}: ${rpcErrorMessage(retryErr)}`,
+        );
+      }
+    }
+
+    remaining -= blockCount;
+    chunkEnd = chunkStart - 1;
+  }
+
+  return null;
+}
+
+function isPrunedHistoryError(err: unknown): boolean {
+  return /pruned|not available/i.test(rpcErrorMessage(err));
+}
+
+function rpcErrorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (err instanceof Error) {
+    const serialized = serializeRpcError(err);
+    return serialized ? `${err.message} ${serialized}` : err.message;
+  }
+  const serialized = serializeRpcError(err);
+  return serialized || String(err);
+}
+
+function serializeRpcError(err: unknown): string {
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "";
   }
 }
 
