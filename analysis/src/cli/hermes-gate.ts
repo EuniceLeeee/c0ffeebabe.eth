@@ -44,9 +44,11 @@ function repoRoot(from: string): string {
  * Exit 1 = FAIL (blocking).
  */
 
-const mdPath = process.argv[2];
+const args = process.argv.slice(2);
+const emitKpi = args.includes("--emit-kpi");
+const mdPath = args.find((arg) => !arg.startsWith("-"));
 if (!mdPath) {
-  console.error("Usage: npm run hermes-gate -- <hermes-md-file>");
+  console.error("Usage: npm run hermes-gate -- <hermes-md-file> [--emit-kpi]");
   process.exit(2);
 }
 
@@ -122,6 +124,112 @@ function validateRunAnalysis(json: any): void {
   }
 }
 
+function computeCoverageKpi(json: any): {
+  competitorLegsTotal: number;
+  legsOutOfGraph: number;
+  outPoolAddrs: string[];
+} {
+  let competitorLegsTotal = 0;
+  let legsOutOfGraph = 0;
+  const outPoolAddrs = new Set<string>();
+
+  const findings: any[] = Array.isArray(json?.findings) ? json.findings : [];
+  for (const f of findings) {
+    const txs: any[] = Array.isArray(f?.txs) ? f.txs : [];
+    for (const tx of txs) {
+      const pools: any[] = Array.isArray(tx?.pools) ? tx.pools : [];
+      for (const p of pools) {
+        competitorLegsTotal++;
+        if (p?.inGraph === false) {
+          legsOutOfGraph++;
+          outPoolAddrs.add(String(p.addr ?? "").toLowerCase());
+        }
+      }
+    }
+  }
+
+  return {
+    competitorLegsTotal,
+    legsOutOfGraph,
+    outPoolAddrs: [...outPoolAddrs].sort(),
+  };
+}
+
+function emitCoverageKpi(json: any): void {
+  const kpi = computeCoverageKpi(json);
+  console.log(JSON.stringify({
+    competitor_legs_total: kpi.competitorLegsTotal,
+    legs_out_of_graph: kpi.legsOutOfGraph,
+    out_pools: kpi.outPoolAddrs.map((addr) => ({
+      addr,
+      token0: "<FILL>",
+      token1: "<FILL>",
+      class: "<closable|single_venue_noise>",
+      evidence: "<FILL>",
+    })),
+    closable: 0,
+    single_venue_noise: 0,
+    prev_round: null,
+  }, null, 2));
+}
+
+function validateCoverageKpi(json: any): void {
+  const expected = computeCoverageKpi(json);
+  const kpi = json.coverage_kpi;
+  if (!kpi || typeof kpi !== "object" || Array.isArray(kpi)) {
+    return fail("artifact.coverage_kpi missing — the per-window coverage metric is mandatory (compute it with --emit-kpi)");
+  }
+
+  if (kpi.competitor_legs_total !== expected.competitorLegsTotal) {
+    fail(`coverage_kpi.competitor_legs_total ${String(kpi.competitor_legs_total)} != recomputed ${expected.competitorLegsTotal}`);
+  }
+  if (kpi.legs_out_of_graph !== expected.legsOutOfGraph) {
+    fail(`coverage_kpi.legs_out_of_graph ${String(kpi.legs_out_of_graph)} != recomputed ${expected.legsOutOfGraph}`);
+  }
+
+  const outPools: any[] = Array.isArray(kpi.out_pools) ? kpi.out_pools : [];
+  if (!Array.isArray(kpi.out_pools)) {
+    fail("coverage_kpi.out_pools must be an array of one entry per unique out-of-graph pool");
+  } else {
+    const expectedAddrs = new Set(expected.outPoolAddrs);
+    const actualAddrs = new Set(outPools.map((p) => String(p?.addr ?? "").toLowerCase()));
+    const missing = expected.outPoolAddrs.filter((addr) => !actualAddrs.has(addr));
+    const extra = [...actualAddrs].sort().filter((addr) => !expectedAddrs.has(addr));
+    if (missing.length > 0 || extra.length > 0) {
+      fail(`coverage_kpi.out_pools addr set mismatch: missing [${missing.join(", ") || "none"}], extra [${extra.join(", ") || "none"}]`);
+    }
+  }
+
+  for (let i = 0; i < outPools.length; i++) {
+    const p = outPools[i];
+    if (!p || typeof p !== "object") {
+      fail(`coverage_kpi.out_pools[${i}] must be an object`);
+      continue;
+    }
+    const addr = String(p.addr ?? "").toLowerCase();
+    if (p.class !== "closable" && p.class !== "single_venue_noise") {
+      fail(`coverage_kpi.out_pools[${i}] ${addr}: class must be closable or single_venue_noise`);
+    }
+    if (isPlaceholder(String(p.token0 ?? ""))) fail(`coverage_kpi.out_pools[${i}] ${addr}: token0 missing`);
+    if (isPlaceholder(String(p.token1 ?? ""))) fail(`coverage_kpi.out_pools[${i}] ${addr}: token1 missing`);
+    if (isPlaceholder(String(p.evidence ?? ""))) fail(`coverage_kpi.out_pools[${i}] ${addr}: evidence missing`);
+  }
+
+  const hasClosable = typeof kpi.closable === "number" && Number.isFinite(kpi.closable);
+  const hasNoise = typeof kpi.single_venue_noise === "number" && Number.isFinite(kpi.single_venue_noise);
+  if (!hasClosable) fail("coverage_kpi.closable must be a number");
+  if (!hasNoise) fail("coverage_kpi.single_venue_noise must be a number");
+  if (hasClosable && hasNoise && kpi.closable + kpi.single_venue_noise !== outPools.length) {
+    fail(`coverage_kpi.closable + single_venue_noise (${kpi.closable} + ${kpi.single_venue_noise}) != out_pools.length (${outPools.length})`);
+  }
+
+  if (!("prev_round" in kpi)) {
+    fail("coverage_kpi.prev_round missing — set null for the first round or {run_id, legs_out_of_graph, closable} to link the trend");
+  } else if (kpi.prev_round !== null && (typeof kpi.prev_round !== "object" || Array.isArray(kpi.prev_round))) {
+    fail("coverage_kpi.prev_round must be null or an object");
+  }
+}
+
 function validateManualArtifact(
   json: any,
   win: { from: number; to: number },
@@ -179,6 +287,7 @@ function validateManualArtifact(
       }
     }
   }
+  validateCoverageKpi(json);
 }
 
 function validateWatchDir(dir: string, win: { from: number; to: number }): void {
@@ -227,7 +336,11 @@ if (win && step1.artifact && !isPlaceholder(step1.artifact)) {
   } else {
     const st = statSync(artifactPath);
     if (st.isDirectory()) {
-      validateWatchDir(artifactPath, win);
+      if (emitKpi) {
+        fail("--emit-kpi requires step1.artifact to be a JSON artifact, not a directory");
+      } else {
+        validateWatchDir(artifactPath, win);
+      }
     } else if (st.size === 0) {
       fail(`step1.artifact is empty: ${step1.artifact}`);
     } else {
@@ -238,7 +351,16 @@ if (win && step1.artifact && !isPlaceholder(step1.artifact)) {
         json = null;
         fail(`step1.artifact is not valid JSON: ${(err as Error).message}`);
       }
-      if (json) validateManualArtifact(json, win, watchlist);
+      if (json) {
+        if (emitKpi) {
+          if (fails.length === 0) {
+            emitCoverageKpi(json);
+            process.exit(0);
+          }
+        } else {
+          validateManualArtifact(json, win, watchlist);
+        }
+      }
     }
   }
 }

@@ -39,6 +39,15 @@ codex:          # landed | stalled
 - non-deterministic → **metrics_before/after** (e.g. expired-before-solver rate, solverEntered, prep_ms p50/p95)
 - **verdict:** fixed | implemented_not_validated | deferred
 - **fix_commit:**
+- **hermes_gate:** PASS (`cd analysis && npm run hermes-gate -- <this md>`) — the Step-1 close gate; requires the ```step1``` artifact below to carry `coverage_kpi` (competitor_legs_total / legs_out_of_graph, computed via `--emit-kpi`; the closable vs single_venue_noise A/B split; `prev_round` trend link). Prose cannot satisfy it.
+
+```step1
+run_id:
+window_blocks:        # <from>..<to>
+watchlist:            # 0xc0ffee...,0xae2f...
+artifact:             # docs/research/reports/step1-<run_id>.json  (must include coverage_kpi)
+method:               # manual-onchain-trace | live-loss-watch
+```
 
 ## Findings Ledger  <!-- rule 13: no orphan findings -->
 | finding | owner | carry_to | status |

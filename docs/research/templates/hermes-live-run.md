@@ -48,6 +48,9 @@ not_seen primary_reason: { router_not_watched / pool_not_in_graph / standing_not
 completeness_pct:        partial:
 ```
 
+**coverage_kpi (north-star trend — required in the step1 artifact, computed via `hermes-gate --emit-kpi`, NOT hand-counted):**
+`competitor_legs_total` · `legs_out_of_graph` · `closable` vs `single_venue_noise` (A/B: closable = both tokens already routable → auto-enqueue candidate; single_venue_noise = must STAY 0) · `prev_round` trend link. This is the fraction of competitor arb legs routing through pools we do NOT index, trended per round. The `hermes_gate` close gate enforces it.
+
 ## Path / Leg Findings  <!-- auto -->
 
 Representative **non-sandwich** competitor legs (sandwich legs excluded per §6/§9.5):

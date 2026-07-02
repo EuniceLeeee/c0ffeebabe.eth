@@ -170,3 +170,22 @@ the existing ≥1-tx secondary-source validation rule.
 | W1 | rule-13 trigger text + epic ledger entry | text present, owner + slices named | doc |
 | W2 | `coverage_kpi` schema + `--emit-kpi` + gate checks + templates | gate PASS on v3fork md; 2 negative FAILs | observability-only |
 | W3 | queue + universe consume + guards | planner fixture flip (`no_candidate → plans>0`) + STAY-0 negative; then 1 dry-run window w/ KPI trend point | **searcher_behavior_change: yes** |
+
+## Implementation log
+
+- **W1 — DONE** (`e068518`, Claude-authored, doc): rule-13 mechanical epic-escalation trigger
+  (≥3 samples/window OR ≥2 consecutive rounds → mandatory `decision: epic`; per-pool pins for an
+  epic'd class forbidden in-loop) + R2 Findings Ledger `decision: epic` for the coverage frontier.
+- **W2 — DONE** (Codex-authored `hermes-gate.ts` +130; Claude = non-author evaluator, ran the
+  gates). `--emit-kpi` recomputes `competitor_legs_total`/`legs_out_of_graph` from the per-tx
+  records (v3fork: 11 total / 6 out-of-graph / 6 unique OUT pools); the normal gate now requires a
+  `coverage_kpi` block whose counts EQUAL the recompute + a valid A/B class per OUT pool + a
+  `prev_round` trend link. `step1-20260702-v3fork.json` back-filled (5 closable / 1
+  single_venue_noise — OVR/WETH single-venue). Gate verified by the evaluator: PASS on the
+  back-filled artifact; 4 independent negatives each block (wrong `legs_out_of_graph`; invalid
+  `class`; `closable+noise != out_pools.length`; dropped `out_pools` entry → addr-set mismatch).
+  `turn_class: observability-only` — per rule-13 anti-drift cap, **W3 is the required next
+  behavior-changing turn.**
+- **W3 — next** (Codex cycle): the auto-enqueue + the computable A/B filter + the replay flip.
+  Flip-fixture candidate = the AAVE/WETH pair (`0x60b84fc4…` / `0xe6e386c6…`, standard shape, two
+  venues → loop closes); STAY-0 negative = `0x0b0d6c11…` (OVR/WETH, single venue).
