@@ -140,6 +140,25 @@ Claude model is orchestrating** — check the session's own model id:
 
 ## Development Workflow
 
+### Node Deploy — run BEFORE each dry-run (get latest code on the node, safely)
+
+The EC2 node's running searcher only picks up code changes on **restart**, and the node's
+`/opt/MEV` can drift behind `main` (concurrent sessions). **Before starting/relying on a
+dry-run for a measurement, deploy latest main** with the one repeatable, broadcast-safe op:
+
+```bash
+aws ssm send-command --instance-ids i-0ff908dedeec9ebc6 --document-name AWS-RunShellScript \
+  --parameters 'commands=["git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
+```
+
+`scripts/deploy-node.sh` (self-bootstraps from git) does: recover the full working env from
+the **running process** → force `SEARCHER_DRY_RUN=1` (+ `SEARCHER_OPP_TTL_MS`, override via
+env) → **ABORT if DRY_RUN can't be ensured (broadcast guard)** → tar-backup dirty files →
+`git reset --hard origin/main` → build → restart → verify the restarted process env is
+dry-run. Never restart the node searcher by hand without this guard ([[project-node-env-dryrun-guard]]).
+Do NOT spawn a 2nd searcher instance for a dry-run — it corrupts the shared events jsonl +
+graph dump; use the single service and mark a window boundary.
+
 ### Historical Replay
 
 When replaying the reference arb tx, do not assume block `24710787` or the final
