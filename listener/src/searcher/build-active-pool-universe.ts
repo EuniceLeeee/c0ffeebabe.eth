@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
 import { DEFAULT_POOL_UNIVERSE_PATH, type PoolUniverseEntry, type PoolUniverseFile } from "./pool-universe.js";
+import { ADDR } from "../shared/constants/addresses.js";
 
 const BLOCKS_PER_DAY = 7200;
 
@@ -45,6 +47,11 @@ const univ3Iface = new ethers.Interface([
   "function fee() view returns (uint24)",
   "function tickSpacing() view returns (int24)",
 ]);
+const v4InitializeIface = new ethers.Interface([
+  "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
+]);
+const V4_INITIALIZE_TOPIC = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
+const V4_SWAP_TOPIC = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
 
 interface DiscoveryQueueEntry {
   addr?: unknown;
@@ -56,8 +63,10 @@ type ProbedPoolShape =
   | { adapter: "univ3"; token0: string; token1: string; fee: number; tickSpacing: number }
   | { adapter: "univ2"; token0: string; token1: string };
 
-interface RawLog {
+export interface RawLog {
   address: string;
+  topics: string[];
+  data: string;
   blockNumber: string;
 }
 
@@ -132,6 +141,31 @@ async function main(): Promise<void> {
     console.log(`[pool-universe] ${label}: ${topicLogs} swap logs`);
   }
 
+  const v4InitLogs: RawLog[] = [];
+  for (let start = fromBlock; start <= latest; start += logBatch) {
+    const end = Math.min(start + logBatch - 1, latest);
+    v4InitLogs.push(...await getLogsWithSplitRetry(
+      provider,
+      V4_INITIALIZE_TOPIC,
+      start,
+      end,
+      ADDR.UNISWAP_V4_POOL_MANAGER,
+    ));
+  }
+  const v4SwapLogs: RawLog[] = [];
+  for (let start = fromBlock; start <= latest; start += logBatch) {
+    const end = Math.min(start + logBatch - 1, latest);
+    v4SwapLogs.push(...await getLogsWithSplitRetry(
+      provider,
+      V4_SWAP_TOPIC,
+      start,
+      end,
+      ADDR.UNISWAP_V4_POOL_MANAGER,
+    ));
+  }
+  const v4Pools = buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps);
+  console.log(`[pool-universe] univ4: ${v4InitLogs.length} Initialize events, ${v4Pools.length} above minSwaps`);
+
   const ranked = [...activity.values()]
     .filter((pool) => pool.count >= minSwaps)
     .sort((a, b) => b.count - a.count || b.lastSwapBlock - a.lastSwapBlock)
@@ -174,7 +208,7 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
     fromBlock,
     toBlock: latest,
-    pools: [...poolByAddress.values()],
+    pools: [...poolByAddress.values(), ...dedupeV4ByPoolId(v4Pools)],
   };
 
   mkdirSync(dirname(outPath), { recursive: true });
@@ -187,20 +221,115 @@ async function getLogsWithSplitRetry(
   topic: string,
   fromBlock: number,
   toBlock: number,
+  address?: string,
 ): Promise<RawLog[]> {
   try {
-    return await provider.send("eth_getLogs", [{
+    const filter: {
+      fromBlock: string;
+      toBlock: string;
+      topics: string[];
+      address?: string;
+    } = {
       fromBlock: "0x" + fromBlock.toString(16),
       toBlock: "0x" + toBlock.toString(16),
       topics: [topic],
-    }]);
+    };
+    if (address) filter.address = address;
+    return await provider.send("eth_getLogs", [filter]);
   } catch {
     if (fromBlock >= toBlock) return [];
     const mid = Math.floor((fromBlock + toBlock) / 2);
-    const left = await getLogsWithSplitRetry(provider, topic, fromBlock, mid);
-    const right = await getLogsWithSplitRetry(provider, topic, mid + 1, toBlock);
+    const left = await getLogsWithSplitRetry(provider, topic, fromBlock, mid, address);
+    const right = await getLogsWithSplitRetry(provider, topic, mid + 1, toBlock, address);
     return [...left, ...right];
   }
+}
+
+export function buildV4PoolEntries(
+  initLogs: RawLog[],
+  swapLogs: RawLog[],
+  minSwaps: number,
+): PoolUniverseEntry[] {
+  const activity = new Map<string, { count: number; lastSwapBlock: number }>();
+  for (const log of swapLogs) {
+    const poolId = normalizeBytes32Topic(log.topics[1], "Swap.id");
+    const block = parseLogBlockNumber(log.blockNumber);
+    const item = activity.get(poolId) ?? { count: 0, lastSwapBlock: 0 };
+    item.count++;
+    item.lastSwapBlock = Math.max(item.lastSwapBlock, block);
+    activity.set(poolId, item);
+  }
+
+  const entries: PoolUniverseEntry[] = [];
+  for (const log of initLogs) {
+    const parsed = v4InitializeIface.parseLog({ topics: log.topics, data: log.data });
+    if (!parsed) throw new Error("failed to parse univ4 Initialize log");
+    const poolId = normalizeBytes32Topic(String(parsed.args.id), "Initialize.id");
+    const item = activity.get(poolId);
+    if (!item || item.count < minSwaps) continue;
+
+    const currency0 = ethers.getAddress(String(parsed.args.currency0));
+    const currency1 = ethers.getAddress(String(parsed.args.currency1));
+    const hooks = ethers.getAddress(String(parsed.args.hooks));
+    entries.push({
+      address: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
+      adapter: "univ4",
+      poolId,
+      currency0,
+      currency1,
+      fee: Number(parsed.args.fee),
+      tickSpacing: Number(parsed.args.tickSpacing),
+      hooks,
+      fixedTokenIn: currency0,
+      fixedTokenOut: currency1,
+      score: item.count,
+      swapCount30d: item.count,
+      lastSwapBlock: item.lastSwapBlock,
+      source: "alchemy-v4-initialize",
+    });
+  }
+
+  return entries.sort((a, b) =>
+    (b.score ?? 0) - (a.score ?? 0) ||
+    (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
+  );
+}
+
+function dedupeV4ByPoolId(pools: PoolUniverseEntry[]): PoolUniverseEntry[] {
+  const byPoolId = new Map<string, PoolUniverseEntry>();
+  for (const pool of pools) {
+    if (!pool.poolId) continue;
+    const key = pool.poolId.toLowerCase();
+    const existing = byPoolId.get(key);
+    if (
+      !existing ||
+      (pool.score ?? 0) > (existing.score ?? 0) ||
+      ((pool.score ?? 0) === (existing.score ?? 0) && (pool.lastSwapBlock ?? 0) > (existing.lastSwapBlock ?? 0))
+    ) {
+      byPoolId.set(key, pool);
+    }
+  }
+  return [...byPoolId.values()].sort((a, b) =>
+    (b.score ?? 0) - (a.score ?? 0) ||
+    (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
+  );
+}
+
+function normalizeBytes32Topic(value: string | undefined, field: string): string {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`univ4 ${field} must be bytes32`);
+  }
+  return value.toLowerCase();
+}
+
+function parseLogBlockNumber(blockNumber: string): number {
+  const block = blockNumber.startsWith("0x")
+    ? parseInt(blockNumber, 16)
+    : Number(blockNumber);
+  if (!Number.isSafeInteger(block) || block < 0) {
+    throw new Error(`invalid log blockNumber: ${blockNumber}`);
+  }
+  return block;
 }
 
 async function enrichPool(
@@ -377,7 +506,7 @@ async function mapLimit<T, R>(
 
 // Only run the full scan when executed directly as a script (npm run searcher:pool-universe),
 // not when this module is imported (e.g. to reuse consumeDiscoveryQueue / isClosablePair in a test).
-if (process.argv[1]?.includes("build-active-pool-universe")) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((err) => {
     console.error(`[pool-universe] FAIL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
