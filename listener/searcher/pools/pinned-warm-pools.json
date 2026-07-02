@@ -78,7 +78,7 @@
     },
     {
       "label": "V3-fork (factory 0x075C42) WETH/USDT 0.05% — coffeebabe sample 20260702",
-      "address": "0x05DEF6d34631BbDD35E212cb749CACaebf8C963d",
+      "address": "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D",
       "adapter": "univ3",
       "warmDirections": [
         {
