@@ -87,7 +87,12 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 ( cd "$REPO/listener" && npm run build ) || { say "build failed — NOT restarting"; exit 1; }
 
 # ── 5. Restart + verify dry-run ──
-RESTART_EPOCH=$(date +%s)
+# The service logs to a FILE (StandardOutput=append:/var/log/mev-live.log), NOT journald, so the
+# startup banner must be read from that file — and only the bytes appended AFTER this restart
+# (byte offset), so a stale pre-restart banner can't satisfy the check.
+LOGF=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
+[ -n "$LOGF" ] || LOGF=/var/log/mev-live.log
+LOG_OFFSET=$(wc -c < "$LOGF" 2>/dev/null || echo 0)
 systemctl restart mev-searcher
 sleep 8
 ACTIVE=$(systemctl is-active mev-searcher)
@@ -99,13 +104,12 @@ if [ "$DRY" != "1" ]; then
 fi
 BANNER=""
 for _ in $(seq 1 60); do
-  BANNER=$(journalctl -u mev-searcher --since "@$RESTART_EPOCH" -o cat --no-pager 2>/dev/null \
-    | grep 'pool registry:' | tail -1)
+  BANNER=$(tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null | grep 'pool registry:' | tail -1)
   [ -n "$BANNER" ] && break
   sleep 1
 done
 if [ -z "$BANNER" ]; then
-  say "ABORT: missing pool registry startup banner after restart."
+  say "ABORT: missing pool registry startup banner after restart (log $LOGF)."
   exit 9
 fi
 say "startup banner: $BANNER"
