@@ -58,4 +58,36 @@
 - **carry-in note:** Cycle-1 added a per-OPP slice (planBudgetMs/oppMinSliceMs) but the
   **per-candidate SIM loop is still not TTL-budgeted** — this is the refinement R2 targets.
 
-## Codex Blocker-Review → Final → Brief → Implement → Gate — pending
+## Codex Blocker-Review (b7dx4jgji) — CONFIRMED + REFINED (found a real v4 bug)
+Codex did the code-side independent verification (its unique value vs fable-5's chain side) and
+**refined the blocker from "latency" to a deterministic v4 accounting BUG:**
+- **Root of the 79 v4 sim reverts = the quote-safety haircut applied to the v4 `take()` amount.**
+  `SEARCHER_QUOTE_SAFETY_BPS=9999` (main.ts:290) → `propagateAmounts` haircuts every hop output
+  (amount-propagation.ts:48) → the v4 plan-builder uses the haircutted `amtOut` as the PoolManager
+  `take()` amount (plan-builder.ts:281). For v4 exact-input, **taking LESS than the real output
+  leaves a nonzero PoolManager delta at unlock end → `unlock` reverts.** Selector `0x48c89491` =
+  `unlock(bytes)` (outer wrapper). The R2 v4-native fork gate passed with EXACT quoted output, so
+  it never exercised this safety-haircut live path.
+- **Latency (2nd):** `solver.solve()` checks the deadline BEFORE sim, but `await probe.simulate()`
+  has no in-flight timeout (solver.ts:256/318); Cycle-1's per-opp slice bounds candidate BOUNDARIES
+  only, not an in-flight sim. `candidatesTried` is the real multiplier (maxCandidatesPerOpp=0=unlimited).
+
+## Final Blocker (Claude) + Implementation Brief — drives code
+- **Blocker (final):** two coupled issues on v4 candidates: **(A, primary) a real v4 execution bug**
+  — the safety haircut on the v4 `take()` amount leaves a nonzero PoolManager delta → `unlock`
+  reverts (79/window), wasting seconds of sim time AND making v4 arbs unexecutable; **(B, secondary)**
+  the per-candidate sim loop is not TTL-budgeted (one slow/reverting sim burns the hint TTL).
+- **searcher_behavior_change: yes** — v4 sims stop reverting (catch v4 MEV) + sim loop bails in budget.
+- **Fix (this round = A, the deterministic bug; B as a bounded guardrail):**
+  - **A:** in the v4 `univ4-unlock` build, `take()` the RAW v4 quote output (full amount owed by the
+    PoolManager), and apply the safety haircut ONLY to the downstream spendable amount — never take
+    less than the pool owes. Files: `plan-builder.ts` (univ4 take amount ~281),
+    `amount-propagation.ts` (haircut boundary ~48). Keep non-v4 behavior identical.
+  - **B (guardrail):** cap `candidatesTried` / bail the sim loop when hint age nears TTL so ≥1 full
+    solver pass completes. Small, in `main.ts` candidate loop / `solver.ts`.
+- **GATE (deterministic repair-replay flip):** a pinned v4 fixture with `quoteSafetyBps=9999` —
+  **baseline: full BotVM sim REVERTS at `unlock`; after fix: sim SUCCEEDS, no revert** (fork gate,
+  local reth, zero CU). Plus op-count: v4 candidates no longer emit the take<output condition.
+  Live confirm (carry): v4 sim-rejected drops from 79/window; expired/quote-timeout ↓; simSuccess ↑.
+- **not_this:** R1 adaptive warm (measured fine); grid tightening (3rd, defer).
+- **verdict:** pending Codex impl + gate.
