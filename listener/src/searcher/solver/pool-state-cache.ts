@@ -20,7 +20,7 @@ import {
   type CurvePlainState,
   type CurveNgState,
 } from "./curve-math.js";
-import { v3SwapExactInput, type V3PoolState } from "./v3-math.js";
+import { V3MissingBitmapWordError, v3SwapExactInput, type V3PoolState } from "./v3-math.js";
 
 const curveIface = new ethers.Interface([
   "function A() view returns (uint256)",
@@ -39,6 +39,7 @@ const univ2Iface = new ethers.Interface([
 
 const TICK_LENS = "0xbfd8137f7d1516D3ea5cA83523914859ec47F573";
 const V3_WORD_RADIUS = Number(process.env.SEARCHER_V3_WORD_RADIUS ?? "8");
+const V3_ADAPTIVE_MAX_WORDS = Number(process.env.SEARCHER_V3_ADAPTIVE_MAX_WORDS ?? "64");
 // How many blocks v3 tick data (bitmap + liquidityNet) may be reused before a
 // re-fetch. tick liquidityNet only changes on LP mint/burn, which is rare over a
 // few blocks, so caching by block turns the heavy TickLens walk from once-per-
@@ -388,8 +389,9 @@ export class PoolStateCache {
    * Local cross-tick exact-input quote for a Uniswap V3 pool. Tick data (the
    * heavy TickLens walk) is warmed once per refresh window and reused across
    * hints; slot0 + liquidity are re-read per hint from the (overlay) state.
-   * Throws on any failure (or if the swap crosses beyond the warmed words) so
-   * the caller falls back to the eth_call quoter.
+   * If the swap crosses beyond initially warmed words, fetches the missing word
+   * and retries locally up to V3_ADAPTIVE_MAX_WORDS. Throws on true failures or
+   * cap exhaustion so the caller falls back to the eth_call quoter.
    */
   async quoteV3(
     state: StateBackend,
@@ -416,17 +418,44 @@ export class PoolStateCache {
       );
       throw err;
     }
-    const v3State: V3PoolState = {
-      sqrtPriceX96: live.sqrtPriceX96,
-      tick: live.tick,
-      liquidity: live.liquidity,
-      fee: ticks.fee,
-      tickSpacing: ticks.tickSpacing,
-      tickBitmap: ticks.tickBitmap,
-      ticks: ticks.ticks,
-    };
     const zeroForOne = tokenIn.toLowerCase() === ticks.token0;
-    return v3SwapExactInput(v3State, zeroForOne, amountIn);
+    const adaptiveWords = new Set<number>();
+    for (;;) {
+      const v3State: V3PoolState = {
+        sqrtPriceX96: live.sqrtPriceX96,
+        tick: live.tick,
+        liquidity: live.liquidity,
+        fee: ticks.fee,
+        tickSpacing: ticks.tickSpacing,
+        tickBitmap: ticks.tickBitmap,
+        ticks: ticks.ticks,
+      };
+      try {
+        return v3SwapExactInput(v3State, zeroForOne, amountIn);
+      } catch (err) {
+        if (!(err instanceof V3MissingBitmapWordError)) throw err;
+        const word = err.word;
+        if (adaptiveWords.has(word)) {
+          throw new Error(`v3 ${pool.slice(0, 10)} still missing bitmap word ${word} after adaptive warm`);
+        }
+        if (adaptiveWords.size >= V3_ADAPTIVE_MAX_WORDS) {
+          throw new Error(
+            `v3 ${pool.slice(0, 10)} adaptive bitmap warm cap ${V3_ADAPTIVE_MAX_WORDS} reached; ` +
+              `next missing word ${word}`,
+          );
+        }
+        try {
+          await this.warmV3TickWord(state, pool, ticks, word);
+        } catch (warmErr) {
+          this.failed.add(key);
+          throw new Error(
+            `v3 ${pool.slice(0, 10)} failed warming missing bitmap word ${word}: ` +
+              `${warmErr instanceof Error ? warmErr.message : String(warmErr)}`,
+          );
+        }
+        adaptiveWords.add(word);
+      }
+    }
   }
 
   /** Tick bitmap + liquidityNet + immutable metadata, reused until the block
@@ -639,6 +668,36 @@ export class PoolStateCache {
     }
 
     return { block: this.tickBlock, fee, tickSpacing, token0, token1, tickBitmap, ticks };
+  }
+
+  private async warmV3TickWord(
+    state: StateBackend,
+    pool: string,
+    cached: V3TickCache,
+    word: number,
+  ): Promise<void> {
+    if (cached.tickBitmap.has(word)) return;
+    const data = tickLensIface.encodeFunctionData("getPopulatedTicksInWord", [pool, word]);
+    const result = this.mainnetProvider
+      ? await this.mainnetProvider.call({ to: TICK_LENS, data, blockTag: this.tickBlock })
+      : await state.call({ to: TICK_LENS, data });
+    const populated = tickLensIface.decodeFunctionResult(
+      "getPopulatedTicksInWord",
+      result,
+    )[0] as Array<{ tick: bigint; liquidityNet: bigint }>;
+    cached.tickBitmap.set(word, 0n);
+    for (const t of populated) {
+      const tk = Number(t.tick);
+      cached.ticks.set(tk, BigInt(t.liquidityNet));
+      const compressed = Math.floor(tk / cached.tickSpacing);
+      const bitmapWord = compressed >> 8;
+      const bit = ((compressed % 256) + 256) % 256;
+      cached.tickBitmap.set(bitmapWord, (cached.tickBitmap.get(bitmapWord) ?? 0n) | (1n << BigInt(bit)));
+    }
+    console.log(
+      `[poolcache] adaptive warmed univ3 tick word ${word} ${pool.slice(0, 10)} ` +
+        `(${populated.length} ticks, block ${cached.block ?? "n/a"})`,
+    );
   }
 
   private async warmCurve(state: StateBackend, pool: string): Promise<CurveCached> {

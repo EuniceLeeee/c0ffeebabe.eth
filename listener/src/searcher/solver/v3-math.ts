@@ -250,9 +250,16 @@ function position(tick: number): [number, number] {
 
 /**
  * Next initialized tick within one word (or the word boundary). `tickBitmap`
- * maps wordPos → 256-bit bitmap. Throws if the needed word isn't warmed, so the
- * caller falls back to eth_call.
+ * maps wordPos → 256-bit bitmap. Throws a typed missing-word signal if the
+ * needed word isn't warmed, so the cache can fetch that exact word and retry.
  */
+export class V3MissingBitmapWordError extends Error {
+  constructor(readonly word: number) {
+    super(`bitmap word ${word} not warmed`);
+    this.name = "V3MissingBitmapWordError";
+  }
+}
+
 function nextInitializedTickWithinOneWord(
   tickBitmap: Map<number, bigint>,
   tick: number,
@@ -263,7 +270,7 @@ function nextInitializedTickWithinOneWord(
   if (lte) {
     const [word, bit] = position(compressed);
     const bitmap = tickBitmap.get(word);
-    if (bitmap === undefined) throw new Error(`bitmap word ${word} not warmed`);
+    if (bitmap === undefined) throw new V3MissingBitmapWordError(word);
     const mask = 2n * (1n << BigInt(bit)) - 1n;
     const masked = bitmap & mask;
     const initialized = masked !== 0n;
@@ -274,7 +281,7 @@ function nextInitializedTickWithinOneWord(
   }
   const [word, bit] = position(compressed + 1);
   const bitmap = tickBitmap.get(word);
-  if (bitmap === undefined) throw new Error(`bitmap word ${word} not warmed`);
+  if (bitmap === undefined) throw new V3MissingBitmapWordError(word);
   const mask = MASK256 ^ ((1n << BigInt(bit)) - 1n); // all 1s at/left of bit
   const masked = bitmap & mask;
   const initialized = masked !== 0n;
