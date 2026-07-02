@@ -272,9 +272,23 @@ cousin of the ledgered native-ETH/ZeroAddress v4 gap. Two independent samples (o
 first in-window competitor tx) now point at the same frontier: **non-standard / native-ETH
 pools missed by our discovery + graph**, not a path or template gap.
 
-**Caveat (honest scope):** only the primary `0xc0ffee` EOA was traced; coffeebabe runs
-multiple EOAs and the second WATCHLIST bot was not swept this pass (events-JSONL-driven
-`--watch` will cover both next window). Single-EOA, single-window — not a rate.
+**Second watchlist bot `0xae2Fc483…FaE13` — sampling analysis (46 txs in window).** Nonce
+delta 0x62198a→0x6219b8 = **46 txs**, all to executor `0x1f2f10d1…f387` (high-frequency
+multi-pool arber). Sampled 3:
+- `0x816c176e…374e9` (blk 25442420): 4-pool arb, 2 legs IN graph / 2 OUT (`0x60b84fc4`,
+  `0xe6e386c6`).
+- `0xc0b55b11…d7e1` (blk 25442460): 2-pool arb, **both** legs OUT (`0x8597fa07`, `0xeab9a071`).
+- `0x68f186f0…20ead` (blk 25442493): 2-pool arb, 1 IN (`0xc3f6b81f`) / 1 OUT (`0x0b0d6c11`).
+3/3 sampled are multi-pool arbs with ≥1 leg OUT of our graph → **recurring pool-coverage gap**,
+same frontier as coffeebabe + the origin sample.
+
+**Consolidated window read:** both watchlist bots + the origin sample all point at ONE gap
+class this cycle — **pool coverage across many non-standard/native-ETH venues**, not path or
+template. This is now recorded in a structured artifact and enforced by `hermes-gate`.
+
+**Caveat (honest scope):** coffeebabe was traced full (its main EOA had 1 tx); it also runs
+other EOAs not swept here. ae2Fc483 sampled 3/46. Single-window — not a rate. Next window
+(events JSONL now on) uses `live-loss --watch` to sweep both automatically.
 
 ## Findings Ledger
 | finding | decision | owner | carry_to_round |

@@ -90,6 +90,38 @@ function parseAddrs(v: string): string[] {
     .filter((x) => /^0x[a-f0-9]{40}$/.test(x));
 }
 
+// EOAs that MUST be analyzed at full depth (every tx), not sampled.
+const REQUIRE_FULL = new Set(["0xc0ffeebabe5d496b2dde509f9fa189c25cf29671"]);
+
+function validateTxRecord(tx: any, eoa: string, win: { from: number; to: number }): void {
+  if (!/^0x[a-f0-9]{64}$/i.test(String(tx.hash ?? ""))) fail(`tx in ${eoa} missing valid hash`);
+  if (!Number.isFinite(tx.block) || tx.block < win.from || tx.block > win.to) {
+    fail(`tx ${tx.hash} block ${tx.block} outside window ${win.from}..${win.to}`);
+  }
+  if (!Array.isArray(tx.pools) || tx.pools.length === 0) {
+    fail(`tx ${tx.hash} has no pools[] classified in/out of graph`);
+  } else if (!tx.pools.every((p: any) => typeof p.inGraph === "boolean")) {
+    fail(`tx ${tx.hash} pools[] must each carry inGraph:boolean`);
+  }
+  if (isPlaceholder(String(tx.gap_class ?? ""))) fail(`tx ${tx.hash} missing gap_class`);
+}
+
+function validateRunAnalysis(json: any): void {
+  const ra = json.run_analysis;
+  if (!ra || typeof ra !== "object") {
+    return fail("artifact.run_analysis missing — the standard post-dry-run funnel/pipeline_dropped analysis is mandatory");
+  }
+  if (!ra.funnel || typeof ra.funnel !== "object" || Object.keys(ra.funnel).length === 0) {
+    fail("run_analysis.funnel missing/empty (need hints/impacts/opportunities/plans/solverEntered/...)");
+  }
+  if (isPlaceholder(String(ra.dominant_drop ?? ""))) {
+    fail("run_analysis.dominant_drop missing — name the dominant loss bucket for the window");
+  }
+  if (isPlaceholder(String(ra.events_source ?? ""))) {
+    fail("run_analysis.events_source missing — declare jsonl vs log-counter (prefer jsonl)");
+  }
+}
+
 function validateManualArtifact(
   json: any,
   win: { from: number; to: number },
@@ -104,36 +136,46 @@ function validateManualArtifact(
   if (w.to < win.from || w.from > win.to) {
     fail(`artifact.window ${w.from}..${w.to} does not overlap declared window ${win.from}..${win.to}`);
   }
+
+  // (1) standard analysis (funnel + dominant drop) is mandatory every dry-run
+  validateRunAnalysis(json);
+
   const aw: string[] = Array.isArray(json.watchlist) ? json.watchlist.map((s: string) => String(s).toLowerCase()) : [];
   for (const addr of watchlist) {
     if (!aw.includes(addr)) fail(`artifact.watchlist missing declared watchlist addr ${addr}`);
   }
+  // coffeebabe must always be in the watchlist for a window
+  for (const req of REQUIRE_FULL) {
+    if (!watchlist.includes(req)) fail(`watchlist must include ${req} (mandatory full analysis)`);
+  }
   if (!Array.isArray(json.findings) || json.findings.length === 0) {
     return fail("artifact.findings is empty — no watchlist EOA was analyzed");
   }
-  // every declared watchlist EOA must have a findings entry (analyzed or explicitly not-swept)
-  const analyzed = new Set(json.findings.map((f: any) => String(f.eoa ?? "").toLowerCase()));
+  const byEoa = new Map<string, any>();
+  for (const f of json.findings) byEoa.set(String(f.eoa ?? "").toLowerCase(), f);
+  // every declared watchlist EOA must have a findings entry, and it must have been swept
   for (const addr of watchlist) {
-    if (!analyzed.has(addr)) fail(`no findings entry for watchlist EOA ${addr} (analyze it or record txCount:0)`);
-  }
-  for (const f of json.findings) {
-    if (!("txCount" in f)) fail(`findings entry ${f.eoa} missing txCount`);
-    if (typeof f.txCount === "number" && f.txCount > 0) {
-      if (!Array.isArray(f.txs) || f.txs.length === 0) {
-        fail(`findings ${f.eoa} has txCount>0 but no txs[] detail`);
-        continue;
+    const f = byEoa.get(addr);
+    if (!f) { fail(`no findings entry for watchlist EOA ${addr}`); continue; }
+    if (f.swept !== true) fail(`findings ${addr}: swept!==true — every watchlist EOA must be swept over the window (no "not swept")`);
+    if (!("txCount" in f) || typeof f.txCount !== "number") fail(`findings ${addr}: txCount must be a number from a real window sweep`);
+    if (isPlaceholder(String(f.method ?? ""))) fail(`findings ${addr}: method missing (how the sweep was done, e.g. nonce delta)`);
+
+    const isFull = REQUIRE_FULL.has(addr) || f.analysis_mode === "full";
+    const txs: any[] = Array.isArray(f.txs) ? f.txs : [];
+
+    if (isFull) {
+      // (3) coffeebabe: EVERY tx must be hand-analyzed
+      if (typeof f.txCount === "number" && f.txCount > 0 && txs.length !== f.txCount) {
+        fail(`findings ${addr} is FULL mode: txs analyzed (${txs.length}) != txCount (${f.txCount}) — every tx must be analyzed`);
       }
-      for (const tx of f.txs) {
-        if (!/^0x[a-f0-9]{64}$/i.test(String(tx.hash ?? ""))) fail(`tx in ${f.eoa} missing valid hash`);
-        if (!Number.isFinite(tx.block) || tx.block < win.from || tx.block > win.to) {
-          fail(`tx ${tx.hash} block ${tx.block} outside window ${win.from}..${win.to}`);
-        }
-        if (!Array.isArray(tx.pools) || tx.pools.length === 0) {
-          fail(`tx ${tx.hash} has no pools[] classified in/out of graph`);
-        } else if (!tx.pools.every((p: any) => typeof p.inGraph === "boolean")) {
-          fail(`tx ${tx.hash} pools[] must each carry inGraph:boolean`);
-        }
-        if (isPlaceholder(String(tx.gap_class ?? ""))) fail(`tx ${tx.hash} missing gap_class`);
+      for (const tx of txs) validateTxRecord(tx, addr, win);
+    } else {
+      // (4) others: sampling analysis required (>=1 sample if it traded)
+      if (typeof f.txCount === "number" && f.txCount > 0) {
+        if (txs.length < 1) fail(`findings ${addr} is SAMPLE mode with txCount>0 but no sampled txs analyzed`);
+        if (!Number.isFinite(f.sampleSize) || f.sampleSize < 1) fail(`findings ${addr}: sampleSize (>=1) required for sampling analysis`);
+        for (const tx of txs) validateTxRecord(tx, addr, win);
       }
     }
   }

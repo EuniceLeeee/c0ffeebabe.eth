@@ -3,6 +3,17 @@
   "window": { "from": 25442352, "to": 25442520 },
   "method": "manual-onchain-trace (events JSONL absent this window; minimum-bar per CLAUDE.md Hermes Step-1)",
   "rpc": "local reth http://127.0.0.1:8545 (zero Alchemy CU)",
+  "run_analysis": {
+    "events_source": "log-counter (SEARCHER_EVENTS_PATH unset this window; fixed post-window)",
+    "funnel": {
+      "hints": 21253, "impacts": 2976, "opportunities": 56, "plans": 364,
+      "solverEntered": 104, "solverSuccess": 0, "simSuccess": 0, "submitAttempts": 0,
+      "expiredBeforeSolver": 7, "quoteTimeouts": 15
+    },
+    "latency": { "perHintEndToEndMsP50": 14, "perHintEndToEndMsP95": 18, "max": 6747 },
+    "dominant_drop": "no structured pipeline_dropped (JSONL absent); log-counter shows solverSuccess=0 (no +EV close), hint-skip dominated by tx-filter/hash-only; expiredBeforeSolver=7 (noise), no latency regression at 4138-pool registry",
+    "metrics_gate": "PASS (no latency regression from universe TOP_N=1500)"
+  },
   "watchlist": [
     "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
     "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13"
@@ -11,6 +22,8 @@
     {
       "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
       "label": "coffeebabe",
+      "analysis_mode": "full",
+      "swept": true,
       "method": "nonce delta over window (187915->187916) + per-block sender scan",
       "txCount": 1,
       "txs": [
@@ -35,10 +48,56 @@
     },
     {
       "eoa": "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13",
-      "label": "second watchlist bot",
-      "method": "not swept this window",
-      "txCount": 0,
-      "note": "single-EOA/single-window pass; events-JSONL-driven --watch will sweep both watchlist bots + coffeebabe's multiple EOAs next window"
+      "label": "second watchlist bot (high-frequency multi-pool arber)",
+      "analysis_mode": "sample",
+      "swept": true,
+      "method": "nonce delta over window (0x62198a->0x6219b8 = 46) + per-block sender scan; all 46 -> executor 0x1f2f10d1…f387",
+      "txCount": 46,
+      "sampleSize": 3,
+      "txs": [
+        {
+          "hash": "0x816c176ef0a3b39ffa5bccdbc2f67fcf36ef56a414ba1f7ca54e6ac23ac374e9",
+          "block": 25442420,
+          "status": "success",
+          "shape": "4-pool multi-hop arb",
+          "pools": [
+            { "addr": "0x4674abc5796e1334b5075326b39b748bee9eaa34", "inGraph": true },
+            { "addr": "0x4d68b530920d26c3b01c99fecc19e21011b72bbd", "inGraph": true },
+            { "addr": "0x60b84fc4338bd0e1119bd672f7a2a42d8fb0d5cd", "inGraph": false },
+            { "addr": "0xe6e386c6d5a7370375fa95085bbb689eef755fba", "inGraph": false }
+          ],
+          "captured_by_us": false,
+          "gap_class": "pool",
+          "gap_note": "partial coverage — 2 of 4 legs OUT of graph"
+        },
+        {
+          "hash": "0xc0b55b112a645fbe6b53bed05d0708c184ea0af571c10c1722dec93c9b1bd7e1",
+          "block": 25442460,
+          "status": "success",
+          "shape": "2-pool arb",
+          "pools": [
+            { "addr": "0x8597fa0773888107e2867d36dd87fe5bafeab328", "inGraph": false },
+            { "addr": "0xeab9a07129395cdd40f6529cb64a6ffb252c5085", "inGraph": false }
+          ],
+          "captured_by_us": false,
+          "gap_class": "pool",
+          "gap_note": "both legs OUT of graph"
+        },
+        {
+          "hash": "0x68f186f08eb61ff2d32486b66b9351f00063da4e955ccf6f3361642ccc920ead",
+          "block": 25442493,
+          "status": "success",
+          "shape": "2-pool arb",
+          "pools": [
+            { "addr": "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc", "inGraph": false },
+            { "addr": "0xc3f6b81fb9e6db259272026601689e383f94c0b0", "inGraph": true }
+          ],
+          "captured_by_us": false,
+          "gap_class": "pool",
+          "gap_note": "1 of 2 legs OUT of graph"
+        }
+      ],
+      "sample_summary": "3/3 sampled txs are multi-pool arbs with >=1 leg OUT of our graph -> recurring pool-coverage gap; same frontier as coffeebabe + the origin sample"
     }
   ]
 }

@@ -256,16 +256,26 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
     `--watch`/`--competitor-scan` scripts (they key off our events) — you are forced onto
     log-counter scraping, which violates the "prefer structured JSONL" rule. Verify the
     events file is being written right after the startup banner.
-  - **ENFORCEMENT (forcing function, not self-discipline): `cd analysis && npm run
-    hermes-gate -- <hermes-md>` MUST exit 0 before you write `Final Approval` / close a
-    cycle.** The gate reads a required fenced ```step1 block in the md (`run_id`,
-    `window_blocks`, `watchlist`, `artifact`, `method`) and validates a structured Step-1
-    artifact on disk (per-watchlist-EOA findings: tx hashes in-window + pools classified
-    in/out of `runtime-graph-pools.json` + `gap_class`) — prose in the md CANNOT satisfy it.
-    It accepts either a `manual-onchain-trace` JSON manifest (events JSONL absent) or a
-    directory of `live-loss --watch` `*.json` WatchReports. Record `hermes_gate: PASS` in the
-    cycle close. This is the mechanical block for the 20260702-v3fork Slice-2 miss — a
-    forgotten Step-1 now fails a command, it is not left to memory.
+  - **ENFORCEMENT (forcing function, not self-discipline): after EVERY dry-run, `cd analysis
+    && npm run hermes-gate -- <hermes-md>` MUST exit 0 before you write `Final Approval` /
+    close a cycle.** The gate reads a required fenced ```step1 block (`run_id`,
+    `window_blocks`, `watchlist`, `artifact`, `method`) and validates a structured artifact
+    on disk — prose in the md CANNOT satisfy it. It enforces all **four** mandatory
+    post-dry-run analyses:
+    1. **Standard analysis** — `run_analysis` with `funnel` (hints…solverEntered…),
+       `dominant_drop`, and `events_source` (jsonl vs log-counter).
+    2. **Competitor comparison** — per-watchlist-EOA `findings`, each `swept:true` with a real
+       `method` (nonce delta / sweep) and `txCount`. No "not swept".
+    3. **coffeebabe `0xc0ffee…29671` — EVERY tx hand-analyzed** (`analysis_mode:"full"`):
+       `txs.length === txCount`, each tx = hashes in-window + pools classified in/out of
+       `runtime-graph-pools.json` + `gap_class`.
+    4. **`0xae2Fc483…FaE13` (+ other watchlist bots) — sampling analysis** (`analysis_mode:
+       "sample"`): swept, `txCount` from the sweep, and if it traded ≥1 sampled tx analyzed to
+       the same per-tx depth with a `sampleSize`.
+    Accepts a `manual-onchain-trace` JSON manifest (events JSONL absent) or a directory of
+    `live-loss --watch` `*.json` WatchReports. Record `hermes_gate: PASS` in the cycle close.
+    This is the mechanical block for the 20260702-v3fork Slice-2 miss — a skipped/half-done
+    analysis now fails a command, it is not left to memory.
   - `analysis live-loss --watch <WATCHLIST> --events <jsonl> --rpc http://127.0.0.1:8545`
     → what the watched MEV bots did in our window + `seenScope`/`primaryReason`
     (`not_seen` / `seen_but_lost`) + `poolInOurGraph`.
