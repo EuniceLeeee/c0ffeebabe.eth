@@ -110,20 +110,64 @@ entries), so the file-level safeguard holds even though the liveness gate was re
   the same window this fix targets). Will apply to the next window that runs with regenerated
   `active-pools.json`.
 
+## Production backfill executed this fire (zero Alchemy CU — local reth on-node)
+Rather than leave the backfill as an open carry, sized and ran it this same fire once the
+retention question was answered: the EC2 node's local reth (`--full`) turns out to retain far
+more than the "~10k blocks" prior assumption (memory `project-reth-node` — **correcting that
+number**: confirmed via direct `eth_getBlockByNumber` probes at tip-10832, tip-23015, tip-30000,
+tip-50000, tip-80000, tip-100000 — all resolved real blocks, i.e. retention is >=100k blocks
+(~14 days), not ~10k). That removed the reason to defer.
+
+Ran a scoped, additive, **zero-CU** one-off script (`node`, ESM, importing the just-shipped
+`buildV4PoolEntries` from the built dist — not the full `main()`, to avoid touching/reshuffling
+the curated non-v4 pool set) via `aws ssm send-command` against the node's `http://127.0.0.1:8545`:
+- Window: last 90,000 blocks (25356905->25446905, ~12.5 days), safely inside the confirmed >=100k
+  retained range.
+- **3,148 Initialize events, 726,175 Swap events** scanned directly off the PoolManager singleton.
+- **1,220 univ4 pools** above `minSwaps=2`, merged additively into
+  `/opt/MEV/listener/searcher/pools/active-pools.json` (backup at `.pre-v4-backfill.bak`; the
+  2,995 existing non-v4 entries were left untouched — verified byte-identical count after merge).
+  File is `.gitignore`'d (`listener/searcher/pools/active-pools*.json`) — confirmed via
+  `git ls-files`, so this never touches the git tree.
+- **Verified admission, not just presence:** re-ran `loadPoolUniverse(..., { maxPools: 1500 })` on
+  the node — **655 of the 1,500 admitted pools are now `univ4`** (score range 30-19043, comfortably
+  competitive against the non-v4 set, not a marginal sliver).
+- **Cross-checked against R6's specific named gaps:** of the two poolIds R6's competitor
+  cross-reference flagged as `pool_in_routing_graph: null` (`0xce2899b1...` fee=500,
+  `0x81fd4a10...` fee=20000), **`0x81fd4a10d06350658f763b282bc94536ef4bdf9d3a9ffefd38a07a968b3cb00b`
+  is now admitted**; `0xce2899b1...` is not in this 90k-block window's discovered set (either below
+  `minSwaps` in this window or outside it — not chased further this fire).
+- Redeployed via the standard guarded `scripts/deploy-node.sh` (git tree unaffected since no new
+  commits landed between the two runs) purely to restart the process and load the updated
+  `active-pools.json` — **verified via `/proc/<pid>/environ` post-restart: `SEARCHER_DRY_RUN=1`,
+  `SEARCHER_EV_GATE=1`, `SEARCHER_BRIBE_BPS=5000`, `SEARCHER_EVENTS_PATH` all intact** (R6's
+  safety/economics config was not disturbed).
+- **Total Alchemy CU spent this fire: 0.** All of the above ran against the local reth node.
+
+This is a genuine, measured `searcher_behavior_change` (not just "code exists") — the live dry-run
+searcher now has structural v4 coverage from real recent activity, not zero. The next dry-run
+window's competitor cross-reference (R8) should show a real change in the v4 `pool_in_routing_graph`
+rate versus R6's baseline (31/32 `null`).
+
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
 | v4 pool discovery/indexing mechanism (Initialize-event scan + inline PoolKey admission) | R6->R7 | — | **done** — code landed, gated via zero-RPC replay flip (`fixed`, commit `2f4141a`) |
-| production backfill: run the new discovery scan against real historical v4 Initialize/Swap logs to populate `active-pools.json`, then redeploy | R7 | R8 | **open** — needs an explicit CU-budget decision (a 30-day Alchemy `eth_getLogs` scan over the full PoolManager history is likely well beyond the ~1000 CU/fire cap meant for secondary verification, not batch backfills); alternative is a zero-CU local-reth run, but the local reth node only lives on the EC2 instance (not reachable from this Mac) and running the batch there needs an SSM-executed job — not attempted this fire to avoid rushing an unverified batch/RPC call against shared node infra. R8 should size the window explicitly (e.g. bounded lookback matching the reth node's retained ~10k blocks, run via SSM on-node, zero CU) before running it. |
-| concurrent-session collision (PID 77146/77145) | human | monitor | downgraded further — 0 open file handles this fire (stronger than R6's idle-CPU/clean-tree evidence); no collision materialized touching the 3 allowed files |
+| production backfill: run the discovery scan against real historical v4 data, redeploy | R7 | — | **done this fire** — 1,220 real univ4 pools discovered (zero CU, local reth, 90k-block window), 655 admitted into the live topN=1500 graph, node redeployed with dry-run/EV-gate/bribe-bps config verified intact |
+| reth retention assumption corrected: `--full` node retains >=100k blocks, not ~10k (memory `project-reth-node` needs updating) | R7 | next memory sync | open — update memory, this changes the cost/benefit of future local-reth backfills/lookbacks |
+| `0xce2899b1...` v4 pool (R6 gap, fee=500) still not covered after the 90k-block backfill | future | R8 | open — check whether it's below `minSwaps` in-window, created after the window start, or needs a longer lookback |
+| concurrent-session collision (PID 77146/77145) | human | monitor | downgraded further — 0 open file handles this fire (stronger than R6's idle-CPU/clean-tree evidence); no collision materialized touching the 3 allowed files or the node |
 | classifier blind spot (`impact_pool_not_in_routing_graph` conflates no-venue vs missing-graph-edge) | future | R8+ | open, non-blocking (carried from R4/R6) |
 | build-time discovery-queue chicken-egg (`not_closable_in_current_graph`) | future | R8+ | open, non-blocking (carried from R4/R6) |
 
 ## Next action
-Round complete: v4 discovery mechanism implemented, evaluated, gated (`fixed`), and committed
-(`2f4141a`) — zero Alchemy CU spent (pure/offline test only). Not pushed/deployed to the node this
-fire since the code alone changes no live behavior until `active-pools.json` is regenerated with
-real v4 pool data (carried to R8 as a CU-budgeted or local-reth-via-SSM decision — see Findings
-Ledger). Releasing the round lock. Next Hermes work resumes at the next `hermes-hourly` cron fire
-(confirmed enabled, `cronExpression: 0 * * * *`, `nextRunAt` after this fire) — external scheduler
-is the continuation trigger for this round's stop, per rule 15(a).
+Round complete: v4 discovery mechanism implemented, evaluated, gated (`fixed`, commit `2f4141a`),
+**and the production backfill executed + deployed this same fire** — zero Alchemy CU spent
+throughout (pure/offline test + local-reth-only RPC calls). The live dry-run searcher now runs
+with 655 real v4 pools in its routing graph (up from effectively 0 general v4 coverage). Releasing
+the round lock. Next Hermes work resumes at the next `hermes-hourly` cron fire (confirmed enabled,
+`cronExpression: 0 * * * *`) — R8 should run a fresh ~30min dry-run window + mandatory competitor
+cross-reference to measure whether this closes any of R6's 31 `not_seen` v4-routed matches, per
+rule 12's "live dry-run still gates competitiveness" (the replay flip proved the mechanism; this
+is the next step that proves live impact). External scheduler is the continuation trigger for this
+round's stop, per rule 15(a).
