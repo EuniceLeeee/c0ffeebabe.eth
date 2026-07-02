@@ -12,9 +12,30 @@
 ## The problem (why you're here)
 The per-window Hermes loop answers "this window, what did we lose + nearest tactical fix." Over
 three rounds it produced clean point-fixes — **but the production needle (a genuine +EV `simSuccess`)
-has NOT moved.** simSuccess is ≈0 across all three rounds, while competitors profitably followed the
-SAME public-mempool source swaps we saw. The loop is busy and correct locally, yet not closing the
-distance to a real +EV live bundle. **Step back and name the single biggest STRUCTURAL blocker.**
+has NOT moved.** simSuccess is ≈0 across all three rounds. The loop is busy and correct locally, yet
+not closing the distance to a real +EV live bundle.
+
+**Your job is to LOCALIZE the fixable lever — not write an essay naming a blocker.** "We can't
+produce a +EV bundle while competitors do" is not a mystery of "nothing to fix"; it's "we haven't
+localized WHERE." Split it into exactly one of:
+- **funnel** — we SAW the profitable flow + could route it, but a stage/config produced no profit
+  (→ fix the solver/economics/graph-routing);
+- **coverage** — the profit needed a pool/venue we don't index (→ close the coverage gap);
+- **flow-admission** — we NEVER admitted the profitable flow (mempool filter too tight / it came via
+  private orderflow / MEV-Share / routers we don't watch) (→ widen what enters the funnel);
+- **or: the flow genuinely has no atomic +EV we can replicate** (competitors run CEX-DEX/inventory,
+  not on-chain atomic backruns) — but you must PROVE this per-bundle, not assume it.
+
+**Do the analysis the per-window loop did NOT (R3's fable-5 only did the AGGREGATE competitor view —
+$84 total, "51/55 CEX-DEX", 1 AMP miss — it did NOT walk each profitable bundle to prove why not us):**
+1. **Longer window** (hours, not 30 min — 54 opps is too small a sample): the size distribution of
+   opportunities we admit — is a +EV-sized one EVER in our flow, or always ~$30?
+2. **Per-competitor-profitable-bundle counterfactual walk (the localizer):** for each REAL atomic-arb
+   bundle a watchlist bot landed, trace stage by stage — did we SEE the source flow (mempool) → plan →
+   solver's best quote → which gate → or did we never see it. This is what separates "process better"
+   (funnel/coverage) from "see more flow" (flow-admission), and it verifies/refutes the "51/55 not
+   replicable" claim bundle by bundle.
+3. **Coverage KPI:** how many pools in competitor profitable routes are out-of-graph (AMP-type).
 
 ## Packaged run results (cross-round, 2026-07-02) — this is DATA, not a conclusion
 | round | window (blocks) | opps | solverEntered | **simSuccess** | fix shipped | did it move +EV simSuccess? |
@@ -112,12 +133,16 @@ already MET.) Output feeds the Findings Ledger as `decision: epic` (or "no epic,
 fix + its gate"), which pauses point-fixing on that theme.
 
 ## Deliverable
-- **architecture_blocker:** one sentence — the single biggest structural blocker to a genuine +EV bundle.
-- **class:** economics | coverage | sim-fidelity | architecture.
-- **why the per-window loop missed it** (why 3 clean point-fixes didn't move simSuccess).
-- **evidence:** the cross-round trend + specific config values / KPI numbers / a competitor-vs-us
-  path comparison — not one window.
-- **epic?** yes/no; if yes, the sliced plan + the first slice's deterministic gate.
+- **localized_lever:** funnel | coverage | flow-admission | no-replicable-atomic-EV — WHERE the
+  fixable lever is, DERIVED from the per-bundle counterfactual walk (not selected).
+- **the walk (the load-bearing evidence):** for each of ≥2 real competitor atomic bundles: saw-it? →
+  planned? → our best quote (number) → gate that killed it (or "never saw it" = flow-admission).
+- **why the per-window loop missed it** (why 3 clean point-fixes didn't move simSuccess; why the
+  aggregate view wasn't enough).
+- **size distribution:** over the longer window, is a +EV-sized opportunity ever admitted?
+- **epic?** yes/no; if yes, the sliced plan + the first slice's deterministic gate (rule 12: a minimal
+  change that flips ONE genuine +EV simSuccess on a pinned replay).
+- **falsifier + runner-up:** the cheap disproof experiment + the strongest alternative lever.
 - **distance-to-production check:** closing it produces a +EV bundle — or is it another clean-but-null fix?
 
 Broadcast stays a human gate; all validation is fork / dry-run on local reth (zero CU).
