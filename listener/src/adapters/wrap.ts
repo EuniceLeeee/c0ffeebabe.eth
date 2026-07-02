@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
-import { encodeCall, encodeWethUnwrap } from "../encoder.js";
+import { encodeCall, encodeCallValue, encodeWethUnwrap } from "../encoder.js";
+import { ADDR } from "../shared/constants/addresses.js";
 import type { ActionAdapter, ResolvedPlanNode } from "../types.js";
 
 /** wstETH unwrap: wstETH.unwrap(uint256 wstETHAmount) → stETH */
@@ -50,6 +51,38 @@ export const wethWithdrawAdapter: ActionAdapter = {
 
   encode(_node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
     return encodeWethUnwrap();
+  },
+
+  matchTrace(_target: string, selector: string) {
+    return selector === "0x2e1a7d4d";
+  },
+};
+
+/** WETH deposit: wrap exact native ETH value into WETH via deposit(). */
+export const wethDepositValueAdapter: ActionAdapter = {
+  id: "weth-deposit-value",
+  isWrapper: false,
+  field2Offset: null,
+
+  encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
+    const calldata = new ethers.Interface(["function deposit() payable"]).encodeFunctionData("deposit");
+    return encodeCallValue(ADDR.WETH, node.amount, ethers.getBytes(calldata));
+  },
+
+  matchTrace(_target: string, selector: string) {
+    return selector === "0xd0e30db0";
+  },
+};
+
+/** WETH withdraw: unwrap exact WETH amount into native ETH via withdraw(uint256). */
+export const wethWithdrawAmountAdapter: ActionAdapter = {
+  id: "weth-withdraw-amount",
+  isWrapper: false,
+  field2Offset: null,
+
+  encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
+    const calldata = new ethers.Interface(["function withdraw(uint256)"]).encodeFunctionData("withdraw", [node.amount]);
+    return encodeCall(ADDR.WETH, ethers.getBytes(calldata));
   },
 
   matchTrace(_target: string, selector: string) {

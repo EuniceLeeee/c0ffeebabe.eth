@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import {
   encodeSetField2,
   encodeCall,
+  encodeCallValue,
   encodeClearState,
   encodeReturn,
   concatBytes,
@@ -134,6 +135,20 @@ export const univ4SettleAdapter: ActionAdapter = {
   encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
     const calldata = settleIface.encodeFunctionData("settle");
     return encodeCall(node.target, ethers.getBytes(calldata));
+  },
+
+  matchTrace() { return false; },
+};
+
+/** UniV4 settle native ETH debt — LEAF inside unlock callback */
+export const univ4SettleValueAdapter: ActionAdapter = {
+  id: "univ4-settle-value",
+  isWrapper: false,
+  field2Offset: null,
+
+  encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
+    const calldata = settleIface.encodeFunctionData("settle");
+    return encodeCallValue(node.target, node.amount, ethers.getBytes(calldata));
   },
 
   matchTrace() { return false; },

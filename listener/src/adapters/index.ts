@@ -14,6 +14,7 @@ import {
   univ4TakeAdapter,
   univ4SyncAdapter,
   univ4SettleAdapter,
+  univ4SettleValueAdapter,
 } from "./univ4.js";
 import {
   curveExchangeAdapter,
@@ -23,7 +24,13 @@ import {
   curveRouterExecutePathAdapter,
 } from "./curve.js";
 import { assertBalanceAdapter } from "./assert-balance.js";
-import { wstethUnwrapAdapter, wstethWrapAdapter, wethWithdrawAdapter } from "./wrap.js";
+import {
+  wstethUnwrapAdapter,
+  wstethWrapAdapter,
+  wethDepositValueAdapter,
+  wethWithdrawAdapter,
+  wethWithdrawAmountAdapter,
+} from "./wrap.js";
 
 // Flash
 register(morphoFlashAdapter);
@@ -46,6 +53,7 @@ register(univ4SwapAdapter);
 register(univ4TakeAdapter);
 register(univ4SyncAdapter);
 register(univ4SettleAdapter);
+register(univ4SettleValueAdapter);
 register(curveExchangeAdapter);
 register(curveExchangeReceivedUintAdapter);
 register(curveExchangeNoReceiverAdapter);
@@ -54,6 +62,8 @@ register(curveRouterExecutePathAdapter);
 // Wrap
 register(wstethUnwrapAdapter);
 register(wstethWrapAdapter);
+register(wethDepositValueAdapter);
 register(wethWithdrawAdapter);
+register(wethWithdrawAmountAdapter);
 // Guards
 register(assertBalanceAdapter);
