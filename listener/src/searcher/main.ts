@@ -24,6 +24,7 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
+  selectPairCompletionPools,
 } from "./pool-universe.js";
 import { AnvilSolver } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
@@ -109,6 +110,7 @@ interface LiveConfig {
   poolUniverseTopN: number;
   poolUniverseMinScore: number;
   poolUniverseForceInclude: string[];
+  pairCompletion: boolean;
   recordLiveFixtures: boolean;
   liveFixtureDir: string;
   /** Phantom-profit guard: reject final profit > this many bps of the flash
@@ -340,6 +342,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "1500"),
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
     poolUniverseForceInclude: parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE),
+    pairCompletion: process.env.SEARCHER_PAIR_COMPLETION !== "0",
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
     maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
@@ -438,7 +441,8 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] pinnedWarmPools=${config.pinnedWarmPoolPath}`);
   console.log(
     `[searcher/live] poolUniverse=${config.poolUniversePath} ` +
-      `topN=${config.poolUniverseTopN} minScore=${config.poolUniverseMinScore}`,
+      `topN=${config.poolUniverseTopN} minScore=${config.poolUniverseMinScore} ` +
+      `pairCompletion=${config.pairCompletion ? "on" : "off"}`,
   );
   console.log(
     `[searcher/live] solverDeadlineMs=${config.solverDeadlineMs} ` +
@@ -471,7 +475,7 @@ async function main(): Promise<void> {
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
   const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
-  const allPools = mergePoolRegistries(
+  const basePools = mergePoolRegistries(
     mergePoolRegistries(
       mergePoolRegistries(
         mergePoolRegistries(POOL_REGISTRY, pinnedWarmPools),
@@ -481,11 +485,27 @@ async function main(): Promise<void> {
     ),
     swapPools,
   );
+  const pairCompletionCandidates = config.pairCompletion
+    ? selectPairCompletionPools(
+      basePools,
+      loadPoolUniverse(config.poolUniversePath, {
+        maxPools: 0,
+        minScore: config.poolUniverseMinScore,
+      }),
+    )
+    : [];
+  const allPools = mergePoolRegistries(basePools, pairCompletionCandidates);
+  const pairCompletionAdded = allPools.length - basePools.length;
+  console.log(
+    `[searcher/live] pair-completion: +${pairCompletionAdded} alternate-venue pools` +
+      (config.pairCompletion ? "" : " (disabled)"),
+  );
   console.log(
     `[searcher/live] pool registry: ${POOL_REGISTRY.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
       `(forceInclude=${config.poolUniverseForceInclude.length}) + ` +
-      `${factoryPools.length} factory + ${swapPools.length} swap-active = ` +
+      `${factoryPools.length} factory + ${swapPools.length} swap-active + ` +
+      `${pairCompletionAdded} pair-completion = ` +
       `${allPools.length} total`,
   );
   dumpRuntimeGraphPools(allPools);

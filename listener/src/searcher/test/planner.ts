@@ -27,9 +27,9 @@ const P1 = "0x0000000000000000000000000000000000000001";
 const P2 = "0x0000000000000000000000000000000000000002";
 const P3 = "0x0000000000000000000000000000000000000003";
 
-function swap(tokenIn: string, tokenOut: string, pool: string): TokenEdge {
+function swap(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ3-swap"): TokenEdge {
   return {
-    adapterId: "univ3-swap",
+    adapterId,
     target: pool,
     tokenIn,
     tokenOut,
@@ -438,6 +438,9 @@ const POOL_V3FORK_WETH_USDT = "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D";
 const OVR = "0x21BfBDa47A0B4B5b1248c767Ee49F7caA9B23697";
 const POOL_OVR_WETH_INGRAPH = "0xc3f6b81fb9e6db259272026601689e383f94c0b0";
 const POOL_OVR_WETH_ENQUEUED = "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc";
+const TOK_14FEE680 = "0x14feE680690900BA0ccCfC76AD70Fd1b95D10e16";
+const POOL_14FEE_WETH_IMPACT = "0x2a6c340b00000000000000000000000000000000";
+const POOL_14FEE_WETH_ALT = "0x49bd1fa4c7286c2754ec7607f6f2e835f3ca6ddd";
 const TOK_FF208177 = "0xff20817700000000000000000000000000000000";
 const POOL_FF208177_A = "0x15e86e6f00000000000000000000000000000000";
 const POOL_FF208177_B = "0x08650bb900000000000000000000000000000000";
@@ -451,6 +454,7 @@ interface ReplayFixture {
   expectMinPlans?: number;
   maxHops?: number;
   expectClass?: string;     // no_candidate classification when expectPlans === 0
+  expectTokenPathTokensGreaterThan?: number;
 }
 
 const REPLAY_FIXTURES: ReplayFixture[] = [
@@ -464,6 +468,35 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
     impact: { tokenIn: REAL_WETH, tokenOut: C470, pool: POOL_E2A1437, start: C470 },
     expectPlans: 0,
     expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    // run 9a20d602 block 25444402: impact pool 0x2a6c340b was in-graph, but
+    // its same-pair alternate venue 0x49bd1fa4 (v3 fee-10000, universe score 3)
+    // was below the global top-N cutoff (~11), leaving only same-pool reversal.
+    id: "b2-14fee-weth-pair-gap",
+    provenance: "run 9a20d602 block 25444402; universe alternate 0x49bd1fa4 score 3 < cutoff 11",
+    edges: [
+      swap(REAL_WETH, TOK_14FEE680, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
+      swap(TOK_14FEE680, REAL_WETH, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: TOK_14FEE680, pool: POOL_14FEE_WETH_IMPACT, start: REAL_WETH },
+    expectPlans: 0,
+    expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    // Same lane after pair-completion admits the below-cutoff same-pair alternate.
+    // The planner should now find a cross-venue two-hop close.
+    id: "b2-14fee-weth-pair-flip",
+    provenance: "run 9a20d602 block 25444402; below-cutoff same-pair alternate 0x49bd1fa4 admitted",
+    edges: [
+      swap(REAL_WETH, TOK_14FEE680, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
+      swap(TOK_14FEE680, REAL_WETH, POOL_14FEE_WETH_IMPACT, "univ2-swap"),
+      swap(REAL_WETH, TOK_14FEE680, POOL_14FEE_WETH_ALT),
+      swap(TOK_14FEE680, REAL_WETH, POOL_14FEE_WETH_ALT),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: TOK_14FEE680, pool: POOL_14FEE_WETH_IMPACT, start: REAL_WETH },
+    expectMinPlans: 1,
+    expectTokenPathTokensGreaterThan: 2,
   },
   {
     // watchlist bot 0xae2Fc483 closed an OVR/WETH loop at block 25442493 through
@@ -586,6 +619,12 @@ async function testRealCaseReplayFixtures(): Promise<void> {
       const diag = planner.lastNoCandidateDiagnostic();
       if (!diag) throw new Error(`FAIL: replay ${fx.id}: expected diagnostic`);
       assert(diag.classification === fx.expectClass, `replay ${fx.id}: class ${diag.classification} != ${fx.expectClass}`);
+    }
+    if (fx.expectTokenPathTokensGreaterThan !== undefined) {
+      assert(
+        plans.some((plan) => plan.tokenPath.edges.length + 1 > fx.expectTokenPathTokensGreaterThan!),
+        `replay ${fx.id}: expected token path length > ${fx.expectTokenPathTokensGreaterThan}`,
+      );
     }
     console.log(`[planner] replay fixture ${fx.id} (${fx.provenance}): PASS`);
   }

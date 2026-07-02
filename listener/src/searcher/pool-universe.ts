@@ -72,6 +72,28 @@ export function loadPoolUniverse(
   return appendForceIncluded(pools.slice(0, maxPools), parsedPools, opts.forceInclude ?? []);
 }
 
+export function selectPairCompletionPools(
+  admittedPools: PoolEntry[],
+  candidatePools: PoolUniverseEntry[],
+): PoolUniverseEntry[] {
+  const admittedPairs = new Set<string>();
+  for (const pool of admittedPools) {
+    const key = unorderedTokenPairKey(pool);
+    if (key) admittedPairs.add(key);
+  }
+  const admittedPoolKeys = new Set(admittedPools.map(poolRegistryKey));
+  for (const pool of candidatePools) {
+    if (!admittedPoolKeys.has(poolRegistryKey(pool))) continue;
+    const key = unorderedTokenPairKey(pool);
+    if (key) admittedPairs.add(key);
+  }
+  if (admittedPairs.size === 0) return [];
+  return candidatePools.filter((pool) => {
+    const key = unorderedTokenPairKey(pool);
+    return key !== null && admittedPairs.has(key);
+  });
+}
+
 function appendForceIncluded(
   selected: PoolUniverseEntry[],
   allPools: PoolUniverseEntry[],
@@ -170,6 +192,24 @@ function parseFixedSlotKind(value: unknown, field: string): PoolEntry["fixedSlot
   if (value === undefined || value === null) return undefined;
   if (value === "lend" || value === "swap") return value;
   throw new Error(`${field} must be "lend" or "swap"`);
+}
+
+function unorderedTokenPairKey(pool: Pick<PoolEntry, "token0" | "token1">): string | null {
+  if (!pool.token0 || !pool.token1) return null;
+  return [pool.token0.toLowerCase(), pool.token1.toLowerCase()].sort().join("/");
+}
+
+function poolRegistryKey(pool: PoolEntry): string {
+  if (pool.adapter !== "univ4") return pool.address.toLowerCase();
+  return [
+    pool.address.toLowerCase(),
+    pool.poolId?.toLowerCase() ?? "",
+    pool.currency0?.toLowerCase() ?? "",
+    pool.currency1?.toLowerCase() ?? "",
+    pool.fee === undefined ? "" : String(pool.fee),
+    pool.tickSpacing === undefined ? "" : String(pool.tickSpacing),
+    pool.hooks?.toLowerCase() ?? "",
+  ].join(":");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
