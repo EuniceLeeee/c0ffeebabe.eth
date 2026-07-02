@@ -193,8 +193,28 @@ the existing ≥1-tx secondary-source validation rule.
   OUT legs are confirmed-closable coverage gaps. Lesson: the manual A/B label missed the paired
   in-graph pool; the **computable filter (W3) checks the real token set and gets it right** — an
   argument for the computed filter over hand-labels.
-- **W3 — DONE** (Codex-authored the two searcher files; Claude = non-author evaluator, ran the
-  gates). Verdict: **fixed** (deterministic replay flip confirmed).
+- **W3 verification correction (after the user asked "is it actually confirmed"):** re-checking
+  against the REAL node exposed two things my first pass overstated.
+  1. **`consumeDiscoveryQueue` had never run to completion.** It now has: the real function was
+     exercised against a mock provider seeded with the real on-chain token/shape data (the module
+     ran `main()` on import and hung the live attempts — fixed with an entry-point guard, below).
+     Result is correct: with OVR in the token set → 5 included / 1 blocked (native-ETH `0x2e8b0b`
+     → `not_closable_in_current_graph`, 0xEEE sentinel); with OVR absent → 4 included / OVR also
+     blocked. The A/B filter behaves exactly as designed.
+  2. **My "0xc3f6b8 is in our graph" claim conflated two things.** `0xc3f6b8` (OVR/WETH) is in the
+     **universe** (`active-pools.json`, 2995 pools) but **NOT in the current runtime graph**
+     (`runtime-graph-pools.json`, 2928 — it was pruned). The filter's token set is built from the
+     universe, so the enqueue decision (include `0x0b0d6c11`) is correct on the real node. But
+     whether the OVR loop actually CLOSES at runtime needs both venues to survive into the routed
+     graph — and `0xc3f6b8` is currently pruned. Adding `0x0b0d6c11` to the universe does not
+     guarantee the runtime graph will route it.
+- **W3 — verdict corrected: `implemented` + deterministically gated on the pieces; the end-to-end
+  learn→close is `implemented_not_validated` pending a node dry-run.** NOT "fixed" end-to-end.
+  What IS confirmed (deterministic, local): the gate (W2), the planner routing flip (given both
+  edges → loop closes), the `isClosablePair` filter unit, and `consumeDiscoveryQueue` full logic
+  (mock + real data). What is NOT confirmed: that after deploy+universe-rebuild+restart the OVR
+  loop actually closes in the runtime graph (the universe→runtime pruning is an open question only
+  a node dry-run answers).
   - Evaluator gates run: `npm run build` (listener tsc clean); `npm run searcher:planner` →
     `coverage-ovr-weth-gap` 0 plans, `coverage-ovr-weth-flip` ≥1 plan, `single-venue-longtail`
     STAYS 0 (planner PASS 12/12 + fixtures 6/6); `isClosablePair` pure unit (both-in true /

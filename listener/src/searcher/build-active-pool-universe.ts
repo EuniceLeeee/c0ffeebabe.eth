@@ -375,7 +375,11 @@ async function mapLimit<T, R>(
   return results;
 }
 
-main().catch((err) => {
-  console.error(`[pool-universe] FAIL: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
-});
+// Only run the full scan when executed directly as a script (npm run searcher:pool-universe),
+// not when this module is imported (e.g. to reuse consumeDiscoveryQueue / isClosablePair in a test).
+if (process.argv[1]?.includes("build-active-pool-universe")) {
+  main().catch((err) => {
+    console.error(`[pool-universe] FAIL: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  });
+}
