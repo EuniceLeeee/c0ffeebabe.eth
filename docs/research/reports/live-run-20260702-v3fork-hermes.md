@@ -183,13 +183,64 @@ files seems required, STOP and report instead of editing.
 2. Gap fixture pins the real classification string (observed, not guessed) → verify: diff + output.
 3. `git diff --stat` touches exactly the two allowed files → verify: orchestrator diff-scope check.
 
+## Slice 2 — Deploy + Metrics Gate (node `mev-searcher.service`)  <!-- Claude ops -->
+
+**Deployed** (node `i-0ff908dedeec9ebc6`, SSM only): `git reset --hard origin/main` →
+`281cf50` (incl. checksum hotfix). Generated `active-pools.json` on the local reth node
+(zero CU): `npm run searcher:pool-universe` with `POOL_UNIVERSE_LOOKBACK_BLOCKS=7000`
+(within --full retention) → **2,995 pools** written. Sample fork pool `0x05dEf6…` present
+at rank 1447 (score 11, univ3, WETH/USDT). Set `SEARCHER_POOL_UNIVERSE_TOP_N=1500`
+(explicit value fixes the `=0` footgun); verified `SEARCHER_DRY_RUN=1` before every restart.
+
+**Startup crash + fix (rule-11 fallback, authored_by claude):** first restart crash-looped
+(`fatal: bad address checksum` on the pinned fork pool). Root cause = **bad EIP-55 casing
+in Claude's own Brief** (`0x05DEF6…` vs canonical `0x05dEf6…`) that Codex transcribed
+verbatim; `loadPinnedWarmPools` runs `ethers.getAddress` at startup. Fixed both occurrences
+(`58c8ca5`→`281cf50`), re-ran planner (4/4 green), redeployed → healthy.
+
+**Pool registry growth (the actual thing this cycle risks):**
+`2 protocol + 11 pinned + 1500 universe + 2712 factory + 100 swap-active = 4138 total`
+(was 2801 in the latency cycle). Fork pool confirmed **in the runtime routing graph**
+(`grep 05def6 runtime-graph-pools.json` → present).
+
+**Window:** process start 04:09:30 UTC (block ~25442352), ~33 min, dry-run.
+
+```
+funnel (cumulative counters, this process — JSONL unavailable, see finding):
+  hints 21253 / impacts 2976 / opportunities 56 / plans 364 / solverEntered 104 /
+  solverSuccess 0 / simSuccess 0 / submitAttempts 0
+  expiredBeforeSolver 7 / quoteTimeouts 15 / simReverts 0 / finalVerifyFailed 0 / missingState 0
+per-hint end-to-end latency (n=19426): p50=14ms  p95=18ms  max=6747ms (single cold-state outlier)
+hint skip mix: 12096 tx-filter / 4153 no-rawTx / 2920 hash-only / 82 victim / 3 insufficient
+```
+
+**Gate verdict: PASS (no regression) — TOP_N kept at 1500.**
+- **Latency (the real risk of +1337 pools): not regressed.** p95 per-hint = 18ms with a
+  4138-pool registry, well inside `planBudgetMs=300`/`oppTtlMs=5000`. Bigger graph did NOT
+  blow up prep. `solverEntered=104` healthy (~1.9/opp).
+- `expiredBeforeSolver=7` (raw) on 56 opportunities — small-sample noise, not the ≥16%
+  starvation the latency cycle fixed; p95 confirms no systemic starvation. Not "显著劣化",
+  so no rollback to 500.
+- **No live +EV close this window** (`solverSuccess=0`), consistent with prior runs.
+- **Fork pool `0x05def6`: 0 live hits this window.** Expected — 12-swap/day pool over 33 min;
+  it may simply not have traded, and even a swap must land in a detected opportunity. Coverage
+  is proven at the graph level (planner flip fixture `v3fork-triangle-flip` + runtime-graph
+  presence); live capture awaits a window where it actually moves. **This is why the repair-
+  replay flip — not a live catch — is the correctness gate for a pool-coverage fix (rule 12);
+  live dry-run gates competitiveness, and a 33-min window can't force a rare pool to trade.**
+
+**Post-window action:** set `SEARCHER_EVENTS_PATH` on the node so the next cycle's follow-up
+uses structured JSONL (rule: prefer JSONL over log substrings) instead of counter scraping.
+
 ## Findings Ledger
 | finding | decision | owner | carry_to_round |
 |---|---|---|---|
 | No-trigger next-block state-arb invisible (kind only `backrun-arb`) | next cycle brief (behavior change) | Claude | 20260703 cycle |
 | live-loss lacks `trigger_type` (backrun vs state-arb) + per-pool in_universe/in_graph tags | pair with state-arb cycle | Claude | 20260703 cycle |
-| `SEARCHER_POOL_UNIVERSE_TOP_N=0` silently disables universe channel (footgun) | document + set explicit value in node .env during Slice 2 ops | Claude | this cycle (ops) |
-| `active-pools.json` never generated; needs regeneration cadence policy | Slice 2 ops + note cadence in deploy doc | Claude | this cycle (ops) |
+| `SEARCHER_POOL_UNIVERSE_TOP_N=0` silently disables universe channel (footgun) | **DONE** — set explicit `=1500` on node .env | Claude | this cycle (ops) ✓ |
+| `active-pools.json` never generated | **DONE** — generated (2995 pools, 7000-block lookback); cadence policy still open (regen weekly?) | Claude | cadence → backlog |
+| pinned-warm-pools has **no EIP-55 checksum-validation gate** — a bad-casing address only fails at node startup (crash-loop), never in CI/build | add a checksum assertion to `searcher:planner` or a pinned-pools lint so bad casing fails locally, not on the node | Claude | 20260703 cycle |
+| node `.env` missing `SEARCHER_EVENTS_PATH` → no structured JSONL; follow-up forced onto log counters (violates "prefer JSONL" rule) | **DONE this cycle** — set events path + restart (dry-run guard re-verified) | Claude | this cycle (ops) ✓ |
 
 ## Codex Implementation Pass  <!-- orchestrator fills after gates -->
 
