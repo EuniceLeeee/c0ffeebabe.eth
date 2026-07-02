@@ -341,7 +341,13 @@ discovery is needed.
                    • coffeebabe 0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671 — MANUAL, EVERY
                      live-window tx (full trace: what the arb did + did it backrun a source swap
                      + that swap's origin, or prove atomic).
-                   • 0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13 — SAMPLED.
+                   • 0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13 — SAMPLED, but sample size is
+                     **OUTCOME-DRIVEN, not a fixed "a few"**: keep sampling (and if a small/thin
+                     window yields nothing analyzable, **EXTEND the window to hours**) until you
+                     have enough to counterfactual-walk **≥1 real blocker** — OR prove no analyzable
+                     +EV opportunity exists. Never conclude a "true negative" from a STARVED sample
+                     (the R3 trap: a 30-min window's thin flow was read as "nothing to fix" — the
+                     right response to a thin window is EXTEND it, not conclude).
                    • Each agent works from PRIMARY sources independently (raw script JSON +
                      own on-chain trace), never the other's curated facts.
                  → classify what WE missed: pool gap / path gap / unanticipated gap; and confirm
