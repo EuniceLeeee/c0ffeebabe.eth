@@ -167,7 +167,7 @@ npm run searcher:planner
 
 | finding | owner | carry_to_round | status |
 |---|---|---|---|
-| shared-TTL serial starvation (this cycle) | Codex impl / Claude gate | this cycle | **implemented `0c3d9ab`** — metrics gate pending on node deploy |
+| shared-TTL serial starvation (this cycle) | Codex impl / Claude gate | this cycle | **FIXED `0c3d9ab`** — metrics gate PASS: expired-before-solver 16.4%→4.1% (~4×), slice-yield confirmed live |
 | **native-ETH v4 execution — SCOPE CORRECTED 2026-07-02:** BotVM.sol already has opcode `0x01` CALL-with-value (since first commit `f964ae5`) + `0x04` WETH_UNWRAP + payable `receive()`; TS `encodeCallValue`/`weth-withdraw` exist. **NO contract change / redeploy.** Real gap is TS-only and starts upstream: detection excludes ZeroAddress (`pool-impact.ts:511`), graph drops it (`token-graph.ts:287`). Fix = 0x0↔WETH native-flag mapping + plan-builder unwrap/settle-value/wrap legs. | next cycle (cycle 2) | cycle 2 | open — de-escalated from "user-present contract change" to normal TS slice; broadcast still human-gated |
 | TTL=8000 band-aid | Claude | this cycle (deploy step) | revert to 5000 — measured ineffective |
 | go-live economics: bribeBps=10000 keeps nothing, `gas_estimate:"0"` in sims, `SEARCHER_MIN_NET_ETH=0` | — | pre-broadcast cycle | open (hard prerequisite before any production flip) |
@@ -199,3 +199,21 @@ npm run searcher:planner
   `expired-before-solver` *rate* per opp down and/or `simulation_result`/solverEntered up;
   a new `plan/plan_budget_exhausted` bucket may appear (honest reclassification, not a
   regression). Remember: raw expired count can rise (now counted honestly, was invisible).
+
+## Measurement RESULT — metrics gate PASS (2026-07-02, ~44min clean-restart window, PID 57057)
+
+- Process counters (cumulative since the clean restart on new code, `oppTtlMs=5000
+  planBudgetMs=300 oppMinSliceMs=500`): **opportunities=73 · solverEntered=22 ·
+  expired-before-solver=3 · plans=140 · simSuccess=0**.
+- **expired-before-solver rate: 286/1748 = 16.4% (old) → 3/73 = 4.1% (new) — ~4× drop.**
+  ~30% of opportunities now reach the solver (22/73). The slice-yield path is confirmed
+  firing in the live log (`opportunity expired (slice) … moving to next opportunity
+  (hintOpps=3 candidatesTried=4/20)`) — one opp yields after its slice instead of
+  `return`-ing and killing the whole hint.
+- **verdict: FIXED** (latency metrics gate, rule 12 exemption). Sample is smaller than the
+  baseline window but the direction + the observed slice-yield behavior are unambiguous.
+- **Caveat / not this cycle:** `simSuccess=0` — the fix moves more opps INTO the solver, but
+  none produced a profitable bundle this window. That is the **coverage + economics** gap
+  (native-ETH v4 = cycle 2; go-live economics = D), NOT latency. Latency starvation is closed.
+- Note: the events-jsonl line-3303 boundary was invalidated when logrotate (installed this
+  session) truncated the file; the process counters above are the clean before/after signal.
