@@ -438,6 +438,9 @@ const POOL_V3FORK_WETH_USDT = "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D";
 const OVR = "0x21BfBDa47A0B4B5b1248c767Ee49F7caA9B23697";
 const POOL_OVR_WETH_INGRAPH = "0xc3f6b81fb9e6db259272026601689e383f94c0b0";
 const POOL_OVR_WETH_ENQUEUED = "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc";
+const TOK_FF208177 = "0xff20817700000000000000000000000000000000";
+const POOL_FF208177_A = "0x15e86e6f00000000000000000000000000000000";
+const POOL_FF208177_B = "0x08650bb900000000000000000000000000000000";
 
 interface ReplayFixture {
   id: string;
@@ -488,6 +491,31 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
       swap(OVR, REAL_WETH, POOL_OVR_WETH_ENQUEUED),
     ],
     impact: { tokenIn: REAL_WETH, tokenOut: OVR, pool: POOL_OVR_WETH_INGRAPH, start: REAL_WETH },
+    expectMinPlans: 1,
+  },
+  {
+    // Block 25443539 WETH/0xff208177: documented competitor lane needs the
+    // universe-loaded return venues 0x15e86e6f + 0x08650bb9. Without them, the
+    // source impact pool is absent from the routing graph.
+    id: "coverage-ff208177-gap",
+    provenance: "block 25443539 WETH/0xff208177; universe return venues 0x15e86e6f + 0x08650bb9 absent",
+    edges: [swap(TOK_FF208177, USDT, P2), swap(USDT, TOK_FF208177, P3)],
+    impact: { tokenIn: REAL_WETH, tokenOut: TOK_FF208177, pool: POOL_FF208177_A, start: REAL_WETH },
+    expectPlans: 0,
+    expectClass: "impact_pool_not_in_routing_graph",
+  },
+  {
+    // Same block 25443539 lane with both file-backed universe venues admitted.
+    // Cross-venue WETH/0xff208177 coverage should produce at least one plan.
+    id: "coverage-ff208177-flip",
+    provenance: "block 25443539 WETH/0xff208177; universe return venues 0x15e86e6f + 0x08650bb9 covered",
+    edges: [
+      swap(REAL_WETH, TOK_FF208177, POOL_FF208177_A),
+      swap(TOK_FF208177, REAL_WETH, POOL_FF208177_A),
+      swap(REAL_WETH, TOK_FF208177, POOL_FF208177_B),
+      swap(TOK_FF208177, REAL_WETH, POOL_FF208177_B),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: TOK_FF208177, pool: POOL_FF208177_A, start: REAL_WETH },
     expectMinPlans: 1,
   },
   {

@@ -108,6 +108,7 @@ interface LiveConfig {
   poolUniversePath: string;
   poolUniverseTopN: number;
   poolUniverseMinScore: number;
+  poolUniverseForceInclude: string[];
   recordLiveFixtures: boolean;
   liveFixtureDir: string;
   /** Phantom-profit guard: reject final profit > this many bps of the flash
@@ -269,6 +270,15 @@ function liveWsUrl(rpcUrl: string): string {
   );
 }
 
+function parseAddressList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((addr) => addr.trim())
+    .filter((addr) => addr.length > 0)
+    .map((addr) => ethers.getAddress(addr));
+}
+
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const rpcUrl = liveRpcUrl();
 
@@ -327,8 +337,9 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     stateWatchMaxPools: Number(process.env.SEARCHER_STATE_WATCH_MAX_POOLS ?? "64"),
     pinnedWarmPoolPath: process.env.SEARCHER_PINNED_WARM_POOLS ?? DEFAULT_PINNED_WARM_POOLS_PATH,
     poolUniversePath: process.env.SEARCHER_POOL_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH,
-    poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "0"),
+    poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "1500"),
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
+    poolUniverseForceInclude: parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE),
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
     maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
@@ -452,6 +463,7 @@ async function main(): Promise<void> {
   const universePools = loadPoolUniverse(config.poolUniversePath, {
     maxPools: config.poolUniverseTopN,
     minScore: config.poolUniverseMinScore,
+    forceInclude: config.poolUniverseForceInclude,
   });
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
@@ -471,7 +483,8 @@ async function main(): Promise<void> {
   );
   console.log(
     `[searcher/live] pool registry: ${POOL_REGISTRY.length} protocol + ` +
-      `${pinnedWarmPools.length} pinned + ${universePools.length} universe + ` +
+      `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
+      `(forceInclude=${config.poolUniverseForceInclude.length}) + ` +
       `${factoryPools.length} factory + ${swapPools.length} swap-active = ` +
       `${allPools.length} total`,
   );

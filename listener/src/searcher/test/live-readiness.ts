@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   const poolUniverseTopN = Number(
     process.env.LR_POOL_UNIVERSE_TOP_N ??
       process.env.SEARCHER_POOL_UNIVERSE_TOP_N ??
-      "0",
+      "1500",
   );
   const poolUniverseMinScore = Number(
     process.env.LR_POOL_UNIVERSE_MIN_SCORE ??

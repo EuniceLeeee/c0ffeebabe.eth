@@ -18,23 +18,41 @@ ENVF=$REPO/.env
 TS=$(date +%Y%m%d-%H%M%S)
 say() { echo "[deploy $TS] $*"; }
 
-# Env keys the searcher needs (allowlist; values recovered from the live process, never printed).
-KEYS="MAINNET_RPC_URL OWNER_PRIVATE_KEY BOTVM_ADDRESS BOTVM_OWNER \
-SEARCHER_ENABLE_HASH_ONLY SEARCHER_ENABLE_MEMPOOL SEARCHER_LIVE_BACKEND \
-SEARCHER_LIVE_RPC_URL SEARCHER_LIVE_WS_URL"
+# Non-SEARCHER keys the searcher needs. SEARCHER_* vars are recovered by prefix
+# from the live process so deploy cannot silently drop tuning knobs.
+NON_SEARCHER_KEYS="MAINNET_RPC_URL OWNER_PRIVATE_KEY BOTVM_ADDRESS BOTVM_OWNER"
 OPP_TTL_MS="${SEARCHER_OPP_TTL_MS:-5000}"   # override via env when invoking
 
 cd "$REPO" || { say "no $REPO"; exit 1; }
+
+recover_running_env() {
+  tr '\0' '\n' < "/proc/$PID/environ" | while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    key=${line%%=*}
+    case "$key" in
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS)
+        continue
+        ;;
+      SEARCHER_*)
+        echo "$line"
+        continue
+        ;;
+    esac
+    for wanted in $NON_SEARCHER_KEYS; do
+      if [ "$key" = "$wanted" ]; then
+        echo "$line"
+        break
+      fi
+    done
+  done
+}
 
 # ── 1. Recover the full working env from the RUNNING process (ground truth) ──
 PID=$(systemctl show -p MainPID --value mev-searcher 2>/dev/null)
 if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   say "recovering env from running PID $PID"
   tmp=$(mktemp)
-  for k in $KEYS; do
-    line=$(tr '\0' '\n' < "/proc/$PID/environ" | grep "^$k=" | head -1)
-    [ -n "$line" ] && echo "$line" >> "$tmp"
-  done
+  recover_running_env > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_DRY_RUN=1" >> "$tmp"
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
@@ -42,8 +60,14 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=1 + TTL=$OPP_TTL_MS"
 else
   say "no running process to recover env from — ensuring DRY_RUN=1 in existing .env"
+  tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  grep -q '^SEARCHER_DRY_RUN=1' "$ENVF" || echo "SEARCHER_DRY_RUN=1" >> "$ENVF"
+  if [ -f "$ENVF" ]; then
+    grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS)=' "$ENVF" > "$tmp"
+  fi
+  echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
+  echo "SEARCHER_DRY_RUN=1" >> "$tmp"
+  cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
 
 # ── 2. HARD broadcast-guard: refuse to continue unless DRY_RUN=1 is present ──
@@ -63,6 +87,7 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 ( cd "$REPO/listener" && npm run build ) || { say "build failed — NOT restarting"; exit 1; }
 
 # ── 5. Restart + verify dry-run ──
+RESTART_EPOCH=$(date +%s)
 systemctl restart mev-searcher
 sleep 8
 ACTIVE=$(systemctl is-active mev-searcher)
@@ -71,5 +96,21 @@ DRY=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c '^SEARCHER_DR
 say "restarted: active=$ACTIVE pid=$NEWPID dry_run_env=$DRY"
 if [ "$DRY" != "1" ]; then
   say "WARNING: restarted process env has no DRY_RUN=1 — STOP and investigate."; exit 9
+fi
+BANNER=""
+for _ in $(seq 1 60); do
+  BANNER=$(journalctl -u mev-searcher --since "@$RESTART_EPOCH" -o cat --no-pager 2>/dev/null \
+    | grep 'pool registry:' | tail -1)
+  [ -n "$BANNER" ] && break
+  sleep 1
+done
+if [ -z "$BANNER" ]; then
+  say "ABORT: missing pool registry startup banner after restart."
+  exit 9
+fi
+say "startup banner: $BANNER"
+if echo "$BANNER" | grep -Eq '(^|[[:space:]])universe=0([^0-9]|$)|\+ 0 universe([^0-9]|$)'; then
+  say "ABORT: pool universe loaded zero pools after restart."
+  exit 9
 fi
 say "DONE — dry-run on latest main. backup: $REPO-deploy-$TS.tar.gz"

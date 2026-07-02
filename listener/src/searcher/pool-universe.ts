@@ -28,6 +28,7 @@ export interface PoolUniverseLoadOptions {
   missingOk?: boolean;
   maxPools?: number;
   minScore?: number;
+  forceInclude?: string[];
 }
 
 const ADAPTERS = new Set<PoolEntry["adapter"]>([
@@ -61,13 +62,44 @@ export function loadPoolUniverse(
   }
 
   const minScore = opts.minScore ?? 0;
-  const maxPools = opts.maxPools ?? Infinity;
-  const pools = rawPools
-    .map((raw, i) => parsePoolUniverseEntry(raw, `${path}.pools[${i}]`))
+  const maxPools = opts.maxPools && opts.maxPools > 0 ? opts.maxPools : Infinity;
+  const parsedPools = rawPools
+    .map((raw, i) => parsePoolUniverseEntry(raw, `${path}.pools[${i}]`));
+  const pools = parsedPools
     .filter((pool) => (pool.score ?? 0) >= minScore)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
-  return pools.slice(0, maxPools);
+  return appendForceIncluded(pools.slice(0, maxPools), parsedPools, opts.forceInclude ?? []);
+}
+
+function appendForceIncluded(
+  selected: PoolUniverseEntry[],
+  allPools: PoolUniverseEntry[],
+  forceInclude: string[],
+): PoolUniverseEntry[] {
+  if (forceInclude.length === 0) return selected;
+  const wanted = new Set(forceInclude.map((addr) => ethers.getAddress(addr).toLowerCase()));
+  const seen = new Set(selected.map((pool) => pool.address.toLowerCase()));
+  const warnedV4 = new Set<string>();
+  const out = [...selected];
+  for (const pool of allPools) {
+    const key = pool.address.toLowerCase();
+    if (!wanted.has(key)) continue;
+    if (pool.adapter === "univ4") {
+      if (!warnedV4.has(key)) {
+        console.warn(
+          `[pool-universe] forceInclude skipped univ4 entry ${pool.address}: ` +
+            "address-only identity is ambiguous for the v4 PoolManager",
+        );
+        warnedV4.add(key);
+      }
+      continue;
+    }
+    if (seen.has(key)) continue;
+    out.push(pool);
+    seen.add(key);
+  }
+  return out;
 }
 
 function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry {
