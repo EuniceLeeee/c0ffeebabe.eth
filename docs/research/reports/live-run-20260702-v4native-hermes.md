@@ -53,10 +53,29 @@ NOT `pool-impact.ts:511` (that's a v2/v3 token0/token1 query) nor `token-graph.t
 - token-graph builder aliasing (4 lines) reviewed-correct; not separately unit-tested
   (needs a backend) — the full native path is exercised by 2b's fork test.
 
-## Slice 2b (next) — execution legs + fork test
-- plan-builder `univ4-unlock` native path: input leg `WETH.withdraw(amountIn)` → v4
-  `settle{value: amountIn}` (encodeCallValue 0x01); output leg `take(0x0)` →
-  `WETH.deposit{value: amountOut}`. Consume `edge.nativeCurrency0/1`.
-- Gate = anvil fork: real ETH/USDC fee-100 v4 swap builds + executes + output matches.
-- Only after 2b passes: pin a native-ETH v4 pool in `pinned-warm-pools.json` (until then
-  2a is inert in prod). Broadcast stays human-gated.
+## Slice 2b — execution (split into 2b-i building blocks + 2b-ii wiring/fork)
+
+### 2b-i — LANDED `a5c82d5` (adapters + deterministic gate)
+- Three BotVM adapters (no contract change; existing 0x01/0x00 encoders):
+  `weth-deposit-value` (wrap exact ETH→WETH), `weth-withdraw-amount` (unwrap exact
+  WETH→ETH; distinct from the 0x04 unwrap-all), `univ4-settle-value` (PoolManager
+  `settle{value}`). Registered in `index.ts`.
+- Gate: `test/v4-native-adapters.ts` decodes the raw `[op][addr:20][value:12][len:3]
+  [payload]` layout and asserts op/target/value/selector for all three — **3/3**. tsc
+  clean; planner 12/12 + v4-impact regression green. **verdict: fixed** (encode-level).
+- authored_by: codex gpt-5.5 xhigh; Claude reviewed + gated.
+- minor (non-blocking): `weth-withdraw-amount` shares matchTrace selector `0x2e1a7d4d`
+  with `weth-withdraw` — reverse trace-decode only, irrelevant to forward encoding.
+
+### 2b-ii — NEXT (wiring + fork test)
+- **quoter.ts direction fix (2a fallout):** after 2a aliasing, `v4ZeroForOne` /
+  `encodeUniV4QuoteExactInputSingle` are called with the aliased WETH token but the real
+  PoolKey has `currency==0x0` → throws "tokens do not match PoolKey". Map aliased WETH→0x0
+  when the key has a native currency (derivable from the PoolKey's 0x0 side; no extra flag).
+- **plan-builder.ts `univ4-unlock` native path:** same direction mapping for `zeroForOne`;
+  input-native leg = `weth-withdraw-amount(amtIn)` → `univ4-settle-value{value:amtIn}`
+  (replaces sync+erc20-transfer+settle); output-native leg = `univ4-take(0x0)` →
+  `weth-deposit-value{value:amtOut}`. Consume `edge.nativeCurrency0/1`.
+- Gate = **anvil fork**: real ETH/USDC v4 swap builds + executes on-fork + output matches
+  (mirror `test/replay-v4-arb.ts`). Only after this: pin a native pool (2a+2b inert in prod
+  until pinned). Broadcast stays human-gated.
