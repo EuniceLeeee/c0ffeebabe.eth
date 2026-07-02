@@ -24,6 +24,7 @@
     "searcher:poolupdater": "tsx src/searcher/test/pool-state-updater.ts",
     "searcher:victimapply": "tsx src/searcher/test/victim-apply.ts",
     "searcher:postimpactoverrides": "tsx src/searcher/test/post-impact-overrides.ts",
+    "searcher:valueineth": "tsx src/searcher/test/value-in-eth.ts",
     "searcher:balanceslots": "tsx src/searcher/test/balance-slots.ts",
     "searcher:finalverifygate": "tsx src/searcher/test/final-verify-gate.ts",
     "searcher:finaloverlayequiv": "tsx src/searcher/test/final-overlay-equiv.ts",

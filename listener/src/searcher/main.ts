@@ -154,9 +154,10 @@ const STABLE_DECIMALS = new Map<string, number>([
   ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6], // USDC
   ["0xdac17f958d2ee523a2206206994597c13d831ec7", 6], // USDT
   ["0x6b175474e89094c44da98b954eedeac495271d0f", 18], // DAI
+  ["0x853d955acef822db058eb8505911ed77f175b99e", 18], // FRAX
 ]);
 
-function valueInEth(token: string, amount: bigint, ethUsd: number): bigint {
+export function valueInEth(token: string, amount: bigint, ethUsd: number): bigint {
   const t = token.toLowerCase();
   if (t === WETH_ADDR) return amount;
   const decimals = STABLE_DECIMALS.get(t);
