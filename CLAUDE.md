@@ -428,12 +428,18 @@ discovery is needed.
     a few times before giving up — give it time). The earlier "stalls" were a bad
     calling posture (reading scrolling stdout, no output file, killed too early), NOT a
     reason to drop `xhigh`. **Default = `gpt-5.5 xhigh`, orchestrated as a slow worker:**
-    - **Invocation (verified codex 0.142.4) — always output to files, never trust stdout:**
+    - **Invocation — ALWAYS via the wrapper `scripts/codex-run.sh`, NEVER hand-write the codex line.**
+      Hand-writing keeps dropping guards (2026-07-02: a plan-review sat stdin-hung 15 min because the
+      hand-written line omitted `< /dev/null`). The wrapper bakes them in so they can't be forgotten:
+      `< /dev/null` (stdin-hang guard), `caffeinate -i`, `-o`+`--json` to files, and a launch watchdog
+      that KILLS a stdin-hang if no `thread.started` appears within 30s (a hang costs ~30s not 15 min).
       ```
-      codex -s workspace-write -a never exec -C /Users/eunice/src/MEV \
-        --json -o /tmp/codex-<pass>.out "$BRIEF" > /tmp/codex-<pass>.events.jsonl 2>&1
+      # brief lives in a FILE (avoids arg-escaping bugs); run via Bash tool run_in_background=true:
+      scripts/codex-run.sh <read-only|workspace-write> /tmp/codex-<pass>.brief.md /tmp/codex-<pass>
+      #   -> /tmp/codex-<pass>.out (final message) + /tmp/codex-<pass>.events.jsonl (events)
       ```
-      `-o` = final message (the result); `--json` events.jsonl = retry/connection evidence.
+      The wrapper `wait`s on codex so the harness completion notification fires exactly when codex
+      finishes. `-o` = final message; `--json` events = retry/connection + `thread.started` evidence.
       Do NOT edit global `~/.codex/config.toml` (it also drives the desktop app).
     - **Timeout:** soft 10–15 min, hard 25–30 min. **Never 90s/180s** (kills xhigh
       mid-think → looks stalled). Run in background + judge on exit; do not poll-kill.
