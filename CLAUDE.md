@@ -310,9 +310,11 @@ discovery is needed.
                    • Each agent works from PRIMARY sources independently (raw script JSON +
                      own on-chain trace), never the other's curated facts.
                  → classify what WE missed: pool gap / path gap / unanticipated gap.
-4. BLOCKER       Claude names the core blocker  →  Codex REVIEWS the blocker (agree on WHAT
-   (agree first)  is wrong before planning the fix)  →  Claude FINALIZES the blocker + writes
-                  the Implementation Brief. Only the Brief / Final Decision drives code.
+4. BLOCKER       A FRESH fable-5 sub-agent (Agent tool, model:fable — new context every round,
+   (agree first)  avoids long-session degradation) does the competitor cross-ref + NAMES the core
+                  blocker, returns it + evidence  →  Codex REVIEWS the blocker (agree on WHAT is
+                  wrong before planning the fix)  →  Claude FINALIZES the blocker + writes the
+                  Implementation Brief. Only the Brief / Final Decision drives code.
 5. IMPLEMENT     Codex writes  →  Claude review ↔ Codex review/fix  (≤ 3 passes, then Claude
                  Final Approval or an explicit stop).
 6. GATE          • deterministic blocker (path/pool/decoder/planner/adapter/graph) → a local
@@ -491,9 +493,17 @@ tool or `/codex` command:
   (`npm run build`, tests, replay, reads node events over SSM), reviews Codex's
   diff, commits. Claude is the non-author skeptic of Codex's code, so the
   generator/evaluator split still holds (Codex writes, Claude judges).
-- **No nested Claude**: `claude -p` inside a Claude Code session is blocked (it
-  crashes the session) — never shell it. Claude does not spawn a second Claude;
-  it *is* the evaluator.
+- **No nested Claude via shell**: `claude -p` inside a Claude Code session is blocked
+  (it crashes the session) — **never shell it.** The orchestrator does not shell a second
+  Claude and is itself the evaluator of Codex's code.
+- **EXCEPTION — fresh fable-5 blocker-finder per round (Rounds step 4):** each Hermes round
+  spawns ONE fresh fable-5 sub-agent for the **blocker-discovery step** (competitor
+  cross-reference → name the core blocker), via the **Agent tool with `model: "fable"`** (SDK
+  sub-agent, cold/fresh context — NOT `claude -p`). Purpose: a fresh fable context each round
+  avoids the long-session degradation, and the blocker judgment is made by fable regardless of
+  which model orchestrates. The sub-agent returns its named blocker + evidence; the orchestrator
+  then runs `Codex reviews the blocker → Claude finalizes → Codex writes → review → fork/replay
+  gate`. This is the ONLY sanctioned second-Claude spawn; everything else stays single-orchestrator.
 
 Discipline: **one turn on demand, not a self-spinning loop.** Run 2-3 turns this
 way before adding `ScheduleWakeup` pacing. Hard backstops still apply (the
