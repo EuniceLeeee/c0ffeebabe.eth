@@ -96,9 +96,19 @@ NOT `pool-impact.ts:511` (that's a v2/v3 token0/token1 query) nor `token-graph.t
   DRY_RUN=1 + TTL=5000 before restart, backup taken). Restart banner: **mode=dry-run**,
   **12 pinned** (was 11 → native pool loaded), oppTtlMs=5000/planBudgetMs=300, pool registry
   4140, no crash, no native/WETH rejection. PID 63246.
-- **Remaining to confirm live catch:** a dry-run window must show a native-ETH v4
-  `opportunity_seen` (depends on a victim trading the ETH/USDC fee-100 pool appearing in the
-  mempool). `simSuccess=0` still = coverage breadth + economics (D), not the native path.
+- **LIVE-CONFIRMED (dry-run window 2026-07-02 04:17→05:01 UTC):** native ETH/USDC v4 victims
+  **enter the funnel AND reach the SOLVER.** In the window: **6 native-ETH v4
+  `opportunity_seen`** (pool=PoolManager + WETH token), then 3 more after a mid-window restart.
+  Their `pipeline_dropped` are ALL at **stage=solver** (native subset: 1 expired-before-solver,
+  1 no-profitable-quote, 1 quote-timeout) — **ZERO at plan/no_candidate or graph_gap.** So
+  detect→route→quote all pass; the native path is validated end-to-end IN PRODUCTION. Drops are
+  ordinary solver-stage attrition (profitability + latency), i.e. the D-economics + latency
+  reality, NOT a native-path gap. `simSuccess=0` for this window (no profitable native arb sized
+  up + not latency-killed yet).
+- **Interference note:** the node searcher was **restarted mid-window by a concurrent session**
+  (opportunities counter reset 55→1 at ~04:51; events jsonl truncated). Data still conclusive.
+  Reinforces: use `scripts/deploy-node.sh` (single guarded op) and coordinate — concurrent
+  ad-hoc node restarts keep disrupting measurement windows.
 - **Expand (follow-up):** verify + pin ETH/USDC fee-500 (most liquid) + ETH/USDT top pools via
   the same zero-CU fork-quote check to widen the native slice. Broadcast stays human-gated.
 
