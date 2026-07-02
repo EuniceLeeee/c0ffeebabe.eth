@@ -111,13 +111,25 @@ Transform tasks into verifiable goals:
 
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
-- **Any non-trivial code change follows: Claude plans → Codex (gpt-5.5 xhigh) implements
-  → Claude reviews + gates + commits.** Claude authors the brief (scope, exact
-  file/anchor list, allowed/forbidden files, verify commands) and is the **non-author
-  evaluator** of Codex's diff; Codex is the **generator/implementer** (rule 11 calling
-  protocol: `codex exec -o <file>`, judge by the output file + `git diff`, never stdout).
+Codex (gpt-5.5 xhigh) is always the **generator/implementer**; Claude authors the brief
+(scope, exact file/anchor list, allowed/forbidden files, verify commands) and is the
+**non-author evaluator** of Codex's diff (rule 11 protocol: `codex exec -o <file>`, judge
+by the output file + `git diff`, never stdout). **The number of rounds depends on which
+Claude model is orchestrating** — check the session's own model id:
+
+- **Fable 5 orchestrator (3 steps):**
+  `Claude plans → Codex writes → Claude reviews + gates + commits.`
+- **Opus 4.8 orchestrator (5 steps — add a plan-review round before code):**
+  `Claude plans → Codex reviews the plan → Claude finalizes the plan → Codex writes →
+  Claude reviews + gates + commits.` The extra `codex review`/`codex exec` plan-review
+  round vets the design with the non-author BEFORE implementation (cheaper to catch a
+  flawed plan than a flawed diff). Record the plan-review outcome in the brief/ledger.
+
 - This applies to **normal single-turn requests too**, not only multi-round Hermes runs.
   Hermes just formalizes the same split into a ledger for live-run cycles.
+- **Commit attribution:** sign as the ACTUAL orchestrating model (per the session's model
+  id / the harness git rule), not whatever a handoff doc addressed — e.g. Opus 4.8 →
+  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - **Exception (rule 11 fallback):** Claude may take over only **fully-specified mechanical
   edits** (brief pins exact file/anchor/code) or **evaluator gate-strengthening** (e.g.
   adding a missing assertion to Codex's test), labelled as such. Claude does **not**
