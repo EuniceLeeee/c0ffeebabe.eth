@@ -1,0 +1,118 @@
+{
+  "run_id": "R10-20260703",
+  "window": { "from": 25447724, "to": 25447874 },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13"
+  ],
+  "run_analysis": {
+    "funnel": {
+      "opportunity_seen": 47,
+      "pipeline_dropped": 45,
+      "simulation_result": 0,
+      "pipeline_dropped_reasons": {
+        "no_candidate_plans": 35,
+        "quote-timeout": 4,
+        "no-profitable-quote": 3,
+        "expired-before-solver": 3
+      },
+      "simSuccess": 0,
+      "submitAttempts": 0
+    },
+    "dominant_drop": "no_candidate_plans",
+    "events_source": "jsonl",
+    "note": "Of 35 no_candidate_plans, 33 classify only_immediate_same_pool_reverse (correctly-pruned) and 2 classify impact_pool_not_in_routing_graph -- both new pools, not the recurring R6/R8/R9 CAGA case. Hand-traced on-chain: WXMR (0x14c10b4b... pool) has a genuine but tiny (~$1,500 TVL) second venue not in our graph; MAAT (0xa8e56206... pool) has no live second venue (its only other listed pair is drained, 0 WETH balance despite a stale nonzero reserve) -- reconfirms the classifier blind spot for MAAT, WXMR is a real-but-dust-capped one-off gap, deprioritized per rule 13 (not worth a pin)."
+  },
+  "findings": [
+    {
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "swept": true,
+      "txCount": 0,
+      "method": "nonce delta (187511 at both block 25447724 and 25447874, delta=0)",
+      "analysis_mode": "full",
+      "txs": []
+    },
+    {
+      "eoa": "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13",
+      "swept": true,
+      "txCount": 24,
+      "method": "live-loss --watch (local reth, zero CU), nonce delta 6430563->6430587=24 exactly matches watch-tool match count; all 24 aggregated (block/gap_type/pathTemplate/realized_profit_usd), 2 hand-traced to full per-tx pool/token depth below",
+      "analysis_mode": "sample",
+      "sampleSize": 2,
+      "txs": [
+        {
+          "hash": "0x42355aad0bac8966f779501b0edf3c5b9e7703273a6c6dbc47974fccca6b2288",
+          "block": 25447729,
+          "pools": [
+            { "addr": "0xfaa318479b7755b2dbfdd34dc306cb28b420ad12", "inGraph": false },
+            { "addr": "0x54f0860d6951b389a7656b6b3915d5bd2270ca0b", "inGraph": false, "note": "v4 poolId 0x0f5238e3..." }
+          ],
+          "gap_class": "pool_gap_v4_partial_coverage"
+        },
+        {
+          "hash": "0xb8c5dce2f9e9f408cadd82a22039213bb06b4cda585a04b04a9f6f5ab3634cd8",
+          "block": 25447737,
+          "pools": [
+            { "addr": "0x2053fa3e18ef0ae69d65dd3e50ed82d93213acb5fe4b8a76c7ee9c16c2ef3eae", "inGraph": false, "note": "v4 poolId, EURC/USDC fee=400" },
+            { "addr": "0xb2b92b56988a4edbe255989792c6ea239b25eaf66b42093145cbf8f630db3a17", "inGraph": false, "note": "v4 poolId, EURC/USDC fee=300 -- confirmed by dual-blind blocker discovery: 246 in-window swaps, 0 in-window Initialize" },
+            { "addr": "0x77ef4ec6717f6ac645d2b0b60b85fea7615c221c5a829729e66e4c978f2bc702", "inGraph": false, "note": "v4 poolId, EURC/USDC fee=500" },
+            { "addr": "0x9b3c4e921936d4dcee135fda01aa8256ebe46f91505b61ef21f3bfdf3dd9de97", "inGraph": false, "note": "v4 poolId, ETH/UNI fee=2500" }
+          ],
+          "gap_class": "pool_gap_v4_initialize_window_gap",
+          "note": "14-pool multi-hop sweep tx, realized_profit_usd=10.01 (largest non-JIT-LP capture this window); 4 of 14 legs are v4, all with heavy in-window swap activity but zero in-window Initialize -- root cause of the R10 fix (build-active-pool-universe.ts buildV4PoolEntries only emitted pools with an in-window Initialize log)"
+        }
+      ]
+    }
+  ],
+  "coverage_kpi": {
+    "competitor_legs_total": 6,
+    "legs_out_of_graph": 6,
+    "out_pools": [
+      {
+        "addr": "0xfaa318479b7755b2dbfdd34dc306cb28b420ad12",
+        "token0": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+        "token1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "class": "closable",
+        "evidence": "recurring pool from R9's watch set too, part of a dust ($0.10) v4 swap-loop"
+      },
+      {
+        "addr": "0x54f0860d6951b389a7656b6b3915d5bd2270ca0b",
+        "token0": "unresolved (v4 poolId hash, not a contract address)",
+        "token1": "unresolved (v4 poolId hash, not a contract address)",
+        "class": "closable",
+        "evidence": "v4 poolId 0x0f5238e3..., part of the same dust ($0.10) v4 swap-loop as 0xfaa318479..., already-tracked partial v4 coverage epic, not this round's fix target"
+      },
+      {
+        "addr": "0xb2b92b56988a4edbe255989792c6ea239b25eaf66b42093145cbf8f630db3a17",
+        "token0": "EURC (0x1abaea1f7c830bd89acc67ec4af516284b1bc33c candidate leg)",
+        "token1": "USDC",
+        "class": "closable",
+        "evidence": "R10 dual-blind blocker discovery root cause: 246 in-window swaps, 0 in-window Initialize -- fixed this round (commits 6761995, 82dce7e), production backfill launched to promote this and 4 sibling poolIds live"
+      },
+      {
+        "addr": "0x2053fa3e18ef0ae69d65dd3e50ed82d93213acb5fe4b8a76c7ee9c16c2ef3eae",
+        "token0": "EURC",
+        "token1": "USDC",
+        "class": "closable",
+        "evidence": "same competitor tx as 0xb2b92b56..., same v4-Initialize-window-gap fix"
+      },
+      {
+        "addr": "0x77ef4ec6717f6ac645d2b0b60b85fea7615c221c5a829729e66e4c978f2bc702",
+        "token0": "EURC",
+        "token1": "USDC",
+        "class": "closable",
+        "evidence": "same competitor tx, same fix"
+      },
+      {
+        "addr": "0x9b3c4e921936d4dcee135fda01aa8256ebe46f91505b61ef21f3bfdf3dd9de97",
+        "token0": "WETH",
+        "token1": "UNI",
+        "class": "closable",
+        "evidence": "same competitor tx, same fix"
+      }
+    ],
+    "closable": 6,
+    "single_venue_noise": 0,
+    "prev_round": { "run_id": "R9-20260703", "legs_out_of_graph": 0, "closable": 0 }
+  }
+}
