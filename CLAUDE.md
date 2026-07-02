@@ -528,12 +528,13 @@ discovery is needed.
       the structural distance-to-production lever — `funnel | coverage | flow-admission |
       no-replicable-atomic-EV` — via a per-competitor-profitable-bundle counterfactual walk + a
       longer window. Output → Findings Ledger as `decision: epic` OR an explicit funnel-fix + its
-      rule-12 gate; point-fixing on that theme PAUSES until it lands. The review's brief is a
-      per-firing context doc generated fresh from the CURRENT accumulated run data (template:
-      `docs/research/reports/HANDOFF-architecture-review.md` — do NOT hardcode a past run's rounds
-      or conclusions into the reusable trigger/prompt). (This catches the failure the gap_class
-      trigger can't: several clean point-fixes that each moved nothing — the loop busy but the
-      production needle unmoved.)
+      rule-12 gate; point-fixing on that theme PAUSES until it lands. Use the REUSABLE template
+      `docs/research/templates/architecture-review.md` (invariant prompt + handoff-generation
+      checklist + run-mode note) + a per-firing handoff regenerated FRESH from the CURRENT run data
+      (`docs/research/reports/HANDOFF-architecture-review.md`). **Never hardcode a past run's rounds /
+      conclusions / cases into the reusable template or the trigger** — those are variables that live
+      in the regenerated handoff. (This catches the failure the gap_class trigger can't: several clean
+      point-fixes that each moved nothing — the loop busy but the production needle unmoved.)
     - **Impact counterweight:** CLAUDE.md's culture is skeptic/verify/gate = good for
       correctness, biased against bold searcher changes. The loop's job is not clean
       commits; it is more MEV caught. A round that shipped a clean analysis patch but
