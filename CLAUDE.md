@@ -109,6 +109,21 @@ Transform tasks into verifiable goals:
   `0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6` and pair
   `0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC / WETH`.
 
+### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
+
+- **Any non-trivial code change follows: Claude plans → Codex (gpt-5.5 xhigh) implements
+  → Claude reviews + gates + commits.** Claude authors the brief (scope, exact
+  file/anchor list, allowed/forbidden files, verify commands) and is the **non-author
+  evaluator** of Codex's diff; Codex is the **generator/implementer** (rule 11 calling
+  protocol: `codex exec -o <file>`, judge by the output file + `git diff`, never stdout).
+- This applies to **normal single-turn requests too**, not only multi-round Hermes runs.
+  Hermes just formalizes the same split into a ledger for live-run cycles.
+- **Exception (rule 11 fallback):** Claude may take over only **fully-specified mechanical
+  edits** (brief pins exact file/anchor/code) or **evaluator gate-strengthening** (e.g.
+  adding a missing assertion to Codex's test), labelled as such. Claude does **not**
+  author net-new design/judgment code without Codex unless the user explicitly says so —
+  judgment needs a non-author reviewer.
+
 ---
 
 ## Development Workflow
