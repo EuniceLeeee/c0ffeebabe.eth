@@ -440,6 +440,10 @@ discovery is needed.
       ```
       The wrapper `wait`s on codex so the harness completion notification fires exactly when codex
       finishes. `-o` = final message; `--json` events = retry/connection + `thread.started` evidence.
+      **ENFORCED, not just documented:** a PreToolUse(Bash) hook (`scripts/hooks/guard-codex-stdin.py`,
+      wired in `.claude/settings.json`) BLOCKS the tool call if it's a raw `codex … exec` that lacks the
+      wrapper or `< /dev/null` (quote-stripped, so it never false-blocks a commit message that mentions
+      the invocation). This is the hard backstop for the doc rule that kept getting missed.
       Do NOT edit global `~/.codex/config.toml` (it also drives the desktop app).
     - **Timeout:** soft 10–15 min, hard 25–30 min. **Never 90s/180s** (kills xhigh
       mid-think → looks stalled). Run in background + judge on exit; do not poll-kill.
