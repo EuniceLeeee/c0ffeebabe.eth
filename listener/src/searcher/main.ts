@@ -80,6 +80,8 @@ interface LiveConfig {
   forkRefreshBlocks: number;
   solverDeadlineMs: number;
   oppTtlMs: number;
+  planBudgetMs: number;
+  oppMinSliceMs: number;
   gssMaxTries: number;
   finalSimTopN: number;
   /** Max candidate plans fully solved per opportunity before bailing to free the
@@ -305,6 +307,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     forkRefreshBlocks: Number(process.env.SEARCHER_FORK_REFRESH_BLOCKS ?? "5"),
     solverDeadlineMs: Number(process.env.SEARCHER_SOLVER_DEADLINE_MS ?? "8000"),
     oppTtlMs: Number(process.env.SEARCHER_OPP_TTL_MS ?? "5000"),
+    planBudgetMs: Number(process.env.SEARCHER_PLAN_BUDGET_MS ?? "300"),
+    oppMinSliceMs: Number(process.env.SEARCHER_OPP_MIN_SLICE_MS ?? "500"),
     gssMaxTries: Number(process.env.SEARCHER_GSS_MAX_TRIES ?? "12"),
     finalSimTopN: Number(process.env.SEARCHER_FINAL_SIM_TOP_N ?? "3"),
     maxCandidatesPerOpp: Number(process.env.SEARCHER_MAX_CANDIDATES_PER_OPP ?? "0"),
@@ -427,7 +431,8 @@ async function main(): Promise<void> {
   );
   console.log(
     `[searcher/live] solverDeadlineMs=${config.solverDeadlineMs} ` +
-      `oppTtlMs=${config.oppTtlMs} gssMaxTries=${config.gssMaxTries} ` +
+      `oppTtlMs=${config.oppTtlMs} planBudgetMs=${config.planBudgetMs} ` +
+      `oppMinSliceMs=${config.oppMinSliceMs} gssMaxTries=${config.gssMaxTries} ` +
       `finalSimTopN=${config.finalSimTopN} ` +
       `maxCandidatesPerOpp=${config.maxCandidatesPerOpp || "unlimited"}`,
   );
@@ -1117,47 +1122,81 @@ async function handleHint(
     });
   }
 
-	  for (const opp of opportunities) {
-	    const opportunityId = opportunityIdFor(eventBlockNumber, txHash, opp);
-	    const emitPipelineDropped = (
-	      stage: string,
-	      reason: string,
-	      error?: string,
-	      extra?: {
-	        pathId?: string;
-	        templateId?: string;
-	        plans?: number;
-	        noCandidateDiagnostic?: unknown;
-	      },
-	    ): void => {
-	      emitEvent({
-	        type: "pipeline_dropped",
-	        opportunity_id: opportunityId,
-	        target_block: eventBlockNumber,
-	        victim_hash: txHash,
-	        stage,
-	        reason,
-	        error: error ? error.slice(0, 240) : undefined,
-	        pool: opp.affectedPools?.[0],
-	        tokens: opp.affectedTokens,
-	        path_id: extra?.pathId,
-	        template_id: extra?.templateId,
-	        plans: extra?.plans,
-	        no_candidate_diagnostic: extra?.noCandidateDiagnostic,
-	      });
-	    };
-	    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]);
-	    segMark("plan");
-	    ctx.counters.plans += plans.length;
-	    fixturePlans += plans.length;
-	    console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
-	    if (plans.length === 0) {
-	      emitPipelineDropped("plan", "no_candidate_plans", undefined, {
-	        plans: 0,
-	        noCandidateDiagnostic: ctx.planner.lastNoCandidateDiagnostic?.(),
-	      });
-	      continue;
-	    }
+  for (let oppIndex = 0; oppIndex < opportunities.length; oppIndex++) {
+    const opp = opportunities[oppIndex];
+    if (!opp) continue;
+    const opportunityId = opportunityIdFor(eventBlockNumber, txHash, opp);
+    const remainingTtl = ctx.config.oppTtlMs - (Date.now() - ctx.startedAt);
+    if (remainingTtl <= 0) {
+      for (const droppedOpp of opportunities.slice(oppIndex)) {
+        emitEvent({
+          type: "pipeline_dropped",
+          opportunity_id: opportunityIdFor(eventBlockNumber, txHash, droppedOpp),
+          target_block: eventBlockNumber,
+          victim_hash: txHash,
+          stage: "solver",
+          reason: "expired-before-solver",
+          pool: droppedOpp.affectedPools?.[0],
+          tokens: droppedOpp.affectedTokens,
+          plans: 0,
+        });
+        ctx.counters.expiredBeforeSolver++;
+      }
+      recordFinalState("expired-before-solver");
+      return;
+    }
+    const oppsLeft = opportunities.length - oppIndex;
+    const sliceMs = Math.max(ctx.config.oppMinSliceMs, Math.floor(remainingTtl / oppsLeft));
+    const oppDeadlineAtMs = Math.min(Date.now() + sliceMs, ctx.startedAt + ctx.config.oppTtlMs);
+    const emitPipelineDropped = (
+      stage: string,
+      reason: string,
+      error?: string,
+      extra?: {
+        pathId?: string;
+        templateId?: string;
+        plans?: number;
+        noCandidateDiagnostic?: unknown;
+      },
+    ): void => {
+      emitEvent({
+        type: "pipeline_dropped",
+        opportunity_id: opportunityId,
+        target_block: eventBlockNumber,
+        victim_hash: txHash,
+        stage,
+        reason,
+        error: error ? error.slice(0, 240) : undefined,
+        pool: opp.affectedPools?.[0],
+        tokens: opp.affectedTokens,
+        path_id: extra?.pathId,
+        template_id: extra?.templateId,
+        plans: extra?.plans,
+        no_candidate_diagnostic: extra?.noCandidateDiagnostic,
+      });
+    };
+    const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY], {
+      deadlineAtMs: Date.now() + Math.min(ctx.config.planBudgetMs, Math.floor(sliceMs / 2)),
+    });
+    segMark("plan");
+    ctx.counters.plans += plans.length;
+    fixturePlans += plans.length;
+    console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
+    if (plans.length === 0) {
+      const noCandidateDiagnostic = ctx.planner.lastNoCandidateDiagnostic?.();
+      emitPipelineDropped(
+        "plan",
+        noCandidateDiagnostic?.classification === "plan_budget_exhausted"
+          ? "plan_budget_exhausted"
+          : "no_candidate_plans",
+        undefined,
+        {
+          plans: 0,
+          noCandidateDiagnostic,
+        },
+      );
+      continue;
+    }
 
     // Backend selection happens after planning. Preparing an overlay for an
     // opportunity with zero candidate paths is pure latency waste (observed as
@@ -1325,8 +1364,9 @@ async function handleHint(
         ? blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock)
       : ctx.state;
 
-    let candidatesTried = 0;
-    for (const candidate of plans) {
+	    let candidatesTried = 0;
+	    let skipPostSolverDrop = false;
+	    for (const candidate of plans) {
       // Candidate cap: a single opportunity can spawn ~20 candidate plans, each
       // running a full quote search + top-N sim that virtually all revert
       // (unprofitable). Grinding every one burns the shared per-hint TTL and
@@ -1340,23 +1380,40 @@ async function handleHint(
         emitPipelineDropped("solver", "candidate-cap", lastTerminalError, {
           plans: plans.length,
         });
+        skipPostSolverDrop = true;
         break;
       }
-      // Opportunity TTL (v7 AC-3a.5): a hint older than oppTtlMs is chasing stale
-      // state — stop solving. Each solve is further capped to the remaining budget
-      // so it never runs past the opportunity's useful life. (v7 AC-3a.3)
-      const remainingMs = ctx.config.oppTtlMs - (Date.now() - ctx.startedAt);
-      if (remainingMs <= 0) {
-        ctx.counters.expiredBeforeSolver++;
+	      // Opportunity slice TTL: keep one slow opportunity from consuming the whole
+	      // hint budget. Each solve is further capped to the remaining slice.
+	      const remainingMs = oppDeadlineAtMs - Date.now();
+	      if (remainingMs <= 0) {
+	        const hintElapsedMs = Date.now() - ctx.startedAt;
+	        if (hintElapsedMs >= ctx.config.oppTtlMs) {
+	          ctx.counters.expiredBeforeSolver++;
+	          console.log(
+	            `[searcher/live] opportunity expired (hint TTL) ` +
+	              `(${hintElapsedMs}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver ` +
+	              `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
+	              `stage breakdown: ${segStr()}`,
+	          );
+	          emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
+	          recordFinalState("expired-before-solver");
+	          return;
+	        }
 	        console.log(
-	          `[searcher/live] opportunity expired ` +
-	            `(${Date.now() - ctx.startedAt}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver ` +
+	          `[searcher/live] opportunity expired (slice) ` +
+	            `(${Date.now()} >= sliceDeadline ${oppDeadlineAtMs}) — moving to next opportunity ` +
 	            `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
 	            `stage breakdown: ${segStr()}`,
 	        );
-	        emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
-	        recordFinalState("expired-before-solver");
-	        return;
+	        if (candidatesTried === 0) {
+	          ctx.counters.expiredBeforeSolver++;
+	          lastTerminalState = "expired-before-solver";
+	          lastTerminalError = undefined;
+	          emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
+	          skipPostSolverDrop = true;
+	        }
+	        break;
 	      }
       candidatesTried++;
       try {
@@ -1647,8 +1704,10 @@ async function handleHint(
 	        );
 	      }
 	    }
-	    emitPipelineDropped("solver", lastTerminalState, lastTerminalError, { plans: plans.length });
-	  }
+		    if (!skipPostSolverDrop) {
+		      emitPipelineDropped("solver", lastTerminalState, lastTerminalError, { plans: plans.length });
+		    }
+		  }
   recordFinalState(lastTerminalState, lastTerminalError);
 }
 

@@ -309,6 +309,25 @@ async function testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue(): Prom
   console.log("[planner] no-candidate diagnostic classifies no supported return venue: PASS");
 }
 
+async function testNoCandidateDiagnosticClassifiesPlanBudgetExhausted(): Promise<void> {
+  const planner = new TemplatePlanner();
+  planner.setGraph([
+    swap(A, B, P1),
+    swap(B, A, P2),
+  ]);
+  planner.setMaxHops(2);
+
+  const plans = await planner.plan(opportunity(), [FLASH_SWAP_REPAY], { deadlineAtMs: Date.now() - 1 });
+  assert(plans.length === 0, `plan budget diagnostic: expected 0 plans, got ${plans.length}`);
+  const diagnostic = planner.lastNoCandidateDiagnostic();
+  if (!diagnostic) throw new Error("FAIL: plan budget diagnostic: expected diagnostic");
+  assert(
+    diagnostic.classification === "plan_budget_exhausted",
+    `plan budget diagnostic: classification ${diagnostic.classification}`,
+  );
+  console.log("[planner] no-candidate diagnostic classifies plan budget exhausted: PASS");
+}
+
 // ── Real-case regression fixtures (repair-replay gate, CLAUDE.md governance 12) ──
 // Each pins a real failing case observed live so a coverage/routing fix can be
 // confirmed deterministically (flip) and guarded against regression. Addresses are
@@ -384,8 +403,9 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesImpactPoolNotInGraph();
   await testNoCandidateDiagnosticClassifiesOnlyImmediateSamePoolReverse();
   await testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue();
+  await testNoCandidateDiagnosticClassifiesPlanBudgetExhausted();
   await testRealCaseReplayFixtures();
-  console.log(`planner PASS (10/10) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length})`);
+  console.log(`planner PASS (11/11) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length})`);
 }
 
 main().catch((err) => {

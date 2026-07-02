@@ -28,7 +28,7 @@ export interface BorrowableCycleToken {
 }
 
 export interface Planner {
-  plan(opp: Opportunity, templates: PathTemplate[]): Promise<CandidatePlan[]>;
+  plan(opp: Opportunity, templates: PathTemplate[], opts?: { deadlineAtMs?: number }): Promise<CandidatePlan[]>;
   lastNoCandidateDiagnostic?(): NoCandidateDiagnostic | null;
 }
 
@@ -39,6 +39,7 @@ export type NoCandidateClassification =
   | "return_venue_pruned_by_bounds"
   | "template_constraint_failed"
   | "borrowability_missing"
+  | "plan_budget_exhausted"
   | "unknown_no_candidate";
 
 export interface NoCandidateTemplateDiagnostic {
@@ -122,7 +123,11 @@ export class TemplatePlanner implements Planner {
     this.flashLiquidity = liquidity;
   }
 
-  async plan(opp: Opportunity, templates: PathTemplate[]): Promise<CandidatePlan[]> {
+  async plan(
+    opp: Opportunity,
+    templates: PathTemplate[],
+    opts?: { deadlineAtMs?: number },
+  ): Promise<CandidatePlan[]> {
     const candidates: CandidatePlan[] = [];
     const baseGraph = this.graph ?? [];
     this.lastDiagnostic = null;
@@ -133,8 +138,13 @@ export class TemplatePlanner implements Planner {
     const debug: string[] = [];
     const diagnostics: NoCandidateTemplateDiagnostic[] = [];
     const seenPathKeys = new Set<string>();
+    let timedOut = false;
 
     for (const template of templates) {
+      if (opts?.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
+        timedOut = true;
+        break;
+      }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
       const flashAdapters = flashSlot?.adapters ?? ["morpho-flash"];
       const preferredFlash = flashAdapters[0] ?? "morpho-flash";
@@ -154,6 +164,7 @@ export class TemplatePlanner implements Planner {
         maxHops: this.maxHops,
         maxPoolsPerToken: this.maxPoolsPerToken,
         pinnedPools,
+        deadlineAtMs: opts?.deadlineAtMs,
       });
       const rawFocus = analyzeImpactFocus(rawPaths, impact);
       const roundtripPrunedPaths = rawPaths.filter((path) => !hasImmediateSamePoolReverse(path));
@@ -166,6 +177,10 @@ export class TemplatePlanner implements Planner {
       let noBorrowable = 0;
       let rotatedPlanCount = 0;
       for (const path of paths) {
+        if (opts?.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
+          timedOut = true;
+          break;
+        }
         if (!satisfiesRequiredSlots(path, template)) {
           continue;
         }
@@ -186,6 +201,10 @@ export class TemplatePlanner implements Planner {
           continue;
         }
         for (const rotation of rotations) {
+          if (opts?.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
+            timedOut = true;
+            break;
+          }
           if (!passesConstraints(
             rotation.tokenPath,
             template.constraints,
@@ -214,9 +233,9 @@ export class TemplatePlanner implements Planner {
           rotatedPlanCount++;
           if (candidates.length >= this.maxCandidates) break;
         }
-        if (candidates.length >= this.maxCandidates) break;
+        if (timedOut || candidates.length >= this.maxCandidates) break;
       }
-      if (candidates.length >= this.maxCandidates) break;
+      if (timedOut || candidates.length >= this.maxCandidates) break;
       debug.push(
         `${template.name}: edges=${graph.length}/${baseGraph.length} raw=${rawPaths.length} ` +
           `focused=${paths.length} prunedRoundtrip=${prunedRoundtrip} ` +
@@ -242,6 +261,9 @@ export class TemplatePlanner implements Planner {
 
     if (candidates.length === 0 && baseGraph.length > 0) {
       this.lastDiagnostic = buildNoCandidateDiagnostic(baseGraph, opp, impact, diagnostics);
+      if (timedOut) {
+        this.lastDiagnostic.classification = "plan_budget_exhausted";
+      }
       console.log(
         `[planner] 0 candidates start=${opp.startToken} profit=${opp.profitToken} ` +
           `impact=${impact ? `${impact.pool} ${impact.tokenIn}->${impact.tokenOut}` : "none"} | ` +

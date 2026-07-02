@@ -431,6 +431,7 @@ export interface PathOpts {
   pinnedPools?: Set<string>;
   /** Hard safety cap on total enumerated paths (prevents DFS blow-up / OOM). */
   maxPaths?: number;
+  deadlineAtMs?: number;
 }
 
 /**
@@ -452,6 +453,7 @@ export function buildTokenPaths(
   const maxPoolsPerToken = opts.maxPoolsPerToken ?? Infinity;
   const pinnedPools = opts.pinnedPools;
   const maxPaths = opts.maxPaths ?? 20000;
+  const deadlineAtMs = opts.deadlineAtMs;
 
   const isPinned = (e: TokenEdge): boolean =>
     e.score === undefined || (pinnedPools?.has(e.target.toLowerCase()) ?? false);
@@ -478,9 +480,12 @@ export function buildTokenPaths(
   }
 
   const paths: TokenPath[] = [];
+  let nodeExpansions = 0;
 
   function walk(token: string, path: TokenEdge[]): void {
     if (paths.length >= maxPaths) return;
+    nodeExpansions++;
+    if (nodeExpansions % 64 === 0 && deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) return;
     if (path.length > 0 && token.toLowerCase() === profitToken.toLowerCase()) {
       paths.push({ edges: path });
       return;
