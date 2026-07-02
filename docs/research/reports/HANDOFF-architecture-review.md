@@ -28,6 +28,21 @@ distance to a real +EV live bundle. **Step back and name the single biggest STRU
 production needle. That is the signal: the blocker is NOT the tactical point-failures the loop keeps
 finding.
 
+**R3 DUAL-BLIND result (two independent analyses converged — treat as a strong HYPOTHESIS to test,
+not as truth):** fable-5 (chain-side) and Codex (code-side, blind to fable-5) INDEPENDENTLY concluded
+the R3 window was a **true negative funnel-internally** — no gate wrongly rejected a winner. Codex
+verified the floors are dust at the observed ~$30 solve centers (quote floor admits to −$0.059;
+final-verify floor ≈ −$0.011; `main.ts:316` / `solver.ts:359` / `final-verify-gate.ts`), and that
+`no_candidate` is not a casing bug (`planner.ts:524/623`). Both point the real lever **OUTSIDE the
+visible funnel → coverage / path universe**. IMPORTANT correction to test: R3 found competitors did
+NOT profitably follow the source swaps we saw this window (55 watchlist txs, `pool_in_seen_events=false`;
+51/55 were CEX-DEX inventory legs with no on-chain source swap = structurally not replicable; several
+"takes" on our drops were on-chain reverts or sub-cent dust). The ONE competitor-validated atomic miss
+was a **coverage gap**: `0x476548cc…` (block 25443539, ~$10.8 gross) routed 7 pools incl AMP/WETH
+`0x08650bb9…`/`0x15e86e6f…`, all absent from the ~2928-pool runtime graph. **Your job: pressure-test
+whether "true-negative-funnel + coverage-upstream" is really the biggest structural blocker, or an
+artifact of a too-small 30-min sample / a flow-admission problem the window can't see.**
+
 ## Mechanical analysis (loss attribution)
 - Dominant per-window drops: `plan/no_candidate_plans` (repeatedly classified longtail / on a pool
   set no competitor monetized — parked), then `solver/no-profitable-quote` (R3: ~46 — the opps we
@@ -69,6 +84,32 @@ Candidate structural causes (test them; ground each in numbers, not hand-waving)
 - Mission anchor: `CLAUDE.md` North-Star (get closer to a real +EV live bundle) + Mission #2
   (learn from competitors → classify our gap). Memory: `project-univ4-coverage-frontier`,
   `project-live-bribe-and-phantom-guard`, `project-first-onchain-inclusion`.
+
+## Hard requirements (NON-NEGOTIABLE — these force the conclusion to be data-derived, not an essay)
+1. **Counterfactual walk-through (mandatory; the class MUST be DERIVED from it, not selected).**
+   Pick **≥2 opportunities a competitor REALLY captured** (one = the AMP coverage miss `0x476548cc…`
+   above; ≥1 more you find yourself from the raw artifacts — a REAL take, not an on-chain revert or
+   sub-cent dust). For each, walk our pipeline stage by stage with numbers: did we SEE it → did the
+   planner emit a plan → what was the solver's BEST quote (exact number) → which gate killed it → how
+   much the number must change to pass. **Decision rule:** competitor path contains an out-of-graph
+   pool → coverage; in-graph but our best quote ≤0 → sim-fidelity / solver; quote >0 but the EV gate
+   killed it → economics. (Also test the flow-admission angle: was the profitable flow one we never
+   admitted — mempool filter / orderflow source?)
+2. **Verify-before-claim.** Re-derive every load-bearing number yourself from code (file:line) or raw
+   artifacts (events jsonl / cscan output / on-chain trace). The R1–R3 `.md` conclusions (incl. the
+   R3 dual-blind note) are HYPOTHESES from the loop you are auditing — do not inherit its blind spots.
+3. **Ranking + falsifiability.** Give the strongest runner-up and the ONE piece of evidence separating
+   #1 from #2. Give a CHEAP disproof experiment: "if I'm right, running <fork/replay/config test>
+   shows <X>; if not, I'm wrong." (This lets the architecture verdict take a rule-12-style gate.)
+4. **Guard the reverse failure.** If epic=yes, the FIRST slice must be the MINIMAL change that flips
+   ONE genuine +EV `simSuccess` on a pinned replay (a rule-12 gate) — not a refactor blueprint.
+
+## When this review is triggered (the rule)
+This architecture review is MANDATORY when **≥2 consecutive rounds close with no growth in a genuine
++EV `simSuccess`** — the per-window loop is then busy but not moving the production needle, so it must
+step up a level before running another point-fix round. (R1/R2/R3 = 3 rounds flat → the trigger is
+already MET.) Output feeds the Findings Ledger as `decision: epic` (or "no epic, here's the funnel
+fix + its gate"), which pauses point-fixing on that theme.
 
 ## Deliverable
 - **architecture_blocker:** one sentence — the single biggest structural blocker to a genuine +EV bundle.
