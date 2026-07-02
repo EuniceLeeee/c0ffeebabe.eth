@@ -77,7 +77,7 @@
       ]
     },
     {
-      "label": "V3-fork (factory 0x075C42) WETH/USDT 0.05% — coffeebabe sample 20260702",
+      "label": "V3-fork (factory 0x075C42) WETH/USDT 0.05% \u2014 coffeebabe sample 20260702",
       "address": "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D",
       "adapter": "univ3",
       "warmDirections": [
@@ -228,6 +228,33 @@
           "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
           "amountIn": "1000000000",
           "weight": 15
+        }
+      ]
+    },
+    {
+      "label": "Uniswap V4 ETH/USDC fee100 ts1 (native)",
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "adapter": "univ4",
+      "poolId": "0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+      "currency0": "0x0000000000000000000000000000000000000000",
+      "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "fee": 100,
+      "tickSpacing": 1,
+      "hooks": "0x0000000000000000000000000000000000000000",
+      "fixedTokenIn": "0x0000000000000000000000000000000000000000",
+      "fixedTokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "warmDirections": [
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "10000000000000000",
+          "weight": 20
+        },
+        {
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "amountIn": "25000000",
+          "weight": 20
         }
       ]
     }
