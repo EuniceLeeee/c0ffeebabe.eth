@@ -203,8 +203,19 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
 
 ### Mechanics
 
-- One file per run: `docs/research/reports/live-run-<run_id>-hermes.md`, copied from
-  `docs/research/templates/hermes-live-run.md`.
+- One file per run: `docs/research/reports/live-run-<run_id>-hermes.md`. **Two templates
+  by cycle type — pick the lean one by default:**
+  - **Implementation cycle** (a known fix → code → gate → merge; most work): copy the LEAN
+    `docs/research/templates/hermes-impl-cycle.md` (~5 sections: Brief · Plan-Review [Opus
+    only] · Codex Pass · Repair-Replay Gate + Approval · Findings). This is what the
+    2026-07-02 latency + v4 cycles actually used — do NOT fill live-run-analysis sections
+    that don't apply.
+  - **Live-run analysis cycle** (run searcher → drop attribution → competitor
+    cross-reference → decide the fix): copy the full `hermes-live-run.md` (Run Facts /
+    Auto Analysis / Competitor Coverage / Path-Leg Findings + the mandatory Step-1
+    competitor cross-reference). Only these cycles need the heavy ceremony.
+  The governance hard-rules (11 Codex protocol, 12 Repair-Replay, 13 forcing functions) apply
+  to BOTH; the lean template just drops the analysis-only sections and the 6-way discussion rounds.
 - Auto-generated inputs (follow the Live-Run Follow-Up rules — redact first, keep
   public on-chain evidence): redacted log, redacted JSONL summary, key tx links, AND
   the **mandatory Step-1 competitor cross-reference** (below).
