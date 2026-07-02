@@ -197,12 +197,12 @@
         "addr": "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc",
         "token0": "0x21BfBDa47A0B4B5b1248c767Ee49F7caA9B23697",
         "token1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "class": "single_venue_noise",
-        "evidence": "OVR/WETH; only ONE OVR venue seen this window, OVR not routable elsewhere in-graph -> adding it alone closes no loop. Must STAY 0 candidates -> W3 negative fixture"
+        "class": "closable",
+        "evidence": "OVR/WETH; ae2Fc483 tx 0x68f186 arbed OVR/WETH between this and the IN-GRAPH pool 0xc3f6b8 (also OVR/WETH) — confirmed real closable loop. OVR already routable via 0xc3f6b8 -> adding this second venue closes the loop. (Correction: earlier single_venue_noise label was wrong; verified 0xc3f6b8 is OVR/WETH in-graph.)"
       }
     ],
-    "closable": 5,
-    "single_venue_noise": 1,
+    "closable": 6,
+    "single_venue_noise": 0,
     "prev_round": null
   }
 }
