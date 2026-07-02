@@ -90,4 +90,30 @@ Codex did the code-side independent verification (its unique value vs fable-5's 
   local reth, zero CU). Plus op-count: v4 candidates no longer emit the take<output condition.
   Live confirm (carry): v4 sim-rejected drops from 79/window; expired/quote-timeout ↓; simSuccess ↑.
 - **not_this:** R1 adaptive warm (measured fine); grid tightening (3rd, defer).
-- **verdict:** pending Codex impl + gate.
+## Implementation + Gate (Codex b60kiz3d6; Claude review + gate)
+- **Implemented (`ef03d20`):** `propagateAmountsWithRawOutputs` returns raw pre-haircut per-edge
+  outputs alongside the haircutted `amounts`; plan-builder v4 `take()` + native-output
+  `weth-deposit-value` use the RAW output (`takeAmount = rawOut ?? amtOut`), non-v4 legs unchanged;
+  solver bails the candidate sim loop when the deadline passed (fix B guardrail). quoter.ts eth_call
+  + non-v4 haircut untouched.
+- **GATE — deterministic repair-replay FLIP, PASS (local reth, ZERO CU):**
+  `replay-v4-safety-haircut` @ block 25443413, ETH/USDC fee-100, safetyBps=9999:
+  - **baseline (haircutted take=15471326350402956): REVERTS at `unlock` (selector 0x48c89491)** —
+    the exact 79-reverts/window bug;
+  - **after fix (raw take=15472873637766733): sim SUCCEEDS, wethDelta == rawOut (exact).**
+  - `v4-safety-haircut PASS`. Deterministic regressions green (planner 12/12, v3-math,
+    pool-state-cache 6/6, v4-adapters 3/3, amount-search 9/9).
+- **verdict: FIXED** (deterministic flip). This bug was silently reverting EVERY v4 sim (79/window)
+  — Cycle-2's native-ETH v4 opps reached the solver but ALL reverted at sim. R2 unlocks v4 execution.
+- **method note:** R2 used the OLD "Codex reviews fable-5's conclusion" hand-off (Codex still found
+  the code root-cause). **R3 switches to dual-blind** (fable-5 conclusion hidden; Codex gets only raw
+  material → independent conclusion; compare) — CLAUDE.md Rounds step 4, per user.
+
+## Findings Ledger (carry to R3)
+| finding | owner | carry_to | status |
+|---|---|---|---|
+| v4 sims revert (safety haircut on take → nonzero unlock delta) | R2 | — | **FIXED ef03d20** (deterministic flip); live validation → R3 |
+| Live: does R2 drop v4 sim-rejected from 79/window + raise simSuccess? | R3 | R3 | open — metrics gate on R3 window |
+| per-candidate sim loop TTL bail (fix B) live effect on expired/quote-timeout | R3 | R3 | open — metrics |
+| candidate ordering by impact + per-candidate budget (from R1) | R3 | R3 | open — deferred |
+| R1 adaptive warm | R1 | closed | fixed/neutral (3ms/call) |
