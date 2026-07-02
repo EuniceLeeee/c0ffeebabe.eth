@@ -444,6 +444,9 @@ const POOL_14FEE_WETH_ALT = "0x49bd1fa4c7286c2754ec7607f6f2e835f3ca6ddd";
 const TOK_FF208177 = "0xff20817700000000000000000000000000000000";
 const POOL_FF208177_A = "0x15e86e6f00000000000000000000000000000000";
 const POOL_FF208177_B = "0x08650bb900000000000000000000000000000000";
+const TOK_1151 = "0x1151CB3d861920e07a38e03eEAd12C32178567F6";
+const POOL_1151_USDT_A = "0x5ea523e496D049e2bA8B303C8D85C83FB6F285F8";
+const POOL_1151_USDT_B = "0x1e84865E17B49286f26D356DC39fF671EDfaA199";
 
 interface ReplayFixture {
   id: string;
@@ -549,6 +552,28 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
       swap(TOK_FF208177, REAL_WETH, POOL_FF208177_B),
     ],
     impact: { tokenIn: REAL_WETH, tokenOut: TOK_FF208177, pool: POOL_FF208177_A, start: REAL_WETH },
+    expectMinPlans: 1,
+  },
+  {
+    // run 9a20d602 block 25444461 tx 0x5610530b...d4511b7: TOK_1151/USDT pool A absent from routing graph.
+    id: "r4-1151-usdt-pair-gap",
+    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7; TOK_1151/USDT impact pool A absent from routing graph",
+    edges: [swap(TOK_1151, REAL_WETH, P2), swap(REAL_WETH, TOK_1151, P3)],
+    impact: { tokenIn: REAL_USDT, tokenOut: TOK_1151, pool: POOL_1151_USDT_A, start: REAL_USDT },
+    expectPlans: 0,
+    expectClass: "impact_pool_not_in_routing_graph",
+  },
+  {
+    // run 9a20d602 blocks 25444461/25444621 txs 0x5610530b...d4511b7 + 0x26c6a22a...7523987: repeated TOK_1151/USDT lane covered.
+    id: "r4-1151-usdt-pair-flip",
+    provenance: "run 9a20d602 block 25444461 tx 0x5610530b4816cd6e405f2a5c788d13669c4fe0bc0ff0599cc0db95a88d4511b7 plus block 25444621 tx 0x26c6a22ade569e525225e6476849185889ca5665eb86e2c880b3855eb7523987; TOK_1151/USDT pools A+B covered",
+    edges: [
+      swap(REAL_USDT, TOK_1151, POOL_1151_USDT_A),
+      swap(TOK_1151, REAL_USDT, POOL_1151_USDT_A),
+      swap(REAL_USDT, TOK_1151, POOL_1151_USDT_B),
+      swap(TOK_1151, REAL_USDT, POOL_1151_USDT_B),
+    ],
+    impact: { tokenIn: REAL_USDT, tokenOut: TOK_1151, pool: POOL_1151_USDT_A, start: REAL_USDT },
     expectMinPlans: 1,
   },
   {
