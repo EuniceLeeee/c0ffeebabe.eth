@@ -290,19 +290,38 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
 - Each agent writes **only its own sections**, never edits the other's. Each round =
   exactly **one core judgment + one next_action + one not_doing** (no walls of text).
 
-### Rounds (per run)
+### Rounds (per run) — the canonical live-run loop
+
+Each round **DISCOVERS the next blocker from competitors, fixes it, gates it, and carries
+what it can't**. This is the full loop (hermes-live-run.md). The lean impl-cycle template is
+only a shortcut for when the blocker is ALREADY known (user-handed) and no competitor
+discovery is needed.
 
 ```
-auto:   Run Facts / Auto Analysis / Competitor Coverage / Path-Leg Findings
-        Codex Round 1            Claude Round 1            (initial core view)
-        Codex Review Of Claude   Claude Review Of Codex
-        Codex Final View         Claude Final View
-        Claude Final Decision + Implementation Brief + Acceptance   ← only this drives code
-        Codex implements
-        → review/fix loop: Claude review+fix request → Codex review+fix
-                          → Claude review+fix request → Codex review+fix
-                          → max 3 passes, then Claude final approval or stop
-        → next 30-min live run
+1. LIVE RUN      ~30-min dry-run on the node. Deploy latest FIRST (scripts/deploy-node.sh);
+                 do not analyze stale code.
+2. AUTO ANALYSIS Run Facts + structured pipeline_dropped (source of truth) + before/after
+                 vs the previous round's metrics.
+3. COMPETITOR    MANDATORY — this is the blocker-DISCOVERY engine (Mission #2), not decoration:
+   CROSS-REF       • coffeebabe 0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671 — MANUAL, EVERY
+                     live-window tx (full trace: what the arb did + did it backrun a victim
+                     + the victim's source, or prove atomic).
+                   • 0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13 — SAMPLED.
+                   • Each agent works from PRIMARY sources independently (raw script JSON +
+                     own on-chain trace), never the other's curated facts.
+                 → classify what WE missed: pool gap / path gap / unanticipated gap.
+4. BLOCKER       Claude names the core blocker  →  Codex REVIEWS the blocker (agree on WHAT
+   (agree first)  is wrong before planning the fix)  →  Claude FINALIZES the blocker + writes
+                  the Implementation Brief. Only the Brief / Final Decision drives code.
+5. IMPLEMENT     Codex writes  →  Claude review ↔ Codex review/fix  (≤ 3 passes, then Claude
+                 Final Approval or an explicit stop).
+6. GATE          • deterministic blocker (path/pool/decoder/planner/adapter/graph) → a local
+                   FORK/REPLAY flip CONFIRMS it's fixed (rule 12). No flip = not fixed.
+                 • non-deterministic blocker (latency / inclusion / ECONOMICS / bid / mempool)
+                   → NOT fork-provable. Record it in the round summary + Findings Ledger with
+                   carry_to_round, and let the NEXT round's live metrics confirm or deny it.
+7. CARRY         The next round's md READS this round's conclusion + open Findings FIRST, and
+                 must resolve any finding past its carry_to_round before new analysis (rule 13).
 ```
 
 ### Governance (hard rules)
