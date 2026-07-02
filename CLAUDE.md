@@ -322,14 +322,31 @@ discovery is needed.
                  do not analyze stale code.
 2. AUTO ANALYSIS Run Facts + structured pipeline_dropped (source of truth) + before/after
                  vs the previous round's metrics.
-3. COMPETITOR    MANDATORY — this is the blocker-DISCOVERY engine (Mission #2), not decoration:
-   CROSS-REF       • coffeebabe 0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671 — MANUAL, EVERY
-                     live-window tx (full trace: what the arb did + did it backrun a victim
-                     + the victim's source, or prove atomic).
+   THE QUESTION  Blocker-discovery answers TWO complementary questions — NOT "which opp did we
+   (dual frame)  lose this window" (that surfaces the nearest POINT-failure, not the distance to
+                 production; it produced ~20-line near-null rounds):
+                   • PRIMARY (funnel-INTERNAL, toward production): **What is the nearest blocker
+                     to a genuine +EV `simSuccess`?** Walk the funnel opportunity_seen → plans →
+                     solverEntered → **simSuccess (a profitable simulated bundle = the last gate
+                     before the human broadcast)** and find where REAL opportunities stall.
+                     `simSuccess` must be **+EV, not dust** — today's sims run with gas_estimate=0
+                     / bribe≈100%, so a bare `simSuccess>0` can be a −EV dust bundle; if that is
+                     the ceiling, **economics IS the blocker**. Do not celebrate dust.
+                   • COMPLEMENTARY (funnel-EXTERNAL, coverage): **What do competitors capture that
+                     never enters our funnel?** The primary question is blind to pools we don't
+                     index (those opps never register as "blocked"); the competitor cross-ref
+                     (step 3) is the only lens on that.
+3. COMPETITOR    MANDATORY — the funnel-EXTERNAL / coverage lens + reality check on the primary
+   CROSS-REF     question (Mission #2), not decoration:
+                   • coffeebabe 0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671 — MANUAL, EVERY
+                     live-window tx (full trace: what the arb did + did it backrun a source swap
+                     + that swap's origin, or prove atomic).
                    • 0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13 — SAMPLED.
                    • Each agent works from PRIMARY sources independently (raw script JSON +
                      own on-chain trace), never the other's curated facts.
-                 → classify what WE missed: pool gap / path gap / unanticipated gap.
+                 → classify what WE missed: pool gap / path gap / unanticipated gap; and confirm
+                 the PRIMARY-question blocker is on a REAL opportunity a competitor captured (not
+                 noise we optimized for nothing).
 4. BLOCKER       **Two BLIND-INDEPENDENT analyses of the same raw material, then compare** — NOT
    (dual-blind)   "analyze then review the conclusion" (a correlated hand-off; the rule-9 nodding risk):
                   • A FRESH fable-5 sub-agent (Agent tool, model:fable — new context every round,
