@@ -1,0 +1,54 @@
+# Handoff → Fable 5 (2026-07-02)
+
+Claude (Opus 4.8) ran an autonomous v4 epic + latency pass (R1–R8). This is the state, the open problems, and where to look.
+
+## 1. Read first (context, in order)
+1. **`CLAUDE.md`** — Hermes governance rules 1–14. Critical: **11** (Codex = gpt-5.5 xhigh generator, `codex exec -o <file>`, judge by output file not stdout), **12** (repair-replay gate: searcher fixes need a replay flip; latency/inclusion exempt → metrics), **13** (forcing functions, ≤1 observability turn), **14** (multi-round = user away → decide + record, don't `AskUserQuestion`).
+2. **`docs/research/reports/live-run-20260701-detgap-hermes.md`** — full ledger of this run (R1–R7: run facts, competitor cross-ref, every finding + decision + the Findings Ledger).
+3. **Memory** (`~/.claude/projects/-Users-eunice-src-MEV/memory/`, index `MEMORY.md`): `project-univ4-coverage-frontier` (the whole v4 story + blockers), `project-v8-quote-loop-bottleneck` (known quote/latency depth), `reference-codex-background-suspend` (caffeinate), `feedback-multiround-user-away-autonomy` (rule 14), `feedback-validate-live-not-backtest`.
+
+## 2. Done this run (R1–R7, all merged `main`, Codex-reviewed + gated)
+| R | change | gate |
+|---|---|---|
+| R1 | `quoteUniV4` → real V4Quoter + pin USDC/USDT fee8 | reproduces real v4 swap 0 bps (`test/validate-v4-quote.ts`) |
+| R2 | no_candidate root-cause (80% longtail; disproved "pin v4 fixes 78%") | on-chain competitor cross-ref |
+| R3 | **v4-impact-detection** (`uniV4Decoder`, v4 Swap→PoolImpact by poolId) | `test/v4-impact-detect.ts` |
+| R4 | solver v4 identity (`sameV4Pool` poolId guard) | tsc + planner regression |
+| R5 | 2nd v4 pool (fee7) + **execution PoolKey from `edge.v4PoolKey`** (was hardcoded fee100) | `test/v4-execution-poolkey.ts` |
+| R6 | **v4 dry-run — PRODUCTION VALIDATED** | v4 victim → `opportunity_seen` live (before: 0/80) |
+| R7 | arb-profit WETH→ETH unwrap double-count fix (competitor sizing was ~2×) | `analysis/src/test/weth-unwrap-delta.ts` |
+
+**Key win:** the v4 detection→quote→identity→execution chain is complete and validated in the live pipeline (R6). Codex review caught 3 real blockers along the way (identity collapse, planner path dedupe, hardcoded execution fee).
+
+## 3. OPEN PROBLEMS (for Fable) — ranked
+
+### A. Latency root-cause fix — **NOT the TTL band-aid** (user's explicit follow-up)
+- **Symptom:** opps die `expired-before-solver` (killed our one live v4 opp in R6). 6/71-block window.
+- **Root cause (located):** the `plan` stage occasionally takes **2.8–4.8s** and **hogs the per-hint SHARED TTL**; opps are processed **serially** (`main.ts:1112` `for (const opp of opportunities)`), so one slow-planning opp starves the rest → they expire with fast individual plans (7/8 expired had `plan<220ms` but `total~5000ms`).
+- **Why it's not path explosion:** `maxPoolsPerToken=8`, `maxHops=3` (`main.ts:347/281`) → ≤512 paths. So the 4.8s is **per-candidate work** (borrowability × `maxRotationsPerPath=3` × constraints) OR pinned-edge-exemption blow-up (pinned edges are exempt from the per-token cap in `token-graph.ts:475`). **Profile it first** (add per-sub-stage timing inside `planner.plan`), then bound.
+- **The band-aid I shipped (revert or keep as backstop):** `SEARCHER_OPP_TTL_MS` 5000→8000 in the node's `/opt/MEV/.env`. It's a band-aid — staler opps, doesn't fix competitiveness. **The real fix is a per-opportunity planning time budget.**
+- **Root fix:** `planner.plan(opp, templates)` has **NO deadline param** (`planner/planner.ts:125`). Add a time budget (thread a deadline into the DFS in `buildTokenPaths` + the candidate loop; return partial when exceeded), so no single opp's planning hogs the shared TTL. Consider also giving each opp its own budget slice instead of one shared per-hint TTL.
+- **Files:** `listener/src/searcher/planner/planner.ts` (`plan()`, `maxCandidates/maxHops/maxPoolsPerToken/maxRotationsPerPath`), `listener/src/searcher/planner/token-graph.ts` (`buildTokenPaths`, `maxPaths=20000` guard), `listener/src/searcher/main.ts` (opp loop `1112`, TTL check `1324`, `startedAt=tHint` `738/754`, seg timing `segMark`/`segStr`).
+- **Gate:** metrics (rule 12 latency exemption) — `expired-before-solver` count + `plan` p50/p95 before/after on a dry-run window. Logs at **`/var/log/mev-live.log`** (`grep "opportunity expired"` → `stage breakdown`), events at `/var/log/mev/events/searcher-live.jsonl`.
+
+### B. native-ETH v4 execution — the ETH-paired **92%** (user-present + broadcast gate)
+- **Blocker:** top v4 volume is native-ETH pairs (ETH/USDC fee100 `0x00b9edc1`, ETH/USDT fee500 `0x72331fcb` — `currency0 = 0x0`). Executing them needs `settle{value: amountIn}()`, but `plan-builder` builds the input leg as `univ4-sync + erc20-transfer + univ4-settle` with **no value path**. Native ETH must be paid via `msg.value` on settle → needs a value-forwarding path in **`src/BotVM.sol` (the executor CONTRACT) + recompile + redeploy**.
+- **Files:** `listener/src/searcher/solver/plan-builder.ts` (`univ4-unlock` case ~236), `listener/src/adapters/univ4.ts` (settle adapter ~134), `src/BotVM.sol`.
+- **Gate:** fork test — ETH→USDC v4 swap builds + executes on-fork with correct output. **Broadcast stays a HUMAN gate** (do NOT broadcast).
+
+### C. Broad v4 coverage
+- Only USDC/USDT (fee7/fee8) pinned → catches a thin stable-stable slice. The 43%/92% is ETH-paired → **blocked on (B)**. After (B): broad-pin the top ETH v4 pools or auto-index the singleton. Curated ERC20/ERC20 v4 pins alone are low value.
+
+### D. Minor
+- `defaultTokenGraph()` still has a hardcoded DAI/USDT v4 fee fallback (test/AC-3 only, not the pinned exec path). Codex caveat.
+
+## 4. Current state (as of handoff)
+- **Branch:** `main`, everything merged (`git log` top: `65d1325`). No open feature branches needing merge.
+- **Node (EC2 `i-0ff908dedeec9ebc6`, SSM only, no SSH):** `mev-searcher.service` **ACTIVE**, **dry-run** (`SEARCHER_DRY_RUN=1`), backend=revm, mempool=1, on local reth `127.0.0.1:8545/8546`. Deployed `main` `137e92d`+ TTL bump. Log `/var/log/mev-live.log` (~382MB — consider rotating), events `/var/log/mev/events/searcher-live.jsonl`. **A TTL=8000 measurement window was in-flight at handoff** — check the log for its `expired` count.
+- **Local Mac:** `caffeinate -dimsu -t 18000` guard running (won't sleep for ~5h; kill `pkill caffeinate` or let it expire). This is what stops codex bg runs from suspending.
+- **go-live / broadcast:** NEVER performed. Hard human gate.
+
+## 5. Process notes
+- **Codex loop:** Claude authors v4 code, Codex (gpt-5.5 xhigh) reviews. Invoke: `caffeinate -i codex -s workspace-write -a never exec -C /Users/eunice/src/MEV --json -o /tmp/codex-<x>.out "$BRIEF" < /dev/null > /tmp/codex-<x>.events.jsonl 2>&1`. Judge by the `-o` file + `git diff`, never stdout. Don't poll-kill; caffeinate prevents the 3h screen-lock suspend.
+- **Verify-before-claim** + **cross-reference on-chain before calling a drop non-arbable** (the R2 lesson: most no_candidate is longtail, but confirm competitor take first).
+- **Node RPC = free (local reth, zero Alchemy CU)**; use Alchemy (`$MAINNET_RPC_URL`) only for archive/old-logs (v4 Initialize poolId→PoolKey).
