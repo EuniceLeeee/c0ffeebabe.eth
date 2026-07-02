@@ -64,6 +64,13 @@ and a planner deadline. One narrow patch.
 **Forbidden:** everything else (solver/*, detector/*, adapters, .env, package.json,
 docs). No renames, no drive-by refactors, match existing style.
 
+**Baseline already landed (`cfbf4c4`, adopted from concurrent session):** a
+`SEARCHER_MAX_CANDIDATES_PER_OPP` candidate cap in the `main.ts` opp/candidate loop
+(bail after N solves to free the shared TTL, default 0=off) + its config knob + log
+line. **Keep it** — it is a complementary blunt cap. This cycle LAYERS the precise
+time-budget on top. Follow the existing `maxCandidatesPerOpp` config-knob pattern for
+the new knobs.
+
 **Changes:**
 
 1. `planner.ts` — `plan(opp, templates, opts?: { deadlineAtMs?: number })`
@@ -74,7 +81,10 @@ docs). No renames, no drive-by refactors, match existing style.
      exploring, **return the partial candidates found so far**.
    - If `timedOut && candidates.length === 0`, the no-candidate diagnostic
      (`lastNoCandidateDiagnostic`) must classify as **`plan_budget_exhausted`** —
-     never mislabel a budget kill as structural `no_candidate`.
+     never mislabel a budget kill as structural `no_candidate`. Add
+     `"plan_budget_exhausted"` to the `NoCandidateClassification` union
+     (`planner.ts:35`); when `timedOut`, set the diagnostic's `classification` to it
+     directly (bypass `classifyNoCandidate` for that case).
 2. `token-graph.ts` — add `deadlineAtMs?: number` to `PathOpts`; in `walk()` check
    the clock every 64 node expansions (counter, not every call); on exceed stop
    expanding and return the paths found so far (partial OK, mirrors the `maxPaths`
