@@ -67,7 +67,35 @@ NOT `pool-impact.ts:511` (that's a v2/v3 token0/token1 query) nor `token-graph.t
 - minor (non-blocking): `weth-withdraw-amount` shares matchTrace selector `0x2e1a7d4d`
   with `weth-withdraw` — reverse trace-decode only, irrelevant to forward encoding.
 
-### 2b-ii — NEXT (wiring + fork test)
+### 2b-ii — LANDED `c817cc2` (wiring + quoter direction + fork gate PASS)
+- **5-step Opus loop** (this session runs as Opus 4.8): Claude plan → **Codex read-only
+  plan-review** (caught 4 real issues before code: native settle needs `sync(0x0)`;
+  `realCurrency` must be restricted + pair-validated; reject native/WETH collapse; simpler
+  pre-funded fork test) → Claude final plan → Codex impl → Claude review.
+- quoter.ts + plan-builder.ts resolve the aliased WETH graph token → real PoolKey currency
+  (`realV4Currency` direct-match, else alias WETH→0x0 only when exactly one side native,
+  pair-validated; native/WETH pool rejected). Native legs: input =
+  `weth-withdraw-amount → univ4-sync(0x0) → univ4-settle-value{value}`; output =
+  `univ4-take(0x0) → weth-deposit-value{value}`.
+- **FORK GATE PASS (local reth, ZERO Alchemy CU)** — `replay-v4-native-arb.ts` on node
+  worktree, fork upstream `127.0.0.1:8545` @ block 25442000, anvil:
+  - native input WETH→USDC: on-fork `delta=16195859 == expected` (V4Quoter) ✓
+  - native output USDC→WETH: on-fork `delta=15431792511170999 == expected` ✓
+  - Both directions execute with EXACT quoted output. **verdict: fixed.**
+- Deterministic regressions green: planner 12/12 + fixtures 4/4; v4-adapters 3/3;
+  v4-impact / v4-execution-poolkey PASS; tsc clean.
+- Infra note: node had no `out/BotVM.sol/BotVM.json` → ran `forge build` once on the node to
+  produce it; fork test run from an isolated `/tmp/mev-2bii` worktree (node_modules + out
+  symlinked) so the live dry-run searcher was never disturbed.
+
+### 2c — REMAINING to actually catch it live (coverage)
+- native-ETH v4 detect→route→quote→execute is now COMPLETE + validated, but **inert in prod
+  until a native pool is pinned**. Next: add ETH/USDC (fee-100, poolId `0x00b9edc1…`, verified
+  routable+executable above) and top ETH/USDT v4 pools to `pinned-warm-pools.json`. Config-only;
+  then a dry-run window should show native-ETH v4 `opportunity_seen` + reaching the solver.
+  Broadcast stays human-gated.
+
+### (superseded) 2b-ii original plan — wiring + fork test
 - **quoter.ts direction fix (2a fallout):** after 2a aliasing, `v4ZeroForOne` /
   `encodeUniV4QuoteExactInputSingle` are called with the aliased WETH token but the real
   PoolKey has `currency==0x0` → throws "tokens do not match PoolKey". Map aliased WETH→0x0
