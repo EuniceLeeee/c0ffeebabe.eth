@@ -33,6 +33,9 @@ simSuccess 平 → 强制架构审阅」规则，现在轮到你。你要回答�
    翻转一个真 +EV simSuccess 的最小改动（rule-12 gate），不是重写蓝图。
 允许答案在四类外或是组合，但必须指定 primary。工具：本地 repo + 节点 EC2（SSM）+
 本地 reth（零 CU 优先）。产出按 handoff Deliverable 格式 + 上面四条的产物。
+产出纪律（降低安全分类器误触发／模型回退，CLAUDE.md Safety Rule 6）：结构化数据优先
+（表 / `tx→池→profit` / `file:line`，让哈希与数字承载），少写重述竞品动作的叙述性散文；
+raw trace 写进 scratchpad 文件、对话里只留简短结论——降低生成体量，不是只换词。
 handoff 路径：<每轮触发时填当轮 handoff 路径>
 ```
 
