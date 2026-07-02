@@ -123,7 +123,41 @@ either land it or document a defer once it returns.
 | sim-fidelity: `gasUsed=0n` unconditional (botvm-simulator.ts:55,66) | R4 | — | **in progress** — Codex dispatched this turn, gate = `searcher:ac3` gasUsed flip |
 | economics slice-3 (EV_GATE=1, BRIBE_BPS<10000, real gas, MIN_NET_ETH=0) | slice-3 | next round | blocked on sim-fidelity fix landing; config-only once unblocked |
 
-## searcher_behavior_change: yes (pending)
-Sim-fidelity fix changes what gas cost the EV gate and bundle builder use for every simulated plan — a real
-change to what the searcher would submit once EV_GATE is enabled, not an observability-only patch.
-carry_to_round: R5.
+## searcher_behavior_change: yes — LANDED
+Codex implemented the fix (`state-backend.ts`: additive `getGasUsed(txHash)`; `botvm-simulator.ts`: success
+path uses it instead of hardcoded `0n`; `ac3.ts`: asserts `gasUsed > 0n`). Codex's own sandbox could not run
+anvil (`EPERM` on local TCP listen) to produce before/after numbers, so the orchestrator ran the repair-replay
+gate directly: `npm run searcher:ac3` (real forked-mainnet wstUSR replay, block 24710789).
+
+**Gate result: PASS.** `gasUsed` flipped from the previous unconditional `0n` to real measured values —
+`1058884`, `1059262`, `1045212` (plausible for a 6-hop flash-loan arbitrage; the old fallback was
+12,000,000 x2 = 24,000,000). AC-3 wstUSR regression fixtures still PASS 2/2 (`bestProfit` unchanged vs
+threshold on both fixtures). `npm run build` clean; only `AnvilStateBackend` implements `StateBackend`, no
+missed call sites. Diff scope matches the brief exactly (3 files: `state-backend.ts`, `botvm-simulator.ts`,
+`ac3.ts`).
+`failing_sample: AC-3 wstUSR fixtures (gasUsed hardcoded 0n, confirmed by code inspection pre-fix) /
+fix_commit: f721651 / replay_command: npm run searcher:ac3 / replay_result: gasUsed 1058884/1059262/1045212,
+AC-3 PASS 2/2 / expected_transition: gasUsed 0n (unconditional) -> real measured value / verdict: **fixed**`
+(not merely `implemented_not_validated`). This satisfies rule 13's anti-drift cap for this round.
+Unblocks economics slice-3 (`SEARCHER_EV_GATE`/`SEARCHER_BRIBE_BPS`/`SEARCHER_MIN_NET_ETH` already wired as
+env config in `main.ts:349-352` — a deploy-time flip for a future measurement round, no code needed).
+carry_to_round: R5 (deploy + dry-run to measure the EV-gate flip's effect).
+
+## IMPORTANT — concurrent session collision discovered (flag to human)
+While staging this commit, found **unstaged, uncommitted changes to `main.ts`, `pool-universe.ts`, and
+`test/pool-universe.ts`** implementing a "pair-floor" pool-admission feature (`SEARCHER_PAIR_FLOOR`,
+`selectPairFloorPools`, top-K same-token-neighbor admission) that this round did not write. Process
+inspection found a **second, independently-running Claude Code session** (PID 77146/77145, a resumed
+session `68cdc92e-8b69-4043-8d6d-dccc6302cf3a`, `claude-opus-4-8 --effort xhigh`, running since 10:46AM)
+with its own live Codex dispatch in progress (`/private/tmp/hermes-arch-review-20260702/codex-slice2-impl-brief.md`,
+PID 11558 at time of discovery) — this matches arch-review-2-verdict.md's **slice-2** productionization
+step ("top-K same-token neighbors by score"), which was conditional on R4 finding a verified real-value
+coverage case. **This round's Final Decision is that R4 found NO such case and killed the coverage-epic
+productionization** — directly conflicting with what the other session appears to be building.
+**Action taken:** left the other session's uncommitted files completely untouched (verified `git add`
+only staged this round's 3 gasUsed-fix files before committing — no overlap, no risk of corrupting or
+discarding its WIP). **Not resolved by this round** — this is a cross-session coordination gap the human
+should see directly, not something to silently reconcile or override autonomously (two live Hermes loops
+independently driving the same working tree is itself a process problem, separate from either loop's
+technical conclusions). Recommend: check what the other session's slice-2 pass concludes against this
+round's kill-the-epic finding before either lands further commits.
