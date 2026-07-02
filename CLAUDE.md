@@ -4,7 +4,15 @@
 
 ## Project Overview
 
-Replicate and study MEV arbitrage strategies on Ethereum mainnet forks.
+### Mission / North Star — every session, every window, every operation stays anchored to this
+1. **Ship to production.** The goal is a **profitable, live on-chain arbitrage searcher**. Everything here is a step toward that first production go-live. (Broadcast stays a hard human gate — Safety Rule 1 — but the *direction* is always: get closer to a real, +EV live bundle.)
+2. **Learn from other searchers to find OUR gaps.** The primary method is to systematically study competitors' winning on-chain paths and classify what **we** are missing:
+   - **pool gap** — a venue/pool we don't index (e.g. the Uni v4 singleton);
+   - **path gap** — pools we already have but can't route / close the loop through;
+   - **unanticipated gap** — we saw the opportunity but lost it somewhere we didn't expect (e.g. latency killing a detected opp).
+3. **Loop:** competitor cross-reference → classify our gap (pool / path / unanticipated) → close it → move closer to production. **No work item counts unless it moves a real gap toward closed, or moves us toward a live +EV bundle.** Do not drift from this.
+
+Replicate and study on-chain arbitrage strategies on Ethereum mainnet forks (the study is *in service of* the mission above).
 Primary case study: **wstUSR depegging arbitrage** executed by `0xE08D97e151473A848C3d9CA3f323Cb720472D015`.
 
 Reference tx: `0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970` (block 24710788).
