@@ -15,8 +15,8 @@ import { HotPathSearcher } from "../hot-path.js";
 import { ManualVictimSource } from "../orderflow/manual-source.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import { defaultTokenGraph } from "../planner/token-graph.js";
-import { AnvilSolver } from "../solver/solver.js";
-import { BotVMSimulator } from "../simulator/botvm-simulator.js";
+import { AnvilSolver, type ResolvedPlan } from "../solver/solver.js";
+import { BotVMSimulator, type SimulationResult } from "../simulator/botvm-simulator.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
 function loadEnv(): void {
@@ -33,6 +33,19 @@ function loadEnv(): void {
     const [rawKey, ...rest] = trimmed.split("=");
     const key = rawKey.replace(/^export\s+/, "");
     if (!process.env[key]) process.env[key] = rest.join("=").replace(/^["']|["']$/g, "");
+  }
+}
+
+class Ac3GasAssertingSimulator extends BotVMSimulator {
+  async simulate(plan: ResolvedPlan): Promise<SimulationResult> {
+    const result = await super.simulate(plan);
+    if (result.success) {
+      console.log(`[searcher/ac3] simulator gasUsed=${result.gasUsed}`);
+      if (result.gasUsed <= 0n) {
+        throw new Error(`AC-3 gasUsed invariant failed: gasUsed=${result.gasUsed}`);
+      }
+    }
+    return result;
   }
 }
 
@@ -58,7 +71,11 @@ async function main(): Promise<void> {
     const planner = new TemplatePlanner();
     planner.setGraph(graph);
     const solver = new AnvilSolver();
-    const simulator = new BotVMSimulator(state, DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER);
+    const simulator = new Ac3GasAssertingSimulator(
+      state,
+      DEFAULT_SEARCHER_EXECUTOR,
+      DEFAULT_SEARCHER_OWNER,
+    );
     const router = new DryRunBundleRouter();
 
     // Optional per-candidate solve budget (v7 AC-3a.3 [fork] verification): when

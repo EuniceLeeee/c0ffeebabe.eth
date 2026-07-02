@@ -21,6 +21,7 @@ export interface StateBackend {
   revert(snapshotId: string): Promise<void>;
   call(req: { to: string; data: string; from?: string }): Promise<string>;
   send(req: { from: string; to: string; data: string; gas?: string }): Promise<string>;
+  getGasUsed(txHash: string): Promise<bigint>;
   getTokenBalance(token: string, account: string): Promise<bigint>;
 }
 
@@ -364,6 +365,11 @@ export class AnvilStateBackend implements StateBackend {
       throw new Error(`transaction reverted: ${hash}${detail ? ` ${detail}` : ""}`);
     }
     return hash;
+  }
+
+  async getGasUsed(txHash: string): Promise<bigint> {
+    const receipt = await getReceipt(this.provider, txHash, "gas used receipt");
+    return receipt?.gasUsed ?? 0n;
   }
 
   async getTokenBalance(token: string, account: string): Promise<bigint> {

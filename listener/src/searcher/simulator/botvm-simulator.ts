@@ -45,6 +45,7 @@ export class BotVMSimulator {
         data: calldata,
         gas: "0x1000000",
       });
+      const gasUsed = await this.state.getGasUsed(txHash);
       const post = await this.state.getTokenBalance(plan.profitToken, this.executor);
       await this.state.revert(snap);
       const grossProfit = post - pre;
@@ -52,7 +53,7 @@ export class BotVMSimulator {
         success: grossProfit > 0n,
         profitToken: plan.profitToken,
         grossProfit,
-        gasUsed: 0n,
+        gasUsed,
         netProfit: grossProfit,
         calldata,
         scriptHex: bytesToHex(script),
@@ -71,4 +72,3 @@ export class BotVMSimulator {
     }
   }
 }
-
