@@ -38,9 +38,12 @@ const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 const TICK_LENS = "0xbfd8137f7d1516D3ea5cA83523914859ec47F573";
 
-// Fallback only if the pinned source swap cannot be read. Prefer the real block
-// tx impact; override this with SEARCHER_BLUECHIP_AMOUNT_IN when calibrating.
-const DEFAULT_LARGE_USDC_TO_WETH_AMOUNT_IN = 25_000_000n * 10n ** 6n;
+// The searcher quotes ARB-sized amounts (the flash-borrow size the solver searches),
+// NOT the victim's own swap size — a large arb amount is what crosses beyond the ±8
+// warmed words and triggers the QuoterV2/eth_call fallback this fix removes. 2M USDC on
+// USDC/WETH-100 crosses ~5 words past ±8 (word 781) and stays within QuoterV2 limits
+// (25M+ makes QuoterV2 revert on this 0.01% pool). Override with SEARCHER_BLUECHIP_AMOUNT_IN.
+const DEFAULT_LARGE_USDC_TO_WETH_AMOUNT_IN = 2_000_000n * 10n ** 6n;
 
 const poolIface = new ethers.Interface([
   "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 a, uint16 b, uint16 c, uint8 d, bool e)",
@@ -217,14 +220,18 @@ async function selectReplayQuote(provider: ethers.JsonRpcProvider, block: number
       source: `SEARCHER_BLUECHIP_AMOUNT_IN override${directionOverride === null ? " (direction from source/default)" : ""}`,
     };
   }
-  if (sourceSwap) return sourceSwap;
-
+  // Default: a representative ARB amount (what the solver actually quotes), with the
+  // DIRECTION taken from the real source victim swap when readable. The victim's own
+  // swap size is too small to cross ±8 — using it would not exercise the fix. Override
+  // the amount with SEARCHER_BLUECHIP_AMOUNT_IN.
+  const zeroForOne = directionOverride ?? sourceSwap?.zeroForOne ?? true;
+  const [tokenIn, tokenOut] = zeroForOne ? [USDC, WETH] : [WETH, USDC];
   return {
-    zeroForOne: true,
-    tokenIn: USDC,
-    tokenOut: WETH,
+    zeroForOne,
+    tokenIn,
+    tokenOut,
     amountIn: DEFAULT_LARGE_USDC_TO_WETH_AMOUNT_IN,
-    source: "DEFAULT_LARGE_USDC_TO_WETH_AMOUNT_IN fallback; set SEARCHER_BLUECHIP_AMOUNT_IN to pin exact impact",
+    source: `representative arb amount (direction from ${sourceSwap ? "source victim swap" : "default"}); override via SEARCHER_BLUECHIP_AMOUNT_IN`,
   };
 }
 
