@@ -593,6 +593,22 @@ discovery is needed.
       ask "should I run the architecture review?"; just run it and record the verdict. A single
       user prompt like "跑 N 轮 hermes" is the whole instruction; everything downstream (deploy,
       windows, blocker-discovery, arch-review firing, fixes, gates) is self-driven.
+15. **A status report is NOT a stop — never end an autonomous-workflow turn on prose alone.** The
+    rule-14 no-ask hook stops you from *asking*, but the real failure mode is subtler: after a big
+    analysis you write a checkpoint report and simply YIELD the turn — neither asking nor proceeding.
+    That is a **silent stall**: the loop only advances when a tool call re-invokes you (next Codex/agent
+    dispatch, deploy, `ScheduleWakeup`, a background timer) or the user prompts; a pure text report
+    schedules nothing, so the workflow dies until the human pokes it (observed 2026-07-02: R1 reported,
+    R2 never auto-started until the user asked "are you running R2?"). **Rule: while `/tmp/mev-workflow-active`
+    exists, every turn MUST end with either (a) a work-continuing / self-re-invoking tool call, or (b) an
+    explicit real stop condition (go-live/broadcast, CU-cap, destructive) stated as such. Reporting is a
+    side-channel to the away user, delivered ALONGSIDE the next action in the SAME turn — not a handoff.**
+    - **ENFORCED, not just documented.** A `Stop` hook (`scripts/hooks/guard-workflow-nostall.py`, wired
+      in `.claude/settings.json`) fires when the turn ends: while the marker exists, it BLOCKS the first
+      stop and forces you to confirm a continuation is scheduled (background work running / wakeup set) or
+      dispatch one — so "report then yield" cannot silently end the loop. If you are legitimately waiting
+      on tracked background work, re-affirm and the stop proceeds (the hook self-clears via
+      `stop_hook_active`).
 
 ### Boundary (CLI-orchestrated by Claude)
 
