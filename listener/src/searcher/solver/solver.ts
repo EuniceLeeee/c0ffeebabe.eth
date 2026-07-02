@@ -24,7 +24,11 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { CandidatePlan } from "../planner/planner.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
-import { propagateAmounts, type AmountQuoteSource } from "./amount-propagation.js";
+import {
+  propagateAmounts,
+  propagateAmountsWithRawOutputs,
+  type AmountQuoteSource,
+} from "./amount-propagation.js";
 import { buildResolvedPlanFromPath } from "./plan-builder.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quote } from "./quoter.js";
@@ -259,14 +263,17 @@ export class AnvilSolver implements Solver {
         break;
       }
       let amounts: bigint[];
+      let rawOutputs: bigint[];
       try {
-        amounts = await propagateAmounts(plan.tokenPath, cand.flashAmount, state, {
+        const propagated = await propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, state, {
           fluidDebtBps: cand.fluidDebtBps,
           cache: opts.cache,
           quoteSource: opts.quoteSource,
           safetyBps: quoteSafetyBps,
           shouldStop: pastDeadline,
         });
+        amounts = propagated.amounts;
+        rawOutputs = propagated.rawOutputs;
       } catch (err) {
         lastFailure = `propagation failed: ${err instanceof Error ? err.message : String(err)}`;
         console.log(`[searcher/ac3] solver:   propagation ${lastFailure.slice(0, 200)}`);
@@ -295,6 +302,7 @@ export class AnvilSolver implements Solver {
             state,
             targetNetProfit,
             flashAdapterId,
+            rawOutputs,
           );
         } catch (err) {
           lastFailure = `build failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -314,6 +322,10 @@ export class AnvilSolver implements Solver {
             `[searcher/ac3] solver:   deferred sim, quoteProfit=${cand.quoteProfit}`,
           );
           return candidate;
+        }
+        if (pastDeadline()) {
+          lastFailure = `deadline ${deadlineMs}ms reached before sim`;
+          break;
         }
         const sim = await probe.simulate(candidate);
         if (!sim.success) {

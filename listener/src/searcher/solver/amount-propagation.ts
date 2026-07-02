@@ -8,6 +8,13 @@ export interface AmountQuoteSource {
   quote(req: QuoteRequest): Promise<QuoteResult>;
 }
 
+export interface PropagatedAmounts {
+  /** Haircutted per-edge amounts used for downstream sizing and profit checks. */
+  amounts: bigint[];
+  /** Raw pre-haircut quote output for each edge; rawOutputs[i] is edge i output. */
+  rawOutputs: bigint[];
+}
+
 /**
  * Chain quoter calls along a TokenPath: amountIn[i+1] = amountOut[i].
  * Returns the per-edge amounts (length = edges + 1, where amounts[0] is
@@ -30,7 +37,25 @@ export async function propagateAmounts(
     shouldStop?: () => boolean;
   } = {},
 ): Promise<bigint[]> {
+  return (await propagateAmountsWithRawOutputs(path, flashAmount, state, options)).amounts;
+}
+
+export async function propagateAmountsWithRawOutputs(
+  path: TokenPath,
+  flashAmount: bigint,
+  state: StateBackend,
+  options: {
+    fluidDebtBps?: bigint;
+    cache?: PoolStateCache;
+    quoteSource?: AmountQuoteSource;
+    safetyBps?: bigint;
+    /** Abort between hops when the solver deadline passes, so a single cold
+     *  quote point doesn't run past the TTL uninterrupted. */
+    shouldStop?: () => boolean;
+  } = {},
+): Promise<PropagatedAmounts> {
   const amounts: bigint[] = [flashAmount];
+  const rawOutputs: bigint[] = [];
   let cur = flashAmount;
   const safetyBps = options.safetyBps ?? 10000n;
   for (const edge of path.edges) {
@@ -45,11 +70,12 @@ export async function propagateAmounts(
         `propagation produced zero at edge ${edge.adapterId} ${edge.tokenIn}->${edge.tokenOut}`,
       );
     }
+    rawOutputs.push(out);
     const spendable = applySafetyBps(out, safetyBps);
     amounts.push(spendable);
     cur = spendable;
   }
-  return amounts;
+  return { amounts, rawOutputs };
 }
 
 /**

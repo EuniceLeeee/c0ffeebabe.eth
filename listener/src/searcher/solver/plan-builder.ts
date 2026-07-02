@@ -35,6 +35,8 @@ const poolFeeIface = new ethers.Interface([
  * @param executor       BotVM executor address (receiver for receiver rewrites)
  * @param state          StateBackend for protocol metadata lookups (curve coins, V3 fee, etc.)
  * @param minProfit      Minimum profit required (added to flashAmount in assert-balance guard)
+ * @param rawOutputs     Optional raw pre-haircut quote outputs; only v4 physical
+ *                       take/deposit consumes these, while amounts stay spendable.
  */
 export async function buildResolvedPlanFromPath(
   path: TokenPath,
@@ -45,10 +47,16 @@ export async function buildResolvedPlanFromPath(
   state: StateBackend,
   minProfit: bigint = 1n,
   flashAdapterId: string = "morpho-flash",
+  rawOutputs?: bigint[],
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
     throw new Error(
       `amounts length ${amounts.length} != edges + 1 (${path.edges.length + 1})`,
+    );
+  }
+  if (rawOutputs !== undefined && rawOutputs.length !== path.edges.length) {
+    throw new Error(
+      `rawOutputs length ${rawOutputs.length} != edges (${path.edges.length})`,
     );
   }
 
@@ -86,11 +94,13 @@ export async function buildResolvedPlanFromPath(
     const edge = path.edges[i];
     const amtIn = amounts[i];
     const amtOut = amounts[i + 1];
+    const rawOut = rawOutputs?.[i];
 
     const node = await buildEdgeNode(
       edge,
       amtIn,
       amtOut,
+      rawOut,
       executor,
       state,
       ensureApprove,
@@ -143,6 +153,7 @@ async function buildEdgeNode(
   edge: TokenEdge,
   amtIn: bigint,
   amtOut: bigint,
+  rawOut: bigint | undefined,
   executor: string,
   state: StateBackend,
   ensureApprove: (token: string, spender: string) => void,
@@ -257,6 +268,7 @@ async function buildEdgeNode(
       const zeroForOne = realIn.toLowerCase() === c0.toLowerCase();
       const inputIsNative = realIn.toLowerCase() === ethers.ZeroAddress.toLowerCase();
       const outputIsNative = realOut.toLowerCase() === ethers.ZeroAddress.toLowerCase();
+      const takeAmount = rawOut ?? amtOut;
 
       const unlockChildren: ResolvedPlanNode[] = [
         // swap: exactInput (amountSpecified negative in V4 convention)
@@ -284,7 +296,7 @@ async function buildEdgeNode(
           target: edge.target,
           tokenIn: "",
           tokenOut: edge.tokenOut,
-          amount: amtOut,
+          amount: takeAmount,
           params: { currency: realOut },
           children: [],
         },
@@ -296,7 +308,7 @@ async function buildEdgeNode(
           target: ADDR.WETH,
           tokenIn: realOut,
           tokenOut: ADDR.WETH,
-          amount: amtOut,
+          amount: takeAmount,
           params: {},
           children: [],
         });
