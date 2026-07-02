@@ -29,6 +29,9 @@ export interface TokenEdge {
   /** Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). Disambiguates v4 pools
    *  that share the singleton PoolManager target (same address, different pool). */
   poolId?: string;
+  /** v4 PoolKey currencyN is native ETH (0x0); the graph node is aliased to WETH, execution (slice 2b) wraps/unwraps. */
+  nativeCurrency0?: boolean;
+  nativeCurrency1?: boolean;
 }
 
 export interface TokenPath {
@@ -238,9 +241,13 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut");
       validateV4Pair(pool.address, poolKey, tIn, tOut);
       const poolId = v4PoolId(poolKey);
+      const graphIn = tIn === ethers.ZeroAddress ? ADDR.WETH : tIn;
+      const graphOut = tOut === ethers.ZeroAddress ? ADDR.WETH : tOut;
+      const nc0 = poolKey.currency0 === ethers.ZeroAddress;
+      const nc1 = poolKey.currency1 === ethers.ZeroAddress;
       edges.push(
-        { adapterId, target: pool.address, tokenIn: tIn, tokenOut: tOut, slotKind: "swap", v4PoolKey: poolKey, poolId },
-        { adapterId, target: pool.address, tokenIn: tOut, tokenOut: tIn, slotKind: "swap", v4PoolKey: poolKey, poolId },
+        { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1 },
+        { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1 },
       );
       break;
     }

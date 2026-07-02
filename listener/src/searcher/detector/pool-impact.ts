@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
 import { v4PoolId, type TokenEdge, type TokenQueryBackend } from "../planner/token-graph.js";
 
@@ -233,10 +234,14 @@ const uniV4Decoder: ImpactDecoder = {
     if (matching.length === 0) return [];
     const key = matching[0].v4PoolKey!;
 
-    const tokenIn = a0 > 0n ? key.currency0 : key.currency1;
-    const tokenOut = a0 > 0n ? key.currency1 : key.currency0;
+    const rawTokenIn = a0 > 0n ? key.currency0 : key.currency1;
+    const rawTokenOut = a0 > 0n ? key.currency1 : key.currency0;
     const amountIn = a0 > 0n ? a0 : a1;
     if (amountIn <= 0n) return [];
+    // Native ETH is aliased to WETH for routing (1:1 via wrap/unwrap; executed in slice 2b).
+    const aliasWeth = (c: string) => (c === ethers.ZeroAddress ? ADDR.WETH : c);
+    const tokenIn = aliasWeth(rawTokenIn);
+    const tokenOut = aliasWeth(rawTokenOut);
 
     const edge = matching.find(
       (e) =>

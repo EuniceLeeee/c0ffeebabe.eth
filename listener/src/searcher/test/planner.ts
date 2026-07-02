@@ -3,9 +3,12 @@
  * Pure in-memory — no RPC, no anvil.
  */
 
+import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import type { Opportunity } from "../detector/detector.js";
+import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { TemplatePlanner } from "../planner/planner.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import { v4PoolId, type TokenEdge, type V4PoolKey } from "../planner/token-graph.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
@@ -16,8 +19,10 @@ function assert(cond: boolean, msg: string): void {
 const A = "0x00000000000000000000000000000000000000aa";
 const B = "0x00000000000000000000000000000000000000bb";
 const BEL = "0x0000000000000000000000000000000000000b01";
+const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const USDT = "0x0000000000000000000000000000000000000dAc";
-const WETH = "0x0000000000000000000000000000000000000c02";
+const WETH = ADDR.WETH;
+const ZeroAddress = ethers.ZeroAddress;
 const P1 = "0x0000000000000000000000000000000000000001";
 const P2 = "0x0000000000000000000000000000000000000002";
 const P3 = "0x0000000000000000000000000000000000000003";
@@ -328,12 +333,99 @@ async function testNoCandidateDiagnosticClassifiesPlanBudgetExhausted(): Promise
   console.log("[planner] no-candidate diagnostic classifies plan budget exhausted: PASS");
 }
 
+async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
+  const nativeKey: V4PoolKey = {
+    currency0: ZeroAddress,
+    currency1: USDC,
+    fee: 500,
+    tickSpacing: 1,
+    hooks: ZeroAddress,
+  };
+  const poolId = v4PoolId(nativeKey);
+  const nativeV4Edges: TokenEdge[] = [
+    {
+      adapterId: "univ4-unlock",
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      tokenIn: WETH,
+      tokenOut: USDC,
+      slotKind: "swap",
+      nativeCurrency0: true,
+      nativeCurrency1: false,
+      v4PoolKey: nativeKey,
+      poolId,
+      score: 100,
+    },
+    {
+      adapterId: "univ4-unlock",
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      tokenIn: USDC,
+      tokenOut: WETH,
+      slotKind: "swap",
+      nativeCurrency0: true,
+      nativeCurrency1: false,
+      v4PoolKey: nativeKey,
+      poolId,
+      score: 100,
+    },
+  ];
+  // FLIP gate for the pool-impact.ts change (governance 12): a RAW native-ETH v4
+  // Swap log must decode to an impact aliased to WETH, not the 0x0 dead-end. If the
+  // decoder alias were reverted, impact.tokenIn would be ZeroAddress and this fails.
+  const UNIV4_SWAP_TOPIC = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+  const nativeSwapLog = {
+    address: ADDR.UNISWAP_V4_POOL_MANAGER,
+    topics: [UNIV4_SWAP_TOPIC, poolId, "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"],
+    data: ethers.AbiCoder.defaultAbiCoder().encode(
+      ["int128", "int128", "uint160", "uint128", "int24", "uint24"],
+      [1_000_000n, -900n, 0n, 0n, 0, 500],
+    ),
+  };
+  const v4Impacts = (await detectImpactFromLogs([nativeSwapLog], nativeV4Edges))
+    .filter((i) => i.matchedAdapterId === "univ4-unlock");
+  assert(v4Impacts.length === 1, `native-ETH v4 decode: expected 1 impact, got ${v4Impacts.length}`);
+  assert(
+    v4Impacts[0].tokenIn.toLowerCase() === WETH.toLowerCase() &&
+      v4Impacts[0].tokenOut.toLowerCase() === USDC.toLowerCase(),
+    `native-ETH v4 decode alias: expected WETH->USDC, got ${v4Impacts[0].tokenIn}->${v4Impacts[0].tokenOut}`,
+  );
+  assert(v4Impacts[0].poolId === poolId, `native-ETH v4 decode: poolId identity lost`);
+
+  const planner = new TemplatePlanner();
+  planner.setGraph([
+    ...nativeV4Edges,
+    swap(WETH, USDC, ADDR.UNISWAP_V3_USDC_WETH_500),
+    swap(USDC, WETH, ADDR.UNISWAP_V3_USDC_WETH_500),
+  ]);
+  planner.setMaxHops(2);
+
+  const plans = await planner.plan({
+    kind: "backrun-arb",
+    victimTxHash: "0xplanner",
+    blockNumber: 1,
+    affectedPools: [ADDR.UNISWAP_V4_POOL_MANAGER],
+    affectedTokens: [WETH, USDC],
+    startToken: WETH,
+    profitToken: WETH,
+    victimAmountIn: 1_000_000n,
+    hints: {
+      impact: {
+        pool: ADDR.UNISWAP_V4_POOL_MANAGER,
+        tokenIn: WETH,
+        tokenOut: USDC,
+        poolId,
+      },
+    },
+  }, [FLASH_SWAP_REPAY]);
+  assert(plans.length > 0, `native-ETH v4 WETH alias: expected >0 plans, got ${plans.length}`);
+  console.log("[planner] native-ETH v4 pool routes through WETH alias: PASS");
+}
+
 // ── Real-case regression fixtures (repair-replay gate, CLAUDE.md governance 12) ──
 // Each pins a real failing case observed live so a coverage/routing fix can be
 // confirmed deterministically (flip) and guarded against regression. Addresses are
 // public on-chain evidence. The planner is address-agnostic, so these behave exactly
 // like the synthetic unit tests above — the value is the provenance link + flip target.
-const REAL_WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const REAL_WETH = ADDR.WETH;
 const C470 = "0xc470f5E6C17a2977CeabB524D530F19024e5a719";
 const POOL_E2A1437 = "0xE2a1437e2a15CfA591AA1D70e9a75C7598C73fDB";
 const TOK_874376 = "0x27c70cd1946795b66be9d954418546998b546634";
@@ -404,8 +496,9 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesOnlyImmediateSamePoolReverse();
   await testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue();
   await testNoCandidateDiagnosticClassifiesPlanBudgetExhausted();
+  await testNativeEthV4RoutesViaWethAlias();
   await testRealCaseReplayFixtures();
-  console.log(`planner PASS (11/11) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length})`);
+  console.log(`planner PASS (12/12) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length})`);
 }
 
 main().catch((err) => {
