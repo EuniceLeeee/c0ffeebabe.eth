@@ -72,3 +72,13 @@ session's changes are committed), resume the normal round protocol from R4's car
 |---|---|---|---|
 | concurrent-session collision: R4 kill-epic verdict vs. live slice-2 productionization build | human | next wakeup (~01:57) | **half-open** — conflicting diff cleared (reverted, not landed), but source session still alive; re-check exit before resuming |
 | R4 carry: measure EV-gate flip (unblocked by `gasUsed` sim-fidelity fix, commit `f721651`) | R4 | next available round | carried, unchanged — blocked by the same collision |
+
+## Re-check @ 02:04 (self-scheduled wakeup, +27min)
+- **PID 77146/77145 still alive** (15h17m elapsed, up from 14h50m — still actively running, not
+  exited).
+- **`git status --short` still clean**, `origin/main` still matches local `HEAD` (`d0024eb`, this
+  round's own last commit) — no new commits from the other session since the last check.
+- **Resume condition still not met** (requires EXITED, not just a clean tree — established at the
+  01:37 re-check). Standing down again.
+- Elapsed time (15h17m) has not yet crossed the 18h threshold set for widening the poll interval,
+  so keeping the ~1500s cadence rather than backing off yet.
