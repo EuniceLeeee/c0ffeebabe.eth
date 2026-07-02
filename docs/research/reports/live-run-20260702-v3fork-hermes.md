@@ -232,6 +232,41 @@ hint skip mix: 12096 tx-filter / 4153 no-rawTx / 2920 hash-only / 82 victim / 3 
 **Post-window action:** set `SEARCHER_EVENTS_PATH` on the node so the next cycle's follow-up
 uses structured JSONL (rule: prefer JSONL over log substrings) instead of counter scraping.
 
+## Slice 2 — Step-1 Competitor Cross-Reference (done retroactively — was MISSED, now corrected)  <!-- Claude -->
+
+**Process miss:** the first close of this section gated only on latency metrics and OMITTED
+the mandatory Step-1 competitor cross-reference over the window. Corrected here; CLAUDE.md
+hardened so a "metrics-gate" window can no longer skip Step-1. Our events JSONL was absent
+this window, so `analysis live-loss --watch` couldn't run on it — did the minimum-bar manual
+on-chain trace on the local reth instead (nonce delta + per-tx pool classification).
+
+**Window:** blocks 25442352–25442520 (~33 min). WATCHLIST `0xc0ffeebabe…29671` (coffeebabe).
+
+**Finding — coffeebabe made exactly 1 move from its main EOA in our window** (nonce
+187915→187916): tx `0x5891adf8…977b`, block 25442447 (index 303 = backrun-shaped),
+to executor `0xe08d…d015`, **success**, dust-scale profit (same profile as the origin sample).
+
+Route (receipt + `trace_transaction`):
+```
+Balancer V2 Vault (flash, FlashLoan event 0x0d7d75e0)         → template-supported (balancer-flash) ✓
+  → pool 0x2e8b0ba0…b5d3f  native-ETH(0xeee…eee sentinel)/USDT, v2-fork Swap topic, no fee()   NOT in graph ✗
+  → pool 0xc7bBeC68…0e9b   USDT/WETH v3 (our pinned pool)                                        IN graph ✓
+  → WETH wrap → repay
+```
+
+**Gap classification: pool gap (again).** `seenScope = same_pool` — we cover the `0xc7bBeC68`
+leg but the loop can't close without `0x2e8b0b` (confirmed absent from `active-pools.json`
+AND `runtime-graph-pools.json`). So we could not have captured this even post-Slice-2.
+**This is the SAME gap class this whole cycle is about** (uncovered non-standard pools), with
+a new wrinkle: `0x2e8b0b` uses the `0xeee…eee` native-ETH sentinel + a V2-style event — a
+cousin of the ledgered native-ETH/ZeroAddress v4 gap. Two independent samples (origin tx +
+first in-window competitor tx) now point at the same frontier: **non-standard / native-ETH
+pools missed by our discovery + graph**, not a path or template gap.
+
+**Caveat (honest scope):** only the primary `0xc0ffee` EOA was traced; coffeebabe runs
+multiple EOAs and the second WATCHLIST bot was not swept this pass (events-JSONL-driven
+`--watch` will cover both next window). Single-EOA, single-window — not a rate.
+
 ## Findings Ledger
 | finding | decision | owner | carry_to_round |
 |---|---|---|---|
@@ -241,6 +276,8 @@ uses structured JSONL (rule: prefer JSONL over log substrings) instead of counte
 | `active-pools.json` never generated | **DONE** — generated (2995 pools, 7000-block lookback); cadence policy still open (regen weekly?) | Claude | cadence → backlog |
 | pinned-warm-pools has **no EIP-55 checksum-validation gate** — a bad-casing address only fails at node startup (crash-loop), never in CI/build | add a checksum assertion to `searcher:planner` or a pinned-pools lint so bad casing fails locally, not on the node | Claude | 20260703 cycle |
 | node `.env` missing `SEARCHER_EVENTS_PATH` → no structured JSONL; follow-up forced onto log counters (violates "prefer JSONL" rule) | **DONE this cycle** — set events path + restart (dry-run guard re-verified) | Claude | this cycle (ops) ✓ |
+| **PROCESS MISS:** Slice-2 window closed on metrics only, skipped mandatory Step-1 competitor cross-reference | **FIXED** — ran it retroactively (coffeebabe 1 window tx = pool gap on native-ETH `0x2e8b0b`); CLAUDE.md hardened so metrics-gate windows can't skip Step-1 | Claude | this cycle ✓ |
+| native-ETH pools via `0xeee…eee` sentinel (not just ZeroAddress/v4) missed by discovery+graph — `0x2e8b0b` is a live example | fold into the discovery/native-ETH work with the v3-fork behavior-discovery slice | Claude | 20260703 cycle |
 
 ## Codex Implementation Pass  <!-- orchestrator fills after gates -->
 

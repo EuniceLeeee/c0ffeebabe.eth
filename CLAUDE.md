@@ -241,6 +241,21 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
 - **Step 1 — competitor cross-reference (mandatory, before any conclusion).** Use the
   EXISTING scripts, iterate them if they fall short — do NOT reinvent. Over the same
   block window, on the local reth node (zero Alchemy CU):
+  - **Applies to EVERY measured live/dry-run window — INCLUDING a pure latency/coverage
+    "metrics-gate" or deploy window.** The rule-12 replay-vs-metrics exemption only chooses
+    how the *fix* is validated; it does NOT exempt the window from Step-1. A metrics gate
+    answers "did we regress"; Step-1 answers the north-star question "what did competitors
+    capture in our blocks that we missed, and is it a pool/path/shape gap." Skipping Step-1
+    because "it was only a metrics gate" is the exact miss that happened on cycle
+    20260702-v3fork Slice 2 — do not repeat it. Minimum bar even when our events JSONL is
+    absent: on the local node, get each WATCHLIST EOA's nonce delta over the window blocks,
+    pull any tx it sent, and classify the pools touched as in/out of our runtime graph
+    (`runtime-graph-pools.json`) — a per-tx manual trace, not just a counter.
+  - **Precondition: `SEARCHER_EVENTS_PATH` MUST be set before a window is measured.** A
+    window run without the structured JSONL is not a valid Hermes window for the
+    `--watch`/`--competitor-scan` scripts (they key off our events) — you are forced onto
+    log-counter scraping, which violates the "prefer structured JSONL" rule. Verify the
+    events file is being written right after the startup banner.
   - `analysis live-loss --watch <WATCHLIST> --events <jsonl> --rpc http://127.0.0.1:8545`
     → what the watched MEV bots did in our window + `seenScope`/`primaryReason`
     (`not_seen` / `seen_but_lost`) + `poolInOurGraph`.
