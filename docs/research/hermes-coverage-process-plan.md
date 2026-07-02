@@ -38,43 +38,63 @@ coverage-frontier epic record.
 **Verify:** trigger text present in CLAUDE.md; ledger entry has `owner` + slice list.
 **Class:** governance/doc — no code. May be Claude-authored (mechanical), Codex not required.
 
-## Workstream 2 — `coverage_kpi` in the step1 artifact, computed not asserted (instrument)
+## Workstream 2 — `coverage_kpi` in the step1 artifact, counts computed not asserted (instrument)
+
+> **Design correction (verified on disk during implementation, 2026-07-02):**
+> `runtime-graph-pools.json` is generated on the node at runtime, is **absent locally**, and
+> dumps only `{address, adapter}` — **no token identities**. So a gate that recomputes the A/B
+> `closable`/`single_venue_noise` split offline is NOT cleanly feasible (no reliable graph token
+> set). Corrected split of responsibility, keeping the gate pure/offline:
+> - **W2 gate recomputes the COUNTS** (`legs_total`, `legs_out_of_graph`) from the per-tx records
+>   it already validates — this is the deterministic anti-hand-wave core and needs no external
+>   artifact.
+> - **A/B classification in W2 is analyst-labeled** per OUT pool (`class` + `token0`/`token1` from
+>   the trace + `evidence`); the gate only checks the label is valid and the counts partition the
+>   unique OUT pools. The gate does not recompute A/B.
+> - **The precise, computable A/B filter lives in W3** at enqueue time, where the built token set
+>   is in memory — that is where it functionally gates what gets probed/added, proven by W3's flip
+>   + STAY-0 fixtures.
 
 **What:** The per-tx pool classifications the gate already validates
 ([hermes-gate.ts:96](analysis/src/cli/hermes-gate.ts) `validateTxRecord` — `pools[].inGraph`,
-`gap_class`) contain everything the KPI needs. Make the gate **compute** the KPI from them and
-require the artifact to carry it, so the trend is machine-produced.
+`gap_class`) contain the counts the KPI needs. Make the gate **recompute the counts** from them
+and require the artifact to carry a `coverage_kpi` block whose counts match, so the trend is
+machine-produced, not hand-asserted.
 
 1. **Schema** — top-level `coverage_kpi` block in the step1 artifact JSON:
    ```
    coverage_kpi: {
      competitor_legs_total: N,      // sum of pools[] across all analyzed txs (full + sampled)
-     legs_out_of_graph: M,          // pools[].inGraph === false
-     out_pools: [ { addr, adapter_guess, class: "closable" | "single_venue_noise", evidence } ],
+     legs_out_of_graph: M,          // pools[].inGraph === false, over the same txs
+     out_pools: [ { addr, token0, token1, class: "closable" | "single_venue_noise", evidence } ],
      closable: X, single_venue_noise: Y,   // X + Y = |unique out_pools|
      prev_round: { run_id, legs_out_of_graph, closable } | null   // the trend link
    }
    ```
-   **A/B rule (mechanical, this is the [[project-planner-no-candidate-plans]] A/B split):** a
-   pool is `closable` (return-venue-missing) iff BOTH its tokens have ≥1 other indexed venue in
-   `runtime-graph-pools.json` — i.e. adding this one pool could close a loop. Otherwise
+   **A/B rule (the [[project-planner-no-candidate-plans]] split), applied by the analyst in W2 and
+   computed authoritatively in W3:** a pool is `closable` (return-venue-missing) iff BOTH its
+   tokens already appear in our routing graph (adding this one pool could close a loop); otherwise
    `single_venue_noise` (the must-STAY-0 longtail; never enqueue).
-2. **hermes-gate.ts** — (a) new `--emit-kpi` mode: read the artifact's per-tx records +
-   a `runtime-graph-pools.json` path, print the computed `coverage_kpi` JSON (the operator pastes
-   it into the artifact — derived, not hand-asserted); (b) validation: `coverage_kpi` present,
-   counts equal the recomputed values from per-tx records, every OUT pool in per-tx records
-   appears in `out_pools` with a class, `closable + single_venue_noise` = unique OUT pools.
-   Missing/mismatched → FAIL (same blocking posture as the four existing checks).
+2. **hermes-gate.ts** — (a) new `--emit-kpi` mode: read the artifact's per-tx records and print
+   the recomputed `competitor_legs_total` / `legs_out_of_graph` + the list of unique OUT pool
+   addresses (the operator fills each pool's `token0`/`token1`/`class`/`evidence`, then pastes the
+   block — counts derived, A/B analyst-set); (b) validation: `coverage_kpi` present; `legs_total`
+   and `legs_out_of_graph` **equal** the recomputed values from per-tx records; every unique OUT
+   pool address in per-tx records appears in `out_pools` with a valid `class` ∈
+   {closable, single_venue_noise} + non-placeholder `token0`/`token1`/`evidence`;
+   `closable + single_venue_noise` = |unique OUT pools|. Missing/mismatched → FAIL (same blocking
+   posture as the four existing checks).
 3. **Templates** — one `coverage_kpi:` line in the close section of
    `docs/research/templates/hermes-impl-cycle.md` and `hermes-live-run.md`.
-4. **Baseline (optional, cheap):** back-compute the KPI for `step1-20260702-v3fork.json` (data
-   already in the file) so R3 has a `prev_round` to link to. R1/R2 predate the artifact schema —
-   do not retro-fabricate; `prev_round: null` is honest there.
+4. **Baseline:** back-fill the KPI for `step1-20260702-v3fork.json` (per-tx data already in the
+   file) so R3 has a `prev_round` to link to. R1/R2 predate the artifact schema — do not
+   retro-fabricate; `prev_round: null` is honest there.
 
 **Verify (all local, zero CU):** `cd analysis && npm run build` clean;
 `npm run hermes-gate -- docs/research/reports/live-run-20260702-v3fork-hermes.md` PASS after the
-artifact gains the block; then two negative tests — delete `coverage_kpi` → FAIL; corrupt a
-count → FAIL. **Do not only test the happy path.**
+artifact gains the block; then negative tests — delete `coverage_kpi` → FAIL; corrupt
+`legs_out_of_graph` → FAIL; give an OUT pool an invalid `class` → FAIL. **Do not only test the
+happy path.**
 **Class:** `turn_class: observability-only` — label it honestly. Per rule 13's anti-drift cap,
 **W3 must be the immediately following implementation turn.**
 

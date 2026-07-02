@@ -505,6 +505,16 @@ discovery is needed.
       their own gates: `analysis-decode → replay → adapter → dry-run`. Without this, the
       loop keeps polishing v4 sizing / poolId / profit-confidence and never ships the
       production adapter.
+      - **Mechanical escalation trigger (not left to judgment):** the same `gap_class`
+        recurring in **≥3 independent samples within one window**, OR in **≥2 consecutive
+        rounds**, → a **mandatory** `decision: epic` in the Findings Ledger (owner + ordered
+        slices). Once a class is epic'd, **per-pool pins for that class inside the 30-min loop
+        are forbidden** — only epic slices (each with its own rule-12 gate) may touch it. And a
+        **systemic single fix always beats N per-pool pins when one exists** (R2's v4 gate flip
+        unlocked the whole v4 execution class in one change; do not whack-a-mole). The point of
+        this trigger is the observed failure mode: coverage gaps get **parked as
+        "longtail/separate" round after round and never escalated** — this converts that
+        recurring signal into a forced epic instead of another parked finding.
     - **Impact counterweight:** CLAUDE.md's culture is skeptic/verify/gate = good for
       correctness, biased against bold searcher changes. The loop's job is not clean
       commits; it is more MEV caught. A round that shipped a clean analysis patch but
