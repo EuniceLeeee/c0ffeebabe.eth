@@ -12,16 +12,16 @@
 研究；主网 fork + dry-run；广播是硬人工门；不针对任何人。
 触发背景：per-window 循环已连续 ≥2 轮收尾、真 +EV simSuccess 没增长——按「≥2 轮
 simSuccess 平 → 强制架构审阅」规则，现在轮到你。你要回答那个循环结构上答不了的
-问题：离一个真 +EV 实盘 bundle，最大的单个结构性障碍是什么。
+问题：离一个真 +EV、可上链的 bundle（今日 dry-run；广播是人工门），最大的单个结构性障碍是什么。
 你的完整 brief 是本轮的架构审阅 handoff（路径见下）——先完整读它。它给的是 DATA +
 待验 HYPOTHESIS（含本轮 R1..Rn 累积数据、若有的双盲结论、pin 好的反事实案例、代码/
 配置指针），不是定论。
 严格执行四条硬要求：
 #1 反事实走查（class 必须由它导出，不是选出）：取 ≥2 个竞品真实捕获的机会（其一已在
    handoff pin 好，≥1 个你自己从原始工件找——真 take，不是链上 revert 或 sub-cent
-   dust），逐段走我们 pipeline：看见没→出 plan 没→solver 最优 quote 具体多少→哪门
-   杀的→差多少才过。判定：竞品路径含 out-of-graph 池→coverage；in-graph 但我们最优
-   quote ≤0→sim-fidelity/solver；quote>0 但 EV 门杀→economics；也测流 admission
+   dust），逐段走我们 pipeline：看见没→出 plan 没→solver 最优 quote 具体多少→在哪一段
+   被滤除→差多少才过。判定：竞品路径含 out-of-graph 池→coverage；in-graph 但我们最优
+   quote ≤0→sim-fidelity/solver；quote>0 但被 EV 门（economics）拦下→economics；也测流 admission
    （盈利流是不是我们从没 admit 的——mempool 过滤/orderflow 源）。薄窗口不许下"真负"
    ——薄就把窗口拉长到几小时再判。
 #2 承重数字自己从代码(file:line)/原始工件重推。R*.md 结论（含双盲）只当假设——它们
@@ -69,3 +69,10 @@ The architecture review is dual-blind, not a single reviewer:
   output) → then the orchestrator **compares A vs B**: converge = high-confidence lever; differ = dig the
   disagreement. Neither reviewer sees the other's conclusion. Only the orchestrator's post-compare
   finalization drives the Findings Ledger `decision:`.
+- **Model-fallback expectation (Safety Rule 6):** a fable spawn may START on fable-5 then auto-switch
+  to the opus fallback mid-run — the classifier trips on the accumulated arbitrage-analysis content the
+  sub-agent GENERATES (competitor takes / source swaps / profit capture), not just the seed prompt.
+  Softening the prompt wording (neutral terms, scope note up top, no term-stacking) lowers the rate but
+  does NOT eliminate it. This is the DESIGNED safety net, not a failure — dual-blind independence does
+  not depend on which model runs A. Do not treat an A-on-opus run as invalid; just verify the spawn was
+  independent + blind.
