@@ -57,12 +57,12 @@ startup banner.
 
 ## The counterfactual walk (≥2 real competitor atomic bundles, traced on local reth, zero CU)
 
-For a `competitor_took` on our `pipeline_dropped` victim, the source swap **did** enter our funnel
-(`opportunity_seen`); "saw it = yes" by construction. All three below are **status=1, real closed-loop
+For a `competitor_took` on a source swap we dropped (`pipeline_dropped`), that swap **did** enter our
+funnel (`opportunity_seen`); "saw it = yes" by construction. All three below are **status=1, real closed-loop
 DEX arbs with WETH landing in the bot contract** — not CEX-DEX, not reverts, not dust.
 
 **Case 1 (pinned) — `0x476548cc…` blk 25443539, bot `0xc46fcd65…`, +0.01557 WETH (~$48).**
-- saw it? **yes** (our dropped victim). planned? **NO** — 0 candidates.
+- saw it? **yes** (the source swap we dropped). planned? **NO** — 0 candidates.
 - gate that killed it: `plan/no_candidate_plans`, classification **`impact_pool_not_in_routing_graph`**.
 - why: the loop is WETH↔token`0xff208177` between two univ2 venues **`0x15e86e6f`** (score 58, **rank 534**)
   and **`0x08650bb9`** (score 25, **rank 923**). Both are **in `active-pools.json` top-1500** and both are
@@ -90,7 +90,7 @@ constraint at the current dominant drop.
 ## Why the per-window loop missed it
 - It read `no_candidate_plans` as "longtail, don't chase" from a **small manual sample** (R1 traced 5
   flagged takes → "3 router swaps, 1 sandwich, 1 arb $0.05 dust") and stopped — while the structured
-  cscan showed competitors profitably took **5 (R1) and 4 (R3)** of exactly those `no_candidate` victims.
+  cscan showed competitors profitably took **5 (R1) and 4 (R3)** of exactly those `no_candidate` source swaps.
 - It never checked the **startup banner**, so it didn't notice the universe was off (`0 universe`). It
   optimized the *small* categories it could see inside the funnel (R1 latency ~15% of drops; R2 v4-sim
   accounting) and left the *dominant* upstream category untouched.
@@ -102,9 +102,9 @@ constraint at the current dominant drop.
 
 ## size distribution
 +EV-sized opportunities **are** admitted into our funnel. The three competitor bundles above
-(0.0156 / 0.0087 / 0.0668 WETH gross) were all on **our own seen-and-dropped victims** — the flow reached
-us; it died at the planner for lack of graph coverage, not for lack of size. (Limitation: I did not build
-a full multi-hour size histogram; the three competitor takes on our dropped victims are already dispositive
+(0.0156 / 0.0087 / 0.0668 WETH gross) were all on **source swaps we ourselves saw and dropped** — the flow
+reached us; it died at the planner for lack of graph coverage, not for lack of size. (Limitation: I did not
+build a full multi-hour size histogram; the three competitor takes on source swaps we dropped are already dispositive
 that +EV-sized flow enters and is lost upstream of the solver.)
 
 ## epic? **YES** — `decision: epic` (owner: coverage/graph-load)
@@ -141,14 +141,14 @@ load defect W3 structurally cannot fix.
   or ≤0 result there means the lever is economics/sim-fidelity, not coverage (see falsifier).
 
 ## falsifier + runner-up
-- **Cheap disproof:** restore `topN=1500` and replay block 25443539 on the WETH/`0xff208177` victim. If
+- **Cheap disproof:** restore `topN=1500` and replay block 25443539 on the WETH/`0xff208177` source swap. If
   I'm right → planner emits a cross-venue candidate (`plans>0`, `impact_pool_not_in_routing_graph` gone)
   **and** the solver produces a +EV `simSuccess`. If plans stay 0, **or** the sim is ≤0/dust → coverage is
   not the binding constraint and I'm wrong; look to sim-fidelity/economics next.
 - **Runner-up: economics.** `bribeBps=10000` (100% of profit to the builder, `main.ts:335`),
   `minNetEth=0` (`main.ts:338`), `quoteProfitFloorBps=20` dry-run (`main.ts:317`), `quoteSafetyBps=9999`
   (`main.ts:290`), `defaultGasUsed=12000000` (`main.ts:303`). Under this config even a restored +EV path
-  may only clear as dust or be bribed to ~0 net.
+  may only clear as dust or have the builder payment consume it to ~0 net.
 - **The one piece of evidence separating #1 from #2:** the **drop stage**. 38/49 R3 losses die at
   `stage=plan`, upstream of both the solver and the EV gate (`main.ts:1619`, which only runs *after* a
   positive sim). ~0 drops reached the EV gate. Economics cannot be the binding constraint on a flow that
@@ -168,6 +168,6 @@ the true wall to economics/sim-fidelity* with a config change, which is itself t
 rounds failed to make.
 
 ## Newly-observed competitor bots (extend WATCHLIST)
-Not on the current seed watchlist, each captured ≥1 atomic arb in the R3 window on our dropped victims:
+Not on the current seed watchlist, each captured ≥1 atomic arb in the R3 window on source swaps we dropped:
 `0xc46fcd651bd6ac11255886feabdcebd58b870c86` (2 takes), `0x65f3443e12982a7180c46a20671ff07f7035629f`,
 `0x00000000a991c429ee2ec6df19d40fe0c80088b8` (the +0.0668 WETH take).

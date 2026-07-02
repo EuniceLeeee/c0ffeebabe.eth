@@ -45,7 +45,7 @@ Regenerate `HANDOFF-architecture-review.md` from the CURRENT run data every time
    Step-1 (not a revert / not dust) — with tx hash + the pools it routed. The reviewer finds ≥1 more.
 4. **Current repo mechanisms snapshot for the candidate classes** (so no epic reinvents landed work):
    e.g. coverage → the learn→close auto-enqueue + `discovery-queue.json` state; economics → the EV
-   gate / floor / bribe / minNet current values; whatever is live NOW. Refresh this every firing.
+   gate / floor / builder-payment / minNet current values; whatever is live NOW. Refresh this every firing.
 5. **Economics config snapshot:** current `SEARCHER_QUOTE_PROFIT_FLOOR_BPS` / `SAFETY_BPS` /
    `BRIBE_BPS` / `MIN_NET_ETH` / `defaultGasUsed` (from code defaults + node `.env`).
 6. The 4 hard requirements (point to this template) + the Deliverable format + code/config pointers.
