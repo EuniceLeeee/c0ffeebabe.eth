@@ -272,10 +272,14 @@ export function normalizeV4PoolKey(poolKey: V4PoolKey): V4PoolKey {
 }
 
 function v4ZeroForOne(key: V4PoolKey, tokenIn: string, tokenOut: string): boolean {
+  rejectNativeWethV4Pool(key, "V4 quoter");
+  const realIn = realV4Currency(tokenIn, key, "tokenIn");
+  const realOut = realV4Currency(tokenOut, key, "tokenOut");
+  validateV4CurrencyPair(realIn, realOut, key, "V4 quoter");
   const c0 = key.currency0.toLowerCase();
   const c1 = key.currency1.toLowerCase();
-  const tIn = tokenIn.toLowerCase();
-  const tOut = tokenOut.toLowerCase();
+  const tIn = realIn.toLowerCase();
+  const tOut = realOut.toLowerCase();
   if (tIn === c0 && tOut === c1) return true;
   if (tIn === c1 && tOut === c0) return false;
   throw new Error(
@@ -290,6 +294,50 @@ function normalizeV4Currency(value: string, field: string): string {
     return ethers.getAddress(value);
   } catch {
     throw new Error(`V4 quoter: ${field} must be an address or 0x0, got ${value}`);
+  }
+}
+
+function realV4Currency(token: string, key: V4PoolKey, field: string): string {
+  const c0 = key.currency0;
+  const c1 = key.currency1;
+  const t = token.toLowerCase();
+  if (t === c0.toLowerCase()) return c0;
+  if (t === c1.toLowerCase()) return c1;
+
+  const c0Native = c0.toLowerCase() === ethers.ZeroAddress.toLowerCase();
+  const c1Native = c1.toLowerCase() === ethers.ZeroAddress.toLowerCase();
+  if (c0Native !== c1Native && t === ADDR.WETH.toLowerCase()) {
+    return c0Native ? c0 : c1;
+  }
+
+  throw new Error(
+    `V4 quoter: ${field} ${token} does not match PoolKey ${c0} / ${c1}`,
+  );
+}
+
+function validateV4CurrencyPair(
+  realIn: string,
+  realOut: string,
+  key: V4PoolKey,
+  context: string,
+): void {
+  const a = [realIn.toLowerCase(), realOut.toLowerCase()].sort().join("/");
+  const b = [key.currency0.toLowerCase(), key.currency1.toLowerCase()].sort().join("/");
+  if (a !== b) {
+    throw new Error(
+      `${context}: resolved pair ${realIn} / ${realOut} does not match PoolKey ` +
+        `${key.currency0} / ${key.currency1}`,
+    );
+  }
+}
+
+function rejectNativeWethV4Pool(key: V4PoolKey, context: string): void {
+  const c0 = key.currency0.toLowerCase();
+  const c1 = key.currency1.toLowerCase();
+  const weth = ADDR.WETH.toLowerCase();
+  const zero = ethers.ZeroAddress.toLowerCase();
+  if ((c0 === zero && c1 === weth) || (c1 === zero && c0 === weth)) {
+    throw new Error(`${context}: native/WETH v4 pool not supported (ambiguous alias)`);
   }
 }
 

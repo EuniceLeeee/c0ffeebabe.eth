@@ -234,7 +234,8 @@ async function buildEdgeNode(
     }
 
     case "univ4-unlock": {
-      // V4 unlock wrapper. Inside callback: swap → take output → sync input → transfer input → settle.
+      // V4 unlock wrapper. Inside callback: swap, take output, then resolve
+      // input debt through either ERC20 transfer+settle or native settle{value}.
       // The PoolKey MUST come from the edge (the exact pool the quote used) — never a
       // hardcoded fee, because pinned v4 pools have different fee tiers (e.g. 7 vs 8);
       // quoting one pool and executing another reverts.
@@ -242,13 +243,20 @@ async function buildEdgeNode(
       if (!key) {
         throw new Error(`univ4-unlock edge missing v4PoolKey: ${edge.tokenIn} -> ${edge.tokenOut}`);
       }
-      const c0 = key.currency0;
-      const c1 = key.currency1;
-      const hooks = key.hooks;
+      const normalizedKey = normalizeV4PoolKey(key);
+      rejectNativeWethV4Pool(normalizedKey, "plan-builder");
+      const c0 = normalizedKey.currency0;
+      const c1 = normalizedKey.currency1;
+      const hooks = normalizedKey.hooks;
       // params encode as bigint (ResolvedParam); V4PoolKey stores fee/tickSpacing as number.
-      const fee = BigInt(key.fee);
-      const tickSpacing = BigInt(key.tickSpacing);
-      const zeroForOne = edge.tokenIn.toLowerCase() === c0.toLowerCase();
+      const fee = BigInt(normalizedKey.fee);
+      const tickSpacing = BigInt(normalizedKey.tickSpacing);
+      const realIn = realV4Currency(edge.tokenIn, normalizedKey, "tokenIn");
+      const realOut = realV4Currency(edge.tokenOut, normalizedKey, "tokenOut");
+      validateV4CurrencyPair(realIn, realOut, normalizedKey, "plan-builder");
+      const zeroForOne = realIn.toLowerCase() === c0.toLowerCase();
+      const inputIsNative = realIn.toLowerCase() === ethers.ZeroAddress.toLowerCase();
+      const outputIsNative = realOut.toLowerCase() === ethers.ZeroAddress.toLowerCase();
 
       const unlockChildren: ResolvedPlanNode[] = [
         // swap: exactInput (amountSpecified negative in V4 convention)
@@ -270,47 +278,94 @@ async function buildEdgeNode(
           },
           children: [],
         },
-        // take output to executor
+        // take output to executor; native pools must take the real 0x0 currency.
         {
           adapterId: "univ4-take",
           target: edge.target,
           tokenIn: "",
           tokenOut: edge.tokenOut,
           amount: amtOut,
-          params: { currency: edge.tokenOut },
-          children: [],
-        },
-        // sync input
-        {
-          adapterId: "univ4-sync",
-          target: edge.target,
-          tokenIn: edge.tokenIn,
-          tokenOut: "",
-          amount: 0n,
-          params: { currency: edge.tokenIn },
-          children: [],
-        },
-        // transfer input to PM
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: edge.target, amount: amtIn },
-          children: [],
-        },
-        // settle
-        {
-          adapterId: "univ4-settle",
-          target: edge.target,
-          tokenIn: "",
-          tokenOut: "",
-          amount: 0n,
-          params: {},
+          params: { currency: realOut },
           children: [],
         },
       ];
+
+      if (outputIsNative) {
+        unlockChildren.push({
+          adapterId: "weth-deposit-value",
+          target: ADDR.WETH,
+          tokenIn: realOut,
+          tokenOut: ADDR.WETH,
+          amount: amtOut,
+          params: {},
+          children: [],
+        });
+      }
+
+      if (inputIsNative) {
+        unlockChildren.push(
+          {
+            adapterId: "weth-withdraw-amount",
+            target: ADDR.WETH,
+            tokenIn: ADDR.WETH,
+            tokenOut: realIn,
+            amount: amtIn,
+            params: {},
+            children: [],
+          },
+          {
+            adapterId: "univ4-sync",
+            target: edge.target,
+            tokenIn: realIn,
+            tokenOut: "",
+            amount: 0n,
+            params: { currency: ethers.ZeroAddress },
+            children: [],
+          },
+          {
+            adapterId: "univ4-settle-value",
+            target: edge.target,
+            tokenIn: "",
+            tokenOut: "",
+            amount: amtIn,
+            params: {},
+            children: [],
+          },
+        );
+      } else {
+        unlockChildren.push(
+          // sync input
+          {
+            adapterId: "univ4-sync",
+            target: edge.target,
+            tokenIn: realIn,
+            tokenOut: "",
+            amount: 0n,
+            params: { currency: realIn },
+            children: [],
+          },
+          // transfer input to PM
+          {
+            adapterId: "erc20-transfer",
+            target: realIn,
+            tokenIn: realIn,
+            tokenOut: realIn,
+            amount: amtIn,
+            params: { to: edge.target, amount: amtIn },
+            children: [],
+          },
+          // settle
+          {
+            adapterId: "univ4-settle",
+            target: edge.target,
+            tokenIn: "",
+            tokenOut: "",
+            amount: 0n,
+            params: {},
+            children: [],
+          },
+        );
+      }
       return {
         adapterId: "univ4-unlock",
         target: edge.target,
@@ -385,4 +440,74 @@ async function uniV3PoolTokens(
 
 function sortedPair(a: string, b: string): [string, string] {
   return a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a];
+}
+
+function normalizeV4PoolKey(poolKey: NonNullable<TokenEdge["v4PoolKey"]>): NonNullable<TokenEdge["v4PoolKey"]> {
+  return {
+    currency0: normalizeV4Currency(poolKey.currency0, "currency0"),
+    currency1: normalizeV4Currency(poolKey.currency1, "currency1"),
+    fee: poolKey.fee,
+    tickSpacing: poolKey.tickSpacing,
+    hooks: normalizeV4Currency(poolKey.hooks, "hooks"),
+  };
+}
+
+function normalizeV4Currency(value: string, field: string): string {
+  if (value.toLowerCase() === "0x0") return ethers.ZeroAddress;
+  try {
+    return ethers.getAddress(value);
+  } catch {
+    throw new Error(`plan-builder: v4 ${field} must be an address or 0x0, got ${value}`);
+  }
+}
+
+function realV4Currency(
+  token: string,
+  key: NonNullable<TokenEdge["v4PoolKey"]>,
+  field: string,
+): string {
+  const c0 = key.currency0;
+  const c1 = key.currency1;
+  const t = token.toLowerCase();
+  if (t === c0.toLowerCase()) return c0;
+  if (t === c1.toLowerCase()) return c1;
+
+  const c0Native = c0.toLowerCase() === ethers.ZeroAddress.toLowerCase();
+  const c1Native = c1.toLowerCase() === ethers.ZeroAddress.toLowerCase();
+  if (c0Native !== c1Native && t === ADDR.WETH.toLowerCase()) {
+    return c0Native ? c0 : c1;
+  }
+
+  throw new Error(
+    `plan-builder: v4 ${field} ${token} does not match PoolKey ${c0} / ${c1}`,
+  );
+}
+
+function validateV4CurrencyPair(
+  realIn: string,
+  realOut: string,
+  key: NonNullable<TokenEdge["v4PoolKey"]>,
+  context: string,
+): void {
+  const resolved = [realIn.toLowerCase(), realOut.toLowerCase()].sort().join("/");
+  const poolPair = [key.currency0.toLowerCase(), key.currency1.toLowerCase()].sort().join("/");
+  if (resolved !== poolPair) {
+    throw new Error(
+      `${context}: resolved pair ${realIn} / ${realOut} does not match PoolKey ` +
+        `${key.currency0} / ${key.currency1}`,
+    );
+  }
+}
+
+function rejectNativeWethV4Pool(
+  key: NonNullable<TokenEdge["v4PoolKey"]>,
+  context: string,
+): void {
+  const c0 = key.currency0.toLowerCase();
+  const c1 = key.currency1.toLowerCase();
+  const weth = ADDR.WETH.toLowerCase();
+  const zero = ethers.ZeroAddress.toLowerCase();
+  if ((c0 === zero && c1 === weth) || (c1 === zero && c0 === weth)) {
+    throw new Error(`${context}: native/WETH v4 pool not supported (ambiguous alias)`);
+  }
 }
