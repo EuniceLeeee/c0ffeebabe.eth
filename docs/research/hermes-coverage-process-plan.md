@@ -186,6 +186,36 @@ the existing ≥1-tx secondary-source validation rule.
   `class`; `closable+noise != out_pools.length`; dropped `out_pools` entry → addr-set mismatch).
   `turn_class: observability-only` — per rule-13 anti-drift cap, **W3 is the required next
   behavior-changing turn.**
-- **W3 — next** (Codex cycle): the auto-enqueue + the computable A/B filter + the replay flip.
-  Flip-fixture candidate = the AAVE/WETH pair (`0x60b84fc4…` / `0xe6e386c6…`, standard shape, two
-  venues → loop closes); STAY-0 negative = `0x0b0d6c11…` (OVR/WETH, single venue).
+- **A/B correction (verify-before-claim, `347b967`):** probing the paired in-graph pool showed
+  `0x0b0d6c11` (OVR/WETH) is **closable, not noise** — its partner `0xc3f6b8` (OVR/WETH) is
+  already in-graph, so OVR is routable and this is the missing 2nd venue (competitor tx `0x68f186`
+  closed exactly this loop). Corrected artifact to **6 closable / 0 single_venue_noise** — all six
+  OUT legs are confirmed-closable coverage gaps. Lesson: the manual A/B label missed the paired
+  in-graph pool; the **computable filter (W3) checks the real token set and gets it right** — an
+  argument for the computed filter over hand-labels.
+- **W3 — DONE** (Codex-authored the two searcher files; Claude = non-author evaluator, ran the
+  gates). Verdict: **fixed** (deterministic replay flip confirmed).
+  - Evaluator gates run: `npm run build` (listener tsc clean); `npm run searcher:planner` →
+    `coverage-ovr-weth-gap` 0 plans, `coverage-ovr-weth-flip` ≥1 plan, `single-venue-longtail`
+    STAYS 0 (planner PASS 12/12 + fixtures 6/6); `isClosablePair` pure unit (both-in true /
+    one-missing false); real-pool probe classification via local reth (zero CU) — the 5 standard
+    closable pools are univ2/univ3 (probe-classifiable → included when their tokens are graph
+    tokens); native-ETH `0x2e8b0b` (0xEEE sentinel not a graph token) is correctly excluded from
+    auto-add → feeds the epic. `failing_sample`: OVR/WETH backrun tx `0x68f186…` block 25442493;
+    `expected_transition`: `no_candidate → candidate_plans≥1` once the enqueued 2nd venue is a
+    graph edge — CONFIRMED.
+  - Minor note (not a defect): `0x2e8b0b` blocks with reason `not_closable_in_current_graph`
+    (0xEEE ∉ graph tokens) rather than `blocked_on_adapter`; both land it in the `blocked` list and
+    keep it out of auto-add. Native-ETH sentinel aliasing stays epic scope.
+- **W3 detail** (Codex cycle, `searcher_behavior_change: yes`):
+  - `build-active-pool-universe.ts`: `isClosablePair(t0,t1,tokenSet)` (computable A/B, both tokens
+    already routable) + `probePoolShape` (univ3→univ2→null) + `consumeDiscoveryQueue` → merged into
+    the universe; non-standard shapes (native-ETH `0x2e8b0b`, v4) → `blocked_on_adapter` (feeds the
+    epic, not auto-added).
+  - Queue seed `listener/searcher/pools/discovery-queue.json` (6 closable pools, `source:
+    step1:20260702-v3fork`) — orchestrator-authored data.
+  - **Rule-12 flip = OVR/WETH** (real, confirmed): `coverage-ovr-weth-gap` (one venue `0xc3f6b8`
+    → 0 plans) → `coverage-ovr-weth-flip` (add enqueued 2nd venue `0x0b0d6c11` → ≥1 plan).
+    Chosen over AAVE/WETH because one OVR venue is already in-graph, so a SINGLE enqueued pool
+    demonstrates the flip (purest auto-enqueue proof). STAY-0 guard = the existing
+    `single-venue-longtail` fixture (unchanged).

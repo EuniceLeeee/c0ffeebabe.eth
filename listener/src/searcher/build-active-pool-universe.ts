@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
@@ -45,6 +45,16 @@ const univ3Iface = new ethers.Interface([
   "function fee() view returns (uint24)",
   "function tickSpacing() view returns (int24)",
 ]);
+
+interface DiscoveryQueueEntry {
+  addr?: unknown;
+  class?: unknown;
+  source?: unknown;
+}
+
+type ProbedPoolShape =
+  | { adapter: "univ3"; token0: string; token1: string; fee: number; tickSpacing: number }
+  | { adapter: "univ2"; token0: string; token1: string };
 
 interface RawLog {
   address: string;
@@ -138,17 +148,38 @@ async function main(): Promise<void> {
     return enrichPool(provider, pool);
   });
   const validPools = pools.filter((pool): pool is PoolUniverseEntry => pool !== null);
+  const tokenSet = new Set<string>();
+  for (const pool of validPools) {
+    if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
+    if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
+  }
+  const discoveryQueuePath = resolve("searcher", "pools", "discovery-queue.json");
+  const { included, blocked } = await consumeDiscoveryQueue(provider, discoveryQueuePath, tokenSet);
+  const poolByAddress = new Map<string, PoolUniverseEntry>();
+  for (const pool of validPools) {
+    poolByAddress.set(pool.address.toLowerCase(), pool);
+  }
+  for (const pool of included) {
+    const key = pool.address.toLowerCase();
+    if (!poolByAddress.has(key)) poolByAddress.set(key, pool);
+  }
+  if (existsSync(discoveryQueuePath)) {
+    console.log(`[pool-universe] discovery-queue: +${included.length} included, ${blocked.length} blocked`);
+    for (const item of blocked) {
+      console.log(`[pool-universe] discovery-queue blocked ${item.addr}: ${item.reason}`);
+    }
+  }
   const file: PoolUniverseFile = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     fromBlock,
     toBlock: latest,
-    pools: validPools,
+    pools: [...poolByAddress.values()],
   };
 
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, JSON.stringify(file, null, 2) + "\n");
-  console.log(`[pool-universe] wrote ${validPools.length} pools to ${outPath}`);
+  console.log(`[pool-universe] wrote ${file.pools.length} pools to ${outPath}`);
 }
 
 async function getLogsWithSplitRetry(
@@ -207,6 +238,100 @@ async function enrichPool(
   } catch {
     return null;
   }
+}
+
+export function isClosablePair(token0: string, token1: string, tokenSet: Set<string>): boolean {
+  return tokenSet.has(token0.toLowerCase()) && tokenSet.has(token1.toLowerCase());
+}
+
+async function probePoolShape(
+  provider: ethers.JsonRpcProvider,
+  addr: string,
+): Promise<ProbedPoolShape | null> {
+  const address = ethers.getAddress(addr);
+  try {
+    const [token0, token1, fee, tickSpacing] = await Promise.all([
+      callAddress(provider, address, univ3Iface.encodeFunctionData("token0")),
+      callAddress(provider, address, univ3Iface.encodeFunctionData("token1")),
+      callNumber(provider, address, univ3Iface.encodeFunctionData("fee"), "fee"),
+      callNumber(provider, address, univ3Iface.encodeFunctionData("tickSpacing"), "tickSpacing"),
+    ]);
+    return { adapter: "univ3", token0, token1, fee, tickSpacing };
+  } catch {
+    // Try the v2 shape below.
+  }
+
+  try {
+    const [token0, token1, reserves] = await Promise.all([
+      callAddress(provider, address, univ2Iface.encodeFunctionData("token0")),
+      callAddress(provider, address, univ2Iface.encodeFunctionData("token1")),
+      provider.call({ to: address, data: univ2Iface.encodeFunctionData("getReserves") }),
+    ]);
+    univ2Iface.decodeFunctionResult("getReserves", reserves);
+    return { adapter: "univ2", token0, token1 };
+  } catch {
+    return null;
+  }
+}
+
+export async function consumeDiscoveryQueue(
+  provider: ethers.JsonRpcProvider,
+  queuePath: string,
+  tokenSet: Set<string>,
+): Promise<{
+  included: PoolUniverseEntry[];
+  blocked: Array<{ addr: string; reason: string }>;
+}> {
+  if (!existsSync(queuePath)) return { included: [], blocked: [] };
+
+  const parsed = JSON.parse(readFileSync(queuePath, "utf8")) as unknown;
+  const included: PoolUniverseEntry[] = [];
+  const blocked: Array<{ addr: string; reason: string }> = [];
+  const queue = isRecord(parsed) && Array.isArray(parsed.queue) ? parsed.queue : [];
+
+  for (const rawEntry of queue) {
+    if (!isRecord(rawEntry)) {
+      blocked.push({ addr: String(rawEntry), reason: "invalid_entry" });
+      continue;
+    }
+    const entry = rawEntry as DiscoveryQueueEntry;
+    if (entry.class !== "closable") continue;
+    const addr = typeof entry.addr === "string" ? entry.addr : "";
+    if (!addr) {
+      blocked.push({ addr: String(entry.addr), reason: "invalid_entry" });
+      continue;
+    }
+
+    try {
+      const shape = await probePoolShape(provider, addr);
+      if (shape === null) {
+        blocked.push({ addr, reason: "blocked_on_adapter" });
+        continue;
+      }
+      if (!isClosablePair(shape.token0, shape.token1, tokenSet)) {
+        blocked.push({ addr, reason: "not_closable_in_current_graph" });
+        continue;
+      }
+      included.push({
+        address: ethers.getAddress(addr),
+        adapter: shape.adapter,
+        token0: shape.token0,
+        token1: shape.token1,
+        fee: shape.adapter === "univ3" ? shape.fee : undefined,
+        tickSpacing: shape.adapter === "univ3" ? shape.tickSpacing : undefined,
+        source: typeof entry.source === "string" ? entry.source : undefined,
+        score: undefined,
+      });
+    } catch {
+      blocked.push({ addr, reason: "blocked_on_adapter" });
+    }
+  }
+
+  return { included, blocked };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function bestAdapter(adapterCounts: Map<PoolEntry["adapter"], number>): PoolEntry["adapter"] {

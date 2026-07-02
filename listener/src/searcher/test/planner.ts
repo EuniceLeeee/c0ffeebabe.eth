@@ -435,6 +435,9 @@ const POOL_874376 = "0x874376be8231dad99aabf9ef0767b3cc054c60ee";
 const POOL_USDC_WETH_100 = ADDR.UNISWAP_V3_USDC_WETH_100;
 const POOL_USDC_USDT_100 = ADDR.UNISWAP_V3_USDC_USDT_100;
 const POOL_V3FORK_WETH_USDT = "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D";
+const OVR = "0x21BfBDa47A0B4B5b1248c767Ee49F7caA9B23697";
+const POOL_OVR_WETH_INGRAPH = "0xc3f6b81fb9e6db259272026601689e383f94c0b0";
+const POOL_OVR_WETH_ENQUEUED = "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc";
 
 interface ReplayFixture {
   id: string;
@@ -458,6 +461,34 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
     impact: { tokenIn: REAL_WETH, tokenOut: C470, pool: POOL_E2A1437, start: C470 },
     expectPlans: 0,
     expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    // watchlist bot 0xae2Fc483 closed an OVR/WETH loop at block 25442493 through
+    // pool 0x0b0d6c11, which was absent from our routing graph. With only our
+    // in-graph OVR/WETH venue, the planner can only attempt same-pool reversal.
+    id: "coverage-ovr-weth-gap",
+    provenance: "watchlist 0xae2Fc483 tx 0x68f186f08eb61ff2d32486b66b9351f00063da4e955ccf6f3361642ccc920ead block 25442493; out-of-graph OVR/WETH pool absent",
+    edges: [
+      swap(REAL_WETH, OVR, POOL_OVR_WETH_INGRAPH),
+      swap(OVR, REAL_WETH, POOL_OVR_WETH_INGRAPH),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: OVR, pool: POOL_OVR_WETH_INGRAPH, start: REAL_WETH },
+    expectPlans: 0,
+    expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    // Same recorded case after consuming the closable discovery-queue pool. The
+    // second OVR/WETH venue lets the planner construct a cross-venue closed loop.
+    id: "coverage-ovr-weth-flip",
+    provenance: "watchlist 0xae2Fc483 tx 0x68f186f08eb61ff2d32486b66b9351f00063da4e955ccf6f3361642ccc920ead block 25442493; out-of-graph OVR/WETH pool covered",
+    edges: [
+      swap(REAL_WETH, OVR, POOL_OVR_WETH_INGRAPH),
+      swap(OVR, REAL_WETH, POOL_OVR_WETH_INGRAPH),
+      swap(REAL_WETH, OVR, POOL_OVR_WETH_ENQUEUED),
+      swap(OVR, REAL_WETH, POOL_OVR_WETH_ENQUEUED),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: OVR, pool: POOL_OVR_WETH_INGRAPH, start: REAL_WETH },
+    expectMinPlans: 1,
   },
   {
     // run 20260701-t2: not_seen graph_gap -- watchlist bot arbed pool 0x874376be
