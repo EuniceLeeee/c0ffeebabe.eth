@@ -1,5 +1,7 @@
 # Hermes — Live Run `<run_id>`
 
+> **Step 0 (before anything): ensure the sleep-keeper is alive** — Codex bg runs freeze on Mac
+> sleep. See CLAUDE.md Rounds Step 0 (idempotent, `/tmp/mev-sleep-keeper.pid`, `caffeinate -i -d -s`).
 > One run, one file. Each agent writes **only its own sections**, never edits the other's.
 > Each round = **one core judgment + one next_action + one not_doing**.
 > **`Claude Final Decision` is the only section that drives code.**

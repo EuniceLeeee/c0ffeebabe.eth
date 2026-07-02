@@ -318,6 +318,17 @@ only a shortcut for when the blocker is ALREADY known (user-handed) and no compe
 discovery is needed.
 
 ```
+0. SLEEP-KEEPER  FIRST STEP of every round. Codex background runs FREEZE on Mac sleep/screen-lock
+                 ([[reference-codex-background-suspend]]) — a multi-round workflow means the user is
+                 away, so ensure ONE persistent keeper is alive before any background Codex/dry-run
+                 (idempotent, PID-file guarded so rounds don't spawn duplicates):
+                   KEEP=/tmp/mev-sleep-keeper.pid
+                   if [ -f "$KEEP" ] && kill -0 "$(cat "$KEEP" 2>/dev/null)" 2>/dev/null; then
+                     echo "sleep-keeper alive PID=$(cat "$KEEP")"
+                   else nohup caffeinate -i -d -s -t 10800 >/dev/null 2>&1 & echo $! >"$KEEP"; fi
+                 (AC power makes `-s` effective; lid-close on battery still sleeps → keep lid open +
+                 the ScheduleWakeup fallback stays the backstop. Per-`codex exec` `caffeinate -i`
+                 wrappers only cover that one command — the keeper covers the whole workflow.)
 1. LIVE RUN      ~30-min dry-run on the node. Deploy latest FIRST (scripts/deploy-node.sh);
                  do not analyze stale code.
 2. AUTO ANALYSIS Run Facts + structured pipeline_dropped (source of truth) + before/after
