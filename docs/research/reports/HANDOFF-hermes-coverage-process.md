@@ -8,6 +8,12 @@
 > Task for the fresh session: **independently** decide and implement the fix for the three
 > Hermes-process gaps below. This doc gives the CONFIRMATION (grounded in R1/R2) + the exact
 > reference material — it does NOT prescribe the design; reach your own conclusion.
+>
+> UPDATE (same day, on user request): a concrete design now exists —
+> `docs/research/hermes-coverage-process-plan.md` (W1 epic trigger · W2 coverage_kpi · W3
+> auto-enqueue). Treat it as the reviewed starting point; verify its premises against the
+> reference material below before implementing, and diverge with a recorded reason if you
+> conclude differently.
 
 ## Confirmation against the latest runs (R1 + R2, 2026-07-02)
 
