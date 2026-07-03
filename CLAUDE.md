@@ -160,6 +160,13 @@ validate with a rule-12 fixture.** Close per gap class:
   `active-pools.json`/`runtime-graph-pools.json`) → resolve its poolKey + enqueue for backfill →
   merge into the graph so the planner can route it. This is the `route_gap_decisive` fix (winner's
   gross > our FULL simulated gross ⇒ NO bid policy could have won ⇒ fix COVERAGE, never bids).
+  **force-include is the band-aid, not the cure.** Every auto-appended force-include entry is a signal
+  the SCORER mis-ranked a pool it should have admitted; unbounded force-include growth + long-tail
+  mis-drops are the same root — pool-universe scoring is single-axis (raw swap count, `minSwaps>=2`,
+  topN). The principled fix is **arb-relevance scoring** (weight "does this pool close a loop with
+  something already in the graph", not just heat) — an EPIC, not an in-loop rewrite. Per rule 13,
+  same-class force-include ≥3 → escalate to fixing scoring, stop pinning. Owner: pool-scoring epic
+  (see memory `project-pool-scoring-arb-relevance-epic`).
 - **path gap** (pools we have but can't close the loop) → add the route/template.
 - **execution-adapter gap** (venue identifiable+graphable, no quote/build) → the venue-adapter epic.
 - **detection gap** (fully covered, not detected/routed) → detection/admission fix.
