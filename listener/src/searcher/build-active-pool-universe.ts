@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
+import { selectArbRelevantPools, type RankablePool } from "./pool-universe-arb-relevance.js";
 import { DEFAULT_POOL_UNIVERSE_PATH, type PoolUniverseEntry, type PoolUniverseFile } from "./pool-universe.js";
 import { ADDR } from "../shared/constants/addresses.js";
 
@@ -78,6 +79,10 @@ interface PoolActivity {
   lastSwapBlock: number;
 }
 
+interface EnrichedRankablePool extends RankablePool {
+  pool: PoolUniverseEntry;
+}
+
 export type V4InitializeSource =
   | "alchemy-v4-initialize"
   | "v4-initialize-backfill"
@@ -126,6 +131,11 @@ async function main(): Promise<void> {
   const minSwaps = Number(process.env.POOL_UNIVERSE_MIN_SWAPS ?? "2");
   const logBatch = Number(process.env.POOL_UNIVERSE_LOG_BATCH ?? "1000");
   const metadataConcurrency = Number(process.env.POOL_UNIVERSE_METADATA_CONCURRENCY ?? "24");
+  const arbRelevance = process.env.POOL_UNIVERSE_ARB_RELEVANCE !== "0";
+  const relevanceOversampleRaw = Number(process.env.POOL_UNIVERSE_RELEVANCE_OVERSAMPLE ?? "2");
+  const relevanceOversample = Number.isFinite(relevanceOversampleRaw)
+    ? Math.max(1, Math.floor(relevanceOversampleRaw))
+    : 1;
   const outPath = process.env.POOL_UNIVERSE_OUT ?? DEFAULT_POOL_UNIVERSE_PATH;
 
   console.log(
@@ -191,22 +201,48 @@ async function main(): Promise<void> {
   });
   console.log(`[pool-universe] univ4: ${v4InitLogs.length} Initialize events, ${v4Pools.length} above minSwaps`);
 
-  const ranked = [...activity.values()]
+  const countRanked = [...activity.values()]
     .filter((pool) => pool.count >= minSwaps)
-    .sort((a, b) => b.count - a.count || b.lastSwapBlock - a.lastSwapBlock)
-    .slice(0, maxPools);
+    .sort((a, b) => b.count - a.count || b.lastSwapBlock - a.lastSwapBlock);
   console.log(
     `[pool-universe] active pools=${activity.size}, ` +
-      `after minSwaps=${ranked.length}, maxPools=${maxPools}`,
+      `after minSwaps=${countRanked.length}, maxPools=${maxPools}`,
   );
 
-  const pools = await mapLimit(ranked, metadataConcurrency, async (pool, idx) => {
+  const oversampleN = arbRelevance
+    ? Math.min(countRanked.length, maxPools * relevanceOversample)
+    : maxPools;
+  const poolsToEnrich = countRanked.slice(0, oversampleN);
+  const enriched = await mapLimit(poolsToEnrich, metadataConcurrency, async (pool, idx) => {
     if ((idx + 1) % 250 === 0) {
-      console.log(`[pool-universe] metadata ${idx + 1}/${ranked.length}`);
+      console.log(`[pool-universe] metadata ${idx + 1}/${poolsToEnrich.length}`);
     }
     return enrichPool(provider, pool);
   });
-  const validPools = pools.filter((pool): pool is PoolUniverseEntry => pool !== null);
+  const enrichedCandidates: EnrichedRankablePool[] = [];
+  for (let i = 0; i < enriched.length; i++) {
+    const pool = enriched[i];
+    if (pool === null) continue;
+    const activityPool = poolsToEnrich[i];
+    enrichedCandidates.push({
+      key: activityPool.address.toLowerCase(),
+      token0: pool.token0,
+      token1: pool.token1,
+      count: activityPool.count,
+      lastSwapBlock: activityPool.lastSwapBlock,
+      pool,
+    });
+  }
+  const v4TokenPools = v4Pools.map(v4TokenPool);
+  const ranked = arbRelevance
+    ? selectArbRelevantPools(enrichedCandidates, v4TokenPools, { enabled: true, maxPools })
+    : enrichedCandidates.slice(0, maxPools);
+  const loopCompleters = countLoopCompleters(ranked, enrichedCandidates, v4TokenPools);
+  console.log(
+    `[pool-universe] arb-relevance: enabled=${arbRelevance} oversample=${relevanceOversample} ` +
+      `loopCompleters=${loopCompleters}/${ranked.length}`,
+  );
+  const validPools = ranked.map((item) => item.pool);
   const tokenSet = new Set<string>();
   for (const pool of validPools) {
     if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
@@ -516,6 +552,50 @@ function dedupeV4ByPoolId(pools: PoolUniverseEntry[]): PoolUniverseEntry[] {
     (b.score ?? 0) - (a.score ?? 0) ||
     (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
   );
+}
+
+function v4TokenPool(pool: PoolUniverseEntry): { token0?: string; token1?: string } {
+  return {
+    token0: pool.token0 ?? pool.currency0,
+    token1: pool.token1 ?? pool.currency1,
+  };
+}
+
+function countLoopCompleters(
+  selected: EnrichedRankablePool[],
+  candidates: EnrichedRankablePool[],
+  externalTokenPools: Array<{ token0?: string; token1?: string }>,
+): number {
+  const tokenDegree = new Map<string, number>();
+  const seenCandidates = new Set<string>();
+  for (const pool of candidates) {
+    const key = pool.key.toLowerCase();
+    if (seenCandidates.has(key)) continue;
+    seenCandidates.add(key);
+    addTokenDegree(tokenDegree, pool);
+  }
+  for (const pool of externalTokenPools) {
+    addTokenDegree(tokenDegree, pool);
+  }
+
+  return selected.filter((pool) =>
+    pool.token0 !== undefined &&
+    pool.token1 !== undefined &&
+    (tokenDegree.get(pool.token0.toLowerCase()) ?? 0) >= 2 &&
+    (tokenDegree.get(pool.token1.toLowerCase()) ?? 0) >= 2
+  ).length;
+}
+
+function addTokenDegree(
+  tokenDegree: Map<string, number>,
+  pool: { token0?: string; token1?: string },
+): void {
+  const tokens = new Set<string>();
+  if (pool.token0) tokens.add(pool.token0.toLowerCase());
+  if (pool.token1) tokens.add(pool.token1.toLowerCase());
+  for (const token of tokens) {
+    tokenDegree.set(token, (tokenDegree.get(token) ?? 0) + 1);
+  }
 }
 
 function normalizeBytes32Topic(value: string | undefined, field: string): string {
