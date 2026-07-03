@@ -119,6 +119,33 @@ will NOT redeploy, restart, or otherwise touch the node while that measurement i
 could interrupt a live (if tiny-stakes) in-flight bundle. No further action from this session;
 ownership of the live-measurement phase belongs to the concurrent session.
 
+## Addendum (hermes-hourly firing, ~10:30-11:00, appended without editing sections above)
+This session is the "next hourly firing" the section above hands off to. Reading current repo
+state per Step 1 found: (a) the same v4-Initialize-window gap class (R10's fix) still had a real,
+evidenced limitation — reth's log index silently returns `[]` (not an error) for `eth_getLogs`
+beyond ~150k blocks back, so R10's bounded backward-walk resolver gives false negatives for
+genuinely old-but-active v4 pools (confirmed casualty: poolId `0x3b1b1f2e...`, a competitor's
+dominant venue in a fresh window, 5/8 sampled txs, absent from `runtime-graph-pools.json`); (b) a
+dual-blind analysis (fresh fable-5 sub-agent with chain+code access vs. Codex read-only, blind to
+each other) converged on fixing this via an O(1) `PositionManager.poolKeys(bytes25)` eth_call
+(state-based, unaffected by the log-index blind spot) with a `keccak(PoolKey)==poolId` integrity
+check, falling back to R10's log-walk only when that check fails. Implemented via
+`scripts/codex-run.sh`, gated via a deterministic replay-fixture flip
+(`npm run searcher:pooluniversev4`, 6/6 PASS, both the new PositionManager-resolved case and an
+integrity-mismatch-falls-back-to-log-walk case), `npm run searcher:planner` unaffected (12/12 +
+replay fixtures 12/12). The address (`0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e`) and the
+`poolKeys` response were independently re-verified from scratch by the orchestrator (not just
+trusted from the sub-agent) via direct `eth_getCode` + `eth_call` + `cast keccak` on the local
+node — exact match. This is the same shared working directory as the concurrent live-monitoring
+session, so the change landed inside its `1d5eb47` commit alongside the high-spread-quota sanity
+check (unattributed there — this addendum is that attribution). **Not deployed** — the live
+bounded-broadcast measurement is active on the node right now (confirmed `.deploy-live` present,
+`SEARCHER_DRY_RUN=0`) and this session will not touch it; the fix will apply on whichever future
+dry-run redeploy naturally follows. Full analysis: `docs/research/reports/step1-R11-20260703.json`
+was already claimed by the concurrent session's real R11 — this session's own raw findings
+(coffeebabe 8/8 full trace, dual-blind transcripts) live in this addendum only, not a separate
+numbered-round doc, to avoid adding a third colliding "R11".
+
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
@@ -128,3 +155,4 @@ ownership of the live-measurement phase belongs to the concurrent session.
 | R10 v4 production backfill (pid changed 99451→110950, still running) | R10→R12 | R13 | check status, likely still running or finished — merge into active-pools.json if done |
 | epic slice-2+ (if slice-1's live effect is small): consider whether `highSpreadPairQuota=150` / `highSpreadMinFee=10000` are the right defaults, or need tuning from live data | future | R13+ | open |
 | concurrent Hermes session detected (own R11 doc + deploy-node.sh live-mode change) — round-numbering collision, no file conflict | R12 | R13 | open, non-blocking — be aware when picking the next round number |
+| v4 PositionManager poolKeys O(1) resolver (fixes reth log-index blind-spot false negatives in R10's backward-walk) | hermes-hourly (addendum) | R13 | **done** — fixed, gated via replay flip (6/6), independently re-verified on-chain, landed in `1d5eb47` (unattributed there, see addendum above); not deployed (live measurement active, do not touch node) |
