@@ -52,6 +52,7 @@ const v4InitializeIface = new ethers.Interface([
 ]);
 const V4_INITIALIZE_TOPIC = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
 const V4_SWAP_TOPIC = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+const V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = "0x86b6be7d";
 
 interface DiscoveryQueueEntry {
   addr?: unknown;
@@ -77,13 +78,19 @@ interface PoolActivity {
   lastSwapBlock: number;
 }
 
-interface ParsedV4Initialize {
+export type V4InitializeSource =
+  | "alchemy-v4-initialize"
+  | "v4-initialize-backfill"
+  | "v4-positionmanager-poolkeys";
+
+export interface ParsedV4Initialize {
   poolId: string;
   currency0: string;
   currency1: string;
   fee: number;
   tickSpacing: number;
   hooks: string;
+  source?: V4InitializeSource;
 }
 
 function loadEnv(): void {
@@ -173,8 +180,9 @@ async function main(): Promise<void> {
     ));
   }
   const v4Pools = await buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps, async (poolId) => {
-    return resolveV4InitBackward(
+    return resolveV4InitViaPositionManagerThenBackward(
       provider,
+      ADDR.UNISWAP_V4_POSITION_MANAGER,
       ADDR.UNISWAP_V4_POOL_MANAGER,
       V4_INITIALIZE_TOPIC,
       poolId,
@@ -314,6 +322,63 @@ export async function resolveV4InitBackward(
   return null;
 }
 
+export async function resolveV4PoolKeyViaPositionManager(
+  provider: ethers.JsonRpcProvider,
+  positionManagerAddr: string,
+  poolId: string,
+): Promise<ParsedV4Initialize | null> {
+  const normalizedPoolId = normalizeBytes32Topic(poolId, "poolId");
+  const poolIdPrefix = normalizedPoolId.slice(2, 52);
+  const data = V4_POSITION_MANAGER_POOL_KEYS_SELECTOR + poolIdPrefix.padEnd(64, "0");
+
+  try {
+    const result = await provider.send("eth_call", [
+      { to: ethers.getAddress(positionManagerAddr), data },
+      "latest",
+    ]);
+    const [decodedCurrency0, decodedCurrency1, decodedFee, decodedTickSpacing, decodedHooks] =
+      ethers.AbiCoder.defaultAbiCoder().decode(
+        ["address", "address", "uint24", "int24", "address"],
+        String(result),
+      );
+    const parsed: ParsedV4Initialize = {
+      poolId: normalizedPoolId,
+      currency0: ethers.getAddress(String(decodedCurrency0)),
+      currency1: ethers.getAddress(String(decodedCurrency1)),
+      fee: Number(decodedFee),
+      tickSpacing: Number(decodedTickSpacing),
+      hooks: ethers.getAddress(String(decodedHooks)),
+    };
+    const recomputed = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["address", "address", "uint24", "int24", "address"],
+        [parsed.currency0, parsed.currency1, parsed.fee, parsed.tickSpacing, parsed.hooks],
+      ),
+    );
+    return recomputed.toLowerCase() === normalizedPoolId ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveV4InitViaPositionManagerThenBackward(
+  provider: ethers.JsonRpcProvider,
+  positionManagerAddr: string,
+  poolManagerAddr: string,
+  topic: string,
+  poolId: string,
+  searchFromBlock: number,
+  chunkSize = 100_000,
+): Promise<ParsedV4Initialize | null> {
+  const viaPositionManager = await resolveV4PoolKeyViaPositionManager(provider, positionManagerAddr, poolId);
+  if (viaPositionManager) {
+    return { ...viaPositionManager, source: "v4-positionmanager-poolkeys" };
+  }
+
+  const log = await resolveV4InitBackward(provider, poolManagerAddr, topic, poolId, searchFromBlock, chunkSize);
+  return log ? { ...parseV4InitializeLog(log), source: "v4-initialize-backfill" } : null;
+}
+
 function isPrunedHistoryError(err: unknown): boolean {
   return /pruned|not available/i.test(rpcErrorMessage(err));
 }
@@ -340,7 +405,7 @@ export async function buildV4PoolEntries(
   initLogs: RawLog[],
   swapLogs: RawLog[],
   minSwaps: number,
-  resolveMissingInit?: (poolId: string) => Promise<RawLog | null>,
+  resolveMissingInit?: (poolId: string) => Promise<ParsedV4Initialize | null>,
 ): Promise<PoolUniverseEntry[]> {
   const activity = new Map<string, { count: number; lastSwapBlock: number }>();
   for (const log of swapLogs) {
@@ -371,11 +436,16 @@ export async function buildV4PoolEntries(
       .map(([poolId]) => poolId)
       .filter((poolId) => !resolved.has(poolId));
     const backfilled = await mapLimit(missing, 24, async (poolId) => {
-      const log = await resolveMissingInit(poolId);
-      return log ? { poolId, parsed: parseV4InitializeLog(log) } : null;
+      const parsed = await resolveMissingInit(poolId);
+      return parsed ? { poolId, parsed } : null;
     });
     for (const item of backfilled) {
-      if (item) resolved.set(item.poolId, { parsed: item.parsed, source: "v4-initialize-backfill" });
+      if (item) {
+        resolved.set(item.poolId, {
+          parsed: item.parsed,
+          source: item.parsed.source ?? "v4-initialize-backfill",
+        });
+      }
     }
   }
 

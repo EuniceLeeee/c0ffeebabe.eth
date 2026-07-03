@@ -75,11 +75,43 @@ codex: landed
   cycles per the lean-template note. The NEXT live measurement window (R13) will show whether
   this shifts real `simSuccess`/coverage-KPI numbers.
 
+## Post-deploy live sanity check (not a full validation window — see caveat)
+Deployed `30ba112` to the node (`scripts/deploy-node.sh`, `mode=DRY` confirmed, no live marker
+present). Startup banner confirmed the fix is wired: `highSpreadPairQuota=150
+highSpreadMinFee=10000`; universe pair-completion grew 284→323 pools (consistent with the quota
+admitting previously-excluded high-fee pairs). A ~31.5min sanity window (blocks 25448833→25448990,
+111 events, 53 `opportunity_seen`) showed **2 `simulation_result` events** (both `ok:true`, dust —
+gross ~$0.03-0.06, correctly rejected by `below_ev_gate` after gas+bribe) — more pipeline depth
+than R10/R11's flat-zero windows, though these two happened to be an unrelated v4/PSM path, not
+the specific high-fee pairs the fix targets. `no_candidate_plans` sub-classification: 37/38
+`only_immediate_same_pool_reverse` (correctly pruned), 1/38 `impact_pool_not_in_routing_graph`.
+**This single small window is NOT sufficient to conclude the fix's live effect either way** (R3-trap
+rule — a 31min/53-opportunity sample is too thin for a coverage-KPI verdict); it confirms the
+deploy is clean and non-regressive. A proper before/after coverage-KPI comparison (how many
+high-fee/wide-spread pairs actually enter `opportunity_seen` pre- vs post-fix, over an hours-scale
+window) is carried to the next round.
+
+## Session handoff (ending this extended loop here — see rationale)
+This session ran the R11 architecture review end-to-end (dual-blind, falsifier-confirmed) and
+shipped + gated + deployed R12's epic slice-1 in the same continuous run. During this run, `git log`
+revealed a **second, concurrent Hermes session** also operating on this repo (it independently
+produced its own `live-run-R11-20260703-hermes.md` + `step1-R11-20260703.json`, and separately
+committed a `deploy-node.sh` change adding a bounded live-broadcast mode) — no file conflicts
+occurred (different filenames), but round-numbering has collided (two independent "R11"s exist).
+Rather than keep chaining `ScheduleWakeup` for more hours in this single session (which would only
+duplicate what the independently-scheduled `hermes-hourly` cron already does on its own cadence,
+and increases the chance of colliding further with the concurrent session), this session's active
+work concludes HERE at a clean checkpoint: architecture review closed, epic slice-1 shipped/gated/
+deployed, initial non-regressive sanity check done. The round lock is released below so the next
+`hermes-hourly` firing (a fresh session, reading current repo state per its own Step 1) can proceed
+without contention.
+
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
-| epic slice-1: high-spread pool-universe quota | R12 | — | **done** — fixed, gated via planner replay flip, commit `5266555`, not yet deployed to node |
-| deploy + measure whether this moves live simSuccess/coverage | R12 | R13 | open — deploy `5266555` to node, confirm `highSpreadPairQuota=150` in startup banner, run a fresh window |
+| epic slice-1: high-spread pool-universe quota | R12 | — | **done** — fixed, gated via planner replay flip, commit `5266555`, deployed live (`30ba112`), banner-confirmed |
+| proper before/after coverage-KPI measurement (hours-scale window) | R12 | R13 | open — this round's 31min sanity check is too thin to conclude live effect |
 | discovery-queue.json 6 stale entries, never drained since 20260702 | future | when slack exists | open, non-blocking |
-| R10 v4 production backfill (pid 99451) | R10→R12 | R13 | check status, likely still running or finished — merge into active-pools.json if done |
+| R10 v4 production backfill (pid changed 99451→110950, still running) | R10→R12 | R13 | check status, likely still running or finished — merge into active-pools.json if done |
 | epic slice-2+ (if slice-1's live effect is small): consider whether `highSpreadPairQuota=150` / `highSpreadMinFee=10000` are the right defaults, or need tuning from live data | future | R13+ | open |
+| concurrent Hermes session detected (own R11 doc + deploy-node.sh live-mode change) — round-numbering collision, no file conflict | R12 | R13 | open, non-blocking — be aware when picking the next round number |

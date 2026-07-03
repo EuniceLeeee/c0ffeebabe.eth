@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ethers } from "ethers";
-import { buildV4PoolEntries, type RawLog } from "../build-active-pool-universe.js";
+import {
+  buildV4PoolEntries,
+  resolveV4InitViaPositionManagerThenBackward,
+  resolveV4PoolKeyViaPositionManager,
+  type ParsedV4Initialize,
+  type RawLog,
+} from "../build-active-pool-universe.js";
 import { loadPoolUniverse, type PoolUniverseEntry } from "../pool-universe.js";
 import { buildTokenGraph, type TokenQueryBackend, v4PoolId } from "../planner/token-graph.js";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -15,7 +21,9 @@ const swapIface = new ethers.Interface([
 ]);
 const initEvent = mustEvent(initIface, "Initialize");
 const swapEvent = mustEvent(swapIface, "Swap");
+const initializeTopic = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
 const poolManager = ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER);
+const positionManager = ethers.getAddress(ADDR.UNISWAP_V4_POSITION_MANAGER);
 const sqrtPriceX96 = 79228162514264337593543950336n;
 
 interface PoolFixture {
@@ -81,6 +89,25 @@ function initLog(fixture: PoolFixture, blockNumber: number): RawLog {
   };
 }
 
+function parsedInitialize(fixture: PoolFixture, source?: ParsedV4Initialize["source"]): ParsedV4Initialize {
+  return {
+    poolId: fixture.poolId,
+    currency0: fixture.currency0,
+    currency1: fixture.currency1,
+    fee: fixture.fee,
+    tickSpacing: fixture.tickSpacing,
+    hooks: fixture.hooks,
+    ...(source ? { source } : {}),
+  };
+}
+
+function positionManagerReturnData(fixture: PoolFixture): string {
+  return ethers.AbiCoder.defaultAbiCoder().encode(
+    ["address", "address", "uint24", "int24", "address"],
+    [fixture.currency0, fixture.currency1, fixture.fee, fixture.tickSpacing, fixture.hooks],
+  );
+}
+
 function swapLog(poolId: string, blockNumber: number): RawLog {
   const encoded = swapIface.encodeEventLog(swapEvent, [
     poolId,
@@ -138,6 +165,9 @@ async function main(): Promise<void> {
   const below = poolFixture(address(0x2001), address(0x2002), 3000, 60, address(0x9999));
   const aboveB = poolFixture(address(0x3001), address(0x3002), 100, 1, address(0x7777));
   const oldPool = poolFixture(address(0x4001), address(0x4002), 10000, 200, address(0x8888));
+  const positionManagerPool = poolFixture(address(0x5001), address(0x5002), 5, 1, address(0));
+  const fallbackPool = poolFixture(address(0x6001), address(0x6002), 5, 1, address(0));
+  const garbagePoolKey = poolFixture(address(0x7001), address(0x7002), 500, 10, address(0x777));
   const minSwaps = 2;
 
   const initLogs = [
@@ -145,7 +175,6 @@ async function main(): Promise<void> {
     initLog(below, 11),
     initLog(aboveB, 12),
   ];
-  const oldPoolInitLog = initLog(oldPool, 5);
   const swapLogs = [
     swapLog(aboveA.poolId, 20),
     swapLog(aboveA.poolId, 22),
@@ -174,7 +203,7 @@ async function main(): Promise<void> {
   const resolverCalls: string[] = [];
   const backfilledEntries = await buildV4PoolEntries(initLogs, swapLogs, minSwaps, async (poolId) => {
     resolverCalls.push(poolId);
-    return poolId === oldPool.poolId ? oldPoolInitLog : null;
+    return poolId === oldPool.poolId ? parsedInitialize(oldPool, "v4-initialize-backfill") : null;
   });
   const backfilledByPoolId = new Map<string, PoolUniverseEntry>();
   for (const entry of backfilledEntries) {
@@ -189,6 +218,95 @@ async function main(): Promise<void> {
   assert(!backfilledByPoolId.has(below.poolId), "pool below minSwaps should remain excluded");
   assertEntry(backfilledByPoolId.get(oldPool.poolId), oldPool, 2, 41, "v4-initialize-backfill");
   console.log("[pool-universe-v4] expected_transition old v4 Initialize backfill: PASS");
+
+  const poolKeysCalls: Array<{ to: string; data: string; blockTag: string }> = [];
+  const positionManagerProvider = {
+    async send(method: string, params: unknown[]) {
+      assert(method === "eth_call", `expected eth_call, got ${method}`);
+      const [call, blockTag] = params as [{ to: string; data: string }, string];
+      poolKeysCalls.push(call ? { ...call, blockTag } : { to: "", data: "", blockTag });
+      assert(ethers.getAddress(call.to) === positionManager, "poolKeys call should target PositionManager");
+      assert(blockTag === "latest", "poolKeys call should use latest state");
+      const expectedData = "0x86b6be7d" + positionManagerPool.poolId.slice(2, 52).padEnd(64, "0");
+      assert(call.data === expectedData, "poolKeys calldata should use bytes25 poolId prefix");
+      return positionManagerReturnData(positionManagerPool);
+    },
+  } as unknown as ethers.JsonRpcProvider;
+  const resolvedPoolKey = await resolveV4PoolKeyViaPositionManager(
+    positionManagerProvider,
+    positionManager,
+    positionManagerPool.poolId,
+  );
+  assert(resolvedPoolKey !== null, "PositionManager poolKeys resolver should pass integrity check");
+  assert(poolKeysCalls.length === 1, `expected one poolKeys call, got ${poolKeysCalls.length}`);
+
+  let positionManagerResolverCalls = 0;
+  const positionManagerEntries = await buildV4PoolEntries(
+    [],
+    [swapLog(positionManagerPool.poolId, 50), swapLog(positionManagerPool.poolId, 51)],
+    minSwaps,
+    async (poolId) => {
+      positionManagerResolverCalls++;
+      assert(poolId === positionManagerPool.poolId, "PositionManager resolver should receive missing poolId");
+      return { ...resolvedPoolKey, source: "v4-positionmanager-poolkeys" };
+    },
+  );
+  const positionManagerByPoolId = new Map<string, PoolUniverseEntry>();
+  for (const entry of positionManagerEntries) {
+    assert(entry.poolId !== undefined, "v4 entry must include poolId");
+    positionManagerByPoolId.set(entry.poolId, entry);
+  }
+  assert(positionManagerResolverCalls === 1, `expected one PositionManager resolver call, got ${positionManagerResolverCalls}`);
+  assert(positionManagerEntries.length === 1, `expected 1 PositionManager-resolved entry, got ${positionManagerEntries.length}`);
+  assertEntry(
+    positionManagerByPoolId.get(positionManagerPool.poolId),
+    positionManagerPool,
+    2,
+    51,
+    "v4-positionmanager-poolkeys",
+  );
+  console.log("[pool-universe-v4] PositionManager poolKeys missing-init resolver: PASS");
+
+  const fallbackPoolInitLog = initLog(fallbackPool, 45);
+  const fallbackCalls: string[] = [];
+  const fallbackProvider = {
+    async send(method: string, params: unknown[]) {
+      fallbackCalls.push(method);
+      if (method === "eth_call") {
+        return positionManagerReturnData(garbagePoolKey);
+      }
+      if (method === "eth_getLogs") {
+        const [filter] = params as [{ topics: string[] }];
+        assert(filter.topics[0] === initializeTopic, "fallback should query Initialize topic");
+        assert(filter.topics[1] === fallbackPool.poolId, "fallback should query the missing poolId");
+        return [fallbackPoolInitLog];
+      }
+      throw new Error(`unexpected provider method: ${method}`);
+    },
+  } as unknown as ethers.JsonRpcProvider;
+  const fallbackEntries = await buildV4PoolEntries(
+    [],
+    [swapLog(fallbackPool.poolId, 60), swapLog(fallbackPool.poolId, 61)],
+    minSwaps,
+    async (poolId) => resolveV4InitViaPositionManagerThenBackward(
+      fallbackProvider,
+      positionManager,
+      poolManager,
+      initializeTopic,
+      poolId,
+      59,
+      100,
+    ),
+  );
+  const fallbackByPoolId = new Map<string, PoolUniverseEntry>();
+  for (const entry of fallbackEntries) {
+    assert(entry.poolId !== undefined, "v4 entry must include poolId");
+    fallbackByPoolId.set(entry.poolId, entry);
+  }
+  assert(fallbackCalls[0] === "eth_call", "composed resolver should try PositionManager first");
+  assert(fallbackCalls.includes("eth_getLogs"), "integrity mismatch should fall through to log backfill");
+  assertEntry(fallbackByPoolId.get(fallbackPool.poolId), fallbackPool, 2, 61, "v4-initialize-backfill");
+  console.log("[pool-universe-v4] PositionManager integrity mismatch fallback: PASS");
 
   const dir = mkdtempSync(join(tmpdir(), "pool-universe-v4-"));
   try {
@@ -231,7 +349,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (4/4)");
+  console.log("pool-universe-v4 PASS (6/6)");
 }
 
 main().catch((err) => {
