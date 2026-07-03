@@ -14,10 +14,13 @@ import {
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
 const DEFAULT_GRAPH_PATH = resolve(DEFAULT_POOLS_DIR, "runtime-graph-pools.json");
-const DEFAULT_MIN_PROFIT_USD = 1;
+// Coverage/learning stage: a pool a competitor PROFITABLY arbed is itself the arb-relevance signal,
+// so admit everything above a noise floor (filters valuation artifacts / failed-arb dust), not a
+// "be picky" floor. Raise this once past the coverage phase.
+const DEFAULT_MIN_PROFIT_USD = 0.1;
 const DEFAULT_MAX_BLOCKS = 1000;
 
-const USAGE = `Usage: npm run census-report -- --watch <addr[,addr]> --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=1>] [--max-blocks <n=1000>] [--out <report.json>]`;
+const USAGE = `Usage: npm run census-report -- --watch <addr[,addr]> --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]`;
 
 interface BlockWindow {
   from: number;
