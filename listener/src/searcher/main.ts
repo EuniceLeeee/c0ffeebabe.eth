@@ -23,6 +23,11 @@ import {
   pinnedWarmHopsFromGraph,
 } from "./pinned-warm-pools.js";
 import {
+  DEFAULT_FORCE_INCLUDE_POOLIDS_PATH,
+  loadForceIncludePoolIds,
+  mergeForceIncludePoolIds,
+} from "./force-include.js";
+import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
   selectPairCompletionPools,
@@ -113,6 +118,7 @@ interface LiveConfig {
   poolUniverseTopN: number;
   poolUniverseMinScore: number;
   poolUniverseForceInclude: string[];
+  forceIncludePoolIdsPath: string;
   poolUniverseHighSpreadPairQuota: number;
   poolUniverseHighSpreadMinFee: number;
   pairCompletion: boolean;
@@ -306,6 +312,11 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const dryRun = process.env.SEARCHER_DRY_RUN === "1";
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
   const quoteSafetyBps = BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
+  const forceIncludePoolIdsPath =
+    process.env.SEARCHER_FORCE_INCLUDE_POOLIDS_PATH ?? DEFAULT_FORCE_INCLUDE_POOLIDS_PATH;
+  const envForceInclude = parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE);
+  const fileForceInclude = loadForceIncludePoolIds(forceIncludePoolIdsPath);
+  const poolUniverseForceInclude = mergeForceIncludePoolIds(envForceInclude, fileForceInclude);
 
   const wsUrl = liveWsUrl(rpcUrl);
 
@@ -348,7 +359,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniversePath: process.env.SEARCHER_POOL_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH,
     poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "1500"),
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
-    poolUniverseForceInclude: parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE),
+    poolUniverseForceInclude,
+    forceIncludePoolIdsPath,
     poolUniverseHighSpreadPairQuota: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_PAIR_QUOTA ?? "150"),
     poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
     pairCompletion: process.env.SEARCHER_PAIR_COMPLETION !== "0",
@@ -448,6 +460,10 @@ async function main(): Promise<void> {
       `finalVerifyFloorBps=${config.finalVerifyFloorBps}`,
   );
   console.log(`[searcher/live] pinnedWarmPools=${config.pinnedWarmPoolPath}`);
+  console.log(
+    `[searcher/live] forceIncludePoolIds=${config.forceIncludePoolIdsPath} ` +
+      `merged=${config.poolUniverseForceInclude.length}`,
+  );
   console.log(
     `[searcher/live] poolUniverse=${config.poolUniversePath} ` +
       `topN=${config.poolUniverseTopN} minScore=${config.poolUniverseMinScore} ` +
