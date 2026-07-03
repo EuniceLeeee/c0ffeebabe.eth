@@ -44,6 +44,7 @@
     "searcher:revm-quote": "tsx src/searcher/test/revm-quote-smoke.ts",
     "searcher:revm-warm": "tsx src/searcher/test/revm-warm-smoke.ts",
     "searcher:replay-live-fixtures": "tsx src/searcher/test/replay-live-fixtures.ts",
+    "searcher:bench-topn": "tsx src/searcher/test/bench-topn-latency.ts",
     "searcher:live": "tsx src/searcher/main.ts"
   },
   "dependencies": {
