@@ -94,15 +94,38 @@
     }
   ],
   "coverage_kpi": {
-    "competitor_legs_total": 17,
+    "competitor_legs_total": 14,
     "legs_out_of_graph": 3,
     "out_pools": [
-      "0x42b94788fb96fb3f39425188a2c24d2b2f03b843",
-      "0xe39687bc93e0dfdf8b22eda19e86eebce0c56069",
-      "0xc69b4ee815b3fcf8da5db0685aba46abdf60b110"
+      {
+        "addr": "0x42b94788fb96fb3f39425188a2c24d2b2f03b843",
+        "class": "single_venue_noise",
+        "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "token1": "0xe8df8f6d75008414ed4c21715f2d4dadbdb94e6e",
+        "evidence": "USDC/0xe8df8f6d v3 pool; touched once in the window by ae2Fc483 out-of-posture tx 0xec673e87 (net ERC20 capture=0); single-venue longtail, no closing loop in our graph"
+      },
+      {
+        "addr": "0xe39687bc93e0dfdf8b22eda19e86eebce0c56069",
+        "class": "single_venue_noise",
+        "token0": "0x5ee84583f67d5ecea5420dbb42b462896e7f8d06",
+        "token1": "0xe8df8f6d75008414ed4c21715f2d4dadbdb94e6e",
+        "evidence": "0x5ee84583/0xe8df8f6d v3 pool; same out-of-posture tx 0xec673e87, touched once; single-venue longtail noise"
+      },
+      {
+        "addr": "0xc69b4ee815b3fcf8da5db0685aba46abdf60b110",
+        "class": "single_venue_noise",
+        "token0": "0x347a96a5bd06d2e15199b032f46fb724d6c73047",
+        "token1": "0x5ee84583f67d5ecea5420dbb42b462896e7f8d06",
+        "evidence": "0x347a96a5/0x5ee84583 v3 pool; same out-of-posture tx 0xec673e87, touched once; single-venue longtail noise"
+      }
     ],
-    "out_pools_window_occurrence": "7 out-of-graph pools across all 79 txs, each touched exactly ONCE in the window (single-venue longtail noise; toucher is an out-of-posture sandwich/inventory bot)",
+    "out_pools_window_occurrence": "each out-of-graph pool touched exactly ONCE across the window by an out-of-posture sandwich/inventory bot; the traced tx netted 0 atomic capture — single-venue longtail noise, not a closable coverage gap",
     "closable": 0,
-    "single_venue_noise": 7
+    "single_venue_noise": 3,
+    "prev_round": {
+      "run_id": "d3055f19-90b7-4b9b-a638-ab2557120292",
+      "legs_out_of_graph": 2,
+      "closable": 0
+    }
   }
 }
