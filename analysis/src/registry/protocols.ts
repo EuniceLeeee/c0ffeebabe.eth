@@ -27,6 +27,10 @@ export const TOKEN_META: Record<string, { symbol: string; decimals: number; stab
   [ADDR.WSTUSR]: { symbol: "wstUSR", decimals: 18 },
   [ADDR.DOLA]: { symbol: "DOLA", decimals: 18, stable: true, roughUsd: 1 },
   [ADDR.SUSDS]: { symbol: "sUSDS", decimals: 18, stable: true, roughUsd: 1 },
+  // FRAX: listed in bundle-postmortem INVENTORY_PRICED_TOKENS but absent here, so a FRAX delta landed
+  // in unpriced and the one_leg_inventory spent-check could never see it (Fable-found dead entry).
+  // Price it (~$1 stable) so that inventory signal works.
+  ["0x853d955acef822db058eb8505911ed77f175b99e"]: { symbol: "FRAX", decimals: 18, stable: true, roughUsd: 1 },
 });
 
 export const PROTOCOLS: Record<string, { name: string; kind: string }> = indexByAddress({
