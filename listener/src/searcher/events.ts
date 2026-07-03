@@ -113,6 +113,23 @@ export type SearcherEvent =
       builders_sent?: string[];
       bundle_hash?: string;
       accepted?: number;
+    }
+  | {
+      type: "bundle_included";
+      opportunity_id: string;
+      tx_hash: string;
+      target_block: number;
+      mined_block: number;
+      status: "success" | "revert";
+      gas_used?: string;
+      effective_gas_price?: string;
+    }
+  | {
+      type: "bundle_not_included";
+      opportunity_id: string;
+      tx_hash: string;
+      target_block: number;
+      blocks_waited: number;
     };
 
 /** Fire-and-forget. Any failure (disabled, fs error) is silently ignored so the

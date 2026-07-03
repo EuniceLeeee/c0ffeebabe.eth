@@ -6,6 +6,7 @@ import { AnvilStateBackend, type StateBackend } from "../shared/state/state-back
 import { BackrunDetector } from "./detector/detector.js";
 import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
+import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import {
   buildTokenGraph,
@@ -75,6 +76,7 @@ interface LiveConfig {
   wallet: ethers.Wallet;
   minProfit: bigint;
   defaultGasUsed: number;
+  inclusionWatchBlocks: number;
   dryRun: boolean;
   maxHints: number;
   enableHashOnly: boolean;
@@ -316,6 +318,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     wallet,
     minProfit: BigInt(process.env.SEARCHER_MIN_PROFIT_RAW ?? "1"),
     defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
+    inclusionWatchBlocks: Number(process.env.SEARCHER_INCLUSION_WATCH_BLOCKS ?? "3"),
     dryRun,
     enableHashOnly: process.env.SEARCHER_ENABLE_HASH_ONLY === "1",
     maxHints: Number(process.env.SEARCHER_MAX_HINTS ?? "0"),
@@ -1730,6 +1733,16 @@ async function handleHint(
             builders_sent: results.map((r) => r.builder),
             bundle_hash: bundleHash,
             accepted: results.filter((r) => r.accepted).length,
+          });
+        }
+        if (backrunTxHash && results.some((r) => r.accepted)) {
+          trackInclusion({
+            provider: ctx.provider,
+            backrunTxHash,
+            opportunityId,
+            targetBlock,
+            watchBlocks: ctx.config.inclusionWatchBlocks,
+            emit: emitEvent,
           });
         }
         recordFinalState("would-submit", undefined, sim);
