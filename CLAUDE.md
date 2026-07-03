@@ -189,11 +189,7 @@ committed `force-include-poolids.json` that survives deploy. Rule-12 flip:
 `pool_in_routing_graph false→true, candidate_plans 0→1` (planner 14/14 + replay 12/12 + pool-universe
 10/10 + force-include 4/4, independently re-run by the evaluator). Residual until the next deploy
 window: banner shows `forceIncludePoolIds merged>0` + `0x267d01…` present in the live runtime graph.
-**The improve-half is now EXECUTABLE** (`4147ce3`+`a181da1`, evaluator-approved): `cd listener &&
-npm run auto-close-route-gap -- --report <postmortem.json> --rpc <url>` consumes a 6a report and,
-when `route_gap_decisive`, auto-closes every `touchedVenues[].in_graph=false` venue (univ4 →
-poolKey backfill + force-include; univ2/3 → force-include + `needs_active_pools` note; idempotent,
-no-op otherwise). So the 6a→6b chain is one command per half: post-mortem → auto-close → deploy.
+(Improve-half executability + the three runnable commands: see the block below.)
 (Evaluator note: an interim review wrongly re-classified this as an execution-adapter epic off a
 corrupted code read — `rg -r` swallows a replacement arg; never use `-rn`/`-rln` — plus a stale
 memory claiming native-ETH execution was still gapped. Re-verified from clean reads + on-chain data;
@@ -214,7 +210,11 @@ cd listener && npm run auto-close-route-gap -- --report /tmp/pm.json --rpc http:
 `auto-close-route-gap` was validated END-TO-END against the REAL node post-mortem report (it read
 `analyzed_competitors[].touchedVenues[]` — NOT the wrong `competing_candidates[]` a fixture-only gate
 first assumed; verify-before-claim on real data caught the schema bug) and correctly extracted the
-missing v4 poolId `0x267d01…` → backfill + force-include.
+missing v4 poolId `0x267d01…` → backfill + force-include. **Evaluator-approved (`410f5d0`)**: gates
+re-run (5/5 + all regressions) AND independently reproduced with the evaluator's own inputs (real
+report + Alchemy RPC + clean scratch files) — RUN1 closed 1 poolId / appended 1, RUN2 idempotent 0/0,
+written poolKey matches the on-chain `Initialize` field-for-field. Known P2 (chip filed): one venue's
+backfill/RPC failure aborts the run — per-venue isolation pending.
 
 **HONEST automation state — codified LOGIC, not yet auto-TRIGGERED.** What is automated: the judgment
 that used to be manual (hand-trace the tx, price the winner, classify outbid-vs-route-gap, resolve the
