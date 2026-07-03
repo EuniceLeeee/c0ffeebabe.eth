@@ -13,6 +13,8 @@ export interface BundleSubmission {
   expectedProfitEth?: bigint;
   /** Fraction of expectedProfitEth to pay as priority-fee bribe, in bps. */
   bribeBps?: number;
+  /** Absolute priority-fee bribe in wei, computed by the searcher economics gate. */
+  bribeWei?: bigint;
   gasUsed?: bigint | number;
 }
 
@@ -42,6 +44,7 @@ export class DryRunBundleRouter implements BundleRouter {
         provider: this.provider,
         expectedProfitEth: bundle.expectedProfitEth,
         bribeBps: bundle.bribeBps,
+        bribeWei: bundle.bribeWei,
       });
       return [{
         builder: "dry-run",
@@ -71,6 +74,7 @@ export class ProductionBundleRouter implements BundleRouter {
     const bribe = {
       expectedProfitEth: bundle.expectedProfitEth,
       bribeBps: bundle.bribeBps,
+      bribeWei: bundle.bribeWei,
     };
     let results: SubmitResult[];
 

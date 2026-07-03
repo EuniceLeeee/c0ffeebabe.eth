@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
@@ -129,6 +130,8 @@ interface LiveConfig {
   maxProfitBpsOfFlash: bigint;
   /** Fraction of expected profit to bribe the proposer via priority fee. */
   bribeBps: number;
+  /** Pay all expected profit above gas as the priority-fee bribe. */
+  bribeAllAboveGas: boolean;
   /** ETH/USD price for valuing stablecoin profit as an ETH bribe. */
   ethUsd: number;
   /** Only submit when profitETH − gas − bribe ≥ minNetEth (net +EV gate). */
@@ -177,6 +180,17 @@ export function valueInEth(token: string, amount: bigint, ethUsd: number): bigin
     return (amount * 10n ** 18n) / (10n ** BigInt(decimals) * BigInt(Math.round(ethUsd)));
   }
   return 0n;
+}
+
+export function computeBidEth(
+  expectedProfitEth: bigint,
+  gasCostEth: bigint,
+  opts: { bribeAllAboveGas: boolean; bribeBps: number },
+): bigint {
+  if (opts.bribeAllAboveGas) {
+    return expectedProfitEth > gasCostEth ? expectedProfitEth - gasCostEth : 0n;
+  }
+  return (expectedProfitEth * BigInt(opts.bribeBps)) / 10000n;
 }
 
 // Major DEX routers/aggregators — mempool server-side filter (route B). A
@@ -368,6 +382,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
     maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
     bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? "10000"),
+    bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
     ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
     evGate: process.env.SEARCHER_EV_GATE === "1",
     minNetEth: BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0"),
@@ -429,7 +444,9 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] sse=${config.mevShareSseUrl}`);
   console.log(`[searcher/live] mempool=${config.enableMempool ? "enabled" : "disabled"}`);
   console.log(
-    `[searcher/live] bribeBps=${config.bribeBps} maxProfitBpsOfFlash=${config.maxProfitBpsOfFlash} ethUsd=${config.ethUsd}`,
+    `[searcher/live] bribeBps=${config.bribeBps} ` +
+      `bribeAllAboveGas=${config.bribeAllAboveGas ? "on" : "off"} ` +
+      `maxProfitBpsOfFlash=${config.maxProfitBpsOfFlash} ethUsd=${config.ethUsd}`,
   );
   console.log(
     `[searcher/live] evGate=${config.evGate ? "on" : "off"} minNetEth=${config.minNetEth} ` +
@@ -1667,7 +1684,18 @@ async function handleHint(
         );
         const expectedProfitEth =
           (rawProfitEth * BigInt(10000 - ctx.config.profitHaircutBps)) / 10000n;
-        const bidEth = (expectedProfitEth * BigInt(ctx.config.bribeBps)) / 10000n;
+        const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(ctx.config.defaultGasUsed);
+        let gasCostEth = 0n;
+        if (ctx.config.evGate || ctx.config.bribeAllAboveGas) {
+          const latest = await ctx.provider.getBlock("latest");
+          const baseFee = latest?.baseFeePerGas ?? 0n;
+          const worstBaseFee = (baseFee * BigInt(ctx.config.gasBufferMultX10)) / 10n;
+          gasCostEth = gasUnits * worstBaseFee;
+        }
+        const bidEth = computeBidEth(expectedProfitEth, gasCostEth, {
+          bribeAllAboveGas: ctx.config.bribeAllAboveGas,
+          bribeBps: ctx.config.bribeBps,
+        });
 
         // Net-EV gate: only go on-chain when profit ETH exceeds gas + bribe by
         // minNetEth. Skips dust whose costs would exceed it (no more net-loss
@@ -1679,11 +1707,6 @@ async function handleHint(
         // (baseFee × gasBufferMult, matching the submitter's maxFee cap) so a
         // bundle that's only +EV at the current low base fee can't land at a loss.
         if (ctx.config.evGate) {
-          const latest = await ctx.provider.getBlock("latest");
-          const baseFee = latest?.baseFeePerGas ?? 0n;
-          const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(ctx.config.defaultGasUsed);
-          const worstBaseFee = (baseFee * BigInt(ctx.config.gasBufferMultX10)) / 10n;
-          const gasCostEth = gasUnits * worstBaseFee;
           const netEth = expectedProfitEth - gasCostEth - bidEth;
           if (netEth < ctx.config.minNetEth) {
             ctx.counters.finalVerifySkipped++;
@@ -1719,7 +1742,8 @@ async function handleHint(
           expectedProfit: sim.netProfit,
           expectedProfitEth,
           bribeBps: ctx.config.bribeBps,
-          gasUsed: sim.gasUsed > 0n ? sim.gasUsed : ctx.config.defaultGasUsed,
+          bribeWei: bidEth,
+          gasUsed: gasUnits,
         });
         ctx.counters.accepted += results.filter((r) => r.accepted).length;
         const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
@@ -2980,7 +3004,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-main().catch((err) => {
-  console.error(`[searcher/live] fatal: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`[searcher/live] fatal: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  });
+}
