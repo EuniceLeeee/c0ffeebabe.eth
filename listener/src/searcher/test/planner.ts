@@ -3,7 +3,7 @@
  * Pure in-memory — no RPC, no anvil.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ethers } from "ethers";
@@ -11,9 +11,17 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { Opportunity } from "../detector/detector.js";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { TemplatePlanner } from "../planner/planner.js";
-import { v4PoolId, type PoolEntry, type TokenEdge, type V4PoolKey } from "../planner/token-graph.js";
+import {
+  buildTokenGraph,
+  v4PoolId,
+  type PoolEntry,
+  type TokenEdge,
+  type TokenQueryBackend,
+  type V4PoolKey,
+} from "../planner/token-graph.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
 import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
+import { backfillV4PoolIdIntoActivePools } from "../backfill-v4-poolid.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
@@ -449,6 +457,16 @@ const POOL_874376 = "0x874376be8231dad99aabf9ef0767b3cc054c60ee";
 const POOL_USDC_WETH_100 = ADDR.UNISWAP_V3_USDC_WETH_100;
 const POOL_USDC_USDT_100 = ADDR.UNISWAP_V3_USDC_USDT_100;
 const POOL_V3FORK_WETH_USDT = "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D";
+const CFG = ethers.getAddress("0xcccccccccc33d538dbc2ee4feab0a7a1ff4e8a94");
+const POOL_V3_WETH_CFG = ethers.getAddress("0x08a10a8b713c03e2fecaa3e355cea18a459ffcbf");
+const POOL_V4_ETH_CFG_ID = "0x267d01a3b23fe2340482242db5396f7544d36f398862efa591e92a079348cd9c";
+const CFG_V4_POOL_KEY: V4PoolKey = {
+  currency0: ethers.ZeroAddress,
+  currency1: CFG,
+  fee: 10001,
+  tickSpacing: 200,
+  hooks: ethers.ZeroAddress,
+};
 const OVR = "0x21BfBDa47A0B4B5b1248c767Ee49F7caA9B23697";
 const POOL_OVR_WETH_INGRAPH = "0xc3f6b81fb9e6db259272026601689e383f94c0b0";
 const POOL_OVR_WETH_ENQUEUED = "0x0b0d6c11d26b58cb25f59bd9b14190c8941e58fc";
@@ -675,6 +693,144 @@ async function testRealCaseReplayFixtures(): Promise<void> {
   }
 }
 
+async function testCfgV4BackfillWritesPoolKeyFields(): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "planner-v4-backfill-"));
+  try {
+    const file = join(dir, "active-pools.json");
+    writeFileSync(file, JSON.stringify({ schemaVersion: 1, pools: [] }, null, 2) + "\n");
+    const poolKeysCalls: Array<{ to: string; data: string; blockTag: string }> = [];
+    const provider = {
+      async send(method: string, params: unknown[]) {
+        assert(method === "eth_call", `v4 backfill resolver: expected eth_call, got ${method}`);
+        const [call, blockTag] = params as [{ to: string; data: string }, string];
+        poolKeysCalls.push({ to: call.to, data: call.data, blockTag });
+        assert(
+          ethers.getAddress(call.to) === ethers.getAddress(ADDR.UNISWAP_V4_POSITION_MANAGER),
+          "v4 backfill resolver: wrong PositionManager target",
+        );
+        assert(blockTag === "latest", "v4 backfill resolver should use latest state");
+        assert(
+          call.data === "0x86b6be7d" + POOL_V4_ETH_CFG_ID.slice(2, 52).padEnd(64, "0"),
+          "v4 backfill resolver: wrong poolKeys(bytes25) calldata",
+        );
+        return ethers.AbiCoder.defaultAbiCoder().encode(
+          ["address", "address", "uint24", "int24", "address"],
+          [CFG_V4_POOL_KEY.currency0, CFG_V4_POOL_KEY.currency1, CFG_V4_POOL_KEY.fee, CFG_V4_POOL_KEY.tickSpacing, CFG_V4_POOL_KEY.hooks],
+        );
+      },
+    } as unknown as ethers.JsonRpcProvider;
+
+    const result = await backfillV4PoolIdIntoActivePools(POOL_V4_ETH_CFG_ID, {
+      provider,
+      activePoolsPath: file,
+    });
+    assert(result.added, "v4 backfill should add the missing CFG poolId");
+    assert(poolKeysCalls.length === 1, `v4 backfill resolver calls ${poolKeysCalls.length}`);
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as { pools: PoolEntry[] };
+    assert(parsed.pools.length === 1, `v4 backfill should write one pool, got ${parsed.pools.length}`);
+    const entry = parsed.pools[0];
+    assert(entry.adapter === "univ4", "v4 backfill entry adapter");
+    assert(entry.poolId === POOL_V4_ETH_CFG_ID, "v4 backfill entry poolId");
+    assert(entry.currency0 === ethers.ZeroAddress, "v4 backfill entry currency0 native ETH");
+    assert(entry.currency1 === CFG, "v4 backfill entry currency1 CFG");
+    assert(entry.fee === 10001, `v4 backfill entry fee ${entry.fee}`);
+    assert(entry.tickSpacing === 200, `v4 backfill entry tickSpacing ${entry.tickSpacing}`);
+    assert(entry.hooks === ethers.ZeroAddress, "v4 backfill entry hooks");
+    assert(entry.fixedTokenIn === ethers.ZeroAddress, "v4 backfill entry fixedTokenIn");
+    assert(entry.fixedTokenOut === CFG, "v4 backfill entry fixedTokenOut");
+
+    const repeat = await backfillV4PoolIdIntoActivePools(POOL_V4_ETH_CFG_ID, {
+      activePoolsPath: file,
+      provider: {
+        async send() {
+          throw new Error("idempotent backfill should not call RPC");
+        },
+      } as unknown as ethers.JsonRpcProvider,
+    });
+    assert(!repeat.added, "v4 backfill should no-op when poolId already exists");
+    const afterRepeat = JSON.parse(readFileSync(file, "utf8")) as { pools: PoolEntry[] };
+    assert(afterRepeat.pools.length === 1, `idempotent v4 backfill wrote ${afterRepeat.pools.length} pools`);
+    console.log("[planner] v4 backfill poolId writes CFG PoolKey fields and is idempotent: PASS");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
+  const backend: TokenQueryBackend = {
+    async call() {
+      throw new Error("CFG routing fixture should not call backend");
+    },
+  };
+  const v3Pool: PoolEntry = {
+    address: POOL_V3_WETH_CFG,
+    adapter: "univ3",
+    token0: REAL_WETH,
+    token1: CFG,
+    fee: 10000,
+    score: 100,
+  };
+  const v4Pool: PoolEntry = {
+    address: ADDR.UNISWAP_V4_POOL_MANAGER,
+    adapter: "univ4",
+    poolId: POOL_V4_ETH_CFG_ID,
+    currency0: CFG_V4_POOL_KEY.currency0,
+    currency1: CFG_V4_POOL_KEY.currency1,
+    fee: CFG_V4_POOL_KEY.fee,
+    tickSpacing: CFG_V4_POOL_KEY.tickSpacing,
+    hooks: CFG_V4_POOL_KEY.hooks,
+    fixedTokenIn: CFG_V4_POOL_KEY.currency0,
+    fixedTokenOut: CFG_V4_POOL_KEY.currency1,
+    score: 1,
+  };
+
+  const withoutV4 = await buildTokenGraph(backend, [v3Pool]);
+  assert(
+    !withoutV4.some((edge) => edge.poolId === POOL_V4_ETH_CFG_ID),
+    "CFG gate baseline: missing v4 pool should not be in routing graph",
+  );
+  const baselinePlanner = new TemplatePlanner();
+  baselinePlanner.setGraph(withoutV4);
+  baselinePlanner.setMaxHops(2);
+  const baselinePlans = await baselinePlanner.plan(
+    opportunityWithImpact(REAL_WETH, CFG, POOL_V3_WETH_CFG, REAL_WETH),
+    [FLASH_SWAP_REPAY],
+  );
+  assert(baselinePlans.length === 0, `CFG gate baseline: expected 0 plans, got ${baselinePlans.length}`);
+
+  const withV4 = await buildTokenGraph(backend, [v3Pool, v4Pool]);
+  const cfgV4Edges = withV4.filter((edge) => edge.poolId === POOL_V4_ETH_CFG_ID);
+  assert(cfgV4Edges.length === 2, `CFG gate fixed: expected 2 directed v4 edges, got ${cfgV4Edges.length}`);
+  assert(
+    cfgV4Edges.some((edge) =>
+      edge.adapterId === "univ4-unlock" &&
+      edge.tokenIn.toLowerCase() === CFG.toLowerCase() &&
+      edge.tokenOut.toLowerCase() === REAL_WETH.toLowerCase() &&
+      edge.nativeCurrency0 === true
+    ),
+    "CFG gate fixed: missing CFG->WETH(native ETH) v4 edge",
+  );
+  const fixedPlanner = new TemplatePlanner();
+  fixedPlanner.setGraph(withV4);
+  fixedPlanner.setMaxHops(2);
+  const fixedPlans = await fixedPlanner.plan(
+    opportunityWithImpact(REAL_WETH, CFG, POOL_V3_WETH_CFG, REAL_WETH),
+    [FLASH_SWAP_REPAY],
+  );
+  assert(fixedPlans.length > 0, `CFG gate fixed: expected enumerable cycle, got ${fixedPlans.length}`);
+  assert(
+    fixedPlans.some((plan) =>
+      plan.tokenPath.edges.some((edge) => edge.target.toLowerCase() === POOL_V3_WETH_CFG.toLowerCase()) &&
+      plan.tokenPath.edges.some((edge) => edge.poolId === POOL_V4_ETH_CFG_ID)
+    ),
+    "CFG gate fixed: expected WETH->CFG(v3)->ETH/WETH(v4) cycle",
+  );
+  console.log(
+    "[planner] CFG v4 route gap flip: pool_in_routing_graph false->true, " +
+      `candidate_plans 0->${fixedPlans.length}: PASS`,
+  );
+}
+
 async function testHighSpreadUniverseSelectionReplay(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "planner-high-spread-universe-"));
   try {
@@ -781,8 +937,10 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesPlanBudgetExhausted();
   await testNativeEthV4RoutesViaWethAlias();
   await testRealCaseReplayFixtures();
+  await testCfgV4BackfillWritesPoolKeyFields();
+  await testCfgV4PoolClosesRoutingCycle();
   await testHighSpreadUniverseSelectionReplay();
-  console.log(`planner PASS (12/12) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);
+  console.log(`planner PASS (14/14) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);
 }
 
 main().catch((err) => {

@@ -16,6 +16,7 @@
     "searcher:ac3": "tsx src/searcher/test/ac3.ts",
     "searcher:liveready": "tsx src/searcher/test/live-readiness.ts",
     "searcher:pool-universe": "tsx src/searcher/build-active-pool-universe.ts",
+    "v4-backfill-poolid": "node --import tsx src/searcher/backfill-v4-poolid.ts",
     "searcher:pooluniverse": "tsx src/searcher/test/pool-universe.ts",
     "searcher:pooluniversev4": "tsx src/searcher/test/build-active-pool-universe-v4.ts",
     "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
