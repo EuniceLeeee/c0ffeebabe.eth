@@ -194,6 +194,31 @@ corrupted code read — `rg -r` swallows a replacement arg; never use `-rn`/`-rl
 memory claiming native-ETH execution was still gapped. Re-verified from clean reads + on-chain data;
 the original pool-gap classification stood. Verify against CODE, not memory — rule 3.)
 
+**The improve-half is now EXECUTABLE (commits `4147ce3`/`a181da1`), not just doctrine.** The three
+codified steps that close a `route_gap_decisive` loss:
+```bash
+# 1. DIAGNOSE (6a): why the accepted bundle didn't land + the winner's per-pool coverage
+cd analysis && npm run bundle-postmortem -- --events <events.jsonl> --tx <our backrun tx> \
+  --rpc http://127.0.0.1:8545 --out /tmp/pm.json
+# 2. AUTO-CLOSE: for each analyzed_competitors[].touchedVenues[] with in_graph=false → backfill the
+#    v4 poolId (poolKey via PositionManager) + append to force-include-poolids.json (idempotent)
+cd listener && npm run auto-close-route-gap -- --report /tmp/pm.json --rpc http://127.0.0.1:8545
+# 3. DEPLOY: the committed force-include file + the verb-added active-pools entry load the pool live
+#    (scripts/deploy-node.sh; then confirm banner forceIncludePoolIds merged>0 + poolId in the graph)
+```
+`auto-close-route-gap` was validated END-TO-END against the REAL node post-mortem report (it read
+`analyzed_competitors[].touchedVenues[]` — NOT the wrong `competing_candidates[]` a fixture-only gate
+first assumed; verify-before-claim on real data caught the schema bug) and correctly extracted the
+missing v4 poolId `0x267d01…` → backfill + force-include.
+
+**HONEST automation state — codified LOGIC, not yet auto-TRIGGERED.** What is automated: the judgment
+that used to be manual (hand-trace the tx, price the winner, classify outbid-vs-route-gap, resolve the
+poolKey, hand-edit active-pools/force-include) is now two commands. What is NOT yet automated: the
+ORCHESTRATION — nothing yet watches `① inclusion`'s `bundle_not_included` events and fires steps 1→2→3.
+That watcher/cron is the remaining piece for hands-off closure; until it exists, run the three steps
+on-demand (or from the hourly cron). Do NOT claim "fully automatic" — it is "one-command diagnose +
+one-command fix", pending the trigger.
+
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
 Codex (gpt-5.5 xhigh) is always the **generator/implementer**; Claude authors the brief
