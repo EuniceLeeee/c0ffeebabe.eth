@@ -27,12 +27,14 @@ const V3_SWAP_IFACE = new ethers.Interface([
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
 ]);
 const FRAX = "0x853d955acef822db058eb8505911ed77f175b99e";
+const WBTC = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 const INVENTORY_PRICED_TOKENS = new Set([
   lower(ADDR.WETH),
   lower(ADDR.USDC),
   lower(ADDR.USDT),
   lower(ADDR.DAI),
   FRAX,
+  WBTC,
 ]);
 const UNPRICED_DUST_RAW = 1000n; // observed residuals were exactly -1 raw unit
 

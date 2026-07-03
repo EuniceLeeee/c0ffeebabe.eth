@@ -31,6 +31,11 @@ export const TOKEN_META: Record<string, { symbol: string; decimals: number; stab
   // in unpriced and the one_leg_inventory spent-check could never see it (Fable-found dead entry).
   // Price it (~$1 stable) so that inventory signal works.
   ["0x853d955acef822db058eb8505911ed77f175b99e"]: { symbol: "FRAX", decimals: 18, stable: true, roughUsd: 1 },
+  // WBTC: absent from TOKEN_META, so a WBTC delta fell into unpriced with the wrong fallback
+  // decimals (18, not 8) — a comparable WBTC atomic loop (R21 winner 0xa00003b2 on the
+  // USDC->WBTC->USDT->USDC leg) classified as winner_style=unknown/unpriceable. roughUsd is a
+  // rough BTC mark (classification only needs it defined; the USD figure is approximate by contract).
+  ["0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"]: { symbol: "WBTC", decimals: 8, roughUsd: 100000 },
 });
 
 export const PROTOCOLS: Record<string, { name: string; kind: string }> = indexByAddress({
