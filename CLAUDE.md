@@ -609,6 +609,20 @@ discovery is needed.
       dispatch one — so "report then yield" cannot silently end the loop. If you are legitimately waiting
       on tracked background work, re-affirm and the stop proceeds (the hook self-clears via
       `stop_hook_active`).
+16. **Fable manual analysis is also a TEST of our analysis tooling — its findings MUST be codified
+    (forcing function, hard).** The fresh fable-5 competitor analyst (Rounds step 4) works from raw
+    on-chain data with ad-hoc curl/jq, so it routinely discovers where our permanent analysis scripts
+    are **wrong** (e.g. `realized_profit_usd` valuation artifact double-counting paired legs) or
+    **missing a metric** (e.g. builder-payment as the robust profit floor; sandwich-bracket detection;
+    public-vs-private distinct-sender classification). When fable's manual pass exposes such an
+    error/omission, the loop MUST **fix or extend the analysis script** (Codex writes, Claude gates)
+    so the next run is script-native — NOT re-derive it by hand every round. Treat a fable-found tooling
+    gap exactly like a rule-13 finding: `owner` + `carry_to_round`, and it BLOCKS closing the cycle as
+    "done" until the script is patched or the gap is explicitly killed by the human. The goal: every
+    competitor analysis Fable can do by hand becomes a reproducible one-command capability
+    (`live-loss --watch` / a `--competitor-census`), so "look at whether other MEV lands +EV backruns"
+    stops depending on a hand analysis. (Codified so far: builder_payment metric. Pending: sandwich
+    detection, public/private classification — carry until scripted.)
 
 ### Boundary (CLI-orchestrated by Claude)
 
