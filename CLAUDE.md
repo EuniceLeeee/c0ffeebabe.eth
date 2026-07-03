@@ -806,8 +806,13 @@ discovery is needed.
     "done" until the script is patched or the gap is explicitly killed by the human. The goal: every
     competitor analysis Fable can do by hand becomes a reproducible one-command capability
     (`live-loss --watch` / a `--competitor-census`), so "look at whether other MEV lands +EV backruns"
-    stops depending on a hand analysis. (Codified so far: builder_payment metric. Pending: sandwich
-    detection, public/private classification — carry until scripted.)
+    stops depending on a hand analysis. (Codified: builder_payment metric; sandwich detection
+    (`detectSandwichPattern`); native-ETH atomic-loop + native-ETH one-leg-inventory classification;
+    public/private `sender_flow` (`analysis/src/pnl/sender-flow.ts`); `victim_source`
+    (`analysis/src/pnl/victim-source.ts`, task #22). NOT determinable from data we hold — stated, not
+    faked: public-mempool membership for out-of-window txs (needs an external mempool archive) and
+    positive MEV-Share identification (needs the Flashbots MEV-Share stream); `sender_flow` returns
+    labeled-confidence proxies for these, never a fabricated `mev-share`/`public` proof.)
 
 ### Boundary (CLI-orchestrated by Claude)
 
