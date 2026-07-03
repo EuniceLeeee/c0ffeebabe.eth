@@ -648,10 +648,23 @@ human gate** — the loop executes but cannot decide production.
 ## Safety Rules
 
 1. **Broadcasting transactions to mainnet (and signing with the private key) requires explicit user authorization.**
-   The user has authorized live bundle submission for this project (granted 2026-06-10).
-   Even when authorized, only broadcast a bundle that passed a **profitable on-fork simulation**
-   this run (`sim.success` + the assert-balance flash-repay guard). **Never broadcast from an
-   unverified or half-modified pipeline** — confirm the dry-run produces a profitable bundle first.
+   The user authorized live bundle submission (2026-06-10) and, on 2026-07-03, authorized a
+   **BOUNDED-LIVE test**: the searcher may broadcast autonomously ONLY inside a hard, script-enforced
+   envelope, so worst-case loss is bounded to a tiny test wallet.
+   - **The bounded-live envelope (all must hold, else stay dry-run):** live is gated by the node-side
+     marker `/opt/MEV/.deploy-live`; `deploy-node.sh` REFUSES live unless the signing wallet balance
+     `≤ MEV_LIVE_MAX_WALLET_ETH` (default 0.2 ETH) AND `SEARCHER_EV_GATE=1`. Flash-loan arbs are atomic
+     (a bad arb reverts, principal never at risk) + the BotVM executor holds no standing funds → the
+     max loss is the test wallet's gas/bribe balance. Verified 2026-07-03: signer
+     `0xb8578B6de173C8554FF0390dB5a7effA567DDA3c` = 0.0027 ETH, BotVM `0x4aF9495C…5BCe` = empty.
+   - **Still hard (never autonomous — these need a fresh explicit human OK):** funding the test wallet
+     above the cap, raising `MEV_LIVE_MAX_WALLET_ETH`, swapping in the real-funds private key, or any
+     broadcast outside the bounded envelope. The autonomous cron must NEVER do these.
+   - **Safety valve:** a bounded-live round reads the test-wallet balance at the start; if it dropped
+     below 50% of its starting balance, STOP, `rm /opt/MEV/.deploy-live` (revert to dry-run), and report.
+   - Even bounded, only broadcast a bundle that passed a **profitable on-fork/EV-gated simulation**
+     (`sim.success` + net-EV + the assert-balance flash-repay guard). Never broadcast from an
+     unverified or half-modified pipeline. **Default is still dry-run** (Rule 2); live is the marked exception.
 2. Default to dry-run (`SEARCHER_DRY_RUN=1` → `DryRunBundleRouter`); flip to production only deliberately.
 3. All correctness testing happens on local forks (`anvil` or `forge test --fork-url`).
 4. Do not commit `.env` files containing real RPC URLs or private keys.
