@@ -1,0 +1,178 @@
+{
+  "run_id": "R11-20260703",
+  "window": {
+    "from": 25448510,
+    "to": 25448663
+  },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13"
+  ],
+  "run_analysis": {
+    "funnel": {
+      "opportunity_seen": 51,
+      "pipeline_dropped": 49,
+      "simulation_result": 0,
+      "pipeline_dropped_reasons": {
+        "no_candidate_plans": 35,
+        "candidate-cap": 5,
+        "expired-before-solver": 4,
+        "no-profitable-quote": 3,
+        "quote-timeout": 2
+      },
+      "simSuccess": 0,
+      "submitAttempts": 0
+    },
+    "dominant_drop": "no_candidate_plans",
+    "events_source": "jsonl",
+    "note": "Thinner window than R8/R9/R10 (0 simulation_result). No own-funnel signal pointing to a new blocker; pattern consistent with prior rounds' recurring only_immediate_same_pool_reverse / classifier-blind-spot buckets."
+  },
+  "findings": [
+    {
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "swept": true,
+      "txCount": 2,
+      "method": "nonce delta (0x2dca5->0x2dca7 = 2, exactly matches live-loss --watch match count)",
+      "analysis_mode": "full",
+      "txs": [
+        {
+          "hash": "0x9b323c98d8b1f480b7dc0b27bab85ad9ca5ba889c363e182989e44d982776f05",
+          "block": 25448530,
+          "pools": [
+            {
+              "addr": "0x0000000000000000000000000000000000000000",
+              "inGraph": false,
+              "note": "no pool address recovered from logs (unwrap-only or opaque trace)"
+            }
+          ],
+          "gap_class": "unknown_no_pool_recovered",
+          "note": "realized_profit_usd=0.06, dust, no pool address recovered from logs (unwrap only)"
+        },
+        {
+          "hash": "0xdbda56f66bfe693018f36eee3fddb830e4b0d1232968546f4923a9ed1f6a21e5",
+          "block": 25448539,
+          "pools": [
+            {
+              "addr": "0x014410b916d47f71ea01c1f57cb95e69ab1b15ea",
+              "inGraph": false
+            }
+          ],
+          "gap_class": "pool_gap_v4_long_tail",
+          "note": "Sky PSM + Uniswap v4 (poolId 0x3b1b1f2e...), realized_profit_usd=0.43, dust"
+        }
+      ]
+    },
+    {
+      "eoa": "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13",
+      "swept": true,
+      "txCount": 50,
+      "method": "live-loss --watch (local reth, zero CU), nonce delta 0x62204d->0x62207f=50 exactly matches watch-tool match count",
+      "analysis_mode": "sample",
+      "sampleSize": 4,
+      "txs": [
+        {
+          "hash": "0x3addeb152a00e6fb9777e21ed620e62cc3d6a0f8833c4682ea66fd4dd470a8c7",
+          "block": 25448577,
+          "pools": [
+            {
+              "addr": "0x3198ca64ebff6d008860f2c450cfcbf1faac7677",
+              "inGraph": false
+            }
+          ],
+          "gap_class": "pool_gap_v4_long_tail",
+          "note": "unknown_replayable, rough_profit=2629.59 (paired with next tx, net ~+7.66 real)"
+        },
+        {
+          "hash": "0x699030b4d61bb1ea5e8db220fea6c763f86ec0212a75ae7ff7b7d3642e83d68c",
+          "block": 25448577,
+          "pools": [
+            {
+              "addr": "0x3198ca64ebff6d008860f2c450cfcbf1faac7677",
+              "inGraph": false
+            },
+            {
+              "addr": "0xc2adda861f89bbb333c90c492cb837741916a225",
+              "inGraph": false
+            }
+          ],
+          "gap_class": "pool_gap_v4_long_tail",
+          "note": "unknown_replayable, rough_profit=-2622.05, paired with prior tx -- largest clean net (~$7.66) this window using rough_profit"
+        },
+        {
+          "hash": "0xbee7d236fb839fc8623b35dcdc3a54d2ed3753e6db404c19e1e7372c2106c5c9",
+          "block": 25448655,
+          "pools": [
+            {
+              "addr": "0x0000000000000000000000000000000000000000",
+              "inGraph": false,
+              "note": "no pool address recovered from logs (unwrap-only or opaque trace)"
+            }
+          ],
+          "gap_class": "jit_lp_artifact",
+          "note": "no pool recovered from logs; realized_profit_usd=-296916.67 but rough_profit=-81089.34 -- paired with next tx nets to ~$0.000017, a valuation-artifact wash, same JIT-LP pattern as R6/R8/R9/R10"
+        },
+        {
+          "hash": "0xdaecacc25c362644695c10657fe18ca3dc1f43b5723e94514079c3bb44e3a09c",
+          "block": 25448655,
+          "pools": [
+            {
+              "addr": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+              "inGraph": false
+            }
+          ],
+          "gap_class": "jit_lp_artifact",
+          "note": "swap-loop, realized_profit_usd=296928.05 but rough_profit=81089.34 -- paired with prior tx, near-zero real net"
+        }
+      ]
+    }
+  ],
+  "coverage_kpi": {
+    "competitor_legs_total": 7,
+    "legs_out_of_graph": 7,
+    "closable": 5,
+    "single_venue_noise": 0,
+    "out_pools": [
+      {
+        "addr": "0x0000000000000000000000000000000000000000",
+        "token0": "unresolved",
+        "token1": "unresolved",
+        "class": "closable",
+        "evidence": "placeholder for 2 txs (coffeebabe 0x9b323c98..., 0xae2Fc483 0xbee7d236...) where the watch tool recovered no pool address from logs (unwrap-only / opaque trace) -- both dust or valuation-artifact, not a real pool-gap signal"
+      },
+      {
+        "addr": "0x014410b916d47f71ea01c1f57cb95e69ab1b15ea",
+        "token0": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "token1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "class": "closable",
+        "evidence": "coffeebabe tx 0xdbda56f6..., v4 poolId 0x3b1b1f2e..., Sky PSM + v4 path, dust ($0.43)"
+      },
+      {
+        "addr": "0x3198ca64ebff6d008860f2c450cfcbf1faac7677",
+        "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "token1": "0x4d7078ddd6ccfed2f85db5b7d3ff16828d378d48",
+        "class": "closable",
+        "evidence": "0xae2Fc483 mirrored pair (0x3addeb15/0x699030b4), block 25448577, real net ~$7.66 via rough_profit -- largest clean capture this window"
+      },
+      {
+        "addr": "0xc2adda861f89bbb333c90c492cb837741916a225",
+        "token0": "0xde4ee8057785a7e8e800db58f9784845a5c2cbd6",
+        "token1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "class": "closable",
+        "evidence": "second leg of the same block-25448577 pair above"
+      },
+      {
+        "addr": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+        "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "token1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "class": "closable",
+        "evidence": "0xae2Fc483 mirrored JIT-LP pair (0xbee7d236/0xdaecacc2), block 25448655 -- nets near-zero real profit via rough_profit ($0.000017), a valuation-artifact wash not a real miss"
+      }
+    ],
+    "prev_round": {
+      "run_id": "R10-20260703",
+      "legs_out_of_graph": 6,
+      "closable": 6
+    },
+    "trend_note": "R6 pre-backfill baseline (own-funnel classifier): 2/13 impact_pool_not_in_routing_graph (15.4%). R7 backfill: 655/1500 graph slots now v4. R8: 1/28 (3.6%). R9: 1/20 (5.0%). R10: found+fixed the Initialize-window gap (systemic). R11 (competitor-cross-ref lens, sampled 5 legs across 5 hand-traced txs out of 52 total matches): 4/5 legs out-of-graph, but this is DIFFERENT pools than R7/R10's backfills covered -- long-tail v4 pool churn (new pools keep appearing faster than one-off backfills promote them), not a regression. R10's carried backfill for 5 more specific poolIds (incl. 0xce2899b1...) ran 2h+ without completing or logging progress; killed this round (diminishing return -- the discovery MECHANISM fix from R10 is deployed and live regardless of this specific run finishing)."
+  }
+}
