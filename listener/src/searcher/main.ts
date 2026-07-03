@@ -110,6 +110,8 @@ interface LiveConfig {
   poolUniverseTopN: number;
   poolUniverseMinScore: number;
   poolUniverseForceInclude: string[];
+  poolUniverseHighSpreadPairQuota: number;
+  poolUniverseHighSpreadMinFee: number;
   pairCompletion: boolean;
   recordLiveFixtures: boolean;
   liveFixtureDir: string;
@@ -343,6 +345,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "1500"),
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
     poolUniverseForceInclude: parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE),
+    poolUniverseHighSpreadPairQuota: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_PAIR_QUOTA ?? "150"),
+    poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
     pairCompletion: process.env.SEARCHER_PAIR_COMPLETION !== "0",
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
@@ -443,6 +447,8 @@ async function main(): Promise<void> {
   console.log(
     `[searcher/live] poolUniverse=${config.poolUniversePath} ` +
       `topN=${config.poolUniverseTopN} minScore=${config.poolUniverseMinScore} ` +
+      `highSpreadPairQuota=${config.poolUniverseHighSpreadPairQuota} ` +
+      `highSpreadMinFee=${config.poolUniverseHighSpreadMinFee} ` +
       `pairCompletion=${config.pairCompletion ? "on" : "off"}`,
   );
   console.log(
@@ -469,6 +475,8 @@ async function main(): Promise<void> {
     maxPools: config.poolUniverseTopN,
     minScore: config.poolUniverseMinScore,
     forceInclude: config.poolUniverseForceInclude,
+    highSpreadPairQuota: config.poolUniverseHighSpreadPairQuota,
+    highSpreadMinFee: config.poolUniverseHighSpreadMinFee,
   });
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks

@@ -3,12 +3,17 @@
  * Pure in-memory — no RPC, no anvil.
  */
 
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { Opportunity } from "../detector/detector.js";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { TemplatePlanner } from "../planner/planner.js";
-import { v4PoolId, type TokenEdge, type V4PoolKey } from "../planner/token-graph.js";
+import { v4PoolId, type PoolEntry, type TokenEdge, type V4PoolKey } from "../planner/token-graph.js";
+import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
@@ -36,6 +41,15 @@ function swap(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ
     slotKind: "swap",
     score: 100,
   };
+}
+
+function poolToSwapEdges(pool: PoolEntry): TokenEdge[] {
+  if (!pool.token0 || !pool.token1) return [];
+  const adapterId = pool.adapter === "univ2" ? "univ2-swap" : "univ3-swap";
+  return [
+    { ...swap(pool.token0, pool.token1, pool.address, adapterId), score: pool.score },
+    { ...swap(pool.token1, pool.token0, pool.address, adapterId), score: pool.score },
+  ];
 }
 
 function opportunity(): Opportunity {
@@ -661,6 +675,98 @@ async function testRealCaseReplayFixtures(): Promise<void> {
   }
 }
 
+async function testHighSpreadUniverseSelectionReplay(): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "planner-high-spread-universe-"));
+  try {
+    const file = join(dir, "active-pools.json");
+    const filler = Array.from({ length: 1500 }, (_unused, i) => ({
+      address: `0x${(0x600000 + i).toString(16).padStart(40, "0")}`,
+      adapter: "univ3",
+      token0: `0x${(0x700000 + i * 2).toString(16).padStart(40, "0")}`,
+      token1: `0x${(0x700001 + i * 2).toString(16).padStart(40, "0")}`,
+      fee: 500,
+      score: 3000 - i,
+    }));
+    writeFileSync(file, JSON.stringify({
+      pools: [
+        ...filler,
+        {
+          address: POOL_1151_USDT_A,
+          adapter: "univ3",
+          token0: REAL_USDT,
+          token1: TOK_1151,
+          fee: 10000,
+          score: 7,
+          swapCount30d: 7,
+        },
+        {
+          address: POOL_1151_USDT_B,
+          adapter: "univ3",
+          token0: REAL_USDT,
+          token1: TOK_1151,
+          fee: 10000,
+          score: 9,
+          swapCount30d: 9,
+        },
+      ],
+    }));
+
+    const oldSelected = loadPoolUniverse(file, {
+      maxPools: 1500,
+      minScore: 1,
+      highSpreadPairQuota: 0,
+    });
+    assert(
+      !oldSelected.some((pool) => pool.address === POOL_1151_USDT_A || pool.address === POOL_1151_USDT_B),
+      "high-spread replay setup: old score-only topN should exclude both real low-score pools",
+    );
+    const oldPlanner = new TemplatePlanner();
+    oldPlanner.setGraph(oldSelected.flatMap(poolToSwapEdges));
+    oldPlanner.setMaxHops(2);
+    const oldPlans = await oldPlanner.plan(
+      opportunityWithImpact(REAL_USDT, TOK_1151, POOL_1151_USDT_A, REAL_USDT),
+      [FLASH_SWAP_REPAY],
+    );
+    assert(oldPlans.length === 0, `high-spread replay before: expected 0 plans, got ${oldPlans.length}`);
+    const oldDiagnostic = oldPlanner.lastNoCandidateDiagnostic();
+    assert(
+      oldDiagnostic?.classification === "impact_pool_not_in_routing_graph",
+      `high-spread replay before: class ${oldDiagnostic?.classification}`,
+    );
+
+    const highSpreadSelected = loadPoolUniverse(file, {
+      maxPools: 1500,
+      minScore: 1,
+      highSpreadPairQuota: 150,
+      highSpreadMinFee: 10000,
+    });
+    const completion = selectPairCompletionPools(
+      highSpreadSelected,
+      loadPoolUniverse(file, { maxPools: 0, minScore: 1 }),
+    );
+    const completed = mergePoolRegistries(highSpreadSelected, completion);
+    assert(
+      completed.some((pool) => pool.address === POOL_1151_USDT_A) &&
+        completed.some((pool) => pool.address === POOL_1151_USDT_B),
+      "high-spread replay after: high-fee pair floor plus pair-completion should include both real pools",
+    );
+    const planner = new TemplatePlanner();
+    planner.setGraph(completed.flatMap(poolToSwapEdges));
+    planner.setMaxHops(2);
+    const plans = await planner.plan(
+      opportunityWithImpact(REAL_USDT, TOK_1151, POOL_1151_USDT_A, REAL_USDT),
+      [FLASH_SWAP_REPAY],
+    );
+    assert(plans.length > 0, `high-spread replay after: expected >0 plans, got ${plans.length}`);
+    console.log(
+      "[planner] high-spread universe replay 0x1151/USDT: " +
+        `score-only excluded->${oldPlans.length} plans, high-spread quota+pair-completion->${plans.length} plans: PASS`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   await testPrunesSamePoolReverse();
   await testKeepsCrossVenueReverse();
@@ -675,7 +781,8 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesPlanBudgetExhausted();
   await testNativeEthV4RoutesViaWethAlias();
   await testRealCaseReplayFixtures();
-  console.log(`planner PASS (12/12) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length})`);
+  await testHighSpreadUniverseSelectionReplay();
+  console.log(`planner PASS (12/12) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);
 }
 
 main().catch((err) => {

@@ -72,6 +72,44 @@ async function main(): Promise<void> {
     assert(!bounded.some((pool) => pool.address === poolAddress(0x1000 + 1500)), "topN=1500 should cut rank 1501");
     console.log("[pool-universe] topN=1500 bounded/ranked: PASS");
 
+    const highSpreadFile = join(dir, "high-spread-pools.json");
+    const topPairA = [poolAddress(0xd001), poolAddress(0xd002)] as const;
+    const topPairB = [poolAddress(0xd003), poolAddress(0xd004)] as const;
+    const topPairC = [poolAddress(0xd005), poolAddress(0xd006)] as const;
+    const rank4 = poolAddress(0x4104);
+    const rank5 = poolAddress(0x4105);
+    const highSpreadSamePair = poolAddress(0x4106);
+    const highSpreadTail = poolAddress(0x4107);
+    writeFileSync(highSpreadFile, JSON.stringify({
+      pools: [
+        { address: poolAddress(0x4101), adapter: "univ3", token0: topPairA[0], token1: topPairA[1], fee: 500, score: 100 },
+        { address: poolAddress(0x4102), adapter: "univ3", token0: topPairB[0], token1: topPairB[1], fee: 500, score: 99 },
+        { address: poolAddress(0x4103), adapter: "univ3", token0: topPairC[0], token1: topPairC[1], fee: 500, score: 98 },
+        { address: rank4, adapter: "univ3", token0: poolAddress(0xd007), token1: poolAddress(0xd008), fee: 500, score: 97 },
+        { address: rank5, adapter: "univ3", token0: poolAddress(0xd009), token1: poolAddress(0xd00a), fee: 500, score: 96 },
+        { address: highSpreadSamePair, adapter: "univ3", token0: topPairA[0], token1: topPairA[1], fee: 10000, score: 4 },
+        { address: highSpreadTail, adapter: "univ3", token0: poolAddress(0xd00b), token1: poolAddress(0xd00c), fee: 10000, score: 3 },
+      ],
+    }));
+    const oldHighSpreadSelection = loadPoolUniverse(highSpreadFile, {
+      maxPools: 5,
+      minScore: 1,
+      highSpreadPairQuota: 0,
+    });
+    assert(!oldHighSpreadSelection.some((pool) => pool.address === highSpreadTail), "old score-only topN should cut low-score high-fee tail");
+    const highSpreadSelected = loadPoolUniverse(highSpreadFile, {
+      maxPools: 5,
+      minScore: 1,
+      highSpreadPairQuota: 2,
+      highSpreadMinFee: 10000,
+    });
+    assert(highSpreadSelected.length === 5, `high-spread quota should preserve cap, got ${highSpreadSelected.length}`);
+    assert(highSpreadSelected.some((pool) => pool.address === highSpreadTail), "high-spread quota should admit unique low-score high-fee pair");
+    assert(!highSpreadSelected.some((pool) => pool.address === highSpreadSamePair), "high-spread quota should not duplicate an already represented pair");
+    assert(highSpreadSelected.some((pool) => pool.address === rank4), "high-spread quota should fill unused quota by score");
+    assert(!highSpreadSelected.some((pool) => pool.address === rank5), "high-spread quota should displace the lowest score-only slot");
+    console.log("[pool-universe] high-spread pair quota admission: PASS");
+
     const unlimited = loadPoolUniverse(rankedFile, { maxPools: 0, minScore: 1 });
     assert(unlimited.length === 1502, `topN=0 should load all pools, got ${unlimited.length}`);
     console.log("[pool-universe] topN=0 unlimited: PASS");
@@ -202,7 +240,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe PASS (7/7)");
+  console.log("pool-universe PASS (8/8)");
 }
 
 main().catch((err) => {

@@ -29,6 +29,8 @@ export interface PoolUniverseLoadOptions {
   maxPools?: number;
   minScore?: number;
   forceInclude?: string[];
+  highSpreadPairQuota?: number;
+  highSpreadMinFee?: number;
 }
 
 const ADAPTERS = new Set<PoolEntry["adapter"]>([
@@ -63,13 +65,81 @@ export function loadPoolUniverse(
 
   const minScore = opts.minScore ?? 0;
   const maxPools = opts.maxPools && opts.maxPools > 0 ? opts.maxPools : Infinity;
+  const highSpreadPairQuota = Math.max(0, Math.floor(opts.highSpreadPairQuota ?? 0));
+  const highSpreadMinFee = Math.max(0, Math.floor(opts.highSpreadMinFee ?? 10_000));
   const parsedPools = rawPools
     .map((raw, i) => parsePoolUniverseEntry(raw, `${path}.pools[${i}]`));
   const pools = parsedPools
     .filter((pool) => (pool.score ?? 0) >= minScore)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
-  return appendForceIncluded(pools.slice(0, maxPools), parsedPools, opts.forceInclude ?? []);
+  return appendForceIncluded(
+    selectRankedPools(pools, maxPools, highSpreadPairQuota, highSpreadMinFee),
+    parsedPools,
+    opts.forceInclude ?? [],
+  );
+}
+
+function selectRankedPools(
+  pools: PoolUniverseEntry[],
+  maxPools: number,
+  highSpreadPairQuota: number,
+  highSpreadMinFee: number,
+): PoolUniverseEntry[] {
+  if (!Number.isFinite(maxPools) || highSpreadPairQuota <= 0) {
+    return pools.slice(0, maxPools);
+  }
+  const cappedMax = Math.max(0, Math.floor(maxPools));
+  if (cappedMax === 0) return [];
+
+  const selected: PoolUniverseEntry[] = [];
+  const seenPools = new Set<string>();
+  const representedPairs = new Set<string>();
+  const primaryLimit = Math.max(0, cappedMax - Math.min(highSpreadPairQuota, cappedMax));
+
+  for (const pool of pools.slice(0, primaryLimit)) {
+    appendSelected(pool, selected, seenPools, representedPairs);
+  }
+
+  const highSpreadCandidates = pools
+    .filter((pool) => !seenPools.has(poolRegistryKey(pool)) && impliedSpreadFee(pool) >= highSpreadMinFee)
+    .sort((a, b) =>
+      impliedSpreadFee(b) - impliedSpreadFee(a) ||
+      (b.score ?? 0) - (a.score ?? 0) ||
+      (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
+    );
+  for (const pool of highSpreadCandidates) {
+    if (selected.length >= cappedMax) break;
+    const pairKey = unorderedTokenPairKey(pool);
+    if (pairKey === null || representedPairs.has(pairKey)) continue;
+    appendSelected(pool, selected, seenPools, representedPairs);
+  }
+
+  for (const pool of pools) {
+    if (selected.length >= cappedMax) break;
+    if (seenPools.has(poolRegistryKey(pool))) continue;
+    appendSelected(pool, selected, seenPools, representedPairs);
+  }
+
+  return selected;
+}
+
+function appendSelected(
+  pool: PoolUniverseEntry,
+  selected: PoolUniverseEntry[],
+  seenPools: Set<string>,
+  representedPairs: Set<string>,
+): void {
+  selected.push(pool);
+  seenPools.add(poolRegistryKey(pool));
+  const pairKey = unorderedTokenPairKey(pool);
+  if (pairKey !== null) representedPairs.add(pairKey);
+}
+
+function impliedSpreadFee(pool: PoolUniverseEntry): number {
+  if (typeof pool.fee === "number") return pool.fee;
+  if (pool.adapter === "univ2") return 3000;
+  return 0;
 }
 
 export function selectPairCompletionPools(
