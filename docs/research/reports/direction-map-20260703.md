@@ -130,6 +130,22 @@ to "coverage=14, detection=41" with numbers. (Caveats: per-tx summary picks pool
 detection_gap; net_per_block carries the known JIT-LP valuation noise — treat counts as direction,
 not P&L.)
 
+## Is the ceiling OURS or the market's? (the user's key challenge — ANSWERED: market, for our posture)
+
+Ran coffeebabe alone (our EXACT class: atomic/spatial backrun) over ~2.3h: 11 txs (~5 landed
+backruns/h), **total net ~$2**, `detection_gap=0` (none of its not-seen txs hit a pool we have
+but missed). **Hand-verified the top capture** (script `realized_profit_usd`=$108,884 is a
+paired-leg valuation artifact — NOT trustworthy): its real **builder payment = 0.001252 ETH =
+$2.13** (priority fee; a bot bribes 50-90% of profit → real profit ~a few $). Dust, confirmed.
+
+**So the ~1/5h ceiling is a MARKET fact for atomic backrun on public flow, not our capability
+gap.** A top same-posture bot with better latency+coverage still extracts only dust. Our real
+capability gaps (2 v4 pool_gap, some unknown venues) would only unlock MORE dust. The non-dust
+money is out of posture (ae2Fc483 sandwiching $693 tips; v4/large-aggregator + JIT). → the
+production lever is the **posture decision below**, not another atomic-backrun capability build.
+(Caveat: coffeebabe + 2 windows [2.3h + Fable 6h]; a 24h sweep would fully nail it, but the
+hand-verified builder payment makes the direction solid.)
+
 ## Posture decision escalated to human (rule-14 gate)
 
 **The fork:** our atomic-backrun class is near ceiling on public flow; the only path to the *large*
