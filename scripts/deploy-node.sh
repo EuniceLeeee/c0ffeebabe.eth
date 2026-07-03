@@ -121,8 +121,20 @@ REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
 REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-0}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
-say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"
-if timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+# Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
+# universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of chain head (~7200 = ~1 day).
+# (The 30-min cron keeps it far fresher, so this check usually skips; it only fires if the cron lapsed.)
+# Block-based, NOT mtime — mtime is a deceptive deploy re-save; toBlock is the real data freshness.
+REINDEX_MAX_STALE_BLOCKS="${POOL_UNIVERSE_MAX_STALE_BLOCKS:-7200}"
+REINDEX_HEAD=$(curl -s http://127.0.0.1:8545 -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
+  | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["result"],16))' 2>/dev/null || echo 0)
+REINDEX_CUR_TOBLOCK=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(int(str(d.get("toBlock",0))))' "$REINDEX_OUT" 2>/dev/null || echo 0)
+if [ "$REINDEX_HEAD" -gt 0 ] && [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
+   && [ "$((REINDEX_HEAD - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ]; then
+  say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, head=$REINDEX_HEAD, $((REINDEX_HEAD - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
+elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"; \
+   timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
        POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS="$REINDEX_V4_BACKFILL" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \
