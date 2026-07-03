@@ -47,46 +47,53 @@ export async function autoCloseRouteGap(
     };
   }
 
-  if (!Array.isArray(report.competing_candidates)) {
-    throw new Error("postmortem report competing_candidates must be an array");
-  }
+  // Real bundle-postmortem schema (verified against the node): the winner's per-pool coverage is in
+  // analyzed_competitors[].touchedVenues[] { protocol, id, in_graph } — NOT competing_candidates
+  // (which only carries hash/index/backrun_positioned). Close every not-in-graph venue observed.
+  const competitors = Array.isArray(report.analyzed_competitors) ? report.analyzed_competitors : [];
 
   const backfill = opts.backfillV4PoolIdFn ?? backfillV4PoolId;
   const closedV4PoolIds: string[] = [];
   const forceIncludeAdded: string[] = [];
   const needsActivePools: string[] = [];
+  const seen = new Set<string>();
 
-  for (const rawCandidate of report.competing_candidates) {
-    if (!isRecord(rawCandidate) || rawCandidate.in_graph !== false) continue;
-    const protocol = rawCandidate.protocol;
-    const id = rawCandidate.id;
-    if (typeof protocol !== "string" || typeof id !== "string") {
-      throw new Error("competing_candidates entries must include string protocol and id");
+  for (const competitor of competitors) {
+    if (!isRecord(competitor) || !Array.isArray(competitor.touchedVenues)) continue;
+    for (const rawVenue of competitor.touchedVenues) {
+      if (!isRecord(rawVenue) || rawVenue.in_graph !== false) continue;
+      const protocol = rawVenue.protocol;
+      const id = rawVenue.id;
+      if (typeof protocol !== "string" || typeof id !== "string") continue;
+      const key = `${protocol}:${id.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      if (protocol === "univ4") {
+        const poolId = normalizePoolId(id);
+        const result = await backfill(poolId, {
+          rpcUrl: opts.rpcUrl,
+          activePoolsPath: opts.activePoolsPath,
+        });
+        if (result.added) closedV4PoolIds.push(result.poolId);
+        const appendResult = appendForceIncludePoolIds([poolId], opts.forceIncludePath);
+        forceIncludeAdded.push(...appendResult.added);
+        continue;
+      }
+
+      if (protocol === "univ2" || protocol === "univ3") {
+        const address = normalizeAddress(id);
+        const appendResult = appendForceIncludePoolIds([address], opts.forceIncludePath);
+        forceIncludeAdded.push(...appendResult.added);
+        const note = `needs_active_pools:${address}`;
+        needsActivePools.push(note);
+        log(note);
+        continue;
+      }
+
+      // Unknown protocol in real data: skip (don't crash the auto-fix loop).
+      log(`[auto-close] skipping unsupported venue protocol: ${protocol}`);
     }
-
-    if (protocol === "univ4") {
-      const poolId = normalizePoolId(id);
-      const result = await backfill(poolId, {
-        rpcUrl: opts.rpcUrl,
-        activePoolsPath: opts.activePoolsPath,
-      });
-      if (result.added) closedV4PoolIds.push(result.poolId);
-      const appendResult = appendForceIncludePoolIds([poolId], opts.forceIncludePath);
-      forceIncludeAdded.push(...appendResult.added);
-      continue;
-    }
-
-    if (protocol === "univ2" || protocol === "univ3") {
-      const address = normalizeAddress(id);
-      const appendResult = appendForceIncludePoolIds([address], opts.forceIncludePath);
-      forceIncludeAdded.push(...appendResult.added);
-      const note = `needs_active_pools:${address}`;
-      needsActivePools.push(note);
-      log(note);
-      continue;
-    }
-
-    throw new Error(`unsupported competing candidate protocol: ${protocol}`);
   }
 
   log(

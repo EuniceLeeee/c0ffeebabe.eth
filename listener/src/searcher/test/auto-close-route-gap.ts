@@ -35,16 +35,19 @@ const CFG_V4_POOL_KEY = {
 };
 const V3_POOL = ethers.getAddress("0x08a10a8b713c03e2fecaa3e355cea18a459ffcbf");
 
+// Real bundle-postmortem schema: the winner's per-pool coverage is analyzed_competitors[].touchedVenues[].
 function writeReport(
   path: string,
   routeGapDecisive: boolean,
-  competingCandidates: Array<Record<string, unknown>>,
+  touchedVenues: Array<Record<string, unknown>>,
 ): void {
   writeFileSync(
     path,
     JSON.stringify({
-      verdict: { route_gap_decisive: routeGapDecisive },
-      competing_candidates: competingCandidates,
+      verdict: { route_gap_decisive: routeGapDecisive, winner: "0xwinner" },
+      analyzed_competitors: [
+        { hash: "0xwinner", transactionIndex: 25, touchedVenues },
+      ],
     }, null, 2) + "\n",
   );
 }
