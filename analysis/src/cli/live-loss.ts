@@ -11,7 +11,7 @@ import { aggregateNetProfit, priceArb, fetchEthUsd, type PricedLeg, type V4Swap 
 import { ADDR, lower, short, TOPICS } from "../registry/protocols.js";
 import { resolveV4PoolKeys } from "../registry/v4-poolkeys.js";
 import { isPublicRouter } from "../registry/routers.js";
-import { RpcClient } from "../rpc/client.js";
+import { RpcClient, toQuantity } from "../rpc/client.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
 import {
   findVenueByFactory,
@@ -112,6 +112,8 @@ interface WatchReport {
   realized_profit_usd: number | null; // ERC20(incl WETH@ethUsd) + native ETH (v4-aware)
   builder_payment_eth: number | null;
   builder_payment_usd: number | null;
+  lp_action: boolean;
+  jit_lp: boolean;
   profit_confidence: string;
   unpriced_deltas: number;
   unpriced_delta_symbols: string[];
@@ -156,6 +158,38 @@ export interface PoolIdentity {
   pool: string;
   venue?: VenueId | "unknown";
   factory?: string | null;
+}
+
+export interface NonceCheckResult {
+  ok: boolean;
+  missing: number;
+}
+
+export function nonceCheck(nonceDelta: number, matchedFrom: number): NonceCheckResult {
+  const missing = Math.max(0, nonceDelta - matchedFrom);
+  return { ok: missing === 0, missing };
+}
+
+const LP_MINT_TOPICS = new Set([
+  lower(TOPICS.univ2Mint),
+  lower(TOPICS.univ3Mint),
+]);
+const LP_BURN_TOPICS = new Set([
+  lower(TOPICS.univ2Burn),
+  lower(TOPICS.univ3Burn),
+]);
+const LP_ACTION_TOPICS = new Set([...LP_MINT_TOPICS, ...LP_BURN_TOPICS]);
+
+export function classifyLpAction(logs: any[]): { lp_action: boolean; jit_lp: boolean } {
+  let hasMint = false;
+  let hasBurn = false;
+  for (const log of logs ?? []) {
+    const topic0 = lower(String(log?.topics?.[0] ?? ""));
+    if (!LP_ACTION_TOPICS.has(topic0)) continue;
+    if (LP_MINT_TOPICS.has(topic0)) hasMint = true;
+    if (LP_BURN_TOPICS.has(topic0)) hasBurn = true;
+  }
+  return { lp_action: hasMint || hasBurn, jit_lp: hasMint && hasBurn };
 }
 
 async function readJsonl(path: string): Promise<any[]> {
@@ -265,6 +299,7 @@ async function runWatchMode(): Promise<void> {
   const pricedTxs: PricedLeg[] = [];
   const writtenReports: Array<{ outBase: string; report: WatchReport }> = [];
   const coinbaseByBlock = new Map<number, string | null>();
+  const matchedFromByBot = new Map(watch.map((bot) => [bot, 0]));
   let written = 0;
   let builderPaymentTotalEth = 0;
   let builderPaymentTotalUsd = 0;
@@ -283,6 +318,10 @@ async function runWatchMode(): Promise<void> {
       return actors.some((actor) => watchSet.has(actor));
     });
     if (matches.length === 0) continue;
+    for (const tx of matches) {
+      const from = lower(tx?.from ?? "");
+      if (watchSet.has(from)) matchedFromByBot.set(from, (matchedFromByBot.get(from) ?? 0) + 1);
+    }
 
     console.error(`[analysis/live-loss/watch] block=${blockNumber} matches=${matches.length}`);
     await mapLimit(matches, 4, async (tx) => {
@@ -330,6 +369,7 @@ async function runWatchMode(): Promise<void> {
       console.error(`[analysis/live-loss/watch] wrote ${outBase}.md`);
     });
   }
+  await emitNonceCompletenessChecks(range, matchedFromByBot);
   await enrichWrittenV4Reports(writtenReports);
   console.error(`[analysis/live-loss/watch] reports=${written}`);
   console.error(
@@ -350,6 +390,43 @@ async function runWatchMode(): Promise<void> {
     `[analysis/live-loss/watch] builder_payment_total=${builderPaymentTotalEth.toFixed(6)} ETH ` +
       `($${builderPaymentTotalUsd.toFixed(2)}) priced_txs=${builderPaymentPricedTxs}`,
   );
+}
+
+async function emitNonceCompletenessChecks(
+  range: { from: number; to: number },
+  matchedFromByBot: Map<string, number>,
+): Promise<void> {
+  const startTag = toQuantity(range.from - 1);
+  const endTag = toQuantity(range.to);
+  for (const bot of watch) {
+    try {
+      const [nonceStartHex, nonceEndHex] = await Promise.all([
+        rpc.call<string | null>("eth_getTransactionCount", [bot, startTag]),
+        rpc.call<string | null>("eth_getTransactionCount", [bot, endTag]),
+      ]);
+      const nonceStart = parseRpcQuantity(nonceStartHex);
+      const nonceEnd = parseRpcQuantity(nonceEndHex);
+      if (nonceStart === null || nonceEnd === null || nonceEnd < nonceStart) {
+        console.error(`[analysis/live-loss/watch] nonce_check bot=${bot} unavailable`);
+        continue;
+      }
+      const nonceDelta = nonceEnd - nonceStart;
+      const matchedFrom = matchedFromByBot.get(bot) ?? 0;
+      const check = nonceCheck(nonceDelta, matchedFrom);
+      const status = check.ok ? "OK" : `MISMATCH(-${check.missing})`;
+      console.error(
+        `[analysis/live-loss/watch] nonce_check bot=${bot} nonce_delta=${nonceDelta} ` +
+          `matched_from=${matchedFrom} ${status}`,
+      );
+    } catch {
+      console.error(`[analysis/live-loss/watch] nonce_check bot=${bot} unavailable`);
+    }
+  }
+}
+
+function parseRpcQuantity(value: string | null | undefined): number | null {
+  if (!value || typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) return null;
+  return Number(BigInt(value));
 }
 
 function cachedBlockCoinbase(cache: Map<number, string | null>, blockNumber: number, block: any): string | null {
@@ -464,6 +541,7 @@ async function buildWatchReport(
   const venueGaps = await classifyVenueGapsForIdentities(poolIdentities, graphPools, activeV4PoolIds);
   const gapType = primaryReason === "not_seen" ? classifyGapType(poolInRoutingGraph) : null;
   const venueGapType = primaryReason === "not_seen" ? summarizeVenueGapType(venueGaps) : null;
+  const lpAction = classifyLpAction(receipt.logs ?? []);
 
   return {
     block,
@@ -486,6 +564,8 @@ async function buildWatchReport(
     realized_profit_usd: null, // filled by priceArb in runWatchMode (needs rpc + ethUsd)
     builder_payment_eth: null,
     builder_payment_usd: null,
+    lp_action: lpAction.lp_action,
+    jit_lp: lpAction.jit_lp,
     profit_confidence: "requires_decode",
     unpriced_deltas: 0,
     unpriced_delta_symbols: [],
@@ -728,6 +808,12 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- competitor_edge: ${report.competitorEdge.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
   lines.push(`- rough_profit: ${report.roughProfit == null ? "n/a" : report.roughProfit.toFixed(6)}`);
   lines.push(`- realized_profit_usd: ${report.realized_profit_usd == null ? "n/a" : report.realized_profit_usd.toFixed(2)} (valuation-artifact-prone; see builder_payment)`);
+  if (report.lp_action) {
+    lines.push(
+      `- lp_action: true jit_lp: ${report.jit_lp} — ` +
+        "realized_profit_usd is valuation-artifact-prone here; trust rough_profit / builder_payment",
+    );
+  }
   lines.push(`- builder_payment: ${formatBuilderPayment(report)} [robust profit floor]`);
   lines.push(`- profit_confidence: \`${report.profit_confidence}\``);
   const unpricedSymbols = report.unpriced_delta_symbols.map((x) => `\`${x}\``).join(", ");
