@@ -50,6 +50,8 @@ export interface PriceArbOptions {
   entityActors: string[];
   allowTrace: boolean;
   coinbase?: string;
+  /** Block baseFeePerGas (wei) — enables the priority-fee-tip component of builder_payment. */
+  baseFeePerGas?: bigint;
 }
 
 export function valueDeltas(
@@ -193,7 +195,10 @@ export async function priceArb(
   // Native ETH: add gas back only when tx.from is part of the supplied entity.
   let ethWei = 0n;
   let tracedEth = false;
-  let builderPaymentWei: bigint | null = null;
+  // Direct-to-coinbase transfers within the tx (this reth's prestateTracer diffMode does NOT
+  // credit the coinbase with the priority-fee tip, so the coinbase balance delta = explicit
+  // coinbase transfers only). Total builder payment = priority-fee tip (below) + this.
+  let coinbaseTransferWei: bigint | null = null;
   if (options.allowTrace) {
     try {
       const tr = await rpc.tracePrestate(txHash);
@@ -205,7 +210,7 @@ export async function priceArb(
         if (b0 === null && b1 === null) return 0n;
         return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
       };
-      if (options.coinbase) builderPaymentWei = builderPaymentWeiFromPrestate(pre, post, options.coinbase);
+      if (options.coinbase) coinbaseTransferWei = builderPaymentWeiFromPrestate(pre, post, options.coinbase);
       const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
       for (const actor of actors) {
         ethWei += delta(actor);
@@ -218,6 +223,15 @@ export async function priceArb(
   }
   const ethDeltaEth = Number(ethWei) / 1e18;
   const ethProfitUsd = ethDeltaEth * ethUsd;
+  // Priority-fee tip to the builder = gasUsed * (effectiveGasPrice - baseFee). Protocol-defined,
+  // needs no trace; usually the DOMINANT builder-payment term (coffeebabe's top tx: $2.13 tip vs
+  // ~$0.01 direct). builder_payment = tip + direct coinbase transfers (robust profit floor).
+  const priorityTipWei = options.baseFeePerGas != null
+    ? hexToBigInt(receipt?.gasUsed) * (hexToBigInt(receipt?.effectiveGasPrice) - options.baseFeePerGas)
+    : null;
+  const builderPaymentWei = priorityTipWei === null && coinbaseTransferWei === null
+    ? null
+    : (priorityTipWei ?? 0n) + (coinbaseTransferWei ?? 0n);
   const builderPaymentEth = builderPaymentWei === null ? null : Number(builderPaymentWei) / 1e18;
   const builderPaymentUsd = builderPaymentEth === null ? null : builderPaymentEth * ethUsd;
 

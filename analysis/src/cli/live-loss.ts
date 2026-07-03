@@ -276,6 +276,7 @@ async function runWatchMode(): Promise<void> {
   for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
     const block = await rpc.getBlockByNumber(blockNumber, true);
     const coinbase = cachedBlockCoinbase(coinbaseByBlock, blockNumber, block);
+    const baseFeePerGas = block?.baseFeePerGas != null ? BigInt(block.baseFeePerGas) : undefined;
     const txs: any[] = Array.isArray(block.transactions) ? block.transactions : [];
     const matches = txs.filter((tx) => {
       const actors = [tx.from, tx.to].filter(Boolean).map(lower);
@@ -295,6 +296,7 @@ async function runWatchMode(): Promise<void> {
         entityActors,
         allowTrace,
         coinbase: coinbase ?? undefined,
+        baseFeePerGas,
       });
       report.realized_profit_usd = profit.realizedProfitUsd;
       report.builder_payment_eth = profit.builderPaymentEth;
