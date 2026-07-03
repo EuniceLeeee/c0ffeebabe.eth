@@ -176,7 +176,8 @@ backran the same triggering swap via a 2-hop route: WETH→CFG on v3 pool `0x08a
 CFG→WETH on a **native-ETH v4 pool `0x267d01a3…9348cd9c`** (`Initialize` confirms currency0=`0x0`
 native ETH / currency1=CFG; poolId absent from our runtime graph, `in_graph=false`). Our v3-only
 3-hop detour (WETH→CFG→USDT→WETH) saw only ~43% of the value (sim gross 330217158618935 wei vs the
-winner's ~791e12 wei), and the winner's builder payment (750794055091649 wei) alone exceeded our
+winner's ~774e12 wei = WETH out 0.16662725 − in 0.16585284), and the winner's builder payment
+(750794055091649 wei, ~97% of its gross) alone exceeded our
 FULL simulated gross — so NO bid policy could have won; the analysis named coverage, not bids.
 **Gap class = execution-adapter, not pool.** The planner already routes native-ETH v4 (WETH-alias;
 `planner.ts` native-ETH v4 fixtures pass), but **v4 is not in the ActionAdapter execution registry**
