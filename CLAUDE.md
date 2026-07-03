@@ -189,6 +189,11 @@ committed `force-include-poolids.json` that survives deploy. Rule-12 flip:
 `pool_in_routing_graph false→true, candidate_plans 0→1` (planner 14/14 + replay 12/12 + pool-universe
 10/10 + force-include 4/4, independently re-run by the evaluator). Residual until the next deploy
 window: banner shows `forceIncludePoolIds merged>0` + `0x267d01…` present in the live runtime graph.
+**The improve-half is now EXECUTABLE** (`4147ce3`+`a181da1`, evaluator-approved): `cd listener &&
+npm run auto-close-route-gap -- --report <postmortem.json> --rpc <url>` consumes a 6a report and,
+when `route_gap_decisive`, auto-closes every `touchedVenues[].in_graph=false` venue (univ4 →
+poolKey backfill + force-include; univ2/3 → force-include + `needs_active_pools` note; idempotent,
+no-op otherwise). So the 6a→6b chain is one command per half: post-mortem → auto-close → deploy.
 (Evaluator note: an interim review wrongly re-classified this as an execution-adapter epic off a
 corrupted code read — `rg -r` swallows a replacement arg; never use `-rn`/`-rln` — plus a stale
 memory claiming native-ETH execution was still gapped. Re-verified from clean reads + on-chain data;
