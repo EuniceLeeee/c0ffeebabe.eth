@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildVerdict,
   classifyWinnerStyle,
+  loadGraphMembership,
   realizedProfitUsdForReport,
   winnerMovedPriceBeyondPrestate,
   type WinnerStyle,
@@ -60,7 +64,31 @@ const atomicVerdict = buildVerdict(
   reach,
 );
 
+// Graph-membership v4 fixture: runtime-graph-pools.json stores v4 by PoolManager ADDRESS only
+// (no poolId), so in_graph for v4 must come from the sibling active-pools.json poolId set — else
+// EVERY v4 pool (incl. ones we index) is a false-negative not-in-graph. This asserts the union.
+const V3_ADDR_IN_GRAPH = "0x08a10a8b713c03e2fecaa3e355cea18a459ffcbf";
+const V4_POOLID_IN_ACTIVE = "0x267d01a3b23fe2340482242db5396f7544d36f398862efa591e92a079348cd9c";
+const V4_POOLID_NOT_INDEXED = "0xaa9a1adf0000000000000000000000000000000000000000000000000000dead";
+const graphFixtureDir = mkdtempSync(join(tmpdir(), "bundle-postmortem-graph-"));
+writeFileSync(
+  join(graphFixtureDir, "runtime-graph-pools.json"),
+  JSON.stringify({ pools: [{ address: V3_ADDR_IN_GRAPH, adapter: "univ3" }] }) + "\n",
+);
+writeFileSync(
+  join(graphFixtureDir, "active-pools.json"),
+  JSON.stringify({ pools: [{ adapter: "univ4", poolId: V4_POOLID_IN_ACTIVE }] }) + "\n",
+);
+const graphMembership = loadGraphMembership(join(graphFixtureDir, "runtime-graph-pools.json"));
+
 const checks: Array<() => void> = [
+  () => assert.equal(graphMembership.status, "loaded"),
+  // the fix: a v4 poolId present in active-pools is now in_graph (was a systematic false-negative)
+  () => assert.equal(graphMembership.members.has(lower(V4_POOLID_IN_ACTIVE)), true),
+  // a v4 poolId we do NOT index stays out of graph (real coverage gap preserved)
+  () => assert.equal(graphMembership.members.has(lower(V4_POOLID_NOT_INDEXED)), false),
+  // v2/v3 in_graph stays authoritative against runtime-graph
+  () => assert.equal(graphMembership.members.has(lower(V3_ADDR_IN_GRAPH)), true),
   () => assert.equal(oneLegStyle, "one_leg_inventory"),
   () => assert.equal(tickForcedStyle, "one_leg_inventory"),
   () => assert.equal(oneLegVerdict.winner_style, "one_leg_inventory"),
@@ -81,6 +109,7 @@ const checks: Array<() => void> = [
 
 try {
   for (const check of checks) check();
+  rmSync(graphFixtureDir, { recursive: true, force: true });
   console.log(`bundle-postmortem-noise-filter PASS (${checks.length}/${checks.length})`);
   console.log("expected_transition: non-comparable (one_leg_inventory/sandwich) winner no longer triggers a false route_gap_decisive; only real atomic-loss coverage gaps do. verdict: fixed");
 } catch (err) {

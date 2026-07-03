@@ -592,9 +592,34 @@ export function loadGraphMembership(path: string): GraphMembership {
     const text = readFileSyncText(path);
     const members = new Set<string>();
     collectGraphMembers(JSON.parse(text), members);
+    // v4 pools are stored in runtime-graph-pools.json by PoolManager ADDRESS only (no poolId),
+    // so a poolId membership check against the runtime graph is a systematic FALSE-NEGATIVE for
+    // ALL v4 pools (it would report every v4 pool — including ones we already index — as not in
+    // graph). The v4 poolIds live in the sibling active-pools.json (the loaded universe); union
+    // them in so v4 in_graph is correct. Mirrors live-loss readActiveV4PoolIds.
+    addActivePoolsV4PoolIds(path, members);
     return { status: "loaded", path, entries: members.size, members };
   } catch {
     return { status: "unavailable", path, entries: 0, members: new Set() };
+  }
+}
+
+// Union the v4 poolIds from the sibling active-pools.json into graph membership. Only bytes32
+// poolIds are added (v4-only field); v2/v3 in_graph stays authoritative against runtime-graph.
+function addActivePoolsV4PoolIds(graphPath: string, members: Set<string>): void {
+  const activePoolsPath = resolve(dirname(graphPath), "active-pools.json");
+  if (!existsSync(activePoolsPath)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(activePoolsPath, "utf8")) as unknown;
+    const pools = Array.isArray(parsed)
+      ? parsed
+      : ((parsed as { pools?: unknown[] })?.pools ?? []);
+    for (const pool of pools) {
+      const poolId = lower(String((pool as { poolId?: unknown })?.poolId ?? ""));
+      if (isBytes32(poolId)) members.add(poolId);
+    }
+  } catch {
+    // active-pools missing/corrupt → leave v4 as runtime-graph-only (prior behavior).
   }
 }
 
