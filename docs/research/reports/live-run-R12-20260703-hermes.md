@@ -106,6 +106,19 @@ deployed, initial non-regressive sanity check done. The round lock is released b
 `hermes-hourly` firing (a fresh session, reading current repo state per its own Step 1) can proceed
 without contention.
 
+**Stronger reason to stop here, discovered after the above was written:** the concurrent session
+(Opus 4.8) went further while this session was running — it read this round's R11/R12 work, ran its
+own independent 3-way synthesis (Fable-A blind + Codex re-review), converged that R12's high-spread
+admission is the right lever but unproven live, found a genuinely new gap (**no on-chain-inclusion
+event** — `accepted` from a builder is not "mined"), and is now running the natural next step
+itself: a **multi-hour bounded-live measurement** (see
+`docs/research/reports/arch-review-20260703-live-synthesis.md`). Confirmed on the node: `.deploy-live`
+marker present, `SEARCHER_DRY_RUN=0`, `SEARCHER_EV_GATE=1` — bounded-live is ACTIVE right now, inside
+the CLAUDE.md-documented ≤0.2 ETH test-wallet envelope authorized by the user 2026-07-03. This session
+will NOT redeploy, restart, or otherwise touch the node while that measurement is running — doing so
+could interrupt a live (if tiny-stakes) in-flight bundle. No further action from this session;
+ownership of the live-measurement phase belongs to the concurrent session.
+
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
