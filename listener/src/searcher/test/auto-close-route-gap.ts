@@ -194,6 +194,51 @@ async function testAlreadyInGraphSkips(): Promise<void> {
   }
 }
 
+async function testNonComparableWinnerSkipped(): Promise<void> {
+  // A one_leg_inventory (CEX-DEX) / sandwich winner is NOT a comparable atomic-loop route gap;
+  // its touched venues are noise. Even with route_gap_decisive true (from some other comparable
+  // competitor), the non-comparable competitor's not-in-graph venue must NOT be closed/backfilled.
+  const dir = mkdtempSync(join(tmpdir(), "auto-close-route-gap-noncomp-"));
+  try {
+    const report = join(dir, "postmortem.json");
+    const activePools = join(dir, "active-pools.json");
+    const forceInclude = join(dir, "force-include-poolids.json");
+    const unchanged = JSON.stringify([], null, 2) + "\n";
+    writeFileSync(forceInclude, unchanged);
+    writeFileSync(
+      report,
+      JSON.stringify({
+        verdict: { route_gap_decisive: true, winner: "0xwinner" },
+        analyzed_competitors: [
+          {
+            hash: "0xinventory",
+            transactionIndex: 11,
+            winner_style: "one_leg_inventory",
+            touchedVenues: [{ protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false }],
+          },
+          {
+            hash: "0xsandwich",
+            transactionIndex: 12,
+            winner_style: "sandwich",
+            touchedVenues: [{ protocol: "univ3", id: V3_POOL.toLowerCase(), in_graph: false }],
+          },
+        ],
+      }, null, 2) + "\n",
+    );
+
+    const fake = fakeV4Provider();
+    const { result } = await runWithLogs(report, activePools, forceInclude, fake.provider);
+    assert(result.routeGapDecisive, "route_gap true result should remain decisive");
+    assertArrayEq(result.closedV4PoolIds, [], "non-comparable winner venue should not be closed");
+    assertArrayEq(result.forceIncludeAdded, [], "non-comparable winner venue should not append");
+    assert(readFileSync(forceInclude, "utf8") === unchanged, "non-comparable winner should not rewrite force-include");
+    assert(fake.calls() === 0, "non-comparable winner should not call backfill");
+    console.log("[auto-close] non-comparable winner (one_leg_inventory/sandwich) venues skipped: PASS");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function testV3AppendsAndLogsActivePoolsNote(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "auto-close-route-gap-v3-"));
   try {
@@ -365,6 +410,7 @@ async function main(): Promise<void> {
   await testRouteGapV4AppendsAndBackfills();
   await testRouteGapFalseNoops();
   await testAlreadyInGraphSkips();
+  await testNonComparableWinnerSkipped();
   await testV3AppendsAndLogsActivePoolsNote();
   await testIdempotentRunningTwiceAppendsOnce();
   await testPerVenueFailureIsolation();
@@ -374,7 +420,7 @@ async function main(): Promise<void> {
       "auto-appended force-include (loop improve-half closes automatically)",
   );
   console.log("verdict: fixed");
-  console.log("auto-close-route-gap PASS (7/7)");
+  console.log("auto-close-route-gap PASS (8/8)");
 }
 
 main().catch((err) => {

@@ -100,6 +100,14 @@ export async function autoCloseRouteGap(
 
   for (const competitor of competitors) {
     if (!isRecord(competitor) || !Array.isArray(competitor.touchedVenues)) continue;
+    // Skip non-comparable winners: one_leg_inventory (CEX-DEX, off-chain settled) and sandwich
+    // are NOT comparable atomic-loop route gaps — their touched venues are noise, not a pool we
+    // are missing on the loop. Mirrors bundle-postmortem isNonComparableWinnerStyle / census
+    // `route_gap_decisive: analyzed.some(tx => !tx.non_comparable_winner)`. atomic_loop and
+    // unknown (conservatively kept — an unrecognized loop may still be a real gap) still feed here.
+    if (competitor.winner_style === "one_leg_inventory" || competitor.winner_style === "sandwich") {
+      continue;
+    }
     for (const rawVenue of competitor.touchedVenues) {
       if (!isRecord(rawVenue) || rawVenue.in_graph !== false) continue;
       const protocol = rawVenue.protocol;
