@@ -109,6 +109,41 @@ Transform tasks into verifiable goals:
   `0xEcABc504c30e1a081438B9F3b57Cc8F9dBDc1Ec6` and pair
   `0x39484A066aF5fEdFdef7ebf828E95CFB035fd1BC / WETH`.
 
+### 6a. Bundle Post-Mortem — submitted but never included (run the script, don't guess)
+
+When a live bundle passes the EV gate and gets builder ACCEPTs but never lands, do NOT
+guess (latency / builder list / bid). Run the codified post-mortem (validated against the
+2026-07-03 manual analysis of bundle `0xa32b646c…8b2f68`, block 25449741):
+
+```bash
+cd analysis && npm run bundle-postmortem -- \
+  --events <searcher events jsonl> --tx <our backrun tx hash, prefix ok> \
+  --rpc http://127.0.0.1:8545
+```
+
+Events + local reth live on the NODE — run it there via SSM. The live events path is the
+running process's `SEARCHER_EVENTS_PATH` (read `/proc/<pid>/environ`; e.g.
+`/var/log/mev/events/searcher-live.jsonl`), NOT necessarily `analysis/events/`.
+
+The script answers the fixed decision tree, in order:
+1. **One-shot validity** — mempool-route bundles embed the pending swap's rawTx and pin ONE
+   target block; once that swap lands, the bundle is permanently invalid (nonce consumed +
+   dislocation re-equalized). "N blocks not included" afterwards is EXPECTED, not a failure.
+2. **Builder reach** — who built the landing block (`extraData`/miner). Standing fact:
+   Flashbots Bundle Relay orderflow is auto-shared with BuilderNet
+   (buildernet.org/docs/send-orderflow), so `flashbots: ACCEPTED` ⇒ BuilderNet saw the
+   bundle; `rpc.buildernet.org` exists as optional direct redundancy.
+3. **Auction outcome** — competing txs directly behind the pending swap in the landing
+   block: route venues, gross take, and builder payment (priority tip + coinbase transfer,
+   the 9bb85fd metric). `outbid` = winner payment > our bid; `route_gap_decisive` = winner
+   payment > our FULL simulated gross (i.e. no bid policy could have won — fix coverage,
+   not bids).
+4. **Gap classification** — winner's pools vs `runtime-graph-pools.json` → pool/path gap.
+
+Manual follow-ups the script cannot do: WebSearch the orderflow-sharing relationships of a
+new winning builder; secondary-source-verify one key number via Alchemy; write durable
+findings to memory / the Findings Ledger.
+
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
 Codex (gpt-5.5 xhigh) is always the **generator/implementer**; Claude authors the brief

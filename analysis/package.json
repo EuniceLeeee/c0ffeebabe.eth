@@ -7,6 +7,7 @@
     "analysis": "tsx src/cli/index.ts",
     "address": "tsx src/cli/address.ts",
     "live-loss": "tsx src/cli/live-loss.ts",
+    "bundle-postmortem": "tsx src/cli/bundle-postmortem.ts",
     "redact-live-run": "tsx src/cli/redact-live-run.ts",
     "hermes-gate": "tsx src/cli/hermes-gate.ts",
     "build": "tsc --noEmit"
