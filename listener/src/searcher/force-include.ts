@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { ethers } from "ethers";
 
 export const DEFAULT_FORCE_INCLUDE_POOLIDS_PATH = resolve(
@@ -46,6 +46,39 @@ export function mergeForceIncludePoolIds(
   for (const entry of envEntries) appendUnique(out, seen, entry);
   for (const entry of fileEntries) appendUnique(out, seen, entry);
   return out;
+}
+
+export interface AppendForceIncludePoolIdsResult {
+  path: string;
+  entries: string[];
+  added: string[];
+}
+
+export function appendForceIncludePoolIds(
+  entries: readonly string[],
+  path = DEFAULT_FORCE_INCLUDE_POOLIDS_PATH,
+): AppendForceIncludePoolIdsResult {
+  const out = loadForceIncludePoolIds(path);
+  const seen = new Set(out.map((entry) => entry.toLowerCase()));
+  const added: string[] = [];
+  for (const entry of entries) {
+    const normalized = normalizeForceIncludeEntry(entry);
+    if (!normalized) {
+      throw new Error(`forceInclude entry must be an address or bytes32 poolId: ${entry}`);
+    }
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+    added.push(normalized);
+  }
+
+  if (added.length > 0) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(out, null, 2) + "\n");
+  }
+
+  return { path, entries: out, added };
 }
 
 function normalizeForceIncludeEntry(value: unknown): string | null {

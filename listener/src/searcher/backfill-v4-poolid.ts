@@ -78,6 +78,13 @@ export async function backfillV4PoolIdIntoActivePools(
   };
 }
 
+export async function backfillV4PoolId(
+  poolId: string,
+  opts: V4BackfillOptions = {},
+): Promise<V4BackfillResult> {
+  return backfillV4PoolIdIntoActivePools(poolId, opts);
+}
+
 export function v4PoolEntryFromResolvedPoolKey(parsed: ParsedV4Initialize): PoolUniverseEntry {
   const currency0 = normalizeCurrency(parsed.currency0, "currency0");
   const currency1 = normalizeCurrency(parsed.currency1, "currency1");
