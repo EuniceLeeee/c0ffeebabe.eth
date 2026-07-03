@@ -87,6 +87,20 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
+// LP action topic sets — MUST be declared before the top-level `await main()` entrypoint below:
+// top-level await pauses module evaluation, so any const declared after it stays in the TDZ when the
+// watch path (classifyLpAction) runs inside main() → ReferenceError. (Regression from 6ff3d4d, which
+// placed these after the entrypoint; keep every main()-reachable const above the guard.)
+const LP_MINT_TOPICS = new Set([
+  lower(TOPICS.univ2Mint),
+  lower(TOPICS.univ3Mint),
+]);
+const LP_BURN_TOPICS = new Set([
+  lower(TOPICS.univ2Burn),
+  lower(TOPICS.univ3Burn),
+]);
+const LP_ACTION_TOPICS = new Set([...LP_MINT_TOPICS, ...LP_BURN_TOPICS]);
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }
@@ -169,16 +183,6 @@ export function nonceCheck(nonceDelta: number, matchedFrom: number): NonceCheckR
   const missing = Math.max(0, nonceDelta - matchedFrom);
   return { ok: missing === 0, missing };
 }
-
-const LP_MINT_TOPICS = new Set([
-  lower(TOPICS.univ2Mint),
-  lower(TOPICS.univ3Mint),
-]);
-const LP_BURN_TOPICS = new Set([
-  lower(TOPICS.univ2Burn),
-  lower(TOPICS.univ3Burn),
-]);
-const LP_ACTION_TOPICS = new Set([...LP_MINT_TOPICS, ...LP_BURN_TOPICS]);
 
 export function classifyLpAction(logs: any[]): { lp_action: boolean; jit_lp: boolean } {
   let hasMint = false;
