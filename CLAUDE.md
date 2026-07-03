@@ -144,6 +144,39 @@ Manual follow-ups the script cannot do: WebSearch the orderflow-sharing relation
 new winning builder; secondary-source-verify one key number via Alchemy; write durable
 findings to memory / the Findings Ledger.
 
+### 6b. Auto-improve loop — same-block loss / opportunity-miss → analyze → CLOSE the gap (forcing function)
+
+6a (post-mortem) + the competitor census ANALYZE why we lost; this rule adds the IMPROVE half so
+diagnosis auto-converts to a closed gap (the mission's learn→close loop, made mandatory). Trigger,
+either of:
+- **Same-block competition loss** — our bundle passed the EV gate + got builder ACCEPTs but a
+  competitor's tx behind the same pending swap landed instead (6a `outbid` / `route_gap_decisive`).
+- **Opportunity-miss vs a comparison player** — a watched competitor captured a +EV backrun in one of
+  our blocks that never became a profitable `simSuccess` for us (competitor census / `not_seen`).
+
+Then, without waiting for a human, run: **analyze (6a / census) → classify the gap → CLOSE it →
+validate with a rule-12 fixture.** Close per gap class:
+- **pool gap** (winner used a venue/pool we don't index — e.g. a v4 poolId absent from
+  `active-pools.json`/`runtime-graph-pools.json`) → resolve its poolKey + enqueue for backfill →
+  merge into the graph so the planner can route it. This is the `route_gap_decisive` fix (winner's
+  gross > our FULL simulated gross ⇒ NO bid policy could have won ⇒ fix COVERAGE, never bids).
+- **path gap** (pools we have but can't close the loop) → add the route/template.
+- **execution-adapter gap** (venue identifiable+graphable, no quote/build) → the venue-adapter epic.
+- **detection gap** (fully covered, not detected/routed) → detection/admission fix.
+- **pure outbid** (winner payment < our full gross but > our bid — bid policy, not coverage) → an
+  economics/bid-policy call; a large bid-posture change stays a human gate (Safety Rule 1 territory).
+
+Governance: every triggered loss/miss with a **closable** gap becomes a tracked item
+(`owner` + `carry_to_round`) and BLOCKS closing the cycle until improved or explicitly killed by the
+human (same teeth as rules 13/16). The gap MUST be closed, not just filed as "known".
+
+**Validated end-to-end (2026-07-03, the reference instance):** bundle `0xa32b646c…8b2f68` (block
+25449741) lost `route_gap_decisive` — the winner `0x28390df4…` backran the same victim via a **v4
+CFG/WETH pool `0x267d01a3…9348cd9c`** (poolId absent from our graph, 0/1220), so our v3-only 3-hop
+detour saw only ~43% of the value ($0.56 vs the winner's ~$1.32 gross). The loop's CLOSE = backfill
+that poolId + a planner fixture asserting our route then captures the full value. Point-fixing bids
+here would have been the wrong lever — the analysis named coverage.
+
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
 Codex (gpt-5.5 xhigh) is always the **generator/implementer**; Claude authors the brief
