@@ -172,6 +172,21 @@ validate with a rule-12 fixture.** Close per gap class:
 - **detection gap** (fully covered, not detected/routed) → detection/admission fix.
 - **pure outbid** (winner payment < our full gross but > our bid — bid policy, not coverage) → an
   economics/bid-policy call; a large bid-posture change stays a human gate (Safety Rule 1 territory).
+- **UNCLASSIFIABLE loss — the tool's blind spot → MANDATORY manual escalation (the meta-loop).** When
+  the automated loop ANALYZED but produced NO closable result — auto-close closes 0 (no `in_graph=false`
+  venue) yet we demonstrably LOST — the tool has hit a gap CLASS it cannot name. There is ALWAYS a reason
+  we lost; "auto-analysis empty" is itself a finding, never a shrug. Canonical instance: bundle
+  `0xee7b98ad…` (2026-07-03) — `route_gap_decisive=true`, winner `0x91f2e7e9…` used ONLY a v3 pool we
+  ALREADY have (0 v4), paid the builder $3.25 vs our $0.68 sim gross → **same-pool under-extraction /
+  sim-undervaluation**, which auto-close (a coverage tool) correctly cannot fix. Required action, NOT
+  optional: **package the raw material — the bundle-postmortem report JSON + the auto-close result
+  (closed=0) + our simulated_profit/bid + the winner's touchedVenues/builderPayment — and hand it to a
+  FRESH manual analyst: Fable (PRIORITY), Opus 4.8 (fallback).** Their job = name the gap class the tool
+  missed (extraction/sizing, sim-undervaluation/mispricing, latency, flow-admission, …) and then CODIFY
+  it back into the analysis tooling (rule 16 — a new postmortem verdict / a new metric / a new close
+  path). The watcher writes a `pending-manual-analysis` package for this case (parallel to
+  `pending-deploy`); a package left unanalyzed BLOCKS closing the cycle. This is how the tool escapes its
+  own blind spot — automated close for KNOWN classes, forced human escalation + codify for UNKNOWN ones.
 
 Governance: every triggered loss/miss with a **closable** gap becomes a tracked item
 (`owner` + `carry_to_round`) and BLOCKS closing the cycle until improved or explicitly killed by the
