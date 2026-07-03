@@ -109,6 +109,27 @@ Status key: ✅ done · 🔶 partial · ❌ not done ·  建议 tags: **做** / 
    Slices 1–4), spatial detection (Slice 5), end-to-end 0x4db replay (Slice 8). Keep the classifier
    pointing at them so the moment one stops being dust, we know.
 
+## Measured (2026-07-03, dogfooded the v4-aware classifier — refines "v4 is the lever")
+
+Ran the Slice-1b classifier over a live 200-block window (competitors coffeebabe + ae2Fc483,
+`not_seen` txs), poolId-level v4 membership:
+
+| class | count | meaning |
+|---|---|---|
+| venue_class_gap | 0 | **no exotic venues at all** — reconfirms defer of SmarDex/OUSD/Enzyme/Rigel/DIFX |
+| **pool_gap** | **14** | v4 poolIds competitors used that we DON'T index → true coverage gap (② v4-depth) |
+| **detection_gap** | **41** | v4 poolIds we DO index but didn't catch → detection/routing/latency, NOT coverage |
+| unknown | 21 | venue unidentifiable (non-v4) |
+
+**Refinement:** the majority of not-seen competitor v4 txs (41/76) touch pools we ALREADY have —
+the loss there is detection/admission/economics, not missing coverage. Only 14/76 are genuine v4
+coverage gaps. So **② v4-depth (adding pools) addresses the minority**; the bigger lever is
+funnel-internal (why we don't act on pools we already index) + ① inclusion. This is exactly the
+kind of prioritization the classifier was built to give — it moved "v4 is the lever" from a guess
+to "coverage=14, detection=41" with numbers. (Caveats: per-tx summary picks pool_gap over
+detection_gap; net_per_block carries the known JIT-LP valuation noise — treat counts as direction,
+not P&L.)
+
 ## Posture decision escalated to human (rule-14 gate)
 
 **The fork:** our atomic-backrun class is near ceiling on public flow; the only path to the *large*
