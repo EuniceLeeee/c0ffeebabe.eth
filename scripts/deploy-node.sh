@@ -112,6 +112,27 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 # ── 4. Build ──
 ( cd "$REPO/listener" && npm run build ) || { say "build failed — NOT restarting"; exit 1; }
 
+# ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
+REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-14}"
+REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
+REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
+say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window)…"
+if timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+       POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
+       POOL_UNIVERSE_OUT="$REINDEX_TMP" \
+       sh -c 'cd "$0/listener" && npx tsx src/searcher/build-active-pool-universe.ts' "$REPO" \
+       >/tmp/deploy-reindex.log 2>&1 \
+   && [ -s "$REINDEX_TMP" ] \
+   && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; sys.exit(0 if len(p)>0 else 1)' "$REINDEX_TMP"; then
+  POOLS=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; print(len(p))' "$REINDEX_TMP")
+  cp -a "$REINDEX_OUT" "${REINDEX_OUT}.bak-$(date +%s)" 2>/dev/null || true
+  mv "$REINDEX_TMP" "$REINDEX_OUT"
+  say "pool universe re-indexed: $POOLS pools (toBlock=head)."
+else
+  say "WARNING: pool-universe re-index failed/timed out — keeping existing active-pools.json (deploy continues)."
+  rm -f "$REINDEX_TMP" 2>/dev/null || true
+fi
+
 # ── 5. Restart + verify mode ──
 LOGF=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
 [ -n "$LOGF" ] || LOGF=/var/log/mev-live.log
