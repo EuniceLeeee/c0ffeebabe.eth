@@ -170,12 +170,25 @@ Governance: every triggered loss/miss with a **closable** gap becomes a tracked 
 (`owner` + `carry_to_round`) and BLOCKS closing the cycle until improved or explicitly killed by the
 human (same teeth as rules 13/16). The gap MUST be closed, not just filed as "known".
 
-**Validated end-to-end (2026-07-03, the reference instance):** bundle `0xa32b646c…8b2f68` (block
-25449741) lost `route_gap_decisive` — the winner `0x28390df4…` backran the same victim via a **v4
-CFG/WETH pool `0x267d01a3…9348cd9c`** (poolId absent from our graph, 0/1220), so our v3-only 3-hop
-detour saw only ~43% of the value ($0.56 vs the winner's ~$1.32 gross). The loop's CLOSE = backfill
-that poolId + a planner fixture asserting our route then captures the full value. Point-fixing bids
-here would have been the wrong lever — the analysis named coverage.
+**Reference instance (2026-07-03) — analysis-validated, close is an EPIC not an in-loop backfill:**
+bundle `0xa32b646c…8b2f68` (block 25449741) lost `route_gap_decisive` — the winner `0x28390df4…`
+backran the same triggering swap via a 2-hop route: WETH→CFG on v3 pool `0x08a10a8b…FCBF`, then
+CFG→WETH on a **native-ETH v4 pool `0x267d01a3…9348cd9c`** (`Initialize` confirms currency0=`0x0`
+native ETH / currency1=CFG; poolId absent from our runtime graph, `in_graph=false`). Our v3-only
+3-hop detour (WETH→CFG→USDT→WETH) saw only ~43% of the value (sim gross 330217158618935 wei vs the
+winner's ~791e12 wei), and the winner's builder payment (750794055091649 wei) alone exceeded our
+FULL simulated gross — so NO bid policy could have won; the analysis named coverage, not bids.
+**Gap class = execution-adapter, not pool.** The planner already routes native-ETH v4 (WETH-alias;
+`planner.ts` native-ETH v4 fixtures pass), but **v4 is not in the ActionAdapter execution registry**
+(only univ2/univ3/ln/curve/psm/fluid; the `ln` V4 call in `FlashArb.sol` is a bespoke wstUSR
+hardcode, not a general v4 builder), so graphing the poolId lets us ROUTE but not BUILD/settle the
+leg live. Per rule 13 native-ETH v4 execution is an **epic**, and per-pool pins on an epic'd class
+are forbidden in-loop → the CLOSE routes to that epic. What the auto-loop CAN close here is the
+COVERAGE half: a planner fixture asserting that, with the v4 CFG poolId graphed, our route emits the
+2-hop v3↔v4 plan capturing the full gross (proves the routing lever); live capture stays
+`implemented_not_validated` until the v4 native-ETH execution adapter lands. (Corrected 2026-07-03 by
+the non-author evaluator after on-chain verification — the original draft mis-classified this as a
+pure pool gap closable by backfill; that would have been a forbidden per-pool pin on the v4 epic.)
 
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
