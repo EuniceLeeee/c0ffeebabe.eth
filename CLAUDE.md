@@ -224,6 +224,23 @@ That watcher/cron is the remaining piece for hands-off closure; until it exists,
 on-demand (or from the hourly cron). Do NOT claim "fully automatic" — it is "one-command diagnose +
 one-command fix", pending the trigger.
 
+**Trigger design decisions (user-approved 2026-07-03 — do not re-litigate):**
+- **Auto-deploy IS in the automated chain.** The ~1-min restart gap in a live window is acceptable;
+  events JSONL gets a new `run_id` per restart, so analysis is naturally segmented — analyze the
+  window across the boundary. The live/dry guard lives in `deploy-node.sh` itself (marker + wallet
+  cap + EV gate + env verify), so a cron trigger passes the SAME safety envelope as a human one.
+- Two implementation requirements for the trigger (small, but mandatory):
+  1. **Mode-preservation verify**: after an auto-deploy, confirm the searcher came back in the same
+     live/dry mode it left (the real failure mode is a silent bounded-live→dry-run fallback corrupting
+     the measurement, not an accidental go-live — the guard blocks the latter). Alert on any flip.
+  2. **Debounce/batch**: the real restart cost is cache/warm-pool cold-start (minutes of degraded
+     competitiveness), not the 60s downtime — batch pending pools and deploy at most once per
+     window/hour; never once-per-loss-event.
+- Scope guards that ride along: per-class close counter (same gap_class auto-closed ≥3 times →
+  escalate per rule 13, don't keep pinning), P2 per-venue failure isolation + structured failure
+  events (a cron's log is a black hole), and the `not_seen` branch stays Hermes-census-driven (this
+  trigger only automates the same-block-loss branch).
+
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
 Codex (gpt-5.5 xhigh) is always the **generator/implementer**; Claude authors the brief
