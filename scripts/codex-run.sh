@@ -34,6 +34,19 @@ BRIEF="$(cat "$BRIEF_FILE")"
 [ -n "$BRIEF" ] || { echo "codex-run: brief is empty: $BRIEF_FILE" >&2; exit 2; }
 : > "$OUT.out"; : > "$OUT.events.jsonl"
 
+# Ensure the PERSISTENT strong sleep-keeper is alive (idempotent, PID-guarded). The per-command
+# `caffeinate -i` below only holds PreventUserIdleSystemSleep for THIS run; the workflow keeper
+# (`-i -d -s`) is stronger, but it dies on its `-t` timeout and interactive dispatch (not the
+# Hermes round-0 loop) never re-checks it — a >3h session outlived a 3h keeper. Guarantee it HERE
+# so every codex launch is covered, `-t 43200` (12h) so it does not expire mid-long-session.
+KEEP=/tmp/mev-sleep-keeper.pid
+if [ -f "$KEEP" ] && kill -0 "$(cat "$KEEP" 2>/dev/null)" 2>/dev/null; then
+  echo "codex-run: sleep-keeper alive PID=$(cat "$KEEP")"
+else
+  nohup caffeinate -i -d -s -t 43200 >/dev/null 2>&1 & echo $! > "$KEEP"
+  echo "codex-run: (re)spawned sleep-keeper PID=$(cat "$KEEP")"
+fi
+
 # launch codex in the background, stdin from /dev/null (THE guard)
 caffeinate -i codex -s "$SANDBOX" -a never exec -C "$REPO" --json -o "$OUT.out" "$BRIEF" \
   < /dev/null > "$OUT.events.jsonl" 2>&1 &
