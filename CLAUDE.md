@@ -263,6 +263,37 @@ one-command fix", pending the trigger.
   events (a cron's log is a black hole), and the `not_seen` branch stays Hermes-census-driven (this
   trigger only automates the same-block-loss branch).
 
+### 6c. THE complete competitor-loss analysis flow (canonical entry point — 6a/6b/census unified)
+
+Every "a competitor got value we didn't" event runs this fixed 4-step flow. It is the consolidation of
+6a (post-mortem) + 6b (auto-improve + meta-loop) + the competitor census; do NOT invent a parallel path.
+
+1. **SCOPE — analyze BOTH, same shape.** (a) A bundle WE submitted that lost (`bundle_not_included`) →
+   `bundle-postmortem --tx <ours>`. (b) An opportunity we MISSED (a competitor captured value we never
+   bid on / `not_seen`) → the census produces a postmortem-shaped report on the competitor's tx. Both
+   feed the identical downstream (steps 2-4). Neither is skipped — a miss is as much a loss as a bad bid.
+2. **FILTER non-comparable competitors FIRST — before ANY conclusion (else it is all noise).** Classify
+   the "winner" `winner_style`: only **`atomic_loop`** (a closed loop returning to a priced token IN-TX)
+   is comparable to our atomic sim. REJECT as noise: **`sandwich`** (frontrun+backrun bracket, out of our
+   posture), **`one_leg_inventory`** (one-way swap, output → EOA/non-pool, profit realized OFF-CHAIN /
+   CEX-DEX — decisive check: winner's Swap pushed the pool tick PAST the pre-victim `slot0` tick ⇒ no
+   atomic explanation; see [[project-cex-dex-inventory-competitor-noise]]), plain transfers, JIT-LP. A
+   non-comparable winner ⇒ `route_gap_decisive=false` + `non_comparable_winner`; our sim/bid was RIGHT and
+   correctly lost — do NOT feed it to the coverage loop. Codified in bundle-postmortem (winner_style).
+3. **AUTO-IMPROVE from the tool's conclusion.** Comparable + `route_gap_decisive` (winner payment > our
+   FULL atomic gross) ⇒ a real coverage gap → `auto-close-route-gap` backfills the missing pool + writes
+   pending-deploy (6b improve-half). `pure_outbid` / economics ⇒ the economics ledger (a bid-posture
+   change stays a human gate).
+4. **INCONCLUSIVE → MANUAL escalation → codify the tool.** If the tool ANALYZED but produced no closable
+   result yet we demonstrably lost (auto-close closed 0 on a comparable winner), the tool hit a blind
+   spot — package {report + auto-close result + our sim/bid + winner flows} → a FRESH analyst (Fable
+   PRIORITY, Opus 4.8 fallback) names the missed class → CODIFY it back into the tool (rule 16). This is
+   how the flow self-improves; the `one_leg_inventory` filter itself came from this meta-loop on 0xee7b98ad.
+
+Executable pieces: `bundle-postmortem` (analysis), the census (missed-opps), `auto-close-route-gap` +
+`route-gap-watcher` (auto-improve, marks pending-deploy — never auto-deploys), the §6b manual-escalation
+package. Governance: every step-4 escalation is a tracked finding that BLOCKS cycle-close until codified.
+
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
 Codex (gpt-5.5 xhigh) is always the **generator/implementer**; Claude authors the brief
