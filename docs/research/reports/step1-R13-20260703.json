@@ -1,0 +1,93 @@
+{
+  "run_id": "d3055f19-90b7-4b9b-a638-ab2557120292",
+  "window": { "from": 25452197, "to": 25452382 },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13"
+  ],
+  "run_analysis": {
+    "funnel": {
+      "opportunity_seen": 359,
+      "pipeline_dropped": 356,
+      "no_candidate_plans": 178,
+      "no_profitable_quote": 80,
+      "candidate_cap": 58,
+      "expired_before_solver": 36,
+      "quote_timeout": 4,
+      "simulation_result": 1,
+      "bundle_submitted": 1,
+      "bundle_not_included": 1
+    },
+    "dominant_drop": "no_candidate_plans (178/356 = 50%); sub-shape = single-pool-token return-venue gap (no_candidate_diagnostic: same_pool_reverse_edge_exists=true, cross_venue_reverse_count=0, impact_token_supported_pools=1)",
+    "events_source": "jsonl (/var/log/mev/events/searcher-live.jsonl, filtered by run_id d3055f19)"
+  },
+  "findings": [
+    {
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "swept": true,
+      "txCount": 1,
+      "method": "nonce-delta sweep over window (nonce_delta=1, matched_from=1) + per-tx trace",
+      "analysis_mode": "full",
+      "txs": [
+        {
+          "hash": "0x631dcbf6df982e249c5b23b7795f14797cccd1fea0c9b814a408b04e3a7652bf",
+          "block": 25452251,
+          "pools": [
+            { "addr": "0xf82d8ec196fb0d56c6b82a8b1870f09502a49f88", "inGraph": true }
+          ],
+          "gap_class": "dust_in_posture"
+        }
+      ]
+    },
+    {
+      "eoa": "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13",
+      "swept": true,
+      "txCount": 74,
+      "method": "nonce-delta sweep over window (nonce_delta=74, matched_from=74) + sampled per-tx trace",
+      "analysis_mode": "sample",
+      "sampleSize": 3,
+      "txs": [
+        {
+          "hash": "0xca22966fc6a67bcbaef7773de84050f2dfa7993b67cfcb7be23bacefaa3ce952",
+          "block": 25452268,
+          "pools": [
+            { "addr": "0x000000000004444c5dc75cb358380d2e3de08a90", "inGraph": true }
+          ],
+          "gap_class": "sandwich_out_of_posture"
+        },
+        {
+          "hash": "0x616466324f6126538709cabbecd19e65e2a60658259e3c233dc459b609820b25",
+          "block": 25452319,
+          "pools": [
+            { "addr": "0x877193009a881359e80df3ded7c6e055be9cc144", "inGraph": false }
+          ],
+          "gap_class": "sandwich_out_of_posture"
+        },
+        {
+          "hash": "0x62abfb79501d70178ab4664a0ba655170829db8f5d2ae4e25d433a3479f7eb6c",
+          "block": 25452319,
+          "pools": [
+            { "addr": "0x877193009a881359e80df3ded7c6e055be9cc144", "inGraph": false }
+          ],
+          "gap_class": "sandwich_out_of_posture"
+        }
+      ]
+    }
+  ],
+  "coverage_kpi": {
+    "competitor_legs_total": 4,
+    "legs_out_of_graph": 2,
+    "out_pools": [
+      {
+        "addr": "0x877193009a881359e80df3ded7c6e055be9cc144",
+        "token0": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "token1": "0xe0151763455a8a021e64880c238ba1cff3787ff0",
+        "class": "single_venue_noise",
+        "evidence": "ae2Fc483 sandwich (frontrun+backrun bracket) leg; WETH/0xe015 pool. Out-of-posture (sandwich), not a closable atomic-backrun coverage gap. Builder payment on these ae2 txs $0.00-$1.72."
+      }
+    ],
+    "closable": 0,
+    "single_venue_noise": 1,
+    "prev_round": null
+  }
+}
