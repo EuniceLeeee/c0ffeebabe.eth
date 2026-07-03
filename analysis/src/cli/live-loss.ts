@@ -20,6 +20,13 @@ import {
   type VenueId,
 } from "../../../listener/src/searcher/venues/capability.js";
 
+// Declared before the top-level `await main()` (below) so they are initialized when the
+// CLI entrypoint runs — a const in the temporal dead zone would ReferenceError at runtime.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
+const UNIV4_POOL_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
+const UNIV4_SWAP_TOPIC = lower(TOPICS.univ4Swap);
+
 let args: Record<string, string | boolean> = {};
 let eventsPath = "";
 let graphPoolsPath = "";
@@ -148,11 +155,6 @@ export interface PoolIdentity {
   venue?: VenueId | "unknown";
   factory?: string | null;
 }
-
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
-const UNIV4_POOL_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
-const UNIV4_SWAP_TOPIC = lower(TOPICS.univ4Swap);
 
 async function readJsonl(path: string): Promise<any[]> {
   const text = await readFile(path, "utf8");
