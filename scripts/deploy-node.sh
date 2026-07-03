@@ -113,12 +113,18 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 ( cd "$REPO/listener" && npm run build ) || { say "build failed — NOT restarting"; exit 1; }
 
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
-REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-14}"
+REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
+# V4 backfill (per-poolId backward Initialize search, default 2M blocks) is the scan's perf killer:
+# hundreds of poolKeys-unresolvable v4 pools × a wide getLogs each pushes the scan >15min. Disable it
+# (=0) so the scan completes in a few min — poolKeys()-resolvable v4 pools + in-window Initialize are
+# still kept; only deep-history/unresolvable v4 is skipped (the census→auto-close bridge backfills those).
+REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-0}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
-say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window)…"
+say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"
 if timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
+       POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS="$REINDEX_V4_BACKFILL" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \
        sh -c 'cd "$0/listener" && npx tsx src/searcher/build-active-pool-universe.ts' "$REPO" \
        >/tmp/deploy-reindex.log 2>&1 \
