@@ -126,6 +126,6 @@ observability-only turn.
 | 0702 review's `gasUsed=0` sim-fidelity carry | Codex-B (0702) | this review | **refuted** — fixed in current code, `botvm-simulator.ts` returns real gas |
 | atomic triangles that DO route/sim are dust vs non-atomic competitor takes on the same block/pool | R11 dual-blind (A) | — | **confirmed** (Case 2, ~48,000x gap; falsifier shows dust/negative at every size 0.1-10,000,000 WETH) |
 | flash-size sweep falsifier (sizing vs structural ceiling) | R11 | — | **done** — `CONFIRMED: dust persists across full size range`, runner-up (sizing) refuted |
-| epic slice-1: audit pool-selection bias toward deep/high-TVL venues, re-weight toward longtail | R11 | R12 | **open, mandatory next Implementation Brief** |
+| epic slice-1: audit pool-selection bias toward deep/high-TVL venues, re-weight toward longtail | R11 | R12 | **done** — bias confirmed (score=swap-log-count, not TVL, same effect); bounded high-spread pair quota shipped + replay-gated, commit `5266555`, see `live-run-R12-20260703-hermes.md` |
 | discovery-queue.json 6 stale entries, never drained since 20260702 | future | when slack exists | open, non-blocking (noted in handoff §4) |
 | R10 v4 production backfill still running (~2hr+, pid 99451) | R10→R11 | R12 | still running, not yet merged into active-pools.json, zero-cost to let continue |
