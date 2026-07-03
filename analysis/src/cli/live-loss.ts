@@ -110,6 +110,8 @@ interface WatchReport {
   protocols: string[];
   roughProfit: number | null;      // ERC20-only, WETH@0 (legacy; kept for continuity)
   realized_profit_usd: number | null; // ERC20(incl WETH@ethUsd) + native ETH (v4-aware)
+  builder_payment_eth: number | null;
+  builder_payment_usd: number | null;
   profit_confidence: string;
   unpriced_deltas: number;
   unpriced_delta_symbols: string[];
@@ -262,13 +264,18 @@ async function runWatchMode(): Promise<void> {
   const allowTrace = priceTrace || rpc.isLocal();
   const pricedTxs: PricedLeg[] = [];
   const writtenReports: Array<{ outBase: string; report: WatchReport }> = [];
+  const coinbaseByBlock = new Map<number, string | null>();
   let written = 0;
+  let builderPaymentTotalEth = 0;
+  let builderPaymentTotalUsd = 0;
+  let builderPaymentPricedTxs = 0;
   console.error(
     `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} price_trace=${allowTrace ? "on" : "off"}`,
   );
 
   for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
     const block = await rpc.getBlockByNumber(blockNumber, true);
+    const coinbase = cachedBlockCoinbase(coinbaseByBlock, blockNumber, block);
     const txs: any[] = Array.isArray(block.transactions) ? block.transactions : [];
     const matches = txs.filter((tx) => {
       const actors = [tx.from, tx.to].filter(Boolean).map(lower);
@@ -284,8 +291,14 @@ async function runWatchMode(): Promise<void> {
       if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
       if (report.primaryReason === "not_seen" && report.venue_gap_type) notSeenByVenueGapType[report.venue_gap_type]++;
       const entityActors = inferWatchEntityActors(tx, report.competitorAddr);
-      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, { entityActors, allowTrace });
+      const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, {
+        entityActors,
+        allowTrace,
+        coinbase: coinbase ?? undefined,
+      });
       report.realized_profit_usd = profit.realizedProfitUsd;
+      report.builder_payment_eth = profit.builderPaymentEth;
+      report.builder_payment_usd = profit.builderPaymentUsd;
       report.profit_confidence = profit.profitConfidence;
       report.unpriced_deltas = profit.unpricedDeltas.length;
       report.unpriced_delta_symbols = uniq(profit.unpricedDeltas.map((delta) => delta.symbol));
@@ -302,6 +315,11 @@ async function runWatchMode(): Promise<void> {
         unsafe: profit.profitConfidence === "unsafe",
         hasV4: profit.v4Swaps.length > 0,
       });
+      if (profit.builderPaymentEth !== null && profit.builderPaymentUsd !== null) {
+        builderPaymentTotalEth += profit.builderPaymentEth;
+        builderPaymentTotalUsd += profit.builderPaymentUsd;
+        builderPaymentPricedTxs++;
+      }
       const outBase = watchOutputBase(blockNumber, tx.hash);
       await writeText(resolve(`${outBase}.md`), renderWatchMarkdown(report));
       await writeText(resolve(`${outBase}.json`), JSON.stringify(report, jsonReplacer, 2));
@@ -326,6 +344,18 @@ async function runWatchMode(): Promise<void> {
     `[analysis/live-loss/watch] net_per_block total=${netProfit.total.toFixed(0)} ` +
       `via_v4=${netProfit.viaV4.toFixed(0)} (ethUsd=${ethUsd.toFixed(0)})`,
   );
+  console.error(
+    `[analysis/live-loss/watch] builder_payment_total=${builderPaymentTotalEth.toFixed(6)} ETH ` +
+      `($${builderPaymentTotalUsd.toFixed(2)}) priced_txs=${builderPaymentPricedTxs}`,
+  );
+}
+
+function cachedBlockCoinbase(cache: Map<number, string | null>, blockNumber: number, block: any): string | null {
+  if (cache.has(blockNumber)) return cache.get(blockNumber) ?? null;
+  const coinbase = lower(block?.miner ?? "");
+  const value = coinbase || null;
+  cache.set(blockNumber, value);
+  return value;
 }
 
 async function enrichWrittenV4Reports(items: Array<{ outBase: string; report: WatchReport }>): Promise<void> {
@@ -452,6 +482,8 @@ async function buildWatchReport(
     protocols: logResult.protocols,
     roughProfit: roughValueUsd(logResult.rawDeltas),
     realized_profit_usd: null, // filled by priceArb in runWatchMode (needs rpc + ethUsd)
+    builder_payment_eth: null,
+    builder_payment_usd: null,
     profit_confidence: "requires_decode",
     unpriced_deltas: 0,
     unpriced_delta_symbols: [],
@@ -693,7 +725,8 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- canonical_sequence: \`${report.canonicalSequence.join(" -> ") || "unknown"}\``);
   lines.push(`- competitor_edge: ${report.competitorEdge.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
   lines.push(`- rough_profit: ${report.roughProfit == null ? "n/a" : report.roughProfit.toFixed(6)}`);
-  lines.push(`- realized_profit_usd: ${report.realized_profit_usd == null ? "n/a" : report.realized_profit_usd.toFixed(2)}`);
+  lines.push(`- realized_profit_usd: ${report.realized_profit_usd == null ? "n/a" : report.realized_profit_usd.toFixed(2)} (valuation-artifact-prone; see builder_payment)`);
+  lines.push(`- builder_payment: ${formatBuilderPayment(report)} [robust profit floor]`);
   lines.push(`- profit_confidence: \`${report.profit_confidence}\``);
   const unpricedSymbols = report.unpriced_delta_symbols.map((x) => `\`${x}\``).join(", ");
   lines.push(`- unpriced_deltas: ${report.unpriced_deltas}${unpricedSymbols ? ` (${unpricedSymbols})` : ""}`);
@@ -739,6 +772,11 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push("");
   for (const action of report.nextAction) lines.push(`- ${action}`);
   return `${lines.join("\n")}\n`;
+}
+
+function formatBuilderPayment(report: WatchReport): string {
+  if (report.builder_payment_eth === null || report.builder_payment_usd === null) return "n/a";
+  return `${report.builder_payment_eth.toFixed(6)} ETH ($${report.builder_payment_usd.toFixed(2)})`;
 }
 
 function competitorEdges(seq: string[]): string[] {

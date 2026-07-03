@@ -32,6 +32,8 @@ export interface PricedLeg {
 export interface ArbProfit {
   /** ERC20 (incl. WETH) + native-ETH net value the bot gained, USD. null if nothing priceable. */
   realizedProfitUsd: number | null;
+  builderPaymentEth: number | null;
+  builderPaymentUsd: number | null;
   erc20Usd: number | null;
   pricedDeltas: TokenDelta[];
   unpricedDeltas: TokenDelta[];
@@ -47,6 +49,7 @@ export interface ArbProfit {
 export interface PriceArbOptions {
   entityActors: string[];
   allowTrace: boolean;
+  coinbase?: string;
 }
 
 export function valueDeltas(
@@ -139,6 +142,22 @@ export function decodeV4Swaps(receipt: any): V4Swap[] {
   return out;
 }
 
+function prestateBalanceWei(m: Record<string, any>, a: string): bigint | null {
+  return a in m && m[a]?.balance !== undefined ? hexToBigInt(m[a].balance) : null;
+}
+
+export function builderPaymentWeiFromPrestate(
+  pre: Record<string, any>,
+  post: Record<string, any>,
+  coinbase: string,
+): bigint {
+  const a = lower(coinbase);
+  const b0 = prestateBalanceWei(pre, a);
+  const b1 = prestateBalanceWei(post, a);
+  if (b0 === null && b1 === null) return 0n;
+  return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
+}
+
 /**
  * Realized profit of an arb tx = net value the caller-supplied bot entity actors
  * gained, in USD. Covers ERC20 (incl. WETH) via Transfer logs AND
@@ -174,19 +193,19 @@ export async function priceArb(
   // Native ETH: add gas back only when tx.from is part of the supplied entity.
   let ethWei = 0n;
   let tracedEth = false;
+  let builderPaymentWei: bigint | null = null;
   if (options.allowTrace) {
     try {
       const tr = await rpc.tracePrestate(txHash);
       const pre = tr?.pre ?? {};
       const post = tr?.post ?? {};
-      const bal = (m: Record<string, any>, a: string): bigint | null =>
-        a in m && m[a]?.balance !== undefined ? hexToBigInt(m[a].balance) : null;
       const delta = (a: string): bigint => {
-        const b0 = bal(pre, a);
-        const b1 = bal(post, a);
+        const b0 = prestateBalanceWei(pre, a);
+        const b1 = prestateBalanceWei(post, a);
         if (b0 === null && b1 === null) return 0n;
         return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
       };
+      if (options.coinbase) builderPaymentWei = builderPaymentWeiFromPrestate(pre, post, options.coinbase);
       const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
       for (const actor of actors) {
         ethWei += delta(actor);
@@ -199,6 +218,8 @@ export async function priceArb(
   }
   const ethDeltaEth = Number(ethWei) / 1e18;
   const ethProfitUsd = ethDeltaEth * ethUsd;
+  const builderPaymentEth = builderPaymentWei === null ? null : Number(builderPaymentWei) / 1e18;
+  const builderPaymentUsd = builderPaymentEth === null ? null : builderPaymentEth * ethUsd;
 
   const v4Swaps = decodeV4Swaps(receipt);
   const v4PoolIds = [...new Set(v4Swaps.map((swap) => swap.poolId))];
@@ -207,6 +228,8 @@ export async function priceArb(
     erc20Usd === null && (!tracedEth || ethWei === 0n) ? null : (erc20Usd ?? 0) + ethProfitUsd;
   return {
     realizedProfitUsd,
+    builderPaymentEth,
+    builderPaymentUsd,
     erc20Usd,
     pricedDeltas: valuedDeltas.priced,
     unpricedDeltas: valuedDeltas.unpriced,
