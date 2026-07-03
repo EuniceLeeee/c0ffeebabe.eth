@@ -1,64 +1,82 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { ethers } from "ethers";
 import { actionsFromLogs } from "../actions/from-logs.js";
 import { canonicalSequence, pathTemplate } from "../actions/canonicalize.js";
 import { runCompetitorScan } from "../competitor-scan.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
 import { aggregateNetProfit, priceArb, fetchEthUsd, type PricedLeg, type V4Swap } from "../pnl/arb-profit.js";
-import { TOPICS, lower, short } from "../registry/protocols.js";
+import { lower, short } from "../registry/protocols.js";
 import { resolveV4PoolKeys } from "../registry/v4-poolkeys.js";
 import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient } from "../rpc/client.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
+import {
+  findVenueByFactory,
+  findVenueBySeed,
+  findVenueCapability,
+  type VenueId,
+} from "../../../listener/src/searcher/venues/capability.js";
 
-const args = parseArgs(process.argv.slice(2));
-const eventsPath = args.events ? String(args.events) : "";
-const graphPoolsPath = args["graph-pools"] ? String(args["graph-pools"]) : "searcher/pools/runtime-graph-pools.json";
-const rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "");
-const v4ArchiveRpcUrl = typeof args["v4-archive-rpc"] === "string"
-  ? String(args["v4-archive-rpc"])
-  : String(process.env.MAINNET_RPC_URL ?? "");
-const fromBlockArg = args["from-block"] ? Number(args["from-block"]) : undefined;
-const toBlockArg = args["to-block"] ? Number(args["to-block"]) : undefined;
-const priceTrace = Boolean(args["price-trace"]);
-const output = args.output ? String(args.output) : undefined;
-const watch = parseWatch(args.watch);
-const competitorScan = Boolean(args["competitor-scan"]);
-const notSeenScan = Boolean(args["not-seen-scan"]);
-const maxBlocks = Number(args["max-blocks"] ?? 200);
+let args: Record<string, string | boolean> = {};
+let eventsPath = "";
+let graphPoolsPath = "searcher/pools/runtime-graph-pools.json";
+let rpcUrl = "";
+let v4ArchiveRpcUrl = "";
+let fromBlockArg: number | undefined;
+let toBlockArg: number | undefined;
+let priceTrace = false;
+let output: string | undefined;
+let watch: string[] = [];
+let competitorScan = false;
+let notSeenScan = false;
+let maxBlocks = 200;
+let rpc: RpcClient;
+let events: any[] = [];
+let routingGraphPools: Set<string> | null = null;
 
-if (!eventsPath) {
-  console.error("Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl (--competitor-scan | --watch <addr[,addr]>) --rpc <url>");
+async function main(): Promise<void> {
+  args = parseArgs(process.argv.slice(2));
+  eventsPath = args.events ? String(args.events) : "";
+  graphPoolsPath = args["graph-pools"] ? String(args["graph-pools"]) : "searcher/pools/runtime-graph-pools.json";
+  rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "");
+  v4ArchiveRpcUrl = typeof args["v4-archive-rpc"] === "string"
+    ? String(args["v4-archive-rpc"])
+    : String(process.env.MAINNET_RPC_URL ?? "");
+  fromBlockArg = args["from-block"] ? Number(args["from-block"]) : undefined;
+  toBlockArg = args["to-block"] ? Number(args["to-block"]) : undefined;
+  priceTrace = Boolean(args["price-trace"]);
+  output = args.output ? String(args.output) : undefined;
+  watch = parseWatch(args.watch);
+  competitorScan = Boolean(args["competitor-scan"]);
+  notSeenScan = Boolean(args["not-seen-scan"]);
+  maxBlocks = Number(args["max-blocks"] ?? 200);
+
+  if (!eventsPath) {
+    console.error("Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl (--competitor-scan | --watch <addr[,addr]>) --rpc <url>");
+    process.exit(1);
+  }
+
+  rpc = new RpcClient(rpcUrl);
+  events = await readJsonl(eventsPath);
+  routingGraphPools = readRoutingGraphPools(graphPoolsPath);
+  if (competitorScan) {
+    await runCompetitorScan({ eventsPath, events, rpc, notSeenScan });
+    process.exit(0);
+  }
+  if (watch.length > 0) {
+    await runWatchMode();
+    process.exit(0);
+  }
+  console.error("Usage error: pass --competitor-scan or --watch <addr[,addr]>.");
   process.exit(1);
 }
 
-const rpc = new RpcClient(rpcUrl);
-const events = await readJsonl(eventsPath);
-const routingGraphPools: Set<string> | null = (() => {
-  try {
-    if (!existsSync(graphPoolsPath)) return null;
-    const j = JSON.parse(readFileSync(graphPoolsPath, "utf8"));
-    const arr = Array.isArray(j) ? j : j.pools || [];
-    return new Set(
-      arr
-        .map((pool: any) => String(pool.address || pool).toLowerCase())
-        .filter(isAddress),
-    );
-  } catch {
-    return null;
-  }
-})();
-if (competitorScan) {
-  await runCompetitorScan({ eventsPath, events, rpc, notSeenScan });
-  process.exit(0);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }
-if (watch.length > 0) {
-  await runWatchMode();
-  process.exit(0);
-}
-console.error("Usage error: pass --competitor-scan or --watch <addr[,addr]>.");
-process.exit(1);
 
 interface WatchReport {
   block: number;
@@ -73,6 +91,8 @@ interface WatchReport {
   pool_in_seen_events: boolean;
   pool_in_routing_graph: boolean | null;
   gap_type: GapType | null;
+  venue_gap_type: VenueGapType | null;
+  venue_gaps: VenueGap[];
   competitorEdge: string[];
   protocols: string[];
   roughProfit: number | null;      // ERC20-only, WETH@0 (legacy; kept for continuity)
@@ -91,6 +111,25 @@ interface WatchReport {
 }
 
 type GapType = "graph_gap" | "detection_gap" | "unknown";
+export type VenueGapType = "venue_class_gap" | "pool_gap" | "execution_adapter_gap" | "detection_gap" | "unknown";
+
+export interface VenueGap {
+  pool: string;
+  venue: VenueId | "unknown";
+  factory: string | null;
+  gap_type: VenueGapType;
+  pool_in_routing_graph: boolean | null;
+  discoverable: boolean | null;
+  quotable: boolean | null;
+  buildable: boolean | null;
+  supported_in_prod: boolean | null;
+}
+
+export interface VenueIdentityFixture {
+  address: string;
+  venue: VenueId | "unknown";
+  factory?: string | null;
+}
 
 interface SeenSet {
   pools: Set<string>;
@@ -111,6 +150,21 @@ async function readJsonl(path: string): Promise<any[]> {
         throw new Error(`Invalid JSONL at ${path}:${i + 1}: ${(err as Error).message}`);
       }
     });
+}
+
+function readRoutingGraphPools(path: string): Set<string> | null {
+  try {
+    if (!existsSync(path)) return null;
+    const j = JSON.parse(readFileSync(path, "utf8"));
+    const arr = Array.isArray(j) ? j : j.pools || [];
+    return new Set(
+      arr
+        .map((pool: any) => String(pool.address || pool).toLowerCase())
+        .filter(isAddress),
+    );
+  } catch {
+    return null;
+  }
 }
 
 function inferBlocks(items: any[]): number[] {
@@ -141,6 +195,13 @@ async function runWatchMode(): Promise<void> {
     detection_gap: 0,
     unknown: 0,
   };
+  const notSeenByVenueGapType: Record<VenueGapType, number> = {
+    venue_class_gap: 0,
+    pool_gap: 0,
+    execution_adapter_gap: 0,
+    detection_gap: 0,
+    unknown: 0,
+  };
   const ethUsd = await fetchEthUsd(rpc);
   const allowTrace = priceTrace || rpc.isLocal();
   const pricedTxs: PricedLeg[] = [];
@@ -163,8 +224,9 @@ async function runWatchMode(): Promise<void> {
     await mapLimit(matches, 4, async (tx) => {
       const receipt = await rpc.getReceipt(tx.hash);
       if (!receipt || receipt.status !== "0x1") return;
-      const report = buildWatchReport(blockNumber, tx, receipt, seenByBlock);
+      const report = await buildWatchReport(blockNumber, tx, receipt, seenByBlock);
       if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
+      if (report.primaryReason === "not_seen" && report.venue_gap_type) notSeenByVenueGapType[report.venue_gap_type]++;
       const entityActors = inferWatchEntityActors(tx, report.competitorAddr);
       const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, { entityActors, allowTrace });
       report.realized_profit_usd = profit.realizedProfitUsd;
@@ -197,6 +259,11 @@ async function runWatchMode(): Promise<void> {
   console.error(
     `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
       `detection_gap=${notSeenByGapType.detection_gap} unknown=${notSeenByGapType.unknown}`,
+  );
+  console.error(
+    `[analysis/live-loss/watch] not_seen_venue_gap_types venue_class_gap=${notSeenByVenueGapType.venue_class_gap} ` +
+      `pool_gap=${notSeenByVenueGapType.pool_gap} execution_adapter_gap=${notSeenByVenueGapType.execution_adapter_gap} ` +
+      `detection_gap=${notSeenByVenueGapType.detection_gap} unknown=${notSeenByVenueGapType.unknown}`,
   );
   const netProfit = aggregateNetProfit(pricedTxs);
   console.error(
@@ -282,12 +349,12 @@ function buildSeenByBlock(items: any[]): Map<number, SeenSet> {
   return out;
 }
 
-function buildWatchReport(
+async function buildWatchReport(
   block: number,
   tx: any,
   receipt: any,
   seenByBlock: Map<number, SeenSet>,
-): WatchReport {
+): Promise<WatchReport> {
   const matched = uniq([tx.from, tx.to].filter(Boolean).map(lower).filter((actor) => watch.includes(actor)));
   const actors = uniq([tx.from, tx.to, ...matched].filter(Boolean));
   const logResult = actionsFromLogs(receipt, actors);
@@ -303,8 +370,11 @@ function buildWatchReport(
     ? (samePool || sameToken ? "seen_but_lost" : "not_seen")
     : (seen.any ? "seen_but_lost" : "not_seen");
   const poolInSeenEvents = pools.some((pool) => seen.pools.has(pool));
-  const poolInRoutingGraph = routingGraphPools ? pools.some((p) => routingGraphPools.has(lower(p))) : null;
+  const graphPools = routingGraphPools;
+  const poolInRoutingGraph = graphPools ? pools.some((p) => graphPools.has(lower(p))) : null;
+  const venueGaps = await classifyVenueGapsForAddresses(pools, graphPools);
   const gapType = primaryReason === "not_seen" ? classifyGapType(poolInRoutingGraph) : null;
+  const venueGapType = primaryReason === "not_seen" ? summarizeVenueGapType(venueGaps) : null;
 
   return {
     block,
@@ -319,6 +389,8 @@ function buildWatchReport(
     pool_in_seen_events: poolInSeenEvents,
     pool_in_routing_graph: poolInRoutingGraph,
     gap_type: gapType,
+    venue_gap_type: venueGapType,
+    venue_gaps: venueGaps,
     competitorEdge: competitorEdges(sequence),
     protocols: logResult.protocols,
     roughProfit: roughValueUsd(logResult.rawDeltas),
@@ -342,19 +414,129 @@ function classifyGapType(poolInRoutingGraph: boolean | null): GapType {
   return poolInRoutingGraph ? "detection_gap" : "graph_gap";
 }
 
+const factoryIface = new ethers.Interface(["function factory() view returns (address)"]);
+const BYTECODE_SIGNATURES: Array<{ selector: string; venue: VenueId }> = [
+  { selector: ethers.id("redeemSharesInKind(address,uint256,address[],uint256[])").slice(2, 10), venue: "enzyme" },
+  { selector: ethers.id("redeemSharesInKind(address,uint256,address[],uint256[],address[])").slice(2, 10), venue: "enzyme" },
+  { selector: ethers.id("smardexSwapCallback(int256,int256,bytes)").slice(2, 10), venue: "smardex" },
+  { selector: ethers.id("getAmountOut(address,uint256)").slice(2, 10), venue: "ousd" },
+];
+
+export function classifyVenueGapsFromFixtures(
+  fixtures: VenueIdentityFixture[],
+  graphPools: Set<string> | null,
+): VenueGap[] {
+  return fixtures.map((fixture) =>
+    classifyResolvedVenue(fixture.address, fixture.venue, fixture.factory ?? null, graphPools),
+  );
+}
+
+async function classifyVenueGapsForAddresses(
+  addresses: string[],
+  graphPools: Set<string> | null,
+): Promise<VenueGap[]> {
+  return mapLimit(addresses, 8, async (address) => {
+    const resolved = await resolveVenueForAddress(address);
+    return classifyResolvedVenue(address, resolved.venue, resolved.factory, graphPools);
+  });
+}
+
+async function resolveVenueForAddress(address: string): Promise<{ venue: VenueId | "unknown"; factory: string | null }> {
+  const seeded = findVenueBySeed(address);
+  if (seeded) return { venue: seeded.venue, factory: null };
+
+  const factory = await probeFactory(address);
+  if (factory) {
+    const byFactory = findVenueByFactory(factory);
+    if (byFactory) return { venue: byFactory.venue, factory };
+    return { venue: "unknown", factory };
+  }
+
+  const signatureVenue = await resolveVenueByBytecode(address);
+  return { venue: signatureVenue ?? "unknown", factory: null };
+}
+
+async function probeFactory(address: string): Promise<string | null> {
+  try {
+    const result = await rpc.call<string>("eth_call", [{ to: address, data: factoryIface.encodeFunctionData("factory") }, "latest"]);
+    if (!result || result === "0x") return null;
+    return ethers.getAddress("0x" + result.slice(-40));
+  } catch {
+    return null;
+  }
+}
+
+async function resolveVenueByBytecode(address: string): Promise<VenueId | null> {
+  try {
+    const code = (await rpc.getCode(address)).toLowerCase();
+    if (!code || code === "0x") return null;
+    for (const sig of BYTECODE_SIGNATURES) {
+      if (code.includes(sig.selector)) return sig.venue;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function classifyResolvedVenue(
+  pool: string,
+  venue: VenueId | "unknown",
+  factory: string | null,
+  graphPools: Set<string> | null,
+): VenueGap {
+  const poolInRoutingGraph = graphPools ? graphPools.has(lower(pool)) : null;
+  const capability = venue === "unknown" ? null : findVenueCapability(venue);
+  if (!capability) {
+    return {
+      pool: lower(pool),
+      venue: "unknown",
+      factory,
+      gap_type: "unknown",
+      pool_in_routing_graph: poolInRoutingGraph,
+      discoverable: null,
+      quotable: null,
+      buildable: null,
+      supported_in_prod: null,
+    };
+  }
+
+  let gapType: VenueGapType;
+  if (!capability.supported_in_prod || !capability.discoverable) {
+    gapType = capability.discoverable && (!capability.quotable || !capability.buildable)
+      ? "execution_adapter_gap"
+      : "venue_class_gap";
+  } else if (!capability.quotable || !capability.buildable) {
+    gapType = "execution_adapter_gap";
+  } else if (poolInRoutingGraph === null) {
+    gapType = "unknown";
+  } else {
+    gapType = poolInRoutingGraph ? "detection_gap" : "pool_gap";
+  }
+
+  return {
+    pool: lower(pool),
+    venue: capability.venue,
+    factory,
+    gap_type: gapType,
+    pool_in_routing_graph: poolInRoutingGraph,
+    discoverable: capability.discoverable,
+    quotable: capability.quotable,
+    buildable: capability.buildable,
+    supported_in_prod: capability.supported_in_prod,
+  };
+}
+
+function summarizeVenueGapType(gaps: VenueGap[]): VenueGapType | null {
+  if (gaps.length === 0) return "unknown";
+  for (const kind of ["venue_class_gap", "execution_adapter_gap", "pool_gap", "detection_gap", "unknown"] as const) {
+    if (gaps.some((gap) => gap.gap_type === kind)) return kind;
+  }
+  return "unknown";
+}
+
 function extractPoolAddresses(receipt: any): string[] {
-  const poolTopics = new Set([
-    TOPICS.univ2Swap,
-    TOPICS.univ3Swap,
-    TOPICS.curveTokenExchange,
-    TOPICS.curveTokenExchangeUnderlying,
-    TOPICS.univ2Mint,
-    TOPICS.univ2Burn,
-    TOPICS.univ3Mint,
-    TOPICS.univ3Burn,
-  ].map(lower));
   const pools = (receipt.logs ?? [])
-    .filter((log: any) => poolTopics.has(lower(log.topics?.[0])))
     .map((log: any) => lower(log.address))
     .filter((addr: string) => /^0x[a-f0-9]{40}$/.test(addr));
   return uniq(pools);
@@ -426,7 +608,20 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- pool_in_seen_events: \`${report.pool_in_seen_events}\``);
   lines.push(`- pool_in_routing_graph: \`${report.pool_in_routing_graph}\``);
   lines.push(`- gap_type: \`${report.gap_type ?? "n/a"}\``);
+  lines.push(`- venue_gap_type: \`${report.venue_gap_type ?? "n/a"}\``);
   lines.push(`- protocols: ${report.protocols.join(", ") || "n/a"}`);
+  if (report.venue_gaps.length > 0) {
+    lines.push("");
+    lines.push("## Venue Gaps");
+    lines.push("");
+    for (const gap of report.venue_gaps) {
+      const factory = gap.factory ? ` factory=${short(gap.factory)}` : "";
+      lines.push(
+        `- ${short(gap.pool)} venue=\`${gap.venue}\` gap=\`${gap.gap_type}\`` +
+          ` graph=\`${gap.pool_in_routing_graph}\`${factory}`,
+      );
+    }
+  }
   lines.push("");
   lines.push("## Next Action");
   lines.push("");
