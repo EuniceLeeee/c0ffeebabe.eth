@@ -40,14 +40,14 @@ interface SourceQuery {
   id?: string;
 }
 
-interface TouchedVenue {
+export interface TouchedVenue {
   protocol: "univ2" | "univ3" | "univ4";
   id: string;
   emitter: string;
   in_graph: boolean | null;
 }
 
-interface GraphMembership {
+export interface GraphMembership {
   status: "loaded" | "unavailable";
   path: string;
   entries: number;
@@ -477,7 +477,7 @@ function normalizeStateMap(state: Record<string, any>): Record<string, any> {
   return out;
 }
 
-function extractTouchedVenues(receipt: Json, graph: GraphMembership | null): TouchedVenue[] {
+export function extractTouchedVenues(receipt: Json, graph: GraphMembership | null): TouchedVenue[] {
   const out: TouchedVenue[] = [];
   for (const log of receipt?.logs ?? []) {
     const emitter = lower(String(log?.address ?? ""));
@@ -514,7 +514,7 @@ function venue(
   };
 }
 
-function loadGraphMembership(path: string): GraphMembership {
+export function loadGraphMembership(path: string): GraphMembership {
   if (!existsSync(path)) return { status: "unavailable", path, entries: 0, members: new Set() };
   try {
     const text = readFileSyncText(path);
