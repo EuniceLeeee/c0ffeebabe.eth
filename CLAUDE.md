@@ -170,26 +170,29 @@ Governance: every triggered loss/miss with a **closable** gap becomes a tracked 
 (`owner` + `carry_to_round`) and BLOCKS closing the cycle until improved or explicitly killed by the
 human (same teeth as rules 13/16). The gap MUST be closed, not just filed as "known".
 
-**Reference instance (2026-07-03) — analysis-validated, close is an EPIC not an in-loop backfill:**
-bundle `0xa32b646c…8b2f68` (block 25449741) lost `route_gap_decisive` — the winner `0x28390df4…`
-backran the same triggering swap via a 2-hop route: WETH→CFG on v3 pool `0x08a10a8b…FCBF`, then
-CFG→WETH on a **native-ETH v4 pool `0x267d01a3…9348cd9c`** (`Initialize` confirms currency0=`0x0`
-native ETH / currency1=CFG; poolId absent from our runtime graph, `in_graph=false`). Our v3-only
-3-hop detour (WETH→CFG→USDT→WETH) saw only ~43% of the value (sim gross 330217158618935 wei vs the
-winner's ~774e12 wei = WETH out 0.16662725 − in 0.16585284), and the winner's builder payment
-(750794055091649 wei, ~97% of its gross) alone exceeded our
-FULL simulated gross — so NO bid policy could have won; the analysis named coverage, not bids.
-**Gap class = execution-adapter, not pool.** The planner already routes native-ETH v4 (WETH-alias;
-`planner.ts` native-ETH v4 fixtures pass), but **v4 is not in the ActionAdapter execution registry**
-(only univ2/univ3/ln/curve/psm/fluid; the `ln` V4 call in `FlashArb.sol` is a bespoke wstUSR
-hardcode, not a general v4 builder), so graphing the poolId lets us ROUTE but not BUILD/settle the
-leg live. Per rule 13 native-ETH v4 execution is an **epic**, and per-pool pins on an epic'd class
-are forbidden in-loop → the CLOSE routes to that epic. What the auto-loop CAN close here is the
-COVERAGE half: a planner fixture asserting that, with the v4 CFG poolId graphed, our route emits the
-2-hop v3↔v4 plan capturing the full gross (proves the routing lever); live capture stays
-`implemented_not_validated` until the v4 native-ETH execution adapter lands. (Corrected 2026-07-03 by
-the non-author evaluator after on-chain verification — the original draft mis-classified this as a
-pure pool gap closable by backfill; that would have been a forbidden per-pool pin on the v4 epic.)
+**Reference instance (2026-07-03), CLOSED as a pool gap:** bundle `0xa32b646c…8b2f68` (block
+25449741) lost `route_gap_decisive` — the winner `0x28390df4…` backran the same triggering swap via
+a 2-hop route: WETH→CFG on v3 pool `0x08a10a8b…FCBF`, then CFG→WETH on a **native-ETH v4 pool
+`0x267d01a3…9348cd9c`** (on-chain `Initialize` verified: currency0=`0x0` native ETH / currency1=CFG,
+fee=10001, tickSpacing=200, hooks=0x0 — matches the backfilled poolKey exactly; poolId was absent
+from our runtime graph). Our v3-only 3-hop detour (WETH→CFG→USDT→WETH) saw only ~43% of the value
+(sim gross 330217158618935 wei vs the winner's ~774e12 wei = WETH out 0.16662725 − in 0.16585284),
+and the winner's builder payment (750794055091649 wei, ~97% of its gross) alone exceeded our FULL
+simulated gross — so NO bid policy could have won; the analysis named coverage, not bids.
+**Gap class = pool gap; native-ETH v4 execution is NOT a blocker** — it landed in epic slice-2b-ii
+(`c817cc2`: plan-builder native settle{value}/take of the real `0x0` currency, univ4 ActionAdapter
+registered, `replay-v4-native-arb.ts` fork execution replay vs V4Quoter; only the truly ambiguous
+ETH/WETH v4 pool is rejected). CLOSE shipped as commits `8acee06`/`b06717c`/`574d5e4`: a reusable
+`v4-backfill-poolid` verb (poolKey via PositionManager), force-include extended to v4 poolIds (was
+address-only and skipped univ4 — a hidden mechanism gap found only by ACTUALLY closing), and a
+committed `force-include-poolids.json` that survives deploy. Rule-12 flip:
+`pool_in_routing_graph false→true, candidate_plans 0→1` (planner 14/14 + replay 12/12 + pool-universe
+10/10 + force-include 4/4, independently re-run by the evaluator). Residual until the next deploy
+window: banner shows `forceIncludePoolIds merged>0` + `0x267d01…` present in the live runtime graph.
+(Evaluator note: an interim review wrongly re-classified this as an execution-adapter epic off a
+corrupted code read — `rg -r` swallows a replacement arg; never use `-rn`/`-rln` — plus a stale
+memory claiming native-ETH execution was still gapped. Re-verified from clean reads + on-chain data;
+the original pool-gap classification stood. Verify against CODE, not memory — rule 3.)
 
 ### 7. Generator / Evaluator split — DEFAULT operating model (all code work, not just Hermes)
 
