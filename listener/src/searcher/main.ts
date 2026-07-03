@@ -54,6 +54,7 @@ import type { ResolvedPlanNode } from "../shared/types/plan.js";
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
 
 const WHALE = "0x000000000000000000000000000000000000dEaD";
@@ -283,7 +284,7 @@ function parseAddressList(value: string | undefined): string[] {
     .split(",")
     .map((addr) => addr.trim())
     .filter((addr) => addr.length > 0)
-    .map((addr) => ethers.getAddress(addr));
+    .map((addr) => BYTES32_RE.test(addr) ? addr.toLowerCase() : ethers.getAddress(addr));
 }
 
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {

@@ -13,6 +13,9 @@ function poolAddress(n: number): string {
   return "0x" + n.toString(16).padStart(40, "0");
 }
 
+const CFG_V4_POOL_ID = "0x267d01a3b23fe2340482242db5396f7544d36f398862efa591e92a079348cd9c";
+const OTHER_V4_POOL_ID = "0x" + "22".repeat(32);
+
 async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "pool-universe-"));
   try {
@@ -205,15 +208,45 @@ async function main(): Promise<void> {
         {
           address: v4PoolManager,
           adapter: "univ4",
-          poolId: "0x" + "11".repeat(32),
+          poolId: CFG_V4_POOL_ID,
+          currency0: poolAddress(0),
+          currency1: poolAddress(0xc005),
+          fee: 10001,
+          tickSpacing: 200,
+          hooks: poolAddress(0),
+          score: 1,
+        },
+        {
+          address: v4PoolManager,
+          adapter: "univ4",
+          poolId: CFG_V4_POOL_ID,
+          currency0: poolAddress(0),
+          currency1: poolAddress(0xc005),
+          fee: 10001,
+          tickSpacing: 200,
+          hooks: poolAddress(0),
+          score: 1,
+        },
+        {
+          address: v4PoolManager,
+          adapter: "univ4",
+          poolId: OTHER_V4_POOL_ID,
           currency0: poolAddress(0xc001),
           currency1: poolAddress(0xc005),
           fee: 3000,
           tickSpacing: 60,
           hooks: poolAddress(0),
+          score: 1,
         },
       ],
     }));
+    const withoutForcedV4 = loadPoolUniverse(forceFile, { maxPools: 2, minScore: 1 });
+    assert(
+      !withoutForcedV4.some((pool) => pool.poolId === CFG_V4_POOL_ID),
+      "low-score v4 pool should be absent without forceInclude",
+    );
+    console.log("[pool-universe] forceInclude v4 poolId baseline absent: PASS");
+
     const warnings: string[] = [];
     const originalWarn = console.warn;
     console.warn = (message?: unknown) => { warnings.push(String(message)); };
@@ -222,7 +255,7 @@ async function main(): Promise<void> {
       forced = loadPoolUniverse(forceFile, {
         maxPools: 2,
         minScore: 5,
-        forceInclude: [belowCut.toLowerCase(), scoreless, v4PoolManager],
+        forceInclude: [belowCut.toLowerCase(), scoreless],
       });
     } finally {
       console.warn = originalWarn;
@@ -230,17 +263,64 @@ async function main(): Promise<void> {
     assert(forced.length === 4, `forceInclude should append two non-v4 pools, got ${forced.length}`);
     assert(forced.some((pool) => pool.address === belowCut), "forceInclude should promote below-cut pool");
     assert(forced.some((pool) => pool.address === scoreless), "forceInclude should promote scoreless pool");
-    assert(!forced.some((pool) => pool.address === v4PoolManager), "forceInclude should skip v4 address identity");
     assert(
-      warnings.some((line) => line.includes("forceInclude skipped univ4 entry")),
-      "forceInclude v4 skip should warn",
+      warnings.every((line) => !line.includes("forceInclude skipped univ4 entry")),
+      "non-v4 forceInclude should not warn about v4 entries",
     );
-    console.log("[pool-universe] forceInclude minScore-bypass/v4-skip: PASS");
+    console.log("[pool-universe] forceInclude minScore-bypass non-v4: PASS");
+
+    const v4Warnings: string[] = [];
+    console.warn = (message?: unknown) => { v4Warnings.push(String(message)); };
+    let forcedV4: ReturnType<typeof loadPoolUniverse> = [];
+    try {
+      forcedV4 = loadPoolUniverse(forceFile, {
+        maxPools: 2,
+        minScore: 1,
+        forceInclude: [CFG_V4_POOL_ID, "0x" + CFG_V4_POOL_ID.slice(2).toUpperCase(), OTHER_V4_POOL_ID],
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+    const cfgV4Matches = forcedV4.filter((pool) => pool.poolId?.toLowerCase() === CFG_V4_POOL_ID);
+    const otherV4Matches = forcedV4.filter((pool) => pool.poolId?.toLowerCase() === OTHER_V4_POOL_ID);
+    assert(cfgV4Matches.length === 1, `forceInclude should dedup same v4 poolId, got ${cfgV4Matches.length}`);
+    assert(otherV4Matches.length === 1, `forceInclude should include distinct v4 poolId, got ${otherV4Matches.length}`);
+    assert(
+      cfgV4Matches[0].address === v4PoolManager && cfgV4Matches[0].adapter === "univ4",
+      "forceInclude should promote v4 entry by poolId",
+    );
+    assert(
+      v4Warnings.every((line) => !line.includes("forceInclude skipped univ4 entry")),
+      "v4 poolId forceInclude should not warn about address ambiguity",
+    );
+    console.log("[pool-universe] forceInclude v4 poolId admission/dedup: PASS");
+
+    const addressOnlyWarnings: string[] = [];
+    console.warn = (message?: unknown) => { addressOnlyWarnings.push(String(message)); };
+    let forcedV4Address: ReturnType<typeof loadPoolUniverse> = [];
+    try {
+      forcedV4Address = loadPoolUniverse(forceFile, {
+        maxPools: 2,
+        minScore: 1,
+        forceInclude: [v4PoolManager],
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert(
+      !forcedV4Address.some((pool) => pool.address === v4PoolManager),
+      "v4 address forceInclude should skip ambiguous PoolManager identity",
+    );
+    assert(
+      addressOnlyWarnings.some((line) => line.includes("forceInclude skipped univ4 entry")),
+      "v4 address forceInclude should warn about ambiguity",
+    );
+    console.log("[pool-universe] forceInclude v4 address ambiguity skip: PASS");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe PASS (8/8)");
+  console.log("pool-universe PASS (10/10)");
 }
 
 main().catch((err) => {

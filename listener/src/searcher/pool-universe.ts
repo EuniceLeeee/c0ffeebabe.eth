@@ -42,6 +42,8 @@ const ADAPTERS = new Set<PoolEntry["adapter"]>([
   "psm",
   "fluid-vault",
 ]);
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 
 export function loadPoolUniverse(
   path = DEFAULT_POOL_UNIVERSE_PATH,
@@ -170,15 +172,40 @@ function appendForceIncluded(
   forceInclude: string[],
 ): PoolUniverseEntry[] {
   if (forceInclude.length === 0) return selected;
-  const wanted = new Set(forceInclude.map((addr) => ethers.getAddress(addr).toLowerCase()));
-  const seen = new Set(selected.map((pool) => pool.address.toLowerCase()));
+  const wantedAddrs = new Set<string>();
+  const wantedPoolIds = new Set<string>();
+  for (const item of forceInclude) {
+    if (ADDRESS_RE.test(item)) {
+      wantedAddrs.add(ethers.getAddress(item).toLowerCase());
+    } else if (BYTES32_RE.test(item)) {
+      wantedPoolIds.add(item.toLowerCase());
+    } else {
+      throw new Error(`forceInclude entry must be an address or bytes32 poolId: ${item}`);
+    }
+  }
+  const seenAddrs = new Set(
+    selected
+      .filter((pool) => pool.adapter !== "univ4")
+      .map((pool) => pool.address.toLowerCase()),
+  );
+  const seenV4PoolIds = new Set(
+    selected
+      .filter((pool) => pool.adapter === "univ4" && typeof pool.poolId === "string")
+      .map((pool) => pool.poolId!.toLowerCase()),
+  );
   const warnedV4 = new Set<string>();
   const out = [...selected];
   for (const pool of allPools) {
     const key = pool.address.toLowerCase();
-    if (!wanted.has(key)) continue;
     if (pool.adapter === "univ4") {
-      if (!warnedV4.has(key)) {
+      const poolId = pool.poolId?.toLowerCase();
+      if (poolId && wantedPoolIds.has(poolId)) {
+        if (seenV4PoolIds.has(poolId)) continue;
+        out.push(pool);
+        seenV4PoolIds.add(poolId);
+        continue;
+      }
+      if (wantedAddrs.has(key) && !warnedV4.has(key)) {
         console.warn(
           `[pool-universe] forceInclude skipped univ4 entry ${pool.address}: ` +
             "address-only identity is ambiguous for the v4 PoolManager",
@@ -187,9 +214,10 @@ function appendForceIncluded(
       }
       continue;
     }
-    if (seen.has(key)) continue;
+    if (!wantedAddrs.has(key)) continue;
+    if (seenAddrs.has(key)) continue;
     out.push(pool);
-    seen.add(key);
+    seenAddrs.add(key);
   }
   return out;
 }
