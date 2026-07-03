@@ -131,13 +131,15 @@ export interface WinnerStyleInput {
   pricedDeltas: TokenDelta[];
   unpricedDeltas: TokenDelta[];
   nativeWeiPositive: boolean;
+  nativeWeiNegative: boolean;
   unpricedInTokensWithoutCounterTransfer: string[];
   winner_moved_price_beyond_prestate: boolean;
   sandwich_detected: boolean;
 }
 
-type WinnerStyleClassifierInput = Omit<WinnerStyleInput, "nativeWeiPositive"> & {
+type WinnerStyleClassifierInput = Omit<WinnerStyleInput, "nativeWeiPositive" | "nativeWeiNegative"> & {
   nativeWeiPositive?: boolean;
+  nativeWeiNegative?: boolean;
 };
 
 export interface WinnerStyleTxInput {
@@ -681,6 +683,7 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
     input.pricedDeltas,
     input.unpricedDeltas,
     input.unpricedInTokensWithoutCounterTransfer,
+    input.nativeWeiNegative ?? false,
   )) {
     return "one_leg_inventory";
   }
@@ -695,6 +698,7 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
 export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
   const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
   const nativeWeiPositive = input.profit.nativeTraceUsed && input.profit.ethDeltaEth > 0;
+  const nativeWeiNegative = input.profit.nativeTraceUsed && input.profit.ethDeltaEth < 0;
   const unpricedTokenInFlow = unpricedTokenInFlowTokens(input.profit.unpricedDeltas);
   const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
     input.rpc,
@@ -712,6 +716,7 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
     input.profit.pricedDeltas,
     input.profit.unpricedDeltas,
     unpricedInTokensWithoutCounterTransfer,
+    nativeWeiNegative,
   );
   const sandwichDetected = !winnerMovedPriceBeyondPrestate && !flowOneLeg
     ? await detectSandwichPattern(
@@ -735,6 +740,7 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
       sandwich_detected: sandwichDetected,
       nativeWeiPositive,
+      nativeWeiNegative,
     }),
     winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
     unpriced_token_in_flow: unpricedTokenInFlow,
@@ -753,9 +759,17 @@ function hasOneLegInventoryFlow(
   pricedDeltas: TokenDelta[],
   _unpricedDeltas: TokenDelta[],
   unpricedInTokensWithoutCounterTransfer: string[],
+  nativeWeiNegative: boolean,
 ): boolean {
-  return pricedDeltas.some((delta) => delta.raw < 0n && INVENTORY_PRICED_TOKENS.has(lower(delta.token)))
-    && unpricedInTokensWithoutCounterTransfer.length > 0;
+  // Native ETH spent (nativeWeiNegative) counts as an inventory-priced spend: a native-ETH-funded
+  // one-leg buy (v4 native settle / any value-funded buy) shows the spend ONLY as a negative native
+  // delta, invisible to the priced-token check. Guarded by the leftover-bought-token term below —
+  // an atomic loop leaves no such token, and (ethDeltaEth net) a native atomic loop is net-positive
+  // so nativeWeiNegative is false for it (mutually exclusive with nativeWeiPositive).
+  const spentPricedOrNative =
+    pricedDeltas.some((delta) => delta.raw < 0n && INVENTORY_PRICED_TOKENS.has(lower(delta.token)))
+    || nativeWeiNegative;
+  return spentPricedOrNative && unpricedInTokensWithoutCounterTransfer.length > 0;
 }
 
 function hasAtomicLoopFlow(

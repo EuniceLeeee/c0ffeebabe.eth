@@ -136,6 +136,28 @@ const checks: Array<() => void> = [
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
   }), "unknown"),
+  // Deliverable 3: native-ETH-funded one-leg inventory buy (ETH spent invisibly, bought token kept,
+  // no counter-transfer) -> one_leg_inventory (was unknown: native-blind AND v4/v2 has no tick check).
+  () => assert.equal(classifyWinnerStyle({
+    pricedDeltas: [],
+    unpricedDeltas: [],
+    nativeWeiPositive: false,
+    nativeWeiNegative: true,
+    unpricedInTokensWithoutCounterTransfer: [lower(CFG)],
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+  }), "one_leg_inventory"),
+  // guard: native spent but NO leftover bought-token without counter-transfer -> NOT one-leg (an
+  // atomic loop returns to a priced token and leaves an empty list) -> falls through to unknown.
+  () => assert.equal(classifyWinnerStyle({
+    pricedDeltas: [],
+    unpricedDeltas: [],
+    nativeWeiPositive: false,
+    nativeWeiNegative: true,
+    unpricedInTokensWithoutCounterTransfer: [],
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+  }), "unknown"),
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90601, "down"), true),
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90610, "down"), false),
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90612, "down"), false),
