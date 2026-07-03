@@ -1,5 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -10,6 +10,7 @@ import {
 import {
   backfillV4PoolId,
   type V4BackfillOptions,
+  type V4BackfillResult,
 } from "../backfill-v4-poolid.js";
 import { loadForceIncludePoolIds } from "../force-include.js";
 
@@ -26,6 +27,7 @@ function assertArrayEq(actual: string[], expected: string[], msg: string): void 
 
 const CFG = ethers.getAddress("0xcccccccccc33d538dbc2ee4feab0a7a1ff4e8a94");
 const CFG_V4_POOL_ID = "0x267d01a3b23fe2340482242db5396f7544d36f398862efa591e92a079348cd9c";
+const THROWING_V4_POOL_ID = "0x1111111111111111111111111111111111111111111111111111111111111111";
 const CFG_V4_POOL_KEY = {
   currency0: ethers.ZeroAddress,
   currency1: CFG,
@@ -83,6 +85,14 @@ function fakeV4Provider(): { provider: ethers.JsonRpcProvider; calls: () => numb
   return { provider, calls: () => callCount };
 }
 
+function readJsonl(path: string): Array<Record<string, unknown>> {
+  return readFileSync(path, "utf8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
 async function runWithLogs(
   reportPath: string,
   activePoolsPath: string,
@@ -90,10 +100,12 @@ async function runWithLogs(
   provider: ethers.JsonRpcProvider,
 ): Promise<{ result: AutoCloseRouteGapResult; logs: string[] }> {
   const logs: string[] = [];
+  const findingsPath = join(dirname(forceIncludePath), "auto-close-findings.jsonl");
   const result = await autoCloseRouteGap({
     reportPath,
     activePoolsPath,
     forceIncludePath,
+    findingsPath,
     backfillV4PoolIdFn: (poolId: string, opts: V4BackfillOptions) =>
       backfillV4PoolId(poolId, { ...opts, provider }),
     log: (line: string) => logs.push(line),
@@ -242,18 +254,127 @@ async function testIdempotentRunningTwiceAppendsOnce(): Promise<void> {
   }
 }
 
+async function testPerVenueFailureIsolation(): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "auto-close-route-gap-isolation-"));
+  try {
+    const report = join(dir, "postmortem.json");
+    const activePools = join(dir, "active-pools.json");
+    const forceInclude = join(dir, "force-include-poolids.json");
+    const findings = join(dir, "auto-close-findings.jsonl");
+    writeReport(report, true, [
+      { protocol: "univ4", id: THROWING_V4_POOL_ID, in_graph: false },
+      { protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false },
+    ]);
+
+    const logs: string[] = [];
+    const result = await autoCloseRouteGap({
+      reportPath: report,
+      activePoolsPath: activePools,
+      forceIncludePath: forceInclude,
+      findingsPath: findings,
+      backfillV4PoolIdFn: async (
+        poolId: string,
+        opts: V4BackfillOptions,
+      ): Promise<V4BackfillResult> => {
+        if (poolId === THROWING_V4_POOL_ID) throw new Error("rpc unavailable");
+        return {
+          activePoolsPath: opts.activePoolsPath ?? activePools,
+          poolId,
+          added: true,
+        };
+      },
+      log: (line: string) => logs.push(line),
+    });
+
+    assertArrayEq(result.closedV4PoolIds, [CFG_V4_POOL_ID], "second v4 venue should still close");
+    assertArrayEq(result.forceIncludeAdded, [CFG_V4_POOL_ID], "second v4 venue should still be force-included");
+    assert(result.failed.length === 1, `expected one failed venue, got ${result.failed.length}`);
+    assert(result.failed[0].protocol === "univ4", "failed venue should preserve protocol");
+    assert(result.failed[0].id === THROWING_V4_POOL_ID, "failed venue should preserve id");
+    assert(result.failed[0].error === "rpc unavailable", "failed venue should preserve error message");
+    assert(
+      logs.some((line) => line.includes(`failed univ4:${THROWING_V4_POOL_ID}`)),
+      "failed venue should be human-logged",
+    );
+    console.log("[auto-close] per-venue v4 failure isolates and continues: PASS");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function testFindingsArtifactRecordsFailedAndClosed(): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "auto-close-route-gap-findings-"));
+  try {
+    const report = join(dir, "postmortem.json");
+    const activePools = join(dir, "active-pools.json");
+    const forceInclude = join(dir, "force-include-poolids.json");
+    const findings = join(dir, "nested", "auto-close-findings.jsonl");
+    writeReport(report, true, [
+      { protocol: "univ4", id: THROWING_V4_POOL_ID, in_graph: false },
+      { protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false },
+    ]);
+
+    await autoCloseRouteGap({
+      reportPath: report,
+      activePoolsPath: activePools,
+      forceIncludePath: forceInclude,
+      findingsPath: findings,
+      backfillV4PoolIdFn: async (
+        poolId: string,
+        opts: V4BackfillOptions,
+      ): Promise<V4BackfillResult> => {
+        if (poolId === THROWING_V4_POOL_ID) throw new Error("empty poolKey");
+        return {
+          activePoolsPath: opts.activePoolsPath ?? activePools,
+          poolId,
+          added: true,
+        };
+      },
+      log: () => undefined,
+    });
+
+    const records = readJsonl(findings);
+    assert(
+      records.some((record) =>
+        record.kind === "failed" &&
+        record.protocol === "univ4" &&
+        record.id === THROWING_V4_POOL_ID &&
+        record.error === "empty poolKey" &&
+        record.report === report &&
+        typeof record.ts === "string"
+      ),
+      "findings JSONL should contain failed venue record",
+    );
+    assert(
+      records.some((record) =>
+        record.kind === "closed" &&
+        record.protocol === "univ4" &&
+        record.id === CFG_V4_POOL_ID &&
+        record.report === report &&
+        typeof record.ts === "string"
+      ),
+      "findings JSONL should contain closed venue record",
+    );
+    console.log("[auto-close] findings artifact records failed and closed outcomes: PASS");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   await testRouteGapV4AppendsAndBackfills();
   await testRouteGapFalseNoops();
   await testAlreadyInGraphSkips();
   await testV3AppendsAndLogsActivePoolsNote();
   await testIdempotentRunningTwiceAppendsOnce();
+  await testPerVenueFailureIsolation();
+  await testFindingsArtifactRecordsFailedAndClosed();
   console.log(
     "expected_transition: route_gap_decisive post-mortem output -> " +
       "auto-appended force-include (loop improve-half closes automatically)",
   );
   console.log("verdict: fixed");
-  console.log("auto-close-route-gap PASS (5/5)");
+  console.log("auto-close-route-gap PASS (7/7)");
 }
 
 main().catch((err) => {
