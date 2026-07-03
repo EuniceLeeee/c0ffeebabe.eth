@@ -46,6 +46,16 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
      **still bounded-live** (`.deploy-live` present, `SEARCHER_DRY_RUN=0`, `SEARCHER_EV_GATE=1`) AND
      **`universe != 0`**. **ALERT + STOP if the mode flipped** to dry-run — a silent bounded-live→dry-run
      fallback is the real failure mode (§6b), not an accidental go-live.
+  1b. **VERIFY THE SEARCHER ACTUALLY RESTARTED ONTO THE LATEST COMMIT — before opening the window.** The
+     searcher only picks up code changes on restart; a window run on STALE code makes any fix's effect
+     invisible and corrupts the before/after (the whole point of the loop). Check BOTH: (a) the running
+     searcher process start-time is fresh (restarted by THIS round's deploy — its uptime is minutes, not
+     hours), AND (b) `git -C /opt/MEV rev-parse HEAD` == `origin/main` HEAD. If the searcher is on stale
+     code (uptime > the ~2h round interval → it missed a restart, OR node HEAD is behind origin/main →
+     deploy aborted/was skipped/build failed), the deploy did NOT take — re-run `deploy-node.sh` (the
+     guarded restart path; NEVER restart the searcher by hand — [[project-node-env-dryrun-guard]]) and
+     re-verify (a)+(b) before measuring. If it still won't come up fresh after a second attempt, STOP the
+     round and report (do not measure on stale code).
   2. Confirm `SEARCHER_EVENTS_PATH` is set (`/var/log/mev/events/searcher-live.jsonl`) right after the
      banner — a window without the structured JSONL is not a valid Hermes window.
   3. ~30–45 min bounded-live measurement window.
