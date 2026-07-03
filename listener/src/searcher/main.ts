@@ -5,6 +5,7 @@ import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector } from "./detector/detector.js";
+import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
@@ -148,6 +149,12 @@ interface LiveConfig {
   /** Allow broadcasting hash-only (synthetic-overlay) bundles. Default false:
    *  only real-victim (mempool/rawTx) bundles are submitted (Fix A). */
   allowHashOnlySubmit: boolean;
+  victimSourceFilter: {
+    enabled: boolean;
+    minStreak: number;
+    windowBlocks: number;
+    ringSize: number;
+  };
 }
 
 interface HintEnvelope {
@@ -239,6 +246,14 @@ interface StageCounters {
   mempoolOpportunitySeen: number;
   mempoolToSim: number;
   cuProxyRpcCalls: number;
+}
+
+const MAX_PENDING_VICTIM_OUTCOMES = 200;
+
+interface PendingVictimOutcome {
+  sender: string;
+  hash: string;
+  targetBlock: number;
 }
 
 function loadEnv(): void {
@@ -389,6 +404,12 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
     profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
     allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
+    victimSourceFilter: {
+      enabled: process.env.SEARCHER_VICTIM_SOURCE_FILTER !== "0",
+      minStreak: Number(process.env.SEARCHER_VICTIM_SOURCE_MIN_STREAK ?? "3"),
+      windowBlocks: Number(process.env.SEARCHER_VICTIM_SOURCE_WINDOW_BLOCKS ?? "200"),
+      ringSize: 8,
+    },
   };
 }
 
@@ -460,6 +481,11 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] minProfitRaw=${config.minProfit}`);
   console.log(`[searcher/live] mode=${config.dryRun ? "dry-run" : "live-submit"}`);
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
+  console.log(
+    `[searcher/live] victimSourceFilter enabled=${config.victimSourceFilter.enabled ? "on" : "off"} ` +
+      `minStreak=${config.victimSourceFilter.minStreak} ` +
+      `windowBlocks=${config.victimSourceFilter.windowBlocks}`,
+  );
   console.log(`[searcher/live] maxCandidates=${maxCandidates}`);
   console.log(
     `[searcher/live] maxHops=${maxHops} maxPoolsPerToken=${maxPoolsPerToken} ` +
@@ -641,6 +667,8 @@ async function main(): Promise<void> {
   let busy = false;
   const seen = new Set<string>();
   const counters = createStageCounters();
+  const victimSource = new VictimSourceTracker(config.victimSourceFilter);
+  const pendingVictimOutcomes: PendingVictimOutcome[] = [];
   const recentWarmPools = new RecentWarmTracker(
     Number(process.env.SEARCHER_WARM_RECENT_TTL_BLOCKS ?? "12"),
   );
@@ -848,6 +876,8 @@ async function main(): Promise<void> {
             poolStateUpdater,
             fixtureRecorder,
             liveBackend,
+            victimSource,
+            pendingVictimOutcomes,
             recentWarmPools,
             pinnedWarmTargets,
             blockTracker,
@@ -897,6 +927,8 @@ interface HandleCtx {
   poolStateUpdater: PoolStateUpdater;
   fixtureRecorder: LiveFixtureRecorder;
   liveBackend: LiveStateBackend;
+  victimSource: VictimSourceTracker;
+  pendingVictimOutcomes: PendingVictimOutcome[];
   /** Recent candidate route-hop directions for the longtail warmer lane. */
   recentWarmPools: RecentWarmTracker;
   /** Pool targets already covered by the pinned warmer lane. */
@@ -941,6 +973,7 @@ async function handleHint(
   // Use the WS-tracked block instead of polling eth_blockNumber every hint; fall
   // back to a one-off poll only if the stream hasn't delivered a block yet.
   const latestBlock = ctx.blockTracker.latest || (await ctx.provider.getBlockNumber());
+  await drainPendingVictimOutcomes(ctx, latestBlock);
   let anvilForkReady = false;
   const ensureHintFork = async (blockNumber: number, forceRefresh = false): Promise<void> => {
     if (anvilForkReady && !forceRefresh) return;
@@ -1158,6 +1191,39 @@ async function handleHint(
   }
 
   // ── Common pipeline: detect → plan → solve → simulate → submit ──
+  const emitPipelineDropped = (
+    stage: string,
+    reason: string,
+    error?: string,
+    extra?: { sender?: string },
+  ): void => {
+    const ev = {
+      type: "pipeline_dropped" as const,
+      opportunity_id: makeOpportunityId({ targetBlock: eventBlockNumber, victimHash: txHash }),
+      target_block: eventBlockNumber,
+      victim_hash: txHash,
+      stage,
+      reason,
+      error: error ? error.slice(0, 240) : undefined,
+      sender: extra?.sender,
+    };
+    emitEvent(ev as Parameters<typeof emitEvent>[0]);
+  };
+  if (
+    eventFrom !== ethers.ZeroAddress &&
+    ctx.victimSource.shouldSkip(eventFrom.toLowerCase(), eventBlockNumber)
+  ) {
+    emitPipelineDropped("admission", "victim_source_low_landrate", undefined, { sender: eventFrom });
+    return;
+  }
+  if (submissionMode === "victim-bundle" && rawTx && eventFrom !== ethers.ZeroAddress) {
+    enqueuePendingVictimOutcome(ctx.pendingVictimOutcomes, {
+      sender: eventFrom.toLowerCase(),
+      hash: txHash,
+      targetBlock: eventBlockNumber,
+    });
+  }
+
   const event: OrderflowEvent = {
     txHash,
     blockNumber: eventBlockNumber,
@@ -1805,6 +1871,36 @@ async function handleHint(
 		    }
 		  }
   recordFinalState(lastTerminalState, lastTerminalError);
+}
+
+async function drainPendingVictimOutcomes(ctx: HandleCtx, currentHeadBlock: number): Promise<void> {
+  const pending = ctx.pendingVictimOutcomes;
+  if (pending.length === 0) return;
+
+  let write = 0;
+  for (let read = 0; read < pending.length; read++) {
+    const entry = pending[read];
+    if (!entry) continue;
+    if (entry.targetBlock >= currentHeadBlock) {
+      pending[write++] = entry;
+      continue;
+    }
+    try {
+      const receipt = await ctx.provider.getTransactionReceipt(entry.hash);
+      ctx.victimSource.record(entry.sender, entry.targetBlock, receipt?.status === 1);
+    } catch {
+      pending[write++] = entry;
+    }
+  }
+  pending.length = Math.min(write, MAX_PENDING_VICTIM_OUTCOMES);
+}
+
+function enqueuePendingVictimOutcome(
+  pending: PendingVictimOutcome[],
+  entry: PendingVictimOutcome,
+): void {
+  pending.push(entry);
+  while (pending.length > MAX_PENDING_VICTIM_OUTCOMES) pending.shift();
 }
 
 function createStageCounters(): StageCounters {
