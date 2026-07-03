@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { ethers } from "ethers";
+import { decodeTransfer } from "../decode/erc20.js";
 import {
   builderPaymentWeiFromPrestate,
   fetchEthUsd,
@@ -9,6 +11,7 @@ import {
 } from "../pnl/arb-profit.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
+import type { TokenDelta } from "../types.js";
 import { parseArgs, uniq, writeText } from "../util.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -18,6 +21,23 @@ const UNIV4_POOL_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
 const TOPIC_UNIV4_SWAP = lower(TOPICS.univ4Swap);
 const TOPIC_UNIV3_SWAP = lower(TOPICS.univ3Swap);
 const TOPIC_UNIV2_SWAP = lower((TOPICS as Record<string, string>).univ2Swap ?? "");
+const TOPIC_TRANSFER = lower(TOPICS.transfer);
+const V3_SLOT0_SELECTOR = "0x3850c7bd";
+const V3_SWAP_IFACE = new ethers.Interface([
+  "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
+]);
+const FRAX = "0x853d955acef822db058eb8505911ed77f175b99e";
+const INVENTORY_PRICED_TOKENS = new Set([
+  lower(ADDR.WETH),
+  lower(ADDR.USDC),
+  lower(ADDR.USDT),
+  lower(ADDR.DAI),
+  FRAX,
+]);
+
+export type WinnerStyle = "atomic_loop" | "one_leg_inventory" | "sandwich" | "unknown";
+export type TickDirection = "down" | "up";
+type RealizedProfitUsd = number | null | string;
 
 type Json = Record<string, any>;
 
@@ -72,7 +92,7 @@ interface CompetitorReport extends CandidateTx {
   builderPaymentWei: string;
   builderPaymentEth: number | null;
   builderPaymentUsd: number | null;
-  realizedProfitUsd: number | null;
+  realizedProfitUsd: RealizedProfitUsd;
   profitConfidence: string;
   nativeTraceUsed: boolean;
   tracePrestateUsed: boolean;
@@ -80,6 +100,9 @@ interface CompetitorReport extends CandidateTx {
   v4Swaps: number;
   v4PoolIds: string[];
   touchedVenues: TouchedVenue[];
+  winner_style: WinnerStyle;
+  winner_moved_price_beyond_prestate: boolean;
+  unpriced_token_in_flow: string[];
 }
 
 interface BuilderReach {
@@ -96,8 +119,19 @@ interface Verdict {
   winnerPaymentWei: string | null;
   outbid: boolean | null;
   route_gap_decisive: boolean | null;
+  winner_style?: WinnerStyle;
+  non_comparable_winner?: boolean;
+  note?: string;
   one_shot: string;
   builder_reach?: BuilderReach;
+}
+
+export interface WinnerStyleInput {
+  pricedDeltas: TokenDelta[];
+  unpricedDeltas: TokenDelta[];
+  unpricedInTokensWithoutCounterTransfer: string[];
+  winner_moved_price_beyond_prestate: boolean;
+  sandwich_detected: boolean;
 }
 
 const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--out <report.json>]`;
@@ -151,6 +185,7 @@ async function main(): Promise<void> {
   };
   const sourceQueries = sourceQueriesForBundle(loaded.events, event, triggeringReceipt);
   const graph = loadGraphMembership(graphPath);
+  const prestateBlock = prestateBlockForEvent(event, landingBlockNumber);
   const candidates = await findCompetingCandidates(
     rpc,
     sourceQueries,
@@ -171,6 +206,7 @@ async function main(): Promise<void> {
         blockInfo.miner,
         baseFeePerGas,
         graph,
+        prestateBlock,
       ),
     );
   }
@@ -396,6 +432,7 @@ async function analyzeCompetitor(
   coinbase: string,
   baseFeePerGas: bigint,
   graph: GraphMembership,
+  prestateBlock: number,
 ): Promise<CompetitorReport> {
   const [tx, receipt] = await Promise.all([
     rpc.getTransaction(candidate.hash),
@@ -408,6 +445,32 @@ async function analyzeCompetitor(
     baseFeePerGas,
   });
   const payment = await computeBuilderPaymentWei(rpc, candidate.hash, receipt, baseFeePerGas, coinbase);
+  const blockNumber = quantityToNumber(receipt?.blockNumber);
+  const beneficiaries = competitorBeneficiaries(tx, receipt, profit.beneficiary);
+  const unpricedTokenInFlow = unpricedTokenInFlowTokens(profit.unpricedDeltas);
+  const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
+    rpc,
+    blockNumber,
+    candidate.transactionIndex,
+    beneficiaries,
+    profit.unpricedDeltas,
+  );
+  const winnerMovedPriceBeyondPrestate = await detectWinnerMovedPriceBeyondPrestate(rpc, receipt, prestateBlock);
+  const flowOneLeg = hasOneLegInventoryFlow(
+    profit.pricedDeltas,
+    profit.unpricedDeltas,
+    unpricedInTokensWithoutCounterTransfer,
+  );
+  const sandwichDetected = !winnerMovedPriceBeyondPrestate && !flowOneLeg
+    ? await detectSandwichPattern(rpc, receipt, candidate, beneficiaries, blockNumber)
+    : false;
+  const winnerStyle = classifyWinnerStyle({
+    pricedDeltas: profit.pricedDeltas,
+    unpricedDeltas: profit.unpricedDeltas,
+    unpricedInTokensWithoutCounterTransfer,
+    winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
+    sandwich_detected: sandwichDetected,
+  });
   return {
     ...candidate,
     from: lower(tx?.from ?? receipt?.from ?? ""),
@@ -420,7 +483,7 @@ async function analyzeCompetitor(
     builderPaymentWei: payment.builderPaymentWei.toString(),
     builderPaymentEth: profit.builderPaymentEth,
     builderPaymentUsd: profit.builderPaymentUsd,
-    realizedProfitUsd: profit.realizedProfitUsd,
+    realizedProfitUsd: realizedProfitUsdForReport(profit.realizedProfitUsd, profit.unpricedDeltas),
     profitConfidence: profit.profitConfidence,
     nativeTraceUsed: profit.nativeTraceUsed,
     tracePrestateUsed: payment.traceUsed,
@@ -428,6 +491,9 @@ async function analyzeCompetitor(
     v4Swaps: profit.v4Swaps.length,
     v4PoolIds: profit.v4PoolIds,
     touchedVenues: extractTouchedVenues(receipt, graph),
+    winner_style: winnerStyle,
+    winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
+    unpriced_token_in_flow: unpricedTokenInFlow,
   };
 }
 
@@ -553,7 +619,208 @@ function addGraphMembersFromString(value: string, members: Set<string>): void {
   }
 }
 
-function buildVerdict(event: Json, competitors: CompetitorReport[], builderReach: BuilderReach): Verdict {
+function prestateBlockForEvent(event: Json, landingBlockNumber: number): number {
+  const target = Number(event.submission_target_block ?? event.target_block ?? landingBlockNumber);
+  if (Number.isFinite(target) && target > 0) return target - 1;
+  return Math.max(landingBlockNumber - 1, 0);
+}
+
+export function winnerMovedPriceBeyondPrestate(
+  preVictimTick: number,
+  winnerPostTick: number,
+  direction: TickDirection = "down",
+): boolean {
+  return direction === "down"
+    ? winnerPostTick < preVictimTick
+    : winnerPostTick > preVictimTick;
+}
+
+export function classifyWinnerStyle(input: WinnerStyleInput): WinnerStyle {
+  if (input.winner_moved_price_beyond_prestate) return "one_leg_inventory";
+  if (input.sandwich_detected) return "sandwich";
+  if (hasOneLegInventoryFlow(
+    input.pricedDeltas,
+    input.unpricedDeltas,
+    input.unpricedInTokensWithoutCounterTransfer,
+  )) {
+    return "one_leg_inventory";
+  }
+  if (hasAtomicLoopFlow(input.pricedDeltas, input.unpricedDeltas)) return "atomic_loop";
+  return "unknown";
+}
+
+export function realizedProfitUsdForReport(
+  realizedProfitUsd: number | null,
+  unpricedDeltas: TokenDelta[],
+): RealizedProfitUsd {
+  const tokens = uniq(unpricedDeltas.filter((delta) => delta.raw !== 0n).map((delta) => lower(delta.token)));
+  return tokens.length === 0 ? realizedProfitUsd : `unpriceable(${tokens.join(",")})`;
+}
+
+function hasOneLegInventoryFlow(
+  pricedDeltas: TokenDelta[],
+  _unpricedDeltas: TokenDelta[],
+  unpricedInTokensWithoutCounterTransfer: string[],
+): boolean {
+  return pricedDeltas.some((delta) => delta.raw < 0n && INVENTORY_PRICED_TOKENS.has(lower(delta.token)))
+    && unpricedInTokensWithoutCounterTransfer.length > 0;
+}
+
+function hasAtomicLoopFlow(pricedDeltas: TokenDelta[], unpricedDeltas: TokenDelta[]): boolean {
+  return pricedDeltas.some((delta) => delta.raw > 0n)
+    && unpricedDeltas.every((delta) => delta.raw === 0n);
+}
+
+function unpricedTokenInFlowTokens(unpricedDeltas: TokenDelta[]): string[] {
+  return uniq(
+    unpricedDeltas
+      .filter((delta) => delta.raw > 0n)
+      .map((delta) => lower(delta.token)),
+  );
+}
+
+function competitorBeneficiaries(tx: Json | null, receipt: Json | null, beneficiary: string): Set<string> {
+  return new Set(
+    [
+      tx?.from,
+      tx?.to,
+      receipt?.from,
+      receipt?.to,
+      beneficiary,
+    ]
+      .map((address) => lower(String(address ?? "")))
+      .filter(isAddress),
+  );
+}
+
+async function unpricedInTokensWithoutCounterTransfers(
+  rpc: RpcClient,
+  blockNumber: number,
+  txIndex: number,
+  beneficiaries: Set<string>,
+  unpricedDeltas: TokenDelta[],
+): Promise<string[]> {
+  const tokens = unpricedTokenInFlowTokens(unpricedDeltas);
+  const out: string[] = [];
+  for (const token of tokens) {
+    try {
+      const logs = await rpc.getLogs({
+        address: token,
+        fromBlock: toQuantity(blockNumber),
+        toBlock: toQuantity(blockNumber),
+        topics: [TOPIC_TRANSFER],
+      });
+      const counterTransfer = logs.some((log) => {
+        const transfer = decodeTransfer(log);
+        if (!transfer) return false;
+        if (quantityToNumber(log.transactionIndex) < txIndex) return false;
+        return beneficiaries.has(lower(transfer.from)) && !beneficiaries.has(lower(transfer.to));
+      });
+      if (!counterTransfer) out.push(token);
+    } catch {
+      // If the cheap block-local token scan is unavailable, do not force a one-leg classification.
+    }
+  }
+  return out;
+}
+
+async function detectWinnerMovedPriceBeyondPrestate(
+  rpc: RpcClient,
+  receipt: Json | null,
+  prestateBlock: number,
+): Promise<boolean> {
+  if (prestateBlock < 0) return false;
+  const primarySwap = primaryV3SwapForTick(receipt);
+  if (!primarySwap) return false;
+  const preTick = await fetchV3Slot0Tick(rpc, primarySwap.pool, prestateBlock);
+  return preTick === null
+    ? false
+    : winnerMovedPriceBeyondPrestate(preTick, primarySwap.postTick, primarySwap.direction);
+}
+
+async function fetchV3Slot0Tick(rpc: RpcClient, pool: string, blockNumber: number): Promise<number | null> {
+  try {
+    const data = await rpc.call<string>("eth_call", [
+      { to: pool, data: V3_SLOT0_SELECTOR },
+      toQuantity(blockNumber),
+    ]);
+    return decodeV3Slot0Tick(data);
+  } catch {
+    return null;
+  }
+}
+
+function decodeV3Slot0Tick(data: string): number | null {
+  const hex = data.startsWith("0x") ? data.slice(2) : data;
+  const word = hex.slice(64, 128);
+  if (word.length !== 64) return null;
+  return Number(BigInt.asIntN(256, BigInt(`0x${word}`)));
+}
+
+function primaryV3SwapForTick(receipt: Json | null): { pool: string; postTick: number; direction: TickDirection } | null {
+  for (const log of receipt?.logs ?? []) {
+    const swap = v3SwapFromLog(log);
+    if (swap) return swap;
+  }
+  return null;
+}
+
+function v3SwapFromLog(log: Json): { pool: string; postTick: number; direction: TickDirection } | null {
+  if (lower(String(log?.topics?.[0] ?? "")) !== TOPIC_UNIV3_SWAP) return null;
+  const pool = lower(String(log?.address ?? ""));
+  if (!isAddress(pool)) return null;
+  try {
+    const parsed = V3_SWAP_IFACE.parseLog({ topics: log.topics, data: log.data ?? "0x" });
+    if (!parsed) return null;
+    const amount0 = BigInt(String(parsed.args[2]));
+    const amount1 = BigInt(String(parsed.args[3]));
+    const direction = amount0 < 0n ? "down" : amount1 < 0n ? "up" : null;
+    if (!direction) return null;
+    return {
+      pool,
+      postTick: Number(parsed.args[6]),
+      direction,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function detectSandwichPattern(
+  rpc: RpcClient,
+  receipt: Json | null,
+  candidate: CandidateTx,
+  beneficiaries: Set<string>,
+  blockNumber: number,
+): Promise<boolean> {
+  const currentSwap = primaryV3SwapForTick(receipt);
+  if (!currentSwap || blockNumber <= 0) return false;
+  try {
+    const logs = await rpc.getLogs({
+      address: currentSwap.pool,
+      fromBlock: toQuantity(blockNumber),
+      toBlock: toQuantity(blockNumber),
+      topics: [TOPIC_UNIV3_SWAP],
+    });
+    for (const log of logs) {
+      const otherIndex = quantityToNumber(log.transactionIndex);
+      if (Math.abs(otherIndex - candidate.transactionIndex) !== 2) continue;
+      const otherHash = lower(String(log.transactionHash ?? ""));
+      if (!otherHash || otherHash === candidate.hash) continue;
+      const otherSwap = v3SwapFromLog(log);
+      if (!otherSwap || otherSwap.direction === currentSwap.direction) continue;
+      const otherTx = await rpc.getTransaction(otherHash);
+      const otherFrom = lower(String(otherTx?.from ?? ""));
+      const otherTo = lower(String(otherTx?.to ?? ""));
+      if (beneficiaries.has(otherFrom) || beneficiaries.has(otherTo)) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+export function buildVerdict(event: Json, competitors: CompetitorReport[], builderReach: BuilderReach): Verdict {
   if (competitors.length === 0) {
     return {
       status: "no_competing_tx_found",
@@ -569,15 +836,28 @@ function buildVerdict(event: Json, competitors: CompetitorReport[], builderReach
   const winnerPayment = BigInt(winner.builderPaymentWei);
   const bid = parseWeiField(event.bid);
   const simulatedProfit = parseWeiField(event.simulated_profit);
+  const nonComparable = isNonComparableWinnerStyle(winner.winner_style);
   return {
     status: "priced",
     winner: winner.hash,
     winnerPaymentWei: winner.builderPaymentWei,
     outbid: bid === null ? null : winnerPayment > bid,
-    route_gap_decisive: simulatedProfit === null ? null : winnerPayment > simulatedProfit,
+    route_gap_decisive: simulatedProfit === null ? null : nonComparable ? false : winnerPayment > simulatedProfit,
+    winner_style: winner.winner_style,
+    non_comparable_winner: nonComparable ? true : undefined,
+    note: nonComparable ? nonComparableWinnerNote(winner.winner_style) : undefined,
     one_shot: oneShotSummary(event),
     builder_reach: builderReach,
   };
+}
+
+function isNonComparableWinnerStyle(style: WinnerStyle): boolean {
+  return style === "one_leg_inventory" || style === "sandwich";
+}
+
+function nonComparableWinnerNote(style: WinnerStyle): string {
+  const label = style === "one_leg_inventory" ? "one_leg_inventory/CEX-DEX" : "sandwich";
+  return `winner is ${label}; off-chain/out-of-posture - our atomic sim gross is the correct ceiling; no coverage/sizing/bid fix`;
 }
 
 function pendingVerdict(): Verdict {
@@ -699,6 +979,7 @@ function renderSummary(report: Json): string {
   if (winner) {
     lines.push(
       `winner: ${winner.hash} index=${winner.transactionIndex} backrun_positioned=${String(winner.backrun_positioned)}`,
+      `winner_style: ${winner.winner_style} winner_moved_price_beyond_prestate=${String(winner.winner_moved_price_beyond_prestate)} unpriced_token_in_flow=${winner.unpriced_token_in_flow.length === 0 ? "none" : winner.unpriced_token_in_flow.join(",")}`,
       `winner_payment_wei: ${winner.builderPaymentWei} priority_tip_wei=${winner.priorityTipWei} coinbase_transfer_wei=${winner.coinbaseTransferWei ?? "unavailable"}`,
       `our_bid_wei: ${report.bundle_submitted.bid ?? "unknown"} simulated_profit_wei=${report.bundle_submitted.simulated_profit ?? "unknown"}`,
       `winner_realized_profit_usd: ${formatUsd(winner.realizedProfitUsd)} builder_payment_usd=${formatUsd(winner.builderPaymentUsd)}`,
@@ -712,6 +993,12 @@ function renderSummary(report: Json): string {
     lines.push(
       `builder_reach: ${verdict.builder_reach.status}`,
       `builder_reach_note: ${verdict.builder_reach.note}`,
+    );
+  }
+  if (verdict.non_comparable_winner) {
+    lines.push(
+      `non_comparable_winner: true`,
+      `note: ${verdict.note ?? ""}`,
     );
   }
   lines.push(`one_shot: ${verdict.one_shot}`);
@@ -732,6 +1019,7 @@ function formatNullableBool(value: boolean | null): string {
   return value === null ? "unknown" : String(value);
 }
 
-function formatUsd(value: number | null): string {
+function formatUsd(value: RealizedProfitUsd): string {
+  if (typeof value === "string") return value;
   return value === null ? "unknown" : value.toFixed(2);
 }
