@@ -80,28 +80,52 @@ dominant drop class.
   larger flash size would clear gas.
 - **separating evidence (so far):** competitor's take on the same block/pool was a single swap, not
   a bigger version of our triangle — suggesting an off-chain edge, not a mis-sized on-chain one.
-- **falsifier dispatched, in progress:** Codex building a one-off flash-size sweep script
-  (`searcher:falsify-r11-triangle-sizing`, background task, not yet complete at verdict-write time)
-  to sweep 1e17–1e25 wei input on the block-25447685 triangle using the existing solver/quote code.
-  If profit clears gas at ANY size → sizing is the real lever (point-fix, not epic). If dust
-  persists across the full range → confirms no-replicable-atomic-EV. **This gates the epic/no-epic
-  decision below — result to be appended once the sweep runs on the node.**
+- **falsifier RESULT (run on the node against local reth, block 25447685, 18 log-spaced points
+  from 0.1 to 10,000,000 WETH input, gas cost 0.00014 ETH):** `net_profit_eth` is **negative at
+  EVERY tested size**, monotonically worsening as size grows (0.1 WETH → −0.000193 ETH;
+  10,000,000 WETH → −9,999,490 ETH — slippage dominates immediately, there is no local optimum to
+  find by sizing up). Verdict line: **`CONFIRMED: dust persists across full size range`**.
+  **Runner-up (solver under-sizing) is REFUTED.** No size of this specific atomic triangle clears
+  gas — the loop's own AMM-implied slippage makes it a losing trade at any scale, consistent with
+  the competitor's edge coming from off-chain information (CEX price), not from an on-chain
+  arbitrage we mis-sized.
 
-## decision: PENDING falsifier result (see above) — provisional lean: no code-fixable point-fix
-this round; the finding is a **strategy-shape ceiling**, not a bug. Provisional framing per rule 13's
-epic-escalation guidance: if the falsifier confirms dust-across-all-sizes, this becomes
-`decision: epic` = re-target opportunity search toward fatter-margin atomic loops (longtail
-volatile-token triangles where spreads are wider than deep ETH/stable venues), NOT build a
-non-atomic/CEX-DEX strategy class (out of mission scope, breaks the atomic-flash-loan safety
-posture). Do NOT spend another round polishing the EV gate / defaultGasUsed / coverage graph on
-these specific ETH/stablecoin pools — per the evidence above, those stages are working correctly.
+## decision: **EPIC** — re-target opportunity search toward fatter-margin atomic loops
+
+Falsifier CONFIRMED (dust/negative persists across the full size range on the deep ETH/stable
+triangle). The finding is a **strategy-shape ceiling, not a bug**: our pipeline correctly sees,
+plans, sims, and gates atomic loops on deep ETH/stablecoin venues — but those venues are priced
+efficiently enough that any real edge there is off-chain (CEX-DEX/inventory), which an atomic
+flash-loan architecture structurally cannot capture. `decision: epic` = re-target discovery/solver
+attention toward longtail volatile-token triangles where naturally wider on-chain spreads can make
+an atomic loop's OWN slippage the profit source (no external price information needed), rather than
+building a non-atomic/CEX-DEX strategy class (out of mission scope; breaks the atomic-flash-loan
+safety posture — Safety Rules 1-2). Do NOT spend another round polishing the EV gate /
+`defaultGasUsed` / coverage graph on deep ETH/stablecoin pools — per the evidence above, those
+stages are working correctly on this venue class.
+
+**Epic slice-1 (rule-12 minimal first cut, carried to R12):** audit whether our pool-universe
+ranking / solver candidate selection is *biased toward deep/high-TVL pools* (e.g. by liquidity-based
+scoring) in a way that starves longtail-triangle exploration, and if so, the minimal change is
+re-weighting candidate selection to also surface wide-spread longtail triangles — gated by a pinned
+replay showing a previously-dust longtail case flip to a genuine +EV `simSuccess`. This audit is the
+next Implementation Brief's job (R12) — this round (R11) is analysis/architecture-review only,
+which is the CLAUDE.md rule-13-mandated exception to "every round ships a fix."
+
+## searcher_behavior_change: no (this round — mandated architecture-review exception)
+R11 shipped no production code change (only the one-off diagnostic falsifier script, additive,
+not wired into the live searcher). Per rule 13's own carve-out, the architecture review replaces a
+point-fix round when its trigger fires; but per the anti-drift cap, **R12 MUST ship a real
+searcher-behavior change** (the epic slice-1 above) — this round cannot be followed by another
+observability-only turn.
 
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
 | coverage epic (0702) substantially landed; residual gap is 12% longtail, not dominant | R4-R10 | — | **confirmed closed enough** — not the R10/R11 flat-simSuccess cause |
 | 0702 review's `gasUsed=0` sim-fidelity carry | Codex-B (0702) | this review | **refuted** — fixed in current code, `botvm-simulator.ts` returns real gas |
-| atomic triangles that DO route/sim are dust vs non-atomic competitor takes on the same block/pool | R11 dual-blind (A) | falsifier | **evidenced** (Case 2, ~48,000x gap) — falsifier pending |
-| flash-size sweep falsifier (sizing vs structural ceiling) | R11 | R12 | **in progress** (Codex building `searcher:falsify-r11-triangle-sizing`) |
+| atomic triangles that DO route/sim are dust vs non-atomic competitor takes on the same block/pool | R11 dual-blind (A) | — | **confirmed** (Case 2, ~48,000x gap; falsifier shows dust/negative at every size 0.1-10,000,000 WETH) |
+| flash-size sweep falsifier (sizing vs structural ceiling) | R11 | — | **done** — `CONFIRMED: dust persists across full size range`, runner-up (sizing) refuted |
+| epic slice-1: audit pool-selection bias toward deep/high-TVL venues, re-weight toward longtail | R11 | R12 | **open, mandatory next Implementation Brief** |
 | discovery-queue.json 6 stale entries, never drained since 20260702 | future | when slack exists | open, non-blocking (noted in handoff §4) |
 | R10 v4 production backfill still running (~2hr+, pid 99451) | R10→R11 | R12 | still running, not yet merged into active-pools.json, zero-cost to let continue |
