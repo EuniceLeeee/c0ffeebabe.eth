@@ -15,6 +15,14 @@ The tx itself is dust (gross ≈ 0.00047 WETH ≈ $1.7, net ≈ $1.3). The reaso
 **capability class** it exposes — SmarDex-family venues + spatial cyclic arbs with no in-block
 trigger — not this one bundle.
 
+**Goal update (2026-07-03):** the plan below targets **end-to-end replication of this exact tx**,
+not just the reusable subset. End-to-end is worth the extra two venue modules because the loop
+spans **four distinct venue archetypes** — a fictive-reserve AMM (SmarDex), a custom non-factory
+AMM (OUSD), a fund-share redemption that is not an AMM at all (Enzyme `redeemSharesInKind`), and
+plain V2-forks (RigelSwap/DIFX) — so reproducing it end-to-end is the acceptance test that our new
+**generalized venue-adapter framework** actually generalizes across every shape we'll meet again,
+instead of being a SmarDex one-off. The dust P&L is irrelevant; the framework is the deliverable.
+
 ## On-chain facts (verified)
 
 | field | value |
@@ -78,71 +86,170 @@ borrowable there. Flash is the one part of this tx we *could* have done.
 
 ---
 
-## Plan
+## Architecture change (the enabling seam for end-to-end)
 
-Replicating *this exact dust tx* is not the goal; building the **generalizable capability** it
-exposes is. Per Hermes rule 13, the multi-venue scope below is an **epic**, run as ordered slices,
-each with its own rule-12 replay flip. Slices are ordered by ROI-per-effort and by dependency.
+Today a venue is hardwired across **four** independent switch statements that must be edited in
+lockstep for any new venue — there is no venue abstraction:
 
-**Epic decision:** `decision: epic` — venue class "SmarDex-family + spatial cyclic arb". Recurrence
-basis: coffeebabe capture in one of our own blocks (2026-07-03) on a venue class absent from our
-graph; per rule-13 this converts a parked coverage gap into a forced epic instead of a per-pool pin.
+| layer | file:line | switch keyed on | role |
+|---|---|---|---|
+| discovery | [active-pool-discovery.ts](listener/src/searcher/active-pool-discovery.ts) `FACTORIES` | factory address | which venues enter the pool universe |
+| quoting | [quoter.ts:375](listener/src/searcher/solver/quoter.ts:375) `switch(adapterId)` | `adapterId` | price a leg locally |
+| execution encode | [plan-builder.ts:162](listener/src/searcher/solver/plan-builder.ts:162) `switch(edge.adapterId)` | `adapterId` | build the BotVM calldata for the leg |
+| on-chain exec | [BotVM.sol:107](src/BotVM.sol:107) opcode `0x00` = generic `target.call(payload)` | — | run the leg (callback venues also need a field-state opcode) |
+
+**Key execution fact:** BotVM opcode `0x00`/`0x01` is already a **generic call** — so on-chain
+execution of a new venue is largely *already possible*; the real execution gap is the **TS
+plan-builder** (encode the venue's calldata + wire its callback field) plus the **quoter** math.
+Only callback-style venues (SmarDex has a `smardexSwapCallback`, like V3's `uniswapV3SwapCallback`)
+need the callback field-state opcodes; simple pre-transfer / redemption venues (OUSD, Enzyme) run on
+the plain generic call.
+
+**The seam (Slice A below):** introduce a single **VenueAdapter registry** — one self-contained
+module per venue implementing a common shape:
+
+```
+interface VenueAdapter {
+  id: string;                                  // adapterId, single source of truth
+  discovery:                                   // how pools enter the universe
+    | { mode: "factory"; factory: string; pairCreatedTopic: string; swapTopic: string }
+    | { mode: "seed";    pools: string[] }     // for no-factory() venues (OUSD)
+    | { mode: "custom";  discover(ctx): Pool[] };
+  quote(state, pool, tokenIn, amtIn): bigint;  // local pricing math for this venue
+  buildLeg(edge, ctx): BotVmAction[];          // plan-builder calldata + callback opcodes
+  botvmCallbackField?: number;                 // only if the venue uses a swap callback
+}
+```
+
+Discovery, quoter, and plan-builder then **iterate the registry** instead of their hardcoded
+switches. This is the reusable component the mission needs: every future venue becomes one module +
+one registry line, and — critically for ask #2 — the registry becomes the **single source of truth
+the analysis tool reads** to decide "do we support this venue's execution?". Note the registry must
+support **non-AMM legs** (Enzyme is a share redemption, not a pool) and **non-factory discovery**
+(OUSD exposes no `factory()`), so the framework cannot assume "AMM with reserves".
+
+---
+
+## Plan (epic — end-to-end replication)
+
+Per Hermes rule 13 this multi-venue scope is an **epic**, run as ordered slices, each with its own
+rule-12 replay flip. The end state is a **fork replay of this exact tx** (Slice 8). Slices are
+ordered architecture-first, then by dependency and ROI.
+
+**Epic decision:** `decision: epic` — "generalized venue-adapter framework + spatial cyclic arb".
+Recurrence basis: coffeebabe capture in one of our own blocks (2026-07-03) on a venue class absent
+from our graph; per rule-13 this converts a parked coverage gap into a forced epic, not per-pool pins.
 
 ### Slice 0 — Pin the failing case as a replay fixture (observability, blocks nothing)
 - Record this tx as a named planner fixture in
-  [test/planner.ts](listener/src/searcher/test/planner.ts) `REPLAY_FIXTURES`: impact/opportunity =
-  the WBTC cycle, with on-chain provenance (block 25448858, the 9 pools above).
+  [test/planner.ts](listener/src/searcher/test/planner.ts) `REPLAY_FIXTURES`: opportunity = the WBTC
+  cycle, with on-chain provenance (block 25448858, the 9 pools above).
 - **Acceptance:** `npm run searcher:planner` runs the new fixture and asserts **`0 candidates`
-  today** with classification `impact_pool_not_in_routing_graph` (the baseline failure this epic
-  must later flip). This is the pinned `baseline_failure`.
+  today** with classification `impact_pool_not_in_routing_graph` (the pinned `baseline_failure` the
+  epic must later flip).
 
-### Slice 1 — Discover the missing V2-fork venues (pool gap, highest ROI)
-- Add RigelSwap (`0x880A…`), SmarDex (`0x7753…`, `0xB878…`), DIFX (`0xe5aa…`) factories to
-  `FACTORIES` in [active-pool-discovery.ts](listener/src/searcher/active-pool-discovery.ts). They
-  emit `PairCreated` like UniV2, so factory-scan + the existing V2 `Swap`/`Sync` topics apply.
-- **Acceptance (rule-12 flip):** after a discovery run over a window covering block 25448858, the
-  runtime graph contains pools `0xdf14…a357`, `0xf3a4…0179`, `0xae26…97e4`, `0xc034…bf0d`.
-  `expected_transition: pool_in_routing_graph false→true` for pool `0xdf14…a357`.
-- **Note:** discovery ≠ correct pricing. SmarDex edges discovered here are still mispriced until
-  Slice 2 — do not route through them before Slice 2 lands (guard: tag SmarDex adapterId distinctly
-  so the quoter routes it to the new math, not `univ2`).
+### Slice A — VenueAdapter registry seam (architecture, behavior-preserving refactor)
+- Refactor the three TS switches (discovery `FACTORIES`, `quoter.ts` `switch(adapterId)`,
+  `plan-builder.ts` `switch(edge.adapterId)`) to iterate a `VenueAdapter[]` registry. Re-express the
+  **existing** venues (curve*/univ2/univ3/univ4/psm/fluid) as registry entries — no behavior change.
+- **Acceptance (rule-12 = behavior-identical):** `npm run searcher:planner` and the curve/v3
+  bit-exact quote tests ([[project-path-b-local-quote]]) pass **unchanged**; a diff-check shows the
+  three switches are gone and every prior `adapterId` resolves through the registry.
+  `expected_transition: none (refactor) — all existing quote/plan fixtures still pass`.
 
-### Slice 2 — SmarDex adapter: quote + execute (path/adapter gap)
-- Add a `smardex-swap` adapter: quoter math in [solver/quoter.ts](listener/src/searcher/solver/quoter.ts)
-  using SmarDex fictive-reserve formula (`getAmountOut` with `fictiveReserve*` + `priceAverage`),
-  and the BotVM execution leg (`1f18b371` `swap(...)`) in the plan-builder / Solidity BotVM.
+### Slice B — Analysis tool: per-tx venue-gap classifier (ask #2 — "what exactly are we missing")
+- **Problem:** [live-loss.ts:340](analysis/src/cli/live-loss.ts:340) `classifyGapType` is a binary
+  (`in graph → detection_gap`, `out → graph_gap`) and `extractPoolAddresses`
+  ([live-loss.ts:345](analysis/src/cli/live-loss.ts:345)) only recognizes univ2/v3/curve topics — so
+  it cannot even *see* SmarDex/OUSD/Enzyme pools, let alone classify them. It cannot answer the
+  question that mattered on this tx: **is the gap a missing DEX class, a missing pool, or a missing
+  swap-endpoint adapter?**
+- **Change:** add a `venue-gap` classifier (new CLI verb / extend `live-loss --watch`) that, for each
+  address emitting a log in a competitor tx, resolves the venue and emits one of a **5-way** class:
+
+  | class (缺什么) | meaning | source of truth checked |
+  |---|---|---|
+  | `venue_class_gap` (缺 DEX) | factory / venue signature not in our known set | scanned-factory set (from registry) + `factory()` probe |
+  | `pool_gap` (缺 pool) | venue known & scanned, but this pool not in runtime graph | `runtime-graph-pools.json` membership |
+  | `execution_adapter_gap` (缺兑换口) | venue identifiable, pool graphable, but no quote+buildLeg adapter | VenueAdapter registry (Slice A) |
+  | `detection_gap` | fully covered (discoverable+quotable+executable), opp not detected/routed | all three above pass |
+  | `unknown` | address's venue can't be identified (probe reverts, no signature) | — |
+
+  Implementation notes: (a) replace the hardcoded 3-topic filter with an **any-log→address** sweep
+  then per-address venue resolution (probe `factory()`; on revert, check seed-list + a small
+  bytecode/selector signature table for OUSD/Enzyme-style contracts); (b) read the scanned-factory
+  set and the supported-adapter set **from the registry**, so the tool and the searcher never drift.
+- **Acceptance (rule-12 flip):** run the classifier on tx `0x4db34b5c…` and assert the per-pool
+  output **matches the hand-analysis in this doc**: `0x9a77…`(UniV3) + `0x0de0…`(UniV2) →
+  `detection_gap`; `0xdf14…`(Rigel) `0xf3a4…`/`0xae26…`(SmarDex) `0xc034…`(DIFX) `0x1791…`/`0x6d18…`
+  (OUSD) → `venue_class_gap`; `0x4d54…`(Enzyme) → `venue_class_gap`. After Slices 1/4 land, re-running
+  must flip the newly-covered pools out of `venue_class_gap` into `pool_gap`/`detection_gap`.
+  `expected_transition: binary {graph_gap|detection_gap} → precise 5-way class matching hand-trace`.
+- **Generality (ask #2, "for every new tx"):** this makes the classifier a reusable per-competitor-tx
+  triage — for any future capture, one command says whether we're short a DEX, a pool, or an adapter,
+  instead of the current in/out binary.
+
+### Slice 1 — SmarDex venue module (fictive-reserve AMM: discovery + quote + execute)
+- One VenueAdapter module: factory discovery (`0x7753…`, `0xB878…`), fictive-reserve quote
+  (`getAmountOut` with `fictiveReserve*` + `priceAverage`), plan-builder leg (`swap(...)` +
+  `smardexSwapCallback` field wiring, mirroring the V3 callback pattern), `botvmCallbackField` set.
 - **Acceptance (rule-12 flip):** a unit test quotes a real SmarDex swap from block 25448858 and
-  matches the on-chain `amountOut` **bit-exact** (same bar as the curve/v3 local-quote work, memory
-  [[project-path-b-local-quote]]). `expected_transition: smardex quote == on-chain amountOut (1 wei)`.
+  matches on-chain `amountOut` **bit-exact** (curve/v3 bar, [[project-path-b-local-quote]]); pools
+  `0xf3a4…`, `0xae26…` enter the graph. `expected_transition: smardex quote == on-chain amountOut
+  (1 wei) AND pool_in_routing_graph false→true`.
 
-### Slice 3 — Deeper hops for the spatial loop (config/planner)
-- Allow the spatial-scan path to enumerate longer cycles (raise the hop budget for the
-  cyclic-scan mode specifically; keep the live victim-backrun path at its low cap for latency).
-- **Acceptance:** with Slices 1–2 landed, `npm run searcher:planner` on the Slice-0 fixture now
-  emits **`candidate_plans > 0`** that reconstruct the WBTC→…→WBTC loop through the SmarDex/Uniswap
-  legs. `expected_transition: candidate_plans 0→>0` (ideally the loop matches the on-chain venue set
-  minus the un-adaptered legs).
+### Slice 2 — OUSD custom-AMM venue module (no-factory / seed discovery + custom quote)
+- VenueAdapter with `discovery.mode:"seed"` (the two pools `0x1791…`, `0x6d18…` have no `factory()`);
+  quote via the pool's own on-chain price/`getAmountOut` state read; execution via the generic
+  `0x00` call (no callback — verify whether it pulls via `transferFrom` or expects pre-transfer, and
+  encode accordingly).
+- **Acceptance (rule-12 flip):** unit test quotes the real OUSD swap from block 25448858 bit-exact
+  vs on-chain; both pools resolvable. `expected_transition: ousd quote == on-chain amountOut (1 wei)`.
 
-### Slice 4 — Spatial / cyclic detection mode (detection-model gap)
-- Add a top-of-block / standing-dislocation scan that seeds the planner with cyclic opportunities on
-  the newly-covered venues **without** requiring an in-block victim (the current `BackrunDetector`
-  cannot see these).
-- **Acceptance:** on a fork at block 25448858 pre-state, the detector emits a WBTC-cycle opportunity
-  for this pool set with **no victim tx supplied**; the planner + solver produce a bundle whose
-  simulated `sim.success` is **+EV net of gas** (or, if only dust like the original, explicitly
-  logged as `dust` per the "don't celebrate dust" rule).
+### Slice 3 — Enzyme `redeemSharesInKind` venue module (non-AMM redemption leg)
+- VenueAdapter for the sUSDN Enzyme vault (`0x4d54…`): `discovery.mode:"seed"`; "quote" = shares ×
+  NAV/share (read `redeemSharesInKind` preview or share price from the vault); execution = generic
+  `0x00` call to `redeemSharesInKind(recipient, shares, [], [])`. This proves the framework handles a
+  leg that is **not an AMM** and returns an underlying basket (single underlying here → simple).
+- **Acceptance (rule-12 flip):** unit test computes the sUSDN→USDnr out for the block-25448858 shares
+  and matches the on-chain redemption amount. `expected_transition: enzyme redeem out == on-chain (≤1
+  wei or documented NAV-rounding tolerance)`.
 
-### Explicitly NOT doing (recorded)
-- **Enzyme `redeemSharesInKind` (`0x4d54…`) and the OUSD custom AMMs (`0x1791…`, `0x6d18…`)**: exotic,
-  low-reuse legs. Excluded from this epic. Consequence: we will reconstruct the *SmarDex/Uniswap
-  portion* of the loop but **not this exact tx end-to-end**. That is acceptable — the goal is the
-  reusable SmarDex venue class + spatial mode, not this dust bundle. Revisit only if these legs
-  recur across ≥2 further competitor captures (rule-13 recurrence trigger).
+### Slice 4 — RigelSwap + DIFX V2-fork factories (cheap coverage, reuse univ2 math)
+- Add `0x880A…` (RigelSwap) and `0xe5aa…` (DIFX) as `discovery.mode:"factory"` registry entries
+  reusing the existing `univ2-swap` quote+buildLeg (they are plain xy=k V2-forks — confirm no
+  fee-on-transfer / custom fee before reusing univ2 math).
+- **Acceptance (rule-12 flip):** pools `0xdf14…`, `0xc034…` enter the graph and quote via univ2 math;
+  `expected_transition: pool_in_routing_graph false→true` for `0xdf14…`.
+
+### Slice 5 — Spatial / cyclic detection mode + deeper hops (detection-model gap)
+- Add a standing-dislocation / top-of-block cyclic scan that seeds the planner with cycle
+  opportunities on the covered venues **without** an in-block trigger (the current `BackrunDetector`
+  keys off a same-block impact swap and cannot see this), and raise the hop budget for the cyclic-scan
+  mode specifically (live victim-backrun path keeps its low cap for latency).
+- **Acceptance (rule-12 flip):** with Slices 1–4 landed, `npm run searcher:planner` on the Slice-0
+  fixture emits **`candidate_plans > 0`** reconstructing the WBTC→…→WBTC loop across all covered legs
+  with **no victim supplied**. `expected_transition: candidate_plans 0→>0`.
+
+### Slice 8 — End-to-end fork replay of the exact tx (epic definition of done)
+- On a mainnet fork at block 25448858 pre-state, with **no victim tx supplied**, run
+  detector → planner → solver → BotVM and reproduce the full **WBTC flash → 9-venue cycle → WBTC
+  repay** bundle through the SmarDex + OUSD + Enzyme + Uniswap + Rigel/DIFX legs.
+- **Acceptance (rule-12 flip, end-to-end):** the simulated bundle `sim.success` with the WBTC
+  flash-repay assert-balance guard passing; net result reproduces the on-chain ~0.00047 WETH (or is
+  explicitly logged `dust` per "don't celebrate dust" — the pass criterion is *reproduction*, not
+  profit). `expected_transition: full-cycle sim.success on the pinned pre-state`.
+
+### Governance / boundaries (recorded)
 - No broadcast. Every slice gates on fork/replay; live competitiveness is a separate dry-run gate.
+- Nothing exotic is deferred any more — end-to-end requires all four archetypes; the only excluded
+  work is any venue **not** on this tx's path.
+- If a slice's on-chain math can't be made bit-exact (e.g. Enzyme NAV rounding), document the
+  tolerance and downgrade that leg's verdict to `implemented_not_validated`, do not silently pass.
 
 ### Definition of done (epic)
-`fixed` (not merely `implemented`) requires the Slice-0 fixture to flip
-`0 candidates (impact_pool_not_in_routing_graph)` → `candidate_plans > 0` reconstructing the loop,
-**with** Slice-2's bit-exact SmarDex quote proven against block 25448858. Record
+`fixed` (not `implemented`) requires **Slice 8's end-to-end fork replay to `sim.success`** on the
+block-25448858 pre-state, built on Slices 1–3's bit-exact per-venue quotes and Slice B's classifier
+flipping every path pool to its correct venue class. Record per rule 12 at epic close:
 `failing_sample / baseline_failure / fix_commit / replay_command / replay_result /
-expected_transition / verdict` per rule 12 at epic close.
+expected_transition / verdict` for each slice.
