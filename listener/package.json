@@ -34,6 +34,7 @@
     "searcher:v3equiv": "tsx src/searcher/test/v3-equiv.ts",
     "searcher:pool": "tsx src/searcher/test/anvil-pool.ts",
     "searcher:forkreuse": "tsx src/searcher/test/fork-reuse.ts",
+    "searcher:falsify-r11": "tsx src/searcher/test/falsify-r11-triangle-sizing.ts",
     "searcher:revm-health": "cargo run --quiet --manifest-path revm-sim/Cargo.toml -- health",
     "searcher:revm-quote": "tsx src/searcher/test/revm-quote-smoke.ts",
     "searcher:revm-warm": "tsx src/searcher/test/revm-warm-smoke.ts",

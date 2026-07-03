@@ -45,7 +45,9 @@ Pool **is** in our routing graph; the out-token (`0x3e76dd57…`) has exactly **
 Competitor's tx is a single directional swap (not a loop) — consistent with an off-chain-priced
 (CEX-DEX/inventory) leg, not an on-chain arb we failed to route.
 
-**Case 2 (found independently by A):** block 25447685, pool `0xc7bBeC68d12a0d1830360F8Ec58fA599bA1d0e9b`
+**Case 2 (found independently by A):** block 25447685, pool `0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b`
+(corrected: A's raw report had a transcription typo, `…d0e9b`, an address with no on-chain bytecode;
+orchestrator verified the real pool via `cast code` on both candidates before running the falsifier)
 (USDT/WETH v3). Our planner DID generate 20 candidate plans and found a real triangle
 (`WETH->USDC->USDT->WETH`, `flash-swap-repay`) with **positive gross profit (~0.00037 ETH)**,
 correctly killed by `below_ev_gate` after ~360k gas (net ≈ −0.000135 ETH). Competitor's take on
