@@ -5,10 +5,13 @@ import { lower } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient } from "../rpc/client.js";
 import { parseArgs, writeText } from "../util.js";
 import {
+  classifyWinnerTxStyle,
   extractTouchedVenues,
+  isNonComparableWinnerStyle,
   loadGraphMembership,
   type GraphMembership,
   type TouchedVenue,
+  type WinnerStyle,
 } from "./bundle-postmortem.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -32,6 +35,9 @@ export interface CensusPerTx {
   from: string;
   realizedUsd: number | null;
   touchedVenues: TouchedVenue[];
+  winner_style?: WinnerStyle;
+  winner_moved_price_beyond_prestate?: boolean;
+  unpriced_token_in_flow?: string[];
 }
 
 export interface AnalyzedCompetitor {
@@ -39,6 +45,10 @@ export interface AnalyzedCompetitor {
   from: string;
   realized_profit_usd: number;
   touchedVenues: TouchedVenue[];
+  winner_style: WinnerStyle;
+  non_comparable_winner?: boolean;
+  winner_moved_price_beyond_prestate?: boolean;
+  unpriced_token_in_flow?: string[];
 }
 
 export interface CensusReport {
@@ -104,11 +114,24 @@ async function main(): Promise<void> {
         coinbase,
         baseFeePerGas,
       });
+      const winnerStyle = await classifyWinnerTxStyle({
+        rpc,
+        txHash: hash,
+        tx,
+        receipt,
+        profit,
+        transactionIndex: Number(hexToBigInt(receipt?.transactionIndex ?? tx?.transactionIndex)),
+        blockNumber,
+        prestateBlock: Math.max(blockNumber - 1, 0),
+      });
       perTx.push({
         hash,
         from: lower(String(tx?.from ?? receipt?.from ?? "")),
         realizedUsd: profit.realizedProfitUsd,
         touchedVenues: extractTouchedVenues(receipt, graph),
+        winner_style: winnerStyle.winner_style,
+        winner_moved_price_beyond_prestate: winnerStyle.winner_moved_price_beyond_prestate,
+        unpriced_token_in_flow: winnerStyle.unpriced_token_in_flow,
       });
     }
   }
@@ -145,13 +168,24 @@ export function buildCensusReport(
       continue;
     }
     if (!tx.touchedVenues.some((venue) => venue.in_graph === false)) continue;
+    const winnerStyle = tx.winner_style ?? "unknown";
+    const nonComparable = isNonComparableWinnerStyle(winnerStyle);
+    // Keep the competitor visible, but do not feed non-comparable missing venues to route-gap closure.
+    const coverageTouchedVenues = nonComparable
+      ? tx.touchedVenues.filter((venue) => venue.in_graph !== false)
+      : tx.touchedVenues;
 
     analyzed.push({
       hash: lower(tx.hash),
       from: lower(tx.from),
       realized_profit_usd: realized,
-      touchedVenues: tx.touchedVenues,
+      touchedVenues: coverageTouchedVenues,
+      winner_style: winnerStyle,
+      non_comparable_winner: nonComparable ? true : undefined,
+      winner_moved_price_beyond_prestate: tx.winner_moved_price_beyond_prestate,
+      unpriced_token_in_flow: tx.unpriced_token_in_flow,
     });
+    if (nonComparable) continue;
     for (const venue of tx.touchedVenues) {
       if (venue.in_graph !== false) continue;
       distinct[venue.protocol].add(lower(venue.id));
@@ -161,21 +195,21 @@ export function buildCensusReport(
   return {
     command: "census-report",
     verdict: {
-      route_gap_decisive: analyzed.length > 0,
+      route_gap_decisive: analyzed.some((tx) => !tx.non_comparable_winner),
     },
     analyzed_competitors: analyzed,
     summary: {
       window,
       watch: watch.map(lower),
       matched_txs: perTx.length,
-      qualifying_txs: analyzed.length,
+      qualifying_txs: analyzed.filter((tx) => !tx.non_comparable_winner).length,
       skipped_below_profit: skippedBelowProfit,
       distinct_out_of_graph: {
         univ2: distinct.univ2.size,
         univ3: distinct.univ3.size,
         univ4: distinct.univ4.size,
       },
-      net_realized_usd: analyzed.reduce((sum, tx) => sum + tx.realized_profit_usd, 0),
+      net_realized_usd: analyzed.reduce((sum, tx) => tx.non_comparable_winner ? sum : sum + tx.realized_profit_usd, 0),
     },
   };
 }

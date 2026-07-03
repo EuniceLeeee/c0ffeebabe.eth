@@ -134,6 +134,27 @@ export interface WinnerStyleInput {
   sandwich_detected: boolean;
 }
 
+export interface WinnerStyleTxInput {
+  rpc: RpcClient;
+  txHash: string;
+  tx: Record<string, any> | null;
+  receipt: Record<string, any> | null;
+  profit: {
+    pricedDeltas: TokenDelta[];
+    unpricedDeltas: TokenDelta[];
+    beneficiary: string;
+  };
+  transactionIndex: number;
+  blockNumber: number;
+  prestateBlock: number;
+}
+
+export interface WinnerStyleAnalysis {
+  winner_style: WinnerStyle;
+  winner_moved_price_beyond_prestate: boolean;
+  unpriced_token_in_flow: string[];
+}
+
 const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--out <report.json>]`;
 
 async function main(): Promise<void> {
@@ -446,30 +467,15 @@ async function analyzeCompetitor(
   });
   const payment = await computeBuilderPaymentWei(rpc, candidate.hash, receipt, baseFeePerGas, coinbase);
   const blockNumber = quantityToNumber(receipt?.blockNumber);
-  const beneficiaries = competitorBeneficiaries(tx, receipt, profit.beneficiary);
-  const unpricedTokenInFlow = unpricedTokenInFlowTokens(profit.unpricedDeltas);
-  const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
+  const winnerStyleAnalysis = await classifyWinnerTxStyle({
     rpc,
+    txHash: candidate.hash,
+    tx,
+    receipt,
+    profit,
+    transactionIndex: candidate.transactionIndex,
     blockNumber,
-    candidate.transactionIndex,
-    beneficiaries,
-    profit.unpricedDeltas,
-  );
-  const winnerMovedPriceBeyondPrestate = await detectWinnerMovedPriceBeyondPrestate(rpc, receipt, prestateBlock);
-  const flowOneLeg = hasOneLegInventoryFlow(
-    profit.pricedDeltas,
-    profit.unpricedDeltas,
-    unpricedInTokensWithoutCounterTransfer,
-  );
-  const sandwichDetected = !winnerMovedPriceBeyondPrestate && !flowOneLeg
-    ? await detectSandwichPattern(rpc, receipt, candidate, beneficiaries, blockNumber)
-    : false;
-  const winnerStyle = classifyWinnerStyle({
-    pricedDeltas: profit.pricedDeltas,
-    unpricedDeltas: profit.unpricedDeltas,
-    unpricedInTokensWithoutCounterTransfer,
-    winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
-    sandwich_detected: sandwichDetected,
+    prestateBlock,
   });
   return {
     ...candidate,
@@ -491,9 +497,9 @@ async function analyzeCompetitor(
     v4Swaps: profit.v4Swaps.length,
     v4PoolIds: profit.v4PoolIds,
     touchedVenues: extractTouchedVenues(receipt, graph),
-    winner_style: winnerStyle,
-    winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
-    unpriced_token_in_flow: unpricedTokenInFlow,
+    winner_style: winnerStyleAnalysis.winner_style,
+    winner_moved_price_beyond_prestate: winnerStyleAnalysis.winner_moved_price_beyond_prestate,
+    unpriced_token_in_flow: winnerStyleAnalysis.unpriced_token_in_flow,
   };
 }
 
@@ -649,6 +655,53 @@ export function classifyWinnerStyle(input: WinnerStyleInput): WinnerStyle {
   return "unknown";
 }
 
+export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
+  const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
+  const unpricedTokenInFlow = unpricedTokenInFlowTokens(input.profit.unpricedDeltas);
+  const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
+    input.rpc,
+    input.blockNumber,
+    input.transactionIndex,
+    beneficiaries,
+    input.profit.unpricedDeltas,
+  );
+  const winnerMovedPriceBeyondPrestate = await detectWinnerMovedPriceBeyondPrestate(
+    input.rpc,
+    input.receipt,
+    input.prestateBlock,
+  );
+  const flowOneLeg = hasOneLegInventoryFlow(
+    input.profit.pricedDeltas,
+    input.profit.unpricedDeltas,
+    unpricedInTokensWithoutCounterTransfer,
+  );
+  const sandwichDetected = !winnerMovedPriceBeyondPrestate && !flowOneLeg
+    ? await detectSandwichPattern(
+      input.rpc,
+      input.receipt,
+      {
+        hash: lower(input.txHash),
+        transactionIndex: input.transactionIndex,
+        backrun_positioned: false,
+        matched_source_addresses: [],
+      },
+      beneficiaries,
+      input.blockNumber,
+    )
+    : false;
+  return {
+    winner_style: classifyWinnerStyle({
+      pricedDeltas: input.profit.pricedDeltas,
+      unpricedDeltas: input.profit.unpricedDeltas,
+      unpricedInTokensWithoutCounterTransfer,
+      winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
+      sandwich_detected: sandwichDetected,
+    }),
+    winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
+    unpriced_token_in_flow: unpricedTokenInFlow,
+  };
+}
+
 export function realizedProfitUsdForReport(
   realizedProfitUsd: number | null,
   unpricedDeltas: TokenDelta[],
@@ -724,7 +777,7 @@ async function unpricedInTokensWithoutCounterTransfers(
   return out;
 }
 
-async function detectWinnerMovedPriceBeyondPrestate(
+export async function detectWinnerMovedPriceBeyondPrestate(
   rpc: RpcClient,
   receipt: Json | null,
   prestateBlock: number,
@@ -851,7 +904,7 @@ export function buildVerdict(event: Json, competitors: CompetitorReport[], build
   };
 }
 
-function isNonComparableWinnerStyle(style: WinnerStyle): boolean {
+export function isNonComparableWinnerStyle(style: WinnerStyle): boolean {
   return style === "one_leg_inventory" || style === "sandwich";
 }
 
