@@ -1,14 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { actionsFromLogs } from "../actions/from-logs.js";
 import { canonicalSequence, pathTemplate } from "../actions/canonicalize.js";
 import { runCompetitorScan } from "../competitor-scan.js";
 import { roughValueUsd } from "../pnl/raw-delta.js";
 import { aggregateNetProfit, priceArb, fetchEthUsd, type PricedLeg, type V4Swap } from "../pnl/arb-profit.js";
-import { lower, short } from "../registry/protocols.js";
+import { ADDR, lower, short, TOPICS } from "../registry/protocols.js";
 import { resolveV4PoolKeys } from "../registry/v4-poolkeys.js";
 import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient } from "../rpc/client.js";
@@ -22,7 +22,8 @@ import {
 
 let args: Record<string, string | boolean> = {};
 let eventsPath = "";
-let graphPoolsPath = "searcher/pools/runtime-graph-pools.json";
+let graphPoolsPath = "";
+let activePoolsPath = "";
 let rpcUrl = "";
 let v4ArchiveRpcUrl = "";
 let fromBlockArg: number | undefined;
@@ -36,11 +37,15 @@ let maxBlocks = 200;
 let rpc: RpcClient;
 let events: any[] = [];
 let routingGraphPools: Set<string> | null = null;
+let activeV4PoolIds = new Set<string>();
 
 async function main(): Promise<void> {
   args = parseArgs(process.argv.slice(2));
   eventsPath = args.events ? String(args.events) : "";
-  graphPoolsPath = args["graph-pools"] ? String(args["graph-pools"]) : "searcher/pools/runtime-graph-pools.json";
+  graphPoolsPath = args["graph-pools"] ? resolveCliPath(String(args["graph-pools"])) : defaultGraphPoolsPath();
+  activePoolsPath = args["active-pools"]
+    ? resolveCliPath(String(args["active-pools"]))
+    : defaultActivePoolsPath(graphPoolsPath);
   rpcUrl = String(args.rpc ?? process.env.READONLY_RPC_URL ?? process.env.MAINNET_RPC_URL ?? "");
   v4ArchiveRpcUrl = typeof args["v4-archive-rpc"] === "string"
     ? String(args["v4-archive-rpc"])
@@ -62,6 +67,7 @@ async function main(): Promise<void> {
   rpc = new RpcClient(rpcUrl);
   events = await readJsonl(eventsPath);
   routingGraphPools = readRoutingGraphPools(graphPoolsPath);
+  activeV4PoolIds = readActiveV4PoolIds(activePoolsPath);
   if (competitorScan) {
     await runCompetitorScan({ eventsPath, events, rpc, notSeenScan });
     process.exit(0);
@@ -137,6 +143,17 @@ interface SeenSet {
   any: boolean;
 }
 
+export interface PoolIdentity {
+  pool: string;
+  venue?: VenueId | "unknown";
+  factory?: string | null;
+}
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
+const UNIV4_POOL_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
+const UNIV4_SWAP_TOPIC = lower(TOPICS.univ4Swap);
+
 async function readJsonl(path: string): Promise<any[]> {
   const text = await readFile(path, "utf8");
   return text
@@ -152,7 +169,19 @@ async function readJsonl(path: string): Promise<any[]> {
     });
 }
 
-function readRoutingGraphPools(path: string): Set<string> | null {
+export function defaultGraphPoolsPath(): string {
+  return resolve(DEFAULT_POOLS_DIR, "runtime-graph-pools.json");
+}
+
+export function defaultActivePoolsPath(graphPath = defaultGraphPoolsPath()): string {
+  return resolve(dirname(graphPath), "active-pools.json");
+}
+
+function resolveCliPath(path: string): string {
+  return isAbsolute(path) ? path : resolve(path);
+}
+
+export function readRoutingGraphPools(path = defaultGraphPoolsPath()): Set<string> | null {
   try {
     if (!existsSync(path)) return null;
     const j = JSON.parse(readFileSync(path, "utf8"));
@@ -164,6 +193,22 @@ function readRoutingGraphPools(path: string): Set<string> | null {
     );
   } catch {
     return null;
+  }
+}
+
+export function readActiveV4PoolIds(path = defaultActivePoolsPath()): Set<string> {
+  try {
+    if (!existsSync(path)) return new Set();
+    const j = JSON.parse(readFileSync(path, "utf8"));
+    const arr = Array.isArray(j) ? j : j.pools || [];
+    return new Set(
+      arr
+        .filter((pool: any) => isUniv4Adapter(pool?.adapter))
+        .map((pool: any) => lower(String(pool?.poolId ?? "")))
+        .filter(isBytes32),
+    );
+  } catch {
+    return new Set();
   }
 }
 
@@ -184,6 +229,15 @@ function parseWatch(value: string | boolean | undefined): string[] {
 
 function isAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
+function isBytes32(value: string): boolean {
+  return /^0x[a-fA-F0-9]{64}$/.test(value);
+}
+
+function isUniv4Adapter(value: unknown): boolean {
+  const adapter = String(value ?? "").toLowerCase();
+  return adapter === "univ4" || adapter.startsWith("univ4");
 }
 
 async function runWatchMode(): Promise<void> {
@@ -359,7 +413,8 @@ async function buildWatchReport(
   const actors = uniq([tx.from, tx.to, ...matched].filter(Boolean));
   const logResult = actionsFromLogs(receipt, actors);
   const sequence = canonicalSequence(logResult.actions);
-  const pools = extractPoolAddresses(receipt);
+  const poolIdentities = extractPoolIdentities(receipt);
+  const pools = poolIdentities.map((pool) => pool.pool);
   const tokens = logResult.tokens.map(lower);
   const seen = seenByBlock.get(block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
   const samePool = pools.some((pool) => seen.pools.has(pool));
@@ -371,8 +426,8 @@ async function buildWatchReport(
     : (seen.any ? "seen_but_lost" : "not_seen");
   const poolInSeenEvents = pools.some((pool) => seen.pools.has(pool));
   const graphPools = routingGraphPools;
-  const poolInRoutingGraph = graphPools ? pools.some((p) => graphPools.has(lower(p))) : null;
-  const venueGaps = await classifyVenueGapsForAddresses(pools, graphPools);
+  const poolInRoutingGraph = summarizePoolMembership(poolIdentities, graphPools, activeV4PoolIds);
+  const venueGaps = await classifyVenueGapsForIdentities(poolIdentities, graphPools, activeV4PoolIds);
   const gapType = primaryReason === "not_seen" ? classifyGapType(poolInRoutingGraph) : null;
   const venueGapType = primaryReason === "not_seen" ? summarizeVenueGapType(venueGaps) : null;
 
@@ -425,19 +480,37 @@ const BYTECODE_SIGNATURES: Array<{ selector: string; venue: VenueId }> = [
 export function classifyVenueGapsFromFixtures(
   fixtures: VenueIdentityFixture[],
   graphPools: Set<string> | null,
+  v4PoolIds: Set<string> = new Set(),
 ): VenueGap[] {
   return fixtures.map((fixture) =>
-    classifyResolvedVenue(fixture.address, fixture.venue, fixture.factory ?? null, graphPools),
+    classifyResolvedVenue(fixture.address, fixture.venue, fixture.factory ?? null, graphPools, v4PoolIds),
   );
 }
 
-async function classifyVenueGapsForAddresses(
-  addresses: string[],
+export function classifyVenueGapsFromLogFixtures(
+  logs: any[],
   graphPools: Set<string> | null,
+  v4PoolIds: Set<string> = new Set(),
+): VenueGap[] {
+  return extractPoolIdentities({ logs }).map((identity) =>
+    classifyResolvedVenue(identity.pool, identity.venue ?? "unknown", identity.factory ?? null, graphPools, v4PoolIds),
+  );
+}
+
+async function classifyVenueGapsForIdentities(
+  identities: PoolIdentity[],
+  graphPools: Set<string> | null,
+  v4PoolIds: Set<string>,
 ): Promise<VenueGap[]> {
-  return mapLimit(addresses, 8, async (address) => {
-    const resolved = await resolveVenueForAddress(address);
-    return classifyResolvedVenue(address, resolved.venue, resolved.factory, graphPools);
+  return mapLimit(identities, 8, async (identity) => {
+    if (identity.venue) {
+      return classifyResolvedVenue(identity.pool, identity.venue, identity.factory ?? null, graphPools, v4PoolIds);
+    }
+    if (!isAddress(identity.pool)) {
+      return classifyResolvedVenue(identity.pool, "unknown", null, graphPools, v4PoolIds);
+    }
+    const resolved = await resolveVenueForAddress(identity.pool);
+    return classifyResolvedVenue(identity.pool, resolved.venue, resolved.factory, graphPools, v4PoolIds);
   });
 }
 
@@ -484,12 +557,16 @@ function classifyResolvedVenue(
   venue: VenueId | "unknown",
   factory: string | null,
   graphPools: Set<string> | null,
+  v4PoolIds: Set<string>,
 ): VenueGap {
-  const poolInRoutingGraph = graphPools ? graphPools.has(lower(pool)) : null;
+  const normalizedPool = lower(pool);
+  const poolInRoutingGraph = venue === "univ4"
+    ? v4PoolIds.has(normalizedPool)
+    : graphPools ? graphPools.has(normalizedPool) : null;
   const capability = venue === "unknown" ? null : findVenueCapability(venue);
   if (!capability) {
     return {
-      pool: lower(pool),
+      pool: normalizedPool,
       venue: "unknown",
       factory,
       gap_type: "unknown",
@@ -515,7 +592,7 @@ function classifyResolvedVenue(
   }
 
   return {
-    pool: lower(pool),
+    pool: normalizedPool,
     venue: capability.venue,
     factory,
     gap_type: gapType,
@@ -535,11 +612,44 @@ function summarizeVenueGapType(gaps: VenueGap[]): VenueGapType | null {
   return "unknown";
 }
 
-function extractPoolAddresses(receipt: any): string[] {
-  const pools = (receipt.logs ?? [])
-    .map((log: any) => lower(log.address))
-    .filter((addr: string) => /^0x[a-f0-9]{40}$/.test(addr));
-  return uniq(pools);
+export function extractPoolIdentities(receipt: any): PoolIdentity[] {
+  const pools = new Map<string, PoolIdentity>();
+  for (const log of receipt.logs ?? []) {
+    const topic0 = lower(String(log?.topics?.[0] ?? ""));
+    if (topic0 === UNIV4_SWAP_TOPIC) {
+      const poolId = lower(String(log?.topics?.[1] ?? ""));
+      if (isBytes32(poolId)) {
+        pools.set(`univ4:${poolId}`, { pool: poolId, venue: "univ4", factory: null });
+      }
+      continue;
+    }
+
+    const address = lower(log?.address);
+    if (!isAddress(address) || address === UNIV4_POOL_MANAGER) continue;
+    pools.set(address, { pool: address });
+  }
+  return [...pools.values()];
+}
+
+function summarizePoolMembership(
+  pools: PoolIdentity[],
+  graphPools: Set<string> | null,
+  v4PoolIds: Set<string>,
+): boolean | null {
+  let sawUnknownMembership = false;
+  for (const pool of pools) {
+    const normalizedPool = lower(pool.pool);
+    if (pool.venue === "univ4") {
+      if (v4PoolIds.has(normalizedPool)) return true;
+      continue;
+    }
+    if (graphPools === null) {
+      sawUnknownMembership = true;
+      continue;
+    }
+    if (graphPools.has(normalizedPool)) return true;
+  }
+  return sawUnknownMembership ? null : false;
 }
 
 function watchNextActions(
