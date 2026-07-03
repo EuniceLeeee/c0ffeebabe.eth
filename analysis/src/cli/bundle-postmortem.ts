@@ -34,6 +34,7 @@ const INVENTORY_PRICED_TOKENS = new Set([
   lower(ADDR.DAI),
   FRAX,
 ]);
+const UNPRICED_DUST_RAW = 1000n; // observed residuals were exactly -1 raw unit
 
 export type WinnerStyle = "atomic_loop" | "one_leg_inventory" | "sandwich" | "unknown";
 export type TickDirection = "down" | "up";
@@ -129,10 +130,15 @@ interface Verdict {
 export interface WinnerStyleInput {
   pricedDeltas: TokenDelta[];
   unpricedDeltas: TokenDelta[];
+  nativeWeiPositive: boolean;
   unpricedInTokensWithoutCounterTransfer: string[];
   winner_moved_price_beyond_prestate: boolean;
   sandwich_detected: boolean;
 }
+
+type WinnerStyleClassifierInput = Omit<WinnerStyleInput, "nativeWeiPositive"> & {
+  nativeWeiPositive?: boolean;
+};
 
 export interface WinnerStyleTxInput {
   rpc: RpcClient;
@@ -143,6 +149,8 @@ export interface WinnerStyleTxInput {
     pricedDeltas: TokenDelta[];
     unpricedDeltas: TokenDelta[];
     beneficiary: string;
+    ethDeltaEth: number;
+    nativeTraceUsed: boolean;
   };
   transactionIndex: number;
   blockNumber: number;
@@ -666,7 +674,7 @@ export function winnerMovedPriceBeyondPrestate(
     : winnerPostTick > preVictimTick;
 }
 
-export function classifyWinnerStyle(input: WinnerStyleInput): WinnerStyle {
+export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerStyle {
   if (input.winner_moved_price_beyond_prestate) return "one_leg_inventory";
   if (input.sandwich_detected) return "sandwich";
   if (hasOneLegInventoryFlow(
@@ -676,12 +684,17 @@ export function classifyWinnerStyle(input: WinnerStyleInput): WinnerStyle {
   )) {
     return "one_leg_inventory";
   }
-  if (hasAtomicLoopFlow(input.pricedDeltas, input.unpricedDeltas)) return "atomic_loop";
+  if (hasAtomicLoopFlow(
+    input.pricedDeltas,
+    input.unpricedDeltas,
+    input.nativeWeiPositive ?? false,
+  )) return "atomic_loop";
   return "unknown";
 }
 
 export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
   const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
+  const nativeWeiPositive = input.profit.nativeTraceUsed && input.profit.ethDeltaEth > 0;
   const unpricedTokenInFlow = unpricedTokenInFlowTokens(input.profit.unpricedDeltas);
   const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
     input.rpc,
@@ -721,6 +734,7 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       unpricedInTokensWithoutCounterTransfer,
       winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
       sandwich_detected: sandwichDetected,
+      nativeWeiPositive,
     }),
     winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
     unpriced_token_in_flow: unpricedTokenInFlow,
@@ -744,9 +758,15 @@ function hasOneLegInventoryFlow(
     && unpricedInTokensWithoutCounterTransfer.length > 0;
 }
 
-function hasAtomicLoopFlow(pricedDeltas: TokenDelta[], unpricedDeltas: TokenDelta[]): boolean {
-  return pricedDeltas.some((delta) => delta.raw > 0n)
-    && unpricedDeltas.every((delta) => delta.raw === 0n);
+function hasAtomicLoopFlow(
+  pricedDeltas: TokenDelta[],
+  unpricedDeltas: TokenDelta[],
+  nativeWeiPositive: boolean,
+): boolean {
+  return (pricedDeltas.some((delta) => delta.raw > 0n) || nativeWeiPositive)
+    && unpricedDeltas.every(
+      (delta) => delta.raw === 0n || (delta.raw < 0n && -delta.raw <= UNPRICED_DUST_RAW),
+    );
 }
 
 function unpricedTokenInFlowTokens(unpricedDeltas: TokenDelta[]): string[] {
