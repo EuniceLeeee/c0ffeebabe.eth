@@ -23,6 +23,7 @@
     "searcher:pooluniversev4": "tsx src/searcher/test/build-active-pool-universe-v4.ts",
     "searcher:auto-close-route-gap": "node --import tsx src/searcher/test/auto-close-route-gap.ts",
     "searcher:route-gap-watcher": "node --import tsx src/searcher/test/route-gap-watcher.ts",
+    "searcher:v4-hook-admission": "tsx src/searcher/test/v4-hook-admission.ts",
     "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
     "searcher:planner": "tsx src/searcher/test/planner.ts",
     "searcher:poolcache": "tsx src/searcher/test/pool-state-cache.ts",

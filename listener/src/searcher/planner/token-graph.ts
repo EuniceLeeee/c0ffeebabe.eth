@@ -72,6 +72,7 @@ export interface V4PoolKey {
 
 const V4_POOLKEY_TUPLE =
   "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
+const V4_SWAP_HOOK_MASK = 0xccn;
 
 /** Canonical Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). */
 export function v4PoolId(key: V4PoolKey): string {
@@ -83,6 +84,10 @@ export function v4PoolId(key: V4PoolKey): string {
       ),
     )
     .toLowerCase();
+}
+
+export function v4HooksAffectSwap(hooks: string): boolean {
+  return (BigInt(hooks) & V4_SWAP_HOOK_MASK) !== 0n;
 }
 
 // DEX pools are discovered via scanActivePools / factory events.
@@ -237,6 +242,10 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         throw new Error(`univ4 pool ${pool.address} requires fixedTokenIn/fixedTokenOut`);
       }
       const poolKey = await resolveV4PoolKey(pool, backend);
+      if (v4HooksAffectSwap(poolKey.hooks)) {
+        // Swap-hooked v4 pools need hookData our quote/execution path does not supply.
+        break;
+      }
       const tIn = normalizeV4Currency(pool.fixedTokenIn, "fixedTokenIn");
       const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut");
       validateV4Pair(pool.address, poolKey, tIn, tOut);
