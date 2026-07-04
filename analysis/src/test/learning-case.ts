@@ -122,6 +122,39 @@ test("LearningCase store upserts are idempotent and status is forward-only", () 
   });
 });
 
+test("credit reference arb 0xf88b folds into an S1 LearningCase (edge_kinds flash+credit+swap, strategy from source evidence)", () => {
+  withTempStore(() => {
+    // CR-3 analysis gate. 0xf88b = the wstUSR reference arb (Morpho flash + Fluid credit leg + DEX
+    // swaps). Anti-binding rule: strategy_kind comes from SOURCE EVIDENCE (its source swap is tx
+    // index 0 => backrun), NEVER from the credit leg. The S1 schema must carry the credit + flash
+    // edge kinds and still let the case advance toward close (credit does not force manual_required).
+    const c = baseLearningCase({
+      learning_case_id: "credit-0xf88b",
+      strategy_kind: "backrun",
+      status: "open",
+      trigger: "bundle_not_included",
+      comparable: true,
+      primary_gap: "venue_missing",
+      edge_kinds: ["flash", "credit", "swap"],
+      competitor_tx: "0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970",
+    });
+    upsertCase(c);
+
+    const loaded = loadCases().find((x) => x.learning_case_id === "credit-0xf88b");
+    assert.ok(loaded, "credit case persisted");
+    assert.deepEqual(loaded.edge_kinds, ["flash", "credit", "swap"]);
+    assert.equal(loaded.strategy_kind, "backrun");
+
+    // A known (non-"unknown") strategy_kind advances toward close — NOT short-circuited to
+    // manual_required — proving a credit edge_kind is closable, not blocked, by the schema.
+    advanceStatus("credit-0xf88b", "proposed_close");
+    assert.equal(
+      loadCases().find((x) => x.learning_case_id === "credit-0xf88b")?.status,
+      "proposed_close",
+    );
+  });
+});
+
 test("census-report source emits tx_shape and omits the banned field name", () => {
   const source = readFileSync(CENSUS_REPORT_SOURCE, "utf8");
   assert.match(source, /\btx_shape\b/);
