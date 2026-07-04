@@ -13,11 +13,38 @@ Two independent, ordered fixes, landed from the run `dc9bb4a3` see→no-submit a
    mislabels MEV-Share-sourced drops as `v_not_mined`. Root cause verified: a MEV-Share hint's
    `victim_hash` is a **double-hash** (`keccak256(realTxHash)`, per Flashbots event-stream docs),
    so `eth_getTransactionReceipt(victim_hash)` can NEVER resolve → the drop is auto-labeled
-   `v_not_mined` at `competitor-scan.ts:154-158`. On run `dc9bb4a3`: of 1630 distinct no_candidate
-   victims, 1381 were `src=mev-share` and 100% show "never mined" — yet a `keccak256(rawTx)`
-   reverse-scan over the drop-window blocks matched **284** of them to REAL mined txs. So the
-   "95% phantom" reading is a tool artifact, not on-chain truth. Fix = resolve via a
-   `keccak256(rawTx)→realTx` reverse map + tag `victim_source: mev-share | mempool`.
+   `v_not_mined` at `competitor-scan.ts:154-158`.
+
+   **REFINED (gate on Codex's Step 1, run `3f5046c9`): "pure tool artifact" was OVERSTATED — the
+   reverse-map only rescues ~15-20%, the rest is a REAL phantom.** The `keccak256(rawTx)→realTx`
+   reverse-map resolves only 12/79 mev-share victims (15%) in the sample — matching the independent
+   full-run reverse-scan (284/1381 ≈ 20%). A wide-scan spot-check (±50 blocks, 101-block window) on
+   12 unresolved mev-share double-hashes: **3 near (dist 0), 0 far, 9 not-found** — zero recovered
+   by widening, so the ~80% unresolved are genuinely **never-mined within ±50 blocks = effectively
+   phantom for a backrun**, NOT a too-narrow window. So the reverse-map is a real correctness
+   improvement (rescues the 15-20% that DID land) but does NOT flip the phantom read: the MEV-Share
+   phantom-victim problem is LARGELY REAL and must NOT be fully scoped out (see the reopened lever
+   note below). (Spot-check caveat: the 12 sampled victims shared one target_block neighborhood
+   `25456945`; the rate still agrees with both independent full-run reverse-scans.)
+
+   **Two Step-1 corrections from the gate (fold into the Codex re-brief):**
+   - **`victim_source` must be AUTHORITATIVE, not inferred.** Codex's fix inferred source from
+     resolution success → the 67 mev-share victims that failed to resolve were mislabeled `mempool`.
+     The reverse-map is best-effort real-tx resolution and MUST NOT drive the source label.
+     **Recommendation: the SEARCHER emits `victim_source` in the event** (not competitor-scan reads
+     the log). `hint.source` (`"mev-share" | "mempool"`) is already in scope at the drop-emit site
+     (`main.ts:1308` `emitPipelineDropped` closure; the same value gates `main.ts:1270,1676`), so add
+     `victim_source: hint.source ?? "mev-share"` to the `pipeline_dropped` event
+     (`events.ts:85-98` + the emit at `main.ts:1319-1333`). This is the durable fix: the events JSONL
+     becomes self-describing, no fragile log-scrape coupling, and every future analysis (not just
+     this scan) gets authoritative source. competitor-scan then reads `victim_source` from the event
+     when present, falling back to the log-scrape only for old events lacking the field.
+   - **The reverse-map STAYS** — it is the best-effort real-tx resolution that lets competitor
+     analysis run on the ~15-20% of mev-share victims that did land (without it, those are lost).
+     It just no longer sets the source label.
+
+   Fix = (a) searcher emits authoritative `victim_source`; (b) competitor-scan keeps the reverse-map
+   for real-tx resolution and reads `victim_source` from the event for labeling.
    (rule-16 mandatory codify: a fresh-analyst-found tooling gap must be fixed in the script.)
 
 2. **Step 2 (the coverage fix — CANDIDATE-CAP relief, NOT latency).** The runtime pool loader
@@ -56,64 +83,76 @@ Two independent, ordered fixes, landed from the run `dc9bb4a3` see→no-submit a
    land it. (Step 1 is unconditional and lands first regardless.)
 
 `searcher_behavior_change: yes` (Step 2 changes which pools the planner can route through).
-Explicitly scoped OUT (per the analysis): no multi-hop cycle-construction epic, no phantom-victim scorer.
+Explicitly scoped OUT: no multi-hop cycle-construction epic. **REOPENED (was wrongly scoped out):
+the phantom-victim problem for MEV-Share flow is a REAL lever, not a scan artifact** — the spot-check
+shows ~80% of mev-share hint victims never land within ±50 blocks, so a stateful victim
+source-quality / sender-land-rate scorer that down-weights low-land-rate MEV-Share sources IS on the
+table for MEV-Share (the existing `VictimSourceTracker` / `victim-source-quality.ts` is the seed;
+memory `project-phantom-victim-flow-admission-epic`). NOT part of this MD's Step 1/2 code — it is a
+separate tracked finding (`owner: phantom-victim epic`, `carry_to_round`), unblocked by Step 1's
+authoritative `victim_source` (which lets us measure land-rate per source honestly).
 
 Governance: rules 11 (Codex generator / Claude evaluator), 12 (repair-replay double-gate), 16
 (fable-found tooling gap → codify). Each step lands only after its rule-12 fixture flips.
 
 ---
 
-## Step 1 — competitor-scan MEV-Share double-hash resolution
+## Step 1 — authoritative `victim_source` (searcher-emitted) + competitor-scan double-hash resolution
 
-**Goal.** Before labeling a drop `v_not_mined`, attempt to resolve the `victim_hash` as a
-MEV-Share double-hash via a `keccak256(rawTx)→realTx` reverse map built over the drop-window
-blocks. Tag every drop with `victim_source: mev-share | mempool | unknown`.
+**Goal.** (a) The SEARCHER emits an authoritative `victim_source` on each `pipeline_dropped` event
+so the events JSONL is self-describing (no inference, no fragile log-scrape). (b) competitor-scan
+labels from that field and keeps the `keccak256(rawTx)→realTx` reverse-map as best-effort real-tx
+RESOLUTION (rescues the ~15-20% of mev-share victims that DID land, for competitor analysis) — the
+reverse-map no longer sets the source label.
 
-**Allowed files**
-- `analysis/src/competitor-scan.ts` (resolution logic, `DropStatus`/`DropResult`, render row)
-- `analysis/src/test/competitor-scan-doublehash.ts` (NEW — rule-12 fixture, pure/offline)
+**Sub-step 1a (searcher, small) — emit authoritative source.**
+- Allowed: `listener/src/searcher/events.ts` (add `victim_source?: "mev-share" | "mempool"` to the
+  `pipeline_dropped` variant, `:85-98`), `listener/src/searcher/main.ts` (set it in the
+  `emitPipelineDropped` closure, `:1319-1333`, from `hint.source ?? "mev-share"` — `hint` is in
+  scope; same value already gates `:1270,:1676`). Also set it on the other `pipeline_dropped` emit
+  (the `expired-before-solver` block at `:1290-1299`).
+- Forbidden: any planner/pool-universe/deploy/.env file; no behavior change beyond adding the field.
+- Verify: `cd listener && npm run build`; run a short dry/bounded window (or replay a recorded
+  fixture) and confirm `pipeline_dropped` events now carry `victim_source`, and it matches the
+  `hint tx=… src=` log line for the same victim.
 
-**Forbidden files** — do NOT touch: `analysis/src/cli/live-loss.ts` (CLI unchanged), any
-`listener/**`, `pool-universe*.ts`, any `.env` / deploy scripts, `runtime-graph-pools.json`.
-
-**Anchors / mechanism**
-- Reverse map: for the set of distinct victim `blockNumber`s already discovered
-  (`seenVictimBlocks`, `competitor-scan.ts:227-231`; or the union of all resolved `victimBlock`
-  plus a small ± window), fetch full blocks via `ctx.rpc.getBlockByNumber(n, true)`
-  (`analysis/src/rpc/client.ts:44`) and build `Map<keccak256(rawTxHex), {realTx, block}>`.
-  `ethers` is already a dependency (`competitor-scan.ts` may import `{ ethers }`; `keccak256` +
-  raw-tx serialization live there). If the node returns full tx objects (not raw hex),
-  serialize with `ethers.Transaction.from(tx).serialized` then `ethers.keccak256(...)`, or use the
-  block's raw-tx form if available — pick whichever the local reth returns; assert one match in
-  the fixture so the encoding is proven.
-- Resolution point: at `competitor-scan.ts:154-158`, when `victimReceipt` is null, first look up
-  `reverseMap.get(drop.victimHash.toLowerCase())`. If hit → treat `realTx` as the victim (fetch
-  its receipt, set `victimBlock`/`victimIndex`, tag `victim_source: "mev-share"`, continue the
-  normal competitor analysis). If miss → keep `v_not_mined` and tag `victim_source: "mempool"`
-  (its hash was a real tx hash that genuinely didn't land) or `"unknown"`.
-- `victim_source` tag: add to `DropResult` (`competitor-scan.ts:50-58`) and surface it in the
-  rendered per-drop line (`competitor-scan.ts:357` region) and the summary counts.
-- Two-pass ordering: the reverse map needs the window blocks, which come from resolved victims.
-  Simplest correct approach: pass 1 resolves all mempool (real-hash) victims to collect the block
-  window; build the reverse map over `[minBlock-1 … maxBlock+K]` (K≈8, cover backruns landing a
-  few blocks late); pass 2 re-resolves the still-`v_not_mined` drops through the map. Keep it a
-  single added helper; do not restructure `runCompetitorScan`'s existing flow beyond this.
+**Sub-step 1b (competitor-scan) — label from event, resolve via reverse-map.**
+- Allowed: `analysis/src/competitor-scan.ts` (read `event.victim_source` into `DropInput`; reverse-map
+  resolution; `DropResult`/render), `analysis/src/test/competitor-scan-doublehash.ts` (NEW fixture).
+- Forbidden: `analysis/src/cli/live-loss.ts` (CLI unchanged) beyond passing the field through if it
+  is stripped in `toDropInput`; `pool-universe*.ts`; deploy/.env.
+- **Labeling (authoritative):** `victim_source` on `DropResult` comes from `event.victim_source` when
+  present. Fallback ONLY when the field is absent (old events): the log-scrape (`hint tx=… src=`) if a
+  log path is provided, else `"unknown"` — NEVER inferred from resolution success.
+- **Resolution (best-effort, unchanged in spirit):** reverse map over the window blocks
+  (`ctx.rpc.getBlockByNumber(n, true)`, `rpc/client.ts:44`) → `Map<keccak256(rawTxHex), {realTx, block}>`.
+  `ethers` is already imported in the analysis package. If blocks return full tx objects, serialize
+  with `ethers.Transaction.from(tx).serialized` then `ethers.keccak256(...)`; assert one match in the
+  fixture so the encoding is proven. At `competitor-scan.ts:154-158`, when `victimReceipt` is null,
+  look up the reverse map; on hit, use `realTx` as the victim (fetch its receipt, set
+  `victimBlock`/`victimIndex`, continue competitor analysis); on miss keep `v_not_mined`. **The
+  source LABEL is independent of whether resolution hit.** Window: `[minBlock-1 … maxBlock+8]` from the
+  resolved-victim block set (widening beyond this does NOT help — spot-check found 0 far hits).
 
 **rule-12 flip (deterministic, offline fixture — `analysis/src/test/competitor-scan-doublehash.ts`)**
-- Pin ≥3 real `{doubleHash, realTxHex, block}` triples from the run (e.g. hint
-  `0xa91c60992f66…` → realTx `0x2b3c78ca63a7…` block 25456945; two more from the 284-match set).
-- Feed a stub RpcClient that returns those blocks' raw txs; assert `keccak256(rawTx)===doubleHash`
-  for each (proves the encoding) AND that `analyzeDrop`/resolution reclassifies a
-  double-hash victim from `v_not_mined` → resolved (`victim_source:"mev-share"`, non-`v_not_mined`).
-- `expected_transition`: on the `dc9bb4a3` 150-drop sample, `v_not_mined` count drops **143 → ~7**
-  (only genuine never-mined mempool victims remain). Record this as the live-sample confirmation
-  (run the scan against the local reth after the fixture passes).
+- Pin ≥3 real `{doubleHash, realTxHex, block}` triples (e.g. hint `0xa91c60992f66…` → realTx
+  `0x2b3c78ca63a7…` block 25456945; two more from the 12-match set). Assert
+  `keccak256(rawTx)===doubleHash` for each (proves encoding) AND that a double-hash victim with a
+  reverse-map hit reclassifies `v_not_mined → resolved` (competitor analysis runs).
+- **Assert labeling is authoritative**: a mev-share event that does NOT resolve keeps
+  `victim_source:"mev-share"` (from the event field) — NOT `"mempool"`. This is the specific bug the
+  gate caught (67 mislabeled); the fixture must lock it.
+- `expected_transition` (live confirmation, honest numbers): on the sample, the ~15-20% of mev-share
+  victims that landed flip `v_not_mined → resolved`; the ~80% that never landed stay `v_not_mined`
+  but are correctly labeled `victim_source:"mev-share"` (a REAL phantom, not a mislabel). Do NOT
+  expect `v_not_mined → ~7`; expect the mev-share resolved count ≈ 12/79 and zero source-mislabels.
 
 **Verify commands**
 ```bash
-cd analysis && npm run build
-cd analysis && npx tsx src/test/competitor-scan-doublehash.ts      # rule-12 fixture, offline
-# live-sample confirmation (local reth, zero-CU), report v_not_mined 143->~7:
+cd listener && npm run build                                        # 1a
+cd analysis && npm run build                                        # 1b
+cd analysis && npx tsx src/test/competitor-scan-doublehash.ts       # rule-12 fixture, offline
+# live confirmation (local reth, zero-CU): mev-share resolved ≈15-20%, zero source-mislabels
 cd analysis && npm run live-loss -- --competitor-scan --events /tmp/nc-sample.jsonl --rpc http://127.0.0.1:8545
 ```
 
@@ -197,9 +236,11 @@ cd listener && npm run searcher:planner     # must print 14/14 + replay fixtures
 ---
 
 ## Gate checklist (Claude, non-author)
-- [ ] Step 1 (unconditional, first): `analysis` build green; offline double-hash fixture passes;
-      live sample shows `v_not_mined` 143 → ~7; `victim_source` tag present. Regressions: existing
-      `live-loss` invocations still run.
+- [ ] Step 1 (unconditional, first): `listener` + `analysis` builds green; searcher emits
+      authoritative `victim_source` on `pipeline_dropped` (matches the `hint … src=` log); offline
+      double-hash fixture passes AND locks the "unresolved mev-share stays labeled mev-share, not
+      mempool" assertion; live sample shows mev-share resolved ≈15-20% (NOT 143→~7) with ZERO
+      source-mislabels. Regressions: existing `live-loss` invocations still run.
 - [ ] Step 2 TRIGGER: a longer bounded-live window confirms `solver/candidate-cap` worsened at
       topN=6000 vs the 1500 baseline. If NOT confirmed → Step 2 DEFERRED, topN=6000 stands, do not
       build. (Latency is NOT a trigger — bench shows +35ms p95, immaterial.)
