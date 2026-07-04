@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { ethers } from "ethers";
 import {
+  appendAdmitCandidates,
   buildFunnelIndex,
   scanOnchainLosses,
   type OnchainScanBlock,
@@ -9,6 +14,7 @@ import {
 } from "../cli/onchain-loss-scan.js";
 import type { GraphMembership } from "../cli/bundle-postmortem.js";
 import { ADDR, TOPICS } from "../registry/protocols.js";
+import { loadForceIncludeRouters } from "../../../listener/src/searcher/force-include.js";
 
 const BLOCK = 300;
 const FIXED_TIME = "2026-07-04T00:00:00.000Z";
@@ -34,7 +40,9 @@ const ERIN = address("e");
 const FAY = address("7");
 const ATOMIC = address("f");
 const EXECUTOR = address("9");
-const OUT_OF_ALLOWLIST_TO = address("8");
+const POOL_GAP_OUT_OF_ALLOWLIST_TO = ethers.getAddress("0x1000000000000000000000000000000000000001");
+const NON_COMPARABLE_OUT_OF_ALLOWLIST_TO = ethers.getAddress("0x2000000000000000000000000000000000000002");
+const OUT_OF_ALLOWLIST_TO = ethers.getAddress("0x1234567890abcdef1234567890abcdef12345678");
 
 const POOL_A = address("1");
 const POOL_B = address("2");
@@ -49,19 +57,20 @@ const POOL_J = address("b");
 const POOL_K = address("c");
 const POOL_L = address("d");
 const W1_PROFIT_WEI = 400_000_000_000_000n;
+const W5_PROFIT_WEI = 400_000_000_000_000n;
 
 test("onchain block scan attributes competed backrun losses per victim", async () => {
   const block = blockFixture([
-    tx(V1, 0, ALICE, EXECUTOR, [POOL_D_OUT_OF_GRAPH]),
+    tx(V1, 0, ALICE, POOL_GAP_OUT_OF_ALLOWLIST_TO, [POOL_D_OUT_OF_GRAPH]),
     tx(W1, 1, BOB, EXECUTOR, [POOL_D_OUT_OF_GRAPH, POOL_A], { wethProfitWei: W1_PROFIT_WEI }),
     tx(V2, 2, CAROL, EXECUTOR, [POOL_C]),
     tx(W2, 3, BOB, EXECUTOR, [POOL_C, POOL_D_OUT_OF_GRAPH]),
     tx(V3, 4, DAN, EXECUTOR, [POOL_E]),
     tx(W3, 5, BOB, EXECUTOR, [POOL_E, POOL_F]),
-    tx(V4, 6, ATOMIC, EXECUTOR, [POOL_G]),
+    tx(V4, 6, ATOMIC, NON_COMPARABLE_OUT_OF_ALLOWLIST_TO, [POOL_G]),
     tx(W4, 7, ATOMIC, EXECUTOR, [POOL_G, POOL_H]),
     tx(V5, 8, ERIN, OUT_OF_ALLOWLIST_TO, [POOL_I]),
-    tx(W5, 9, BOB, EXECUTOR, [POOL_I, POOL_J]),
+    tx(W5, 9, BOB, EXECUTOR, [POOL_I, POOL_J], { wethProfitWei: W5_PROFIT_WEI }),
     tx(V6, 10, FAY, EXECUTOR, [POOL_K]),
     tx(W6, 11, BOB, EXECUTOR, [POOL_K, POOL_L]),
   ]);
@@ -129,9 +138,26 @@ test("onchain block scan attributes competed backrun losses per victim", async (
   assert.equal(byVictim.get(V4)?.learning_case.status, "manual_required");
   assert.equal(byVictim.get(V5)?.primary_gap, "source_not_seen");
   assert.equal(byVictim.get(V5)?.source_not_seen_reason, "to_not_admissible");
+  assert.equal(byVictim.get(V5)?.winner_profit_usd, 0.8);
   assert.equal(byVictim.get(V6)?.primary_gap, "source_not_seen");
   assert.equal(byVictim.get(V6)?.source_not_seen_reason, "not_received");
   assert.equal(byVictim.get(V6)?.source_not_seen_note, "not_further_separable_without_external_mempool_archive");
+  assert.deepEqual(result.admit_candidates.map((candidate) => candidate.address), [OUT_OF_ALLOWLIST_TO]);
+  assert.equal(result.admit_candidate_count, 1);
+  assert.equal(result.admit_candidates[0]?.victim_tx, V5);
+  assert.equal(result.admit_candidates[0]?.winner_profit_usd, 0.8);
+  assert(
+    !result.admit_candidates.some((candidate) => candidate.address === POOL_GAP_OUT_OF_ALLOWLIST_TO),
+    "pool_not_in_graph target should not be admitted",
+  );
+  assert(
+    !result.admit_candidates.some((candidate) => candidate.address === NON_COMPARABLE_OUT_OF_ALLOWLIST_TO),
+    "non-comparable target should not be admitted",
+  );
+  assert(
+    !result.admit_candidates.some((candidate) => candidate.address === EXECUTOR),
+    "not_received target should not be admitted",
+  );
 
   assert.equal(result.summary.source_not_seen, 3);
   assert.equal(result.summary.venue_missing, 1);
@@ -145,7 +171,40 @@ test("onchain block scan attributes competed backrun losses per victim", async (
   assert.equal(result.winner_profit_by_primary_gap.source_not_seen?.dust_share, 1);
   assert.equal(funnel.run_id, "latest-run");
 
+  const minProfitResult = await scanOnchainLosses({
+    fromBlock: BLOCK,
+    toBlock: BLOCK,
+    fetchBlock: async () => block,
+    funnel,
+    graph,
+    now: () => FIXED_TIME,
+    ethUsd: 2000,
+    admitMinProfitUsd: 1,
+  });
+  assert.deepEqual(
+    minProfitResult.admit_candidates.map((candidate) => candidate.address),
+    [],
+    "case below --admit-min-profit-usd should be excluded",
+  );
+
+  const dir = mkdtempSync(join(tmpdir(), "onchain-loss-scan-"));
+  try {
+    const forceIncludePath = join(dir, "force-include-routers.json");
+    const firstAppend = appendAdmitCandidates(result.admit_candidates, forceIncludePath);
+    assert.equal(firstAppend.appended, 1);
+    assert.equal(firstAppend.already_present, 0);
+    assert.deepEqual(loadForceIncludeRouters(forceIncludePath), [OUT_OF_ALLOWLIST_TO]);
+
+    const secondAppend = appendAdmitCandidates(result.admit_candidates, forceIncludePath);
+    assert.equal(secondAppend.appended, 0);
+    assert.equal(secondAppend.already_present, 1);
+    assert.deepEqual(loadForceIncludeRouters(forceIncludePath), [OUT_OF_ALLOWLIST_TO]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+
   console.log("[onchain-loss-scan] per-case attribution PASS");
+  console.log("[onchain-loss-scan] admit-candidates gating PASS");
 });
 
 type FixtureTx = OnchainScanTx & {

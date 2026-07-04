@@ -28,6 +28,8 @@ import {
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_RPC_URL = "http://127.0.0.1:8545";
 const DEFAULT_GRAPH_PATH = resolve(REPO_ROOT, "listener/searcher/pools/runtime-graph-pools.json");
+const FORCE_INCLUDE_ROUTERS_SUFFIX = "searcher/pools/force-include-routers.json";
+const DEFAULT_ADMIT_FORCE_INCLUDE_PATH = listenerDefaultForceIncludeRoutersPath();
 const DEFAULT_BLOCKS = 120;
 
 type Json = Record<string, any>;
@@ -232,7 +234,7 @@ async function main(): Promise<void> {
   const admitMinProfitUsd = Math.max(0, numberArg(args, "admit-min-profit-usd", 0));
   const forceIncludePath = args["force-include"]
     ? resolveCliPath(String(args["force-include"]))
-    : DEFAULT_FORCE_INCLUDE_ROUTERS_PATH;
+    : DEFAULT_ADMIT_FORCE_INCLUDE_PATH;
   const ourExecutorPrefixes = parsePrefixes(args["our-executor"]);
 
   if (!eventsPath || blocks <= 0) usage();
@@ -903,7 +905,7 @@ export function collectAdmitCandidates(
 
 export function appendAdmitCandidates(
   candidates: readonly AdmitCandidate[],
-  forceIncludePath = DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
+  forceIncludePath = DEFAULT_ADMIT_FORCE_INCLUDE_PATH,
 ): AdmitWriteResult {
   const appendResult = appendForceIncludeRouters(
     candidates.map((candidate) => candidate.address),
@@ -915,6 +917,13 @@ export function appendAdmitCandidates(
     already_present: candidates.length - appendResult.added.length,
     added: appendResult.added,
   };
+}
+
+function listenerDefaultForceIncludeRoutersPath(): string {
+  if (DEFAULT_FORCE_INCLUDE_ROUTERS_PATH.endsWith(FORCE_INCLUDE_ROUTERS_SUFFIX)) {
+    return resolve(REPO_ROOT, "listener", FORCE_INCLUDE_ROUTERS_SUFFIX);
+  }
+  return DEFAULT_FORCE_INCLUDE_ROUTERS_PATH;
 }
 
 function passesAdmitProfitGuard(profitUsd: number | null, minProfitUsd: number): boolean {
