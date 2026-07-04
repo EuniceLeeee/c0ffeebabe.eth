@@ -453,7 +453,7 @@ generator/evaluator split, each with its rule-12 gate.
 | **S0** taxonomy + TokenEdge widening | `75210c5` | build + `searcher:planner` 14/14 + replay 12/12 + `searcher:taxonomy` 5/5 + router-filter |
 | **S1** merged LearningCase + postmortem/census fold | `6145931` | tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner unchanged |
 | **S2** fail-closed standing-position guard | `a737576` | build + `searcher:standing-guard` 4/4 + planner/replay unchanged; **deployed to the node** (live mode preserved, wallet 0.0027 ETH ≤ cap); runtime check = **0 `standing_position_unauthorized` false-positives** |
-| **BS-0** fixture | uncommitted (states persisted) | states captured to `test/fixtures/blockscan-coffee-803a3693.json`; harness NOT written (§9.4 step 1) |
+| **BS-0** fixture | exemplar re-selected 2026-07-04 | pure-DEX exemplar = `test/fixtures/blockscan-coffee-f2de7499.json` (tx #3, receipt-derived, zero-node); `…803a3693.json` retired → future credit/mint-leg exemplar; harness NOT written (§9.4 step 1) |
 | BS-contract → CR-8 | — | NOT STARTED |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
@@ -501,7 +501,7 @@ downgrade). Done. Per-slice chain dependency:
 
 | slice | chain dependency | status |
 |---|---|---|
-| BS-0 | pool states + v4 PoolKeys + symbols at block 25455023 | **CAPTURED + persisted** to the fixture; harness is pure-local |
+| BS-0 | NONE — exemplar re-selected to tx #3 `0xf2de7499`; poolKeys + pre-states all receipt-derived locally (see `blockscan-coffee-f2de7499.json` `_provenance`) | **pure-local**; ONE optional operator upgrade: curve pool `0x6206ca31` state at block 25455296 (TIME-SENSITIVE, prune window ~2026-07-05/06) |
 | BS-contract, BS-universe, BS-1/2/3 | none — gates are `searcher:planner` + `searcher:replay-live-fixtures` (persisted) + unit tests | pure-local |
 | CR-3 | PRIMARY gate = local planner `REPLAY_FIXTURES` flip; OPTIONAL secondary = AC-3-style ~273 wstUSR delta needs `MAINNET_RPC_URL` archive (block 24710788, past reth prune) | do the LOCAL primary gate; DEFER the archive half to the operator |
 | CR-5 / BS-lane / BS-4 / CS-min / D / CR-8 | BS-4 is a live dry-run window (operator-run); the rest are local until then | later slices; not the next session's concern |
@@ -512,14 +512,23 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
 
 ### 9.4 EXACT next actions, in order
 
-1. **Finish BS-0** (time-sensitivity already handled — states are persisted). Resolve the 3rd pool
-   `0x695a5f…`'s v4 PoolKey + token identity (`PositionManager.poolKeys(bytes25)` on the node, or the
-   `Initialize` log; the two known legs are WETH/CFG v3 + native-ETH/CFG v4 — the 3rd is likely the
-   WETH↔native funding leg). Then Codex writes `listener/src/searcher/test/blockscan-a0-replay.ts` +
-   npm `searcher:blockscan-a0` that reconstructs the cycle from the persisted states with the existing
-   local math (`solver/v3-math.ts` + v4 math) and asserts `expectedGrossWei > 0` (record it back into
-   the fixture). Gate: cycle reconstructable from public state alone (substantiates "contestable with a
-   scanner, no private info"). This is the ONLY gate other slices' fixtures depend on.
+1. **Finish BS-0 — EXEMPLAR RE-SELECTED (2026-07-04, operator-approved).** The original exemplar
+   tx #2 `0x803a3693` was mischaracterized: its "CFG 2-hop loop" is fee-negative in both directions
+   (0.32% tick spread vs ~1.3% round-trip fee) and lost −0.0000023 ETH in the real execution; the
+   profit rides a **Liquity V2 BOLD-issuance leg** (the "out-of-cycle" ETH/BOLD pool is integral).
+   It is RETAINED as the future credit/mint-leg exemplar (strategy=block-scan, edge_kinds=flash+
+   credit/mint+swap) but NOT for the BS-0 pure-DEX gate. The new exemplar is **tx #3 `0xf2de7499`**
+   (block 25455297): a genuine 4-leg pure-AMM loop (Balancer-flash USDC → v4 USDC/USDT fee=7 [the
+   edge, +8.1bps USDT premium] → v4 USDT/D166 → Curve D166→USDC → repay, +0.270191 USDC surplus →
+   v2 →WETH, +157203701650240 wei realized). Everything was derived with ZERO node access from the
+   committed receipt fixture (poolKeys keccak-recovered; v4 pre-states single-tick-inverted with
+   diff=0 out cross-check; v2 pre-reserves exact from Sync; curve leg receipt-anchored) — see
+   `blockscan-coffee-f2de7499.json`. Codex writes `listener/src/searcher/test/blockscan-a0-replay.ts`
+   + npm `searcher:blockscan-a0` replaying legs 1/2/4 with local math (v3-math engine + canonical v2),
+   asserting bit-exact leg outputs vs realized, loop surplus > 0, `expectedGrossWei > 0` (record it
+   into the fixture). Gate: cycle reconstructable from public block-boundary state alone
+   (substantiates "contestable with a scanner, no private info"). This is the ONLY gate other
+   slices' fixtures depend on.
 2. **BS-contract** (the biggest, riskiest slice — the ~640-line `processOpportunities` factor-out from
    `handleHint`). Follow impl plan §A-contract + this doc §1.3/§1.6. RELOCATE the S2 guard into
    `processOpportunities` and add `BundleSubmission.safety` + the `BundleRouter.submit()` second-reject

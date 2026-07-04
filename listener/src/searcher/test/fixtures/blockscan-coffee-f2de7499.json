@@ -1,0 +1,90 @@
+{
+  "_note": "BS-0 fixture v2 — the pure-DEX block-scan exemplar, REPLACING 0x803a3693 (which turned out to be a Liquity BOLD-mint credit-leg op, see blockscan-coffee-803a3693.json _correction). Coffee tx #3 0xf2de7499 (block 25455297, txIndex 37): a genuine 4-leg pure-AMM closed loop — Balancer flash 1807.735808 USDC -> univ4 USDC->USDT (fee=7 pips, the EDGE: USDT traded at ~+8.1bps premium on a 0.0007%-fee pool) -> univ4 USDT->D166 (fee=5000) -> Curve D166->USDC (return route) -> repay flash, surplus +0.270191 USDC -> univ2 USDC->WETH -> unwrap, keep 157203701650240 wei (~$0.55). No mint / lending / credit / LP / inventory: every token nets zero for the executor except the final ETH. edge_kinds = flash + swap only. strategy_kind = block-scan (standing dislocation: sameBlockSwapLogs contain ZERO foreign-tx touches on these pools in the whole block, so pre-tx state == block-25455296-boundary state for all four pools).",
+  "_provenance": "Derived 2026-07-04 with ZERO node access, purely from the committed receipt fixture analysis/src/test/fixtures/coffee-20260704/tx-3.json: (a) both v4 poolKeys recovered locally by keccak brute-force of poolId over tickSpacing with hooks=0x0 (exact match); (b) v4 pre-tx sqrtPriceX96 recovered by single-tick swap inversion from the event's POST sqrtP/liquidity + amounts + fee — cross-checked by forward-replaying the input: computed out matches the receipt out with diff=0 on BOTH legs (also proves no tick crossing, so event liquidity == pre liquidity); (c) v2 pre-reserves exactly from the Sync event (post r0-in0, r1+out1); (d) curve leg is NOT pre-state-invertible from its event — receipt-anchored (realized amounts pinned below); optional operator upgrade: capture curve pool 0x6206ca31 state (balances/A/fee) at block 25455296 from the node — TIME-SENSITIVE (reth ~10k prune window, block falls out around 2026-07-05/06).",
+  "txHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
+  "executionBlock": 25455297,
+  "sourceBlock": 25455296,
+  "txIndex": 37,
+  "strategyKind": "block-scan",
+  "edgeKinds": ["flash", "swap"],
+  "stateSource": "receipt-derived (local, see _provenance)",
+  "flash": {
+    "venue": "balancer-v2",
+    "token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "tokenSymbol": "USDC",
+    "amount": "1807735808",
+    "fee": "0"
+  },
+  "loopToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  "legs": [
+    {
+      "seq": 1,
+      "kind": "univ4",
+      "poolId": "0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239",
+      "poolKey": {
+        "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "fee": 7,
+        "tickSpacing": 1,
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "currency0Symbol": "USDC",
+        "currency1Symbol": "USDT",
+        "recovered": "keccak brute-force, exact poolId match"
+      },
+      "zeroForOne": true,
+      "preState": { "sqrtPriceX96": "79260705373951548935714287164", "liquidity": "34994503500441817" },
+      "postStateFromEvent": { "sqrtPriceX96": "79260701277872361448024486786", "liquidity": "34994503500441817", "tick": 8 },
+      "realized": { "amountIn": "1807735808", "amountOut": "1809208404" },
+      "role": "THE EDGE: USDC->USDT at ~+8.1bps standing USDT premium on a 0.0007%-fee stable pool"
+    },
+    {
+      "seq": 2,
+      "kind": "univ4",
+      "poolId": "0x37083adb580cbe6355fe1a875e497c52dc48e8250dcc5c943b473fbcfa8a0a11",
+      "poolKey": {
+        "currency0": "0xd166337499e176bbC38a1fBD113AB144E5BD2DF7",
+        "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "fee": 5000,
+        "tickSpacing": 100,
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "currency0Symbol": "D166 (18dp ERC20, ~$0.886; identity not needed for the gate)",
+        "currency1Symbol": "USDT",
+        "recovered": "keccak brute-force, exact poolId match"
+      },
+      "zeroForOne": false,
+      "preState": { "sqrtPriceX96": "74410080551845815677440", "liquidity": "19105616198104942727" },
+      "postStateFromEvent": { "sqrtPriceX96": "74417545558715510074641", "liquidity": "19105616198104942727", "tick": -277577 },
+      "realized": { "amountIn": "1809208405", "amountOut": "2040627466925953875895" },
+      "role": "return route hop 1: USDT->D166"
+    },
+    {
+      "seq": 3,
+      "kind": "curve",
+      "pool": "0x6206ca315c2fcdd2a857b47efb285aa12c529a7a",
+      "soldId": 1,
+      "boughtId": 0,
+      "realized": { "amountIn": "2040627466925953875895", "amountOut": "1808005999" },
+      "preState": null,
+      "receiptAnchored": true,
+      "role": "return route hop 2: D166->USDC, closes the loop. Pre-state NOT invertible from TokenExchange event; harness uses the pinned realized amounts (public on-chain data). Optional operator upgrade: node-read pool state at block 25455296 -> full curve-math.ts replay."
+    },
+    {
+      "seq": 4,
+      "kind": "univ2",
+      "pool": "0x6d74748b7089409cd7c52dcb2cbcc3b204360296",
+      "token0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "token1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "token0Symbol": "USDC",
+      "token1Symbol": "WETH",
+      "preReserves": { "r0": "18175845", "r1": "10764212984508276", "derivedFrom": "Sync event minus/plus swap amounts (exact)" },
+      "postReservesFromSync": { "r0": "18446035", "r1": "10607009282858036" },
+      "realized": { "amountIn": "270190", "amountOut": "157203701650240" },
+      "role": "profit conversion: loop-surplus USDC -> WETH (thin pool, prices USDC rich — extra bonus, not part of the closed loop)"
+    }
+  ],
+  "loopSurplusRealized": { "token": "USDC", "units": "270191", "note": "curveOut 1808005999 - flash 1807735808; 1 unit stays as dust (v2 leg spends 270190)" },
+  "expectedGrossWeiRealized": "157203701650240",
+  "expectedGrossWei": null,
+  "_gate": "BS-0 harness (blockscan-a0-replay.ts): rebuild legs 1-2 with local v4 math (v3-math.ts computeSwapStep engine) from preState, assert bit-exact amountOut vs realized; leg 3 pinned realized; leg 4 canonical v2 getAmountOut from preReserves; assert loop closes with surplus > 0 and expectedGrossWei > 0; record expectedGrossWei here. Substantiates: standing pure-AMM dislocation reconstructable from public block-boundary state alone — scanner-contestable, no private info.",
+  "_universeNote": "All 4 pools are ABSENT from listener/searcher/pools/active-pools.json (checked 2026-07-04) — four coverage gaps for the block-scan universe slice (BS-universe)."
+}
