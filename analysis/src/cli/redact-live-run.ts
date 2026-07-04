@@ -27,6 +27,10 @@ type EventStats = {
   typeCounts: Map<string, number>;
   blocks: number[];
   dropCounts: Map<string, number>;
+  // Drill-down of no_candidate_plans / plan_budget_exhausted drops by the planner's
+  // no_candidate_diagnostic.classification — the "why can't we build a loop" reason
+  // one level below the top-level stage/reason (token-graph coverage / borrowability / etc.).
+  noCandidateClassCounts: Map<string, number>;
 };
 
 type SensitiveValue = {
@@ -240,6 +244,7 @@ async function redactEvents(
     typeCounts: new Map(),
     blocks: [],
     dropCounts: new Map(),
+    noCandidateClassCounts: new Map(),
   };
   const output: string[] = [];
 
@@ -274,6 +279,14 @@ function collectEventStats(value: JsonValue, stats: EventStats): void {
     const stage = typeof value.stage === "string" ? value.stage : "unknown";
     const reason = typeof value.reason === "string" ? value.reason : "unknown";
     addCount(stats.dropCounts, `${stage}/${reason}`);
+    if (reason === "no_candidate_plans" || reason === "plan_budget_exhausted") {
+      const diag = value.no_candidate_diagnostic;
+      const classification =
+        isRecord(diag) && typeof diag.classification === "string"
+          ? diag.classification
+          : "(no diagnostic attached)";
+      addCount(stats.noCandidateClassCounts, classification);
+    }
   }
 }
 
@@ -390,6 +403,10 @@ function renderSummary(input: {
     "",
     renderDropStats(input.eventStats),
     "",
+    "## Why no_candidate_plans (planner classification)",
+    "",
+    renderNoCandidateDrill(input.eventStats),
+    "",
     "## Representative Timings",
     "",
     bulletList(timings.map((line) => `\`${line}\``), "No detector timing samples found."),
@@ -452,6 +469,15 @@ function renderEventStats(stats?: EventStats): string {
 function renderDropStats(stats?: EventStats): string {
   if (!stats || stats.dropCounts.size === 0) return "- no pipeline_dropped events found";
   return sortedEntries(stats.dropCounts)
+    .map(([key, count]) => `- \`${key}\`: \`${count}\``)
+    .join("\n");
+}
+
+function renderNoCandidateDrill(stats?: EventStats): string {
+  if (!stats || stats.noCandidateClassCounts.size === 0) {
+    return "- no no_candidate_plans drops with a diagnostic in this window";
+  }
+  return sortedEntries(stats.noCandidateClassCounts)
     .map(([key, count]) => `- \`${key}\`: \`${count}\``)
     .join("\n");
 }
