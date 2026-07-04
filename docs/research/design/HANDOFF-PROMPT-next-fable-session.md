@@ -182,6 +182,20 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   decision-relevant values all inline above and persisted into the fixture.
 - captured: R-2b-1 / 2026-07-05
 
+#### node reth reads — block 25455297 tx anchors (BS-3 execution-state fork), 2026-07-05
+- input: SSM read-only `eth_getBlockByNumber` 0x1846ac1 on local reth (zero-CU). Block has 160 txs.
+- result: coffee's block-scan tx `0xf2de7499…` is at **txIndex 37**; the tx immediately before it is
+  **txIndex 36 = `0x82c315049171b73a30587e23fdbe52a810dc56e431fb17aaf91ef657882275d3`**. Forking via
+  `AnvilStateBackend.forkAfterTx("0x82c31504…")` (anvil `--fork-transaction-hash`) yields the
+  EXECUTION state (all txs 0..36 applied, incl. the intra-block D166 oracle update) where the 4-leg
+  loop is +EV — the correct fork anchor for BS-3 full-pipeline. (Boundary fork at 25455296 would be
+  −EV, per R-2b-1.)
+- design note (sharpened R-2b-2): f2de7499 is an **oracle-update backrun consumed same-block**, not a
+  standing cross-block dislocation — a pure boundary scanner wouldn't see it. It is usable as the
+  BS-3 fork exemplar ONLY via the execution-state anchor above; it is NOT evidence that standing
+  boundary dislocations are +EV (they are dust — see [[project-atomic-backrun-market-ceiling]]).
+- captured: R-2b-2 / 2026-07-05
+
 #### rule-12 gate suite (local `npm run searcher:*` + `test:learning-case`) — R-verify-1
 - result: ALL GREEN — blockscan-a0 19/19 · blockscan-scanner 10/10 · blockscan-solver-center 2/2 ·
   planner 15/15 + replay-fixtures 14/14 + high-spread universe · blockscan-contract 5/5 ·
