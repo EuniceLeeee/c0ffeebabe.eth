@@ -22,6 +22,7 @@ import {
 import { mergePoolRegistries } from "../active-pool-discovery.js";
 import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
 import { backfillV4PoolIdIntoActivePools } from "../backfill-v4-poolid.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
@@ -47,6 +48,7 @@ function swap(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ
     tokenIn,
     tokenOut,
     slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
     score: 100,
   };
 }
@@ -371,6 +373,7 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
       tokenIn: WETH,
       tokenOut: USDC,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       nativeCurrency0: true,
       nativeCurrency1: false,
       v4PoolKey: nativeKey,
@@ -383,6 +386,7 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
       tokenIn: USDC,
       tokenOut: WETH,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       nativeCurrency0: true,
       nativeCurrency1: false,
       v4PoolKey: nativeKey,

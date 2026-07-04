@@ -4,6 +4,7 @@
 // so pinned fee-7 / fee-8 pools quoted one pool and executed against another.
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { v4PoolId, type TokenPath, type TokenEdge } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
 type PlanNode = { adapterId: string; params?: Record<string, unknown>; children?: PlanNode[] };
 
@@ -14,7 +15,7 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 const key8 = { currency0: USDC, currency1: USDT, fee: 8, tickSpacing: 1, hooks: ZERO };
 
 const edge = (tin: string, tout: string) =>
-  ({ adapterId: "univ4-unlock", target: PM, tokenIn: tin, tokenOut: tout, slotKind: "swap", v4PoolKey: key8, poolId: v4PoolId(key8) }) as unknown as TokenEdge;
+  ({ adapterId: "univ4-unlock", target: PM, tokenIn: tin, tokenOut: tout, slotKind: "swap", ...deriveEdgeTaxonomy("swap"), v4PoolKey: key8, poolId: v4PoolId(key8) }) as unknown as TokenEdge;
 
 // A USDC->USDT->USDC cycle, both hops through the fee-8 v4 pool.
 const path: TokenPath = { edges: [edge(USDC, USDT), edge(USDT, USDC)] };

@@ -10,13 +10,14 @@
 
 import { performance } from "node:perf_hooks";
 import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
 }
 
 function edge(tokenIn: string, tokenOut: string, pool: string, score?: number): TokenEdge {
-  return { adapterId: "univ2-swap", target: pool, tokenIn, tokenOut, slotKind: "swap", score };
+  return { adapterId: "univ2-swap", target: pool, tokenIn, tokenOut, slotKind: "swap", ...deriveEdgeTaxonomy("swap"), score };
 }
 
 /** Build A→X (6 scored out-edges) + each X→A back-edge, so closed loops are A→X→A. */

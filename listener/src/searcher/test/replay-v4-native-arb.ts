@@ -25,6 +25,7 @@ import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { quote } from "../solver/quoter.js";
 import { v4PoolId, type TokenEdge, type TokenPath, type V4PoolKey } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 
@@ -273,6 +274,7 @@ function nativeV4Edge(tokenIn: string, tokenOut: string): TokenEdge {
     tokenIn,
     tokenOut,
     slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
     v4PoolKey: NATIVE_ETH_USDC_POOL_KEY,
     poolId: EXPECTED_NATIVE_ETH_USDC_POOL_ID,
     nativeCurrency0: true,

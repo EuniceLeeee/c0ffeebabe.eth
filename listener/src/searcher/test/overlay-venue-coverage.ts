@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { type TokenEdge, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { postImpactSupportsStateOverrides } from "../solver/post-impact-overrides.js";
 import type { PostImpactSeed } from "../solver/pool-state-cache.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
@@ -64,6 +65,7 @@ async function hasCaptureBranch(adapterId: string): Promise<boolean> {
       tokenIn: TOKEN0,
       tokenOut: TOKEN1,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       poolToken0: TOKEN0,
       poolToken1: TOKEN1,
     }];
@@ -83,6 +85,7 @@ async function hasCaptureBranch(adapterId: string): Promise<boolean> {
       tokenIn: TOKEN0,
       tokenOut: TOKEN1,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       poolToken0: TOKEN0,
       poolToken1: TOKEN1,
     }];
@@ -105,6 +108,7 @@ async function hasCaptureBranch(adapterId: string): Promise<boolean> {
       tokenIn: TOKEN0,
       tokenOut: TOKEN1,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       v4PoolKey: V4_KEY,
       poolId: V4_POOL_ID,
     }];

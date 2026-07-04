@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { type TokenEdge, type TokenQueryBackend, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
   packUniv2ReservesSlot,
   packUniv3Slot0,
@@ -71,6 +72,7 @@ const V2_GRAPH: TokenEdge[] = [
     tokenIn: TOKEN0,
     tokenOut: TOKEN1,
     slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
     poolToken0: TOKEN0,
     poolToken1: TOKEN1,
   },
@@ -80,6 +82,7 @@ const V2_GRAPH: TokenEdge[] = [
     tokenIn: TOKEN1,
     tokenOut: TOKEN0,
     slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
     poolToken0: TOKEN0,
     poolToken1: TOKEN1,
   },
@@ -91,6 +94,7 @@ const V3_GRAPH: TokenEdge[] = [{
   tokenIn: TOKEN0,
   tokenOut: TOKEN1,
   slotKind: "swap",
+  ...deriveEdgeTaxonomy("swap"),
   poolToken0: TOKEN0,
   poolToken1: TOKEN1,
 }];
@@ -102,6 +106,7 @@ const V4_GRAPH: TokenEdge[] = [
     tokenIn: TOKEN0,
     tokenOut: TOKEN1,
     slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
     v4PoolKey: V4_KEY,
     poolId: V4_POOL_ID,
   },
@@ -111,6 +116,7 @@ const V4_GRAPH: TokenEdge[] = [
     tokenIn: TOKEN1,
     tokenOut: TOKEN0,
     slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
     v4PoolKey: V4_KEY,
     poolId: V4_POOL_ID,
   },

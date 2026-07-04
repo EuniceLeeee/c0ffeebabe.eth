@@ -32,6 +32,7 @@ import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js"
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import { v4PoolId, type TokenEdge, type TokenPath, type V4PoolKey } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 
 const PINNED_NATIVE_ETH_USDC_POOL_KEY: V4PoolKey = {
@@ -225,6 +226,7 @@ function v4SafetyPath(): TokenPath {
       tokenIn: INPUT_TOKEN,
       tokenOut: OUTPUT_TOKEN,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       v4PoolKey: PINNED_NATIVE_ETH_USDC_POOL_KEY,
       poolId: PINNED_NATIVE_ETH_USDC_POOL_ID,
       nativeCurrency0: true,

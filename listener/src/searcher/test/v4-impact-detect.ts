@@ -8,6 +8,7 @@
 import { ethers } from "ethers";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { v4PoolId, type TokenEdge } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
 const POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -22,7 +23,7 @@ const id8 = v4PoolId(key8);
 const id7 = v4PoolId(key7);
 
 const edge = (k: typeof key8, id: string, tin: string, tout: string) =>
-  ({ adapterId: "univ4-unlock", target: POOL_MANAGER, tokenIn: tin, tokenOut: tout, slotKind: "swap", v4PoolKey: k, poolId: id }) as unknown as TokenEdge;
+  ({ adapterId: "univ4-unlock", target: POOL_MANAGER, tokenIn: tin, tokenOut: tout, slotKind: "swap", ...deriveEdgeTaxonomy("swap"), v4PoolKey: k, poolId: id }) as unknown as TokenEdge;
 const edges = [
   edge(key8, id8, USDC, USDT), edge(key8, id8, USDT, USDC),
   edge(key7, id7, USDC, USDT), edge(key7, id7, USDT, USDC),

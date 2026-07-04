@@ -11,6 +11,7 @@ import { AnvilSolver, resolveSearchCenter } from "../solver/solver.js";
 import { propagateAmounts } from "../solver/amount-propagation.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { CandidatePlan } from "../planner/planner.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -161,6 +162,7 @@ async function testDefaultSafetyHasNoHaircut(): Promise<void> {
         tokenIn: tokenA,
         tokenOut: tokenB,
         slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
       }],
     },
     1000n,
@@ -203,8 +205,8 @@ async function testSolverUsesUnifiedDefaultSafety(): Promise<void> {
     },
     tokenPath: {
       edges: [
-        { adapterId: "univ2-swap", target: pool1, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap" },
-        { adapterId: "univ2-swap", target: pool2, tokenIn: tokenB, tokenOut: tokenA, slotKind: "swap" },
+        { adapterId: "univ2-swap", target: pool1, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap", ...deriveEdgeTaxonomy("swap") },
+        { adapterId: "univ2-swap", target: pool2, tokenIn: tokenB, tokenOut: tokenA, slotKind: "swap", ...deriveEdgeTaxonomy("swap") },
       ],
     },
     flashAdapterIds: ["morpho-flash"],
@@ -278,7 +280,7 @@ async function testQuoteProfitFloorAdmitsNearMiss(): Promise<void> {
     },
     tokenPath: {
       edges: [
-        { adapterId: "univ2-swap", target: pool, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap" },
+        { adapterId: "univ2-swap", target: pool, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap", ...deriveEdgeTaxonomy("swap") },
       ],
     },
     flashAdapterIds: ["morpho-flash"],

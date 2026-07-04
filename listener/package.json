@@ -44,7 +44,7 @@
     "searcher:finaloverlayequiv": "tsx src/searcher/test/final-overlay-equiv.ts",
     "searcher:overlay-fidelity": "node --import tsx src/searcher/test/mevshare-overlay-fidelity.ts",
     "searcher:overlay-coverage": "node --import tsx src/searcher/test/overlay-venue-coverage.ts",
-    "searcher:mempool-router-filter": "tsx src/searcher/test/mempool-router-filter.ts",
+    "searcher:mempool-router-filter": "node --import tsx src/searcher/test/mempool-router-filter.ts",
     "searcher:amtsearch": "tsx src/searcher/test/amount-search.ts",
     "searcher:curvemath": "tsx src/searcher/test/curve-math-equiv.ts",
     "searcher:v3math": "tsx src/searcher/test/v3-math.ts",
@@ -57,6 +57,7 @@
     "searcher:revm-warm": "tsx src/searcher/test/revm-warm-smoke.ts",
     "searcher:replay-live-fixtures": "tsx src/searcher/test/replay-live-fixtures.ts",
     "searcher:bench-topn": "tsx src/searcher/test/bench-topn-latency.ts",
+    "searcher:taxonomy": "node --import tsx src/searcher/test/taxonomy.ts",
     "searcher:live": "tsx src/searcher/main.ts"
   },
   "dependencies": {

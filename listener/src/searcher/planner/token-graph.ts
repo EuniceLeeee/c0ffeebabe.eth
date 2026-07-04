@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
+import { deriveEdgeTaxonomy, type EdgeKind } from "../strategy-taxonomy.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -18,6 +19,10 @@ export interface TokenEdge {
   tokenIn: string;
   tokenOut: string;
   slotKind: "flash" | "lend" | "swap";
+  /** Derived at construction via deriveEdgeTaxonomy(slotKind). Never set independently. */
+  edgeKind: EdgeKind;
+  /** true ⇔ executing this edge leaves an open position after the tx (credit abandon-exit). */
+  leavesStandingPosition: boolean;
   curveI?: number;
   curveJ?: number;
   poolToken0?: string;
@@ -209,6 +214,7 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
             adapterId, target: pool.address,
             tokenIn: coins[i], tokenOut: coins[j],
             slotKind: "swap", curveI: i, curveJ: j,
+            ...deriveEdgeTaxonomy("swap"),
           });
         }
       }
@@ -219,8 +225,8 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
         : await queryUniV3Tokens(backend, pool.address);
       edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
+        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
+        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
       );
       break;
     }
@@ -230,8 +236,8 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         : await queryUniV3Tokens(backend, pool.address);
       await verifyUniV2Pair(backend, pool.address);
       edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1 },
+        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
+        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
       );
       break;
     }
@@ -255,8 +261,8 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       const nc0 = poolKey.currency0 === ethers.ZeroAddress;
       const nc1 = poolKey.currency1 === ethers.ZeroAddress;
       edges.push(
-        { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1 },
-        { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1 },
+        { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
+        { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
       );
       break;
     }
@@ -265,10 +271,12 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
         throw new Error(`${pool.adapter} pool ${pool.address} missing fixedTokenIn/Out`);
       }
+      const slotKind = pool.fixedSlotKind ?? "swap";
       edges.push({
         adapterId, target: pool.address,
         tokenIn: pool.fixedTokenIn, tokenOut: pool.fixedTokenOut,
-        slotKind: pool.fixedSlotKind ?? "swap",
+        slotKind,
+        ...deriveEdgeTaxonomy(slotKind),
       });
       break;
     }
@@ -343,6 +351,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.WSTUSR,
       tokenOut: ADDR.USDC,
       slotKind: "lend",
+      ...deriveEdgeTaxonomy("lend"),
     },
     {
       adapterId: "psm",
@@ -350,6 +359,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.USDC,
       tokenOut: ADDR.DAI,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
     },
     {
       adapterId: "univ4-unlock",
@@ -357,6 +367,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.DAI,
       tokenOut: ADDR.USDT,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       v4PoolKey: {
         currency0: ADDR.DAI,
         currency1: ADDR.USDT,
@@ -371,6 +382,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.USDC,
       tokenOut: ADDR.USDT,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       curveI: 1,
       curveJ: 2,
     },
@@ -380,6 +392,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.USDC,
       tokenOut: ADDR.DAI,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       curveI: 1,
       curveJ: 0,
     },
@@ -389,6 +402,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.DAI,
       tokenOut: ADDR.USDT,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       curveI: 0,
       curveJ: 2,
     },
@@ -398,6 +412,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.USDT,
       tokenOut: ADDR.WETH,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       poolToken0: ADDR.WETH,
       poolToken1: ADDR.USDT,
     },
@@ -407,6 +422,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.WETH,
       tokenOut: ADDR.USDT,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       poolToken0: ADDR.WETH,
       poolToken1: ADDR.USDT,
     },
@@ -416,6 +432,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.USDT,
       tokenOut: ADDR.SUSDS,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
     },
     {
       adapterId: "curve-exchange",
@@ -423,6 +440,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.SUSDS,
       tokenOut: ADDR.DOLA,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
     },
     {
       adapterId: "curve-exchange-nr",
@@ -430,6 +448,7 @@ export function defaultTokenGraph(): TokenEdge[] {
       tokenIn: ADDR.DOLA,
       tokenOut: ADDR.WSTUSR,
       slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
       curveI: 0,
       curveJ: 1,
     },

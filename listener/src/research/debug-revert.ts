@@ -17,6 +17,7 @@ import { buildExecuteCalldata, installForkBotVm } from "../shared/executor/botvm
 import { buildResolvedPlanFromPath } from "../searcher/solver/plan-builder.js";
 import { propagateAmounts } from "../searcher/solver/amount-propagation.js";
 import { defaultTokenGraph, type TokenEdge } from "../searcher/planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../searcher/strategy-taxonomy.js";
 
 const RPC = process.env.MAINNET_RPC_URL!;
 if (!RPC) throw new Error("MAINNET_RPC_URL required");
@@ -54,6 +55,7 @@ async function main() {
           tokenIn: ADDR.USDC,
           tokenOut: ADDR.WETH,
           slotKind: "swap" as const,
+          ...deriveEdgeTaxonomy("swap"),
           poolToken0: ADDR.WETH,
           poolToken1: ADDR.USDC,
         },

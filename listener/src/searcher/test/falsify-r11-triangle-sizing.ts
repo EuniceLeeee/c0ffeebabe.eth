@@ -3,6 +3,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { propagateAmounts } from "../solver/amount-propagation.js";
 import type { TokenPath } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
 const DEFAULT_BLOCK = 25_447_685;
 const DEFAULT_RPC = "http://127.0.0.1:8545";
@@ -21,6 +22,7 @@ const hop = (
   tokenIn,
   tokenOut,
   slotKind: "swap",
+  ...deriveEdgeTaxonomy("swap"),
 });
 
 const PATH: TokenPath = {
