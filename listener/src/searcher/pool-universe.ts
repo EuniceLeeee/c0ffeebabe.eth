@@ -82,6 +82,18 @@ export function loadPoolUniverse(
   );
 }
 
+/** Reads only the universe file's generatedAt metadata (loadPoolUniverse discards it). "" if absent/array-form/missing. */
+export function loadPoolUniverseGeneratedAt(path = DEFAULT_POOL_UNIVERSE_PATH): string {
+  if (!existsSync(path)) return "";
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (isRecord(parsed) && typeof parsed.generatedAt === "string") return parsed.generatedAt;
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 function selectRankedPools(
   pools: PoolUniverseEntry[],
   maxPools: number,

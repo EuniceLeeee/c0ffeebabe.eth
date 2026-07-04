@@ -20,6 +20,8 @@ import {
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
 import { scanActivePools, indexFactoryPools, mergePoolRegistries } from "./active-pool-discovery.js";
+import { buildStrategyViews } from "./strategy-views.js";
+import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
   loadPinnedWarmPools,
@@ -34,6 +36,7 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
+  loadPoolUniverseGeneratedAt,
   selectPairCompletionPools,
 } from "./pool-universe.js";
 import { AnvilSolver } from "./solver/solver.js";
@@ -610,21 +613,39 @@ async function main(): Promise<void> {
       `${pairCompletionAdded} pair-completion = ` +
       `${allPools.length} total`,
   );
-  dumpRuntimeGraphPools(allPools);
+  const blockscanUniverse = loadPoolUniverse(config.poolUniversePath, {
+    maxPools: 0,                                   // uncapped — the broad blockscan candidate set
+    minScore: config.poolUniverseMinScore,
+  });
+  const strategyViews = buildStrategyViews(
+    allPools,
+    blockscanUniverse,
+    loadBlockScanViewOverrides(),
+    {
+      blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
+      poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
+    },
+  );
+  console.log(
+    `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
+      `blockscan=${strategyViews.blockscan.length} ` +
+      `view_version=${strategyViews.versions.strategy_view_version.slice(0, 10)}`,
+  );
+  dumpRuntimeGraphPools(strategyViews.backrun);
 
   // Build routing graph from all pools. File-backed universe entries can carry
   // token0/token1 metadata, so V2/V3 graph construction avoids per-pool token
   // eth_call unless the generated file is missing that metadata.
   // Factory pools are queried for token0/token1 in parallel batches.
   // This is ~1500 eth_call pairs at startup but gives full routing coverage.
-  const graph = await buildTokenGraph(mainnetBackend, allPools);
+  const graph = await buildTokenGraph(mainnetBackend, strategyViews.backrun);
   const tokenIndex = buildTokenIndex(graph);
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
   // for matching hint logs. Map: address → adapter type.
   // Routing graph is a subset for path finding.
   const allPoolMap = new Map<string, string>();
-  for (const p of allPools) allPoolMap.set(p.address.toLowerCase(), p.adapter);
+  for (const p of strategyViews.backrun) allPoolMap.set(p.address.toLowerCase(), p.adapter);
   detector.setGraph(graph);
   detector.setPoolAddressMap(allPoolMap);
   detector.setTokenQuery(mainnetBackend);
