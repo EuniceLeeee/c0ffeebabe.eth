@@ -9,6 +9,7 @@ import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
+import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import {
   buildTokenGraph,
@@ -484,6 +485,9 @@ async function main(): Promise<void> {
       config.botvmAddress,
       config.defaultGasUsed,
     );
+  const submissionCoordinator = new SubmissionCoordinator({
+    blockscanPreemptMarginBps: Number(process.env.SEARCHER_BLOCKSCAN_PREEMPT_MARGIN_BPS ?? 0),
+  });
 
   console.log("[searcher/live] starting V5 MEV-Share searcher");
   initEvents();
@@ -839,6 +843,7 @@ async function main(): Promise<void> {
   const blockTracker = { latest: await provider.getBlockNumber() };
   provider.on("block", (blockNumber: number) => {
     if (blockNumber > blockTracker.latest) blockTracker.latest = blockNumber;
+    submissionCoordinator.onBlock(blockNumber);
   });
 
   const shutdown = () => {
@@ -892,6 +897,7 @@ async function main(): Promise<void> {
             solver,
             simulator,
             bundleRouter,
+            submissionCoordinator,
             graph,
             tokenIndex,
             poolAddrs: allPoolMap,
@@ -941,6 +947,7 @@ interface HandleCtx {
   solver: AnvilSolver;
   simulator: BotVMSimulator;
   bundleRouter: BundleRouter;
+  submissionCoordinator: SubmissionCoordinator;
   graph: TokenEdge[];
   tokenIndex: Map<string, Set<string>>;
   poolAddrs: Map<string, string>;
@@ -1958,6 +1965,22 @@ async function processOpportunities(
         }
 
         const targetBlock = (ctx.blockTracker.latest || (await ctx.provider.getBlockNumber())) + 1;
+        const decision = ctx.submissionCoordinator.offer({
+          strategy: "backrun",
+          opportunityId,
+          targetBlock,
+          netEvWei: expectedProfitEth - gasCostEth - bidEth,
+          deadlineAtMs: oppDeadlineAtMs,
+        });
+        if (!decision.admit) {
+          emitPipelineDropped("submit_gate", decision.reason, undefined, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+          });
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
         ctx.counters.submitAttempts++;
         const results = await ctx.bundleRouter.submit({
           victimTxHash: sourceMeta.victimTxHash,

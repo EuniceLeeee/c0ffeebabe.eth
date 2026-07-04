@@ -33,6 +33,7 @@
     "searcher:arb-relevance": "tsx src/searcher/test/pool-universe-arb-relevance.ts",
     "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
     "searcher:planner": "node --import tsx src/searcher/test/planner.ts",
+    "searcher:submission-coordinator": "node --import tsx src/searcher/test/submission-coordinator.ts",
     "searcher:blockscan-a0": "node --import tsx src/searcher/test/blockscan-a0-replay.ts",
     "searcher:poolcache": "tsx src/searcher/test/pool-state-cache.ts",
     "searcher:poolupdater": "tsx src/searcher/test/pool-state-updater.ts",
