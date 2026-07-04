@@ -100,26 +100,61 @@ atomic sample). Reuse the historical-replay harness pattern (`docs/historical-re
   doc's recommended next step, §Caveats).
 - **Deliverable:** a pinned fixture `{block, startToken, cyclePools[], expectedGrossWei}` for A1/A3.
 
-**A1 — anchor finder: O(pairs) 2-hop spread scan (this IS the detector, not a filter).**
-First make `Opportunity` a **discriminated union** so atomic never fakes a victim (`detector.ts:6`):
-`type Opportunity = BackrunOpportunity | AtomicOpportunity`. `BackrunOpportunity` keeps today's shape
-(`kind:"backrun-arb"`, `victimTxHash`, `victimAmountIn`, `hints.impact`). `AtomicOpportunity`
-(`kind:"atomic-arb"`) carries **no victim fields and no `hints.impact`**, plus a required
-`searchSeed: { searchCenter: bigint; maxInput?: bigint }` (the sizing seed, missing-piece #2). The only
-non-test consumers of `Opportunity` are `main.ts / events.ts / planner.ts / solver.ts / detector.ts`, and
-`"backrun-arb"` is a literal in just two spots in `detector.ts` — so the union is a small, contained change.
+> **2026-07-04 architecture re-review (verified in code) — 6 structural gaps folded in below.** The
+> earlier draft under-specified how an `AtomicOpportunity` actually constrains the planner/solver; left
+> as-was it would ship a scanner that "sees" the opportunity while the planner/solver still run on backrun
+> assumptions. The four load-bearing ones (#1 planner constraint, #2 seed/rotation token unit, #3
+> telemetry/bundle contract, #4 shared pipeline entry) become the **A-contract** prerequisite slice;
+> #5 (state-block consistency) lands in A4; #6 (classifier venue coverage) in Gap C.
 
+**A-contract — no-victim contracts + shared pipeline entry (PREREQUISITE, before any atomic logic).**
+Four current contracts are victim-shaped; generalize them first or atomic forks a parallel hot path that
+drifts from backrun's EV gate / drop-reasons / submission.
+1. **`Opportunity` discriminated union** (`detector.ts:6`): `BackrunOpportunity | AtomicOpportunity`.
+   `BackrunOpportunity` = today's shape. `AtomicOpportunity` (`kind:"atomic-arb"`) carries **no victim
+   fields, no `hints.impact`**, and — critically (finding #1) — a **concrete cycle the planner is bound
+   to**, not just telemetry: `seedEdges: TokenEdge[]` (the exact anchor cycle), a pinned `flashToken`,
+   and `searchSeed:{ searchCenter: bigint; maxInput?: bigint }` in **`flashToken` units** (finding #2).
+   Non-test consumers are just `main.ts / events.ts / planner.ts / solver.ts / detector.ts`.
+2. **Telemetry contract** (`events.ts:38-109`): `makeOpportunityId` **and every event** currently require
+   `victim_hash` (verified). Add `opportunity_kind:"backrun-arb"|"atomic-arb"`, `source_block`,
+   `cycle_id`; make `victim_hash` **optional**. Atomic `opportunity_id =
+   keccak(source_block | cycle_id | startToken | seedPools)` — **never a fake/empty victim hash** (which
+   would collide IDs and poison live-loss / Hermes analysis keyed on `victim_hash`).
+3. **Bundle contract** (`bundle-router.ts:5`): make `victimTxHash` **optional** — the `standalone` path
+   already ignores it (`bundle-router.ts:81`) and atomic is standalone-shaped.
+4. **Extract `processOpportunities(ctx, opportunities, sourceMeta)`** from the ~900-line `handleHint`
+   (the detect→plan→solve→sim→submit tail, `main.ts:1258+`), telemetry fields driven by `sourceMeta.kind`.
+   Backrun `handleHint` calls it; the atomic block handler (A4) calls it. This is the single shared entry
+   that prevents two divergent hot paths (finding #4).
+- **Gate (refactor-neutral):** all existing backrun `searcher:planner` + `searcher:replay-live-fixtures`
+  pass **unchanged**; a new unit test asserts two distinct anchors in the same `source_block` produce
+  **distinct** `opportunity_id`s (no victim-hash collision).
+
+**A1 — anchor finder: O(pairs) 2-hop spread scan (emits a CONSTRAINED cycle, not a start token).**
 Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(cache, pricedTokens)`: iterate only
-**token pairs that have ≥2 venues** in the runtime graph; for each, compare mid-prices from the warm
-`PoolStateCache` (constant-product ratio for v2, `sqrtPriceX96` for v3) and flag pairs whose spread
-exceeds fees. A flagged pair directly yields the 2-hop seed (start token + the two pools) — **no DFS,
-no per-token enumeration** — and a `searchCenter` derived from the anchor pools' depth/spread (NOT `1n`).
-Emit an `AtomicOpportunity{ startToken, profitToken:start, affectedPools:[poolA,poolB], searchSeed }`.
-This is inherently short-path and cheap.
-- **Gate (rule-12, `npm run searcher:planner`, deterministic, no anvil):** pin a 2-venue spread fixture;
-  assert the pair is flagged and yields `candidate_plans 0→>0` — same flip shape as the CFG v4 fixture
-  (`test/planner.ts:829`). (From the data this class is mostly dust here; it ships first because it is
-  the cheapest and unblocks the pipeline — the value comes in A2.)
+**token pairs that have ≥2 venues** in the runtime graph; compare mid-prices from the warm
+`PoolStateCache` (constant-product for v2, `sqrtPriceX96` for v3) and flag pairs whose spread exceeds
+fees. A flagged pair yields the concrete 2-hop cycle + a `searchCenter` derived from anchor pool
+depth/spread (NOT `1n`). **No DFS, no per-token enumeration.**
+- **Emit the cycle as `seedEdges`, and constrain the planner to it (finding #1 — the biggest fix).**
+  Verified: the planner ignores `affectedPools`; with no `hints.impact` it re-enumerates the whole graph
+  `startToken→profitToken` (`planner.ts:163`) and `focusPathsOnImpact` returns all paths
+  (`planner.ts:451`). So an anchor passed only as `affectedPools` would **not** constrain planning — the
+  candidate set explodes and drifts off-anchor. Fix: `planner.plan` for `kind:"atomic-arb"` **builds the
+  candidate directly from `seedEdges`** (skip `buildTokenPaths` entirely; A2's cycle search is likewise
+  emitted as `seedEdges`), or enforces "every path must contain all `seedEdges`". Atomic never triggers
+  the full-graph DFS.
+- **Pin one `flashToken`, disable rotation for atomic (finding #2).** `buildBorrowabilityRotations`
+  (`planner.ts:321`) clones the opp to other flash tokens (`startToken/profitToken := borrowable.token`,
+  `planner.ts:356`); a single `searchCenter` would then be applied in the wrong token unit. So an
+  `AtomicOpportunity` pins the scanner-chosen `flashToken` and the planner **does not rotate** atomic
+  candidates → `searchSeed.searchCenter` is unambiguously in `flashToken` units. (Multi-flash later ⇒
+  make `searchSeed` per-token.)
+- **Gate (rule-12, `npm run searcher:planner`, deterministic, no anvil):** the anchor fixture flips
+  `candidate_plans 0→>0`; **every returned candidate's path contains the seed pools** (assert
+  anchor-constrained, not whole-graph); the resolved center is `>8` **and in `flashToken` units** (no
+  rotation). (This class is mostly dust in the data; it ships first as the cheapest unblock — value is A2.)
 
 **A2 — bounded short-cycle extension to 3–4 hops (where the value is).**
 The paying arbs (#2 @3, #3 @4) are triangles/quads a 2-hop scan can't see. Catch them with a
@@ -135,7 +170,8 @@ DFS from every token. Bounded depth + anchored seeds keep it inside the between-
 
 **A3 — no-victim solve + sim + standalone build (end-to-end on fork).**
 Teach `resolveSearchCenter` (`solver.ts:442`) to read `AtomicOpportunity.searchSeed.searchCenter` instead
-of the `1n` fallback (dispatch on `opp.kind`; backrun path unchanged). Then run the A0 fixture through
+of the `1n` fallback (dispatch on `opp.kind`; backrun path unchanged). The seed is in `flashToken` units
+and atomic rotation is disabled (A1), so the center is unambiguous. Then run the A0 fixture through
 `solver.solve` (no `localVictimApply` → sims on the current fork directly, exactly like the
 standalone/mined path) → terminal verify → `standalone` bundle build.
 - **Gate (rule-12, `npm run searcher:replay-live-fixtures`):** `sim.success=true`, net-EV > 0 after
@@ -159,6 +195,14 @@ Two design constraints the earlier draft got wrong (verified in code):
   (`if (busy) skip hint`, `main.ts:846`); a per-block atomic scan contends for the same slot. Run the
   scan **idle-only** (skip if `busy`) with a per-block time budget, so it never starves backrun hints and
   `expired-before-solver` does not rise. Both behind `SEARCHER_ENABLE_ATOMIC_SCAN` (default 0).
+- **State-block consistency — a hard gate, not an assumption (finding #5).** Atomic state-arb depends
+  entirely on the end-of-block state. But the per-block warm + state-update are async/debounced listeners
+  on the same `block` event (`main.ts:762 / :807`), so a scan firing on `block N` can read a
+  `PoolStateCache` still seeded at `N-1` → false positives/negatives that also make replay non-reproducible.
+  Require: the scanner reads a `state_block`, all changed-pool reads use the **same `blockTag`**, and the
+  scan only proceeds when `state_block === source_block` — otherwise **skip the block** (do not enter the
+  solver on stale state). Record both `source_block` and `state_block` on every atomic event so a drift is
+  visible in the dry-run, not silent.
 
 Hook the scan into `provider.on("block")` in `main.ts` under those two constraints. Deploy
 (`scripts/deploy-node.sh`), run a dry-run window, run the mandatory Step-1 competitor cross-reference
@@ -171,11 +215,14 @@ over coffee's blocks.
   the R3 trap).
 
 ### Gap-A sequencing note
-A0→A1 are pure/deterministic and land fast (A1's O(pairs) scan is cheap and short-path by construction).
-**A2 (bounded 3–4 hop cycle search) is the only real engineering risk** — its per-block cost is what the
-latency gate polices, and the hop cap is the lever (drop 4→3 before ever exceeding budget). A4 is gated
-behind the flag and the dry-run — go-live stays a human gate. **Per-pool force-include pins for this
-class are forbidden once epic'd (rule 13); only these slices touch it.**
+Order: **A0 (decode) + A-contract (contracts/refactor) → A1 → A2 → A3 → A4.** A-contract is a
+prerequisite (union + telemetry + bundle + `processOpportunities` extraction) — nothing atomic ships
+before it, or the hot path forks. The three real engineering surfaces are **A-contract** (the shared
+`processOpportunities` extraction from the ~900-line `handleHint`), **A2** (bounded 3–4 hop cycle cost,
+policed by the latency gate; hop cap 4→3 is the lever), and **A4** (block wiring + idle-only scheduling +
+state-block consistency). A1's O(pairs) scan is cheap. A4 is flag- + dry-run-gated; go-live stays a human
+gate. **Per-pool force-include pins for this class are forbidden once epic'd (rule 13); only these slices
+touch it.**
 
 ---
 
@@ -226,6 +273,13 @@ a one-command capability, or the cycle does not close.
   the tx, `eth_getLogs` the same block for a preceding swap at a **lower tx index** → 0 preceding =
   `atomic_state_arb`, ≥1 = `backrun`, indeterminate = `unknown` (the exact `coffee-backrun-verify.mjs`
   logic, made permanent). Emit `source_swap_hash`, `source_swap_seen_by_us`, `source_router`.
+- **Decode via a unified swap-log registry, not three hardcoded topics (finding #6).** Verified:
+  `victim-source.ts:124` `decodeSwapLog` handles only UniV2/V3/V4 topics — no Curve `TokenExchange` /
+  Balancer. If the shape classifier inherits that, a backrun whose source swap sat on a Curve/Balancer
+  pool finds **0 preceding swaps** and is **mislabeled `atomic_state_arb`** (a followable opp wrongly
+  called non-followable). The classifier must decode the full set the analysis layer already claims to
+  support — **UniV2 / V3 / V4 / Curve / Balancer** — via one shared swap-log registry, so the verdict is
+  production-general, not valid only for coffee's 9 v2/v3/v4 txs.
 - **Fix the `sender-flow.ts` bug (verified — this is a real defect, not just a reframe).**
   `classifySenderFlow` (`analysis/src/pnl/sender-flow.ts:44-49`) currently returns `("private","high")`
   on `coinbaseTransferWei>0` **or** `maxPriorityFeePerGas===0 || priorityTip===0`, and those branches sit
@@ -257,17 +311,20 @@ just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line)
 | slice | harness / command | expected transition (rule-12) |
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
-| A1 | `npm run searcher:planner` | 2-venue spread pair flagged → `candidate_plans 0→>0` (O(pairs), no DFS) |
+| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s** (no victim-hash collision) |
+| A1 | `npm run searcher:planner` | anchor flips `candidate_plans 0→>0`; **every candidate path contains the seed pools** (anchor-constrained, not whole-graph); center `>8` in `flashToken` units |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
 | A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built`; **search center from `searchSeed`, not `1n` (`center>8`)** |
-| A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx; **backrun `expired-before-solver` not materially higher** |
+| A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx; **backrun `expired-before-solver` not materially higher**; **every atomic event has `state_block === source_block`** |
 | B | `npm run searcher:planner`-style fixture on committed reth logs | `0x663dc15d ∈ mempool filter` (under quotas) → admission `false→true`; hot-pool quota preserved |
-| C | `analysis` classifier test | coffee 9 txs → 8 `atomic_state_arb` + 1 `backrun`; `#9 source_swap_seen_by_us=false`; **no `maxPrio=0` tx labeled private** |
+| C | `analysis` classifier test | coffee 9 txs → 8 `atomic_state_arb` + 1 `backrun`; `#9 source_swap_seen_by_us=false`; **no `maxPrio=0` tx labeled private**; **classifier decodes v2/v3/v4/Curve/Balancer** (a Curve/Balancer source swap is not mislabeled atomic) |
 
 ## Governance / sequencing
 
-- **Gap A = EPIC** (rule 13): `decision: epic`, owner `atomic-scanner-epic`, ordered slices A0→A4 each
-  with its own gate; per-pool pins for this class are now forbidden inside the 30-min loop.
+- **Gap A = EPIC** (rule 13): `decision: epic`, owner `atomic-scanner-epic`, ordered slices
+  **A0 + A-contract → A1 → A2 → A3 → A4**, each with its own gate; **A-contract (no-victim contracts +
+  `processOpportunities` extraction) is a hard prerequisite — no atomic logic ships before it.** Per-pool
+  pins for this class are now forbidden inside the 30-min loop.
 - **Gap B, C = single-cycle rule-12 fixes**, parallelizable with A0/A1.
 - **Recommended order:** **C first** (cheapest; makes every future round auto-measure followability, so
   we stop hand-classifying) → **B** (cheap coverage + unblocks measuring wider flow) → **A** as the epic
