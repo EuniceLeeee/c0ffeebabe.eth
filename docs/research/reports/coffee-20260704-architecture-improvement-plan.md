@@ -61,6 +61,13 @@ only on an `OrderflowEvent` from the mempool (`main.ts:1245`). There is **no blo
 standing cross-pool spread with no pending swap produces no hint → no opportunity → never seen. This
 matches the doc exactly: "our pipeline never triggers; there is nothing to follow."
 
+**Strategic note (why this is the north-star gap, not a side quest):** the project's founding case
+study — the wstUSR depeg arb (`CLAUDE.md` reference tx) — is *itself* an atomic chain-state arbitrage
+(a standing dislocation, no pending source swap). **Our live searcher today could not have detected its
+own reference transaction.** Closing Gap A is what lets the searcher catch the very class it was built to
+study. And volatility events (the wstUSR case) turn standing dislocations *large* — so the class is dust
+on a calm day but is exactly what pays during a depeg.
+
 Escalated to an **EPIC** per rule 13 (too big for one 30-min round; ordered slices, each with its own
 rule-12 gate). Owner: `atomic-scanner-epic`. Default OFF (`SEARCHER_ENABLE_ATOMIC_SCAN=0`) until A4.
 
@@ -217,6 +224,12 @@ Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(cache, pricedTok
 `PoolStateCache` (constant-product for v2, `sqrtPriceX96` for v3) and flag pairs whose spread exceeds
 fees. A flagged pair yields the concrete 2-hop cycle + a `searchCenter` derived from anchor pool
 depth/spread (NOT `1n`). **No DFS, no per-token enumeration.**
+- **Seed from the block's CHANGED pools (delta-driven), not a full re-scan of all ≥2-venue pairs every
+  block.** On block N, pull N's swap logs on tracked pools → the set of changed pools → restrict the
+  spread scan to pairs touching those pools. This is O(changed pools), not O(all pairs), and it targets
+  dislocations *as they form* (a swap in block N creates a standing dislocation from N+1 onward — where
+  the race is). The full ≥2-venue sweep stays available as a periodic backstop, but the per-block hot
+  path is delta-driven.
 - **Emit the cycle as `seedEdges`, and constrain the planner to it (finding #1 — the biggest fix).**
   Verified: the planner ignores `affectedPools`; with no `hints.impact` it re-enumerates the whole graph
   `startToken→profitToken` (`planner.ts:163`) and `focusPathsOnImpact` returns all paths
@@ -247,6 +260,9 @@ DFS from every token. Bounded depth + anchored seeds keep it inside the between-
   under the between-block warm budget at `maxHops=4` (relative, harness-bound per rule 12). If it can't,
   drop to `maxHops=3` (still captures #2, the richest) and record the trade-off — never widen hops past
   what the budget allows just to chase the 5-hop tail that netted $0.
+  - **Headroom is real (measured):** the atomic deadline is the **next block (~12s)**, far looser than the
+    5s backrun TTL, and a full planner pass measured **114ms @ 4216 pools** (`project-topn-latency-curve`).
+    So the budget lever is comfortable; the delta-driven seeding (A1) keeps the common case far under it.
 
 **A3 — no-source-swap solve + sim + standalone build (end-to-end on fork).**
 Teach `resolveSearchCenter` (`solver.ts:442`) to read `AtomicOpportunity.searchSeed.searchCenter` instead
@@ -332,6 +348,10 @@ to **widen the address set in a bounded, evidence-based way**, not go unfiltered
    - **Precondition, not just a bigger cap:** confirm the Alchemy server-side `alchemy_pendingTransactions`
      `toAddress` list length limit before raising the cap — exceeding it makes the whole filtered
      subscription fatal (`FatalMempoolSubscriptionError`), which is worse than a truncated list.
+   - **CU/latency abort criterion:** more admitted routers ⇒ more pending txs ⇒ more forks ⇒ CU + hot-path
+     latency. Measure `pendingFilteredReceived` and hot-path p50/p95 before/after in the A3-style window;
+     keep discovered top-K tunable; **abort = a hot-path p95 regression.** Widen only while the wider flow
+     measurably pays.
 - **Gate (rule-12, deterministic, from committed reth logs):** pin #9's source-swap tx `0x8e0c59b4…`
   (`to=0x663dc15d…`) as a fixture; assert after discovery `0x663dc15d` ∈ merged set AND
   `buildMempoolToAddressFilter` would include it under the quotas → admission flip `false→true`. Also
