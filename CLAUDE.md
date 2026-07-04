@@ -838,6 +838,25 @@ discovery is needed.
     faked: public-mempool membership for out-of-window txs (needs an external mempool archive) and
     positive MEV-Share identification (needs the Flashbots MEV-Share stream); `sender_flow` returns
     labeled-confidence proxies for these, never a fabricated `mev-share`/`public` proof.)
+17. **Tool-first, then codify-the-recurring-probe (the anti-hand-scripting forcing function — the
+    ORCHESTRATOR-side companion to rule 16).** Rule 16 codifies gaps FABLE finds; this one stops CLAUDE
+    (the orchestrator) from re-deriving BY HAND what a permanent tool already does — or should. **BEFORE
+    hand-writing a scratchpad analysis, CHECK the existing toolset first:** grep `analysis/src/cli/*`, the
+    LearningCase `PrimaryGap` taxonomy + store (`analysis/src/learning/learning-case.ts` — the shared home
+    for loss attribution, trigger `bundle_not_included` | `competitor_not_seen`), the `redact-live-run`
+    drill-downs, and `analysis/src/pnl/*`. If the question maps to an existing tool/schema, **RUN or EXTEND
+    it** (a new CLI subcommand / a producer feeding the LearningCase store) — do NOT re-derive by hand.
+    Scratchpad node/py scripts are for genuine ONE-OFF probes only. A scratchpad analysis that is (a) run a
+    SECOND time, or (b) produces a finding that maps to an existing taxonomy (e.g. a LearningCase
+    `PrimaryGap`: `source_not_seen` / `scan_not_triggered` / `venue_missing` / `outbid` /
+    `non_comparable_winner`), MUST be codified into the permanent tool before the cycle closes — same teeth
+    as rules 13/16 (`owner` + BLOCKS cycle-close). A recurring analysis living only in scratchpad is tooling
+    debt, and hand-scripting the same class twice is a review miss. (Observed 2026-07-04: per-case loss
+    attribution was re-derived by hand — `loss_attrib.py` / `notseen_split.py` / `reconcile_recv.py` —
+    while the LearningCase framework + `PrimaryGap` taxonomy already existed and mapped 1:1; that was the
+    SECOND user correction of this exact pattern, the first being the `no_candidate` drill-down that
+    belonged in `redact-live-run`. The fix landed as the `onchain-loss-scan` producer feeding the
+    LearningCase store — codify, don't re-script.)
 
 ### Boundary (CLI-orchestrated by Claude)
 
