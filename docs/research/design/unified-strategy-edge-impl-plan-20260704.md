@@ -29,7 +29,7 @@
 | D1 | **Strategy axis = `"backrun" \| "block-scan"`. "atomic" is BANNED as a strategy value** — reserved for the derived execution property (`winner_style:"atomic_loop"` keeps it; principal-safety is expressed ONLY as `leavesStandingPosition:false`, computed from edges, never asserted by a name). **"reactive" is an accepted prose synonym for `backrun`; it is NOT a code value.** | The safety fix (ADR-a) requires killing "atomic"-as-strategy, NOT renaming "backrun": every shipped artifact (`detector.ts:6` `kind:"backrun-arb"`, `tx-shape.ts`, route-gap-watcher, census) already speaks "backrun", and S0 (landed) implements these values. Re-labeling shipped fixture-locked code for cosmetics contradicts the unanimous "re-label only, no rework" C1 verdict. Divergence vs the concurrent synthesis recorded + resolved in §8.3. |
 | D2 | **`edgeKind` + `leavesStandingPosition` live on the EDGE** (`TokenEdge` widened IN PLACE, `token-graph.ts:15` — no new parallel edge type); the plan carries a DERIVED `leavesStandingPosition = tokenPath.edges.some(...)`; every posture guard keys on the derived flag. ONE kind-derivation (`deriveEdgeTaxonomy(slotKind)`, landed in S0), no second tag. | Credit invariant 1 + reconciliation defect 3. In-place widening (not `VenueEdge extends TokenEdge`) keeps ONE edge type — two edge types is itself the drift D2 bans (§8.3). |
 | D3 | **ONE LearningCase schema** = credit's spine (`strategy_kind`, `edge_kinds[]`, funnel-ordered `primary_gap` + terminals) + the block-scan spec's machinery (`learning_case_id` idempotency, forward-only status, `parked_uneconomic`, `source_block = B−1`, P1-4 dual verdicts, P1-5 view hashes). Emitters EXTEND existing tools (postmortem/census); the schema lives in one new shared module. | Rule 16 / the 3×-analyzer drift both docs warn about. |
-| D4 | **The Fluid credit edge is ALREADY live-routable today — grandfather it.** `POOL_REGISTRY`'s fluid-vault entry (`token-graph.ts:100-110`) merges into the live graph (`main.ts:571-590`) and the solver prices it via the `fluidDebtBps` search (`solver.ts:396`). Therefore `SEARCHER_ENABLE_CREDIT_EDGES_FOR_BACKRUN` **defaults to 1** (refactor-neutral: the backrun view stays bit-for-bit today's selection at default flags), and the "credit prod-OFF" invariant is re-scoped to what is actually new: the resolver-quote adapter path (CR-5), new credit venues (CR-8), and — the REAL safety line — the submit-time credit-live guard, which moves EARLY (BS-contract, §4). Graph membership is not the hazard; submitting a standing-position plan is. | Both blind reviewers found the v1 self-contradiction (backrun view "bit-for-bit today" vs default-0 stripping the fluid edge); orchestrator code-confirmed. Declaring a silent live-graph change was the alternative — rejected as a hidden behavior change. |
+| D4 | **The Fluid credit edge is ALREADY live-routable today — grandfather it.** `POOL_REGISTRY`'s fluid-vault entry (`token-graph.ts:100-110`) merges into the live graph (`main.ts:571-590`) and the solver prices it via the `fluidDebtBps` search (`solver.ts:396`). Therefore `SEARCHER_ENABLE_CREDIT_EDGES_FOR_BACKRUN` **defaults to 1** (refactor-neutral: the backrun view stays bit-for-bit today's selection at default flags), and the "credit prod-OFF" invariant is re-scoped to what is actually new: the resolver-quote adapter path (CR-5), new credit venues (CR-8), and — the REAL safety line — the submit-time credit-live guard, which lands as its OWN immediate slice **S2** (the FIRST runtime touch, at the existing submit site, ahead of the BS-contract factor-out; §4). Graph membership is not the hazard; submitting a standing-position plan is. | Both blind reviewers found the v1 self-contradiction (backrun view "bit-for-bit today" vs default-0 stripping the fluid edge); orchestrator code-confirmed. Declaring a silent live-graph change was the alternative — rejected as a hidden behavior change. |
 
 **Rename map (D1, applied to every not-yet-shipped identifier from the block-scan spec).**
 Completeness rule: **any identifier in new code matching `/atomic/i` must appear in this table or
@@ -234,8 +234,8 @@ slice 7 must not create another.
 ## 2. Slice plan (merged DAG; statuses carry over from the source specs' owner re-gates)
 
 ```
-Phase 0  SPINE        S0 (LANDED: taxonomy + TokenEdge widening) ──> S1 (learning layer)
-Phase 1  FOUNDATIONS  BS-0 (=A0 fixture) · BS-contract (=A-contract + credit-live guard) · BS-universe (=A-universe + edge projection) · CR-3 (0xf88b analysis/replay)
+Phase 0  SPINE        S0 (LANDED) ──> S1 (LANDED) ──> S2 (fail-closed standing-position guard — FIRST runtime touch)
+Phase 1  FOUNDATIONS  BS-0 (=A0 fixture) · BS-contract (=A-contract; RELOCATES the S2 guard + adds BundleSubmission.safety) · BS-universe (=A-universe + edge projection) · CR-3 (0xf88b analysis/replay)
 Phase 2  OFFLINE      BS-1/BS-2/BS-3 (=A1/A2/A3) · CR-5 (Fluid resolver-quote adapter, prod OFF)
 Phase 3  COMPARE+LANE CS-min (=C2-minimal, + blockscan-triggers.ts shared module) → BS-lane (=A-lane; supersedes CR-7) → BS-4 (=A4, BLOCKED until BS-lane + fresh-read pre-gates green)
 Phase 4  CLOSE+EXPAND CS-full (=C2-full) · D (dispatcher) · CR-8 (Aave/Euler) · CR-6-live (human gate) · B-residual (evidence-gated)
@@ -245,10 +245,11 @@ Phase 4  CLOSE+EXPAND CS-full (=C2-full) · D (dispatcher) · CR-8 (Aave/Euler) 
 |---|---|---|---|
 | **S0** | replaces credit slice 1 + A-contract's naming layer | **LANDED** (gated: build + planner 14/14 + replay 12/12 + taxonomy 5/5 + router-filter, all re-run by the evaluator) | as §1.1/§1.2 |
 | **S1** | replaces credit slice 2 + impl plan §1.5 creation + C1's deferred census wiring | **LANDED** (gated: tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner 14/14, re-run by the evaluator; census emits `tx_shape:"unknown"` live until CS-min wires same-block log collection — honest plumbing, fixture-gated) | §1.4 schema/store; EXTEND `bundle-postmortem` (`winner_style`→`comparable`+`primary_gap`, `edge_kinds` via the C1b registry) + census (`tx_shape` field); `strategyKindFromTxShape` wiring; **CREATES the pinned postmortem fixtures for `0xa32b…`/`0xee7b98ad…`** — they do NOT exist at HEAD (verified; the credit plan's "existing fixtures" claim was false). Synthetic PostmortemReport-shaped JSON with the decision-relevant fields (winner_style, in_graph, builder payment vs gross), values from the committed report docs; no chain calls |
-| **BS-0** | A0 | GO (R5 prune window — run early) | fixture names only |
-| **BS-contract** | A-contract | GO | consumes S0 types; §1.3 union + §1.6 coordinator; **+ the credit-live guard lands HERE, not CR-5 (D4 corollary — the credit edge is live-routable TODAY with no guard):** inside `processOpportunities`, immediately BEFORE the EV gate (`main.ts:1793-1826`; sole live submit site `:1840`), derive `leavesStandingPosition = candidate.tokenPath.edges.some(e => e.leavesStandingPosition)` (`CandidatePlan.tokenPath`, `planner.ts:8`) and REJECT (drop reason `standing_position_unauthorized`) unless the credit-live marker exists (`/opt/MEV/.credit-live`; path injectable for tests). The AC-3/fixture harness (`hot-path.ts:109`) is a TEST-ONLY second submit site — exempt by construction (no broadcast), stated here so nobody "fixes" it |
+| **S2** | NEW — split out of BS-contract (2026-07-04 operator-line review, core finding 2: the hard gate must not wait for the risky factor-out; the credit edge is live-routable TODAY with no guard) | **GO — NEXT** | Fail-closed standing-position guard at the EXISTING submit path, using landed S0 helpers: in `main.ts` immediately BEFORE the EV gate (`:1793-1826`; sole live submit site `:1840`), derive `containsStandingPosition = pathLeavesStandingPosition(candidate.tokenPath.edges)` (`CandidatePlan.tokenPath`, `planner.ts:8`) and REJECT — `pipeline_dropped("standing_position_unauthorized")`, no sign, no submit — unless the credit-live marker exists (`/opt/MEV/.credit-live`; path injectable for tests). ~20 lines + test. The AC-3/fixture harness (`hot-path.ts:109`) is a TEST-ONLY second submit site — exempt by construction (no broadcast), stated so nobody "fixes" it |
+| **BS-0** | A0 | GO (R5 prune window — run early; parallel-safe with S2) | fixture names only |
+| **BS-contract** | A-contract | GO | consumes S0 types; §1.3 union + §1.6 coordinator; **RELOCATES the S2 guard** into `processOpportunities` (same anchors, same drop reason) and adds belt-and-braces (operator-line review): `BundleSubmission.safety: { containsStandingPosition: boolean; edgeKinds: EdgeKind[] }` populated at build time, and a `BundleRouter.submit()` second-reject on `safety.containsStandingPosition` without the marker (bypass-proofing — no future caller can skip the check) |
 | **BS-universe** | A-universe | GO | `buildStrategyViews` per §1.5 (EdgePolicy, D4 defaults, `edgeKindFromPoolEntry`); +credit slice 6's flag-flip gate folded in |
-| **CR-3** | credit slice 3 | GO (after S1) | planner `REPLAY_FIXTURES` credit flip on `0xf88b` uses S0's `edgeKind:"credit"`; analysis emits an S1 `LearningCase` |
+| **CR-3** | credit slice 3 | GO (after S1) | planner `REPLAY_FIXTURES` credit flip on `0xf88b` uses S0's `edgeKind:"credit"`; analysis emits an S1 `LearningCase`. **Anti-binding rule (operator-line review): `strategy_kind` comes from SOURCE EVIDENCE, never from the credit leg** — the `0xf88b` reference tx classifies `backrun` (its source swap is tx index 0; the arch plan's verified correction), credit is strategy-agnostic. `"flash"` in `edge_kinds` is the FUNDING wrapper, not a route leg — whether to split a `funding_kinds` field from route edges is decided AT CR-3 (schema-affecting; currently a merged view) |
 | **BS-1/2/3** | A1/A2/A3 | GO (offline-fixture scope) | BS-1 planner branch REJECTS seedEdges with a view-disabled `edgeKind` → drop `edge_kind_disabled` |
 | **CR-5** | credit slice 5 | prod OFF | resolver `quote()` + deterministic max-borrow (+ equivalence proof before deleting the `fluidDebtBps` search) + per-adapter gas table + EV-gate market-priced profit token (ADR-b must-haves 3/4). Guard already landed (BS-contract); CR-5 adds the Fluid-specific feasibility drops (`credit_infeasible`/`emode_required` → `pipeline_dropped`) |
 | **CS-min** | C2-minimal | GO to build/report; BLOCKED as authoritative close input until P1-4+P1-5 green (carried) | emits §1.4 `LearningCase`; **CREATES `listener/src/searcher/blockscan-triggers.ts`** (`fetchSwapTouchedVenues` + `expandToPeerVenues`) as a shared module — CS-min's live-admission replay needs it BEFORE BS-4 exists; BS-4's lane imports it (DAG fix, reviewer-B m6) |
@@ -259,9 +260,10 @@ Phase 4  CLOSE+EXPAND CS-full (=C2-full) · D (dispatcher) · CR-8 (Aave/Euler) 
 | **CR-6-live** | credit slice 6 (live enable) | **human gate** (posture) | mechanism shipped in BS-universe; this item = the depeg-gated insertion decision + flag flip |
 | **B-residual** | B-residual | evidence-gated | unchanged |
 
-**Execution order (from today's state):**
-`S1 → BS-0 → BS-contract → BS-universe → CR-3 → BS-1 → BS-2 → BS-3 → CR-5 → CS-min → BS-lane →
-BS-4 → CS-full → D → CR-8`.
+**Execution order (from today's state; S0/S1 landed):**
+`S2 → BS-0 → BS-contract → BS-universe → CR-3 → BS-1 → BS-2 → BS-3 → CR-5 → CS-min → BS-lane →
+BS-4 → CS-full → D → CR-8`. After S2 lands + gates: deploy to the node (`scripts/deploy-node.sh`)
+so the guard is live — the restart is operator-authorized (2026-07-04).
 
 ---
 
@@ -270,6 +272,7 @@ BS-4 → CS-full → D → CR-8`.
 | slice | command | expected transition / assertion |
 |---|---|---|
 | S0 | (LANDED — gates re-run by evaluator) | build + `searcher:planner` 14/14 + replay 12/12 unchanged; `searcher:taxonomy` 5/5; router-filter regression |
+| S2 | new `searcher:standing-guard` + existing suites | a plan whose `tokenPath.edges` contain the fluid credit edge is REJECTED pre-EV-gate with `standing_position_unauthorized` when the (injectable) marker path is absent — no sign, no submit; ADMITTED when the marker exists; an all-swap plan untouched either way; backrun suites unchanged (`searcher:planner` 14/14 + replay 12/12) |
 | S1 | new `analysis` `test:learning-case` (+ existing C1 suites — sender-flow/registry/tx-shape — pass unchanged; do not cite fixed counts) | S1-CREATED pinned fixtures fold to ONE schema: `0xa32b…` ⇒ `{strategy_kind:"backrun", primary_gap:"venue_missing", comparable:true}`; `0xee7b98ad…` ⇒ `{primary_gap:"non_comparable_winner", comparable:false}` (short-circuits, no close); coffee 9-tx fixture ⇒ 8 `{strategy_kind:"block-scan", primary_gap:"scan_not_triggered"}` (pre-BS-4 honest state: no scanner existed) + 1 `{strategy_kind:"backrun", primary_gap:"source_not_seen", gap_detail:"router_not_watched"}`; a `tx_shape:"unknown"` synthetic ⇒ `strategy_kind:"unknown"` + `status:"manual_required"`, closer refuses it; double-run idempotency; census emits `tx_shape` (grep: `atomic_scan_shape` absent) |
 | BS-0 | `searcher:blockscan-a0` | impl plan A0 gate verbatim |
 | BS-contract | `searcher:planner` + `searcher:replay-live-fixtures` + `searcher:blockscan-contract` | impl plan A-contract gates (a)–(f) verbatim under new names; +(g) derived-flag: seedEdges containing a `leavesStandingPosition` edge ⇒ plan flag true; **+(h) credit-live guard: a plan whose `tokenPath.edges` contain the fluid credit edge is REJECTED at the pre-EV-gate check with `standing_position_unauthorized` when the (injectable) marker path is absent, ADMITTED when present; an all-swap plan is untouched either way; backrun suites byte-identical** |
@@ -293,8 +296,9 @@ BS-4 → CS-full → D → CR-8`.
   VIEW_MAX_POOLS=6000, MAX_PEER_SEEDS=64}`, breaker knobs (impl plan §4 renamed);
   `SEARCHER_ENABLE_CREDIT_EDGES_FOR_BACKRUN=1` (**D4 grandfather — documented, bannered**),
   `SEARCHER_ENABLE_CREDIT_EDGES_FOR_BLOCKSCAN=0`.
-- **Credit-live guard (D2-keyed, lands at BS-contract, single live check site):** derive
-  `leavesStandingPosition` from `candidate.tokenPath.edges` in `processOpportunities` immediately
+- **Credit-live guard (D2-keyed, lands at S2 — the FIRST runtime slice; BS-contract relocates it
+  into `processOpportunities` and adds the `BundleSubmission.safety` field + `BundleRouter`
+  second-reject):** derive `containsStandingPosition` from `candidate.tokenPath.edges` immediately
   before the EV gate (`main.ts:1793-1826`); reject `standing_position_unauthorized` unless
   `/opt/MEV/.credit-live` exists (independent of `.deploy-live` + wallet cap — `assert-balance`
   (`plan-builder.ts:113`) bounds only the flash token; the wallet cap does not bound a standing
@@ -302,7 +306,8 @@ BS-4 → CS-full → D → CR-8`.
   of the go-live class (Safety Rule 1). Until BS-contract lands, the pre-existing exposure
   (fluid edge live-routable with no guard) is bounded by: `quoteFluidVault` throws on the direct
   quote path, the depeg condition required for the debt-bps search to find +EV, and the EV
-  gate/bounded-live envelope — recorded honestly, which is WHY the guard is Phase-1, not Phase-2.
+  gate/bounded-live envelope — recorded honestly, which is WHY the guard is its own FIRST runtime
+  slice (S2), ahead of the BS-contract factor-out, deployed to the node as soon as it gates.
 - **Position-account isolation (credit) ≠ signing EOA:** per-credit-leg isolation is
   `nftId`/sub-account level (quote purity + deposit-absorption trap, ADR-b) and ships with CR-5;
   a 2nd SIGNING EOA is only the lane-contention escalation (BS-lane), Safety-1-gated.
@@ -410,3 +415,23 @@ guard wired off `pathLeavesStandingPosition`. Zero decision-level divergence rem
 two lines. Per §7, THIS doc stays the slice-plan/naming authority; the concurrent line's spec
 stands as corroborating provenance (its F1–F4 foundation→fork framing maps 1:1 onto
 S0/S1 → BS-contract/BS-universe → BS-lane here).
+
+### 8.4 External operator-line review fold (2026-07-04 ~16:55 — v2.1 → v2.2)
+Two "core findings" + a detail list, adjudicated:
+- **Finding 1 (Fluid already in the production graph — premise conflict): ALREADY RESOLVED at v2
+  (D4 grandfather).** The quoted premise ("credit default OFF, not in the backrun hot path") was
+  v1 text; both blind reviewers had found the same blocker and v2 fixed it. No change.
+- **Finding 2 (standing-position hard gate must be architectural + immediate): ADOPTED as slice
+  S2** — the guard is ~20 lines with no dependency on the risky `processOpportunities` factor-out,
+  so it ships FIRST at the existing submit site; BS-contract relocates it and adds
+  `BundleSubmission.safety{containsStandingPosition, edgeKinds}` + a `BundleRouter.submit()`
+  second-reject (bypass-proofing).
+- **`0xee7b98ad…` expected gap → `manual_required`/sim-undervaluation: REJECTED with evidence.**
+  The FINAL codified verdict on that case is `winner_style=one_leg_inventory` (CEX-DEX inventory,
+  non-comparable noise) — the §6b meta-loop on this very case is what CREATED the non-comparable
+  filter (CLAUDE.md §6c step 2; memory `project-cex-dex-inventory-competitor-noise`, Opus+Fable
+  dual-analysis converged). "Same-pool under-extraction" was the pre-meta-loop interim framing.
+  S1's landed gate (`non_comparable_winner`, `comparable:false`) is correct.
+- CR-3 anti-binding (strategy from source evidence; `0xf88b` = backrun) + flash-as-funding note:
+  ADOPTED (§2 CR-3 row). No-leak greps: already TYPE-enforced (`PrimaryGap`/`StrategyKind` cannot
+  hold atomic values) — not added.
