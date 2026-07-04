@@ -27,6 +27,7 @@ import {
 import {
   DEFAULT_FORCE_INCLUDE_POOLIDS_PATH,
   loadForceIncludePoolIds,
+  loadForceIncludeRouters,
   mergeForceIncludePoolIds,
 } from "./force-include.js";
 import {
@@ -2503,7 +2504,9 @@ async function* mempoolHints(
   pools: PoolEntry[],
   counters: StageCounters,
 ): AsyncGenerator<HintEnvelope> {
-  const toAddress = buildMempoolToAddressFilter(pools);
+  const routersPath = process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined;
+  const forceIncludeRouters = loadForceIncludeRouters(routersPath);
+  const toAddress = buildMempoolToAddressFilterWithRouters(pools, forceIncludeRouters);
   const toAddressSet = new Set(toAddress.map((a) => a.toLowerCase()));
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
   const interesting = (to: string | null | undefined): boolean =>
@@ -2511,7 +2514,7 @@ async function* mempoolHints(
   const mode = parseMempoolMode();
   console.log(
     `[searcher/live] mempool mode=${mode} toAddress=${toAddress.length} ` +
-      `routers=${MEMPOOL_ROUTER_ADDRESSES.size}`,
+      `routers=${MEMPOOL_ROUTER_ADDRESSES.size} forceIncludeRouters=${forceIncludeRouters.length}`,
   );
   emitEvent({
     type: "mempool_filter_config",
@@ -2803,10 +2806,20 @@ class FatalMempoolSubscriptionError extends Error {
 
 let wsRpcId = 1;
 
-function buildMempoolToAddressFilter(pools: PoolEntry[]): string[] {
+export function buildMempoolToAddressFilter(pools: PoolEntry[], routersPath?: string): string[] {
+  const forceRouters = loadForceIncludeRouters(
+    routersPath ?? process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined,
+  );
+  return buildMempoolToAddressFilterWithRouters(pools, forceRouters);
+}
+
+function buildMempoolToAddressFilterWithRouters(
+  pools: PoolEntry[],
+  forceRouters: readonly string[],
+): string[] {
   const hotPoolTopN = Number(process.env.SEARCHER_MEMPOOL_FILTER_TOP_N ?? "200");
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
-  const fixed = [...MEMPOOL_ROUTER_ADDRESSES];
+  const fixed = [...MEMPOOL_ROUTER_ADDRESSES, ...forceRouters];
   const pinned = pools
     .filter((p) => p.score === undefined)
     .map((p) => p.address);

@@ -7,6 +7,11 @@ export const DEFAULT_FORCE_INCLUDE_POOLIDS_PATH = resolve(
   "pools",
   "force-include-poolids.json",
 );
+export const DEFAULT_FORCE_INCLUDE_ROUTERS_PATH = resolve(
+  "searcher",
+  "pools",
+  "force-include-routers.json",
+);
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
@@ -33,6 +38,32 @@ export function loadForceIncludePoolIds(
       continue;
     }
     appendUnique(out, seen, normalized);
+  }
+  return out;
+}
+
+export function loadForceIncludeRouters(
+  path = DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
+): string[] {
+  if (!existsSync(path)) return [];
+
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  if (!Array.isArray(parsed)) {
+    console.warn(`[searcher/live] forceIncludeRouters file ${path} must be a JSON array; ignoring`);
+    return [];
+  }
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < parsed.length; i++) {
+    const normalized = normalizeForceIncludeRouterEntry(parsed[i]);
+    if (!normalized) {
+      console.warn(
+        `[searcher/live] forceIncludeRouters skipped invalid entry ${path}[${i}]: ${String(parsed[i])}`,
+      );
+      continue;
+    }
+    appendUniqueNormalized(out, seen, normalized, normalizeForceIncludeRouterEntry);
   }
   return out;
 }
@@ -81,6 +112,33 @@ export function appendForceIncludePoolIds(
   return { path, entries: out, added };
 }
 
+export function appendForceIncludeRouters(
+  entries: readonly string[],
+  path = DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
+): AppendForceIncludePoolIdsResult {
+  const out = loadForceIncludeRouters(path);
+  const seen = new Set(out.map((entry) => entry.toLowerCase()));
+  const added: string[] = [];
+  for (const entry of entries) {
+    const normalized = normalizeForceIncludeRouterEntry(entry);
+    if (!normalized) {
+      throw new Error(`forceInclude router entry must be an address: ${entry}`);
+    }
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+    added.push(normalized);
+  }
+
+  if (added.length > 0) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(out, null, 2) + "\n");
+  }
+
+  return { path, entries: out, added };
+}
+
 function normalizeForceIncludeEntry(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -93,8 +151,28 @@ function normalizeForceIncludeEntry(value: unknown): string | null {
   }
 }
 
+function normalizeForceIncludeRouterEntry(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!ADDRESS_RE.test(trimmed)) return null;
+  try {
+    return ethers.getAddress(trimmed);
+  } catch {
+    return null;
+  }
+}
+
 function appendUnique(out: string[], seen: Set<string>, entry: string): void {
-  const normalized = normalizeForceIncludeEntry(entry);
+  appendUniqueNormalized(out, seen, entry, normalizeForceIncludeEntry);
+}
+
+function appendUniqueNormalized(
+  out: string[],
+  seen: Set<string>,
+  entry: string,
+  normalize: (value: unknown) => string | null,
+): void {
+  const normalized = normalize(entry);
   if (!normalized) return;
   const key = normalized.toLowerCase();
   if (seen.has(key)) return;
