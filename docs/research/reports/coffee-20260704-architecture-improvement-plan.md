@@ -61,12 +61,14 @@ only on an `OrderflowEvent` from the mempool (`main.ts:1245`). There is **no blo
 standing cross-pool spread with no pending swap produces no hint → no opportunity → never seen. This
 matches the doc exactly: "our pipeline never triggers; there is nothing to follow."
 
-**Strategic note (why this is the north-star gap, not a side quest):** the project's founding case
-study — the wstUSR depeg arb (`CLAUDE.md` reference tx) — is *itself* an atomic chain-state arbitrage
-(a standing dislocation, no pending source swap). **Our live searcher today could not have detected its
-own reference transaction.** Closing Gap A is what lets the searcher catch the very class it was built to
-study. And volatility events (the wstUSR case) turn standing dislocations *large* — so the class is dust
-on a calm day but is exactly what pays during a depeg.
+**Correction (do NOT re-add the "wstUSR is atomic" claim — verified against `docs/historical-replay.md`):**
+the founding wstUSR depeg reference tx (`0xf88b498b…`, block 24710788) is a **backrun, NOT atomic**. The
+replay doc shows its source swap is **tx index 0** — a user swap selling 2,800 wstUSR → DOLA that *creates*
+the depeg — and the reference bot at index 8 is literally labeled "Reference MEV bot backrun" (indices
+2/6/7 are competing partial backruns of the same depeg; the replay must apply tx 0..7 to reach the
+dislocated pre-state). So the reference tx has a source swap and is within our **existing** backrun
+posture — it is **not** a Gap A example. Gap A's justification is the coffee data (8/9 atomic with no
+preceding swap on a shared pool), not this tx. (An earlier merged draft mislabeled it atomic.)
 
 Escalated to an **EPIC** per rule 13 (too big for one 30-min round; ordered slices, each with its own
 rule-12 gate). Owner: `atomic-scanner-epic`. Default OFF (`SEARCHER_ENABLE_ATOMIC_SCAN=0`) until A4.
