@@ -1,5 +1,6 @@
 {
-  "_note": "BS-0 fixture (unified impl plan slice BS-0/=A0). Pre-tx pool states for coffee tx #2 0x803a3693 (block 25455024, txIndex 201). States read from the node's local reth at blockTag 25455023 (pre-tx) on 2026-07-04 while still inside the ~10k-block prune window (head 25458229). Persisted so the gate stays replayable after prune-out (impl plan R5). PoolKeys for the two v4 pools + token identity of 0x695a5f still need resolution — see handoff (md §9). expectedGrossWei to be recorded by the replay harness (Codex, still to write).",
+  "_note": "BS-0 fixture (unified impl plan slice BS-0/=A0). Pre-tx pool states for coffee tx #2 0x803a3693 (block 25455024, txIndex 201). States + v4 PoolKeys all read from the node's local reth / PositionManager on 2026-07-04 (head 25458229, block still inside the ~10k prune window). Persisted so the gate stays replayable after prune-out (impl plan R5) — the next session needs ZERO node access to write the harness. expectedGrossWei to be recorded by the replay harness (still to write, md §9.4 step 1).",
+  "_cycle_finding": "The 'three arb pools' do NOT form one clean 3-hop cycle. The CORE closed loop is the 2-hop CFG spread: pool[0] WETH/CFG v3 (buy CFG) -> pool[1] native-ETH/CFG v4 (sell CFG for ETH), ETH~=WETH — the native-ETH-vs-WETH CFG spread family (CLAUDE.md §6b / 0xa32b). pool[2] is native-ETH/0x6440f144 (a DIFFERENT token, not CFG) — a separate leg in the same tx, NOT part of the CFG loop. The A0 replay should reconstruct the CFG 2-hop loop; treat pool[2] as out-of-cycle unless a fuller trace shows otherwise.",
   "txHash": "0x803a36936a1a58392bad9b47a90d1c7b4afe3da4a3cb61b6bab651b200727ba3",
   "executionBlock": 25455024,
   "sourceBlock": 25455023,
@@ -11,8 +12,12 @@
       "id": "0x08a10a8b713c03e2fecaa3e355cea18a459ffcbf",
       "kind": "univ3",
       "token0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "token0Symbol": "WETH",
       "token1": "0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94",
+      "token1Symbol": "CFG",
+      "token1Decimals": 18,
       "fee": 3000,
+      "cycleRole": "leg1: buy CFG with WETH",
       "state": {
         "sqrtPriceX96": "7410461572592114366325777760256",
         "tick": 90770,
@@ -28,8 +33,11 @@
         "currency1": "0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94",
         "fee": 10001,
         "tickSpacing": 200,
-        "hooks": "0x0000000000000000000000000000000000000000"
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "currency0Symbol": "native ETH",
+        "currency1Symbol": "CFG"
       },
+      "cycleRole": "leg2: sell CFG for native ETH (~=WETH); closes the CFG spread loop",
       "state": {
         "sqrtPriceX96": "7422430952299715996642787051557",
         "tick": 90803,
@@ -40,8 +48,17 @@
     {
       "id": "0x695a5fbc047543cd09e00cbfe239becc9bfbffd41f6ac4b6f1a36caf4829d75e",
       "kind": "univ4",
-      "poolKeyKnown": false,
-      "poolKeyTODO": "resolve currency0/currency1/fee/tickSpacing/hooks via PositionManager.poolKeys(bytes25) or the Initialize log; token identity of this leg unresolved (tick 74745 differs from the CFG pools ~90800 — likely the WETH/native funding leg of the 3-pool cycle)",
+      "poolKeyKnown": true,
+      "poolKey": {
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0x6440f144b7e50D6a8439336510312d2F54beB01D",
+        "fee": 3000,
+        "tickSpacing": 60,
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "currency0Symbol": "native ETH",
+        "currency1Symbol": "BOLD"
+      },
+      "cycleRole": "OUT-OF-CYCLE: native-ETH/BOLD, a different token — a separate leg in the same tx, NOT part of the CFG 2-hop loop (see _cycle_finding). Kept for completeness; the A0 replay should NOT include it in the CFG cycle.",
       "state": {
         "sqrtPriceX96": "3325591450640364772130206985123",
         "tick": 74745,

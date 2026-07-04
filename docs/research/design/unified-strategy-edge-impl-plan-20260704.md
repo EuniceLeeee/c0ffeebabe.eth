@@ -246,7 +246,7 @@ Phase 4  CLOSE+EXPAND CS-full (=C2-full) · D (dispatcher) · CR-8 (Aave/Euler) 
 | **S0** | replaces credit slice 1 + A-contract's naming layer | **LANDED** (gated: build + planner 14/14 + replay 12/12 + taxonomy 5/5 + router-filter, all re-run by the evaluator) | as §1.1/§1.2 |
 | **S1** | replaces credit slice 2 + impl plan §1.5 creation + C1's deferred census wiring | **LANDED** (gated: tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner 14/14, re-run by the evaluator; census emits `tx_shape:"unknown"` live until CS-min wires same-block log collection — honest plumbing, fixture-gated) | §1.4 schema/store; EXTEND `bundle-postmortem` (`winner_style`→`comparable`+`primary_gap`, `edge_kinds` via the C1b registry) + census (`tx_shape` field); `strategyKindFromTxShape` wiring; **CREATES the pinned postmortem fixtures for `0xa32b…`/`0xee7b98ad…`** — they do NOT exist at HEAD (verified; the credit plan's "existing fixtures" claim was false). Synthetic PostmortemReport-shaped JSON with the decision-relevant fields (winner_style, in_graph, builder payment vs gross), values from the committed report docs; no chain calls |
 | **S2** | NEW — split out of BS-contract (2026-07-04 operator-line review, core finding 2: the hard gate must not wait for the risky factor-out; the credit edge is live-routable TODAY with no guard) | **LANDED** (gated: build + `searcher:standing-guard` 4/4 + planner 14/14 + replay 12/12 + taxonomy 5/5, evaluator re-run; deployed to the node same day) | Fail-closed standing-position guard at the EXISTING submit path, using landed S0 helpers: in `main.ts` immediately BEFORE the EV gate (`:1793-1826`; sole live submit site `:1840`), derive `containsStandingPosition = pathLeavesStandingPosition(candidate.tokenPath.edges)` (`CandidatePlan.tokenPath`, `planner.ts:8`) and REJECT — `pipeline_dropped("standing_position_unauthorized")`, no sign, no submit — unless the credit-live marker exists (`/opt/MEV/.credit-live`; path injectable for tests). ~20 lines + test. The AC-3/fixture harness (`hot-path.ts:109`) is a TEST-ONLY second submit site — exempt by construction (no broadcast), stated so nobody "fixes" it |
-| **BS-0** | A0 | **PARTIAL — states captured, harness pending** | Pre-tx pool states for coffee #2 `0x803a3693` READ from local reth at block 25455023 (inside the prune window) and PERSISTED to `listener/src/searcher/test/fixtures/blockscan-coffee-803a3693.json` (the time-critical half — done). REMAINING (not time-limited): resolve the 3rd pool `0x695a5f…` v4 PoolKey/tokens, write `blockscan-a0-replay.ts` + npm `searcher:blockscan-a0`, record `expectedGrossWei`. See §9 handoff |
+| **BS-0** | A0 | **NODE READS DONE — only the local harness remains** | ALL chain data captured + persisted to `listener/src/searcher/test/fixtures/blockscan-coffee-803a3693.json`: pre-tx states (block 25455023) + BOTH v4 PoolKeys + token symbols. Cycle finding recorded: the closed loop is the 2-hop CFG spread (WETH/CFG v3 → native-ETH/CFG v4); the 3rd pool (ETH/BOLD) is out-of-cycle. REMAINING is PURE LOCAL CODE (no node): Codex writes `blockscan-a0-replay.ts` + npm `searcher:blockscan-a0`, reconstruct the CFG 2-hop from the fixture, record `expectedGrossWei > 0`. See §9.4 |
 | **BS-contract** | A-contract | GO | consumes S0 types; §1.3 union + §1.6 coordinator; **RELOCATES the S2 guard** into `processOpportunities` (same anchors, same drop reason) and adds belt-and-braces (operator-line review): `BundleSubmission.safety: { containsStandingPosition: boolean; edgeKinds: EdgeKind[] }` populated at build time, and a `BundleRouter.submit()` second-reject on `safety.containsStandingPosition` without the marker (bypass-proofing — no future caller can skip the check) |
 | **BS-universe** | A-universe | GO | `buildStrategyViews` per §1.5 (EdgePolicy, D4 defaults, `edgeKindFromPoolEntry`); +credit slice 6's flag-flip gate folded in |
 | **CR-3** | credit slice 3 | GO (after S1) | planner `REPLAY_FIXTURES` credit flip on `0xf88b` uses S0's `edgeKind:"credit"`; analysis emits an S1 `LearningCase`. **Anti-binding rule (operator-line review): `strategy_kind` comes from SOURCE EVIDENCE, never from the credit leg** — the `0xf88b` reference tx classifies `backrun` (its source swap is tx index 0; the arch plan's verified correction), credit is strategy-agnostic. `"flash"` in `edge_kinds` is the FUNDING wrapper, not a route leg — whether to split a `funding_kinds` field from route edges is decided AT CR-3 (schema-affecting; currently a merged view) |
@@ -492,6 +492,23 @@ wallet `0xb8578B6…` (≤ 0.2 ETH cap, EV_GATE=1). This is operator-authorized 
   in this sandbox); keep that style for new test scripts.
 - Stray untracked `listener/src/searcher/venues/capability.js` sits beside `capability.ts` — delete
   or gitignore it (a shadowing hazard); not auto-removed because this session didn't create it.
+
+### 9.3b Chain-dependency map — ALL node/live/broadcast work is PRE-CLEARED (stay pure-code)
+
+The operator's directive: front-load everything needing node/live/broadcast so the next session
+stays on pure code (live/arbitrage chain work is what tends to trigger the safety-classifier
+downgrade). Done. Per-slice chain dependency:
+
+| slice | chain dependency | status |
+|---|---|---|
+| BS-0 | pool states + v4 PoolKeys + symbols at block 25455023 | **CAPTURED + persisted** to the fixture; harness is pure-local |
+| BS-contract, BS-universe, BS-1/2/3 | none — gates are `searcher:planner` + `searcher:replay-live-fixtures` (persisted) + unit tests | pure-local |
+| CR-3 | PRIMARY gate = local planner `REPLAY_FIXTURES` flip; OPTIONAL secondary = AC-3-style ~273 wstUSR delta needs `MAINNET_RPC_URL` archive (block 24710788, past reth prune) | do the LOCAL primary gate; DEFER the archive half to the operator |
+| CR-5 / BS-lane / BS-4 / CS-min / D / CR-8 | BS-4 is a live dry-run window (operator-run); the rest are local until then | later slices; not the next session's concern |
+
+**Rule for the next session: if a slice appears to need node / archive / broadcast, STOP and hand
+back to the operator — do not touch the node yourself.** S2 is already deployed + live-verified;
+nothing you write next needs a deploy until BS-4 (operator-gated).
 
 ### 9.4 EXACT next actions, in order
 
