@@ -12,10 +12,23 @@ of this design is to keep the work **on Fable** (a same-session opus fallback is
 engineering around); the two mechanisms below (round-start Fable check + the appendix data-cache) exist to
 prevent that downgrade.
 
-## Step 0 — round-start guard (decide whether this round runs at all)
-Two checks, in order:
+**Invocation.** Fired unattended (e.g. a cron), same pattern as `autonomous-hermes-round.md`:
+`Instructions = "Read and execute docs/research/autonomous-handoff-relay-round.md as your instructions
+for this handoff-relay round."` So this prompt must self-decide whether to run, relay, or NO-OP — there is
+no human to ask.
 
-**0a — is a healthy Fable relay round already running? If so, NO-OP.**
+## Step 0 — round-start guard (decide whether this round runs at all)
+Three checks, in order — the FIRST that fires wins:
+
+**0a — is the relay already COMPLETE? If so, NO-OP (this is the loop's OFF switch).**
+Read the committed status file `docs/research/design/HANDOFF-RELAY-STATUS.md` (git-fetch first). It holds
+`consecutive_done_confirmations: N` and a `status:` line.
+- If `status: COMPLETE` (set once N reached 2) → **NO-OP exit immediately.** The handoff work is finished
+  and was confirmed done by two consecutive independent rounds; do NOT re-run, do NOT re-verify, do NOT
+  touch anything. Release the lock and exit.
+- Otherwise continue to 0b.
+
+**0b — is a healthy Fable relay round already running? If so, NO-OP.**
 The `/tmp` PID lock is best-effort only (ephemeral subshell `$$`; see [[project-hermes-round-lock-ineffective]]).
 The reliable signal is the previous round's **model trace**, not a lock:
 - Find the most recent handoff-relay round's session/task transcript (its `-o` output / task JSONL).
@@ -27,7 +40,7 @@ The reliable signal is the previous round's **model trace**, not a lock:
     THIS round **relays**: pick up where the previous round left off (Step 1) and continue on fresh Fable.
 - Weak hint only: `echo $$ > /tmp/mev-handoff-relay.lock` + trap `rm -f`; rely on the model-trace check.
 
-**0b — arm the workflow.** `touch /tmp/mev-workflow-active` (idempotent); ensure the sleep-keeper is alive
+**0c — arm the workflow.** `touch /tmp/mev-workflow-active` (idempotent); ensure the sleep-keeper is alive
 (Rounds Step 0). Read `CLAUDE.md` (Hermes protocol + rules 1–16 + Safety Rules) + the handoff prompt fully.
 
 ## Step 1 — read state from the repo + the appendix (not memory)
@@ -37,6 +50,10 @@ The reliable signal is the previous round's **model trace**, not a lock:
   slices are landed (S0/S1/S2 committed; check BS-0 and everything after).
 - Determine the **next unwritten slice** (the handoff's ordered list) and resume from there — do not redo a
   landed slice.
+- **If the previous round's doc/commit CLAIMS "all slices landed / done"**, do NOT take that on faith —
+  this round's job becomes **independent verification** (Step 4b): confirm there is genuinely no unwritten
+  slice and every landed slice's gate is green. "The previous round said done" is a claim to CHECK, not to
+  trust — trust comes from two rounds independently re-confirming it.
 
 ## Step 2 — do the relay work, and CACHE every analysis result into the appendix
 **The appendix data-cache (the core anti-downgrade mechanism).** Analysis-tool output (bundle-postmortem,
@@ -74,6 +91,22 @@ fallback. So:
 - The node is in bounded-live-broadcast RIGHT NOW (impl-plan §9.2) — this round must not deploy or restart it.
 
 ## Step 4 — close (rule 15)
+
+**4b — done-confirmation counter (the loop's termination; update `HANDOFF-RELAY-STATUS.md`).**
+Exactly one of:
+- **This round landed a slice, OR unwritten slices remain** → the work is NOT finished. Set
+  `consecutive_done_confirmations: 0` (reset) in `docs/research/design/HANDOFF-RELAY-STATUS.md`,
+  `status: IN_PROGRESS`. Commit.
+- **This round found ALL handoff slices already landed AND independently VERIFIED them** — re-ran the final
+  slice's rule-12 gate(s) yourself (not trusting the prior round's word), and `git log` + the §3 acceptance
+  matrix show every slice committed + green → **increment `consecutive_done_confirmations` by 1**; record
+  the round id + the gate command/result you re-ran as evidence. Commit.
+  - **When `consecutive_done_confirmations` reaches 2 → set `status: COMPLETE`.** From then on Step 0a makes
+    every subsequent round NO-OP — the relay loop is OFF. Two consecutive independent verifications is the
+    "check it's OK, then you can trust it" bar; one round's claim is never enough.
+  - If this round found all-landed but a re-run gate FAILED → the prior "done" was wrong: fix/relay the
+    failing slice as normal work, and reset `consecutive_done_confirmations: 0`.
+
 - If you called any analysis tool this round, its raw data + result is now in the handoff appendix (Step 2)
   — verify it committed. Update the handoff's ground-state / next-actions to reflect the slices you landed.
 - Commit + push the slices you gated (sign as the ACTUAL orchestrating model per the harness git rule) and
