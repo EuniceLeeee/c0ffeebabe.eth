@@ -12,7 +12,7 @@
 | # | competitor evidence | our gap | class | size |
 |---|---|---|---|---|
 | A | 8/9 of coffee's txs = **atomic chain-state arbitrage** (a standing cross-pool spread captured in one tx; **no pending source swap** to follow) | our pipeline is **backrun-only** — it triggers exclusively on a pending mempool swap; a standing spread never enters the funnel | strategy / architecture | **largest — EPIC** |
-| B | 1/9 = a **public backrun** whose victim `to=0x663dc15d…` (custom router) was dropped **before** the funnel | mempool admission is a fixed ~14-router allowlist; a swap via an unlisted router that touches our pools is invisible | flow-admission | small, cheap |
+| B | 1/9 = a **public backrun** whose source swap `to=0x663dc15d…` (custom router) was dropped **before** the funnel | mempool admission is a fixed ~14-router allowlist; a swap via an unlisted router that touches our pools is invisible | flow-admission | small, cheap |
 | C | the per-round comparison never checked "did we SEE the source swap" nor "is the competitor atomic- or backrun-shaped" (built by hand: `coffee-backrun-verify.mjs`) | the followability classifier is a hand analysis, not a permanent tool | analysis-tooling (rule 16) | cheapest |
 
 Economics honesty (carried from memory, not re-litigated): coffee's atomic take is **dust** on public
@@ -24,23 +24,23 @@ still clear the gate. Do not celebrate dust (Hermes "simSuccess must be +EV" rul
 
 ## What is already reusable (do NOT rebuild)
 
-The backrun pipeline is already victim-*agnostic* below the trigger. An atomic (no-victim) opportunity
+The backrun pipeline is already source-swap-*agnostic* below the trigger. An atomic (no-source-swap) opportunity
 reuses almost all of it:
 
-| stage | file:line | victim-dependence today | reuse for atomic |
+| stage | file:line | source-swap-dependence today | reuse for atomic |
 |---|---|---|---|
 | block-driven pool-state freshness | `main.ts:764 / :809` (`provider.on("block")` warm + state update), `solver/pool-state-updater.ts` | none — already per-block | **trigger + state source for the scan** |
 | cycle enumeration | `planner/token-graph.ts:462` `buildTokenPaths(start,profit)` | none — DFS start→profit is generic | seed with `start===profit` (a cycle) |
 | candidate planning | `planner/planner.ts:86` `TemplatePlanner.plan(opp,…)` | pins the impact pool from `opp.hints.impact` (via `impactFromOpportunity`, `planner.ts:413`) — **NOT** `opp.affectedPools`; with no `hints.impact`, `focusPathsOnImpact` returns all paths | plan from a synthetic `Opportunity` that **omits `hints.impact`** (clearing `affectedPools` alone does nothing) |
 | amount sizing | `solver/solver.ts:442` `resolveSearchCenter` | ⚠️ `if (victimAmount<=0n) return 1n` does **NOT** fall back to a useful search — see the sizing-seed blocker below | requires a real `searchCenter` seed (missing piece #2) |
-| execution / submission | `execution/bundle-router.ts:81` `standalone` → `submitStandaloneBundle` (single next-block tx, **no victim rawTx**) | already exists for the mined-victim Path C (`main.ts:1139`) | **atomic bundle == standalone bundle** |
+| execution / submission | `execution/bundle-router.ts:81` `standalone` → `submitStandaloneBundle` (single next-block tx, **no source-swap rawTx**) | already exists for the mined-source-swap Path C (`main.ts:1139`) | **atomic bundle == standalone bundle** |
 | EV / final-verify gate | `main.ts:1606` terminal verify + `evGate` (`main.ts:404`) | none | unchanged |
 
 So the **genuinely missing pieces for Gap A** are three (not two — the sizing seed was missed):
 1. a block-triggered *opportunity source* whose search is cheap by construction — an O(pairs) 2-hop
    spread scan to find anchors, then a depth-bounded (≤4 hop) cycle search seeded only from those
    anchors — NOT a whole-graph DFS. See "Path length" below.
-2. **an amount-search seed for the no-victim path (blocker, verified in code).** The reuse claim that
+2. **an amount-search seed for the no-source-swap path (blocker, verified in code).** The reuse claim that
    `victimAmountIn:0n` "already falls back to the geometric grid + GSS" is **false**. `resolveSearchCenter`
    returns `1n` (`solver.ts:449`); `geometricGrid(1n, halfWidth=3)` is anchored on that center and the
    negative shifts floor to 0 → the grid is exactly **`[1, 2, 4, 8]` wei**. GSS only fires when a grid
@@ -49,8 +49,8 @@ So the **genuinely missing pieces for Gap A** are three (not two — the sizing 
    "no profitable plan". Atomic sizing therefore needs a real `searchCenter` (derive it in A1/A2 from the
    anchor pool depth / spread), not `victimAmountIn:0n`. This is a hard landing blocker, folded into the
    slices below.
-3. a no-victim **entry point** into the post-detect pipeline (A4) — `handleHint` cannot be fed a synthetic
-   hint (see A4); the plan→solve→sim→submit tail must be reachable without a victim tx.
+3. a no-source-swap **entry point** into the post-detect pipeline (A4) — `handleHint` cannot be fed a synthetic
+   hint (see A4); the plan→solve→sim→submit tail must be reachable without a source-swap tx.
 
 ---
 
@@ -107,11 +107,11 @@ atomic sample). Reuse the historical-replay harness pattern (`docs/historical-re
 > telemetry/bundle contract, #4 shared pipeline entry) become the **A-contract** prerequisite slice;
 > #5 (state-block consistency) lands in A4; #6 (classifier venue coverage) in Gap C.
 
-**A-contract — no-victim contracts + shared pipeline entry (PREREQUISITE, before any atomic logic).**
-Four current contracts are victim-shaped; generalize them first or atomic forks a parallel hot path that
+**A-contract — no-source-swap contracts + shared pipeline entry (PREREQUISITE, before any atomic logic).**
+Four current contracts are source-swap-shaped; generalize them first or atomic forks a parallel hot path that
 drifts from backrun's EV gate / drop-reasons / submission.
 1. **`Opportunity` discriminated union** (`detector.ts:6`): `BackrunOpportunity | AtomicOpportunity`.
-   `BackrunOpportunity` = today's shape. `AtomicOpportunity` (`kind:"atomic-arb"`) carries **no victim
+   `BackrunOpportunity` = today's shape. `AtomicOpportunity` (`kind:"atomic-arb"`) carries **no source-swap
    fields, no `hints.impact`**, and — critically (finding #1) — a **concrete cycle the planner is bound
    to**, not just telemetry: `seedEdges: TokenEdge[]` (the exact anchor cycle), a pinned `flashToken`,
    and `searchSeed:{ searchCenter: bigint; maxInput?: bigint }` in **`flashToken` units** (finding #2).
@@ -141,7 +141,7 @@ drifts from backrun's EV gate / drop-reasons / submission.
    that prevents two divergent hot paths (finding #4).
 - **Gate (refactor-neutral):** all existing backrun `searcher:planner` + `searcher:replay-live-fixtures`
   pass **unchanged**; a new unit test asserts two distinct anchors in the same `source_block` produce
-  **distinct** `opportunity_id`s (no victim-hash collision).
+  **distinct** `opportunity_id`s (no source-swap-hash collision).
 
 **A-universe — strategy-scoped pool selection (PREREQUISITE, alongside A-contract, upstream of A1).**
 Backrun wants **fast** (few hot pools); atomic wants **broad** (loop-closure coverage). Today they are
@@ -154,7 +154,7 @@ already capped): `buildMempoolToAddressFilterWithRouters` already self-caps to t
 (`main.ts:2820`), and the live planner already prunes to top-8 edges/token (`maxPoolsPerToken=8`,
 `main.ts:431`). So widening the universe does NOT inflate the `toAddress` list or explode the DFS. What
 DOES break: those capped slots (200 hot / 8 edges) are filled by **one shared score** — atomic-relevant
-pools (loop-closure but not victim-likely) with high scores **displace** backrun-relevant hot pools →
+pools (loop-closure but not source-swap-likely) with high scores **displace** backrun-relevant hot pools →
 backrun coverage silently degrades; and conversely the same caps throttle atomic's breadth. **Split them:
 `shared venue registry + strategy-specific selection views`, each with its OWN score. The boundary is
 venue / admission / scorer level, NOT pool level.** The per-consumer cap machinery already exists
@@ -165,7 +165,7 @@ not new infrastructure.
   a pool property; tagging freezes selection at generation time and explodes maintenance.
 - **Per-venue × per-strategy runtime policy is a SEPARATE config** (like `force-include-*.json`), never
   embedded in the regenerated pool JSON (else each discovery rebuild clobbers policy):
-  - `backrun`: selection = hot / recent / high-liquidity / victim-likely, `maxPools≈1500` (latency-bound).
+  - `backrun`: selection = hot / recent / high-liquidity / source-swap-likely, `maxPools≈1500` (latency-bound).
   - `atomic`: selection = **cross-venue loop-closure = the existing `selectArbRelevantPools`**, promoted
     from build-time (`build-active-pool-universe.ts:238`) to a runtime view — this **unifies with
     `project-pool-scoring-arb-relevance-epic`** (atomic's "does this pool close a loop" scorer IS
@@ -176,7 +176,7 @@ not new infrastructure.
   the planner's existing top-N edge pruning (`maxPoolsPerToken`), and saves memory vs two graphs.
 - **Enforcement point (where "atomic breadth must not pollute backrun speed" bites): the mempool
   `toAddress` filter ranks its 200 hot slots by the BACKRUN score, never the atomic score** — so an
-  atomic-relevant-but-not-victim-likely pool can never displace a victim-likely pool from the mempool
+  atomic-relevant-but-not-source-swap-likely pool can never displace a source-swap-likely pool from the mempool
   filter. (Not "hide the 8000 from it" — the filter already self-caps; the point is *which* score orders
   the capped slots.)
 - **Gate (rule-12):** widening the atomic universe leaves the backrun mempool `toAddress` **set
@@ -221,7 +221,7 @@ DFS from every token. Bounded depth + anchored seeds keep it inside the between-
   drop to `maxHops=3` (still captures #2, the richest) and record the trade-off — never widen hops past
   what the budget allows just to chase the 5-hop tail that netted $0.
 
-**A3 — no-victim solve + sim + standalone build (end-to-end on fork).**
+**A3 — no-source-swap solve + sim + standalone build (end-to-end on fork).**
 Teach `resolveSearchCenter` (`solver.ts:442`) to read `AtomicOpportunity.searchSeed.searchCenter` instead
 of the `1n` fallback (dispatch on `opp.kind`; backrun path unchanged). The seed is in `flashToken` units
 and atomic rotation is disabled (A1), so the center is unambiguous. Then run the A0 fixture through
@@ -237,7 +237,7 @@ standalone/mined path) → terminal verify → `standalone` bundle build.
 **A4 — live wiring + dry-run window.**
 Two design constraints the earlier draft got wrong (verified in code):
 - **Entry point — do NOT feed a synthetic hint to `handleHint` (missing-piece #3).** `handleHint`
-  (`main.ts:954`) is victim-parse all the way down: Path A needs hint logs + `enableHashOnly`, Path B
+  (`main.ts:954`) is source-swap-parse all the way down: Path A needs hint logs + `enableHashOnly`, Path B
   needs a rawTx, Path C calls `getTransaction(txHash)` (a fabricated hash throws), and the tail is
   `detector.detect(event)` (`main.ts:1245`), which produces opportunities from **swap logs** — a
   log-less synthetic event yields 0 and exits at "no matching graph pool". The correct wiring is to
@@ -305,7 +305,7 @@ to **widen the address set in a bounded, evidence-based way**, not go unfiltered
    - **Precondition, not just a bigger cap:** confirm the Alchemy server-side `alchemy_pendingTransactions`
      `toAddress` list length limit before raising the cap — exceeding it makes the whole filtered
      subscription fatal (`FatalMempoolSubscriptionError`), which is worse than a truncated list.
-- **Gate (rule-12, deterministic, from committed reth logs):** pin #9's victim tx `0x8e0c59b4…`
+- **Gate (rule-12, deterministic, from committed reth logs):** pin #9's source-swap tx `0x8e0c59b4…`
   (`to=0x663dc15d…`) as a fixture; assert after discovery `0x663dc15d` ∈ merged set AND
   `buildMempoolToAddressFilter` would include it under the quotas → admission flip `false→true`. Also
   assert hot-pool coverage is not reduced below its own quota by the merge.
@@ -442,7 +442,7 @@ close-side *enforcement* of A-universe's decoupling.
 | slice | harness / command | expected transition (rule-12) |
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
-| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s** (no victim-hash collision) |
+| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s** (no source-swap-hash collision) |
 | A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves the backrun-scored mempool `toAddress` **set unchanged** (no atomic displacement); atomic view has ≥1 loop-closure pool absent from the backrun hot set |
 | A1 | `npm run searcher:planner` | anchor flips `candidate_plans 0→>0`; **every candidate path contains the seed pools** (anchor-constrained, not whole-graph); center `>8` in `flashToken` units |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
@@ -456,7 +456,7 @@ close-side *enforcement* of A-universe's decoupling.
 ## Governance / sequencing
 
 - **Gap A = EPIC** (rule 13): `decision: epic`, owner `atomic-scanner-epic`, ordered slices
-  **A0 + A-contract + A-universe → A1 → A2 → A3 → A4**, each with its own gate; **A-contract (no-victim
+  **A0 + A-contract + A-universe → A1 → A2 → A3 → A4**, each with its own gate; **A-contract (no-source-swap
   contracts + `processOpportunities` extraction) and A-universe (shared venue registry + strategy-specific
   selection views; mempool filter from the backrun view only) are hard prerequisites — no atomic logic
   ships before them.** A-universe overlaps `project-pool-scoring-arb-relevance-epic` (same scorer). Per-pool
