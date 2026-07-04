@@ -45,7 +45,7 @@ The reliable signal is the previous round's **model trace**, not a lock:
 
 ## Step 1 — read state from the repo + the appendix (not memory)
 - Read `docs/research/design/HANDOFF-PROMPT-next-fable-session.md` (the authority) INCLUDING its
-  **`## Appendix — cached analysis data`** (the data-cache; see Step 2). Read `unified-strategy-edge-impl-plan
+  **`## Appendix`** — Section A (reasoning chain) + Section B (cached data); see Step 2. Read `unified-strategy-edge-impl-plan
   -20260704.md` §9 (ground state, D1–D4 invariants, exact next actions) + `git log --oneline` to see which
   slices are landed (S0/S1/S2 committed; check BS-0 and everything after).
 - Determine the **next unwritten slice** (the handoff's ordered list) and resume from there — do not redo a
@@ -56,18 +56,28 @@ The reliable signal is the previous round's **model trace**, not a lock:
   trust — trust comes from two rounds independently re-confirming it.
 
 ## Step 2 — do the relay work, and CACHE every analysis result into the appendix
-**The appendix data-cache (the core anti-downgrade mechanism).** Analysis-tool output (bundle-postmortem,
-census, live-loss, onchain-loss-scan, competitor cross-reference, chain traces) is exactly the
-high-volume, arbitrage-flavored content that accumulates the classifier signal and triggers the opus
-fallback. So:
-1. **BEFORE invoking ANY analysis tool or chain trace, FIRST read the handoff's `## Appendix — cached
-   analysis data`.** If the data/result you need is already there (keyed by tool + query/input), **USE THE
-   CACHED VALUE — do NOT call the tool.**
-2. If it is NOT cached, call the tool **exactly once**, then **APPEND** to the appendix: the tool +
-   the exact query/input, the raw data (or a scratchpad file path for bulk), and the decision-relevant
-   result. Commit the appendix update. No future round re-calls it.
-3. Keep raw bulk traces in scratchpad FILES; put only the terse decision-relevant result inline in the
-   appendix (Safety Rule 6 volume lever). Never re-narrate a competitor's actions at length.
+**The appendix (the core anti-downgrade + continuity mechanism).** It has TWO append-only sections, both
+read-before-work; keep them SEPARATE (do not interleave reasoning and raw data):
+- **Section A — reasoning chain** (per round: the decision logic).
+- **Section B — cached analysis data** (tool outputs / raw data).
+
+**Section B — data cache.** Analysis-tool output (bundle-postmortem, census, live-loss, onchain-loss-scan,
+competitor cross-reference, chain traces) is exactly the high-volume, arbitrage-flavored content that
+accumulates the classifier signal and triggers the opus fallback. So:
+1. **BEFORE invoking ANY analysis tool or chain trace, FIRST read Section B.** If the data/result you need
+   is already there (keyed by tool + query/input), **USE THE CACHED VALUE — do NOT call the tool.**
+2. If it is NOT cached, call the tool **exactly once**, then **APPEND** to Section B: the tool + the exact
+   query/input, the raw data (or a scratchpad file path for bulk), and the decision-relevant result. Commit.
+   No future round re-calls it.
+3. Keep raw bulk traces in scratchpad FILES; put only the terse decision-relevant result inline (Safety
+   Rule 6 volume lever). Never re-narrate a competitor's actions at length.
+
+**Section A — reasoning chain.** At the close of every round, append ONE self-contained entry recording the
+round's decision logic — **not** the data (that's B), but the JUDGMENT: the blocker/gap you hit, the options
+you weighed, the choice + why (and what you rejected), and the gate outcome. Write it clean and general
+enough that a later round follows the reasoning without re-deriving it — the relay's judgment is auditable
+and reusable across rounds, kept distinct from the raw evidence in B. One tight entry per round; no walls of
+text (Section A stays low-volume — it is reasoning, not re-narrated chain data).
 
 **The slice work (generator/evaluator split — CLAUDE.md rule 7/11):**
 - Codex is the generator, ALWAYS via `scripts/codex-run.sh <read-only|workspace-write>
@@ -119,16 +129,26 @@ Exactly one of:
 ---
 
 ## Appendix maintenance note (for the FIRST relay round)
-`HANDOFF-PROMPT-next-fable-session.md` has no appendix yet. The first round that needs an analysis result
-creates the section at the end of that file:
+`HANDOFF-PROMPT-next-fable-session.md` has no appendix yet. The first round creates it at the end of that
+file, with the TWO sections kept separate (never interleave reasoning and data):
 ```
-## Appendix — cached analysis data (READ THIS before invoking any analysis tool)
-> Purpose: avoid re-running analysis/chain tools (their cumulative output triggers the opus fallback).
-> Each entry: tool · exact query/input · result (raw bulk → scratchpad file path). Append, never delete.
+## Appendix (READ before invoking any analysis tool). Two sections, append-only, never delete.
 
-### <tool> — <query/input>
+### A. Reasoning chain — the relay's decision logic, one self-contained entry per round
+> Judgment only, not data (data → B). Kept clean/general so it is followable + reusable across rounds.
+
+#### R<n> · <date>
+- blocker/gap: <what stalled this round>
+- options + choice: <what you weighed → what you picked and why → what you rejected>
+- outcome: <gate result / slice landed / carried>
+
+### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
+> One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
+
+#### <tool> — <query/input>
 - result: <terse decision-relevant value>
 - raw: <scratchpad path, if bulk>
-- captured: <round / date>
+- captured: R<n> / <date>
 ```
-Thereafter every round appends; no round re-queries a cached entry.
+Thereafter every round appends to BOTH: one Section-A reasoning entry, and a Section-B entry per uncached
+tool call. No round re-queries a cached B entry or restates an A entry.
