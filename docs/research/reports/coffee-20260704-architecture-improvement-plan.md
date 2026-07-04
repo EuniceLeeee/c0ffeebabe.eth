@@ -37,6 +37,44 @@ still clear the gate. Do not celebrate dust (Hermes "simSuccess must be +EV" rul
 > 6. **A minimal C2 ships BEFORE A4** — A4's gate ("we now generate a competing candidate") is hand
 >    analysis without it. Order → C1 → B → A-contract/A-universe → A1–A3 → **C2-minimal → A4** → D. → Governance.
 
+> **Second-review architecture nails (2026-07-04, verified against the repo) — folded into the slices
+> below; these are prerequisites, not optional polish.** Seven items that must be pinned or the atomic side
+> implements as "runs a bit" but is not productionizable and cannot self-explain why it didn't run. The
+> detail lives at each slice; this is the index.
+> 1. **Planner strategy-view interface — pin the mechanism, not just "two views" (→ A-universe / A1).**
+>    `planner.plan` keeps ONE signature; the edge-view is selected by `opp.kind` (backrun → hot edge-view;
+>    atomic → union graph, `seedEdges`-constrained), or via an explicit `graphView` arg. Gate: under one
+>    union graph the backrun view EXCLUDES an atomic-only venue and the atomic view INCLUDES it.
+> 2. **Cross-strategy `SubmissionCoordinator` — not just atomic top-1 (→ A-contract).** A-contract #5 dedups
+>    atomic-INTERNALLY, but backrun and atomic are two producers feeding ONE wallet / nonce / target-block
+>    slot. Add a coordinator both feed: group `SubmissionCandidate`s by target block, rank by
+>    `strategy_priority / net_ev / deadline`, admit one, losers emit `submission_arbitration_lost`. Without
+>    it atomic seizes backrun's send slot (last-write-wins on the shared nonce, not best-EV-wins).
+> 3. **Atomic target-block expiry — a SUBMIT-time gate (→ A4).** State-block consistency is scan-time only.
+>    Atomic pins `target = source_block + 1`; if `latest` advanced past `source_block` at submit, drop as
+>    `atomic_stale_target_block` (atomic must NOT re-target latest+1 the way backrun does — its EV assumes
+>    the `source_block` state).
+> 4. **Per-newHead `atomic_scan_result` event — not only opportunity events (→ A-contract §2 / A4).**
+>    Skip / budget / busy paths produce NO opportunity, so scanner suppression is invisible to self-analysis.
+>    Emit one `atomic_scan_result{ source_block, state_block, scanned_edges, candidates, skipped_reason }`
+>    per newHead regardless of outcome (`ran` / `skipped_busy` / `stale_state` / `budget_exceeded`).
+> 5. **`LearningCase` idempotent lifecycle — id + state machine (→ C2).** The census is competitor-tx-driven
+>    (no events-offset checkpoint like the backrun watcher), so without identity it re-closes / re-escalates
+>    the same case every run. Add `learning_case_id =
+>    hash(strategy, trigger, competitor_tx, source_block, cycle_fingerprint, primary_gap)` + a `status`
+>    machine (`open → proposed_close → replay_passed → applied → live_verified` | `parked_uneconomic` |
+>    `manual_required`). `parked_uneconomic` is the dust-steady-state terminal (re-open only if the spread
+>    materially widens) — else the loop re-fires on coffee's sub-EV dust every window.
+> 6. **`atomic-view-overrides.json` path correction — a real defect in this md (→ Gap D).** The runtime
+>    config root is cwd-relative `searcher/pools/` (mirror `force-include.ts`
+>    `resolve("searcher","pools",…)`) → the file is `listener/searcher/pools/atomic-view-overrides.json`,
+>    NOT under `src/`. A `src/` path = a file the searcher never loads (analysis writes it, searcher ignores
+>    it). Gate: the atomic loader actually READS the written file.
+> 7. **Offline-replay state-backend contract (→ C2).** Pin the state source: recent window → local reth;
+>    aged-out case → archive RPC / fork provider; unavailable → emit `replay_state_unavailable` (NEVER
+>    mislabel unavailable state as a path/pool gap). Cache the verdict per `learning_case_id` (one replay per
+>    case-version) so the self-evolution loop is not an archive-CU sink (rule 10 cap).
+
 ---
 
 ## What is already reusable (do NOT rebuild)
@@ -197,13 +235,28 @@ drifts from backrun's EV gate / drop-reasons / submission.
    per block** (multi-submission would need explicit nonce-sequencing of a bundle-of-bundles — heavier,
    defer). This is a *contract* decision, not an A4 detail: `processOpportunities` accepts a batch, but the
    atomic caller reduces to one submission/block. (Not a backrun concern — hints arrive serially.)
+6. **Cross-strategy `SubmissionCoordinator` — the arbiter both producers feed (nail #2, verified).**
+   Point 5 only dedups atomic-vs-atomic; the deeper constraint is that **backrun and atomic are two
+   independent producers** (hint-driven vs block-driven) contending for **one wallet, one pending nonce, one
+   target-block slot** (`wallet.getNonce("pending")` + a bundle pins ONE target block). The `busy` flag
+   serializes CPU but NOT the nonce/target-block slot across the ~12s interval: atomic submits for `N+1`
+   (nonce K), then a hint's backrun submits for `N+1` (same pending nonce K) → two live bundles, one nonce,
+   **last-write-wins, not best-EV-wins**. So introduce a single arbiter both callers route through: each
+   emits a `SubmissionCandidate{ strategy, targetBlock, netEvWei, confidence, deadlineMs }`; the coordinator
+   groups by `targetBlock`, ranks by `strategy_priority / net_ev / deadline`, admits **one** per slot, and
+   the loser emits `pipeline_dropped` reason `submission_arbitration_lost`. This is a first-class component,
+   not an A4 detail — without it, shipping atomic can DEGRADE backrun (the proven revenue path) rather than
+   add a second earner. `strategy_priority` default = backrun-first (protect the working strategy) unless
+   atomic `net_ev` exceeds backrun's by a recorded margin; a change to that policy is an economics/human call.
 - **Gate (refactor-neutral):** all existing backrun `searcher:planner` + `searcher:replay-live-fixtures`
   pass **unchanged**; a new unit test asserts (a) two distinct anchors in the same `source_block` produce
   **distinct** `opportunity_id`s (no source-swap-hash collision); (b) two rotations/directions of the SAME
   ring produce the **same** `cycle_fingerprint` and two genuinely different rings produce different ones
   (canonical-join invariance — the C2 alignment depends on it); (c) a batch of ≥2 profitable atomic
   opportunities in one block yields **exactly one** `bundle_submitted` (top `candidate_rank`), the losers
-  emitting `pipeline_dropped` with a visible `dedup_per_block` reason (not silently swallowed).
+  emitting `pipeline_dropped` with a visible `dedup_per_block` reason (not silently swallowed); (d) a
+  backrun candidate and an atomic candidate for the **same** target block yield **exactly one**
+  `bundle_submitted` and the loser emits `submission_arbitration_lost` (the cross-strategy arbiter, nail #2).
 
 **A-universe — strategy-scoped pool selection (PREREQUISITE, alongside A-contract, upstream of A1).**
 Backrun wants **fast** (few hot pools); atomic wants **broad** (loop-closure coverage). Today they are
@@ -236,6 +289,13 @@ not new infrastructure.
 - **One union graph, two edge-selection views** (not two graphs): the planner gets a hot edge-view for
   backrun; the atomic scanner uses the full union graph (it needs it to find cross-venue loops). Reuses
   the planner's existing top-N edge pruning (`maxPoolsPerToken`), and saves memory vs two graphs.
+  - **Pin the planner interface, not just the concept (nail #1, verified).** Today `planner.plan(opp,
+    templates, opts)` takes NO strategy/view arg and runs one graph set via `setGraph` — so "two views"
+    stays doc-only unless the mechanism is fixed. Keep the ONE signature and select the edge-view by
+    `opp.kind` (backrun → hot edge-view + `hints.impact` focusing; atomic → full union graph +
+    `seedEdges`-constrained, no full-graph DFS), or add an explicit `graphView` opt. Either way, backrun
+    and atomic never share one edge set. **Gate:** under a single union graph, the backrun view EXCLUDES an
+    atomic-only venue and the atomic view INCLUDES it, asserted independently (ties to the A1 seedEdges gate).
 - **Enforcement point (where "atomic breadth must not crowd out backrun speed" bites): the mempool
   `toAddress` filter ranks its 200 hot slots by the BACKRUN score, never the atomic score** — so an
   atomic-relevant-but-not-source-swap-likely pool can never displace a source-swap-likely pool from the mempool
@@ -327,14 +387,32 @@ Two design constraints the earlier draft got wrong (verified in code):
   scan only proceeds when `state_block === source_block` — otherwise **skip the block** (do not enter the
   solver on stale state). Record both `source_block` and `state_block` on every atomic event so a drift is
   visible in the dry-run, not silent.
+- **Submit-time target-block expiry — a hard drop, not a re-target (nail #3, verified).** Backrun recomputes
+  `target = latest + 1` at submit (`main.ts:1832`), self-correcting if a block arrived mid-processing. Atomic
+  must NOT: its EV assumes the `source_block` state, so `target` is fixed at `source_block + 1`. If `latest`
+  advanced past `source_block` between scan and submit, the pinned target is stale and the state assumption is
+  void → **drop and emit `atomic_stale_target_block`**, never submit to a re-targeted block.
+- **Per-newHead `atomic_scan_result` telemetry (nail #4, verified).** The `busy` / budget / stale-state skips
+  produce NO opportunity, so scanner suppression is otherwise invisible. Emit exactly one
+  `atomic_scan_result{ source_block, state_block, scanned_edges, candidates, skipped_reason }` per newHead
+  regardless of outcome (`ran` / `skipped_busy` / `stale_state` / `budget_exceeded`) — so self-analysis can
+  distinguish "no spread existed" from "scanner was starved by backrun".
+- **Runtime circuit-breaker (extends the merge-time regression guard into production).** The A4 gate below
+  is a one-time merge check; production also needs a runtime breaker: if backrun `expired-before-solver` /
+  hot-path p95 crosses a threshold in a live window, auto-disable the atomic scan for that window and alert
+  (the scanner-scoped analog of the bounded-live safety valve, Safety Rule 1) — never let atomic silently
+  degrade the proven backrun path.
 
-Hook the scan into `provider.on("block")` in `main.ts` under those two constraints. Deploy
+Hook the scan into `provider.on("block")` in `main.ts` under those constraints. Deploy
 (`scripts/deploy-node.sh`), run a dry-run window, run the mandatory Step-1 competitor cross-reference
 over coffee's blocks.
 - **Gate (metrics, non-deterministic per rule 12 exemption):** atomic `opportunity_seen>0` in the
   window, ≥1 atomic `simSuccess` on a real block, and Step-1 shows we now generate a competing
   candidate for ≥1 of coffee's atomic txs. **Regression guard: backrun `expired-before-solver` must not
   rise materially vs the pre-atomic baseline** (proves idle-only scheduling didn't starve backrun).
+  **Every newHead emits an `atomic_scan_result` (nail #4); every atomic event has
+  `state_block === source_block`; any submit with `latest > source_block` shows `atomic_stale_target_block`,
+  never a bundle to a re-targeted block (nail #3).**
   Carry to the next round if the window is thin (extend the window, do not conclude a true negative —
   the R3 trap).
 
@@ -490,6 +568,14 @@ competitor_profit  vs  our_simulated_best
   deterministically instead of waiting for the same standing spread to recur live. Pre-A the replay
   reports `atomic_scan_not_triggered` (build A); once each slice lands, the SAME historical sample must
   show the stage flip.
+  - **State-backend contract (nail #7, mandatory — offline replay needs B-1 pool state).** The scanner
+    reads pool reserves / `sqrtPriceX96` at `source_block = B-1`; our reth is `--full`/pruned (~10k blocks),
+    so aged-out cases have NO local state. Pin the source explicitly: recent window → **local reth** (zero
+    CU); aged-out pinned case → **archive RPC / fork provider**; if NEITHER can serve `B-1` → emit
+    `replay_state_unavailable` and STOP — never let missing state be silently classified as a path/pool gap
+    (a false self-evolution conclusion on historical samples). **CU discipline:** cache the replay verdict
+    per `learning_case_id` (one replay per case-version), so re-running the census does not re-hit archive
+    RPC and blow the daily CU cap (rule 10).
   - **Gate (rule-12, offline replay):** given a competitor atomic tx at block `B`, replay the scanner at
     `B-1`; the report records `scanner_found / candidate_plans / solver_quote / sim_success` → `primary_gap`,
     and the same sample flips once the owning slice ships (`atomic_cycle_not_found → candidate_plans>0`,
@@ -499,6 +585,9 @@ competitor_profit  vs  our_simulated_best
   shape — else atomic becomes a bypass the moment auto-close understands only one report:
   ```
   LearningCase {
+    learning_case_id:    string     // hash(strategy,trigger,competitor_tx,source_block,cycle_fingerprint,primary_gap)
+    status:              "open" | "proposed_close" | "replay_passed" | "applied" |
+                         "live_verified" | "parked_uneconomic" | "manual_required"
     strategy:            "backrun" | "atomic"
     trigger:             "bundle_not_included" | "competitor_not_seen"
     competitor_tx?:      string
@@ -512,6 +601,15 @@ competitor_profit  vs  our_simulated_best
     replay_gate:         {...}
   }
   ```
+  - **Idempotent lifecycle (nail #5, mandatory — this is what makes the atomic loop safe to re-run).**
+    The backrun watcher is idempotent for free via its events-stream checkpoint offset; the atomic census is
+    **competitor-tx-driven** (re-analyzes the same historical txs every cycle) and has NO such checkpoint, so
+    without `learning_case_id` + `status` it re-emits closes and re-packages `pending-manual-analysis` for
+    the same case on every run. Persist a processed-case store keyed by `learning_case_id`; a case only
+    advances its `status` forward. `parked_uneconomic` is the **dust-steady-state terminal** (coffee's 8/9
+    sub-EV atomic txs land here): it does NOT re-open, does NOT block cycle-close (rule 13), and re-opens
+    ONLY if the same `cycle_fingerprint` reappears with a materially wider spread — else the loop generates
+    infinite noise on known dust.
   `bundle-postmortem` (backrun) and the atomic census both OUTPUT `LearningCase`; `auto-close-strategy-gap`
   (Gap D) / the route-gap-watcher INPUT `LearningCase`. This is a refactor of the existing backrun outputs
   onto the shared object (done with D), NOT a second platform — it is what makes "one strategy-aware loop"
@@ -552,8 +650,11 @@ dispatch on `strategy`):**
   `toAddress` set and crowds out backrun slots in the hot path (the exact A-universe violation, now on the close side). Pin
   the atomic durable close target explicitly, a strategy-view policy file parallel to `force-include-*.json`
   (per A-universe "per-strategy runtime policy is a SEPARATE config"):
-  **`listener/src/searcher/pools/atomic-view-overrides.json`** (committed, survives deploy; loaded ONLY
-  into the atomic selection view). Rule:
+  **`listener/searcher/pools/atomic-view-overrides.json`** — the runtime config root is cwd-relative
+  `searcher/pools/` (mirror `force-include.ts` `resolve("searcher","pools",…)`), **NOT** `src/searcher/pools/`
+  (nail #6 — a `src/` path is a file the searcher never loads: analysis writes it, searcher ignores it).
+  Committed, survives deploy; loaded ONLY into the atomic selection view. **Loader gate: the atomic view
+  must actually read the written file.** Rule:
   ```
   atomic_view_missing_venue
     → write atomic-view-overrides.json ONLY
@@ -585,17 +686,17 @@ dispatch on `strategy`):**
 | slice | harness / command | expected transition (rule-12) |
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
-| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s**; **same ring in 2 rotations/directions → same `cycle_fingerprint`** (canonical-join invariance); **≥2 profitable atomic opps in one block → exactly one `bundle_submitted`** (losers `dedup_per_block`) |
-| A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves the backrun-scored mempool `toAddress` **set unchanged** (no atomic displacement); atomic view has ≥1 loop-closure pool absent from the backrun hot set |
+| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s**; **same ring in 2 rotations/directions → same `cycle_fingerprint`** (canonical-join invariance); **≥2 profitable atomic opps in one block → exactly one `bundle_submitted`** (losers `dedup_per_block`); **backrun+atomic for the SAME target block → exactly one submitted, loser `submission_arbitration_lost` (nail #2 cross-strategy arbiter)** |
+| A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves the backrun-scored mempool `toAddress` **set unchanged** (no atomic displacement); atomic view has ≥1 loop-closure pool absent from the backrun hot set; **planner backrun view EXCLUDES / atomic view INCLUDES an atomic-only venue (nail #1 interface)** |
 | A1 | `npm run searcher:planner` | anchor flips `candidate_plans 0→>0`; **every candidate path contains the seed pools** (anchor-constrained, not whole-graph); center `>8` in `flashToken` units |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
 | A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built`; **search center from `searchSeed`, not `1n` (`center>8`)** |
-| A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx; **backrun `expired-before-solver` not materially higher**; **every atomic event has `state_block === source_block`** |
+| A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx; **backrun `expired-before-solver` not materially higher**; **every atomic event has `state_block === source_block`**; **every newHead emits `atomic_scan_result` (nail #4)**; **a scan whose `latest>source_block` at submit shows `atomic_stale_target_block`, never a bundle (nail #3)** |
 | B | `npm run searcher:planner`-style fixture on committed reth logs | `0x663dc15d ∈ mempool filter` (under quotas) → admission `false→true`; hot-pool quota preserved |
 | C1 | `analysis` classifier test | coffee 9 txs → 8 `atomic_state_arb` + 1 `backrun`; `#9 source_swap_seen_by_us=false`; **no `maxPrio=0` tx labeled private**; **classifier decodes v2/v3/v4/Curve/Balancer** (a Curve/Balancer source swap is not mislabeled atomic) |
-| C2-minimal (BEFORE A4) | `analysis` comparison test + offline scanner replay | each coffee atomic tx aligns at `source_block = B−1`, emits **both** `competitor_shape` **and** an offline-replay-driven `primary_gap` (never `atomic_state_arb` with no diagnosis of our gap); alignment by `cycle_fingerprint`, not `victim_hash`; every `LearningCase` carries `source_block=B−1` |
+| C2-minimal (BEFORE A4) | `analysis` comparison test + offline scanner replay (harness lives in `listener`, reused by `analysis`) | each coffee atomic tx aligns at `source_block = B−1`, emits **both** `competitor_shape` **and** an offline-replay-driven `primary_gap` (never `atomic_state_arb` with no diagnosis of our gap); alignment by `cycle_fingerprint`, not `victim_hash`; every `LearningCase` carries `source_block=B−1`, a `learning_case_id` + `status` (nail #5); **an aged-out case with no B−1 state emits `replay_state_unavailable`, never a false path/pool gap (nail #7)** |
 | C2-full (with/after A) | `analysis` comparison test | `competitor_profit vs our_simulated_best` + full taxonomy; `comparable=false` (one_leg_inventory/sandwich) short-circuits before auto-close |
-| D (with/after A) | replay per gap class | consumes `LearningCase` (both strategies); before→after stage flip (e.g. `atomic_cycle_not_found → candidate_plans>0`); closing `atomic_view_missing_venue` writes **`atomic-view-overrides.json` only** — backrun `force-include` + mempool `toAddress` set **unchanged**; inconclusive comparable loss → `pending-manual-analysis` package |
+| D (with/after A) | replay per gap class | consumes `LearningCase` (both strategies); before→after stage flip (e.g. `atomic_cycle_not_found → candidate_plans>0`); closing `atomic_view_missing_venue` writes **`listener/searcher/pools/atomic-view-overrides.json` only** (nail #6 — cwd-relative `searcher/pools/`, NOT `src/`; loader-reads-it asserted) — backrun `force-include` + mempool `toAddress` set **unchanged**; re-running the closer on the same `learning_case_id` is idempotent (no duplicate override/escalation, nail #5); inconclusive comparable loss → `pending-manual-analysis` package |
 
 ## Governance / sequencing
 
@@ -617,3 +718,11 @@ dispatch on `strategy`):**
   telemetry). C2-minimal-before-A4 is the point-6 correction; D stays last.
 - Each slice is generator/evaluator split (rule 7): Claude briefs → Codex writes → Claude gates. Go-live
   stays a hard human gate (Safety Rule 1); A4 is dry-run + flag-gated only.
+- **Second-review nails (2026-07-04) are prerequisites, not optional.** #1 planner-view interface + #2
+  cross-strategy `SubmissionCoordinator` bind into **A-contract / A-universe** (must land before any atomic
+  logic — they protect the working backrun path from the new producer). #3 stale-target + #4
+  `atomic_scan_result` + the runtime circuit-breaker bind into **A4**. #5 `LearningCase` id/lifecycle + #7
+  offline-replay state-backend bind into **C2**; #6 `atomic-view-overrides.json` path correction binds into
+  **Gap D**. **Package boundary:** the offline atomic-replay harness lives in **`listener`** (reuses the
+  `searcher:planner` infra so it exercises the REAL scanner, not a drifting copy); `analysis` emits the
+  competitor `LearningCase` that harness consumes — do NOT reimplement the scanner inside `analysis`.
