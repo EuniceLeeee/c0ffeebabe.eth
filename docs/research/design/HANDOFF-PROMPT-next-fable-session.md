@@ -56,3 +56,39 @@ If any slice seems to need node/archive/broadcast: STOP and hand back to the ope
 - The D1–D4 invariants (doc §9.5) are non-negotiable: strategy values are `backrun|block-scan` only
   ("atomic" banned as a strategy value); edge-level `leavesStandingPosition` + derived plan flag;
   ONE LearningCase; fluid credit edge grandfathered live, hazard is submitting not membership.
+
+## Appendix (READ before invoking any analysis tool). Two sections, append-only, never delete.
+
+### A. Reasoning chain — the relay's decision logic, one self-contained entry per round
+> Judgment only, not data (data → B). Kept clean/general so it is followable + reusable across rounds.
+
+#### R-verify-1 · 2026-07-04
+- blocker/gap: no pure-local slice remains to write. Git shows the scanner is offline-complete
+  (BS-1a `2498cf0` · BS-2 `c0e617b` · BS-3a `7f66cb7`) on top of Phase-1 (S0/S1/S2, BS-0, BS-contract
+  A/B/B2/C1/C2, BS-universe P1/P2, CR-3a/b). The previous relay round downgraded to Opus (541 opus
+  turns in its transcript) and ended on a bare "already-completed" claim — a claim to CHECK, not trust.
+- options + choice: (a) write the next ordered slice, or (b) independently verify + advance the
+  done-counter. Rejected (a): the next unwritten slice BS-3 (full-pipeline sim→standalone bundle) needs
+  a profitable block-scan fixture on a FORK, and everything after (CR-5 archive replay, BS-lane, BS-4
+  live window, CS-min live-admission, CS-full/D/CR-8) needs the live node or archive — all operator-gated
+  per §9.1/§9.3b, off-limits to this pure-local round (Step 2 discipline). Chose (b): re-ran every landed
+  slice's rule-12 gate myself (13 suites + both tsc), all green, byte-identical backrun preserved.
+- outcome: all pure-local handoff slices confirmed landed + gated → `consecutive_done_confirmations`
+  0→1, `status: IN_PROGRESS` (need a 2nd independent round for COMPLETE). No slice written (none was
+  writable pure-local); remainder handed to the operator. Gate evidence → HANDOFF-RELAY-STATUS log.
+
+### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
+> One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
+> NOTE: the rule-12 *gate re-runs* below are deliberately NOT cached-to-skip — the 2-round
+> done-bar (round doc Step 4b) requires each confirmation round to INDEPENDENTLY re-run them.
+> This entry records the R-verify-1 outcome for audit only; the next round re-runs, it does not reuse.
+
+#### rule-12 gate suite (local `npm run searcher:*` + `test:learning-case`) — R-verify-1
+- result: ALL GREEN — blockscan-a0 19/19 · blockscan-scanner 10/10 · blockscan-solver-center 2/2 ·
+  planner 15/15 + replay-fixtures 14/14 + high-spread universe · blockscan-contract 5/5 ·
+  submission-coordinator 8/8 · bundle-router-safety 4/4 · cycle-fingerprint 7/7 · universe-split 6/6 ·
+  standing-guard 4/4 · taxonomy 5/5 · replay-live-fixtures buckets unchanged (expired:1/no-profitable:1,
+  byte-identical backrun) · learning-case 6/6 · tsc listener + analysis both CLEAN.
+- raw: n/a (terse); no external analysis tool (bundle-postmortem/census/live-loss/chain trace) called
+  this round — pure local gate re-runs, zero node/RPC.
+- captured: R-verify-1 / 2026-07-04
