@@ -63,7 +63,8 @@ carry a written justification** (the only sanctioned survivors: `winner_style:"a
 
 ```ts
 export type StrategyKind = "backrun" | "block-scan";
-export type EdgeKind = "swap" | "credit" | "lp" | "flash";
+export type EdgeKind = "swap" | "credit" | "lp" | "flash" | "protocol";   // "protocol" added 2026-07-04
+export type ProtocolAction = "mint" | "redeem" | "wrap" | "unwrap" | "convert" | "stake" | "unstake";
 export function strategyKindFromTxShape(shape: "backrun" | "atomic_state_arb" | "unknown"): StrategyKind | "unknown";
 export function edgeKindFromSlotKind(slotKind: "flash" | "lend" | "swap"): EdgeKind;   // lend→credit
 export function deriveEdgeTaxonomy(slotKind): { edgeKind: EdgeKind; leavesStandingPosition: boolean };
@@ -72,6 +73,28 @@ export function pathLeavesStandingPosition(edges: ReadonlyArray<{ leavesStanding
 
 `canonicalize.ts:38` `strategyType` (legacy third vocabulary, `"atomic/standing"`) is NOT migrated
 in v1 — `// legacy, do not extend` comment + ledger TODO.
+
+**Taxonomy amendment (2026-07-04, operator decision — do not re-litigate):**
+- **`"protocol"` edge kind added** — the protocol's OWN asset-conversion rule: mint / redeem /
+  wrap / unwrap / PSM convert / CDP-style conversion, with the `ProtocolAction` sub-axis. It is NOT
+  stuffed into `credit`: `credit`'s risk model is collateral/debt/HF/LTV/standing-position; a
+  protocol edge's risk is the protocol's fixed conversion rule. Both can produce a position delta,
+  but the risk models differ. (`creditAction`, e.g. `"borrow"`, stays reserved-by-example —
+  formalize at the CR slices.)
+- **Exemplar labels under the amended taxonomy:** coffee tx #2 `0x803a3693` = `block-scan`,
+  edge_kinds `flash + protocol + swap`, protocolAction `mint` (the Liquity BOLD-issuance leg);
+  reference tx `0xf88b…` = `backrun`, edge_kinds `flash + credit + swap`, creditAction `borrow`.
+- **`"lp"` doctrine (analysis-only, unchanged in production):** lp = add/remove-liquidity legs
+  (JIT LP, LP mint→victim swap→burn, share/underlying dislocations). It exists so competitor paths
+  with lp legs are classified `edge_kind=lp` + `gap_detail=lp_leg_unsupported` (adapter_missing /
+  path_not_found) instead of being misread as pool gaps / quote failures. Capability:
+  `{ analysis: true, replay: maybe, liveRouting: false, submit: false }` — planner/quoter/
+  plan-builder do NOT route lp; the searcher never submits one. Never a strategy value (D1-adjacent).
+- **BS-0 direction note:** the pure-AMM exemplar (tx #3 `0xf2de7499`) WAS found, so BS-0's pure-DEX
+  gate stands. Standing rationale recorded: pure-AMM standing loops are usually competed away before
+  an atomic scanner gets them ("纯 AMM 一般轮不到原子") — if future windows show the pure-AMM class
+  empty, the sanctioned fallback is pivoting BS-0's substantiation to a protocol-leg scan, not
+  forcing an AMM-only loop.
 
 ### 1.2 Edge model — `TokenEdge` widened IN PLACE (LANDED in S0)
 
@@ -453,7 +476,7 @@ generator/evaluator split, each with its rule-12 gate.
 | **S0** taxonomy + TokenEdge widening | `75210c5` | build + `searcher:planner` 14/14 + replay 12/12 + `searcher:taxonomy` 5/5 + router-filter |
 | **S1** merged LearningCase + postmortem/census fold | `6145931` | tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner unchanged |
 | **S2** fail-closed standing-position guard | `a737576` | build + `searcher:standing-guard` 4/4 + planner/replay unchanged; **deployed to the node** (live mode preserved, wallet 0.0027 ETH ≤ cap); runtime check = **0 `standing_position_unauthorized` false-positives** |
-| **BS-0** fixture | exemplar re-selected 2026-07-04 | pure-DEX exemplar = `test/fixtures/blockscan-coffee-f2de7499.json` (tx #3, receipt-derived, zero-node); `…803a3693.json` retired → future credit/mint-leg exemplar; harness NOT written (§9.4 step 1) |
+| **BS-0** fixture | exemplar re-selected 2026-07-04 | pure-DEX exemplar = `test/fixtures/blockscan-coffee-f2de7499.json` (tx #3, receipt-derived, zero-node); `…803a3693.json` retired → future protocol-leg exemplar (protocolAction=mint, §1.1 amendment); harness NOT written (§9.4 step 1) |
 | BS-contract → CR-8 | — | NOT STARTED |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
@@ -516,8 +539,8 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
    tx #2 `0x803a3693` was mischaracterized: its "CFG 2-hop loop" is fee-negative in both directions
    (0.32% tick spread vs ~1.3% round-trip fee) and lost −0.0000023 ETH in the real execution; the
    profit rides a **Liquity V2 BOLD-issuance leg** (the "out-of-cycle" ETH/BOLD pool is integral).
-   It is RETAINED as the future credit/mint-leg exemplar (strategy=block-scan, edge_kinds=flash+
-   credit/mint+swap) but NOT for the BS-0 pure-DEX gate. The new exemplar is **tx #3 `0xf2de7499`**
+   It is RETAINED as the future protocol-leg exemplar (strategy=block-scan, edge_kinds=flash+
+   protocol+swap, protocolAction=mint — §1.1 amendment) but NOT for the BS-0 pure-DEX gate. The new exemplar is **tx #3 `0xf2de7499`**
    (block 25455297): a genuine 4-leg pure-AMM loop (Balancer-flash USDC → v4 USDC/USDT fee=7 [the
    edge, +8.1bps USDT premium] → v4 USDT/D166 → Curve D166→USDC → repay, +0.270191 USDC surplus →
    v2 →WETH, +157203701650240 wei realized). Everything was derived with ZERO node access from the
