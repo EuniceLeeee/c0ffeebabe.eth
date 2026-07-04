@@ -18,6 +18,25 @@ export interface PoolImpact {
     liquidity: bigint;
     tick: number;
   };
+  /** Exact UniV2 post-swap reserves carried by Sync events, or computed from pre-reserves + Swap amounts. */
+  v2PostState?: {
+    reserve0: bigint;
+    reserve1: bigint;
+    blockTimestampLast?: number;
+    token0?: string;
+    token1?: string;
+  };
+  /** Exact UniV4 post-swap state carried by PoolManager Swap events. Undefined for non-v4 impacts. */
+  v4PostState?: {
+    sqrtPriceX96: bigint;
+    liquidity: bigint;
+    tick: number;
+    poolId: string;
+    lpFee?: number;
+  };
+  /** Pool token order, when known from the graph or token0/token1 reads. */
+  poolToken0?: string;
+  poolToken1?: string;
 }
 
 interface EventLog {
@@ -42,8 +61,15 @@ const CURVE_TOKEN_EXCHANGE_TOPICS = new Set([
 ]);
 const UNIV3_SWAP = topic("Swap(address,address,int256,int256,uint160,uint128,int24)");
 const UNIV2_SWAP = topic("Swap(address,uint256,uint256,uint256,uint256,address)");
+const UNIV2_SYNC = topic("Sync(uint112,uint112)");
 const UNIV4_SWAP = topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
 const ERC20_TRANSFER = topic("Transfer(address,address,uint256)");
+
+const univ2PairIface = new ethers.Interface([
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+]);
 
 function decodeUniV3SwapData(data: string): {
   amount0: bigint;
@@ -62,6 +88,32 @@ function decodeUniV3SwapData(data: string): {
       liquidity: BigInt(liquidity),
       tick: Number(tick),
     },
+  };
+}
+
+function decodeUniV2SwapData(data: string): {
+  amount0In: bigint;
+  amount1In: bigint;
+  amount0Out: bigint;
+  amount1Out: bigint;
+} {
+  const [amount0In, amount1In, amount0Out, amount1Out] = ethers.AbiCoder.defaultAbiCoder().decode(
+    ["uint256", "uint256", "uint256", "uint256"],
+    data,
+  );
+  return {
+    amount0In: BigInt(amount0In),
+    amount1In: BigInt(amount1In),
+    amount0Out: BigInt(amount0Out),
+    amount1Out: BigInt(amount1Out),
+  };
+}
+
+function decodeUniV2SyncData(data: string): NonNullable<PoolImpact["v2PostState"]> {
+  const [reserve0, reserve1] = ethers.AbiCoder.defaultAbiCoder().decode(["uint112", "uint112"], data);
+  return {
+    reserve0: BigInt(reserve0),
+    reserve1: BigInt(reserve1),
   };
 }
 
@@ -192,17 +244,14 @@ const uniV2Decoder: ImpactDecoder = {
   decodeLog(log, edges) {
     if (log.topics[0]?.toLowerCase() !== UNIV2_SWAP) return [];
 
-    const [amount0In, amount1In] = ethers.AbiCoder.defaultAbiCoder().decode(
-      ["uint256", "uint256", "uint256", "uint256"],
-      log.data,
-    );
+    const { amount0In, amount1In } = decodeUniV2SwapData(log.data);
 
     const sample = edges.find((e) => e.poolToken0 && e.poolToken1);
     if (!sample?.poolToken0 || !sample?.poolToken1) return [];
 
-    const tokenIn = BigInt(amount0In) > 0n ? sample.poolToken0 : sample.poolToken1;
-    const tokenOut = BigInt(amount0In) > 0n ? sample.poolToken1 : sample.poolToken0;
-    const amountIn = BigInt(amount0In) > 0n ? BigInt(amount0In) : BigInt(amount1In);
+    const tokenIn = amount0In > 0n ? sample.poolToken0 : sample.poolToken1;
+    const tokenOut = amount0In > 0n ? sample.poolToken1 : sample.poolToken0;
+    const amountIn = amount0In > 0n ? amount0In : amount1In;
 
     const edge = edges.find(
       (e) =>
@@ -218,6 +267,8 @@ const uniV2Decoder: ImpactDecoder = {
       tokenOut: edge.tokenOut,
       amountIn,
       matchedAdapterId: edge.adapterId,
+      poolToken0: sample.poolToken0,
+      poolToken1: sample.poolToken1,
     }];
   },
 };
@@ -240,7 +291,7 @@ const uniV4Decoder: ImpactDecoder = {
     const poolId = log.topics[1]?.toLowerCase();
     if (!poolId) return [];
 
-    const [amount0, amount1] = ethers.AbiCoder.defaultAbiCoder().decode(
+    const [amount0, amount1, sqrtPriceX96, liquidity, tick, fee] = ethers.AbiCoder.defaultAbiCoder().decode(
       ["int128", "int128", "uint160", "uint128", "int24", "uint24"],
       log.data,
     );
@@ -280,6 +331,13 @@ const uniV4Decoder: ImpactDecoder = {
       amountIn,
       matchedAdapterId: edge.adapterId,
       poolId,
+      v4PostState: {
+        sqrtPriceX96: BigInt(sqrtPriceX96),
+        liquidity: BigInt(liquidity),
+        tick: Number(tick),
+        poolId,
+        lpFee: Number(fee),
+      },
     }];
   },
 };
@@ -382,6 +440,8 @@ function pairedTransferImpacts(
               tokenOut: edge.tokenOut,
               amountIn: inT.amount,
               matchedAdapterId: edge.adapterId,
+              poolToken0: edge.poolToken0,
+              poolToken1: edge.poolToken1,
             });
           }
         } else {
@@ -557,17 +617,14 @@ async function swapOnlyImpacts(
     try {
       let tokenIn: string, tokenOut: string, amountIn: bigint;
       let v3PostState: PoolImpact["v3PostState"];
+      let v2PostState: PoolImpact["v2PostState"];
 
       if (swapType === "univ2") {
-        const [amount0In, amount1In] = ethers.AbiCoder.defaultAbiCoder().decode(
-          ["uint256", "uint256", "uint256", "uint256"],
-          log.data,
-        );
-        const a0In = BigInt(amount0In);
-        const a1In = BigInt(amount1In);
-        tokenIn = a0In > 0n ? token0 : token1;
-        tokenOut = a0In > 0n ? token1 : token0;
-        amountIn = a0In > 0n ? a0In : a1In;
+        const swap = decodeUniV2SwapData(log.data);
+        tokenIn = swap.amount0In > 0n ? token0 : token1;
+        tokenOut = swap.amount0In > 0n ? token1 : token0;
+        amountIn = swap.amount0In > 0n ? swap.amount0In : swap.amount1In;
+        v2PostState = await computeUniV2PostStateFromPreReserves(addr, swap, tokenQuery) ?? undefined;
       } else {
         const { amount0: a0, amount1: a1, v3PostState: postState } = decodeUniV3SwapData(log.data);
         // UniV3: positive amount = tokens sent TO pool (input)
@@ -589,6 +646,9 @@ async function swapOnlyImpacts(
         tokenOut,
         amountIn,
         matchedAdapterId: adapterId,
+        poolToken0: token0,
+        poolToken1: token1,
+        ...(v2PostState ? { v2PostState } : {}),
         ...(v3PostState ? { v3PostState } : {}),
       });
       console.log(
@@ -632,6 +692,7 @@ export async function detectImpactFromLogs(
 ): Promise<PoolImpact[]> {
   const impacts: PoolImpact[] = [];
   const edgesByTarget = groupEdgesByTarget(graph);
+  const v2PostStates = await collectUniV2PostStates(logs, tokenQuery);
 
   for (const log of logs) {
     // Standard decoders: log.address is a known pool in routing graph
@@ -640,7 +701,7 @@ export async function detectImpactFromLogs(
       for (const decoder of IMPACT_DECODERS) {
         if (!edges.some((edge) => decoder.adapterIds.includes(edge.adapterId))) continue;
         try {
-          impacts.push(...decoder.decodeLog(log, edges));
+          impacts.push(...withExactPostStates(decoder.decodeLog(log, edges), v2PostStates));
         } catch {
           continue;
         }
@@ -651,21 +712,114 @@ export async function detectImpactFromLogs(
   // Paired Transfer fallback: tokenA→pool + pool→tokenB = swap
   // Uses broadPoolAddrs (factory-indexed) for wider matching
   const touches = collectPoolTouches(logs, edgesByTarget, broadPoolAddrs);
-  impacts.push(...pairedTransferImpacts(touches, edgesByTarget, broadPoolAddrs));
+  impacts.push(...withExactPostStates(pairedTransferImpacts(touches, edgesByTarget, broadPoolAddrs), v2PostStates));
 
   // Swap-event correlation: detect unknown pools by correlating Swap events
   // with Transfer events in the same log set. Works for any pool, even those
   // not in broadPoolAddrs (created before our factory scan window).
-  impacts.push(...swapEventCorrelatedImpacts(logs, edgesByTarget, broadPoolAddrs));
+  impacts.push(...withExactPostStates(swapEventCorrelatedImpacts(logs, edgesByTarget, broadPoolAddrs), v2PostStates));
 
   // Swap-only hints: MEV-Share often exposes only the Swap event (no Transfer).
   // For pools in the routing graph, the standard decoder already handles this.
   // For unknown pools, query token0/token1 on-chain and decode from Swap data.
   if (tokenQuery) {
-    impacts.push(...await swapOnlyImpacts(logs, edgesByTarget, broadPoolAddrs, tokenQuery));
+    impacts.push(...withExactPostStates(
+      await swapOnlyImpacts(logs, edgesByTarget, broadPoolAddrs, tokenQuery),
+      v2PostStates,
+    ));
   }
 
   return dedupeImpacts(impacts);
+}
+
+async function collectUniV2PostStates(
+  logs: EventLog[],
+  tokenQuery?: TokenQueryBackend | null,
+): Promise<Map<string, NonNullable<PoolImpact["v2PostState"]>>> {
+  const out = new Map<string, NonNullable<PoolImpact["v2PostState"]>>();
+  for (let i = 0; i < logs.length; i++) {
+    const log = logs[i];
+    if (log.topics[0]?.toLowerCase() !== UNIV2_SWAP) continue;
+    const pool = log.address.toLowerCase();
+    const syncState = adjacentUniV2SyncPostState(logs, i);
+    if (syncState) {
+      out.set(pool, syncState);
+      continue;
+    }
+    if (!tokenQuery) continue;
+    try {
+      const postState = await computeUniV2PostStateFromPreReserves(
+        pool,
+        decodeUniV2SwapData(log.data),
+        tokenQuery,
+      );
+      if (postState) out.set(pool, postState);
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+function adjacentUniV2SyncPostState(
+  logs: EventLog[],
+  swapIndex: number,
+): NonNullable<PoolImpact["v2PostState"]> | null {
+  const pool = logs[swapIndex].address.toLowerCase();
+  for (let i = swapIndex - 1; i >= 0; i--) {
+    if (logs[i].address.toLowerCase() !== pool) continue;
+    const t0 = logs[i].topics[0]?.toLowerCase();
+    if (t0 === UNIV2_SYNC) return decodeUniV2SyncData(logs[i].data);
+    if (t0 === UNIV2_SWAP) break;
+  }
+  for (let i = swapIndex + 1; i < logs.length; i++) {
+    if (logs[i].address.toLowerCase() !== pool) continue;
+    const t0 = logs[i].topics[0]?.toLowerCase();
+    if (t0 === UNIV2_SYNC) return decodeUniV2SyncData(logs[i].data);
+    if (t0 === UNIV2_SWAP) break;
+  }
+  return null;
+}
+
+async function computeUniV2PostStateFromPreReserves(
+  pool: string,
+  swap: ReturnType<typeof decodeUniV2SwapData>,
+  tokenQuery: TokenQueryBackend,
+): Promise<NonNullable<PoolImpact["v2PostState"]> | null> {
+  const [reservesRaw, token0Raw, token1Raw] = await Promise.all([
+    tokenQuery.call({ to: pool, data: univ2PairIface.encodeFunctionData("getReserves") }),
+    tokenQuery.call({ to: pool, data: univ2PairIface.encodeFunctionData("token0") }),
+    tokenQuery.call({ to: pool, data: univ2PairIface.encodeFunctionData("token1") }),
+  ]);
+  if (!reservesRaw || reservesRaw === "0x" || !token0Raw || token0Raw === "0x" || !token1Raw || token1Raw === "0x") {
+    return null;
+  }
+  const decoded = univ2PairIface.decodeFunctionResult("getReserves", reservesRaw);
+  const reserve0 = BigInt(decoded[0]) + swap.amount0In - swap.amount0Out;
+  const reserve1 = BigInt(decoded[1]) + swap.amount1In - swap.amount1Out;
+  if (reserve0 < 0n || reserve1 < 0n) return null;
+  return {
+    reserve0,
+    reserve1,
+    blockTimestampLast: Number(decoded[2]),
+    token0: ethers.getAddress("0x" + token0Raw.slice(-40)),
+    token1: ethers.getAddress("0x" + token1Raw.slice(-40)),
+  };
+}
+
+function withExactPostStates(
+  impacts: PoolImpact[],
+  v2PostStates: Map<string, NonNullable<PoolImpact["v2PostState"]>>,
+): PoolImpact[] {
+  for (const impact of impacts) {
+    if (impact.matchedAdapterId !== "univ2-swap" || impact.v2PostState) continue;
+    const postState = v2PostStates.get(impact.pool.toLowerCase());
+    if (!postState) continue;
+    impact.v2PostState = postState;
+    impact.poolToken0 ??= postState.token0;
+    impact.poolToken1 ??= postState.token1;
+  }
+  return impacts;
 }
 
 export async function detectPoolImpact(
@@ -733,9 +887,13 @@ function dedupeImpacts(impacts: PoolImpact[]): PoolImpact[] {
     if (!existing) {
       seen.set(key, impact);
       order.push(key);
-    } else if (!existing.v3PostState && impact.v3PostState) {
+    } else if (!hasExactPostState(existing) && hasExactPostState(impact)) {
       seen.set(key, impact);
     }
   }
   return order.map((key) => seen.get(key)!);
+}
+
+function hasExactPostState(impact: PoolImpact): boolean {
+  return Boolean(impact.v2PostState || impact.v3PostState || impact.v4PostState);
 }

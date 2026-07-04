@@ -38,9 +38,16 @@ import {
 import { AnvilSolver } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import { PoolStateCache, type PostImpactSeed, type V3PostImpactSeed } from "./solver/pool-state-cache.js";
+import {
+  PoolStateCache,
+  type PostImpactSeed,
+  type V2PostImpactSeed,
+  type V3PostImpactSeed,
+  type V4PostImpactSeed,
+} from "./solver/pool-state-cache.js";
 import { PoolStateUpdater } from "./solver/pool-state-updater.js";
 import { postImpactStateOverrides } from "./solver/post-impact-overrides.js";
+import { resolveErc20BalanceSlot } from "./solver/balance-slots.js";
 import { applyVictimSwapLocally, type LocalVictimApplyResult } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "./templates/path-template.js";
@@ -1355,7 +1362,7 @@ async function handleHint(
     const oppImpact = poolImpactFromOpportunity(opp) ?? fixtureImpact;
     const prepareBaseBlock = fixturePath === "mined" ? eventBlockNumber : latestBlock;
     const exactPostImpact = fixturePath === "hash-only" && oppImpact
-      ? v3EventPostImpactSeed(oppImpact, prepareBaseBlock)
+      ? eventPostImpactSeed(oppImpact, prepareBaseBlock)
       : null;
     const overlayExact = exactPostImpact !== null;
     const prepareInput = {
@@ -1368,9 +1375,8 @@ async function handleHint(
     };
     if (overlayExact) {
       console.log(
-        `[searcher/live] hash-only exact v3 overlay seed ` +
-          `pool=${exactPostImpact.pool.slice(0, 10)} sqrtPriceX96=${exactPostImpact.sqrtPriceX96} ` +
-          `tick=${exactPostImpact.tick}`,
+        `[searcher/live] hash-only exact ${exactPostImpact.kind} overlay seed ` +
+          postImpactSummary(exactPostImpact),
       );
     }
     // Feed the between-block warmer: these pools recur across hints, so record
@@ -1502,8 +1508,8 @@ async function handleHint(
       if (exactPostImpact) {
         const overrides = await applyPostImpactOverridesToAnvil(ctx.state, exactPostImpact);
         console.log(
-          `[searcher/live] anvil exact v3 post-state overlay ` +
-            `pool=${exactPostImpact.pool.slice(0, 10)} overrides=${overrides}`,
+          `[searcher/live] anvil exact ${exactPostImpact.kind} post-state overlay ` +
+            `${postImpactSummary(exactPostImpact)} overrides=${overrides}`,
         );
       } else {
         await impersonateSwap(ctx.state, oppImpact, ctx.graph);
@@ -2349,6 +2355,29 @@ function isCurveAdapter(adapterId: string): boolean {
   return adapterId.startsWith("curve-");
 }
 
+function eventPostImpactSeed(impact: PoolImpact, blockNumber: number): PostImpactSeed | null {
+  return v2EventPostImpactSeed(impact, blockNumber) ??
+    v3EventPostImpactSeed(impact, blockNumber) ??
+    v4EventPostImpactSeed(impact, blockNumber);
+}
+
+function v2EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V2PostImpactSeed | null {
+  if (impact.matchedAdapterId !== "univ2-swap" || !impact.v2PostState) return null;
+  const token0 = impact.poolToken0 ?? impact.v2PostState.token0;
+  const token1 = impact.poolToken1 ?? impact.v2PostState.token1;
+  if (!token0 || !token1) return null;
+  return {
+    kind: "v2",
+    pool: impact.pool,
+    token0,
+    token1,
+    reserve0: impact.v2PostState.reserve0,
+    reserve1: impact.v2PostState.reserve1,
+    blockTimestampLast: impact.v2PostState.blockTimestampLast,
+    blockNumber,
+  };
+}
+
 function v3EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V3PostImpactSeed | null {
   if (impact.matchedAdapterId !== "univ3-swap" || !impact.v3PostState) return null;
   return {
@@ -2361,11 +2390,43 @@ function v3EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V3PostI
   };
 }
 
+function v4EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V4PostImpactSeed | null {
+  if (impact.matchedAdapterId !== "univ4-unlock" || !impact.v4PostState) return null;
+  return {
+    kind: "v4",
+    poolManager: impact.pool,
+    poolId: impact.v4PostState.poolId,
+    sqrtPriceX96: impact.v4PostState.sqrtPriceX96,
+    tick: impact.v4PostState.tick,
+    liquidity: impact.v4PostState.liquidity,
+    lpFee: impact.v4PostState.lpFee,
+    blockNumber,
+  };
+}
+
+function postImpactSummary(postImpact: PostImpactSeed): string {
+  if (postImpact.kind === "v2") {
+    return `pool=${postImpact.pool.slice(0, 10)} reserve0=${postImpact.reserve0} reserve1=${postImpact.reserve1}`;
+  }
+  if (postImpact.kind === "v3") {
+    return `pool=${postImpact.pool.slice(0, 10)} sqrtPriceX96=${postImpact.sqrtPriceX96} tick=${postImpact.tick}`;
+  }
+  if (postImpact.kind === "v4") {
+    return `poolManager=${postImpact.poolManager.slice(0, 10)} poolId=${postImpact.poolId.slice(0, 10)} ` +
+      `sqrtPriceX96=${postImpact.sqrtPriceX96} tick=${postImpact.tick}`;
+  }
+  return `pool=${postImpact.pool.slice(0, 10)}`;
+}
+
 async function applyPostImpactOverridesToAnvil(
   state: AnvilStateBackend,
   postImpact: PostImpactSeed,
 ): Promise<number> {
-  const overrides = await postImpactStateOverrides(postImpact);
+  const holder = postImpact.kind === "v2" ? postImpact.pool : undefined;
+  const overrides = await postImpactStateOverrides(
+    postImpact,
+    holder ? (token) => resolveAnvilBalanceSlot(state, token, holder) : undefined,
+  );
   if (overrides.length === 0) {
     throw new Error(`post-impact state override unavailable for ${postImpact.kind}`);
   }
@@ -2373,6 +2434,30 @@ async function applyPostImpactOverridesToAnvil(
     await state.provider.send("anvil_setStorageAt", [override.address, override.slot, override.value]);
   }
   return overrides.length;
+}
+
+const BALANCE_OF_IFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+]);
+
+async function resolveAnvilBalanceSlot(
+  state: AnvilStateBackend,
+  token: string,
+  holder: string,
+): Promise<number | null> {
+  return resolveErc20BalanceSlot(token, holder, {
+    balanceOf: async (t, h) => {
+      const ret = await state.provider.call({
+        to: t,
+        data: BALANCE_OF_IFACE.encodeFunctionData("balanceOf", [h]),
+      });
+      return ret && ret !== "0x" ? BigInt(ret) : 0n;
+    },
+    getStorage: async (t, key) => {
+      const ret = await state.provider.getStorage(t, key);
+      return ret && ret !== "0x" ? BigInt(ret) : 0n;
+    },
+  });
 }
 
 /**

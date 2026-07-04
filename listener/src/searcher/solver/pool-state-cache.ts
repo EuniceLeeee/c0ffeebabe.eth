@@ -147,6 +147,18 @@ export interface V3PostImpactSeed extends V3LiveSeed {
   kind: "v3";
 }
 
+export interface V4PostImpactSeed {
+  kind: "v4";
+  poolManager: string;
+  poolId: string;
+  sqrtPriceX96: bigint;
+  tick: number;
+  liquidity: bigint;
+  lpFee?: number;
+  protocolFee?: number;
+  blockNumber: number;
+}
+
 export interface CurvePostImpactSeed {
   kind: "curve";
   pool: string;
@@ -157,7 +169,7 @@ export interface CurvePostImpactSeed {
   blockNumber: number;
 }
 
-export type PostImpactSeed = V2PostImpactSeed | V3PostImpactSeed | CurvePostImpactSeed;
+export type PostImpactSeed = V2PostImpactSeed | V3PostImpactSeed | V4PostImpactSeed | CurvePostImpactSeed;
 
 export interface V3Snapshot {
   pool: string;
@@ -224,7 +236,7 @@ export class PoolStateCache {
     const options: BeginHintOptions = Array.isArray(overlayPoolsOrOptions)
       ? { overlayPools: overlayPoolsOrOptions }
       : overlayPoolsOrOptions;
-    const postImpactTargets = new Set((options.postImpact ?? []).map((s) => s.pool.toLowerCase()));
+    const postImpactTargets = new Set((options.postImpact ?? []).map(postImpactTarget));
     this.overlayPools = new Set(
       (options.overlayPools ?? [])
         .map((p) => p.toLowerCase())
@@ -243,7 +255,7 @@ export class PoolStateCache {
         this.seedV2(post);
       } else if (post.kind === "v3") {
         this.seedV3Live(post);
-      } else {
+      } else if (post.kind === "curve") {
         this.seedCurve(post);
       }
     }
@@ -759,6 +771,10 @@ export class PoolStateCache {
     if (coins.length === 0) throw new Error(`curve ${pool}: no coins`);
     return coins;
   }
+}
+
+function postImpactTarget(seed: PostImpactSeed): string {
+  return (seed.kind === "v4" ? seed.poolManager : seed.pool).toLowerCase();
 }
 
 function clonePlain(state: CurvePlainState): CurvePlainState {
