@@ -31,16 +31,26 @@ reuses almost all of it:
 |---|---|---|---|
 | block-driven pool-state freshness | `main.ts:762 / :807` (`provider.on("block")` warm + state update), `solver/pool-state-updater.ts` | none — already per-block | **trigger + state source for the scan** |
 | cycle enumeration | `planner/token-graph.ts:462` `buildTokenPaths(start,profit)` | none — DFS start→profit is generic | seed with `start===profit` (a cycle) |
-| candidate planning | `planner/planner.ts:86` `TemplatePlanner.plan(opp,…)` | reads `opp.affectedPools` only to *pin* the impact pool | plan from a synthetic `Opportunity` with no pinned victim pool |
-| amount sizing | `solver/solver.ts:442` `resolveSearchCenter` | `if (victimAmount<=0n) return 1n` → **already** falls back to the geometric-grid + GSS search | drive with `victimAmountIn:0n` |
+| candidate planning | `planner/planner.ts:86` `TemplatePlanner.plan(opp,…)` | pins the impact pool from `opp.hints.impact` (via `impactFromOpportunity`, `planner.ts:413`) — **NOT** `opp.affectedPools`; with no `hints.impact`, `focusPathsOnImpact` returns all paths | plan from a synthetic `Opportunity` that **omits `hints.impact`** (clearing `affectedPools` alone does nothing) |
+| amount sizing | `solver/solver.ts:442` `resolveSearchCenter` | ⚠️ `if (victimAmount<=0n) return 1n` does **NOT** fall back to a useful search — see the sizing-seed blocker below | requires a real `searchCenter` seed (missing piece #2) |
 | execution / submission | `execution/bundle-router.ts:81` `standalone` → `submitStandaloneBundle` (single next-block tx, **no victim rawTx**) | already exists for the mined-victim Path C (`main.ts:1134`) | **atomic bundle == standalone bundle** |
 | EV / final-verify gate | `main.ts:1583` terminal verify + EV gate | none | unchanged |
 
-So the **only genuinely missing pieces for Gap A** are: (1) a block-triggered *opportunity source* whose
-search is cheap by construction — an O(pairs) 2-hop spread scan to find anchors, then a depth-bounded
-(≤4 hop) cycle search seeded only from those anchors — NOT a whole-graph DFS. Everything downstream
-already runs no-victim. See "Path length" below for why the hop cap and the anchored order are forced by
-coffee's own data.
+So the **genuinely missing pieces for Gap A** are three (not two — the sizing seed was missed):
+1. a block-triggered *opportunity source* whose search is cheap by construction — an O(pairs) 2-hop
+   spread scan to find anchors, then a depth-bounded (≤4 hop) cycle search seeded only from those
+   anchors — NOT a whole-graph DFS. See "Path length" below.
+2. **an amount-search seed for the no-victim path (blocker, verified in code).** The reuse claim that
+   `victimAmountIn:0n` "already falls back to the geometric grid + GSS" is **false**. `resolveSearchCenter`
+   returns `1n` (`solver.ts:448`); `geometricGrid(1n, halfWidth=3)` is anchored on that center and the
+   negative shifts floor to 0 → the grid is exactly **`[1, 2, 4, 8]` wei**. GSS only fires when a grid
+   point already quotes a **positive** profit (`solver.ts:196`) and its bracket is only `[bestX/2, 2·bestX]`
+   with **no boundary expansion** — so a 1–8 wei probe is rounded to zero and the solver throws
+   "no profitable plan". Atomic sizing therefore needs a real `searchCenter` (derive it in A1/A2 from the
+   anchor pool depth / spread), not `victimAmountIn:0n`. This is a hard landing blocker, folded into the
+   slices below.
+3. a no-victim **entry point** into the post-detect pipeline (A4) — `handleHint` cannot be fed a synthetic
+   hint (see A4); the plan→solve→sim→submit tail must be reachable without a victim tx.
 
 ---
 
@@ -91,13 +101,21 @@ atomic sample). Reuse the historical-replay harness pattern (`docs/historical-re
 - **Deliverable:** a pinned fixture `{block, startToken, cyclePools[], expectedGrossWei}` for A1/A3.
 
 **A1 — anchor finder: O(pairs) 2-hop spread scan (this IS the detector, not a filter).**
+First make `Opportunity` a **discriminated union** so atomic never fakes a victim (`detector.ts:6`):
+`type Opportunity = BackrunOpportunity | AtomicOpportunity`. `BackrunOpportunity` keeps today's shape
+(`kind:"backrun-arb"`, `victimTxHash`, `victimAmountIn`, `hints.impact`). `AtomicOpportunity`
+(`kind:"atomic-arb"`) carries **no victim fields and no `hints.impact`**, plus a required
+`searchSeed: { searchCenter: bigint; maxInput?: bigint }` (the sizing seed, missing-piece #2). The only
+non-test consumers of `Opportunity` are `main.ts / events.ts / planner.ts / solver.ts / detector.ts`, and
+`"backrun-arb"` is a literal in just two spots in `detector.ts` — so the union is a small, contained change.
+
 Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(cache, pricedTokens)`: iterate only
 **token pairs that have ≥2 venues** in the runtime graph; for each, compare mid-prices from the warm
 `PoolStateCache` (constant-product ratio for v2, `sqrtPriceX96` for v3) and flag pairs whose spread
 exceeds fees. A flagged pair directly yields the 2-hop seed (start token + the two pools) — **no DFS,
-no per-token enumeration.** Emit `Opportunity{ kind:"atomic-arb", victimTxHash:"", victimAmountIn:0n,
-affectedPools:[poolA,poolB], startToken, profitToken:start }`. Downstream is unchanged (add the
-`"atomic-arb"` kind to `detector.ts:6`). This is inherently short-path and cheap.
+no per-token enumeration** — and a `searchCenter` derived from the anchor pools' depth/spread (NOT `1n`).
+Emit an `AtomicOpportunity{ startToken, profitToken:start, affectedPools:[poolA,poolB], searchSeed }`.
+This is inherently short-path and cheap.
 - **Gate (rule-12, `npm run searcher:planner`, deterministic, no anvil):** pin a 2-venue spread fixture;
   assert the pair is flagged and yields `candidate_plans 0→>0` — same flip shape as the CFG v4 fixture
   (`test/planner.ts:829`). (From the data this class is mostly dust here; it ships first because it is
@@ -116,22 +134,41 @@ DFS from every token. Bounded depth + anchored seeds keep it inside the between-
   what the budget allows just to chase the 5-hop tail that netted $0.
 
 **A3 — no-victim solve + sim + standalone build (end-to-end on fork).**
-Run the A0 fixture through `solver.solve` (no `localVictimApply` → sims on the current fork directly,
-exactly like the standalone/mined path) → terminal verify → `standalone` bundle build.
+Teach `resolveSearchCenter` (`solver.ts:442`) to read `AtomicOpportunity.searchSeed.searchCenter` instead
+of the `1n` fallback (dispatch on `opp.kind`; backrun path unchanged). Then run the A0 fixture through
+`solver.solve` (no `localVictimApply` → sims on the current fork directly, exactly like the
+standalone/mined path) → terminal verify → `standalone` bundle build.
 - **Gate (rule-12, `npm run searcher:replay-live-fixtures`):** `sim.success=true`, net-EV > 0 after
-  gas, EV gate passes, a `standalone` `BundleSubmission` is produced (DryRun signs it). Records the
-  rule-12 quartet (`failing_sample / fix_commit / replay_command / expected_transition:
+  gas, EV gate passes, a `standalone` `BundleSubmission` is produced (DryRun signs it). **The gate must
+  also assert the solver's search center came from `searchSeed`, not `1n`** (else A1's dust-grid failure
+  mode is silently reintroduced — log the resolved center and assert `center > 8` for this fixture).
+  Records the rule-12 quartet (`failing_sample / fix_commit / replay_command / expected_transition:
   atomic_scan no_candidate→sim.success+standalone`).
 
 **A4 — live wiring + dry-run window.**
-Hook `detectAtomicOpportunities` into `provider.on("block")` in `main.ts` (behind
-`SEARCHER_ENABLE_ATOMIC_SCAN`, default 0), feeding the existing `handleHint` downstream with a
-synthetic block-triggered hint. Deploy (`scripts/deploy-node.sh`), run a dry-run window, run the
-mandatory Step-1 competitor cross-reference over coffee's blocks.
+Two design constraints the earlier draft got wrong (verified in code):
+- **Entry point — do NOT feed a synthetic hint to `handleHint` (missing-piece #3).** `handleHint`
+  (`main.ts:953`) is victim-parse all the way down: Path A needs hint logs + `enableHashOnly`, Path B
+  needs a rawTx, Path C calls `getTransaction(txHash)` (a fabricated hash throws), and the tail is
+  `detector.detect(event)` (`main.ts:1244`), which produces opportunities from **swap logs** — a
+  log-less synthetic event yields 0 and exits at "no matching graph pool". The correct wiring is to
+  **extract the post-detect pipeline** (plan → solve → sim → terminal-verify → submit, `main.ts` ~1250+)
+  into a function that takes an `Opportunity[]` directly, and have both `handleHint` and the atomic block
+  handler call it. The atomic handler skips detect entirely and passes the scanner's `AtomicOpportunity[]`.
+- **Scheduling — respect the single-flight `busy` loop.** The hint loop is single-flight
+  (`if (busy) skip hint`, `main.ts:846`); a per-block atomic scan contends for the same slot. Run the
+  scan **idle-only** (skip if `busy`) with a per-block time budget, so it never starves backrun hints and
+  `expired-before-solver` does not rise. Both behind `SEARCHER_ENABLE_ATOMIC_SCAN` (default 0).
+
+Hook the scan into `provider.on("block")` in `main.ts` under those two constraints. Deploy
+(`scripts/deploy-node.sh`), run a dry-run window, run the mandatory Step-1 competitor cross-reference
+over coffee's blocks.
 - **Gate (metrics, non-deterministic per rule 12 exemption):** atomic `opportunity_seen>0` in the
   window, ≥1 atomic `simSuccess` on a real block, and Step-1 shows we now generate a competing
-  candidate for ≥1 of coffee's atomic txs. Carry to the next round if the window is thin (extend the
-  window, do not conclude a true negative — the R3 trap).
+  candidate for ≥1 of coffee's atomic txs. **Regression guard: backrun `expired-before-solver` must not
+  rise materially vs the pre-atomic baseline** (proves idle-only scheduling didn't starve backrun).
+  Carry to the next round if the window is thin (extend the window, do not conclude a true negative —
+  the R3 trap).
 
 ### Gap-A sequencing note
 A0→A1 are pure/deterministic and land fast (A1's O(pairs) scan is cheap and short-path by construction).
@@ -156,11 +193,20 @@ to **widen the address set in a bounded, evidence-based way**, not go unfiltered
    recent blocks on the **local reth** (zero-CU) for `to` addresses that emit swap logs on our indexed
    pools, above a min-frequency threshold. Persist to a committed `discovered-routers.json` (survives
    deploy, like `force-include-poolids.json`).
-2. Merge `discovered-routers.json` into `MEMPOOL_ROUTER_ADDRESSES` at load; raise
-   `SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES` headroom so the merge isn't truncated (`main.ts:2778`).
+2. Merge `discovered-routers.json` into the `toAddress` set at load. **Budget in buckets, not first-come
+   (verified concern):** in `buildMempoolToAddressFilter` the fixed routers sit at the head of
+   `candidates` and win the 300 cap first-come, so hardcoded routers are never evicted — but discovered
+   routers and hot pools then fight over the remainder, and a large discovered set can starve hot pools
+   (or vice-versa). Give each class its own quota (fixed routers → discovered top-K → hot pools top-N),
+   so widening admission does not silently drop hot-pool coverage. Raise
+   `SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES` only as needed for the quotas.
+   - **Precondition, not just a bigger cap:** confirm the Alchemy server-side `alchemy_pendingTransactions`
+     `toAddress` list length limit before raising the cap — exceeding it makes the whole filtered
+     subscription fatal (`FatalMempoolSubscriptionError`), which is worse than a truncated list.
 - **Gate (rule-12, deterministic, from committed reth logs):** pin #9's victim tx `0x8e0c59b4…`
   (`to=0x663dc15d…`) as a fixture; assert after discovery `0x663dc15d` ∈ merged set AND
-  `buildMempoolToAddressFilter` would include it → admission flip `false→true`.
+  `buildMempoolToAddressFilter` would include it under the quotas → admission flip `false→true`. Also
+  assert hot-pool coverage is not reduced below its own quota by the merge.
 - **Honesty:** #9 netted **−$0.19** (a lower bound, understated) → low value on this one sample. Do it
   because it is a cheap, genuine coverage hole and it unblocks *measuring* whether the wider flow pays —
   not because this tx pays. **Bounded widening only** (evidence-gated addresses, capped count).
@@ -178,13 +224,28 @@ a one-command capability, or the cycle does not close.
 **Fix — fold the classifier into the standing tools:**
 - Extend `analysis` `live-loss` / census with a per-competitor-tx **shape** field: for each arb pool in
   the tx, `eth_getLogs` the same block for a preceding swap at a **lower tx index** → 0 preceding =
-  `atomic`, ≥1 = `backrun` (the exact `coffee-backrun-verify.mjs` logic, made permanent).
-- Reuse the existing primitives for the two complementary axes: `pnl/victim-source.ts` ("did we see the
-  source swap") and `pnl/sender-flow.ts` (public/private, with the doc's correction that
-  `maxPriorityFeePerGas=0` ≠ private). `bundle-postmortem` already has `winner_style` — add
-  `atomic_scan_shape` so the census reports **followable vs non-followable** per competitor automatically.
+  `atomic_state_arb`, ≥1 = `backrun`, indeterminate = `unknown` (the exact `coffee-backrun-verify.mjs`
+  logic, made permanent). Emit `source_swap_hash`, `source_swap_seen_by_us`, `source_router`.
+- **Fix the `sender-flow.ts` bug (verified — this is a real defect, not just a reframe).**
+  `classifySenderFlow` (`analysis/src/pnl/sender-flow.ts:44-49`) currently returns `("private","high")`
+  on `coinbaseTransferWei>0` **or** `maxPriorityFeePerGas===0 || priorityTip===0`, and those branches sit
+  **above** the `seenInOurPublicFeed===true` check — so a tx we literally saw in our public feed gets
+  stamped `private/high` if it has a zero tip. That directly contradicts coffee correction #1 (0 tip +
+  coinbase transfer = bundle submission, universal to MEV searchers, **not** proof of private orderflow).
+  Split the single `flow` axis into two independent ones:
+  - `submission_method = bundle | public_mempool | unknown` — 0 tip + coinbase transfer ⇒ at most
+    `bundle` (never "private"; a bundle can carry public-mempool-origin flow).
+  - `source_visibility = seen_by_us | not_seen_by_us | unknown` — driven by `seenInOurPublicFeed` /
+    `victim-source.ts`, and **evaluated before** the fee heuristics so a seen tx is never overridden.
+  Migrate every reader of the old `flow:"private"` (bundle-postmortem, census) to the two-axis result.
+- Reuse `pnl/victim-source.ts` (source visibility) as the `source_visibility` driver. `bundle-postmortem`
+  already has `winner_style` — add `atomic_scan_shape` so the census reports **followable vs
+  non-followable** per competitor automatically.
 - **Gate (rule-12, `analysis` test):** pin coffee's 9 txs (from the source doc's table) as a fixture;
-  assert the classifier returns **8 atomic + 1 backrun** and `#9 source_swap_seen=false`. Deterministic.
+  assert the classifier returns **8 `atomic_state_arb` + 1 `backrun`**, `#9`
+  (`0xc9ad7160…`) resolves `source_swap_hash=0x8e0c59b4…` with `source_swap_seen_by_us=false`, and
+  **no tx with `maxPriorityFeePerGas=0` is labeled `source_visibility=private`** (the regression the
+  bug would reintroduce). Deterministic.
 
 Also records the doc's two corrections so they aren't repeated: "private" overstated (`maxPrio=0` is
 just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line).
@@ -198,10 +259,10 @@ just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line)
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
 | A1 | `npm run searcher:planner` | 2-venue spread pair flagged → `candidate_plans 0→>0` (O(pairs), no DFS) |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
-| A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built` |
-| A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx |
-| B | `npm run searcher:planner`-style fixture on committed reth logs | `0x663dc15d ∈ mempool filter` → admission `false→true` |
-| C | `analysis` classifier test | coffee 9 txs → 8 atomic + 1 backrun; `#9 source_swap_seen=false` |
+| A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built`; **search center from `searchSeed`, not `1n` (`center>8`)** |
+| A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx; **backrun `expired-before-solver` not materially higher** |
+| B | `npm run searcher:planner`-style fixture on committed reth logs | `0x663dc15d ∈ mempool filter` (under quotas) → admission `false→true`; hot-pool quota preserved |
+| C | `analysis` classifier test | coffee 9 txs → 8 `atomic_state_arb` + 1 `backrun`; `#9 source_swap_seen_by_us=false`; **no `maxPrio=0` tx labeled private** |
 
 ## Governance / sequencing
 
