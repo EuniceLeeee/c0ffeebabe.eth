@@ -481,8 +481,9 @@ generator/evaluator split, each with its rule-12 gate.
 | **BS-contract Pass B** (SubmissionCoordinator) | `a370612` | `submission-coordinator.ts` (one slot/targetBlock, sync `offer()` D1-matrix, `onBlock` prune) wired behind the backrun submit (offer→admit→submit); behavior-neutral (backrun-only always admits). Gate `searcher:submission-coordinator` 8/8 + planner/replay/replay-live-fixtures/blockscan-a0/taxonomy all unchanged (evaluator re-ran 6) |
 | **BS-contract Pass B2** (safety second-reject) | `6ab9b49` | `BundleSubmission.safety` + `standingPositionSafetyReject` in both routers (refuse-before-broadcast on unauthorized standing-position, defense-in-depth behind S2); populated from `containsStandingPosition`/`standingGuard.allowed`; behavior-neutral. Gate `searcher:bundle-router-safety` 4/4 + all suites unchanged |
 | **BS-contract Pass C1** (cycle-fingerprint) | `d958e42` | `detector/cycle-fingerprint.ts` (`canonicalTokenRing` + `cycleFingerprint`, §1.2 verbatim) — shared rotation/direction/case-invariant, sourceBlock-scoped join key. Gate `searcher:cycle-fingerprint` 7/7 |
-| BS-contract Pass C2 (union+events plumbing) | in flight | `BlockScanOpportunity` type + `makeBlockScanOpportunityId` + `block_scan_result` event + optional telemetry fields (D1-renamed, additive) |
-| BS-universe → CR-8 | — | NOT STARTED |
+| **BS-contract Pass C2** (union+events plumbing) | `319771b` | `BlockScanOpportunity` + `BackrunOpportunity` alias (detector.ts); `makeBlockScanOpportunityId` (keccak `blockscan\|`) + `block_scan_result` event + optional telemetry fields; `victim_hash` widened to optional (D1-renamed, additive, zero emitters). Gate `searcher:blockscan-contract` 5/5 + all suites unchanged + listener AND analysis tsc clean. **BS-contract layer (A/B/B2/C1/C2) COMPLETE** |
+| BS-universe (views) | in flight | `buildStrategyViews` + `edgeKindFromPoolEntry` + `blockscan-view-overrides` + P1-5 view hashes |
+| CR-3 → CR-8 | — | NOT STARTED |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
 block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of Phase 3/4 do not exist.**
