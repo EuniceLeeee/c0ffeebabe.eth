@@ -1148,7 +1148,17 @@ async function handleHint(
       data: l.data,
     }));
   } else if (!hintTokenHit) {
-    // No pool match AND no token match — skip early
+    // No pool match AND no token match — skip early. Emit a drop so this is not event-silent
+    // (else onchain-loss-scan undercounts received_but_dropped into not_received — rule-16 fix).
+    emitEvent({
+      type: "pipeline_dropped",
+      opportunity_id: makeOpportunityId({ targetBlock: eventBlockNumber, victimHash: txHash }),
+      target_block: eventBlockNumber,
+      victim_hash: txHash,
+      victim_source: hint.source ?? "mev-share",
+      stage: "detect",
+      reason: "no_matching_graph_pool",
+    });
     throw new Error("no matching graph pool");
   } else {
     // Token hit but no pool impact — try to fetch full tx from RPC
