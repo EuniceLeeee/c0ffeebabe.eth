@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 
 /** Walk up from a path to the git repo root (dir containing .git); fallback = cwd. */
 function repoRoot(from: string): string {
@@ -35,7 +36,8 @@ function repoRoot(from: string): string {
  *
  * The artifact is either:
  *   - a JSON manifest (method: manual-onchain-trace) with { run_id, window:{from,to},
- *     watchlist:[...], findings:[ { eoa, txCount, txs?:[{hash,block,pools:[{addr,inGraph}],gap_class}] } ] }, or
+ *     watchlist:[...], intake_audit:{pending_received,pending_filtered,mevshare_enabled},
+ *     findings:[ { eoa, txCount, txs?:[{hash,block,class,source_flow?,seen_in_our_feed?,pools:[{addr,inGraph}],gap_class}] } ] }, or
  *   - a directory of `analysis live-loss --watch` outputs (method: live-loss-watch):
  *     ≥1 `*.json` WatchReport with a `block` inside the window.
  *
@@ -44,15 +46,7 @@ function repoRoot(from: string): string {
  * Exit 1 = FAIL (blocking).
  */
 
-const args = process.argv.slice(2);
-const emitKpi = args.includes("--emit-kpi");
-const mdPath = args.find((arg) => !arg.startsWith("-"));
-if (!mdPath) {
-  console.error("Usage: npm run hermes-gate -- <hermes-md-file> [--emit-kpi]");
-  process.exit(2);
-}
-
-const fails: string[] = [];
+export const fails: string[] = [];
 function fail(msg: string): void {
   fails.push(msg);
 }
@@ -95,10 +89,21 @@ function parseAddrs(v: string): string[] {
 // EOAs that MUST be analyzed at full depth (every tx), not sampled.
 const REQUIRE_FULL = new Set(["0xc0ffeebabe5d496b2dde509f9fa189c25cf29671"]);
 
-function validateTxRecord(tx: any, eoa: string, win: { from: number; to: number }): void {
+export function validateTxRecord(tx: any, eoa: string, win: { from: number; to: number }): void {
   if (!/^0x[a-f0-9]{64}$/i.test(String(tx.hash ?? ""))) fail(`tx in ${eoa} missing valid hash`);
   if (!Number.isFinite(tx.block) || tx.block < win.from || tx.block > win.to) {
     fail(`tx ${tx.hash} block ${tx.block} outside window ${win.from}..${win.to}`);
+  }
+  const txClass = tx.class;
+  if (txClass !== "atomic" && txClass !== "backrun") {
+    fail(`tx ${tx.hash} missing/invalid class (atomic|backrun)`);
+  } else if (txClass === "backrun") {
+    const sourceFlow = tx.source_flow;
+    if (sourceFlow !== "public" && sourceFlow !== "private" && sourceFlow !== "unknown") {
+      fail(`tx ${tx.hash} missing/invalid source_flow (public|private|unknown)`);
+    } else if (sourceFlow === "public" && typeof tx.seen_in_our_feed !== "boolean") {
+      fail(`tx ${tx.hash} is a public backrun but missing seen_in_our_feed:boolean (did our mempool admission SEE the source swap?)`);
+    }
   }
   if (!Array.isArray(tx.pools) || tx.pools.length === 0) {
     fail(`tx ${tx.hash} has no pools[] classified in/out of graph`);
@@ -121,6 +126,22 @@ function validateRunAnalysis(json: any): void {
   }
   if (isPlaceholder(String(ra.events_source ?? ""))) {
     fail("run_analysis.events_source missing — declare jsonl vs log-counter (prefer jsonl)");
+  }
+}
+
+export function validateIntakeAudit(json: any): void {
+  const ia = json?.intake_audit;
+  if (!ia || typeof ia !== "object" || Array.isArray(ia)) {
+    return fail("artifact.intake_audit missing — pending_received/pending_filtered/mevshare_enabled are mandatory");
+  }
+  if (typeof ia.pending_received !== "number" || !Number.isFinite(ia.pending_received) || ia.pending_received < 0) {
+    fail("intake_audit.pending_received must be a finite number >= 0");
+  }
+  if (typeof ia.pending_filtered !== "number" || !Number.isFinite(ia.pending_filtered) || ia.pending_filtered < 0) {
+    fail("intake_audit.pending_filtered must be a finite number >= 0");
+  }
+  if (typeof ia.mevshare_enabled !== "boolean") {
+    fail("intake_audit.mevshare_enabled must be boolean");
   }
 }
 
@@ -247,6 +268,7 @@ function validateManualArtifact(
 
   // (1) standard analysis (funnel + dominant drop) is mandatory every dry-run
   validateRunAnalysis(json);
+  validateIntakeAudit(json);
 
   const aw: string[] = Array.isArray(json.watchlist) ? json.watchlist.map((s: string) => String(s).toLowerCase()) : [];
   for (const addr of watchlist) {
@@ -307,72 +329,92 @@ function validateWatchDir(dir: string, win: { from: number; to: number }): void 
   }
 }
 
-// ── main ──
-if (!existsSync(mdPath)) {
-  console.error(`FAIL: hermes md not found: ${mdPath}`);
-  process.exit(1);
-}
-const md = readFileSync(mdPath, "utf8");
-const step1 = parseStep1Block(md);
-if (!step1) {
-  console.error("FAIL: no ```step1 block in the Hermes md.");
-  console.error("Step-1 competitor cross-reference is mandatory before Final Approval (CLAUDE.md Hermes §Step-1).");
-  process.exit(1);
-}
+function main(): void {
+  const args = process.argv.slice(2);
+  const emitKpi = args.includes("--emit-kpi");
+  const mdPath = args.find((arg) => !arg.startsWith("-"));
+  if (!mdPath) {
+    console.error("Usage: npm run hermes-gate -- <hermes-md-file> [--emit-kpi]");
+    process.exit(2);
+  }
 
-for (const key of ["run_id", "window_blocks", "watchlist", "artifact", "method"]) {
-  if (!(key in step1) || isPlaceholder(step1[key])) fail(`step1.${key} missing or placeholder`);
-}
+  // ── main ──
+  if (!existsSync(mdPath)) {
+    console.error(`FAIL: hermes md not found: ${mdPath}`);
+    process.exit(1);
+  }
+  const md = readFileSync(mdPath, "utf8");
+  const step1 = parseStep1Block(md);
+  if (!step1) {
+    console.error("FAIL: no ```step1 block in the Hermes md.");
+    console.error("Step-1 competitor cross-reference is mandatory before Final Approval (CLAUDE.md Hermes §Step-1).");
+    process.exit(1);
+  }
 
-const win = step1.window_blocks ? parseWindow(step1.window_blocks) : null;
-if (step1.window_blocks && !win) fail(`step1.window_blocks not "<from>..<to>": ${step1.window_blocks}`);
-const watchlist = step1.watchlist ? parseAddrs(step1.watchlist) : [];
-if (step1.watchlist && watchlist.length === 0) fail("step1.watchlist has no valid addresses");
+  for (const key of ["run_id", "window_blocks", "watchlist", "artifact", "method"]) {
+    if (!(key in step1) || isPlaceholder(step1[key])) fail(`step1.${key} missing or placeholder`);
+  }
 
-if (win && step1.artifact && !isPlaceholder(step1.artifact)) {
-  const artifactPath = resolve(repoRoot(mdPath), step1.artifact);
-  if (!existsSync(artifactPath)) {
-    fail(`step1.artifact does not exist: ${step1.artifact}`);
-  } else {
-    const st = statSync(artifactPath);
-    if (st.isDirectory()) {
-      if (emitKpi) {
-        fail("--emit-kpi requires step1.artifact to be a JSON artifact, not a directory");
-      } else {
-        validateWatchDir(artifactPath, win);
-      }
-    } else if (st.size === 0) {
-      fail(`step1.artifact is empty: ${step1.artifact}`);
+  const win = step1.window_blocks ? parseWindow(step1.window_blocks) : null;
+  if (step1.window_blocks && !win) fail(`step1.window_blocks not "<from>..<to>": ${step1.window_blocks}`);
+  const watchlist = step1.watchlist ? parseAddrs(step1.watchlist) : [];
+  if (step1.watchlist && watchlist.length === 0) fail("step1.watchlist has no valid addresses");
+
+  if (win && step1.artifact && !isPlaceholder(step1.artifact)) {
+    const artifactPath = resolve(repoRoot(mdPath), step1.artifact);
+    if (!existsSync(artifactPath)) {
+      fail(`step1.artifact does not exist: ${step1.artifact}`);
     } else {
-      let json: any;
-      try {
-        json = JSON.parse(readFileSync(artifactPath, "utf8"));
-      } catch (err) {
-        json = null;
-        fail(`step1.artifact is not valid JSON: ${(err as Error).message}`);
-      }
-      if (json) {
+      const st = statSync(artifactPath);
+      if (st.isDirectory()) {
         if (emitKpi) {
-          if (fails.length === 0) {
-            emitCoverageKpi(json);
-            process.exit(0);
-          }
+          fail("--emit-kpi requires step1.artifact to be a JSON artifact, not a directory");
         } else {
-          validateManualArtifact(json, win, watchlist);
+          validateWatchDir(artifactPath, win);
+        }
+      } else if (st.size === 0) {
+        fail(`step1.artifact is empty: ${step1.artifact}`);
+      } else {
+        let json: any;
+        try {
+          json = JSON.parse(readFileSync(artifactPath, "utf8"));
+        } catch (err) {
+          json = null;
+          fail(`step1.artifact is not valid JSON: ${(err as Error).message}`);
+        }
+        if (json) {
+          if (emitKpi) {
+            if (fails.length === 0) {
+              emitCoverageKpi(json);
+              process.exit(0);
+            }
+          } else {
+            validateManualArtifact(json, win, watchlist);
+          }
         }
       }
     }
   }
+
+  if (fails.length > 0) {
+    console.error(`FAIL: Step-1 close-gate blocked ${mdPath}`);
+    for (const f of fails) console.error(`  - ${f}`);
+    console.error("Do NOT write Final Approval until Step-1 evidence exists and is consistent.");
+    process.exit(1);
+  }
+
+  console.log(`PASS: Step-1 competitor cross-reference present for ${step1.run_id}`);
+  console.log(`  window ${step1.window_blocks} · watchlist ${watchlist.length} · method ${step1.method}`);
+  console.log(`  artifact ${step1.artifact}`);
+  process.exit(0);
 }
 
-if (fails.length > 0) {
-  console.error(`FAIL: Step-1 close-gate blocked ${mdPath}`);
-  for (const f of fails) console.error(`  - ${f}`);
-  console.error("Do NOT write Final Approval until Step-1 evidence exists and is consistent.");
-  process.exit(1);
+function isCliEntrypoint(): boolean {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  return import.meta.url === pathToFileURL(argv1).href || /[/\\]cli[/\\]index\.[jt]s$/.test(argv1);
 }
 
-console.log(`PASS: Step-1 competitor cross-reference present for ${step1.run_id}`);
-console.log(`  window ${step1.window_blocks} · watchlist ${watchlist.length} · method ${step1.method}`);
-console.log(`  artifact ${step1.artifact}`);
-process.exit(0);
+if (isCliEntrypoint()) {
+  main();
+}
