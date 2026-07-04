@@ -1993,6 +1993,7 @@ async function processOpportunities(
           bribeBps: ctx.config.bribeBps,
           bribeWei: bidEth,
           gasUsed: gasUnits,
+          safety: { leavesStandingPosition: containsStandingPosition, authorized: standingGuard.allowed },
         });
         ctx.counters.accepted += results.filter((r) => r.accepted).length;
         const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;

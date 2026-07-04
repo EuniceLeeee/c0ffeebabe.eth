@@ -16,10 +16,21 @@ export interface BundleSubmission {
   /** Absolute priority-fee bribe in wei, computed by the searcher economics gate. */
   bribeWei?: bigint;
   gasUsed?: bigint | number;
+  /** Standing-position safety state, carried from the searcher's S2 guard. The router refuses to
+   *  broadcast a standing-position bundle that is not authorized (defense-in-depth behind the
+   *  pre-submit guard). Absent => no standing position => never blocked. */
+  safety?: { leavesStandingPosition: boolean; authorized: boolean };
 }
 
 export interface BundleRouter {
   submit(bundle: BundleSubmission): Promise<SubmitResult[]>;
+}
+
+export function standingPositionSafetyReject(bundle: BundleSubmission): SubmitResult | null {
+  if (bundle.safety && bundle.safety.leavesStandingPosition && !bundle.safety.authorized) {
+    return { builder: "safety-reject", accepted: false, error: "standing_position_unauthorized" };
+  }
+  return null;
 }
 
 export class DryRunBundleRouter implements BundleRouter {
@@ -33,6 +44,8 @@ export class DryRunBundleRouter implements BundleRouter {
   ) {}
 
   async submit(bundle: BundleSubmission): Promise<SubmitResult[]> {
+    const safetyReject = standingPositionSafetyReject(bundle);
+    if (safetyReject) return [safetyReject];
     this.submissions.push(bundle);
     if (!this.wallet || !this.provider || !this.botvmAddress) return [];
     try {
@@ -70,6 +83,8 @@ export class ProductionBundleRouter implements BundleRouter {
   ) {}
 
   async submit(bundle: BundleSubmission): Promise<SubmitResult[]> {
+    const safetyReject = standingPositionSafetyReject(bundle);
+    if (safetyReject) return [safetyReject];
     const gasUsed = Number(bundle.gasUsed ?? this.defaultGasUsed);
     const bribe = {
       expectedProfitEth: bundle.expectedProfitEth,
