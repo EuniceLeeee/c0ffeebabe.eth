@@ -452,7 +452,7 @@ generator/evaluator split, each with its rule-12 gate.
 | C1a/b/c | `0fb1566`/`975ebc2`/`cbbdf1f` | sender-flow two-axis, swap-log-registry, tx-shape classifier + 9 coffee fixtures |
 | **S0** taxonomy + TokenEdge widening | `75210c5` | build + `searcher:planner` 14/14 + replay 12/12 + `searcher:taxonomy` 5/5 + router-filter |
 | **S1** merged LearningCase + postmortem/census fold | `6145931` | tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner unchanged |
-| **S2** fail-closed standing-position guard | `a737576` | build + `searcher:standing-guard` 4/4 + planner/replay unchanged; **DEPLOYED LIVE** on the node (mode=LIVE preserved, wallet 0.0027 ETH ≤ cap); live check = **0 `standing_position_unauthorized` false-positives** |
+| **S2** fail-closed standing-position guard | `a737576` | build + `searcher:standing-guard` 4/4 + planner/replay unchanged; **deployed to the node** (live mode preserved, wallet 0.0027 ETH ≤ cap); runtime check = **0 `standing_position_unauthorized` false-positives** |
 | **BS-0** fixture | uncommitted (states persisted) | states captured to `test/fixtures/blockscan-coffee-803a3693.json`; harness NOT written (§9.4 step 1) |
 | BS-contract → CR-8 | — | NOT STARTED |
 

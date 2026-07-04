@@ -15,7 +15,7 @@ ordered next actions). Slice-mechanics detail lives in
 ## Ground state (verify against git; do not trust prose)
 - Landed + gated + committed: **S0** (`75210c5`, taxonomy + TokenEdge widening), **S1** (`6145931`,
   merged LearningCase + postmortem/census fold), **S2** (`a737576`, fail-closed standing-position
-  guard — DEPLOYED LIVE, verified 0 false-positives on the live node).
+  guard — deployed to the node, verified 0 false-positives).
 - **BS-0 node reads are ALL DONE for you** (the previous session front-loaded every chain read so
   you never touch the node): pre-tx pool states + both v4 PoolKeys + token symbols are persisted in
   `listener/src/searcher/test/fixtures/blockscan-coffee-803a3693.json`. Key finding recorded there:
@@ -23,9 +23,9 @@ ordered next actions). Slice-mechanics detail lives in
   native-ETH/CFG v4); the 3rd pool (ETH/BOLD) is a separate leg, out-of-cycle.
 - Everything from BS-contract onward is UNWRITTEN (13 slices).
 
-## NO node / live / broadcast access is needed for your slices — this was deliberate
-The previous session pre-cleared all chain dependencies so you can stay purely on code (this avoids
-the safety-classifier downgrade that live/arbitrage chain work tends to trigger):
+## No node / RPC / broadcast access is needed for your slices — this was deliberate
+The previous session pre-cleared all chain dependencies so your slices stay purely on local code
+(no node, RPC, or on-chain submission at all):
 - **BS-0**: all node data captured → your job is pure local code (harness). No node.
 - **BS-contract, BS-universe, BS-1/2/3**: gates are local — `npm run searcher:planner` +
   `npm run searcher:replay-live-fixtures` (persisted fixtures) + new unit tests. No node/archive.
