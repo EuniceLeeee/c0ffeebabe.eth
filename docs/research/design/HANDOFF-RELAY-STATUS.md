@@ -27,6 +27,17 @@ consecutive_done_confirmations: 0
 > view-quotes. BS-3 full-pipeline is now BLOCKED on a genuinely-viable +EV block-scan exemplar (needs
 > census discovery, not more harness code). Remainder still gated behind it. Counter stays 0.
 >
+> **R-2b-6 (2026-07-05) ran the rule-13 architecture review (dual-blind); localized THE lever.**
+> Verdict (`docs/research/reports/arch-review-20260705-verdict.md`, dual-blind fable-A + Codex-B,
+> orchestrator-verified live): the binding production lever is **FLOW-ADMISSION at our submit gate** —
+> a bounded-live window IS running (the R-2b relay was BLIND to it, never read the live events) with
+> **3,889 +EV sims, 95.3% self-dropped at `submit_gate/hash_only_unmatchable`** (incl. the biggest,
+> $50–$210) because `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` is unset; the `submitMevShareBundle` drain is
+> already built. Fix = one config flag, NOT an epic — but flipping what we broadcast is a Safety-Rule-1
+> HUMAN GATE (escalated, chip `task_3deb3186`). Phase-2b scaffolding is NOT the lever and pauses pending
+> the flag decision. A vs B converged (B code-only said measurement-gap/run-a-window; A read the window
+> and localized flow-admission). Counter stays 0.
+>
 > **R-2b-5 (2026-07-05) hit the rule-13 architecture-review trigger; escalated to the operator.**
 > Under the rule-13 behavior-or-escalate mandate, investigated both remaining behavior slices: CR-5c
 > (gas table) has NO clean insertion — the EV gate already uses real `sim.gasUsed`, within-plan gas is
