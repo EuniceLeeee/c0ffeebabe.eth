@@ -16,8 +16,8 @@ import {
   type PrimaryGap,
   upsertCase,
 } from "../learning/learning-case.js";
-import { fetchEthUsd, priceArb } from "../pnl/arb-profit.js";
-import { lower, short } from "../registry/protocols.js";
+import { fetchEthUsd, priceArb, type ArbProfit } from "../pnl/arb-profit.js";
+import { ADDR, lower, short } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
 
@@ -45,11 +45,20 @@ export interface FunnelVictimState {
   opportunity_ids: string[];
 }
 
+export interface FunnelHintState {
+  hash: string;
+  seen: boolean;
+  drops: FunnelDrop[];
+  event_types: string[];
+}
+
 export interface FunnelIndex {
   run_id?: string;
   events: number;
   indexed_victims: number;
   victims: Map<string, FunnelVictimState>;
+  hints: Map<string, FunnelHintState>;
+  mempool_allowlist: Set<string> | null;
 }
 
 export interface OnchainScanTx {
@@ -104,10 +113,35 @@ export interface OnchainCaseReport {
   comparable: boolean;
   winner_style?: WinnerStyle;
   non_comparable_reason?: string;
+  source_not_seen_reason?: SourceNotSeenReason;
+  source_not_seen_drop_reason?: string;
+  source_not_seen_hint_hash?: string;
+  source_not_seen_note?: string;
+  winner_profit_wei: string | null;
+  winner_profit_usd: number | null;
   touched_venues: TouchedVenue[];
   missing_venues: TouchedVenue[];
   funnel?: FunnelVictimState;
   learning_case: LearningCase;
+}
+
+export type SourceNotSeenReason =
+  | "pool_not_in_graph"
+  | "to_not_admissible"
+  | "not_received"
+  | "received_but_dropped";
+
+export interface WinnerProfit {
+  winner_profit_wei: string | null;
+  winner_profit_usd: number | null;
+}
+
+export interface WinnerProfitRollup {
+  cases: number;
+  priced_cases: number;
+  median_usd: number | null;
+  p90_usd: number | null;
+  dust_share: number | null;
 }
 
 export interface OnchainLossScanResult {
@@ -117,6 +151,8 @@ export interface OnchainLossScanResult {
   competed_backruns: number;
   cases: OnchainCaseReport[];
   summary: Partial<Record<PrimaryGap, number>>;
+  source_not_seen_reasons: Partial<Record<SourceNotSeenReason, number>>;
+  winner_profit_by_primary_gap: Partial<Record<PrimaryGap, WinnerProfitRollup>>;
 }
 
 export interface OnchainLossScanOptions {
@@ -127,6 +163,8 @@ export interface OnchainLossScanOptions {
   graph: GraphMembership;
   ourExecutorPrefixes?: string[];
   classifyWinnerStyle?: OnchainWinnerStyleClassifier;
+  priceWinner?: OnchainWinnerProfitPricer;
+  ethUsd?: number;
   concurrency?: number;
   now?: () => string;
 }
@@ -136,6 +174,12 @@ export type OnchainWinnerStyleClassifier = (input: {
   winner: JoinedTx;
   victim: JoinedTx;
 }) => Promise<WinnerStyle | undefined> | WinnerStyle | undefined;
+
+export type OnchainWinnerProfitPricer = (input: {
+  block: OnchainScanBlock;
+  winner: JoinedTx;
+  victim: JoinedTx;
+}) => Promise<WinnerProfit> | WinnerProfit;
 
 export interface JoinedTx {
   hash: string;
@@ -167,6 +211,7 @@ async function main(): Promise<void> {
   const funnel = buildFunnelIndex(loaded.events);
   const graph = loadGraphMembership(graphPath);
   const rpc = new RpcClient(rpcUrl);
+  const winnerAnalysis = makeRpcWinnerAnalysis(rpc);
   const head = Number(hexToBigInt(await rpc.call<string>("eth_blockNumber", [])));
   const startBlock = Math.max(0, head - blocks + 1);
   const result = await scanOnchainLosses({
@@ -176,7 +221,8 @@ async function main(): Promise<void> {
     funnel,
     graph,
     ourExecutorPrefixes,
-    classifyWinnerStyle: makeRpcWinnerStyleClassifier(rpc),
+    classifyWinnerStyle: winnerAnalysis.classifyWinnerStyle,
+    priceWinner: winnerAnalysis.priceWinner,
   });
 
   const storedCases = write
@@ -243,32 +289,37 @@ export function buildFunnelIndex(events: Json[]): FunnelIndex {
   const runId = latestRunId(events);
   const scoped = runId ? events.filter((event) => String(event?.run_id ?? "") === runId) : events;
   const victims = new Map<string, FunnelVictimState>();
+  const hints = new Map<string, FunnelHintState>();
 
   for (const event of scoped) {
+    const eventType = optionalString(event.type) ?? "unknown";
+    const drop = eventType === "pipeline_dropped" ? dropFromEvent(event) : undefined;
+    for (const hash of collectEventHashes(event)) {
+      const hint = getHintEntry(hints, hash);
+      hint.event_types = uniq([...hint.event_types, eventType]);
+      if (eventType === "opportunity_seen") hint.seen = true;
+      if (drop) hint.drops.push(drop);
+    }
+
     const victim = normalizeHash(optionalString(event.victim_hash ?? event.victimHash));
     if (!victim) continue;
     const entry = getFunnelEntry(victims, victim);
     const opportunityId = optionalString(event.opportunity_id ?? event.opportunityId);
     if (opportunityId) entry.opportunity_ids = uniq([...entry.opportunity_ids, opportunityId]);
 
-    if (event.type === "opportunity_seen") {
+    if (eventType === "opportunity_seen") {
       entry.seen = true;
-    } else if (event.type === "simulation_result") {
+    } else if (eventType === "simulation_result") {
       entry.seen = true;
       entry.sim_ok = entry.sim_ok || event.ok === true;
-    } else if (event.type === "bundle_submitted") {
+    } else if (eventType === "bundle_submitted") {
       entry.seen = true;
       entry.sim_ok = true;
       entry.submitted = true;
       const bid = optionalString(event.bid);
       if (bid) entry.bid = bid;
-    } else if (event.type === "pipeline_dropped") {
-      const reason = optionalString(event.reason) ?? "unknown";
-      entry.drops.push({
-        stage: optionalString(event.stage),
-        reason,
-        error: optionalString(event.error),
-      });
+    } else if (drop) {
+      entry.drops.push(drop);
       const source = optionalString(event.victim_source ?? event.victimSource);
       if (source) entry.victim_source = source;
     }
@@ -279,6 +330,8 @@ export function buildFunnelIndex(events: Json[]): FunnelIndex {
     events: scoped.length,
     indexed_victims: victims.size,
     victims,
+    hints,
+    mempool_allowlist: latestMempoolAllowlist(scoped) ?? latestMempoolAllowlist(events),
   };
 }
 
@@ -287,6 +340,7 @@ export async function scanOnchainLosses(options: OnchainLossScanOptions): Promis
   const cases: OnchainCaseReport[] = [];
   const concurrency = options.concurrency ?? 4;
   const range = blockRange(options.fromBlock, options.toBlock);
+  const priceWinner = options.priceWinner ?? makeLogOnlyWinnerProfitPricer(options.ethUsd);
 
   await mapLimit(range, concurrency, async (blockNumber) => {
     const block = await options.fetchBlock(blockNumber);
@@ -297,6 +351,7 @@ export async function scanOnchainLosses(options: OnchainLossScanOptions): Promis
       prefixes,
       options.now,
       options.classifyWinnerStyle,
+      priceWinner,
     ));
   });
 
@@ -308,6 +363,8 @@ export async function scanOnchainLosses(options: OnchainLossScanOptions): Promis
     competed_backruns: cases.length,
     cases,
     summary: summarizeCases(cases),
+    source_not_seen_reasons: summarizeSourceNotSeenReasons(cases),
+    winner_profit_by_primary_gap: summarizeWinnerProfitByGap(cases),
   };
 }
 
@@ -318,6 +375,7 @@ async function scanBlock(
   ourExecutorPrefixes: string[],
   now?: () => string,
   classifyWinnerStyle?: OnchainWinnerStyleClassifier,
+  priceWinner?: OnchainWinnerProfitPricer,
 ): Promise<OnchainCaseReport[]> {
   const joined = joinBlockTxs(block, graph);
   const out: OnchainCaseReport[] = [];
@@ -331,7 +389,10 @@ async function scanBlock(
     const winnerStyle = classifyWinnerStyle
       ? await classifyWinnerStyle({ block, winner, victim })
       : undefined;
-    out.push(caseFromCompetedBackrun(block, winner, victim, funnel, now, winnerStyle));
+    const winnerProfit = priceWinner
+      ? await priceWinner({ block, winner, victim })
+      : emptyWinnerProfit();
+    out.push(caseFromCompetedBackrun(block, winner, victim, funnel, now, winnerStyle, winnerProfit));
   }
 
   return out;
@@ -344,13 +405,18 @@ function caseFromCompetedBackrun(
   funnel: FunnelIndex,
   now?: () => string,
   winnerStyle?: WinnerStyle,
+  winnerProfit: WinnerProfit = emptyWinnerProfit(),
 ): OnchainCaseReport {
-  const funnelEntry = funnel.victims.get(victim.hash);
+  const funnelMatch = findFunnelMatch(funnel, victim.hash);
+  const funnelEntry = funnelMatch.entry;
   const nonComparable = classifyNonComparable(winner, victim, winnerStyle);
   const missingVenues = winner.touchedVenues.filter((venue) => venue.in_graph === false);
   const primary_gap = nonComparable.primary_gap
     ?? classifyPrimaryGap(funnelEntry, missingVenues);
   const comparable = nonComparable.primary_gap === undefined;
+  const sourceNotSeen = primary_gap === "source_not_seen"
+    ? classifySourceNotSeenReason(victim, funnel)
+    : undefined;
   const strategy_kind: LearningCase["strategy_kind"] = comparable ? "backrun" : "unknown";
   const createdAt = now ? now() : timestampFromBlock(block);
   const touchedVenues = winner.touchedVenues.map(reportVenue);
@@ -363,7 +429,7 @@ function caseFromCompetedBackrun(
     comparable,
     strategy_kind,
     our_opportunity_id: funnelEntry?.opportunity_ids[0],
-    gap_detail: gapDetail(primary_gap, nonComparable.reason, funnelEntry),
+    gap_detail: gapDetail(primary_gap, nonComparable.reason, funnelEntry, sourceNotSeen),
     edge_kinds: ["swap"],
     created_at: createdAt,
     evidence: {
@@ -378,8 +444,14 @@ function caseFromCompetedBackrun(
       victim_to: victim.to,
       victim_pools: victim.pools,
       victim_source: funnelEntry?.victim_source,
+      source_not_seen_reason: sourceNotSeen?.reason,
+      source_not_seen_drop_reason: sourceNotSeen?.drop_reason,
+      source_not_seen_hint_hash: sourceNotSeen?.hint_hash,
+      source_not_seen_note: sourceNotSeen?.note,
       source_block_choice: "target_block_minus_1",
       winner_style: winnerStyle,
+      winner_profit_wei: winnerProfit.winner_profit_wei,
+      winner_profit_usd: winnerProfit.winner_profit_usd,
       non_comparable_reason: nonComparable.reason,
       touched_venues: touchedVenues,
       missing_venues: missingVenueEvidence,
@@ -403,6 +475,12 @@ function caseFromCompetedBackrun(
     comparable,
     winner_style: winnerStyle,
     non_comparable_reason: nonComparable.reason,
+    source_not_seen_reason: sourceNotSeen?.reason,
+    source_not_seen_drop_reason: sourceNotSeen?.drop_reason,
+    source_not_seen_hint_hash: sourceNotSeen?.hint_hash,
+    source_not_seen_note: sourceNotSeen?.note,
+    winner_profit_wei: winnerProfit.winner_profit_wei,
+    winner_profit_usd: winnerProfit.winner_profit_usd,
     touched_venues: winner.touchedVenues,
     missing_venues: missingVenues,
     funnel: funnelEntry,
@@ -467,9 +545,15 @@ function gapDetail(
   primaryGap: PrimaryGap,
   nonComparableReason: string | undefined,
   funnelEntry: FunnelVictimState | undefined,
+  sourceNotSeen?: SourceNotSeenAttribution,
 ): string | undefined {
   if (nonComparableReason) return nonComparableReason;
-  if (primaryGap === "source_not_seen") return "no_opportunity_seen_for_landed_victim";
+  if (primaryGap === "source_not_seen") {
+    if (!sourceNotSeen) return "no_opportunity_seen_for_landed_victim";
+    return sourceNotSeen.drop_reason
+      ? `${sourceNotSeen.reason}:${sourceNotSeen.drop_reason}`
+      : sourceNotSeen.reason;
+  }
   if (primaryGap === "outbid") return funnelEntry?.bid ? `submitted_bid_wei=${funnelEntry.bid}` : "bundle_submitted";
   const lastDrop = funnelEntry?.drops.at(-1);
   return lastDrop ? `${lastDrop.stage ?? "unknown"}/${lastDrop.reason}` : undefined;
@@ -491,22 +575,39 @@ async function fetchBlockFromRpc(rpc: RpcClient, blockNumber: number): Promise<O
   };
 }
 
-function makeRpcWinnerStyleClassifier(rpc: RpcClient): OnchainWinnerStyleClassifier {
+function makeRpcWinnerAnalysis(rpc: RpcClient): {
+  classifyWinnerStyle: OnchainWinnerStyleClassifier;
+  priceWinner: OnchainWinnerProfitPricer;
+} {
   let ethUsd: Promise<number> | null = null;
-  return async ({ block, winner }) => {
-    try {
-      ethUsd ??= fetchEthUsd(rpc);
-      const tx = {
-        hash: winner.hash,
-        from: winner.from,
-        to: winner.to,
-      };
-      const profit = await priceArb(rpc, winner.hash, tx, winner.receipt, await ethUsd, {
-        entityActors: [winner.to, winner.from].filter((actor): actor is string => Boolean(actor)),
+  const profitCache = new Map<string, Promise<{ profit: ArbProfit; ethUsd: number }>>();
+
+  const getEthUsd = (): Promise<number> => {
+    ethUsd ??= fetchEthUsd(rpc);
+    return ethUsd;
+  };
+  const getProfit = (block: OnchainScanBlock, winner: JoinedTx): Promise<{ profit: ArbProfit; ethUsd: number }> => {
+    const existing = profitCache.get(winner.hash);
+    if (existing) return existing;
+    const promise = (async () => {
+      const mark = await getEthUsd();
+      const tx = txForPricing(winner);
+      const profit = await priceArb(rpc, winner.hash, tx, winner.receipt, mark, {
+        entityActors: winnerProfitActors(winner),
         allowTrace: true,
         coinbase: lower(block.miner ?? ""),
         baseFeePerGas: hexToBigInt(block.baseFeePerGas),
       });
+      return { profit, ethUsd: mark };
+    })();
+    profitCache.set(winner.hash, promise);
+    return promise;
+  };
+
+  const classifyWinnerStyle: OnchainWinnerStyleClassifier = async ({ block, winner }) => {
+    try {
+      const tx = txForPricing(winner);
+      const { profit } = await getProfit(block, winner);
       const style = await classifyWinnerTxStyle({
         rpc,
         txHash: winner.hash,
@@ -521,6 +622,73 @@ function makeRpcWinnerStyleClassifier(rpc: RpcClient): OnchainWinnerStyleClassif
     } catch {
       return undefined;
     }
+  };
+
+  const priceWinner: OnchainWinnerProfitPricer = async ({ block, winner }) => {
+    try {
+      const { profit, ethUsd: mark } = await getProfit(block, winner);
+      return winnerProfitFromArbProfit(profit, mark);
+    } catch {
+      return emptyWinnerProfit();
+    }
+  };
+
+  return { classifyWinnerStyle, priceWinner };
+}
+
+function makeLogOnlyWinnerProfitPricer(ethUsd?: number): OnchainWinnerProfitPricer {
+  const mark = Number.isFinite(ethUsd) && ethUsd !== undefined ? ethUsd : null;
+  return async ({ winner }) => {
+    try {
+      const profit = await priceArb({} as RpcClient, winner.hash, txForPricing(winner), winner.receipt, mark ?? 0, {
+        entityActors: winnerProfitActors(winner),
+        allowTrace: false,
+      });
+      return winnerProfitFromArbProfit(profit, mark);
+    } catch {
+      return emptyWinnerProfit();
+    }
+  };
+}
+
+function txForPricing(winner: JoinedTx): { hash: string; from: string; to: string | null } {
+  return {
+    hash: winner.hash,
+    from: winner.from,
+    to: winner.to,
+  };
+}
+
+function winnerProfitActors(winner: JoinedTx): string[] {
+  return [winner.to, winner.from].filter((actor): actor is string => Boolean(actor));
+}
+
+function winnerProfitFromArbProfit(profit: ArbProfit, ethUsd: number | null): WinnerProfit {
+  const wethDeltas = profit.pricedDeltas.filter((delta) => lower(delta.token) === lower(ADDR.WETH));
+  const wethWei = wethDeltas.reduce((sum, delta) => sum + delta.raw, 0n);
+  const nativeWei = profit.nativeTraceUsed ? ethFloatToWei(profit.ethDeltaEth) : 0n;
+  const ethWethWei = wethWei + nativeWei;
+  const hasEthWethSignal = wethDeltas.length > 0 || nativeWei !== 0n;
+  const realizedUsd = ethUsd === null && wethDeltas.length > 0 ? null : profit.realizedProfitUsd;
+  const ethWethUsd = ethUsd !== null && hasEthWethSignal
+    ? Number(ethWethWei) / 1e18 * ethUsd
+    : null;
+
+  return {
+    winner_profit_wei: hasEthWethSignal ? ethWethWei.toString() : null,
+    winner_profit_usd: realizedUsd ?? ethWethUsd,
+  };
+}
+
+function ethFloatToWei(value: number): bigint {
+  if (!Number.isFinite(value) || value === 0) return 0n;
+  return BigInt(Math.round(value * 1e18));
+}
+
+function emptyWinnerProfit(): WinnerProfit {
+  return {
+    winner_profit_wei: null,
+    winner_profit_usd: null,
   };
 }
 
@@ -623,6 +791,51 @@ function summarizeCases(cases: OnchainCaseReport[]): Partial<Record<PrimaryGap, 
   return out;
 }
 
+function summarizeSourceNotSeenReasons(cases: OnchainCaseReport[]): Partial<Record<SourceNotSeenReason, number>> {
+  const out: Partial<Record<SourceNotSeenReason, number>> = {};
+  for (const item of cases) {
+    if (item.primary_gap !== "source_not_seen" || !item.source_not_seen_reason) continue;
+    out[item.source_not_seen_reason] = (out[item.source_not_seen_reason] ?? 0) + 1;
+  }
+  return out;
+}
+
+function summarizeWinnerProfitByGap(cases: OnchainCaseReport[]): Partial<Record<PrimaryGap, WinnerProfitRollup>> {
+  const groups = new Map<PrimaryGap, OnchainCaseReport[]>();
+  for (const item of cases) groups.set(item.primary_gap, [...(groups.get(item.primary_gap) ?? []), item]);
+
+  const out: Partial<Record<PrimaryGap, WinnerProfitRollup>> = {};
+  for (const [gap, items] of groups) {
+    const profits = items
+      .map((item) => item.winner_profit_usd)
+      .filter((profit): profit is number => typeof profit === "number" && Number.isFinite(profit))
+      .sort((a, b) => a - b);
+    out[gap] = {
+      cases: items.length,
+      priced_cases: profits.length,
+      median_usd: median(profits),
+      p90_usd: percentileNearestRank(profits, 0.9),
+      dust_share: profits.length === 0
+        ? null
+        : profits.filter((profit) => profit < 1).length / profits.length,
+    };
+  }
+  return out;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const mid = Math.floor(values.length / 2);
+  if (values.length % 2 === 1) return values[mid] ?? null;
+  return ((values[mid - 1] ?? 0) + (values[mid] ?? 0)) / 2;
+}
+
+function percentileNearestRank(values: number[], q: number): number | null {
+  if (values.length === 0) return null;
+  const index = Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * q) - 1));
+  return values[index] ?? null;
+}
+
 function blockRange(fromBlock: number, toBlock: number): number[] {
   if (!Number.isInteger(fromBlock) || !Number.isInteger(toBlock) || fromBlock < 0 || toBlock < fromBlock) {
     throw new Error(`Invalid block range ${fromBlock}..${toBlock}`);
@@ -687,6 +900,126 @@ function getFunnelEntry(victims: Map<string, FunnelVictimState>, victim: string)
   return entry;
 }
 
+function getHintEntry(hints: Map<string, FunnelHintState>, hash: string): FunnelHintState {
+  const existing = hints.get(hash);
+  if (existing) return existing;
+  const entry: FunnelHintState = {
+    hash,
+    seen: false,
+    drops: [],
+    event_types: [],
+  };
+  hints.set(hash, entry);
+  return entry;
+}
+
+function dropFromEvent(event: Json): FunnelDrop {
+  return {
+    stage: optionalString(event.stage),
+    reason: optionalString(event.reason) ?? "unknown",
+    error: optionalString(event.error),
+  };
+}
+
+function collectEventHashes(event: Json): string[] {
+  const out = new Set<string>();
+  for (const key of [
+    "victim_hash",
+    "victimHash",
+    "tx_hash",
+    "txHash",
+    "transactionHash",
+    "pending_hash",
+    "pendingHash",
+    "hash",
+  ]) {
+    addHash(out, event[key]);
+  }
+  addHash(out, event.tx?.hash);
+  if (Array.isArray(event.hashes)) {
+    for (const hash of event.hashes) addHash(out, hash);
+  }
+  return [...out];
+}
+
+function addHash(out: Set<string>, value: unknown): void {
+  const hash = normalizeHash(optionalString(value));
+  if (hash) out.add(hash);
+}
+
+function latestMempoolAllowlist(events: Json[]): Set<string> | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event?.type !== "mempool_filter_config") continue;
+    const raw = event.to_addresses ?? event.toAddresses ?? event.allowlist ?? event.mempool_allowlist;
+    if (!Array.isArray(raw)) return new Set();
+    return new Set(raw.map((item) => normalizeAddress(optionalString(item))).filter((item): item is string => Boolean(item)));
+  }
+  return null;
+}
+
+interface FunnelMatch {
+  entry?: FunnelVictimState;
+  hint_hash?: string;
+}
+
+interface SourceNotSeenAttribution {
+  reason: SourceNotSeenReason;
+  drop_reason?: string;
+  hint_hash?: string;
+  note?: string;
+}
+
+function findFunnelMatch(funnel: FunnelIndex, realHash: string): FunnelMatch {
+  for (const hash of hashAliases(realHash)) {
+    const entry = funnel.victims.get(hash);
+    if (entry) return { entry, hint_hash: hash };
+  }
+  return {};
+}
+
+function classifySourceNotSeenReason(victim: JoinedTx, funnel: FunnelIndex): SourceNotSeenAttribution {
+  const missingVictimPools = victim.touchedVenues.filter((venue) => venue.in_graph === false);
+  if (missingVictimPools.length > 0) return { reason: "pool_not_in_graph" };
+
+  if (funnel.mempool_allowlist && (!victim.to || !funnel.mempool_allowlist.has(lower(victim.to)))) {
+    return { reason: "to_not_admissible" };
+  }
+
+  const hint = findHintEvidence(funnel, victim.hash);
+  if (hint) {
+    const lastDrop = hint.drops.at(-1);
+    return {
+      reason: "received_but_dropped",
+      drop_reason: lastDrop ? `${lastDrop.stage ?? "unknown"}/${lastDrop.reason}` : undefined,
+      hint_hash: hint.hash,
+    };
+  }
+
+  return {
+    reason: "not_received",
+    note: "not_further_separable_without_external_mempool_archive",
+  };
+}
+
+function findHintEvidence(funnel: FunnelIndex, realHash: string): FunnelHintState | undefined {
+  for (const hash of hashAliases(realHash)) {
+    const hint = funnel.hints.get(hash);
+    if (hint && (hint.event_types.length > 0 || hint.drops.length > 0 || hint.seen)) return hint;
+  }
+  return undefined;
+}
+
+function hashAliases(realHash: string): string[] {
+  const out = [realHash];
+  try {
+    out.push(lower(ethers.keccak256(realHash)));
+  } catch {
+    // A normalized tx hash is valid BytesLike; keep the real hash if this ever fails.
+  }
+  return uniq(out);
+}
+
 function renderSummary(report: {
   events: { path: string; run_id: string | null; parsed: number; skipped_unparsable: number; indexed_victims: number };
   graph: { status: string; path: string; entries: number };
@@ -695,6 +1028,8 @@ function renderSummary(report: {
   scanned_blocks: number;
   competed_backruns: number;
   summary: Partial<Record<PrimaryGap, number>>;
+  source_not_seen_reasons: Partial<Record<SourceNotSeenReason, number>>;
+  winner_profit_by_primary_gap: Partial<Record<PrimaryGap, WinnerProfitRollup>>;
   cases: OnchainCaseReport[];
   write: boolean;
   stored_cases: number;
@@ -711,6 +1046,24 @@ function renderSummary(report: {
   if (gaps.length === 0) lines.push("  none: 0");
   else for (const [gap, count] of gaps) lines.push(`  ${gap}: ${count}`);
 
+  const reasons = Object.entries(report.source_not_seen_reasons).sort(([a], [b]) => a.localeCompare(b));
+  if (reasons.length > 0) {
+    lines.push("  source_not_seen_reasons:");
+    for (const [reason, count] of reasons) lines.push(`    ${reason}: ${count}`);
+  }
+
+  const profitRollups = Object.entries(report.winner_profit_by_primary_gap).sort(([a], [b]) => a.localeCompare(b));
+  if (profitRollups.length > 0) {
+    lines.push("  winner_profit_by_primary_gap:");
+    for (const [gap, rollup] of profitRollups) {
+      lines.push(
+        `    ${gap}: cases=${rollup.cases} priced=${rollup.priced_cases} ` +
+        `median=${formatUsd(rollup.median_usd)} p90=${formatUsd(rollup.p90_usd)} ` +
+        `dust_share=${formatShare(rollup.dust_share)}`,
+      );
+    }
+  }
+
   lines.push(`competed_backruns: ${report.competed_backruns}`);
   for (const item of report.cases) {
     const missing = item.missing_venues.map((venue) => `${venue.protocol}:${short(venue.id)}`).join(",");
@@ -718,6 +1071,9 @@ function renderSummary(report: {
       `case block=${item.block} winner=${short(item.winner_tx)} victim=${short(item.victim_tx)} ` +
       `gap=${item.primary_gap} comparable=${String(item.comparable)} ` +
       `winner_index=${item.winner_index} victim_index=${item.victim_index}` +
+      `${item.source_not_seen_reason ? ` source_not_seen_reason=${item.source_not_seen_reason}` : ""}` +
+      `${item.source_not_seen_note ? ` source_not_seen_note=${item.source_not_seen_note}` : ""}` +
+      `${item.winner_profit_usd !== null ? ` winner_profit_usd=${formatUsd(item.winner_profit_usd)}` : ""}` +
       `${missing ? ` missing=${missing}` : ""}`,
     );
   }
@@ -762,6 +1118,12 @@ function optionalString(value: unknown): string | undefined {
   return undefined;
 }
 
+function normalizeAddress(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const normalized = lower(value);
+  return /^0x[a-f0-9]{40}$/.test(normalized) ? normalized : undefined;
+}
+
 function normalizeHash(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const normalized = lower(value);
@@ -782,6 +1144,14 @@ function timestampFromBlock(block: OnchainScanBlock): string {
 
 function isRecord(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatUsd(value: number | null): string {
+  return value === null || !Number.isFinite(value) ? "n/a" : `$${value.toFixed(2)}`;
+}
+
+function formatShare(value: number | null): string {
+  return value === null || !Number.isFinite(value) ? "n/a" : value.toFixed(3);
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {
