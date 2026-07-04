@@ -445,7 +445,7 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
     && npm run hermes-gate -- <hermes-md>` MUST exit 0 before you write `Final Approval` /
     close a cycle.** The gate reads a required fenced ```step1 block (`run_id`,
     `window_blocks`, `watchlist`, `artifact`, `method`) and validates a structured artifact
-    on disk — prose in the md CANNOT satisfy it. It enforces all **four** mandatory
+    on disk — prose in the md CANNOT satisfy it. It enforces all **five** mandatory
     post-dry-run analyses:
     1. **Standard analysis** — `run_analysis` with `funnel` (hints…solverEntered…),
        `dominant_drop`, and `events_source` (jsonl vs log-counter).
@@ -457,6 +457,19 @@ per run holds the whole exchange; GitHub is the shared state both agents read/wr
     4. **`0xae2Fc483…FaE13` (+ other watchlist bots) — sampling analysis** (`analysis_mode:
        "sample"`): swept, `txCount` from the sweep, and if it traded ≥1 sampled tx analyzed to
        the same per-tx depth with a `sampleSize`.
+    5. **Intake audit — the funnel-EXTERNAL lens (the fix for the R13–R21 structural blind spot:
+       the router-allowlist + MEV-Share intake gaps were invisible because they never ENTER the
+       funnel, so `pipeline_dropped` / pool-coverage can never see them).** Every competitor tx carries
+       `class` (`atomic`|`backrun`); a `backrun` carries `source_flow` (`public`|`private`|`unknown`),
+       and a PUBLIC backrun carries `seen_in_our_feed:boolean` — a public source swap we NEVER saw = a
+       **flow-admission gap** (our mempool admission dropped it pre-funnel), NOT a lost auction. Plus a
+       per-window `intake_audit` = `{pending_received, pending_filtered, mevshare_enabled}` — quantifies
+       what fraction of flow actually ENTERED the funnel + whether the private-hint feed WE control is on.
+       Doctrine the gate encodes: a **"private" victim is NOT a human gate until the MEV-Share feed is
+       ruled in** (MEV-Share is a config flag we control, ~72× mempool volume, indistinguishable on-chain
+       from truly-private); **"coverage exhausted" is INVALID without the intake fraction**; an `atomic`
+       competitor is a **scanner/strategy gap** (a standing public dislocation we could scan for), NOT a
+       market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow.
     Accepts a `manual-onchain-trace` JSON manifest (events JSONL absent) or a directory of
     `live-loss --watch` `*.json` WatchReports. Record `hermes_gate: PASS` in the cycle close.
     This is the mechanical block for the 20260702-v3fork Slice-2 miss — a skipped/half-done
@@ -738,8 +751,20 @@ discovery is needed.
       so hand it the pinned competitor takes as DATA; its unique code-side job is re-deriving the
       economics / sim-fidelity numbers (EV gate, `defaultGasUsed`, profit floor, `valueInEth`) from
       `file:line`. This is NOT one reviewer rubber-stamping the other — same anti-nodding as step 4.
+      **MANDATORY FRAME AUDIT first — before localizing any lever.** The R13–R21 failure was a SHARED
+      WRONG FRAME, which dual-blind / fresh-context / carry do NOT catch (A and B both inherit the same
+      framed handoff and CONVERGE on the blind spot; convergence then looks like confirmation but is
+      shared blindness — that is how "coverage exhausted → economics/posture gate" was concluded while
+      the router-allowlist + MEV-Share **intake** gaps sat unquestioned). So challenge the frame itself:
+      (1) **is "coverage exhausted" measured on COMPLETE intake or only the admitted fraction?** — audit
+      the pre-funnel intake (`MEMPOOL_ROUTER_ADDRESSES` allowlist `main.ts:206`, `enableHashOnly`/
+      MEV-Share) and quantify `pending_filtered` vs `pending_received`; a conclusion on a small admitted
+      slice is invalid. (2) **are we conflating "not-backrunnable-BY-US" (a posture limit) with "no
+      opportunity" (a market limit)?** — a "market ceiling" verdict is INVALID until intake completeness
+      AND the scanner-strategy gap (a standing public dislocation we could scan for) are ruled out.
+      Record the frame-audit answers in the verdict, THEN localize the lever.
       Step back from the per-window loop and LOCALIZE
-      the structural distance-to-production lever — `funnel | coverage | flow-admission |
+      the structural distance-to-production lever — `funnel | coverage | flow-admission | scanner-strategy |
       no-replicable-atomic-EV` — via a per-competitor-profitable-bundle counterfactual walk + a
       longer window. Output → Findings Ledger as `decision: epic` OR an explicit funnel-fix + its
       rule-12 gate; point-fixing on that theme PAUSES until it lands. Use the REUSABLE template
