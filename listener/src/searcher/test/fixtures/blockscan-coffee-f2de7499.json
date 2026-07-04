@@ -1,13 +1,13 @@
 {
-  "_note": "BS-0 fixture v2 — the pure-DEX block-scan exemplar, REPLACING 0x803a3693 (which turned out to be a Liquity BOLD-mint credit-leg op, see blockscan-coffee-803a3693.json _correction). Coffee tx #3 0xf2de7499 (block 25455297, txIndex 37): a genuine 4-leg pure-AMM closed loop — Balancer flash 1807.735808 USDC -> univ4 USDC->USDT (fee=7 pips, the EDGE: USDT traded at ~+8.1bps premium on a 0.0007%-fee pool) -> univ4 USDT->D166 (fee=5000) -> Curve D166->USDC (return route) -> repay flash, surplus +0.270191 USDC -> univ2 USDC->WETH -> unwrap, keep 157203701650240 wei (~$0.55). No mint / lending / credit / LP / inventory: every token nets zero for the executor except the final ETH. edge_kinds = flash + swap only. strategy_kind = block-scan (standing dislocation: sameBlockSwapLogs contain ZERO foreign-tx touches on these pools in the whole block, so pre-tx state == block-25455296-boundary state for all four pools).",
-  "_provenance": "Derived 2026-07-04 with ZERO node access, purely from the committed receipt fixture analysis/src/test/fixtures/coffee-20260704/tx-3.json: (a) both v4 poolKeys recovered locally by keccak brute-force of poolId over tickSpacing with hooks=0x0 (exact match); (b) v4 pre-tx sqrtPriceX96 recovered by single-tick swap inversion from the event's POST sqrtP/liquidity + amounts + fee — cross-checked by forward-replaying the input: computed out matches the receipt out with diff=0 on BOTH legs (also proves no tick crossing, so event liquidity == pre liquidity); (c) v2 pre-reserves exactly from the Sync event (post r0-in0, r1+out1); (d) curve leg is NOT pre-state-invertible from its event — receipt-anchored (realized amounts pinned below); optional operator upgrade: capture curve pool 0x6206ca31 state (balances/A/fee) at block 25455296 from the node — TIME-SENSITIVE (reth ~10k prune window, block falls out around 2026-07-05/06).",
+  "_note": "BS-0 fixture v2 — the pure-DEX block-scan exemplar, REPLACING 0x803a3693 (which turned out to be a Liquity BOLD-mint credit-leg op, see blockscan-coffee-803a3693.json _correction). Coffee tx #3 0xf2de7499 (block 25455297, txIndex 37): a genuine 4-leg pure-AMM closed loop — Balancer flash 1807.735808 USDC -> univ4 USDC->USDT (fee=7 pips, the EDGE: USDT traded at ~+8.1bps premium on a 0.0007%-fee pool) -> univ4 USDT->D166 (fee=5000) -> Curve D166->USDC (return route) -> repay flash, surplus +0.270191 USDC -> univ2 USDC->WETH -> unwrap, keep 157203701650240 wei (~$0.55). No mint / lending / credit / LP / inventory: every token nets zero for the executor except the final ETH. edge_kinds = flash + swap only. strategy_kind = block-scan with an oracle-triggered curve leg: legs 1/2/4 remain block-25455296-boundary state, but Curve D166 stored_rates updated inside block 25455297 before txIndex 37, so the loop is +EV only under execution rates; strict boundary surplus = -389319.",
+  "_provenance": "Derived 2026-07-04 with ZERO node access, purely from the committed receipt fixture analysis/src/test/fixtures/coffee-20260704/tx-3.json: (a) both v4 poolKeys recovered locally by keccak brute-force of poolId over tickSpacing with hooks=0x0 (exact match); (b) v4 pre-tx sqrtPriceX96 recovered by single-tick swap inversion from the event's POST sqrtP/liquidity + amounts + fee — cross-checked by forward-replaying the input: computed out matches the receipt out with diff=0 on BOTH legs (also proves no tick crossing, so event liquidity == pre liquidity); (c) v2 pre-reserves exactly from the Sync event (post r0-in0, r1+out1); (d) curve leg is NOT pre-state-invertible from its event — receipt-anchored (realized amounts pinned below); optional operator upgrade: capture curve pool 0x6206ca31 state (balances/A/fee) at block 25455296 from the node — TIME-SENSITIVE (reth ~10k prune window, block falls out around 2026-07-05/06). Upgraded 2026-07-05: curve leg 3 is now node-state-verified from local reth block 25455296 pool state; curveNgGetDy is bit-exact at boundary (1807346489) and execution rate (1808005999), proving the strict boundary loop is -389319 units and the +270191 surplus exists only after the in-block D166 rate-oracle update before txIndex 37.",
   "txHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
   "executionBlock": 25455297,
   "sourceBlock": 25455296,
   "txIndex": 37,
   "strategyKind": "block-scan",
   "edgeKinds": ["flash", "swap"],
-  "stateSource": "receipt-derived (local, see _provenance)",
+  "stateSource": "v4/v2 receipt-derived local; curve leg node-state-verified from local reth read 2026-07-05 at block 25455296 with execution-rate oracle note (see _provenance/preState)",
   "flash": {
     "venue": "balancer-v2",
     "token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
@@ -64,9 +64,18 @@
       "soldId": 1,
       "boughtId": 0,
       "realized": { "amountIn": "2040627466925953875895", "amountOut": "1808005999" },
-      "preState": null,
-      "receiptAnchored": true,
-      "role": "return route hop 2: D166->USDC, closes the loop. Pre-state NOT invertible from TokenExchange event; harness uses the pinned realized amounts (public on-chain data). Optional operator upgrade: node-read pool state at block 25455296 -> full curve-math.ts replay."
+      "receiptAnchored": false,
+      "preState": {
+        "variant": "stableswap-ng",
+        "A": "200",
+        "fee": "1000000",
+        "offpegFeeMultiplier": "100000000000",
+        "balances": ["385138018042", "1272541181204127929026946"],
+        "ratesAtSourceBoundary": ["1000000000000000000000000000000", "893440000000000000"],
+        "ratesAtExecution": ["1000000000000000000000000000000", "893771000000000000"],
+        "rateNote": "D166 rate oracle updated inside block 25455297 before txIndex 37 (stored_rates 893440000000000000 -> 893771000000000000, +3.7bps); only pool event in the block is the exemplar's own TokenExchange. get_dy at 25455295/25455296 boundary = 1807346489."
+      },
+      "role": "return route hop 2: D166->USDC, state-verified via curveNgGetDy. The loop closes +EV only under the execution rate; the trigger is the D166 rate-oracle update (boundary-state surplus = -389319)."
     },
     {
       "seq": 4,
@@ -83,8 +92,10 @@
     }
   ],
   "loopSurplusRealized": { "token": "USDC", "units": "270191", "note": "curveOut 1808005999 - flash 1807735808; 1 unit stays as dust (v2 leg spends 270190)" },
+  "boundarySurplusUnits": "-389319",
+  "boundarySurplusNote": "boundary curveOut 1807346489 - flash 1807735808; NOT +EV at block-25455296 boundary, so the in-block rate-oracle update is the trigger",
   "expectedGrossWeiRealized": "157203701650240",
   "expectedGrossWei": "157203701650240",
-  "_gate": "BS-0 harness (blockscan-a0-replay.ts): rebuild legs 1-2 with local v4 math (v3-math.ts computeSwapStep engine) from preState, assert bit-exact amountOut vs realized; leg 3 pinned realized; leg 4 canonical v2 getAmountOut from preReserves; assert loop closes with surplus > 0 and expectedGrossWei > 0; record expectedGrossWei here. Substantiates: standing pure-AMM dislocation reconstructable from public block-boundary state alone — scanner-contestable, no private info.",
+  "_gate": "BS-0 harness (blockscan-a0-replay.ts): rebuild legs 1-2 with local v4 math (v3-math.ts computeSwapStep engine) from preState, assert bit-exact amountOut vs realized; leg 3 state-replayed with curveNgGetDy at boundary and execution rates, assert boundary dy 1807346489, boundary surplus -389319, and execution dy 1808005999 bit-exact vs realized; leg 4 canonical v2 getAmountOut from preReserves; assert loop closes with execution-rate surplus > 0 and expectedGrossWei > 0; record expectedGrossWei here. Substantiates: a pure-AMM loop that becomes scanner-contestable only after the intra-block D166 rate-oracle update, not a strict block-boundary standing dislocation.",
   "_universeNote": "All 4 pools are ABSENT from listener/searcher/pools/active-pools.json (checked 2026-07-04) — four coverage gaps for the block-scan universe slice (BS-universe)."
 }
