@@ -553,10 +553,23 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
    (substantiates "contestable with a scanner, no private info"). This is the ONLY gate other
    slices' fixtures depend on.
 2. **BS-contract** (the biggest, riskiest slice — the ~640-line `processOpportunities` factor-out from
-   `handleHint`). Follow impl plan §A-contract + this doc §1.3/§1.6. RELOCATE the S2 guard into
-   `processOpportunities` and add `BundleSubmission.safety` + the `BundleRouter.submit()` second-reject
-   (§2 BS-contract row). Gate hardest: backrun suites BYTE-IDENTICAL + the coordinator/union/guard unit
-   tests. Scope it as a MECHANICAL move (zero logic edits) gated on byte-equivalent replay.
+   `handleHint`). Follow impl plan §A-contract + this doc §1.3/§1.6. **DECOMPOSED into gated passes
+   (2026-07-04, autonomous scoping per rule 14 — one narrow patch each, rule 11):**
+   - **Pass A (in flight): the mechanical extraction only.** Extract `main.ts:1311–1968` (the
+     opportunities loop + trailing fall-through `recordFinalState`) into
+     `async function processOpportunities(ctx, opportunities, sourceMeta, deps)` — `sourceMeta` is the
+     **backrun-only** `SourceMeta` arm; per-hint closures (`recordFinalState`/`segMark`/`segStr`) +
+     the loop-mutated `fixturePlans` (via an `addFixturePlans` callback) go in `deps`;
+     `lastTerminalState/Error` become locals. main.ts ONLY, ZERO logic edits. Gate: `searcher:planner`
+     14/14 + replay 12/12 BYTE-IDENTICAL + tsc + taxonomy 5/5. (Boundary confirmed by grep: `emitEvent`
+     + all helpers are module-level imports — no threading; `fixtureOpportunities` set pre-loop, stays.)
+   - **Pass B:** SubmissionCoordinator (`submission-coordinator.ts`) + `bundle-router.ts` `victimTxHash`
+     + `BundleSubmission.safety` + route the (single, backrun) submit site through the coordinator's
+     second-reject; RELOCATE the S2 standing guard into `processOpportunities`.
+   - **Pass C:** detector union rename (type-only) + `events.ts` atomic fields + `cycle-fingerprint.ts`
+     + the `atomic-contract.ts` gate (§A-contract acceptance a–f). The atomic `SourceMeta` arm is added
+     when BS-1 (the scanner) needs it — not before, to keep Pass A's byte-identical gate clean.
+   Each pass = its own rule-12 record + commit.
 3. **BS-universe** (§1.5, `buildStrategyViews` + `edgeKindFromPoolEntry` + D4 defaults), then **CR-3**
    (`0xf88b` credit flip, strategy from source evidence). Then the scanner slices BS-1/2/3.
 
