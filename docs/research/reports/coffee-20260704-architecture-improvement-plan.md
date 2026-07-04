@@ -20,6 +20,23 @@ flow ($0–0.33/tx, ~$23/2.5h) — but that ceiling was measured on ~1.4% of flo
 volume) was just flipped on. Gap A is a **capability** we lack regardless of today's dust; its EV must
 still clear the gate. Do not celebrate dust (Hermes "simSuccess must be +EV" rule).
 
+> **User second-review (2026-07-04) — 5 remaining self-evolution closures folded in.** The atomic side must
+> be a self-analyzing / self-evolving / comparison-driven loop identical in KIND to backrun's. A prior pass
+> already fixed the `cycle_fingerprint` identity (canonical token-RING, size excluded — the user's point 5).
+> The five still open (numbered per the user's review; their point 5 = the already-landed token-ring fix),
+> folded into the slices named — top three load-bearing are 1, 3, 4:
+> 1. **Comparison temporal off-by-one** — align a competitor atomic tx by `source_block =
+>    competitor_execution_block − 1` (we scan `B-1` end-state, submit to `B`); aligning on `B` reports our
+>    real `B-1` scan as `not_seen`. → A-contract `cycle_fingerprint`, C2, A4.
+> 2. **Offline counterfactual replay in C2/D** — not only live events; historical / pre-telemetry samples
+>    replay the scanner at `B-1` to drive `our_stage`, or early learning stalls at `not_scanned`. → C2.
+> 3. **Unified `LearningCase` schema** — backrun postmortem AND atomic census both emit ONE object; D
+>    consumes only `LearningCase`, never a per-tool report shape (else atomic is a bypass). → C2, D.
+> 4. **Atomic close writes `atomic-view-overrides.json`**, NEVER backrun's `force-include-poolids.json` —
+>    else the close pollutes the shared graph + backrun mempool `toAddress` hot path. → D.
+> 6. **A minimal C2 ships BEFORE A4** — A4's gate ("we now generate a competing candidate") is hand
+>    analysis without it. Order → C1 → B → A-contract/A-universe → A1–A3 → **C2-minimal → A4** → D. → Governance.
+
 ---
 
 ## What is already reusable (do NOT rebuild)
@@ -154,6 +171,15 @@ drifts from backrun's EV gate / drop-reasons / submission.
      sizes, so size-in-identity re-introduces the exact `cycle_match=false` false-gap the route-fuzzy choice
      was meant to avoid, just on a new axis. Size, `seed_venues`, and route are **comparison attributes**
      (they feed `primary_gap` and `competitor_profit vs our_simulated_best` in C2), never the join key.
+   - **Temporal semantics of `source_block` for a COMPETITOR tx (the alignment off-by-one — mandatory,
+     user point 1).** A competitor's atomic tx *executes* in block `B`; to have contested it we scan the
+     **end state of `B-1`** and submit targeting `B`. So OUR live atomic event for that same opportunity
+     records `source_block = B-1` (and `target_block = B`). C2 MUST therefore align a competitor tx by
+     `source_block = competitor_execution_block − 1`, **never by `B` directly** — else our real `B-1` scan
+     is joined against the wrong block and reported as `not_seen` when in fact we saw it. Both models agree:
+     the delta-driven case (a swap in `B-1` creates the standing dislocation captured in `B`) and a pure
+     standing spread both give `source_block = B-1`. The `LearningCase` (C2) carries `source_block = B-1`
+     and `target_block = B` explicitly so the join is unambiguous.
 3. **Bundle contract** (`bundle-router.ts:5`): make `victimTxHash` **optional** — the `standalone` path
    already ignores it (`bundle-router.ts:81`) and atomic is standalone-shaped.
 4. **Extract `processOpportunities(ctx, opportunities, sourceMeta)`** from the ~900-line `handleHint`
@@ -416,7 +442,7 @@ one strategy-aware learning loop; Gap D builds the **close** half.
 Also records the doc's two corrections so they aren't repeated: "private" overstated (`maxPrio=0` is
 just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line).
 
-### C2 — strategy comparison report (the self-evolution half; build AFTER A ships atomic telemetry)
+### C2 — strategy comparison report (minimal C2 BEFORE A4; full self-evolution with/after A)
 
 Today's census (`census-report.ts:150`) is **coverage-only**: it flags a competitor's touched venues that
 are out-of-graph (`in_graph === false`, `census-report.ts:170`) to feed the backrun route-gap close. That
@@ -450,14 +476,59 @@ competitor_profit  vs  our_simulated_best
   | `atomic_budget_skipped` | scanner budget / scheduling (A4) |
   | `atomic_competitor_faster_or_outbid` | economics / latency (human gate) |
 
-- **Sequencing (refinement, verified):** the competitor side of C2 (shape + `cycle_fingerprint`) is
-  computable from chain data alone and can precede A. But `our_atomic_seen` / `our_stage` need **our
-  atomic events**, which don't exist until A ships — so pre-A, every atomic competitor tx maps to
-  `our_stage=not_scanned` (i.e. "build A"), and the full report only lights up after A4. **C1 (classifier)
-  ships first; C2's self-evolution half is gated on A's telemetry.** Do not build the full comparison
-  platform before A0 proves atomic is a real +EV opportunity and not pure dust (economics honesty).
+- **Two comparison sources — live AND offline counterfactual replay (user point 2, mandatory).**
+  `our_atomic_seen` / `our_stage` must NOT depend only on live atomic events. Many key samples are
+  historical, or predate atomic telemetry, so a live-only C2 stalls every early case at
+  `our_stage=not_scanned` — useful for round 1, useless for localization after. Support BOTH sources:
+  ```
+  live comparison:        competitor tx  vs  our live atomic events   (cycle_fingerprint align at B-1)
+  offline counterfactual: competitor tx → replay the atomic scanner at prestate source_block (B-1)
+                          → observe exactly where OUR pipeline would stop
+  ```
+  The offline path drives `our_stage` from an ACTUAL scanner replay (scanner_found? candidate_plans?
+  solver_quote? sim.success?), exactly like backrun's rule-12 replay — so an atomic gap closes
+  deterministically instead of waiting for the same standing spread to recur live. Pre-A the replay
+  reports `atomic_scan_not_triggered` (build A); once each slice lands, the SAME historical sample must
+  show the stage flip.
+  - **Gate (rule-12, offline replay):** given a competitor atomic tx at block `B`, replay the scanner at
+    `B-1`; the report records `scanner_found / candidate_plans / solver_quote / sim_success` → `primary_gap`,
+    and the same sample flips once the owning slice ships (`atomic_cycle_not_found → candidate_plans>0`,
+    `atomic_sizing_failed → sim.success`).
+- **Unified `LearningCase` schema — one learning loop, not two report shapes (user point 3, mandatory).**
+  Both strategies' analyzers emit ONE object; D consumes ONLY `LearningCase`, never a per-tool report
+  shape — else atomic becomes a bypass the moment auto-close understands only one report:
+  ```
+  LearningCase {
+    strategy:            "backrun" | "atomic"
+    trigger:             "bundle_not_included" | "competitor_not_seen"
+    competitor_tx?:      string
+    our_opportunity_id?: string
+    source_block?:       number     // atomic: competitor_execution_block − 1
+    target_block?:       number     // atomic: competitor_execution_block
+    comparable:          boolean    // atomic_loop only; one_leg_inventory / sandwich ⇒ false
+    primary_gap:         string
+    evidence:            {...}
+    close_action:        {...}
+    replay_gate:         {...}
+  }
+  ```
+  `bundle-postmortem` (backrun) and the atomic census both OUTPUT `LearningCase`; `auto-close-strategy-gap`
+  (Gap D) / the route-gap-watcher INPUT `LearningCase`. This is a refactor of the existing backrun outputs
+  onto the shared object (done with D), NOT a second platform — it is what makes "one strategy-aware loop"
+  real instead of aspirational. `comparable=false` (a `one_leg_inventory` / `sandwich` winner, reusing the
+  existing `winner_style` filter) short-circuits before auto-close so the atomic loop never manufactures a
+  false coverage gap from a CEX-DEX inventory op.
+- **Ordering — a MINIMAL C2 ships BEFORE A4 (user point 6).** A4's gate literally reads "Step-1 shows we
+  now generate a competing candidate for a coffee atomic tx"; without C2 that Step-1 is a HAND analysis and
+  atomic's first live round has no real self-analysis. So a minimal C2 — read atomic events + competitor
+  tx, align by `cycle_fingerprint` at `B-1`, emit an offline-replay-driven `primary_gap` — is a **hard
+  prerequisite of A4**, not an after-A add-on. The competitor side (shape + `cycle_fingerprint`) is
+  computable from chain data alone; the full report (`competitor_profit vs our_simulated_best`, the whole
+  taxonomy) fills in with/after A. **C1 first; C2-minimal before A4; D (close half) after.** Do not build
+  the full comparison platform before A0 proves atomic is a real +EV opportunity, not pure dust.
 - **Gate (rule-12):** on coffee's 8 atomic samples, C2 emits **both** `competitor_shape=atomic_state_arb`
-  **and** a per-tx atomic `primary_gap` — never just `atomic_state_arb` with no diagnosis of *our* gap.
+  **and** a per-tx atomic `primary_gap` — never just `atomic_state_arb` with no diagnosis of *our* gap;
+  and every emitted `LearningCase` carries `source_block = competitor_block − 1` (the point-1 join key).
 
 ---
 
@@ -470,19 +541,42 @@ strategy-blind close on an atomic miss would force-include the pool into backrun
 A-universe pollution ("atomic breadth must not pollute backrun speed").** So D is not cleanup; it is the
 close-side *enforcement* of A-universe's decoupling.
 
-**Fix — wrap the closers in a strategy-aware dispatcher `auto-close-strategy-gap`:**
+**Fix — wrap the closers in a strategy-aware dispatcher `auto-close-strategy-gap` (input: `LearningCase`;
+dispatch on `strategy`):**
 - `backrun` miss → backrun view / router universe / route-gap close (today's `auto-close-route-gap`, unchanged).
 - `atomic` miss → **atomic** view / venue scorer / atomic scanner only — **never** the backrun view.
 - `shared adapter missing` → the venue-adapter epic (touches neither view's ranking).
+- **Durable close target — a SEPARATE atomic artifact, never backrun's force-include (user point 4,
+  mandatory).** D states the principle ("atomic view only") but pins no FILE, so an implementer will
+  reflexively reuse `force-include-poolids.json` — which feeds the shared graph + the backrun mempool
+  `toAddress` set and pollutes the hot path (the exact A-universe violation, now on the close side). Pin
+  the atomic durable close target explicitly, a strategy-view policy file parallel to `force-include-*.json`
+  (per A-universe "per-strategy runtime policy is a SEPARATE config"):
+  **`listener/src/searcher/pools/atomic-view-overrides.json`** (committed, survives deploy; loaded ONLY
+  into the atomic selection view). Rule:
+  ```
+  atomic_view_missing_venue
+    → write atomic-view-overrides.json ONLY
+    → does NOT touch force-include-poolids.json / any backrun force-include
+    → does NOT change the mempool toAddress set
+  ```
 - A **strategy-agnostic trigger**: not just our `bundle_not_included` (which atomic never emits), but also
   the C2 `not_seen` / `our_stage != submitted` result on a competitor `atomic_state_arb` tx. It writes a
   pending task per gap class (marks `pending-deploy`; never auto-broadcasts — go-live is a human gate).
 - **Gate (rule-12, the self-evolution flip — this is the whole point):** each atomic gap close records
   `before: <competitor sample> → our gap X` and `after replay: same sample → stage improved`, e.g.
   `atomic_cycle_not_found → candidate_plans>0` or `atomic_sizing_failed → sim.success && netEV>0`.
-  **AND** the A-universe safety assertion: closing an `atomic_view_missing_venue` updates the atomic view
-  only and leaves the backrun-scored mempool `toAddress` set unchanged. A close with no before→after stage
-  flip does not count as closed (rule 13 — no orphan findings).
+  **AND** the A-universe safety assertion: closing an `atomic_view_missing_venue` writes
+  `atomic-view-overrides.json` only and leaves `force-include-poolids.json` + the backrun-scored mempool
+  `toAddress` set unchanged. A close with no before→after stage flip does not count as closed (rule 13 —
+  no orphan findings).
+- **Inconclusive atomic loss → the §6b/§6c manual-escalation meta-loop (not a dead `our_stage`).** When
+  C2 marks a COMPARABLE (`comparable=true`) atomic_loop competitor we demonstrably lost yet the dispatcher
+  closes 0 (a scanner blind spot coverage-close cannot fix — the atomic analog of the `0xee7b98ad`
+  same-pool under-extraction), package `{LearningCase + close result(closed=0) + our sim/bid + winner
+  flows}` as a `pending-manual-analysis` for a fresh analyst (Fable priority, Opus 4.8 fallback) → name the
+  missed class → CODIFY it back into the tool (rule 16). Same teeth as backrun: a package left unanalyzed
+  BLOCKS closing the cycle.
 
 ---
 
@@ -499,8 +593,9 @@ close-side *enforcement* of A-universe's decoupling.
 | A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx; **backrun `expired-before-solver` not materially higher**; **every atomic event has `state_block === source_block`** |
 | B | `npm run searcher:planner`-style fixture on committed reth logs | `0x663dc15d ∈ mempool filter` (under quotas) → admission `false→true`; hot-pool quota preserved |
 | C1 | `analysis` classifier test | coffee 9 txs → 8 `atomic_state_arb` + 1 `backrun`; `#9 source_swap_seen_by_us=false`; **no `maxPrio=0` tx labeled private**; **classifier decodes v2/v3/v4/Curve/Balancer** (a Curve/Balancer source swap is not mislabeled atomic) |
-| C2 (after A) | `analysis` comparison test | each coffee atomic tx emits **both** `competitor_shape` **and** a per-tx atomic `primary_gap` (never `atomic_state_arb` with no diagnosis of our gap); alignment by `cycle_fingerprint`, not `victim_hash` |
-| D (with/after A) | replay per gap class | before→after stage flip (e.g. `atomic_cycle_not_found → candidate_plans>0`); closing `atomic_view_missing_venue` updates the atomic view only, backrun mempool `toAddress` set **unchanged** |
+| C2-minimal (BEFORE A4) | `analysis` comparison test + offline scanner replay | each coffee atomic tx aligns at `source_block = B−1`, emits **both** `competitor_shape` **and** an offline-replay-driven `primary_gap` (never `atomic_state_arb` with no diagnosis of our gap); alignment by `cycle_fingerprint`, not `victim_hash`; every `LearningCase` carries `source_block=B−1` |
+| C2-full (with/after A) | `analysis` comparison test | `competitor_profit vs our_simulated_best` + full taxonomy; `comparable=false` (one_leg_inventory/sandwich) short-circuits before auto-close |
+| D (with/after A) | replay per gap class | consumes `LearningCase` (both strategies); before→after stage flip (e.g. `atomic_cycle_not_found → candidate_plans>0`); closing `atomic_view_missing_venue` writes **`atomic-view-overrides.json` only** — backrun `force-include` + mempool `toAddress` set **unchanged**; inconclusive comparable loss → `pending-manual-analysis` package |
 
 ## Governance / sequencing
 
@@ -514,9 +609,11 @@ close-side *enforcement* of A-universe's decoupling.
   learning loop** — one shared framework (census / classifier / gap ledger / replay gate) with **split**
   taxonomy / `opportunity_id` / venue-view / close-action; do NOT build two parallel platforms. Their
   self-evolution half is gated on A's atomic telemetry (see C2/D), so they land **with/after A**, not before.
-- **Recommended order:** **C1 first** (cheapest; makes every future round auto-measure followability, so
-  we stop hand-classifying) → **B** (cheap coverage + unblocks measuring wider flow) → **A** as the epic
-  (the real capability, highest ceiling especially over MEV-Share flow) → **C2 + D** (close the atomic
-  learning loop once A emits telemetry).
+- **Recommended order (explicit, user point 6):** **C1** (cheapest; auto-measures followability, stops
+  hand-classifying) → **B** (cheap coverage + unblocks measuring wider flow) → **A-contract / A-universe**
+  (prerequisites) → **A1–A3** (deterministic scanner + solver, fork-gated) → **C2-minimal** (align at
+  `B-1`, offline-replay `primary_gap` — REQUIRED before A4 so its gate is script-driven, not hand analysis)
+  → **A4** (dry-run window) → **C2-full + D** (the close half + `LearningCase` dispatcher, once A emits
+  telemetry). C2-minimal-before-A4 is the point-6 correction; D stays last.
 - Each slice is generator/evaluator split (rule 7): Claude briefs → Codex writes → Claude gates. Go-live
   stays a hard human gate (Safety Rule 1); A4 is dry-run + flag-gated only.
