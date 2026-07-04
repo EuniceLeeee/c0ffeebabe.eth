@@ -84,7 +84,7 @@
   ],
   "loopSurplusRealized": { "token": "USDC", "units": "270191", "note": "curveOut 1808005999 - flash 1807735808; 1 unit stays as dust (v2 leg spends 270190)" },
   "expectedGrossWeiRealized": "157203701650240",
-  "expectedGrossWei": null,
+  "expectedGrossWei": "157203701650240",
   "_gate": "BS-0 harness (blockscan-a0-replay.ts): rebuild legs 1-2 with local v4 math (v3-math.ts computeSwapStep engine) from preState, assert bit-exact amountOut vs realized; leg 3 pinned realized; leg 4 canonical v2 getAmountOut from preReserves; assert loop closes with surplus > 0 and expectedGrossWei > 0; record expectedGrossWei here. Substantiates: standing pure-AMM dislocation reconstructable from public block-boundary state alone — scanner-contestable, no private info.",
   "_universeNote": "All 4 pools are ABSENT from listener/searcher/pools/active-pools.json (checked 2026-07-04) — four coverage gaps for the block-scan universe slice (BS-universe)."
 }
