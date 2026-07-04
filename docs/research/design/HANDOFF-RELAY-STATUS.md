@@ -26,6 +26,15 @@ consecutive_done_confirmations: 0
 > is a stableswap-ng swap-time `stored_rates` refresh, −EV on every pre-coffee fork, invisible to
 > view-quotes. BS-3 full-pipeline is now BLOCKED on a genuinely-viable +EV block-scan exemplar (needs
 > census discovery, not more harness code). Remainder still gated behind it. Counter stays 0.
+>
+> **R-2b-3 (2026-07-05) picked up CR-5, verified its archive target, decomposed it as an epic.** BS-3
+> is discovery-blocked, so moved to the next unblocked slice (item 4, CR-5). CR-5 is a large multi-part
+> behavior slice → decomposed into ordered sub-slices CR-5a..e (Phase 2b list). Verified CR-5's
+> max-borrow equivalence target on-chain: the reference bot's realized wstUSR delta on `0xf88b` (block
+> 24710788) = **270.096803239981276728 wstUSR** (≈270.1, not the loose "~273"). No code slice this
+> round — CR-5 is a fresh-context epic; a rushed archive-gated adapter on this long session would be
+> lower-integrity than a clean decomposition. Next round executes CR-5a (the `0xf88b` archive replay).
+> Counter stays 0.
 
 ## Confirmation log (append-only; each entry = one round that re-verified all slices landed + gates green)
 <!-- round-id · date · gate command re-run · result -->

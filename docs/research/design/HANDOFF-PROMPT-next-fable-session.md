@@ -84,9 +84,27 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
    sub-slice. Original spec kept below for reference. Build a profitable block-scan fixture on a FORK (anvil against local reth
    or Alchemy) and gate the end-to-end scan→plan→sim→standalone-bundle path (dry-run router; no
    broadcast in the test). Gate: new suite flips no-bundle→bundle with expected profit.
-4. **CR-5 credit adapter** + **CR-3 optional secondary** (same archive block, do together): fork
-   replay of `0xf88b` at block 24710788 via `$MAINNET_RPC_URL` archive (past reth prune); assert the
-   AC-3-style ~273 wstUSR delta for CR-3's secondary validation. Gate per impl-plan §CR-5.
+4. **CR-5 credit adapter — ⚙ EPIC, DECOMPOSED (R-2b-3). Resume at sub-slice a.** CR-5 is a large
+   multi-part behavior slice (impl-plan §277/§306); do it as ordered sub-slices, each its own rule-12
+   gate + commit. CR-5's max-borrow equivalence TARGET is on-chain-verified: **≈270.1 wstUSR** (exact
+   `270096803239981276728` wei; appendix B R-2b-3) — NOT the impl-plan's loose "~273".
+   - **CR-5a — CR-3 secondary (do FIRST; archive replay, self-contained, confirmatory).** Fork-replay
+     the `0xf88b` credit arb at block 24710788 via `$MAINNET_RPC_URL` archive (reuse the `ac3.ts`
+     harness shape: AnvilStateBackend + planner/solver/simulator over the fixture victim
+     `0xc52bc6f4…`). Gate: our credit-edge path self-composes a plan whose wstUSR netProfit reaches a
+     tolerance band around the verified on-chain **270.1 wstUSR** (assert `>= ~270e18` with a stated
+     band). This validates CR-3's economics against on-chain truth. Bounded CU.
+   - **CR-5b — resolver `quote()` + deterministic max-borrow + `fluidDebtBps`-search-delete
+     equivalence.** Replace the `fluidDebtBps` search (`solver.ts:396`) with a deterministic
+     resolver-quote max-borrow; PROVE equivalence (same sizing → same ~270.1 wstUSR) on the CR-5a fork
+     BEFORE deleting the search. Gate: equivalence fixture + CR-5a still green.
+   - **CR-5c — per-adapter gas table** (credit leg 250–400k vs swap ~100k): fixes the gas=0
+     over-ranking → dust-regime under-ranking. Local gate: dust-regime ranking fixture.
+   - **CR-5d — EV-gate market-priced profit token** (peg-valued fails, market-valued passes only when
+     genuinely +EV) + **Fluid feasibility drops** (`credit_infeasible`/`emode_required` →
+     `pipeline_dropped`). Local gate + the drops assertion.
+   - **CR-5e — guard WIRING re-asserted end-to-end** (not unit-only): fork-replay the `0xf88b` plan
+     reaches the pre-EV-gate check and is rejected WITHOUT the `.credit-live` marker (never create it).
 5. **BS-lane.** Concurrent block-scan lane in the live process (code local; gate on
    `searcher:replay-live-fixtures` byte-identical backrun + new lane unit tests; no deploy needed yet).
 6. **BS-4 live window.** Deploy via `scripts/deploy-node.sh` ONLY (its guard envelope decides
@@ -189,6 +207,23 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   requires stored_rate-refresh / oracle-event modeling (a scanner-capability question). Handed to the
   operator/next round with all de-risk data. `consecutive_done_confirmations: 0`, IN_PROGRESS.
 
+#### R-2b-3 · 2026-07-05
+- blocker/gap: BS-3 is discovery-blocked (needs a viable exemplar, not code). Picked up the next
+  UNBLOCKED Phase 2b slice — item 4, CR-5 credit adapter + CR-3 secondary (the `0xf88b` wstUSR archive
+  replay). On inspection CR-5 is a LARGE multi-part behavior slice: resolver `quote()` + deterministic
+  max-borrow + `fluidDebtBps`-search-delete equivalence + per-adapter gas table + EV-gate market-priced
+  profit token + Fluid feasibility drops + guard-wiring fork re-assertion (impl-plan §277/§306).
+- options + choice: (a) cram CR-5 onto this long single-session context, or (b) verify CR-5's key
+  archive input now + decompose it as an epic for a fresh round. Chose (b): this session already landed
+  3 slices (BS-0-curve, edge-kinds, BS-3-solve) and the relay design explicitly wants FRESH context for
+  a new large slice (Rounds step 4 anti-degradation) — a rushed archive-gated adapter on a stale context
+  is lower-integrity than a clean decomposition. Verified the one unambiguous, bounded datum the whole
+  slice pivots on: the reference bot's realized on-chain wstUSR delta (CR-5's max-borrow equivalence
+  target). CR-5 decomposed into ordered sub-slices below.
+- outcome: no code slice this round (CR-5 is a fresh-context epic); verified ~270.1 wstUSR target
+  cached (B) + CR-5 sub-slice decomposition written to the Phase 2b list. `consecutive_done_confirmations:
+  0`, IN_PROGRESS. Next round executes CR-5 sub-slice 1.
+
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
 > NOTE: the rule-12 *gate re-runs* below are deliberately NOT cached-to-skip — the 2-round
@@ -213,6 +248,17 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
 - raw: scripts + outputs in session scratchpad (`curve-read.sh`, `curve-logs.sh`, `curve-rates2.sh`);
   decision-relevant values all inline above and persisted into the fixture.
 - captured: R-2b-1 / 2026-07-05
+
+#### Alchemy archive — reference bot wstUSR realized delta on 0xf88b (CR-5 max-borrow target), 2026-07-05
+- input: `cast call wstUSR balanceOf(0xE08D97e1…472D015)` at blocks 24710787 (pre) and 24710788 (post)
+  via `$MAINNET_RPC_URL` archive (block past reth prune — archive required). wstUSR =
+  `0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055`.
+- result: pre = **0**, post = **270096803239981276728** (270.096803… wstUSR). The reference bot netted
+  **≈270.1 wstUSR** in-block (its arb is tx index 8). This is the on-chain-verified value behind the
+  impl-plan's "~273 wstUSR" approximation → **CR-5's deterministic max-borrow equivalence gate target =
+  ~270.1 wstUSR** (use the exact wei for a tolerance-band assert; the +WETH leg is separate). Bounded CU
+  (2 archive eth_calls).
+- captured: R-2b-3 / 2026-07-05
 
 #### node reth reads — block 25455297 tx anchors (BS-3 execution-state fork), 2026-07-05
 - input: SSM read-only `eth_getBlockByNumber` 0x1846ac1 on local reth (zero-CU). Block has 160 txs.
