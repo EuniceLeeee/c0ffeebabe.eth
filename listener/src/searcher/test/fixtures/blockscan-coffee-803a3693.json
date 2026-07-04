@@ -1,0 +1,54 @@
+{
+  "_note": "BS-0 fixture (unified impl plan slice BS-0/=A0). Pre-tx pool states for coffee tx #2 0x803a3693 (block 25455024, txIndex 201). States read from the node's local reth at blockTag 25455023 (pre-tx) on 2026-07-04 while still inside the ~10k-block prune window (head 25458229). Persisted so the gate stays replayable after prune-out (impl plan R5). PoolKeys for the two v4 pools + token identity of 0x695a5f still need resolution — see handoff (md §9). expectedGrossWei to be recorded by the replay harness (Codex, still to write).",
+  "txHash": "0x803a36936a1a58392bad9b47a90d1c7b4afe3da4a3cb61b6bab651b200727ba3",
+  "executionBlock": 25455024,
+  "sourceBlock": 25455023,
+  "txIndex": 201,
+  "netUsdReported": 0.33,
+  "stateSource": "local_reth",
+  "arbPools": [
+    {
+      "id": "0x08a10a8b713c03e2fecaa3e355cea18a459ffcbf",
+      "kind": "univ3",
+      "token0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "token1": "0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94",
+      "fee": 3000,
+      "state": {
+        "sqrtPriceX96": "7410461572592114366325777760256",
+        "tick": 90770,
+        "liquidity": "3641329370393559469734"
+      }
+    },
+    {
+      "id": "0x267d01a3b23fe2340482242db5396f7544d36f398862efa591e92a079348cd9c",
+      "kind": "univ4",
+      "poolKeyKnown": true,
+      "poolKey": {
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94",
+        "fee": 10001,
+        "tickSpacing": 200,
+        "hooks": "0x0000000000000000000000000000000000000000"
+      },
+      "state": {
+        "sqrtPriceX96": "7422430952299715996642787051557",
+        "tick": 90803,
+        "lpFee": 10001,
+        "liquidity": "49743898734195442775439"
+      }
+    },
+    {
+      "id": "0x695a5fbc047543cd09e00cbfe239becc9bfbffd41f6ac4b6f1a36caf4829d75e",
+      "kind": "univ4",
+      "poolKeyKnown": false,
+      "poolKeyTODO": "resolve currency0/currency1/fee/tickSpacing/hooks via PositionManager.poolKeys(bytes25) or the Initialize log; token identity of this leg unresolved (tick 74745 differs from the CFG pools ~90800 — likely the WETH/native funding leg of the 3-pool cycle)",
+      "state": {
+        "sqrtPriceX96": "3325591450640364772130206985123",
+        "tick": 74745,
+        "lpFee": 3000,
+        "liquidity": "26750480727583479356538"
+      }
+    }
+  ],
+  "expectedGrossWei": null
+}
