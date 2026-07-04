@@ -73,10 +73,15 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
    recorded: boundary loop is −EV (−389319); the oracle update is the trigger (see appendix A R-2b-1).
 2. **Chip `task_45c7379e` — ✅ LANDED `a6b72cd` (R-2b-1).** `deriveEdgeKindsFromLogs` replaces the
    `["swap"]` hardcode in both LearningCase producers; `test:learning-case` 8/8.
-3. **BS-3 full-pipeline — ⛔ HANDED BACK (R-2b-1): needs an execution-state fork + operator design
-   call.** The `f2de7499` exemplar is boundary-−EV (appendix A R-2b-1), so a boundary-state fork sim
-   cannot be profitable — BS-3 needs a new boundary-profitable exemplar OR a mid-block fork, and its
-   gate needs the node's anvil-fork-of-local-reth. Resume here. Build a profitable block-scan fixture on a FORK (anvil against local reth
+3. **BS-3 full-pipeline — ⛔ EPIC-ESCALATED (R-2b-2, rule 13): BLOCKED on a viable +EV exemplar.**
+   BS-3-solve landed (`c63e075`, `searcher:blockscan-fork-solve` 9/9) and PROVED the planner→solver→
+   fork wiring works — but also PROVED `f2de7499` is un-usable: its profit is a stableswap-ng
+   swap-time `stored_rates` refresh (appendix A R-2b-2), −EV on every pre-coffee fork, invisible to
+   view-quotes. **Next step is NOT more harness code — it is exemplar DISCOVERY**: census for a
+   genuinely-standing (view-quotable, multi-block-persistent) +EV block-scan case, OR an operator
+   decision that block-scan's testable +EV requires stored_rate-refresh/oracle-event modeling. Once a
+   viable exemplar exists, BS-3-sim (BotVM execute → standalone +EV BundleSubmission) is the remaining
+   sub-slice. Original spec kept below for reference. Build a profitable block-scan fixture on a FORK (anvil against local reth
    or Alchemy) and gate the end-to-end scan→plan→sim→standalone-bundle path (dry-run router; no
    broadcast in the test). Gate: new suite flips no-bundle→bundle with expected profit.
 4. **CR-5 credit adapter** + **CR-3 optional secondary** (same archive block, do together): fork
@@ -156,6 +161,33 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   live window, CS-min/CS-full/D/CR-8) stays operator-gated behind it.
 - outcome: 2 slices landed + gated (`9135cbc`, `a6b72cd`); BS-3 handed back with the boundary-−EV
   finding. Work remains → `consecutive_done_confirmations: 0`, `status: IN_PROGRESS`.
+
+#### R-2b-2 · 2026-07-05
+- blocker/gap: R-2b-1 handed BS-3 to the operator; on review that was over-conservative — BS-3 (anvil
+  fork, dry-run, no broadcast) is squarely inside the Phase 2b authorization, not one of the four hard
+  human gates. So this round PROCEEDED on BS-3 (rule 14) instead of re-handing-back.
+- options + choice: de-risked BS-3 fully (confirmed `forkAfterTx` execution-state fork infra; got the
+  fork anchor = block 25455297 txIndex 36; fixture already bit-exact). Structured BS-3 as sub-slices
+  (rule 13; it's a large fork-integration slice) and dispatched the first, BS-3-solve (fork-state
+  planner→solver, +EV solved plan). Codex built the harness (no network in its sandbox); I gated it
+  against Alchemy archive myself.
+- **Definitive finding (verified by running the fork, `c63e075`):** f2de7499 is NOT a viable +EV
+  block-scan fork exemplar. On any pre-coffee fork state the curve pool holds the STALE boundary D166
+  rate → `get_dy 1807346489 < flash 1807735808` = −EV, so the solver correctly returns no profitable
+  plan. The +3.7bps bump to the execution rate that made coffee +EV is applied by the stableswap-ng
+  pool refreshing `stored_rates` at coffee's OWN swap (the only curve interaction in the block) —
+  invisible to view-quotes and absent from any pre-coffee fork. So coffee's profit is a swap-time
+  stored_rate refresh (an oracle-staleness capture), NOT a standing dislocation. This confirms the
+  market-ceiling reality at the fixture level: standing view-quotable +EV block-scan dislocations are
+  dust ([[project-atomic-backrun-market-ceiling]]).
+- outcome: committed BS-3-solve as a documenting VIABILITY PROBE (9/9) — it proves the block-scan
+  planner→solver→fork wiring works AND deterministically pins the non-viability (stops re-attempts;
+  if stored_rate-refresh modeling ever lands, the same harness flips +EV → promote the exemplar).
+  **BS-3 full-pipeline is now rule-13 EPIC-escalated: it is BLOCKED on a genuinely-viable +EV
+  block-scan exemplar, which we do not have** — the next step is census discovery of a real standing
+  (view-quotable, multi-block) +EV block-scan case, OR a decision that block-scan's testable +EV
+  requires stored_rate-refresh / oracle-event modeling (a scanner-capability question). Handed to the
+  operator/next round with all de-risk data. `consecutive_done_confirmations: 0`, IN_PROGRESS.
 
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).

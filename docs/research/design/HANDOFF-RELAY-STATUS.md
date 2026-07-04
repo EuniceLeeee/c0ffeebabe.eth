@@ -18,6 +18,14 @@ consecutive_done_confirmations: 0
 > block boundary; the profit is oracle-triggered, so BS-3 needs an execution-state fork or a new
 > boundary-profitable exemplar + the node's anvil-fork environment). Remainder (CR-5/BS-lane/BS-4/
 > CS-*/D/CR-8) stays gated behind BS-3. Counter stays 0 — Phase 2b work remains.
+>
+> **R-2b-2 (2026-07-05) landed BS-3-solve and EPIC-escalated BS-3 full-pipeline.** Proceeded on BS-3
+> (R-2b-1's hand-back was over-conservative — anvil-fork/dry-run is inside Phase 2b scope). BS-3-solve
+> (`c63e075`, `searcher:blockscan-fork-solve` 9/9, gated against Alchemy archive) proved the block-scan
+> planner→solver→fork wiring works AND deterministically pinned that `f2de7499` is un-usable: its +EV
+> is a stableswap-ng swap-time `stored_rates` refresh, −EV on every pre-coffee fork, invisible to
+> view-quotes. BS-3 full-pipeline is now BLOCKED on a genuinely-viable +EV block-scan exemplar (needs
+> census discovery, not more harness code). Remainder still gated behind it. Counter stays 0.
 
 ## Confirmation log (append-only; each entry = one round that re-verified all slices landed + gates green)
 <!-- round-id · date · gate command re-run · result -->
