@@ -12,6 +12,18 @@ consecutive_done_confirmations: 0
 > section for the ordered slice list + authorization scope. Counter reset to 0: the relay runs again
 > and the two-confirmation bar now applies to Phase 2b completion.
 >
+> **R-2b-7 (2026-07-05) confirmed the blocked-on-human-gate state; no code (correctly).** Checked the
+> node read-only: `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` still ABSENT from the running searcher env (PID
+> 177547, up 12h54m) → the operator has NOT yet acted on the R-2b-6 flag decision (chip
+> `task_3deb3186`). Bounded-live safety valve verified: signer balance 0.002704 ETH ≈ unchanged from
+> the 0.0027 start (no drain). Live funnel freshness (per the R-2b-6 meta-finding, never run blind):
+> recent tail = 86 `hash_only_unmatchable` / 0 `bundle_submitted` — identical profile to the R-2b-6
+> measurement. All remaining work is gated: the flag flip is a Safety-Rule-1 human gate; Phase-2b
+> scaffolding is paused by the arch-review verdict; BS-3 discovery-blocked; CR-5b design-blocked.
+> **Fast-path for future rounds until the operator acts:** check the flag in the node env first — if
+> still unset and no new operator input (no new commit / chip response / env change), close as blocked
+> immediately; do NOT re-run the arch review or re-derive the verdict. Counter stays 0.
+>
 > **R-2b-1 (2026-07-05) landed the first two Phase 2b slices and handed BS-3 back.** Done: BS-0-curve
 > (`9135cbc`, curve leg node-state-verified) + edge-kinds chip (`a6b72cd`). BS-3 full-pipeline is
 > handed back to the operator with a premise-changing finding (the `f2de7499` exemplar is −EV at the

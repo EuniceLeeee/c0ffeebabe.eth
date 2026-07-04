@@ -62,6 +62,14 @@ If any slice seems to need node/archive/broadcast: STOP and hand back to the ope
 
 ## Phase 2b — operator-approved chain-enabled slices (2026-07-05; this is the CURRENT work list)
 
+> **⏸ PAUSED (R-2b-6 arch-review verdict, 2026-07-05):** Phase-2b scaffolding is NOT the production
+> lever; it pauses pending the operator's `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` flag decision (a
+> Safety-Rule-1 human gate, chip `task_3deb3186`; verdict:
+> `docs/research/reports/arch-review-20260705-verdict.md`). Future rounds: check the flag in the node
+> env FIRST (read-only SSM); if still unset with no new operator input, close as blocked (see
+> HANDOFF-RELAY-STATUS R-2b-7 fast-path). Once flipped: run a measured window → `bundle_submitted`
+> delta → bundle-postmortem on real submissions → Hermes Step-1 cross-ref.
+
 The operator reviewed the operator-gated remainder on 2026-07-05 and approved **all of it** for the
 autonomous relay, EXCEPT the credit-live human gate (still forbidden, see Authorization scope). This
 supersedes the "No node / RPC" section above and impl-plan §9.3b's "stay pure-code / hand back" rule
@@ -265,6 +273,34 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   (dual-blind, frame-audit first), NOT another point-fix. `consecutive_done_confirmations: 0`,
   IN_PROGRESS. This is the honest end of the cleanly-autonomous Phase 2b work — the remainder needs
   human/design input.
+
+#### R-2b-6 · 2026-07-05 (arch review — logged here retroactively by R-2b-7 for chain continuity)
+- blocker/gap: rule-13 architecture-review trigger (fired R-2b-5). Ran the mandated dual-blind review
+  in fresh contexts instead of a point-fix.
+- options + choice: frame-audit first (per the trigger's mandate) → discovered the frame itself was
+  wrong: a bounded-live window WAS running all along, unread by the relay. A (fable, chain+code) and
+  B (Codex, code-only) converged: the lever is FLOW-ADMISSION at our own submit gate — 95.3% of 3,889
+  +EV sims self-dropped at `hash_only_unmatchable` because `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` is
+  unset while the `submitMevShareBundle` drain is already built. Rejected: new epics, Phase-2b
+  scaffolding as the lever, bid-policy changes.
+- outcome: verdict committed (`arch-review-20260705-verdict.md`, `abc0eca`); fix = one config flag =
+  broadcast-behavior change = HUMAN GATE → escalated (chip `task_3deb3186`), did NOT auto-flip.
+  Phase-2b scaffolding paused pending the decision. Process fix recorded: every round reads the live
+  events first.
+
+#### R-2b-7 · 2026-07-05
+- blocker/gap: all remaining paths blocked on the R-2b-6 human gate. Round's job reduced to: has the
+  operator acted? and is the live window healthy?
+- options + choice: (a) pick up a Phase-2b slice anyway — rejected (verdict pauses scaffolding;
+  BS-3 discovery-blocked, CR-5b design-blocked, CR-5c no clean insertion, BS-lane null infra);
+  (b) re-run the arch review — rejected (nothing changed; re-deriving a cached verdict is waste);
+  (c) verify the gate state read-only + safety-valve + funnel freshness, record, close as blocked.
+  Chose (c). Node env (PID 177547, up 12h54m): flag still ABSENT → operator has not acted. Signer
+  balance 0.002704 ETH ≈ start (0.0027) → no drain, valve fine. Funnel tail: 86 `hash_only_unmatchable`
+  / 0 `bundle_submitted` — profile identical to the R-2b-6 measurement (no re-measurement needed).
+- outcome: no code slice (correctly — blocked on Safety-Rule-1 human gate). Wrote the fast-path note
+  (status file + Phase 2b header) so future rounds close cheaply until the operator acts. Counter
+  stays 0, IN_PROGRESS. Post-flip playbook pre-recorded in the Phase 2b pause note.
 
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
