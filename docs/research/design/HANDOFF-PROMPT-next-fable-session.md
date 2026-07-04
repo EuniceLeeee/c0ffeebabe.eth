@@ -67,14 +67,16 @@ autonomous relay, EXCEPT the credit-live human gate (still forbidden, see Author
 supersedes the "No node / RPC" section above and impl-plan §9.3b's "stay pure-code / hand back" rule
 for the slices listed here. Ordered list (resume at the first not-landed one; verify against git):
 
-1. **BS-0-curve (TIME-SENSITIVE — do FIRST, prune window ~2026-07-05/06).** Capture curve pool
-   `0x6206ca31` state at block 25455296 from the node's local reth (zero-CU, via SSM read-only
-   `cast`/RPC); if already pruned, fall back to Alchemy archive. Upgrade the exemplar fixture
-   `blockscan-coffee-f2de7499.json`'s curve leg from receipt-anchored to state-verified. Gate:
-   `searcher:blockscan-a0` stays green with the state-derived leg (19/19 or better).
-2. **Chip `task_45c7379e` (pure local).** The postmortem LearningCase producer still hardcodes
-   `edge_kinds:["swap"]` — derive real edge kinds. Gate: `test:learning-case` extended + green.
-3. **BS-3 full-pipeline.** Build a profitable block-scan fixture on a FORK (anvil against local reth
+1. **BS-0-curve — ✅ LANDED `9135cbc` (R-2b-1, 2026-07-05).** Curve pool `0x6206ca31` state captured
+   read-only from local reth (zero-CU; block still un-pruned); leg 3 upgraded receipt-anchored →
+   node-state-verified (`curveNgGetDy` bit-exact both rates). `searcher:blockscan-a0` 23/23. Finding
+   recorded: boundary loop is −EV (−389319); the oracle update is the trigger (see appendix A R-2b-1).
+2. **Chip `task_45c7379e` — ✅ LANDED `a6b72cd` (R-2b-1).** `deriveEdgeKindsFromLogs` replaces the
+   `["swap"]` hardcode in both LearningCase producers; `test:learning-case` 8/8.
+3. **BS-3 full-pipeline — ⛔ HANDED BACK (R-2b-1): needs an execution-state fork + operator design
+   call.** The `f2de7499` exemplar is boundary-−EV (appendix A R-2b-1), so a boundary-state fork sim
+   cannot be profitable — BS-3 needs a new boundary-profitable exemplar OR a mid-block fork, and its
+   gate needs the node's anvil-fork-of-local-reth. Resume here. Build a profitable block-scan fixture on a FORK (anvil against local reth
    or Alchemy) and gate the end-to-end scan→plan→sim→standalone-bundle path (dry-run router; no
    broadcast in the test). Gate: new suite flips no-bundle→bundle with expected profit.
 4. **CR-5 credit adapter** + **CR-3 optional secondary** (same archive block, do together): fork
@@ -132,6 +134,28 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
 - outcome: ALL GREEN, matching R-verify-1 independently → `consecutive_done_confirmations` 1→2 →
   `status: COMPLETE`. The relay loop is OFF (Step 0a NO-OPs every future round). Remainder is
   operator-gated; hand-back note stands.
+
+#### R-2b-1 · 2026-07-05
+- blocker/gap: Phase 2b opened (operator-approved chain-enabled slices). Two tractable slices were
+  writable this round; the third (BS-3 full-pipeline) surfaced a premise-changing finding.
+- options + choice: worked the Phase 2b list in order. (1) BS-0-curve (TIME-SENSITIVE, prune window):
+  captured the stableswap-ng curve pool state read-only from local reth (zero-CU, block still
+  un-pruned) and upgraded leg 3 from receipt-anchored to state-verified — `curveNgGetDy` is bit-exact
+  at both boundary and execution rates. (2) edge-kinds chip: replaced the `["swap"]` hardcode in both
+  LearningCase producers with topic0-derived edge kinds. Both gated + committed. (3) BS-3: STOPPED and
+  handed back — see finding.
+- **BS-3 finding (the reason for handback):** our ONLY block-scan exemplar (`f2de7499`) is **−EV at
+  the block-25455296 boundary** (surplus −389,319 USDC units); its +$0.55 realized profit exists only
+  AFTER an intra-block D166 rate-oracle update (+3.7bps) that lands before coffee's txIndex 37. So a
+  "profitable block-scan fixture on a boundary-state fork" (BS-3 as written) cannot be built honestly
+  from this exemplar. BS-3 needs EITHER a new genuinely-boundary-profitable block-scan exemplar (via
+  the census) OR a mid-block / execution-state fork (fork at 25455297 after the oracle-update tx,
+  before txIndex 37). Its end-to-end gate also needs the node's anvil-fork-of-local-reth environment
+  (`replay-v4-native-arb.ts` pattern: `SEARCHER_LIVE_RPC_URL=local reth`). This is a design fork +
+  node/fork-infra dependency → operator decision. The remainder (CR-5 archive replay, BS-lane, BS-4
+  live window, CS-min/CS-full/D/CR-8) stays operator-gated behind it.
+- outcome: 2 slices landed + gated (`9135cbc`, `a6b72cd`); BS-3 handed back with the boundary-−EV
+  finding. Work remains → `consecutive_done_confirmations: 0`, `status: IN_PROGRESS`.
 
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).

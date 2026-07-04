@@ -11,6 +11,13 @@ consecutive_done_confirmations: 0
 > below). The operator then approved the chain-enabled remainder — see the handoff's `## Phase 2b`
 > section for the ordered slice list + authorization scope. Counter reset to 0: the relay runs again
 > and the two-confirmation bar now applies to Phase 2b completion.
+>
+> **R-2b-1 (2026-07-05) landed the first two Phase 2b slices and handed BS-3 back.** Done: BS-0-curve
+> (`9135cbc`, curve leg node-state-verified) + edge-kinds chip (`a6b72cd`). BS-3 full-pipeline is
+> handed back to the operator with a premise-changing finding (the `f2de7499` exemplar is −EV at the
+> block boundary; the profit is oracle-triggered, so BS-3 needs an execution-state fork or a new
+> boundary-profitable exemplar + the node's anvil-fork environment). Remainder (CR-5/BS-lane/BS-4/
+> CS-*/D/CR-8) stays gated behind BS-3. Counter stays 0 — Phase 2b work remains.
 
 ## Confirmation log (append-only; each entry = one round that re-verified all slices landed + gates green)
 <!-- round-id · date · gate command re-run · result -->
