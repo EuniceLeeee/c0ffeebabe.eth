@@ -29,6 +29,21 @@ principal-safe** through a strategy label the guards trust.
   it. A swap edge is `leavesStandingPosition:false`. Then `{reactive|block-scan} × {swap|credit}` all
   compose, and no credit edge can pass posture guards as "atomic/safe."
 
+## NAILED INVARIANT: the credit edge is STRATEGY-AGNOSTIC (operator, 2026-07-04)
+Credit is NOT a strategy and is NOT bound to one. It is a PATH capability — an edge in the graph — that
+**EITHER strategy driver may use**. Both cells are first-class:
+```
+reactive(backrun) + credit:   victim      → FluidCredit(wstUSR→USDC) → swaps → repay flash
+block-scan(atomic) + credit:  block-state → FluidCredit(wstUSR→USDC) → swaps → repay flash
+```
+So the model is exactly: `Strategy Driver {BackrunDriver | BlockScanDriver} → UnifiedOpportunity →
+Planner over EdgeGraph {SwapEdge | CreditEdge | LP later} → any strategy can use any ENABLED edge kind.`
+Corollary the plan must respect: **"credit goes into analysis/replay first" is a production-ENABLE
+ORDER, not a strategy binding.** The credit edge must be architected so BOTH BackrunDriver and
+BlockScanDriver can route it the moment its per-view enable flag is on; nothing in the edge, the planner,
+or the LearningCase may assume credit belongs to a particular strategy. `ENABLE_CREDIT_EDGES_FOR_BACKRUN`
+and `..._FOR_ATOMIC` are independent flags precisely because the edge is shared, not owned.
+
 ## Where all three converged
 - Orthogonal `strategy_kind × edge_kind`, credit as an edge FAMILY not a strategy — sound + non-redundant.
 - Views = **precomputed materialized sets, NOT live predicates** over the registry. A per-opportunity
@@ -67,6 +82,20 @@ principal-safe** through a strategy label the guards trust.
   Fable-2). But the ENVELOPE's mechanism was designed for atomic reverts, so **credit-LIVE needs an explicit
   new bound**, a distinct authorization of the same class as go-live (Fable-1). **Moot for v1** (credit is
   analysis-only, production flag OFF) — but recorded as the gate before any live credit routing.
+- **UNANIMOUS across all THREE reviews (concrete mechanism):** the `assert-balance` flash-repay guard
+  (`plan-builder.ts:112`) bounds only the FLASH token delta, NOT the leftover standing position. So the
+  bounded-live guard MUST **reject any plan containing an `abandonExit` credit edge unless a SEPARATE
+  credit-live human marker is set** (independent of the wallet cap — the wallet cap does not bound a
+  standing under-collateralized position). Wire the guard off the edge's `abandonExit`/`leavesStandingPosition`
+  flag, never off a strategy label. Plus a per-venue feasibility precondition proven on fork replay BEFORE
+  the adapter ships: the venue's health-factor check is oracle-based and admits an oracle-value>market-value
+  position with no tx-end solvency revert (exactly the Fluid/wstUSR reference case — verify per venue).
+- **Note on the quote interface (fresh review):** Fluid has NO 1-D `quote(amountIn)→amountOut` today —
+  `quoteFluidVault()` throws; it is priced by a 2-D solver search (flashAmount × `fluidDebtBps`). A credit
+  edge has an EXTRA free variable (borrow size / LTV) a swap edge lacks. The typing-layer slice must NOT
+  flatten credit into the swap's 1-D quote — keep the borrow-size variable explicit (the deterministic
+  max-safe-borrow under abandonment is the eventual collapse, but prove equivalence before deleting the
+  search).
 
 ## LEAN v1 (build these — all off-hot-path or gated refactor, all replay-gateable)
 1. **Unified data model as TYPES** — `VenueEdge{ edgeKind:"swap"|"credit"|"lp"; venue; tokenIn; tokenOut;
