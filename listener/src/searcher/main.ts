@@ -155,9 +155,10 @@ interface LiveConfig {
    *  in bps. Scale-invariant margin for sim-vs-real error; calibrate from the
    *  reconciliation of landed txs. 2000 = trust 80% of sim profit. */
   profitHaircutBps: number;
-  /** Allow broadcasting hash-only (synthetic-overlay) bundles. Default false:
-   *  only real-victim (mempool/rawTx) bundles are submitted (Fix A). */
+  /** Allow broadcasting approximate hash-only (synthetic-overlay) bundles. */
   allowHashOnlySubmit: boolean;
+  /** Allow broadcasting exact-overlay hash-only MEV-Share bundles. */
+  allowHashOnlyMevShareSubmit: boolean;
   victimSourceFilter: {
     enabled: boolean;
     minStreak: number;
@@ -209,8 +210,13 @@ export function computeBidEth(
   return (expectedProfitEth * BigInt(opts.bribeBps)) / 10000n;
 }
 
-export function hashOnlySubmitDecision(rawTx: boolean, overlayExact: boolean, allowApprox: boolean): boolean {
-  return rawTx || overlayExact || allowApprox;
+export function hashOnlySubmitDecision(
+  rawTx: boolean,
+  overlayExact: boolean,
+  allowApprox: boolean,
+  allowHashOnlyMevShareSubmit = false,
+): boolean {
+  return rawTx || (overlayExact && allowHashOnlyMevShareSubmit) || allowApprox;
 }
 
 // Major DEX routers/aggregators — mempool server-side filter (route B). A
@@ -417,6 +423,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
     profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
     allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
+    allowHashOnlyMevShareSubmit: process.env.SEARCHER_SUBMIT_HASHONLY_MEVSHARE === "1",
     victimSourceFilter: {
       enabled: process.env.SEARCHER_VICTIM_SOURCE_FILTER !== "0",
       minStreak: Number(process.env.SEARCHER_VICTIM_SOURCE_MIN_STREAK ?? "3"),
@@ -486,7 +493,8 @@ async function main(): Promise<void> {
     `[searcher/live] evGate=${config.evGate ? "on" : "off"} minNetEth=${config.minNetEth} ` +
       `gasBufferMult=${(config.gasBufferMultX10 / 10).toFixed(1)}x ` +
       `profitHaircut=${(config.profitHaircutBps / 100).toFixed(0)}% ` +
-      `hashOnlySubmit=${config.allowHashOnlySubmit ? "all" : "exact-only"}`,
+      `hashOnlyApproxSubmit=${config.allowHashOnlySubmit ? "on" : "off"} ` +
+      `hashOnlyMevShareSubmit=${config.allowHashOnlyMevShareSubmit ? "on" : "off"}`,
   );
   console.log(`[searcher/live] wallet=${config.wallet.address}`);
   console.log(`[searcher/live] botvm=${config.botvmAddress}`);
@@ -1731,26 +1739,38 @@ async function handleHint(
           continue;
         }
 
-        // Real-victim / exact-overlay gate (Fix A): approximate hash-only bundles
+        // Real-victim / hash-only gate (Fix A): approximate hash-only bundles
         // reconstruct the pending swap with a SYNTHETIC overlay (whale swaps
         // impact.amountIn), which can inflate the sim and over-size the builder
         // payment. Real-victim bundles carry rawTx; exact hash-only overlays use
-        // event-derived post-state. Approximate hash-only submit still requires
-        // the explicit override.
-        if (!hashOnlySubmitDecision(Boolean(rawTx), overlayExact, ctx.config.allowHashOnlySubmit)) {
+        // event-derived post-state but still have no landed order to backrun, so
+        // exact-overlay MEV-Share submit requires its own explicit override.
+        const allowApproxHashOnlySubmit = !overlayExact && ctx.config.allowHashOnlySubmit;
+        if (
+          !hashOnlySubmitDecision(
+            Boolean(rawTx),
+            overlayExact,
+            allowApproxHashOnlySubmit,
+            ctx.config.allowHashOnlyMevShareSubmit,
+          )
+        ) {
           ctx.counters.finalVerifySkipped++;
           lastTerminalState = "no-profitable-quote";
-          lastTerminalError =
-            `hash-only unverifiable (no real victim or exact overlay) route=${resolvedRouteSummary(resolved.root)}`;
-	          console.log(`[searcher/live] skip hash-only submit: ${lastTerminalError}`);
-	          emitPipelineDropped("submit_gate", "hash_only_unverifiable", lastTerminalError, {
-	            pathId: resolvedRouteSummary(resolved.root),
-	            templateId: candidate.templateName,
-	            plans: plans.length,
-	          });
-	          recordFinalState(lastTerminalState, lastTerminalError, sim);
-	          continue;
-	        }
+          const hashOnlyDropReason = overlayExact
+            ? "hash_only_unmatchable"
+            : "hash_only_unverifiable";
+          lastTerminalError = overlayExact
+            ? `hash-only unmatchable (exact overlay has no landed order) route=${resolvedRouteSummary(resolved.root)}`
+            : `hash-only unverifiable (no real victim or exact overlay) route=${resolvedRouteSummary(resolved.root)}`;
+          console.log(`[searcher/live] skip hash-only submit: ${lastTerminalError}`);
+          emitPipelineDropped("submit_gate", hashOnlyDropReason, lastTerminalError, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+          });
+          recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
 
         // Phantom-profit guard: a closed-loop backrun capturing a large fraction
         // of the flash notional is not real — it means the revm victim overlay
