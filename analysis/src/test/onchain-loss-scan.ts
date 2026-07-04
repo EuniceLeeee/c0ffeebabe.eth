@@ -43,6 +43,8 @@ const EXECUTOR = address("9");
 const POOL_GAP_OUT_OF_ALLOWLIST_TO = ethers.getAddress("0x1000000000000000000000000000000000000001");
 const NON_COMPARABLE_OUT_OF_ALLOWLIST_TO = ethers.getAddress("0x2000000000000000000000000000000000000002");
 const OUT_OF_ALLOWLIST_TO = ethers.getAddress("0x1234567890abcdef1234567890abcdef12345678");
+const BUILDER_COINBASE = ethers.getAddress("0xB000000000000000000000000000000000000001").toLowerCase();
+const BUILDER_LABEL = "Titan (titanbuilder.xyz)";
 
 const POOL_A = address("1");
 const POOL_B = address("2");
@@ -73,7 +75,7 @@ test("onchain block scan attributes competed backrun losses per victim", async (
     tx(W5, 9, BOB, EXECUTOR, [POOL_I, POOL_J], { wethProfitWei: W5_PROFIT_WEI }),
     tx(V6, 10, FAY, EXECUTOR, [POOL_K]),
     tx(W6, 11, BOB, EXECUTOR, [POOL_K, POOL_L]),
-  ]);
+  ], { miner: BUILDER_COINBASE, extraData: textHex(BUILDER_LABEL) });
   const graph = graphFixture([
     POOL_A,
     POOL_B,
@@ -142,6 +144,8 @@ test("onchain block scan attributes competed backrun losses per victim", async (
   assert.equal(byVictim.get(V6)?.primary_gap, "source_not_seen");
   assert.equal(byVictim.get(V6)?.source_not_seen_reason, "not_received");
   assert.equal(byVictim.get(V6)?.source_not_seen_note, "not_further_separable_without_external_mempool_archive");
+  assert.equal(byVictim.get(V6)?.winner_block_builder, BUILDER_LABEL);
+  assert.equal(byVictim.get(V1)?.winner_block_builder, BUILDER_LABEL);
   assert.deepEqual(result.admit_candidates.map((candidate) => candidate.address), [OUT_OF_ALLOWLIST_TO]);
   assert.equal(result.admit_candidate_count, 1);
   assert.equal(result.admit_candidates[0]?.victim_tx, V5);
@@ -166,6 +170,12 @@ test("onchain block scan attributes competed backrun losses per victim", async (
   assert.equal(result.source_not_seen_reasons.pool_not_in_graph, 1);
   assert.equal(result.source_not_seen_reasons.to_not_admissible, 1);
   assert.equal(result.source_not_seen_reasons.not_received, 1);
+  assert.deepEqual(result.not_received_builders, { [BUILDER_LABEL]: 1 });
+  assert.equal(
+    Object.values(result.not_received_builders).reduce((sum, count) => sum + count, 0),
+    1,
+    "non-not_received cases should not be counted in the builder rollup",
+  );
   assert.equal(result.winner_profit_by_primary_gap.source_not_seen?.median_usd, 0.8);
   assert.equal(result.winner_profit_by_primary_gap.source_not_seen?.p90_usd, 0.8);
   assert.equal(result.winner_profit_by_primary_gap.source_not_seen?.dust_share, 1);
@@ -205,6 +215,7 @@ test("onchain block scan attributes competed backrun losses per victim", async (
 
   console.log("[onchain-loss-scan] per-case attribution PASS");
   console.log("[onchain-loss-scan] admit-candidates gating PASS");
+  console.log("[onchain-loss-scan] not-received builder rollup PASS");
 });
 
 type FixtureTx = OnchainScanTx & {
@@ -212,10 +223,15 @@ type FixtureTx = OnchainScanTx & {
   wethProfitWei?: bigint;
 };
 
-function blockFixture(items: FixtureTx[]): OnchainScanBlock {
+function blockFixture(
+  items: FixtureTx[],
+  opts: { miner?: string; extraData?: string } = {},
+): OnchainScanBlock {
   return {
     number: BLOCK,
     timestamp: 1783094400,
+    miner: opts.miner,
+    extraData: opts.extraData,
     transactions: items.map(({ pools: _pools, ...item }) => item),
     receipts: items.map((item) => receipt(item)),
   };
@@ -285,6 +301,10 @@ function address(char: string): string {
 
 function quantity(n: number): string {
   return `0x${BigInt(n).toString(16)}`;
+}
+
+function textHex(value: string): string {
+  return ethers.hexlify(ethers.toUtf8Bytes(value));
 }
 
 function topicAddress(addr: string): string {

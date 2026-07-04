@@ -91,6 +91,7 @@ export interface OnchainScanBlock {
   timestamp?: number;
   baseFeePerGas?: string;
   miner?: string;
+  extraData?: string;
   transactions: OnchainScanTx[];
   receipts: OnchainScanReceipt[];
 }
@@ -118,6 +119,7 @@ export interface OnchainCaseReport {
   winner_index: number;
   winner_from: string;
   winner_to: string | null;
+  winner_block_builder: string;
   primary_gap: PrimaryGap;
   comparable: boolean;
   winner_style?: WinnerStyle;
@@ -178,6 +180,7 @@ export interface OnchainLossScanResult {
   admit_candidate_count: number;
   summary: Partial<Record<PrimaryGap, number>>;
   source_not_seen_reasons: Partial<Record<SourceNotSeenReason, number>>;
+  not_received_builders: Record<string, number>;
   winner_profit_by_primary_gap: Partial<Record<PrimaryGap, WinnerProfitRollup>>;
 }
 
@@ -407,6 +410,7 @@ export async function scanOnchainLosses(options: OnchainLossScanOptions): Promis
     admit_candidate_count: admitCandidates.length,
     summary: summarizeCases(cases),
     source_not_seen_reasons: summarizeSourceNotSeenReasons(cases),
+    not_received_builders: summarizeNotReceivedBuilders(cases),
     winner_profit_by_primary_gap: summarizeWinnerProfitByGap(cases),
   };
 }
@@ -464,6 +468,7 @@ function caseFromCompetedBackrun(
   const createdAt = now ? now() : timestampFromBlock(block);
   const touchedVenues = winner.touchedVenues.map(reportVenue);
   const missingVenueEvidence = missingVenues.map(reportVenue);
+  const winnerBlockBuilder = resolveBlockBuilder(block);
   const learningCase = learningCaseFromOnchainScan({
     competitor_tx: winner.hash,
     source_block: block.number - 1,
@@ -480,6 +485,7 @@ function caseFromCompetedBackrun(
       winner_index: winner.index,
       winner_from: winner.from,
       winner_to: winner.to,
+      winner_block_builder: winnerBlockBuilder,
       winner_pools: winner.pools,
       victim_tx: victim.hash,
       victim_index: victim.index,
@@ -517,6 +523,7 @@ function caseFromCompetedBackrun(
     winner_index: winner.index,
     winner_from: winner.from,
     winner_to: winner.to,
+    winner_block_builder: winnerBlockBuilder,
     primary_gap,
     comparable,
     winner_style: winnerStyle,
@@ -616,6 +623,7 @@ async function fetchBlockFromRpc(rpc: RpcClient, blockNumber: number): Promise<O
     timestamp: quantityToNumber(block.timestamp),
     baseFeePerGas: optionalString(block.baseFeePerGas),
     miner: optionalString(block.miner),
+    extraData: optionalString(block.extraData),
     transactions: normalizeBlockTransactions(block.transactions),
     receipts: parseRpcReceipts(rawReceipts),
   };
@@ -846,6 +854,18 @@ function summarizeSourceNotSeenReasons(cases: OnchainCaseReport[]): Partial<Reco
   return out;
 }
 
+function summarizeNotReceivedBuilders(cases: OnchainCaseReport[]): Record<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of cases) {
+    if (item.source_not_seen_reason !== "not_received") continue;
+    const builder = item.winner_block_builder || "unknown";
+    counts.set(builder, (counts.get(builder) ?? 0) + 1);
+  }
+  return Object.fromEntries(
+    [...counts.entries()].sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b)),
+  );
+}
+
 function summarizeWinnerProfitByGap(cases: OnchainCaseReport[]): Partial<Record<PrimaryGap, WinnerProfitRollup>> {
   const groups = new Map<PrimaryGap, OnchainCaseReport[]>();
   for (const item of cases) groups.set(item.primary_gap, [...(groups.get(item.primary_gap) ?? []), item]);
@@ -957,6 +977,19 @@ function percentileNearestRank(values: number[], q: number): number | null {
   if (values.length === 0) return null;
   const index = Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * q) - 1));
   return values[index] ?? null;
+}
+
+function resolveBlockBuilder(block: OnchainScanBlock): string {
+  return decodeBlockExtraData(block.extraData) || normalizeAddress(optionalString(block.miner)) || "unknown";
+}
+
+function decodeBlockExtraData(extraData: unknown): string {
+  const hex = String(extraData ?? "");
+  if (!/^0x([0-9a-fA-F]{2})*$/.test(hex)) return "";
+  return Buffer.from(hex.slice(2), "hex")
+    .toString("utf8")
+    .replace(/[^\x20-\x7e]+/g, "")
+    .trim();
 }
 
 function blockRange(fromBlock: number, toBlock: number): number[] {
@@ -1152,6 +1185,7 @@ function renderSummary(report: {
   competed_backruns: number;
   summary: Partial<Record<PrimaryGap, number>>;
   source_not_seen_reasons: Partial<Record<SourceNotSeenReason, number>>;
+  not_received_builders: Record<string, number>;
   winner_profit_by_primary_gap: Partial<Record<PrimaryGap, WinnerProfitRollup>>;
   cases: OnchainCaseReport[];
   write: boolean;
@@ -1179,6 +1213,12 @@ function renderSummary(report: {
   if (reasons.length > 0) {
     lines.push("  source_not_seen_reasons:");
     for (const [reason, count] of reasons) lines.push(`    ${reason}: ${count}`);
+  }
+
+  const notReceivedBuilders = Object.entries(report.not_received_builders);
+  if (notReceivedBuilders.length > 0) {
+    lines.push("  not_received_builders:");
+    for (const [builder, count] of notReceivedBuilders) lines.push(`    ${builder}: ${count}`);
   }
 
   const profitRollups = Object.entries(report.winner_profit_by_primary_gap).sort(([a], [b]) => a.localeCompare(b));
