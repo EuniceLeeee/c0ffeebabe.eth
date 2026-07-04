@@ -401,5 +401,12 @@ flag). Divergences resolved:
 - their "adopt the name `AtomicView`" → **rejected** (naming residue; views key = `blockscan`).
 - their Reviewer-A wallet reconciliation (2nd EOA = position-account category mix) → **adopted**
   (§2 BS-lane row, §4).
-If the concurrent line commits its own fusion spec, it merges INTO this doc per §7 (one
-authority); this section is the ready-made merge map.
+**Resolution landed (`d1655a2`, same day):** the concurrent line's final fusion synthesis
+(`unified-arch-impl-spec-20260704-3way-synthesis.md`) independently CONVERGED onto this doc's
+decisions — its Reviewer B found the S0 spine in the working tree, verified it, and adopted
+`backrun | block-scan` ("renaming to `reactive` is churn with zero safety benefit"), `VenueEdge`
+= the already-widened `TokenEdge` (type alias at most, no new class), and the credit-live reject
+guard wired off `pathLeavesStandingPosition`. Zero decision-level divergence remains between the
+two lines. Per §7, THIS doc stays the slice-plan/naming authority; the concurrent line's spec
+stands as corroborating provenance (its F1–F4 foundation→fork framing maps 1:1 onto
+S0/S1 → BS-contract/BS-universe → BS-lane here).
