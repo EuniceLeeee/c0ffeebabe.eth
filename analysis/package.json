@@ -11,6 +11,7 @@
     "census-report": "tsx src/cli/census-report.ts",
     "redact-live-run": "tsx src/cli/redact-live-run.ts",
     "hermes-gate": "tsx src/cli/hermes-gate.ts",
+    "test:sender-flow": "tsx --test src/test/sender-flow-victim-source.ts",
     "build": "tsc --noEmit"
   },
   "dependencies": {

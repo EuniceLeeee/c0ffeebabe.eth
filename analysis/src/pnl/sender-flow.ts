@@ -12,10 +12,9 @@ export interface SenderFlowInput {
   seenInOurPublicFeed: boolean | null;
 }
 
-export type SenderFlow = "public" | "private" | "unknown";
-
 export interface SenderFlowResult {
-  flow: SenderFlow;
+  submission_method: "bundle" | "public_mempool" | "unknown";
+  source_visibility: "seen_by_us" | "not_seen_by_us" | "unknown";
   confidence: "high" | "med" | "low";
   evidence: string[];
   signals: {
@@ -31,6 +30,9 @@ export interface SenderFlowResult {
 
 export function classifySenderFlow(input: SenderFlowInput): SenderFlowResult {
   const destIsPublicRouter = isKnownPublicRouter(input.to);
+  const sourceVisibility = sourceVisibilityFor(input.seenInOurPublicFeed);
+  const submissionMethod = submissionMethodFor(input, sourceVisibility, destIsPublicRouter);
+  const evidence = evidenceFor(input, sourceVisibility, destIsPublicRouter);
   const signals: SenderFlowResult["signals"] = {
     coinbase_transfer_wei: input.coinbaseTransferWei.toString(),
     priority_tip_wei: input.priorityTipWei.toString(),
@@ -41,31 +43,79 @@ export function classifySenderFlow(input: SenderFlowInput): SenderFlowResult {
     builder: input.builder,
   };
 
-  if (input.coinbaseTransferWei > 0n) {
-    return result("private", "high", ["coinbase_transfer"], signals);
+  return result(
+    submissionMethod,
+    sourceVisibility,
+    confidenceFor(submissionMethod, sourceVisibility, destIsPublicRouter),
+    evidence,
+    signals,
+  );
+}
+
+function sourceVisibilityFor(seenInOurPublicFeed: boolean | null): SenderFlowResult["source_visibility"] {
+  if (seenInOurPublicFeed === true) return "seen_by_us";
+  if (seenInOurPublicFeed === false) return "not_seen_by_us";
+  return "unknown";
+}
+
+function submissionMethodFor(
+  input: SenderFlowInput,
+  sourceVisibility: SenderFlowResult["source_visibility"],
+  destIsPublicRouter: boolean,
+): SenderFlowResult["submission_method"] {
+  if (
+    input.coinbaseTransferWei > 0n
+    || input.maxPriorityFeePerGasWei === 0n
+    || input.priorityTipWei === 0n
+  ) {
+    return "bundle";
   }
+  if (sourceVisibility === "seen_by_us" || destIsPublicRouter) return "public_mempool";
+  return "unknown";
+}
+
+function evidenceFor(
+  input: SenderFlowInput,
+  sourceVisibility: SenderFlowResult["source_visibility"],
+  destIsPublicRouter: boolean,
+): string[] {
+  const evidence: string[] = [];
+  if (sourceVisibility === "seen_by_us") evidence.push("seen_in_our_public_feed");
+  if (sourceVisibility === "not_seen_by_us") evidence.push("not_seen_in_our_public_feed");
+  if (input.coinbaseTransferWei > 0n) evidence.push("coinbase_transfer_bundle");
   if (input.maxPriorityFeePerGasWei === 0n || input.priorityTipWei === 0n) {
-    return result("private", "high", ["zero_priority_tip"], signals);
+    evidence.push("zero_priority_tip_bundle");
   }
-  if (input.seenInOurPublicFeed === true) {
-    return result("public", "high", ["seen_in_our_public_feed"], signals);
-  }
-  if (destIsPublicRouter) {
-    return result("public", "med", ["dest_public_router"], signals);
-  }
-  if (input.toHasCode && !destIsPublicRouter) {
-    return result("private", "low", ["dest_searcher_contract"], signals);
-  }
-  return result("unknown", "low", ["no_discriminating_signal"], signals);
+  if (destIsPublicRouter) evidence.push("dest_public_router");
+  if (evidence.length === 0) evidence.push("no_discriminating_signal");
+  return evidence;
+}
+
+function confidenceFor(
+  submissionMethod: SenderFlowResult["submission_method"],
+  sourceVisibility: SenderFlowResult["source_visibility"],
+  destIsPublicRouter: boolean,
+): SenderFlowResult["confidence"] {
+  if (submissionMethod === "bundle") return "high";
+  if (sourceVisibility === "seen_by_us") return "high";
+  if (destIsPublicRouter) return "med";
+  return "low";
 }
 
 function result(
-  flow: SenderFlow,
+  submissionMethod: SenderFlowResult["submission_method"],
+  sourceVisibility: SenderFlowResult["source_visibility"],
   confidence: SenderFlowResult["confidence"],
   evidence: string[],
   signals: SenderFlowResult["signals"],
 ): SenderFlowResult {
-  return { flow, confidence, evidence, signals };
+  return {
+    submission_method: submissionMethod,
+    source_visibility: sourceVisibility,
+    confidence,
+    evidence,
+    signals,
+  };
 }
 
 function isKnownPublicRouter(addr: string | null | undefined): boolean {

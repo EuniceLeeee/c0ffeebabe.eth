@@ -94,22 +94,41 @@ export async function findVictimSource(
   }
 
   const sourceFlow = await classifySourceFlow(best.prior.txHash);
+  const sourceFlowClass = classifyVictimSourceFlow(sourceFlow);
   return {
     atomic: false,
     source_hash: best.prior.txHash,
     source_pool: best.pool,
     source_index: best.prior.index,
     backrun_index: backrun.transactionIndex,
-    source_flow: classifyVictimSourceFlow(sourceFlow),
-    source_flow_confidence: sourceFlow.confidence,
+    source_flow: sourceFlowClass,
+    source_flow_confidence: victimSourceFlowConfidence(sourceFlowClass, sourceFlow),
     evidence: ["nearest_preceding_opposite_dir_same_pool", ...sourceFlow.evidence],
   };
 }
 
 function classifyVictimSourceFlow(sourceFlow: SenderFlowResult): VictimSourceResult["source_flow"] {
-  if (sourceFlow.flow === "public" && sourceFlow.signals.dest_is_public_router) return "public-router";
-  if (sourceFlow.flow === "private") return "private-orderflow";
+  if (sourceFlow.source_visibility === "seen_by_us" && sourceFlow.signals.dest_is_public_router) {
+    return "public-router";
+  }
+  if (
+    sourceFlow.source_visibility === "not_seen_by_us"
+    && sourceFlow.submission_method === "bundle"
+    && sourceFlow.signals.dest_has_code
+    && !sourceFlow.signals.dest_is_public_router
+  ) {
+    return "private-orderflow";
+  }
   return "unknown";
+}
+
+function victimSourceFlowConfidence(
+  sourceFlowClass: VictimSourceResult["source_flow"],
+  sourceFlow: SenderFlowResult,
+): VictimSourceResult["source_flow_confidence"] {
+  if (sourceFlowClass === "public-router") return sourceFlow.confidence;
+  if (sourceFlowClass === "private-orderflow") return "low";
+  return "low";
 }
 
 function isBetterSource(candidate: DecodedSwap, current: DecodedSwap): boolean {
