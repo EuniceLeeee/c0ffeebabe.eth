@@ -476,7 +476,7 @@ generator/evaluator split, each with its rule-12 gate.
 | **S0** taxonomy + TokenEdge widening | `75210c5` | build + `searcher:planner` 14/14 + replay 12/12 + `searcher:taxonomy` 5/5 + router-filter |
 | **S1** merged LearningCase + postmortem/census fold | `6145931` | tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner unchanged |
 | **S2** fail-closed standing-position guard | `a737576` | build + `searcher:standing-guard` 4/4 + planner/replay unchanged; **deployed to the node** (live mode preserved, wallet 0.0027 ETH ≤ cap); runtime check = **0 `standing_position_unauthorized` false-positives** |
-| **BS-0** fixture | exemplar re-selected 2026-07-04 | pure-DEX exemplar = `test/fixtures/blockscan-coffee-f2de7499.json` (tx #3, receipt-derived, zero-node); `…803a3693.json` retired → future protocol-leg exemplar (protocolAction=mint, §1.1 amendment); harness NOT written (§9.4 step 1) |
+| **BS-0** harness | `d29110a` | `searcher:blockscan-a0` **19/19** — legs 1-2 replayed with production `computeSwapStep` from receipt-derived pre-states (amountOut + post-sqrtP bit-exact), leg 3 curve receipt-anchored, leg 4 canonical v2 bit-exact, surplus +270191 USDC, `expectedGrossWei` 157203701650240 recorded + gated; tsc + taxonomy 5/5 + planner 14/14 + replay 12/12 unchanged. Exemplar = `test/fixtures/blockscan-coffee-f2de7499.json` (tx #3, zero-node); `…803a3693.json` retired → future protocol-leg exemplar (protocolAction=mint, §1.1 amendment) |
 | BS-contract → CR-8 | — | NOT STARTED |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
