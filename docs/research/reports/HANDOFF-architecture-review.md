@@ -1,129 +1,80 @@
-# Architecture Review Handoff — refired after R10+R11 (2026-07-03)
+# Architecture Review Handoff — refired after R-2b-1..5 (2026-07-05)
 
-> Regenerated per `docs/research/templates/architecture-review.md` section B. DATA + HYPOTHESIS,
-> not conclusions. Scope: authorized defensive on-chain arbitrage research; mainnet fork +
-> dry-run; broadcast is a human-gated step.
->
-> **This is a REFIRE of a prior review, not a first firing.** The 20260702 review (see
-> `docs/research/reports/arch-review-20260702-verdict.md`) already ran this same dual-blind
-> process once, verdict `localized_lever: COVERAGE`, `decision: EPIC` (proactive venue-graph
-> coverage). That epic was executed across R4-R10 (universe topN=0 fix, v4 adapter, v4 discovery,
-> v4 Initialize-window gap) and is now substantially LANDED and DEPLOYED LIVE. Yet `simSuccess`
-> is STILL flat (0) across R10 and R11. **Your job: determine whether coverage remains the binding
-> lever (just not yet sufficient), or whether closing coverage has now exposed a DIFFERENT binding
-> constraint** (the prior review's own Codex-B pass already flagged a candidate: see §2 below).
+> Regenerated per `docs/research/templates/architecture-review.md` §B. DATA + HYPOTHESIS, not
+> conclusions. Scope: authorized defensive on-chain arbitrage research; mainnet fork + dry-run;
+> broadcast is a human-gated step. Neutral wording.
 
-## 1. Trigger evidence — round table (flat simSuccess)
+## 0. FRAME AUDIT FIRST (mandatory — challenge the shared frame before localizing)
+The trigger fired on "no +EV `simSuccess` growth across rounds." But the R-2b rounds ran **ZERO live
+windows** — they were all OFFLINE Phase-2b strategy-expansion scaffolding (block-scan + credit). So the
+flat-simSuccess "evidence" is not a fresh measurement; it is the ABSENCE of measurement. Two frame
+challenges the reviewer MUST answer before naming a lever:
+1. **Is "coverage/scaffolding exhausted" measured on COMPLETE, CURRENT intake — or inherited from stale
+   data?** The last live window was **R11, 2026-07-03** (see prior handoff in git history). Since then:
+   (a) the economics/sim-fidelity lever that review localized (the `gasUsed=0` sim bug) has been **FIXED**
+   in code (verify below), and (b) **MEV-Share was flipped ON 2026-07-04** ([[project-mevshare-flow-discarded]]:
+   the old "dust ceiling" was measured on ~1.4% of flow). Neither change has been measured live. So the
+   binding production lever is being localized on data that predates the two biggest relevant changes.
+2. **Are we conflating "not-worth-it-for-block-scan" with "no production lever"?** R-2b concluded
+   block-scan is dust-limited ([[project-f2de7499-not-viable-blockscan-exemplar]]) and credit needs a
+   Fluid-resolver research slice. Both are STRATEGY-EXPANSION tracks. The searcher's PRIMARY path is
+   backrun (mempool + MEV-Share). Is the real distance-to-production lever in the EXISTING backrun path
+   (intake completeness post-MEV-Share + the R11 inclusion/economics wall), not in Phase-2b scaffolding?
 
-| round | window | opps_seen | pipeline_dropped | simulation_result (ok:true) | non-dust bundle_submitted | fix shipped |
-|---|---|---|---|---|---|---|
-| R8 | 20260703 | 48 | 51 | **3** | — | EV-gate FRAX valuation fix |
-| R9 | 64 events, 147 blocks | 32 | 32 | 0 (strict window) | **first non-dust found** (block 25447376: profit 0.00217 ETH, bid 0.00109 ETH, net ~$3.9, bid≈50% not 100%) | validated R8 fix live |
-| R10 | 92 events | 47 | 45 | **0** | 0 in-window | v4 Initialize-window pool-discovery gap fixed + deployed (`82dce7e`) |
-| R11 | 183 events, 573 blocks (25447562→25448134, 64min) | 91 | 90 | **0** | **0** | none yet — this trigger |
+## 1. Trigger evidence — R-2b round table (all OFFLINE, no live simSuccess measured)
+| round | type | shipped | live simSuccess? |
+|---|---|---|---|
+| R-2b-1 | offline | BS-0-curve (`9135cbc`) + edge-kinds (`a6b72cd`) | not measured |
+| R-2b-2 | offline | BS-3-solve probe (`c63e075`); pinned f2de7499 non-viable | not measured |
+| R-2b-3 | offline | CR-5 decomposition + verified 270.1 wstUSR archive target | not measured |
+| R-2b-4 | offline | validated CR-3-secondary (AC-3 archive 2/2) | not measured |
+| R-2b-5 | offline | investigated CR-5c/BS-lane → both blocked/null → this trigger | not measured |
 
-**R10 + R11 are both solid (non-thin) samples with zero non-dust simSuccess growth.** R11
-`pipeline_dropped`: `no_candidate_plans`=57 (63%), `no-profitable-quote`=11, `candidate-cap`=11,
-`quote-timeout`=7, `expired-before-solver`=4. Spread across **13 distinct pools** (not one
-concentrated known-bottleneck pool like R6-R9's `0xEcABc504…`/`0x39484A066af5…` pattern) —
-`0xb2896002662372B95086A4fCAaf7dFA6C7727B4A`(7x), `0x46af68beE5212318B3f30AE14b4EE03fd49FB147`(3x),
-rest 1-2x each.
+**No live dry-run window has run since 2026-07-03 (R11).** The offline slices are all valid gated work;
+none touched the backrun production path or measured live simSuccess/inclusion.
 
-**IMPORTANT — do not trust the raw `no_candidate_plans` count without sub-classification.** R9/R10
-each hand-classified their own `no_candidate_plans` drops and found the large majority were
-**correctly-pruned, non-arbable** (`only_immediate_same_pool_reverse`): R9 19/20, R10 33/35. Only a
-small remainder (R9 1/20, R10 2/35) were `impact_pool_not_in_routing_graph` — a REAL gap. **R11's 57
-`no_candidate_plans` have NOT been sub-classified yet this round — this is the reviewer's first job**
-(the events carry a `subReason`/classification field per drop; grep the raw jsonl, don't just count).
-If R11 follows the same ~94% correctly-pruned pattern, the real remaining `no_candidate_plans` gap is
-only ~3-4 pools, not 57 — which changes the whole picture of how big the coverage lever still is.
+## 2. HYPOTHESIS to pressure-test (orchestrator's frame-audit read — treat as hypothesis, not verdict)
+The binding lever is **NOT Phase-2b scaffolding** and **cannot be named from stale data**. The loop has
+shipped offline strategy-expansion + a since-fixed economics bug without re-measuring live. Primary
+candidate lever = **MEASUREMENT / backrun-path revalidation**: run a fresh dry-run window (post-MEV-Share,
+post-gasUsed-fix) + Step-1 competitor cross-ref, then localize among {coverage | sim-fidelity | economics
+| flow-admission}. Runner-up = **economics** (bribeBps=100% / EV-gate posture, §4) if the fresh window
+still shows non-dust bundles dying pre-inclusion. Falsify by: if a fresh window shows simSuccess still 0
+pre-EV-gate, the lever is plan→sim (coverage/fidelity), not measurement/economics.
 
-## 2. Prior review's own unresolved finding (read before re-deriving from scratch)
+## 3. Verified current-code facts (rule-13 #2 — re-derived this round, do not inherit)
+- **`gasUsed=0` sim bug is FIXED.** `botvm-simulator.ts:48` `const gasUsed = await this.state.getGasUsed(txHash)`
+  → real gas on success (AC-3 measured `sim.gasUsed=1059262`); `gasUsed:0n` (`:67`) is ONLY the
+  revert/failure path. The 2026-07-03 review's headline economics finding is remediated.
+- **`simSuccess` is pre-EV-gate.** Recorded at `main.ts:1810-1811` (`sim.success && sim.netProfit>0n`),
+  the EV gate is later at `main.ts:1963`. So flat simSuccess=0 (when it occurs) is a plan→sim problem,
+  not an EV-gate one. The EV gate uses REAL sim gas now (`main.ts:1919` `sim.gasUsed>0n ? sim.gasUsed : default`).
+- **AC-3 archive replay PASSES 2/2** (R-2b-4): the credit-edge + curve/v4/psm path self-composes a
+  profitable arb (870.99 wstUSR on block 24710788) — the offline pipeline is sound.
 
-From `docs/research/reports/epic-coverage-slice1-20260702.md` (Codex-B, independent economics
-re-derivation, already landed as an epic finding, **status: open, carry_to: go-live, NOT YET FIXED**):
-
-> **Anvil sim returns `gasUsed=0` unconditionally** (`botvm-simulator.ts:51-56`) → whenever the EV
-> gate is evaluated, it ALWAYS falls back to `defaultGasUsed=12,000,000` × 2 buffer = 24M gas ≈
-> 0.024 ETH @1gwei — enough to kill real, modest (~0.01-0.02 ETH) profitable lanes. **A sim-fidelity
-> bug that compounds economics.** Also: `bribeBps=10000` → `bidEth = expectedProfitEth` →
-> `netEth = −gasCostEth` (fails EV gate by construction) whenever the gate is ON.
-
-**Caveat also already noted by that review:** `simSuccess` is measured **upstream** of the EV gate
-(`main.ts:1509` before `main.ts:1619`), and **the EV gate is OFF in dry-run** — so this specific bug
-does NOT explain a flat `simSuccess=0` by itself (it's a pre-broadcast wall, not a `simSuccess`
-blocker). **Re-verify this is still true on the current code** (line numbers may have shifted since
-R6-R10 touched `main.ts` — grep, don't trust the cited line numbers). If `simSuccess` really is
-computed pre-EV-gate, then the flat-zero this round is a `plan → sim` problem (no positive quote
-ever reaches `simSuccess`), not (yet) an EV-gate/economics problem — but confirm this split still
-holds; do not assume it is unchanged from the 0702 review.
-
-## 3. Pinned counterfactual case (from R11's own Step-1, chain-verified this round)
-
-- **tx:** `0x2e19d12618a20024759214b553a904c8a3f561ebee5d15b7c8b4c3aebdc5997c`, block `25447978`,
-  competitor `0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13`.
-- **on-chain facts (cast receipt, local reth):** `gasUsed=106774` (vs our 12M fallback — ~112x
-  smaller), single pool `0x51840EdC34BE8f0a391cBB180a213facF22CCD74` (standard UniV3 `Swap` topic
-  `0xc42079f9…`), USDT leg = 5,268.398337 USDT out of the pool; other leg = token
-  `0x3e76dd57E649A263a532cC9bcC58b32A065fB2a4` (unpriced by the script, `unpriced_deltas:1` — treat
-  the `$5228.68 realized_profit_usd` figure as a rough, possibly-inflated heuristic, `profit_confidence:
-  medium`, until independently priced).
-- **script classification** (`outputs/live-loss/watch-25447978-2e19d12618.md` on the node):
-  `primary_reason: seen_but_lost`, `seen_scope: same_token`, `pool_in_seen_events: false`,
-  `pool_in_routing_graph: null`, `gap_type: n/a` (unclassified by the script — verify, don't trust).
-- **our own funnel, SAME window:** this EXACT pool address appears in R11's `no_candidate_plans`
-  drop list — meaning our planner DID encounter it and produced no candidate plan, yet the script
-  says it's not in our routing graph. **This contradiction is the thing to resolve**: is the pool
-  registered but unroutable (path gap), or does opportunity-detection touch it via a different
-  mechanism than the routing graph (registration/coverage gap)?
-- **Widen the sample:** `0xae2Fc483` alone executed 126 txs in this 64-min window (net ~$332
-  realized after netting paired legs; 30/126 `seen_but_lost`, 96/126 `not_seen`).
-  `0xc0ffeEBABE5D496B2DDE509f9fa189C25cF29671` executed 10 txs, ~$4.07 net (quiet this window).
-  Raw reports: on the node, `/opt/MEV/analysis/outputs/live-loss/watch-*.md`, filter to
-  **filename block number in `[25447562, 25448134]`** (the directory has stale reports from prior
-  rounds mixed in — do NOT grep the whole directory, `grep -l addr $(cat /tmp/inwindow.txt)`
-  pattern was used this round to scope correctly, list saved at `/tmp/inwindow.txt` on the node).
-
-## 4. Current repo mechanisms snapshot (so no epic slice reinvents landed work)
-
-- **Coverage / learn→close (W3, landed `a3c8cb2`):** `listener/searcher/pools/discovery-queue.json`
-  — only `class:closable` pools auto-enqueue for probe+merge; `single_venue_noise` never added;
-  non-standard shapes (native-ETH sentinel, v4) recorded `blocked_on_adapter`, feed the epic.
-  Current queue has 6 STALE entries from `step1:20260702-v3fork` (never probed/merged since
-  `first_seen_block` ~25442420-493) — **check whether this queue is actively drained by anything,
-  or sits dormant round-to-round.**
-- **v4 pool discovery:** R7 initial backfill (655/1500 graph slots v4) + R10 fixed the
-  `Initialize`-window gap (`resolveV4InitBackward`, deployed `82dce7e`). R10's live production
-  backfill (150k-block window) is **STILL RUNNING** on the node as of this handoff (pid 99451,
-  ~2hr+ elapsed, stuck in the per-poolId resolver phase — see `/tmp/v4-backfill-r10.log`), not yet
-  merged into `active-pools.json`.
-- **Pool universe:** `SEARCHER_POOL_UNIVERSE_TOP_N=1500` confirmed live this round (startup banner:
-  `2 protocol + 12 pinned + 1500 universe + 2934 factory + 100 swap-active + 284 pair-completion =
-  4676 total`). The 20260702 zero-universe regression (topN=0) is NOT present.
-
-## 5. Economics config snapshot (current values, re-verified this round)
-
-| knob | value | source |
+## 4. Economics config snapshot (verify against node `.env` — code defaults here)
+| knob | code default | file |
 |---|---|---|
-| `SEARCHER_QUOTE_SAFETY_BPS` | 9999 | `main.ts:303`, `solver.ts:112` |
-| `SEARCHER_QUOTE_PROFIT_FLOOR_BPS` | 20 (dry-run) / 0 (live) | `main.ts:330`, `solver.ts:114` |
-| `SEARCHER_BRIBE_BPS` | 10000 (100%) | `main.ts:350` |
-| `SEARCHER_MIN_NET_ETH` | 0 | `main.ts:353` |
-| `SEARCHER_BACKRUN_GAS_USED` (defaultGasUsed fallback) | 12,000,000 | `main.ts:316`, used at `main.ts:1656,1694` when `sim.gasUsed==0` |
-| `SEARCHER_POOL_UNIVERSE_TOP_N` | 1500 (confirmed live) | startup banner this round |
-| `SEARCHER_OPP_TTL_MS` | 5000 (deploy default) | `scripts/deploy-node.sh` |
+| `SEARCHER_QUOTE_SAFETY_BPS` | 9999 | solver.ts / main.ts |
+| `SEARCHER_QUOTE_PROFIT_FLOOR_BPS` | 20 dry / 0 live | main.ts |
+| `SEARCHER_BRIBE_BPS` | 10000 (100%) | main.ts:350-ish |
+| `SEARCHER_MIN_NET_ETH` | 0 | main.ts |
+| `defaultGasUsed` fallback | 12,000,000 | main.ts (only when sim.gasUsed==0, i.e. reverts) |
+Note: bribeBps=100% means `bidEth=expectedProfitEth` → `netEth=-gasCostEth` when the EV gate is ON —
+still fail-by-construction IF the gate is on live; but the gate is OFF in dry-run and simSuccess is
+upstream of it, so this is a pre-broadcast wall, not a simSuccess blocker. Confirm live `.env` values.
 
-**Note:** line numbers above are from a grep run this round (2026-07-03) — re-verify, code may have
-shifted since. `defaultGasUsed`/`bribeBps` values match the prior review's Codex-B finding almost
-exactly (still 12M / 10000bps) — i.e. that finding was never actually remediated, only diagnosed.
+## 5. Pinned counterfactual case — STALE (2026-07-03 R11; no fresh window this round)
+- tx `0x2e19d12618a20024759214b553a904c8a3f561ebee5d15b7c8b4c3aebdc5997c`, block 25447978, competitor
+  `0xae2Fc483…FaE13`; gasUsed 106774 (~112x < our 12M fallback), pool `0x51840EdC…CCD74` (UniV3).
+  Appeared in R11's own `no_candidate_plans` list yet script said not-in-routing-graph — unresolved
+  path-vs-registration contradiction. **This is STALE — its value now is only to test whether the
+  contradiction still reproduces; a fresh window is needed for a live counterfactual walk.**
 
-## 6. Deliverable format expected back
-
-Per the template's 4 hard requirements: (1) counterfactual walk on ≥2 real competitor takes
-(the pinned `0x2e19d126…` case + ≥1 more you find independently) with a named primary class
-(coverage / sim-fidelity / economics / flow-admission, or a stated combination with a named
-primary) — **and explicitly address whether coverage is still-insufficient vs a new lever has
-emerged now that the 20260702 epic has substantially landed**; (2) load-bearing numbers
-re-derived from code/raw artifacts, not inherited from R-round docs or this handoff; (3) runner-up
-class + the evidence that separated it + one cheap falsification experiment; (4) a repo-mechanism
-inventory check (§4 above is a starting point, verify it) before naming any class `epic`.
+## 6. Deliverable (per template's 4 hard requirements)
+Answer the §0 frame-audit questions FIRST, then name the primary binding lever to a real +EV on-chain
+bundle (coverage | sim-fidelity | economics | flow-admission | **measurement-gap**, or a combination
+with a named primary). Re-derive load-bearing numbers from `file:line`. Give a runner-up + the evidence
+separating it + one cheap falsification experiment. Inventory repo mechanisms before naming any `epic`.
+Note explicitly: R-2b shipped offline scaffolding without a live window since the gasUsed fix + MEV-Share
+flip — weigh whether the mandated next action is a fresh live measurement (operator-gated) vs a code lever.
