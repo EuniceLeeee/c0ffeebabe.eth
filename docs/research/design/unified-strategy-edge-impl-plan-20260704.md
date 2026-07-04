@@ -477,7 +477,8 @@ generator/evaluator split, each with its rule-12 gate.
 | **S1** merged LearningCase + postmortem/census fold | `6145931` | tsc + `test:learning-case` 5/5 + C1 suites + cross-package planner unchanged |
 | **S2** fail-closed standing-position guard | `a737576` | build + `searcher:standing-guard` 4/4 + planner/replay unchanged; **deployed to the node** (live mode preserved, wallet 0.0027 ETH ≤ cap); runtime check = **0 `standing_position_unauthorized` false-positives** |
 | **BS-0** harness | `d29110a` | `searcher:blockscan-a0` **19/19** — legs 1-2 replayed with production `computeSwapStep` from receipt-derived pre-states (amountOut + post-sqrtP bit-exact), leg 3 curve receipt-anchored, leg 4 canonical v2 bit-exact, surplus +270191 USDC, `expectedGrossWei` 157203701650240 recorded + gated; tsc + taxonomy 5/5 + planner 14/14 + replay 12/12 unchanged. Exemplar = `test/fixtures/blockscan-coffee-f2de7499.json` (tx #3, zero-node); `…803a3693.json` retired → future protocol-leg exemplar (protocolAction=mint, §1.1 amendment) |
-| BS-contract → CR-8 | — | NOT STARTED |
+| **BS-contract Pass A** (mechanical extraction) | `5fadecb` | `processOpportunities` factored out of `handleHint` (main.ts:1311-1968, backrun-only `SourceMeta` + `deps`), ZERO logic edits; byte-identical: planner 14/14 + replay 12/12 + `replay-live-fixtures` finalState buckets (expired:1/no-profitable:1) + taxonomy 5/5 + tsc all unchanged; evaluator re-ran all 4 + hunk-by-hunk diff review (hint→{source} equivalence, read-only threaded locals, fixturePlans write-back verified) |
+| BS-contract Pass B/C → CR-8 | — | NOT STARTED |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
 block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of Phase 3/4 do not exist.**
