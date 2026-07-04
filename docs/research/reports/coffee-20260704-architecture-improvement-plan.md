@@ -33,7 +33,7 @@ still clear the gate. Do not celebrate dust (Hermes "simSuccess must be +EV" rul
 > 3. **Unified `LearningCase` schema** — backrun postmortem AND atomic census both emit ONE object; D
 >    consumes only `LearningCase`, never a per-tool report shape (else atomic is a bypass). → C2, D.
 > 4. **Atomic close writes `atomic-view-overrides.json`**, NEVER backrun's `force-include-poolids.json` —
->    else the close pollutes the shared graph + backrun mempool `toAddress` hot path. → D.
+>    else the close crowds out backrun slots in the shared graph + mempool `toAddress` hot path. → D.
 > 6. **A minimal C2 ships BEFORE A4** — A4's gate ("we now generate a competing candidate") is hand
 >    analysis without it. Order → C1 → B → A-contract/A-universe → A1–A3 → **C2-minimal → A4** → D. → Governance.
 
@@ -146,7 +146,7 @@ drifts from backrun's EV gate / drop-reasons / submission.
    `victim_hash` (verified). Add `opportunity_kind:"backrun-arb"|"atomic-arb"`, `source_block`,
    `cycle_id`; make `victim_hash` **optional**. Atomic `opportunity_id =
    keccak(source_block | cycle_id | startToken | seedPools)` — **never a fake/empty source-swap hash**
-   (which would collide IDs and poison live-loss / Hermes analysis keyed on `victim_hash`).
+   (which would collide IDs and corrupt live-loss / Hermes analysis keyed on `victim_hash`).
    **Also design the atomic scanner funnel fields NOW (forward-compatible; Gap C/D — the Strategy Learning
    Loop below reads them).** Emit atomic-only:
    `state_block`, `cycle_fingerprint`, `seed_venues`, `venue_view_version`, `strategy_view_used`,
@@ -182,7 +182,7 @@ drifts from backrun's EV gate / drop-reasons / submission.
      and `target_block = B` explicitly so the join is unambiguous.
 3. **Bundle contract** (`bundle-router.ts:5`): make `victimTxHash` **optional** — the `standalone` path
    already ignores it (`bundle-router.ts:81`) and atomic is standalone-shaped.
-4. **Extract `processOpportunities(ctx, opportunities, sourceMeta)`** from the ~900-line `handleHint`
+4. **Factor out `processOpportunities(ctx, opportunities, sourceMeta)`** from the ~900-line `handleHint`
    (the detect→plan→solve→sim→submit tail: detect at `main.ts:1245`, the opportunities loop at
    `main.ts:1275+`), telemetry fields driven by `sourceMeta.kind`.
    Backrun `handleHint` calls it; the atomic block handler (A4) calls it. This is the single shared entry
@@ -236,7 +236,7 @@ not new infrastructure.
 - **One union graph, two edge-selection views** (not two graphs): the planner gets a hot edge-view for
   backrun; the atomic scanner uses the full union graph (it needs it to find cross-venue loops). Reuses
   the planner's existing top-N edge pruning (`maxPoolsPerToken`), and saves memory vs two graphs.
-- **Enforcement point (where "atomic breadth must not pollute backrun speed" bites): the mempool
+- **Enforcement point (where "atomic breadth must not crowd out backrun speed" bites): the mempool
   `toAddress` filter ranks its 200 hot slots by the BACKRUN score, never the atomic score** — so an
   atomic-relevant-but-not-source-swap-likely pool can never displace a source-swap-likely pool from the mempool
   filter. (Not "hide the 8000 from it" — the filter already self-caps; the point is *which* score orders
@@ -312,7 +312,7 @@ Two design constraints the earlier draft got wrong (verified in code):
   needs a rawTx, Path C calls `getTransaction(txHash)` (a fabricated hash throws), and the tail is
   `detector.detect(event)` (`main.ts:1245`), which produces opportunities from **swap logs** — a
   log-less synthetic event yields 0 and exits at "no matching graph pool". The correct wiring is to
-  **extract the post-detect pipeline** (plan → solve → sim → terminal-verify → submit, `main.ts` ~1275+)
+  **factor out the post-detect pipeline** (plan → solve → sim → terminal-verify → submit, `main.ts` ~1275+)
   into a function that takes an `Opportunity[]` directly, and have both `handleHint` and the atomic block
   handler call it. The atomic handler skips detect entirely and passes the scanner's `AtomicOpportunity[]`.
 - **Scheduling — respect the single-flight `busy` loop.** The hint loop is single-flight
@@ -342,7 +342,7 @@ over coffee's blocks.
 Order: **A0 (decode) + A-contract (contracts/refactor) + A-universe (pool-selection split) → A1 → A2 →
 A3 → A4.** A-contract and A-universe are both prerequisites — nothing atomic ships before them, or the hot
 path forks (A-contract) and backrun-speed/atomic-breadth fight through one universe (A-universe). The real
-engineering surfaces are **A-contract** (the shared `processOpportunities` extraction from the ~900-line
+engineering surfaces are **A-contract** (the shared `processOpportunities` split-out from the ~900-line
 `handleHint`), **A-universe** (two selection views + mempool-filter-from-backrun-view; overlaps the
 arb-relevance epic), **A2** (bounded 3–4 hop cycle cost, policed by the latency gate; hop cap 4→3 is the
 lever), and **A4** (block wiring + idle-only scheduling + state-block consistency). A1's O(pairs) scan is
@@ -538,7 +538,7 @@ The current closer `auto-close-route-gap.ts:72` is strategy-**blind**: it append
 `force-include-poolids` (`auto-close-route-gap.ts:10` → `appendForceIncludePoolIds`), which feeds the
 **shared** graph and therefore the backrun mempool `toAddress` set. **Verified consequence: a
 strategy-blind close on an atomic miss would force-include the pool into backrun's hot set — exactly the
-A-universe pollution ("atomic breadth must not pollute backrun speed").** So D is not cleanup; it is the
+A-universe crowding ("atomic breadth must not crowd out backrun speed").** So D is not cleanup; it is the
 close-side *enforcement* of A-universe's decoupling.
 
 **Fix — wrap the closers in a strategy-aware dispatcher `auto-close-strategy-gap` (input: `LearningCase`;
@@ -549,7 +549,7 @@ dispatch on `strategy`):**
 - **Durable close target — a SEPARATE atomic artifact, never backrun's force-include (user point 4,
   mandatory).** D states the principle ("atomic view only") but pins no FILE, so an implementer will
   reflexively reuse `force-include-poolids.json` — which feeds the shared graph + the backrun mempool
-  `toAddress` set and pollutes the hot path (the exact A-universe violation, now on the close side). Pin
+  `toAddress` set and crowds out backrun slots in the hot path (the exact A-universe violation, now on the close side). Pin
   the atomic durable close target explicitly, a strategy-view policy file parallel to `force-include-*.json`
   (per A-universe "per-strategy runtime policy is a SEPARATE config"):
   **`listener/src/searcher/pools/atomic-view-overrides.json`** (committed, survives deploy; loaded ONLY
@@ -573,7 +573,7 @@ dispatch on `strategy`):**
 - **Inconclusive atomic loss → the §6b/§6c manual-escalation meta-loop (not a dead `our_stage`).** When
   C2 marks a COMPARABLE (`comparable=true`) atomic_loop competitor we demonstrably lost yet the dispatcher
   closes 0 (a scanner blind spot coverage-close cannot fix — the atomic analog of the `0xee7b98ad`
-  same-pool under-extraction), package `{LearningCase + close result(closed=0) + our sim/bid + winner
+  same-pool under-capture), package `{LearningCase + close result(closed=0) + our sim/bid + winner
   flows}` as a `pending-manual-analysis` for a fresh analyst (Fable priority, Opus 4.8 fallback) → name the
   missed class → CODIFY it back into the tool (rule 16). Same teeth as backrun: a package left unanalyzed
   BLOCKS closing the cycle.
@@ -601,7 +601,7 @@ dispatch on `strategy`):**
 
 - **Gap A = EPIC** (rule 13): `decision: epic`, owner `atomic-scanner-epic`, ordered slices
   **A0 + A-contract + A-universe → A1 → A2 → A3 → A4**, each with its own gate; **A-contract (no-source-swap
-  contracts + `processOpportunities` extraction) and A-universe (shared venue registry + strategy-specific
+  contracts + `processOpportunities` split-out) and A-universe (shared venue registry + strategy-specific
   selection views; mempool filter from the backrun view only) are hard prerequisites — no atomic logic
   ships before them.** A-universe overlaps `project-pool-scoring-arb-relevance-epic` (same scorer). Per-pool
   pins for this class are now forbidden inside the 30-min loop.
