@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
-import type { Opportunity } from "../detector/detector.js";
+import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
+import type { BlockScanOpportunity, Opportunity } from "../detector/detector.js";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
@@ -499,6 +500,61 @@ const POOL_FF208177_B = "0x08650bb900000000000000000000000000000000";
 const TOK_1151 = "0x1151CB3d861920e07a38e03eEAd12C32178567F6";
 const POOL_1151_USDT_A = "0x5ea523e496D049e2bA8B303C8D85C83FB6F285F8";
 const POOL_1151_USDT_B = "0x1e84865E17B49286f26D356DC39fF671EDfaA199";
+
+async function testBlockScanPlannerBinding(): Promise<void> {
+  const token = TOK_874376;
+  const seedPoolA = "0x0000000000000000000000000000000000000b51";
+  const seedPoolB = "0x0000000000000000000000000000000000000b52";
+  const seedEdges = [
+    swap(REAL_WETH, token, seedPoolA),
+    swap(token, REAL_WETH, seedPoolB),
+  ];
+  const sourceBlock = 25455296;
+  const ring = [REAL_WETH, token];
+  const opp: BlockScanOpportunity = {
+    kind: "block-scan-arb",
+    sourceBlock,
+    stateBlock: sourceBlock,
+    cycleId: canonicalTokenRing(ring).join("|"),
+    cycleFingerprint: cycleFingerprint(sourceBlock, ring),
+    seedEdges,
+    flashToken: REAL_WETH,
+    searchSeed: {
+      startToken: REAL_WETH,
+      searchCenter: 5_000n,
+      maxInput: 1_000_000n,
+    },
+    leavesStandingPosition: false,
+  };
+  const planner = new TemplatePlanner();
+  planner.setGraph([
+    swap(REAL_WETH, token, P1),
+    swap(token, REAL_WETH, P2),
+    swap(REAL_WETH, REAL_USDC, POOL_USDC_WETH_100),
+    swap(REAL_USDC, REAL_WETH, POOL_USDC_WETH_100),
+  ]);
+
+  const plans = await planner.plan(opp, [FLASH_SWAP_REPAY]);
+  assert(plans.length >= 1, `block-scan binding: expected at least 1 plan, got ${plans.length}`);
+  const expectedPools = seedEdges.map((edge) => edge.target.toLowerCase()).join("|");
+  for (const plan of plans) {
+    const actualPools = plan.tokenPath.edges.map((edge) => edge.target.toLowerCase()).join("|");
+    assert(
+      actualPools === expectedPools,
+      `block-scan binding: expected pinned seed pools ${expectedPools}, got ${actualPools}`,
+    );
+  }
+  assert(plans[0].maxFlashAmount === 1_000_000n, `block-scan binding: maxFlash ${plans[0].maxFlashAmount}`);
+  assert(
+    plans[0].opportunity.startToken.toLowerCase() === REAL_WETH.toLowerCase(),
+    `block-scan binding: start token ${plans[0].opportunity.startToken}`,
+  );
+  assert(
+    plans[0].opportunity.profitToken.toLowerCase() === REAL_WETH.toLowerCase(),
+    `block-scan binding: profit token ${plans[0].opportunity.profitToken}`,
+  );
+  console.log("[planner] block-scan planner binding from pinned seedEdges: PASS");
+}
 
 interface ReplayFixture {
   id: string;
@@ -993,11 +1049,12 @@ async function main(): Promise<void> {
   await testNoCandidateDiagnosticClassifiesNoSupportedReturnVenue();
   await testNoCandidateDiagnosticClassifiesPlanBudgetExhausted();
   await testNativeEthV4RoutesViaWethAlias();
+  await testBlockScanPlannerBinding();
   await testRealCaseReplayFixtures();
   await testCfgV4BackfillWritesPoolKeyFields();
   await testCfgV4PoolClosesRoutingCycle();
   await testHighSpreadUniverseSelectionReplay();
-  console.log(`planner PASS (14/14) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);
+  console.log(`planner PASS (15/15) + replay fixtures (${REPLAY_FIXTURES.length}/${REPLAY_FIXTURES.length}) + high-spread universe replay`);
 }
 
 main().catch((err) => {

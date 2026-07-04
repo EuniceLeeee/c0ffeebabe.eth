@@ -1,14 +1,26 @@
 import type { PlanNode } from "../../shared/types/plan.js";
-import type { Opportunity } from "../detector/detector.js";
+import type { BlockScanOpportunity, Opportunity } from "../detector/detector.js";
 import type { PathTemplate } from "../templates/path-template.js";
 import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
 
+export interface BlockScanPlannedOpportunity extends BlockScanOpportunity {
+  startToken: string;
+  profitToken: string;
+  victimAmountIn: bigint;
+  targetNetProfit?: bigint;
+  hints: Record<string, unknown>;
+  affectedPools: string[];
+  affectedTokens: string[];
+}
+
+type PlannedOpportunity = Opportunity | BlockScanPlannedOpportunity;
+
 export interface CandidatePlan {
   templateName: string;
   root: PlanNode;
-  opportunity: Opportunity;
+  opportunity: PlannedOpportunity;
   tokenPath: TokenPath;
   flashAdapterIds: string[];
   /** Preferred flash adapter for compatibility with older call sites. */
@@ -28,7 +40,16 @@ export interface BorrowableCycleToken {
 }
 
 export interface Planner {
-  plan(opp: Opportunity, templates: PathTemplate[], opts?: { deadlineAtMs?: number }): Promise<CandidatePlan[]>;
+  plan(
+    opp: Opportunity | BlockScanOpportunity,
+    templates: PathTemplate[],
+    opts?: { deadlineAtMs?: number },
+  ): Promise<CandidatePlan[]>;
+  planBlockScanFromSeedEdges(
+    opp: BlockScanOpportunity,
+    templates: PathTemplate[],
+    opts?: { deadlineAtMs?: number },
+  ): Promise<CandidatePlan[]>;
   lastNoCandidateDiagnostic?(): NoCandidateDiagnostic | null;
 }
 
@@ -124,10 +145,14 @@ export class TemplatePlanner implements Planner {
   }
 
   async plan(
-    opp: Opportunity,
+    opp: Opportunity | BlockScanOpportunity,
     templates: PathTemplate[],
     opts?: { deadlineAtMs?: number },
   ): Promise<CandidatePlan[]> {
+    if (opp.kind === "block-scan-arb") {
+      return this.planBlockScanFromSeedEdges(opp, templates, opts);
+    }
+
     const candidates: CandidatePlan[] = [];
     const baseGraph = this.graph ?? [];
     this.lastDiagnostic = null;
@@ -276,6 +301,74 @@ export class TemplatePlanner implements Planner {
     return candidates;
   }
 
+  async planBlockScanFromSeedEdges(
+    opp: BlockScanOpportunity,
+    templates: PathTemplate[],
+    opts?: { deadlineAtMs?: number },
+  ): Promise<CandidatePlan[]> {
+    this.lastDiagnostic = null;
+    const candidates: CandidatePlan[] = [];
+    const tokenPath: TokenPath = { edges: [...opp.seedEdges] };
+    const cycleTokens = collectCycleTokens(tokenPath);
+    const plannedOpportunity: BlockScanPlannedOpportunity = {
+      ...opp,
+      startToken: opp.flashToken,
+      profitToken: opp.flashToken,
+      victimAmountIn: opp.searchSeed.searchCenter,
+      hints: {
+        blockScan: {
+          sourceBlock: opp.sourceBlock,
+          stateBlock: opp.stateBlock,
+          cycleId: opp.cycleId,
+          cycleFingerprint: opp.cycleFingerprint,
+        },
+      },
+      affectedPools: opp.affectedPools ?? uniqueAddresses(opp.seedEdges.map((edge) => edge.target)),
+      affectedTokens: opp.affectedTokens ?? cycleTokens,
+    };
+    const seenPathKeys = new Set<string>();
+
+    for (const template of templates) {
+      if (opts?.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
+        break;
+      }
+      const flashSlot = template.slots.find((s) => s.kind === "flash");
+      const flashAdapters = flashSlot?.adapters ?? ["morpho-flash"];
+      const preferredFlash = flashAdapters[0] ?? "morpho-flash";
+
+      if (!satisfiesRequiredSlots(tokenPath, template)) {
+        continue;
+      }
+      if (!passesConstraints(tokenPath, template.constraints, opp.flashToken, opp.flashToken)) {
+        continue;
+      }
+
+      const pathKey = `${tokenPathKey(tokenPath)}:${preferredFlash}`;
+      if (seenPathKeys.has(pathKey)) {
+        continue;
+      }
+      seenPathKeys.add(pathKey);
+      candidates.push({
+        templateName: template.name,
+        root: buildAbstractRoot(tokenPath, plannedOpportunity, preferredFlash),
+        opportunity: plannedOpportunity,
+        tokenPath,
+        flashAdapterIds: [...flashAdapters],
+        flashAdapterId: preferredFlash,
+        maxFlashAmount: opp.searchSeed.maxInput,
+        cycleTokens,
+        borrowableTokens: [{
+          token: opp.flashToken,
+          amount: opp.searchSeed.maxInput,
+          adapterId: preferredFlash,
+        }],
+      });
+      if (candidates.length >= this.maxCandidates) break;
+    }
+
+    return candidates;
+  }
+
   lastNoCandidateDiagnostic(): NoCandidateDiagnostic | null {
     return this.lastDiagnostic;
   }
@@ -286,7 +379,7 @@ const FLASH_TARGETS: Record<string, string> = {
   "balancer-flash": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
 };
 
-function buildAbstractRoot(path: TokenPath, opp: Opportunity, flashAdapterId: string): PlanNode {
+function buildAbstractRoot(path: TokenPath, opp: Pick<PlannedOpportunity, "startToken" | "profitToken">, flashAdapterId: string): PlanNode {
   const flashTarget = FLASH_TARGETS[flashAdapterId];
   if (!flashTarget) throw new Error(`unknown flash adapter: ${flashAdapterId}`);
   return {
