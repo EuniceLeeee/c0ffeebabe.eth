@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
-import { BackrunDetector } from "./detector/detector.js";
+import { BackrunDetector, type Opportunity } from "./detector/detector.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
@@ -1054,8 +1054,6 @@ async function handleHint(
   let fixtureImpact: PoolImpact | null = hintImpact;
   let fixtureOpportunities = 0;
   let fixturePlans = 0;
-  let lastTerminalState: LiveFinalState = "no-profitable-quote";
-  let lastTerminalError: string | undefined;
 
   const recordFinalState = (
     finalState: LiveFinalState,
@@ -1308,19 +1306,86 @@ async function handleHint(
     });
   }
 
+  await processOpportunities(
+    ctx,
+    opportunities,
+    {
+      kind: "backrun-arb",
+      victimTxHash: txHash,
+      victimSource,
+      eventBlockNumber,
+      victimRawTx: rawTx,
+      submissionMode,
+    },
+    {
+      recordFinalState,
+      segMark,
+      segStr,
+      addFixturePlans: (n) => {
+        fixturePlans += n;
+      },
+      event,
+      latestBlock,
+      fixturePath,
+      fixtureImpact,
+      ensureHintFork,
+    },
+  );
+}
+
+type BackrunSourceMeta = {
+  kind: "backrun-arb";
+  victimTxHash: string;
+  victimSource: NonNullable<HintEnvelope["source"]>;
+  eventBlockNumber: number;
+  victimRawTx: string | undefined;
+  submissionMode: BundleSubmission["mode"];
+};
+
+interface ProcessOppsDeps {
+  recordFinalState: (
+    finalState: LiveFinalState,
+    error?: string,
+    sim?: { calldata: string; profitToken: string; netProfit: bigint; gasUsed: bigint },
+  ) => void;
+  segMark: (k: string) => void;
+  segStr: () => string;
+  addFixturePlans: (n: number) => void;
+  event: OrderflowEvent;
+  latestBlock: number;
+  fixturePath: LiveFixturePath;
+  fixtureImpact: PoolImpact | null;
+  ensureHintFork: (blockNumber: number, forceRefresh?: boolean) => Promise<void>;
+}
+
+async function processOpportunities(
+  ctx: HandleCtx,
+  opportunities: Opportunity[],
+  sourceMeta: BackrunSourceMeta,
+  deps: ProcessOppsDeps,
+): Promise<void> {
+  let lastTerminalState: LiveFinalState = "no-profitable-quote";
+  let lastTerminalError: string | undefined;
+  const event = deps.event;
+  const latestBlock = deps.latestBlock;
+  const fixturePath = deps.fixturePath;
+  const fixtureImpact = deps.fixtureImpact;
+  const ensureHintFork = deps.ensureHintFork;
+  const hint = { source: sourceMeta.victimSource };
+
   for (let oppIndex = 0; oppIndex < opportunities.length; oppIndex++) {
     const opp = opportunities[oppIndex];
     if (!opp) continue;
-    const opportunityId = opportunityIdFor(eventBlockNumber, txHash, opp);
+    const opportunityId = opportunityIdFor(sourceMeta.eventBlockNumber, sourceMeta.victimTxHash, opp);
     const remainingTtl = ctx.config.oppTtlMs - (Date.now() - ctx.startedAt);
     if (remainingTtl <= 0) {
       for (const droppedOpp of opportunities.slice(oppIndex)) {
         emitEvent({
           type: "pipeline_dropped",
-          opportunity_id: opportunityIdFor(eventBlockNumber, txHash, droppedOpp),
-          target_block: eventBlockNumber,
-          victim_hash: txHash,
-          victim_source: victimSource,
+          opportunity_id: opportunityIdFor(sourceMeta.eventBlockNumber, sourceMeta.victimTxHash, droppedOpp),
+          target_block: sourceMeta.eventBlockNumber,
+          victim_hash: sourceMeta.victimTxHash,
+          victim_source: sourceMeta.victimSource,
           stage: "solver",
           reason: "expired-before-solver",
           pool: droppedOpp.affectedPools?.[0],
@@ -1329,7 +1394,7 @@ async function handleHint(
         });
         ctx.counters.expiredBeforeSolver++;
       }
-      recordFinalState("expired-before-solver");
+      deps.recordFinalState("expired-before-solver");
       return;
     }
     const oppsLeft = opportunities.length - oppIndex;
@@ -1349,9 +1414,9 @@ async function handleHint(
       emitEvent({
         type: "pipeline_dropped",
         opportunity_id: opportunityId,
-        target_block: eventBlockNumber,
-        victim_hash: txHash,
-        victim_source: victimSource,
+        target_block: sourceMeta.eventBlockNumber,
+        victim_hash: sourceMeta.victimTxHash,
+        victim_source: sourceMeta.victimSource,
         stage,
         reason,
         error: error ? error.slice(0, 240) : undefined,
@@ -1366,9 +1431,9 @@ async function handleHint(
     const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY], {
       deadlineAtMs: Date.now() + Math.min(ctx.config.planBudgetMs, Math.floor(sliceMs / 2)),
     });
-    segMark("plan");
+    deps.segMark("plan");
     ctx.counters.plans += plans.length;
-    fixturePlans += plans.length;
+    deps.addFixturePlans(plans.length);
     console.log(`[searcher/live] planner: ${plans.length} candidate plans`);
     if (plans.length === 0) {
       const noCandidateDiagnostic = ctx.planner.lastNoCandidateDiagnostic?.();
@@ -1391,7 +1456,7 @@ async function handleHint(
     // 20s+ cold revm overlay on obscure WETH pairs), and it can expire the hint
     // before the solver gets a chance on real candidate plans.
     const oppImpact = poolImpactFromOpportunity(opp) ?? fixtureImpact;
-    const prepareBaseBlock = fixturePath === "mined" ? eventBlockNumber : latestBlock;
+    const prepareBaseBlock = fixturePath === "mined" ? sourceMeta.eventBlockNumber : latestBlock;
     const exactPostImpact = fixturePath === "hash-only" && oppImpact
       ? eventPostImpactSeed(oppImpact, prepareBaseBlock)
       : null;
@@ -1462,7 +1527,7 @@ async function handleHint(
         }
       }
       if (localVictimApply) {
-        segMark("victimApply");
+        deps.segMark("victimApply");
         console.log(
           `[searcher/live] victim-apply local ${oppImpact.matchedAdapterId} ` +
             `${oppImpact.pool.slice(0, 10)} amountOut=${localVictimApply.amountOut} ` +
@@ -1506,7 +1571,7 @@ async function handleHint(
     if (!localVictimApply && ctx.config.liveBackend !== "rpc" && supportsConfiguredBackend) {
       try {
         await ctx.liveBackend.prepareVictimState(prepareInput);
-        segMark("overlay");
+        deps.segMark("overlay");
         useConfiguredBackend = true;
       } catch (err) {
         ctx.counters.revmErrors++;
@@ -1519,7 +1584,7 @@ async function handleHint(
               `${message.slice(0, 160)}`,
 	          );
 	          emitPipelineDropped("overlay", "balance_slot_missing", lastTerminalError, { plans: plans.length });
-	          recordFinalState(lastTerminalState, lastTerminalError);
+	          deps.recordFinalState(lastTerminalState, lastTerminalError);
 	          continue;
 	        }
         lastTerminalState = "sim-revert";
@@ -1529,7 +1594,7 @@ async function handleHint(
 	            `${message.slice(0, 160)}`,
 	        );
 	        emitPipelineDropped("overlay", "revm_prepare_failed", lastTerminalError, { plans: plans.length });
-	        recordFinalState(lastTerminalState, lastTerminalError);
+	        deps.recordFinalState(lastTerminalState, lastTerminalError);
 	        continue;
 	      }
     }
@@ -1546,12 +1611,12 @@ async function handleHint(
         await impersonateSwap(ctx.state, oppImpact, ctx.graph);
       }
       await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
-      segMark(exactPostImpact ? "anvilExactOverlay" : "anvilOverlay");
+      deps.segMark(exactPostImpact ? "anvilExactOverlay" : "anvilOverlay");
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "mined") {
-      await ensureHintFork(eventBlockNumber, true);
+      await ensureHintFork(sourceMeta.eventBlockNumber, true);
       await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
-      segMark("anvilMined");
+      deps.segMark("anvilMined");
     }
     const solveProbe = useConfiguredBackend ? ctx.liveBackend : ctx.simulator;
     // In revm/hybrid mode the anvil fork is never started, so route the solver's
@@ -1583,7 +1648,7 @@ async function handleHint(
       if (ctx.config.maxCandidatesPerOpp > 0 && candidatesTried >= ctx.config.maxCandidatesPerOpp) {
         console.log(
           `[searcher/live] candidate cap: tried ${candidatesTried}/${plans.length} for this opp ` +
-            `(hintOpps=${opportunities.length}) — bail to free TTL budget. ${segStr()}`,
+            `(hintOpps=${opportunities.length}) — bail to free TTL budget. ${deps.segStr()}`,
         );
         emitPipelineDropped("solver", "candidate-cap", lastTerminalError, {
           plans: plans.length,
@@ -1602,17 +1667,17 @@ async function handleHint(
 	            `[searcher/live] opportunity expired (hint TTL) ` +
 	              `(${hintElapsedMs}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver ` +
 	              `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
-	              `stage breakdown: ${segStr()}`,
+	              `stage breakdown: ${deps.segStr()}`,
 	          );
 	          emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
-	          recordFinalState("expired-before-solver");
+	          deps.recordFinalState("expired-before-solver");
 	          return;
 	        }
 	        console.log(
 	          `[searcher/live] opportunity expired (slice) ` +
 	            `(${Date.now()} >= sliceDeadline ${oppDeadlineAtMs}) — moving to next opportunity ` +
 	            `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
-	            `stage breakdown: ${segStr()}`,
+	            `stage breakdown: ${deps.segStr()}`,
 	        );
 	        if (candidatesTried === 0) {
 	          ctx.counters.expiredBeforeSolver++;
@@ -1638,7 +1703,7 @@ async function handleHint(
             : undefined,
           deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
         });
-        segMark("solve");
+        deps.segMark("solve");
         ctx.counters.solverSuccess++;
         // Terminal verify (v7 AC-3a.4): re-simulate the resolved plan and require
         // strictly positive profit before paying gas — never submit on a plan that
@@ -1662,7 +1727,7 @@ async function handleHint(
 	              templateId: candidate.templateName,
 	              plans: plans.length,
 	            });
-	            recordFinalState(lastTerminalState, lastTerminalError);
+	            deps.recordFinalState(lastTerminalState, lastTerminalError);
 	            continue;
 	          }
           try {
@@ -1676,7 +1741,7 @@ async function handleHint(
               ...prepareInput,
               postImpact: localVictimApply.postImpact,
             });
-            segMark("finalOverlay");
+            deps.segMark("finalOverlay");
           } catch (err) {
             ctx.counters.revmErrors++;
             const message = err instanceof Error ? err.message : String(err);
@@ -1691,7 +1756,7 @@ async function handleHint(
 	              templateId: candidate.templateName,
 	              plans: plans.length,
 	            });
-	            recordFinalState(lastTerminalState, lastTerminalError);
+	            deps.recordFinalState(lastTerminalState, lastTerminalError);
 	            continue;
 	          }
         }
@@ -1704,8 +1769,8 @@ async function handleHint(
         emitEvent({
           type: "simulation_result",
           opportunity_id: opportunityId,
-          target_block: eventBlockNumber,
-          victim_hash: txHash,
+          target_block: sourceMeta.eventBlockNumber,
+          victim_hash: sourceMeta.victimTxHash,
           path_id: resolvedRouteSummary(resolved.root),
           template_id: candidate.templateName,
           ok: sim.success && sim.netProfit > 0n,
@@ -1737,7 +1802,7 @@ async function handleHint(
               `route=${resolvedRouteSummary(resolved.root)} ` +
               `reason=${sim.revertReason ?? "no-positive-profit"}`,
           );
-          recordFinalState("sim-revert", sim.revertReason, sim);
+          deps.recordFinalState("sim-revert", sim.revertReason, sim);
           continue;
         }
         // Strictly positive profit required to submit — a closed-loop flash arb
@@ -1750,7 +1815,7 @@ async function handleHint(
           ctx.counters.finalVerifyFailed++;
           lastTerminalState = "final-verify-failed";
           lastTerminalError = `non-positive final profit ${sim.netProfit}`;
-          recordFinalState("final-verify-failed", lastTerminalError, sim);
+          deps.recordFinalState("final-verify-failed", lastTerminalError, sim);
           continue;
         }
 
@@ -1763,7 +1828,7 @@ async function handleHint(
         const allowApproxHashOnlySubmit = !overlayExact && ctx.config.allowHashOnlySubmit;
         if (
           !hashOnlySubmitDecision(
-            Boolean(rawTx),
+            Boolean(sourceMeta.victimRawTx),
             overlayExact,
             allowApproxHashOnlySubmit,
             ctx.config.allowHashOnlyMevShareSubmit,
@@ -1783,7 +1848,7 @@ async function handleHint(
             templateId: candidate.templateName,
             plans: plans.length,
           });
-          recordFinalState(lastTerminalState, lastTerminalError, sim);
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
           continue;
         }
 
@@ -1806,7 +1871,7 @@ async function handleHint(
 	            templateId: candidate.templateName,
 	            plans: plans.length,
 	          });
-	          recordFinalState("final-verify-failed", lastTerminalError, sim);
+	          deps.recordFinalState("final-verify-failed", lastTerminalError, sim);
 	          continue;
 	        }
 
@@ -1854,7 +1919,7 @@ async function handleHint(
             templateId: candidate.templateName,
             plans: plans.length,
           });
-          recordFinalState(lastTerminalState, lastTerminalError, sim);
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
           continue;
         }
 
@@ -1882,7 +1947,7 @@ async function handleHint(
 	              templateId: candidate.templateName,
 	              plans: plans.length,
 	            });
-	            recordFinalState(lastTerminalState, lastTerminalError, sim);
+	            deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
 	            continue;
 	          }
           console.log(
@@ -1895,9 +1960,9 @@ async function handleHint(
         const targetBlock = (ctx.blockTracker.latest || (await ctx.provider.getBlockNumber())) + 1;
         ctx.counters.submitAttempts++;
         const results = await ctx.bundleRouter.submit({
-          victimTxHash: txHash,
-          victimRawTx: rawTx,
-          mode: submissionMode,
+          victimTxHash: sourceMeta.victimTxHash,
+          victimRawTx: sourceMeta.victimRawTx,
+          mode: sourceMeta.submissionMode,
           backrunCalldata: sim.calldata,
           targetBlock,
           expectedProfit: sim.netProfit,
@@ -1909,9 +1974,9 @@ async function handleHint(
         ctx.counters.accepted += results.filter((r) => r.accepted).length;
         const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
         const backrunTxHash = results.find((r) => r.backrunTxHash)?.backrunTxHash;
-        const mode = submissionMode === "standalone"
+        const mode = sourceMeta.submissionMode === "standalone"
           ? "standalone eth_sendBundle"
-          : rawTx ? "eth_sendBundle" : "mev_sendBundle";
+          : sourceMeta.victimRawTx ? "eth_sendBundle" : "mev_sendBundle";
         console.log(
           `[searcher/live] submitted via ${mode} targetBlock=${targetBlock} ` +
             `profit=${sim.netProfit} route=${resolvedRouteSummary(resolved.root)}` +
@@ -1921,9 +1986,9 @@ async function handleHint(
           emitEvent({
             type: "bundle_submitted",
             opportunity_id: opportunityId,
-            target_block: eventBlockNumber,
+            target_block: sourceMeta.eventBlockNumber,
             submission_target_block: targetBlock,
-            victim_hash: txHash,
+            victim_hash: sourceMeta.victimTxHash,
             mode,
             path_id: resolvedRouteSummary(resolved.root),
             template_id: candidate.templateName,
@@ -1947,7 +2012,7 @@ async function handleHint(
             emit: emitEvent,
           });
         }
-        recordFinalState("would-submit", undefined, sim);
+        deps.recordFinalState("would-submit", undefined, sim);
         return;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1965,7 +2030,7 @@ async function handleHint(
 		      emitPipelineDropped("solver", lastTerminalState, lastTerminalError, { plans: plans.length });
 		    }
 		  }
-  recordFinalState(lastTerminalState, lastTerminalError);
+  deps.recordFinalState(lastTerminalState, lastTerminalError);
 }
 
 async function drainPendingVictimOutcomes(ctx: HandleCtx, currentHeadBlock: number): Promise<void> {
