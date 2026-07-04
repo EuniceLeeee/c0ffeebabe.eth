@@ -488,8 +488,9 @@ generator/evaluator split, each with its rule-12 gate.
 | **CR-3b** (analysis LearningCase) | `a9f8da6` | `test:learning-case` 6/6 — S1 schema carries `edge_kinds:[flash,credit,swap]`, `strategy_kind:backrun` (anti-binding), advances toward close. Follow-up filed (`task_45c7379e`): postmortem producer still hardcodes `["swap"]` |
 | **PHASE 1 COMPLETE** | — | BS-0 · BS-contract (A/B/B2/C1/C2) · BS-universe (P1/P2) · CR-3 (a/b) — all landed + gated |
 | **BS-1a** (scanner core) | `2498cf0` | `blockscan-scanner.ts` `detectBlockScanOpportunities` — PURE+SYNC 2-hop anchor finder over the warm cache (mid-price v2/v3/curve, spread−fees, WETH flashToken, geometric-mid searchCenter>8n, ranked+capped, cycleFingerprint). `searchSeed` string→`{startToken,searchCenter,maxInput}`. Gate `searcher:blockscan-scanner` 7/7 (anchor w/ correct cheap→rich orientation, no-spread control, single-venue, delta-restrict, priced-token gate, rank+cap, fingerprint) + all suites unchanged. Evaluator hand-verified the algorithm |
-| BS-1b (planner binding) | in flight | `planBlockScanFromSeedEdges` (direct-from-seedEdges, no rotation, byte-identical backrun) |
-| BS-2/BS-3 · CR-5 → CR-8 | — | NOT STARTED (BS-4 = operator-gated live window) |
+| **BS-1b** (planner binding) | `b8d1c12` | `planBlockScanFromSeedEdges` builds a plan DIRECTLY from seedEdges (no rotation, `maxFlashAmount`=searchSeed.maxInput); plan() early-return branch, backrun BYTE-IDENTICAL (planner 15/15 incl new binding test + replay 14/14 + replay-live-fixtures buckets unchanged). **BS-1 complete: scan→BlockScanOpportunity→plan end-to-end** |
+| BS-2 (3–4 hop cycle extension) | in flight | reuse `buildTokenPaths(t,t)` on anchor tokens, score rings Σlog(mid·(1−fee)), emit full-ring seedEdges |
+| BS-3 · CR-5 → CR-8 | — | NOT STARTED (BS-4 = operator-gated live window) |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
 block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of Phase 3/4 do not exist.**
