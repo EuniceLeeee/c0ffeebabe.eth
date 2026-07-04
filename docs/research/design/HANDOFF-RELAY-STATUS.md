@@ -27,6 +27,15 @@ consecutive_done_confirmations: 0
 > view-quotes. BS-3 full-pipeline is now BLOCKED on a genuinely-viable +EV block-scan exemplar (needs
 > census discovery, not more harness code). Remainder still gated behind it. Counter stays 0.
 >
+> **R-2b-4 (2026-07-05) validated CR-3 secondary (CR-5a) and escalated CR-5b as design-blocked.**
+> Ran `searcher:ac3` on archive: PASS 2/2 (credit path extracts 870.99 wstUSR on block 24710788,
+> > the reference bot's on-chain-verified 270.1) → CR-3 secondary validated WITHOUT a new harness
+> (would duplicate AC-3). CR-5b (deterministic max-borrow) is DESIGN-BLOCKED: `quoteFluidVault()`
+> throws — no deterministic Fluid quote path exists; building the resolver-quote adapter needs
+> external protocol research, too large for a clean unattended slice (rule-13 escalation). Next
+> tractable behavior slice = CR-5c (gas table, local) or BS-lane. No hot-path change; grid stays.
+> Counter stays 0.
+>
 > **R-2b-3 (2026-07-05) picked up CR-5, verified its archive target, decomposed it as an epic.** BS-3
 > is discovery-blocked, so moved to the next unblocked slice (item 4, CR-5). CR-5 is a large multi-part
 > behavior slice → decomposed into ordered sub-slices CR-5a..e (Phase 2b list). Verified CR-5's

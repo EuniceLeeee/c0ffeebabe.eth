@@ -88,16 +88,21 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
    multi-part behavior slice (impl-plan §277/§306); do it as ordered sub-slices, each its own rule-12
    gate + commit. CR-5's max-borrow equivalence TARGET is on-chain-verified: **≈270.1 wstUSR** (exact
    `270096803239981276728` wei; appendix B R-2b-3) — NOT the impl-plan's loose "~273".
-   - **CR-5a — CR-3 secondary (do FIRST; archive replay, self-contained, confirmatory).** Fork-replay
-     the `0xf88b` credit arb at block 24710788 via `$MAINNET_RPC_URL` archive (reuse the `ac3.ts`
-     harness shape: AnvilStateBackend + planner/solver/simulator over the fixture victim
-     `0xc52bc6f4…`). Gate: our credit-edge path self-composes a plan whose wstUSR netProfit reaches a
-     tolerance band around the verified on-chain **270.1 wstUSR** (assert `>= ~270e18` with a stated
-     band). This validates CR-3's economics against on-chain truth. Bounded CU.
-   - **CR-5b — resolver `quote()` + deterministic max-borrow + `fluidDebtBps`-search-delete
-     equivalence.** Replace the `fluidDebtBps` search (`solver.ts:396`) with a deterministic
-     resolver-quote max-borrow; PROVE equivalence (same sizing → same ~270.1 wstUSR) on the CR-5a fork
-     BEFORE deleting the search. Gate: equivalence fixture + CR-5a still green.
+   - **CR-5a — CR-3 secondary — ✅ VALIDATED (R-2b-4), no new harness needed.** The existing
+     `searcher:ac3` already fork-replays block 24710788 and PASSES 2/2 (our credit-edge path
+     self-composes 870.99 wstUSR via the fluid-vault leg — appendix B R-2b-4); the reference bot's
+     270.1 wstUSR is on-chain-verified directly (appendix B R-2b-3). CR-3's "AC-3-style ~273 wstUSR
+     delta" secondary is satisfied by these two together — a separate harness would just duplicate
+     AC-3. Nothing to build.
+   - **CR-5b — resolver `quote()` + deterministic max-borrow — ⚠ DESIGN-BLOCKED / ESCALATED (R-2b-4).**
+     `quoteFluidVault()` (`quoter.ts:358`) THROWS today — there is NO deterministic Fluid quote path;
+     the `fluidDebtBps` grid (`solver.ts:396`) is the only sizing. CR-5b must build the resolver-quote
+     max-borrow FROM SCRATCH: the Fluid resolver contract (address + ABI + LTV/oracle max-borrow math,
+     needs external protocol research), a real `quoteFluidVault`, solver integration, and an
+     equivalence proof (deterministic max-borrow ≥ the grid's best profit on AC-3). This is a
+     design/research-heavy slice, NOT a clean unattended one-pass — it needs a dedicated round with
+     research budget (WebSearch the Fluid resolver + archive-probe the vault) or operator input. Do
+     NOT rush it. Until it lands, the `fluidDebtBps` grid stays (AC-3 proves it works).
    - **CR-5c — per-adapter gas table** (credit leg 250–400k vs swap ~100k): fixes the gas=0
      over-ranking → dust-regime under-ranking. Local gate: dust-regime ranking fixture.
    - **CR-5d — EV-gate market-priced profit token** (peg-valued fails, market-valued passes only when
@@ -224,6 +229,22 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   cached (B) + CR-5 sub-slice decomposition written to the Phase 2b list. `consecutive_done_confirmations:
   0`, IN_PROGRESS. Next round executes CR-5 sub-slice 1.
 
+#### R-2b-4 · 2026-07-05
+- blocker/gap: picked up CR-5 (BS-3 still discovery-blocked). Goal: ship CR-5's first sub-slice.
+- options + choice: (a) build CR-5a as a new ~270.1-wstUSR harness, or (b) check whether existing
+  tooling already covers it. Chose (b) — ran `searcher:ac3` on archive: PASS 2/2, our credit path
+  extracts 870.99 wstUSR on block 24710788 (> reference bot's on-chain-verified 270.1). So CR-3's
+  secondary is ALREADY validated (AC-3 + the R-2b-3 on-chain read) — a CR-5a harness would just
+  duplicate AC-3 (rule-17: don't re-derive what a tool already does). Then attempted CR-5b (the real
+  behavior change): found `quoteFluidVault()` THROWS — no deterministic Fluid quote path exists; the
+  `fluidDebtBps` grid is the only sizing. CR-5b must build the resolver-quote adapter from scratch +
+  external protocol research → too large for a clean unattended one-pass.
+- outcome: CR-5a validated (no build), CR-5b design-blocked/escalated (rule 13 — the behavior slice
+  can't be cleanly shipped unattended without a research round). Next TRACTABLE behavior slice =
+  CR-5c (per-adapter gas table, local, no resolver dependency) or BS-lane; routed the next round
+  there. No hot-path code changed this round; the `fluidDebtBps` grid stays (AC-3 proves it works).
+  `consecutive_done_confirmations: 0`, IN_PROGRESS.
+
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
 > NOTE: the rule-12 *gate re-runs* below are deliberately NOT cached-to-skip — the 2-round
@@ -248,6 +269,21 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
 - raw: scripts + outputs in session scratchpad (`curve-read.sh`, `curve-logs.sh`, `curve-rates2.sh`);
   decision-relevant values all inline above and persisted into the fixture.
 - captured: R-2b-1 / 2026-07-05
+
+#### searcher:ac3 — archive-fork replay of block 24710788 (CR-3 secondary validation), 2026-07-05
+- input: `npm run searcher:ac3` against `$MAINNET_RPC_URL` archive (AnvilStateBackend fork; full
+  HotPathSearcher detector→planner→solver→simulator→DryRun over VICTIM_FIXTURES).
+- result: **PASS 2/2**. On the wstUSR victim `0xc52bc6f4` (block 24710788) our credit-edge path
+  self-composes a profitable arb via the `fluid-vault` credit leg → psm → univ4 → curve×3, best
+  netProfit = **870.985639595371182157 wstUSR** (> 543 threshold, > the reference bot's 270.1). The
+  accepted plan used `fluidDebtBps=10400` (the grid's feasible optimum; 10800/11200 REVERTED =
+  over-borrow infeasible). → CR-3 secondary is VALIDATED on-chain: the credit-edge economics on the
+  real archive block are confirmed, and our extraction exceeds the reference realized amount.
+- finding for CR-5b: `quoteFluidVault()` (`quoter.ts:358`) THROWS ("fluid-vault requires solver debt
+  search") — there is NO deterministic Fluid quote path today; the `fluidDebtBps` grid
+  (`[8500,9500,10000,10400,10800,11200]`, `solver.ts:396`) is the ONLY sizing. So CR-5b is a
+  from-scratch resolver-quote adapter, not a quick sub-slice (see Phase 2b CR-5b note).
+- captured: R-2b-4 / 2026-07-05
 
 #### Alchemy archive — reference bot wstUSR realized delta on 0xf88b (CR-5 max-borrow target), 2026-07-05
 - input: `cast call wstUSR balanceOf(0xE08D97e1…472D015)` at blocks 24710787 (pre) and 24710788 (post)
