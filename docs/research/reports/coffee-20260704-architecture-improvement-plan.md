@@ -29,12 +29,12 @@ reuses almost all of it:
 
 | stage | file:line | victim-dependence today | reuse for atomic |
 |---|---|---|---|
-| block-driven pool-state freshness | `main.ts:762 / :807` (`provider.on("block")` warm + state update), `solver/pool-state-updater.ts` | none — already per-block | **trigger + state source for the scan** |
+| block-driven pool-state freshness | `main.ts:764 / :809` (`provider.on("block")` warm + state update), `solver/pool-state-updater.ts` | none — already per-block | **trigger + state source for the scan** |
 | cycle enumeration | `planner/token-graph.ts:462` `buildTokenPaths(start,profit)` | none — DFS start→profit is generic | seed with `start===profit` (a cycle) |
 | candidate planning | `planner/planner.ts:86` `TemplatePlanner.plan(opp,…)` | pins the impact pool from `opp.hints.impact` (via `impactFromOpportunity`, `planner.ts:413`) — **NOT** `opp.affectedPools`; with no `hints.impact`, `focusPathsOnImpact` returns all paths | plan from a synthetic `Opportunity` that **omits `hints.impact`** (clearing `affectedPools` alone does nothing) |
 | amount sizing | `solver/solver.ts:442` `resolveSearchCenter` | ⚠️ `if (victimAmount<=0n) return 1n` does **NOT** fall back to a useful search — see the sizing-seed blocker below | requires a real `searchCenter` seed (missing piece #2) |
-| execution / submission | `execution/bundle-router.ts:81` `standalone` → `submitStandaloneBundle` (single next-block tx, **no victim rawTx**) | already exists for the mined-victim Path C (`main.ts:1134`) | **atomic bundle == standalone bundle** |
-| EV / final-verify gate | `main.ts:1583` terminal verify + EV gate | none | unchanged |
+| execution / submission | `execution/bundle-router.ts:81` `standalone` → `submitStandaloneBundle` (single next-block tx, **no victim rawTx**) | already exists for the mined-victim Path C (`main.ts:1139`) | **atomic bundle == standalone bundle** |
+| EV / final-verify gate | `main.ts:1606` terminal verify + `evGate` (`main.ts:404`) | none | unchanged |
 
 So the **genuinely missing pieces for Gap A** are three (not two — the sizing seed was missed):
 1. a block-triggered *opportunity source* whose search is cheap by construction — an O(pairs) 2-hop
@@ -42,7 +42,7 @@ So the **genuinely missing pieces for Gap A** are three (not two — the sizing 
    anchors — NOT a whole-graph DFS. See "Path length" below.
 2. **an amount-search seed for the no-victim path (blocker, verified in code).** The reuse claim that
    `victimAmountIn:0n` "already falls back to the geometric grid + GSS" is **false**. `resolveSearchCenter`
-   returns `1n` (`solver.ts:448`); `geometricGrid(1n, halfWidth=3)` is anchored on that center and the
+   returns `1n` (`solver.ts:449`); `geometricGrid(1n, halfWidth=3)` is anchored on that center and the
    negative shifts floor to 0 → the grid is exactly **`[1, 2, 4, 8]` wei**. GSS only fires when a grid
    point already quotes a **positive** profit (`solver.ts:196`) and its bracket is only `[bestX/2, 2·bestX]`
    with **no boundary expansion** — so a 1–8 wei probe is rounded to zero and the solver throws
@@ -57,7 +57,7 @@ So the **genuinely missing pieces for Gap A** are three (not two — the sizing 
 ## Gap A — per-block atomic chain-state scanner (EPIC)
 
 **Root cause (verified in code):** `BackrunDetector.detect` runs only inside `handleHint`, which fires
-only on an `OrderflowEvent` from the mempool (`main.ts:1240`). There is **no block-driven scan**. A
+only on an `OrderflowEvent` from the mempool (`main.ts:1245`). There is **no block-driven scan**. A
 standing cross-pool spread with no pending swap produces no hint → no opportunity → never seen. This
 matches the doc exactly: "our pipeline never triggers; there is nothing to follow."
 
@@ -124,7 +124,8 @@ drifts from backrun's EV gate / drop-reasons / submission.
 3. **Bundle contract** (`bundle-router.ts:5`): make `victimTxHash` **optional** — the `standalone` path
    already ignores it (`bundle-router.ts:81`) and atomic is standalone-shaped.
 4. **Extract `processOpportunities(ctx, opportunities, sourceMeta)`** from the ~900-line `handleHint`
-   (the detect→plan→solve→sim→submit tail, `main.ts:1258+`), telemetry fields driven by `sourceMeta.kind`.
+   (the detect→plan→solve→sim→submit tail: detect at `main.ts:1245`, the opportunities loop at
+   `main.ts:1275+`), telemetry fields driven by `sourceMeta.kind`.
    Backrun `handleHint` calls it; the atomic block handler (A4) calls it. This is the single shared entry
    that prevents two divergent hot paths (finding #4).
 - **Gate (refactor-neutral):** all existing backrun `searcher:planner` + `searcher:replay-live-fixtures`
@@ -188,7 +189,7 @@ depth/spread (NOT `1n`). **No DFS, no per-token enumeration.**
   the full-graph DFS.
 - **Pin one `flashToken`, disable rotation for atomic (finding #2).** `buildBorrowabilityRotations`
   (`planner.ts:321`) clones the opp to other flash tokens (`startToken/profitToken := borrowable.token`,
-  `planner.ts:356`); a single `searchCenter` would then be applied in the wrong token unit. So an
+  `planner.ts:358`); a single `searchCenter` would then be applied in the wrong token unit. So an
   `AtomicOpportunity` pins the scanner-chosen `flashToken` and the planner **does not rotate** atomic
   candidates → `searchSeed.searchCenter` is unambiguously in `flashToken` units. (Multi-flash later ⇒
   make `searchSeed` per-token.)
@@ -225,20 +226,20 @@ standalone/mined path) → terminal verify → `standalone` bundle build.
 **A4 — live wiring + dry-run window.**
 Two design constraints the earlier draft got wrong (verified in code):
 - **Entry point — do NOT feed a synthetic hint to `handleHint` (missing-piece #3).** `handleHint`
-  (`main.ts:953`) is victim-parse all the way down: Path A needs hint logs + `enableHashOnly`, Path B
+  (`main.ts:954`) is victim-parse all the way down: Path A needs hint logs + `enableHashOnly`, Path B
   needs a rawTx, Path C calls `getTransaction(txHash)` (a fabricated hash throws), and the tail is
-  `detector.detect(event)` (`main.ts:1244`), which produces opportunities from **swap logs** — a
+  `detector.detect(event)` (`main.ts:1245`), which produces opportunities from **swap logs** — a
   log-less synthetic event yields 0 and exits at "no matching graph pool". The correct wiring is to
-  **extract the post-detect pipeline** (plan → solve → sim → terminal-verify → submit, `main.ts` ~1250+)
+  **extract the post-detect pipeline** (plan → solve → sim → terminal-verify → submit, `main.ts` ~1275+)
   into a function that takes an `Opportunity[]` directly, and have both `handleHint` and the atomic block
   handler call it. The atomic handler skips detect entirely and passes the scanner's `AtomicOpportunity[]`.
 - **Scheduling — respect the single-flight `busy` loop.** The hint loop is single-flight
-  (`if (busy) skip hint`, `main.ts:846`); a per-block atomic scan contends for the same slot. Run the
+  (`if (busy) skip hint`, `main.ts:847`); a per-block atomic scan contends for the same slot. Run the
   scan **idle-only** (skip if `busy`) with a per-block time budget, so it never starves backrun hints and
   `expired-before-solver` does not rise. Both behind `SEARCHER_ENABLE_ATOMIC_SCAN` (default 0).
 - **State-block consistency — a hard gate, not an assumption (finding #5).** Atomic state-arb depends
   entirely on the end-of-block state. But the per-block warm + state-update are async/debounced listeners
-  on the same `block` event (`main.ts:762 / :807`), so a scan firing on `block N` can read a
+  on the same `block` event (`main.ts:764 / :809`), so a scan firing on `block N` can read a
   `PoolStateCache` still seeded at `N-1` → false positives/negatives that also make replay non-reproducible.
   Require: the scanner reads a `state_block`, all changed-pool reads use the **same `blockTag`**, and the
   scan only proceeds when `state_block === source_block` — otherwise **skip the block** (do not enter the
@@ -270,11 +271,12 @@ class are forbidden once epic'd (rule 13); only these slices touch it.**
 
 ## Gap B — mempool flow-admission (bounded router widening)
 
-**Root cause (verified):** `MEMPOOL_ROUTER_ADDRESSES` is a fixed ~14-address set (`main.ts:206`);
-`buildMempoolToAddressFilter` (`main.ts:2755`) = those routers + pinned pools + top-N hot pools. The
-subscription is a **server-side `alchemy_pendingTransactions` `toAddress` filter** (`main.ts:2794`), so
-we cannot "admit by pool-touch" at subscribe time — we don't know the touched pool until we fork the
-tx. The code explicitly refuses the hash-firehose fallback (`main.ts:2805`). So the only correct fix is
+**Root cause (verified):** `MEMPOOL_ROUTER_ADDRESSES` is a fixed ~14-address set (`main.ts:208`);
+`buildMempoolToAddressFilter` (`main.ts:2809`, impl `buildMempoolToAddressFilterWithRouters` `main.ts:2816`)
+= those routers + pinned pools + top-N hot pools. The subscription is a **server-side
+`alchemy_pendingTransactions` `toAddress` filter** (`main.ts:2859`), so we cannot "admit by pool-touch"
+at subscribe time — we don't know the touched pool until we fork the tx. The code explicitly refuses the
+hash-firehose fallback (`main.ts:2870`). So the only correct fix is
 to **widen the address set in a bounded, evidence-based way**, not go unfiltered.
 
 **Fix — a discovered-router set (mirrors the pool-universe / force-include pattern):**
