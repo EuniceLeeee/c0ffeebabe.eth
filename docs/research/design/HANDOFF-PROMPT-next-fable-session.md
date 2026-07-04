@@ -24,6 +24,9 @@ ordered next actions). Slice-mechanics detail lives in
 - Everything from BS-contract onward is UNWRITTEN (13 slices).
 
 ## No node / RPC / broadcast access is needed for your slices — this was deliberate
+> **SUPERSEDED 2026-07-05 (operator approval) — see `## Phase 2b` below.** The pure-local phase is
+> complete (2× verified); the operator approved the chain-enabled remainder. This section is kept
+> for history only.
 The previous session pre-cleared all chain dependencies so your slices stay purely on local code
 (no node, RPC, or on-chain submission at all):
 - **BS-0**: all node data captured → your job is pure local code (harness). No node.
@@ -56,6 +59,45 @@ If any slice seems to need node/archive/broadcast: STOP and hand back to the ope
 - The D1–D4 invariants (doc §9.5) are non-negotiable: strategy values are `backrun|block-scan` only
   ("atomic" banned as a strategy value); edge-level `leavesStandingPosition` + derived plan flag;
   ONE LearningCase; fluid credit edge grandfathered live, hazard is submitting not membership.
+
+## Phase 2b — operator-approved chain-enabled slices (2026-07-05; this is the CURRENT work list)
+
+The operator reviewed the operator-gated remainder on 2026-07-05 and approved **all of it** for the
+autonomous relay, EXCEPT the credit-live human gate (still forbidden, see Authorization scope). This
+supersedes the "No node / RPC" section above and impl-plan §9.3b's "stay pure-code / hand back" rule
+for the slices listed here. Ordered list (resume at the first not-landed one; verify against git):
+
+1. **BS-0-curve (TIME-SENSITIVE — do FIRST, prune window ~2026-07-05/06).** Capture curve pool
+   `0x6206ca31` state at block 25455296 from the node's local reth (zero-CU, via SSM read-only
+   `cast`/RPC); if already pruned, fall back to Alchemy archive. Upgrade the exemplar fixture
+   `blockscan-coffee-f2de7499.json`'s curve leg from receipt-anchored to state-verified. Gate:
+   `searcher:blockscan-a0` stays green with the state-derived leg (19/19 or better).
+2. **Chip `task_45c7379e` (pure local).** The postmortem LearningCase producer still hardcodes
+   `edge_kinds:["swap"]` — derive real edge kinds. Gate: `test:learning-case` extended + green.
+3. **BS-3 full-pipeline.** Build a profitable block-scan fixture on a FORK (anvil against local reth
+   or Alchemy) and gate the end-to-end scan→plan→sim→standalone-bundle path (dry-run router; no
+   broadcast in the test). Gate: new suite flips no-bundle→bundle with expected profit.
+4. **CR-5 credit adapter** + **CR-3 optional secondary** (same archive block, do together): fork
+   replay of `0xf88b` at block 24710788 via `$MAINNET_RPC_URL` archive (past reth prune); assert the
+   AC-3-style ~273 wstUSR delta for CR-3's secondary validation. Gate per impl-plan §CR-5.
+5. **BS-lane.** Concurrent block-scan lane in the live process (code local; gate on
+   `searcher:replay-live-fixtures` byte-identical backrun + new lane unit tests; no deploy needed yet).
+6. **BS-4 live window.** Deploy via `scripts/deploy-node.sh` ONLY (its guard envelope decides
+   live/dry from the node marker — do not touch the marker), mode-preservation verify + debounce
+   (≤1 deploy per window/hour), run a measured window, then the full Hermes Step-1 competitor
+   cross-ref + `hermes-gate` PASS. Bounded-live safety valve applies (wallet <50% of start →
+   `rm /opt/MEV/.deploy-live`, stop, report).
+7. **CS-min → CS-full → D → CR-8** per impl-plan order, each with its own rule-12 gate.
+
+**Authorization scope (operator, 2026-07-05):**
+- ALLOWED: read-only chain access (local reth via SSM preferred = zero-CU; Alchemy
+  `$MAINNET_RPC_URL` only for archive blocks past prune, keep it to the named checks — rule-10 CU
+  discipline applies); anvil forks; node deploys ONLY via `deploy-node.sh` for BS-4.
+- STILL FORBIDDEN (fresh human gate each): creating `/opt/MEV/.credit-live` (standing-position
+  submits), funding the wallet / raising `MEV_LIVE_MAX_WALLET_ETH`, swapping keys, any broadcast
+  outside the bounded envelope, destructive/irreversible ops.
+- Relay mechanics unchanged: Codex generator via `codex-run.sh` (Opus 4.8 Agent fallback if Codex
+  stalls), Fable non-author evaluator, ≤3 passes, rule-12 quartet per slice, appendix A/B upkeep.
 
 ## Appendix (READ before invoking any analysis tool). Two sections, append-only, never delete.
 

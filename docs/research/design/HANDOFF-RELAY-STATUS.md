@@ -4,8 +4,13 @@
 > Step 4b. Two consecutive independent "done" verifications flip `status` to COMPLETE, after which every
 > future round NO-OPs. Do not hand-edit `consecutive_done_confirmations` to skip the two-round bar.
 
-status: COMPLETE
-consecutive_done_confirmations: 2
+status: IN_PROGRESS
+consecutive_done_confirmations: 0
+
+> **2026-07-05 operator re-open (Phase 2b).** The pure-local phase was verified COMPLETE (2×, log
+> below). The operator then approved the chain-enabled remainder — see the handoff's `## Phase 2b`
+> section for the ordered slice list + authorization scope. Counter reset to 0: the relay runs again
+> and the two-confirmation bar now applies to Phase 2b completion.
 
 ## Confirmation log (append-only; each entry = one round that re-verified all slices landed + gates green)
 <!-- round-id · date · gate command re-run · result -->

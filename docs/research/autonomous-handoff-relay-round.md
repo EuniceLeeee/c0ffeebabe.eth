@@ -1,9 +1,12 @@
 # Autonomous Handoff-Relay Round — finish the unified strategy × edge slices, on Fable, without downgrading
 
-> Scope: authorized, defensive on-chain arbitrage research; this round is **pure local code** — the
-> handoff's slices need NO node / RPC / broadcast (that was pre-cleared on purpose). Broadcasting and the
-> four hard actions stay a human gate (Safety Rule 1). Neutral, legitimacy-framed wording throughout.
-> You are relaying an in-progress, design-settled implementation — do NOT re-open the architecture.
+> Scope: authorized, defensive on-chain arbitrage research. **2026-07-05 operator approval:** the
+> pure-local phase is COMPLETE (2× verified); the current work list is the handoff's **`## Phase 2b`**
+> section — chain-ENABLED slices with an explicit authorization scope (read-only RPC/archive, anvil
+> forks, BS-4 deploy via `deploy-node.sh` only). The four hard actions (credit-live marker, wallet
+> funding/caps, key swaps, out-of-envelope broadcast) stay a human gate (Safety Rule 1). Neutral,
+> legitimacy-framed wording throughout. You are relaying an in-progress, design-settled
+> implementation — do NOT re-open the architecture.
 
 You are relaying `docs/research/design/HANDOFF-PROMPT-next-fable-session.md`: continue and finish its
 ordered slices (BS-0 harness → BS-contract → BS-universe → CR-3 → BS-1/2/3 → …). This is an **unattended**
@@ -96,10 +99,13 @@ text (Section A stays low-volume — it is reasoning, not re-narrated chain data
   `opus-4.8-fallback`) in the round doc + Section A reasoning.
 - rule-12 quartet per slice (deterministic slices flip a pinned fixture; no flip = not fixed). ≤3 review
   passes per slice.
-- **Pure-local discipline (from the handoff): your slices need NO node / RPC / broadcast.** If a slice
-  seems to need chain / archive / a live marker / broadcast → **STOP and hand back to the operator** (write
-  a one-line note in the round doc + release the lock). Do not do it. (The one archive-optional check, CR-3's
-  ~273 wstUSR secondary validation at block 24710788, is already deferred to the operator in the handoff.)
+- **Chain-scope discipline (Phase 2b, operator-approved 2026-07-05).** The handoff's `## Phase 2b`
+  authorization scope is the whole permission: read-only chain access (local reth via SSM first,
+  zero-CU; Alchemy archive only for named past-prune checks), anvil forks, and the BS-4 deploy via
+  `scripts/deploy-node.sh` only (mode-preservation verify + debounce + bounded-live safety valve).
+  Anything OUTSIDE that scope — the credit-live marker, wallet funding/caps, key material, broadcast
+  outside the envelope, destructive ops → **STOP and hand back to the operator** (one-line note in the
+  round doc + release the lock).
 
 ## Step 3 — hard gates (never cross)
 - Do **NOT** create `/opt/MEV/.credit-live` (authorizes standing-position submissions — a fresh human gate).
@@ -107,9 +113,12 @@ text (Section A stays low-volume — it is reasoning, not re-narrated chain data
   only ("atomic" banned as a strategy value); edge-level `leavesStandingPosition` + derived plan flag; ONE
   LearningCase store; fluid credit edge grandfathered live — the hazard is *submitting* a standing position,
   not graph membership.
-- **No node / broadcast / deploy this round** (handoff is local code). Never `rg -rn`/`-rln` (`-r` =
-  `--replace`, corrupts reads). Destructive / irreversible → stop.
-- The node is in bounded-live-broadcast RIGHT NOW (impl-plan §9.2) — this round must not deploy or restart it.
+- **Node access only per the Phase 2b scope**: read-only reads any time; a deploy/restart ONLY for
+  BS-4 and ONLY via `scripts/deploy-node.sh` (never a hand restart), ≤1 per window/hour. Never
+  `rg -rn`/`-rln` (`-r` = `--replace`, corrupts reads). Destructive / irreversible → stop.
+- The node is in bounded-live-broadcast RIGHT NOW (impl-plan §9.2) — do not interrupt an active live
+  measurement window; check `git log` + the node marker before any BS-4 deploy, and verify
+  mode-preservation after.
 
 ## Step 4 — close (rule 15)
 
