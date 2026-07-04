@@ -131,6 +131,35 @@ drifts from backrun's EV gate / drop-reasons / submission.
   pass **unchanged**; a new unit test asserts two distinct anchors in the same `source_block` produce
   **distinct** `opportunity_id`s (no victim-hash collision).
 
+**A-universe — strategy-scoped pool selection (PREREQUISITE, alongside A-contract, upstream of A1).**
+Backrun wants **fast** (few hot pools); atomic wants **broad** (loop-closure coverage). Today they are
+**coupled through one universe** (verified): `main.ts:592` builds ONE `graph = buildTokenGraph(allPools)`
+that feeds BOTH the planner (`main.ts:603`) AND the mempool `toAddress` filter (`main.ts:2509`), and the
+single `SEARCHER_POOL_UNIVERSE_TOP_N=1500` (`main.ts:391`) is simultaneously the backrun latency cap and
+the planning-breadth cap. Widen it for atomic breadth → the mempool `toAddress` list inflates and latency
+rises; cap it for mempool speed → atomic loop-closure starves. **Split them: `shared venue registry +
+strategy-specific selection views`. The boundary is venue / admission / scorer level, NOT pool level.**
+- **Registry stays strategy-agnostic DATA** (`active-pools.json`: address / adapter / tokens / fee /
+  score / source). Do **not** tag pools `backrun`/`atomic` — a strategy label is a scorer **output**, not
+  a pool property; tagging freezes selection at generation time and explodes maintenance.
+- **Per-venue × per-strategy runtime policy is a SEPARATE config** (like `force-include-*.json`), never
+  embedded in the regenerated pool JSON (else each discovery rebuild clobbers policy):
+  - `backrun`: selection = hot / recent / high-liquidity / victim-likely, `maxPools≈1500` (latency-bound).
+  - `atomic`: selection = **cross-venue loop-closure = the existing `selectArbRelevantPools`**, promoted
+    from build-time (`build-active-pool-universe.ts:238`) to a runtime view — this **unifies with
+    `project-pool-scoring-arb-relevance-epic`** (atomic's "does this pool close a loop" scorer IS
+    arb-relevance; `main.ts:563` `selectPairCompletionPools` is the nascent runtime seed of it).
+    `maxPools` large, consumed under A2/A4's per-block budget + idle-only.
+- **One union graph, two edge-selection views** (not two graphs): the planner gets a hot edge-view for
+  backrun; the atomic scanner uses the full union graph (it needs it to find cross-venue loops). Reuses
+  the planner's existing top-N edge pruning (`maxPoolsPerToken`), and saves memory vs two graphs.
+- **Enforcement point (where "atomic 全 must not pollute backrun 快" bites): the mempool `toAddress`
+  filter draws from the BACKRUN view ONLY.** `buildMempoolToAddressFilter` must never see the atomic
+  breadth.
+- **Gate (rule-12):** widening the atomic universe leaves the backrun mempool `toAddress` count
+  **unchanged** (assert atomic breadth does not inflate the filter — the decoupling proof); AND the atomic
+  view contains ≥1 loop-closure pool absent from the backrun hot set (proves the views actually differ).
+
 **A1 — anchor finder: O(pairs) 2-hop spread scan (emits a CONSTRAINED cycle, not a start token).**
 Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(cache, pricedTokens)`: iterate only
 **token pairs that have ≥2 venues** in the runtime graph; compare mid-prices from the warm
@@ -215,14 +244,15 @@ over coffee's blocks.
   the R3 trap).
 
 ### Gap-A sequencing note
-Order: **A0 (decode) + A-contract (contracts/refactor) → A1 → A2 → A3 → A4.** A-contract is a
-prerequisite (union + telemetry + bundle + `processOpportunities` extraction) — nothing atomic ships
-before it, or the hot path forks. The three real engineering surfaces are **A-contract** (the shared
-`processOpportunities` extraction from the ~900-line `handleHint`), **A2** (bounded 3–4 hop cycle cost,
-policed by the latency gate; hop cap 4→3 is the lever), and **A4** (block wiring + idle-only scheduling +
-state-block consistency). A1's O(pairs) scan is cheap. A4 is flag- + dry-run-gated; go-live stays a human
-gate. **Per-pool force-include pins for this class are forbidden once epic'd (rule 13); only these slices
-touch it.**
+Order: **A0 (decode) + A-contract (contracts/refactor) + A-universe (pool-selection split) → A1 → A2 →
+A3 → A4.** A-contract and A-universe are both prerequisites — nothing atomic ships before them, or the hot
+path forks (A-contract) and backrun-speed/atomic-breadth fight through one universe (A-universe). The real
+engineering surfaces are **A-contract** (the shared `processOpportunities` extraction from the ~900-line
+`handleHint`), **A-universe** (two selection views + mempool-filter-from-backrun-view; overlaps the
+arb-relevance epic), **A2** (bounded 3–4 hop cycle cost, policed by the latency gate; hop cap 4→3 is the
+lever), and **A4** (block wiring + idle-only scheduling + state-block consistency). A1's O(pairs) scan is
+cheap. A4 is flag- + dry-run-gated; go-live stays a human gate. **Per-pool force-include pins for this
+class are forbidden once epic'd (rule 13); only these slices touch it.**
 
 ---
 
@@ -312,6 +342,7 @@ just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line)
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
 | A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s** (no victim-hash collision) |
+| A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves backrun mempool `toAddress` count **unchanged**; atomic view has ≥1 loop-closure pool absent from the backrun hot set |
 | A1 | `npm run searcher:planner` | anchor flips `candidate_plans 0→>0`; **every candidate path contains the seed pools** (anchor-constrained, not whole-graph); center `>8` in `flashToken` units |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
 | A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built`; **search center from `searchSeed`, not `1n` (`center>8`)** |
@@ -322,8 +353,10 @@ just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line)
 ## Governance / sequencing
 
 - **Gap A = EPIC** (rule 13): `decision: epic`, owner `atomic-scanner-epic`, ordered slices
-  **A0 + A-contract → A1 → A2 → A3 → A4**, each with its own gate; **A-contract (no-victim contracts +
-  `processOpportunities` extraction) is a hard prerequisite — no atomic logic ships before it.** Per-pool
+  **A0 + A-contract + A-universe → A1 → A2 → A3 → A4**, each with its own gate; **A-contract (no-victim
+  contracts + `processOpportunities` extraction) and A-universe (shared venue registry + strategy-specific
+  selection views; mempool filter from the backrun view only) are hard prerequisites — no atomic logic
+  ships before them.** A-universe overlaps `project-pool-scoring-arb-relevance-epic` (same scorer). Per-pool
   pins for this class are now forbidden inside the 30-min loop.
 - **Gap B, C = single-cycle rule-12 fixes**, parallelizable with A0/A1.
 - **Recommended order:** **C first** (cheapest; makes every future round auto-measure followability, so
