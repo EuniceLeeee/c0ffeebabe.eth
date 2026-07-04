@@ -80,9 +80,20 @@ and reusable across rounds, kept distinct from the raw evidence in B. One tight 
 text (Section A stays low-volume — it is reasoning, not re-narrated chain data).
 
 **The slice work (generator/evaluator split — CLAUDE.md rule 7/11):**
-- Codex is the generator, ALWAYS via `scripts/codex-run.sh <read-only|workspace-write>
+- Codex is the PRIMARY generator, ALWAYS via `scripts/codex-run.sh <read-only|workspace-write>
   /tmp/codex-<slice>.brief.md /tmp/codex-<slice>` in the background. You are the non-author evaluator —
   re-run every gate yourself, read the full `git diff` hunk-by-hunk, commit only the verified surface.
+- **Codex-health check + Opus 4.8 fallback (unattended — do NOT stop-and-wait).** Confirm Codex actually
+  wakes: a `thread.started` event appears and it makes progress. If Codex cannot be invoked — the rule-11
+  stalled definition (2 consecutive stalled attempts: hard timeout reached + empty `git diff`, OR no
+  `thread.started` / the local proxy connection never comes up) — **FALL BACK to an Opus 4.8 generator:**
+  spawn an Agent with `model: "opus"` and the SAME slice brief to write the code. You (Fable) remain the
+  non-author evaluator — re-run every gate, review the diff hunk-by-hunk, commit only the verified surface;
+  the generator/evaluator split still holds (Opus 4.8 writes → Fable gates). This OVERRIDES rule 11's
+  attended "stop and wait" — this round is unattended (rule 14), so keep the code moving on Opus 4.8 rather
+  than stalling the loop. This is also the sanctioned Safety-Rule-6 split (code-gen on Codex; the
+  fallback-capable model when Codex is down). Record the generator used per slice (`codex` |
+  `opus-4.8-fallback`) in the round doc + Section A reasoning.
 - rule-12 quartet per slice (deterministic slices flip a pinned fixture; no flip = not fixed). ≤3 review
   passes per slice.
 - **Pure-local discipline (from the handoff): your slices need NO node / RPC / broadcast.** If a slice
