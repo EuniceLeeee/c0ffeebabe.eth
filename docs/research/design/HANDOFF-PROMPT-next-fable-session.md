@@ -77,6 +77,20 @@ If any slice seems to need node/archive/broadcast: STOP and hand back to the ope
   0→1, `status: IN_PROGRESS` (need a 2nd independent round for COMPLETE). No slice written (none was
   writable pure-local); remainder handed to the operator. Gate evidence → HANDOFF-RELAY-STATUS log.
 
+#### R-verify-2 · 2026-07-04
+- blocker/gap: none new. Step-0b found the prior round (R-verify-1) had downgraded (42 opus turns in
+  its transcript) and was inactive → this round ran as the fresh-Fable relay. Its "all done,
+  done-confirm 0→1" was treated as a claim to CHECK (round-doc Step 1), not trusted.
+- options + choice: only one path — independent verification (Step 4b). Confirmed no writable
+  pure-local slice exists (same §9.1/§9.3b reading as R-verify-1: BS-3 full-pipeline needs a fork
+  fixture; BS-lane/BS-4/CR-5/CS-*/D/CR-8 are operator-gated), verified all 17 slice commits in git,
+  then re-ran the full gate suite MYSELF on this session (13 suites + learning-case + both tsc) —
+  did NOT reuse R-verify-1's cached results, per the Section-B note. Entire round stayed pure Fable,
+  zero analysis-tool calls, zero node/RPC.
+- outcome: ALL GREEN, matching R-verify-1 independently → `consecutive_done_confirmations` 1→2 →
+  `status: COMPLETE`. The relay loop is OFF (Step 0a NO-OPs every future round). Remainder is
+  operator-gated; hand-back note stands.
+
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
 > NOTE: the rule-12 *gate re-runs* below are deliberately NOT cached-to-skip — the 2-round
