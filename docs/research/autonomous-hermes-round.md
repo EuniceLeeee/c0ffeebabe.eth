@@ -10,10 +10,13 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
 **unattended** round. The user is away — decide and proceed per CLAUDE.md rule 14/15; never stop to ask.
 
 ## Step 0 — startup
-- **Anti-overlap lock (PID-liveness, NOT mtime):** `LOCK=/tmp/mev-hermes-round.lock`. If it exists AND
-  the PID inside is alive (`kill -0 "$(cat $LOCK)"`) → a round is still running → **no-op exit**. Else
-  (absent, or the PID is dead/stale) → `echo $$ > $LOCK`. A full round can exceed any fixed time window,
-  so never gate staleness on mtime. Set a trap to `rm -f $LOCK` on ANY exit.
+- **Anti-overlap check.** The `/tmp` PID lock is BEST-EFFORT ONLY — it does NOT actually prevent overlap
+  in this harness: each Bash tool call is an ephemeral subshell whose `$$` dies before the next check, so
+  two cron fires race the same round ([[project-hermes-round-lock-ineffective]]). The RELIABLE guard is a
+  **repo check**: before opening a window, `git -C /opt/MEV fetch` + list `docs/research/reports/live-run-R*`
+  and read the latest round doc — if a doc for the NEXT R-number was already committed in the last ~2h,
+  another chain is on it → **no-op exit**. Still `echo $$ > /tmp/mev-hermes-round.lock` + trap `rm -f` as a
+  weak hint, but rely on the repo check, not the lock.
 - `touch /tmp/mev-workflow-active` (idempotent); ensure the sleep-keeper is alive (Rounds Step 0).
 - Read `CLAUDE.md` fully (Hermes protocol + rules 1–16 + Safety Rules).
 
@@ -39,6 +42,20 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
   (non-dust) `simSuccess` → run the **dual-blind architecture review**: fresh fable sub-agent → conclusion
   A, Codex → conclusion B, mutually BLIND, both from the same regenerated DATA handoff; use
   `docs/research/templates/architecture-review.md`; output `localized_lever` + `decision: epic | funnel-fix`.
+  - **MANDATORY FRAME AUDIT — do this FIRST, before localizing any lever.** Dual-blind / fresh-context /
+    carry-forward all protect against WITHIN-frame errors (nodding, degradation, orphans) but NOT a wrong
+    FRAME: A and B both inherit the same framed handoff and can CONVERGE on a shared blind spot —
+    convergence then looks like confirmation but is shared blindness. This is exactly how R13–R21 concluded
+    "coverage exhausted → economics/posture gate" while the router-allowlist + MEV-Share **intake** gaps sat
+    unquestioned. So challenge the frame itself before trusting any in-frame conclusion:
+    1. **Is "coverage exhausted" measured on COMPLETE intake, or only the admitted fraction?** Audit the
+       pre-funnel intake — the `MEMPOOL_ROUTER_ADDRESSES` allowlist, `enableHashOnly`/MEV-Share, any
+       server-side filter — and quantify what fraction of flow actually ENTERS the funnel
+       (`pendingFiltered` vs `pendingReceived`). A conclusion drawn on a small admitted slice is invalid.
+    2. **Are we conflating "not-backrunnable-BY-US" (a posture limit) with "no opportunity" (a market
+       limit)?** A "market ceiling" verdict is INVALID until intake completeness AND the scanner-strategy
+       gap are ruled out.
+    Record the frame-audit answers in the verdict; only THEN localize the lever.
 - **Else → a regular round:**
   1. **Deploy latest** (get main onto the node; the node drifts behind main because it isn't hand-updated):
      `git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash`.
@@ -61,12 +78,32 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
   3. ~30–45 min bounded-live measurement window.
   4. **Structured `pipeline_dropped` analysis filtered by the CURRENT `run_id`** (source of truth; a
      restart starts a new run_id — segment across the boundary), before/after vs the previous round.
-  5. **MANDATORY competitor cross-reference on local reth (zero-CU):** coffeebabe
+  5. **MANDATORY competitor cross-reference on local reth (zero-CU)** — coffeebabe
      `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (EVERY window tx, full manual trace) + `0xae2Fc483…FaE13`
-     (sampled, outcome-driven; extend the window if thin). Classify what WE missed: pool / path /
-     unanticipated gap. (The census/postmortem tooling is now v4-`in_graph`-correct and native-ETH-
-     classifier-correct — commits `b8a29a5` / `223ae05` — so coffeebabe's atomic loops classify correctly;
-     the deploy in step 1 brings these to the node.)
+     (sampled, outcome-driven; extend the window if thin). Run **all THREE lenses per competitor tx**, not
+     just pool coverage — pool coverage alone is the funnel-INTERNAL lens that structurally missed the
+     router-allowlist + MEV-Share gaps for a whole night:
+     - **(a) atomic-vs-backrun** (`analysis/src/pnl/victim-source.ts`): is there a preceding swap on a
+       shared pool in-block (**backrun**) or none (**atomic** chain-arbitrage)? An ATOMIC tx is **NOT a
+       "market ceiling"** — "we can't backrun it" ≠ "no opportunity". A standing cross-pool price
+       difference is public/permissionless and capturable by a per-block whole-graph **SCANNER we do not
+       have** → a **scanner/strategy gap**, not `closable=0`. Never file atomic as market-ceiling/dust.
+     - **(b) INTAKE AUDIT — the funnel-EXTERNAL lens (this is the fix for the structural blind spot).**
+       For each BACKRUN whose source swap is PUBLIC (paid a priority fee — `analysis/src/pnl/sender-flow.ts`,
+       `maxPriorityFeePerGas>0`), check `seen_in_our_feed` (grep the running `SEARCHER_EVENTS_PATH` for the
+       source-swap hash). A public source swap we **NEVER SAW** = a **flow-admission gap** — our mempool
+       ADMISSION dropped it BEFORE the funnel (the `MEMPOOL_ROUTER_ADDRESSES` allowlist `main.ts:206`, or a
+       disabled MEV-Share / `enableHashOnly`). This is **structurally invisible to `pipeline_dropped`**
+       (which only sees what ENTERED the funnel) — this audit is the ONLY lens that can find it. Distinct,
+       closable class (widen admission to pool-touch / enable the discarded flow).
+     - **(c) pool / path coverage** (the pre-existing lens): pools the competitor touched that we lack.
+       Tooling is v4-`in_graph`-correct + native-ETH-classifier-correct (`b8a29a5` / `223ae05`).
+     **Gap taxonomy — classify into ONE:** pool · path · **flow-admission (intake, pre-funnel)** ·
+     **scanner-strategy** · economics/posture (human gate) · unanticipated. **"dust" ≡ per-tx NET USD
+     < $0.1** (the census floor) at the CURRENT ETH price — NEVER blanket-label a competitor "dust";
+     report the net USD (WETH-unwrap gross is a LOWER bound — it misses token-denominated profit). Also:
+     `maxPriorityFeePerGas=0` ⇒ the competitor submits as a bundle (coinbase builder payment) — this does
+     **NOT** prove private orderflow; for atomic arbitrage the opportunity is public chain state.
   6. **Dual-blind blocker:** fresh fable sub-agent → conclusion A (Agent tool, `model: fable`); Codex →
      conclusion B from the raw DATA package (blind to A); compare → finalize the Implementation Brief.
   7. **Codex writes the fix** (`scripts/codex-run.sh`, never hand-write the codex line) → review + the
