@@ -16,6 +16,7 @@ import {
   type PrimaryGap,
   upsertCase,
 } from "../learning/learning-case.js";
+import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
 import { fetchEthUsd, priceArb, type ArbProfit } from "../pnl/arb-profit.js";
 import { ADDR, lower, short } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
@@ -469,6 +470,7 @@ function caseFromCompetedBackrun(
   const touchedVenues = winner.touchedVenues.map(reportVenue);
   const missingVenueEvidence = missingVenues.map(reportVenue);
   const winnerBlockBuilder = resolveBlockBuilder(block);
+  const derivedEdgeKinds = deriveEdgeKindsFromLogs(winner.receipt.logs);
   const learningCase = learningCaseFromOnchainScan({
     competitor_tx: winner.hash,
     source_block: block.number - 1,
@@ -478,7 +480,7 @@ function caseFromCompetedBackrun(
     strategy_kind,
     our_opportunity_id: funnelEntry?.opportunity_ids[0],
     gap_detail: gapDetail(primary_gap, nonComparable.reason, funnelEntry, sourceNotSeen),
-    edge_kinds: ["swap"],
+    edge_kinds: derivedEdgeKinds.length > 0 ? derivedEdgeKinds : ["swap"],
     created_at: createdAt,
     evidence: {
       winner_tx: winner.hash,

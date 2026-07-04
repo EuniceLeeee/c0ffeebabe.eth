@@ -4,6 +4,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { decodeTransfer } from "../decode/erc20.js";
+import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
 import type { LearningCase, PrimaryGap } from "../learning/learning-case.js";
 import {
   builderPaymentWeiFromPrestate,
@@ -14,6 +15,7 @@ import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
 import { parseArgs, uniq, writeText } from "../util.js";
+import type { EdgeKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
@@ -104,6 +106,7 @@ export interface CompetitorReport extends CandidateTx {
   v4Swaps: number;
   v4PoolIds: string[];
   touchedVenues: TouchedVenue[];
+  edgeKinds: EdgeKind[];
   winner_style: WinnerStyle;
   winner_moved_price_beyond_prestate: boolean;
   unpriced_token_in_flow: string[];
@@ -534,6 +537,7 @@ async function analyzeCompetitor(
     v4Swaps: profit.v4Swaps.length,
     v4PoolIds: profit.v4PoolIds,
     touchedVenues: extractTouchedVenues(receipt, graph),
+    edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
     winner_style: winnerStyleAnalysis.winner_style,
     winner_moved_price_beyond_prestate: winnerStyleAnalysis.winner_moved_price_beyond_prestate,
     unpriced_token_in_flow: winnerStyleAnalysis.unpriced_token_in_flow,
@@ -1009,7 +1013,7 @@ export function learningCaseFromPostmortem(report: PostmortemReport): LearningCa
   );
   const createdAt = timestampFromReport(report);
   const competitorTx = winner?.hash ?? report.verdict.winner ?? undefined;
-  const edge_kinds: LearningCase["edge_kinds"] = winner && winner.touchedVenues.length > 0 ? ["swap"] : [];
+  const edge_kinds: LearningCase["edge_kinds"] = winner?.edgeKinds && winner.edgeKinds.length > 0 ? winner.edgeKinds : (winner && winner.touchedVenues.length > 0 ? ["swap"] : []);
 
   return {
     learning_case_id: learningCaseId({

@@ -9,12 +9,14 @@ import {
   learningCaseFromPostmortem,
   type PostmortemReport,
 } from "../cli/bundle-postmortem.js";
+import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
 import {
   advanceStatus,
   loadCases,
   type LearningCase,
   upsertCase,
 } from "../learning/learning-case.js";
+import { TOPICS } from "../registry/protocols.js";
 import {
   classifyTxShape,
   type RawLog,
@@ -49,6 +51,43 @@ test("postmortem fixtures fold into the merged LearningCase schema", () => {
   assert.equal(ee7b.primary_gap, "non_comparable_winner");
   assert.equal(ee7b.comparable, false);
   assert.equal("close_action" in ee7b, false);
+});
+
+test("deriveEdgeKindsFromLogs classifies topic0 into stable edge kinds", () => {
+  assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: [TOPICS.balancerV2FlashLoan] },
+    { topics: [TOPICS.univ4Swap] },
+    { topics: [TOPICS.curveTokenExchange] },
+  ]), ["flash", "swap"]);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: [TOPICS.morphoBorrow] },
+    { topics: [TOPICS.univ3Swap] },
+  ]), ["swap", "credit"]);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: [TOPICS.univ3Mint] },
+  ]), ["lp"]);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: ["0x0000000000000000000000000000000000000000000000000000000000000000"] },
+  ]), []);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs(undefined), []);
+  assert.deepEqual(deriveEdgeKindsFromLogs(null), []);
+});
+
+test("learningCaseFromPostmortem carries derived edgeKinds and preserves old-report swap fallback", () => {
+  const derivedReport = readJsonFixture<PostmortemReport>("postmortem-0xa32b/report.json");
+  const derivedWinner = winnerInReport(derivedReport);
+  derivedWinner.edgeKinds = ["flash", "swap"];
+  assert.deepEqual(learningCaseFromPostmortem(derivedReport).edge_kinds, ["flash", "swap"]);
+
+  const oldReport = readJsonFixture<PostmortemReport>("postmortem-0xa32b/report.json");
+  const oldWinner = winnerInReport(oldReport);
+  delete (oldWinner as { edgeKinds?: unknown }).edgeKinds;
+  assert.ok(oldWinner.touchedVenues.length > 0, "fixture winner has touched venues");
+  assert.deepEqual(learningCaseFromPostmortem(oldReport).edge_kinds, ["swap"]);
 });
 
 test("coffee tx-shape fixtures construct competitor-observation LearningCases", () => {
@@ -206,6 +245,13 @@ function loadCoffeeFixtures(): CoffeeFixture[] {
 
 function readJsonFixture<T>(path: string): T {
   return JSON.parse(readFileSync(join(FIXTURES_DIR, path), "utf8")) as T;
+}
+
+function winnerInReport(report: PostmortemReport): NonNullable<PostmortemReport["analyzed_competitors"]>[number] {
+  const winner = report.analyzed_competitors?.find((tx) => tx.hash === report.verdict.winner)
+    ?? report.analyzed_competitors?.[0];
+  assert.ok(winner, "postmortem report has an analyzed competitor");
+  return winner;
 }
 
 function withTempStore(fn: () => void): void {

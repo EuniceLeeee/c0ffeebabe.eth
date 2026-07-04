@@ -65,6 +65,19 @@ export const TOPICS = {
   univ2Burn: ethers.id("Burn(address,uint256,uint256,address)"),
   univ3Mint: ethers.id("Mint(address,address,int24,int24,uint128,uint256,uint256)"),
   univ3Burn: ethers.id("Burn(address,int24,int24,uint128,uint256,uint256)"),
+  balancerV2FlashLoan: ethers.id("FlashLoan(address,address,uint256,uint256)"),
+  morphoFlashLoan: ethers.id("FlashLoan(address,address,uint256)"),
+  univ3Flash: ethers.id("Flash(address,address,uint256,uint256,uint256,uint256)"),
+  aaveV3FlashLoan: ethers.id("FlashLoan(address,address,address,uint256,uint8,uint256,uint16)"),
+  univ4ModifyLiquidity: ethers.id("ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)"),
+  morphoBorrow: ethers.id("Borrow(bytes32,address,address,address,uint256,uint256)"),
+  morphoRepay: ethers.id("Repay(bytes32,address,address,uint256,uint256)"),
+  morphoSupply: ethers.id("Supply(bytes32,address,address,uint256,uint256)"),
+  morphoWithdraw: ethers.id("Withdraw(bytes32,address,address,address,uint256,uint256)"),
+  morphoSupplyCollateral: ethers.id("SupplyCollateral(bytes32,address,address,uint256)"),
+  morphoWithdrawCollateral: ethers.id("WithdrawCollateral(bytes32,address,address,address,uint256)"),
+  aaveV3Borrow: ethers.id("Borrow(address,address,address,uint256,uint8,uint256,uint16)"),
+  aaveV3Repay: ethers.id("Repay(address,address,address,uint256,bool)"),
 };
 
 export const CALL_SELECTORS = {
