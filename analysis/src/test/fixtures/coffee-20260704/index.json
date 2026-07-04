@@ -1,0 +1,74 @@
+[
+  {
+    "label": "1",
+    "txHash": "0xee51e26428e0213d3f2a6cca3176d650663a393ba3a7cebd2cd963e4419e4e92",
+    "block": 25454979,
+    "txIndex": 70,
+    "arbPools": 1,
+    "sameBlockSwapLogs": 1
+  },
+  {
+    "label": "2",
+    "txHash": "0x803a36936a1a58392bad9b47a90d1c7b4afe3da4a3cb61b6bab651b200727ba3",
+    "block": 25455024,
+    "txIndex": 201,
+    "arbPools": 3,
+    "sameBlockSwapLogs": 3
+  },
+  {
+    "label": "3",
+    "txHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
+    "block": 25455297,
+    "txIndex": 37,
+    "arbPools": 4,
+    "sameBlockSwapLogs": 4
+  },
+  {
+    "label": "4",
+    "txHash": "0xdc52761ffb79eaf37df696b3ed0eff0e7befbec224caaecf61a7a68f0e2cdfc4",
+    "block": 25455523,
+    "txIndex": 136,
+    "arbPools": 5,
+    "sameBlockSwapLogs": 5
+  },
+  {
+    "label": "5",
+    "txHash": "0x975e9ea62ea6069cb082537b2134da1ef26f9679e788ae84da404ecb69a0af6e",
+    "block": 25455539,
+    "txIndex": 113,
+    "arbPools": 2,
+    "sameBlockSwapLogs": 2
+  },
+  {
+    "label": "6",
+    "txHash": "0x96f48d4d761ac7ae1c8b728e8a6e3f190c4d6b02ee74190e0f54623978a653f2",
+    "block": 25455738,
+    "txIndex": 122,
+    "arbPools": 1,
+    "sameBlockSwapLogs": 1
+  },
+  {
+    "label": "7",
+    "txHash": "0x378e0ed2f6209fc3b8fea4871d787687926881b3731966efff557cde6f748539",
+    "block": 25455838,
+    "txIndex": 243,
+    "arbPools": 0,
+    "sameBlockSwapLogs": 0
+  },
+  {
+    "label": "8",
+    "txHash": "0x5f9f530fdb9d260ba52678b27d1fa70334d4aa7539362ab4d00f8d7ff41515b2",
+    "block": 25456048,
+    "txIndex": 36,
+    "arbPools": 1,
+    "sameBlockSwapLogs": 1
+  },
+  {
+    "label": "9",
+    "txHash": "0xc9ad7160836e68e60c06d663a95d92bd867d519306603aecb34ce9c597e639f0",
+    "block": 25456237,
+    "txIndex": 52,
+    "arbPools": 1,
+    "sameBlockSwapLogs": 2
+  }
+]
