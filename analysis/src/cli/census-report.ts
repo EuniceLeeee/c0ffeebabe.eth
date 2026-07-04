@@ -1,9 +1,11 @@
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchEthUsd, priceArb } from "../pnl/arb-profit.js";
+import { classifyTxShape, type RawLog } from "../pnl/tx-shape.js";
 import { lower } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient } from "../rpc/client.js";
 import { parseArgs, writeText } from "../util.js";
+import { strategyKindFromTxShape, type StrategyKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
 import {
   classifyWinnerTxStyle,
   extractTouchedVenues,
@@ -22,6 +24,7 @@ const DEFAULT_GRAPH_PATH = resolve(DEFAULT_POOLS_DIR, "runtime-graph-pools.json"
 // "be picky" floor. Raise this once past the coverage phase.
 const DEFAULT_MIN_PROFIT_USD = 0.1;
 const DEFAULT_MAX_BLOCKS = 1000;
+type TxShape = "atomic_state_arb" | "backrun" | "unknown";
 
 const USAGE = `Usage: npm run census-report -- --watch <addr[,addr]> --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]`;
 
@@ -35,6 +38,9 @@ export interface CensusPerTx {
   from: string;
   realizedUsd: number | null;
   touchedVenues: TouchedVenue[];
+  txIndex?: number;
+  receiptLogs?: RawLog[];
+  sameBlockSwapLogs?: RawLog[];
   winner_style?: WinnerStyle;
   winner_moved_price_beyond_prestate?: boolean;
   unpriced_token_in_flow?: string[];
@@ -45,6 +51,8 @@ export interface AnalyzedCompetitor {
   from: string;
   realized_profit_usd: number;
   touchedVenues: TouchedVenue[];
+  tx_shape: TxShape;
+  strategy_kind: StrategyKind | "unknown";
   winner_style: WinnerStyle;
   non_comparable_winner?: boolean;
   winner_moved_price_beyond_prestate?: boolean;
@@ -129,6 +137,8 @@ async function main(): Promise<void> {
         from: lower(String(tx?.from ?? receipt?.from ?? "")),
         realizedUsd: profit.realizedProfitUsd,
         touchedVenues: extractTouchedVenues(receipt, graph),
+        txIndex: Number(hexToBigInt(receipt?.transactionIndex ?? tx?.transactionIndex)),
+        receiptLogs: receipt?.logs,
         winner_style: winnerStyle.winner_style,
         winner_moved_price_beyond_prestate: winnerStyle.winner_moved_price_beyond_prestate,
         unpriced_token_in_flow: winnerStyle.unpriced_token_in_flow,
@@ -174,12 +184,15 @@ export function buildCensusReport(
     const coverageTouchedVenues = nonComparable
       ? tx.touchedVenues.filter((venue) => venue.in_graph !== false)
       : tx.touchedVenues;
+    const txShape = classifyCensusTxShape(tx);
 
     analyzed.push({
       hash: lower(tx.hash),
       from: lower(tx.from),
       realized_profit_usd: realized,
       touchedVenues: coverageTouchedVenues,
+      tx_shape: txShape,
+      strategy_kind: strategyKindFromTxShape(txShape),
       winner_style: winnerStyle,
       non_comparable_winner: nonComparable ? true : undefined,
       winner_moved_price_beyond_prestate: tx.winner_moved_price_beyond_prestate,
@@ -212,6 +225,21 @@ export function buildCensusReport(
       net_realized_usd: analyzed.reduce((sum, tx) => tx.non_comparable_winner ? sum : sum + tx.realized_profit_usd, 0),
     },
   };
+}
+
+function classifyCensusTxShape(tx: CensusPerTx): TxShape {
+  if (
+    typeof tx.txIndex !== "number"
+    || !Array.isArray(tx.receiptLogs)
+    || !Array.isArray(tx.sameBlockSwapLogs)
+  ) {
+    return "unknown";
+  }
+  return classifyTxShape({
+    receiptLogs: tx.receiptLogs,
+    txIndex: tx.txIndex,
+    sameBlockSwapLogs: tx.sameBlockSwapLogs,
+  }).shape;
 }
 
 function usage(): never {

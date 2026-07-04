@@ -12,4 +12,5 @@ listener/searcher/pools/active-pools*.json
 listener/searcher/pools/auto-close-findings.jsonl
 analysis/outputs/
 analysis/events/
+analysis/learning-cases/replay-cache/
 .DS_Store

@@ -11,9 +11,10 @@
     "census-report": "tsx src/cli/census-report.ts",
     "redact-live-run": "tsx src/cli/redact-live-run.ts",
     "hermes-gate": "tsx src/cli/hermes-gate.ts",
-    "test:sender-flow": "tsx --test src/test/sender-flow-victim-source.ts",
-    "test:swap-log-registry": "tsx --test src/test/swap-log-registry.ts",
-    "test:tx-shape": "tsx --test src/test/tx-shape.ts",
+    "test:sender-flow": "node --import tsx --test src/test/sender-flow-victim-source.ts",
+    "test:swap-log-registry": "node --import tsx --test src/test/swap-log-registry.ts",
+    "test:learning-case": "node --import tsx --test src/test/learning-case.ts",
+    "test:tx-shape": "node --import tsx --test src/test/tx-shape.ts",
     "build": "tsc --noEmit"
   },
   "dependencies": {

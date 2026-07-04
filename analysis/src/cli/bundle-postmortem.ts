@@ -4,6 +4,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { decodeTransfer } from "../decode/erc20.js";
+import type { LearningCase, PrimaryGap } from "../learning/learning-case.js";
 import {
   builderPaymentWeiFromPrestate,
   fetchEthUsd,
@@ -56,7 +57,7 @@ interface MatchResult {
   query: string;
 }
 
-interface SourceQuery {
+export interface SourceQuery {
   address: string;
   origin: "opportunity_seen" | "triggering_receipt";
   venue?: string;
@@ -77,14 +78,14 @@ export interface GraphMembership {
   members: Set<string>;
 }
 
-interface CandidateTx {
+export interface CandidateTx {
   hash: string;
   transactionIndex: number;
   backrun_positioned: boolean;
   matched_source_addresses: string[];
 }
 
-interface CompetitorReport extends CandidateTx {
+export interface CompetitorReport extends CandidateTx {
   from: string;
   to: string | null;
   status: string | null;
@@ -127,6 +128,22 @@ interface Verdict {
   note?: string;
   one_shot: string;
   builder_reach?: BuilderReach;
+}
+
+export interface PostmortemReport {
+  command: "bundle-postmortem";
+  events: Json;
+  matched_by: Json;
+  bundle_submitted: Json;
+  triggering_swap: Json;
+  block?: Json;
+  landed_in_targeted_block?: boolean;
+  source_queries?: SourceQuery[];
+  graph?: Json;
+  competing_candidates?: CandidateTx[];
+  analyzed_competitors?: CompetitorReport[];
+  verdict: Verdict;
+  learning_case?: LearningCase;
 }
 
 export interface WinnerStyleInput {
@@ -198,9 +215,13 @@ async function main(): Promise<void> {
       bundle_submitted: event,
       triggering_swap: { hash: triggeringHash, receipt: null },
       verdict: pendingVerdict(),
+    } satisfies PostmortemReport;
+    const reportWithLearningCase = {
+      ...report,
+      learning_case: learningCaseFromPostmortem(report),
     };
-    console.log(renderPendingSummary(report));
-    if (outPath) await writeJson(outPath, report);
+    console.log(renderPendingSummary(reportWithLearningCase));
+    if (outPath) await writeJson(outPath, reportWithLearningCase);
     return;
   }
 
@@ -268,10 +289,14 @@ async function main(): Promise<void> {
     competing_candidates: candidates,
     analyzed_competitors: competitors,
     verdict,
+  } satisfies PostmortemReport;
+  const reportWithLearningCase = {
+    ...report,
+    learning_case: learningCaseFromPostmortem(report),
   };
 
-  console.log(renderSummary(report));
-  if (outPath) await writeJson(outPath, report);
+  console.log(renderSummary(reportWithLearningCase));
+  if (outPath) await writeJson(outPath, reportWithLearningCase);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -967,6 +992,133 @@ export function buildVerdict(event: Json, competitors: CompetitorReport[], build
 
 export function isNonComparableWinnerStyle(style: WinnerStyle): boolean {
   return style === "one_leg_inventory" || style === "sandwich";
+}
+
+export function learningCaseFromPostmortem(report: PostmortemReport): LearningCase {
+  const winner = report.analyzed_competitors?.find((tx) => tx.hash === report.verdict.winner)
+    ?? report.analyzed_competitors?.[0]
+    ?? null;
+  const winnerStyle = report.verdict.winner_style ?? winner?.winner_style ?? "unknown";
+  const comparable = winnerStyle === "atomic_loop";
+  const missingVenues = (winner?.touchedVenues ?? []).filter((venue) => venue.in_graph === false);
+  const primary_gap = postmortemPrimaryGap(report, winner, comparable, missingVenues);
+  const targetBlock = numberOrUndefined(
+    report.bundle_submitted.submission_target_block
+      ?? report.bundle_submitted.target_block
+      ?? report.triggering_swap.block,
+  );
+  const createdAt = timestampFromReport(report);
+  const competitorTx = winner?.hash ?? report.verdict.winner ?? undefined;
+  const edge_kinds: LearningCase["edge_kinds"] = winner && winner.touchedVenues.length > 0 ? ["swap"] : [];
+
+  return {
+    learning_case_id: learningCaseId({
+      strategy_kind: "backrun",
+      trigger: "bundle_not_included",
+      competitor_tx: competitorTx,
+      source_block: undefined,
+      cycle_fingerprint: undefined,
+      primary_gap,
+    }),
+    status: primary_gap === "manual_required" ? "manual_required" : "open",
+    strategy_kind: "backrun",
+    edge_kinds,
+    trigger: "bundle_not_included",
+    competitor_tx: competitorTx,
+    our_opportunity_id: optionalString(report.bundle_submitted.opportunity_id),
+    target_block: targetBlock,
+    comparable,
+    primary_gap,
+    evidence: {
+      verdict_status: report.verdict.status,
+      winner_style: winnerStyle,
+      route_gap_decisive: report.verdict.route_gap_decisive,
+      outbid: report.verdict.outbid,
+      winner_payment_wei: report.verdict.winnerPaymentWei ?? winner?.builderPaymentWei ?? null,
+      our_bid_wei: optionalString(report.bundle_submitted.bid),
+      our_simulated_gross_wei: optionalString(
+        report.bundle_submitted.simulated_profit ?? report.bundle_submitted.simulated_profit_wei,
+      ),
+      missing_venues: missingVenues.map((venue) => ({
+        protocol: venue.protocol,
+        id: venue.id,
+        emitter: venue.emitter,
+      })),
+      touched_venues: (winner?.touchedVenues ?? []).map((venue) => ({
+        protocol: venue.protocol,
+        id: venue.id,
+        in_graph: venue.in_graph,
+      })),
+    },
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
+
+function postmortemPrimaryGap(
+  report: PostmortemReport,
+  winner: CompetitorReport | null,
+  comparable: boolean,
+  missingVenues: TouchedVenue[],
+): PrimaryGap {
+  const winnerStyle = report.verdict.winner_style ?? winner?.winner_style ?? "unknown";
+  if (isNonComparableWinnerStyle(winnerStyle)) return "non_comparable_winner";
+  if (comparable && report.verdict.route_gap_decisive === true && missingVenues.length > 0) {
+    return "venue_missing";
+  }
+  const winnerPayment = parseWeiField(report.verdict.winnerPaymentWei ?? winner?.builderPaymentWei);
+  const bid = parseWeiField(report.bundle_submitted.bid);
+  const simulatedGross = parseWeiField(
+    report.bundle_submitted.simulated_profit ?? report.bundle_submitted.simulated_profit_wei,
+  );
+  if (
+    comparable
+    && winnerPayment !== null
+    && bid !== null
+    && simulatedGross !== null
+    && winnerPayment > bid
+    && winnerPayment < simulatedGross
+  ) {
+    return "outbid";
+  }
+  return "manual_required";
+}
+
+function learningCaseId(parts: {
+  strategy_kind: string;
+  trigger: string;
+  competitor_tx?: string;
+  source_block?: number;
+  cycle_fingerprint?: string;
+  primary_gap: PrimaryGap;
+}): string {
+  return ethers.id([
+    parts.strategy_kind,
+    parts.trigger,
+    parts.competitor_tx ?? "",
+    parts.source_block ?? "",
+    parts.cycle_fingerprint ?? "",
+    parts.primary_gap,
+  ].join("|"));
+}
+
+function timestampFromReport(report: PostmortemReport): string {
+  const timestamp = numberOrUndefined(report.block?.timestamp);
+  if (timestamp !== undefined && timestamp >= 0) return new Date(timestamp * 1000).toISOString();
+  const eventTime = optionalString(report.bundle_submitted.timestamp ?? report.bundle_submitted.time);
+  if (eventTime) return eventTime;
+  return "1970-01-01T00:00:00.000Z";
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" || typeof value === "bigint") return String(value);
+  return undefined;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function nonComparableWinnerNote(style: WinnerStyle): string {
