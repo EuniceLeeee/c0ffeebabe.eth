@@ -151,6 +151,21 @@ else
   rm -f "$REINDEX_TMP" 2>/dev/null || true
 fi
 
+# ── Router allowlist auto-discovery (best-effort; never blocks/aborts the deploy) ──
+# Proactive flow-admission refresh: scan recent local-reth blocks for out-of-allowlist `to` contracts
+# that emit DEX swaps and are called by many distinct EOAs (router/aggregator, NOT single-operator arb
+# bot), and append them to force-include-routers.json so the restarted searcher admits their swap flow.
+# git reset --hard already restored the committed seed; this appends live-discovered routers on top
+# (idempotent, re-run each deploy). Mirrors the pool-universe re-index above.
+ROUTER_DISCOVERY_BLOCKS="${MEMPOOL_ROUTER_DISCOVERY_BLOCKS:-600}"
+if timeout 180 sh -c 'cd "$0/listener" && npx tsx src/searcher/discover-routers.ts --rpc http://127.0.0.1:8545 --blocks "$1"' "$REPO" "$ROUTER_DISCOVERY_BLOCKS" \
+     >/tmp/deploy-discover-routers.log 2>&1; then
+  RADD=$(grep -c '\[discover-routers\] added ' /tmp/deploy-discover-routers.log 2>/dev/null || echo 0)
+  say "router discovery: appended $RADD new router(s) to force-include-routers.json."
+else
+  say "WARNING: router discovery failed/timed out — keeping committed force-include-routers.json (deploy continues)."
+fi
+
 # ── 5. Restart + verify mode ──
 LOGF=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
 [ -n "$LOGF" ] || LOGF=/var/log/mev-live.log
