@@ -20,6 +20,10 @@ import { fetchEthUsd, priceArb, type ArbProfit } from "../pnl/arb-profit.js";
 import { ADDR, lower, short } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
+import {
+  appendForceIncludeRouters,
+  DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
+} from "../../../listener/src/searcher/force-include.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_RPC_URL = "http://127.0.0.1:8545";
@@ -107,8 +111,11 @@ export interface OnchainCaseReport {
   block: number;
   victim_tx: string;
   victim_index: number;
+  victim_to: string | null;
   winner_tx: string;
   winner_index: number;
+  winner_from: string;
+  winner_to: string | null;
   primary_gap: PrimaryGap;
   comparable: boolean;
   winner_style?: WinnerStyle;
@@ -144,12 +151,29 @@ export interface WinnerProfitRollup {
   dust_share: number | null;
 }
 
+export interface AdmitCandidate {
+  address: string;
+  victim_tx: string;
+  winner_tx: string;
+  block: number;
+  winner_profit_usd: number | null;
+}
+
+export interface AdmitWriteResult {
+  path: string;
+  appended: number;
+  already_present: number;
+  added: string[];
+}
+
 export interface OnchainLossScanResult {
   start_block: number;
   end_block: number;
   scanned_blocks: number;
   competed_backruns: number;
   cases: OnchainCaseReport[];
+  admit_candidates: AdmitCandidate[];
+  admit_candidate_count: number;
   summary: Partial<Record<PrimaryGap, number>>;
   source_not_seen_reasons: Partial<Record<SourceNotSeenReason, number>>;
   winner_profit_by_primary_gap: Partial<Record<PrimaryGap, WinnerProfitRollup>>;
@@ -165,6 +189,7 @@ export interface OnchainLossScanOptions {
   classifyWinnerStyle?: OnchainWinnerStyleClassifier;
   priceWinner?: OnchainWinnerProfitPricer;
   ethUsd?: number;
+  admitMinProfitUsd?: number;
   concurrency?: number;
   now?: () => string;
 }
@@ -191,7 +216,7 @@ export interface JoinedTx {
   touchedVenues: TouchedVenue[];
 }
 
-const USAGE = `Usage: npm run onchain-loss-scan -- --events <jsonl> [--rpc <url>] [--blocks <n>] [--graph <runtime-graph-pools.json>] [--our-executor <0x prefix>] [--write] [--out <report.json>]`;
+const USAGE = `Usage: npm run onchain-loss-scan -- --events <jsonl> [--rpc <url>] [--blocks <n>] [--graph <runtime-graph-pools.json>] [--our-executor <0x prefix>] [--write] [--out <report.json>] [--admit-write] [--admit-min-profit-usd <n>] [--force-include <path>]`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -203,6 +228,11 @@ async function main(): Promise<void> {
   const graphPath = args.graph ? resolveCliPath(String(args.graph)) : DEFAULT_GRAPH_PATH;
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";
   const write = Boolean(args.write);
+  const admitWrite = Boolean(args["admit-write"]);
+  const admitMinProfitUsd = Math.max(0, numberArg(args, "admit-min-profit-usd", 0));
+  const forceIncludePath = args["force-include"]
+    ? resolveCliPath(String(args["force-include"]))
+    : DEFAULT_FORCE_INCLUDE_ROUTERS_PATH;
   const ourExecutorPrefixes = parsePrefixes(args["our-executor"]);
 
   if (!eventsPath || blocks <= 0) usage();
@@ -223,11 +253,15 @@ async function main(): Promise<void> {
     ourExecutorPrefixes,
     classifyWinnerStyle: winnerAnalysis.classifyWinnerStyle,
     priceWinner: winnerAnalysis.priceWinner,
+    admitMinProfitUsd,
   });
 
   const storedCases = write
     ? result.cases.map((item) => upsertCase(item.learning_case))
     : [];
+  const admitWriteResult = admitWrite
+    ? appendAdmitCandidates(result.admit_candidates, forceIncludePath)
+    : undefined;
   const report = {
     command: "onchain-loss-scan",
     rpc: rpcUrl,
@@ -245,6 +279,10 @@ async function main(): Promise<void> {
     },
     write,
     stored_cases: storedCases.length,
+    admit_write: admitWrite,
+    admit_min_profit_usd: admitMinProfitUsd,
+    force_include: forceIncludePath,
+    admit_write_result: admitWriteResult,
     ...result,
   };
 
@@ -356,12 +394,15 @@ export async function scanOnchainLosses(options: OnchainLossScanOptions): Promis
   });
 
   cases.sort((a, b) => a.block - b.block || a.winner_index - b.winner_index);
+  const admitCandidates = collectAdmitCandidates(cases, options.admitMinProfitUsd ?? 0);
   return {
     start_block: options.fromBlock,
     end_block: options.toBlock,
     scanned_blocks: range.length,
     competed_backruns: cases.length,
     cases,
+    admit_candidates: admitCandidates,
+    admit_candidate_count: admitCandidates.length,
     summary: summarizeCases(cases),
     source_not_seen_reasons: summarizeSourceNotSeenReasons(cases),
     winner_profit_by_primary_gap: summarizeWinnerProfitByGap(cases),
@@ -469,8 +510,11 @@ function caseFromCompetedBackrun(
     block: block.number,
     victim_tx: victim.hash,
     victim_index: victim.index,
+    victim_to: victim.to,
     winner_tx: winner.hash,
     winner_index: winner.index,
+    winner_from: winner.from,
+    winner_to: winner.to,
     primary_gap,
     comparable,
     winner_style: winnerStyle,
@@ -823,6 +867,76 @@ function summarizeWinnerProfitByGap(cases: OnchainCaseReport[]): Partial<Record<
   return out;
 }
 
+export function collectAdmitCandidates(
+  cases: OnchainCaseReport[],
+  minProfitUsd = 0,
+): AdmitCandidate[] {
+  const min = Math.max(0, minProfitUsd);
+  const byAddress = new Map<string, AdmitCandidate>();
+
+  for (const item of cases) {
+    if (item.primary_gap !== "source_not_seen") continue;
+    if (item.source_not_seen_reason !== "to_not_admissible") continue;
+    if (!item.comparable) continue;
+    if (!passesAdmitProfitGuard(item.winner_profit_usd, min)) continue;
+
+    const address = checksumAddress(item.victim_to);
+    if (!address) continue;
+    const key = address.toLowerCase();
+    if (key === lower(item.winner_from) || key === lower(item.winner_to ?? "")) continue;
+
+    const candidate = {
+      address,
+      victim_tx: item.victim_tx,
+      winner_tx: item.winner_tx,
+      block: item.block,
+      winner_profit_usd: item.winner_profit_usd,
+    };
+    const existing = byAddress.get(key);
+    if (!existing || admitCandidateSortKey(candidate) > admitCandidateSortKey(existing)) {
+      byAddress.set(key, candidate);
+    }
+  }
+
+  return [...byAddress.values()].sort((a, b) => a.address.localeCompare(b.address));
+}
+
+export function appendAdmitCandidates(
+  candidates: readonly AdmitCandidate[],
+  forceIncludePath = DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
+): AdmitWriteResult {
+  const appendResult = appendForceIncludeRouters(
+    candidates.map((candidate) => candidate.address),
+    forceIncludePath,
+  );
+  return {
+    path: appendResult.path,
+    appended: appendResult.added.length,
+    already_present: candidates.length - appendResult.added.length,
+    added: appendResult.added,
+  };
+}
+
+function passesAdmitProfitGuard(profitUsd: number | null, minProfitUsd: number): boolean {
+  if (minProfitUsd <= 0) return true;
+  return typeof profitUsd === "number" && Number.isFinite(profitUsd) && profitUsd >= minProfitUsd;
+}
+
+function admitCandidateSortKey(candidate: AdmitCandidate): number {
+  return candidate.winner_profit_usd === null || !Number.isFinite(candidate.winner_profit_usd)
+    ? Number.NEGATIVE_INFINITY
+    : candidate.winner_profit_usd;
+}
+
+function checksumAddress(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return ethers.getAddress(value);
+  } catch {
+    return null;
+  }
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const mid = Math.floor(values.length / 2);
@@ -1033,6 +1147,12 @@ function renderSummary(report: {
   cases: OnchainCaseReport[];
   write: boolean;
   stored_cases: number;
+  admit_write: boolean;
+  admit_min_profit_usd: number;
+  force_include: string;
+  admit_candidates: AdmitCandidate[];
+  admit_candidate_count: number;
+  admit_write_result?: AdmitWriteResult;
 }): string {
   const lines = [
     "onchain-loss-scan",
@@ -1062,6 +1182,26 @@ function renderSummary(report: {
         `dust_share=${formatShare(rollup.dust_share)}`,
       );
     }
+  }
+
+  lines.push(
+    `admit_candidates: count=${report.admit_candidate_count} ` +
+    `min_profit_usd=${formatUsd(report.admit_min_profit_usd)} force_include=${report.force_include}`,
+  );
+  if (report.admit_write) {
+    const result = report.admit_write_result ?? { appended: 0, already_present: 0 };
+    lines.push(
+      `[onchain-loss-scan] admit-write: appended ${result.appended} routers ` +
+      `(${result.already_present} already present)`,
+    );
+  } else {
+    for (const candidate of report.admit_candidates) {
+      lines.push(
+        `would-admit ${candidate.address} ` +
+        `(profit ${formatUsd(candidate.winner_profit_usd)}, victim ${short(candidate.victim_tx)})`,
+      );
+    }
+    lines.push(`admit-write: dry-run would_admit=${report.admit_candidate_count}`);
   }
 
   lines.push(`competed_backruns: ${report.competed_backruns}`);
