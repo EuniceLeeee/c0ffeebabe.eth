@@ -20,22 +20,40 @@ Two independent, ordered fixes, landed from the run `dc9bb4a3` see→no-submit a
    `keccak256(rawTx)→realTx` reverse map + tag `victim_source: mev-share | mempool`.
    (rule-16 mandatory codify: a fresh-analyst-found tooling gap must be fixed in the script.)
 
-2. **Step 2 (the coverage fix).** The runtime pool loader `loadPoolUniverse`
-   (`pool-universe.ts:74-76`) sorts purely by raw `score` (= `activity.count`, written at
-   `build-active-pool-universe.ts:530,626`) and topN-slices. Build-time `selectArbRelevantPools`
-   (loop-completer-first ranking) exists and is enabled at BUILD (`build-active-pool-universe.ts:238`)
-   but only decides which pools get WRITTEN; it does not adjust the runtime `score`, and
-   `PoolUniverseLoadOptions` (`pool-universe.ts:27-34`) has no arb-relevance option. So a
-   low-count-but-critical loop-completer is dropped by the runtime topN cut. Verified on run
-   `dc9bb4a3`: the genuine competitor winner `0x4308955f` closed a loop through 3 pools that are
-   in `active-pools.json` but NOT in the runtime graph at topN=1500 (2 HAKKA v2
-   `0xb8b84ce0…`/`0x9c599965…` + v4 poolId `0x00d5397c…`); 33 `impact_pool_not_in_routing_graph`
-   drops are likewise active-but-not-runtime. Current stopgap `SEARCHER_POOL_UNIVERSE_TOP_N=6000`
-   masks this by including everything (adds solver/candidate-cap load, already ~24% of drops). Fix =
+2. **Step 2 (the coverage fix — CANDIDATE-CAP relief, NOT latency).** The runtime pool loader
+   `loadPoolUniverse` (`pool-universe.ts:74-76`) sorts purely by raw `score` (= `activity.count`,
+   written at `build-active-pool-universe.ts:530,626`) and topN-slices. Build-time
+   `selectArbRelevantPools` (loop-completer-first ranking) exists and is enabled at BUILD
+   (`build-active-pool-universe.ts:238`) but only decides which pools get WRITTEN; it does not
+   adjust the runtime `score`, and `PoolUniverseLoadOptions` (`pool-universe.ts:27-34`) has no
+   arb-relevance option. So a low-count-but-critical loop-completer is dropped by the runtime topN
+   cut. Verified on run `dc9bb4a3`: the genuine competitor winner `0x4308955f` closed a loop
+   through 3 pools that are in `active-pools.json` but NOT in the runtime graph at topN=1500 (2
+   HAKKA v2 `0xb8b84ce0…`/`0x9c599965…` + v4 poolId `0x00d5397c…`); 33
+   `impact_pool_not_in_routing_graph` drops are likewise active-but-not-runtime.
+
+   **Motivation is throughput, NOT latency (benchmark-corrected).** `searcher:bench-topn` on the
+   real 5026-pool universe: plan p95 `96ms (topN=1500) → 131ms (topN=5026)` = **+35ms**, trivial
+   vs the 5000ms TTL; one-time graph `buildMs 269→902` is off the per-victim hot path
+   (startup/refresh only); live at topN=6000 shows most hints <170ms and `expiredBeforeSolver=4`
+   (the rare 5000ms spikes are fork-refresh cold-state, present at 1500 too — NOT topN-caused). So
+   full-universe topN is latency-fine, and the current stopgap `SEARCHER_POOL_UNIVERSE_TOP_N=6000`
+   (universe 1500→5026 live) is a valid coverage answer on its own. Step 2's ONLY benefit is
+   **candidate-cap / throughput relief**: more pools → more candidate plans → more hit the solver
+   candidate-cap (~24% of drops). A reserved loop-completer quota lets the deploy knob drop back
+   from 6000 toward ~1500-2000 WITHOUT losing the loop-completers — trading raw pool count for
+   arb-relevant pool count so the candidate cap is spent on pools that actually close loops. Fix =
    wire arb-relevance into the RUNTIME loader with a reserved loop-completer quota (mirror the
    existing `highSpreadPairQuota` reserved-slot pattern in `selectRankedPools`,
-   `pool-universe.ts:85-127`), so loop-completers survive at topN≈1500-2000 and the deploy knob can
-   drop back from 6000.
+   `pool-universe.ts:85-127`).
+
+   **GATE-BEFORE-LAND (do not build Step 2 until this holds).** topN=6000 is currently deployed and
+   latency-fine, so Step 2 is only justified if throughput is actually hurting: it lands ONLY if a
+   longer bounded-live window shows `solver/candidate-cap` measurably WORSENED at topN=6000 vs the
+   1500 baseline (share of drops or absolute rate up, crowding out real opps). If candidate-cap is
+   fine at 6000, **Step 2 is DEFERRED** — topN=6000 is the sufficient coverage answer and no code
+   change is needed. The rule-12 fixture below still stands as the correctness proof for WHEN we do
+   land it. (Step 1 is unconditional and lands first regardless.)
 
 `searcher_behavior_change: yes` (Step 2 changes which pools the planner can route through).
 Explicitly scoped OUT (per the analysis): no multi-hop cycle-construction epic, no phantom-victim scorer.
@@ -106,9 +124,16 @@ downstream loss verdict, so it lands first.
 
 ## Step 2 — runtime arb-relevance loop-completer quota in `loadPoolUniverse`
 
-**Goal.** At topN≈1500-2000 (NOT 6000), reserve topN slots for loop-completers so a low-count
-pool that closes a cycle with a token already selected survives the runtime cut. Reuse
-`selectArbRelevantPools`; mirror the `highSpreadPairQuota` reserved-slot pattern.
+> **GATED — build only after the throughput trigger fires (see Step 2 Brief).** topN=6000 is
+> deployed and latency-fine; this step lands ONLY if a longer bounded-live window shows
+> `solver/candidate-cap` worsened at 6000 vs 1500. Otherwise DEFER. Benefit = candidate-cap relief
+> (lets topN drop back from 6000 without losing loop-completers), NOT latency.
+
+**Goal.** Reserve topN slots for loop-completers so a low-count pool that closes a cycle with a
+token already selected survives the runtime cut — letting the deploy knob drop back from 6000
+toward ~1500-2000 while keeping arb-relevant coverage, spending the solver candidate-cap on pools
+that actually close loops rather than raw high-activity pools. Reuse `selectArbRelevantPools`;
+mirror the `highSpreadPairQuota` reserved-slot pattern.
 
 **Allowed files**
 - `listener/src/searcher/pool-universe.ts` (`PoolUniverseLoadOptions`, `loadPoolUniverse`,
@@ -172,9 +197,13 @@ cd listener && npm run searcher:planner     # must print 14/14 + replay fixtures
 ---
 
 ## Gate checklist (Claude, non-author)
-- [ ] Step 1: `analysis` build green; offline double-hash fixture passes; live sample shows
-      `v_not_mined` 143 → ~7; `victim_source` tag present. Regressions: existing `live-loss`
-      invocations still run.
-- [ ] Step 2: `listener` build green; `searcher:planner` prints the loop-completer flip AND the
-      prior 14/14 + replay + high-spread lines (no regression); banner shows the new quota.
+- [ ] Step 1 (unconditional, first): `analysis` build green; offline double-hash fixture passes;
+      live sample shows `v_not_mined` 143 → ~7; `victim_source` tag present. Regressions: existing
+      `live-loss` invocations still run.
+- [ ] Step 2 TRIGGER: a longer bounded-live window confirms `solver/candidate-cap` worsened at
+      topN=6000 vs the 1500 baseline. If NOT confirmed → Step 2 DEFERRED, topN=6000 stands, do not
+      build. (Latency is NOT a trigger — bench shows +35ms p95, immaterial.)
+- [ ] Step 2 (only if triggered): `listener` build green; `searcher:planner` prints the
+      loop-completer flip AND the prior 14/14 + replay + high-spread lines (no regression); banner
+      shows the new quota.
 - [ ] Commit each step separately, signed as the orchestrating model, only after its gate passes.
