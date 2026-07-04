@@ -36,9 +36,11 @@ reuses almost all of it:
 | execution / submission | `execution/bundle-router.ts:81` `standalone` → `submitStandaloneBundle` (single next-block tx, **no victim rawTx**) | already exists for the mined-victim Path C (`main.ts:1134`) | **atomic bundle == standalone bundle** |
 | EV / final-verify gate | `main.ts:1583` terminal verify + EV gate | none | unchanged |
 
-So the **only genuinely missing pieces for Gap A** are: (1) a block-triggered *opportunity source* that
-scans current state for a profitable cycle, and (2) a cheap pre-filter so the per-block scan fits the
-between-block budget. Everything downstream already runs no-victim.
+So the **only genuinely missing pieces for Gap A** are: (1) a block-triggered *opportunity source* whose
+search is cheap by construction — an O(pairs) 2-hop spread scan to find anchors, then a depth-bounded
+(≤4 hop) cycle search seeded only from those anchors — NOT a whole-graph DFS. Everything downstream
+already runs no-victim. See "Path length" below for why the hop cap and the anchored order are forced by
+coffee's own data.
 
 ---
 
@@ -52,6 +54,31 @@ matches the doc exactly: "our pipeline never triggers; there is nothing to follo
 Escalated to an **EPIC** per rule 13 (too big for one 30-min round; ordered slices, each with its own
 rule-12 gate). Owner: `atomic-scanner-epic`. Default OFF (`SEARCHER_ENABLE_ATOMIC_SCAN=0`) until A4.
 
+### Path length — from the data (this drives the whole design)
+
+Our searcher's edge is **speed, and short on-chain paths** (fewer hops = less gas, less revert risk,
+faster to build/sign/submit). A per-block whole-graph cycle scan is the natural enemy of that. So before
+designing the scanner, count coffee's actual atomic path lengths (doc "arb pools" = distinct swap venues
+≈ hop count):
+
+| metric | value |
+|---|---|
+| atomic txs (#1–8) hop counts | `{1, 3, 4, 5, 2, 1, 0, 1}` |
+| **average** | **≈2.1 hops** |
+| median | 1–2 |
+| ≤2 hops | 5/8 (63%) **but each nets ~$0 — dust / likely undercounted** (a 1-pool "arb" is not a closed spread) |
+| **3–4 hops** | 2/8 — **#2 (3-pool, $0.33) + #3 (4-pool, $0.18) = ~82% of all realized value** |
+| 5 hops | 1/8 (#4) — netted **$0.00** |
+
+**Two conclusions that reshape the plan:**
+1. **Cap hops at ~4.** Everything with value sits in the 2–4 band; the one 5-hop netted nothing. A live
+   cap `SEARCHER_ATOMIC_MAX_HOPS=4` matches the data and stays inside our short-path posture. (Backrun
+   live already runs a small `maxHops`; atomic must be at least as tight.)
+2. **Do NOT DFS from every token, then pre-filter.** That is O(cycles) and slow — the opposite of our
+   speed edge. The scanner must be cheap **by construction**: find the *anchor* (where a spread exists)
+   with an O(pairs) price scan first, and only expand short cycles from anchors. This flips my original
+   A1/A2 ordering (the pairwise scan IS the detector, not a post-enumeration filter).
+
 ### Ordered slices
 
 **A0 — decode/verify (analysis-decode).**
@@ -63,24 +90,30 @@ atomic sample). Reuse the historical-replay harness pattern (`docs/historical-re
   doc's recommended next step, §Caveats).
 - **Deliverable:** a pinned fixture `{block, startToken, cyclePools[], expectedGrossWei}` for A1/A3.
 
-**A1 — atomic opportunity source (planner seeding).**
-Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(state, pricedTokens)`: for each
-borrowable/priced start token, enumerate short cycles (`buildTokenPaths(start, start, {maxHops:3})`)
-over the runtime graph and emit `Opportunity{ kind:"atomic-arb", victimTxHash:"", victimAmountIn:0n,
-affectedPools:[], startToken, profitToken:start }`. No new planner/solver logic — it produces the same
-`Opportunity` shape the existing planner consumes (add the `"atomic-arb"` kind to
-`detector.ts:6`).
-- **Gate (rule-12, `npm run searcher:planner`, deterministic, no anvil):** pin the A0 cycle as a
-  `REPLAY_FIXTURE`; assert `candidate_plans 0→>0` for the atomic seed (start===profit) — the same
-  flip shape as the existing CFG v4 fixture (`test/planner.ts:829`).
+**A1 — anchor finder: O(pairs) 2-hop spread scan (this IS the detector, not a filter).**
+Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(cache, pricedTokens)`: iterate only
+**token pairs that have ≥2 venues** in the runtime graph; for each, compare mid-prices from the warm
+`PoolStateCache` (constant-product ratio for v2, `sqrtPriceX96` for v3) and flag pairs whose spread
+exceeds fees. A flagged pair directly yields the 2-hop seed (start token + the two pools) — **no DFS,
+no per-token enumeration.** Emit `Opportunity{ kind:"atomic-arb", victimTxHash:"", victimAmountIn:0n,
+affectedPools:[poolA,poolB], startToken, profitToken:start }`. Downstream is unchanged (add the
+`"atomic-arb"` kind to `detector.ts:6`). This is inherently short-path and cheap.
+- **Gate (rule-12, `npm run searcher:planner`, deterministic, no anvil):** pin a 2-venue spread fixture;
+  assert the pair is flagged and yields `candidate_plans 0→>0` — same flip shape as the CFG v4 fixture
+  (`test/planner.ts:829`). (From the data this class is mostly dust here; it ships first because it is
+  the cheapest and unblocks the pipeline — the value comes in A2.)
 
-**A2 — cheap spread pre-filter (latency guard).**
-Before full GSS sizing, a per-pool-pair fast price check (constant-product / `sqrtPriceX96` ratio from
-the warm `PoolStateCache`) prunes the O(cycles) enumeration to the few pairs whose mid-price spread
-exceeds a threshold. This keeps the per-block scan inside the between-block warm budget.
-- **Gate (rule-12 latency, `npm run searcher:bench-topn` pattern / a new `searcher:bench-atomic`):**
-  per-block scan cost stays under the between-block budget (relative, harness-bound per rule 12); AND
-  the A0 fixture still survives the pre-filter (no false prune).
+**A2 — bounded short-cycle extension to 3–4 hops (where the value is).**
+The paying arbs (#2 @3, #3 @4) are triangles/quads a 2-hop scan can't see. Catch them with a
+**depth-bounded negative-cycle search** (Bellman-Ford on `−log(mid-price)` over the warm cache), hard
+capped at `SEARCHER_ATOMIC_MAX_HOPS=4` and seeded only from the A1-anchored tokens — NOT a whole-graph
+DFS from every token. Bounded depth + anchored seeds keep it inside the between-block budget.
+- **Gate 1 (rule-12 correctness, `searcher:planner`):** pin the A0 fixture (#2, 3-hop) → the cycle is
+  found and `candidate_plans 0→>0`.
+- **Gate 2 (rule-12 latency, new `searcher:bench-atomic`):** full per-block scan (A1+A2) cost stays
+  under the between-block warm budget at `maxHops=4` (relative, harness-bound per rule 12). If it can't,
+  drop to `maxHops=3` (still captures #2, the richest) and record the trade-off — never widen hops past
+  what the budget allows just to chase the 5-hop tail that netted $0.
 
 **A3 — no-victim solve + sim + standalone build (end-to-end on fork).**
 Run the A0 fixture through `solver.solve` (no `localVictimApply` → sims on the current fork directly,
@@ -101,9 +134,11 @@ mandatory Step-1 competitor cross-reference over coffee's blocks.
   window, do not conclude a true negative — the R3 trap).
 
 ### Gap-A sequencing note
-A0→A1 are pure/deterministic and land fast. A2 is the only real engineering risk (per-block cost). A4
-is gated behind the flag and the dry-run — go-live stays a human gate. **Per-pool force-include pins
-for this class are forbidden once epic'd (rule 13); only these slices touch it.**
+A0→A1 are pure/deterministic and land fast (A1's O(pairs) scan is cheap and short-path by construction).
+**A2 (bounded 3–4 hop cycle search) is the only real engineering risk** — its per-block cost is what the
+latency gate polices, and the hop cap is the lever (drop 4→3 before ever exceeding budget). A4 is gated
+behind the flag and the dry-run — go-live stays a human gate. **Per-pool force-include pins for this
+class are forbidden once epic'd (rule 13); only these slices touch it.**
 
 ---
 
@@ -161,8 +196,8 @@ just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line)
 | slice | harness / command | expected transition (rule-12) |
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
-| A1 | `npm run searcher:planner` | `candidate_plans 0→>0` for the atomic seed (start===profit) |
-| A2 | `searcher:bench-atomic` (bench-topn pattern) | per-block scan < between-block budget; A0 not false-pruned |
+| A1 | `npm run searcher:planner` | 2-venue spread pair flagged → `candidate_plans 0→>0` (O(pairs), no DFS) |
+| A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
 | A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built` |
 | A4 | dry-run window + Step-1 cross-ref | atomic `opportunity_seen>0`, ≥1 atomic `simSuccess`, competing candidate for a coffee atomic tx |
 | B | `npm run searcher:planner`-style fixture on committed reth logs | `0x663dc15d ∈ mempool filter` → admission `false→true` |
