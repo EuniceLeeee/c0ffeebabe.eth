@@ -24,7 +24,7 @@ import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js
 import { backfillV4PoolIdIntoActivePools } from "../backfill-v4-poolid.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
-import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
+import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -49,6 +49,19 @@ function swap(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ
     tokenOut,
     slotKind: "swap",
     ...deriveEdgeTaxonomy("swap"),
+    score: 100,
+  };
+}
+
+function lend(tokenIn: string, tokenOut: string, pool: string, adapterId = "fluid-vault"): TokenEdge {
+  return {
+    adapterId,
+    target: pool,
+    tokenIn,
+    tokenOut,
+    slotKind: "lend",
+    // S0 contract: deriveEdgeTaxonomy("lend") sets edgeKind:"credit" and leavesStandingPosition:true.
+    ...deriveEdgeTaxonomy("lend"),
     score: 100,
   };
 }
@@ -452,8 +465,11 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
 // public on-chain evidence. The planner is address-agnostic, so these behave exactly
 // like the synthetic unit tests above — the value is the provenance link + flip target.
 const REAL_WETH = ADDR.WETH;
+const REAL_WSTUSR = ADDR.WSTUSR;
 const REAL_USDC = ADDR.USDC;
 const REAL_USDT = ADDR.USDT;
+const FLUID_VAULT_WSTUSR_USDC = ADDR.FLUID_VAULT_WSTUSR_USDC;
+const POOL_F88B_USDC_WSTUSR_DEX = "0xf88b498b835279ec9de597c7360ca21b7e880305";
 const C470 = "0xc470f5E6C17a2977CeabB524D530F19024e5a719";
 const POOL_E2A1437 = "0xE2a1437e2a15CfA591AA1D70e9a75C7598C73fDB";
 const TOK_874376 = "0x27c70cd1946795b66be9d954418546998b546634";
@@ -494,9 +510,45 @@ interface ReplayFixture {
   maxHops?: number;
   expectClass?: string;     // no_candidate classification when expectPlans === 0
   expectTokenPathTokensGreaterThan?: number;
+  templates?: PathTemplate[];              // default [FLASH_SWAP_REPAY]
+  flashLiquidity?: Array<[string, bigint, string]>;   // [token, amount, adapterId] -> setFlashLiquidity
 }
 
 const REPLAY_FIXTURES: ReplayFixture[] = [
+  {
+    // CR-3a credit-edge routing gate, modeled on reference tx
+    // 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 (block 24710788).
+    // The direct USDC->wstUSR DEX edge collapses the reference multi-hop return route into one
+    // deterministic fixture edge. Anti-binding note: the credit edge is strategy-AGNOSTIC; the
+    // 0xf88b reference tx classifies backrun (source swap tx index 0). This fixture proves
+    // credit-edge ROUTING, it does NOT bind strategy.
+    id: "credit-f88b-absent",
+    provenance: "reference tx 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 block 24710788; Fluid credit edge absent",
+    edges: [
+      swap(REAL_USDC, REAL_WSTUSR, POOL_F88B_USDC_WSTUSR_DEX),
+    ],
+    impact: { tokenIn: REAL_USDC, tokenOut: REAL_WSTUSR, pool: POOL_F88B_USDC_WSTUSR_DEX, start: REAL_WSTUSR },
+    templates: [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
+    flashLiquidity: [[REAL_WSTUSR, 1_000_000_000_000n, "morpho-flash"]],
+    maxHops: 2,
+    expectPlans: 0,
+    expectClass: "impact_token_no_supported_return_venue",
+  },
+  {
+    // Same graph with the S0 credit edge present: wstUSR->USDC (Fluid lend/credit)
+    // then USDC->wstUSR (DEX return) closes the Morpho-flash repayment loop.
+    id: "credit-f88b-present",
+    provenance: "reference tx 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 block 24710788; Fluid credit edge present",
+    edges: [
+      lend(REAL_WSTUSR, REAL_USDC, FLUID_VAULT_WSTUSR_USDC),
+      swap(REAL_USDC, REAL_WSTUSR, POOL_F88B_USDC_WSTUSR_DEX),
+    ],
+    impact: { tokenIn: REAL_USDC, tokenOut: REAL_WSTUSR, pool: POOL_F88B_USDC_WSTUSR_DEX, start: REAL_WSTUSR },
+    templates: [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
+    flashLiquidity: [[REAL_WSTUSR, 1_000_000_000_000n, "morpho-flash"]],
+    maxHops: 2,
+    expectMinPlans: 1,
+  },
   {
     // run 20260701-032600: 7x no_candidate on E2a1437 (WETH/0xc470f5E6). On-chain
     // cross-ref Ppost=0 (no competitor) -> genuinely non-arbable single venue.
@@ -669,9 +721,10 @@ async function testRealCaseReplayFixtures(): Promise<void> {
     const planner = new TemplatePlanner();
     planner.setGraph(fx.edges);
     planner.setMaxHops(fx.maxHops ?? 2);
+    if (fx.flashLiquidity) planner.setFlashLiquidity(fakeLiquidity(fx.flashLiquidity));
     const plans = await planner.plan(
       opportunityWithImpact(fx.impact.tokenIn, fx.impact.tokenOut, fx.impact.pool, fx.impact.start),
-      [FLASH_SWAP_REPAY],
+      fx.templates ?? [FLASH_SWAP_REPAY],
     );
     if (fx.expectMinPlans !== undefined) {
       assert(
