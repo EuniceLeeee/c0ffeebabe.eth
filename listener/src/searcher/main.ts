@@ -967,7 +967,8 @@ async function handleHint(
   txHash: string,
   ctx: HandleCtx,
 ): Promise<void> {
-  console.log(`[searcher/live] hint tx=${txHash} src=${hint.source ?? "mev-share"}`);
+  const victimSource = hint.source ?? "mev-share";
+  console.log(`[searcher/live] hint tx=${txHash} src=${victimSource}`);
 
   // Per-stage timing from hint receipt — surfaces where the wall time goes
   // (fork setup vs state prep vs detect/plan) so even a no-solver expiry is
@@ -1218,6 +1219,7 @@ async function handleHint(
       opportunity_id: makeOpportunityId({ targetBlock: eventBlockNumber, victimHash: txHash }),
       target_block: eventBlockNumber,
       victim_hash: txHash,
+      victim_source: victimSource,
       stage,
       reason,
       error: error ? error.slice(0, 240) : undefined,
@@ -1295,6 +1297,7 @@ async function handleHint(
           opportunity_id: opportunityIdFor(eventBlockNumber, txHash, droppedOpp),
           target_block: eventBlockNumber,
           victim_hash: txHash,
+          victim_source: victimSource,
           stage: "solver",
           reason: "expired-before-solver",
           pool: droppedOpp.affectedPools?.[0],
@@ -1325,6 +1328,7 @@ async function handleHint(
         opportunity_id: opportunityId,
         target_block: eventBlockNumber,
         victim_hash: txHash,
+        victim_source: victimSource,
         stage,
         reason,
         error: error ? error.slice(0, 240) : undefined,

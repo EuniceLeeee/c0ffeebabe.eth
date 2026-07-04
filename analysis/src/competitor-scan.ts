@@ -1,7 +1,9 @@
 import { RpcClient, hexToBigInt, toQuantity } from "./rpc/client.js";
 import { mapLimit } from "./util.js";
+import { ethers } from "ethers";
 
-type DropStatus = "competitor_took" | "no_competitor" | "v_not_mined";
+export type DropStatus = "competitor_took" | "no_competitor" | "v_not_mined";
+export type VictimSource = "mev-share" | "mempool" | "unknown";
 
 interface CompetitorScanOptions {
   eventsPath: string;
@@ -16,6 +18,7 @@ interface DropInput {
   index: number;
   reason: string;
   victimHash: string;
+  victimSource: VictimSource;
   pool: string;
 }
 
@@ -38,7 +41,7 @@ interface PoolLogTx {
   transactionIndex: number;
 }
 
-interface CandidateAnalysis {
+export interface CandidateAnalysis {
   hash: string;
   transactionIndex: number;
   distinctPools: number;
@@ -47,17 +50,28 @@ interface CandidateAnalysis {
   toIsContract: boolean;
 }
 
-interface DropResult {
+export interface DropResult {
   index: number;
   reason: string;
   pool: string;
   victimHash: string;
+  victimSource: VictimSource;
   victimBlock: number | null;
   status: DropStatus;
   bestCandidate: CandidateAnalysis | null;
 }
 
-interface TriageItem {
+export interface CompetitorScanResult {
+  results: DropResult[];
+  triage: TriageItem[];
+}
+
+interface DoubleHashResolution {
+  realTx: string;
+  block: number;
+}
+
+export interface TriageItem {
   block: number;
   transactionIndex: number;
   hash: string;
@@ -78,7 +92,7 @@ interface ScanContext {
   errors: string[];
 }
 
-export async function runCompetitorScan(options: CompetitorScanOptions): Promise<void> {
+export async function runCompetitorScan(options: CompetitorScanOptions): Promise<CompetitorScanResult> {
   const concurrency = options.concurrency ?? 8;
   const ctx: ScanContext = {
     rpc: options.rpc,
@@ -95,8 +109,9 @@ export async function runCompetitorScan(options: CompetitorScanOptions): Promise
   const drops = options.events
     .map((event, index) => toDropInput(event, index))
     .filter((drop): drop is DropInput => drop !== null);
+  const seenVictims = ctx.seenVictimHashes.size;
 
-  const results = await mapLimit(drops, concurrency, async (drop) => {
+  let results = await mapLimit(drops, concurrency, async (drop) => {
     try {
       return await analyzeDrop(ctx, drop);
     } catch (err) {
@@ -104,12 +119,13 @@ export async function runCompetitorScan(options: CompetitorScanOptions): Promise
       return errorDropResult(drop);
     }
   });
+  results = await resolveMevShareDoubleHashDrops(ctx, drops, results);
   const triage = options.notSeenScan ? await runNotSeenScan(ctx, results) : [];
 
   console.log(renderCompetitorScan({
     eventsPath: options.eventsPath,
     drops: drops.length,
-    seenVictims: ctx.seenVictimHashes.size,
+    seenVictims,
     results,
     triage,
     triageCap: ctx.triageCap,
@@ -122,14 +138,20 @@ export async function runCompetitorScan(options: CompetitorScanOptions): Promise
     for (const err of errors.slice(0, 25)) console.error(`[analysis/competitor-scan] ${err}`);
     if (errors.length > 25) console.error(`[analysis/competitor-scan] omitted_errors=${errors.length - 25}`);
   }
+
+  return { results, triage };
 }
 
-async function analyzeDrop(ctx: ScanContext, drop: DropInput): Promise<DropResult> {
+async function analyzeDrop(
+  ctx: ScanContext,
+  drop: DropInput,
+): Promise<DropResult> {
   const base = (): DropResult => ({
     index: drop.index,
     reason: drop.reason,
     pool: lower(drop.pool),
     victimHash: lower(drop.victimHash),
+    victimSource: drop.victimSource,
     victimBlock: null,
     status: "no_competitor",
     bestCandidate: null,
@@ -186,6 +208,91 @@ async function analyzeDrop(ctx: ScanContext, drop: DropInput): Promise<DropResul
     status: bestCandidate ? "competitor_took" : "no_competitor",
     bestCandidate,
   };
+}
+
+async function resolveMevShareDoubleHashDrops(
+  ctx: ScanContext,
+  drops: DropInput[],
+  results: DropResult[],
+): Promise<DropResult[]> {
+  const unresolved = results.filter((result) =>
+    result.status === "v_not_mined" &&
+    isTxHash(result.victimHash)
+  );
+  if (unresolved.length === 0) return results;
+
+  const blocks = await seenVictimBlocks(ctx, results);
+  if (blocks.length === 0) return results;
+
+  const reverseMap = await buildMevShareDoubleHashReverseMap(ctx, blocks);
+  if (reverseMap.size === 0) return results;
+
+  const matches = unresolved
+    .map((result) => ({
+      result,
+      drop: drops.find((candidate) => candidate.index === result.index),
+      resolved: reverseMap.get(result.victimHash),
+    }))
+    .filter((item): item is { result: DropResult; drop: DropInput; resolved: DoubleHashResolution } =>
+      item.drop !== undefined && item.resolved !== undefined
+    );
+  if (matches.length === 0) return results;
+
+  for (const match of matches) ctx.seenVictimHashes.add(match.resolved.realTx);
+
+  const replacements = new Map<number, DropResult>();
+  await mapLimit(matches, ctx.concurrency, async (match) => {
+    try {
+      replacements.set(
+        match.result.index,
+        await analyzeDrop(ctx, { ...match.drop, victimHash: match.resolved.realTx }),
+      );
+    } catch (err) {
+      ctx.errors.push(
+        `drop#${match.result.index} mev_share_resolution ${match.resolved.realTx}: ${(err as Error).message}`,
+      );
+    }
+  });
+
+  return results.map((result) => replacements.get(result.index) ?? result);
+}
+
+async function buildMevShareDoubleHashReverseMap(
+  ctx: ScanContext,
+  victimBlocks: number[],
+): Promise<Map<string, DoubleHashResolution>> {
+  const reverseMap = new Map<string, DoubleHashResolution>();
+  const window = expandedBlockWindow(victimBlocks);
+
+  await mapLimit(window, ctx.concurrency, async (blockNumber) => {
+    let block: any;
+    try {
+      block = await ctx.gate.run(() => ctx.rpc.getBlockByNumber(blockNumber, true));
+    } catch (err) {
+      ctx.errors.push(`double_hash_block block=${blockNumber}: ${(err as Error).message}`);
+      return;
+    }
+
+    const txs: any[] = Array.isArray(block?.transactions) ? block.transactions : [];
+    for (const tx of txs) {
+      const materials = blockTxHashMaterials(tx);
+      const realTx = blockTxRealHash(tx, materials);
+      if (!realTx) continue;
+
+      const hashMaterials = new Set([...materials, realTx]);
+      for (const material of hashMaterials) {
+        let doubleHash: string;
+        try {
+          doubleHash = lower(ethers.keccak256(material));
+        } catch {
+          continue;
+        }
+        if (!reverseMap.has(doubleHash)) reverseMap.set(doubleHash, { realTx, block: blockNumber });
+      }
+    }
+  });
+
+  return reverseMap;
 }
 
 async function analyzeCandidate(
@@ -342,6 +449,14 @@ function renderCompetitorScan(input: {
     lines.push(`| ${row.reason} | ${row.competitor_took} | ${row.no_competitor} | ${row.v_not_mined} |`);
   }
 
+  lines.push("");
+  lines.push("victim_source summary:");
+  lines.push("| victim_source | competitor_took | no_competitor | v_not_mined |");
+  lines.push("|---|---:|---:|---:|");
+  for (const row of victimSourceRows(input.results)) {
+    lines.push(`| ${row.victim_source} | ${row.competitor_took} | ${row.no_competitor} | ${row.v_not_mined} |`);
+  }
+
   const details = input.results
     .filter((result) => result.status === "competitor_took" && result.bestCandidate)
     .sort(compareDropDetails);
@@ -354,7 +469,8 @@ function renderCompetitorScan(input: {
       const candidate = result.bestCandidate;
       if (!candidate) continue;
       lines.push(
-        `reason=${result.reason} pool=${result.pool} victim_block=${result.victimBlock} ` +
+        `reason=${result.reason} pool=${result.pool} victim_source=${result.victimSource} ` +
+        `victim_block=${result.victimBlock} ` +
         `competitor_tx=${candidate.hash} distinct_pools=${candidate.distinctPools} ` +
         `gasUsed=${candidate.gasUsed} to=${candidate.to ?? "n/a"} to_contract=${candidate.toIsContract}`,
       );
@@ -385,6 +501,7 @@ function errorDropResult(drop: DropInput): DropResult {
     reason: drop.reason,
     pool: lower(drop.pool),
     victimHash: lower(drop.victimHash),
+    victimSource: drop.victimSource,
     victimBlock: null,
     status: "no_competitor",
     bestCandidate: null,
@@ -403,12 +520,25 @@ function reasonRows(results: DropResult[]): Array<Record<DropStatus | "reason", 
     .map(([reason, counts]) => ({ reason, ...counts }));
 }
 
+function victimSourceRows(results: DropResult[]): Array<Record<DropStatus | "victim_source", string | number>> {
+  const rows = new Map<VictimSource, Record<DropStatus, number>>();
+  for (const result of results) {
+    const row = rows.get(result.victimSource) ?? { competitor_took: 0, no_competitor: 0, v_not_mined: 0 };
+    row[result.status]++;
+    rows.set(result.victimSource, row);
+  }
+  return [...rows.entries()]
+    .sort(([a], [b]) => compareStrings(a, b))
+    .map(([victim_source, counts]) => ({ victim_source, ...counts }));
+}
+
 function toDropInput(event: any, index: number): DropInput | null {
   if (event?.type !== "pipeline_dropped") return null;
   return {
     index,
     reason: stringValue(event.reason) ?? stringValue(event.stage) ?? "unknown",
     victimHash: stringValue(event.victim_hash ?? event.victimHash) ?? "",
+    victimSource: victimSourceValue(event.victim_source ?? event.victimSource),
     pool: stringValue(event.pool) ?? "",
   };
 }
@@ -477,6 +607,52 @@ function getCodeCached(ctx: ScanContext, address: string, block: number): Promis
   return promise;
 }
 
+function expandedBlockWindow(blocks: number[]): number[] {
+  if (blocks.length === 0) return [];
+  const from = Math.max(0, blocks[0] - 1);
+  const to = blocks[blocks.length - 1] + 8;
+  const out: number[] = [];
+  for (let block = from; block <= to; block++) out.push(block);
+  return out;
+}
+
+function blockTxHashMaterials(tx: any): string[] {
+  const out: string[] = [];
+  addHexMaterial(out, tx);
+  addHexMaterial(out, tx?.hash);
+  addHexMaterial(out, tx?.raw);
+  addHexMaterial(out, tx?.rawTransaction);
+  addHexMaterial(out, tx?.serialized);
+
+  if (tx && typeof tx === "object") {
+    try {
+      addHexMaterial(out, ethers.Transaction.from(tx).serialized);
+    } catch {
+      // Some RPC transaction objects are not directly accepted by ethers; tx.hash still covers them.
+    }
+  }
+
+  return [...new Set(out)];
+}
+
+function blockTxRealHash(tx: any, materials: string[]): string | null {
+  if (typeof tx?.hash === "string" && isTxHash(tx.hash)) return lower(tx.hash);
+  if (typeof tx === "string" && isTxHash(tx)) return lower(tx);
+
+  for (const material of materials) {
+    try {
+      return lower(ethers.keccak256(material));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function addHexMaterial(out: string[], value: unknown): void {
+  if (typeof value === "string" && isHexBytes(value)) out.push(lower(value));
+}
+
 function compareCandidates(a: CandidateAnalysis, b: CandidateAnalysis): number {
   return (
     compareNumbers(b.distinctPools, a.distinctPools) ||
@@ -527,12 +703,20 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function victimSourceValue(value: unknown): VictimSource {
+  return value === "mev-share" || value === "mempool" ? value : "unknown";
+}
+
 function isAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
 }
 
 function isTxHash(value: string): boolean {
   return /^0x[a-fA-F0-9]{64}$/.test(value);
+}
+
+function isHexBytes(value: string): boolean {
+  return /^0x(?:[a-fA-F0-9]{2})*$/.test(value);
 }
 
 function isContractCode(code: string): boolean {

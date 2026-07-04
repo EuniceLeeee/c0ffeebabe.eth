@@ -86,6 +86,7 @@ export type SearcherEvent =
 	      opportunity_id: string;
 	      target_block: number;
 	      victim_hash: string;
+	      victim_source?: "mev-share" | "mempool";
 	      stage: string;
 	      reason: string;
 	      error?: string;
