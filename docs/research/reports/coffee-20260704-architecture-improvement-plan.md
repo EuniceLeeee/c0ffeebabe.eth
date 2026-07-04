@@ -133,12 +133,21 @@ drifts from backrun's EV gate / drop-reasons / submission.
 
 **A-universe — strategy-scoped pool selection (PREREQUISITE, alongside A-contract, upstream of A1).**
 Backrun wants **fast** (few hot pools); atomic wants **broad** (loop-closure coverage). Today they are
-**coupled through one universe** (verified): `main.ts:592` builds ONE `graph = buildTokenGraph(allPools)`
-that feeds BOTH the planner (`main.ts:603`) AND the mempool `toAddress` filter (`main.ts:2509`), and the
-single `SEARCHER_POOL_UNIVERSE_TOP_N=1500` (`main.ts:391`) is simultaneously the backrun latency cap and
-the planning-breadth cap. Widen it for atomic breadth → the mempool `toAddress` list inflates and latency
-rises; cap it for mempool speed → atomic loop-closure starves. **Split them: `shared venue registry +
-strategy-specific selection views`. The boundary is venue / admission / scorer level, NOT pool level.**
+**coupled through one universe + one score axis** (verified): `main.ts:592` builds ONE
+`graph = buildTokenGraph(allPools)` that feeds BOTH the planner (`main.ts:603`) AND the mempool
+`toAddress` filter (`main.ts:2509`), and the single `SEARCHER_POOL_UNIVERSE_TOP_N=1500` (`main.ts:391`)
+is simultaneously the backrun latency cap and the planning-breadth cap.
+**The real coupling is displacement, not list-size explosion** (correction — the raw-size blowups are
+already capped): `buildMempoolToAddressFilterWithRouters` already self-caps to top-200 hot + 300 max
+(`main.ts:2820`), and the live planner already prunes to top-8 edges/token (`maxPoolsPerToken=8`,
+`main.ts:431`). So widening the universe does NOT inflate the `toAddress` list or explode the DFS. What
+DOES break: those capped slots (200 hot / 8 edges) are filled by **one shared score** — atomic-relevant
+pools (loop-closure but not victim-likely) with high scores **displace** backrun-relevant hot pools →
+backrun coverage silently degrades; and conversely the same caps throttle atomic's breadth. **Split them:
+`shared venue registry + strategy-specific selection views`, each with its OWN score. The boundary is
+venue / admission / scorer level, NOT pool level.** The per-consumer cap machinery already exists
+(`maxPoolsPerToken`, the mempool filter's own topN) — this is a **parameterization** (two scored views),
+not new infrastructure.
 - **Registry stays strategy-agnostic DATA** (`active-pools.json`: address / adapter / tokens / fee /
   score / source). Do **not** tag pools `backrun`/`atomic` — a strategy label is a scorer **output**, not
   a pool property; tagging freezes selection at generation time and explodes maintenance.
@@ -153,12 +162,15 @@ strategy-specific selection views`. The boundary is venue / admission / scorer l
 - **One union graph, two edge-selection views** (not two graphs): the planner gets a hot edge-view for
   backrun; the atomic scanner uses the full union graph (it needs it to find cross-venue loops). Reuses
   the planner's existing top-N edge pruning (`maxPoolsPerToken`), and saves memory vs two graphs.
-- **Enforcement point (where "atomic 全 must not pollute backrun 快" bites): the mempool `toAddress`
-  filter draws from the BACKRUN view ONLY.** `buildMempoolToAddressFilter` must never see the atomic
-  breadth.
-- **Gate (rule-12):** widening the atomic universe leaves the backrun mempool `toAddress` count
-  **unchanged** (assert atomic breadth does not inflate the filter — the decoupling proof); AND the atomic
-  view contains ≥1 loop-closure pool absent from the backrun hot set (proves the views actually differ).
+- **Enforcement point (where "atomic breadth must not pollute backrun speed" bites): the mempool
+  `toAddress` filter ranks its 200 hot slots by the BACKRUN score, never the atomic score** — so an
+  atomic-relevant-but-not-victim-likely pool can never displace a victim-likely pool from the mempool
+  filter. (Not "hide the 8000 from it" — the filter already self-caps; the point is *which* score orders
+  the capped slots.)
+- **Gate (rule-12):** widening the atomic universe leaves the backrun mempool `toAddress` **set
+  unchanged** (assert the backrun-scored hot slots are not displaced by atomic pools — the decoupling
+  proof); AND the atomic view contains ≥1 loop-closure pool absent from the backrun hot set (proves the
+  views actually differ).
 
 **A1 — anchor finder: O(pairs) 2-hop spread scan (emits a CONSTRAINED cycle, not a start token).**
 Add `detector/atomic-scanner.ts` → `detectAtomicOpportunities(cache, pricedTokens)`: iterate only
@@ -342,7 +354,7 @@ just bundle+coinbase), "dust" imprecise (report per-tx net USD vs the $0.1 line)
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
 | A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s** (no victim-hash collision) |
-| A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves backrun mempool `toAddress` count **unchanged**; atomic view has ≥1 loop-closure pool absent from the backrun hot set |
+| A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves the backrun-scored mempool `toAddress` **set unchanged** (no atomic displacement); atomic view has ≥1 loop-closure pool absent from the backrun hot set |
 | A1 | `npm run searcher:planner` | anchor flips `candidate_plans 0→>0`; **every candidate path contains the seed pools** (anchor-constrained, not whole-graph); center `>8` in `flashToken` units |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
 | A3 | `npm run searcher:replay-live-fixtures` | `sim.success + net-EV>0 + standalone bundle built`; **search center from `searchSeed`, not `1n` (`center>8`)** |
