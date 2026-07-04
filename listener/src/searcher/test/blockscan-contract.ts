@@ -105,7 +105,7 @@ const tests: TestCase[] = [
           leavesStandingPosition: false,
         }],
         flashToken: WETH,
-        searchSeed: WETH,
+        searchSeed: { startToken: WETH, searchCenter: 1_000n, maxInput: 10_000n },
         leavesStandingPosition: false,
         affectedPools: [POOL_A],
         affectedTokens: [WETH, USDC],

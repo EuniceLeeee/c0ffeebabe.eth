@@ -30,7 +30,7 @@ export interface BlockScanOpportunity {
   cycleFingerprint: string;        // cycleFingerprint(sourceBlock, ring) — cross-block join key
   seedEdges: TokenEdge[];          // the pinned cycle edges the scanner found
   flashToken: string;              // pinned by the scanner; planner MUST NOT rotate
-  searchSeed: string;              // start token / search center
+  searchSeed: { startToken: string; searchCenter: bigint; maxInput: bigint }; // sizing seed for solver search
   leavesStandingPosition: boolean; // DERIVED from seedEdges at construction; re-derived at submit
   affectedPools?: string[];
   affectedTokens?: string[];
