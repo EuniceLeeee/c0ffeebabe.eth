@@ -96,6 +96,15 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
        disabled MEV-Share / `enableHashOnly`). This is **structurally invisible to `pipeline_dropped`**
        (which only sees what ENTERED the funnel) — this audit is the ONLY lens that can find it. Distinct,
        closable class (widen admission to pool-touch / enable the discarded flow).
+       - **CRITICAL: a source swap NOT in our public feed is NOT automatically "private orderflow / human
+         gate".** MEV-Share is retroactively INDISTINGUISHABLE from truly-private on-chain (no on-chain
+         marker — `sender-flow.ts` never emits `mev-share`), so you cannot read it off the victim. Instead
+         **audit OUR OWN intake config**: is the MEV-Share / private-hint feed ENABLED (`enableHashOnly`
+         etc.)? If DISABLED, a not-in-public-feed victim is a **flow-admission gap (turn the feed ON — a
+         config flag WE control), NOT a human gate.** MEV-Share is ~72× public-mempool volume, so misfiling
+         it as "private → Lever B human gate" (which R13–R21 did) throws away the single largest
+         controllable flow. Human-gate ONLY if the private-hint feed is ALREADY on AND the victim is still
+         unreachable.
      - **(c) pool / path coverage** (the pre-existing lens): pools the competitor touched that we lack.
        Tooling is v4-`in_graph`-correct + native-ETH-classifier-correct (`b8a29a5` / `223ae05`).
      **Gap taxonomy — classify into ONE:** pool · path · **flow-admission (intake, pre-funnel)** ·
