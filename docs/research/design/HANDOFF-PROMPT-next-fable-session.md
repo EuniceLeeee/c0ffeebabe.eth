@@ -245,6 +245,27 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   there. No hot-path code changed this round; the `fluidDebtBps` grid stays (AC-3 proves it works).
   `consecutive_done_confirmations: 0`, IN_PROGRESS.
 
+#### R-2b-5 · 2026-07-05
+- blocker/gap: rule-13 mandate to ship a behavior change (after R-2b-3/4 non-behavior). Investigated
+  both available behavior slices; neither is a clean, genuinely-catches-more-MEV one-pass slice.
+- options + choice: (a) CR-5c gas table — traced every insertion point: the EV gate ALREADY uses real
+  `sim.gasUsed` (`main.ts:1919`, not gas=0 as an old memory claimed); within-plan solver top-N has
+  CONSTANT gas across candidates (no ranking effect); cross-plan pre-solve ordering has no profit
+  signal yet (gas-only ordering is a fuzzy heuristic). So there is no clean gas-table insertion that
+  improves selection without a coordinated design pass — CR-5c is not the quick local slice the
+  decomposition assumed. (b) BS-lane — self-contained but it's flag-gated construction that catches
+  NOTHING new until BS-4 wires the trigger (rule-13 impact lens = a null round), and building lane
+  infra for a strategy at the dust ceiling is a strategic call. Chose (c): ESCALATE. Neither slice is
+  a genuine +EV behavior improvement; combined with BS-3 (discovery-blocked/dust) + CR-5b
+  (design-blocked) + no +EV `simSuccess` growth across rounds, the rule-13 ARCHITECTURE-REVIEW trigger
+  has fired.
+- outcome: no code slice (correctly — shipping BS-lane null-infra or a half-CR-5c would be lower
+  integrity than escalating). Spawned operator chip `task_3246ef5f` (strategic fork: block-scan-dust
+  vs credit-resolver-research). Next round = the rule-13 architecture review in a fresh context
+  (dual-blind, frame-audit first), NOT another point-fix. `consecutive_done_confirmations: 0`,
+  IN_PROGRESS. This is the honest end of the cleanly-autonomous Phase 2b work — the remainder needs
+  human/design input.
+
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
 > NOTE: the rule-12 *gate re-runs* below are deliberately NOT cached-to-skip — the 2-round

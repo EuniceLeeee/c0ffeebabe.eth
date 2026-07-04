@@ -27,6 +27,17 @@ consecutive_done_confirmations: 0
 > view-quotes. BS-3 full-pipeline is now BLOCKED on a genuinely-viable +EV block-scan exemplar (needs
 > census discovery, not more harness code). Remainder still gated behind it. Counter stays 0.
 >
+> **R-2b-5 (2026-07-05) hit the rule-13 architecture-review trigger; escalated to the operator.**
+> Under the rule-13 behavior-or-escalate mandate, investigated both remaining behavior slices: CR-5c
+> (gas table) has NO clean insertion — the EV gate already uses real `sim.gasUsed`, within-plan gas is
+> constant, cross-plan pre-solve has no profit signal; and BS-lane is null infra (catches nothing new
+> until BS-4, and is for a dust-ceiling strategy). With BS-3 discovery-blocked + CR-5b design-blocked +
+> no +EV simSuccess growth across rounds, the rule-13 architecture-review trigger fired. Escalated:
+> spawned operator chip `task_3246ef5f` (strategic fork: block-scan-dust vs credit-resolver-research);
+> next round runs the architecture review in a fresh context, NOT a point-fix. No code this round (by
+> design — shipping null infra would be lower integrity). Cleanly-autonomous Phase 2b work is DONE;
+> remainder needs human/design input. Counter stays 0.
+>
 > **R-2b-4 (2026-07-05) validated CR-3 secondary (CR-5a) and escalated CR-5b as design-blocked.**
 > Ran `searcher:ac3` on archive: PASS 2/2 (credit path extracts 870.99 wstUSR on block 24710788,
 > > the reference bot's on-chain-verified 270.1) → CR-3 secondary validated WITHOUT a new harness
