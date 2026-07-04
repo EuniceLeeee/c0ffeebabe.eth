@@ -445,6 +445,12 @@ export async function resolveSearchCenter(
   state: StateBackend,
   options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
 ): Promise<bigint> {
+  // Block-scan (no source swap): the scanner already sized the loop; use its
+  // searchCenter directly (in flashToken units) and skip the victim-amount /
+  // impact path entirely. Backrun opportunities fall through unchanged.
+  if (plan.opportunity.kind === "block-scan-arb") {
+    return plan.opportunity.searchSeed.searchCenter;
+  }
   const victimAmount = plan.opportunity.victimAmountIn;
   if (victimAmount <= 0n) return 1n;
 
