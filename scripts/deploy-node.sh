@@ -66,10 +66,10 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # a single durable source that survives the recover-from-process rebuild. Does NOT touch the
   # DRY_RUN broadcast guard; only sizes the bribe (net stays ≥0 by the EV gate).
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
-  # hash-only (MEV-Share Path A) is marker-controlled ($REPO/.hash-only), like .bribe-all-above-gas:
-  # deploy default = ON when the marker is present, surviving the recover-from-process rebuild.
-  # Ingest+sim only (submission still gated by allowHashOnlySubmit); no broadcast-guard/latency impact.
-  [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
+  # hash-only (MEV-Share Path A) is ALWAYS ON (user directive 2026-07-04 — MEV-Share is the primary flow,
+  # 72x mempool volume; was .hash-only marker-gated). Ingest+sim only (submission still gated by
+  # allowHashOnlySubmit); no broadcast-guard/latency impact. To disable, edit this line deliberately.
+  echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=$DRY_VAL + TTL=$OPP_TTL_MS + poolUniverseTopN=$POOL_UNIVERSE_TOP_N"
@@ -82,7 +82,7 @@ else
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
-  [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
+  echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share always on (user directive 2026-07-04)
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
 
