@@ -16,6 +16,26 @@ export interface Opportunity {
   hints: Record<string, unknown>;
 }
 
+/** Doc alias for the backrun opportunity shape (D1 naming); identical to Opportunity. */
+export type BackrunOpportunity = Opportunity;
+
+/** Block-scan (standing-dislocation) opportunity — produced by the future block-scan scanner (BS-1).
+ *  No victim: identity is (sourceBlock, cycle). Not yet unioned into Opportunity (the scanner + the
+ *  processOpportunities block-scan arm will wire it at BS-1). */
+export interface BlockScanOpportunity {
+  kind: "block-scan-arb";
+  sourceBlock: number;             // = competitor_execution_block − 1 (temporal rule)
+  stateBlock: number;              // block whose end-state the cycle was reconstructed from
+  cycleId: string;                 // ring identity within the block (start-token + sorted seed pools)
+  cycleFingerprint: string;        // cycleFingerprint(sourceBlock, ring) — cross-block join key
+  seedEdges: TokenEdge[];          // the pinned cycle edges the scanner found
+  flashToken: string;              // pinned by the scanner; planner MUST NOT rotate
+  searchSeed: string;              // start token / search center
+  leavesStandingPosition: boolean; // DERIVED from seedEdges at construction; re-derived at submit
+  affectedPools?: string[];
+  affectedTokens?: string[];
+}
+
 export interface Detector {
   detect(event: OrderflowEvent, state: StateBackend): Promise<Opportunity[]>;
 }

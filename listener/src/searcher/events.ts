@@ -51,6 +51,22 @@ export function makeOpportunityId(input: {
   ].join("|")));
 }
 
+export function makeBlockScanOpportunityId(input: {
+  sourceBlock: number;
+  cycleId: string;
+  startToken: string;
+  seedPools: string[];
+}): string {
+  const seedPools = input.seedPools.map(normalize).sort();
+  return ethers.keccak256(ethers.toUtf8Bytes([
+    "blockscan",
+    String(input.sourceBlock),
+    input.cycleId,
+    normalize(input.startToken),
+    seedPools.join(","),
+  ].join("|")));
+}
+
 export type SearcherEvent =
   | {
       type: "mempool_filter_config";
@@ -64,7 +80,19 @@ export type SearcherEvent =
       type: "opportunity_seen";
       opportunity_id: string;
       target_block: number;
-      victim_hash: string;
+      victim_hash?: string;
+      opportunity_kind?: "backrun-arb" | "block-scan-arb";
+      source_block?: number;
+      cycle_id?: string;
+      cycle_fingerprint?: string;
+      strategy_view_used?: "backrun" | "blockscan";
+      search_center?: string;
+      candidate_rank?: number;
+      scanner_budget_ms?: number;
+      seed_venues?: string[];
+      strategy_view_version?: string;
+      blockscan_view_hash?: string;
+      backrun_view_hash?: string;
       pool?: string;
       tokens?: string[];
     }
@@ -72,7 +100,19 @@ export type SearcherEvent =
 	      type: "simulation_result";
 	      opportunity_id: string;
 	      target_block: number;
-      victim_hash: string;
+      victim_hash?: string;
+      opportunity_kind?: "backrun-arb" | "block-scan-arb";
+      source_block?: number;
+      cycle_id?: string;
+      cycle_fingerprint?: string;
+      strategy_view_used?: "backrun" | "blockscan";
+      search_center?: string;
+      candidate_rank?: number;
+      scanner_budget_ms?: number;
+      seed_venues?: string[];
+      strategy_view_version?: string;
+      blockscan_view_hash?: string;
+      backrun_view_hash?: string;
       path_id?: string;
       template_id?: string;
       ok: boolean;
@@ -85,7 +125,19 @@ export type SearcherEvent =
 	      type: "pipeline_dropped";
 	      opportunity_id: string;
 	      target_block: number;
-	      victim_hash: string;
+	      victim_hash?: string;
+	      opportunity_kind?: "backrun-arb" | "block-scan-arb";
+	      source_block?: number;
+	      cycle_id?: string;
+	      cycle_fingerprint?: string;
+	      strategy_view_used?: "backrun" | "blockscan";
+	      search_center?: string;
+	      candidate_rank?: number;
+	      scanner_budget_ms?: number;
+	      seed_venues?: string[];
+	      strategy_view_version?: string;
+	      blockscan_view_hash?: string;
+	      backrun_view_hash?: string;
 	      victim_source?: "mev-share" | "mempool";
 	      stage: string;
 	      reason: string;
@@ -102,7 +154,19 @@ export type SearcherEvent =
 	      opportunity_id: string;
       target_block: number;
       submission_target_block?: number;
-      victim_hash: string;
+      victim_hash?: string;
+      opportunity_kind?: "backrun-arb" | "block-scan-arb";
+      source_block?: number;
+      cycle_id?: string;
+      cycle_fingerprint?: string;
+      strategy_view_used?: "backrun" | "blockscan";
+      search_center?: string;
+      candidate_rank?: number;
+      scanner_budget_ms?: number;
+      seed_venues?: string[];
+      strategy_view_version?: string;
+      blockscan_view_hash?: string;
+      backrun_view_hash?: string;
       mode: string;
       path_id?: string;
       template_id?: string;
@@ -114,6 +178,17 @@ export type SearcherEvent =
       builders_sent?: string[];
       bundle_hash?: string;
       accepted?: number;
+    }
+  | {
+      type: "block_scan_result";
+      source_block: number;
+      state_block: number | null;
+      outcome: "ran" | "skipped_busy" | "stale_state" | "budget_exceeded" | "disabled" | "breaker_open";
+      scanned_pairs: number;
+      swap_touched_pools: number;
+      candidates: number;
+      scan_ms: number;
+      skipped_reason?: string;
     }
   | {
       type: "bundle_included";
