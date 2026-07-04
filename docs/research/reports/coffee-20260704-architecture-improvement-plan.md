@@ -128,10 +128,23 @@ drifts from backrun's EV gate / drop-reasons / submission.
    these you can only see "not submitted", never *where* it stalled (no venue in the view / not scanned /
    spread below threshold / sizing seed / quote-fidelity / sim revert / EV gate / lost). Designing them
    into A now (cheap, forward-compatible) avoids re-running windows to backfill telemetry after A ships.
-   `cycle_fingerprint` = **economic-core-exact + route-fuzzy**: keyed on `source_block + token-pair +
-   direction + rounded size`, with `seed_venues` a **secondary** discriminator only — NOT part of identity.
-   (If venues were part of identity, a competitor closing the same spread via a different route would read
-   as `cycle_match=false` and we'd log a false gap.)
+   `cycle_fingerprint` (the cross-searcher JOIN key C2 aligns on — distinct from the internal
+   `opportunity_id` above, which may stay route/startToken-specific) = **economic-core, canonicalized,
+   route-fuzzy**. Two hard corrections vs the naive `token-pair + rounded size` form, both load-bearing for
+   the paying case:
+   - **Key on the canonical token-RING, not a "token-pair".** The realized value is in 3–4-hop cycles
+     (A0/A2: #2 @3 tokens, #3 @4 tokens = ~82% of value), and a ring of 3–4 distinct tokens has **no single
+     pair**. A ring is also rotation- and direction-sensitive — our `startToken`/orientation need not equal
+     the competitor's for the *same* loop. So identity = `keccak(source_block | canonicalTokenRing)`, where
+     `canonicalTokenRing` is the cycle's token sequence rotated to start at the lowest-address token and
+     oriented by a fixed rule (e.g. first hop toward the lexically smaller neighbor) → rotation/direction
+     invariant. Plain `token-pair` collapses distinct 3-hop rings that share two tokens into one id (false
+     match) and is simply undefined for the 3–4-hop paying case.
+   - **Do NOT put size in identity.** `rounded size` is a per-searcher CHOICE (capital, slippage tolerance,
+     flash token), not a property of the standing spread — two searchers close the same spread at different
+     sizes, so size-in-identity re-introduces the exact `cycle_match=false` false-gap the route-fuzzy choice
+     was meant to avoid, just on a new axis. Size, `seed_venues`, and route are **comparison attributes**
+     (they feed `primary_gap` and `competitor_profit vs our_simulated_best` in C2), never the join key.
 3. **Bundle contract** (`bundle-router.ts:5`): make `victimTxHash` **optional** — the `standalone` path
    already ignores it (`bundle-router.ts:81`) and atomic is standalone-shaped.
 4. **Extract `processOpportunities(ctx, opportunities, sourceMeta)`** from the ~900-line `handleHint`
@@ -139,9 +152,23 @@ drifts from backrun's EV gate / drop-reasons / submission.
    `main.ts:1275+`), telemetry fields driven by `sourceMeta.kind`.
    Backrun `handleHint` calls it; the atomic block handler (A4) calls it. This is the single shared entry
    that prevents two divergent hot paths (finding #4).
+5. **Submission model — atomic is BATCH-per-block, backrun is one-at-a-time (new constraint, verified).**
+   Backrun is single-flight: one source swap → one opportunity → one bundle (`busy` guard, `main.ts:847`).
+   The atomic scanner emits a **batch** of opportunities per block (A1 many anchor pairs, A2 many rings).
+   But the signer nonce is `wallet.getNonce("pending")` (`submitter.ts:296`) and a `standalone` bundle pins
+   ONE target block (`blockNumber:0x{targetBlock}`, `submitter.ts:250`) — so **N atomic bundles for block B
+   share one nonce + one target block and at most one can land**; concurrent submits merely collide/replace.
+   So the atomic caller must **rank by `candidate_rank` and submit only the single best atomic opportunity
+   per block** (multi-submission would need explicit nonce-sequencing of a bundle-of-bundles — heavier,
+   defer). This is a *contract* decision, not an A4 detail: `processOpportunities` accepts a batch, but the
+   atomic caller reduces to one submission/block. (Not a backrun concern — hints arrive serially.)
 - **Gate (refactor-neutral):** all existing backrun `searcher:planner` + `searcher:replay-live-fixtures`
-  pass **unchanged**; a new unit test asserts two distinct anchors in the same `source_block` produce
-  **distinct** `opportunity_id`s (no source-swap-hash collision).
+  pass **unchanged**; a new unit test asserts (a) two distinct anchors in the same `source_block` produce
+  **distinct** `opportunity_id`s (no source-swap-hash collision); (b) two rotations/directions of the SAME
+  ring produce the **same** `cycle_fingerprint` and two genuinely different rings produce different ones
+  (canonical-join invariance — the C2 alignment depends on it); (c) a batch of ≥2 profitable atomic
+  opportunities in one block yields **exactly one** `bundle_submitted` (top `candidate_rank`), the losers
+  emitting `pipeline_dropped` with a visible `dedup_per_block` reason (not silently swallowed).
 
 **A-universe — strategy-scoped pool selection (PREREQUISITE, alongside A-contract, upstream of A1).**
 Backrun wants **fast** (few hot pools); atomic wants **broad** (loop-closure coverage). Today they are
@@ -442,7 +469,7 @@ close-side *enforcement* of A-universe's decoupling.
 | slice | harness / command | expected transition (rule-12) |
 |---|---|---|
 | A0 | fork replay at pre-tx state (`docs/historical-replay.md` pattern) | atomic cycle reproduced from public state, gross > 0 |
-| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s** (no source-swap-hash collision) |
+| A-contract | `searcher:planner` + `searcher:replay-live-fixtures` (refactor-neutral) | backrun tests pass unchanged; two anchors in one `source_block` → **distinct `opportunity_id`s**; **same ring in 2 rotations/directions → same `cycle_fingerprint`** (canonical-join invariance); **≥2 profitable atomic opps in one block → exactly one `bundle_submitted`** (losers `dedup_per_block`) |
 | A-universe | new `searcher:universe-split` unit test | widening the atomic universe leaves the backrun-scored mempool `toAddress` **set unchanged** (no atomic displacement); atomic view has ≥1 loop-closure pool absent from the backrun hot set |
 | A1 | `npm run searcher:planner` | anchor flips `candidate_plans 0→>0`; **every candidate path contains the seed pools** (anchor-constrained, not whole-graph); center `>8` in `flashToken` units |
 | A2 | `searcher:planner` + new `searcher:bench-atomic` | #2 3-hop cycle found (`candidate_plans 0→>0`); full scan < between-block budget at `maxHops≤4` |
