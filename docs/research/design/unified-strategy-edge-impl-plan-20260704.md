@@ -487,7 +487,9 @@ generator/evaluator split, each with its rule-12 gate.
 | **CR-3a** (planner credit flip) | `90d6849` | `REPLAY_FIXTURES` + `lend()` helper + `templates?`/`flashLiquidity?`; `0xf88b` pair flips absent→0 (`impact_token_no_supported_return_venue`) / present→≥1 on the Fluid credit edge alone. `searcher:planner` replay 14/14 |
 | **CR-3b** (analysis LearningCase) | `a9f8da6` | `test:learning-case` 6/6 — S1 schema carries `edge_kinds:[flash,credit,swap]`, `strategy_kind:backrun` (anti-binding), advances toward close. Follow-up filed (`task_45c7379e`): postmortem producer still hardcodes `["swap"]` |
 | **PHASE 1 COMPLETE** | — | BS-0 · BS-contract (A/B/B2/C1/C2) · BS-universe (P1/P2) · CR-3 (a/b) — all landed + gated |
-| Phase 2: BS-1/2/3 (block-scan scanner) · CR-5 | — | NOT STARTED (scanner = the capability epic) |
+| **BS-1a** (scanner core) | `2498cf0` | `blockscan-scanner.ts` `detectBlockScanOpportunities` — PURE+SYNC 2-hop anchor finder over the warm cache (mid-price v2/v3/curve, spread−fees, WETH flashToken, geometric-mid searchCenter>8n, ranked+capped, cycleFingerprint). `searchSeed` string→`{startToken,searchCenter,maxInput}`. Gate `searcher:blockscan-scanner` 7/7 (anchor w/ correct cheap→rich orientation, no-spread control, single-venue, delta-restrict, priced-token gate, rank+cap, fingerprint) + all suites unchanged. Evaluator hand-verified the algorithm |
+| BS-1b (planner binding) | in flight | `planBlockScanFromSeedEdges` (direct-from-seedEdges, no rotation, byte-identical backrun) |
+| BS-2/BS-3 · CR-5 → CR-8 | — | NOT STARTED (BS-4 = operator-gated live window) |
 
 Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
 block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of Phase 3/4 do not exist.**
