@@ -36,6 +36,7 @@
     "searcher:balanceslots": "tsx src/searcher/test/balance-slots.ts",
     "searcher:finalverifygate": "tsx src/searcher/test/final-verify-gate.ts",
     "searcher:finaloverlayequiv": "tsx src/searcher/test/final-overlay-equiv.ts",
+    "searcher:overlay-fidelity": "node --import tsx src/searcher/test/mevshare-overlay-fidelity.ts",
     "searcher:amtsearch": "tsx src/searcher/test/amount-search.ts",
     "searcher:curvemath": "tsx src/searcher/test/curve-math-equiv.ts",
     "searcher:v3math": "tsx src/searcher/test/v3-math.ts",

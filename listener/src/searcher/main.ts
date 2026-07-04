@@ -37,8 +37,9 @@ import {
 import { AnvilSolver } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import { PoolStateCache } from "./solver/pool-state-cache.js";
+import { PoolStateCache, type PostImpactSeed, type V3PostImpactSeed } from "./solver/pool-state-cache.js";
 import { PoolStateUpdater } from "./solver/pool-state-updater.js";
+import { postImpactStateOverrides } from "./solver/post-impact-overrides.js";
 import { applyVictimSwapLocally, type LocalVictimApplyResult } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "./templates/path-template.js";
@@ -1102,12 +1103,15 @@ async function handleHint(
     ctx.counters.impacts++;
     countedHintImpact = true;
 
-    // Path A: hash-only — approximate simulation via impersonate swap
+    // Path A: hash-only — exact v3 event overlay when available, otherwise
+    // approximate simulation via impersonate swap.
     if (!ctx.config.enableHashOnly) {
       throw new Error("hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable");
     }
+    const hintOverlayExact = hintImpact.v3PostState !== undefined;
     console.log(
-      `[searcher/live] hint via logs (approximate): pool=${hintImpact.pool.slice(0, 10)} ` +
+      `[searcher/live] hint via logs (${hintOverlayExact ? "exact-v3-post-state" : "approximate"}): ` +
+        `pool=${hintImpact.pool.slice(0, 10)} ` +
         `amountIn=${hintImpact.amountIn}`,
     );
 
@@ -1348,13 +1352,26 @@ async function handleHint(
     // 20s+ cold revm overlay on obscure WETH pairs), and it can expire the hint
     // before the solver gets a chance on real candidate plans.
     const oppImpact = poolImpactFromOpportunity(opp) ?? fixtureImpact;
+    const prepareBaseBlock = fixturePath === "mined" ? eventBlockNumber : latestBlock;
+    const exactPostImpact = fixturePath === "hash-only" && oppImpact
+      ? v3EventPostImpactSeed(oppImpact, prepareBaseBlock)
+      : null;
+    const overlayExact = exactPostImpact !== null;
     const prepareInput = {
       event,
       impact: oppImpact,
-      baseBlock: fixturePath === "mined" ? eventBlockNumber : latestBlock,
+      baseBlock: prepareBaseBlock,
       path: fixturePath,
       routeHops: dedupeRouteHops(plans, ctx.config.revmPrewarmRouteHops),
+      postImpact: exactPostImpact ?? undefined,
     };
+    if (overlayExact) {
+      console.log(
+        `[searcher/live] hash-only exact v3 overlay seed ` +
+          `pool=${exactPostImpact.pool.slice(0, 10)} sqrtPriceX96=${exactPostImpact.sqrtPriceX96} ` +
+          `tick=${exactPostImpact.tick}`,
+      );
+    }
     // Feed the between-block warmer: these pools recur across hints, so record
     // their quote directions to pre-warm recent longtail pools on the next block.
     if (oppImpact) {
@@ -1372,7 +1389,7 @@ async function handleHint(
     let jitWarmCurrent: Promise<void> | null = null;
     const supportsConfiguredBackend = ctx.config.liveBackend !== "rpc" &&
       (ctx.liveBackend.supportsPath?.(prepareInput) ?? true);
-    if (supportsConfiguredBackend && oppImpact && isLocalVictimApplyAdapter(oppImpact.matchedAdapterId)) {
+    if (!overlayExact && supportsConfiguredBackend && oppImpact && isLocalVictimApplyAdapter(oppImpact.matchedAdapterId)) {
       const applyStarted = Date.now();
       ctx.cache.beginHint(prepareInput.baseBlock);
       const localReadState = blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock);
@@ -1481,9 +1498,17 @@ async function handleHint(
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "hash-only") {
       if (!oppImpact) throw new Error("hash-only fallback missing impact");
       await ensureHintFork(latestBlock);
-      await impersonateSwap(ctx.state, oppImpact, ctx.graph);
+      if (exactPostImpact) {
+        const overrides = await applyPostImpactOverridesToAnvil(ctx.state, exactPostImpact);
+        console.log(
+          `[searcher/live] anvil exact v3 post-state overlay ` +
+            `pool=${exactPostImpact.pool.slice(0, 10)} overrides=${overrides}`,
+        );
+      } else {
+        await impersonateSwap(ctx.state, oppImpact, ctx.graph);
+      }
       await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
-      segMark("anvilOverlay");
+      segMark(exactPostImpact ? "anvilExactOverlay" : "anvilOverlay");
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "mined") {
       await ensureHintFork(eventBlockNumber, true);
@@ -1499,8 +1524,8 @@ async function handleHint(
     const useRevmReadState = useConfiguredBackend && ctx.config.liveBackend !== "rpc" && !localVictimApply;
     ctx.cache.beginHint(
       prepareInput.baseBlock,
-      localVictimApply
-        ? { postImpact: [localVictimApply.postImpact] }
+      localVictimApply || exactPostImpact
+        ? { postImpact: [localVictimApply?.postImpact ?? exactPostImpact!] }
         : oppImpact ? [oppImpact.pool] : [],
     );
     const solveState = useRevmReadState
@@ -2321,6 +2346,32 @@ async function impersonateSwap(
 
 function isCurveAdapter(adapterId: string): boolean {
   return adapterId.startsWith("curve-");
+}
+
+function v3EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V3PostImpactSeed | null {
+  if (impact.matchedAdapterId !== "univ3-swap" || !impact.v3PostState) return null;
+  return {
+    kind: "v3",
+    pool: impact.pool,
+    sqrtPriceX96: impact.v3PostState.sqrtPriceX96,
+    tick: impact.v3PostState.tick,
+    liquidity: impact.v3PostState.liquidity,
+    blockNumber,
+  };
+}
+
+async function applyPostImpactOverridesToAnvil(
+  state: AnvilStateBackend,
+  postImpact: PostImpactSeed,
+): Promise<number> {
+  const overrides = await postImpactStateOverrides(postImpact);
+  if (overrides.length === 0) {
+    throw new Error(`post-impact state override unavailable for ${postImpact.kind}`);
+  }
+  for (const override of overrides) {
+    await state.provider.send("anvil_setStorageAt", [override.address, override.slot, override.value]);
+  }
+  return overrides.length;
 }
 
 /**

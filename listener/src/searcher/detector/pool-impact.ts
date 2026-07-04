@@ -12,6 +12,12 @@ export interface PoolImpact {
   /** Uniswap v4 poolId — preserves pool identity across the singleton PoolManager
    *  (all v4 pools share the same `pool` address). Undefined for v2/v3/curve. */
   poolId?: string;
+  /** Exact UniV3 post-swap state carried by Swap events. Undefined for non-v3 impacts. */
+  v3PostState?: {
+    sqrtPriceX96: bigint;
+    liquidity: bigint;
+    tick: number;
+  };
 }
 
 interface EventLog {
@@ -38,6 +44,26 @@ const UNIV3_SWAP = topic("Swap(address,address,int256,int256,uint160,uint128,int
 const UNIV2_SWAP = topic("Swap(address,uint256,uint256,uint256,uint256,address)");
 const UNIV4_SWAP = topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
 const ERC20_TRANSFER = topic("Transfer(address,address,uint256)");
+
+function decodeUniV3SwapData(data: string): {
+  amount0: bigint;
+  amount1: bigint;
+  v3PostState: NonNullable<PoolImpact["v3PostState"]>;
+} {
+  const [amount0, amount1, sqrtPriceX96, liquidity, tick] = ethers.AbiCoder.defaultAbiCoder().decode(
+    ["int256", "int256", "uint160", "uint128", "int24"],
+    data,
+  );
+  return {
+    amount0: BigInt(amount0),
+    amount1: BigInt(amount1),
+    v3PostState: {
+      sqrtPriceX96: BigInt(sqrtPriceX96),
+      liquidity: BigInt(liquidity),
+      tick: Number(tick),
+    },
+  };
+}
 
 // ─── Curve direct-call selectors ──────────────────────────────
 
@@ -130,13 +156,7 @@ const uniV3Decoder: ImpactDecoder = {
   decodeLog(log, edges) {
     if (log.topics[0]?.toLowerCase() !== UNIV3_SWAP) return [];
 
-    const [amount0, amount1] = ethers.AbiCoder.defaultAbiCoder().decode(
-      ["int256", "int256", "uint160", "uint128", "int24"],
-      log.data,
-    );
-
-    const a0 = BigInt(amount0);
-    const a1 = BigInt(amount1);
+    const { amount0: a0, amount1: a1, v3PostState } = decodeUniV3SwapData(log.data);
 
     const sample = edges.find((e) => e.poolToken0 && e.poolToken1);
     if (!sample?.poolToken0 || !sample?.poolToken1) return [];
@@ -159,6 +179,7 @@ const uniV3Decoder: ImpactDecoder = {
       tokenOut: edge.tokenOut,
       amountIn,
       matchedAdapterId: edge.adapterId,
+      v3PostState,
     }];
   },
 };
@@ -400,7 +421,7 @@ function swapEventCorrelatedImpacts(
   broadPoolAddrs?: Map<string, string> | null,
 ): PoolImpact[] {
   // Step 1: Find addresses that emitted a Swap event
-  const swapPools = new Map<string, string>(); // address → adapter
+  const swapPools = new Map<string, { adapter: string; v3PostState?: NonNullable<PoolImpact["v3PostState"]> }>();
   for (const log of logs) {
     const t0 = log.topics[0]?.toLowerCase();
     const addr = log.address.toLowerCase();
@@ -409,9 +430,13 @@ function swapEventCorrelatedImpacts(
     if (broadPoolAddrs?.has(addr)) continue;
 
     if (t0 === UNIV2_SWAP) {
-      swapPools.set(addr, "univ2-swap");
+      swapPools.set(addr, { adapter: "univ2-swap" });
     } else if (t0 === UNIV3_SWAP) {
-      swapPools.set(addr, "univ3-swap");
+      try {
+        swapPools.set(addr, { adapter: "univ3-swap", v3PostState: decodeUniV3SwapData(log.data).v3PostState });
+      } catch {
+        swapPools.set(addr, { adapter: "univ3-swap" });
+      }
     }
   }
   if (swapPools.size === 0) return [];
@@ -444,7 +469,7 @@ function swapEventCorrelatedImpacts(
   const impacts: PoolImpact[] = [];
   for (const [pool, { ins, outs }] of transfers) {
     if (ins.length === 0 || outs.length === 0) continue;
-    const adapter = swapPools.get(pool)!;
+    const swapMeta = swapPools.get(pool)!;
     for (const inT of ins) {
       for (const outT of outs) {
         if (inT.token === outT.token) continue;
@@ -453,7 +478,8 @@ function swapEventCorrelatedImpacts(
           tokenIn: inT.token,
           tokenOut: outT.token,
           amountIn: inT.amount,
-          matchedAdapterId: adapter,
+          matchedAdapterId: swapMeta.adapter,
+          ...(swapMeta.v3PostState ? { v3PostState: swapMeta.v3PostState } : {}),
         });
       }
     }
@@ -530,6 +556,7 @@ async function swapOnlyImpacts(
 
     try {
       let tokenIn: string, tokenOut: string, amountIn: bigint;
+      let v3PostState: PoolImpact["v3PostState"];
 
       if (swapType === "univ2") {
         const [amount0In, amount1In] = ethers.AbiCoder.defaultAbiCoder().decode(
@@ -542,17 +569,13 @@ async function swapOnlyImpacts(
         tokenOut = a0In > 0n ? token1 : token0;
         amountIn = a0In > 0n ? a0In : a1In;
       } else {
-        const [amount0, amount1] = ethers.AbiCoder.defaultAbiCoder().decode(
-          ["int256", "int256", "uint160", "uint128", "int24"],
-          log.data,
-        );
-        const a0 = BigInt(amount0);
-        const a1 = BigInt(amount1);
+        const { amount0: a0, amount1: a1, v3PostState: postState } = decodeUniV3SwapData(log.data);
         // UniV3: positive amount = tokens sent TO pool (input)
         tokenIn = a0 > 0n ? token0 : token1;
         tokenOut = a0 > 0n ? token1 : token0;
         amountIn = a0 > 0n ? a0 : a1;
         if (amountIn < 0n) amountIn = -amountIn;
+        v3PostState = postState;
       }
 
       const factoryAdapter = broadPoolAddrs?.get(addr);
@@ -560,7 +583,14 @@ async function swapOnlyImpacts(
         ? (FACTORY_ADAPTER_MAP[factoryAdapter] ?? (swapType === "univ2" ? "univ2-swap" : "univ3-swap"))
         : (swapType === "univ2" ? "univ2-swap" : "univ3-swap");
 
-      impacts.push({ pool: addr, tokenIn, tokenOut, amountIn, matchedAdapterId: adapterId });
+      impacts.push({
+        pool: addr,
+        tokenIn,
+        tokenOut,
+        amountIn,
+        matchedAdapterId: adapterId,
+        ...(v3PostState ? { v3PostState } : {}),
+      });
       console.log(
         `[pool-impact] swap-only decoded: pool=${addr.slice(0, 10)} ` +
           `${tokenIn.slice(0, 10)}→${tokenOut.slice(0, 10)} amt=${amountIn}`,
@@ -688,8 +718,9 @@ function groupEdgesByTarget(graph: TokenEdge[]): Map<string, TokenEdge[]> {
 }
 
 function dedupeImpacts(impacts: PoolImpact[]): PoolImpact[] {
-  const seen = new Set<string>();
-  return impacts.filter((impact) => {
+  const order: string[] = [];
+  const seen = new Map<string, PoolImpact>();
+  for (const impact of impacts) {
     const key = [
       impact.pool.toLowerCase(),
       impact.poolId ?? "",
@@ -698,8 +729,13 @@ function dedupeImpacts(impacts: PoolImpact[]): PoolImpact[] {
       impact.amountIn.toString(),
       impact.matchedAdapterId,
     ].join(":");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, impact);
+      order.push(key);
+    } else if (!existing.v3PostState && impact.v3PostState) {
+      seen.set(key, impact);
+    }
+  }
+  return order.map((key) => seen.get(key)!);
 }
