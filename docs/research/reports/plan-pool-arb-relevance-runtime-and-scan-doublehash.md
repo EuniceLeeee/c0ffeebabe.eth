@@ -248,3 +248,54 @@ cd listener && npm run searcher:planner     # must print 14/14 + replay fixtures
       loop-completer flip AND the prior 14/14 + replay + high-spread lines (no regression); banner
       shows the new quota.
 - [ ] Commit each step separately, signed as the orchestrating model, only after its gate passes.
+
+---
+
+## Finding — MEV-Share `mev_sendBundle` 100% rejected ("backrun not found"): PRIVATE victims, not latency/hash-bug
+
+Investigated the coordinator's `mev-share: ACCEPTED=0 REJECTED=81` (all HTTP 200 +
+`{"error":{"code":-32000,"message":"backrun not found"}}`). Measured, not guessed:
+
+**Root cause = the referenced hints are PRIVATE MEV-Share txs that never land on-chain.** Of the 81
+rejects, **80/80 distinct victim double-hashes have NO real tx mined within ±20 blocks of our
+target** (`scratchpad/reject_gap.mjs` reverse-scan): `landed=0, private/never-mined=80`. A backrun
+references the hinted tx by `{ hash }` (`submitter.ts:150-151`); if that tx is private and the relay
+never includes it in the target block, there is no order to backrun → `backrun not found` is the
+CORRECT relay response, not a defect in our submission. This is the same ~80%-never-mined phenomenon
+established for MEV-Share flow earlier in this doc, now confirmed as the direct cause of the rejects.
+The searcher already skips 103,701 hints with `tx not available from RPC (private MEV-Share tx)`
+(`main.ts:1144`); the 81 that reached submit are the private-overlay path that passed the
+`hashOnlySubmitDecision` gate (`main.ts:1740`) on a SYNTHETIC overlay — i.e. we sim a phantom victim
+and submit a backrun for a tx that won't be there.
+
+**Hypothesis 1 (latency/expired window) — REFUTED.** End-to-end pipeline latency (`mev-live.log`):
+p50 14ms, p95 170ms, p99 2091ms, only **35/230441 (0.015%)** slower than one block (>12s). We are
+NOT structurally too slow for MEV-Share's window. (And the 80 rejected victims never landed at all,
+so no target block could have matched regardless of speed.)
+
+**Hypothesis 2 (wrong hash / format) — REFUTED.** Traced the hash provenance: `mev_sendBundle` body
+`{ hash: victimHash }` (`submitter.ts:151`) ← `victimTxHash: txHash` (`main.ts:1841`) ← the `txHash`
+loop var (`main.ts:864`) ← `extractTxHashes(payload)` off the raw SSE event (`main.ts:3179`). So we
+pass the SSE event `hash` UNMODIFIED — exactly what the spec requires ("listeners get only a tx hash…
+placed using the `{hash}` wrapper", mev-share v0.1 bundles spec). Not re-derived, not the resolved
+real hash. `inclusion.block`/`maxBlock` are set to `head+1 … head+6` (`submitter.ts:147-148`) — a
+valid forward window; the reject is not an inclusion-format issue.
+
+**So: not fixable as a bug — it's a POSTURE reality.** ~96% of our flow is now MEV-Share hints, ~80%
+of which are private txs that never mine, so backruns against them are structurally un-landable. This
+is NOT a code fix; it is the same lever reopened above (MEV-Share phantom / victim-source land-rate).
+Concrete, non-guessing next steps (tracked, NOT part of Step 1/2 code):
+- **Stop submitting synthetic-overlay backruns for private hints** — they cost nothing (rejected) but
+  pollute the "submitted" metric and waste the submit slot. Gate submit on `victim_source` land-rate:
+  if a hint is a private MEV-Share tx with no rawTx and no exact overlay, do not submit (tighten the
+  `hashOnlySubmitDecision` path). rule-12 gate: replay a recorded private-hint fixture → asserts
+  `bundle_submitted` for it goes 1→0 and it is dropped `hash_only_unverifiable` instead.
+- **The value is in the ~15-20% of MEV-Share hints that DO become public/landable** (the ones the
+  reverse-map resolves). Route submit effort there; measure land-rate per source with Step 1's
+  authoritative `victim_source`. This is the phantom-victim / source-quality epic
+  (`project-phantom-victim-flow-admission-epic`), now with a hard number: private-hint backruns are
+  ~0% landable, so admission must filter on source land-rate before sim, not after.
+- Honest bottom line for the coordinator: the "primary flow submits 100% invalid bundles" is real but
+  the invalidity is INHERENT to backrunning private hints, not a hash/latency bug. The fix is
+  admission/posture (don't sim+submit against private un-landable hints), plus concentrating on the
+  landable minority — NOT a submitter patch.
