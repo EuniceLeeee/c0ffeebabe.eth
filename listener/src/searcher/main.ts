@@ -66,6 +66,11 @@ import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
 import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js";
 import type { ResolvedPlanNode } from "../shared/types/plan.js";
+import {
+  DEFAULT_CREDIT_LIVE_MARKER_PATH,
+  evaluateStandingGuard,
+} from "./standing-guard.js";
+import { pathLeavesStandingPosition } from "./strategy-taxonomy.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
@@ -1820,6 +1825,28 @@ async function handleHint(
           bribeAllAboveGas: ctx.config.bribeAllAboveGas,
           bribeBps: ctx.config.bribeBps,
         });
+
+        const creditLiveMarkerPath =
+          process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
+        const containsStandingPosition = pathLeavesStandingPosition(candidate.tokenPath.edges);
+        const standingGuard = evaluateStandingGuard(
+          candidate.tokenPath.edges,
+          creditLiveMarkerPath,
+          containsStandingPosition,
+        );
+        if (!standingGuard.allowed) {
+          ctx.counters.finalVerifySkipped++;
+          lastTerminalState = "no-profitable-quote";
+          lastTerminalError = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+          console.log(`[searcher/live] reject standing-position: ${lastTerminalError}`);
+          emitPipelineDropped("submit_gate", standingGuard.reason, lastTerminalError, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+          });
+          recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
 
         // Net-EV gate: only go on-chain when profit ETH exceeds gas + bribe by
         // minNetEth. Skips dust whose costs would exceed it (no more net-loss
