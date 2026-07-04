@@ -30,6 +30,7 @@ const P3 = "0x0000000000000000000000000000000000000103";
 const P4 = "0x0000000000000000000000000000000000000104";
 const P5 = "0x0000000000000000000000000000000000000105";
 const P6 = "0x0000000000000000000000000000000000000106";
+const P7 = "0x0000000000000000000000000000000000000107";
 const Q96 = 1n << 96n;
 
 function cfg(overrides: Partial<BlockScanConfig> = {}): BlockScanConfig {
@@ -73,6 +74,24 @@ function seedV2(cache: PoolStateCache, pool: string, token: string, tokenReserve
   });
 }
 
+function seedV2Pair(
+  cache: PoolStateCache,
+  pool: string,
+  token0: string,
+  token1: string,
+  reserve0: bigint,
+  reserve1: bigint,
+): void {
+  cache.seedV2({
+    pool,
+    token0,
+    token1,
+    reserve0,
+    reserve1,
+    blockNumber: BLOCK,
+  });
+}
+
 function seedV3(cache: PoolStateCache, pool: string, token: string, midWethPerToken: number): void {
   cache.seedV3Ticks({
     pool,
@@ -112,6 +131,32 @@ function mainAnchor(): { cache: PoolStateCache; edges: TokenEdge[] } {
   seedV2(cache, P1, USDC, 2_000_000n * UNIT, 1_000n * UNIT);
   seedV3(cache, P2, USDC, 0.00055);
   return { cache, edges: [...venueEdges(USDC, P1), ...venueEdges(USDC, P2, "univ3-swap")] };
+}
+
+function pairEdges(token0: string, token1: string, pool: string): TokenEdge[] {
+  return [
+    swap(token0, token1, pool),
+    swap(token1, token0, pool),
+  ];
+}
+
+function addWethAnchor(cache: PoolStateCache, edges: TokenEdge[]): void {
+  seedV2(cache, P6, USDC, 2_000_000n * UNIT, 1_000n * UNIT);
+  seedV2(cache, P7, USDC, 2_000_000n * UNIT, 1_040n * UNIT);
+  edges.push(...venueEdges(USDC, P6), ...venueEdges(USDC, P7));
+}
+
+function triangleFixture(profitable: boolean): { cache: PoolStateCache; edges: TokenEdge[]; ringPools: string[] } {
+  const cache = new PoolStateCache();
+  const edges: TokenEdge[] = [];
+  const a = tokenAt(20);
+  const b = tokenAt(21);
+  addWethAnchor(cache, edges);
+  seedV2Pair(cache, P1, WETH, a, 1_000n * UNIT, 1_200n * UNIT);
+  seedV2Pair(cache, P2, a, b, 1_000n * UNIT, 1_000n * UNIT);
+  seedV2Pair(cache, P3, b, WETH, 1_000n * UNIT, (profitable ? 860n : 833n) * UNIT);
+  edges.push(...pairEdges(WETH, a, P1), ...pairEdges(a, b, P2), ...pairEdges(b, WETH, P3));
+  return { cache, edges, ringPools: [P1, P2, P3] };
 }
 
 function assertMainAnchor(opp: BlockScanOpportunity): void {
@@ -219,6 +264,50 @@ const tests: TestCase[] = [
       const opp = outcome.opportunities[0];
       assert(opp.cycleFingerprint === cycleFingerprint(BLOCK, [WETH, USDC]), "cycle fingerprint");
       console.log("[blockscan-scanner] cycleFingerprint set: PASS");
+    },
+  },
+  {
+    name: "3-hop cycle found",
+    run: () => {
+      const { cache, edges, ringPools } = triangleFixture(true);
+      const outcome = run(edges, cache);
+      const rings = outcome.opportunities.filter((opp) => opp.seedEdges.length === 3);
+      assert(rings.length === 1, `expected one 3-hop ring, got ${rings.length}`);
+      const ring = rings[0];
+      assert(ring.seedEdges[0].tokenIn.toLowerCase() === WETH, "3-hop ring starts at WETH");
+      assert(ring.seedEdges[2].tokenOut.toLowerCase() === WETH, "3-hop ring ends at WETH");
+      const actualPools = [...new Set(ring.seedEdges.map((edge) => edge.target.toLowerCase()))].sort();
+      assert(actualPools.join(",") === ringPools.sort().join(","), "3-hop ring pools");
+      assert(ring.searchSeed.searchCenter > 8n, "3-hop ring search center is usable");
+      console.log("[blockscan-scanner] 3-hop cycle found: PASS");
+    },
+  },
+  {
+    name: "unprofitable-cycle control",
+    run: () => {
+      const { cache, edges, ringPools } = triangleFixture(false);
+      const outcome = run(edges, cache);
+      const ringPoolKey = ringPools.sort().join(",");
+      const falsePositive = outcome.opportunities.some((opp) => {
+        if (opp.seedEdges.length !== 3) return false;
+        const pools = [...new Set(opp.seedEdges.map((edge) => edge.target.toLowerCase()))].sort();
+        return pools.join(",") === ringPoolKey;
+      });
+      assert(!falsePositive, "unprofitable 3-hop ring should not emit");
+      console.log("[blockscan-scanner] unprofitable-cycle control: PASS");
+    },
+  },
+  {
+    name: "cycleFingerprint dedup",
+    run: () => {
+      const { cache, edges } = triangleFixture(true);
+      const outcome = run(edges, cache);
+      const seen = new Set<string>();
+      for (const opp of outcome.opportunities) {
+        assert(!seen.has(opp.cycleFingerprint), "duplicate cycleFingerprint");
+        seen.add(opp.cycleFingerprint);
+      }
+      console.log("[blockscan-scanner] cycleFingerprint dedup: PASS");
     },
   },
 ];

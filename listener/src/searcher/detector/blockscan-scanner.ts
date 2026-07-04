@@ -1,7 +1,7 @@
 import { ADDR } from "../../shared/constants/addresses.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
 import type { CurveSnapshot, PoolStateCache, V2Seed, V3Snapshot } from "../solver/pool-state-cache.js";
 import { getAmount0Delta, getAmount1Delta } from "../solver/v3-math.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
@@ -67,17 +67,25 @@ export function detectBlockScanOpportunities(input: {
     : null;
   const groups = groupPairs(input.edges);
   const ranked: RankedOpportunity[] = [];
+  const anchorTokens = new Set<string>();
   let scannedPairs = 0;
   let skippedVenues = 0;
 
   const finish = (outcome: BlockScanOutcome["outcome"]): BlockScanOutcome => {
     ranked.sort((a, b) => b.rank - a.rank);
+    const deduped: RankedOpportunity[] = [];
+    const seenFingerprints = new Set<string>();
+    for (const entry of ranked) {
+      if (seenFingerprints.has(entry.opportunity.cycleFingerprint)) continue;
+      seenFingerprints.add(entry.opportunity.cycleFingerprint);
+      deduped.push(entry);
+    }
     return {
       outcome,
       stateBlock: input.sourceBlock,
       scannedPairs,
       swapTouchedPools: touched?.size ?? 0,
-      opportunities: ranked.slice(0, input.cfg.maxCandidates).map((entry) => entry.opportunity),
+      opportunities: deduped.slice(0, input.cfg.maxCandidates).map((entry) => entry.opportunity),
       debug: { skippedVenues },
     };
   };
@@ -110,6 +118,8 @@ export function detectBlockScanOpportunities(input: {
       minVenue.feeBps -
       maxVenue.feeBps;
     if (!Number.isFinite(estSpreadBps) || estSpreadBps <= input.cfg.minSpreadBps) continue;
+    anchorTokens.add(group.a);
+    anchorTokens.add(group.b);
 
     const flashToken = pickFlashToken(group.a, group.b, input.cfg.pricedTokens);
     if (!flashToken) continue;
@@ -148,6 +158,68 @@ export function detectBlockScanOpportunities(input: {
     };
     const depth = Math.max(1, Math.min(cheapVenue.depthProxy, richVenue.depthProxy));
     ranked.push({ opportunity, rank: estSpreadBps * Math.log10(depth) });
+  }
+
+  for (const anchorToken of anchorTokens) {
+    if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
+    const rings = buildTokenPaths(input.edges, anchorToken, anchorToken, {
+      maxHops: input.cfg.maxHops,
+      maxPoolsPerToken: 8,
+      maxPaths: 2000,
+      deadlineAtMs,
+    });
+    if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
+
+    for (const ring of rings) {
+      if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
+      const score = scoreRing(input.cache, input.sourceBlock, ring.edges);
+      if (!score || score.estSpreadBps <= input.cfg.minSpreadBps) continue;
+
+      const ringTokens = ringTokensWithoutRepeat(ring.edges);
+      const flashToken = pickRingFlashToken(ringTokens, input.cfg.pricedTokens);
+      if (!flashToken) continue;
+      const seedEdges = rotateRingEdges(ring.edges, flashToken);
+      if (!seedEdges) continue;
+
+      const firstVenue = readEdgeVenueMid(input.cache, input.sourceBlock, seedEdges[0]);
+      if (!firstVenue) continue;
+      const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
+      const spreadMultiplier = 1 + score.estSpreadBps / 10_000;
+      const minMid = firstVenue.mid / Math.max(spreadMultiplier, 1);
+      const sizing = estimateSizing(
+        firstVenue,
+        flashToken,
+        seedEdges[0].tokenIn.toLowerCase(),
+        seedEdges[0].tokenOut.toLowerCase(),
+        minMid,
+        firstVenue.mid,
+        score.estSpreadBps,
+        maxBorrow,
+      );
+      if (!sizing || sizing.searchCenter <= 8n) continue;
+
+      const rotatedRingTokens = ringTokensWithoutRepeat(seedEdges);
+      const canonicalRing = canonicalTokenRing(rotatedRingTokens);
+      const opportunity: BlockScanOpportunity = {
+        kind: "block-scan-arb",
+        sourceBlock: input.sourceBlock,
+        stateBlock: input.sourceBlock,
+        cycleId: canonicalRing.join("|"),
+        cycleFingerprint: cycleFingerprint(input.sourceBlock, rotatedRingTokens),
+        seedEdges,
+        flashToken,
+        searchSeed: {
+          startToken: flashToken,
+          searchCenter: sizing.searchCenter,
+          maxInput: sizing.maxInput,
+        },
+        leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
+        affectedPools: uniqueLowercase(seedEdges.map((edge) => edge.target)),
+        affectedTokens: canonicalRing,
+      };
+      const depth = Math.max(1, score.minDepth);
+      ranked.push({ opportunity, rank: score.estSpreadBps * Math.log10(depth) });
+    }
   }
 
   return finish("ran");
@@ -301,6 +373,90 @@ function findEdge(edges: TokenEdge[], tokenIn: string, tokenOut: string): TokenE
   return edges.find(
     (edge) => edge.tokenIn.toLowerCase() === tokenIn && edge.tokenOut.toLowerCase() === tokenOut,
   ) ?? null;
+}
+
+function readEdgeVenueMid(cache: PoolStateCache, sourceBlock: number, edge: TokenEdge): VenueMid | null {
+  return readVenueMid(
+    cache,
+    sourceBlock,
+    edge.tokenIn.toLowerCase(),
+    edge.tokenOut.toLowerCase(),
+    edge.target.toLowerCase(),
+    [edge],
+  );
+}
+
+function edgeMidTimesOneMinusFee(cache: PoolStateCache, sourceBlock: number, edge: TokenEdge): number | null {
+  const venue = readEdgeVenueMid(cache, sourceBlock, edge);
+  if (!venue || venue.feeBps >= 10_000) return null;
+  const adjusted = venue.mid * (1 - venue.feeBps / 10_000);
+  return Number.isFinite(adjusted) && adjusted > 0 ? adjusted : null;
+}
+
+function scoreRing(
+  cache: PoolStateCache,
+  sourceBlock: number,
+  edges: TokenEdge[],
+): { estSpreadBps: number; minDepth: number } | null {
+  if (edges.length === 0 || !isClosedContinuousRing(edges)) return null;
+  const tokens = ringTokensWithoutRepeat(edges);
+  if (new Set(tokens).size !== tokens.length) return null;
+  let logSum = 0;
+  let minDepth = Infinity;
+  for (const edge of edges) {
+    const adjustedMid = edgeMidTimesOneMinusFee(cache, sourceBlock, edge);
+    if (adjustedMid === null) return null;
+    const venue = readEdgeVenueMid(cache, sourceBlock, edge);
+    if (!venue) return null;
+    logSum += Math.log(adjustedMid);
+    minDepth = Math.min(minDepth, venue.depthProxy);
+  }
+  if (!Number.isFinite(logSum) || logSum <= 0 || !Number.isFinite(minDepth)) return null;
+  const estSpreadBps = (Math.exp(logSum) - 1) * 10_000;
+  return Number.isFinite(estSpreadBps) && estSpreadBps > 0 ? { estSpreadBps, minDepth } : null;
+}
+
+function isClosedContinuousRing(edges: TokenEdge[]): boolean {
+  if (edges.length === 0) return false;
+  for (let i = 1; i < edges.length; i++) {
+    if (edges[i - 1].tokenOut.toLowerCase() !== edges[i].tokenIn.toLowerCase()) return false;
+  }
+  return edges[edges.length - 1].tokenOut.toLowerCase() === edges[0].tokenIn.toLowerCase();
+}
+
+function ringTokensWithoutRepeat(edges: TokenEdge[]): string[] {
+  if (edges.length === 0) return [];
+  const tokens = [edges[0].tokenIn.toLowerCase(), ...edges.map((edge) => edge.tokenOut.toLowerCase())];
+  if (tokens.length > 1 && tokens[tokens.length - 1] === tokens[0]) tokens.pop();
+  return tokens;
+}
+
+function pickRingFlashToken(ringTokens: string[], pricedTokens: Map<string, { maxBorrow: bigint }>): string | null {
+  const tokens = ringTokens.map((token) => token.toLowerCase());
+  if (tokens.includes(WETH) && pricedTokens.has(WETH)) return WETH;
+  return tokens.find((token) => pricedTokens.has(token)) ?? null;
+}
+
+function rotateRingEdges(edges: TokenEdge[], startToken: string): TokenEdge[] | null {
+  const wanted = startToken.toLowerCase();
+  for (let i = 0; i < edges.length; i++) {
+    if (edges[i].tokenIn.toLowerCase() !== wanted) continue;
+    const rotated = [...edges.slice(i), ...edges.slice(0, i)];
+    if (isClosedContinuousRing(rotated) && rotated[0].tokenIn.toLowerCase() === wanted) return rotated;
+  }
+  return null;
+}
+
+function uniqueLowercase(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
 }
 
 function estimateSizing(
