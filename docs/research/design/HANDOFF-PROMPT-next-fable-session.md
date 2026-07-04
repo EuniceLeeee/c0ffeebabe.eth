@@ -139,6 +139,25 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
 > done-bar (round doc Step 4b) requires each confirmation round to INDEPENDENTLY re-run them.
 > This entry records the R-verify-1 outcome for audit only; the next round re-runs, it does not reuse.
 
+#### node reth reads — curve pool 0x6206ca315c2fcdd2a857b47efb285aa12c529a7a @ blocks 25455295–25455298 (BS-0-curve)
+- input: SSM read-only `eth_call`/`eth_getLogs` on the node's local reth (zero-CU), 2026-07-05; head
+  was 25460848 (block still in prune window). Selectors: A/fee/offpeg_fee_multiplier/stored_rates/
+  balances/coins/get_dy.
+- result: pool is **stableswap-ng** 2-coin, coins=[USDC, D166]. `A=200`, `fee=1000000` (1e10 denom),
+  `offpeg_fee_multiplier=100000000000`. Balances @25455296 boundary =
+  `[385138018042, 1272541181204127929026946]`. `stored_rates` @25455296 =
+  `[1e30, 893440000000000000]`; @25455297 (post-block) = `[1e30, 893771000000000000]` → **D166 has a
+  live rate oracle that updated INSIDE block 25455297 before txIndex 37** (+3.7bps). Only pool event
+  in 25455297 = the exemplar's own TokenExchange (txIndex 37). On-chain
+  `get_dy(1,0,2040627466925953875895)` @25455295 AND @25455296 = `1807346489`.
+- cross-check (local, bit-exact both ways): repo `curveNgGetDy` with boundary rates → 1807346489
+  (== on-chain get_dy); with execution rates → 1808005999 (== realized). **Boundary-state loop
+  surplus = −389319 (NOT +EV); +270191 exists only under the oracle-updated rate** — the exemplar's
+  trigger is the D166 rate-oracle update, not a pure block-boundary standing dislocation.
+- raw: scripts + outputs in session scratchpad (`curve-read.sh`, `curve-logs.sh`, `curve-rates2.sh`);
+  decision-relevant values all inline above and persisted into the fixture.
+- captured: R-2b-1 / 2026-07-05
+
 #### rule-12 gate suite (local `npm run searcher:*` + `test:learning-case`) — R-verify-1
 - result: ALL GREEN — blockscan-a0 19/19 · blockscan-scanner 10/10 · blockscan-solver-center 2/2 ·
   planner 15/15 + replay-fixtures 14/14 + high-spread universe · blockscan-contract 5/5 ·
