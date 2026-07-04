@@ -209,6 +209,10 @@ export function computeBidEth(
   return (expectedProfitEth * BigInt(opts.bribeBps)) / 10000n;
 }
 
+export function hashOnlySubmitDecision(rawTx: boolean, overlayExact: boolean, allowApprox: boolean): boolean {
+  return rawTx || overlayExact || allowApprox;
+}
+
 // Major DEX routers/aggregators — mempool server-side filter (route B). A
 // pending tx is only worth forking when tx.to is a tracked pool OR one of these
 // entrypoints; the fork receipt then reveals which pool was actually impacted.
@@ -482,7 +486,7 @@ async function main(): Promise<void> {
     `[searcher/live] evGate=${config.evGate ? "on" : "off"} minNetEth=${config.minNetEth} ` +
       `gasBufferMult=${(config.gasBufferMultX10 / 10).toFixed(1)}x ` +
       `profitHaircut=${(config.profitHaircutBps / 100).toFixed(0)}% ` +
-      `hashOnlySubmit=${config.allowHashOnlySubmit ? "ALLOWED" : "gated"}`,
+      `hashOnlySubmit=${config.allowHashOnlySubmit ? "all" : "exact-only"}`,
   );
   console.log(`[searcher/live] wallet=${config.wallet.address}`);
   console.log(`[searcher/live] botvm=${config.botvmAddress}`);
@@ -1723,19 +1727,17 @@ async function handleHint(
           continue;
         }
 
-        // Real-victim gate (Fix A): hash-only bundles reconstruct the victim with a
-        // SYNTHETIC overlay (whale swaps impact.amountIn). That overlay diverges from
-        // the real victim for EVERY adapter (not just curve) — measured: hash-only
-        // backruns that landed had NEGATIVE real profit (the sim's dislocation wasn't
-        // real). And hash-only victims overwhelmingly don't land at all (0/40). So
-        // only submit bundles that carry the REAL victim tx (mempool/rawTx path),
-        // whose on-fork apply matches what the builder re-sims. Unless explicitly
-        // re-enabled, skip every hash-only candidate at submit.
-        if (!rawTx && !ctx.config.allowHashOnlySubmit) {
+        // Real-victim / exact-overlay gate (Fix A): approximate hash-only bundles
+        // reconstruct the pending swap with a SYNTHETIC overlay (whale swaps
+        // impact.amountIn), which can inflate the sim and over-size the builder
+        // payment. Real-victim bundles carry rawTx; exact hash-only overlays use
+        // event-derived post-state. Approximate hash-only submit still requires
+        // the explicit override.
+        if (!hashOnlySubmitDecision(Boolean(rawTx), overlayExact, ctx.config.allowHashOnlySubmit)) {
           ctx.counters.finalVerifySkipped++;
           lastTerminalState = "no-profitable-quote";
           lastTerminalError =
-            `hash-only unverifiable (no real victim) route=${resolvedRouteSummary(resolved.root)}`;
+            `hash-only unverifiable (no real victim or exact overlay) route=${resolvedRouteSummary(resolved.root)}`;
 	          console.log(`[searcher/live] skip hash-only submit: ${lastTerminalError}`);
 	          emitPipelineDropped("submit_gate", "hash_only_unverifiable", lastTerminalError, {
 	            pathId: resolvedRouteSummary(resolved.root),

@@ -40,6 +40,7 @@
     "searcher:valueineth": "tsx src/searcher/test/value-in-eth.ts",
     "searcher:balanceslots": "tsx src/searcher/test/balance-slots.ts",
     "searcher:finalverifygate": "tsx src/searcher/test/final-verify-gate.ts",
+    "searcher:submit-gate": "node --import tsx src/searcher/test/hashonly-submit-gate.ts",
     "searcher:finaloverlayequiv": "tsx src/searcher/test/final-overlay-equiv.ts",
     "searcher:overlay-fidelity": "node --import tsx src/searcher/test/mevshare-overlay-fidelity.ts",
     "searcher:overlay-coverage": "node --import tsx src/searcher/test/overlay-venue-coverage.ts",
