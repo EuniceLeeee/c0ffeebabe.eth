@@ -104,22 +104,28 @@
 
 ---
 
-### F-006 | 2026-07-05 | ⏳ | MEV-Share submissions are relay-rejected "backrun not found" (post-flag blocker)
+### F-006 | 2026-07-05 | ✅ | MEV-Share `mev_sendBundle` 100% relay-rejected "backrun not found" = a POSTURE gate (not timing)
 - **Fact:** with D-001's flag ON, 100% of `mev_sendBundle` submissions to `flashbots-mev-share` return
   `http=200 {"code":-32000,"message":"backrun not found"}` → `accepted:false`. The submit path works; the
-  relay won't match the referenced hint. SSE connected + genuine hints ⇒ the hint is stale/unmatchable by
-  submit time (timing/one-shot or target-block), not a wrong source. Log: `/var/log/mev-live.log`
-  (`[submitter] flashbots-mev-share http=200 …`).
+  relay won't match the referenced hint. Log: `/var/log/mev-live.log` (`[submitter] flashbots-mev-share
+  http=200 …backrun not found`).
 - **Implication:** the arch review's "flag ON ⇒ inclusion via submitMevShareBundle" was over-optimistic —
-  the flag is necessary but NOT sufficient; the binding downstream constraint is mev_sendBundle reference
-  validity. [[project-mevshare-submit-flag-lever]]
-- **Diagnosed 2026-07-05 (per-submit, local reth):** of the 7 rejected, **6 referenced victim hashes are
-  not found on our full node at all** (never-landed pending/private txs) and **1 landed 51 blocks BEFORE
-  the block we pinned** (stale hint; landed 25463381 vs pinned 25463432). Our seen→submit latency is fine
-  (93–1256 ms) ⇒ **the cause is hint MATCHABILITY, not our speed**: we submit backruns for MEV-Share hints
-  whose txs never become landed matchable txs. Adjacent to [[project-phantom-victim-flow-admission-epic]]
-  (our +EV sims backrun pending swaps that revert/never-land). **Fix direction = hint selection/quality
-  (only submit for hints likely to land), not latency and not the submit gate.**
+  the flag is necessary but NOT sufficient. [[project-mevshare-submit-flag-lever]]
+- **CAUSE — corrected 2026-07-05 (dual-blind: fable diagnosis agent + a concurrent orchestrator, converged;
+  supersedes my first "timing/target-block" read):** the reject is **STRUCTURAL / POSTURE, not timing and
+  not a code bug.** Ruled out mechanically: target-block is NOT drifting (`main.ts:1988` target=latest+1;
+  0/12 submit-block > hint-block); the `{hash}` reference is spec-correct (http=200 *semantic* error, not
+  parse/400); and **latency is inert — 102ms and 131ms hint→submit BOTH still got "backrun not found"** (a
+  race would let a 100ms submit win). Decisive: **19/20 referenced victim txs NEVER land on-chain** (local
+  reth NOTFOUND; phantom), 1/20 mined ~10min *before* the hint (the only genuine stale-timing case). ⇒ the
+  relay does not hold these as backrun-matchable pending orders at reference time; our plain-searcher posture
+  (reconstruct-from-SSE-logs → `mev_sendBundle{hash}`) is **not offered open backrun for this flow.**
+  Corroborates [[project-phantom-victim-flow-admission-epic]] (~82% phantom) + [[project-atomic-backrun-market-ceiling]].
+- **Fix direction:** NOT latency / targetBlock / maxBlock (all proven inert). Real capture = a posture /
+  eligible-orderflow relationship = **STRATEGY / human gate**, not a code edit. Near-term inclusion instead
+  via mempool (has landed before) or protocol/credit-leg coverage to raise +EV opportunity density. Options
+  on the flag itself (operator's call): revert to 0 (0/20 convert — stop wasting submit+EV-gate cycles), or
+  keep (harmless; a rejected `mev_sendBundle` never broadcasts).
 
 ## Dead-ends / retired (high-value — don't circle back)
 
