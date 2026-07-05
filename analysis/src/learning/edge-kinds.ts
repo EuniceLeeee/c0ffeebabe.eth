@@ -1,5 +1,5 @@
-import type { EdgeKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
-import { lower, TOPICS } from "../registry/protocols.js";
+import type { EdgeKind, ProtocolAction } from "../../../listener/src/searcher/strategy-taxonomy.js";
+import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 
 const SWAP_TOPICS = topicSet([
   TOPICS.univ2Swap,
@@ -8,6 +8,8 @@ const SWAP_TOPICS = topicSet([
   TOPICS.curveTokenExchange,
   TOPICS.curveTokenExchangeUnderlying,
   TOPICS.balancerV2Swap,
+  TOPICS.pancakeV3Swap,
+  TOPICS.dodoSwap,
 ]);
 
 const FLASH_TOPICS = topicSet([
@@ -34,9 +36,20 @@ const CREDIT_TOPICS = topicSet([
   TOPICS.morphoWithdrawCollateral,
   TOPICS.aaveV3Borrow,
   TOPICS.aaveV3Repay,
+  // TODO(credit): Fluid Liquidity LogOperate — pending a verified signature (see registry/protocols.ts).
 ]);
 
-const STABLE_ORDER: EdgeKind[] = ["flash", "swap", "credit", "lp"];
+// Protocol legs: the protocol's OWN asset-conversion rule (Liquity trove ops, ERC4626 vault
+// entry/exit). Sky PSM BuyGem/SellGem pending a verified signature (see registry/protocols.ts).
+const PROTOCOL_TOPICS = topicSet([
+  TOPICS.liquityTroveOperation,
+  TOPICS.liquityTroveUpdated,
+  TOPICS.liquityBatchUpdated,
+  TOPICS.erc4626Deposit,
+  TOPICS.erc4626Withdraw,
+]);
+
+const STABLE_ORDER: EdgeKind[] = ["flash", "swap", "credit", "lp", "protocol"];
 
 export function deriveEdgeKindsFromLogs(logs: Array<{ topics?: unknown }> | undefined | null): EdgeKind[] {
   const seen = new Set<EdgeKind>();
@@ -47,9 +60,62 @@ export function deriveEdgeKindsFromLogs(logs: Array<{ topics?: unknown }> | unde
     if (SWAP_TOPICS.has(topic0)) seen.add("swap");
     if (CREDIT_TOPICS.has(topic0)) seen.add("credit");
     if (LP_TOPICS.has(topic0)) seen.add("lp");
+    if (PROTOCOL_TOPICS.has(topic0)) seen.add("protocol");
   }
-  // Protocol-leg detection (e.g. Liquity BOLD mint) is future work.
   return STABLE_ORDER.filter((kind) => seen.has(kind));
+}
+
+const ACTION_ORDER: ProtocolAction[] = ["mint", "redeem", "wrap", "unwrap", "convert", "stake", "unstake"];
+const ZERO_WORD = `0x${"0".repeat(64)}`;
+const ERC4626_DEPOSIT = lower(TOPICS.erc4626Deposit);
+const ERC4626_WITHDRAW = lower(TOPICS.erc4626Withdraw);
+const WETH_DEPOSIT = lower(TOPICS.wethDeposit);
+const WETH_WITHDRAWAL = lower(TOPICS.wethWithdrawal);
+const TRANSFER = lower(TOPICS.transfer);
+const WETH_ADDR = lower(ADDR.WETH);
+
+/**
+ * Topic-level protocol-action observations (evidence-based; no data decoding):
+ * - ERC4626 Deposit/Withdraw → "stake"/"unstake" (vault share entry/exit);
+ * - WETH Deposit/Withdrawal (WETH emitter only) → "wrap"/"unwrap";
+ * - generic mint: an ERC20 Transfer with from == 0x0 on a non-LP emitter → "mint" (an emitter that
+ *   also logs an LP topic in the same log set is an AMM pair minting its own LP token, not a
+ *   protocol mint). Covers BOLD-style tokens with no named protocol event (coffee tx-2 exemplar).
+ * Liquity TroveOperation/TroveUpdated/BatchUpdated topics classify the EDGE as "protocol"
+ * (deriveEdgeKindsFromLogs); the action direction (mint vs redeem vs adjust) is not decidable from
+ * topic0 alone, so no action is emitted for them directly — the minted token's Transfer-from-0x0
+ * carries the mint evidence.
+ */
+export function deriveProtocolActionsFromLogs(
+  logs: Array<{ topics?: unknown; address?: unknown }> | undefined | null,
+): ProtocolAction[] {
+  const all = [...(logs ?? [])];
+  const lpEmitters = new Set<string>();
+  for (const log of all) {
+    const topic0 = topic0Of(log);
+    if (topic0 && LP_TOPICS.has(topic0)) lpEmitters.add(addressOf(log));
+  }
+  const seen = new Set<ProtocolAction>();
+  for (const log of all) {
+    const topic0 = topic0Of(log);
+    if (!topic0) continue;
+    if (topic0 === ERC4626_DEPOSIT) seen.add("stake");
+    if (topic0 === ERC4626_WITHDRAW) seen.add("unstake");
+    if (topic0 === WETH_DEPOSIT && addressOf(log) === WETH_ADDR) seen.add("wrap");
+    if (topic0 === WETH_WITHDRAWAL && addressOf(log) === WETH_ADDR) seen.add("unwrap");
+    if (topic0 === TRANSFER && transferFromZero(log) && !lpEmitters.has(addressOf(log))) seen.add("mint");
+  }
+  return ACTION_ORDER.filter((action) => seen.has(action));
+}
+
+function transferFromZero(log: { topics?: unknown }): boolean {
+  if (!Array.isArray(log.topics) || log.topics.length < 3) return false;
+  const from = log.topics[1];
+  return typeof from === "string" && lower(from) === ZERO_WORD;
+}
+
+function addressOf(log: { address?: unknown }): string {
+  return typeof log.address === "string" ? lower(log.address) : "";
 }
 
 function topic0Of(log: { topics?: unknown }): string | null {

@@ -78,6 +78,22 @@ export const TOPICS = {
   morphoWithdrawCollateral: ethers.id("WithdrawCollateral(bytes32,address,address,address,uint256)"),
   aaveV3Borrow: ethers.id("Borrow(address,address,address,uint256,uint8,uint256,uint16)"),
   aaveV3Repay: ethers.id("Repay(address,address,address,uint256,bool)"),
+  // Liquity v2 — fixture-verified: all three topic0s match the emitter 0xa2895d6a… in
+  // test/fixtures/coffee-20260704/tx-2.json (0x962110f2… / 0x0fba2673… / 0xecf6daab…).
+  liquityTroveOperation: ethers.id("TroveOperation(uint256,uint8,uint256,uint256,uint256,int256,uint256,int256)"),
+  liquityTroveUpdated: ethers.id("TroveUpdated(uint256,uint256,uint256,uint256,uint256,uint256,uint256)"),
+  liquityBatchUpdated: ethers.id("BatchUpdated(address,uint8,uint256,uint256,uint256,uint256,uint256,uint256)"),
+  // ERC4626 — canonical EIP-4626 event signatures (spec-defined; not present in the coffee fixtures).
+  erc4626Deposit: ethers.id("Deposit(address,address,uint256,uint256)"),
+  erc4626Withdraw: ethers.id("Withdraw(address,address,address,uint256,uint256)"),
+  // Pancake v3 + DODO — fixture-verified: match coffee-20260704/tx-4.json (0x19b47279… / 0xc2c0245e…).
+  pancakeV3Swap: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
+  dodoSwap: ethers.id("DODOSwap(address,address,uint256,uint256,address,address)"),
+  // TODO(protocol): Sky PSM BuyGem/SellGem — no event ABI in-repo (only the sellGem call selector) and
+  // no fixture emits the PSM (0xf6e72Db5…); resolve the deployed DssLitePsm event signature from a
+  // verified source before adding a hash (do NOT invent one).
+  // TODO(credit): Fluid Liquidity LogOperate — same: no in-repo event ABI / fixture to verify against;
+  // candidate signatures tried against coffee tx-7's unresolved topics did not match.
 };
 
 export const CALL_SELECTORS = {

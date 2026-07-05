@@ -9,7 +9,7 @@ import {
   learningCaseFromPostmortem,
   type PostmortemReport,
 } from "../cli/bundle-postmortem.js";
-import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
+import { deriveEdgeKindsFromLogs, deriveProtocolActionsFromLogs } from "../learning/edge-kinds.js";
 import {
   advanceStatus,
   loadCases,
@@ -70,11 +70,70 @@ test("deriveEdgeKindsFromLogs classifies topic0 into stable edge kinds", () => {
   ]), ["lp"]);
 
   assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: [TOPICS.liquityTroveOperation] },
+    { topics: [TOPICS.liquityTroveUpdated] },
+    { topics: [TOPICS.liquityBatchUpdated] },
+  ]), ["protocol"]);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: [TOPICS.pancakeV3Swap] },
+    { topics: [TOPICS.dodoSwap] },
+    { topics: [TOPICS.erc4626Deposit] },
+  ]), ["swap", "protocol"]);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([
+    { topics: [TOPICS.erc4626Withdraw] },
+  ]), ["protocol"]);
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([
     { topics: ["0x0000000000000000000000000000000000000000000000000000000000000000"] },
   ]), []);
 
   assert.deepEqual(deriveEdgeKindsFromLogs(undefined), []);
   assert.deepEqual(deriveEdgeKindsFromLogs(null), []);
+});
+
+test("coffee tx-2 (Liquity BOLD mint) flips to [flash,swap,protocol] with a mint action", () => {
+  const tx2 = loadCoffeeFixture("2");
+
+  // Fixture-verification: the computed Liquity topic0s MUST be what the Liquity emitter actually
+  // logged (0x962110f2… / 0x0fba2673… / 0xecf6daab…) — a hash mismatch fails here, not silently.
+  const topic0s = new Set(tx2.receiptLogs.map((log) => log.topics[0]?.toLowerCase()));
+  assert.ok(topic0s.has(TOPICS.liquityTroveOperation.toLowerCase()), "tx-2 emits TroveOperation");
+  assert.ok(topic0s.has(TOPICS.liquityTroveUpdated.toLowerCase()), "tx-2 emits TroveUpdated");
+  assert.ok(topic0s.has(TOPICS.liquityBatchUpdated.toLowerCase()), "tx-2 emits BatchUpdated");
+
+  // Rule-12 flip: was ["flash","swap"] (protocol legs invisible), now the Liquity leg is seen.
+  assert.deepEqual(deriveEdgeKindsFromLogs(tx2.receiptLogs), ["flash", "swap", "protocol"]);
+  // BOLD (0x6440f144…) mints via Transfer(from=0x0) — the generic mint heuristic must observe it.
+  assert.ok(deriveProtocolActionsFromLogs(tx2.receiptLogs).includes("mint"));
+});
+
+test("coffee tx-4 recognizes the pancake-v3 and DODO swap topics", () => {
+  const tx4 = loadCoffeeFixture("4");
+
+  const topic0s = new Set(tx4.receiptLogs.map((log) => log.topics[0]?.toLowerCase()));
+  assert.ok(topic0s.has(TOPICS.pancakeV3Swap.toLowerCase()), "tx-4 emits pancake-v3 Swap");
+  assert.ok(topic0s.has(TOPICS.dodoSwap.toLowerCase()), "tx-4 emits DODOSwap");
+
+  assert.ok(deriveEdgeKindsFromLogs(tx4.receiptLogs).includes("swap"));
+  // The new topics classify as swap on their own (not just via tx-4's uni legs).
+  assert.deepEqual(deriveEdgeKindsFromLogs([{ topics: [TOPICS.pancakeV3Swap] }]), ["swap"]);
+  assert.deepEqual(deriveEdgeKindsFromLogs([{ topics: [TOPICS.dodoSwap] }]), ["swap"]);
+});
+
+test("coffee tx-7 (unresolved venue) derives without crashing — explicit unknown, not a silent misclassification", () => {
+  // tx-7's three topic0s (0x554841bb…, 0x6c51882b…, 0x8580f507…) have no verified signature yet
+  // (plausibly Fluid DEX; candidate signatures did not match). Until the venue is resolved we assert
+  // only that derivation is total (no crash) — no specific classification is pinned here.
+  const tx7 = loadCoffeeFixture("7");
+  assert.equal(tx7.arbPools.length, 0);
+  const kinds = deriveEdgeKindsFromLogs(tx7.receiptLogs);
+  const actions = deriveProtocolActionsFromLogs(tx7.receiptLogs);
+  assert.ok(Array.isArray(kinds));
+  assert.ok(Array.isArray(actions));
+  // None of tx-7's logs are Transfers, so the mint heuristic must not fire on its zero-topic1 log.
+  assert.equal(actions.includes("mint"), false);
 });
 
 test("learningCaseFromPostmortem carries derived edgeKinds and preserves old-report swap fallback", () => {
@@ -207,7 +266,7 @@ function learningCaseFromCoffeeFixture(fixture: CoffeeFixture, txShape: TxShapeR
     learning_case_id: `coffee-${fixture.txHash}-${txShape.shape}`,
     status: strategy_kind === "unknown" ? "manual_required" : "open",
     strategy_kind,
-    edge_kinds: txShape.arb_pools.length > 0 ? ["swap"] : [],
+    edge_kinds: deriveEdgeKindsFromLogs(fixture.receiptLogs),
     trigger: "competitor_not_seen",
     competitor_tx: fixture.txHash,
     source_block: fixture.block - 1,
@@ -238,9 +297,11 @@ function baseLearningCase(overrides: Partial<LearningCase> & Pick<
 
 function loadCoffeeFixtures(): CoffeeFixture[] {
   const index = JSON.parse(readFileSync(join(COFFEE_DIR, "index.json"), "utf8")) as Array<{ label: string }>;
-  return index.map((entry) =>
-    JSON.parse(readFileSync(join(COFFEE_DIR, `tx-${entry.label}.json`), "utf8")) as CoffeeFixture
-  );
+  return index.map((entry) => loadCoffeeFixture(entry.label));
+}
+
+function loadCoffeeFixture(label: string): CoffeeFixture {
+  return JSON.parse(readFileSync(join(COFFEE_DIR, `tx-${label}.json`), "utf8")) as CoffeeFixture;
 }
 
 function readJsonFixture<T>(path: string): T {
