@@ -12,6 +12,13 @@ consecutive_done_confirmations: 0
 > section for the ordered slice list + authorization scope. Counter reset to 0: the relay runs again
 > and the two-confirmation bar now applies to Phase 2b completion.
 >
+> **R-2b-9 (2026-07-05 night) — fast-path confirmed, still current.** Executed R-2b-8's fast-path
+> verbatim: no commits after `8d02cc5`, no operator input in git log / impl-plan §9.4 re-opening the
+> tail or handing a Track-B slice → verified HEAD builds (listener tsc CLEAN, analysis tsc CLEAN,
+> `test:venue-discovery` 2/2) and closed as deferred. No code (correctly — the whole Phase-2b tail is
+> operator-DEFERRED behind Track A/B; live-window comparisons belong to the ~2h hermes cron). The
+> R-2b-8 fast-path stays the operative check for future rounds. Counter stays 0.
+>
 > **R-2b-8 (2026-07-05 evening) — R-2b-7's fast-path is SUPERSEDED; new fast-path here.** The operator
 > acted attended: flag flipped + measured (decision-log D-001, run `0bf0319a` — submit wall gone but
 > ZERO inclusion) and F-006 pinned the 100% relay-reject ("backrun not found") as a STRUCTURAL posture

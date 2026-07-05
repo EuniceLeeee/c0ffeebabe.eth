@@ -326,6 +326,19 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
   git log/§9.4 for operator re-open; else verify HEAD builds + close as deferred). Counter stays 0,
   IN_PROGRESS — deferred tail still exists, so no done-confirmation is claimable.
 
+#### R-2b-9 · 2026-07-05
+- blocker/gap: none new — pure fast-path round. Zero commits after `8d02cc5` (R-2b-8's own), no
+  operator input in git log or impl-plan §9.4 that re-opens the Phase-2b tail or hands the relay a
+  Track-B slice; the tail (BS-3 exemplar, CR-5b–e, BS-lane, BS-4, CS-*/D/CR-8) stays
+  operator-DEFERRED behind Track A/B per the §9.4 reorder.
+- options + choice: (a) pick up a deferred-tail slice unattended — rejected, contradicts the
+  operator's same-day defer (R-2b-8 reasoning holds unchanged). (b) run live-window analysis —
+  rejected, the ~2h autonomous-hermes-round cron owns live comparisons (R-2b-8 terminus). Chose (c)
+  the recorded fast-path verbatim: verify HEAD builds + close as deferred, no code.
+- outcome: HEAD `8d02cc5` verified green — listener tsc CLEAN, analysis tsc CLEAN,
+  `test:venue-discovery` 2/2 (last-touched surface). No slice landed (correctly — none available).
+  Counter stays 0, IN_PROGRESS; fast-path remains valid for the next round.
+
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).
 > NOTE: the rule-12 *gate re-runs* below are deliberately NOT cached-to-skip — the 2-round
