@@ -2,6 +2,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadCases, type LearningCase } from "../learning/learning-case.js";
+import {
+  METHOD_TRACE_FIELDS,
+  parseMethodTraceFields,
+  type MethodTraceField,
+} from "../learning/method-trace.js";
 
 /** Walk up from a path to the git repo root (dir containing .git); fallback = cwd. */
 function repoRoot(from: string): string {
@@ -60,19 +65,6 @@ function isPlaceholder(v: string): boolean {
     || /<[A-Za-z][^<>]*>/.test(t)
     || /^(todo|tbd|n\/a|na|fill|pending)$/i.test(t);
 }
-
-const METHOD_TRACE_FIELDS = [
-  "task_class",
-  "tools_used",
-  "evidence_order",
-  "analysis_frame",
-  "sanity_checks",
-  "tool_gap",
-  "codify_next",
-  "distill_for_opus",
-] as const;
-
-type MethodTraceField = typeof METHOD_TRACE_FIELDS[number];
 
 const TASK_CLASS_VALUES = [
   "competitor_path",
@@ -217,16 +209,12 @@ function emitMethodTraceBlockErrors(
 
 function validateMethodTraceBlock(block: string, cases: LearningCase[]): MethodTraceBlockValidation {
   const fieldErrors: string[] = [];
-  const values: Record<MethodTraceField, string> = Object.fromEntries(
-    METHOD_TRACE_FIELDS.map((field) => [field, ""]),
-  ) as Record<MethodTraceField, string>;
+  const values: Record<MethodTraceField, string> = parseMethodTraceFields(block);
+  values.task_class = stripInlineComment(values.task_class);
 
   for (const f of METHOD_TRACE_FIELDS) {
-    const re = new RegExp(`^\\s*${f}\\s*:(.*)$`, "mi");
-    const hit = block.match(re);
-    const value = f === "task_class" ? stripInlineComment(hit?.[1] ?? "") : (hit?.[1] ?? "").trim();
-    values[f] = value;
-    if (!hit || isPlaceholder(value) || isUnfilledMenu(value)) {
+    const value = values[f];
+    if (isPlaceholder(value) || isUnfilledMenu(value)) {
       fieldErrors.push(`Method Trace missing/blank field: ${f}`);
       continue;
     }
