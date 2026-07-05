@@ -1,8 +1,5 @@
-import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { rowsToVenueInputs, type BqLogRow } from "../discovery/bq-rows.js";
 import {
@@ -48,26 +45,52 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await main();
 }
 
-/** Auto-detect NDJSON (line starts with '{') vs a BigQuery CSV export (header row). */
+/** Auto-detect: JSON array ('['), NDJSON ('{' per line), or a BigQuery CSV export (header row).
+ *  BigQuery JSON stringifies numbers, so string block_number/log_index/receipt_status are coerced. */
 async function readRows(path: string): Promise<BqLogRow[]> {
-  const input = inputStream(path);
-  const reader = createInterface({ input, crlfDelay: Infinity });
-  const lines: string[] = [];
-  for await (const line of reader) {
-    if (line.trim()) lines.push(line);
+  const content = await readAll(path);
+  const trimmed = content.trimStart();
+  if (!trimmed) return [];
+  if (trimmed[0] === "[") {
+    const arr = JSON.parse(content) as unknown[];
+    if (!Array.isArray(arr)) throw new Error("JSON input must be an array of row objects");
+    return arr.map((r) => coerceRow(r as Record<string, unknown>));
   }
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length === 0) return [];
-  return lines[0].trimStart().startsWith("{") ? parseNdjson(lines) : parseCsv(lines);
+  if (lines[0].trimStart().startsWith("{")) {
+    return lines.map((line, i) => {
+      try {
+        return coerceRow(JSON.parse(line.trim()) as Record<string, unknown>);
+      } catch (error) {
+        throw new Error(`Invalid NDJSON at line ${i + 1}: ${(error as Error).message}`);
+      }
+    });
+  }
+  return parseCsv(lines);
 }
 
-function parseNdjson(lines: string[]): BqLogRow[] {
-  return lines.map((line, i) => {
-    try {
-      return JSON.parse(line.trim()) as BqLogRow;
-    } catch (error) {
-      throw new Error(`Invalid NDJSON at line ${i + 1}: ${(error as Error).message}`);
-    }
-  });
+async function readAll(path: string): Promise<string> {
+  if (path) return readFile(path, "utf8");
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function coerceRow(row: Record<string, unknown>): BqLogRow {
+  return {
+    ...(row as unknown as BqLogRow),
+    block_number: toNum(row.block_number),
+    transaction_index: toNum(row.transaction_index),
+    log_index: toNum(row.log_index),
+    receipt_status: toNum(row.receipt_status),
+  };
+}
+
+function toNum(v: unknown): number | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isNaN(n) ? undefined : n;
 }
 
 /** BigQuery CSV: header line + rows; the `topics` cell is a quoted "[0x..,0x..]" array. */
@@ -126,10 +149,6 @@ function parseBqTopics(raw: string | undefined): string[] {
   const inner = raw.trim().replace(/^\[/, "").replace(/\]$/, "").trim();
   if (!inner) return [];
   return inner.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-function inputStream(path: string): Readable {
-  return path ? createReadStream(path, { encoding: "utf8" }) : process.stdin;
 }
 
 async function readStore(path: string): Promise<AggregatedVenue[]> {
