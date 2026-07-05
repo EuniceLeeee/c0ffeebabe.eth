@@ -45,3 +45,16 @@
 ## 5. 回归验证
 - **重跑方式:** 新会话让Opus(加载更新后的规则)重答原问题
 - **结果:** 差距消除 / 部分消除 / 无效(无效→撤回规则,在此注明)
+
+## 6. Method Trace (Fable 每轮手工分析必附;缺失 = 无效交付)
+<!-- 这是给 Opus 蒸馏的"项目方法胶囊",不是隐藏思维链。字段规范见 docs/research/HERMES.md rule 16。 -->
+```
+task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+tools_used:
+evidence_order:
+analysis_frame:
+sanity_checks:
+tool_gap:         none | <工具没抓到什么>
+codify_next:      no | <要加的 field/test/gate/tooling_defect + 目标文件>
+distill_for_opus: <这轮 Opus 应学到的一条可复用规则>
+```

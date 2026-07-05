@@ -230,3 +230,18 @@ Non-deterministic → before/after metrics (no replay):
 - **live_allowed:** yes / no   # yes only if all hard gates passed
 - **config changes:**
 - **what this run should answer:**
+
+---
+
+## Method Trace (MANDATORY if this round used Fable manual analysis — missing = invalid handoff, hermes-gate blocks)
+> See HERMES.md rule 16 for the full field spec. If `tool_gap` != none → create + close a `tooling_defect` LearningCase.
+```
+task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+tools_used:
+evidence_order:
+analysis_frame:
+sanity_checks:
+tool_gap:         none | <what the tool missed>
+codify_next:      no | <field/test/gate/tooling_defect + target file>
+distill_for_opus: <one reusable rule Opus should learn>
+```

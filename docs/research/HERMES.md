@@ -108,6 +108,30 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
 14. **Multi-round = user-away autonomy.** >1 round means the user is NOT at the keyboard: self-serve architecture/scope calls (pick the option best for the extraction goal + PROCEED + **record the decision: choice + rationale + explicit not-doing**), do NOT block with `AskUserQuestion`. This includes **auto-firing the rule-13 arch review when its trigger hits — just run it; do NOT ask "should I run the architecture review?"**. Real stop conditions still wait for the human (go-live/broadcast, CU-cap, destructive). **ENFORCED** by `scripts/hooks/guard-workflow-noask.py` (`touch /tmp/mev-workflow-active` at start; the hook blocks AskUserQuestion unless it names a real stop condition — full rationale in the hook's docstring).
 15. **A status report is NOT a stop.** While `/tmp/mev-workflow-active` exists, every turn ends with either a work-continuing / self-re-invoking tool call OR an explicit real stop condition — reporting rides ALONGSIDE the next action, never instead of it. **ENFORCED** by `scripts/hooks/guard-workflow-nostall.py` (full rationale in the hook's docstring).
 16. **Fable manual analysis is also a TEST of our tooling — codify its findings (hard).** The fresh fable analyst works from raw data with ad-hoc curl/jq, routinely finding where our permanent scripts are wrong (valuation artifacts) or missing a metric. When it exposes a gap, the loop MUST fix/extend the script (Codex writes, Claude gates) — treat it like a rule-13 finding (`owner` + `carry_to_round`, BLOCKS cycle-close). *(Honest: public-mempool membership for out-of-window txs + positive MEV-Share identification are NOT determinable from data we hold; `sender_flow` returns labeled-confidence proxies, never a fabricated proof.)*
+    - **Method Trace (MANDATORY — the auditable frame, not the hidden chain-of-thought).** Every Fable
+      manual-analysis handoff MUST end with a `## Method Trace`. **Missing Method Trace = invalid handoff**
+      (`hermes-gate` enforces its presence + fields). It is not "how it thought" — it is *what tools it ran,
+      in what order it verified, what frame it judged by, which tool-miss it caught, and which rule Opus
+      should learn.* This is the reusable project-method asset that trains/constrains Opus (distilled into
+      `docs/distill/`), and it feeds the tooling-defect close loop: **if `tool_gap` != `none`, a
+      `tooling_defect` LearningCase MUST be created and closed (`codify_commit` or `human_killed`) before
+      cycle-close** (see rule 17 / the `tooling_defect` gate in `hermes-gate`).
+      ```
+      ## Method Trace
+      task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+      tools_used:       - <tool / command / file>   (structured tool BEFORE ad-hoc curl/jq)
+      evidence_order:   1. structured tool output  2. raw tx/receipt/trace  3. repo code path  4. compared to taxonomy
+      analysis_frame:   - strategy_kind first, edge_kind second
+                        - comparable vs non-comparable before gap classification
+                        - protocol constraint vs market PnL
+                        - source visibility before funnel attribution
+                        - fixed vs implemented via replay flip
+      sanity_checks:    - gross/net/block-netting  - same tx/block/source verified
+                        - pool-in-graph vs venue-adapter separated  - landed/stale/phantom hint  - no positive-leg-only PnL
+      tool_gap:         none | <tool missed: native-ETH delta / one-leg inventory / protocol mint / stale hint / …>
+      codify_next:      no | <field/test/gate/tooling_defect to add — name the target file/tool>
+      distill_for_opus: <one reusable rule Opus should learn from this round>
+      ```
 17. **Tool-first, then codify-the-recurring-probe (orchestrator-side companion to 16).** BEFORE hand-writing a scratchpad analysis, CHECK the toolset (`analysis/src/cli/*`, the LearningCase `PrimaryGap` store `analysis/src/learning/learning-case.ts`, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it. A scratchpad analysis run a SECOND time, or mapping to an existing taxonomy, MUST be codified before cycle-close (same teeth as 13/16).
 
 ## Boundary (CLI-orchestrated by Claude)
