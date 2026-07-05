@@ -56,9 +56,8 @@ function fail(msg: string): void {
 function isPlaceholder(v: string): boolean {
   const t = v.trim();
   return t === ""
-    || t.startsWith("<")
-    || /<[^>]+>/.test(t)
-    || t.includes(" | ")
+    || /^<[A-Za-z]/.test(t)
+    || /<[A-Za-z][^<>]*>/.test(t)
     || /^(todo|tbd|n\/a|na|fill|pending)$/i.test(t);
 }
 
@@ -71,7 +70,34 @@ const METHOD_TRACE_FIELDS = [
   "tool_gap",
   "codify_next",
   "distill_for_opus",
-];
+] as const;
+
+type MethodTraceField = typeof METHOD_TRACE_FIELDS[number];
+
+const TASK_CLASS_VALUES = [
+  "competitor_path",
+  "bundle_postmortem",
+  "architecture_review",
+  "replay_fixture",
+  "protocol_leg",
+] as const;
+const TASK_CLASS_MENU = TASK_CLASS_VALUES.join(" | ");
+const TASK_CLASS_SET = new Set<string>(TASK_CLASS_VALUES);
+const METHOD_TRACE_TEMPLATE_MENUS = new Set([
+  TASK_CLASS_MENU,
+  "none | <what the tool missed>",
+  "no | <field/test/gate/tooling_defect to add — name the target file/tool>",
+  "manual-onchain-trace | live-loss-watch",
+]);
+
+function stripInlineComment(v: string): string {
+  return v.replace(/#.*$/, "").trim();
+}
+
+function isUnfilledMenu(v: string): boolean {
+  const t = v.trim();
+  return METHOD_TRACE_TEMPLATE_MENUS.has(t) || (t.includes(" | ") && /<[A-Za-z][^<>]*>/.test(t));
+}
 
 const ARCH_AXES: { key: string; re: RegExp }[] = [
   { key: "strategy_source", re: /strategy[\s_/-]*source/i },
@@ -128,22 +154,25 @@ export function validateMethodTrace(
     return;
   }
 
-  const blockFailures: string[] = [];
-  for (let i = 0; i < blocks.length; i++) {
-    const errors = validateMethodTraceBlock(blocks[i], cases);
-    if (errors.length === 0) {
-      const taskClass = (blocks[i].match(/^\s*task_class\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
-      if (taskClass === "architecture_review") validateArchitectureCoverage(md);
-      return;
+  const results = blocks.map((block) => validateMethodTraceBlock(block, cases));
+  const fieldComplete = results.filter((result) => result.fieldErrors.length === 0);
+  if (fieldComplete.length === 0) {
+    for (let i = 0; i < results.length; i++) {
+      emitMethodTraceBlockErrors(i, blocks.length, [...results[i].fieldErrors, ...results[i].crossErrors]);
     }
-    const prefix = blocks.length === 1 ? "" : `Method Trace block ${i + 1}: `;
-    for (const err of errors) blockFailures.push(`${prefix}${err}`);
+    return;
   }
-  for (const err of blockFailures) fail(err);
+
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].fieldErrors.length === 0) {
+      emitMethodTraceBlockErrors(i, blocks.length, results[i].crossErrors);
+    }
+  }
+  if (fieldComplete.some((result) => result.taskClass === "architecture_review")) validateArchitectureCoverage(md);
 }
 
 export function validateArchitectureCoverage(md: string): void {
-  const m = md.match(/##\s*Architecture Coverage Matrix[\s\S]*?(?=\n##\s|$)/i);
+  const m = md.match(/(?:^|\n)##\s*Architecture Coverage Matrix[\s\S]*?(?=\n##\s|$)/i);
   if (!m) {
     fail("task_class:architecture_review but no `## Architecture Coverage Matrix` section — the 12-axis "
       + "matrix is mandatory (HERMES rule 13/16).");
@@ -153,37 +182,71 @@ export function validateArchitectureCoverage(md: string): void {
   const rows = m[0]
     .split("\n")
     .filter((l) => l.trim().startsWith("|") && !/^\s*\|[\s:|-]+\|?\s*$/.test(l));
+  const remaining = [...rows];
   for (const axis of ARCH_AXES) {
-    const row = rows.find((r) => axis.re.test((r.split("|").map((c) => c.trim())[1]) ?? ""));
-    if (!row) {
+    const idx = remaining.findIndex((r) => axis.re.test((r.split("|").map((c) => c.trim())[1]) ?? ""));
+    if (idx < 0) {
       fail(`Architecture Coverage Matrix missing axis: ${axis.key}`);
       continue;
     }
+    const row = remaining.splice(idx, 1)[0];
     const decision = (row.split("|").map((c) => c.trim())[2]) ?? "";
     if (isPlaceholder(decision)) fail(`Architecture Coverage Matrix axis ${axis.key}: decision cell blank/placeholder`);
   }
 }
 
-function validateMethodTraceBlock(block: string, cases: LearningCase[]): string[] {
-  const errors: string[] = [];
+type MethodTraceBlockValidation = {
+  fieldErrors: string[];
+  crossErrors: string[];
+  taskClass: string;
+};
+
+function emitMethodTraceBlockErrors(
+  index: number,
+  blockCount: number,
+  errors: string[],
+): void {
+  const prefix = blockCount === 1 ? "" : `Method Trace block ${index + 1}: `;
+  for (const err of errors) fail(`${prefix}${err}`);
+}
+
+function validateMethodTraceBlock(block: string, cases: LearningCase[]): MethodTraceBlockValidation {
+  const fieldErrors: string[] = [];
+  const values: Record<MethodTraceField, string> = Object.fromEntries(
+    METHOD_TRACE_FIELDS.map((field) => [field, ""]),
+  ) as Record<MethodTraceField, string>;
+
   for (const f of METHOD_TRACE_FIELDS) {
     const re = new RegExp(`^\\s*${f}\\s*:(.*)$`, "mi");
     const hit = block.match(re);
-    if (!hit || isPlaceholder(hit[1] ?? "")) errors.push(`Method Trace missing/blank field: ${f}`);
+    const value = f === "task_class" ? stripInlineComment(hit?.[1] ?? "") : (hit?.[1] ?? "").trim();
+    values[f] = value;
+    if (!hit || isPlaceholder(value) || isUnfilledMenu(value)) {
+      fieldErrors.push(`Method Trace missing/blank field: ${f}`);
+      continue;
+    }
+    if (f === "task_class" && !TASK_CLASS_SET.has(value)) {
+      fieldErrors.push(`Method Trace task_class invalid: ${value} — must be one of ${TASK_CLASS_MENU}`);
+    }
   }
-  const toolGap = (block.match(/^\s*tool_gap\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
-  const codifyNext = (block.match(/^\s*codify_next\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
-  const namesToolGap = toolGap !== "" && !/^(none|no)\b/i.test(toolGap);
+
+  const crossErrors: string[] = [];
+  const toolGap = values.tool_gap;
+  const codifyNext = values.codify_next;
+  const namesToolGap = toolGap !== ""
+    && !isPlaceholder(toolGap)
+    && !isUnfilledMenu(toolGap)
+    && !/^(none|no)\b/i.test(toolGap);
   if (namesToolGap && /^(no|none)\b/i.test(codifyNext)) {
-    errors.push("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
+    crossErrors.push("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
       + "(create a tooling_defect LearningCase).");
   }
   // Global-store scoped: an old case satisfies "filed"; per-window/per-gap matching is a future tightening.
   if (namesToolGap && !cases.some((c) => c.tooling_defect)) {
-    errors.push("Method Trace names a tool_gap but no tooling_defect LearningCase is filed in the store — "
+    crossErrors.push("Method Trace names a tool_gap but no tooling_defect LearningCase is filed in the store — "
       + "rule 16 requires the gap be filed as a case (then codified or human_killed).");
   }
-  return errors;
+  return { fieldErrors, crossErrors, taskClass: values.task_class };
 }
 
 function loadCasesForToolingGate(): LearningCase[] {
@@ -390,7 +453,7 @@ function validateCoverageKpi(json: any): void {
   }
 }
 
-function validateManualArtifact(
+export function validateManualArtifact(
   json: any,
   win: { from: number; to: number },
   watchlist: string[],

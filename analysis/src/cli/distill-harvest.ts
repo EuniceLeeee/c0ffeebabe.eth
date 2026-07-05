@@ -36,11 +36,12 @@ function repoRoot(from: string): string {
 function isPlaceholder(v: string): boolean {
   const t = v.trim();
   return t === ""
-    || t.startsWith("<")
-    || /<[^>]+>/.test(t)
-    || t.includes(" | ")
+    || /^<[A-Za-z]/.test(t)
+    || /<[A-Za-z][^<>]*>/.test(t)
     || /^(todo|tbd|n\/a|na|fill|pending)$/i.test(t);
 }
+
+const TASK_CLASS_MENU = "competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg";
 
 function parseField(block: string, field: MethodTraceField): string {
   const re = new RegExp(`^\\s*${field}\\s*:(.*)$`, "mi");
@@ -52,7 +53,7 @@ function parseTrace(block: string, sourceFile: string, blockIndex: number, md: s
     METHOD_TRACE_FIELDS.map((field) => [field, parseField(block, field)]),
   ) as Record<MethodTraceField, string>;
 
-  if (isPlaceholder(fields.task_class)) return null;
+  if (isPlaceholder(fields.task_class) || fields.task_class === TASK_CLASS_MENU) return null;
 
   return {
     ...fields,
@@ -65,7 +66,7 @@ function parseTrace(block: string, sourceFile: string, blockIndex: number, md: s
 }
 
 function extractArchitectureMatrix(md: string): string {
-  const section = md.match(/##\s*Architecture Coverage Matrix[\s\S]*?(?=\n##\s|$)/i)?.[0] ?? "";
+  const section = md.match(/(?:^|\n)##\s*Architecture Coverage Matrix[\s\S]*?(?=\n##\s|$)/i)?.[0] ?? "";
   return section
     .split(/\r?\n/)
     .filter((line) => line.trim().startsWith("|"))

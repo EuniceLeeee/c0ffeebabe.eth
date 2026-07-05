@@ -49,6 +49,7 @@ window_blocks:        # <from>..<to>
 watchlist:            # 0xc0ffee...,0xae2f...
 artifact:             # docs/research/reports/step1-<run_id>.json  (must include coverage_kpi)
 method:               # manual-onchain-trace | live-loss-watch
+fable_manual: no      # yes only when the fable-5 blocker-finder handoff ran
 ```
 
 ## Findings Ledger  <!-- rule 13: no orphan findings -->

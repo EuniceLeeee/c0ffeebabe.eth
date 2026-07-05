@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import {
   fails,
+  validateManualArtifact,
   validateMethodTrace,
   validateStep1RequiredFields,
   validateToolingDefects,
 } from "../cli/hermes-gate.js";
 import type { LearningCase } from "../learning/learning-case.js";
+
+const COFFEEBABE = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
+const TEST_POOL = "0x1111111111111111111111111111111111111111";
 
 const checks: Array<() => void> = [
   () => expectFail("open tooling defect blocks", () => {
@@ -129,6 +133,79 @@ const checks: Array<() => void> = [
   () => expectFail("raw Method Trace menu text is blank", () => {
     validateMethodTrace(menuTraceMd(), step1({ fable_manual: "yes" }), []);
   }, "Method Trace missing/blank field: task_class", "Method Trace missing/blank field: tool_gap"),
+  () => expectPass("bracket-like shipped values are not placeholders", () => {
+    validateManualArtifact(
+      manualArtifact({ dominant_drop: "<=1 tx repeated across >=3 streak", evidence: "WETH<->USDT" }),
+      { from: 1, to: 2 },
+      [COFFEEBABE],
+    );
+  }),
+  () => expectFail("real angle-bracket placeholders still fail", () => {
+    validateManualArtifact(
+      manualArtifact({ dominant_drop: "<from>", evidence: "<FILL>" }),
+      { from: 1, to: 2 },
+      [COFFEEBABE],
+    );
+  }, "run_analysis.dominant_drop missing", "evidence missing"),
+  () => expectPass("shell pipeline in tools_used is not a placeholder", () => {
+    validateMethodTrace(
+      validTraceMd().replace(/^tools_used:.*$/m, "tools_used: curl -s $RPC | jq '.result', cast run"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
+  () => expectFail("unfilled task_class menu is blank", () => {
+    validateMethodTrace(
+      validTraceMd().replace(/^task_class:.*$/m, "task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "Method Trace missing/blank field: task_class"),
+  () => expectFail("unfilled tool_gap menu is blank", () => {
+    validateMethodTrace(
+      validTraceMd().replace(/^tool_gap:.*$/m, "tool_gap: none | <what the tool missed>"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "Method Trace missing/blank field: tool_gap"),
+  () => expectFail("later architecture trace without matrix is not masked by earlier valid trace", () => {
+    validateMethodTrace(`${validTraceMd()}\n${archTraceMd()}`, step1({ fable_manual: "yes" }), []);
+  }, "task_class:architecture_review", "no `## Architecture Coverage Matrix` section"),
+  () => expectFail("later tool gap with no codify case is not masked by earlier valid trace", () => {
+    validateMethodTrace(`${validTraceMd()}\n${validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^codify_next:.*$/m, "codify_next: no")}`, step1({ fable_manual: "yes" }), []);
+  }, "Method Trace block 2: Method Trace tool_gap != none", "no tooling_defect LearningCase is filed"),
+  () => expectFail("invalid task_class spelling fails", () => {
+    validateMethodTrace(
+      archTraceMd().replace(/^task_class:.*$/m, "task_class: architecture-review"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "Method Trace task_class invalid: architecture-review", "must be one of"),
+  () => expectPass("architecture_review task_class allows inline comment", () => {
+    validateMethodTrace(
+      archTraceMd(archMatrix()).replace(/^task_class:.*$/m, "task_class: architecture_review   # per rule 13"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
+  () => expectFail("architecture matrix rows are consumed by first matching axis", () => {
+    validateMethodTrace(
+      archTraceMd(archMatrix()
+        .replace("| universe/admission | covered |", "| pool universe admission & freshness | covered |")
+        .replace(/^\| state\/freshness \|.*\n/m, "")),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "Architecture Coverage Matrix missing axis: state_freshness"),
+  () => expectPass("inline code mention of architecture matrix header is ignored", () => {
+    validateMethodTrace(
+      archTraceMd(`\nReviewer note: include a \`## Architecture Coverage Matrix\` table in the handoff.\n${archMatrix()}`),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
   () => expectFail("named tool gap requires filed tooling defect case", () => {
     validateMethodTrace(validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
@@ -229,6 +306,50 @@ function step1(overrides: Partial<Record<string, string>> = {}): Record<string, 
   };
 }
 
+function manualArtifact(overrides: { dominant_drop?: string; evidence?: string } = {}): any {
+  return {
+    window: { from: 1, to: 2 },
+    run_analysis: {
+      funnel: { opportunities: 1, plans: 0 },
+      dominant_drop: overrides.dominant_drop ?? "coverage_gap",
+      events_source: "events.jsonl",
+    },
+    intake_audit: {
+      pending_received: 1,
+      pending_filtered: 0,
+      mevshare_enabled: true,
+    },
+    watchlist: [COFFEEBABE],
+    findings: [{
+      eoa: COFFEEBABE,
+      swept: true,
+      txCount: 1,
+      method: "nonce delta",
+      txs: [{
+        hash: `0x${"1".repeat(64)}`,
+        block: 1,
+        class: "atomic",
+        pools: [{ addr: TEST_POOL, inGraph: false }],
+        gap_class: "pool_gap",
+      }],
+    }],
+    coverage_kpi: {
+      competitor_legs_total: 1,
+      legs_out_of_graph: 1,
+      out_pools: [{
+        addr: TEST_POOL,
+        token0: "WETH",
+        token1: "USDT",
+        class: "closable",
+        evidence: overrides.evidence ?? "pool gap",
+      }],
+      closable: 1,
+      single_venue_noise: 0,
+      prev_round: null,
+    },
+  };
+}
+
 function baseCase(overrides: Partial<LearningCase> = {}): LearningCase {
   return {
     learning_case_id: "case-1",
@@ -324,7 +445,7 @@ function menuTraceMd(): string {
 
 ## Method Trace
 \`\`\`
-task_class: competitor_path | bundle_postmortem | architecture_review
+task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
 tools_used: - <tool / command / file>
 evidence_order: 1. structured output | 2. raw trace
 analysis_frame: - <frame>
