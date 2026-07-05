@@ -112,9 +112,14 @@
   (`[submitter] flashbots-mev-share http=200 …`).
 - **Implication:** the arch review's "flag ON ⇒ inclusion via submitMevShareBundle" was over-optimistic —
   the flag is necessary but NOT sufficient; the binding downstream constraint is mev_sendBundle reference
-  validity. Owner: a latency/target-block investigation (a Hermes/arch-review cycle), NOT this interactive
-  turn. Verify next: instrument the hint-age at submit (`emitted_at` of the hint vs submit time) + the
-  target-block we pin vs the relay's expected block. [[project-mevshare-submit-flag-lever]]
+  validity. [[project-mevshare-submit-flag-lever]]
+- **Diagnosed 2026-07-05 (per-submit, local reth):** of the 7 rejected, **6 referenced victim hashes are
+  not found on our full node at all** (never-landed pending/private txs) and **1 landed 51 blocks BEFORE
+  the block we pinned** (stale hint; landed 25463381 vs pinned 25463432). Our seen→submit latency is fine
+  (93–1256 ms) ⇒ **the cause is hint MATCHABILITY, not our speed**: we submit backruns for MEV-Share hints
+  whose txs never become landed matchable txs. Adjacent to [[project-phantom-victim-flow-admission-epic]]
+  (our +EV sims backrun pending swaps that revert/never-land). **Fix direction = hint selection/quality
+  (only submit for hints likely to land), not latency and not the submit gate.**
 
 ## Dead-ends / retired (high-value — don't circle back)
 
