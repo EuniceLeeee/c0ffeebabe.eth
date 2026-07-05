@@ -108,7 +108,12 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
      - **(c) pool / path coverage** (the pre-existing lens): pools the competitor touched that we lack.
        Tooling is v4-`in_graph`-correct + native-ETH-classifier-correct (`b8a29a5` / `223ae05`).
      **Gap taxonomy — classify into ONE:** pool · path · **flow-admission (intake, pre-funnel)** ·
-     **scanner-strategy** · economics/posture (human gate) · unanticipated. **"dust" ≡ per-tx NET USD
+     **scanner-strategy** · **protocol/venue-coverage** (a protocol/credit/ERC4626 venue the competitor
+     converts through that we don't route — protocol edges wstETH/sUSDS/wstUSR are LIVE behind
+     `/opt/MEV/.protocol-edges` (A6); enumerate the MISSING ones with
+     `analysis && npm run venue-discovery-bq -- --input <coffee logs export>` → each ERC4626-shaped hit
+     is ~1 POOL_REGISTRY row via the protocol-adapter descriptor framework) · economics/posture (human
+     gate) · unanticipated. **"dust" ≡ per-tx NET USD
      < $0.1** (the census floor) at the CURRENT ETH price — NEVER blanket-label a competitor "dust";
      report the net USD (WETH-unwrap gross is a LOWER bound — it misses token-denominated profit). Also:
      `maxPriorityFeePerGas=0` ⇒ the competitor submits as a bundle (coinbase builder payment) — this does
