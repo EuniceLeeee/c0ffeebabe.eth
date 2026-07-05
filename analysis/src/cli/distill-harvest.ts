@@ -52,6 +52,7 @@ function parseTrace(block: string, sourceFile: string, blockIndex: number, md: s
   const fields = Object.fromEntries(
     METHOD_TRACE_FIELDS.map((field) => [field, parseField(block, field)]),
   ) as Record<MethodTraceField, string>;
+  fields.task_class = fields.task_class.replace(/#.*$/, "").trim();
 
   if (isPlaceholder(fields.task_class) || fields.task_class === TASK_CLASS_MENU) return null;
 

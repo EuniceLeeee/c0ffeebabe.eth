@@ -126,6 +126,9 @@ const checks: Array<() => void> = [
   () => expectFail("fable_manual maybe fails exact value check", () => {
     validateStep1RequiredFields(step1({ fable_manual: "maybe" }));
   }, "step1.fable_manual invalid", "must be exactly yes or no"),
+  () => expectFail("step1 method left as unfilled menu fails", () => {
+    validateStep1RequiredFields(step1({ method: "manual-onchain-trace | live-loss-watch" }));
+  }, "step1.method missing or placeholder"),
   () => expectPass("fable_manual no needs no method trace", () => {
     validateStep1RequiredFields(step1({ fable_manual: "no" }));
     validateMethodTrace("# Hermes\n\nNo trace here.\n", step1({ fable_manual: "no" }), []);

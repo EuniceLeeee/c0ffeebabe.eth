@@ -135,7 +135,7 @@ export function validateToolingDefects(cases: LearningCase[]): void {
 
 export function validateStep1RequiredFields(step1: Record<string, string>): void {
   for (const key of ["run_id", "window_blocks", "watchlist", "artifact", "method", "fable_manual"]) {
-    if (!(key in step1) || isPlaceholder(step1[key])) fail(`step1.${key} missing or placeholder`);
+    if (!(key in step1) || isPlaceholder(step1[key]) || isUnfilledMenu(step1[key])) fail(`step1.${key} missing or placeholder`);
   }
   if ("fable_manual" in step1 && step1.fable_manual !== "yes" && step1.fable_manual !== "no") {
     fail(`step1.fable_manual invalid: ${step1.fable_manual} — must be exactly yes or no`);
