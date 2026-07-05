@@ -49,11 +49,12 @@ export class BotVMSimulator {
       const post = await this.state.getTokenBalance(plan.profitToken, this.executor);
       await this.state.revert(snap);
       const grossProfit = post - pre;
+      const success = grossProfit > 0n;
       return {
-        success: grossProfit > 0n,
+        success,
         profitToken: plan.profitToken,
         grossProfit,
-        gasUsed,
+        gasUsed: success ? gasUsed : 0n,
         netProfit: grossProfit,
         calldata,
         scriptHex: bytesToHex(script),

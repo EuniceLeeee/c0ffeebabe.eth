@@ -466,11 +466,12 @@ export class RevmLiveBackend implements LiveStateBackend {
       throw new Error(`revm missingState: ${result.missingStateKeys.slice(0, 6).join(",")}`);
     }
     const profit = BigInt(result.profit ?? "0");
+    const success = result.success ?? false;
     return {
-      success: result.success ?? false,
+      success,
       profitToken: plan.profitToken,
       grossProfit: profit,
-      gasUsed: BigInt(result.gasUsed ?? "0"),
+      gasUsed: success ? BigInt(result.gasUsed ?? "0") : 0n,
       netProfit: profit,
       calldata,
       revertReason: result.revertReason ?? undefined,
