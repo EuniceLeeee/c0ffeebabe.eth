@@ -10,7 +10,7 @@
 
 You are relaying `docs/research/design/HANDOFF-PROMPT-next-fable-session.md`: continue and finish its
 ordered slices (BS-0 harness → BS-contract → BS-universe → CR-3 → BS-1/2/3 → …). This is an **unattended**
-round — the user is away; decide and proceed per CLAUDE.md rule 14/15, never stop to ask. The whole point
+round — the user is away; decide and proceed per HERMES.md rule 14/15, never stop to ask. The whole point
 of this design is to keep the work **on Fable** (a same-session opus fallback is the failure mode we are
 engineering around); the two mechanisms below (round-start Fable check + the appendix data-cache) exist to
 prevent that downgrade.
@@ -44,7 +44,7 @@ The reliable signal is the previous round's **model trace**, not a lock:
 - Weak hint only: `echo $$ > /tmp/mev-handoff-relay.lock` + trap `rm -f`; rely on the model-trace check.
 
 **0c — arm the workflow.** `touch /tmp/mev-workflow-active` (idempotent); ensure the sleep-keeper is alive
-(Rounds Step 0). Read `CLAUDE.md` (Hermes protocol + rules 1–16 + Safety Rules) + the handoff prompt fully.
+(Rounds Step 0). Read `CLAUDE.md` (behavioral base + Safety Rules) + `HERMES.md` (Hermes protocol + governance rules 1–17) + `docs/gates.md` + the handoff prompt fully.
 
 ## Step 1 — read state from the repo + the appendix (not memory)
 - Read `docs/research/design/HANDOFF-PROMPT-next-fable-session.md` (the authority) INCLUDING its
@@ -82,7 +82,7 @@ enough that a later round follows the reasoning without re-deriving it — the r
 and reusable across rounds, kept distinct from the raw evidence in B. One tight entry per round; no walls of
 text (Section A stays low-volume — it is reasoning, not re-narrated chain data).
 
-**The slice work (generator/evaluator split — CLAUDE.md rule 7/11):**
+**The slice work (generator/evaluator split — HERMES.md Generator/Evaluator split + rule 11):**
 - Codex is the PRIMARY generator, ALWAYS via `scripts/codex-run.sh <read-only|workspace-write>
   /tmp/codex-<slice>.brief.md /tmp/codex-<slice>` in the background. You are the non-author evaluator —
   re-run every gate yourself, read the full `git diff` hunk-by-hunk, commit only the verified surface.
