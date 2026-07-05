@@ -1,3 +1,5 @@
+import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
+
 export type TemplateSlotKind = "flash" | "lend" | "swap" | "repay" | "guard";
 
 export interface TemplateConstraint {
@@ -20,10 +22,7 @@ export interface PathTemplate {
 
 const SWAP_ADAPTERS = [
   "psm",
-  "erc4626-deposit",
-  "erc4626-redeem",
-  "wsteth-wrap",
-  "wsteth-unwrap",
+  ...PROTOCOL_LEG_DESCRIPTORS.map((desc) => desc.id),
   "univ4-unlock",
   "univ3-swap",
   "univ2-swap",

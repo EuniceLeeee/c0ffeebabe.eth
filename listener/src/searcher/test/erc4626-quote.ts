@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import { quote } from "../solver/quoter.js";
+import { quote, quoteProtocolLeg } from "../solver/quoter.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -95,11 +95,26 @@ async function testZeroAmountShortCircuitsBeforePreview(): Promise<void> {
   console.log("[erc4626-quote] dispatch zero-amount short circuit: PASS");
 }
 
+async function testUnknownAdapterIdThrows(): Promise<void> {
+  const { state, calls } = mockState(0n, 0n);
+  let threw = false;
+  try {
+    await quoteProtocolLeg(state, ADDR.SUSDS, "erc4626-bogus", 1n);
+  } catch (err) {
+    threw = err instanceof Error && err.message.includes("protocol leg quote descriptor not found");
+  }
+
+  assert(threw, "unknown adapterId should throw descriptor lookup error");
+  assert(calls.length === 0, `unknown adapterId should not call preview, got ${calls.length} calls`);
+  console.log("[erc4626-quote] unknown adapterId rejected: PASS");
+}
+
 async function main(): Promise<void> {
   const tests = [
     testDepositUsesPreviewDeposit,
     testRedeemUsesPreviewRedeem,
     testZeroAmountShortCircuitsBeforePreview,
+    testUnknownAdapterIdThrows,
   ];
   let passed = 0;
   for (const test of tests) {

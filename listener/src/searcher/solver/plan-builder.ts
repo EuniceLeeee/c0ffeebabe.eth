@@ -8,6 +8,7 @@
  */
 
 import { ethers } from "ethers";
+import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
@@ -159,6 +160,20 @@ async function buildEdgeNode(
   ensureApprove: (token: string, spender: string) => void,
   transferToPool: (token: string, pool: string, amount: bigint) => void,
 ): Promise<ResolvedPlanNode | null> {
+  const protocolLeg = PROTOCOL_LEG_DESCRIPTORS.find((desc) => desc.id === edge.adapterId);
+  if (protocolLeg) {
+    if (protocolLeg.needsApprove) ensureApprove(edge.tokenIn, edge.target);
+    return {
+      adapterId: edge.adapterId,
+      target: edge.target,
+      tokenIn: edge.tokenIn,
+      tokenOut: edge.tokenOut,
+      amount: amtIn,
+      params: {},
+      children: [],
+    };
+  }
+
   switch (edge.adapterId) {
     case "fluid-vault":
       ensureApprove(edge.tokenIn, edge.target);
@@ -186,52 +201,6 @@ async function buildEdgeNode(
         tokenIn: edge.tokenIn,
         tokenOut: edge.tokenOut,
         amount: gemAmount,
-        params: {},
-        children: [],
-      };
-
-    case "wsteth-wrap":
-      ensureApprove(edge.tokenIn, edge.target);
-      return {
-        adapterId: "wsteth-wrap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {},
-        children: [],
-      };
-
-    case "wsteth-unwrap":
-      return {
-        adapterId: "wsteth-unwrap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {},
-        children: [],
-      };
-
-    case "erc4626-deposit":
-      ensureApprove(edge.tokenIn, edge.target);
-      return {
-        adapterId: "erc4626-deposit",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {},
-        children: [],
-      };
-
-    case "erc4626-redeem":
-      return {
-        adapterId: "erc4626-redeem",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
         params: {},
         children: [],
       };

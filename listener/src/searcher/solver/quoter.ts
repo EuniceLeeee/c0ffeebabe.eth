@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
@@ -216,66 +217,40 @@ async function quotePSM(
   throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
 }
 
-// -- wstETH (Lido fixed-rate wrap/unwrap views) -----------------
+// -- Descriptor-backed protocol legs ----------------------------
 
-const wstETHIface = new ethers.Interface([
-  "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
-  "function getStETHByWstETH(uint256 _wstETHAmount) view returns (uint256)",
-]);
-
-async function quoteWstETH(
-  state: StateBackend,
-  target: string,
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-): Promise<bigint> {
-  const steth = ADDR.STETH.toLowerCase();
-  const wsteth = ADDR.WSTETH.toLowerCase();
-  const tIn = tokenIn.toLowerCase();
-  const tOut = tokenOut.toLowerCase();
-
-  if (tIn === steth && tOut === wsteth) {
-    const data = wstETHIface.encodeFunctionData("getWstETHByStETH", [amountIn]);
-    const result = await state.call({ to: target, data });
-    const decoded = wstETHIface.decodeFunctionResult("getWstETHByStETH", result);
-    return BigInt(decoded[0]);
+function protocolLegQuoteFunctionName(adapterId: string, signature: string): string {
+  const paren = signature.indexOf("(");
+  if (paren <= 0) {
+    throw new Error(`invalid protocol leg quote signature for ${adapterId}: ${signature}`);
   }
-  if (tIn === wsteth && tOut === steth) {
-    const data = wstETHIface.encodeFunctionData("getStETHByWstETH", [amountIn]);
-    const result = await state.call({ to: target, data });
-    const decoded = wstETHIface.decodeFunctionResult("getStETHByWstETH", result);
-    return BigInt(decoded[0]);
-  }
-  throw new Error(`wstETH only supports stETH<->wstETH, got ${tokenIn} -> ${tokenOut}`);
+  return signature.slice(0, paren);
 }
 
-// -- ERC4626 (asset/share vault preview views) ------------------
+function protocolLegQuoteAbi(signature: string): string {
+  if (/\breturns\s*\(/.test(signature)) return `function ${signature}`;
+  return `function ${signature} view returns (uint256)`;
+}
 
-const erc4626Iface = new ethers.Interface([
-  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
-  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
-]);
-
-async function quoteErc4626(
+export async function quoteProtocolLeg(
   state: StateBackend,
   target: string,
   adapterId: string,
   amountIn: bigint,
 ): Promise<bigint> {
-  if (adapterId === "erc4626-deposit") {
-    const data = erc4626Iface.encodeFunctionData("previewDeposit", [amountIn]);
-    const result = await state.call({ to: target, data });
-    const decoded = erc4626Iface.decodeFunctionResult("previewDeposit", result);
-    return BigInt(decoded[0]);
+  const desc = PROTOCOL_LEG_DESCRIPTORS.find((entry) => entry.id === adapterId);
+  if (!desc) {
+    throw new Error(`protocol leg quote descriptor not found for adapter ${adapterId}`);
   }
-  if (adapterId === "erc4626-redeem") {
-    const data = erc4626Iface.encodeFunctionData("previewRedeem", [amountIn]);
-    const result = await state.call({ to: target, data });
-    const decoded = erc4626Iface.decodeFunctionResult("previewRedeem", result);
-    return BigInt(decoded[0]);
+  if (desc.quoteSig === undefined) {
+    throw new Error(`protocol leg ${adapterId} has no quoteSig`);
   }
-  throw new Error(`ERC4626 quote requires deposit/redeem adapter, got ${adapterId}`);
+  const iface = new ethers.Interface([protocolLegQuoteAbi(desc.quoteSig)]);
+  const fnName = protocolLegQuoteFunctionName(adapterId, desc.quoteSig);
+  const data = iface.encodeFunctionData(fnName, [amountIn]);
+  const result = await state.call({ to: target, data });
+  const decoded = iface.decodeFunctionResult(fnName, result);
+  return BigInt(decoded[0]);
 }
 
 // ── UniV2 (constant-product) ──────────────────────────────────
@@ -512,10 +487,9 @@ export async function quote(
       return quotePSM(state, target, tokenIn, tokenOut, amountIn);
     case "wsteth-wrap":
     case "wsteth-unwrap":
-      return quoteWstETH(state, target, tokenIn, tokenOut, amountIn);
     case "erc4626-deposit":
     case "erc4626-redeem":
-      return quoteErc4626(state, target, adapterId, amountIn);
+      return quoteProtocolLeg(state, target, adapterId, amountIn);
     case "fluid-vault":
       return quoteFluidVault();
     default:

@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import { quote } from "../solver/quoter.js";
+import { quote, quoteProtocolLeg } from "../solver/quoter.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -87,25 +87,25 @@ async function testUnwrapUsesGetStETHByWstETH(): Promise<void> {
   console.log("[wsteth-quote] unwrap uses getStETHByWstETH: PASS");
 }
 
-async function testRejectsNonWstEthPair(): Promise<void> {
+async function testUnknownAdapterIdThrows(): Promise<void> {
   const { state, calls } = mockState(0n, 0n);
   let threw = false;
   try {
-    await quoteWstETH("wsteth-wrap", ADDR.USDC, ADDR.WSTETH, 1n, state);
+    await quoteProtocolLeg(state, ADDR.WSTETH, "wsteth-bogus", 1n);
   } catch (err) {
-    threw = err instanceof Error && err.message.includes("wstETH only supports stETH<->wstETH");
+    threw = err instanceof Error && err.message.includes("protocol leg quote descriptor not found");
   }
 
-  assert(threw, "non-stETH/wstETH pair should throw wstETH support error");
-  assert(calls.length === 0, `unsupported pair should not call rate view, got ${calls.length} calls`);
-  console.log("[wsteth-quote] non-stETH/wstETH pair rejected: PASS");
+  assert(threw, "unknown adapterId should throw descriptor lookup error");
+  assert(calls.length === 0, `unknown adapterId should not call rate view, got ${calls.length} calls`);
+  console.log("[wsteth-quote] unknown adapterId rejected: PASS");
 }
 
 async function main(): Promise<void> {
   const tests = [
     testWrapUsesGetWstETHByStETH,
     testUnwrapUsesGetStETHByWstETH,
-    testRejectsNonWstEthPair,
+    testUnknownAdapterIdThrows,
   ];
   let passed = 0;
   for (const test of tests) {
