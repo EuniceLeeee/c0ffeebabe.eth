@@ -600,6 +600,35 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
 >   human gate), CS-min/CS-full/D/CR-8. MEV-Share flag disposition = operator call (harmless if left on).
 >
 > The historical block-scan next-actions below (BS-0…BS-3, all LANDED per §9.1) are kept for provenance.
+>
+> **TRACK A/B EXECUTION STATUS (2026-07-05, this relay — all offline slices landed + gated):**
+> - **PHASE 0** — landed pre-relay (`e17316e` + `2ea2646`); re-verified green (`test:learning-case` 11/11).
+> - **A0** protocol taxonomy (`31bbec5`): `slotKind:"protocol"` + `protocolAction`; leavesStandingPosition
+>   FAIL-CLOSED (unguarded only for wrap/unwrap/convert/redeem/stake/unstake; `mint`/undeclared stay
+>   S2-guarded — stricter than the bare "mint=true" table). PSM reclassified protocol/convert,
+>   planner byte-identical.
+> - **A1** PSM fee-aware quote + reverse routing (`3933eaa`): quotePSM async, LitePSM `tin`/`tout` WAD
+>   math (buyGem exact-in inverted, floor-conservative), fallback 0 on read failure;
+>   `psm-reverse-absent/present` flip pair; `searcher:psm-quote` 5/5. No live reverse edge (A6).
+> - **A2** PSM buyGem build (`8b586a0`): direction-aware encode (USDC-side = gemAmt), matchTrace accepts
+>   both selectors; plan-builder amount = amtIn(sell)/amtOut(buy); `searcher:psm-build` 3/3.
+>   **OPERATOR gate outstanding: anvil fork buyGem round-trip.**
+> - **A5** wstETH wiring (`7eac27f`): graph wsteth case (wrap/unwrap protocol edges), Lido rate quotes,
+>   build cases, template ids; flip pair `wsteth-absent/present`; `searcher:wsteth-quote` 3/3.
+>   **Live-gated OFF: `SEARCHER_ENABLE_PROTOCOL_EDGES` (default 0) filters wsteth from the live merge
+>   (PSM grandfathered). OPERATOR gates: cast-verify WSTETH/STETH, fork-sim round-trip (stETH rebasing
+>   1-2 wei quirk), then the A6 flip + dry-run window.**
+> - **B2** venue-discovery-scan (`198003b`): `analysis/src/discovery/venue-evidence.ts` +
+>   `venue-discovery-scan` CLI (log-only offline) + `test:venue-discovery` 2/2 — coffee tx-2 surfaces the
+>   Liquity venue `0xa2895d6a` (protocol), excludes WETH/PoolManager/Balancer/bot; tx-3 pure-swap control
+>   clean. Feeds B4 (venue-registry, next Track-B slice) + Track A consumption.
+> - **A3/A4 ERC4626 — NOT landed, address-blocked offline:** USDS (sUSDS `asset()`) + wstUSR's underlying
+>   are not repo-verifiable; spec (incl. the sUSDS-first priority — its Curve return venues
+>   `CURVE_SUSDS_USDT`/`CURVE_DOLA_SUSDS` are ALREADY in-graph ⇒ loop-closable today) =
+>   `docs/research/design/erc4626-a3a4-spec-20260705.md`. Needs one operator `cast` pass, then the
+>   A5-shaped slice is mechanical.
+> - Remaining operator/human gates unchanged: BS-3 exemplar, CR-5 archive, BS-lane/BS-4, A6/CR-6-live,
+>   MEV-Share flag disposition, broadcast (Safety Rule 1).
 
 1. **Finish BS-0 — EXEMPLAR RE-SELECTED (2026-07-04, operator-approved).** The original exemplar
    tx #2 `0x803a3693` was mischaracterized: its "CFG 2-hop loop" is fee-negative in both directions
