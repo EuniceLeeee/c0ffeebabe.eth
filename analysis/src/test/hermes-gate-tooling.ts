@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   fails,
   validateMethodTrace,
+  validateStep1RequiredFields,
   validateToolingDefects,
 } from "../cli/hermes-gate.js";
 import type { LearningCase } from "../learning/learning-case.js";
@@ -65,23 +66,82 @@ const checks: Array<() => void> = [
   () => expectPass("absent tooling defect passes", () => {
     validateToolingDefects([baseCase()]);
   }),
-  () => expectPass("no fable marker needs no method trace", () => {
-    validateMethodTrace("# Hermes\n\nNo external analyst was used in this round.\n");
+  () => expectPass("prose fable marker with fable_manual no needs no method trace", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "no" }));
+    validateMethodTrace("# Hermes\n\nfresh fable reviewed the raw data.\n", step1({ fable_manual: "no" }), []);
   }),
-  () => expectPass("fable marker with full method trace passes", () => {
-    validateMethodTrace(validTraceMd());
+  () => expectPass("fable_manual yes with full method trace passes", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace(validTraceMd(), step1({ fable_manual: "yes" }), []);
   }),
-  () => expectFail("fable marker without method trace fails", () => {
-    validateMethodTrace("# Hermes\n\nfresh fable reviewed the raw data.\n");
+  () => expectFail("fable_manual yes without method trace fails", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace("# Hermes\n\nfresh fable reviewed the raw data.\n", step1({ fable_manual: "yes" }), []);
   }, "no `## Method Trace` block"),
   () => expectFail("method trace missing sanity checks fails", () => {
-    validateMethodTrace(validTraceMd().replace(/^sanity_checks:.*\n/m, ""));
+    validateMethodTrace(validTraceMd().replace(/^sanity_checks:.*\n/m, ""), step1({ fable_manual: "yes" }), []);
   }, "Method Trace missing/blank field: sanity_checks"),
   () => expectFail("tool gap with no codify plan fails", () => {
     validateMethodTrace(validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta")
-      .replace(/^codify_next:.*$/m, "codify_next: no"));
+      .replace(/^codify_next:.*$/m, "codify_next: no"), step1({ fable_manual: "yes" }), [toolingDefectCase("human_killed")]);
   }, "tool_gap != none", "codify_next = no"),
+  () => expectFail("fable_manual absent from step1 fails required key", () => {
+    const s = step1();
+    delete s.fable_manual;
+    validateStep1RequiredFields(s);
+  }, "step1.fable_manual missing or placeholder"),
+  () => expectFail("fable_manual maybe fails exact value check", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "maybe" }));
+  }, "step1.fable_manual invalid", "must be exactly yes or no"),
+  () => expectPass("fable_manual no needs no method trace", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "no" }));
+    validateMethodTrace("# Hermes\n\nNo trace here.\n", step1({ fable_manual: "no" }), []);
+  }),
+  () => expectFail("raw Method Trace menu text is blank", () => {
+    validateMethodTrace(menuTraceMd(), step1({ fable_manual: "yes" }), []);
+  }, "Method Trace missing/blank field: task_class", "Method Trace missing/blank field: tool_gap"),
+  () => expectFail("named tool gap requires filed tooling defect case", () => {
+    validateMethodTrace(validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^codify_next:.*$/m, "codify_next: add metric"), step1({ fable_manual: "yes" }), []);
+  }, "names a tool_gap", "no tooling_defect LearningCase is filed"),
+  () => expectFailWithout("filed open tooling defect satisfies filing check then open status blocks", () => {
+    const cases = [toolingDefectCase("open")];
+    validateMethodTrace(validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^codify_next:.*$/m, "codify_next: add metric"), step1({ fable_manual: "yes" }), cases);
+    validateToolingDefects(cases);
+  }, ["tooling_defect OPEN"], ["no tooling_defect LearningCase is filed"]),
+  () => expectFail("codify_next none fails consistency for named tool gap", () => {
+    validateMethodTrace(validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^codify_next:.*$/m, "codify_next: none"), step1({ fable_manual: "yes" }), [toolingDefectCase("human_killed")]);
+  }, "tool_gap != none", "codify_next = no"),
+  () => expectPass("horizontal rule after Method Trace header does not truncate block", () => {
+    validateMethodTrace(validTraceMd().replace("## Method Trace\n", "## Method Trace\n---\n"), step1({ fable_manual: "yes" }), []);
+  }),
+  () => expectPass("one valid Method Trace block is enough", () => {
+    validateMethodTrace(`# Hermes
+
+## Method Trace
+\`\`\`
+task_class:
+tools_used:
+evidence_order:
+analysis_frame:
+sanity_checks:
+tool_gap:
+codify_next:
+distill_for_opus:
+\`\`\`
+
+${validTraceMd()}
+`, step1({ fable_manual: "yes" }), []);
+  }),
+  () => expectFail("invalid tooling defect status fails", () => {
+    validateToolingDefects([toolingDefectCase("Open")]);
+  }, "tooling_defect.status invalid: Open", "must be open|codified|human_killed"),
 ];
 
 try {
@@ -111,6 +171,36 @@ function expectFail(label: string, fn: () => void, ...expected: string[]): void 
   }
 }
 
+function expectFailWithout(label: string, fn: () => void, expected: string[], unexpected: string[]): void {
+  fails.length = 0;
+  fn();
+  const actual = fails.join("\n");
+  for (const snippet of expected) {
+    assert.ok(
+      actual.includes(snippet),
+      `${label}: expected ${JSON.stringify(snippet)}, got ${JSON.stringify(fails)}`,
+    );
+  }
+  for (const snippet of unexpected) {
+    assert.ok(
+      !actual.includes(snippet),
+      `${label}: did not expect ${JSON.stringify(snippet)}, got ${JSON.stringify(fails)}`,
+    );
+  }
+}
+
+function step1(overrides: Partial<Record<string, string>> = {}): Record<string, string> {
+  return {
+    run_id: "tooling-test",
+    window_blocks: "1..2",
+    watchlist: "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    artifact: "docs/research/reports/step1-tooling-test.json",
+    method: "manual-onchain-trace",
+    fable_manual: "yes",
+    ...overrides,
+  };
+}
+
 function baseCase(overrides: Partial<LearningCase> = {}): LearningCase {
   return {
     learning_case_id: "case-1",
@@ -125,6 +215,19 @@ function baseCase(overrides: Partial<LearningCase> = {}): LearningCase {
     updated_at: "2026-07-05T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function toolingDefectCase(status: string): LearningCase {
+  return baseCase({
+    learning_case_id: `case-${status}`,
+    tooling_defect: {
+      tool: "bundle-postmortem",
+      issue: "missing native-ETH delta",
+      evidence: "manual trace showed ETH balance movement",
+      codify_target: "analysis/src/cli/bundle-postmortem.ts add native ETH metric",
+      status,
+    } as LearningCase["tooling_defect"],
+  });
 }
 
 function validTraceMd(): string {
@@ -146,5 +249,22 @@ distill_for_opus: run structured tooling before ad-hoc trace work
 
 ## Next Run
 - next_state: continue
+`;
+}
+
+function menuTraceMd(): string {
+  return `# Hermes
+
+## Method Trace
+\`\`\`
+task_class: competitor_path | bundle_postmortem | architecture_review
+tools_used: - <tool / command / file>
+evidence_order: 1. structured output | 2. raw trace
+analysis_frame: - <frame>
+sanity_checks: - <checks>
+tool_gap: none | <what the tool missed>
+codify_next: no | <field/test/gate/tooling_defect + target file>
+distill_for_opus: <one reusable rule Opus should learn>
+\`\`\`
 `;
 }

@@ -33,6 +33,7 @@ function repoRoot(from: string): string {
  *   watchlist: 0xc0ffee...,0xae2f...
  *   artifact: docs/research/reports/step1-20260702-v3fork.json
  *   method: manual-onchain-trace   # or: live-loss-watch
+ *   fable_manual: no               # yes|no
  *   ```
  *
  * The artifact is either:
@@ -54,7 +55,11 @@ function fail(msg: string): void {
 
 function isPlaceholder(v: string): boolean {
   const t = v.trim();
-  return t === "" || t.startsWith("<") || /^(todo|tbd|n\/a|na|fill|pending)$/i.test(t);
+  return t === ""
+    || t.startsWith("<")
+    || /<[^>]+>/.test(t)
+    || t.includes(" | ")
+    || /^(todo|tbd|n\/a|na|fill|pending)$/i.test(t);
 }
 
 const METHOD_TRACE_FIELDS = [
@@ -72,11 +77,14 @@ export function validateToolingDefects(cases: LearningCase[]): void {
   for (const c of cases) {
     const td = c.tooling_defect;
     if (!td) continue;
-    if (td.status === "open") {
+    const status = td.status;
+    if (status !== "open" && status !== "codified" && status !== "human_killed") {
+      fail(`LearningCase ${c.learning_case_id} tooling_defect.status invalid: ${String(status)} — must be open|codified|human_killed`);
+    } else if (status === "open") {
       fail(`LearningCase ${c.learning_case_id} tooling_defect OPEN (${td.tool}: ${td.issue}) — a manual-`
         + `analysis-found tool error/omission MUST be codified (status:codified + codify_commit) or `
         + `human_killed before cycle-close (rule 16).`);
-    } else if (td.status === "codified"
+    } else if (status === "codified"
         && (typeof td.codify_commit !== "string" || td.codify_commit.trim() === "" || isPlaceholder(td.codify_commit))) {
       fail(`LearningCase ${c.learning_case_id} tooling_defect status=codified but codify_commit missing/`
         + `placeholder — cite the git ref that fixed the tool.`);
@@ -84,26 +92,57 @@ export function validateToolingDefects(cases: LearningCase[]): void {
   }
 }
 
-export function validateMethodTrace(md: string): void {
-  const usesFable = /fresh fable|fable manual|manual escalation|manual analysis|fable[- ]?5 sub-?agent/i.test(md);
-  if (!usesFable) return;
-  const m = md.match(/##\s*Method Trace[\s\S]*?(?=\n##\s|\n---|\s*$)/i);
-  if (!m) {
+export function validateStep1RequiredFields(step1: Record<string, string>): void {
+  for (const key of ["run_id", "window_blocks", "watchlist", "artifact", "method", "fable_manual"]) {
+    if (!(key in step1) || isPlaceholder(step1[key])) fail(`step1.${key} missing or placeholder`);
+  }
+  if ("fable_manual" in step1 && step1.fable_manual !== "yes" && step1.fable_manual !== "no") {
+    fail(`step1.fable_manual invalid: ${step1.fable_manual} — must be exactly yes or no`);
+  }
+}
+
+export function validateMethodTrace(
+  md: string,
+  step1: Record<string, string>,
+  cases: LearningCase[],
+): void {
+  if (step1.fable_manual !== "yes") return;
+  const blocks = [...md.matchAll(/##\s*Method Trace[\s\S]*?(?=\n##\s|$)/gi)].map((m) => m[0]);
+  if (blocks.length === 0) {
     fail("Fable manual analysis present but no `## Method Trace` block — missing = invalid handoff (rule 16).");
     return;
   }
-  const block = m[0];
+
+  const blockFailures: string[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const errors = validateMethodTraceBlock(blocks[i], cases);
+    if (errors.length === 0) return;
+    const prefix = blocks.length === 1 ? "" : `Method Trace block ${i + 1}: `;
+    for (const err of errors) blockFailures.push(`${prefix}${err}`);
+  }
+  for (const err of blockFailures) fail(err);
+}
+
+function validateMethodTraceBlock(block: string, cases: LearningCase[]): string[] {
+  const errors: string[] = [];
   for (const f of METHOD_TRACE_FIELDS) {
     const re = new RegExp(`^\\s*${f}\\s*:(.*)$`, "mi");
     const hit = block.match(re);
-    if (!hit || isPlaceholder(hit[1] ?? "")) fail(`Method Trace missing/blank field: ${f}`);
+    if (!hit || isPlaceholder(hit[1] ?? "")) errors.push(`Method Trace missing/blank field: ${f}`);
   }
   const toolGap = (block.match(/^\s*tool_gap\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
   const codifyNext = (block.match(/^\s*codify_next\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
-  if (toolGap && !/^none\b/i.test(toolGap) && /^no\b/i.test(codifyNext)) {
-    fail("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
+  const namesToolGap = toolGap !== "" && !/^(none|no)\b/i.test(toolGap);
+  if (namesToolGap && /^(no|none)\b/i.test(codifyNext)) {
+    errors.push("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
       + "(create a tooling_defect LearningCase).");
   }
+  // Global-store scoped: an old case satisfies "filed"; per-window/per-gap matching is a future tightening.
+  if (namesToolGap && !cases.some((c) => c.tooling_defect)) {
+    errors.push("Method Trace names a tool_gap but no tooling_defect LearningCase is filed in the store — "
+      + "rule 16 requires the gap be filed as a case (then codified or human_killed).");
+  }
+  return errors;
 }
 
 function loadCasesForToolingGate(): LearningCase[] {
@@ -410,9 +449,7 @@ function main(): void {
     process.exit(1);
   }
 
-  for (const key of ["run_id", "window_blocks", "watchlist", "artifact", "method"]) {
-    if (!(key in step1) || isPlaceholder(step1[key])) fail(`step1.${key} missing or placeholder`);
-  }
+  validateStep1RequiredFields(step1);
 
   const win = step1.window_blocks ? parseWindow(step1.window_blocks) : null;
   if (step1.window_blocks && !win) fail(`step1.window_blocks not "<from>..<to>": ${step1.window_blocks}`);
@@ -455,8 +492,9 @@ function main(): void {
     }
   }
 
-  validateMethodTrace(md);
-  validateToolingDefects(loadCasesForToolingGate());
+  const tdCases = loadCasesForToolingGate();
+  validateMethodTrace(md, step1, tdCases);
+  validateToolingDefects(tdCases);
 
   if (fails.length > 0) {
     console.error(`FAIL: Step-1 close-gate blocked ${mdPath}`);

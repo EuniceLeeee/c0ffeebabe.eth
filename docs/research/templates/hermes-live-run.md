@@ -23,6 +23,15 @@ inputs:
   key_tx_links: []
 ```
 
+```step1
+run_id:
+window_blocks:        # <from>..<to>
+watchlist:            # 0xc0ffee...,0xae2f...
+artifact:             # docs/research/reports/step1-<run_id>.json  (must include coverage_kpi)
+method:               # manual-onchain-trace | live-loss-watch
+fable_manual: no      # yes only when the fable-5 blocker-finder handoff ran
+```
+
 ---
 
 ## Run Facts  <!-- auto -->
@@ -59,7 +68,7 @@ Representative **non-sandwich** competitor legs (sandwich legs excluded per §6/
 `canonical_sequence`, `path_template`, `pool_in_our_graph`, tokens/venues.
 
 ### Competitor cross-ref — EXACT commands to hand the fable-5 blocker-finder (verified R1/R2)
-Paste these into the fable-5 sub-agent brief so it runs them ITSELF (full independence, own
+Paste these into the fable-5 blocker-finder brief so it runs them ITSELF (full independence, own
 primary-source scan + own traces) with zero tooling-discovery overhead. All on local reth = 0 CU.
 Node: EC2 `i-0ff908dedeec9ebc6`, SSM-only. `<FROM>`/`<TO>` = the window block range.
 ```
@@ -79,7 +88,7 @@ cast tx <hash> --rpc-url http://127.0.0.1:8545 ; cast run <hash> --rpc-url http:
 # 5. secondary-validate ONE key tx via Alchemy ($MAINNET_RPC_URL in /opt/MEV/.env) — keep CU tiny
 ```
 Flags drift: read `/opt/MEV/analysis/src/cli/live-loss.ts` for exact flags; iterate the script, don't reinvent.
-Hand the fable-5 sub-agent the **funnel numbers as DATA** (never a conclusion) + these commands; it
+Hand the fable-5 blocker-finder the **funnel numbers as DATA** (never a conclusion) + these commands; it
 produces the raw artifacts + its own traces + the named blocker.
 
 ---
@@ -233,7 +242,7 @@ Non-deterministic → before/after metrics (no replay):
 
 ---
 
-## Method Trace (MANDATORY if this round used Fable manual analysis — missing = invalid handoff, hermes-gate blocks)
+## Method Trace (MANDATORY when step1 `fable_manual: yes` — missing = invalid handoff, hermes-gate blocks)
 > See HERMES.md rule 16 for the full field spec. If `tool_gap` != none → create + close a `tooling_defect` LearningCase.
 ```
 task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg

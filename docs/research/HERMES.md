@@ -68,7 +68,7 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
    CROSS-REF     (extend a thin window to hours; never conclude a true-negative from a starved sample — the R3 trap).
                  Classify what WE missed (pool/path/unanticipated) + confirm the blocker is on a REAL captured opp.
 4. BLOCKER       Two BLIND-INDEPENDENT analyses of the same raw material, then compare (NOT analyze-then-review —
-   (dual-blind)  the rule-9 nodding risk): a FRESH fable-5 sub-agent (Agent tool, model:fable, chain+code) → A
+   (dual-blind)  the rule-9 nodding risk): a FRESH fable-5 blocker-finder (Agent tool, model:fable, chain+code) → A
                  (kept from Codex); Codex, handed ONLY raw material as DATA → B blind to A. Agree = high-confidence;
                  differ = the disagreement is the signal. Only the Brief drives code.
 5. IMPLEMENT     Codex writes → Claude review ↔ Codex fix (≤3 passes) → Final Approval or explicit stop.
@@ -108,9 +108,10 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
 14. **Multi-round = user-away autonomy.** >1 round means the user is NOT at the keyboard: self-serve architecture/scope calls (pick the option best for the extraction goal + PROCEED + **record the decision: choice + rationale + explicit not-doing**), do NOT block with `AskUserQuestion`. This includes **auto-firing the rule-13 arch review when its trigger hits — just run it; do NOT ask "should I run the architecture review?"**. Real stop conditions still wait for the human (go-live/broadcast, CU-cap, destructive). **ENFORCED** by `scripts/hooks/guard-workflow-noask.py` (`touch /tmp/mev-workflow-active` at start; the hook blocks AskUserQuestion unless it names a real stop condition — full rationale in the hook's docstring).
 15. **A status report is NOT a stop.** While `/tmp/mev-workflow-active` exists, every turn ends with either a work-continuing / self-re-invoking tool call OR an explicit real stop condition — reporting rides ALONGSIDE the next action, never instead of it. **ENFORCED** by `scripts/hooks/guard-workflow-nostall.py` (full rationale in the hook's docstring).
 16. **Fable manual analysis is also a TEST of our tooling — codify its findings (hard).** The fresh fable analyst works from raw data with ad-hoc curl/jq, routinely finding where our permanent scripts are wrong (valuation artifacts) or missing a metric. When it exposes a gap, the loop MUST fix/extend the script (Codex writes, Claude gates) — treat it like a rule-13 finding (`owner` + `carry_to_round`, BLOCKS cycle-close). *(Honest: public-mempool membership for out-of-window txs + positive MEV-Share identification are NOT determinable from data we hold; `sender_flow` returns labeled-confidence proxies, never a fabricated proof.)*
-    - **Method Trace (MANDATORY — the auditable frame, not the hidden chain-of-thought).** Every Fable
-      manual-analysis handoff MUST end with a `## Method Trace`. **Missing Method Trace = invalid handoff**
-      (`hermes-gate` enforces its presence + fields). It is not "how it thought" — it is *what tools it ran,
+    - **Method Trace (MANDATORY — the auditable frame, not the hidden chain-of-thought).** Every handoff
+      whose `step1` block declares `fable_manual: yes` MUST end with a `## Method Trace`.
+      **Missing Method Trace = invalid handoff** (`hermes-gate` enforces its presence + fields). The
+      declaration, not prose, is the gate trigger. It is not "how it thought" — it is *what tools it ran,
       in what order it verified, what frame it judged by, which tool-miss it caught, and which rule Opus
       should learn.* This is the reusable project-method asset that trains/constrains Opus (distilled into
       `docs/distill/`), and it feeds the tooling-defect close loop: **if `tool_gap` != `none`, a
