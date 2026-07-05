@@ -68,12 +68,21 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   its classification live in HERMES + the `redact-live-run` tool.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
-  analysis / bundle postmortem / a tool found wrong / repo diagnosis), you MUST: (1) write
-  `docs/analysis/YYYYMMDD-<topic>.md` ending with a `## Method Trace` (the 8 fields — see HERMES rule 16);
-  (2) run `cd analysis && npm run method-trace-check -- ../docs/analysis/<file>.md` then `npm run distill-harvest`;
-  (3) if `tool_gap != none`, **file a `tooling_defect` LearningCase** (not "fix later"); (4) state in your
-  answer: **new Method Trace? harvested? tooling_defect? decision-log update?** Same Method Trace + same
-  harvest as a Hermes round — Opus learns from `docs/distill/method-traces.md` either way.
+  analysis / bundle postmortem / a tool found wrong / repo diagnosis), at the end of that turn **auto-capture
+  it** — don't wait to be asked:
+  1. **Generate the Method Trace, don't hand-write it.** Run the capture pipeline on this session's
+     transcript: `cd analysis && npm run session-evidence -- <this session's transcript.jsonl> --out /tmp/ev.json`
+     (locate the transcript by recency/content — session-list ids do NOT map to filenames), then a fable pass
+     reads `/tmp/ev.json` (+ bounded transcript slices) and writes `docs/analysis/YYYYMMDD-<topic>.md` ending
+     with a `## Method Trace` (the 8 fields, HERMES rule 16). **Ground it strictly in the evidence — fields the
+     evidence can't support are `unknown`, never fabricated (rule 16); never read `thinking` blocks into it.**
+     If task_class is `architecture_review`, add the 12-axis Architecture Coverage Matrix.
+  2. `npm run method-trace-check -- ../docs/analysis/<file>.md` (must PASS), then `npm run distill-harvest`.
+     (The `guard-daily-methodtrace.py` Stop hook reminds you if a `docs/analysis/*.md` is unharvested/incomplete.)
+  3. If `tool_gap != none`, **file a `tooling_defect` LearningCase** (not "fix later").
+  4. State in your answer: **new Method Trace? harvested? tooling_defect? decision-log update?**
+  Same Method Trace + same harvest as a Hermes round — Opus learns from `docs/distill/method-traces.md` either
+  way. (Trivial turns — a typo, a one-command lookup, plain chat — are NOT reusable judgments; skip.)
 
 ## 6. Load-on-demand map (read the right one for the task)
 - `docs/research/HERMES.md` — the live-run / Hermes / autonomous workflow runbook + governance rules 1–17.
