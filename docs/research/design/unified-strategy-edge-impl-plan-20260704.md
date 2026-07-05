@@ -493,8 +493,23 @@ generator/evaluator split, each with its rule-12 gate.
 | **BS-3a** (solver center) | `7f66cb7` | `resolveSearchCenter` block-scan branch → `searchSeed.searchCenter` (no victim/1n-dust). Gate `searcher:blockscan-solver-center` 2/2 + backrun byte-identical |
 | **SCANNER OFFLINE-COMPLETE** | — | detect (BS-1a 2-hop + BS-2 cycles) → route (BS-1b) → size (BS-3a), all tested. **Remaining needs the LIVE NODE / real fork state → OPERATOR-gated:** BS-3 full-pipeline sim→standalone bundle (needs a profitable block-scan fixture on a fork), BS-lane (concurrent lane in the live process), BS-4 (live dry-run window). CR-5 gate needs archive (0xf88b fork replay, block 24710788 past prune). CS-min/CS-full/D/CR-8 are later Phase-3/4 slices |
 
-Everything from `BS-contract` onward is unwritten. Total: **3 of 16 runtime slices landed; the
-block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of Phase 3/4 do not exist.**
+**STATUS (2026-07-05, supersedes the pre-implementation line below):** Phase 0 (S0/S1/S2) + Phase 1
+(BS-0, BS-contract A/B/B2/C1/C2, BS-universe P1/P2, CR-3 a/b) + the block-scan scanner OFFLINE body
+(BS-1a 2-hop core, BS-1b planner binding, BS-2 3–4-hop cycles, BS-3a solver center) are all LANDED +
+gated. The 2026-07-05 R-2b relay added: BS-0-curve node-state verification, `edge-kinds` receipt
+derivation (chip `task_45c7379e` closed), the `blockscan-fork-solve` probe (which fork-verified the
+BS-0 exemplar `0xf2de7499` as **−EV / oracle-trigger, NOT a standing dislocation** → BS-3 full pipeline
+is EPIC-blocked on a genuinely-viable +EV exemplar), CR-3 secondary AC-3-archive validation, and CR-5
+decomposition (a–e; CR-5b escalated — no deterministic Fluid quote path). **Dual-blind arch review
+(R-2b-6) verdict: the production needle-mover is FLOW-ADMISSION — the MEV-Share submit flag
+`SEARCHER_SUBMIT_HASHONLY_MEVSHARE` (95% of +EV sims self-drop at submit_gate because it is unset) — a
+HUMAN-GATE config flip (chip `task_3deb3186`), not more Phase-2b scaffolding.** Still unwritten / gated:
+BS-3 full pipeline (viable-exemplar-blocked), CR-5 adapter (archive + Fluid-quote-gated), BS-lane/BS-4
+(live node/window), CS-min/CS-full/D/CR-8 (Phase 3/4).
+
+_(historical, pre-implementation:)_ Everything from `BS-contract` onward is unwritten. Total: **3 of 16
+runtime slices landed; the block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of
+Phase 3/4 do not exist.**
 
 ### 9.2 The node is in bounded-LIVE-BROADCAST mode RIGHT NOW (critical safety note)
 
