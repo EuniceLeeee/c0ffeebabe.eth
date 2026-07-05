@@ -66,6 +66,14 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
+- **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
+  light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
+  analysis / bundle postmortem / a tool found wrong / repo diagnosis), you MUST: (1) write
+  `docs/analysis/YYYYMMDD-<topic>.md` ending with a `## Method Trace` (the 8 fields — see HERMES rule 16);
+  (2) run `cd analysis && npm run method-trace-check -- ../docs/analysis/<file>.md` then `npm run distill-harvest`;
+  (3) if `tool_gap != none`, **file a `tooling_defect` LearningCase** (not "fix later"); (4) state in your
+  answer: **new Method Trace? harvested? tooling_defect? decision-log update?** Same Method Trace + same
+  harvest as a Hermes round — Opus learns from `docs/distill/method-traces.md` either way.
 
 ## 6. Load-on-demand map (read the right one for the task)
 - `docs/research/HERMES.md` — the live-run / Hermes / autonomous workflow runbook + governance rules 1–17.
