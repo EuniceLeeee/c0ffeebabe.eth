@@ -177,14 +177,15 @@ async function buildEdgeNode(
       };
 
     case "psm":
-      // sellGem(usr, gemAmt) — requires approval of input token to the PSM
+      // sellGem/buyGem gemAmt is always the USDC-side amount.
       ensureApprove(edge.tokenIn, edge.target);
+      const gemAmount = edge.tokenIn.toLowerCase() === ADDR.USDC.toLowerCase() ? amtIn : amtOut;
       return {
         adapterId: "psm",
         target: edge.target,
         tokenIn: edge.tokenIn,
         tokenOut: edge.tokenOut,
-        amount: amtIn,
+        amount: gemAmount,
         params: {},
         children: [],
       };
