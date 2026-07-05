@@ -1,0 +1,118 @@
+# Decision Log — dated decisions & findings (may go stale)
+
+> The committed sink for the dated conclusions CLAUDE.md used to inline. Scope: authorized defensive
+> on-chain arbitrage research (fork/dry-run; broadcast is a human gate).
+>
+> Rules:
+> - Each entry has a date + status: ✅ in effect / ⏳ to-verify / ~~❌ retired~~ (strike, don't delete —
+>   prevents circling back to a dead path).
+> - Conclusions bind the code/data state when written. Stale → update the status, don't erase.
+> - Before re-opening a settled question, scan the ✅ and ❌ entries here first.
+> - Cross-session operating facts also live in user memory (`MEMORY.md`); this file is the *committed*
+>   copy Codex and fresh sessions can read. Link memory slugs as `[[slug]]`.
+
+---
+
+## Decisions
+
+### D-001 | 2026-07-05 | ✅ | Flip the MEV-Share submit flag (falsification of the flow-admission lever)
+- **Decision:** `SEARCHER_SUBMIT_HASHONLY_MEVSHARE=1` on the bounded-live node for a measured window.
+- **Why:** the 2026-07-05 dual-blind arch review found 95.3% of 3,889 +EV sims (incl. the biggest
+  $50–$210) self-drop at `submit_gate/hash_only_unmatchable` because this one flag is unset — the drain
+  (`submitMevShareBundle`) is already built. THE production lever, not an epic. [[project-mevshare-submit-flag-lever]]
+- **Envelope intact:** wallet ≤0.2 ETH, `EV_GATE=1`; `mev_sendBundle` is conditioned on the referenced
+  hash landing ⇒ no phantom-loss path ([[project-mevshare-flow-discarded]]). Broadcast-behavior change ⇒
+  required explicit user authorization (Safety Rule 1) — **granted 2026-07-05**.
+- **First-order effect (run_id `0bf0319a`, ~9 min):** `hash_only_unmatchable` drops 95.3% → 0 (submit-gate
+  wall gone, as predicted). `bundle_submitted` still 0 over the thin window; the surviving +EV sims all hit
+  `below_ev_gate` (dust). **Next lever if this holds = economics** (`bribeAllAboveGas ⇒ net≈0`, a strategic
+  human call). Needs a longer window to see the big MEV-Share sims submit + `bundle-postmortem` real inclusion.
+- **Failure/revert:** if they still don't submit / relay rejects / real profit ≪ overlay sim ⇒ sim-fidelity,
+  not flow-admission. Safety valve reverts via `rm /opt/MEV/.deploy-live`.
+
+### D-002 | 2026-07-03 | ✅ | Auto-deploy IS in the §6b auto-close chain (do not re-litigate)
+- **Decision:** the postmortem → auto-close → deploy chain may auto-deploy via `deploy-node.sh`.
+- **Why:** the ~1-min restart gap is acceptable; events JSONL gets a new `run_id` per restart, so analysis
+  is naturally segmented (analyze across the boundary). The live/dry guard lives in `deploy-node.sh`, so a
+  cron trigger passes the SAME safety envelope as a human one.
+- **Requirements (mandatory, not human-gating):** (1) mode-preservation verify after deploy (alert on a
+  silent bounded-live→dry-run flip); (2) debounce/batch — the real cost is warm-pool cold-start, deploy at
+  most once/window, never once-per-loss. [[feedback-auto-deploy-in-loop-approved]]
+
+### D-003 | 2026-07-03 | ✅ | Bounded-live envelope authorized
+- **Decision:** the searcher may broadcast autonomously ONLY inside the script-enforced envelope
+  (`.deploy-live` marker + wallet ≤ `MEV_LIVE_MAX_WALLET_ETH` 0.2 ETH + `EV_GATE=1`). See Safety Rule 1.
+- **Still hard human gates:** funding above the cap, raising the cap, real-funds key swap, any broadcast
+  outside the envelope. [[project-bounded-live-active]] [[project-live-broadcast-authorized]]
+
+### D-004 | 2026-07-04 | ✅ | MEV-Share (hash-only ingest) is always ON at intake
+- **Decision:** `SEARCHER_ENABLE_HASH_ONLY=1` unconditionally in `deploy-node.sh` (was marker-gated).
+- **Why:** MEV-Share is the primary flow (~72× mempool volume, ~90% of the built pipeline); R13–R21
+  "coverage exhausted" was measured on ~1.4% of flow because this was off. Ingest+sim only — submission is
+  separately gated (D-001). [[project-mevshare-flow-discarded]]
+
+---
+
+## Facts (verified project state)
+
+### F-001 | 2026-07-05 | ✅ | Primary distance-to-production lever = flow-admission at the submit gate
+- **Fact:** with MEV-Share intake ON, the dominant self-drop is `submit_gate/hash_only_unmatchable`
+  (95.3% of drops, gated by the D-001 flag), not coverage/`no_candidate`. Runner-up = economics
+  (`bribeAllAboveGas ⇒ computeBidEth = max(profit−gas,0) ⇒ net≈0`). [[project-mevshare-submit-flag-lever]]
+- **Evidence:** arch review `docs/research/reports/arch-review-20260705-verdict.md`; funnel `file:line` in
+  `listener/src/searcher/main.ts` (submit gate `:222`/`:1868`; flag `:435`; EV gate `:1963`).
+
+### F-002 | 2026-07-03 | ✅ | Native-ETH v4 pool gap `0xa32b646c` — CLOSED as a pool gap
+- **Fact:** bundle `0xa32b646c…8b2f68` (block 25449741) lost `route_gap_decisive`; winner `0x28390df4…`
+  backran the same triggering swap via WETH→CFG (v3 `0x08a10a8b…FCBF`) then CFG→WETH on a **native-ETH v4
+  pool `0x267d01a3…9348cd9c`** (on-chain `Initialize`: currency0=`0x0`, currency1=CFG, fee=10001,
+  tickSpacing=200, hooks=0x0). Our v3-only 3-hop detour saw ~43% of the value; winner's builder payment
+  (~97% of its gross) alone exceeded our FULL sim gross ⇒ coverage, not bids.
+- **Close:** commits `8acee06`/`b06717c`/`574d5e4` — reusable `v4-backfill-poolid` verb, force-include
+  extended to v4 poolIds (was address-only), committed `force-include-poolids.json` survives deploy.
+  Rule-12 flip `pool_in_routing_graph false→true, candidate_plans 0→1`. Native-ETH v4 execution is NOT a
+  blocker (epic slice-2b-ii, `c817cc2`). [[project-buildernet-auction-loss-anatomy]] [[project-competitor-native-eth-profit]]
+
+### F-003 | 2026-07-04 | ✅ | Atomic backrun = dust market ceiling *on public flow* (posture-qualified)
+- **Fact:** coffeebabe (our exact class) captures dust on public flow (~$0.64/tx; the per-tx
+  `realized_profit_usd` is a valuation artifact — builder-payment is the robust floor). For OUR posture the
+  ~1/5h ceiling is a MARKET limit, not a capability limit. **Qualified:** this was measured on public
+  mempool ≈ 1.4% of flow — the real question is MEV-Share (D-001/D-004), not more atomic-backrun coverage.
+  [[project-atomic-backrun-market-ceiling]] [[project-coffeebabe-census-notseen-bridge]]
+
+### F-004 | 2026-07-04 | ⏳ | Mempool router-allowlist is a flow-admission blind spot
+- **Fact:** the filtered mempool admits `tx.to` in ~10–14 hardcoded routers OR a tracked pool
+  (`main.ts:206`) → public swaps via custom routers are invisible pre-funnel (found: coffee's 1 public
+  victim we missed, `to` `0x663dc15d`). Fixable searcher-side (admit by pool-touch), distinct from the
+  economics gate. [[project-mempool-router-allowlist-blindspot]] [[project-mempool-filter-flow-admission-gap]]
+
+### F-005 | 2026-07-04 | ✅ | topN=0 pool-universe bug + dominant `no_candidate` root cause
+- **Fact:** `SEARCHER_POOL_UNIVERSE_TOP_N` default "0" + `?? Infinity` → `slice(0,0)` → the curated
+  active-pools universe never loads → runtime graph misses return venues. Verify `universe=N` in the
+  startup banner after every deploy. The dominant see→bundle blocker had been `no_candidate_plans` (94% =
+  `only_immediate_same_pool_reverse`, a token-graph return-venue coverage gap). [[project-pool-universe-topn-zero-bug]] [[project-nocandidate-return-venue-gap]]
+
+---
+
+## Dead-ends / retired (high-value — don't circle back)
+
+### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
+- **Why wrong:** measured on ~1.4% of flow (MEV-Share intake was OFF). The router-allowlist + MEV-Share
+  intake gaps never ENTER the funnel, so `pipeline_dropped`/pool-coverage could never see them — a SHARED
+  WRONG FRAME that dual-blind convergence masked as confirmation. Fix: the mandatory frame audit (rule 13
+  arch-review trigger) + the hermes-gate intake-audit lens. [[project-mevshare-flow-discarded]]
+
+### ~~X-002 | 2026-07-01 | ❌ | "coffeebabe is atomic, MEV-Share can't save us" from a single-pool probe~~
+- **Why wrong:** concluded without tracing what the competitor backran. A root-cause is INVALID unless it
+  names the specific source swap (or proves none) from a manual trace — now Hermes doctrine (Mechanics
+  Step-1). 
+
+### ~~X-003 | 2026-07-03 | ❌ | Interim re-classification of `0xa32b646c` as an execution-adapter epic~~
+- **Why wrong:** off a corrupted code read (`rg -r` swallows a replacement arg — never `rg -rn`/`-rln`) +
+  a stale memory. Re-verified from clean reads + on-chain data; the original pool-gap classification stood
+  (F-002). Verify against CODE, not memory (rule 3). [[project-buildernet-auction-loss-anatomy]]
+
+### ~~X-004 | multiple rounds | ❌ | "polishing the microscope" — analysis commits as progress~~
+- **Why wrong:** safe verifiable analysis commits left searcher behavior unchanged (the 2026-07-01
+  pattern). Fix: rule 12 `turn_class: observability-only` + rule 13 anti-drift cap (one such turn, then the
+  next Brief MUST change behavior or escalate).
