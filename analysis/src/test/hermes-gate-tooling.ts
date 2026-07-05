@@ -3,6 +3,7 @@ import {
   fails,
   validateManualArtifact,
   validateMethodTrace,
+  validateMethodTraceContent,
   validateStep1RequiredFields,
   validateToolingDefects,
 } from "../cli/hermes-gate.js";
@@ -73,6 +74,31 @@ const checks: Array<() => void> = [
   () => expectPass("prose fable marker with fable_manual no needs no method trace", () => {
     validateStep1RequiredFields(step1({ fable_manual: "no" }));
     validateMethodTrace("# Hermes\n\nfresh fable reviewed the raw data.\n", step1({ fable_manual: "no" }), []);
+  }),
+  () => expectPass("content validator accepts full competitor path method trace", () => {
+    validateMethodTraceContent(validTraceMd(), []);
+  }),
+  () => expectFail("content validator requires method trace block", () => {
+    validateMethodTraceContent("# Daily Analysis\n\nNo trace here.\n", []);
+  }, "no `## Method Trace`"),
+  () => expectFail("content validator architecture review requires coverage matrix", () => {
+    validateMethodTraceContent(archTraceMd(), []);
+  }, "task_class:architecture_review", "no `## Architecture Coverage Matrix` section"),
+  () => expectPass("content validator architecture review with full matrix passes", () => {
+    validateMethodTraceContent(archTraceMd(archMatrix()), []);
+  }),
+  () => expectFail("content validator named tool gap requires filed tooling defect case", () => {
+    validateMethodTraceContent(validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^codify_next:.*$/m, "codify_next: add metric"), []);
+  }, "names a tool_gap", "no tooling_defect LearningCase is filed"),
+  () => expectPass("content validator named tool gap passes with filed tooling defect case", () => {
+    validateMethodTraceContent(validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^codify_next:.*$/m, "codify_next: add metric"), [toolingDefectCase("open")]);
+  }),
+  () => expectPass("round wrapper fable_manual no preserves early return", () => {
+    validateMethodTrace(validTraceMd().replace(/^task_class:.*\n/m, ""), step1({ fable_manual: "no" }), []);
   }),
   () => expectPass("fable_manual yes with full method trace passes", () => {
     validateStep1RequiredFields(step1({ fable_manual: "yes" }));

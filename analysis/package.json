@@ -13,6 +13,7 @@
     "redact-live-run": "tsx src/cli/redact-live-run.ts",
     "distill-harvest": "tsx src/cli/distill-harvest.ts",
     "hermes-gate": "tsx src/cli/hermes-gate.ts",
+    "method-trace-check": "tsx src/cli/method-trace-check.ts",
     "venue-discovery-scan": "tsx src/cli/venue-discovery-scan.ts",
     "test:sender-flow": "node --import tsx --test src/test/sender-flow-victim-source.ts",
     "test:swap-log-registry": "node --import tsx --test src/test/swap-log-registry.ts",

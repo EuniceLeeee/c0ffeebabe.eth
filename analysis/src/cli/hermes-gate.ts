@@ -148,6 +148,10 @@ export function validateMethodTrace(
   cases: LearningCase[],
 ): void {
   if (step1.fable_manual !== "yes") return;
+  validateMethodTraceContent(md, cases);
+}
+
+export function validateMethodTraceContent(md: string, cases: LearningCase[]): void {
   const blocks = [...md.matchAll(/##\s*Method Trace[\s\S]*?(?=\n##\s|$)/gi)].map((m) => m[0]);
   if (blocks.length === 0) {
     fail("Fable manual analysis present but no `## Method Trace` block — missing = invalid handoff (rule 16).");
