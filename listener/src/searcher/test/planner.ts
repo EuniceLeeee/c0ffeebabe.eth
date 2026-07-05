@@ -23,7 +23,7 @@ import {
 import { mergePoolRegistries } from "../active-pool-discovery.js";
 import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
 import { backfillV4PoolIdIntoActivePools } from "../backfill-v4-poolid.js";
-import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { deriveEdgeTaxonomy, type ProtocolAction } from "../strategy-taxonomy.js";
 import type { FlashLiquidityView, FlashSource } from "../solver/flash-liquidity.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
 
@@ -63,6 +63,25 @@ function lend(tokenIn: string, tokenOut: string, pool: string, adapterId = "flui
     slotKind: "lend",
     // S0 contract: deriveEdgeTaxonomy("lend") sets edgeKind:"credit" and leavesStandingPosition:true.
     ...deriveEdgeTaxonomy("lend"),
+    score: 100,
+  };
+}
+
+function protocol(
+  tokenIn: string,
+  tokenOut: string,
+  pool: string,
+  protocolAction: ProtocolAction,
+  adapterId = "psm",
+): TokenEdge {
+  return {
+    adapterId,
+    target: pool,
+    tokenIn,
+    tokenOut,
+    slotKind: "protocol",
+    protocolAction,
+    ...deriveEdgeTaxonomy("protocol", protocolAction),
     score: 100,
   };
 }
@@ -468,6 +487,7 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
 const REAL_WETH = ADDR.WETH;
 const REAL_WSTUSR = ADDR.WSTUSR;
 const REAL_USDC = ADDR.USDC;
+const REAL_DAI = ADDR.DAI;
 const REAL_USDT = ADDR.USDT;
 const FLUID_VAULT_WSTUSR_USDC = ADDR.FLUID_VAULT_WSTUSR_USDC;
 const POOL_F88B_USDC_WSTUSR_DEX = "0xf88b498b835279ec9de597c7360ca21b7e880305";
@@ -602,6 +622,33 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
     impact: { tokenIn: REAL_USDC, tokenOut: REAL_WSTUSR, pool: POOL_F88B_USDC_WSTUSR_DEX, start: REAL_WSTUSR },
     templates: [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
     flashLiquidity: [[REAL_WSTUSR, 1_000_000_000_000n, "morpho-flash"]],
+    maxHops: 2,
+    expectMinPlans: 1,
+  },
+  {
+    // PSM reverse (buyGem, DAI->USDC) routing; A1. Anti-binding note: the
+    // protocol edge is strategy-AGNOSTIC, like credit-f88b; this fixture proves
+    // protocol-edge routing through the existing swap slot, not strategy identity.
+    id: "psm-reverse-absent",
+    provenance: "A1 PSM reverse buyGem DAI->USDC routing; Sky LitePSM reverse edge absent",
+    edges: [
+      swap(REAL_USDC, REAL_DAI, ADDR.CURVE_3POOL, "curve-exchange-plain"),
+    ],
+    impact: { tokenIn: REAL_USDC, tokenOut: REAL_DAI, pool: ADDR.CURVE_3POOL, start: REAL_DAI },
+    maxHops: 2,
+    expectPlans: 0,
+    expectClass: "impact_token_no_supported_return_venue",
+  },
+  {
+    // Same graph with the synthetic DAI->USDC PSM protocol edge present: the
+    // DAI->USDC->DAI loop closes without adding a live registry reverse edge.
+    id: "psm-reverse-present",
+    provenance: "A1 PSM reverse buyGem DAI->USDC routing; Sky LitePSM reverse protocol edge present",
+    edges: [
+      protocol(REAL_DAI, REAL_USDC, ADDR.SKY_PSM_LITE, "convert"),
+      swap(REAL_USDC, REAL_DAI, ADDR.CURVE_3POOL, "curve-exchange-plain"),
+    ],
+    impact: { tokenIn: REAL_USDC, tokenOut: REAL_DAI, pool: ADDR.CURVE_3POOL, start: REAL_DAI },
     maxHops: 2,
     expectMinPlans: 1,
   },

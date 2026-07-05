@@ -33,6 +33,7 @@
     "searcher:arb-relevance": "tsx src/searcher/test/pool-universe-arb-relevance.ts",
     "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
     "searcher:planner": "node --import tsx src/searcher/test/planner.ts",
+    "searcher:psm-quote": "node --import tsx src/searcher/test/psm-quote.ts",
     "searcher:sim-gas-on-revert": "node --import tsx src/searcher/test/sim-gas-on-revert.ts",
     "searcher:cycle-fingerprint": "node --import tsx src/searcher/test/cycle-fingerprint.ts",
     "searcher:blockscan-solver-center": "node --import tsx src/searcher/test/blockscan-solver-center.ts",

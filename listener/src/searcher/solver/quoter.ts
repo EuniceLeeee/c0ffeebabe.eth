@@ -160,20 +160,58 @@ async function quoteUniV3(
 
 // ── PSM (Sky/Maker stable swap, 1:1 with decimal scaling) ──────
 
-function quotePSM(
+const psmIface = new ethers.Interface([
+  "function tin() view returns (uint256)",
+  "function tout() view returns (uint256)",
+]);
+const WAD = 10n ** 18n;
+const PSM_TO18 = 10n ** 12n;
+
+async function readPSMFee(
+  state: StateBackend,
+  target: string,
+  fee: "tin" | "tout",
+): Promise<bigint> {
+  try {
+    const result = await state.call({
+      to: target,
+      data: psmIface.encodeFunctionData(fee),
+    });
+    const decoded = psmIface.decodeFunctionResult(fee, result);
+    return BigInt(decoded[0]);
+  } catch {
+    return 0n;
+  }
+}
+
+async function quotePSM(
+  state: StateBackend,
+  target: string,
   tokenIn: string,
   tokenOut: string,
   amountIn: bigint,
-): bigint {
+): Promise<bigint> {
   const usdc = ADDR.USDC.toLowerCase();
   const dai = ADDR.DAI.toLowerCase();
   const tIn = tokenIn.toLowerCase();
   const tOut = tokenOut.toLowerCase();
-  if (tIn === usdc && tOut === dai) {
-    return amountIn * 10n ** 12n;
+  const sellsGem = tIn === usdc && tOut === dai;
+  const buysGem = tIn === dai && tOut === usdc;
+  if (!sellsGem && !buysGem) {
+    throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
   }
-  if (tIn === dai && tOut === usdc) {
-    return amountIn / 10n ** 12n;
+  const [tin, tout] = await Promise.all([
+    readPSMFee(state, target, "tin"),
+    readPSMFee(state, target, "tout"),
+  ]);
+  if (sellsGem) {
+    const gemAmt18 = amountIn * PSM_TO18;
+    const fee = gemAmt18 * tin / WAD;
+    return gemAmt18 - fee;
+  }
+  if (buysGem) {
+    const gemAmt18 = amountIn * WAD / (WAD + tout);
+    return gemAmt18 / PSM_TO18;
   }
   throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
 }
@@ -409,7 +447,7 @@ export async function quote(
     case "univ4-unlock":
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey);
     case "psm":
-      return quotePSM(tokenIn, tokenOut, amountIn);
+      return quotePSM(state, target, tokenIn, tokenOut, amountIn);
     case "fluid-vault":
       return quoteFluidVault();
     default:
