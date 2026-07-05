@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse(Bash) guard — ENFORCES CLAUDE.md rule 11.
+"""PreToolUse(Bash) guard — ENFORCES HERMES.md rule 11.
 
 A raw `codex ... exec` launch inherits the shell's stdin and hangs forever on
 "Reading additional input from stdin..." (2026-07-02: a plan-review sat stdin-hung 15 min).
@@ -41,7 +41,7 @@ if is_launch:
     if "codex-run.sh" in cmd or "/dev/null" in cmd:
         sys.exit(0)
     sys.stderr.write(
-        "BLOCKED (CLAUDE.md rule 11): do NOT hand-write 'codex exec'. Launch codex via "
+        "BLOCKED (HERMES.md rule 11): do NOT hand-write 'codex exec'. Launch codex via "
         "scripts/codex-run.sh <read-only|workspace-write> <brief-file> <out-prefix> — it bakes in "
         "'< /dev/null' (stdin-hang guard), caffeinate, -o/--json to files, and a 30s stdin-hang "
         "watchdog. A raw 'codex exec' without '< /dev/null' hangs on stdin forever "

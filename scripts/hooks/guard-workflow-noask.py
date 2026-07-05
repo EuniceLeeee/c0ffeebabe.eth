@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse(AskUserQuestion) guard — ENFORCES CLAUDE.md rule 14.
+"""PreToolUse(AskUserQuestion) guard — ENFORCES HERMES.md rule 14.
 
 A multi-round / user-away workflow means the user is NOT at the keyboard: run-scoped, architecture,
 and scope calls are the agent's to make (pick the option best for the extraction goal + PROCEED +
@@ -39,7 +39,7 @@ if any(k in blob for k in STOP_KEYWORDS):
     sys.exit(0)  # a genuine stop condition -> still ask the human
 
 sys.stderr.write(
-    "BLOCKED (CLAUDE.md rule 14): a multi-round workflow is ACTIVE (/tmp/mev-workflow-active) = the "
+    "BLOCKED (HERMES.md rule 14): a multi-round workflow is ACTIVE (/tmp/mev-workflow-active) = the "
     "user is away. Do NOT ask a run-scoped / architecture / scope question — pick the option best for "
     "the extraction goal (catch more MEV) and PROCEED, then RECORD the decision (Hermes md 'Claude "
     "Final Decision' / Findings Ledger for run-scoped; CLAUDE.md for durable governance; memory for "

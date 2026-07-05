@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# codex-run.sh — the ONE sanctioned way to launch a long `codex exec` (CLAUDE.md rule 11).
+# codex-run.sh — the ONE sanctioned way to launch a long `codex exec` (HERMES.md rule 11).
 # NEVER hand-write the codex invocation: the guards below keep getting forgotten and each one
 # has burned a run. This script bakes them in so they CANNOT be omitted.
 #

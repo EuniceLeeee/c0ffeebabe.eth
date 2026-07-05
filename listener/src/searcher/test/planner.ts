@@ -460,7 +460,7 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
   console.log("[planner] native-ETH v4 pool routes through WETH alias: PASS");
 }
 
-// ── Real-case regression fixtures (repair-replay gate, CLAUDE.md governance 12) ──
+// ── Real-case regression fixtures (repair-replay gate, docs/research/gates.md rule 12) ──
 // Each pins a real failing case observed live so a coverage/routing fix can be
 // confirmed deterministically (flip) and guarded against regression. Addresses are
 // public on-chain evidence. The planner is address-agnostic, so these behave exactly

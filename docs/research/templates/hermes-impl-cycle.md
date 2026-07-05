@@ -1,7 +1,7 @@
 # Hermes Impl Cycle `<cycle_id>`
 
 > **Step 0 (before anything): ensure the sleep-keeper is alive** — Codex bg runs freeze on Mac
-> sleep. See CLAUDE.md Rounds Step 0 (idempotent, `/tmp/mev-sleep-keeper.pid`, `caffeinate -i -d -s`).
+> sleep. See HERMES.md §Rounds Step 0 (idempotent, `/tmp/mev-sleep-keeper.pid`, `caffeinate -i -d -s`).
 > **Lean template for an IMPLEMENTATION cycle** — a known fix → code → gate → merge.
 > For a genuine LIVE-RUN ANALYSIS (run searcher → drop attribution → competitor
 > cross-reference → decide the fix) use the full `hermes-live-run.md` instead.

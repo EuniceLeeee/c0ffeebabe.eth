@@ -1,6 +1,6 @@
 # Architecture Review — template (invariants) + per-firing handoff checklist (variables)
 
-> Fired by CLAUDE.md rule 13's **architecture-review trigger** (≥2 consecutive rounds close with no
+> Fired by HERMES.md rule 13's **architecture-review trigger** (≥2 consecutive rounds close with no
 > growth in a genuine +EV `simSuccess`). This file is the REUSABLE part. Per-firing data lives in a
 > freshly-generated handoff (`docs/research/reports/HANDOFF-architecture-review.md`), NOT here.
 > Scope: authorized defensive on-chain arbitrage research; fork/dry-run; broadcast human-gated.
@@ -60,7 +60,7 @@ Regenerate `HANDOFF-architecture-review.md` from the CURRENT run data every time
   ONLY for the analysis plan (no execution); **phase 2** — after you approve, `SendMessage` the SAME
   agent (context preserved) "execute". Do NOT rely on a "show me the plan first" line inside the prompt.
 
-## D. Dual-blind at the architecture level (CLAUDE.md rule 13 — SAME anti-nodding as Rounds step 4)
+## D. Dual-blind at the architecture level (HERMES.md rule 13 — SAME anti-nodding as Rounds step 4)
 The architecture review is dual-blind, not a single reviewer:
 - **Conclusion A = the fable sub-agent** (Agent tool, model:fable) — chain-side + code, does the traces.
 - **Conclusion B = Codex, independently** — dispatch it (rule-11 protocol, `-s read-only -a never exec`,

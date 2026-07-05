@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stop hook — ENFORCES CLAUDE.md rule 15 (a status report is NOT a stop).
+"""Stop hook — ENFORCES HERMES.md rule 15 (a status report is NOT a stop).
 
 The rule-14 no-ask hook stops the agent from *asking* mid-workflow, but the real failure mode is
 subtler: after a big analysis the agent writes a checkpoint report and simply YIELDS the turn —
@@ -32,7 +32,7 @@ if data.get("stop_hook_active"):
 
 sys.stderr.write(
     "AUTONOMOUS WORKFLOW ACTIVE (/tmp/mev-workflow-active) — do NOT end on a status report alone "
-    "(CLAUDE.md rule 15). Before this turn ends, confirm ONE of:\n"
+    "(HERMES.md rule 15). Before this turn ends, confirm ONE of:\n"
     "  (a) background work is RUNNING or a wakeup/timer is scheduled that will re-invoke you — then "
     "this stop is fine: briefly say what you're waiting on, and stopping again will proceed;\n"
     "  (b) otherwise DISPATCH the next action NOW (next Codex/agent, deploy, ScheduleWakeup, the next "

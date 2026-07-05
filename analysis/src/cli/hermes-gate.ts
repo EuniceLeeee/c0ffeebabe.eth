@@ -16,7 +16,7 @@ function repoRoot(from: string): string {
 
 /**
  * Hermes close-gate (forcing function for the mandatory Step-1 competitor
- * cross-reference, CLAUDE.md Hermes §Step-1).
+ * cross-reference, HERMES.md §Mechanics Step-1).
  *
  * Purpose: make it IMPOSSIBLE to close a cycle / write "Final Approval" on a
  * measured live/dry-run window without an actual Step-1 competitor
@@ -347,7 +347,7 @@ function main(): void {
   const step1 = parseStep1Block(md);
   if (!step1) {
     console.error("FAIL: no ```step1 block in the Hermes md.");
-    console.error("Step-1 competitor cross-reference is mandatory before Final Approval (CLAUDE.md Hermes §Step-1).");
+    console.error("Step-1 competitor cross-reference is mandatory before Final Approval (HERMES.md §Mechanics Step-1).");
     process.exit(1);
   }
 

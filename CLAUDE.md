@@ -116,6 +116,9 @@ Morpho (flash loan 3,533.49 wstUSR)
 
 ## Safety Rules (hard gates — never autonomous)
 
+> Safety Rule **numbers are load-bearing** — Rule 1 is referenced by number from HERMES.md, the autonomous
+> routines, and the bundle-postmortem skill. Never renumber; compress in place.
+
 1. **Broadcasting transactions to mainnet (and signing with the private key) requires explicit user authorization.**
    The user authorized live bundle submission (2026-06-10) and, on 2026-07-03, authorized a **BOUNDED-LIVE test**: the searcher may broadcast autonomously ONLY inside a hard, script-enforced envelope, so worst-case loss is bounded to a tiny test wallet.
    - **The bounded-live envelope (all must hold, else stay dry-run):** live is gated by the node-side marker `/opt/MEV/.deploy-live`; `deploy-node.sh` REFUSES live unless the signing wallet balance `≤ MEV_LIVE_MAX_WALLET_ETH` (default 0.2 ETH) AND `SEARCHER_EV_GATE=1`. Flash-loan arbs are atomic (a bad arb reverts, principal never at risk) + the BotVM executor holds no standing funds → max loss is the test wallet's gas/bribe balance. Verified 2026-07-03: signer `0xb8578B6de173C8554FF0390dB5a7effA567DDA3c` = 0.0027 ETH, BotVM `0x4aF9495C…5BCe` = empty.
