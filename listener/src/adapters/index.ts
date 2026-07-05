@@ -5,7 +5,7 @@ import { balancerFlashAdapter } from "./balancer-flash.js";
 import { fluidVaultAdapter } from "./fluid-vault.js";
 import { fluidDexLiquidateAdapter, fluidDexSwapAdapter } from "./fluid-dex.js";
 import { erc20ApproveAdapter, erc20TransferAdapter } from "./erc20.js";
-import { erc4626DepositAdapter, erc4626RedeemAdapter } from "./erc4626.js";
+import { makeProtocolAdapter, PROTOCOL_LEG_DESCRIPTORS } from "./protocol-legs.js";
 import { psmAdapter } from "./psm.js";
 import { univ3Adapter } from "./univ3.js";
 import { univ2Adapter, univ2RouterAdapter, univ2RouterAltAdapter } from "./univ2.js";
@@ -26,8 +26,6 @@ import {
 } from "./curve.js";
 import { assertBalanceAdapter } from "./assert-balance.js";
 import {
-  wstethUnwrapAdapter,
-  wstethWrapAdapter,
   wethDepositValueAdapter,
   wethWithdrawAdapter,
   wethWithdrawAmountAdapter,
@@ -43,8 +41,9 @@ register(fluidDexSwapAdapter);
 // ERC20
 register(erc20ApproveAdapter);
 register(erc20TransferAdapter);
-register(erc4626DepositAdapter);
-register(erc4626RedeemAdapter);
+for (const desc of PROTOCOL_LEG_DESCRIPTORS) {
+  register(makeProtocolAdapter(desc));
+}
 // Swaps
 register(psmAdapter);
 register(univ3Adapter);
@@ -63,8 +62,6 @@ register(curveExchangeNoReceiverAdapter);
 register(curvePlainExchangeAdapter);
 register(curveRouterExecutePathAdapter);
 // Wrap
-register(wstethUnwrapAdapter);
-register(wstethWrapAdapter);
 register(wethDepositValueAdapter);
 register(wethWithdrawAdapter);
 register(wethWithdrawAmountAdapter);

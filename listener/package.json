@@ -33,6 +33,7 @@
     "searcher:arb-relevance": "tsx src/searcher/test/pool-universe-arb-relevance.ts",
     "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
     "searcher:planner": "node --import tsx src/searcher/test/planner.ts",
+    "searcher:protocol-legs": "node --import tsx src/searcher/test/protocol-legs.ts",
     "searcher:psm-build": "node --import tsx src/searcher/test/psm-build.ts",
     "searcher:psm-quote": "node --import tsx src/searcher/test/psm-quote.ts",
     "searcher:wsteth-quote": "node --import tsx src/searcher/test/wsteth-quote.ts",
