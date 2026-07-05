@@ -44,7 +44,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -66,6 +66,10 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # a single durable source that survives the recover-from-process rebuild. Does NOT touch the
   # DRY_RUN broadcast guard; only sizes the bribe (net stays ≥0 by the EV gate).
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
+  # protocol-edges (A6) is marker-controlled ($REPO/.protocol-edges), like .bribe-all-above-gas —
+  # admits the NEW wsteth wrap/unwrap protocol edges into the live graph. Full-value conversions
+  # (leavesStandingPosition=false); still bounded by the EV gate + wallet cap. Remove the marker → off.
+  [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"
   # hash-only (MEV-Share Path A) is ALWAYS ON (user directive 2026-07-04 — MEV-Share is the primary flow,
   # 72x mempool volume; was .hash-only marker-gated). Ingest+sim only (submission still gated by
   # allowHashOnlySubmit); no broadcast-guard/latency impact. To disable, edit this line deliberately.
@@ -77,11 +81,12 @@ else
   say "no running process — ensuring DRY_RUN=$DRY_VAL in existing .env (mode=$MODE)"
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
+  [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"  # A6 marker-gated (wsteth)
   echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share always on (user directive 2026-07-04)
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
