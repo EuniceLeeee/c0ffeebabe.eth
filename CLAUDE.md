@@ -82,6 +82,7 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - `docs/agent-style.md` — neutral-wording detail (behind Rule 6).
 - `docs/research/` — Hermes round docs, handoff/relay routines, architecture reviews, templates.
 - `docs/distill/method-traces.md` — the harvested Fable/Opus project-method library (Method Traces grouped by task_class; regenerate with `npm run distill-harvest`). Opus reads this to learn this project's analysis methods.
+- `docs/analysis/` — **daily** Fable analysis outputs (any manual analysis that isn't a full Hermes round). Each md ends with a `## Method Trace`; validate round-agnostically with `npm run method-trace-check -- <md>`; harvested into `method-traces.md`. See `docs/analysis/README.md`.
 - Skills: `bundle-postmortem` (competitor-loss decision tree), `mev-review` (trace-diff review).
   `docs/distill/` + `.claude/commands/{dualrun,compress}.md` — the Fable/Opus distillation workflow (don't
   auto-read; only for rule compression).

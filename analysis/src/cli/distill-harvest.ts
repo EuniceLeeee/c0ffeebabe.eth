@@ -124,11 +124,19 @@ function renderTraceLibrary(traces: MethodTrace[]): string {
 
 function main(): void {
   const root = repoRoot(fileURLToPath(import.meta.url));
-  const reportsDir = join(root, "docs", "research", "reports");
   const outPath = join(root, "docs", "distill", "method-traces.md");
-  const files = readdirSync(reportsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => join(reportsDir, entry.name))
+  // Hermes round docs (reports/) AND daily Fable analysis outputs (analysis/) — one Opus library.
+  const scanDirs = [
+    join(root, "docs", "research", "reports"),
+    join(root, "docs", "analysis"),
+  ];
+  const files = scanDirs
+    .filter((dir) => existsSync(dir))
+    .flatMap((dir) =>
+      readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+        .map((entry) => join(dir, entry.name)),
+    )
     .sort();
 
   const traces = files.flatMap(harvestFile)

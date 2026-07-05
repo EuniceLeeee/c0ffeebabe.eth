@@ -135,6 +135,11 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
       distill_for_opus: <one reusable rule Opus should learn from this round>
       ```
       The captured traces are harvested into `docs/distill/method-traces.md` (`npm run distill-harvest`) — the single asset Opus reads to learn the project's methods.
+    - **Not round-only.** The Method Trace contract applies to ANY Fable manual analysis, not just a Hermes
+      round. A daily one-off (postmortem / architecture note / replay debug / planning analysis) goes in
+      `docs/analysis/` and is validated round-agnostically with `npm run method-trace-check -- <md>` (no
+      step1 / 5-analysis scaffolding); harvest collects both `docs/analysis/` and the round reports. A
+      Hermes round is the heavy special case of the same Method Trace.
 17. **Tool-first, then codify-the-recurring-probe (orchestrator-side companion to 16).** BEFORE hand-writing a scratchpad analysis, CHECK the toolset (`analysis/src/cli/*`, the LearningCase `PrimaryGap` store `analysis/src/learning/learning-case.ts`, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it. A scratchpad analysis run a SECOND time, or mapping to an existing taxonomy, MUST be codified before cycle-close (same teeth as 13/16).
 
 ## Boundary (CLI-orchestrated by Claude)
