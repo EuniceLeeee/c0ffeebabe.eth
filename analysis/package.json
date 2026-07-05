@@ -11,6 +11,7 @@
     "onchain-loss-scan": "tsx src/cli/onchain-loss-scan.ts",
     "census-report": "tsx src/cli/census-report.ts",
     "redact-live-run": "tsx src/cli/redact-live-run.ts",
+    "distill-harvest": "tsx src/cli/distill-harvest.ts",
     "hermes-gate": "tsx src/cli/hermes-gate.ts",
     "test:sender-flow": "node --import tsx --test src/test/sender-flow-victim-source.ts",
     "test:swap-log-registry": "node --import tsx --test src/test/swap-log-registry.ts",

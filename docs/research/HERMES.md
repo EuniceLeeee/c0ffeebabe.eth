@@ -134,6 +134,7 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
       codify_next:      no | <field/test/gate/tooling_defect to add — name the target file/tool>
       distill_for_opus: <one reusable rule Opus should learn from this round>
       ```
+      The captured traces are harvested into `docs/distill/method-traces.md` (`npm run distill-harvest`) — the single asset Opus reads to learn the project's methods.
 17. **Tool-first, then codify-the-recurring-probe (orchestrator-side companion to 16).** BEFORE hand-writing a scratchpad analysis, CHECK the toolset (`analysis/src/cli/*`, the LearningCase `PrimaryGap` store `analysis/src/learning/learning-case.ts`, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it. A scratchpad analysis run a SECOND time, or mapping to an existing taxonomy, MUST be codified before cycle-close (same teeth as 13/16).
 
 ## Boundary (CLI-orchestrated by Claude)
