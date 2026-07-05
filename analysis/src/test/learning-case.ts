@@ -85,6 +85,11 @@ test("deriveEdgeKindsFromLogs classifies topic0 into stable edge kinds", () => {
     { topics: [TOPICS.erc4626Withdraw] },
   ]), ["protocol"]);
 
+  // Sky LitePSM SellGem/BuyGem (node-verified topic0s) = a protocol convert leg.
+  assert.deepEqual(deriveEdgeKindsFromLogs([{ topics: [TOPICS.psmSellGem] }]), ["protocol"]);
+  assert.deepEqual(deriveEdgeKindsFromLogs([{ topics: [TOPICS.psmBuyGem] }]), ["protocol"]);
+  assert.deepEqual(deriveProtocolActionsFromLogs([{ topics: [TOPICS.psmSellGem] }]), ["convert"]);
+
   assert.deepEqual(deriveEdgeKindsFromLogs([
     { topics: ["0x0000000000000000000000000000000000000000000000000000000000000000"] },
   ]), []);

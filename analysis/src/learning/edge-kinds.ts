@@ -47,6 +47,8 @@ const PROTOCOL_TOPICS = topicSet([
   TOPICS.liquityBatchUpdated,
   TOPICS.erc4626Deposit,
   TOPICS.erc4626Withdraw,
+  TOPICS.psmSellGem,
+  TOPICS.psmBuyGem,
 ]);
 
 const STABLE_ORDER: EdgeKind[] = ["flash", "swap", "credit", "lp", "protocol"];
@@ -69,6 +71,8 @@ const ACTION_ORDER: ProtocolAction[] = ["mint", "redeem", "wrap", "unwrap", "con
 const ZERO_WORD = `0x${"0".repeat(64)}`;
 const ERC4626_DEPOSIT = lower(TOPICS.erc4626Deposit);
 const ERC4626_WITHDRAW = lower(TOPICS.erc4626Withdraw);
+const PSM_SELL_GEM = lower(TOPICS.psmSellGem);
+const PSM_BUY_GEM = lower(TOPICS.psmBuyGem);
 const WETH_DEPOSIT = lower(TOPICS.wethDeposit);
 const WETH_WITHDRAWAL = lower(TOPICS.wethWithdrawal);
 const TRANSFER = lower(TOPICS.transfer);
@@ -101,6 +105,7 @@ export function deriveProtocolActionsFromLogs(
     if (!topic0) continue;
     if (topic0 === ERC4626_DEPOSIT) seen.add("stake");
     if (topic0 === ERC4626_WITHDRAW) seen.add("unstake");
+    if (topic0 === PSM_SELL_GEM || topic0 === PSM_BUY_GEM) seen.add("convert");
     if (topic0 === WETH_DEPOSIT && addressOf(log) === WETH_ADDR) seen.add("wrap");
     if (topic0 === WETH_WITHDRAWAL && addressOf(log) === WETH_ADDR) seen.add("unwrap");
     if (topic0 === TRANSFER && transferFromZero(log) && !lpEmitters.has(addressOf(log))) seen.add("mint");

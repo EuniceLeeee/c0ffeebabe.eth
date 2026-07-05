@@ -89,11 +89,14 @@ export const TOPICS = {
   // Pancake v3 + DODO — fixture-verified: match coffee-20260704/tx-4.json (0x19b47279… / 0xc2c0245e…).
   pancakeV3Swap: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
   dodoSwap: ethers.id("DODOSwap(address,address,uint256,uint256,address,address)"),
-  // TODO(protocol): Sky PSM BuyGem/SellGem — no event ABI in-repo (only the sellGem call selector) and
-  // no fixture emits the PSM (0xf6e72Db5…); resolve the deployed DssLitePsm event signature from a
-  // verified source before adding a hash (do NOT invent one).
-  // TODO(credit): Fluid Liquidity LogOperate — same: no in-repo event ABI / fixture to verify against;
-  // candidate signatures tried against coffee tx-7's unresolved topics did not match.
+  // Sky LitePSM (0xf6e72Db5…) — NODE-VERIFIED 2026-07-05: read the contract's real emitted topic0s over
+  // 20k blocks on local reth (SellGem 0xef75f5a4… ×2822, BuyGem 0x085d06ec… ×2522) then ethers.id-matched
+  // the signature (chain topic0 == ethers.id — two-way lock). SellGem = USDC→DAI, BuyGem = DAI→USDC.
+  psmSellGem: ethers.id("SellGem(address,uint256,uint256)"),
+  psmBuyGem: ethers.id("BuyGem(address,uint256,uint256)"),
+  // TODO(credit): Fluid Liquidity LogOperate — the Fluid VAULT (0xee327311…) emits 0 logs (inactive);
+  // LogOperate is emitted by Fluid's central Liquidity contract (address not yet resolved). Same
+  // node-verify method as PSM once that address is found; do NOT invent a hash.
 };
 
 export const CALL_SELECTORS = {
