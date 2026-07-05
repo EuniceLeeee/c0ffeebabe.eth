@@ -3,6 +3,45 @@
 > Source: `## Method Trace` blocks in docs/research/reports/*.md (Hermes rounds) + docs/analysis/*.md (daily).
 
 ## implementation
+### 20260705-learning-kernel-build.md
+- task_class: implementation
+- tools_used:
+  Bash×208 (codex-run.sh passes, builds/tests, SSM node checks, git), Edit×42, Read×30,
+    Write×24 (doc splits + ~12 Codex briefs), Agent×6 (5 fresh-context fable adversarial reviews + 1 fable
+    capture pass from Plan-window evidence), session-transcript search×4, list_sessions×2, Workflow×2,
+    mark_chapter×2, ToolSearch×1, AskUserQuestion×1
+- evidence_order:
+  repo/doc state first (git log, reports dir, CLAUDE.md section map, handoff routines, prior
+    session transcripts) → live node state over SSM (deploy-node.sh flags, running searcher env, bundle-router
+    MEV-Share path) before doc claims → constitution split + repo-wide cross-reference sweeps → per tooling
+    slice — read target source → scratchpad Codex brief → codex-run.sh → gate diff-scope/build/tests → commit
+    → dispatch fable adversarial review → harden pass on blocking findings → Stop hook + §5 rule → dogfood capture
+- analysis_frame:
+  generator/evaluator split on every code change (Claude briefs + gates, Codex implements;
+    Claude hand-edits only mechanical/test-strengthening pieces) — adversarial fresh-context review for any
+    change that can halt the loop (gate behavior) — constitution-vs-runbook layering for the instruction stack
+    — capture→check→harvest→distill as one closed learning loop, dogfooded on itself at session close
+- sanity_checks:
+  git diff --stat scope check per Codex pass (caught 3 unexpected files; discarded a superseded
+    flat-boolean pass via checkout) — build + suites at every gate (20/20 → 37/37 → 46/46 → 50/50 incl. 4
+    self-added F1–F3 regressions; parser 3/3) — hook smoke on 4 behaviors (clean-repo silent / missing-trace
+    exit 2 / harvested silent / stop_hook_active self-clear) + settings.json JSON validity — cross-ref sweeps
+    after doc moves — verified the first real daily Method Trace passes the gate before calling the loop closed
+- tool_gap:
+  none — the defects surfaced (harvest first-line truncation, gate false-positives/negatives)
+    were fixed in-session; the Plan-session-id→on-disk-transcript mismatch is a harness quirk worked around
+    once with an mtime scan, not a permanent repo tool falling short
+- codify_next:
+  one candidate — the session-id→transcript-file locator (mtime/stat scan of
+    ~/.claude/projects jsonl) was hand-scripted twice this session; now that §5 makes capture routine, fold a
+    locator into session-evidence. No other recurring hand-scripted probe in evidence.
+- distill_for_opus:
+  **adversarially review every gate-behavior change with a fresh-context reviewer — green tests
+    plus author self-review miss loop-halting edges. In this session, after 20/20 green + self-review, fable
+    still found blocking F1 (every template copy trips the usesFable prose regex, hermes-gate.ts:88 → false
+    halt) and F2 (rule-16 core loop false-negative); the parser review found first-line-scoping bugs (F1–F3);
+    and the human's read-only review caught a harvest truncation silently degrading every Opus capsule.**
+
 ### plan-unified-strategy-edge-20260705.md
 - task_class: implementation
 - tools_used:
