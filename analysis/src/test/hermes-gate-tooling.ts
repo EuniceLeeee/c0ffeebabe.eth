@@ -78,6 +78,9 @@ const checks: Array<() => void> = [
   () => expectPass("content validator accepts full competitor path method trace", () => {
     validateMethodTraceContent(validTraceMd(), []);
   }),
+  () => expectPass("content validator accepts implementation method trace without coverage matrix", () => {
+    validateMethodTraceContent(validTraceMd().replace(/^task_class:.*$/m, "task_class: implementation"), []);
+  }),
   () => expectFail("content validator requires method trace block", () => {
     validateMethodTraceContent("# Daily Analysis\n\nNo trace here.\n", []);
   }, "no `## Method Trace`"),
@@ -185,7 +188,7 @@ const checks: Array<() => void> = [
   }),
   () => expectFail("unfilled task_class menu is blank", () => {
     validateMethodTrace(
-      validTraceMd().replace(/^task_class:.*$/m, "task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg"),
+      validTraceMd().replace(/^task_class:.*$/m, "task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation"),
       step1({ fable_manual: "yes" }),
       [],
     );
@@ -212,6 +215,12 @@ const checks: Array<() => void> = [
       [],
     );
   }, "Method Trace task_class invalid: architecture-review", "must be one of"),
+  () => expectFail("non-menu task_class value fails", () => {
+    validateMethodTraceContent(
+      validTraceMd().replace(/^task_class:.*$/m, "task_class: build_stuff"),
+      [],
+    );
+  }, "Method Trace task_class invalid: build_stuff"),
   () => expectPass("architecture_review task_class allows inline comment", () => {
     validateMethodTrace(
       archTraceMd(archMatrix()).replace(/^task_class:.*$/m, "task_class: architecture_review   # per rule 13"),
@@ -474,7 +483,7 @@ function menuTraceMd(): string {
 
 ## Method Trace
 \`\`\`
-task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation
 tools_used: - <tool / command / file>
 evidence_order: 1. structured output | 2. raw trace
 analysis_frame: - <frame>

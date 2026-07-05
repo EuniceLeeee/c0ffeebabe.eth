@@ -80,6 +80,7 @@ const TASK_CLASS_VALUES = [
   "architecture_review",
   "replay_fixture",
   "protocol_leg",
+  "implementation",
 ] as const;
 const TASK_CLASS_MENU = TASK_CLASS_VALUES.join(" | ");
 const TASK_CLASS_SET = new Set<string>(TASK_CLASS_VALUES);

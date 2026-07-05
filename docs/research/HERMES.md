@@ -120,7 +120,7 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
       **When `task_class: architecture_review`, the Method Trace MUST be accompanied by a `## Architecture Coverage Matrix` (the 12 axes: strategy source / edge model / universe·admission / planner / quote·pnl / state·freshness / sim·replay / execution / safety·position / learning·auto-close / observability·tooling / non-goals·isolation) with a filled decision per axis — hermes-gate enforces it. Not a second framework; the matrix is the arch-review variant of the one Method Trace.**
       ```
       ## Method Trace
-      task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+      task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation
       tools_used:       - <tool / command / file>   (structured tool BEFORE ad-hoc curl/jq)
       evidence_order:   1. structured tool output  2. raw tx/receipt/trace  3. repo code path  4. compared to taxonomy
       analysis_frame:   - strategy_kind first, edge_kind second

@@ -9,7 +9,7 @@ Every analysis md dropped here MUST end with a `## Method Trace` (the auditable 
 `docs/research/HERMES.md` rule 16 for the field spec):
 ```
 ## Method Trace
-task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation
 tools_used:
 evidence_order:
 analysis_frame:

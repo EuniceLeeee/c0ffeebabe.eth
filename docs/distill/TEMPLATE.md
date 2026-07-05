@@ -49,7 +49,7 @@
 ## 6. Method Trace (Fable 每轮手工分析必附;缺失 = 无效交付)
 <!-- 这是给 Opus 蒸馏的"项目方法胶囊",不是隐藏思维链。字段规范见 docs/research/HERMES.md rule 16。 -->
 ```
-task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation
 tools_used:
 evidence_order:
 analysis_frame:

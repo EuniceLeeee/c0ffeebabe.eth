@@ -245,7 +245,7 @@ Non-deterministic → before/after metrics (no replay):
 ## Method Trace (MANDATORY when step1 `fable_manual: yes` — missing = invalid handoff, hermes-gate blocks)
 > See HERMES.md rule 16 for the full field spec. If `tool_gap` != none → create + close a `tooling_defect` LearningCase.
 ```
-task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg
+task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation
 tools_used:
 evidence_order:
 analysis_frame:
