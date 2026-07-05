@@ -1,5 +1,14 @@
 # Protocol-edges operator runbook (A2 / A5 fork-sim · A3/A4 cast-verify · A6 window) — 2026-07-05
 
+> **UPDATE 2026-07-05: STEPS 1–3 EXECUTED (operator "全部同意").** Cast-verify ✓ (wstETH/stETH ok;
+> PSM tin=tout=0 ⇒ A1 live no-op; USDS/USR resolved ⇒ A3/A4 unblocked+landed `4eacc5f`). Fork-sims ✓:
+> wstETH wrap bit-exact/unwrap −1 wei, sUSDS deposit+redeem bit-exact. **A6 LIVE**: `.protocol-edges`
+> marker (deploy-node.sh `04d10ce`), node on `4eacc5f`, banner `protocolEdges=enabled`, 5 protocol
+> entries (PSM+fluid+wsteth+sUSDS+wstUSR), bounded-live, 0 candidates fired, wallet unchanged (no loss).
+> **STILL OPEN:** A2 PSM buyGem fork-sim (§2) — landed but the PSM reverse edge is NOT live-wired
+> (forward-only registry entry), so buyGem is unreachable live until a DAI→USDC entry is added; low EV.
+> Disable protocol edges: `rm /opt/MEV/.protocol-edges` + redeploy.
+
 Hand-back for the node/human-gated steps behind the offline slices landed this relay
 (A0 `31bbec5` · A1 `3933eaa` · A2 `8b586a0` · A5 `7eac27f` · B2 `198003b`). Everything below needs a
 node / archive RPC or a go-live authorization, so it was NOT run autonomously (§9.3b, Safety Rule 1).

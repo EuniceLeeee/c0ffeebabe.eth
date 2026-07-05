@@ -627,8 +627,19 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
 >   `CURVE_SUSDS_USDT`/`CURVE_DOLA_SUSDS` are ALREADY in-graph ⇒ loop-closable today) =
 >   `docs/research/design/erc4626-a3a4-spec-20260705.md`. Needs one operator `cast` pass, then the
 >   A5-shaped slice is mechanical.
-> - Remaining operator/human gates unchanged: BS-3 exemplar, CR-5 archive, BS-lane/BS-4, A6/CR-6-live,
->   MEV-Share flag disposition, broadcast (Safety Rule 1).
+> - **A3/A4 ERC4626 (sUSDS + wstUSR) — LANDED + LIVE (`4eacc5f`).** Addresses cast-verified
+>   (USDS `0xdC035D45…`, USR `0x66a1E37c…`); adapter/quote/graph/build mirror A5; fork-sim on node
+>   passed BIT-EXACT (deposit shares == previewDeposit, redeem USDS == previewRedeem, diff=0).
+> - **A6 GO-LIVE DONE (operator "全部同意" 2026-07-05).** `SEARCHER_ENABLE_PROTOCOL_EDGES` is now a
+>   `.protocol-edges` marker (deploy-node.sh `04d10ce`, mirrors `.bribe-all-above-gas`). Node deployed
+>   `4eacc5f`, bounded-live (wallet 0.0027 ETH ≤ cap, EV_GATE=1); banner `protocolEdges=enabled`,
+>   **5 protocol entries** (PSM+fluid+wsteth+sUSDS+wstUSR) all in the live graph + planner-evaluated.
+>   0 protocol-edge candidates fired (conversions near-NAV; capability live for a dislocation), wallet
+>   unchanged = no loss. Node fork-sims: wstETH ✓ (wrap bit-exact, unwrap −1 wei) + sUSDS ✓ (bit-exact).
+> - Remaining operator/human gates: A2 PSM buyGem fork-sim (code landed but PSM reverse NOT live-wired —
+>   forward-only registry entry; buyGem unreachable live until a reverse entry is added); BS-3 exemplar,
+>   CR-5 archive, BS-lane/BS-4, CR-6-live (Aave credit-live = separate `.credit-live` gate), broadcast
+>   scope changes (Safety Rule 1). To disable protocol edges: `rm /opt/MEV/.protocol-edges` + redeploy.
 
 1. **Finish BS-0 — EXEMPLAR RE-SELECTED (2026-07-04, operator-approved).** The original exemplar
    tx #2 `0x803a3693` was mischaracterized: its "CFG 2-hop loop" is fee-negative in both directions
