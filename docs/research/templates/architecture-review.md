@@ -79,3 +79,24 @@ The architecture review is dual-blind, not a single reviewer:
   does NOT eliminate it. This is the DESIGNED safety net, not a failure — dual-blind independence does
   not depend on which model runs A. Do not treat an A-on-opus run as invalid; just verify the spawn was
   independent + blind.
+
+## E. Required output — Method Trace (task_class: architecture_review) + Coverage Matrix
+The review's handoff MUST end with a `## Method Trace` whose `task_class` is `architecture_review` and
+which carries the common Method Trace fields from HERMES rule 16. It MUST also include a
+`## Architecture Coverage Matrix` table with exactly these 12 axis rows and a filled `decision` per axis.
+
+## Architecture Coverage Matrix
+| axis | decision | repo mechanism | missing piece | gate |
+|---|---|---|---|---|
+| strategy source |  |  |  |  |
+| edge model |  |  |  |  |
+| universe/admission |  |  |  |  |
+| planner |  |  |  |  |
+| quote/pnl |  |  |  |  |
+| state/freshness |  |  |  |  |
+| sim/replay |  |  |  |  |
+| execution |  |  |  |  |
+| safety/position |  |  |  |  |
+| learning/auto-close |  |  |  |  |
+| observability/tooling |  |  |  |  |
+| non-goals/isolation |  |  |  |  |

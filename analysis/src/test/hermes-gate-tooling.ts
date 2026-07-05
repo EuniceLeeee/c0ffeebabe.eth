@@ -74,6 +74,34 @@ const checks: Array<() => void> = [
     validateStep1RequiredFields(step1({ fable_manual: "yes" }));
     validateMethodTrace(validTraceMd(), step1({ fable_manual: "yes" }), []);
   }),
+  () => expectFail("architecture review trace without coverage matrix fails", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace(archTraceMd(), step1({ fable_manual: "yes" }), []);
+  }, "task_class:architecture_review", "no `## Architecture Coverage Matrix` section"),
+  () => expectPass("architecture review trace with full coverage matrix passes", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace(archTraceMd(archMatrix()), step1({ fable_manual: "yes" }), []);
+  }),
+  () => expectFail("architecture review coverage matrix missing planner fails", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace(
+      archTraceMd(archMatrix().replace(/^\| planner \|.*\n/m, "")),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "Architecture Coverage Matrix missing axis: planner"),
+  () => expectFail("architecture review coverage matrix blank decision fails", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace(
+      archTraceMd(archMatrix().replace("| quote/pnl | covered |", "| quote/pnl |  |")),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "Architecture Coverage Matrix axis quote_pnl: decision cell blank/placeholder"),
+  () => expectPass("competitor path trace without coverage matrix passes", () => {
+    validateStep1RequiredFields(step1({ fable_manual: "yes" }));
+    validateMethodTrace(validTraceMd(), step1({ fable_manual: "yes" }), []);
+  }),
   () => expectFail("fable_manual yes without method trace fails", () => {
     validateStep1RequiredFields(step1({ fable_manual: "yes" }));
     validateMethodTrace("# Hermes\n\nfresh fable reviewed the raw data.\n", step1({ fable_manual: "yes" }), []);
@@ -249,6 +277,45 @@ distill_for_opus: run structured tooling before ad-hoc trace work
 
 ## Next Run
 - next_state: continue
+`;
+}
+
+function archTraceMd(matrix = ""): string {
+  return `# Hermes
+
+fresh fable reviewed the raw data.
+
+## Method Trace
+\`\`\`
+task_class: architecture_review
+tools_used: architecture-review handoff; repo grep
+evidence_order: structured output, raw trace, repo taxonomy
+analysis_frame: comparable before gap classification
+sanity_checks: same tx/block/source verified
+tool_gap: none
+codify_next: no
+distill_for_opus: architecture review requires the coverage matrix
+\`\`\`
+${matrix}`;
+}
+
+function archMatrix(): string {
+  return `
+## Architecture Coverage Matrix
+| axis | decision | repo mechanism | missing piece | gate |
+|---|---|---|---|---|
+| strategy source | covered | current source catalog | none | build |
+| edge model | covered | quote model | none | build |
+| universe/admission | covered | intake audit | none | build |
+| planner | covered | planner harness | none | build |
+| quote/pnl | covered | pnl tooling | none | build |
+| state/freshness | covered | latency metrics | none | build |
+| sim/replay | covered | replay harness | none | build |
+| execution | covered | bundle router | none | build |
+| safety/position | covered | safety gates | none | build |
+| learning/auto-close | covered | learning case store | none | build |
+| observability/tooling | covered | hermes gate | none | build |
+| non-goals/isolation | covered | scope notes | none | build |
 `;
 }
 

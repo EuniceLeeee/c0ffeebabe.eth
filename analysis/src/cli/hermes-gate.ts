@@ -73,6 +73,21 @@ const METHOD_TRACE_FIELDS = [
   "distill_for_opus",
 ];
 
+const ARCH_AXES: { key: string; re: RegExp }[] = [
+  { key: "strategy_source", re: /strategy[\s_/-]*source/i },
+  { key: "edge_model", re: /edge[\s_/-]*model/i },
+  { key: "universe_admission", re: /universe|admission/i },
+  { key: "planner", re: /planner/i },
+  { key: "quote_pnl", re: /quote|pnl|p&l/i },
+  { key: "state_freshness", re: /state|freshness|latency/i },
+  { key: "sim_replay", re: /\bsim\b|replay/i },
+  { key: "execution", re: /execution|builder/i },
+  { key: "safety_position", re: /safety|position/i },
+  { key: "learning_autoclose", re: /learning|auto[\s-]*close/i },
+  { key: "observability_tooling", re: /observability|tooling/i },
+  { key: "non_goals_isolation", re: /non[\s-]*goals?|isolation/i },
+];
+
 export function validateToolingDefects(cases: LearningCase[]): void {
   for (const c of cases) {
     const td = c.tooling_defect;
@@ -116,11 +131,37 @@ export function validateMethodTrace(
   const blockFailures: string[] = [];
   for (let i = 0; i < blocks.length; i++) {
     const errors = validateMethodTraceBlock(blocks[i], cases);
-    if (errors.length === 0) return;
+    if (errors.length === 0) {
+      const taskClass = (blocks[i].match(/^\s*task_class\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
+      if (taskClass === "architecture_review") validateArchitectureCoverage(md);
+      return;
+    }
     const prefix = blocks.length === 1 ? "" : `Method Trace block ${i + 1}: `;
     for (const err of errors) blockFailures.push(`${prefix}${err}`);
   }
   for (const err of blockFailures) fail(err);
+}
+
+export function validateArchitectureCoverage(md: string): void {
+  const m = md.match(/##\s*Architecture Coverage Matrix[\s\S]*?(?=\n##\s|$)/i);
+  if (!m) {
+    fail("task_class:architecture_review but no `## Architecture Coverage Matrix` section — the 12-axis "
+      + "matrix is mandatory (HERMES rule 13/16).");
+    return;
+  }
+
+  const rows = m[0]
+    .split("\n")
+    .filter((l) => l.trim().startsWith("|") && !/^\s*\|[\s:|-]+\|?\s*$/.test(l));
+  for (const axis of ARCH_AXES) {
+    const row = rows.find((r) => axis.re.test((r.split("|").map((c) => c.trim())[1]) ?? ""));
+    if (!row) {
+      fail(`Architecture Coverage Matrix missing axis: ${axis.key}`);
+      continue;
+    }
+    const decision = (row.split("|").map((c) => c.trim())[2]) ?? "";
+    if (isPlaceholder(decision)) fail(`Architecture Coverage Matrix axis ${axis.key}: decision cell blank/placeholder`);
+  }
 }
 
 function validateMethodTraceBlock(block: string, cases: LearningCase[]): string[] {
