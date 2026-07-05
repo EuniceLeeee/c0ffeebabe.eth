@@ -124,6 +124,14 @@ export const POOL_REGISTRY: PoolEntry[] = [
     adapter: "erc4626",
     fixedTokenIn: ADDR.USR,
   },
+  // ERC4626 vaults discovered in coffee's flow (2026-07-05 venue-discovery-bq + adapter-probe verified:
+  // asset()/previewRedeem respond on node reth). Loop-closable via each asset's DEX venues.
+  { address: "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // steakUSDC
+  { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // steakUSDT
+  { address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003", adapter: "erc4626", fixedTokenIn: ADDR.USDE },  // srUSDe
+  { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH }, // sfrxETH
+  { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // waEthUSDT
+  { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
   {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
     adapter: "fluid-vault",
