@@ -20,6 +20,8 @@ export interface PathTemplate {
 
 const SWAP_ADAPTERS = [
   "psm",
+  "erc4626-deposit",
+  "erc4626-redeem",
   "wsteth-wrap",
   "wsteth-unwrap",
   "univ4-unlock",

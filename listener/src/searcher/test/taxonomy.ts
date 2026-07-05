@@ -103,6 +103,21 @@ async function testTokenGraphEdges(): Promise<void> {
     edgeKindFromPoolEntry(psmEntry) === psmEdges[0].edgeKind,
     "psm PoolEntry edge kind should agree with the edge-level derivation",
   );
+
+  const erc4626Entry = POOL_REGISTRY.find((entry) =>
+    entry.adapter === "erc4626" && entry.address.toLowerCase() === ADDR.SUSDS.toLowerCase()
+  );
+  assert(erc4626Entry !== undefined, "POOL_REGISTRY sUSDS ERC4626 entry missing");
+  const erc4626Edges = await buildTokenGraph(unusedBackend, [erc4626Entry]);
+  assert(erc4626Edges.length === 2, `erc4626 edge count ${erc4626Edges.length}`);
+  const depositEdge = erc4626Edges.find((edge) => edge.adapterId === "erc4626-deposit");
+  const redeemEdge = erc4626Edges.find((edge) => edge.adapterId === "erc4626-redeem");
+  assert(depositEdge !== undefined, "erc4626 deposit edge missing");
+  assert(redeemEdge !== undefined, "erc4626 redeem edge missing");
+  assert(depositEdge.protocolAction === "wrap", `erc4626 deposit action ${depositEdge.protocolAction}`);
+  assert(redeemEdge.protocolAction === "redeem", `erc4626 redeem action ${redeemEdge.protocolAction}`);
+  assertTaxonomy(depositEdge, "protocol", false, "erc4626 deposit protocol/wrap edge");
+  assertTaxonomy(redeemEdge, "protocol", false, "erc4626 redeem protocol/redeem edge");
   console.log("[taxonomy] token graph edge taxonomy: PASS");
 }
 

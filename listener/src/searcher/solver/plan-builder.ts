@@ -213,6 +213,29 @@ async function buildEdgeNode(
         children: [],
       };
 
+    case "erc4626-deposit":
+      ensureApprove(edge.tokenIn, edge.target);
+      return {
+        adapterId: "erc4626-deposit",
+        target: edge.target,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amount: amtIn,
+        params: {},
+        children: [],
+      };
+
+    case "erc4626-redeem":
+      return {
+        adapterId: "erc4626-redeem",
+        target: edge.target,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amount: amtIn,
+        params: {},
+        children: [],
+      };
+
     case "curve-exchange":
     case "curve-exchange-received-uint":
     case "curve-exchange-nr":

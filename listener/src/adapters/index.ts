@@ -5,6 +5,7 @@ import { balancerFlashAdapter } from "./balancer-flash.js";
 import { fluidVaultAdapter } from "./fluid-vault.js";
 import { fluidDexLiquidateAdapter, fluidDexSwapAdapter } from "./fluid-dex.js";
 import { erc20ApproveAdapter, erc20TransferAdapter } from "./erc20.js";
+import { erc4626DepositAdapter, erc4626RedeemAdapter } from "./erc4626.js";
 import { psmAdapter } from "./psm.js";
 import { univ3Adapter } from "./univ3.js";
 import { univ2Adapter, univ2RouterAdapter, univ2RouterAltAdapter } from "./univ2.js";
@@ -42,6 +43,8 @@ register(fluidDexSwapAdapter);
 // ERC20
 register(erc20ApproveAdapter);
 register(erc20TransferAdapter);
+register(erc4626DepositAdapter);
+register(erc4626RedeemAdapter);
 // Swaps
 register(psmAdapter);
 register(univ3Adapter);

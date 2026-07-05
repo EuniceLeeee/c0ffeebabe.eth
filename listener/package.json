@@ -36,6 +36,7 @@
     "searcher:psm-build": "node --import tsx src/searcher/test/psm-build.ts",
     "searcher:psm-quote": "node --import tsx src/searcher/test/psm-quote.ts",
     "searcher:wsteth-quote": "node --import tsx src/searcher/test/wsteth-quote.ts",
+    "searcher:erc4626-quote": "node --import tsx src/searcher/test/erc4626-quote.ts",
     "searcher:sim-gas-on-revert": "node --import tsx src/searcher/test/sim-gas-on-revert.ts",
     "searcher:cycle-fingerprint": "node --import tsx src/searcher/test/cycle-fingerprint.ts",
     "searcher:blockscan-solver-center": "node --import tsx src/searcher/test/blockscan-solver-center.ts",

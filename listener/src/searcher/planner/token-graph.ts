@@ -49,7 +49,7 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "wsteth";
+  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "wsteth" | "erc4626";
   /** Optional file-backed metadata for standard two-token pools. */
   token0?: string;
   token1?: string;
@@ -113,6 +113,16 @@ export const POOL_REGISTRY: PoolEntry[] = [
   {
     address: ADDR.WSTETH,
     adapter: "wsteth",
+  },
+  {
+    address: ADDR.SUSDS,
+    adapter: "erc4626",
+    fixedTokenIn: ADDR.USDS,
+  },
+  {
+    address: ADDR.WSTUSR,
+    adapter: "erc4626",
+    fixedTokenIn: ADDR.USR,
   },
   {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
@@ -294,6 +304,32 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
           slotKind: "protocol",
           protocolAction: "unwrap",
           ...deriveEdgeTaxonomy("protocol", "unwrap"),
+        },
+      );
+      break;
+    }
+    case "erc4626": {
+      if (!pool.fixedTokenIn) {
+        throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
+      }
+      edges.push(
+        {
+          adapterId: "erc4626-deposit",
+          target: pool.address,
+          tokenIn: pool.fixedTokenIn,
+          tokenOut: pool.address,
+          slotKind: "protocol",
+          protocolAction: "wrap",
+          ...deriveEdgeTaxonomy("protocol", "wrap"),
+        },
+        {
+          adapterId: "erc4626-redeem",
+          target: pool.address,
+          tokenIn: pool.address,
+          tokenOut: pool.fixedTokenIn,
+          slotKind: "protocol",
+          protocolAction: "redeem",
+          ...deriveEdgeTaxonomy("protocol", "redeem"),
         },
       );
       break;

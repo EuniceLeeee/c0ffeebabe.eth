@@ -96,7 +96,7 @@ interface LiveConfig {
   wsUrl: string;
   /** Subscribe to the public mempool as a victim source (route B). */
   enableMempool: boolean;
-  /** A6 live-enable: admit NEW protocol-conversion edges (wsteth wrap/unwrap) into the live
+  /** A6 live-enable: admit NEW protocol-conversion edges (wsteth/ERC4626) into the live
    *  graph. Default OFF until the operator's fork-sim + dry-run window; the pre-existing PSM
    *  entry is grandfathered (D4-style) and unaffected. */
   enableProtocolEdges: boolean;
@@ -585,11 +585,11 @@ async function main(): Promise<void> {
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
   const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
-  // A6 gate: NEW protocol-conversion entries (wsteth) stay out of the live graph until
+  // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
   // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
   const liveRegistry = config.enableProtocolEdges
     ? POOL_REGISTRY
-    : POOL_REGISTRY.filter((pool) => pool.adapter !== "wsteth");
+    : POOL_REGISTRY.filter((pool) => pool.adapter !== "wsteth" && pool.adapter !== "erc4626");
   const basePools = mergePoolRegistries(
     mergePoolRegistries(
       mergePoolRegistries(
@@ -615,7 +615,7 @@ async function main(): Promise<void> {
     `[searcher/live] pair-completion: +${pairCompletionAdded} alternate-venue pools` +
       (config.pairCompletion ? "" : " (disabled)"),
   );
-  console.log(`[searcher/live] protocolEdges=${config.enableProtocolEdges ? "enabled" : "disabled (wsteth off)"}`);
+  console.log(`[searcher/live] protocolEdges=${config.enableProtocolEdges ? "enabled" : "disabled (wsteth/erc4626 off)"}`);
   console.log(
     `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +

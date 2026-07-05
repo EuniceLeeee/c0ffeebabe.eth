@@ -250,6 +250,34 @@ async function quoteWstETH(
   throw new Error(`wstETH only supports stETH<->wstETH, got ${tokenIn} -> ${tokenOut}`);
 }
 
+// -- ERC4626 (asset/share vault preview views) ------------------
+
+const erc4626Iface = new ethers.Interface([
+  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
+  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+]);
+
+async function quoteErc4626(
+  state: StateBackend,
+  target: string,
+  adapterId: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  if (adapterId === "erc4626-deposit") {
+    const data = erc4626Iface.encodeFunctionData("previewDeposit", [amountIn]);
+    const result = await state.call({ to: target, data });
+    const decoded = erc4626Iface.decodeFunctionResult("previewDeposit", result);
+    return BigInt(decoded[0]);
+  }
+  if (adapterId === "erc4626-redeem") {
+    const data = erc4626Iface.encodeFunctionData("previewRedeem", [amountIn]);
+    const result = await state.call({ to: target, data });
+    const decoded = erc4626Iface.decodeFunctionResult("previewRedeem", result);
+    return BigInt(decoded[0]);
+  }
+  throw new Error(`ERC4626 quote requires deposit/redeem adapter, got ${adapterId}`);
+}
+
 // ── UniV2 (constant-product) ──────────────────────────────────
 
 const univ2Iface = new ethers.Interface([
@@ -485,6 +513,9 @@ export async function quote(
     case "wsteth-wrap":
     case "wsteth-unwrap":
       return quoteWstETH(state, target, tokenIn, tokenOut, amountIn);
+    case "erc4626-deposit":
+    case "erc4626-redeem":
+      return quoteErc4626(state, target, adapterId, amountIn);
     case "fluid-vault":
       return quoteFluidVault();
     default:

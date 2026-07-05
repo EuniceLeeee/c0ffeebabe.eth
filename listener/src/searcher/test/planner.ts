@@ -488,6 +488,8 @@ const REAL_WETH = ADDR.WETH;
 const REAL_WSTUSR = ADDR.WSTUSR;
 const REAL_WSTETH = ADDR.WSTETH;
 const REAL_STETH = ADDR.STETH;
+const REAL_SUSDS = ADDR.SUSDS;
+const REAL_USDS = ADDR.USDS;
 const REAL_USDC = ADDR.USDC;
 const REAL_DAI = ADDR.DAI;
 const REAL_USDT = ADDR.USDT;
@@ -523,6 +525,7 @@ const TOK_1151 = "0x1151CB3d861920e07a38e03eEAd12C32178567F6";
 const POOL_1151_USDT_A = "0x5ea523e496D049e2bA8B303C8D85C83FB6F285F8";
 const POOL_1151_USDT_B = "0x1e84865E17B49286f26D356DC39fF671EDfaA199";
 const POOL_WSTETH_STETH_SYNTH = "0x0000000000000000000000000000000000000e7e";
+const POOL_SUSDS_USDS_SYNTH = "0x0000000000000000000000000000000000004626";
 
 async function testBlockScanPlannerBinding(): Promise<void> {
   const token = TOK_874376;
@@ -678,6 +681,32 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
       swap(REAL_WSTETH, REAL_STETH, POOL_WSTETH_STETH_SYNTH),
     ],
     impact: { tokenIn: REAL_WSTETH, tokenOut: REAL_STETH, pool: POOL_WSTETH_STETH_SYNTH, start: REAL_STETH },
+    maxHops: 2,
+    expectMinPlans: 1,
+  },
+  {
+    // A3/A4 ERC4626 sUSDS deposit routing. Without the USDS->sUSDS protocol
+    // edge, the synthetic sUSDS->USDS return venue cannot close a USDS flash loop.
+    id: "erc4626-absent",
+    provenance: "A3/A4 ERC4626 sUSDS deposit routing; USDS->sUSDS protocol edge absent",
+    edges: [
+      swap(REAL_SUSDS, REAL_USDS, POOL_SUSDS_USDS_SYNTH),
+    ],
+    impact: { tokenIn: REAL_SUSDS, tokenOut: REAL_USDS, pool: POOL_SUSDS_USDS_SYNTH, start: REAL_USDS },
+    maxHops: 2,
+    expectPlans: 0,
+    expectClass: "impact_token_no_supported_return_venue",
+  },
+  {
+    // Same synthetic loop with the USDS->sUSDS ERC4626 deposit edge present:
+    // USDS->sUSDS(deposit) then sUSDS->USDS(synthetic swap) closes the loop.
+    id: "erc4626-present",
+    provenance: "A3/A4 ERC4626 sUSDS deposit routing; USDS->sUSDS protocol edge present",
+    edges: [
+      protocol(REAL_USDS, REAL_SUSDS, ADDR.SUSDS, "wrap", "erc4626-deposit"),
+      swap(REAL_SUSDS, REAL_USDS, POOL_SUSDS_USDS_SYNTH),
+    ],
+    impact: { tokenIn: REAL_SUSDS, tokenOut: REAL_USDS, pool: POOL_SUSDS_USDS_SYNTH, start: REAL_USDS },
     maxHops: 2,
     expectMinPlans: 1,
   },
