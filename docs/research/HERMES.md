@@ -3,7 +3,7 @@
 > **Load this when you are running a live-run / Hermes / handoff round** (the autonomous routines in
 > `docs/research/autonomous-*.md` read it). It is NOT always-on: a normal interactive task doesn't need
 > it — that's why it lives here and not in `CLAUDE.md`. `CLAUDE.md` (behavioral base + Mission + Safety
-> Rules) and `docs/gates.md` (the validation contract, rule 12) are the companions.
+> Rules) and `docs/research/gates.md` (the validation contract, rule 12) are the companions.
 >
 > Hermes is the fixed collaboration + decision record between **Claude** and **Codex** after each live
 > run (a 作战记录 + 决策协议, not a product). One markdown file per run; GitHub is the shared state.
@@ -30,7 +30,7 @@ aws ssm send-command --instance-ids i-0ff908dedeec9ebc6 --document-name AWS-RunS
 Every "a competitor got value we didn't" event runs ONE fixed flow (the `bundle-postmortem` skill holds the decision tree; do NOT invent a parallel path):
 1. **SCOPE both, same shape:** a bundle WE submitted that lost (`bundle_not_included` → `bundle-postmortem --tx <ours>`) AND an opportunity we MISSED (`not_seen` → census produces a postmortem-shaped report). Neither is skipped.
 2. **FILTER non-comparable winners FIRST** (else it's noise). Only `atomic_loop` (a closed loop returning to a priced token in-tx) is comparable to our atomic sim. REJECT: `sandwich`, `one_leg_inventory` (one-way swap, profit realized off-chain / CEX-DEX — decisive check: the winner's Swap pushed the pool tick PAST the pre-triggering-swap `slot0` tick), plain transfers, JIT-LP → `non_comparable_winner`; our sim was RIGHT and correctly lost. Codified in bundle-postmortem (`winner_style`).
-3. **AUTO-IMPROVE from the tool's verdict** — classify + close per gap class (pool/path/execution-adapter/detection/pure-outbid), validate with a rule-12 fixture flip (`docs/gates.md`).
+3. **AUTO-IMPROVE from the tool's verdict** — classify + close per gap class (pool/path/execution-adapter/detection/pure-outbid), validate with a rule-12 fixture flip (`docs/research/gates.md`).
 4. **INCONCLUSIVE → MANUAL escalation → codify:** auto-close closed 0 yet we demonstrably LOST ⇒ the tool hit a class it can't name ("auto-analysis empty" is itself a finding). Package {postmortem JSON + auto-close result + our sim/bid + winner touchedVenues/builderPayment} → a FRESH analyst (Fable PRIORITY, Opus 4.8 fallback) names the missed class → CODIFY it back into the tool (rule 16). A `pending-manual-analysis` package left unanalyzed BLOCKS cycle-close.
 
 ```bash
@@ -70,7 +70,7 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  (kept from Codex); Codex, handed ONLY raw material as DATA → B blind to A. Agree = high-confidence;
                  differ = the disagreement is the signal. Only the Brief drives code.
 5. IMPLEMENT     Codex writes → Claude review ↔ Codex fix (≤3 passes) → Final Approval or explicit stop.
-6. GATE          deterministic → local FORK/REPLAY flip confirms (rule 12, docs/gates.md; no flip = not fixed);
+6. GATE          deterministic → local FORK/REPLAY flip confirms (rule 12, docs/research/gates.md; no flip = not fixed);
                  non-deterministic (latency/inclusion/economics/bid/mempool) → record with carry_to_round, next
                  round's metrics decide.
 7. CARRY         Next round READS this round's conclusion + open findings FIRST; resolve any finding past its
@@ -95,7 +95,7 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
     - **Stalled:** alive + under hard timeout = running (retrying). Hard timeout + empty `git diff` = one stalled attempt. 2 consecutive = Codex stalled. Never declare stalled before the hard timeout.
     - **One Codex task = one narrow patch** (≤1–3 files, allowed/forbidden files stated). No racing. Resume a fix pass with `codex exec resume <SESSION_ID>` (prefer the recorded id over `--last`).
     - **Fallback:** genuinely stalled → Claude takes over only fully-specified mechanical edits, labelled `authored_by: claude (codex stalled)`; NEVER judgment/design (the turn stops and waits). *(Unattended rounds override the stop-and-wait: fall back to an Opus 4.8 generator — Fable stays the non-author evaluator.)*
-12. **Repair-replay double-gate → see `docs/gates.md` (the validation contract).** A deterministic change is `fixed` only when the SAME failing sample, replayed, flips buckets; "build passes" is never enough. No flip = not fixed. `turn_class: observability-only` if there's nothing to replay.
+12. **Repair-replay double-gate → see `docs/research/gates.md` (the validation contract).** A deterministic change is `fixed` only when the SAME failing sample, replayed, flips buckets; "build passes" is never enough. No flip = not fixed. `turn_class: observability-only` if there's nothing to replay.
 13. **Convert findings to fixes — forcing functions.** Rules 1–12 prevent bad changes; none forces impactful ones, so analysis commits masquerade as progress. Counterweights:
     - **Anti-drift cap:** at most ONE consecutive `observability-only` turn; the next Brief MUST change searcher behavior (proven by a rule-12 flip) or STOP + escalate — no third analysis turn.
     - **No orphan findings:** every finding → `owner` + `carry_to_round: N`. Deferred past it blocks new work until done or human-killed.

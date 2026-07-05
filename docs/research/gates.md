@@ -3,7 +3,7 @@
 > Scope: authorized defensive on-chain arbitrage research (fork/dry-run; broadcast is a human gate).
 > This is where "how do we know a change is actually correct" lives — extracted from the Hermes
 > protocol (was governance rule 12) so it reads as a **test contract**, not always-loaded prose.
-> `HERMES.md` rule 12 is a one-line pointer here. The endgame (distill-kit doctrine): correctness
+> `docs/research/HERMES.md` rule 12 is a one-line pointer here. The endgame (distill-kit doctrine): correctness
 > rules become **assertions in the harnesses below** and get DELETED from prose — see §Correctness
 > properties.
 
@@ -68,4 +68,4 @@ property still marked *prose-only* is a tracked gap, not "done".
 **Rule:** when adding a new correctness/coverage rule, first ask *"can this be an assertion here?"* — if
 yes, write the assertion and do NOT add the prose rule (distill-kit sunset doctrine). Only irreducibly
 **judgment/process** doctrine (dual-blind, frame-audit, null-round, epic-escalation) stays as prose in
-`HERMES.md` — those have no single "correct" answer to assert.
+`docs/research/HERMES.md` — those have no single "correct" answer to assert.

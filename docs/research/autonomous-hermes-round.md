@@ -7,7 +7,7 @@
 > it does NOT force dry-run. The four hard actions below stay a human gate.
 
 You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/src/MEV`). This is an
-**unattended** round. The user is away — decide and proceed per HERMES.md rule 14/15; never stop to ask.
+**unattended** round. The user is away — decide and proceed per docs/research/HERMES.md rule 14/15; never stop to ask.
 
 ## Step 0 — startup
 - **Anti-overlap check.** The `/tmp` PID lock is BEST-EFFORT ONLY — it does NOT actually prevent overlap
@@ -18,7 +18,7 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
   another chain is on it → **no-op exit**. Still `echo $$ > /tmp/mev-hermes-round.lock` + trap `rm -f` as a
   weak hint, but rely on the repo check, not the lock.
 - `touch /tmp/mev-workflow-active` (idempotent); ensure the sleep-keeper is alive (Rounds Step 0).
-- Read `CLAUDE.md` (behavioral base + Safety Rules) + `HERMES.md` (Hermes protocol + governance rules 1–17) + `docs/gates.md` (rule 12 validation contract).
+- Read `CLAUDE.md` (behavioral base + Safety Rules) + `docs/research/HERMES.md` (Hermes protocol + governance rules 1–17) + `docs/research/gates.md` (rule 12 validation contract).
 
 ## Step 0.5 — bounded-live SAFETY VALVE (run FIRST, before any deploy) [Safety Rule 1]
 - Read the signer balance `0xb8578B6de173C8554FF0390dB5a7effA567DDA3c` via the node's local reth

@@ -5,9 +5,10 @@
 > **This file is the always-loaded core:** the Behavioral Base (how to work), the Project (what/why),
 > the Safety Rules (hard gates), and quick Reference. Keep it lean — dated decisions / closed findings
 > live in `docs/decision-log.md`. **Load the companions on demand:**
-> - **`HERMES.md`** — the live-run collaboration runbook + governance rules 1–17. Read it when running a
->   Hermes / handoff / autonomous round (the `docs/research/autonomous-*.md` routines do).
-> - **`docs/gates.md`** — the validation contract (rule 12: `fixed` vs `implemented`, replay flips, the
+> - **`docs/research/HERMES.md`** — the live-run collaboration runbook + governance rules 1–17. Read it
+>   fully when running a Hermes / live-run / autonomous cycle (the `docs/research/autonomous-*.md` routines
+>   do). **Hermes rule numbers are load-bearing; do not renumber.**
+> - **`docs/research/gates.md`** — the validation contract (rule 12: `fixed` vs `implemented`, replay flips, the
 >   test harnesses). Read it before claiming a deterministic change is fixed.
 > - Skills: `bundle-postmortem` (competitor-loss decision tree), `mev-review` (trace-diff review).
 
@@ -55,8 +56,8 @@ For multi-step tasks, state a brief plan:
 2. [Step] → verify: [check]
 ```
 Strong success criteria let you loop independently; weak criteria ("make it work") require constant
-clarification. In THIS repo the ultimate success criterion for a deterministic searcher change is a
-**rule-12 replay flip** (`docs/gates.md`), not "build passes".
+clarification. In THIS repo: **build passing is `implemented`, not `fixed`** — a deterministic searcher
+fix needs a replay/harness flip (`docs/research/gates.md`).
 
 *These guidelines are working if: fewer unnecessary changes in diffs, fewer rewrites from
 overcomplication, and clarifying questions come before implementation rather than after mistakes.*
@@ -148,11 +149,11 @@ cast 4byte-decode <calldata>                                                    
 cast call <token> "balanceOf(address)(uint256)" <addr> --rpc-url $MAINNET_RPC_URL --block 24710787
 cast receipt <txhash> --rpc-url $MAINNET_RPC_URL --json | jq '.logs'                 # logs / address discovery
 ```
-Validation gates for searcher changes: `docs/gates.md`. Trace-diff / reproduction review methodology: the `mev-review` skill.
+Validation gates for searcher changes: `docs/research/gates.md`. Trace-diff / reproduction review methodology: the `mev-review` skill.
 
 ### File Map
-- `HERMES.md` — live-run collaboration runbook + governance rules 1–17 (on-demand).
-- `docs/gates.md` — validation contract (rule 12 + the test harnesses + correctness-property → test mapping).
+- `docs/research/HERMES.md` — live-run collaboration runbook + governance rules 1–17 (on-demand).
+- `docs/research/gates.md` — validation contract (rule 12 + the test harnesses + correctness-property → test mapping).
 - `docs/decision-log.md` — dated decisions / verified facts / dead-ends (committed). Read the ✅/❌ entries before re-opening a settled question.
 - `.claude/skills/bundle-postmortem/` — competitor-loss postmortem decision-tree tool. `.claude/skills/mev-review/` — reproduction / trace-diff review methodology.
 - `docs/distill/` — Fable/Opus dual-run distillation records + daily-compress + golden-set (do NOT auto-read; only for rule compression). `.claude/commands/{dualrun,compress}.md` drive it.
