@@ -23,12 +23,22 @@
 - **Envelope intact:** wallet ≤0.2 ETH, `EV_GATE=1`; `mev_sendBundle` is conditioned on the referenced
   hash landing ⇒ no phantom-loss path ([[project-mevshare-flow-discarded]]). Broadcast-behavior change ⇒
   required explicit user authorization (Safety Rule 1) — **granted 2026-07-05**.
-- **First-order effect (run_id `0bf0319a`, ~9 min):** `hash_only_unmatchable` drops 95.3% → 0 (submit-gate
-  wall gone, as predicted). `bundle_submitted` still 0 over the thin window; the surviving +EV sims all hit
-  `below_ev_gate` (dust). **Next lever if this holds = economics** (`bribeAllAboveGas ⇒ net≈0`, a strategic
-  human call). Needs a longer window to see the big MEV-Share sims submit + `bundle-postmortem` real inclusion.
-- **Failure/revert:** if they still don't submit / relay rejects / real profit ≪ overlay sim ⇒ sim-fidelity,
-  not flow-admission. Safety valve reverts via `rm /opt/MEV/.deploy-live`.
+- **Measured result (run_id `0bf0319a`, ~20 min, PID 187254) — the falsification came back "WRONG-ish":**
+  - ✅ Mechanical: `hash_only_unmatchable` drops 95.3% → 0 (submit-gate wall gone); the `submitMevShareBundle`
+    drain is live — `bundle_submitted` 0 → 7, all `mode:mev_sendBundle` → `flashbots-mev-share`.
+  - ❌ **Inclusion: ZERO. All 7 rejected by the relay with `{"code":-32000,"message":"backrun not found"}`
+    (`accepted:0`; 14 rejections this run).** The flag just RELOCATES the drop — our self-gate
+    `hash_only_unmatchable` → the relay's `backrun not found`. No bundle reaches a builder.
+  - The 7 sims were small (`simulated_profit_eth` 0.0001–0.0018 ETH, ~$0.4–$6), NOT the arch review's
+    $50–$210 — those didn't recur in 20 min (thin window). But they'd hit the SAME rejection anyway.
+- **Cause (diagnosed, F-006):** MEV-Share SSE IS connected (banner "MEV-Share SSE connected"; no custom
+  `SEARCHER_MEVSHARE_SSE_URL` ⇒ real Flashbots default) and the hints are genuine, so "backrun not found"
+  is DOWNSTREAM of a valid feed ⇒ the referenced hint is stale/unmatchable by submit time (timing/one-shot,
+  or target-block mismatch). NOT a wrong-source and NOT the submit gate. **The next real lever past the
+  gate = mev_sendBundle reference validity (latency / target-block), not economics and not flow-admission.**
+- **Disposition:** flag stays ON (harmless — a rejected `mev_sendBundle` never broadcasts, envelope intact,
+  no loss; it's the falsification window). It's a diagnostic win, not an inclusion win. Revert path unchanged
+  (`rm /opt/MEV/.deploy-live`). Refines the arch review verdict `arch-review-20260705-verdict.md`.
 
 ### D-002 | 2026-07-03 | ✅ | Auto-deploy IS in the §6b auto-close chain (do not re-litigate)
 - **Decision:** the postmortem → auto-close → deploy chain may auto-deploy via `deploy-node.sh`.
@@ -93,6 +103,18 @@
   `only_immediate_same_pool_reverse`, a token-graph return-venue coverage gap). [[project-pool-universe-topn-zero-bug]] [[project-nocandidate-return-venue-gap]]
 
 ---
+
+### F-006 | 2026-07-05 | ⏳ | MEV-Share submissions are relay-rejected "backrun not found" (post-flag blocker)
+- **Fact:** with D-001's flag ON, 100% of `mev_sendBundle` submissions to `flashbots-mev-share` return
+  `http=200 {"code":-32000,"message":"backrun not found"}` → `accepted:false`. The submit path works; the
+  relay won't match the referenced hint. SSE connected + genuine hints ⇒ the hint is stale/unmatchable by
+  submit time (timing/one-shot or target-block), not a wrong source. Log: `/var/log/mev-live.log`
+  (`[submitter] flashbots-mev-share http=200 …`).
+- **Implication:** the arch review's "flag ON ⇒ inclusion via submitMevShareBundle" was over-optimistic —
+  the flag is necessary but NOT sufficient; the binding downstream constraint is mev_sendBundle reference
+  validity. Owner: a latency/target-block investigation (a Hermes/arch-review cycle), NOT this interactive
+  turn. Verify next: instrument the hint-age at submit (`emitted_at` of the hint vs submit time) + the
+  target-block we pin vs the relay's expected block. [[project-mevshare-submit-flag-lever]]
 
 ## Dead-ends / retired (high-value — don't circle back)
 
