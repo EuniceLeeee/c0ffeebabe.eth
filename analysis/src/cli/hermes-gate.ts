@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadCases, type LearningCase } from "../learning/learning-case.js";
 
 /** Walk up from a path to the git repo root (dir containing .git); fallback = cwd. */
 function repoRoot(from: string): string {
@@ -54,6 +55,64 @@ function fail(msg: string): void {
 function isPlaceholder(v: string): boolean {
   const t = v.trim();
   return t === "" || t.startsWith("<") || /^(todo|tbd|n\/a|na|fill|pending)$/i.test(t);
+}
+
+const METHOD_TRACE_FIELDS = [
+  "task_class",
+  "tools_used",
+  "evidence_order",
+  "analysis_frame",
+  "sanity_checks",
+  "tool_gap",
+  "codify_next",
+  "distill_for_opus",
+];
+
+export function validateToolingDefects(cases: LearningCase[]): void {
+  for (const c of cases) {
+    const td = c.tooling_defect;
+    if (!td) continue;
+    if (td.status === "open") {
+      fail(`LearningCase ${c.learning_case_id} tooling_defect OPEN (${td.tool}: ${td.issue}) — a manual-`
+        + `analysis-found tool error/omission MUST be codified (status:codified + codify_commit) or `
+        + `human_killed before cycle-close (rule 16).`);
+    } else if (td.status === "codified"
+        && (typeof td.codify_commit !== "string" || td.codify_commit.trim() === "" || isPlaceholder(td.codify_commit))) {
+      fail(`LearningCase ${c.learning_case_id} tooling_defect status=codified but codify_commit missing/`
+        + `placeholder — cite the git ref that fixed the tool.`);
+    }
+  }
+}
+
+export function validateMethodTrace(md: string): void {
+  const usesFable = /fresh fable|fable manual|manual escalation|manual analysis|fable[- ]?5 sub-?agent/i.test(md);
+  if (!usesFable) return;
+  const m = md.match(/##\s*Method Trace[\s\S]*?(?=\n##\s|\n---|\s*$)/i);
+  if (!m) {
+    fail("Fable manual analysis present but no `## Method Trace` block — missing = invalid handoff (rule 16).");
+    return;
+  }
+  const block = m[0];
+  for (const f of METHOD_TRACE_FIELDS) {
+    const re = new RegExp(`^\\s*${f}\\s*:(.*)$`, "mi");
+    const hit = block.match(re);
+    if (!hit || isPlaceholder(hit[1] ?? "")) fail(`Method Trace missing/blank field: ${f}`);
+  }
+  const toolGap = (block.match(/^\s*tool_gap\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
+  const codifyNext = (block.match(/^\s*codify_next\s*:\s*(.+)$/mi)?.[1] ?? "").trim();
+  if (toolGap && !/^none\b/i.test(toolGap) && /^no\b/i.test(codifyNext)) {
+    fail("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
+      + "(create a tooling_defect LearningCase).");
+  }
+}
+
+function loadCasesForToolingGate(): LearningCase[] {
+  try {
+    return loadCases();
+  } catch (err) {
+    if ((err as { code?: string }).code === "ENOENT") return [];
+    throw err;
+  }
 }
 
 function parseStep1Block(md: string): Record<string, string> | null {
@@ -395,6 +454,9 @@ function main(): void {
       }
     }
   }
+
+  validateMethodTrace(md);
+  validateToolingDefects(loadCasesForToolingGate());
 
   if (fails.length > 0) {
     console.error(`FAIL: Step-1 close-gate blocked ${mdPath}`);

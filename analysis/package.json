@@ -15,6 +15,7 @@
     "test:sender-flow": "node --import tsx --test src/test/sender-flow-victim-source.ts",
     "test:swap-log-registry": "node --import tsx --test src/test/swap-log-registry.ts",
     "test:learning-case": "node --import tsx --test src/test/learning-case.ts",
+    "test:hermes-gate-tooling": "node --import tsx --test src/test/hermes-gate-tooling.ts",
     "test:onchain-loss-scan": "node --import tsx --test src/test/onchain-loss-scan.ts",
     "test:tx-shape": "node --import tsx --test src/test/tx-shape.ts",
     "build": "tsc --noEmit"

@@ -47,6 +47,16 @@ export interface LearningCase {
   backrun_view_hash?: string; blockscan_view_hash?: string;
   capability_replay_stage?: string;  live_admission_stage?: string;
   evidence: Record<string, unknown>;
+  /** rule 16: set when MANUAL (Fable) analysis found our analysis TOOL itself wrong/insufficient.
+   *  An OPEN tooling_defect BLOCKS hermes-gate cycle-close until codified or human-killed. */
+  tooling_defect?: {
+    tool: string;            // which analysis tool/script/metric was wrong or missing
+    issue: string;           // what was wrong (valuation artifact / missing metric / mis-classification)
+    evidence: string;        // concrete proof
+    codify_target: string;   // the file/tool + what to add (a field / test / gate)
+    codify_commit?: string;  // git ref of the fix (required when status === "codified")
+    status: "open" | "codified" | "human_killed";
+  };
   close_action?: { kind: string; target_file?: string; entries?: string[] };
   replay_gate?: { command: string; expected_transition: string; before?: string; after?: string };
   created_at: string; updated_at: string;
