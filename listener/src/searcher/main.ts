@@ -96,6 +96,10 @@ interface LiveConfig {
   wsUrl: string;
   /** Subscribe to the public mempool as a victim source (route B). */
   enableMempool: boolean;
+  /** A6 live-enable: admit NEW protocol-conversion edges (wsteth wrap/unwrap) into the live
+   *  graph. Default OFF until the operator's fork-sim + dry-run window; the pre-existing PSM
+   *  entry is grandfathered (D4-style) and unaffected. */
+  enableProtocolEdges: boolean;
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
   botvmAddress: string;
@@ -381,6 +385,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     rpcUrl,
     wsUrl,
     enableMempool: process.env.SEARCHER_ENABLE_MEMPOOL === "1",
+    enableProtocolEdges: process.env.SEARCHER_ENABLE_PROTOCOL_EDGES === "1",
     mevShareSseUrl: process.env.MEV_SHARE_SSE_URL ?? DEFAULT_MEV_SHARE_SSE_URL,
     liveBackend: parseLiveBackendKind(process.env.SEARCHER_LIVE_BACKEND ?? "rpc"),
     botvmAddress: ethers.getAddress(botvmAddress),
@@ -580,10 +585,15 @@ async function main(): Promise<void> {
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
   const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
+  // A6 gate: NEW protocol-conversion entries (wsteth) stay out of the live graph until
+  // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
+  const liveRegistry = config.enableProtocolEdges
+    ? POOL_REGISTRY
+    : POOL_REGISTRY.filter((pool) => pool.adapter !== "wsteth");
   const basePools = mergePoolRegistries(
     mergePoolRegistries(
       mergePoolRegistries(
-        mergePoolRegistries(POOL_REGISTRY, pinnedWarmPools),
+        mergePoolRegistries(liveRegistry, pinnedWarmPools),
         universePools,
       ),
       factoryPools,
@@ -605,8 +615,9 @@ async function main(): Promise<void> {
     `[searcher/live] pair-completion: +${pairCompletionAdded} alternate-venue pools` +
       (config.pairCompletion ? "" : " (disabled)"),
   );
+  console.log(`[searcher/live] protocolEdges=${config.enableProtocolEdges ? "enabled" : "disabled (wsteth off)"}`);
   console.log(
-    `[searcher/live] pool registry: ${POOL_REGISTRY.length} protocol + ` +
+    `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
       `(forceInclude=${config.poolUniverseForceInclude.length}) + ` +
       `${factoryPools.length} factory + ${swapPools.length} swap-active + ` +

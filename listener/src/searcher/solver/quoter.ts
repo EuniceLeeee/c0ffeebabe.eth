@@ -216,6 +216,40 @@ async function quotePSM(
   throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
 }
 
+// -- wstETH (Lido fixed-rate wrap/unwrap views) -----------------
+
+const wstETHIface = new ethers.Interface([
+  "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
+  "function getStETHByWstETH(uint256 _wstETHAmount) view returns (uint256)",
+]);
+
+async function quoteWstETH(
+  state: StateBackend,
+  target: string,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  const steth = ADDR.STETH.toLowerCase();
+  const wsteth = ADDR.WSTETH.toLowerCase();
+  const tIn = tokenIn.toLowerCase();
+  const tOut = tokenOut.toLowerCase();
+
+  if (tIn === steth && tOut === wsteth) {
+    const data = wstETHIface.encodeFunctionData("getWstETHByStETH", [amountIn]);
+    const result = await state.call({ to: target, data });
+    const decoded = wstETHIface.decodeFunctionResult("getWstETHByStETH", result);
+    return BigInt(decoded[0]);
+  }
+  if (tIn === wsteth && tOut === steth) {
+    const data = wstETHIface.encodeFunctionData("getStETHByWstETH", [amountIn]);
+    const result = await state.call({ to: target, data });
+    const decoded = wstETHIface.decodeFunctionResult("getStETHByWstETH", result);
+    return BigInt(decoded[0]);
+  }
+  throw new Error(`wstETH only supports stETH<->wstETH, got ${tokenIn} -> ${tokenOut}`);
+}
+
 // ── UniV2 (constant-product) ──────────────────────────────────
 
 const univ2Iface = new ethers.Interface([
@@ -448,6 +482,9 @@ export async function quote(
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey);
     case "psm":
       return quotePSM(state, target, tokenIn, tokenOut, amountIn);
+    case "wsteth-wrap":
+    case "wsteth-unwrap":
+      return quoteWstETH(state, target, tokenIn, tokenOut, amountIn);
     case "fluid-vault":
       return quoteFluidVault();
     default:

@@ -486,6 +486,8 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
 // like the synthetic unit tests above — the value is the provenance link + flip target.
 const REAL_WETH = ADDR.WETH;
 const REAL_WSTUSR = ADDR.WSTUSR;
+const REAL_WSTETH = ADDR.WSTETH;
+const REAL_STETH = ADDR.STETH;
 const REAL_USDC = ADDR.USDC;
 const REAL_DAI = ADDR.DAI;
 const REAL_USDT = ADDR.USDT;
@@ -520,6 +522,7 @@ const POOL_FF208177_B = "0x08650bb900000000000000000000000000000000";
 const TOK_1151 = "0x1151CB3d861920e07a38e03eEAd12C32178567F6";
 const POOL_1151_USDT_A = "0x5ea523e496D049e2bA8B303C8D85C83FB6F285F8";
 const POOL_1151_USDT_B = "0x1e84865E17B49286f26D356DC39fF671EDfaA199";
+const POOL_WSTETH_STETH_SYNTH = "0x0000000000000000000000000000000000000e7e";
 
 async function testBlockScanPlannerBinding(): Promise<void> {
   const token = TOK_874376;
@@ -649,6 +652,32 @@ const REPLAY_FIXTURES: ReplayFixture[] = [
       swap(REAL_USDC, REAL_DAI, ADDR.CURVE_3POOL, "curve-exchange-plain"),
     ],
     impact: { tokenIn: REAL_USDC, tokenOut: REAL_DAI, pool: ADDR.CURVE_3POOL, start: REAL_DAI },
+    maxHops: 2,
+    expectMinPlans: 1,
+  },
+  {
+    // A5 wstETH wrap routing. Without the stETH->wstETH protocol edge, the
+    // synthetic wstETH->stETH return venue cannot close a stETH flash loop.
+    id: "wsteth-absent",
+    provenance: "A5 wstETH wrap routing; stETH->wstETH protocol edge absent",
+    edges: [
+      swap(REAL_WSTETH, REAL_STETH, POOL_WSTETH_STETH_SYNTH),
+    ],
+    impact: { tokenIn: REAL_WSTETH, tokenOut: REAL_STETH, pool: POOL_WSTETH_STETH_SYNTH, start: REAL_STETH },
+    maxHops: 2,
+    expectPlans: 0,
+    expectClass: "impact_token_no_supported_return_venue",
+  },
+  {
+    // Same synthetic loop with the stETH->wstETH protocol edge present:
+    // stETH->wstETH(wrap) then wstETH->stETH(synthetic swap) closes the loop.
+    id: "wsteth-present",
+    provenance: "A5 wstETH wrap routing; stETH->wstETH protocol edge present",
+    edges: [
+      protocol(REAL_STETH, REAL_WSTETH, ADDR.WSTETH, "wrap", "wsteth-wrap"),
+      swap(REAL_WSTETH, REAL_STETH, POOL_WSTETH_STETH_SYNTH),
+    ],
+    impact: { tokenIn: REAL_WSTETH, tokenOut: REAL_STETH, pool: POOL_WSTETH_STETH_SYNTH, start: REAL_STETH },
     maxHops: 2,
     expectMinPlans: 1,
   },

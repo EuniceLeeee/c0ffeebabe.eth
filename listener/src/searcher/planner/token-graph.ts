@@ -49,7 +49,7 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault";
+  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "wsteth";
   /** Optional file-backed metadata for standard two-token pools. */
   token0?: string;
   token1?: string;
@@ -109,6 +109,10 @@ export const POOL_REGISTRY: PoolEntry[] = [
     fixedTokenOut: ADDR.DAI,
     fixedSlotKind: "protocol",
     fixedProtocolAction: "convert",
+  },
+  {
+    address: ADDR.WSTETH,
+    adapter: "wsteth",
   },
   {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
@@ -268,6 +272,29 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       edges.push(
         { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
         { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
+      );
+      break;
+    }
+    case "wsteth": {
+      edges.push(
+        {
+          adapterId: "wsteth-wrap",
+          target: pool.address,
+          tokenIn: ADDR.STETH,
+          tokenOut: ADDR.WSTETH,
+          slotKind: "protocol",
+          protocolAction: "wrap",
+          ...deriveEdgeTaxonomy("protocol", "wrap"),
+        },
+        {
+          adapterId: "wsteth-unwrap",
+          target: pool.address,
+          tokenIn: ADDR.WSTETH,
+          tokenOut: ADDR.STETH,
+          slotKind: "protocol",
+          protocolAction: "unwrap",
+          ...deriveEdgeTaxonomy("protocol", "unwrap"),
+        },
       );
       break;
     }

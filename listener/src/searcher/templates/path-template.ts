@@ -20,6 +20,8 @@ export interface PathTemplate {
 
 const SWAP_ADAPTERS = [
   "psm",
+  "wsteth-wrap",
+  "wsteth-unwrap",
   "univ4-unlock",
   "univ3-swap",
   "univ2-swap",
@@ -57,4 +59,3 @@ export const FLASH_SWAP_REPAY: PathTemplate = {
     { type: "final-token-equals-start-token" },
   ],
 };
-
