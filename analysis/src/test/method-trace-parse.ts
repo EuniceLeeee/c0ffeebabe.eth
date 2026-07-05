@@ -44,6 +44,53 @@ not part of the field
   assert.ok(!fields.distill_for_opus.includes("not part of the field"));
 });
 
+test("parseMethodTraceFields preserves indented shell comments", () => {
+  const fields = parseMethodTraceFields(`## Method Trace
+\`\`\`
+tools_used: cast run
+  # on the node, run with the archive RPC
+  jq '.result'
+evidence_order: structured output
+\`\`\`
+`);
+
+  assert.equal(fields.tools_used, "cast run\n  # on the node, run with the archive RPC\n  jq '.result'");
+});
+
+test("parseMethodTraceFields treats an inner code fence as a terminator", () => {
+  const fields = parseMethodTraceFields(`## Method Trace
+\`\`\`
+distill_for_opus: keep this line
+  \`\`\`sh
+  echo not part of the field
+  \`\`\`
+  and this is also outside the field
+\`\`\`
+`);
+
+  assert.equal(fields.distill_for_opus, "keep this line");
+});
+
+test("parseMethodTraceFields stops field continuation at a horizontal rule", () => {
+  const fields = parseMethodTraceFields(`## Method Trace
+distill_for_opus: keep the capsule body
+---
+Signed-off after the trace should not bleed into the field.
+`);
+
+  assert.equal(fields.distill_for_opus, "keep the capsule body");
+});
+
+test("parseMethodTraceFields keeps the first non-empty duplicate field value", () => {
+  const fields = parseMethodTraceFields(`## Method Trace
+tool_gap: first gap wins
+codify_next: add the parser regression
+tool_gap: later duplicate should not replace the first value
+`);
+
+  assert.equal(fields.tool_gap, "first gap wins");
+});
+
 test("parseMethodTraceFields preserves the real multi-line distill_for_opus fixture", () => {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
   const md = readFileSync(

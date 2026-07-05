@@ -186,6 +186,16 @@ const checks: Array<() => void> = [
       [],
     );
   }),
+  () => expectPass("multi-line distill_for_opus with quoted placeholders is valid", () => {
+    validateMethodTrace(
+      validTraceMd().replace(
+        /^distill_for_opus:.*$/m,
+        "distill_for_opus: preserve the runnable capsule\n  replay with --tx <ours>\n  compare <field/test/gate> templates as quoted examples",
+      ),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
   () => expectFail("unfilled task_class menu is blank", () => {
     validateMethodTrace(
       validTraceMd().replace(/^task_class:.*$/m, "task_class: competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation"),
@@ -200,6 +210,22 @@ const checks: Array<() => void> = [
       [],
     );
   }, "Method Trace missing/blank field: tool_gap"),
+  () => expectFail("continuation-only none-of tool_gap names a real gap", () => {
+    validateMethodTrace(
+      validTraceMd()
+        .replace(/^tool_gap:.*$/m, "tool_gap:\nnone of the verdicts cover X")
+        .replace(/^codify_next:.*$/m, "codify_next: no"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }, "tool_gap != none", "no tooling_defect LearningCase is filed"),
+  () => expectPass("none parenthetical tool_gap remains no-gap", () => {
+    validateMethodTrace(
+      validTraceMd().replace(/^tool_gap:.*$/m, "tool_gap: none (minor harness note: existing fixture phrasing)"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
   () => expectFail("later architecture trace without matrix is not masked by earlier valid trace", () => {
     validateMethodTrace(`${validTraceMd()}\n${archTraceMd()}`, step1({ fable_manual: "yes" }), []);
   }, "task_class:architecture_review", "no `## Architecture Coverage Matrix` section"),
@@ -224,6 +250,16 @@ const checks: Array<() => void> = [
   () => expectPass("architecture_review task_class allows inline comment", () => {
     validateMethodTrace(
       archTraceMd(archMatrix()).replace(/^task_class:.*$/m, "task_class: architecture_review   # per rule 13"),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
+  () => expectPass("multi-line task_class validates on the first line", () => {
+    validateMethodTrace(
+      validTraceMd().replace(
+        /^task_class:.*$/m,
+        "task_class: implementation\nclassification note quotes <field/test/gate> examples",
+      ),
       step1({ fable_manual: "yes" }),
       [],
     );
@@ -285,6 +321,24 @@ ${validTraceMd()}
   () => expectFail("invalid tooling defect status fails", () => {
     validateToolingDefects([toolingDefectCase("Open")]);
   }, "tooling_defect.status invalid: Open", "must be open|codified|human_killed"),
+  // F1-F3 (fable review of the multi-line parser): single-line heuristics must scope to the first line.
+  () => expectPass("F1 multiline distill_for_opus quoting <ours> not flagged placeholder", () => {
+    validateMethodTraceContent(validTraceMd().replace(/^distill_for_opus:.*$/m,
+      "distill_for_opus: (1) run the postmortem first:\nnpm run bundle-postmortem -- --tx <ours> --rpc x\n(2) classify winner_style"), []);
+  }),
+  () => expectFail("F2 multiline tool_gap 'none of the...' is a named gap", () => {
+    validateMethodTraceContent(validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap:\nnone of the verdicts cover sim-undervaluation")
+      .replace(/^codify_next:.*$/m, "codify_next: no"), []);
+  }, "tool_gap != none"),
+  () => expectPass("F2 tool_gap 'none (note)' stays no-gap", () => {
+    validateMethodTraceContent(validTraceMd().replace(/^tool_gap:.*$/m,
+      "tool_gap: none (minor harness note: sleep blocked)"), []);
+  }),
+  () => expectPass("F3 multiline task_class validates on first line", () => {
+    validateMethodTraceContent(validTraceMd().replace(/^task_class:.*$/m,
+      "task_class: competitor_path\n(chosen: hand-traced coffeebabe)"), []);
+  }),
 ];
 
 try {

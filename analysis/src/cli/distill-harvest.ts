@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  firstLine,
   METHOD_TRACE_FIELDS,
   parseMethodTraceFields,
   type MethodTraceField,
@@ -37,11 +38,11 @@ const TASK_CLASS_MENU = "competitor_path | bundle_postmortem | architecture_revi
 
 function parseTrace(block: string, sourceFile: string, blockIndex: number, md: string): MethodTrace | null {
   const fields = parseMethodTraceFields(block);
-  fields.task_class = fields.task_class.replace(/#.*$/, "").trim();
+  fields.task_class = firstLine(fields.task_class).replace(/#.*$/, "").trim();
 
-  if (isPlaceholder(fields.task_class) || fields.task_class === TASK_CLASS_MENU) return null;
+  if (fields.task_class.trim() === "" || isPlaceholder(firstLine(fields.task_class)) || fields.task_class === TASK_CLASS_MENU) return null;
   // skip an unfilled TEMPLATE block (e.g. the README example): a real trace has a filled distill_for_opus.
-  if (isPlaceholder(fields.distill_for_opus)) return null;
+  if (fields.distill_for_opus.trim() === "" || isPlaceholder(firstLine(fields.distill_for_opus))) return null;
 
   return {
     ...fields,

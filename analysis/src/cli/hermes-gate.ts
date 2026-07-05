@@ -3,6 +3,7 @@ import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadCases, type LearningCase } from "../learning/learning-case.js";
 import {
+  firstLine,
   METHOD_TRACE_FIELDS,
   parseMethodTraceFields,
   type MethodTraceField,
@@ -210,27 +211,28 @@ function emitMethodTraceBlockErrors(
 function validateMethodTraceBlock(block: string, cases: LearningCase[]): MethodTraceBlockValidation {
   const fieldErrors: string[] = [];
   const values: Record<MethodTraceField, string> = parseMethodTraceFields(block);
-  values.task_class = stripInlineComment(values.task_class);
+  const taskClass = stripInlineComment(firstLine(values.task_class));
 
   for (const f of METHOD_TRACE_FIELDS) {
     const value = values[f];
-    if (isPlaceholder(value) || isUnfilledMenu(value)) {
+    const valueFirst = firstLine(value);
+    if (value.trim() === "" || isPlaceholder(valueFirst) || isUnfilledMenu(valueFirst)) {
       fieldErrors.push(`Method Trace missing/blank field: ${f}`);
       continue;
     }
-    if (f === "task_class" && !TASK_CLASS_SET.has(value)) {
-      fieldErrors.push(`Method Trace task_class invalid: ${value} — must be one of ${TASK_CLASS_MENU}`);
+    if (f === "task_class" && !TASK_CLASS_SET.has(taskClass)) {
+      fieldErrors.push(`Method Trace task_class invalid: ${taskClass} — must be one of ${TASK_CLASS_MENU}`);
     }
   }
 
   const crossErrors: string[] = [];
   const toolGap = values.tool_gap;
   const codifyNext = values.codify_next;
-  const namesToolGap = toolGap !== ""
-    && !isPlaceholder(toolGap)
-    && !isUnfilledMenu(toolGap)
-    && !/^(none|no)\b/i.test(toolGap);
-  if (namesToolGap && /^(no|none)\b/i.test(codifyNext)) {
+  const gapFirst = firstLine(toolGap).trim();
+  const namesToolGap = gapFirst !== "" && !/^(none|no)\s*($|[(),.;:—-])/i.test(gapFirst);
+  const codifyFirst = firstLine(codifyNext).trim();
+  const codifyIsNo = /^(no|none)\s*($|[(),.;:—-])/i.test(codifyFirst);
+  if (namesToolGap && codifyIsNo) {
     crossErrors.push("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
       + "(create a tooling_defect LearningCase).");
   }
@@ -239,7 +241,7 @@ function validateMethodTraceBlock(block: string, cases: LearningCase[]): MethodT
     crossErrors.push("Method Trace names a tool_gap but no tooling_defect LearningCase is filed in the store — "
       + "rule 16 requires the gap be filed as a case (then codified or human_killed).");
   }
-  return { fieldErrors, crossErrors, taskClass: values.task_class };
+  return { fieldErrors, crossErrors, taskClass };
 }
 
 function loadCasesForToolingGate(): LearningCase[] {
