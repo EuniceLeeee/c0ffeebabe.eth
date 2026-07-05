@@ -564,6 +564,42 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
 
 ### 9.4 EXACT next actions, in order
 
+> **⭐ PRIORITY REORDER 2026-07-05 (operator-directed) — PROTOCOL/CREDIT LEG EV-UNLOCK moves to the
+> FRONT, ahead of the blocked block-scan/CR-5 tail.** Rationale (all verified this session): EV is the
+> binding constraint. (1) The MEV-Share submit flag is a **STRUCTURAL posture ceiling, not a code/latency
+> bug** — dual-blind: 20/20 mev_sendBundle relay-rejected "backrun not found", 19/20 hints never land,
+> 102ms fast submits still rejected; targetBlock/latency proven inert (`project-mevshare-submit-flag-lever`).
+> (2) Pure-DEX atomic loops are **dust** (census: 14 atomic_loop, all $0.10–0.58). (3) Coffee's real EV
+> is in legs we neither SEE nor ROUTE — non-uni swaps (Pancake-v3 `0x19b47279`, DODO `0xc2c0245e`),
+> PROTOCOL legs (Liquity mint / ERC4626 wrap / PSM-reverse), Fluid CREDIT — and `edge-kinds.ts:51`
+> literally says *"Protocol-leg detection … is future work."* Full synthesis (3 code-verified fable-agent
+> landing plans, sequencing) = `docs/research/reports/coffee-ev-protocol-credit-plan-20260705.md`.
+>
+> **NEW ORDER (front-loaded):**
+> - **PHASE 0 — classification unblock (offline, zero-node, DO FIRST):** extend `analysis/src/learning/
+>   edge-kinds.ts` + `analysis/src/registry/protocols.ts` with protocol topics (Liquity Trove*, ERC4626
+>   Deposit/Withdraw, Sky PSM), missing swap topics (Pancake-v3, DODO), Fluid credit topic, +
+>   `deriveProtocolActionsFromLogs`; `STABLE_ORDER`→`[flash,swap,credit,lp,protocol]`; drop the `:51`
+>   future-work comment; fix the LearningCase `["swap"]` hardcode. Gate (rule-12 flip): tx-2
+>   `["flash","swap"]`→`["flash","swap","protocol"]`+action `["mint"]`; tx-4 swap obs include pancake+dodo.
+> - **TRACK A — protocol/credit EXECUTION** (deterministic-local quotes; node only at fork-sim):
+>   A0 taxonomy (`slotKind:"protocol"` + `protocolAction` + leavesStandingPosition table: mint=true→S2,
+>   wrap/convert/redeem=false) → A1 PSM reverse (buyGem) + fee-aware quote (flip fixture) → A2 build →
+>   A3/A4 ERC4626 (sUSDS/wstUSR) → **A5 wstETH (adapters ALREADY exist in `adapters/wrap.ts` — cheapest
+>   win, just wire graph+quote+builder)** → A6 live-enable `SEARCHER_ENABLE_PROTOCOL_EDGES` (operator window).
+> - **TRACK B — discovery scanner** (`venue-discovery-scan`: scan bot tx → log/trace reverse-infer venue
+>   → classify edge_kind/protocolAction → venue-registry.json [candidate→approved→routable, human gate] →
+>   feeds graph + classifier). Track A consumes the registry.
+> - **Corrections that change the plan (agent-verified):** PSM is **already routed** (add reverse+fee, don't
+>   rebuild); planner needs **zero change** (edge-kind-agnostic DFS, slot order unenforced); Liquity BOLD
+>   mint = **DEFER** (its exemplar is $0.33/fee-negative); census `tx_shape` is **broken at scale**
+>   (`sameBlockSwapLogs` never populated) — fix in PHASE 0; EV metric = **builder_payment** not realized_usd.
+> - **DEFERRED behind the above (don't let them gate it):** BS-3 full-pipeline (discovery-blocked on a
+>   viable +EV exemplar), CR-5 Fluid resolver-quote (archive + research), Aave/Morpho credit (credit-live
+>   human gate), CS-min/CS-full/D/CR-8. MEV-Share flag disposition = operator call (harmless if left on).
+>
+> The historical block-scan next-actions below (BS-0…BS-3, all LANDED per §9.1) are kept for provenance.
+
 1. **Finish BS-0 — EXEMPLAR RE-SELECTED (2026-07-04, operator-approved).** The original exemplar
    tx #2 `0x803a3693` was mischaracterized: its "CFG 2-hop loop" is fee-negative in both directions
    (0.32% tick spread vs ~1.3% round-trip fee) and lost −0.0000023 ETH in the real execution; the
@@ -602,10 +638,12 @@ nothing you write next needs a deploy until BS-4 (operator-gated).
 3. **BS-universe** (§1.5, `buildStrategyViews` + `edgeKindFromPoolEntry` + D4 defaults), then **CR-3**
    (`0xf88b` credit flip, strategy from source evidence). Then the scanner slices BS-1/2/3.
 
-Full order (§2): `BS-0 → BS-contract → BS-universe → CR-3 → BS-1 → BS-2 → BS-3 → CR-5 → CS-min →
-BS-lane → BS-4 → CS-full → D → CR-8`. Statuses/blocks per §2 (A4/BS-4 stays BLOCKED until BS-lane +
-the P0-2/P0-3 fresh-read pre-gates are green; C2/CS-min not an authoritative close input until
-P1-4/P1-5 land).
+Full order (§2, block-scan spine — mostly LANDED): `BS-0 → BS-contract → BS-universe → CR-3 → BS-1 →
+BS-2 → BS-3 → CR-5 → CS-min → BS-lane → BS-4 → CS-full → D → CR-8`.
+**SUPERSEDED FRONT (2026-07-05, see the PRIORITY REORDER block above):** `PHASE 0 (classification) →
+TRACK A (protocol/credit execution: A0 taxonomy → PSM-reverse → ERC4626 → wstETH → live-enable) +
+TRACK B (discovery scanner) → [then the deferred tail: BS-3 full-pipeline · CR-5 · BS-lane · BS-4 ·
+CS-min · CS-full · D · CR-8]`. Statuses/blocks per §2.
 
 ### 9.5 Invariants you must not break (the whole point of the merge)
 
