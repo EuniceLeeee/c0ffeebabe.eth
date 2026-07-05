@@ -9,6 +9,17 @@ export interface AggregatedVenue {
   totalLogCount: number;
 }
 
+const EDGE_KIND_ORDER: readonly EdgeKind[] = ["flash", "swap", "credit", "lp", "protocol"];
+const PROTOCOL_ACTION_ORDER: readonly ProtocolAction[] = [
+  "mint",
+  "redeem",
+  "wrap",
+  "unwrap",
+  "convert",
+  "stake",
+  "unstake",
+];
+
 export function aggregateVenueCandidates(perTx: VenueCandidate[][]): AggregatedVenue[] {
   const byAddress = new Map<string, AggregatedVenue>();
 
@@ -41,7 +52,44 @@ export function aggregateVenueCandidates(perTx: VenueCandidate[][]): AggregatedV
     }
   }
 
-  return [...byAddress.values()].sort(
+  return sortAggregates([...byAddress.values()].map(normalizeAggregate));
+}
+
+export function mergeAggregates(
+  existing: AggregatedVenue[],
+  incoming: AggregatedVenue[],
+): AggregatedVenue[] {
+  const byAddress = new Map<string, AggregatedVenue>();
+
+  for (const source of [existing, incoming]) {
+    for (const candidate of source) {
+      const address = candidate.address.toLowerCase();
+      if (!address) continue;
+
+      let aggregate = byAddress.get(address);
+      if (!aggregate) {
+        aggregate = {
+          address,
+          edgeKinds: [],
+          protocolActions: [],
+          txCount: 0,
+          totalLogCount: 0,
+        };
+        byAddress.set(address, aggregate);
+      }
+
+      aggregate.txCount += candidate.txCount;
+      aggregate.totalLogCount += candidate.totalLogCount;
+      unionInto(aggregate.edgeKinds, candidate.edgeKinds);
+      unionInto(aggregate.protocolActions, candidate.protocolActions);
+    }
+  }
+
+  return sortAggregates([...byAddress.values()].map(normalizeAggregate));
+}
+
+function sortAggregates(items: AggregatedVenue[]): AggregatedVenue[] {
+  return items.sort(
     (a, b) =>
       b.txCount - a.txCount
       || b.totalLogCount - a.totalLogCount
@@ -49,8 +97,25 @@ export function aggregateVenueCandidates(perTx: VenueCandidate[][]): AggregatedV
   );
 }
 
+function normalizeAggregate(aggregate: AggregatedVenue): AggregatedVenue {
+  return {
+    ...aggregate,
+    edgeKinds: sortedUniqueByOrder(aggregate.edgeKinds, EDGE_KIND_ORDER),
+    protocolActions: sortedUniqueByOrder(aggregate.protocolActions, PROTOCOL_ACTION_ORDER),
+  };
+}
+
 function unionInto<T>(target: T[], source: T[]): void {
   for (const item of source) {
     if (!target.includes(item)) target.push(item);
   }
+}
+
+function sortedUniqueByOrder<T extends string>(items: T[], order: readonly T[]): T[] {
+  const orderIndex = new Map(order.map((item, index) => [item, index]));
+  return [...new Set(items)].sort((a, b) =>
+    (orderIndex.get(a) ?? Number.MAX_SAFE_INTEGER)
+    - (orderIndex.get(b) ?? Number.MAX_SAFE_INTEGER)
+    || a.localeCompare(b)
+  );
 }

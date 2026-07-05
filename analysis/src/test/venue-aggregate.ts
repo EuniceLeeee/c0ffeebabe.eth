@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { aggregateVenueCandidates, type AggregatedVenue } from "../discovery/venue-aggregate.js";
+import {
+  aggregateVenueCandidates,
+  mergeAggregates,
+  type AggregatedVenue,
+} from "../discovery/venue-aggregate.js";
 import { extractVenueCandidates, type VenueScanInput } from "../discovery/venue-evidence.js";
 import { ADDR } from "../../../listener/src/shared/constants/addresses.js";
 
@@ -43,6 +47,19 @@ test("coffee fixtures aggregate B2 venue evidence deterministically", () => {
   }
 
   assert.deepEqual(aggregateVenueCandidates(perTx), aggregated, "aggregation is deterministic");
+});
+
+test("mergeAggregates matches aggregation over the union and is commutative", () => {
+  const perTx = Array.from({ length: 9 }, (_item, index) => {
+    const fixture = loadCoffeeFixture(String(index + 1));
+    return extractVenueCandidates(inputFromFixture(fixture));
+  });
+  const expected = aggregateVenueCandidates(perTx);
+  const firstHalf = aggregateVenueCandidates(perTx.slice(0, 4));
+  const secondHalf = aggregateVenueCandidates(perTx.slice(4));
+
+  assert.deepEqual(mergeAggregates(firstHalf, secondHalf), expected);
+  assert.deepEqual(mergeAggregates(secondHalf, firstHalf), expected);
 });
 
 function assertSorted(items: AggregatedVenue[]): void {
