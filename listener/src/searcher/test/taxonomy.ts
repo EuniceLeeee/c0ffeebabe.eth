@@ -8,6 +8,7 @@ import {
 } from "../planner/token-graph.js";
 import {
   deriveEdgeTaxonomy,
+  edgeKindFromPoolEntry,
   edgeKindFromSlotKind,
   pathLeavesStandingPosition,
   strategyKindFromTxShape,
@@ -40,6 +41,7 @@ function testSlotKindMapping(): void {
   assert(edgeKindFromSlotKind("lend") === "credit", "lend maps to credit");
   assert(edgeKindFromSlotKind("flash") === "flash", "flash maps to flash");
   assert(edgeKindFromSlotKind("swap") === "swap", "swap maps to swap");
+  assert(edgeKindFromSlotKind("protocol") === "protocol", "protocol maps to protocol");
   console.log("[taxonomy] edgeKindFromSlotKind: PASS");
 }
 
@@ -47,6 +49,13 @@ function testDeriveEdgeTaxonomy(): void {
   assertTaxonomy(deriveEdgeTaxonomy("lend"), "credit", true, "derive lend");
   assertTaxonomy(deriveEdgeTaxonomy("swap"), "swap", false, "derive swap");
   assertTaxonomy(deriveEdgeTaxonomy("flash"), "flash", false, "derive flash");
+  // protocol edges: full-value conversions route unguarded; debt mint + undeclared are fail-closed.
+  assertTaxonomy(deriveEdgeTaxonomy("protocol", "convert"), "protocol", false, "derive protocol convert");
+  assertTaxonomy(deriveEdgeTaxonomy("protocol", "wrap"), "protocol", false, "derive protocol wrap");
+  assertTaxonomy(deriveEdgeTaxonomy("protocol", "unwrap"), "protocol", false, "derive protocol unwrap");
+  assertTaxonomy(deriveEdgeTaxonomy("protocol", "redeem"), "protocol", false, "derive protocol redeem");
+  assertTaxonomy(deriveEdgeTaxonomy("protocol", "mint"), "protocol", true, "derive protocol mint (debt → guarded)");
+  assertTaxonomy(deriveEdgeTaxonomy("protocol"), "protocol", true, "derive protocol undeclared (fail-closed)");
   console.log("[taxonomy] deriveEdgeTaxonomy: PASS");
 }
 
@@ -78,6 +87,22 @@ async function testTokenGraphEdges(): Promise<void> {
     ...deriveEdgeTaxonomy("flash"),
   };
   assertTaxonomy(flashEdge, "flash", false, "flash edge");
+
+  // A0: the PSM entry is reclassified protocol/convert — a full-value conversion that must NOT
+  // leave a standing position (behavior-neutral vs the prior swap classification), and its
+  // PoolEntry-level projection must agree with the edge-level derivation.
+  const psmEntry = POOL_REGISTRY.find((entry) => entry.adapter === "psm");
+  assert(psmEntry !== undefined, "POOL_REGISTRY psm entry missing");
+  assert(psmEntry.fixedSlotKind === "protocol", `psm fixedSlotKind ${psmEntry.fixedSlotKind}`);
+  assert(psmEntry.fixedProtocolAction === "convert", `psm fixedProtocolAction ${psmEntry.fixedProtocolAction}`);
+  const psmEdges = await buildTokenGraph(unusedBackend, [psmEntry]);
+  assert(psmEdges.length === 1, `psm edge count ${psmEdges.length}`);
+  assert(psmEdges[0].protocolAction === "convert", `psm edge protocolAction ${psmEdges[0].protocolAction}`);
+  assertTaxonomy(psmEdges[0], "protocol", false, "psm protocol/convert edge");
+  assert(
+    edgeKindFromPoolEntry(psmEntry) === psmEdges[0].edgeKind,
+    "psm PoolEntry edge kind should agree with the edge-level derivation",
+  );
   console.log("[taxonomy] token graph edge taxonomy: PASS");
 }
 

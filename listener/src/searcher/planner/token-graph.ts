@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { deriveEdgeTaxonomy, type EdgeKind } from "../strategy-taxonomy.js";
+import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -18,8 +18,10 @@ export interface TokenEdge {
   target: string;
   tokenIn: string;
   tokenOut: string;
-  slotKind: "flash" | "lend" | "swap";
-  /** Derived at construction via deriveEdgeTaxonomy(slotKind). Never set independently. */
+  slotKind: SlotKind;
+  /** For protocol slots: the protocol's asset-conversion action (drives leavesStandingPosition). */
+  protocolAction?: ProtocolAction;
+  /** Derived at construction via deriveEdgeTaxonomy(slotKind, protocolAction). Never set independently. */
   edgeKind: EdgeKind;
   /** true ⇔ executing this edge leaves an open position after the tx (credit abandon-exit). */
   leavesStandingPosition: boolean;
@@ -62,7 +64,9 @@ export interface PoolEntry {
   /** For PSM/fluid where direction is protocol-fixed */
   fixedTokenIn?: string;
   fixedTokenOut?: string;
-  fixedSlotKind?: "lend" | "swap";
+  fixedSlotKind?: "lend" | "swap" | "protocol";
+  /** For protocol-fixed pools: the conversion action (e.g. PSM convert). */
+  fixedProtocolAction?: ProtocolAction;
   /** Activity proxy from discovery (swap-event count). undefined = curated backbone (pinned). */
   score?: number;
 }
@@ -103,7 +107,8 @@ export const POOL_REGISTRY: PoolEntry[] = [
     adapter: "psm",
     fixedTokenIn: ADDR.USDC,
     fixedTokenOut: ADDR.DAI,
-    fixedSlotKind: "swap",
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "convert",
   },
   {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
@@ -276,7 +281,8 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         adapterId, target: pool.address,
         tokenIn: pool.fixedTokenIn, tokenOut: pool.fixedTokenOut,
         slotKind,
-        ...deriveEdgeTaxonomy(slotKind),
+        ...(pool.fixedProtocolAction ? { protocolAction: pool.fixedProtocolAction } : {}),
+        ...deriveEdgeTaxonomy(slotKind, pool.fixedProtocolAction),
       });
       break;
     }
@@ -358,8 +364,9 @@ export function defaultTokenGraph(): TokenEdge[] {
       target: ADDR.SKY_PSM_LITE,
       tokenIn: ADDR.USDC,
       tokenOut: ADDR.DAI,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
+      slotKind: "protocol",
+      protocolAction: "convert",
+      ...deriveEdgeTaxonomy("protocol", "convert"),
     },
     {
       adapterId: "univ4-unlock",

@@ -16,6 +16,21 @@ export type ProtocolAction =
   | "stake"
   | "unstake";
 
+/**
+ * Protocol actions that are full-value conversions leaving NO standing liability
+ * (a wrap/unwrap/convert/redeem/stake/unstake returns the whole value in-tx).
+ * Everything NOT in this set — notably a debt-creating "mint" (CDP/stablecoin issuance)
+ * or an undeclared action — leaves a standing position and is S2-guarded (fail-closed).
+ */
+const STANDING_SAFE_PROTOCOL_ACTIONS: ReadonlySet<ProtocolAction> = new Set<ProtocolAction>([
+  "wrap",
+  "unwrap",
+  "convert",
+  "redeem",
+  "stake",
+  "unstake",
+]);
+
 /** Analysis-vocabulary bridge (D1): backrun->"backrun"; atomic_state_arb->"block-scan"; unknown->"unknown". */
 export function strategyKindFromTxShape(
   shape: "backrun" | "atomic_state_arb" | "unknown",
@@ -24,34 +39,44 @@ export function strategyKindFromTxShape(
   return shape;
 }
 
+export type SlotKind = "flash" | "lend" | "swap" | "protocol";
+
 /**
- * Single-derivation law (D2): lend->"credit"; flash->"flash"; swap->"swap".
- * "lp" and "protocol" are reserved analysis vocabulary — never derived from runtime slots today
- * (analysis classifies competitor legs with them; planner/quoter/plan-builder do not route them,
- * capability = { analysis: true, liveRouting: false, submit: false }). When a protocol edge is
- * eventually derived, its leavesStandingPosition is per-action (a CDP mint leaves a position, a
- * wrap does not) — decided at that slice, not here.
+ * Single-derivation law (D2): lend->"credit"; flash->"flash"; swap->"swap"; protocol->"protocol".
+ * "lp" stays reserved analysis vocabulary (never derived from a runtime slot). "protocol" is now a
+ * routable runtime slot (Track A: PSM convert, wstETH wrap/unwrap, ERC4626 deposit/redeem); its
+ * leavesStandingPosition is per-action (see deriveEdgeTaxonomy), a debt mint leaves a position, a
+ * wrap does not.
  */
-export function edgeKindFromSlotKind(slotKind: "flash" | "lend" | "swap"): EdgeKind {
+export function edgeKindFromSlotKind(slotKind: SlotKind): EdgeKind {
   if (slotKind === "lend") return "credit";
   return slotKind;
 }
 
 /** PoolEntry → EdgeKind, BEFORE edges exist (view projection). MUST agree with deriveEdgeTaxonomy:
- *  a credit adapter (fluid-vault) or a lend-fixed pool → "credit"; everything else → "swap".
- *  ("lp"/"protocol" are analysis-only, never derived here.) */
-export function edgeKindFromPoolEntry(p: { adapter: string; fixedSlotKind?: "lend" | "swap" }): EdgeKind {
+ *  a credit adapter (fluid-vault) or a lend-fixed pool → "credit"; a protocol-fixed pool →
+ *  "protocol"; everything else → "swap". ("lp" is analysis-only, never derived here.) */
+export function edgeKindFromPoolEntry(p: { adapter: string; fixedSlotKind?: "lend" | "swap" | "protocol" }): EdgeKind {
   if (p.adapter === "fluid-vault") return "credit";
   if (p.fixedSlotKind === "lend") return "credit";
+  if (p.fixedSlotKind === "protocol") return "protocol";
   return "swap";
 }
 
-/** Derived edge fields in ONE place. */
+/** Derived edge fields in ONE place. protocolAction is consulted ONLY for protocol slots. */
 export function deriveEdgeTaxonomy(
-  slotKind: "flash" | "lend" | "swap",
+  slotKind: SlotKind,
+  protocolAction?: ProtocolAction,
 ): { edgeKind: EdgeKind; leavesStandingPosition: boolean } {
   const edgeKind = edgeKindFromSlotKind(slotKind);
-  return { edgeKind, leavesStandingPosition: edgeKind === "credit" };
+  if (edgeKind === "credit") return { edgeKind, leavesStandingPosition: true };
+  if (edgeKind === "protocol") {
+    // Fail-closed: a protocol edge routes UNGUARDED only when it declares an explicitly-safe
+    // full-value conversion action. "mint" and any undeclared action leave a standing position.
+    const safe = protocolAction !== undefined && STANDING_SAFE_PROTOCOL_ACTIONS.has(protocolAction);
+    return { edgeKind, leavesStandingPosition: !safe };
+  }
+  return { edgeKind, leavesStandingPosition: false };
 }
 
 export function pathLeavesStandingPosition(
