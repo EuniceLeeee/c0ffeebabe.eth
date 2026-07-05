@@ -452,7 +452,7 @@ Two "core findings" + a detail list, adjudicated:
 - **`0xee7b98ad…` expected gap → `manual_required`/sim-undervaluation: REJECTED with evidence.**
   The FINAL codified verdict on that case is `winner_style=one_leg_inventory` (CEX-DEX inventory,
   non-comparable noise) — the §6b meta-loop on this very case is what CREATED the non-comparable
-  filter (CLAUDE.md §6c step 2; memory `project-cex-dex-inventory-competitor-noise`, Opus+Fable
+  filter (HERMES.md §Competitor-loss step 2; memory `project-cex-dex-inventory-competitor-noise`, Opus+Fable
   dual-analysis converged). "Same-pool under-extraction" was the pre-meta-loop interim framing.
   S1's landed gate (`non_comparable_winner`, `comparable:false`) is correct.
 - CR-3 anti-binding (strategy from source evidence; `0xf88b` = backrun) + flash-as-funding note:

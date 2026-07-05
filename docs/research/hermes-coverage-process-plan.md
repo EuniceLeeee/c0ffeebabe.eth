@@ -20,10 +20,10 @@ governance trigger + one instrument + one behavior change, in that order.
 
 ## Workstream 1 — Epic-escalation trigger (governance, doc-only)
 
-**What:** Add a mechanical trigger to CLAUDE.md rule 13's epic-escalation clause, and open the
+**What:** Add a mechanical trigger to HERMES.md rule 13's epic-escalation clause, and open the
 coverage-frontier epic record.
 
-1. **CLAUDE.md rule 13, epic-escalation bullet** — add the trigger:
+1. **HERMES.md rule 13, epic-escalation bullet** — add the trigger:
    *"Same `gap_class` recurring in ≥3 independent samples within one window, OR in ≥2 consecutive
    rounds, → mandatory `decision: epic` in the Findings Ledger. Once a class is epic'd, per-pool
    pins for that class inside the 30-min loop are forbidden — only epic slices (each with its own

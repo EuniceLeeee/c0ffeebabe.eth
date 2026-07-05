@@ -11,9 +11,10 @@ companion doc, not here.
 ## 2. Behavioral base (every task)
 *Tradeoff: these guidelines bias toward caution over speed. For trivial tasks, use judgment.*
 - **Think before coding.** State assumptions; if multiple interpretations exist, present them — don't pick
-  silently; if a simpler approach exists, say so; if unclear, stop and ask.
-- **Simplicity first.** Minimum code that solves the problem, nothing speculative. If 200 lines could be 50,
-  rewrite. Test: *would a senior engineer say this is overcomplicated?*
+  silently; if a simpler approach exists, say so (push back when warranted); if unclear, stop and ask.
+- **Simplicity first.** Minimum code that solves the problem, nothing speculative (no unrequested
+  flexibility, no error handling for impossible cases). If 200 lines could be 50, rewrite. Test: *would a
+  senior engineer say this is overcomplicated?*
 - **Surgical changes.** Touch only what you must; match existing style; don't refactor what isn't broken;
   remove only the orphans *your* change created; mention unrelated dead code, don't delete it. Every changed
   line traces to the request. **Never `rg -rn`/`-rln`** (`-r` = `--replace`, corrupts reads).
@@ -62,6 +63,9 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - **Tool-first** — before hand-writing a scratchpad analysis, check the existing toolset (`analysis/src/cli/*`,
   the LearningCase store, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it (HERMES rule 17). Prefer
   structured JSONL over log greps; `pipeline_dropped` is the source of truth for loss attribution.
+- **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
+  (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
+  its classification live in HERMES + the `redact-live-run` tool.
 
 ## 6. Load-on-demand map (read the right one for the task)
 - `docs/research/HERMES.md` — the live-run / Hermes / autonomous workflow runbook + governance rules 1–17.
@@ -76,6 +80,7 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - `docs/project-context.md` — case study, arb flow, address table, source layout.
 - `docs/dev-commands.md` — fork test / trace / discovery command reference.
 - `docs/agent-style.md` — neutral-wording detail (behind Rule 6).
+- `docs/research/` — Hermes round docs, handoff/relay routines, architecture reviews, templates.
 - Skills: `bundle-postmortem` (competitor-loss decision tree), `mev-review` (trace-diff review).
   `docs/distill/` + `.claude/commands/{dualrun,compress}.md` — the Fable/Opus distillation workflow (don't
   auto-read; only for rule compression).

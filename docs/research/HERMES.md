@@ -57,7 +57,9 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                    if [ -f "$KEEP" ] && kill -0 "$(cat "$KEEP" 2>/dev/null)" 2>/dev/null; then echo alive; \
                    else nohup caffeinate -i -d -s -t 10800 >/dev/null 2>&1 & echo $! >"$KEEP"; fi
 1. LIVE RUN      ~30-min window. Deploy latest FIRST; do not analyze stale code.
-2. AUTO ANALYSIS Run Facts + structured pipeline_dropped + before/after vs the prior round.
+2. AUTO ANALYSIS Run Facts + structured pipeline_dropped + before/after vs the prior round. If the dominant
+                 drop is `no_candidate_plans`, classify: flash borrowability / path template / token-graph
+                 coverage / unsupported shape (drill-down is standard in the `redact-live-run` tool).
    THE QUESTION  (dual frame): • PRIMARY (funnel-INTERNAL) the nearest blocker to a genuine +EV simSuccess
                  (walk opportunity_seen → plans → solverEntered → simSuccess; simSuccess must be +EV not dust —
                  if dust is the ceiling, ECONOMICS is the blocker). • COMPLEMENTARY (funnel-EXTERNAL) what
