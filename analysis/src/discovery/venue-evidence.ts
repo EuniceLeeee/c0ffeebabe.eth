@@ -17,7 +17,7 @@ export interface VenueScanInput {
   receiptLogs: Array<{ address?: string; topics?: unknown; data?: unknown }>;
 }
 
-const KNOWN_EXCLUDED_ADDRESSES = new Set([
+export const KNOWN_EXCLUDED_ADDRESSES: ReadonlySet<string> = new Set([
   ...[
     ADDR.WETH,
     ADDR.USDC,
