@@ -62,13 +62,17 @@ If any slice seems to need node/archive/broadcast: STOP and hand back to the ope
 
 ## Phase 2b — operator-approved chain-enabled slices (2026-07-05; this is the CURRENT work list)
 
-> **⏸ PAUSED (R-2b-6 arch-review verdict, 2026-07-05):** Phase-2b scaffolding is NOT the production
-> lever; it pauses pending the operator's `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` flag decision (a
-> Safety-Rule-1 human gate, chip `task_3deb3186`; verdict:
-> `docs/research/reports/arch-review-20260705-verdict.md`). Future rounds: check the flag in the node
-> env FIRST (read-only SSM); if still unset with no new operator input, close as blocked (see
-> HANDOFF-RELAY-STATUS R-2b-7 fast-path). Once flipped: run a measured window → `bundle_submitted`
-> delta → bundle-postmortem on real submissions → Hermes Step-1 cross-ref.
+> **⏸ DEFERRED (operator priority reorder, 2026-07-05 evening — supersedes the R-2b-6/R-2b-7 pause):**
+> The flag human-gate is RESOLVED: the operator flipped `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` and the
+> measured window ran (decision-log **D-001**, run `0bf0319a`) — mechanical success, **zero inclusion**;
+> **F-006** diagnosed the 100% relay-reject ("backrun not found") as a STRUCTURAL POSTURE gate (19/20
+> referenced victims never land; latency/targetBlock proven inert). The lever moved to protocol/credit
+> coverage: the operator drove Track A/B attended (impl-plan §9.4 reorder; A0–A6 protocol edges LIVE,
+> venue registry + 6 ERC4626 vaults deployed, `95ec2ff`). The remaining Phase-2b tail (BS-3 exemplar,
+> CR-5b–e, BS-lane, BS-4, CS-*/D/CR-8) is **operator-DEFERRED behind Track A/B** — do not pick it up
+> unattended. Fast-path for future rounds: read `git log` + impl-plan §9.4 status; if no new operator
+> input re-opens the tail (or hands the relay a Track-B slice), verify HEAD builds + status intact and
+> close as deferred. The ~2h autonomous-hermes-round cron owns the live-window comparison.
 
 The operator reviewed the operator-gated remainder on 2026-07-05 and approved **all of it** for the
 autonomous relay, EXCEPT the credit-live human gate (still forbidden, see Authorization scope). This
@@ -301,6 +305,26 @@ for the slices listed here. Ordered list (resume at the first not-landed one; ve
 - outcome: no code slice (correctly — blocked on Safety-Rule-1 human gate). Wrote the fast-path note
   (status file + Phase 2b header) so future rounds close cheaply until the operator acts. Counter
   stays 0, IN_PROGRESS. Post-flip playbook pre-recorded in the Phase 2b pause note.
+
+#### R-2b-8 · 2026-07-05
+- blocker/gap: the R-2b-7 fast-path condition ("flag unset, operator hasn't acted") was STALE — the
+  operator acted attended: D-001 (flag flipped + measured window `0bf0319a`) and F-006 (100%
+  relay-reject = structural posture gate, not timing/code) landed in the decision log, and the
+  operator drove Track A/B to A6-live + venue-registry (impl-plan §9.4 reorder). The last attended
+  session ended at an explicit clean terminus ("nothing more to push tonight; the ~2h hermes cron
+  owns tomorrow's comparison") but left HEAD BROKEN: `venue-registry.ts` (committed `e0a223f`)
+  imports `KNOWN_EXCLUDED_ADDRESSES` while the export edit sat uncommitted in the working tree.
+- options + choice: (a) pick up the Phase-2b tail (CR-5d was never individually ruled out) —
+  rejected: the operator's same-day reorder defers the whole CR-5 epic + BS tail behind Track A/B,
+  and the operator explicitly closed the evening with "don't fabricate work"; barging into a
+  deferred epic unattended would contradict fresh operator direction (R-2b-5 integrity principle).
+  (b) re-run the arch review / re-measure the flag window — rejected: cached (D-001/F-006), nothing
+  changed. Chose (c): fix the broken HEAD (rule-12 flip: analysis tsc TS2459 at HEAD → CLEAN with
+  the one-line export; `test:venue-discovery` 2/2; commit `ce495f2`), refresh the stale Phase-2b
+  pause header to the DEFERRED state with a new fast-path, close as deferred.
+- outcome: HEAD un-broken (`ce495f2`); Phase-2b header + status-file fast-path updated (check
+  git log/§9.4 for operator re-open; else verify HEAD builds + close as deferred). Counter stays 0,
+  IN_PROGRESS — deferred tail still exists, so no done-confirmation is claimable.
 
 ### B. Cached analysis data — avoid re-running tools (their volume triggers the opus fallback)
 > One entry per tool call: tool · exact query/input · result (raw bulk → scratchpad file path).

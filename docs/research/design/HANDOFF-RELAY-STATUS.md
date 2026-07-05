@@ -12,6 +12,19 @@ consecutive_done_confirmations: 0
 > section for the ordered slice list + authorization scope. Counter reset to 0: the relay runs again
 > and the two-confirmation bar now applies to Phase 2b completion.
 >
+> **R-2b-8 (2026-07-05 evening) — R-2b-7's fast-path is SUPERSEDED; new fast-path here.** The operator
+> acted attended: flag flipped + measured (decision-log D-001, run `0bf0319a` — submit wall gone but
+> ZERO inclusion) and F-006 pinned the 100% relay-reject ("backrun not found") as a STRUCTURAL posture
+> gate, not timing/code. The lever moved to protocol/credit coverage: Track A/B driven attended to
+> A6-live + venue registry + 6 ERC4626 vaults (`95ec2ff`); the Phase-2b tail (BS-3 exemplar, CR-5b–e,
+> BS-lane, BS-4, CS-*/D/CR-8) is **operator-DEFERRED behind Track A/B** (impl-plan §9.4 reorder — do
+> not pick it up unattended). This round's work: fixed the broken HEAD the attended session left
+> (`ce495f2` — committed `venue-registry.ts` imported a non-exported `KNOWN_EXCLUDED_ADDRESSES`;
+> rule-12 flip: analysis tsc TS2459 at HEAD → CLEAN, `test:venue-discovery` 2/2). **New fast-path:**
+> check `git log` + impl-plan §9.4 for operator input that re-opens the tail or hands the relay a
+> Track-B slice; if none, verify HEAD builds (analysis + listener tsc) + close as deferred — the ~2h
+> autonomous-hermes-round cron owns live-window comparisons. Counter stays 0.
+>
 > **R-2b-7 (2026-07-05) confirmed the blocked-on-human-gate state; no code (correctly).** Checked the
 > node read-only: `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` still ABSENT from the running searcher env (PID
 > 177547, up 12h54m) → the operator has NOT yet acted on the R-2b-6 flag decision (chip
