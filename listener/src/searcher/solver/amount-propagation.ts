@@ -102,6 +102,8 @@ async function quoteEdge(
       state,
       options.cache,
       edge.v4PoolKey,
+      edge.poolToken0,
+      edge.poolToken1,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
@@ -112,6 +114,8 @@ async function quoteEdge(
       tokenOut: edge.tokenOut,
       amountIn,
       v4PoolKey: edge.v4PoolKey,
+      poolToken0: edge.poolToken0,
+      poolToken1: edge.poolToken1,
     })).amountOut;
   }
 }

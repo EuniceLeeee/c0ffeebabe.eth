@@ -21,6 +21,11 @@ export const ADDR = {
   MORPHO: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
   BALANCER_VAULT: "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
   FLUID_VAULT_WSTUSR_USDC: "0xee327311D8640156E87eC33ea55FcbF2309e0ce6",
+  // Fluid DexT1 USDC/USDT pool — the pool 0x9be73297's plain swapIn (0x2668dfaa)
+  // actually targeted (verified from its callTracer trace); shares FluidLiquidity
+  // 0x52Aa8994. USDC=token0 -> USDT=token1 (swap0to1=true). An earlier pick,
+  // 0xea734B6 "…-CONCENTRATED", was the wrong pool (quote was off ~2bp).
+  FLUID_DEX_USDC_USDT: "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9B",
   SKY_PSM_LITE: "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
   UNISWAP_V4_POOL_MANAGER: "0x000000000004444c5dc75cB358380D2e3dE08A90",
   UNISWAP_V4_POSITION_MANAGER: "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",

@@ -28,8 +28,8 @@ export interface VenueCapability {
 }
 
 // Source-of-truth cross-check:
-// - token-graph ADAPTER_MAP supports curve, curve-nr, univ2, univ3, univ4, psm, fluid-vault.
-// - quoter.ts supports curve*, univ2-swap, univ3-swap, univ4-unlock, psm, fluid-vault.
+// - token-graph ADAPTER_MAP supports curve, curve-nr, univ2, univ3, univ4, psm, fluid-vault, fluid-dex.
+// - quoter.ts supports curve*, univ2-swap, univ3-swap, univ4-unlock, psm, fluid-dex-swap, fluid-vault.
 // - plan-builder.ts supports those same swap/lend adapter ids.
 // - ActionAdapter registry registers univ2/univ3/univ4/curve/psm/fluid adapters.
 // - path-template.ts includes psm/univ4/univ3/univ2/curve* swap adapters.
@@ -92,7 +92,13 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   },
   {
     venue: "fluid",
-    discovery: { mode: "seed", seeds: ["0xee327311D8640156E87eC33ea55FcbF2309e0ce6"] },
+    discovery: {
+      mode: "seed",
+      seeds: [
+        "0xee327311D8640156E87eC33ea55FcbF2309e0ce6", // vault wstUSR/USDC
+        "0xea734B615888c669667038D11950f44b177F15C0", // DEX USDC/USDT
+      ],
+    },
     discoverable: true,
     quotable: true,
     buildable: true,

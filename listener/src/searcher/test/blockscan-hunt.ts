@@ -421,6 +421,8 @@ function quoteHops(edges: TokenEdge[]): QuoteRequest[] {
     tokenIn: edge.tokenIn,
     tokenOut: edge.tokenOut,
     amountIn: 0n,
+    poolToken0: edge.poolToken0,
+    poolToken1: edge.poolToken1,
     ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
   }));
 }

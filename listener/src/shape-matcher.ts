@@ -50,8 +50,8 @@ export function matchShape(
   for (const call of directCalls) {
     switch (call.kind) {
       case ActionKind.Lend:
-        // Check for unsupported FluidDex swap (dexCallback)
-        if (call.protocol === "fluid-dex-swap") {
+        // Check for unsupported FluidDex callback swap (dexCallback has no bytes payload).
+        if (call.protocol === "fluid-dex-callback-swap") {
           unsupported.push(call);
         } else {
           lends.push(call);
@@ -75,7 +75,7 @@ export function matchShape(
     }
   }
 
-  // If unsupported calls exist (e.g. fluid-dex-swap), report explicitly.
+  // If unsupported calls exist (e.g. fluid-dex-callback-swap), report explicitly.
   // Don't silently return null — caller needs to see the real skip reason.
   if (unsupported.length > 0) {
     return {

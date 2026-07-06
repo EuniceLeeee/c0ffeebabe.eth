@@ -21,6 +21,7 @@ import {
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
 import {
+  quoteFluidDex,
   encodeUniV4QuoteExactInputSingle,
   uniV4QuoterIface,
 } from "../solver/quoter.js";
@@ -170,6 +171,7 @@ export class RevmLiveBackend implements LiveStateBackend {
         push(hop.target);
         if (hop.adapterId === "psm") push(ADDR.SKY_PSM_LITE);
         if (hop.adapterId === "fluid-vault") push(ADDR.FLUID_VAULT_WSTUSR_USDC);
+        if (hop.adapterId === "fluid-dex-swap") push(hop.target);
       }
       return [...prewarm.values()];
     }
@@ -427,6 +429,8 @@ export class RevmLiveBackend implements LiveStateBackend {
           amountOut: quotePSM(req.tokenIn, req.tokenOut, req.amountIn),
           latencyMs: 0,
         };
+      case "fluid-dex-swap":
+        return this.quoteFluidDex(req);
       case "fluid-vault":
         throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
       default:
@@ -628,6 +632,21 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
   }
 
+  private async quoteFluidDex(req: QuoteRequest): Promise<QuoteResult> {
+    const started = Date.now();
+    const edge = this.findEdge(req);
+    const amountOut = await quoteFluidDex(
+      this,
+      req.target,
+      req.tokenIn,
+      req.tokenOut,
+      req.amountIn,
+      req.poolToken0 ?? edge?.poolToken0,
+      req.poolToken1 ?? edge?.poolToken1,
+    );
+    return { amountOut, latencyMs: Date.now() - started };
+  }
+
   private resolveV4PoolKey(req: QuoteHop) {
     if (req.v4PoolKey) return req.v4PoolKey;
     const edge = this.findEdge({ ...req, amountIn: 0n });
@@ -650,6 +669,7 @@ function overlayApproveSpender(hop: { adapterId: string; target: string }): stri
   if (hop.adapterId === "univ2-swap") return UNIV2_ROUTER;
   if (hop.adapterId === "univ3-swap") return UNIV3_SWAP_ROUTER;
   if (hop.adapterId.startsWith("curve-")) return ethers.getAddress(hop.target);
+  if (hop.adapterId === "fluid-dex-swap") return ethers.getAddress(hop.target);
   return null;
 }
 

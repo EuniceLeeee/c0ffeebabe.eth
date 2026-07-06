@@ -8,7 +8,7 @@ export const DEFAULT_BLOCKSCAN_VIEW_OVERRIDES_PATH = resolve(
   "blockscan-view-overrides.json",
 );
 
-const ADAPTERS = new Set(["curve", "curve-nr", "univ3", "univ2", "univ4", "psm", "fluid-vault"]);
+const ADAPTERS = new Set(["curve", "curve-nr", "univ3", "univ2", "univ4", "psm", "fluid-vault", "fluid-dex"]);
 
 export function loadBlockScanViewOverrides(
   path = DEFAULT_BLOCKSCAN_VIEW_OVERRIDES_PATH,
@@ -43,7 +43,8 @@ function isPoolEntryLike(value: unknown): value is PoolEntry {
   if (
     entry.fixedSlotKind !== undefined &&
     entry.fixedSlotKind !== "lend" &&
-    entry.fixedSlotKind !== "swap"
+    entry.fixedSlotKind !== "swap" &&
+    entry.fixedSlotKind !== "protocol"
   ) {
     return false;
   }

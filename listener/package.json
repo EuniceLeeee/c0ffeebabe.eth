@@ -42,6 +42,7 @@
     "searcher:cycle-fingerprint": "node --import tsx src/searcher/test/cycle-fingerprint.ts",
     "searcher:blockscan-solver-center": "node --import tsx src/searcher/test/blockscan-solver-center.ts",
     "searcher:blockscan-fork-solve": "node --import tsx src/searcher/test/blockscan-fork-solve.ts",
+    "searcher:fluid-dex-verify": "node --import tsx src/searcher/test/fluid-dex-verify.ts",
     "searcher:blockscan-hunt": "node --import tsx src/searcher/test/blockscan-hunt.ts",
     "searcher:bundle-router-safety": "node --import tsx src/searcher/test/bundle-router-safety.ts",
     "searcher:submission-coordinator": "node --import tsx src/searcher/test/submission-coordinator.ts",

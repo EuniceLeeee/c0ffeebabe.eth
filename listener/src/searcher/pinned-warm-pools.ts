@@ -37,6 +37,7 @@ const ADAPTERS = new Set<PoolEntry["adapter"]>([
   "univ4",
   "psm",
   "fluid-vault",
+  "fluid-dex",
 ]);
 
 export function loadPinnedWarmPools(
@@ -80,6 +81,8 @@ export function pinnedWarmHopsFromGraph(
         tokenIn: edge.tokenIn,
         tokenOut: edge.tokenOut,
         amountIn: dir.amountIn,
+        poolToken0: edge.poolToken0,
+        poolToken1: edge.poolToken1,
         v4PoolKey: edge.v4PoolKey,
         weight: dir.weight,
         label: pool.label,
@@ -107,6 +110,8 @@ function parsePinnedWarmPool(raw: unknown, index: number, path: string): PinnedW
       ? optionalCurrency(raw.fixedTokenOut, `${path}[${index}].fixedTokenOut`)
       : optionalAddress(raw.fixedTokenOut, `${path}[${index}].fixedTokenOut`),
     fixedSlotKind: parseFixedSlotKind(raw.fixedSlotKind, `${path}[${index}].fixedSlotKind`),
+    token0: optionalAddress(raw.token0, `${path}[${index}].token0`),
+    token1: optionalAddress(raw.token1, `${path}[${index}].token1`),
     currency0: optionalCurrency(raw.currency0, `${path}[${index}].currency0`),
     currency1: optionalCurrency(raw.currency1, `${path}[${index}].currency1`),
     fee: optionalNumber(raw.fee, `${path}[${index}].fee`),
@@ -183,8 +188,8 @@ function optionalString(value: unknown, field: string): string | undefined {
 
 function parseFixedSlotKind(value: unknown, field: string): PoolEntry["fixedSlotKind"] | undefined {
   if (value === undefined) return undefined;
-  if (value === "lend" || value === "swap") return value;
-  throw new Error(`${field} must be "lend" or "swap"`);
+  if (value === "lend" || value === "swap" || value === "protocol") return value;
+  throw new Error(`${field} must be "lend", "swap", or "protocol"`);
 }
 
 function directionKey(pool: string, tokenIn: string, tokenOut: string, poolKey: string): string {

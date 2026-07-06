@@ -435,6 +435,8 @@ interface OpportunityImpact {
   tokenIn: string;
   tokenOut: string;
   matchedAdapterId: string;
+  poolToken0?: string;
+  poolToken1?: string;
   /** v4 poolId — disambiguates pools sharing the singleton PoolManager address. */
   poolId?: string;
 }
@@ -537,6 +539,8 @@ async function quoteImpactOutput(
       state,
       options.cache,
       v4PoolKey,
+      impact.poolToken0,
+      impact.poolToken1,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
@@ -547,6 +551,8 @@ async function quoteImpactOutput(
       tokenOut: impact.tokenOut,
       amountIn: victimAmount,
       v4PoolKey,
+      poolToken0: impact.poolToken0,
+      poolToken1: impact.poolToken1,
     })).amountOut;
   }
   return quoted > 0n ? quoted : 1n;
@@ -609,6 +615,8 @@ function impactFromOpportunity(impact: unknown): OpportunityImpact | null {
     tokenIn: maybe.tokenIn,
     tokenOut: maybe.tokenOut,
     matchedAdapterId: maybe.matchedAdapterId,
+    poolToken0: typeof maybe.poolToken0 === "string" ? maybe.poolToken0 : undefined,
+    poolToken1: typeof maybe.poolToken1 === "string" ? maybe.poolToken1 : undefined,
     poolId: typeof maybe.poolId === "string" ? maybe.poolId : undefined,
   };
 }

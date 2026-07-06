@@ -49,7 +49,7 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "wsteth" | "erc4626";
+  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626";
   /** Optional file-backed metadata for standard two-token pools. */
   token0?: string;
   token1?: string;
@@ -149,6 +149,14 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C", adapter: "erc4626", fixedTokenIn: "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" }, // waEthLidoGHO (asset GHO in DEX)
   { address: "0x43680aBF18cf54898Be84C6eF78237CFBD441883", adapter: "erc4626", fixedTokenIn: "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0" }, // wTSLAx (asset in DEX)
   {
+    // Fluid deployment registry: "Fluid Dex Pool - USDC-USDT-CONCENTRATED".
+    // Plain swapIn token order is USDC(token0) -> USDT(token1).
+    address: ADDR.FLUID_DEX_USDC_USDT,
+    adapter: "fluid-dex",
+    token0: ADDR.USDC,
+    token1: ADDR.USDT,
+  },
+  {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
     adapter: "fluid-vault",
     fixedTokenIn: ADDR.WSTUSR,
@@ -187,6 +195,7 @@ const ADAPTER_MAP: Record<string, string> = {
   "univ4": "univ4-unlock",
   "psm": "psm",
   "fluid-vault": "fluid-vault",
+  "fluid-dex": "fluid-dex-swap",
 };
 
 /**
@@ -278,6 +287,17 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
         : await queryUniV3Tokens(backend, pool.address);
       await verifyUniV2Pair(backend, pool.address);
+      edges.push(
+        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
+        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
+      );
+      break;
+    }
+    case "fluid-dex": {
+      if (!pool.token0 || !pool.token1) {
+        throw new Error(`fluid-dex pool ${pool.address} missing pinned token0/token1 metadata`);
+      }
+      const [t0, t1] = [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)];
       edges.push(
         { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
         { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
@@ -469,6 +489,26 @@ export function defaultTokenGraph(): TokenEdge[] {
         tickSpacing: 1,
         hooks: ADDR.ZERO,
       },
+    },
+    {
+      adapterId: "fluid-dex-swap",
+      target: ADDR.FLUID_DEX_USDC_USDT,
+      tokenIn: ADDR.USDC,
+      tokenOut: ADDR.USDT,
+      slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
+      poolToken0: ADDR.USDC,
+      poolToken1: ADDR.USDT,
+    },
+    {
+      adapterId: "fluid-dex-swap",
+      target: ADDR.FLUID_DEX_USDC_USDT,
+      tokenIn: ADDR.USDT,
+      tokenOut: ADDR.USDC,
+      slotKind: "swap",
+      ...deriveEdgeTaxonomy("swap"),
+      poolToken0: ADDR.USDC,
+      poolToken1: ADDR.USDT,
     },
     {
       adapterId: "curve-exchange-plain",

@@ -39,6 +39,8 @@ export interface QuoteRequest {
   tokenIn: string;
   tokenOut: string;
   amountIn: bigint;
+  poolToken0?: string;
+  poolToken1?: string;
   v4PoolKey?: V4PoolKey;
 }
 

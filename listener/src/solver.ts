@@ -24,6 +24,7 @@ const DECODERS: Record<string, ethers.Interface> = {
   "0x5c38449e": new ethers.Interface(["function flashLoan(address recipient, address[] tokens, uint256[] amounts, bytes userData)"]),
   "0x032d2276": new ethers.Interface(["function operate(uint256 nftId, int256 newCol, int256 newDebt, address to)"]),
   "0x8433ea22": new ethers.Interface(["function liquidate(uint256 col, uint256 debt, address to, bool absorb)"]),
+  "0x2668dfaa": new ethers.Interface(["function swapIn(bool swap0to1_, uint256 amountIn_, uint256 amountOutMin_, address to_)"]),
   "0x128acb08": new ethers.Interface(["function swap(address recipient, bool zeroForOne, int256 amountSpecified, uint160 sqrtPriceLimitX96, bytes data)"]),
   "0x48c89491": new ethers.Interface(["function unlock(bytes data)"]),
   "0x022c0d9f": new ethers.Interface(["function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes data)"]),
@@ -99,7 +100,7 @@ function resolveNode(
   const decoder = DECODERS[node.selector];
   let adapterId = PROTOCOL_ADAPTER_MAP[node.protocol] ?? null;
 
-  if (adapterId === "fluid-dex-swap") {
+  if (node.protocol === "fluid-dex-callback-swap" || node.selector === "0xbe17c79c") {
     throw new Error(
       `unsupported: fluid-dex-swap ${node.target} ${node.selector} uses dexCallback without bytes payload`,
     );
@@ -157,6 +158,11 @@ function resolveNode(
           params.debt = decoded[1];
           params.absorb = decoded[3];
           amount = decoded[0];
+          break;
+        case "0x2668dfaa": // FluidDex plain swapIn
+          params.swap0to1 = decoded[0];
+          params.amountOutMin = decoded[2];
+          amount = decoded[1];
           break;
         case "0x128acb08": // UniV3 swap
           params.zeroForOne = decoded[1];

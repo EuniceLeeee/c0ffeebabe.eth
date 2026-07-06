@@ -227,6 +227,38 @@ async function buildEdgeNode(
       };
     }
 
+    case "fluid-dex-swap": {
+      ensureApprove(edge.tokenIn, edge.target);
+      if (!edge.poolToken0 || !edge.poolToken1) {
+        throw new Error(`fluid-dex edge missing poolToken0/poolToken1: ${edge.tokenIn} -> ${edge.tokenOut}`);
+      }
+      const inLower = edge.tokenIn.toLowerCase();
+      const outLower = edge.tokenOut.toLowerCase();
+      const t0 = edge.poolToken0.toLowerCase();
+      const t1 = edge.poolToken1.toLowerCase();
+      const swap0to1 =
+        inLower === t0 && outLower === t1
+          ? true
+          : inLower === t1 && outLower === t0
+            ? false
+            : null;
+      if (swap0to1 === null) {
+        throw new Error(
+          `fluid-dex tokens ${edge.tokenIn} -> ${edge.tokenOut} do not match pool ` +
+            `${edge.poolToken0} / ${edge.poolToken1}`,
+        );
+      }
+      return {
+        adapterId: "fluid-dex-swap",
+        target: edge.target,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amount: amtIn,
+        params: { swap0to1, amountOutMin: 0n },
+        children: [],
+      };
+    }
+
     case "univ3-swap": {
       // Wrapper: callback is BotVM transferring tokenIn (the inbound) to pool.
       // exactInput mode: amountSpecified > 0

@@ -41,6 +41,7 @@ const ADAPTERS = new Set<PoolEntry["adapter"]>([
   "univ4",
   "psm",
   "fluid-vault",
+  "fluid-dex",
 ]);
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
@@ -300,8 +301,8 @@ function numberField(value: unknown, field: string): number | undefined {
 
 function parseFixedSlotKind(value: unknown, field: string): PoolEntry["fixedSlotKind"] | undefined {
   if (value === undefined || value === null) return undefined;
-  if (value === "lend" || value === "swap") return value;
-  throw new Error(`${field} must be "lend" or "swap"`);
+  if (value === "lend" || value === "swap" || value === "protocol") return value;
+  throw new Error(`${field} must be "lend", "swap", or "protocol"`);
 }
 
 function unorderedTokenPairKey(pool: Pick<PoolEntry, "token0" | "token1">): string | null {

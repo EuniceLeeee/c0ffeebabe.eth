@@ -68,6 +68,12 @@ async function testTokenGraphEdges(): Promise<void> {
   assert(fluidEdges.length === 1, `fluid edge count ${fluidEdges.length}`);
   assertTaxonomy(fluidEdges[0], "credit", true, "fluid-vault edge");
 
+  const fluidDexEntry = POOL_REGISTRY.find((entry) => entry.adapter === "fluid-dex");
+  assert(fluidDexEntry !== undefined, "POOL_REGISTRY fluid-dex entry missing");
+  const fluidDexEdges = await buildTokenGraph(unusedBackend, [fluidDexEntry]);
+  assert(fluidDexEdges.length === 2, `fluid-dex edge count ${fluidDexEdges.length}`);
+  assertTaxonomy(fluidDexEdges[0], "swap", false, "fluid-dex edge");
+
   const univ3Entry: PoolEntry = {
     address: ADDR.UNISWAP_V3_USDT_WETH,
     adapter: "univ3",

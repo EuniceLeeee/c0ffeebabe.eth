@@ -43,6 +43,8 @@ export class RpcAnvilLiveBackend implements LiveStateBackend {
       this.state,
       undefined,
       req.v4PoolKey,
+      req.poolToken0,
+      req.poolToken1,
     );
     return { amountOut, latencyMs: Date.now() - started };
   }

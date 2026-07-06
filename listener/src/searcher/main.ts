@@ -2580,12 +2580,14 @@ function topPinnedWarmHops(
   return [...hops]
     .sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1))
     .slice(0, k)
-    .map(({ adapterId, target, tokenIn, tokenOut, amountIn, v4PoolKey }) => ({
+    .map(({ adapterId, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1, v4PoolKey }) => ({
       adapterId,
       target,
       tokenIn,
       tokenOut,
       amountIn,
+      poolToken0,
+      poolToken1,
       v4PoolKey,
     }));
 }
@@ -2609,6 +2611,8 @@ function dedupeRouteHops(
         target: edge.target,
         tokenIn: edge.tokenIn,
         tokenOut: edge.tokenOut,
+        poolToken0: edge.poolToken0,
+        poolToken1: edge.poolToken1,
         v4PoolKey: edge.v4PoolKey,
       });
       if (hops.length >= maxHops) return hops;
@@ -2623,6 +2627,8 @@ function quoteHopKey(hop: QuoteHop): string {
     hop.target.toLowerCase(),
     hop.tokenIn.toLowerCase(),
     hop.tokenOut.toLowerCase(),
+    hop.poolToken0?.toLowerCase() ?? "",
+    hop.poolToken1?.toLowerCase() ?? "",
     v4PoolKeyIdentity(hop.v4PoolKey),
   ].join(":");
 }
@@ -2813,6 +2819,8 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
       tokenIn: edge.tokenIn,
       tokenOut: edge.tokenOut,
       amountIn: 0n,
+      poolToken0: edge.poolToken0,
+      poolToken1: edge.poolToken1,
       ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
     }));
 }
