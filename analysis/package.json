@@ -26,6 +26,7 @@
     "test:venue-discovery": "node --import tsx --test src/test/venue-discovery.ts",
     "test:venue-aggregate": "node --import tsx --test src/test/venue-aggregate.ts",
     "test:venue-bq": "node --import tsx --test src/test/venue-bq.ts",
+    "test:venue-capture": "node --import tsx --test src/test/venue-capture.ts",
     "test:venue-registry": "node --import tsx --test src/test/venue-registry.ts",
     "test:hermes-gate-tooling": "node --import tsx --test src/test/hermes-gate-tooling.ts",
     "test:onchain-loss-scan": "node --import tsx --test src/test/onchain-loss-scan.ts",
