@@ -27,15 +27,21 @@ const LP_TOPICS = topicSet([
   TOPICS.univ4ModifyLiquidity,
 ]);
 
+// CREDIT = a leg that opens/closes a DEBT position we hold (borrow/repay + collateral moves).
+// Classify by the ACTUAL behavior, NOT by protocol membership: plain Morpho `Supply`/`Withdraw` is a
+// LENDING deposit, and — critically — is ALSO what a MetaMorpho VAULT emits internally when we merely
+// deposit/redeem its shares (an ERC4626 PROTOCOL leg). Including Supply/Withdraw here mis-tagged
+// `0x9be73297` (steakUSDC/USDT vault deposit, ZERO borrow) as credit. Only Borrow/Repay/*Collateral
+// represent a credit position we take. (`0x9be73297` classification correction, decision-log F-007.)
 const CREDIT_TOPICS = topicSet([
   TOPICS.morphoBorrow,
   TOPICS.morphoRepay,
-  TOPICS.morphoSupply,
-  TOPICS.morphoWithdraw,
   TOPICS.morphoSupplyCollateral,
   TOPICS.morphoWithdrawCollateral,
   TOPICS.aaveV3Borrow,
   TOPICS.aaveV3Repay,
+  // NOT morphoSupply/morphoWithdraw — plain lending supply/withdraw (incl. a MetaMorpho vault's internal
+  // ops) is not a credit LEG; it's protocol/lending. See the block comment above.
   // TODO(credit): Fluid Liquidity LogOperate — pending a verified signature (see registry/protocols.ts).
 ]);
 
