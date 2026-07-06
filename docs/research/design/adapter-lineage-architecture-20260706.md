@@ -47,11 +47,14 @@ matchCall(...) → descriptorFor(id)` + `assertDescriptorCoverage()` (throws if 
 a descriptor — anti-drift teeth). Classification table for the current 31 adapters is in the descriptor
 Codex brief (`scratchpad/codex-descriptor.brief.md`); lineage/edgeKind pinned there.
 
-## Reuse boring-vault — DO NOT reinvent (operator directive)
-boring-vault has canonical per-protocol decoders under
+## Reuse boring-vault's PROTOCOL KNOWLEDGE — NOT its code (operator directive)
+**Explicit: this is NOT "reuse the whole codebase / import their adapters."** boring-vault is a Solidity
+on-chain vault; its decoders cannot be a library for our off-chain TS searcher, and we do NOT copy them
+wholesale. What we reuse is the **protocol knowledge each decoder encodes** — signatures, which args define
+a position, the catalog of protocols. Their per-protocol decoders live under
 `src/base/DecodersAndSanitizers/Protocols/` (~50: ERC4626, MorphoBlue, AaveV3, Curve, UniswapV3,
-PancakeSwapV3, BalancerV2, Lido, FluidDex, FluidFToken, PendleRouter, Convex, Gearbox, …).
-**They are Solidity (on-chain), so we don't import them as a library — we reuse their PROTOCOL KNOWLEDGE:**
+PancakeSwapV3, BalancerV2, Lido, FluidDex, FluidFToken, PendleRouter, Convex, Gearbox, …). Concretely we
+reuse:
 - **Signatures + position-defining args** for each protocol (their decoder tells us exactly which args
   matter). E.g. `MorphoBlueDecoderAndSanitizer`: supply/withdraw/borrow/repay/supplyCollateral/
   withdrawCollateral, position = `(loanToken, collateralToken, oracle, irm, onBehalf)`, `receiver` is not
@@ -63,7 +66,25 @@ PancakeSwapV3, BalancerV2, Lido, FluidDex, FluidFToken, PendleRouter, Convex, Ge
 - **What we still write ourselves** (they don't do it — they're a vault, not a searcher): quote (amountOut
   or EdgeQuote), BotVM calldata encode, fork-sim gate, PnL, LearningCase.
 - **Do NOT copy**: their Merkle-authorization / Teller / Accountant (vault security model, irrelevant to an
-  off-chain atomic-flash searcher).
+  off-chain atomic-flash searcher); and NOT their Solidity adapters/decoders as code — knowledge only.
+
+## Adapter correctness — VERIFY against a real on-chain tx log (mandatory per adapter)
+A descriptor / signature reference (boring-vault or our own guess) is a HYPOTHESIS until it matches real
+chain data. **Every new/derived adapter must be validated against a real competitor tx (coffee's txs are
+the corpus) BEFORE it is trusted — not just against a hand-written unit fixture.** Two checks:
+1. **Decode/classify matches the log**: pull the real tx's receipt (`tx-profit`/`bundle-postmortem` already
+   fetch it, or `cast receipt`), and for each call the tx made to that protocol, `matchTrace(target,
+   selector)` must fire on OUR adapter and `classifyCall` must return the right `{lineage, edgeKind,
+   action}`; the emitted logs (topic0 + which addresses) must be consistent with the descriptor's
+   position-defining args. (E.g. steakUSDC/steakUSDT in `0x9be73297`: the Morpho Blue calls must classify
+   `credit`, the vault deposit/redeem `protocol`.)
+2. **Encode reproduces the on-chain calldata**: our `encode()` for that action, given the same params, must
+   produce calldata byte-identical to what the real tx sent to the target (selector + args). A mismatch =
+   the adapter is wrong, regardless of a green unit test.
+This is the same discipline that caught earlier errors (the hand-decoded profit, the "dead edge" premise):
+**ground the adapter in a real tx, don't trust the fixture.** Record the reference tx hash in the adapter's
+lineage header. Coffee's already-collected exemplars (`0x9be73297` Morpho+vaults, plus the per-vault txs in
+the handoff §5) are the first corpus.
 
 ## Adding a new venue — the workflow
 ```
