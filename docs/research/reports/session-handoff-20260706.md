@@ -93,8 +93,12 @@ sfrxETH `0xf4774e11`, waEthUSDT `0x33e4e9bc`, waEthUSDC `0x8ca222f1`.)
    closes the vault loop. credit-edge (`edge_kind:"credit"`) case, D2/D5; Fluid credit is the template.
    (Dust EV — do only if pursuing the atomic-arb class with eyes open.)
 3. **Block-scan scanner live** (BS-lane + BS-3 full pipeline + BS-4) over vault+credit+swap edges — the whole
-   workstream, not a flag. NOTE: a concurrent session is already doing block-scan exemplar hunting
-   (commit `0a1984c` BS-1c, uncommitted `blockscan-hunt.ts`) — COORDINATE before duplicating.
+   workstream, not a flag. **COORDINATION RESOLVED (2026-07-06):** the concurrent session shipped BS-1c
+   (`0a1984c`, scanner prices protocol edges) + `searcher:blockscan-hunt` (`f48c371`, committed) and MEASURED
+   it — 4 live blocks fork-solved = **ZERO +EV protocol/vault ring, only sub-cent pure-DEX dust** (decision-log
+   F-007, `docs/analysis/20260706-protocol-edge-return-venue-gap.md`). Verdict: the DEX-NAV protocol class is
+   empty and the Morpho-credit vault class is dust (§ above). **Do NOT wire the live block-scan lane to chase
+   the protocol/vault class** — it is dust-bounded; the lever is posture/ROI, not the scanner.
 4. **Adapter LINEAGE — classification inherited by behavior, code split by protocol (operator design
    2026-07-06; supersedes both the topic-heuristic AND my earlier "static edgeKind on 31 / giant family
    adapter" framings).** Principle: *代码按协议拆,能力按行为继承* — adapter files may proliferate, the

@@ -493,6 +493,8 @@ generator/evaluator split, each with its rule-12 gate.
 | **BS-2** (3–4 hop cycle extension) | `c0e617b` | reuse `buildTokenPaths(t,t)` on anchor tokens, score rings Σln(mid·(1−fee))>0, rotate to flashToken, emit full-ring seedEdges, dedup by cycleFingerprint. Gate `searcher:blockscan-scanner` 10/10 (3-hop found, unprofitable control, dedup) |
 | **BS-3a** (solver center) | `7f66cb7` | `resolveSearchCenter` block-scan branch → `searchSeed.searchCenter` (no victim/1n-dust). Gate `searcher:blockscan-solver-center` 2/2 + backrun byte-identical |
 | **SCANNER OFFLINE-COMPLETE** | — | detect (BS-1a 2-hop + BS-2 cycles) → route (BS-1b) → size (BS-3a), all tested. **Remaining needs the LIVE NODE / real fork state → OPERATOR-gated:** BS-3 full-pipeline sim→standalone bundle (needs a profitable block-scan fixture on a fork), BS-lane (concurrent lane in the live process), BS-4 (live dry-run window). CR-5 gate needs archive (0xf88b fork replay, block 24710788 past prune). CS-min/CS-full/D/CR-8 are later Phase-3/4 slices |
+| **BS-1c** (scanner prices protocol edges) | `0a1984c` | `detectBlockScanOpportunities` gains optional `protocolMids` — admits non-standing `slotKind:"protocol"` edges (was swap-only), `venueKind/readVenueMid` "protocol" branch (map lookup, direct or 1/mid reverse; reserves synthesized so `estimateSizing` unchanged), seeds `anchorTokens` from protocol-edge tokens, skips standing rings. Undefined `protocolMids` = byte-identical. Gate `searcher:blockscan-scanner` 14/14 (T-nav-dislocation flip + par control + standing-ring reject + missing-mids no-regression); planner/replay/taxonomy/contract unchanged |
+| **BLOCKSCAN-HUNT** (exemplar measurement) | `f48c371` | `searcher:blockscan-hunt` fork-solves the BS-1c scanner's top-K over the LIVE protocol-enriched graph. **4 blocks measured (node worktree, live searcher untouched): scanner surfaces+prices protocol (PSM) rings but ZERO protocol/vault ring is +EV; only sub-cent pure-DEX dust solves.** ⇒ the DEX-NAV protocol class (only wstETH/sUSDS of 11 shares have a DEX venue, both par) is EMPTY. Answers the BS-3 EPIC-blocker: no viable +EV DEX-NAV exemplar exists. decision-log F-007 |
 
 **STATUS (2026-07-05, supersedes the pre-implementation line below):** Phase 0 (S0/S1/S2) + Phase 1
 (BS-0, BS-contract A/B/B2/C1/C2, BS-universe P1/P2, CR-3 a/b) + the block-scan scanner OFFLINE body
@@ -507,6 +509,16 @@ decomposition (a–e; CR-5b escalated — no deterministic Fluid quote path). **
 HUMAN-GATE config flip (chip `task_3deb3186`), not more Phase-2b scaffolding.** Still unwritten / gated:
 BS-3 full pipeline (viable-exemplar-blocked), CR-5 adapter (archive + Fluid-quote-gated), BS-lane/BS-4
 (live node/window), CS-min/CS-full/D/CR-8 (Phase 3/4).
+
+**UPDATE (2026-07-06): BS-1c LANDED (`0a1984c`) + measured (`f48c371`, decision-log F-007).** The scanner
+now prices protocol edges, and `searcher:blockscan-hunt` fork-solved 4 live blocks over the enriched graph:
+**ZERO +EV protocol/vault ring; only sub-cent pure-DEX dust.** Combined with the concurrent trace of
+`0x9be73297` (vault loops close via Morpho CREDIT, ~$1 net — NOT a DEX swap of the share; `c62fcc7`/`2516ce0`),
+**both protocol paths are DUST.** So BS-3's "viable-exemplar-blocked" is now RESOLVED-as-negative for the
+protocol class: no viable +EV DEX-NAV exemplar exists, and the Morpho-credit exemplar is dust + a
+`.credit-live` human gate. The needle-mover is a **posture/ROI decision, not the scanner** — do NOT wire the
+live block-scan lane (BS-lane/BS-3/BS-4) to chase the protocol/vault class. Missing leg if the operator ever
+pursues it: the Morpho Blue credit edge (`edge_kind:"credit"`, D2/D5; Fluid is the template).
 
 _(historical, pre-implementation:)_ Everything from `BS-contract` onward is unwritten. Total: **3 of 16
 runtime slices landed; the block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of
