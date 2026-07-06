@@ -213,6 +213,17 @@
   a FluidDexResolver quote + register the Fluid Dex USDC/USDT pool; VERIFY vs `0x9be73297`. This is the real,
   bounded "adapt an unknown/stubbed venue" work — a curve-sized adapter, not a new detection model. (F-008's
   earlier "needs a new composition model" was wrong.)
+- **DONE + VERIFIED (2026-07-06, commit `1c4b947`):** `fluidDexSwapAdapter` implemented via plain
+  `swapIn(bool,uint256,uint256,address)` (selector `0x2668dfaa`, approve+call, no executor change) +
+  a FluidDexResolver/revert-estimate quote + plan-builder approve + `poolToken0/poolToken1` threaded
+  through the quote plumbing + the Fluid DexT1 **USDC/USDT pool `0x667701e5`** registered as a swap edge.
+  Gate `searcher:fluid-dex-verify` **reproduces `0x9be73297`'s swap exactly** (326,058.65 USDC →
+  326,061.67 USDT, diff 4288 wei; block 24568129 archive fork-after-prev-tx); planner/replay/taxonomy/
+  scanner/coordinator all additive-unchanged. Evaluator fix: Codex first picked the wrong Fluid pool
+  (0xea734B6, off ~2bp); the real swapIn target `0x667701e5` was pinned from the callTracer trace.
+  **The Fluid DEX leg now routes through the SAME buildTokenPaths as any swap — coffee's Fluid arb class
+  is unblocked in the graph.** Not yet deployed to the node (a swap adapter is principal-safe + within the
+  bounded-live envelope; the deploy is an operator restart).
 
 ## Dead-ends / retired (high-value — don't circle back)
 
