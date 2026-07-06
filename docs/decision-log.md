@@ -178,6 +178,28 @@
   > so it is likely genuine — but verify, don't inherit the Morpho error).
   [[project-track-a-b-protocol-edges]] [[project-atomic-backrun-market-ceiling]]
 
+### F-008 | 2026-07-06 | ✅ | Our block-scan scanner CANNOT reach coffee's protocol arbs (verified at the exact arb block)
+- **Setup:** BS-lane Pass A/B1/B1b landed the live block-scan lane (log-only, isolated stack, full-warm) and
+  **B1b** (`1d0c724`) wired live `protocolMids` so the scanner can price protocol edges. To avoid concluding
+  from a starved/protocol-blind window, ran the `protocolMids`-enabled `blockscan-hunt` at **block 24568129 —
+  the EXACT block of `0x9be73297`** (coffee's steakUSDC/steakUSDT PROTOCOL arb, $2.23, archive fork).
+- **Result (decisive):** 24 opportunities, **ZERO protocol rings** (all `protocol=false`, pure-DEX dust, best
+  net ~$0.0035). At the exact block where coffee netted $2.23 via a protocol/vault loop, **our scanner surfaces
+  no protocol ring at all.**
+- **Why (detection-MODEL gap, not a protocolMids gap):** (1) steakUSDC/steakUSDT/waEthUSDC vault shares have
+  **no DEX venue** in our universe → no DEX-mid to spread against the vault NAV → our spread-cycle scanner
+  cannot form the ring. (2) coffee's mechanism is a **multi-protocol COMPOSITION** (Balancer-flash → Morpho
+  Blue supply/withdraw → MetaMorpho vault deposit/redeem → UniV3 swaps → WETH), NOT a DEX-mid-spread cycle —
+  a different SHAPE our scanner does not model.
+- **Net picture (after 3 corrections — this is the settled one):** protocol is NOT dust (coffee $2.23/$2.44 is
+  real), BUT **our block-scan scanner structurally cannot reach coffee's protocol wins.** Its reachable protocol
+  set = only vaults whose share has a DEX venue = **wstETH/sUSDS NAV rings**, and only when they dislocate
+  (pegged/rare). Capturing coffee's steakUSDC-class protocol arbs needs a **composition-arb** detect+execute
+  capability (model flash→Morpho→vault→swap), a much larger build than the spread-cycle scanner.
+- **Implication:** a multi-hour live block-scan window will NOT surface coffee's protocol arbs — the lane is
+  blind to that shape, not merely waiting for a dislocation. B1b + the live lane are correct + isolated + safe
+  (log-only, zero loss); the limit is the detection model. [[project-track-a-b-protocol-edges]]
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
