@@ -84,6 +84,13 @@ const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
 
+const V3_META = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function fee() view returns (uint24)",
+  "function tickSpacing() view returns (int24)",
+]);
+
 const WHALE = "0x000000000000000000000000000000000000dEaD";
 
 interface HintLog {
@@ -486,6 +493,35 @@ async function main(): Promise<void> {
   planner.setMaxHops(maxHops);
   planner.setMaxPoolsPerToken(maxPoolsPerToken);
   planner.setMaxRotationsPerPath(maxRotationsPerPath);
+  let blockScanState: AnvilStateBackend | undefined;
+  let blockScanCache: PoolStateCache | undefined;
+  let blockScanUpdater: PoolStateUpdater | undefined;
+  let blockScanPlanner: TemplatePlanner | undefined;
+  let blockScanSolver: AnvilSolver | undefined;
+  let blockScanSimulator: BotVMSimulator | undefined;
+  const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "8000");
+  if (enableBlockScan) {
+    const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
+    const isolatedState = new AnvilStateBackend(
+      config.rpcUrl,
+      `http://127.0.0.1:${blockScanAnvilPort}`,
+      blockScanAnvilPort,
+    );
+    const isolatedCache = new PoolStateCache(provider);
+    const isolatedPlanner = new TemplatePlanner();
+    isolatedPlanner.setMaxCandidates(maxCandidates);
+    isolatedPlanner.setMaxHops(maxHops);
+    isolatedPlanner.setMaxPoolsPerToken(maxPoolsPerToken);
+    isolatedPlanner.setMaxRotationsPerPath(maxRotationsPerPath);
+    blockScanState = isolatedState;
+    blockScanCache = isolatedCache;
+    blockScanUpdater = new PoolStateUpdater(provider, isolatedCache, {
+      maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
+    });
+    blockScanPlanner = isolatedPlanner;
+    blockScanSolver = new AnvilSolver();
+    blockScanSimulator = new BotVMSimulator(isolatedState, config.botvmAddress, config.wallet.address);
+  }
   const solver = new AnvilSolver();
   // Direct provider for v3 tick data — anvil-over-RPC is slow + wrong for TickLens.
   const poolStateCache = new PoolStateCache(provider);
@@ -674,6 +710,7 @@ async function main(): Promise<void> {
   let blockScanGraph: TokenEdge[] | undefined;
   if (enableBlockScan) {
     blockScanGraph = await buildTokenGraph(mainnetBackend, strategyViews.blockscan);
+    blockScanPlanner?.setGraph(blockScanGraph);
     console.log(
       `[searcher/blockscan] graph built: edges=${blockScanGraph.length} ` +
         `from blockscan view=${strategyViews.blockscan.length}`,
@@ -860,41 +897,167 @@ async function main(): Promise<void> {
     });
   }
 
-  // Block-level PoolStateUpdater: seed watched V2/V3 pool state by Multicall so
+  // Block-level PoolStateUpdater: seed watched V2/V3 pools by Multicall so
   // quote/search uses local math. This is deliberately separate from the revm
   // trace warmer above; it does not touch the revm daemon.
+  // Isolation invariant: this lane is built only from the blockScan* stack below;
+  // no shared backrun objects are passed into scan, warm, plan, or solve.
+  let blockScanBusy = false;
   const scheduleBlockScan = (blockNumber: number): void => {
     if (!enableBlockScan) return;
     const edges = blockScanGraph;
     const cfg = blockScanCfg;
-    if (!edges || !cfg) return;
+    const blockScanStateForPass = blockScanState;
+    const blockScanCacheForPass = blockScanCache;
+    const blockScanUpdaterForPass = blockScanUpdater;
+    const blockScanPlannerForPass = blockScanPlanner;
+    const blockScanSolverForPass = blockScanSolver;
+    const blockScanSimulatorForPass = blockScanSimulator;
+    if (
+      !edges ||
+      !cfg ||
+      !blockScanStateForPass ||
+      !blockScanCacheForPass ||
+      !blockScanUpdaterForPass ||
+      !blockScanPlannerForPass ||
+      !blockScanSolverForPass ||
+      !blockScanSimulatorForPass
+    ) return;
     setImmediate(() => {
-      try {
-        const scan = detectBlockScanOpportunities({
-          edges,
-          cache: poolStateCache,
-          sourceBlock: blockNumber,
-          swapTouched: null,
-          cfg,
-        });
-        console.log(
-          `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
-            `candidates=${scan.opportunities.length} skippedVenues=${scan.debug?.skippedVenues ?? 0} ` +
-            `outcome=${scan.outcome}`,
-        );
-        for (const opp of scan.opportunities.slice(0, 5)) {
-          console.log(
-            `[searcher/blockscan]   cand ring=${opp.affectedTokens?.join("->")} ` +
-              `pools=${opp.affectedPools?.join(",")} flashToken=${opp.flashToken} ` +
-              `center=${opp.searchSeed.searchCenter} standing=${opp.leavesStandingPosition}`,
-          );
+      void (async () => {
+        if (blockScanBusy) {
+          console.log(`[searcher/blockscan] block=${blockNumber} skipped=busy`);
+          return;
         }
-      } catch (err) {
-        console.log(
-          `[searcher/blockscan] block=${blockNumber} scan error: ` +
-            `${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+        blockScanBusy = true;
+        const passStarted = Date.now();
+        const passDeadlineAtMs = passStarted + blockScanPassBudgetMs;
+        let passBudgetLogged = false;
+        const passBudgetExceeded = (stage: string): boolean => {
+          if (Date.now() < passDeadlineAtMs) return false;
+          if (!passBudgetLogged) {
+            passBudgetLogged = true;
+            console.log(
+              `[searcher/blockscan] block=${blockNumber} pass_budget_exceeded ` +
+                `stage=${stage} ms=${Date.now() - passStarted} budgetMs=${blockScanPassBudgetMs}`,
+            );
+          }
+          return true;
+        };
+        try {
+          try {
+            await blockScanStateForPass.forkAt(blockNumber);
+            blockScanCacheForPass.clear();
+          } catch (err) {
+            console.log(
+              `[searcher/blockscan] block=${blockNumber} fork error: ` +
+                `${err instanceof Error ? err.message : String(err)}`,
+            );
+            return;
+          }
+          if (passBudgetExceeded("fork")) return;
+
+          const hops = blockScanQuoteRequests(edges);
+          for (let i = 0; i < hops.length; i += 500) {
+            if (passBudgetExceeded("warm_v2v3")) return;
+            await blockScanUpdaterForPass.update(blockNumber, hops.slice(i, i + 500), {
+              awaitTicks: false,
+              maxTickPools: 0,
+            });
+          }
+          const v3TickMeta = await seedBlockScanV3TickMetadata(
+            provider,
+            blockScanCacheForPass,
+            blockNumber,
+            edges,
+            passDeadlineAtMs,
+          );
+          if (passBudgetExceeded("v3_tick_meta")) return;
+          const curveWarm = await warmBlockScanCurves(
+            blockScanStateForPass,
+            blockScanCacheForPass,
+            blockNumber,
+            edges,
+            passDeadlineAtMs,
+          );
+          if (passBudgetExceeded("warm_curve")) return;
+          const warmedV2V3 = countBlockScanWarmedV2V3(blockScanCacheForPass, blockNumber, edges);
+          console.log(
+            `[searcher/blockscan] block=${blockNumber} warmedV2V3=${warmedV2V3} ` +
+              `warmedCurve=${curveWarm.warmed} v3TickMeta=${v3TickMeta}`,
+          );
+
+          if (passBudgetExceeded("scan")) return;
+          const scan = detectBlockScanOpportunities({
+            edges,
+            cache: blockScanCacheForPass,
+            sourceBlock: blockNumber,
+            swapTouched: null,
+            cfg,
+          });
+          let quotePositive = 0;
+          let bestNet: bigint | null = null;
+          for (const opp of scan.opportunities.slice(0, cfg.maxCandidates)) {
+            if (passBudgetExceeded("solve")) break;
+            const ring = formatBlockScanRing(opp);
+            const protoRing = opp.seedEdges.some((edge) => edge.slotKind === "protocol");
+            try {
+              blockScanPlannerForPass.setGraph(opp.seedEdges);
+              const plans = await blockScanPlannerForPass.planBlockScanFromSeedEdges(
+                opp,
+                [FLASH_SWAP_REPAY],
+              );
+              if (plans.length === 0) {
+                console.log(
+                  `[searcher/blockscan]   solve ring=${ring} net=null error=no_plans ` +
+                  `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
+                );
+                continue;
+              }
+              if (passBudgetExceeded("solve")) break;
+              const solved = await blockScanSolverForPass.solve(
+                plans[0],
+                blockScanStateForPass,
+                blockScanSimulatorForPass,
+                {
+                  deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
+                  deferPhase2Sim: true,
+                  cache: blockScanCacheForPass,
+                  finalSimTopN: 3,
+                  gssMaxTries: 8,
+                  quoteProfitFloorBps: 0n,
+                  quoteSafetyBps: 10000n,
+                },
+              );
+              if (solved.netProfit > 0n) quotePositive++;
+              if (bestNet === null || solved.netProfit > bestNet) bestNet = solved.netProfit;
+              console.log(
+                `[searcher/blockscan]   solve ring=${ring} net=${solved.netProfit} ` +
+                  `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
+              );
+            } catch (err) {
+              console.log(
+                `[searcher/blockscan]   solve ring=${ring} net=null ` +
+                  `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
+                  `protoRing=${protoRing}`,
+              );
+            }
+          }
+          console.log(
+            `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
+              `candidates=${scan.opportunities.length} quotePositive=${quotePositive} ` +
+              `bestNet=${bestNet === null ? "null" : bestNet.toString()} warmedV2V3=${warmedV2V3} ` +
+              `skippedVenues=${scan.debug?.skippedVenues ?? 0} ms=${Date.now() - passStarted}`,
+          );
+        } catch (err) {
+          console.log(
+            `[searcher/blockscan] block=${blockNumber} scan error: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          );
+        } finally {
+          blockScanBusy = false;
+        }
+      })();
     });
   };
   let stateUpdating = false;
@@ -955,6 +1118,7 @@ async function main(): Promise<void> {
     clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();
+    blockScanState?.stop();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
@@ -1036,6 +1200,7 @@ async function main(): Promise<void> {
     clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();
+    blockScanState?.stop();
   }
 }
 
@@ -2606,6 +2771,129 @@ async function impersonateSwap(
 
 function isCurveAdapter(adapterId: string): boolean {
   return adapterId.startsWith("curve-");
+}
+
+function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
+  return edges
+    .filter((edge) => edge.slotKind === "swap")
+    .map((edge) => ({
+      adapterId: edge.adapterId,
+      target: edge.target,
+      tokenIn: edge.tokenIn,
+      tokenOut: edge.tokenOut,
+      amountIn: 0n,
+      ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
+    }));
+}
+
+async function seedBlockScanV3TickMetadata(
+  provider: ethers.JsonRpcProvider,
+  cache: PoolStateCache,
+  blockNumber: number,
+  edges: TokenEdge[],
+  deadlineAtMs: number,
+): Promise<number> {
+  const pools = new Set<string>();
+  for (const edge of edges) {
+    if (edge.slotKind === "swap" && edge.adapterId === "univ3-swap") pools.add(edge.target.toLowerCase());
+  }
+
+  let seeded = 0;
+  const list = [...pools];
+  for (let i = 0; i < list.length; i += 50) {
+    if (Date.now() >= deadlineAtMs) break;
+    const results = await Promise.all(
+      list.slice(i, i + 50).map(async (pool) => {
+        try {
+          const [t0, t1, fee, tickSpacing] = await Promise.all([
+            provider.call({ to: pool, data: V3_META.encodeFunctionData("token0"), blockTag: blockNumber }),
+            provider.call({ to: pool, data: V3_META.encodeFunctionData("token1"), blockTag: blockNumber }),
+            provider.call({ to: pool, data: V3_META.encodeFunctionData("fee"), blockTag: blockNumber }),
+            provider.call({ to: pool, data: V3_META.encodeFunctionData("tickSpacing"), blockTag: blockNumber }),
+          ]);
+          // Metadata-only tick seed: snapshotV3 needs this layer for pool metadata,
+          // but block-scan mids do not need the slow TickLens bitmap/tick walk.
+          cache.seedV3Ticks({
+            pool,
+            token0: String(V3_META.decodeFunctionResult("token0", t0)[0]),
+            token1: String(V3_META.decodeFunctionResult("token1", t1)[0]),
+            fee: BigInt(V3_META.decodeFunctionResult("fee", fee)[0]),
+            tickSpacing: Number(V3_META.decodeFunctionResult("tickSpacing", tickSpacing)[0]),
+            tickBitmap: new Map<number, bigint>(),
+            ticks: new Map<number, bigint>(),
+            blockNumber,
+          });
+          return 1;
+        } catch {
+          return 0;
+        }
+      }),
+    );
+    seeded += results.reduce((sum: number, value) => sum + value, 0);
+  }
+  return seeded;
+}
+
+async function warmBlockScanCurves(
+  state: StateBackend,
+  cache: PoolStateCache,
+  blockNumber: number,
+  edges: TokenEdge[],
+  deadlineAtMs: number,
+): Promise<{ warmed: number; failed: number }> {
+  let warmed = 0;
+  let failed = 0;
+  for (const edge of uniqueBlockScanCurvePools(edges)) {
+    if (Date.now() >= deadlineAtMs) break;
+    try {
+      await cache.quoteCurve(state, edge.target, edge.tokenIn, edge.tokenOut, 1n);
+      if (cache.snapshotCurve(edge.target, blockNumber)) warmed++;
+      else failed++;
+    } catch {
+      failed++;
+    }
+  }
+  return { warmed, failed };
+}
+
+function uniqueBlockScanCurvePools(edges: TokenEdge[]): TokenEdge[] {
+  const seen = new Set<string>();
+  const out: TokenEdge[] = [];
+  for (const edge of edges) {
+    if (edge.slotKind !== "swap" || !isCurveAdapter(edge.adapterId)) continue;
+    const key = edge.target.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(edge);
+  }
+  return out;
+}
+
+function countBlockScanWarmedV2V3(
+  cache: PoolStateCache,
+  blockNumber: number,
+  edges: TokenEdge[],
+): number {
+  const seen = new Set<string>();
+  let warmed = 0;
+  for (const edge of edges) {
+    if (edge.slotKind !== "swap") continue;
+    if (edge.adapterId !== "univ2-swap" && edge.adapterId !== "univ3-swap") continue;
+    const key = `${edge.adapterId}:${edge.target.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (edge.adapterId === "univ2-swap" && cache.snapshotV2(edge.target, blockNumber)) warmed++;
+    if (edge.adapterId === "univ3-swap" && cache.snapshotV3(edge.target, blockNumber)) warmed++;
+  }
+  return warmed;
+}
+
+function formatBlockScanRing(opp: { affectedTokens?: string[]; seedEdges: TokenEdge[] }): string {
+  return (opp.affectedTokens ?? opp.seedEdges.map((edge) => edge.tokenIn)).join("->");
+}
+
+function blockScanErrorMessage(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200);
 }
 
 function eventPostImpactSeed(impact: PoolImpact, blockNumber: number): PostImpactSeed | null {
