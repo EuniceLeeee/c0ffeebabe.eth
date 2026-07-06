@@ -133,59 +133,24 @@ scan/discover venue
            decoder for that protocol first.
 ```
 
-## credit vs protocol-convert (keep distinct — boring-vault's Aave/Fluid decoders prove it)
-- `protocol` convert/wrap/redeem (PSM, ERC4626, wstETH) → quotable as a plain token delta (bigint amountOut
-  today; EdgeQuote later), `leavesStandingPosition=false`.
-- `credit` borrow/supply (Aave, Morpho, Fluid) → has a POSITION by nature → must carry positionDeltas /
-  constraints, NOT a long-term bigint quote (D5). `leavesStandingPosition=true` unless closed in-tx →
-  S2/`.credit-live` gate. Never a new strategy — it's a LEG.
+## credit vs protocol-convert — a STRUCTURAL adapter distinction (keep distinct)
+Not a strategy call — a shape-of-the-quote fact that determines how a credit adapter is written:
+- **`protocol` convert/wrap/redeem** (PSM, ERC4626, wstETH) → a plain TOKEN DELTA. Quotable as `bigint`
+  amountOut today (EdgeQuote later); `leavesStandingPosition=false`. Simple to write — deposit/redeem/wrap
+  are pure conversions.
+- **`credit` borrow/supply** (Aave, Morpho, Fluid) → carries a POSITION by nature → the quote must be
+  `positionDeltas`/`constraints`, NOT a `bigint` amountOut (D5). `leavesStandingPosition=true` unless closed
+  in-tx (S2 fail-closed). Never a new strategy — it's a LEG.
+- **Credit is the HARDER adapter class and is NOT built.** Beyond positionDeltas, a credit leg's value depends
+  on the DEX price vs the protocol/oracle price (the arb lives in that gap), so a credit adapter needs a
+  market-vs-oracle-aware quote, not a single `amountOut`. We have NOT built this. `fluid-vault` is
+  grandfathered/sized by the legacy `fluidDebtBps` grid, not a proper credit quote. So: keep the `credit`
+  lineage + classification clean now (this doc), but the credit ADAPTER (Morpho/Aave/Fluid proper) is deferred
+  work — reuse boring-vault's `MorphoBlue`/`AaveV3` decoder signatures + the position-defining args when it is
+  built, and VERIFY against a real tx log (§ Adapter correctness).
 
-## Status / decision context (corrected 2026-07-06 — do not re-open WITHOUT reading decision-log F-007)
-**Two protocol classes, kept separate (decision-log F-007, corrected — the earlier "protocol block-scan is
-all dust" here was an OVERREACH the operator caught with `0xf88b`):**
-- **DEX-NAV protocol (BS-1c scans this) = genuinely DUST.** `blockscan-hunt` fork-solved 4 live blocks AND
-  the `0xf88b` depeg block = zero +EV protocol ring, best ~$0.50; of 11 protocol entries only wstETH/sUSDS
-  have a DEX share-venue, both NAV-par. Don't build BS-3 for this class.
-- **CREDIT (Fluid/Morpho) = EPISODIC $100–500, NOT dust.** `0xf88b498b…` (block 24710788, from coffeebabe)
-  nets ~273 wstUSR + 0.078 WETH during a wstUSR market DEPEG via `flash→Fluid borrow→swap→repay`. BS-1c
-  CANNOT see it — it excludes credit/standing edges by design (`blockscan-scanner.ts:247`), which is why the
-  hunt saw only DEX dust. **"BS-3-as-built (credit-excluded) sees only dust — a scanner SCOPE limit, not a
-  market fact."** The Morpho-vault class (`0x9be73297`, ~$1) is the same shape, smaller.
-- **Capability EXISTS; the gate is POSTURE.** `WstUSRArb.t.sol` (AC-3) reconstructs the ~273 wstUSR profit;
-  the Fluid credit edge is grandfathered live in the backrun graph (D4) + the solver sizes it (`fluidDebtBps`).
-  So the reward is REAL ($100–500/depeg) — which makes the `.credit-live` decision MORE worth taking to the
-  operator, not less. This lineage architecture serves that: clean `credit` classification + the Morpho/Fluid
-  credit lineage are exactly what a credit-UN-excluded scanner + the `.credit-live` path consume.
-
-## Remaining from the unified plan (`unified-strategy-edge-impl-plan-20260704.md`) — consolidated status
-Carried here so the incomplete work has one current home. **Verdict column is load-bearing, and split by the
-F-007 two-class correction** (DEX-NAV dust vs credit episodic).
-
-**DON'T-BUILD (the DEX-NAV protocol class is measured dust):**
-| slice | what | status |
-|---|---|---|
-| BS-3 as built (credit-EXCLUDED) | block-scan over DEX-NAV protocol edges only | `blockscan-hunt` = zero +EV; don't wire it FOR the DEX-NAV class |
-| BS-lane / BS-4 for DEX-NAV | live lane + window to run the credit-excluded scanner | nothing +EV in that class to run |
-| CS-min / CS-full / D | strategy-compare + dispatcher/auto-close | Phase 3/4; only worth it once a +EV strategy class is live |
-| B-residual | residual backrun coverage | evidence-gated |
-
-**WORTH-BUILDING but POSTURE/human-gated (the credit class is episodic $100–500, F-007 capture-path):**
-| step | what | gate |
-|---|---|---|
-| 1. `.credit-live` posture | authorize standing-position (credit) submits | **human gate** (Safety Rule 1) — the real decision, reward now known REAL not dust |
-| 2. backrun-captures-first | the Fluid loop already routes+sizes in the backrun graph (D4) → captures the proven `0xf88b` exemplar without new code | needs step 1 only |
-| 3. CR-5 | deterministic Fluid quote (auction precision over the `fluidDebtBps` grid) | CR-5b escalated: no deterministic Fluid quote path yet (resolver eth_call design). Precision upgrade, NOT a blocker |
-| 4. BS-3 credit-UN-EXCLUDED | relax `blockscan-scanner.ts:247` + wire `fluidDebtBps` sizing into block-scan → catch the standing depeg dislocation proactively every block | after 1–3 |
-| Morpho/Aave credit edges (CR-8) | `edge_kind:"credit"`, D2/D5; Fluid is the template; reuse boring-vault `MorphoBlueDecoderAndSanitizer` signatures + VERIFY vs `0x9be73297` log | `.credit-live` gate; Morpho EV smaller ($1) than Fluid |
-| MEV-Share submit flag | `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` | **already flipped + measured (F-006/D-001): 100% relay-rejected "backrun not found", cause = structural POSTURE (not a code edit).** Real lever = eligible-orderflow relationship, not the flag |
-
-**LANDED-BUT-NOT-LIVE-WIRED (small follow-ups):**
-| item | state |
-|---|---|
-| A2 PSM buyGem | encode landed; the DAI→USDC reverse edge is NOT in the live registry (forward-only), so buyGem is unreachable live; anvil fork round-trip fork-sim outstanding. Low EV. |
-| Track B B3–B6 | venue-discovery + venue-registry LANDED this session (`e0a223f`/`3df4d0a`); remaining = B3 trace enrichment, the B4 status machine (candidate→approved→**routable**, human gate), B5–B6 feed into classifier + graph |
-| tooling_defect (open) | venue-discovery promotes a vault on `asset()`/`previewRedeem` WITHOUT checking a return path exists (DEX venue OR credit edge) — surfaced the "5/6 no-return-path" false-promote; fix = gate promotion on loop-closability |
-
-**The one thing worth doing next (if anything): the adapter descriptor CODE layer is LANDED (`72fbfd9`);
-the natural follow-up is wiring `classifyCall` into venue-discovery (replace the topic heuristic) + the
-loop-closability check — offline, cheap, improves classification correctness regardless of the dust verdict.**
+---
+> **Scope note:** this doc is the ADAPTER ARCHITECTURE only (lineage / descriptor / reuse / verification).
+> The EV / dust-vs-episodic / capture-path / build-or-not decisions for protocol + credit classes live in
+> **`docs/decision-log.md` F-007** (two protocol classes: DEX-NAV dust vs credit episodic $100–500) and the
+> session handoff — not here. Don't duplicate strategy into the architecture doc.
