@@ -5,7 +5,7 @@
 
 import { ADDR } from "../../shared/constants/addresses.js";
 import { cycleFingerprint } from "../detector/cycle-fingerprint.js";
-import { detectBlockScanOpportunities, type BlockScanConfig } from "../detector/blockscan-scanner.js";
+import { detectBlockScanOpportunities, type BlockScanConfig, type ProtocolMid } from "../detector/blockscan-scanner.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
@@ -24,6 +24,7 @@ const BLOCK = 25_455_296;
 const UNIT = 10n ** 18n;
 const WETH = ADDR.WETH.toLowerCase();
 const USDC = ADDR.USDC.toLowerCase();
+const USDT = ADDR.USDT.toLowerCase();
 const P1 = "0x0000000000000000000000000000000000000101";
 const P2 = "0x0000000000000000000000000000000000000102";
 const P3 = "0x0000000000000000000000000000000000000103";
@@ -31,6 +32,8 @@ const P4 = "0x0000000000000000000000000000000000000104";
 const P5 = "0x0000000000000000000000000000000000000105";
 const P6 = "0x0000000000000000000000000000000000000106";
 const P7 = "0x0000000000000000000000000000000000000107";
+const P8 = "0x0000000000000000000000000000000000000108";
+const P9 = "0x0000000000000000000000000000000000000109";
 const Q96 = 1n << 96n;
 
 function cfg(overrides: Partial<BlockScanConfig> = {}): BlockScanConfig {
@@ -52,6 +55,37 @@ function swap(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ
     tokenOut,
     slotKind: "swap",
     ...deriveEdgeTaxonomy("swap"),
+    score: 100,
+  };
+}
+
+function lend(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ2-lend"): TokenEdge {
+  return {
+    adapterId,
+    target: pool,
+    tokenIn,
+    tokenOut,
+    slotKind: "lend",
+    ...deriveEdgeTaxonomy("lend"),
+    score: 100,
+  };
+}
+
+function protocol(
+  tokenIn: string,
+  tokenOut: string,
+  pool: string,
+  adapterId: "erc4626-deposit" | "erc4626-redeem",
+  protocolAction: "wrap" | "redeem",
+): TokenEdge {
+  return {
+    adapterId,
+    target: pool,
+    tokenIn,
+    tokenOut,
+    slotKind: "protocol",
+    protocolAction,
+    ...deriveEdgeTaxonomy("protocol", protocolAction),
     score: 100,
   };
 }
@@ -138,6 +172,45 @@ function pairEdges(token0: string, token1: string, pool: string): TokenEdge[] {
     swap(token0, token1, pool),
     swap(token1, token0, pool),
   ];
+}
+
+function erc4626Edges(underlying: string, vault: string): TokenEdge[] {
+  return [
+    protocol(underlying, vault, vault, "erc4626-deposit", "wrap"),
+    protocol(vault, underlying, vault, "erc4626-redeem", "redeem"),
+  ];
+}
+
+function protocolKey(pool: string, tokenIn: string, tokenOut: string): string {
+  return `${pool.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
+}
+
+function navProtocolMids(underlying: string, vault: string, redeemMid: number): ReadonlyMap<string, ProtocolMid> {
+  return new Map<string, ProtocolMid>([
+    [protocolKey(vault, underlying, vault), { mid: 1 / redeemMid, feeBps: 0, depthIn: 10_000_000n * UNIT }],
+    [protocolKey(vault, vault, underlying), { mid: redeemMid, feeBps: 0, depthIn: 10_000_000n * UNIT }],
+  ]);
+}
+
+function navFixture(redeemMid: number): {
+  cache: PoolStateCache;
+  edges: TokenEdge[];
+  protocolMids: ReadonlyMap<string, ProtocolMid>;
+  underlying: string;
+  vault: string;
+} {
+  const cache = new PoolStateCache();
+  const underlying = tokenAt(60);
+  const vault = tokenAt(61);
+  seedV2Pair(cache, P8, vault, USDT, 1_000_000n * UNIT, 1_000_000n * UNIT);
+  seedV2Pair(cache, P9, underlying, USDT, 1_000_000n * UNIT, 1_000_000n * UNIT);
+  return {
+    cache,
+    edges: [...erc4626Edges(underlying, vault), ...pairEdges(vault, USDT, P8), ...pairEdges(underlying, USDT, P9)],
+    protocolMids: navProtocolMids(underlying, vault, redeemMid),
+    underlying,
+    vault,
+  };
 }
 
 function addWethAnchor(cache: PoolStateCache, edges: TokenEdge[]): void {
@@ -308,6 +381,82 @@ const tests: TestCase[] = [
         seen.add(opp.cycleFingerprint);
       }
       console.log("[blockscan-scanner] cycleFingerprint dedup: PASS");
+    },
+  },
+  {
+    name: "T-nav-dislocation",
+    run: () => {
+      const { cache, edges, protocolMids } = navFixture(1.05);
+      const outcome = run(edges, cache, {
+        pricedTokens: new Map([[USDT, { maxBorrow: 100_000n * UNIT }]]),
+        protocolMids,
+      });
+      const protocolOpp = outcome.opportunities.find((opp) =>
+        opp.seedEdges.some((edge) => edge.adapterId === "erc4626-redeem"),
+      );
+      assert(protocolOpp !== undefined, "expected NAV protocol opportunity");
+      assert(protocolOpp.leavesStandingPosition === false, "NAV opportunity should not leave a standing position");
+      assert(protocolOpp.searchSeed.searchCenter > 8n, "NAV search center is usable");
+      assert(protocolOpp.flashToken === USDT, "NAV flashToken is USDT");
+      assert(protocolOpp.seedEdges[0].tokenIn.toLowerCase() === USDT, "NAV ring starts at USDT");
+      assert(
+        protocolOpp.seedEdges[protocolOpp.seedEdges.length - 1].tokenOut.toLowerCase() === USDT,
+        "NAV ring closes at USDT",
+      );
+      console.log("[blockscan-scanner] T-nav-dislocation: PASS");
+    },
+  },
+  {
+    name: "T-nav-par control",
+    run: () => {
+      const { cache, edges, protocolMids } = navFixture(1.00);
+      const outcome = run(edges, cache, {
+        pricedTokens: new Map([[USDT, { maxBorrow: 100_000n * UNIT }]]),
+        protocolMids,
+      });
+      const protocolOpp = outcome.opportunities.some((opp) =>
+        opp.seedEdges.some((edge) => edge.slotKind === "protocol"),
+      );
+      assert(!protocolOpp, "par NAV protocol ring should not emit");
+      console.log("[blockscan-scanner] T-nav-par control: PASS");
+    },
+  },
+  {
+    name: "T-standing-ring-rejected",
+    run: () => {
+      const cache = new PoolStateCache();
+      const edges: TokenEdge[] = [];
+      const a = tokenAt(70);
+      const b = tokenAt(71);
+      addWethAnchor(cache, edges);
+      seedV2Pair(cache, P1, WETH, a, 1_000n * UNIT, 1_200n * UNIT);
+      seedV2Pair(cache, P2, a, b, 1_000n * UNIT, 1_000n * UNIT);
+      seedV2Pair(cache, P3, b, WETH, 1_000n * UNIT, 1_000n * UNIT);
+      edges.push(...pairEdges(WETH, a, P1), lend(a, b, P2), ...pairEdges(b, WETH, P3));
+      const outcome = run(edges, cache);
+      const standingOpp = outcome.opportunities.some((opp) =>
+        opp.seedEdges.some((edge) => edge.slotKind === "lend"),
+      );
+      assert(!standingOpp, "standing-position ring should not emit");
+      console.log("[blockscan-scanner] T-standing-ring-rejected: PASS");
+    },
+  },
+  {
+    name: "T-missing-protocolMids",
+    run: () => {
+      const { cache, edges } = mainAnchor();
+      const vault = tokenAt(80);
+      seedV2Pair(cache, P8, USDC, vault, 1_000_000n * UNIT, 1_000_000n * UNIT);
+      edges.push(...pairEdges(USDC, vault, P8), ...erc4626Edges(USDC, vault));
+      const outcome = run(edges, cache);
+      assert(outcome.opportunities.length === 1, "swap-only opportunity should remain");
+      assertMainAnchor(outcome.opportunities[0]);
+      assert(
+        outcome.opportunities.every((opp) => opp.seedEdges.every((edge) => edge.slotKind !== "protocol")),
+        "missing protocol mids should not emit protocol opportunities",
+      );
+      assert(outcome.debug?.skippedVenues === 1, `expected one skipped protocol venue, got ${outcome.debug?.skippedVenues}`);
+      console.log("[blockscan-scanner] T-missing-protocolMids: PASS");
     },
   },
 ];

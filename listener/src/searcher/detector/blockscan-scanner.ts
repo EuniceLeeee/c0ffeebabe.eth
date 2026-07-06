@@ -12,6 +12,15 @@ export interface BlockScanConfig {
   maxCandidates: number;
   budgetMs: number;
   pricedTokens: Map<string, { maxBorrow: bigint }>;
+  protocolMids?: ReadonlyMap<string, ProtocolMid>;
+}
+
+export interface ProtocolMid {
+  /** tokenOut raw units per 1 raw unit of tokenIn (decimals INCLUDED, same convention as AMM mids). */
+  mid: number;
+  feeBps: number;
+  /** Max plausible size in tokenIn raw units (depth proxy for sizing/ranking). */
+  depthIn: bigint;
 }
 
 export interface BlockScanOutcome {
@@ -23,7 +32,7 @@ export interface BlockScanOutcome {
   debug?: { skippedVenues: number };
 }
 
-type VenueKind = "v2" | "v3" | "curve";
+type VenueKind = "v2" | "v3" | "curve" | "protocol";
 
 interface PairGroup {
   a: string;
@@ -99,7 +108,7 @@ export function detectBlockScanOpportunities(input: {
     const venues: VenueMid[] = [];
     for (const [pool, edges] of group.venues) {
       if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
-      const mid = readVenueMid(input.cache, input.sourceBlock, group.a, group.b, pool, edges);
+      const mid = readVenueMid(input.cache, input.sourceBlock, group.a, group.b, pool, edges, input.cfg.protocolMids);
       if (mid) venues.push(mid);
       else skippedVenues++;
     }
@@ -160,6 +169,12 @@ export function detectBlockScanOpportunities(input: {
     ranked.push({ opportunity, rank: estSpreadBps * Math.log10(depth) });
   }
 
+  for (const edge of input.edges) {
+    if (edge.slotKind !== "protocol" || edge.leavesStandingPosition) continue;
+    anchorTokens.add(edge.tokenIn.toLowerCase());
+    anchorTokens.add(edge.tokenOut.toLowerCase());
+  }
+
   for (const anchorToken of anchorTokens) {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
     const rings = buildTokenPaths(input.edges, anchorToken, anchorToken, {
@@ -172,7 +187,8 @@ export function detectBlockScanOpportunities(input: {
 
     for (const ring of rings) {
       if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
-      const score = scoreRing(input.cache, input.sourceBlock, ring.edges);
+      if (pathLeavesStandingPosition(ring.edges)) continue;
+      const score = scoreRing(input.cache, input.sourceBlock, ring.edges, input.cfg.protocolMids);
       if (!score || score.estSpreadBps <= input.cfg.minSpreadBps) continue;
 
       const ringTokens = ringTokensWithoutRepeat(ring.edges);
@@ -181,7 +197,7 @@ export function detectBlockScanOpportunities(input: {
       const seedEdges = rotateRingEdges(ring.edges, flashToken);
       if (!seedEdges) continue;
 
-      const firstVenue = readEdgeVenueMid(input.cache, input.sourceBlock, seedEdges[0]);
+      const firstVenue = readEdgeVenueMid(input.cache, input.sourceBlock, seedEdges[0], input.cfg.protocolMids);
       if (!firstVenue) continue;
       const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
       const spreadMultiplier = 1 + score.estSpreadBps / 10_000;
@@ -228,7 +244,7 @@ export function detectBlockScanOpportunities(input: {
 function groupPairs(edges: TokenEdge[]): Map<string, PairGroup> {
   const groups = new Map<string, PairGroup>();
   for (const edge of edges) {
-    if (edge.slotKind !== "swap") continue;
+    if (edge.slotKind !== "swap" && (edge.slotKind !== "protocol" || edge.leavesStandingPosition)) continue;
     const tokenIn = edge.tokenIn.toLowerCase();
     const tokenOut = edge.tokenOut.toLowerCase();
     if (tokenIn === tokenOut) continue;
@@ -261,15 +277,18 @@ function readVenueMid(
   b: string,
   pool: string,
   edges: TokenEdge[],
+  protocolMids?: ReadonlyMap<string, ProtocolMid>,
 ): VenueMid | null {
   const kind = venueKind(edges[0]);
   if (!kind) return null;
   if (kind === "v2") return readV2Mid(cache.snapshotV2(pool, sourceBlock), pool, edges, a, b);
   if (kind === "v3") return readV3Mid(cache.snapshotV3(pool, sourceBlock), pool, edges, a, b);
+  if (kind === "protocol") return readProtocolMid(protocolMids, pool, edges, a, b);
   return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b);
 }
 
 function venueKind(edge: TokenEdge): VenueKind | null {
+  if (edge.slotKind === "protocol") return "protocol";
   const adapterId = edge.adapterId.toLowerCase();
   if (adapterId.includes("univ2")) return "v2";
   if (adapterId.includes("univ3")) return "v3";
@@ -292,6 +311,38 @@ function readV2Mid(snapshot: V2Seed | null, pool: string, edges: TokenEdge[], a:
     edges,
     mid,
     feeBps: 30,
+    reserveA,
+    reserveB,
+    depthProxy: Number(minBigint(reserveA, reserveB)),
+  };
+}
+
+function readProtocolMid(
+  protocolMids: ReadonlyMap<string, ProtocolMid> | undefined,
+  pool: string,
+  edges: TokenEdge[],
+  a: string,
+  b: string,
+): VenueMid | null {
+  if (!protocolMids || !findEdge(edges, a, b)) return null;
+  const direct = protocolMids.get(`${pool}|${a}|${b}`);
+  const reverse = direct ? null : protocolMids.get(`${pool}|${b}|${a}`);
+  const quoted = direct ?? reverse;
+  if (!quoted || !Number.isFinite(quoted.mid) || quoted.mid <= 0 || quoted.depthIn <= 0n) return null;
+  const mid = direct ? quoted.mid : 1 / quoted.mid;
+  const reserveBNumber = Number(quoted.depthIn) * mid;
+  if (!Number.isFinite(mid) || mid <= 0 || !Number.isFinite(reserveBNumber) || reserveBNumber <= 0) {
+    return null;
+  }
+  const reserveA = quoted.depthIn;
+  const reserveB = BigInt(Math.floor(reserveBNumber));
+  if (reserveB <= 0n) return null;
+  return {
+    kind: "protocol",
+    pool,
+    edges,
+    mid,
+    feeBps: quoted.feeBps,
     reserveA,
     reserveB,
     depthProxy: Number(minBigint(reserveA, reserveB)),
@@ -375,7 +426,12 @@ function findEdge(edges: TokenEdge[], tokenIn: string, tokenOut: string): TokenE
   ) ?? null;
 }
 
-function readEdgeVenueMid(cache: PoolStateCache, sourceBlock: number, edge: TokenEdge): VenueMid | null {
+function readEdgeVenueMid(
+  cache: PoolStateCache,
+  sourceBlock: number,
+  edge: TokenEdge,
+  protocolMids?: ReadonlyMap<string, ProtocolMid>,
+): VenueMid | null {
   return readVenueMid(
     cache,
     sourceBlock,
@@ -383,11 +439,17 @@ function readEdgeVenueMid(cache: PoolStateCache, sourceBlock: number, edge: Toke
     edge.tokenOut.toLowerCase(),
     edge.target.toLowerCase(),
     [edge],
+    protocolMids,
   );
 }
 
-function edgeMidTimesOneMinusFee(cache: PoolStateCache, sourceBlock: number, edge: TokenEdge): number | null {
-  const venue = readEdgeVenueMid(cache, sourceBlock, edge);
+function edgeMidTimesOneMinusFee(
+  cache: PoolStateCache,
+  sourceBlock: number,
+  edge: TokenEdge,
+  protocolMids?: ReadonlyMap<string, ProtocolMid>,
+): number | null {
+  const venue = readEdgeVenueMid(cache, sourceBlock, edge, protocolMids);
   if (!venue || venue.feeBps >= 10_000) return null;
   const adjusted = venue.mid * (1 - venue.feeBps / 10_000);
   return Number.isFinite(adjusted) && adjusted > 0 ? adjusted : null;
@@ -397,6 +459,7 @@ function scoreRing(
   cache: PoolStateCache,
   sourceBlock: number,
   edges: TokenEdge[],
+  protocolMids?: ReadonlyMap<string, ProtocolMid>,
 ): { estSpreadBps: number; minDepth: number } | null {
   if (edges.length === 0 || !isClosedContinuousRing(edges)) return null;
   const tokens = ringTokensWithoutRepeat(edges);
@@ -404,9 +467,9 @@ function scoreRing(
   let logSum = 0;
   let minDepth = Infinity;
   for (const edge of edges) {
-    const adjustedMid = edgeMidTimesOneMinusFee(cache, sourceBlock, edge);
+    const adjustedMid = edgeMidTimesOneMinusFee(cache, sourceBlock, edge, protocolMids);
     if (adjustedMid === null) return null;
-    const venue = readEdgeVenueMid(cache, sourceBlock, edge);
+    const venue = readEdgeVenueMid(cache, sourceBlock, edge, protocolMids);
     if (!venue) return null;
     logSum += Math.log(adjustedMid);
     minDepth = Math.min(minDepth, venue.depthProxy);
