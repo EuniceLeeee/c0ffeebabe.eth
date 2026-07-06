@@ -1,3 +1,41 @@
 {
-  "cases": []
+  "cases": [
+    {
+      "learning_case_id": "tooldef-20260706-share-token-venue-check",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "venue_missing",
+      "gap_detail": "protocol_share_token_no_dex_venue",
+      "evidence": {
+        "finding": "6 ERC4626 vaults (95ec2ff) added to POOL_REGISTRY as loop-closable via adapter-probe (asset()/previewRedeem responded), but their SHARE tokens have 0 DEX swap venues in the live universe (active-pools.json, 4838 pools). Only wstETH (7) and sUSDS (2) share tokens are loop-closable; wstUSR is credit-only. defaultTokenGraph curve venues are test-only (not in main.ts).",
+        "loop_closable": [
+          "wstETH",
+          "sUSDS"
+        ],
+        "not_closable": [
+          "wstUSR(credit-only)",
+          "steakUSDC",
+          "steakUSDT",
+          "srUSDe",
+          "sfrxETH",
+          "waEthUSDT",
+          "waEthUSDC"
+        ]
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/discovery venue-discovery + adapter-probe classifier",
+        "issue": "classifies an ERC4626 as routable/loop-closable from asset()+previewRedeem alone; does NOT test whether a DEX pool trades the SHARE token, so un-closable vaults get promoted into the live graph and fire 0x",
+        "evidence": "node active-pools.json exact token0/token1 match: steakUSDC/steakUSDT/srUSDe/sfrxETH/waEthUSDT/waEthUSDC each have 0 share-token swap venues; wstETH 7, sUSDS 2",
+        "codify_target": "analysis/src/discovery (venue-registry/adapter-probe): add a share_token_has_dex_venue gate before promoting a vault to POOL_REGISTRY; + main.ts startup banner count of loop-closable protocol edges",
+        "status": "open"
+      },
+      "created_at": "2026-07-06T03:09:51.018Z",
+      "updated_at": "2026-07-06T03:09:51.018Z"
+    }
+  ]
 }
