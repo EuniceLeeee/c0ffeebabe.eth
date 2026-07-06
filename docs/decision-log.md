@@ -162,9 +162,20 @@
   loop, so it captures the proven exemplar first; (3) CR-5 for auction precision; (4) **BS-3 with credit
   UN-EXCLUDED** (relax `blockscan-scanner.ts:247` + wire `fluidDebtBps` sizing into block-scan) to catch the
   standing depeg dislocation proactively every block instead of waiting for a victim swap. BS-3-as-built
-  (credit-excluded) only ever sees dust — that was a scanner SCOPE limit, not a market fact. Morpho-credit
-  vault class (`0x9be73297`, ~$1) is the same shape, smaller. tooling_defect (return-path check) stands.
+  (credit-excluded) only ever sees dust — that was a scanner SCOPE limit, not a market fact.
+  tooling_defect (return-path check) stands.
   Full record: `docs/analysis/20260706-protocol-edge-return-venue-gap.md`.
+  > **CLASSIFICATION CORRECTION (2026-07-06, operator + event-level verify): `0x9be73297` is PROTOCOL, NOT
+  > credit.** Its 4 Morpho Blue events decode to `Supply` + `Withdraw` + 2×`AccrueInterest` (topic0s verified
+  > by keccak) — the MetaMorpho VAULT's own internal supply/withdraw when we deposit/redeem steakUSDC/USDT.
+  > **ZERO Borrow / Repay / SupplyCollateral** = we took no credit position. So the steakUSDC+steakUSDT
+  > ($2.23) and waEthUSDC ($2.44) txs are **ERC4626-vault PROTOCOL arbs, not credit** (the earlier "vault
+  > loops close via Morpho CREDIT ~$1" was a mis-read of the vault's internal Supply as our borrow).
+  > TWO consequences: (a) these are **>$1 PROTOCOL txs** — direct evidence the DEX-NAV/protocol class is NOT
+  > uniformly dust (reinforces the Class-1 sample-size downgrade above); (b) the ONLY remaining credit
+  > exemplar is `0xf88b498b…970` (Fluid), and it too must be event-verified for a real `Fluid borrow` before
+  > "credit = $100–500" is trusted (Fluid vaults ARE borrow-based + AC-3 reconstructs a leveraged position,
+  > so it is likely genuine — but verify, don't inherit the Morpho error).
   [[project-track-a-b-protocol-edges]] [[project-atomic-backrun-market-ceiling]]
 
 ## Dead-ends / retired (high-value — don't circle back)

@@ -55,8 +55,11 @@ concluding "dust, don't build" from 5 blocks is the **starved-sample true-negati
 standing rule against ("never conclude a true-negative from a starved sample; size OUTCOME-DRIVEN"). Dislocations
 are EPISODIC (depeg/volatility events). **Before any don't-build verdict, measure over an outcome-driven window
 — hours, ideally event-targeted across multiple depeg blocks, not 5 consecutive quiet ones.** coffee demonstrably
-nets >$1 in the protocol/credit space (the $2.23/$2.44 vault txs — those close via CREDIT, but they prove the
-space is not uniformly dust). So BS-3 for DEX-NAV is **not yet decidable**, not "don't build."
+nets >$1 in the PROTOCOL space: `0x9be73297` (steakUSDC+steakUSDT, $2.23) and `0x8ca222f1` (waEthUSDC, $2.44)
+are **ERC4626-vault PROTOCOL arbs, NOT credit** — event-verified 2026-07-06: their Morpho Blue events are
+`Supply`/`Withdraw`/`AccrueInterest` (the vault's internal ops), **ZERO Borrow** (F-007 classification
+correction). So DEX-NAV/protocol is contradicted-by-evidence, not just under-sampled. BS-3 for DEX-NAV is
+**not yet decidable**, not "don't build."
 
 ## 4. The binding decisions (do not re-open without reading the cited source)
 - **F-007 (decision-log) — two protocol classes:** DEX-NAV protocol = smoke-test-dust but **UNMEASURED**

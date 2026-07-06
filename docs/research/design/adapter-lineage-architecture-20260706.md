@@ -145,15 +145,20 @@ competitor corpus) BEFORE it is trusted — not just against a hand-written unit
    fetch it, or `cast receipt`), and for each call the tx made to that protocol, `matchTrace(target,
    selector)` must fire on OUR adapter and `classifyCall` must return the right `{lineage, edgeKind,
    action}`; the emitted logs (topic0 + which addresses) must be consistent with the descriptor's
-   position-defining args. (E.g. steakUSDC/steakUSDT in `0x9be73297`: the Morpho Blue calls must classify
-   `credit`, the vault deposit/redeem `protocol`.)
+   position-defining args. **Worked example that PROVES why this rule exists — `0x9be73297`
+   (steakUSDC/steakUSDT):** a naive classifier sees Morpho Blue events and calls it `credit`. Event-level
+   verification (topic0s decoded by keccak, 2026-07-06) shows the 4 Morpho events are `Supply` + `Withdraw`
+   + 2×`AccrueInterest` — the MetaMorpho VAULT's internal ops, **ZERO Borrow/SupplyCollateral**. We took no
+   credit position → it is `protocol` (ERC4626 vault deposit/redeem), NOT credit. The rule caught a real
+   mis-classification (and corrected decision-log F-007).
 2. **Encode reproduces the on-chain calldata**: our `encode()` for that action, given the same params, must
    produce calldata byte-identical to what the real tx sent to the target (selector + args). A mismatch =
    the adapter is wrong, regardless of a green unit test.
 This is the same discipline that caught earlier errors (the hand-decoded profit, the "dead edge" premise):
 **ground the adapter in a real tx, don't trust the fixture.** Record the reference tx hash in the adapter's
-lineage header. First corpus: `0x9be73297` (Morpho + vaults), `0xf88b498b…` (the credit exemplar, below),
-plus the per-vault txs in the handoff §5. **Today this rule is prose only — no descriptor field, no gate
+lineage header. First corpus: `0x9be73297` (ERC4626-vault PROTOCOL, $2.23 — event-verified NO borrow),
+`0xf88b498b…` (the only real credit exemplar — Fluid; verify its borrow before trusting), plus the per-vault
+txs in the handoff §5. **Today this rule is prose only — no descriptor field, no gate
 enforces it. That is R5.**
 
 ## Descriptor remediation plan — ordered, gated (converts the 2026-07-06 review findings)
