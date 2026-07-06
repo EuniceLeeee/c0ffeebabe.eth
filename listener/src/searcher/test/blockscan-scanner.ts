@@ -97,6 +97,13 @@ function venueEdges(token: string, pool: string, adapterId = "univ2-swap"): Toke
   ];
 }
 
+function fluidVenueEdges(token: string, pool: string): TokenEdge[] {
+  return [
+    { ...swap(token, WETH, pool, "fluid-dex-swap"), poolToken0: token, poolToken1: WETH },
+    { ...swap(WETH, token, pool, "fluid-dex-swap"), poolToken0: token, poolToken1: WETH },
+  ];
+}
+
 function seedV2(cache: PoolStateCache, pool: string, token: string, tokenReserve: bigint, wethReserve: bigint): void {
   cache.seedV2({
     pool,
@@ -189,6 +196,12 @@ function navProtocolMids(underlying: string, vault: string, redeemMid: number): 
   return new Map<string, ProtocolMid>([
     [protocolKey(vault, underlying, vault), { mid: 1 / redeemMid, feeBps: 0, depthIn: 10_000_000n * UNIT }],
     [protocolKey(vault, vault, underlying), { mid: redeemMid, feeBps: 0, depthIn: 10_000_000n * UNIT }],
+  ]);
+}
+
+function fluidMid(pool: string, token: string, midWethPerToken: number): ReadonlyMap<string, ProtocolMid> {
+  return new Map<string, ProtocolMid>([
+    [protocolKey(pool, token, WETH), { mid: midWethPerToken, feeBps: 0, depthIn: 10_000_000n * UNIT }],
   ]);
 }
 
@@ -404,6 +417,29 @@ const tests: TestCase[] = [
         "NAV ring closes at USDT",
       );
       console.log("[blockscan-scanner] T-nav-dislocation: PASS");
+    },
+  },
+  {
+    name: "T-fluid-mid-flip",
+    run: () => {
+      const cache = new PoolStateCache();
+      const token = tokenAt(90);
+      const v2Pool = poolAt(90, 0);
+      const fluidPool = poolAt(90, 1);
+      const edges = [...venueEdges(token, v2Pool), ...fluidVenueEdges(token, fluidPool)];
+      seedV2(cache, v2Pool, token, 2_000_000n * UNIT, 1_000n * UNIT);
+
+      const noMid = run(edges, cache);
+      assert(noMid.opportunities.length === 0, "missing Fluid mid should not emit a Fluid candidate");
+      assert(noMid.debug?.skippedVenues === 1, `expected one skipped Fluid venue, got ${noMid.debug?.skippedVenues}`);
+
+      const withMid = run(edges, cache, { protocolMids: fluidMid(fluidPool, token, 0.00056) });
+      const fluidOpp = withMid.opportunities.find((opp) =>
+        opp.seedEdges.some((edge) => edge.adapterId === "fluid-dex-swap"),
+      );
+      assert(fluidOpp !== undefined, "supplied Fluid mid should emit a candidate through Fluid DEX");
+      assert(fluidOpp.searchSeed.searchCenter > 8n, "Fluid candidate search center is usable");
+      console.log("[blockscan-scanner] T-fluid-mid-flip: PASS");
     },
   },
   {

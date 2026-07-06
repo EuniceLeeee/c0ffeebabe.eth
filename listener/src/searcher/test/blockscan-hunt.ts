@@ -32,6 +32,7 @@ import {
 import { DEFAULT_POOL_UNIVERSE_PATH, loadPoolUniverse } from "../pool-universe.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
+import { quoteFluidDex } from "../solver/quoter.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
@@ -218,7 +219,13 @@ async function main(): Promise<void> {
       curveCounts.curveWarmed + curveCounts.curveFailed === uniqueCurvePools(edges).size,
     );
 
-    const protocolMidResult = await buildProtocolMids(provider, cfg.blockNumber, protocolEdges);
+    const protocolMidResult = await buildProtocolMids(
+      provider,
+      callBackend,
+      cfg.blockNumber,
+      edges,
+      Date.now() + cfg.budgetMs,
+    );
     const protocolMids = protocolMidResult.mids;
     await check("protocol mids cover erc4626, wsteth, and psm", () =>
       (protocolMidResult.classCounts.get("erc4626") ?? 0) > 0 &&
@@ -464,14 +471,23 @@ function uniqueCurvePools(edges: TokenEdge[]): Map<string, TokenEdge> {
 
 async function buildProtocolMids(
   provider: ethers.JsonRpcProvider,
+  state: StateBackend,
   blockNumber: number,
   edges: TokenEdge[],
+  deadlineAtMs: number,
 ): Promise<ProtocolMidResult> {
   const mids = new Map<string, ProtocolMid>();
   const classCounts = new Map<ProtocolClass, number>();
   const decimals = new Map<string, number>();
+  let fluidFailed = 0;
+  let fluidMids = 0;
+  let deadlineHit = false;
 
   for (const edge of edges) {
+    if (Date.now() >= deadlineAtMs) {
+      deadlineHit = true;
+      break;
+    }
     const protocolClass = classifyProtocol(edge);
     if (!protocolClass) continue;
     try {
@@ -496,12 +512,45 @@ async function buildProtocolMids(
     }
   }
 
+  if (!deadlineHit) {
+    for (const edge of edges) {
+      if (Date.now() >= deadlineAtMs) {
+        deadlineHit = true;
+        break;
+      }
+      if (!isFluidDexSwap(edge)) continue;
+      try {
+        const tokenInDec = await tokenDecimals(provider, blockNumber, edge.tokenIn, decimals);
+        const oneIn = 10n ** BigInt(tokenInDec);
+        const mid = await readFluidDexMid(state, edge, oneIn);
+        if (!Number.isFinite(mid) || mid <= 0) continue;
+        mids.set(protocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
+          mid,
+          feeBps: 0,
+          depthIn: oneIn * 10_000n,
+        });
+        fluidMids++;
+      } catch (err) {
+        fluidFailed++;
+        console.log(
+          `[blockscan-hunt] fluid mid failed adapter=${edge.adapterId} target=${edge.target} ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
   console.log(
     `[blockscan-hunt] protocol mids total=${mids.size} ` +
       `erc4626=${classCounts.get("erc4626") ?? 0} ` +
-      `wsteth=${classCounts.get("wsteth") ?? 0} psm=${classCounts.get("psm") ?? 0}`,
+      `wsteth=${classCounts.get("wsteth") ?? 0} psm=${classCounts.get("psm") ?? 0} ` +
+      `fluid=${fluidMids} fluidFailed=${fluidFailed} deadline=${deadlineHit ? 1 : 0}`,
   );
   return { mids, classCounts };
+}
+
+function isFluidDexSwap(edge: TokenEdge): boolean {
+  return edge.slotKind === "swap" && edge.adapterId.toLowerCase().includes("fluid-dex");
 }
 
 function classifyProtocol(edge: TokenEdge): ProtocolClass | null {
@@ -543,6 +592,23 @@ async function readProtocolMid(
     return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
   }
   throw new Error(`unsupported protocol adapter ${edge.adapterId}`);
+}
+
+async function readFluidDexMid(
+  state: StateBackend,
+  edge: TokenEdge,
+  oneIn: bigint,
+): Promise<number> {
+  const out = await quoteFluidDex(
+    state,
+    edge.target,
+    edge.tokenIn,
+    edge.tokenOut,
+    oneIn,
+    edge.poolToken0,
+    edge.poolToken1,
+  );
+  return Number(out) / Number(oneIn);
 }
 
 async function tokenDecimals(
@@ -704,9 +770,8 @@ function directedMid(
 ): { mid: number; feeBps: number } | null {
   const tokenIn = edge.tokenIn.toLowerCase();
   const tokenOut = edge.tokenOut.toLowerCase();
-  if (edge.slotKind === "protocol") {
-    const mid = protocolMids.get(protocolKey(edge.target, tokenIn, tokenOut));
-    return mid ? { mid: mid.mid, feeBps: mid.feeBps } : null;
+  if (edge.slotKind === "protocol" || isFluidDexSwap(edge)) {
+    return externalDirectedMid(protocolMids, edge.target, tokenIn, tokenOut);
   }
   if (edge.adapterId === "univ2-swap") {
     const snap = cache.snapshotV2(edge.target, blockNumber);
@@ -752,6 +817,19 @@ function directedMid(
     );
   }
   return null;
+}
+
+function externalDirectedMid(
+  mids: ReadonlyMap<string, ProtocolMid>,
+  target: string,
+  tokenIn: string,
+  tokenOut: string,
+): { mid: number; feeBps: number } | null {
+  const direct = mids.get(protocolKey(target, tokenIn, tokenOut));
+  if (direct) return { mid: direct.mid, feeBps: direct.feeBps };
+  const reverse = mids.get(protocolKey(target, tokenOut, tokenIn));
+  if (!reverse || !Number.isFinite(reverse.mid) || reverse.mid <= 0) return null;
+  return { mid: 1 / reverse.mid, feeBps: reverse.feeBps };
 }
 
 function reserveMid(

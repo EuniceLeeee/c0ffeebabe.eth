@@ -32,7 +32,7 @@ export interface BlockScanOutcome {
   debug?: { skippedVenues: number };
 }
 
-type VenueKind = "v2" | "v3" | "curve" | "protocol";
+type VenueKind = "v2" | "v3" | "curve" | "protocol" | "fluid";
 
 interface PairGroup {
   a: string;
@@ -283,13 +283,15 @@ function readVenueMid(
   if (!kind) return null;
   if (kind === "v2") return readV2Mid(cache.snapshotV2(pool, sourceBlock), pool, edges, a, b);
   if (kind === "v3") return readV3Mid(cache.snapshotV3(pool, sourceBlock), pool, edges, a, b);
-  if (kind === "protocol") return readProtocolMid(protocolMids, pool, edges, a, b);
+  if (kind === "protocol") return readExternalMid("protocol", protocolMids, pool, edges, a, b);
+  if (kind === "fluid") return readExternalMid("fluid", protocolMids, pool, edges, a, b);
   return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b);
 }
 
 function venueKind(edge: TokenEdge): VenueKind | null {
   if (edge.slotKind === "protocol") return "protocol";
   const adapterId = edge.adapterId.toLowerCase();
+  if (adapterId.includes("fluid-dex")) return "fluid";
   if (adapterId.includes("univ2")) return "v2";
   if (adapterId.includes("univ3")) return "v3";
   if (adapterId.includes("curve")) return "curve";
@@ -317,7 +319,8 @@ function readV2Mid(snapshot: V2Seed | null, pool: string, edges: TokenEdge[], a:
   };
 }
 
-function readProtocolMid(
+function readExternalMid(
+  kind: "protocol" | "fluid",
   protocolMids: ReadonlyMap<string, ProtocolMid> | undefined,
   pool: string,
   edges: TokenEdge[],
@@ -338,7 +341,7 @@ function readProtocolMid(
   const reserveB = BigInt(Math.floor(reserveBNumber));
   if (reserveB <= 0n) return null;
   return {
-    kind: "protocol",
+    kind,
     pool,
     edges,
     mid,

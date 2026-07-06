@@ -48,6 +48,7 @@ import {
 import { AnvilSolver } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
+import { quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
   type PostImpactSeed,
@@ -1004,6 +1005,7 @@ async function main(): Promise<void> {
           if (passBudgetExceeded("warm_curve")) return;
           const protocolMids = await buildBlockScanProtocolMids(
             provider,
+            blockScanStateForPass,
             blockNumber,
             edges,
             passDeadlineAtMs,
@@ -2834,13 +2836,16 @@ type BlockScanProtocolAdapter =
 
 async function buildBlockScanProtocolMids(
   provider: ethers.JsonRpcProvider,
+  state: StateBackend,
   blockNumber: number,
   edges: TokenEdge[],
   deadlineAtMs: number,
   decimalsCache: Map<string, number>,
 ): Promise<Map<string, ProtocolMid>> {
   const mids = new Map<string, ProtocolMid>();
-  let failed = 0;
+  let protocolFailed = 0;
+  let fluidFailed = 0;
+  let fluidMids = 0;
   let deadlineHit = false;
 
   for (const edge of edges) {
@@ -2872,17 +2877,56 @@ async function buildBlockScanProtocolMids(
         depthIn: oneIn * 10_000n,
       });
     } catch {
-      failed++;
+      protocolFailed++;
     }
   }
 
-  if (failed > 0 || deadlineHit) {
+  if (!deadlineHit) {
+    for (const edge of edges) {
+      if (Date.now() >= deadlineAtMs) {
+        deadlineHit = true;
+        break;
+      }
+      if (!isBlockScanFluidDexSwap(edge)) continue;
+
+      try {
+        const tokenInDec = await blockScanTokenDecimals(
+          provider,
+          blockNumber,
+          edge.tokenIn,
+          decimalsCache,
+        );
+        if (Date.now() >= deadlineAtMs) {
+          deadlineHit = true;
+          break;
+        }
+        const oneIn = 10n ** BigInt(tokenInDec);
+        const mid = await readBlockScanFluidDexMid(state, edge, oneIn);
+        if (!Number.isFinite(mid) || mid <= 0) continue;
+        mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
+          mid,
+          feeBps: 0,
+          depthIn: oneIn * 10_000n,
+        });
+        fluidMids++;
+      } catch {
+        fluidFailed++;
+      }
+    }
+  }
+
+  if (protocolFailed > 0 || fluidFailed > 0 || deadlineHit) {
     console.log(
-      `[searcher/blockscan] block=${blockNumber} protocolMidFailed=${failed} ` +
-        `protocolMidDeadline=${deadlineHit ? 1 : 0} protocolMids=${mids.size}`,
+      `[searcher/blockscan] block=${blockNumber} protocolMidFailed=${protocolFailed} ` +
+        `fluidMidFailed=${fluidFailed} protocolMidDeadline=${deadlineHit ? 1 : 0} ` +
+        `fluidMids=${fluidMids} protocolMids=${mids.size}`,
     );
   }
   return mids;
+}
+
+function isBlockScanFluidDexSwap(edge: TokenEdge): boolean {
+  return edge.slotKind === "swap" && edge.adapterId.toLowerCase().includes("fluid-dex");
 }
 
 function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | null {
@@ -2972,6 +3016,23 @@ async function readBlockScanProtocolMid(
     }
   }
   throw new Error(`unsupported protocol adapter ${adapterId}`);
+}
+
+async function readBlockScanFluidDexMid(
+  state: StateBackend,
+  edge: TokenEdge,
+  oneIn: bigint,
+): Promise<number> {
+  const out = await quoteFluidDex(
+    state,
+    edge.target,
+    edge.tokenIn,
+    edge.tokenOut,
+    oneIn,
+    edge.poolToken0,
+    edge.poolToken1,
+  );
+  return Number(out) / Number(oneIn);
 }
 
 async function blockScanTokenDecimals(
