@@ -10,7 +10,7 @@
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "venue_missing",
-      "gap_detail": "protocol_share_token_no_dex_venue",
+      "gap_detail": "protocol_share_token_no_return_path_checked",
       "evidence": {
         "finding": "6 ERC4626 vaults (95ec2ff) added to POOL_REGISTRY as loop-closable via adapter-probe (asset()/previewRedeem responded), but their SHARE tokens have 0 DEX swap venues in the live universe (active-pools.json, 4838 pools). Only wstETH (7) and sUSDS (2) share tokens are loop-closable; wstUSR is credit-only. defaultTokenGraph curve venues are test-only (not in main.ts).",
         "loop_closable": [
@@ -25,17 +25,19 @@
           "sfrxETH",
           "waEthUSDT",
           "waEthUSDC"
-        ]
+        ],
+        "correction_2026_07_06": "Refined: the 6 vaults with no DEX share-venue are NOT dead — coffee closes them via Morpho Blue CREDIT (0x9be73297, ~$1 net). The defect is that venue-discovery checks NEITHER a DEX return venue NOR a credit return path; it promotes on asset()/previewRedeem alone.",
+        "hunt_measurement": "searcher:blockscan-hunt over 4 live blocks: scanner surfaces+prices protocol (PSM) rings but ZERO protocol ring is +EV; only sub-cent pure-DEX dust solves. DEX-NAV protocol class is par at measured blocks."
       },
       "tooling_defect": {
         "tool": "analysis/src/discovery venue-discovery + adapter-probe classifier",
-        "issue": "classifies an ERC4626 as routable/loop-closable from asset()+previewRedeem alone; does NOT test whether a DEX pool trades the SHARE token, so un-closable vaults get promoted into the live graph and fire 0x",
+        "issue": "classifies an ERC4626 as loop-closable from asset()+previewRedeem alone; checks NEITHER a DEX share-venue NOR a credit return path — so vaults are promoted into the live graph with their actual return leg (DEX or Morpho credit) unverified",
         "evidence": "node active-pools.json exact token0/token1 match: steakUSDC/steakUSDT/srUSDe/sfrxETH/waEthUSDT/waEthUSDC each have 0 share-token swap venues; wstETH 7, sUSDS 2",
-        "codify_target": "analysis/src/discovery (venue-registry/adapter-probe): add a share_token_has_dex_venue gate before promoting a vault to POOL_REGISTRY; + main.ts startup banner count of loop-closable protocol edges",
+        "codify_target": "analysis/src/discovery: gate vault promotion on a return-path check (DEX share-venue OR a wired credit edge); + main.ts banner count of loop-closable protocol edges",
         "status": "open"
       },
       "created_at": "2026-07-06T03:09:51.018Z",
-      "updated_at": "2026-07-06T03:09:51.018Z"
+      "updated_at": "2026-07-06T03:38:20.525Z"
     }
   ]
 }

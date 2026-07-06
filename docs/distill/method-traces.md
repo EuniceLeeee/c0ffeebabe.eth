@@ -75,3 +75,27 @@
                     measurement window, (3) new protocol addresses/params are cast-verified against the node's reth — this
                     both chain-verifies the slice's assumptions and can prove a change is a live no-op (PSM tin=tout=0)
                     before it ships.**
+
+## protocol_leg
+### 20260706-protocol-edge-return-venue-gap.md
+- task_class: protocol_leg
+- tools_used:
+  - Explore agent x2 (scanner-state map; share-token venue map)
+                    - SSM read-only: node active-pools.json token0/token1 match; reth prune-window probe; worktree hunt runs (3 blocks + 1)
+                    - Read: blockscan-scanner.ts, token-graph.ts, pool-state-cache.ts, blockscan-fork-solve.ts, unified-strategy-edge-impl-plan
+                    - codex-run.sh (BS-1c + hunt-harness generators); evaluator re-ran every gate + applied 2 fixes
+                    - searcher:blockscan-hunt (new harness) fork-solving top-K over the live graph
+- evidence_order: 1. live active-pools.json (node truth) 2. scanner/cache source 3. fork-solve measurement 4. concurrent-session trace of 0x9be73297 5. compared to handoff claim
+- analysis_frame:
+  - strategy_kind first (block-scan), edge_kind second (protocol vs credit)
+                    - loop-closability (does a return path exist — DEX OR credit?) before "add coverage"
+                    - probe (convertible) vs venue (DEX-traded) vs measured EV (fork-solve) — three distinct gates
+                    - fixed vs implemented: BS-1c gated by a replay flip; the hunt is a live-fork measurement not a backtest
+                    - dust honesty: netProfit with no gas floor ⇒ 2751 wei is not +EV
+- sanity_checks:
+  - exact token0/token1 match not substring - universe vs POOL_REGISTRY vs test fixture separated
+                    - reth prune window verified before picking a fork block - worktree run never touched the live /opt/MEV checkout or restarted the searcher
+                    - fork-solve rejected the trillion-bps decimal-artifact candidates (junk) - my own "dead edge" conclusion refuted by the credit trace and corrected here
+- tool_gap: (a) venue-discovery classifies an ERC4626 as loop-closable from asset()/previewRedeem WITHOUT checking a return path exists (DEX venue OR credit edge) — filed as a tooling_defect. (b) blockscan-hunt harness had two generator bugs the evaluator fixed (v3 ticks metadata-only seeding; solver must read the fork not the detection cache) — codified in the commit.
+- codify_next: tooling_defect LearningCase (share-token return-path gate in analysis/src/discovery) — FILED (open). Consider a startup-banner count of loop-closable protocol edges.
+- distill_for_opus: **"Convertible" (probe) ≠ "loop-closable" (a return path exists) ≠ "+EV" (fork-solve clears fees+gas). Check all three before treating a venue as capture. And the return path can be CREDIT, not just a DEX swap — absence of a DEX share-venue does not make a vault edge dead; trace the competitor before concluding.**
