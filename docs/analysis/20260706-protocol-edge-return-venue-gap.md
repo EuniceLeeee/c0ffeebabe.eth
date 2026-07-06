@@ -2,6 +2,14 @@
 
 > Scope: authorized defensive on-chain arbitrage research; fork/dry-run only, broadcast human-gated.
 > Daily Fable analysis (not a full Hermes round). Neutral DeFi framing per Safety Rule 6.
+>
+> **⚠️ CORRECTION (2026-07-06, operator caught it with `0xf88b`): do NOT read this as "the protocol class is
+> dust."** This doc measured the credit-EXCLUDED DEX-NAV subset (BS-1c excludes credit edges) in a QUIET (peg)
+> window. That subset IS dust. But the CREDIT class is not: `0xf88b498b…` (block 24710788, coffeebabe) nets
+> ~273 wstUSR + 0.078 WETH (~$100–500) during a wstUSR depeg via `flash→Fluid borrow→swap→repay`. It is
+> credit-ESSENTIAL (the BS-1c scanner structurally can't see it), our machinery reconstructs it
+> (`test/WstUSRArb.t.sol` AC-3), and the gate is `.credit-live` posture + depeg-timing, not capability. See
+> decision-log **F-007 (corrected)** for the authoritative two-class split.
 
 ## TL;DR
 Two things settle here, one of them a correction to my own first read.
