@@ -106,34 +106,44 @@ scan/discover venue
   constraints, NOT a long-term bigint quote (D5). `leavesStandingPosition=true` unless closed in-tx →
   S2/`.credit-live` gate. Never a new strategy — it's a LEG.
 
-## Status / decision context (do not re-open)
-- Building the Morpho credit edge + block-scan scanner for LIVE capture is **de-risk-refuted DUST** (both
-  windows measured it 2026-07-06: `blockscan-hunt` fork-solved 4 blocks = zero +EV protocol ring; the vault
-  loops net ~$1). So this lineage architecture is built for **classification coherence + future coverage**,
-  NOT to chase the dust atomic-arb class now. The Morpho credit adapter, if built, is an OFFLINE `credit`
-  lineage exemplar — not wired live (needs `.credit-live` human gate). Needle-mover = posture/ROI.
+## Status / decision context (corrected 2026-07-06 — do not re-open WITHOUT reading decision-log F-007)
+**Two protocol classes, kept separate (decision-log F-007, corrected — the earlier "protocol block-scan is
+all dust" here was an OVERREACH the operator caught with `0xf88b`):**
+- **DEX-NAV protocol (BS-1c scans this) = genuinely DUST.** `blockscan-hunt` fork-solved 4 live blocks AND
+  the `0xf88b` depeg block = zero +EV protocol ring, best ~$0.50; of 11 protocol entries only wstETH/sUSDS
+  have a DEX share-venue, both NAV-par. Don't build BS-3 for this class.
+- **CREDIT (Fluid/Morpho) = EPISODIC $100–500, NOT dust.** `0xf88b498b…` (block 24710788, from coffeebabe)
+  nets ~273 wstUSR + 0.078 WETH during a wstUSR market DEPEG via `flash→Fluid borrow→swap→repay`. BS-1c
+  CANNOT see it — it excludes credit/standing edges by design (`blockscan-scanner.ts:247`), which is why the
+  hunt saw only DEX dust. **"BS-3-as-built (credit-excluded) sees only dust — a scanner SCOPE limit, not a
+  market fact."** The Morpho-vault class (`0x9be73297`, ~$1) is the same shape, smaller.
+- **Capability EXISTS; the gate is POSTURE.** `WstUSRArb.t.sol` (AC-3) reconstructs the ~273 wstUSR profit;
+  the Fluid credit edge is grandfathered live in the backrun graph (D4) + the solver sizes it (`fluidDebtBps`).
+  So the reward is REAL ($100–500/depeg) — which makes the `.credit-live` decision MORE worth taking to the
+  operator, not less. This lineage architecture serves that: clean `credit` classification + the Morpho/Fluid
+  credit lineage are exactly what a credit-UN-excluded scanner + the `.credit-live` path consume.
 
 ## Remaining from the unified plan (`unified-strategy-edge-impl-plan-20260704.md`) — consolidated status
-Carried here so the incomplete work has one current home. **Verdict column is load-bearing:** the
-block-scan/credit tail is MEASURED dust (2026-07-06, decision-log F-007) — most of it should NOT be built.
+Carried here so the incomplete work has one current home. **Verdict column is load-bearing, and split by the
+F-007 two-class correction** (DEX-NAV dust vs credit episodic).
 
-**DON'T-BUILD (measured dust-bound — chasing them hits the "atomic = market ceiling" wall):**
+**DON'T-BUILD (the DEX-NAV protocol class is measured dust):**
 | slice | what | status |
 |---|---|---|
-| BS-3 full pipeline | block-scan scan→sim→standalone-bundle→submit | EPIC-blocker RESOLVED-NEGATIVE: `blockscan-hunt` fork-solved 4 blocks = zero +EV protocol/vault ring. Do not wire. |
-| BS-lane | concurrent block-scan lane in the live process | not built; don't wire (nothing +EV to run through it) |
-| BS-4 | live block-scan dry-run window | blocked on BS-lane; don't |
-| CS-min / CS-full / D | strategy-compare + `blockscan-triggers.ts` + dispatcher/auto-close-strategy-gap | Phase 3/4, not built; block-scan-dependent → moot while block-scan is dust |
-| B-residual | residual backrun coverage | evidence-gated; not pursued |
+| BS-3 as built (credit-EXCLUDED) | block-scan over DEX-NAV protocol edges only | `blockscan-hunt` = zero +EV; don't wire it FOR the DEX-NAV class |
+| BS-lane / BS-4 for DEX-NAV | live lane + window to run the credit-excluded scanner | nothing +EV in that class to run |
+| CS-min / CS-full / D | strategy-compare + dispatcher/auto-close | Phase 3/4; only worth it once a +EV strategy class is live |
+| B-residual | residual backrun coverage | evidence-gated |
 
-**GATED (needs archive / human authorization, not just code):**
-| slice | what | gate |
+**WORTH-BUILDING but POSTURE/human-gated (the credit class is episodic $100–500, F-007 capture-path):**
+| step | what | gate |
 |---|---|---|
-| CR-5 | Fluid resolver-quote adapter + deterministic max-borrow (replace `fluidDebtBps` search) | archive RPC + **CR-5b escalated: no deterministic Fluid quote path** (needs a resolver eth_call design). prod OFF |
-| CR-6-live | credit live-enable (depeg-gated insertion) | **human gate** (posture) |
-| CR-8 | Aave/Euler credit edges | after CR-5; `.credit-live` human gate |
-| Morpho Blue credit edge | the missing leg that closes coffee's vault loops (`edge_kind:"credit"`, D2/D5; Fluid is the template; reuse boring-vault `MorphoBlueDecoderAndSanitizer` signatures) | build only as an OFFLINE `credit`-lineage exemplar; live = `.credit-live` gate. EV = dust. |
-| MEV-Share submit flag | `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` — 95% of +EV sims self-drop at submit_gate | **the real production needle-mover (flow-admission), a HUMAN-GATE config flip** — not more scaffolding |
+| 1. `.credit-live` posture | authorize standing-position (credit) submits | **human gate** (Safety Rule 1) — the real decision, reward now known REAL not dust |
+| 2. backrun-captures-first | the Fluid loop already routes+sizes in the backrun graph (D4) → captures the proven `0xf88b` exemplar without new code | needs step 1 only |
+| 3. CR-5 | deterministic Fluid quote (auction precision over the `fluidDebtBps` grid) | CR-5b escalated: no deterministic Fluid quote path yet (resolver eth_call design). Precision upgrade, NOT a blocker |
+| 4. BS-3 credit-UN-EXCLUDED | relax `blockscan-scanner.ts:247` + wire `fluidDebtBps` sizing into block-scan → catch the standing depeg dislocation proactively every block | after 1–3 |
+| Morpho/Aave credit edges (CR-8) | `edge_kind:"credit"`, D2/D5; Fluid is the template; reuse boring-vault `MorphoBlueDecoderAndSanitizer` signatures + VERIFY vs `0x9be73297` log | `.credit-live` gate; Morpho EV smaller ($1) than Fluid |
+| MEV-Share submit flag | `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` | **already flipped + measured (F-006/D-001): 100% relay-rejected "backrun not found", cause = structural POSTURE (not a code edit).** Real lever = eligible-orderflow relationship, not the flag |
 
 **LANDED-BUT-NOT-LIVE-WIRED (small follow-ups):**
 | item | state |
