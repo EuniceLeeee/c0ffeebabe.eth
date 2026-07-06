@@ -63,6 +63,10 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - **Tool-first** — before hand-writing a scratchpad analysis, check the existing toolset (`analysis/src/cli/*`,
   the LearningCase store, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it (HERMES rule 17). Prefer
   structured JSONL over log greps; `pipeline_dropped` is the source of truth for loss attribution.
+  **ENFORCED** by `scripts/hooks/guard-tool-first.py` (PreToolUse Write+Bash): writing a throwaway `_*.ts/.py`
+  (or `/tmp`·scratchpad) analysis script with venue/pool/trace/PnL-extraction markers is BLOCKED unless the
+  file carries a `tool-first-checked: <tools checked + why they don't fit>` line — the conscious-check gate
+  (bundle-postmortem's `in_graph` would have avoided the 2026-07-06 "dead edge" error).
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
