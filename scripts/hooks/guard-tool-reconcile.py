@@ -97,6 +97,9 @@ elif tool in ("Edit", "MultiEdit"):
 elif tool == "Bash":
     cmd = ti.get("command", "") or ""
     body = cmd
+    # git/gh/version-control ops are never analysis — their messages quote marker words (false positives).
+    if re.search(r"\b(git|gh)\s+(commit|add|push|pull|mv|rm|fetch|show|log|status|diff|checkout|reset|stash|branch|clone|tag|pr|issue)\b", cmd):
+        sys.exit(0)
     # running a canonical tool = the reconciliation act -> clear pending
     if ran_canonical_tool(cmd) or affirmed(cmd):
         clear_pending()
@@ -112,8 +115,8 @@ elif tool == "Bash":
             if os.path.exists(cand):
                 body += "\n" + read(cand)
                 break
-    elif re.search(r"(python3?|node)\s+-[ce]\b", cmd) or "<<" in cmd:
-        target = "inline-code"     # python3 -c / node -e / heredoc analysis (no file)
+    elif re.search(r"(python3?|node)\s+-[ce]\b", cmd):
+        target = "inline-code"     # python3 -c / node -e analysis (no file); markers gate it below
         scratch = True
     else:
         scratch = False
