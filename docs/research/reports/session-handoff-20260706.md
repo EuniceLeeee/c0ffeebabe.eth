@@ -61,28 +61,37 @@ exist, `main.ts` never calls the scanner, node flag `SEARCHER_ENABLE_BLOCK_SCAN`
 activity. So the scanner was NOT brought live — only the venues were. Live scanner = a real workstream
 (BS-lane + BS-3 full pipeline scan→sim→standalone-bundle + BS-4 window), not a flag flip.
 
-**CORRECTION (2026-07-06 empirical check — supersedes the optimistic "vaults are the missing substrate"):**
-A vault arb REQUIRES the share to be DEX-traded (buy share below NAV → redeem at NAV, or deposit→sell above
-NAV; deposit/redeem alone at NAV never profits). Checked the 6 wired vault shares against the pool universe:
-**5 of 6 have ZERO DEX pools** (steakUSDC/steakUSDT/sfrxETH/waEthUSDT/waEthUSDC) — only **srUSDe** has 4.
-So those 5 are DEAD edges (no loop closes, backrun OR block-scan) and coffee "touching" them ≥17× is almost
-certainly INVENTORY/yield management, not an arb leg — **venue-discovery conflates "touched" with
-"arbitraged-through".** Two corrections for the next session: (1) the wiring filter must be **share is
-DEX-traded (loop-closable)**, NOT coffee-touch-frequency; (2) before building the live scanner, empirically
-confirm a +EV loop EXISTS on a loop-closable venue (srUSDe is the only survivor here — check its DEX price vs
-previewRedeem NAV). Consider `rm`-ing the 5 dead vault rows from POOL_REGISTRY (harmless but noise).
+**CORRECTION (2026-07-06 — a WRONG intermediate conclusion + the real finding, both recorded for honesty):**
+First-pass check found 5/6 vault shares have ZERO DEX pools (only srUSDe has 4) and I wrongly concluded they
+were "dead edges / coffee inventory." **That was refuted by tracing coffee's actual tx.** coffee is a pure
+atomic-arb bot — it would not touch a venue it can't profit from. Tracing `0x9be73297…` (block 24568129, touches
+steakUSDC+steakUSDT, 15 contracts, 47 logs) shows the REAL mechanism: **Balancer flash-loan → Morpho Blue
+(0xbbbb…) supply/borrow/withdraw ×4 → MetaMorpho vault deposit/redeem across several vaults (steakUSDC/steakUSDT/
+0xb8280955/0x4825eff2) → a few DEX swaps (UniV3) → WETH Withdrawal (profit in ETH).** The share is NEVER
+DEX-swapped — **the loop closes through CREDIT (Morpho Blue borrow/supply) + vault deposit/redeem.** So the
+"share must be DEX-traded" premise was wrong; a vault leg + a credit leg constructs the loop (this is exactly
+the `strategy_kind × edge_kind` credit-edge case). **THE OVERLOOKED GAP: we are missing the Morpho Blue CREDIT
+edge** (supply/borrow/withdraw/repay). The vault deposit/redeem (ERC4626) is wired, but the credit leg that
+closes the loop is not in the system. So the vaults are NOT dead — they are legs awaiting the Morpho credit
+edge + the block-scan scanner to construct the loop. **`0x9be73297…` is a concrete +EV protocol/credit exemplar
+— likely THE viable exemplar the scanner was EPIC-blocked on.** Next session: trace this tx's amounts to
+quantify the arb, add the Morpho Blue credit edge, then the block-scan scanner over vault+credit+swap edges.
+(6 vault example txs: steakUSDC/steakUSDT `0x9be73297`, srUSDe `0xd63b56ca`, sfrxETH `0xf4774e11`, waEthUSDT
+`0x33e4e9bc`, waEthUSDC `0x8ca222f1`.)
 
 ## 5. Open threads / suggested next steps (priority order)
-1. **Empirically confirm a +EV protocol-leg loop EXISTS before building anything** (§4 correction). Cheapest:
-   for a loop-closable venue (share DEX-traded — srUSDe is the only one of the 6), compare its DEX price to
-   `previewRedeem` NAV; if at parity there is NO arb even there. This gates whether block-scan is worth it.
-2. **Block-scan scanner live** (BS-lane + BS-3 full pipeline + BS-4) — ONLY if step 1 finds a real loop.
-   It's a real workstream, not a flag. Do NOT build it on the assumption the vaults supply the exemplar —
-   that was refuted for 5/6.
-3. **Fix the venue-wiring filter**: require share-is-DEX-traded (loop-closable), not coffee-touch-frequency;
-   and distinguish "arbitraged-through" from "inventory/yield touch" in venue-discovery. Consider removing the
-   5 dead vault rows.
+1. **Trace `0x9be73297…` amounts** (Balancer flash in/out, Morpho borrow/supply, WETH profit) to quantify the
+   arb and confirm the exact +EV loop shape. This is a concrete protocol/credit exemplar — the substrate the
+   scanner was missing. Zero-node: the amounts are in the BigQuery export log `data` fields.
+2. **Add the Morpho Blue CREDIT edge** (supply/borrow/withdraw/repay on 0xbbbbBBBBbb…) — the missing leg that
+   closes the vault loop. This is the credit-edge (`edge_kind:"credit"`) case, D2/D5. Fluid credit already
+   exists as a template.
+3. **Block-scan scanner live** (BS-lane + BS-3 full pipeline + BS-4) over vault+credit+swap edges — the whole
+   workstream, not a flag. Now has a real exemplar (step 1) to validate against.
 4. **Adapter-probe as primary classifier** (§3) — replace topic heuristic; feeds the venue-registry.
+5. Wiring-filter note: coffee-touch-frequency IS a valid signal (coffee only touches what it arbs) — the
+   earlier "require DEX-traded share" filter was WRONG; the real requirement is a loop-closing leg exists
+   (DEX swap OR credit OR another vault). Keep the 6 vault rows.
 4. Deferred tail (unchanged, gated): CR-5 Fluid deterministic quote (archive-gated), Aave/Morpho credit
    (`.credit-live` human gate — DO NOT create it), CS-min/CS-full/D/CR-8.
 
