@@ -3,6 +3,30 @@
 > Source: `## Method Trace` blocks in docs/research/reports/*.md (Hermes rounds) + docs/analysis/*.md (daily).
 
 ## bundle_postmortem
+### 20260706-coffee-keeper-claim-postmortem.md
+- task_class: bundle_postmortem
+- tools_used:
+  - SSM + local reth (zero-CU): eth_getTransactionByHash/Receipt, eth_getLogs (FeeCollector 24h USDC outflows)
+                    - calldata decode + openchain.xyz selector lookup (withdraw_many/collect/swap)
+                    - WebSearch (Curve FeeCollector identity via docs.curve.finance + etherscan label)
+                    - npm run tx-profit (canonical PnL: $0.24/$0.02/$0.22)
+                    - events JSONL grep (block 25472884 + all involved addresses)
+                    - npm run census-report (canonical venue/in_graph reconcile, agrees)
+- evidence_order: 1. tx + receipt (what is it) 2. full log amounts (flow conservation: USDC in==out, bulk to a fixed sink + small caller cut ⇒ claim-shape, not arb-shape) 3. selector DB (withdraw_many/collect) 4. WebSearch identity (Curve FeeCollector) 5. 24h outflow history (bounty market size) 6. tx-profit 7. our events 8. census reconcile
+- analysis_frame:
+  - flow-shape FIRST: exact conservation into a fixed treasury + tiny caller payment ⇒ keeper claim, stop arb-gap analysis
+                    - winner_style non-comparability check before gap classification (one_leg_inventory / rfq_fill precedents)
+                    - size the WHOLE bounty market (24h logs), not the single tx, before judging if the class is worth entering
+                    - realized$ of the caller is the real prize; the treasury flow is NOT competitor profit
+- sanity_checks:
+  - USDC conservation checked to 6 decimals (28.947939 = 28.696092 + 0.251847) before naming 0xc0fc a sink
+                    - "treasury" hypothesis cross-confirmed by 30 recurring transfers/24h to the same address + Curve docs naming the CoWSwapBurner
+                    - tx-profit $0.24 vs hand flow $0.25 bounty agrees (gas/eth-px convention)
+                    - our-events zero-hit verified for all 4 involved addresses, not just the pool
+- tool_gap: same census-report single-competitor-tx display gap as F-010 (net_realized_usd=0/qualifying=0 hides the computed per-tx detail) — already filed as tooldef-20260706-census-single-tx-ingraph-detail, recurrence noted, no new defect.
+- codify_next: tooling_defect LearningCase tooldef-20260706-census-single-tx-ingraph-detail — already FILED (open) today; this tx is a second manifestation. When it is fixed, add keeper_claim to the winner_style enum (withdraw_many/collect + conserved-flow-to-fixed-sink heuristic).
+- distill_for_opus: **Before running any lost-arb decision tree, check the winner's FLOW SHAPE: if value is conserved into a fixed sink with only a small cut to the caller, it is a keeper/claim bounty (fee collectors, liquidation pokes, harvest bots), not an arbitrage — classify keeper_claim, size the whole bounty market from a day of logs (here ~$17/day across ≥5 bots), and spend zero route/coverage budget. Selector DB + protocol docs turn an opaque "competitor win" into a named permissionless mechanism in two lookups.**
+
 ### 20260706-coffee-rfq-fill-postmortem.md
 - task_class: bundle_postmortem
 - tools_used:

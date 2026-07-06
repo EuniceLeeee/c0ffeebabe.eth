@@ -262,6 +262,20 @@
   detail; no single-competitor-tx mode). Full trace: `docs/analysis/20260706-coffee-rfq-fill-postmortem.md`.
   [[project-cex-dex-inventory-competitor-noise]]
 
+### F-011 | 2026-07-06 | ✅ | `0xcfacdd69` (coffee, blk 25472884) = Curve FeeCollector keeper claim — NOT an arbitrage
+- **Operator Q:** did our live see it / why did we lose? **A: category error — nothing to see; it's keeper work.**
+- **Mechanics (local reth + selector DB + Curve docs):** `withdraw_many([3 pools])` + `collect([USDC], coffee)`
+  on Curve FeeCollector `0xa2bc…cce00` sweeps $28.95 accrued admin fees → **$28.70 to the CoWSwapBurner**
+  (`0xc0fc3ddf…`), **$0.25 caller incentive to coffee** (net $0.22 tx-profit), converted via one Fluid swap.
+  USDC conserved exactly; PYUSD/USDe remain in the collector.
+- **Bounty market sized (24h of logs):** $18.5k/day swept to the burner; **~$17/day TOTAL caller bounties
+  split across ≥5 competing keeper bots** (coffee 8×/$2.02). Not a strategy class for us at any effort.
+- **Ruling:** `winner_style: keeper_claim` = third non-comparable class (after `one_leg_inventory`, F-010
+  `rfq_fill`). Reflex: check the winner's FLOW SHAPE (value conserved into a fixed sink + small caller cut)
+  BEFORE any gap analysis. Census single-tx display gap recurred (already filed
+  `tooldef-20260706-census-single-tx-ingraph-detail`). Full trace:
+  `docs/analysis/20260706-coffee-keeper-claim-postmortem.md`. [[project-cex-dex-inventory-competitor-noise]]
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
