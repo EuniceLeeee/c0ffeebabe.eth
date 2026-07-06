@@ -127,6 +127,27 @@
   on the flag itself (operator's call): revert to 0 (0/20 convert — stop wasting submit+EV-gate cycles), or
   keep (harmless; a rejected `mev_sendBundle` never broadcasts).
 
+### F-007 | 2026-07-06 | ✅ | Protocol-edge block-scan is measured DUST-bound (scanner works; the class is empty/dust)
+- **Fact:** shipped **BS-1c** (`0a1984c`) — the block-scan scanner now detects+prices `slotKind:"protocol"`
+  edges (optional `protocolMids` input; admits non-standing protocol edges; seeds anchors from protocol-edge
+  tokens; skips standing rings; undefined `protocolMids` = byte-identical). Built **`searcher:blockscan-hunt`**
+  (`f48c371`) and fork-solved the scanner's top candidates over the LIVE protocol-enriched graph at **4 recent
+  blocks** (node worktree, live searcher untouched). Result: the scanner surfaces + prices protocol (PSM)
+  rings, but **ZERO protocol/vault ring is +EV**; the only positive fork-solves are sub-cent pure-DEX dust
+  (best ~0.0000045 ETH; one block 2751 wei; one block nothing) — gas-negative live.
+- **Structure:** of 11 protocol entries only **wstETH (7 DEX venues) and sUSDS (2)** have a DEX market venue
+  for their share token, and both are tightly NAV-pegged (par). The `defaultTokenGraph` curve venues for
+  sUSDS/wstUSR are **test-only** (not referenced by `main.ts`).
+- **Correction (folds concurrent `c62fcc7`/`2516ce0`):** the 6 vaults with no DEX share-venue are NOT dead —
+  coffee closes them via **Morpho Blue CREDIT** + vault deposit/redeem (`0x9be73297`, ~$1 net, $4.65 gross),
+  never a DEX swap of the share. Real but dust + standing-position ⇒ `.credit-live` human gate.
+- **Implication:** both paths (DEX-NAV par, Morpho-credit ~$1) are DUST ⇒ the needle-mover is a **posture/ROI
+  decision, not the scanner.** BS-3 (live block-scan lane) stays EPIC-blocked — no viable +EV DEX-NAV exemplar;
+  wiring it now would chase a dust class. Don't re-run the hunt or re-propose the scanner-for-vaults without a
+  new posture (e.g. `.credit-live`). tooling_defect filed (venue-discovery promotes a vault without checking a
+  return path — DEX venue OR credit edge). Full record: `docs/analysis/20260706-protocol-edge-return-venue-gap.md`.
+  [[project-track-a-b-protocol-edges]] [[project-atomic-backrun-market-ceiling]]
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
