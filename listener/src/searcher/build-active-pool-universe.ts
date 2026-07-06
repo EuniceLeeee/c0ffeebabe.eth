@@ -127,7 +127,10 @@ async function main(): Promise<void> {
       String(Number(process.env.POOL_UNIVERSE_LOOKBACK_DAYS ?? "30") * BLOCKS_PER_DAY),
   );
   const fromBlock = Math.max(0, Number(process.env.POOL_UNIVERSE_FROM_BLOCK ?? latest - lookbackBlocks));
-  const maxPools = Number(process.env.POOL_UNIVERSE_MAX_POOLS ?? "3000");
+  // No index cap by default (0/unset = Infinity): the arb-relevance ranker only *orders* pools
+  // (loop-completers first), so a hard cap silently drops real venues whose tokens look low-degree
+  // in isolation but DO close loops on-chain (e.g. coffee's low-volume pools). Set the env to re-cap.
+  const maxPools = Number(process.env.POOL_UNIVERSE_MAX_POOLS ?? "0") || Infinity;
   const minSwaps = Number(process.env.POOL_UNIVERSE_MIN_SWAPS ?? "2");
   const logBatch = Number(process.env.POOL_UNIVERSE_LOG_BATCH ?? "1000");
   const metadataConcurrency = Number(process.env.POOL_UNIVERSE_METADATA_CONCURRENCY ?? "24");
