@@ -6,7 +6,11 @@ import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector, type Opportunity } from "./detector/detector.js";
-import { detectBlockScanOpportunities, type BlockScanConfig } from "./detector/blockscan-scanner.js";
+import {
+  detectBlockScanOpportunities,
+  type BlockScanConfig,
+  type ProtocolMid,
+} from "./detector/blockscan-scanner.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
@@ -90,6 +94,18 @@ const V3_META = new ethers.Interface([
   "function fee() view returns (uint24)",
   "function tickSpacing() view returns (int24)",
 ]);
+const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
+const ERC4626 = new ethers.Interface([
+  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
+  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+]);
+const WSTETH = new ethers.Interface([
+  "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
+  "function getStETHByWstETH(uint256 _wstETHAmount) view returns (uint256)",
+]);
+const PSM = new ethers.Interface(["function tin() view returns (uint256)"]);
+const WAD = 10n ** 18n;
+const PSM_TO18 = 10n ** 12n;
 
 const WHALE = "0x000000000000000000000000000000000000dEaD";
 
@@ -906,6 +922,7 @@ async function main(): Promise<void> {
   // Immutable v3 pool metadata (token0/token1/fee/tickSpacing), read once per
   // pool then reused across blocks — see seedBlockScanV3TickMetadata.
   const blockScanV3Meta = new Map<string, V3PoolMeta>();
+  const blockScanDecimals = new Map<string, number>();
   const scheduleBlockScan = (blockNumber: number): void => {
     if (!enableBlockScan) return;
     const edges = blockScanGraph;
@@ -985,10 +1002,19 @@ async function main(): Promise<void> {
             passDeadlineAtMs,
           );
           if (passBudgetExceeded("warm_curve")) return;
+          const protocolMids = await buildBlockScanProtocolMids(
+            provider,
+            blockNumber,
+            edges,
+            passDeadlineAtMs,
+            blockScanDecimals,
+          );
+          if (passBudgetExceeded("protocol_mids")) return;
           const warmedV2V3 = countBlockScanWarmedV2V3(blockScanCacheForPass, blockNumber, edges);
           console.log(
             `[searcher/blockscan] block=${blockNumber} warmedV2V3=${warmedV2V3} ` +
-              `warmedCurve=${curveWarm.warmed} v3TickMeta=${v3TickMeta}`,
+              `warmedCurve=${curveWarm.warmed} v3TickMeta=${v3TickMeta} ` +
+              `protocolMids=${protocolMids.size}`,
           );
 
           if (passBudgetExceeded("scan")) return;
@@ -997,7 +1023,7 @@ async function main(): Promise<void> {
             cache: blockScanCacheForPass,
             sourceBlock: blockNumber,
             swapTouched: null,
-            cfg,
+            cfg: { ...cfg, protocolMids },
           });
           let quotePositive = 0;
           let bestNet: bigint | null = null;
@@ -1051,6 +1077,7 @@ async function main(): Promise<void> {
             `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
               `candidates=${scan.opportunities.length} quotePositive=${quotePositive} ` +
               `bestNet=${bestNet === null ? "null" : bestNet.toString()} warmedV2V3=${warmedV2V3} ` +
+              `protocolMids=${protocolMids.size} ` +
               `skippedVenues=${scan.debug?.skippedVenues ?? 0} ms=${Date.now() - passStarted}`,
           );
         } catch (err) {
@@ -2788,6 +2815,190 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
       amountIn: 0n,
       ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
     }));
+}
+
+type BlockScanProtocolAdapter =
+  | "erc4626-deposit"
+  | "erc4626-redeem"
+  | "wsteth-wrap"
+  | "wsteth-unwrap"
+  | "psm";
+
+async function buildBlockScanProtocolMids(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  edges: TokenEdge[],
+  deadlineAtMs: number,
+  decimalsCache: Map<string, number>,
+): Promise<Map<string, ProtocolMid>> {
+  const mids = new Map<string, ProtocolMid>();
+  let failed = 0;
+  let deadlineHit = false;
+
+  for (const edge of edges) {
+    if (Date.now() >= deadlineAtMs) {
+      deadlineHit = true;
+      break;
+    }
+    if (edge.slotKind !== "protocol") continue;
+    const adapterId = blockScanProtocolAdapter(edge);
+    if (!adapterId) continue;
+
+    try {
+      const tokenInDec = await blockScanTokenDecimals(
+        provider,
+        blockNumber,
+        edge.tokenIn,
+        decimalsCache,
+      );
+      if (Date.now() >= deadlineAtMs) {
+        deadlineHit = true;
+        break;
+      }
+      const oneIn = 10n ** BigInt(tokenInDec);
+      const mid = await readBlockScanProtocolMid(provider, blockNumber, edge, adapterId, oneIn);
+      if (!Number.isFinite(mid) || mid <= 0) continue;
+      mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
+        mid,
+        feeBps: 0,
+        depthIn: oneIn * 10_000n,
+      });
+    } catch {
+      failed++;
+    }
+  }
+
+  if (failed > 0 || deadlineHit) {
+    console.log(
+      `[searcher/blockscan] block=${blockNumber} protocolMidFailed=${failed} ` +
+        `protocolMidDeadline=${deadlineHit ? 1 : 0} protocolMids=${mids.size}`,
+    );
+  }
+  return mids;
+}
+
+function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | null {
+  switch (edge.adapterId) {
+    case "erc4626-deposit":
+      return "erc4626-deposit";
+    case "erc4626-redeem":
+      return "erc4626-redeem";
+    case "wsteth-wrap":
+      return "wsteth-wrap";
+    case "wsteth-unwrap":
+      return "wsteth-unwrap";
+    case "psm":
+      return "psm";
+    default:
+      return null;
+  }
+}
+
+async function readBlockScanProtocolMid(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  edge: TokenEdge,
+  adapterId: BlockScanProtocolAdapter,
+  oneIn: bigint,
+): Promise<number> {
+  switch (adapterId) {
+    case "erc4626-deposit": {
+      const out = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.target,
+        ERC4626.encodeFunctionData("previewDeposit", [oneIn]),
+        ERC4626,
+        "previewDeposit",
+      );
+      return Number(out) / Number(oneIn);
+    }
+    case "erc4626-redeem": {
+      const out = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.target,
+        ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
+        ERC4626,
+        "previewRedeem",
+      );
+      return Number(out) / Number(oneIn);
+    }
+    case "wsteth-wrap": {
+      const out = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.target,
+        WSTETH.encodeFunctionData("getWstETHByStETH", [oneIn]),
+        WSTETH,
+        "getWstETHByStETH",
+      );
+      return Number(out) / Number(oneIn);
+    }
+    case "wsteth-unwrap": {
+      const out = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.target,
+        WSTETH.encodeFunctionData("getStETHByWstETH", [oneIn]),
+        WSTETH,
+        "getStETHByWstETH",
+      );
+      return Number(out) / Number(oneIn);
+    }
+    case "psm": {
+      let tin = 0n;
+      try {
+        tin = await blockScanCallUint(
+          provider,
+          blockNumber,
+          edge.target,
+          PSM.encodeFunctionData("tin"),
+          PSM,
+          "tin",
+        );
+      } catch {
+        tin = 0n;
+      }
+      return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
+    }
+  }
+  throw new Error(`unsupported protocol adapter ${adapterId}`);
+}
+
+async function blockScanTokenDecimals(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  token: string,
+  cache: Map<string, number>,
+): Promise<number> {
+  const key = token.toLowerCase();
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const data = await provider.call({
+    to: token,
+    data: ERC20.encodeFunctionData("decimals"),
+    blockTag: blockNumber,
+  });
+  const decimals = Number(ERC20.decodeFunctionResult("decimals", data)[0]);
+  cache.set(key, decimals);
+  return decimals;
+}
+
+async function blockScanCallUint(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  target: string,
+  data: string,
+  iface: ethers.Interface,
+  fnName: string,
+): Promise<bigint> {
+  const result = await provider.call({ to: target, data, blockTag: blockNumber });
+  return BigInt(iface.decodeFunctionResult(fnName, result)[0]);
+}
+
+function blockScanProtocolKey(target: string, tokenIn: string, tokenOut: string): string {
+  return `${target.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
 }
 
 interface V3PoolMeta {
