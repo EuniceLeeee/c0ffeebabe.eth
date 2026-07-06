@@ -54,17 +54,35 @@ Generator = Codex (`scripts/codex-run.sh`), evaluator = Claude (non-author, re-r
 — we build candidates only from victim swaps we see, and vault-share tokens (steakUSDC etc.) are held, not
 DEX-swapped, so the vault edges never enter a plan. Even the more-traded wstETH/sUSDS edges (35 log hits)
 produced 0 candidates. coffee captures protocol-leg EV because it runs **atomic block-scan** — proactively
-constructing deposit→swap→redeem loops. **Conclusion: venue coverage is now DONE but doesn't move the needle
-without the block-scan/atomic scanner running live over the enriched graph.** The scanner (BS-1a/1b/2/3a) is
-OFFLINE-COMPLETE (detect→route→size) but was EPIC-blocked on a viable +EV exemplar — the newly-wired vaults
-are exactly the missing substrate for that scanner to find loops. **Next lever = block-scan, not more venues.**
+constructing deposit→swap→redeem loops. **Conclusion: venue coverage does NOT move the needle without the
+block-scan/atomic scanner running live over the enriched graph.** The scanner (BS-1a/1b/2/3a) is
+OFFLINE-COMPLETE (detect→route→size) but its LIVE integration was never built: `blockscan-lane.ts` does not
+exist, `main.ts` never calls the scanner, node flag `SEARCHER_ENABLE_BLOCK_SCAN` is unset, 0 block-scan
+activity. So the scanner was NOT brought live — only the venues were. Live scanner = a real workstream
+(BS-lane + BS-3 full pipeline scan→sim→standalone-bundle + BS-4 window), not a flag flip.
+
+**CORRECTION (2026-07-06 empirical check — supersedes the optimistic "vaults are the missing substrate"):**
+A vault arb REQUIRES the share to be DEX-traded (buy share below NAV → redeem at NAV, or deposit→sell above
+NAV; deposit/redeem alone at NAV never profits). Checked the 6 wired vault shares against the pool universe:
+**5 of 6 have ZERO DEX pools** (steakUSDC/steakUSDT/sfrxETH/waEthUSDT/waEthUSDC) — only **srUSDe** has 4.
+So those 5 are DEAD edges (no loop closes, backrun OR block-scan) and coffee "touching" them ≥17× is almost
+certainly INVENTORY/yield management, not an arb leg — **venue-discovery conflates "touched" with
+"arbitraged-through".** Two corrections for the next session: (1) the wiring filter must be **share is
+DEX-traded (loop-closable)**, NOT coffee-touch-frequency; (2) before building the live scanner, empirically
+confirm a +EV loop EXISTS on a loop-closable venue (srUSDe is the only survivor here — check its DEX price vs
+previewRedeem NAV). Consider `rm`-ing the 5 dead vault rows from POOL_REGISTRY (harmless but noise).
 
 ## 5. Open threads / suggested next steps (priority order)
-1. **Block-scan scanner live** over the enriched graph (BS-3 full pipeline: scan→sim→standalone bundle).
-   This is the real needle-mover per §4. Needs a live-viable +EV exemplar; the vaults may supply it.
-2. **Adapter-probe as primary classifier** (§3) — replace topic heuristic; feeds the venue-registry.
-3. **More vaults** — 28 more probe-passing ERC4626 vaults found; wire the loop-closable ones (1 row each).
-   But per §4, low value until the scanner can originate loops through them.
+1. **Empirically confirm a +EV protocol-leg loop EXISTS before building anything** (§4 correction). Cheapest:
+   for a loop-closable venue (share DEX-traded — srUSDe is the only one of the 6), compare its DEX price to
+   `previewRedeem` NAV; if at parity there is NO arb even there. This gates whether block-scan is worth it.
+2. **Block-scan scanner live** (BS-lane + BS-3 full pipeline + BS-4) — ONLY if step 1 finds a real loop.
+   It's a real workstream, not a flag. Do NOT build it on the assumption the vaults supply the exemplar —
+   that was refuted for 5/6.
+3. **Fix the venue-wiring filter**: require share-is-DEX-traded (loop-closable), not coffee-touch-frequency;
+   and distinguish "arbitraged-through" from "inventory/yield touch" in venue-discovery. Consider removing the
+   5 dead vault rows.
+4. **Adapter-probe as primary classifier** (§3) — replace topic heuristic; feeds the venue-registry.
 4. Deferred tail (unchanged, gated): CR-5 Fluid deterministic quote (archive-gated), Aave/Morpho credit
    (`.credit-live` human gate — DO NOT create it), CS-min/CS-full/D/CR-8.
 
