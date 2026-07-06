@@ -84,18 +84,31 @@ finding. Decide on that basis. (6 vault example txs: steakUSDC/steakUSDT `0x9be7
 sfrxETH `0xf4774e11`, waEthUSDT `0x33e4e9bc`, waEthUSDC `0x8ca222f1`.)
 
 ## 5. Open threads / suggested next steps (priority order)
-1. **Trace `0x9be73297…` amounts** (Balancer flash in/out, Morpho borrow/supply, WETH profit) to quantify the
-   arb and confirm the exact +EV loop shape. This is a concrete protocol/credit exemplar — the substrate the
-   scanner was missing. Zero-node: the amounts are in the BigQuery export log `data` fields.
+1. **DONE 2026-07-06: `0x9be73297…` + all 6 vault txs quantified** via the NEW `tx-profit` CLI
+   (`analysis/src/cli/tx-profit.ts`, reuses `pnl/arb-profit.ts` `priceArb` — builder-payment-aware; the
+   earlier $4.65 hand-decode was WRONG, missed builder payment). NET profits: 0x9be73297 (steakUSDC+USDT)
+   $2.23, 0x8ca222f1 (waEthUSDC) $2.44, 0x33e4e9bc (waEthUSDT) $0.36, 0xf4774e11 (sfrxETH) $0.21, 0xd63b56ca
+   (srUSDe) $0.15 — **all DUST**. Confirms the ceiling; the ROI verdict in §4 stands.
 2. **Add the Morpho Blue CREDIT edge** (supply/borrow/withdraw/repay on 0xbbbbBBBBbb…) — the missing leg that
-   closes the vault loop. This is the credit-edge (`edge_kind:"credit"`) case, D2/D5. Fluid credit already
-   exists as a template.
+   closes the vault loop. credit-edge (`edge_kind:"credit"`) case, D2/D5; Fluid credit is the template.
+   (Dust EV — do only if pursuing the atomic-arb class with eyes open.)
 3. **Block-scan scanner live** (BS-lane + BS-3 full pipeline + BS-4) over vault+credit+swap edges — the whole
-   workstream, not a flag. Now has a real exemplar (step 1) to validate against.
-4. **Adapter-probe as primary classifier** (§3) — replace topic heuristic; feeds the venue-registry.
+   workstream, not a flag. NOTE: a concurrent session is already doing block-scan exemplar hunting
+   (commit `0a1984c` BS-1c, uncommitted `blockscan-hunt.ts`) — COORDINATE before duplicating.
+4. **Classify venues BY ADAPTABILITY (operator design, 2026-07-06 — supersedes "static edgeKind on 31
+   adapters"):** the 31 adapter IDs are really ~13 generic FAMILIES (~8 venue types); ONE ERC4626 adapter
+   already serves every vault (the 6 vaults were 1 POOL_REGISTRY row each, zero new adapter code). So the
+   classifier should PROBE which generic family `canAdapt(venue)` (ERC4626: `asset()`+`previewRedeem` respond;
+   Curve: `coins()/get_dy`; Uni: `token0/token1`; Morpho: the Morpho interface) — the family that adapts it
+   gives BOTH its edge_kind AND its routing adapter (classification == routability, unified). Adding a venue an
+   existing family adapts = ZERO code; only a genuinely-new protocol needs a new adapter. This replaces both
+   the topic heuristic AND the "static edgeKind field" plan.
 5. Wiring-filter note: coffee-touch-frequency IS a valid signal (coffee only touches what it arbs) — the
    earlier "require DEX-traded share" filter was WRONG; the real requirement is a loop-closing leg exists
    (DEX swap OR credit OR another vault). Keep the 6 vault rows.
+6. **Discipline: TOOL-FIRST (CLAUDE.md §5, names `analysis/src/pnl/*`).** This session hand-rolled a profit
+   decode instead of using `arb-profit.ts` — a rule violation, now corrected by `tx-profit`. Check the
+   toolset before hand-writing analysis.
 4. Deferred tail (unchanged, gated): CR-5 Fluid deterministic quote (archive-gated), Aave/Morpho credit
    (`.credit-live` human gate — DO NOT create it), CS-min/CS-full/D/CR-8.
 
