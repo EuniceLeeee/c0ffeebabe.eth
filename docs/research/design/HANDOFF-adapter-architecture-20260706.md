@@ -5,9 +5,15 @@ node, and the clear next moves. Read `CLAUDE.md` + `docs/research/HERMES.md` fir
 
 ## 0. TL;DR
 - **Design is settled + code-verified; the CLASSIFICATION architecture (lineage/descriptor) is landed but
-  UNCONSUMED and gated behind a 5-item remediation plan (R1–R5). The strategy question is settled by F-007:
-  DEX-NAV protocol = **UNMEASURED (a ~5-block smoke test showed dust — NOT a don't-build basis, see §4)**;
-  CREDIT = episodic $100–500 (posture-gated, build LAST).**
+  UNCONSUMED and gated behind a 5-item remediation plan (R1–R5).**
+- **Strategy (corrected 2026-07-06 by event-level verification, supersedes the earlier F-007 framing):**
+  - **PROTOCOL class HAS profit — proven, not dust.** `0x9be73297` ($2.23) + `0x8ca222f1` ($2.44) are
+    ERC4626-vault PROTOCOL arbs (event-verified: their Morpho events are the vault's Supply/Withdraw, ZERO
+    Borrow). "DEX-NAV/protocol = dust" is contradicted by evidence (and the "dust" read was only a ~5-block
+    smoke test anyway). Worth measuring + building.
+  - **CREDIT class = ONE unverified exemplar** (`0xf88b`, Fluid) — must be event-verified for a real borrow
+    before "episodic $100–500" is trusted. Posture-gated (`.credit-live`), build LAST.
+  - **This IS the point of classifying venues by BEHAVIOR, not protocol membership** (see §4).
 - **Repo HEAD**: `67d88b7` (lineage doc rev 2). **Node** `9a8f348`, bounded-live (`DRY_RUN=0`, wallet
   `0xb8578B6…` = 0.0027 ETH unchanged), markers `.deploy-live` + `.protocol-edges` + `.block-scan` on,
   `.credit-live` OFF. Block-scan lane runs **log-only** (Pass A); protocol edges live (11 entries).
@@ -69,6 +75,13 @@ correction). So DEX-NAV/protocol is contradicted-by-evidence, not just under-sam
   grandfathered live); the gate is POSTURE (`.credit-live`, human). Reward is REAL, not dust.
 - **Lineage architecture:** adapter=implementation, lineage=behavior family, edgeKind=path semantics; code
   splits per protocol, the classification vocab must not fragment. Credit stays a LEG, never a strategy.
+- **Classify by the per-call BEHAVIOR, not the protocol's membership — THIS is why venue classification
+  matters.** A protocol is not a class: Morpho is a lending protocol, but a MetaMorpho vault deposit/redeem
+  (`Supply`/`Withdraw` by the vault) is `protocol`, while an actual `Borrow`/`Repay`/`SupplyCollateral` we
+  take is `credit`. The edge_kind is set by what THIS call does (does it open a debt position?), not by the
+  contract's name. `0x9be73297` proved it: reading "Morpho events ⇒ credit" was wrong; event-level verify
+  (no Borrow) ⇒ `protocol`. Consequence: **protocol has real >$1 profit; don't write it off as dust.**
+  Getting this right is the payoff of the descriptor/verify discipline (R2/R5).
 - **Reuse boring-vault KNOWLEDGE not code** (Solidity → we take signatures + position-defining args + the
   Protocols/ catalog; write quote/encode/fork-sim/PnL ourselves; don't copy Merkle/Teller).
 - **MEV-Share submit flag:** already flipped + measured insufficient (F-006/D-001, structural posture) —
