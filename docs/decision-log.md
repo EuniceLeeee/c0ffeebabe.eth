@@ -225,6 +225,27 @@
   is unblocked in the graph.** Not yet deployed to the node (a swap adapter is principal-safe + within the
   bounded-live envelope; the deploy is an operator restart).
 
+### F-009 | 2026-07-06 | ✅ | `0x9be73297`'s vault middle leg = INVENTORY rebalance, NOT a replicable protocol/credit edge
+- **Operator ruling (correct — corrects my overclaim):** do NOT read "funds pass through Morpho" as "add a
+  Morpho steakUSDT→steakUSDC edge". A cross-vault return path is only a `protocol` leg if it proves 3 things:
+  (1) externally callable with NO inventory, (2) a deterministic input→output leg, (3) does NOT depend on
+  vault internal state / bot pre-holdings. Classify by trace/replay BEFORE writing any edge.
+- **Classification (decided on-chain, block 24568128→24568129):** the "~1:1 USDT→USDC" middle leg is an
+  **inventory rebalance through the operator's PRIVATE vault-wrapper contracts**, verdict
+  **`inventory_or_internal_only_not_ours`**:
+  - Profit-key numbers (operator's Q): bundler `0xb82809` (a private GenericVault w/ Manager+Controller, NOT
+    public Morpho infra) minted **+293,404 steakUSDT** (held ~0 before, keeps it after); mediator `0x4825ef`
+    **−291,368 steakUSDC** drawn from a **pre-existing 2,751,718 steakUSDC inventory** (~$2.9M), ending at
+    2,460,350. NET position change, NOT atomic net-zero.
+  - The share-count asymmetry (293,404 vs 291,368) = the two vaults' different NAV/price-per-share; part of
+    the profit is embedded in a favorable cross-vault inventory rebalance, ON TOP of the Fluid swap +0.9bp.
+  - Fails all 3 criteria: needs ~$2.9M steakUSDC inventory (not inventory-free), depends on vault internal
+    state, requires pre-holdings. ⇒ it is an **inventory/posture play (credit-live-adjacent capital
+    commitment), not our flash-arb path** — same class as [[project-cex-dex-inventory-competitor-noise]].
+- **Consequence:** the Fluid DEX SWAP leg is real + done (F-008); coffee's SPECIFIC steakUSDC arb is NOT
+  replicable as a leg. Open (worth checking, cheap): is there a permissionless ≤0.9bp-loss par USDT↔USDC
+  return path (curve/PSM) that lets us capture the Fluid dislocation inventory-free? [[project-track-a-b-protocol-edges]]
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
