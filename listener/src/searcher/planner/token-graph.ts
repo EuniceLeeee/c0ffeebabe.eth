@@ -132,6 +132,16 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH }, // sfrxETH
   { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // waEthUSDT
   { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
+  // Batch 2 (2026-07-06 venue-discovery + probe-verified, loop-closable assets only — exotic-asset vaults
+  // deferred pending a return-path venue, per the open return-path tooling_defect):
+  { address: "0x4F95C5bA0C7c69FB2f9340E190cCeE890B3bd87c", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // hgUSDC
+  { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // pfUSDC-24
+  { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },  // pfWETH-4
+  { address: "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // USD3
+  { address: "0xe3DA4B83C9dd4c4D185ecE42077462b3F35c454a", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // vvUSDC
+  { address: "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367", adapter: "erc4626", fixedTokenIn: ADDR.CRVUSD }, // scrvUSD
+  { address: "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // wYLDS
+  { address: "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // vvUSDT
   {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
     adapter: "fluid-vault",
