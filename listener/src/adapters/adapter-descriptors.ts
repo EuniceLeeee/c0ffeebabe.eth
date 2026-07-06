@@ -18,7 +18,11 @@ export interface AdapterDescriptor {
   leavesStandingPositionDefault: boolean;
 }
 
-// TODO credit adapters -> true when they intentionally encode debt/supply positions.
+// Credit adapters default `leavesStandingPositionDefault:true` to match the runtime fail-closed law
+// (deriveEdgeTaxonomy: credit -> leavesStandingPosition:true). A credit leg that actually closes in-tx
+// (e.g. a liquidation) is still flagged true here — the CONSERVATIVE/safe direction for the S2 guard
+// (over-flag, never under-flag). Do NOT read this as the live S2 bit: the runtime edge derivation is the
+// source of truth; this is the descriptor-level default that must never disagree in the unsafe direction.
 export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
   "assert-balance": {
     adapterId: "assert-balance",
@@ -194,7 +198,7 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     edgeKind: "credit",
     action: "repay",
     canSendValue: false,
-    leavesStandingPositionDefault: false,
+    leavesStandingPositionDefault: true,
   },
   "fluid-vault": {
     adapterId: "fluid-vault",
@@ -202,7 +206,7 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     edgeKind: "credit",
     action: "borrow",
     canSendValue: false,
-    leavesStandingPositionDefault: false,
+    leavesStandingPositionDefault: true,
   },
   psm: {
     adapterId: "psm",

@@ -119,9 +119,10 @@ function testCreditStandingPositionDefault(): void {
     .filter((descriptor) => descriptor.edgeKind === "credit");
   assert(creditDescriptors.length === 2, `credit descriptor count ${creditDescriptors.length}`);
   for (const descriptor of creditDescriptors) {
+    // Must match the runtime fail-closed law (deriveEdgeTaxonomy: credit -> true). Never fail-open.
     assert(
-      descriptor.leavesStandingPositionDefault === false,
-      `${descriptor.adapterId}: credit standing-position default should stay false until credit encoders own it`,
+      descriptor.leavesStandingPositionDefault === true,
+      `${descriptor.adapterId}: credit standing-position default must be true (fail-closed, matches deriveEdgeTaxonomy)`,
     );
   }
   console.log("[adapter-descriptors] credit standing-position default: PASS");
