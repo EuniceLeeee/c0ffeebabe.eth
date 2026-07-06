@@ -142,6 +142,12 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367", adapter: "erc4626", fixedTokenIn: ADDR.CRVUSD }, // scrvUSD
   { address: "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // wYLDS
   { address: "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // vvUSDT
+  // Batch 2b: loop-closable via EITHER side in the DEX universe (corrected dead-edge test — a vault is
+  // dead only if NEITHER asset NOR share appears in any indexed DEX pool; the solver decides closability):
+  { address: "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7", adapter: "erc4626", fixedTokenIn: "0x23238f20b894f29041f48D88eE91131C395Aaa71" }, // sUSDat (share in DEX)
+  { address: "0xC255910618158F48FA461874471Aa24AEfbDC23A", adapter: "erc4626", fixedTokenIn: "0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D5" }, // pfOHM (asset OHM in DEX)
+  { address: "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C", adapter: "erc4626", fixedTokenIn: "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" }, // waEthLidoGHO (asset GHO in DEX)
+  { address: "0x43680aBF18cf54898Be84C6eF78237CFBD441883", adapter: "erc4626", fixedTokenIn: "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0" }, // wTSLAx (asset in DEX)
   {
     address: ADDR.FLUID_VAULT_WSTUSR_USDC,
     adapter: "fluid-vault",
