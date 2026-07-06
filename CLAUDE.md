@@ -60,9 +60,13 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   public on-chain evidence (tx hashes, pools, token addresses) unless stricter redaction is asked.
 - **md commit/push** — whenever a `*.md` is updated, commit + push it in the same turn. Raw logs / JSONL /
   secrets / `.env` never committed; local run logs go to `MEV/logs/` (gitignored).
-- **Tool-first** — before hand-writing a scratchpad analysis, check the existing toolset (`analysis/src/cli/*`,
-  the LearningCase store, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it (HERMES rule 17). Prefer
-  structured JSONL over log greps; `pipeline_dropped` is the source of truth for loss attribution.
+- **Reconcile-after (NOT tool-first-pre-check)** — the ORDER is: hand-roll/analyze FIRST (it is allowed and
+  valuable — rule 16: manual analysis is a TEST of the tooling and routinely finds where a script is stale/
+  wrong), THEN reconcile the result against the existing toolset (`analysis/src/cli/*`, the LearningCase
+  store, `redact-live-run`, `analysis/src/pnl/*`) — run/extend it and cross-check (HERMES rules 16+17). Do
+  NOT invert to "check the tool, then hand-roll": pre-checking suppresses the very manual analysis that
+  catches a stale tool. Prefer structured JSONL over log greps; `pipeline_dropped` is the source of truth
+  for loss attribution.
   **GATED** by `guard-tool-reconcile.py` (PostToolUse Write|Edit|Bash) + `guard-reconcile-stop.py` (Stop) —
   a RECONCILE-after, not a pre-block (a pre-block suppresses the manual analysis that catches a STALE tool,
   rule 16). A throwaway `_*`/`/tmp`·scratchpad analysis (`.ts/.py/.sh/.mjs/.js` OR inline `python3 -c`/`node
