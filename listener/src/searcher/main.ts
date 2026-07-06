@@ -499,7 +499,7 @@ async function main(): Promise<void> {
   let blockScanPlanner: TemplatePlanner | undefined;
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
-  const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "8000");
+  const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
     const isolatedState = new AnvilStateBackend(
@@ -903,6 +903,9 @@ async function main(): Promise<void> {
   // Isolation invariant: this lane is built only from the blockScan* stack below;
   // no shared backrun objects are passed into scan, warm, plan, or solve.
   let blockScanBusy = false;
+  // Immutable v3 pool metadata (token0/token1/fee/tickSpacing), read once per
+  // pool then reused across blocks — see seedBlockScanV3TickMetadata.
+  const blockScanV3Meta = new Map<string, V3PoolMeta>();
   const scheduleBlockScan = (blockNumber: number): void => {
     if (!enableBlockScan) return;
     const edges = blockScanGraph;
@@ -971,6 +974,7 @@ async function main(): Promise<void> {
             blockNumber,
             edges,
             passDeadlineAtMs,
+            blockScanV3Meta,
           );
           if (passBudgetExceeded("v3_tick_meta")) return;
           const curveWarm = await warmBlockScanCurves(
@@ -2786,24 +2790,59 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
     }));
 }
 
+interface V3PoolMeta {
+  token0: string;
+  token1: string;
+  fee: bigint;
+  tickSpacing: number;
+}
+
 async function seedBlockScanV3TickMetadata(
   provider: ethers.JsonRpcProvider,
   cache: PoolStateCache,
   blockNumber: number,
   edges: TokenEdge[],
   deadlineAtMs: number,
+  metaCache: Map<string, V3PoolMeta>,
 ): Promise<number> {
   const pools = new Set<string>();
   for (const edge of edges) {
     if (edge.slotKind === "swap" && edge.adapterId === "univ3-swap") pools.add(edge.target.toLowerCase());
   }
 
+  // token0/token1/fee/tickSpacing are IMMUTABLE — read once per pool (metaCache
+  // persists across blocks), then re-seed cheaply with the current block number
+  // (no RPC) to keep snapshotV3's freshness gate satisfied. Only NEW pools pay
+  // the eth_call cost, so after the first block this is near-instant.
+  const seedFromMeta = (pool: string, meta: V3PoolMeta): void => {
+    cache.seedV3Ticks({
+      pool,
+      token0: meta.token0,
+      token1: meta.token1,
+      fee: meta.fee,
+      tickSpacing: meta.tickSpacing,
+      tickBitmap: new Map<number, bigint>(),
+      ticks: new Map<number, bigint>(),
+      blockNumber,
+    });
+  };
+
   let seeded = 0;
-  const list = [...pools];
-  for (let i = 0; i < list.length; i += 50) {
+  const unknown: string[] = [];
+  for (const pool of pools) {
+    const cached = metaCache.get(pool);
+    if (cached) {
+      seedFromMeta(pool, cached);
+      seeded++;
+    } else {
+      unknown.push(pool);
+    }
+  }
+
+  for (let i = 0; i < unknown.length; i += 50) {
     if (Date.now() >= deadlineAtMs) break;
     const results = await Promise.all(
-      list.slice(i, i + 50).map(async (pool) => {
+      unknown.slice(i, i + 50).map(async (pool) => {
         try {
           const [t0, t1, fee, tickSpacing] = await Promise.all([
             provider.call({ to: pool, data: V3_META.encodeFunctionData("token0"), blockTag: blockNumber }),
@@ -2811,18 +2850,14 @@ async function seedBlockScanV3TickMetadata(
             provider.call({ to: pool, data: V3_META.encodeFunctionData("fee"), blockTag: blockNumber }),
             provider.call({ to: pool, data: V3_META.encodeFunctionData("tickSpacing"), blockTag: blockNumber }),
           ]);
-          // Metadata-only tick seed: snapshotV3 needs this layer for pool metadata,
-          // but block-scan mids do not need the slow TickLens bitmap/tick walk.
-          cache.seedV3Ticks({
-            pool,
+          const meta: V3PoolMeta = {
             token0: String(V3_META.decodeFunctionResult("token0", t0)[0]),
             token1: String(V3_META.decodeFunctionResult("token1", t1)[0]),
             fee: BigInt(V3_META.decodeFunctionResult("fee", fee)[0]),
             tickSpacing: Number(V3_META.decodeFunctionResult("tickSpacing", tickSpacing)[0]),
-            tickBitmap: new Map<number, bigint>(),
-            ticks: new Map<number, bigint>(),
-            blockNumber,
-          });
+          };
+          metaCache.set(pool, meta);
+          seedFromMeta(pool, meta);
           return 1;
         } catch {
           return 0;
