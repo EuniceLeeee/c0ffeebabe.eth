@@ -63,13 +63,16 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - **Tool-first** — before hand-writing a scratchpad analysis, check the existing toolset (`analysis/src/cli/*`,
   the LearningCase store, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it (HERMES rule 17). Prefer
   structured JSONL over log greps; `pipeline_dropped` is the source of truth for loss attribution.
-  **ENFORCED** by `scripts/hooks/guard-tool-reconcile.py` (PostToolUse Write+Bash — a RECONCILE-after, not a
-  pre-block: a pre-block suppresses the manual analysis that catches a STALE tool, rule 16). Running a
-  throwaway `_*.ts/.py` (or `/tmp`·scratchpad) analysis script with ≥2 venue/pool/trace/PnL markers fires a
-  reminder to run the canonical tool on the same input and RECONCILE — agree ⇒ add `tool-reconciled: <tool>
-  agrees`; differ ⇒ that's the finding (fix the stale tool OR the wrong hand analysis, e.g. bundle-postmortem
-  `in_graph` shows a "dead edge" is really an unindexed pool = pool gap) — silence it with a `tool-reconciled:`
-  line. Keeps hand analysis (its rule-16 tool-test value) while forcing the cross-check.
+  **GATED** by `guard-tool-reconcile.py` (PostToolUse Write|Edit|Bash) + `guard-reconcile-stop.py` (Stop) —
+  a RECONCILE-after, not a pre-block (a pre-block suppresses the manual analysis that catches a STALE tool,
+  rule 16). A throwaway `_*`/`/tmp`·scratchpad analysis (`.ts/.py/.sh/.mjs/.js` OR inline `python3 -c`/`node
+  -e`) with a venue/pool/trace/PnL marker fires a reminder AND records a pending entry; the **Stop hook then
+  refuses to end the turn** until it clears — that is the teeth. Clear it by RUNNING the canonical tool
+  (`npm run bundle-postmortem/…` — that IS the reconciliation) or a `tool-reconciled: <named tool> agrees|
+  diverged→<fix>` line. Divergence is the finding: fix the stale tool (rule 16) OR the wrong hand analysis
+  (e.g. `in_graph` shows a "dead edge" is really an unindexed pool = pool gap). Honest residual (2026-07-06
+  blind audit): silencing is still honor-system (a `tool-reconciled:` line naming a tool clears it whether or
+  not you truly ran it) and recall is wide-but-not-total — a gate on the canonical pattern, not a proof.
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
