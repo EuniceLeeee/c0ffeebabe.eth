@@ -6,6 +6,9 @@ import type { PoolEntry } from "./planner/token-graph.js";
 const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
 const UNIV3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 const SUSHI_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
+// PancakeSwap V3 — a UniswapV3-lineage clone (same swap interface + PoolCreated layout, different factory).
+// cast-verified 2026-07-06: factory() on coffee's pancake pools 0xacdb27b2 / 0x1445f32d = this address.
+const PANCAKE_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865";
 
 // Factory event topics
 const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
@@ -41,6 +44,18 @@ const FACTORIES: FactoryDef[] = [
     topic: UNIV3_POOL_CREATED,
     adapter: "univ3",
     // PoolCreated data: tickSpacing(int24, 32B) + pool(address, 32B)
+    parsePool: (log) => {
+      const dataHex = log.data.replace("0x", "");
+      return ethers.getAddress("0x" + dataHex.slice(-40));
+    },
+  },
+  {
+    // PancakeSwap V3: same PoolCreated(token0,token1,fee,tickSpacing,pool) event + data layout as UniV3
+    // (only the factory address differs) → reuse the univ3 adapter + parsePool. UniV2/SushiV2/PancakeV2
+    // and SushiV3 need NO entry — they share UniV2/UniV3's Swap+factory topics and are already covered.
+    address: PANCAKE_V3_FACTORY,
+    topic: UNIV3_POOL_CREATED,
+    adapter: "univ3",
     parsePool: (log) => {
       const dataHex = log.data.replace("0x", "");
       return ethers.getAddress("0x" + dataHex.slice(-40));
@@ -122,7 +137,11 @@ async function getFactoryLogs(
 const SWAP_TOPICS: { topic: string; adapter: PoolEntry["adapter"] }[] = [
   // UniV3
   { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"), adapter: "univ3" },
-  // UniV2
+  // PancakeSwap V3 — UniV3-lineage clone; its Swap event adds protocolFeesToken0/1 so the topic differs
+  // (0x19b47279…, cast-verified against coffee's pancake pools). Same swap/slot0/tick interface ⇒ univ3
+  // adapter routes it (local v3 math is layout-identical). SushiV3 reuses UniV3's topic — already covered.
+  { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"), adapter: "univ3" },
+  // UniV2 (also PancakeV2 / SushiV2 — identical event ⇒ same topic, already covered)
   { topic: ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"), adapter: "univ2" },
   // Curve — multiple event signatures across pool versions
   { topic: ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"), adapter: "curve" },
