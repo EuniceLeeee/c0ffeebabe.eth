@@ -131,12 +131,19 @@
 > **CORRECTED 2026-07-06 (operator caught the overreach with `0xf88b`).** The first draft said "protocol
 > block-scan is dust-bounded" — WRONG generalization. It measured only the credit-EXCLUDED DEX-NAV subset in a
 > QUIET (peg) window. Two classes must be kept separate:
-- **Class 1 — DEX-NAV protocol (what BS-1c scans): genuinely dust.** Shipped **BS-1c** (`0a1984c`, scanner
-  detects+prices non-standing `slotKind:"protocol"` edges) + **`searcher:blockscan-hunt`** (`f48c371`).
-  Fork-solved over the LIVE graph at 4 recent blocks AND at the `0xf88b` depeg block (24710788, archive fork):
-  **ZERO +EV protocol ring, only sub-dollar pure-DEX dust** (best ~$0.50 even AT the depeg block). Of 11
-  protocol entries only wstETH/sUSDS have a DEX share-venue, both NAV-pegged/par. This result is CORRECT for
-  what it measured.
+- **Class 1 — DEX-NAV protocol (what BS-1c scans): smoke-test-dust, but UNMEASURED — NOT "don't build".**
+  Shipped **BS-1c** (`0a1984c`, scanner detects+prices non-standing `slotKind:"protocol"` edges) +
+  **`searcher:blockscan-hunt`** (`f48c371`). Fork-solved over the LIVE graph at 4 recent blocks AND at the
+  `0xf88b` depeg block (24710788, archive fork): **ZERO +EV protocol ring, only sub-dollar pure-DEX dust**
+  (best ~$0.50 even AT the depeg block). Of 11 protocol entries only wstETH/sUSDS have a DEX share-venue, both
+  NAV-pegged/par.
+  > **SAMPLE-SIZE CORRECTION (2026-07-06, operator caught it):** 4 recent + 1 depeg = a **~5-block smoke
+  > test** — this proves BS-1c WORKS but does NOT measure the class's EV. Concluding "DEX-NAV = dust, don't
+  > build" from 5 blocks is the **starved-sample true-negative trap** (project rule: never conclude a
+  > true-negative from a starved sample; size OUTCOME-DRIVEN). Dislocations are EPISODIC. **Verdict downgraded
+  > to UNMEASURED/not-yet-decidable.** To decide DEX-NAV: run `blockscan-hunt` over an outcome-driven window
+  > (hours, ideally event-targeted across multiple depeg/volatility blocks + more of the 11 entries' share
+  > venues), not 5 consecutive quiet blocks. Only the CREDIT class (Class 2) is evidence-backed so far.
 - **Class 2 — CREDIT (Fluid/Morpho): episodic $100–500, NOT dust.** `0xf88b498b…` (block 24710788, from =
   coffeebabe) nets **~273 wstUSR + 0.078 WETH (~$100–500)** during a wstUSR **market depeg**, via
   `flash→Fluid borrow→swap→repay` (a BACKRUN). It routes through wstUSR+sUSDS+PSM+Fluid+curve+v4 in ONE atomic

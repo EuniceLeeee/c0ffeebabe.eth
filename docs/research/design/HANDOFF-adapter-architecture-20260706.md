@@ -6,7 +6,8 @@ node, and the clear next moves. Read `CLAUDE.md` + `docs/research/HERMES.md` fir
 ## 0. TL;DR
 - **Design is settled + code-verified; the CLASSIFICATION architecture (lineage/descriptor) is landed but
   UNCONSUMED and gated behind a 5-item remediation plan (R1–R5). The strategy question is settled by F-007:
-  DEX-NAV protocol = dust (don't build); CREDIT = episodic $100–500 (posture-gated, build LAST).**
+  DEX-NAV protocol = **UNMEASURED (a ~5-block smoke test showed dust — NOT a don't-build basis, see §4)**;
+  CREDIT = episodic $100–500 (posture-gated, build LAST).**
 - **Repo HEAD**: `67d88b7` (lineage doc rev 2). **Node** `9a8f348`, bounded-live (`DRY_RUN=0`, wallet
   `0xb8578B6…` = 0.0027 ETH unchanged), markers `.deploy-live` + `.protocol-edges` + `.block-scan` on,
   `.credit-live` OFF. Block-scan lane runs **log-only** (Pass A); protocol edges live (11 entries).
@@ -47,11 +48,19 @@ protocol-adapter descriptor framework, venue-discovery pipeline (evidence→aggr
 6 ERC4626 vaults live, `tx-profit` CLI, the lineage descriptor layer, BS-1c (scanner prices protocol edges),
 `blockscan-hunt` (exemplar measurement), BS-lane Pass A (live block-scan lane, log-only, gated).
 
-**Don't build (F-007 DEX-NAV dust):** BS-3 full-pipeline / BS-4 FOR the DEX-NAV protocol class — measured
-zero +EV. Building the live submit path for that class chases dust.
+**DEX-NAV protocol class — NOT proven dust (correction 2026-07-06):** the "dust" read comes from a **~5-block
+smoke test** (`blockscan-hunt`: 4 recent blocks + the `0xf88b` depeg block). That measurement proved BS-1c
+WORKS (it surfaces + prices protocol rings) but did NOT measure the class's EV over a meaningful sample —
+concluding "dust, don't build" from 5 blocks is the **starved-sample true-negative trap** the project has a
+standing rule against ("never conclude a true-negative from a starved sample; size OUTCOME-DRIVEN"). Dislocations
+are EPISODIC (depeg/volatility events). **Before any don't-build verdict, measure over an outcome-driven window
+— hours, ideally event-targeted across multiple depeg blocks, not 5 consecutive quiet ones.** coffee demonstrably
+nets >$1 in the protocol/credit space (the $2.23/$2.44 vault txs — those close via CREDIT, but they prove the
+space is not uniformly dust). So BS-3 for DEX-NAV is **not yet decidable**, not "don't build."
 
 ## 4. The binding decisions (do not re-open without reading the cited source)
-- **F-007 (decision-log) — two protocol classes:** DEX-NAV protocol = dust; **CREDIT (Fluid/Morpho) =
+- **F-007 (decision-log) — two protocol classes:** DEX-NAV protocol = smoke-test-dust but **UNMEASURED**
+  (§ correction: 5 blocks ≠ a don't-build basis; re-measure outcome-driven); **CREDIT (Fluid/Morpho) =
   episodic $100–500** (`0xf88b` nets ~273 wstUSR at a wstUSR depeg via flash→Fluid borrow→swap→repay;
   BS-1c can't see it — credit-excluded by design). Capability EXISTS (AC-3 reconstructs it, Fluid edge
   grandfathered live); the gate is POSTURE (`.credit-live`, human). Reward is REAL, not dust.
