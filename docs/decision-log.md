@@ -199,6 +199,20 @@
 - **Implication:** a multi-hour live block-scan window will NOT surface coffee's protocol arbs — the lane is
   blind to that shape, not merely waiting for a dislocation. B1b + the live lane are correct + isolated + safe
   (log-only, zero loss); the limit is the detection model. [[project-track-a-b-protocol-edges]]
+- **CORRECTED again (2026-07-06, full amount-trace of `0x9be73297`) — it IS a routable closed loop; the
+  block is a STUBBED adapter, not a modeling limit.** Executor `0xe08d97` net = **+0.0016 WETH (~$2-3)**. Flow:
+  Balancer flash 326,058.65 USDC → **Fluid DEX swap USDC→USDT (326,058.65→326,061.67, +0.9bp — THE profit
+  leg)** → USDT →(steakUSDT deposit → Morpho Blue → steakUSDC redeem, ~1:1 par close)→ USDC → repay flash;
+  surplus 3.02 USDC → 0.0016 WETH. The profit VENUE `0x52aa89` = **FluidLiquidityProxy (Fluid/Instadapp DEX)**.
+  We HAVE a `fluid-dex-swap` adapter but it is a **STUB**: `fluid-dex.ts:52` `encode()` throws
+  "not supported in v3.0: dexCallback has no bytes payload" (Fluid's `swapInWithCallback` 0xbe17c79c callback
+  can't carry BotVM's inner script). **So `0x9be73297` is routable as legs (vindicates the leg-based D5
+  design — the SAME buildTokenPaths routes it); the only block is the un-implemented Fluid DEX swap adapter.**
+  FIX (scoped, no executor change): implement `fluidDexSwapAdapter` via the plain non-callback
+  `swapIn(bool swap0to1,uint256 amountIn,uint256 amountOutMin,address to)` (approve+call, curve-pattern) +
+  a FluidDexResolver quote + register the Fluid Dex USDC/USDT pool; VERIFY vs `0x9be73297`. This is the real,
+  bounded "adapt an unknown/stubbed venue" work — a curve-sized adapter, not a new detection model. (F-008's
+  earlier "needs a new composition model" was wrong.)
 
 ## Dead-ends / retired (high-value — don't circle back)
 
