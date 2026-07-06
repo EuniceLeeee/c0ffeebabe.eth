@@ -3,8 +3,10 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../shared/adapters/index.js";
+import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector, type Opportunity } from "./detector/detector.js";
+import { detectBlockScanOpportunities, type BlockScanConfig } from "./detector/blockscan-scanner.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
@@ -210,6 +212,15 @@ export function valueInEth(token: string, amount: bigint, ethUsd: number): bigin
     return (amount * 10n ** 18n) / (10n ** BigInt(decimals) * BigInt(Math.round(ethUsd)));
   }
   return 0n;
+}
+
+function buildBlockScanPricedTokens(): BlockScanConfig["pricedTokens"] {
+  return new Map([
+    [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
+    [ADDR.USDC.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
+    [ADDR.USDT.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
+    [ADDR.DAI.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 18n }],
+  ]);
 }
 
 export function computeBidEth(
@@ -462,6 +473,16 @@ async function main(): Promise<void> {
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
+  const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
+  const blockScanCfg: BlockScanConfig | undefined = enableBlockScan
+    ? {
+        maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
+        minSpreadBps: Number(process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10"),
+        maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "8"),
+        budgetMs: Number(process.env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
+        pricedTokens: buildBlockScanPricedTokens(),
+      }
+    : undefined;
   planner.setMaxHops(maxHops);
   planner.setMaxPoolsPerToken(maxPoolsPerToken);
   planner.setMaxRotationsPerPath(maxRotationsPerPath);
@@ -650,6 +671,14 @@ async function main(): Promise<void> {
   // Factory pools are queried for token0/token1 in parallel batches.
   // This is ~1500 eth_call pairs at startup but gives full routing coverage.
   const graph = await buildTokenGraph(mainnetBackend, strategyViews.backrun);
+  let blockScanGraph: TokenEdge[] | undefined;
+  if (enableBlockScan) {
+    blockScanGraph = await buildTokenGraph(mainnetBackend, strategyViews.blockscan);
+    console.log(
+      `[searcher/blockscan] graph built: edges=${blockScanGraph.length} ` +
+        `from blockscan view=${strategyViews.blockscan.length}`,
+    );
+  }
   const tokenIndex = buildTokenIndex(graph);
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
@@ -834,6 +863,40 @@ async function main(): Promise<void> {
   // Block-level PoolStateUpdater: seed watched V2/V3 pool state by Multicall so
   // quote/search uses local math. This is deliberately separate from the revm
   // trace warmer above; it does not touch the revm daemon.
+  const scheduleBlockScan = (blockNumber: number): void => {
+    if (!enableBlockScan) return;
+    const edges = blockScanGraph;
+    const cfg = blockScanCfg;
+    if (!edges || !cfg) return;
+    setImmediate(() => {
+      try {
+        const scan = detectBlockScanOpportunities({
+          edges,
+          cache: poolStateCache,
+          sourceBlock: blockNumber,
+          swapTouched: null,
+          cfg,
+        });
+        console.log(
+          `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
+            `candidates=${scan.opportunities.length} skippedVenues=${scan.debug?.skippedVenues ?? 0} ` +
+            `outcome=${scan.outcome}`,
+        );
+        for (const opp of scan.opportunities.slice(0, 5)) {
+          console.log(
+            `[searcher/blockscan]   cand ring=${opp.affectedTokens?.join("->")} ` +
+              `pools=${opp.affectedPools?.join(",")} flashToken=${opp.flashToken} ` +
+              `center=${opp.searchSeed.searchCenter} standing=${opp.leavesStandingPosition}`,
+          );
+        }
+      } catch (err) {
+        console.log(
+          `[searcher/blockscan] block=${blockNumber} scan error: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    });
+  };
   let stateUpdating = false;
   let pendingStateUpdateBlock: number | null = null;
   const runStateUpdate = (blockNumber: number, reason: "block" | "pending"): void => {
@@ -844,7 +907,10 @@ async function main(): Promise<void> {
     const pinned = topPinnedWarmHops(pinnedWarmHops, config.statePinnedK);
     const recent = recentWarmPools.top(config.stateRecentK, blockNumber, pinnedWarmTargets);
     const hops = [...recent, ...pinned].slice(0, config.stateWatchMaxPools);
-    if (hops.length === 0) return;
+    if (hops.length === 0) {
+      scheduleBlockScan(blockNumber);
+      return;
+    }
     stateUpdating = true;
     pendingStateUpdateBlock = null;
     console.log(
@@ -858,6 +924,7 @@ async function main(): Promise<void> {
       )
       .finally(() => {
         stateUpdating = false;
+        scheduleBlockScan(blockNumber);
         if (pendingStateUpdateBlock !== null) {
           const next = pendingStateUpdateBlock;
           pendingStateUpdateBlock = null;
@@ -867,6 +934,8 @@ async function main(): Promise<void> {
   };
   if (config.stateUpdaterEnabled) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
+  } else if (enableBlockScan) {
+    provider.on("block", (blockNumber: number) => scheduleBlockScan(blockNumber));
   }
 
   // Track the latest mined block from the WS newHeads stream so the per-hint hot
