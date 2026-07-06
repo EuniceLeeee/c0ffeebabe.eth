@@ -73,11 +73,15 @@ DEX-swapped — **the loop closes through CREDIT (Morpho Blue borrow/supply) + v
 the `strategy_kind × edge_kind` credit-edge case). **THE OVERLOOKED GAP: we are missing the Morpho Blue CREDIT
 edge** (supply/borrow/withdraw/repay). The vault deposit/redeem (ERC4626) is wired, but the credit leg that
 closes the loop is not in the system. So the vaults are NOT dead — they are legs awaiting the Morpho credit
-edge + the block-scan scanner to construct the loop. **`0x9be73297…` is a concrete +EV protocol/credit exemplar
-— likely THE viable exemplar the scanner was EPIC-blocked on.** Next session: trace this tx's amounts to
-quantify the arb, add the Morpho Blue credit edge, then the block-scan scanner over vault+credit+swap edges.
-(6 vault example txs: steakUSDC/steakUSDT `0x9be73297`, srUSDe `0xd63b56ca`, sfrxETH `0xf4774e11`, waEthUSDT
-`0x33e4e9bc`, waEthUSDC `0x8ca222f1`.)
+edge + the block-scan scanner to construct the loop. **`0x9be73297…` QUANTIFIED (archive receipt, 2026-07-06):** Balancer flash **326,058 USDC** → Morpho Blue
+(4 events) + MetaMorpho vaults → executor net **+0.001551 WETH ≈ $4.65 GROSS** (only token delta; USDC/USDT
+net ~0), gasUsed 1.67M, minus builder/gas ⇒ **~$1 NET = DUST.** So the mechanism is confirmed (Morpho credit
+is the missing edge) but the EV is coffee's known **dust ceiling** (memory `project-atomic-backrun-market-ceiling`:
+coffeebabe ~$0.64/tx, ~$23/2.5h). **This DOWNGRADES the finding: not a big +EV unlock — a confirmed-but-dust
+atomic-arb class.** The real question is ROI/posture, not capability: building Morpho-credit-edge + block-scan
+lane + BS-3 + BS-4 to capture ~$1/tx dust hits the SAME "atomic = market ceiling" wall the project keeps
+finding. Decide on that basis. (6 vault example txs: steakUSDC/steakUSDT `0x9be73297`, srUSDe `0xd63b56ca`,
+sfrxETH `0xf4774e11`, waEthUSDT `0x33e4e9bc`, waEthUSDC `0x8ca222f1`.)
 
 ## 5. Open threads / suggested next steps (priority order)
 1. **Trace `0x9be73297…` amounts** (Balancer flash in/out, Morpho borrow/supply, WETH profit) to quantify the
