@@ -510,15 +510,24 @@ HUMAN-GATE config flip (chip `task_3deb3186`), not more Phase-2b scaffolding.** 
 BS-3 full pipeline (viable-exemplar-blocked), CR-5 adapter (archive + Fluid-quote-gated), BS-lane/BS-4
 (live node/window), CS-min/CS-full/D/CR-8 (Phase 3/4).
 
-**UPDATE (2026-07-06): BS-1c LANDED (`0a1984c`) + measured (`f48c371`, decision-log F-007).** The scanner
-now prices protocol edges, and `searcher:blockscan-hunt` fork-solved 4 live blocks over the enriched graph:
-**ZERO +EV protocol/vault ring; only sub-cent pure-DEX dust.** Combined with the concurrent trace of
-`0x9be73297` (vault loops close via Morpho CREDIT, ~$1 net — NOT a DEX swap of the share; `c62fcc7`/`2516ce0`),
-**both protocol paths are DUST.** So BS-3's "viable-exemplar-blocked" is now RESOLVED-as-negative for the
-protocol class: no viable +EV DEX-NAV exemplar exists, and the Morpho-credit exemplar is dust + a
-`.credit-live` human gate. The needle-mover is a **posture/ROI decision, not the scanner** — do NOT wire the
-live block-scan lane (BS-lane/BS-3/BS-4) to chase the protocol/vault class. Missing leg if the operator ever
-pursues it: the Morpho Blue credit edge (`edge_kind:"credit"`, D2/D5; Fluid is the template).
+**UPDATE (2026-07-06): BS-1c LANDED (`0a1984c`) + measured (`f48c371`) — then CORRECTED (decision-log F-007).**
+The scanner now prices protocol edges. `searcher:blockscan-hunt` fork-solved the LIVE graph at 4 recent blocks
+AND at the `0xf88b` depeg block (24710788): the credit-EXCLUDED, DEX-NAV scan finds **only sub-dollar dust**.
+BUT the operator caught the overreach — **two classes must be separated:**
+- **DEX-NAV protocol (BS-1c's scope): genuinely dust** (wstETH/sUSDS pegged; even at the depeg block only ~$0.50).
+- **CREDIT (Fluid/Morpho): episodic $100–500, NOT dust.** `0xf88b` (block 24710788, coffeebabe) nets ~273 wstUSR
+  + 0.078 WETH during a wstUSR depeg via `flash→Fluid borrow→swap→repay` — credit-ESSENTIAL, so the scanner
+  (which excludes credit, `blockscan-scanner.ts:247`) structurally can't see it. `test/WstUSRArb.t.sol` (AC-3)
+  reconstructs that profit; the Fluid edge is grandfathered live in backrun (D4) + solver sizes it
+  (`fluidDebtBps`). **The gate is `.credit-live` posture + depeg-timing, not capability.**
+
+So BS-3's "viable-exemplar-blocked" is RESOLVED as: **negative for the DEX-NAV class, POSITIVE for the credit
+class but behind the `.credit-live` human gate.** Capture-path order if the operator opens credit-live:
+(1) backrun already routes+sizes the Fluid loop (captures the `0xf88b` class first, no new code) → (2) CR-5
+deterministic quote (auction precision) → (3) **BS-3 with credit UN-EXCLUDED** (relax `:247` + wire `fluidDebtBps`
+into block-scan) to catch the standing depeg dislocation proactively. BS-3-as-built (credit-excluded) only sees
+dust — a scanner SCOPE limit, not a market fact. Do NOT conclude "protocol block-scan is dust" — that was the
+credit-excluded subset in a peg window.
 
 _(historical, pre-implementation:)_ Everything from `BS-contract` onward is unwritten. Total: **3 of 16
 runtime slices landed; the block-scan scanner body (BS-1/2/3), the credit adapter (CR-5), and all of

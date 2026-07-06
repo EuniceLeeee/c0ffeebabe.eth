@@ -127,25 +127,37 @@
   on the flag itself (operator's call): revert to 0 (0/20 convert — stop wasting submit+EV-gate cycles), or
   keep (harmless; a rejected `mev_sendBundle` never broadcasts).
 
-### F-007 | 2026-07-06 | ✅ | Protocol-edge block-scan is measured DUST-bound (scanner works; the class is empty/dust)
-- **Fact:** shipped **BS-1c** (`0a1984c`) — the block-scan scanner now detects+prices `slotKind:"protocol"`
-  edges (optional `protocolMids` input; admits non-standing protocol edges; seeds anchors from protocol-edge
-  tokens; skips standing rings; undefined `protocolMids` = byte-identical). Built **`searcher:blockscan-hunt`**
-  (`f48c371`) and fork-solved the scanner's top candidates over the LIVE protocol-enriched graph at **4 recent
-  blocks** (node worktree, live searcher untouched). Result: the scanner surfaces + prices protocol (PSM)
-  rings, but **ZERO protocol/vault ring is +EV**; the only positive fork-solves are sub-cent pure-DEX dust
-  (best ~0.0000045 ETH; one block 2751 wei; one block nothing) — gas-negative live.
-- **Structure:** of 11 protocol entries only **wstETH (7 DEX venues) and sUSDS (2)** have a DEX market venue
-  for their share token, and both are tightly NAV-pegged (par). The `defaultTokenGraph` curve venues for
-  sUSDS/wstUSR are **test-only** (not referenced by `main.ts`).
-- **Correction (folds concurrent `c62fcc7`/`2516ce0`):** the 6 vaults with no DEX share-venue are NOT dead —
-  coffee closes them via **Morpho Blue CREDIT** + vault deposit/redeem (`0x9be73297`, ~$1 net, $4.65 gross),
-  never a DEX swap of the share. Real but dust + standing-position ⇒ `.credit-live` human gate.
-- **Implication:** both paths (DEX-NAV par, Morpho-credit ~$1) are DUST ⇒ the needle-mover is a **posture/ROI
-  decision, not the scanner.** BS-3 (live block-scan lane) stays EPIC-blocked — no viable +EV DEX-NAV exemplar;
-  wiring it now would chase a dust class. Don't re-run the hunt or re-propose the scanner-for-vaults without a
-  new posture (e.g. `.credit-live`). tooling_defect filed (venue-discovery promotes a vault without checking a
-  return path — DEX venue OR credit edge). Full record: `docs/analysis/20260706-protocol-edge-return-venue-gap.md`.
+### F-007 | 2026-07-06 | ✅ | Two distinct protocol classes: DEX-NAV = dust; CREDIT (Fluid/Morpho) = episodic $100s, credit-live-gated
+> **CORRECTED 2026-07-06 (operator caught the overreach with `0xf88b`).** The first draft said "protocol
+> block-scan is dust-bounded" — WRONG generalization. It measured only the credit-EXCLUDED DEX-NAV subset in a
+> QUIET (peg) window. Two classes must be kept separate:
+- **Class 1 — DEX-NAV protocol (what BS-1c scans): genuinely dust.** Shipped **BS-1c** (`0a1984c`, scanner
+  detects+prices non-standing `slotKind:"protocol"` edges) + **`searcher:blockscan-hunt`** (`f48c371`).
+  Fork-solved over the LIVE graph at 4 recent blocks AND at the `0xf88b` depeg block (24710788, archive fork):
+  **ZERO +EV protocol ring, only sub-dollar pure-DEX dust** (best ~$0.50 even AT the depeg block). Of 11
+  protocol entries only wstETH/sUSDS have a DEX share-venue, both NAV-pegged/par. This result is CORRECT for
+  what it measured.
+- **Class 2 — CREDIT (Fluid/Morpho): episodic $100–500, NOT dust.** `0xf88b498b…` (block 24710788, from =
+  coffeebabe) nets **~273 wstUSR + 0.078 WETH (~$100–500)** during a wstUSR **market depeg**, via
+  `flash→Fluid borrow→swap→repay` (a BACKRUN). It routes through wstUSR+sUSDS+PSM+Fluid+curve+v4 in ONE atomic
+  loop. **This is credit-ESSENTIAL** (the profit rides Fluid leverage + the market dislocation), so the BS-1c
+  scanner CANNOT see it (it excludes credit/standing edges by design, `blockscan-scanner.ts:247`) — which is
+  why even the depeg-block hunt found only DEX dust. The vault NAV (`previewRedeem`) is stable across the
+  depeg; the dislocation is in the leveraged market position, not the DEX pools.
+- **Capability EXISTS; the gate is POSTURE.** `test/WstUSRArb.t.sol` (AC-3, landed) reconstructs the ~273
+  wstUSR profit on a fork. The Fluid credit edge is grandfathered live in the backrun graph (D4) and the solver
+  sizes it (`fluidDebtBps` search, `solver.ts:96-187`). So capturing the `0xf88b` class is largely a
+  **`.credit-live` human-gate + depeg-timing** problem, NOT a capability gap. CR-5 (deterministic Fluid quote)
+  is an auction-precision upgrade over the grid search, not a blocker.
+- **Corrected implication:** the needle-mover is STILL a **posture decision**, but the reward is REAL
+  ($100–500/depeg), not dust — which makes the `.credit-live` decision MORE worth taking to the operator, not
+  less. Capture-path order: (1) `.credit-live` posture [human] → (2) backrun already routes+sizes the Fluid
+  loop, so it captures the proven exemplar first; (3) CR-5 for auction precision; (4) **BS-3 with credit
+  UN-EXCLUDED** (relax `blockscan-scanner.ts:247` + wire `fluidDebtBps` sizing into block-scan) to catch the
+  standing depeg dislocation proactively every block instead of waiting for a victim swap. BS-3-as-built
+  (credit-excluded) only ever sees dust — that was a scanner SCOPE limit, not a market fact. Morpho-credit
+  vault class (`0x9be73297`, ~$1) is the same shape, smaller. tooling_defect (return-path check) stands.
+  Full record: `docs/analysis/20260706-protocol-edge-return-venue-gap.md`.
   [[project-track-a-b-protocol-edges]] [[project-atomic-backrun-market-ceiling]]
 
 ## Dead-ends / retired (high-value — don't circle back)
