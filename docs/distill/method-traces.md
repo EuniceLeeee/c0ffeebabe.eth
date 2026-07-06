@@ -2,6 +2,35 @@
 > Single entry point for Opus to learn this project's analysis methods. Regenerate after new rounds.
 > Source: `## Method Trace` blocks in docs/research/reports/*.md (Hermes rounds) + docs/analysis/*.md (daily).
 
+## bundle_postmortem
+### 20260706-coffee-rfq-fill-postmortem.md
+- task_class: bundle_postmortem
+- tools_used:
+  - Skill bundle-postmortem (procedure frame)
+                    - SSM + local reth (zero-CU): eth_getTransactionByHash/Receipt, eth_getLogs (pool swaps in block), eth_getBlockByNumber (index→hash)
+                    - npm run bundle-postmortem (errored by design: competitor tx has no bundle_submitted — that error itself localized the question)
+                    - npm run tx-profit (canonical PnL: $0.54/$0.05/$0.49)
+                    - events JSONL greps: block 25472647 event/type/reason breakdown; pool + victim-hash presence
+                    - npm run census-report --watch coffeebabe (canonical venue/in_graph + route_gap verdict)
+                    - Alchemy $MAINNET_RPC_URL (secondary-source verify of the profit number)
+                    - WebSearch x2 (settlement/maker contracts — no public identity)
+- evidence_order: 1. tx + receipt from local reth (what is it) 2. searcher env + .deploy-live (were we live) 3. tx-profit (how big) 4. events at that block (did we see anything) 5. pool in_graph (was it coverage) 6. in-block pool swap logs → trigger tx prio (was the trigger visible) 7. census-report reconcile 8. Alchemy secondary verify
+- analysis_frame:
+  - "did we see it" decomposed into: pool indexed? victim flow visible? edge between which two prices?
+                    - identify the CHEAP SIDE of the arb first — if the mispriced side is not a public venue, no coverage/latency work applies
+                    - winner_style non-comparability check (one_leg_inventory precedent) BEFORE gap classification
+                    - order privacy read off calldata mechanics: signature count + deadline TTL (30s ⇒ live quote, not resting order)
+                    - dust honesty: $0.49 net keeps this inside the measured coffee ceiling; not a needle-mover even if visible
+- sanity_checks:
+  - prio-fee of the trigger tx checked before calling it "missable" (prio=0 ⇒ private, not an admission drop)
+                    - our events grepped for BOTH the pool and the trigger hash (0 hits each) before claiming invisibility
+                    - census distinct_out_of_graph=0 cross-checked the hand active-pools grep
+                    - tx-profit vs hand log-sum reconciled ($0.54 vs $0.59 gross — convention, not error)
+                    - bundle-postmortem's near-miss list confirmed our submitted bundles that day were unrelated targets
+- tool_gap: census-report computes winner_style/touchedVenues per competitor tx but drops the record when all venues are in-graph (census-report.ts:180) and emits ambiguous net_realized_usd=0; no canonical single-competitor-tx report entry point (bundle-postmortem requires our bundle_submitted).
+- codify_next: tooling_defect LearningCase tooldef-20260706-census-single-tx-ingraph-detail — FILED (open): add --tx single-competitor-tx mode (or --include-in-graph) emitting the per-tx record; rename summary field to route_gap_profit_usd.
+- distill_for_opus: **In a competitor postmortem, locate the cheap side of the winner's trade FIRST. If the cheap side is a signed off-chain order (multiple ECDSA sigs + a ~seconds deadline in calldata) the winner class is rfq_fill = non-comparable: no pool/path/latency work can capture it, and "did our live see it" is answered by flow visibility (trigger tx prio=0 ⇒ private), not by coverage. Spend the fix budget on flow classes we can receive.**
+
 ## implementation
 ### 20260705-learning-kernel-build.md
 - task_class: implementation

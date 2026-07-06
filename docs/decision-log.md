@@ -246,6 +246,22 @@
   replicable as a leg. Open (worth checking, cheap): is there a permissionless ≤0.9bp-loss par USDT↔USDC
   return path (curve/PSM) that lets us capture the Fluid dislocation inventory-free? [[project-track-a-b-protocol-edges]]
 
+### F-010 | 2026-07-06 | ✅ | `0x15352456` (coffee, blk 25472647) = private RFQ fill — non-comparable, structurally invisible
+- **Operator Q:** did our live see this opportunity / why did we lose? **A: could not see it — both legs private.**
+- **Mechanics (local reth + Alchemy secondary):** Balancer flash-loan 0.0526 WETH → fill a SIGNED off-chain
+  order (target `0x0b7250…9188`, sel `0x69384be8`, 3 ECDSA sigs, deadline = block_ts+29s ⇒ live ~30s RFQ
+  quote) at ~1771.6 USDT/WETH → buy back on in-graph univ3 WETH/USDT 0.01% `0xc7bbec…` at ~1761.3 → net
+  **$0.49** (tx-profit: $0.54 realized − $0.05 builder) = coffee dust ceiling.
+- **Visibility (events run 5abbb905, live):** 60 events at that target block, none touching the pool/pair;
+  the in-block price-mover (idx 79 `0x8aa5812e…`) had prio=0 (builder-integrated private flow), 0 hits in
+  our feeds. Pool in-graph (census `distinct_out_of_graph`=0) ⇒ NOT pool/path/latency/admission.
+- **Ruling:** `winner_style: rfq_fill` joins `one_leg_inventory` as a **non-comparable winner class** —
+  filter it in postmortems; spend zero route/latency budget on it. Only lever = orderflow relationships
+  (F-006/D-001, human). Even BS-3 block-scan can't price a private maker quote (not an indexed venue).
+  Tooling: `tooldef-20260706-census-single-tx-ingraph-detail` filed (census hides in-graph-only per-tx
+  detail; no single-competitor-tx mode). Full trace: `docs/analysis/20260706-coffee-rfq-fill-postmortem.md`.
+  [[project-cex-dex-inventory-competitor-noise]]
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
