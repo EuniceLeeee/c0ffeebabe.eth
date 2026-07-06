@@ -91,3 +91,36 @@ scan/discover venue
   loops net ~$1). So this lineage architecture is built for **classification coherence + future coverage**,
   NOT to chase the dust atomic-arb class now. The Morpho credit adapter, if built, is an OFFLINE `credit`
   lineage exemplar — not wired live (needs `.credit-live` human gate). Needle-mover = posture/ROI.
+
+## Remaining from the unified plan (`unified-strategy-edge-impl-plan-20260704.md`) — consolidated status
+Carried here so the incomplete work has one current home. **Verdict column is load-bearing:** the
+block-scan/credit tail is MEASURED dust (2026-07-06, decision-log F-007) — most of it should NOT be built.
+
+**DON'T-BUILD (measured dust-bound — chasing them hits the "atomic = market ceiling" wall):**
+| slice | what | status |
+|---|---|---|
+| BS-3 full pipeline | block-scan scan→sim→standalone-bundle→submit | EPIC-blocker RESOLVED-NEGATIVE: `blockscan-hunt` fork-solved 4 blocks = zero +EV protocol/vault ring. Do not wire. |
+| BS-lane | concurrent block-scan lane in the live process | not built; don't wire (nothing +EV to run through it) |
+| BS-4 | live block-scan dry-run window | blocked on BS-lane; don't |
+| CS-min / CS-full / D | strategy-compare + `blockscan-triggers.ts` + dispatcher/auto-close-strategy-gap | Phase 3/4, not built; block-scan-dependent → moot while block-scan is dust |
+| B-residual | residual backrun coverage | evidence-gated; not pursued |
+
+**GATED (needs archive / human authorization, not just code):**
+| slice | what | gate |
+|---|---|---|
+| CR-5 | Fluid resolver-quote adapter + deterministic max-borrow (replace `fluidDebtBps` search) | archive RPC + **CR-5b escalated: no deterministic Fluid quote path** (needs a resolver eth_call design). prod OFF |
+| CR-6-live | credit live-enable (depeg-gated insertion) | **human gate** (posture) |
+| CR-8 | Aave/Euler credit edges | after CR-5; `.credit-live` human gate |
+| Morpho Blue credit edge | the missing leg that closes coffee's vault loops (`edge_kind:"credit"`, D2/D5; Fluid is the template; reuse boring-vault `MorphoBlueDecoderAndSanitizer` signatures) | build only as an OFFLINE `credit`-lineage exemplar; live = `.credit-live` gate. EV = dust. |
+| MEV-Share submit flag | `SEARCHER_SUBMIT_HASHONLY_MEVSHARE` — 95% of +EV sims self-drop at submit_gate | **the real production needle-mover (flow-admission), a HUMAN-GATE config flip** — not more scaffolding |
+
+**LANDED-BUT-NOT-LIVE-WIRED (small follow-ups):**
+| item | state |
+|---|---|
+| A2 PSM buyGem | encode landed; the DAI→USDC reverse edge is NOT in the live registry (forward-only), so buyGem is unreachable live; anvil fork round-trip fork-sim outstanding. Low EV. |
+| Track B B3–B6 | venue-discovery + venue-registry LANDED this session (`e0a223f`/`3df4d0a`); remaining = B3 trace enrichment, the B4 status machine (candidate→approved→**routable**, human gate), B5–B6 feed into classifier + graph |
+| tooling_defect (open) | venue-discovery promotes a vault on `asset()`/`previewRedeem` WITHOUT checking a return path exists (DEX venue OR credit edge) — surfaced the "5/6 no-return-path" false-promote; fix = gate promotion on loop-closability |
+
+**The one thing worth doing next (if anything): the adapter descriptor CODE layer is LANDED (`72fbfd9`);
+the natural follow-up is wiring `classifyCall` into venue-discovery (replace the topic heuristic) + the
+loop-closability check — offline, cheap, improves classification correctness regardless of the dust verdict.**
