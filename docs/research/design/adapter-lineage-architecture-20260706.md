@@ -86,6 +86,40 @@ This is the same discipline that caught earlier errors (the hand-decoded profit,
 lineage header. Coffee's already-collected exemplars (`0x9be73297` Morpho+vaults, plus the per-vault txs in
 the handoff §5) are the first corpus.
 
+## Descriptor known-issues — FIX BEFORE any production consumer (2026-07-06 fresh-fable review)
+The descriptor code (`72fbfd9`) is landed but UNCONSUMED (only its test reads it), so these are latent, not
+live. The reviewer's key point: fix them BEFORE wiring `classifyCall` into venue-discovery/routing, else the
+first consumer inherits the bug. Ordered by severity:
+- **[MAJOR] `matchTrace` is selector-only + target-blind → false positives.** `classifyCall(anyAddr,
+  0x2e1a7d4d)` → `{weth, unwrap}`; `deposit()` on any addr → `{weth-deposit-value}`. `withdraw/deposit` are
+  everywhere (staking/Yearn). Also `weth-withdraw` + `weth-withdraw-amount` share selector `0x2e1a7d4d` →
+  registration order shadows one. FIX: target-check `ADDR.WETH` in the three weth `matchTrace`s + a registry
+  gate asserting no two adapters match the same selector without disjoint target predicates. (morpho/balancer
+  flash already target-check — follow that.)
+- **[MAJOR] `AdapterAction` is a 3rd action vocab that already drifted.** `erc4626-deposit` runtime edge
+  carries `protocolAction:"wrap"` (`token-graph.ts:330`) but its descriptor `action:"deposit"` — same adapter,
+  two words, no mapping. venue-registry stores `ProtocolAction[]`, so wiring `classifyCall` into it collides.
+  FIX: one total `adapterActionToProtocolAction()` map next to the table (gated), or make `AdapterAction` a
+  declared superset of `ProtocolAction` with shared members type-identical.
+- **[MAJOR] the mandated "verify vs a real coffee tx log" has NO gate/field/harness** — it's prose. FIX: add
+  `referenceTx?: string` to the descriptor + a zero-RPC committed-calldata fixtures gate (matchCall fires,
+  classifyCall returns the pinned triple, encode() reproduces the bytes); fail on a venue adapter with no fixture.
+- **[MAJOR] `quotable`/`buildable` in the doc spec were dropped from the code.** `fluid-dex-swap.encode()`
+  throws "not supported in v3.0" but its descriptor is indistinguishable from a wired swap. FIX: add the two
+  fields (fluid-dex-swap `buildable:false`).
+- **[MINOR] 6/31 descriptors unreachable via `classifyCall`** (univ4-swap/take/sync/settle/settle-value +
+  assert-balance all `matchTrace→false`; only top-level `unlock` classifies). Give the v4 leaves their real
+  PoolManager selectors or document the hole.
+- **[MINOR] polymorphic-selector actions are statically wrong**: `fluid-vault.operate` is sign-polymorphic
+  (borrow/repay/supply/withdraw) but labeled `borrow`; `fluid-dex-liquidate` labeled `repay` is really a
+  liquidation. `action` is a REPRESENTATIVE label for polymorphic selectors — decode args for the true action
+  (boring-vault review learning 3). ("liquidate" added to AdapterAction 0fc3c47-adjacent if pursued.)
+- **[MINOR] venue-registry coupling overstated**: `adapterHint?` is unvalidated freetext (no import of
+  `ADAPTER_DESCRIPTORS`), status vocab is `candidate|known|routable|excluded` (doc says "approved"). Align +
+  validate `adapterHint ∈ descriptors` in the venue-registry gate.
+- **[NIT] `assertDescriptorCoverage` has no production caller** — call it at the end of `adapters/index.ts` so
+  the process can't boot with a missing descriptor (real teeth vs manual-gate-only).
+
 ## Adding a new venue — the workflow
 ```
 scan/discover venue
