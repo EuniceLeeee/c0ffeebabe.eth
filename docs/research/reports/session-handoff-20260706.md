@@ -95,14 +95,26 @@ sfrxETH `0xf4774e11`, waEthUSDT `0x33e4e9bc`, waEthUSDC `0x8ca222f1`.)
 3. **Block-scan scanner live** (BS-lane + BS-3 full pipeline + BS-4) over vault+credit+swap edges — the whole
    workstream, not a flag. NOTE: a concurrent session is already doing block-scan exemplar hunting
    (commit `0a1984c` BS-1c, uncommitted `blockscan-hunt.ts`) — COORDINATE before duplicating.
-4. **Classify venues BY ADAPTABILITY (operator design, 2026-07-06 — supersedes "static edgeKind on 31
-   adapters"):** the 31 adapter IDs are really ~13 generic FAMILIES (~8 venue types); ONE ERC4626 adapter
-   already serves every vault (the 6 vaults were 1 POOL_REGISTRY row each, zero new adapter code). So the
-   classifier should PROBE which generic family `canAdapt(venue)` (ERC4626: `asset()`+`previewRedeem` respond;
-   Curve: `coins()/get_dy`; Uni: `token0/token1`; Morpho: the Morpho interface) — the family that adapts it
-   gives BOTH its edge_kind AND its routing adapter (classification == routability, unified). Adding a venue an
-   existing family adapts = ZERO code; only a genuinely-new protocol needs a new adapter. This replaces both
-   the topic heuristic AND the "static edgeKind field" plan.
+4. **Adapter LINEAGE — classification inherited by behavior, code split by protocol (operator design
+   2026-07-06; supersedes both the topic-heuristic AND my earlier "static edgeKind on 31 / giant family
+   adapter" framings).** Principle: *代码按协议拆,能力按行为继承* — adapter files may proliferate, the
+   classification vocabulary must NOT fragment. Rules:
+   - **Classification vocab is fixed + reused**: `edgeKind` ∈ {swap, credit, protocol, lp, flash} +
+     `protocolAction` ∈ {convert, wrap, redeem, mint, unwrap, stake, unstake} + (formalize) `creditAction` ∈
+     {borrow, repay, supply, withdraw}. A new venue NEVER gets a new `*-kind`; it maps to an existing behavior
+     class or (rarely) adds a behavior class — never a per-protocol kind like `susds-kind`.
+   - **New adapter = derived, never from-scratch**: before adding an adapter, PROBE the venue with existing
+     adapters (ERC4626: `asset()`+`previewRedeem`; wstETH: `getStETHByWstETH`; Curve: `coins()/get_dy`;
+     Morpho: its interface). The one that adapts it fixes the classification (edgeKind+action) AND is the
+     lineage base to copy/thin-wrap.
+   - **Each adapter carries a `lineage` header**: `derivedFrom`, `reuses` (probe/quote/build fns), `custom`
+     (the diffs — asset token, decimals, gas, maxRedeem, special reverts, fee), and *why not just the base*.
+   - **Split-vs-config (Claude's added judgment, operator-agreed): don't make N identical files.** NO
+     behavioral diff (pure ERC4626, only asset/decimals differ) → a **POOL_REGISTRY config row on the lineage
+     base adapter** (exactly the current 6 vaults — keep it, it is more DRY than 6 identical `*.ts`). A real
+     behavioral diff → a derived adapter file + lineage header. Lineage metadata attaches to BOTH.
+   - Net: classification == routability (the adapter that classifies it routes it), stable analysis language
+     across planner / LearningCase / venue-discovery / gap-report, and no redundant files.
 5. Wiring-filter note: coffee-touch-frequency IS a valid signal (coffee only touches what it arbs) — the
    earlier "require DEX-traded share" filter was WRONG; the real requirement is a loop-closing leg exists
    (DEX swap OR credit OR another vault). Keep the 6 vault rows.
