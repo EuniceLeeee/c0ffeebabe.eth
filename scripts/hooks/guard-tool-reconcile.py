@@ -128,8 +128,11 @@ if tool != "Bash" and affirmed(body):
     sys.exit(0)
 if not scratch:
     sys.exit(0)
-# threshold 1 for a clearly-scratch target (audit: >=2 missed real venue analyses)
-if markers(body) < 1:
+# a named scratch FILE (_*.ts/.py/.sh) fires on 1 marker (audit: >=2 missed real venue analyses);
+# an inline `python3 -c`/`node -e` one-liner needs >=2 (a lone marker there is usually data plumbing
+# — e.g. a json.load reshape of active-pools.json — not an analysis reaching a conclusion).
+threshold = 2 if target == "inline-code" else 1
+if markers(body) < threshold:
     sys.exit(0)
 if affirmed(body):
     clear_pending()
