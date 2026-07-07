@@ -67,6 +67,17 @@ export interface PoolEntry {
   fixedSlotKind?: "lend" | "swap" | "protocol";
   /** For protocol-fixed pools: the conversion action (e.g. PSM convert). */
   fixedProtocolAction?: ProtocolAction;
+  /**
+   * NON-STANDARD ERC4626: redeem/withdraw pays a DIFFERENT token than `asset()`, in a
+   * DIFFERENT quantity than `previewRedeem` returns (previewRedeem is the asset()-denominated
+   * VALUE, not the amount of the token actually transferred). Our erc4626 adapter models the
+   * redeem edge as share -> asset() with quantity previewRedeem, which is wrong on BOTH the
+   * output token and the routed amount, so the leg after it reverts on-chain. We cannot quote
+   * these with the single-call previewRedeem descriptor (correct output needs a second call on
+   * a different contract). Flagged vaults are EXCLUDED from the graph entirely — a wrong edge
+   * is worse than no edge (deposit alone can never close a loop anyway). Verified per-vault via
+   * a fork redeem receipt-decode; see docs. */
+  nonStandardRedeem?: boolean;
   /** Activity proxy from discovery (swap-event count). undefined = curated backbone (pinned). */
   score?: number;
 }
@@ -128,7 +139,12 @@ export const POOL_REGISTRY: PoolEntry[] = [
   // asset()/previewRedeem respond on node reth). Loop-closable via each asset's DEX venues.
   { address: "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // steakUSDC
   { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // steakUSDT
-  { address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003", adapter: "erc4626", fixedTokenIn: ADDR.USDE },  // srUSDe
+  // srUSDe (Strata Senior USDe): NON-STANDARD ERC4626. deposit pulls USDe (asset(), standard),
+  // but redeem pays sUSDe (0x9d39a5de...) via a silo, NOT USDe — previewRedeem returns the
+  // USDe-denominated VALUE, so our share->asset()/previewRedeem edge is wrong on token AND
+  // amount (fork receipt: 934.46 srUSDe -> 773.99 sUSDe, previewRedeem said 958.15 USDe).
+  // Excluded until the adapter can model a distinct redeem-out token + convertToShares quantity.
+  { address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003", adapter: "erc4626", fixedTokenIn: ADDR.USDE, nonStandardRedeem: true },  // srUSDe
   { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH }, // sfrxETH
   { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // waEthUSDT
   { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
@@ -355,6 +371,11 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
     case "erc4626": {
       if (!pool.fixedTokenIn) {
         throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
+      }
+      if (pool.nonStandardRedeem) {
+        // Redeem pays a token our previewRedeem-based edge can't model (wrong token + amount);
+        // emit no edges rather than a silently-wrong one that reverts the next leg on-chain.
+        break;
       }
       edges.push(
         {
