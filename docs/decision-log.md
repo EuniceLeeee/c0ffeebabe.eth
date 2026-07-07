@@ -360,10 +360,14 @@
     c069abea POOL's standing liquidity only yields ~0.206e18 srUSDe going up (local v4 math + V4Quoter agree — both
     CORRECT for the pool). So F-014 was never a pool quoter-vs-core gap: the srUSDe came from a **deposit/mint**, not
     the pool.
-  - **`winner_style = inventory_vault_rebalance`** (canonical tool, Agent B's detector) — tx86 is flagged NON-COMPARABLE
-    (F-009 class), diverging from Agent A's manual "clean atomic" verdict. **Unresolved rule-16 divergence:** likely a
-    detector FALSE-POSITIVE on an atomic loop that legitimately round-trips a vault share (net 0, returns +$5.60 to
-    WETH/USDC) — OR it genuinely is an inventory op. Must resolve before treating 0xf391d0 as a replicable target.
+  - **`winner_style = inventory_vault_rebalance`** was a DETECTOR FALSE POSITIVE — RESOLVED (commit 315b901).
+    `shareTokenImbalanceTokens` flagged any GLOBAL net burn as "inventory by construction", but an atomic loop that
+    BUYS the vault share in-tx (from a swap venue / 0x0 mint) then REDEEMS it shows a global net burn while the
+    EXECUTOR nets 0 — contradicting the tool's own flow-ledger (executor net take = 0 srUSDe, only +WETH). Fixed to
+    flag only a NON-VENUE holder residual (either sign). **Agent A was RIGHT (atomic), the detector over-flagged.**
+    0xf391d0 AND the fresh coffeebabe 0x2b84e28c now classify `atomic_loop` / non_comparable=None. So these ARE
+    genuine atomic protocol arbs — the capture blocker is the entry-leg MECHANISM (srUSDe minted/one-sided c069abea
+    pool our pool-quoter can't cleanly price), NOT inventory. The two questions are now cleanly separated.
 - **Lesson (the load-bearing one):** on a confusing multi-mechanism v4 tx, do NOT trust a hand trace-decode — the
   sqrtP/transfer-flow/mint signals contradict and I flip-flopped 3×. Run `bundle-postmortem` (authoritative
   `decodeV4SwapFills` + `winner_style`) FIRST and anchor to it (HERMES rule 16).
