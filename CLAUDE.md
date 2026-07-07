@@ -82,8 +82,16 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   its classification live in HERMES + the `redact-live-run` tool.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
-  analysis / bundle postmortem / a tool found wrong / repo diagnosis), at the end of that turn **auto-capture
-  it** — don't wait to be asked:
+  analysis / bundle postmortem / a tool found wrong / repo diagnosis), capture it via steps 1–4 below.
+  **[ACTIVE] Trigger = MANUAL only** (2026-07-07): run this capture ONLY when the user explicitly asks
+  (e.g. `/compress`, or "capture this"). Do NOT auto-run it at end of turn.
+  <!-- [DISABLED 2026-07-07] AUTO trigger — kept for easy revert. Reverted because the distill library's
+       measured read-rate is 0 (docs/distill/method-traces.md never Read across 80 local sessions => auto-
+       capture was write-only credit burn). To RE-ENABLE auto: swap the "[ACTIVE] Trigger = MANUAL only"
+       sentence above back to the original line —
+         "at the end of that turn **auto-capture it** — don't wait to be asked:"
+       (and delete this comment). -->
+  When triggered:
   1. **Generate the Method Trace, don't hand-write it.** Run the capture pipeline on this session's
      transcript: `cd analysis && npm run session-evidence -- <this session's transcript.jsonl> --out /tmp/ev.json`
      (locate the transcript by recency/content — session-list ids do NOT map to filenames), then a fable pass
