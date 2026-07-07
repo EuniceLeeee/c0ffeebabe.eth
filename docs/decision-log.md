@@ -312,6 +312,20 @@
 - **Next (bounded, gated):** build the srUSDe→sUSDe non-standard-redeem adapter + sUSDe node → then a planner
   fork-solve @25462190 must produce the loop (rule-12 replay flip), NOT just build-passing. Operator decision
   before building.
+- **Design round 2026-07-07 (8-agent ground → dual-prior proposals → judge → red-team; full doc
+  `docs/analysis/20260707-srusde-silo-redeem-edge-design.md`):** byte-exact quote =
+  `sUSDe.previewWithdraw(srUSDe.previewRedeem(shares))` — diff **0** vs the receipt at execution state
+  (callTracer: the silo itself staticcalls previewWithdraw; the earlier convertToShares hypothesis is the
+  floor dual, 1 wei low). Execution = srUSDe's **multi-token exact-in `redeem(address,uint256,address,address)`
+  = `0xfea53be1`** (live-verified via eth_call from a real holder; competitor used the exact-out twin
+  `0xdfcd412e`; standard `0xba087652` is NOT the silo path). Two F-013 assumptions corrected by ground:
+  sUSDe needs NO node registration (graph nodes are implicit from edge endpoints) and c069abea admission =
+  a `pinned-warm-pools.json` entry (must include fixedTokenIn/fixedTokenOut or token-graph hard-throws →
+  silently skipped). Verdict: **design_holds_with_amendments** — `erc4626-redeem-silo` descriptor
+  (~8-line tokenOutArg extension) + registry `redeemTokenOut` field, fail-closed prune retained; 3 red-team
+  amendments folded into the gate (evm_setNextBlockTimestamp pin for wei-exact receipt-diff — vaults accrue
+  per-second; full pool-pin fields; negative emission asserts: srUSDe exactly ONE edge, flagged-without-payout
+  vaults still ZERO).
 
 ## Dead-ends / retired (high-value — don't circle back)
 
