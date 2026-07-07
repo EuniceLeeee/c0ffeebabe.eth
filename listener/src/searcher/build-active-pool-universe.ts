@@ -16,6 +16,15 @@ const SWAP_TOPICS: Array<{ topic: string; adapter: PoolEntry["adapter"]; label: 
     label: "univ3",
   },
   {
+    // PancakeSwap V3 — UniV3-lineage clone; its Swap adds protocolFeesToken0/1 so the topic differs
+    // (0x19b47279…). Same swap/slot0/tick interface ⇒ univ3 adapter routes it. Mirrors the runtime
+    // discovery scan (active-pool-discovery.ts). Without this the universe GENERATOR never indexes
+    // pancake pools even though the adapter supports them (its busiest pools are top missing venues).
+    topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
+    adapter: "univ3",
+    label: "pancake-v3",
+  },
+  {
     topic: ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"),
     adapter: "univ2",
     label: "univ2",
