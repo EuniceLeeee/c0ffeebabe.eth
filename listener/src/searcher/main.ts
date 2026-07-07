@@ -5,14 +5,14 @@ import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
-import { BackrunDetector, type Opportunity } from "./detector/detector.js";
+import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import {
   detectBlockScanOpportunities,
   type BlockScanConfig,
   type ProtocolMid,
 } from "./detector/blockscan-scanner.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
-import { initEvents, emitEvent, makeOpportunityId } from "./events.js";
+import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
@@ -45,7 +45,7 @@ import {
   loadPoolUniverseGeneratedAt,
   selectPairCompletionPools,
 } from "./pool-universe.js";
-import { AnvilSolver } from "./solver/solver.js";
+import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
 import { quoteFluidDex } from "./solver/quoter.js";
@@ -135,6 +135,8 @@ interface LiveConfig {
   defaultGasUsed: number;
   inclusionWatchBlocks: number;
   dryRun: boolean;
+  /** Submit +EV block-scan atomic bundles through the standalone bundle path. Default OFF. */
+  blockScanSubmit: boolean;
   maxHints: number;
   enableHashOnly: boolean;
   forkRefreshBlocks: number;
@@ -430,6 +432,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
     inclusionWatchBlocks: Number(process.env.SEARCHER_INCLUSION_WATCH_BLOCKS ?? "3"),
     dryRun,
+    blockScanSubmit: process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1",
     enableHashOnly: process.env.SEARCHER_ENABLE_HASH_ONLY === "1",
     maxHints: Number(process.env.SEARCHER_MAX_HINTS ?? "0"),
     forkRefreshBlocks: Number(process.env.SEARCHER_FORK_REFRESH_BLOCKS ?? "5"),
@@ -593,6 +596,11 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] liveBackend=${config.liveBackend}`);
   console.log(`[searcher/live] minProfitRaw=${config.minProfit}`);
   console.log(`[searcher/live] mode=${config.dryRun ? "dry-run" : "live-submit"}`);
+  console.log(
+    `[searcher/blockscan] enabled=${enableBlockScan ? "on" : "off"} ` +
+      `submit=${config.blockScanSubmit ? "on" : "off"} ` +
+      `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
+  );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
   console.log(
     `[searcher/live] victimSourceFilter enabled=${config.victimSourceFilter.enabled ? "on" : "off"} ` +
@@ -1068,6 +1076,27 @@ async function main(): Promise<void> {
                 `[searcher/blockscan]   solve ring=${ring} net=${solved.netProfit} ` +
                   `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
               );
+              if (solved.netProfit > 0n) {
+                if (config.blockScanSubmit && passBudgetExceeded("submit")) break;
+                await maybeSubmitBlockScanAtomic({
+                  config,
+                  provider,
+                  simulator: blockScanSimulatorForPass,
+                  bundleRouter,
+                  submissionCoordinator,
+                  opp,
+                  resolved: solved,
+                  sourceBlock: blockNumber,
+                  ring,
+                  protoRing,
+                  plans: plans.length,
+                  passDeadlineAtMs,
+                  strategyVersions: {
+                    strategy_view_version: strategyViews.versions.strategy_view_version,
+                    blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
+                  },
+                });
+              }
             } catch (err) {
               console.log(
                 `[searcher/blockscan]   solve ring=${ring} net=null ` +
@@ -2355,6 +2384,263 @@ async function processOpportunities(
 		    }
 		  }
   deps.recordFinalState(lastTerminalState, lastTerminalError);
+}
+
+async function maybeSubmitBlockScanAtomic(params: {
+  config: LiveConfig;
+  provider: ethers.JsonRpcProvider;
+  simulator: BotVMSimulator;
+  bundleRouter: BundleRouter;
+  submissionCoordinator: SubmissionCoordinator;
+  opp: BlockScanOpportunity;
+  resolved: ResolvedPlan;
+  sourceBlock: number;
+  ring: string;
+  protoRing: boolean;
+  plans: number;
+  passDeadlineAtMs: number;
+  strategyVersions: {
+    strategy_view_version: string;
+    blockscan_view_hash: string;
+  };
+}): Promise<void> {
+  const {
+    config,
+    provider,
+    simulator,
+    bundleRouter,
+    submissionCoordinator,
+    opp,
+    resolved,
+    sourceBlock,
+    ring,
+    protoRing,
+    plans,
+    passDeadlineAtMs,
+    strategyVersions,
+  } = params;
+  const route = resolvedRouteSummary(resolved.root);
+  const opportunityId = makeBlockScanOpportunityId({
+    sourceBlock,
+    cycleId: opp.cycleId,
+    startToken: opp.flashToken,
+    seedPools: opp.seedEdges.map((edge) => edge.target),
+  });
+  const eventBase = (targetBlock: number) => ({
+    opportunity_id: opportunityId,
+    target_block: targetBlock,
+    opportunity_kind: "block-scan-arb" as const,
+    source_block: sourceBlock,
+    cycle_id: opp.cycleId,
+    cycle_fingerprint: opp.cycleFingerprint,
+    strategy_view_used: "blockscan" as const,
+    strategy_view_version: strategyVersions.strategy_view_version,
+    blockscan_view_hash: strategyVersions.blockscan_view_hash,
+    seed_venues: opp.seedEdges.map((edge) => edge.adapterId),
+    path_id: route,
+    template_id: resolved.templateName,
+  });
+  const drop = (targetBlock: number, stage: string, reason: string, error?: string): void => {
+    emitEvent({
+      type: "pipeline_dropped",
+      ...eventBase(targetBlock),
+      stage,
+      reason,
+      error,
+      plans,
+    });
+  };
+
+  if (!config.blockScanSubmit) {
+    const reason = "SEARCHER_BLOCKSCAN_SUBMIT!=1";
+    console.log(
+      `[searcher/blockscan]   submit gated-off ring=${ring} route=${route} ` +
+        `net=${resolved.netProfit} reason=${reason} protoRing=${protoRing}`,
+    );
+    drop(sourceBlock + 1, "submit_gate", "blockscan_submit_disabled", reason);
+    return;
+  }
+
+  if (!shouldRunFinalVerify(
+    resolved.netProfit,
+    resolved.flashAmount,
+    config.finalVerifyFloorBps,
+  )) {
+    const error =
+      `quoteProfit ${resolved.netProfit} below final verify floor ` +
+      `${config.finalVerifyFloorBps}bps`;
+    console.log(`[searcher/blockscan]   final verify skipped ring=${ring}: ${error}`);
+    drop(sourceBlock + 1, "final_verify", "below_final_verify_floor", error);
+    return;
+  }
+
+  let targetBlock = sourceBlock + 1;
+  try {
+    targetBlock = Math.max(sourceBlock, await provider.getBlockNumber()) + 1;
+    const sim = await simulator.simulate(resolved);
+    emitEvent({
+      type: "simulation_result",
+      ...eventBase(targetBlock),
+      ok: sim.success && sim.netProfit > 0n,
+      simulated_profit: sim.netProfit.toString(),
+      profit_token: resolved.profitToken,
+      gas_estimate: sim.gasUsed.toString(),
+      failure_reason: sim.success ? undefined : sim.revertReason,
+    });
+
+    if (!sim.success) {
+      const error = sim.revertReason ?? "no-positive-profit";
+      console.log(
+        `[searcher/blockscan]   final sim rejected ring=${ring} route=${route} ` +
+          `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,
+      );
+      drop(targetBlock, "final_verify", "sim_revert", error);
+      return;
+    }
+    if (sim.netProfit <= 0n) {
+      const error = `non-positive final profit ${sim.netProfit}`;
+      console.log(`[searcher/blockscan]   final verify failed ring=${ring}: ${error}`);
+      drop(targetBlock, "final_verify", "final_verify_failed", error);
+      return;
+    }
+
+    if (
+      resolved.flashAmount > 0n &&
+      sim.netProfit * 10000n > resolved.flashAmount * config.maxProfitBpsOfFlash
+    ) {
+      const error =
+        `phantom profit ${sim.netProfit} > ${config.maxProfitBpsOfFlash}bps of ` +
+        `flash ${resolved.flashAmount} route=${route}`;
+      console.log(`[searcher/blockscan]   reject phantom ring=${ring}: ${error}`);
+      drop(targetBlock, "submit_gate", "phantom_profit", error);
+      return;
+    }
+
+    const rawProfitEth = valueInEth(
+      resolved.profitToken,
+      sim.netProfit,
+      config.ethUsd,
+    );
+    const expectedProfitEth =
+      (rawProfitEth * BigInt(10000 - config.profitHaircutBps)) / 10000n;
+    const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(config.defaultGasUsed);
+    let gasCostEth = 0n;
+    if (config.evGate || config.bribeAllAboveGas) {
+      const latest = await provider.getBlock("latest");
+      const baseFee = latest?.baseFeePerGas ?? 0n;
+      const worstBaseFee = (baseFee * BigInt(config.gasBufferMultX10)) / 10n;
+      gasCostEth = gasUnits * worstBaseFee;
+    }
+    const bidEth = computeBidEth(expectedProfitEth, gasCostEth, {
+      bribeAllAboveGas: config.bribeAllAboveGas,
+      bribeBps: config.bribeBps,
+    });
+
+    const creditLiveMarkerPath =
+      process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
+    const containsStandingPosition = pathLeavesStandingPosition(opp.seedEdges);
+    const standingGuard = evaluateStandingGuard(
+      opp.seedEdges,
+      creditLiveMarkerPath,
+      containsStandingPosition,
+    );
+    if (!standingGuard.allowed) {
+      const error = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+      console.log(`[searcher/blockscan]   reject standing-position ring=${ring}: ${error}`);
+      drop(targetBlock, "submit_gate", standingGuard.reason, error);
+      return;
+    }
+
+    const netEvWei = expectedProfitEth - gasCostEth - bidEth;
+    if (config.evGate) {
+      if (netEvWei < config.minNetEth) {
+        const error =
+          `EV gate: net ${netEvWei} < ${config.minNetEth} ` +
+          `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
+          `token=${resolved.profitToken.slice(0, 10)})`;
+        console.log(`[searcher/blockscan]   skip below-EV ring=${ring}: ${error}`);
+        drop(targetBlock, "submit_gate", "below_ev_gate", error);
+        return;
+      }
+      console.log(
+        `[searcher/blockscan]   EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
+          `profitEth=${ethers.formatEther(expectedProfitEth)} ` +
+          `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)}`,
+      );
+    }
+
+    const decision = submissionCoordinator.offer({
+      strategy: "block-scan",
+      opportunityId,
+      targetBlock,
+      netEvWei,
+      deadlineAtMs: passDeadlineAtMs,
+    });
+    if (!decision.admit) {
+      console.log(
+        `[searcher/blockscan]   submit gated ring=${ring} targetBlock=${targetBlock} ` +
+          `reason=${decision.reason}`,
+      );
+      drop(targetBlock, "submit_gate", decision.reason);
+      return;
+    }
+
+    const results = await bundleRouter.submit({
+      victimTxHash: "",
+      mode: "standalone",
+      backrunCalldata: sim.calldata,
+      targetBlock,
+      expectedProfit: sim.netProfit,
+      expectedProfitEth,
+      bribeBps: config.bribeBps,
+      bribeWei: bidEth,
+      gasUsed: gasUnits,
+      safety: { leavesStandingPosition: containsStandingPosition, authorized: standingGuard.allowed },
+    });
+    const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
+    const backrunTxHash = results.find((r) => r.backrunTxHash)?.backrunTxHash;
+    const accepted = results.filter((r) => r.accepted).length;
+    if (!backrunTxHash) {
+      const error = results.find((r) => r.error)?.error ?? "missing backrun tx hash";
+      console.log(`[searcher/blockscan]   submit failed ring=${ring}: ${error}`);
+      drop(targetBlock, "submit", "bundle_router_rejected", error);
+      return;
+    }
+
+    console.log(
+      `[searcher/blockscan]   ${config.dryRun ? "dry-run queued" : "submitted"} ` +
+        `atomic via eth_sendBundle targetBlock=${targetBlock} profit=${sim.netProfit} ` +
+        `route=${route}${bundleHash ? ` bundleHash=${bundleHash}` : ""}`,
+    );
+    emitEvent({
+      type: "bundle_submitted",
+      ...eventBase(targetBlock),
+      submission_target_block: targetBlock,
+      mode: "eth_sendBundle",
+      simulated_profit: sim.netProfit.toString(),
+      simulated_profit_eth: expectedProfitEth.toString(),
+      bid: bidEth.toString(),
+      tx_hash: backrunTxHash,
+      calldata_hash: ethers.keccak256(sim.calldata),
+      builders_sent: results.map((r) => r.builder),
+      bundle_hash: bundleHash,
+      accepted,
+    });
+    if (results.some((r) => r.accepted)) {
+      trackInclusion({
+        provider,
+        backrunTxHash,
+        opportunityId,
+        targetBlock,
+        watchBlocks: config.inclusionWatchBlocks,
+        emit: emitEvent,
+      });
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.log(`[searcher/blockscan]   submit error ring=${ring}: ${error}`);
+    drop(targetBlock, "submit", "blockscan_submit_error", error);
+  }
 }
 
 async function drainPendingVictimOutcomes(ctx: HandleCtx, currentHeadBlock: number): Promise<void> {
