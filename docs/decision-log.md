@@ -326,6 +326,32 @@
   amendments folded into the gate (evm_setNextBlockTimestamp pin for wei-exact receipt-diff — vaults accrue
   per-second; full pool-pin fields; negative emission asserts: srUSDe exactly ONE edge, flagged-without-payout
   vaults still ZERO).
+- **BUILT + GATED 2026-07-07 (commit d2e73ba):** `erc4626-redeem-silo` descriptor (tokenOutArg extension) +
+  `quoteSiloRedeem` (two-contract quote) + `redeemTokenOut` registry field + block-scan/hunt mid wiring +
+  unit pins (protocol-legs, erc4626-quote two-call). Gate `searcher:blockscan-fork-solve-f391` @25462190
+  **PASS 8/8**: real emission (srUSDe → exactly 1 silo edge, no deposit; flagged-without-payout → 0,
+  fail-closed) + **silo quote diff=0** on the pre-competitor fork (timestamp-pinned — the sUSDe/srUSDe
+  per-second vesting drift the red-team flagged was real: unpinned = +1.9e16) + planner composes the 4-leg
+  ring through the silo leg. Silo edge is PROVEN. **Correction to Blocker 2 wording:** the design-round
+  claim "c069abea admission = pinned-warm-pools entry" was necessary but NOT sufficient — see F-014.
+- **F-013 verdict refined:** "backrun-closeable" is TRUE for the silo LEG (built + proven) but the FULL loop
+  is **NOT yet reproducible +EV** — blocked on F-014 (a v4-quoter entry-leg gap), NOT the srUSDe edge.
+
+### F-014 | 2026-07-07 | ⚠️ | V4Quoter reverts `NotEnoughLiquidity` for USDC→srUSDe on `0xc069abea` — entry-leg blocker for 0xf391d0's loop
+- **What:** at 0xf391d0's execution state (fork post-txIndex-85, and the clean archive at blk 25462189), our
+  V4Quoter (`0x52F0E24D…`) reverts `NotEnoughLiquidity(0xc069abea…)` (`0x6190b2b0`/`7a5ed734`) for
+  **USDC→srUSDe at every size incl. 1 USDC**, while the **reverse** srUSDe→USDC quotes fine (1 srUSDe →
+  1.0159 USDC) and the competitor's **real** swap filled **949.488853 USDC → 934.46 srUSDe** at that exact
+  state. No JIT: the competitor tx has only a Swap on this pool (no ModifyLiquidity), slot0 tick = −276166
+  and pool `liquidity` = 1.238e19 unchanged pre/post block. So the quoter's tick-traversal DIVERGES from the
+  real core swap for this pool's (one-sided) liquidity — the same class as the known v4-quoting gaps
+  ([[project-v4-swaphook-admission-gap]], [[project-univ4-coverage-frontier]]), here on a HOOKLESS pool.
+- **Impact:** the srUSDe silo edge (F-013) is correct and composes the ring, but the loop's ENTRY leg can't be
+  quoted/sized by our solver ⇒ no +EV solve ⇒ 0xf391d0 not yet capturable end-to-end. The f391 gate documents
+  this as a deferred, separate block (still PASSes on the silo-edge flip).
+- **Next:** a v4 entry-quote path that matches the core swap for one-sided/thin pools (local tick math vs the
+  QuoterV2 revert-sim, or a StateView-based traversal). Filed as a tooling_defect. Do NOT re-attribute to the
+  srUSDe edge.
 
 ## Dead-ends / retired (high-value — don't circle back)
 
