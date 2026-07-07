@@ -3,9 +3,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ethers } from "ethers";
 import {
   buildVerdict,
   classifyWinnerStyle,
+  decodeV4SwapFills,
+  detectJitLiquidity,
   isNonComparableWinnerStyle,
   loadGraphMembership,
   realizedProfitUsdForReport,
@@ -133,6 +136,34 @@ writeFileSync(
 );
 const graphMembership = loadGraphMembership(join(graphFixtureDir, "runtime-graph-pools.json"));
 
+// v4 real-fill decode + JIT detection (synthetic PoolManager logs, no RPC). Mirrors 0xf391d0's
+// c069abea leg: swapper pays 949.488853 USDC (amount1 < 0) and receives 934.46 srUSDe (amount0 > 0).
+const V4_PM = lower(ADDR.UNIV4_POOL_MANAGER);
+const C069ABEA = "0xc069abea3d235a4f38cb7d0219f66cc7cbbce92f0b4740bac46bef896c2277b8";
+const SENDER = "0x00000000000000000000000000000000000000e0";
+const v4LogIface = new ethers.Interface([
+  "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
+  "event ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)",
+]);
+function v4SwapLog(poolId: string, amount0: bigint, amount1: bigint, logIndex: number) {
+  const { data, topics } = v4LogIface.encodeEventLog("Swap", [poolId, SENDER, amount0, amount1, 0n, 0n, 0, 0]);
+  return { address: V4_PM, topics, data, logIndex: "0x" + logIndex.toString(16) };
+}
+function v4ModifyLog(poolId: string, delta: bigint, logIndex: number) {
+  const { data, topics } = v4LogIface.encodeEventLog("ModifyLiquidity", [poolId, SENDER, 0, 0, delta, ethers.ZeroHash]);
+  return { address: V4_PM, topics, data, logIndex: "0x" + logIndex.toString(16) };
+}
+// F-391 shape: a lone Swap, no ModifyLiquidity (no JIT).
+const f391Receipt = { logs: [v4SwapLog(C069ABEA, 934460889828731878592n, -949488853n, 2)] };
+const f391Jit = detectJitLiquidity(f391Receipt);
+const f391Fills = decodeV4SwapFills(f391Receipt, new Set(f391Jit));
+// JIT shape: add-liquidity (positive delta) BEFORE the swap on the same pool.
+const jitReceipt = { logs: [v4ModifyLog(C069ABEA, 5_000n, 0), v4SwapLog(C069ABEA, 1n, -1n, 1)] };
+const jitPools = detectJitLiquidity(jitReceipt);
+const jitFills = decodeV4SwapFills(jitReceipt, new Set(jitPools));
+// Add-AFTER-swap must NOT count as JIT (ordering matters).
+const addAfterJit = detectJitLiquidity({ logs: [v4SwapLog(C069ABEA, 1n, -1n, 0), v4ModifyLog(C069ABEA, 5_000n, 1)] });
+
 const checks: Array<() => void> = [
   () => assert.equal(graphMembership.status, "loaded"),
   // the fix: a v4 poolId present in active-pools is now in_graph (was a systematic false-negative)
@@ -241,6 +272,21 @@ const checks: Array<() => void> = [
   }), "inventory_vault_rebalance"),
   // Regression: the plain atomic-loop fixture (no new signals passed) is unchanged.
   () => assert.equal(atomicStyle, "atomic_loop"),
+
+  // v4 real per-leg fill decode (0xf391d0 c069abea entry leg) -----------------------------------
+  () => assert.equal(f391Fills.length, 1),
+  () => assert.equal(f391Fills[0].poolId, lower(C069ABEA)),
+  // USDC paid in (amount1 < 0), srUSDe received (amount0 > 0) => oneForZero, i.e. NOT zeroForOne.
+  () => assert.equal(f391Fills[0].amount1, "-949488853"),
+  () => assert.equal(f391Fills[0].amount0, "934460889828731878592"),
+  () => assert.equal(f391Fills[0].zeroForOne, false),
+  () => assert.equal(f391Fills[0].jit, false),
+  () => assert.deepEqual(f391Jit, []),
+  // JIT detection: add-before-swap on the same pool flags it; the fill carries jit=true.
+  () => assert.deepEqual(jitPools, [lower(C069ABEA)]),
+  () => assert.equal(jitFills[0].jit, true),
+  // Ordering guard: liquidity added AFTER the swap is not JIT.
+  () => assert.deepEqual(addAfterJit, []),
 ];
 
 try {

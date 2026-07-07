@@ -12,6 +12,7 @@ import {
   priceArb,
 } from "../pnl/arb-profit.js";
 import { buildFlowReport, formatTokenAmount, renderFlowWalk } from "../pnl/flow-walk.js";
+import { v4SwapFillFromLog } from "../pnl/swap-log-registry.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
@@ -429,6 +430,69 @@ export function extractOtherVenues(receipt: Json, graph: GraphMembership | null)
   return out;
 }
 
+const MODIFY_LIQ_IFACE = new ethers.Interface([
+  "event ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)",
+]);
+
+export interface V4LegFill {
+  poolId: string;
+  amount0: string; // signed BalanceDelta (swapper view): negative = paid in, positive = received
+  amount1: string;
+  zeroForOne: boolean;
+  jit: boolean; // liquidity was self-added to this pool earlier in the same tx (see detectJitLiquidity)
+}
+
+// The REAL per-leg v4 fills the competitor moved (the census/touchedVenues layer only surfaces poolIds,
+// not amounts). Feeds quote-fidelity reconciliation (validate-v4-quote) + loss attribution.
+export function decodeV4SwapFills(receipt: Json, jitPoolIds: Set<string>): V4LegFill[] {
+  const out: V4LegFill[] = [];
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.address ?? "")) !== UNIV4_POOL_MANAGER) continue;
+    const fill = v4SwapFillFromLog(log);
+    if (!fill) continue;
+    out.push({
+      poolId: fill.poolId,
+      amount0: fill.amount0.toString(),
+      amount1: fill.amount1.toString(),
+      zeroForOne: fill.zeroForOne,
+      jit: jitPoolIds.has(fill.poolId),
+    });
+  }
+  return out;
+}
+
+// v4 poolIds that had liquidity ADDED (ModifyLiquidity, positive delta) BEFORE their Swap in the SAME
+// tx = JIT self-provided liquidity. A JIT'd leg is not reproducible against standing liquidity, so it
+// marks a competitor take as non-replicable — a distinct signal from a pool/path gap or a quote gap.
+export function detectJitLiquidity(receipt: Json): string[] {
+  const addTopic = lower(TOPICS.univ4ModifyLiquidity);
+  const swapTopic = lower(TOPICS.univ4Swap);
+  const firstAdd = new Map<string, number>();
+  const firstSwap = new Map<string, number>();
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.address ?? "")) !== UNIV4_POOL_MANAGER) continue;
+    const topic0 = lower(String(log?.topics?.[0] ?? ""));
+    const poolId = lower(String(log?.topics?.[1] ?? ""));
+    const li = quantityToNumber(log?.logIndex) ?? 0;
+    if (topic0 === addTopic) {
+      let delta = 0n;
+      try {
+        const parsed = MODIFY_LIQ_IFACE.parseLog({ topics: log.topics, data: log.data ?? "0x" });
+        delta = BigInt(String(parsed?.args?.[4] ?? 0n));
+      } catch { /* not a ModifyLiquidity we can decode */ }
+      if (delta > 0n && li < (firstAdd.get(poolId) ?? Number.POSITIVE_INFINITY)) firstAdd.set(poolId, li);
+    } else if (topic0 === swapTopic) {
+      if (li < (firstSwap.get(poolId) ?? Number.POSITIVE_INFINITY)) firstSwap.set(poolId, li);
+    }
+  }
+  const jit: string[] = [];
+  for (const [poolId, addLi] of firstAdd) {
+    const swapLi = firstSwap.get(poolId);
+    if (swapLi !== undefined && addLi < swapLi) jit.push(poolId);
+  }
+  return jit;
+}
+
 interface PriorMover {
   txHash: string;
   transactionIndex: number;
@@ -562,6 +626,8 @@ async function anyTxPostmortem(
   });
   const touchedVenues = extractTouchedVenues(receipt, graph);
   const otherVenues = extractOtherVenues(receipt, graph);
+  const jitPoolIds = detectJitLiquidity(receipt);
+  const v4LegFills = decodeV4SwapFills(receipt, new Set(jitPoolIds));
   const addressVenues = [
     ...touchedVenues.filter((venue) => venue.protocol !== "univ4").map((venue) => venue.emitter),
     ...otherVenues.map((venue) => venue.emitter),
@@ -606,6 +672,8 @@ async function anyTxPostmortem(
     non_arb_signals: styleAnalysis.non_arb_signals,
     edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
     touchedVenues,
+    v4LegFills,
+    jitPoolIds: jitPoolIds.length > 0 ? jitPoolIds : undefined,
     otherVenues,
     out_of_graph_venues: [
       ...touchedVenues.filter((venue) => venue.in_graph === false),

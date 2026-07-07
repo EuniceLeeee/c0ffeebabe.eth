@@ -103,6 +103,41 @@ export function v4SwapFromLog(log: any): DecodedSwap | null {
   }
 }
 
+export interface V4SwapFill {
+  poolId: string;
+  logIndex: number;
+  amount0: bigint; // signed BalanceDelta from the swapper's view: negative = paid in, positive = received
+  amount1: bigint;
+  zeroForOne: boolean; // token0 in, token1 out
+}
+
+/**
+ * Signed per-side v4 fill from a PoolManager Swap log — the real amountIn/amountOut the competitor
+ * moved through the pool. (v4SwapFromLog collapses this to a lossy sizeRaw for direction/matching;
+ * loss-attribution and quote-fidelity reconciliation need the actual signed amounts.)
+ */
+export function v4SwapFillFromLog(log: any): V4SwapFill | null {
+  try {
+    const parsed = V4_SWAP_IFACE.parseLog({ topics: log.topics, data: log.data ?? "0x" });
+    if (!parsed) return null;
+    const poolId = lower(String(parsed.args[0]));
+    const amount0 = toBigInt(parsed.args[2]);
+    const amount1 = toBigInt(parsed.args[3]);
+    if (amount0 === 0n && amount1 === 0n) return null;
+    // Swapper receives token0 (amount0 > 0) and pays token1 => oneForZero; else zeroForOne.
+    const zeroForOne = amount0 < 0n;
+    return {
+      poolId,
+      logIndex: quantityToNumber(log?.logIndex) ?? 0,
+      amount0,
+      amount1,
+      zeroForOne,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function curveSwapFromLog(log: any): DecodedSwap | null {
   const base = baseSwapFields(log, lower(String(log?.address ?? "")));
   if (!base) return null;
