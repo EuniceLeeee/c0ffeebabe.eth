@@ -349,9 +349,17 @@
 - **Impact:** the srUSDe silo edge (F-013) is correct and composes the ring, but the loop's ENTRY leg can't be
   quoted/sized by our solver ⇒ no +EV solve ⇒ 0xf391d0 not yet capturable end-to-end. The f391 gate documents
   this as a deferred, separate block (still PASSes on the silo-edge flip).
-- **Next:** a v4 entry-quote path that matches the core swap for one-sided/thin pools (local tick math vs the
-  QuoterV2 revert-sim, or a StateView-based traversal). Filed as a tooling_defect. Do NOT re-attribute to the
-  srUSDe edge.
+- **CONFIRMED root cause = quoter-vs-core divergence (2026-07-07, decisive):** replaying the competitor's RAW
+  signed tx86 on a post-tx85 fork returns **`status 1 (success)`, gasUsed 858188** — the whole atomic loop
+  reproduces on our standalone fork. So core `Pool.swap` DOES fill USDC→srUSDe from that exact state; only the
+  QuoterV2 (and our path calling it) can't price it. Rules out "encoding inverted" (real fill decoded genuine
+  USDC→srUSDe, zeroForOne=false, via tx86 Transfer flows) and "genuine no-liquidity / non-reproducible"
+  (status-1 replay). The loop is standalone-reproducible; our gap is QUOTING (sizing), not execution. Codex A's
+  read-only sandbox could not certify this (outbound RPC denied — a tooling fact: on-chain diagnosis needs the
+  evaluator's RPC, not a sandboxed Codex).
+- **Next → F-016 (task #16):** a local v4 exact-in quote matching core `Pool.swap` (a PORT of the bit-exact
+  v3-math tick walk, StateView-fed), wired into `quote()` with on-chain fallback + warmed via the cache. Now
+  KNOWN to work (core fills). Sliced, Codex-generated, Claude-gated. Do NOT re-attribute to the srUSDe edge.
 
 ## Dead-ends / retired (high-value — don't circle back)
 
