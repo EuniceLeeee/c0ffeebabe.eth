@@ -263,10 +263,11 @@ async function main(): Promise<void> {
   try {
     match = findBundleSubmitted(loaded.events, txQuery, opportunityQuery);
   } catch (err) {
-    // Any-tx fallback (F-010/F-011/F-012 workflow): a full hash that never matched one of OUR
+    // Any-tx fallback (F-010/F-011/F-012 workflow): a full hash that matched NONE of our
     // bundle_submitted events is a competitor/foreign tx — post-mortem it directly from the chain
-    // instead of erroring. Prefix queries still error (an on-chain lookup needs the full hash).
-    if (/^0x[0-9a-fA-F]{64}$/.test(txQuery)) {
+    // instead of erroring. Only the no-match case falls back: an Ambiguous multi-match is still an
+    // own-bundle query (disambiguate with --opportunity), and prefix queries need the full hash.
+    if ((err as { code?: string }).code === "NO_BUNDLE_MATCH" && /^0x[0-9a-fA-F]{64}$/.test(txQuery)) {
       console.error(`[bundle-postmortem] no bundle_submitted matched --tx ${txQuery} — any-tx competitor mode.`);
       await anyTxPostmortem(new RpcClient(rpcUrl), txQuery, loaded, graphPath, outPath, resolveCliPath(eventsPath));
       return;
@@ -671,7 +672,10 @@ function findBundleSubmitted(events: Json[], txQuery: string, opportunityQuery: 
     if (matches.length > 1) {
       throw new Error(`Ambiguous --tx ${txQuery}; matches:\n${formatNearMisses(matches, txQuery, "tx_hash")}`);
     }
-    throw new Error(`No bundle_submitted matched --tx ${txQuery}. Near misses:\n${formatNearMisses(bundles, txQuery, "tx_hash")}`);
+    throw Object.assign(
+      new Error(`No bundle_submitted matched --tx ${txQuery}. Near misses:\n${formatNearMisses(bundles, txQuery, "tx_hash")}`),
+      { code: "NO_BUNDLE_MATCH" },
+    );
   }
 
   const needle = lower(opportunityQuery);
