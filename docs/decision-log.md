@@ -380,9 +380,14 @@
   route through path-assembly + execute atomically like DEX legs" — YES, demonstrated end-to-end.
 - **Honest scope:** a MACHINERY gate, not a live +EV finder. With no peg dislocation the round-trip loses the
   Curve fee (~1.1bp), so grossProfit = −$11 at 100k; a small pre-funded USDC buffer covers the fee so the flash
-  repays. A REAL +EV run needs a dislocation (or a naturally-mispriced vault share). Traps solved building it:
-  the BotVM executor must be installed via `installForkBotVm` (setCode + impersonate owner); Balancer flash
-  reverts under the plan-builder's approve-based repay — use **`morpho-flash`** (callback-pull repay).
+  repays. A REAL +EV run needs a dislocation (or a naturally-mispriced vault share).
+- **Real PRODUCTION BUG found + fixed via this repro (commit 6b36e04):** `buildResolvedPlanFromPath` repaid
+  EVERY flash via `ensureApprove` — right for Morpho (pull) but a SILENT no-op for Balancer (which verifies its
+  restored balance; the repay must TRANSFER back). Any `balancer-flash` plan reverted at `flashLoan`, and
+  `flash-liquidity.ts` DEFAULTS the flash-source selector to balancer-flash — so the searcher could emit
+  silently-reverting balancer bundles. Fixed: transfer-back for balancer, approve for morpho. The gate now runs
+  BOTH adapters (status=1 under each). Setup trap also codified: install the BotVM executor via
+  `installForkBotVm` (setCode + impersonate owner) or `state.send` fails "No Signer available".
 - **Contrast with F-014/0xf391d0:** that srUSDe loop was NOT a clean vehicle (mint mechanism, one-sided c069abea
   pool, inventory_vault_rebalance flag). PSM+Curve is the clean, deterministic demonstration.
 
