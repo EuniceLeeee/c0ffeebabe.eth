@@ -289,6 +289,30 @@
   univ2/3/4 ONLY; curve/exotic venue gaps invisible → extended `tooldef-20260706-census-single-tx-ingraph-detail`.
   Full trace: `docs/analysis/20260707-coffee-stbt-rwa-loop-postmortem.md`.
 
+### F-013 | 2026-07-07 | ✅ | `0xf391d0` (coffee, blk 25462190) = clean ATOMIC protocol arb — backrun-closeable behind ONE bounded adapter (srUSDe→sUSDe)
+- **What (opposite of F-009):** verified ATOMIC via share net mint/burn — srUSDe net **−934.46 (pure burn)**,
+  sUSDe net **0** (flows in and fully out), NO residual inventory in any helper. Reconciled with canonical
+  `tx-profit.ts`: net **+$5.69** (WETH only), `unpricedDeltas:[]`. This is the positive case Agent B's
+  atomicity classifier separates from `0x9be73297`'s inventory rebalance.
+- **Loop:** Balancer flash USDC → UniV4 USDC/srUSDe `0xc069abea` → **srUSDe redeem → sUSDe** → UniV3
+  sUSDe/USDT `0x7eb59` → UniV4 USDT/USDC `0x395f91b3` → surplus → UniV3 USDC/WETH → repay. All legs covered
+  EXCEPT the srUSDe redeem + the sUSDe node + the `0xc069abea` pool surviving graph build.
+- **Blocker 1 — the ONE real gap (bounded, replicable):** srUSDe (`0x3d7d6fdf`) is a **non-standard ERC4626**:
+  `asset()`=USDe but redeem **pays sUSDe** via a silo (previewRedeem lies — says 958.15 USDe, actual pay
+  773.99 sUSDe). Our generic `erc4626-redeem` models share→USDe with previewRedeem qty ⇒ wrong on BOTH token
+  and amount ⇒ deliberately excluded (`token-graph.ts:147` `nonStandardRedeem:true`). Fix = a dedicated
+  **srUSDe→sUSDe** redeem edge that quotes in sUSDe + register **sUSDe (`0x9d39a5de`)** as a graph node + let
+  `0xc069abea` survive graph construction. srUSDe/sUSDe are permissionless (Ethena/Strata) ⇒ passes F-009's
+  3-point replicability test ⇒ **verdict `protocol_cross_vault_replicable`** — this one justifies building the leg.
+- **Blocker 2 — scanner still blind (F-008, structural):** even with the edge, this is a multi-hop composition
+  (USDC→srUSDe→sUSDe→USDT→USDC), NOT a same-pair two-venue spread — the block-scan spread-cycle scanner cannot
+  compose it (hunt @25462190: 16 opps, 0 srUSDe rings, `c069abea_v4pool_loaded:false`). The **backrun planner
+  (`buildTokenPaths`) CAN** compose it once the edge exists. So protocol-leg-closes-a-loop-like-backrun is
+  TRUE via the planner; the scanner limit is separate and known (F-008).
+- **Next (bounded, gated):** build the srUSDe→sUSDe non-standard-redeem adapter + sUSDe node → then a planner
+  fork-solve @25462190 must produce the loop (rule-12 replay flip), NOT just build-passing. Operator decision
+  before building.
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
