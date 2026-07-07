@@ -33,6 +33,33 @@ const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
 const inventoryImbalanceTokens = shareTokenImbalanceTokens(inventoryReceipt).sort();
 const atomicImbalanceTokens = shareTokenImbalanceTokens(atomicReceipt);
 
+// FALSE-POSITIVE FIX (coffeebabe srUSDe loops 0xf391d0 / 0x2b84e28c): an atomic loop that BUYS a vault
+// share in-tx (from a swap venue) then REDEEMS it (burn to 0x0) shows a GLOBAL net BURN but the executor
+// nets ~0. The old unconditional `value<0` flagged it as pre-held inventory. Now it must NOT flag (no
+// non-venue holder ends with a residual). A GENUINE pre-held burn (a non-venue helper -> 0x0, no in-tx
+// source) still flags. Synthetic receipts, deterministic.
+const SHARE_TOK = "0x00000000000000000000000000000000000000a1";
+const SWAP_VENUE = "0x00000000000000000000000000000000000000b2";
+const EXEC_ACTOR = "0x00000000000000000000000000000000000000c3";
+const INV_HELPER = "0x00000000000000000000000000000000000000d4";
+const erc20If = new ethers.Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+const v3If = new ethers.Interface(["event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)"]);
+const xfer = (token: string, from: string, to: string, amt: bigint, li: number) => {
+  const { data, topics } = erc20If.encodeEventLog("Transfer", [from, to, amt]);
+  return { address: token, topics, data, logIndex: "0x" + li.toString(16) };
+};
+const v3SwapLog = (pool: string, li: number) => {
+  const { data, topics } = v3If.encodeEventLog("Swap", [EXEC_ACTOR, EXEC_ACTOR, 1, -1, 0, 0, 0]);
+  return { address: pool, topics, data, logIndex: "0x" + li.toString(16) };
+};
+const SHARE_AMT = 934n * 10n ** 18n;
+// buy the share from a swap venue, redeem it (burn) — executor nets 0 => NOT inventory (the fix).
+const atomicBuyRedeem = { logs: [v3SwapLog(SWAP_VENUE, 0), xfer(SHARE_TOK, SWAP_VENUE, EXEC_ACTOR, SHARE_AMT, 1), xfer(SHARE_TOK, EXEC_ACTOR, ethers.ZeroAddress, SHARE_AMT, 2)] };
+// a non-venue helper burns a PRE-HELD share (no in-tx source) => still inventory.
+const preHeldBurn = { logs: [xfer(SHARE_TOK, INV_HELPER, ethers.ZeroAddress, SHARE_AMT, 0)] };
+const buyRedeemImbalance = shareTokenImbalanceTokens(atomicBuyRedeem);
+const preHeldBurnImbalance = shareTokenImbalanceTokens(preHeldBurn);
+
 const CFG = "0xcccccccccccccccccccccccccccccccccccccccc";
 const reach = {
   status: "sent_directly" as const,
@@ -242,6 +269,13 @@ const checks: Array<() => void> = [
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90610, "down"), false),
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90612, "down"), false),
   () => assert.equal(realizedProfitUsdForReport(-528, [delta(CFG, 1n, "CFG", 18)]), `unpriceable(${lower(CFG)})`),
+
+  // False-positive fix: atomic BUY-share-then-REDEEM (executor nets 0, share bought from a swap venue)
+  // must NOT be flagged inventory — even though it is a GLOBAL net burn. This is the coffeebabe srUSDe
+  // loop shape (0xf391d0 / 0x2b84e28c) the old unconditional `value<0` mis-flagged.
+  () => assert.deepEqual(buyRedeemImbalance, []),
+  // ...but a genuine pre-held burn (non-venue helper -> 0x0, no in-tx source) still flags.
+  () => assert.deepEqual(preHeldBurnImbalance, [lower(SHARE_TOK)]),
 
   // F-009 atomicity / inventory-rebalance detector ---------------------------------------------
   // Layer 2 (robust receipt signal): 0x9be73297 leaves a residual position in BOTH vault-share

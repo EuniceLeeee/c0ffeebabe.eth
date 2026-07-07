@@ -1362,20 +1362,26 @@ export function shareTokenImbalanceTokens(receipt: Json | null): string[] {
     if (to !== ZERO_ADDRESS) holders.set(to, (holders.get(to) ?? 0n) + transfer.amount);
   }
   const out: string[] = [];
-  for (const [token, value] of net) {
-    const imbalanced = value < 0n ? -value > SHARE_IMBALANCE_DUST_RAW : value > SHARE_IMBALANCE_DUST_RAW;
-    if (!imbalanced) continue;
+  for (const token of net.keys()) {
+    // A token is a residual STANDING position only if some NON-VENUE holder ends the tx with a real net
+    // balance change beyond dust — EITHER sign. Positive = a created standing position (0x9be73297's
+    // minted steakUSDT held by a wrapper). Negative = a PRE-HELD position drawn down with no in-tx source
+    // (0x9be73297's burned steakUSDC: the helper only has an out-transfer, net negative). An atomic loop
+    // that BUYS a vault share in-tx (from a pool or a 0x0 mint) and then REDEEMS it nets ~0 for the
+    // executor and is NOT flagged. This fixes the false positive (F-014/coffeebabe srUSDe loops): a
+    // DEX-bought-then-redeemed share shows a GLOBAL net BURN (the buy is not a 0x0 mint), which the old
+    // unconditional `value < 0` wrongly treated as pre-held inventory even though the executor's own
+    // net share balance is 0. Venue emitters (a metapool taking 3CRV as currency, F-012) are excluded.
     const holders = perHolder.get(token) ?? new Map<string, bigint>();
-    let nonVenueResidual = false;
+    let residual = false;
     for (const [holder, holderNet] of holders) {
-      if (holderNet > SHARE_IMBALANCE_DUST_RAW && !venueEmitters.has(holder)) {
-        nonVenueResidual = true;
+      const magnitude = holderNet < 0n ? -holderNet : holderNet;
+      if (magnitude > SHARE_IMBALANCE_DUST_RAW && !venueEmitters.has(holder)) {
+        residual = true;
         break;
       }
     }
-    // A net BURN imbalance (consuming pre-held shares) has no in-receipt holder to inspect — it is
-    // inventory by construction; keep flagging it unconditionally.
-    if (value < 0n || nonVenueResidual) out.push(token);
+    if (residual) out.push(token);
   }
   return out;
 }
