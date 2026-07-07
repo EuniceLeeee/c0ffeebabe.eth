@@ -371,6 +371,21 @@
   coverage. But 0xf391d0 is NOT confirmed a capturable arb — it may be an inventory_vault_rebalance. Resolve the
   Agent-A-vs-tool divergence (detector false-positive? file a tooling_defect if so) before more loop work.
 
+### F-015 | 2026-07-07 | ✅ | Protocol atomic closed-loop VERIFIED executing through our pipeline (`searcher:protocol-loop`)
+- **What:** a clean, fully-quotable protocol loop runs atomically through the SAME live machinery as a DEX arb:
+  `flash USDC → PSM (protocol leg) USDC→DAI → Curve 3pool (DEX leg) DAI→USDC → repay`. Both legs route through
+  `buildTokenGraph`/`quote()` like any swap; `buildResolvedPlanFromPath` assembles the flash-wrapped plan; the
+  same `BotVMSimulator` the searcher uses executes it. Result on a mainnet fork: **`revert=NONE` (status=1)**,
+  the loop closes back to USDC, the **Morpho flash repaid**. Answers the north-star question "do protocol legs
+  route through path-assembly + execute atomically like DEX legs" — YES, demonstrated end-to-end.
+- **Honest scope:** a MACHINERY gate, not a live +EV finder. With no peg dislocation the round-trip loses the
+  Curve fee (~1.1bp), so grossProfit = −$11 at 100k; a small pre-funded USDC buffer covers the fee so the flash
+  repays. A REAL +EV run needs a dislocation (or a naturally-mispriced vault share). Traps solved building it:
+  the BotVM executor must be installed via `installForkBotVm` (setCode + impersonate owner); Balancer flash
+  reverts under the plan-builder's approve-based repay — use **`morpho-flash`** (callback-pull repay).
+- **Contrast with F-014/0xf391d0:** that srUSDe loop was NOT a clean vehicle (mint mechanism, one-sided c069abea
+  pool, inventory_vault_rebalance flag). PSM+Curve is the clean, deterministic demonstration.
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
