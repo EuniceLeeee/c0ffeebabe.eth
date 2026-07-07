@@ -375,8 +375,15 @@ async function main(): Promise<void> {
   if (outPath) await writeJson(outPath, reportWithLearningCase);
 }
 
+// NOTE: `.catch()` not top-level `await` — a top-level await (even inside this entry guard) marks the
+// whole module as top-level-await, which esbuild's cjs transform rejects, breaking `import`s of
+// exported helpers (loadGraphMembership etc.) under tsx on the node. Keep this await-free so the
+// v4-aware membership check is importable/runnable anywhere.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
 
 function usage(): never {
