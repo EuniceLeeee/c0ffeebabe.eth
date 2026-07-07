@@ -45,6 +45,8 @@ export type WinnerStyle =
   | "atomic_loop"
   | "one_leg_inventory"
   | "inventory_vault_rebalance"
+  | "keeper_claim"
+  | "rfq_fill"
   | "sandwich"
   | "unknown";
 export type TickDirection = "down" | "up";
@@ -212,15 +214,22 @@ export interface WinnerStyleTxInput {
   transactionIndex: number;
   blockNumber: number;
   prestateBlock: number;
+  // Optional: enables the rfq_fill deadline check (F-010). Callers without a block header simply
+  // skip that signal; keeper_claim detection works regardless.
+  blockTimestamp?: number | null;
 }
 
 export interface WinnerStyleAnalysis {
   winner_style: WinnerStyle;
   winner_moved_price_beyond_prestate: boolean;
   unpriced_token_in_flow: string[];
+  non_arb_signals?: NonArbSignals;
 }
 
-const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--out <report.json>]`;
+const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--out <report.json>]
+  --tx with a FULL hash that matches no bundle_submitted falls back to any-tx competitor mode:
+  PnL + winner_style (incl. keeper_claim/rfq_fill signals) + venues incl. non-univ lineages +
+  same-block prior movers + our-events venue overlap.`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -236,7 +245,20 @@ async function main(): Promise<void> {
   if (!eventsPath || !rpcUrl || Boolean(txQuery) === Boolean(opportunityQuery)) usage();
 
   const loaded = await readJsonlSkippingBad(resolveCliPath(eventsPath));
-  const match = findBundleSubmitted(loaded.events, txQuery, opportunityQuery);
+  let match: MatchResult;
+  try {
+    match = findBundleSubmitted(loaded.events, txQuery, opportunityQuery);
+  } catch (err) {
+    // Any-tx fallback (F-010/F-011/F-012 workflow): a full hash that never matched one of OUR
+    // bundle_submitted events is a competitor/foreign tx — post-mortem it directly from the chain
+    // instead of erroring. Prefix queries still error (an on-chain lookup needs the full hash).
+    if (/^0x[0-9a-fA-F]{64}$/.test(txQuery)) {
+      console.error(`[bundle-postmortem] no bundle_submitted matched --tx ${txQuery} — any-tx competitor mode.`);
+      await anyTxPostmortem(new RpcClient(rpcUrl), txQuery, loaded, graphPath, outPath, resolveCliPath(eventsPath));
+      return;
+    }
+    throw err;
+  }
   const event = match.event;
   const rpc = new RpcClient(rpcUrl);
   const triggeringHash = requireString(event.victim_hash, "bundle_submitted.victim_hash");
@@ -297,6 +319,7 @@ async function main(): Promise<void> {
         baseFeePerGas,
         graph,
         prestateBlock,
+        blockInfo.timestamp,
       ),
     );
   }
@@ -353,6 +376,270 @@ function stringArg(args: Record<string, string | boolean>, key: string, required
 
 function resolveCliPath(path: string): string {
   return isAbsolute(path) ? path : resolve(path);
+}
+
+// ---------------------------------------------------------------------------
+// Any-tx competitor postmortem (no bundle_submitted required).
+// Codifies the F-010/F-011/F-012 manual workflow: PnL, per-leg venues incl. non-univ lineages,
+// winner_style with non-arb signals, same-block prior movers (atomic vs backrun), and whether OUR
+// live events had any signal on the touched venues at that block.
+// ---------------------------------------------------------------------------
+
+export interface OtherVenue {
+  protocol: string;
+  id: string;
+  emitter: string;
+  in_graph: boolean | null;
+}
+
+const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
+  { topic: lower(TOPICS.curveTokenExchange), protocol: "curve" },
+  { topic: lower(TOPICS.curveTokenExchangeUnderlying), protocol: "curve" },
+  { topic: lower(TOPICS.balancerV2Swap), protocol: "balancerV2" },
+  { topic: lower(TOPICS.pancakeV3Swap), protocol: "pancakeV3" },
+  { topic: lower(TOPICS.dodoSwap), protocol: "dodo" },
+  { topic: lower(TOPICS.psmSellGem), protocol: "psm" },
+  { topic: lower(TOPICS.psmBuyGem), protocol: "psm" },
+];
+
+// Swap-like venues OUTSIDE the univ2/3/4 lineages extractTouchedVenues covers — the census verdict
+// is blind to these (filed defect), so the any-tx report surfaces them explicitly.
+export function extractOtherVenues(receipt: Json, graph: GraphMembership | null): OtherVenue[] {
+  const out: OtherVenue[] = [];
+  const seen = new Set<string>();
+  for (const log of receipt?.logs ?? []) {
+    const emitter = lower(String(log?.address ?? ""));
+    const topic0 = lower(String(log?.topics?.[0] ?? ""));
+    const hit = OTHER_SWAP_TOPIC_PROTOCOLS.find((entry) => entry.topic === topic0);
+    if (!hit || !isAddress(emitter) || seen.has(emitter)) continue;
+    seen.add(emitter);
+    out.push({
+      protocol: hit.protocol,
+      id: emitter,
+      emitter,
+      in_graph: graph?.status === "loaded" ? graph.members.has(emitter) : null,
+    });
+  }
+  return out;
+}
+
+interface PriorMover {
+  txHash: string;
+  transactionIndex: number;
+  emitter: string;
+}
+
+// Any tx earlier in the same block that touched one of the winner's venues — discriminates an
+// in-block reaction (backrun-like) from a standing-state take (block-scan-like), 0x5d8e9097 method.
+async function findPriorMovers(
+  rpc: RpcClient,
+  blockNumber: number,
+  ourIndex: number,
+  ourHash: string,
+  addressVenues: string[],
+  v4PoolIds: string[],
+): Promise<PriorMover[]> {
+  const movers = new Map<string, PriorMover>();
+  const v4Pools = new Set(v4PoolIds.map(lower));
+  const emitters = uniq([
+    ...addressVenues.map(lower),
+    ...(v4Pools.size > 0 ? [UNIV4_POOL_MANAGER] : []),
+  ]).slice(0, 8);
+  for (const emitter of emitters) {
+    const logs = await rpc.getLogs({
+      address: emitter,
+      fromBlock: toQuantity(blockNumber),
+      toBlock: toQuantity(blockNumber),
+    });
+    for (const log of logs) {
+      const hash = lower(String(log.transactionHash ?? ""));
+      const index = quantityToNumber(log.transactionIndex);
+      if (!hash || hash === lower(ourHash) || index >= ourIndex) continue;
+      if (emitter === UNIV4_POOL_MANAGER) {
+        const poolId = lower(String(log?.topics?.[1] ?? ""));
+        if (!v4Pools.has(poolId)) continue;
+      }
+      const existing = movers.get(hash);
+      if (!existing || index < existing.transactionIndex) {
+        movers.set(hash, { txHash: hash, transactionIndex: index, emitter });
+      }
+    }
+  }
+  return [...movers.values()].sort((a, b) => a.transactionIndex - b.transactionIndex);
+}
+
+interface OurEventsAtBlock {
+  total: number;
+  by_type: Record<string, number>;
+  venue_overlap: Array<{ type: string; pool: string; victim_hash?: string }>;
+}
+
+// Did OUR live pipeline emit anything for this block touching the winner's venues? (v4 caveat: our
+// events store the PoolManager address, not the poolId, so a v4 overlap is manager-level only.)
+function ourEventsAtBlock(events: Json[], blockNumber: number, venueEmitters: Set<string>): OurEventsAtBlock {
+  const byType: Record<string, number> = {};
+  const overlap: OurEventsAtBlock["venue_overlap"] = [];
+  let total = 0;
+  for (const event of events) {
+    if (Number(event?.target_block) !== blockNumber) continue;
+    total += 1;
+    const type = String(event?.type ?? "unknown");
+    byType[type] = (byType[type] ?? 0) + 1;
+    const pool = lower(String(event?.pool ?? ""));
+    if (pool && venueEmitters.has(pool)) {
+      overlap.push({ type, pool, victim_hash: event?.victim_hash });
+    }
+  }
+  return { total, by_type: byType, venue_overlap: overlap };
+}
+
+interface FlowSummaryEntry {
+  token: string;
+  executor_edge_in: string;
+  top_net: Array<{ address: string; net: string }>;
+}
+
+function summarizeFlowLedger(
+  ledger: Map<string, FlowLedgerToken>,
+  executors: Set<string>,
+): FlowSummaryEntry[] {
+  const out: FlowSummaryEntry[] = [];
+  for (const [token, { net, edges }] of ledger) {
+    let executorEdgeIn = 0n;
+    for (const edge of edges) if (executors.has(edge.to)) executorEdgeIn += edge.amount;
+    const topNet = [...net.entries()]
+      .filter(([, amount]) => amount !== 0n)
+      .sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0))
+      .slice(0, 3)
+      .map(([address, amount]) => ({ address, net: amount.toString() }));
+    out.push({ token, executor_edge_in: executorEdgeIn.toString(), top_net: topNet });
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+async function anyTxPostmortem(
+  rpc: RpcClient,
+  txHash: string,
+  loaded: JsonlLoad,
+  graphPath: string,
+  outPath: string,
+  eventsPath: string,
+): Promise<void> {
+  const [tx, receipt] = await Promise.all([rpc.getTransaction(txHash), rpc.getReceipt(txHash)]);
+  if (!tx || !receipt) throw new Error(`any-tx mode: ${txHash} not found on-chain (need the full hash of a mined tx)`);
+  const blockNumber = quantityToNumber(receipt.blockNumber);
+  const transactionIndex = quantityToNumber(receipt.transactionIndex);
+  const block = await rpc.getBlockByNumber(blockNumber, false);
+  const baseFeePerGas = block?.baseFeePerGas != null ? hexToBigInt(block.baseFeePerGas) : 0n;
+  const coinbase = lower(block?.miner ?? "");
+  const blockTimestamp = quantityToNumber(block?.timestamp);
+  const graph = loadGraphMembership(graphPath);
+  const ethUsd = await fetchEthUsd(rpc);
+  const profit = await priceArb(rpc, txHash, tx, receipt, ethUsd, {
+    entityActors: [tx?.to, tx?.from].filter((actor): actor is string => typeof actor === "string" && actor.length > 0),
+    allowTrace: true,
+    coinbase,
+    baseFeePerGas,
+  });
+  const payment = await computeBuilderPaymentWei(rpc, txHash, receipt, baseFeePerGas, coinbase);
+  const styleAnalysis = await classifyWinnerTxStyle({
+    rpc,
+    txHash,
+    tx,
+    receipt,
+    profit,
+    transactionIndex,
+    blockNumber,
+    prestateBlock: Math.max(blockNumber - 1, 0),
+    blockTimestamp,
+  });
+  const touchedVenues = extractTouchedVenues(receipt, graph);
+  const otherVenues = extractOtherVenues(receipt, graph);
+  const addressVenues = [
+    ...touchedVenues.filter((venue) => venue.protocol !== "univ4").map((venue) => venue.emitter),
+    ...otherVenues.map((venue) => venue.emitter),
+  ];
+  const v4PoolIds = touchedVenues.filter((venue) => venue.protocol === "univ4").map((venue) => venue.id);
+  const priorMovers = await findPriorMovers(rpc, blockNumber, transactionIndex, txHash, addressVenues, v4PoolIds);
+  const venueEmitters = new Set([...addressVenues.map(lower), ...(v4PoolIds.length > 0 ? [UNIV4_POOL_MANAGER] : [])]);
+  const executors = competitorBeneficiaries(tx, receipt, profit.beneficiary);
+  const report = {
+    command: "bundle-postmortem" as const,
+    mode: "any_tx" as const,
+    events: { path: eventsPath, parsed: loaded.parsed, skipped_unparsable: loaded.skipped },
+    tx: {
+      hash: lower(txHash),
+      from: lower(tx?.from ?? ""),
+      to: tx?.to ? lower(tx.to) : null,
+      status: receipt?.status ? String(receipt.status) : null,
+      block: blockNumber,
+      transactionIndex,
+      gasUsed: hexToBigInt(receipt?.gasUsed).toString(),
+      priorityTipWei: payment.priorityTipWei.toString(),
+      builderPaymentWei: payment.builderPaymentWei.toString(),
+    },
+    block: {
+      number: blockNumber,
+      miner: coinbase,
+      builder: decodeExtraData(block?.extraData),
+      timestamp: blockTimestamp,
+    },
+    pnl: {
+      ethUsd,
+      realizedProfitUsd: realizedProfitUsdForReport(profit.realizedProfitUsd, profit.unpricedDeltas),
+      builderPaymentUsd: profit.builderPaymentUsd,
+      netProfitUsd: typeof profit.realizedProfitUsd === "number" && profit.builderPaymentUsd != null
+        ? profit.realizedProfitUsd - profit.builderPaymentUsd
+        : null,
+      unpricedDeltas: profit.unpricedDeltas,
+    },
+    winner_style: styleAnalysis.winner_style,
+    non_comparable_winner: isNonComparableWinnerStyle(styleAnalysis.winner_style) ? true : undefined,
+    non_arb_signals: styleAnalysis.non_arb_signals,
+    edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
+    touchedVenues,
+    otherVenues,
+    out_of_graph_venues: [
+      ...touchedVenues.filter((venue) => venue.in_graph === false),
+      ...otherVenues.filter((venue) => venue.in_graph === false),
+    ],
+    prior_same_block_movers: priorMovers,
+    positioning: priorMovers.length === 0 ? "standing_state_take" : "after_in_block_movers",
+    our_events_at_block: ourEventsAtBlock(loaded.events, blockNumber, venueEmitters),
+    flow: summarizeFlowLedger(buildFlowLedger(receipt), executors),
+    graph: { status: graph.status, path: graph.path, entries: graph.entries },
+  };
+  console.log(renderAnyTxSummary(report));
+  if (outPath) await writeJson(outPath, report);
+}
+
+function renderAnyTxSummary(report: any): string {
+  const lines: string[] = [];
+  const fmtUsd = (value: unknown) => (typeof value === "number" ? `$${value.toFixed(2)}` : String(value ?? "—"));
+  lines.push(`any-tx postmortem ${report.tx.hash}`);
+  lines.push(`  block ${report.tx.block} idx ${report.tx.transactionIndex} builder=${report.block.builder || "?"} status=${report.tx.status}`);
+  lines.push(`  pnl: realized ${fmtUsd(report.pnl.realizedProfitUsd)} builder ${fmtUsd(report.pnl.builderPaymentUsd)} net ${fmtUsd(report.pnl.netProfitUsd)} (ethUsd ${report.pnl.ethUsd})`);
+  const signals = report.non_arb_signals ?? {};
+  lines.push(`  winner_style: ${report.winner_style}${report.non_comparable_winner ? " (NON-COMPARABLE)" : ""}`
+    + ` [claim_selector=${signals.claim_selector_hit} sink_cut=${signals.conserved_sink_cut}`
+    + ` rfq_sigs=${signals.rfq_sig_count} deadline=${signals.rfq_deadline_in_calldata}]`
+    + ` edges=[${(report.edgeKinds ?? []).join(",")}]`);
+  const venueLine = (venue: any) => `${venue.protocol}:${venue.id.slice(0, 12)}… in_graph=${venue.in_graph}`;
+  lines.push(`  venues: ${[...report.touchedVenues, ...report.otherVenues].map(venueLine).join(" | ") || "none"}`);
+  if (report.out_of_graph_venues.length > 0) {
+    lines.push(`  OUT-OF-GRAPH: ${report.out_of_graph_venues.map(venueLine).join(" | ")}`);
+  }
+  lines.push(report.prior_same_block_movers.length === 0
+    ? "  positioning: standing_state_take (no same-block prior mover on any touched venue)"
+    : `  positioning: after_in_block_movers — ${report.prior_same_block_movers
+      .map((mover: PriorMover) => `idx ${mover.transactionIndex} ${mover.txHash.slice(0, 10)}`)
+      .join(", ")}`);
+  const ours = report.our_events_at_block;
+  const byType = Object.entries(ours.by_type).map(([type, count]) => `${count} ${type}`).join(", ") || "none";
+  lines.push(`  our events @block: ${ours.total} (${byType}); venue overlap: ${ours.venue_overlap.length}`
+    + (ours.venue_overlap.length === 0 ? " → our live had no signal on these venues" : ""));
+  return lines.join("\n");
 }
 
 async function readJsonlSkippingBad(path: string): Promise<JsonlLoad> {
@@ -527,6 +814,7 @@ async function analyzeCompetitor(
   baseFeePerGas: bigint,
   graph: GraphMembership,
   prestateBlock: number,
+  blockTimestamp: number | null = null,
 ): Promise<CompetitorReport> {
   const [tx, receipt] = await Promise.all([
     rpc.getTransaction(candidate.hash),
@@ -549,6 +837,7 @@ async function analyzeCompetitor(
     transactionIndex: candidate.transactionIndex,
     blockNumber,
     prestateBlock,
+    blockTimestamp,
   });
   return {
     ...candidate,
@@ -740,6 +1029,119 @@ export function winnerMovedPriceBeyondPrestate(
     : winnerPostTick > preVictimTick;
 }
 
+// Non-arb winner detection (decision-log F-010/F-011). Two classes of "competitor wins" that are
+// NOT arbitrage and must not feed coverage/bid analysis:
+//  - keeper_claim (F-011): protocol fee-sweep / claim bounty. Layer 1 = known claim selectors in the
+//    calldata (Curve FeeCollector withdraw_many/collect + legacy withdraw_admin_fees — verified on
+//    0xcfacdd69/0xaffe7e05). Layer 2 (general flow SHAPE, receipt-only): a conserved intermediary
+//    (token in == out) whose outflow splits into a dominant non-executor sink plus a small executor
+//    cut (<10% of the largest sink edge) — "value conserved into a fixed sink + caller cut".
+//  - rfq_fill (F-010): the cheap side is a signed off-chain order — ABI-encoded 65-byte ECDSA
+//    signature(s) plus a seconds-scale deadline near the block timestamp in the calldata (verified on
+//    0x15352456: 3 sigs + deadline = block_ts+29s).
+const KEEPER_CLAIM_SELECTORS = ["755da811", "42b1689d", "30c54085"];
+const RFQ_DEADLINE_MAX_AHEAD_S = 3600;
+const RFQ_DEADLINE_MAX_BEHIND_S = 120;
+
+export interface NonArbSignals {
+  claim_selector_hit: boolean;
+  conserved_sink_cut: boolean;
+  rfq_sig_count: number;
+  rfq_deadline_in_calldata: boolean;
+}
+
+interface FlowLedgerToken {
+  net: Map<string, bigint>;
+  edges: Array<{ from: string; to: string; amount: bigint }>;
+}
+
+export function buildFlowLedger(receipt: Json | null): Map<string, FlowLedgerToken> {
+  const ledger = new Map<string, FlowLedgerToken>();
+  for (const log of receipt?.logs ?? []) {
+    const transfer = decodeTransfer(log);
+    if (!transfer || transfer.amount === 0n) continue;
+    const token = lower(transfer.token);
+    let entry = ledger.get(token);
+    if (!entry) {
+      entry = { net: new Map(), edges: [] };
+      ledger.set(token, entry);
+    }
+    const from = lower(transfer.from);
+    const to = lower(transfer.to);
+    entry.net.set(from, (entry.net.get(from) ?? 0n) - transfer.amount);
+    entry.net.set(to, (entry.net.get(to) ?? 0n) + transfer.amount);
+    entry.edges.push({ from, to, amount: transfer.amount });
+  }
+  return ledger;
+}
+
+// Conserved-sink-cut shape: some intermediary I with net == 0 pays the executor a small cut while a
+// non-executor sink takes the dominant share of I's outflow. Edge-based (not net-based) so it still
+// fires when the executor immediately converts its cut (its NET goes to ~0, the EDGE remains).
+export function hasConservedSinkCutShape(
+  ledger: Map<string, FlowLedgerToken>,
+  executors: Set<string>,
+): boolean {
+  for (const { net, edges } of ledger.values()) {
+    for (const [intermediary, netAmount] of net) {
+      if (netAmount !== 0n || executors.has(intermediary)) continue;
+      let executorOut = 0n;
+      let maxNonExecutorOut = 0n;
+      let sawOutflow = false;
+      for (const edge of edges) {
+        if (edge.from !== intermediary) continue;
+        sawOutflow = true;
+        if (executors.has(edge.to)) executorOut += edge.amount;
+        else if (edge.amount > maxNonExecutorOut) maxNonExecutorOut = edge.amount;
+      }
+      if (sawOutflow && executorOut > 0n && executorOut * 9n < maxNonExecutorOut) return true;
+    }
+  }
+  return false;
+}
+
+// ABI-encoded 65-byte ECDSA signature: a 32-byte length word of 0x41 followed by r‖s‖v with
+// v ∈ {0x1b, 0x1c}. Matches both top-level ABI args and order structs nested in router batches.
+function countAbiEncodedSignatures(inputHex: string): number {
+  return [...inputHex.matchAll(/0{62}41[0-9a-f]{128}(?:1b|1c)/g)].length;
+}
+
+// A zero-padded uint32 word within a seconds-scale window around the block timestamp — an order
+// deadline. 56 leading zeros + 8 hex = a full 32-byte word holding a unix timestamp.
+function hasDeadlineWord(inputHex: string, blockTimestamp: number): boolean {
+  for (const match of inputHex.matchAll(/0{56}([0-9a-f]{8})/g)) {
+    const value = Number.parseInt(match[1], 16);
+    if (value >= blockTimestamp - RFQ_DEADLINE_MAX_BEHIND_S
+      && value <= blockTimestamp + RFQ_DEADLINE_MAX_AHEAD_S) return true;
+  }
+  return false;
+}
+
+export function detectNonArbSignals(
+  txInput: string | null | undefined,
+  receipt: Json | null,
+  executors: Set<string>,
+  blockTimestamp: number | null,
+): NonArbSignals {
+  const inputHex = lower(String(txInput ?? "")).replace(/^0x/, "");
+  return {
+    claim_selector_hit: KEEPER_CLAIM_SELECTORS.some((selector) => inputHex.includes(selector)),
+    conserved_sink_cut: hasConservedSinkCutShape(buildFlowLedger(receipt), executors),
+    rfq_sig_count: countAbiEncodedSignatures(inputHex),
+    rfq_deadline_in_calldata: blockTimestamp != null && hasDeadlineWord(inputHex, blockTimestamp),
+  };
+}
+
+// Overlay the non-arb classes on a base style. keeper_claim needs the decisive selector OR the flow
+// shape; rfq_fill only reinterprets an otherwise atomic/unknown win (a sandwich/inventory verdict is
+// already non-comparable and more specific).
+export function overlayNonArbStyle(base: WinnerStyle, signals: NonArbSignals): WinnerStyle {
+  if (signals.claim_selector_hit || signals.conserved_sink_cut) return "keeper_claim";
+  if (signals.rfq_sig_count >= 1 && signals.rfq_deadline_in_calldata
+    && (base === "atomic_loop" || base === "unknown")) return "rfq_fill";
+  return base;
+}
+
 export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerStyle {
   // Atomicity check FIRST: a vault-share inventory rebalance (F-009) otherwise reads as atomic_loop
   // because the executor's intra-tx net is clean. Two layers, either is sufficient to flag:
@@ -815,8 +1217,15 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
   const inventoryRebalanceSelectorHit = shareImbalanceTokens.length > 0
     ? true
     : await inventoryRebalanceSelectorPresent(input.rpc, input.txHash);
+  const nonArbSignals = detectNonArbSignals(
+    input.tx?.input,
+    input.receipt,
+    beneficiaries,
+    input.blockTimestamp ?? null,
+  );
   return {
-    winner_style: classifyWinnerStyle({
+    non_arb_signals: nonArbSignals,
+    winner_style: overlayNonArbStyle(classifyWinnerStyle({
       pricedDeltas: input.profit.pricedDeltas,
       unpricedDeltas: input.profit.unpricedDeltas,
       unpricedInTokensWithoutCounterTransfer,
@@ -826,7 +1235,7 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       nativeWeiNegative,
       inventory_rebalance_selector_hit: inventoryRebalanceSelectorHit,
       share_imbalance_tokens: shareImbalanceTokens,
-    }),
+    }), nonArbSignals),
     winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
     unpriced_token_in_flow: unpricedTokenInFlow,
   };
@@ -1101,7 +1510,9 @@ export function buildVerdict(event: Json, competitors: CompetitorReport[], build
 export function isNonComparableWinnerStyle(style: WinnerStyle): boolean {
   return style === "one_leg_inventory"
     || style === "sandwich"
-    || style === "inventory_vault_rebalance";
+    || style === "inventory_vault_rebalance"
+    || style === "keeper_claim"
+    || style === "rfq_fill";
 }
 
 export function learningCaseFromPostmortem(report: PostmortemReport): LearningCase {
