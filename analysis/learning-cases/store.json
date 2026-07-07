@@ -26,12 +26,12 @@
           "waEthUSDT",
           "waEthUSDC"
         ],
-        "correction_2026_07_06": "Refined: the 6 vaults with no DEX share-venue are NOT dead — coffee closes them via Morpho Blue CREDIT (0x9be73297, ~$1 net). The defect is that venue-discovery checks NEITHER a DEX return venue NOR a credit return path; it promotes on asset()/previewRedeem alone.",
+        "correction_2026_07_06": "Refined: the 6 vaults with no DEX share-venue are NOT dead \u2014 coffee closes them via Morpho Blue CREDIT (0x9be73297, ~$1 net). The defect is that venue-discovery checks NEITHER a DEX return venue NOR a credit return path; it promotes on asset()/previewRedeem alone.",
         "hunt_measurement": "searcher:blockscan-hunt over 4 live blocks: scanner surfaces+prices protocol (PSM) rings but ZERO protocol ring is +EV; only sub-cent pure-DEX dust solves. DEX-NAV protocol class is par at measured blocks."
       },
       "tooling_defect": {
         "tool": "analysis/src/discovery venue-discovery + adapter-probe classifier",
-        "issue": "classifies an ERC4626 as loop-closable from asset()+previewRedeem alone; checks NEITHER a DEX share-venue NOR a credit return path — so vaults are promoted into the live graph with their actual return leg (DEX or Morpho credit) unverified",
+        "issue": "classifies an ERC4626 as loop-closable from asset()+previewRedeem alone; checks NEITHER a DEX share-venue NOR a credit return path \u2014 so vaults are promoted into the live graph with their actual return leg (DEX or Morpho credit) unverified",
         "evidence": "node active-pools.json exact token0/token1 match: steakUSDC/steakUSDT/srUSDe/sfrxETH/waEthUSDT/waEthUSDC each have 0 share-token swap venues; wstETH 7, sUSDS 2",
         "codify_target": "analysis/src/discovery: gate vault promotion on a return-path check (DEX share-venue OR a wired credit edge); + main.ts banner count of loop-closable protocol edges",
         "status": "open"
@@ -51,17 +51,18 @@
       "primary_gap": "none_tooling_only",
       "gap_detail": "no_single_competitor_tx_report_mode",
       "evidence": {
-        "finding": "Postmortem of coffee tx 0x15352456 (block 25472647): bundle-postmortem requires a bundle_submitted match (errors on a competitor-only tx); census-report computes winner_style/touchedVenues per tx but drops the record when ALL venues are in_graph (census-report.ts:180 continue) and reports net_realized_usd=0 / qualifying=0 — reads as 'no profit / nothing found' when the truth is 'profitable ($0.54 tx-profit) but no route gap'. Analyst had to hand-assemble the verdict from tx-profit + raw logs.",
+        "finding": "Postmortem of coffee tx 0x15352456 (block 25472647): bundle-postmortem requires a bundle_submitted match (errors on a competitor-only tx); census-report computes winner_style/touchedVenues per tx but drops the record when ALL venues are in_graph (census-report.ts:180 continue) and reports net_realized_usd=0 / qualifying=0 \u2014 reads as 'no profit / nothing found' when the truth is 'profitable ($0.54 tx-profit) but no route gap'. Analyst had to hand-assemble the verdict from tx-profit + raw logs.",
         "tx": "0x153524566a94f24094c1f083c0b9d98899787f8968943f0f6200230dc45e8e02",
-        "cross_check": "tx-profit realized $0.54 net $0.49; census net_realized_usd=0 (by-design filter, not stale math)"
+        "cross_check": "tx-profit realized $0.54 net $0.49; census net_realized_usd=0 (by-design filter, not stale math)",
+        "divergence_20260707": "0xf698e6c2 (blk 25476156, coffee STBT loop): census route_gap_decisive=false while hand receipt-walk shows TWO out-of-graph venues (curve metapool 0x892d701d STBT/3CRV + non-standard STBT->ETH venue 0x7d002303). Root cause: distinct_out_of_graph counts univ2/3/4 lineage ONLY - curve/exotic venue gaps are invisible to the census verdict."
       },
       "tooling_defect": {
         "tool": "analysis/src/cli/census-report.ts (+ bundle-postmortem.ts single-tx entry)",
-        "issue": "no --tx single-competitor-tx mode: in-graph-only competitor txs are silently excluded from analyzed_competitors, hiding the already-computed winner_style/touchedVenues/realizedUsd; net_realized_usd=0 is ambiguous (no-gap vs no-profit)",
+        "issue": "no --tx single-competitor-tx mode: in-graph-only competitor txs are silently excluded from analyzed_competitors, hiding the already-computed winner_style/touchedVenues/realizedUsd; net_realized_usd=0 is ambiguous (no-gap vs no-profit); ALSO out_of_graph detection is univ2/3/4-only (curve/exotic venues never counted -> false 'no route gap', 2026-07-07 0xf698e6c2)",
         "proposed_fix": "add a --tx <hash> mode (or --include-in-graph) that emits the per-tx CensusPerTx record regardless of in_graph filter; label summary field as route_gap_profit_usd"
       },
       "created_at": "2026-07-06T10:21:11.017088Z",
-      "updated_at": "2026-07-06T10:21:11.017088Z"
+      "updated_at": "2026-07-07T00:41:06.179662Z"
     },
     {
       "learning_case_id": "tooldef-20260706-atomicity-vault-inventory",
@@ -76,7 +77,7 @@
       "gap_detail": "inventory_vault_rebalance_misclassified_atomic",
       "evidence": {
         "finding": "bundle-postmortem winner_style catches CEX-DEX one_leg_inventory (via winner_moved_price_beyond_prestate tick heuristic) but NOT vault-share inventory rebalance. 0x9be73297 (steakUSDC/steakUSDT rebalance through private vault contracts) has a closed-loop flash flow -> would misclassify as atomic_loop, polluting competitor analysis.",
-        "verified": "on-chain 24568128->24568129: mediator 0x4825ef drew 291,368 steakUSDC from a pre-held 2,751,718 inventory; bundler 0xb82809 kept +293,404 steakUSDT. NET position change, not atomic. The executor 0xe08d97 intra-tx net was only +WETH (looks atomic) — inventory hidden in helper contracts.",
+        "verified": "on-chain 24568128->24568129: mediator 0x4825ef drew 291,368 steakUSDC from a pre-held 2,751,718 inventory; bundler 0xb82809 kept +293,404 steakUSDT. NET position change, not atomic. The executor 0xe08d97 intra-tx net was only +WETH (looks atomic) \u2014 inventory hidden in helper contracts.",
         "signal": "cleanest catch = share-token net mint/burn imbalance from the receipt: for each ERC4626/vault-share token, net(minted-burned) != 0 => inventory/non-atomic. Robust version = check the bot contract-cluster before/after block balances."
       },
       "tooling_defect": {
@@ -102,7 +103,7 @@
       "primary_gap": "none_tooling_only",
       "gap_detail": "reconcile_gate_misses_ssm_wrapped_canonical_runs",
       "evidence": {
-        "finding": "guard-tool-reconcile.py / guard-reconcile-stop.py do not credit canonical tool runs (npm run tx-profit / census-report / bundle-postmortem) when they execute inside `aws ssm send-command` parameters — the standard zero-CU node-side path per the bundle-postmortem skill. Result: pending entries accumulate across an entire postmortem session (4 txs, all reconciled on-node) and the Stop gate blocks with false positives; cleared via the sanctioned rm path 2026-07-07.",
+        "finding": "guard-tool-reconcile.py / guard-reconcile-stop.py do not credit canonical tool runs (npm run tx-profit / census-report / bundle-postmortem) when they execute inside `aws ssm send-command` parameters \u2014 the standard zero-CU node-side path per the bundle-postmortem skill. Result: pending entries accumulate across an entire postmortem session (4 txs, all reconciled on-node) and the Stop gate blocks with false positives; cleared via the sanctioned rm path 2026-07-07.",
         "session": "57680a96 (2026-07-06/07 coffee postmortems F-010/F-011)"
       },
       "tooling_defect": {

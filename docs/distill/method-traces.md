@@ -55,6 +55,30 @@
 - codify_next: tooling_defect LearningCase tooldef-20260706-census-single-tx-ingraph-detail — FILED (open): add --tx single-competitor-tx mode (or --include-in-graph) emitting the per-tx record; rename summary field to route_gap_profit_usd.
 - distill_for_opus: **In a competitor postmortem, locate the cheap side of the winner's trade FIRST. If the cheap side is a signed off-chain order (multiple ECDSA sigs + a ~seconds deadline in calldata) the winner class is rfq_fill = non-comparable: no pool/path/latency work can capture it, and "did our live see it" is answered by flow visibility (trigger tx prio=0 ⇒ private), not by coverage. Spend the fix budget on flow classes we can receive.**
 
+### 20260707-coffee-stbt-rwa-loop-postmortem.md
+- task_class: bundle_postmortem
+- tools_used:
+  - SSM + local reth (zero-CU): eth_getTransactionByHash/Receipt, block-wide eth_getLogs (same-block movers), 24h venue-activity logs, on-chain symbol() calls
+                    - npm run tx-profit (canonical PnL: $0.54/$0.03/$0.51)
+                    - npm run census-report (canonical venue verdict — DIVERGED, univ-only out_of_graph blindness, recorded per rule 16)
+                    - active-pools.json membership greps (per-leg in_graph)
+                    - WebSearch (STBT/Matrixdock identity + permissioning; router/venue addresses returned nothing public)
+                    - events JSONL grep (our 21 events at the block, zero leg overlap)
+- evidence_order: 1. tx+receipt (route shape) 2. tx-profit (size) 3. symbol()+WebSearch (STBT = KYC RWA) 4. same-block logs (standing vs backrun) 5. per-leg graph membership 6. 24h venue logs (class frequency) 7. census reconcile (divergence found)
+- analysis_frame:
+  - atomic-vs-backrun decided by same-block prior movers on ALL legs, not by tx shape alone
+                    - who HOLDS the permissioned token mid-route (coffee never does ⇒ access lives in the router/venue, F-009 3-point leg test applies)
+                    - class value = venue-frequency × per-take profit measured over a day of logs, BEFORE any close-the-gap work
+                    - census verdict is univ-lineage-scoped — curve/exotic venue gaps need the hand receipt-walk (until the tool is extended)
+- sanity_checks:
+  - USDC/DAI/WETH amounts followed leg-by-leg to confirm the loop closes (in 0.040283 vs out 0.040598, profit matches Withdrawal 0.000314)
+                    - metapool activity attributed by router topic, not assumed to be coffee-only
+                    - in_graph checked for all four legs separately (2 in / 2 out), not just the missing ones
+                    - census divergence root-caused to detection scope before calling the tool wrong
+- tool_gap: census-report out_of_graph detection is univ2/3/4-only — curve-metapool / exotic-venue route gaps produce a false route_gap_decisive=false; recorded as an extension of the existing filed defect.
+- codify_next: tooling_defect LearningCase tooldef-20260706-census-single-tx-ingraph-detail — EXTENDED (open) with the univ-only out_of_graph divergence (0xf698e6c2); fix = count curve/balancer/fluid/exotic lineages in distinct_out_of_graph, or at minimum emit unclassified-venue addresses.
+- distill_for_opus: **For a permissioned-asset (RWA) competitor loop: first ask who holds the token at each hop — if only whitelisted intermediaries ever hold it, replicability = F-009 3-point test on the ROUTER, not on the pool. And always price the CLASS (a day of venue logs: here 2 trades/$1 total) before considering adapter work; a closable-looking venue gap at $1/day is a deliberate non-close, logged so it never re-opens.**
+
 ## implementation
 ### 20260705-learning-kernel-build.md
 - task_class: implementation

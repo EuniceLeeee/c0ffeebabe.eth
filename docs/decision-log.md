@@ -276,6 +276,19 @@
   `tooldef-20260706-census-single-tx-ingraph-detail`). Full trace:
   `docs/analysis/20260706-coffee-keeper-claim-postmortem.md`. [[project-cex-dex-inventory-competitor-noise]]
 
+### F-012 | 2026-07-07 | ✅ | `0xf698e6c2` (coffee, blk 25476156) = STBT RWA atomic loop — venue gap DELIBERATELY not closed
+- **What:** standing-dislocation 4-leg loop (no backrun): flash 0.0403 WETH → v3 DAI/WETH (in-graph) → 3pool
+  add_liquidity → 3CRV (in-graph) → STBT/3CRV metapool `0x892d701d` (NOT in graph) → STBT→ETH at exotic venue
+  `0x7d002303` (NOT in graph) → net **$0.51** (tx-profit). STBT = Matrixdock T-bill RWA, KYC-whitelisted,
+  rebasing; **coffee never holds STBT** — the whitelisted router `0x45312ea0` does.
+- **Why not close:** class measured at **~2 trades/$1 per DAY** (24h venue logs); replicability hinges on the
+  router being permissionless = F-009 3-point leg test UNPROVEN; exit venue needs a new adapter for an
+  unidentified ABI. Dust × access-unproven × adapter cost ⇒ log it, don't build. Re-open ONLY if the class
+  frequency changes an order of magnitude or the router is proven open.
+- **Tooling divergence (rule 16):** census-report said `route_gap_decisive=false` — its out_of_graph counts
+  univ2/3/4 ONLY; curve/exotic venue gaps invisible → extended `tooldef-20260706-census-single-tx-ingraph-detail`.
+  Full trace: `docs/analysis/20260707-coffee-stbt-rwa-loop-postmortem.md`.
+
 ## Dead-ends / retired (high-value — don't circle back)
 
 ### ~~X-001 | R13–R21 | ❌ | "coverage exhausted → economics/posture is the only gate"~~
