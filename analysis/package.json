@@ -34,7 +34,8 @@
     "test:onchain-loss-scan": "node --import tsx --test src/test/onchain-loss-scan.ts",
     "test:tx-shape": "node --import tsx --test src/test/tx-shape.ts",
     "build": "tsc --noEmit",
-    "graph-in": "node --import tsx src/cli/graph-in.ts"
+    "graph-in": "node --import tsx src/cli/graph-in.ts",
+    "block-activity": "node --import tsx src/cli/block-activity.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
