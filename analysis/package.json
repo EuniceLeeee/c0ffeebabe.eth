@@ -11,6 +11,7 @@
     "onchain-loss-scan": "tsx src/cli/onchain-loss-scan.ts",
     "census-report": "tsx src/cli/census-report.ts",
     "tx-profit": "tsx src/cli/tx-profit.ts",
+    "tx-flow": "tsx src/cli/tx-flow.ts",
     "redact-live-run": "tsx src/cli/redact-live-run.ts",
     "distill-harvest": "tsx src/cli/distill-harvest.ts",
     "hermes-gate": "tsx src/cli/hermes-gate.ts",

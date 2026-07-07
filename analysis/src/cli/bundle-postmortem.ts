@@ -11,6 +11,7 @@ import {
   fetchEthUsd,
   priceArb,
 } from "../pnl/arb-profit.js";
+import { buildFlowReport, formatTokenAmount, renderFlowWalk } from "../pnl/flow-walk.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
@@ -569,6 +570,7 @@ async function anyTxPostmortem(
   const priorMovers = await findPriorMovers(rpc, blockNumber, transactionIndex, txHash, addressVenues, v4PoolIds);
   const venueEmitters = new Set([...addressVenues.map(lower), ...(v4PoolIds.length > 0 ? [UNIV4_POOL_MANAGER] : [])]);
   const executors = competitorBeneficiaries(tx, receipt, profit.beneficiary);
+  const flowReport = await buildFlowReport(rpc, receipt, executors);
   const report = {
     command: "bundle-postmortem" as const,
     mode: "any_tx" as const,
@@ -613,9 +615,20 @@ async function anyTxPostmortem(
     positioning: priorMovers.length === 0 ? "standing_state_take" : "after_in_block_movers",
     our_events_at_block: ourEventsAtBlock(loaded.events, blockNumber, venueEmitters),
     flow: summarizeFlowLedger(buildFlowLedger(receipt), executors),
+    flow_walk: flowReport.steps.map((step) => ({
+      logIndex: step.logIndex,
+      kind: step.kind,
+      token: step.token,
+      symbol: flowReport.tokens.get(step.token)?.symbol,
+      from: step.from,
+      to: step.to,
+      amount: step.amount.toString(),
+      display: formatTokenAmount(step.amount, flowReport.tokens.get(step.token)?.decimals ?? null),
+    })),
     graph: { status: graph.status, path: graph.path, entries: graph.entries },
   };
   console.log(renderAnyTxSummary(report));
+  console.log(renderFlowWalk(flowReport));
   if (outPath) await writeJson(outPath, report);
 }
 
