@@ -85,10 +85,10 @@
         "evidence": "0x9be73297: steakUSDT net +293,404 minted / steakUSDC net -291,368 burned across the tx; mediator pre-held 2.75M steakUSDC",
         "codify_target": "DONE: bundle-postmortem.ts adds WinnerStyle inventory_vault_rebalance + shareTokenImbalanceTokens(receipt) [Layer 2: per-tx ERC4626 share mint/burn net imbalance from the receipt, pure, no RPC] + inventoryRebalanceSelectorPresent [Layer 1: hardcoded rebalance selectors 0x6e553f65 deposit / 0xba087652 redeem via callTracer, corroborated] wired into classifyWinnerStyle (checked BEFORE atomic_loop) + isNonComparableWinnerStyle; census-report inherits via isNonComparableWinnerStyle. Fixtures postmortem-0x9be73297 (positive) + postmortem-0xf2de7499 (negative control). Gate: npm run test:noise-filter 37/37. Ref F-009.",
         "status": "codified",
-        "codify_commit": "UNCOMMITTED_pending_orchestrator_gate"
+        "codify_commit": "e49ebf4"
       },
       "created_at": "2026-07-06T10:32:38.530Z",
-      "updated_at": "2026-07-07T00:33:59.699Z"
+      "updated_at": "2026-07-07T00:40:56.409Z"
     },
     {
       "learning_case_id": "tooldef-20260707-reconcile-gate-ssm-blind",
