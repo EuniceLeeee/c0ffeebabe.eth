@@ -52,7 +52,9 @@ import { quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
   type PostImpactSeed,
+  type V2Seed,
   type V2PostImpactSeed,
+  type V3LiveSeed,
   type V3PostImpactSeed,
   type V4PostImpactSeed,
 } from "./solver/pool-state-cache.js";
@@ -108,6 +110,20 @@ const WSTETH = new ethers.Interface([
 const PSM = new ethers.Interface(["function tin() view returns (uint256)"]);
 const WAD = 10n ** 18n;
 const PSM_TO18 = 10n ** 12n;
+const BLOCKSCAN_V2_SYNC_TOPIC = ethers.id("Sync(uint112,uint112)");
+const BLOCKSCAN_V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
+const BLOCKSCAN_V3_MINT_TOPIC = ethers.id("Mint(address,address,int24,int24,uint128,uint256,uint256)");
+const BLOCKSCAN_V3_BURN_TOPIC = ethers.id("Burn(address,int24,int24,uint128,uint256,uint256)");
+const BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC = ethers.id(
+  "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
+);
+const BLOCKSCAN_WARM_EVENT_TOPICS = [
+  BLOCKSCAN_V2_SYNC_TOPIC,
+  BLOCKSCAN_V3_SWAP_TOPIC,
+  BLOCKSCAN_V3_MINT_TOPIC,
+  BLOCKSCAN_V3_BURN_TOPIC,
+  BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC,
+];
 
 const WHALE = "0x000000000000000000000000000000000000dEaD";
 
@@ -521,6 +537,8 @@ async function main(): Promise<void> {
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
   const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
+  const blockScanFullRewarmBlocks = Number(process.env.SEARCHER_BLOCKSCAN_FULL_REWARM_BLOCKS ?? "600");
+  const blockScanWarmVerify = process.env.SEARCHER_BLOCKSCAN_WARM_VERIFY === "1";
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
     const isolatedState = new AnvilStateBackend(
@@ -933,6 +951,8 @@ async function main(): Promise<void> {
   // pool then reused across blocks — see seedBlockScanV3TickMetadata.
   const blockScanV3Meta = new Map<string, V3PoolMeta>();
   const blockScanDecimals = new Map<string, number>();
+  let blockScanLastWarmedBlock: number | null = null;
+  let blockScanLastFullWarmBlock: number | null = null;
   const scheduleBlockScan = (blockNumber: number): void => {
     if (!enableBlockScan) return;
     const edges = blockScanGraph;
@@ -975,9 +995,21 @@ async function main(): Promise<void> {
           return true;
         };
         try {
+          const allHops = blockScanQuoteRequests(edges);
+          let warmPlan: BlockScanWarmPlan;
           try {
             await blockScanStateForPass.forkAt(blockNumber);
-            blockScanCacheForPass.clear();
+            blockScanCacheForPass.beginBlockScanPass(blockNumber);
+            warmPlan = await planBlockScanWarm(
+              provider,
+              blockScanCacheForPass,
+              blockScanUpdaterForPass,
+              blockNumber,
+              allHops,
+              blockScanLastWarmedBlock,
+              blockScanLastFullWarmBlock,
+              blockScanFullRewarmBlocks,
+            );
           } catch (err) {
             console.log(
               `[searcher/blockscan] block=${blockNumber} fork error: ` +
@@ -985,16 +1017,38 @@ async function main(): Promise<void> {
             );
             return;
           }
-          if (passBudgetExceeded("fork")) return;
 
-          const hops = blockScanQuoteRequests(edges);
-          for (let i = 0; i < hops.length; i += 500) {
-            if (passBudgetExceeded("warm_v2v3")) return;
-            await blockScanUpdaterForPass.update(blockNumber, hops.slice(i, i + 500), {
-              awaitTicks: false,
-              maxTickPools: 0,
-            });
+          console.log(`[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)}`);
+          if (warmPlan.kind === "full") {
+            blockScanCacheForPass.clear();
+          } else {
+            blockScanCacheForPass.invalidateBlockScanV2V3(warmPlan.changed.pools);
           }
+          if (passBudgetExceeded("warm_plan")) return;
+
+          const warmHops = warmPlan.kind === "full" ? allHops : warmPlan.changed.hops;
+          const v2v3WarmComplete = await warmBlockScanV2V3(
+            blockScanUpdaterForPass,
+            blockNumber,
+            warmHops,
+            () => passBudgetExceeded("warm_v2v3"),
+          );
+          if (!v2v3WarmComplete) return;
+          if (warmPlan.kind === "incremental") {
+            blockScanCacheForPass.restampBlockScanV2V3(blockNumber, warmPlan.changed.pools);
+            if (blockScanWarmVerify) {
+              await verifyBlockScanIncrementalWarm(
+                provider,
+                blockNumber,
+                allHops,
+                blockScanCacheForPass,
+                warmPlan.changed.pools,
+              );
+              if (passBudgetExceeded("warm_verify")) return;
+            }
+          }
+          blockScanLastWarmedBlock = blockNumber;
+          if (warmPlan.kind === "full") blockScanLastFullWarmBlock = blockNumber;
           const v3TickMeta = await seedBlockScanV3TickMetadata(
             provider,
             blockScanCacheForPass,
@@ -3112,6 +3166,262 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
       poolToken1: edge.poolToken1,
       ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
     }));
+}
+
+type BlockScanFullWarmReason = "startup" | "logs_error" | "reorg" | "interval" | "range";
+
+// Cap the incremental getLogs span: after a long stall (RPC outage / paused
+// passes) a chain-wide topic query over hundreds of blocks is heavier than a
+// full rewarm — just rewarm.
+const BLOCKSCAN_MAX_INCREMENTAL_RANGE_BLOCKS = 32;
+
+interface BlockScanChangedPools {
+  fromBlock: number;
+  toBlock: number;
+  logs: number;
+  hops: QuoteRequest[];
+  pools: Set<string>;
+}
+
+type BlockScanWarmPlan =
+  | { kind: "full"; reason: BlockScanFullWarmReason; error?: string }
+  | { kind: "incremental"; changed: BlockScanChangedPools };
+
+async function planBlockScanWarm(
+  provider: ethers.JsonRpcProvider,
+  cache: PoolStateCache,
+  updater: PoolStateUpdater,
+  blockNumber: number,
+  hops: QuoteRequest[],
+  lastWarmedBlock: number | null,
+  lastFullWarmBlock: number | null,
+  fullRewarmBlocks: number,
+): Promise<BlockScanWarmPlan> {
+  if (lastWarmedBlock === null) return { kind: "full", reason: "startup" };
+  if (blockNumber <= lastWarmedBlock) return { kind: "full", reason: "reorg" };
+  if (blockNumber - lastWarmedBlock > BLOCKSCAN_MAX_INCREMENTAL_RANGE_BLOCKS) {
+    return { kind: "full", reason: "range" };
+  }
+  if (
+    lastFullWarmBlock !== null &&
+    blockNumber - lastFullWarmBlock >= fullRewarmBlocks
+  ) {
+    return { kind: "full", reason: "interval" };
+  }
+
+  try {
+    const changed = await detectBlockScanChangedPools(
+      provider,
+      cache,
+      updater,
+      lastWarmedBlock + 1,
+      blockNumber,
+      hops,
+    );
+    return { kind: "incremental", changed };
+  } catch (err) {
+    return {
+      kind: "full",
+      reason: "logs_error",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function detectBlockScanChangedPools(
+  provider: ethers.JsonRpcProvider,
+  cache: PoolStateCache,
+  updater: PoolStateUpdater,
+  fromBlock: number,
+  toBlock: number,
+  hops: QuoteRequest[],
+): Promise<BlockScanChangedPools> {
+  const mutableHops = blockScanMutableQuoteRequests(hops);
+  const byAddress = new Map<string, QuoteRequest[]>();
+  for (const hop of mutableHops) {
+    const key = hop.target.toLowerCase();
+    const existing = byAddress.get(key);
+    if (existing) existing.push(hop);
+    else byAddress.set(key, [hop]);
+  }
+
+  const logs = await provider.getLogs({
+    fromBlock,
+    toBlock,
+    topics: [BLOCKSCAN_WARM_EVENT_TOPICS],
+  });
+
+  const changedKeys = new Set<string>();
+  const changedPools = new Set<string>();
+  const markChanged = (hop: QuoteRequest): void => {
+    const pool = hop.target.toLowerCase();
+    changedPools.add(pool);
+    for (const candidate of byAddress.get(pool) ?? [hop]) {
+      changedKeys.add(blockScanWarmKey(candidate));
+    }
+  };
+
+  for (const log of logs) {
+    const pool = log.address.toLowerCase();
+    const poolHops = byAddress.get(pool);
+    if (!poolHops) continue;
+    for (const hop of poolHops) markChanged(hop);
+  }
+
+  for (const hop of mutableHops) {
+    if (!blockScanHasWarmState(cache, updater, hop)) markChanged(hop);
+  }
+
+  return {
+    fromBlock,
+    toBlock,
+    logs: logs.length,
+    hops: mutableHops.filter((hop) => changedKeys.has(blockScanWarmKey(hop))),
+    pools: changedPools,
+  };
+}
+
+function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
+  const seen = new Set<string>();
+  const out: QuoteRequest[] = [];
+  for (const hop of hops) {
+    if (hop.adapterId !== "univ2-swap" && hop.adapterId !== "univ3-swap") continue;
+    const key = blockScanWarmKey(hop);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hop);
+  }
+  return out;
+}
+
+function blockScanWarmKey(hop: QuoteRequest): string {
+  return `${hop.adapterId}:${hop.target.toLowerCase()}`;
+}
+
+function blockScanHasWarmState(
+  cache: PoolStateCache,
+  updater: PoolStateUpdater,
+  hop: QuoteRequest,
+): boolean {
+  if (hop.adapterId === "univ2-swap") {
+    return cache.hasV2(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
+  }
+  if (hop.adapterId === "univ3-swap") {
+    return cache.hasV3Live(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
+  }
+  return true;
+}
+
+async function warmBlockScanV2V3(
+  updater: PoolStateUpdater,
+  blockNumber: number,
+  hops: QuoteRequest[],
+  shouldStop: () => boolean = () => false,
+): Promise<boolean> {
+  for (let i = 0; i < hops.length; i += 500) {
+    if (shouldStop()) return false;
+    await updater.update(blockNumber, hops.slice(i, i + 500), {
+      awaitTicks: false,
+      maxTickPools: 0,
+    });
+  }
+  return true;
+}
+
+async function verifyBlockScanIncrementalWarm(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  allHops: QuoteRequest[],
+  cache: PoolStateCache,
+  changedPools: ReadonlySet<string>,
+): Promise<void> {
+  const scratchCache = new PoolStateCache(provider);
+  const scratchUpdater = new PoolStateUpdater(provider, scratchCache, {
+    maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
+  });
+  await warmBlockScanV2V3(scratchUpdater, blockNumber, allHops);
+
+  let checked = 0;
+  let mismatches = 0;
+  for (const hop of blockScanMutableQuoteRequests(allHops)) {
+    const pool = hop.target.toLowerCase();
+    if (changedPools.has(pool)) continue;
+    if (hop.adapterId === "univ2-swap") {
+      const cached = cache.snapshotV2(hop.target, blockNumber);
+      const fresh = scratchCache.snapshotV2(hop.target, blockNumber);
+      if (!fresh) continue;
+      checked++;
+      if (!cached || !sameV2Seed(cached, fresh)) {
+        mismatches++;
+        console.log(
+          `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
+            `pool=${pool} field=reserves cached=${cached ? formatV2Seed(cached) : "missing"} ` +
+            `fresh=${formatV2Seed(fresh)}`,
+        );
+      }
+    } else if (hop.adapterId === "univ3-swap") {
+      const cached = cache.snapshotV3Live(hop.target, blockNumber);
+      const fresh = scratchCache.snapshotV3Live(hop.target, blockNumber);
+      if (!fresh) continue;
+      checked++;
+      if (!cached || !sameV3LiveSeed(cached, fresh)) {
+        mismatches++;
+        console.log(
+          `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
+            `pool=${pool} field=slot0 cached=${cached ? formatV3LiveSeed(cached) : "missing"} ` +
+            `fresh=${formatV3LiveSeed(fresh)}`,
+        );
+      }
+    }
+  }
+  console.log(
+    `[searcher/blockscan] block=${blockNumber} warm_verify checked=${checked} mismatches=${mismatches}`,
+  );
+}
+
+function sameV2Seed(a: V2Seed, b: V2Seed): boolean {
+  return a.token0.toLowerCase() === b.token0.toLowerCase() &&
+    a.token1.toLowerCase() === b.token1.toLowerCase() &&
+    a.reserve0 === b.reserve0 &&
+    a.reserve1 === b.reserve1 &&
+    a.blockTimestampLast === b.blockTimestampLast;
+}
+
+function sameV3LiveSeed(a: V3LiveSeed, b: V3LiveSeed): boolean {
+  return a.sqrtPriceX96 === b.sqrtPriceX96 &&
+    a.tick === b.tick &&
+    a.liquidity === b.liquidity &&
+    a.observationIndex === b.observationIndex &&
+    a.observationCardinality === b.observationCardinality &&
+    a.observationCardinalityNext === b.observationCardinalityNext &&
+    a.feeProtocol === b.feeProtocol &&
+    a.unlocked === b.unlocked;
+}
+
+function formatV2Seed(seed: V2Seed): string {
+  return `${seed.reserve0}/${seed.reserve1}/${seed.blockTimestampLast ?? "n/a"}`;
+}
+
+function formatV3LiveSeed(seed: V3LiveSeed): string {
+  return [
+    seed.sqrtPriceX96,
+    seed.tick,
+    seed.liquidity,
+    seed.observationIndex ?? "n/a",
+    seed.observationCardinality ?? "n/a",
+    seed.observationCardinalityNext ?? "n/a",
+    seed.feeProtocol ?? "n/a",
+    seed.unlocked ?? "n/a",
+  ].join("/");
+}
+
+function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
+  if (plan.kind === "full") {
+    const suffix = plan.error ? ` error=${blockScanErrorMessage(plan.error)}` : "";
+    return `warm=full reason=${plan.reason}${suffix}`;
+  }
+  return `warm=incremental changed=${plan.changed.pools.size} ` +
+    `range=${plan.changed.fromBlock}-${plan.changed.toBlock} logs=${plan.changed.logs}`;
 }
 
 type BlockScanProtocolAdapter =

@@ -297,6 +297,49 @@ export class PoolStateCache {
     this.overlayPools.clear();
   }
 
+  /**
+   * Block-scan pass boundary: keep seeded V2 reserves and V3 slot0/liquidity
+   * across blocks, while clearing the families that clear() dropped per pass.
+   */
+  beginBlockScanPass(blockNumber: number): void {
+    this.tickBlock = blockNumber;
+    this.curve.clear();
+    this.failed.clear();
+    this.overlayPools.clear();
+    for (const [key, live] of this.v3Live) {
+      if (live.source !== "seed") this.v3Live.delete(key);
+    }
+    for (const [key, cached] of this.v2) {
+      if (cached.source !== "seed") this.v2.delete(key);
+    }
+  }
+
+  invalidateBlockScanV2V3(pools: Iterable<string>): void {
+    for (const pool of pools) {
+      const key = pool.toLowerCase();
+      this.v2.delete(key);
+      this.v3Live.delete(key);
+      this.failed.delete(key);
+    }
+  }
+
+  restampBlockScanV2V3(blockNumber: number, skipPools: ReadonlySet<string> = new Set()): void {
+    for (const [key, cached] of this.v2) {
+      if (cached.source === "seed" && !skipPools.has(key)) cached.blockNumber = blockNumber;
+    }
+    for (const [key, live] of this.v3Live) {
+      if (live.source === "seed" && !skipPools.has(key)) live.blockNumber = blockNumber;
+    }
+  }
+
+  hasV2(pool: string): boolean {
+    return this.v2.has(pool.toLowerCase());
+  }
+
+  hasV3Live(pool: string): boolean {
+    return this.v3Live.has(pool.toLowerCase());
+  }
+
   seedV2(seed: V2Seed): void {
     const key = seed.pool.toLowerCase();
     this.v2.set(key, {
@@ -395,6 +438,24 @@ export class PoolStateCache {
         tickBitmap: ticks.tickBitmap,
         ticks: ticks.ticks,
       },
+    };
+  }
+
+  snapshotV3Live(pool: string, blockNumber?: number): V3LiveSeed | null {
+    const key = pool.toLowerCase();
+    const live = this.v3Live.get(key);
+    if (!live || !this.liveStateFreshFor(live.blockNumber, blockNumber)) return null;
+    return {
+      pool,
+      sqrtPriceX96: live.sqrtPriceX96,
+      tick: live.tick,
+      liquidity: live.liquidity,
+      observationIndex: live.observationIndex,
+      observationCardinality: live.observationCardinality,
+      observationCardinalityNext: live.observationCardinalityNext,
+      feeProtocol: live.feeProtocol,
+      unlocked: live.unlocked,
+      blockNumber: live.blockNumber ?? blockNumber ?? 0,
     };
   }
 

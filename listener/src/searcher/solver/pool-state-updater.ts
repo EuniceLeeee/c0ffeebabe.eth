@@ -108,6 +108,13 @@ export class PoolStateUpdater {
     }
   }
 
+  hasStaticMetadata(adapterId: string, pool: string): boolean {
+    const key = pool.toLowerCase();
+    if (adapterId === "univ2-swap") return this.v2Static.has(key);
+    if (adapterId === "univ3-swap") return this.v3Static.has(key);
+    return true;
+  }
+
   private dedupe(hops: QuoteRequest[]): QuoteRequest[] {
     const seen = new Set<string>();
     const out: QuoteRequest[] = [];
