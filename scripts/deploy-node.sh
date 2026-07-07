@@ -44,7 +44,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -74,10 +74,14 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # scanner per block and prints candidates — NO plan/sim/submit, NO broadcast impact. Safe to enable in
   # any mode. Remove the marker → off. (Pass B will add the submit path behind its own gate.)
   [ -f "$REPO/.block-scan" ] && echo "SEARCHER_ENABLE_BLOCK_SCAN=1" >> "$tmp"
-  # hash-only (MEV-Share Path A) is ALWAYS ON (user directive 2026-07-04 — MEV-Share is the primary flow,
-  # 72x mempool volume; was .hash-only marker-gated). Ingest+sim only (submission still gated by
-  # allowHashOnlySubmit); no broadcast-guard/latency impact. To disable, edit this line deliberately.
-  echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
+  # block-scan atomic SUBMIT (BS-lane Pass B) is marker-controlled ($REPO/.blockscan-submit). Wires the
+  # block-scan +EV solve into live submission (standalone eth_sendBundle, NO victim). Same EV/phantom/
+  # standing-credit gates as backrun; bounded by the EV gate + wallet cap + DRY_RUN. Remove marker → off.
+  [ -f "$REPO/.blockscan-submit" ] && echo "SEARCHER_BLOCKSCAN_SUBMIT=1" >> "$tmp"
+  # hash-only (MEV-Share consumption) is marker-controlled ($REPO/.hash-only), DEFAULT OFF (2026-07-07:
+  # measured 100% phantom-victim rate — pure ghost flow that starved the mempool/atomic paths of CPU).
+  # Ingest+sim only (submission also gated by allowHashOnlySubmit). Create the marker to re-enable.
+  [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=$DRY_VAL + TTL=$OPP_TTL_MS + poolUniverseTopN=$POOL_UNIVERSE_TOP_N"
@@ -85,14 +89,15 @@ else
   say "no running process — ensuring DRY_RUN=$DRY_VAL in existing .env (mode=$MODE)"
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
   [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"  # A6 marker-gated (wsteth)
   [ -f "$REPO/.block-scan" ] && echo "SEARCHER_ENABLE_BLOCK_SCAN=1" >> "$tmp"  # BS-lane Pass A log-only, marker-gated
-  echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share always on (user directive 2026-07-04)
+  [ -f "$REPO/.blockscan-submit" ] && echo "SEARCHER_BLOCKSCAN_SUBMIT=1" >> "$tmp"  # BS-lane Pass B atomic submit, marker-gated
+  [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share consumption marker-gated, DEFAULT OFF (2026-07-07 ghost flow)
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
 
