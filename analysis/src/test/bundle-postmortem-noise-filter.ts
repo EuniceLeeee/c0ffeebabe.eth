@@ -1,17 +1,34 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildVerdict,
   classifyWinnerStyle,
+  isNonComparableWinnerStyle,
   loadGraphMembership,
   realizedProfitUsdForReport,
+  shareTokenImbalanceTokens,
   winnerMovedPriceBeyondPrestate,
   type WinnerStyle,
 } from "../cli/bundle-postmortem.js";
 import { ADDR, lower } from "../registry/protocols.js";
 import type { TokenDelta } from "../types.js";
+
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+// F-009 atomicity detector: a real inventory-rebalance receipt (0x9be73297: steakUSDC/steakUSDT
+// rebalance through private vault-wrappers) vs a clean atomic 4-leg AMM loop (0xf2de7499).
+const inventoryReceipt = JSON.parse(
+  readFileSync(join(FIXTURES, "postmortem-0x9be73297", "receipt.json"), "utf8"),
+);
+const atomicReceipt = JSON.parse(
+  readFileSync(join(FIXTURES, "postmortem-0xf2de7499", "receipt.json"), "utf8"),
+);
+const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
+const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
+const inventoryImbalanceTokens = shareTokenImbalanceTokens(inventoryReceipt).sort();
+const atomicImbalanceTokens = shareTokenImbalanceTokens(atomicReceipt);
 
 const CFG = "0xcccccccccccccccccccccccccccccccccccccccc";
 const reach = {
@@ -21,6 +38,38 @@ const reach = {
   builders_sent: ["test-builder"],
   note: "test fixture",
 };
+
+// The inventory receipt's residual vault-share position => inventory_vault_rebalance (non-comparable),
+// even though the executor's priced/native net looks like a clean atomic loop (+profit only).
+const inventoryVaultStyle = classifyWinnerStyle({
+  pricedDeltas: [delta(ADDR.WETH, 399744634603446n, "WETH", 18)], // looks atomic on the executor axis
+  unpricedDeltas: [],
+  nativeWeiPositive: false,
+  unpricedInTokensWithoutCounterTransfer: [],
+  winner_moved_price_beyond_prestate: false,
+  sandwich_detected: false,
+  share_imbalance_tokens: inventoryImbalanceTokens,
+  inventory_rebalance_selector_hit: true,
+});
+
+// The clean atomic loop: no share imbalance; a hardcoded selector hit alone must NOT reclassify a
+// comparable atomic loop (a plain ERC4626 arb calls deposit/redeem but nets zero shares).
+const atomicWithSelectorHit = classifyWinnerStyle({
+  pricedDeltas: [delta(ADDR.WETH, 399744634603446n, "WETH", 18)],
+  unpricedDeltas: [],
+  nativeWeiPositive: false,
+  unpricedInTokensWithoutCounterTransfer: [],
+  winner_moved_price_beyond_prestate: false,
+  sandwich_detected: false,
+  share_imbalance_tokens: atomicImbalanceTokens,
+  inventory_rebalance_selector_hit: true,
+});
+
+const inventoryVaultVerdict = buildVerdict(
+  event("100", "50"),
+  [competitor(inventoryVaultStyle, "200")],
+  reach,
+);
 
 const oneLegStyle = classifyWinnerStyle({
   pricedDeltas: [delta(ADDR.WETH, -305410000000000000n, "WETH", 18)],
@@ -162,13 +211,43 @@ const checks: Array<() => void> = [
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90610, "down"), false),
   () => assert.equal(winnerMovedPriceBeyondPrestate(90610, 90612, "down"), false),
   () => assert.equal(realizedProfitUsdForReport(-528, [delta(CFG, 1n, "CFG", 18)]), `unpriceable(${lower(CFG)})`),
+
+  // F-009 atomicity / inventory-rebalance detector ---------------------------------------------
+  // Layer 2 (robust receipt signal): 0x9be73297 leaves a residual position in BOTH vault-share
+  // tokens (steakUSDT minted, steakUSDC burned) => both flagged. Reconciles the F-009 on-chain trace.
+  () => assert.deepEqual(inventoryImbalanceTokens, [lower(STEAK_USDC), lower(STEAK_USDT)].sort()),
+  // Negative control: the clean atomic 4-leg AMM loop 0xf2de7499 has NO share mint/burn => empty.
+  () => assert.deepEqual(atomicImbalanceTokens, []),
+  // 0x9be73297 => inventory_vault_rebalance even though its executor net looks atomic (+WETH only).
+  () => assert.equal(inventoryVaultStyle, "inventory_vault_rebalance"),
+  () => assert.equal(isNonComparableWinnerStyle("inventory_vault_rebalance"), true),
+  () => assert.equal(inventoryVaultVerdict.winner_style, "inventory_vault_rebalance"),
+  () => assert.equal(inventoryVaultVerdict.non_comparable_winner, true),
+  () => assert.equal(inventoryVaultVerdict.route_gap_decisive, false),
+  () => assert.match(inventoryVaultVerdict.note ?? "", /inventory_vault_rebalance/),
+  // Guard: hardcoded selector hit alone on a clean atomic loop (no share imbalance) does NOT
+  // reclassify it — a plain ERC4626 arb calls deposit/redeem but nets zero shares. Stays atomic_loop.
+  () => assert.equal(atomicWithSelectorHit, "atomic_loop"),
+  // Guard: a residual share imbalance with NO selector hit STILL flags (Layer 2 is sufficient alone).
+  () => assert.equal(classifyWinnerStyle({
+    pricedDeltas: [delta(ADDR.WETH, 399744634603446n, "WETH", 18)],
+    unpricedDeltas: [],
+    nativeWeiPositive: false,
+    unpricedInTokensWithoutCounterTransfer: [],
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+    share_imbalance_tokens: [lower(STEAK_USDT)],
+    inventory_rebalance_selector_hit: false,
+  }), "inventory_vault_rebalance"),
+  // Regression: the plain atomic-loop fixture (no new signals passed) is unchanged.
+  () => assert.equal(atomicStyle, "atomic_loop"),
 ];
 
 try {
   for (const check of checks) check();
   rmSync(graphFixtureDir, { recursive: true, force: true });
   console.log(`bundle-postmortem-noise-filter PASS (${checks.length}/${checks.length})`);
-  console.log("expected_transition: non-comparable (one_leg_inventory/sandwich) winner no longer triggers a false route_gap_decisive; only real atomic-loss coverage gaps do. verdict: fixed");
+  console.log("expected_transition: non-comparable winner (one_leg_inventory/sandwich/inventory_vault_rebalance) no longer triggers a false route_gap_decisive; a flash-wrapped vault-share inventory rebalance (0x9be73297, F-009) that reads as atomic on the executor axis is now flagged non-comparable via the receipt share mint/burn imbalance. verdict: fixed");
 } catch (err) {
   console.error(`bundle-postmortem-noise-filter FAIL: ${(err as Error).message}`);
   process.exit(1);

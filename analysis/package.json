@@ -20,6 +20,7 @@
     "venue-discovery-window": "tsx src/cli/venue-discovery-window.ts",
     "venue-discovery-bq": "tsx src/cli/venue-discovery-bq.ts",
     "venue-registry": "node --import tsx src/cli/venue-registry.ts",
+    "test:noise-filter": "node --import tsx --test src/test/bundle-postmortem-noise-filter.ts",
     "test:sender-flow": "node --import tsx --test src/test/sender-flow-victim-source.ts",
     "test:swap-log-registry": "node --import tsx --test src/test/swap-log-registry.ts",
     "test:learning-case": "node --import tsx --test src/test/learning-case.ts",

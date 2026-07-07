@@ -41,8 +41,38 @@ const INVENTORY_PRICED_TOKENS = new Set([
 ]);
 const UNPRICED_DUST_RAW = 1000n; // observed residuals were exactly -1 raw unit
 
-export type WinnerStyle = "atomic_loop" | "one_leg_inventory" | "sandwich" | "unknown";
+export type WinnerStyle =
+  | "atomic_loop"
+  | "one_leg_inventory"
+  | "inventory_vault_rebalance"
+  | "sandwich"
+  | "unknown";
 export type TickDirection = "down" | "up";
+
+// Atomicity / inventory-rebalance detector (ref decision-log F-009). A flash-wrapped inventory
+// rebalance through private vault-wrapper contracts (e.g. 0x9be73297: steakUSDC/steakUSDT) presents
+// a CLEAN executor intra-tx net (+profit only) and a closed-loop flash flow, so it otherwise
+// misclassifies as atomic_loop and pollutes atomic-arb competitor analysis. It is NOT ours: it needs
+// pre-held vault-share inventory (~$2.9M) and leaves a residual position in helper contracts.
+//
+// Layer 1 (operator directive — flag by FUNCTION/selector, NOT by contract, because the SAME
+// contract's deposit/redeem are legit protocol-arb calls): a hardcoded set of ERC4626 vault-share
+// rebalance selectors observed as the inventory legs of 0x9be73297. To avoid over-flagging a plain
+// atomic ERC4626 arb (which also calls deposit/redeem but round-trips to ~zero net shares), the
+// selector hit is corroborated by Layer 2.
+//
+// Layer 2 (robust general signal): per-tx ERC4626/vault-share NET mint/burn imbalance from the
+// receipt — sum Transfer to/from 0x0 per share token; a nonzero net for any token ⇒ a residual
+// standing position ⇒ inventory/non-atomic. This catches the class generally (not just the hardcoded
+// selector) and is what makes the selector hit safe. A bot-cluster before/after-block balance check
+// is a documented future upgrade (F-009). Pure receipt computation — no extra RPC.
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+// deposit(uint256,address) 0x6e553f65 and redeem(uint256,address,address) 0xba087652 — the two
+// vault-wrapper legs of the 0x9be73297 inventory rebalance (bundler 0xb8280955 / mediator 0x4825eff2).
+const INVENTORY_REBALANCE_SELECTORS = new Set(["0x6e553f65", "0xba087652"]);
+// A share-token net that is dust (rounding) does NOT mark a residual position; observed rebalance
+// residuals were ~2.9e23 raw. Keep the threshold well above ERC4626 rounding (a few wei-shares).
+const SHARE_IMBALANCE_DUST_RAW = 1000n;
 type RealizedProfitUsd = number | null | string;
 
 type Json = Record<string, any>;
@@ -157,6 +187,9 @@ export interface WinnerStyleInput {
   unpricedInTokensWithoutCounterTransfer: string[];
   winner_moved_price_beyond_prestate: boolean;
   sandwich_detected: boolean;
+  // Atomicity detector (F-009). Both optional so existing callers/fixtures are unchanged.
+  inventory_rebalance_selector_hit?: boolean;
+  share_imbalance_tokens?: string[];
 }
 
 type WinnerStyleClassifierInput = Omit<WinnerStyleInput, "nativeWeiPositive" | "nativeWeiNegative"> & {
@@ -708,6 +741,17 @@ export function winnerMovedPriceBeyondPrestate(
 }
 
 export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerStyle {
+  // Atomicity check FIRST: a vault-share inventory rebalance (F-009) otherwise reads as atomic_loop
+  // because the executor's intra-tx net is clean. Two layers, either is sufficient to flag:
+  //  - Layer 2 (robust): a residual share-token mint/burn imbalance in the receipt (general signal).
+  //  - Layer 1 (operator first cut): a hardcoded ERC4626 rebalance selector. Trusted alone ONLY when
+  //    the winner is NOT a comparable atomic loop; a plain atomic ERC4626 arb also calls
+  //    deposit/redeem but round-trips to ~zero net shares (no imbalance) and returns to a priced
+  //    token (an atomic loop), so the selector never fires against it.
+  const shareImbalance = (input.share_imbalance_tokens?.length ?? 0) > 0;
+  const selectorInventory = Boolean(input.inventory_rebalance_selector_hit)
+    && !hasAtomicLoopFlow(input.pricedDeltas, input.unpricedDeltas, input.nativeWeiPositive ?? false);
+  if (shareImbalance || selectorInventory) return "inventory_vault_rebalance";
   if (input.winner_moved_price_beyond_prestate) return "one_leg_inventory";
   if (input.sandwich_detected) return "sandwich";
   if (hasOneLegInventoryFlow(
@@ -763,6 +807,14 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       input.blockNumber,
     )
     : false;
+  // Atomicity / inventory-rebalance detector (F-009). Layer 2 first (pure receipt, no RPC).
+  const shareImbalanceTokens = shareTokenImbalanceTokens(input.receipt);
+  // Layer 1 (hardcoded selectors) needs the inner calls (top-level input is a private entrypoint),
+  // so it reads a callTracer trace — but only when Layer 2 is silent, to avoid the extra RPC on the
+  // common case. Graceful degrade: if the trace is unavailable the imbalance layer still catches it.
+  const inventoryRebalanceSelectorHit = shareImbalanceTokens.length > 0
+    ? true
+    : await inventoryRebalanceSelectorPresent(input.rpc, input.txHash);
   return {
     winner_style: classifyWinnerStyle({
       pricedDeltas: input.profit.pricedDeltas,
@@ -772,10 +824,62 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       sandwich_detected: sandwichDetected,
       nativeWeiPositive,
       nativeWeiNegative,
+      inventory_rebalance_selector_hit: inventoryRebalanceSelectorHit,
+      share_imbalance_tokens: shareImbalanceTokens,
     }),
     winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
     unpriced_token_in_flow: unpricedTokenInFlow,
   };
+}
+
+// Layer 2 (F-009): per-tx ERC4626/vault-share NET mint/burn imbalance from the receipt. For each
+// token, sum Transfer(from=0x0) as +mint and Transfer(to=0x0) as -burn; a net magnitude above dust
+// for ANY token ⇒ a residual standing position was created/consumed ⇒ inventory/non-atomic. A plain
+// atomic ERC4626 arb round-trips the same shares (deposit then redeem) and nets ~0. Pure receipt
+// computation — no RPC. Returns the offending share-token addresses (empty ⇒ atomic on this axis).
+export function shareTokenImbalanceTokens(receipt: Json | null): string[] {
+  const net = new Map<string, bigint>();
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.topics?.[0] ?? "")) !== TOPIC_TRANSFER) continue;
+    const transfer = decodeTransfer(log);
+    if (!transfer) continue;
+    const from = lower(transfer.from);
+    const to = lower(transfer.to);
+    const token = lower(String(log?.address ?? ""));
+    if (!isAddress(token)) continue;
+    if (from === ZERO_ADDRESS && to === ZERO_ADDRESS) continue;
+    if (from === ZERO_ADDRESS) net.set(token, (net.get(token) ?? 0n) + transfer.amount);
+    else if (to === ZERO_ADDRESS) net.set(token, (net.get(token) ?? 0n) - transfer.amount);
+  }
+  const out: string[] = [];
+  for (const [token, value] of net) {
+    if (value < 0n ? -value > SHARE_IMBALANCE_DUST_RAW : value > SHARE_IMBALANCE_DUST_RAW) {
+      out.push(token);
+    }
+  }
+  return out;
+}
+
+// Layer 1 (F-009, operator directive): scan the tx call tree for a hardcoded ERC4626 vault-share
+// rebalance selector (deposit/redeem observed as the inventory legs of 0x9be73297). Keyed by
+// FUNCTION selector, NOT contract, since the same contracts' deposit/redeem are legit protocol-arb
+// calls; the selector hit is only trusted by classifyWinnerStyle when it is NOT a comparable atomic
+// loop. Best-effort: any trace failure returns false (Layer 2 remains the robust catch).
+async function inventoryRebalanceSelectorPresent(rpc: RpcClient, txHash: string): Promise<boolean> {
+  try {
+    const trace = await rpc.traceTransaction(txHash);
+    return callTreeHasSelector(trace, INVENTORY_REBALANCE_SELECTORS);
+  } catch {
+    return false;
+  }
+}
+
+function callTreeHasSelector(node: Json | null | undefined, selectors: Set<string>): boolean {
+  if (!node || typeof node !== "object") return false;
+  const selector = lower(String(node.input ?? "0x")).slice(0, 10);
+  if (selectors.has(selector)) return true;
+  const calls = Array.isArray(node.calls) ? node.calls : [];
+  return calls.some((child) => callTreeHasSelector(child, selectors));
 }
 
 export function realizedProfitUsdForReport(
@@ -995,7 +1099,9 @@ export function buildVerdict(event: Json, competitors: CompetitorReport[], build
 }
 
 export function isNonComparableWinnerStyle(style: WinnerStyle): boolean {
-  return style === "one_leg_inventory" || style === "sandwich";
+  return style === "one_leg_inventory"
+    || style === "sandwich"
+    || style === "inventory_vault_rebalance";
 }
 
 export function learningCaseFromPostmortem(report: PostmortemReport): LearningCase {
@@ -1126,7 +1232,11 @@ function numberOrUndefined(value: unknown): number | undefined {
 }
 
 function nonComparableWinnerNote(style: WinnerStyle): string {
-  const label = style === "one_leg_inventory" ? "one_leg_inventory/CEX-DEX" : "sandwich";
+  const label = style === "one_leg_inventory"
+    ? "one_leg_inventory/CEX-DEX"
+    : style === "inventory_vault_rebalance"
+      ? "inventory_vault_rebalance (residual vault-share position; needs pre-held inventory)"
+      : "sandwich";
   return `winner is ${label}; off-chain/out-of-posture - our atomic sim gross is the correct ceiling; no coverage/sizing/bid fix`;
 }
 
