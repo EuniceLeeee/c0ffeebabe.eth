@@ -181,8 +181,8 @@ export function computeSwapStep(
 // ── TickMath / BitMath / TickBitmap ────────────────────────────
 export const MIN_TICK = -887272;
 export const MAX_TICK = 887272;
-const MIN_SQRT_RATIO = 4295128739n;
-const MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342n;
+export const MIN_SQRT_RATIO = 4295128739n;
+export const MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342n;
 const MASK256 = (1n << 256n) - 1n;
 const MAX_UINT256 = MASK256;
 
@@ -260,7 +260,7 @@ export class V3MissingBitmapWordError extends Error {
   }
 }
 
-function nextInitializedTickWithinOneWord(
+export function nextInitializedTickWithinOneWord(
   tickBitmap: Map<number, bigint>,
   tick: number,
   tickSpacing: number,

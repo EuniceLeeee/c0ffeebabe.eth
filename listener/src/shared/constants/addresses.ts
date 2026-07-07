@@ -30,6 +30,7 @@ export const ADDR = {
   UNISWAP_V4_POOL_MANAGER: "0x000000000004444c5dc75cB358380D2e3dE08A90",
   UNISWAP_V4_POSITION_MANAGER: "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
   UNISWAP_V4_QUOTER: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+  UNISWAP_V4_STATE_VIEW: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
   UNISWAP_V3_USDT_WETH: "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
   // 0.01% (1 bp) fee tier — blue-chip pools created at V3 launch,
   // outside the 50k-block factory index window. Pinned for routing coverage.
