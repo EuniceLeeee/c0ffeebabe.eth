@@ -1,12 +1,26 @@
 /**
- * BS-3 fork solve gate for coffee tx 0xf2de7499.
+ * BS-3 fork solve gate for coffee tx 0xf2de7499 (DEFAULT), AND a parameterized
+ * closed-loop fork gate ("loop-fork-gate") for ANY extracted CoffeeFixture.
  *
- * Mainnet-fork + dry-run only. Forks execution state after the prior in-block
- * D166 rate update, builds the committed block-scan loop fixture, then runs the
- * planner and solver against real fork-state quotes.
+ * Mainnet-fork + dry-run only.
+ *
+ * DEFAULT (no --fixture / no SEARCHER_LOOP_FIXTURE_DIR): unchanged BS-3 regression
+ * probe. Forks execution state after the prior in-block D166 rate update, builds the
+ * committed block-scan loop fixture, then runs the planner and solver against real
+ * fork-state quotes. `npm run searcher:blockscan-fork-solve` still runs this exact gate.
+ *
+ * PARAMETERIZED (`--fixture <path>` or SEARCHER_LOOP_FIXTURE_DIR=<dir>, alias
+ * `npm run searcher:loop-fork-gate -- --fixture ...`): for each extracted fixture:
+ *   - forkAfterTx(fixture.txHash) using the fixture's own executionBlock/txIndex.
+ *   - Assertion A (edge-in-graph / false-green guard): every leg's pool must produce
+ *     an edge in buildTokenGraph; a venue kind with no adapter (e.g. balancer-v1) fails
+ *     with a clear "no adapter for kind X" message — the anti-false-green gate.
+ *   - Assertion B (closed-loop execute): plan+solve the loop on the fork and assert net
+ *     output >= expectedGrossWeiRealized * tolerance; a leg we cannot encode fails clearly.
+ * The f2de7499-specific curve-rate checks run ONLY on the default fixture.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
@@ -20,7 +34,16 @@ import {
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { TemplatePlanner } from "../planner/planner.js";
-import { v4PoolId, type TokenEdge, type V4PoolKey } from "../planner/token-graph.js";
+import {
+  buildTokenGraph,
+  v4PoolId,
+  type PoolEntry,
+  type TokenEdge,
+  type TokenPath,
+  type TokenQueryBackend,
+  type V4PoolKey,
+} from "../planner/token-graph.js";
+import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { deriveEdgeTaxonomy, pathLeavesStandingPosition } from "../strategy-taxonomy.js";
@@ -34,6 +57,19 @@ const EXECUTION_TX_INDEX = 36;
 const ANVIL_PORT = Number(process.env.SEARCHER_BLOCKSCAN_FORK_SOLVE_ANVIL_PORT ?? "8565");
 const ANVIL_URL = `http://127.0.0.1:${ANVIL_PORT}`;
 const D166 = "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7";
+
+/** Loop-tolerance: solver sizing may differ from the competitor's, so accept >= 90% of realized. */
+const LOOP_PROFIT_TOLERANCE_BPS = 9000n;
+
+/** Extractor leg kind -> PoolEntry adapter. balancer-v1 intentionally ABSENT (no adapter). */
+const LEG_KIND_TO_ADAPTER: Record<string, PoolEntry["adapter"] | undefined> = {
+  univ2: "univ2",
+  univ3: "univ3",
+  univ4: "univ4",
+  curve: "curve",
+  erc4626: "erc4626",
+  "balancer-v1": undefined,
+};
 
 interface FixtureV4PoolKey {
   currency0: string;
@@ -83,6 +119,37 @@ interface CoffeeFixture {
   legs: [FixtureV4Leg, FixtureV4Leg, FixtureCurveLeg, FixtureProfitLeg];
 }
 
+/** A leg as emitted by extract-loop-fixture.ts (superset of the hand-authored shapes). */
+interface ExtractedLeg {
+  seq: number;
+  kind: "univ2" | "univ3" | "univ4" | "curve" | "balancer-v1" | "erc4626";
+  poolId?: string;
+  poolKey?: { recovered?: boolean } & Partial<FixtureV4PoolKey>;
+  address?: string;
+  pool?: string;
+  token0?: string;
+  token1?: string;
+  tokenIn?: string;
+  tokenOut?: string;
+  zeroForOne?: boolean;
+  soldId?: number;
+  boughtId?: number;
+  vault?: string;
+  realized: { amountIn: string; amountOut: string };
+}
+
+/** The generic extracted-fixture shape consumed by the parameterized loop-fork-gate path. */
+interface ExtractedFixture {
+  txHash: string;
+  executionBlock: number;
+  sourceBlock: number;
+  txIndex: number;
+  flash: { venue: string; token: string; amount: string; fee: string };
+  loopToken: string;
+  legs: ExtractedLeg[];
+  expectedGrossWeiRealized: string;
+}
+
 let checks = 0;
 let passed = 0;
 
@@ -120,8 +187,11 @@ async function check(name: string, run: () => boolean | Promise<boolean>): Promi
   console.log(`[blockscan-fork-solve] ${name}: PASS`);
 }
 
-async function main(): Promise<void> {
-  loadEnv();
+/**
+ * DEFAULT BS-3 regression gate for coffee tx 0xf2de7499. Behavior is byte-identical to the
+ * original harness — only reached when no --fixture / SEARCHER_LOOP_FIXTURE_DIR is provided.
+ */
+async function runDefaultF2de7499Gate(): Promise<void> {
   const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL || process.env.MAINNET_RPC_URL;
   if (!rpcUrl) {
     throw new Error(
@@ -246,6 +316,417 @@ async function main(): Promise<void> {
     state.stop();
     upstream.destroy();
   }
+}
+
+// ─── Parameterized loop-fork-gate (Assertion A + B for any extracted fixture) ──
+
+interface LoopGateArgs {
+  fixturePaths: string[];
+}
+
+/** Resolve --fixture <path> / SEARCHER_LOOP_FIXTURE_DIR into a concrete list of fixture files. */
+function resolveLoopFixtures(): LoopGateArgs | null {
+  const argv = process.argv.slice(2);
+  const fixtureArgs: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--fixture") {
+      const p = argv[++i];
+      if (p) fixtureArgs.push(p);
+    }
+  }
+  const dir = process.env.SEARCHER_LOOP_FIXTURE_DIR;
+  if (fixtureArgs.length === 0 && !dir) return null; // default -> f2de7499 gate
+
+  const paths: string[] = [...fixtureArgs.map((p) => resolve(p))];
+  if (dir) {
+    const dirAbs = resolve(dir);
+    if (existsSync(dirAbs) && statSync(dirAbs).isDirectory()) {
+      for (const name of readdirSync(dirAbs).filter((n) => n.endsWith(".json")).sort()) {
+        paths.push(resolve(dirAbs, name));
+      }
+    }
+  }
+  if (paths.length === 0) return null;
+  return { fixturePaths: paths };
+}
+
+function loadExtractedFixture(path: string): ExtractedFixture {
+  return JSON.parse(readFileSync(path, "utf8")) as ExtractedFixture;
+}
+
+/** Build a minimal PoolEntry for a leg so buildTokenGraph can attempt an edge. */
+function poolEntryForLeg(leg: ExtractedLeg, adapter: PoolEntry["adapter"]): PoolEntry {
+  const address = ethers.getAddress(leg.pool ?? leg.address ?? leg.vault ?? ethers.ZeroAddress);
+  const entry: PoolEntry = { address, adapter };
+  if ((adapter === "univ2" || adapter === "univ3") && leg.token0 && leg.token1) {
+    entry.token0 = ethers.getAddress(leg.token0);
+    entry.token1 = ethers.getAddress(leg.token1);
+  }
+  if (adapter === "univ4" && leg.poolKey && leg.poolKey.currency0 && leg.poolKey.currency1) {
+    entry.currency0 = leg.poolKey.currency0;
+    entry.currency1 = leg.poolKey.currency1;
+    entry.fee = leg.poolKey.fee;
+    entry.tickSpacing = leg.poolKey.tickSpacing;
+    entry.hooks = leg.poolKey.hooks;
+    entry.poolId = leg.poolId;
+    entry.fixedTokenIn = leg.tokenIn;
+    entry.fixedTokenOut = leg.tokenOut;
+  }
+  if (adapter === "erc4626") {
+    // Standard vault: graph emits deposit (asset->shares) + redeem (shares->asset). fixedTokenIn = asset().
+    // Redeem leg is shares(vault)->asset, so the asset is the leg's tokenOut (redeem) or tokenIn (deposit).
+    const isRedeem = leg.tokenIn && leg.tokenIn.toLowerCase() === address.toLowerCase();
+    const asset = isRedeem ? leg.tokenOut : leg.tokenIn;
+    if (asset) entry.fixedTokenIn = ethers.getAddress(asset);
+  }
+  return entry;
+}
+
+/**
+ * Assertion A — edge-in-graph / false-green guard. For EVERY leg, the leg's venue kind must map to an
+ * adapter AND buildTokenGraph must emit an edge connecting the leg's tokenIn->tokenOut. A kind with no
+ * adapter (e.g. balancer-v1) fails here with a clear message — the anti-false-green gate.
+ */
+async function assertEdgesInGraph(
+  fixture: ExtractedFixture,
+  backend: TokenQueryBackend,
+): Promise<void> {
+  for (const leg of fixture.legs) {
+    const adapter = LEG_KIND_TO_ADAPTER[leg.kind];
+    await check(
+      `Assertion A: leg ${leg.seq} (${leg.kind}) produces an edge in the token graph`,
+      async () => {
+        if (!adapter) {
+          console.error(
+            `[blockscan-fork-solve]   -> NO ADAPTER for kind "${leg.kind}" (pool ${leg.pool ?? leg.address}); ` +
+              "edge is absent — our system cannot route this leg. This is the anti-false-green RED.",
+          );
+          return false;
+        }
+        let edges: TokenEdge[] = [];
+        try {
+          edges = await buildTokenGraph(backend, [poolEntryForLeg(leg, adapter)]);
+        } catch (err) {
+          console.error(
+            `[blockscan-fork-solve]   -> buildTokenGraph threw for leg ${leg.seq} (${leg.kind}): ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+          return false;
+        }
+        // A leg is covered iff some emitted edge matches its tokenIn->tokenOut direction (when known),
+        // else any edge on the pool suffices.
+        if (edges.length === 0) {
+          console.error(`[blockscan-fork-solve]   -> zero edges emitted for leg ${leg.seq} (${leg.kind})`);
+          return false;
+        }
+        if (leg.tokenIn && leg.tokenOut) {
+          const want = (a: string, b: string) =>
+            edges.some(
+              (e) =>
+                e.tokenIn.toLowerCase() === a.toLowerCase() && e.tokenOut.toLowerCase() === b.toLowerCase(),
+            );
+          if (!want(leg.tokenIn, leg.tokenOut)) {
+            console.error(
+              `[blockscan-fork-solve]   -> no edge for direction ${leg.tokenIn} -> ${leg.tokenOut} ` +
+                `on leg ${leg.seq}`,
+            );
+            return false;
+          }
+        }
+        return true;
+      },
+    );
+  }
+}
+
+/**
+ * Assertion B — ADAPTER-ISOLATED fixed-path execute (flavor C). This is the adapter-acceptance gate:
+ * a PASS here implies the adapters-under-test (encode + compose + execute) are correct on THIS loop.
+ *
+ * It takes the FIXED leg path straight from the fixture — exact pools, directions (zeroForOne), and each
+ * leg's VERBATIM `realized.amountIn` (the competitor's on-chain sizing), plus the flashloan input amount.
+ * It does NOT search for the path and does NOT let a solver re-size amountIn. Each leg is encoded through
+ * ITS venue adapter (buildResolvedPlanFromPath -> the same encode path the live executor uses), and the
+ * flash-wrapped loop executes in sequence on the forkAfterTx anvil state (BotVMSimulator). It asserts the
+ * loop closes (final loopToken >= flash repay) with net surplus >= expectedGrossWeiRealized * tolerance.
+ * No TemplatePlanner / AnvilSolver.solve — planner-find + solver-sizing are a SEPARATE integration concern
+ * (Assertion C, opt-in via --with-solver / SEARCHER_LOOP_GATE_SOLVER=1) whose search noise would
+ * false-negative a perfectly correct adapter. A FAIL here points cleanly at an adapter.
+ */
+async function assertClosedLoopExecutes(
+  fixture: ExtractedFixture,
+  state: AnvilStateBackend,
+): Promise<void> {
+  // Every loop leg must be adapter-backed; if not, seed-building fails clearly before any execution.
+  await check("Assertion B: every loop leg is encodable via its venue adapter", () => {
+    for (const leg of fixture.legs) {
+      if (!LEG_KIND_TO_ADAPTER[leg.kind]) {
+        console.error(
+          `[blockscan-fork-solve]   -> cannot encode leg ${leg.seq}: no adapter for kind "${leg.kind}"`,
+        );
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const seedEdges = buildExtractedSeedEdges(fixture);
+  const path: TokenPath = { edges: seedEdges };
+  const flashToken = ethers.getAddress(fixture.flash.token);
+  const flashAmount = BigInt(fixture.flash.amount);
+  const expected = BigInt(fixture.expectedGrossWeiRealized);
+  const floor = (expected * LOOP_PROFIT_TOLERANCE_BPS) / 10000n;
+
+  await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
+
+  // FIXED amounts straight from the fixture — each leg's realized.amountIn verbatim, plus the final
+  // leg's realized.amountOut as the loop output. No adapter re-quote, no solver re-size. buildResolved
+  // PlanFromPath wants length = edges + 1: amounts[i] flows INTO edge i, amounts[last] is the final out.
+  const amounts: bigint[] = [
+    ...fixture.legs.map((leg) => BigInt(leg.realized.amountIn)),
+    BigInt(fixture.legs[fixture.legs.length - 1].realized.amountOut),
+  ];
+  console.log(
+    `[blockscan-fork-solve] Assertion B fixed realized amounts: [${amounts.join(", ")}] ` +
+      `(flash=${flashAmount}, expected surplus>=${floor})`,
+  );
+
+  // Encode the fixed path via the adapter path (approves/transfers + assert-balance + flash wrapper).
+  const root = await buildResolvedPlanFromPath(
+    path,
+    flashToken,
+    flashAmount,
+    amounts,
+    DEFAULT_SEARCHER_EXECUTOR,
+    state,
+    floor > 0n ? floor : 1n,
+    flashAdapterIdForVenue(fixture.flash.venue),
+  );
+  const plan: ResolvedPlan = {
+    root,
+    netProfit: 0n,
+    profitToken: flashToken,
+    flashAmount,
+    templateName: "loop-fork-gate-fixed-path",
+  };
+
+  const simulator = new BotVMSimulator(state, DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER);
+  const sim = await simulator.simulate(plan);
+  console.log(
+    `[blockscan-fork-solve] Assertion B execute: success=${sim.success} grossProfit=${sim.grossProfit} ` +
+      `(expected ${expected}, floor ${floor})${sim.revertReason ? ` revert=${sim.revertReason.slice(0, 160)}` : ""}`,
+  );
+  await check(
+    "Assertion B: fixed-path adapter-encoded loop executes and closes >= expectedGrossWeiRealized * tolerance",
+    () => sim.success && sim.grossProfit >= floor,
+  );
+
+  // Assertion C (OPTIONAL, opt-in): planner-find + solver-sizing integration. Off by default because its
+  // search noise false-negatives a correct adapter; a FAIL here is an integration concern, not the adapter.
+  const withSolver =
+    process.env.SEARCHER_LOOP_GATE_SOLVER === "1" || process.argv.slice(2).includes("--with-solver");
+  if (withSolver) {
+    const opp = buildExtractedOpportunity(fixture, seedEdges);
+    const planner = new TemplatePlanner();
+    planner.setGraph(seedEdges);
+    const plans = await planner.planBlockScanFromSeedEdges(opp, [FLASH_SWAP_REPAY]);
+    await check("Assertion C (solver, optional): planner composes candidate_plans > 0", () => plans.length > 0);
+    const solver = new AnvilSolver();
+    let solved: ResolvedPlan | null = null;
+    let solveError: string | null = null;
+    try {
+      solved = await solver.solve(plans[0], state, simulator, {
+        finalSimTopN: 3,
+        gssMaxTries: 8,
+        quoteProfitFloorBps: 0n,
+        quoteSafetyBps: 9999n,
+      });
+    } catch (err) {
+      solveError = err instanceof Error ? err.message : String(err);
+    }
+    console.log(
+      `[blockscan-fork-solve] Assertion C (solver, optional) outcome: ${
+        solved ? `netProfit=${solved.netProfit}` : `no plan (${solveError ?? "null"})`
+      }`,
+    );
+    await check("Assertion C (solver, optional): solver net output >= expectedGrossWeiRealized * tolerance", () =>
+      solved !== null && solved.netProfit >= floor,
+    );
+  }
+}
+
+/** Map the fixture's flash venue to the plan-builder's flash adapter id. */
+function flashAdapterIdForVenue(venue: string): string {
+  if (venue === "balancer-v2") return "balancer-flash";
+  // Aave/others not yet wired into plan-builder's FLASH_ADAPTER_TARGETS; fail clearly at build time.
+  throw new Error(`no flash adapter wired for venue "${venue}" (plan-builder supports balancer-flash/morpho-flash)`);
+}
+
+/**
+ * Build seed edges from the fixture legs IN LOG ORDER, one edge per leg.
+ *
+ * LIMITATION (v1): this assumes the legs form a single LINEAR ring (leg[i].tokenOut == leg[i+1].tokenIn),
+ * which holds for straight-line loops (the YETI/dc52761f/f2de7499 shapes). A BRANCHED/DAG loop — where
+ * the bot splits the flash across sub-paths that re-converge (e.g. the sfrxETH tx 0x8756ba5c: a USDC-
+ * anchored 5-leg chain plus a separate USDT<->WETH profit sweep) — is NOT a single linear ring, so the
+ * fixed log-order amounts array won't be balance-consistent and Assertion B will (correctly) revert at
+ * execution. Composing branched loops is a follow-up (needs a per-token flow DAG, not a linear chain).
+ */
+function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
+  const edges: TokenEdge[] = [];
+  for (const leg of fixture.legs) {
+    const adapter = LEG_KIND_TO_ADAPTER[leg.kind];
+    if (!adapter) throw new Error(`leg ${leg.seq}: no adapter for kind ${leg.kind}`);
+    if (!leg.tokenIn || !leg.tokenOut) {
+      throw new Error(`leg ${leg.seq} (${leg.kind}) missing tokenIn/tokenOut for seed edge`);
+    }
+    const tokenIn = ethers.getAddress(leg.tokenIn);
+    const tokenOut = ethers.getAddress(leg.tokenOut);
+    if (leg.kind === "curve") {
+      edges.push({
+        adapterId: "curve-exchange-plain",
+        target: ethers.getAddress(leg.pool ?? leg.address!),
+        tokenIn,
+        tokenOut,
+        slotKind: "swap",
+        curveI: leg.soldId,
+        curveJ: leg.boughtId,
+        ...deriveEdgeTaxonomy("swap"),
+        score: 100,
+      });
+    } else if (leg.kind === "univ4") {
+      if (!leg.poolKey?.currency0) {
+        throw new Error(`leg ${leg.seq} univ4 poolKey unrecovered — cannot build seed edge (v1 TODO)`);
+      }
+      const key: V4PoolKey = {
+        currency0: ethers.getAddress(leg.poolKey.currency0),
+        currency1: ethers.getAddress(leg.poolKey.currency1!),
+        fee: leg.poolKey.fee!,
+        tickSpacing: leg.poolKey.tickSpacing!,
+        hooks: ethers.getAddress(leg.poolKey.hooks!),
+      };
+      edges.push({
+        adapterId: "univ4-unlock",
+        target: ADDR.UNISWAP_V4_POOL_MANAGER,
+        tokenIn,
+        tokenOut,
+        slotKind: "swap",
+        v4PoolKey: key,
+        poolId: v4PoolId(key),
+        nativeCurrency0: key.currency0 === ethers.ZeroAddress,
+        nativeCurrency1: key.currency1 === ethers.ZeroAddress,
+        ...deriveEdgeTaxonomy("swap"),
+        score: 100,
+      });
+    } else if (leg.kind === "erc4626") {
+      // Standard vault redeem (shares->asset) or deposit (asset->shares); direction from tokenIn == vault.
+      const vault = ethers.getAddress(leg.vault ?? leg.address!);
+      const isRedeem = tokenIn.toLowerCase() === vault.toLowerCase();
+      edges.push({
+        adapterId: isRedeem ? "erc4626-redeem" : "erc4626-deposit",
+        target: vault,
+        tokenIn,
+        tokenOut,
+        slotKind: "protocol",
+        protocolAction: isRedeem ? "redeem" : "wrap",
+        ...deriveEdgeTaxonomy("protocol", isRedeem ? "redeem" : "wrap"),
+        score: 100,
+      });
+    } else {
+      // univ2 / univ3
+      edges.push({
+        adapterId: adapter === "univ3" ? "univ3-swap" : "univ2-swap",
+        target: ethers.getAddress(leg.pool ?? leg.address!),
+        tokenIn,
+        tokenOut,
+        slotKind: "swap",
+        poolToken0: leg.token0 ? ethers.getAddress(leg.token0) : undefined,
+        poolToken1: leg.token1 ? ethers.getAddress(leg.token1) : undefined,
+        ...deriveEdgeTaxonomy("swap"),
+        score: 100,
+      });
+    }
+  }
+  return edges;
+}
+
+function buildExtractedOpportunity(fixture: ExtractedFixture, seedEdges: TokenEdge[]): BlockScanOpportunity {
+  const flashToken = ethers.getAddress(fixture.flash.token);
+  const ring = seedEdges.length === 0 ? [] : [seedEdges[0].tokenIn, ...seedEdges.slice(0, -1).map((e) => e.tokenOut)];
+  return {
+    kind: "block-scan-arb",
+    sourceBlock: fixture.sourceBlock,
+    stateBlock: fixture.executionBlock,
+    cycleId: canonicalTokenRing(ring).join("|"),
+    cycleFingerprint: cycleFingerprint(fixture.sourceBlock, ring),
+    seedEdges,
+    flashToken,
+    searchSeed: {
+      startToken: flashToken,
+      searchCenter: BigInt(fixture.flash.amount),
+      maxInput: (BigInt(fixture.flash.amount) * 3n) / 2n,
+    },
+    leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
+    affectedPools: [...new Set(seedEdges.map((e) => e.target.toLowerCase()))].map((a) => ethers.getAddress(a)),
+    affectedTokens: canonicalTokenRing(ring),
+  };
+}
+
+async function runLoopForkGate(args: LoopGateArgs): Promise<void> {
+  const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL || process.env.MAINNET_RPC_URL;
+  if (!rpcUrl) {
+    throw new Error("SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL required for the loop-fork-gate archive fork.");
+  }
+  console.log(`[blockscan-fork-solve] loop-fork-gate over ${args.fixturePaths.length} fixture(s)`);
+
+  for (const path of args.fixturePaths) {
+    const fixture = loadExtractedFixture(path);
+    console.log(
+      `[blockscan-fork-solve] --- fixture ${path} tx=${fixture.txHash} block=${fixture.executionBlock} ` +
+        `legs=${fixture.legs.map((l) => l.kind).join(",")} ---`,
+    );
+    const upstream = new ethers.JsonRpcProvider(rpcUrl);
+    const state = new AnvilStateBackend(rpcUrl, ANVIL_URL, ANVIL_PORT);
+    try {
+      const latest = await withTimeout(
+        upstream.getBlockNumber(),
+        30_000,
+        `upstream RPC preflight ${redactRpcUrl(rpcUrl)}`,
+        rpcUrl,
+      );
+      if (latest < fixture.executionBlock) {
+        throw new Error(`upstream latest block ${latest} is before required block ${fixture.executionBlock}`);
+      }
+
+      // Assertion A does NOT need the fork (pure graph emission from pinned metadata / latest reads),
+      // so run it first — a missing adapter RED-flags before we pay for a fork. buildTokenGraph only
+      // needs `call`; wrap the provider in a minimal TokenQueryBackend (its getLogs types differ).
+      const graphBackend: TokenQueryBackend = {
+        call: (req) => upstream.call(req as ethers.TransactionRequest),
+      };
+      await assertEdgesInGraph(fixture, graphBackend);
+
+      // Fork AFTER the competitor tx so its own state is applied, then run Assertion B.
+      console.log(`[blockscan-fork-solve] forkAfterTx ${fixture.txHash} anvil=${ANVIL_URL}`);
+      await state.forkAfterTx(fixture.txHash);
+      await assertClosedLoopExecutes(fixture, state);
+    } finally {
+      state.stop();
+      upstream.destroy();
+    }
+  }
+
+  console.log(`blockscan-fork-solve (loop-fork-gate) PASS (${passed}/${checks})`);
+}
+
+async function main(): Promise<void> {
+  loadEnv();
+  const loopArgs = resolveLoopFixtures();
+  if (loopArgs) {
+    await runLoopForkGate(loopArgs);
+    return;
+  }
+  await runDefaultF2de7499Gate();
 }
 
 function loadFixture(): CoffeeFixture {

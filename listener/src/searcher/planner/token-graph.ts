@@ -173,6 +173,10 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0xC255910618158F48FA461874471Aa24AEfbDC23A", adapter: "erc4626", fixedTokenIn: "0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D5" }, // pfOHM (asset OHM in DEX)
   { address: "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C", adapter: "erc4626", fixedTokenIn: "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" }, // waEthLidoGHO (asset GHO in DEX)
   { address: "0x43680aBF18cf54898Be84C6eF78237CFBD441883", adapter: "erc4626", fixedTokenIn: "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0" }, // wTSLAx (asset in DEX)
+  // MetaMorpho vaults — standard ERC4626, redeem pays asset (receipt-verified: 0x4825… -> USDC in tx
+  // 0x9be73297, 0xB828… -> USDT in tx 0x175f7024). coffee 2nd CSV window (24.55M), ~17 tx each.
+  { address: "0x4825eFF24F9B7b76EEAFA2ecc6A1D5dFCb3c1c3f", adapter: "erc4626", fixedTokenIn: ADDR.USDC }, // MetaMorpho USDC
+  { address: "0xB8280955aE7b5207AF4CDbdCd775135Bd38157fE", adapter: "erc4626", fixedTokenIn: ADDR.USDT }, // MetaMorpho USDT
   {
     // Fluid deployment registry: "Fluid Dex Pool - USDC-USDT-CONCENTRATED".
     // Plain swapIn token order is USDC(token0) -> USDT(token1).

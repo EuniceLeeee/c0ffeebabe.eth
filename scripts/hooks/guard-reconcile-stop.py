@@ -11,8 +11,15 @@ Exit 0 = allow stop; exit 2 = BLOCK + stderr to the model. Fail-open on any erro
 To clear manually if a fire was a false positive: run a canonical tool, or write
 `tool-reconciled: <tool> n/a-<why>`, or `rm /tmp/mev-reconcile-pending`.
 """
-import sys, os
+import sys, os, json
 
+# Global (non-session-isolated) pending path — operator reverted the per-session key (2026-07-07).
+# Tradeoff: with concurrent sessions on this repo, one session's un-reconciled analysis can block
+# another's Stop. Must match guard-tool-reconcile.py's PENDING path.
+try:
+    json.load(sys.stdin)  # consume stdin (session_id no longer used for the path)
+except Exception:
+    pass
 PENDING = "/tmp/mev-reconcile-pending"
 
 try:
@@ -34,6 +41,6 @@ sys.stderr.write(
     "venue-discovery, auto-close-route-gap, tx-profit, …) and reconcile — agreement confirms it, "
     "divergence IS the finding (stale tool -> fix it, or wrong hand analysis -> correct it BEFORE "
     "reporting). Running the tool, or a `tool-reconciled: <named tool>` line, clears this; a genuine "
-    "false positive clears with `rm /tmp/mev-reconcile-pending`.\n"
+    f"false positive clears with `rm {PENDING}`.\n"
 )
 sys.exit(2)

@@ -1,0 +1,196 @@
+{
+  "_note": "Extracted competitor closed-loop fixture from 0x8756ba5c83ed628212956a1f2b9df4b85cc33728cf827ae280ae64a07da7a10b (block 25435984, txIndex 1). 7 legs: univ4 -> curve -> curve -> erc4626 -> curve -> univ3 -> univ3. loopToken flash = balancer-v2.",
+  "_provenance": "Auto-extracted by extract-loop-fixture.ts: realized amounts decoded from event logs (GROUND TRUTH); preState read read-only at sourceBlock (executionBlock-1) via eth_call at that block tag. v4 poolKey recovery + v4 preState (StateView) are TODO in v1 (poolId + raw event amounts recorded). curve pre-state records coin balances only (A/fee/rates are pool-version-specific reads).",
+  "preStateNote": "preState is read at the block-1 BOUNDARY, not the exact intra-block pre-tx point. If earlier txs in executionBlock touched a leg's pool, the true pre-tx state drifts from this boundary read. Realized amounts (from the events) are exact; only the pre-state carries this ~intra-block-drift caveat.",
+  "txHash": "0x8756ba5c83ed628212956a1f2b9df4b85cc33728cf827ae280ae64a07da7a10b",
+  "executionBlock": 25435984,
+  "sourceBlock": 25435983,
+  "txIndex": 1,
+  "executor": "0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671",
+  "strategyKind": "block-scan",
+  "edgeKinds": [
+    "flash",
+    "swap"
+  ],
+  "stateSource": "auto-extracted (event-realized amounts exact; preState boundary-read)",
+  "flash": {
+    "venue": "balancer-v2",
+    "token": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "tokenSymbol": "USDT",
+    "amount": "44724980",
+    "fee": "0",
+    "recipient": "0xE08D97e151473A848C3d9CA3f323Cb720472D015"
+  },
+  "loopToken": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+  "legs": [
+    {
+      "kind": "univ4",
+      "poolId": "0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239",
+      "poolKey": {
+        "recovered": true,
+        "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "fee": 7,
+        "tickSpacing": 1,
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "_source": "PoolManager Initialize log (tx 0xc1f97ac427b0aa9fc6153b2146f08d76a282ddc87b539afe82a503673167e78e)"
+      },
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "zeroForOne": true,
+      "logIndex": 17,
+      "realized": {
+        "amountIn": "44674459",
+        "amountOut": "44724980"
+      },
+      "_decodeNote": "postStateFromEvent sqrtPriceX96=79272669826630765651756635146 liquidity=21586782577644300 tick=11",
+      "seq": 1,
+      "role": "leg 1 (univ4)",
+      "token0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "token1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "preState": {
+        "_todo": "v4 preState needs StateView(poolId); see poolKey recovery TODO",
+        "recovered": false
+      }
+    },
+    {
+      "kind": "curve",
+      "pool": "0x4f3DCf8896ef8287e8AE319BfE0782C4846cD99b",
+      "address": "0x4f3DCf8896ef8287e8AE319BfE0782C4846cD99b",
+      "soldId": 0,
+      "boughtId": 1,
+      "logIndex": 22,
+      "realized": {
+        "amountIn": "44674460",
+        "amountOut": "44614134413548934074"
+      },
+      "seq": 2,
+      "role": "leg 2 (curve)",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0xf71040d20Cc3FFBb28c1abcEF46134C7936624e0",
+      "preState": {
+        "variant": "unknown",
+        "balances": {
+          "0": "902467505",
+          "1": "554828565046456180525"
+        },
+        "_note": "A/fee/rates require pool-version-specific reads; recorded balances only for v1"
+      }
+    },
+    {
+      "kind": "curve",
+      "pool": "0x77fCFB78151c676f390a6236A78b5d3152e43384",
+      "address": "0x77fCFB78151c676f390a6236A78b5d3152e43384",
+      "soldId": 0,
+      "boughtId": 1,
+      "logIndex": 25,
+      "realized": {
+        "amountIn": "44614134413548934074",
+        "amountOut": "24569794050409827"
+      },
+      "seq": 3,
+      "role": "leg 3 (curve)",
+      "tokenIn": "0xf71040d20Cc3FFBb28c1abcEF46134C7936624e0",
+      "tokenOut": "0xac3E018457B222d93114458476f3E3416Abbe38F",
+      "preState": {
+        "variant": "unknown",
+        "balances": {},
+        "_note": "A/fee/rates require pool-version-specific reads; recorded balances only for v1"
+      }
+    },
+    {
+      "kind": "erc4626",
+      "vault": "0xac3E018457B222d93114458476f3E3416Abbe38F",
+      "address": "0xac3E018457B222d93114458476f3E3416Abbe38F",
+      "logIndex": 27,
+      "realized": {
+        "amountIn": "24569794050409827",
+        "amountOut": "28572102598544409"
+      },
+      "_decodeNote": "erc4626 redeem: amountIn = shares burned, amountOut = assets() paid (see nonStandardRedeem caveat)",
+      "seq": 4,
+      "role": "leg 4 (erc4626)",
+      "tokenIn": "0xac3E018457B222d93114458476f3E3416Abbe38F",
+      "tokenOut": "0x5E8422345238F34275888049021821E8E08CAa1f",
+      "preState": {
+        "totalAssets": "45229410817093620890816",
+        "totalSupply": "38893788683653730366193",
+        "_note": "erc4626 redeem edge output token may differ from asset() — see nonStandardRedeem"
+      }
+    },
+    {
+      "kind": "curve",
+      "pool": "0x9c3B46C0Ceb5B9e304FCd6D88Fc50f7DD24B31Bc",
+      "address": "0x9c3B46C0Ceb5B9e304FCd6D88Fc50f7DD24B31Bc",
+      "soldId": 1,
+      "boughtId": 0,
+      "logIndex": 31,
+      "realized": {
+        "amountIn": "28572102598544409",
+        "amountOut": "28554335386230171"
+      },
+      "seq": 5,
+      "role": "leg 5 (curve)",
+      "tokenIn": "0x5E8422345238F34275888049021821E8E08CAa1f",
+      "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "preState": {
+        "variant": "unknown",
+        "balances": {
+          "0": "1636154242985398103425",
+          "1": "2430910664839763432631"
+        },
+        "_note": "A/fee/rates require pool-version-specific reads; recorded balances only for v1"
+      }
+    },
+    {
+      "kind": "univ3",
+      "address": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+      "pool": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+      "zeroForOne": true,
+      "logIndex": 34,
+      "realized": {
+        "amountIn": "28554335386230171",
+        "amountOut": "44992021"
+      },
+      "seq": 6,
+      "role": "leg 6 (univ3)",
+      "token0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "token1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "preState": {
+        "sqrtPriceX96": "3145116276365317770444587",
+        "liquidity": "30279076190228085"
+      }
+    },
+    {
+      "kind": "univ3",
+      "address": "0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36",
+      "pool": "0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36",
+      "zeroForOne": false,
+      "logIndex": 37,
+      "realized": {
+        "amountIn": "267041",
+        "amountOut": "169097928394919"
+      },
+      "seq": 7,
+      "role": "leg 7 (univ3)",
+      "token0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "token1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "preState": {
+        "sqrtPriceX96": "3143737508000277081366712",
+        "liquidity": "7577888935962620807"
+      }
+    }
+  ],
+  "loopSurplusRealized": {
+    "units": "0",
+    "note": "loopToken=0xdac17f958d2ee523a2206206994597c13d831ec7; flashRecipient=0xE08D97e151473A848C3d9CA3f323Cb720472D015 received=89717001 sent=89717001 fee=0; surplus = received − sent − fee"
+  },
+  "expectedGrossWeiRealized": "0",
+  "expectedGrossWei": "0",
+  "_gate": "Consume with loop-fork-gate (blockscan-fork-solve.ts --fixture): Assertion A asserts every leg's pool yields an edge in buildTokenGraph (RED if a venue kind has no adapter); Assertion B forks + executes the loop and asserts net output >= expectedGrossWeiRealized * tolerance."
+}

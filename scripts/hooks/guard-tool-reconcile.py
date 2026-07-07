@@ -18,6 +18,9 @@ under-firing, so recall was widened per the 2026-07-06 blind audit.
 """
 import sys, json, re, os
 
+# Global (non-session-isolated) pending path — operator reverted the per-session key (2026-07-07).
+# Known tradeoff: with concurrent sessions on this repo, one session's un-reconciled analysis can
+# fire the Stop backstop in another. Must match guard-reconcile-stop.py's PENDING path.
 PENDING = "/tmp/mev-reconcile-pending"
 TOOL_NAMES = ("bundle-postmortem", "census-report", "venue-discovery", "venue-evidence",
               "venue-registry", "auto-close-route-gap", "auto-close", "tx-profit", "arb-profit")
@@ -81,6 +84,7 @@ try:
 except Exception:
     sys.exit(0)
 
+# PENDING is the module-level global path (session-isolation reverted per operator).
 tool = data.get("tool_name")
 ti = data.get("tool_input") or {}
 target, body = "", ""
