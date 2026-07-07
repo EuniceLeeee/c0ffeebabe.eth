@@ -54,7 +54,8 @@
         "finding": "Postmortem of coffee tx 0x15352456 (block 25472647): bundle-postmortem requires a bundle_submitted match (errors on a competitor-only tx); census-report computes winner_style/touchedVenues per tx but drops the record when ALL venues are in_graph (census-report.ts:180 continue) and reports net_realized_usd=0 / qualifying=0 \u2014 reads as 'no profit / nothing found' when the truth is 'profitable ($0.54 tx-profit) but no route gap'. Analyst had to hand-assemble the verdict from tx-profit + raw logs.",
         "tx": "0x153524566a94f24094c1f083c0b9d98899787f8968943f0f6200230dc45e8e02",
         "cross_check": "tx-profit realized $0.54 net $0.49; census net_realized_usd=0 (by-design filter, not stale math)",
-        "divergence_20260707": "0xf698e6c2 (blk 25476156, coffee STBT loop): census route_gap_decisive=false while hand receipt-walk shows TWO out-of-graph venues (curve metapool 0x892d701d STBT/3CRV + non-standard STBT->ETH venue 0x7d002303). Root cause: distinct_out_of_graph counts univ2/3/4 lineage ONLY - curve/exotic venue gaps are invisible to the census verdict."
+        "divergence_20260707": "0xf698e6c2 (blk 25476156, coffee STBT loop): census route_gap_decisive=false while hand receipt-walk shows TWO out-of-graph venues (curve metapool 0x892d701d STBT/3CRV + non-standard STBT->ETH venue 0x7d002303). Root cause: distinct_out_of_graph counts univ2/3/4 lineage ONLY - curve/exotic venue gaps are invisible to the census verdict.",
+        "fix_20260707": "Single-tx facet SHIPPED as bundle-postmortem any-tx mode (9858d57, 0b4e06c, ea043f4, e55aa9b): --tx full-hash with no bundle_submitted match runs a competitor postmortem \u2014 PnL, winner_style incl. new keeper_claim/rfq_fill (non-comparable), venues incl. curve/balancer/pancake/dodo/psm lineages with in_graph (runtime-graph authoritative), same-block prior movers, our-events venue overlap, flow ledger. Verified on all 5 F-010/011/012 txs + Ambiguous/classic regressions on-node. REMAINING OPEN facet: census-report verdict distinct_out_of_graph is still univ2/3/4-only."
       },
       "tooling_defect": {
         "tool": "analysis/src/cli/census-report.ts (+ bundle-postmortem.ts single-tx entry)",
@@ -62,7 +63,7 @@
         "proposed_fix": "add a --tx <hash> mode (or --include-in-graph) that emits the per-tx CensusPerTx record regardless of in_graph filter; label summary field as route_gap_profit_usd"
       },
       "created_at": "2026-07-06T10:21:11.017088Z",
-      "updated_at": "2026-07-07T00:41:06.179662Z"
+      "updated_at": "2026-07-07T01:24:59.885148Z"
     },
     {
       "learning_case_id": "tooldef-20260706-atomicity-vault-inventory",
