@@ -83,11 +83,35 @@
         "tool": "analysis/src/cli/bundle-postmortem.ts (winner_style / classifyWinnerTxStyle) + census-report",
         "issue": "no atomicity check for vault-share inventory: a flash-wrapped inventory rebalance (0x9be73297) misclassifies as atomic_loop because the executor's intra-tx net is clean (+profit only); the residual position sits in helper contracts",
         "evidence": "0x9be73297: steakUSDT net +293,404 minted / steakUSDC net -291,368 burned across the tx; mediator pre-held 2.75M steakUSDC",
-        "codify_target": "add an atomicity classifier: per-tx share-token (ERC4626) net mint/burn imbalance from the receipt (and/or bot-cluster before/after block balance delta) -> a `atomic: bool` / `winner_style: inventory_vault_rebalance` field; census + postmortem mark non-atomic as non-comparable (like one_leg_inventory). Ref F-009.",
-        "status": "open"
+        "codify_target": "DONE: bundle-postmortem.ts adds WinnerStyle inventory_vault_rebalance + shareTokenImbalanceTokens(receipt) [Layer 2: per-tx ERC4626 share mint/burn net imbalance from the receipt, pure, no RPC] + inventoryRebalanceSelectorPresent [Layer 1: hardcoded rebalance selectors 0x6e553f65 deposit / 0xba087652 redeem via callTracer, corroborated] wired into classifyWinnerStyle (checked BEFORE atomic_loop) + isNonComparableWinnerStyle; census-report inherits via isNonComparableWinnerStyle. Fixtures postmortem-0x9be73297 (positive) + postmortem-0xf2de7499 (negative control). Gate: npm run test:noise-filter 37/37. Ref F-009.",
+        "status": "codified",
+        "codify_commit": "UNCOMMITTED_pending_orchestrator_gate"
       },
       "created_at": "2026-07-06T10:32:38.530Z",
-      "updated_at": "2026-07-06T10:32:38.530Z"
+      "updated_at": "2026-07-07T00:33:59.699Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260707-reconcile-gate-ssm-blind",
+      "status": "open",
+      "strategy_kind": "backrun",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_cross_reference",
+      "comparable": false,
+      "primary_gap": "none_tooling_only",
+      "gap_detail": "reconcile_gate_misses_ssm_wrapped_canonical_runs",
+      "evidence": {
+        "finding": "guard-tool-reconcile.py / guard-reconcile-stop.py do not credit canonical tool runs (npm run tx-profit / census-report / bundle-postmortem) when they execute inside `aws ssm send-command` parameters — the standard zero-CU node-side path per the bundle-postmortem skill. Result: pending entries accumulate across an entire postmortem session (4 txs, all reconciled on-node) and the Stop gate blocks with false positives; cleared via the sanctioned rm path 2026-07-07.",
+        "session": "57680a96 (2026-07-06/07 coffee postmortems F-010/F-011)"
+      },
+      "tooling_defect": {
+        "tool": "scripts/hooks/guard-tool-reconcile.py",
+        "issue": "canonical-run detection only matches local Bash npm invocations; SSM-wrapped runs (and their tool output in the transcript) never clear the pending entry, so every node-side postmortem turn ends Stop-blocked",
+        "proposed_fix": "also match canonical npm-run patterns inside aws ssm send-command command strings (and/or credit a `tool-reconciled:` line in assistant output), keeping the honor-system caveat documented in CLAUDE.md"
+      },
+      "created_at": "2026-07-07T00:33:55.793911Z",
+      "updated_at": "2026-07-07T00:33:55.793911Z"
     }
   ]
 }
