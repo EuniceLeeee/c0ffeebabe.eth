@@ -337,7 +337,7 @@
 - **F-013 verdict refined:** "backrun-closeable" is TRUE for the silo LEG (built + proven) but the FULL loop
   is **NOT yet reproducible +EV** — blocked on F-014 (a v4-quoter entry-leg gap), NOT the srUSDe edge.
 
-### F-014 | 2026-07-07 | ✅ CORRECTED | NOT a quoter gap — a swap-DIRECTION misattribution on `0xc069abea` (real leg is srUSDe→USDC, which quotes fine)
+### F-014 | 2026-07-07 | ⚠️ RE-OPENED (tool-reconciled) | `0xc069abea` leg is USDC→srUSDe, but the srUSDe is MINTED not pool-swapped; tx86 flags `inventory_vault_rebalance`
 - **What:** at 0xf391d0's execution state (fork post-txIndex-85, and the clean archive at blk 25462189), our
   V4Quoter (`0x52F0E24D…`) reverts `NotEnoughLiquidity(0xc069abea…)` (`0x6190b2b0`/`7a5ed734`) for
   **USDC→srUSDe at every size incl. 1 USDC**, while the **reverse** srUSDe→USDC quotes fine (1 srUSDe →
@@ -349,24 +349,27 @@
 - **Impact:** the srUSDe silo edge (F-013) is correct and composes the ring, but the loop's ENTRY leg can't be
   quoted/sized by our solver ⇒ no +EV solve ⇒ 0xf391d0 not yet capturable end-to-end. The f391 gate documents
   this as a deferred, separate block (still PASSes on the silo-edge flip).
-- **CORRECTION (2026-07-07, decisive — supersedes the "What"/"Impact" above and an earlier wrong "quoter-vs-core
-  divergence" claim in commit d8aec2d):** the c069abea leg's REAL direction is **srUSDe→USDC**, not USDC→srUSDe.
-  Proof: tx86's Swap event `sqrtPriceX96` FELL (79860609751145369495838 → 79860599658565075951039 = price DOWN
-  = pool gained token0/srUSDe = swapper SOLD srUSDe). The V4Quoter prices this real direction fine
-  (934.46e18 srUSDe → 949299209 USDC, ≈ the real 949.488853). The **new local v4 math (F-016 slice 1,
-  `searcher:v4math`) matches the V4Quoter BIT-EXACT on it** (949299209 == 949299209) and on USDC/USDT. The
-  `NotEnoughLiquidity` we chased was the OPPOSITE direction (USDC→srUSDe, price up) — a genuinely ONE-SIDED pool
-  (all standing liquidity sits below the current price; the debug trace shows liquidity → 0 one tick above
-  current). Both the V4Quoter revert AND the local math's bounded partial there are CORRECT. The tx86 status-1
-  replay was real but proved only that the LOOP reproduces (via srUSDe→USDC), NOT that USDC→srUSDe fills.
-- **Lesson:** derive a v4 swap's direction from the Swap event's `sqrtPriceX96` move (or the pool's token
-  delta signs), NOT from a token-transfer-flow guess — a multi-hop's boundary transfers can invert the
-  per-pool direction. This is the F-014 misread's root.
-- **Now → F-016 (task #16):** the local v4 quoter is verified correct and is still worth finishing for v4
-  COVERAGE (43% of bot MEV; removes the on-chain V4Quoter latency/rate-limit dependency; returns a bounded
-  partial instead of reverting on one-sided pools) — but it is NOT a fix for a (non-existent) F-014 gap. The
-  0xf391d0 loop needs its leg DIRECTIONS re-mapped (Agent A had the c069abea leg backwards) to test whether it
-  is already quotable end-to-end with the existing quoter.
+- **RE-CORRECTION (2026-07-07, anchored to the canonical tool — my two prior hand-analysis verdicts BOTH
+  flip-flopped; trust `bundle-postmortem`, not the hand decode. `tool-reconciled: bundle-postmortem`):**
+  - The intermediate "srUSDe→USDC direction misattribution" claim (commit 5aee875) was WRONG. `bundle-postmortem`
+    `decodeV4SwapFills` for c069abea: amount0(srUSDe)=+934460889828731878592, amount1(USDC)=-949488853,
+    **zeroForOne=false ⇒ the leg IS USDC→srUSDe** (F-014's original direction was right). My "sqrtP fell ⇒ srUSDe→USDC"
+    inference was a hand-decode error.
+  - **But the 934e18 srUSDe was MINTED, not pool-swapped:** in the ordered flow, srUSDe transfers `0x0 → EXECUTOR`
+    (mint) at logIndex 251, then `EXECUTOR → 0x0` (burn/redeem) at 252 — a vault round-trip, net srUSDe = 0. The
+    c069abea POOL's standing liquidity only yields ~0.206e18 srUSDe going up (local v4 math + V4Quoter agree — both
+    CORRECT for the pool). So F-014 was never a pool quoter-vs-core gap: the srUSDe came from a **deposit/mint**, not
+    the pool.
+  - **`winner_style = inventory_vault_rebalance`** (canonical tool, Agent B's detector) — tx86 is flagged NON-COMPARABLE
+    (F-009 class), diverging from Agent A's manual "clean atomic" verdict. **Unresolved rule-16 divergence:** likely a
+    detector FALSE-POSITIVE on an atomic loop that legitimately round-trips a vault share (net 0, returns +$5.60 to
+    WETH/USDC) — OR it genuinely is an inventory op. Must resolve before treating 0xf391d0 as a replicable target.
+- **Lesson (the load-bearing one):** on a confusing multi-mechanism v4 tx, do NOT trust a hand trace-decode — the
+  sqrtP/transfer-flow/mint signals contradict and I flip-flopped 3×. Run `bundle-postmortem` (authoritative
+  `decodeV4SwapFills` + `winner_style`) FIRST and anchor to it (HERMES rule 16).
+- **Status:** F-016 slice 1 (local v4 math) is verified-correct as a POOL quoter and still worth finishing for v4
+  coverage. But 0xf391d0 is NOT confirmed a capturable arb — it may be an inventory_vault_rebalance. Resolve the
+  Agent-A-vs-tool divergence (detector false-positive? file a tooling_defect if so) before more loop work.
 
 ## Dead-ends / retired (high-value — don't circle back)
 
