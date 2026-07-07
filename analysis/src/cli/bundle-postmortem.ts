@@ -25,6 +25,20 @@ const TOPIC_UNIV4_SWAP = lower(TOPICS.univ4Swap);
 const TOPIC_UNIV3_SWAP = lower(TOPICS.univ3Swap);
 const TOPIC_UNIV2_SWAP = lower((TOPICS as Record<string, string>).univ2Swap ?? "");
 const TOPIC_TRANSFER = lower(TOPICS.transfer);
+// Any-tx mode constants live at module top: `await main()` runs at module scope, so consts declared
+// below it are TDZ at call time (the census-report 83923ef crash class).
+const KEEPER_CLAIM_SELECTORS = ["755da811", "42b1689d", "30c54085"];
+const RFQ_DEADLINE_MAX_AHEAD_S = 3600;
+const RFQ_DEADLINE_MAX_BEHIND_S = 120;
+const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
+  { topic: lower(TOPICS.curveTokenExchange), protocol: "curve" },
+  { topic: lower(TOPICS.curveTokenExchangeUnderlying), protocol: "curve" },
+  { topic: lower(TOPICS.balancerV2Swap), protocol: "balancerV2" },
+  { topic: lower(TOPICS.pancakeV3Swap), protocol: "pancakeV3" },
+  { topic: lower(TOPICS.dodoSwap), protocol: "dodo" },
+  { topic: lower(TOPICS.psmSellGem), protocol: "psm" },
+  { topic: lower(TOPICS.psmBuyGem), protocol: "psm" },
+];
 const V3_SLOT0_SELECTOR = "0x3850c7bd";
 const V3_SWAP_IFACE = new ethers.Interface([
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
@@ -391,16 +405,6 @@ export interface OtherVenue {
   emitter: string;
   in_graph: boolean | null;
 }
-
-const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
-  { topic: lower(TOPICS.curveTokenExchange), protocol: "curve" },
-  { topic: lower(TOPICS.curveTokenExchangeUnderlying), protocol: "curve" },
-  { topic: lower(TOPICS.balancerV2Swap), protocol: "balancerV2" },
-  { topic: lower(TOPICS.pancakeV3Swap), protocol: "pancakeV3" },
-  { topic: lower(TOPICS.dodoSwap), protocol: "dodo" },
-  { topic: lower(TOPICS.psmSellGem), protocol: "psm" },
-  { topic: lower(TOPICS.psmBuyGem), protocol: "psm" },
-];
 
 // Swap-like venues OUTSIDE the univ2/3/4 lineages extractTouchedVenues covers — the census verdict
 // is blind to these (filed defect), so the any-tx report surfaces them explicitly.
@@ -1039,10 +1043,6 @@ export function winnerMovedPriceBeyondPrestate(
 //  - rfq_fill (F-010): the cheap side is a signed off-chain order — ABI-encoded 65-byte ECDSA
 //    signature(s) plus a seconds-scale deadline near the block timestamp in the calldata (verified on
 //    0x15352456: 3 sigs + deadline = block_ts+29s).
-const KEEPER_CLAIM_SELECTORS = ["755da811", "42b1689d", "30c54085"];
-const RFQ_DEADLINE_MAX_AHEAD_S = 3600;
-const RFQ_DEADLINE_MAX_BEHIND_S = 120;
-
 export interface NonArbSignals {
   claim_selector_hit: boolean;
   conserved_sink_cut: boolean;
