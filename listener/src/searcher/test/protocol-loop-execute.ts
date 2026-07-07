@@ -82,30 +82,37 @@ async function main(): Promise<void> {
   // we pre-fund the executor a small USDC buffer (> the fee) so the flash REPAYS and the full sequence
   // executes atomically. This is a MACHINERY gate (a protocol leg closes an atomic loop), not a live
   // +EV finder; grossProfit = -Curve-fee is the delta (buffer cancels out).
+  //
+  // Run BOTH flash adapters. This pins the flash-repay path per adapter: morpho PULLS the repay
+  // (approve), balancer VERIFIES its restored balance (transfer-back). The plan-builder emits the right
+  // repay per adapter — a balancer plan that only approved would silently revert (the bug this discovered).
   const executor = DEFAULT_SEARCHER_EXECUTOR;
-  const buffer = (FLASH - usdcBack) * 4n + 1_000000n; // > the fee loss
-  await dealToken(state, ADDR.USDC, executor, buffer);
-  console.log(`[protocol-loop] pre-funded executor buffer=${usd6(buffer)} USDC (covers the ${usd6(FLASH - usdcBack)} Curve fee so the flash repays)`);
+  const maxFee = FLASH - usdcBack + 10_000n; // quoted Curve fee + tiny sim rounding
 
-  const root = await buildResolvedPlanFromPath(
-    path, ADDR.USDC, FLASH, [FLASH, daiOut, usdcBack], executor, state,
-    1n,             // minProfit: guard balance >= flashAmount + 1 (satisfied by the buffer)
-    "morpho-flash", // approve-based repay (matches the plan-builder's ensureApprove repay path)
-  );
-  const plan = { root, profitToken: ADDR.USDC, flashAmount: FLASH, netProfit: gross, templateName: "protocol-loop" } as unknown as Parameters<BotVMSimulator["simulate"]>[0];
-  const sim = new BotVMSimulator(state, executor, DEFAULT_SEARCHER_OWNER);
-  const result = await sim.simulate(plan);
+  async function runLoop(flashAdapterId: string): Promise<boolean> {
+    const buffer = (FLASH - usdcBack) * 4n + 1_000000n; // > the fee loss, so the flash repays
+    await dealToken(state, ADDR.USDC, executor, buffer);
+    const root = await buildResolvedPlanFromPath(path, ADDR.USDC, FLASH, [FLASH, daiOut, usdcBack], executor, state, 1n, flashAdapterId);
+    const plan = { root, profitToken: ADDR.USDC, flashAmount: FLASH, netProfit: gross, templateName: "protocol-loop" } as unknown as Parameters<BotVMSimulator["simulate"]>[0];
+    const result = await new BotVMSimulator(state, executor, DEFAULT_SEARCHER_OWNER).simulate(plan);
+    // status=1 = the atomic tx did not revert (flash borrowed, PSM converted, Curve swapped, guard
+    // passed, flash REPAID — the loop closed back to USDC). grossProfit ~ -Curve-fee = value-preserving.
+    const ok = result.revertReason === undefined && result.grossProfit >= -maxFee && result.grossProfit <= gross + 10_000n;
+    console.log(`[protocol-loop] ${flashAdapterId.padEnd(14)} revert=${result.revertReason ? result.revertReason.slice(0, 60) : "NONE (status=1)"} grossProfit=${usd6(result.grossProfit)} USDC -> ${ok ? "PASS" : "FAIL"}`);
+    return ok;
+  }
 
-  console.log(`\n[protocol-loop] BotVM simulate: revert=${result.revertReason ?? "NONE (status=1)"} grossProfit=${usd6(result.grossProfit)} USDC gas=${result.gasUsed}`);
-  // status=1 = the atomic tx did not revert (flash borrowed, PSM converted, Curve swapped, guard passed,
-  // flash REPAID — the loop closed back to USDC). grossProfit ~ -Curve-fee proves value-preserving close.
-  const maxFee = FLASH - usdcBack + 10_000n; // allow the quoted fee + tiny sim rounding
-  const atomicClose = result.revertReason === undefined && result.grossProfit >= -maxFee && result.grossProfit <= gross + 10_000n;
-  if (!atomicClose) {
-    console.log(`PROTOCOL LOOP: FAIL (revert=${result.revertReason ?? "none"}, grossProfit=${result.grossProfit}, expected ~${gross})`);
+  console.log(`[protocol-loop] pre-fund buffer per run = ${usd6((FLASH - usdcBack) * 4n + 1_000000n)} USDC (covers the ${usd6(FLASH - usdcBack)} Curve fee so the flash repays)\n`);
+  const results: boolean[] = [];
+  for (const adapterId of ["morpho-flash", "balancer-flash"]) {
+    results.push(await runLoop(adapterId));
+  }
+
+  if (!results.every(Boolean)) {
+    console.log("\nPROTOCOL LOOP: FAIL");
     process.exit(1);
   }
-  console.log(`[protocol-loop] PASS — protocol(PSM) + DEX(Curve) atomic closed loop: flash->USDC->DAI->USDC->repay executed status=1, closed to USDC (delta ${usd6(result.grossProfit)} = Curve fee).`);
+  console.log(`\n[protocol-loop] PASS — protocol(PSM) + DEX(Curve) atomic closed loop (flash->USDC->DAI->USDC->repay) executed status=1 + closed to USDC under BOTH morpho-flash and balancer-flash.`);
   console.log("\nPROTOCOL LOOP: PASS");
   process.exit(0);
 }

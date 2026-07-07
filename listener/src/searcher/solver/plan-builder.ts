@@ -121,10 +121,18 @@ export async function buildResolvedPlanFromPath(
     children: [],
   });
 
-  // Approve flash source for repay
+  // Repay the flash. Morpho PULLS the repayment via transferFrom after the callback (needs an approve).
+  // Balancer does NOT pull — receiveFlashLoan must leave the borrowed amount back in the vault (it
+  // verifies its own balance is restored), so the repay must be a TRANSFER to the vault. An approve is a
+  // silent no-op for Balancer and the flashLoan then reverts. (Balancer protocol flash fee is 0, so we
+  // transfer exactly flashAmount.)
   const flashTarget = FLASH_ADAPTER_TARGETS[flashAdapterId];
   if (!flashTarget) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
-  ensureApprove(flashToken, flashTarget);
+  if (flashAdapterId === "balancer-flash") {
+    transferToPool(flashToken, flashTarget, flashAmount);
+  } else {
+    ensureApprove(flashToken, flashTarget);
+  }
 
   // Wrap entire sequence in flash loan
   const flashParams: Record<string, string[] | bigint[]> =
