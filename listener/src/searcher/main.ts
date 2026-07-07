@@ -3181,17 +3181,26 @@ async function warmBlockScanCurves(
   edges: TokenEdge[],
   deadlineAtMs: number,
 ): Promise<{ warmed: number; failed: number }> {
+  // Warm curve pool state CONCURRENTLY. Each quoteCurve is an independent read (own pool, own cache
+  // key) so a bounded-concurrency batch is safe and ~Nx faster than the old sequential for-await, which
+  // spent the ENTIRE block-scan pass budget here (11s at stage=warm_curve) and never reached detection.
   let warmed = 0;
   let failed = 0;
-  for (const edge of uniqueBlockScanCurvePools(edges)) {
+  const pools = uniqueBlockScanCurvePools(edges);
+  const CONCURRENCY = 8;
+  for (let i = 0; i < pools.length; i += CONCURRENCY) {
     if (Date.now() >= deadlineAtMs) break;
-    try {
-      await cache.quoteCurve(state, edge.target, edge.tokenIn, edge.tokenOut, 1n);
-      if (cache.snapshotCurve(edge.target, blockNumber)) warmed++;
-      else failed++;
-    } catch {
-      failed++;
-    }
+    await Promise.all(
+      pools.slice(i, i + CONCURRENCY).map(async (edge) => {
+        try {
+          await cache.quoteCurve(state, edge.target, edge.tokenIn, edge.tokenOut, 1n);
+          if (cache.snapshotCurve(edge.target, blockNumber)) warmed++;
+          else failed++;
+        } catch {
+          failed++;
+        }
+      }),
+    );
   }
   return { warmed, failed };
 }
