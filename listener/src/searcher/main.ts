@@ -3467,26 +3467,25 @@ async function warmBlockScanCurves(
   edges: TokenEdge[],
   deadlineAtMs: number,
 ): Promise<{ warmed: number; failed: number }> {
-  // Warm curve pool state CONCURRENTLY. Each quoteCurve is an independent read (own pool, own cache
-  // key) so a bounded-concurrency batch is safe and ~Nx faster than the old sequential for-await, which
-  // spent the ENTIRE block-scan pass budget here (11s at stage=warm_curve) and never reached detection.
+  // Warm curve pool state via Multicall3. 31 pools keeps worst-case 8-coin
+  // plain pools below 500 subcalls in round 2 (balances + token decimals).
   let warmed = 0;
   let failed = 0;
   const pools = uniqueBlockScanCurvePools(edges);
-  const CONCURRENCY = 8;
-  for (let i = 0; i < pools.length; i += CONCURRENCY) {
+  const CURVE_BATCH_POOLS = 31;
+  cache.setTickBlock(blockNumber);
+  for (let i = 0; i < pools.length; i += CURVE_BATCH_POOLS) {
     if (Date.now() >= deadlineAtMs) break;
-    await Promise.all(
-      pools.slice(i, i + CONCURRENCY).map(async (edge) => {
-        try {
-          await cache.quoteCurve(state, edge.target, edge.tokenIn, edge.tokenOut, 1n);
-          if (cache.snapshotCurve(edge.target, blockNumber)) warmed++;
-          else failed++;
-        } catch {
-          failed++;
-        }
-      }),
-    );
+    const chunk = pools.slice(i, i + CURVE_BATCH_POOLS);
+    try {
+      await cache.warmCurvesBatch(state, chunk.map((edge) => edge.target));
+    } catch {
+      // Count from snapshots below; a failed aggregate leaves the chunk cold.
+    }
+    for (const edge of chunk) {
+      if (cache.snapshotCurve(edge.target, blockNumber)) warmed++;
+      else failed++;
+    }
   }
   return { warmed, failed };
 }

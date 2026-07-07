@@ -67,6 +67,7 @@
     "searcher:mempool-router-filter": "node --import tsx src/searcher/test/mempool-router-filter.ts",
     "searcher:amtsearch": "tsx src/searcher/test/amount-search.ts",
     "searcher:curvemath": "tsx src/searcher/test/curve-math-equiv.ts",
+    "searcher:curve-warm-batch": "tsx src/searcher/test/curve-warm-batch.ts",
     "searcher:v3math": "tsx src/searcher/test/v3-math.ts",
     "searcher:v3equiv": "tsx src/searcher/test/v3-equiv.ts",
     "searcher:v4math": "tsx src/searcher/test/v4-math.ts",

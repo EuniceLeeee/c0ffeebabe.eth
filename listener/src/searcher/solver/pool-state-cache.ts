@@ -37,6 +37,8 @@ const univ2Iface = new ethers.Interface([
   "function token1() view returns (address)",
 ]);
 
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+const CURVE_MULTICALL_MAX_CALLS = 500;
 const TICK_LENS = "0xbfd8137f7d1516D3ea5cA83523914859ec47F573";
 const V3_WORD_RADIUS = Number(process.env.SEARCHER_V3_WORD_RADIUS ?? "8");
 const V3_ADAPTIVE_MAX_WORDS = Number(process.env.SEARCHER_V3_ADAPTIVE_MAX_WORDS ?? "64");
@@ -57,6 +59,9 @@ const v3PoolIface = new ethers.Interface([
 ]);
 const tickLensIface = new ethers.Interface([
   "function getPopulatedTicksInWord(address pool, int16 tickBitmapIndex) view returns ((int24 tick,int128 liquidityNet,uint128 liquidityGross)[])",
+]);
+const multicallIface = new ethers.Interface([
+  "function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success, bytes returnData)[] returnData)",
 ]);
 
 interface CurveCached {
@@ -103,6 +108,22 @@ interface V2Cached {
   blockTimestampLast?: number;
   blockNumber?: number;
   source: "seed" | "lazy";
+}
+
+interface CurveBatchCall {
+  target: string;
+  allowFailure: boolean;
+  callData: string;
+  label: string;
+}
+
+interface CurveBatchRound1 {
+  pool: string;
+  key: string;
+  coins: string[];
+  A: bigint;
+  fee: bigint;
+  offpeg: bigint | null;
 }
 
 export interface V2Seed {
@@ -593,6 +614,138 @@ export class PoolStateCache {
    * Local-math get_dy for a Curve pool, warming state on first touch.
    * Throws on any failure so the caller can fall back to the eth_call quoter.
    */
+  async warmCurvesBatch(state: StateBackend, pools: string[]): Promise<void> {
+    const candidates: Array<{ pool: string; key: string }> = [];
+    const seen = new Set<string>();
+    for (const pool of pools) {
+      const key = pool.toLowerCase();
+      if (seen.has(key) || this.overlayPools.has(key) || this.curve.has(key) || this.failed.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      candidates.push({ pool, key });
+    }
+    if (candidates.length === 0) return;
+
+    const round1Calls: CurveBatchCall[] = [];
+    for (const { pool, key } of candidates) {
+      for (let i = 0; i < 8; i++) {
+        round1Calls.push({
+          target: pool,
+          allowFailure: true,
+          callData: curveIface.encodeFunctionData("coins", [i]),
+          label: `${key}:coins:${i}`,
+        });
+      }
+      round1Calls.push({
+        target: pool,
+        allowFailure: true,
+        callData: curveIface.encodeFunctionData("A"),
+        label: `${key}:A`,
+      });
+      round1Calls.push({
+        target: pool,
+        allowFailure: true,
+        callData: curveIface.encodeFunctionData("fee"),
+        label: `${key}:fee`,
+      });
+      round1Calls.push({
+        target: pool,
+        allowFailure: true,
+        callData: curveIface.encodeFunctionData("offpeg_fee_multiplier"),
+        label: `${key}:offpeg_fee_multiplier`,
+      });
+    }
+
+    const round1 = await this.aggregateCurveCalls(state, round1Calls);
+    const parsed: CurveBatchRound1[] = [];
+    for (const candidate of candidates) {
+      try {
+        parsed.push(this.parseCurveBatchRound1(candidate.pool, candidate.key, round1));
+      } catch {
+        this.failed.add(candidate.key);
+      }
+    }
+    if (parsed.length === 0) return;
+
+    const round2Calls: CurveBatchCall[] = [];
+    for (const item of parsed) {
+      for (let k = 0; k < item.coins.length; k++) {
+        round2Calls.push({
+          target: item.pool,
+          allowFailure: true,
+          callData: curveIface.encodeFunctionData("balances", [k]),
+          label: `${item.key}:balances:${k}`,
+        });
+      }
+      if (item.offpeg !== null) {
+        round2Calls.push({
+          target: item.pool,
+          allowFailure: true,
+          callData: curveIface.encodeFunctionData("stored_rates"),
+          label: `${item.key}:stored_rates`,
+        });
+      } else {
+        for (let k = 0; k < item.coins.length; k++) {
+          round2Calls.push({
+            target: item.coins[k],
+            allowFailure: true,
+            callData: erc20Iface.encodeFunctionData("decimals"),
+            label: `${item.key}:decimals:${k}`,
+          });
+        }
+      }
+    }
+
+    const round2 = await this.aggregateCurveCalls(state, round2Calls);
+    for (const item of parsed) {
+      try {
+        const balances: bigint[] = [];
+        for (let k = 0; k < item.coins.length; k++) {
+          balances.push(BigInt(requireCurveBatchData(round2, `${item.key}:balances:${k}`)));
+        }
+
+        if (item.offpeg !== null) {
+          const ratesRes = requireCurveBatchData(round2, `${item.key}:stored_rates`);
+          const rates = (curveIface.decodeFunctionResult("stored_rates", ratesRes)[0] as bigint[]).map(
+            (r) => BigInt(r),
+          );
+          const ng: CurveNgState = {
+            A: item.A,
+            fee: item.fee,
+            offpegFeeMultiplier: item.offpeg,
+            balances,
+            rates,
+          };
+          this.curve.set(item.key, {
+            kind: "ng",
+            coins: item.coins,
+            ng,
+            blockNumber: this.tickBlock,
+            source: "lazy",
+          });
+        } else {
+          const rates: bigint[] = [];
+          for (let k = 0; k < item.coins.length; k++) {
+            const dec = Number(BigInt(requireCurveBatchData(round2, `${item.key}:decimals:${k}`)));
+            rates.push(10n ** BigInt(36 - dec));
+          }
+          const plain: CurvePlainState = { A: item.A, fee: item.fee, balances, rates };
+          this.curve.set(item.key, {
+            kind: "plain",
+            coins: item.coins,
+            plain,
+            blockNumber: this.tickBlock,
+            source: "lazy",
+          });
+        }
+      } catch {
+        this.curve.delete(item.key);
+        this.failed.add(item.key);
+      }
+    }
+  }
+
   async quoteCurve(
     state: StateBackend,
     pool: string,
@@ -630,6 +783,66 @@ export class PoolStateCache {
 
   private async call(state: StateBackend, to: string, data: string): Promise<bigint> {
     return BigInt(await state.call({ to, data }));
+  }
+
+  private async aggregateCurveCalls(state: StateBackend, calls: CurveBatchCall[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (calls.length === 0) return out;
+    for (let i = 0; i < calls.length; i += CURVE_MULTICALL_MAX_CALLS) {
+      const chunk = calls.slice(i, i + CURVE_MULTICALL_MAX_CALLS);
+      const data = multicallIface.encodeFunctionData("aggregate3", [
+        chunk.map((call) => ({
+          target: call.target,
+          allowFailure: call.allowFailure,
+          callData: call.callData,
+        })),
+      ]);
+      const result = await state.call({ to: MULTICALL3, data });
+      const decoded = multicallIface.decodeFunctionResult("aggregate3", result)[0] as Array<{
+        success: boolean;
+        returnData: string;
+      }>;
+      for (let j = 0; j < chunk.length; j++) {
+        const res = decoded[j];
+        if (res?.success && res.returnData && res.returnData !== "0x") {
+          out.set(chunk[j].label, res.returnData);
+        }
+      }
+    }
+    return out;
+  }
+
+  private parseCurveBatchRound1(
+    pool: string,
+    key: string,
+    results: Map<string, string>,
+  ): CurveBatchRound1 {
+    const coins: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const res = results.get(`${key}:coins:${i}`);
+      if (!res || res === "0x") break;
+      let addr: string;
+      try {
+        addr = ethers.getAddress("0x" + res.slice(-40));
+      } catch {
+        break;
+      }
+      if (addr === ethers.ZeroAddress) break;
+      coins.push(addr.toLowerCase());
+    }
+    if (coins.length === 0) throw new Error(`curve ${pool}: no coins`);
+    const A = BigInt(requireCurveBatchData(results, `${key}:A`));
+    const fee = BigInt(requireCurveBatchData(results, `${key}:fee`));
+    let offpeg: bigint | null = null;
+    const offpegRes = results.get(`${key}:offpeg_fee_multiplier`);
+    if (offpegRes) {
+      try {
+        offpeg = BigInt(offpegRes);
+      } catch {
+        offpeg = null;
+      }
+    }
+    return { pool, key, coins, A, fee, offpeg };
   }
 
   private async warmV3Ticks(state: StateBackend, pool: string): Promise<V3TickCache> {
@@ -794,4 +1007,10 @@ function cloneNg(state: CurveNgState): CurveNgState {
     balances: [...state.balances],
     rates: [...state.rates],
   };
+}
+
+function requireCurveBatchData(results: Map<string, string>, label: string): string {
+  const data = results.get(label);
+  if (!data) throw new Error(`missing ${label}`);
+  return data;
 }
