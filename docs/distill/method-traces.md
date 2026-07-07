@@ -176,3 +176,31 @@
 - tool_gap: (a) venue-discovery classifies an ERC4626 as loop-closable from asset()/previewRedeem WITHOUT checking a return path exists (DEX venue OR credit edge) — filed as a tooling_defect. (b) blockscan-hunt harness had two generator bugs the evaluator fixed (v3 ticks metadata-only seeding; solver must read the fork not the detection cache) — codified in the commit.
 - codify_next: tooling_defect LearningCase (share-token return-path gate in analysis/src/discovery) — FILED (open). Consider a startup-banner count of loop-closable protocol edges.
 - distill_for_opus: **"Convertible" (probe) ≠ "loop-closable" (a return path exists) ≠ "+EV" (fork-solve clears fees+gas). Check all three before treating a venue as capture. And the return path can be CREDIT, not just a DEX swap — absence of a DEX share-venue does not make a vault edge dead; trace the competitor before concluding.**
+
+### 20260707-srusde-silo-redeem-edge-design.md
+- task_class: protocol_leg
+- tools_used:
+  - 8-agent workflow (4 ground readers → 2 dual-prior proposals → judge merge → red-team), 189 tool calls, all facts file:line-cited
+                    - eth_call quote probes at historical blocks 25462189/25462190 + head 25477300 (previewRedeem / previewWithdraw / convertToShares, exact-in/exact-out selector verification from a real holder)
+                    - debug_traceTransaction callTracer on 0xf391d02a (silo staticcalls previewWithdraw — dispositive for the quote formula) + receipt log decode
+                    - SSM reads of the node universe (/opt/MEV/listener/searcher/pools/active-pools.json 4895 pools: c069abea entry complete, 8 sUSDe-touching venues; pinned-warm-pools.json precedent shape)
+                    - local ethers selector computation (0xfea53be1 / 0xdfcd412e / 0xba087652 / 0x4cdad506 / 0x0a28a477) reconciled against the pinned test table (test/protocol-legs.ts)
+                    - node --import tsx run of test/overlay-venue-coverage.ts (surfaced the pre-existing red)
+                    - npm run tx-profit reconcile (canonical PnL: net $5.66 vs F-013 $5.69, ethUsd snapshot drift — agrees)
+- evidence_order: 1. receipt + callTracer of the competitor tx (mechanism: multi-token silo withdraw, payout token, selectors) 2. eth_call quote math at execution state (formula byte-exact, diff 0; convertToShares floor dual rejected) 3. live-holder eth_call at head (0xfea53be1 exact-in verified, structure holds today) 4. code ground: descriptor/graph/quoter/mids dispatch sites file:line (4 parallel readers) 5. node universe presence via SSM (c069abea + return venues) 6. dual-prior design proposals 7. judge merge on the 2 load-bearing splits (encode, pool pin) 8. red-team code-verified attacks → 3 amendments
+- analysis_frame:
+  - registry-owns-data / descriptor-owns-mechanism split: the vault instance + payout token are registry data; encode+quote mechanism is a descriptor — vault #2 must be a one-line registry addition
+                    - a quote must be the execution path's OWN math (byte-exact previewWithdraw∘previewRedeem, silo-staticcalled), not an economically-close dual — wei-exact receipt-diff is the gate criterion, quoteSafetyBps stays a live-safety layer not a gate tolerance
+                    - fail-closed doctrine: a flagged vault without a receipt-verified payout token must emit ZERO edges; explicit-token calldata makes wrong-payout-token structurally impossible
+                    - hardcoded-switch inventory before claiming "auto-appears": quoter quote() and BOTH protocolMids builders silently null/throw on unknown adapter ids — every dispatch site enumerated up front
+                    - graph nodes are implicit from edge endpoints — verify what registration a new token actually needs (none) instead of assuming node/decimals/price plumbing
+- sanity_checks:
+  - exact-out twin inverse check: withdraw(sUSDe, quoted_amount, …) returns exactly 1e18 shares — perfect inverse of the exact-in quote
+                    - convertToShares vs previewWithdraw distinguished at the same state (1 wei apart) before declaring the winning formula
+                    - per-second accrual measured across 12s (2.4e12 raw at ~958e18 scale) before claiming wei-exactness is achievable — became gate amendment 1
+                    - 13 cooldown-style getters probed (all revert) before classifying protocolAction=redeem as standing-safe
+                    - the prior "c069abea dropped from graph" claim re-derived from the probe's own grep target (hunt report JSON has no pool list) — probe artifact, not admission bug
+                    - selector table recomputed locally and reconciled against the pinned test CASES; overlay-coverage red confirmed pre-existing at HEAD before attributing
+- tool_gap: listener test searcher:overlay-coverage is red at HEAD for every protocol descriptor id (routedSwapVenues enumerates all SWAP_ADAPTERS but seedForAdapter only seeds univ2/univ3/univ4) — a gate-adjacent test that mis-attributes failure to any new protocol descriptor; surfaced by ground reader, not caused by this design.
+- codify_next: tooling_defect LearningCase tooldef-20260707-overlay-coverage-protocol-seeds — FILED (open): fix = seedForAdapter gains protocol-leg seeds (or routedSwapVenues excludes protocol slotKind ids with an explicit allowlist) in listener/src/searcher/test/overlay-venue-coverage.ts; until then every protocol-descriptor gate report must carry the known-red exclusion line.
+- distill_for_opus: **For a non-standard protocol venue, settle the QUOTE before the design: callTracer the competitor tx to find which preview function the protocol ITSELF calls mid-execution — that composition is the byte-exact quote (here previewWithdraw∘previewRedeem; the plausible convertToShares dual was 1 wei off and only the trace could disambiguate). Then classify by splitting data from mechanism: payout token is registry DATA (redeemTokenOut), the two-call quote + explicit-token encode is a reusable mechanism descriptor — and before claiming any new id "auto-appears" anywhere, enumerate every hardcoded dispatch switch (quoter + both mids builders here) because unknown ids fail SILENT, not loud. Time-dependent vault math makes wei-exact gates impossible without pinning the execution timestamp to the quote state.**
