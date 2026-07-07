@@ -8,11 +8,16 @@ import {
   type AggregatedVenue,
 } from "../discovery/venue-aggregate.js";
 import { extractVenueCandidates } from "../discovery/venue-evidence.js";
+import { classifyTxLoopCoverage, type TxLoopCoverage } from "../discovery/loop-coverage.js";
 import { parseArgs, writeText } from "../util.js";
 
-const USAGE = `Usage: npm run venue-discovery-bq -- [--input <rows.ndjson|rows.csv>] [--store <venues.json>] [--out <venues.json>]
+const USAGE = `Usage: npm run venue-discovery-bq -- [--input <rows.ndjson|rows.csv>] [--store <venues.json>] [--out <venues.json>] [--loop-coverage|--per-tx]
   Accepts NDJSON (one BqLogRow per line) OR a BigQuery CSV export (header
-  tx_hash,...,log_address,topic0,topics,receipt_status; topics = "[0x..,0x..]"). Format auto-detected.`;
+  tx_hash,...,log_address,topic0,topics,receipt_status; topics = "[0x..,0x..]"). Format auto-detected.
+  Default: per-VENUE aggregation (edgeKinds/protocolActions/txCount).
+  --loop-coverage (alias --per-tx): per-TX loop-coverage — classifies each tx's venues into
+    supported-swap / our-vault (real ERC4626 leg) / token / flashloan / GAP, and flags fullyCovered
+    (zero gaps AND >=1 real vault leg). Emits a { perTx, summary } JSON object instead.`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -24,6 +29,12 @@ async function main(): Promise<void> {
 
   const rows = await readRows(inputPath);
   const inputs = rowsToVenueInputs(rows);
+
+  if (args["loop-coverage"] || args["per-tx"]) {
+    await runLoopCoverage(inputs.map((input) => classifyTxLoopCoverage(input)), outPath);
+    return;
+  }
+
   const current = aggregateVenueCandidates(inputs.map((input) => extractVenueCandidates(input)));
   const output = storePath ? mergeAggregates(await readStore(storePath), current) : current;
   const json = `${JSON.stringify(output, null, 2)}\n`;
@@ -43,6 +54,39 @@ async function main(): Promise<void> {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
+}
+
+/** Per-TX loop-coverage mode: emit { perTx, summary } and a human line. perTx is sorted fullyCovered-first,
+ *  then by fewest gap venues, so candidate closed protocol loops surface at the top. */
+async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promise<void> {
+  const sorted = [...perTx].sort(
+    (a, b) =>
+      Number(b.fullyCovered) - Number(a.fullyCovered)
+      || a.gapVenues.length - b.gapVenues.length
+      || b.vaults.length - a.vaults.length
+      || a.tx.localeCompare(b.tx),
+  );
+  const withVault = sorted.filter((t) => t.vaults.length >= 1);
+  const summary = {
+    txs: perTx.length,
+    txsWithVaultLeg: withVault.length,
+    fullyCovered: perTx.filter((t) => t.fullyCovered).length,
+    oneGapWithVault: withVault.filter((t) => t.gapVenues.length === 1).length,
+  };
+  const json = `${JSON.stringify({ summary, perTx: sorted }, null, 2)}\n`;
+
+  process.stdout.write(json);
+  if (outPath) await writeText(outPath, json);
+
+  console.error(
+    [
+      "[analysis/venue-discovery-bq loop-coverage]",
+      `txs=${summary.txs}`,
+      `txs_with_vault_leg=${summary.txsWithVaultLeg}`,
+      `fully_covered=${summary.fullyCovered}`,
+      `vault_leg_one_gap=${summary.oneGapWithVault}`,
+    ].join(" "),
+  );
 }
 
 /** Auto-detect: JSON array ('['), NDJSON ('{' per line), or a BigQuery CSV export (header row).
