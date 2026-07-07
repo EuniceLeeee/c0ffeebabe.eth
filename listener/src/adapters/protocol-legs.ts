@@ -7,11 +7,17 @@ export interface ProtocolLegDescriptor {
   signature: string;
   amountArg: number;
   executorArgs: number[];
+  /**
+   * Index of an address arg that carries the leg's out-token (e.g. a non-standard silo redeem
+   * whose calldata names the token to pay out). Sourced from node.tokenOut. Absent for the
+   * standard legs whose out-token is implicit.
+   */
+  tokenOutArg?: number;
   needsApprove: boolean;
   quoteSig?: string;
 }
 
-type ArgSource = "amount" | "executor";
+type ArgSource = "amount" | "executor" | "tokenOut";
 
 function functionName(signature: string): string {
   const paren = signature.indexOf("(");
@@ -37,6 +43,9 @@ function argSources(desc: ProtocolLegDescriptor, argCount: number): ArgSource[] 
   setArg(desc.amountArg, "amount");
   for (const index of desc.executorArgs) {
     setArg(index, "executor");
+  }
+  if (desc.tokenOutArg !== undefined) {
+    setArg(desc.tokenOutArg, "tokenOut");
   }
 
   const missing = sources.findIndex((source) => source === undefined);
@@ -64,7 +73,16 @@ export function makeProtocolAdapter(desc: ProtocolLegDescriptor): ActionAdapter 
     field2Offset: null,
 
     encode(node, executor, _inner) {
-      const args = sources.map((source) => source === "amount" ? node.amount : executor);
+      const args = sources.map((source) => {
+        if (source === "amount") return node.amount;
+        if (source === "tokenOut") {
+          if (!node.tokenOut) {
+            throw new Error(`protocol leg ${desc.id} requires node.tokenOut for the out-token arg`);
+          }
+          return node.tokenOut;
+        }
+        return executor;
+      });
       return encodeCall(node.target, ethers.getBytes(iface.encodeFunctionData(fnName, args)));
     },
 
@@ -106,5 +124,20 @@ export const PROTOCOL_LEG_DESCRIPTORS: ProtocolLegDescriptor[] = [
     executorArgs: [1, 2],
     needsApprove: false,
     quoteSig: "previewRedeem(uint256)",
+  },
+  {
+    // Non-standard ERC4626 (srUSDe): multi-token exact-in redeem paying an out-token that is NOT
+    // asset(). redeem(address token, uint256 shares, address receiver, address owner), selector
+    // 0xfea53be1 (live-verified exact-in twin of the competitor's exact-out withdraw 0xdfcd412e).
+    // The token arg is the redeem-out token (e.g. sUSDe), sourced from node.tokenOut. quoteSig is
+    // deliberately undefined: the payout quote is a two-contract composition (vault.previewRedeem
+    // then out-token.previewWithdraw) that quoteProtocolLeg's single-call shape cannot express, so
+    // quoter.ts owns it (quoteSiloRedeem).
+    id: "erc4626-redeem-silo",
+    signature: "redeem(address,uint256,address,address)",
+    tokenOutArg: 0,
+    amountArg: 1,
+    executorArgs: [2, 3],
+    needsApprove: false,
   },
 ];

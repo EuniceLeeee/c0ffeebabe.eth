@@ -257,6 +257,32 @@ export async function quoteProtocolLeg(
   return BigInt(decoded[0]);
 }
 
+const siloRedeemIface = new ethers.Interface([
+  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
+]);
+
+/**
+ * Non-standard ERC4626 silo redeem (e.g. srUSDe -> sUSDe). The vault's previewRedeem returns an
+ * asset()-denominated VALUE (USDe), and the silo pays the out-token (sUSDe) at that token's
+ * previewWithdraw of the value — byte-exact to the on-chain payout (verified via callTracer: the
+ * silo staticcalls previewWithdraw itself, diff 0). Two SEQUENTIAL state.calls on two contracts;
+ * quoteProtocolLeg's single-call/single-contract shape cannot express this.
+ */
+export async function quoteSiloRedeem(
+  state: StateBackend,
+  vault: string,
+  outToken: string,
+  shares: bigint,
+): Promise<bigint> {
+  const assetsData = siloRedeemIface.encodeFunctionData("previewRedeem", [shares]);
+  const assetsRaw = await state.call({ to: vault, data: assetsData });
+  const assets = BigInt(siloRedeemIface.decodeFunctionResult("previewRedeem", assetsRaw)[0]);
+  const outData = siloRedeemIface.encodeFunctionData("previewWithdraw", [assets]);
+  const outRaw = await state.call({ to: outToken, data: outData });
+  return BigInt(siloRedeemIface.decodeFunctionResult("previewWithdraw", outRaw)[0]);
+}
+
 // ── UniV2 (constant-product) ──────────────────────────────────
 
 const univ2Iface = new ethers.Interface([
@@ -631,6 +657,8 @@ export async function quote(
     case "erc4626-deposit":
     case "erc4626-redeem":
       return quoteProtocolLeg(state, target, adapterId, amountIn);
+    case "erc4626-redeem-silo":
+      return quoteSiloRedeem(state, target, tokenOut, amountIn);
     case "fluid-vault":
       return quoteFluidVault();
     default:

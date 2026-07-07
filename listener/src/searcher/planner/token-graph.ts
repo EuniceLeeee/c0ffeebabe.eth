@@ -78,6 +78,13 @@ export interface PoolEntry {
    * is worse than no edge (deposit alone can never close a loop anyway). Verified per-vault via
    * a fork redeem receipt-decode; see docs. */
   nonStandardRedeem?: boolean;
+  /**
+   * Receipt-verified out-token for a nonStandardRedeem vault (the token the silo actually pays,
+   * != asset()). Declaring it opts the flagged vault into the `erc4626-redeem-silo` edge (quoted
+   * via vault.previewRedeem -> outToken.previewWithdraw). A nonStandardRedeem vault WITHOUT this
+   * still emits ZERO edges (fail-closed — a wrong edge is worse than no edge).
+   */
+  redeemTokenOut?: string;
   /** Activity proxy from discovery (swap-event count). undefined = curated backbone (pinned). */
   score?: number;
 }
@@ -141,10 +148,12 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // steakUSDT
   // srUSDe (Strata Senior USDe): NON-STANDARD ERC4626. deposit pulls USDe (asset(), standard),
   // but redeem pays sUSDe (0x9d39a5de...) via a silo, NOT USDe — previewRedeem returns the
-  // USDe-denominated VALUE, so our share->asset()/previewRedeem edge is wrong on token AND
-  // amount (fork receipt: 934.46 srUSDe -> 773.99 sUSDe, previewRedeem said 958.15 USDe).
-  // Excluded until the adapter can model a distinct redeem-out token + convertToShares quantity.
-  { address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003", adapter: "erc4626", fixedTokenIn: ADDR.USDE, nonStandardRedeem: true },  // srUSDe
+  // USDe-denominated VALUE, so the generic share->asset()/previewRedeem edge is wrong on token AND
+  // amount (fork receipt: 934.46 srUSDe -> 773.99 sUSDe, previewRedeem said 958.15 USDe). The
+  // generic pair stays SUPPRESSED (nonStandardRedeem); redeemTokenOut opts in the correct
+  // erc4626-redeem-silo edge quoted as sUSDe.previewWithdraw(srUSDe.previewRedeem(shares)) —
+  // byte-exact to the on-chain payout (see docs/analysis/20260707-srusde-silo-redeem-edge-design.md).
+  { address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003", adapter: "erc4626", fixedTokenIn: ADDR.USDE, nonStandardRedeem: true, redeemTokenOut: "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497" },  // srUSDe -> sUSDe
   { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH }, // sfrxETH
   { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // waEthUSDT
   { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
@@ -373,8 +382,21 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
       }
       if (pool.nonStandardRedeem) {
-        // Redeem pays a token our previewRedeem-based edge can't model (wrong token + amount);
-        // emit no edges rather than a silently-wrong one that reverts the next leg on-chain.
+        // The generic deposit/redeem pair would be wrong on token AND amount, so it stays
+        // suppressed. When the receipt-verified payout token is declared, emit the correct
+        // silo redeem edge (share -> redeemTokenOut) quoted by quoteSiloRedeem. A flagged
+        // vault WITHOUT redeemTokenOut still emits ZERO edges (fail-closed).
+        if (pool.redeemTokenOut) {
+          edges.push({
+            adapterId: "erc4626-redeem-silo",
+            target: pool.address,
+            tokenIn: pool.address,
+            tokenOut: pool.redeemTokenOut,
+            slotKind: "protocol",
+            protocolAction: "redeem",
+            ...deriveEdgeTaxonomy("protocol", "redeem"),
+          });
+        }
         break;
       }
       edges.push(

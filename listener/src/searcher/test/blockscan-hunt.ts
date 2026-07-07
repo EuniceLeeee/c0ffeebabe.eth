@@ -41,6 +41,7 @@ const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"])
 const ERC4626 = new ethers.Interface([
   "function previewDeposit(uint256 assets) view returns (uint256 shares)",
   "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
 ]);
 const WSTETH = new ethers.Interface([
   "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
@@ -556,7 +557,13 @@ function isFluidDexSwap(edge: TokenEdge): boolean {
 function classifyProtocol(edge: TokenEdge): ProtocolClass | null {
   if (edge.adapterId === "psm") return "psm";
   if (edge.adapterId === "wsteth-wrap" || edge.adapterId === "wsteth-unwrap") return "wsteth";
-  if (edge.adapterId === "erc4626-deposit" || edge.adapterId === "erc4626-redeem") return "erc4626";
+  if (
+    edge.adapterId === "erc4626-deposit" ||
+    edge.adapterId === "erc4626-redeem" ||
+    edge.adapterId === "erc4626-redeem-silo"
+  ) {
+    return "erc4626";
+  }
   return null;
 }
 
@@ -572,6 +579,11 @@ async function readProtocolMid(
   }
   if (edge.adapterId === "erc4626-redeem") {
     const out = await callUint(provider, blockNumber, edge.target, ERC4626.encodeFunctionData("previewRedeem", [oneIn]), "previewRedeem");
+    return Number(out) / Number(oneIn);
+  }
+  if (edge.adapterId === "erc4626-redeem-silo") {
+    const value = await callUint(provider, blockNumber, edge.target, ERC4626.encodeFunctionData("previewRedeem", [oneIn]), "previewRedeem");
+    const out = await callUint(provider, blockNumber, edge.tokenOut, ERC4626.encodeFunctionData("previewWithdraw", [value]), "previewWithdraw");
     return Number(out) / Number(oneIn);
   }
   if (edge.adapterId === "wsteth-wrap") {

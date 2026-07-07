@@ -99,6 +99,7 @@ const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"])
 const ERC4626 = new ethers.Interface([
   "function previewDeposit(uint256 assets) view returns (uint256 shares)",
   "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
 ]);
 const WSTETH = new ethers.Interface([
   "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
@@ -2830,6 +2831,7 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
 type BlockScanProtocolAdapter =
   | "erc4626-deposit"
   | "erc4626-redeem"
+  | "erc4626-redeem-silo"
   | "wsteth-wrap"
   | "wsteth-unwrap"
   | "psm";
@@ -2935,6 +2937,8 @@ function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | n
       return "erc4626-deposit";
     case "erc4626-redeem":
       return "erc4626-redeem";
+    case "erc4626-redeem-silo":
+      return "erc4626-redeem-silo";
     case "wsteth-wrap":
       return "wsteth-wrap";
     case "wsteth-unwrap":
@@ -2973,6 +2977,27 @@ async function readBlockScanProtocolMid(
         ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
         ERC4626,
         "previewRedeem",
+      );
+      return Number(out) / Number(oneIn);
+    }
+    case "erc4626-redeem-silo": {
+      // Non-standard silo redeem: value = vault.previewRedeem(oneIn) (asset()-denominated),
+      // out = outToken.previewWithdraw(value) — byte-exact to the on-chain payout.
+      const value = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.target,
+        ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
+        ERC4626,
+        "previewRedeem",
+      );
+      const out = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.tokenOut,
+        ERC4626.encodeFunctionData("previewWithdraw", [value]),
+        ERC4626,
+        "previewWithdraw",
       );
       return Number(out) / Number(oneIn);
     }

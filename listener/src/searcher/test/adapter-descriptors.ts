@@ -44,7 +44,7 @@ function testCoverage(): void {
   const registeredIds = listAll().map((adapter) => adapter.id);
   const descriptorIds = Object.keys(ADAPTER_DESCRIPTORS);
 
-  assert(registeredIds.length === 31, `registered adapter count ${registeredIds.length}`);
+  assert(registeredIds.length === 32, `registered adapter count ${registeredIds.length}`);
   assert(descriptorIds.length === registeredIds.length, `descriptor count ${descriptorIds.length}`);
   for (const id of registeredIds) {
     const descriptor = descriptorFor(id);
@@ -70,7 +70,7 @@ function testEdgeKindCounts(): void {
 
   assert(counts.swap === 16, `swap count ${counts.swap}`);
   assert(counts.flash === 2, `flash count ${counts.flash}`);
-  assert(counts.protocol === 8, `protocol count ${counts.protocol}`);
+  assert(counts.protocol === 9, `protocol count ${counts.protocol}`);
   assert(counts.credit === 2, `credit count ${counts.credit}`);
   assert(counts.null === 3, `null count ${counts.null}`);
   assert(counts.lp === 0, `lp count ${counts.lp}`);

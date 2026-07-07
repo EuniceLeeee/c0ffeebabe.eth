@@ -232,6 +232,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },
+  "erc4626-redeem-silo": {
+    adapterId: "erc4626-redeem-silo",
+    lineage: "erc4626",
+    edgeKind: "protocol",
+    action: "redeem",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
   "wsteth-wrap": {
     adapterId: "wsteth-wrap",
     lineage: "wsteth",

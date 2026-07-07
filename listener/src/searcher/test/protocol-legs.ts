@@ -59,6 +59,15 @@ const CASES: ProtocolCase[] = [
     selector: ethers.id("redeem(uint256,address,address)").slice(0, 10),
     expectedArgs: (node, executor) => [node.amount, executor, executor],
   },
+  {
+    // Non-standard silo redeem: multi-token exact-in redeem(token, shares, receiver, owner).
+    // token arg (index 0) is sourced from node.tokenOut; selector must be 0xfea53be1 (distinct
+    // from erc4626-redeem's 0xba087652 so matchTrace never shadows).
+    id: "erc4626-redeem-silo",
+    signature: "redeem(address,uint256,address,address)",
+    selector: ethers.id("redeem(address,uint256,address,address)").slice(0, 10),
+    expectedArgs: (node, executor) => [node.tokenOut, node.amount, executor, executor],
+  },
 ];
 
 function assert(cond: boolean, msg: string): asserts cond {
@@ -140,6 +149,9 @@ function testRoundTrip(): void {
     assertEqual(BigInt(decoded[desc.amountArg]), NODE.amount, `${testCase.id} amount arg`);
     for (const index of desc.executorArgs) {
       assertEqual(String(decoded[index]).toLowerCase(), EXECUTOR.toLowerCase(), `${testCase.id} executor arg ${index}`);
+    }
+    if (desc.tokenOutArg !== undefined) {
+      assertEqual(String(decoded[desc.tokenOutArg]).toLowerCase(), NODE.tokenOut.toLowerCase(), `${testCase.id} tokenOut arg ${desc.tokenOutArg}`);
     }
   }
   console.log("[protocol-legs] round-trip decode: PASS");

@@ -95,6 +95,50 @@ async function testZeroAmountShortCircuitsBeforePreview(): Promise<void> {
   console.log("[erc4626-quote] dispatch zero-amount short circuit: PASS");
 }
 
+const SRUSDE = "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003";
+const SUSDE = "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497";
+const siloIface = new ethers.Interface([
+  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
+]);
+const SILO_PREVIEW_REDEEM_SELECTOR = siloIface.encodeFunctionData("previewRedeem", [0n]).slice(0, 10);
+const SILO_PREVIEW_WITHDRAW_SELECTOR = siloIface.encodeFunctionData("previewWithdraw", [0n]).slice(0, 10);
+
+// The non-standard silo redeem quote is a two-CONTRACT composition:
+// out = sUSDe.previewWithdraw( srUSDe.previewRedeem(shares) ) — byte-exact to the on-chain payout.
+async function testSiloRedeemComposesTwoCalls(): Promise<void> {
+  const shares = 934_460_889_828_731_878_592n;          // exact srUSDe burned in 0xf391d0
+  const assetsValue = 958_150_733_475_481_205_886n;      // srUSDe.previewRedeem -> USDe-denominated value
+  const expectedOut = 773_988_354_296_524_711_820n;      // sUSDe.previewWithdraw(value) -> sUSDe paid
+  const seenCalls: Array<{ to: string; fn: string; amount: bigint }> = [];
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      const selector = req.data.slice(0, 10);
+      if (req.to.toLowerCase() === SRUSDE.toLowerCase() && selector === SILO_PREVIEW_REDEEM_SELECTOR) {
+        const decoded = siloIface.decodeFunctionData("previewRedeem", req.data);
+        seenCalls.push({ to: "srUSDe", fn: "previewRedeem", amount: BigInt(decoded[0]) });
+        return siloIface.encodeFunctionResult("previewRedeem", [assetsValue]);
+      }
+      if (req.to.toLowerCase() === SUSDE.toLowerCase() && selector === SILO_PREVIEW_WITHDRAW_SELECTOR) {
+        const decoded = siloIface.decodeFunctionData("previewWithdraw", req.data);
+        seenCalls.push({ to: "sUSDe", fn: "previewWithdraw", amount: BigInt(decoded[0]) });
+        return siloIface.encodeFunctionResult("previewWithdraw", [expectedOut]);
+      }
+      throw new Error(`unexpected silo call to ${req.to} selector ${selector}`);
+    },
+  } as unknown as StateBackend;
+
+  const out = await quote("erc4626-redeem-silo", SRUSDE, SRUSDE, SUSDE, shares, state);
+
+  assert(out === expectedOut, `silo redeem output expected ${expectedOut}, got ${out}`);
+  assert(seenCalls.length === 2, `silo redeem should make two calls, got ${seenCalls.length}`);
+  assert(seenCalls[0].to === "srUSDe" && seenCalls[0].fn === "previewRedeem", `first call must be srUSDe.previewRedeem, got ${seenCalls[0].to}.${seenCalls[0].fn}`);
+  assert(seenCalls[0].amount === shares, `previewRedeem amount expected ${shares}, got ${seenCalls[0].amount}`);
+  assert(seenCalls[1].to === "sUSDe" && seenCalls[1].fn === "previewWithdraw", `second call must be sUSDe.previewWithdraw, got ${seenCalls[1].to}.${seenCalls[1].fn}`);
+  assert(seenCalls[1].amount === assetsValue, `previewWithdraw fed the previewRedeem value ${assetsValue}, got ${seenCalls[1].amount}`);
+  console.log("[erc4626-quote] silo redeem composes previewRedeem->previewWithdraw across two contracts: PASS");
+}
+
 async function testUnknownAdapterIdThrows(): Promise<void> {
   const { state, calls } = mockState(0n, 0n);
   let threw = false;
@@ -113,6 +157,7 @@ async function main(): Promise<void> {
   const tests = [
     testDepositUsesPreviewDeposit,
     testRedeemUsesPreviewRedeem,
+    testSiloRedeemComposesTwoCalls,
     testZeroAmountShortCircuitsBeforePreview,
     testUnknownAdapterIdThrows,
   ];
