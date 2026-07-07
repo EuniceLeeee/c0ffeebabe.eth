@@ -1107,9 +1107,11 @@ function countAbiEncodedSignatures(inputHex: string): number {
 }
 
 // A zero-padded uint32 word within a seconds-scale window around the block timestamp — an order
-// deadline. 56 leading zeros + 8 hex = a full 32-byte word holding a unix timestamp.
+// deadline. 56 leading zeros + 8 hex = a full 32-byte word holding a unix timestamp. Lookahead form:
+// a greedy /0{56}…/ consumes long zero runs and can mis-align past the real word (a run of 57+
+// zeros captured "0xxxxxxx" and then skipped the true window — 0x15352456 verification miss).
 function hasDeadlineWord(inputHex: string, blockTimestamp: number): boolean {
-  for (const match of inputHex.matchAll(/0{56}([0-9a-f]{8})/g)) {
+  for (const match of inputHex.matchAll(/(?=0{56}([0-9a-f]{8}))/g)) {
     const value = Number.parseInt(match[1], 16);
     if (value >= blockTimestamp - RFQ_DEADLINE_MAX_BEHIND_S
       && value <= blockTimestamp + RFQ_DEADLINE_MAX_AHEAD_S) return true;
@@ -1244,10 +1246,17 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
 // Layer 2 (F-009): per-tx ERC4626/vault-share NET mint/burn imbalance from the receipt. For each
 // token, sum Transfer(from=0x0) as +mint and Transfer(to=0x0) as -burn; a net magnitude above dust
 // for ANY token ⇒ a residual standing position was created/consumed ⇒ inventory/non-atomic. A plain
-// atomic ERC4626 arb round-trips the same shares (deposit then redeem) and nets ~0. Pure receipt
-// computation — no RPC. Returns the offending share-token addresses (empty ⇒ atomic on this axis).
+// atomic ERC4626 arb round-trips the same shares (deposit then redeem) and nets ~0.
+// Refinement (0xf698e6c2, F-012 verification): a global mint>burn is NOT a standing position when
+// the minted shares were spent AS CURRENCY into a swap venue (LP-token-as-intermediate loops mint
+// 3CRV and pay it whole to a metapool). So an imbalanced token only flags if some residual holder
+// (positive per-address net above dust) is NOT a swap-venue emitter of this receipt — the
+// 0x9be73297 vault-wrapper helpers (no swap events) still flag; a metapool taking 3CRV does not.
+// Pure receipt computation — no RPC. Returns the offending share-token addresses.
 export function shareTokenImbalanceTokens(receipt: Json | null): string[] {
   const net = new Map<string, bigint>();
+  const perHolder = new Map<string, Map<string, bigint>>();
+  const venueEmitters = swapVenueEmitters(receipt);
   for (const log of receipt?.logs ?? []) {
     if (lower(String(log?.topics?.[0] ?? "")) !== TOPIC_TRANSFER) continue;
     const transfer = decodeTransfer(log);
@@ -1259,11 +1268,43 @@ export function shareTokenImbalanceTokens(receipt: Json | null): string[] {
     if (from === ZERO_ADDRESS && to === ZERO_ADDRESS) continue;
     if (from === ZERO_ADDRESS) net.set(token, (net.get(token) ?? 0n) + transfer.amount);
     else if (to === ZERO_ADDRESS) net.set(token, (net.get(token) ?? 0n) - transfer.amount);
+    let holders = perHolder.get(token);
+    if (!holders) {
+      holders = new Map();
+      perHolder.set(token, holders);
+    }
+    if (from !== ZERO_ADDRESS) holders.set(from, (holders.get(from) ?? 0n) - transfer.amount);
+    if (to !== ZERO_ADDRESS) holders.set(to, (holders.get(to) ?? 0n) + transfer.amount);
   }
   const out: string[] = [];
   for (const [token, value] of net) {
-    if (value < 0n ? -value > SHARE_IMBALANCE_DUST_RAW : value > SHARE_IMBALANCE_DUST_RAW) {
-      out.push(token);
+    const imbalanced = value < 0n ? -value > SHARE_IMBALANCE_DUST_RAW : value > SHARE_IMBALANCE_DUST_RAW;
+    if (!imbalanced) continue;
+    const holders = perHolder.get(token) ?? new Map<string, bigint>();
+    let nonVenueResidual = false;
+    for (const [holder, holderNet] of holders) {
+      if (holderNet > SHARE_IMBALANCE_DUST_RAW && !venueEmitters.has(holder)) {
+        nonVenueResidual = true;
+        break;
+      }
+    }
+    // A net BURN imbalance (consuming pre-held shares) has no in-receipt holder to inspect — it is
+    // inventory by construction; keep flagging it unconditionally.
+    if (value < 0n || nonVenueResidual) out.push(token);
+  }
+  return out;
+}
+
+function swapVenueEmitters(receipt: Json | null): Set<string> {
+  const out = new Set<string>();
+  for (const log of receipt?.logs ?? []) {
+    const topic0 = lower(String(log?.topics?.[0] ?? ""));
+    const emitter = lower(String(log?.address ?? ""));
+    if (!isAddress(emitter)) continue;
+    if (topic0 === TOPIC_UNIV4_SWAP || topic0 === TOPIC_UNIV3_SWAP
+      || (TOPIC_UNIV2_SWAP && topic0 === TOPIC_UNIV2_SWAP)
+      || OTHER_SWAP_TOPIC_PROTOCOLS.some((entry) => entry.topic === topic0)) {
+      out.add(emitter);
     }
   }
   return out;
