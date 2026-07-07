@@ -45,6 +45,7 @@ export interface VictimStateResult {
 }
 
 const ERC20 = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
+const LOCAL_FORK_GAS_BALANCE_FLOOR = 10_000n * 10n ** 18n;
 
 export class AnvilStateBackend implements StateBackend {
   provider: ethers.JsonRpcProvider;
@@ -353,8 +354,9 @@ export class AnvilStateBackend implements StateBackend {
   }
 
   async send(req: { from: string; to: string; data: string; gas?: string }): Promise<string> {
+    const from = await prepareUnlockedSender(this.provider, req.from);
     const hash = await withTimeout(
-      this.provider.send("eth_sendTransaction", [req]),
+      this.provider.send("eth_sendTransaction", [{ ...req, from }]),
       45_000,
       `eth_sendTransaction ${req.to}`,
     );
@@ -474,15 +476,35 @@ async function ensureSenderHasGas(
 ): Promise<void> {
   const tx = ethers.Transaction.from(rawTx);
   if (!tx.from) return;
-  const from = ethers.getAddress(tx.from);
+  await ensureAccountGasFloor(provider, tx.from);
+}
+
+async function prepareUnlockedSender(
+  provider: ethers.JsonRpcProvider,
+  account: string,
+): Promise<string> {
+  const from = await ensureAccountGasFloor(provider, account);
+  await provider.send("anvil_impersonateAccount", [from]);
+  return from;
+}
+
+async function ensureAccountGasFloor(
+  provider: ethers.JsonRpcProvider,
+  account: string,
+): Promise<string> {
+  const from = ethers.getAddress(account);
   const balance = await withTimeout(
     provider.getBalance(from, "latest"),
     30_000,
     `getBalance ${from}`,
   );
-  const floor = 10_000n * 10n ** 18n; // local fork gas/value top-up for raw prefix replay.
-  if (balance >= floor) return;
-  await provider.send("anvil_setBalance", [from, "0x" + floor.toString(16)]);
+  if (balance < LOCAL_FORK_GAS_BALANCE_FLOOR) {
+    await provider.send("anvil_setBalance", [
+      from,
+      "0x" + LOCAL_FORK_GAS_BALANCE_FLOOR.toString(16),
+    ]);
+  }
+  return from;
 }
 
 async function setNextBlockContext(provider: ethers.JsonRpcProvider, block: any): Promise<void> {
