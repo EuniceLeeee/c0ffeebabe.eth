@@ -7,9 +7,10 @@
  * Within one solve (~hundreds of amount trials) this turns "an eth_call per
  * trial" into "one warm-up + N local computes".
  *
- * The cache holds fork-state-dependent balances, so it MUST be cleared whenever
- * the underlying fork advances (caller clears per hint / per fixture). On any
- * warm-up or lookup failure the caller falls back to the on-chain quoter.
+ * The cache holds fork-state-dependent balances, so callers normally clear it
+ * whenever the underlying fork advances. Block-scan uses explicit log-based
+ * invalidation plus restamping for unchanged pools. On any warm-up or lookup
+ * failure the caller falls back to the on-chain quoter.
  */
 
 import { ethers } from "ethers";
@@ -298,12 +299,12 @@ export class PoolStateCache {
   }
 
   /**
-   * Block-scan pass boundary: keep seeded V2 reserves and V3 slot0/liquidity
-   * across blocks, while clearing the families that clear() dropped per pass.
+   * Block-scan pass boundary: keep seeded V2 reserves, V3 slot0/liquidity, and
+   * Curve pool state across blocks. The block-scan warm planner invalidates the
+   * pools that emitted state-changing logs, then restamps unchanged entries.
    */
   beginBlockScanPass(blockNumber: number): void {
     this.tickBlock = blockNumber;
-    this.curve.clear();
     this.failed.clear();
     this.overlayPools.clear();
     for (const [key, live] of this.v3Live) {
@@ -323,6 +324,14 @@ export class PoolStateCache {
     }
   }
 
+  invalidateBlockScanCurve(pools: Iterable<string>): void {
+    for (const pool of pools) {
+      const key = pool.toLowerCase();
+      this.curve.delete(key);
+      this.failed.delete(key);
+    }
+  }
+
   restampBlockScanV2V3(blockNumber: number, skipPools: ReadonlySet<string> = new Set()): void {
     for (const [key, cached] of this.v2) {
       if (cached.source === "seed" && !skipPools.has(key)) cached.blockNumber = blockNumber;
@@ -332,12 +341,22 @@ export class PoolStateCache {
     }
   }
 
+  restampBlockScanCurve(blockNumber: number, skipPools: ReadonlySet<string> = new Set()): void {
+    for (const [key, cached] of this.curve) {
+      if (!skipPools.has(key)) cached.blockNumber = blockNumber;
+    }
+  }
+
   hasV2(pool: string): boolean {
     return this.v2.has(pool.toLowerCase());
   }
 
   hasV3Live(pool: string): boolean {
     return this.v3Live.has(pool.toLowerCase());
+  }
+
+  hasCurve(pool: string): boolean {
+    return this.curve.has(pool.toLowerCase());
   }
 
   seedV2(seed: V2Seed): void {

@@ -51,6 +51,7 @@ import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
 import { quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
+  type CurveSnapshot,
   type PostImpactSeed,
   type V2Seed,
   type V2PostImpactSeed,
@@ -117,12 +118,38 @@ const BLOCKSCAN_V3_BURN_TOPIC = ethers.id("Burn(address,int24,int24,uint128,uint
 const BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC = ethers.id(
   "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
 );
+const BLOCKSCAN_CURVE_N_COINS = [2, 3, 4, 5, 6, 7, 8] as const;
+const BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS = BLOCKSCAN_CURVE_N_COINS.flatMap((n) => [
+  ethers.id(`AddLiquidity(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
+  ethers.id(`RemoveLiquidity(address,uint256[${n}],uint256[${n}],uint256)`),
+  ethers.id(`RemoveLiquidityImbalance(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
+]);
+const BLOCKSCAN_CURVE_EVENT_TOPICS = [
+  ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"),
+  ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"),
+  ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
+  ethers.id("TokenExchangeUnderlying(address,uint256,uint256,uint256,uint256)"),
+  ethers.id("AddLiquidity(address,uint256[],uint256[],uint256,uint256)"),
+  ethers.id("RemoveLiquidity(address,uint256[],uint256[],uint256)"),
+  ethers.id("RemoveLiquidityImbalance(address,uint256[],uint256[],uint256,uint256)"),
+  ethers.id("RemoveLiquidityOne(address,uint256,uint256)"),
+  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256)"),
+  ethers.id("RemoveLiquidityOne(address,int128,uint256,uint256,uint256)"),
+  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256,uint256)"),
+  ethers.id("RampA(uint256,uint256,uint256,uint256)"),
+  ethers.id("StopRampA(uint256,uint256)"),
+  ethers.id("ApplyNewFee(uint256,uint256)"),
+  ethers.id("NewFee(uint256,uint256)"),
+  ethers.id("SetNewMATime(uint256,uint256)"),
+  ...BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS,
+];
 const BLOCKSCAN_WARM_EVENT_TOPICS = [
   BLOCKSCAN_V2_SYNC_TOPIC,
   BLOCKSCAN_V3_SWAP_TOPIC,
   BLOCKSCAN_V3_MINT_TOPIC,
   BLOCKSCAN_V3_BURN_TOPIC,
   BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC,
+  ...BLOCKSCAN_CURVE_EVENT_TOPICS,
 ];
 
 const WHALE = "0x000000000000000000000000000000000000dEaD";
@@ -1044,6 +1071,7 @@ async function main(): Promise<void> {
               blockScanLastWarmedBlock,
               blockScanLastFullWarmBlock,
               blockScanFullRewarmBlocks,
+              edges,
             );
           } catch (err) {
             console.log(
@@ -1058,6 +1086,7 @@ async function main(): Promise<void> {
             blockScanCacheForPass.clear();
           } else {
             blockScanCacheForPass.invalidateBlockScanV2V3(warmPlan.changed.pools);
+            blockScanCacheForPass.invalidateBlockScanCurve(warmPlan.changed.curvePools);
           }
           segMark("warm_plan");
           if (passBudgetExceeded("warm_plan")) {
@@ -1115,11 +1144,30 @@ async function main(): Promise<void> {
             blockNumber,
             edges,
             passDeadlineAtMs,
+            warmPlan.kind === "full" ? undefined : warmPlan.changed.curvePools,
           );
           segMark("warm_curve");
+          if (warmPlan.kind === "incremental") {
+            blockScanCacheForPass.restampBlockScanCurve(blockNumber, warmPlan.changed.curvePools);
+          }
           if (passBudgetExceeded("warm_curve")) {
             logSeg();
             return;
+          }
+          if (warmPlan.kind === "incremental" && blockScanWarmVerify) {
+            await verifyBlockScanIncrementalCurveWarm(
+              blockScanStateForPass,
+              provider,
+              blockNumber,
+              edges,
+              blockScanCacheForPass,
+              warmPlan.changed.curvePools,
+            );
+            segMark("warm_verify_curve");
+            if (passBudgetExceeded("warm_verify_curve")) {
+              logSeg();
+              return;
+            }
           }
           const protocolMids = await buildBlockScanProtocolMids(
             provider,
@@ -3277,6 +3325,7 @@ interface BlockScanChangedPools {
   logs: number;
   hops: QuoteRequest[];
   pools: Set<string>;
+  curvePools: Set<string>;
 }
 
 type BlockScanWarmPlan =
@@ -3292,6 +3341,7 @@ async function planBlockScanWarm(
   lastWarmedBlock: number | null,
   lastFullWarmBlock: number | null,
   fullRewarmBlocks: number,
+  edges: TokenEdge[],
 ): Promise<BlockScanWarmPlan> {
   if (lastWarmedBlock === null) return { kind: "full", reason: "startup" };
   if (blockNumber <= lastWarmedBlock) return { kind: "full", reason: "reorg" };
@@ -3313,6 +3363,7 @@ async function planBlockScanWarm(
       lastWarmedBlock + 1,
       blockNumber,
       hops,
+      uniqueBlockScanCurvePools(edges),
     );
     return { kind: "incremental", changed };
   } catch (err) {
@@ -3331,6 +3382,7 @@ async function detectBlockScanChangedPools(
   fromBlock: number,
   toBlock: number,
   hops: QuoteRequest[],
+  curvePoolEdges: TokenEdge[],
 ): Promise<BlockScanChangedPools> {
   const mutableHops = blockScanMutableQuoteRequests(hops);
   const byAddress = new Map<string, QuoteRequest[]>();
@@ -3340,6 +3392,7 @@ async function detectBlockScanChangedPools(
     if (existing) existing.push(hop);
     else byAddress.set(key, [hop]);
   }
+  const curvePoolKeys = new Set(curvePoolEdges.map((edge) => edge.target.toLowerCase()));
 
   const logs = await provider.getLogs({
     fromBlock,
@@ -3349,6 +3402,7 @@ async function detectBlockScanChangedPools(
 
   const changedKeys = new Set<string>();
   const changedPools = new Set<string>();
+  const changedCurvePools = new Set<string>();
   const markChanged = (hop: QuoteRequest): void => {
     const pool = hop.target.toLowerCase();
     changedPools.add(pool);
@@ -3360,12 +3414,18 @@ async function detectBlockScanChangedPools(
   for (const log of logs) {
     const pool = log.address.toLowerCase();
     const poolHops = byAddress.get(pool);
-    if (!poolHops) continue;
-    for (const hop of poolHops) markChanged(hop);
+    if (poolHops) {
+      for (const hop of poolHops) markChanged(hop);
+    }
+    if (curvePoolKeys.has(pool)) changedCurvePools.add(pool);
   }
 
   for (const hop of mutableHops) {
     if (!blockScanHasWarmState(cache, updater, hop)) markChanged(hop);
+  }
+  for (const edge of curvePoolEdges) {
+    const pool = edge.target.toLowerCase();
+    if (!cache.hasCurve(pool)) changedCurvePools.add(pool);
   }
 
   return {
@@ -3374,6 +3434,7 @@ async function detectBlockScanChangedPools(
     logs: logs.length,
     hops: mutableHops.filter((hop) => changedKeys.has(blockScanWarmKey(hop))),
     pools: changedPools,
+    curvePools: changedCurvePools,
   };
 }
 
@@ -3475,6 +3536,41 @@ async function verifyBlockScanIncrementalWarm(
   );
 }
 
+async function verifyBlockScanIncrementalCurveWarm(
+  state: StateBackend,
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+  edges: TokenEdge[],
+  cache: PoolStateCache,
+  changedCurvePools: ReadonlySet<string>,
+): Promise<void> {
+  const scratchCache = new PoolStateCache(provider);
+  await warmBlockScanCurves(state, scratchCache, blockNumber, edges, Number.POSITIVE_INFINITY);
+
+  let checked = 0;
+  let mismatches = 0;
+  for (const edge of uniqueBlockScanCurvePools(edges)) {
+    const pool = edge.target.toLowerCase();
+    if (changedCurvePools.has(pool)) continue;
+    const cached = cache.snapshotCurve(edge.target, blockNumber);
+    const fresh = scratchCache.snapshotCurve(edge.target, blockNumber);
+    if (!fresh) continue;
+    checked++;
+    if (!cached || !sameCurveSnapshot(cached, fresh)) {
+      mismatches++;
+      console.log(
+        `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
+          `pool=${pool} field=curve cached=${cached ? formatCurveSnapshot(cached) : "missing"} ` +
+          `fresh=${formatCurveSnapshot(fresh)}`,
+      );
+    }
+  }
+  console.log(
+    `[searcher/blockscan] block=${blockNumber} warm_verify_curve checked=${checked} ` +
+      `mismatches=${mismatches}`,
+  );
+}
+
 function sameV2Seed(a: V2Seed, b: V2Seed): boolean {
   return a.token0.toLowerCase() === b.token0.toLowerCase() &&
     a.token1.toLowerCase() === b.token1.toLowerCase() &&
@@ -3494,6 +3590,33 @@ function sameV3LiveSeed(a: V3LiveSeed, b: V3LiveSeed): boolean {
     a.unlocked === b.unlocked;
 }
 
+function sameCurveSnapshot(a: CurveSnapshot, b: CurveSnapshot): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.coins.length !== b.coins.length) return false;
+  for (let i = 0; i < a.coins.length; i++) {
+    if (a.coins[i].toLowerCase() !== b.coins[i].toLowerCase()) return false;
+  }
+  if (a.kind === "plain") {
+    return a.plain !== undefined &&
+      b.plain !== undefined &&
+      a.plain.A === b.plain.A &&
+      a.plain.fee === b.plain.fee &&
+      sameBigintArray(a.plain.balances, b.plain.balances) &&
+      sameBigintArray(a.plain.rates, b.plain.rates);
+  }
+  return a.ng !== undefined &&
+    b.ng !== undefined &&
+    a.ng.A === b.ng.A &&
+    a.ng.fee === b.ng.fee &&
+    a.ng.offpegFeeMultiplier === b.ng.offpegFeeMultiplier &&
+    sameBigintArray(a.ng.balances, b.ng.balances) &&
+    sameBigintArray(a.ng.rates, b.ng.rates);
+}
+
+function sameBigintArray(a: bigint[], b: bigint[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 function formatV2Seed(seed: V2Seed): string {
   return `${seed.reserve0}/${seed.reserve1}/${seed.blockTimestampLast ?? "n/a"}`;
 }
@@ -3511,12 +3634,38 @@ function formatV3LiveSeed(seed: V3LiveSeed): string {
   ].join("/");
 }
 
+function formatCurveSnapshot(seed: CurveSnapshot): string {
+  if (seed.kind === "plain" && seed.plain) {
+    return [
+      "plain",
+      `coins=${seed.coins.join(",")}`,
+      `A=${seed.plain.A}`,
+      `fee=${seed.plain.fee}`,
+      `balances=${seed.plain.balances.join(",")}`,
+      `rates=${seed.plain.rates.join(",")}`,
+    ].join("/");
+  }
+  if (seed.kind === "ng" && seed.ng) {
+    return [
+      "ng",
+      `coins=${seed.coins.join(",")}`,
+      `A=${seed.ng.A}`,
+      `fee=${seed.ng.fee}`,
+      `offpeg=${seed.ng.offpegFeeMultiplier}`,
+      `balances=${seed.ng.balances.join(",")}`,
+      `rates=${seed.ng.rates.join(",")}`,
+    ].join("/");
+  }
+  return `${seed.kind}/coins=${seed.coins.join(",")}/missing-state`;
+}
+
 function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
   if (plan.kind === "full") {
     const suffix = plan.error ? ` error=${blockScanErrorMessage(plan.error)}` : "";
     return `warm=full reason=${plan.reason}${suffix}`;
   }
   return `warm=incremental changed=${plan.changed.pools.size} ` +
+    `changedCurve=${plan.changed.curvePools.size} ` +
     `range=${plan.changed.fromBlock}-${plan.changed.toBlock} logs=${plan.changed.logs}`;
 }
 
@@ -3872,12 +4021,15 @@ async function warmBlockScanCurves(
   blockNumber: number,
   edges: TokenEdge[],
   deadlineAtMs: number,
+  onlyPools?: ReadonlySet<string>,
 ): Promise<{ warmed: number; failed: number }> {
   // Warm curve pool state via Multicall3. 31 pools keeps worst-case 8-coin
   // plain pools below 500 subcalls in round 2 (balances + token decimals).
   let warmed = 0;
   let failed = 0;
-  const pools = uniqueBlockScanCurvePools(edges);
+  const pools = uniqueBlockScanCurvePools(edges).filter(
+    (edge) => onlyPools === undefined || onlyPools.has(edge.target.toLowerCase()),
+  );
   const CURVE_BATCH_POOLS = 31;
   cache.setTickBlock(blockNumber);
   for (let i = 0; i < pools.length; i += CURVE_BATCH_POOLS) {
