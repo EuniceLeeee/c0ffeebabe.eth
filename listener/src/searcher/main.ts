@@ -3425,7 +3425,8 @@ async function detectBlockScanChangedPools(
   }
   for (const edge of curvePoolEdges) {
     const pool = edge.target.toLowerCase();
-    if (!cache.hasCurve(pool)) changedCurvePools.add(pool);
+    // NG stored_rates can refresh by timer without a pool log, so they are never event-incremental.
+    if (!cache.hasCurve(pool) || cache.curveKind(pool) === "ng") changedCurvePools.add(pool);
   }
 
   return {

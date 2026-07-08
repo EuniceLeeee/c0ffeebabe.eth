@@ -359,6 +359,10 @@ export class PoolStateCache {
     return this.curve.has(pool.toLowerCase());
   }
 
+  curveKind(pool: string): "plain" | "ng" | null {
+    return this.curve.get(pool.toLowerCase())?.kind ?? null;
+  }
+
   seedV2(seed: V2Seed): void {
     const key = seed.pool.toLowerCase();
     this.v2.set(key, {
