@@ -235,6 +235,20 @@ interface HintEnvelope {
   prefetched?: { tx: ethers.TransactionResponse; rawTx: string };
 }
 
+interface BlockScanRejectBlacklistEntry {
+  strikes: number;
+  expiryBlock: number | null;
+}
+
+type ActiveBlockScanRejectBlacklistEntry = BlockScanRejectBlacklistEntry & { expiryBlock: number };
+
+interface BlockScanRejectBlacklistState {
+  enabled: boolean;
+  after: number;
+  ttlBlocks: number;
+  entries: Map<string, BlockScanRejectBlacklistEntry>;
+}
+
 // Profit-token → ETH valuation for sizing the proposer bribe (route B). WETH is
 // 1:1; the major stables convert via ethUsd; anything else returns 0 (no full
 // bribe — we fall back to the default priority fee for exotic profit tokens).
@@ -953,6 +967,12 @@ async function main(): Promise<void> {
   const blockScanDecimals = new Map<string, number>();
   let blockScanLastWarmedBlock: number | null = null;
   let blockScanLastFullWarmBlock: number | null = null;
+  const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
+    enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
+    after: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2")),
+    ttlBlocks: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_TTL_BLOCKS ?? "300")),
+    entries: new Map(),
+  };
   const scheduleBlockScan = (blockNumber: number): void => {
     if (!enableBlockScan) return;
     const edges = blockScanGraph;
@@ -1092,7 +1112,33 @@ async function main(): Promise<void> {
           });
           let quotePositive = 0;
           let bestNet: bigint | null = null;
-          for (const opp of scan.opportunities.slice(0, cfg.maxCandidates)) {
+          const blacklistSkipLogged = new Set<string>();
+          const candidateOpps: BlockScanOpportunity[] = [];
+          for (const opp of scan.opportunities) {
+            if (blockScanRejectBlacklist.enabled) {
+              const routeKey = formatBlockScanRouteKey(opp);
+              const blacklistEntry = activeBlockScanRejectBlacklistEntry(
+                blockScanRejectBlacklist,
+                routeKey,
+                blockNumber,
+              );
+              if (blacklistEntry) {
+                if (!blacklistSkipLogged.has(routeKey)) {
+                  blacklistSkipLogged.add(routeKey);
+                  const ring = formatBlockScanRing(opp);
+                  console.log(
+                    `[searcher/blockscan]   blacklist skip ring=${ring} ` +
+                      `strikes=${blacklistEntry.strikes} ` +
+                      `ttlRemaining=${blacklistEntry.expiryBlock - blockNumber}`,
+                  );
+                }
+                continue;
+              }
+            }
+            candidateOpps.push(opp);
+            if (candidateOpps.length >= cfg.maxCandidates) break;
+          }
+          for (const opp of candidateOpps) {
             if (passBudgetExceeded("solve")) break;
             const ring = formatBlockScanRing(opp);
             const protoRing = opp.seedEdges.some((edge) => edge.slotKind === "protocol");
@@ -1145,6 +1191,7 @@ async function main(): Promise<void> {
                   protoRing,
                   plans: plans.length,
                   passDeadlineAtMs,
+                  rejectBlacklist: blockScanRejectBlacklist,
                   strategyVersions: {
                     strategy_view_version: strategyViews.versions.strategy_view_version,
                     blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
@@ -2453,6 +2500,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   protoRing: boolean;
   plans: number;
   passDeadlineAtMs: number;
+  rejectBlacklist: BlockScanRejectBlacklistState;
   strategyVersions: {
     strategy_view_version: string;
     blockscan_view_hash: string;
@@ -2471,6 +2519,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     protoRing,
     plans,
     passDeadlineAtMs,
+    rejectBlacklist,
     strategyVersions,
   } = params;
   const route = resolvedRouteSummary(resolved.root);
@@ -2544,6 +2593,7 @@ async function maybeSubmitBlockScanAtomic(params: {
 
     if (!sim.success) {
       const error = sim.revertReason ?? "no-positive-profit";
+      recordBlockScanRejectStrike(rejectBlacklist, opp, sourceBlock);
       console.log(
         `[searcher/blockscan]   final sim rejected ring=${ring} route=${route} ` +
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,
@@ -2551,6 +2601,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       drop(targetBlock, "final_verify", "sim_revert", error);
       return;
     }
+    clearBlockScanRejectStrikes(rejectBlacklist, opp);
     if (sim.netProfit <= 0n) {
       const error = `non-positive final profit ${sim.netProfit}`;
       console.log(`[searcher/blockscan]   final verify failed ring=${ring}: ${error}`);
@@ -3834,6 +3885,48 @@ function countBlockScanWarmedV2V3(
 
 function formatBlockScanRing(opp: { affectedTokens?: string[]; seedEdges: TokenEdge[] }): string {
   return (opp.affectedTokens ?? opp.seedEdges.map((edge) => edge.tokenIn)).join("->");
+}
+
+function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
+  return opp.seedEdges.map((edge) => `${edge.adapterId}:${edge.target.toLowerCase()}`).join("|");
+}
+
+function activeBlockScanRejectBlacklistEntry(
+  state: BlockScanRejectBlacklistState,
+  routeKey: string,
+  currentBlock: number,
+): ActiveBlockScanRejectBlacklistEntry | null {
+  if (!state.enabled) return null;
+  const entry = state.entries.get(routeKey);
+  if (!entry || entry.expiryBlock === null) return null;
+  if (currentBlock >= entry.expiryBlock) {
+    state.entries.delete(routeKey);
+    return null;
+  }
+  return { strikes: entry.strikes, expiryBlock: entry.expiryBlock };
+}
+
+function recordBlockScanRejectStrike(
+  state: BlockScanRejectBlacklistState,
+  opp: { seedEdges: TokenEdge[] },
+  sourceBlock: number,
+): void {
+  if (!state.enabled) return;
+  const routeKey = formatBlockScanRouteKey(opp);
+  const entry = state.entries.get(routeKey) ?? { strikes: 0, expiryBlock: null };
+  entry.strikes += 1;
+  if (entry.strikes >= state.after) {
+    entry.expiryBlock = sourceBlock + state.ttlBlocks + 1;
+  }
+  state.entries.set(routeKey, entry);
+}
+
+function clearBlockScanRejectStrikes(
+  state: BlockScanRejectBlacklistState,
+  opp: { seedEdges: TokenEdge[] },
+): void {
+  if (!state.enabled) return;
+  state.entries.delete(formatBlockScanRouteKey(opp));
 }
 
 function blockScanErrorMessage(err: unknown): string {
