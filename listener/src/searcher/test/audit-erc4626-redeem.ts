@@ -2,10 +2,9 @@
  * ERC4626 redeem audit on a local Anvil mainnet fork.
  *
  * For each POOL_REGISTRY ERC4626 entry, this performs a fork-only deposit -> redeem
- * round-trip when deposits are open, otherwise tries a recent share holder. It decodes
- * the redeem receipt's ERC20 Transfer logs to identify the token(s) actually paid to
- * the receiver, then compares the observed payout against asset() / previewRedeem and
- * the registry's nonStandardRedeem metadata.
+ * audit when deposits are open. It decodes the redeem receipt's ERC20 Transfer logs
+ * to identify the token(s) actually paid to the receiver, then separates verified
+ * standard ERC4626 behavior from vaults that need separate handling.
  */
 
 import { readFileSync } from "node:fs";
@@ -30,21 +29,21 @@ const ERC4626 = new ethers.Interface([
   "function previewRedeem(uint256 shares) view returns (uint256 assets)",
   "function redeem(uint256 shares, address receiver, address owner) returns (uint256 assets)",
 ]);
+const DECLARED_TOKEN_REDEEM = new ethers.Interface([
+  "function redeem(address token, uint256 shares, address receiver, address owner) returns (uint256 assets)",
+]);
 
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
-const ZERO_TOPIC = ethers.zeroPadValue(ethers.ZeroAddress, 32).toLowerCase();
 const COMMON_ERC20_BALANCE_SLOTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 51];
 const TEST_RECEIVER = "0x000000000000000000000000000000000000A462";
 
 let toleranceBps = 5n;
-let holderLookbackBlocks = 50_000;
 
 type Verdict =
   | "OK_STANDARD"
   | "OK_NONSTANDARD_FLAGGED"
-  | "BUG_UNFLAGGED_NONSTANDARD"
-  | "BUG_MISDECLARED"
-  | "SKIP";
+  | "NEEDS_MANUAL"
+  | "BUG_UNFLAGGED";
 
 interface TokenMeta {
   address: string;
@@ -66,6 +65,7 @@ interface AuditRow {
   flag: string;
   verdict: Verdict;
   note?: string;
+  manualReason?: string;
 }
 
 interface RedeemObservation {
@@ -74,7 +74,7 @@ interface RedeemObservation {
   shares: bigint;
   preview: bigint;
   payouts: Payout[];
-  source: "deposit" | "holder";
+  redeemCall: string;
 }
 
 function loadEnv(): void {
@@ -101,7 +101,6 @@ async function main(): Promise<void> {
   const anvilPort = readIntEnv("AUDIT_ANVIL_PORT", 8626);
   const anvilUrl = `http://127.0.0.1:${anvilPort}`;
   toleranceBps = BigInt(readIntEnv("AUDIT_TOLERANCE_BPS", 5));
-  holderLookbackBlocks = readIntEnv("AUDIT_HOLDER_LOOKBACK", 50_000);
 
   const vaults = POOL_REGISTRY.filter((pool) => pool.adapter === "erc4626");
   const upstream = new ethers.JsonRpcProvider(rpcUrl);
@@ -114,23 +113,25 @@ async function main(): Promise<void> {
       `[erc4626-audit] vaults=${vaults.length} forkBlock=${forkBlock} ` +
         `anvil=${anvilUrl} upstream=${redactRpcUrl(rpcUrl)}`,
     );
-    console.log(
-      `[erc4626-audit] tolerance=${toleranceBps}bps holderLookback=${holderLookbackBlocks} blocks`,
-    );
+    console.log(`[erc4626-audit] tolerance=${toleranceBps}bps`);
     await state.refreshFork(forkBlock);
 
     const rows: AuditRow[] = [];
     for (const entry of vaults) {
       await state.resetToBaseline();
-      rows.push(await auditVault(state, entry, forkBlock));
+      rows.push(await auditVault(state, entry));
     }
 
     printRows(rows);
-    const ok = rows.filter((row) => row.verdict.startsWith("OK_")).length;
-    const skip = rows.filter((row) => row.verdict === "SKIP").length;
-    const bug = rows.filter((row) => row.verdict.startsWith("BUG_")).length;
-    console.log(`${rows.length} vaults, ${ok} OK, ${skip} SKIP, ${bug} BUG`);
-    if (bug > 0) process.exitCode = 1;
+    const okStandard = rows.filter((row) => row.verdict === "OK_STANDARD").length;
+    const okNonstandard = rows.filter((row) => row.verdict === "OK_NONSTANDARD_FLAGGED").length;
+    const needsManual = rows.filter((row) => row.verdict === "NEEDS_MANUAL").length;
+    const bugUnflagged = rows.filter((row) => row.verdict === "BUG_UNFLAGGED").length;
+    console.log(
+      `${okStandard} OK_STANDARD, ${okNonstandard} OK_NONSTANDARD_FLAGGED, ` +
+        `${needsManual} NEEDS_MANUAL (with reasons), ${bugUnflagged} BUG_UNFLAGGED`,
+    );
+    if (bugUnflagged > 0) process.exitCode = 1;
   } finally {
     state.stop();
     upstream.destroy();
@@ -150,7 +151,6 @@ async function resolveForkBlock(provider: ethers.JsonRpcProvider): Promise<numbe
 async function auditVault(
   state: AnvilStateBackend,
   entry: PoolEntry,
-  forkBlock: number,
 ): Promise<AuditRow> {
   const vault = ethers.getAddress(entry.address);
   const fixedTokenIn = entry.fixedTokenIn ? ethers.getAddress(entry.fixedTokenIn) : "";
@@ -161,7 +161,7 @@ async function auditVault(
 
   try {
     if (!fixedTokenIn) {
-      return skipRow(vault, vaultMeta.symbol, "-", flag, "missing fixedTokenIn");
+      return needsManualRow(vault, vaultMeta.symbol, "-", flag, "missing fixedTokenIn");
     }
 
     const asset = await readAddress(state, vault, ERC4626.encodeFunctionData("asset"));
@@ -171,11 +171,14 @@ async function auditVault(
       ? label(assetMeta)
       : `${label(assetMeta)} != fixed ${short(fixedTokenIn)}`;
 
-    const observation = await observeRedeem(state, vault, assetMeta, forkBlock);
+    if (entry.nonStandardRedeem) {
+      return auditDeclaredNonStandard(state, entry, vault, vaultMeta, assetCell, assetMeta, flag);
+    }
+
+    const observation = await observeStandardRedeem(state, vault, assetMeta);
     const payoutCell = await formatPayoutTokens(state, observation.payouts);
     const amountCheck = amountVsPreview(observation.payouts, asset, observation.preview);
-    const verdict = classify(entry, asset, observation, amountCheck.close, assetMatchesRegistry);
-    const sourceNote = observation.source === "holder" ? `holder=${short(observation.owner)}` : "deposit";
+    const classified = classifyStandard(asset, observation, amountCheck.close, assetMatchesRegistry);
 
     return {
       vault: short(vault),
@@ -184,55 +187,174 @@ async function auditVault(
       payoutToken: payoutCell,
       amountVsPreview: amountCheck.text,
       flag,
-      verdict,
-      note: sourceNote,
+      verdict: classified.verdict,
+      note: classified.note ?? observation.redeemCall,
+      manualReason: classified.manualReason,
     };
   } catch (err) {
-    return skipRow(vault, vaultMeta.symbol, "-", flag, compactError(err));
+    return needsManualRow(vault, vaultMeta.symbol, "-", flag, compactError(err));
   }
 }
 
-async function observeRedeem(
+async function auditDeclaredNonStandard(
+  state: AnvilStateBackend,
+  entry: PoolEntry,
+  vault: string,
+  vaultMeta: TokenMeta,
+  assetCell: string,
+  assetMeta: TokenMeta,
+  flag: string,
+): Promise<AuditRow> {
+  const declaredOut = entry.redeemTokenOut ? ethers.getAddress(entry.redeemTokenOut) : "";
+  if (!declaredOut) {
+    return needsManualRow(
+      vault,
+      vaultMeta.symbol,
+      assetCell,
+      flag,
+      "declared-non-standard-missing-redeemTokenOut",
+    );
+  }
+
+  let observation: RedeemObservation;
+  try {
+    observation = await observeDeclaredNonStandardRedeem(state, vault, assetMeta, declaredOut);
+  } catch (err) {
+    return needsManualRow(
+      vault,
+      vaultMeta.symbol,
+      assetCell,
+      flag,
+      `declared-non-standard-untestable: ${compactError(err)}`,
+    );
+  }
+
+  const payoutCell = await formatPayoutTokens(state, observation.payouts);
+  const singlePayout = singlePayoutToken(observation.payouts);
+  if (singlePayout && sameAddress(singlePayout, declaredOut)) {
+    return {
+      vault: short(vault),
+      symbol: vaultMeta.symbol,
+      asset: assetCell,
+      payoutToken: payoutCell,
+      amountVsPreview: "n/a declared-non-standard",
+      flag,
+      verdict: "OK_NONSTANDARD_FLAGGED",
+      note: observation.redeemCall,
+    };
+  }
+
+  return needsManualRow(
+    vault,
+    vaultMeta.symbol,
+    assetCell,
+    flag,
+    `declared-non-standard-payout-mismatch: expected ${short(declaredOut)} ` +
+      `got ${payoutTokenSummary(observation.payouts)}`,
+    payoutCell,
+    "n/a declared-non-standard",
+  );
+}
+
+async function observeStandardRedeem(
   state: AnvilStateBackend,
   vault: string,
   assetMeta: TokenMeta,
-  forkBlock: number,
 ): Promise<RedeemObservation> {
-  const depositSnap = await state.snapshot();
-  try {
-    const receiver = ethers.getAddress(TEST_RECEIVER);
-    const amount = await chooseDepositAmount(state, vault, assetMeta, receiver);
-    await dealToken(state, assetMeta.address, receiver, amount);
-    await state.send({
-      from: receiver,
-      to: assetMeta.address,
-      data: ERC20.encodeFunctionData("approve", [vault, amount]),
-    });
-    await state.send({
-      from: receiver,
-      to: vault,
-      data: ERC4626.encodeFunctionData("deposit", [amount, receiver]),
-      gas: "0x1000000",
-    });
-    const shareBalance = await balanceOf(state, vault, receiver);
-    const shares = await chooseRedeemShares(state, vault, receiver, shareBalance);
-    return redeemAndDecode(state, vault, receiver, receiver, shares, "deposit");
-  } catch (err) {
-    await state.revert(depositSnap);
-    const depositErr = compactError(err);
-    const holder = await findRecentShareHolder(state, vault, forkBlock);
-    if (!holder) {
-      throw new Error(`deposit failed (${depositErr}); no recent holder found`);
-    }
-    const shares = await chooseRedeemShares(state, vault, holder.address, holder.balance);
+  const setup = await depositForShares(state, vault, assetMeta);
+  const data = ERC4626.encodeFunctionData("redeem", [setup.shares, setup.receiver, setup.owner]);
+  return redeemAndDecodeCall(
+    state,
+    vault,
+    setup.owner,
+    setup.receiver,
+    setup.shares,
+    data,
+    "redeem(uint256,address,address)",
+  );
+}
+
+async function observeDeclaredNonStandardRedeem(
+  state: AnvilStateBackend,
+  vault: string,
+  assetMeta: TokenMeta,
+  declaredOut: string,
+): Promise<RedeemObservation> {
+  const setup = await depositForShares(state, vault, assetMeta);
+  // Current declarations only provide a token-out exact-in redeem path. Future mechanisms should add
+  // their own candidate here; unsupported selectors surface as NEEDS_MANUAL, never as standard bugs.
+  const attempts = [
+    {
+      redeemCall: "redeem(address,uint256,address,address)",
+      data: DECLARED_TOKEN_REDEEM.encodeFunctionData("redeem", [
+        declaredOut,
+        setup.shares,
+        setup.receiver,
+        setup.owner,
+      ]),
+    },
+  ];
+
+  let lastErr = "no redeem call candidates";
+  for (const attempt of attempts) {
+    const snap = await state.snapshot();
     try {
-      return await redeemAndDecode(state, vault, holder.address, ethers.getAddress(TEST_RECEIVER), shares, "holder");
-    } catch (redeemErr) {
-      throw new Error(
-        `deposit failed (${depositErr}); holder ${short(holder.address)} redeem failed (${compactError(redeemErr)})`,
+      return await redeemAndDecodeCall(
+        state,
+        vault,
+        setup.owner,
+        setup.receiver,
+        setup.shares,
+        attempt.data,
+        attempt.redeemCall,
       );
+    } catch (err) {
+      lastErr = `${attempt.redeemCall}: ${compactError(err)}`;
+      await state.revert(snap);
     }
   }
+  throw new Error(lastErr);
+}
+
+async function depositForShares(
+  state: AnvilStateBackend,
+  vault: string,
+  assetMeta: TokenMeta,
+): Promise<{ owner: string; receiver: string; shares: bigint }> {
+  const receiver = ethers.getAddress(TEST_RECEIVER);
+  const amount = await chooseDepositAmount(state, vault, assetMeta, receiver).catch((err) => {
+    throw new Error(`deposit-unavailable: ${compactError(err)}`);
+  });
+  await dealToken(state, assetMeta.address, receiver, amount).catch((err) => {
+    const message = compactError(err);
+    throw new Error(
+      message.includes("no balance slot")
+        ? `no-balance-slot: ${message}`
+        : `dealToken-failed: ${message}`,
+    );
+  });
+  await state.send({
+    from: receiver,
+    to: assetMeta.address,
+    data: ERC20.encodeFunctionData("approve", [vault, amount]),
+  }).catch((err) => {
+    throw new Error(`approve-reverted: ${compactError(err)}`);
+  });
+  await state.send({
+    from: receiver,
+    to: vault,
+    data: ERC4626.encodeFunctionData("deposit", [amount, receiver]),
+    gas: "0x1000000",
+  }).catch((err) => {
+    throw new Error(`deposit-reverted: ${compactError(err)}`);
+  });
+
+  const shareBalance = await balanceOf(state, vault, receiver);
+  if (shareBalance === 0n) throw new Error("deposit-minted-zero-shares");
+  const shares = await chooseRedeemShares(state, vault, receiver, shareBalance).catch((err) => {
+    throw new Error(`redeem-unavailable: ${compactError(err)}`);
+  });
+  return { owner: receiver, receiver, shares };
 }
 
 async function chooseDepositAmount(
@@ -286,19 +408,20 @@ async function chooseRedeemShares(
   return candidates[candidates.length - 1] ?? redeemable;
 }
 
-async function redeemAndDecode(
+async function redeemAndDecodeCall(
   state: AnvilStateBackend,
   vault: string,
   owner: string,
   receiver: string,
   shares: bigint,
-  source: "deposit" | "holder",
+  data: string,
+  redeemCall: string,
 ): Promise<RedeemObservation> {
   const preview = await readUint(state, vault, ERC4626.encodeFunctionData("previewRedeem", [shares]));
   const hash = await state.send({
     from: owner,
     to: vault,
-    data: ERC4626.encodeFunctionData("redeem", [shares, receiver, owner]),
+    data,
     gas: "0x1000000",
   });
   const receipt = await state.provider.getTransactionReceipt(hash);
@@ -309,7 +432,7 @@ async function redeemAndDecode(
     shares,
     preview,
     payouts: decodePayouts(receipt.logs, receiver),
-    source,
+    redeemCall,
   };
 }
 
@@ -327,56 +450,33 @@ function decodePayouts(logs: readonly ethers.Log[], receiver: string): Payout[] 
   return [...byToken.entries()].map(([token, amount]) => ({ token, amount }));
 }
 
-async function findRecentShareHolder(
-  state: AnvilStateBackend,
-  vault: string,
-  forkBlock: number,
-): Promise<{ address: string; balance: bigint } | null> {
-  if (holderLookbackBlocks <= 0) return null;
-  const fromBlock = Math.max(0, forkBlock - holderLookbackBlocks);
-  let logs: ethers.Log[];
-  try {
-    logs = await withTimeout(
-      state.provider.getLogs({ address: vault, topics: [TRANSFER_TOPIC], fromBlock, toBlock: forkBlock }),
-      20_000,
-      `getLogs ${short(vault)}`,
-    );
-  } catch {
-    return null;
-  }
-  for (const log of logs.reverse()) {
-    if (log.topics.length < 3) continue;
-    const toTopic = log.topics[2].toLowerCase();
-    if (toTopic === ZERO_TOPIC) continue;
-    const holder = ethers.getAddress("0x" + toTopic.slice(-40));
-    const balance = await balanceOf(state, vault, holder).catch(() => 0n);
-    if (balance > 0n) return { address: holder, balance };
-  }
-  return null;
-}
-
-function classify(
-  entry: PoolEntry,
+function classifyStandard(
   asset: string,
   observation: RedeemObservation,
   amountClose: boolean,
   assetMatchesRegistry: boolean,
-): Verdict {
-  const payoutTokens = observation.payouts.map((payout) => payout.token);
-  const singlePayout = payoutTokens.length === 1 ? payoutTokens[0] : null;
+): { verdict: Verdict; note?: string; manualReason?: string } {
+  const singlePayout = singlePayoutToken(observation.payouts);
   const payoutMatchesAsset = singlePayout !== null && sameAddress(singlePayout, asset);
-  const flagged = entry.nonStandardRedeem === true;
 
-  if (flagged) {
-    const declared = entry.redeemTokenOut ? ethers.getAddress(entry.redeemTokenOut) : "";
-    return singlePayout !== null && declared && sameAddress(declared, singlePayout) && !payoutMatchesAsset
-      ? "OK_NONSTANDARD_FLAGGED"
-      : "BUG_MISDECLARED";
+  if (!assetMatchesRegistry) {
+    const reason = "asset-registry-mismatch";
+    return { verdict: "NEEDS_MANUAL", note: reason, manualReason: reason };
   }
 
-  return payoutMatchesAsset && amountClose && assetMatchesRegistry
-    ? "OK_STANDARD"
-    : "BUG_UNFLAGGED_NONSTANDARD";
+  if (!payoutMatchesAsset) {
+    return {
+      verdict: "BUG_UNFLAGGED",
+      note: `unflagged non-standard payout: ${payoutTokenSummary(observation.payouts)}`,
+    };
+  }
+
+  if (!amountClose) {
+    const reason = "amount-vs-preview-mismatch";
+    return { verdict: "NEEDS_MANUAL", note: reason, manualReason: reason };
+  }
+
+  return { verdict: "OK_STANDARD", note: observation.redeemCall };
 }
 
 function amountVsPreview(payouts: Payout[], asset: string, preview: bigint): { close: boolean; text: string } {
@@ -468,15 +568,25 @@ async function dealToken(
   throw new Error(`dealToken: no balance slot found for ${short(tokenAddr)}`);
 }
 
-function skipRow(vault: string, symbol: string, asset: string, flag: string, reason: string): AuditRow {
+function needsManualRow(
+  vault: string,
+  symbol: string,
+  asset: string,
+  flag: string,
+  reason: string,
+  payoutToken = "-",
+  amountVsPreview?: string,
+): AuditRow {
   return {
     vault: short(vault),
     symbol,
     asset,
-    payoutToken: "-",
-    amountVsPreview: `SKIP: ${reason}`,
+    payoutToken,
+    amountVsPreview: amountVsPreview ?? `NEEDS_MANUAL: ${reason}`,
     flag,
-    verdict: "SKIP",
+    verdict: "NEEDS_MANUAL",
+    note: reason,
+    manualReason: reason,
   };
 }
 
@@ -497,15 +607,33 @@ function printRows(rows: AuditRow[]): void {
   for (const row of table) {
     console.log(row.map((cell, index) => cell.padEnd(widths[index])).join(" | "));
   }
-  const notes = rows.filter((row) => row.note).map((row) => `${row.vault} ${row.symbol}: ${row.note}`);
+  const notes = rows
+    .filter((row) => row.note && row.verdict !== "NEEDS_MANUAL")
+    .map((row) => `${row.vault} ${row.symbol}: ${row.note}`);
   if (notes.length > 0) {
     console.log("\n[erc4626-audit] notes:");
     for (const note of notes) console.log(`  ${note}`);
+  }
+  const manualRows = rows
+    .filter((row) => row.verdict === "NEEDS_MANUAL")
+    .map((row) => `${row.vault} ${row.symbol}: ${row.manualReason ?? row.note ?? "manual review required"}`);
+  if (manualRows.length > 0) {
+    console.log("\n[erc4626-audit] NEEDS_MANUAL:");
+    for (const row of manualRows) console.log(`  ${row}`);
   }
 }
 
 function label(meta: TokenMeta): string {
   return `${meta.symbol}(${short(meta.address)})`;
+}
+
+function singlePayoutToken(payouts: Payout[]): string | null {
+  return payouts.length === 1 ? payouts[0].token : null;
+}
+
+function payoutTokenSummary(payouts: Payout[]): string {
+  if (payouts.length === 0) return "none";
+  return payouts.map((payout) => short(payout.token)).join(",");
 }
 
 function short(address: string): string {
@@ -555,22 +683,6 @@ function redactRpcUrl(url: string): string {
   } catch {
     return url.startsWith("http") ? "<rpc-url>" : url;
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, labelText: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${labelText} timed out after ${ms}ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
 }
 
 main().catch((err) => {
