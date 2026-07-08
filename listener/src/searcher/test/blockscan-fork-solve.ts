@@ -138,6 +138,9 @@ interface ExtractedLeg {
   realized: { amountIn: string; amountOut: string };
 }
 
+const ZERO_ADDRESS = ethers.ZeroAddress.toLowerCase();
+const WETH_ADDRESS = ADDR.WETH.toLowerCase();
+
 /** The generic extracted-fixture shape consumed by the parameterized loop-fork-gate path. */
 interface ExtractedFixture {
   txHash: string;
@@ -369,8 +372,8 @@ function poolEntryForLeg(leg: ExtractedLeg, adapter: PoolEntry["adapter"]): Pool
     entry.tickSpacing = leg.poolKey.tickSpacing;
     entry.hooks = leg.poolKey.hooks;
     entry.poolId = leg.poolId;
-    entry.fixedTokenIn = leg.tokenIn;
-    entry.fixedTokenOut = leg.tokenOut;
+    entry.fixedTokenIn = leg.tokenIn ? v4PoolEntryTokenForLeg(leg, leg.tokenIn) : undefined;
+    entry.fixedTokenOut = leg.tokenOut ? v4PoolEntryTokenForLeg(leg, leg.tokenOut) : undefined;
   }
   if (adapter === "erc4626") {
     // Standard vault: graph emits deposit (asset->shares) + redeem (shares->asset). fixedTokenIn = asset().
@@ -420,15 +423,18 @@ async function assertEdgesInGraph(
           return false;
         }
         if (leg.tokenIn && leg.tokenOut) {
+          const wantIn = graphTokenForLeg(leg, leg.tokenIn);
+          const wantOut = graphTokenForLeg(leg, leg.tokenOut);
           const want = (a: string, b: string) =>
             edges.some(
               (e) =>
-                e.tokenIn.toLowerCase() === a.toLowerCase() && e.tokenOut.toLowerCase() === b.toLowerCase(),
+                graphTokenForLeg(leg, e.tokenIn).toLowerCase() === a.toLowerCase() &&
+                graphTokenForLeg(leg, e.tokenOut).toLowerCase() === b.toLowerCase(),
             );
-          if (!want(leg.tokenIn, leg.tokenOut)) {
+          if (!want(wantIn, wantOut)) {
             console.error(
               `[blockscan-fork-solve]   -> no edge for direction ${leg.tokenIn} -> ${leg.tokenOut} ` +
-                `on leg ${leg.seq}`,
+                `(graph ${wantIn} -> ${wantOut}) on leg ${leg.seq}`,
             );
             return false;
           }
@@ -476,6 +482,15 @@ async function assertClosedLoopExecutes(
   const flashAmount = BigInt(fixture.flash.amount);
   const expected = BigInt(fixture.expectedGrossWeiRealized);
   const floor = (expected * LOOP_PROFIT_TOLERANCE_BPS) / 10000n;
+
+  await check("Assertion B: WETH-aliased seed path composes and closes in the flash token", () =>
+    seedEdges.length > 0 &&
+    seedEdges[0].tokenIn.toLowerCase() === flashToken.toLowerCase() &&
+    seedEdges[seedEdges.length - 1].tokenOut.toLowerCase() === flashToken.toLowerCase() &&
+    seedEdges.every((edge, i) =>
+      i === 0 || seedEdges[i - 1].tokenOut.toLowerCase() === edge.tokenIn.toLowerCase(),
+    ),
+  );
 
   await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
 
@@ -580,8 +595,8 @@ function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
     if (!leg.tokenIn || !leg.tokenOut) {
       throw new Error(`leg ${leg.seq} (${leg.kind}) missing tokenIn/tokenOut for seed edge`);
     }
-    const tokenIn = ethers.getAddress(leg.tokenIn);
-    const tokenOut = ethers.getAddress(leg.tokenOut);
+    const tokenIn = graphTokenForLeg(leg, leg.tokenIn);
+    const tokenOut = graphTokenForLeg(leg, leg.tokenOut);
     if (leg.kind === "curve") {
       edges.push({
         adapterId: "curve-exchange-plain",
@@ -599,11 +614,11 @@ function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
         throw new Error(`leg ${leg.seq} univ4 poolKey unrecovered — cannot build seed edge (v1 TODO)`);
       }
       const key: V4PoolKey = {
-        currency0: ethers.getAddress(leg.poolKey.currency0),
-        currency1: ethers.getAddress(leg.poolKey.currency1!),
+        currency0: normalizeAddress(leg.poolKey.currency0),
+        currency1: normalizeAddress(leg.poolKey.currency1!),
         fee: leg.poolKey.fee!,
         tickSpacing: leg.poolKey.tickSpacing!,
-        hooks: ethers.getAddress(leg.poolKey.hooks!),
+        hooks: normalizeAddress(leg.poolKey.hooks!),
       };
       edges.push({
         adapterId: "univ4-unlock",
@@ -648,6 +663,39 @@ function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
     }
   }
   return edges;
+}
+
+/** Harness-side view of a fixture token: native v4 currency composes as WETH in the graph/plan path. */
+function graphTokenForLeg(leg: ExtractedLeg, token: string): string {
+  const normalized = normalizeAddress(token);
+  if (leg.kind === "univ4" && isNativeCurrencyV4Leg(leg) && normalized.toLowerCase() === ZERO_ADDRESS) {
+    return ethers.getAddress(ADDR.WETH);
+  }
+  return normalized;
+}
+
+/** buildTokenGraph still takes raw PoolKey currencies, so an already-aliased WETH fixture token maps back. */
+function v4PoolEntryTokenForLeg(leg: ExtractedLeg, token: string): string {
+  const normalized = normalizeAddress(token);
+  if (leg.kind !== "univ4" || !isNativeCurrencyV4Leg(leg) || normalized.toLowerCase() !== WETH_ADDRESS) {
+    return normalized;
+  }
+  const c0 = normalizeAddress(leg.poolKey!.currency0!);
+  const c1 = normalizeAddress(leg.poolKey!.currency1!);
+  if ((c0.toLowerCase() === ZERO_ADDRESS && c1.toLowerCase() !== WETH_ADDRESS) ||
+    (c1.toLowerCase() === ZERO_ADDRESS && c0.toLowerCase() !== WETH_ADDRESS)) {
+    return ethers.ZeroAddress;
+  }
+  return normalized;
+}
+
+function isNativeCurrencyV4Leg(leg: ExtractedLeg): boolean {
+  if (leg.kind !== "univ4" || !leg.poolKey?.currency0 || !leg.poolKey.currency1) return false;
+  return isZeroAddress(leg.poolKey.currency0) || isZeroAddress(leg.poolKey.currency1);
+}
+
+function isZeroAddress(value: string): boolean {
+  return normalizeAddress(value).toLowerCase() === ZERO_ADDRESS;
 }
 
 function buildExtractedOpportunity(fixture: ExtractedFixture, seedEdges: TokenEdge[]): BlockScanOpportunity {
