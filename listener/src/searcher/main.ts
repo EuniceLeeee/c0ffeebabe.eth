@@ -1001,6 +1001,21 @@ async function main(): Promise<void> {
         }
         blockScanBusy = true;
         const passStarted = Date.now();
+        let segPrev = passStarted;
+        const seg: Record<string, number> = {};
+        const segMark = (k: string): void => {
+          const now = Date.now();
+          seg[k] = now - segPrev;
+          segPrev = now;
+        };
+        const segStr = (): string =>
+          `${Object.entries(seg).map(([k, v]) => `${k}=${v}ms`).join(" ")} total=${Date.now() - passStarted}ms`;
+        let segLogged = false;
+        const logSeg = (): void => {
+          if (segLogged) return;
+          segLogged = true;
+          console.log(`[searcher/blockscan] block=${blockNumber} stage ${segStr()}`);
+        };
         const passDeadlineAtMs = passStarted + blockScanPassBudgetMs;
         let passBudgetLogged = false;
         const passBudgetExceeded = (stage: string): boolean => {
@@ -1044,7 +1059,11 @@ async function main(): Promise<void> {
           } else {
             blockScanCacheForPass.invalidateBlockScanV2V3(warmPlan.changed.pools);
           }
-          if (passBudgetExceeded("warm_plan")) return;
+          segMark("warm_plan");
+          if (passBudgetExceeded("warm_plan")) {
+            logSeg();
+            return;
+          }
 
           const warmHops = warmPlan.kind === "full" ? allHops : warmPlan.changed.hops;
           const v2v3WarmComplete = await warmBlockScanV2V3(
@@ -1053,7 +1072,11 @@ async function main(): Promise<void> {
             warmHops,
             () => passBudgetExceeded("warm_v2v3"),
           );
-          if (!v2v3WarmComplete) return;
+          segMark("warm_v2v3");
+          if (!v2v3WarmComplete) {
+            logSeg();
+            return;
+          }
           if (warmPlan.kind === "incremental") {
             blockScanCacheForPass.restampBlockScanV2V3(blockNumber, warmPlan.changed.pools);
             if (blockScanWarmVerify) {
@@ -1064,7 +1087,11 @@ async function main(): Promise<void> {
                 blockScanCacheForPass,
                 warmPlan.changed.pools,
               );
-              if (passBudgetExceeded("warm_verify")) return;
+              segMark("warm_verify");
+              if (passBudgetExceeded("warm_verify")) {
+                logSeg();
+                return;
+              }
             }
           }
           blockScanLastWarmedBlock = blockNumber;
@@ -1077,7 +1104,11 @@ async function main(): Promise<void> {
             passDeadlineAtMs,
             blockScanV3Meta,
           );
-          if (passBudgetExceeded("v3_tick_meta")) return;
+          segMark("v3_tick_meta");
+          if (passBudgetExceeded("v3_tick_meta")) {
+            logSeg();
+            return;
+          }
           const curveWarm = await warmBlockScanCurves(
             blockScanStateForPass,
             blockScanCacheForPass,
@@ -1085,7 +1116,11 @@ async function main(): Promise<void> {
             edges,
             passDeadlineAtMs,
           );
-          if (passBudgetExceeded("warm_curve")) return;
+          segMark("warm_curve");
+          if (passBudgetExceeded("warm_curve")) {
+            logSeg();
+            return;
+          }
           const protocolMids = await buildBlockScanProtocolMids(
             provider,
             blockScanStateForPass,
@@ -1094,7 +1129,11 @@ async function main(): Promise<void> {
             passDeadlineAtMs,
             blockScanDecimals,
           );
-          if (passBudgetExceeded("protocol_mids")) return;
+          segMark("protocol_mids");
+          if (passBudgetExceeded("protocol_mids")) {
+            logSeg();
+            return;
+          }
           const warmedV2V3 = countBlockScanWarmedV2V3(blockScanCacheForPass, blockNumber, edges);
           console.log(
             `[searcher/blockscan] block=${blockNumber} warmedV2V3=${warmedV2V3} ` +
@@ -1102,7 +1141,10 @@ async function main(): Promise<void> {
               `protocolMids=${protocolMids.size}`,
           );
 
-          if (passBudgetExceeded("scan")) return;
+          if (passBudgetExceeded("scan")) {
+            logSeg();
+            return;
+          }
           const scan = detectBlockScanOpportunities({
             edges,
             cache: blockScanCacheForPass,
@@ -1110,6 +1152,7 @@ async function main(): Promise<void> {
             swapTouched: null,
             cfg: { ...cfg, protocolMids },
           });
+          segMark("scan");
           let quotePositive = 0;
           let bestNet: bigint | null = null;
           const blacklistSkipLogged = new Set<string>();
@@ -1206,6 +1249,7 @@ async function main(): Promise<void> {
               );
             }
           }
+          segMark("solve");
           console.log(
             `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
               `candidates=${scan.opportunities.length} quotePositive=${quotePositive} ` +
@@ -1213,6 +1257,7 @@ async function main(): Promise<void> {
               `protocolMids=${protocolMids.size} ` +
               `skippedVenues=${scan.debug?.skippedVenues ?? 0} ms=${Date.now() - passStarted}`,
           );
+          logSeg();
         } catch (err) {
           console.log(
             `[searcher/blockscan] block=${blockNumber} scan error: ` +
