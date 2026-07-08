@@ -60,6 +60,14 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   public on-chain evidence (tx hashes, pools, token addresses) unless stricter redaction is asked.
 - **md commit/push** — whenever a `*.md` is updated, commit + push it in the same turn. Raw logs / JSONL /
   secrets / `.env` never committed; local run logs go to `MEV/logs/` (gitignored).
+- **Codex-first for fan-out** — multi-agent investigation OR code generation dispatches to **Codex**
+  (`scripts/codex-run.sh <read-only|workspace-write> <brief-file> <out-prefix>`, parallel background runs
+  fine), NOT a Claude-agent `Workflow`. Codex is the sanctioned generator/investigator (HERMES rule 11/12);
+  Claude sub-agents burn tokens duplicating what Codex does in-sandbox. Reserve `Workflow`/Claude sub-agents
+  for work Codex genuinely CANNOT do in its sandbox: spawning processes (anvil/forge), node/network queries
+  the sandbox blocks, interactive-auth MCP, Claude-only tools (visualize/artifact/browser). **GATED** by
+  `guard-workflow-codex-first.py` (PreToolUse Workflow) — BLOCKS a `Workflow` call unless you first
+  `touch /tmp/mev-workflow-codex-exempt` (one-shot, hook-consumed) to declare the fan-out is sandbox-blocked.
 - **Reconcile-after (NOT tool-first-pre-check)** — the ORDER is: hand-roll/analyze FIRST (it is allowed and
   valuable — rule 16: manual analysis is a TEST of the tooling and routinely finds where a script is stale/
   wrong), THEN reconcile the result against the existing toolset (`analysis/src/cli/*`, the LearningCase

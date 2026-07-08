@@ -18,6 +18,15 @@
             "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/guard-workflow-noask.py"
           }
         ]
+      },
+      {
+        "matcher": "Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/guard-workflow-codex-first.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [
