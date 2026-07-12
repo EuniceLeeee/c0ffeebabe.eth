@@ -86,10 +86,12 @@
 
 ## Final Decision
 - **verdict:** win
-- **branch action:** pending_merge
+- **branch action:** merged_deleted
 - **merge/deploy/cleanup evidence:** trusted wrapper closed the paused experiment as `win`; exact
-  challenger was merged with tested base/challenger parents at `ef561c6b6a352b553f769f67c6ce65be4f7390c1`. Guarded deploy and
-  gate-authorized branch cleanup remain pending.
+  challenger was merged with tested base/challenger parents at `ef561c6b6a352b553f769f67c6ce65be4f7390c1`.
+  Guarded deploy restarted A at `7d0ed093f369af90cf76fab224bd4af7f8f10cd2` with LIVE bounded-wallet
+  envelope intact (balance below 0.2 ETH, EV gate on). Cleanup authorization passed, then the local
+  worktree and local/remote literal `ab/round1-v4-scanner-mid` branch were deleted.
 - **stronger-model handoff (if retained):** none; this branch has decisive evidence.
 
 ```ab_experiment
@@ -160,7 +162,7 @@
   },
   "final_verdict": "win",
   "merge_commit": "ef561c6b6a352b553f769f67c6ce65be4f7390c1",
-  "branch_action": "pending_merge",
+  "branch_action": "merged_deleted",
   "b_stopped": true,
   "evidence_bundle": "compare JSON; classifier calibration; same-window Coffee postmortem summary; Step-1 artifact; stable trusted-wrapper status; deterministic replay reports remain node-local"
 }
