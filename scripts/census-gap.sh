@@ -15,7 +15,7 @@ WATCH=${3:-0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2fc483527b8ef99eb5d9b4
 OUT=${4:-/tmp/census-gap-$FROM-$TO}
 RPC=${RPC:-http://127.0.0.1:8545}
 EVENTS=${EVENTS:-/var/log/mev/events/searcher-live.jsonl}
-GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/active-pools.json}
+GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-graph-pools.json}
 command -v jq >/dev/null || { echo "jq required"; exit 2; }
 mkdir -p "$OUT"; cd /opt/MEV/analysis
 

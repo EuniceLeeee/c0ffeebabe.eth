@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { buildCensusReport, type CensusPerTx } from "./census-report.js";
-import { classifyWinnerStyle, type TouchedVenue } from "./bundle-postmortem.js";
+import test from "node:test";
+import { classifyWinnerStyle, type TouchedVenue } from "../cli/bundle-postmortem.js";
+import { buildCensusReport, type CensusPerTx } from "../cli/census-report.js";
 import { ADDR, lower } from "../registry/protocols.js";
 import type { TokenDelta } from "../types.js";
 
@@ -38,9 +39,7 @@ const perTx: CensusPerTx[] = [
     hash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     from: watch[0],
     realizedUsd: 3,
-    touchedVenues: [
-      venue("univ4", oneLegMissingPool, false),
-    ],
+    touchedVenues: [venue("univ4", oneLegMissingPool, false)],
     winner_style: oneLegStyle,
     winner_moved_price_beyond_prestate: true,
     unpriced_token_in_flow: [lower(CFG)],
@@ -65,38 +64,29 @@ const perTx: CensusPerTx[] = [
   },
 ];
 
-const report = buildCensusReport(perTx, 1, window, watch);
-const atomic = report.analyzed_competitors.find((tx) => tx.hash === perTx[0].hash);
-const oneLeg = report.analyzed_competitors.find((tx) => tx.hash === perTx[1].hash);
-const coverageIds = report.analyzed_competitors.flatMap((tx) =>
-  tx.touchedVenues.filter((venue) => venue.in_graph === false).map((venue) => venue.id),
-);
-const checks: Array<() => void> = [
-  () => assert.equal(atomicStyle, "atomic_loop"),
-  () => assert.equal(oneLegStyle, "one_leg_inventory"),
-  () => assert.equal(report.verdict.route_gap_decisive, true),
-  () => assert.deepEqual(report.analyzed_competitors.map((tx) => tx.hash), [perTx[0].hash, perTx[1].hash]),
-  () => assert.equal(atomic?.winner_style, "atomic_loop"),
-  () => assert.equal(oneLeg?.winner_style, "one_leg_inventory"),
-  () => assert.equal(oneLeg?.non_comparable_winner, true),
-  () => assert.deepEqual(coverageIds, [atomicMissingPool]),
-  () => assert.equal(report.analyzed_competitors[0]?.realized_profit_usd, 2),
-  () => assert.equal(report.summary.matched_txs, 4),
-  () => assert.equal(report.summary.qualifying_txs, 1),
-  () => assert.equal(report.summary.skipped_below_profit, 1),
-  () => assert.deepEqual(report.summary.distinct_out_of_graph, { univ2: 0, univ3: 1, univ4: 0 }),
-  () => assert.equal(report.summary.net_realized_usd, 2),
-];
+test("census report filters non-comparable competitors from the decisive route gap", () => {
+  const report = buildCensusReport(perTx, 1, window, watch);
+  const atomic = report.analyzed_competitors.find((tx) => tx.hash === perTx[0].hash);
+  const oneLeg = report.analyzed_competitors.find((tx) => tx.hash === perTx[1].hash);
+  const coverageIds = report.analyzed_competitors.flatMap((tx) =>
+    tx.touchedVenues.filter((venue) => venue.in_graph === false).map((venue) => venue.id),
+  );
 
-try {
-  for (const check of checks) check();
-  console.log(`census-report PASS (${checks.length}/${checks.length})`);
-  console.log("expected_transition: census missed-opp analysis now filters non-comparable competitors (winner_style), matching the lost-bundle branch. verdict: fixed");
-  console.log("verdict: fixed");
-} catch (err) {
-  console.error(`census-report FAIL: ${(err as Error).message}`);
-  process.exit(1);
-}
+  assert.equal(atomicStyle, "atomic_loop");
+  assert.equal(oneLegStyle, "one_leg_inventory");
+  assert.equal(report.verdict.route_gap_decisive, true);
+  assert.deepEqual(report.analyzed_competitors.map((tx) => tx.hash), [perTx[0].hash, perTx[1].hash]);
+  assert.equal(atomic?.winner_style, "atomic_loop");
+  assert.equal(oneLeg?.winner_style, "one_leg_inventory");
+  assert.equal(oneLeg?.non_comparable_winner, true);
+  assert.deepEqual(coverageIds, [atomicMissingPool]);
+  assert.equal(report.analyzed_competitors[0]?.realized_profit_usd, 2);
+  assert.equal(report.summary.matched_txs, 4);
+  assert.equal(report.summary.qualifying_txs, 1);
+  assert.equal(report.summary.skipped_below_profit, 1);
+  assert.deepEqual(report.summary.distinct_out_of_graph, { univ2: 0, univ3: 1, univ4: 0, other: 0 });
+  assert.equal(report.summary.net_realized_usd, 2);
+});
 
 function venue(protocol: TouchedVenue["protocol"], id: string, inGraph: boolean): TouchedVenue {
   return {

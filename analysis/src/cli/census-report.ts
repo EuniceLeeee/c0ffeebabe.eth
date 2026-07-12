@@ -2,16 +2,18 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchEthUsd, priceArb } from "../pnl/arb-profit.js";
 import { classifyTxShape, type RawLog } from "../pnl/tx-shape.js";
-import { lower } from "../registry/protocols.js";
-import { hexToBigInt, RpcClient } from "../rpc/client.js";
+import { lower, TOPICS } from "../registry/protocols.js";
+import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import { parseArgs, writeText } from "../util.js";
 import { strategyKindFromTxShape, type StrategyKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
 import {
   classifyWinnerTxStyle,
+  extractOtherVenues,
   extractTouchedVenues,
   isNonComparableWinnerStyle,
   loadGraphMembership,
   type GraphMembership,
+  type OtherVenue,
   type TouchedVenue,
   type WinnerStyle,
 } from "./bundle-postmortem.js";
@@ -25,6 +27,16 @@ const DEFAULT_GRAPH_PATH = resolve(DEFAULT_POOLS_DIR, "runtime-graph-pools.json"
 const DEFAULT_MIN_PROFIT_USD = 0.1;
 const DEFAULT_MAX_BLOCKS = 1000;
 type TxShape = "atomic_state_arb" | "backrun" | "unknown";
+export type CensusVenue = TouchedVenue | OtherVenue;
+
+const TX_SHAPE_SWAP_TOPICS = [
+  TOPICS.univ2Swap,
+  TOPICS.univ3Swap,
+  TOPICS.univ4Swap,
+  TOPICS.curveTokenExchange,
+  TOPICS.curveTokenExchangeUnderlying,
+  TOPICS.balancerV2Swap,
+].map(lower);
 
 const USAGE = `Usage: npm run census-report -- --watch <addr[,addr]> --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]`;
 
@@ -37,7 +49,7 @@ export interface CensusPerTx {
   hash: string;
   from: string;
   realizedUsd: number | null;
-  touchedVenues: TouchedVenue[];
+  touchedVenues: CensusVenue[];
   txIndex?: number;
   receiptLogs?: RawLog[];
   sameBlockSwapLogs?: RawLog[];
@@ -50,7 +62,7 @@ export interface AnalyzedCompetitor {
   hash: string;
   from: string;
   realized_profit_usd: number;
-  touchedVenues: TouchedVenue[];
+  touchedVenues: CensusVenue[];
   tx_shape: TxShape;
   strategy_kind: StrategyKind | "unknown";
   winner_style: WinnerStyle;
@@ -89,6 +101,7 @@ export interface CensusReport {
       univ2: number;
       univ3: number;
       univ4: number;
+      other: number;
     };
     net_realized_usd: number;
   };
@@ -124,6 +137,9 @@ async function main(): Promise<void> {
     const coinbase = lower(String(block?.miner ?? ""));
     const txs: any[] = Array.isArray(block?.transactions) ? block.transactions : [];
     const matches = txs.filter((tx) => txMatchesWatch(tx, watchSet));
+    const sameBlockSwapLogs = matches.length > 0
+      ? await fetchSameBlockSwapLogs(rpc, blockNumber, txs)
+      : [];
 
     for (const tx of matches) {
       const hash = lower(String(tx?.hash ?? ""));
@@ -150,9 +166,13 @@ async function main(): Promise<void> {
         hash,
         from: lower(String(tx?.from ?? receipt?.from ?? "")),
         realizedUsd: profit.realizedProfitUsd,
-        touchedVenues: extractTouchedVenues(receipt, graph),
+        touchedVenues: [
+          ...extractTouchedVenues(receipt, graph),
+          ...extractOtherVenues(receipt, graph),
+        ],
         txIndex: Number(hexToBigInt(receipt?.transactionIndex ?? tx?.transactionIndex)),
         receiptLogs: receipt?.logs,
+        sameBlockSwapLogs,
         winner_style: winnerStyle.winner_style,
         winner_moved_price_beyond_prestate: winnerStyle.winner_moved_price_beyond_prestate,
         unpriced_token_in_flow: winnerStyle.unpriced_token_in_flow,
@@ -182,6 +202,7 @@ export function buildCensusReport(
     univ2: new Set<string>(),
     univ3: new Set<string>(),
     univ4: new Set<string>(),
+    other: new Set<string>(),
   };
   let skippedBelowProfit = 0;
 
@@ -215,7 +236,11 @@ export function buildCensusReport(
     if (nonComparable) continue;
     for (const venue of tx.touchedVenues) {
       if (venue.in_graph !== false) continue;
-      distinct[venue.protocol].add(lower(venue.id));
+      if (isUniVenueProtocol(venue.protocol)) {
+        distinct[venue.protocol].add(lower(venue.id));
+      } else {
+        distinct.other.add(`${lower(venue.protocol)}:${lower(venue.id)}`);
+      }
     }
   }
 
@@ -243,10 +268,43 @@ export function buildCensusReport(
         univ2: distinct.univ2.size,
         univ3: distinct.univ3.size,
         univ4: distinct.univ4.size,
+        other: distinct.other.size,
       },
       net_realized_usd: analyzed.reduce((sum, tx) => tx.non_comparable_winner ? sum : sum + tx.realized_profit_usd, 0),
     },
   };
+}
+
+export async function fetchSameBlockSwapLogs(
+  rpc: Pick<RpcClient, "getLogs">,
+  blockNumber: number,
+  transactions: any[],
+): Promise<RawLog[]> {
+  const txToByHash = new Map<string, string | null>();
+  for (const tx of transactions) {
+    const hash = lower(String(tx?.hash ?? ""));
+    if (!hash) continue;
+    txToByHash.set(hash, typeof tx?.to === "string" ? lower(tx.to) : null);
+  }
+
+  const logs = await rpc.getLogs({
+    fromBlock: toQuantity(blockNumber),
+    toBlock: toQuantity(blockNumber),
+    topics: [TX_SHAPE_SWAP_TOPICS],
+  });
+  return logs.map((log) => ({
+    address: lower(String(log?.address ?? "")),
+    topics: Array.isArray(log?.topics) ? log.topics.map((topic: unknown) => lower(String(topic))) : [],
+    data: String(log?.data ?? "0x"),
+    logIndex: Number(hexToBigInt(log?.logIndex)),
+    transactionIndex: Number(hexToBigInt(log?.transactionIndex)),
+    transactionHash: lower(String(log?.transactionHash ?? "")),
+    txTo: txToByHash.get(lower(String(log?.transactionHash ?? ""))) ?? null,
+  }));
+}
+
+function isUniVenueProtocol(protocol: string): protocol is TouchedVenue["protocol"] {
+  return protocol === "univ2" || protocol === "univ3" || protocol === "univ4";
 }
 
 function classifyCensusTxShape(tx: CensusPerTx): TxShape {

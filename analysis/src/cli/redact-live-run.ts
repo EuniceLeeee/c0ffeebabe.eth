@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, writeText } from "../util.js";
 
 type Profile = "review" | "public";
@@ -38,9 +38,22 @@ type SensitiveValue = {
   redaction: string;
 };
 
+export type InputLocations = {
+  currentLog: string;
+  currentEvents: string;
+  legacyLogDir: string;
+  legacyEventsDir: string;
+};
+
 const repoRoot = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const analysisDir = join(repoRoot, "analysis");
 const defaultReportsDir = join(repoRoot, "docs", "research", "reports");
+export const DEFAULT_INPUT_LOCATIONS: InputLocations = {
+  currentLog: "/var/log/mev-live.log",
+  currentEvents: "/var/log/mev/events/searcher-live.jsonl",
+  legacyLogDir: "/tmp",
+  legacyEventsDir: join(analysisDir, "events"),
+};
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -53,13 +66,9 @@ async function main() {
     sensitiveValues: [],
   };
 
-  const logPath =
-    readString(args.log) ?? (await latestFile("/tmp", /^mev-live-.+\.log$/));
-  const eventsPath =
-    readString(args.events) ??
-    (await latestFile(join(analysisDir, "events"), /^searcher-.+\.jsonl$/).catch(
-      () => undefined,
-    ));
+  const { logPath, eventsPath } = await resolveInputPaths(
+    { log: readString(args.log), events: readString(args.events) },
+  );
   const outDir = resolve(readString(args["out-dir"]) ?? defaultReportsDir);
   const label = readString(args.label) ?? deriveLabel(logPath, eventsPath);
 
@@ -100,6 +109,27 @@ async function main() {
   if (eventsPath) console.log(`[redact-live-run] wrote ${join(outDir, eventReportName)}`);
 }
 
+export async function resolveInputPaths(
+  explicit: { log?: string; events?: string } = {},
+  locations: InputLocations = DEFAULT_INPUT_LOCATIONS,
+): Promise<{ logPath: string; eventsPath?: string }> {
+  const logPath =
+    explicit.log ??
+    (await existingFile(locations.currentLog)) ??
+    (await latestFile(locations.legacyLogDir, /^mev-live-.+\.log$/));
+  if (!logPath) {
+    throw new Error(
+      `No live log found at ${locations.currentLog} or in ${locations.legacyLogDir}`,
+    );
+  }
+
+  const eventsPath =
+    explicit.events ??
+    (await existingFile(locations.currentEvents)) ??
+    (await latestFile(locations.legacyEventsDir, /^searcher-.+\.jsonl$/));
+  return { logPath, eventsPath };
+}
+
 function readString(value: string | boolean | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -116,21 +146,43 @@ function readBool(value: string | boolean | undefined, fallback: boolean): boole
   return !["0", "false", "no", "off"].includes(value.toLowerCase());
 }
 
-async function latestFile(dir: string, pattern: RegExp): Promise<string> {
-  const entries = await readdir(dir);
-  const candidates = await Promise.all(
-    entries
-      .filter((entry) => pattern.test(entry))
-      .map(async (entry) => {
-        const path = join(dir, entry);
-        const info = await stat(path);
-        return { path, mtimeMs: info.mtimeMs };
-      }),
+async function existingFile(path: string): Promise<string | undefined> {
+  try {
+    return (await stat(path)).isFile() ? path : undefined;
+  } catch (err) {
+    if (isMissingPathError(err)) return undefined;
+    throw err;
+  }
+}
+
+async function latestFile(dir: string, pattern: RegExp): Promise<string | undefined> {
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch (err) {
+    if (isMissingPathError(err)) return undefined;
+    throw err;
+  }
+  const candidates = (
+    await Promise.all(
+      entries
+        .filter((entry) => pattern.test(entry))
+        .map(async (entry) => {
+          const path = join(dir, entry);
+          const info = await stat(path);
+          return info.isFile() ? { path, mtimeMs: info.mtimeMs } : undefined;
+        }),
+    )
+  ).filter(
+    (candidate): candidate is { path: string; mtimeMs: number } => candidate !== undefined,
   );
   candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const latest = candidates[0];
-  if (!latest) throw new Error(`No files matching ${pattern} in ${dir}`);
-  return latest.path;
+  return candidates[0]?.path;
+}
+
+function isMissingPathError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function deriveLabel(logPath: string, eventsPath?: string): string {
@@ -525,7 +577,17 @@ function bulletList(items: string[], fallback: string): string {
   return items.map((item) => `- ${item}`).join("\n");
 }
 
-main().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+function isCliEntry(): boolean {
+  const argv1 = process.argv[1];
+  return Boolean(
+    argv1 &&
+      (import.meta.url === pathToFileURL(argv1).href || /[/\\]cli[/\\]index\.[jt]s$/.test(argv1)),
+  );
+}
+
+if (isCliEntry()) {
+  main().catch((err: unknown) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}
