@@ -336,7 +336,8 @@ export function validateTxRecord(tx: any, eoa: string, win: { from: number; to: 
     fail(`tx ${tx.hash} block ${tx.block} outside window ${win.from}..${win.to}`);
   }
   const txClass = tx.class;
-  if (txClass !== "atomic" && txClass !== "backrun") {
+  const explicitlyNonComparable = tx.comparable === false;
+  if (txClass !== "atomic" && txClass !== "backrun" && !(explicitlyNonComparable && txClass === "unknown")) {
     fail(`tx ${tx.hash} missing/invalid class (atomic|backrun)`);
   } else if (txClass === "backrun") {
     const sourceFlow = tx.source_flow;
@@ -346,10 +347,13 @@ export function validateTxRecord(tx: any, eoa: string, win: { from: number; to: 
       fail(`tx ${tx.hash} is a public backrun but missing seen_in_our_feed:boolean (did our mempool admission SEE the source swap?)`);
     }
   }
-  if (!Array.isArray(tx.pools) || tx.pools.length === 0) {
+  if (!Array.isArray(tx.pools) || (tx.pools.length === 0 && !explicitlyNonComparable)) {
     fail(`tx ${tx.hash} has no pools[] classified in/out of graph`);
   } else if (!tx.pools.every((p: any) => typeof p.inGraph === "boolean")) {
     fail(`tx ${tx.hash} pools[] must each carry inGraph:boolean`);
+  }
+  if (explicitlyNonComparable && isPlaceholder(String(tx.winner_style ?? ""))) {
+    fail(`tx ${tx.hash} comparable=false but winner_style missing`);
   }
   if (isPlaceholder(String(tx.gap_class ?? ""))) fail(`tx ${tx.hash} missing gap_class`);
 }
@@ -474,6 +478,7 @@ function computeCoverageKpi(json: any): {
   for (const f of findings) {
     const txs: any[] = Array.isArray(f?.txs) ? f.txs : [];
     for (const tx of txs) {
+      if (tx?.comparable === false) continue;
       const pools: any[] = Array.isArray(tx?.pools) ? tx.pools : [];
       for (const p of pools) {
         competitorLegsTotal++;

@@ -18,6 +18,33 @@ const checks: Array<() => void> = [
   () => expectPass("valid atomic tx without source_flow", () => {
     validateTxRecord(validAtomicTx(), EOA, WIN);
   }),
+  () => expectPass("explicit non-comparable unknown tx may have no pools", () => {
+    validateTxRecord({
+      hash: HASH,
+      block: 150,
+      class: "unknown",
+      comparable: false,
+      winner_style: "keeper_claim",
+      pools: [],
+      gap_class: "excluded_non_comparable_keeper",
+    }, EOA, WIN);
+  }),
+  () => expectFail("unknown tx without explicit non-comparable evidence remains invalid", () => {
+    validateTxRecord(validAtomicTx({ class: "unknown", pools: [] }), EOA, WIN);
+  }, `tx ${HASH} missing/invalid class (atomic|backrun)`),
+  () => expectFail("comparable atomic tx still requires pools", () => {
+    validateTxRecord(validAtomicTx({ comparable: true, pools: [] }), EOA, WIN);
+  }, `tx ${HASH} has no pools[] classified in/out of graph`),
+  () => expectFail("non-comparable tx must name winner style", () => {
+    validateTxRecord({
+      hash: HASH,
+      block: 150,
+      class: "unknown",
+      comparable: false,
+      pools: [],
+      gap_class: "excluded_non_comparable",
+    }, EOA, WIN);
+  }, `tx ${HASH} comparable=false but winner_style missing`),
   () => expectFail("missing class", () => {
     validateTxRecord(validBackrunTx({ class: undefined }), EOA, WIN);
   }, `tx ${HASH} missing/invalid class (atomic|backrun)`),

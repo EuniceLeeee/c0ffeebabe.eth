@@ -178,6 +178,32 @@
       },
       "created_at": "2026-07-12T20:43:00.000Z",
       "updated_at": "2026-07-12T21:07:34.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260712-hermes-noncomparable-full-sweep",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_cross_reference",
+      "comparable": false,
+      "primary_gap": "none_tooling_only",
+      "gap_detail": "hermes_full_sweep_cannot_represent_noncomparable_no_pool_transactions",
+      "evidence": {
+        "window": "25518588..25518887",
+        "gate_failure": "Coffee full analysis required five tx records, while keeper/empty records could not honestly satisfy atomic-or-backrun plus non-empty pools",
+        "reviewer": "019f5833-20b9-70f2-90c4-b68e17c9fdc0 agreed the schema forced fabricated class/pool data and polluted coverage KPI"
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/cli/hermes-gate.ts",
+        "issue": "full Coffee sweeps cannot represent explicitly non-comparable unknown or no-pool activity, and coverage KPI counts excluded non-comparable venues",
+        "codify_target": "allow only comparable=false records to use class unknown and empty pools; require winner_style/gap_class; exclude those records from coverage KPI; preserve all legacy comparable gates",
+        "status": "open"
+      },
+      "created_at": "2026-07-12T21:20:00.000Z",
+      "updated_at": "2026-07-12T21:20:00.000Z"
     }
   ]
 }

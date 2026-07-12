@@ -172,6 +172,20 @@ const checks: Array<() => void> = [
       [COFFEEBABE],
     );
   }),
+  () => expectPass("coverage KPI excludes explicitly non-comparable tx venues", () => {
+    const artifact = manualArtifact();
+    artifact.findings[0].txCount = 2;
+    artifact.findings[0].txs.push({
+      hash: `0x${"2".repeat(64)}`,
+      block: 2,
+      class: "unknown",
+      comparable: false,
+      winner_style: "keeper_claim",
+      pools: [{ addr: "0x3333333333333333333333333333333333333333", inGraph: false }],
+      gap_class: "excluded_non_comparable_keeper",
+    });
+    validateManualArtifact(artifact, { from: 1, to: 2 }, [COFFEEBABE]);
+  }),
   () => expectFail("real angle-bracket placeholders still fail", () => {
     validateManualArtifact(
       manualArtifact({ dominant_drop: "<from>", evidence: "<FILL>" }),
