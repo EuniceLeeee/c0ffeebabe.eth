@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "run_id": "hermes10-r2-v4-amount-domain",
+  "window": {
+    "from": 25518588,
+    "to": 25518887
+  },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671"
+  ],
+  "run_analysis": {
+    "funnel": {
+      "paired_raw_blocks": 188,
+      "paired_manual_after_budget_exclusion": 172,
+      "paired_canonical_after_budget_and_catchup_exclusion": 117,
+      "a_overflow_errors": 224,
+      "b_overflow_errors": 0,
+      "b_domain_reject_blocks": 172,
+      "b_promoted_reserve_blocks": 172,
+      "a_quote_positive_blocks": 0,
+      "b_quote_positive_blocks": 0,
+      "a_final_sim_success": 0,
+      "b_final_sim_success": 0,
+      "a_submit": 0,
+      "b_submit": 0
+    },
+    "dominant_drop": "all selected rings remained quote-negative; challenger removed the v4 amount-domain failure but increased hot-path deadline pressure",
+    "events_source": "structured block-scan text summaries and canonical paired-log comparator; raw logs remain node-local"
+  },
+  "intake_audit": {
+    "pending_received": 0,
+    "pending_filtered": 0,
+    "mevshare_enabled": false
+  },
+  "ab_external_calibration": {
+    "competitor": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "strategy_kind": "block-scan",
+    "comparable_filter": "atomic_loop",
+    "tool_artifact": "docs/research/reports/ab-hermes10-r2-v4-amount-domain-coffee-calibration.json",
+    "classifier_calibration": {
+      "command": "cd analysis && npm run competitor-calibration",
+      "status": "pass",
+      "samples": 16
+    },
+    "comparable_txs": [],
+    "excluded_counts": {
+      "inventory": 0,
+      "sandwich": 0,
+      "keeper_or_liquidation": 3,
+      "jit_lp": 0,
+      "standing_credit": 0,
+      "unknown_or_empty": 2
+    },
+    "gap_counts": {
+      "not_seen": 0,
+      "pool": 0,
+      "path": 0,
+      "adapter": 0,
+      "quote_or_sim": 0,
+      "execution": 0,
+      "economics": 0
+    },
+    "next_problem_id": "none:no_comparable_sample"
+  },
+  "findings": [
+    {
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "swept": true,
+      "txCount": 5,
+      "method": "local reth full-block sweep, manual trace before canonical reconciliation",
+      "analysis_mode": "full",
+      "txs": [
+        {
+          "hash": "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628",
+          "block": 25518777,
+          "class": "atomic",
+          "comparable": false,
+          "winner_style": "keeper_claim",
+          "pools": [
+            { "addr": "0x3d68dd1cae135b490c11c4b6df75c1d65c6c61dd", "inGraph": false },
+            { "addr": "0x66bea722346efc72a5a2fc3d35abd7915547fea0", "inGraph": true },
+            { "addr": "0xf643d9b4826f616240b302a4cb3c073a7f30441b", "inGraph": false }
+          ],
+          "gap_class": "excluded_non_comparable_keeper"
+        },
+        {
+          "hash": "0x1a0839d9c4240c123692d7c7b91d1cc43adc05d38e8ebbdb35e3e7bc131ecf35",
+          "block": 25518777,
+          "class": "atomic",
+          "comparable": false,
+          "winner_style": "keeper_claim",
+          "pools": [
+            { "addr": "0x2809c338b8b2c7e94605f03c1414260eed479ce7", "inGraph": false },
+            { "addr": "0x79bd712f876c364aa5e775a1ed40de1fdfdb2a50", "inGraph": true },
+            { "addr": "0x8f4abe8df5872097e9f70f8b7141fcf6f42a7a176a35e6f2a998308acf0abd4e", "inGraph": true }
+          ],
+          "gap_class": "excluded_non_comparable_keeper"
+        },
+        {
+          "hash": "0x20bd02d1d12995ab61c248e2c6133e6c8516ca97350036505366845d76d6ce63",
+          "block": 25518777,
+          "class": "atomic",
+          "comparable": false,
+          "winner_style": "keeper_claim",
+          "pools": [
+            { "addr": "0x6d9d31941109334e8db7be0d23e0e79456ddeee2", "inGraph": false },
+            { "addr": "0xcdd8a4605e392bf6934f9a1bf4535084c9a9e779e3d497fefe88bd43b9b48990", "inGraph": true },
+            { "addr": "0xc45a81bc23a64ea556ab4cdf08a86b61cdceea8b", "inGraph": true }
+          ],
+          "gap_class": "excluded_non_comparable_keeper"
+        },
+        {
+          "hash": "0xeb40619a6be92404ac053bfcb10f543f18f0277aad97549300f0ca58408f60c6",
+          "block": 25518777,
+          "class": "unknown",
+          "comparable": false,
+          "winner_style": "unknown",
+          "pools": [],
+          "gap_class": "manual_required_empty"
+        },
+        {
+          "hash": "0x91cade85d727b8dee910c27d9b14c0d16cd9c5bb673c39f7c5ed73e2526cb7d8",
+          "block": 25518791,
+          "class": "unknown",
+          "comparable": false,
+          "winner_style": "unknown",
+          "pools": [],
+          "gap_class": "manual_required_unknown"
+        }
+      ]
+    }
+  ],
+  "coverage_kpi": {
+    "competitor_legs_total": 0,
+    "legs_out_of_graph": 0,
+    "out_pools": [],
+    "closable": 0,
+    "single_venue_noise": 0,
+    "prev_round": {
+      "run_id": "hermes10-r1-v4-scanner-mid",
+      "legs_out_of_graph": 0,
+      "closable": 0
+    }
+  }
+}

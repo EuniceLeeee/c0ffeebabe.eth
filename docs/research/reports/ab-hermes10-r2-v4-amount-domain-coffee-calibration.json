@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "window": {
+    "from": 25518588,
+    "to": 25518887
+  },
+  "competitor": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+  "method": "local reth full-block enumeration, manual trace and transfer-flow analysis, then census-gap and bundle-postmortem reconciliation",
+  "comparable_txs": [],
+  "excluded": [
+    {
+      "hash": "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628",
+      "block": 25518777,
+      "winner_style": "keeper_claim",
+      "reason": "protocol-distributed SCALE reward is sold through DEXes without an actor input-return loop"
+    },
+    {
+      "hash": "0x1a0839d9c4240c123692d7c7b91d1cc43adc05d38e8ebbdb35e3e7bc131ecf35",
+      "block": 25518777,
+      "winner_style": "keeper_claim",
+      "reason": "protocol-distributed SCALE reward is sold through DEXes without an actor input-return loop"
+    },
+    {
+      "hash": "0x20bd02d1d12995ab61c248e2c6133e6c8516ca97350036505366845d76d6ce63",
+      "block": 25518777,
+      "winner_style": "keeper_claim",
+      "reason": "protocol-distributed SCALE reward is sold through DEXes without an actor input-return loop"
+    },
+    {
+      "hash": "0xeb40619a6be92404ac053bfcb10f543f18f0277aad97549300f0ca58408f60c6",
+      "block": 25518777,
+      "winner_style": "unknown",
+      "reason": "empty self-transfer"
+    },
+    {
+      "hash": "0x91cade85d727b8dee910c27d9b14c0d16cd9c5bb673c39f7c5ed73e2526cb7d8",
+      "block": 25518791,
+      "winner_style": "unknown",
+      "reason": "unpriced non-atomic activity; retained for manual analysis"
+    }
+  ],
+  "canonical_before": "three keeper transactions were unknown and incorrectly emitted routing_gap",
+  "canonical_after": "three keeper transactions are keeper_claim and non_comparable; unknown empty activity is manual_required",
+  "tooling_defect": "tooldef-20260712-coffee-keeper-unknown-routing",
+  "codify_commit": "6fc2017349924b5a69bb209a8101dbf8f5c0e1d4"
+}

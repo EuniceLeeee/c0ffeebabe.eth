@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "comparison_goal": "improvement",
+  "metric": "total_ms",
+  "direction": "lower",
+  "aggregate": "p50",
+  "paired_blocks": 117,
+  "paired_block_range": {
+    "from": 25518582,
+    "to": 25518896
+  },
+  "warmup_blocks_excluded": 0,
+  "a_value": null,
+  "b_value": null,
+  "absolute_delta": null,
+  "improvement_pct": null,
+  "budget_censored_block_count": 37,
+  "catchup_censored_block_count": 81,
+  "full_warm_censored_block_count": 2,
+  "require_output_match": false,
+  "script_assessment": "inconclusive",
+  "reasons": [
+    "excluded 37 budget-censored paired blocks",
+    "excluded 81 catch-up paired blocks with unequal cache history",
+    "excluded 2 full-warm paired blocks",
+    "paired blocks 117 < required 120"
+  ],
+  "source": "canonical comparator rerun after B pause; raw A/B logs remain node-local"
+}

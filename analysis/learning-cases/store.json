@@ -200,10 +200,12 @@
         "tool": "analysis/src/cli/hermes-gate.ts",
         "issue": "full Coffee sweeps cannot represent explicitly non-comparable unknown or no-pool activity, and coverage KPI counts excluded non-comparable venues",
         "codify_target": "allow only comparable=false records to use class unknown and empty pools; require winner_style/gap_class; exclude those records from coverage KPI; preserve all legacy comparable gates",
-        "status": "open"
+        "status": "codified",
+        "codify_commit": "b440609138ce6f04480e772507eec54e2374b0d4",
+        "validation": "analysis build plus hermes-gate-intake 16/16 and hermes-gate-tooling 63/63; Round-2 Step-1 artifact passes with three keeper and two no-pool non-comparable records excluded from coverage KPI"
       },
       "created_at": "2026-07-12T21:20:00.000Z",
-      "updated_at": "2026-07-12T21:20:00.000Z"
+      "updated_at": "2026-07-12T21:24:23.000Z"
     }
   ]
 }
