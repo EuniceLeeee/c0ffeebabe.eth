@@ -574,9 +574,10 @@ export function validateAbExperiment(
   const hardVeto = experiment.deterministic_gate?.result === "fail"
     || experiment.analysis?.script_exit_code !== 0
     || fairnessHardVeto;
+  const resolvedArchive = phase === "close" && experiment.branch_action === "resolved_deleted";
   if (experiment.final_verdict === "win" && resolved !== "win") errors.push("final win is not supported by reconciled/adjudicated evidence");
   if (experiment.final_verdict === "lose" && resolved !== "lose") errors.push("final lose is not supported by reconciled/adjudicated evidence");
-  if (experiment.final_verdict === "needs_escalation" && resolved !== "inconclusive" && !hardVeto) {
+  if (experiment.final_verdict === "needs_escalation" && resolved !== "inconclusive" && !hardVeto && !resolvedArchive) {
     errors.push("needs_escalation requires an inconclusive reconciled/adjudicated verdict");
   }
 
