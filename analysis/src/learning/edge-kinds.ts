@@ -10,6 +10,7 @@ const SWAP_TOPICS = topicSet([
   TOPICS.balancerV2Swap,
   TOPICS.pancakeV3Swap,
   TOPICS.dodoSwap,
+  TOPICS.fluidDexSwap,
 ]);
 
 const FLASH_TOPICS = topicSet([

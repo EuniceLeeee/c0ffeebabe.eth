@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { actionsFromLogs } from "./actions/from-logs.js";
 import {
   classifyWinnerStyle,
+  extractOtherVenues,
   shareTokenImbalanceTokens,
   type WinnerStyle,
 } from "./cli/bundle-postmortem.js";
@@ -28,7 +29,7 @@ interface CoffeeFixture {
 
 export interface CompetitorCalibrationCheck {
   tx_hash: string;
-  axis: "source_shape" | "winner_style" | "vault_inventory_signal";
+  axis: "source_shape" | "winner_style" | "vault_inventory_signal" | "venue_lineage";
   expected: string;
   actual: string;
   pass: boolean;
@@ -103,6 +104,15 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
       "vault_inventory_signal",
       [lower(STEAK_USDC), lower(STEAK_USDT)].sort().join(","),
       inventorySignals.join(","),
+    ));
+    const fluidLineages = extractOtherVenues(inventoryReceipt, null)
+      .map((venue) => venue.protocol)
+      .filter((protocol) => protocol === "fluidDex");
+    checks.push(check(
+      "0x9be73297e0fd8b0ff9760356480b372e3f78b12ce6bc6dc9bb83888d1314b862",
+      "venue_lineage",
+      "fluidDex",
+      fluidLineages.join(",") || "none",
     ));
   } catch (error) {
     checks.push(check(

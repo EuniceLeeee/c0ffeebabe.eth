@@ -9,6 +9,7 @@ import {
   classifyWinnerStyle,
   decodeV4SwapFills,
   detectJitLiquidity,
+  extractOtherVenues,
   isNonComparableWinnerStyle,
   loadGraphMembership,
   realizedProfitUsdForReport,
@@ -16,7 +17,7 @@ import {
   winnerMovedPriceBeyondPrestate,
   type WinnerStyle,
 } from "../cli/bundle-postmortem.js";
-import { ADDR, lower } from "../registry/protocols.js";
+import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import type { TokenDelta } from "../types.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -70,6 +71,9 @@ const preHeldBurn = { logs: [xfer(SHARE_TOK, INV_HELPER, ethers.ZeroAddress, SHA
 const buyRedeemImbalance = shareTokenImbalanceTokens(atomicBuyRedeem);
 const preHeldBurnImbalance = shareTokenImbalanceTokens(preHeldBurn);
 const liquityMintImbalance = shareTokenImbalanceTokens({ logs: liquityMintReceipt.receiptLogs });
+const fluidOtherVenues = extractOtherVenues({
+  logs: [{ address: ADDR.FLUID_DEX_USDC_USDT, topics: [TOPICS.fluidDexSwap] }],
+}, null);
 
 const CFG = "0xcccccccccccccccccccccccccccccccccccccccc";
 const reach = {
@@ -290,6 +294,13 @@ const checks: Array<() => void> = [
   // Coffee #2 is a Liquity BOLD protocol mint, not an ERC4626 share position. A plain token mint
   // without Deposit/Withdraw evidence must not poison comparable atomic-loop analysis.
   () => assert.deepEqual(liquityMintImbalance, []),
+  // Fluid DEX is a swap venue in canonical any-tx postmortems, not an opaque emitter.
+  () => assert.deepEqual(fluidOtherVenues, [{
+    protocol: "fluidDex",
+    id: lower(ADDR.FLUID_DEX_USDC_USDT),
+    emitter: lower(ADDR.FLUID_DEX_USDC_USDT),
+    in_graph: null,
+  }]),
 
   // F-009 atomicity / inventory-rebalance detector ---------------------------------------------
   // Layer 2 (robust receipt signal): 0x9be73297 leaves a residual position in BOTH vault-share

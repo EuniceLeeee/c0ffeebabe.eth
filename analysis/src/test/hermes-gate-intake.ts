@@ -65,9 +65,9 @@ const checks: Array<() => void> = [
   }, "ab_external_calibration.classifier_calibration missing"),
   () => expectFail("A/B calibration rejects a fabricated sample count", () => {
     const value = validAbCalibration();
-    value.ab_external_calibration.classifier_calibration.samples = 13;
+    value.ab_external_calibration.classifier_calibration.samples = 14;
     validateAbExternalCalibration(value);
-  }, "ab_external_calibration.classifier_calibration.samples must be 14"),
+  }, "ab_external_calibration.classifier_calibration.samples must be 15"),
 ];
 
 try {
@@ -142,7 +142,7 @@ function validAbCalibration(): any {
       classifier_calibration: {
         command: "npm run competitor-calibration",
         status: "pass",
-        samples: 14,
+        samples: 15,
       },
       comparable_txs: [HASH],
       excluded_counts: {

@@ -11,6 +11,7 @@ export const ADDR = {
   MORPHO: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
   FLUID_LIQUIDITY: "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497",
   FLUID_VAULT_WSTUSR_USDC: "0xee327311D8640156E87eC33ea55FcbF2309e0ce6",
+  FLUID_DEX_USDC_USDT: "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9B",
   SKY_PSM_LITE: "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
   UNIV4_POOL_MANAGER: "0x000000000004444c5dc75cB358380D2e3dE08A90",
   CURVE_SUSDS_USDT: "0x00836Fe54625BE242BcFA286207795405ca4fD10",
@@ -42,6 +43,7 @@ export const PROTOCOLS: Record<string, { name: string; kind: string }> = indexBy
   [ADDR.MORPHO]: { name: "Morpho", kind: "flash/credit" },
   [ADDR.FLUID_LIQUIDITY]: { name: "Fluid", kind: "credit" },
   [ADDR.FLUID_VAULT_WSTUSR_USDC]: { name: "Fluid Vault", kind: "credit" },
+  [ADDR.FLUID_DEX_USDC_USDT]: { name: "Fluid DEX USDC/USDT", kind: "swap" },
   [ADDR.SKY_PSM_LITE]: { name: "Sky PSM", kind: "peg" },
   [ADDR.UNIV4_POOL_MANAGER]: { name: "Uniswap v4", kind: "swap" },
   [ADDR.CURVE_SUSDS_USDT]: { name: "Curve sUSDS/USDT", kind: "swap" },
@@ -89,6 +91,10 @@ export const TOPICS = {
   // Pancake v3 + DODO — fixture-verified: match coffee-20260704/tx-4.json (0x19b47279… / 0xc2c0245e…).
   pancakeV3Swap: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
   dodoSwap: ethers.id("DODOSwap(address,address,uint256,uint256,address,address)"),
+  // Fluid DEX T1 swap — receipt-verified on coffee tx 0x9be73297 at the registered
+  // USDC/USDT pool 0x667701e5. The public event signature is not available in the
+  // interface we use, so keep the full observed topic instead of inventing an ABI.
+  fluidDexSwap: "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7",
   // Sky LitePSM (0xf6e72Db5…) — NODE-VERIFIED 2026-07-05: read the contract's real emitted topic0s over
   // 20k blocks on local reth (SellGem 0xef75f5a4… ×2822, BuyGem 0x085d06ec… ×2522) then ethers.id-matched
   // the signature (chain topic0 == ethers.id — two-way lock). SellGem = USDC→DAI, BuyGem = DAI→USDC.

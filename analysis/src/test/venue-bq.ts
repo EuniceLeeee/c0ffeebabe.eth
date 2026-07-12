@@ -10,6 +10,9 @@ import {
   type AggregatedVenue,
 } from "../discovery/venue-aggregate.js";
 import { extractVenueCandidates } from "../discovery/venue-evidence.js";
+import { classifyTxLoopCoverage } from "../discovery/loop-coverage.js";
+import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
+import { TOPICS } from "../registry/protocols.js";
 import { ADDR } from "../../../listener/src/shared/constants/addresses.js";
 
 interface CoffeeFixture {
@@ -30,6 +33,10 @@ const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const COFFEE_DIR = join(TEST_DIR, "fixtures", "coffee-20260704");
 const LIQUITY_VENUE = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
 const COFFEE_BOT = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
+const HG_USDC = "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c";
+const UNKNOWN_HELPER = "0x35d1b3f3d7966a1dfe207aa4514c12a259a0492b";
+const UNKNOWN_PROTOCOL = "0x0000000000000000000000000000000000004626";
+const UNKNOWN_TOPIC = `0x${"11".repeat(32)}`;
 
 test("BigQuery NDJSON rows surface the Liquity protocol venue and exclude known emitters", () => {
   const tx2 = loadCoffeeFixture("2");
@@ -64,6 +71,44 @@ test("BigQuery aggregate halves merge to the same result as the whole export", (
   const merged = mergeAggregates(aggregateRows(tx2Rows), aggregateRows(tx3Rows));
 
   assert.deepEqual(merged, whole);
+});
+
+test("receipt-log coverage separates protocol gaps from unknown emitters and requires trace", () => {
+  const logs = [
+    { address: HG_USDC, topics: [TOPICS.erc4626Withdraw] },
+    { address: ADDR.SKY_PSM_LITE, topics: [TOPICS.psmSellGem] },
+    { address: ADDR.FLUID_DEX_USDC_USDT, topics: [TOPICS.fluidDexSwap] },
+    { address: UNKNOWN_HELPER, topics: [UNKNOWN_TOPIC] },
+  ];
+  const result = classifyTxLoopCoverage({ txHash: "0x95805790", receiptLogs: logs });
+
+  assert.deepEqual(deriveEdgeKindsFromLogs([logs[2]]), ["swap"]);
+  assert.deepEqual(result.vaults, [HG_USDC]);
+  assert.deepEqual(result.protocolVenues, [HG_USDC, ADDR.SKY_PSM_LITE.toLowerCase()].sort());
+  assert.equal(result.swapVenues, 1);
+  assert.deepEqual(result.protocolVenueGaps, []);
+  assert.deepEqual(result.gapVenues, []);
+  assert.deepEqual(result.unclassifiedEmitters, [{ addr: UNKNOWN_HELPER, topic0: UNKNOWN_TOPIC }]);
+  assert.equal(result.protocolAdapterCandidate, true);
+  assert.equal(result.fullyCovered, false);
+  assert.equal(result.coverageScope, "receipt_log_emitters_only");
+  assert.equal(result.comparability, "requires_trace");
+});
+
+test("an ERC4626 event without a registered adapter is a known protocol venue gap", () => {
+  const result = classifyTxLoopCoverage({
+    txHash: "0xunsupported",
+    receiptLogs: [
+      { address: UNKNOWN_PROTOCOL, topics: [TOPICS.transfer] },
+      { address: UNKNOWN_PROTOCOL, topics: [TOPICS.erc4626Deposit] },
+    ],
+  });
+
+  assert.deepEqual(result.protocolVenueGaps, [
+    { addr: UNKNOWN_PROTOCOL, topic0: TOPICS.erc4626Deposit.toLowerCase() },
+  ]);
+  assert.deepEqual(result.unclassifiedEmitters, []);
+  assert.equal(result.protocolAdapterCandidate, false);
 });
 
 function aggregateRows(rows: BqLogRow[]): AggregatedVenue[] {

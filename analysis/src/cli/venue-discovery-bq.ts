@@ -16,8 +16,9 @@ const USAGE = `Usage: npm run venue-discovery-bq -- [--input <rows.ndjson|rows.c
   tx_hash,...,log_address,topic0,topics,receipt_status; topics = "[0x..,0x..]"). Format auto-detected.
   Default: per-VENUE aggregation (edgeKinds/protocolActions/txCount).
   --loop-coverage (alias --per-tx): per-TX loop-coverage — classifies each tx's venues into
-    supported-swap / our-vault (real ERC4626 leg) / token / flashloan / GAP, and flags fullyCovered
-    (zero gaps AND >=1 real vault leg). Emits a { perTx, summary } JSON object instead.`;
+    supported-swap / registered protocol / unsupported protocol / token / flashloan / unclassified.
+    This is receipt-log adapter coverage only; comparability remains requires_trace. Emits a
+    { perTx, summary } JSON object instead.`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -56,22 +57,35 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await main();
 }
 
-/** Per-TX loop-coverage mode: emit { perTx, summary } and a human line. perTx is sorted fullyCovered-first,
- *  then by fewest gap venues, so candidate closed protocol loops surface at the top. */
+/** Per-TX receipt-log coverage mode. Candidate rows surface first, but only bundle-postmortem/trace may
+ *  promote one to a conserving atomic_loop. */
 async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promise<void> {
   const sorted = [...perTx].sort(
     (a, b) =>
-      Number(b.fullyCovered) - Number(a.fullyCovered)
-      || a.gapVenues.length - b.gapVenues.length
-      || b.vaults.length - a.vaults.length
+      Number(b.protocolAdapterCandidate) - Number(a.protocolAdapterCandidate)
+      || a.protocolVenueGaps.length - b.protocolVenueGaps.length
+      || a.unclassifiedEmitters.length - b.unclassifiedEmitters.length
+      || b.protocolVenues.length - a.protocolVenues.length
       || a.tx.localeCompare(b.tx),
   );
-  const withVault = sorted.filter((t) => t.vaults.length >= 1);
+  const withProtocol = sorted.filter((t) => t.protocolVenues.length >= 1);
+  const withNamedProtocolEvidence = sorted.filter(
+    (t) => t.protocolVenues.length >= 1 || t.protocolVenueGaps.length >= 1,
+  );
   const summary = {
+    schema_version: 2,
+    coverage_scope: "receipt_log_emitters_only",
     txs: perTx.length,
-    txsWithVaultLeg: withVault.length,
+    txsWithVaultLeg: sorted.filter((t) => t.vaults.length >= 1).length,
+    txsWithProtocolLeg: withProtocol.length,
+    txsWithNamedProtocolEvidence: withNamedProtocolEvidence.length,
+    protocolAdapterCandidates: perTx.filter((t) => t.protocolAdapterCandidate).length,
+    requiresTrace: withNamedProtocolEvidence.length,
+    knownProtocolGapTxs: perTx.filter((t) => t.protocolVenueGaps.length > 0).length,
+    unclassifiedEmitterTxs: withNamedProtocolEvidence.filter((t) => t.unclassifiedEmitters.length > 0).length,
+    // Legacy fields retained for downstream readers. "fullyCovered" is strict log cleanliness only.
     fullyCovered: perTx.filter((t) => t.fullyCovered).length,
-    oneGapWithVault: withVault.filter((t) => t.gapVenues.length === 1).length,
+    oneGapWithVault: withProtocol.filter((t) => t.protocolVenueGaps.length === 1).length,
   };
   const json = `${JSON.stringify({ summary, perTx: sorted }, null, 2)}\n`;
 
@@ -83,8 +97,11 @@ async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promis
       "[analysis/venue-discovery-bq loop-coverage]",
       `txs=${summary.txs}`,
       `txs_with_vault_leg=${summary.txsWithVaultLeg}`,
+      `protocol_adapter_candidates=${summary.protocolAdapterCandidates}`,
+      `requires_trace=${summary.requiresTrace}`,
+      `known_protocol_gap_txs=${summary.knownProtocolGapTxs}`,
       `fully_covered=${summary.fullyCovered}`,
-      `vault_leg_one_gap=${summary.oneGapWithVault}`,
+      `unclassified_emitter_txs=${summary.unclassifiedEmitterTxs}`,
     ].join(" "),
   );
 }

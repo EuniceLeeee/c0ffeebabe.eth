@@ -38,6 +38,7 @@ const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
   { topic: lower(TOPICS.balancerV2Swap), protocol: "balancerV2" },
   { topic: lower(TOPICS.pancakeV3Swap), protocol: "pancakeV3" },
   { topic: lower(TOPICS.dodoSwap), protocol: "dodo" },
+  { topic: lower(TOPICS.fluidDexSwap), protocol: "fluidDex" },
   { topic: lower(TOPICS.psmSellGem), protocol: "psm" },
   { topic: lower(TOPICS.psmBuyGem), protocol: "psm" },
 ];

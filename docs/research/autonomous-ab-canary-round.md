@@ -67,6 +67,8 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    First run `cd analysis && npm run competitor-calibration` and record its real JSON result. If it fails,
    classify this round `needs_escalation`, retain B/evidence, and file the classifier defect; an uncalibrated
    winner-style tool may not authorize a merge.
+   The per-take bridge is `/opt/MEV/scripts/census-gap.sh <from> <to> <watchlist> <out-dir>
+   --blockscan-log <log>` on the node; preserve its `verdicts.tsv` plus postmortem JSON as the external axis.
 2. **Agent-manual first:** inspect local A→B causality plus B→mature-searcher production gap against the
    predeclared semantic criterion; record author, `win|lose|inconclusive`, and evidence before viewing the
    canonical A/B script assessment.
