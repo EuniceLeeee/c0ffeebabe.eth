@@ -135,6 +135,18 @@ test("comparator excludes budget-censored blocks before warmup and pairing", () 
   assert.deepEqual(result.paired_block_range, { from: 103, to: 105 });
 });
 
+test("equivalence mode supports identical semantic outputs without metric cherry-picking", () => {
+  const result = compareBlockScanLogs(log(100), log(101), {
+    goal: "equivalence",
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  assert.equal(result.comparison_goal, "equivalence");
+  assert.equal(result.script_assessment, "supports");
+  assert.equal(result.output_mismatches, 0);
+});
+
 function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
   fs.writeFileSync(path.join(tmp, "compare.json"), JSON.stringify(artifact));
   return {

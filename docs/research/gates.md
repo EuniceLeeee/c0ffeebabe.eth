@@ -81,6 +81,8 @@ thin `ab_experiment` journal:
   artifact/exit status;
 - budget-censored blocks are excluded before warmup/pairing, and exact solved-ring identities are part of
   semantic output matching;
+- identical-code infrastructure shakedowns use the explicit equivalence goal; they never cherry-pick a
+  noisy latency direction to manufacture a verdict;
 - deterministic replay `pass` before any correctness/capability win;
 - agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
   every manual/script conflict or inconclusive result;
