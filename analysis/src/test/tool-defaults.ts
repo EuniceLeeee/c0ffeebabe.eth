@@ -82,7 +82,10 @@ test("census-gap defaults to the runtime routing graph", async () => {
     script,
     /^GRAPH=\$\{GRAPH:-\/opt\/MEV\/listener\/searcher\/pools\/runtime-graph-pools\.json\}$/m,
   );
-  assert.match(script, /^BLOCKSCAN_LOG=\$\{BLOCKSCAN_LOG:-\/var\/log\/mev-live\.log\}$/m);
+  assert.match(script, /^BLOCKSCAN_LOG=\$\{BLOCKSCAN_LOG:-\}$/m);
+  assert.match(script, /BLOCKSCAN_LOG=\$\{UNIT_LOG:-\/var\/log\/mev-live\.log\}/);
+  assert.match(script, /EVENTS=\$\{EVENTS:-\/var\/log\/mev\/events\/searcher-live\.jsonl\}/);
+  assert.match(script, /events file unreadable: \$EVENTS/);
   assert.match(script, /--blockscan-log "\$BLOCKSCAN_INPUT"/);
 });
 
@@ -104,6 +107,23 @@ test("census-gap excludes stale and failed postmortem artifacts", async () => {
     script.indexOf("unknown_competitor_tokens") < script.indexOf("scan_candidate_token_gap"),
     "unknown token sets must not be reported as a candidate-token coverage gap",
   );
+});
+
+test("node deploy installs and verifies production analysis tooling before restart", async () => {
+  const script = await readFile(join(repoRoot, "scripts", "deploy-node.sh"), "utf8");
+  assert.match(script, /cd "\$REPO\/analysis"/);
+  assert.match(script, /npm ci --include=dev --prefer-offline --no-audit --no-fund/);
+  assert.match(script, /npm run build/);
+  assert.match(
+    script,
+    /node --import tsx --test src\/test\/blockscan-log-join\.ts src\/test\/block-activity\.ts/,
+  );
+  assert.ok(
+    script.indexOf("analysis preflight failed") < script.indexOf("systemctl restart mev-searcher"),
+    "analysis verification must fail before the live service restart",
+  );
+  assert.match(script, /echo "SEARCHER_EVENTS_PATH=\$EVENTS_PATH"/);
+  assert.match(script, /events telemetry banner missing for \$EVENTS_PATH/);
 });
 
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {

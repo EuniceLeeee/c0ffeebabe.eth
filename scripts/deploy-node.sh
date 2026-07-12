@@ -33,6 +33,7 @@ POOL_UNIVERSE_TOP_N="${SEARCHER_POOL_UNIVERSE_TOP_N:-20000}"
 LIVE_MARKER=$REPO/.deploy-live
 LOCAL_RPC=${SEARCHER_LIVE_RPC_URL:-http://127.0.0.1:8545}
 MEV_LIVE_MAX_WALLET_ETH=${MEV_LIVE_MAX_WALLET_ETH:-0.2}
+DEFAULT_EVENTS_PATH=/var/log/mev/events/searcher-live.jsonl
 
 # Mode: DRY (default) unless the human placed the live marker on the node.
 if [ -f "$LIVE_MARKER" ]; then MODE=LIVE; DRY_VAL=0; else MODE=DRY; DRY_VAL=1; fi
@@ -49,7 +50,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -62,11 +63,15 @@ recover_running_env() {
 PID=$(systemctl show -p MainPID --value mev-searcher 2>/dev/null)
 if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   say "recovering env from running PID $PID (mode=$MODE)"
+  RUNNING_EVENTS_PATH=$(tr '\0' '\n' < "/proc/$PID/environ" \
+    | sed -n 's/^SEARCHER_EVENTS_PATH=//p' | tail -1)
+  EVENTS_PATH=${SEARCHER_EVENTS_PATH:-${RUNNING_EVENTS_PATH:-$DEFAULT_EVENTS_PATH}}
   tmp=$(mktemp)
   recover_running_env > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
+  echo "SEARCHER_EVENTS_PATH=$EVENTS_PATH" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   # bribe-all-above-gas is marker-controlled ($REPO/.bribe-all-above-gas), like .deploy-live —
   # a single durable source that survives the recover-from-process rebuild. Does NOT touch the
@@ -101,12 +106,15 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=$DRY_VAL + TTL=$OPP_TTL_MS + poolUniverseTopN=$POOL_UNIVERSE_TOP_N + discoveryToBlock=$DISCOVERY_TO_BLOCK"
 else
   say "no running process — ensuring DRY_RUN=$DRY_VAL in existing .env (mode=$MODE)"
+  EXISTING_EVENTS_PATH=$(sed -n 's/^SEARCHER_EVENTS_PATH=//p' "$ENVF" 2>/dev/null | tail -1)
+  EVENTS_PATH=${SEARCHER_EVENTS_PATH:-${EXISTING_EVENTS_PATH:-$DEFAULT_EVENTS_PATH}}
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
+  echo "SEARCHER_EVENTS_PATH=$EVENTS_PATH" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
   [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"  # A6 marker-gated (wsteth)
@@ -152,8 +160,18 @@ git fetch origin -q
 git reset --hard origin/main || { say "reset failed"; exit 1; }
 say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 
-# ── 4. Build ──
-( cd "$REPO/listener" && npm run build ) || { say "build failed — NOT restarting"; exit 1; }
+# ── 4. Build + production-analysis preflight ──
+( cd "$REPO/listener" && npm run build ) \
+  || { say "listener build failed — NOT restarting"; exit 1; }
+# Analysis CLIs execute TypeScript directly via the devDependency `tsx`. A git
+# reset updates their source but not ignored node_modules, so install the exact
+# lockfile and verify the production blockscan joins before this checkout is
+# considered deployable. The running searcher is not restarted until these pass.
+( cd "$REPO/analysis" \
+    && npm ci --include=dev --prefer-offline --no-audit --no-fund \
+    && npm run build \
+    && node --import tsx --test src/test/blockscan-log-join.ts src/test/block-activity.ts ) \
+  || { say "analysis preflight failed — NOT restarting"; exit 1; }
 
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
 REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
@@ -276,6 +294,9 @@ fi
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep -q "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" \
   || { say "ABORT: backrun startup banner does not match marker-controlled posture."; exit 9; }
+tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
+  | grep -Fq "[searcher/live] events emit → $EVENTS_PATH" \
+  || { say "ABORT: events telemetry banner missing for $EVENTS_PATH."; exit 9; }
 say "startup banner: $BANNER"
 if echo "$BANNER" | grep -Eq '(^|[[:space:]])universe=0([^0-9]|$)|\+ 0 universe([^0-9]|$)'; then
   say "ABORT: pool universe loaded zero pools after restart."; exit 9

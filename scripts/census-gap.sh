@@ -14,7 +14,7 @@ set -euo pipefail
 FROM=${1:?from-block}; TO=${2:?to-block}
 WATCH=${3:-0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2fc483527b8ef99eb5d9b44875f005ba1fae13}
 OUT=${4:-/tmp/census-gap-$FROM-$TO}
-BLOCKSCAN_LOG=${BLOCKSCAN_LOG:-/var/log/mev-live.log}
+BLOCKSCAN_LOG=${BLOCKSCAN_LOG:-}
 if [ "${5:-}" = "--blockscan-log" ]; then
   BLOCKSCAN_LOG=${6:?--blockscan-log requires a path}
 elif [ -n "${5:-}" ]; then
@@ -22,9 +22,25 @@ elif [ -n "${5:-}" ]; then
   exit 2
 fi
 RPC=${RPC:-http://127.0.0.1:8545}
-EVENTS=${EVENTS:-/var/log/mev/events/searcher-live.jsonl}
+EVENTS=${EVENTS:-}
 GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-graph-pools.json}
+if [ -z "$BLOCKSCAN_LOG" ]; then
+  UNIT_LOG=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null \
+    | sed -n 's/^append://p' || true)
+  BLOCKSCAN_LOG=${UNIT_LOG:-/var/log/mev-live.log}
+fi
+if [ -z "$EVENTS" ]; then
+  SEARCHER_PID=$(systemctl show mev-searcher -p MainPID --value 2>/dev/null || true)
+  if [ -n "$SEARCHER_PID" ] && [ "$SEARCHER_PID" != "0" ] && [ -r "/proc/$SEARCHER_PID/environ" ]; then
+    EVENTS=$(tr '\0' '\n' < "/proc/$SEARCHER_PID/environ" \
+      | sed -n 's/^SEARCHER_EVENTS_PATH=//p' | tail -1)
+  fi
+  EVENTS=${EVENTS:-/var/log/mev/events/searcher-live.jsonl}
+fi
 command -v jq >/dev/null || { echo "jq required"; exit 2; }
+[ -r "$EVENTS" ] || { echo "events file unreadable: $EVENTS" >&2; exit 2; }
+[ -r "$GRAPH" ] || { echo "routing graph unreadable: $GRAPH" >&2; exit 2; }
+echo "inputs: events=$EVENTS blockscan=$BLOCKSCAN_LOG graph=$GRAPH" >&2
 mkdir -p "$OUT"
 # A window may be rerun with a different watchlist or after a transient PM
 # failure. Never let artifacts from an earlier invocation enter this run.
