@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "run_id": "20260712-runtime-view-shakedown-5",
+  "window": { "from": 25515168, "to": 25515211 },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13"
+  ],
+  "classifier_calibration": { "status": "pass", "passed": 14, "failed": 0 },
+  "matched_txs": 6,
+  "comparable_atomic_loops": 0,
+  "excluded_counts": { "sandwich": 3, "one_leg_inventory": 3 },
+  "gap_counts": {},
+  "next_problem_id": "none:no_comparable_sample",
+  "takes": [
+    { "tx": "0x4c546e0cce35b31660d9ab8805d62abc2c12a2ee3377409b0c4acb0f3521c110", "style": "sandwich", "comparable": false },
+    { "tx": "0xf2afffbef7a7ba8dd0d09ec022bc5f65fa23a45b29d85c3f0a045308f2e93ea7", "style": "one_leg_inventory", "comparable": false },
+    { "tx": "0x28b4809fcf2c33096a9b1a7f3b7ce1fb01234f847d88c38e69d97da7fcef7e46", "style": "sandwich", "comparable": false },
+    { "tx": "0x6d809bbb1a0f837c23255241fd848f2d0dc4b843e0774ee961b3d1ae33b1452f", "style": "one_leg_inventory", "comparable": false },
+    { "tx": "0x31edb361829e53c553fbb3df26a7be8ac4efe7198ba42d66945a9b323cfc8caf", "style": "sandwich", "comparable": false },
+    { "tx": "0x4cc184ee2c9f532f734c43c3d63b9cceacfda2c30a1fc0883c6471abd051c476", "style": "one_leg_inventory", "comparable": false }
+  ]
+}

@@ -447,6 +447,23 @@ test("a later main fix may archive a previously escalated branch", () => {
   assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
 });
 
+test("resolved archive preserves an original escalation after later evidence becomes decisive", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "resolved_deleted";
+  value.resolution = {
+    resolved_by_commit: "9".repeat(40),
+    evidence: "later corrected adjudicator validates the retained experiment",
+  };
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
+});
+
 test("a hard deterministic veto may retain a metric winner without falsifying the manual verdict", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
   const artifact = compareBlockScanLogs(log(100), log(80), {
