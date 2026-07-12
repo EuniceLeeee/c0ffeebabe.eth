@@ -14,6 +14,12 @@ import { isPublicRouter } from "../registry/routers.js";
 import { RpcClient, toQuantity } from "../rpc/client.js";
 import { mapLimit, parseArgs, uniq, writeText } from "../util.js";
 import {
+  blockScanActivityAtBlock,
+  blockScanSourceBlockForTarget,
+  type BlockScanActivity,
+  type BlockScanLogStatus,
+} from "./bundle-postmortem.js";
+import {
   findVenueByFactory,
   findVenueBySeed,
   findVenueCapability,
@@ -24,6 +30,7 @@ import {
 // CLI entrypoint runs — a const in the temporal dead zone would ReferenceError at runtime.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
+const DEFAULT_BLOCKSCAN_LOG = "/var/log/mev-live.log";
 const UNIV4_POOL_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
 const UNIV4_SWAP_TOPIC = lower(TOPICS.univ4Swap);
 
@@ -41,6 +48,9 @@ let watch: string[] = [];
 let competitorScan = false;
 let notSeenScan = false;
 let maxBlocks = 200;
+let blockScanLogPath = DEFAULT_BLOCKSCAN_LOG;
+let blockScanLog: WatchBlockScanLog = { path: DEFAULT_BLOCKSCAN_LOG, text: null, error: "not loaded" };
+let blockScanActivityBySource = new Map<number, BlockScanActivity>();
 let rpc: RpcClient;
 let events: any[] = [];
 let routingGraphPools: Set<string> | null = null;
@@ -65,9 +75,15 @@ async function main(): Promise<void> {
   competitorScan = Boolean(args["competitor-scan"]);
   notSeenScan = Boolean(args["not-seen-scan"]);
   maxBlocks = Number(args["max-blocks"] ?? 200);
+  blockScanLogPath = args["blockscan-log"]
+    ? resolveCliPath(String(args["blockscan-log"]))
+    : DEFAULT_BLOCKSCAN_LOG;
 
   if (!eventsPath) {
-    console.error("Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl (--competitor-scan | --watch <addr[,addr]>) --rpc <url>");
+    console.error(
+      "Usage: pnpm analysis live-loss --events ./analysis/events/searcher.jsonl " +
+        "(--competitor-scan | --watch <addr[,addr]>) --rpc <url> [--blockscan-log /var/log/mev-live.log]",
+    );
     process.exit(1);
   }
 
@@ -80,6 +96,13 @@ async function main(): Promise<void> {
     process.exit(0);
   }
   if (watch.length > 0) {
+    blockScanLog = await readWatchBlockScanLog(blockScanLogPath);
+    blockScanActivityBySource = new Map();
+    if (blockScanLog.error) {
+      console.error(
+        `[analysis/live-loss/watch] blockscan_log=${blockScanLog.path} unavailable: ${blockScanLog.error}`,
+      );
+    }
     await runWatchMode();
     process.exit(0);
   }
@@ -105,12 +128,58 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await main();
 }
 
-interface WatchReport {
+export type WatchPrimaryReason =
+  | "not_seen"
+  | "seen_but_lost"
+  | "blockscan_ran_no_jsonl_signal"
+  | "unknown_without_blockscan_evidence";
+
+export type WatchPrimaryReasonBasis =
+  | "backrun_event_overlap"
+  | "blockscan_source_pass_complete"
+  | "blockscan_source_pass_absent"
+  | "blockscan_evidence_unavailable_or_incomplete";
+
+export interface WatchBlockScanLog {
+  path: string;
+  text: string | null;
+  error?: string;
+}
+
+export interface WatchBlockScanAudit {
+  target_block: number;
+  source_block: number;
+  log_path: string;
+  status: BlockScanLogStatus | "log_unavailable";
+  ran: boolean;
+  detail_complete: boolean;
+  solve_ring_count: number;
+  solve_ring_token_count: number;
+  competitor_token_count: number;
+  candidate_ring_token_overlap_count: number;
+  candidate_ring_token_overlap_tokens: string[];
+  any_submission_in_source_pass: boolean;
+  route_match_proven: false;
+  log_min_source_block?: number;
+  log_max_source_block?: number;
+  log_error?: string;
+  limitations: string[];
+}
+
+export interface WatchVisibilityDecision {
+  primaryReason: WatchPrimaryReason;
+  primaryReasonBasis: WatchPrimaryReasonBasis;
+}
+
+export interface WatchReport {
   block: number;
   competitorTx: string;
   competitorAddr: string[];
-  primaryReason: "not_seen" | "seen_but_lost";
+  primaryReason: WatchPrimaryReason;
+  primaryReasonBasis: WatchPrimaryReasonBasis;
   seenScope: "same_pool" | "same_token" | "block_only" | "none";
+  seenScopeLane: "backrun_events";
+  blockscan_lane: WatchBlockScanAudit;
   canonicalSequence: string[];
   pathTemplate: string;
   pools: string[];
@@ -162,7 +231,7 @@ export interface VenueIdentityFixture {
   factory?: string | null;
 }
 
-interface SeenSet {
+export interface SeenSet {
   pools: Set<string>;
   tokens: Set<string>;
   any: boolean;
@@ -209,6 +278,120 @@ async function readJsonl(path: string): Promise<any[]> {
         throw new Error(`Invalid JSONL at ${path}:${i + 1}: ${(err as Error).message}`);
       }
     });
+}
+
+export function defaultBlockScanLogPath(): string {
+  return DEFAULT_BLOCKSCAN_LOG;
+}
+
+export async function readWatchBlockScanLog(path = defaultBlockScanLogPath()): Promise<WatchBlockScanLog> {
+  try {
+    return { path, text: await readFile(path, "utf8") };
+  } catch (err) {
+    return {
+      path,
+      text: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function buildWatchBlockScanAudit(
+  targetBlock: number,
+  competitorTokens: Iterable<string>,
+  log: WatchBlockScanLog,
+  activityCache?: Map<number, BlockScanActivity>,
+): WatchBlockScanAudit {
+  const sourceBlock = blockScanSourceBlockForTarget(targetBlock);
+  const tokens = new Set(
+    [...competitorTokens]
+      .map(lower)
+      .filter((token) => isAddress(token)),
+  );
+  const limitations = [
+    "solve-ring token overlap is a candidate-level clue, not proof that the competitor route was seen",
+    "submission text is source-pass-wide and cannot be attributed to this competitor transaction",
+    "blockscan is an atomic standing-state lane; seenScope is derived separately from backrun JSONL events",
+  ];
+
+  if (log.text === null) {
+    return {
+      target_block: targetBlock,
+      source_block: sourceBlock,
+      log_path: log.path,
+      status: "log_unavailable",
+      ran: false,
+      detail_complete: false,
+      solve_ring_count: 0,
+      solve_ring_token_count: 0,
+      competitor_token_count: tokens.size,
+      candidate_ring_token_overlap_count: 0,
+      candidate_ring_token_overlap_tokens: [],
+      any_submission_in_source_pass: false,
+      route_match_proven: false,
+      log_error: log.error ?? "log unavailable",
+      limitations,
+    };
+  }
+
+  let activity = activityCache?.get(sourceBlock);
+  if (!activity) {
+    activity = blockScanActivityAtBlock(log.text, sourceBlock);
+    activityCache?.set(sourceBlock, activity);
+  }
+  const overlap = [...tokens]
+    .filter((token) => activity.scannedTokens.has(token))
+    .sort();
+  return {
+    target_block: targetBlock,
+    source_block: sourceBlock,
+    log_path: log.path,
+    status: activity.status,
+    ran: activity.ran,
+    detail_complete: activity.detailComplete,
+    solve_ring_count: activity.ringCount,
+    solve_ring_token_count: activity.scannedTokens.size,
+    competitor_token_count: tokens.size,
+    candidate_ring_token_overlap_count: overlap.length,
+    candidate_ring_token_overlap_tokens: overlap,
+    any_submission_in_source_pass: activity.anySubmitted,
+    route_match_proven: false,
+    log_min_source_block: activity.minBlock,
+    log_max_source_block: activity.maxBlock,
+    limitations,
+  };
+}
+
+export function classifyWatchVisibility(
+  seenScope: WatchReport["seenScope"],
+  blockScan: WatchBlockScanAudit,
+): WatchVisibilityDecision {
+  if (seenScope === "same_pool" || seenScope === "same_token") {
+    return {
+      primaryReason: "seen_but_lost",
+      primaryReasonBasis: "backrun_event_overlap",
+    };
+  }
+  if (blockScan.status === "complete") {
+    return {
+      primaryReason: "blockscan_ran_no_jsonl_signal",
+      primaryReasonBasis: "blockscan_source_pass_complete",
+    };
+  }
+  if (blockScan.status === "not_running" || blockScan.status === "skipped_busy") {
+    return {
+      primaryReason: "not_seen",
+      primaryReasonBasis: "blockscan_source_pass_absent",
+    };
+  }
+  return {
+    primaryReason: "unknown_without_blockscan_evidence",
+    primaryReasonBasis: "blockscan_evidence_unavailable_or_incomplete",
+  };
+}
+
+export function isWatchNotSeen(reason: WatchPrimaryReason): boolean {
+  return reason === "not_seen";
 }
 
 export function defaultGraphPoolsPath(): string {
@@ -284,7 +467,7 @@ function isUniv4Adapter(value: unknown): boolean {
 
 async function runWatchMode(): Promise<void> {
   const range = inferWatchRange(events);
-  const seenByBlock = buildSeenByBlock(events);
+  const seenByBlock = buildBackrunSeenByBlock(events);
   const watchSet = new Set(watch);
   const notSeenByGapType: Record<GapType, number> = {
     graph_gap: 0,
@@ -298,6 +481,12 @@ async function runWatchMode(): Promise<void> {
     detection_gap: 0,
     unknown: 0,
   };
+  const primaryReasonCounts: Record<WatchPrimaryReason, number> = {
+    not_seen: 0,
+    seen_but_lost: 0,
+    blockscan_ran_no_jsonl_signal: 0,
+    unknown_without_blockscan_evidence: 0,
+  };
   const ethUsd = await fetchEthUsd(rpc);
   const allowTrace = priceTrace || rpc.isLocal();
   const pricedTxs: PricedLeg[] = [];
@@ -309,7 +498,8 @@ async function runWatchMode(): Promise<void> {
   let builderPaymentTotalUsd = 0;
   let builderPaymentPricedTxs = 0;
   console.error(
-    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} price_trace=${allowTrace ? "on" : "off"}`,
+    `[analysis/live-loss/watch] blocks=${range.from}-${range.to} watch=${watch.length} ethUsd=${ethUsd.toFixed(0)} ` +
+      `price_trace=${allowTrace ? "on" : "off"} blockscan_log=${blockScanLog.path}`,
   );
 
   for (let blockNumber = range.from; blockNumber <= range.to; blockNumber++) {
@@ -332,8 +522,9 @@ async function runWatchMode(): Promise<void> {
       const receipt = await rpc.getReceipt(tx.hash);
       if (!receipt || receipt.status !== "0x1") return;
       const report = await buildWatchReport(blockNumber, tx, receipt, seenByBlock);
-      if (report.primaryReason === "not_seen" && report.gap_type) notSeenByGapType[report.gap_type]++;
-      if (report.primaryReason === "not_seen" && report.venue_gap_type) notSeenByVenueGapType[report.venue_gap_type]++;
+      primaryReasonCounts[report.primaryReason]++;
+      if (isWatchNotSeen(report.primaryReason) && report.gap_type) notSeenByGapType[report.gap_type]++;
+      if (isWatchNotSeen(report.primaryReason) && report.venue_gap_type) notSeenByVenueGapType[report.venue_gap_type]++;
       const entityActors = inferWatchEntityActors(tx, report.competitorAddr);
       const profit = await priceArb(rpc, tx.hash, tx, receipt, ethUsd, {
         entityActors,
@@ -376,6 +567,12 @@ async function runWatchMode(): Promise<void> {
   await emitNonceCompletenessChecks(range, matchedFromByBot);
   await enrichWrittenV4Reports(writtenReports);
   console.error(`[analysis/live-loss/watch] reports=${written}`);
+  console.error(
+    `[analysis/live-loss/watch] primary_reasons not_seen=${primaryReasonCounts.not_seen} ` +
+      `seen_but_lost=${primaryReasonCounts.seen_but_lost} ` +
+      `blockscan_ran_no_jsonl_signal=${primaryReasonCounts.blockscan_ran_no_jsonl_signal} ` +
+      `unknown_without_blockscan_evidence=${primaryReasonCounts.unknown_without_blockscan_evidence}`,
+  );
   console.error(
     `[analysis/live-loss/watch] not_seen_gap_types graph_gap=${notSeenByGapType.graph_gap} ` +
       `detection_gap=${notSeenByGapType.detection_gap} unknown=${notSeenByGapType.unknown}`,
@@ -502,9 +699,12 @@ function inferWatchEntityActors(tx: any, matched: string[]): string[] {
   return [...actors];
 }
 
-function buildSeenByBlock(items: any[]): Map<number, SeenSet> {
+export function buildBackrunSeenByBlock(items: any[]): Map<number, SeenSet> {
   const out = new Map<number, SeenSet>();
   for (const e of items) {
+    // block-scan-arb is the standing-state atomic lane. Keep it out of the
+    // legacy/backrun seen scope so the two production paths remain auditable.
+    if (e?.opportunity_kind === "block-scan-arb") continue;
     const block = Number(e.target_block ?? e.block);
     if (!Number.isFinite(block)) continue;
     const seen = out.get(block) ?? { pools: new Set<string>(), tokens: new Set<string>(), any: false };
@@ -535,16 +735,20 @@ async function buildWatchReport(
   const samePool = pools.some((pool) => seen.pools.has(pool));
   const sameToken = tokens.some((token) => seen.tokens.has(token));
   const seenScope = samePool ? "same_pool" : sameToken ? "same_token" : seen.any ? "block_only" : "none";
-  const decoded = pools.length > 0 || tokens.length > 0;
-  const primaryReason = decoded
-    ? (samePool || sameToken ? "seen_but_lost" : "not_seen")
-    : (seen.any ? "seen_but_lost" : "not_seen");
+  const blockScanAudit = buildWatchBlockScanAudit(
+    block,
+    tokens,
+    blockScanLog,
+    blockScanActivityBySource,
+  );
+  const visibility = classifyWatchVisibility(seenScope, blockScanAudit);
+  const primaryReason = visibility.primaryReason;
   const poolInSeenEvents = pools.some((pool) => seen.pools.has(pool));
   const graphPools = routingGraphPools;
   const poolInRoutingGraph = summarizePoolMembership(poolIdentities, graphPools, activeV4PoolIds);
   const venueGaps = await classifyVenueGapsForIdentities(poolIdentities, graphPools, activeV4PoolIds);
-  const gapType = primaryReason === "not_seen" ? classifyGapType(poolInRoutingGraph) : null;
-  const venueGapType = primaryReason === "not_seen" ? summarizeVenueGapType(venueGaps) : null;
+  const gapType = isWatchNotSeen(primaryReason) ? classifyGapType(poolInRoutingGraph) : null;
+  const venueGapType = isWatchNotSeen(primaryReason) ? summarizeVenueGapType(venueGaps) : null;
   const lpAction = classifyLpAction(receipt.logs ?? []);
 
   return {
@@ -552,7 +756,10 @@ async function buildWatchReport(
     competitorTx: tx.hash,
     competitorAddr: matched,
     primaryReason,
+    primaryReasonBasis: visibility.primaryReasonBasis,
     seenScope,
+    seenScopeLane: "backrun_events",
+    blockscan_lane: blockScanAudit,
     canonicalSequence: sequence,
     pathTemplate: pathTemplate(sequence),
     pools,
@@ -579,7 +786,7 @@ async function buildWatchReport(
     v4_pool_ids: [],
     v4_swaps_detail: [],
     trace_used: false,
-    nextAction: watchNextActions(primaryReason, seenScope, pools),
+    nextAction: watchNextActions(primaryReason, seenScope, pools, blockScanAudit),
     rawDeltas: logResult.rawDeltas,
   };
 }
@@ -776,10 +983,30 @@ function watchNextActions(
   primaryReason: WatchReport["primaryReason"],
   seenScope: WatchReport["seenScope"],
   pools: string[],
+  blockScan: WatchBlockScanAudit,
 ): string[] {
   if (primaryReason === "not_seen") {
-    if (pools.length > 0) return ["check pool universe, pending detector coverage, and token filters for watched competitor pool"];
-    return ["decode watched tx deeper; no pool address was recovered from logs"];
+    if (pools.length > 0) {
+      return [
+        `source block ${blockScan.source_block} had no blockscan pass (${blockScan.status}); ` +
+          "check blockscan scheduling plus backrun pool universe and detector coverage",
+      ];
+    }
+    return [
+      `source block ${blockScan.source_block} had no blockscan pass (${blockScan.status}); ` +
+        "decode watched tx deeper because no pool address was recovered from logs",
+    ];
+  }
+  if (primaryReason === "blockscan_ran_no_jsonl_signal") {
+    return [
+      "inspect blockscan candidate/quote rejection telemetry; solve-ring token overlap alone does not prove the competitor route was seen",
+    ];
+  }
+  if (primaryReason === "unknown_without_blockscan_evidence") {
+    return [
+      `recover a complete blockscan source-pass log for block ${blockScan.source_block} before assigning not_seen ` +
+        `(current status: ${blockScan.status})`,
+    ];
   }
   if (seenScope === "same_pool") return ["compare planner output, solver drop reason, bid, and latency for the same pool"];
   if (seenScope === "same_token") return ["check whether our pool graph missed the competitor venue for the same token set"];
@@ -806,7 +1033,8 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push("## Loss");
   lines.push("");
   lines.push(`- primary_reason: \`${report.primaryReason}\``);
-  lines.push(`- seen_scope: \`${report.seenScope}\``);
+  lines.push(`- primary_reason_basis: \`${report.primaryReasonBasis}\``);
+  lines.push(`- seen_scope: \`${report.seenScope}\` (lane: \`${report.seenScopeLane}\`)`);
   lines.push(`- path_template: \`${report.pathTemplate}\``);
   lines.push(`- canonical_sequence: \`${report.canonicalSequence.join(" -> ") || "unknown"}\``);
   lines.push(`- competitor_edge: ${report.competitorEdge.map((x) => `\`${x}\``).join(", ") || "n/a"}`);
@@ -847,6 +1075,28 @@ function renderWatchMarkdown(report: WatchReport): string {
   lines.push(`- gap_type: \`${report.gap_type ?? "n/a"}\``);
   lines.push(`- venue_gap_type: \`${report.venue_gap_type ?? "n/a"}\``);
   lines.push(`- protocols: ${report.protocols.join(", ") || "n/a"}`);
+  lines.push("");
+  lines.push("## Blockscan Lane Audit");
+  lines.push("");
+  lines.push(`- target_block: \`${report.blockscan_lane.target_block}\``);
+  lines.push(`- source_block: \`${report.blockscan_lane.source_block}\``);
+  lines.push(`- status: \`${report.blockscan_lane.status}\``);
+  lines.push(`- ran: \`${report.blockscan_lane.ran}\``);
+  lines.push(`- detail_complete: \`${report.blockscan_lane.detail_complete}\``);
+  lines.push(`- solve_ring_count: ${report.blockscan_lane.solve_ring_count}`);
+  lines.push(`- solve_ring_token_count: ${report.blockscan_lane.solve_ring_token_count}`);
+  lines.push(`- competitor_token_count: ${report.blockscan_lane.competitor_token_count}`);
+  lines.push(
+    `- candidate_ring_token_overlap_count: ${report.blockscan_lane.candidate_ring_token_overlap_count}`,
+  );
+  lines.push(
+    `- candidate_ring_token_overlap_tokens: ${report.blockscan_lane.candidate_ring_token_overlap_tokens.map((x) => `\`${x}\``).join(", ") || "n/a"}`,
+  );
+  lines.push(`- any_submission_in_source_pass: \`${report.blockscan_lane.any_submission_in_source_pass}\``);
+  lines.push(`- route_match_proven: \`${report.blockscan_lane.route_match_proven}\``);
+  lines.push(`- log_path: \`${report.blockscan_lane.log_path}\``);
+  if (report.blockscan_lane.log_error) lines.push(`- log_error: \`${report.blockscan_lane.log_error}\``);
+  for (const limitation of report.blockscan_lane.limitations) lines.push(`- limitation: ${limitation}`);
   if (report.venue_gaps.length > 0) {
     lines.push("");
     lines.push("## Venue Gaps");

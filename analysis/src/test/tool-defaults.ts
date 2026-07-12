@@ -116,7 +116,7 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /npm run build/);
   assert.match(
     script,
-    /node --import tsx --test src\/test\/blockscan-log-join\.ts src\/test\/block-activity\.ts/,
+    /node --import tsx --test src\/test\/blockscan-log-join\.ts src\/test\/block-activity\.ts[\s\\]*src\/test\/live-loss-blockscan\.ts/,
   );
   assert.ok(
     script.indexOf("analysis preflight failed") < script.indexOf("systemctl restart mev-searcher"),

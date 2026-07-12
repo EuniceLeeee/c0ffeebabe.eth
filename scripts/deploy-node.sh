@@ -170,7 +170,8 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 ( cd "$REPO/analysis" \
     && npm ci --include=dev --prefer-offline --no-audit --no-fund \
     && npm run build \
-    && node --import tsx --test src/test/blockscan-log-join.ts src/test/block-activity.ts ) \
+    && node --import tsx --test src/test/blockscan-log-join.ts src/test/block-activity.ts \
+      src/test/live-loss-blockscan.ts ) \
   || { say "analysis preflight failed — NOT restarting"; exit 1; }
 
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
