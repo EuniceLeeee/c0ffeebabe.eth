@@ -589,6 +589,9 @@ async function main(): Promise<void> {
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
   const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
+  const blockScanStartupWarmBudgetMs = Number(
+    process.env.SEARCHER_BLOCKSCAN_STARTUP_WARM_BUDGET_MS ?? "30000",
+  );
   const blockScanSolveConcurrencyRaw = Number(process.env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
@@ -1069,7 +1072,8 @@ async function main(): Promise<void> {
           segLogged = true;
           console.log(`[searcher/blockscan] block=${blockNumber} stage ${segStr()}`);
         };
-        const passDeadlineAtMs = passStarted + blockScanPassBudgetMs;
+        let activePassBudgetMs = blockScanPassBudgetMs;
+        let passDeadlineAtMs = passStarted + activePassBudgetMs;
         let passBudgetLogged = false;
         const passBudgetExceeded = (stage: string): boolean => {
           if (Date.now() < passDeadlineAtMs) return false;
@@ -1077,7 +1081,7 @@ async function main(): Promise<void> {
             passBudgetLogged = true;
             console.log(
               `[searcher/blockscan] block=${blockNumber} pass_budget_exceeded ` +
-                `stage=${stage} ms=${Date.now() - passStarted} budgetMs=${blockScanPassBudgetMs}`,
+                `stage=${stage} ms=${Date.now() - passStarted} budgetMs=${activePassBudgetMs}`,
             );
           }
           return true;
@@ -1108,6 +1112,10 @@ async function main(): Promise<void> {
           }
 
           console.log(`[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)}`);
+          if (warmPlan.kind === "full" && warmPlan.reason === "startup") {
+            activePassBudgetMs = Math.max(blockScanPassBudgetMs, blockScanStartupWarmBudgetMs);
+            passDeadlineAtMs = passStarted + activePassBudgetMs;
+          }
           if (warmPlan.kind === "full") {
             blockScanCacheForPass.clear();
           } else {

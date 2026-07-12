@@ -179,9 +179,9 @@ The hourly opening `reap` also reconciles runtime liveness: `state=running` with
 immediately as `crashed_needs_escalation`, restores A's CPUs, preserves the branch/evidence, and advances to
 the next problem. It never waits for the nominal lease to expire.
 **Traps (codified 2026-07-08/12):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Startup
-full warm under load can't finish the budget → early-return → `lastWarmedBlock` never set → `warm=full`
-DEATH-SPIRAL; escape by bumping `SEARCHER_BLOCKSCAN_PASS_BUDGET_MS` for the first warm, or deploy at normal
-load (latent bug: make startup warm budget-resilient). • stableswap-NG `stored_rate` refreshes OFF-event →
+full warm has its own one-time `SEARCHER_BLOCKSCAN_STARTUP_WARM_BUDGET_MS` (default 30000); regular passes
+remain 11000. The B wrapper refuses readiness until one complete `scannedPairs=` pass, preventing the old
+`lastWarmedBlock=null` / `warm=full` death spiral from masquerading as a healthy deploy. • stableswap-NG `stored_rate` refreshes OFF-event →
 getLogs-changed incremental MISSES it → always re-warm `kind==="ng"`, only plain-curve is event-incremental.
 • A fork-gate revert can be a FIXTURE artifact (take pinned to a realized amount on a post-tx fork →
 CurrencyNotSettled), not a live bug (live re-quotes via `propagateAmountsWithRawOutputs`) — separate

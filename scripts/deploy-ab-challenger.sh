@@ -138,7 +138,8 @@ capture_fairness() {
     a_pid_after "$a_pid_after" champion_pid_changed "$pid_changed" \
     b_restarts "$b_now" \
     a_universe_hash_after "$(hash_or_unavailable "$a_path")" \
-    b_universe_hash_after "$(hash_or_unavailable "$b_path")"
+    b_universe_hash_after "$(hash_or_unavailable "$b_path")" \
+    failure_reason ""
 }
 
 reap_stale() {
@@ -396,12 +397,25 @@ deploy() {
   grep -q 'mempool=disabled' "$LOG" || { stop_b; die "challenger mempool-off banner missing"; }
   ! grep -q 'MEV-Share SSE connected' "$LOG" || { stop_b; die "challenger unexpectedly connected to MEV-Share"; }
   ! grep -q 'src=mev-share' "$LOG" || { stop_b; die "challenger unexpectedly processed a MEV-Share hint"; }
+  local scan_ready=0
+  for _ in $(seq 1 90); do
+    if grep -q '\[searcher/blockscan\] block=.*scannedPairs=' "$LOG"; then
+      scan_ready=1
+      break
+    fi
+    sleep 1
+  done
+  [ "$scan_ready" = "1" ] || { stop_b; die "challenger never completed its first block-scan pass"; }
   [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
+  local a_universe_hash b_universe_hash
+  a_universe_hash=$(hash_file "$A_UNIVERSE")
+  b_universe_hash=$(hash_file "$B_UNIVERSE")
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
     a_commit "$a_commit" b_commit "$b_commit" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
-    a_universe_hash "$(hash_file "$A_UNIVERSE")" b_universe_hash "$(hash_file "$B_UNIVERSE")" \
+    a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
+    a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
     a_restarts_before "$a_restarts_before" a_restart_delta 0 b_restarts 0 \
     a_pid_before "$a_pid_before" a_pid_after "$a_pid_before" champion_pid_changed 0 \
