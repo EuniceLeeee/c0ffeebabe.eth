@@ -137,6 +137,21 @@ export interface ActorBatchCandidate {
   };
 }
 
+export interface BlockFingerprint {
+  block: number;
+  builder_hint: string;
+  coinbase: string;
+  matched_tx_count: number;
+  per_sender: Array<{
+    from: string;
+    tx_count: number;
+    min_index: number | null;
+    max_index: number | null;
+    consecutive: boolean;
+    top_of_block: boolean;
+  }>;
+}
+
 export interface CensusReport {
   command: "census-report";
   verdict: {
@@ -160,6 +175,9 @@ export interface CensusReport {
     actor_batch_candidates: number;
     top_of_block_actor_batches: number;
     max_actor_batch_txs: number;
+    /** Raw watch-matched sender activity. Unlike actor_batches this includes
+     *  singleton, sparse, failed, and different-executor transactions. */
+    block_fingerprints: BlockFingerprint[];
     skipped_below_profit: number;
     distinct_out_of_graph: {
       univ2: number;
@@ -194,6 +212,7 @@ async function main(): Promise<void> {
   const ethUsd = await fetchEthUsd(rpc);
   const watchSet = new Set(watch);
   const perTx: CensusPerTx[] = [];
+  const blockFingerprints: BlockFingerprint[] = [];
 
   for (let blockNumber = fromBlock; blockNumber <= toBlock; blockNumber++) {
     const block = await rpc.getBlockByNumber(blockNumber, true);
@@ -202,6 +221,7 @@ async function main(): Promise<void> {
     const blockBuilderHint = decodeExtraData(block?.extraData);
     const txs: any[] = Array.isArray(block?.transactions) ? block.transactions : [];
     const matches = txs.filter((tx) => txMatchesWatch(tx, watchSet));
+    if (matches.length > 0) blockFingerprints.push(buildBlockFingerprint(blockNumber, block, matches));
     const actorTxHashes = actorTxHashesBySender(txs);
     const sameBlockSwapLogs = matches.length > 0
       ? await fetchSameBlockSwapLogs(rpc, blockNumber, txs)
@@ -253,7 +273,13 @@ async function main(): Promise<void> {
     }
   }
 
-  const report = buildCensusReport(perTx, minProfitUsd, { from: fromBlock, to: toBlock }, watch);
+  const report = buildCensusReport(
+    perTx,
+    minProfitUsd,
+    { from: fromBlock, to: toBlock },
+    watch,
+    blockFingerprints,
+  );
   const json = `${JSON.stringify(report, jsonReplacer, 2)}\n`;
   process.stdout.write(json);
   if (outPath) await writeText(outPath, json);
@@ -269,6 +295,7 @@ export function buildCensusReport(
   minProfitUsd: number,
   window: BlockWindow,
   watch: string[],
+  blockFingerprints: BlockFingerprint[] = [],
 ): CensusReport {
   const analyzed: AnalyzedCompetitor[] = [];
   const shapeByHash = classifyCensusTxShapes(perTx);
@@ -369,6 +396,7 @@ export function buildCensusReport(
       actor_batch_candidates: actorBatches.length,
       top_of_block_actor_batches: actorBatches.filter((batch) => batch.top_of_block).length,
       max_actor_batch_txs: actorBatches.reduce((max, batch) => Math.max(max, batch.tx_count), 0),
+      block_fingerprints: [...blockFingerprints].sort((a, b) => a.block - b.block),
       skipped_below_profit: skippedBelowProfit,
       distinct_out_of_graph: {
         univ2: distinct.univ2.size,
@@ -677,6 +705,65 @@ function txMatchesWatch(tx: any, watchSet: Set<string>): boolean {
   return watchSet.has(from) || watchSet.has(to);
 }
 
+export function buildBlockFingerprint(
+  blockNumber: number,
+  block: any,
+  matches: any[],
+): BlockFingerprint {
+  const bySender = new Map<string, any[]>();
+  for (const tx of matches) {
+    const from = lower(String(tx?.from ?? ""));
+    if (!from) continue;
+    const senderTxs = bySender.get(from) ?? [];
+    senderTxs.push(tx);
+    bySender.set(from, senderTxs);
+  }
+
+  const perSender = [...bySender.entries()].map(([from, transactions]) => {
+    const indices = transactions
+      .map((tx) => optionalQuantityNumber(tx?.transactionIndex))
+      .filter((index): index is number => index !== undefined)
+      .sort((a, b) => a - b);
+    const completeIndices = indices.length === transactions.length;
+    const consecutive = completeIndices && isConsecutive(indices);
+    const minIndex = indices[0] ?? null;
+    const maxIndex = indices.at(-1) ?? null;
+    return {
+      from,
+      tx_count: transactions.length,
+      min_index: minIndex,
+      max_index: maxIndex,
+      consecutive,
+      top_of_block: minIndex === 0 && consecutive,
+    };
+  });
+  perSender.sort((a, b) =>
+    (a.min_index ?? Number.MAX_SAFE_INTEGER) - (b.min_index ?? Number.MAX_SAFE_INTEGER)
+    || a.from.localeCompare(b.from)
+  );
+
+  return {
+    block: blockNumber,
+    builder_hint: decodeExtraData(block?.extraData),
+    coinbase: lower(String(block?.miner ?? "")),
+    matched_tx_count: matches.length,
+    per_sender: perSender,
+  };
+}
+
+export function renderBlockFingerprint(fingerprint: BlockFingerprint): string {
+  const senders = fingerprint.per_sender.map((sender) => {
+    const indexRange = sender.min_index === null
+      ? "idx ?"
+      : `idx ${sender.min_index}-${sender.max_index}`;
+    const posture = sender.top_of_block
+      ? " TOP-OF-BLOCK"
+      : sender.consecutive ? " consecutive" : " spread";
+    return `${sender.from.slice(0, 10)}…: ${sender.tx_count} txs ${indexRange}${posture}`;
+  });
+  return `block ${fingerprint.block} builder=${fingerprint.builder_hint || "?"} ${senders.join(" | ")}`;
+}
+
 function actorTxHashesBySender(transactions: any[]): Map<string, string[]> {
   const result = new Map<string, string[]>();
   for (const tx of transactions) {
@@ -698,6 +785,7 @@ function selectorFromInput(input: unknown): string {
 }
 
 function optionalQuantityNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) return undefined;
   const parsed = Number(hexToBigInt(value));
   return Number.isSafeInteger(parsed) ? parsed : undefined;
@@ -713,7 +801,7 @@ function isAddress(value: string): boolean {
 
 function renderHumanSummary(report: CensusReport, graph: GraphMembership, minProfitUsd: number): string {
   const { summary } = report;
-  return [
+  const headline = [
     "[analysis/census-report]",
     `blocks=${summary.window.from}-${summary.window.to}`,
     `watch=${summary.watch.length}`,
@@ -727,6 +815,7 @@ function renderHumanSummary(report: CensusReport, graph: GraphMembership, minPro
     `route_gap_decisive=${String(report.verdict.route_gap_decisive)}`,
     `net_realized_usd=${summary.net_realized_usd.toFixed(2)}`,
   ].join(" ");
+  return [headline, ...summary.block_fingerprints.map(renderBlockFingerprint)].join("\n");
 }
 
 function jsonReplacer(_key: string, value: unknown): unknown {
