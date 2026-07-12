@@ -19,7 +19,9 @@ EXPECTED_BOTVM=0xCF471995e8FbD99F8dBE8377FA67Db89Ab18af24
 EXPECTED_A_WALLET=0xb8578B6de173C8554FF0390dB5a7effA567DDA3c
 EXPECTED_A_BOTVM=0x4aF9495C4aC24c5CD3b0C90611550a1996415BCe
 LOCAL_RPC=http://127.0.0.1:8545
-LEASE_SECONDS=${AB_LEASE_SECONDS:-3300}
+# A measured Hermes window is 60 minutes after challenger cold-start/warmup. Keep one bounded lease long
+# enough for warmup + the full window + close; stale/crashed slots are still reaped automatically.
+LEASE_SECONDS=${AB_LEASE_SECONDS:-5400}
 PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
 FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-240}
 
@@ -44,7 +46,7 @@ file_env_get() { sed -n "s/^$2=//p" "$1" | tail -1; }
 lower() { tr '[:upper:]' '[:lower:]'; }
 valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; }
 valid_branch() { [[ "$1" =~ ^ab/[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$ ]]; }
-[ "$LEASE_SECONDS" -ge 300 ] && [ "$LEASE_SECONDS" -le 3600 ] || die "AB_LEASE_SECONDS must be 300..3600"
+[ "$LEASE_SECONDS" -ge 300 ] && [ "$LEASE_SECONDS" -le 7200 ] || die "AB_LEASE_SECONDS must be 300..7200"
 [ "$PAUSE_LEASE_SECONDS" -ge 60 ] && [ "$PAUSE_LEASE_SECONDS" -le 1800 ] || die "AB_PAUSE_LEASE_SECONDS must be 60..1800"
 [ "$FIRST_SCAN_TIMEOUT_SECONDS" -ge 90 ] && [ "$FIRST_SCAN_TIMEOUT_SECONDS" -le 600 ] \
   || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..600"
