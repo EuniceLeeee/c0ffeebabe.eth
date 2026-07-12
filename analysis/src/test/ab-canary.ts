@@ -84,6 +84,39 @@ test("solvePositive counts only strictly positive net profit", () => {
   assert.equal(parseBlockScanLog(text).get(100)?.events.solvePositive, 1);
 });
 
+test("block labels and busy notifications preserve active-pass attribution", () => {
+  const text = [
+    "[searcher/blockscan] block=100 warm=incremental changed=1 changedCurve=0 range=100-100 logs=1",
+    "[searcher/blockscan]   solve ring=legacy>A>legacy net=null error=no_quote standing=false protoRing=false",
+    "[searcher/blockscan] block=101 skipped=busy",
+    "[searcher/blockscan] block=100 solve ring=labeled>B>labeled net=5 standing=false protoRing=false",
+    "[searcher/blockscan] block=100 submitted atomic via eth_sendBundle targetBlock=101 profit=5 route=x",
+    "[searcher/blockscan] block=100 scannedPairs=10 candidates=2 quotePositive=1 bestNet=5 warmedV2V3=3 protocolMids=2 skippedVenues=0 ms=10",
+    "[searcher/blockscan] block=100 stage warm_curve=2ms solve=8ms total=10ms",
+  ].join("\n");
+
+  const parsed = parseBlockScanLog(text);
+  assert.deepEqual([...parsed.get(100)!.rings].sort(), [
+    "labeled>B>labeled",
+    "legacy>A>legacy",
+  ]);
+  assert.equal(parsed.get(100)?.events.solvePositive, 1);
+  assert.equal(parsed.get(100)?.events.submitted, 1);
+  assert.equal(parsed.get(101)?.rings.size ?? 0, 0);
+});
+
+test("legacy warmedV2V3 marker still starts an unlabelled pass", () => {
+  const text = [
+    "[searcher/blockscan] block=200 warmedV2V3=3 warmedCurve=1 v3TickMeta=2 protocolMids=2",
+    "[searcher/blockscan]   solve ring=A>B>A net=null error=no_quote standing=false protoRing=false",
+    "[searcher/blockscan] block=201 skipped=busy",
+    "[searcher/blockscan] block=200 scannedPairs=10 candidates=1 quotePositive=0 bestNet=null warmedV2V3=3 protocolMids=2 skippedVenues=0 ms=10",
+    "[searcher/blockscan] block=200 stage warm_curve=2ms solve=8ms total=10ms",
+  ].join("\n");
+
+  assert.deepEqual([...parseBlockScanLog(text).get(200)!.rings], ["A>B>A"]);
+});
+
 test("event regression from a zero A baseline contradicts instead of becoming inconclusive", () => {
   const b = log(100).split("\n").flatMap((line) => line.includes("scannedPairs=")
     ? [line, "[searcher/blockscan]   final sim rejected ring=x route=y error=z"]

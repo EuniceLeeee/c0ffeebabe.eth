@@ -1270,7 +1270,7 @@ async function main(): Promise<void> {
                   blacklistSkipLogged.add(routeKey);
                   const ring = formatBlockScanRing(opp);
                   console.log(
-                    `[searcher/blockscan]   blacklist skip ring=${ring} ` +
+                    `[searcher/blockscan] block=${blockNumber} blacklist skip ring=${ring} ` +
                       `strikes=${blacklistEntry.strikes} ` +
                       `ttlRemaining=${blacklistEntry.expiryBlock - blockNumber}`,
                   );
@@ -1300,7 +1300,7 @@ async function main(): Promise<void> {
               }
               if (plans.length === 0) {
                 console.log(
-                  `[searcher/blockscan]   solve ring=${ring} net=null error=no_plans ` +
+                  `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null error=no_plans ` +
                   `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
                 );
                 continue;
@@ -1315,7 +1315,7 @@ async function main(): Promise<void> {
               });
             } catch (err) {
               console.log(
-                `[searcher/blockscan]   solve ring=${ring} net=null ` +
+                `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null ` +
                   `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
                   `protoRing=${protoRing}`,
               );
@@ -1355,7 +1355,7 @@ async function main(): Promise<void> {
               if (solved.netProfit > 0n) quotePositive++;
               if (bestNet === null || solved.netProfit > bestNet) bestNet = solved.netProfit;
               console.log(
-                `[searcher/blockscan]   solve ring=${ring} net=${solved.netProfit} ` +
+                `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=${solved.netProfit} ` +
                   `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
               );
               if (solved.netProfit > 0n) {
@@ -1395,7 +1395,7 @@ async function main(): Promise<void> {
               }
             } catch (err) {
               console.log(
-                `[searcher/blockscan]   solve ring=${ring} net=null ` +
+                `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null ` +
                   `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
                   `protoRing=${protoRing}`,
               );
@@ -2771,7 +2771,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   if (!config.blockScanSubmit) {
     const reason = "SEARCHER_BLOCKSCAN_SUBMIT!=1";
     console.log(
-      `[searcher/blockscan]   submit gated-off ring=${ring} route=${route} ` +
+      `[searcher/blockscan] block=${sourceBlock} submit gated-off ring=${ring} route=${route} ` +
         `net=${resolved.netProfit} reason=${reason} protoRing=${protoRing}`,
     );
     drop(sourceBlock + 1, "submit_gate", "blockscan_submit_disabled", reason);
@@ -2786,7 +2786,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     const error =
       `quoteProfit ${resolved.netProfit} below final verify floor ` +
       `${config.finalVerifyFloorBps}bps`;
-    console.log(`[searcher/blockscan]   final verify skipped ring=${ring}: ${error}`);
+    console.log(`[searcher/blockscan] block=${sourceBlock} final verify skipped ring=${ring}: ${error}`);
     drop(sourceBlock + 1, "final_verify", "below_final_verify_floor", error);
     return;
   }
@@ -2809,7 +2809,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       const error = sim.revertReason ?? "no-positive-profit";
       recordBlockScanRejectStrike(rejectBlacklist, opp, sourceBlock);
       console.log(
-        `[searcher/blockscan]   final sim rejected ring=${ring} route=${route} ` +
+        `[searcher/blockscan] block=${sourceBlock} final sim rejected ring=${ring} route=${route} ` +
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,
       );
       drop(targetBlock, "final_verify", "sim_revert", error);
@@ -2818,7 +2818,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     clearBlockScanRejectStrikes(rejectBlacklist, opp);
     if (sim.netProfit <= 0n) {
       const error = `non-positive final profit ${sim.netProfit}`;
-      console.log(`[searcher/blockscan]   final verify failed ring=${ring}: ${error}`);
+      console.log(`[searcher/blockscan] block=${sourceBlock} final verify failed ring=${ring}: ${error}`);
       drop(targetBlock, "final_verify", "final_verify_failed", error);
       return;
     }
@@ -2830,7 +2830,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       const error =
         `phantom profit ${sim.netProfit} > ${config.maxProfitBpsOfFlash}bps of ` +
         `flash ${resolved.flashAmount} route=${route}`;
-      console.log(`[searcher/blockscan]   reject phantom ring=${ring}: ${error}`);
+      console.log(`[searcher/blockscan] block=${sourceBlock} reject phantom ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "phantom_profit", error);
       return;
     }
@@ -2865,7 +2865,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     );
     if (!standingGuard.allowed) {
       const error = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
-      console.log(`[searcher/blockscan]   reject standing-position ring=${ring}: ${error}`);
+      console.log(`[searcher/blockscan] block=${sourceBlock} reject standing-position ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", standingGuard.reason, error);
       return;
     }
@@ -2877,12 +2877,12 @@ async function maybeSubmitBlockScanAtomic(params: {
           `EV gate: net ${netEvWei} < ${config.minNetEth} ` +
           `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
           `token=${resolved.profitToken.slice(0, 10)})`;
-        console.log(`[searcher/blockscan]   skip below-EV ring=${ring}: ${error}`);
+        console.log(`[searcher/blockscan] block=${sourceBlock} skip below-EV ring=${ring}: ${error}`);
         drop(targetBlock, "submit_gate", "below_ev_gate", error);
         return;
       }
       console.log(
-        `[searcher/blockscan]   EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
+        `[searcher/blockscan] block=${sourceBlock} EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
           `profitEth=${ethers.formatEther(expectedProfitEth)} ` +
           `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)}`,
       );
@@ -2897,7 +2897,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     });
     if (!decision.admit) {
       console.log(
-        `[searcher/blockscan]   submit gated ring=${ring} targetBlock=${targetBlock} ` +
+        `[searcher/blockscan] block=${sourceBlock} submit gated ring=${ring} targetBlock=${targetBlock} ` +
           `reason=${decision.reason}`,
       );
       drop(targetBlock, "submit_gate", decision.reason);
@@ -2921,13 +2921,13 @@ async function maybeSubmitBlockScanAtomic(params: {
     const accepted = results.filter((r) => r.accepted).length;
     if (!backrunTxHash) {
       const error = results.find((r) => r.error)?.error ?? "missing backrun tx hash";
-      console.log(`[searcher/blockscan]   submit failed ring=${ring}: ${error}`);
+      console.log(`[searcher/blockscan] block=${sourceBlock} submit failed ring=${ring}: ${error}`);
       drop(targetBlock, "submit", "bundle_router_rejected", error);
       return;
     }
 
     console.log(
-      `[searcher/blockscan]   ${config.dryRun ? "dry-run queued" : "submitted"} ` +
+      `[searcher/blockscan] block=${sourceBlock} ${config.dryRun ? "dry-run queued" : "submitted"} ` +
         `atomic via eth_sendBundle targetBlock=${targetBlock} profit=${sim.netProfit} ` +
         `route=${route}${bundleHash ? ` bundleHash=${bundleHash}` : ""}`,
     );
@@ -2957,7 +2957,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    console.log(`[searcher/blockscan]   submit error ring=${ring}: ${error}`);
+    console.log(`[searcher/blockscan] block=${sourceBlock} submit error ring=${ring}: ${error}`);
     drop(targetBlock, "submit", "blockscan_submit_error", error);
   }
 }

@@ -55,18 +55,19 @@ export type AbCompareResult = {
 const SUMMARY_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=(\d+)\s+candidates=(\d+)\s+quotePositive=(\d+)\s+bestNet=(null|-?\d+)\s+warmedV2V3=(\d+)\s+protocolMids=(\d+)\s+skippedVenues=(\d+)\s+ms=(\d+)/;
 const STAGE_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+stage\s+(.+)$/;
 const BLOCK_RE = /\[searcher\/blockscan\]\s+block=(\d+)\b/;
-const SOLVE_RE = /\[searcher\/blockscan\]\s+solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
+const PASS_START_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+(?:warm=(?:full|incremental)\b|warmedV2V3=)/;
+const SOLVE_RE = /\[searcher\/blockscan\]\s+(?:block=(\d+)\s+)?solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
 const BUDGET_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+pass_budget_exceeded\b/;
 const EVENT_PATTERNS: [string, RegExp][] = [
-  ["blacklistSkip", /\[searcher\/blockscan\]\s+blacklist skip ring=/],
-  ["solvePositive", /\[searcher\/blockscan\]\s+solve ring=.*\snet=[1-9]\d*\b/],
-  ["finalSimRejected", /\[searcher\/blockscan\]\s+final sim rejected ring=/],
-  ["phantomRejected", /\[searcher\/blockscan\]\s+reject phantom ring=/],
-  ["standingPositionRejected", /\[searcher\/blockscan\]\s+reject standing-position ring=/],
-  ["belowEvSkipped", /\[searcher\/blockscan\]\s+skip below-EV ring=/],
-  ["evOk", /\[searcher\/blockscan\]\s+EV ok:/],
-  ["submitted", /\[searcher\/blockscan\]\s+submitted ring=/],
-  ["submitFailed", /\[searcher\/blockscan\]\s+submit (?:failed|error) ring=/],
+  ["blacklistSkip", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?blacklist skip ring=/],
+  ["solvePositive", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?solve ring=.*\snet=[1-9]\d*\b/],
+  ["finalSimRejected", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?final sim rejected ring=/],
+  ["phantomRejected", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?reject phantom ring=/],
+  ["standingPositionRejected", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?reject standing-position ring=/],
+  ["belowEvSkipped", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?skip below-EV ring=/],
+  ["evOk", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?EV ok:/],
+  ["submitted", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?submitted\s+atomic\s+via\b/],
+  ["submitFailed", /\[searcher\/blockscan\]\s+(?:block=\d+\s+)?submit (?:failed|error) ring=/],
 ];
 
 export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
@@ -90,8 +91,8 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
 
   let currentBlock: number | null = null;
   for (const line of text.split(/\r?\n/)) {
-    const blockMatch = line.match(BLOCK_RE);
-    if (blockMatch) currentBlock = Number(blockMatch[1]);
+    const passStart = line.match(PASS_START_RE);
+    if (passStart) currentBlock = Number(passStart[1]);
     const budget = line.match(BUDGET_RE);
     if (budget) get(Number(budget[1])).budgetExceeded = true;
     const summary = line.match(SUMMARY_RE);
@@ -108,7 +109,7 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
         ms: Number(summary[9]),
       };
       record.bestNet = summary[5] === "null" ? null : summary[5];
-      continue;
+      if (currentBlock === null) currentBlock = block;
     }
 
     const stage = line.match(STAGE_RE);
@@ -119,17 +120,22 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
         record.stage[match[1]] = Number(match[2]);
       }
     }
-    if (currentBlock !== null) {
-      const record = get(currentBlock);
-      const solve = line.match(SOLVE_RE);
+    const explicitBlock = line.match(BLOCK_RE);
+    const solve = line.match(SOLVE_RE);
+    const attributedBlock = solve?.[1]
+      ? Number(solve[1])
+      : explicitBlock && !/skipped=busy\b/.test(line) ? Number(explicitBlock[1]) : currentBlock;
+    if (attributedBlock !== null) {
+      const record = get(attributedBlock);
       if (solve) {
-        record.rings.add(solve[1]);
-        record.solveResults.push(`${solve[1]}|${solve[2]}|${solve[3] ?? ""}`);
+        record.rings.add(solve[2]);
+        record.solveResults.push(`${solve[2]}|${solve[3]}|${solve[4] ?? ""}`);
       }
       for (const [name, pattern] of EVENT_PATTERNS) {
         if (pattern.test(line)) record.events[name] = (record.events[name] ?? 0) + 1;
       }
     }
+    if (stage && currentBlock === Number(stage[1])) currentBlock = null;
   }
   return records;
 }
