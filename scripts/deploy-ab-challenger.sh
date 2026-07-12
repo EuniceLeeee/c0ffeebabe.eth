@@ -313,6 +313,18 @@ PY
   INPUT_MODE=$input_mode
 }
 
+prepare_challenger_dependencies() {
+  local a_lock="$MAIN_REPO/listener/package-lock.json"
+  local b_lock="$WT/listener/package-lock.json"
+  local a_modules="$MAIN_REPO/listener/node_modules"
+  [ -f "$a_lock" ] && [ -f "$b_lock" ] || die "listener package-lock.json missing"
+  cmp -s "$a_lock" "$b_lock" \
+    || die "challenger dependency lock differs from champion; unattended canary install is not authorized"
+  [ -d "$a_modules" ] || die "champion listener/node_modules missing"
+  rm -rf "$WT/listener/node_modules"
+  ln -s "$a_modules" "$WT/listener/node_modules"
+}
+
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 now lease current_status current_lease current_experiment
   valid_id "$experiment" || die "invalid experiment id"
@@ -349,6 +361,7 @@ deploy() {
   else
     git -C "$MAIN_REPO" worktree add --detach "$WT" "origin/$branch" >/dev/null
   fi
+  prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
   build_runtime_env "$experiment"
   cpu_layout
