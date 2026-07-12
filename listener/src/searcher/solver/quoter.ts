@@ -2,8 +2,9 @@ import { ethers } from "ethers";
 import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import type { V4PoolKey } from "../planner/token-graph.js";
+import { type V4PoolKey, v4HooksAffectSwap } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
+import { quoteV4ExactInLocal } from "./v4-math.js";
 
 /**
  * Quoter — per-protocol amountOut estimation on the current fork state.
@@ -21,6 +22,13 @@ const FLUID_DEX_RESOLVER_ENV = "FLUID_DEX_RESOLVER";
 export const FLUID_DEX_ADDRESS_DEAD = "0x000000000000000000000000000000000000dEaD";
 
 type CallBackend = Pick<StateBackend, "call">;
+
+export interface V4QuotePathStats {
+  local: number;
+  fallback: number;
+  localFailures: number;
+  hookSkipped: number;
+}
 
 // ── Curve ──────────────────────────────────────────────────────
 
@@ -319,7 +327,7 @@ async function quoteUniV2(
   return numerator / denominator;
 }
 
-// ── UniV4 (V4Quoter) ─────────────────────────────────────────
+// ── UniV4 (local math, V4Quoter fallback) ─────────────────────
 
 export const uniV4QuoterIface = new ethers.Interface([
   "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
@@ -333,11 +341,50 @@ async function quoteUniV4(
   tokenOut: string,
   amountIn: bigint,
   poolKey: V4PoolKey | undefined,
+  stats?: V4QuotePathStats,
 ): Promise<bigint> {
-  const data = encodeUniV4QuoteExactInputSingle(tokenIn, tokenOut, amountIn, poolKey);
+  const key = validateUniV4QuoteInput(tokenIn, tokenOut, amountIn, poolKey);
+  if (isLocalV4QuoteEligible(key)) {
+    try {
+      const amountOut = await quoteV4ExactInLocal(state, key, tokenIn, tokenOut, amountIn);
+      if (stats) stats.local++;
+      return amountOut;
+    } catch {
+      if (stats) stats.localFailures++;
+      /* fall through to V4Quoter eth_call */
+    }
+  } else if (stats) {
+    stats.hookSkipped++;
+  }
+
+  if (stats) stats.fallback++;
+  const data = encodeUniV4QuoteExactInputSingle(tokenIn, tokenOut, amountIn, key);
   const result = await state.call({ to: ADDR.UNISWAP_V4_QUOTER, data });
   const decoded = uniV4QuoterIface.decodeFunctionResult("quoteExactInputSingle", result);
   return BigInt(decoded[0]);
+}
+
+function validateUniV4QuoteInput(
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+  poolKey: V4PoolKey | undefined,
+): V4PoolKey {
+  if (!poolKey) {
+    throw new Error(`V4 quoter: missing PoolKey for ${tokenIn} -> ${tokenOut}`);
+  }
+  if (amountIn < 0n || amountIn > MAX_UINT128) {
+    throw new Error(`V4 quoter: exactAmount does not fit uint128: ${amountIn}`);
+  }
+  const key = normalizeV4PoolKey(poolKey);
+  const inCurrency = normalizeV4Currency(tokenIn, "tokenIn");
+  const outCurrency = normalizeV4Currency(tokenOut, "tokenOut");
+  v4ZeroForOne(key, inCurrency, outCurrency);
+  return key;
+}
+
+function isLocalV4QuoteEligible(key: V4PoolKey): boolean {
+  return key.hooks.toLowerCase() === ethers.ZeroAddress.toLowerCase() && !v4HooksAffectSwap(key.hooks);
 }
 
 export function encodeUniV4QuoteExactInputSingle(
@@ -610,6 +657,7 @@ export async function quote(
   v4PoolKey?: V4PoolKey,
   poolToken0?: string,
   poolToken1?: string,
+  v4QuoteStats?: V4QuotePathStats,
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
   switch (adapterId) {
@@ -647,7 +695,8 @@ export async function quote(
       }
       return quoteUniV2(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
-      return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey);
+      // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
+      return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);
     case "psm":
       return quotePSM(state, target, tokenIn, tokenOut, amountIn);
     case "fluid-dex-swap":

@@ -1,7 +1,7 @@
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
-import { quote } from "./quoter.js";
+import { quote, type V4QuotePathStats } from "./quoter.js";
 import type { QuoteRequest, QuoteResult } from "../live-state-backend.js";
 
 export interface AmountQuoteSource {
@@ -31,6 +31,7 @@ export async function propagateAmounts(
     fluidDebtBps?: bigint;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
+    v4QuoteStats?: V4QuotePathStats;
     safetyBps?: bigint;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
@@ -48,6 +49,7 @@ export async function propagateAmountsWithRawOutputs(
     fluidDebtBps?: bigint;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
+    v4QuoteStats?: V4QuotePathStats;
     safetyBps?: bigint;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
@@ -90,7 +92,7 @@ async function quoteEdge(
   edge: TokenEdge,
   amountIn: bigint,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
 ): Promise<bigint> {
   try {
     return await quote(
@@ -104,6 +106,7 @@ async function quoteEdge(
       edge.v4PoolKey,
       edge.poolToken0,
       edge.poolToken1,
+      options.v4QuoteStats,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
