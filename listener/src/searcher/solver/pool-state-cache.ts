@@ -100,6 +100,17 @@ interface V3Live {
   source: "seed" | "lazy";
 }
 
+/** Block-pinned v4 slot0/liquidity, keyed by poolId rather than PoolManager. */
+interface V4Cached {
+  sqrtPriceX96: bigint;
+  tick: number;
+  liquidity: bigint;
+  protocolFee: bigint;
+  lpFee: bigint;
+  blockNumber?: number;
+  source: "seed";
+}
+
 /** Per-hint v2 reserves: shift with the victim swap, re-read each hint. */
 interface V2Cached {
   token0: string; // lowercase
@@ -161,6 +172,18 @@ export interface V3TicksSeed {
   blockNumber: number;
 }
 
+export interface V4Seed {
+  poolId: string;
+  sqrtPriceX96: bigint;
+  tick: number;
+  liquidity: bigint;
+  protocolFee: bigint;
+  lpFee: bigint;
+  blockNumber: number;
+}
+
+export interface V4Snapshot extends V4Seed {}
+
 export interface V2PostImpactSeed extends V2Seed {
   kind: "v2";
 }
@@ -221,6 +244,7 @@ export class PoolStateCache {
   // slot0/liquidity layer is dropped every hint.
   private v3Ticks = new Map<string, V3TickCache>();
   private v3Live = new Map<string, V3Live>();
+  private v4 = new Map<string, V4Cached>();
   // v2 reserves — per-hint (shift with the victim swap), warmed once then local.
   private v2 = new Map<string, V2Cached>();
   // Pools whose state is modified by the current victim overlay. These must
@@ -266,6 +290,7 @@ export class PoolStateCache {
     );
     this.failed.clear();
     this.curve.clear();
+    this.v4.clear();
     for (const [key, live] of this.v3Live) {
       if (live.source !== "seed") this.v3Live.delete(key);
     }
@@ -277,6 +302,16 @@ export class PoolStateCache {
         this.seedV2(post);
       } else if (post.kind === "v3") {
         this.seedV3Live(post);
+      } else if (post.kind === "v4") {
+        this.seedV4({
+          poolId: post.poolId,
+          sqrtPriceX96: post.sqrtPriceX96,
+          tick: post.tick,
+          liquidity: post.liquidity,
+          protocolFee: BigInt(post.protocolFee ?? 0),
+          lpFee: BigInt(post.lpFee ?? 0),
+          blockNumber: post.blockNumber,
+        });
       } else if (post.kind === "curve") {
         this.seedCurve(post);
       }
@@ -293,6 +328,7 @@ export class PoolStateCache {
   clear(): void {
     this.curve.clear();
     this.v3Live.clear();
+    this.v4.clear();
     this.v2.clear();
     this.failed.clear();
     this.overlayPools.clear();
@@ -332,6 +368,14 @@ export class PoolStateCache {
     }
   }
 
+  invalidateBlockScanV4(poolIds: Iterable<string>): void {
+    for (const poolId of poolIds) {
+      const key = poolId.toLowerCase();
+      this.v4.delete(key);
+      this.failed.delete(key);
+    }
+  }
+
   restampBlockScanV2V3(blockNumber: number, skipPools: ReadonlySet<string> = new Set()): void {
     for (const [key, cached] of this.v2) {
       if (cached.source === "seed" && !skipPools.has(key)) cached.blockNumber = blockNumber;
@@ -347,12 +391,22 @@ export class PoolStateCache {
     }
   }
 
+  restampBlockScanV4(blockNumber: number, skipPoolIds: ReadonlySet<string> = new Set()): void {
+    for (const [key, cached] of this.v4) {
+      if (cached.source === "seed" && !skipPoolIds.has(key)) cached.blockNumber = blockNumber;
+    }
+  }
+
   hasV2(pool: string): boolean {
     return this.v2.has(pool.toLowerCase());
   }
 
   hasV3Live(pool: string): boolean {
     return this.v3Live.has(pool.toLowerCase());
+  }
+
+  hasV4(poolId: string): boolean {
+    return this.v4.has(poolId.toLowerCase());
   }
 
   hasCurve(pool: string): boolean {
@@ -404,6 +458,20 @@ export class PoolStateCache {
       token1: seed.token1.toLowerCase(),
       tickBitmap: seed.tickBitmap,
       ticks: seed.ticks,
+    });
+    this.failed.delete(key);
+  }
+
+  seedV4(seed: V4Seed): void {
+    const key = seed.poolId.toLowerCase();
+    this.v4.set(key, {
+      sqrtPriceX96: seed.sqrtPriceX96,
+      tick: seed.tick,
+      liquidity: seed.liquidity,
+      protocolFee: seed.protocolFee,
+      lpFee: seed.lpFee,
+      blockNumber: seed.blockNumber,
+      source: "seed",
     });
     this.failed.delete(key);
   }
@@ -479,6 +547,21 @@ export class PoolStateCache {
       feeProtocol: live.feeProtocol,
       unlocked: live.unlocked,
       blockNumber: live.blockNumber ?? blockNumber ?? 0,
+    };
+  }
+
+  snapshotV4(poolId: string, blockNumber?: number): V4Snapshot | null {
+    const key = poolId.toLowerCase();
+    const cached = this.v4.get(key);
+    if (!cached || !this.liveStateFreshFor(cached.blockNumber, blockNumber)) return null;
+    return {
+      poolId: key,
+      sqrtPriceX96: cached.sqrtPriceX96,
+      tick: cached.tick,
+      liquidity: cached.liquidity,
+      protocolFee: cached.protocolFee,
+      lpFee: cached.lpFee,
+      blockNumber: cached.blockNumber ?? blockNumber ?? 0,
     };
   }
 

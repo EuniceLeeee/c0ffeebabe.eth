@@ -21,6 +21,7 @@ import {
   buildTokenGraph,
   buildTokenIndex,
   POOL_REGISTRY,
+  v4PoolId,
   type PoolEntry,
   type TokenEdge,
   type TokenQueryBackend,
@@ -58,6 +59,7 @@ import {
   type V3LiveSeed,
   type V3PostImpactSeed,
   type V4PostImpactSeed,
+  type V4Seed,
 } from "./solver/pool-state-cache.js";
 import { PoolStateUpdater } from "./solver/pool-state-updater.js";
 import { postImpactStateOverrides } from "./solver/post-impact-overrides.js";
@@ -119,6 +121,12 @@ const BLOCKSCAN_V3_BURN_TOPIC = ethers.id("Burn(address,int24,int24,uint128,uint
 const BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC = ethers.id(
   "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
 );
+const BLOCKSCAN_V4_SWAP_TOPIC = ethers.id(
+  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
+);
+const BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC = ethers.id(
+  "ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)",
+);
 const BLOCKSCAN_CURVE_N_COINS = [2, 3, 4, 5, 6, 7, 8] as const;
 const BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS = BLOCKSCAN_CURVE_N_COINS.flatMap((n) => [
   ethers.id(`AddLiquidity(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
@@ -150,6 +158,8 @@ const BLOCKSCAN_WARM_EVENT_TOPICS = [
   BLOCKSCAN_V3_MINT_TOPIC,
   BLOCKSCAN_V3_BURN_TOPIC,
   BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC,
+  BLOCKSCAN_V4_SWAP_TOPIC,
+  BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC,
   ...BLOCKSCAN_CURVE_EVENT_TOPICS,
 ];
 
@@ -1138,6 +1148,7 @@ async function main(): Promise<void> {
             blockScanCacheForPass.clear();
           } else {
             blockScanCacheForPass.invalidateBlockScanV2V3(warmPlan.changed.pools);
+            blockScanCacheForPass.invalidateBlockScanV4(warmPlan.changed.v4PoolIds);
             blockScanCacheForPass.invalidateBlockScanCurve(warmPlan.changed.curvePools);
           }
           segMark("warm_plan");
@@ -1160,6 +1171,7 @@ async function main(): Promise<void> {
           }
           if (warmPlan.kind === "incremental") {
             blockScanCacheForPass.restampBlockScanV2V3(blockNumber, warmPlan.changed.pools);
+            blockScanCacheForPass.restampBlockScanV4(blockNumber, warmPlan.changed.v4PoolIds);
             if (blockScanWarmVerify) {
               await verifyBlockScanIncrementalWarm(
                 provider,
@@ -1167,6 +1179,7 @@ async function main(): Promise<void> {
                 allHops,
                 blockScanCacheForPass,
                 warmPlan.changed.pools,
+                warmPlan.changed.v4PoolIds,
               );
               segMark("warm_verify");
               if (passBudgetExceeded("warm_verify")) {
@@ -1235,8 +1248,10 @@ async function main(): Promise<void> {
             return;
           }
           const warmedV2V3 = countBlockScanWarmedV2V3(blockScanCacheForPass, blockNumber, edges);
+          const warmedV4 = countBlockScanWarmedV4(blockScanCacheForPass, blockNumber, edges);
           console.log(
             `[searcher/blockscan] block=${blockNumber} warmedV2V3=${warmedV2V3} ` +
+              `warmedV4=${warmedV4} ` +
               `warmedCurve=${curveWarm.warmed} v3TickMeta=${v3TickMeta} ` +
               `protocolMids=${protocolMids.size}`,
           );
@@ -3446,6 +3461,7 @@ interface BlockScanChangedPools {
   logs: number;
   hops: QuoteRequest[];
   pools: Set<string>;
+  v4PoolIds: Set<string>;
   curvePools: Set<string>;
 }
 
@@ -3507,7 +3523,15 @@ async function detectBlockScanChangedPools(
 ): Promise<BlockScanChangedPools> {
   const mutableHops = blockScanMutableQuoteRequests(hops);
   const byAddress = new Map<string, QuoteRequest[]>();
+  const byV4PoolId = new Map<string, QuoteRequest[]>();
   for (const hop of mutableHops) {
+    const poolId = blockScanV4PoolId(hop);
+    if (poolId) {
+      const existing = byV4PoolId.get(poolId);
+      if (existing) existing.push(hop);
+      else byV4PoolId.set(poolId, [hop]);
+      continue;
+    }
     const key = hop.target.toLowerCase();
     const existing = byAddress.get(key);
     if (existing) existing.push(hop);
@@ -3523,6 +3547,7 @@ async function detectBlockScanChangedPools(
 
   const changedKeys = new Set<string>();
   const changedPools = new Set<string>();
+  const changedV4PoolIds = new Set<string>();
   const changedCurvePools = new Set<string>();
   const markChanged = (hop: QuoteRequest): void => {
     const pool = hop.target.toLowerCase();
@@ -3534,6 +3559,17 @@ async function detectBlockScanChangedPools(
 
   for (const log of logs) {
     const pool = log.address.toLowerCase();
+    const topic0 = log.topics[0]?.toLowerCase();
+    if (
+      pool === ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase() &&
+      (topic0 === BLOCKSCAN_V4_SWAP_TOPIC || topic0 === BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC)
+    ) {
+      const poolId = log.topics[1]?.toLowerCase();
+      if (poolId) {
+        changedV4PoolIds.add(poolId);
+        for (const hop of byV4PoolId.get(poolId) ?? []) markChanged(hop);
+      }
+    }
     const poolHops = byAddress.get(pool);
     if (poolHops) {
       for (const hop of poolHops) markChanged(hop);
@@ -3556,6 +3592,7 @@ async function detectBlockScanChangedPools(
     logs: logs.length,
     hops: mutableHops.filter((hop) => changedKeys.has(blockScanWarmKey(hop))),
     pools: changedPools,
+    v4PoolIds: changedV4PoolIds,
     curvePools: changedCurvePools,
   };
 }
@@ -3564,7 +3601,11 @@ function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
   const seen = new Set<string>();
   const out: QuoteRequest[] = [];
   for (const hop of hops) {
-    if (hop.adapterId !== "univ2-swap" && hop.adapterId !== "univ3-swap") continue;
+    if (
+      hop.adapterId !== "univ2-swap" &&
+      hop.adapterId !== "univ3-swap" &&
+      hop.adapterId !== "univ4-unlock"
+    ) continue;
     const key = blockScanWarmKey(hop);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -3574,7 +3615,7 @@ function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
 }
 
 function blockScanWarmKey(hop: QuoteRequest): string {
-  return `${hop.adapterId}:${hop.target.toLowerCase()}`;
+  return `${hop.adapterId}:${blockScanV4PoolId(hop) ?? hop.target.toLowerCase()}`;
 }
 
 function blockScanHasWarmState(
@@ -3588,7 +3629,16 @@ function blockScanHasWarmState(
   if (hop.adapterId === "univ3-swap") {
     return cache.hasV3Live(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
   }
+  if (hop.adapterId === "univ4-unlock") {
+    const poolId = blockScanV4PoolId(hop);
+    return poolId !== null && cache.hasV4(poolId);
+  }
   return true;
+}
+
+function blockScanV4PoolId(hop: QuoteRequest): string | null {
+  if (hop.adapterId !== "univ4-unlock" || !hop.v4PoolKey) return null;
+  return v4PoolId(hop.v4PoolKey).toLowerCase();
 }
 
 async function warmBlockScanV2V3(
@@ -3613,6 +3663,7 @@ async function verifyBlockScanIncrementalWarm(
   allHops: QuoteRequest[],
   cache: PoolStateCache,
   changedPools: ReadonlySet<string>,
+  changedV4PoolIds: ReadonlySet<string>,
 ): Promise<void> {
   const scratchCache = new PoolStateCache(provider);
   const scratchUpdater = new PoolStateUpdater(provider, scratchCache, {
@@ -3623,8 +3674,8 @@ async function verifyBlockScanIncrementalWarm(
   let checked = 0;
   let mismatches = 0;
   for (const hop of blockScanMutableQuoteRequests(allHops)) {
-    const pool = hop.target.toLowerCase();
-    if (changedPools.has(pool)) continue;
+    const pool = blockScanV4PoolId(hop) ?? hop.target.toLowerCase();
+    if (changedPools.has(pool) || changedV4PoolIds.has(pool)) continue;
     if (hop.adapterId === "univ2-swap") {
       const cached = cache.snapshotV2(hop.target, blockNumber);
       const fresh = scratchCache.snapshotV2(hop.target, blockNumber);
@@ -3648,7 +3699,22 @@ async function verifyBlockScanIncrementalWarm(
         console.log(
           `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
             `pool=${pool} field=slot0 cached=${cached ? formatV3LiveSeed(cached) : "missing"} ` +
-            `fresh=${formatV3LiveSeed(fresh)}`,
+          `fresh=${formatV3LiveSeed(fresh)}`,
+        );
+      }
+    } else if (hop.adapterId === "univ4-unlock") {
+      const poolId = blockScanV4PoolId(hop);
+      if (!poolId) continue;
+      const cached = cache.snapshotV4(poolId, blockNumber);
+      const fresh = scratchCache.snapshotV4(poolId, blockNumber);
+      if (!fresh) continue;
+      checked++;
+      if (!cached || !sameV4Seed(cached, fresh)) {
+        mismatches++;
+        console.log(
+          `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
+            `pool=${poolId} field=v4slot0 cached=${cached ? formatV4Seed(cached) : "missing"} ` +
+            `fresh=${formatV4Seed(fresh)}`,
         );
       }
     }
@@ -3712,6 +3778,14 @@ function sameV3LiveSeed(a: V3LiveSeed, b: V3LiveSeed): boolean {
     a.unlocked === b.unlocked;
 }
 
+function sameV4Seed(a: V4Seed, b: V4Seed): boolean {
+  return a.sqrtPriceX96 === b.sqrtPriceX96 &&
+    a.tick === b.tick &&
+    a.liquidity === b.liquidity &&
+    a.protocolFee === b.protocolFee &&
+    a.lpFee === b.lpFee;
+}
+
 function sameCurveSnapshot(a: CurveSnapshot, b: CurveSnapshot): boolean {
   if (a.kind !== b.kind) return false;
   if (a.coins.length !== b.coins.length) return false;
@@ -3756,6 +3830,10 @@ function formatV3LiveSeed(seed: V3LiveSeed): string {
   ].join("/");
 }
 
+function formatV4Seed(seed: V4Seed): string {
+  return `${seed.sqrtPriceX96}/${seed.tick}/${seed.liquidity}/${seed.protocolFee}/${seed.lpFee}`;
+}
+
 function formatCurveSnapshot(seed: CurveSnapshot): string {
   if (seed.kind === "plain" && seed.plain) {
     return [
@@ -3787,6 +3865,7 @@ function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
     return `warm=full reason=${plan.reason}${suffix}`;
   }
   return `warm=incremental changed=${plan.changed.pools.size} ` +
+    `changedV4=${plan.changed.v4PoolIds.size} ` +
     `changedCurve=${plan.changed.curvePools.size} ` +
     `range=${plan.changed.fromBlock}-${plan.changed.toBlock} logs=${plan.changed.logs}`;
 }
@@ -4202,12 +4281,36 @@ function countBlockScanWarmedV2V3(
   return warmed;
 }
 
+function countBlockScanWarmedV4(
+  cache: PoolStateCache,
+  blockNumber: number,
+  edges: TokenEdge[],
+): number {
+  const seen = new Set<string>();
+  let warmed = 0;
+  for (const edge of edges) {
+    if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) continue;
+    const poolId = (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
+    if (seen.has(poolId)) continue;
+    seen.add(poolId);
+    if (cache.snapshotV4(poolId, blockNumber)) warmed++;
+  }
+  return warmed;
+}
+
 function formatBlockScanRing(opp: { affectedTokens?: string[]; seedEdges: TokenEdge[] }): string {
   return (opp.affectedTokens ?? opp.seedEdges.map((edge) => edge.tokenIn)).join("->");
 }
 
 function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
-  return opp.seedEdges.map((edge) => `${edge.adapterId}:${edge.target.toLowerCase()}`).join("|");
+  return opp.seedEdges.map((edge) => `${edge.adapterId}:${blockScanEdgeIdentity(edge)}`).join("|");
+}
+
+function blockScanEdgeIdentity(edge: TokenEdge): string {
+  if (edge.adapterId === "univ4-unlock" && edge.v4PoolKey) {
+    return (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
+  }
+  return edge.target.toLowerCase();
 }
 
 function activeBlockScanRejectBlacklistEntry(

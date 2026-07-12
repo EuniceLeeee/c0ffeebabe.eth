@@ -7,7 +7,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import { detectBlockScanOpportunities, type BlockScanConfig, type ProtocolMid } from "../detector/blockscan-scanner.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import { type TokenEdge, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
@@ -102,6 +102,35 @@ function fluidVenueEdges(token: string, pool: string): TokenEdge[] {
     { ...swap(token, WETH, pool, "fluid-dex-swap"), poolToken0: token, poolToken1: WETH },
     { ...swap(WETH, token, pool, "fluid-dex-swap"), poolToken0: token, poolToken1: WETH },
   ];
+}
+
+function v4VenueEdges(token: string, fee: number): { edges: TokenEdge[]; poolId: string; key: V4PoolKey } {
+  const key: V4PoolKey = {
+    currency0: token,
+    currency1: WETH,
+    fee,
+    tickSpacing: fee === 500 ? 10 : 60,
+    hooks: "0x0000000000000000000000000000000000000000",
+  };
+  const poolId = v4PoolId(key);
+  const edge = (tokenIn: string, tokenOut: string): TokenEdge => ({
+    ...swap(tokenIn, tokenOut, ADDR.UNISWAP_V4_POOL_MANAGER, "univ4-unlock"),
+    poolId,
+    v4PoolKey: key,
+  });
+  return { edges: [edge(token, WETH), edge(WETH, token)], poolId, key };
+}
+
+function seedV4(cache: PoolStateCache, poolId: string, midWethPerToken: number, fee: number): void {
+  cache.seedV4({
+    poolId,
+    sqrtPriceX96: sqrtPriceX96FromMid(midWethPerToken),
+    tick: 0,
+    liquidity: 10_000_000n * UNIT,
+    protocolFee: 0n,
+    lpFee: BigInt(fee),
+    blockNumber: BLOCK,
+  });
 }
 
 function seedV2(cache: PoolStateCache, pool: string, token: string, tokenReserve: bigint, wethReserve: bigint): void {
@@ -261,6 +290,25 @@ function assertMainAnchor(opp: BlockScanOpportunity): void {
 }
 
 const tests: TestCase[] = [
+  {
+    name: "v4 poolId venues admitted",
+    run: () => {
+      const cache = new PoolStateCache();
+      const token = tokenAt(90);
+      const low = v4VenueEdges(token, 500);
+      const high = v4VenueEdges(token, 3_000);
+      seedV4(cache, low.poolId, 0.00050, 500);
+      seedV4(cache, high.poolId, 0.00060, 3_000);
+      const outcome = run([...low.edges, ...high.edges], cache);
+      assert(outcome.opportunities.length === 1, "two v4 pools sharing PoolManager should remain distinct venues");
+      const opp = outcome.opportunities[0];
+      assert(opp.seedEdges.every((edge) => edge.adapterId === "univ4-unlock"), "v4 route adapters");
+      assert(opp.affectedPools?.includes(low.poolId) ?? false, "affected pools should contain first poolId");
+      assert(opp.affectedPools?.includes(high.poolId) ?? false, "affected pools should contain second poolId");
+      assert(!opp.affectedPools?.includes(ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase()), "PoolManager is not a venue identity");
+      console.log("[blockscan-scanner] v4 poolId venues admitted: PASS");
+    },
+  },
   {
     name: "anchor found",
     run: () => {
