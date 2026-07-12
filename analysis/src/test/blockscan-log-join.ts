@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   blockScanActivityAtBlock,
+  blockScanSubmissionCycleTokenSets,
   blockScanSourceBlockForTarget,
   competitorArbTokenSet,
 } from "../cli/bundle-postmortem.js";
@@ -16,8 +17,8 @@ const completePassLog = [
   // A head notification can arrive while block 99 is still solving. It must
   // not steal the following untagged ring from the active pass.
   "[searcher/blockscan] block=100 skipped=busy",
-  `[searcher/blockscan]   solve ring=${WETH}->${DAI}->${WETH} net=null error=no_quote standing=false protoRing=false`,
-  "[searcher/blockscan]   submitted atomic via eth_sendBundle targetBlock=100 profit=42 route=x",
+  `[searcher/blockscan] block=99 solve ring=${WETH}->${DAI}->${WETH} net=null error=no_quote standing=false protoRing=false`,
+  "[searcher/blockscan] block=99 submitted atomic via eth_sendBundle targetBlock=100 profit=42 route=x",
   "[searcher/blockscan] block=99 scannedPairs=568 candidates=8 quotePositive=1 bestNet=42 warmedV2V3=9 protocolMids=2 skippedVenues=0 ms=900",
   "[searcher/blockscan] block=99 stage warm_plan=1ms solve=2ms total=900ms",
   "[searcher/blockscan] block=101 warm=incremental changed=1 changedCurve=0 range=100-101 logs=1",
@@ -52,6 +53,33 @@ test("token join keeps net-zero intermediary tokens from flow steps", () => {
     [],
   );
   assert.deepEqual([...tokens].sort(), [DAI, USDC, WETH].sort());
+});
+
+test("submission cycle tokens distinguish related from pass-global submissions", () => {
+  const cycles = blockScanSubmissionCycleTokenSets([
+    {
+      type: "bundle_submitted",
+      opportunity_kind: "block-scan-arb",
+      target_block: 100,
+      cycle_id: `${WETH}|${USDC}`,
+    },
+    {
+      type: "bundle_submitted",
+      opportunity_kind: "block-scan-arb",
+      target_block: 101,
+      cycle_id: `${WETH}|${DAI}`,
+    },
+    {
+      type: "bundle_submitted",
+      opportunity_kind: "backrun-arb",
+      target_block: 100,
+      cycle_id: `${WETH}|${DAI}`,
+    },
+  ], 100);
+
+  assert.equal(cycles.length, 1);
+  assert.deepEqual([...cycles[0]!].sort(), [USDC, WETH].sort());
+  assert.equal([...new Set([WETH, DAI])].every((token) => cycles[0]!.has(token)), false);
 });
 
 test("block-scan log coverage distinguishes busy, rotation, future, absence, and partial passes", () => {

@@ -656,8 +656,8 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
   const busyRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+skipped=busy\b/;
   const budgetRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+pass_budget_exceeded\b/;
   const errorRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+(?:fork error|scan error):/;
-  const solveRe = /\[searcher\/blockscan\]\s+solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
-  const submittedRe = /\[searcher\/blockscan\]\s+submitted\s+atomic\s+via\b/;
+  const solveRe = /\[searcher\/blockscan\]\s+(?:block=(\d+)\s+)?solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
+  const submittedRe = /\[searcher\/blockscan\]\s+(?:block=(\d+)\s+)?submitted\s+atomic\s+via\b/;
 
   let minBlock: number | undefined;
   let maxBlock: number | undefined;
@@ -719,19 +719,21 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
       continue;
     }
 
-    if (activeBlock !== sourceBlock) continue;
     const solve = line.match(solveRe);
-    if (solve) {
-      const tokens = [...solve[1].matchAll(/0x[a-fA-F0-9]{40}/g)].map((match) => lower(match[0]));
+    const solveBlock = solve?.[1] ? Number(solve[1]) : activeBlock;
+    if (solve && solveBlock === sourceBlock) {
+      const tokens = [...solve[2].matchAll(/0x[a-fA-F0-9]{40}/g)].map((match) => lower(match[0]));
       for (const token of tokens) scannedTokens.add(token);
       rings.push({
-        ring: solve[1],
+        ring: solve[2],
         tokens: uniq(tokens),
-        net: solve[2] === "null" ? null : solve[2],
-        error: solve[3],
+        net: solve[3] === "null" ? null : solve[3],
+        error: solve[4],
       });
     }
-    if (submittedRe.test(line)) anySubmitted = true;
+    const submitted = line.match(submittedRe);
+    const submittedBlock = submitted?.[1] ? Number(submitted[1]) : activeBlock;
+    if (submitted && submittedBlock === sourceBlock) anySubmitted = true;
   }
 
   const detailComplete = sawWarm && sawSummary && sawStage;
@@ -778,11 +780,26 @@ export interface OurBlockScanForTarget {
   fully_covered_by_ring_count: number;
   any_submitted: boolean;
   jsonl_submission_seen: boolean;
+  related_jsonl_submission_seen: boolean;
+  related_jsonl_submission_count: number;
   text_submission_seen: boolean;
   log_min_source_block?: number;
   log_max_source_block?: number;
   log_error?: string;
   limitations: string[];
+}
+
+export function blockScanSubmissionCycleTokenSets(events: Json[], targetBlock: number): Set<string>[] {
+  return events
+    .filter((event) =>
+      event?.type === "bundle_submitted"
+      && event?.opportunity_kind === "block-scan-arb"
+      && Number(event?.target_block) === targetBlock
+    )
+    .map((event) => new Set(
+      [...String(event?.cycle_id ?? "").matchAll(/0x[a-fA-F0-9]{40}/g)]
+        .map((match) => lower(match[0])),
+    ));
 }
 
 async function blockScanEvidenceForTarget(
@@ -792,11 +809,13 @@ async function blockScanEvidenceForTarget(
   events: Json[],
 ): Promise<OurBlockScanForTarget> {
   const sourceBlock = blockScanSourceBlockForTarget(targetBlock);
-  const jsonlSubmissionSeen = events.some((event) =>
-    event?.type === "bundle_submitted"
-    && event?.opportunity_kind === "block-scan-arb"
-    && Number(event?.target_block) === targetBlock
-  );
+  const submissionCycleTokenSets = blockScanSubmissionCycleTokenSets(events, targetBlock);
+  const jsonlSubmissionSeen = submissionCycleTokenSets.length > 0;
+  const relatedJsonlSubmissionCount = competitorTokens.size === 0
+    ? 0
+    : submissionCycleTokenSets.filter((tokens) =>
+      [...competitorTokens].every((token) => tokens.has(token))
+    ).length;
   const base = {
     target_block: targetBlock,
     source_block: sourceBlock,
@@ -804,6 +823,7 @@ async function blockScanEvidenceForTarget(
     limitations: [
       "ring logs contain solved candidate rings, not the full scannedPairs token universe",
       "native ETH without a wrapped-token flow edge is not represented in the token join",
+      "text submission lines are pass-wide; only JSONL cycle_id tokens can establish route-token coverage",
     ],
   };
 
@@ -823,6 +843,8 @@ async function blockScanEvidenceForTarget(
       fully_covered_by_ring_count: 0,
       any_submitted: jsonlSubmissionSeen,
       jsonl_submission_seen: jsonlSubmissionSeen,
+      related_jsonl_submission_seen: relatedJsonlSubmissionCount > 0,
+      related_jsonl_submission_count: relatedJsonlSubmissionCount,
       text_submission_seen: false,
       log_error: err instanceof Error ? err.message : String(err),
     };
@@ -851,6 +873,8 @@ async function blockScanEvidenceForTarget(
     fully_covered_by_ring_count: fullyCoveredByRingCount,
     any_submitted: activity.anySubmitted || jsonlSubmissionSeen,
     jsonl_submission_seen: jsonlSubmissionSeen,
+    related_jsonl_submission_seen: relatedJsonlSubmissionCount > 0,
+    related_jsonl_submission_count: relatedJsonlSubmissionCount,
     text_submission_seen: activity.anySubmitted,
     log_min_source_block: activity.minBlock,
     log_max_source_block: activity.maxBlock,
@@ -1089,7 +1113,8 @@ function renderAnyTxSummary(report: any): string {
       `  our block-scan for target ${blockScan.target_block}: source=${blockScan.source_block} `
       + `status=${blockScan.status} rings=${blockScan.solve_ring_count} `
       + `token_overlap=${blockScan.token_overlap_count}/${blockScan.competitor_token_count} `
-      + `submitted=${blockScan.any_submitted}`,
+      + `pass_submitted=${blockScan.any_submitted} `
+      + `related_jsonl_submitted=${blockScan.related_jsonl_submission_count}`,
     );
   }
   return lines.join("\n");

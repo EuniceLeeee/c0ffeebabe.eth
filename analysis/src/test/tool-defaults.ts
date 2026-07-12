@@ -86,6 +86,26 @@ test("census-gap defaults to the runtime routing graph", async () => {
   assert.match(script, /--blockscan-log "\$BLOCKSCAN_INPUT"/);
 });
 
+test("census-gap excludes stale and failed postmortem artifacts", async () => {
+  const script = await readFile(join(repoRoot, "scripts", "census-gap.sh"), "utf8");
+  assert.match(script, /^set -euo pipefail$/m);
+  assert.match(script, /census output missing summary or matched competitor list/);
+  assert.match(script, /rm -f .*pm-0x\*\.json/s);
+  assert.match(script, /PM_FILES=\(\)/);
+  assert.match(script, /rm -f "\$pm"/);
+  assert.match(script, /jq -r -s[\s\S]*"\$\{PM_FILES\[@\]\}"/);
+  assert.doesNotMatch(script, /jq -r -s[\s\S]*"\$OUT"\/pm-0x\*\.json/);
+  assert.match(script, /incomplete: \$PM_FAILURES postmortem\(s\) failed/);
+  assert.doesNotMatch(script, /scan_submitted_lost/);
+  assert.match(script, /scan_related_submission_seen/);
+  assert.match(script, /scan_pass_had_submission/);
+  assert.match(script, /unknown_competitor_tokens/);
+  assert.ok(
+    script.indexOf("unknown_competitor_tokens") < script.indexOf("scan_candidate_token_gap"),
+    "unknown token sets must not be reported as a candidate-token coverage gap",
+  );
+});
+
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "mev-tool-defaults-"));
   const locations: InputLocations = {

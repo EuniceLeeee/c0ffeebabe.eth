@@ -5,12 +5,18 @@
 // Zero-CU on the events (pure JSONL read). The events live on the NODE — this defaults to the node
 // path so it runs there directly; point --events at a fetched slice to run locally.
 //
-// Usage: npm run block-activity -- --block <N> [--events <path>] [--venues <id,id,...>]
+// Usage: npm run block-activity -- --block <N> [--events <path>] [--blockscan-log <path>]
+//   [--venues <id,id,...>]
 //   default --events /var/log/mev/events/searcher-live.jsonl (the live node path; the OLD
 //   analysis/events + /tmp/mev-live-*.log defaults are stale — the node moved to /var/log/mev).
 import { existsSync, readFileSync } from "node:fs";
+import {
+  blockScanActivityAtBlock,
+  blockScanSourceBlockForTarget,
+} from "./bundle-postmortem.js";
 
 const DEFAULT_EVENTS = "/var/log/mev/events/searcher-live.jsonl";
+const DEFAULT_BLOCKSCAN_LOG = "/var/log/mev-live.log";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -19,9 +25,13 @@ function arg(name: string): string | undefined {
 
 function main(): void {
   const blockStr = arg("--block");
-  if (!blockStr) { console.error("usage: npm run block-activity -- --block <N> [--events <path>] [--venues <id,...>]"); process.exit(1); }
+  if (!blockStr) {
+    console.error("usage: npm run block-activity -- --block <N> [--events <path>] [--blockscan-log <path>] [--venues <id,...>]");
+    process.exit(1);
+  }
   const block = Number(blockStr);
   const eventsPath = arg("--events") ?? DEFAULT_EVENTS;
+  const blockScanLogPath = arg("--blockscan-log") ?? DEFAULT_BLOCKSCAN_LOG;
   const venues = (arg("--venues") ?? "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
   if (!existsSync(eventsPath)) {
     console.error(`events file not found: ${eventsPath} (on the node it is ${DEFAULT_EVENTS}; fetch a slice or run on the node)`);
@@ -66,6 +76,26 @@ function main(): void {
     console.log(`  competitor venue cross-ref (whole run):`);
     for (const v of venues) console.log(`      ${v}: ${venueHits.get(v) ?? 0} mentions${(venueHits.get(v) ?? 0) === 0 ? "  <- NEVER seen" : ""}`);
   }
+
+  const sourceBlock = blockScanSourceBlockForTarget(block);
+  let blockScanLog: string;
+  try {
+    blockScanLog = readFileSync(blockScanLogPath, "utf8");
+  } catch {
+    console.log(`  blockscan: target_block=${block} source_block=${sourceBlock} status=unknown_log_unavailable log=${blockScanLogPath}`);
+    console.log("      solve_rings: unknown");
+    console.log("      solve_ring_tokens: unknown");
+    return;
+  }
+
+  const activity = blockScanActivityAtBlock(blockScanLog, sourceBlock);
+  const tokens = [...activity.scannedTokens].sort();
+  console.log(`  blockscan: target_block=${block} source_block=${sourceBlock} status=${activity.status} log=${blockScanLogPath}`);
+  console.log(`      solve_rings: ${activity.ringCount}`);
+  for (const ring of activity.rings) {
+    console.log(`          ring=${ring.ring} net=${ring.net ?? "null"}${ring.error ? ` error=${ring.error}` : ""}`);
+  }
+  console.log(`      solve_ring_tokens: ${tokens.length}${tokens.length > 0 ? ` ${tokens.join(",")}` : ""}`);
 }
 
 main();

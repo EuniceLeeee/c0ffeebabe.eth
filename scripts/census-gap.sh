@@ -10,7 +10,7 @@
 # routing_gap is ALSO a standalone column so the structural flag stays visible on non_comparable rows.
 # Runs ON the node (local reth = zero CU for recent windows; older than ~10k blocks needs archive RPC).
 # Usage: census-gap.sh <from-block> <to-block> [watch-csv] [out-dir] [--blockscan-log <path>]
-set -uo pipefail
+set -euo pipefail
 FROM=${1:?from-block}; TO=${2:?to-block}
 WATCH=${3:-0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2fc483527b8ef99eb5d9b44875f005ba1fae13}
 OUT=${4:-/tmp/census-gap-$FROM-$TO}
@@ -25,7 +25,12 @@ RPC=${RPC:-http://127.0.0.1:8545}
 EVENTS=${EVENTS:-/var/log/mev/events/searcher-live.jsonl}
 GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-graph-pools.json}
 command -v jq >/dev/null || { echo "jq required"; exit 2; }
-mkdir -p "$OUT"; cd /opt/MEV/analysis
+mkdir -p "$OUT"
+# A window may be rerun with a different watchlist or after a transient PM
+# failure. Never let artifacts from an earlier invocation enter this run.
+rm -f "$OUT/census.json" "$OUT/census.err" "$OUT/blockscan.log" \
+  "$OUT/verdicts.tsv" "$OUT"/pm-0x*.json
+cd /opt/MEV/analysis
 
 # Read the potentially large mixed live log once. The PM parser still needs all
 # block-scan markers to distinguish a rotated target from an in-window absence,
@@ -39,6 +44,11 @@ fi
 npm run -s census-report -- --watch "$WATCH" --from-block "$FROM" --to-block "$TO" \
   --rpc "$RPC" --graph "$GRAPH" --out "$OUT/census.json" >/dev/null 2>"$OUT/census.err" \
   || { echo "census failed:"; tail -3 "$OUT/census.err"; exit 1; }
+jq -e '
+  (.summary | type == "object")
+  and ((.matched_competitors // .analyzed_competitors) | type == "array")
+' "$OUT/census.json" >/dev/null \
+  || { echo "census output missing summary or matched competitor list" >&2; exit 1; }
 
 # Read ALL matched takes (matched_competitors), NOT analyzed_competitors — the latter is the
 # route-gap subset (out-of-graph venue only) and silently hides all-in-graph takes, which are
@@ -50,13 +60,21 @@ if [ -z "$HASHES" ]; then
   exit 0
 fi
 
+PM_FILES=()
+PM_FAILURES=0
 for h in $HASHES; do
-  npm run -s bundle-postmortem -- --events "$EVENTS" --tx "$h" --rpc "$RPC" --graph "$GRAPH" \
-    --blockscan-log "$BLOCKSCAN_INPUT" --out "$OUT/pm-$h.json" >/dev/null 2>&1 \
-    || echo "pm-fail $h" >&2
+  pm="$OUT/pm-$h.json"
+  if npm run -s bundle-postmortem -- --events "$EVENTS" --tx "$h" --rpc "$RPC" --graph "$GRAPH" \
+    --blockscan-log "$BLOCKSCAN_INPUT" --out "$pm" >/dev/null 2>&1; then
+    PM_FILES+=("$pm")
+  else
+    rm -f "$pm"
+    PM_FAILURES=$((PM_FAILURES + 1))
+    echo "pm-fail $h" >&2
+  fi
 done
 
-ls "$OUT"/pm-0x*.json >/dev/null 2>&1 || { echo "no postmortems produced"; exit 1; }
+[ "${#PM_FILES[@]}" -gt 0 ] || { echo "no postmortems produced (failures=$PM_FAILURES)"; exit 1; }
 {
   printf 'block\ttx\tstyle\tnet_usd\tour_events\toverlap\tbs_source\tbs_status\tbs_rings\tbs_token_overlap\trouting_gap\toog\tverdict\n'
   jq -r -s 'sort_by(.tx.block)[] |
@@ -75,7 +93,9 @@ ls "$OUT"/pm-0x*.json >/dev/null 2>&1 || { echo "no postmortems produced"; exit 
      elif $bs != null and $bss == "skipped_busy" then "scan_skipped_busy"
      elif $bs != null and $bss == "not_running" then "not_running"
      elif $bs != null and $bss == "budget_exceeded" then "scan_budget_exceeded"
-     elif $bs != null and $bss == "complete" and ($bs.any_submitted // false) then "scan_submitted_lost"
+     elif $bs != null and $bss == "complete" and ($bs.competitor_token_count // 0) == 0 then "unknown_competitor_tokens"
+     elif $bs != null and $bss == "complete" and ($bs.related_jsonl_submission_seen // false) then "scan_related_submission_seen"
+     elif $bs != null and $bss == "complete" and ($bs.any_submitted // false) then "scan_pass_had_submission"
      elif $bs != null and $bss == "complete" and ($bs.token_overlap_count // 0) == 0 then "scan_candidate_token_gap"
      elif $bs != null and $bss == "complete" then "scan_token_overlap_no_submit"
      elif $ev == 0 then "not_seen"
@@ -84,6 +104,10 @@ ls "$OUT"/pm-0x*.json >/dev/null 2>&1 || { echo "no postmortems produced"; exit 
     [.tx.block, .tx.hash[0:10], (.winner_style // "?"), (.pnl.netProfitUsd // "null"),
      $ev, $ov, ($bs.source_block // "-"), $bss, ($bs.solve_ring_count // 0),
      (($bs.token_overlap_count // 0) | tostring) + "/" + (($bs.competitor_token_count // 0) | tostring),
-     $rg, $oog, $v] | @tsv' "$OUT"/pm-0x*.json
+     $rg, $oog, $v] | @tsv' "${PM_FILES[@]}"
 } | tee "$OUT/verdicts.tsv"
 echo "reports: $OUT (census.json, pm-<tx>.json, verdicts.tsv)" >&2
+if [ "$PM_FAILURES" -gt 0 ]; then
+  echo "incomplete: $PM_FAILURES postmortem(s) failed; stale artifacts were excluded" >&2
+  exit 1
+fi
