@@ -2087,7 +2087,11 @@ async function detectSandwichPattern(
           if (victim.swap.direction !== frontDirection) continue;
           const victimHash = lower(victim.swap.txHash);
           if (!victimHash || victimHash === candidate.hash || victimHash === otherHash) continue;
-          if (!isSameActor(await transaction(victimHash))) return true;
+          const victimTx = await transaction(victimHash);
+          // A missing historical transaction is unknown, not proof of an external victim.
+          // Sandwich classification is non-comparable, so fail closed unless actor identity
+          // is available and positively differs from the candidate beneficiaries.
+          if (victimTx && !isSameActor(victimTx)) return true;
         }
       }
     }

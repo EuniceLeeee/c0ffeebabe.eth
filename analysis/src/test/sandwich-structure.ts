@@ -60,6 +60,14 @@ test("real ae2Fc483 pre-victim-post bracket remains sandwich", async () => {
   assert.equal(analysis.winner_style, "sandwich");
 });
 
+test("a missing bracket transaction cannot prove an external sandwich victim", async () => {
+  const sample = structuredClone(fixture.false_atomic);
+  delete sample.transactions["0x0a8750bc93000ff6f3ef29262b8e11171718f012ef2d8491a439eb16fd145f9a"];
+
+  const analysis = await classify(sample);
+  assert.equal(analysis.winner_style, "atomic_loop");
+});
+
 test("an available native prestate trace stays authoritative over an unwrap receipt", async () => {
   const analysis = await classify(fixture.false_atomic, [], true, -0.1);
   assert.equal(analysis.receipt_weth_unwrap_exit, true);
