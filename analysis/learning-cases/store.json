@@ -172,10 +172,12 @@
         "issue": "known reward-distribution keeper calls are missed and unknown winners can fall through to a false routing gap",
         "evidence": "three Coffee txs in block 25518777 contain inner selector 0xe4fc6b6d, receive protocol-distributed SCALE without actor ERC20 input, then sell it; canonical output classified all three unknown and routing_gap",
         "codify_target": "recognize 0xe4fc6b6d as keeper_claim; require winner_style=atomic_loop before route-gap eligibility; add calibration and regression tests",
-        "status": "open"
+        "status": "codified",
+        "codify_commit": "6fc2017349924b5a69bb209a8101dbf8f5c0e1d4",
+        "validation": "node production CLI replay over blocks 25518588..25518887: three Coffee txs changed from unknown+routing_gap to keeper_claim+non_comparable; empty txs remained manual_required:unknown"
       },
       "created_at": "2026-07-12T20:43:00.000Z",
-      "updated_at": "2026-07-12T20:43:00.000Z"
+      "updated_at": "2026-07-12T21:07:34.000Z"
     }
   ]
 }
