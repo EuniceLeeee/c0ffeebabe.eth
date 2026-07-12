@@ -18,6 +18,7 @@ type BlockRecord = {
 };
 
 export type AbCompareOptions = {
+  goal?: "improvement" | "equivalence";
   metric: string;
   direction: "lower" | "higher";
   aggregate: "mean" | "p50" | "p95";
@@ -31,6 +32,7 @@ export type AbCompareOptions = {
 
 export type AbCompareResult = {
   schema_version: 1;
+  comparison_goal: "improvement" | "equivalence";
   metric: string;
   direction: "lower" | "higher";
   aggregate: "mean" | "p50" | "p95";
@@ -180,6 +182,7 @@ export function compareBlockScanLogs(
 ): AbCompareResult {
   const a = parseBlockScanLog(aText);
   const b = parseBlockScanLog(bText);
+  const goal = options.goal ?? "improvement";
   const common = [...a.keys()].filter((block) => b.has(block)).sort((x, y) => x - y);
   const completePairs = common.flatMap((block) => {
     const ar = a.get(block)!;
@@ -211,31 +214,39 @@ export function compareBlockScanLogs(
   } else if (options.requireOutputMatch && outputMismatches > 0) {
     scriptAssessment = "contradicts";
     reasons.push(`output mismatch on ${outputMismatches}/${pairs.length} paired blocks`);
+  } else if (goal === "equivalence" && !options.requireOutputMatch) {
+    reasons.push("equivalence comparison requires requireOutputMatch=true");
   } else {
     aValue = aggregate(pairs.map((pair) => pair.av), options.aggregate);
     bValue = aggregate(pairs.map((pair) => pair.bv), options.aggregate);
     absoluteDelta = options.direction === "lower" ? aValue - bValue : bValue - aValue;
     improvementPct = aValue === 0 ? null : (absoluteDelta / Math.abs(aValue)) * 100;
-    const absolutePass = absoluteDelta > 0 && absoluteDelta >= options.minAbsoluteDelta;
-    const percentPass = options.minImprovementPct <= 0
-      || (improvementPct !== null && improvementPct >= options.minImprovementPct);
-    const regressed = absoluteDelta < 0 && (
-      (improvementPct !== null && improvementPct <= -Math.abs(options.maxRegressionPct))
-      || Math.abs(absoluteDelta) >= Math.max(0, options.minAbsoluteDelta)
-    );
-    if (absolutePass && percentPass) {
+    if (goal === "equivalence") {
       scriptAssessment = "supports";
-      reasons.push(`primary metric improved by ${absoluteDelta} (${improvementPct?.toFixed(2) ?? "n/a"}%)`);
-    } else if (regressed) {
-      scriptAssessment = "contradicts";
-      reasons.push(`primary metric regressed by ${Math.abs(improvementPct ?? 0).toFixed(2)}%`);
+      reasons.push(`semantic outputs and solved-ring sets matched on ${pairs.length} paired blocks`);
     } else {
-      reasons.push("measured delta did not cross the predeclared win or loss threshold");
+      const absolutePass = absoluteDelta > 0 && absoluteDelta >= options.minAbsoluteDelta;
+      const percentPass = options.minImprovementPct <= 0
+        || (improvementPct !== null && improvementPct >= options.minImprovementPct);
+      const regressed = absoluteDelta < 0 && (
+        (improvementPct !== null && improvementPct <= -Math.abs(options.maxRegressionPct))
+        || Math.abs(absoluteDelta) >= Math.max(0, options.minAbsoluteDelta)
+      );
+      if (absolutePass && percentPass) {
+        scriptAssessment = "supports";
+        reasons.push(`primary metric improved by ${absoluteDelta} (${improvementPct?.toFixed(2) ?? "n/a"}%)`);
+      } else if (regressed) {
+        scriptAssessment = "contradicts";
+        reasons.push(`primary metric regressed by ${Math.abs(improvementPct ?? 0).toFixed(2)}%`);
+      } else {
+        reasons.push("measured delta did not cross the predeclared win or loss threshold");
+      }
     }
   }
 
   return {
     schema_version: 1,
+    comparison_goal: goal,
     metric: options.metric,
     direction: options.direction,
     aggregate: options.aggregate,

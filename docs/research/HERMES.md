@@ -158,7 +158,8 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `agent_manual_verdict: win|lose|inconclusive` + evidence. Only then run the canonical
    `ab-canary-compare` script over paired blocks and record its real exit code plus
    `script_assessment: supports|contradicts|inconclusive`. This follows `CLAUDE.md` reconcile-after and tests
-   the script rather than anchoring the analyst to it.
+   the script rather than anchoring the analyst to it. Infrastructure/identical-code shakedowns use
+   `--expect-equal --require-output-match`; normal challenger experiments keep the default improvement goal.
 10. **RECONCILE.** Agreement may decide performance/correctness. A capability `win` always requires a fresh
    non-author adversarial reviewer. Any manual/script conflict, either side inconclusive, suspected
    honeypot/phantom/inventory artifact, or semantic-vs-metric disagreement also requires one. The reviewer

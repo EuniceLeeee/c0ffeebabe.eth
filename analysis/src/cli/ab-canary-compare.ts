@@ -23,6 +23,7 @@ if (!aLog || !bLog || !out) {
   throw new Error("usage: ab-canary-compare --a-log <path> --b-log <path> --out <json> [metric options]");
 }
 const options: AbCompareOptions = {
+  goal: args.includes("--expect-equal") ? "equivalence" : "improvement",
   metric: value(args, "--metric") ?? "total_ms",
   direction: (value(args, "--direction") ?? "lower") as AbCompareOptions["direction"],
   aggregate: (value(args, "--aggregate") ?? "p50") as AbCompareOptions["aggregate"],
@@ -33,6 +34,9 @@ const options: AbCompareOptions = {
   maxRegressionPct: numberArg(args, "--max-regression-pct", 5),
   requireOutputMatch: args.includes("--require-output-match"),
 };
+if (options.goal === "equivalence" && !options.requireOutputMatch) {
+  throw new Error("--expect-equal requires --require-output-match");
+}
 if (!(["lower", "higher"] as string[]).includes(options.direction)) throw new Error("invalid --direction");
 if (!(["mean", "p50", "p95"] as string[]).includes(options.aggregate)) throw new Error("invalid --aggregate");
 const result = compareBlockScanLogs(fs.readFileSync(aLog, "utf8"), fs.readFileSync(bLog, "utf8"), options);
