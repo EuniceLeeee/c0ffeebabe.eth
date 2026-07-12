@@ -512,10 +512,25 @@ export function detectJitLiquidity(receipt: Json): string[] {
   return jit;
 }
 
-interface PriorMover {
+export interface PriorMover {
   txHash: string;
   transactionIndex: number;
   emitter: string;
+}
+
+export function partitionPriorMoversByActor(
+  movers: PriorMover[],
+  actorByTxHash: ReadonlyMap<string, string>,
+  actor: string,
+): { external: PriorMover[]; sameActor: PriorMover[] } {
+  const normalizedActor = lower(actor);
+  const external: PriorMover[] = [];
+  const sameActor: PriorMover[] = [];
+  for (const mover of movers) {
+    const moverActor = lower(actorByTxHash.get(lower(mover.txHash)) ?? "");
+    (moverActor && moverActor === normalizedActor ? sameActor : external).push(mover);
+  }
+  return { external, sameActor };
 }
 
 // Any tx earlier in the same block that touched one of the winner's venues — discriminates an
@@ -619,7 +634,7 @@ async function anyTxPostmortem(
   if (!tx || !receipt) throw new Error(`any-tx mode: ${txHash} not found on-chain (need the full hash of a mined tx)`);
   const blockNumber = quantityToNumber(receipt.blockNumber);
   const transactionIndex = quantityToNumber(receipt.transactionIndex);
-  const block = await rpc.getBlockByNumber(blockNumber, false);
+  const block = await rpc.getBlockByNumber(blockNumber, true);
   const baseFeePerGas = block?.baseFeePerGas != null ? hexToBigInt(block.baseFeePerGas) : 0n;
   const coinbase = lower(block?.miner ?? "");
   const blockTimestamp = quantityToNumber(block?.timestamp);
@@ -652,7 +667,26 @@ async function anyTxPostmortem(
     ...otherVenues.map((venue) => venue.emitter),
   ];
   const v4PoolIds = touchedVenues.filter((venue) => venue.protocol === "univ4").map((venue) => venue.id);
-  const priorMovers = await findPriorMovers(rpc, blockNumber, transactionIndex, txHash, addressVenues, v4PoolIds);
+  const priorMoverCandidates = await findPriorMovers(
+    rpc,
+    blockNumber,
+    transactionIndex,
+    txHash,
+    addressVenues,
+    v4PoolIds,
+  );
+  const actorByTxHash = new Map<string, string>();
+  for (const blockTx of Array.isArray(block?.transactions) ? block.transactions : []) {
+    if (typeof blockTx !== "object" || blockTx === null) continue;
+    const hash = lower(String(blockTx.hash ?? ""));
+    const from = lower(String(blockTx.from ?? ""));
+    if (hash && from) actorByTxHash.set(hash, from);
+  }
+  const priorMovers = partitionPriorMoversByActor(
+    priorMoverCandidates,
+    actorByTxHash,
+    lower(String(tx?.from ?? "")),
+  );
   const venueEmitters = new Set([...addressVenues.map(lower), ...(v4PoolIds.length > 0 ? [UNIV4_POOL_MANAGER] : [])]);
   const executors = competitorBeneficiaries(tx, receipt, profit.beneficiary);
   const flowReport = await buildFlowReport(rpc, receipt, executors);
@@ -699,8 +733,12 @@ async function anyTxPostmortem(
       ...touchedVenues.filter((venue) => venue.in_graph === false),
       ...otherVenues.filter((venue) => venue.in_graph === false),
     ],
-    prior_same_block_movers: priorMovers,
-    positioning: priorMovers.length === 0 ? "standing_state_take" : "after_in_block_movers",
+    // Backward-compatible raw field: all prior movers. Consumers that need
+    // causal attribution should use the explicit external/same-actor split.
+    prior_same_block_movers: priorMoverCandidates,
+    external_prior_same_block_movers: priorMovers.external,
+    same_actor_prior_same_block_movers: priorMovers.sameActor,
+    positioning: priorMovers.external.length === 0 ? "standing_state_take" : "after_in_block_movers",
     our_events_at_block: ourEventsAtBlock(loaded.events, blockNumber, venueEmitters),
     flow: summarizeFlowLedger(buildFlowLedger(receipt), executors),
     flow_walk: flowReport.steps.map((step) => ({
@@ -736,11 +774,17 @@ function renderAnyTxSummary(report: any): string {
   if (report.out_of_graph_venues.length > 0) {
     lines.push(`  OUT-OF-GRAPH: ${report.out_of_graph_venues.map(venueLine).join(" | ")}`);
   }
-  lines.push(report.prior_same_block_movers.length === 0
-    ? "  positioning: standing_state_take (no same-block prior mover on any touched venue)"
-    : `  positioning: after_in_block_movers — ${report.prior_same_block_movers
+  const positioningMovers = report.external_prior_same_block_movers ?? report.prior_same_block_movers;
+  lines.push(positioningMovers.length === 0
+    ? "  positioning: standing_state_take (no external same-block prior mover on any touched venue)"
+    : `  positioning: after_in_block_movers — ${positioningMovers
       .map((mover: PriorMover) => `idx ${mover.transactionIndex} ${mover.txHash.slice(0, 10)}`)
       .join(", ")}`);
+  if ((report.same_actor_prior_same_block_movers ?? []).length > 0) {
+    lines.push(`  actor-batch context: ${report.same_actor_prior_same_block_movers
+      .map((mover: PriorMover) => `idx ${mover.transactionIndex} ${mover.txHash.slice(0, 10)}`)
+      .join(", ")} (excluded as external source)`);
+  }
   const ours = report.our_events_at_block;
   const byType = Object.entries(ours.by_type).map(([type, count]) => `${count} ${type}`).join(", ") || "none";
   lines.push(`  our events @block: ${ours.total} (${byType}); venue overlap: ${ours.venue_overlap.length}`
@@ -1895,7 +1939,7 @@ function assessBuilderReach(builder: string, miner: string, buildersSentValue: u
   };
 }
 
-function decodeExtraData(extraData: unknown): string {
+export function decodeExtraData(extraData: unknown): string {
   const hex = String(extraData ?? "");
   if (!/^0x([0-9a-fA-F]{2})*$/.test(hex)) return "";
   return Buffer.from(hex.slice(2), "hex")

@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import {
   classifyWinnerTxStyle,
+  decodeExtraData,
   extractTouchedVenues,
   isNonComparableWinnerStyle,
   loadGraphMembership,
@@ -982,16 +983,7 @@ function percentileNearestRank(values: number[], q: number): number | null {
 }
 
 function resolveBlockBuilder(block: OnchainScanBlock): string {
-  return decodeBlockExtraData(block.extraData) || normalizeAddress(optionalString(block.miner)) || "unknown";
-}
-
-function decodeBlockExtraData(extraData: unknown): string {
-  const hex = String(extraData ?? "");
-  if (!/^0x([0-9a-fA-F]{2})*$/.test(hex)) return "";
-  return Buffer.from(hex.slice(2), "hex")
-    .toString("utf8")
-    .replace(/[^\x20-\x7e]+/g, "")
-    .trim();
+  return decodeExtraData(block.extraData) || normalizeAddress(optionalString(block.miner)) || "unknown";
 }
 
 function blockRange(fromBlock: number, toBlock: number): number[] {
