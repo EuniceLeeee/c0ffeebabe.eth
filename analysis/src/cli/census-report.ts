@@ -320,10 +320,12 @@ export function buildCensusReport(
     if (!tx.touchedVenues.some((venue) => venue.in_graph === false)) continue;
     const winnerStyle = tx.winner_style ?? "unknown";
     const nonComparable = isNonComparableWinnerStyle(winnerStyle);
-    // Keep the competitor visible, but do not feed non-comparable missing venues to route-gap closure.
-    const coverageTouchedVenues = nonComparable
-      ? tx.touchedVenues.filter((venue) => venue.in_graph !== false)
-      : tx.touchedVenues;
+    const comparableAtomic = winnerStyle === "atomic_loop";
+    // Keep unknown/non-comparable competitors visible for manual analysis, but
+    // only a proven atomic loop may feed missing venues to route-gap closure.
+    const coverageTouchedVenues = comparableAtomic
+      ? tx.touchedVenues
+      : tx.touchedVenues.filter((venue) => venue.in_graph !== false);
     const txShape = shapeByHash.get(lower(tx.hash)) ?? unknownTxShape();
 
     analyzed.push({
@@ -342,7 +344,7 @@ export function buildCensusReport(
       winner_moved_price_beyond_prestate: tx.winner_moved_price_beyond_prestate,
       unpriced_token_in_flow: tx.unpriced_token_in_flow,
     });
-    if (nonComparable) continue;
+    if (!comparableAtomic) continue;
     for (const venue of tx.touchedVenues) {
       if (venue.in_graph !== false) continue;
       if (isUniVenueProtocol(venue.protocol)) {
@@ -383,7 +385,7 @@ export function buildCensusReport(
   return {
     command: "census-report",
     verdict: {
-      route_gap_decisive: analyzed.some((tx) => !tx.non_comparable_winner),
+      route_gap_decisive: analyzed.some((tx) => tx.winner_style === "atomic_loop"),
     },
     matched_competitors: matchedCompetitors,
     analyzed_competitors: analyzed,
@@ -392,7 +394,7 @@ export function buildCensusReport(
       window,
       watch: watch.map(lower),
       matched_txs: perTx.length,
-      qualifying_txs: analyzed.filter((tx) => !tx.non_comparable_winner).length,
+      qualifying_txs: analyzed.filter((tx) => tx.winner_style === "atomic_loop").length,
       actor_batch_candidates: actorBatches.length,
       top_of_block_actor_batches: actorBatches.filter((batch) => batch.top_of_block).length,
       max_actor_batch_txs: actorBatches.reduce((max, batch) => Math.max(max, batch.tx_count), 0),
@@ -404,7 +406,10 @@ export function buildCensusReport(
         univ4: distinct.univ4.size,
         other: distinct.other.size,
       },
-      net_realized_usd: analyzed.reduce((sum, tx) => tx.non_comparable_winner ? sum : sum + tx.realized_profit_usd, 0),
+      net_realized_usd: analyzed.reduce(
+        (sum, tx) => tx.winner_style === "atomic_loop" ? sum + tx.realized_profit_usd : sum,
+        0,
+      ),
     },
   };
 }

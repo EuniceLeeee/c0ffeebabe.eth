@@ -23,6 +23,10 @@ const C_GAP = "0x" + "11".repeat(32);
 const C_ADMITTED = "0x" + "22".repeat(32);
 const C_ATOMIC = "0x" + "33".repeat(32);
 const C_SANDWICH = "0x" + "44".repeat(32);
+const C_UNKNOWN = "0x" + "55".repeat(32);
+const C_KEEPER = "0x" + "66".repeat(32);
+const C_RFQ = "0x" + "77".repeat(32);
+const C_INVENTORY = "0x" + "88".repeat(32);
 const GAP_ROUTER = ethers.getAddress("0x1000000000000000000000000000000000000001");
 const ADMITTED_ROUTER = ethers.getAddress("0x2000000000000000000000000000000000000002");
 
@@ -36,6 +40,10 @@ function writeReport(path: string, routeGapDecisive: boolean): void {
         { hash: C_ADMITTED, winner_style: "atomic_loop" },
         { hash: C_ATOMIC, winner_style: "atomic_loop" },
         { hash: C_SANDWICH, winner_style: "sandwich" },
+        { hash: C_UNKNOWN, winner_style: "unknown" },
+        { hash: C_KEEPER, winner_style: "keeper_claim" },
+        { hash: C_RFQ, winner_style: "rfq_fill" },
+        { hash: C_INVENTORY, winner_style: "inventory_vault_rebalance" },
       ],
     }, null, 2) + "\n",
   );
@@ -84,11 +92,15 @@ async function main(): Promise<void> {
     assertArrayEq(first.routersAdded, [GAP_ROUTER], "out-of-allowlist router should append");
     assertArrayEq(first.alreadyAdmitted, [ADMITTED_ROUTER], "admitted router should be a no-op");
     assertArrayEq(first.noSourceSwap, [C_ATOMIC], "atomic competitor should record no source swap");
-    assertArrayEq(first.skippedNonComparable, [C_SANDWICH], "sandwich should be skipped");
+    assertArrayEq(
+      first.skippedNonComparable,
+      [C_SANDWICH, C_UNKNOWN, C_KEEPER, C_RFQ, C_INVENTORY],
+      "every non-atomic or unknown winner should be skipped",
+    );
     assertArrayEq(first.failed.map((failure) => failure.hash), [], "fixture should not fail");
     assert(
-      !firstResolver.calls.includes(C_SANDWICH),
-      "non-comparable sandwich should not call resolver",
+      firstResolver.calls.length === 3,
+      "only atomic-loop competitors should call resolver",
     );
     assertArrayEq(
       loadForceIncludeRouters(forceInclude),
@@ -145,7 +157,7 @@ async function main(): Promise<void> {
 
   console.log(
     "[auto-close-router-gap] out-of-allowlist source router appended, " +
-      "admitted/atomic/sandwich skipped, idempotent PASS",
+      "admitted/atomic/non-atomic skipped, idempotent PASS",
   );
 }
 

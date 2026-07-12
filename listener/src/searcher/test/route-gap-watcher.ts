@@ -8,6 +8,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  inferAutoClosePoolIds,
   routeGapWatcher,
   type AutoCloseRunnerResult,
 } from "../route-gap-watcher.js";
@@ -29,6 +30,14 @@ const TX_B = "0x" + "b".repeat(64);
 const TX_C = "0x" + "c".repeat(64);
 const POOL_A = "0x1111111111111111111111111111111111111111111111111111111111111111";
 const POOL_C = "0x3333333333333333333333333333333333333333333333333333333333333333";
+const NON_ATOMIC_STYLES = [
+  "unknown",
+  "keeper_claim",
+  "rfq_fill",
+  "one_leg_inventory",
+  "inventory_vault_rebalance",
+  "sandwich",
+];
 
 function writeJsonl(path: string, events: Array<Record<string, unknown>>): void {
   writeFileSync(path, events.map((event) => JSON.stringify(event)).join("\n") + "\n");
@@ -38,6 +47,7 @@ function writeReport(
   path: string,
   routeGapDecisive: boolean,
   poolId?: string,
+  winnerStyle = "atomic_loop",
 ): void {
   writeFileSync(
     path,
@@ -47,6 +57,7 @@ function writeReport(
         ? [
             {
               hash: "0xwinner",
+              winner_style: winnerStyle,
               touchedVenues: [
                 { protocol: "univ4", id: poolId, in_graph: false },
               ],
@@ -55,6 +66,76 @@ function writeReport(
         : [],
     }, null, 2) + "\n",
   );
+}
+
+function testInferAutoCloseRequiresAtomicLoop(): void {
+  const dir = mkdtempSync(join(tmpdir(), "route-gap-watcher-style-"));
+  try {
+    for (const style of NON_ATOMIC_STYLES) {
+      const report = join(dir, `${style}.json`);
+      writeReport(report, true, POOL_A, style);
+      const inferred = inferAutoClosePoolIds(report);
+      assertArrayEq(inferred.closedV4PoolIds, [], `${style} must not infer a v4 close`);
+      assertArrayEq(inferred.forceIncludeAdded, [], `${style} must not infer force-include`);
+    }
+
+    const atomicReport = join(dir, "atomic.json");
+    writeReport(atomicReport, true, POOL_A, "atomic_loop");
+    const atomic = inferAutoClosePoolIds(atomicReport);
+    assertArrayEq(atomic.closedV4PoolIds, [POOL_A], "atomic loop should infer v4 close");
+    assertArrayEq(atomic.forceIncludeAdded, [POOL_A], "atomic loop should infer force-include");
+    console.log("[route-gap-watcher] only atomic_loop infers auto-close poolIds: PASS");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function testWatcherNeverInvokesAutoCloseForNonAtomicReports(): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "route-gap-watcher-non-atomic-"));
+  try {
+    const eventsPath = join(dir, "events.jsonl");
+    const checkpointPath = join(dir, "checkpoint.json");
+    const pendingDeployPath = join(dir, "pending-deploy.json");
+    const reportsDir = join(dir, "reports");
+    const styleByHash = new Map<string, string>();
+    const events = NON_ATOMIC_STYLES.map((style, index) => {
+      const txHash = `0x${String(index + 1).padStart(64, "0")}`;
+      styleByHash.set(txHash, style);
+      return { type: "bundle_not_included", tx_hash: txHash, target_block: 200 + index };
+    });
+    writeJsonl(eventsPath, events);
+
+    let autoCloseCalls = 0;
+    const result = await routeGapWatcher({
+      eventsPath,
+      rpcUrl: "http://127.0.0.1:8545",
+      checkpointPath,
+      pendingDeployPath,
+      reportsDir,
+      runPostmortem: async (txHash) => {
+        const style = styleByHash.get(txHash);
+        if (!style) throw new Error(`unexpected postmortem tx ${txHash}`);
+        const reportPath = join(reportsDir, `${style}.json`);
+        writeReport(reportPath, true, POOL_A, style);
+        return reportPath;
+      },
+      runAutoClose: async () => {
+        autoCloseCalls++;
+        return { closedV4PoolIds: [POOL_A], forceIncludeAdded: [POOL_A] };
+      },
+      log: () => undefined,
+      now: () => new Date("2026-07-03T00:03:00.000Z"),
+    });
+
+    assert(result.notIncludedSeen === NON_ATOMIC_STYLES.length, "all non-atomic reports should be inspected");
+    assert(result.routeGapDecisive === 0, "non-atomic reports must not count as decisive route gaps");
+    assert(result.routeGapsClosed === 0, "non-atomic reports must not close route gaps");
+    assert(autoCloseCalls === 0, "non-atomic reports must not invoke auto-close");
+    assert(!result.pendingDeployWritten, "non-atomic reports must not write pending deploy markers");
+    console.log("[route-gap-watcher] non-atomic reports never invoke auto-close: PASS");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function loadPending(path: string): Array<{ poolIds?: string[]; writtenAt?: string }> {
@@ -198,13 +279,15 @@ async function testRouteGapWatcherOrchestration(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  testInferAutoCloseRequiresAtomicLoop();
+  await testWatcherNeverInvokesAutoCloseForNonAtomicReports();
   await testRouteGapWatcherOrchestration();
   console.log(
     "expected_transition: bundle_not_included event -> " +
       "(auto) diagnose+close -> pending-deploy marker",
   );
   console.log("verdict: fixed");
-  console.log("route-gap-watcher PASS (3/3)");
+  console.log("route-gap-watcher PASS (5/5)");
 }
 
 main().catch((err) => {

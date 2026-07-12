@@ -103,6 +103,7 @@ done
     (.our_blockscan_for_target // null) as $bs |
     ($bs.status // "unset") as $bss |
     (if .non_comparable_winner == true then "non_comparable:" + (.winner_style // "?")
+     elif (.winner_style // "unknown") != "atomic_loop" then "manual_required:" + (.winner_style // "unknown")
      elif $rg > 0 then "routing_gap(hooked-v4 x\($rg))"
      elif $oog > 0 then "pool_gap(\($oog) oog)"
      elif $bs != null and $bss == "unknown_log_rotated" then "unknown_log_rotated"

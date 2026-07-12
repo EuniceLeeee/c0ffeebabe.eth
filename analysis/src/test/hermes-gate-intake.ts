@@ -67,7 +67,7 @@ const checks: Array<() => void> = [
     const value = validAbCalibration();
     value.ab_external_calibration.classifier_calibration.samples = 14;
     validateAbExternalCalibration(value);
-  }, "ab_external_calibration.classifier_calibration.samples must be 15"),
+  }, "ab_external_calibration.classifier_calibration.samples must be 16"),
 ];
 
 try {
@@ -142,7 +142,7 @@ function validAbCalibration(): any {
       classifier_calibration: {
         command: "npm run competitor-calibration",
         status: "pass",
-        samples: 15,
+        samples: 16,
       },
       comparable_txs: [HASH],
       excluded_counts: {
