@@ -287,6 +287,7 @@ function graphFixture(members: string[]): GraphMembership {
     status: "loaded",
     path: "fixture-runtime-graph-pools.json",
     entries: members.length,
+    v4Hooks: new Map(),
     members: new Set(members.map((item) => item.toLowerCase())),
   };
 }

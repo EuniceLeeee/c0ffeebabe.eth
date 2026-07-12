@@ -3,8 +3,10 @@
 # Glue only: joins the two existing CLIs — census-report (competitor takes in the window) ×
 # bundle-postmortem any-tx (our-side events/venue-overlap/graph signal per take) — and rolls up
 # ONE line per take: block, tx, style, net_usd, our_events, overlap, oog, verdict.
-# Verdict ladder: non_comparable → pool_gap (out-of-graph venue) → not_seen (0 events at block)
-#   → seen_no_overlap (events but not on these venues) → seen_lost (had signal, lost anyway).
+# Verdict ladder: non_comparable → routing_gap (venue in discovery but token-graph admission skips
+#   it, e.g. hooked v4 — ring can't close) → pool_gap (out-of-graph venue) → not_seen (0 events at
+#   block) → seen_no_overlap (events but not on these venues) → seen_lost (had signal, lost anyway).
+# routing_gap is ALSO a standalone column so the structural flag stays visible on non_comparable rows.
 # Runs ON the node (local reth = zero CU for recent windows; older than ~10k blocks needs archive RPC).
 # Usage: census-gap.sh <from-block> <to-block> [watch-csv] [out-dir]
 set -uo pipefail
@@ -31,17 +33,19 @@ done
 
 ls "$OUT"/pm-0x*.json >/dev/null 2>&1 || { echo "no postmortems produced"; exit 1; }
 {
-  printf 'block\ttx\tstyle\tnet_usd\tour_events\toverlap\toog\tverdict\n'
+  printf 'block\ttx\tstyle\tnet_usd\tour_events\toverlap\trouting_gap\toog\tverdict\n'
   jq -r -s 'sort_by(.tx.block)[] |
     (.our_events_at_block.total // 0) as $ev |
     ((.our_events_at_block.venue_overlap // []) | length) as $ov |
     ((.out_of_graph_venues // []) | length) as $oog |
+    ([(.touchedVenues // [])[] | select(.routing_admitted == false)] | length) as $rg |
     (if .non_comparable_winner == true then "non_comparable:" + (.winner_style // "?")
+     elif $rg > 0 then "routing_gap(hooked-v4 x\($rg))"
      elif $oog > 0 then "pool_gap(\($oog) oog)"
      elif $ev == 0 then "not_seen"
      elif $ov == 0 then "seen_no_overlap"
      else "seen_lost" end) as $v |
     [.tx.block, .tx.hash[0:10], (.winner_style // "?"), (.pnl.netProfitUsd // "null"),
-     $ev, $ov, $oog, $v] | @tsv' "$OUT"/pm-0x*.json
+     $ev, $ov, $rg, $oog, $v] | @tsv' "$OUT"/pm-0x*.json
 } | tee "$OUT/verdicts.tsv"
 echo "reports: $OUT (census.json, pm-<tx>.json, verdicts.tsv)" >&2

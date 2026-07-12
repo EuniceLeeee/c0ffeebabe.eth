@@ -119,6 +119,12 @@ export interface TouchedVenue {
   id: string;
   emitter: string;
   in_graph: boolean | null;
+  /** v4 only: swap-affecting hook bits set (hooks & 0xcc != 0). null = hooks unknown. */
+  hooked?: boolean | null;
+  /** ROUTING-level reachability — in_graph is DISCOVERY-level and misleading for v4: a hooked v4
+   *  pool sits in active-pools (in_graph=true) but token-graph admission skips it (0 edges), so a
+   *  ring through it can never close. false here = the structural reason a take is unreproducible. */
+  routing_admitted?: boolean | null;
 }
 
 export interface GraphMembership {
@@ -126,7 +132,13 @@ export interface GraphMembership {
   path: string;
   entries: number;
   members: Set<string>;
+  /** v4 poolId → hooks address, from the sibling active-pools.json (empty when unavailable). */
+  v4Hooks: Map<string, string>;
 }
+
+// Swap-affecting v4 hook permission bits — mirrors listener token-graph.ts V4_SWAP_HOOK_MASK
+// (BEFORE_SWAP 0x80 | AFTER_SWAP 0x40 | BEFORE_SWAP_RETURNS_DELTA 0x08 | AFTER_SWAP_RETURNS_DELTA 0x04).
+const V4_SWAP_HOOK_MASK = 0xccn;
 
 export interface CandidateTx {
   hash: string;
@@ -1037,35 +1049,47 @@ function venue(
   emitter: string,
   graph: GraphMembership | null,
 ): TouchedVenue {
+  const inGraph = graph?.status === "loaded" ? graph.members.has(lower(id)) : null;
+  if (protocol !== "univ4") {
+    // v2/v3 in_graph checks the runtime graph = routing level already.
+    return { protocol, id, emitter, in_graph: inGraph, routing_admitted: inGraph };
+  }
+  const hooks = graph?.v4Hooks.get(lower(id));
+  const hooked = hooks !== undefined ? (BigInt(hooks || "0x0") & V4_SWAP_HOOK_MASK) !== 0n : null;
   return {
     protocol,
     id,
     emitter,
-    in_graph: graph?.status === "loaded" ? graph.members.has(lower(id)) : null,
+    in_graph: inGraph,
+    hooked,
+    routing_admitted: inGraph === true ? (hooked === null ? null : !hooked) : inGraph,
   };
 }
 
 export function loadGraphMembership(path: string): GraphMembership {
-  if (!existsSync(path)) return { status: "unavailable", path, entries: 0, members: new Set() };
+  if (!existsSync(path)) return { status: "unavailable", path, entries: 0, members: new Set(), v4Hooks: new Map() };
   try {
     const text = readFileSyncText(path);
     const members = new Set<string>();
+    const v4Hooks = new Map<string, string>();
     collectGraphMembers(JSON.parse(text), members);
     // v4 pools are stored in runtime-graph-pools.json by PoolManager ADDRESS only (no poolId),
     // so a poolId membership check against the runtime graph is a systematic FALSE-NEGATIVE for
     // ALL v4 pools (it would report every v4 pool — including ones we already index — as not in
     // graph). The v4 poolIds live in the sibling active-pools.json (the loaded universe); union
     // them in so v4 in_graph is correct. Mirrors live-loss readActiveV4PoolIds.
-    addActivePoolsV4PoolIds(path, members);
-    return { status: "loaded", path, entries: members.size, members };
+    addActivePoolsV4PoolIds(path, members, v4Hooks);
+    return { status: "loaded", path, entries: members.size, members, v4Hooks };
   } catch {
-    return { status: "unavailable", path, entries: 0, members: new Set() };
+    return { status: "unavailable", path, entries: 0, members: new Set(), v4Hooks: new Map() };
   }
 }
 
 // Union the v4 poolIds from the sibling active-pools.json into graph membership. Only bytes32
 // poolIds are added (v4-only field); v2/v3 in_graph stays authoritative against runtime-graph.
-function addActivePoolsV4PoolIds(graphPath: string, members: Set<string>): void {
+// Also capture poolId → hooks so callers can tell DISCOVERY membership apart from ROUTING
+// admission (token-graph skips swap-hooked v4 pools).
+function addActivePoolsV4PoolIds(graphPath: string, members: Set<string>, v4Hooks?: Map<string, string>): void {
   const activePoolsPath = resolve(dirname(graphPath), "active-pools.json");
   if (!existsSync(activePoolsPath)) return;
   try {
@@ -1075,7 +1099,10 @@ function addActivePoolsV4PoolIds(graphPath: string, members: Set<string>): void 
       : ((parsed as { pools?: unknown[] })?.pools ?? []);
     for (const pool of pools) {
       const poolId = lower(String((pool as { poolId?: unknown })?.poolId ?? ""));
-      if (isBytes32(poolId)) members.add(poolId);
+      if (!isBytes32(poolId)) continue;
+      members.add(poolId);
+      const hooks = lower(String((pool as { hooks?: unknown })?.hooks ?? ""));
+      if (v4Hooks && /^0x[a-f0-9]{40}$/.test(hooks)) v4Hooks.set(poolId, hooks);
     }
   } catch {
     // active-pools missing/corrupt → leave v4 as runtime-graph-only (prior behavior).
