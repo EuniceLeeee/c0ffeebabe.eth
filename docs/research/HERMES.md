@@ -79,6 +79,53 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  carry_to_round before new analysis (rule 13).
 ```
 
+## A/B Canary — champion/challenger loop (for a KNOWN perf/correctness/capability change)
+Sibling to the Rounds loop, but for a change we already have (a perf fix, a correctness fix, a new edge),
+validated by a deterministic gate + a live A/B — NOT competitor-discovery. Runs unattended. **Champion
+discipline: NOTHING enters `main` un-validated; each change is one isolated challenger; win → merge + DELETE
+branch (local AND remote); lose → keep/iterate or discard.**
+- **A = champion = prod `mev-searcher` at `main`** (wallet-1, BotVM-1, live). **B = challenger =
+  `systemd-run --unit=mev-ab-b`, a branch `ab/<name>`** (wallet-2 `0x2a6b…`, BotVM-2 `0xCF47…`,
+  `/opt/MEV-ab/b` worktree + `/opt/MEV-ab/b.env` 600). Both **block-scan-only (backrun off)**, same universe
+  file, distinct anvil ports (A 8556 / B 8567), distinct events+log. True dual-live needs the 2nd
+  wallet+BotVM — funding is a Rule-1 human gate. See [[project-ab-canary-champion-challenger]].
+```
+1. PICK        next change from backlog; ONE change per challenger (isolate the delta).
+2. BRANCH+GEN  ab/<name> off main; Codex writes (Generator/Evaluator split); review scope (block-scan only,
+               diff tight, tsc pass).
+3. DEPLOY B    re-point B worktree to origin/ab/<name> + restart (keep b.env: wallet-2/BotVM-2/live/topN). A stays main.
+4. GATE        MANDATORY before merge, by change type (a green build is NEVER enough, rule 12):
+               • warm/cache → SEARCHER_BLOCKSCAN_WARM_VERIFY=1 → `warm_verify checked=N mismatches=0`, N>0
+                 (0 mismatch AND it actually ran; field-specific v2v3/curve).
+               • graph/edge → fork-solve gate (Assertion A edge-in-graph / B execute / C planner-find) or the
+                 f391 protocol gate.
+5. MEASURE     HONEST: report the delta from the TRUE steady-state with verify OFF — never an intermediate/
+               optimistic value (curve lesson: buggy NG-skip showed 0.65s; the CORRECT version is ~2.5s).
+6. COMPARE     A vs B block-scan `stage` timing + solve results: B must MATCH A (correctness) and show the
+               intended gain (or no regression).
+7. MERGE-ON-WIN  gate 0-mismatch AND A/B holds → git merge --no-ff → push → DELETE branch (local+remote).
+8. DEPLOY PROD deploy-node.sh (posture: DRY_RUN=0/EV_GATE=1/markers/backrun-off preserved; topN via
+               SEARCHER_POOL_UNIVERSE_TOP_N=; NORMAL LOAD — stop B first). Read the new `stage` breakdown → next bottleneck.
+9. RECORD      memory + Method Trace if it was a reusable judgment.
+```
+**Traps (codified 2026-07-08/12):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Startup
+full warm under load can't finish the budget → early-return → `lastWarmedBlock` never set → `warm=full`
+DEATH-SPIRAL; escape by bumping `SEARCHER_BLOCKSCAN_PASS_BUDGET_MS` for the first warm, or deploy at normal
+load (latent bug: make startup warm budget-resilient). • stableswap-NG `stored_rate` refreshes OFF-event →
+getLogs-changed incremental MISSES it → always re-warm `kind==="ng"`, only plain-curve is event-incremental.
+• A fork-gate revert can be a FIXTURE artifact (take pinned to a realized amount on a post-tx fork →
+CurrencyNotSettled), not a live bug (live re-quotes via `propagateAmountsWithRawOutputs`) — separate
+fixture-pinning from real execution before calling a revert a live blocker. • `traceRevert` returns the
+deepest failed call but the string is `.slice`-truncated. • `census-report` is loss-focused (only deep-
+analyzes qualifying comparable losses) — it won't classify ALL competitor txs. • Don't call a pool-count or a
+fork-gate revert a strategic blocker without the VALUE distribution + a CONSERVING atomic_loop exemplar
+(hooked-v4: 9% of pools but the head is blue-chip, yet a fee hook thins the arb — [[project-v4-swaphook-admission-gap]]).
+**Autonomous (auto-run live):** fired unattended (cron/loop): `Instructions = "Read and execute
+docs/research/HERMES.md §A/B-Canary as your instructions for this canary round."` Self-decide (rule 14/15,
+user away). Step-0 guard: `git log` (a concurrent session may have run it) + check the backlog for an
+un-validated challenger; none → NO-OP. Run the cycle; self-schedule the next wake (ScheduleWakeup ~1200s idle,
+or on Codex/deploy completion). All node ops via SSM to `i-0ff908dedeec9ebc6`; secrets stay in `/opt/MEV*/.env`.
+
 ## Governance (hard rules — numbers are load-bearing, never renumber)
 1. **Only `Claude Final Decision` / `Implementation Brief` drives code.** Never from scattered chat or the other agent's draft.
 2. `Claude Final Decision` is authoritative for the md; code review is mutual; Claude holds final approval.

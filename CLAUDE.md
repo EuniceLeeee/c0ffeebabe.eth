@@ -115,7 +115,9 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   way. (Trivial turns — a typo, a one-command lookup, plain chat — are NOT reusable judgments; skip.)
 
 ## 6. Load-on-demand map (read the right one for the task)
-- `docs/research/HERMES.md` — the live-run / Hermes / autonomous workflow runbook + governance rules 1–17.
+- `docs/research/HERMES.md` — the live-run / Hermes / autonomous workflow runbook + governance rules 1–17
+  + the **§A/B Canary** champion/challenger loop (perf/correctness/capability changes: branch=challenger,
+  main=champion, deterministic gate + live A/B, merge-on-win + delete branch; auto-runs live).
   Read it **fully** when running such a cycle (the `docs/research/autonomous-*.md` routines do). Hermes rule
   numbers are load-bearing; do not renumber.
 - `docs/research/gates.md` — the validation contract (`fixed` vs `implemented`, replay flips, test harnesses).
