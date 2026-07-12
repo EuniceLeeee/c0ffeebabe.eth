@@ -164,6 +164,7 @@ REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
 REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-0}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
+UNIVERSE_SNAPSHOT_DIR=/opt/MEV-runtime/universe
 # Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
 # universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of chain head (~7200 = ~1 day).
 # (The 30-min cron keeps it far fresher, so this check usually skips; it only fires if the cron lapsed.)
@@ -194,6 +195,34 @@ else
   rm -f "$REINDEX_TMP" 2>/dev/null || true
 fi
 
+# Pin the running process to an immutable, content-addressed universe. The 30-minute indexer may replace
+# active-pools.json while an A/B window is running; that file update must become input to the NEXT deploy,
+# not silently mutate the champion's recorded fairness input mid-window.
+UNIVERSE_HASH=$(sha256sum "$REINDEX_OUT" 2>/dev/null | awk '{print $1}')
+case "$UNIVERSE_HASH" in
+  [0-9a-f][0-9a-f]*) ;;
+  *) say "ABORT: could not hash pool universe $REINDEX_OUT."; exit 9 ;;
+esac
+[ "${#UNIVERSE_HASH}" = "64" ] \
+  || { say "ABORT: invalid pool universe hash for $REINDEX_OUT."; exit 9; }
+mkdir -p "$UNIVERSE_SNAPSHOT_DIR" \
+  || { say "ABORT: could not create $UNIVERSE_SNAPSHOT_DIR."; exit 9; }
+UNIVERSE_SNAPSHOT="$UNIVERSE_SNAPSHOT_DIR/active-pools-$UNIVERSE_HASH.json"
+if [ ! -f "$UNIVERSE_SNAPSHOT" ]; then
+  SNAPSHOT_TMP="$UNIVERSE_SNAPSHOT.tmp.$$"
+  cp "$REINDEX_OUT" "$SNAPSHOT_TMP" \
+    || { say "ABORT: could not snapshot pool universe."; exit 9; }
+  chmod 444 "$SNAPSHOT_TMP"
+  mv "$SNAPSHOT_TMP" "$UNIVERSE_SNAPSHOT"
+fi
+[ "$(sha256sum "$UNIVERSE_SNAPSHOT" | awk '{print $1}')" = "$UNIVERSE_HASH" ] \
+  || { say "ABORT: content-addressed universe snapshot failed verification."; exit 9; }
+tmp=$(mktemp)
+grep -v '^SEARCHER_POOL_UNIVERSE_PATH=' "$ENVF" > "$tmp" || true
+echo "SEARCHER_POOL_UNIVERSE_PATH=$UNIVERSE_SNAPSHOT" >> "$tmp"
+cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
+say "pool universe pinned: hash=$UNIVERSE_HASH snapshot=$UNIVERSE_SNAPSHOT"
+
 # ── Router allowlist auto-discovery (best-effort; never blocks/aborts the deploy) ──
 # Proactive flow-admission refresh: scan recent local-reth blocks for out-of-allowlist `to` contracts
 # that emit DEX swaps and are called by many distinct EOAs (router/aggregator, NOT single-operator arb
@@ -218,6 +247,8 @@ sleep 8
 ACTIVE=$(systemctl is-active mev-searcher)
 NEWPID=$(systemctl show -p MainPID --value mev-searcher)
 DRY=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_DRY_RUN=$DRY_VAL")
+PROCESS_UNIVERSE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null \
+  | sed -n 's/^SEARCHER_POOL_UNIVERSE_PATH=//p' | tail -1)
 BACKRUN_EXPECTED=0
 [ -f "$REPO/.backrun" ] && BACKRUN_EXPECTED=1
 BACKRUN=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_BACKRUN=$BACKRUN_EXPECTED")
@@ -228,6 +259,11 @@ fi
 if [ "$BACKRUN" != "1" ]; then
   say "WARNING: restarted process SEARCHER_ENABLE_BACKRUN != $BACKRUN_EXPECTED — STOP and investigate."; exit 9
 fi
+if [ "$PROCESS_UNIVERSE" != "$UNIVERSE_SNAPSHOT" ] \
+   || [ "$(sha256sum "$PROCESS_UNIVERSE" 2>/dev/null | awk '{print $1}')" != "$UNIVERSE_HASH" ]; then
+  say "ABORT: restarted process did not retain the verified immutable universe snapshot."; exit 9
+fi
+say "runtime universe verified: $PROCESS_UNIVERSE hash=$UNIVERSE_HASH"
 BANNER=""
 for _ in $(seq 1 60); do
   BANNER=$(tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null | grep 'pool registry:' | tail -1)
