@@ -76,7 +76,11 @@ yes, write the assertion and do NOT add the prose rule (distill-kit sunset doctr
 `supports | contradicts | inconclusive`. It never emits `win`. `ab-canary-gate` validates the report's
 thin `ab_experiment` journal:
 - exact tested commits; normalized config and universe fairness; same-block sample; no measured-window
-  restarts; B stopped; real script artifact/exit status;
+  restarts; one pinned startup-discovery block; stable runtime pool-view and TokenEdge graph hashes
+  (unless a graph delta was explicitly predeclared and replay-proven); B stopped; real script
+  artifact/exit status;
+- budget-censored blocks are excluded before warmup/pairing, and exact solved-ring identities are part of
+  semantic output matching;
 - deterministic replay `pass` before any correctness/capability win;
 - agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
   every manual/script conflict or inconclusive result;

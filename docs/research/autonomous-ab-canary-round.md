@@ -42,9 +42,12 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 
 ## 3. Dual-live measurement
 1. Deploy only via the trusted node wrapper:
-   `deploy-ab-challenger.sh deploy <id> <ab/branch> <base-sha> <challenger-sha>`.
+   `deploy-ab-challenger.sh deploy <id> <ab/branch> <base-sha> <challenger-sha> <allow-view-delta>`;
+   pass `1` only when the schema-v2 journal predeclares `expected_runtime_view_delta=true`, else `0`.
    Direct B `systemd-run` or challenger-owned deploy code is invalid.
-2. Run the predeclared paired-block window. Exclude startup/full-warm blocks. Renew the B lease before expiry.
+2. Run the predeclared paired-block window. Exclude startup/full-warm and budget-censored blocks. Renew the
+   B lease before expiry. Record the shared discovery cutoff and stable runtime pool-view/TokenEdge graph
+   hashes alongside config/universe hashes.
 3. Run `deploy-ab-challenger.sh pause <id>` **before analysis**; B is now stopped and A owns all CPUs.
 4. Copy/redact evidence. Never commit raw logs/events or secrets.
 

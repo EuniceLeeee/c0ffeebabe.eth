@@ -1,5 +1,6 @@
-import type { PoolEntry } from "../planner/token-graph.js";
-import { buildStrategyViews } from "../strategy-views.js";
+import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
+import { indexFactoryPools, scanActivePools } from "../active-pool-discovery.js";
+import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
 import {
   deriveEdgeTaxonomy,
   edgeKindFromPoolEntry,
@@ -115,6 +116,41 @@ function testNoDuplicateAddresses(): void {
   console.log("[universe-split] blockscan dedupe: PASS");
 }
 
+function testV4SingletonUsesPoolIdentity(): void {
+  const manager = address(0x444);
+  const v4a: PoolEntry = {
+    address: manager,
+    adapter: "univ4",
+    poolId: "0x" + "11".repeat(32),
+    currency0: address(0x501),
+    currency1: address(0x502),
+    fee: 100,
+    tickSpacing: 1,
+    hooks: address(0),
+    score: 2,
+  };
+  const v4b: PoolEntry = {
+    ...v4a,
+    poolId: "0x" + "22".repeat(32),
+    currency1: address(0x503),
+    score: 1,
+  };
+  const both = buildStrategyViews([], [v4a, v4b], [], {
+    blockscanMaxPools: 2,
+    poolUniverseGeneratedAt: GENERATED_AT,
+  });
+  const one = buildStrategyViews([], [v4a], [], {
+    blockscanMaxPools: 2,
+    poolUniverseGeneratedAt: GENERATED_AT,
+  });
+  assert(both.blockscan.length === 2, "distinct v4 poolIds sharing PoolManager must both survive");
+  assert(
+    both.versions.blockscan_view_hash !== one.versions.blockscan_view_hash,
+    "blockscan hash must include v4 pool identity, not only PoolManager address",
+  );
+  console.log("[universe-split] v4 singleton pool identity: PASS");
+}
+
 function testHashesDeterministicAndSensitive(): void {
   const { basePools, overrides, universeFile, views } = buildFixture(2);
   const same = buildStrategyViews(basePools, universeFile, overrides, {
@@ -189,14 +225,53 @@ function testEdgeKindFromPoolEntry(): void {
   console.log("[universe-split] edgeKindFromPoolEntry: PASS");
 }
 
-function main(): void {
+function testTokenGraphHash(): void {
+  const edge: TokenEdge = {
+    adapterId: "univ3-swap",
+    target: address(0x701),
+    tokenIn: address(0x702),
+    tokenOut: address(0x703),
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+  };
+  const same = { ...edge };
+  const changed = { ...edge, tokenOut: address(0x704) };
+  assert(hashTokenGraph([edge]) === hashTokenGraph([same]), "same graph must hash identically");
+  assert(hashTokenGraph([edge]) !== hashTokenGraph([changed]), "routing edge change must change graph hash");
+  console.log("[universe-split] runtime token graph hash: PASS");
+}
+
+async function testPinnedDiscoveryCutoff(): Promise<void> {
+  const filters: Array<{ fromBlock: string; toBlock: string }> = [];
+  const provider = {
+    getBlockNumber(): never {
+      throw new Error("getBlockNumber must not run when cutoff is pinned");
+    },
+    async send(_method: string, args: Array<{ fromBlock: string; toBlock: string }>): Promise<unknown[]> {
+      filters.push(args[0]);
+      return [];
+    },
+  };
+  await indexFactoryPools(provider as never, 10, 1_000);
+  await scanActivePools(provider as never, 10, 10, 1_000);
+  assert(filters.length > 0, "pinned discovery should issue log requests");
+  assert(filters.every((filter) => filter.toBlock === "0x3e8"), "all discovery requests must stop at pinned head");
+  assert(filters.every((filter) => filter.fromBlock === "0x3de"), "all discovery requests must share pinned range");
+  console.log("[universe-split] pinned discovery cutoff: PASS");
+}
+
+async function main(): Promise<void> {
   testBackrunIsBasePoolsAsIs();
   testBlockscanSupersetAndOverrides();
   testUniverseCapAndScoreSort();
   testNoDuplicateAddresses();
+  testV4SingletonUsesPoolIdentity();
   testHashesDeterministicAndSensitive();
   testEdgeKindFromPoolEntry();
-  console.log("universe-split PASS (6/6)");
+  testTokenGraphHash();
+  await testPinnedDiscoveryCutoff();
+  console.log("universe-split PASS (9/9)");
 }
 
-main();
+await main();

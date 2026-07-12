@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
+import { poolRegistryKey } from "./pool-universe.js";
 
 // ─── Factory addresses ──────────────────────────────────────
 
@@ -76,9 +77,10 @@ const FACTORIES: FactoryDef[] = [
 export async function indexFactoryPools(
   provider: ethers.JsonRpcProvider,
   blocksBack = 50000,
+  toBlock?: number,
 ): Promise<PoolEntry[]> {
-  const latest = await provider.getBlockNumber();
-  const fromBlock = latest - blocksBack;
+  const latest = toBlock ?? await provider.getBlockNumber();
+  const fromBlock = Math.max(0, latest - blocksBack);
   const pools: PoolEntry[] = [];
 
   for (const factory of FACTORIES) {
@@ -160,9 +162,10 @@ export async function scanActivePools(
   provider: ethers.JsonRpcProvider,
   blocksBack = 300,
   maxPools = 100,
+  toBlock?: number,
 ): Promise<PoolEntry[]> {
-  const latest = await provider.getBlockNumber();
-  const fromBlock = latest - blocksBack;
+  const latest = toBlock ?? await provider.getBlockNumber();
+  const fromBlock = Math.max(0, latest - blocksBack);
 
   const poolCounts = new Map<string, { adapter: PoolEntry["adapter"]; count: number }>();
 
@@ -244,17 +247,4 @@ export function mergePoolRegistries(base: PoolEntry[], extra: PoolEntry[]): Pool
     }
   }
   return merged;
-}
-
-function poolRegistryKey(pool: PoolEntry): string {
-  if (pool.adapter !== "univ4") return pool.address.toLowerCase();
-  return [
-    pool.address.toLowerCase(),
-    pool.poolId?.toLowerCase() ?? "",
-    pool.currency0?.toLowerCase() ?? "",
-    pool.currency1?.toLowerCase() ?? "",
-    pool.fee === undefined ? "" : String(pool.fee),
-    pool.tickSpacing === undefined ? "" : String(pool.tickSpacing),
-    pool.hooks?.toLowerCase() ?? "",
-  ].join(":");
 }
