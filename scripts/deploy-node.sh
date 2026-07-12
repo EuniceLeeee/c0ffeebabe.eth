@@ -25,11 +25,11 @@ say() { echo "[deploy $TS] $*"; }
 
 NON_SEARCHER_KEYS="MAINNET_RPC_URL OWNER_PRIVATE_KEY BOTVM_ADDRESS BOTVM_OWNER"
 OPP_TTL_MS="${SEARCHER_OPP_TTL_MS:-5000}"
-# Pool-universe topN: how many ranked active-pools enter the runtime graph. Default 6000 covers the full
-# active-pools universe (~5k) — the 1500 code-default under-covered it, excluding pools we already hold
-# (a genuine competitor loop used 3 such topN-excluded pools). Deploy-controlled (like OPP_TTL_MS) so it
-# survives the recover-from-process .env rebuild. Latency-affordable (1500->4216 ~ +60ms vs 5000ms TTL).
-POOL_UNIVERSE_TOP_N="${SEARCHER_POOL_UNIVERSE_TOP_N:-6000}"
+# Pool-universe topN: how many ranked active-pools enter the runtime graph. Default 20000 (operator
+# 2026-07-12) — the running value; the old 6000 default silently reset a 20000 .env on every deploy
+# because SSM spawns a fresh sh (no SEARCHER_* inherited), so the :-fallback ALWAYS applied. Deploy-
+# controlled (like OPP_TTL_MS) so it survives the recover-from-process .env rebuild. Latency-affordable.
+POOL_UNIVERSE_TOP_N="${SEARCHER_POOL_UNIVERSE_TOP_N:-20000}"
 LIVE_MARKER=$REPO/.deploy-live
 LOCAL_RPC=${SEARCHER_LIVE_RPC_URL:-http://127.0.0.1:8545}
 MEV_LIVE_MAX_WALLET_ETH=${MEV_LIVE_MAX_WALLET_ETH:-0.2}
