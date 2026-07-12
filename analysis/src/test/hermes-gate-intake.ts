@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   fails,
+  validateAbExternalCalibration,
   validateIntakeAudit,
   validateTxRecord,
 } from "../cli/hermes-gate.js";
@@ -48,6 +49,25 @@ const checks: Array<() => void> = [
       },
     });
   }, "intake_audit.pending_filtered must be a finite number >= 0"),
+  () => expectPass("A/B calibration accepts only a conserving atomic loop", () => {
+    validateAbExternalCalibration(validAbCalibration());
+  }),
+  () => expectFail("A/B calibration rejects inventory mislabeled as comparable", () => {
+    const value = validAbCalibration();
+    value.findings[0].txs[0].position_conserving = false;
+    value.findings[0].txs[0].winner_style = "one_leg_inventory";
+    validateAbExternalCalibration(value);
+  }, `ab_external_calibration tx ${HASH} is not a conserving atomic_loop`),
+  () => expectFail("A/B calibration requires the classifier gate result", () => {
+    const value = validAbCalibration();
+    delete value.ab_external_calibration.classifier_calibration;
+    validateAbExternalCalibration(value);
+  }, "ab_external_calibration.classifier_calibration missing"),
+  () => expectFail("A/B calibration rejects a fabricated sample count", () => {
+    const value = validAbCalibration();
+    value.ab_external_calibration.classifier_calibration.samples = 13;
+    validateAbExternalCalibration(value);
+  }, "ab_external_calibration.classifier_calibration.samples must be 14"),
 ];
 
 try {
@@ -104,6 +124,44 @@ function validIntakeAudit(): any {
       pending_received: 10,
       pending_filtered: 2,
       mevshare_enabled: false,
+    },
+  };
+}
+
+function validAbCalibration(): any {
+  return {
+    findings: [{
+      eoa: "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      txs: [{ hash: HASH, winner_style: "atomic_loop", position_conserving: true }],
+    }],
+    ab_external_calibration: {
+      competitor: "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      strategy_kind: "block-scan",
+      comparable_filter: "atomic_loop",
+      tool_artifact: "docs/research/reports/step1-test.json",
+      classifier_calibration: {
+        command: "npm run competitor-calibration",
+        status: "pass",
+        samples: 14,
+      },
+      comparable_txs: [HASH],
+      excluded_counts: {
+        inventory: 1,
+        sandwich: 0,
+        keeper_or_liquidation: 0,
+        jit_lp: 0,
+        standing_credit: 0,
+      },
+      gap_counts: {
+        not_seen: 0,
+        pool: 1,
+        path: 0,
+        adapter: 0,
+        quote_or_sim: 0,
+        execution: 0,
+        economics: 0,
+      },
+      next_problem_id: "LC-next",
     },
   };
 }

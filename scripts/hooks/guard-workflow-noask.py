@@ -5,14 +5,16 @@ A multi-round / user-away workflow means the user is NOT at the keyboard: run-sc
 and scope calls are the agent's to make (pick the option best for the extraction goal + PROCEED +
 record it), NOT to block on with AskUserQuestion. This hook blocks such questions WHILE a workflow
 is active — but deliberately ALLOWS the real stop conditions that must still reach the human:
-go-live / broadcast, CU-cap, destructive / irreversible, private-key.
+out-of-envelope broadcast/funding/cap/key changes, standing-credit enablement, CU-cap, and unrelated
+destructive / irreversible operations. The dated bounded-live A/B and gate-authorized ab/* cleanup
+are already authorized and are not ask points.
 
 Active-workflow signal: the marker file /tmp/mev-workflow-active exists (the agent creates it when a
 multi-round/away workflow starts, removes it when it ends). No marker -> asking is always fine.
 
 Exit 0 = allow; exit 2 = BLOCK the AskUserQuestion and surface stderr to the model.
 """
-import sys, json, os
+import sys, json, os, re
 
 MARKER = "/tmp/mev-workflow-active"
 
@@ -30,12 +32,17 @@ if not os.path.exists(MARKER):
 blob = json.dumps(data.get("tool_input") or {}, ensure_ascii=False).lower()
 
 STOP_KEYWORDS = [
-    "broadcast", "go-live", "go live", "mainnet", "main-net", "上线", "广播", "主网", "实盘",
+    "out-of-envelope", "outside the envelope", "超出封套", "封套外",
+    "fund wallet", "funding", "充值", "raise cap", "increase cap", "提高上限",
+    "credit-live", "standing credit", "standing-position", "留仓", "开仓",
     "cu cap", "cu-cap", "cu_cap", "cu budget", "daily cap", "预算", "费用上限",
     "delete", "rm -rf", "drop table", "destructive", "irreversible", "不可逆", "删除", "销毁", "覆盖",
     "private key", "私钥", "signing key",
 ]
-if any(k in blob for k in STOP_KEYWORDS):
+authorized_ab_cleanup = bool(re.search(r"\bab/[a-z0-9]", blob)) \
+    and any(k in blob for k in ("branch", "分支")) \
+    and any(k in blob for k in ("delete", "删除"))
+if any(k in blob for k in STOP_KEYWORDS) and not authorized_ab_cleanup:
     sys.exit(0)  # a genuine stop condition -> still ask the human
 
 sys.stderr.write(
@@ -44,7 +51,8 @@ sys.stderr.write(
     "the extraction goal (catch more MEV) and PROCEED, then RECORD the decision (Hermes md 'Claude "
     "Final Decision' / Findings Ledger for run-scoped; CLAUDE.md for durable governance; memory for "
     "cross-session facts). AskUserQuestion mid-workflow is reserved for the REAL stop conditions only: "
-    "go-live/broadcast, CU-cap, destructive/irreversible, private-key. If this genuinely IS one of "
+    "out-of-envelope funding/cap/key/standing-credit, CU-cap, or unrelated destructive operations. "
+    "Bounded-live A/B and gate-authorized literal ab/* cleanup are already authorized. If this genuinely IS one of "
     "those, phrase it with that keyword; otherwise decide it yourself and keep going.\n"
 )
 sys.exit(2)

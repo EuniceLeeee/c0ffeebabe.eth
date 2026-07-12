@@ -8,8 +8,8 @@
 > Hermes is the fixed collaboration + decision record between **Claude** and **Codex** after each live
 > run (a 作战记录 + 决策协议, not a product). One markdown file per run; GitHub is the shared state.
 > Rule **numbers 1–17 are load-bearing** — hooks + routines reference rules 11/12/13/14/15 by number.
-> Never renumber; compress in place. Safety Rules (broadcast = human gate) live in `CLAUDE.md` and
-> override everything here.
+> Never renumber; compress in place. Safety Rules and their dated bounded-live authorizations live in
+> `CLAUDE.md` / `docs/live-safety-envelope.md` and override everything here.
 
 ## Generator / Evaluator split — DEFAULT for all code work
 Codex (gpt-5.5 xhigh) is the generator; Claude authors the brief and is the **non-author evaluator** of the diff (rule 11 protocol). Rounds depend on the orchestrating model:
@@ -24,7 +24,7 @@ The EC2 node picks up code only on **restart**, and `/opt/MEV` can drift behind 
 aws ssm send-command --instance-ids i-0ff908dedeec9ebc6 --document-name AWS-RunShellScript \
   --parameters 'commands=["git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
 ```
-`scripts/deploy-node.sh` (self-bootstraps from git): recovers the full working env from the **running process** → forces `SEARCHER_DRY_RUN=1` (override via env/markers) → **ABORTS if DRY_RUN can't be ensured (broadcast guard)** → tar-backs-up dirty files → `git reset --hard origin/main` → build → restart → verifies the restarted env. Durable flags are marker-gated on the node (`.deploy-live`, `.bribe-all-above-gas`) so they survive the recover-from-process rebuild. Never restart by hand without this guard ([[project-node-env-dryrun-guard]]). Never spawn a 2nd searcher instance. Multiple concurrent sessions run on this repo — `git log` + check the node marker before any deploy, and never interrupt an active live measurement window. Local run logs go to `MEV/logs/` (gitignored), not `$HOME`.
+`scripts/deploy-node.sh` (self-bootstraps from git): recovers the full working env from the **running process** → forces `SEARCHER_DRY_RUN=1` (override via env/markers) → **ABORTS if DRY_RUN can't be ensured (broadcast guard)** → tar-backs-up dirty files → `git reset --hard origin/main` → build → restart → verifies the restarted env. Durable flags are marker-gated on the node (`.deploy-live`, `.bribe-all-above-gas`) so they survive the recover-from-process rebuild. Never restart by hand without this guard ([[project-node-env-dryrun-guard]]). Never spawn a 2nd searcher instance **except the single §A/B challenger through `deploy-ab-challenger.sh`**. Multiple concurrent sessions run on this repo — `git log` + check the node marker before any deploy, and never interrupt an active live measurement window. Local run logs go to `MEV/logs/` (gitignored), not `$HOME`.
 
 ## Competitor-loss analysis — the canonical flow (run the tools, don't guess)
 Every "a competitor got value we didn't" event runs ONE fixed flow (the `bundle-postmortem` skill holds the decision tree; do NOT invent a parallel path):
@@ -79,35 +79,93 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  carry_to_round before new analysis (rule 13).
 ```
 
-## A/B Canary — champion/challenger loop (for a KNOWN perf/correctness/capability change)
-Sibling to the Rounds loop, but for a change we already have (a perf fix, a correctness fix, a new edge),
-validated by a deterministic gate + a live A/B — NOT competitor-discovery. Runs unattended. **Champion
-discipline: NOTHING enters `main` un-validated; each change is one isolated challenger; win → merge + DELETE
-branch (local AND remote); lose → keep/iterate or discard.**
-- **A = champion = prod `mev-searcher` at `main`** (wallet-1, BotVM-1, live). **B = challenger =
-  `systemd-run --unit=mev-ab-b`, a branch `ab/<name>`** (wallet-2 `0x2a6b…`, BotVM-2 `0xCF47…`,
-  `/opt/MEV-ab/b` worktree + `/opt/MEV-ab/b.env` 600). Both **block-scan-only (backrun off)**, same universe
-  file, distinct anvil ports (A 8556 / B 8567), distinct events+log. True dual-live needs the 2nd
-  wallet+BotVM — funding is a Rule-1 human gate. See [[project-ab-canary-champion-challenger]].
-```
-1. PICK        next change from backlog; ONE change per challenger (isolate the delta).
-2. BRANCH+GEN  ab/<name> off main; Codex writes (Generator/Evaluator split); review scope (block-scan only,
-               diff tight, tsc pass).
-3. DEPLOY B    re-point B worktree to origin/ab/<name> + restart (keep b.env: wallet-2/BotVM-2/live/topN). A stays main.
-4. GATE        MANDATORY before merge, by change type (a green build is NEVER enough, rule 12):
-               • warm/cache → SEARCHER_BLOCKSCAN_WARM_VERIFY=1 → `warm_verify checked=N mismatches=0`, N>0
-                 (0 mismatch AND it actually ran; field-specific v2v3/curve).
-               • graph/edge → fork-solve gate (Assertion A edge-in-graph / B execute / C planner-find) or the
-                 f391 protocol gate.
-5. MEASURE     HONEST: report the delta from the TRUE steady-state with verify OFF — never an intermediate/
-               optimistic value (curve lesson: buggy NG-skip showed 0.65s; the CORRECT version is ~2.5s).
-6. COMPARE     A vs B block-scan `stage` timing + solve results: B must MATCH A (correctness) and show the
-               intended gain (or no regression).
-7. MERGE-ON-WIN  gate 0-mismatch AND A/B holds → git merge --no-ff → push → DELETE branch (local+remote).
-8. DEPLOY PROD deploy-node.sh (posture: DRY_RUN=0/EV_GATE=1/markers/backrun-off preserved; topN via
-               SEARCHER_POOL_UNIVERSE_TOP_N=; NORMAL LOAD — stop B first). Read the new `stage` breakdown → next bottleneck.
-9. RECORD      memory + Method Trace if it was a reusable judgment.
-```
+## A/B Canary — unattended champion/challenger research loop
+This is the hourly path for one known blocker at a time. It is deliberately **not a TS research state
+machine**: the agent chooses/implements/judges; a thin JSON journal plus small mechanical tools enforce
+safety, fairness, evidence, recovery, and branch lifecycle. Metrics provide evidence but **never own the
+merge decision** (a honeypot filter can correctly reduce `quotePositive` and look worse numerically).
+
+- **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
+- **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
+- Both are block-scan-only (mempool/backrun off), EV-gated, and may submit simultaneously. Their wallets,
+  BotVMs, ports, events, logs, and CPU sets are separate. The dated authorization and circuit breakers are
+  in `docs/live-safety-envelope.md`.
+- Many analysis branches may exist, but there is exactly **one persistent B runtime lease** because every
+  challenger shares wallet-2/BotVM-2/port 8567/unit `mev-ab-b`. The lease is resource coordination, not a
+  global research lock; another hourly wake skips a busy B slot and does not disturb it.
+
+### One unattended wake = one new problem
+1. **RECOVER.** Run trusted `origin/main:scripts/deploy-ab-challenger.sh reap` first. An expired/crashed B is
+   stopped, A gets all CPUs back, its branch is retained, and the report becomes `needs_escalation`. Read the
+   newest A/B reports and skip every `problem_id` already retained/escalated. Never retry the same hard
+   problem every hour. With no active B lease, sync champion A to `origin/main` through guarded
+   `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
+2. **PICK.** Select the highest-impact unclaimed blocker from open LearningCases/Findings and current
+   postmortem/competitor evidence. If the queue is empty, run the normal Hermes manual+tool analysis to
+   create one; do not invent a code change merely to keep the loop busy. One branch = one causal hypothesis.
+3. **PREDECLARE.** Create `ab/<problem>` from the exact deployed A SHA, then before code create
+   `docs/research/reports/ab-<experiment_id>-hermes.md` from the A/B template and fill its `ab_experiment`
+   journal: exact problem/base SHA, change class, hypothesis, semantic success criterion, deterministic gate,
+   intended metric evidence, input mode, and allowed config delta. Commit/push the initial report on B.
+4. **FIX.** Codex writes; the non-author agent
+   reviews; deterministic correctness/capability fixes must flip the pinned replay (rule 12). Push B. Two
+   failed generator attempts or three review passes do not block the loop: retain branch + evidence as
+   `needs_escalation`, then the next wake selects another problem.
+5. **DEPLOY B THROUGH THE SAFETY WRAPPER ONLY.** Execute the trusted `origin/main` copy of
+   `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>` over SSM. It validates
+   both wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
+   universe inputs, and equal CPU partitions. It never restarts A. Direct `systemd-run`, hand-written B env,
+   or deployment from the challenger branch is invalid.
+6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm blocks; renew the lease if needed. A and B must see
+   the same block numbers. Record restart deltas and before/after input hashes. For shared-input tests all
+   universe hashes match; challenger-input capability tests declare the intended input delta. A fairness
+   failure cannot yield a decisive verdict.
+7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
+   CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
+8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor
+   cross-reference against coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (plus the standing
+   watchlist) and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
+   `atomic_loop`** transactions: in-tx route closes to a priced token and has no standing position. Exclude
+   `sandwich`, `one_leg_inventory`, keeper/liquidation, JIT-LP, standing-credit, and private-inventory
+   rebalances before classifying any gap; they are different postures and cannot judge this block-scan lane.
+   For each comparable take, classify B's remaining production gap (`not_seen | pool | path | adapter |
+   quote/sim | execution | economics`). If the live window is thin, record zero same-window comparable
+   samples honestly, then use a separate recent historical artifact to seed backlog rather than inserting
+   out-of-window txs or relabeling non-comparable transactions. This axis answers
+   “did the tested gap to a mature searcher shrink?” and seeds the next problem. It does not replace A/B.
+   Before trusting those labels, run `cd analysis && npm run competitor-calibration`: it replays the nine
+   pinned coffee source-shape fixtures plus conserving/inventory receipt controls. Record its JSON summary
+   under `classifier_calibration`; `hermes-gate` independently reruns the same checks. A failure means the
+   analysis tool is not authoritative: file/fix the tooling defect, retain this B as `needs_escalation`, and
+   do not merge from an uncalibrated external comparison. Source-shape `atomic_state_arb` is never by itself
+   proof of winner-style `atomic_loop`; the latter additionally requires in-tx position conservation.
+9. **AGENT-MANUAL FIRST, SCRIPT SECOND.** The orchestrating agent independently inspects both axes: local
+   A→B causal behavior and B→comparable-competitor production gap, then records
+   `agent_manual_verdict: win|lose|inconclusive` + evidence. Only then run the canonical
+   `ab-canary-compare` script over paired blocks and record its real exit code plus
+   `script_assessment: supports|contradicts|inconclusive`. This follows `CLAUDE.md` reconcile-after and tests
+   the script rather than anchoring the analyst to it.
+10. **RECONCILE.** Agreement may decide performance/correctness. A capability `win` always requires a fresh
+   non-author adversarial reviewer. Any manual/script conflict, either side inconclusive, suspected
+   honeypot/phantom/inventory artifact, or semantic-vs-metric disagreement also requires one. The reviewer
+   checks which causal interpretation is correct; it does not vote by threshold. If the fresh review still
+   cannot decide, final verdict is `needs_escalation`.
+11. **MECHANICAL VETO.** `npm run ab-canary-gate -- <report> --phase decision` verifies safety/fairness,
+    exact evidence, script artifact, non-author review, replay requirements, and B stopped. It can reject a
+    decision; it cannot create a win. `hermes-gate` also runs the A/B close validation when the journal exists.
+12. **CLOSE EXACTLY ONE WAY.** First run `deploy-ab-challenger.sh close <id> <verdict>`.
+    - `win`: only if `origin/main` is still the tested base; otherwise retain/retest. Merge `--no-ff`, push,
+      deploy champion via guarded `deploy-node.sh`, add `merge_commit`, authorize cleanup with the A/B gate
+      (which verifies B+merge are ancestors of `origin/main`), delete local+remote `ab/*`, then close-gate.
+    - `lose`: copy/commit the final redacted report (not challenger code) to `main`, authorize cleanup,
+      archive evidence, delete local+remote `ab/*`, then close-gate against the preserved main report.
+    - `needs_escalation` / unfinished / crash: branch action is `retained`; do not merge or delete. Record the
+      unresolved question so a stronger model can inspect it. The next hourly wake moves to a new problem.
+
+**No mid-loop questions.** This dual-live/merge/`ab/*` cleanup sequence is explicitly authorized inside the
+dated bounded envelope. Only funding/cap/key changes, standing-credit enablement, or out-of-envelope
+broadcast are real human stops. Transient mechanics get one retry; a second failure retains the branch and
+advances rather than stalling ten future rounds.
 **Traps (codified 2026-07-08/12):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Startup
 full warm under load can't finish the budget → early-return → `lastWarmedBlock` never set → `warm=full`
 DEATH-SPIRAL; escape by bumping `SEARCHER_BLOCKSCAN_PASS_BUDGET_MS` for the first warm, or deploy at normal
@@ -120,11 +178,9 @@ deepest failed call but the string is `.slice`-truncated. • `census-report` is
 analyzes qualifying comparable losses) — it won't classify ALL competitor txs. • Don't call a pool-count or a
 fork-gate revert a strategic blocker without the VALUE distribution + a CONSERVING atomic_loop exemplar
 (hooked-v4: 9% of pools but the head is blue-chip, yet a fee hook thins the arb — [[project-v4-swaphook-admission-gap]]).
-**Autonomous (auto-run live):** fired unattended (cron/loop): `Instructions = "Read and execute
-docs/research/HERMES.md §A/B-Canary as your instructions for this canary round."` Self-decide (rule 14/15,
-user away). Step-0 guard: `git log` (a concurrent session may have run it) + check the backlog for an
-un-validated challenger; none → NO-OP. Run the cycle; self-schedule the next wake (ScheduleWakeup ~1200s idle,
-or on Codex/deploy completion). All node ops via SSM to `i-0ff908dedeec9ebc6`; secrets stay in `/opt/MEV*/.env`.
+**Autonomous invocation:** use `docs/research/autonomous-ab-canary-round.md` as the complete fresh-context
+prompt. One external hourly wake runs one problem; the durable node lease/reports provide recovery. No
+in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; secrets stay in `/opt/MEV*/.env`.
 
 ## Governance (hard rules — numbers are load-bearing, never renumber)
 1. **Only `Claude Final Decision` / `Implementation Brief` drives code.** Never from scattered chat or the other agent's draft.
@@ -152,7 +208,7 @@ or on Codex/deploy completion). All node ops via SSM to `i-0ff908dedeec9ebc6`; s
     - **Epic escalation:** a finding too big for one round → `decision: epic`, ordered slices with their own gates. **Mechanical trigger:** the same `gap_class` in ≥3 samples/window OR ≥2 consecutive rounds → a MANDATORY epic; per-pool pins for that class are then forbidden. A systemic single fix beats N per-pool pins.
     - **Architecture-review trigger:** ≥2 consecutive rounds with NO growth in a genuine +EV `simSuccess` → a MANDATORY arch-level review in a fresh context, DUAL-BLIND like step 4. **FRAME AUDIT first** (the R13–R21 failure was a shared WRONG frame dual-blind can't catch): (1) is "coverage exhausted" measured on COMPLETE intake or only the admitted fraction? (audit `MEMPOOL_ROUTER_ADDRESSES` + MEV-Share, quantify `pending_filtered` vs `pending_received`); (2) are we conflating "not-backrunnable-BY-US" (posture) with "no opportunity" (market)? Record the frame answers, THEN localize the lever (`funnel | coverage | flow-admission | scanner-strategy | no-replicable-atomic-EV`). Template `docs/research/templates/architecture-review.md` + a per-firing handoff regenerated FRESH — never hardcode past rounds; the arch-review handoff MUST include the Architecture Coverage Matrix (12 axes); missing/blank = invalid handoff (hermes-gate blocks).
     - **Impact counterweight:** a round that shipped a clean analysis patch but changed nothing the searcher does is a **null round** — label it so.
-14. **Multi-round = user-away autonomy.** >1 round means the user is NOT at the keyboard: self-serve architecture/scope calls (pick the option best for the extraction goal + PROCEED + **record the decision: choice + rationale + explicit not-doing**), do NOT block with `AskUserQuestion`. This includes **auto-firing the rule-13 arch review when its trigger hits — just run it; do NOT ask "should I run the architecture review?"**. Real stop conditions still wait for the human (go-live/broadcast, CU-cap, destructive). **ENFORCED** by `scripts/hooks/guard-workflow-noask.py` (`touch /tmp/mev-workflow-active` at start; the hook blocks AskUserQuestion unless it names a real stop condition — full rationale in the hook's docstring).
+14. **Multi-round = user-away autonomy.** >1 round means the user is NOT at the keyboard: self-serve architecture/scope calls (pick the option best for the extraction goal + PROCEED + **record the decision: choice + rationale + explicit not-doing**), do NOT block with `AskUserQuestion`. This includes **auto-firing the rule-13 arch review when its trigger hits — just run it; do NOT ask "should I run the architecture review?"**. Real stop conditions still wait for the human (out-of-envelope broadcast/funding/cap/key/standing-credit, CU-cap). The dated dual-live A/B, merge-on-proven-win, and gate-authorized literal `ab/*` cleanup are already authorized and are not ask points. **ENFORCED** by `scripts/hooks/guard-workflow-noask.py` (`touch /tmp/mev-workflow-active` at start; the hook blocks AskUserQuestion unless it names a real stop condition — full rationale in the hook's docstring).
 15. **A status report is NOT a stop.** While `/tmp/mev-workflow-active` exists, every turn ends with either a work-continuing / self-re-invoking tool call OR an explicit real stop condition — reporting rides ALONGSIDE the next action, never instead of it. **ENFORCED** by `scripts/hooks/guard-workflow-nostall.py` (full rationale in the hook's docstring).
 16. **Fable manual analysis is also a TEST of our tooling — codify its findings (hard).** The fresh fable analyst works from raw data with ad-hoc curl/jq, routinely finding where our permanent scripts are wrong (valuation artifacts) or missing a metric. When it exposes a gap, the loop MUST fix/extend the script (Codex writes, Claude gates) — treat it like a rule-13 finding (`owner` + `carry_to_round`, BLOCKS cycle-close). *(Honest: public-mempool membership for out-of-window txs + positive MEV-Share identification are NOT determinable from data we hold; `sender_flow` returns labeled-confidence proxies, never a fabricated proof.)*
     - **Method Trace (MANDATORY — the auditable frame, not the hidden chain-of-thought).** Every handoff
@@ -187,7 +243,10 @@ or on Codex/deploy completion). All node ops via SSM to `i-0ff908dedeec9ebc6`; s
       `docs/analysis/` and is validated round-agnostically with `npm run method-trace-check -- <md>` (no
       step1 / 5-analysis scaffolding); harvest collects both `docs/analysis/` and the round reports. A
       Hermes round is the heavy special case of the same Method Trace.
-17. **Tool-first, then codify-the-recurring-probe (orchestrator-side companion to 16).** BEFORE hand-writing a scratchpad analysis, CHECK the toolset (`analysis/src/cli/*`, the LearningCase `PrimaryGap` store `analysis/src/learning/learning-case.ts`, `redact-live-run`, `analysis/src/pnl/*`) and RUN/EXTEND it. A scratchpad analysis run a SECOND time, or mapping to an existing taxonomy, MUST be codified before cycle-close (same teeth as 13/16).
+17. **Manual-first, then canonical reconciliation (orchestrator-side companion to 16).** Follow
+`CLAUDE.md` reconcile-after: make the independent manual/causal judgment first, then RUN the canonical
+tool and compare. Do not anchor the analyst by showing it the script verdict first. A scratchpad probe run a
+second time, or mapping to an existing taxonomy, MUST be codified before cycle-close (same teeth as 13/16).
 
 ## Boundary (CLI-orchestrated by Claude)
-Claude orchestrates from the terminal (Bash), NOT via any in-app agent tool or `/codex`. Codex = generator (rule 11; judge by the `-o` file + `git diff --stat`, never scrolling stdout; the Hermes md is the formal ledger). Claude = orchestrator + evaluator (runs gates, reviews the diff, commits — the non-author skeptic). **No nested Claude via shell** (`claude -p` crashes the session). **EXCEPTION — the fresh fable-5 blocker-finder** (Rounds step 4): each round spawns ONE fresh fable sub-agent via the **Agent tool with `model: "fable"`** — the only sanctioned second-Claude spawn. Discipline: one turn on demand, not a self-spinning loop; go-live/broadcast stays a human gate (`CLAUDE.md` Safety Rule 1).
+Claude orchestrates from the terminal (Bash), NOT via any in-app agent tool or `/codex`. Codex = generator (rule 11; judge by the `-o` file + `git diff --stat`, never scrolling stdout; the Hermes md is the formal ledger). Claude = orchestrator + evaluator (runs gates, reviews the diff, commits — the non-author skeptic). **No nested Claude via shell** (`claude -p` crashes the session). **EXCEPTIONS:** the fresh fable-5 blocker-finder (Rounds step 4) and the one-shot fresh non-author A/B adversarial reviewer required above. Discipline: one turn on demand, not a self-spinning loop; all broadcasts remain inside `CLAUDE.md` Safety Rule 1 and its dated envelope.

@@ -69,3 +69,21 @@ property still marked *prose-only* is a tracked gap, not "done".
 yes, write the assertion and do NOT add the prose rule (distill-kit sunset doctrine). Only irreducibly
 **judgment/process** doctrine (dual-blind, frame-audit, null-round, epic-escalation) stays as prose in
 `docs/research/HERMES.md` — those have no single "correct" answer to assert.
+
+## A/B canary gate — mechanical veto, never merge authority
+
+`analysis/src/cli/ab-canary-compare.ts` pairs A/B by exact block and emits facts plus only
+`supports | contradicts | inconclusive`. It never emits `win`. `ab-canary-gate` validates the report's
+thin `ab_experiment` journal:
+- exact tested commits; normalized config and universe fairness; same-block sample; no measured-window
+  restarts; B stopped; real script artifact/exit status;
+- deterministic replay `pass` before any correctness/capability win;
+- agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
+  every manual/script conflict or inconclusive result;
+- branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained.
+- external comparator calibration: the pinned coffee corpus must still separate source shape from
+  position-conserving winner style; `hermes-gate` reruns it and rejects an A/B close on classifier drift.
+
+The agent's causal judgment owns `win|lose|needs_escalation`. A raw metric can contradict a valid semantic
+fix (for example, filtering a high-scoring honeypot); in that case a fresh reviewer may confirm the win.
+Hard safety/correctness/fairness failures can only veto or escalate. They cannot create a win.

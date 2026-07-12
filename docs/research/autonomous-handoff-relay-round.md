@@ -118,7 +118,8 @@ text (Section A stays low-volume — it is reasoning, not re-narrated chain data
   `rg -rn`/`-rln` (`-r` = `--replace`, corrupts reads). Destructive / irreversible → stop.
 - The node is in bounded-live-broadcast RIGHT NOW (impl-plan §9.2) — do not interrupt an active live
   measurement window; check `git log` + the node marker before any BS-4 deploy, and verify
-  mode-preservation after.
+  mode-preservation after. Also read `/opt/MEV-ab/state.json`; if the B lease is running, defer BS-4 and
+  close this wake without restarting champion A underneath the paired A/B window.
 
 ## Step 4 — close (rule 15)
 
