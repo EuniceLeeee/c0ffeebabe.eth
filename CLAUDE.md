@@ -92,9 +92,11 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
 - **A/B branch lifecycle** — unattended cleanup is allowed only for literal `ab/*` branches after the A/B
-  gate authorizes a decisive `win`/`lose`. `needs_escalation`, unresolved manual/script disagreement,
-  incomplete fixes, and crashed runs retain the branch + evidence and move to a new problem. Never delete
-  another branch class under this authority.
+  gate authorizes it. A decisive `win`/`lose` cleans immediately. `needs_escalation`, unresolved
+  manual/script disagreement, incomplete fixes, and crashes retain the branch only while unresolved. Once a
+  later validated fix is on `origin/main`, copy the report to main with exact base/challenger/resolution SHAs,
+  mark `resolved_deleted`, gate-delete the old branch, and keep the report as the durable record. Never
+  delete another branch class under this authority.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
   analysis / bundle postmortem / a tool found wrong / repo diagnosis), capture it via steps 1–4 below.

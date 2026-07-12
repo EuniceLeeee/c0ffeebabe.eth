@@ -59,9 +59,10 @@ Required for every capability win and every conflict/inconclusive/artifact conce
 
 ## Final Decision
 - **verdict:** win | lose | needs_escalation
-- **branch action:** pending_merge | pending_delete | merged_deleted | deleted_unmerged | retained
+- **branch action:** pending_merge | pending_delete | merged_deleted | deleted_unmerged | retained | resolved_deleted
 - **merge/deploy/cleanup evidence:**
 - **stronger-model handoff (if retained):**
+- **later resolution (if resolved_deleted):** resolved_by_commit · replay/A/B evidence · report-on-main commit
 
 ```ab_experiment
 {
@@ -125,6 +126,14 @@ Required for every capability win and every conflict/inconclusive/artifact conce
   "branch_action": "retained",
   "b_stopped": false,
   "evidence_bundle": "<redacted evidence paths>"
+}
+```
+
+When a later main commit resolves a retained experiment, set `branch_action` to `resolved_deleted` and add:
+```json
+"resolution": {
+  "resolved_by_commit": "<40-char main ancestor>",
+  "evidence": "<later replay/A/B validation already committed on main>"
 }
 ```
 

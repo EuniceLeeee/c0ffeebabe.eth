@@ -48,6 +48,33 @@ function verifyWinningMerge(): void {
   }
 }
 
+function verifyResolvedCleanup(): void {
+  const resolvedBy = experiment.resolution?.resolved_by_commit;
+  if (!/^[a-f0-9]{40}$/i.test(resolvedBy ?? "")) {
+    throw new Error("resolved cleanup requires resolution.resolved_by_commit");
+  }
+  execFileSync("git", ["fetch", "origin", "main", "--quiet"], { stdio: "inherit" });
+  if (!isAncestor(experiment.base_commit, resolvedBy!) || !isAncestor(resolvedBy!, "origin/main")) {
+    throw new Error("resolved cleanup refused: resolved_by_commit must descend from the tested base and be an ancestor of origin/main");
+  }
+
+  const root = fs.realpathSync(gitOutput(["rev-parse", "--show-toplevel"]));
+  const reportPath = fs.realpathSync(path.resolve(report!));
+  const relativeReport = path.relative(root, reportPath).split(path.sep).join("/");
+  if (relativeReport === "" || relativeReport === ".." || relativeReport.startsWith("../")) {
+    throw new Error("resolved cleanup refused: report must live inside the repository");
+  }
+  let mainReport: string;
+  try {
+    mainReport = execFileSync("git", ["show", `origin/main:${relativeReport}`], { encoding: "utf8" });
+  } catch {
+    throw new Error("resolved cleanup refused: final report must be committed and pushed to origin/main first");
+  }
+  if (mainReport !== md) {
+    throw new Error("resolved cleanup refused: local report must exactly match the copy on origin/main");
+  }
+}
+
 function remoteBranchExists(): boolean {
   return gitOutput(["ls-remote", "--heads", "origin", `refs/heads/${experiment.branch}`]).length > 0;
 }
@@ -62,23 +89,32 @@ function localBranchExists(): boolean {
 }
 
 const marker = path.join("/tmp", `mev-ab-cleanup-${createHash("sha256").update(experiment.branch).digest("hex")}`);
-if (args.includes("--authorize-cleanup")) {
-  if (phase !== "decision" || experiment.final_verdict === "needs_escalation") {
-    throw new Error("cleanup authorization is only valid for a decisive decision-phase win/lose");
+const authorizeCleanup = args.includes("--authorize-cleanup");
+if (authorizeCleanup) {
+  const resolvedCleanup = phase === "close"
+    && experiment.final_verdict === "needs_escalation"
+    && experiment.branch_action === "resolved_deleted";
+  const decisiveCleanup = phase === "decision" && experiment.final_verdict !== "needs_escalation";
+  if (!resolvedCleanup && !decisiveCleanup) {
+    throw new Error("cleanup authorization requires a decisive decision or a main-resolved escalated close");
   }
-  if (experiment.final_verdict === "win") {
+  if (resolvedCleanup) {
+    verifyResolvedCleanup();
+  } else if (experiment.final_verdict === "win") {
     verifyWinningMerge();
   }
-  fs.writeFileSync(marker, `${JSON.stringify({ branch: experiment.branch, verdict: experiment.final_verdict, created_at: Date.now() })}\n`, { mode: 0o600 });
+  const verdict = resolvedCleanup ? "resolved" : experiment.final_verdict;
+  fs.writeFileSync(marker, `${JSON.stringify({ branch: experiment.branch, verdict, created_at: Date.now() })}\n`, { mode: 0o600 });
 }
-if (phase === "close") {
+if (phase === "close" && !authorizeCleanup) {
   if (experiment.final_verdict === "win") verifyWinningMerge();
+  if (experiment.branch_action === "resolved_deleted") verifyResolvedCleanup();
   const localExists = localBranchExists();
   const remoteExists = remoteBranchExists();
-  if (experiment.final_verdict === "needs_escalation") {
+  if (experiment.final_verdict === "needs_escalation" && experiment.branch_action === "retained") {
     if (!remoteExists) throw new Error("retained challenger must still exist on origin for stronger-model review");
   } else if (localExists || remoteExists) {
-    throw new Error("decisive challenger cleanup incomplete: local and remote ab/* branch must both be absent");
+    throw new Error("challenger cleanup incomplete: local and remote ab/* branch must both be absent");
   }
   if (fs.existsSync(marker)) fs.unlinkSync(marker);
 }

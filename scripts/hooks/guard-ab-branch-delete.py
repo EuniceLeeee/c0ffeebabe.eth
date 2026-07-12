@@ -48,10 +48,11 @@ for branch in branches:
     except Exception:
         age = 10**9
         record = {}
-    if age > 7200 or record.get("branch") != branch or record.get("verdict") not in ("win", "lose"):
+    if age > 7200 or record.get("branch") != branch or record.get("verdict") not in ("win", "lose", "resolved"):
         sys.stderr.write(
             "BLOCKED: run `npm run ab-canary-gate -- <report> --phase decision --authorize-cleanup` "
-            f"before deleting {branch}. Inconclusive branches must be retained.\n"
+            f"before deleting {branch}. Unresolved branches must be retained; main-resolved branches use "
+            "`--phase close --authorize-cleanup`.\n"
         )
         sys.exit(2)
 

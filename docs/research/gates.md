@@ -86,7 +86,9 @@ thin `ab_experiment` journal:
 - deterministic replay `pass` before any correctness/capability win;
 - agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
   every manual/script conflict or inconclusive result;
-- branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained.
+- branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained only
+  until a later validated `resolved_by_commit` is on `origin/main`. Resolved cleanup additionally requires
+  the final report to be committed on main with exact base/challenger/resolution SHAs before branch deletion.
 - external comparator calibration: the pinned coffee corpus must still separate source shape from
   position-conserving winner style; `hermes-gate` reruns it and rejects an A/B close on classifier drift.
 

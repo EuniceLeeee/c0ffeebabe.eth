@@ -348,7 +348,34 @@ test("unresolved work retains the branch and closes the B slot", () => {
   assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
   value.branch_action = "deleted_unmerged";
   assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "close")
-    .some((error) => error.includes("branch_action must be retained")));
+    .some((error) => error.includes("branch_action must be retained|resolved_deleted")));
+});
+
+test("a later main fix may archive a previously escalated branch", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(99), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.analysis.agent_manual_verdict = "inconclusive";
+  value.analysis.script_assessment = "inconclusive";
+  value.analysis.reconciliation = "inconclusive";
+  value.analysis.adversarial_review = {
+    verdict: "inconclusive",
+    evidence: "the original window could not separate noise from effect",
+    reviewer: "fresh-opus",
+  };
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "resolved_deleted";
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "close")
+    .some((error) => error.includes("resolved_by_commit")));
+  value.resolution = {
+    resolved_by_commit: "9".repeat(40),
+    evidence: "later identical-code replay proves the parser fix on main",
+  };
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
 });
 
 test("a hard deterministic veto may retain a metric winner without falsifying the manual verdict", () => {
@@ -496,5 +523,72 @@ test("cleanup gate verifies a real no-ff merge and actual local/remote branch de
   value.branch_action = "merged_deleted";
   writeReport();
   const close = runGate("close");
+  assert.equal(close.status, 0, close.stderr);
+});
+
+test("cleanup gate archives main-resolved escalated work without retaining the branch", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-resolved-cli-"));
+  const remote = path.join(tmp, "remote.git");
+  const repo = path.join(tmp, "repo");
+  fs.mkdirSync(repo);
+  const git = (args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+  execFileSync("git", ["init", "--bare", remote], { stdio: "ignore" });
+  execFileSync("git", ["init", "-b", "main"], { cwd: repo, stdio: "ignore" });
+  git(["config", "user.email", "ab-test@example.invalid"]);
+  git(["config", "user.name", "AB Test"]);
+  fs.writeFileSync(path.join(repo, "file"), "base\n");
+  git(["add", "file"]); git(["commit", "-m", "base"]);
+  const base = git(["rev-parse", "HEAD"]);
+  git(["remote", "add", "origin", remote]); git(["push", "-u", "origin", "main"]);
+  git(["checkout", "-b", "ab/resolved-lifecycle"]);
+  fs.appendFileSync(path.join(repo, "file"), "inconclusive challenger\n");
+  git(["commit", "-am", "challenger"]);
+  const challenger = git(["rev-parse", "HEAD"]);
+  git(["push", "-u", "origin", "ab/resolved-lifecycle"]);
+  git(["checkout", "main"]);
+  fs.writeFileSync(path.join(repo, "fix"), "later validated fix\n");
+  git(["add", "fix"]); git(["commit", "-m", "resolve gap"]);
+  const resolvedBy = git(["rev-parse", "HEAD"]);
+
+  const artifact = compareBlockScanLogs(log(100), log(99), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(repo, artifact);
+  value.branch = "ab/resolved-lifecycle";
+  value.base_commit = base; value.a.commit = base;
+  value.challenger_commit = challenger; value.b.commit = challenger;
+  value.analysis.agent_manual_verdict = "inconclusive";
+  value.analysis.script_assessment = "inconclusive";
+  value.analysis.reconciliation = "inconclusive";
+  value.analysis.adversarial_review = {
+    verdict: "inconclusive",
+    evidence: "original experiment required a later deterministic fix",
+    reviewer: "fresh-opus",
+  };
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "resolved_deleted";
+  value.resolution = {
+    resolved_by_commit: resolvedBy,
+    evidence: "later main replay validates the resolved parser behavior",
+  };
+  const report = path.join(repo, "report.md");
+  const writeReport = () => fs.writeFileSync(report, `\`\`\`ab_experiment\n${JSON.stringify(value)}\n\`\`\`\n`);
+  writeReport();
+  git(["add", "report.md"]); git(["commit", "-m", "archive resolved A/B evidence"]); git(["push", "origin", "main"]);
+
+  const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+  const cli = path.join(analysisRoot, "src/cli/ab-canary-gate.ts");
+  const tsx = path.join(analysisRoot, "node_modules/tsx/dist/loader.mjs");
+  const runGate = (authorize = false) => spawnSync(
+    process.execPath,
+    ["--import", tsx, cli, report, "--phase", "close", ...(authorize ? ["--authorize-cleanup"] : [])],
+    { cwd: repo, encoding: "utf8" },
+  );
+  const authorize = runGate(true);
+  assert.equal(authorize.status, 0, authorize.stderr);
+  git(["branch", "-D", "ab/resolved-lifecycle"]); git(["push", "origin", "--delete", "ab/resolved-lifecycle"]);
+  const close = runGate();
   assert.equal(close.status, 0, close.stderr);
 });

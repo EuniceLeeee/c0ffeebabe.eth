@@ -97,8 +97,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 ### One unattended wake = one new problem
 1. **RECOVER.** Run trusted `origin/main:scripts/deploy-ab-challenger.sh reap` first. An expired/crashed B is
    stopped, A gets all CPUs back, its branch is retained, and the report becomes `needs_escalation`. Read the
-   newest A/B reports and skip every `problem_id` already retained/escalated. Never retry the same hard
-   problem every hour. With no active B lease, sync champion A to `origin/main` through guarded
+   newest A/B reports. Before picking new work, archive any retained branch whose gap has since been closed
+   by a validated commit on `origin/main`: copy/update its report on main with the exact base, challenger,
+   `resolved_by_commit`, and validation evidence; authorize `resolved_deleted`; delete only that literal
+   `ab/*` branch/worktree. Skip every still-retained `problem_id`; never retry the same hard problem every
+   hour. With no active B lease, sync champion A to `origin/main` through guarded
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
 2. **PICK.** Select the highest-impact unclaimed blocker from open LearningCases/Findings and current
    postmortem/competitor evidence. If the queue is empty, run the normal Hermes manual+tool analysis to
@@ -176,8 +179,15 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
       delete local+remote `ab/*`, then close-gate.
     - `lose`: copy/commit the final redacted report (not challenger code) to `main`, authorize cleanup,
       archive evidence, delete local+remote `ab/*`, then close-gate against the preserved main report.
-    - `needs_escalation` / unfinished / crash: branch action is `retained`; do not merge or delete. Record the
-      unresolved question so a stronger model can inspect it. The next hourly wake moves to a new problem.
+    - `needs_escalation` / unfinished / crash: branch action is `retained` while unresolved; do not merge or
+      delete yet. Record the unresolved question so a stronger model can inspect it. The next hourly wake
+      moves to a new problem.
+    - later resolution: when a deterministic replay or subsequent A/B proves a fix already on `origin/main`,
+      copy the original report/evidence to main, add `resolution.resolved_by_commit` + `resolution.evidence`,
+      set `branch_action=resolved_deleted`, commit/push the report, then run close-phase cleanup authorization
+      and delete the old local+remote `ab/*` branch/worktree. The report on main, not a permanent branch, is
+      the archive. A recorded SHA alone is not durable for an unmerged Git object, so unresolved branches
+      remain until this condition is met.
 
 **No mid-loop questions.** This dual-live/merge/`ab/*` cleanup sequence is explicitly authorized inside the
 dated bounded envelope. Only funding/cap/key changes, standing-credit enablement, or out-of-envelope

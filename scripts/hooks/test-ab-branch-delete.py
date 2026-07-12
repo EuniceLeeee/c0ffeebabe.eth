@@ -21,10 +21,10 @@ def run(command: str) -> subprocess.CompletedProcess[str]:
 
 
 class GuardTest(unittest.TestCase):
-    def marker(self, branch: str) -> str:
+    def marker(self, branch: str, verdict: str = "win") -> str:
         path = f"/tmp/mev-ab-cleanup-{hashlib.sha256(branch.encode()).hexdigest()}"
         with open(path, "w") as f:
-            json.dump({"branch": branch, "verdict": "win", "created_at": int(time.time() * 1000)}, f)
+            json.dump({"branch": branch, "verdict": verdict, "created_at": int(time.time() * 1000)}, f)
         self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
         return path
 
@@ -39,6 +39,11 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(run("git branch -D ab/test").returncode, 0)
         self.assertEqual(run("git branch --delete ab/test").returncode, 0)
         self.assertEqual(run("git push origin --delete ab/test").returncode, 0)
+
+    def test_allows_main_resolved_ab_cleanup(self) -> None:
+        self.marker("ab/resolved", "resolved")
+        self.assertEqual(run("git branch -D ab/resolved").returncode, 0)
+        self.assertEqual(run("git push origin --delete ab/resolved").returncode, 0)
 
 
 if __name__ == "__main__":
