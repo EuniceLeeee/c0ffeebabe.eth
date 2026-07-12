@@ -66,6 +66,7 @@ interface HuntConfig {
   blockNumber: number;
   universePath: string;
   maxPools: number;
+  maxHops: number;
   minSpreadBps: number;
   budgetMs: number;
   maxCandidates: number;
@@ -186,7 +187,7 @@ async function main(): Promise<void> {
     const cfg = readConfig(rpcUrl, blockNumber);
     console.log(
       `[blockscan-hunt] upstream=${redactRpcUrl(rpcUrl)} block=${cfg.blockNumber} ` +
-        `universe=${cfg.universePath} maxPools=${cfg.maxPools}`,
+        `universe=${cfg.universePath} maxPools=${cfg.maxPools} maxHops=${cfg.maxHops}`,
     );
 
     const cache = new PoolStateCache(provider);
@@ -240,7 +241,7 @@ async function main(): Promise<void> {
       sourceBlock: cfg.blockNumber,
       swapTouched: null,
       cfg: {
-        maxHops: 4,
+        maxHops: cfg.maxHops,
         minSpreadBps: cfg.minSpreadBps,
         maxCandidates: cfg.maxCandidates,
         budgetMs: cfg.budgetMs,
@@ -280,6 +281,7 @@ async function main(): Promise<void> {
       universePools: universePools.length,
       graphPools: pools.length,
       edges: edges.length,
+      maxHops: cfg.maxHops,
       protocolEdges: protocolEdges.length,
       protocolMids: protocolMids.size,
       scannedPairs: scan.scannedPairs,
@@ -313,6 +315,7 @@ function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
     blockNumber,
     universePath: process.env.HUNT_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH,
     maxPools: envInt("HUNT_MAX_POOLS", 1500),
+    maxHops: envInt("HUNT_MAX_HOPS", 4),
     minSpreadBps: envInt("HUNT_MIN_SPREAD_BPS", 10),
     budgetMs: envInt("HUNT_BUDGET_MS", 10_000),
     maxCandidates: envInt("HUNT_MAX_CANDIDATES", 16),
