@@ -12,7 +12,7 @@ import {
   priceArb,
 } from "../pnl/arb-profit.js";
 import { buildFlowReport, formatTokenAmount, renderFlowWalk } from "../pnl/flow-walk.js";
-import { v4SwapFillFromLog } from "../pnl/swap-log-registry.js";
+import { decodeAnySwapLog, v4SwapFillFromLog } from "../pnl/swap-log-registry.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
@@ -1973,26 +1973,67 @@ async function detectSandwichPattern(
   beneficiaries: Set<string>,
   blockNumber: number,
 ): Promise<boolean> {
-  const currentSwap = primaryV3SwapForTick(receipt);
-  if (!currentSwap || blockNumber <= 0) return false;
+  if (blockNumber <= 0) return false;
+  const supportedTopics = new Set([TOPIC_UNIV2_SWAP, TOPIC_UNIV3_SWAP].filter(Boolean));
+  const currentSwaps = ((receipt?.logs ?? []) as Json[])
+    .filter((log: Json) => supportedTopics.has(lower(String(log?.topics?.[0] ?? ""))))
+    .map((log: Json) => decodeAnySwapLog(log))
+    .filter((swap): swap is NonNullable<ReturnType<typeof decodeAnySwapLog>> => swap !== null);
+  if (currentSwaps.length === 0) return false;
+
+  const txCache = new Map<string, Promise<Json | null>>();
+  const transaction = (hash: string): Promise<Json | null> => {
+    const normalized = lower(hash);
+    const cached = txCache.get(normalized);
+    if (cached) return cached;
+    const pending = rpc.getTransaction(normalized).catch(() => null);
+    txCache.set(normalized, pending);
+    return pending;
+  };
+  const isSameActor = (tx: Json | null): boolean => {
+    const from = lower(String(tx?.from ?? ""));
+    const to = lower(String(tx?.to ?? ""));
+    return beneficiaries.has(from) || beneficiaries.has(to);
+  };
+
+  const checkedPools = new Set<string>();
   try {
-    const logs = await rpc.getLogs({
-      address: currentSwap.pool,
-      fromBlock: toQuantity(blockNumber),
-      toBlock: toQuantity(blockNumber),
-      topics: [TOPIC_UNIV3_SWAP],
-    });
-    for (const log of logs) {
-      const otherIndex = quantityToNumber(log.transactionIndex);
-      if (Math.abs(otherIndex - candidate.transactionIndex) !== 2) continue;
-      const otherHash = lower(String(log.transactionHash ?? ""));
-      if (!otherHash || otherHash === candidate.hash) continue;
-      const otherSwap = v3SwapFromLog(log);
-      if (!otherSwap || otherSwap.direction === currentSwap.direction) continue;
-      const otherTx = await rpc.getTransaction(otherHash);
-      const otherFrom = lower(String(otherTx?.from ?? ""));
-      const otherTo = lower(String(otherTx?.to ?? ""));
-      if (beneficiaries.has(otherFrom) || beneficiaries.has(otherTo)) return true;
+    for (const currentSwap of currentSwaps) {
+      if (checkedPools.has(currentSwap.poolId)) continue;
+      checkedPools.add(currentSwap.poolId);
+      const logs = await rpc.getLogs({
+        address: currentSwap.poolId,
+        fromBlock: toQuantity(blockNumber),
+        toBlock: toQuantity(blockNumber),
+        topics: [[...supportedTopics]],
+      });
+      const poolSwaps = logs
+        .map((log) => ({ log, swap: decodeAnySwapLog(log) }))
+        .filter((entry): entry is { log: Json; swap: NonNullable<ReturnType<typeof decodeAnySwapLog>> } =>
+          entry.swap !== null && entry.swap.poolId === currentSwap.poolId
+        );
+
+      for (const other of poolSwaps) {
+        const otherHash = lower(other.swap.txHash);
+        if (!otherHash || otherHash === candidate.hash) continue;
+        if (other.swap.direction === currentSwap.direction) continue;
+        if (!isSameActor(await transaction(otherHash))) continue;
+
+        const frontIndex = Math.min(other.swap.index, candidate.transactionIndex);
+        const backIndex = Math.max(other.swap.index, candidate.transactionIndex);
+        if (backIndex - frontIndex < 2) continue;
+        const frontDirection = other.swap.index < candidate.transactionIndex
+          ? other.swap.direction
+          : currentSwap.direction;
+
+        for (const victim of poolSwaps) {
+          if (victim.swap.index <= frontIndex || victim.swap.index >= backIndex) continue;
+          if (victim.swap.direction !== frontDirection) continue;
+          const victimHash = lower(victim.swap.txHash);
+          if (!victimHash || victimHash === candidate.hash || victimHash === otherHash) continue;
+          if (!isSameActor(await transaction(victimHash))) return true;
+        }
+      }
     }
   } catch {
     return false;
