@@ -41,6 +41,14 @@ export interface ResolvedPlan {
   templateName: string;
 }
 
+export interface SolverTiming {
+  /** Phase-1 quote-search work: center resolution plus grid/GSS quote evaluation. */
+  quoteMs: number;
+  /** Phase-2 validation work: top-N propagation, plan build, and final simulate. */
+  simMs: number;
+  otherMs?: number;
+}
+
 export interface SolverProbe {
   readonly executor: string;
   simulate(plan: ResolvedPlan): Promise<{
@@ -77,6 +85,9 @@ export interface SolveOptions {
    *  Live local-victim-apply uses this to keep revm victim overlay out of the
    *  hot quote/search path; the caller must run final sim before submit. */
   deferPhase2Sim?: boolean;
+  /** Optional per-call timing sink. Reset at solve entry and updated before
+   *  returns or throws, so callers can account for rejected solver attempts. */
+  timing?: SolverTiming;
 }
 
 export interface Solver {
@@ -116,6 +127,21 @@ export class AnvilSolver implements Solver {
     const debugQuotes = process.env.SEARCHER_SOLVER_DEBUG_QUOTES === "1";
     const startedAt = Date.now();
     const pastDeadline = (): boolean => Date.now() - startedAt >= deadlineMs;
+    const timing = opts.timing;
+    if (timing) {
+      timing.quoteMs = 0;
+      timing.simMs = 0;
+      if (timing.otherMs !== undefined) timing.otherMs = 0;
+    }
+    const timed = async <T>(bucket: "quoteMs" | "simMs", fn: () => Promise<T>): Promise<T> => {
+      if (!timing) return fn();
+      const timingStarted = Date.now();
+      try {
+        return await fn();
+      } finally {
+        timing[bucket] += Date.now() - timingStarted;
+      }
+    };
 
     const flashToken = plan.opportunity.startToken;
     const executor = probe.executor;
@@ -124,10 +150,12 @@ export class AnvilSolver implements Solver {
     // token. The detector stores victimAmountIn in the victim tokenIn units;
     // live opportunities often flash tokenOut (for example WETH), so using the
     // raw 6-decimal stable amount as wei would collapse the grid to dust.
-    const rawCenter = await resolveSearchCenter(plan, flashToken, state, {
-      cache: opts.cache,
-      quoteSource: opts.quoteSource,
-    });
+    const rawCenter = await timed("quoteMs", () =>
+      resolveSearchCenter(plan, flashToken, state, {
+        cache: opts.cache,
+        quoteSource: opts.quoteSource,
+      }),
+    );
     const maxFlashAmount = normalizedMaxFlashAmount(plan);
     if (maxFlashAmount !== null && maxFlashAmount <= 0n) {
       throw new Error(`no profitable plan (flash cap is zero)`);
@@ -149,13 +177,15 @@ export class AnvilSolver implements Solver {
       quoteCount++;
       let amounts: bigint[];
       try {
-        amounts = await propagateAmounts(plan.tokenPath, flashAmount, state, {
-          fluidDebtBps,
-          cache: opts.cache,
-          quoteSource: opts.quoteSource,
-          safetyBps: quoteSafetyBps,
-          shouldStop: pastDeadline,
-        });
+        amounts = await timed("quoteMs", () =>
+          propagateAmounts(plan.tokenPath, flashAmount, state, {
+            fluidDebtBps,
+            cache: opts.cache,
+            quoteSource: opts.quoteSource,
+            safetyBps: quoteSafetyBps,
+            shouldStop: pastDeadline,
+          }),
+        );
       } catch (err) {
         lastFailure = `quote failed: ${err instanceof Error ? err.message : String(err)}`;
         return FAIL_SCORE;
@@ -265,13 +295,15 @@ export class AnvilSolver implements Solver {
       let amounts: bigint[];
       let rawOutputs: bigint[];
       try {
-        const propagated = await propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, state, {
-          fluidDebtBps: cand.fluidDebtBps,
-          cache: opts.cache,
-          quoteSource: opts.quoteSource,
-          safetyBps: quoteSafetyBps,
-          shouldStop: pastDeadline,
-        });
+        const propagated = await timed("simMs", () =>
+          propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, state, {
+            fluidDebtBps: cand.fluidDebtBps,
+            cache: opts.cache,
+            quoteSource: opts.quoteSource,
+            safetyBps: quoteSafetyBps,
+            shouldStop: pastDeadline,
+          }),
+        );
         amounts = propagated.amounts;
         rawOutputs = propagated.rawOutputs;
       } catch (err) {
@@ -293,16 +325,18 @@ export class AnvilSolver implements Solver {
 
         let resolvedNode: ResolvedPlanNode;
         try {
-          resolvedNode = await buildResolvedPlanFromPath(
-            plan.tokenPath,
-            flashToken,
-            cand.flashAmount,
-            amounts,
-            executor,
-            state,
-            targetNetProfit,
-            flashAdapterId,
-            rawOutputs,
+          resolvedNode = await timed("simMs", () =>
+            buildResolvedPlanFromPath(
+              plan.tokenPath,
+              flashToken,
+              cand.flashAmount,
+              amounts,
+              executor,
+              state,
+              targetNetProfit,
+              flashAdapterId,
+              rawOutputs,
+            ),
           );
         } catch (err) {
           lastFailure = `build failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -327,7 +361,7 @@ export class AnvilSolver implements Solver {
           lastFailure = `deadline ${deadlineMs}ms reached before sim`;
           break;
         }
-        const sim = await probe.simulate(candidate);
+        const sim = await timed("simMs", () => probe.simulate(candidate));
         if (!sim.success) {
           lastFailure = sim.revertReason ?? "simulation failed";
           console.log(`[searcher/ac3] solver:   sim rejected: ${lastFailure.slice(0, 200)}`);
