@@ -175,6 +175,9 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 dated bounded envelope. Only funding/cap/key changes, standing-credit enablement, or out-of-envelope
 broadcast are real human stops. Transient mechanics get one retry; a second failure retains the branch and
 advances rather than stalling ten future rounds.
+The hourly opening `reap` also reconciles runtime liveness: `state=running` with an inactive B unit closes
+immediately as `crashed_needs_escalation`, restores A's CPUs, preserves the branch/evidence, and advances to
+the next problem. It never waits for the nominal lease to expire.
 **Traps (codified 2026-07-08/12):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Startup
 full warm under load can't finish the budget → early-return → `lastWarmedBlock` never set → `warm=full`
 DEATH-SPIRAL; escape by bumping `SEARCHER_BLOCKSCAN_PASS_BUDGET_MS` for the first warm, or deploy at normal

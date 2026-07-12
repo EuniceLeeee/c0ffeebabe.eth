@@ -147,6 +147,17 @@ reap_stale() {
   status=$(state_field status)
   lease=$(state_field lease_until)
   now=$(date +%s)
+  if [ "$status" = "running" ] && [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" != "active" ]; then
+    experiment=$(state_field experiment_id)
+    branch=$(state_field branch)
+    capture_fairness
+    stop_b
+    state_update status closed lease_until 0 outcome crashed_needs_escalation \
+      failure_reason b_unit_inactive_while_state_running
+    append_history
+    echo "reaped inactive B experiment=$experiment branch=$branch; branch retained"
+    return 0
+  fi
   if { [ "$status" = "running" ] || [ "$status" = "paused" ]; } \
       && [ "${lease:-0}" -gt 0 ] && [ "$lease" -le "$now" ]; then
     experiment=$(state_field experiment_id)
@@ -446,6 +457,6 @@ case "$cmd" in
   close) [ "$#" -eq 3 ] || die "usage: close <experiment-id> <outcome>"; close_experiment "$2" "$3" ;;
   renew) [ "$#" -eq 2 ] || die "usage: renew <experiment-id>"; renew "$2" ;;
   reap) reap_stale; [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
-  status) [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
+  status) reap_stale; [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
   *) die "usage: $0 preflight|deploy|pause|close|renew|reap|status" ;;
 esac
