@@ -31,7 +31,7 @@ import {
 } from "./amount-propagation.js";
 import { buildResolvedPlanFromPath } from "./plan-builder.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
-import { quote } from "./quoter.js";
+import { quote, type V4QuotePathStats } from "./quoter.js";
 
 export interface ResolvedPlan {
   root: ResolvedPlanNode;
@@ -108,6 +108,23 @@ interface QuoteCandidate {
   quoteProfit: bigint;
 }
 
+function newV4QuotePathStats(): V4QuotePathStats {
+  return { local: 0, fallback: 0, localFailures: 0, hookSkipped: 0 };
+}
+
+function v4QuoteStatsTotal(stats: V4QuotePathStats): number {
+  return stats.local + stats.fallback;
+}
+
+function formatV4QuotePathStats(stats: V4QuotePathStats): string {
+  const total = v4QuoteStatsTotal(stats);
+  const localPct = total === 0 ? "n/a" : `${((stats.local * 100) / total).toFixed(1)}%`;
+  return (
+    `local=${stats.local} fallback=${stats.fallback} localPct=${localPct} ` +
+    `localFailures=${stats.localFailures} hookSkipped=${stats.hookSkipped}`
+  );
+}
+
 export class AnvilSolver implements Solver {
   async solve(
     plan: CandidatePlan,
@@ -142,6 +159,16 @@ export class AnvilSolver implements Solver {
         timing[bucket] += Date.now() - timingStarted;
       }
     };
+    const v4QuoteStats = debugQuotes ? newV4QuotePathStats() : undefined;
+    let v4QuoteStatsLogged = false;
+    const logV4QuoteStatsOnce = (outcome: string): void => {
+      if (!debugQuotes || !v4QuoteStats || v4QuoteStatsLogged || v4QuoteStatsTotal(v4QuoteStats) === 0) return;
+      v4QuoteStatsLogged = true;
+      console.log(
+        `[searcher/ac3] solver: v4 quote path ${formatV4QuotePathStats(v4QuoteStats)} ` +
+          `outcome=${outcome} path=${pathSummary(plan.tokenPath)}`,
+      );
+    };
 
     const flashToken = plan.opportunity.startToken;
     const executor = probe.executor;
@@ -154,6 +181,7 @@ export class AnvilSolver implements Solver {
       resolveSearchCenter(plan, flashToken, state, {
         cache: opts.cache,
         quoteSource: opts.quoteSource,
+        v4QuoteStats,
       }),
     );
     const maxFlashAmount = normalizedMaxFlashAmount(plan);
@@ -182,6 +210,7 @@ export class AnvilSolver implements Solver {
             fluidDebtBps,
             cache: opts.cache,
             quoteSource: opts.quoteSource,
+            v4QuoteStats,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
@@ -240,6 +269,7 @@ export class AnvilSolver implements Solver {
       if (debugQuotes && bestObserved) {
         logBestObservedQuote(plan, bestObserved, center, quoteSafetyBps);
       }
+      logV4QuoteStatsOnce("no-profitable");
       throw new Error(
         `no profitable plan (quote search ${quoteCount} pts, center=${center}): ${lastFailure}`,
       );
@@ -284,6 +314,7 @@ export class AnvilSolver implements Solver {
         `maxFlash=${maxFlashAmount ?? "unbounded"} ` +
         `path=${pathSummary(plan.tokenPath)}`,
     );
+    logV4QuoteStatsOnce("quote-search");
 
     let best: ResolvedPlan | null = null;
     let bestProfit = FAIL_SCORE;
@@ -479,7 +510,7 @@ export async function resolveSearchCenter(
   plan: CandidatePlan,
   flashToken: string,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
 ): Promise<bigint> {
   // Block-scan (no source swap): the scanner already sized the loop; use its
   // searchCenter directly (in flashToken units) and skip the victim-amount /
@@ -559,7 +590,7 @@ async function quoteImpactOutput(
   impact: OpportunityImpact,
   victimAmount: bigint,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
   v4PoolKey?: V4PoolKey,
 ): Promise<bigint> {
   let quoted: bigint;
@@ -575,6 +606,7 @@ async function quoteImpactOutput(
       v4PoolKey,
       impact.poolToken0,
       impact.poolToken1,
+      options.v4QuoteStats,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;
@@ -597,7 +629,7 @@ async function approximatePrefixInputForOutput(
   reverseImpactIndex: number,
   desiredOutput: bigint,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource },
+  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
 ): Promise<bigint> {
   if (desiredOutput <= 0n) return 1n;
   const prefix = { edges: plan.tokenPath.edges.slice(0, reverseImpactIndex) };
@@ -608,6 +640,7 @@ async function approximatePrefixInputForOutput(
     const amounts = await propagateAmounts(prefix, flashAmount, state, {
       cache: options.cache,
       quoteSource: options.quoteSource,
+      v4QuoteStats: options.v4QuoteStats,
     });
     return amounts[amounts.length - 1] ?? 0n;
   };
