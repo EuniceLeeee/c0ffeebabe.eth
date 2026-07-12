@@ -119,6 +119,50 @@ test("comparator catches solve-ring drift even when aggregate summaries match", 
   assert.equal(result.output_mismatches, 4);
 });
 
+test("next-block busy logs do not steal solve lines from the active pass", () => {
+  const shared = [
+    "[searcher/blockscan] block=100 warm=incremental changed=1 changedCurve=0 range=100-100 logs=1",
+    "[searcher/blockscan]   solve ring=A>B>A net=null error=no_quote standing=false protoRing=false",
+  ];
+  const tail = [
+    "[searcher/blockscan]   solve ring=A>C>A net=null error=no_quote standing=false protoRing=false",
+    "[searcher/blockscan] block=100 scannedPairs=10 candidates=2 quotePositive=0 bestNet=null warmedV2V3=3 protocolMids=2 skippedVenues=0 ms=100",
+    "[searcher/blockscan] block=100 stage warm_curve=2ms solve=98ms total=100ms solve_planner=0ms solve_solver=98ms solve_submit=0ms",
+  ];
+  const a = [...shared, "[searcher/blockscan] block=101 skipped=busy", ...tail].join("\n");
+  const b = [...shared, ...tail].join("\n");
+  const parsed = parseBlockScanLog(a);
+  assert.deepEqual([...parsed.get(100)!.rings].sort(), ["A>B>A", "A>C>A"]);
+  assert.equal(parsed.get(101)?.rings.size ?? 0, 0);
+
+  const result = compareBlockScanLogs(a, b, {
+    goal: "equivalence",
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 1,
+    warmupBlocks: 0, minImprovementPct: 0, minAbsoluteDelta: 0, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  assert.equal(result.script_assessment, "supports");
+  assert.deepEqual(result.ring_set_mismatch_blocks, []);
+});
+
+test("legacy warmedV2V3 pass markers keep pre-summary solve attribution", () => {
+  const legacy = (ring: string) => [
+    "[searcher/blockscan] block=100 warmedV2V3=3 warmedCurve=1 v3TickMeta=2 protocolMids=2",
+    `[searcher/blockscan]   solve ring=${ring} net=null error=no_quote standing=false protoRing=false`,
+    "[searcher/blockscan] block=101 skipped=busy",
+    "[searcher/blockscan] block=100 scannedPairs=10 candidates=1 quotePositive=0 bestNet=null warmedV2V3=3 protocolMids=2 skippedVenues=0 ms=100",
+    "[searcher/blockscan] block=100 stage warm_curve=2ms solve=98ms total=100ms solve_planner=0ms solve_solver=98ms solve_submit=0ms",
+  ].join("\n");
+  const result = compareBlockScanLogs(legacy("A>B>A"), legacy("DIFFERENT"), {
+    goal: "equivalence",
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 1,
+    warmupBlocks: 0, minImprovementPct: 0, minAbsoluteDelta: 0, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  assert.equal(result.script_assessment, "contradicts");
+  assert.deepEqual(result.ring_set_mismatch_blocks, [100]);
+});
+
 test("comparator excludes budget-censored blocks before warmup and pairing", () => {
   const a = [
     log(100),

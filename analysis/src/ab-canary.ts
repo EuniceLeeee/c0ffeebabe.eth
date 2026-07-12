@@ -54,7 +54,7 @@ export type AbCompareResult = {
 
 const SUMMARY_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=(\d+)\s+candidates=(\d+)\s+quotePositive=(\d+)\s+bestNet=(null|-?\d+)\s+warmedV2V3=(\d+)\s+protocolMids=(\d+)\s+skippedVenues=(\d+)\s+ms=(\d+)/;
 const STAGE_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+stage\s+(.+)$/;
-const BLOCK_RE = /\[searcher\/blockscan\]\s+block=(\d+)\b/;
+const PASS_START_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+(?:warm=|warmedV2V3=)/;
 const SOLVE_RE = /\[searcher\/blockscan\]\s+solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
 const BUDGET_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+pass_budget_exceeded\b/;
 const EVENT_PATTERNS: [string, RegExp][] = [
@@ -90,13 +90,17 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
 
   let currentBlock: number | null = null;
   for (const line of text.split(/\r?\n/)) {
-    const blockMatch = line.match(BLOCK_RE);
-    if (blockMatch) currentBlock = Number(blockMatch[1]);
+    const passStart = line.match(PASS_START_RE);
+    if (passStart) currentBlock = Number(passStart[1]);
     const budget = line.match(BUDGET_RE);
     if (budget) get(Number(budget[1])).budgetExceeded = true;
     const summary = line.match(SUMMARY_RE);
     if (summary) {
       const block = Number(summary[1]);
+      // Real solve/event lines omit the block number. Keep them attached to the
+      // active warm pass; a concurrent `block=N+1 skipped=busy` is not a pass switch.
+      // Setting this on summaries also keeps legacy/synthetic logs parseable.
+      currentBlock = block;
       const record = get(block);
       record.summary = {
         scannedPairs: Number(summary[2]),
