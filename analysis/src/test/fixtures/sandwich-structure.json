@@ -27,6 +27,19 @@
           ],
           "transactionHash": "0xa6fdcb644754032598cf30a48fc398f5dbdd9061a93eb06555fadd879027c426",
           "transactionIndex": "0x2"
+        },
+        {
+          "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "blockNumber": "0x18552a3",
+          "data": "0x00000000000000000000000000000000000000000000000000052fcfaecfabd1",
+          "logIndex": "0x7a",
+          "removed": false,
+          "topics": [
+            "0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ],
+          "transactionHash": "0xa6fdcb644754032598cf30a48fc398f5dbdd9061a93eb06555fadd879027c426",
+          "transactionIndex": "0x2"
         }
       ]
     },

@@ -34,10 +34,11 @@ const COFFEE = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
 
 test("0xa6fdcb64 flips from false sandwich to atomic_loop without an external bracketed victim", async () => {
   const sample = fixture.false_atomic;
-  const analysis = await classify(sample);
+  const analysis = await classify(sample, []);
 
   assert.equal(sample.txHash, "0xa6fdcb644754032598cf30a48fc398f5dbdd9061a93eb06555fadd879027c426");
   assert.equal(analysis.winner_style, "atomic_loop");
+  assert.equal(analysis.receipt_weth_unwrap_exit, true);
 
   const prior = partitionPriorMoversByActor([
     { txHash: "0x3b0469c96e9dd3f7ac4246824f5cdd3ca6fba6e2a6fb03fc1beedea4a9a71c96", transactionIndex: 0, emitter: sample.blockSwaps[0]!.address },
@@ -59,18 +60,29 @@ test("real ae2Fc483 pre-victim-post bracket remains sandwich", async () => {
   assert.equal(analysis.winner_style, "sandwich");
 });
 
-async function classify(sample: SandwichFixtureCase) {
+test("an available native prestate trace stays authoritative over an unwrap receipt", async () => {
+  const analysis = await classify(fixture.false_atomic, [], true, -0.1);
+  assert.equal(analysis.receipt_weth_unwrap_exit, true);
+  assert.equal(analysis.winner_style, "unknown");
+});
+
+async function classify(
+  sample: SandwichFixtureCase,
+  pricedDeltas = [{ token: WETH, raw: 1n, symbol: "WETH", decimals: 18 }],
+  nativeTraceUsed = false,
+  ethDeltaEth = 0,
+) {
   return classifyWinnerTxStyle({
     rpc: fixtureRpc(sample),
     txHash: sample.txHash,
     tx: sample.tx,
     receipt: sample.receipt,
     profit: {
-      pricedDeltas: [{ token: WETH, raw: 1n, symbol: "WETH", decimals: 18 }],
+      pricedDeltas,
       unpricedDeltas: [],
       beneficiary: sample.tx.to,
-      ethDeltaEth: 0,
-      nativeTraceUsed: false,
+      ethDeltaEth,
+      nativeTraceUsed,
     },
     transactionIndex: sample.transactionIndex,
     blockNumber: sample.block,

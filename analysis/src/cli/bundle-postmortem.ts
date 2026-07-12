@@ -168,6 +168,7 @@ export interface CompetitorReport extends CandidateTx {
   touchedVenues: TouchedVenue[];
   edgeKinds: EdgeKind[];
   winner_style: WinnerStyle;
+  receipt_weth_unwrap_exit: boolean;
   winner_moved_price_beyond_prestate: boolean;
   unpriced_token_in_flow: string[];
 }
@@ -249,6 +250,7 @@ export interface WinnerStyleTxInput {
 
 export interface WinnerStyleAnalysis {
   winner_style: WinnerStyle;
+  receipt_weth_unwrap_exit: boolean;
   winner_moved_price_beyond_prestate: boolean;
   unpriced_token_in_flow: string[];
   non_arb_signals?: NonArbSignals;
@@ -1039,6 +1041,7 @@ async function anyTxPostmortem(
       unpricedDeltas: profit.unpricedDeltas,
     },
     winner_style: styleAnalysis.winner_style,
+    receipt_weth_unwrap_exit: styleAnalysis.receipt_weth_unwrap_exit,
     non_comparable_winner: isNonComparableWinnerStyle(styleAnalysis.winner_style) ? true : undefined,
     non_arb_signals: styleAnalysis.non_arb_signals,
     edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
@@ -1342,6 +1345,7 @@ async function analyzeCompetitor(
     touchedVenues: extractTouchedVenues(receipt, graph),
     edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
     winner_style: winnerStyleAnalysis.winner_style,
+    receipt_weth_unwrap_exit: winnerStyleAnalysis.receipt_weth_unwrap_exit,
     winner_moved_price_beyond_prestate: winnerStyleAnalysis.winner_moved_price_beyond_prestate,
     unpriced_token_in_flow: winnerStyleAnalysis.unpriced_token_in_flow,
   };
@@ -1668,7 +1672,13 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
 
 export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
   const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
-  const nativeWeiPositive = input.profit.nativeTraceUsed && input.profit.ethDeltaEth > 0;
+  const receiptWethUnwrapExit = hasBeneficiaryWethUnwrapExit(input.receipt, beneficiaries);
+  // A successful WETH Withdrawal to the executor is the receipt-level native
+  // profit exit used by Coffee's atomic loops. Use it only when prestate trace
+  // is unavailable; an available trace remains authoritative for native net.
+  const nativeWeiPositive = input.profit.nativeTraceUsed
+    ? input.profit.ethDeltaEth > 0
+    : receiptWethUnwrapExit;
   const nativeWeiNegative = input.profit.nativeTraceUsed && input.profit.ethDeltaEth < 0;
   const unpricedTokenInFlow = unpricedTokenInFlowTokens(input.profit.unpricedDeltas);
   const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
@@ -1730,9 +1740,29 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       inventory_rebalance_selector_hit: inventoryRebalanceSelectorHit,
       share_imbalance_tokens: shareImbalanceTokens,
     }), nonArbSignals),
+    receipt_weth_unwrap_exit: receiptWethUnwrapExit,
     winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
     unpriced_token_in_flow: unpricedTokenInFlow,
   };
+}
+
+export function hasBeneficiaryWethUnwrapExit(
+  receipt: Json | null,
+  beneficiaries: Set<string>,
+): boolean {
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.address ?? "")) !== lower(ADDR.WETH)) continue;
+    if (lower(String(log?.topics?.[0] ?? "")) !== lower(TOPICS.wethWithdrawal)) continue;
+    const party = `0x${String(log?.topics?.[1] ?? "").slice(-40)}`.toLowerCase();
+    if (!beneficiaries.has(party)) continue;
+    try {
+      if (hexToBigInt(log?.data ?? "0x0") > 0n) return true;
+    } catch {
+      // Malformed receipt evidence is ignored; it must never manufacture an
+      // atomic classification.
+    }
+  }
+  return false;
 }
 
 // Layer 2 (F-009): per-tx ERC4626/vault-share NET mint/burn imbalance from the receipt. For each
