@@ -39,6 +39,24 @@ test("paired comparator excludes warmup and detects a guarded performance win", 
   assert.equal(result.script_assessment, "supports");
 });
 
+test("disabled absolute threshold does not turn sub-percent noise into a regression", () => {
+  const options = {
+    metric: "total_ms",
+    direction: "lower" as const,
+    aggregate: "p50" as const,
+    minPairedBlocks: 4,
+    warmupBlocks: 2,
+    minImprovementPct: 5,
+    minAbsoluteDelta: 0,
+    maxRegressionPct: 5,
+    requireOutputMatch: false,
+  };
+  const noise = compareBlockScanLogs(log(100), log(101), options);
+  const regression = compareBlockScanLogs(log(100), log(106), options);
+  assert.equal(noise.script_assessment, "inconclusive");
+  assert.equal(regression.script_assessment, "contradicts");
+});
+
 test("performance comparator rejects output drift", () => {
   const result = compareBlockScanLogs(log(100), log(80, 1), {
     metric: "total_ms",
@@ -318,6 +336,11 @@ function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
     branch_action: "pending_merge",
     b_stopped: true,
     evidence_bundle: "redacted A/B report and compare.json",
+    mergeability: {
+      current_main_commit: "a".repeat(40),
+      tested_base_is_current: true,
+      evidence: "origin/main still equals the tested base",
+    },
   };
 }
 
@@ -418,6 +441,45 @@ test("unresolved work retains the branch and closes the B slot", () => {
   value.branch_action = "deleted_unmerged";
   assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "close")
     .some((error) => error.includes("branch_action must be retained|resolved_deleted")));
+});
+
+test("a causally winning challenger is retained when current main is no longer the tested base", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(120), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: false,
+  });
+  const value = experiment(tmp, artifact);
+  value.change_class = "capability";
+  value.deterministic_gate = { result: "pass", evidence: "same failing replay flips to positive execution" };
+  value.analysis.reconciliation = "disagree";
+  value.analysis.adversarial_review = {
+    verdict: "win",
+    evidence: "the replay proves capability and paired live shows no semantic regression",
+    reviewer: "fresh-non-author",
+  };
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "retained";
+  value.mergeability = {
+    current_main_commit: "9".repeat(40),
+    tested_base_is_current: false,
+    evidence: "origin/main advanced during the measurement; HERMES requires a retest",
+  };
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "decision"), []);
+});
+
+test("schema v2 cannot authorize a win when mergeability evidence is omitted", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  delete value.mergeability;
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "decision")
+    .some((error) => error.includes("requires mergeability evidence")));
 });
 
 test("a later main fix may archive a previously escalated branch", () => {
@@ -591,6 +653,11 @@ test("cleanup gate verifies a real no-ff merge and actual local/remote branch de
   value.branch = "ab/cli-lifecycle";
   value.base_commit = base; value.a.commit = base;
   value.challenger_commit = challenger; value.b.commit = challenger;
+  value.mergeability = {
+    current_main_commit: base,
+    tested_base_is_current: true,
+    evidence: "origin/main still equals the tested base before merge",
+  };
   value.merge_commit = merge;
   const report = path.join(repo, "report.md");
   const writeReport = () => fs.writeFileSync(report, `\`\`\`ab_experiment\n${JSON.stringify(value)}\n\`\`\`\n`);
@@ -645,6 +712,11 @@ test("cleanup gate archives main-resolved escalated work without retaining the b
   value.branch = "ab/resolved-lifecycle";
   value.base_commit = base; value.a.commit = base;
   value.challenger_commit = challenger; value.b.commit = challenger;
+  value.mergeability = {
+    current_main_commit: resolvedBy,
+    tested_base_is_current: false,
+    evidence: "a later validated main commit resolves the retained experiment",
+  };
   value.analysis.agent_manual_verdict = "inconclusive";
   value.analysis.script_assessment = "inconclusive";
   value.analysis.reconciliation = "inconclusive";

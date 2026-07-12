@@ -270,10 +270,11 @@ export function compareBlockScanLogs(
       const absolutePass = absoluteDelta > 0 && absoluteDelta >= options.minAbsoluteDelta;
       const percentPass = options.minImprovementPct <= 0
         || (improvementPct !== null && improvementPct >= options.minImprovementPct);
-      const regressed = absoluteDelta < 0 && (
-        (improvementPct !== null && improvementPct <= -Math.abs(options.maxRegressionPct))
-        || Math.abs(absoluteDelta) >= Math.max(0, options.minAbsoluteDelta)
-      );
+      const absoluteRegression = options.minAbsoluteDelta > 0
+        && Math.abs(absoluteDelta) >= options.minAbsoluteDelta;
+      const percentRegression = improvementPct !== null
+        && improvementPct <= -Math.abs(options.maxRegressionPct);
+      const regressed = absoluteDelta < 0 && (percentRegression || absoluteRegression);
       if (absolutePass && percentPass) {
         scriptAssessment = "supports";
         reasons.push(`primary metric improved by ${absoluteDelta} (${improvementPct?.toFixed(2) ?? "n/a"}%)`);
@@ -371,6 +372,11 @@ export type AbExperiment = {
   b_stopped: boolean;
   evidence_bundle: string;
   merge_commit?: string;
+  mergeability?: {
+    current_main_commit: string;
+    tested_base_is_current: boolean;
+    evidence: string;
+  };
   resolution?: {
     resolved_by_commit: string;
     evidence: string;
@@ -579,9 +585,31 @@ export function validateAbExperiment(
     || runtimeFairnessErrors.length > 0;
   const hardVeto = experiment.deterministic_gate?.result === "fail"
     || experiment.analysis?.script_exit_code !== 0
-    || fairnessHardVeto;
+    || fairnessHardVeto
+    || experiment.mergeability?.tested_base_is_current === false;
+  if (experiment.mergeability !== undefined) {
+    if (!sha(experiment.mergeability.current_main_commit, 40)) {
+      errors.push("mergeability.current_main_commit must be a full 40-char commit SHA");
+    }
+    if (typeof experiment.mergeability.tested_base_is_current !== "boolean") {
+      errors.push("mergeability.tested_base_is_current must be boolean");
+    } else if (experiment.mergeability.tested_base_is_current
+        !== (experiment.mergeability.current_main_commit === experiment.base_commit)) {
+      errors.push("mergeability.tested_base_is_current disagrees with current_main_commit vs base_commit");
+    }
+    if (!nonEmpty(experiment.mergeability.evidence)) {
+      errors.push("mergeability.evidence missing/placeholder");
+    }
+  }
+  if (experiment.schema_version === 2 && experiment.final_verdict === "win"
+      && experiment.mergeability === undefined) {
+    errors.push("schema_version=2 final win requires mergeability evidence for current origin/main vs tested base");
+  }
   const resolvedArchive = phase === "close" && experiment.branch_action === "resolved_deleted";
   if (experiment.final_verdict === "win" && resolved !== "win") errors.push("final win is not supported by reconciled/adjudicated evidence");
+  if (experiment.final_verdict === "win" && experiment.mergeability?.tested_base_is_current === false) {
+    errors.push("final win requires current origin/main to equal the tested base; retain and retest instead");
+  }
   if (experiment.final_verdict === "lose" && resolved !== "lose") errors.push("final lose is not supported by reconciled/adjudicated evidence");
   if (experiment.final_verdict === "needs_escalation" && resolved !== "inconclusive" && !hardVeto && !resolvedArchive) {
     errors.push("needs_escalation requires an inconclusive reconciled/adjudicated verdict");
