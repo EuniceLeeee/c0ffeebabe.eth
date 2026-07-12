@@ -16,7 +16,7 @@ import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } 
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
-import { TemplatePlanner } from "./planner/planner.js";
+import { TemplatePlanner, type CandidatePlan } from "./planner/planner.js";
 import {
   buildTokenGraph,
   buildTokenIndex,
@@ -1030,13 +1030,19 @@ async function main(): Promise<void> {
         const passStarted = Date.now();
         let segPrev = passStarted;
         const seg: Record<string, number> = {};
+        let solvePlannerMs = 0;
+        let solveSolverMs = 0;
+        let solveSubmitMs = 0;
         const segMark = (k: string): void => {
           const now = Date.now();
           seg[k] = now - segPrev;
           segPrev = now;
         };
         const segStr = (): string =>
-          `${Object.entries(seg).map(([k, v]) => `${k}=${v}ms`).join(" ")} total=${Date.now() - passStarted}ms`;
+          `${Object.entries(seg).map(([k, v]) => `${k}=${v}ms`).join(" ")} ` +
+          `total=${Date.now() - passStarted}ms ` +
+          `solve_planner=${solvePlannerMs}ms solve_solver=${solveSolverMs}ms ` +
+          `solve_submit=${solveSubmitMs}ms`;
         let segLogged = false;
         const logSeg = (): void => {
           if (segLogged) return;
@@ -1235,10 +1241,16 @@ async function main(): Promise<void> {
             const protoRing = opp.seedEdges.some((edge) => edge.slotKind === "protocol");
             try {
               blockScanPlannerForPass.setGraph(opp.seedEdges);
-              const plans = await blockScanPlannerForPass.planBlockScanFromSeedEdges(
-                opp,
-                [FLASH_SWAP_REPAY],
-              );
+              let plans: CandidatePlan[];
+              const plannerStarted = Date.now();
+              try {
+                plans = await blockScanPlannerForPass.planBlockScanFromSeedEdges(
+                  opp,
+                  [FLASH_SWAP_REPAY],
+                );
+              } finally {
+                solvePlannerMs += Date.now() - plannerStarted;
+              }
               if (plans.length === 0) {
                 console.log(
                   `[searcher/blockscan]   solve ring=${ring} net=null error=no_plans ` +
@@ -1247,20 +1259,26 @@ async function main(): Promise<void> {
                 continue;
               }
               if (passBudgetExceeded("solve")) break;
-              const solved = await blockScanSolverForPass.solve(
-                plans[0],
-                blockScanStateForPass,
-                blockScanSimulatorForPass,
-                {
-                  deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
-                  deferPhase2Sim: true,
-                  cache: blockScanCacheForPass,
-                  finalSimTopN: 3,
-                  gssMaxTries: 8,
-                  quoteProfitFloorBps: 0n,
-                  quoteSafetyBps: 10000n,
-                },
-              );
+              let solved: ResolvedPlan;
+              const solverStarted = Date.now();
+              try {
+                solved = await blockScanSolverForPass.solve(
+                  plans[0],
+                  blockScanStateForPass,
+                  blockScanSimulatorForPass,
+                  {
+                    deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
+                    deferPhase2Sim: true,
+                    cache: blockScanCacheForPass,
+                    finalSimTopN: 3,
+                    gssMaxTries: 8,
+                    quoteProfitFloorBps: 0n,
+                    quoteSafetyBps: 10000n,
+                  },
+                );
+              } finally {
+                solveSolverMs += Date.now() - solverStarted;
+              }
               if (solved.netProfit > 0n) quotePositive++;
               if (bestNet === null || solved.netProfit > bestNet) bestNet = solved.netProfit;
               console.log(
@@ -1269,25 +1287,30 @@ async function main(): Promise<void> {
               );
               if (solved.netProfit > 0n) {
                 if (config.blockScanSubmit && passBudgetExceeded("submit")) break;
-                await maybeSubmitBlockScanAtomic({
-                  config,
-                  provider,
-                  simulator: blockScanSimulatorForPass,
-                  bundleRouter,
-                  submissionCoordinator,
-                  opp,
-                  resolved: solved,
-                  sourceBlock: blockNumber,
-                  ring,
-                  protoRing,
-                  plans: plans.length,
-                  passDeadlineAtMs,
-                  rejectBlacklist: blockScanRejectBlacklist,
-                  strategyVersions: {
-                    strategy_view_version: strategyViews.versions.strategy_view_version,
-                    blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
-                  },
-                });
+                const submitStarted = Date.now();
+                try {
+                  await maybeSubmitBlockScanAtomic({
+                    config,
+                    provider,
+                    simulator: blockScanSimulatorForPass,
+                    bundleRouter,
+                    submissionCoordinator,
+                    opp,
+                    resolved: solved,
+                    sourceBlock: blockNumber,
+                    ring,
+                    protoRing,
+                    plans: plans.length,
+                    passDeadlineAtMs,
+                    rejectBlacklist: blockScanRejectBlacklist,
+                    strategyVersions: {
+                      strategy_view_version: strategyViews.versions.strategy_view_version,
+                      blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
+                    },
+                  });
+                } finally {
+                  solveSubmitMs += Date.now() - submitStarted;
+                }
               }
             } catch (err) {
               console.log(
