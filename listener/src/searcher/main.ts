@@ -1329,7 +1329,9 @@ async function main(): Promise<void> {
                   `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
               );
               if (solved.netProfit > 0n) {
-                submitQueue = submitQueue.then(async () => {
+                // A rejected submit must not poison the chain for later +EV submits
+                // (old serial loop caught per-candidate; keep that isolation).
+                submitQueue = submitQueue.catch(() => {}).then(async () => {
                   if (config.blockScanSubmit && passBudgetExceeded("submit")) {
                     stopSolves = true;
                     return;
@@ -1383,7 +1385,7 @@ async function main(): Promise<void> {
           };
           const workerCount = Math.min(blockScanSolveConcurrency, plannedSolves.length);
           await Promise.all(Array.from({ length: workerCount }, () => solveWorker()));
-          await submitQueue;
+          await submitQueue.catch(() => {});
           segMark("solve");
           console.log(
             `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
