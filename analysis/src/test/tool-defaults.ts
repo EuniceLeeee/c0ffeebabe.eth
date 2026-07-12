@@ -82,6 +82,8 @@ test("census-gap defaults to the runtime routing graph", async () => {
     script,
     /^GRAPH=\$\{GRAPH:-\/opt\/MEV\/listener\/searcher\/pools\/runtime-graph-pools\.json\}$/m,
   );
+  assert.match(script, /^BLOCKSCAN_LOG=\$\{BLOCKSCAN_LOG:-\/var\/log\/mev-live\.log\}$/m);
+  assert.match(script, /--blockscan-log "\$BLOCKSCAN_INPUT"/);
 });
 
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {

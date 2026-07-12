@@ -254,7 +254,7 @@ export interface WinnerStyleAnalysis {
   non_arb_signals?: NonArbSignals;
 }
 
-const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--out <report.json>]
+const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--blockscan-log <mev-live.log>] [--out <report.json>]
   --tx with a FULL hash that matches no bundle_submitted falls back to any-tx competitor mode:
   PnL + winner_style (incl. keeper_claim/rfq_fill signals) + venues incl. non-univ lineages +
   same-block prior movers + our-events venue overlap.`;
@@ -268,6 +268,7 @@ async function main(): Promise<void> {
   const opportunityQuery = stringArg(args, "opportunity", false);
   const rpcUrl = stringArg(args, "rpc");
   const graphPath = args.graph ? resolveCliPath(String(args.graph)) : DEFAULT_GRAPH_PATH;
+  const blockScanLogPath = args["blockscan-log"] ? resolveCliPath(String(args["blockscan-log"])) : "";
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";
 
   if (!eventsPath || !rpcUrl || Boolean(txQuery) === Boolean(opportunityQuery)) usage();
@@ -283,7 +284,15 @@ async function main(): Promise<void> {
     // own-bundle query (disambiguate with --opportunity), and prefix queries need the full hash.
     if ((err as { code?: string }).code === "NO_BUNDLE_MATCH" && /^0x[0-9a-fA-F]{64}$/.test(txQuery)) {
       console.error(`[bundle-postmortem] no bundle_submitted matched --tx ${txQuery} — any-tx competitor mode.`);
-      await anyTxPostmortem(new RpcClient(rpcUrl), txQuery, loaded, graphPath, outPath, resolveCliPath(eventsPath));
+      await anyTxPostmortem(
+        new RpcClient(rpcUrl),
+        txQuery,
+        loaded,
+        graphPath,
+        outPath,
+        resolveCliPath(eventsPath),
+        blockScanLogPath,
+      );
       return;
     }
     throw err;
@@ -578,6 +587,276 @@ interface OurEventsAtBlock {
   venue_overlap: Array<{ type: string; pool: string; victim_hash?: string }>;
 }
 
+export type BlockScanLogStatus =
+  | "complete"
+  | "budget_exceeded"
+  | "skipped_busy"
+  | "error"
+  | "incomplete"
+  | "not_running"
+  | "unknown_log_rotated"
+  | "unknown_log_not_covered"
+  | "unknown_log_empty";
+
+export interface BlockScanRingEvidence {
+  ring: string;
+  tokens: string[];
+  net: string | null;
+  error?: string;
+}
+
+export interface BlockScanActivity {
+  sourceBlock: number;
+  status: BlockScanLogStatus;
+  ran: boolean;
+  detailComplete: boolean;
+  passLine?: string;
+  scannedTokens: Set<string>;
+  rings: BlockScanRingEvidence[];
+  ringCount: number;
+  anySubmitted: boolean;
+  skippedBusy: boolean;
+  budgetExceeded: boolean;
+  minBlock?: number;
+  maxBlock?: number;
+}
+
+export function blockScanSourceBlockForTarget(targetBlock: number): number {
+  return Math.max(0, targetBlock - 1);
+}
+
+export function competitorArbTokenSet(
+  flowSteps: Array<{ token: string }>,
+  pricedDeltas: TokenDelta[],
+  unpricedDeltas: TokenDelta[],
+): Set<string> {
+  const tokens = new Set<string>();
+  for (const value of [
+    ...flowSteps.map((step) => step.token),
+    ...pricedDeltas.map((delta) => delta.token),
+    ...unpricedDeltas.map((delta) => delta.token),
+  ]) {
+    const token = lower(value);
+    if (isAddress(token) && token !== "0x0000000000000000000000000000000000000000") tokens.add(token);
+  }
+  return tokens;
+}
+
+/**
+ * Parse one source-block pass from the text log. Solve/submission lines do not
+ * carry a block number, so attribution is stateful: a real warm line opens the
+ * pass and its matching stage line closes it. A later `skipped=busy` marker is
+ * an overlapping head notification, not a new active pass.
+ */
+export function blockScanActivityAtBlock(logText: string, sourceBlock: number): BlockScanActivity {
+  const anyBlockRe = /\[searcher\/blockscan\]\s+block=(\d+)\b/;
+  const warmRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+warm=(?:full|incremental)\b/;
+  const summaryRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=/;
+  const stageRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+stage\b/;
+  const busyRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+skipped=busy\b/;
+  const budgetRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+pass_budget_exceeded\b/;
+  const errorRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+(?:fork error|scan error):/;
+  const solveRe = /\[searcher\/blockscan\]\s+solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
+  const submittedRe = /\[searcher\/blockscan\]\s+submitted\s+atomic\s+via\b/;
+
+  let minBlock: number | undefined;
+  let maxBlock: number | undefined;
+  let activeBlock: number | null = null;
+  let sawWarm = false;
+  let sawSummary = false;
+  let sawStage = false;
+  let skippedBusy = false;
+  let budgetExceeded = false;
+  let sawError = false;
+  let passLine: string | undefined;
+  let anySubmitted = false;
+  const rings: BlockScanRingEvidence[] = [];
+  const scannedTokens = new Set<string>();
+
+  for (const line of logText.split(/\r?\n/)) {
+    const anyBlock = line.match(anyBlockRe);
+    if (anyBlock) {
+      const block = Number(anyBlock[1]);
+      minBlock = minBlock === undefined ? block : Math.min(minBlock, block);
+      maxBlock = maxBlock === undefined ? block : Math.max(maxBlock, block);
+    }
+
+    const busy = line.match(busyRe);
+    if (busy) {
+      if (Number(busy[1]) === sourceBlock) skippedBusy = true;
+      // Crucial: a busy notification is emitted while another pass is still
+      // producing untagged solve lines. It must not change activeBlock.
+      continue;
+    }
+
+    const warm = line.match(warmRe);
+    if (warm) {
+      activeBlock = Number(warm[1]);
+      if (activeBlock === sourceBlock) {
+        sawWarm = true;
+        passLine = line;
+      }
+      continue;
+    }
+
+    const budget = line.match(budgetRe);
+    if (budget && Number(budget[1]) === sourceBlock) budgetExceeded = true;
+
+    const scanError = line.match(errorRe);
+    if (scanError && Number(scanError[1]) === sourceBlock) sawError = true;
+
+    const summary = line.match(summaryRe);
+    if (summary && Number(summary[1]) === sourceBlock) sawSummary = true;
+
+    const stage = line.match(stageRe);
+    if (stage) {
+      const block = Number(stage[1]);
+      if (block === sourceBlock) {
+        sawStage = true;
+        passLine = line;
+      }
+      if (activeBlock === block) activeBlock = null;
+      continue;
+    }
+
+    if (activeBlock !== sourceBlock) continue;
+    const solve = line.match(solveRe);
+    if (solve) {
+      const tokens = [...solve[1].matchAll(/0x[a-fA-F0-9]{40}/g)].map((match) => lower(match[0]));
+      for (const token of tokens) scannedTokens.add(token);
+      rings.push({
+        ring: solve[1],
+        tokens: uniq(tokens),
+        net: solve[2] === "null" ? null : solve[2],
+        error: solve[3],
+      });
+    }
+    if (submittedRe.test(line)) anySubmitted = true;
+  }
+
+  const detailComplete = sawWarm && sawSummary && sawStage;
+  let status: BlockScanLogStatus;
+  if (minBlock === undefined || maxBlock === undefined) status = "unknown_log_empty";
+  else if (sourceBlock < minBlock) status = "unknown_log_rotated";
+  else if (sourceBlock > maxBlock) status = "unknown_log_not_covered";
+  else if (detailComplete && budgetExceeded) status = "budget_exceeded";
+  else if (detailComplete) status = "complete";
+  else if (sawError) status = "error";
+  else if (sawWarm || sawSummary || sawStage || budgetExceeded) status = "incomplete";
+  else if (skippedBusy) status = "skipped_busy";
+  else status = "not_running";
+
+  return {
+    sourceBlock,
+    status,
+    ran: sawStage,
+    detailComplete,
+    passLine,
+    scannedTokens,
+    rings,
+    ringCount: rings.length,
+    anySubmitted,
+    skippedBusy,
+    budgetExceeded,
+    minBlock,
+    maxBlock,
+  };
+}
+
+export interface OurBlockScanForTarget {
+  target_block: number;
+  source_block: number;
+  status: BlockScanLogStatus | "log_unavailable";
+  ran: boolean;
+  detail_complete: boolean;
+  pass_line?: string;
+  solve_ring_count: number;
+  solve_ring_token_count: number;
+  competitor_token_count: number;
+  token_overlap_count: number;
+  token_overlap_tokens: string[];
+  fully_covered_by_ring_count: number;
+  any_submitted: boolean;
+  jsonl_submission_seen: boolean;
+  text_submission_seen: boolean;
+  log_min_source_block?: number;
+  log_max_source_block?: number;
+  log_error?: string;
+  limitations: string[];
+}
+
+async function blockScanEvidenceForTarget(
+  logPath: string,
+  targetBlock: number,
+  competitorTokens: Set<string>,
+  events: Json[],
+): Promise<OurBlockScanForTarget> {
+  const sourceBlock = blockScanSourceBlockForTarget(targetBlock);
+  const jsonlSubmissionSeen = events.some((event) =>
+    event?.type === "bundle_submitted"
+    && event?.opportunity_kind === "block-scan-arb"
+    && Number(event?.target_block) === targetBlock
+  );
+  const base = {
+    target_block: targetBlock,
+    source_block: sourceBlock,
+    competitor_token_count: competitorTokens.size,
+    limitations: [
+      "ring logs contain solved candidate rings, not the full scannedPairs token universe",
+      "native ETH without a wrapped-token flow edge is not represented in the token join",
+    ],
+  };
+
+  let logText: string;
+  try {
+    logText = await readFile(logPath, "utf8");
+  } catch (err) {
+    return {
+      ...base,
+      status: "log_unavailable",
+      ran: false,
+      detail_complete: false,
+      solve_ring_count: 0,
+      solve_ring_token_count: 0,
+      token_overlap_count: 0,
+      token_overlap_tokens: [],
+      fully_covered_by_ring_count: 0,
+      any_submitted: jsonlSubmissionSeen,
+      jsonl_submission_seen: jsonlSubmissionSeen,
+      text_submission_seen: false,
+      log_error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const activity = blockScanActivityAtBlock(logText, sourceBlock);
+  const overlap = [...competitorTokens]
+    .filter((token) => activity.scannedTokens.has(token))
+    .sort();
+  const fullyCoveredByRingCount = competitorTokens.size === 0
+    ? 0
+    : activity.rings.filter((ring) => {
+      const ringTokens = new Set(ring.tokens);
+      return [...competitorTokens].every((token) => ringTokens.has(token));
+    }).length;
+  return {
+    ...base,
+    status: activity.status,
+    ran: activity.ran,
+    detail_complete: activity.detailComplete,
+    pass_line: activity.passLine,
+    solve_ring_count: activity.ringCount,
+    solve_ring_token_count: activity.scannedTokens.size,
+    token_overlap_count: overlap.length,
+    token_overlap_tokens: overlap,
+    fully_covered_by_ring_count: fullyCoveredByRingCount,
+    any_submitted: activity.anySubmitted || jsonlSubmissionSeen,
+    jsonl_submission_seen: jsonlSubmissionSeen,
+    text_submission_seen: activity.anySubmitted,
+    log_min_source_block: activity.minBlock,
+    log_max_source_block: activity.maxBlock,
+  };
+}
+
 // Did OUR live pipeline emit anything for this block touching the winner's venues? (v4 caveat: our
 // events store the PoolManager address, not the poolId, so a v4 overlap is manager-level only.)
 function ourEventsAtBlock(events: Json[], blockNumber: number, venueEmitters: Set<string>): OurEventsAtBlock {
@@ -629,6 +908,7 @@ async function anyTxPostmortem(
   graphPath: string,
   outPath: string,
   eventsPath: string,
+  blockScanLogPath: string,
 ): Promise<void> {
   const [tx, receipt] = await Promise.all([rpc.getTransaction(txHash), rpc.getReceipt(txHash)]);
   if (!tx || !receipt) throw new Error(`any-tx mode: ${txHash} not found on-chain (need the full hash of a mined tx)`);
@@ -690,6 +970,19 @@ async function anyTxPostmortem(
   const venueEmitters = new Set([...addressVenues.map(lower), ...(v4PoolIds.length > 0 ? [UNIV4_POOL_MANAGER] : [])]);
   const executors = competitorBeneficiaries(tx, receipt, profit.beneficiary);
   const flowReport = await buildFlowReport(rpc, receipt, executors);
+  const competitorTokens = competitorArbTokenSet(
+    flowReport.steps,
+    profit.pricedDeltas,
+    profit.unpricedDeltas,
+  );
+  const blockScanEvidence = blockScanLogPath
+    ? await blockScanEvidenceForTarget(
+      blockScanLogPath,
+      blockNumber,
+      competitorTokens,
+      loaded.events,
+    )
+    : undefined;
   const report = {
     command: "bundle-postmortem" as const,
     mode: "any_tx" as const,
@@ -740,6 +1033,7 @@ async function anyTxPostmortem(
     same_actor_prior_same_block_movers: priorMovers.sameActor,
     positioning: priorMovers.external.length === 0 ? "standing_state_take" : "after_in_block_movers",
     our_events_at_block: ourEventsAtBlock(loaded.events, blockNumber, venueEmitters),
+    our_blockscan_for_target: blockScanEvidence,
     flow: summarizeFlowLedger(buildFlowLedger(receipt), executors),
     flow_walk: flowReport.steps.map((step) => ({
       logIndex: step.logIndex,
@@ -788,7 +1082,16 @@ function renderAnyTxSummary(report: any): string {
   const ours = report.our_events_at_block;
   const byType = Object.entries(ours.by_type).map(([type, count]) => `${count} ${type}`).join(", ") || "none";
   lines.push(`  our events @block: ${ours.total} (${byType}); venue overlap: ${ours.venue_overlap.length}`
-    + (ours.venue_overlap.length === 0 ? " → our live had no signal on these venues" : ""));
+    + (ours.venue_overlap.length === 0 ? " → no JSONL/backrun-lane venue signal" : ""));
+  const blockScan = report.our_blockscan_for_target;
+  if (blockScan) {
+    lines.push(
+      `  our block-scan for target ${blockScan.target_block}: source=${blockScan.source_block} `
+      + `status=${blockScan.status} rings=${blockScan.solve_ring_count} `
+      + `token_overlap=${blockScan.token_overlap_count}/${blockScan.competitor_token_count} `
+      + `submitted=${blockScan.any_submitted}`,
+    );
+  }
   return lines.join("\n");
 }
 
