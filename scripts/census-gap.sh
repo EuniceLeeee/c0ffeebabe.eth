@@ -23,8 +23,15 @@ npm run -s census-report -- --watch "$WATCH" --from-block "$FROM" --to-block "$T
   --rpc "$RPC" --graph "$GRAPH" --out "$OUT/census.json" >/dev/null 2>"$OUT/census.err" \
   || { echo "census failed:"; tail -3 "$OUT/census.err"; exit 1; }
 
-HASHES=$(jq -r '.analyzed_competitors[]?.hash // empty' "$OUT/census.json")
-if [ -z "$HASHES" ]; then echo "no competitor takes in window $FROM-$TO"; exit 0; fi
+# Read ALL matched takes (matched_competitors), NOT analyzed_competitors — the latter is the
+# route-gap subset (out-of-graph venue only) and silently hides all-in-graph takes, which are
+# exactly the "we could have competed" cases this report exists for (found 2026-07-12: 8 coffee
+# takes in one block, analyzed=0 because every venue was in-graph).
+HASHES=$(jq -r '(.matched_competitors // .analyzed_competitors)[]?.hash // empty' "$OUT/census.json")
+if [ -z "$HASHES" ]; then
+  jq -r '"no competitor takes in window '"$FROM-$TO"' (matched=\(.summary.matched_txs) skipped_below_profit=\(.summary.skipped_below_profit // 0) — matched>0 with empty list means an OLD census-report without matched_competitors)"' "$OUT/census.json"
+  exit 0
+fi
 
 for h in $HASHES; do
   npm run -s bundle-postmortem -- --events "$EVENTS" --tx "$h" --rpc "$RPC" --graph "$GRAPH" \

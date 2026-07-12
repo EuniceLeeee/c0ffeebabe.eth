@@ -59,11 +59,25 @@ export interface AnalyzedCompetitor {
   unpriced_token_in_flow?: string[];
 }
 
+export interface MatchedCompetitor {
+  hash: string;
+  from: string;
+  realized_profit_usd: number | null;
+  winner_style: WinnerStyle | "unknown";
+  non_comparable_winner?: boolean;
+  all_venues_in_graph: boolean;
+}
+
 export interface CensusReport {
   command: "census-report";
   verdict: {
     route_gap_decisive: boolean;
   };
+  /** EVERY watch-matched take, unfiltered. analyzed_competitors below is the ROUTE-GAP subset
+   *  (out-of-graph venue + above min-profit) — consumers doing per-block "why didn't we win"
+   *  joins (census-gap) must read THIS list: an all-in-graph take is exactly the case where we
+   *  could have competed, and the loss-focused filter would silently hide it. */
+  matched_competitors: MatchedCompetitor[];
   analyzed_competitors: AnalyzedCompetitor[];
   summary: {
     window: BlockWindow;
@@ -210,6 +224,14 @@ export function buildCensusReport(
     verdict: {
       route_gap_decisive: analyzed.some((tx) => !tx.non_comparable_winner),
     },
+    matched_competitors: perTx.map((tx) => ({
+      hash: tx.hash,
+      from: tx.from,
+      realized_profit_usd: tx.realizedUsd,
+      winner_style: tx.winner_style ?? "unknown",
+      non_comparable_winner: tx.winner_style ? (isNonComparableWinnerStyle(tx.winner_style) || undefined) : undefined,
+      all_venues_in_graph: !tx.touchedVenues.some((venue) => venue.in_graph === false),
+    })),
     analyzed_competitors: analyzed,
     summary: {
       window,
