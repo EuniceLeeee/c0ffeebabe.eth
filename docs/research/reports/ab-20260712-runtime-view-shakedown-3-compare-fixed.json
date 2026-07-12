@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "comparison_goal": "equivalence",
+  "metric": "total_ms",
+  "direction": "lower",
+  "aggregate": "p50",
+  "paired_blocks": 37,
+  "paired_block_range": { "from": 25514873, "to": 25514912 },
+  "warmup_blocks_excluded": 5,
+  "a_value": 7662,
+  "b_value": 7662,
+  "absolute_delta": 0,
+  "improvement_pct": 0,
+  "output_mismatches": 0,
+  "output_mismatch_blocks": [],
+  "ring_set_mismatch_blocks": [],
+  "budget_censored_blocks": [25514868, 25514874],
+  "require_output_match": true,
+  "script_assessment": "supports",
+  "reasons": [
+    "excluded 2 budget-censored paired blocks",
+    "semantic outputs and solved-ring sets matched on 37 paired blocks"
+  ]
+}

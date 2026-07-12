@@ -24,7 +24,7 @@ The EC2 node picks up code only on **restart**, and `/opt/MEV` can drift behind 
 aws ssm send-command --instance-ids i-0ff908dedeec9ebc6 --document-name AWS-RunShellScript \
   --parameters 'commands=["git -C /opt/MEV fetch origin -q && git -C /opt/MEV show origin/main:scripts/deploy-node.sh | sudo bash"]'
 ```
-`scripts/deploy-node.sh` (self-bootstraps from git): recovers the full working env from the **running process** → forces `SEARCHER_DRY_RUN=1` (override via env/markers) → **ABORTS if DRY_RUN can't be ensured (broadcast guard)** → tar-backs-up dirty files → `git reset --hard origin/main` → build → restart → verifies the restarted env. Durable flags are marker-gated on the node (`.deploy-live`, `.bribe-all-above-gas`) so they survive the recover-from-process rebuild. Never restart by hand without this guard ([[project-node-env-dryrun-guard]]). Never spawn a 2nd searcher instance **except the single §A/B challenger through `deploy-ab-challenger.sh`**. Multiple concurrent sessions run on this repo — `git log` + check the node marker before any deploy, and never interrupt an active live measurement window. Local run logs go to `MEV/logs/` (gitignored), not `$HOME`.
+`scripts/deploy-node.sh` (self-bootstraps from git): recovers the full working env from the **running process** → forces `SEARCHER_DRY_RUN=1` (override via env/markers) → **ABORTS if DRY_RUN can't be ensured (broadcast guard)** → tar-backs-up dirty files → `git reset --hard origin/main` → build → pins the process to a content-addressed, read-only pool-universe snapshot → restart → verifies the restarted env. The 30-minute indexer may update canonical `active-pools.json`, but that update becomes input only at the NEXT guarded deploy and cannot invalidate an active A/B window. Durable flags are marker-gated on the node (`.deploy-live`, `.bribe-all-above-gas`) so they survive the recover-from-process rebuild. Never restart by hand without this guard ([[project-node-env-dryrun-guard]]). Never spawn a 2nd searcher instance **except the single §A/B challenger through `deploy-ab-challenger.sh`**. Multiple concurrent sessions run on this repo — `git log` + check the node marker before any deploy, and never interrupt an active live measurement window. Local run logs go to `MEV/logs/` (gitignored), not `$HOME`.
 
 ## Competitor-loss analysis — the canonical flow (run the tools, don't guess)
 Every "a competitor got value we didn't" event runs ONE fixed flow (the `bundle-postmortem` skill holds the decision tree; do NOT invent a parallel path):
@@ -97,8 +97,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 ### One unattended wake = one new problem
 1. **RECOVER.** Run trusted `origin/main:scripts/deploy-ab-challenger.sh reap` first. An expired/crashed B is
    stopped, A gets all CPUs back, its branch is retained, and the report becomes `needs_escalation`. Read the
-   newest A/B reports and skip every `problem_id` already retained/escalated. Never retry the same hard
-   problem every hour. With no active B lease, sync champion A to `origin/main` through guarded
+   newest A/B reports. Before picking new work, archive any retained branch whose gap has since been closed
+   by a validated commit on `origin/main`: copy/update its report on main with the exact base, challenger,
+   `resolved_by_commit`, and validation evidence; authorize `resolved_deleted`; delete only that literal
+   `ab/*` branch/worktree. Skip every still-retained `problem_id`; never retry the same hard problem every
+   hour. With no active B lease, sync champion A to `origin/main` through guarded
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
 2. **PICK.** Select the highest-impact unclaimed blocker from open LearningCases/Findings and current
    postmortem/competitor evidence. If the queue is empty, run the normal Hermes manual+tool analysis to
@@ -128,12 +131,14 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides: the first disables
    MEV-Share plus every victim-driven hint path; the second alone disables only public mempool and is not a
    valid CPU-isolated canary posture.
-6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm blocks; renew the lease if needed. A and B must see
-   the same block numbers. Record restart deltas and before/after input hashes. For shared-input tests all
+6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm, pass-budget, and catch-up blocks where either lane's
+   incremental warm range spans more than one block; those lanes have different cache histories and are not
+   a causal pair. Renew the lease if needed. A and B must see the same remaining block numbers. Record restart
+   deltas and before/after input hashes. For shared-input tests all
    universe hashes and discovery cutoffs match. Unless the intervention explicitly targets graph admission,
    the full runtime pool-view and TokenEdge graph hashes must also match and remain stable. Budget-censored
-   blocks are reported separately and do not count toward warmup or the paired sample. A fairness failure
-   cannot yield a decisive verdict.
+   / full-warm / catch-up blocks are reported separately and do not count toward warmup or the paired
+   sample. A fairness failure cannot yield a decisive verdict.
 7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor
@@ -176,8 +181,15 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
       delete local+remote `ab/*`, then close-gate.
     - `lose`: copy/commit the final redacted report (not challenger code) to `main`, authorize cleanup,
       archive evidence, delete local+remote `ab/*`, then close-gate against the preserved main report.
-    - `needs_escalation` / unfinished / crash: branch action is `retained`; do not merge or delete. Record the
-      unresolved question so a stronger model can inspect it. The next hourly wake moves to a new problem.
+    - `needs_escalation` / unfinished / crash: branch action is `retained` while unresolved; do not merge or
+      delete yet. Record the unresolved question so a stronger model can inspect it. The next hourly wake
+      moves to a new problem.
+    - later resolution: when a deterministic replay or subsequent A/B proves a fix already on `origin/main`,
+      copy the original report/evidence to main, add `resolution.resolved_by_commit` + `resolution.evidence`,
+      set `branch_action=resolved_deleted`, commit/push the report, then run close-phase cleanup authorization
+      and delete the old local+remote `ab/*` branch/worktree. The report on main, not a permanent branch, is
+      the archive. A recorded SHA alone is not durable for an unmerged Git object, so unresolved branches
+      remain until this condition is met.
 
 **No mid-loop questions.** This dual-live/merge/`ab/*` cleanup sequence is explicitly authorized inside the
 dated bounded envelope. Only funding/cap/key changes, standing-credit enablement, or out-of-envelope

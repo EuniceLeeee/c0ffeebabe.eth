@@ -79,14 +79,16 @@ thin `ab_experiment` journal:
   restarts; one pinned startup-discovery block; stable runtime pool-view and TokenEdge graph hashes
   (unless a graph delta was explicitly predeclared and replay-proven); B stopped; real script
   artifact/exit status;
-- budget-censored blocks are excluded before warmup/pairing, and exact solved-ring identities are part of
-  semantic output matching;
+- budget-censored, full-warm, and catch-up-range blocks are excluded before warmup/pairing because they do
+  not share equivalent cache history; exact solved-ring identities remain part of semantic output matching;
 - identical-code infrastructure shakedowns use the explicit equivalence goal; they never cherry-pick a
   noisy latency direction to manufacture a verdict;
 - deterministic replay `pass` before any correctness/capability win;
 - agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
   every manual/script conflict or inconclusive result;
-- branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained.
+- branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained only
+  until a later validated `resolved_by_commit` is on `origin/main`. Resolved cleanup additionally requires
+  the final report to be committed on main with exact base/challenger/resolution SHAs before branch deletion.
 - external comparator calibration: the pinned coffee corpus must still separate source shape from
   position-conserving winner style; `hermes-gate` reruns it and rejects an A/B close on classifier drift.
 

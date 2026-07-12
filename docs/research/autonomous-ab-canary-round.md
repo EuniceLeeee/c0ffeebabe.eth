@@ -16,7 +16,11 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    B lease belongs to another experiment, NO-OP; branches may coexist but the B runtime slot may not.
 4. If reap reports `crashed_needs_escalation`, update that experiment's report/journal: B stopped, branch
    retained, crash evidence linked. Commit/push the md. Do not retry that `problem_id` this wake.
-5. With no active B lease, compare deployed A HEAD to `origin/main`. If different, use guarded
+5. Sweep retained reports before selecting new work. If a later deterministic replay/A/B has already put a
+   validated fix on `origin/main`, copy/update the old report on main with `resolution.resolved_by_commit`
+   and evidence, set `resolved_deleted`, commit/push it, authorize close cleanup, then delete that literal
+   local+remote `ab/*` branch/worktree. Still-unresolved branches remain retained.
+6. With no active B lease, compare deployed A HEAD to `origin/main`. If different, use guarded
    `deploy-node.sh` to sync A and verify the bounded-live block-scan-only posture before choosing base SHA.
 
 ## 1. Pick + predeclare
@@ -45,9 +49,10 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    `deploy-ab-challenger.sh deploy <id> <ab/branch> <base-sha> <challenger-sha> <allow-view-delta>`;
    pass `1` only when the schema-v2 journal predeclares `expected_runtime_view_delta=true`, else `0`.
    Direct B `systemd-run` or challenger-owned deploy code is invalid.
-2. Run the predeclared paired-block window. Exclude startup/full-warm and budget-censored blocks. Renew the
-   B lease before expiry. Record the shared discovery cutoff and stable runtime pool-view/TokenEdge graph
-   hashes alongside config/universe hashes.
+2. Run the predeclared paired-block window. Exclude startup/full-warm, budget-censored, and catch-up blocks
+   where either lane warmed a multi-block range after a skip. Renew the B lease before expiry. Record the
+   shared discovery cutoff and stable runtime pool-view/TokenEdge graph hashes alongside config/universe
+   hashes.
 3. Run `deploy-ab-challenger.sh pause <id>` **before analysis**; B is now stopped and A owns all CPUs.
 4. Copy/redact evidence. Never commit raw logs/events or secrets.
 
@@ -84,8 +89,9 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 3. **lose:** copy and commit the final redacted report alone to `main`, run decision gate with
    `--authorize-cleanup`, archive evidence, delete local+remote `ab/*`, mark `deleted_unmerged`, and run the
    close gate against the main copy.
-4. **needs_escalation/crash/unfinished:** mark `retained`; never merge/delete. Record exactly what a stronger
-   model must decide. Future hourly wakes skip this problem.
+4. **needs_escalation/crash/unfinished:** mark `retained` while unresolved; never merge/delete yet. Record
+   exactly what a stronger model must decide. Future hourly wakes skip this problem. Once a later validated
+   main commit resolves it, the opening sweep archives its report on main and gate-deletes the old branch.
 5. Run `npm run ab-canary-gate -- <report> --phase close`, then `npm run hermes-gate -- <report>`. Commit/push
    report and any Method Trace. Remove `/tmp/mev-workflow-active`. Exit; do not start a second problem.
 

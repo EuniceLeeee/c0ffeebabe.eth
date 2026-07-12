@@ -15,6 +15,8 @@ type BlockRecord = {
   solveResults: string[];
   rings: Set<string>;
   budgetExceeded: boolean;
+  catchupWarm: boolean;
+  fullWarm: boolean;
 };
 
 export type AbCompareOptions = {
@@ -47,6 +49,8 @@ export type AbCompareResult = {
   output_mismatch_blocks: number[];
   ring_set_mismatch_blocks: number[];
   budget_censored_blocks: number[];
+  catchup_censored_blocks: number[];
+  full_warm_censored_blocks: number[];
   require_output_match: boolean;
   script_assessment: ScriptAssessment;
   reasons: string[];
@@ -55,7 +59,9 @@ export type AbCompareResult = {
 const SUMMARY_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=(\d+)\s+candidates=(\d+)\s+quotePositive=(\d+)\s+bestNet=(null|-?\d+)\s+warmedV2V3=(\d+)\s+protocolMids=(\d+)\s+skippedVenues=(\d+)\s+ms=(\d+)/;
 const STAGE_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+stage\s+(.+)$/;
 const BLOCK_RE = /\[searcher\/blockscan\]\s+block=(\d+)\b/;
-const PASS_START_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+(?:warm=(?:full|incremental)\b|warmedV2V3=)/;
+const PASS_START_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+(?:warm=|warmedV2V3=)/;
+const INCREMENTAL_WARM_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+warm=incremental\b.*\brange=(\d+)-(\d+)\b/;
+const FULL_WARM_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+warm=full\b/;
 const SOLVE_RE = /\[searcher\/blockscan\]\s+(?:block=(\d+)\s+)?solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
 const BUDGET_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+pass_budget_exceeded\b/;
 const EVENT_PATTERNS: [string, RegExp][] = [
@@ -84,6 +90,8 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
       solveResults: [],
       rings: new Set(),
       budgetExceeded: false,
+      catchupWarm: false,
+      fullWarm: false,
     };
     records.set(block, created);
     return created;
@@ -93,11 +101,24 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
   for (const line of text.split(/\r?\n/)) {
     const passStart = line.match(PASS_START_RE);
     if (passStart) currentBlock = Number(passStart[1]);
+    const incrementalWarm = line.match(INCREMENTAL_WARM_RE);
+    if (incrementalWarm) {
+      const block = Number(incrementalWarm[1]);
+      const from = Number(incrementalWarm[2]);
+      const to = Number(incrementalWarm[3]);
+      get(block).catchupWarm = from !== to || to !== block;
+    }
+    const fullWarm = line.match(FULL_WARM_RE);
+    if (fullWarm) get(Number(fullWarm[1])).fullWarm = true;
     const budget = line.match(BUDGET_RE);
     if (budget) get(Number(budget[1])).budgetExceeded = true;
     const summary = line.match(SUMMARY_RE);
     if (summary) {
       const block = Number(summary[1]);
+      // Real solve/event lines omit the block number. Keep them attached to the
+      // active warm pass; a concurrent `block=N+1 skipped=busy` is not a pass switch.
+      // Setting this on summaries also keeps legacy/synthetic logs parseable.
+      currentBlock = block;
       const record = get(block);
       record.summary = {
         scannedPairs: Number(summary[2]),
@@ -200,11 +221,26 @@ export function compareBlockScanLogs(
   const budgetCensored = completePairs
     .filter(({ ar, br }) => ar.budgetExceeded || br.budgetExceeded)
     .map(({ block }) => block);
-  const uncensored = completePairs.filter(({ ar, br }) => !ar.budgetExceeded && !br.budgetExceeded);
+  const catchupCensored = completePairs
+    .filter(({ ar, br }) => ar.catchupWarm || br.catchupWarm)
+    .map(({ block }) => block);
+  const fullWarmCensored = completePairs
+    .filter(({ ar, br }) => ar.fullWarm || br.fullWarm)
+    .map(({ block }) => block);
+  const uncensored = completePairs.filter(({ ar, br }) =>
+    !ar.budgetExceeded && !br.budgetExceeded
+    && !ar.catchupWarm && !br.catchupWarm
+    && !ar.fullWarm && !br.fullWarm);
   const pairs = uncensored.slice(Math.max(0, options.warmupBlocks));
   const reasons: string[] = [];
   if (budgetCensored.length > 0) {
     reasons.push(`excluded ${budgetCensored.length} budget-censored paired blocks`);
+  }
+  if (catchupCensored.length > 0) {
+    reasons.push(`excluded ${catchupCensored.length} catch-up paired blocks with unequal cache history`);
+  }
+  if (fullWarmCensored.length > 0) {
+    reasons.push(`excluded ${fullWarmCensored.length} full-warm paired blocks`);
   }
   const outputMismatchBlocks = pairs.filter(({ ar, br }) => !outputsMatch(ar, br)).map(({ block }) => block);
   const ringSetMismatchBlocks = pairs.filter(({ ar, br }) => !ringSetsMatch(ar, br)).map(({ block }) => block);
@@ -269,6 +305,8 @@ export function compareBlockScanLogs(
     output_mismatch_blocks: outputMismatchBlocks,
     ring_set_mismatch_blocks: ringSetMismatchBlocks,
     budget_censored_blocks: budgetCensored,
+    catchup_censored_blocks: catchupCensored,
+    full_warm_censored_blocks: fullWarmCensored,
     require_output_match: options.requireOutputMatch,
     script_assessment: scriptAssessment,
     reasons,
@@ -329,10 +367,14 @@ export type AbExperiment = {
     adversarial_review?: { verdict: AbVerdict; evidence: string; reviewer: string };
   };
   final_verdict: FinalVerdict;
-  branch_action: "pending_merge" | "pending_delete" | "merged_deleted" | "deleted_unmerged" | "retained";
+  branch_action: "pending_merge" | "pending_delete" | "merged_deleted" | "deleted_unmerged" | "retained" | "resolved_deleted";
   b_stopped: boolean;
   evidence_bundle: string;
   merge_commit?: string;
+  resolution?: {
+    resolved_by_commit: string;
+    evidence: string;
+  };
 };
 
 export function parseAbExperiment(md: string): AbExperiment {
@@ -625,9 +667,25 @@ export function validateAbExperiment(
 
   const expectedAction = phase === "decision"
     ? { win: "pending_merge", lose: "pending_delete", needs_escalation: "retained" }
-    : { win: "merged_deleted", lose: "deleted_unmerged", needs_escalation: "retained" };
-  if (experiment.branch_action !== expectedAction[experiment.final_verdict]) {
+    : { win: "merged_deleted", lose: "deleted_unmerged", needs_escalation: "retained|resolved_deleted" };
+  const actionAllowed = experiment.final_verdict === "needs_escalation" && phase === "close"
+    ? experiment.branch_action === "retained" || experiment.branch_action === "resolved_deleted"
+    : experiment.branch_action === expectedAction[experiment.final_verdict];
+  if (!actionAllowed) {
     errors.push(`branch_action must be ${expectedAction[experiment.final_verdict]} for ${experiment.final_verdict} in ${phase} phase`);
+  }
+  if (experiment.branch_action === "resolved_deleted") {
+    if (phase !== "close" || experiment.final_verdict !== "needs_escalation") {
+      errors.push("resolved_deleted is only valid when closing a previously escalated experiment");
+    }
+    if (!sha(experiment.resolution?.resolved_by_commit, 40)) {
+      errors.push("resolved_deleted requires resolution.resolved_by_commit");
+    }
+    if (!nonEmpty(experiment.resolution?.evidence)) {
+      errors.push("resolved_deleted requires non-placeholder resolution.evidence");
+    }
+  } else if (experiment.resolution !== undefined) {
+    errors.push("resolution is only valid with branch_action=resolved_deleted");
   }
   if (phase === "close" && experiment.final_verdict === "win" && !sha(experiment.merge_commit, 40)) {
     errors.push("closed win requires merge_commit");
