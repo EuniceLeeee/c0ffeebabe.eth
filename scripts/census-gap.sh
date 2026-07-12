@@ -10,6 +10,7 @@
 # routing_gap is ALSO a standalone column so the structural flag stays visible on non_comparable rows.
 # Runs ON the node (local reth = zero CU for recent windows; older than ~10k blocks needs archive RPC).
 # Usage: census-gap.sh <from-block> <to-block> [watch-csv] [out-dir] [--blockscan-log <path>]
+# MEV_ANALYSIS_ROOT may point at a frozen analysis worktree; runtime graph/events still default to champion A.
 set -euo pipefail
 FROM=${1:?from-block}; TO=${2:?to-block}
 WATCH=${3:-0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2fc483527b8ef99eb5d9b44875f005ba1fae13}
@@ -23,6 +24,7 @@ elif [ -n "${5:-}" ]; then
 fi
 RPC=${RPC:-http://127.0.0.1:8545}
 EVENTS=${EVENTS:-}
+ANALYSIS_ROOT=${MEV_ANALYSIS_ROOT:-/opt/MEV}
 GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-graph-pools.json}
 if [ -z "$BLOCKSCAN_LOG" ]; then
   UNIT_LOG=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null \
@@ -46,7 +48,7 @@ mkdir -p "$OUT"
 # failure. Never let artifacts from an earlier invocation enter this run.
 rm -f "$OUT/census.json" "$OUT/census.err" "$OUT/blockscan.log" \
   "$OUT/verdicts.tsv" "$OUT"/pm-0x*.json
-cd /opt/MEV/analysis
+cd "$ANALYSIS_ROOT/analysis"
 
 # Read the potentially large mixed live log once. The PM parser still needs all
 # block-scan markers to distinguish a rotated target from an in-window absence,
