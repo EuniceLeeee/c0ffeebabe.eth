@@ -1032,6 +1032,8 @@ async function main(): Promise<void> {
         const seg: Record<string, number> = {};
         let solvePlannerMs = 0;
         let solveSolverMs = 0;
+        let solveQuoteMs = 0;
+        let solveSimMs = 0;
         let solveSubmitMs = 0;
         const segMark = (k: string): void => {
           const now = Date.now();
@@ -1042,6 +1044,7 @@ async function main(): Promise<void> {
           `${Object.entries(seg).map(([k, v]) => `${k}=${v}ms`).join(" ")} ` +
           `total=${Date.now() - passStarted}ms ` +
           `solve_planner=${solvePlannerMs}ms solve_solver=${solveSolverMs}ms ` +
+          `solve_quote=${solveQuoteMs}ms solve_sim=${solveSimMs}ms ` +
           `solve_submit=${solveSubmitMs}ms`;
         let segLogged = false;
         const logSeg = (): void => {
@@ -1261,6 +1264,7 @@ async function main(): Promise<void> {
               if (passBudgetExceeded("solve")) break;
               let solved: ResolvedPlan;
               const solverStarted = Date.now();
+              const solverTiming = { quoteMs: 0, simMs: 0 };
               try {
                 solved = await blockScanSolverForPass.solve(
                   plans[0],
@@ -1274,10 +1278,13 @@ async function main(): Promise<void> {
                     gssMaxTries: 8,
                     quoteProfitFloorBps: 0n,
                     quoteSafetyBps: 10000n,
+                    timing: solverTiming,
                   },
                 );
               } finally {
                 solveSolverMs += Date.now() - solverStarted;
+                solveQuoteMs += solverTiming.quoteMs;
+                solveSimMs += solverTiming.simMs;
               }
               if (solved.netProfit > 0n) quotePositive++;
               if (bestNet === null || solved.netProfit > bestNet) bestNet = solved.netProfit;
