@@ -27,15 +27,18 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 3. Create `ab/<problem>` from exact deployed A, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from `templates/hermes-ab-canary.md`; fill the
    `ab_experiment` block with exact base SHA, hypothesis, semantic success criterion, change class,
-   deterministic gate, input mode, config deltas, and initial branch action. Commit/push this initial report
-   on B so a crash always leaves a durable handoff.
+   deterministic gate, input mode, config deltas, and initial branch action. `challenger_commit` is pending
+   here because a commit cannot contain its own SHA. Commit/push this initial report on B so a crash always
+   leaves a durable handoff.
 
 ## 2. Implement + deterministic gate
 1. Make one causal change only on the predeclared literal `ab/<problem>` branch.
 2. Use the HERMES generator/evaluator split. Two stalled generator attempts or three failed review passes
    produce `needs_escalation`; retain/push the branch + evidence and let the next hourly wake pick another.
 3. For correctness/capability, run the pinned replay/fork gate and require the same failing sample to flip.
-   Build-only is never fixed. Push the exact challenger SHA.
+   Build-only is never fixed. Push/freeze the exact code SHA while it is the remote branch tip and deploy it.
+   Later branch commits may change only report/evidence; the final report records the frozen deployed SHA as
+   `challenger_commit`, not its own report commit.
 
 ## 3. Dual-live measurement
 1. Deploy only via the trusted node wrapper:
@@ -71,8 +74,10 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 ## 5. Close without stalling
 1. Run node `deploy-ab-challenger.sh close <id> <win|lose|needs_escalation>`.
 2. **win:** verify `origin/main` still equals tested base; otherwise retain/retest in a later new experiment.
-   Merge `--no-ff`, push main, deploy A through guarded `deploy-node.sh`, update `merge_commit`, then run
-   `ab-canary-gate --phase decision --authorize-cleanup`; delete local+remote `ab/*`; mark `merged_deleted`.
+   Merge the exact frozen `challenger_commit` with `--no-ff` (not the branch's later report tip), add the
+   final redacted report in a separate main-side docs commit, push main, deploy A through guarded
+   `deploy-node.sh`, update `merge_commit`, then run `ab-canary-gate --phase decision --authorize-cleanup`;
+   delete local+remote `ab/*`; mark `merged_deleted`.
 3. **lose:** copy and commit the final redacted report alone to `main`, run decision gate with
    `--authorize-cleanup`, archive evidence, delete local+remote `ab/*`, mark `deleted_unmerged`, and run the
    close gate against the main copy.

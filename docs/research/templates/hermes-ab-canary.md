@@ -17,7 +17,7 @@
 - **diff scope:**
 - **build:**
 - **replay/fork result:**
-- **base SHA / challenger SHA:**
+- **base SHA / challenger SHA:** challenger = frozen deployed code commit, not a later report-only tip
 
 ## Paired Live Evidence
 - **window / warmup excluded:**

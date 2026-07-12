@@ -106,11 +106,15 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 3. **PREDECLARE.** Create `ab/<problem>` from the exact deployed A SHA, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from the A/B template and fill its `ab_experiment`
    journal: exact problem/base SHA, change class, hypothesis, semantic success criterion, deterministic gate,
-   intended metric evidence, input mode, and allowed config delta. Commit/push the initial report on B.
-4. **FIX.** Codex writes; the non-author agent
+   intended metric evidence, input mode, and allowed config delta. `challenger_commit` is temporarily pending
+   here because a commit cannot contain its own SHA. Commit/push the initial report on B.
+4. **FIX + FREEZE.** Codex writes; the non-author agent
    reviews; deterministic correctness/capability fixes must flip the pinned replay (rule 12). Push B. Two
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
-   `needs_escalation`, then the next wake selects another problem.
+   `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it
+   is the remote branch tip and deploy that SHA. After deployment the branch may advance only through
+   report/evidence commits; the final journal's `challenger_commit` is the frozen deployed code SHA, not the
+   later report tip.
 5. **DEPLOY B THROUGH THE SAFETY WRAPPER ONLY.** Execute the trusted `origin/main` copy of
    `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>` over SSM. It validates
    both wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
@@ -154,9 +158,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
     exact evidence, script artifact, non-author review, replay requirements, and B stopped. It can reject a
     decision; it cannot create a win. `hermes-gate` also runs the A/B close validation when the journal exists.
 12. **CLOSE EXACTLY ONE WAY.** First run `deploy-ab-challenger.sh close <id> <verdict>`.
-    - `win`: only if `origin/main` is still the tested base; otherwise retain/retest. Merge `--no-ff`, push,
-      deploy champion via guarded `deploy-node.sh`, add `merge_commit`, authorize cleanup with the A/B gate
-      (which verifies B+merge are ancestors of `origin/main`), delete local+remote `ab/*`, then close-gate.
+    - `win`: only if `origin/main` is still the tested base; otherwise retain/retest. Merge the exact frozen
+      `challenger_commit` with `--no-ff` (never the later report tip), then add the final redacted report as a
+      separate main-side docs commit. Push, deploy champion via guarded `deploy-node.sh`, add `merge_commit`,
+      authorize cleanup with the A/B gate (which verifies the no-ff merge's second parent is the tested SHA),
+      delete local+remote `ab/*`, then close-gate.
     - `lose`: copy/commit the final redacted report (not challenger code) to `main`, authorize cleanup,
       archive evidence, delete local+remote `ab/*`, then close-gate against the preserved main report.
     - `needs_escalation` / unfinished / crash: branch action is `retained`; do not merge or delete. Record the
