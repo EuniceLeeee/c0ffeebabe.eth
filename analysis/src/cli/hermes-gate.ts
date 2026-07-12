@@ -142,16 +142,16 @@ export function validateMethodTrace(
   md: string,
   step1: Record<string, string>,
   cases: LearningCase[],
-): void {
-  if (step1.fable_manual !== "yes") return;
-  validateMethodTraceContent(md, cases);
+): LearningCase[] {
+  if (step1.fable_manual !== "yes") return [];
+  return validateMethodTraceContent(md, cases);
 }
 
-export function validateMethodTraceContent(md: string, cases: LearningCase[]): void {
-  const blocks = [...md.matchAll(/##\s*Method Trace[\s\S]*?(?=\n##\s|$)/gi)].map((m) => m[0]);
+export function validateMethodTraceContent(md: string, cases: LearningCase[]): LearningCase[] {
+  const blocks = extractMethodTraceBlocks(md);
   if (blocks.length === 0) {
     fail("Fable manual analysis present but no `## Method Trace` block — missing = invalid handoff (rule 16).");
-    return;
+    return [];
   }
 
   const results = blocks.map((block) => validateMethodTraceBlock(block, cases));
@@ -160,7 +160,7 @@ export function validateMethodTraceContent(md: string, cases: LearningCase[]): v
     for (let i = 0; i < results.length; i++) {
       emitMethodTraceBlockErrors(i, blocks.length, [...results[i].fieldErrors, ...results[i].crossErrors]);
     }
-    return;
+    return [];
   }
 
   for (let i = 0; i < results.length; i++) {
@@ -169,6 +169,41 @@ export function validateMethodTraceContent(md: string, cases: LearningCase[]): v
     }
   }
   if (fieldComplete.some((result) => result.taskClass === "architecture_review")) validateArchitectureCoverage(md);
+  return [...new Map(fieldComplete.flatMap((result) => result.referencedCases)
+    .map((c) => [c.learning_case_id, c])).values()];
+}
+
+function extractMethodTraceBlocks(md: string): string[] {
+  const blocks: string[] = [];
+  let current: string[] | null = null;
+  let fence: string | null = null;
+
+  for (const line of md.split(/\r?\n/)) {
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/);
+    if (fence !== null) {
+      if (current !== null) current.push(line);
+      if (fenceMatch && fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (fenceMatch) {
+      if (current !== null) current.push(line);
+      fence = fenceMatch[1];
+      continue;
+    }
+    if (/^##[ \t]+Method Trace(?:[ \t]+\([^)]*\))?[ \t]*$/i.test(line)) {
+      if (current !== null) blocks.push(current.join("\n"));
+      current = [line];
+      continue;
+    }
+    if (current !== null && /^##[ \t]+/.test(line)) {
+      blocks.push(current.join("\n"));
+      current = null;
+      continue;
+    }
+    if (current !== null) current.push(line);
+  }
+  if (current !== null) blocks.push(current.join("\n"));
+  return blocks;
 }
 
 export function validateArchitectureCoverage(md: string): void {
@@ -199,6 +234,7 @@ type MethodTraceBlockValidation = {
   fieldErrors: string[];
   crossErrors: string[];
   taskClass: string;
+  referencedCases: LearningCase[];
 };
 
 function emitMethodTraceBlockErrors(
@@ -234,16 +270,22 @@ function validateMethodTraceBlock(block: string, cases: LearningCase[]): MethodT
   const namesToolGap = gapFirst !== "" && !/^(none|no)\s*($|[(),.;:—-])/i.test(gapFirst);
   const codifyFirst = firstLine(codifyNext).trim();
   const codifyIsNo = /^(no|none)\s*($|[(),.;:—-])/i.test(codifyFirst);
+  const referenceFields = `${toolGap}\n${codifyNext}`;
+  const referencedCases = cases.filter((c) => containsExactCaseId(referenceFields, c.learning_case_id));
   if (namesToolGap && codifyIsNo) {
     crossErrors.push("Method Trace tool_gap != none but codify_next = no — a found tool gap MUST be codified "
       + "(create a tooling_defect LearningCase).");
   }
-  // Global-store scoped: an old case satisfies "filed"; per-window/per-gap matching is a future tightening.
-  if (namesToolGap && !cases.some((c) => c.tooling_defect)) {
-    crossErrors.push("Method Trace names a tool_gap but no tooling_defect LearningCase is filed in the store — "
-      + "rule 16 requires the gap be filed as a case (then codified or human_killed).");
+  if (namesToolGap && !referencedCases.some((c) => c.tooling_defect)) {
+    crossErrors.push("Method Trace names a tool_gap but does not reference a filed tooling_defect LearningCase — "
+      + "rule 16 requires the current gap's learning_case_id (then codified or human_killed).");
   }
-  return { fieldErrors, crossErrors, taskClass };
+  return { fieldErrors, crossErrors, taskClass, referencedCases };
+}
+
+function containsExactCaseId(value: string, id: string): boolean {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![A-Za-z0-9._:/-])${escaped}(?![A-Za-z0-9._:/-])`).test(value);
 }
 
 function loadCasesForToolingGate(): LearningCase[] {
@@ -671,8 +713,8 @@ function main(): void {
   }
 
   const tdCases = loadCasesForToolingGate();
-  validateMethodTrace(md, step1, tdCases);
-  validateToolingDefects(tdCases);
+  const referencedToolingDefects = validateMethodTrace(md, step1, tdCases);
+  validateToolingDefects(referencedToolingDefects);
   if (/```ab_experiment\s*\n/.test(md)) {
     try {
       for (const error of validateAbExperiment(parseAbExperiment(md), mdPath, "close")) {

@@ -94,11 +94,11 @@ const checks: Array<() => void> = [
     validateMethodTraceContent(validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
       .replace(/^codify_next:.*$/m, "codify_next: add metric"), []);
-  }, "names a tool_gap", "no tooling_defect LearningCase is filed"),
+  }, "names a tool_gap", "does not reference a filed tooling_defect LearningCase"),
   () => expectPass("content validator named tool gap passes with filed tooling defect case", () => {
     validateMethodTraceContent(validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
-      .replace(/^codify_next:.*$/m, "codify_next: add metric"), [toolingDefectCase("open")]);
+      .replace(/^codify_next:.*$/m, "codify_next: case-open add metric"), [toolingDefectCase("open")]);
   }),
   () => expectPass("round wrapper fable_manual no preserves early return", () => {
     validateMethodTrace(validTraceMd().replace(/^task_class:.*\n/m, ""), step1({ fable_manual: "no" }), []);
@@ -144,7 +144,7 @@ const checks: Array<() => void> = [
   }, "Method Trace missing/blank field: sanity_checks"),
   () => expectFail("tool gap with no codify plan fails", () => {
     validateMethodTrace(validTraceMd()
-      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta")
+      .replace(/^tool_gap:.*$/m, "tool_gap: case-human_killed native-ETH delta")
       .replace(/^codify_next:.*$/m, "codify_next: no"), step1({ fable_manual: "yes" }), [toolingDefectCase("human_killed")]);
   }, "tool_gap != none", "codify_next = no"),
   () => expectFail("fable_manual absent from step1 fails required key", () => {
@@ -218,7 +218,7 @@ const checks: Array<() => void> = [
       step1({ fable_manual: "yes" }),
       [],
     );
-  }, "tool_gap != none", "no tooling_defect LearningCase is filed"),
+  }, "tool_gap != none", "does not reference a filed tooling_defect LearningCase"),
   () => expectPass("none parenthetical tool_gap remains no-gap", () => {
     validateMethodTrace(
       validTraceMd().replace(/^tool_gap:.*$/m, "tool_gap: none (minor harness note: existing fixture phrasing)"),
@@ -233,7 +233,7 @@ const checks: Array<() => void> = [
     validateMethodTrace(`${validTraceMd()}\n${validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
       .replace(/^codify_next:.*$/m, "codify_next: no")}`, step1({ fable_manual: "yes" }), []);
-  }, "Method Trace block 2: Method Trace tool_gap != none", "no tooling_defect LearningCase is filed"),
+  }, "Method Trace block 2: Method Trace tool_gap != none", "does not reference a filed tooling_defect LearningCase"),
   () => expectFail("invalid task_class spelling fails", () => {
     validateMethodTrace(
       archTraceMd().replace(/^task_class:.*$/m, "task_class: architecture-review"),
@@ -284,17 +284,98 @@ const checks: Array<() => void> = [
     validateMethodTrace(validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
       .replace(/^codify_next:.*$/m, "codify_next: add metric"), step1({ fable_manual: "yes" }), []);
-  }, "names a tool_gap", "no tooling_defect LearningCase is filed"),
+  }, "names a tool_gap", "does not reference a filed tooling_defect LearningCase"),
   () => expectFailWithout("filed open tooling defect satisfies filing check then open status blocks", () => {
     const cases = [toolingDefectCase("open")];
-    validateMethodTrace(validTraceMd()
+    const referenced = validateMethodTrace(validTraceMd()
       .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
-      .replace(/^codify_next:.*$/m, "codify_next: add metric"), step1({ fable_manual: "yes" }), cases);
-    validateToolingDefects(cases);
-  }, ["tooling_defect OPEN"], ["no tooling_defect LearningCase is filed"]),
+      .replace(/^codify_next:.*$/m, "codify_next: case-open add metric"), step1({ fable_manual: "yes" }), cases);
+    validateToolingDefects(referenced);
+  }, ["tooling_defect OPEN"], ["does not reference a filed tooling_defect LearningCase"]),
+  () => expectPass("unrelated historical open tooling defects do not block this trace", () => {
+    const referenced = validateMethodTrace(
+      validTraceMd(),
+      step1({ fable_manual: "yes" }),
+      [toolingDefectCase("open")],
+    );
+    validateToolingDefects(referenced);
+  }),
+  () => expectFail("tooling defect case id must match exactly, not by prefix", () => {
+    const cases = [toolingDefectCase("codified")];
+    cases[0].learning_case_id = "case-done";
+    validateMethodTrace(
+      validTraceMd()
+        .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+        .replace(/^codify_next:.*$/m, "codify_next: case-done-suffix add metric"),
+      step1({ fable_manual: "yes" }),
+      cases,
+    );
+  }, "does not reference a filed tooling_defect LearningCase"),
+  () => expectFailWithout("case id prefixes do not select a different open case", () => {
+    const prefix = toolingDefectCase("open");
+    prefix.learning_case_id = "case-1";
+    const exact = toolingDefectCase("codified");
+    exact.learning_case_id = "case-10";
+    const referenced = validateMethodTrace(
+      validTraceMd()
+        .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+        .replace(/^codify_next:.*$/m, "codify_next: case-10 add metric"),
+      step1({ fable_manual: "yes" }),
+      [prefix, exact],
+    );
+    validateToolingDefects(referenced);
+  }, [], ["case-1 tooling_defect OPEN"]),
+  () => expectFail("case id in an unrelated Method Trace field cannot satisfy filing", () => {
+    const filed = toolingDefectCase("codified");
+    filed.learning_case_id = "case-done";
+    validateMethodTrace(
+      validTraceMd()
+        .replace(/^tools_used:.*$/m, "tools_used: inspected case-done with rg")
+        .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+        .replace(/^codify_next:.*$/m, "codify_next: add metric"),
+      step1({ fable_manual: "yes" }),
+      [filed],
+    );
+  }, "does not reference a filed tooling_defect LearningCase"),
+  () => expectPass("ignored incomplete Method Trace cannot leak an old open defect", () => {
+    const open = toolingDefectCase("open");
+    open.learning_case_id = "case-open";
+    const md = `${validTraceMd()}\n\n## Method Trace\ntool_gap: case-open old gap\ncodify_next: case-open old plan\n`;
+    const referenced = validateMethodTrace(md, step1({ fable_manual: "yes" }), [open]);
+    validateToolingDefects(referenced);
+  }),
+  () => expectFail("an explicitly referenced open defect blocks even when tool_gap says none", () => {
+    const open = toolingDefectCase("open");
+    open.learning_case_id = "case-open";
+    const referenced = validateMethodTrace(
+      validTraceMd().replace(/^codify_next:.*$/m, "codify_next: case-open remains open"),
+      step1({ fable_manual: "yes" }),
+      [open],
+    );
+    validateToolingDefects(referenced);
+  }, "case-open", "tooling_defect OPEN"),
+  () => expectPass("fenced Method Trace example cannot leak an old open defect", () => {
+    const open = toolingDefectCase("open");
+    open.learning_case_id = "case-open";
+    const quoted = `\`\`\`markdown\n${validTraceMd()
+      .replace(/^tool_gap:.*$/m, "tool_gap: case-open historical gap")
+      .replace(/^codify_next:.*$/m, "codify_next: case-open historical plan")}\n\`\`\``;
+    const referenced = validateMethodTrace(`${quoted}\n\n${validTraceMd()}`, step1({ fable_manual: "yes" }), [open]);
+    validateToolingDefects(referenced);
+  }),
+  () => expectPass("canonical template Method Trace heading remains accepted", () => {
+    validateMethodTrace(
+      validTraceMd().replace(
+        "## Method Trace",
+        "## Method Trace (MANDATORY when step1 `fable_manual: yes` — missing = invalid handoff, hermes-gate blocks)",
+      ),
+      step1({ fable_manual: "yes" }),
+      [],
+    );
+  }),
   () => expectFail("codify_next none fails consistency for named tool gap", () => {
     validateMethodTrace(validTraceMd()
-      .replace(/^tool_gap:.*$/m, "tool_gap: native-ETH delta missed")
+      .replace(/^tool_gap:.*$/m, "tool_gap: case-human_killed native-ETH delta missed")
       .replace(/^codify_next:.*$/m, "codify_next: none"), step1({ fable_manual: "yes" }), [toolingDefectCase("human_killed")]);
   }, "tool_gap != none", "codify_next = no"),
   () => expectPass("horizontal rule after Method Trace header does not truncate block", () => {

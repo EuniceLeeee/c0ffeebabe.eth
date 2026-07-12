@@ -88,6 +88,12 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   (e.g. `in_graph` shows a "dead edge" is really an unindexed pool = pool gap). Honest residual (2026-07-06
   blind audit): silencing is still honor-system (a `tool-reconciled:` line naming a tool clears it whether or
   not you truly ran it) and recall is wide-but-not-total — a gate on the canonical pattern, not a proof.
+- **Tool defects close in the same analysis round.** If manual analysis and a canonical tool disagree about
+  the tool's correctness or coverage, call a fresh non-author adversarial reviewer. When both analyses agree
+  the tool is wrong or incomplete, file the exact `tooling_defect` LearningCase, fix the tool, add its regression
+  test, and cite the `codify_commit` before closing that same turn/Hermes round. Do not defer an agreed tool bug
+  into a historical backlog. `hermes-gate` blocks only defects explicitly referenced by the current Method
+  Trace; unrelated old cases neither block the round nor excuse skipping this closure.
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
