@@ -1,10 +1,13 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import type { QuoteRequest } from "../live-state-backend.js";
+import { v4PoolId } from "../planner/token-graph.js";
 import {
   PoolStateCache,
   type V2Seed,
   type V3LiveSeed,
   type V3TicksSeed,
+  type V4Seed,
 } from "./pool-state-cache.js";
 
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
@@ -26,6 +29,10 @@ const v3Iface = new ethers.Interface([
   "function tickSpacing() view returns (int24)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
+]);
+const v4StateViewIface = new ethers.Interface([
+  "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
 ]);
 const tickLensIface = new ethers.Interface([
   "function getPopulatedTicksInWord(address pool, int16 tickBitmapIndex) view returns ((int24 tick,int128 liquidityNet,uint128 liquidityGross)[])",
@@ -84,11 +91,12 @@ export class PoolStateUpdater {
     const started = Date.now();
     const v2 = pools.filter((p) => p.adapterId === "univ2-swap");
     const v3 = pools.filter((p) => p.adapterId === "univ3-swap");
-    const { v2Count, v3Count, tickFetch } = await this.updateMutableState(blockNumber, v2, v3);
-    if (v2Count + v3Count > 0) {
+    const v4 = pools.filter((p) => p.adapterId === "univ4-unlock" && p.v4PoolKey);
+    const { v2Count, v3Count, v4Count, tickFetch } = await this.updateMutableState(blockNumber, v2, v3, v4);
+    if (v2Count + v3Count + v4Count > 0) {
       const tickItems = tickFetch.slice(0, opts.maxTickPools ?? this.maxV3TickPoolsPerBlock);
       console.log(
-        `[pool-updater] block=${blockNumber} seeded v2=${v2Count} v3=${v3Count} ` +
+        `[pool-updater] block=${blockNumber} seeded v2=${v2Count} v3=${v3Count} v4=${v4Count} ` +
           `watched=${pools.length}/${this.maxPools} ` +
           `tickRefresh=${tickItems.length}/${tickFetch.length} ${Date.now() - started}ms`,
       );
@@ -119,7 +127,7 @@ export class PoolStateUpdater {
     const seen = new Set<string>();
     const out: QuoteRequest[] = [];
     for (const hop of hops) {
-      const key = `${hop.adapterId}:${hop.target.toLowerCase()}`;
+      const key = poolUpdateKey(hop);
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(hop);
@@ -131,9 +139,11 @@ export class PoolStateUpdater {
     blockNumber: number,
     v2Pools: QuoteRequest[],
     v3Pools: QuoteRequest[],
+    v4Pools: QuoteRequest[],
   ): Promise<{
     v2Count: number;
     v3Count: number;
+    v4Count: number;
     tickFetch: Array<{ pool: QuoteRequest; stat: StaticV3; tick: number }>;
   }> {
     const calls: BatchCall[] = [];
@@ -155,6 +165,20 @@ export class PoolStateUpdater {
       }
       calls.push({ target: pool.target, callData: v3Iface.encodeFunctionData("slot0"), label: `${key}:slot0` });
       calls.push({ target: pool.target, callData: v3Iface.encodeFunctionData("liquidity"), label: `${key}:liquidity` });
+    }
+    for (const pool of v4Pools) {
+      const poolId = quoteV4PoolId(pool);
+      if (!poolId) continue;
+      calls.push({
+        target: ADDR.UNISWAP_V4_STATE_VIEW,
+        callData: v4StateViewIface.encodeFunctionData("getSlot0", [poolId]),
+        label: `${poolId}:v4slot0`,
+      });
+      calls.push({
+        target: ADDR.UNISWAP_V4_STATE_VIEW,
+        callData: v4StateViewIface.encodeFunctionData("getLiquidity", [poolId]),
+        label: `${poolId}:v4liquidity`,
+      });
     }
 
     const results = await this.aggregate(blockNumber, calls);
@@ -227,7 +251,28 @@ export class PoolStateUpdater {
       }
       v3Count++;
     }
-    return { v2Count, v3Count, tickFetch };
+
+    let v4Count = 0;
+    for (const pool of v4Pools) {
+      const poolId = quoteV4PoolId(pool);
+      if (!poolId) continue;
+      const slot0Data = results.get(`${poolId}:v4slot0`);
+      const liquidityData = results.get(`${poolId}:v4liquidity`);
+      if (!slot0Data || !liquidityData) continue;
+      const slot0 = v4StateViewIface.decodeFunctionResult("getSlot0", slot0Data);
+      const seed: V4Seed = {
+        poolId,
+        sqrtPriceX96: BigInt(slot0[0]),
+        tick: Number(slot0[1]),
+        protocolFee: BigInt(slot0[2]),
+        lpFee: BigInt(slot0[3]),
+        liquidity: BigInt(v4StateViewIface.decodeFunctionResult("getLiquidity", liquidityData)[0]),
+        blockNumber,
+      };
+      this.cache.seedV4(seed);
+      v4Count++;
+    }
+    return { v2Count, v3Count, v4Count, tickFetch };
   }
 
   private async updateV3Ticks(
@@ -326,6 +371,15 @@ export class PoolStateUpdater {
     }
     return out;
   }
+}
+
+function quoteV4PoolId(hop: QuoteRequest): string | null {
+  if (hop.adapterId !== "univ4-unlock" || !hop.v4PoolKey) return null;
+  return v4PoolId(hop.v4PoolKey).toLowerCase();
+}
+
+function poolUpdateKey(hop: QuoteRequest): string {
+  return `${hop.adapterId}:${quoteV4PoolId(hop) ?? hop.target.toLowerCase()}`;
 }
 
 function v3WordRange(tick: number, tickSpacing: number): number[] {

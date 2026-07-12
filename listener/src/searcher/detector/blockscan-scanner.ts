@@ -1,8 +1,9 @@
+import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
-import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
-import type { CurveSnapshot, PoolStateCache, V2Seed, V3Snapshot } from "../solver/pool-state-cache.js";
+import { buildTokenPaths, type TokenEdge, v4PoolId } from "../planner/token-graph.js";
+import type { CurveSnapshot, PoolStateCache, V2Seed, V3Snapshot, V4Snapshot } from "../solver/pool-state-cache.js";
 import { getAmount0Delta, getAmount1Delta } from "../solver/v3-math.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 
@@ -32,7 +33,7 @@ export interface BlockScanOutcome {
   debug?: { skippedVenues: number };
 }
 
-type VenueKind = "v2" | "v3" | "curve" | "protocol" | "fluid";
+type VenueKind = "v2" | "v3" | "v4" | "curve" | "protocol" | "fluid";
 
 interface PairGroup {
   a: string;
@@ -230,7 +231,7 @@ export function detectBlockScanOpportunities(input: {
           maxInput: sizing.maxInput,
         },
         leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
-        affectedPools: uniqueLowercase(seedEdges.map((edge) => edge.target)),
+        affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
         affectedTokens: canonicalRing,
       };
       const depth = Math.max(1, score.minDepth);
@@ -255,7 +256,7 @@ function groupPairs(edges: TokenEdge[]): Map<string, PairGroup> {
       group = { a, b, venues: new Map() };
       groups.set(key, group);
     }
-    const pool = edge.target.toLowerCase();
+    const pool = edgeVenueIdentity(edge);
     const venueEdges = group.venues.get(pool);
     if (venueEdges) venueEdges.push(edge);
     else group.venues.set(pool, [edge]);
@@ -283,6 +284,7 @@ function readVenueMid(
   if (!kind) return null;
   if (kind === "v2") return readV2Mid(cache.snapshotV2(pool, sourceBlock), pool, edges, a, b);
   if (kind === "v3") return readV3Mid(cache.snapshotV3(pool, sourceBlock), pool, edges, a, b);
+  if (kind === "v4") return readV4Mid(cache.snapshotV4(pool, sourceBlock), pool, edges, a, b);
   if (kind === "protocol") return readExternalMid("protocol", protocolMids, pool, edges, a, b);
   if (kind === "fluid") return readExternalMid("fluid", protocolMids, pool, edges, a, b);
   return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b);
@@ -294,6 +296,7 @@ function venueKind(edge: TokenEdge): VenueKind | null {
   if (adapterId.includes("fluid-dex")) return "fluid";
   if (adapterId.includes("univ2")) return "v2";
   if (adapterId.includes("univ3")) return "v3";
+  if (adapterId.includes("univ4")) return "v4";
   if (adapterId.includes("curve")) return "curve";
   return null;
 }
@@ -381,6 +384,42 @@ function readV3Mid(snapshot: V3Snapshot | null, pool: string, edges: TokenEdge[]
   };
 }
 
+function readV4Mid(
+  snapshot: V4Snapshot | null,
+  pool: string,
+  edges: TokenEdge[],
+  a: string,
+  b: string,
+): VenueMid | null {
+  const key = edges[0]?.v4PoolKey;
+  if (!snapshot || !key || snapshot.sqrtPriceX96 <= 0n || snapshot.liquidity <= 0n) return null;
+  const token0 = normalizeV4GraphCurrency(key.currency0);
+  const token1 = normalizeV4GraphCurrency(key.currency1);
+  const price0To1 = sqrtPriceToNumber(snapshot.sqrtPriceX96) ** 2;
+  let mid: number;
+  let sqrtABX96: bigint;
+  if (token0 === a && token1 === b) {
+    mid = price0To1;
+    sqrtABX96 = snapshot.sqrtPriceX96;
+  } else if (token0 === b && token1 === a) {
+    mid = 1 / price0To1;
+    sqrtABX96 = Q192 / snapshot.sqrtPriceX96;
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
+  return {
+    kind: "v4",
+    pool,
+    edges,
+    mid,
+    feeBps: Number(snapshot.lpFee) / 100,
+    sqrtABX96,
+    liquidity: snapshot.liquidity,
+    depthProxy: Number(snapshot.liquidity),
+  };
+}
+
 function readCurveMid(
   snapshot: CurveSnapshot | null,
   pool: string,
@@ -440,10 +479,22 @@ function readEdgeVenueMid(
     sourceBlock,
     edge.tokenIn.toLowerCase(),
     edge.tokenOut.toLowerCase(),
-    edge.target.toLowerCase(),
+    edgeVenueIdentity(edge),
     [edge],
     protocolMids,
   );
+}
+
+function edgeVenueIdentity(edge: TokenEdge): string {
+  if (edge.adapterId === "univ4-unlock" && edge.v4PoolKey) {
+    return (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
+  }
+  return edge.target.toLowerCase();
+}
+
+function normalizeV4GraphCurrency(currency: string): string {
+  const normalized = currency.toLowerCase();
+  return normalized === ethers.ZeroAddress.toLowerCase() ? WETH : normalized;
 }
 
 function edgeMidTimesOneMinusFee(

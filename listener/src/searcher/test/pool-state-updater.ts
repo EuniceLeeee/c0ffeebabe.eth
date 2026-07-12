@@ -1,5 +1,7 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
+import { v4PoolId, type V4PoolKey } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
 
@@ -14,6 +16,14 @@ const V3_POOL = "0x0000000000000000000000000000000000000a03";
 const TOKEN0 = "0x00000000000000000000000000000000000000a0";
 const TOKEN1 = "0x00000000000000000000000000000000000000b1";
 const SQRT_PRICE_1_1 = 1n << 96n;
+const V4_KEY: V4PoolKey = {
+  currency0: TOKEN0,
+  currency1: TOKEN1,
+  fee: 500,
+  tickSpacing: 10,
+  hooks: ethers.ZeroAddress,
+};
+const V4_POOL_ID = v4PoolId(V4_KEY);
 
 const multicallIface = new ethers.Interface([
   "function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success, bytes returnData)[] returnData)",
@@ -30,6 +40,10 @@ const v3Iface = new ethers.Interface([
   "function tickSpacing() view returns (int24)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
+]);
+const v4StateViewIface = new ethers.Interface([
+  "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
 ]);
 const tickLensIface = new ethers.Interface([
   "function getPopulatedTicksInWord(address pool, int16 tickBitmapIndex) view returns ((int24 tick,int128 liquidityNet,uint128 liquidityGross)[])",
@@ -66,6 +80,9 @@ async function main(): Promise<void> {
         if (target === V3_POOL.toLowerCase()) {
           return { success: true, returnData: encodeV3(selector) };
         }
+        if (target === ADDR.UNISWAP_V4_STATE_VIEW.toLowerCase()) {
+          return { success: true, returnData: encodeV4(selector) };
+        }
         return { success: false, returnData: "0x" };
       });
       return multicallIface.encodeFunctionResult("aggregate3", [returnData]);
@@ -81,10 +98,21 @@ async function main(): Promise<void> {
   await updater.update(123, [
     { adapterId: "univ2-swap", target: V2_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
     { adapterId: "univ3-swap", target: V3_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
+    {
+      adapterId: "univ4-unlock",
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: 10_000n,
+      v4PoolKey: V4_KEY,
+    },
   ]);
   assert(aggregateCalls === 2, `expected mutable aggregate + tick aggregate, got ${aggregateCalls}`);
-  assert(mutableCalls === 9, `expected 9 mutable/static subcalls, got ${mutableCalls}`);
+  assert(mutableCalls === 11, `expected 11 mutable/static subcalls, got ${mutableCalls}`);
   assert(tickCalls > 0, `expected TickLens subcalls in aggregate`);
+  const v4 = cache.snapshotV4(V4_POOL_ID, 123);
+  assert(v4?.sqrtPriceX96 === SQRT_PRICE_1_1, "v4 slot0 seeded by PoolStateUpdater");
+  assert(v4?.liquidity === 10n ** 18n, "v4 liquidity seeded by PoolStateUpdater");
 
   const noState = {
     async call(): Promise<string> {
@@ -130,6 +158,16 @@ function encodeV3(selector: string): string {
   }
   if (selector === v3Iface.getFunction("liquidity")!.selector) {
     return v3Iface.encodeFunctionResult("liquidity", [10n ** 18n]);
+  }
+  return "0x";
+}
+
+function encodeV4(selector: string): string {
+  if (selector === v4StateViewIface.getFunction("getSlot0")!.selector) {
+    return v4StateViewIface.encodeFunctionResult("getSlot0", [SQRT_PRICE_1_1, 0, 0, 500]);
+  }
+  if (selector === v4StateViewIface.getFunction("getLiquidity")!.selector) {
+    return v4StateViewIface.encodeFunctionResult("getLiquidity", [10n ** 18n]);
   }
   return "0x";
 }
