@@ -10,6 +10,10 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
 **unattended** round. The user is away — decide and proceed per docs/research/HERMES.md rule 14/15; never stop to ask.
 
 ## Step 0 — startup
+- **A/B exclusion.** Before any deploy/window, read `/opt/MEV-ab/state.json` through SSM (or run trusted
+  `origin/main:scripts/deploy-ab-challenger.sh status`). If its B lease is `running` and unexpired, another
+  A/B experiment is measuring A: **NO-OP this regular Hermes wake**. Never restart champion A underneath a
+  paired A/B window.
 - **Anti-overlap check.** The `/tmp` PID lock is BEST-EFFORT ONLY — it does NOT actually prevent overlap
   in this harness: each Bash tool call is an ephemeral subshell whose `$$` dies before the next check, so
   two cron fires race the same round ([[project-hermes-round-lock-ineffective]]). The RELIABLE guard is a

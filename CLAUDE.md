@@ -11,7 +11,9 @@ companion doc, not here.
 ## 2. Behavioral base (every task)
 *Tradeoff: these guidelines bias toward caution over speed. For trivial tasks, use judgment.*
 - **Think before coding.** State assumptions; if multiple interpretations exist, present them — don't pick
-  silently; if a simpler approach exists, say so (push back when warranted); if unclear, stop and ask.
+  silently; if a simpler approach exists, say so (push back when warranted); if unclear, stop and ask in an
+  attended task. In an explicitly unattended HERMES round, make the safest in-envelope decision, record it,
+  and continue; only a true out-of-envelope safety stop may wait for the user.
 - **Simplicity first.** Minimum code that solves the problem, nothing speculative (no unrequested
   flexibility, no error handling for impossible cases). If 200 lines could be 50, rewrite. Test: *would a
   senior engineer say this is overcomplicated?*
@@ -42,7 +44,8 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 1. **Mainnet broadcast (and signing with the private key) requires explicit human authorization.** Today:
    a **bounded-live** test is authorized ONLY inside the script-enforced envelope (node marker
    `/opt/MEV/.deploy-live` + wallet `≤ MEV_LIVE_MAX_WALLET_ETH` + `SEARCHER_EV_GATE=1`; broadcast only a
-   profitable EV-gated sim). Anything outside the envelope — funding above the cap, raising the cap, the
+   profitable EV-gated sim). The dated envelope also defines the authorized dual-live A/B challenger.
+   Anything outside the envelope — funding above the cap, raising the cap, the
    real-funds key, out-of-envelope broadcast — needs a fresh human OK. Specifics + safety valve:
    `docs/live-safety-envelope.md`.
 2. **Default to dry-run** (`SEARCHER_DRY_RUN=1` → `DryRunBundleRouter`); flip to production only deliberately.
@@ -88,6 +91,10 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
   its classification live in HERMES + the `redact-live-run` tool.
+- **A/B branch lifecycle** — unattended cleanup is allowed only for literal `ab/*` branches after the A/B
+  gate authorizes a decisive `win`/`lose`. `needs_escalation`, unresolved manual/script disagreement,
+  incomplete fixes, and crashed runs retain the branch + evidence and move to a new problem. Never delete
+  another branch class under this authority.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
   analysis / bundle postmortem / a tool found wrong / repo diagnosis), capture it via steps 1–4 below.
@@ -116,8 +123,9 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 
 ## 6. Load-on-demand map (read the right one for the task)
 - `docs/research/HERMES.md` — the live-run / Hermes / autonomous workflow runbook + governance rules 1–17
-  + the **§A/B Canary** champion/challenger loop (perf/correctness/capability changes: branch=challenger,
-  main=champion, deterministic gate + live A/B, merge-on-win + delete branch; auto-runs live).
+  + the **§A/B Canary** champion/challenger loop (agent-manual causal analysis → canonical script
+  reconciliation → fresh non-author review on conflict/capability wins; merge/delete only on a proven win,
+  retain-and-advance on inconclusive; auto-runs bounded live).
   Read it **fully** when running such a cycle (the `docs/research/autonomous-*.md` routines do). Hermes rule
   numbers are load-bearing; do not renumber.
 - `docs/research/gates.md` — the validation contract (`fixed` vs `implemented`, replay flips, test harnesses).

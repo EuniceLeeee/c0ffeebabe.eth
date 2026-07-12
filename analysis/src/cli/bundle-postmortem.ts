@@ -80,10 +80,10 @@ export type TickDirection = "down" | "up";
 // selector hit is corroborated by Layer 2.
 //
 // Layer 2 (robust general signal): per-tx ERC4626/vault-share NET mint/burn imbalance from the
-// receipt — sum Transfer to/from 0x0 per share token; a nonzero net for any token ⇒ a residual
-// standing position ⇒ inventory/non-atomic. This catches the class generally (not just the hardcoded
-// selector) and is what makes the selector hit safe. A bot-cluster before/after-block balance check
-// is a documented future upgrade (F-009). Pure receipt computation — no extra RPC.
+// receipt — but ONLY for token contracts that also emitted an ERC4626 Deposit/Withdraw in this tx.
+// A generic Transfer(0x0, ...) is not enough: protocol assets such as Liquity BOLD are minted during
+// a valid protocol-DEX atomic loop and must not be mislabeled as vault inventory. For evidenced share
+// tokens, a nonzero net means a residual standing position. Pure receipt computation — no extra RPC.
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 // deposit(uint256,address) 0x6e553f65 and redeem(uint256,address,address) 0xba087652 — the two
 // vault-wrapper legs of the 0x9be73297 inventory rebalance (bundler 0xb8280955 / mediator 0x4825eff2).
@@ -1346,6 +1346,16 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
 // 0x9be73297 vault-wrapper helpers (no swap events) still flag; a metapool taking 3CRV does not.
 // Pure receipt computation — no RPC. Returns the offending share-token addresses.
 export function shareTokenImbalanceTokens(receipt: Json | null): string[] {
+  const evidencedVaultTokens = new Set<string>();
+  for (const log of receipt?.logs ?? []) {
+    const topic0 = lower(String(log?.topics?.[0] ?? ""));
+    const emitter = lower(String(log?.address ?? ""));
+    if (isAddress(emitter)
+      && (topic0 === lower(TOPICS.erc4626Deposit) || topic0 === lower(TOPICS.erc4626Withdraw))) {
+      evidencedVaultTokens.add(emitter);
+    }
+  }
+
   const net = new Map<string, bigint>();
   const perHolder = new Map<string, Map<string, bigint>>();
   const venueEmitters = swapVenueEmitters(receipt);
@@ -1356,7 +1366,7 @@ export function shareTokenImbalanceTokens(receipt: Json | null): string[] {
     const from = lower(transfer.from);
     const to = lower(transfer.to);
     const token = lower(String(log?.address ?? ""));
-    if (!isAddress(token)) continue;
+    if (!isAddress(token) || !evidencedVaultTokens.has(token)) continue;
     if (from === ZERO_ADDRESS && to === ZERO_ADDRESS) continue;
     if (from === ZERO_ADDRESS) net.set(token, (net.get(token) ?? 0n) + transfer.amount);
     else if (to === ZERO_ADDRESS) net.set(token, (net.get(token) ?? 0n) - transfer.amount);

@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadCases, type LearningCase } from "../learning/learning-case.js";
+import { parseAbExperiment, validateAbExperiment } from "../ab-canary.js";
+import { runCompetitorCalibration } from "../competitor-calibration.js";
 import {
   firstLine,
   METHOD_TRACE_FIELDS,
@@ -342,6 +344,81 @@ export function validateIntakeAudit(json: any): void {
   }
 }
 
+export function validateAbExternalCalibration(json: any): void {
+  const calibration = json?.ab_external_calibration;
+  if (!calibration || typeof calibration !== "object" || Array.isArray(calibration)) {
+    return fail("artifact.ab_external_calibration missing for A/B cycle");
+  }
+  if (String(calibration.competitor ?? "").toLowerCase()
+      !== "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671") {
+    fail("ab_external_calibration.competitor must be coffeebabe");
+  }
+  if (calibration.strategy_kind !== "block-scan" || calibration.comparable_filter !== "atomic_loop") {
+    fail("ab_external_calibration must compare block-scan against comparable_filter=atomic_loop");
+  }
+  if (isPlaceholder(String(calibration.tool_artifact ?? ""))) {
+    fail("ab_external_calibration.tool_artifact missing");
+  }
+  const fixtureCalibration = runCompetitorCalibration();
+  const declaredCalibration = calibration.classifier_calibration;
+  if (fixtureCalibration.status !== "pass") {
+    const failed = fixtureCalibration.checks
+      .filter((entry) => !entry.pass)
+      .map((entry) => `${entry.tx_hash}:${entry.axis}:${entry.expected}->${entry.actual}`)
+      .join("; ");
+    fail(`competitor classifier calibration failed: ${failed}`);
+  }
+  if (!declaredCalibration || typeof declaredCalibration !== "object") {
+    fail("ab_external_calibration.classifier_calibration missing");
+  } else {
+    if (!String(declaredCalibration.command ?? "").includes("competitor-calibration")) {
+      fail("ab_external_calibration.classifier_calibration.command must run competitor-calibration");
+    }
+    if (declaredCalibration.status !== "pass") {
+      fail("ab_external_calibration.classifier_calibration.status must be pass");
+    }
+    if (declaredCalibration.samples !== fixtureCalibration.checks.length) {
+      fail(`ab_external_calibration.classifier_calibration.samples must be ${fixtureCalibration.checks.length}`);
+    }
+  }
+  const comparable: unknown[] = Array.isArray(calibration.comparable_txs)
+    ? calibration.comparable_txs
+    : [];
+  if (!Array.isArray(calibration.comparable_txs)) {
+    fail("ab_external_calibration.comparable_txs must be an array (empty is valid)");
+  }
+  const txByHash = new Map<string, any>();
+  for (const finding of Array.isArray(json?.findings) ? json.findings : []) {
+    for (const tx of Array.isArray(finding?.txs) ? finding.txs : []) {
+      txByHash.set(String(tx?.hash ?? "").toLowerCase(), tx);
+    }
+  }
+  for (const rawHash of comparable) {
+    const hash = String(rawHash).toLowerCase();
+    const tx = txByHash.get(hash);
+    if (!/^0x[a-f0-9]{64}$/.test(hash) || !tx) {
+      fail(`ab_external_calibration comparable tx missing from findings: ${hash}`);
+    } else if (tx.winner_style !== "atomic_loop" || tx.position_conserving !== true) {
+      fail(`ab_external_calibration tx ${hash} is not a conserving atomic_loop`);
+    }
+  }
+  const excluded = calibration.excluded_counts;
+  for (const key of ["inventory", "sandwich", "keeper_or_liquidation", "jit_lp", "standing_credit"]) {
+    if (!excluded || !Number.isFinite(excluded[key]) || excluded[key] < 0) {
+      fail(`ab_external_calibration.excluded_counts.${key} must be a number >= 0`);
+    }
+  }
+  const gaps = calibration.gap_counts;
+  for (const key of ["not_seen", "pool", "path", "adapter", "quote_or_sim", "execution", "economics"]) {
+    if (!gaps || !Number.isFinite(gaps[key]) || gaps[key] < 0) {
+      fail(`ab_external_calibration.gap_counts.${key} must be a number >= 0`);
+    }
+  }
+  if (isPlaceholder(String(calibration.next_problem_id ?? ""))) {
+    fail("ab_external_calibration.next_problem_id missing (use none:no_comparable_sample when empty)");
+  }
+}
+
 function computeCoverageKpi(json: any): {
   competitorLegsTotal: number;
   legsOutOfGraph: number;
@@ -452,6 +529,7 @@ export function validateManualArtifact(
   json: any,
   win: { from: number; to: number },
   watchlist: string[],
+  requireAbCalibration = false,
 ): void {
   if (!json || typeof json !== "object") return fail("artifact is not a JSON object");
   const w = json.window;
@@ -466,6 +544,7 @@ export function validateManualArtifact(
   // (1) standard analysis (funnel + dominant drop) is mandatory every dry-run
   validateRunAnalysis(json);
   validateIntakeAudit(json);
+  if (requireAbCalibration) validateAbExternalCalibration(json);
 
   const aw: string[] = Array.isArray(json.watchlist) ? json.watchlist.map((s: string) => String(s).toLowerCase()) : [];
   for (const addr of watchlist) {
@@ -584,7 +663,7 @@ function main(): void {
               process.exit(0);
             }
           } else {
-            validateManualArtifact(json, win, watchlist);
+            validateManualArtifact(json, win, watchlist, /```ab_experiment\s*\n/.test(md));
           }
         }
       }
@@ -594,6 +673,15 @@ function main(): void {
   const tdCases = loadCasesForToolingGate();
   validateMethodTrace(md, step1, tdCases);
   validateToolingDefects(tdCases);
+  if (/```ab_experiment\s*\n/.test(md)) {
+    try {
+      for (const error of validateAbExperiment(parseAbExperiment(md), mdPath, "close")) {
+        fail(`A/B close-gate: ${error}`);
+      }
+    } catch (error) {
+      fail(`A/B close-gate: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   if (fails.length > 0) {
     console.error(`FAIL: Step-1 close-gate blocked ${mdPath}`);

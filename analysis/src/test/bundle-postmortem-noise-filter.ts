@@ -28,6 +28,9 @@ const inventoryReceipt = JSON.parse(
 const atomicReceipt = JSON.parse(
   readFileSync(join(FIXTURES, "postmortem-0xf2de7499", "receipt.json"), "utf8"),
 );
+const liquityMintReceipt = JSON.parse(
+  readFileSync(join(FIXTURES, "coffee-20260704", "tx-2.json"), "utf8"),
+);
 const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
 const inventoryImbalanceTokens = shareTokenImbalanceTokens(inventoryReceipt).sort();
@@ -43,6 +46,9 @@ const SWAP_VENUE = "0x00000000000000000000000000000000000000b2";
 const EXEC_ACTOR = "0x00000000000000000000000000000000000000c3";
 const INV_HELPER = "0x00000000000000000000000000000000000000d4";
 const erc20If = new ethers.Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+const erc4626If = new ethers.Interface([
+  "event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)",
+]);
 const v3If = new ethers.Interface(["event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)"]);
 const xfer = (token: string, from: string, to: string, amt: bigint, li: number) => {
   const { data, topics } = erc20If.encodeEventLog("Transfer", [from, to, amt]);
@@ -52,13 +58,18 @@ const v3SwapLog = (pool: string, li: number) => {
   const { data, topics } = v3If.encodeEventLog("Swap", [EXEC_ACTOR, EXEC_ACTOR, 1, -1, 0, 0, 0]);
   return { address: pool, topics, data, logIndex: "0x" + li.toString(16) };
 };
+const vaultWithdrawLog = (vault: string, actor: string, amount: bigint, li: number) => {
+  const { data, topics } = erc4626If.encodeEventLog("Withdraw", [actor, actor, actor, amount, amount]);
+  return { address: vault, topics, data, logIndex: "0x" + li.toString(16) };
+};
 const SHARE_AMT = 934n * 10n ** 18n;
 // buy the share from a swap venue, redeem it (burn) — executor nets 0 => NOT inventory (the fix).
-const atomicBuyRedeem = { logs: [v3SwapLog(SWAP_VENUE, 0), xfer(SHARE_TOK, SWAP_VENUE, EXEC_ACTOR, SHARE_AMT, 1), xfer(SHARE_TOK, EXEC_ACTOR, ethers.ZeroAddress, SHARE_AMT, 2)] };
+const atomicBuyRedeem = { logs: [v3SwapLog(SWAP_VENUE, 0), xfer(SHARE_TOK, SWAP_VENUE, EXEC_ACTOR, SHARE_AMT, 1), xfer(SHARE_TOK, EXEC_ACTOR, ethers.ZeroAddress, SHARE_AMT, 2), vaultWithdrawLog(SHARE_TOK, EXEC_ACTOR, SHARE_AMT, 3)] };
 // a non-venue helper burns a PRE-HELD share (no in-tx source) => still inventory.
-const preHeldBurn = { logs: [xfer(SHARE_TOK, INV_HELPER, ethers.ZeroAddress, SHARE_AMT, 0)] };
+const preHeldBurn = { logs: [xfer(SHARE_TOK, INV_HELPER, ethers.ZeroAddress, SHARE_AMT, 0), vaultWithdrawLog(SHARE_TOK, INV_HELPER, SHARE_AMT, 1)] };
 const buyRedeemImbalance = shareTokenImbalanceTokens(atomicBuyRedeem);
 const preHeldBurnImbalance = shareTokenImbalanceTokens(preHeldBurn);
+const liquityMintImbalance = shareTokenImbalanceTokens({ logs: liquityMintReceipt.receiptLogs });
 
 const CFG = "0xcccccccccccccccccccccccccccccccccccccccc";
 const reach = {
@@ -276,6 +287,9 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(buyRedeemImbalance, []),
   // ...but a genuine pre-held burn (non-venue helper -> 0x0, no in-tx source) still flags.
   () => assert.deepEqual(preHeldBurnImbalance, [lower(SHARE_TOK)]),
+  // Coffee #2 is a Liquity BOLD protocol mint, not an ERC4626 share position. A plain token mint
+  // without Deposit/Withdraw evidence must not poison comparable atomic-loop analysis.
+  () => assert.deepEqual(liquityMintImbalance, []),
 
   // F-009 atomicity / inventory-rebalance detector ---------------------------------------------
   // Layer 2 (robust receipt signal): 0x9be73297 leaves a residual position in BOTH vault-share
