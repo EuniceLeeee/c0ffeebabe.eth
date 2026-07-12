@@ -203,7 +203,7 @@ preflight() {
   tr '\0' '\n' < "/proc/$apid/environ" > "$A_PROCESS_ENV"
   chmod 600 "$A_PROCESS_ENV"
   for pair in \
-    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_MEMPOOL=0 \
+    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
     SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1; do
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(file_env_get "$A_PROCESS_ENV" "$key")" = "$expected" ] \
@@ -211,7 +211,7 @@ preflight() {
   done
 
   for pair in \
-    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_MEMPOOL=0 \
+    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
     SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567; do
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(env_get "$key")" = "$expected" ] || die "$key must equal $expected in $ENVF"
@@ -256,6 +256,7 @@ build_runtime_env() {
   cat >> "$runtime_env" <<EOF
 SEARCHER_DRY_RUN=0
 SEARCHER_EV_GATE=1
+SEARCHER_ENABLE_BACKRUN=0
 SEARCHER_ENABLE_MEMPOOL=0
 SEARCHER_ENABLE_BLOCK_SCAN=1
 SEARCHER_BLOCKSCAN_SUBMIT=1
@@ -380,7 +381,10 @@ deploy() {
   sleep 8
   [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] || { stop_b; die "challenger failed to start"; }
   grep -q '\[searcher/live\] mode=live' "$LOG" || { stop_b; die "challenger live banner missing"; }
+  grep -q 'backrun=disabled' "$LOG" || { stop_b; die "challenger backrun-off banner missing"; }
   grep -q 'mempool=disabled' "$LOG" || { stop_b; die "challenger mempool-off banner missing"; }
+  ! grep -q 'MEV-Share SSE connected' "$LOG" || { stop_b; die "challenger unexpectedly connected to MEV-Share"; }
+  ! grep -q 'src=mev-share' "$LOG" || { stop_b; die "challenger unexpectedly processed a MEV-Share hint"; }
   [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \

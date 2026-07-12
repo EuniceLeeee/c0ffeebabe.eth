@@ -162,6 +162,8 @@ interface HintLog {
 
 interface LiveConfig {
   rpcUrl: string;
+  /** Enable victim-driven backrun processing from MEV-Share and, optionally, public mempool. */
+  enableBackrun: boolean;
   /** WebSocket URL for public mempool pending-tx subscription (route B). */
   wsUrl: string;
   /** Subscribe to the public mempool as a victim source (route B). */
@@ -487,6 +489,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   return {
     rpcUrl,
     wsUrl,
+    enableBackrun: process.env.SEARCHER_ENABLE_BACKRUN !== "0",
     enableMempool: process.env.SEARCHER_ENABLE_MEMPOOL === "1",
     enableProtocolEdges: process.env.SEARCHER_ENABLE_PROTOCOL_EDGES === "1",
     mevShareSseUrl: process.env.MEV_SHARE_SSE_URL ?? DEFAULT_MEV_SHARE_SSE_URL,
@@ -649,6 +652,7 @@ async function main(): Promise<void> {
   console.log("[searcher/live] starting V5 MEV-Share searcher");
   initEvents();
   console.log(`[searcher/live] sse=${config.mevShareSseUrl}`);
+  console.log(`[searcher/live] backrun=${config.enableBackrun ? "enabled" : "disabled"}`);
   console.log(`[searcher/live] mempool=${config.enableMempool ? "enabled" : "disabled"}`);
   console.log(
     `[searcher/live] bribeBps=${config.bribeBps} ` +
@@ -1470,15 +1474,17 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const hintStream = config.enableMempool
-    ? (() => {
-        console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
-        return mergeHints(
-          mevShareHints(config.mevShareSseUrl),
-          mempoolHints(config.wsUrl, provider, allPools, counters),
-        );
-      })()
-    : mevShareHints(config.mevShareSseUrl);
+  const hintStream = !config.enableBackrun
+    ? disabledHints()
+    : config.enableMempool
+      ? (() => {
+          console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
+          return mergeHints(
+            mevShareHints(config.mevShareSseUrl),
+            mempoolHints(config.wsUrl, provider, allPools, counters),
+          );
+        })()
+      : mevShareHints(config.mevShareSseUrl);
 
   try {
     for await (const hint of hintStream) {
@@ -5055,6 +5061,12 @@ async function* mevShareHints(url: string): AsyncGenerator<HintEnvelope> {
       if (timer) clearTimeout(timer);
       controller.abort();
     }
+  }
+}
+
+async function* disabledHints(): AsyncGenerator<HintEnvelope> {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
   }
 }
 

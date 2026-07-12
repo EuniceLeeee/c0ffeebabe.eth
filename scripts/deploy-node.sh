@@ -44,7 +44,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -82,6 +82,14 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # measured 100% phantom-victim rate — pure ghost flow that starved the mempool/atomic paths of CPU).
   # Ingest+sim only (submission also gated by allowHashOnlySubmit). Create the marker to re-enable.
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
+  # Backrun victim sources are marker-controlled and default OFF on the node's block-scan production
+  # posture. Without this explicit switch, SEARCHER_ENABLE_MEMPOOL=0 still consumes MEV-Share SSE.
+  # Create $REPO/.backrun to deliberately restore MEV-Share (and optional public-mempool) processing.
+  if [ -f "$REPO/.backrun" ]; then
+    echo "SEARCHER_ENABLE_BACKRUN=1" >> "$tmp"
+  else
+    echo "SEARCHER_ENABLE_BACKRUN=0" >> "$tmp"
+  fi
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=$DRY_VAL + TTL=$OPP_TTL_MS + poolUniverseTopN=$POOL_UNIVERSE_TOP_N"
@@ -89,7 +97,7 @@ else
   say "no running process — ensuring DRY_RUN=$DRY_VAL in existing .env (mode=$MODE)"
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
@@ -98,6 +106,7 @@ else
   [ -f "$REPO/.block-scan" ] && echo "SEARCHER_ENABLE_BLOCK_SCAN=1" >> "$tmp"  # BS-lane Pass A log-only, marker-gated
   [ -f "$REPO/.blockscan-submit" ] && echo "SEARCHER_BLOCKSCAN_SUBMIT=1" >> "$tmp"  # BS-lane Pass B atomic submit, marker-gated
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share consumption marker-gated, DEFAULT OFF (2026-07-07 ghost flow)
+  if [ -f "$REPO/.backrun" ]; then echo "SEARCHER_ENABLE_BACKRUN=1" >> "$tmp"; else echo "SEARCHER_ENABLE_BACKRUN=0" >> "$tmp"; fi
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
 
@@ -202,9 +211,15 @@ sleep 8
 ACTIVE=$(systemctl is-active mev-searcher)
 NEWPID=$(systemctl show -p MainPID --value mev-searcher)
 DRY=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_DRY_RUN=$DRY_VAL")
+BACKRUN_EXPECTED=0
+[ -f "$REPO/.backrun" ] && BACKRUN_EXPECTED=1
+BACKRUN=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_BACKRUN=$BACKRUN_EXPECTED")
 say "restarted: active=$ACTIVE pid=$NEWPID mode=$MODE dry_run_env=$(tr '\0' '\n' < /proc/$NEWPID/environ 2>/dev/null | grep '^SEARCHER_DRY_RUN=' | cut -d= -f2)"
 if [ "$DRY" != "1" ]; then
   say "WARNING: restarted process SEARCHER_DRY_RUN != $DRY_VAL (expected for mode=$MODE) — STOP and investigate."; exit 9
+fi
+if [ "$BACKRUN" != "1" ]; then
+  say "WARNING: restarted process SEARCHER_ENABLE_BACKRUN != $BACKRUN_EXPECTED — STOP and investigate."; exit 9
 fi
 BANNER=""
 for _ in $(seq 1 60); do
@@ -215,6 +230,9 @@ done
 if [ -z "$BANNER" ]; then
   say "ABORT: missing pool registry startup banner after restart (log $LOGF)."; exit 9
 fi
+tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
+  | grep -q "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" \
+  || { say "ABORT: backrun startup banner does not match marker-controlled posture."; exit 9; }
 say "startup banner: $BANNER"
 if echo "$BANNER" | grep -Eq '(^|[[:space:]])universe=0([^0-9]|$)|\+ 0 universe([^0-9]|$)'; then
   say "ABORT: pool universe loaded zero pools after restart."; exit 9

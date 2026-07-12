@@ -119,7 +119,10 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>` over SSM. It validates
    both wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
    universe inputs, and equal CPU partitions. It never restarts A. Direct `systemd-run`, hand-written B env,
-   or deployment from the challenger branch is invalid.
+   or deployment from the challenger branch is invalid. Block-scan-only A/B requires
+   `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides: the first disables
+   MEV-Share plus every victim-driven hint path; the second alone disables only public mempool and is not a
+   valid CPU-isolated canary posture.
 6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm blocks; renew the lease if needed. A and B must see
    the same block numbers. Record restart deltas and before/after input hashes. For shared-input tests all
    universe hashes match; challenger-input capability tests declare the intended input delta. A fairness
