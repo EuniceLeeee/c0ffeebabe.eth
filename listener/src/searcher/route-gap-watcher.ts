@@ -275,7 +275,7 @@ function execFileChecked(
   });
 }
 
-function inferAutoClosePoolIds(reportPath: string): AutoCloseRunnerResult {
+export function inferAutoClosePoolIds(reportPath: string): AutoCloseRunnerResult {
   const report = readJsonObject(reportPath, "postmortem report");
   const closedV4PoolIds: string[] = [];
   const forceIncludeAdded: string[] = [];
@@ -303,6 +303,7 @@ function missingTouchedVenues(report: JsonRecord): JsonRecord[] {
   const out: JsonRecord[] = [];
   for (const competitor of competitors) {
     if (!isRecord(competitor) || !Array.isArray(competitor.touchedVenues)) continue;
+    if (competitor.winner_style !== "atomic_loop") continue;
     for (const venue of competitor.touchedVenues) {
       if (!isRecord(venue) || venue.in_graph !== false) continue;
       out.push(venue);
@@ -375,7 +376,11 @@ function readJsonObject(path: string, label: string): JsonRecord {
 }
 
 function isRouteGapDecisive(report: JsonRecord): boolean {
-  return isRecord(report.verdict) && report.verdict.route_gap_decisive === true;
+  return (
+    isRecord(report.verdict) &&
+    report.verdict.route_gap_decisive === true &&
+    missingTouchedVenues(report).length > 0
+  );
 }
 
 function jsonlRecordsFromOffset(file: Buffer, offset: number): JsonlRecord[] {

@@ -42,13 +42,14 @@ function writeReport(
   path: string,
   routeGapDecisive: boolean,
   touchedVenues: Array<Record<string, unknown>>,
+  winnerStyle = "atomic_loop",
 ): void {
   writeFileSync(
     path,
     JSON.stringify({
       verdict: { route_gap_decisive: routeGapDecisive, winner: "0xwinner" },
       analyzed_competitors: [
-        { hash: "0xwinner", transactionIndex: 25, touchedVenues },
+        { hash: "0xwinner", transactionIndex: 25, winner_style: winnerStyle, touchedVenues },
       ],
     }, null, 2) + "\n",
   );
@@ -195,9 +196,8 @@ async function testAlreadyInGraphSkips(): Promise<void> {
 }
 
 async function testNonComparableWinnerSkipped(): Promise<void> {
-  // A one_leg_inventory (CEX-DEX) / sandwich winner is NOT a comparable atomic-loop route gap;
-  // its touched venues are noise. Even with route_gap_decisive true (from some other comparable
-  // competitor), the non-comparable competitor's not-in-graph venue must NOT be closed/backfilled.
+  // Only a proven atomic_loop may feed auto-close. Unknown and every known
+  // non-atomic style must leave registries untouched.
   const dir = mkdtempSync(join(tmpdir(), "auto-close-route-gap-noncomp-"));
   try {
     const report = join(dir, "postmortem.json");
@@ -222,6 +222,30 @@ async function testNonComparableWinnerSkipped(): Promise<void> {
             winner_style: "sandwich",
             touchedVenues: [{ protocol: "univ3", id: V3_POOL.toLowerCase(), in_graph: false }],
           },
+          {
+            hash: "0xunknown",
+            transactionIndex: 13,
+            winner_style: "unknown",
+            touchedVenues: [{ protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false }],
+          },
+          {
+            hash: "0xkeeper",
+            transactionIndex: 14,
+            winner_style: "keeper_claim",
+            touchedVenues: [{ protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false }],
+          },
+          {
+            hash: "0xrfq",
+            transactionIndex: 15,
+            winner_style: "rfq_fill",
+            touchedVenues: [{ protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false }],
+          },
+          {
+            hash: "0xvault",
+            transactionIndex: 16,
+            winner_style: "inventory_vault_rebalance",
+            touchedVenues: [{ protocol: "univ4", id: CFG_V4_POOL_ID, in_graph: false }],
+          },
         ],
       }, null, 2) + "\n",
     );
@@ -233,7 +257,7 @@ async function testNonComparableWinnerSkipped(): Promise<void> {
     assertArrayEq(result.forceIncludeAdded, [], "non-comparable winner venue should not append");
     assert(readFileSync(forceInclude, "utf8") === unchanged, "non-comparable winner should not rewrite force-include");
     assert(fake.calls() === 0, "non-comparable winner should not call backfill");
-    console.log("[auto-close] non-comparable winner (one_leg_inventory/sandwich) venues skipped: PASS");
+    console.log("[auto-close] unknown and non-atomic winner venues skipped: PASS");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

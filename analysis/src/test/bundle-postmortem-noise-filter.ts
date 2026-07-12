@@ -8,10 +8,12 @@ import {
   buildVerdict,
   classifyWinnerStyle,
   decodeV4SwapFills,
+  detectNonArbSignals,
   detectJitLiquidity,
   extractOtherVenues,
   isNonComparableWinnerStyle,
   loadGraphMembership,
+  overlayNonArbStyle,
   realizedProfitUsdForReport,
   shareTokenImbalanceTokens,
   winnerMovedPriceBeyondPrestate,
@@ -83,6 +85,12 @@ const reach = {
   builders_sent: ["test-builder"],
   note: "test fixture",
 };
+const scaleKeeperSignals = detectNonArbSignals(
+  "0x8cbf856600000000e4fc6b6d00000000",
+  null,
+  new Set([EXEC_ACTOR]),
+  null,
+);
 
 // The inventory receipt's residual vault-share position => inventory_vault_rebalance (non-comparable),
 // even though the executor's priced/native net looks like a clean atomic loop (+profit only).
@@ -160,6 +168,11 @@ const atomicVerdict = buildVerdict(
   [competitor(atomicStyle, "200")],
   reach,
 );
+const unknownVerdict = buildVerdict(
+  event("100", "50"),
+  [competitor("unknown", "200")],
+  reach,
+);
 
 // Graph-membership v4 fixture: runtime-graph-pools.json stores v4 by PoolManager ADDRESS only
 // (no poolId), so in_graph for v4 must come from the sibling active-pools.json poolId set — else
@@ -226,6 +239,10 @@ const checks: Array<() => void> = [
   () => assert.equal(atomicVerdict.winner_style, "atomic_loop"),
   () => assert.equal(atomicVerdict.route_gap_decisive, true),
   () => assert.equal(atomicVerdict.non_comparable_winner, undefined),
+  () => assert.equal(unknownVerdict.route_gap_decisive, false),
+  () => assert.equal(scaleKeeperSignals.claim_selector_hit, true),
+  () => assert.equal(overlayNonArbStyle("unknown", scaleKeeperSignals), "keeper_claim"),
+  () => assert.equal(isNonComparableWinnerStyle("keeper_claim"), true),
   () => assert.equal(classifyWinnerStyle({
     pricedDeltas: [],
     unpricedDeltas: [],

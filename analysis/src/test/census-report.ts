@@ -88,6 +88,24 @@ test("census report filters non-comparable competitors from the decisive route g
   assert.equal(report.summary.net_realized_usd, 2);
 });
 
+test("census report never turns an unknown winner into a route gap", () => {
+  const unknownTx: CensusPerTx = {
+    hash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    from: watch[0],
+    realizedUsd: 2,
+    touchedVenues: [venue("univ4", oneLegMissingPool, false)],
+    winner_style: "unknown",
+  };
+  const report = buildCensusReport([unknownTx], 1, window, watch);
+
+  assert.equal(report.verdict.route_gap_decisive, false);
+  assert.equal(report.summary.qualifying_txs, 0);
+  assert.equal(report.summary.net_realized_usd, 0);
+  assert.deepEqual(report.summary.distinct_out_of_graph, { univ2: 0, univ3: 0, univ4: 0, other: 0 });
+  assert.equal(report.analyzed_competitors[0]?.winner_style, "unknown");
+  assert.equal(report.analyzed_competitors[0]?.touchedVenues.some((entry) => entry.in_graph === false), false);
+});
+
 function venue(protocol: TouchedVenue["protocol"], id: string, inGraph: boolean): TouchedVenue {
   return {
     protocol,

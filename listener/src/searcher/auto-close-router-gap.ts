@@ -117,7 +117,7 @@ export async function autoCloseRouterGap(
     const winnerStyle =
       typeof competitor.winner_style === "string" ? competitor.winner_style : "";
 
-    if (winnerStyle === "one_leg_inventory" || winnerStyle === "sandwich") {
+    if (winnerStyle !== "atomic_loop") {
       if (hash) {
         skippedNonComparable.push(hash);
         appendFinding(findingsPath, {

@@ -29,7 +29,15 @@ const TOPIC_UNIV2_SWAP = lower((TOPICS as Record<string, string>).univ2Swap ?? "
 const TOPIC_TRANSFER = lower(TOPICS.transfer);
 // Any-tx mode constants live at module top: `await main()` runs at module scope, so consts declared
 // below it are TDZ at call time (the census-report 83923ef crash class).
-const KEEPER_CLAIM_SELECTORS = ["755da811", "42b1689d", "30c54085"];
+const KEEPER_CLAIM_SELECTORS = [
+  "755da811",
+  "42b1689d",
+  "30c54085",
+  // Scale/S88 distribute(): protocol rewards are allocated to the caller and
+  // then sold through DEXes. The selector is embedded in Coffee's executor
+  // batch calldata rather than being the top-level private entrypoint.
+  "e4fc6b6d",
+];
 const RFQ_DEADLINE_MAX_AHEAD_S = 3600;
 const RFQ_DEADLINE_MAX_BEHIND_S = 120;
 const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
@@ -2118,12 +2126,13 @@ export function buildVerdict(event: Json, competitors: CompetitorReport[], build
   const bid = parseWeiField(event.bid);
   const simulatedProfit = parseWeiField(event.simulated_profit);
   const nonComparable = isNonComparableWinnerStyle(winner.winner_style);
+  const comparableAtomic = winner.winner_style === "atomic_loop";
   return {
     status: "priced",
     winner: winner.hash,
     winnerPaymentWei: winner.builderPaymentWei,
     outbid: bid === null ? null : winnerPayment > bid,
-    route_gap_decisive: simulatedProfit === null ? null : nonComparable ? false : winnerPayment > simulatedProfit,
+    route_gap_decisive: simulatedProfit === null ? null : comparableAtomic ? winnerPayment > simulatedProfit : false,
     winner_style: winner.winner_style,
     non_comparable_winner: nonComparable ? true : undefined,
     note: nonComparable ? nonComparableWinnerNote(winner.winner_style) : undefined,
@@ -2272,7 +2281,11 @@ function nonComparableWinnerNote(style: WinnerStyle): string {
     ? "one_leg_inventory/CEX-DEX"
     : style === "inventory_vault_rebalance"
       ? "inventory_vault_rebalance (residual vault-share position; needs pre-held inventory)"
-      : "sandwich";
+      : style === "keeper_claim"
+        ? "keeper_claim/protocol reward harvest"
+        : style === "rfq_fill"
+          ? "rfq_fill/off-chain signed liquidity"
+          : "sandwich";
   return `winner is ${label}; off-chain/out-of-posture - our atomic sim gross is the correct ceiling; no coverage/sizing/bid fix`;
 }
 

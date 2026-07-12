@@ -141,6 +141,43 @@
       },
       "created_at": "2026-07-07T01:52:27.000Z",
       "updated_at": "2026-07-07T01:52:27.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260712-coffee-keeper-unknown-routing",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "protocol",
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628",
+      "source_block": 25518776,
+      "comparable": false,
+      "primary_gap": "non_comparable_winner",
+      "gap_detail": "keeper_reward_distribution_misclassified_unknown_then_routing_gap",
+      "evidence": {
+        "window": "25518588..25518887",
+        "transactions": [
+          "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628",
+          "0x1a0839d9c4240c123692d7c7b91d1cc43adc05d38e8ebbdb35e3e7bc131ecf35",
+          "0x20bd02d1d12995ab61c248e2c6133e6c8516ca97350036505366845d76d6ce63"
+        ],
+        "manual": "inner 0xe9c2.../0xe4fc6b6d distributes SCALE to the executor with no actor ERC20 input; executor liquidates the reward through DEXes",
+        "canonical_before": "winner_style=unknown and census-gap routing_gap(hooked-v4 x1/x2)",
+        "reviewer": "019f5807-aa00-7e71-988d-dd7315f6a16b agreed keeper_claim must precede routing analysis"
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/cli/bundle-postmortem.ts + census-report.ts + scripts/census-gap.sh",
+        "issue": "known reward-distribution keeper calls are missed and unknown winners can fall through to a false routing gap",
+        "evidence": "three Coffee txs in block 25518777 contain inner selector 0xe4fc6b6d, receive protocol-distributed SCALE without actor ERC20 input, then sell it; canonical output classified all three unknown and routing_gap",
+        "codify_target": "recognize 0xe4fc6b6d as keeper_claim; require winner_style=atomic_loop before route-gap eligibility; add calibration and regression tests",
+        "status": "codified",
+        "codify_commit": "6fc2017349924b5a69bb209a8101dbf8f5c0e1d4",
+        "validation": "node production CLI replay over blocks 25518588..25518887: three Coffee txs changed from unknown+routing_gap to keeper_claim+non_comparable; empty txs remained manual_required:unknown"
+      },
+      "created_at": "2026-07-12T20:43:00.000Z",
+      "updated_at": "2026-07-12T21:07:34.000Z"
     }
   ]
 }

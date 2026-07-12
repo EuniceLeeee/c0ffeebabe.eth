@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { actionsFromLogs } from "./actions/from-logs.js";
 import {
   classifyWinnerStyle,
+  detectNonArbSignals,
   extractOtherVenues,
+  overlayNonArbStyle,
   shareTokenImbalanceTokens,
   type WinnerStyle,
 } from "./cli/bundle-postmortem.js";
@@ -17,6 +19,13 @@ const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "test", "fixtures
 const COFFEE_FIXTURES = join(FIXTURES, "coffee-20260704");
 const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
+const SCALE_KEEPER_TX = "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628";
+
+interface TxInputFixture {
+  hash: string;
+  from: string;
+  input: string;
+}
 
 interface CoffeeFixture {
   label: string;
@@ -114,6 +123,24 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
       "fluidDex",
       fluidLineages.join(",") || "none",
     ));
+    const keeperFixture = JSON.parse(
+      readFileSync(join(FIXTURES, "postmortem-0xd63fa66f", "tx.json"), "utf8"),
+    ) as TxInputFixture;
+    if (lower(keeperFixture.hash) !== SCALE_KEEPER_TX) {
+      throw new Error("SCALE keeper fixture hash mismatch");
+    }
+    const keeperSignals = detectNonArbSignals(
+      keeperFixture.input,
+      null,
+      new Set([lower(keeperFixture.from)]),
+      null,
+    );
+    checks.push(check(
+      SCALE_KEEPER_TX,
+      "winner_style",
+      "keeper_claim",
+      overlayNonArbStyle("unknown", keeperSignals),
+    ));
   } catch (error) {
     checks.push(check(
       "fixture-loader",
@@ -127,7 +154,7 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
   return {
     schema_version: 1,
     competitor: COFFEE,
-    fixture_set: "coffee-20260704 + postmortem-0x9be73297",
+    fixture_set: "coffee-20260704 + postmortem-0x9be73297 + postmortem-0xd63fa66f",
     checks,
     passed: checks.length - failed,
     failed,
