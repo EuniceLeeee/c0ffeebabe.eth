@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
-import type { PoolEntry } from "./planner/token-graph.js";
+import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
+import { poolRegistryKey } from "./pool-universe.js";
 
 /**
  * Strategy-scoped pool views plus attributable P1-5 view-version hashes.
@@ -41,9 +42,9 @@ export function buildStrategyViews(
     if (appendUnique(blockscan, seen, pool)) universeAdded++;
   }
 
-  const overrides_hash = hashAddressList(overrides);
-  const backrun_view_hash = hashAddressList(backrun);
-  const blockscan_view_hash = keccakUtf8(`${sortedLowercaseAddresses(blockscan).join(",")}|${overrides_hash}`);
+  const overrides_hash = hashPoolList(overrides);
+  const backrun_view_hash = hashPoolList(backrun);
+  const blockscan_view_hash = keccakUtf8(`${sortedPoolKeys(blockscan).join(",")}|${overrides_hash}`);
   const strategy_view_version = keccakUtf8(
     `${backrun_view_hash}|${blockscan_view_hash}|${opts.poolUniverseGeneratedAt}`,
   );
@@ -62,7 +63,7 @@ export function buildStrategyViews(
 }
 
 function appendUnique(out: PoolEntry[], seen: Set<string>, pool: PoolEntry): boolean {
-  const key = pool.address.toLowerCase();
+  const key = poolRegistryKey(pool);
   if (seen.has(key)) return false;
   seen.add(key);
   out.push(pool);
@@ -72,19 +73,50 @@ function appendUnique(out: PoolEntry[], seen: Set<string>, pool: PoolEntry): boo
 function compareUniversePools(a: PoolEntry, b: PoolEntry): number {
   const scoreDiff = scoreForSort(b) - scoreForSort(a);
   if (scoreDiff !== 0) return scoreDiff;
-  return a.address.toLowerCase().localeCompare(b.address.toLowerCase());
+  return poolRegistryKey(a).localeCompare(poolRegistryKey(b));
 }
 
 function scoreForSort(pool: PoolEntry): number {
   return pool.score ?? -1;
 }
 
-function hashAddressList(pools: PoolEntry[]): string {
-  return keccakUtf8(sortedLowercaseAddresses(pools).join(","));
+function hashPoolList(pools: PoolEntry[]): string {
+  return keccakUtf8(sortedPoolKeys(pools).join(","));
 }
 
-function sortedLowercaseAddresses(pools: PoolEntry[]): string[] {
-  return pools.map((pool) => pool.address.toLowerCase()).sort();
+function sortedPoolKeys(pools: PoolEntry[]): string[] {
+  return pools.map(poolRegistryKey).sort();
+}
+
+export function hashTokenGraph(edges: TokenEdge[]): string {
+  const keys = edges.map((edge) => [
+    edge.adapterId,
+    edge.target.toLowerCase(),
+    edge.tokenIn.toLowerCase(),
+    edge.tokenOut.toLowerCase(),
+    edge.slotKind,
+    edge.protocolAction ?? "",
+    edge.edgeKind,
+    edge.leavesStandingPosition ? "1" : "0",
+    edge.curveI ?? "",
+    edge.curveJ ?? "",
+    edge.poolToken0?.toLowerCase() ?? "",
+    edge.poolToken1?.toLowerCase() ?? "",
+    edge.score ?? "",
+    edge.poolId?.toLowerCase() ?? "",
+    edge.nativeCurrency0 ? "1" : "0",
+    edge.nativeCurrency1 ? "1" : "0",
+    edge.v4PoolKey
+      ? [
+        edge.v4PoolKey.currency0.toLowerCase(),
+        edge.v4PoolKey.currency1.toLowerCase(),
+        edge.v4PoolKey.fee,
+        edge.v4PoolKey.tickSpacing,
+        edge.v4PoolKey.hooks.toLowerCase(),
+      ].join(":")
+      : "",
+  ].join("|")).sort();
+  return keccakUtf8(keys.join(","));
 }
 
 function keccakUtf8(value: string): string {

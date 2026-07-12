@@ -12,6 +12,9 @@ type BlockRecord = {
   summary: Record<string, number>;
   events: Record<string, number>;
   bestNet: string | null;
+  solveResults: string[];
+  rings: Set<string>;
+  budgetExceeded: boolean;
 };
 
 export type AbCompareOptions = {
@@ -39,6 +42,9 @@ export type AbCompareResult = {
   absolute_delta: number | null;
   improvement_pct: number | null;
   output_mismatches: number;
+  output_mismatch_blocks: number[];
+  ring_set_mismatch_blocks: number[];
+  budget_censored_blocks: number[];
   require_output_match: boolean;
   script_assessment: ScriptAssessment;
   reasons: string[];
@@ -47,6 +53,8 @@ export type AbCompareResult = {
 const SUMMARY_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=(\d+)\s+candidates=(\d+)\s+quotePositive=(\d+)\s+bestNet=(null|-?\d+)\s+warmedV2V3=(\d+)\s+protocolMids=(\d+)\s+skippedVenues=(\d+)\s+ms=(\d+)/;
 const STAGE_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+stage\s+(.+)$/;
 const BLOCK_RE = /\[searcher\/blockscan\]\s+block=(\d+)\b/;
+const SOLVE_RE = /\[searcher\/blockscan\]\s+solve ring=(\S+)\s+net=(null|-?\d+)(?:\s+error=(\S+))?/;
+const BUDGET_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+pass_budget_exceeded\b/;
 const EVENT_PATTERNS: [string, RegExp][] = [
   ["blacklistSkip", /\[searcher\/blockscan\]\s+blacklist skip ring=/],
   ["solvePositive", /\[searcher\/blockscan\]\s+solve ring=.*\snet=[1-9]\d*\b/],
@@ -64,7 +72,16 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
   const get = (block: number): BlockRecord => {
     const existing = records.get(block);
     if (existing) return existing;
-    const created: BlockRecord = { block, stage: {}, summary: {}, events: {}, bestNet: null };
+    const created: BlockRecord = {
+      block,
+      stage: {},
+      summary: {},
+      events: {},
+      bestNet: null,
+      solveResults: [],
+      rings: new Set(),
+      budgetExceeded: false,
+    };
     records.set(block, created);
     return created;
   };
@@ -73,6 +90,8 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
   for (const line of text.split(/\r?\n/)) {
     const blockMatch = line.match(BLOCK_RE);
     if (blockMatch) currentBlock = Number(blockMatch[1]);
+    const budget = line.match(BUDGET_RE);
+    if (budget) get(Number(budget[1])).budgetExceeded = true;
     const summary = line.match(SUMMARY_RE);
     if (summary) {
       const block = Number(summary[1]);
@@ -100,6 +119,11 @@ export function parseBlockScanLog(text: string): Map<number, BlockRecord> {
     }
     if (currentBlock !== null) {
       const record = get(currentBlock);
+      const solve = line.match(SOLVE_RE);
+      if (solve) {
+        record.rings.add(solve[1]);
+        record.solveResults.push(`${solve[1]}|${solve[2]}|${solve[3] ?? ""}`);
+      }
       for (const [name, pattern] of EVENT_PATTERNS) {
         if (pattern.test(line)) record.events[name] = (record.events[name] ?? 0) + 1;
       }
@@ -137,7 +161,16 @@ function outputsMatch(a: BlockRecord, b: BlockRecord): boolean {
   const eventNames = new Set([...Object.keys(a.events), ...Object.keys(b.events)]);
   return fields.every((field) => a.summary[field] === b.summary[field])
     && [...eventNames].every((field) => (a.events[field] ?? 0) === (b.events[field] ?? 0))
-    && a.bestNet === b.bestNet;
+    && a.bestNet === b.bestNet
+    && sorted(a.solveResults).join("\n") === sorted(b.solveResults).join("\n");
+}
+
+function sorted(values: Iterable<string>): string[] {
+  return [...values].sort();
+}
+
+function ringSetsMatch(a: BlockRecord, b: BlockRecord): boolean {
+  return sorted(a.rings).join("\n") === sorted(b.rings).join("\n");
 }
 
 export function compareBlockScanLogs(
@@ -148,16 +181,25 @@ export function compareBlockScanLogs(
   const a = parseBlockScanLog(aText);
   const b = parseBlockScanLog(bText);
   const common = [...a.keys()].filter((block) => b.has(block)).sort((x, y) => x - y);
-  const afterWarmup = common.slice(Math.max(0, options.warmupBlocks));
-  const pairs = afterWarmup.flatMap((block) => {
+  const completePairs = common.flatMap((block) => {
     const ar = a.get(block)!;
     const br = b.get(block)!;
     const av = metricValue(ar, options.metric);
     const bv = metricValue(br, options.metric);
     return av === null || bv === null ? [] : [{ block, ar, br, av, bv }];
   });
+  const budgetCensored = completePairs
+    .filter(({ ar, br }) => ar.budgetExceeded || br.budgetExceeded)
+    .map(({ block }) => block);
+  const uncensored = completePairs.filter(({ ar, br }) => !ar.budgetExceeded && !br.budgetExceeded);
+  const pairs = uncensored.slice(Math.max(0, options.warmupBlocks));
   const reasons: string[] = [];
-  const outputMismatches = pairs.filter(({ ar, br }) => !outputsMatch(ar, br)).length;
+  if (budgetCensored.length > 0) {
+    reasons.push(`excluded ${budgetCensored.length} budget-censored paired blocks`);
+  }
+  const outputMismatchBlocks = pairs.filter(({ ar, br }) => !outputsMatch(ar, br)).map(({ block }) => block);
+  const ringSetMismatchBlocks = pairs.filter(({ ar, br }) => !ringSetsMatch(ar, br)).map(({ block }) => block);
+  const outputMismatches = outputMismatchBlocks.length;
   let scriptAssessment: ScriptAssessment = "inconclusive";
   let aValue: number | null = null;
   let bValue: number | null = null;
@@ -201,12 +243,15 @@ export function compareBlockScanLogs(
     paired_block_range: pairs.length === 0
       ? null
       : { from: pairs[0].block, to: pairs[pairs.length - 1].block },
-    warmup_blocks_excluded: Math.min(common.length, Math.max(0, options.warmupBlocks)),
+    warmup_blocks_excluded: Math.min(uncensored.length, Math.max(0, options.warmupBlocks)),
     a_value: aValue,
     b_value: bValue,
     absolute_delta: absoluteDelta,
     improvement_pct: improvementPct,
     output_mismatches: outputMismatches,
+    output_mismatch_blocks: outputMismatchBlocks,
+    ring_set_mismatch_blocks: ringSetMismatchBlocks,
+    budget_censored_blocks: budgetCensored,
     require_output_match: options.requireOutputMatch,
     script_assessment: scriptAssessment,
     reasons,
@@ -214,7 +259,7 @@ export function compareBlockScanLogs(
 }
 
 export type AbExperiment = {
-  schema_version: 1;
+  schema_version: 1 | 2;
   experiment_id: string;
   problem_id: string;
   branch: string;
@@ -223,9 +268,24 @@ export type AbExperiment = {
   change_class: ChangeClass;
   hypothesis: string;
   input_mode: "shared" | "challenger";
+  expected_runtime_view_delta?: boolean;
   allowed_config_delta: string[];
-  a: { commit: string; config_hash: string; universe_hash: string };
-  b: { commit: string; config_hash: string; universe_hash: string };
+  a: {
+    commit: string;
+    config_hash: string;
+    universe_hash: string;
+    discovery_to_block?: number;
+    blockscan_view_hash?: string;
+    blockscan_graph_hash?: string;
+  };
+  b: {
+    commit: string;
+    config_hash: string;
+    universe_hash: string;
+    discovery_to_block?: number;
+    blockscan_view_hash?: string;
+    blockscan_graph_hash?: string;
+  };
   window: { min_paired_blocks: number; warmup_blocks: number };
   fairness: {
     same_block_window: boolean;
@@ -235,6 +295,10 @@ export type AbExperiment = {
     challenger_restarts: number;
     a_universe_hash_after: string;
     b_universe_hash_after: string;
+    a_blockscan_view_hash_after?: string;
+    b_blockscan_view_hash_after?: string;
+    a_blockscan_graph_hash_after?: string;
+    b_blockscan_graph_hash_after?: string;
   };
   deterministic_gate: { result: "pass" | "fail" | "not_applicable"; evidence: string };
   analysis: {
@@ -311,7 +375,12 @@ export function validateAbExperiment(
     ["evidence_bundle", experiment.evidence_bundle],
   ];
   for (const [name, value] of requiredText) if (!nonEmpty(value)) errors.push(`${name} missing/placeholder`);
-  if (experiment.schema_version !== 1) errors.push("schema_version must be 1");
+  if (experiment.schema_version !== 1 && experiment.schema_version !== 2) {
+    errors.push("schema_version must be 1|2");
+  }
+  if (experiment.schema_version === 1 && experiment.final_verdict !== "needs_escalation") {
+    errors.push("schema_version=2 is required for every decisive A/B verdict");
+  }
   if (!(<string[]>["performance", "correctness", "capability"]).includes(experiment.change_class)) {
     errors.push("change_class must be performance|correctness|capability");
   }
@@ -390,6 +459,54 @@ export function validateAbExperiment(
     }
   }
   const fairness = experiment.fairness;
+  const runtimeFairnessErrors: string[] = [];
+  if (experiment.schema_version === 2) {
+    if (typeof experiment.expected_runtime_view_delta !== "boolean") {
+      runtimeFairnessErrors.push("expected_runtime_view_delta must be predeclared for schema_version=2");
+    }
+    for (const [name, value] of [
+      ["a.discovery_to_block", experiment.a?.discovery_to_block],
+      ["b.discovery_to_block", experiment.b?.discovery_to_block],
+    ] as [string, unknown][]) {
+      if (!Number.isSafeInteger(value) || Number(value) < 0) {
+        runtimeFairnessErrors.push(`${name} must be a non-negative safe integer`);
+      }
+    }
+    if (experiment.a?.discovery_to_block !== experiment.b?.discovery_to_block) {
+      runtimeFairnessErrors.push("A/B discovery_to_block must match");
+    }
+    for (const [name, value] of [
+      ["a.blockscan_view_hash", experiment.a?.blockscan_view_hash],
+      ["b.blockscan_view_hash", experiment.b?.blockscan_view_hash],
+      ["a.blockscan_graph_hash", experiment.a?.blockscan_graph_hash],
+      ["b.blockscan_graph_hash", experiment.b?.blockscan_graph_hash],
+      ["fairness.a_blockscan_view_hash_after", fairness?.a_blockscan_view_hash_after],
+      ["fairness.b_blockscan_view_hash_after", fairness?.b_blockscan_view_hash_after],
+      ["fairness.a_blockscan_graph_hash_after", fairness?.a_blockscan_graph_hash_after],
+      ["fairness.b_blockscan_graph_hash_after", fairness?.b_blockscan_graph_hash_after],
+    ] as [string, unknown][]) {
+      if (!sha(value, 64)) runtimeFairnessErrors.push(`${name} must be a 64-char runtime hash`);
+    }
+    if (fairness?.a_blockscan_view_hash_after !== experiment.a?.blockscan_view_hash
+        || fairness?.b_blockscan_view_hash_after !== experiment.b?.blockscan_view_hash
+        || fairness?.a_blockscan_graph_hash_after !== experiment.a?.blockscan_graph_hash
+        || fairness?.b_blockscan_graph_hash_after !== experiment.b?.blockscan_graph_hash) {
+      runtimeFairnessErrors.push("runtime view/graph hashes must stay stable throughout the measured window");
+    }
+    if (experiment.expected_runtime_view_delta === false
+        && (experiment.a?.blockscan_view_hash !== experiment.b?.blockscan_view_hash
+          || experiment.a?.blockscan_graph_hash !== experiment.b?.blockscan_graph_hash)) {
+      runtimeFairnessErrors.push("A/B runtime view and graph hashes must match unless a delta was predeclared");
+    }
+    if (experiment.expected_runtime_view_delta === true && experiment.change_class === "performance") {
+      runtimeFairnessErrors.push("performance experiments cannot predeclare a runtime view delta");
+    }
+    if (experiment.expected_runtime_view_delta === true && experiment.final_verdict === "win"
+        && experiment.deterministic_gate?.result !== "pass") {
+      runtimeFairnessErrors.push("a winning runtime-view delta requires deterministic_gate.result=pass");
+    }
+  }
+  errors.push(...runtimeFairnessErrors);
   const resolved = resolvedVerdict(experiment);
   const fairnessHardVeto = fairness?.same_block_window !== true
     || fairness?.champion_pid_changed === true
@@ -399,7 +516,8 @@ export function validateAbExperiment(
     || !sha(fairness?.a_universe_hash_after, 64)
     || !sha(fairness?.b_universe_hash_after, 64)
     || fairness?.a_universe_hash_after !== experiment.a?.universe_hash
-    || fairness?.b_universe_hash_after !== experiment.b?.universe_hash;
+    || fairness?.b_universe_hash_after !== experiment.b?.universe_hash
+    || runtimeFairnessErrors.length > 0;
   const hardVeto = experiment.deterministic_gate?.result === "fail"
     || experiment.analysis?.script_exit_code !== 0
     || fairnessHardVeto;

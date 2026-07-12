@@ -102,10 +102,43 @@ test("event regression from a zero A baseline contradicts instead of becoming in
   assert.equal(result.script_assessment, "contradicts");
 });
 
+test("comparator catches solve-ring drift even when aggregate summaries match", () => {
+  const a = log(100).split("\n").flatMap((line) => line.includes("scannedPairs=")
+    ? [line, "[searcher/blockscan]   solve ring=A>B>A net=null error=no_quote standing=false protoRing=false"]
+    : [line]).join("\n");
+  const b = log(100).split("\n").flatMap((line) => line.includes("scannedPairs=")
+    ? [line, "[searcher/blockscan]   solve ring=A>C>A net=null error=no_quote standing=false protoRing=false"]
+    : [line]).join("\n");
+  const result = compareBlockScanLogs(a, b, {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 0, minAbsoluteDelta: 0, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  assert.equal(result.script_assessment, "contradicts");
+  assert.deepEqual(result.ring_set_mismatch_blocks, [102, 103, 104, 105]);
+  assert.equal(result.output_mismatches, 4);
+});
+
+test("comparator excludes budget-censored blocks before warmup and pairing", () => {
+  const a = [
+    log(100),
+    "[searcher/blockscan] block=102 pass_budget_exceeded stage=solve elapsed=11001ms budget=11000ms",
+  ].join("\n");
+  const result = compareBlockScanLogs(a, log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 3,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  assert.deepEqual(result.budget_censored_blocks, [102]);
+  assert.equal(result.warmup_blocks_excluded, 2);
+  assert.equal(result.paired_blocks, 3);
+  assert.deepEqual(result.paired_block_range, { from: 103, to: 105 });
+});
+
 function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
   fs.writeFileSync(path.join(tmp, "compare.json"), JSON.stringify(artifact));
   return {
-    schema_version: 1,
+    schema_version: 2,
     experiment_id: "ab-test-1",
     problem_id: "LC-123",
     branch: "ab/test-1",
@@ -114,9 +147,24 @@ function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
     change_class: "performance",
     hypothesis: "reduce total block-scan time",
     input_mode: "shared",
+    expected_runtime_view_delta: false,
     allowed_config_delta: [],
-    a: { commit: "a".repeat(40), config_hash: "c".repeat(64), universe_hash: "d".repeat(64) },
-    b: { commit: "b".repeat(40), config_hash: "c".repeat(64), universe_hash: "d".repeat(64) },
+    a: {
+      commit: "a".repeat(40),
+      config_hash: "c".repeat(64),
+      universe_hash: "d".repeat(64),
+      discovery_to_block: 100,
+      blockscan_view_hash: "e".repeat(64),
+      blockscan_graph_hash: "f".repeat(64),
+    },
+    b: {
+      commit: "b".repeat(40),
+      config_hash: "c".repeat(64),
+      universe_hash: "d".repeat(64),
+      discovery_to_block: 100,
+      blockscan_view_hash: "e".repeat(64),
+      blockscan_graph_hash: "f".repeat(64),
+    },
     window: { min_paired_blocks: 4, warmup_blocks: 2 },
     fairness: {
       same_block_window: true,
@@ -126,6 +174,10 @@ function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
       challenger_restarts: 0,
       a_universe_hash_after: "d".repeat(64),
       b_universe_hash_after: "d".repeat(64),
+      a_blockscan_view_hash_after: "e".repeat(64),
+      b_blockscan_view_hash_after: "e".repeat(64),
+      a_blockscan_graph_hash_after: "f".repeat(64),
+      b_blockscan_graph_hash_after: "f".repeat(64),
     },
     deterministic_gate: { result: "not_applicable", evidence: "metrics-only performance change" },
     analysis: {
@@ -256,6 +308,69 @@ test("a hard deterministic veto may retain a metric winner without falsifying th
   value.final_verdict = "needs_escalation";
   value.branch_action = "retained";
   assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
+});
+
+test("schema v2 rejects unplanned runtime graph drift", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.b.blockscan_graph_hash = "0".repeat(64);
+  value.fairness.b_blockscan_graph_hash_after = "0".repeat(64);
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "decision")
+    .some((error) => error.includes("unless a delta was predeclared")));
+});
+
+test("legacy schema v1 may retain evidence but cannot authorize a decisive verdict", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.schema_version = 1;
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "decision")
+    .some((error) => error.includes("required for every decisive")));
+  value.analysis.agent_manual_verdict = "inconclusive";
+  value.analysis.script_exit_code = 1;
+  value.analysis.script_assessment = "inconclusive";
+  value.analysis.reconciliation = "inconclusive";
+  value.analysis.adversarial_review = {
+    verdict: "inconclusive",
+    evidence: "legacy evidence remains available for escalation",
+    reviewer: "fresh-opus",
+  };
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "retained";
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
+});
+
+test("schema v2 permits a predeclared capability graph delta only with replay proof", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.change_class = "capability";
+  value.expected_runtime_view_delta = true;
+  value.b.blockscan_graph_hash = "0".repeat(64);
+  value.fairness.b_blockscan_graph_hash_after = "0".repeat(64);
+  value.deterministic_gate = { result: "pass", evidence: "pinned pool enters graph and route sim succeeds" };
+  value.analysis.adversarial_review = {
+    verdict: "win",
+    evidence: "fresh reviewer confirmed the graph delta is exactly the pinned capability",
+    reviewer: "fresh-opus",
+  };
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "decision"), []);
+  value.deterministic_gate.result = "not_applicable";
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "decision")
+    .some((error) => error.includes("requires deterministic_gate.result=pass")));
 });
 
 test("parser reads the machine block", () => {

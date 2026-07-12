@@ -106,7 +106,8 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 3. **PREDECLARE.** Create `ab/<problem>` from the exact deployed A SHA, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from the A/B template and fill its `ab_experiment`
    journal: exact problem/base SHA, change class, hypothesis, semantic success criterion, deterministic gate,
-   intended metric evidence, input mode, and allowed config delta. `challenger_commit` is temporarily pending
+   intended metric evidence, input mode, allowed config delta, and whether the change is expected to alter
+   the runtime block-scan view/graph. `challenger_commit` is temporarily pending
    here because a commit cannot contain its own SHA. Commit/push the initial report on B.
 4. **FIX + FREEZE.** Codex writes; the non-author agent
    reviews; deterministic correctness/capability fixes must flip the pinned replay (rule 12). Push B. Two
@@ -116,17 +117,23 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    report/evidence commits; the final journal's `challenger_commit` is the frozen deployed code SHA, not the
    later report tip.
 5. **DEPLOY B THROUGH THE SAFETY WRAPPER ONLY.** Execute the trusted `origin/main` copy of
-   `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>` over SSM. It validates
+   `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha> <allow-view-delta>`
+   over SSM, where the last argument is `1` only when `expected_runtime_view_delta=true` was predeclared
+   (otherwise `0`). It validates
    both wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
-   universe inputs, and equal CPU partitions. It never restarts A. Direct `systemd-run`, hand-written B env,
+   universe inputs, the pinned startup-discovery cutoff, exact runtime pool-view and TokenEdge graph hashes,
+   and equal CPU partitions. A runtime-view delta is rejected unless it was explicitly predeclared for a
+   correctness/capability experiment. It never restarts A. Direct `systemd-run`, hand-written B env,
    or deployment from the challenger branch is invalid. Block-scan-only A/B requires
    `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides: the first disables
    MEV-Share plus every victim-driven hint path; the second alone disables only public mempool and is not a
    valid CPU-isolated canary posture.
 6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm blocks; renew the lease if needed. A and B must see
    the same block numbers. Record restart deltas and before/after input hashes. For shared-input tests all
-   universe hashes match; challenger-input capability tests declare the intended input delta. A fairness
-   failure cannot yield a decisive verdict.
+   universe hashes and discovery cutoffs match. Unless the intervention explicitly targets graph admission,
+   the full runtime pool-view and TokenEdge graph hashes must also match and remain stable. Budget-censored
+   blocks are reported separately and do not count toward warmup or the paired sample. A fairness failure
+   cannot yield a decisive verdict.
 7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor

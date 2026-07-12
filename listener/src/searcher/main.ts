@@ -26,7 +26,7 @@ import {
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
 import { scanActivePools, indexFactoryPools, mergePoolRegistries } from "./active-pool-discovery.js";
-import { buildStrategyViews } from "./strategy-views.js";
+import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
@@ -88,6 +88,7 @@ import { pathLeavesStandingPosition } from "./strategy-taxonomy.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
+const DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH = resolve("searcher", "pools", "runtime-blockscan-pools.json");
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -418,6 +419,12 @@ function dumpRuntimeGraphPools(
     const normalized = pools.map((pool) => ({
       address: pool.address.toLowerCase(),
       adapter: pool.adapter,
+      poolId: pool.poolId?.toLowerCase(),
+      currency0: pool.currency0?.toLowerCase(),
+      currency1: pool.currency1?.toLowerCase(),
+      fee: pool.fee,
+      tickSpacing: pool.tickSpacing,
+      hooks: pool.hooks?.toLowerCase(),
     }));
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, `${JSON.stringify({
@@ -728,6 +735,12 @@ async function main(): Promise<void> {
   const discoveryBlocks = Number(process.env.SEARCHER_DISCOVERY_BLOCKS ?? "300");
   const discoveryTopN = Number(process.env.SEARCHER_DISCOVERY_TOP_N ?? "100");
   const factoryBlocks = Number(process.env.SEARCHER_FACTORY_BLOCKS ?? "50000");
+  const discoveryToBlock = process.env.SEARCHER_DISCOVERY_TO_BLOCK === undefined
+    ? await provider.getBlockNumber()
+    : Number(process.env.SEARCHER_DISCOVERY_TO_BLOCK);
+  if (!Number.isSafeInteger(discoveryToBlock) || discoveryToBlock < 0) {
+    throw new Error("SEARCHER_DISCOVERY_TO_BLOCK must be a non-negative safe integer");
+  }
   const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
   const mainnetBackend: TokenQueryBackend = {
     call: async (req) => provider.call(req),
@@ -743,9 +756,9 @@ async function main(): Promise<void> {
   });
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
-  const factoryPools = await indexFactoryPools(provider, factoryBlocks);
+  const factoryPools = await indexFactoryPools(provider, factoryBlocks, discoveryToBlock);
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
-  const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN);
+  const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN, discoveryToBlock);
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
   // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
@@ -802,9 +815,12 @@ async function main(): Promise<void> {
   console.log(
     `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
       `blockscan=${strategyViews.blockscan.length} ` +
-      `view_version=${strategyViews.versions.strategy_view_version.slice(0, 10)}`,
+      `view_version=${strategyViews.versions.strategy_view_version} ` +
+      `blockscan_view_hash=${strategyViews.versions.blockscan_view_hash} ` +
+      `discovery_to_block=${discoveryToBlock}`,
   );
   dumpRuntimeGraphPools(strategyViews.backrun);
+  dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
 
   // Build routing graph from all pools. File-backed universe entries can carry
   // token0/token1 metadata, so V2/V3 graph construction avoids per-pool token
@@ -816,9 +832,11 @@ async function main(): Promise<void> {
   if (enableBlockScan) {
     blockScanGraph = await buildTokenGraph(mainnetBackend, strategyViews.blockscan);
     blockScanPlanner?.setGraph(blockScanGraph);
+    const blockscanGraphHash = hashTokenGraph(blockScanGraph);
     console.log(
       `[searcher/blockscan] graph built: edges=${blockScanGraph.length} ` +
-        `from blockscan view=${strategyViews.blockscan.length}`,
+        `from blockscan view=${strategyViews.blockscan.length} ` +
+        `blockscan_graph_hash=${blockscanGraphHash}`,
     );
   }
   const tokenIndex = buildTokenIndex(graph);

@@ -94,6 +94,21 @@ hash_or_unavailable() {
   if [ -f "$1" ]; then sha256sum "$1" | awk '{print $1}'; else echo unavailable; fi
 }
 
+unit_log_path() {
+  local unit=$1 fallback=$2 path
+  path=$(systemctl show "$unit" -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
+  printf '%s\n' "${path:-$fallback}"
+}
+
+runtime_hash() {
+  local log=$1 key=$2
+  [ -f "$log" ] || { echo unavailable; return; }
+  grep "$key=" "$log" 2>/dev/null | tail -1 \
+    | sed -n "s/.*$key=0x\([0-9a-fA-F]\{64\}\).*/\1/p" \
+    | tr '[:upper:]' '[:lower:]' \
+    | grep -E '^[0-9a-f]{64}$' || echo unavailable
+}
+
 append_history() {
   python3 - "$STATE" "$HISTORY" <<'PY'
 import json, sys
@@ -124,7 +139,7 @@ stop_b() {
 
 capture_fairness() {
   [ -f "$STATE" ] || return 0
-  local a_before a_now b_now a_path b_path a_pid_before a_pid_after pid_changed
+  local a_before a_now b_now a_path b_path a_pid_before a_pid_after pid_changed a_log b_log
   a_before=$(state_field a_restarts_before); a_before=${a_before:-0}
   a_now=$(unit_restarts "$A_UNIT")
   b_now=$(unit_restarts "$UNIT")
@@ -133,12 +148,18 @@ capture_fairness() {
   pid_changed=0; [ "$a_pid_after" = "$a_pid_before" ] || pid_changed=1
   a_path=$(state_field a_universe_path)
   b_path=$(state_field b_universe_path)
+  a_log=$(state_field a_log_path)
+  b_log=$(state_field b_log_path)
   state_update \
     a_restart_delta "$((a_now - a_before))" \
     a_pid_after "$a_pid_after" champion_pid_changed "$pid_changed" \
     b_restarts "$b_now" \
     a_universe_hash_after "$(hash_or_unavailable "$a_path")" \
     b_universe_hash_after "$(hash_or_unavailable "$b_path")" \
+    a_blockscan_view_hash_after "$(runtime_hash "$a_log" blockscan_view_hash)" \
+    b_blockscan_view_hash_after "$(runtime_hash "$b_log" blockscan_view_hash)" \
+    a_blockscan_graph_hash_after "$(runtime_hash "$a_log" blockscan_graph_hash)" \
+    b_blockscan_graph_hash_after "$(runtime_hash "$b_log" blockscan_graph_hash)" \
     failure_reason ""
 }
 
@@ -221,6 +242,8 @@ preflight() {
     [ "$(file_env_get "$A_PROCESS_ENV" "$key")" = "$expected" ] \
       || die "champion $key must equal $expected"
   done
+  [[ "$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)" =~ ^[0-9]+$ ]] \
+    || die "champion SEARCHER_DISCOVERY_TO_BLOCK must be pinned by deploy-node.sh"
 
   for pair in \
     SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
@@ -339,11 +362,14 @@ prepare_challenger_dependencies() {
 }
 
 deploy() {
-  local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 now lease current_status current_lease current_experiment
+  local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 allow_runtime_view_delta=${5:-0}
+  local now lease current_status current_lease current_experiment
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
   [[ "$expected_b" =~ ^[a-f0-9]{40}$ ]] || die "challenger commit must be a full SHA"
+  [ "$allow_runtime_view_delta" = "0" ] || [ "$allow_runtime_view_delta" = "1" ] \
+    || die "allow-runtime-view-delta must be 0|1"
   reap_stale
   now=$(date +%s); lease=$((now + LEASE_SECONDS))
   current_status=$(state_field status); current_lease=$(state_field lease_until); current_experiment=$(state_field experiment_id)
@@ -407,9 +433,27 @@ deploy() {
   done
   [ "$scan_ready" = "1" ] || { stop_b; die "challenger never completed its first block-scan pass"; }
   [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
-  local a_universe_hash b_universe_hash
+  local a_universe_hash b_universe_hash a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
+  local discovery_to_block
   a_universe_hash=$(hash_file "$A_UNIVERSE")
   b_universe_hash=$(hash_file "$B_UNIVERSE")
+  a_log=$(unit_log_path "$A_UNIT" /var/log/mev-live.log)
+  a_view_hash=$(runtime_hash "$a_log" blockscan_view_hash)
+  b_view_hash=$(runtime_hash "$LOG" blockscan_view_hash)
+  a_graph_hash=$(runtime_hash "$a_log" blockscan_graph_hash)
+  b_graph_hash=$(runtime_hash "$LOG" blockscan_graph_hash)
+  for pair in \
+    "A blockscan view:$a_view_hash" "B blockscan view:$b_view_hash" \
+    "A blockscan graph:$a_graph_hash" "B blockscan graph:$b_graph_hash"; do
+    [[ "${pair#*:}" =~ ^[0-9a-f]{64}$ ]] || { stop_b; die "${pair%%:*} hash unavailable"; }
+  done
+  if [ "$allow_runtime_view_delta" = "0" ]; then
+    [ "$a_view_hash" = "$b_view_hash" ] \
+      || { stop_b; die "A/B blockscan pool views differ without a predeclared runtime-view delta"; }
+    [ "$a_graph_hash" = "$b_graph_hash" ] \
+      || { stop_b; die "A/B runtime token graphs differ without a predeclared runtime-view delta"; }
+  fi
+  discovery_to_block=$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
     a_commit "$a_commit" b_commit "$b_commit" \
@@ -417,6 +461,12 @@ deploy() {
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
+    discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \
+    a_blockscan_view_hash "$a_view_hash" b_blockscan_view_hash "$b_view_hash" \
+    a_blockscan_view_hash_after "$a_view_hash" b_blockscan_view_hash_after "$b_view_hash" \
+    a_blockscan_graph_hash "$a_graph_hash" b_blockscan_graph_hash "$b_graph_hash" \
+    a_blockscan_graph_hash_after "$a_graph_hash" b_blockscan_graph_hash_after "$b_graph_hash" \
+    a_log_path "$a_log" b_log_path "$LOG" \
     a_restarts_before "$a_restarts_before" a_restart_delta 0 b_restarts 0 \
     a_pid_before "$a_pid_before" a_pid_after "$a_pid_before" champion_pid_changed 0 \
     cpu_partition "A:$A_CPUS,B:$B_CPUS"
@@ -466,7 +516,9 @@ renew() {
 cmd=${1:-status}
 case "$cmd" in
   preflight) preflight; echo "PASS: challenger bounded-live preflight" ;;
-  deploy) [ "$#" -eq 5 ] || die "usage: deploy <experiment-id> <ab/branch> <base-sha> <challenger-sha>"; deploy "$2" "$3" "$4" "$5" ;;
+  deploy) { [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; } \
+    || die "usage: deploy <experiment-id> <ab/branch> <base-sha> <challenger-sha> [allow-runtime-view-delta=0|1]"; \
+    deploy "$2" "$3" "$4" "$5" "${6:-0}" ;;
   pause) [ "$#" -eq 2 ] || die "usage: pause <experiment-id>"; pause_experiment "$2" ;;
   close) [ "$#" -eq 3 ] || die "usage: close <experiment-id> <outcome>"; close_experiment "$2" "$3" ;;
   renew) [ "$#" -eq 2 ] || die "usage: renew <experiment-id>"; renew "$2" ;;

@@ -9,6 +9,7 @@ node_modules/
 listener/dist/
 listener/revm-sim/target/
 listener/searcher/pools/active-pools*.json
+listener/searcher/pools/runtime-*.json
 listener/searcher/pools/auto-close-findings.jsonl
 analysis/outputs/
 analysis/events/

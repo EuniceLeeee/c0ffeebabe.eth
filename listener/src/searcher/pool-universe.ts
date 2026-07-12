@@ -310,7 +310,7 @@ function unorderedTokenPairKey(pool: Pick<PoolEntry, "token0" | "token1">): stri
   return [pool.token0.toLowerCase(), pool.token1.toLowerCase()].sort().join("/");
 }
 
-function poolRegistryKey(pool: PoolEntry): string {
+export function poolRegistryKey(pool: PoolEntry): string {
   if (pool.adapter !== "univ4") return pool.address.toLowerCase();
   return [
     pool.address.toLowerCase(),

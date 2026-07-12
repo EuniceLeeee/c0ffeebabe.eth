@@ -23,7 +23,8 @@
 - **window / warmup excluded:**
 - **A/B logs (redacted):**
 - **node slot state:**
-- **fairness evidence:** same blocks · restart deltas · config hashes · universe before/after · CPU split
+- **fairness evidence:** same blocks · restart deltas · config/universe hashes · pinned discovery cutoff ·
+  runtime pool-view + TokenEdge graph hashes before/after · budget-censored blocks · CPU split
 
 ## External Production Calibration
 - **window / tool artifact:**
@@ -64,7 +65,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
 
 ```ab_experiment
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "experiment_id": "<id>",
   "problem_id": "<learning-case-or-finding-id>",
   "branch": "ab/<problem>",
@@ -73,16 +74,23 @@ Required for every capability win and every conflict/inconclusive/artifact conce
   "change_class": "capability",
   "hypothesis": "<causal hypothesis and semantic success criterion>",
   "input_mode": "shared",
+  "expected_runtime_view_delta": false,
   "allowed_config_delta": [],
   "a": {
     "commit": "<40-char-sha>",
     "config_hash": "<sha256>",
-    "universe_hash": "<sha256>"
+    "universe_hash": "<sha256>",
+    "discovery_to_block": 0,
+    "blockscan_view_hash": "<64-char-keccak-without-0x>",
+    "blockscan_graph_hash": "<64-char-keccak-without-0x>"
   },
   "b": {
     "commit": "<40-char-sha>",
     "config_hash": "<sha256>",
-    "universe_hash": "<sha256>"
+    "universe_hash": "<sha256>",
+    "discovery_to_block": 0,
+    "blockscan_view_hash": "<64-char-keccak-without-0x>",
+    "blockscan_graph_hash": "<64-char-keccak-without-0x>"
   },
   "window": { "min_paired_blocks": 120, "warmup_blocks": 10 },
   "fairness": {
@@ -92,7 +100,11 @@ Required for every capability win and every conflict/inconclusive/artifact conce
     "champion_pid_changed": false,
     "challenger_restarts": 0,
     "a_universe_hash_after": "unavailable",
-    "b_universe_hash_after": "unavailable"
+    "b_universe_hash_after": "unavailable",
+    "a_blockscan_view_hash_after": "unavailable",
+    "b_blockscan_view_hash_after": "unavailable",
+    "a_blockscan_graph_hash_after": "unavailable",
+    "b_blockscan_graph_hash_after": "unavailable"
   },
   "deterministic_gate": { "result": "not_applicable", "evidence": "<gate command/result>" },
   "analysis": {
