@@ -30,8 +30,14 @@ export interface PricedLeg {
 }
 
 export interface ArbProfit {
-  /** ERC20 (incl. WETH) + native-ETH net value the bot gained, USD. null if nothing priceable. */
+  /** ERC20 (incl. WETH) + native-ETH net value the bot gained, USD. null if nothing priceable.
+   *  Already net of any in-tx coinbase-transfer bribe (that ETH left the beneficiary), but PRE-gas. */
   realizedProfitUsd: number | null;
+  /** realized − total gas (the correct kept-profit). NOT realized − builderPayment (that double-counts
+   *  a coinbase-transfer bribe already excluded from realized). null when realized is null. */
+  netProfitUsd: number | null;
+  /** gasUsed × effectiveGasPrice, USD (base fee + priority tip). */
+  gasCostUsd: number | null;
   builderPaymentEth: number | null;
   builderPaymentUsd: number | null;
   erc20Usd: number | null;
@@ -235,13 +241,28 @@ export async function priceArb(
   const builderPaymentEth = builderPaymentWei === null ? null : Number(builderPaymentWei) / 1e18;
   const builderPaymentUsd = builderPaymentEth === null ? null : builderPaymentEth * ethUsd;
 
+  // Total gas the EOA paid = gasUsed * effectiveGasPrice (base fee burned + priority tip to builder).
+  const totalGasWei = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
+  const gasCostUsd = (Number(totalGasWei) / 1e18) * ethUsd;
+
   const v4Swaps = decodeV4Swaps(receipt);
   const v4PoolIds = [...new Set(v4Swaps.map((swap) => swap.poolId))];
 
   const realizedProfitUsd =
     erc20Usd === null && (!tracedEth || ethWei === 0n) ? null : (erc20Usd ?? 0) + ethProfitUsd;
+  // NET = realized − total gas. realized is the beneficiary's INTERNAL gain (ERC20 + native ETH),
+  // which is ALREADY net of any in-tx coinbase-transfer bribe (that ETH left the beneficiary to the
+  // coinbase, so it is not in realized) but PRE-gas (gas is protocol-deducted from the EOA, outside
+  // the internal transfers). So the ONLY remaining cost to subtract is total gas. Do NOT subtract
+  // builderPaymentUsd: its coinbase-transfer component is already out of realized (subtracting it
+  // again double-counts, which turned coffee's break-even dust into fake ~-$0.14 losses, 2026-07-12),
+  // and its priority-tip component is part of totalGas. builderPayment stays informational (how much
+  // the builder captured — the auction-competitiveness read).
+  const netProfitUsd = realizedProfitUsd === null ? null : realizedProfitUsd - gasCostUsd;
   return {
     realizedProfitUsd,
+    netProfitUsd,
+    gasCostUsd,
     builderPaymentEth,
     builderPaymentUsd,
     erc20Usd,

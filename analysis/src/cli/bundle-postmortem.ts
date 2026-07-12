@@ -681,9 +681,10 @@ async function anyTxPostmortem(
       ethUsd,
       realizedProfitUsd: realizedProfitUsdForReport(profit.realizedProfitUsd, profit.unpricedDeltas),
       builderPaymentUsd: profit.builderPaymentUsd,
-      netProfitUsd: typeof profit.realizedProfitUsd === "number" && profit.builderPaymentUsd != null
-        ? profit.realizedProfitUsd - profit.builderPaymentUsd
-        : null,
+      gasCostUsd: profit.gasCostUsd,
+      // net = realized − total gas (NOT realized − builderPayment — that double-counts a
+      // coinbase-transfer bribe already excluded from realized). See arb-profit.ts.
+      netProfitUsd: profit.netProfitUsd,
       unpricedDeltas: profit.unpricedDeltas,
     },
     winner_style: styleAnalysis.winner_style,

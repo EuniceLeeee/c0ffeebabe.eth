@@ -20,7 +20,8 @@ interface TxProfit {
   realizedProfitUsd: number | null;
   builderPaymentEth: number | null;
   builderPaymentUsd: number | null;
-  netProfitUsd: number | null;   // realized − builder payment (what the searcher keeps)
+  netProfitUsd: number | null;   // realized − total gas (what the searcher keeps; see arb-profit.ts)
+  gasCostUsd: number | null;
   unpricedDeltas: unknown[];
   gasUsed: number | null;
 }
@@ -38,16 +39,15 @@ async function priceOne(rpc: RpcClient, ethUsd: number, hash: string): Promise<T
     baseFeePerGas,
   });
   const realized = profit.realizedProfitUsd;
-  const builder = profit.builderPaymentUsd;
-  const net = realized != null && builder != null ? realized - builder : realized;
   return {
     tx: hash,
     block: blockNumber,
     status: receipt?.status != null ? Number(hexToBigInt(receipt.status)) : null,
     realizedProfitUsd: realized,
     builderPaymentEth: profit.builderPaymentEth,
-    builderPaymentUsd: builder,
-    netProfitUsd: net,
+    builderPaymentUsd: profit.builderPaymentUsd,
+    netProfitUsd: profit.netProfitUsd,
+    gasCostUsd: profit.gasCostUsd,
     unpricedDeltas: profit.unpricedDeltas,
     gasUsed: receipt?.gasUsed != null ? Number(hexToBigInt(receipt.gasUsed)) : null,
   };
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     } catch (err) {
       console.error(`[tx-profit] ${hash}: FAILED ${err instanceof Error ? err.message : String(err)}`);
       results.push({ tx: hash, block: null, status: null, realizedProfitUsd: null, builderPaymentEth: null,
-        builderPaymentUsd: null, netProfitUsd: null, unpricedDeltas: [], gasUsed: null });
+        builderPaymentUsd: null, netProfitUsd: null, gasCostUsd: null, unpricedDeltas: [], gasUsed: null });
     }
   }
   if (args.json) {
