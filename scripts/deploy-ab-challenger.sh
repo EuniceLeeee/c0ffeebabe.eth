@@ -21,6 +21,7 @@ EXPECTED_A_BOTVM=0x4aF9495C4aC24c5CD3b0C90611550a1996415BCe
 LOCAL_RPC=http://127.0.0.1:8545
 LEASE_SECONDS=${AB_LEASE_SECONDS:-3300}
 PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
+FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-240}
 
 mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe"
 touch "$LOCK"
@@ -45,6 +46,8 @@ valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; }
 valid_branch() { [[ "$1" =~ ^ab/[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$ ]]; }
 [ "$LEASE_SECONDS" -ge 300 ] && [ "$LEASE_SECONDS" -le 3600 ] || die "AB_LEASE_SECONDS must be 300..3600"
 [ "$PAUSE_LEASE_SECONDS" -ge 60 ] && [ "$PAUSE_LEASE_SECONDS" -le 1800 ] || die "AB_PAUSE_LEASE_SECONDS must be 60..1800"
+[ "$FIRST_SCAN_TIMEOUT_SECONDS" -ge 90 ] && [ "$FIRST_SCAN_TIMEOUT_SECONDS" -le 600 ] \
+  || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..600"
 
 state_field() {
   python3 - "$STATE" "$1" <<'PY'
@@ -424,14 +427,17 @@ deploy() {
   ! grep -q 'MEV-Share SSE connected' "$LOG" || { stop_b; die "challenger unexpectedly connected to MEV-Share"; }
   ! grep -q 'src=mev-share' "$LOG" || { stop_b; die "challenger unexpectedly processed a MEV-Share hint"; }
   local scan_ready=0
-  for _ in $(seq 1 90); do
+  for _ in $(seq 1 "$FIRST_SCAN_TIMEOUT_SECONDS"); do
     if grep -q '\[searcher/blockscan\] block=.*scannedPairs=' "$LOG"; then
       scan_ready=1
       break
     fi
     sleep 1
   done
-  [ "$scan_ready" = "1" ] || { stop_b; die "challenger never completed its first block-scan pass"; }
+  [ "$scan_ready" = "1" ] || {
+    stop_b
+    die "challenger never completed its first block-scan pass within ${FIRST_SCAN_TIMEOUT_SECONDS}s"
+  }
   [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
   local a_universe_hash b_universe_hash a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
   local discovery_to_block
