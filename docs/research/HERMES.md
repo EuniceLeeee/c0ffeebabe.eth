@@ -131,12 +131,14 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides: the first disables
    MEV-Share plus every victim-driven hint path; the second alone disables only public mempool and is not a
    valid CPU-isolated canary posture.
-6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm blocks; renew the lease if needed. A and B must see
-   the same block numbers. Record restart deltas and before/after input hashes. For shared-input tests all
+6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm, pass-budget, and catch-up blocks where either lane's
+   incremental warm range spans more than one block; those lanes have different cache histories and are not
+   a causal pair. Renew the lease if needed. A and B must see the same remaining block numbers. Record restart
+   deltas and before/after input hashes. For shared-input tests all
    universe hashes and discovery cutoffs match. Unless the intervention explicitly targets graph admission,
    the full runtime pool-view and TokenEdge graph hashes must also match and remain stable. Budget-censored
-   blocks are reported separately and do not count toward warmup or the paired sample. A fairness failure
-   cannot yield a decisive verdict.
+   / full-warm / catch-up blocks are reported separately and do not count toward warmup or the paired
+   sample. A fairness failure cannot yield a decisive verdict.
 7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor

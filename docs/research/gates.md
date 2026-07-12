@@ -79,8 +79,8 @@ thin `ab_experiment` journal:
   restarts; one pinned startup-discovery block; stable runtime pool-view and TokenEdge graph hashes
   (unless a graph delta was explicitly predeclared and replay-proven); B stopped; real script
   artifact/exit status;
-- budget-censored blocks are excluded before warmup/pairing, and exact solved-ring identities are part of
-  semantic output matching;
+- budget-censored, full-warm, and catch-up-range blocks are excluded before warmup/pairing because they do
+  not share equivalent cache history; exact solved-ring identities remain part of semantic output matching;
 - identical-code infrastructure shakedowns use the explicit equivalence goal; they never cherry-pick a
   noisy latency direction to manufacture a verdict;
 - deterministic replay `pass` before any correctness/capability win;

@@ -179,6 +179,42 @@ test("comparator excludes budget-censored blocks before warmup and pairing", () 
   assert.deepEqual(result.paired_block_range, { from: 103, to: 105 });
 });
 
+test("comparator excludes catch-up and full-warm blocks with unequal cache history", () => {
+  const withWarm = (text: string, catchupBlock?: number, fullWarmBlock?: number) => text
+    .split("\n")
+    .flatMap((line) => {
+      const match = line.match(/block=(\d+) scannedPairs=/);
+      if (!match) return [line];
+      const block = Number(match[1]);
+      if (block === catchupBlock) {
+        return [
+          `[searcher/blockscan] block=${block} warm=incremental changed=2 changedCurve=0 range=${block - 1}-${block} logs=2`,
+          line.replace("skippedVenues=0", "skippedVenues=10"),
+        ];
+      }
+      if (block === fullWarmBlock) {
+        return [`[searcher/blockscan] block=${block} warm=full reason=interval`, line];
+      }
+      return [`[searcher/blockscan] block=${block} warm=incremental changed=1 changedCurve=0 range=${block}-${block} logs=1`, line];
+    })
+    .join("\n");
+  const result = compareBlockScanLogs(
+    withWarm(log(100)),
+    withWarm(log(100), 102, 103),
+    {
+      goal: "equivalence",
+      metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 2,
+      warmupBlocks: 2, minImprovementPct: 0, minAbsoluteDelta: 0, maxRegressionPct: 5,
+      requireOutputMatch: true,
+    },
+  );
+  assert.deepEqual(result.catchup_censored_blocks, [102]);
+  assert.deepEqual(result.full_warm_censored_blocks, [103]);
+  assert.equal(result.paired_blocks, 2);
+  assert.equal(result.script_assessment, "supports");
+  assert.equal(result.output_mismatches, 0);
+});
+
 test("equivalence mode supports identical semantic outputs without metric cherry-picking", () => {
   const result = compareBlockScanLogs(log(100), log(101), {
     goal: "equivalence",
