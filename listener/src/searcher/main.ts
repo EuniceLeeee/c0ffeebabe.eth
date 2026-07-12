@@ -276,6 +276,14 @@ interface BlockScanRejectBlacklistState {
   entries: Map<string, BlockScanRejectBlacklistEntry>;
 }
 
+interface PlannedBlockScanSolve {
+  opp: BlockScanOpportunity;
+  ring: string;
+  protoRing: boolean;
+  plan: CandidatePlan;
+  planCount: number;
+}
+
 // Profit-token → ETH valuation for sizing the proposer bribe (route B). WETH is
 // 1:1; the major stables convert via ethUsd; anything else returns 0 (no full
 // bribe — we fall back to the default priority fee for exotic profit tokens).
@@ -578,6 +586,10 @@ async function main(): Promise<void> {
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
   const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
+  const blockScanSolveConcurrencyRaw = Number(process.env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
+  const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
+    ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
+    : 4;
   const blockScanFullRewarmBlocks = Number(process.env.SEARCHER_BLOCKSCAN_FULL_REWARM_BLOCKS ?? "600");
   const blockScanWarmVerify = process.env.SEARCHER_BLOCKSCAN_WARM_VERIFY === "1";
   if (enableBlockScan) {
@@ -658,6 +670,7 @@ async function main(): Promise<void> {
   console.log(
     `[searcher/blockscan] enabled=${enableBlockScan ? "on" : "off"} ` +
       `submit=${config.blockScanSubmit ? "on" : "off"} ` +
+      `solveConcurrency=${blockScanSolveConcurrency} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -1238,6 +1251,7 @@ async function main(): Promise<void> {
             candidateOpps.push(opp);
             if (candidateOpps.length >= cfg.maxCandidates) break;
           }
+          const plannedSolves: PlannedBlockScanSolve[] = [];
           for (const opp of candidateOpps) {
             if (passBudgetExceeded("solve")) break;
             const ring = formatBlockScanRing(opp);
@@ -1262,12 +1276,34 @@ async function main(): Promise<void> {
                 continue;
               }
               if (passBudgetExceeded("solve")) break;
+              plannedSolves.push({
+                opp,
+                ring,
+                protoRing,
+                plan: plans[0],
+                planCount: plans.length,
+              });
+            } catch (err) {
+              console.log(
+                `[searcher/blockscan]   solve ring=${ring} net=null ` +
+                  `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
+                  `protoRing=${protoRing}`,
+              );
+            }
+          }
+
+          let nextPlannedSolve = 0;
+          let stopSolves = false;
+          let submitQueue: Promise<void> = Promise.resolve();
+          const solvePlanned = async (planned: PlannedBlockScanSolve): Promise<void> => {
+            const { opp, ring, protoRing, plan, planCount } = planned;
+            try {
               let solved: ResolvedPlan;
               const solverStarted = Date.now();
               const solverTiming = { quoteMs: 0, simMs: 0 };
               try {
                 solved = await blockScanSolverForPass.solve(
-                  plans[0],
+                  plan,
                   blockScanStateForPass,
                   blockScanSimulatorForPass,
                   {
@@ -1293,31 +1329,37 @@ async function main(): Promise<void> {
                   `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
               );
               if (solved.netProfit > 0n) {
-                if (config.blockScanSubmit && passBudgetExceeded("submit")) break;
-                const submitStarted = Date.now();
-                try {
-                  await maybeSubmitBlockScanAtomic({
-                    config,
-                    provider,
-                    simulator: blockScanSimulatorForPass,
-                    bundleRouter,
-                    submissionCoordinator,
-                    opp,
-                    resolved: solved,
-                    sourceBlock: blockNumber,
-                    ring,
-                    protoRing,
-                    plans: plans.length,
-                    passDeadlineAtMs,
-                    rejectBlacklist: blockScanRejectBlacklist,
-                    strategyVersions: {
-                      strategy_view_version: strategyViews.versions.strategy_view_version,
-                      blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
-                    },
-                  });
-                } finally {
-                  solveSubmitMs += Date.now() - submitStarted;
-                }
+                submitQueue = submitQueue.then(async () => {
+                  if (config.blockScanSubmit && passBudgetExceeded("submit")) {
+                    stopSolves = true;
+                    return;
+                  }
+                  const submitStarted = Date.now();
+                  try {
+                    await maybeSubmitBlockScanAtomic({
+                      config,
+                      provider,
+                      simulator: blockScanSimulatorForPass,
+                      bundleRouter,
+                      submissionCoordinator,
+                      opp,
+                      resolved: solved,
+                      sourceBlock: blockNumber,
+                      ring,
+                      protoRing,
+                      plans: planCount,
+                      passDeadlineAtMs,
+                      rejectBlacklist: blockScanRejectBlacklist,
+                      strategyVersions: {
+                        strategy_view_version: strategyViews.versions.strategy_view_version,
+                        blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
+                      },
+                    });
+                  } finally {
+                    solveSubmitMs += Date.now() - submitStarted;
+                  }
+                });
+                await submitQueue;
               }
             } catch (err) {
               console.log(
@@ -1326,7 +1368,22 @@ async function main(): Promise<void> {
                   `protoRing=${protoRing}`,
               );
             }
-          }
+          };
+          const solveWorker = async (): Promise<void> => {
+            for (;;) {
+              if (stopSolves) return;
+              if (nextPlannedSolve >= plannedSolves.length) return;
+              if (passBudgetExceeded("solve")) {
+                stopSolves = true;
+                return;
+              }
+              const planned = plannedSolves[nextPlannedSolve++];
+              await solvePlanned(planned);
+            }
+          };
+          const workerCount = Math.min(blockScanSolveConcurrency, plannedSolves.length);
+          await Promise.all(Array.from({ length: workerCount }, () => solveWorker()));
+          await submitQueue;
           segMark("solve");
           console.log(
             `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
