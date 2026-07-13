@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "run_id": "20260712-metronome-oracle-backrun",
+  "window": { "from": 25516096, "to": 25516253 },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13"
+  ],
+  "run_analysis": {
+    "funnel": {
+      "measured_blockscan_passes": 134,
+      "candidate_slots": 1072,
+      "quote_positive": 0,
+      "final_sim_positive": 0,
+      "bundle_submitted": 0
+    },
+    "dominant_drop": "All 134 measured B passes produced eight candidates but zero positive quotes. The pinned Metronome trigger did not recur; same-window Coffee calibration instead exposes an all-in-graph six-hop loop that exceeds the current planner/scanner hop bounds.",
+    "events_source": "B block-scan log counters; the block-scan-only B JSONL had no structured rows in the measured block window"
+  },
+  "intake_audit": {
+    "pending_received": 0,
+    "pending_filtered": 0,
+    "mevshare_enabled": false
+  },
+  "findings": [
+    {
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "swept": true,
+      "txCount": 2,
+      "analysis_mode": "full",
+      "method": "full local-reth sender sweep; independent receipt/callTracer token-flow reconstruction; then competitor-calibration and census-gap/bundle-postmortem reconciliation against B",
+      "txs": [
+        {
+          "hash": "0x43ea11358aec0a6eb30bbe24cbc567dcab826c46e6e3de03321c48c62f605fa5",
+          "block": 25516126,
+          "class": "atomic",
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0x22a80b289670a5676e0be54ad6514fa601757875", "inGraph": true },
+            { "addr": "0xaa362e4301abe8627b5bf52b55336a6d5f1af6711f2ce5cde6c635dad813b341", "inGraph": true },
+            { "addr": "0x1f0f0d68217494782bafa094e41c4c6cc78dc46ab343470929c2f4aec2097fb3", "inGraph": true },
+            { "addr": "0x7c02705adb182b9b6c3551b43fe73d3836a2fe3b29e8c669f84e271807f554d0", "inGraph": true },
+            { "addr": "0x38076d640fecd774e558ddeca569723ce52fb98a0e67b653cb585a8496805b45", "inGraph": true },
+            { "addr": "0x992133e991cefab74eee32eacca3bac071cf1c5b", "inGraph": true }
+          ],
+          "gap_class": "path_planner_hop_cap"
+        },
+        {
+          "hash": "0x546483d67a6f23e53f2a6d3e77a14b60017a0aec7e9fc23f8d8d8c02f394ab13",
+          "block": 25516153,
+          "class": "atomic",
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0xc45a81bc23a64ea556ab4cdf08a86b61cdceea8b", "inGraph": true },
+            { "addr": "0x14d725edb1299ff560d96f42462f0234b65b00af", "inGraph": true },
+            { "addr": "0x3f7d02c99401ce51e310a3d7bc396c74012b5e66", "inGraph": true },
+            { "addr": "0xd7d85771d7d7b253b3746578cdaeaf2661e1829b", "inGraph": true },
+            { "addr": "0x9da4acd7d87e7396901d92671173296bf9845c53", "inGraph": true },
+            { "addr": "0x0a67ae7937fd300b687c0971cdb0a4f33b5da5ca", "inGraph": false }
+          ],
+          "gap_class": "pool_gap_dodo_plus_scan_busy"
+        }
+      ]
+    },
+    {
+      "eoa": "0xae2fc483527b8ef99eb5d9b44875f005ba1fae13",
+      "swept": true,
+      "txCount": 50,
+      "analysis_mode": "sample",
+      "sampleSize": 1,
+      "method": "local-reth sender sweep with one outcome-driven conserving-loop sample reconciled through bundle-postmortem",
+      "txs": [
+        {
+          "hash": "0xb5c5ff5b7c9b27da53c6c1de2835cc57c3e5eb2128a4dac600d5d5124f031390",
+          "block": 25516130,
+          "class": "atomic",
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0xffa98a091331df4600f87c9164cd27e8a5cd2405", "inGraph": true },
+            { "addr": "0x913f0d0db0c9e701e4380d165eca0527a969f2e5", "inGraph": true },
+            { "addr": "0x72c2178e082fedb13246877b5aa42ebce1b72218", "inGraph": true },
+            { "addr": "0xfaa318479b7755b2dbfdd34dc306cb28b420ad12", "inGraph": true },
+            { "addr": "0xccd8c402a4b91ab59a50d30dbbdb29f1faec411d", "inGraph": true }
+          ],
+          "gap_class": "atomic_dust_below_strategy_floor"
+        }
+      ]
+    }
+  ],
+  "coverage_kpi": {
+    "competitor_legs_total": 17,
+    "legs_out_of_graph": 1,
+    "out_pools": [
+      {
+        "addr": "0x0a67ae7937fd300b687c0971cdb0a4f33b5da5ca",
+        "token0": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "token1": "0xe2cfd7a01ec63875cd9da6c7c1b7025166c2fa2f",
+        "class": "closable",
+        "evidence": "Permissionless DODO WETH/token pool used by the conserving 0x546483d6 loop; absent from B runtime graph. The same source block was also skipped busy, so pool admission is the first deterministic gap and latency is secondary."
+      }
+    ],
+    "closable": 1,
+    "single_venue_noise": 0,
+    "prev_round": null
+  },
+  "ab_external_calibration": {
+    "competitor": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "strategy_kind": "block-scan",
+    "comparable_filter": "atomic_loop",
+    "tool_artifact": "node:/tmp/census-gap-20260712-metronome-ab",
+    "classifier_calibration": {
+      "command": "npm run competitor-calibration",
+      "status": "pass",
+      "samples": 15
+    },
+    "comparable_txs": [
+      "0x43ea11358aec0a6eb30bbe24cbc567dcab826c46e6e3de03321c48c62f605fa5",
+      "0x546483d67a6f23e53f2a6d3e77a14b60017a0aec7e9fc23f8d8d8c02f394ab13"
+    ],
+    "excluded_counts": {
+      "inventory": 0,
+      "sandwich": 0,
+      "keeper_or_liquidation": 0,
+      "jit_lp": 0,
+      "standing_credit": 0
+    },
+    "gap_counts": {
+      "not_seen": 0,
+      "pool": 1,
+      "path": 1,
+      "adapter": 0,
+      "quote_or_sim": 0,
+      "execution": 0,
+      "economics": 0
+    },
+    "next_problem_id": "coffee-six-hop-all-in-graph-path-cap"
+  }
+}
