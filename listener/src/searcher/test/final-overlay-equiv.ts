@@ -410,11 +410,17 @@ async function main(): Promise<void> {
       checkBalances: [USDC, WETH],
     },
     {
+      // Fixture chosen so this poolId has EXACTLY ONE swap in the block, so a
+      // post-block fork == the victim's immediate post-swap state (no later
+      // same-pool swap to reverse it). That makes cold(fork@N) a valid ground
+      // truth to compare the applyV4 override against. (Block 25523003 had 3
+      // swaps on this pool — tx idx2 nearly reversed the victim — so its cold
+      // baseline was end-of-block, not immediate-post-victim.)
       name: "v4 USDC/USDT",
       adapterId: "univ4-unlock",
       pool: V4_POOL_MANAGER,
-      block: 25_523_003,
-      txHash: "0x19842ecc505dd17ad56beb381c4ccee30b0ed5380f3dad87f6f28be8d784be87",
+      block: 25_523_157,
+      txHash: "0xdc56bd839c88a273bed892712dae84b1bffba6a4593b60cb043edff814cb1cde",
       poolId: "0x395f91b34aa34a477ce3bc6505639a821b286a62b1a164fc1887fa3a5ef713a5",
       v4PoolKey: {
         currency0: USDC,
