@@ -36,6 +36,7 @@ import type { BlockScanOpportunity } from "../detector/detector.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
   buildTokenGraph,
+  POOL_REGISTRY,
   v4PoolId,
   type PoolEntry,
   type TokenEdge,
@@ -43,6 +44,7 @@ import {
   type TokenQueryBackend,
   type V4PoolKey,
 } from "../planner/token-graph.js";
+import { attestPoolIdentities } from "../venues/identity.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
@@ -408,7 +410,20 @@ async function assertEdgesInGraph(
         }
         let edges: TokenEdge[] = [];
         try {
-          edges = await buildTokenGraph(backend, [poolEntryForLeg(leg, adapter)]);
+          const candidate = poolEntryForLeg(leg, adapter);
+          const identity = await attestPoolIdentities(backend, [candidate], {
+            seedEntries: POOL_REGISTRY,
+          });
+          if (identity.accepted.length !== 1) {
+            const rejected = identity.rejected[0];
+            console.error(
+              `[blockscan-fork-solve]   -> venue identity rejected leg ${leg.seq} (${leg.kind}) ` +
+                `pool=${candidate.address} reason=${rejected?.reason ?? "unknown"} ` +
+                `venue=${rejected?.venueId ?? "unknown"} factory=${rejected?.factory ?? "unknown"}`,
+            );
+            return false;
+          }
+          edges = await buildTokenGraph(backend, identity.accepted);
         } catch (err) {
           console.error(
             `[blockscan-fork-solve]   -> buildTokenGraph threw for leg ${leg.seq} (${leg.kind}): ` +

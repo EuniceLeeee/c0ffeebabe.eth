@@ -6,6 +6,7 @@ import type { PoolEntry } from "./planner/token-graph.js";
 import { selectArbRelevantPools, type RankablePool } from "./pool-universe-arb-relevance.js";
 import { DEFAULT_POOL_UNIVERSE_PATH, type PoolUniverseEntry, type PoolUniverseFile } from "./pool-universe.js";
 import { ADDR } from "../shared/constants/addresses.js";
+import { resolvePoolIdentity } from "./venues/identity.js";
 
 const BLOCKS_PER_DAY = 7200;
 
@@ -16,10 +17,7 @@ const SWAP_TOPICS: Array<{ topic: string; adapter: PoolEntry["adapter"]; label: 
     label: "univ3",
   },
   {
-    // PancakeSwap V3 — UniV3-lineage clone; its Swap adds protocolFeesToken0/1 so the topic differs
-    // (0x19b47279…). Same swap/slot0/tick interface ⇒ univ3 adapter routes it. Mirrors the runtime
-    // discovery scan (active-pool-discovery.ts). Without this the universe GENERATOR never indexes
-    // pancake pools even though the adapter supports them (its busiest pools are top missing venues).
+    // The distinct topic only discovers candidates; factory identity still controls admission.
     topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
     adapter: "univ3",
     label: "pancake-v3",
@@ -71,8 +69,24 @@ interface DiscoveryQueueEntry {
 }
 
 type ProbedPoolShape =
-  | { adapter: "univ3"; token0: string; token1: string; fee: number; tickSpacing: number }
-  | { adapter: "univ2"; token0: string; token1: string };
+  | {
+      adapter: "univ3";
+      token0: string;
+      token1: string;
+      fee: number;
+      tickSpacing: number;
+      venueId: PoolUniverseEntry["venueId"];
+      factory: string;
+      identitySource: PoolUniverseEntry["identitySource"];
+    }
+  | {
+      adapter: "univ2";
+      token0: string;
+      token1: string;
+      venueId: PoolUniverseEntry["venueId"];
+      factory: string;
+      identitySource: PoolUniverseEntry["identitySource"];
+    };
 
 export interface RawLog {
   address: string;
@@ -277,7 +291,7 @@ async function main(): Promise<void> {
     }
   }
   const file: PoolUniverseFile = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     fromBlock,
     toBlock: latest,
@@ -531,6 +545,8 @@ function v4PoolEntryFromInitialize(
   return {
     address: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
     adapter: "univ4",
+    venueId: "univ4",
+    identitySource: "v4-manager",
     poolId: parsed.poolId,
     currency0: parsed.currency0,
     currency1: parsed.currency1,
@@ -631,10 +647,17 @@ async function enrichPool(
   provider: ethers.JsonRpcProvider,
   pool: PoolActivity,
 ): Promise<PoolUniverseEntry | null> {
-  const adapter = bestAdapter(pool.adapterCounts);
+  const adapterHint = bestAdapter(pool.adapterCounts);
+  if (adapterHint !== "univ2" && adapterHint !== "univ3" && adapterHint !== "curve") return null;
+  const identity = await resolvePoolIdentity(provider, pool.address, adapterHint);
+  if (!identity.ok) return null;
+  const adapter = identity.adapter;
   const base: PoolUniverseEntry = {
     address: pool.address,
     adapter,
+    venueId: identity.venueId,
+    factory: identity.factory,
+    identitySource: identity.identitySource,
     score: pool.count,
     swapCount30d: pool.count,
     lastSwapBlock: pool.lastSwapBlock,
@@ -673,29 +696,44 @@ async function probePoolShape(
   addr: string,
 ): Promise<ProbedPoolShape | null> {
   const address = ethers.getAddress(addr);
-  try {
+  const identity = await resolvePoolIdentity(provider, address, "univ3");
+  if (!identity.ok) return null;
+  if (identity.adapter === "univ3") try {
     const [token0, token1, fee, tickSpacing] = await Promise.all([
       callAddress(provider, address, univ3Iface.encodeFunctionData("token0")),
       callAddress(provider, address, univ3Iface.encodeFunctionData("token1")),
       callNumber(provider, address, univ3Iface.encodeFunctionData("fee"), "fee"),
       callNumber(provider, address, univ3Iface.encodeFunctionData("tickSpacing"), "tickSpacing"),
     ]);
-    return { adapter: "univ3", token0, token1, fee, tickSpacing };
-  } catch {
-    // Try the v2 shape below.
-  }
+    return {
+      adapter: "univ3",
+      token0,
+      token1,
+      fee,
+      tickSpacing,
+      venueId: identity.venueId,
+      factory: identity.factory!,
+      identitySource: identity.identitySource,
+    };
+  } catch { /* an identity match still needs the expected pool ABI */ }
 
-  try {
+  if (identity.adapter === "univ2") try {
     const [token0, token1, reserves] = await Promise.all([
       callAddress(provider, address, univ2Iface.encodeFunctionData("token0")),
       callAddress(provider, address, univ2Iface.encodeFunctionData("token1")),
       provider.call({ to: address, data: univ2Iface.encodeFunctionData("getReserves") }),
     ]);
     univ2Iface.decodeFunctionResult("getReserves", reserves);
-    return { adapter: "univ2", token0, token1 };
-  } catch {
-    return null;
-  }
+    return {
+      adapter: "univ2",
+      token0,
+      token1,
+      venueId: identity.venueId,
+      factory: identity.factory!,
+      identitySource: identity.identitySource,
+    };
+  } catch { /* fall through */ }
+  return null;
 }
 
 export async function consumeDiscoveryQueue(
@@ -739,6 +777,9 @@ export async function consumeDiscoveryQueue(
       included.push({
         address: ethers.getAddress(addr),
         adapter: shape.adapter,
+        venueId: shape.venueId,
+        factory: shape.factory,
+        identitySource: shape.identitySource,
         token0: shape.token0,
         token1: shape.token1,
         fee: shape.adapter === "univ3" ? shape.fee : undefined,

@@ -83,6 +83,7 @@
     "searcher:adapter-descriptors": "node --import tsx src/searcher/test/adapter-descriptors.ts",
     "searcher:taxonomy": "node --import tsx src/searcher/test/taxonomy.ts",
     "searcher:universe-split": "node --import tsx src/searcher/test/universe-split.ts",
+    "searcher:venue-identity": "node --import tsx src/searcher/test/venue-identity.ts",
     "searcher:standing-guard": "node --import tsx src/searcher/test/standing-guard.ts",
     "searcher:live": "tsx src/searcher/main.ts",
     "searcher:protocol-loop": "tsx src/searcher/test/protocol-loop-execute.ts"

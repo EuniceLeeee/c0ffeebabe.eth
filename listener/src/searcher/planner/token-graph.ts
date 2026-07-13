@@ -1,6 +1,8 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
+import type { VenueId } from "../venues/capability.js";
+import type { VenueIdentitySource } from "../venues/identity.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -50,6 +52,12 @@ export interface TokenPath {
 export interface PoolEntry {
   address: string;
   adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626";
+  /** Dynamic venue identity proven before admission; event selectors alone never set this. */
+  venueId?: VenueId;
+  /** Factory returned by the pool, for factory-backed venues. */
+  factory?: string;
+  /** Mechanism that established venueId. */
+  identitySource?: VenueIdentitySource;
   /** Optional file-backed metadata for standard two-token pools. */
   token0?: string;
   token1?: string;

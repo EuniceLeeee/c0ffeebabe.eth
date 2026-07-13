@@ -1,7 +1,10 @@
 export type VenueId =
   | "univ2"
-  | "univ2-fork"
+  | "sushiswap-v2"
   | "univ3"
+  | "pancake-v3"
+  | "univ3-fork-075c"
+  | "panoramaswap-v1"
   | "univ4"
   | "curve"
   | "curve-nr"
@@ -21,6 +24,8 @@ export type VenueDiscovery =
 export interface VenueCapability {
   venue: VenueId;
   discovery: VenueDiscovery;
+  /** Explicit adapter choice for this exact factory lineage; absence means fail closed. */
+  runtimeAdapter?: "univ2" | "univ3";
   discoverable: boolean;
   quotable: boolean;
   buildable: boolean;
@@ -37,14 +42,16 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   {
     venue: "univ2",
     discovery: { mode: "factory", factories: ["0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"] },
+    runtimeAdapter: "univ2",
     discoverable: true,
     quotable: true,
     buildable: true,
     supported_in_prod: true,
   },
   {
-    venue: "univ2-fork",
+    venue: "sushiswap-v2",
     discovery: { mode: "factory", factories: ["0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"] },
+    runtimeAdapter: "univ2",
     discoverable: true,
     quotable: true,
     buildable: true,
@@ -53,10 +60,40 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   {
     venue: "univ3",
     discovery: { mode: "factory", factories: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"] },
+    runtimeAdapter: "univ3",
     discoverable: true,
     quotable: true,
     buildable: true,
     supported_in_prod: true,
+  },
+  {
+    // Pancake V3 remains a distinct venue even though its approved runtime adapter is V3-compatible.
+    venue: "pancake-v3",
+    discovery: { mode: "factory", factories: ["0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"] },
+    runtimeAdapter: "univ3",
+    discoverable: true,
+    quotable: true,
+    buildable: true,
+    supported_in_prod: true,
+  },
+  {
+    // Coffee fixture 20260702: exact factory verified and the missing graph leg has a pinned fixture.
+    venue: "univ3-fork-075c",
+    discovery: { mode: "factory", factories: ["0x075C42cD233a1c723c0F18f6dd575c8d679FEA85"] },
+    runtimeAdapter: "univ3",
+    discoverable: true,
+    quotable: true,
+    buildable: true,
+    supported_in_prod: true,
+  },
+  {
+    // Standard-looking V2 events are insufficient: this venue needs its own invariant replay.
+    venue: "panoramaswap-v1",
+    discovery: { mode: "factory", factories: ["0x82Eeb5A22A25310ac15352197d92d6C17A49602e"] },
+    discoverable: false,
+    quotable: false,
+    buildable: false,
+    supported_in_prod: false,
   },
   {
     venue: "univ4",

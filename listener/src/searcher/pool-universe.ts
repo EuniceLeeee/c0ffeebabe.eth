@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
+import { findVenueCapability, type VenueId } from "./venues/capability.js";
+import type { VenueIdentitySource } from "./venues/identity.js";
 
 export const DEFAULT_POOL_UNIVERSE_PATH = resolve("searcher", "pools", "active-pools.json");
 
@@ -248,6 +250,9 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
   return {
     address: checksumField(raw.address ?? raw.pool, `${field}.address`),
     adapter: adapter as PoolEntry["adapter"],
+    venueId: venueIdField(raw.venueId, `${field}.venueId`),
+    factory: optionalAddress(raw.factory, `${field}.factory`),
+    identitySource: identitySourceField(raw.identitySource, `${field}.identitySource`),
     poolId: stringField(raw.poolId, `${field}.poolId`),
     score,
     fixedTokenIn: isV4
@@ -289,6 +294,28 @@ function optionalCurrency(value: unknown, field: string): string | undefined {
 function stringField(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (typeof value !== "string") throw new Error(`${field} must be a string`);
+  return value;
+}
+
+function venueIdField(value: unknown, field: string): VenueId | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || findVenueCapability(value) === null) {
+    throw new Error(`${field} must be a known venue id`);
+  }
+  return value.toLowerCase() as VenueId;
+}
+
+function identitySourceField(value: unknown, field: string): VenueIdentitySource | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (
+    value !== "factory-call" &&
+    value !== "factory-event" &&
+    value !== "curve-metaregistry" &&
+    value !== "v4-manager" &&
+    value !== "seed"
+  ) {
+    throw new Error(`${field} has unsupported identity source ${String(value)}`);
+  }
   return value;
 }
 

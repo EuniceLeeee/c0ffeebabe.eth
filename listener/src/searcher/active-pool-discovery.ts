@@ -1,15 +1,8 @@
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
 import { poolRegistryKey } from "./pool-universe.js";
-
-// ─── Factory addresses ──────────────────────────────────────
-
-const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
-const UNIV3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
-const SUSHI_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
-// PancakeSwap V3 — a UniswapV3-lineage clone (same swap interface + PoolCreated layout, different factory).
-// cast-verified 2026-07-06: factory() on coffee's pancake pools 0xacdb27b2 / 0x1445f32d = this address.
-const PANCAKE_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865";
+import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
+import { attestPoolIdentities } from "./venues/identity.js";
 
 // Factory event topics
 const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
@@ -22,47 +15,35 @@ const FACTORY_LOG_BATCH = 5000;
 interface FactoryDef {
   address: string;
   topic: string;
-  adapter: PoolEntry["adapter"];
+  adapter: "univ2" | "univ3";
+  venueId: VenueId;
   parsePool: (log: { data: string; topics: string[] }) => string;
 }
 
-const FACTORIES: FactoryDef[] = [
-  {
-    address: UNIV2_FACTORY,
-    topic: UNIV2_PAIR_CREATED,
-    adapter: "univ2",
-    // PairCreated data: pair address in first 32 bytes, then uint256
-    parsePool: (log) => ethers.getAddress("0x" + log.data.slice(26, 66)),
-  },
-  {
-    address: SUSHI_FACTORY,
-    topic: UNIV2_PAIR_CREATED,
-    adapter: "univ2",
-    parsePool: (log) => ethers.getAddress("0x" + log.data.slice(26, 66)),
-  },
-  {
-    address: UNIV3_FACTORY,
-    topic: UNIV3_POOL_CREATED,
-    adapter: "univ3",
-    // PoolCreated data: tickSpacing(int24, 32B) + pool(address, 32B)
-    parsePool: (log) => {
-      const dataHex = log.data.replace("0x", "");
-      return ethers.getAddress("0x" + dataHex.slice(-40));
-    },
-  },
-  {
-    // PancakeSwap V3: same PoolCreated(token0,token1,fee,tickSpacing,pool) event + data layout as UniV3
-    // (only the factory address differs) → reuse the univ3 adapter + parsePool. UniV2/SushiV2/PancakeV2
-    // and SushiV3 need NO entry — they share UniV2/UniV3's Swap+factory topics and are already covered.
-    address: PANCAKE_V3_FACTORY,
-    topic: UNIV3_POOL_CREATED,
-    adapter: "univ3",
-    parsePool: (log) => {
-      const dataHex = log.data.replace("0x", "");
-      return ethers.getAddress("0x" + dataHex.slice(-40));
-    },
-  },
-];
+const FACTORIES: FactoryDef[] = VENUE_CAPABILITIES.flatMap((capability) => {
+  if (
+    capability.discovery.mode !== "factory" ||
+    !capability.runtimeAdapter ||
+    !capability.discoverable ||
+    !capability.quotable ||
+    !capability.buildable ||
+    !capability.supported_in_prod
+  ) {
+    return [];
+  }
+  const adapter = capability.runtimeAdapter;
+  return capability.discovery.factories.map((address) => ({
+    address,
+    adapter,
+    venueId: capability.venue,
+    topic: adapter === "univ2" ? UNIV2_PAIR_CREATED : UNIV3_POOL_CREATED,
+    parsePool: adapter === "univ2"
+      // PairCreated data: pair address in first 32 bytes, then uint256.
+      ? (log: { data: string }) => ethers.getAddress("0x" + log.data.slice(26, 66))
+      // V3 PoolCreated data ends with the pool address.
+      : (log: { data: string }) => ethers.getAddress("0x" + log.data.replace("0x", "").slice(-40)),
+  }));
+});
 
 /**
  * Index pools from factory PairCreated/PoolCreated events over a block range.
@@ -92,7 +73,14 @@ export async function indexFactoryPools(
         try {
           // score 0: factory pools are prunable (not curated backbone), ranked
           // below swap-active pools but still above nothing.
-          pools.push({ address: factory.parsePool(log), adapter: factory.adapter, score: 0 });
+          pools.push({
+            address: factory.parsePool(log),
+            adapter: factory.adapter,
+            venueId: factory.venueId,
+            factory: ethers.getAddress(factory.address),
+            identitySource: "factory-event",
+            score: 0,
+          });
           count++;
         } catch { /* skip malformed */ }
       }
@@ -134,16 +122,17 @@ async function getFactoryLogs(
   }
 }
 
-// ─── Swap event topics (all variants) ────────────────────────
+// Swap topics discover candidates only. factory()/MetaRegistry decides venue identity.
 
-const SWAP_TOPICS: { topic: string; adapter: PoolEntry["adapter"] }[] = [
+const SWAP_TOPICS: { topic: string; adapter: "univ2" | "univ3" | "curve" }[] = [
   // UniV3
   { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"), adapter: "univ3" },
   // PancakeSwap V3 — UniV3-lineage clone; its Swap event adds protocolFeesToken0/1 so the topic differs
   // (0x19b47279…, cast-verified against coffee's pancake pools). Same swap/slot0/tick interface ⇒ univ3
-  // adapter routes it (local v3 math is layout-identical). SushiV3 reuses UniV3's topic — already covered.
+  // Topics only discover candidates. Exact factories must be present in the
+  // capability registry with a replayed runtime adapter before admission.
   { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"), adapter: "univ3" },
-  // UniV2 (also PancakeV2 / SushiV2 — identical event ⇒ same topic, already covered)
+  // V2-shaped candidate. An identical event does not prove a compatible invariant.
   { topic: ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"), adapter: "univ2" },
   // Curve — multiple event signatures across pool versions
   { topic: ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"), adapter: "curve" },
@@ -167,7 +156,10 @@ export async function scanActivePools(
   const latest = toBlock ?? await provider.getBlockNumber();
   const fromBlock = Math.max(0, latest - blocksBack);
 
-  const poolCounts = new Map<string, { adapter: PoolEntry["adapter"]; count: number }>();
+  const poolCounts = new Map<
+    string,
+    { adapterCounts: Map<"univ2" | "univ3" | "curve", number>; count: number }
+  >();
 
   for (const { topic, adapter } of SWAP_TOPICS) {
     for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
@@ -178,26 +170,45 @@ export async function scanActivePools(
         const existing = poolCounts.get(addr);
         if (existing) {
           existing.count++;
+          existing.adapterCounts.set(adapter, (existing.adapterCounts.get(adapter) ?? 0) + 1);
         } else {
-          poolCounts.set(addr, { adapter, count: 1 });
+          poolCounts.set(addr, { adapterCounts: new Map([[adapter, 1]]), count: 1 });
         }
       }
     }
   }
 
-  const ranked = [...poolCounts.entries()]
+  const candidates: PoolEntry[] = [...poolCounts.entries()]
     .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, maxPools);
+    .map(([addr, item]) => ({
+      address: ethers.getAddress(addr),
+      adapter: bestAdapter(item.adapterCounts),
+      score: item.count,
+    }));
+  const { accepted, rejected } = await attestPoolIdentities(provider, candidates);
+  const ranked = accepted.slice(0, maxPools);
+  const rejectedByReason = new Map<string, number>();
+  for (const item of rejected) {
+    rejectedByReason.set(item.reason, (rejectedByReason.get(item.reason) ?? 0) + 1);
+  }
+  const rejectedSummary = [...rejectedByReason.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => `${reason}=${count}`)
+    .join(",");
 
   console.log(
-    `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size} active pools, taking top ${ranked.length}`,
+    `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size} candidates, ` +
+      `${accepted.length} identity-verified, taking top ${ranked.length}` +
+      (rejectedSummary ? `, rejected(${rejectedSummary})` : ""),
   );
 
-  return ranked.map(([addr, { adapter, count }]) => ({
-    address: ethers.getAddress(addr),
-    adapter,
-    score: count,
-  }));
+  return ranked;
+}
+
+function bestAdapter(
+  adapterCounts: Map<"univ2" | "univ3" | "curve", number>,
+): "univ2" | "univ3" | "curve" {
+  return [...adapterCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
 async function getLogsWithSplitRetry(

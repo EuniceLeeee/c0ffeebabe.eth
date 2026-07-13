@@ -27,6 +27,11 @@ import {
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
 import { scanActivePools, indexFactoryPools, mergePoolRegistries } from "./active-pool-discovery.js";
+import {
+  attestPoolIdentities,
+  createPoolIdentityCache,
+  type RejectedPoolIdentity,
+} from "./venues/identity.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
@@ -405,6 +410,22 @@ interface PendingVictimOutcome {
   targetBlock: number;
 }
 
+function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[]): void {
+  if (rejected.length === 0) return;
+  const counts = new Map<string, number>();
+  for (const item of rejected) {
+    const key = `${item.reason}:${item.venueId ?? "unknown"}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const summary = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => `${key}=${count}`)
+    .join(",");
+  console.log(
+    `[searcher/live] venue identity rejected source=${source} count=${rejected.length} ${summary}`,
+  );
+}
+
 function loadEnv(): void {
   const envPath = resolve("..", ".env");
   let text = "";
@@ -430,6 +451,9 @@ function dumpRuntimeGraphPools(
     const normalized = pools.map((pool) => ({
       address: pool.address.toLowerCase(),
       adapter: pool.adapter,
+      venueId: pool.venueId,
+      factory: pool.factory?.toLowerCase(),
+      identitySource: pool.identitySource,
       poolId: pool.poolId?.toLowerCase(),
       currency0: pool.currency0?.toLowerCase(),
       currency1: pool.currency1?.toLowerCase(),
@@ -757,14 +781,39 @@ async function main(): Promise<void> {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
   };
-  const pinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
-  const universePools = loadPoolUniverse(config.poolUniversePath, {
+  // Protocol adapters are admitted only through the currently enabled exact
+  // code-owned seeds. File-backed pools cannot bypass protocol-edge posture.
+  const liveRegistry = config.enableProtocolEdges
+    ? POOL_REGISTRY
+    : POOL_REGISTRY.filter((pool) => pool.adapter !== "wsteth" && pool.adapter !== "erc4626");
+  const identityCache = createPoolIdentityCache();
+  const rawPinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
+  const rawUniversePools = loadPoolUniverse(config.poolUniversePath, {
     maxPools: config.poolUniverseTopN,
     minScore: config.poolUniverseMinScore,
     forceInclude: config.poolUniverseForceInclude,
     highSpreadPairQuota: config.poolUniverseHighSpreadPairQuota,
     highSpreadMinFee: config.poolUniverseHighSpreadMinFee,
   });
+  const rawBlockscanUniverse = loadPoolUniverse(config.poolUniversePath, {
+    maxPools: 0,
+    minScore: config.poolUniverseMinScore,
+  });
+  const rawBlockScanOverrides = loadBlockScanViewOverrides();
+  const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] = await Promise.all([
+    attestPoolIdentities(provider, rawPinnedWarmPools, { cache: identityCache, seedEntries: liveRegistry }),
+    attestPoolIdentities(provider, rawUniversePools, { cache: identityCache, seedEntries: liveRegistry }),
+    attestPoolIdentities(provider, rawBlockscanUniverse, { cache: identityCache, seedEntries: liveRegistry }),
+    attestPoolIdentities(provider, rawBlockScanOverrides, { cache: identityCache, seedEntries: liveRegistry }),
+  ]);
+  const pinnedWarmPools = pinnedIdentity.accepted;
+  const universePools = universeIdentity.accepted;
+  const blockscanUniverse = blockscanIdentity.accepted;
+  const blockScanOverrides = overrideIdentity.accepted;
+  logIdentityRejections("pinned", pinnedIdentity.rejected);
+  logIdentityRejections("universe", universeIdentity.rejected);
+  logIdentityRejections("blockscan-universe", blockscanIdentity.rejected);
+  logIdentityRejections("blockscan-overrides", overrideIdentity.rejected);
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
   const factoryPools = await indexFactoryPools(provider, factoryBlocks, discoveryToBlock);
@@ -773,9 +822,6 @@ async function main(): Promise<void> {
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
   // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
-  const liveRegistry = config.enableProtocolEdges
-    ? POOL_REGISTRY
-    : POOL_REGISTRY.filter((pool) => pool.adapter !== "wsteth" && pool.adapter !== "erc4626");
   const basePools = mergePoolRegistries(
     mergePoolRegistries(
       mergePoolRegistries(
@@ -789,10 +835,7 @@ async function main(): Promise<void> {
   const pairCompletionCandidates = config.pairCompletion
     ? selectPairCompletionPools(
       basePools,
-      loadPoolUniverse(config.poolUniversePath, {
-        maxPools: 0,
-        minScore: config.poolUniverseMinScore,
-      }),
+      blockscanUniverse,
     )
     : [];
   const allPools = mergePoolRegistries(basePools, pairCompletionCandidates);
@@ -810,14 +853,10 @@ async function main(): Promise<void> {
       `${pairCompletionAdded} pair-completion = ` +
       `${allPools.length} total`,
   );
-  const blockscanUniverse = loadPoolUniverse(config.poolUniversePath, {
-    maxPools: 0,                                   // uncapped — the broad blockscan candidate set
-    minScore: config.poolUniverseMinScore,
-  });
   const strategyViews = buildStrategyViews(
     allPools,
     blockscanUniverse,
-    loadBlockScanViewOverrides(),
+    blockScanOverrides,
     {
       blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
       poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
