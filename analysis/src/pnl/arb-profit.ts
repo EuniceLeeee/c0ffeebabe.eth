@@ -189,14 +189,6 @@ export async function priceArb(
   const { rawDeltas } = actionsFromLogs(receipt, actors);
   const valuedDeltas = valueDeltas(rawDeltas, ethUsd);
   const erc20Usd = valuedDeltas.usd;
-  const profitConfidence =
-    erc20Usd === null
-      ? "requires_decode"
-      : isPublicRouter(beneficiary)
-        ? "unsafe"
-        : valuedDeltas.unpriced.length === 0
-          ? "high"
-          : "medium";
 
   // Native ETH: add gas back only when tx.from is part of the supplied entity.
   let ethWei = 0n;
@@ -250,6 +242,18 @@ export async function priceArb(
 
   const realizedProfitUsd =
     erc20Usd === null && (!tracedEth || ethWei === 0n) ? null : (erc20Usd ?? 0) + ethProfitUsd;
+  // Confidence depends on the native trace as well as ERC20 logs. A WETH profit that is fully
+  // unwrapped has no residual ERC20 delta, but a successful non-zero entity trace still measures
+  // it exactly. Keep unknown token residue decode-gated and public routers unsafe.
+  const profitConfidence = isPublicRouter(beneficiary)
+    ? "unsafe"
+    : erc20Usd !== null
+      ? valuedDeltas.unpriced.length === 0
+        ? "high"
+        : "medium"
+      : rawDeltas.length === 0 && tracedEth && ethWei !== 0n
+        ? "high"
+        : "requires_decode";
   // NET = realized − total gas. realized is the beneficiary's INTERNAL gain (ERC20 + native ETH),
   // which is ALREADY net of any in-tx coinbase-transfer bribe (that ETH left the beneficiary to the
   // coinbase, so it is not in realized) but PRE-gas (gas is protocol-deducted from the EOA, outside
