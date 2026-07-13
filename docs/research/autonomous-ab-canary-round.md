@@ -26,29 +26,42 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 ## 1. Pick + predeclare
 1. Fetch `origin/main`. Read open LearningCases/Findings plus recent A/B reports. Exclude every `problem_id`
    whose latest verdict is `needs_escalation`/retained and every problem already owned by an active branch.
-2. Pick the highest-impact remaining blocker. If none exists, run the normal Hermes manual-first + canonical
-   tool reconciliation to discover/file one. If there is still no evidence-backed blocker, clean NO-OP.
+2. Pick the highest-impact remaining blocker only when one real +EV, victim-independent `block-scan` sample
+   in the current DEX-DEX / DEX-permissionless-protocol scope proves the failed production stage. Atomic
+   backruns, keeper/reward, inventory, private-path, credit, sandwich and JIT-LP samples do not qualify. If
+   none exists, run the normal Hermes manual-first + canonical tool reconciliation to discover/file one; if
+   the tool is wrong, get fresh non-author agreement, fix/test/rerun it immediately, and merge that auxiliary
+   tool commit before cutting B. If there is still no qualifying sample, clean NO-OP.
 3. Create `ab/<problem>` from exact deployed A, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from `templates/hermes-ab-canary.md`; fill the
-   `ab_experiment` block with exact base SHA, hypothesis, semantic success criterion, change class,
-   deterministic gate, input mode, config deltas, and initial branch action. `challenger_commit` is pending
+   schema-v3 `ab_experiment` block with exact base SHA, hypothesis, semantic success criterion, change class,
+   complete `production_evidence`, deterministic stage-flip gate, input mode, config deltas, and initial
+   branch action. `challenger_commit` is pending
    here because a commit cannot contain its own SHA. Commit/push this initial report on B so a crash always
    leaves a durable handoff.
 
 ## 2. Implement + deterministic gate
-1. Make one causal change only on the predeclared literal `ab/<problem>` branch.
+1. Make one causal production behavior change only on the predeclared literal `ab/<problem>` branch.
+   Analysis/tooling/governance fixes must already be merged to the base and may not appear in the B diff.
 2. Use the HERMES generator/evaluator split. Two stalled generator attempts or three failed review passes
    produce `needs_escalation`; retain/push the branch + evidence and let the next hourly wake pick another.
-3. For correctness/capability, run the pinned replay/fork gate and require the same failing sample to flip.
-   Build-only is never fixed. Push/freeze the exact code SHA while it is the remote branch tip and deploy it.
+3. Run the pinned replay/fork gate and require the same real +EV block-scan sample to advance at least one
+   production stage from the untouched `sample.block_number - 1` state. The trusted wrapper runs the
+   unchanged `searcher:blockscan-hunt` from both base and challenger against the same frozen universe and
+   on-chain sample pool IDs; a challenger-authored harness or pre-applied trigger is invalid. A
+   performance optimization with no such sample flip is ineligible. Build-only is never
+   fixed. Push/freeze the exact code SHA while it is the remote branch tip and deploy it.
    Later branch commits may change only report/evidence; the final report records the frozen deployed SHA as
    `challenger_commit`, not its own report commit.
 
 ## 3. Dual-live measurement
 1. Deploy only via the trusted node wrapper:
-   `deploy-ab-challenger.sh deploy <id> <ab/branch> <base-sha> <challenger-sha> <allow-view-delta>`;
-   pass `1` only when the schema-v2 journal predeclares `expected_runtime_view_delta=true`, else `0`.
-   Direct B `systemd-run` or challenger-owned deploy code is invalid.
+   `deploy-ab-challenger.sh deploy <id> <ab/branch> <base-sha> <challenger-sha>
+   <docs/research/reports/ab-...-hermes.md> <allow-view-delta>`;
+   pass `1` only when the schema-v3 journal predeclares `expected_runtime_view_delta=true`, else `0`.
+   The wrapper recomputes source shape, winner style and net PnL from local reth, executes the declared
+   existing pinned replay, binds all deployment identity/config declarations, and rejects non-runtime or
+   mixed tooling/governance challengers. Direct B `systemd-run` or challenger-owned deploy code is invalid.
 2. Run the predeclared paired-block window. Exclude startup/full-warm, budget-censored, and catch-up blocks
    where either lane warmed a multi-block range after a skip. Renew the B lease before expiry. Record the
    shared discovery cutoff and stable runtime pool-view/TokenEdge graph hashes alongside config/universe
@@ -59,7 +72,8 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 ## 4. Judgment — agent owns the decision
 1. **External production calibration:** on the same window run the existing Step-1 competitor tooling for
    coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` and the standing watchlist. Keep only conserving,
-   replicable `atomic_loop` takes. Exclude inventory/sandwich/keeper/JIT-LP/standing-credit before gap
+   replicable, victim-independent `block-scan atomic_loop` takes. Exclude backrun, inventory, sandwich,
+   keeper, JIT-LP, and standing-credit before gap
    classification. Compare B with those takes, classify the remaining pool/path/adapter/quote/sim/execution/
    economics gap, and file the next blocker. If zero same-window comparable samples, record that honestly
    and use a separate recent historical artifact only for backlog; never put out-of-window txs in Step-1 or

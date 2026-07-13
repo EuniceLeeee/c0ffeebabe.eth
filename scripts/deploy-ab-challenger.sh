@@ -46,6 +46,9 @@ file_env_get() { sed -n "s/^$2=//p" "$1" | tail -1; }
 lower() { tr '[:upper:]' '[:lower:]'; }
 valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; }
 valid_branch() { [[ "$1" =~ ^ab/[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$ ]]; }
+valid_report_path() {
+  [[ "$1" =~ ^docs/research/reports/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$ ]] && [[ "$1" != *".."* ]]
+}
 [ "$LEASE_SECONDS" -ge 300 ] && [ "$LEASE_SECONDS" -le 7200 ] || die "AB_LEASE_SECONDS must be 300..7200"
 [ "$PAUSE_LEASE_SECONDS" -ge 60 ] && [ "$PAUSE_LEASE_SECONDS" -le 1800 ] || die "AB_PAUSE_LEASE_SECONDS must be 60..1800"
 [ "$FIRST_SCAN_TIMEOUT_SECONDS" -ge 90 ] && [ "$FIRST_SCAN_TIMEOUT_SECONDS" -le 600 ] \
@@ -366,15 +369,33 @@ prepare_challenger_dependencies() {
   ln -s "$a_modules" "$WT/listener/node_modules"
 }
 
+resolve_a_universe() {
+  local a_pool_path
+  a_pool_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_PATH)
+  if [ -z "$a_pool_path" ]; then
+    A_UNIVERSE="$MAIN_REPO/listener/searcher/pools/active-pools.json"
+  elif [[ "$a_pool_path" = /* ]]; then
+    A_UNIVERSE="$a_pool_path"
+  else
+    A_UNIVERSE="$MAIN_REPO/listener/$a_pool_path"
+  fi
+  [ -f "$A_UNIVERSE" ] || die "champion pool universe missing: $A_UNIVERSE"
+}
+
 deploy() {
-  local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 allow_runtime_view_delta=${5:-0}
-  local now lease current_status current_lease current_experiment
+  local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
+  local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
   [[ "$expected_b" =~ ^[a-f0-9]{40}$ ]] || die "challenger commit must be a full SHA"
+  valid_report_path "$report_path" || die "candidate report must be a safe docs/research/reports/*.md path"
   [ "$allow_runtime_view_delta" = "0" ] || [ "$allow_runtime_view_delta" = "1" ] \
     || die "allow-runtime-view-delta must be 0|1"
+  requested_input_mode=$(env_get AB_INPUT_MODE); requested_input_mode=${requested_input_mode:-shared}
+  [ "$requested_input_mode" = "shared" ] || [ "$requested_input_mode" = "challenger" ] \
+    || die "AB_INPUT_MODE must be shared|challenger"
+  requested_config_delta=$(env_get AB_ALLOWED_CONFIG_DELTA)
   reap_stale
   now=$(date +%s); lease=$((now + LEASE_SECONDS))
   current_status=$(state_field status); current_lease=$(state_field lease_until); current_experiment=$(state_field experiment_id)
@@ -384,6 +405,7 @@ deploy() {
     exit 75
   fi
   preflight
+  resolve_a_universe
   local a_commit b_commit
   a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
   [ "$a_commit" = "$expected_a" ] || die "champion commit drift: expected $expected_a got $a_commit"
@@ -405,8 +427,45 @@ deploy() {
   else
     git -C "$MAIN_REPO" worktree add --detach "$WT" "origin/$branch" >/dev/null
   fi
+  [ -f "$WT/$report_path" ] || die "candidate report is not present in the frozen challenger commit"
+  local changed_file production_change=0
+  while IFS= read -r changed_file; do
+    [ -n "$changed_file" ] || continue
+    case "$changed_file" in
+      "$report_path") ;;
+      */test/*|*/tests/*|*/fixtures/*|*.test.ts|*.spec.ts)
+        die "B challenger modifies its own replay/test evidence instead of production only: $changed_file"
+        ;;
+      listener/src/searcher/*.ts|listener/src/shared/*.ts|listener/src/adapters/*.ts|\
+      listener/src/submitter.ts|listener/src/compiler.ts|listener/src/encoder.ts|listener/src/types.ts)
+        production_change=1
+        ;;
+      *)
+        die "B challenger contains a non-runtime or unapproved file: $changed_file"
+        ;;
+    esac
+  done < <(git -C "$MAIN_REPO" diff --name-only "$a_commit..$b_commit")
+  [ "$production_change" = "1" ] \
+    || die "B challenger has no production searcher/contract behavior change"
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
+  local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json"
+  cp -f "$A_UNIVERSE" "$replay_universe"
+  (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$WT/$report_path" \
+    --phase candidate \
+    --expected-experiment "$experiment" \
+    --expected-branch "$branch" \
+    --expected-base "$expected_a" \
+    --expected-challenger "$expected_b" \
+    --expected-runtime-view-delta "$allow_runtime_view_delta" \
+    --expected-input-mode "$requested_input_mode" \
+    --expected-config-delta "$requested_config_delta" \
+    --base-root "$MAIN_REPO" \
+    --challenger-root "$WT" \
+    --universe "$replay_universe" \
+    --rpc "$LOCAL_RPC") \
+    >/tmp/mev-ab-candidate-gate.log 2>&1 \
+    || die "production candidate gate failed (see /tmp/mev-ab-candidate-gate.log)"
   build_runtime_env "$experiment"
   cpu_layout
   local a_restarts_before a_pid_before
@@ -464,6 +523,7 @@ deploy() {
   discovery_to_block=$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
+    production_report_path "$report_path" production_report_hash "$(hash_file "$WT/$report_path")" \
     a_commit "$a_commit" b_commit "$b_commit" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
@@ -524,9 +584,9 @@ renew() {
 cmd=${1:-status}
 case "$cmd" in
   preflight) preflight; echo "PASS: challenger bounded-live preflight" ;;
-  deploy) { [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; } \
-    || die "usage: deploy <experiment-id> <ab/branch> <base-sha> <challenger-sha> [allow-runtime-view-delta=0|1]"; \
-    deploy "$2" "$3" "$4" "$5" "${6:-0}" ;;
+  deploy) { [ "$#" -eq 6 ] || [ "$#" -eq 7 ]; } \
+    || die "usage: deploy <experiment-id> <ab/branch> <base-sha> <challenger-sha> <candidate-report.md> [allow-runtime-view-delta=0|1]"; \
+    deploy "$2" "$3" "$4" "$5" "$6" "${7:-0}" ;;
   pause) [ "$#" -eq 2 ] || die "usage: pause <experiment-id>"; pause_experiment "$2" ;;
   close) [ "$#" -eq 3 ] || die "usage: close <experiment-id> <outcome>"; close_experiment "$2" "$3" ;;
   renew) [ "$#" -eq 2 ] || die "usage: renew <experiment-id>"; renew "$2" ;;

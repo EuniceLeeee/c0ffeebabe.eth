@@ -10,6 +10,8 @@
 - **change_class:** performance | correctness | capability
 - **one-change scope:**
 - **deterministic gate + pinned sample:**
+- **production sample:** real tx/block · net +EV evidence · victim-independent block-scan proof
+- **stage flip:** not_admitted → path_found → final_sim_success (other stages need a trusted main-side harness first)
 - **not doing:**
 
 ## Implementation + Gate
@@ -30,7 +32,7 @@
 - **window / tool artifact:**
 - **classifier calibration:** `npm run competitor-calibration` · pass/fail · sample count
 - **coffeebabe + watchlist sweep:**
-- **comparable filter:** conserving `atomic_loop` only
+- **comparable filter:** victim-independent, conserving `block-scan atomic_loop` only
 - **excluded:** inventory · sandwich · keeper/liquidation · JIT-LP · standing-credit
 - **B vs comparable takes:** not_seen | pool | path | adapter | quote/sim | execution | economics
 - **next production blocker filed:**
@@ -66,7 +68,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
 
 ```ab_experiment
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "experiment_id": "<id>",
   "problem_id": "<learning-case-or-finding-id>",
   "branch": "ab/<problem>",
@@ -107,7 +109,42 @@ Required for every capability win and every conflict/inconclusive/artifact conce
     "a_blockscan_graph_hash_after": "unavailable",
     "b_blockscan_graph_hash_after": "unavailable"
   },
-  "deterministic_gate": { "result": "not_applicable", "evidence": "<gate command/result>" },
+  "deterministic_gate": { "result": "pass", "evidence": "<gate command/result>" },
+  "production_evidence": {
+    "searcher_behavior_change": true,
+    "strategy_kind": "block-scan",
+    "trigger_kind": "standing-state",
+    "route_scope": "dex-dex",
+    "position_conserving": true,
+    "posture": {
+      "victim_dependent": false,
+      "keeper": false,
+      "inventory": false,
+      "private_path": false,
+      "credit": false,
+      "sandwich": false,
+      "jit_lp": false
+    },
+    "sample": {
+      "tx_hash": "<full-onchain-tx-hash>",
+      "block_number": 0,
+      "expected_net_profit_usd": 0,
+      "evidence": "<net-profit and strategy-source evidence>"
+    },
+    "classification_review": {
+      "verdict": "pass",
+      "reviewer": "<fresh non-author reviewer>",
+      "evidence": "<independent target-scope and victim-independence verification>"
+    },
+    "baseline_stage": "not_admitted",
+    "challenger_stage": "path_found",
+    "replay": {
+      "result": "pass",
+      "cwd": "listener",
+      "argv": ["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
+      "evidence": "<same sample stage transition>"
+    }
+  },
   "analysis": {
     "agent_manual_author": "<orchestrator>",
     "agent_manual_verdict": "inconclusive",
@@ -128,6 +165,10 @@ Required for every capability win and every conflict/inconclusive/artifact conce
   "evidence_bundle": "<redacted evidence paths>"
 }
 ```
+
+The deploy wrapper, not the challenger, runs this unchanged harness from both A and B at the sample's
+untouched parent block and binds its machine result to the sample's on-chain DEX pool IDs. Test, fixture,
+replay-harness, analysis, or governance changes must be merged before B and are rejected in the challenger.
 
 When a later main commit resolves a retained experiment, set `branch_action` to `resolved_deleted` and add:
 ```json
@@ -158,3 +199,7 @@ npm run ab-canary-gate -- ../docs/research/reports/ab-<id>-hermes.md --phase dec
 npm run ab-canary-gate -- ../docs/research/reports/ab-<id>-hermes.md --phase close
 npm run hermes-gate -- ../docs/research/reports/ab-<id>-hermes.md
 ```
+
+The candidate phase is intentionally not a hand-run close command. The trusted node-side
+`deploy-ab-challenger.sh deploy ...` wrapper supplies and verifies the frozen deployment identity,
+local archive RPC, runtime declarations, and challenger worktree before B can start.

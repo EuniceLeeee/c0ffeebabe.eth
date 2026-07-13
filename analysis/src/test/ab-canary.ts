@@ -9,6 +9,7 @@ import {
   parseAbExperiment,
   parseBlockScanLog,
   validateAbExperiment,
+  validateAbProductionCandidate,
   type AbCompareResult,
   type AbExperiment,
 } from "../ab-canary.js";
@@ -343,6 +344,125 @@ function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
     },
   };
 }
+
+function productionCandidate(tmp: string): AbExperiment {
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.schema_version = 3;
+  value.change_class = "capability";
+  value.deterministic_gate = { result: "pass", evidence: "pinned block-scan replay advances the same sample" };
+  value.production_evidence = {
+    searcher_behavior_change: true,
+    strategy_kind: "block-scan",
+    trigger_kind: "standing-state",
+    route_scope: "dex-permissionless-protocol",
+    position_conserving: true,
+    posture: {
+      victim_dependent: false,
+      keeper: false,
+      inventory: false,
+      private_path: false,
+      credit: false,
+      sandwich: false,
+      jit_lp: false,
+    },
+    sample: {
+      tx_hash: `0x${"1".repeat(64)}`,
+      block_number: 25_519_817,
+      expected_net_profit_usd: 1.65,
+      evidence: "priced terminal deltas prove positive net profit and no preceding victim dependency",
+    },
+    classification_review: {
+      verdict: "pass",
+      reviewer: "fresh-non-author",
+      evidence: "independent trace confirms standing-state block-scan, conservation, and current route scope",
+    },
+    baseline_stage: "not_admitted",
+    challenger_stage: "path_found",
+    replay: {
+      result: "pass",
+      cwd: "listener",
+      argv: ["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
+      evidence: "the same tx/block changes not_admitted to path_found",
+    },
+  };
+  return value;
+}
+
+test("production candidate schema accepts a complete stage-advancing block-scan declaration", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  assert.deepEqual(validateAbProductionCandidate(productionCandidate(tmp)), []);
+});
+
+test("production candidate gate rejects victim-dependent backrun and keeper postures", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.production_evidence!.trigger_kind = "standing-state";
+  value.production_evidence!.posture.victim_dependent = true;
+  value.production_evidence!.posture.keeper = true;
+  const errors = validateAbProductionCandidate(value);
+  assert.ok(errors.some((error) => error.includes("victim_dependent")));
+  assert.ok(errors.some((error) => error.includes("keeper")));
+});
+
+test("production candidate gate rejects analysis-only or metric-only challengers", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.production_evidence!.searcher_behavior_change = false;
+  value.production_evidence!.challenger_stage = value.production_evidence!.baseline_stage;
+  const errors = validateAbProductionCandidate(value);
+  assert.ok(errors.some((error) => error.includes("analysis-only")));
+  assert.ok(errors.some((error) => error.includes("advance at least one production stage")));
+});
+
+test("production candidate gate binds deployment identity and requires a passing deterministic gate", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.deterministic_gate.result = "fail";
+  const errors = validateAbProductionCandidate(value, {
+    experimentId: "different-experiment",
+    branch: "ab/different-branch",
+    baseCommit: "f".repeat(40),
+    expectedRuntimeViewDelta: true,
+    inputMode: "challenger",
+    allowedConfigDelta: ["SEARCHER_BLOCKSCAN_MAX_CANDIDATES"],
+  });
+  assert.ok(errors.some((error) => error.includes("deterministic_gate.result=pass")));
+  assert.ok(errors.some((error) => error.includes("experiment_id")));
+  assert.ok(errors.some((error) => error.includes("branch")));
+  assert.ok(errors.some((error) => error.includes("base_commit")));
+  assert.ok(errors.some((error) => error.includes("expected_runtime_view_delta")));
+  assert.ok(errors.some((error) => error.includes("input_mode")));
+  assert.ok(errors.some((error) => error.includes("allowed_config_delta")));
+});
+
+test("schema v3 failed replay may close honestly as needs_escalation", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.production_evidence!.replay.result = "fail";
+  value.deterministic_gate = { result: "fail", evidence: "pinned sample did not advance" };
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "retained";
+  value.b_stopped = true;
+  const errors = validateAbExperiment(value, path.join(tmp, "report.md"), "close");
+  assert.deepEqual(errors, []);
+});
+
+test("historical schema v2 remains readable but cannot deploy as a new candidate", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const artifact = compareBlockScanLogs(log(100), log(80), {
+    metric: "total_ms", direction: "lower", aggregate: "p50", minPairedBlocks: 4,
+    warmupBlocks: 2, minImprovementPct: 10, minAbsoluteDelta: 10, maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  assert.ok(validateAbProductionCandidate(value).some((error) => error.includes("schema_version=3")));
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "decision"), []);
+});
 
 test("gate authorizes a supported win and requires cleanup at close", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-gate-"));

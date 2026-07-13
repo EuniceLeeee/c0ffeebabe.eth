@@ -133,6 +133,20 @@ const oneLegStyle = classifyWinnerStyle({
   sandwich_detected: false,
 });
 
+// Selling one priced inventory asset into another is still one-leg inventory. The old classifier
+// treated any positive priced residual as an atomic loop, even when a different priced token was spent.
+const pricedOneLegStyle = classifyWinnerStyle({
+  pricedDeltas: [
+    delta(ADDR.WETH, -1_000_000_000_000_000_000n, "WETH", 18),
+    delta(ADDR.USDC, 3_500_000_000n, "USDC", 6),
+  ],
+  unpricedDeltas: [],
+  nativeWeiPositive: false,
+  unpricedInTokensWithoutCounterTransfer: [],
+  winner_moved_price_beyond_prestate: false,
+  sandwich_detected: false,
+});
+
 const tickForcedStyle = classifyWinnerStyle({
   pricedDeltas: [],
   unpricedDeltas: [],
@@ -228,6 +242,7 @@ const checks: Array<() => void> = [
   // v2/v3 in_graph stays authoritative against runtime-graph
   () => assert.equal(graphMembership.members.has(lower(V3_ADDR_IN_GRAPH)), true),
   () => assert.equal(oneLegStyle, "one_leg_inventory"),
+  () => assert.equal(pricedOneLegStyle, "one_leg_inventory"),
   () => assert.equal(tickForcedStyle, "one_leg_inventory"),
   () => assert.equal(oneLegVerdict.winner_style, "one_leg_inventory"),
   () => assert.equal(oneLegVerdict.route_gap_decisive, false),

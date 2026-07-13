@@ -315,7 +315,7 @@ export function compareBlockScanLogs(
 }
 
 export type AbExperiment = {
-  schema_version: 1 | 2;
+  schema_version: 1 | 2 | 3;
   experiment_id: string;
   problem_id: string;
   branch: string;
@@ -357,6 +357,37 @@ export type AbExperiment = {
     b_blockscan_graph_hash_after?: string;
   };
   deterministic_gate: { result: "pass" | "fail" | "not_applicable"; evidence: string };
+  production_evidence?: {
+    searcher_behavior_change: boolean;
+    strategy_kind: "block-scan";
+    trigger_kind: "standing-state";
+    route_scope: "dex-dex" | "dex-permissionless-protocol";
+    position_conserving: boolean;
+    posture: {
+      victim_dependent: boolean;
+      keeper: boolean;
+      inventory: boolean;
+      private_path: boolean;
+      credit: boolean;
+      sandwich: boolean;
+      jit_lp: boolean;
+    };
+    sample: {
+      tx_hash: string;
+      block_number: number;
+      expected_net_profit_usd: number;
+      evidence: string;
+    };
+    classification_review: { verdict: "pass" | "fail"; reviewer: string; evidence: string };
+    baseline_stage: "not_admitted" | "path_found" | "final_sim_success";
+    challenger_stage: "not_admitted" | "path_found" | "final_sim_success";
+    replay: {
+      result: "pass" | "fail";
+      cwd: "listener" | "analysis";
+      argv: string[];
+      evidence: string;
+    };
+  };
   analysis: {
     agent_manual_author: string;
     agent_manual_verdict: AbVerdict;
@@ -382,6 +413,141 @@ export type AbExperiment = {
     evidence: string;
   };
 };
+
+const PRODUCTION_STAGE_ORDER = new Map([
+  ["not_admitted", 0],
+  ["path_found", 1],
+  ["final_sim_success", 2],
+]);
+
+/** Pre-deploy veto for the current production phase. Historical schema-v2 reports remain readable, but
+ * every new B deployment must use schema v3 and bind its behavior change to one real, profitable,
+ * victim-independent block-scan sample in the current DEX / permissionless-protocol scope. */
+export interface AbProductionCandidateContext {
+  experimentId?: string;
+  branch?: string;
+  baseCommit?: string;
+  expectedRuntimeViewDelta?: boolean;
+  inputMode?: "shared" | "challenger";
+  allowedConfigDelta?: string[];
+}
+
+export function validateAbProductionCandidate(
+  experiment: AbExperiment,
+  context: AbProductionCandidateContext = {},
+): string[] {
+  const errors: string[] = [];
+  if (!experiment || typeof experiment !== "object") return ["ab_experiment must be a JSON object"];
+  if (experiment.schema_version !== 3) {
+    errors.push("candidate deployment requires schema_version=3 production evidence");
+    return errors;
+  }
+  if (context.experimentId !== undefined && experiment.experiment_id !== context.experimentId) {
+    errors.push("candidate report experiment_id does not match the deployment request");
+  }
+  if (context.branch !== undefined && experiment.branch !== context.branch) {
+    errors.push("candidate report branch does not match the deployment request");
+  }
+  if (context.baseCommit !== undefined && experiment.base_commit !== context.baseCommit) {
+    errors.push("candidate report base_commit does not match the deployed champion");
+  }
+  if (context.expectedRuntimeViewDelta !== undefined
+      && experiment.expected_runtime_view_delta !== context.expectedRuntimeViewDelta) {
+    errors.push("candidate report expected_runtime_view_delta does not match the deployment request");
+  }
+  if (context.inputMode !== undefined && experiment.input_mode !== context.inputMode) {
+    errors.push("candidate report input_mode does not match the deployment request");
+  }
+  if (context.allowedConfigDelta !== undefined) {
+    const declared = [...(experiment.allowed_config_delta ?? [])].sort();
+    const requested = [...context.allowedConfigDelta].sort();
+    if (JSON.stringify(declared) !== JSON.stringify(requested)) {
+      errors.push("candidate report allowed_config_delta does not match the deployment request");
+    }
+  }
+  if (experiment.deterministic_gate?.result !== "pass") {
+    errors.push("candidate deployment requires deterministic_gate.result=pass");
+  }
+
+  const evidence = experiment.production_evidence;
+  if (!evidence || typeof evidence !== "object") {
+    errors.push("production_evidence is required before deploying B");
+    return errors;
+  }
+  if (evidence.searcher_behavior_change !== true) {
+    errors.push("production_evidence.searcher_behavior_change must be true; tooling/docs/analysis-only work cannot deploy as B");
+  }
+  if (evidence.strategy_kind !== "block-scan") {
+    errors.push("current production candidate strategy_kind must be block-scan");
+  }
+  if (evidence.trigger_kind !== "standing-state") {
+    errors.push("current production candidate must be standing-state, not victim-triggered backrun");
+  }
+  if (evidence.route_scope !== "dex-dex" && evidence.route_scope !== "dex-permissionless-protocol") {
+    errors.push("production_evidence.route_scope must be dex-dex|dex-permissionless-protocol");
+  }
+  if (evidence.position_conserving !== true) {
+    errors.push("production candidate must be position-conserving inside the transaction");
+  }
+
+  const posture = evidence.posture;
+  for (const key of ["victim_dependent", "keeper", "inventory", "private_path", "credit", "sandwich", "jit_lp"] as const) {
+    if (!posture || posture[key] !== false) {
+      errors.push(`production_evidence.posture.${key} must be false`);
+    }
+  }
+
+  const sample = evidence.sample;
+  if (!sample || typeof sample !== "object") {
+    errors.push("production_evidence.sample is required");
+  } else {
+    if (!/^0x[a-f0-9]{64}$/i.test(sample.tx_hash ?? "")) {
+      errors.push("production_evidence.sample.tx_hash must be a full on-chain transaction hash");
+    }
+    if (!Number.isSafeInteger(sample.block_number) || sample.block_number <= 0) {
+      errors.push("production_evidence.sample.block_number must be a positive safe integer");
+    }
+    if (!Number.isFinite(sample.expected_net_profit_usd) || sample.expected_net_profit_usd <= 0) {
+      errors.push("production_evidence.sample.expected_net_profit_usd must be > 0");
+    }
+    if (!nonEmpty(sample.evidence)) {
+      errors.push("production_evidence.sample.evidence missing/placeholder");
+    }
+  }
+
+  const before = PRODUCTION_STAGE_ORDER.get(evidence.baseline_stage);
+  const after = PRODUCTION_STAGE_ORDER.get(evidence.challenger_stage);
+  if (before === undefined) errors.push("production_evidence.baseline_stage invalid");
+  if (after === undefined) errors.push("production_evidence.challenger_stage invalid");
+  if (before !== undefined && after !== undefined && after <= before) {
+    errors.push("the same +EV sample must advance at least one production stage before B deployment");
+  }
+  if (!evidence.replay || evidence.replay.result !== "pass") {
+    errors.push("production_evidence.replay.result must be pass");
+  } else {
+    if (evidence.replay.cwd !== "listener"
+        || JSON.stringify(evidence.replay.argv)
+          !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"])) {
+      errors.push("production_evidence.replay must use the trusted direct-node blockscan-hunt harness");
+    }
+    if (!nonEmpty(evidence.replay.evidence)) errors.push("production_evidence.replay.evidence missing/placeholder");
+  }
+  if (!evidence.classification_review || evidence.classification_review.verdict !== "pass") {
+    errors.push("production_evidence.classification_review.verdict must be pass from a fresh non-author reviewer");
+  } else {
+    if (!nonEmpty(evidence.classification_review.reviewer)) {
+      errors.push("production_evidence.classification_review.reviewer missing/placeholder");
+    }
+    if (!nonEmpty(evidence.classification_review.evidence)) {
+      errors.push("production_evidence.classification_review.evidence missing/placeholder");
+    }
+    if (String(evidence.classification_review.reviewer).trim().toLowerCase()
+        === String(experiment.analysis?.agent_manual_author ?? "").trim().toLowerCase()) {
+      errors.push("production classification reviewer must differ from agent_manual_author");
+    }
+  }
+  return errors;
+}
 
 export function parseAbExperiment(md: string): AbExperiment {
   const match = md.match(/```ab_experiment\s*\n([\s\S]*?)\n```/);
@@ -440,11 +606,11 @@ export function validateAbExperiment(
     ["evidence_bundle", experiment.evidence_bundle],
   ];
   for (const [name, value] of requiredText) if (!nonEmpty(value)) errors.push(`${name} missing/placeholder`);
-  if (experiment.schema_version !== 1 && experiment.schema_version !== 2) {
-    errors.push("schema_version must be 1|2");
+  if (experiment.schema_version !== 1 && experiment.schema_version !== 2 && experiment.schema_version !== 3) {
+    errors.push("schema_version must be 1|2|3");
   }
   if (experiment.schema_version === 1 && experiment.final_verdict !== "needs_escalation") {
-    errors.push("schema_version=2 is required for every decisive A/B verdict");
+    errors.push("schema_version>=2 is required for every decisive A/B verdict");
   }
   if (!(<string[]>["performance", "correctness", "capability"]).includes(experiment.change_class)) {
     errors.push("change_class must be performance|correctness|capability");
@@ -525,9 +691,9 @@ export function validateAbExperiment(
   }
   const fairness = experiment.fairness;
   const runtimeFairnessErrors: string[] = [];
-  if (experiment.schema_version === 2) {
+  if (experiment.schema_version >= 2) {
     if (typeof experiment.expected_runtime_view_delta !== "boolean") {
-      runtimeFairnessErrors.push("expected_runtime_view_delta must be predeclared for schema_version=2");
+      runtimeFairnessErrors.push("expected_runtime_view_delta must be predeclared for schema_version>=2");
     }
     for (const [name, value] of [
       ["a.discovery_to_block", experiment.a?.discovery_to_block],
@@ -601,9 +767,12 @@ export function validateAbExperiment(
       errors.push("mergeability.evidence missing/placeholder");
     }
   }
-  if (experiment.schema_version === 2 && experiment.final_verdict === "win"
+  if (experiment.schema_version >= 2 && experiment.final_verdict === "win"
       && experiment.mergeability === undefined) {
-    errors.push("schema_version=2 final win requires mergeability evidence for current origin/main vs tested base");
+    errors.push("schema_version>=2 final win requires mergeability evidence for current origin/main vs tested base");
+  }
+  if (experiment.schema_version === 3 && experiment.final_verdict === "win") {
+    errors.push(...validateAbProductionCandidate(experiment));
   }
   const resolvedArchive = phase === "close" && experiment.branch_action === "resolved_deleted";
   if (experiment.final_verdict === "win" && resolved !== "win") errors.push("final win is not supported by reconciled/adjudicated evidence");

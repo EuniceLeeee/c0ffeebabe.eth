@@ -35,6 +35,11 @@ companion doc, not here.
 3. **Loop:** competitor cross-reference → classify the gap → close it → replay/live verify. **No work item
    counts unless it moves a real gap toward closed, or moves us toward a live +EV bundle.** Don't drift.
 
+**Current production phase:** B challengers target victim-independent `block-scan` atomic arbitrage only:
+position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed loops. An atomic transaction shape is
+not enough: victim-dependent backruns, keeper/reward flows, inventory, private paths, credit, sandwich, and
+JIT-LP are outside the current production target and cannot justify an `ab/*` deployment.
+
 Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
 
 ## 4. Hard safety rules (never autonomous)

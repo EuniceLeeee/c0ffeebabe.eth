@@ -1,23 +1,178 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
-import { parseAbExperiment, validateAbExperiment } from "../ab-canary.js";
+import { parseAbExperiment, validateAbExperiment, validateAbProductionCandidate } from "../ab-canary.js";
+import {
+  verifyOnchainProductionSample,
+  type ProductionSampleObservation,
+} from "../ab-production-evidence.js";
 
 const args = process.argv.slice(2);
-const report = args.find((arg) => !arg.startsWith("--"));
+const report = args[0];
 const phaseIndex = args.indexOf("--phase");
 const phase = phaseIndex >= 0 ? args[phaseIndex + 1] : "decision";
-if (!report || (phase !== "decision" && phase !== "close")) {
-  throw new Error("usage: ab-canary-gate <report.md> --phase decision|close");
+if (!report || (phase !== "candidate" && phase !== "decision" && phase !== "close")) {
+  throw new Error("usage: ab-canary-gate <report.md> --phase candidate|decision|close [candidate identity args]");
 }
 const md = fs.readFileSync(report, "utf8");
 const experiment = parseAbExperiment(md);
-const errors = validateAbExperiment(experiment, report, phase);
+const candidateContext = phase === "candidate" ? {
+  experimentId: requiredArg("--expected-experiment"),
+  branch: requiredArg("--expected-branch"),
+  baseCommit: requiredArg("--expected-base"),
+  expectedRuntimeViewDelta: requiredArg("--expected-runtime-view-delta") === "1",
+  inputMode: requiredArg("--expected-input-mode") as "shared" | "challenger",
+  allowedConfigDelta: csvArg("--expected-config-delta"),
+} : undefined;
+const errors = phase === "candidate"
+  ? validateAbProductionCandidate(experiment, candidateContext)
+  : validateAbExperiment(experiment, report, phase);
+let onchainObservation: ProductionSampleObservation | undefined;
+if (phase === "candidate" && errors.length === 0) {
+  const onchain = await verifyOnchainProductionSample(experiment, requiredArg("--rpc"));
+  errors.push(...onchain.errors);
+  onchainObservation = onchain.observation;
+  if (onchain.observation) {
+    console.log(`candidate_onchain=${JSON.stringify(onchain.observation)}`);
+  }
+}
+if (phase === "candidate" && errors.length === 0) runCandidateReplay(onchainObservation!);
 if (errors.length > 0) {
   for (const error of errors) console.error(`FAIL: ${error}`);
   process.exit(1);
+}
+
+function option(name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+function requiredArg(name: string): string {
+  const value = option(name);
+  if (value === undefined || value.length === 0 || value.startsWith("--")) {
+    throw new Error(`${name} is required for candidate phase`);
+  }
+  return value;
+}
+
+function csvArg(name: string): string[] {
+  const value = option(name);
+  if (value === undefined) throw new Error(`${name} is required for candidate phase`);
+  return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+interface HuntResult {
+  schema_version: number;
+  fork_block: number;
+  stage: string;
+  expected_pool_ids: string[];
+  matched_pool_ids: string[];
+  has_protocol_edge: boolean;
+  closed_route: boolean;
+  final_sim_success: boolean;
+  net_profit_raw: string | null;
+}
+
+function runCandidateReplay(observation: ProductionSampleObservation): void {
+  const replay = experiment.production_evidence!.replay;
+  if (JSON.stringify(replay.argv)
+      !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"])
+      || replay.cwd !== "listener") {
+    throw new Error("candidate replay must use the trusted direct-node blockscan-hunt harness");
+  }
+  const baseRoot = fs.realpathSync(requiredArg("--base-root"));
+  const challengerRoot = fs.realpathSync(requiredArg("--challenger-root"));
+  const sample = experiment.production_evidence!.sample;
+  const universe = fs.realpathSync(requiredArg("--universe"));
+  const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
+  const baseline = runHunt("baseline", baseRoot, 8568, universe, sample.block_number - 1, expectedPools);
+  const challenger = runHunt("challenger", challengerRoot, 8569, universe, sample.block_number - 1, expectedPools);
+  validateHuntResult("baseline", baseline, experiment.production_evidence!.baseline_stage, sample.block_number - 1, expectedPools);
+  validateHuntResult("challenger", challenger, experiment.production_evidence!.challenger_stage, sample.block_number - 1, expectedPools);
+  console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
+}
+
+function runHunt(
+  label: string,
+  root: string,
+  anvilPort: number,
+  universe: string,
+  forkBlock: number,
+  expectedPools: string[],
+): HuntResult {
+  const outDir = fs.mkdtempSync(path.join("/tmp", `mev-ab-${label}-`));
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.npm_config_script_shell;
+  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  const result = spawnSync(process.execPath, ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts"], {
+    cwd: path.join(root, "listener"),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 20 * 60 * 1000,
+    env: {
+      ...childEnv,
+      SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
+      SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: String(anvilPort),
+      HUNT_BLOCK: String(forkBlock),
+      HUNT_UNIVERSE_PATH: universe,
+      HUNT_MAX_POOLS: "6000",
+      HUNT_MAX_HOPS: "4",
+      HUNT_MIN_SPREAD_BPS: "0",
+      HUNT_BUDGET_MS: "120000",
+      HUNT_MAX_CANDIDATES: "8",
+      HUNT_TOP_K: "8",
+      HUNT_OUT: path.join(outDir, "hunt.json"),
+      AB_EXPECTED_POOL_IDS: expectedPools.join(","),
+      AB_EXPECTED_ROUTE_SCOPE: experiment.production_evidence!.route_scope,
+    },
+  });
+  if (result.error) throw new Error(`${label} blockscan hunt failed to start: ${result.error.message}`);
+  if (result.status !== 0) {
+    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4000);
+    throw new Error(`${label} blockscan hunt exited ${result.status ?? "signal"}: ${output}`);
+  }
+  const marker = String(result.stdout ?? "").split(/\r?\n/)
+    .filter((line) => line.startsWith("BLOCKSCAN_HUNT_RESULT="))
+    .at(-1);
+  if (!marker) throw new Error(`${label} blockscan hunt emitted no machine result`);
+  try {
+    return JSON.parse(marker.slice("BLOCKSCAN_HUNT_RESULT=".length)) as HuntResult;
+  } catch (error) {
+    throw new Error(`${label} blockscan hunt result is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function validateHuntResult(
+  label: string,
+  result: HuntResult,
+  expectedStage: string,
+  forkBlock: number,
+  expectedPools: string[],
+): void {
+  if (result.schema_version !== 1 || result.fork_block !== forkBlock) {
+    throw new Error(`${label} hunt did not execute at the untouched sample parent block`);
+  }
+  if (result.stage !== expectedStage) {
+    throw new Error(`${label} hunt stage ${result.stage} does not match declared ${expectedStage}`);
+  }
+  const reportedPools = [...(result.expected_pool_ids ?? [])].map((pool) => pool.toLowerCase()).sort();
+  if (JSON.stringify(reportedPools) !== JSON.stringify(expectedPools)) {
+    throw new Error(`${label} hunt pool identity does not match the on-chain sample`);
+  }
+  if (expectedStage !== "not_admitted" && result.closed_route !== true) {
+    throw new Error(`${label} hunt did not find the sample pools in a closed route`);
+  }
+  const expectedProtocol = experiment.production_evidence!.route_scope === "dex-permissionless-protocol";
+  if (expectedStage !== "not_admitted" && result.has_protocol_edge !== expectedProtocol) {
+    throw new Error(`${label} hunt route scope does not match the on-chain sample`);
+  }
+  if (expectedStage === "final_sim_success"
+      && (!result.final_sim_success || result.net_profit_raw === null || BigInt(result.net_profit_raw) <= 0n)) {
+    throw new Error(`${label} hunt did not produce a positive final simulation`);
+  }
 }
 
 function gitOutput(args: string[]): string {

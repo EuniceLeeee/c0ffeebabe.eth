@@ -95,3 +95,31 @@ thin `ab_experiment` journal:
 The agent's causal judgment owns `win|lose|needs_escalation`. A raw metric can contradict a valid semantic
 fix (for example, filtering a high-scoring honeypot); in that case a fresh reviewer may confirm the win.
 Hard safety/correctness/fairness failures can only veto or escalate. They cannot create a win.
+
+### Production candidate gate (schema v3, pre-deploy)
+
+Every new B deployment runs `ab-canary-gate --phase candidate` from the trusted champion checkout before
+the second live searcher starts. It requires one `production_evidence` object proving:
+
+- a real on-chain transaction whose successful receipt, block, positive net PnL, canonical
+  `winner_style=atomic_loop`, and `source_shape=atomic_state_arb` are recomputed from the local archive
+  node at deploy time (so a victim-dependent backrun cannot be relabelled as atomic);
+- a fresh non-author classification review confirming the sample is in scope;
+- current strategy scope: `block-scan`, `standing-state`, position-conserving `dex-dex` or
+  `dex-permissionless-protocol`;
+- no victim dependency, keeper/reward, inventory, private path, credit, sandwich, or JIT-LP posture;
+- `searcher_behavior_change=true`, `deterministic_gate.result=pass`, and the trusted, unchanged
+  `blockscan-hunt.ts` harness invoked directly by Node (not through challenger npm configuration). The wrapper runs it from
+  both the base and challenger worktrees on the untouched sample parent block (`sample.block_number - 1`),
+  with the same frozen universe and the sample's on-chain DEX pool IDs. Harness/test/fixture changes in B
+  are forbidden. The measured A/B hunt stages, not a challenger-authored success string, must show the same
+  sample advances at least one
+  mechanically observable production stage: `not_admitted → path_found → final_sim_success`. A later
+  quote-only or submit-only stage requires its own trusted harness to land on main before it may gate B.
+
+The trusted deploy wrapper binds the report to the requested experiment, branch, tested base, input mode,
+runtime-view declaration, and config delta. It requires a deployable listener runtime diff (tests and
+fixtures do not count and may not change) and rejects analysis, governance, dependency-script, or runner changes in the
+challenger diff. Tool corrections are same-round auxiliary work: fix,
+review, merge, and immediately rerun them before the B branch is cut. They never count as the B variable.
+Historical schema-v1/v2 reports remain readable; only schema-v3 can pass the candidate phase.

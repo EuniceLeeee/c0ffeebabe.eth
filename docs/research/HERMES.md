@@ -107,27 +107,50 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `ab/*` branch/worktree. Skip every still-retained `problem_id`; never retry the same hard problem every
    hour. With no active B lease, sync champion A to `origin/main` through guarded
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
-2. **PICK.** Select the highest-impact unclaimed blocker from open LearningCases/Findings and current
-   postmortem/competitor evidence. If the queue is empty, run the normal Hermes manual+tool analysis to
-   create one; do not invent a code change merely to keep the loop busy. One branch = one causal hypothesis.
+2. **PICK A PRODUCTION SAMPLE, NOT A METRIC.** Select the highest-impact unclaimed blocker only after one
+   real on-chain `+EV` sample in the current production scope proves where we stop. The sample MUST be a
+   victim-independent `block-scan`, position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed
+   loop. `winner_style=atomic_loop` alone is insufficient: a prior/victim transaction makes it a backrun and
+   excludes it while backrun/mempool are disabled. Keeper/reward, inventory, private-path, credit, sandwich,
+   and JIT-LP samples are also excluded. If the queue is empty, run the normal Hermes manual+tool analysis to
+   find one; do not invent a code change merely to keep the loop busy. One branch = one causal hypothesis.
+   A latency/CPU/cache optimization becomes eligible only when the SAME +EV sample demonstrably misses a
+   production stage because of that limit and the replay advances it; aggregate milliseconds alone are not
+   a blocker.
+   If manual analysis finds an analysis tool wrong or incomplete, invoke a fresh non-author reviewer. When
+   both agree, fix the tool and its regression test immediately, rerun it in this same wake, and merge that
+   auxiliary tooling commit before selecting/forking B. Tooling work does not consume the round's production
+   objective and MUST NOT appear in the challenger diff.
 3. **PREDECLARE.** Create `ab/<problem>` from the exact deployed A SHA, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from the A/B template and fill its `ab_experiment`
-   journal: exact problem/base SHA, change class, hypothesis, semantic success criterion, deterministic gate,
+   schema-v3 journal: exact problem/base SHA, change class, hypothesis, semantic success criterion,
+   `production_evidence` (real tx/block/net +EV evidence, current-scope posture, baseline→challenger funnel
+   stage, passing replay), deterministic gate,
    intended metric evidence, input mode, allowed config delta, and whether the change is expected to alter
    the runtime block-scan view/graph. `challenger_commit` is temporarily pending
    here because a commit cannot contain its own SHA. Commit/push the initial report on B.
 4. **FIX + FREEZE.** Codex writes; the non-author agent
-   reviews; deterministic correctness/capability fixes must flip the pinned replay (rule 12). Push B. Two
+   reviews; the same production sample must advance at least one stage
+   (`not_admitted→path_found→final_sim_success`) in a pinned replay
+   from the sample's untouched parent-block state (rule 12). Predeploy runs the trusted unchanged
+   `searcher:blockscan-hunt` from both A and B against the same universe and on-chain sample pool IDs; no
+   victim/oracle transmit/same-actor prefix may be applied first. An exit-zero build/test or
+   challenger-authored replay harness is not evidence. Push B. Two
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
    `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it
    is the remote branch tip and deploy that SHA. After deployment the branch may advance only through
    report/evidence commits; the final journal's `challenger_commit` is the frozen deployed code SHA, not the
    later report tip.
 5. **DEPLOY B THROUGH THE SAFETY WRAPPER ONLY.** Execute the trusted `origin/main` copy of
-   `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha> <allow-view-delta>`
-   over SSM, where the last argument is `1` only when `expected_runtime_view_delta=true` was predeclared
+   `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>
+   <candidate-report.md> <allow-view-delta>` over SSM, where the last argument is `1` only when
+   `expected_runtime_view_delta=true` was predeclared
    (otherwise `0`). It validates
-   both wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
+   the schema-v3 production candidate gate; recomputes the sample's receipt/block, PnL, winner style and
+   victim independence from local reth; executes the trusted dual-worktree parent-state hunt; binds the
+   report to the requested experiment/branch/base/input/config declarations; and requires a deployable
+   listener runtime diff with no mixed analysis/governance/dependency-script edits. It then validates both
+   wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
    universe inputs, the pinned startup-discovery cutoff, exact runtime pool-view and TokenEdge graph hashes,
    and equal CPU partitions. A runtime-view delta is rejected unless it was explicitly predeclared for a
    correctness/capability experiment. It never restarts A. Direct `systemd-run`, hand-written B env,
@@ -148,7 +171,8 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor
    cross-reference against coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (plus the standing
    watchlist) through `scripts/census-gap.sh` and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
-   `atomic_loop`** transactions: in-tx route closes to a priced token and has no standing position. Exclude
+   victim-independent `block-scan atomic_loop`** transactions: in-tx route closes to a priced token, has no
+   standing position, and does not depend on a prior/victim transaction. Exclude
    `sandwich`, `one_leg_inventory`, keeper/liquidation, JIT-LP, standing-credit, and private-inventory
    rebalances before classifying any gap; they are different postures and cannot judge this block-scan lane.
    For each comparable take, classify B's remaining production gap (`not_seen | pool | path | adapter |

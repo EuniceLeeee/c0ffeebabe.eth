@@ -65,6 +65,7 @@ const INVENTORY_PRICED_TOKENS = new Set([
   WBTC,
 ]);
 const UNPRICED_DUST_RAW = 1000n; // observed residuals were exactly -1 raw unit
+const PRICED_POSITION_DUST_RAW = 1000n;
 
 export type WinnerStyle =
   | "atomic_loop"
@@ -1899,9 +1900,12 @@ function hasOneLegInventoryFlow(
   // an atomic loop leaves no such token, and (ethDeltaEth net) a native atomic loop is net-positive
   // so nativeWeiNegative is false for it (mutually exclusive with nativeWeiPositive).
   const spentPricedOrNative =
-    pricedDeltas.some((delta) => delta.raw < 0n && INVENTORY_PRICED_TOKENS.has(lower(delta.token)))
+    pricedDeltas.some((delta) => delta.raw < -PRICED_POSITION_DUST_RAW
+      && INVENTORY_PRICED_TOKENS.has(lower(delta.token)))
     || nativeWeiNegative;
-  return spentPricedOrNative && unpricedInTokensWithoutCounterTransfer.length > 0;
+  const retainedPricedPosition = pricedDeltas.some((delta) => delta.raw > PRICED_POSITION_DUST_RAW);
+  return spentPricedOrNative
+    && (retainedPricedPosition || unpricedInTokensWithoutCounterTransfer.length > 0);
 }
 
 function hasAtomicLoopFlow(
@@ -1910,6 +1914,7 @@ function hasAtomicLoopFlow(
   nativeWeiPositive: boolean,
 ): boolean {
   return (pricedDeltas.some((delta) => delta.raw > 0n) || nativeWeiPositive)
+    && pricedDeltas.every((delta) => delta.raw >= -PRICED_POSITION_DUST_RAW)
     && unpricedDeltas.every(
       (delta) => delta.raw === 0n || (delta.raw < 0n && -delta.raw <= UNPRICED_DUST_RAW),
     );

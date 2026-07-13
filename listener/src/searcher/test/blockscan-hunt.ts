@@ -296,6 +296,7 @@ async function main(): Promise<void> {
     mkdirSync(dirname(cfg.outPath), { recursive: true });
     writeFileSync(cfg.outPath, `${JSON.stringify(report, jsonReplacer, 2)}\n`);
     await check("report written", () => readFileSync(cfg.outPath, "utf8").length > 0);
+    emitProductionReplayResult(cfg, opportunityReports, solvedReports);
 
     console.log(
       `blockscan-hunt verdict=${verdict} block=${cfg.blockNumber} ` +
@@ -305,6 +306,44 @@ async function main(): Promise<void> {
     state.stop();
     provider.destroy();
   }
+}
+
+function emitProductionReplayResult(
+  cfg: HuntConfig,
+  opportunities: OpportunityReport[],
+  solved: SolveReport[],
+): void {
+  const expectedPools = (process.env.AB_EXPECTED_POOL_IDS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  if (expectedPools.length === 0) return;
+  const expectedProtocol = process.env.AB_EXPECTED_ROUTE_SCOPE === "dex-permissionless-protocol";
+  const opportunityIndex = opportunities.findIndex((entry) => {
+    const pools = new Set(entry.pools.map((pool) => pool.toLowerCase()));
+    return expectedPools.every((pool) => pools.has(pool)) && entry.hasProtocolEdge === expectedProtocol;
+  });
+  const opportunity = opportunityIndex >= 0 ? opportunities[opportunityIndex] : null;
+  const solve = opportunityIndex >= 0 ? solved[opportunityIndex] ?? null : null;
+  let stage = "not_admitted";
+  if (opportunity) stage = "path_found";
+  if (solve?.solved !== null && solve?.solved !== undefined) {
+    stage = BigInt(solve.solved) > 0n ? "final_sim_success" : "path_found";
+  }
+  const closedRoute = Boolean(opportunity
+    && opportunity.ring.length >= 2
+    && opportunity.ring[0].toLowerCase() === opportunity.ring.at(-1)?.toLowerCase());
+  console.log(`BLOCKSCAN_HUNT_RESULT=${JSON.stringify({
+    schema_version: 1,
+    fork_block: cfg.blockNumber,
+    stage,
+    expected_pool_ids: expectedPools,
+    matched_pool_ids: opportunity?.pools.map((pool) => pool.toLowerCase()) ?? [],
+    has_protocol_edge: opportunity?.hasProtocolEdge ?? false,
+    closed_route: closedRoute,
+    final_sim_success: stage === "final_sim_success",
+    net_profit_raw: solve?.solved ?? null,
+  })}`);
 }
 
 function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
