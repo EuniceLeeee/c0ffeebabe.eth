@@ -206,6 +206,36 @@
       },
       "created_at": "2026-07-12T21:20:00.000Z",
       "updated_at": "2026-07-12T21:24:23.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260713-round3-coffee-leg-extractor",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x5f78b29827e4858f662c30964d2bc2d0a60f2a00226851e851d2025f0336d427",
+      "source_block": 25519816,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "call_trace_leg_extractor_missed_curve_liquidity_and_aid_redeem",
+      "evidence": {
+        "window": "25519558..25519857",
+        "manual": "trace shows Curve-style add_liquidity, remove_liquidity_one_coin, AID redeem and final UniV3 profit conversion",
+        "canonical_before": "bundle-postmortem and census exposed only final UniV3 and emitted scan_token_overlap_no_submit",
+        "stop_reason": "user explicitly stopped the unattended sequence after round 3 before a fresh tool-defect adjudicator or codification round"
+      },
+      "tooling_defect": {
+        "tool": "analysis competitor call-trace/leg extraction",
+        "issue": "Curve liquidity and protocol redeem calls are omitted, hiding admission and protocol-path gaps behind token-overlap/no-submit",
+        "evidence": "manual trace of 0x5f78b298... shows 0xc4ad0f4a add/remove liquidity and 0x52323f33 redeem before 0xe0554a47 UniV3; canonical output lists only UniV3",
+        "codify_target": "extend canonical call-trace leg extraction and calibration fixtures for Curve add/remove liquidity plus permissionless redeem",
+        "status": "human_killed"
+      },
+      "created_at": "2026-07-13T03:00:00.000Z",
+      "updated_at": "2026-07-13T03:00:00.000Z"
     }
   ]
 }

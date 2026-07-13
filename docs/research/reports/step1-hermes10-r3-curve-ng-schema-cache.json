@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "run_id": "hermes10-r3-curve-ng-schema-cache",
+  "window": {
+    "from": 25519558,
+    "to": 25519857
+  },
+  "watchlist": [
+    "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671"
+  ],
+  "run_analysis": {
+    "funnel": {
+      "paired_fair_blocks": 121,
+      "budget_censored_blocks": 11,
+      "catchup_censored_blocks": 74,
+      "a_quote_positive_blocks": 0,
+      "b_quote_positive_blocks": 0,
+      "a_final_sim_success": 0,
+      "b_final_sim_success": 0,
+      "a_submit": 0,
+      "b_submit": 0
+    },
+    "dominant_drop": "all selected rings remained quote-negative; neither side submitted",
+    "events_source": "rotated A and B block-scan logs plus canonical paired-log comparator; raw logs remain node-local"
+  },
+  "intake_audit": {
+    "pending_received": 0,
+    "pending_filtered": 0,
+    "mevshare_enabled": false
+  },
+  "ab_external_calibration": {
+    "competitor": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "strategy_kind": "block-scan",
+    "comparable_filter": "atomic_loop",
+    "tool_artifact": "node-local /tmp/hermes10-r3-census/census.json",
+    "classifier_calibration": {
+      "command": "cd analysis && npm run competitor-calibration",
+      "status": "pass",
+      "samples": 16
+    },
+    "comparable_txs": [
+      "0x17cf1d33962ddd36bd5c9de8990bc119dc50aa45b89b27643d7c6aaed9db5104",
+      "0x80062e1a5b24a30cdcf60a2bb5590969b08dc08588ba06f88ca2ddde13ee30cd",
+      "0xc8593cf78b30e2569cc38181344ce8f98523422dc7b1815d55e4dd19e967f481",
+      "0x5f78b29827e4858f662c30964d2bc2d0a60f2a00226851e851d2025f0336d427"
+    ],
+    "excluded_counts": {
+      "inventory": 0,
+      "sandwich": 0,
+      "keeper_or_liquidation": 0,
+      "jit_lp": 0,
+      "standing_credit": 0,
+      "unknown_or_empty": 1
+    },
+    "gap_counts": {
+      "not_seen": 1,
+      "pool": 2,
+      "path": 1,
+      "adapter": 1,
+      "quote_or_sim": 0,
+      "execution": 0,
+      "economics": 0
+    },
+    "next_problem_id": "flow-admission-backrun-disabled-plus-aid-protocol-path"
+  },
+  "findings": [
+    {
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "swept": true,
+      "txCount": 5,
+      "method": "local reth full-block sweep, manual trace before canonical reconciliation",
+      "analysis_mode": "full",
+      "txs": [
+        {
+          "hash": "0x17cf1d33962ddd36bd5c9de8990bc119dc50aa45b89b27643d7c6aaed9db5104",
+          "block": 25519738,
+          "class": "atomic",
+          "comparable": true,
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0x758a5f59b3ebe8a5cb9e6a09b5b876d2414042cd", "inGraph": true },
+            { "addr": "0xcdf9f50519eb0a9995730ddb6e7d3a8b1d8ffa07", "inGraph": true },
+            { "addr": "0x87b1d1b59725209879cc5c5adeb99d8bc9eccf12", "inGraph": true },
+            { "addr": "0x9e7809c21ba130c1a51c112928ea6474d9a9ae3c", "inGraph": true },
+            { "addr": "0xe6ff8b9a37b0fab776134636d9981aa778c4e718", "inGraph": true },
+            { "addr": "0x2f62f2b4c5fcd7570a709dec05d68ea19c82a9ec", "inGraph": true },
+            { "addr": "0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83", "inGraph": true },
+            { "addr": "0x4b62fa30fea125e43780dc425c2be5acb4ba743b", "inGraph": true },
+            { "addr": "0xf4c5e0f4590b6679b3030d29a84857f226087fef", "inGraph": true }
+          ],
+          "gap_class": "scan_token_overlap_no_submit"
+        },
+        {
+          "hash": "0x80062e1a5b24a30cdcf60a2bb5590969b08dc08588ba06f88ca2ddde13ee30cd",
+          "block": 25519805,
+          "class": "atomic",
+          "comparable": true,
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0x7f3c993e1dc1ed0e390847065399d103147336e76ddf289231864f46b1f52f86", "inGraph": true },
+            { "addr": "0x5f76ab7a791b9fd4df010bcd43467dfa5824ce70f10a9b354ee4847283caafa3", "inGraph": true },
+            { "addr": "0xf6de222adc615e298eebc39814490e90abe4aa13", "inGraph": false }
+          ],
+          "gap_class": "routing_gap_hooked_v4"
+        },
+        {
+          "hash": "0xc8593cf78b30e2569cc38181344ce8f98523422dc7b1815d55e4dd19e967f481",
+          "block": 25519808,
+          "class": "atomic",
+          "comparable": true,
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0x7f3c993e1dc1ed0e390847065399d103147336e76ddf289231864f46b1f52f86", "inGraph": true },
+            { "addr": "0x5f76ab7a791b9fd4df010bcd43467dfa5824ce70f10a9b354ee4847283caafa3", "inGraph": true },
+            { "addr": "0xf6de222adc615e298eebc39814490e90abe4aa13", "inGraph": false }
+          ],
+          "gap_class": "routing_gap_hooked_v4"
+        },
+        {
+          "hash": "0x33f5da33ddfe9b2e5c5565386e5dc8b556c8838a103ee7bb0c65f5d1accc354b",
+          "block": 25519810,
+          "class": "unknown",
+          "comparable": false,
+          "winner_style": "unknown",
+          "pools": [],
+          "gap_class": "manual_required_unknown"
+        },
+        {
+          "hash": "0x5f78b29827e4858f662c30964d2bc2d0a60f2a00226851e851d2025f0336d427",
+          "block": 25519817,
+          "class": "atomic",
+          "comparable": true,
+          "winner_style": "atomic_loop",
+          "position_conserving": true,
+          "pools": [
+            { "addr": "0xc4ad0f4a231e8071dcccbbadfcdf78935d7c41c3", "inGraph": false },
+            { "addr": "0x52323f33551188f170d8de14fe8d8423a839629d", "inGraph": false },
+            { "addr": "0xe0554a476a092703abdb3ef35c80e0d76d32939f", "inGraph": true }
+          ],
+          "gap_class": "backrun_admission_and_protocol_path_gap"
+        }
+      ]
+    }
+  ],
+  "coverage_kpi": {
+    "competitor_legs_total": 18,
+    "legs_out_of_graph": 4,
+    "out_pools": [
+      {
+        "addr": "0x52323f33551188f170d8de14fe8d8423a839629d",
+        "token0": "0x18f52b3fb465118731d9e0d276d4eb3599d57596",
+        "token1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "class": "closable",
+        "evidence": "manual trace: permissionless redeem burns AID and returns USDC"
+      },
+      {
+        "addr": "0xc4ad0f4a231e8071dcccbbadfcdf78935d7c41c3",
+        "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "token1": "0x18f52b3fb465118731d9e0d276d4eb3599d57596",
+        "class": "closable",
+        "evidence": "manual trace and on-chain coins(): add_liquidity and remove_liquidity_one_coin bridge USDC and AID"
+      },
+      {
+        "addr": "0xf6de222adc615e298eebc39814490e90abe4aa13",
+        "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "token1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "class": "closable",
+        "evidence": "on-chain token0/token1 and canonical Coffee receipt identify an out-of-graph UniV2 USDC/WETH pool"
+      }
+    ],
+    "closable": 3,
+    "single_venue_noise": 0,
+    "prev_round": {
+      "run_id": "hermes10-r2-v4-amount-domain",
+      "legs_out_of_graph": 0,
+      "closable": 0
+    }
+  }
+}
