@@ -438,6 +438,7 @@ export interface AbProductionCandidateContext {
   experimentId?: string;
   branch?: string;
   baseCommit?: string;
+  challengerCommit?: string;
   expectedRuntimeViewDelta?: boolean;
   inputMode?: "shared" | "challenger";
   allowedConfigDelta?: string[];
@@ -464,6 +465,10 @@ export function validateAbProductionCandidate(
   if (context.baseCommit !== undefined && experiment.base_commit !== context.baseCommit) {
     errors.push("candidate report base_commit does not match the deployed champion");
   }
+  if (context.challengerCommit !== undefined
+      && experiment.challenger_commit !== context.challengerCommit) {
+    errors.push("candidate report challenger_commit does not match the frozen runtime commit");
+  }
   if (context.expectedRuntimeViewDelta !== undefined
       && experiment.expected_runtime_view_delta !== context.expectedRuntimeViewDelta) {
     errors.push("candidate report expected_runtime_view_delta does not match the deployment request");
@@ -477,6 +482,9 @@ export function validateAbProductionCandidate(
     if (JSON.stringify(declared) !== JSON.stringify(requested)) {
       errors.push("candidate report allowed_config_delta does not match the deployment request");
     }
+  }
+  if ((experiment.allowed_config_delta ?? []).length !== 0) {
+    errors.push("candidate deployment forbids config deltas; B must differ by one reviewed code variable only");
   }
   if (context.laneMode !== undefined && experiment.lane_mode !== context.laneMode) {
     errors.push("candidate report lane_mode does not match the deployment request");

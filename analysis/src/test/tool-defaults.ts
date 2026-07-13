@@ -141,6 +141,14 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /infrastructure shakedown must run identical searcher code/);
   assert.match(script, /replay_top_n=.*SEARCHER_POOL_UNIVERSE_TOP_N/);
   assert.match(script, /--pool-universe-top-n "\$replay_top_n"/);
+  assert.match(script, /--expected-challenger "\$expected_b"/);
+  assert.match(script, /A\/B candidate config deltas are forbidden/);
+  assert.match(script, /B challenger may not modify the trusted state\/port backend/);
+  assert.match(script, /report branch tip does not descend from the frozen challenger commit/);
+  assert.match(script, /commits after the frozen challenger may change only its report/);
+  assert.match(script, /reset --hard "\$b_commit"/);
+  assert.match(script, /assert_no_port_owner "\$b_pid_now" challenger 8555 8556/);
+  assert.match(script, /assert_no_port_owner "\$a_pid_now" champion 8566 8567/);
 });
 
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {

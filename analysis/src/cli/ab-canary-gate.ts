@@ -22,6 +22,7 @@ const candidateContext = phase === "candidate" ? {
   experimentId: requiredArg("--expected-experiment"),
   branch: requiredArg("--expected-branch"),
   baseCommit: requiredArg("--expected-base"),
+  challengerCommit: requiredArg("--expected-challenger"),
   expectedRuntimeViewDelta: requiredArg("--expected-runtime-view-delta") === "1",
   inputMode: requiredArg("--expected-input-mode") as "shared" | "challenger",
   allowedConfigDelta: csvArg("--expected-config-delta"),
@@ -87,6 +88,10 @@ interface BackrunHuntResult extends HuntResult {
   pre_execution_net_raw: string | null;
   post_execution_success: boolean | null;
   post_execution_net_raw: string | null;
+  pre_execution_block: number | null;
+  pre_execution_index: number | null;
+  post_execution_block: number | null;
+  post_execution_index: number | null;
   pre_state_anchor_kind: "parent-block" | "previous-tx";
   pre_state_anchor_hash: string | null;
   post_state_anchor_kind: "victim-tx";
@@ -200,6 +205,7 @@ function runBackrunHunt(
           HUNT_VICTIM_TX_HASH: experiment.production_evidence!.sample.victim_tx_hash!,
           HUNT_UNIVERSE_PATH: universe,
           HUNT_MAX_POOLS: String(maxPools),
+          HUNT_TRUSTED_ROOT: trustedRoot,
           AB_EXPECTED_POOL_IDS: expectedPools.join(","),
           AB_EXPECTED_ROUTE_JSON: JSON.stringify(experiment.production_evidence!.sample.expected_route),
           AB_TRIGGER_KIND: experiment.production_evidence!.trigger_kind,
@@ -288,6 +294,13 @@ function validateBackrunHuntResult(
         || BigInt(result.post_execution_net_raw) <= 0n
         || BigInt(result.post_execution_net_raw) !== BigInt(result.net_profit_raw)) {
       throw new Error(`${label} backrun hunt did not independently execute the exact route after the victim`);
+    }
+    const victimIndex = observation.victim_transaction_index!;
+    if (result.pre_execution_block !== observation.block_number
+        || result.pre_execution_index !== victimIndex
+        || result.post_execution_block !== observation.block_number
+        || result.post_execution_index !== victimIndex + 1) {
+      throw new Error(`${label} backrun route was not mined immediately before/after the victim in its exact historical block`);
     }
     const triggerKind = experiment.production_evidence!.trigger_kind;
     if (triggerKind === "victim-swap" && result.victim_effect_kind !== "swap") {

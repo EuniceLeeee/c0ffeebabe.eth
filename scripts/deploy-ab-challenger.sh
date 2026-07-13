@@ -117,6 +117,45 @@ assert_port_free() {
   fi
 }
 
+port_listener_pids() {
+  local port=$1
+  ss -H -ltnp "sport = :$port" 2>/dev/null \
+    | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
+}
+
+pid_descends_from() {
+  local pid=$1 root=$2 ppid
+  while [[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" -gt 1 ]; do
+    [ "$pid" = "$root" ] && return 0
+    [ -r "/proc/$pid/stat" ] || return 1
+    ppid=$(awk '{print $4}' "/proc/$pid/stat")
+    [ "$ppid" != "$pid" ] || return 1
+    pid=$ppid
+  done
+  return 1
+}
+
+assert_no_port_owner() {
+  local root_pid=$1 label=$2 port listener
+  shift 2
+  for port in "$@"; do
+    [[ "$port" =~ ^[0-9]+$ ]] || continue
+    for listener in $(port_listener_pids "$port"); do
+      if pid_descends_from "$listener" "$root_pid"; then
+        die "$label process tree unexpectedly owns protected port $port (pid=$listener)"
+      fi
+    done
+  done
+}
+
+assert_owned_if_listening() {
+  local root_pid=$1 label=$2 port=$3 listener
+  for listener in $(port_listener_pids "$port"); do
+    pid_descends_from "$listener" "$root_pid" \
+      || die "$label port $port is owned outside its unit tree (pid=$listener)"
+  done
+}
+
 unit_log_path() {
   local unit=$1 fallback=$2 path
   path=$(systemctl show "$unit" -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
@@ -421,7 +460,7 @@ resolve_a_universe() {
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
-  local requested_lane_mode requested_shakedown
+  local requested_lane_mode requested_shakedown branch_tip candidate_report
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
@@ -433,6 +472,8 @@ deploy() {
   [ "$requested_input_mode" = "shared" ] || [ "$requested_input_mode" = "challenger" ] \
     || die "AB_INPUT_MODE must be shared|challenger"
   requested_config_delta=$(env_get AB_ALLOWED_CONFIG_DELTA)
+  [ -z "$requested_config_delta" ] \
+    || die "A/B candidate config deltas are forbidden; change one reviewed code variable instead"
   requested_lane_mode=$(lane_mode)
   requested_shakedown=$(env_get AB_SHAKEDOWN); requested_shakedown=${requested_shakedown:-0}
   [ "$requested_shakedown" = "0" ] || [ "$requested_shakedown" = "1" ] \
@@ -460,10 +501,25 @@ deploy() {
   [ "$a_commit" = "$expected_a" ] || die "champion commit drift: expected $expected_a got $a_commit"
   git -C "$MAIN_REPO" fetch origin "$branch" -q
   git -C "$MAIN_REPO" rev-parse --verify "origin/$branch^{commit}" >/dev/null || die "remote challenger branch missing"
-  b_commit=$(git -C "$MAIN_REPO" rev-parse "origin/$branch^{commit}")
-  [ "$b_commit" = "$expected_b" ] || die "challenger branch drift: expected $expected_b got $b_commit"
+  branch_tip=$(git -C "$MAIN_REPO" rev-parse "origin/$branch^{commit}")
+  git -C "$MAIN_REPO" cat-file -e "$expected_b^{commit}" 2>/dev/null \
+    || die "frozen challenger commit is unavailable"
+  b_commit=$expected_b
   [ "$(git -C "$MAIN_REPO" merge-base "$a_commit" "$b_commit")" = "$a_commit" ] \
     || die "challenger is not based on the deployed champion commit"
+  [ "$(git -C "$MAIN_REPO" merge-base "$b_commit" "$branch_tip")" = "$b_commit" ] \
+    || die "report branch tip does not descend from the frozen challenger commit"
+  git -C "$MAIN_REPO" cat-file -e "origin/$branch:$report_path" 2>/dev/null \
+    || die "candidate report is not committed on the challenger branch"
+  local artifact_file
+  while IFS= read -r artifact_file; do
+    [ -z "$artifact_file" ] || [ "$artifact_file" = "$report_path" ] \
+      || die "commits after the frozen challenger may change only its report: $artifact_file"
+  done < <(git -C "$MAIN_REPO" diff --name-only "$b_commit..$branch_tip")
+  mkdir -p "$ROOT/reports"
+  candidate_report="$ROOT/reports/$experiment-candidate.md"
+  git -C "$MAIN_REPO" show "origin/$branch:$report_path" > "$candidate_report"
+  chmod 600 "$candidate_report"
   stop_b
   sleep 1
   assert_port_free 8566
@@ -472,21 +528,22 @@ deploy() {
     if [ -n "$(git -C "$WT" status --porcelain)" ]; then
       tar czf "$ROOT/archive/$experiment-dirty-$(date +%s).tgz" -C "$WT" .
     fi
-    git -C "$WT" reset --hard "origin/$branch" >/dev/null
+    git -C "$WT" reset --hard "$b_commit" >/dev/null
     git -C "$WT" clean -fd >/dev/null
   elif [ -e "$WT" ]; then
     die "$WT exists but is not a git worktree"
   else
-    git -C "$MAIN_REPO" worktree add --detach "$WT" "origin/$branch" >/dev/null
+    git -C "$MAIN_REPO" worktree add --detach "$WT" "$b_commit" >/dev/null
   fi
-  [ -f "$WT/$report_path" ] || die "candidate report is not present in the frozen challenger commit"
   local changed_file production_change=0
   while IFS= read -r changed_file; do
     [ -n "$changed_file" ] || continue
     case "$changed_file" in
-      "$report_path") ;;
       */test/*|*/tests/*|*/fixtures/*|*.test.ts|*.spec.ts)
         die "B challenger modifies its own replay/test evidence instead of production only: $changed_file"
+        ;;
+      listener/src/shared/state/*)
+        die "B challenger may not modify the trusted state/port backend: $changed_file"
         ;;
       listener/src/searcher/*.ts|listener/src/shared/*.ts|listener/src/adapters/*.ts|\
       listener/src/submitter.ts|listener/src/compiler.ts|listener/src/encoder.ts|listener/src/types.ts)
@@ -525,7 +582,7 @@ deploy() {
   [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "champion SEARCHER_POOL_UNIVERSE_TOP_N is invalid"
   local shakedown_arg=()
   [ "$requested_shakedown" = "0" ] || shakedown_arg=(--shakedown)
-  (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$WT/$report_path" \
+  (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$candidate_report" \
     --phase candidate \
     --expected-experiment "$experiment" \
     --expected-branch "$branch" \
@@ -604,6 +661,13 @@ deploy() {
       die "challenger never connected its MEV-Share victim stream"
     }
   fi
+  local a_pid_now b_pid_now
+  a_pid_now=$(systemctl show -p MainPID --value "$A_UNIT")
+  b_pid_now=$(systemctl show -p MainPID --value "$UNIT")
+  assert_no_port_owner "$b_pid_now" challenger 8555 8556
+  assert_no_port_owner "$a_pid_now" champion 8566 8567
+  assert_owned_if_listening "$b_pid_now" challenger 8566
+  assert_owned_if_listening "$b_pid_now" challenger 8567
   [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
   local a_universe_hash b_universe_hash a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
   local discovery_to_block
@@ -628,8 +692,8 @@ deploy() {
   discovery_to_block=$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
-    production_report_path "$report_path" production_report_hash "$(hash_file "$WT/$report_path")" \
-    a_commit "$a_commit" b_commit "$b_commit" \
+    production_report_path "$report_path" production_report_hash "$(hash_file "$candidate_report")" \
+    a_commit "$a_commit" b_commit "$b_commit" branch_tip_commit "$branch_tip" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \

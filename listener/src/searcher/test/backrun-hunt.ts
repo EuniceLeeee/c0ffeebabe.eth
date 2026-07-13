@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
@@ -62,6 +63,10 @@ interface HuntResult {
   pre_execution_net_raw: string | null;
   post_execution_success: boolean | null;
   post_execution_net_raw: string | null;
+  pre_execution_block: number | null;
+  pre_execution_index: number | null;
+  post_execution_block: number | null;
+  post_execution_index: number | null;
   pre_state_anchor_kind: "parent-block" | "previous-tx";
   pre_state_anchor_hash: string | null;
   post_state_anchor_kind: "victim-tx";
@@ -85,6 +90,13 @@ interface VictimEffectProof {
   oracleProbeAmountIn: bigint | null;
   oracleBeforeAmountOut: bigint | null;
   oracleAfterAmountOut: bigint | null;
+}
+
+interface ExactExecutionResult {
+  success: boolean;
+  netProfit: bigint;
+  blockNumber: number | null;
+  transactionIndex: number | null;
 }
 
 const CANDIDATE_CAP = 6;
@@ -209,7 +221,13 @@ async function main(): Promise<void> {
       return;
     }
     const selectedPlan = plans[expectedIndex];
-    const effectProof = victimEffectProof(selectedPlan, route, triggerKind);
+    const effectProof = await victimEffectProof(
+      selectedPlan,
+      route,
+      triggerKind,
+      preState,
+      postState,
+    );
 
     let solved: ResolvedPlan;
     try {
@@ -225,15 +243,29 @@ async function main(): Promise<void> {
       safetyBps: 10000n,
     });
     const postGross = post.amounts.at(-1)! - solved.flashAmount;
-    const postExecution = await executeResolvedPlan(postState, solved);
     const pre = await propagateAmountsWithRawOutputs(selectedPlan.tokenPath, solved.flashAmount, preState, {
       safetyBps: 10000n,
     });
     const preGross = pre.amounts.at(-1)! - solved.flashAmount;
-    const preExecution = await executeResolvedPlan(preState, solved);
+    const postExecution = await executeResolvedPlanInHistoricalBlock(
+      postState,
+      solved,
+      sampleBlock,
+      Number(receipt.index),
+    );
+    const preExecution = await executeResolvedPlanInHistoricalBlock(
+      preState,
+      solved,
+      sampleBlock,
+      Number(receipt.index) - 1,
+    );
     const finalSuccess = postExecution.success && postExecution.netProfit > 0n
       && !preExecution.success && preExecution.netProfit <= 0n
       && preGross <= 0n && postGross > 0n
+      && preExecution.blockNumber === sampleBlock
+      && preExecution.transactionIndex === Number(receipt.index)
+      && postExecution.blockNumber === sampleBlock
+      && postExecution.transactionIndex === Number(receipt.index) + 1
       && effectProof.kind === (triggerKind === "oracle-update" ? "oracle" : "swap")
       && (triggerKind !== "oracle-update"
         || effectProof.oracleBeforeAmountOut !== effectProof.oracleAfterAmountOut);
@@ -255,6 +287,10 @@ async function main(): Promise<void> {
       pre_execution_net_raw: preExecution.netProfit.toString(),
       post_execution_success: postExecution.success,
       post_execution_net_raw: postExecution.netProfit.toString(),
+      pre_execution_block: preExecution.blockNumber,
+      pre_execution_index: preExecution.transactionIndex,
+      post_execution_block: postExecution.blockNumber,
+      post_execution_index: postExecution.transactionIndex,
     });
   } finally {
     preState.stop();
@@ -365,23 +401,16 @@ function latestTokenBackend(provider: ethers.JsonRpcProvider): TokenQueryBackend
   };
 }
 
-function victimEffectProof(
+async function victimEffectProof(
   plan: CandidatePlan,
   route: EdgeSpec[],
   triggerKind: "victim-swap" | "oracle-update",
-): VictimEffectProof {
+  preState: AnvilStateBackend,
+  postState: AnvilStateBackend,
+): Promise<VictimEffectProof> {
   const opportunity = plan.opportunity as unknown as {
     victimEffect?: {
       kind?: unknown;
-      priceChanges?: Array<{
-        adapterId?: unknown;
-        target?: unknown;
-        tokenIn?: unknown;
-        tokenOut?: unknown;
-        probeAmountIn?: unknown;
-        beforeAmountOut?: unknown;
-        afterAmountOut?: unknown;
-      }>;
     };
   };
   const effect = opportunity.victimEffect;
@@ -393,24 +422,59 @@ function victimEffectProof(
   const edgeIndex = optionalNonNegativeInt("AB_ORACLE_ROUTE_EDGE_INDEX");
   if (edgeIndex === null || edgeIndex >= route.length) return emptyProof("oracle");
   const spec = route[edgeIndex];
-  const change = (effect.priceChanges ?? []).find((candidate) =>
-    candidate.adapterId === spec.adapterId
-      && same(String(candidate.tokenIn ?? ""), spec.tokenIn)
-      && same(String(candidate.tokenOut ?? ""), spec.tokenOut)
-      && (!spec.target || same(String(candidate.target ?? ""), spec.target)),
-  );
-  if (!change) return emptyProof("oracle");
+  const edge = plan.tokenPath.edges.find((candidate) => edgeMatches(candidate, spec));
+  if (!edge) return emptyProof("oracle");
   try {
+    const trustedRoot = resolve(requiredEnv("HUNT_TRUSTED_ROOT"));
+    const trustedQuoter = await import(pathToFileURL(resolve(
+      trustedRoot,
+      "listener/src/searcher/solver/quoter.ts",
+    )).href) as typeof import("../solver/quoter.js");
+    const probeAmount = await oneToken(preState, edge.tokenIn);
+    const quoteArgs = [
+      edge.adapterId,
+      edge.target,
+      edge.tokenIn,
+      edge.tokenOut,
+      probeAmount,
+    ] as const;
+    const before = await trustedQuoter.quote(
+      ...quoteArgs,
+      preState,
+      undefined,
+      edge.v4PoolKey,
+      edge.poolToken0,
+      edge.poolToken1,
+    );
+    const after = await trustedQuoter.quote(
+      ...quoteArgs,
+      postState,
+      undefined,
+      edge.v4PoolKey,
+      edge.poolToken0,
+      edge.poolToken1,
+    );
     return {
       kind: "oracle",
       oracleRouteEdgeIndex: edgeIndex,
-      oracleProbeAmountIn: BigInt(change.probeAmountIn as bigint),
-      oracleBeforeAmountOut: BigInt(change.beforeAmountOut as bigint),
-      oracleAfterAmountOut: BigInt(change.afterAmountOut as bigint),
+      oracleProbeAmountIn: probeAmount,
+      oracleBeforeAmountOut: before,
+      oracleAfterAmountOut: after,
     };
   } catch {
     return emptyProof("oracle");
   }
+}
+
+async function oneToken(state: AnvilStateBackend, token: string): Promise<bigint> {
+  if (same(token, ethers.ZeroAddress)) return 10n ** 18n;
+  const iface = new ethers.Interface(["function decimals() view returns (uint8)"]);
+  const data = await state.call({ to: token, data: iface.encodeFunctionData("decimals") });
+  const decimals = Number(iface.decodeFunctionResult("decimals", data)[0]);
+  if (!Number.isSafeInteger(decimals) || decimals < 0 || decimals > 36) {
+    throw new Error(`invalid token decimals ${decimals}`);
+  }
+  return 10n ** BigInt(decimals);
 }
 
 function emptyProof(kind: "swap" | "oracle" | null): VictimEffectProof {
@@ -477,14 +541,17 @@ async function solveCandidate(state: AnvilStateBackend, plan: CandidatePlan): Pr
   );
 }
 
-async function executeResolvedPlan(
+async function executeResolvedPlanInHistoricalBlock(
   state: AnvilStateBackend,
   plan: ResolvedPlan,
-): Promise<{ success: boolean; netProfit: bigint }> {
-  const snapshot = await state.snapshot();
+  blockNumber: number,
+  prefixThroughIndex: number,
+): Promise<ExactExecutionResult> {
   const erc20 = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
   const balanceData = erc20.encodeFunctionData("balanceOf", [DEFAULT_SEARCHER_EXECUTOR]);
   try {
+    const prefixHashes = await state.queueHistoricalBlockPrefix(blockNumber, prefixThroughIndex);
+    await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
     const pre = BigInt(await state.provider.call({ to: plan.profitToken, data: balanceData }));
     const script = compilePlan(plan.root, DEFAULT_SEARCHER_EXECUTOR);
     const calldata = buildExecuteCalldata(script);
@@ -499,16 +566,21 @@ async function executeResolvedPlan(
       data: calldata,
       gas: "0x1000000",
     }]);
-    await state.provider.send("evm_mine", []);
+    await state.mineQueuedHistoricalBlock([...prefixHashes, txHash], "backrun-counterfactual-block");
     const receipt = await state.provider.getTransactionReceipt(txHash);
-    if (!receipt || receipt.status !== 1) return { success: false, netProfit: 0n };
+    if (!receipt || receipt.status !== 1) {
+      return { success: false, netProfit: 0n, blockNumber: null, transactionIndex: null };
+    }
     const post = BigInt(await state.provider.call({ to: plan.profitToken, data: balanceData }));
     const netProfit = post - pre;
-    return { success: netProfit > 0n, netProfit };
+    return {
+      success: netProfit > 0n,
+      netProfit,
+      blockNumber: receipt.blockNumber,
+      transactionIndex: Number(receipt.index),
+    };
   } catch {
-    return { success: false, netProfit: 0n };
-  } finally {
-    await state.revert(snapshot);
+    return { success: false, netProfit: 0n, blockNumber: null, transactionIndex: null };
   }
 }
 
@@ -537,6 +609,10 @@ function pathResult(
     pre_execution_net_raw: null,
     post_execution_success: null,
     post_execution_net_raw: null,
+    pre_execution_block: null,
+    pre_execution_index: null,
+    post_execution_block: null,
+    post_execution_index: null,
     pre_state_anchor_kind: anchors.preKind,
     pre_state_anchor_hash: anchors.preHash,
     post_state_anchor_kind: "victim-tx",

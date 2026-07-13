@@ -128,7 +128,7 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    schema-v3 journal: exact problem/base SHA, change class, hypothesis, semantic success criterion,
    `production_evidence` (real tx/block/net +EV evidence, current-scope posture, baseline→challenger funnel
    stage, passing replay), deterministic gate,
-   intended metric evidence, input mode, allowed config delta, and whether the change is expected to alter
+   intended metric evidence, input mode, `allowed_config_delta=[]`, and whether the change is expected to alter
    the runtime block-scan view/graph. `challenger_commit` is temporarily pending
    here because a commit cannot contain its own SHA. Commit/push the initial report on B.
    A one-off identical-code infrastructure shakedown is not a production round: declare
@@ -139,16 +139,18 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 4. **FIX + FREEZE.** Codex writes; the non-author agent
    reviews; the same production sample must advance at least one stage
    (`not_admitted→path_found→final_sim_success`) in a pinned replay (rule 12). Block-scan replays start from
-   the untouched sample parent-block state. Backrun replays reconstruct any earlier same-block prefix, then
-   compare the same route immediately before and after the declared real victim. Predeploy runs the trusted
+   the untouched sample parent-block state. Backrun replays reconstruct the real FIFO prefix and mine the
+   candidate immediately before/after the victim in that same historical block; historical senders are not
+   funded or otherwise rewritten. Oracle causality is an independent trusted pre/post quote on the declared
+   route edge, never a challenger detector's self-reported delta. Predeploy runs the trusted
    unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the same universe,
    champion `SEARCHER_POOL_UNIVERSE_TOP_N`, and on-chain identities. An exit-zero build/test or
    challenger-authored replay harness is not evidence. Push B. Two
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
-   `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it
-   is the remote branch tip and deploy that SHA. After deployment the branch may advance only through
-   report/evidence commits; the final journal's `challenger_commit` is the frozen deployed code SHA, not the
-   later report tip.
+   `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA, fill that
+   SHA into the report, and commit the report as a report-only descendant. The wrapper extracts the report
+   from the branch tip but checks out and deploys the frozen code SHA; the final journal's
+   `challenger_commit` remains that code SHA, not the later report tip.
 5. **DEPLOY B THROUGH THE SAFETY WRAPPER ONLY.** Execute the trusted `origin/main` copy of
    `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>
    <candidate-report.md> <allow-view-delta>` over SSM, where the last argument is `1` only when
@@ -156,9 +158,10 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    (otherwise `0`). It validates
    the schema-v3 production candidate gate; recomputes the sample's receipt/block, PnL, winner style and
    victim independence from local reth; executes the trusted dual-worktree parent-state hunt; binds the
-   report to the requested experiment/branch/base/input/config declarations; and requires a deployable
+   report to the requested experiment/branch/base/input declarations and exact frozen challenger SHA; and requires a deployable
    listener runtime diff with no mixed analysis/governance/dependency-script edits. It then validates both
-   wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config, declared deltas,
+   wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config with no candidate
+   config deltas, protected state/port code, runtime socket ownership,
    universe inputs, the pinned startup-discovery cutoff, exact runtime pool-view and TokenEdge graph hashes,
    and equal CPU partitions. A runtime-view delta is rejected unless it was explicitly predeclared for a
    correctness/capability experiment. It never restarts A. Direct `systemd-run`, hand-written B env,

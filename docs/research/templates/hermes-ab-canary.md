@@ -21,7 +21,8 @@
 - **diff scope:**
 - **build:**
 - **replay/fork result:**
-- **base SHA / challenger SHA:** challenger = frozen deployed code commit, not a later report-only tip
+- **base SHA / challenger SHA:** challenger = frozen deployed code commit; commit this filled report as the
+  only allowed descendant, while the wrapper checks out the frozen code SHA
 
 ## Paired Live Evidence
 - **window / warmup excluded:**

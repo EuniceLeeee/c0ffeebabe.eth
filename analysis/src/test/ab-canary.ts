@@ -531,6 +531,7 @@ test("production candidate gate binds deployment identity and requires a passing
     experimentId: "different-experiment",
     branch: "ab/different-branch",
     baseCommit: "f".repeat(40),
+    challengerCommit: "e".repeat(40),
     expectedRuntimeViewDelta: true,
     inputMode: "challenger",
     allowedConfigDelta: ["SEARCHER_BLOCKSCAN_MAX_CANDIDATES"],
@@ -539,9 +540,18 @@ test("production candidate gate binds deployment identity and requires a passing
   assert.ok(errors.some((error) => error.includes("experiment_id")));
   assert.ok(errors.some((error) => error.includes("branch")));
   assert.ok(errors.some((error) => error.includes("base_commit")));
+  assert.ok(errors.some((error) => error.includes("challenger_commit")));
   assert.ok(errors.some((error) => error.includes("expected_runtime_view_delta")));
   assert.ok(errors.some((error) => error.includes("input_mode")));
   assert.ok(errors.some((error) => error.includes("allowed_config_delta")));
+});
+
+test("production candidates cannot hide a safety-sensitive config change", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.allowed_config_delta = ["SEARCHER_MIN_NET_ETH"];
+  assert.ok(validateAbProductionCandidate(value)
+    .some((error) => error.includes("forbids config deltas")));
 });
 
 test("schema v3 failed replay may close honestly as needs_escalation", () => {

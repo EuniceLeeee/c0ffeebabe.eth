@@ -233,37 +233,12 @@ export class AnvilStateBackend implements StateBackend {
     params: VictimStateParams,
   ): Promise<VictimStateResult> {
     const txIndex = params.transactionIndex;
-    // Prefix replay is a historical exactness path. Use a fresh Anvil process
-    // so reset-mode state/mempool/mining settings cannot leak across fixtures.
-    await this.restartForkAt(params.blockNumber - 1);
-
-    const archive = new ethers.JsonRpcProvider(this.rpcUrl);
-    const block = await withTimeout(
-      archive.send("eth_getBlockByNumber", ["0x" + params.blockNumber.toString(16), true]),
-      60_000,
-      `eth_getBlockByNumber ${params.blockNumber}`,
-    );
-    const txs = Array.isArray(block?.transactions) ? block.transactions : [];
-    if (txs.length <= txIndex) {
-      throw new Error(`block ${params.blockNumber} missing tx index ${txIndex}`);
-    }
-
-    await setNextBlockContext(this.provider, block);
-
-    const rawTxs: string[] = [];
-    for (let i = 0; i <= txIndex; i++) {
-      const expectedHash = txHashAt(txs, i);
-      const raw = i === txIndex ? params.rawTx : await rawTxByHash(archive, expectedHash);
-      rawTxs.push(await sendRawTxNoMine(this.provider, raw, expectedHash));
-    }
-
-    await mineOne(this.provider, "victim-prefix-block", 180_000);
-    for (let i = 0; i < rawTxs.length; i++) {
-      const receipt = await getReceipt(this.provider, rawTxs[i], `prefix receipt ${i}`);
-      if (!receipt || receipt.status !== 1) {
-        throw new Error(`prefix/victim tx failed at index ${i}: ${rawTxs[i]}`);
-      }
-    }
+    const rawTxs = await this.queueHistoricalBlockPrefix(params.blockNumber, txIndex, {
+      index: txIndex,
+      rawTx: params.rawTx,
+      expectedHash: params.txHash,
+    });
+    await this.mineQueuedHistoricalBlock(rawTxs, "victim-prefix-block");
 
     const appliedTxHash = rawTxs[rawTxs.length - 1];
     if (appliedTxHash.toLowerCase() !== params.txHash.toLowerCase()) {
@@ -284,6 +259,66 @@ export class AnvilStateBackend implements StateBackend {
       nonceAfter,
       replayedPrefixCount: txIndex,
     };
+  }
+
+  /**
+   * Fork the parent and queue the real historical FIFO prefix without mining it.
+   * No account balance or nonce is rewritten: a transaction that was valid in
+   * the historical block must be accepted from the historical parent state.
+   * `throughIndex=-1` prepares an empty prefix at the exact block context.
+   */
+  async queueHistoricalBlockPrefix(
+    blockNumber: number,
+    throughIndex: number,
+    override?: { index: number; rawTx: string; expectedHash: string },
+  ): Promise<string[]> {
+    if (!Number.isSafeInteger(blockNumber) || blockNumber <= 0) {
+      throw new Error(`invalid historical block ${blockNumber}`);
+    }
+    if (!Number.isSafeInteger(throughIndex) || throughIndex < -1) {
+      throw new Error(`invalid historical prefix index ${throughIndex}`);
+    }
+    await this.restartForkAt(blockNumber - 1);
+
+    const archive = new ethers.JsonRpcProvider(this.rpcUrl);
+    try {
+      const block = await withTimeout(
+        archive.send("eth_getBlockByNumber", ["0x" + blockNumber.toString(16), true]),
+        60_000,
+        `eth_getBlockByNumber ${blockNumber}`,
+      );
+      const txs = Array.isArray(block?.transactions) ? block.transactions : [];
+      if (throughIndex >= txs.length) {
+        throw new Error(`block ${blockNumber} missing tx index ${throughIndex}`);
+      }
+      await setNextBlockContext(this.provider, block);
+
+      const rawTxs: string[] = [];
+      for (let i = 0; i <= throughIndex; i++) {
+        const expectedHash = txHashAt(txs, i);
+        const raw = override?.index === i
+          ? override.rawTx
+          : await rawTxByHash(archive, expectedHash);
+        const requiredHash = override?.index === i ? override.expectedHash : expectedHash;
+        if (requiredHash.toLowerCase() !== expectedHash.toLowerCase()) {
+          throw new Error(`historical override hash mismatch at index ${i}`);
+        }
+        rawTxs.push(await sendRawTxNoMine(this.provider, raw, expectedHash));
+      }
+      return rawTxs;
+    } finally {
+      archive.destroy();
+    }
+  }
+
+  async mineQueuedHistoricalBlock(txHashes: string[], label = "historical-block"): Promise<void> {
+    await mineOne(this.provider, label, 180_000);
+    for (let i = 0; i < txHashes.length; i++) {
+      const receipt = await getReceipt(this.provider, txHashes[i], `${label} receipt ${i}`);
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(`${label} tx failed at index ${i}: ${txHashes[i]}`);
+      }
+    }
   }
 
   async applyRawTx(rawTx: string): Promise<string> {
@@ -458,7 +493,6 @@ async function sendRawTxNoMine(
   rawTx: string,
   expectedHash: string,
 ): Promise<string> {
-  await ensureSenderHasGas(provider, rawTx);
   const hash = await withTimeout(
     provider.send("eth_sendRawTransaction", [rawTx]),
     45_000,
@@ -468,15 +502,6 @@ async function sendRawTxNoMine(
     throw new Error(`raw tx hash mismatch: sent=${hash} expected=${expectedHash}`);
   }
   return hash;
-}
-
-async function ensureSenderHasGas(
-  provider: ethers.JsonRpcProvider,
-  rawTx: string,
-): Promise<void> {
-  const tx = ethers.Transaction.from(rawTx);
-  if (!tx.from) return;
-  await ensureAccountGasFloor(provider, tx.from);
 }
 
 async function prepareUnlockedSender(
