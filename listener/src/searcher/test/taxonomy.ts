@@ -37,6 +37,10 @@ const unusedBackend: TokenQueryBackend = {
   },
 };
 
+const trueBoolBackend: TokenQueryBackend = {
+  call: async () => `0x${"0".repeat(63)}1`,
+};
+
 function testSlotKindMapping(): void {
   assert(edgeKindFromSlotKind("lend") === "credit", "lend maps to credit");
   assert(edgeKindFromSlotKind("flash") === "flash", "flash maps to flash");
@@ -124,6 +128,31 @@ async function testTokenGraphEdges(): Promise<void> {
   assert(redeemEdge.protocolAction === "redeem", `erc4626 redeem action ${redeemEdge.protocolAction}`);
   assertTaxonomy(depositEdge, "protocol", false, "erc4626 deposit protocol/wrap edge");
   assertTaxonomy(redeemEdge, "protocol", false, "erc4626 redeem protocol/redeem edge");
+
+  const hgUsdcEntry = POOL_REGISTRY.find((entry) => entry.adapter === "metronome-hgusdc");
+  assert(hgUsdcEntry !== undefined, "Metronome hgUSDC router entry missing");
+  const hgUsdcEdges = await buildTokenGraph(unusedBackend, [hgUsdcEntry]);
+  const hgUsdcExit = hgUsdcEdges.find((edge) => edge.adapterId === "metronome-hgusdc-exit");
+  assert(hgUsdcExit !== undefined, "Metronome hgUSDC exit edge missing");
+  assert(
+    hgUsdcExit.tokenIn.toLowerCase() === ADDR.MSUSD.toLowerCase() &&
+      hgUsdcExit.tokenOut.toLowerCase() === ADDR.USDC.toLowerCase(),
+    `Metronome hgUSDC exit edge ${hgUsdcExit.tokenIn}->${hgUsdcExit.tokenOut}`,
+  );
+  assertTaxonomy(hgUsdcExit, "protocol", false, "Metronome hgUSDC protocol/redeem edge");
+
+  const metronomeEntry = POOL_REGISTRY.find((entry) => entry.adapter === "metronome-synth");
+  assert(metronomeEntry !== undefined, "POOL_REGISTRY metronome synth entry missing");
+  const metronomeEdges = await buildTokenGraph(trueBoolBackend, [metronomeEntry]);
+  assert(metronomeEdges.length === 6, `metronome edge count ${metronomeEdges.length}`);
+  const msEthToMsBtc = metronomeEdges.find((edge) =>
+    edge.adapterId === "metronome-synth-swap" &&
+    edge.tokenIn.toLowerCase() === ADDR.MSETH.toLowerCase() &&
+    edge.tokenOut.toLowerCase() === ADDR.MSBTC.toLowerCase()
+  );
+  assert(msEthToMsBtc !== undefined, "metronome msETH->msBTC edge missing");
+  assert(msEthToMsBtc.protocolAction === "convert", `metronome action ${msEthToMsBtc.protocolAction}`);
+  assertTaxonomy(msEthToMsBtc, "protocol", false, "metronome synth protocol/convert edge");
   console.log("[taxonomy] token graph edge taxonomy: PASS");
 }
 

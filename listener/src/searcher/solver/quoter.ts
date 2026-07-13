@@ -292,6 +292,29 @@ export async function quoteSiloRedeem(
   return BigInt(siloRedeemIface.decodeFunctionResult("previewWithdraw", outRaw)[0]);
 }
 
+// ── Metronome Synth Pool --------------------------------------
+
+export const metronomeSynthPoolIface = new ethers.Interface([
+  "function quoteSwapOut(address syntheticTokenIn, address syntheticTokenOut, uint256 amountIn) view returns (uint256 amountOut, uint256 fee)",
+]);
+
+export async function quoteMetronomeSynthSwap(
+  state: CallBackend,
+  pool: string,
+  synthIn: string,
+  synthOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  const data = metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+    synthIn,
+    synthOut,
+    amountIn,
+  ]);
+  const result = await state.call({ to: pool, data });
+  const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
+  return BigInt(decoded[0]);
+}
+
 // ── UniV2 (constant-product) ──────────────────────────────────
 
 const univ2Iface = new ethers.Interface([
@@ -727,6 +750,39 @@ export async function quote(
       return quoteProtocolLeg(state, target, adapterId, amountIn);
     case "erc4626-redeem-silo":
       return quoteSiloRedeem(state, target, tokenOut, amountIn);
+    case "metronome-synth-swap":
+      return quoteMetronomeSynthSwap(state, target, tokenIn, tokenOut, amountIn);
+    case "metronome-hgusdc-exit": { // msUSD -> Curve frxUSD -> authorized hgUSDC redeem -> USDC
+      let frxUsdOut: bigint;
+      if (cache) {
+        try {
+          frxUsdOut = await cache.quoteCurve(
+            state,
+            ADDR.CURVE_MSUSD_FRXUSD,
+            ADDR.MSUSD,
+            ADDR.FRXUSD,
+            amountIn,
+          );
+        } catch {
+          frxUsdOut = await quoteCurve(
+            state,
+            ADDR.CURVE_MSUSD_FRXUSD,
+            ADDR.MSUSD,
+            ADDR.FRXUSD,
+            amountIn,
+          );
+        }
+      } else {
+        frxUsdOut = await quoteCurve(
+          state,
+          ADDR.CURVE_MSUSD_FRXUSD,
+          ADDR.MSUSD,
+          ADDR.FRXUSD,
+          amountIn,
+        );
+      }
+      return quoteProtocolLeg(state, ADDR.HGUSDC, "erc4626-redeem", frxUsdOut);
+    }
     case "fluid-vault":
       return quoteFluidVault();
     default:

@@ -23,6 +23,7 @@ import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from ".
 import {
   quoteFluidDex,
   encodeUniV4QuoteExactInputSingle,
+  metronomeSynthPoolIface,
   uniV4QuoterIface,
 } from "../solver/quoter.js";
 import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
@@ -390,6 +391,18 @@ export class RevmLiveBackend implements LiveStateBackend {
           });
           break;
         }
+        case "metronome-synth-swap":
+          calls.push({
+            from: ethers.ZeroAddress,
+            to: hop.target,
+            calldata: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+              hop.tokenIn,
+              hop.tokenOut,
+              amountIn,
+            ]),
+            gasLimit: 1_000_000,
+          });
+          break;
         default:
           break;
       }
@@ -434,6 +447,8 @@ export class RevmLiveBackend implements LiveStateBackend {
         };
       case "fluid-dex-swap":
         return this.quoteFluidDex(req);
+      case "metronome-synth-swap":
+        return this.quoteMetronomeSynthSwap(req);
       case "fluid-vault":
         throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
       default:
@@ -671,6 +686,20 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { amountOut, latencyMs: Date.now() - started };
   }
 
+  private async quoteMetronomeSynthSwap(req: QuoteRequest): Promise<QuoteResult> {
+    const quoted = await this.callPrepared(
+      req.target,
+      metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+        req.tokenIn,
+        req.tokenOut,
+        req.amountIn,
+      ]),
+      { gasLimit: 1_000_000 },
+    );
+    const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", quoted.output);
+    return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
+  }
+
   private resolveV4PoolKey(req: QuoteHop) {
     if (req.v4PoolKey) return req.v4PoolKey;
     const edge = this.findEdge({ ...req, amountIn: 0n });
@@ -694,6 +723,7 @@ function overlayApproveSpender(hop: { adapterId: string; target: string }): stri
   if (hop.adapterId === "univ3-swap") return UNIV3_SWAP_ROUTER;
   if (hop.adapterId.startsWith("curve-")) return ethers.getAddress(hop.target);
   if (hop.adapterId === "fluid-dex-swap") return ethers.getAddress(hop.target);
+  if (hop.adapterId === "metronome-synth-swap") return ethers.getAddress(hop.target);
   return null;
 }
 

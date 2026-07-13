@@ -8,6 +8,11 @@ export interface ProtocolLegDescriptor {
   amountArg: number;
   executorArgs: number[];
   /**
+   * Index of an address arg that carries the leg's in-token. Sourced from node.tokenIn.
+   * Used by protocol swaps whose calldata names both tokens explicitly.
+   */
+  tokenInArg?: number;
+  /**
    * Index of an address arg that carries the leg's out-token (e.g. a non-standard silo redeem
    * whose calldata names the token to pay out). Sourced from node.tokenOut. Absent for the
    * standard legs whose out-token is implicit.
@@ -17,7 +22,7 @@ export interface ProtocolLegDescriptor {
   quoteSig?: string;
 }
 
-type ArgSource = "amount" | "executor" | "tokenOut";
+type ArgSource = "amount" | "executor" | "tokenIn" | "tokenOut";
 
 function functionName(signature: string): string {
   const paren = signature.indexOf("(");
@@ -43,6 +48,9 @@ function argSources(desc: ProtocolLegDescriptor, argCount: number): ArgSource[] 
   setArg(desc.amountArg, "amount");
   for (const index of desc.executorArgs) {
     setArg(index, "executor");
+  }
+  if (desc.tokenInArg !== undefined) {
+    setArg(desc.tokenInArg, "tokenIn");
   }
   if (desc.tokenOutArg !== undefined) {
     setArg(desc.tokenOutArg, "tokenOut");
@@ -75,6 +83,7 @@ export function makeProtocolAdapter(desc: ProtocolLegDescriptor): ActionAdapter 
     encode(node, executor, _inner) {
       const args = sources.map((source) => {
         if (source === "amount") return node.amount;
+        if (source === "tokenIn") return node.tokenIn;
         if (source === "tokenOut") {
           if (!node.tokenOut) {
             throw new Error(`protocol leg ${desc.id} requires node.tokenOut for the out-token arg`);
@@ -139,5 +148,14 @@ export const PROTOCOL_LEG_DESCRIPTORS: ProtocolLegDescriptor[] = [
     amountArg: 1,
     executorArgs: [2, 3],
     needsApprove: false,
+  },
+  {
+    id: "metronome-synth-swap",
+    signature: "swap(address,address,uint256)",
+    tokenInArg: 0,
+    tokenOutArg: 1,
+    amountArg: 2,
+    executorArgs: [],
+    needsApprove: true,
   },
 ];

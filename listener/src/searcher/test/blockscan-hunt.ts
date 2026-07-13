@@ -32,7 +32,7 @@ import {
 import { DEFAULT_POOL_UNIVERSE_PATH, loadPoolUniverse } from "../pool-universe.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
-import { quoteFluidDex } from "../solver/quoter.js";
+import { metronomeSynthPoolIface, quoteFluidDex } from "../solver/quoter.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
@@ -59,7 +59,7 @@ const WAD = 10n ** 18n;
 const PSM_TO18 = 10n ** 12n;
 const Q96 = 1n << 96n;
 
-type ProtocolClass = "erc4626" | "wsteth" | "psm";
+type ProtocolClass = "erc4626" | "wsteth" | "psm" | "metronome";
 
 interface HuntConfig {
   rpcUrl: string;
@@ -229,10 +229,11 @@ async function main(): Promise<void> {
       Date.now() + cfg.budgetMs,
     );
     const protocolMids = protocolMidResult.mids;
-    await check("protocol mids cover erc4626, wsteth, and psm", () =>
+    await check("protocol mids cover erc4626, wsteth, psm, and metronome", () =>
       (protocolMidResult.classCounts.get("erc4626") ?? 0) > 0 &&
       (protocolMidResult.classCounts.get("wsteth") ?? 0) > 0 &&
-      (protocolMidResult.classCounts.get("psm") ?? 0) > 0,
+      (protocolMidResult.classCounts.get("psm") ?? 0) > 0 &&
+      (protocolMidResult.classCounts.get("metronome") ?? 0) > 0,
     );
 
     const scan = detectBlockScanOpportunities({
@@ -587,6 +588,7 @@ async function buildProtocolMids(
     `[blockscan-hunt] protocol mids total=${mids.size} ` +
       `erc4626=${classCounts.get("erc4626") ?? 0} ` +
       `wsteth=${classCounts.get("wsteth") ?? 0} psm=${classCounts.get("psm") ?? 0} ` +
+      `metronome=${classCounts.get("metronome") ?? 0} ` +
       `fluid=${fluidMids} fluidFailed=${fluidFailed} deadline=${deadlineHit ? 1 : 0}`,
   );
   return { mids, classCounts };
@@ -598,6 +600,7 @@ function isFluidDexSwap(edge: TokenEdge): boolean {
 
 function classifyProtocol(edge: TokenEdge): ProtocolClass | null {
   if (edge.adapterId === "psm") return "psm";
+  if (edge.adapterId === "metronome-synth-swap") return "metronome";
   if (edge.adapterId === "wsteth-wrap" || edge.adapterId === "wsteth-unwrap") return "wsteth";
   if (
     edge.adapterId === "erc4626-deposit" ||
@@ -644,6 +647,19 @@ async function readProtocolMid(
       tin = 0n;
     }
     return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
+  }
+  if (edge.adapterId === "metronome-synth-swap") {
+    const result = await provider.call({
+      to: edge.target,
+      data: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+        edge.tokenIn,
+        edge.tokenOut,
+        oneIn,
+      ]),
+      blockTag: blockNumber,
+    });
+    const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
+    return Number(decoded[0]) / Number(oneIn);
   }
   throw new Error(`unsupported protocol adapter ${edge.adapterId}`);
 }

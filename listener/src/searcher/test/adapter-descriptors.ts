@@ -44,7 +44,7 @@ function testCoverage(): void {
   const registeredIds = listAll().map((adapter) => adapter.id);
   const descriptorIds = Object.keys(ADAPTER_DESCRIPTORS);
 
-  assert(registeredIds.length === 32, `registered adapter count ${registeredIds.length}`);
+  assert(registeredIds.length === 34, `registered adapter count ${registeredIds.length}`);
   assert(descriptorIds.length === registeredIds.length, `descriptor count ${descriptorIds.length}`);
   for (const id of registeredIds) {
     const descriptor = descriptorFor(id);
@@ -70,7 +70,7 @@ function testEdgeKindCounts(): void {
 
   assert(counts.swap === 16, `swap count ${counts.swap}`);
   assert(counts.flash === 2, `flash count ${counts.flash}`);
-  assert(counts.protocol === 9, `protocol count ${counts.protocol}`);
+  assert(counts.protocol === 11, `protocol count ${counts.protocol}`);
   assert(counts.credit === 2, `credit count ${counts.credit}`);
   assert(counts.null === 3, `null count ${counts.null}`);
   assert(counts.lp === 0, `lp count ${counts.lp}`);
@@ -89,12 +89,17 @@ function testClassifyCall(): void {
     "psm sellGem",
   );
   assertDescriptor(
-    classifyCall("0x0000000000000000000000000000000000000003", "0x032d2276"),
+    classifyCall("0x0000000000000000000000000000000000000003", "0xdf791e50"),
+    { lineage: "metronome", edgeKind: "protocol", action: "convert" },
+    "metronome synth swap",
+  );
+  assertDescriptor(
+    classifyCall("0x0000000000000000000000000000000000000004", "0x032d2276"),
     { edgeKind: "credit" },
     "fluid-vault operate",
   );
   assertDescriptor(
-    classifyCall("0x0000000000000000000000000000000000000004", "0x095ea7b3"),
+    classifyCall("0x0000000000000000000000000000000000000005", "0x095ea7b3"),
     { edgeKind: null },
     "erc20 approve",
   );

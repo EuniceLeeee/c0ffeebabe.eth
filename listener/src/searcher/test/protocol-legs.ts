@@ -68,6 +68,12 @@ const CASES: ProtocolCase[] = [
     selector: ethers.id("redeem(address,uint256,address,address)").slice(0, 10),
     expectedArgs: (node, executor) => [node.tokenOut, node.amount, executor, executor],
   },
+  {
+    id: "metronome-synth-swap",
+    signature: "swap(address,address,uint256)",
+    selector: "0xdf791e50",
+    expectedArgs: (node) => [node.tokenIn, node.tokenOut, node.amount],
+  },
 ];
 
 function assert(cond: boolean, msg: string): asserts cond {
@@ -152,6 +158,9 @@ function testRoundTrip(): void {
     }
     if (desc.tokenOutArg !== undefined) {
       assertEqual(String(decoded[desc.tokenOutArg]).toLowerCase(), NODE.tokenOut.toLowerCase(), `${testCase.id} tokenOut arg ${desc.tokenOutArg}`);
+    }
+    if (desc.tokenInArg !== undefined) {
+      assertEqual(String(decoded[desc.tokenInArg]).toLowerCase(), NODE.tokenIn.toLowerCase(), `${testCase.id} tokenIn arg ${desc.tokenInArg}`);
     }
   }
   console.log("[protocol-legs] round-trip decode: PASS");

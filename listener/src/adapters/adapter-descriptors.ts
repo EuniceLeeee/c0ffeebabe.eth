@@ -2,7 +2,7 @@ import type { EdgeKind } from "../searcher/strategy-taxonomy.js";
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
-  | "psm" | "erc4626" | "wsteth" | "weth" | "fluid-credit" | "fluid-dex" | "erc20-infra";
+  | "psm" | "erc4626" | "wsteth" | "metronome" | "weth" | "fluid-credit" | "fluid-dex" | "erc20-infra";
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
 export type AdapterAction =
@@ -101,6 +101,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     lineage: "curve",
     edgeKind: "swap",
     action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "metronome-hgusdc-exit": {
+    adapterId: "metronome-hgusdc-exit",
+    lineage: "metronome",
+    edgeKind: "protocol",
+    action: "redeem",
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },
@@ -253,6 +261,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     lineage: "wsteth",
     edgeKind: "protocol",
     action: "unwrap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "metronome-synth-swap": {
+    adapterId: "metronome-synth-swap",
+    lineage: "metronome",
+    edgeKind: "protocol",
+    action: "convert",
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },

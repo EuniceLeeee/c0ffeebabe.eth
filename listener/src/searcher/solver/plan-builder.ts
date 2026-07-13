@@ -183,6 +183,20 @@ async function buildEdgeNode(
   }
 
   switch (edge.adapterId) {
+    case "metronome-hgusdc-exit":
+      // The router starts with Curve exchange_received; it does not pull msUSD.
+      // Pre-fund the exact Curve pool, matching the successful reference trace.
+      transferToPool(edge.tokenIn, ADDR.CURVE_MSUSD_FRXUSD, amtIn);
+      return {
+        adapterId: "metronome-hgusdc-exit",
+        target: edge.target,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amount: amtIn,
+        params: {},
+        children: [],
+      };
+
     case "fluid-vault":
       ensureApprove(edge.tokenIn, edge.target);
       return {

@@ -54,7 +54,7 @@ import {
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import { quoteFluidDex } from "./solver/quoter.js";
+import { metronomeSynthPoolIface, quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
   type CurveSnapshot,
@@ -844,7 +844,7 @@ async function main(): Promise<void> {
     `[searcher/live] pair-completion: +${pairCompletionAdded} alternate-venue pools` +
       (config.pairCompletion ? "" : " (disabled)"),
   );
-  console.log(`[searcher/live] protocolEdges=${config.enableProtocolEdges ? "enabled" : "disabled (wsteth/erc4626 off)"}`);
+  console.log(`[searcher/live] protocolEdges=${config.enableProtocolEdges ? "enabled" : "disabled (wsteth/erc4626/metronome off)"}`);
   console.log(
     `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
@@ -3917,6 +3917,7 @@ type BlockScanProtocolAdapter =
   | "erc4626-redeem-silo"
   | "wsteth-wrap"
   | "wsteth-unwrap"
+  | "metronome-synth-swap"
   | "psm";
 
 async function buildBlockScanProtocolMids(
@@ -4028,6 +4029,8 @@ function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | n
       return "wsteth-unwrap";
     case "psm":
       return "psm";
+    case "metronome-synth-swap":
+      return "metronome-synth-swap";
     default:
       return null;
   }
@@ -4121,6 +4124,19 @@ async function readBlockScanProtocolMid(
         tin = 0n;
       }
       return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
+    }
+    case "metronome-synth-swap": {
+      const result = await provider.call({
+        to: edge.target,
+        data: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+          edge.tokenIn,
+          edge.tokenOut,
+          oneIn,
+        ]),
+        blockTag: blockNumber,
+      });
+      const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
+      return Number(decoded[0]) / Number(oneIn);
     }
   }
   throw new Error(`unsupported protocol adapter ${adapterId}`);
@@ -4932,6 +4948,16 @@ class FatalMempoolSubscriptionError extends Error {
 }
 
 let wsRpcId = 1;
+
+export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean): PoolEntry[] {
+  if (enabled) return pools;
+  return pools.filter((pool) =>
+    pool.adapter !== "wsteth" &&
+    pool.adapter !== "erc4626" &&
+    pool.adapter !== "metronome-synth" &&
+    pool.adapter !== "metronome-hgusdc"
+  );
+}
 
 export function buildMempoolToAddressFilter(pools: PoolEntry[], routersPath?: string): string[] {
   const forceRouters = loadForceIncludeRouters(

@@ -30,6 +30,7 @@ import {
   wethWithdrawAdapter,
   wethWithdrawAmountAdapter,
 } from "./wrap.js";
+import { metronomeHgUsdcExitAdapter } from "./metronome-hgusdc.js";
 
 // Flash
 register(morphoFlashAdapter);
@@ -61,6 +62,7 @@ register(curveExchangeReceivedUintAdapter);
 register(curveExchangeNoReceiverAdapter);
 register(curvePlainExchangeAdapter);
 register(curveRouterExecutePathAdapter);
+register(metronomeHgUsdcExitAdapter);
 // Wrap
 register(wethDepositValueAdapter);
 register(wethWithdrawAdapter);

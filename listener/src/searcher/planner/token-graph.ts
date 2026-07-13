@@ -51,7 +51,7 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626";
+  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626" | "metronome-synth" | "metronome-hgusdc";
   /** Dynamic venue identity proven before admission; event selectors alone never set this. */
   venueId?: VenueId;
   /** Factory returned by the pool, for factory-backed venues. */
@@ -141,6 +141,10 @@ export const POOL_REGISTRY: PoolEntry[] = [
     adapter: "wsteth",
   },
   {
+    address: ADDR.METRONOME_SYNTH_POOL,
+    adapter: "metronome-synth",
+  },
+  {
     address: ADDR.SUSDS,
     adapter: "erc4626",
     fixedTokenIn: ADDR.USDS,
@@ -167,7 +171,12 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
   // Batch 2 (2026-07-06 venue-discovery + probe-verified, loop-closable assets only — exotic-asset vaults
   // deferred pending a return-path venue, per the open return-path tooling_defect):
-  { address: "0x4F95C5bA0C7c69FB2f9340E190cCeE890B3bd87c", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // hgUSDC
+  {
+    address: ADDR.METRONOME_HGUSDC_ROUTER,
+    adapter: "metronome-hgusdc",
+    fixedTokenIn: ADDR.MSUSD,
+    fixedTokenOut: ADDR.USDC,
+  }, // authorized msUSD -> frxUSD -> hgUSDC exit; direct hgUSDC redeem is not executable
   { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // pfUSDC-24
   { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },  // pfWETH-4
   { address: "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // USD3
@@ -217,6 +226,9 @@ const univ3Iface = new ethers.Interface([
 const univ2ReservesIface = new ethers.Interface([
   "function getReserves() view returns (uint112, uint112, uint32)",
 ]);
+const metronomeSynthPoolIface = new ethers.Interface([
+  "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
+]);
 const v4InitializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
@@ -233,7 +245,14 @@ const ADAPTER_MAP: Record<string, string> = {
   "psm": "psm",
   "fluid-vault": "fluid-vault",
   "fluid-dex": "fluid-dex-swap",
+  "metronome-synth": "metronome-synth-swap",
 };
+
+const METRONOME_SYNTH_TOKENS = [
+  ADDR.MSETH,
+  ADDR.MSBTC,
+  ADDR.MSUSD,
+] as const;
 
 /**
  * Build the token graph by querying each pool's tokens on-chain.
@@ -433,6 +452,39 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       );
       break;
     }
+    case "metronome-hgusdc": {
+      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
+        throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);
+      }
+      edges.push({
+        adapterId: "metronome-hgusdc-exit",
+        target: pool.address,
+        tokenIn: ethers.getAddress(pool.fixedTokenIn),
+        tokenOut: ethers.getAddress(pool.fixedTokenOut),
+        slotKind: "protocol",
+        protocolAction: "redeem",
+        ...deriveEdgeTaxonomy("protocol", "redeem"),
+      });
+      break;
+    }
+    case "metronome-synth": {
+      const synths = await queryMetronomeSynths(backend, pool.address);
+      for (let i = 0; i < synths.length; i++) {
+        for (let j = 0; j < synths.length; j++) {
+          if (i === j) continue;
+          edges.push({
+            adapterId,
+            target: pool.address,
+            tokenIn: synths[i],
+            tokenOut: synths[j],
+            slotKind: "protocol",
+            protocolAction: "convert",
+            ...deriveEdgeTaxonomy("protocol", "convert"),
+          });
+        }
+      }
+      break;
+    }
     case "psm":
     case "fluid-vault": {
       if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
@@ -502,6 +554,20 @@ async function verifyUniV2Pair(backend: TokenQueryBackend, pool: string): Promis
   if (!result || result === "0x" || result.length < 194) {
     throw new Error(`${pool} failed getReserves — not a valid UniV2 pair`);
   }
+}
+
+async function queryMetronomeSynths(backend: TokenQueryBackend, pool: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const synth of METRONOME_SYNTH_TOKENS) {
+    const data = metronomeSynthPoolIface.encodeFunctionData("doesSyntheticTokenExist", [synth]);
+    const result = await backend.call({ to: pool, data });
+    const exists = Boolean(metronomeSynthPoolIface.decodeFunctionResult("doesSyntheticTokenExist", result)[0]);
+    if (exists) out.push(ethers.getAddress(synth));
+  }
+  if (out.length < 2) {
+    throw new Error(`metronome synth pool ${pool} has fewer than two known synths`);
+  }
+  return out;
 }
 
 // ─── Sync fallback (used by AC-3 tests that don't want async init) ──
