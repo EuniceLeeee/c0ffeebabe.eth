@@ -143,8 +143,23 @@ async function main(): Promise<void> {
       return;
     }
 
-    await anchorPreState(preState, parentBlock, anchors);
-    await postState.forkAfterTx(victimTxHash);
+    await prepareExactPreState(
+      provider,
+      preState,
+      parentBlock,
+      sampleBlock,
+      Number(receipt.index),
+      anchors,
+    );
+    await postState.prepareVictimPostState({
+      txHash: victimTxHash,
+      rawTx: rawVictim,
+      from: victim.from,
+      nonce: victim.nonce,
+      transactionIndex: Number(receipt.index),
+      blockNumber: sampleBlock,
+      preferSequentialPrefix: true,
+    });
     await Promise.all([
       installForkBotVm(preState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR),
       installForkBotVm(postState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR),
@@ -317,9 +332,12 @@ async function stateAnchors(
   };
 }
 
-async function anchorPreState(
+async function prepareExactPreState(
+  provider: ethers.JsonRpcProvider,
   state: AnvilStateBackend,
   parentBlock: number,
+  sampleBlock: number,
+  victimIndex: number,
   anchors: StateAnchors,
 ): Promise<void> {
   if (anchors.preKind === "parent-block") {
@@ -327,7 +345,17 @@ async function anchorPreState(
     return;
   }
   if (!anchors.preHash) throw new Error("previous-tx anchor hash missing");
-  await state.forkAfterTx(anchors.preHash);
+  const previous = await provider.getTransaction(anchors.preHash);
+  if (!previous || !previous.from) throw new Error("previous transaction details unavailable");
+  await state.prepareVictimPostState({
+    txHash: anchors.preHash,
+    rawTx: await rawTransaction(provider, anchors.preHash, previous),
+    from: previous.from,
+    nonce: previous.nonce,
+    transactionIndex: victimIndex - 1,
+    blockNumber: sampleBlock,
+    preferSequentialPrefix: true,
+  });
 }
 
 function latestTokenBackend(provider: ethers.JsonRpcProvider): TokenQueryBackend {
