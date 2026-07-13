@@ -42,6 +42,14 @@ env_get() {
     sed -n "s/^$key=//p" "$ENVF" | tail -1
   fi
 }
+lane_mode() {
+  local mode
+  mode=$(env_get AB_LANE_MODE); mode=${mode:-blockscan-only}
+  case "$mode" in
+    blockscan-only|dual) printf '%s\n' "$mode" ;;
+    *) die "AB_LANE_MODE must be blockscan-only|dual" ;;
+  esac
+}
 file_env_get() { sed -n "s/^$2=//p" "$1" | tail -1; }
 lower() { tr '[:upper:]' '[:lower:]'; }
 valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; }
@@ -100,6 +108,13 @@ hash_file() {
 
 hash_or_unavailable() {
   if [ -f "$1" ]; then sha256sum "$1" | awk '{print $1}'; else echo unavailable; fi
+}
+
+assert_port_free() {
+  local port=$1
+  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[:.])${port}$"; then
+    die "required A/B port $port is already listening"
+  fi
 }
 
 unit_log_path() {
@@ -235,17 +250,27 @@ PY
 }
 
 preflight() {
+  [ -f "$MAIN_REPO/.deploy-live" ] || die "champion bounded-live marker is missing"
   [ -f "$ENVF" ] || die "missing $ENVF"
   [ "$(stat -c %a "$ENVF")" = "600" ] || die "$ENVF must be mode 600"
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] || die "champion unit is not active"
-  local apid
+  local apid mode expected_backrun expected_mempool
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    expected_backrun=1
+    expected_mempool=1
+  else
+    expected_backrun=0
+    expected_mempool=0
+  fi
   apid=$(systemctl show -p MainPID --value "$A_UNIT")
   [ -r "/proc/$apid/environ" ] || die "cannot read champion environment"
   tr '\0' '\n' < "/proc/$apid/environ" > "$A_PROCESS_ENV"
   chmod 600 "$A_PROCESS_ENV"
   for pair in \
-    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
-    SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1; do
+    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
+    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ANVIL_PORT=8555 \
+    SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8556; do
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(file_env_get "$A_PROCESS_ENV" "$key")" = "$expected" ] \
       || die "champion $key must equal $expected"
@@ -254,7 +279,8 @@ preflight() {
     || die "champion SEARCHER_DISCOVERY_TO_BLOCK must be pinned by deploy-node.sh"
 
   for pair in \
-    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
+    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
+    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ANVIL_PORT=8566 \
     SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567; do
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(env_get "$key")" = "$expected" ] || die "$key must equal $expected in $ENVF"
@@ -267,6 +293,15 @@ preflight() {
 
 build_runtime_env() {
   local experiment=$1 input_mode allowed a_env runtime_env a_common b_common a_pool_path
+  local mode expected_backrun expected_mempool
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    expected_backrun=1
+    expected_mempool=1
+  else
+    expected_backrun=0
+    expected_mempool=0
+  fi
   input_mode=$(env_get AB_INPUT_MODE); input_mode=${input_mode:-shared}
   [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] || die "AB_INPUT_MODE must be shared|challenger"
   allowed=",$(env_get AB_ALLOWED_CONFIG_DELTA),"
@@ -281,7 +316,7 @@ build_runtime_env() {
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$a_common"
@@ -299,10 +334,11 @@ build_runtime_env() {
   cat >> "$runtime_env" <<EOF
 SEARCHER_DRY_RUN=0
 SEARCHER_EV_GATE=1
-SEARCHER_ENABLE_BACKRUN=0
-SEARCHER_ENABLE_MEMPOOL=0
+SEARCHER_ENABLE_BACKRUN=$expected_backrun
+SEARCHER_ENABLE_MEMPOOL=$expected_mempool
 SEARCHER_ENABLE_BLOCK_SCAN=1
 SEARCHER_BLOCKSCAN_SUBMIT=1
+SEARCHER_ANVIL_PORT=8566
 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567
 SEARCHER_EVENTS_PATH=/var/log/mev/events/searcher-ab-b.jsonl
 SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545
@@ -342,7 +378,7 @@ PY
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$b_common"
@@ -385,6 +421,7 @@ resolve_a_universe() {
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
+  local requested_lane_mode requested_shakedown
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
@@ -396,6 +433,18 @@ deploy() {
   [ "$requested_input_mode" = "shared" ] || [ "$requested_input_mode" = "challenger" ] \
     || die "AB_INPUT_MODE must be shared|challenger"
   requested_config_delta=$(env_get AB_ALLOWED_CONFIG_DELTA)
+  requested_lane_mode=$(lane_mode)
+  requested_shakedown=$(env_get AB_SHAKEDOWN); requested_shakedown=${requested_shakedown:-0}
+  [ "$requested_shakedown" = "0" ] || [ "$requested_shakedown" = "1" ] \
+    || die "AB_SHAKEDOWN must be 0|1"
+  if [ "$requested_shakedown" = "1" ]; then
+    [ "$requested_input_mode" = "shared" ] \
+      || die "infrastructure shakedown requires AB_INPUT_MODE=shared"
+    [ -z "$requested_config_delta" ] \
+      || die "infrastructure shakedown requires empty AB_ALLOWED_CONFIG_DELTA"
+    [ "$allow_runtime_view_delta" = "0" ] \
+      || die "infrastructure shakedown forbids runtime-view delta"
+  fi
   reap_stale
   now=$(date +%s); lease=$((now + LEASE_SECONDS))
   current_status=$(state_field status); current_lease=$(state_field lease_until); current_experiment=$(state_field experiment_id)
@@ -416,6 +465,9 @@ deploy() {
   [ "$(git -C "$MAIN_REPO" merge-base "$a_commit" "$b_commit")" = "$a_commit" ] \
     || die "challenger is not based on the deployed champion commit"
   stop_b
+  sleep 1
+  assert_port_free 8566
+  assert_port_free 8567
   if [ -e "$WT/.git" ]; then
     if [ -n "$(git -C "$WT" status --porcelain)" ]; then
       tar czf "$ROOT/archive/$experiment-dirty-$(date +%s).tgz" -C "$WT" .
@@ -445,12 +497,32 @@ deploy() {
         ;;
     esac
   done < <(git -C "$MAIN_REPO" diff --name-only "$a_commit..$b_commit")
-  [ "$production_change" = "1" ] \
-    || die "B challenger has no production searcher/contract behavior change"
+  if [ "$requested_shakedown" = "1" ]; then
+    [ "$production_change" = "0" ] \
+      || die "infrastructure shakedown must run identical searcher code"
+  else
+    [ "$production_change" = "1" ] \
+      || die "B challenger has no production searcher/contract behavior change"
+  fi
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
-  local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json"
+  preflight
+  local gate_a_pid gate_a_restarts gate_a_commit
+  gate_a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
+  gate_a_restarts=$(unit_restarts "$A_UNIT")
+  gate_a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
+  [ "$gate_a_commit" = "$a_commit" ] || die "champion commit drifted before candidate replay"
+  assert_port_free 8568
+  assert_port_free 8569
+  assert_port_free 8570
+  assert_port_free 8571
+  local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json" replay_top_n
   cp -f "$A_UNIVERSE" "$replay_universe"
+  replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)
+  replay_top_n=${replay_top_n:-6000}
+  [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "champion SEARCHER_POOL_UNIVERSE_TOP_N is invalid"
+  local shakedown_arg=()
+  [ "$requested_shakedown" = "0" ] || shakedown_arg=(--shakedown)
   (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$WT/$report_path" \
     --phase candidate \
     --expected-experiment "$experiment" \
@@ -460,17 +532,27 @@ deploy() {
     --expected-runtime-view-delta "$allow_runtime_view_delta" \
     --expected-input-mode "$requested_input_mode" \
     --expected-config-delta "$requested_config_delta" \
+    --expected-lane-mode "$requested_lane_mode" \
+    "${shakedown_arg[@]}" \
     --base-root "$MAIN_REPO" \
     --challenger-root "$WT" \
     --universe "$replay_universe" \
+    --pool-universe-top-n "$replay_top_n" \
     --rpc "$LOCAL_RPC") \
     >/tmp/mev-ab-candidate-gate.log 2>&1 \
     || die "production candidate gate failed (see /tmp/mev-ab-candidate-gate.log)"
+  preflight
+  [ "$(systemctl show -p MainPID --value "$A_UNIT")" = "$gate_a_pid" ] \
+    || die "champion PID changed during candidate replay"
+  [ "$(unit_restarts "$A_UNIT")" = "$gate_a_restarts" ] \
+    || die "champion restarted during candidate replay"
+  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
+    || die "champion commit changed during candidate replay"
   build_runtime_env "$experiment"
   cpu_layout
   local a_restarts_before a_pid_before
-  a_restarts_before=$(unit_restarts "$A_UNIT")
-  a_pid_before=$(systemctl show -p MainPID --value "$A_UNIT")
+  a_restarts_before=$gate_a_restarts
+  a_pid_before=$gate_a_pid
   systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$A_CPUS" >/dev/null
   : > "$LOG"
   systemd-run --unit="$UNIT" --collect --service-type=simple \
@@ -483,10 +565,17 @@ deploy() {
   sleep 8
   [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] || { stop_b; die "challenger failed to start"; }
   grep -q '\[searcher/live\] mode=live' "$LOG" || { stop_b; die "challenger live banner missing"; }
-  grep -q 'backrun=disabled' "$LOG" || { stop_b; die "challenger backrun-off banner missing"; }
-  grep -q 'mempool=disabled' "$LOG" || { stop_b; die "challenger mempool-off banner missing"; }
-  ! grep -q 'MEV-Share SSE connected' "$LOG" || { stop_b; die "challenger unexpectedly connected to MEV-Share"; }
-  ! grep -q 'src=mev-share' "$LOG" || { stop_b; die "challenger unexpectedly processed a MEV-Share hint"; }
+  local mode
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    grep -q 'backrun=enabled' "$LOG" || { stop_b; die "challenger backrun-on banner missing"; }
+    grep -q 'mempool=enabled' "$LOG" || { stop_b; die "challenger mempool-on banner missing"; }
+  else
+    grep -q 'backrun=disabled' "$LOG" || { stop_b; die "challenger backrun-off banner missing"; }
+    grep -q 'mempool=disabled' "$LOG" || { stop_b; die "challenger mempool-off banner missing"; }
+    ! grep -q 'MEV-Share SSE connected' "$LOG" || { stop_b; die "challenger unexpectedly connected to MEV-Share"; }
+    ! grep -q 'src=mev-share' "$LOG" || { stop_b; die "challenger unexpectedly processed a MEV-Share hint"; }
+  fi
   local scan_ready=0
   for _ in $(seq 1 "$FIRST_SCAN_TIMEOUT_SECONDS"); do
     if grep -q '\[searcher/blockscan\] block=.*scannedPairs=' "$LOG"; then
@@ -499,6 +588,20 @@ deploy() {
     stop_b
     die "challenger never completed its first block-scan pass within ${FIRST_SCAN_TIMEOUT_SECONDS}s"
   }
+  if [ "$mode" = "dual" ]; then
+    local victim_ready=0
+    for _ in $(seq 1 60); do
+      if grep -q 'MEV-Share SSE connected' "$LOG"; then
+        victim_ready=1
+        break
+      fi
+      sleep 1
+    done
+    [ "$victim_ready" = "1" ] || {
+      stop_b
+      die "challenger never connected its MEV-Share victim stream"
+    }
+  fi
   [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
   local a_universe_hash b_universe_hash a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
   local discovery_to_block
@@ -530,6 +633,7 @@ deploy() {
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
     discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \
+    lane_mode "$mode" infrastructure_shakedown "$requested_shakedown" \
     a_blockscan_view_hash "$a_view_hash" b_blockscan_view_hash "$b_view_hash" \
     a_blockscan_view_hash_after "$a_view_hash" b_blockscan_view_hash_after "$b_view_hash" \
     a_blockscan_graph_hash "$a_graph_hash" b_blockscan_graph_hash "$b_graph_hash" \

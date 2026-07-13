@@ -578,7 +578,12 @@ async function main(): Promise<void> {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
-  const state = new AnvilStateBackend(config.rpcUrl);
+  const anvilPort = Number(process.env.SEARCHER_ANVIL_PORT ?? "8555");
+  const state = new AnvilStateBackend(
+    config.rpcUrl,
+    `http://127.0.0.1:${anvilPort}`,
+    anvilPort,
+  );
   const detector = new BackrunDetector();
   const planner = new TemplatePlanner();
   const maxCandidates = Number(process.env.SEARCHER_MAX_CANDIDATES ?? "20");

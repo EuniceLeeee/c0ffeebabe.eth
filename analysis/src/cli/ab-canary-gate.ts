@@ -25,12 +25,14 @@ const candidateContext = phase === "candidate" ? {
   expectedRuntimeViewDelta: requiredArg("--expected-runtime-view-delta") === "1",
   inputMode: requiredArg("--expected-input-mode") as "shared" | "challenger",
   allowedConfigDelta: csvArg("--expected-config-delta"),
+  laneMode: requiredArg("--expected-lane-mode") as "blockscan-only" | "dual",
+  shakedown: args.includes("--shakedown"),
 } : undefined;
 const errors = phase === "candidate"
   ? validateAbProductionCandidate(experiment, candidateContext)
   : validateAbExperiment(experiment, report, phase);
 let onchainObservation: ProductionSampleObservation | undefined;
-if (phase === "candidate" && errors.length === 0) {
+if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown) {
   const onchain = await verifyOnchainProductionSample(experiment, requiredArg("--rpc"));
   errors.push(...onchain.errors);
   onchainObservation = onchain.observation;
@@ -38,7 +40,9 @@ if (phase === "candidate" && errors.length === 0) {
     console.log(`candidate_onchain=${JSON.stringify(onchain.observation)}`);
   }
 }
-if (phase === "candidate" && errors.length === 0) runCandidateReplay(onchainObservation!);
+if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown) {
+  runCandidateReplay(onchainObservation!);
+}
 if (errors.length > 0) {
   for (const error of errors) console.error(`FAIL: ${error}`);
   process.exit(1);
@@ -75,7 +79,21 @@ interface HuntResult {
   net_profit_raw: string | null;
 }
 
+interface BackrunHuntResult extends HuntResult {
+  victim_tx_hash: string;
+  pre_gross_raw: string | null;
+  post_gross_raw: string | null;
+  pre_execution_success: boolean | null;
+  pre_execution_net_raw: string | null;
+  post_execution_success: boolean | null;
+  post_execution_net_raw: string | null;
+}
+
 function runCandidateReplay(observation: ProductionSampleObservation): void {
+  if (experiment.production_evidence!.strategy_kind === "backrun") {
+    runBackrunCandidateReplay(observation);
+    return;
+  }
   const replay = experiment.production_evidence!.replay;
   if (JSON.stringify(replay.argv)
       !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"])
@@ -87,11 +105,149 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
   const sample = experiment.production_evidence!.sample;
   const universe = fs.realpathSync(requiredArg("--universe"));
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
-  const baseline = runHunt("baseline", baseRoot, 8568, universe, sample.block_number - 1, expectedPools);
-  const challenger = runHunt("challenger", challengerRoot, 8569, universe, sample.block_number - 1, expectedPools);
+  const maxPools = Number(requiredArg("--pool-universe-top-n"));
+  if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
+  const baseline = runHunt("baseline", baseRoot, 8568, universe, sample.block_number - 1, expectedPools, maxPools);
+  const challenger = runHunt("challenger", challengerRoot, 8569, universe, sample.block_number - 1, expectedPools, maxPools);
   validateHuntResult("baseline", baseline, experiment.production_evidence!.baseline_stage, sample.block_number - 1, expectedPools);
   validateHuntResult("challenger", challenger, experiment.production_evidence!.challenger_stage, sample.block_number - 1, expectedPools);
   console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
+}
+
+function runBackrunCandidateReplay(observation: ProductionSampleObservation): void {
+  const replay = experiment.production_evidence!.replay;
+  if (JSON.stringify(replay.argv)
+      !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"])
+      || replay.cwd !== "listener") {
+    throw new Error("candidate replay must use the trusted direct-node backrun-hunt harness");
+  }
+  const baseRoot = fs.realpathSync(requiredArg("--base-root"));
+  const challengerRoot = fs.realpathSync(requiredArg("--challenger-root"));
+  const sample = experiment.production_evidence!.sample;
+  const universe = fs.realpathSync(requiredArg("--universe"));
+  const maxPools = Number(requiredArg("--pool-universe-top-n"));
+  if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
+  const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
+  const baseline = runBackrunHunt("baseline", baseRoot, baseRoot, 8570, universe, expectedPools, maxPools);
+  const challenger = runBackrunHunt("challenger", baseRoot, challengerRoot, 8571, universe, expectedPools, maxPools);
+  validateBackrunHuntResult("baseline", baseline, experiment.production_evidence!.baseline_stage, sample.block_number - 1, expectedPools);
+  validateBackrunHuntResult("challenger", challenger, experiment.production_evidence!.challenger_stage, sample.block_number - 1, expectedPools);
+  console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
+}
+
+function runBackrunHunt(
+  label: string,
+  trustedRoot: string,
+  targetRoot: string,
+  anvilPort: number,
+  universe: string,
+  expectedPools: string[],
+  maxPools: number,
+): BackrunHuntResult {
+  const trustedSource = path.join(trustedRoot, "listener", "src", "searcher", "test", "backrun-hunt.ts");
+  const targetSource = path.join(
+    targetRoot,
+    "listener",
+    "src",
+    "searcher",
+    "test",
+    `.ab-trusted-backrun-hunt-${process.pid}-${label}.ts`,
+  );
+  fs.copyFileSync(trustedSource, targetSource);
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.npm_config_script_shell;
+  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  try {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", path.relative(path.join(targetRoot, "listener"), targetSource)],
+      {
+        cwd: path.join(targetRoot, "listener"),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 20 * 60 * 1000,
+        env: {
+          ...childEnv,
+          SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
+          SEARCHER_BACKRUN_HUNT_ANVIL_PORT: String(anvilPort),
+          HUNT_SAMPLE_BLOCK: String(experiment.production_evidence!.sample.block_number),
+          HUNT_VICTIM_TX_HASH: experiment.production_evidence!.sample.victim_tx_hash!,
+          HUNT_UNIVERSE_PATH: universe,
+          HUNT_MAX_POOLS: String(maxPools),
+          AB_EXPECTED_POOL_IDS: expectedPools.join(","),
+          AB_EXPECTED_ROUTE_JSON: JSON.stringify(experiment.production_evidence!.sample.expected_route),
+        },
+      },
+    );
+    if (result.error) throw new Error(`${label} backrun hunt failed to start: ${result.error.message}`);
+    if (result.status !== 0) {
+      const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4000);
+      throw new Error(`${label} backrun hunt exited ${result.status ?? "signal"}: ${output}`);
+    }
+    const marker = String(result.stdout ?? "").split(/\r?\n/)
+      .filter((line) => line.startsWith("BACKRUN_HUNT_RESULT="))
+      .at(-1);
+    if (!marker) throw new Error(`${label} backrun hunt emitted no machine result`);
+    return JSON.parse(marker.slice("BACKRUN_HUNT_RESULT=".length)) as BackrunHuntResult;
+  } finally {
+    fs.rmSync(targetSource, { force: true });
+  }
+}
+
+function validateBackrunHuntResult(
+  label: string,
+  result: BackrunHuntResult,
+  expectedStage: string,
+  forkBlock: number,
+  expectedPools: string[],
+): void {
+  if (result.schema_version !== 1 || result.fork_block !== forkBlock) {
+    throw new Error(`${label} backrun hunt did not execute from the sample parent block`);
+  }
+  if (result.victim_tx_hash.toLowerCase()
+      !== experiment.production_evidence!.sample.victim_tx_hash!.toLowerCase()) {
+    throw new Error(`${label} backrun hunt used the wrong victim`);
+  }
+  if (result.stage !== expectedStage) {
+    throw new Error(`${label} backrun hunt stage ${result.stage} does not match declared ${expectedStage}`);
+  }
+  const reportedPools = [...(result.expected_pool_ids ?? [])].map((pool) => pool.toLowerCase()).sort();
+  if (JSON.stringify(reportedPools) !== JSON.stringify(expectedPools)) {
+    throw new Error(`${label} backrun hunt pool identity does not match the winner sample`);
+  }
+  if (expectedStage !== "not_admitted" && !result.closed_route) {
+    throw new Error(`${label} backrun hunt did not find the declared closed route`);
+  }
+  if (expectedStage !== "not_admitted") {
+    const matched = new Set((result.matched_pool_ids ?? []).map((pool) => pool.toLowerCase()));
+    const missing = expectedPools.filter((pool) => !matched.has(pool));
+    if (missing.length > 0) {
+      throw new Error(`${label} backrun hunt route is missing on-chain DEX pools: ${missing.join(",")}`);
+    }
+  }
+  const expectedProtocol = experiment.production_evidence!.route_scope === "dex-permissionless-protocol";
+  if (expectedStage !== "not_admitted" && result.has_protocol_edge !== expectedProtocol) {
+    throw new Error(`${label} backrun hunt route scope does not match the winner sample`);
+  }
+  if (expectedStage === "final_sim_success") {
+    if (!result.final_sim_success || result.net_profit_raw === null || BigInt(result.net_profit_raw) <= 0n) {
+      throw new Error(`${label} backrun hunt did not produce a positive final simulation`);
+    }
+    if (result.pre_gross_raw === null || result.post_gross_raw === null
+        || BigInt(result.pre_gross_raw) > 0n || BigInt(result.post_gross_raw) <= 0n) {
+      throw new Error(`${label} backrun hunt did not prove the victim counterfactual flip`);
+    }
+    if (result.pre_execution_success !== false || result.pre_execution_net_raw === null
+        || BigInt(result.pre_execution_net_raw) > 0n) {
+      throw new Error(`${label} backrun hunt did not prove the exact route is non-profitable before the victim`);
+    }
+    if (result.post_execution_success !== true || result.post_execution_net_raw === null
+        || BigInt(result.post_execution_net_raw) <= 0n
+        || BigInt(result.post_execution_net_raw) !== BigInt(result.net_profit_raw)) {
+      throw new Error(`${label} backrun hunt did not independently execute the exact route after the victim`);
+    }
+  }
 }
 
 function runHunt(
@@ -101,6 +257,7 @@ function runHunt(
   universe: string,
   forkBlock: number,
   expectedPools: string[],
+  maxPools: number,
 ): HuntResult {
   const outDir = fs.mkdtempSync(path.join("/tmp", `mev-ab-${label}-`));
   const childEnv = { ...process.env };
@@ -118,7 +275,7 @@ function runHunt(
       SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: String(anvilPort),
       HUNT_BLOCK: String(forkBlock),
       HUNT_UNIVERSE_PATH: universe,
-      HUNT_MAX_POOLS: "6000",
+      HUNT_MAX_POOLS: String(maxPools),
       HUNT_MAX_HOPS: "4",
       HUNT_MIN_SPREAD_BPS: "0",
       HUNT_BUDGET_MS: "120000",

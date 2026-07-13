@@ -13,6 +13,11 @@
   A plus one challenger B may run and submit simultaneously; a proven B may be merged/deployed to champion
   without another prompt. This authorization is conditional on every gate below and does not authorize
   funding, cap/key changes, standing-credit positions, or any out-of-envelope broadcast.
+- **2026-07-13:** user extended that same bounded dual-live authorization to an explicit `dual` lane where
+  A and B run block-scan plus victim-driven backrun together. Self-competition is accepted at this stage.
+  The extension covers only position-conserving DEX or DEX+permissionless-protocol routes triggered by a
+  public/MEV-Share swap or oracle update; wallet caps, EV/final-sim gates, keys, and all other exclusions are
+  unchanged.
 
 ## The envelope (all must hold, else stay dry-run)
 - Live is gated by the node-side marker `/opt/MEV/.deploy-live`.
@@ -32,9 +37,13 @@
   `0x2a6b8024190CF537efA3685792f201FD1Aac7294` with BotVM
   `0xCF471995e8FbD99F8dBE8377FA67Db89Ab18af24`. Each wallet independently satisfies the cap and 50%-of-
   baseline circuit breaker; B ownership is checked on-chain before every run.
-- Both lanes are `SEARCHER_DRY_RUN=0`, `SEARCHER_EV_GATE=1`, block-scan submit on, mempool/backrun off.
-  They use separate wallets, BotVMs, anvil ports, logs, events, and equal CPU partitions. A is never
-  restarted merely to launch B.
+- Both lanes are `SEARCHER_DRY_RUN=0`, `SEARCHER_EV_GATE=1`, with block-scan submit on. The default
+  `blockscan-only` mode requires mempool/backrun off. The explicit `dual` mode requires both backrun and
+  public mempool on for A and B; mixed postures are refused. They use separate wallets, BotVMs, main and
+  block-scan anvil ports, logs, events, and equal CPU partitions. A is never restarted merely to launch B.
+- Champion victim sources are durable only through `/opt/MEV/.backrun` plus `/opt/MEV/.mempool`; the deploy
+  guard rejects `.mempool` without `.backrun`. B may inherit dual posture only when `AB_LANE_MODE=dual` and
+  the trusted wrapper verifies matching A/B banners plus a live MEV-Share connection.
 - B may start only through `scripts/deploy-ab-challenger.sh` fetched from trusted `origin/main`. The script
   verifies the exact A/B commits, derives B's normalized config from A's running process, checks declared
   config deltas, snapshots/records universe inputs, owns the single B runtime lease, and stops/reaps B.

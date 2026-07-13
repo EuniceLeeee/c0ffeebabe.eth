@@ -34,6 +34,14 @@ LIVE_MARKER=$REPO/.deploy-live
 LOCAL_RPC=${SEARCHER_LIVE_RPC_URL:-http://127.0.0.1:8545}
 MEV_LIVE_MAX_WALLET_ETH=${MEV_LIVE_MAX_WALLET_ETH:-0.2}
 DEFAULT_EVENTS_PATH=/var/log/mev/events/searcher-live.jsonl
+ANVIL_PORT=8555
+
+if [ -f "$REPO/.mempool" ] && [ ! -f "$REPO/.backrun" ]; then
+  say "ABORT: .mempool requires .backrun; public pending flow cannot run without the backrun lane."
+  exit 9
+fi
+if [ -f "$REPO/.backrun" ]; then BACKRUN_VAL=1; else BACKRUN_VAL=0; fi
+if [ -f "$REPO/.mempool" ]; then MEMPOOL_VAL=1; else MEMPOOL_VAL=0; fi
 
 # Mode: DRY (default) unless the human placed the live marker on the node.
 if [ -f "$LIVE_MARKER" ]; then MODE=LIVE; DRY_VAL=0; else MODE=DRY; DRY_VAL=1; fi
@@ -50,7 +58,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -93,14 +101,11 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # measured 100% phantom-victim rate — pure ghost flow that starved the mempool/atomic paths of CPU).
   # Ingest+sim only (submission also gated by allowHashOnlySubmit). Create the marker to re-enable.
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
-  # Backrun victim sources are marker-controlled and default OFF on the node's block-scan production
-  # posture. Without this explicit switch, SEARCHER_ENABLE_MEMPOOL=0 still consumes MEV-Share SSE.
-  # Create $REPO/.backrun to deliberately restore MEV-Share (and optional public-mempool) processing.
-  if [ -f "$REPO/.backrun" ]; then
-    echo "SEARCHER_ENABLE_BACKRUN=1" >> "$tmp"
-  else
-    echo "SEARCHER_ENABLE_BACKRUN=0" >> "$tmp"
-  fi
+  # Victim sources are independently marker-controlled. .backrun enables MEV-Share processing;
+  # .mempool additionally enables the public pending stream and is rejected without .backrun.
+  echo "SEARCHER_ENABLE_BACKRUN=$BACKRUN_VAL" >> "$tmp"
+  echo "SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_VAL" >> "$tmp"
+  echo "SEARCHER_ANVIL_PORT=$ANVIL_PORT" >> "$tmp"
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=$DRY_VAL + TTL=$OPP_TTL_MS + poolUniverseTopN=$POOL_UNIVERSE_TOP_N + discoveryToBlock=$DISCOVERY_TO_BLOCK"
@@ -110,7 +115,7 @@ else
   EVENTS_PATH=${SEARCHER_EVENTS_PATH:-${EXISTING_EVENTS_PATH:-$DEFAULT_EVENTS_PATH}}
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
@@ -121,7 +126,9 @@ else
   [ -f "$REPO/.block-scan" ] && echo "SEARCHER_ENABLE_BLOCK_SCAN=1" >> "$tmp"  # BS-lane Pass A log-only, marker-gated
   [ -f "$REPO/.blockscan-submit" ] && echo "SEARCHER_BLOCKSCAN_SUBMIT=1" >> "$tmp"  # BS-lane Pass B atomic submit, marker-gated
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share consumption marker-gated, DEFAULT OFF (2026-07-07 ghost flow)
-  if [ -f "$REPO/.backrun" ]; then echo "SEARCHER_ENABLE_BACKRUN=1" >> "$tmp"; else echo "SEARCHER_ENABLE_BACKRUN=0" >> "$tmp"; fi
+  echo "SEARCHER_ENABLE_BACKRUN=$BACKRUN_VAL" >> "$tmp"
+  echo "SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_VAL" >> "$tmp"
+  echo "SEARCHER_ANVIL_PORT=$ANVIL_PORT" >> "$tmp"
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
 
@@ -268,15 +275,23 @@ NEWPID=$(systemctl show -p MainPID --value mev-searcher)
 DRY=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_DRY_RUN=$DRY_VAL")
 PROCESS_UNIVERSE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null \
   | sed -n 's/^SEARCHER_POOL_UNIVERSE_PATH=//p' | tail -1)
-BACKRUN_EXPECTED=0
-[ -f "$REPO/.backrun" ] && BACKRUN_EXPECTED=1
+BACKRUN_EXPECTED=$BACKRUN_VAL
+MEMPOOL_EXPECTED=$MEMPOOL_VAL
 BACKRUN=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_BACKRUN=$BACKRUN_EXPECTED")
+MEMPOOL=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_EXPECTED")
+PROCESS_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_ANVIL_PORT=//p' | tail -1)
 say "restarted: active=$ACTIVE pid=$NEWPID mode=$MODE dry_run_env=$(tr '\0' '\n' < /proc/$NEWPID/environ 2>/dev/null | grep '^SEARCHER_DRY_RUN=' | cut -d= -f2)"
 if [ "$DRY" != "1" ]; then
   say "WARNING: restarted process SEARCHER_DRY_RUN != $DRY_VAL (expected for mode=$MODE) — STOP and investigate."; exit 9
 fi
 if [ "$BACKRUN" != "1" ]; then
   say "WARNING: restarted process SEARCHER_ENABLE_BACKRUN != $BACKRUN_EXPECTED — STOP and investigate."; exit 9
+fi
+if [ "$MEMPOOL" != "1" ]; then
+  say "WARNING: restarted process SEARCHER_ENABLE_MEMPOOL != $MEMPOOL_EXPECTED — STOP and investigate."; exit 9
+fi
+if [ "$PROCESS_ANVIL_PORT" != "$ANVIL_PORT" ]; then
+  say "WARNING: restarted process SEARCHER_ANVIL_PORT != $ANVIL_PORT — STOP and investigate."; exit 9
 fi
 if [ "$PROCESS_UNIVERSE" != "$UNIVERSE_SNAPSHOT" ] \
    || [ "$(sha256sum "$PROCESS_UNIVERSE" 2>/dev/null | awk '{print $1}')" != "$UNIVERSE_HASH" ]; then
@@ -295,6 +310,9 @@ fi
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep -q "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" \
   || { say "ABORT: backrun startup banner does not match marker-controlled posture."; exit 9; }
+tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
+  | grep -q "\[searcher/live\] mempool=$( [ "$MEMPOOL_EXPECTED" = "1" ] && echo enabled || echo disabled )" \
+  || { say "ABORT: mempool startup banner does not match marker-controlled posture."; exit 9; }
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep -Fq "[searcher/live] events emit → $EVENTS_PATH" \
   || { say "ABORT: events telemetry banner missing for $EVENTS_PATH."; exit 9; }

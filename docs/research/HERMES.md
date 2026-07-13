@@ -91,9 +91,10 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 
 - **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
 - **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
-- Both are block-scan-only (mempool/backrun off), EV-gated, and may submit simultaneously. Their wallets,
-  BotVMs, ports, events, logs, and CPU sets are separate. The dated authorization and circuit breakers are
-  in `docs/live-safety-envelope.md`.
+- Both are EV-gated and may submit simultaneously. `blockscan-only` remains the default; explicit
+  `AB_LANE_MODE=dual` runs block-scan plus backrun/public-mempool on both sides. Mixed A/B postures are
+  invalid. Wallets, BotVMs, main/block-scan anvil ports, events, logs, and CPU sets are separate. The dated
+  authorization and circuit breakers are in `docs/live-safety-envelope.md`.
 - Many analysis branches may exist, but there is exactly **one persistent B runtime lease** because every
   challenger shares wallet-2/BotVM-2/port 8567/unit `mev-ab-b`. The lease is resource coordination, not a
   global research lock; another hourly wake skips a busy B slot and does not disturb it.
@@ -109,10 +110,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
 2. **PICK A PRODUCTION SAMPLE, NOT A METRIC.** Select the highest-impact unclaimed blocker only after one
    real on-chain `+EV` sample in the current production scope proves where we stop. The sample MUST be a
-   victim-independent `block-scan`, position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed
-   loop. `winner_style=atomic_loop` alone is insufficient: a prior/victim transaction makes it a backrun and
-   excludes it while backrun/mempool are disabled. Keeper/reward, inventory, private-path, credit, sandwich,
-   and JIT-LP samples are also excluded. If the queue is empty, run the normal Hermes manual+tool analysis to
+   position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed loop. In `blockscan-only` it must be
+   victim-independent. In `dual` it may instead bind one real earlier same-block swap/oracle victim and must
+   prove the same route is non-positive pre-victim and +EV post-victim. `winner_style=atomic_loop` alone is
+   insufficient for either claim. Keeper/reward, inventory, private-path, credit, sandwich, and JIT-LP
+   samples are excluded. If the queue is empty, run the normal Hermes manual+tool analysis to
    find one; do not invent a code change merely to keep the loop busy. One branch = one causal hypothesis.
    A latency/CPU/cache optimization becomes eligible only when the SAME +EV sample demonstrably misses a
    production stage because of that limit and the replay advances it; aggregate milliseconds alone are not
@@ -129,12 +131,18 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    intended metric evidence, input mode, allowed config delta, and whether the change is expected to alter
    the runtime block-scan view/graph. `challenger_commit` is temporarily pending
    here because a commit cannot contain its own SHA. Commit/push the initial report on B.
+   A one-off identical-code infrastructure shakedown is not a production round: declare
+   `infrastructure_shakedown=true`, `deterministic_gate=not_applicable`, omit `production_evidence`, and set
+   trusted `AB_SHAKEDOWN=1`. The wrapper then requires a report-only challenger and identical runtime tree.
+   A successful equivalence window may merge only that report and gate-delete the temporary branch; it does
+   not count as a production capability win.
 4. **FIX + FREEZE.** Codex writes; the non-author agent
    reviews; the same production sample must advance at least one stage
-   (`not_admitted→path_found→final_sim_success`) in a pinned replay
-   from the sample's untouched parent-block state (rule 12). Predeploy runs the trusted unchanged
-   `searcher:blockscan-hunt` from both A and B against the same universe and on-chain sample pool IDs; no
-   victim/oracle transmit/same-actor prefix may be applied first. An exit-zero build/test or
+   (`not_admitted→path_found→final_sim_success`) in a pinned replay (rule 12). Block-scan replays start from
+   the untouched sample parent-block state. Backrun replays reconstruct any earlier same-block prefix, then
+   compare the same route immediately before and after the declared real victim. Predeploy runs the trusted
+   unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the same universe,
+   champion `SEARCHER_POOL_UNIVERSE_TOP_N`, and on-chain identities. An exit-zero build/test or
    challenger-authored replay harness is not evidence. Push B. Two
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
    `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it
@@ -155,9 +163,10 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    and equal CPU partitions. A runtime-view delta is rejected unless it was explicitly predeclared for a
    correctness/capability experiment. It never restarts A. Direct `systemd-run`, hand-written B env,
    or deployment from the challenger branch is invalid. Block-scan-only A/B requires
-   `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides: the first disables
-   MEV-Share plus every victim-driven hint path; the second alone disables only public mempool and is not a
-   valid CPU-isolated canary posture.
+   `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides. Dual A/B requires both equal
+   to `1` on both sides, separate main/block-scan Anvil ports, matching startup banners, and a connected
+   MEV-Share stream. The wrapper's default is blockscan-only; a dual run must declare `lane_mode=dual` in the
+   report and `AB_LANE_MODE=dual` in the trusted B environment.
 6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm, pass-budget, and catch-up blocks where either lane's
    incremental warm range spans more than one block; those lanes have different cache histories and are not
    a causal pair. Renew the lease if needed. A and B must see the same remaining block numbers. Record restart
@@ -170,11 +179,12 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor
    cross-reference against coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (plus the standing
-   watchlist) through `scripts/census-gap.sh` and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
-   victim-independent `block-scan atomic_loop`** transactions: in-tx route closes to a priced token, has no
-   standing position, and does not depend on a prior/victim transaction. Exclude
+   watchlist) through `scripts/census-gap.sh` and emit the normal Step-1 artifact. Compare B only with
+   **replicable, conserving `atomic_loop`** transactions: blockscan-only requires victim independence; dual
+   additionally admits a public/MEV-Share swap-or-oracle victim with a verified pre/post counterfactual. The
+   in-tx route still closes to a priced token and has no standing position. Exclude
    `sandwich`, `one_leg_inventory`, keeper/liquidation, JIT-LP, standing-credit, and private-inventory
-   rebalances before classifying any gap; they are different postures and cannot judge this block-scan lane.
+   rebalances before classifying any gap; they are different postures and cannot judge either lane.
    For each comparable take, classify B's remaining production gap (`not_seen | pool | path | adapter |
    quote/sim | execution | economics`). If the live window is thin, record zero same-window comparable
    samples honestly, then use a separate recent historical artifact to seed backlog rather than inserting

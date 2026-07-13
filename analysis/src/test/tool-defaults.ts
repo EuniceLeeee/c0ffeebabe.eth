@@ -124,6 +124,23 @@ test("node deploy installs and verifies production analysis tooling before resta
   );
   assert.match(script, /echo "SEARCHER_EVENTS_PATH=\$EVENTS_PATH"/);
   assert.match(script, /events telemetry banner missing for \$EVENTS_PATH/);
+  assert.match(script, /\.mempool requires \.backrun/);
+  assert.match(script, /echo "SEARCHER_ENABLE_MEMPOOL=\$MEMPOOL_VAL"/);
+  assert.match(script, /echo "SEARCHER_ANVIL_PORT=\$ANVIL_PORT"/);
+  assert.match(script, /mempool startup banner does not match marker-controlled posture/);
+});
+
+test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode", async () => {
+  const script = await readFile(join(repoRoot, "scripts", "deploy-ab-challenger.sh"), "utf8");
+  assert.match(script, /mode=\$\(env_get AB_LANE_MODE\); mode=\$\{mode:-blockscan-only\}/);
+  assert.match(script, /blockscan-only\|dual/);
+  assert.match(script, /SEARCHER_ENABLE_BACKRUN=\$expected_backrun/);
+  assert.match(script, /SEARCHER_ENABLE_MEMPOOL=\$expected_mempool/);
+  assert.match(script, /SEARCHER_ANVIL_PORT=8566/);
+  assert.match(script, /challenger never connected its MEV-Share victim stream/);
+  assert.match(script, /infrastructure shakedown must run identical searcher code/);
+  assert.match(script, /replay_top_n=.*SEARCHER_POOL_UNIVERSE_TOP_N/);
+  assert.match(script, /--pool-universe-top-n "\$replay_top_n"/);
 });
 
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {

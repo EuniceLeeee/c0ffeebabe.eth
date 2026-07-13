@@ -354,6 +354,7 @@ function productionCandidate(tmp: string): AbExperiment {
   const value = experiment(tmp, artifact);
   value.schema_version = 3;
   value.change_class = "capability";
+  value.lane_mode = "blockscan-only";
   value.deterministic_gate = { result: "pass", evidence: "pinned block-scan replay advances the same sample" };
   value.production_evidence = {
     searcher_behavior_change: true,
@@ -407,6 +408,90 @@ test("production candidate gate rejects victim-dependent backrun and keeper post
   const errors = validateAbProductionCandidate(value);
   assert.ok(errors.some((error) => error.includes("victim_dependent")));
   assert.ok(errors.some((error) => error.includes("keeper")));
+});
+
+test("production candidate schema accepts a reviewed oracle-triggered backrun in dual mode", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.lane_mode = "dual";
+  value.production_evidence!.strategy_kind = "backrun";
+  value.production_evidence!.trigger_kind = "oracle-update";
+  value.production_evidence!.posture.victim_dependent = true;
+  value.production_evidence!.challenger_stage = "final_sim_success";
+  value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
+  value.production_evidence!.sample.expected_route = [
+    { adapterId: "univ3-swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
+    { adapterId: "protocol-redeem", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
+  ];
+  value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
+  assert.deepEqual(validateAbProductionCandidate(value, { laneMode: "dual" }), []);
+});
+
+test("backrun candidate is rejected outside the explicit dual lane", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.production_evidence!.strategy_kind = "backrun";
+  value.production_evidence!.trigger_kind = "victim-swap";
+  value.production_evidence!.posture.victim_dependent = true;
+  value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
+  value.production_evidence!.sample.expected_route = [
+    { adapterId: "univ2-swap", tokenIn: "0x01", tokenOut: "0x02" },
+    { adapterId: "univ3-swap", tokenIn: "0x02", tokenOut: "0x01" },
+  ];
+  value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
+  const errors = validateAbProductionCandidate(value, { laneMode: "blockscan-only" });
+  assert.ok(errors.some((error) => error.includes("lane_mode=dual")));
+});
+
+test("identical-code infrastructure shakedown has a separate fail-closed candidate path", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.lane_mode = "dual";
+  value.infrastructure_shakedown = true;
+  value.deterministic_gate = { result: "not_applicable", evidence: "identical runtime tree" };
+  delete value.production_evidence;
+  assert.deepEqual(validateAbProductionCandidate(value, { laneMode: "dual", shakedown: true }), []);
+  value.input_mode = "challenger";
+  assert.ok(validateAbProductionCandidate(value, { laneMode: "dual", shakedown: true })
+    .some((error) => error.includes("input_mode=shared")));
+  value.input_mode = "shared";
+  value.allowed_config_delta = ["SEARCHER_MAX_CANDIDATES"];
+  assert.ok(validateAbProductionCandidate(value, { laneMode: "dual", shakedown: true })
+    .some((error) => error.includes("allowed_config_delta=[]")));
+  value.allowed_config_delta = [];
+  value.expected_runtime_view_delta = true;
+  assert.ok(validateAbProductionCandidate(value, { laneMode: "dual", shakedown: true })
+    .some((error) => error.includes("expected_runtime_view_delta=false")));
+});
+
+test("successful infrastructure shakedown can close without pretending to be a production change", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-shakedown-close-"));
+  const artifact = compareBlockScanLogs(log(100), log(101), {
+    goal: "equivalence",
+    metric: "total_ms",
+    direction: "lower",
+    aggregate: "p50",
+    minPairedBlocks: 4,
+    warmupBlocks: 2,
+    minImprovementPct: 0,
+    minAbsoluteDelta: 0,
+    maxRegressionPct: 5,
+    requireOutputMatch: true,
+  });
+  const value = experiment(tmp, artifact);
+  value.schema_version = 3;
+  value.change_class = "performance";
+  value.lane_mode = "dual";
+  value.infrastructure_shakedown = true;
+  value.deterministic_gate = { result: "not_applicable", evidence: "identical runtime tree" };
+  value.final_verdict = "win";
+  value.branch_action = "pending_merge";
+  value.mergeability = {
+    current_main_commit: value.base_commit,
+    tested_base_is_current: true,
+    evidence: "origin/main still equals the tested base",
+  };
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "decision"), []);
 });
 
 test("production candidate gate rejects analysis-only or metric-only challengers", () => {
