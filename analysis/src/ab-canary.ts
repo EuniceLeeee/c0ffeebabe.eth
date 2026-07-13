@@ -380,6 +380,7 @@ export type AbExperiment = {
       expected_net_profit_usd: number;
       evidence: string;
       victim_tx_hash?: string;
+      oracle_route_edge_index?: number;
       expected_route?: Array<{
         adapterId: string;
         tokenIn: string;
@@ -577,6 +578,12 @@ export function validateAbProductionCandidate(
             errors.push(`backrun expected_route[${index}] requires adapterId/tokenIn/tokenOut`);
           }
         }
+      }
+      if (evidence.trigger_kind === "oracle-update"
+          && (!Number.isSafeInteger(sample.oracle_route_edge_index)
+            || sample.oracle_route_edge_index! < 0
+            || sample.oracle_route_edge_index! >= (sample.expected_route?.length ?? 0))) {
+        errors.push("oracle-update sample requires oracle_route_edge_index within expected_route");
       }
     }
   }

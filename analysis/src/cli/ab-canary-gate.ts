@@ -87,6 +87,15 @@ interface BackrunHuntResult extends HuntResult {
   pre_execution_net_raw: string | null;
   post_execution_success: boolean | null;
   post_execution_net_raw: string | null;
+  pre_state_anchor_kind: "parent-block" | "previous-tx";
+  pre_state_anchor_hash: string | null;
+  post_state_anchor_kind: "victim-tx";
+  post_state_anchor_hash: string;
+  victim_effect_kind: "swap" | "oracle" | null;
+  oracle_route_edge_index: number | null;
+  oracle_probe_amount_in_raw: string | null;
+  oracle_before_amount_out_raw: string | null;
+  oracle_after_amount_out_raw: string | null;
 }
 
 function runCandidateReplay(observation: ProductionSampleObservation): void {
@@ -128,10 +137,24 @@ function runBackrunCandidateReplay(observation: ProductionSampleObservation): vo
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
   if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
-  const baseline = runBackrunHunt("baseline", baseRoot, baseRoot, 8570, universe, expectedPools, maxPools);
-  const challenger = runBackrunHunt("challenger", baseRoot, challengerRoot, 8571, universe, expectedPools, maxPools);
-  validateBackrunHuntResult("baseline", baseline, experiment.production_evidence!.baseline_stage, sample.block_number - 1, expectedPools);
-  validateBackrunHuntResult("challenger", challenger, experiment.production_evidence!.challenger_stage, sample.block_number - 1, expectedPools);
+  const baseline = runBackrunHunt("baseline", baseRoot, baseRoot, 8570, 8572, universe, expectedPools, maxPools);
+  const challenger = runBackrunHunt("challenger", baseRoot, challengerRoot, 8571, 8573, universe, expectedPools, maxPools);
+  validateBackrunHuntResult(
+    "baseline",
+    baseline,
+    experiment.production_evidence!.baseline_stage,
+    sample.block_number - 1,
+    expectedPools,
+    observation,
+  );
+  validateBackrunHuntResult(
+    "challenger",
+    challenger,
+    experiment.production_evidence!.challenger_stage,
+    sample.block_number - 1,
+    expectedPools,
+    observation,
+  );
   console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
 }
 
@@ -140,6 +163,7 @@ function runBackrunHunt(
   trustedRoot: string,
   targetRoot: string,
   anvilPort: number,
+  preAnvilPort: number,
   universe: string,
   expectedPools: string[],
   maxPools: number,
@@ -171,12 +195,17 @@ function runBackrunHunt(
           ...childEnv,
           SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
           SEARCHER_BACKRUN_HUNT_ANVIL_PORT: String(anvilPort),
+          SEARCHER_BACKRUN_HUNT_PRE_ANVIL_PORT: String(preAnvilPort),
           HUNT_SAMPLE_BLOCK: String(experiment.production_evidence!.sample.block_number),
           HUNT_VICTIM_TX_HASH: experiment.production_evidence!.sample.victim_tx_hash!,
           HUNT_UNIVERSE_PATH: universe,
           HUNT_MAX_POOLS: String(maxPools),
           AB_EXPECTED_POOL_IDS: expectedPools.join(","),
           AB_EXPECTED_ROUTE_JSON: JSON.stringify(experiment.production_evidence!.sample.expected_route),
+          AB_TRIGGER_KIND: experiment.production_evidence!.trigger_kind,
+          AB_ORACLE_ROUTE_EDGE_INDEX: experiment.production_evidence!.sample.oracle_route_edge_index === undefined
+            ? ""
+            : String(experiment.production_evidence!.sample.oracle_route_edge_index),
         },
       },
     );
@@ -201,6 +230,7 @@ function validateBackrunHuntResult(
   expectedStage: string,
   forkBlock: number,
   expectedPools: string[],
+  observation: ProductionSampleObservation,
 ): void {
   if (result.schema_version !== 1 || result.fork_block !== forkBlock) {
     throw new Error(`${label} backrun hunt did not execute from the sample parent block`);
@@ -208,6 +238,18 @@ function validateBackrunHuntResult(
   if (result.victim_tx_hash.toLowerCase()
       !== experiment.production_evidence!.sample.victim_tx_hash!.toLowerCase()) {
     throw new Error(`${label} backrun hunt used the wrong victim`);
+  }
+  if (result.post_state_anchor_kind !== "victim-tx"
+      || result.post_state_anchor_hash.toLowerCase() !== result.victim_tx_hash.toLowerCase()) {
+    throw new Error(`${label} backrun hunt is not anchored immediately after the victim transaction`);
+  }
+  if ((observation.victim_transaction_index ?? -1) === 0) {
+    if (result.pre_state_anchor_kind !== "parent-block" || result.pre_state_anchor_hash !== null) {
+      throw new Error(`${label} backrun hunt did not use the parent block as the index-0 victim pre-state`);
+    }
+  } else if (result.pre_state_anchor_kind !== "previous-tx"
+      || result.pre_state_anchor_hash?.toLowerCase() !== observation.victim_previous_tx_hash?.toLowerCase()) {
+    throw new Error(`${label} backrun hunt is not anchored immediately before the victim transaction`);
   }
   if (result.stage !== expectedStage) {
     throw new Error(`${label} backrun hunt stage ${result.stage} does not match declared ${expectedStage}`);
@@ -246,6 +288,21 @@ function validateBackrunHuntResult(
         || BigInt(result.post_execution_net_raw) <= 0n
         || BigInt(result.post_execution_net_raw) !== BigInt(result.net_profit_raw)) {
       throw new Error(`${label} backrun hunt did not independently execute the exact route after the victim`);
+    }
+    const triggerKind = experiment.production_evidence!.trigger_kind;
+    if (triggerKind === "victim-swap" && result.victim_effect_kind !== "swap") {
+      throw new Error(`${label} backrun hunt did not bind the route to a swap victim effect`);
+    }
+    if (triggerKind === "oracle-update") {
+      const expectedEdgeIndex = experiment.production_evidence!.sample.oracle_route_edge_index!;
+      if (result.victim_effect_kind !== "oracle"
+          || result.oracle_route_edge_index !== expectedEdgeIndex
+          || result.oracle_probe_amount_in_raw === null
+          || result.oracle_before_amount_out_raw === null
+          || result.oracle_after_amount_out_raw === null
+          || BigInt(result.oracle_before_amount_out_raw) === BigInt(result.oracle_after_amount_out_raw)) {
+        throw new Error(`${label} backrun hunt did not prove an oracle quote delta on the declared route edge`);
+      }
     }
   }
 }

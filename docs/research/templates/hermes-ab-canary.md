@@ -136,6 +136,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
       "expected_net_profit_usd": 0,
       "evidence": "<net-profit and strategy-source evidence>",
       "victim_tx_hash": "<dual backrun only>",
+      "oracle_route_edge_index": "<required for oracle-update; zero-based expected_route index>",
       "expected_route": []
     },
     "classification_review": {

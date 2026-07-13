@@ -16,6 +16,7 @@ export interface ProductionSampleObservation {
   edge_kinds: string[];
   victim_tx_hash?: string;
   victim_transaction_index?: number;
+  victim_previous_tx_hash?: string;
   victim_edge_kinds?: string[];
 }
 
@@ -67,6 +68,7 @@ export async function verifyOnchainProductionSample(
   }
   let victimTxHash: string | undefined;
   let victimTransactionIndex: number | undefined;
+  let victimPreviousTxHash: string | undefined;
   let victimEdgeKinds: string[] | undefined;
   if (strategyKind === "backrun") {
     victimTxHash = lower(String(sample.victim_tx_hash ?? ""));
@@ -79,6 +81,15 @@ export async function verifyOnchainProductionSample(
     } else {
       const victimBlock = Number(hexToBigInt(victimReceipt.blockNumber));
       victimTransactionIndex = Number(hexToBigInt(victimReceipt.transactionIndex));
+      if (victimTransactionIndex > 0) {
+        const previous = transactions[victimTransactionIndex - 1];
+        victimPreviousTxHash = previous && typeof previous === "object"
+          ? lower(String((previous as Record<string, unknown>).hash ?? ""))
+          : undefined;
+        if (!/^0x[a-f0-9]{64}$/i.test(victimPreviousTxHash ?? "")) {
+          errors.push("declared backrun victim previous transaction is unavailable");
+        }
+      }
       victimEdgeKinds = deriveEdgeKindsFromLogs(victimReceipt.logs);
       if (Number(hexToBigInt(victimReceipt.status)) !== 1) errors.push("declared backrun victim reverted");
       if (victimBlock !== blockNumber) errors.push("declared backrun victim is not in the winner block");
@@ -147,6 +158,7 @@ export async function verifyOnchainProductionSample(
       edge_kinds: edgeKinds,
       victim_tx_hash: victimTxHash,
       victim_transaction_index: victimTransactionIndex,
+      victim_previous_tx_hash: victimPreviousTxHash,
       victim_edge_kinds: victimEdgeKinds,
     },
   };

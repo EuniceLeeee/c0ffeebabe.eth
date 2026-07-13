@@ -62,6 +62,29 @@ interface HuntResult {
   pre_execution_net_raw: string | null;
   post_execution_success: boolean | null;
   post_execution_net_raw: string | null;
+  pre_state_anchor_kind: "parent-block" | "previous-tx";
+  pre_state_anchor_hash: string | null;
+  post_state_anchor_kind: "victim-tx";
+  post_state_anchor_hash: string;
+  victim_effect_kind: "swap" | "oracle" | null;
+  oracle_route_edge_index: number | null;
+  oracle_probe_amount_in_raw: string | null;
+  oracle_before_amount_out_raw: string | null;
+  oracle_after_amount_out_raw: string | null;
+}
+
+interface StateAnchors {
+  preKind: "parent-block" | "previous-tx";
+  preHash: string | null;
+  postHash: string;
+}
+
+interface VictimEffectProof {
+  kind: "swap" | "oracle" | null;
+  oracleRouteEdgeIndex: number | null;
+  oracleProbeAmountIn: bigint | null;
+  oracleBeforeAmountOut: bigint | null;
+  oracleAfterAmountOut: bigint | null;
 }
 
 const CANDIDATE_CAP = 6;
@@ -94,10 +117,17 @@ async function main(): Promise<void> {
   const expectedPools = csv("AB_EXPECTED_POOL_IDS");
   const universePath = process.env.HUNT_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH;
   const maxPools = optionalPositiveInt("HUNT_MAX_POOLS", 6_000);
-  const port = positiveInt("SEARCHER_BACKRUN_HUNT_ANVIL_PORT");
+  const postPort = positiveInt("SEARCHER_BACKRUN_HUNT_ANVIL_PORT");
+  const prePort = positiveInt("SEARCHER_BACKRUN_HUNT_PRE_ANVIL_PORT");
+  if (prePort === postPort) throw new Error("pre/post backrun hunt Anvil ports must differ");
+  const triggerKind = requiredEnv("AB_TRIGGER_KIND");
+  if (triggerKind !== "victim-swap" && triggerKind !== "oracle-update") {
+    throw new Error("AB_TRIGGER_KIND must be victim-swap|oracle-update");
+  }
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const state = new AnvilStateBackend(rpcUrl, `http://127.0.0.1:${port}`, port);
+  const preState = new AnvilStateBackend(rpcUrl, `http://127.0.0.1:${prePort}`, prePort);
+  const postState = new AnvilStateBackend(rpcUrl, `http://127.0.0.1:${postPort}`, postPort);
   try {
     const victim = await provider.getTransaction(victimTxHash);
     const receipt = await provider.getTransactionReceipt(victimTxHash);
@@ -105,37 +135,23 @@ async function main(): Promise<void> {
       throw new Error("victim transaction/receipt does not match HUNT_SAMPLE_BLOCK");
     }
     const rawVictim = await rawTransaction(provider, victimTxHash, victim);
+    const anchors = await stateAnchors(provider, sampleBlock, Number(receipt.index), victimTxHash);
     const graph = await routeGraph(provider, parentBlock, universePath, maxPools, route);
     const matchedPath = expectedPath(graph, route);
     if (!matchedPath) {
-      emit({
-        schema_version: 1,
-        fork_block: parentBlock,
-        victim_tx_hash: victimTxHash,
-        stage: "not_admitted",
-        expected_pool_ids: expectedPools,
-        matched_pool_ids: [],
-        has_protocol_edge: false,
-        closed_route: false,
-        final_sim_success: false,
-        net_profit_raw: null,
-        pre_gross_raw: null,
-        post_gross_raw: null,
-        pre_execution_success: null,
-        pre_execution_net_raw: null,
-        post_execution_success: null,
-        post_execution_net_raw: null,
-      });
+      emit(pathResult(parentBlock, victimTxHash, expectedPools, [], "not_admitted", anchors));
       return;
     }
 
-    await state.forkAt(parentBlock);
-    await replayPrefix(provider, state, sampleBlock, Number(receipt.index));
-    await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
-    const preVictimSnapshot = await state.snapshot();
+    await anchorPreState(preState, parentBlock, anchors);
+    await postState.forkAfterTx(victimTxHash);
+    await Promise.all([
+      installForkBotVm(preState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR),
+      installForkBotVm(postState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR),
+    ]);
     const detector = new BackrunDetector();
     detector.setGraph(graph);
-    detector.setTokenQuery(tokenBackend(provider, parentBlock));
+    detector.setTokenQuery(latestTokenBackend(preState.provider));
     const event = {
       txHash: victimTxHash,
       blockNumber: sampleBlock,
@@ -153,10 +169,9 @@ async function main(): Promise<void> {
       minProfit: 1n,
     };
 
-    await state.applyRawTx(rawVictim);
-    const opportunities = await detector.detect(event, state);
+    const opportunities = await detector.detect(event, postState);
     if (opportunities.length === 0) {
-      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "not_admitted"));
+      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "not_admitted", anchors));
       return;
     }
 
@@ -165,7 +180,7 @@ async function main(): Promise<void> {
     planner.setMaxHops(Math.max(3, route.length));
     planner.setMaxPoolsPerToken(8);
     planner.setMaxCandidates(20);
-    const flashLiquidity = new FlashLiquidityCache(state.provider);
+    const flashLiquidity = new FlashLiquidityCache(postState.provider);
     await flashLiquidity.refresh(unique(graph.flatMap((edge) => [edge.tokenIn, edge.tokenOut])));
     planner.setFlashLiquidity(flashLiquidity);
 
@@ -175,31 +190,38 @@ async function main(): Promise<void> {
     }
     const expectedIndex = plans.findIndex((plan) => pathMatches(plan.tokenPath, route));
     if (expectedIndex < 0 || expectedIndex >= CANDIDATE_CAP) {
-      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "not_admitted"));
+      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "not_admitted", anchors));
       return;
     }
+    const selectedPlan = plans[expectedIndex];
+    const effectProof = victimEffectProof(selectedPlan, route, triggerKind);
 
     let solved: ResolvedPlan;
     try {
-      solved = await solveCandidate(state, plans[expectedIndex]);
+      solved = await solveCandidate(postState, selectedPlan);
     } catch {
-      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "path_found"));
+      emit({
+        ...pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "path_found", anchors),
+        ...proofResult(effectProof),
+      });
       return;
     }
-    const post = await propagateAmountsWithRawOutputs(plans[expectedIndex].tokenPath, solved.flashAmount, state, {
+    const post = await propagateAmountsWithRawOutputs(selectedPlan.tokenPath, solved.flashAmount, postState, {
       safetyBps: 10000n,
     });
     const postGross = post.amounts.at(-1)! - solved.flashAmount;
-    const postExecution = await executeResolvedPlan(state, solved);
-    await state.revert(preVictimSnapshot);
-    const pre = await propagateAmountsWithRawOutputs(plans[expectedIndex].tokenPath, solved.flashAmount, state, {
+    const postExecution = await executeResolvedPlan(postState, solved);
+    const pre = await propagateAmountsWithRawOutputs(selectedPlan.tokenPath, solved.flashAmount, preState, {
       safetyBps: 10000n,
     });
     const preGross = pre.amounts.at(-1)! - solved.flashAmount;
-    const preExecution = await executeResolvedPlan(state, solved);
+    const preExecution = await executeResolvedPlan(preState, solved);
     const finalSuccess = postExecution.success && postExecution.netProfit > 0n
       && !preExecution.success && preExecution.netProfit <= 0n
-      && preGross <= 0n && postGross > 0n;
+      && preGross <= 0n && postGross > 0n
+      && effectProof.kind === (triggerKind === "oracle-update" ? "oracle" : "swap")
+      && (triggerKind !== "oracle-update"
+        || effectProof.oracleBeforeAmountOut !== effectProof.oracleAfterAmountOut);
     emit({
       ...pathResult(
         parentBlock,
@@ -207,7 +229,9 @@ async function main(): Promise<void> {
         expectedPools,
         matchedPath,
         finalSuccess ? "final_sim_success" : "path_found",
+        anchors,
       ),
+      ...proofResult(effectProof),
       final_sim_success: finalSuccess,
       net_profit_raw: postExecution.netProfit.toString(),
       pre_gross_raw: preGross.toString(),
@@ -218,7 +242,8 @@ async function main(): Promise<void> {
       post_execution_net_raw: postExecution.netProfit.toString(),
     });
   } finally {
-    state.stop();
+    preState.stop();
+    postState.stop();
     provider.destroy();
   }
 }
@@ -268,20 +293,123 @@ function lowerAddress(value: string): string {
   return ethers.getAddress(value.toLowerCase()).toLowerCase();
 }
 
-async function replayPrefix(
+async function stateAnchors(
   provider: ethers.JsonRpcProvider,
-  state: AnvilStateBackend,
   blockNumber: number,
   victimIndex: number,
-): Promise<void> {
-  if (victimIndex === 0) return;
+  victimTxHash: string,
+): Promise<StateAnchors> {
+  if (victimIndex === 0) {
+    return { preKind: "parent-block", preHash: null, postHash: victimTxHash };
+  }
   const block = await provider.getBlock(blockNumber, true);
   if (!block) throw new Error(`block ${blockNumber} unavailable`);
-  for (let index = 0; index < victimIndex; index++) {
-    const tx = block.prefetchedTransactions[index];
-    if (!tx) throw new Error(`prefix transaction ${index} unavailable`);
-    await state.applyRawTx(await rawTransaction(provider, tx.hash, tx));
+  const victim = block.prefetchedTransactions[victimIndex];
+  const previous = block.prefetchedTransactions[victimIndex - 1];
+  if (!victim || victim.hash.toLowerCase() !== victimTxHash.toLowerCase()) {
+    throw new Error(`victim transaction ${victimIndex} unavailable in block ${blockNumber}`);
   }
+  if (!previous) throw new Error(`previous transaction ${victimIndex - 1} unavailable`);
+  return {
+    preKind: "previous-tx",
+    preHash: previous.hash.toLowerCase(),
+    postHash: victimTxHash,
+  };
+}
+
+async function anchorPreState(
+  state: AnvilStateBackend,
+  parentBlock: number,
+  anchors: StateAnchors,
+): Promise<void> {
+  if (anchors.preKind === "parent-block") {
+    await state.forkAt(parentBlock);
+    return;
+  }
+  if (!anchors.preHash) throw new Error("previous-tx anchor hash missing");
+  await state.forkAfterTx(anchors.preHash);
+}
+
+function latestTokenBackend(provider: ethers.JsonRpcProvider): TokenQueryBackend {
+  return {
+    call: (req) => provider.call({ to: req.to, data: req.data }),
+    getLogs: async (req) => provider.send("eth_getLogs", [req]),
+  };
+}
+
+function victimEffectProof(
+  plan: CandidatePlan,
+  route: EdgeSpec[],
+  triggerKind: "victim-swap" | "oracle-update",
+): VictimEffectProof {
+  const opportunity = plan.opportunity as unknown as {
+    victimEffect?: {
+      kind?: unknown;
+      priceChanges?: Array<{
+        adapterId?: unknown;
+        target?: unknown;
+        tokenIn?: unknown;
+        tokenOut?: unknown;
+        probeAmountIn?: unknown;
+        beforeAmountOut?: unknown;
+        afterAmountOut?: unknown;
+      }>;
+    };
+  };
+  const effect = opportunity.victimEffect;
+  if (triggerKind === "victim-swap") {
+    return emptyProof(effect?.kind === "swap" ? "swap" : null);
+  }
+  if (effect?.kind !== "oracle") return emptyProof(null);
+
+  const edgeIndex = optionalNonNegativeInt("AB_ORACLE_ROUTE_EDGE_INDEX");
+  if (edgeIndex === null || edgeIndex >= route.length) return emptyProof("oracle");
+  const spec = route[edgeIndex];
+  const change = (effect.priceChanges ?? []).find((candidate) =>
+    candidate.adapterId === spec.adapterId
+      && same(String(candidate.tokenIn ?? ""), spec.tokenIn)
+      && same(String(candidate.tokenOut ?? ""), spec.tokenOut)
+      && (!spec.target || same(String(candidate.target ?? ""), spec.target)),
+  );
+  if (!change) return emptyProof("oracle");
+  try {
+    return {
+      kind: "oracle",
+      oracleRouteEdgeIndex: edgeIndex,
+      oracleProbeAmountIn: BigInt(change.probeAmountIn as bigint),
+      oracleBeforeAmountOut: BigInt(change.beforeAmountOut as bigint),
+      oracleAfterAmountOut: BigInt(change.afterAmountOut as bigint),
+    };
+  } catch {
+    return emptyProof("oracle");
+  }
+}
+
+function emptyProof(kind: "swap" | "oracle" | null): VictimEffectProof {
+  return {
+    kind,
+    oracleRouteEdgeIndex: null,
+    oracleProbeAmountIn: null,
+    oracleBeforeAmountOut: null,
+    oracleAfterAmountOut: null,
+  };
+}
+
+function proofResult(proof: VictimEffectProof): Pick<
+  HuntResult,
+  | "victim_effect_kind"
+  | "oracle_route_edge_index"
+  | "oracle_probe_amount_in_raw"
+  | "oracle_before_amount_out_raw"
+  | "oracle_after_amount_out_raw"
+> {
+  return {
+    victim_effect_kind: proof.kind,
+    oracle_route_edge_index: proof.oracleRouteEdgeIndex,
+    oracle_probe_amount_in_raw: proof.oracleProbeAmountIn?.toString() ?? null,
+    oracle_before_amount_out_raw: proof.oracleBeforeAmountOut?.toString() ?? null,
+    oracle_after_amount_out_raw: proof.oracleAfterAmountOut?.toString() ?? null,
+  };
 }
 
 async function rawTransaction(
@@ -362,6 +490,7 @@ function pathResult(
   expectedPools: string[],
   path: TokenEdge[],
   stage: HuntResult["stage"],
+  anchors: StateAnchors,
 ): HuntResult {
   return {
     schema_version: 1,
@@ -380,6 +509,15 @@ function pathResult(
     pre_execution_net_raw: null,
     post_execution_success: null,
     post_execution_net_raw: null,
+    pre_state_anchor_kind: anchors.preKind,
+    pre_state_anchor_hash: anchors.preHash,
+    post_state_anchor_kind: "victim-tx",
+    post_state_anchor_hash: anchors.postHash,
+    victim_effect_kind: null,
+    oracle_route_edge_index: null,
+    oracle_probe_amount_in_raw: null,
+    oracle_before_amount_out_raw: null,
+    oracle_after_amount_out_raw: null,
   };
 }
 
@@ -448,6 +586,14 @@ function optionalPositiveInt(name: string, fallback: number): number {
   if (!raw) return fallback;
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive integer`);
+  return value;
+}
+
+function optionalNonNegativeInt(name: string): number | null {
+  const raw = process.env[name]?.trim();
+  if (!raw) return null;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer`);
   return value;
 }
 

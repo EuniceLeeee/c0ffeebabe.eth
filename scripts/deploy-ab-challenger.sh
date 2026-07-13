@@ -516,6 +516,8 @@ deploy() {
   assert_port_free 8569
   assert_port_free 8570
   assert_port_free 8571
+  assert_port_free 8572
+  assert_port_free 8573
   local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json" replay_top_n
   cp -f "$A_UNIVERSE" "$replay_universe"
   replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)

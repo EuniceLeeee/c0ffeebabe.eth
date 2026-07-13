@@ -423,8 +423,27 @@ test("production candidate schema accepts a reviewed oracle-triggered backrun in
     { adapterId: "univ3-swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
     { adapterId: "protocol-redeem", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
+  value.production_evidence!.sample.oracle_route_edge_index = 1;
   value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
   assert.deepEqual(validateAbProductionCandidate(value, { laneMode: "dual" }), []);
+});
+
+test("oracle-triggered backrun requires a route-bound oracle edge", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.lane_mode = "dual";
+  value.production_evidence!.strategy_kind = "backrun";
+  value.production_evidence!.trigger_kind = "oracle-update";
+  value.production_evidence!.posture.victim_dependent = true;
+  value.production_evidence!.challenger_stage = "final_sim_success";
+  value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
+  value.production_evidence!.sample.expected_route = [
+    { adapterId: "univ3-swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
+    { adapterId: "protocol-redeem", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
+  ];
+  value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
+  assert.ok(validateAbProductionCandidate(value, { laneMode: "dual" })
+    .some((error) => error.includes("oracle_route_edge_index")));
 });
 
 test("backrun candidate is rejected outside the explicit dual lane", () => {
