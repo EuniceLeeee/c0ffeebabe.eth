@@ -236,6 +236,36 @@
       },
       "created_at": "2026-07-13T03:00:00.000Z",
       "updated_at": "2026-07-13T03:00:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260713-native-only-profit-confidence",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "flash",
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x80062e1a5b24a30cdcf60a2bb5590969b08dc08588ba06f88ca2ddde13ee30cd",
+      "source_block": 25519804,
+      "comparable": true,
+      "primary_gap": "manual_required",
+      "gap_detail": "native_only_profit_trace_misclassified_requires_decode",
+      "evidence": {
+        "manual": "receipt and prestate trace show a position-conserving atomic loop whose WETH profit is fully unwrapped to native ETH; ERC20 and unpriced deltas are empty",
+        "canonical_before": "tx-profit computed positive netProfitUsd but profitConfidence=requires_decode, so the production evidence gate rejected the sample",
+        "reviewer": "019f59c9-9a8d-7630-ad95-823a916aa640 independently confirmed the confidence calculation must consume the successful native trace"
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/pnl/arb-profit.ts",
+        "issue": "profitConfidence was finalized before native tracing, so exact native-only profit remained requires_decode",
+        "evidence": "Coffee tx 0x80062e1a... has positive traced native profit, zero residual ERC20 deltas and no unpriced deltas, yet the production gate rejected only its requires_decode confidence",
+        "codify_target": "derive confidence after native tracing; retain public-router, unknown-residue, failed-trace and zero-trace fail-closed behavior; add regression coverage",
+        "status": "codified",
+        "codify_commit": "5cd6351b41524099d203c4ff139a5dc7e3f7b5df"
+      },
+      "created_at": "2026-07-13T04:47:49.000Z",
+      "updated_at": "2026-07-13T04:47:49.000Z"
     }
   ]
 }
