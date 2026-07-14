@@ -131,6 +131,16 @@ async function testTokenGraphEdges(): Promise<void> {
 
   const hgUsdcEntry = POOL_REGISTRY.find((entry) => entry.adapter === "metronome-hgusdc");
   assert(hgUsdcEntry !== undefined, "Metronome hgUSDC router entry missing");
+  assert(
+    Boolean(hgUsdcEntry.receiptEmitters
+      ?.map((address) => address.toLowerCase())
+      .includes(ADDR.HGUSDC.toLowerCase())),
+    "Metronome hgUSDC receipt emitter alias missing",
+  );
+  assert(
+    hgUsdcEntry.fixedSlotKind === "protocol" && hgUsdcEntry.fixedProtocolAction === "redeem",
+    "Metronome hgUSDC protocol metadata missing",
+  );
   const hgUsdcEdges = await buildTokenGraph(unusedBackend, [hgUsdcEntry]);
   const hgUsdcExit = hgUsdcEdges.find((edge) => edge.adapterId === "metronome-hgusdc-exit");
   assert(hgUsdcExit !== undefined, "Metronome hgUSDC exit edge missing");

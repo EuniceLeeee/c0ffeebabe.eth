@@ -90,8 +90,11 @@ export const FLASHLOAN_ADDRESSES: ReadonlySet<string> = new Set(
   ].map(lower),
 );
 
-const REGISTERED_ADAPTER_BY_ADDRESS: ReadonlyMap<string, string> = new Map(
-  POOL_REGISTRY.map((entry) => [lower(entry.address), entry.adapter]),
+const REGISTERED_ENTRY_BY_ADDRESS = new Map(
+  POOL_REGISTRY.flatMap((entry) => [
+    [lower(entry.address), entry] as const,
+    ...(entry.receiptEmitters ?? []).map((emitter) => [lower(emitter), entry] as const),
+  ]),
 );
 
 /** Backward-compatible export used by callers that need our registered ERC4626 vault set. */
@@ -141,10 +144,13 @@ export interface TxLoopCoverage {
 /** Classify one emitter given its distinct topic0s in this tx. */
 function classifyEmitter(addr: string, topic0s: string[]): VenueClass {
   const set = new Set(topic0s);
-  const adapter = REGISTERED_ADAPTER_BY_ADDRESS.get(addr);
+  const entry = REGISTERED_ENTRY_BY_ADDRESS.get(addr);
+  const adapter = entry?.adapter;
   // Adapter support requires BOTH the registered target and evidence for that adapter's real action.
   if (adapter === "erc4626" && topic0s.some((t) => ERC4626_EVENT_TOPICS.has(t))) return "our-vault";
-  if (adapter === "psm" && topic0s.some((t) => PSM_EVENT_TOPICS.has(t))) return "our-protocol";
+  if (entry?.fixedSlotKind === "protocol" && topic0s.some((t) => NAMED_PROTOCOL_EVENT_TOPICS.has(t))) {
+    return "our-protocol";
+  }
   if (FLASHLOAN_ADDRESSES.has(addr)) return "flashloan";
   if (topic0s.some((t) => SUPPORTED_SWAP_TOPICS.has(t) || t.startsWith(CURVE_ROUTER_EXCHANGE_PREFIX))) {
     return "supported-swap";

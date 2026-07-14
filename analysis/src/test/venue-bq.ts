@@ -83,7 +83,7 @@ test("receipt-log coverage separates protocol gaps from unknown emitters and req
   const result = classifyTxLoopCoverage({ txHash: "0x95805790", receiptLogs: logs });
 
   assert.deepEqual(deriveEdgeKindsFromLogs([logs[2]]), ["swap"]);
-  assert.deepEqual(result.vaults, [HG_USDC]);
+  assert.deepEqual(result.vaults, []);
   assert.deepEqual(result.protocolVenues, [HG_USDC, ADDR.SKY_PSM_LITE.toLowerCase()].sort());
   assert.equal(result.swapVenues, 1);
   assert.deepEqual(result.protocolVenueGaps, []);

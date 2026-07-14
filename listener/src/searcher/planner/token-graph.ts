@@ -52,6 +52,8 @@ export interface TokenPath {
 export interface PoolEntry {
   address: string;
   adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626" | "metronome-synth" | "metronome-hgusdc";
+  /** Contracts that emit the protocol action when execution goes through a different target. */
+  receiptEmitters?: string[];
   /** Dynamic venue identity proven before admission; event selectors alone never set this. */
   venueId?: VenueId;
   /** Factory returned by the pool, for factory-backed venues. */
@@ -174,8 +176,11 @@ export const POOL_REGISTRY: PoolEntry[] = [
   {
     address: ADDR.METRONOME_HGUSDC_ROUTER,
     adapter: "metronome-hgusdc",
+    receiptEmitters: [ADDR.HGUSDC],
     fixedTokenIn: ADDR.MSUSD,
     fixedTokenOut: ADDR.USDC,
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "redeem",
   }, // authorized msUSD -> frxUSD -> hgUSDC exit; direct hgUSDC redeem is not executable
   { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // pfUSDC-24
   { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },  // pfWETH-4
