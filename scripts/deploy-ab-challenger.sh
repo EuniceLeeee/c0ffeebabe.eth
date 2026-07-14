@@ -25,7 +25,7 @@ LEASE_SECONDS=${AB_LEASE_SECONDS:-5400}
 PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
 FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-240}
 
-mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe"
+mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe" "$ROOT/candidate"
 touch "$LOCK"
 exec 9>"$LOCK"
 flock -x 9
@@ -198,6 +198,72 @@ reap_stale() {
     append_history
     echo "reaped stale experiment=$experiment branch=$branch; branch retained"
   fi
+}
+
+require_previous_decisive_cleanup() {
+  [ -f "$STATE" ] || return 0
+  local status outcome branch report expected tmp reported
+  status=$(state_field status)
+  outcome=$(state_field outcome)
+  [ "$status" = "closed" ] || return 0
+  branch=$(state_field branch)
+  report=$(state_field production_report_path)
+  if valid_branch "$branch" && valid_report_path "$report"; then
+    git -C "$MAIN_REPO" fetch origin --prune -q \
+      || die "cannot inspect previous A/B decision"
+    tmp=$(mktemp "$ROOT/previous-decision.XXXXXX")
+    if git -C "$MAIN_REPO" show "origin/$branch:$report" > "$tmp" 2>/dev/null; then
+      reported=$(python3 - "$tmp" <<'PY'
+import json, re, sys
+text = open(sys.argv[1]).read()
+match = re.search(r"```ab_experiment\s*\n([\s\S]*?)\n```", text)
+if match:
+    doc = json.loads(match.group(1))
+    if doc.get("final_verdict") in ("win", "lose"):
+        print(doc["final_verdict"])
+PY
+)
+      if [ -n "$reported" ]; then outcome=$reported; fi
+    fi
+    rm -f "$tmp"
+  fi
+  case "$outcome" in
+    win) expected=merged_deleted ;;
+    lose) expected=deleted_unmerged ;;
+    *) return 0 ;;
+  esac
+  valid_branch "$branch" || die "previous decisive experiment has invalid branch metadata"
+  valid_report_path "$report" || die "previous decisive experiment has invalid report metadata"
+  if git -C "$MAIN_REPO" ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+    die "previous decisive experiment is not closed: $branch still exists; run ab-promotion-close before deploying another B"
+  fi
+  git -C "$MAIN_REPO" fetch origin main -q \
+    || die "cannot verify previous decisive close against origin/main"
+  tmp=$(mktemp "$ROOT/previous-close.XXXXXX")
+  if ! git -C "$MAIN_REPO" show "origin/main:$report" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    die "previous decisive experiment is not closed: final report is absent from origin/main"
+  fi
+  python3 - "$tmp" "$(state_field experiment_id)" "$branch" "$outcome" "$expected" <<'PY' \
+    || { rm -f "$tmp"; die "previous decisive experiment report does not prove promotion/rejection cleanup"; }
+import json, re, sys
+path, experiment_id, branch, outcome, expected = sys.argv[1:]
+text = open(path).read()
+match = re.search(r"```ab_experiment\s*\n([\s\S]*?)\n```", text)
+if not match:
+    raise SystemExit(1)
+doc = json.loads(match.group(1))
+ok = (
+    doc.get("experiment_id") == experiment_id
+    and doc.get("branch") == branch
+    and doc.get("final_verdict") == outcome
+    and doc.get("branch_action") == expected
+    and isinstance(doc.get("closing_branch_tip"), str)
+    and re.fullmatch(r"[a-fA-F0-9]{40}", doc["closing_branch_tip"])
+)
+raise SystemExit(0 if ok else 1)
+PY
+  rm -f "$tmp"
 }
 
 check_wallet_envelope() {
@@ -397,6 +463,7 @@ deploy() {
     || die "AB_INPUT_MODE must be shared|challenger"
   requested_config_delta=$(env_get AB_ALLOWED_CONFIG_DELTA)
   reap_stale
+  require_previous_decisive_cleanup
   now=$(date +%s); lease=$((now + LEASE_SECONDS))
   current_status=$(state_field status); current_lease=$(state_field lease_until); current_experiment=$(state_field experiment_id)
   if { [ "$current_status" = "running" ] || [ "$current_status" = "paused" ]; } \
@@ -406,33 +473,46 @@ deploy() {
   fi
   preflight
   resolve_a_universe
-  local a_commit b_commit
+  local a_commit b_commit branch_tip candidate_report post_freeze_file
   a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
   [ "$a_commit" = "$expected_a" ] || die "champion commit drift: expected $expected_a got $a_commit"
   git -C "$MAIN_REPO" fetch origin "$branch" -q
   git -C "$MAIN_REPO" rev-parse --verify "origin/$branch^{commit}" >/dev/null || die "remote challenger branch missing"
-  b_commit=$(git -C "$MAIN_REPO" rev-parse "origin/$branch^{commit}")
-  [ "$b_commit" = "$expected_b" ] || die "challenger branch drift: expected $expected_b got $b_commit"
+  branch_tip=$(git -C "$MAIN_REPO" rev-parse "origin/$branch^{commit}")
+  git -C "$MAIN_REPO" cat-file -e "$expected_b^{commit}" 2>/dev/null \
+    || die "frozen challenger commit is unavailable: $expected_b"
+  b_commit=$expected_b
+  git -C "$MAIN_REPO" merge-base --is-ancestor "$b_commit" "$branch_tip" \
+    || die "frozen challenger is not an ancestor of the report branch tip"
   [ "$(git -C "$MAIN_REPO" merge-base "$a_commit" "$b_commit")" = "$a_commit" ] \
     || die "challenger is not based on the deployed champion commit"
+  while IFS= read -r post_freeze_file; do
+    [ -n "$post_freeze_file" ] || continue
+    case "$post_freeze_file" in
+      docs/research/reports/*.md|docs/research/reports/*.json) ;;
+      *) die "challenger branch changed non-evidence file after frozen code SHA: $post_freeze_file" ;;
+    esac
+  done < <(git -C "$MAIN_REPO" diff --name-only "$b_commit..$branch_tip")
+  candidate_report="$ROOT/candidate/$experiment-report.md"
+  git -C "$MAIN_REPO" show "origin/$branch:$report_path" > "$candidate_report" 2>/dev/null \
+    || die "candidate report is not present on the challenger evidence tip"
+  chmod 600 "$candidate_report"
   stop_b
   if [ -e "$WT/.git" ]; then
     if [ -n "$(git -C "$WT" status --porcelain)" ]; then
       tar czf "$ROOT/archive/$experiment-dirty-$(date +%s).tgz" -C "$WT" .
     fi
-    git -C "$WT" reset --hard "origin/$branch" >/dev/null
+    git -C "$WT" reset --hard "$b_commit" >/dev/null
     git -C "$WT" clean -fd >/dev/null
   elif [ -e "$WT" ]; then
     die "$WT exists but is not a git worktree"
   else
-    git -C "$MAIN_REPO" worktree add --detach "$WT" "origin/$branch" >/dev/null
+    git -C "$MAIN_REPO" worktree add --detach "$WT" "$b_commit" >/dev/null
   fi
-  [ -f "$WT/$report_path" ] || die "candidate report is not present in the frozen challenger commit"
   local changed_file production_change=0
   while IFS= read -r changed_file; do
     [ -n "$changed_file" ] || continue
     case "$changed_file" in
-      "$report_path") ;;
       */test/*|*/tests/*|*/fixtures/*|*.test.ts|*.spec.ts)
         die "B challenger modifies its own replay/test evidence instead of production only: $changed_file"
         ;;
@@ -451,7 +531,7 @@ deploy() {
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
   local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json"
   cp -f "$A_UNIVERSE" "$replay_universe"
-  (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$WT/$report_path" \
+  (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$candidate_report" \
     --phase candidate \
     --expected-experiment "$experiment" \
     --expected-branch "$branch" \
@@ -460,6 +540,8 @@ deploy() {
     --expected-runtime-view-delta "$allow_runtime_view_delta" \
     --expected-input-mode "$requested_input_mode" \
     --expected-config-delta "$requested_config_delta" \
+    --artifact-ref "origin/$branch" \
+    --report-repo-path "$report_path" \
     --base-root "$MAIN_REPO" \
     --challenger-root "$WT" \
     --universe "$replay_universe" \
@@ -523,8 +605,8 @@ deploy() {
   discovery_to_block=$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
-    production_report_path "$report_path" production_report_hash "$(hash_file "$WT/$report_path")" \
-    a_commit "$a_commit" b_commit "$b_commit" \
+    production_report_path "$report_path" production_report_hash "$(hash_file "$candidate_report")" \
+    a_commit "$a_commit" b_commit "$b_commit" report_commit "$branch_tip" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
@@ -554,11 +636,44 @@ pause_experiment() {
 }
 
 close_experiment() {
-  local experiment=$1 outcome=$2 current status
+  local experiment=$1 outcome=$2 current status branch report expected tmp
   valid_id "$experiment" || die "invalid experiment id"
-  case "$outcome" in win|lose|needs_escalation|crashed_needs_escalation) ;; *) die "invalid outcome";; esac
+  case "$outcome" in win|lose|needs_escalation) ;; *) die "invalid outcome";; esac
   current=$(state_field experiment_id)
   [ "$current" = "$experiment" ] || die "state belongs to $current, not $experiment"
+  branch=$(state_field branch)
+  report=$(state_field production_report_path)
+  valid_branch "$branch" || die "close state has invalid branch"
+  valid_report_path "$report" || die "close state has invalid production report"
+  case "$outcome" in
+    win) expected=pending_merge ;;
+    lose) expected=pending_delete ;;
+    needs_escalation) expected=retained ;;
+  esac
+  git -C "$MAIN_REPO" fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" -q \
+    || die "cannot fetch frozen B report for close"
+  tmp=$(mktemp "$ROOT/close-report.XXXXXX")
+  git -C "$MAIN_REPO" show "origin/$branch:$report" > "$tmp" 2>/dev/null \
+    || { rm -f "$tmp"; die "cannot read frozen B report for close"; }
+  python3 - "$tmp" "$experiment" "$branch" "$outcome" "$expected" <<'PY' \
+    || { rm -f "$tmp"; die "close outcome does not match the committed B report"; }
+import json, re, sys
+path, experiment_id, branch, outcome, expected = sys.argv[1:]
+text = open(path).read()
+match = re.search(r"```ab_experiment\s*\n([\s\S]*?)\n```", text)
+if not match:
+    raise SystemExit(1)
+doc = json.loads(match.group(1))
+ok = (
+    doc.get("experiment_id") == experiment_id
+    and doc.get("branch") == branch
+    and doc.get("final_verdict") == outcome
+    and doc.get("branch_action") == expected
+    and doc.get("b_stopped") is True
+)
+raise SystemExit(0 if ok else 1)
+PY
+  rm -f "$tmp"
   status=$(state_field status)
   if [ "$status" = "running" ]; then
     capture_fairness

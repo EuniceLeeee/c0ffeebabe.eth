@@ -26,28 +26,42 @@ aws ssm send-command --instance-ids i-0ff908dedeec9ebc6 --document-name AWS-RunS
 ```
 `scripts/deploy-node.sh` (self-bootstraps from git): recovers the full working env from the **running process** → forces `SEARCHER_DRY_RUN=1` (override via env/markers) → **ABORTS if DRY_RUN can't be ensured (broadcast guard)** → tar-backs-up dirty files → `git reset --hard origin/main` → build → pins the process to a content-addressed, read-only pool-universe snapshot → restart → verifies the restarted env. The 30-minute indexer may update canonical `active-pools.json`, but that update becomes input only at the NEXT guarded deploy and cannot invalidate an active A/B window. Durable flags are marker-gated on the node (`.deploy-live`, `.bribe-all-above-gas`) so they survive the recover-from-process rebuild. Never restart by hand without this guard ([[project-node-env-dryrun-guard]]). Never spawn a 2nd searcher instance **except the single §A/B challenger through `deploy-ab-challenger.sh`**. Multiple concurrent sessions run on this repo — `git log` + check the node marker before any deploy, and never interrupt an active live measurement window. Local run logs go to `MEV/logs/` (gitignored), not `$HOME`.
 
-## Competitor-loss analysis — the canonical flow (run the tools, don't guess)
-Every "a competitor got value we didn't" event runs ONE fixed flow (the `bundle-postmortem` skill holds the decision tree; do NOT invent a parallel path):
-1. **SCOPE both, same shape:** a bundle WE submitted that lost (`bundle_not_included` → `bundle-postmortem --tx <ours>`) AND an opportunity we MISSED (`not_seen` → census produces a postmortem-shaped report). Neither is skipped.
-2. **FILTER non-comparable winners FIRST** (else it's noise). Only `atomic_loop` (a closed loop returning to a priced token in-tx) is comparable to our atomic sim. REJECT: `sandwich`, `one_leg_inventory` (one-way swap, profit realized off-chain / CEX-DEX — decisive check: the winner's Swap pushed the pool tick PAST the pre-triggering-swap `slot0` tick), plain transfers, JIT-LP → `non_comparable_winner`; our sim was RIGHT and correctly lost. Codified in bundle-postmortem (`winner_style`).
+## Competitor-loss analysis — capability-selected canonical flow (run the tools, don't guess)
+Every "a competitor got value we didn't" event runs ONE decision flow. Tool names are not governance:
+after the independent manual read, query the generated current inventory, inspect the recommended minimal
+coverage set plus all related TS/Bash alternatives, and execute the one or more tools whose combined evidence
+answers the required capabilities. Do not invent a parallel path or choose from memory.
+Fixed evidence writers/runners/gates are infrastructure, not diagnostic choices; only semantic capabilities
+are predeclared. Do not run every indexed command blindly because the inventory also contains runtime,
+deployment, cleanup, fork, and unrelated test entrypoints.
+1. **SCOPE both, same shape:** a bundle WE submitted that lost (`bundle_not_included`) AND an opportunity we
+   MISSED (`not_seen`). Neither is skipped. Select `single-transaction,competitor-loss,causality` for the
+   first and `competitor-window,classification` for the second.
+2. **FILTER non-comparable winners FIRST** (else it's noise). Only `atomic_loop` (a closed loop returning to a priced token in-tx) is comparable to our atomic sim. REJECT: `sandwich`, `one_leg_inventory` (one-way swap, profit realized off-chain / CEX-DEX — decisive check: the winner's Swap pushed the pool tick PAST the pre-triggering-swap `slot0` tick), plain transfers, JIT-LP → `non_comparable_winner`; our sim was RIGHT and correctly lost. The selected canonical deep transaction analyzer owns `winner_style`.
 3. **AUTO-IMPROVE from the tool's verdict** — classify + close per gap class (pool/path/execution-adapter/detection/pure-outbid), validate with a rule-12 fixture flip (`docs/research/gates.md`).
 4. **INCONCLUSIVE → MANUAL escalation → codify:** auto-close closed 0 yet we demonstrably LOST ⇒ the tool hit a class it can't name ("auto-analysis empty" is itself a finding). Package {postmortem JSON + auto-close result + our sim/bid + winner touchedVenues/builderPayment} → a FRESH analyst (Fable PRIORITY, Opus 4.8 fallback) names the missed class → CODIFY it back into the tool (rule 16). A `pending-manual-analysis` package left unanalyzed BLOCKS cycle-close.
 
 ```bash
-cd analysis && npm run bundle-postmortem -- --events <events.jsonl> --tx <our tx, prefix ok> \
-  --rpc http://127.0.0.1:8545 --out /tmp/pm.json
-cd listener && npm run auto-close-route-gap -- --report /tmp/pm.json --rpc http://127.0.0.1:8545  # backfill missing poolId + force-include (idempotent)
+cd analysis
+npm run tool-index -- --check
+npm run tool-index -- --select single-transaction,competitor-loss,causality --out /tmp/event-tools.json --json
+# Inspect recommended_tools + related_tools, then execute each chosen current tool through the runner:
+npm run tool-run -- --manifest /tmp/event-tools.json --tool <indexed-id> -- <event/tx/report/RPC args>
+# Reconcile the results and archive the manifest path + SHA-256 with the report.
 ```
 Events + local reth live on the NODE (run via SSM); the events path is the running process's `SEARCHER_EVENTS_PATH` (read `/proc/<pid>/environ`). Postmortem tree: one-shot validity (a mempool-route bundle pins ONE target block; "not included after the swap landed" is EXPECTED) → builder reach (Flashbots relay auto-shares to BuilderNet ⇒ `flashbots: ACCEPTED` ⇒ BuilderNet saw it) → auction outcome (`outbid` = winner payment > our bid; `route_gap_decisive` = winner payment > our FULL sim gross ⇒ coverage gap, no bid could have won) → gap class vs `runtime-graph-pools.json`. **force-include is the band-aid**; same-class force-include ≥3 → fix the SCORER (arb-relevance scoring epic, `project-pool-scoring-arb-relevance-epic`), stop pinning. Auto-deploy is sanctioned in this chain (decision-log D-002) with mode-preservation verify + debounce (≤1 deploy/window). Dated closed instances (e.g. the native-ETH v4 pool gap `0xa32b646c`) live in `docs/decision-log.md`.
 
 ## Mechanics
 - One file per run: `docs/research/reports/live-run-<run_id>-hermes.md`. Two templates: **implementation cycle** (known fix → code → gate → merge) uses the lean `hermes-impl-cycle.md`; **live-run analysis cycle** uses the full `hermes-live-run.md`. Governance rules 11/12/13 apply to both.
-- **Step 1 — competitor cross-reference (MANDATORY, before any conclusion).** Use the EXISTING scripts (iterate, don't reinvent), over the same block window, on the local reth node (zero Alchemy CU). Applies to EVERY measured window — including a pure metrics/deploy window (a metrics gate answers "did we regress"; Step-1 answers "what did competitors capture that we missed"). **Precondition: `SEARCHER_EVENTS_PATH` set before the window** (verify the events file writes right after the banner) — a window without structured JSONL is not a valid Hermes window.
-  - `analysis live-loss --watch <WATCHLIST> --events <jsonl> --rpc http://127.0.0.1:8545` → per-EOA `seenScope`/`primaryReason` + `poolInOurGraph`. `--competitor-scan` → per-drop victim-real-block competitor take ([[project-competitor-scan-tool]]).
-  - For an A/B block-scan window, run `/opt/MEV/scripts/census-gap.sh <from> <to> <WATCHLIST> <out-dir>
-    --blockscan-log <log>` on the node. It is the canonical glue from `census-report`'s complete matched-take
-    list to per-tx `bundle-postmortem` + source-block scanner evidence. Its verdicts remain hypotheses until
-    the conserving `atomic_loop` filter and the calibration gate below pass.
+- **Step 1 — competitor cross-reference (MANDATORY, before any conclusion).** First make the independent
+  manual judgment. Then run `cd analysis && npm run tool-index -- --check` and select the current tools for
+  `competitor-window,classification` plus `single-transaction,competitor-loss,causality`; use the indexed
+  repo glue when `block-scan` is also required. Write the selection manifest, run the chosen indexed IDs via
+  `tool-run` over the same block window on local reth (zero Alchemy CU), and record query + successful IDs +
+  manifest path/SHA-256. This applies to EVERY measured window — including
+  a pure metrics/deploy window (a metrics gate answers "did we regress"; Step-1 answers "what did competitors
+  capture that we missed"). **Precondition: `SEARCHER_EVENTS_PATH` set before the window** (verify the events
+  file writes right after the banner) — a window without structured JSONL is not a valid Hermes window.
   - **WATCHLIST (seed):** `0xc0ffeebabe5d496b2dde509f9fa189c25cf29671` (coffeebabe), `0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13`.
   - **Both agents run this and cite it.** Each works from PRIMARY sources independently (raw script JSON + own on-chain trace), **never the other's curated facts/conclusion**. Secondary-source-validate ≥1 key tx via Alchemy/Tenderly. **MANUAL analysis, not script-only:** the label is a hypothesis; hand-trace the watchlist's key txs — a root-cause is INVALID unless it names the specific source swap (or proves atomic) from a manual trace.
 - **ENFORCEMENT — the hermes-gate (forcing function).** After EVERY dry-run, `cd analysis && npm run hermes-gate -- <hermes-md>` MUST exit 0 before `Final Approval`. It validates a structured on-disk artifact (prose can't satisfy it) and enforces five analyses: (1) standard `run_analysis` (funnel + `dominant_drop` + `events_source`); (2) per-watchlist-EOA comparison; (3) coffeebabe `analysis_mode:"full"` (EVERY tx hand-analyzed, pools in/out of `runtime-graph-pools.json` + `gap_class`); (4) other bots `analysis_mode:"sample"`; (5) **intake audit — the funnel-EXTERNAL lens** (router-allowlist + MEV-Share intake gaps never ENTER the funnel, so `pipeline_dropped` can't see them). Doctrine the gate encodes: a "private" victim is NOT a human gate until the MEV-Share feed is ruled in; "coverage exhausted" is INVALID without the intake fraction; an `atomic` competitor is a scanner/strategy gap, NOT a market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow. Record `hermes_gate: PASS`.
@@ -101,10 +115,13 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 ### One unattended wake = one new problem
 1. **RECOVER.** Run trusted `origin/main:scripts/deploy-ab-challenger.sh reap` first. An expired/crashed B is
    stopped, A gets all CPUs back, its branch is retained, and the report becomes `needs_escalation`. Read the
-   newest A/B reports. Before picking new work, archive any retained branch whose gap has since been closed
-   by a validated commit on `origin/main`: copy/update its report on main with the exact base, challenger,
-   `resolved_by_commit`, and validation evidence; authorize `resolved_deleted`; delete only that literal
-   `ab/*` branch/worktree. Skip every still-retained `problem_id`; never retry the same hard problem every
+   newest A/B reports. Then run `cd analysis && npm run ab-resolution-sweep -- --apply`. A later fix closes
+   an old branch only through a main-committed `docs/research/resolutions/*.json` claim naming the same stable
+   `problem_id`, exact report, exact retained branch-tip SHA, and `resolved_by_commit`. The old report, not
+   the new claim, owns the pinned `resolution_replay` command and expected transition. The runner executes it
+   in the named commit worktree; only exit 0 may archive the report, authorize `resolved_deleted`, and delete
+   the clean literal `ab/*` branch/worktree. Missing claim/report, replay failure, dirty worktree, main drift,
+   or gate failure retains it. Skip every still-retained `problem_id`; never retry the same hard problem every
    hour. With no active B lease, sync champion A to `origin/main` through guarded
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
 2. **PICK A PRODUCTION SAMPLE, NOT A METRIC.** Select the highest-impact unclaimed blocker only after one
@@ -125,10 +142,21 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `docs/research/reports/ab-<experiment_id>-hermes.md` from the A/B template and fill its `ab_experiment`
    schema-v3 journal: exact problem/base SHA, change class, hypothesis, semantic success criterion,
    `production_evidence` (real tx/block/net +EV evidence, current-scope posture, baseline→challenger funnel
-   stage, passing replay), deterministic gate,
+   stage, passing replay), deterministic gate, and `analysis.tool_selection` (capability query, successfully
+   executed selected IDs, generated-catalog check, execution-manifest path + SHA-256). The query names
+   evidence capabilities, never executable names; the
+   generated index inventories every current analysis/listener package command and repository TS/Bash/Python
+   entrypoint, proposes a coverage set, and exposes all related alternatives. Run additional related tools
+   whenever the first set is partial or contradictory. Every selected tool runs through `tool-run`, whose
+   machine receipt binds its current descriptor, argv/output hashes, real exit code, timestamps, and exact
+   live window. The gate judges successful receipt capability union, not a hardcoded tool list or self-reported
+   command. Also include a self-contained `resolution_replay` command and expected
+   transition that a later resolution claim cannot replace,
    intended metric evidence, input mode, allowed config delta, and whether the change is expected to alter
-   the runtime block-scan view/graph. `challenger_commit` is temporarily pending
-   here because a commit cannot contain its own SHA. Commit/push the initial report on B.
+   the runtime block-scan view/graph. `challenger_commit` is temporarily pending here because a commit cannot
+   contain its own SHA. Commit/push the initial report on B. The later frozen code SHA may be followed by
+   report/evidence-only commits; that descendant branch tip is the evidence tip, never the runtime commit
+   promoted to A.
 4. **FIX + FREEZE.** Codex writes; the non-author agent
    reviews; the same production sample must advance at least one stage
    (`not_admitted→path_found→final_sim_success`) in a pinned replay
@@ -139,8 +167,9 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
    `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it
    is the remote branch tip and deploy that SHA. After deployment the branch may advance only through
-   report/evidence commits; the final journal's `challenger_commit` is the frozen deployed code SHA, not the
-   later report tip.
+   `docs/research/reports/*.md|*.json` evidence commits. The trusted wrapper reads the report from that
+   descendant evidence tip but checks out/deploys the frozen code SHA; the final journal's
+   `challenger_commit` remains the frozen deployed code SHA, not the evidence tip.
 5. **DEPLOY B THROUGH THE SAFETY WRAPPER ONLY.** Execute the trusted `origin/main` copy of
    `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>
    <candidate-report.md> <allow-view-delta>` over SSM, where the last argument is `1` only when
@@ -168,9 +197,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    sample. A fairness failure cannot yield a decisive verdict.
 7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
-8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, run the existing competitor
-   cross-reference against coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (plus the standing
-   watchlist) through `scripts/census-gap.sh` and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
+8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, use the generated tool index
+   after the manual trace to select `competitor-window,classification,block-scan` into an execution manifest,
+   then run the selected
+   current tool against coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (plus the standing
+   watchlist) and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
    victim-independent `block-scan atomic_loop`** transactions: in-tx route closes to a priced token, has no
    standing position, and does not depend on a prior/victim transaction. Exclude
    `sandwich`, `one_leg_inventory`, keeper/liquidation, JIT-LP, standing-credit, and private-inventory
@@ -180,16 +211,20 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    samples honestly, then use a separate recent historical artifact to seed backlog rather than inserting
    out-of-window txs or relabeling non-comparable transactions. This axis answers
    “did the tested gap to a mature searcher shrink?” and seeds the next problem. It does not replace A/B.
-   Before trusting those labels, run `cd analysis && npm run competitor-calibration`: it replays the nine
+   Before trusting those labels, select and run `classification,calibration`: it replays the nine
    pinned coffee source-shape fixtures plus conserving/inventory receipt controls. Record its JSON summary
    under `classifier_calibration`; `hermes-gate` independently reruns the same checks. A failure means the
    analysis tool is not authoritative: file/fix the tooling defect, retain this B as `needs_escalation`, and
    do not merge from an uncalibrated external comparison. Source-shape `atomic_state_arb` is never by itself
    proof of winner-style `atomic_loop`; the latter additionally requires in-tx position conservation.
 9. **AGENT-MANUAL FIRST, SCRIPT SECOND.** The orchestrating agent independently inspects both axes: local
-   A→B causal behavior and B→comparable-competitor production gap, then records
-   `agent_manual_verdict: win|lose|inconclusive` + evidence. Only then run the canonical
-   `ab-canary-compare` script over paired blocks and record its real exit code plus
+   A→B causal behavior and B→comparable-competitor production gap, then writes a standalone manual-verdict
+   JSON artifact with `ab-manual-verdict`. The trusted writer is write-once and seals the exact A/B log byte
+   counts + SHA-256 before any comparator can run. Only then select the remaining `ab,comparison` capabilities
+   into the execution manifest. The comparator verifies that seal, records its hash/nonce and its own start
+   time, and emits its result; copy those exact values into the journal. A timestamp typed into prose or a
+   manual artifact bound to different/rotated log bytes is not ordering evidence. Run the selected tool set
+   through `tool-run` over paired blocks and record its machine receipts plus
    `script_assessment: supports|contradicts|inconclusive`. This follows `CLAUDE.md` reconcile-after and tests
    the script rather than anchoring the analyst to it. Infrastructure/identical-code shakedowns use
    `--expect-equal --require-output-match`; normal challenger experiments keep the default improvement goal.
@@ -201,23 +236,31 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 11. **MECHANICAL VETO.** `npm run ab-canary-gate -- <report> --phase decision` verifies safety/fairness,
     exact evidence, script artifact, non-author review, replay requirements, and B stopped. It can reject a
     decision; it cannot create a win. `hermes-gate` also runs the A/B close validation when the journal exists.
-12. **CLOSE EXACTLY ONE WAY.** First run `deploy-ab-challenger.sh close <id> <verdict>`.
-    - `win`: only if `origin/main` is still the tested base; otherwise retain/retest. Merge the exact frozen
-      `challenger_commit` with `--no-ff` (never the later report tip), then add the final redacted report as a
-      separate main-side docs commit. Push, deploy champion via guarded `deploy-node.sh`, add `merge_commit`,
-      authorize cleanup with the A/B gate (which verifies the no-ff merge's second parent is the tested SHA),
-      delete local+remote `ab/*`, then close-gate.
-    - `lose`: copy/commit the final redacted report (not challenger code) to `main`, authorize cleanup,
-      archive evidence, delete local+remote `ab/*`, then close-gate against the preserved main report.
+12. **CLOSE EXACTLY ONE WAY.** Commit/push the completed B report first (`b_stopped=true`, final verdict and
+    matching pending branch action), then run `deploy-ab-challenger.sh close <id> <verdict>`; the wrapper
+    refuses an outcome that differs from that committed report.
+    - `win|lose`: from a clean main-based checkout run
+      `cd analysis && npm run ab-promotion-close -- <repo-relative-report-path>`. This command consumes the already
+      adjudicated manual+tool+review verdict; it cannot create or change one. For `win` it requires
+      `origin/main` still equal the tested base, merges only the exact frozen `challenger_commit` with
+      `--no-ff`, archives the final report plus manual/comparator/Step-1 artifacts, runs both A/B and Hermes
+      gates, and atomically pushes main while leasing the exact B tip. It then verifies the merge parents,
+      authorizes cleanup, and exact-deletes
+      the literal `ab/*` ref/worktree. For `lose` it archives only the report and exact-deletes without merging
+      challenger code. It is crash-idempotent. After a win, deploy the new main champion through guarded
+      `deploy-node.sh`, then run `ab-resolution-sweep -- --apply` for old gaps the new main may have resolved.
+      A new B deployment is mechanically refused while the previous decisive branch/report cleanup is
+      incomplete. A successful promotion is the next champion (`A_n + B_n(win) → A_{n+1}`); the next round
+      cuts a new `B_{n+1}` from that champion, never from the old challenger branch.
     - `needs_escalation` / unfinished / crash: branch action is `retained` while unresolved; do not merge or
       delete yet. Record the unresolved question so a stronger model can inspect it. The next hourly wake
       moves to a new problem.
-    - later resolution: when a deterministic replay or subsequent A/B proves a fix already on `origin/main`,
-      copy the original report/evidence to main, add `resolution.resolved_by_commit` + `resolution.evidence`,
-      set `branch_action=resolved_deleted`, commit/push the report, then run close-phase cleanup authorization
-      and delete the old local+remote `ab/*` branch/worktree. The report on main, not a permanent branch, is
-      the archive. A recorded SHA alone is not durable for an unmerged Git object, so unresolved branches
-      remain until this condition is met.
+    - later resolution: add a main-committed resolution claim and run `ab-resolution-sweep -- --apply` at the
+      next wake and after every win merge. It proves the old pinned replay fails on the retained base and
+      passes on the claimed main SHA, writes the report resolution,
+      pushes the durable archive, invokes the existing close gate, and only then deletes local+remote branch
+      and clean worktree. The report on main, not a permanent branch, is the archive. A recorded SHA alone is
+      not durable for an unmerged Git object, so unresolved branches remain until this condition is met.
 
 **No mid-loop questions.** This dual-live/merge/`ab/*` cleanup sequence is explicitly authorized inside the
 dated bounded envelope. Only funding/cap/key changes, standing-credit enablement, or out-of-envelope
@@ -284,8 +327,8 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
       ```
       ## Method Trace
       task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation
-      tools_used:       - <tool / command / file>   (structured tool BEFORE ad-hoc curl/jq)
-      evidence_order:   1. structured tool output  2. raw tx/receipt/trace  3. repo code path  4. compared to taxonomy
+      tools_used:       - manual raw-data probe  - tool-index capability query  - selected canonical tool set / commands / files
+      evidence_order:   1. independent raw tx/receipt/trace judgment  2. tool-index selection  3. canonical tool output  4. repo code/taxonomy reconciliation
       analysis_frame:   - strategy_kind first, edge_kind second
                         - comparable vs non-comparable before gap classification
                         - protocol constraint vs market PnL
@@ -303,9 +346,11 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
       `docs/analysis/` and is validated round-agnostically with `npm run method-trace-check -- <md>` (no
       step1 / 5-analysis scaffolding); harvest collects both `docs/analysis/` and the round reports. A
       Hermes round is the heavy special case of the same Method Trace.
-17. **Manual-first, then canonical reconciliation (orchestrator-side companion to 16).** Follow
-`CLAUDE.md` reconcile-after: make the independent manual/causal judgment first, then RUN the canonical
-tool and compare. Do not anchor the analyst by showing it the script verdict first. A scratchpad probe run a
+17. **Manual-first, then indexed canonical reconciliation (orchestrator-side companion to 16).** Follow
+`CLAUDE.md` reconcile-after: make the independent manual/causal judgment first, then query the generated
+tool index by needed capabilities, inspect the coverage set and related alternatives, RUN the selected one or
+more canonical tools, and compare their results. Do not choose a tool from a
+remembered list or anchor the analyst by showing it the script verdict first. A scratchpad probe run a
 second time, or mapping to an existing taxonomy, MUST be codified before cycle-close (same teeth as 13/16).
 
 ## Boundary (CLI-orchestrated by Claude)

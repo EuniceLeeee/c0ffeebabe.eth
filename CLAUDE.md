@@ -78,8 +78,20 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   `touch /tmp/mev-workflow-codex-exempt` (one-shot, hook-consumed) to declare the fan-out is sandbox-blocked.
 - **Reconcile-after (NOT tool-first-pre-check)** — the ORDER is: hand-roll/analyze FIRST (it is allowed and
   valuable — rule 16: manual analysis is a TEST of the tooling and routinely finds where a script is stale/
-  wrong), THEN reconcile the result against the existing toolset (`analysis/src/cli/*`, the LearningCase
-  store, `redact-live-run`, `analysis/src/pnl/*`) — run/extend it and cross-check (HERMES rules 16+17). Do
+  wrong), THEN query the generated current inventory with
+  `cd analysis && npm run tool-index -- --select <capability[,capability]> --out <manifest.json>`, inspect its
+  recommended coverage set plus related alternatives, then run the selected tools through
+  `npm run tool-run -- --manifest <manifest.json> --tool <indexed-id> [--window <from>..<to>] -- <args>` and
+  reconcile their results,
+  and cross-check (HERMES rules 16+17). Never choose from a remembered/hardcoded tool list: the index is
+  generated from the current analysis/listener package scripts plus repo scripts, and `--check` fails on an
+  unindexed analysis CLI. Selection is validated by the **union** of capabilities across the recorded tools;
+  no lifecycle rule hardcodes a diagnostic tool name. Trusted writers/runners/gates may be fixed because they
+  create or validate evidence; they do not supply the diagnostic conclusion. Record the capability query, selected tool IDs,
+  manifest path, and manifest SHA-256 in an A/B journal. `tool-run` records the current descriptor
+  fingerprint, redacted argv hash, exit status, output hashes/byte counts, timestamps, and exact live window.
+  A printed command, fixture-only run, failed/skipped shell branch, or remembered tool ID is not execution
+  evidence. Do
   NOT invert to "check the tool, then hand-roll": pre-checking suppresses the very manual analysis that
   catches a stale tool. Prefer structured JSONL over log greps; `pipeline_dropped` is the source of truth
   for loss attribution.
@@ -87,12 +99,15 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   a RECONCILE-after, not a pre-block (a pre-block suppresses the manual analysis that catches a STALE tool,
   rule 16). A throwaway `_*`/`/tmp`·scratchpad analysis (`.ts/.py/.sh/.mjs/.js` OR inline `python3 -c`/`node
   -e`) with a venue/pool/trace/PnL marker fires a reminder AND records a pending entry; the **Stop hook then
-  refuses to end the turn** until it clears — that is the teeth. Clear it by RUNNING the canonical tool
-  (`npm run bundle-postmortem/…` — that IS the reconciliation) or a `tool-reconciled: <named tool> agrees|
-  diverged→<fix>` line. Divergence is the finding: fix the stale tool (rule 16) OR the wrong hand analysis
-  (e.g. `in_graph` shows a "dead edge" is really an unindexed pool = pool gap). Honest residual (2026-07-06
-  blind audit): silencing is still honor-system (a `tool-reconciled:` line naming a tool clears it whether or
-  not you truly ran it) and recall is wide-but-not-total — a gate on the canonical pattern, not a proof.
+  refuses to end the turn** until it clears — that is the teeth. Clear it by RUNNING the indexed canonical
+  tool set selected for the needed capabilities through `tool-run`. A tracked Write/Edit may record an honest
+  `tool-reconciled: <exact-indexed-tool-id> agrees|diverged|n/a <reason>` when execution is genuinely
+  inapplicable; printing that text from Bash does not clear the gate. One partial tool does not clear it: the
+  successful execution/reconciliation capability union must cover the query. Divergence is the finding: fix
+  the stale tool (rule 16) OR the wrong hand analysis
+  (e.g. `in_graph` shows a "dead edge" is really an unindexed pool = pool gap). The hook is a gate on the
+  canonical analysis pattern, while schema-v3 Hermes/A-B decisions additionally require the machine execution
+  manifest and cannot be satisfied by prose.
 - **Tool defects close in the same analysis round.** If manual analysis and a canonical tool disagree about
   the tool's correctness or coverage, call a fresh non-author adversarial reviewer. When both analyses agree
   the tool is wrong or incomplete, file the exact `tooling_defect` LearningCase, fix the tool, add its regression
@@ -106,8 +121,14 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   gate authorizes it. A decisive `win`/`lose` cleans immediately. `needs_escalation`, unresolved
   manual/script disagreement, incomplete fixes, and crashes retain the branch only while unresolved. Once a
   later validated fix is on `origin/main`, copy the report to main with exact base/challenger/resolution SHAs,
-  mark `resolved_deleted`, gate-delete the old branch, and keep the report as the durable record. Never
+  add a main-committed `docs/research/resolutions/*.json` claim that pins the old branch tip, then run
+  `npm run ab-resolution-sweep -- --apply`: it replays the report-owned old gate at `resolved_by_commit`,
+  archives the report, invokes the cleanup gate, and exact-deletes only on success. Keep the report as the
+  durable record. Never
   delete another branch class under this authority.
+  Each new round starts from the current `origin/main` champion: `A_n → fresh B_n`. A proven win atomically
+  promotes the exact frozen B SHA to `A_{n+1}` and deletes B; the next challenger is then cut fresh from
+  `A_{n+1}`. Never stack the next experiment on an old B branch.
 - **Daily analysis = a light learning round (one Learning Kernel, two entrances: Hermes = heavy, daily =
   light).** When you do a **reusable judgment** outside a Hermes round (architecture review / competitor-path
   analysis / bundle postmortem / a tool found wrong / repo diagnosis), capture it via steps 1–4 below.

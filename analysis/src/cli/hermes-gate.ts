@@ -1,9 +1,16 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve, join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadCases, type LearningCase } from "../learning/learning-case.js";
 import { parseAbExperiment, validateAbExperiment } from "../ab-canary.js";
 import { runCompetitorCalibration } from "../competitor-calibration.js";
+import {
+  discoverToolIndex,
+  validateToolExecutionManifest,
+  validateToolIndex,
+  type ToolExecutionManifest,
+} from "../tool-index.js";
 import {
   firstLine,
   METHOD_TRACE_FIELDS,
@@ -390,7 +397,10 @@ export function validateIntakeAudit(json: any): void {
   }
 }
 
-export function validateAbExternalCalibration(json: any): void {
+export function validateAbExternalCalibration(
+  json: any,
+  context?: { artifactPath: string; window: { from: number; to: number } },
+): void {
   const calibration = json?.ab_external_calibration;
   if (!calibration || typeof calibration !== "object" || Array.isArray(calibration)) {
     return fail("artifact.ab_external_calibration missing for A/B cycle");
@@ -404,6 +414,32 @@ export function validateAbExternalCalibration(json: any): void {
   }
   if (isPlaceholder(String(calibration.tool_artifact ?? ""))) {
     fail("ab_external_calibration.tool_artifact missing");
+  }
+  if (isPlaceholder(String(calibration.tool_manifest ?? ""))
+      || !/^[a-f0-9]{64}$/.test(String(calibration.tool_manifest_sha256 ?? ""))) {
+    fail("ab_external_calibration must bind a tool execution manifest by path and SHA-256");
+  } else if (context) {
+    try {
+      const relative = String(calibration.tool_manifest).replaceAll("\\", "/");
+      if (relative.startsWith("/") || relative.split("/").includes("..")) {
+        throw new Error("tool_manifest must stay beside the Step-1 artifact");
+      }
+      const manifestPath = resolve(dirname(context.artifactPath), relative);
+      const source = readFileSync(manifestPath);
+      if (createHash("sha256").update(source).digest("hex") !== calibration.tool_manifest_sha256) {
+        throw new Error("tool_manifest SHA-256 mismatch");
+      }
+      const root = repoRoot(context.artifactPath);
+      const tools = discoverToolIndex(root);
+      const manifest = JSON.parse(source.toString("utf8")) as ToolExecutionManifest;
+      const errors = [
+        ...validateToolIndex(root, tools),
+        ...validateToolExecutionManifest(manifest, tools, ["competitor-window", "classification"], context.window),
+      ];
+      for (const error of errors) fail(`ab_external_calibration tool execution: ${error}`);
+    } catch (error) {
+      fail(`ab_external_calibration tool_manifest invalid: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   const fixtureCalibration = runCompetitorCalibration();
   const declaredCalibration = calibration.classifier_calibration;
@@ -577,21 +613,25 @@ export function validateManualArtifact(
   win: { from: number; to: number },
   watchlist: string[],
   requireAbCalibration = false,
+  artifactPath?: string,
 ): void {
   if (!json || typeof json !== "object") return fail("artifact is not a JSON object");
   const w = json.window;
   if (!w || !Number.isFinite(w.from) || !Number.isFinite(w.to)) {
     return fail("artifact.window missing {from,to}");
   }
-  // artifact window must overlap the declared window (not a stale/unrelated file)
-  if (w.to < win.from || w.from > win.to) {
-    fail(`artifact.window ${w.from}..${w.to} does not overlap declared window ${win.from}..${win.to}`);
+  // A partial/stale overlap can hide transactions and cannot calibrate this exact live window.
+  if (w.from !== win.from || w.to !== win.to) {
+    fail(`artifact.window ${w.from}..${w.to} must exactly match declared window ${win.from}..${win.to}`);
   }
 
   // (1) standard analysis (funnel + dominant drop) is mandatory every dry-run
   validateRunAnalysis(json);
   validateIntakeAudit(json);
-  if (requireAbCalibration) validateAbExternalCalibration(json);
+  if (requireAbCalibration) validateAbExternalCalibration(
+    json,
+    artifactPath ? { artifactPath, window: win } : undefined,
+  );
 
   const aw: string[] = Array.isArray(json.watchlist) ? json.watchlist.map((s: string) => String(s).toLowerCase()) : [];
   for (const addr of watchlist) {
@@ -710,7 +750,7 @@ function main(): void {
               process.exit(0);
             }
           } else {
-            validateManualArtifact(json, win, watchlist, /```ab_experiment\s*\n/.test(md));
+            validateManualArtifact(json, win, watchlist, /```ab_experiment\s*\n/.test(md), artifactPath);
           }
         }
       }

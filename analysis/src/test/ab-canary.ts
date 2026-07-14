@@ -279,6 +279,59 @@ test("equivalence mode supports identical semantic outputs without metric cherry
   assert.equal(result.output_mismatches, 0);
 });
 
+test("comparison CLI binds its output to a manual verdict written first", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-manual-first-"));
+  const a = path.join(tmp, "a.log");
+  const b = path.join(tmp, "b.log");
+  const manualPath = path.join(tmp, "manual.json");
+  const out = path.join(tmp, "compare.json");
+  fs.writeFileSync(a, log(100));
+  fs.writeFileSync(b, log(80));
+  const guard = path.resolve("../scripts/hooks/guard-ab-manual-first.py");
+  const comparatorCommand = `npm run ab-canary-compare -- --a-log ${a} --b-log ${b} --manual-verdict ${manualPath} --out ${out}`;
+  const blocked = spawnSync("python3", [guard], {
+    encoding: "utf8",
+    input: JSON.stringify({ tool_name: "Bash", tool_input: { command: comparatorCommand } }),
+  });
+  assert.equal(blocked.status, 2, "canonical comparator must be blocked before the manual seal exists");
+  const sealed = spawnSync(process.execPath, [
+    "--import", "tsx", "src/cli/ab-manual-verdict.ts",
+    "--experiment", "manual-first", "--author", "agent", "--verdict", "win",
+    "--evidence", "independent causal analysis", "--a-log", a, "--b-log", b, "--out", manualPath,
+  ], { cwd: path.resolve("."), encoding: "utf8" });
+  assert.equal(sealed.status, 0, sealed.stderr);
+  const manual = JSON.parse(fs.readFileSync(manualPath, "utf8"));
+  const allowed = spawnSync("python3", [guard], {
+    encoding: "utf8",
+    input: JSON.stringify({ tool_name: "Bash", tool_input: { command: comparatorCommand } }),
+  });
+  assert.equal(allowed.status, 0, allowed.stderr);
+  const result = spawnSync(process.execPath, [
+    "--import", "tsx", "src/cli/ab-canary-compare.ts",
+    "--a-log", a, "--b-log", b, "--manual-verdict", manualPath, "--out", out,
+    "--min-paired-blocks", "4", "--warmup-blocks", "0",
+  ], { cwd: path.resolve("."), encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const artifact = JSON.parse(fs.readFileSync(out, "utf8"));
+  assert.equal(artifact.manual_verdict_written_at, manual.written_at);
+  assert.match(artifact.manual_verdict_sha256, /^[a-f0-9]{64}$/);
+  assert.ok(Date.parse(artifact.comparator_started_at) > Date.parse(manual.written_at));
+  assert.equal(artifact.a_log_sha256, manual.a_log_sha256);
+  assert.equal(artifact.b_log_sha256, manual.b_log_sha256);
+
+  const rewrite = spawnSync(process.execPath, [
+    "--import", "tsx", "src/cli/ab-manual-verdict.ts",
+    "--experiment", "manual-first", "--author", "agent", "--verdict", "win",
+    "--evidence", "rewrite", "--a-log", a, "--b-log", b, "--out", manualPath,
+  ], { cwd: path.resolve("."), encoding: "utf8" });
+  assert.notEqual(rewrite.status, 0, "trusted manual artifact must be write-once");
+
+  const missing = spawnSync(process.execPath, [
+    "--import", "tsx", "src/cli/ab-canary-compare.ts", "--a-log", a, "--b-log", b, "--out", out,
+  ], { cwd: path.resolve("."), encoding: "utf8" });
+  assert.notEqual(missing.status, 0);
+});
+
 function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
   fs.writeFileSync(path.join(tmp, "compare.json"), JSON.stringify(artifact));
   return {
@@ -328,10 +381,21 @@ function experiment(tmp: string, artifact: AbCompareResult): AbExperiment {
       agent_manual_author: "orchestrator-fable",
       agent_manual_verdict: "win",
       agent_manual_evidence: "paired stage lines agree with the measured improvement",
+      agent_manual_written_at: "2026-07-14T01:00:00.000Z",
+      agent_manual_artifact: "manual.json",
+      agent_manual_artifact_sha256: "a".repeat(64),
+      comparator_started_at: "2026-07-14T01:05:00.000Z",
       script_exit_code: 0,
       script_assessment: artifact.script_assessment,
       script_artifact: "compare.json",
       reconciliation: "agree",
+      tool_selection: {
+        capability_query: ["single-transaction", "causality"],
+        selected_tools: ["analysis:bundle-postmortem"],
+        catalog_check_exit_code: 0,
+        evidence_manifest: "tools.json",
+        evidence_manifest_sha256: "a".repeat(64),
+      },
     },
     final_verdict: "win",
     branch_action: "pending_merge",
@@ -353,6 +417,8 @@ function productionCandidate(tmp: string): AbExperiment {
   });
   const value = experiment(tmp, artifact);
   value.schema_version = 3;
+  value.window.measured_from_block = 100;
+  value.window.measured_to_block = 109;
   value.change_class = "capability";
   value.deterministic_gate = { result: "pass", evidence: "pinned block-scan replay advances the same sample" };
   value.production_evidence = {
@@ -390,6 +456,12 @@ function productionCandidate(tmp: string): AbExperiment {
       evidence: "the same tx/block changes not_admitted to path_found",
     },
   };
+  value.resolution_replay = {
+    cwd: "listener",
+    argv: ["node", "src/searcher/test/pinned-production-gap.mjs"],
+    timeout_seconds: 1200,
+    expected_transition: "same pinned sample advances one production stage",
+  };
   return value;
 }
 
@@ -419,6 +491,13 @@ test("production candidate gate rejects analysis-only or metric-only challengers
   assert.ok(errors.some((error) => error.includes("advance at least one production stage")));
 });
 
+test("production candidate gate requires indexed tool selection evidence", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  delete value.analysis.tool_selection;
+  assert.ok(validateAbProductionCandidate(value).some((error) => error.includes("tool_selection")));
+});
+
 test("production candidate gate binds deployment identity and requires a passing deterministic gate", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   const value = productionCandidate(tmp);
@@ -427,6 +506,7 @@ test("production candidate gate binds deployment identity and requires a passing
     experimentId: "different-experiment",
     branch: "ab/different-branch",
     baseCommit: "f".repeat(40),
+    challengerCommit: "e".repeat(40),
     expectedRuntimeViewDelta: true,
     inputMode: "challenger",
     allowedConfigDelta: ["SEARCHER_BLOCKSCAN_MAX_CANDIDATES"],
@@ -435,6 +515,7 @@ test("production candidate gate binds deployment identity and requires a passing
   assert.ok(errors.some((error) => error.includes("experiment_id")));
   assert.ok(errors.some((error) => error.includes("branch")));
   assert.ok(errors.some((error) => error.includes("base_commit")));
+  assert.ok(errors.some((error) => error.includes("challenger_commit")));
   assert.ok(errors.some((error) => error.includes("expected_runtime_view_delta")));
   assert.ok(errors.some((error) => error.includes("input_mode")));
   assert.ok(errors.some((error) => error.includes("allowed_config_delta")));
@@ -450,6 +531,15 @@ test("schema v3 failed replay may close honestly as needs_escalation", () => {
   value.b_stopped = true;
   const errors = validateAbExperiment(value, path.join(tmp, "report.md"), "close");
   assert.deepEqual(errors, []);
+});
+
+test("schema v3 mechanically requires manual judgment before the comparator starts", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.analysis.agent_manual_written_at = "2026-07-14T01:06:00.000Z";
+  value.analysis.comparator_started_at = "2026-07-14T01:05:00.000Z";
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "decision")
+    .some((error) => error.includes("must be earlier")));
 });
 
 test("historical schema v2 remains readable but cannot deploy as a new candidate", () => {

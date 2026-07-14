@@ -6,6 +6,43 @@ export type ScriptAssessment = "supports" | "contradicts" | "inconclusive";
 export type FinalVerdict = "win" | "lose" | "needs_escalation";
 export type ChangeClass = "performance" | "correctness" | "capability";
 
+export type ResolutionReplaySpec = {
+  cwd: string;
+  argv: string[];
+  timeout_seconds?: number;
+  expected_transition: string;
+};
+
+const SAFE_REPLAY_EXECUTABLES = new Set(["node", "npm", "pnpm", "forge", "cargo"]);
+
+export function validateResolutionReplay(replay: ResolutionReplaySpec | undefined): string[] {
+  const errors: string[] = [];
+  if (!replay || typeof replay !== "object") return ["resolution_replay is required"];
+  if (!replay.cwd || path.isAbsolute(replay.cwd) || replay.cwd.split(/[\\/]/).includes("..")) {
+    errors.push("resolution_replay.cwd must stay inside the resolved commit worktree");
+  }
+  if (!Array.isArray(replay.argv) || replay.argv.length < 2
+      || replay.argv.some((part) => typeof part !== "string" || part.length === 0)) {
+    errors.push("resolution_replay.argv must contain an executable and a committed command/script");
+  } else {
+    if (!SAFE_REPLAY_EXECUTABLES.has(replay.argv[0])) {
+      errors.push(`resolution_replay executable must be one of ${[...SAFE_REPLAY_EXECUTABLES].join(", ")}`);
+    }
+    if (replay.argv.some((part) => ["-e", "--eval", "-p", "--print", "-c"].includes(part))) {
+      errors.push("resolution_replay may not use inline evaluation or shell command flags");
+    }
+  }
+  const timeout = replay.timeout_seconds ?? 1_200;
+  if (!Number.isInteger(timeout) || timeout < 1 || timeout > 3_600) {
+    errors.push("resolution_replay.timeout_seconds must be an integer in 1..3600");
+  }
+  if (typeof replay.expected_transition !== "string" || replay.expected_transition.trim().length === 0
+      || /<[^>]*>/.test(replay.expected_transition)) {
+    errors.push("resolution_replay.expected_transition is required");
+  }
+  return errors;
+}
+
 type BlockRecord = {
   block: number;
   stage: Record<string, number>;
@@ -54,6 +91,24 @@ export type AbCompareResult = {
   require_output_match: boolean;
   script_assessment: ScriptAssessment;
   reasons: string[];
+  comparator_started_at?: string;
+  manual_verdict_path?: string;
+  manual_verdict_sha256?: string;
+  manual_verdict_written_at?: string;
+};
+
+export type ManualVerdictArtifact = {
+  schema_version: 2;
+  experiment_id: string;
+  author: string;
+  verdict: AbVerdict;
+  evidence: string;
+  written_at: string;
+  a_log_sha256: string;
+  b_log_sha256: string;
+  a_log_bytes: number;
+  b_log_bytes: number;
+  seal_nonce: string;
 };
 
 const SUMMARY_RE = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=(\d+)\s+candidates=(\d+)\s+quotePositive=(\d+)\s+bestNet=(null|-?\d+)\s+warmedV2V3=(\d+)\s+protocolMids=(\d+)\s+skippedVenues=(\d+)\s+ms=(\d+)/;
@@ -342,7 +397,12 @@ export type AbExperiment = {
     blockscan_view_hash?: string;
     blockscan_graph_hash?: string;
   };
-  window: { min_paired_blocks: number; warmup_blocks: number };
+  window: {
+    min_paired_blocks: number;
+    warmup_blocks: number;
+    measured_from_block?: number;
+    measured_to_block?: number;
+  };
   fairness: {
     same_block_window: boolean;
     paired_blocks: number;
@@ -392,10 +452,21 @@ export type AbExperiment = {
     agent_manual_author: string;
     agent_manual_verdict: AbVerdict;
     agent_manual_evidence: string;
+    agent_manual_written_at?: string;
+    agent_manual_artifact?: string;
+    agent_manual_artifact_sha256?: string;
+    comparator_started_at?: string;
     script_exit_code: number;
     script_assessment: ScriptAssessment;
     script_artifact: string;
     reconciliation: "agree" | "disagree" | "inconclusive";
+    tool_selection?: {
+      capability_query: string[];
+      selected_tools: string[];
+      catalog_check_exit_code: number;
+      evidence_manifest: string;
+      evidence_manifest_sha256: string;
+    };
     adversarial_review?: { verdict: AbVerdict; evidence: string; reviewer: string };
   };
   final_verdict: FinalVerdict;
@@ -403,6 +474,7 @@ export type AbExperiment = {
   b_stopped: boolean;
   evidence_bundle: string;
   merge_commit?: string;
+  closing_branch_tip?: string;
   mergeability?: {
     current_main_commit: string;
     tested_base_is_current: boolean;
@@ -412,6 +484,7 @@ export type AbExperiment = {
     resolved_by_commit: string;
     evidence: string;
   };
+  resolution_replay?: ResolutionReplaySpec;
 };
 
 const PRODUCTION_STAGE_ORDER = new Map([
@@ -427,6 +500,7 @@ export interface AbProductionCandidateContext {
   experimentId?: string;
   branch?: string;
   baseCommit?: string;
+  challengerCommit?: string;
   expectedRuntimeViewDelta?: boolean;
   inputMode?: "shared" | "challenger";
   allowedConfigDelta?: string[];
@@ -448,8 +522,14 @@ export function validateAbProductionCandidate(
   if (context.branch !== undefined && experiment.branch !== context.branch) {
     errors.push("candidate report branch does not match the deployment request");
   }
-  if (context.baseCommit !== undefined && experiment.base_commit !== context.baseCommit) {
-    errors.push("candidate report base_commit does not match the deployed champion");
+  if (context.baseCommit !== undefined
+      && (experiment.base_commit !== context.baseCommit || experiment.a?.commit !== context.baseCommit)) {
+    errors.push("candidate report base_commit/a.commit does not match the deployed champion");
+  }
+  if (context.challengerCommit !== undefined
+      && (experiment.challenger_commit !== context.challengerCommit
+        || experiment.b?.commit !== context.challengerCommit)) {
+    errors.push("candidate report challenger_commit/b.commit does not match the deployed challenger");
   }
   if (context.expectedRuntimeViewDelta !== undefined
       && experiment.expected_runtime_view_delta !== context.expectedRuntimeViewDelta) {
@@ -467,6 +547,13 @@ export function validateAbProductionCandidate(
   }
   if (experiment.deterministic_gate?.result !== "pass") {
     errors.push("candidate deployment requires deterministic_gate.result=pass");
+  }
+  errors.push(...validateResolutionReplay(experiment.resolution_replay));
+  const selection = experiment.analysis?.tool_selection;
+  if (!selection || selection.catalog_check_exit_code !== 0
+      || !Array.isArray(selection.capability_query) || selection.capability_query.length === 0
+      || !Array.isArray(selection.selected_tools) || selection.selected_tools.length === 0) {
+    errors.push("candidate deployment requires a successful indexed analysis.tool_selection");
   }
 
   const evidence = experiment.production_evidence;
@@ -567,6 +654,15 @@ function sha(value: unknown, length: 40 | 64): boolean {
   return typeof value === "string" && new RegExp(`^[a-f0-9]{${length}}$`, "i").test(value);
 }
 
+function isoTimestamp(value: unknown): number | null {
+  if (typeof value !== "string"
+      || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function scriptAlignsWithManual(manual: AbVerdict, script: ScriptAssessment): boolean {
   return (manual === "win" && script === "supports") || (manual === "lose" && script === "contradicts");
 }
@@ -658,6 +754,27 @@ export function validateAbExperiment(
   }
   if (!Number.isInteger(experiment.analysis?.script_exit_code)) {
     errors.push("analysis.script_exit_code must be an integer captured from the canonical comparison command");
+  }
+  if (experiment.schema_version === 3) {
+    if (!Number.isSafeInteger(experiment.window?.measured_from_block)
+        || !Number.isSafeInteger(experiment.window?.measured_to_block)
+        || experiment.window.measured_from_block! < 0
+        || experiment.window.measured_from_block! > experiment.window.measured_to_block!) {
+      errors.push("schema v3 requires an exact valid window.measured_from_block..measured_to_block");
+    }
+    const manualAt = isoTimestamp(experiment.analysis?.agent_manual_written_at);
+    const comparatorAt = isoTimestamp(experiment.analysis?.comparator_started_at);
+    if (manualAt === null) errors.push("schema v3 requires analysis.agent_manual_written_at ISO timestamp");
+    if (comparatorAt === null) errors.push("schema v3 requires analysis.comparator_started_at ISO timestamp");
+    if (manualAt !== null && comparatorAt !== null && manualAt >= comparatorAt) {
+      errors.push("agent_manual_written_at must be earlier than comparator_started_at");
+    }
+    if (!nonEmpty(experiment.analysis?.agent_manual_artifact)) {
+      errors.push("schema v3 requires analysis.agent_manual_artifact");
+    }
+    if (!sha(experiment.analysis?.agent_manual_artifact_sha256, 64)) {
+      errors.push("schema v3 requires analysis.agent_manual_artifact_sha256");
+    }
   }
 
   const manual = experiment.analysis?.agent_manual_verdict;
@@ -774,6 +891,9 @@ export function validateAbExperiment(
   if (experiment.schema_version === 3 && experiment.final_verdict === "win") {
     errors.push(...validateAbProductionCandidate(experiment));
   }
+  if (experiment.schema_version === 3 && experiment.branch_action === "retained") {
+    errors.push(...validateResolutionReplay(experiment.resolution_replay));
+  }
   const resolvedArchive = phase === "close" && experiment.branch_action === "resolved_deleted";
   if (experiment.final_verdict === "win" && resolved !== "win") errors.push("final win is not supported by reconciled/adjudicated evidence");
   if (experiment.final_verdict === "win" && experiment.mergeability?.tested_base_is_current === false) {
@@ -887,6 +1007,11 @@ export function validateAbExperiment(
   }
   if (phase === "close" && experiment.final_verdict === "win" && !sha(experiment.merge_commit, 40)) {
     errors.push("closed win requires merge_commit");
+  }
+  if (phase === "close" && experiment.schema_version === 3
+      && experiment.final_verdict !== "needs_escalation"
+      && !sha(experiment.closing_branch_tip, 40)) {
+    errors.push("schema v3 decisive close requires closing_branch_tip");
   }
   return errors;
 }

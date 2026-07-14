@@ -1,156 +1,379 @@
 #!/usr/bin/env python3
-"""PostToolUse(Write|Edit|Bash) guard — CLAUDE.md §5 / HERMES rules 16+17 RECONCILE-after.
+"""PostToolUse gate for capability-selected RECONCILE-after.
 
-POST (not a pre-block): a pre-block suppresses the manual analysis that catches a STALE tool (rule 16:
-manual analysis is a TEST of our tooling). So keep hand analysis, but make it RECONCILE with the
-canonical tool afterward — the two verify each other. Motivating miss (2026-07-06): a hand-rolled
-venue/pool "dead-edge" analysis reached a wrong conclusion `bundle-postmortem`'s `in_graph` would have
-avoided (a "dead edge" was really an unindexed pool = pool gap).
+Manual analysis runs first so it can test the repository tooling. When scratch analysis derives
+venue, pool, trace, or PnL facts, this hook records pending state. The generated tool index then
+selects current tools by capability. Pending clears only when the tools actually run (or are
+explicitly reconciled by exact indexed id) collectively cover every requested capability.
 
-This fires AFTER a hand-rolled analysis is written/run: exit 2 -> stderr reminder to the model, AND it
-records a PENDING entry so the Stop backstop (guard-reconcile-stop.py) can refuse to end the turn until
-the reconciliation is recorded — that is what makes it a gate, not a nudge. Running a canonical tool
-(npm run bundle-postmortem/census-report/venue-discovery*/auto-close*/tx-profit) OR an explicit
-`tool-reconciled: <named tool>` line CLEARS the pending state.
-
-Fail-open: any parse error -> exit 0 (never break real work). Scope stays tight; risk skews to
-under-firing, so recall was widened per the 2026-07-06 blind audit.
+Fail-open on parse or state errors so the hook cannot break ordinary repository work.
 """
-import sys, json, re, os
 
-# Global (non-session-isolated) pending path — operator reverted the per-session key (2026-07-07).
-# Known tradeoff: with concurrent sessions on this repo, one session's un-reconciled analysis can
-# fire the Stop backstop in another. Must match guard-reconcile-stop.py's PENDING path.
-PENDING = "/tmp/mev-reconcile-pending"
-TOOL_NAMES = ("bundle-postmortem", "census-report", "venue-discovery", "venue-evidence",
-              "venue-registry", "auto-close-route-gap", "auto-close", "tx-profit", "arb-profit")
-TOOLS_TXT = (
-    "  - bundle-postmortem.ts  extractTouchedVenues(receipt, graph) + venue.in_graph (pool-in-graph truth)\n"
-    "  - census-report.ts / venue-discovery-bq.ts  competitor / log-export -> venues\n"
-    "  - discovery/venue-evidence.ts  captureAllVenues\n"
-    "  - searcher/auto-close-route-gap.ts  force-include missing univ2/3/4 pools\n"
-    "  - pnl/arb-profit.ts (priceArb) + cli/tx-profit.ts  builder-payment-aware PnL\n"
-)
+import json
+import hashlib
+import os
+import re
+import secrets
+import shlex
+import subprocess
+import sys
+
+
+def configured_path(environment_name, default):
+    if os.environ.get("MEV_HOOK_TEST") == "1":
+        return os.environ.get(environment_name, default)
+    return default
+
+
+PENDING = configured_path("MEV_RECONCILE_PENDING_PATH", "/tmp/mev-reconcile-pending")
+SELECTION = configured_path("MEV_TOOL_SELECTION_PATH", "/tmp/mev-tool-selection.json")
 MARKERS = [
     "receiptLogs", "deriveEdgeKindsFromLogs", "deriveProtocolActionsFromLogs", "extractTouchedVenues",
     "captureAllVenues", "extractVenueCandidates", "traceTransaction", "callTracer", "debug_trace",
     "active-pools", "runtime-graph-pools", "previewRedeem", "asset()", "token0", "token1", "topic0",
     "log_address", "in_graph", "priceArb", "builderPayment", "getLogs", "eth_getLogs", "slot0",
     "get_dy", "coins(", "/discovery/", "/learning/edge-kinds", "/pnl/",
-    "0xddf252ad",  # ERC20 Transfer topic literal (raw-hash analyses)
-    "0xc42079f9", "0x19b47279",  # univ3 / pancake-v3 Swap topic literals
+    "0xddf252ad", "0xc42079f9", "0x19b47279",
 ]
 SCRATCH_EXT = (".ts", ".py", ".sh", ".mjs", ".js")
 
-def is_scratch(p):
-    if not p:
+
+def is_scratch(path_value):
+    if not path_value:
         return False
-    base = p.rsplit("/", 1)[-1]
+    base = path_value.rsplit("/", 1)[-1]
     if not base.endswith(SCRATCH_EXT):
         return False
-    return base.startswith("_") or "/tmp/" in p or "/scratchpad/" in p
+    return base.startswith("_") or "/tmp/" in path_value or "/scratchpad/" in path_value
 
-def markers(t):
-    return sum(1 for m in MARKERS if m in t)
 
-def read(p):
+def marker_count(text):
+    return sum(1 for marker in MARKERS if marker in text)
+
+
+def read(path_value):
     try:
-        with open(p, "r") as f:
-            return f.read()
+        with open(path_value, "r") as handle:
+            return handle.read()
     except Exception:
         return ""
 
-def affirmed(t):
-    return re.search(r"tool-reconciled:\s*(" + "|".join(re.escape(n) for n in TOOL_NAMES) + r")", t) is not None
 
-def ran_canonical_tool(cmd):
-    return any(("run " + n) in cmd or (n + ".ts") in cmd or (n + " ") in cmd for n in TOOL_NAMES)
-
-def clear_pending():
+def remove(path_value):
     try:
-        os.remove(PENDING)
+        os.remove(path_value)
     except Exception:
         pass
+
+
+def clear_pending():
+    remove(PENDING)
+    remove(SELECTION)
+
 
 def add_pending(target):
     try:
-        with open(PENDING, "a") as f:
-            f.write(target + "\n")
+        # A new manual analysis invalidates any selection made for an older analysis.
+        remove(SELECTION)
+        items = []
+        try:
+            with open(PENDING, "r") as handle:
+                previous = json.load(handle)
+            items = list(previous.get("items") or [])
+        except Exception:
+            pass
+        if target not in items:
+            items.append(target)
+        temporary = f"{PENDING}.{os.getpid()}.tmp"
+        with open(temporary, "w") as handle:
+            json.dump({"schema_version": 1, "nonce": secrets.token_hex(16), "items": items}, handle, indent=2)
+            handle.write("\n")
+        os.replace(temporary, PENDING)
     except Exception:
         pass
+
+
+def load_current_selection():
+    try:
+        if not os.path.exists(PENDING) or not os.path.exists(SELECTION):
+            return None
+        with open(PENDING, "r") as handle:
+            pending = json.load(handle)
+        with open(SELECTION, "r") as handle:
+            plan = json.load(handle)
+        project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+        if not project_dir:
+            project_dir = subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=os.getcwd(),
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        expected_root = os.path.realpath(project_dir)
+        if (plan.get("schema_version") != 2
+                or pending.get("schema_version") != 1
+                or plan.get("pending_nonce") != pending.get("nonce")
+                or os.path.realpath(plan.get("repo_root") or "") != expected_root
+                or not plan.get("requested_capabilities")):
+            return None
+        candidates = (plan.get("recommended_tools") or []) + (plan.get("related_tools") or [])
+        by_id = {tool.get("id"): tool for tool in candidates if tool.get("id")}
+        if not by_id:
+            return None
+        plan["_candidates"] = by_id
+        return plan
+    except Exception:
+        return None
+
+
+def command_segments(command):
+    """Return (connector-before, argv) without treating quoted text as executable syntax."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.whitespace = " \t\r"
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except Exception:
+        return []
+    segments = []
+    current = []
+    conditional = False
+    for token in tokens:
+        if token in (";", "&&", "||", "|", "\n"):
+            if current:
+                segments.append((conditional, current))
+                current = []
+            if token in (";", "\n"):
+                conditional = False
+            elif token in ("||", "|"):
+                conditional = True
+        else:
+            current.append(token)
+    if current:
+        segments.append((conditional, current))
+    return segments
+
+
+def strip_prefixes(segment):
+    index = 0
+    while index < len(segment) and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", segment[index])
+                                    or segment[index] in ("env", "command", "exec", "sudo")):
+        index += 1
+    return segment[index:]
+
+
+def command_runs_tool(command, tool):
+    script = tool.get("script") or ""
+    package = tool.get("package") or ""
+    implementation = tool.get("implementation") or ""
+    implementation_paths = set()
+    if implementation:
+        implementation_paths.add(implementation.removeprefix("./"))
+        if package != "repo":
+            implementation_paths.add((package + "/" + implementation).removeprefix("./"))
+    repo_paths = {script.removeprefix("./")} if package == "repo" and script else set()
+    for conditional, raw_segment in command_segments(command):
+        # A command following || may be skipped; a pipeline may hide its failure. Be conservative.
+        if conditional:
+            continue
+        segment = strip_prefixes(raw_segment)
+        if not segment:
+            continue
+        executable = os.path.basename(segment[0])
+        if package in ("analysis", "listener") and script:
+            if executable in ("npm", "pnpm") and len(segment) >= 3 and segment[1:3] == ["run", script]:
+                return True
+            if executable == "yarn" and len(segment) >= 2:
+                offset = 2 if segment[1] == "run" else 1
+                if len(segment) > offset and segment[offset] == script:
+                    return True
+        head = segment[0].removeprefix("./")
+        if package == "repo":
+            if head in repo_paths:
+                return True
+            if executable in ("bash", "sh", "python", "python3") and len(segment) >= 2 \
+                    and segment[1].removeprefix("./") in repo_paths:
+                return True
+        if implementation_paths:
+            if executable in ("tsx", "node"):
+                # The implementation must be the executed program, not a quoted/printed argument.
+                program_tokens = segment[1:]
+                if executable == "node" and len(program_tokens) >= 2 and program_tokens[:2] == ["--import", "tsx"]:
+                    program_tokens = program_tokens[2:]
+                if program_tokens and program_tokens[0].removeprefix("./") in implementation_paths:
+                    return True
+    return False
+
+
+def command_runs_tool_runner(command):
+    for conditional, raw_segment in command_segments(command):
+        if conditional:
+            continue
+        segment = strip_prefixes(raw_segment)
+        if not segment:
+            continue
+        executable = os.path.basename(segment[0])
+        if executable in ("npm", "pnpm") and len(segment) >= 3 and segment[1:3] == ["run", "tool-run"]:
+            return True
+        if executable == "yarn" and len(segment) >= 2:
+            offset = 2 if segment[1] == "run" else 1
+            if len(segment) > offset and segment[offset] == "tool-run":
+                return True
+    return False
+
+
+def descriptor_sha256(tool):
+    payload = {}
+    for key in (
+        "id", "package", "script", "command", "implementation", "kind", "capabilities", "cost",
+        "window_binding",
+    ):
+        if key in tool:
+            payload[key] = tool[key]
+    source = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(source.encode()).hexdigest()
+
+
+def successful_receipt_ids(plan):
+    successful = set()
+    for receipt in plan.get("executions") or []:
+        tool = plan["_candidates"].get(receipt.get("tool_id"))
+        if (tool
+                and receipt.get("schema_version") == 1
+                and receipt.get("exit_code") == 0
+                and receipt.get("descriptor_sha256") == descriptor_sha256(tool)):
+            successful.add(tool["id"])
+    return successful
+
+
+def reconciled_tool_ids(text, candidate_ids):
+    found = set()
+    pattern = re.compile(r"tool-reconciled:\s*([A-Za-z0-9:._/-]+)\s+(?:agrees|diverged|n/a)\b")
+    for match in pattern.finditer(text):
+        if match.group(1) in candidate_ids:
+            found.add(match.group(1))
+    return found
+
+
+def record_progress(plan, executed_ids=None, reconciled_ids=None):
+    executed = set(plan.get("executed_tools") or []) | set(executed_ids or [])
+    reconciled = set(plan.get("reconciled_tools") or []) | set(reconciled_ids or [])
+    completed = executed | reconciled
+    covered = set()
+    for tool_id in completed:
+        tool = plan["_candidates"].get(tool_id)
+        if tool:
+            covered.update(tool.get("capabilities") or [])
+    requested = set(plan.get("requested_capabilities") or [])
+    if requested.issubset(covered):
+        clear_pending()
+        return
+
+    serializable = {key: value for key, value in plan.items() if not key.startswith("_")}
+    serializable["executed_tools"] = sorted(executed)
+    serializable["reconciled_tools"] = sorted(reconciled)
+    serializable["covered_capabilities"] = sorted(covered & requested)
+    temporary = f"{SELECTION}.{os.getpid()}.tmp"
+    try:
+        with open(temporary, "w") as handle:
+            json.dump(serializable, handle, indent=2)
+            handle.write("\n")
+        os.replace(temporary, SELECTION)
+    except Exception:
+        remove(temporary)
+
 
 try:
     data = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
 
-# PENDING is the module-level global path (session-isolation reverted per operator).
-tool = data.get("tool_name")
-ti = data.get("tool_input") or {}
-target, body = "", ""
+tool_name = data.get("tool_name")
+tool_input = data.get("tool_input") or {}
+tool_response = data.get("tool_response") or {}
+target = ""
+body = ""
 
-if tool in ("Write",):
-    target = ti.get("file_path", "") or ""
-    body = ti.get("content", "") or ""
+if tool_name == "Write":
+    target = tool_input.get("file_path", "") or ""
+    body = tool_input.get("content", "") or ""
     scratch = is_scratch(target)
-elif tool in ("Edit", "MultiEdit"):
-    target = ti.get("file_path", "") or ""
-    body = (ti.get("new_string", "") or "") + " " + " ".join(
-        (e.get("new_string", "") or "") for e in (ti.get("edits") or []))
+elif tool_name in ("Edit", "MultiEdit"):
+    target = tool_input.get("file_path", "") or ""
+    body = (tool_input.get("new_string", "") or "") + " " + " ".join(
+        (edit.get("new_string", "") or "") for edit in (tool_input.get("edits") or [])
+    )
     scratch = is_scratch(target)
-elif tool == "Bash":
-    cmd = ti.get("command", "") or ""
-    body = cmd
-    # git/gh/version-control ops are never analysis — their messages quote marker words (false positives).
-    if re.search(r"\b(git|gh)\s+(commit|add|push|pull|mv|rm|fetch|show|log|status|diff|checkout|reset|stash|branch|clone|tag|pr|issue)\b", cmd):
+elif tool_name == "Bash":
+    command = tool_input.get("command", "") or ""
+    body = command
+    if re.search(
+        r"\b(git|gh)\s+(commit|add|push|pull|mv|rm|fetch|show|log|status|diff|checkout|reset|stash|branch|clone|tag|pr|issue)\b",
+        command,
+    ):
         sys.exit(0)
-    # running a canonical tool = the reconciliation act -> clear pending
-    if ran_canonical_tool(cmd) or affirmed(cmd):
-        clear_pending()
-        sys.exit(0)
-    # a heredoc/redirect/run of a scratch script (resolve a `cd x &&` basename), OR inline -c/-e code
-    m = re.search(r"(?:>\s*|node\s[^\n|;&]*?|tsx\s|python3?\s|bash\s|sh\s)([^\s;|&'\"]+\.(?:ts|py|sh|mjs|js))", cmd)
-    if m:
-        ref = m.group(1)
-        target = ref
-        base = ref.rsplit("/", 1)[-1]
-        scratch = base.startswith("_") or "/tmp/" in ref or "/scratchpad/" in ref
-        for cand in (ref, os.path.join("analysis", ref), os.path.join("listener", ref)):
-            if os.path.exists(cand):
-                body += "\n" + read(cand)
+
+    plan = load_current_selection()
+    if plan:
+        # PostToolUse is the success event. Interrupted calls are never execution evidence.
+        if not isinstance(tool_response, dict) or bool(tool_response.get("interrupted")):
+            sys.exit(0)
+        if command_runs_tool_runner(command):
+            receipts = successful_receipt_ids(plan)
+            if receipts:
+                record_progress(plan, receipts)
+            sys.exit(0)
+        executed = {
+            tool_id for tool_id, descriptor in plan["_candidates"].items()
+            if command_runs_tool(command, descriptor)
+        }
+        if executed:
+            record_progress(plan, executed)
+            sys.exit(0)
+
+    match = re.search(
+        r"(?:>\s*|node\s[^\n|;&]*?|tsx\s|python3?\s|bash\s|sh\s)([^\s;|&'\"]+\.(?:ts|py|sh|mjs|js))",
+        command,
+    )
+    if match:
+        reference = match.group(1)
+        target = reference
+        base = reference.rsplit("/", 1)[-1]
+        scratch = base.startswith("_") or "/tmp/" in reference or "/scratchpad/" in reference
+        for candidate in (reference, os.path.join("analysis", reference), os.path.join("listener", reference)):
+            if os.path.exists(candidate):
+                body += "\n" + read(candidate)
                 break
-    elif re.search(r"(python3?|node)\s+-[ce]\b", cmd):
-        target = "inline-code"     # python3 -c / node -e analysis (no file); markers gate it below
+    elif re.search(r"(python3?|node)\s+-[ce]\b", command):
+        target = "inline-code"
         scratch = True
     else:
         scratch = False
 else:
     sys.exit(0)
 
-if tool != "Bash" and affirmed(body):
-    clear_pending()
-    sys.exit(0)
+if tool_name != "Bash":
+    plan = load_current_selection()
+    if plan:
+        reconciled = reconciled_tool_ids(body, set(plan["_candidates"]))
+        if reconciled:
+            record_progress(plan, reconciled_ids=reconciled)
+            sys.exit(0)
+
 if not scratch:
     sys.exit(0)
-# a named scratch FILE (_*.ts/.py/.sh) fires on 1 marker (audit: >=2 missed real venue analyses);
-# an inline `python3 -c`/`node -e` one-liner needs >=2 (a lone marker there is usually data plumbing
-# — e.g. a json.load reshape of active-pools.json — not an analysis reaching a conclusion).
 threshold = 2 if target == "inline-code" else 1
-if markers(body) < threshold:
-    sys.exit(0)
-if affirmed(body):
-    clear_pending()
+if marker_count(body) < threshold:
     sys.exit(0)
 
 add_pending(target or "scratch-analysis")
 sys.stderr.write(
-    "RECONCILE REQUIRED (CLAUDE.md §5 / HERMES rules 16+17): you ran a hand-rolled analysis "
-    f"({target}) that re-derives venue/pool/trace/PnL facts a canonical tool also computes. Rule 16 makes "
-    "the hand analysis a TEST of the tool — run the tool on the SAME input and RECONCILE before trusting/"
-    "reporting it (and the turn cannot end until you do — Stop backstop):\n" + TOOLS_TXT +
-    "Record the outcome to clear it: run the tool (npm run bundle-postmortem/…), OR add a line "
-    "`tool-reconciled: <named tool> agrees|diverged -> <fix>`. Divergence IS the finding "
-    "(fix the stale tool per rule 16, or the wrong hand analysis — e.g. in_graph shows a 'dead edge' is an "
-    "unindexed pool = pool gap).\n"
+    "RECONCILE REQUIRED (CLAUDE.md §5 / HERMES rules 16+17): a hand-rolled analysis "
+    f"({target}) derived venue/pool/trace/PnL facts. Query the generated inventory with "
+    "`cd analysis && npm run tool-index -- --select <capability[,capability]> --out <manifest.json>`, inspect "
+    "the recommended coverage set and related alternatives, then use `npm run tool-run -- --manifest "
+    "<manifest.json> --tool <indexed-id> -- <args>` for enough selected tools on the same input for their "
+    "capability union to cover the query. An explicit exception/finding must use an exact selected id: "
+    "`tool-reconciled: <indexed-tool-id> agrees|diverged|n/a <reason>`.\n"
 )
 sys.exit(2)

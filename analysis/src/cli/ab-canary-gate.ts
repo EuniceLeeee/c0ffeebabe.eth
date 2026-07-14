@@ -3,11 +3,24 @@ import fs from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
-import { parseAbExperiment, validateAbExperiment, validateAbProductionCandidate } from "../ab-canary.js";
+import {
+  parseAbExperiment,
+  validateAbExperiment,
+  validateAbProductionCandidate,
+  type ManualVerdictArtifact,
+} from "../ab-canary.js";
 import {
   verifyOnchainProductionSample,
   type ProductionSampleObservation,
 } from "../ab-production-evidence.js";
+import {
+  discoverToolIndex,
+  PRODUCTION_CANDIDATE_CAPABILITIES,
+  PRODUCTION_DECISION_CAPABILITIES,
+  validateRecordedToolSelection,
+  validateToolIndex,
+  type ToolExecutionManifest,
+} from "../tool-index.js";
 
 const args = process.argv.slice(2);
 const report = args[0];
@@ -22,6 +35,7 @@ const candidateContext = phase === "candidate" ? {
   experimentId: requiredArg("--expected-experiment"),
   branch: requiredArg("--expected-branch"),
   baseCommit: requiredArg("--expected-base"),
+  challengerCommit: requiredArg("--expected-challenger"),
   expectedRuntimeViewDelta: requiredArg("--expected-runtime-view-delta") === "1",
   inputMode: requiredArg("--expected-input-mode") as "shared" | "challenger",
   allowedConfigDelta: csvArg("--expected-config-delta"),
@@ -30,6 +44,35 @@ const errors = phase === "candidate"
   ? validateAbProductionCandidate(experiment, candidateContext)
   : validateAbExperiment(experiment, report, phase);
 let onchainObservation: ProductionSampleObservation | undefined;
+if (experiment.schema_version === 3 && errors.length === 0) {
+  const repoRoot = gitOutput(["rev-parse", "--show-toplevel"]);
+  const tools = discoverToolIndex(repoRoot);
+  errors.push(...validateToolIndex(repoRoot, tools));
+  let executionManifest: ToolExecutionManifest | undefined;
+  try {
+    const manifestSource = readReportArtifact(repoRoot, experiment.analysis.tool_selection?.evidence_manifest ?? "", "tool execution manifest");
+    const manifestHash = createHash("sha256").update(manifestSource).digest("hex");
+    if (manifestHash !== experiment.analysis.tool_selection?.evidence_manifest_sha256) {
+      errors.push("tool execution manifest SHA-256 does not match the A/B journal");
+    }
+    executionManifest = JSON.parse(manifestSource.toString("utf8")) as ToolExecutionManifest;
+  } catch (error) {
+    errors.push(`tool execution manifest validation failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  errors.push(...validateRecordedToolSelection(
+    experiment.analysis.tool_selection,
+    tools,
+    phase === "candidate" ? PRODUCTION_CANDIDATE_CAPABILITIES : PRODUCTION_DECISION_CAPABILITIES,
+    executionManifest,
+    phase === "candidate" ? undefined : {
+      from: experiment.window.measured_from_block!,
+      to: experiment.window.measured_to_block!,
+    },
+  ));
+  if (phase !== "candidate" && errors.length === 0) {
+    errors.push(...validateAnalysisArtifacts(repoRoot));
+  }
+}
 if (phase === "candidate" && errors.length === 0) {
   const onchain = await verifyOnchainProductionSample(experiment, requiredArg("--rpc"));
   errors.push(...onchain.errors);
@@ -61,6 +104,60 @@ function csvArg(name: string): string[] {
   const value = option(name);
   if (value === undefined) throw new Error(`${name} is required for candidate phase`);
   return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+function reportArtifactRelative(repoRoot: string, artifact: string, label: string): string {
+  if (!artifact?.trim() || path.isAbsolute(artifact)) throw new Error(`${label} must be repository-relative`);
+  const reportRelative = option("--report-repo-path") ?? path.relative(repoRoot, path.resolve(report!));
+  if (path.isAbsolute(reportRelative) || reportRelative === ".." || reportRelative.startsWith(`..${path.sep}`)) {
+    throw new Error("report path escapes the repository");
+  }
+  const relative = path.normalize(path.join(path.dirname(reportRelative), artifact));
+  if (relative === ".." || relative.startsWith(`..${path.sep}`)) throw new Error(`${label} escapes the repository`);
+  return relative.split(path.sep).join("/");
+}
+
+function readReportArtifact(repoRoot: string, artifact: string, label: string): Buffer {
+  const relative = reportArtifactRelative(repoRoot, artifact, label);
+  const artifactRef = option("--artifact-ref");
+  if (artifactRef) {
+    return execFileSync("git", ["show", `${artifactRef}:${relative}`], { cwd: repoRoot });
+  }
+  return fs.readFileSync(path.join(repoRoot, relative));
+}
+
+function validateAnalysisArtifacts(repoRoot: string): string[] {
+  const artifactErrors: string[] = [];
+  try {
+    const manualSource = readReportArtifact(repoRoot, experiment.analysis.agent_manual_artifact ?? "", "agent_manual_artifact");
+    const manual = JSON.parse(manualSource.toString("utf8")) as ManualVerdictArtifact;
+    const compare = JSON.parse(readReportArtifact(repoRoot, experiment.analysis.script_artifact ?? "", "script_artifact").toString("utf8")) as Record<string, unknown>;
+    const manualHash = createHash("sha256").update(manualSource).digest("hex");
+    if (manual.schema_version !== 2 || manual.experiment_id !== experiment.experiment_id
+        || manual.author !== experiment.analysis.agent_manual_author
+        || manual.verdict !== experiment.analysis.agent_manual_verdict
+        || manual.evidence !== experiment.analysis.agent_manual_evidence
+        || manual.written_at !== experiment.analysis.agent_manual_written_at) {
+      artifactErrors.push("manual verdict artifact does not exactly match the A/B journal");
+    }
+    if (manualHash !== experiment.analysis.agent_manual_artifact_sha256) {
+      artifactErrors.push("manual verdict artifact hash does not match the A/B journal");
+    }
+    if (compare.manual_verdict_sha256 !== manualHash
+        || compare.manual_verdict_written_at !== manual.written_at
+        || compare.comparator_started_at !== experiment.analysis.comparator_started_at
+        || compare.manual_seal_nonce !== manual.seal_nonce
+        || compare.a_log_sha256 !== manual.a_log_sha256
+        || compare.b_log_sha256 !== manual.b_log_sha256) {
+      artifactErrors.push("comparison artifact is not cryptographically bound to the earlier manual verdict");
+    }
+    if (compare.script_assessment !== experiment.analysis.script_assessment) {
+      artifactErrors.push("comparison artifact assessment does not match the A/B journal");
+    }
+  } catch (error) {
+    artifactErrors.push(`analysis artifact validation failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return artifactErrors;
 }
 
 interface HuntResult {

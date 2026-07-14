@@ -83,12 +83,19 @@ thin `ab_experiment` journal:
   not share equivalent cache history; exact solved-ring identities remain part of semantic output matching;
 - identical-code infrastructure shakedowns use the explicit equivalence goal; they never cherry-pick a
   noisy latency direction to manufacture a verdict;
+- schema-v3 decision/close records bind a write-once standalone manual-verdict artifact by SHA-256 into the
+  comparator output. The artifact seals the exact A/B log hashes and byte counts; the comparator must bind
+  the same hashes plus seal nonce and start later than the artifact. Timestamps typed into prose or a seal for
+  different log bytes cannot satisfy the gate;
 - deterministic replay `pass` before any correctness/capability win;
 - agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
   every manual/script conflict or inconclusive result;
 - branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained only
   until a later validated `resolved_by_commit` is on `origin/main`. Resolved cleanup additionally requires
-  the final report to be committed on main with exact base/challenger/resolution SHAs before branch deletion.
+  a main-committed resolution claim that pins the old branch tip, an unchanged report-owned replay that fails
+  on the old base and passes at the exact resolution SHA, and the final report on
+  main with exact base/challenger/resolution SHAs before branch deletion. `ab-resolution-sweep -- --apply`
+  is the mechanical claim→replay→archive→gate→delete connection.
 - external comparator calibration: the pinned coffee corpus must still separate source shape from
   position-conserving winner style; `hermes-gate` reruns it and rejects an A/B close on classifier drift.
 
@@ -100,6 +107,15 @@ Hard safety/correctness/fairness failures can only veto or escalate. They cannot
 
 Every new B deployment runs `ab-canary-gate --phase candidate` from the trusted champion checkout before
 the second live searcher starts. It requires one `production_evidence` object proving:
+
+- `analysis.tool_selection` records a successful generated catalog check, the capability query made only
+  after independent manual analysis, successfully executed tool IDs, and a machine execution-manifest path
+  + SHA-256. Every receipt binds the current descriptor fingerprint, redacted argv hash, output hashes/byte
+  counts, timestamps, and real exit code; live-window tools must bind the exact measured range. Candidate
+  evidence must cover single-transaction causality/PnL plus competitor-window classification/block-scan;
+  decision evidence additionally covers A/B comparison. The gate validates successful receipt capability
+  union from the current generated inventory, never a fixed executable name, fixture-only substitute, or
+  self-reported command;
 
 - a real on-chain transaction whose successful receipt, block, positive net PnL, canonical
   `winner_style=atomic_loop`, and `source_shape=atomic_state_arb` are recomputed from the local archive

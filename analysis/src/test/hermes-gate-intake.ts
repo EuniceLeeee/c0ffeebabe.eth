@@ -166,6 +166,8 @@ function validAbCalibration(): any {
       strategy_kind: "block-scan",
       comparable_filter: "atomic_loop",
       tool_artifact: "docs/research/reports/step1-test.json",
+      tool_manifest: "step1-test-tools.json",
+      tool_manifest_sha256: "a".repeat(64),
       classifier_calibration: {
         command: "npm run competitor-calibration",
         status: "pass",

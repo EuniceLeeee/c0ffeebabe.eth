@@ -19,7 +19,7 @@ turn_class:    # extraction | observability-only  (governance 12 — see Repair 
 inputs:
   redacted_log:
   redacted_events_summary:
-  competitor_cross_reference:   # analysis live-loss --watch <WATCHLIST> --graph-pools <dump> (mandatory Step 1)
+  competitor_cross_reference:   # manual first, then capability-indexed tool set (mandatory Step 1)
   key_tx_links: []
 ```
 
@@ -28,7 +28,7 @@ run_id:
 window_blocks:        # <from>..<to>
 watchlist:            # 0xc0ffee...,0xae2f...
 artifact:             # docs/research/reports/step1-<run_id>.json  (must include coverage_kpi)
-method:               # manual-onchain-trace | live-loss-watch
+method:               # manual-onchain-trace + machine execution manifest / successful selected tool IDs
 fable_manual: no      # yes only when the fable-5 blocker-finder handoff ran
 ```
 
@@ -49,7 +49,7 @@ dominant pipeline_dropped reason:
 - `no_candidate` classification distribution (9.4/9.5 buckets)
 - sim outcomes (ok / sim-revert / no-profitable / failure_reason)
 
-## Competitor Coverage  <!-- auto: analysis live-loss --coverage, same window -->
+## Competitor Coverage  <!-- selected indexed coverage view, same window -->
 
 ```
 ours:        opportunity_seen / unique_victims / submitted / included
@@ -67,29 +67,22 @@ completeness_pct:        partial:
 Representative **non-sandwich** competitor legs (sandwich legs excluded per §6/§9.5):
 `canonical_sequence`, `path_template`, `pool_in_our_graph`, tokens/venues.
 
-### Competitor cross-ref — EXACT commands to hand the fable-5 blocker-finder (verified R1/R2)
-Paste these into the fable-5 blocker-finder brief so it runs them ITSELF (full independence, own
-primary-source scan + own traces) with zero tooling-discovery overhead. All on local reth = 0 CU.
-Node: EC2 `i-0ff908dedeec9ebc6`, SSM-only. `<FROM>`/`<TO>` = the window block range.
+### Competitor cross-ref — capability-selected tools (manual first)
+The analyst first traces the key transactions independently. It then generates the current catalog and
+selects by capability; do not paste remembered CLI names or stale flags into the brief. All chain reads use
+local reth = 0 remote CU. Node: EC2 `i-0ff908dedeec9ebc6`, SSM-only. `<FROM>`/`<TO>` = the window range.
 ```
-# 1. watch reports (what the watchlist bots did in-window)
-cd /opt/MEV/analysis && npm run analysis -- live-loss \
-  --events /var/log/mev/events/searcher-live.jsonl \
-  --watch 0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13 \
-  --rpc http://127.0.0.1:8545
-# 2. per-drop competitor take (arb-signature at victim real-block)
-cd /opt/MEV/analysis && npm run analysis -- live-loss \
-  --events /var/log/mev/events/searcher-live.jsonl --competitor-scan --rpc http://127.0.0.1:8545
-# 3. our funnel + expiries (loss attribution)
-tail -N /var/log/mev/events/searcher-live.jsonl | jq -r 'select(.type=="pipeline_dropped")|.stage+"/"+.reason' | sort | uniq -c | sort -rn
-grep -a "opportunity expired" /var/log/mev-live.log | tail   # stage breakdown per expiry
-# 4. MANUAL on-chain trace (coffeebabe EVERY in-window tx, other SAMPLED) via local reth:
-cast tx <hash> --rpc-url http://127.0.0.1:8545 ; cast run <hash> --rpc-url http://127.0.0.1:8545
-# 5. secondary-validate ONE key tx via Alchemy ($MAINNET_RPC_URL in /opt/MEV/.env) — keep CU tiny
+cd /opt/MEV/analysis
+npm run tool-index -- --check
+npm run tool-index -- --select competitor-window,classification --out /tmp/<run_id>-window-tools.json --json
+npm run tool-index -- --select single-transaction,competitor-loss,causality --out /tmp/<run_id>-tx-tools.json --json
+# Inspect recommended_tools + related_tools. Run each chosen indexed ID through the generic runner:
+npm run tool-run -- --manifest /tmp/<run_id>-window-tools.json --tool <indexed-id> --window <FROM>..<TO> -- <args>
+npm run tool-run -- --manifest /tmp/<run_id>-tx-tools.json --tool <indexed-id> -- <args>
+# Archive the manifests beside the Step-1 artifact; record their paths + SHA-256, not self-reported exit codes.
 ```
-Flags drift: read `/opt/MEV/analysis/src/cli/live-loss.ts` for exact flags; iterate the script, don't reinvent.
-Hand the fable-5 blocker-finder the **funnel numbers as DATA** (never a conclusion) + these commands; it
-produces the raw artifacts + its own traces + the named blocker.
+Hand the reviewer the **manual raw facts and funnel numbers as DATA**, never the canonical tool's conclusion.
+After its independent judgment, it runs the same capability queries and reconciles the selected tools.
 
 ---
 

@@ -223,7 +223,7 @@ export interface JoinedTx {
   touchedVenues: TouchedVenue[];
 }
 
-const USAGE = `Usage: npm run onchain-loss-scan -- --events <jsonl> [--rpc <url>] [--blocks <n>] [--graph <runtime-graph-pools.json>] [--our-executor <0x prefix>] [--write] [--out <report.json>] [--admit-write] [--admit-min-profit-usd <n>] [--force-include <path>]`;
+const USAGE = `Usage: npm run onchain-loss-scan -- --events <jsonl> [--rpc <url>] [--from-block <n> --to-block <n> | --blocks <n>] [--graph <runtime-graph-pools.json>] [--our-executor <0x prefix>] [--write] [--out <report.json>] [--admit-write] [--admit-min-profit-usd <n>] [--force-include <path>]`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -232,6 +232,8 @@ async function main(): Promise<void> {
   const eventsPath = stringArg(args, "events");
   const rpcUrl = stringArg(args, "rpc", false) || DEFAULT_RPC_URL;
   const blocks = numberArg(args, "blocks", DEFAULT_BLOCKS);
+  const fromBlockArg = optionalNumberArg(args, "from-block");
+  const toBlockArg = optionalNumberArg(args, "to-block");
   const graphPath = args.graph ? resolveCliPath(String(args.graph)) : DEFAULT_GRAPH_PATH;
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";
   const write = Boolean(args.write);
@@ -242,15 +244,16 @@ async function main(): Promise<void> {
     : DEFAULT_ADMIT_FORCE_INCLUDE_PATH;
   const ourExecutorPrefixes = parsePrefixes(args["our-executor"]);
 
-  if (!eventsPath || blocks <= 0) usage();
+  if (!eventsPath || blocks <= 0 || (fromBlockArg === undefined) !== (toBlockArg === undefined)
+      || (fromBlockArg !== undefined && (fromBlockArg < 0 || fromBlockArg > toBlockArg!))) usage();
 
   const loaded = await readJsonlSkippingBad(resolveCliPath(eventsPath));
   const funnel = buildFunnelIndex(loaded.events);
   const graph = loadGraphMembership(graphPath);
   const rpc = new RpcClient(rpcUrl);
   const winnerAnalysis = makeRpcWinnerAnalysis(rpc);
-  const head = Number(hexToBigInt(await rpc.call<string>("eth_blockNumber", [])));
-  const startBlock = Math.max(0, head - blocks + 1);
+  const head = toBlockArg ?? Number(hexToBigInt(await rpc.call<string>("eth_blockNumber", [])));
+  const startBlock = fromBlockArg ?? Math.max(0, head - blocks + 1);
   const result = await scanOnchainLosses({
     fromBlock: startBlock,
     toBlock: head,
@@ -1281,6 +1284,15 @@ function numberArg(args: Record<string, string | boolean>, key: string, fallback
   if (typeof value !== "string") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function optionalNumberArg(args: Record<string, string | boolean>, key: string): number | undefined {
+  const value = args[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") usage();
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) usage();
+  return parsed;
 }
 
 function parsePrefixes(value: string | boolean | undefined): string[] {
