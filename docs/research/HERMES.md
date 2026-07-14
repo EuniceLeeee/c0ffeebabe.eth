@@ -159,7 +159,10 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    the schema-v3 production candidate gate; recomputes the sample's receipt/block, PnL, winner style and
    victim independence from local reth; executes the trusted dual-worktree parent-state hunt; binds the
    report to the requested experiment/branch/base/input declarations and exact frozen challenger SHA; and requires a deployable
-   listener runtime diff with no mixed analysis/governance/dependency-script edits. It then validates both
+   listener runtime diff with no mixed analysis/governance/dependency-script edits. The trusted replay source
+   comes from a clean detached checkout of the frozen A SHA, not the mutable deployed working tree; ignored
+   challenger `.env` files are removed and B receives only allowlisted secrets through a systemd environment
+   file, never shell-sourced input. It then validates both
    wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config with no candidate
    config deltas, protected state/port code, runtime socket ownership,
    universe inputs, the pinned startup-discovery cutoff, exact runtime pool-view and TokenEdge graph hashes,
@@ -167,8 +170,15 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    correctness/capability experiment. It never restarts A. Direct `systemd-run`, hand-written B env,
    or deployment from the challenger branch is invalid. Block-scan-only A/B requires
    `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides. Dual A/B requires both equal
-   to `1` on both sides, separate main/block-scan Anvil ports, matching startup banners, and a connected
-   MEV-Share stream. The wrapper's default is blockscan-only; a dual run must declare `lane_mode=dual` in the
+   to `1` on both sides, eagerly listening and separately owned main/block-scan Anvil ports, matching startup banners, and a connected
+   MEV-Share stream whose hashed endpoint identity is equal on both current processes. A preflight or renewal
+   envelope failure must stop both A and B and remove the champion live marker. The searcher itself must also
+   validate its effective live envelope before constructing any production submission component. Both lanes must use the same local-reth
+   HTTP/WS inputs and the same content-addressed dynamic router admission snapshot. Their effective process
+   environments must identify the exact A/B commits, and dual mode must show the latest public-mempool state
+   as connected on both sides. A and B share one deployment lock, so champion deploy is forbidden during an active B
+   lease. B has `Restart=no` plus a unit-level hard runtime limit; renewal revalidates PIDs, commits, posture,
+   ports, graph/view/feed identities, and universe hashes before extending it. The wrapper's default is blockscan-only; a dual run must declare `lane_mode=dual` in the
    report and `AB_LANE_MODE=dual` in the trusted B environment.
 6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm, pass-budget, and catch-up blocks where either lane's
    incremental warm range spans more than one block; those lanes have different cache histories and are not

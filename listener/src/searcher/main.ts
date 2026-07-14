@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
@@ -74,6 +75,7 @@ import {
 } from "./live-fixture-recorder.js";
 import { parseLiveBackendKind, type LiveBackendKind } from "./live-state-backend.js";
 import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
+import { validateLiveEnvelope } from "./live-envelope.js";
 import { RevmSimClient } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
@@ -578,12 +580,37 @@ async function main(): Promise<void> {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  await validateLiveEnvelope(
+    {
+      dryRun: config.dryRun,
+      evGate: config.evGate,
+      walletAddress: config.wallet.address,
+      botvmAddress: config.botvmAddress,
+      configuredBotvmOwner: process.env.BOTVM_OWNER,
+      maxWalletEth: process.env.MEV_LIVE_MAX_WALLET_ETH,
+    },
+    {
+      walletBalance: (address) => provider.getBalance(address),
+      botvmOwner: async (address) => {
+        const contract = new ethers.Contract(
+          address,
+          ["function owner() view returns (address)"],
+          provider,
+        );
+        return String(await contract.owner());
+      },
+    },
+  );
   const anvilPort = Number(process.env.SEARCHER_ANVIL_PORT ?? "8555");
   const state = new AnvilStateBackend(
     config.rpcUrl,
     `http://127.0.0.1:${anvilPort}`,
     anvilPort,
   );
+  if (process.env.SEARCHER_EAGER_STATE_BACKEND === "1") {
+    await state.start();
+    console.log(`[searcher/live] eager state backend ready port=${anvilPort}`);
+  }
   const detector = new BackrunDetector();
   const planner = new TemplatePlanner();
   const maxCandidates = Number(process.env.SEARCHER_MAX_CANDIDATES ?? "20");
@@ -676,7 +703,9 @@ async function main(): Promise<void> {
 
   console.log("[searcher/live] starting V5 MEV-Share searcher");
   initEvents();
-  console.log(`[searcher/live] sse=${config.mevShareSseUrl}`);
+  console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
+  const victimFeedHash = createHash("sha256").update(config.mevShareSseUrl).digest("hex");
+  console.log(`[searcher/live] victim_feed_hash=0x${victimFeedHash}`);
   console.log(`[searcher/live] backrun=${config.enableBackrun ? "enabled" : "disabled"}`);
   console.log(`[searcher/live] mempool=${config.enableMempool ? "enabled" : "disabled"}`);
   console.log(
@@ -4638,6 +4667,7 @@ async function* mempoolHints(
       console.log(
         `[searcher/live] mempool WS connect failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+      console.log("[searcher/live] mempool_state=disconnected");
       await sleep(1_000);
       continue;
     }
@@ -4650,6 +4680,7 @@ async function* mempoolHints(
     const seen = new Set<string>();
 
     const fail = () => {
+      if (!failed) console.log("[searcher/live] mempool_state=disconnected");
       failed = true;
       wake?.();
     };
@@ -4739,6 +4770,7 @@ async function* localFirehoseMempoolHints(
         `[searcher/live] mempool local firehose connect failed: ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
+      console.log("[searcher/live] mempool_state=disconnected");
       await sleep(1_000);
       continue;
     }
@@ -4750,6 +4782,7 @@ async function* localFirehoseMempoolHints(
     let inFlight = 0;
 
     const fail = () => {
+      if (!failed) console.log("[searcher/live] mempool_state=disconnected");
       failed = true;
       wake?.();
     };
@@ -4853,6 +4886,7 @@ async function connectStandardMempool(wsUrl: string): Promise<WebSocket> {
       throw new Error(`unexpected subscription id ${String(subId)}`);
     }
     console.log(`[searcher/live] mempool WS connected localFirehoseSub=${subId}`);
+    console.log("[searcher/live] mempool_state=connected");
     return ws;
   } catch (err) {
     try { ws.close(); } catch { /* already closed */ }
@@ -4953,6 +4987,7 @@ async function connectFilteredMempool(wsUrl: string, toAddress: string[]): Promi
       throw new Error(`unexpected subscription id ${String(subId)}`);
     }
     console.log(`[searcher/live] mempool WS connected filteredSub=${subId}`);
+    console.log("[searcher/live] mempool_state=connected");
     return ws;
   } catch (err) {
     try { ws.close(); } catch { /* already closed */ }
