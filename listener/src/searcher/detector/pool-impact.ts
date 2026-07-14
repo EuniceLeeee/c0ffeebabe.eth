@@ -8,6 +8,9 @@ export interface PoolImpact {
   tokenIn: string;
   tokenOut: string;
   amountIn: bigint;
+  /** Victim's swap output amount. v2/v3/curve appliers recompute it locally from amountIn, so it is
+   *  only carried for v4 (whose Swap event provides the exact deltas and whose applier does no math). */
+  amountOut?: bigint;
   matchedAdapterId: string;
   /** Uniswap v4 poolId — preserves pool identity across the singleton PoolManager
    *  (all v4 pools share the same `pool` address). Undefined for v2/v3/curve. */
@@ -329,6 +332,8 @@ const uniV4Decoder: ImpactDecoder = {
       tokenIn: edge.tokenIn,
       tokenOut: edge.tokenOut,
       amountIn,
+      // Output = the negative (paid-out) delta's magnitude; amountIn is the positive one.
+      amountOut: a0 > 0n ? -a1 : -a0,
       matchedAdapterId: edge.adapterId,
       poolId,
       v4PostState: {

@@ -193,13 +193,55 @@ async function testCurveVictimApply(): Promise<void> {
   console.log("[victim-apply] curve post-impact cache: PASS");
 }
 
+async function testV4VictimApply(): Promise<void> {
+  const cache = new PoolStateCache();
+  const POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
+  const POOL_ID = "0x" + "ab".repeat(32);
+  const impact: PoolImpact = {
+    pool: POOL_MANAGER,
+    tokenIn: TOKEN0,
+    tokenOut: TOKEN1,
+    amountIn: 35_045_872_323n,
+    amountOut: 35_013_321_757n,
+    matchedAdapterId: "univ4-unlock",
+    poolId: POOL_ID,
+    v4PostState: {
+      sqrtPriceX96: 79_228_162_514_264_337_593_543_950_336n,
+      liquidity: 10n ** 18n,
+      tick: 42,
+      poolId: POOL_ID,
+      lpFee: 100,
+    },
+  };
+
+  const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
+  if (!applied) throw new Error("FAIL: v4 victim apply should succeed");
+  assert(applied.amountOut === impact.amountOut, `v4 amountOut passthrough ${applied.amountOut}`);
+  const post = applied.postImpact;
+  assert(post.kind === "v4", `v4 seed kind ${post.kind}`);
+  if (post.kind === "v4") {
+    assert(post.poolManager === POOL_MANAGER, "v4 poolManager");
+    assert(post.poolId === POOL_ID, "v4 poolId");
+    assert(post.sqrtPriceX96 === impact.v4PostState!.sqrtPriceX96, "v4 sqrtPrice from event, no math");
+    assert(post.tick === 42 && post.liquidity === 10n ** 18n && post.lpFee === 100, "v4 state fields");
+    assert(post.blockNumber === BLOCK, "v4 blockNumber");
+  }
+
+  // Guard: missing v4PostState or amountOut => null (no partial seed).
+  const noPost = await applyVictimSwapLocally(cache, { ...impact, v4PostState: undefined }, BLOCK);
+  assert(noPost === null, "v4 without post-state must return null");
+  const noOut = await applyVictimSwapLocally(cache, { ...impact, amountOut: undefined }, BLOCK);
+  assert(noOut === null, "v4 without amountOut must return null");
+  console.log("[victim-apply] v4 post-impact seed: PASS");
+}
 async function main(): Promise<void> {
   testV2FeeMath();
   testV2FeeTable();
   await testV2VictimApply();
   await testV3VictimApply();
+  await testV4VictimApply();
   await testCurveVictimApply();
-  console.log("victim-apply PASS (6/6)");
+  console.log("victim-apply PASS (7/7)");
 }
 
 main().catch((err) => {

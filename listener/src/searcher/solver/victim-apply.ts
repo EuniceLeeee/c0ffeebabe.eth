@@ -6,6 +6,7 @@ import {
   type PostImpactSeed,
   type V2PostImpactSeed,
   type V3PostImpactSeed,
+  type V4PostImpactSeed,
 } from "./pool-state-cache.js";
 import { curveNgGetDy, curvePlainGetDy } from "./curve-math.js";
 import { v3SwapToState } from "./v3-math.js";
@@ -27,6 +28,8 @@ export async function applyVictimSwapLocally(
       return applyV2(cache, impact, blockNumber);
     case "univ3-swap":
       return applyV3(cache, impact, blockNumber);
+    case "univ4-unlock":
+      return applyV4(impact, blockNumber);
     case "curve-exchange":
     case "curve-exchange-nr":
     case "curve-exchange-plain":
@@ -102,6 +105,31 @@ function applyV3(
     blockNumber,
   };
   return { postImpact: post, amountOut: result.amountOut };
+}
+
+// v4 is the simplest case: the PoolManager Swap event carries the EXACT post-swap state
+// (sqrtPrice/liquidity/tick) and the output delta, so — unlike v2/v3/curve — no swap math is
+// recomputed. We just re-package the detector's v4PostState into a seed. The seed is applied to
+// the anvil fork via v4PostImpactStateOverrides (post-impact-overrides.ts), and v4 quotes eth_call
+// that fork, so the overlay reaches both the quote search and the final sim without a local cache.
+function applyV4(
+  impact: PoolImpact,
+  blockNumber: number,
+): LocalVictimApplyResult | null {
+  const s = impact.v4PostState;
+  if (!s || impact.amountOut === undefined || impact.amountOut <= 0n) return null;
+
+  const post: V4PostImpactSeed = {
+    kind: "v4",
+    poolManager: impact.pool,
+    poolId: s.poolId,
+    sqrtPriceX96: s.sqrtPriceX96,
+    tick: s.tick,
+    liquidity: s.liquidity,
+    lpFee: s.lpFee,
+    blockNumber,
+  };
+  return { postImpact: post, amountOut: impact.amountOut };
 }
 
 async function applyCurve(
