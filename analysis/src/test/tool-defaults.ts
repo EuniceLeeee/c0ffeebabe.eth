@@ -195,6 +195,12 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /champion_pid_changed_during_challenger_warmup/);
   assert.match(script, /current_generation_hash/);
   assert.match(script, /current_generation_mempool_state/);
+  assert.match(script, /AB_MEMPOOL_READY_TIMEOUT_SECONDS:-60/);
+  assert.match(script, /wait_current_generation_mempool_connected/);
+  assert.doesNotMatch(
+    script,
+    /\[ "\$\(current_generation_mempool_state "\$a_log"\)" = "connected" \]/,
+  );
   assert.match(script, /champion public mempool subscription is not currently connected/);
   assert.match(script, /challenger_mempool_stream_timeout/);
   assert.match(script, /challenger_unexpected_mev_share_connection/);

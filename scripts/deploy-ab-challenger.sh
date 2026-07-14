@@ -27,6 +27,7 @@ LOCAL_RPC=http://127.0.0.1:8545
 LEASE_SECONDS=${AB_LEASE_SECONDS:-5400}
 PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
 FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-240}
+MEMPOOL_READY_TIMEOUT_SECONDS=${AB_MEMPOOL_READY_TIMEOUT_SECONDS:-60}
 
 mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe" "$ROOT/candidate"
 touch "$LOCK"
@@ -75,6 +76,8 @@ valid_report_path() {
 [ "$PAUSE_LEASE_SECONDS" -ge 60 ] && [ "$PAUSE_LEASE_SECONDS" -le 1800 ] || die "AB_PAUSE_LEASE_SECONDS must be 60..1800"
 [ "$FIRST_SCAN_TIMEOUT_SECONDS" -ge 90 ] && [ "$FIRST_SCAN_TIMEOUT_SECONDS" -le 600 ] \
   || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..600"
+[ "$MEMPOOL_READY_TIMEOUT_SECONDS" -ge 5 ] && [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -le 120 ] \
+  || die "AB_MEMPOOL_READY_TIMEOUT_SECONDS must be 5..120"
 
 state_field() {
   python3 - "$STATE" "$1" <<'PY'
@@ -220,6 +223,15 @@ current_generation_mempool_state() {
     }
     END { print state == "" ? "unavailable" : state }
   ' "$log"
+}
+
+wait_current_generation_mempool_connected() {
+  local log=$1
+  for _ in $(seq 1 "$MEMPOOL_READY_TIMEOUT_SECONDS"); do
+    [ "$(current_generation_mempool_state "$log")" = "connected" ] && return 0
+    sleep 1
+  done
+  return 1
 }
 
 append_history() {
@@ -531,12 +543,12 @@ preflight() {
       current_generation_has "$a_log" 'MEV-Share SSE connected' \
         || die "champion current process has not connected its MEV-Share victim stream"
     else
-      current_generation_has "$a_log" '\[searcher/live\] mevshare=disabled' \
+      current_generation_has "$a_log" '[searcher/live] mevshare=disabled' \
         || die "champion did not confirm MEV-Share is disabled"
       ! current_generation_has "$a_log" 'MEV-Share SSE connected' \
         || die "champion unexpectedly connected MEV-Share"
     fi
-    [ "$(current_generation_mempool_state "$a_log")" = "connected" ] \
+    wait_current_generation_mempool_connected "$a_log" \
       || die "champion public mempool subscription is not currently connected"
   fi
 }
@@ -622,9 +634,9 @@ validate_running_pair() {
       ! current_generation_has "$a_log" 'MEV-Share SSE connected' || die "champion unexpected MEV-Share stream"
       ! current_generation_has "$b_log" 'MEV-Share SSE connected' || die "challenger unexpected MEV-Share stream"
     fi
-    [ "$(current_generation_mempool_state "$a_log")" = "connected" ] \
+    wait_current_generation_mempool_connected "$a_log" \
       || die "champion public mempool subscription disconnected"
-    [ "$(current_generation_mempool_state "$b_log")" = "connected" ] \
+    wait_current_generation_mempool_connected "$b_log" \
       || die "challenger public mempool subscription disconnected"
   fi
   for key in victim_feed_hash blockscan_view_hash blockscan_graph_hash; do
@@ -1081,15 +1093,8 @@ deploy() {
       done
       [ "$victim_ready" = "1" ] || safety_abort challenger_victim_stream_timeout
     fi
-    local mempool_ready=0
-    for _ in $(seq 1 60); do
-      if [ "$(current_generation_mempool_state "$LOG")" = "connected" ]; then
-        mempool_ready=1
-        break
-      fi
-      sleep 1
-    done
-    [ "$mempool_ready" = "1" ] || safety_abort challenger_mempool_stream_timeout
+    wait_current_generation_mempool_connected "$LOG" \
+      || safety_abort challenger_mempool_stream_timeout
   fi
   local a_pid_now b_pid_now
   a_pid_now=$(systemctl show -p MainPID --value "$A_UNIT")
