@@ -133,6 +133,7 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /echo "SEARCHER_ENABLE_MEMPOOL=\$MEMPOOL_VAL"/);
   assert.match(script, /echo "SEARCHER_ENABLE_MEV_SHARE=\$MEV_SHARE_VAL"/);
   assert.match(script, /echo "SEARCHER_ANVIL_PORT=\$ANVIL_PORT"/);
+  assert.match(script, /echo "SEARCHER_BLOCKSCAN_ANVIL_PORT=\$BLOCKSCAN_ANVIL_PORT"/);
   assert.match(script, /echo "SEARCHER_EAGER_STATE_BACKEND=\$BACKRUN_VAL"/);
   assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);
   assert.ok(
