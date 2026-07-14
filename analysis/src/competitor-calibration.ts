@@ -17,6 +17,7 @@ import { ADDR, lower } from "./registry/protocols.js";
 const COFFEE = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "test", "fixtures");
 const COFFEE_FIXTURES = join(FIXTURES, "coffee-20260704");
+const HOLDOUT_FIXTURE = join(FIXTURES, "competitor-calibration-holdouts.json");
 const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
 const SCALE_KEEPER_TX = "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628";
@@ -36,9 +37,20 @@ interface CoffeeFixture {
   sameBlockSwapLogs: RawLog[];
 }
 
+interface HoldoutFixture {
+  txHash: string;
+  expectedWinnerStyle: WinnerStyle;
+  expectedNonArbSignal: "keeper" | "rfq" | "none";
+  nativeWeiPositive: boolean;
+  manualEvidence: string;
+  tx: { from: string; to: string; input: string };
+  blockTimestamp: number;
+  receiptLogs: RawLog[];
+}
+
 export interface CompetitorCalibrationCheck {
   tx_hash: string;
-  axis: "source_shape" | "winner_style" | "vault_inventory_signal" | "venue_lineage";
+  axis: "source_shape" | "winner_style" | "vault_inventory_signal" | "venue_lineage" | "non_arb_signal";
   expected: string;
   actual: string;
   pass: boolean;
@@ -141,6 +153,17 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
       "keeper_claim",
       overlayNonArbStyle("unknown", keeperSignals),
     ));
+
+    for (const holdout of loadHoldouts()) {
+      const actual = offlineHoldoutStyle(holdout);
+      checks.push(check(holdout.txHash, "winner_style", holdout.expectedWinnerStyle, actual.style));
+      checks.push(check(
+        holdout.txHash,
+        "non_arb_signal",
+        holdout.expectedNonArbSignal,
+        actual.nonArbSignal,
+      ));
+    }
   } catch (error) {
     checks.push(check(
       "fixture-loader",
@@ -154,12 +177,46 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
   return {
     schema_version: 1,
     competitor: COFFEE,
-    fixture_set: "coffee-20260704 + postmortem-0x9be73297 + postmortem-0xd63fa66f",
+    fixture_set: "coffee-20260704 + postmortem-0x9be73297 + postmortem-0xd63fa66f + three manually-labelled holdouts",
     checks,
     passed: checks.length - failed,
     failed,
     status: failed === 0 ? "pass" : "fail",
   };
+}
+
+function offlineHoldoutStyle(holdout: HoldoutFixture): {
+  style: WinnerStyle;
+  nonArbSignal: HoldoutFixture["expectedNonArbSignal"];
+} {
+  const receipt = { logs: holdout.receiptLogs };
+  const rawDeltas = actionsFromLogs(receipt, [holdout.tx.from, holdout.tx.to]).rawDeltas;
+  const valued = valueDeltas(rawDeltas, 1746.76);
+  const nonArb = detectNonArbSignals(
+    holdout.tx.input,
+    receipt,
+    new Set([lower(holdout.tx.from), lower(holdout.tx.to)]),
+    holdout.blockTimestamp,
+  );
+  const base = classifyWinnerStyle({
+    pricedDeltas: valued.priced,
+    unpricedDeltas: valued.unpriced,
+    nativeWeiPositive: holdout.nativeWeiPositive,
+    nativeWeiNegative: false,
+    unpricedInTokensWithoutCounterTransfer: valued.unpriced
+      .filter((delta) => delta.raw > 0n)
+      .map((delta) => delta.token),
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+    share_imbalance_tokens: shareTokenImbalanceTokens(receipt),
+    inventory_rebalance_selector_hit: false,
+  });
+  const nonArbSignal = nonArb.claim_selector_hit || nonArb.conserved_sink_cut
+    ? "keeper"
+    : nonArb.rfq_sig_count > 0 && nonArb.rfq_deadline_in_calldata
+      ? "rfq"
+      : "none";
+  return { style: overlayNonArbStyle(base, nonArb), nonArbSignal };
 }
 
 function check(
@@ -199,4 +256,19 @@ function loadCoffeeFixtures(): CoffeeFixture[] {
   return index.map((entry) => JSON.parse(
     readFileSync(join(COFFEE_FIXTURES, `tx-${entry.label}.json`), "utf8"),
   ) as CoffeeFixture);
+}
+
+function loadHoldouts(): HoldoutFixture[] {
+  const fixture = JSON.parse(readFileSync(HOLDOUT_FIXTURE, "utf8")) as {
+    samples?: HoldoutFixture[];
+  };
+  if (!Array.isArray(fixture.samples) || fixture.samples.length < 3) {
+    throw new Error("competitor calibration requires at least three holdout samples");
+  }
+  for (const sample of fixture.samples) {
+    if (!sample.manualEvidence || !sample.txHash || !Array.isArray(sample.receiptLogs)) {
+      throw new Error("competitor holdout missing manual evidence, tx hash, or receipt logs");
+    }
+  }
+  return fixture.samples;
 }

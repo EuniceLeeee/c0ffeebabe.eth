@@ -5,11 +5,13 @@ import {
   validateIntakeAudit,
   validateTxRecord,
 } from "../cli/hermes-gate.js";
+import { runCompetitorCalibration } from "../competitor-calibration.js";
 
 const WIN = { from: 100, to: 200 };
 const EOA = "0x1111111111111111111111111111111111111111";
 const HASH = `0x${"a".repeat(64)}`;
 const POOL = "0x2222222222222222222222222222222222222222";
+const CALIBRATION_SAMPLES = runCompetitorCalibration().checks.length;
 
 const checks: Array<() => void> = [
   () => expectPass("valid public backrun tx", () => {
@@ -92,9 +94,9 @@ const checks: Array<() => void> = [
   }, "ab_external_calibration.classifier_calibration missing"),
   () => expectFail("A/B calibration rejects a fabricated sample count", () => {
     const value = validAbCalibration();
-    value.ab_external_calibration.classifier_calibration.samples = 14;
+    value.ab_external_calibration.classifier_calibration.samples = CALIBRATION_SAMPLES - 1;
     validateAbExternalCalibration(value);
-  }, "ab_external_calibration.classifier_calibration.samples must be 16"),
+  }, `ab_external_calibration.classifier_calibration.samples must be ${CALIBRATION_SAMPLES}`),
 ];
 
 try {
@@ -171,7 +173,7 @@ function validAbCalibration(): any {
       classifier_calibration: {
         command: "npm run competitor-calibration",
         status: "pass",
-        samples: 16,
+        samples: CALIBRATION_SAMPLES,
       },
       comparable_txs: [HASH],
       excluded_counts: {
