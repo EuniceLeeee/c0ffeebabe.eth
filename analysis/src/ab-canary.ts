@@ -379,6 +379,8 @@ export type AbExperiment = {
   change_class: ChangeClass;
   hypothesis: string;
   input_mode: "shared" | "challenger";
+  lane_mode?: "blockscan-only" | "dual";
+  infrastructure_shakedown?: boolean;
   expected_runtime_view_delta?: boolean;
   allowed_config_delta: string[];
   a: {
@@ -419,8 +421,8 @@ export type AbExperiment = {
   deterministic_gate: { result: "pass" | "fail" | "not_applicable"; evidence: string };
   production_evidence?: {
     searcher_behavior_change: boolean;
-    strategy_kind: "block-scan";
-    trigger_kind: "standing-state";
+    strategy_kind: "block-scan" | "backrun";
+    trigger_kind: "standing-state" | "victim-swap" | "oracle-update";
     route_scope: "dex-dex" | "dex-permissionless-protocol";
     position_conserving: boolean;
     posture: {
@@ -437,6 +439,15 @@ export type AbExperiment = {
       block_number: number;
       expected_net_profit_usd: number;
       evidence: string;
+      victim_tx_hash?: string;
+      oracle_route_edge_index?: number;
+      expected_route?: Array<{
+        adapterId: string;
+        tokenIn: string;
+        tokenOut: string;
+        target?: string;
+        poolId?: string;
+      }>;
     };
     classification_review: { verdict: "pass" | "fail"; reviewer: string; evidence: string };
     baseline_stage: "not_admitted" | "path_found" | "final_sim_success";
@@ -494,8 +505,8 @@ const PRODUCTION_STAGE_ORDER = new Map([
 ]);
 
 /** Pre-deploy veto for the current production phase. Historical schema-v2 reports remain readable, but
- * every new B deployment must use schema v3 and bind its behavior change to one real, profitable,
- * victim-independent block-scan sample in the current DEX / permissionless-protocol scope. */
+ * every new B deployment must use schema v3 and bind its behavior change to one real, profitable sample:
+ * victim-independent for block-scan, or a pinned swap/oracle counterfactual for dual-lane backrun. */
 export interface AbProductionCandidateContext {
   experimentId?: string;
   branch?: string;
@@ -504,6 +515,8 @@ export interface AbProductionCandidateContext {
   expectedRuntimeViewDelta?: boolean;
   inputMode?: "shared" | "challenger";
   allowedConfigDelta?: string[];
+  laneMode?: "blockscan-only" | "dual";
+  shakedown?: boolean;
 }
 
 export function validateAbProductionCandidate(
@@ -545,6 +558,36 @@ export function validateAbProductionCandidate(
       errors.push("candidate report allowed_config_delta does not match the deployment request");
     }
   }
+  if ((experiment.allowed_config_delta ?? []).length !== 0) {
+    errors.push("candidate deployment forbids config deltas; B must differ by one reviewed code variable only");
+  }
+  if (context.laneMode !== undefined && experiment.lane_mode !== context.laneMode) {
+    errors.push("candidate report lane_mode does not match the deployment request");
+  }
+  if (context.shakedown === true) {
+    if (experiment.infrastructure_shakedown !== true) {
+      errors.push("infrastructure shakedown deployment requires infrastructure_shakedown=true");
+    }
+    if (experiment.deterministic_gate?.result !== "not_applicable") {
+      errors.push("infrastructure shakedown deterministic_gate must be not_applicable");
+    }
+    if (experiment.production_evidence !== undefined) {
+      errors.push("infrastructure shakedown must not claim production_evidence");
+    }
+    if (experiment.input_mode !== "shared") {
+      errors.push("infrastructure shakedown requires input_mode=shared");
+    }
+    if ((experiment.allowed_config_delta ?? []).length !== 0) {
+      errors.push("infrastructure shakedown requires allowed_config_delta=[]");
+    }
+    if (experiment.expected_runtime_view_delta !== false) {
+      errors.push("infrastructure shakedown requires expected_runtime_view_delta=false");
+    }
+    return errors;
+  }
+  if (experiment.infrastructure_shakedown === true) {
+    errors.push("production challenger cannot declare infrastructure_shakedown=true");
+  }
   if (experiment.deterministic_gate?.result !== "pass") {
     errors.push("candidate deployment requires deterministic_gate.result=pass");
   }
@@ -564,11 +607,22 @@ export function validateAbProductionCandidate(
   if (evidence.searcher_behavior_change !== true) {
     errors.push("production_evidence.searcher_behavior_change must be true; tooling/docs/analysis-only work cannot deploy as B");
   }
-  if (evidence.strategy_kind !== "block-scan") {
-    errors.push("current production candidate strategy_kind must be block-scan");
+  if (evidence.strategy_kind !== "block-scan" && evidence.strategy_kind !== "backrun") {
+    errors.push("production candidate strategy_kind must be block-scan|backrun");
   }
-  if (evidence.trigger_kind !== "standing-state") {
-    errors.push("current production candidate must be standing-state, not victim-triggered backrun");
+  if (evidence.strategy_kind === "block-scan" && evidence.trigger_kind !== "standing-state") {
+    errors.push("block-scan candidate trigger_kind must be standing-state");
+  }
+  if (evidence.strategy_kind === "backrun"
+      && evidence.trigger_kind !== "victim-swap"
+      && evidence.trigger_kind !== "oracle-update") {
+    errors.push("backrun candidate trigger_kind must be victim-swap|oracle-update");
+  }
+  if (evidence.strategy_kind === "backrun" && (context.laneMode ?? experiment.lane_mode) !== "dual") {
+    errors.push("backrun candidate requires lane_mode=dual");
+  }
+  if (evidence.strategy_kind === "backrun" && evidence.challenger_stage !== "final_sim_success") {
+    errors.push("backrun challenger must reach final_sim_success on the pinned victim counterfactual");
   }
   if (evidence.route_scope !== "dex-dex" && evidence.route_scope !== "dex-permissionless-protocol") {
     errors.push("production_evidence.route_scope must be dex-dex|dex-permissionless-protocol");
@@ -578,10 +632,12 @@ export function validateAbProductionCandidate(
   }
 
   const posture = evidence.posture;
-  for (const key of ["victim_dependent", "keeper", "inventory", "private_path", "credit", "sandwich", "jit_lp"] as const) {
-    if (!posture || posture[key] !== false) {
-      errors.push(`production_evidence.posture.${key} must be false`);
-    }
+  const expectedVictimDependent = evidence.strategy_kind === "backrun";
+  if (!posture || posture.victim_dependent !== expectedVictimDependent) {
+    errors.push(`production_evidence.posture.victim_dependent must be ${expectedVictimDependent}`);
+  }
+  for (const key of ["keeper", "inventory", "private_path", "credit", "sandwich", "jit_lp"] as const) {
+    if (!posture || posture[key] !== false) errors.push(`production_evidence.posture.${key} must be false`);
   }
 
   const sample = evidence.sample;
@@ -600,6 +656,26 @@ export function validateAbProductionCandidate(
     if (!nonEmpty(sample.evidence)) {
       errors.push("production_evidence.sample.evidence missing/placeholder");
     }
+    if (evidence.strategy_kind === "backrun") {
+      if (!/^0x[a-f0-9]{64}$/i.test(sample.victim_tx_hash ?? "")) {
+        errors.push("backrun production sample requires a full victim_tx_hash");
+      }
+      if (!Array.isArray(sample.expected_route) || sample.expected_route.length < 2 || sample.expected_route.length > 8) {
+        errors.push("backrun production sample requires expected_route with 2..8 edges");
+      } else {
+        for (const [index, edge] of sample.expected_route.entries()) {
+          if (!nonEmpty(edge?.adapterId) || !nonEmpty(edge?.tokenIn) || !nonEmpty(edge?.tokenOut)) {
+            errors.push(`backrun expected_route[${index}] requires adapterId/tokenIn/tokenOut`);
+          }
+        }
+      }
+      if (evidence.trigger_kind === "oracle-update"
+          && (!Number.isSafeInteger(sample.oracle_route_edge_index)
+            || sample.oracle_route_edge_index! < 0
+            || sample.oracle_route_edge_index! >= (sample.expected_route?.length ?? 0))) {
+        errors.push("oracle-update sample requires oracle_route_edge_index within expected_route");
+      }
+    }
   }
 
   const before = PRODUCTION_STAGE_ORDER.get(evidence.baseline_stage);
@@ -612,10 +688,12 @@ export function validateAbProductionCandidate(
   if (!evidence.replay || evidence.replay.result !== "pass") {
     errors.push("production_evidence.replay.result must be pass");
   } else {
+    const expectedReplay = evidence.strategy_kind === "backrun"
+      ? ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"]
+      : ["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"];
     if (evidence.replay.cwd !== "listener"
-        || JSON.stringify(evidence.replay.argv)
-          !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"])) {
-      errors.push("production_evidence.replay must use the trusted direct-node blockscan-hunt harness");
+        || JSON.stringify(evidence.replay.argv) !== JSON.stringify(expectedReplay)) {
+      errors.push(`production_evidence.replay must use the trusted direct-node ${evidence.strategy_kind} harness`);
     }
     if (!nonEmpty(evidence.replay.evidence)) errors.push("production_evidence.replay.evidence missing/placeholder");
   }
@@ -713,6 +791,11 @@ export function validateAbExperiment(
   }
   if (!(<string[]>["shared", "challenger"]).includes(experiment.input_mode)) {
     errors.push("input_mode must be shared|challenger");
+  }
+  if (experiment.schema_version === 3
+      && experiment.lane_mode !== "blockscan-only"
+      && experiment.lane_mode !== "dual") {
+    errors.push("schema_version=3 lane_mode must be blockscan-only|dual");
   }
   if (!(<string[]>["win", "lose", "inconclusive"]).includes(experiment.analysis?.agent_manual_verdict)) {
     errors.push("agent_manual_verdict must be win|lose|inconclusive");
@@ -889,7 +972,10 @@ export function validateAbExperiment(
     errors.push("schema_version>=2 final win requires mergeability evidence for current origin/main vs tested base");
   }
   if (experiment.schema_version === 3 && experiment.final_verdict === "win") {
-    errors.push(...validateAbProductionCandidate(experiment));
+    errors.push(...validateAbProductionCandidate(
+      experiment,
+      experiment.infrastructure_shakedown === true ? { shakedown: true } : {},
+    ));
   }
   if (experiment.schema_version === 3 && experiment.branch_action === "retained") {
     errors.push(...validateResolutionReplay(experiment.resolution_replay));

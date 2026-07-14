@@ -117,24 +117,32 @@ the second live searcher starts. It requires one `production_evidence` object pr
   union from the current generated inventory, never a fixed executable name, fixture-only substitute, or
   self-reported command;
 
-- a real on-chain transaction whose successful receipt, block, positive net PnL, canonical
-  `winner_style=atomic_loop`, and `source_shape=atomic_state_arb` are recomputed from the local archive
-  node at deploy time (so a victim-dependent backrun cannot be relabelled as atomic);
+- a real on-chain transaction whose successful receipt, block, positive net PnL and canonical
+  `winner_style=atomic_loop` are recomputed from the local archive node at deploy time. Block-scan requires
+  `source_shape=atomic_state_arb`; dual backrun additionally verifies its declared earlier victim and exact
+  pre/post counterfactual;
 - a fresh non-author classification review confirming the sample is in scope;
-- current strategy scope: `block-scan`, `standing-state`, position-conserving `dex-dex` or
-  `dex-permissionless-protocol`;
-- no victim dependency, keeper/reward, inventory, private path, credit, sandwich, or JIT-LP posture;
+- current strategy scope: position-conserving `dex-dex` or `dex-permissionless-protocol`, with either
+  `block-scan`/`standing-state` or dual `backrun`/`victim-swap|oracle-update`;
+- no keeper/reward, inventory, private path, credit, sandwich, or JIT-LP posture; victim dependency is valid
+  only for the declared, replay-proven dual backrun;
 - `searcher_behavior_change=true`, `deterministic_gate.result=pass`, and the trusted, unchanged
-  `blockscan-hunt.ts` harness invoked directly by Node (not through challenger npm configuration). The wrapper runs it from
-  both the base and challenger worktrees on the untouched sample parent block (`sample.block_number - 1`),
+  trusted hunt harness invoked directly by Node (not through challenger npm configuration). The wrapper runs
+  `blockscan-hunt.ts` from the untouched sample parent block and `backrun-hunt.ts` around the exact historical
+  victim prefix,
   with the same frozen universe and the sample's on-chain DEX pool IDs. Harness/test/fixture changes in B
   are forbidden. The measured A/B hunt stages, not a challenger-authored success string, must show the same
   sample advances at least one
-  mechanically observable production stage: `not_admitted → path_found → final_sim_success`. A later
+  mechanically observable production stage: `not_admitted → path_found → final_sim_success`. A backrun
+  `final_sim_success` additionally requires the route transaction to land at the exact expected index in the
+  historical victim block, without rewriting historical sender balances; oracle victims require an
+  independent trusted quote delta on the declared route edge. A later
   quote-only or submit-only stage requires its own trusted harness to land on main before it may gate B.
 
-The trusted deploy wrapper binds the report to the requested experiment, branch, tested base, input mode,
-runtime-view declaration, and config delta. It requires a deployable listener runtime diff (tests and
+The trusted deploy wrapper binds the report to the requested experiment, branch, tested base, frozen
+challenger code SHA, input mode, and runtime-view declaration. Candidate config deltas are forbidden. The
+branch tip may advance beyond the code SHA only through the named report; the wrapper deploys the code SHA,
+not that report tip. It requires a deployable listener runtime diff (tests and
 fixtures do not count and may not change) and rejects analysis, governance, dependency-script, or runner changes in the
 challenger diff. Tool corrections are same-round auxiliary work: fix,
 review, merge, and immediately rerun them before the B branch is cut. They never count as the B variable.

@@ -54,6 +54,7 @@
     "searcher:fluid-dex-verify": "node --import tsx src/searcher/test/fluid-dex-verify.ts",
     "searcher:blockscan-hunt": "node --import tsx src/searcher/test/blockscan-hunt.ts",
     "searcher:bundle-router-safety": "node --import tsx src/searcher/test/bundle-router-safety.ts",
+    "searcher:live-envelope": "node --import tsx src/searcher/test/live-envelope.ts",
     "searcher:submission-coordinator": "node --import tsx src/searcher/test/submission-coordinator.ts",
     "searcher:blockscan-contract": "node --import tsx src/searcher/test/blockscan-contract.ts",
     "searcher:blockscan-scanner": "node --import tsx src/searcher/test/blockscan-scanner.ts",

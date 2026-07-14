@@ -11,8 +11,8 @@
 #    (never risk an accidental live broadcast). The autonomous cron + every normal deploy hit
 #    this path and stay dry-run. This is the project-node-env-dryrun-guard lesson, unchanged.
 #  - LIVE is a DELIBERATE, node-side, human action: create the marker file $REPO/.deploy-live.
-#    Even then, LIVE is REFUSED unless the signing wallet holds <= MEV_LIVE_MAX_WALLET_ETH
-#    (default 0.2 ETH) AND SEARCHER_EV_GATE=1 — so live can only ever run on a BOUNDED test
+#    Even then, LIVE is REFUSED unless the signing wallet holds <= MEV_LIVE_MAX_WALLET_ETH,
+#    which cannot exceed the fixed 0.2 ETH authorization, AND SEARCHER_EV_GATE=1.
 #    wallet (flash-loan arbs are atomic → worst-case loss is bounded to that wallet's gas/bribe
 #    balance). Remove the marker → next deploy reverts to dry-run.
 #  - The full working env is recovered from the RUNNING process BEFORE reset, so a truncated
@@ -23,7 +23,92 @@ ENVF=$REPO/.env
 TS=$(date +%Y%m%d-%H%M%S)
 say() { echo "[deploy $TS] $*"; }
 
-NON_SEARCHER_KEYS="MAINNET_RPC_URL OWNER_PRIVATE_KEY BOTVM_ADDRESS BOTVM_OWNER"
+env_value() { sed -n "s/^$1=//p" "$2" 2>/dev/null | tail -1; }
+process_env_value() {
+  tr '\0' '\n' < "/proc/$2/environ" 2>/dev/null | sed -n "s/^$1=//p" | tail -1
+}
+process_env_count() {
+  tr '\0' '\n' < "/proc/$2/environ" 2>/dev/null | grep -c "^$1=" || true
+}
+
+canonicalize_env() {
+  local path=$1 out
+  out=$(mktemp)
+  python3 - "$path" "$out" <<'PY' || { rm -f "$out"; return 1; }
+import os, re, sys
+
+source, destination = sys.argv[1:]
+values = {}
+order = []
+for line_number, raw in enumerate(open(source), 1):
+    line = raw.rstrip("\n")
+    if not line or line.lstrip().startswith("#"):
+        continue
+    if "=" not in line:
+        raise SystemExit(f"invalid env line {line_number}")
+    key, value = line.split("=", 1)
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
+        raise SystemExit(f"invalid env key on line {line_number}")
+    if "\x00" in value or "\r" in value or "\n" in value:
+        raise SystemExit(f"invalid env value for {key}")
+    if key not in values:
+        order.append(key)
+    values[key] = value
+with open(destination, "w") as out:
+    for key in order:
+        out.write(f"{key}={values[key]}\n")
+os.chmod(destination, 0o600)
+PY
+  mv "$out" "$path"
+}
+
+unit_is_stopped() {
+  local unit=$1 props load state pid
+  props=$(systemctl show -p LoadState -p ActiveState -p MainPID "$unit" 2>/dev/null) || return 1
+  load=$(printf '%s\n' "$props" | sed -n 's/^LoadState=//p')
+  state=$(printf '%s\n' "$props" | sed -n 's/^ActiveState=//p')
+  pid=$(printf '%s\n' "$props" | sed -n 's/^MainPID=//p')
+  [ -n "$load" ] && [ -n "$state" ] && [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  [ "$load" = "not-found" ] && [ "$pid" = "0" ] && return 0
+  { [ "$state" = "inactive" ] || [ "$state" = "failed" ]; } && [ "$pid" = "0" ]
+}
+
+stop_searcher_verified() {
+  systemctl stop mev-searcher >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    unit_is_stopped mev-searcher && return 0
+    sleep 1
+  done
+  systemctl kill --kill-who=all --signal=KILL mev-searcher >/dev/null 2>&1 || true
+  systemctl stop mev-searcher >/dev/null 2>&1 || true
+  for _ in $(seq 1 10); do
+    unit_is_stopped mev-searcher && return 0
+    sleep 1
+  done
+  return 1
+}
+
+abort_runtime() {
+  local reason=$1 stopped=1
+  stop_searcher_verified || stopped=0
+  if [ "$MODE" = "LIVE" ]; then
+    rm -f "$LIVE_MARKER"
+    if [ "$stopped" = "1" ]; then
+      say "ABORT (live runtime): $reason; searcher stop verified and live marker removed."
+    else
+      say "CRITICAL ABORT (live runtime): $reason; live marker removed but searcher stop could not be verified."
+    fi
+  else
+    if [ "$stopped" = "1" ]; then
+      say "ABORT (runtime): $reason; searcher stop verified."
+    else
+      say "CRITICAL ABORT (runtime): $reason; searcher stop could not be verified."
+    fi
+  fi
+  exit 9
+}
+
+NON_SEARCHER_KEYS="MAINNET_RPC_URL PRIVATE_KEY OWNER_PRIVATE_KEY BOTVM_ADDRESS BOTVM_OWNER MEV_SHARE_SSE_URL MEV_LIVE_MAX_WALLET_ETH"
 OPP_TTL_MS="${SEARCHER_OPP_TTL_MS:-5000}"
 # Pool-universe topN: how many ranked active-pools enter the runtime graph. Default 20000 (operator
 # 2026-07-12) — the running value; the old 6000 default silently reset a 20000 .env on every deploy
@@ -31,26 +116,73 @@ OPP_TTL_MS="${SEARCHER_OPP_TTL_MS:-5000}"
 # controlled (like OPP_TTL_MS) so it survives the recover-from-process .env rebuild. Latency-affordable.
 POOL_UNIVERSE_TOP_N="${SEARCHER_POOL_UNIVERSE_TOP_N:-20000}"
 LIVE_MARKER=$REPO/.deploy-live
-LOCAL_RPC=${SEARCHER_LIVE_RPC_URL:-http://127.0.0.1:8545}
-MEV_LIVE_MAX_WALLET_ETH=${MEV_LIVE_MAX_WALLET_ETH:-0.2}
+LOCAL_RPC=http://127.0.0.1:8545
+LOCAL_WS=ws://127.0.0.1:8546
+AUTHORIZED_MAX_WALLET_ETH=0.2
+MEV_LIVE_MAX_WALLET_ETH=${MEV_LIVE_MAX_WALLET_ETH:-$AUTHORIZED_MAX_WALLET_ETH}
 DEFAULT_EVENTS_PATH=/var/log/mev/events/searcher-live.jsonl
-
-# Mode: DRY (default) unless the human placed the live marker on the node.
+ANVIL_PORT=8555
+# Mode is fixed before any marker/env validation so every later failure can safely stop an old live A.
 if [ -f "$LIVE_MARKER" ]; then MODE=LIVE; DRY_VAL=0; else MODE=DRY; DRY_VAL=1; fi
+AB_ROOT=/opt/MEV-ab
+AB_STATE=$AB_ROOT/state.json
+mkdir -p "$AB_ROOT"
+exec 8>"$AB_ROOT/slot.lock"
+flock -x 8
+if ! AB_UNIT_PROPS=$(systemctl show -p LoadState -p ActiveState -p MainPID mev-ab-b 2>/dev/null); then
+  say "ABORT: could not verify challenger unit state; close/reap the A/B window before deploying A."
+  exit 75
+fi
+AB_LOAD_STATE=$(printf '%s\n' "$AB_UNIT_PROPS" | sed -n 's/^LoadState=//p')
+AB_ACTIVE_STATE=$(printf '%s\n' "$AB_UNIT_PROPS" | sed -n 's/^ActiveState=//p')
+AB_MAIN_PID=$(printf '%s\n' "$AB_UNIT_PROPS" | sed -n 's/^MainPID=//p')
+if [ -z "$AB_LOAD_STATE" ] || [ -z "$AB_ACTIVE_STATE" ] || ! [[ "$AB_MAIN_PID" =~ ^[0-9]+$ ]]; then
+  say "ABORT: incomplete challenger unit state; close/reap the A/B window before deploying A."
+  exit 75
+fi
+if { [ "$AB_LOAD_STATE" != "not-found" ] \
+      && [ "$AB_ACTIVE_STATE" != "inactive" ] && [ "$AB_ACTIVE_STATE" != "failed" ]; } \
+    || [ "$AB_MAIN_PID" != "0" ]; then
+  say "ABORT: challenger unit is not fully stopped (load=$AB_LOAD_STATE state=$AB_ACTIVE_STATE pid=$AB_MAIN_PID); close/reap the A/B window before deploying A."
+  exit 75
+fi
+if [ -f "$AB_STATE" ]; then
+  if ! AB_STATUS_LEASE=$(python3 - "$AB_STATE" 2>/dev/null <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+print(str(doc.get("status", "")), int(doc.get("lease_until", 0) or 0))
+PY
+  ); then
+    say "ABORT: malformed A/B state; trusted reap is required before deploying A."
+    exit 75
+  fi
+  AB_STATUS=${AB_STATUS_LEASE%% *}
+  AB_LEASE=${AB_STATUS_LEASE#* }
+  if [ "$AB_STATUS" = "running" ] || [ "$AB_STATUS" = "paused" ]; then
+    say "ABORT: A/B state is still $AB_STATUS (lease=$AB_LEASE); trusted close/reap is required before deploying A."
+    exit 75
+  fi
+fi
 
-cd "$REPO" || { say "no $REPO"; exit 1; }
+if [ -f "$REPO/.mempool" ] && [ ! -f "$REPO/.backrun" ]; then
+  abort_runtime ".mempool requires .backrun; public pending flow cannot run without the backrun lane"
+fi
+if [ -f "$REPO/.backrun" ]; then BACKRUN_VAL=1; else BACKRUN_VAL=0; fi
+if [ -f "$REPO/.mempool" ]; then MEMPOOL_VAL=1; else MEMPOOL_VAL=0; fi
+
+cd "$REPO" || abort_runtime "missing repository $REPO"
 DISCOVERY_TO_BLOCK=$(curl -sS "$LOCAL_RPC" -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
   | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["result"],16))' 2>/dev/null || echo 0)
 [ "$DISCOVERY_TO_BLOCK" -gt 0 ] \
-  || { say "ABORT: could not pin SEARCHER_DISCOVERY_TO_BLOCK from local reth."; exit 9; }
+  || abort_runtime "could not pin SEARCHER_DISCOVERY_TO_BLOCK from local reth"
 
 recover_running_env() {
   tr '\0' '\n' < "/proc/$PID/environ" | while IFS= read -r line; do
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -72,6 +204,8 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
   echo "SEARCHER_EVENTS_PATH=$EVENTS_PATH" >> "$tmp"
+  echo "SEARCHER_LIVE_RPC_URL=$LOCAL_RPC" >> "$tmp"
+  echo "SEARCHER_LIVE_WS_URL=$LOCAL_WS" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   # bribe-all-above-gas is marker-controlled ($REPO/.bribe-all-above-gas), like .deploy-live —
   # a single durable source that survives the recover-from-process rebuild. Does NOT touch the
@@ -93,14 +227,14 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # measured 100% phantom-victim rate — pure ghost flow that starved the mempool/atomic paths of CPU).
   # Ingest+sim only (submission also gated by allowHashOnlySubmit). Create the marker to re-enable.
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
-  # Backrun victim sources are marker-controlled and default OFF on the node's block-scan production
-  # posture. Without this explicit switch, SEARCHER_ENABLE_MEMPOOL=0 still consumes MEV-Share SSE.
-  # Create $REPO/.backrun to deliberately restore MEV-Share (and optional public-mempool) processing.
-  if [ -f "$REPO/.backrun" ]; then
-    echo "SEARCHER_ENABLE_BACKRUN=1" >> "$tmp"
-  else
-    echo "SEARCHER_ENABLE_BACKRUN=0" >> "$tmp"
-  fi
+  # Victim sources are independently marker-controlled. .backrun enables MEV-Share processing;
+  # .mempool additionally enables the public pending stream and is rejected without .backrun.
+  echo "SEARCHER_ENABLE_BACKRUN=$BACKRUN_VAL" >> "$tmp"
+  echo "SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_VAL" >> "$tmp"
+  echo "SEARCHER_EAGER_STATE_BACKEND=$BACKRUN_VAL" >> "$tmp"
+  echo "SEARCHER_ANVIL_PORT=$ANVIL_PORT" >> "$tmp"
+  canonicalize_env "$tmp" \
+    || { rm -f "$tmp"; abort_runtime "recovered runtime environment is invalid"; }
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
   say "env rebuilt ($(wc -l < "$ENVF") keys) + DRY_RUN=$DRY_VAL + TTL=$OPP_TTL_MS + poolUniverseTopN=$POOL_UNIVERSE_TOP_N + discoveryToBlock=$DISCOVERY_TO_BLOCK"
@@ -110,45 +244,74 @@ else
   EVENTS_PATH=${SEARCHER_EVENTS_PATH:-${EXISTING_EVENTS_PATH:-$DEFAULT_EVENTS_PATH}}
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
   echo "SEARCHER_EVENTS_PATH=$EVENTS_PATH" >> "$tmp"
+  echo "SEARCHER_LIVE_RPC_URL=$LOCAL_RPC" >> "$tmp"
+  echo "SEARCHER_LIVE_WS_URL=$LOCAL_WS" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
   [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"  # A6 marker-gated (wsteth)
   [ -f "$REPO/.block-scan" ] && echo "SEARCHER_ENABLE_BLOCK_SCAN=1" >> "$tmp"  # BS-lane Pass A log-only, marker-gated
   [ -f "$REPO/.blockscan-submit" ] && echo "SEARCHER_BLOCKSCAN_SUBMIT=1" >> "$tmp"  # BS-lane Pass B atomic submit, marker-gated
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share consumption marker-gated, DEFAULT OFF (2026-07-07 ghost flow)
-  if [ -f "$REPO/.backrun" ]; then echo "SEARCHER_ENABLE_BACKRUN=1" >> "$tmp"; else echo "SEARCHER_ENABLE_BACKRUN=0" >> "$tmp"; fi
+  echo "SEARCHER_ENABLE_BACKRUN=$BACKRUN_VAL" >> "$tmp"
+  echo "SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_VAL" >> "$tmp"
+  echo "SEARCHER_EAGER_STATE_BACKEND=$BACKRUN_VAL" >> "$tmp"
+  echo "SEARCHER_ANVIL_PORT=$ANVIL_PORT" >> "$tmp"
+  canonicalize_env "$tmp" \
+    || { rm -f "$tmp"; abort_runtime "existing environment is invalid"; }
   cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 fi
 
 # ── 2. Broadcast guard ──
+MEV_LIVE_MAX_WALLET_ETH=$(env_value MEV_LIVE_MAX_WALLET_ETH "$ENVF")
+MEV_LIVE_MAX_WALLET_ETH=${MEV_LIVE_MAX_WALLET_ETH:-$AUTHORIZED_MAX_WALLET_ETH}
 if [ "$MODE" = "DRY" ]; then
   # HARD guard: refuse to continue unless DRY_RUN=1 is present exactly once.
   if [ "$(grep -c '^SEARCHER_DRY_RUN=1' "$ENVF")" != "1" ]; then
-    say "ABORT: SEARCHER_DRY_RUN=1 not in $ENVF — not restarting (broadcast guard)."; exit 9
+    abort_runtime "SEARCHER_DRY_RUN=1 not uniquely present in $ENVF"
   fi
 else
   # LIVE path: deliberate marker present. Refuse unless bounded test wallet + EV gate on.
   say "*** LIVE marker present ($LIVE_MARKER) — validating bounded-test-wallet envelope ***"
-  grep -q '^SEARCHER_EV_GATE=1' "$ENVF" || { say "ABORT (live): SEARCHER_EV_GATE=1 required."; exit 9; }
-  PK=$(grep '^OWNER_PRIVATE_KEY=' "$ENVF" | head -1 | cut -d= -f2-)
-  [ -n "$PK" ] || { say "ABORT (live): no OWNER_PRIVATE_KEY."; exit 9; }
+  [ "$(grep -c '^SEARCHER_EV_GATE=' "$ENVF")" = "1" ] \
+    && [ "$(env_value SEARCHER_EV_GATE "$ENVF")" = "1" ] \
+    || abort_runtime "unique SEARCHER_EV_GATE=1 required"
+  PK=$(env_value PRIVATE_KEY "$ENVF")
+  [ -n "$PK" ] || PK=$(env_value OWNER_PRIVATE_KEY "$ENVF")
+  [ -n "$PK" ] || abort_runtime "no PRIVATE_KEY or OWNER_PRIVATE_KEY"
   WALLET=$(cast wallet address --private-key "$PK" 2>/dev/null)
-  [ -n "$WALLET" ] || { say "ABORT (live): could not derive wallet from key."; exit 9; }
+  [ -n "$WALLET" ] || abort_runtime "could not derive wallet from key"
+  BOTVM_ADDRESS=$(env_value BOTVM_ADDRESS "$ENVF")
+  BOTVM_OWNER=$(env_value BOTVM_OWNER "$ENVF")
+  [ "$(printf %s "$BOTVM_OWNER" | tr '[:upper:]' '[:lower:]')" = \
+    "$(printf %s "$WALLET" | tr '[:upper:]' '[:lower:]')" ] \
+    || abort_runtime "effective signer does not match BOTVM_OWNER"
+  ONCHAIN_OWNER=$(cast call "$BOTVM_ADDRESS" 'owner()(address)' --rpc-url "$LOCAL_RPC" 2>/dev/null || true)
+  [ "$(printf %s "$ONCHAIN_OWNER" | tr '[:upper:]' '[:lower:]')" = \
+    "$(printf %s "$WALLET" | tr '[:upper:]' '[:lower:]')" ] \
+    || abort_runtime "effective signer is not the on-chain BotVM owner"
   BAL_WEI=$(cast balance "$WALLET" --rpc-url "$LOCAL_RPC" 2>/dev/null)
   CAP_WEI=$(cast to-wei "$MEV_LIVE_MAX_WALLET_ETH" 2>/dev/null)
-  [ -n "$BAL_WEI" ] && [ -n "$CAP_WEI" ] || { say "ABORT (live): could not read wallet balance."; exit 9; }
+  AUTHORIZED_CAP_WEI=$(cast to-wei "$AUTHORIZED_MAX_WALLET_ETH" 2>/dev/null)
+  [ -n "$BAL_WEI" ] && [ -n "$CAP_WEI" ] && [ -n "$AUTHORIZED_CAP_WEI" ] \
+    || abort_runtime "could not read wallet balance/cap"
+  if ! python3 - "$CAP_WEI" "$AUTHORIZED_CAP_WEI" <<'PY'
+import sys
+configured, authorized = map(int, sys.argv[1:])
+raise SystemExit(0 if 0 < configured <= authorized else 1)
+PY
+  then
+    abort_runtime "configured cap exceeds the fixed ${AUTHORIZED_MAX_WALLET_ETH} ETH authorization"
+  fi
   if ! python3 -c "import sys; sys.exit(0 if int('$BAL_WEI') <= int('$CAP_WEI') else 1)"; then
-    say "ABORT (live): wallet $WALLET balance $BAL_WEI wei > cap ${MEV_LIVE_MAX_WALLET_ETH} ETH."
-    say "  LIVE is only for a BOUNDED test wallet. Move funds out or raise MEV_LIVE_MAX_WALLET_ETH deliberately."
-    exit 9
+    abort_runtime "wallet $WALLET balance $BAL_WEI wei exceeds cap ${MEV_LIVE_MAX_WALLET_ETH} ETH"
   fi
   if [ "$(grep -c '^SEARCHER_DRY_RUN=0' "$ENVF")" != "1" ]; then
-    say "ABORT (live): SEARCHER_DRY_RUN=0 not set as expected."; exit 9
+    abort_runtime "SEARCHER_DRY_RUN=0 not set as expected"
   fi
   say "LIVE envelope OK: wallet=$WALLET balance=$BAL_WEI wei (<= ${MEV_LIVE_MAX_WALLET_ETH} ETH), EV_GATE=1."
 fi
@@ -156,13 +319,13 @@ fi
 # ── 3. Backup dirty files, then update code ──
 git ls-files -m -o --exclude-standard 2>/dev/null | grep -v node_modules > "/tmp/dirty-$TS.txt"
 tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
-git fetch origin -q
-git reset --hard origin/main || { say "reset failed"; exit 1; }
+git fetch origin -q || abort_runtime "git fetch origin failed"
+git reset --hard origin/main || abort_runtime "git reset to origin/main failed"
 say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 
 # ── 4. Build + production-analysis preflight ──
 ( cd "$REPO/listener" && npm run build ) \
-  || { say "listener build failed — NOT restarting"; exit 1; }
+  || abort_runtime "listener build failed after checkout update"
 # Analysis CLIs execute TypeScript directly via the devDependency `tsx`. A git
 # reset updates their source but not ignored node_modules, so install the exact
 # lockfile and verify the production blockscan joins before this checkout is
@@ -172,7 +335,15 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
     && npm run build \
     && node --import tsx --test src/test/blockscan-log-join.ts src/test/block-activity.ts \
       src/test/live-loss-blockscan.ts ) \
-  || { say "analysis preflight failed — NOT restarting"; exit 1; }
+  || abort_runtime "analysis preflight failed after checkout update"
+
+DEPLOY_COMMIT=$(git rev-parse HEAD)
+[[ "$DEPLOY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || abort_runtime "deployed commit identity is invalid"
+tmp=$(mktemp)
+grep -v '^SEARCHER_RUNTIME_COMMIT=' "$ENVF" > "$tmp" || true
+echo "SEARCHER_RUNTIME_COMMIT=$DEPLOY_COMMIT" >> "$tmp"
+canonicalize_env "$tmp" || { rm -f "$tmp"; abort_runtime "could not bind runtime commit"; }
+cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
 REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
@@ -220,22 +391,22 @@ fi
 UNIVERSE_HASH=$(sha256sum "$REINDEX_OUT" 2>/dev/null | awk '{print $1}')
 case "$UNIVERSE_HASH" in
   [0-9a-f][0-9a-f]*) ;;
-  *) say "ABORT: could not hash pool universe $REINDEX_OUT."; exit 9 ;;
+  *) abort_runtime "could not hash pool universe $REINDEX_OUT" ;;
 esac
 [ "${#UNIVERSE_HASH}" = "64" ] \
-  || { say "ABORT: invalid pool universe hash for $REINDEX_OUT."; exit 9; }
+  || abort_runtime "invalid pool universe hash for $REINDEX_OUT"
 mkdir -p "$UNIVERSE_SNAPSHOT_DIR" \
-  || { say "ABORT: could not create $UNIVERSE_SNAPSHOT_DIR."; exit 9; }
+  || abort_runtime "could not create $UNIVERSE_SNAPSHOT_DIR"
 UNIVERSE_SNAPSHOT="$UNIVERSE_SNAPSHOT_DIR/active-pools-$UNIVERSE_HASH.json"
 if [ ! -f "$UNIVERSE_SNAPSHOT" ]; then
   SNAPSHOT_TMP="$UNIVERSE_SNAPSHOT.tmp.$$"
   cp "$REINDEX_OUT" "$SNAPSHOT_TMP" \
-    || { say "ABORT: could not snapshot pool universe."; exit 9; }
+    || abort_runtime "could not snapshot pool universe"
   chmod 444 "$SNAPSHOT_TMP"
   mv "$SNAPSHOT_TMP" "$UNIVERSE_SNAPSHOT"
 fi
 [ "$(sha256sum "$UNIVERSE_SNAPSHOT" | awk '{print $1}')" = "$UNIVERSE_HASH" ] \
-  || { say "ABORT: content-addressed universe snapshot failed verification."; exit 9; }
+  || abort_runtime "content-addressed universe snapshot failed verification"
 tmp=$(mktemp)
 grep -v '^SEARCHER_POOL_UNIVERSE_PATH=' "$ENVF" > "$tmp" || true
 echo "SEARCHER_POOL_UNIVERSE_PATH=$UNIVERSE_SNAPSHOT" >> "$tmp"
@@ -257,30 +428,92 @@ else
   say "WARNING: router discovery failed/timed out — keeping committed force-include-routers.json (deploy continues)."
 fi
 
+# Pin the exact router admission input too. A/B processes run from different worktrees, so a relative
+# force-include file would silently give them different public-mempool victim sets.
+ROUTER_ALLOWLIST="$REPO/listener/searcher/pools/force-include-routers.json"
+[ -f "$ROUTER_ALLOWLIST" ] || abort_runtime "router allowlist missing: $ROUTER_ALLOWLIST"
+ROUTER_HASH=$(sha256sum "$ROUTER_ALLOWLIST" 2>/dev/null | awk '{print $1}')
+[[ "$ROUTER_HASH" =~ ^[0-9a-f]{64}$ ]] || abort_runtime "could not hash router allowlist"
+ROUTER_SNAPSHOT_DIR=/opt/MEV-runtime/routers
+mkdir -p "$ROUTER_SNAPSHOT_DIR" || abort_runtime "could not create $ROUTER_SNAPSHOT_DIR"
+ROUTER_SNAPSHOT="$ROUTER_SNAPSHOT_DIR/force-include-routers-$ROUTER_HASH.json"
+if [ ! -f "$ROUTER_SNAPSHOT" ]; then
+  ROUTER_TMP="$ROUTER_SNAPSHOT.tmp.$$"
+  cp "$ROUTER_ALLOWLIST" "$ROUTER_TMP" || abort_runtime "could not snapshot router allowlist"
+  chmod 444 "$ROUTER_TMP"
+  mv "$ROUTER_TMP" "$ROUTER_SNAPSHOT"
+fi
+[ "$(sha256sum "$ROUTER_SNAPSHOT" | awk '{print $1}')" = "$ROUTER_HASH" ] \
+  || abort_runtime "content-addressed router snapshot failed verification"
+tmp=$(mktemp)
+grep -v '^SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=' "$ENVF" > "$tmp" || true
+echo "SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=$ROUTER_SNAPSHOT" >> "$tmp"
+canonicalize_env "$tmp" || { rm -f "$tmp"; abort_runtime "could not pin router allowlist"; }
+cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
+say "router allowlist pinned: hash=$ROUTER_HASH snapshot=$ROUTER_SNAPSHOT"
+
 # ── 5. Restart + verify mode ──
 LOGF=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
 [ -n "$LOGF" ] || LOGF=/var/log/mev-live.log
 LOG_OFFSET=$(wc -c < "$LOGF" 2>/dev/null || echo 0)
-systemctl restart mev-searcher
+systemctl restart mev-searcher || abort_runtime "systemctl restart mev-searcher failed"
 sleep 8
 ACTIVE=$(systemctl is-active mev-searcher)
 NEWPID=$(systemctl show -p MainPID --value mev-searcher)
 DRY=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_DRY_RUN=$DRY_VAL")
 PROCESS_UNIVERSE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null \
   | sed -n 's/^SEARCHER_POOL_UNIVERSE_PATH=//p' | tail -1)
-BACKRUN_EXPECTED=0
-[ -f "$REPO/.backrun" ] && BACKRUN_EXPECTED=1
+BACKRUN_EXPECTED=$BACKRUN_VAL
+MEMPOOL_EXPECTED=$MEMPOOL_VAL
 BACKRUN=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_BACKRUN=$BACKRUN_EXPECTED")
+MEMPOOL=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_EXPECTED")
+PROCESS_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_ANVIL_PORT=//p' | tail -1)
+PROCESS_EAGER_STATE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_EAGER_STATE_BACKEND=//p' | tail -1)
+PROCESS_RUNTIME_COMMIT=$(process_env_value SEARCHER_RUNTIME_COMMIT "$NEWPID")
+PROCESS_ROUTER_SNAPSHOT=$(process_env_value SEARCHER_FORCE_INCLUDE_ROUTERS_PATH "$NEWPID")
 say "restarted: active=$ACTIVE pid=$NEWPID mode=$MODE dry_run_env=$(tr '\0' '\n' < /proc/$NEWPID/environ 2>/dev/null | grep '^SEARCHER_DRY_RUN=' | cut -d= -f2)"
 if [ "$DRY" != "1" ]; then
-  say "WARNING: restarted process SEARCHER_DRY_RUN != $DRY_VAL (expected for mode=$MODE) — STOP and investigate."; exit 9
+  abort_runtime "restarted process SEARCHER_DRY_RUN != $DRY_VAL"
 fi
 if [ "$BACKRUN" != "1" ]; then
-  say "WARNING: restarted process SEARCHER_ENABLE_BACKRUN != $BACKRUN_EXPECTED — STOP and investigate."; exit 9
+  abort_runtime "restarted process SEARCHER_ENABLE_BACKRUN != $BACKRUN_EXPECTED"
+fi
+if [ "$MEMPOOL" != "1" ]; then
+  abort_runtime "restarted process SEARCHER_ENABLE_MEMPOOL != $MEMPOOL_EXPECTED"
+fi
+if [ "$PROCESS_ANVIL_PORT" != "$ANVIL_PORT" ]; then
+  abort_runtime "restarted process SEARCHER_ANVIL_PORT != $ANVIL_PORT"
+fi
+if [ "$PROCESS_EAGER_STATE" != "$BACKRUN_EXPECTED" ]; then
+  abort_runtime "restarted process SEARCHER_EAGER_STATE_BACKEND != $BACKRUN_EXPECTED"
+fi
+if [ "$PROCESS_RUNTIME_COMMIT" != "$DEPLOY_COMMIT" ]; then
+  abort_runtime "restarted process runtime commit does not match deployed checkout"
+fi
+if [ "$PROCESS_ROUTER_SNAPSHOT" != "$ROUTER_SNAPSHOT" ] \
+   || [ "$(sha256sum "$PROCESS_ROUTER_SNAPSHOT" 2>/dev/null | awk '{print $1}')" != "$ROUTER_HASH" ]; then
+  abort_runtime "restarted process did not retain the verified router snapshot"
+fi
+if [ "$MODE" = "LIVE" ]; then
+  [ "$(process_env_count SEARCHER_EV_GATE "$NEWPID")" = "1" ] \
+    && [ "$(process_env_value SEARCHER_EV_GATE "$NEWPID")" = "1" ] \
+    || abort_runtime "effective SEARCHER_EV_GATE is not 1"
+  RUNTIME_PK=$(process_env_value PRIVATE_KEY "$NEWPID")
+  [ -n "$RUNTIME_PK" ] || RUNTIME_PK=$(process_env_value OWNER_PRIVATE_KEY "$NEWPID")
+  RUNTIME_WALLET=$(cast wallet address --private-key "$RUNTIME_PK" 2>/dev/null || true)
+  [ "$(printf %s "$RUNTIME_WALLET" | tr '[:upper:]' '[:lower:]')" = \
+    "$(printf %s "$WALLET" | tr '[:upper:]' '[:lower:]')" ] \
+    || abort_runtime "effective signer changed after restart"
+  [ "$(printf %s "$(process_env_value BOTVM_ADDRESS "$NEWPID")" | tr '[:upper:]' '[:lower:]')" = \
+    "$(printf %s "$BOTVM_ADDRESS" | tr '[:upper:]' '[:lower:]')" ] \
+    || abort_runtime "effective BotVM changed after restart"
+  [ "$(printf %s "$(process_env_value BOTVM_OWNER "$NEWPID")" | tr '[:upper:]' '[:lower:]')" = \
+    "$(printf %s "$WALLET" | tr '[:upper:]' '[:lower:]')" ] \
+    || abort_runtime "effective BotVM owner changed after restart"
 fi
 if [ "$PROCESS_UNIVERSE" != "$UNIVERSE_SNAPSHOT" ] \
    || [ "$(sha256sum "$PROCESS_UNIVERSE" 2>/dev/null | awk '{print $1}')" != "$UNIVERSE_HASH" ]; then
-  say "ABORT: restarted process did not retain the verified immutable universe snapshot."; exit 9
+  abort_runtime "restarted process did not retain the verified immutable universe snapshot"
 fi
 say "runtime universe verified: $PROCESS_UNIVERSE hash=$UNIVERSE_HASH"
 BANNER=""
@@ -290,17 +523,20 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 if [ -z "$BANNER" ]; then
-  say "ABORT: missing pool registry startup banner after restart (log $LOGF)."; exit 9
+  abort_runtime "missing pool registry startup banner after restart (log $LOGF)"
 fi
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
-  | grep -q "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" \
-  || { say "ABORT: backrun startup banner does not match marker-controlled posture."; exit 9; }
+  | grep "\[searcher/live\] backrun=$( [ "$BACKRUN_EXPECTED" = "1" ] && echo enabled || echo disabled )" >/dev/null \
+  || abort_runtime "backrun startup banner does not match marker-controlled posture"
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
-  | grep -Fq "[searcher/live] events emit → $EVENTS_PATH" \
-  || { say "ABORT: events telemetry banner missing for $EVENTS_PATH."; exit 9; }
+  | grep "\[searcher/live\] mempool=$( [ "$MEMPOOL_EXPECTED" = "1" ] && echo enabled || echo disabled )" >/dev/null \
+  || abort_runtime "mempool startup banner does not match marker-controlled posture"
+tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
+  | grep -F "[searcher/live] events emit → $EVENTS_PATH" >/dev/null \
+  || abort_runtime "events telemetry banner missing for $EVENTS_PATH"
 say "startup banner: $BANNER"
 if echo "$BANNER" | grep -Eq '(^|[[:space:]])universe=0([^0-9]|$)|\+ 0 universe([^0-9]|$)'; then
-  say "ABORT: pool universe loaded zero pools after restart."; exit 9
+  abort_runtime "pool universe loaded zero pools after restart"
 fi
 if [ "$MODE" = "LIVE" ]; then
   say "########################################################################"

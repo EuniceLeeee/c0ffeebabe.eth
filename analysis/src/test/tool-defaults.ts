@@ -111,6 +111,7 @@ test("census-gap excludes stale and failed postmortem artifacts", async () => {
 
 test("node deploy installs and verifies production analysis tooling before restart", async () => {
   const script = await readFile(join(repoRoot, "scripts", "deploy-node.sh"), "utf8");
+  const searcher = await readFile(join(repoRoot, "listener", "src", "searcher", "main.ts"), "utf8");
   assert.match(script, /cd "\$REPO\/analysis"/);
   assert.match(script, /npm ci --include=dev --prefer-offline --no-audit --no-fund/);
   assert.match(script, /npm run build/);
@@ -124,6 +125,90 @@ test("node deploy installs and verifies production analysis tooling before resta
   );
   assert.match(script, /echo "SEARCHER_EVENTS_PATH=\$EVENTS_PATH"/);
   assert.match(script, /events telemetry banner missing for \$EVENTS_PATH/);
+  assert.match(script, /\.mempool requires \.backrun/);
+  assert.match(script, /echo "SEARCHER_ENABLE_MEMPOOL=\$MEMPOOL_VAL"/);
+  assert.match(script, /echo "SEARCHER_ANVIL_PORT=\$ANVIL_PORT"/);
+  assert.match(script, /echo "SEARCHER_EAGER_STATE_BACKEND=\$BACKRUN_VAL"/);
+  assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);
+  assert.ok(
+    script.indexOf("PK=$(env_value PRIVATE_KEY") < script.indexOf("PK=$(env_value OWNER_PRIVATE_KEY"),
+    "deploy guard must use the same PRIVATE_KEY-first signer precedence as the searcher",
+  );
+  assert.match(script, /canonicalize_env "\$tmp"/);
+  assert.match(script, /unique SEARCHER_EV_GATE=1 required/);
+  assert.match(script, /effective signer changed after restart/);
+  assert.match(script, /effective signer is not the on-chain BotVM owner/);
+  assert.match(script, /challenger unit is not fully stopped/);
+  assert.match(script, /trusted close\/reap is required before deploying A/);
+  assert.match(script, /SEARCHER_LIVE_RPC_URL=\$LOCAL_RPC/);
+  assert.match(script, /SEARCHER_LIVE_WS_URL=\$LOCAL_WS/);
+  assert.match(script, /SEARCHER_RUNTIME_COMMIT=\$DEPLOY_COMMIT/);
+  assert.match(script, /SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=\$ROUTER_SNAPSHOT/);
+  assert.match(script, /router allowlist pinned: hash=\$ROUTER_HASH/);
+  assert.match(script, /searcher stop verified and live marker removed/);
+  assert.match(script, /systemctl kill --kill-who=all --signal=KILL mev-searcher/);
+  assert.match(script, /mempool startup banner does not match marker-controlled posture/);
+  assert.ok(
+    searcher.indexOf("await validateLiveEnvelope(") < searcher.indexOf("new ProductionBundleRouter("),
+    "effective live envelope must be validated before the production router exists",
+  );
+});
+
+test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode", async () => {
+  const script = await readFile(join(repoRoot, "scripts", "deploy-ab-challenger.sh"), "utf8");
+  assert.match(script, /mode=\$\(env_get AB_LANE_MODE\); mode=\$\{mode:-blockscan-only\}/);
+  assert.match(script, /blockscan-only\|dual/);
+  assert.match(script, /SEARCHER_ENABLE_BACKRUN=\$expected_backrun/);
+  assert.match(script, /SEARCHER_ENABLE_MEMPOOL=\$expected_mempool/);
+  assert.match(script, /SEARCHER_ANVIL_PORT=8566/);
+  assert.match(script, /SEARCHER_EAGER_STATE_BACKEND=\$expected_backrun/);
+  assert.match(script, /challenger_victim_stream_timeout/);
+  assert.match(script, /infrastructure shakedown must run identical searcher code/);
+  assert.match(script, /replay_top_n=.*SEARCHER_POOL_UNIVERSE_TOP_N/);
+  assert.match(script, /--pool-universe-top-n "\$replay_top_n"/);
+  assert.match(script, /--expected-challenger "\$expected_b"/);
+  assert.match(script, /A\/B candidate config deltas are forbidden/);
+  assert.match(script, /B challenger may not modify the trusted state\/port backend/);
+  assert.match(script, /frozen challenger is not an ancestor of the report branch tip/);
+  assert.match(script, /challenger branch changed non-evidence file after frozen code SHA/);
+  assert.match(script, /reset --hard "\$b_commit"/);
+  assert.match(script, /clean -fdx/);
+  assert.match(script, /prepare_trusted_base "\$a_commit"/);
+  assert.match(script, /--base-root "\$TRUSTED_BASE"/);
+  assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);
+  assert.match(script, /allowed = \{"PRIVATE_KEY", "OWNER_PRIVATE_KEY", "BOTVM_ADDRESS", "BOTVM_OWNER"\}/);
+  assert.match(script, /--property="EnvironmentFile=\$B_PROCESS_ENV"/);
+  assert.match(script, /MEV_LIVE_MAX_WALLET_ETH=%s/);
+  assert.doesNotMatch(script, /\/bin\/bash -lc/);
+  assert.match(script, /challenger MEV_SHARE_SSE_URL must match champion/);
+  assert.match(script, /victim_feed_endpoints_differ/);
+  assert.match(script, /run_preflight_safely/);
+  assert.match(script, /SAFETY_ABORTING=1/);
+  assert.match(script, /champion_pid_changed_during_challenger_warmup/);
+  assert.match(script, /current_generation_hash/);
+  assert.match(script, /current_generation_mempool_state/);
+  assert.match(script, /champion public mempool subscription is not currently connected/);
+  assert.match(script, /challenger_mempool_stream_timeout/);
+  assert.match(script, /champion running commit does not match checkout HEAD/);
+  assert.match(script, /router_snapshot_hash/);
+  assert.match(script, /validate_running_pair/);
+  assert.match(script, /RuntimeMaxSec=\$\{LEASE_SECONDS\}s/);
+  assert.match(script, /Restart=no/);
+  assert.match(script, /extend_runtime_deadline/);
+  assert.ok(
+    script.indexOf('(state_update lease_until "$((now + LEASE_SECONDS))")') <
+      script.indexOf("(extend_runtime_deadline) || safety_abort runtime_deadline_renewal_failed"),
+    "renewal must persist the new lease before extending the hard runtime deadline",
+  );
+  assert.match(script, /A\/B stop verified and champion live marker removed/);
+  assert.match(script, /stop_unit_verified "\$A_UNIT"/);
+  assert.match(script, /systemctl kill --kill-who=all --signal=KILL/);
+  assert.match(script, /assert_no_port_owner "\$b_pid_now" challenger 8555 8556/);
+  assert.match(script, /assert_no_port_owner "\$a_pid_now" champion 8566 8567/);
+  assert.match(script, /assert_port_owned "\$a_pid_now" champion 8555/);
+  assert.match(script, /assert_port_owned "\$a_pid_now" champion 8556/);
+  assert.match(script, /assert_port_owned "\$b_pid_now" challenger 8566/);
+  assert.match(script, /assert_port_owned "\$b_pid_now" challenger 8567/);
 });
 
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Node-side A/B canary slot manager. Run via SSM from the trusted origin/main copy.
 # It owns only the shared B runtime slot; Git analysis branches may exist independently.
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT=/opt/MEV-ab
 MAIN_REPO=/opt/MEV
 WT=$ROOT/b
+TRUSTED_BASE=$ROOT/trusted-base
 ENVF=$ROOT/b.env
 B_SECRETS=$ROOT/b-secrets.env
+B_PROCESS_ENV=$ROOT/b-process.env
 STATE=$ROOT/state.json
 HISTORY=$ROOT/history.jsonl
 LOCK=$ROOT/slot.lock
@@ -18,6 +20,7 @@ EXPECTED_WALLET=0x2a6b8024190CF537efA3685792f201FD1Aac7294
 EXPECTED_BOTVM=0xCF471995e8FbD99F8dBE8377FA67Db89Ab18af24
 EXPECTED_A_WALLET=0xb8578B6de173C8554FF0390dB5a7effA567DDA3c
 EXPECTED_A_BOTVM=0x4aF9495C4aC24c5CD3b0C90611550a1996415BCe
+AUTHORIZED_MAX_WALLET_ETH=0.2
 LOCAL_RPC=http://127.0.0.1:8545
 # A measured Hermes window is 60 minutes after challenger cold-start/warmup. Keep one bounded lease long
 # enough for warmup + the full window + close; stale/crashed slots are still reaped automatically.
@@ -42,7 +45,18 @@ env_get() {
     sed -n "s/^$key=//p" "$ENVF" | tail -1
   fi
 }
+lane_mode() {
+  local mode
+  mode=$(env_get AB_LANE_MODE); mode=${mode:-blockscan-only}
+  case "$mode" in
+    blockscan-only|dual) printf '%s\n' "$mode" ;;
+    *) die "AB_LANE_MODE must be blockscan-only|dual" ;;
+  esac
+}
 file_env_get() { sed -n "s/^$2=//p" "$1" | tail -1; }
+process_env_get() {
+  tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | tail -1
+}
 lower() { tr '[:upper:]' '[:lower:]'; }
 valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; }
 valid_branch() { [[ "$1" =~ ^ab/[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$ ]]; }
@@ -76,7 +90,7 @@ if len(pairs) % 2:
 doc = json.load(open(state)) if os.path.exists(state) else {"schema_version": 1}
 integer_keys = {
     "lease_until", "updated_at", "a_restarts_before", "a_restart_delta",
-    "b_restarts", "a_pid_before", "a_pid_after", "champion_pid_changed",
+    "b_restarts", "a_pid_before", "a_pid_after", "b_pid_before", "champion_pid_changed",
 }
 for i in range(0, len(pairs), 2):
     key, value = pairs[i:i + 2]
@@ -102,6 +116,55 @@ hash_or_unavailable() {
   if [ -f "$1" ]; then sha256sum "$1" | awk '{print $1}'; else echo unavailable; fi
 }
 
+assert_port_free() {
+  local port=$1
+  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[:.])${port}$"; then
+    die "required A/B port $port is already listening"
+  fi
+}
+
+port_listener_pids() {
+  local port=$1
+  ss -H -ltnp "sport = :$port" 2>/dev/null \
+    | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
+}
+
+pid_descends_from() {
+  local pid=$1 root=$2 ppid
+  while [[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" -gt 1 ]; do
+    [ "$pid" = "$root" ] && return 0
+    [ -r "/proc/$pid/stat" ] || return 1
+    ppid=$(awk '{print $4}' "/proc/$pid/stat")
+    [ "$ppid" != "$pid" ] || return 1
+    pid=$ppid
+  done
+  return 1
+}
+
+assert_no_port_owner() {
+  local root_pid=$1 label=$2 port listener
+  shift 2
+  for port in "$@"; do
+    [[ "$port" =~ ^[0-9]+$ ]] || continue
+    for listener in $(port_listener_pids "$port"); do
+      if pid_descends_from "$listener" "$root_pid"; then
+        die "$label process tree unexpectedly owns protected port $port (pid=$listener)"
+      fi
+    done
+  done
+}
+
+assert_port_owned() {
+  local root_pid=$1 label=$2 port=$3 listener
+  local listeners
+  listeners=$(port_listener_pids "$port")
+  [ -n "$listeners" ] || die "$label required port $port is not listening"
+  for listener in $listeners; do
+    pid_descends_from "$listener" "$root_pid" \
+      || die "$label port $port is owned outside its unit tree (pid=$listener)"
+  done
+}
+
 unit_log_path() {
   local unit=$1 fallback=$2 path
   path=$(systemctl show "$unit" -p StandardOutput --value 2>/dev/null | sed -n 's/^append://p')
@@ -115,6 +178,40 @@ runtime_hash() {
     | sed -n "s/.*$key=0x\([0-9a-fA-F]\{64\}\).*/\1/p" \
     | tr '[:upper:]' '[:lower:]' \
     | grep -E '^[0-9a-f]{64}$' || echo unavailable
+}
+
+current_generation_has() {
+  local log=$1 pattern=$2 start_line
+  [ -f "$log" ] || return 1
+  start_line=$(grep -n '\[searcher/live\] starting V5' "$log" 2>/dev/null | tail -1 | cut -d: -f1)
+  [[ "$start_line" =~ ^[1-9][0-9]*$ ]] || return 1
+  awk -v start="$start_line" -v pattern="$pattern" \
+    'NR >= start && index($0, pattern) { found = 1 } END { exit(found ? 0 : 1) }' "$log"
+}
+
+current_generation_hash() {
+  local log=$1 key=$2 start_line
+  [ -f "$log" ] || { echo unavailable; return; }
+  start_line=$(grep -n '\[searcher/live\] starting V5' "$log" 2>/dev/null | tail -1 | cut -d: -f1)
+  [[ "$start_line" =~ ^[1-9][0-9]*$ ]] || { echo unavailable; return; }
+  tail -n "+$start_line" "$log" \
+    | sed -n "s/.*$key=0x\([0-9a-fA-F]\{64\}\).*/\1/p" \
+    | tail -1 \
+    | tr '[:upper:]' '[:lower:]' \
+    | grep -E '^[0-9a-f]{64}$' || echo unavailable
+}
+
+current_generation_mempool_state() {
+  local log=$1 start_line
+  [ -f "$log" ] || { echo unavailable; return; }
+  start_line=$(grep -n '\[searcher/live\] starting V5' "$log" 2>/dev/null | tail -1 | cut -d: -f1)
+  [[ "$start_line" =~ ^[1-9][0-9]*$ ]] || { echo unavailable; return; }
+  awk -v start="$start_line" '
+    NR >= start && match($0, /mempool_state=(connected|disconnected)/) {
+      state = substr($0, RSTART + 14, RLENGTH - 14)
+    }
+    END { print state == "" ? "unavailable" : state }
+  ' "$log"
 }
 
 append_history() {
@@ -138,11 +235,67 @@ cpu_layout() {
   ALL_CPUS="0-$((count - 1))"
 }
 
+unit_is_stopped() {
+  local unit=$1 props load state pid
+  props=$(systemctl show -p LoadState -p ActiveState -p MainPID "$unit" 2>/dev/null) || return 1
+  load=$(printf '%s\n' "$props" | sed -n 's/^LoadState=//p')
+  state=$(printf '%s\n' "$props" | sed -n 's/^ActiveState=//p')
+  pid=$(printf '%s\n' "$props" | sed -n 's/^MainPID=//p')
+  [ -n "$load" ] && [ -n "$state" ] && [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  [ "$load" = "not-found" ] && [ "$pid" = "0" ] && return 0
+  { [ "$state" = "inactive" ] || [ "$state" = "failed" ]; } && [ "$pid" = "0" ]
+}
+
+stop_unit_verified() {
+  local unit=$1
+  systemctl stop "$unit" >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    unit_is_stopped "$unit" && return 0
+    sleep 1
+  done
+  systemctl kill --kill-who=all --signal=KILL "$unit" >/dev/null 2>&1 || true
+  systemctl stop "$unit" >/dev/null 2>&1 || true
+  for _ in $(seq 1 10); do
+    unit_is_stopped "$unit" && return 0
+    sleep 1
+  done
+  return 1
+}
+
 stop_b() {
-  systemctl stop "$UNIT" >/dev/null 2>&1 || true
+  local stopped=0
+  stop_unit_verified "$UNIT" && stopped=1
   systemctl reset-failed "$UNIT" >/dev/null 2>&1 || true
   cpu_layout
   systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$ALL_CPUS" >/dev/null
+  [ "$stopped" = "1" ]
+}
+
+safety_abort() {
+  local reason=${1:-safety_preflight_failed} status already_aborting b_stopped=1 a_stopped=1
+  trap - ERR
+  already_aborting=${SAFETY_ABORTING:-0}
+  SAFETY_ABORTING=1
+  status=$(state_field status 2>/dev/null || true)
+  if [ "$status" = "running" ] && [ "$already_aborting" != "1" ]; then
+    (capture_fairness) || true
+  fi
+  stop_b || b_stopped=0
+  stop_unit_verified "$A_UNIT" || a_stopped=0
+  rm -f "$MAIN_REPO/.deploy-live"
+  if [ "$b_stopped" != "1" ] || [ "$a_stopped" != "1" ]; then
+    reason="${reason};stop_verification_failed:A=${a_stopped},B=${b_stopped}"
+  fi
+  if [ -f "$STATE" ] && { [ "$status" = "running" ] || [ "$status" = "paused" ]; }; then
+    (state_update status closed lease_until 0 outcome crashed_needs_escalation failure_reason "$reason") || true
+    (append_history) || true
+  fi
+  if [ "$b_stopped" = "1" ] && [ "$a_stopped" = "1" ]; then
+    echo "ABORT: $reason; A/B stop verified and champion live marker removed" >&2
+  else
+    echo "CRITICAL ABORT: $reason; live marker removed but unit stop could not be verified" >&2
+  fi
+  exit 9
 }
 
 capture_fairness() {
@@ -181,7 +334,7 @@ reap_stale() {
     experiment=$(state_field experiment_id)
     branch=$(state_field branch)
     capture_fairness
-    stop_b
+    stop_b || safety_abort stale_inactive_b_stop_verification_failed
     state_update status closed lease_until 0 outcome crashed_needs_escalation \
       failure_reason b_unit_inactive_while_state_running
     append_history
@@ -193,7 +346,7 @@ reap_stale() {
     experiment=$(state_field experiment_id)
     branch=$(state_field branch)
     if [ "$status" = "running" ]; then capture_fairness; fi
-    stop_b
+    stop_b || safety_abort stale_b_stop_verification_failed
     state_update status closed lease_until 0 outcome crashed_needs_escalation
     append_history
     echo "reaped stale experiment=$experiment branch=$branch; branch retained"
@@ -268,24 +421,32 @@ PY
 
 check_wallet_envelope() {
   local env_file=$1 expected_wallet=$2 expected_botvm=$3 label=$4 baseline_file=$5
-  local pk wallet botvm owner balance cap cap_wei baseline
+  local pk wallet botvm owner balance cap cap_wei authorized_wei baseline
   pk=$(file_env_get "$env_file" PRIVATE_KEY)
   [ -n "$pk" ] || pk=$(file_env_get "$env_file" OWNER_PRIVATE_KEY)
-  [ -n "$pk" ] || die "$label private key missing"
+  [ -n "$pk" ] || safety_abort "${label}_private_key_missing"
   wallet=$(cast wallet address --private-key "$pk" 2>/dev/null)
   [ "$(printf %s "$wallet" | lower)" = "$(printf %s "$expected_wallet" | lower)" ] \
-    || die "$label key does not match its authorized wallet"
+    || safety_abort "${label}_unauthorized_wallet"
   botvm=$(file_env_get "$env_file" BOTVM_ADDRESS)
   [ "$(printf %s "$botvm" | lower)" = "$(printf %s "$expected_botvm" | lower)" ] \
-    || die "$label BOTVM_ADDRESS is not authorized"
+    || safety_abort "${label}_unauthorized_botvm"
   owner=$(cast call "$botvm" 'owner()(address)' --rpc-url "$LOCAL_RPC" 2>/dev/null || true)
   [ "$(printf %s "$owner" | lower)" = "$(printf %s "$wallet" | lower)" ] \
-    || die "$label wallet is not BotVM owner"
+    || safety_abort "${label}_botvm_owner_mismatch"
   balance=$(cast balance "$wallet" --rpc-url "$LOCAL_RPC" 2>/dev/null)
-  cap=$(file_env_get "$env_file" MEV_LIVE_MAX_WALLET_ETH); cap=${cap:-0.2}
+  cap=$(file_env_get "$env_file" MEV_LIVE_MAX_WALLET_ETH); cap=${cap:-$AUTHORIZED_MAX_WALLET_ETH}
   cap_wei=$(cast to-wei "$cap" 2>/dev/null)
-  [ -n "$balance" ] && [ -n "$cap_wei" ] || die "could not evaluate $label wallet cap"
-  python3 - "$balance" "$cap_wei" <<'PY' || die "$label wallet exceeds bounded-live cap"
+  authorized_wei=$(cast to-wei "$AUTHORIZED_MAX_WALLET_ETH" 2>/dev/null)
+  [ -n "$balance" ] && [ -n "$cap_wei" ] && [ -n "$authorized_wei" ] \
+    || safety_abort "${label}_wallet_cap_unavailable"
+  python3 - "$cap_wei" "$authorized_wei" <<'PY' \
+    || safety_abort "${label}_wallet_cap_unauthorized"
+import sys
+configured, authorized = map(int, sys.argv[1:])
+raise SystemExit(0 if 0 < configured <= authorized else 1)
+PY
+  python3 - "$balance" "$cap_wei" <<'PY' || safety_abort "${label}_wallet_over_cap"
 import sys
 raise SystemExit(0 if int(sys.argv[1]) <= int(sys.argv[2]) else 1)
 PY
@@ -294,33 +455,57 @@ PY
     chmod 600 "$baseline_file"
   fi
   baseline=$(cat "$baseline_file")
-  python3 - "$balance" "$baseline" <<'PY' || die "$label wallet fell below 50% of its bounded-live baseline"
+  python3 - "$balance" "$baseline" <<'PY' || safety_abort "${label}_wallet_below_baseline"
 import sys
 raise SystemExit(0 if int(sys.argv[1]) * 2 >= int(sys.argv[2]) else 1)
 PY
 }
 
 preflight() {
+  [ -f "$MAIN_REPO/.deploy-live" ] || die "champion bounded-live marker is missing"
   [ -f "$ENVF" ] || die "missing $ENVF"
   [ "$(stat -c %a "$ENVF")" = "600" ] || die "$ENVF must be mode 600"
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] || die "champion unit is not active"
-  local apid
+  local apid mode expected_backrun expected_mempool a_rpc a_ws a_log a_runtime_commit a_router_path
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    expected_backrun=1
+    expected_mempool=1
+  else
+    expected_backrun=0
+    expected_mempool=0
+  fi
   apid=$(systemctl show -p MainPID --value "$A_UNIT")
   [ -r "/proc/$apid/environ" ] || die "cannot read champion environment"
   tr '\0' '\n' < "/proc/$apid/environ" > "$A_PROCESS_ENV"
   chmod 600 "$A_PROCESS_ENV"
   for pair in \
-    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
-    SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1; do
+    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
+    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ANVIL_PORT=8555 \
+    SEARCHER_EAGER_STATE_BACKEND=$expected_backrun \
+    SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8556; do
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(file_env_get "$A_PROCESS_ENV" "$key")" = "$expected" ] \
       || die "champion $key must equal $expected"
   done
   [[ "$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)" =~ ^[0-9]+$ ]] \
     || die "champion SEARCHER_DISCOVERY_TO_BLOCK must be pinned by deploy-node.sh"
+  a_rpc=$(file_env_get "$A_PROCESS_ENV" SEARCHER_LIVE_RPC_URL)
+  a_ws=$(file_env_get "$A_PROCESS_ENV" SEARCHER_LIVE_WS_URL)
+  [ "$a_rpc" = "$LOCAL_RPC" ] || die "champion SEARCHER_LIVE_RPC_URL must use local reth"
+  [ "$a_ws" = "ws://127.0.0.1:8546" ] || die "champion SEARCHER_LIVE_WS_URL must use local reth"
+  a_runtime_commit=$(file_env_get "$A_PROCESS_ENV" SEARCHER_RUNTIME_COMMIT)
+  [[ "$a_runtime_commit" =~ ^[0-9a-f]{40}$ ]] || die "champion runtime commit is unavailable"
+  [ "$a_runtime_commit" = "$(git -C "$MAIN_REPO" rev-parse HEAD)" ] \
+    || die "champion running commit does not match checkout HEAD"
+  a_router_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
+  [[ "$a_router_path" = /* ]] && [ -f "$a_router_path" ] \
+    || die "champion router admission snapshot is unavailable"
 
   for pair in \
-    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=0 SEARCHER_ENABLE_MEMPOOL=0 \
+    SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
+    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ANVIL_PORT=8566 \
+    SEARCHER_EAGER_STATE_BACKEND=$expected_backrun \
     SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567; do
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(env_get "$key")" = "$expected" ] || die "$key must equal $expected in $ENVF"
@@ -329,10 +514,112 @@ preflight() {
     || die "B requires its dedicated SEARCHER_EVENTS_PATH"
   check_wallet_envelope "$A_PROCESS_ENV" "$EXPECTED_A_WALLET" "$EXPECTED_A_BOTVM" champion "$ROOT/.a-start-balance-wei"
   check_wallet_envelope "$ENVF" "$EXPECTED_WALLET" "$EXPECTED_BOTVM" challenger "$ROOT/.b-start-balance-wei"
+  if [ "$mode" = "dual" ]; then
+    a_log=$(unit_log_path "$A_UNIT" /var/log/mev-live.log)
+    current_generation_has "$a_log" 'MEV-Share SSE connected' \
+      || die "champion current process has not connected its MEV-Share victim stream"
+    [ "$(current_generation_mempool_state "$a_log")" = "connected" ] \
+      || die "champion public mempool subscription is not currently connected"
+  fi
+}
+
+run_preflight_safely() {
+  (preflight) || safety_abort preflight_failed
+}
+
+validate_running_pair() {
+  local mode expected_backrun expected_mempool a_pid b_pid a_log b_log key expected a_router_path b_router_path
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    expected_backrun=1
+    expected_mempool=1
+  else
+    expected_backrun=0
+    expected_mempool=0
+  fi
+  [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] || die "champion unit is inactive"
+  [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] || die "challenger unit is inactive"
+  a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
+  b_pid=$(systemctl show -p MainPID --value "$UNIT")
+  [ "$a_pid" = "$(state_field a_pid_before)" ] || die "champion PID drift"
+  [ "$b_pid" = "$(state_field b_pid_before)" ] || die "challenger PID drift"
+  [ "$(unit_restarts "$A_UNIT")" = "$(state_field a_restarts_before)" ] || die "champion restart drift"
+  [ "$(unit_restarts "$UNIT")" = "$(state_field b_restarts)" ] || die "challenger restart drift"
+  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$(state_field a_commit)" ] || die "champion commit drift"
+  [ "$(git -C "$WT" rev-parse HEAD)" = "$(state_field b_commit)" ] || die "challenger commit drift"
+  [ "$(process_env_get "$a_pid" SEARCHER_RUNTIME_COMMIT)" = "$(state_field a_commit)" ] \
+    || die "champion running commit drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_RUNTIME_COMMIT)" = "$(state_field b_commit)" ] \
+    || die "challenger running commit drift"
+  for key in SEARCHER_DRY_RUN SEARCHER_EV_GATE SEARCHER_ENABLE_BLOCK_SCAN SEARCHER_BLOCKSCAN_SUBMIT; do
+    expected=1
+    [ "$key" = "SEARCHER_DRY_RUN" ] && expected=0
+    [ "$(process_env_get "$a_pid" "$key")" = "$expected" ] || die "champion $key drift"
+    [ "$(process_env_get "$b_pid" "$key")" = "$expected" ] || die "challenger $key drift"
+  done
+  [ "$(process_env_get "$a_pid" SEARCHER_ENABLE_BACKRUN)" = "$expected_backrun" ] \
+    || die "champion backrun posture drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_ENABLE_BACKRUN)" = "$expected_backrun" ] \
+    || die "challenger backrun posture drift"
+  [ "$(process_env_get "$a_pid" SEARCHER_ENABLE_MEMPOOL)" = "$expected_mempool" ] \
+    || die "champion mempool posture drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_ENABLE_MEMPOOL)" = "$expected_mempool" ] \
+    || die "challenger mempool posture drift"
+  [ "$(process_env_get "$a_pid" SEARCHER_EAGER_STATE_BACKEND)" = "$expected_backrun" ] \
+    || die "champion eager-state posture drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_EAGER_STATE_BACKEND)" = "$expected_backrun" ] \
+    || die "challenger eager-state posture drift"
+  [ "$(process_env_get "$a_pid" SEARCHER_LIVE_RPC_URL)" = "$LOCAL_RPC" ] || die "champion RPC source drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_LIVE_RPC_URL)" = "$LOCAL_RPC" ] || die "challenger RPC source drift"
+  [ "$(process_env_get "$a_pid" SEARCHER_LIVE_WS_URL)" = "ws://127.0.0.1:8546" ] || die "champion WS source drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_LIVE_WS_URL)" = "ws://127.0.0.1:8546" ] || die "challenger WS source drift"
+  a_router_path=$(process_env_get "$a_pid" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
+  b_router_path=$(process_env_get "$b_pid" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
+  [ "$a_router_path" = "$b_router_path" ] && [ "$a_router_path" = "$(state_field router_snapshot_path)" ] \
+    || die "router admission snapshot path drift"
+  [ "$(hash_file "$a_router_path")" = "$(state_field router_snapshot_hash)" ] \
+    || die "router admission snapshot content drift"
+  (assert_no_port_owner "$b_pid" challenger 8555 8556) || return 1
+  (assert_no_port_owner "$a_pid" champion 8566 8567) || return 1
+  if [ "$mode" = "dual" ]; then
+    (assert_port_owned "$a_pid" champion 8555) || return 1
+    (assert_port_owned "$b_pid" challenger 8566) || return 1
+  fi
+  (assert_port_owned "$a_pid" champion 8556) || return 1
+  (assert_port_owned "$b_pid" challenger 8567) || return 1
+  a_log=$(state_field a_log_path)
+  b_log=$(state_field b_log_path)
+  if [ "$mode" = "dual" ]; then
+    current_generation_has "$a_log" 'MEV-Share SSE connected' || die "champion victim stream missing"
+    current_generation_has "$b_log" 'MEV-Share SSE connected' || die "challenger victim stream missing"
+    [ "$(current_generation_mempool_state "$a_log")" = "connected" ] \
+      || die "champion public mempool subscription disconnected"
+    [ "$(current_generation_mempool_state "$b_log")" = "connected" ] \
+      || die "challenger public mempool subscription disconnected"
+  fi
+  for key in victim_feed_hash blockscan_view_hash blockscan_graph_hash; do
+    [ "$(current_generation_hash "$a_log" "$key")" = "$(state_field "a_$key")" ] \
+      || die "champion $key drift"
+    [ "$(current_generation_hash "$b_log" "$key")" = "$(state_field "b_$key")" ] \
+      || die "challenger $key drift"
+  done
+  [ "$(hash_file "$(state_field a_universe_path)")" = "$(state_field a_universe_hash)" ] \
+    || die "champion universe drift"
+  [ "$(hash_file "$(state_field b_universe_path)")" = "$(state_field b_universe_hash)" ] \
+    || die "challenger universe drift"
 }
 
 build_runtime_env() {
-  local experiment=$1 input_mode allowed a_env runtime_env a_common b_common a_pool_path
+  local experiment=$1 b_commit=$2 input_mode allowed a_env runtime_env a_common b_common a_pool_path a_sse b_sse b_cap
+  local mode expected_backrun expected_mempool
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    expected_backrun=1
+    expected_mempool=1
+  else
+    expected_backrun=0
+    expected_mempool=0
+  fi
   input_mode=$(env_get AB_INPUT_MODE); input_mode=${input_mode:-shared}
   [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] || die "AB_INPUT_MODE must be shared|challenger"
   allowed=",$(env_get AB_ALLOWED_CONFIG_DELTA),"
@@ -341,13 +628,19 @@ build_runtime_env() {
   a_common="$ROOT/a-common.env"
   b_common="$ROOT/b-common.env"
   grep '^SEARCHER_' "$A_PROCESS_ENV" > "$a_env"
-  grep -v '^SEARCHER_' "$ENVF" > "$B_SECRETS"
+  write_b_secrets
+  a_sse=$(file_env_get "$A_PROCESS_ENV" MEV_SHARE_SSE_URL)
+  a_sse=${a_sse:-https://mev-share.flashbots.net}
+  [[ "$a_sse" =~ ^https://[^[:space:]]+$ ]] || die "champion MEV_SHARE_SSE_URL must be https"
+  b_sse=$(file_env_get "$ENVF" MEV_SHARE_SSE_URL)
+  [ -z "$b_sse" ] || [ "$b_sse" = "$a_sse" ] \
+    || die "challenger MEV_SHARE_SSE_URL must match champion"
   : > "$a_common"
   : > "$runtime_env"
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$a_common"
@@ -365,14 +658,17 @@ build_runtime_env() {
   cat >> "$runtime_env" <<EOF
 SEARCHER_DRY_RUN=0
 SEARCHER_EV_GATE=1
-SEARCHER_ENABLE_BACKRUN=0
-SEARCHER_ENABLE_MEMPOOL=0
+SEARCHER_ENABLE_BACKRUN=$expected_backrun
+SEARCHER_ENABLE_MEMPOOL=$expected_mempool
+SEARCHER_EAGER_STATE_BACKEND=$expected_backrun
 SEARCHER_ENABLE_BLOCK_SCAN=1
 SEARCHER_BLOCKSCAN_SUBMIT=1
+SEARCHER_ANVIL_PORT=8566
 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567
 SEARCHER_EVENTS_PATH=/var/log/mev/events/searcher-ab-b.jsonl
 SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545
 SEARCHER_LIVE_WS_URL=ws://127.0.0.1:8546
+SEARCHER_RUNTIME_COMMIT=$b_commit
 EOF
   a_pool_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_PATH)
   if [ -z "$a_pool_path" ]; then
@@ -408,7 +704,7 @@ PY
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$b_common"
@@ -417,10 +713,84 @@ PY
     diff -u "$a_common" "$b_common" >&2 || true
     die "normalized A/B SEARCHER config differs outside AB_ALLOWED_CONFIG_DELTA"
   }
-  chmod 600 "$B_SECRETS" "$runtime_env" "$a_common" "$b_common"
+  cat "$B_SECRETS" "$runtime_env" > "$B_PROCESS_ENV"
+  printf 'MEV_SHARE_SSE_URL=%s\n' "$a_sse" >> "$B_PROCESS_ENV"
+  b_cap=$(file_env_get "$ENVF" MEV_LIVE_MAX_WALLET_ETH); b_cap=${b_cap:-$AUTHORIZED_MAX_WALLET_ETH}
+  printf 'MEV_LIVE_MAX_WALLET_ETH=%s\n' "$b_cap" >> "$B_PROCESS_ENV"
+  chmod 600 "$B_SECRETS" "$B_PROCESS_ENV" "$runtime_env" "$a_common" "$b_common"
   A_CONFIG_HASH=$(hash_file "$a_common")
   B_CONFIG_HASH=$(hash_file "$b_common")
   INPUT_MODE=$input_mode
+}
+
+write_b_secrets() {
+  python3 - "$ENVF" "$B_SECRETS" <<'PY'
+import os, re, sys
+
+source, destination = sys.argv[1:]
+allowed = {"PRIVATE_KEY", "OWNER_PRIVATE_KEY", "BOTVM_ADDRESS", "BOTVM_OWNER"}
+values = {}
+for line_number, raw in enumerate(open(source), 1):
+    line = raw.rstrip("\n")
+    if not line or line.lstrip().startswith("#"):
+        continue
+    if "=" not in line:
+        raise SystemExit(f"invalid env line {line_number}")
+    key, value = line.split("=", 1)
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
+        raise SystemExit(f"invalid env key {key!r}")
+    if key not in allowed:
+        continue
+    if key in values:
+        raise SystemExit(f"duplicate secret env key {key}")
+    if "\x00" in value or "\n" in value or "\r" in value:
+        raise SystemExit(f"invalid control character in {key}")
+    if key in {"PRIVATE_KEY", "OWNER_PRIVATE_KEY"} and not re.fullmatch(r"0x[0-9a-fA-F]{64}", value):
+        raise SystemExit(f"invalid private key encoding in {key}")
+    if key in {"BOTVM_ADDRESS", "BOTVM_OWNER"} and not re.fullmatch(r"0x[0-9a-fA-F]{40}", value):
+        raise SystemExit(f"invalid address encoding in {key}")
+    values[key] = value
+with open(destination, "w") as out:
+    for key in sorted(values):
+        out.write(f"{key}={values[key]}\n")
+os.chmod(destination, 0o600)
+PY
+}
+
+prepare_trusted_base() {
+  local commit=$1
+  if [ -e "$TRUSTED_BASE/.git" ]; then
+    git -C "$TRUSTED_BASE" reset --hard "$commit" >/dev/null
+    git -C "$TRUSTED_BASE" clean -fdx >/dev/null
+  elif [ -e "$TRUSTED_BASE" ]; then
+    die "$TRUSTED_BASE exists but is not a git worktree"
+  else
+    git -C "$MAIN_REPO" worktree add --detach "$TRUSTED_BASE" "$commit" >/dev/null
+  fi
+  [ "$(git -C "$TRUSTED_BASE" rev-parse HEAD)" = "$commit" ] \
+    || die "trusted base checkout does not match frozen champion SHA"
+  [ -d "$MAIN_REPO/analysis/node_modules" ] || die "champion analysis/node_modules missing"
+  [ -d "$MAIN_REPO/listener/node_modules" ] || die "champion listener/node_modules missing"
+  verify_forge_dependency "$commit"
+  ln -s "$MAIN_REPO/analysis/node_modules" "$TRUSTED_BASE/analysis/node_modules"
+  ln -s "$MAIN_REPO/listener/node_modules" "$TRUSTED_BASE/listener/node_modules"
+  rm -rf "$TRUSTED_BASE/lib/forge-std"
+  ln -s "$MAIN_REPO/lib/forge-std" "$TRUSTED_BASE/lib/forge-std"
+  (cd "$TRUSTED_BASE" && forge build >/tmp/mev-ab-trusted-forge-build.log 2>&1) \
+    || die "trusted base forge build failed (see /tmp/mev-ab-trusted-forge-build.log)"
+  (cd "$TRUSTED_BASE/analysis" && npm run build >/tmp/mev-ab-trusted-analysis-build.log 2>&1) \
+    || die "trusted base analysis build failed (see /tmp/mev-ab-trusted-analysis-build.log)"
+}
+
+verify_forge_dependency() {
+  local commit=$1 expected actual
+  [ -d "$MAIN_REPO/lib/forge-std" ] || die "champion forge-std dependency missing"
+  expected=$(git -C "$MAIN_REPO" ls-tree "$commit" lib/forge-std | awk '{print $3}')
+  actual=$(git -C "$MAIN_REPO/lib/forge-std" rev-parse HEAD 2>/dev/null || true)
+  [ -n "$expected" ] && [ "$actual" = "$expected" ] \
+    || die "champion forge-std checkout does not match the frozen commit"
+  [ -z "$(git -C "$MAIN_REPO/lib/forge-std" status --porcelain 2>/dev/null)" ] \
+    || die "champion forge-std checkout is dirty"
 }
 
 prepare_challenger_dependencies() {
@@ -433,6 +803,11 @@ prepare_challenger_dependencies() {
   [ -d "$a_modules" ] || die "champion listener/node_modules missing"
   rm -rf "$WT/listener/node_modules"
   ln -s "$a_modules" "$WT/listener/node_modules"
+  verify_forge_dependency "$(git -C "$WT" rev-parse HEAD)"
+  rm -rf "$WT/lib/forge-std"
+  ln -s "$MAIN_REPO/lib/forge-std" "$WT/lib/forge-std"
+  (cd "$WT" && forge build >/tmp/mev-ab-challenger-forge-build.log 2>&1) \
+    || die "challenger forge build failed (see /tmp/mev-ab-challenger-forge-build.log)"
 }
 
 resolve_a_universe() {
@@ -451,6 +826,7 @@ resolve_a_universe() {
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
+  local requested_lane_mode requested_shakedown branch_tip candidate_report
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
@@ -462,16 +838,30 @@ deploy() {
   [ "$requested_input_mode" = "shared" ] || [ "$requested_input_mode" = "challenger" ] \
     || die "AB_INPUT_MODE must be shared|challenger"
   requested_config_delta=$(env_get AB_ALLOWED_CONFIG_DELTA)
+  [ -z "$requested_config_delta" ] \
+    || die "A/B candidate config deltas are forbidden; change one reviewed code variable instead"
+  requested_lane_mode=$(lane_mode)
+  requested_shakedown=$(env_get AB_SHAKEDOWN); requested_shakedown=${requested_shakedown:-0}
+  [ "$requested_shakedown" = "0" ] || [ "$requested_shakedown" = "1" ] \
+    || die "AB_SHAKEDOWN must be 0|1"
+  if [ "$requested_shakedown" = "1" ]; then
+    [ "$requested_input_mode" = "shared" ] \
+      || die "infrastructure shakedown requires AB_INPUT_MODE=shared"
+    [ -z "$requested_config_delta" ] \
+      || die "infrastructure shakedown requires empty AB_ALLOWED_CONFIG_DELTA"
+    [ "$allow_runtime_view_delta" = "0" ] \
+      || die "infrastructure shakedown forbids runtime-view delta"
+  fi
   reap_stale
   require_previous_decisive_cleanup
-  now=$(date +%s); lease=$((now + LEASE_SECONDS))
+  now=$(date +%s)
   current_status=$(state_field status); current_lease=$(state_field lease_until); current_experiment=$(state_field experiment_id)
   if { [ "$current_status" = "running" ] || [ "$current_status" = "paused" ]; } \
       && [ "${current_lease:-0}" -gt "$now" ] && [ "$current_experiment" != "$experiment" ]; then
     echo "BUSY: B slot held by $current_experiment until $current_lease" >&2
     exit 75
   fi
-  preflight
+  run_preflight_safely
   resolve_a_universe
   local a_commit b_commit branch_tip candidate_report post_freeze_file
   a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
@@ -497,24 +887,31 @@ deploy() {
   git -C "$MAIN_REPO" show "origin/$branch:$report_path" > "$candidate_report" 2>/dev/null \
     || die "candidate report is not present on the challenger evidence tip"
   chmod 600 "$candidate_report"
-  stop_b
+  stop_b || safety_abort previous_challenger_stop_verification_failed
+  sleep 1
+  assert_port_free 8566
+  assert_port_free 8567
   if [ -e "$WT/.git" ]; then
     if [ -n "$(git -C "$WT" status --porcelain)" ]; then
       tar czf "$ROOT/archive/$experiment-dirty-$(date +%s).tgz" -C "$WT" .
     fi
     git -C "$WT" reset --hard "$b_commit" >/dev/null
-    git -C "$WT" clean -fd >/dev/null
+    git -C "$WT" clean -fdx >/dev/null
   elif [ -e "$WT" ]; then
     die "$WT exists but is not a git worktree"
   else
     git -C "$MAIN_REPO" worktree add --detach "$WT" "$b_commit" >/dev/null
   fi
+  rm -f "$WT/.env" "$WT/listener/.env"
   local changed_file production_change=0
   while IFS= read -r changed_file; do
     [ -n "$changed_file" ] || continue
     case "$changed_file" in
       */test/*|*/tests/*|*/fixtures/*|*.test.ts|*.spec.ts)
         die "B challenger modifies its own replay/test evidence instead of production only: $changed_file"
+        ;;
+      listener/src/shared/state/*)
+        die "B challenger may not modify the trusted state/port backend: $changed_file"
         ;;
       listener/src/searcher/*.ts|listener/src/shared/*.ts|listener/src/adapters/*.ts|\
       listener/src/submitter.ts|listener/src/compiler.ts|listener/src/encoder.ts|listener/src/types.ts)
@@ -525,13 +922,36 @@ deploy() {
         ;;
     esac
   done < <(git -C "$MAIN_REPO" diff --name-only "$a_commit..$b_commit")
-  [ "$production_change" = "1" ] \
-    || die "B challenger has no production searcher/contract behavior change"
+  if [ "$requested_shakedown" = "1" ]; then
+    [ "$production_change" = "0" ] \
+      || die "infrastructure shakedown must run identical searcher code"
+  else
+    [ "$production_change" = "1" ] \
+      || die "B challenger has no production searcher/contract behavior change"
+  fi
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
-  local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json"
+  prepare_trusted_base "$a_commit"
+  run_preflight_safely
+  local gate_a_pid gate_a_restarts gate_a_commit
+  gate_a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
+  gate_a_restarts=$(unit_restarts "$A_UNIT")
+  gate_a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
+  [ "$gate_a_commit" = "$a_commit" ] || die "champion commit drifted before candidate replay"
+  assert_port_free 8568
+  assert_port_free 8569
+  assert_port_free 8570
+  assert_port_free 8571
+  assert_port_free 8572
+  assert_port_free 8573
+  local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json" replay_top_n
   cp -f "$A_UNIVERSE" "$replay_universe"
-  (cd "$MAIN_REPO/analysis" && npm run ab-canary-gate -- "$candidate_report" \
+  replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)
+  replay_top_n=${replay_top_n:-6000}
+  [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "champion SEARCHER_POOL_UNIVERSE_TOP_N is invalid"
+  local shakedown_arg=()
+  [ "$requested_shakedown" = "0" ] || shakedown_arg=(--shakedown)
+  (cd "$TRUSTED_BASE/analysis" && npm run ab-canary-gate -- "$candidate_report" \
     --phase candidate \
     --expected-experiment "$experiment" \
     --expected-branch "$branch" \
@@ -542,33 +962,56 @@ deploy() {
     --expected-config-delta "$requested_config_delta" \
     --artifact-ref "origin/$branch" \
     --report-repo-path "$report_path" \
-    --base-root "$MAIN_REPO" \
+    --expected-lane-mode "$requested_lane_mode" \
+    "${shakedown_arg[@]}" \
+    --base-root "$TRUSTED_BASE" \
     --challenger-root "$WT" \
     --universe "$replay_universe" \
+    --pool-universe-top-n "$replay_top_n" \
     --rpc "$LOCAL_RPC") \
     >/tmp/mev-ab-candidate-gate.log 2>&1 \
     || die "production candidate gate failed (see /tmp/mev-ab-candidate-gate.log)"
-  build_runtime_env "$experiment"
+  run_preflight_safely
+  [ "$(systemctl show -p MainPID --value "$A_UNIT")" = "$gate_a_pid" ] \
+    || die "champion PID changed during candidate replay"
+  [ "$(unit_restarts "$A_UNIT")" = "$gate_a_restarts" ] \
+    || die "champion restarted during candidate replay"
+  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
+    || die "champion commit changed during candidate replay"
+  build_runtime_env "$experiment" "$b_commit"
   cpu_layout
   local a_restarts_before a_pid_before
-  a_restarts_before=$(unit_restarts "$A_UNIT")
-  a_pid_before=$(systemctl show -p MainPID --value "$A_UNIT")
+  a_restarts_before=$gate_a_restarts
+  a_pid_before=$gate_a_pid
   systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$A_CPUS" >/dev/null
   : > "$LOG"
+  now=$(date +%s); lease=$((now + LEASE_SECONDS))
   systemd-run --unit="$UNIT" --collect --service-type=simple \
     --property="WorkingDirectory=$WT/listener" \
     --property="AllowedCPUs=$B_CPUS" \
-    --property="Restart=on-failure" --property="RestartSec=5" \
+    --property="EnvironmentFile=$B_PROCESS_ENV" \
+    --property="Environment=HOME=/root" \
+    --property="Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    --property="Restart=no" --property="RuntimeMaxSec=${LEASE_SECONDS}s" \
     --property="StandardOutput=append:$LOG" --property="StandardError=append:$LOG" \
-    /bin/bash -lc "set -a; source '$B_SECRETS'; source '$ROOT/b-runtime.env'; set +a; exec /usr/bin/npm run searcher:live" \
-    >/dev/null
+    /usr/bin/npm run searcher:live \
+    >/dev/null || safety_abort challenger_systemd_run_failed
+  trap 'safety_abort post_start_unhandled_failure' ERR
   sleep 8
-  [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] || { stop_b; die "challenger failed to start"; }
-  grep -q '\[searcher/live\] mode=live' "$LOG" || { stop_b; die "challenger live banner missing"; }
-  grep -q 'backrun=disabled' "$LOG" || { stop_b; die "challenger backrun-off banner missing"; }
-  grep -q 'mempool=disabled' "$LOG" || { stop_b; die "challenger mempool-off banner missing"; }
-  ! grep -q 'MEV-Share SSE connected' "$LOG" || { stop_b; die "challenger unexpectedly connected to MEV-Share"; }
-  ! grep -q 'src=mev-share' "$LOG" || { stop_b; die "challenger unexpectedly processed a MEV-Share hint"; }
+  [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] \
+    || safety_abort challenger_failed_to_start
+  grep -q '\[searcher/live\] mode=live' "$LOG" || safety_abort challenger_live_banner_missing
+  local mode
+  mode=$(lane_mode)
+  if [ "$mode" = "dual" ]; then
+    grep -q 'backrun=enabled' "$LOG" || safety_abort challenger_backrun_banner_missing
+    grep -q 'mempool=enabled' "$LOG" || safety_abort challenger_mempool_banner_missing
+  else
+    grep -q 'backrun=disabled' "$LOG" || safety_abort challenger_backrun_banner_mismatch
+    grep -q 'mempool=disabled' "$LOG" || safety_abort challenger_mempool_banner_mismatch
+    ! grep -q 'MEV-Share SSE connected' "$LOG" || safety_abort challenger_unexpected_mev_share_connection
+    ! grep -q 'src=mev-share' "$LOG" || safety_abort challenger_unexpected_mev_share_hint
+  fi
   local scan_ready=0
   for _ in $(seq 1 "$FIRST_SCAN_TIMEOUT_SECONDS"); do
     if grep -q '\[searcher/blockscan\] block=.*scannedPairs=' "$LOG"; then
@@ -577,49 +1020,112 @@ deploy() {
     fi
     sleep 1
   done
-  [ "$scan_ready" = "1" ] || {
-    stop_b
-    die "challenger never completed its first block-scan pass within ${FIRST_SCAN_TIMEOUT_SECONDS}s"
-  }
-  [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || { stop_b; die "challenger worktree commit drift"; }
+  [ "$scan_ready" = "1" ] \
+    || safety_abort challenger_first_blockscan_timeout
+  if [ "$mode" = "dual" ]; then
+    local victim_ready=0
+    for _ in $(seq 1 60); do
+      if grep -q 'MEV-Share SSE connected' "$LOG"; then
+        victim_ready=1
+        break
+      fi
+      sleep 1
+    done
+    [ "$victim_ready" = "1" ] || safety_abort challenger_victim_stream_timeout
+    local mempool_ready=0
+    for _ in $(seq 1 60); do
+      if [ "$(current_generation_mempool_state "$LOG")" = "connected" ]; then
+        mempool_ready=1
+        break
+      fi
+      sleep 1
+    done
+    [ "$mempool_ready" = "1" ] || safety_abort challenger_mempool_stream_timeout
+  fi
+  local a_pid_now b_pid_now
+  a_pid_now=$(systemctl show -p MainPID --value "$A_UNIT")
+  b_pid_now=$(systemctl show -p MainPID --value "$UNIT")
+  [ "$a_pid_now" = "$gate_a_pid" ] || safety_abort champion_pid_changed_during_challenger_warmup
+  [ "$(unit_restarts "$A_UNIT")" = "$gate_a_restarts" ] \
+    || safety_abort champion_restarted_during_challenger_warmup
+  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
+    || safety_abort champion_commit_changed_during_challenger_warmup
+  if [ "$mode" = "dual" ]; then
+    current_generation_has "$(unit_log_path "$A_UNIT" /var/log/mev-live.log)" 'MEV-Share SSE connected' \
+      || safety_abort champion_current_victim_stream_missing
+  fi
+  (assert_no_port_owner "$b_pid_now" challenger 8555 8556) \
+    || safety_abort challenger_owns_champion_port
+  (assert_no_port_owner "$a_pid_now" champion 8566 8567) \
+    || safety_abort champion_owns_challenger_port
+  if [ "$mode" = "dual" ]; then
+    (assert_port_owned "$a_pid_now" champion 8555) || safety_abort champion_main_anvil_not_owned
+    (assert_port_owned "$b_pid_now" challenger 8566) || safety_abort challenger_main_anvil_not_owned
+  fi
+  (assert_port_owned "$a_pid_now" champion 8556) || safety_abort champion_blockscan_anvil_not_owned
+  (assert_port_owned "$b_pid_now" challenger 8567) || safety_abort challenger_blockscan_anvil_not_owned
+  [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] || safety_abort challenger_worktree_commit_drift
+  [ "$(process_env_get "$a_pid_now" SEARCHER_RUNTIME_COMMIT)" = "$a_commit" ] \
+    || safety_abort champion_runtime_commit_mismatch
+  [ "$(process_env_get "$b_pid_now" SEARCHER_RUNTIME_COMMIT)" = "$b_commit" ] \
+    || safety_abort challenger_runtime_commit_mismatch
+  local a_router_path b_router_path router_hash
+  a_router_path=$(process_env_get "$a_pid_now" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
+  b_router_path=$(process_env_get "$b_pid_now" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
+  [ -n "$a_router_path" ] && [ "$a_router_path" = "$b_router_path" ] \
+    || safety_abort router_admission_paths_differ
+  router_hash=$(hash_file "$a_router_path")
+  [[ "$router_hash" =~ ^[0-9a-f]{64}$ ]] || safety_abort router_admission_hash_unavailable
   local a_universe_hash b_universe_hash a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
+  local a_feed_hash b_feed_hash
   local discovery_to_block
   a_universe_hash=$(hash_file "$A_UNIVERSE")
   b_universe_hash=$(hash_file "$B_UNIVERSE")
   a_log=$(unit_log_path "$A_UNIT" /var/log/mev-live.log)
-  a_view_hash=$(runtime_hash "$a_log" blockscan_view_hash)
-  b_view_hash=$(runtime_hash "$LOG" blockscan_view_hash)
-  a_graph_hash=$(runtime_hash "$a_log" blockscan_graph_hash)
-  b_graph_hash=$(runtime_hash "$LOG" blockscan_graph_hash)
+  a_view_hash=$(current_generation_hash "$a_log" blockscan_view_hash)
+  b_view_hash=$(current_generation_hash "$LOG" blockscan_view_hash)
+  a_graph_hash=$(current_generation_hash "$a_log" blockscan_graph_hash)
+  b_graph_hash=$(current_generation_hash "$LOG" blockscan_graph_hash)
+  a_feed_hash=$(current_generation_hash "$a_log" victim_feed_hash)
+  b_feed_hash=$(current_generation_hash "$LOG" victim_feed_hash)
   for pair in \
     "A blockscan view:$a_view_hash" "B blockscan view:$b_view_hash" \
     "A blockscan graph:$a_graph_hash" "B blockscan graph:$b_graph_hash"; do
-    [[ "${pair#*:}" =~ ^[0-9a-f]{64}$ ]] || { stop_b; die "${pair%%:*} hash unavailable"; }
+    [[ "${pair#*:}" =~ ^[0-9a-f]{64}$ ]] || safety_abort runtime_hash_unavailable
   done
+  [[ "$a_feed_hash" =~ ^[0-9a-f]{64}$ ]] && [[ "$b_feed_hash" =~ ^[0-9a-f]{64}$ ]] \
+    || safety_abort victim_feed_hash_unavailable
+  [ "$a_feed_hash" = "$b_feed_hash" ] \
+    || safety_abort victim_feed_endpoints_differ
   if [ "$allow_runtime_view_delta" = "0" ]; then
     [ "$a_view_hash" = "$b_view_hash" ] \
-      || { stop_b; die "A/B blockscan pool views differ without a predeclared runtime-view delta"; }
+      || safety_abort blockscan_pool_views_differ
     [ "$a_graph_hash" = "$b_graph_hash" ] \
-      || { stop_b; die "A/B runtime token graphs differ without a predeclared runtime-view delta"; }
+      || safety_abort runtime_token_graphs_differ
   fi
   discovery_to_block=$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
     production_report_path "$report_path" production_report_hash "$(hash_file "$candidate_report")" \
     a_commit "$a_commit" b_commit "$b_commit" report_commit "$branch_tip" \
+    branch_tip_commit "$branch_tip" \
+    router_snapshot_path "$a_router_path" router_snapshot_hash "$router_hash" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
     discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \
+    lane_mode "$mode" infrastructure_shakedown "$requested_shakedown" \
+    a_victim_feed_hash "$a_feed_hash" b_victim_feed_hash "$b_feed_hash" \
     a_blockscan_view_hash "$a_view_hash" b_blockscan_view_hash "$b_view_hash" \
     a_blockscan_view_hash_after "$a_view_hash" b_blockscan_view_hash_after "$b_view_hash" \
     a_blockscan_graph_hash "$a_graph_hash" b_blockscan_graph_hash "$b_graph_hash" \
     a_blockscan_graph_hash_after "$a_graph_hash" b_blockscan_graph_hash_after "$b_graph_hash" \
     a_log_path "$a_log" b_log_path "$LOG" \
     a_restarts_before "$a_restarts_before" a_restart_delta 0 b_restarts 0 \
-    a_pid_before "$a_pid_before" a_pid_after "$a_pid_before" champion_pid_changed 0 \
+    a_pid_before "$a_pid_before" a_pid_after "$a_pid_before" b_pid_before "$b_pid_now" champion_pid_changed 0 \
     cpu_partition "A:$A_CPUS,B:$B_CPUS"
+  trap - ERR
   cat "$STATE"
 }
 
@@ -630,7 +1136,7 @@ pause_experiment() {
   [ "$current" = "$experiment" ] || die "state belongs to $current, not $experiment"
   [ "$(state_field status)" = "running" ] || die "experiment is not running"
   capture_fairness
-  stop_b
+  stop_b || safety_abort challenger_pause_stop_verification_failed
   state_update status paused lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
   cat "$STATE"
 }
@@ -677,7 +1183,7 @@ PY
   status=$(state_field status)
   if [ "$status" = "running" ]; then
     capture_fairness
-    stop_b
+    stop_b || safety_abort challenger_close_stop_verification_failed
   elif [ "$status" != "paused" ]; then
     die "experiment must be running or paused before close (status=$status)"
   fi
@@ -686,19 +1192,34 @@ PY
   cat "$STATE"
 }
 
+extend_runtime_deadline() {
+  local active_us uptime_us elapsed_s runtime_limit_s
+  active_us=$(systemctl show -p ActiveEnterTimestampMonotonic --value "$UNIT")
+  uptime_us=$(awk '{ printf "%.0f\n", $1 * 1000000 }' /proc/uptime)
+  [[ "$active_us" =~ ^[0-9]+$ ]] && [[ "$uptime_us" =~ ^[0-9]+$ ]] \
+    || die "could not read challenger monotonic runtime"
+  [ "$uptime_us" -ge "$active_us" ] || die "challenger runtime clock moved backwards"
+  elapsed_s=$(( (uptime_us - active_us) / 1000000 ))
+  runtime_limit_s=$((elapsed_s + LEASE_SECONDS))
+  systemctl set-property --runtime "$UNIT" RuntimeMaxSec="${runtime_limit_s}s"
+}
+
 renew() {
   local experiment=$1 current now
   current=$(state_field experiment_id)
   [ "$current" = "$experiment" ] || die "state belongs to $current, not $experiment"
   [ "$(state_field status)" = "running" ] || die "experiment is not running"
+  run_preflight_safely
+  (validate_running_pair) || safety_abort running_pair_validation_failed
   now=$(date +%s)
-  state_update lease_until "$((now + LEASE_SECONDS))"
+  (state_update lease_until "$((now + LEASE_SECONDS))") || safety_abort journal_renewal_failed
+  (extend_runtime_deadline) || safety_abort runtime_deadline_renewal_failed
   cat "$STATE"
 }
 
 cmd=${1:-status}
 case "$cmd" in
-  preflight) preflight; echo "PASS: challenger bounded-live preflight" ;;
+  preflight) run_preflight_safely; echo "PASS: challenger bounded-live preflight" ;;
   deploy) { [ "$#" -eq 6 ] || [ "$#" -eq 7 ]; } \
     || die "usage: deploy <experiment-id> <ab/branch> <base-sha> <challenger-sha> <candidate-report.md> [allow-runtime-view-delta=0|1]"; \
     deploy "$2" "$3" "$4" "$5" "$6" "${7:-0}" ;;

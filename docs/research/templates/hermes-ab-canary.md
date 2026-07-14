@@ -10,7 +10,9 @@
 - **change_class:** performance | correctness | capability
 - **one-change scope:**
 - **deterministic gate + pinned sample:**
-- **production sample:** real tx/block · net +EV evidence · victim-independent block-scan proof
+- **lane mode:** blockscan-only | dual
+- **production sample:** real tx/block · net +EV evidence · victim-independent block-scan, or declared
+  public/MEV-Share victim with pre/post counterfactual in dual mode
 - **stage flip:** not_admitted → path_found → final_sim_success (other stages need a trusted main-side harness first)
 - **not doing:**
 
@@ -19,7 +21,8 @@
 - **diff scope:**
 - **build:**
 - **replay/fork result:**
-- **base SHA / challenger SHA:** challenger = frozen deployed code commit, not a later report-only tip
+- **base SHA / challenger SHA:** challenger = frozen deployed code commit; commit this filled report as the
+  only allowed descendant, while the wrapper checks out the frozen code SHA
 
 ## Paired Live Evidence
 - **window / warmup excluded:**
@@ -32,7 +35,8 @@
 - **window / tool artifact:**
 - **classifier calibration:** capability query + successful tool receipt(s) · pass/fail · sample count
 - **coffeebabe + watchlist sweep:**
-- **comparable filter:** victim-independent, conserving `block-scan atomic_loop` only
+- **comparable filter:** conserving `atomic_loop`; victim-independent in blockscan-only, verified
+  swap/oracle victim permitted in dual
 - **excluded:** inventory · sandwich · keeper/liquidation · JIT-LP · standing-credit
 - **B vs comparable takes:** not_seen | pool | path | adapter | quote/sim | execution | economics
 - **next production blocker filed:**
@@ -78,6 +82,8 @@ Required for every capability win and every conflict/inconclusive/artifact conce
   "change_class": "capability",
   "hypothesis": "<causal hypothesis and semantic success criterion>",
   "input_mode": "shared",
+  "lane_mode": "blockscan-only",
+  "infrastructure_shakedown": false,
   "expected_runtime_view_delta": false,
   "allowed_config_delta": [],
   "a": {
@@ -141,7 +147,10 @@ Required for every capability win and every conflict/inconclusive/artifact conce
       "tx_hash": "<full-onchain-tx-hash>",
       "block_number": 0,
       "expected_net_profit_usd": 0,
-      "evidence": "<net-profit and strategy-source evidence>"
+      "evidence": "<net-profit and strategy-source evidence>",
+      "victim_tx_hash": "<dual backrun only>",
+      "oracle_route_edge_index": "<required for oracle-update; zero-based expected_route index>",
+      "expected_route": []
     },
     "classification_review": {
       "verdict": "pass",

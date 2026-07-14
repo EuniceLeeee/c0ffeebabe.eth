@@ -14,6 +14,10 @@ export interface ProductionSampleObservation {
   net_profit_usd: number | null;
   arb_pools: string[];
   edge_kinds: string[];
+  victim_tx_hash?: string;
+  victim_transaction_index?: number;
+  victim_previous_tx_hash?: string;
+  victim_edge_kinds?: string[];
 }
 
 /** Recompute the sample classification from the local archive node at deploy time. This prevents a
@@ -58,8 +62,47 @@ export async function verifyOnchainProductionSample(
     sameActorTxHashes,
   });
   if (shape.arb_pools.length === 0) errors.push("production sample has no DEX swap pool recognized by the canonical classifier");
-  if (shape.shape !== "atomic_state_arb") {
-    errors.push(`production sample source shape is ${shape.shape}; current B scope requires victim-independent atomic_state_arb`);
+  const strategyKind = experiment.production_evidence?.strategy_kind;
+  if (strategyKind === "block-scan" && shape.shape !== "atomic_state_arb") {
+    errors.push(`production sample source shape is ${shape.shape}; block-scan scope requires victim-independent atomic_state_arb`);
+  }
+  let victimTxHash: string | undefined;
+  let victimTransactionIndex: number | undefined;
+  let victimPreviousTxHash: string | undefined;
+  let victimEdgeKinds: string[] | undefined;
+  if (strategyKind === "backrun") {
+    victimTxHash = lower(String(sample.victim_tx_hash ?? ""));
+    const [victimTx, victimReceipt] = await Promise.all([
+      rpc.getTransaction(victimTxHash),
+      rpc.getReceipt(victimTxHash),
+    ]);
+    if (!victimTx || !victimReceipt) {
+      errors.push("declared backrun victim is unavailable on the configured archive node");
+    } else {
+      const victimBlock = Number(hexToBigInt(victimReceipt.blockNumber));
+      victimTransactionIndex = Number(hexToBigInt(victimReceipt.transactionIndex));
+      if (victimTransactionIndex > 0) {
+        const previous = transactions[victimTransactionIndex - 1];
+        victimPreviousTxHash = previous && typeof previous === "object"
+          ? lower(String((previous as Record<string, unknown>).hash ?? ""))
+          : undefined;
+        if (!/^0x[a-f0-9]{64}$/i.test(victimPreviousTxHash ?? "")) {
+          errors.push("declared backrun victim previous transaction is unavailable");
+        }
+      }
+      victimEdgeKinds = deriveEdgeKindsFromLogs(victimReceipt.logs);
+      if (Number(hexToBigInt(victimReceipt.status)) !== 1) errors.push("declared backrun victim reverted");
+      if (victimBlock !== blockNumber) errors.push("declared backrun victim is not in the winner block");
+      if (victimTransactionIndex >= transactionIndex) errors.push("declared backrun victim does not precede the winner");
+      if (experiment.production_evidence?.trigger_kind === "victim-swap"
+          && !victimEdgeKinds.includes("swap")) {
+        errors.push("victim-swap trigger has no canonical swap edge");
+      }
+      if (experiment.production_evidence?.trigger_kind === "oracle-update"
+          && (typeof victimTx.to !== "string" || String(victimTx.input ?? victimTx.data ?? "0x") === "0x")) {
+        errors.push("oracle-update trigger is not a contract call with calldata");
+      }
+    }
   }
   const edgeKinds = deriveEdgeKindsFromLogs(receipt.logs);
   if (!edgeKinds.includes("swap")) errors.push("production sample does not contain a recognized DEX swap edge");
@@ -113,6 +156,10 @@ export async function verifyOnchainProductionSample(
       net_profit_usd: profit.netProfitUsd,
       arb_pools: shape.arb_pools,
       edge_kinds: edgeKinds,
+      victim_tx_hash: victimTxHash,
+      victim_transaction_index: victimTransactionIndex,
+      victim_previous_tx_hash: victimPreviousTxHash,
+      victim_edge_kinds: victimEdgeKinds,
     },
   };
 }
