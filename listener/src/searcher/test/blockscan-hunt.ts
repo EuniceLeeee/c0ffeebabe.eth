@@ -1091,6 +1091,10 @@ class PinnedCallBackend implements StateBackend {
     this.unsupported("applyRawTx");
   }
 
+  async queueHistoricalRawTransactions(): Promise<never> {
+    this.unsupported("queueHistoricalRawTransactions");
+  }
+
   async snapshot(): Promise<never> {
     this.unsupported("snapshot");
   }

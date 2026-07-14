@@ -17,6 +17,10 @@ export interface StateBackend {
   forkAfterTx(txHash: string): Promise<void>;
   prepareVictimPostState(params: VictimStateParams): Promise<VictimStateResult>;
   applyRawTx(rawTx: string): Promise<string>;
+  queueHistoricalRawTransactions(
+    blockNumber: number,
+    transactions: Array<{ rawTx: string; expectedHash: string }>,
+  ): Promise<string[]>;
   snapshot(): Promise<string>;
   revert(snapshotId: string): Promise<void>;
   call(req: { to: string; data: string; from?: string }): Promise<string>;
@@ -306,6 +310,43 @@ export class AnvilStateBackend implements StateBackend {
         rawTxs.push(await sendRawTxNoMine(this.provider, raw, expectedHash));
       }
       return rawTxs;
+    } finally {
+      archive.destroy();
+    }
+  }
+
+  /**
+   * Fork the historical parent and queue only the supplied raw transactions
+   * under that block's timestamp/basefee. This is intentionally fail-closed:
+   * sender balances and nonces are never rewritten, so a trigger that depends
+   * on omitted prefix state cannot masquerade as an isolated causal trigger.
+   */
+  async queueHistoricalRawTransactions(
+    blockNumber: number,
+    transactions: Array<{ rawTx: string; expectedHash: string }>,
+  ): Promise<string[]> {
+    if (!Number.isSafeInteger(blockNumber) || blockNumber <= 0) {
+      throw new Error(`invalid historical block ${blockNumber}`);
+    }
+    await this.restartForkAt(blockNumber - 1);
+
+    const archive = new ethers.JsonRpcProvider(this.rpcUrl);
+    try {
+      const block = await withTimeout(
+        archive.send("eth_getBlockByNumber", ["0x" + blockNumber.toString(16), false]),
+        60_000,
+        `eth_getBlockByNumber ${blockNumber}`,
+      );
+      await setNextBlockContext(this.provider, block);
+      const hashes: string[] = [];
+      for (const transaction of transactions) {
+        hashes.push(await sendRawTxNoMine(
+          this.provider,
+          transaction.rawTx,
+          transaction.expectedHash,
+        ));
+      }
+      return hashes;
     } finally {
       archive.destroy();
     }

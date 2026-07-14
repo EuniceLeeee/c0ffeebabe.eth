@@ -420,7 +420,7 @@ function productionCandidate(tmp: string): AbExperiment {
   value.window.measured_from_block = 100;
   value.window.measured_to_block = 109;
   value.change_class = "capability";
-  value.lane_mode = "blockscan-only";
+  value.lane_mode = "dual";
   value.deterministic_gate = { result: "pass", evidence: "pinned block-scan replay advances the same sample" };
   value.production_evidence = {
     searcher_behavior_change: true,
@@ -466,9 +466,17 @@ function productionCandidate(tmp: string): AbExperiment {
   return value;
 }
 
-test("production candidate schema accepts a complete stage-advancing block-scan declaration", () => {
+test("production candidate schema accepts a dual-lane stage-advancing block-scan declaration", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   assert.deepEqual(validateAbProductionCandidate(productionCandidate(tmp)), []);
+});
+
+test("production candidate gate rejects blockscan-only Hermes deployment", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
+  const value = productionCandidate(tmp);
+  value.lane_mode = "blockscan-only";
+  assert.ok(validateAbProductionCandidate(value, { laneMode: "blockscan-only" })
+    .some((error) => error.includes("requires lane_mode=dual")));
 });
 
 test("production candidate gate rejects victim-dependent backrun and keeper postures", () => {

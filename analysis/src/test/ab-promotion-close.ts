@@ -27,7 +27,7 @@ function experiment(
   const script = verdict === "win" ? "supports" : verdict === "lose" ? "contradicts" : "inconclusive";
   return {
     schema_version: 3,
-    lane_mode: "blockscan-only",
+    lane_mode: "dual",
     experiment_id: `ab-close-${verdict}`,
     problem_id: `gap-${verdict}`,
     branch: `ab/close-${verdict}`,

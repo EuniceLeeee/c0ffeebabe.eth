@@ -47,8 +47,10 @@ interface EdgeSpec {
 }
 
 interface HuntResult {
-  schema_version: 1;
+  schema_version: 2;
   fork_block: number;
+  winner_tx_hash: string;
+  winner_transaction_index: number;
   victim_tx_hash: string;
   stage: "not_admitted" | "path_found" | "final_sim_success";
   expected_pool_ids: string[];
@@ -76,6 +78,17 @@ interface HuntResult {
   oracle_probe_amount_in_raw: string | null;
   oracle_before_amount_out_raw: string | null;
   oracle_after_amount_out_raw: string | null;
+  trigger_route_signature: string | null;
+  full_prefix_route_signature: string | null;
+  full_prefix_gross_raw: string | null;
+  full_prefix_execution_success: boolean | null;
+  full_prefix_execution_net_raw: string | null;
+  full_prefix_execution_block: number | null;
+  full_prefix_execution_index: number | null;
+  trigger_ev_bucket: "positive" | "non_positive" | "unverified";
+  full_prefix_ev_bucket: "positive" | "non_positive" | "unverified";
+  full_vs_trigger: "match" | "diverge" | "unverified";
+  causal_replay_error: string | null;
 }
 
 interface StateAnchors {
@@ -123,6 +136,7 @@ async function main(): Promise<void> {
   const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL || process.env.MAINNET_RPC_URL;
   if (!rpcUrl) throw new Error("SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL required");
   const victimTxHash = requiredEnv("HUNT_VICTIM_TX_HASH").toLowerCase();
+  const winnerTxHash = requiredEnv("HUNT_WINNER_TX_HASH").toLowerCase();
   const sampleBlock = positiveInt("HUNT_SAMPLE_BLOCK");
   const parentBlock = sampleBlock - 1;
   const route = parseRoute(requiredEnv("AB_EXPECTED_ROUTE_JSON"));
@@ -131,7 +145,10 @@ async function main(): Promise<void> {
   const maxPools = optionalPositiveInt("HUNT_MAX_POOLS", 6_000);
   const postPort = positiveInt("SEARCHER_BACKRUN_HUNT_ANVIL_PORT");
   const prePort = positiveInt("SEARCHER_BACKRUN_HUNT_PRE_ANVIL_PORT");
-  if (prePort === postPort) throw new Error("pre/post backrun hunt Anvil ports must differ");
+  const fullPrefixPort = positiveInt("SEARCHER_BACKRUN_HUNT_FULL_PREFIX_ANVIL_PORT");
+  if (new Set([prePort, postPort, fullPrefixPort]).size !== 3) {
+    throw new Error("boundary/trigger/full-prefix backrun hunt Anvil ports must differ");
+  }
   const triggerKind = requiredEnv("AB_TRIGGER_KIND");
   if (triggerKind !== "victim-swap" && triggerKind !== "oracle-update") {
     throw new Error("AB_TRIGGER_KIND must be victim-swap|oracle-update");
@@ -140,45 +157,91 @@ async function main(): Promise<void> {
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const preState = new AnvilStateBackend(rpcUrl, `http://127.0.0.1:${prePort}`, prePort);
   const postState = new AnvilStateBackend(rpcUrl, `http://127.0.0.1:${postPort}`, postPort);
+  const fullPrefixState = new AnvilStateBackend(
+    rpcUrl,
+    `http://127.0.0.1:${fullPrefixPort}`,
+    fullPrefixPort,
+  );
   try {
     const victim = await provider.getTransaction(victimTxHash);
     const receipt = await provider.getTransactionReceipt(victimTxHash);
+    const winnerReceipt = await provider.getTransactionReceipt(winnerTxHash);
     if (!victim || !receipt || receipt.blockNumber !== sampleBlock) {
       throw new Error("victim transaction/receipt does not match HUNT_SAMPLE_BLOCK");
     }
+    if (!winnerReceipt || winnerReceipt.blockNumber !== sampleBlock
+        || Number(winnerReceipt.index) <= Number(receipt.index)) {
+      throw new Error("winner transaction must follow the victim in HUNT_SAMPLE_BLOCK");
+    }
+    const winnerIndex = Number(winnerReceipt.index);
     const rawVictim = await rawTransaction(provider, victimTxHash, victim);
-    const anchors = await stateAnchors(provider, sampleBlock, Number(receipt.index), victimTxHash);
+    const anchors: StateAnchors = {
+      preKind: "parent-block",
+      preHash: null,
+      postHash: victimTxHash,
+    };
     const graph = await routeGraph(provider, parentBlock, universePath, maxPools, route);
     const matchedPath = expectedPath(graph, route);
     if (!matchedPath) {
-      emit(pathResult(parentBlock, victimTxHash, expectedPools, [], "not_admitted", anchors));
+      emit(pathResult(
+        parentBlock,
+        winnerTxHash,
+        winnerIndex,
+        victimTxHash,
+        expectedPools,
+        [],
+        "not_admitted",
+        anchors,
+      ));
       return;
     }
 
-    await prepareExactPreState(
-      provider,
-      preState,
-      parentBlock,
-      sampleBlock,
-      Number(receipt.index),
-      anchors,
-    );
-    await postState.prepareVictimPostState({
-      txHash: victimTxHash,
-      rawTx: rawVictim,
-      from: victim.from,
-      nonce: victim.nonce,
-      transactionIndex: Number(receipt.index),
-      blockNumber: sampleBlock,
-      preferSequentialPrefix: true,
-    });
+    await preState.forkAt(parentBlock);
+    try {
+      const triggerHashes = await postState.queueHistoricalRawTransactions(sampleBlock, [{
+        rawTx: rawVictim,
+        expectedHash: victimTxHash,
+      }]);
+      await postState.mineQueuedHistoricalBlock(triggerHashes, "trigger-only-block");
+    } catch (error) {
+      emit({
+        ...pathResult(
+          parentBlock,
+          winnerTxHash,
+          winnerIndex,
+          victimTxHash,
+          expectedPools,
+          matchedPath,
+          "not_admitted",
+          anchors,
+        ),
+        causal_replay_error: errorMessage(error),
+      });
+      return;
+    }
+
+    let fullPrefixReady = true;
+    let fullPrefixError: string | null = null;
+    try {
+      const fullPrefixHashes = await fullPrefixState.queueHistoricalBlockPrefix(
+        sampleBlock,
+        winnerIndex - 1,
+      );
+      await fullPrefixState.mineQueuedHistoricalBlock(fullPrefixHashes, "full-prefix-block");
+    } catch (error) {
+      fullPrefixReady = false;
+      fullPrefixError = errorMessage(error);
+    }
     await Promise.all([
       installForkBotVm(preState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR),
       installForkBotVm(postState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR),
+      ...(fullPrefixReady
+        ? [installForkBotVm(fullPrefixState.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR)]
+        : []),
     ]);
     const detector = new BackrunDetector();
     detector.setGraph(graph);
-    detector.setTokenQuery(latestTokenBackend(preState.provider));
+    detector.setTokenQuery(latestTokenBackend(postState.provider));
     const event = {
       txHash: victimTxHash,
       blockNumber: sampleBlock,
@@ -198,7 +261,19 @@ async function main(): Promise<void> {
 
     const opportunities = await detector.detect(event, postState);
     if (opportunities.length === 0) {
-      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "not_admitted", anchors));
+      emit({
+        ...pathResult(
+          parentBlock,
+          winnerTxHash,
+          winnerIndex,
+          victimTxHash,
+          expectedPools,
+          matchedPath,
+          "not_admitted",
+          anchors,
+        ),
+        causal_replay_error: fullPrefixError,
+      });
       return;
     }
 
@@ -217,7 +292,19 @@ async function main(): Promise<void> {
     }
     const expectedIndex = plans.findIndex((plan) => pathMatches(plan.tokenPath, route));
     if (expectedIndex < 0 || expectedIndex >= CANDIDATE_CAP) {
-      emit(pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "not_admitted", anchors));
+      emit({
+        ...pathResult(
+          parentBlock,
+          winnerTxHash,
+          winnerIndex,
+          victimTxHash,
+          expectedPools,
+          matchedPath,
+          "not_admitted",
+          anchors,
+        ),
+        causal_replay_error: fullPrefixError,
+      });
       return;
     }
     const selectedPlan = plans[expectedIndex];
@@ -234,8 +321,18 @@ async function main(): Promise<void> {
       solved = await solveCandidate(postState, selectedPlan);
     } catch {
       emit({
-        ...pathResult(parentBlock, victimTxHash, expectedPools, matchedPath, "path_found", anchors),
+        ...pathResult(
+          parentBlock,
+          winnerTxHash,
+          winnerIndex,
+          victimTxHash,
+          expectedPools,
+          matchedPath,
+          "path_found",
+          anchors,
+        ),
         ...proofResult(effectProof),
+        causal_replay_error: fullPrefixError,
       });
       return;
     }
@@ -247,31 +344,70 @@ async function main(): Promise<void> {
       safetyBps: 10000n,
     });
     const preGross = pre.amounts.at(-1)! - solved.flashAmount;
-    const postExecution = await executeResolvedPlanInHistoricalBlock(
+    const postExecution = await executeResolvedPlanWithRawPrefix(
       postState,
       solved,
       sampleBlock,
-      Number(receipt.index),
+      [{ rawTx: rawVictim, expectedHash: victimTxHash }],
     );
-    const preExecution = await executeResolvedPlanInHistoricalBlock(
+    const preExecution = await executeResolvedPlanWithRawPrefix(
       preState,
       solved,
       sampleBlock,
-      Number(receipt.index) - 1,
+      [],
     );
+    const signature = routeSignature(route);
+    let fullPrefixGross: bigint | null = null;
+    let fullPrefixExecution: ExactExecutionResult | null = null;
+    let fullPrefixSignature: string | null = null;
+    if (fullPrefixReady) {
+      try {
+        const fullPrefixSolved = await solveCandidate(fullPrefixState, selectedPlan);
+        const fullPrefixAmounts = await propagateAmountsWithRawOutputs(
+          selectedPlan.tokenPath,
+          fullPrefixSolved.flashAmount,
+          fullPrefixState,
+          { safetyBps: 10000n },
+        );
+        fullPrefixGross = fullPrefixAmounts.amounts.at(-1)! - fullPrefixSolved.flashAmount;
+        fullPrefixExecution = await executeResolvedPlanInHistoricalBlock(
+          fullPrefixState,
+          fullPrefixSolved,
+          sampleBlock,
+          winnerIndex - 1,
+        );
+        fullPrefixSignature = signature;
+      } catch (error) {
+        fullPrefixError = errorMessage(error);
+      }
+    }
+    const triggerBucket = evBucket(postExecution);
+    const fullPrefixBucket = evBucket(fullPrefixExecution);
+    const fullVsTrigger = fullPrefixExecution === null
+      ? "unverified"
+      : fullPrefixSignature === signature
+        && fullPrefixExecution.success === postExecution.success
+        && fullPrefixBucket === triggerBucket
+        ? "match"
+        : "diverge";
     const finalSuccess = postExecution.success && postExecution.netProfit > 0n
       && !preExecution.success && preExecution.netProfit <= 0n
       && preGross <= 0n && postGross > 0n
       && preExecution.blockNumber === sampleBlock
-      && preExecution.transactionIndex === Number(receipt.index)
+      && preExecution.transactionIndex === 0
       && postExecution.blockNumber === sampleBlock
-      && postExecution.transactionIndex === Number(receipt.index) + 1
+      && postExecution.transactionIndex === 1
+      && fullPrefixExecution?.blockNumber === sampleBlock
+      && fullPrefixExecution.transactionIndex === winnerIndex
+      && fullVsTrigger === "match"
       && effectProof.kind === (triggerKind === "oracle-update" ? "oracle" : "swap")
       && (triggerKind !== "oracle-update"
         || effectProof.oracleBeforeAmountOut !== effectProof.oracleAfterAmountOut);
     emit({
       ...pathResult(
         parentBlock,
+        winnerTxHash,
+        winnerIndex,
         victimTxHash,
         expectedPools,
         matchedPath,
@@ -291,10 +427,22 @@ async function main(): Promise<void> {
       pre_execution_index: preExecution.transactionIndex,
       post_execution_block: postExecution.blockNumber,
       post_execution_index: postExecution.transactionIndex,
+      trigger_route_signature: signature,
+      full_prefix_route_signature: fullPrefixSignature,
+      full_prefix_gross_raw: fullPrefixGross?.toString() ?? null,
+      full_prefix_execution_success: fullPrefixExecution?.success ?? null,
+      full_prefix_execution_net_raw: fullPrefixExecution?.netProfit.toString() ?? null,
+      full_prefix_execution_block: fullPrefixExecution?.blockNumber ?? null,
+      full_prefix_execution_index: fullPrefixExecution?.transactionIndex ?? null,
+      trigger_ev_bucket: triggerBucket,
+      full_prefix_ev_bucket: fullPrefixBucket,
+      full_vs_trigger: fullVsTrigger,
+      causal_replay_error: fullPrefixError,
     });
   } finally {
     preState.stop();
     postState.stop();
+    fullPrefixState.stop();
     provider.destroy();
   }
 }
@@ -342,56 +490,6 @@ function lowerOptionalAddress(value: string | undefined): string | undefined {
 function lowerAddress(value: string): string {
   if (value.toLowerCase() === "0x0") return ethers.ZeroAddress.toLowerCase();
   return ethers.getAddress(value.toLowerCase()).toLowerCase();
-}
-
-async function stateAnchors(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  victimIndex: number,
-  victimTxHash: string,
-): Promise<StateAnchors> {
-  if (victimIndex === 0) {
-    return { preKind: "parent-block", preHash: null, postHash: victimTxHash };
-  }
-  const block = await provider.getBlock(blockNumber, true);
-  if (!block) throw new Error(`block ${blockNumber} unavailable`);
-  const victim = block.prefetchedTransactions[victimIndex];
-  const previous = block.prefetchedTransactions[victimIndex - 1];
-  if (!victim || victim.hash.toLowerCase() !== victimTxHash.toLowerCase()) {
-    throw new Error(`victim transaction ${victimIndex} unavailable in block ${blockNumber}`);
-  }
-  if (!previous) throw new Error(`previous transaction ${victimIndex - 1} unavailable`);
-  return {
-    preKind: "previous-tx",
-    preHash: previous.hash.toLowerCase(),
-    postHash: victimTxHash,
-  };
-}
-
-async function prepareExactPreState(
-  provider: ethers.JsonRpcProvider,
-  state: AnvilStateBackend,
-  parentBlock: number,
-  sampleBlock: number,
-  victimIndex: number,
-  anchors: StateAnchors,
-): Promise<void> {
-  if (anchors.preKind === "parent-block") {
-    await state.forkAt(parentBlock);
-    return;
-  }
-  if (!anchors.preHash) throw new Error("previous-tx anchor hash missing");
-  const previous = await provider.getTransaction(anchors.preHash);
-  if (!previous || !previous.from) throw new Error("previous transaction details unavailable");
-  await state.prepareVictimPostState({
-    txHash: anchors.preHash,
-    rawTx: await rawTransaction(provider, anchors.preHash, previous),
-    from: previous.from,
-    nonce: previous.nonce,
-    transactionIndex: victimIndex - 1,
-    blockNumber: sampleBlock,
-    preferSequentialPrefix: true,
-  });
 }
 
 function latestTokenBackend(provider: ethers.JsonRpcProvider): TokenQueryBackend {
@@ -541,16 +639,35 @@ async function solveCandidate(state: AnvilStateBackend, plan: CandidatePlan): Pr
   );
 }
 
+async function executeResolvedPlanWithRawPrefix(
+  state: AnvilStateBackend,
+  plan: ResolvedPlan,
+  blockNumber: number,
+  transactions: Array<{ rawTx: string; expectedHash: string }>,
+): Promise<ExactExecutionResult> {
+  return executeResolvedPlan(state, plan, async () =>
+    state.queueHistoricalRawTransactions(blockNumber, transactions));
+}
+
 async function executeResolvedPlanInHistoricalBlock(
   state: AnvilStateBackend,
   plan: ResolvedPlan,
   blockNumber: number,
   prefixThroughIndex: number,
 ): Promise<ExactExecutionResult> {
+  return executeResolvedPlan(state, plan, async () =>
+    state.queueHistoricalBlockPrefix(blockNumber, prefixThroughIndex));
+}
+
+async function executeResolvedPlan(
+  state: AnvilStateBackend,
+  plan: ResolvedPlan,
+  queuePrefix: () => Promise<string[]>,
+): Promise<ExactExecutionResult> {
   const erc20 = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
   const balanceData = erc20.encodeFunctionData("balanceOf", [DEFAULT_SEARCHER_EXECUTOR]);
   try {
-    const prefixHashes = await state.queueHistoricalBlockPrefix(blockNumber, prefixThroughIndex);
+    const prefixHashes = await queuePrefix();
     await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
     const pre = BigInt(await state.provider.call({ to: plan.profitToken, data: balanceData }));
     const script = compilePlan(plan.root, DEFAULT_SEARCHER_EXECUTOR);
@@ -584,8 +701,29 @@ async function executeResolvedPlanInHistoricalBlock(
   }
 }
 
+function evBucket(result: ExactExecutionResult | null): HuntResult["trigger_ev_bucket"] {
+  if (result === null) return "unverified";
+  return result.success && result.netProfit > 0n ? "positive" : "non_positive";
+}
+
+function routeSignature(route: EdgeSpec[]): string {
+  return route.map((edge) => [
+    edge.adapterId,
+    edge.tokenIn.toLowerCase(),
+    edge.tokenOut.toLowerCase(),
+    edge.poolId?.toLowerCase() ?? edge.target?.toLowerCase() ?? "",
+  ].join(":"))
+    .join("|");
+}
+
+function errorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).slice(0, 500);
+}
+
 function pathResult(
   forkBlock: number,
+  winnerTxHash: string,
+  winnerTransactionIndex: number,
   victimTxHash: string,
   expectedPools: string[],
   path: TokenEdge[],
@@ -593,8 +731,10 @@ function pathResult(
   anchors: StateAnchors,
 ): HuntResult {
   return {
-    schema_version: 1,
+    schema_version: 2,
     fork_block: forkBlock,
+    winner_tx_hash: winnerTxHash,
+    winner_transaction_index: winnerTransactionIndex,
     victim_tx_hash: victimTxHash,
     stage,
     expected_pool_ids: expectedPools,
@@ -622,6 +762,17 @@ function pathResult(
     oracle_probe_amount_in_raw: null,
     oracle_before_amount_out_raw: null,
     oracle_after_amount_out_raw: null,
+    trigger_route_signature: null,
+    full_prefix_route_signature: null,
+    full_prefix_gross_raw: null,
+    full_prefix_execution_success: null,
+    full_prefix_execution_net_raw: null,
+    full_prefix_execution_block: null,
+    full_prefix_execution_index: null,
+    trigger_ev_bucket: "unverified",
+    full_prefix_ev_bucket: "unverified",
+    full_vs_trigger: "unverified",
+    causal_replay_error: null,
   };
 }
 

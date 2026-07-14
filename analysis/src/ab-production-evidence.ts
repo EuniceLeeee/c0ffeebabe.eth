@@ -9,6 +9,7 @@ import { lower } from "./registry/protocols.js";
 export interface ProductionSampleObservation {
   tx_hash: string;
   block_number: number;
+  transaction_index: number;
   source_shape: "atomic_state_arb" | "backrun" | "unknown";
   winner_style: string;
   net_profit_usd: number | null;
@@ -151,6 +152,7 @@ export async function verifyOnchainProductionSample(
     observation: {
       tx_hash: lower(sample.tx_hash),
       block_number: blockNumber,
+      transaction_index: transactionIndex,
       source_shape: shape.shape,
       winner_style: style.winner_style,
       net_profit_usd: profit.netProfitUsd,

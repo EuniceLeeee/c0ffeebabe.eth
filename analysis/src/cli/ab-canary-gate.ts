@@ -14,6 +14,10 @@ import {
   type ProductionSampleObservation,
 } from "../ab-production-evidence.js";
 import {
+  validateBackrunCausalReplay,
+  type BackrunCausalReplayResult,
+} from "../backrun-causal-replay.js";
+import {
   discoverToolIndex,
   PRODUCTION_CANDIDATE_CAPABILITIES,
   PRODUCTION_DECISION_CAPABILITIES,
@@ -178,7 +182,9 @@ interface HuntResult {
   net_profit_raw: string | null;
 }
 
-interface BackrunHuntResult extends HuntResult {
+interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
+  winner_tx_hash: string;
+  winner_transaction_index: number;
   victim_tx_hash: string;
   pre_gross_raw: string | null;
   post_gross_raw: string | null;
@@ -199,6 +205,17 @@ interface BackrunHuntResult extends HuntResult {
   oracle_probe_amount_in_raw: string | null;
   oracle_before_amount_out_raw: string | null;
   oracle_after_amount_out_raw: string | null;
+  trigger_route_signature: string | null;
+  full_prefix_route_signature: string | null;
+  full_prefix_gross_raw: string | null;
+  full_prefix_execution_success: boolean | null;
+  full_prefix_execution_net_raw: string | null;
+  full_prefix_execution_block: number | null;
+  full_prefix_execution_index: number | null;
+  trigger_ev_bucket: "positive" | "non_positive" | "unverified";
+  full_prefix_ev_bucket: "positive" | "non_positive" | "unverified";
+  full_vs_trigger: "match" | "diverge" | "unverified";
+  causal_replay_error: string | null;
 }
 
 function runCandidateReplay(observation: ProductionSampleObservation): void {
@@ -240,8 +257,12 @@ function runBackrunCandidateReplay(observation: ProductionSampleObservation): vo
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
   if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
-  const baseline = runBackrunHunt("baseline", baseRoot, baseRoot, 8570, 8572, universe, expectedPools, maxPools);
-  const challenger = runBackrunHunt("challenger", baseRoot, challengerRoot, 8571, 8573, universe, expectedPools, maxPools);
+  const baseline = runBackrunHunt(
+    "baseline", baseRoot, baseRoot, 8570, 8572, 8574, universe, expectedPools, maxPools,
+  );
+  const challenger = runBackrunHunt(
+    "challenger", baseRoot, challengerRoot, 8571, 8573, 8575, universe, expectedPools, maxPools,
+  );
   validateBackrunHuntResult(
     "baseline",
     baseline,
@@ -267,6 +288,7 @@ function runBackrunHunt(
   targetRoot: string,
   anvilPort: number,
   preAnvilPort: number,
+  fullPrefixAnvilPort: number,
   universe: string,
   expectedPools: string[],
   maxPools: number,
@@ -299,7 +321,9 @@ function runBackrunHunt(
           SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
           SEARCHER_BACKRUN_HUNT_ANVIL_PORT: String(anvilPort),
           SEARCHER_BACKRUN_HUNT_PRE_ANVIL_PORT: String(preAnvilPort),
+          SEARCHER_BACKRUN_HUNT_FULL_PREFIX_ANVIL_PORT: String(fullPrefixAnvilPort),
           HUNT_SAMPLE_BLOCK: String(experiment.production_evidence!.sample.block_number),
+          HUNT_WINNER_TX_HASH: experiment.production_evidence!.sample.tx_hash,
           HUNT_VICTIM_TX_HASH: experiment.production_evidence!.sample.victim_tx_hash!,
           HUNT_UNIVERSE_PATH: universe,
           HUNT_MAX_POOLS: String(maxPools),
@@ -336,24 +360,16 @@ function validateBackrunHuntResult(
   expectedPools: string[],
   observation: ProductionSampleObservation,
 ): void {
-  if (result.schema_version !== 1 || result.fork_block !== forkBlock) {
-    throw new Error(`${label} backrun hunt did not execute from the sample parent block`);
-  }
-  if (result.victim_tx_hash.toLowerCase()
-      !== experiment.production_evidence!.sample.victim_tx_hash!.toLowerCase()) {
-    throw new Error(`${label} backrun hunt used the wrong victim`);
-  }
-  if (result.post_state_anchor_kind !== "victim-tx"
-      || result.post_state_anchor_hash.toLowerCase() !== result.victim_tx_hash.toLowerCase()) {
-    throw new Error(`${label} backrun hunt is not anchored immediately after the victim transaction`);
-  }
-  if ((observation.victim_transaction_index ?? -1) === 0) {
-    if (result.pre_state_anchor_kind !== "parent-block" || result.pre_state_anchor_hash !== null) {
-      throw new Error(`${label} backrun hunt did not use the parent block as the index-0 victim pre-state`);
-    }
-  } else if (result.pre_state_anchor_kind !== "previous-tx"
-      || result.pre_state_anchor_hash?.toLowerCase() !== observation.victim_previous_tx_hash?.toLowerCase()) {
-    throw new Error(`${label} backrun hunt is not anchored immediately before the victim transaction`);
+  const causalErrors = validateBackrunCausalReplay(result, {
+    stage: expectedStage,
+    parentBlock: forkBlock,
+    winnerTxHash: experiment.production_evidence!.sample.tx_hash,
+    winnerTransactionIndex: observation.transaction_index,
+    victimTxHash: experiment.production_evidence!.sample.victim_tx_hash!,
+    blockNumber: observation.block_number,
+  });
+  if (causalErrors.length > 0) {
+    throw new Error(`${label} backrun causal replay invalid: ${causalErrors.join("; ")}`);
   }
   if (result.stage !== expectedStage) {
     throw new Error(`${label} backrun hunt stage ${result.stage} does not match declared ${expectedStage}`);
@@ -392,13 +408,6 @@ function validateBackrunHuntResult(
         || BigInt(result.post_execution_net_raw) <= 0n
         || BigInt(result.post_execution_net_raw) !== BigInt(result.net_profit_raw)) {
       throw new Error(`${label} backrun hunt did not independently execute the exact route after the victim`);
-    }
-    const victimIndex = observation.victim_transaction_index!;
-    if (result.pre_execution_block !== observation.block_number
-        || result.pre_execution_index !== victimIndex
-        || result.post_execution_block !== observation.block_number
-        || result.post_execution_index !== victimIndex + 1) {
-      throw new Error(`${label} backrun route was not mined immediately before/after the victim in its exact historical block`);
     }
     const triggerKind = experiment.production_evidence!.trigger_kind;
     if (triggerKind === "victim-swap" && result.victim_effect_kind !== "swap") {

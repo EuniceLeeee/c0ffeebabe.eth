@@ -33,6 +33,25 @@ Example `expected_transition`s: graph_gap → `pool_in_routing_graph false→tru
 `candidate_plans>0` (ideally `solverEntered>0`); v4 decode → poolId→token pair emitted; pricing → old
 wrong number gone + auditable artifact.
 
+### Backrun causal replay (thin three-state contract)
+
+A backrun fixture is `fixed` only when the trusted harness freezes the same winner/trigger/config/graph and
+records all three states:
+
+- `boundary`: untouched parent-block state, with no same-block prefix;
+- `trigger_only`: only the selected raw swap/oracle trigger, without nonce/balance rewriting, then the real
+  detector → planner → solver → final-sim path; no pre-seeded impact or route;
+- `full_prefix`: every real transaction before the winner, followed by the same declared route check.
+
+The gate does not discover or bisect victims. It only requires the candidate stage to advance, the trusted
+pipeline replay to pass, and `trigger_only`/`full_prefix` to match on route signature, final-sim result, and
+EV-sign bucket. `diverge` or `unverified` means `implemented_not_validated` with
+`manual_followup_required`; Hermes must select another trigger or record a multi-transaction dependency and
+rerun. A positive `boundary` disqualifies the sample as a causal backrun and sends it to block-scan analysis.
+If the change is before the detector (websocket/router/filter intake), `backrun-hunt` alone is insufficient;
+a trusted intake-specific harness must also flip. A dust replay may validly end after final sim at
+`below_ev_gate`; it need not submit.
+
 ### Exempt from replay — gate on before/after METRICS instead
 pure latency, builder inclusion, live mempool visibility, external-RPC/network instability, competitive
 bid → gate on `prep_ms p50/p95` / `solverEntered` / `pendingReceived` / `cuProxyRpcCalls` / `not_seen`
@@ -124,18 +143,22 @@ the second live searcher starts. It requires one `production_evidence` object pr
 - a fresh non-author classification review confirming the sample is in scope;
 - current strategy scope: position-conserving `dex-dex` or `dex-permissionless-protocol`, with either
   `block-scan`/`standing-state` or dual `backrun`/`victim-swap|oracle-update`;
+- every new production Hermes candidate declares `lane_mode=dual`: A/B observe atomic block-scan and
+  public-mempool backrun concurrently (MEV-Share off). The single B behavior change and replay sample may
+  belong to either lane; the other lane is a no-regression/safety observation, not a second required win;
 - no keeper/reward, inventory, private path, credit, sandwich, or JIT-LP posture; victim dependency is valid
   only for the declared, replay-proven dual backrun;
 - `searcher_behavior_change=true`, `deterministic_gate.result=pass`, and the trusted, unchanged
   trusted hunt harness invoked directly by Node (not through challenger npm configuration). The wrapper runs
-  `blockscan-hunt.ts` from the untouched sample parent block and `backrun-hunt.ts` around the exact historical
-  victim prefix,
+  `blockscan-hunt.ts` from the untouched sample parent block and `backrun-hunt.ts` across the exact
+  boundary/trigger-only/full-prefix states,
   with the same frozen universe and the sample's on-chain DEX pool IDs. Harness/test/fixture changes in B
   are forbidden. The measured A/B hunt stages, not a challenger-authored success string, must show the same
   sample advances at least one
   mechanically observable production stage: `not_admitted → path_found → final_sim_success`. A backrun
-  `final_sim_success` additionally requires the route transaction to land at the exact expected index in the
-  historical victim block, without rewriting historical sender balances; oracle victims require an
+  `final_sim_success` additionally requires trigger-only and full-prefix route/sim/EV buckets to match, the
+  full-prefix route transaction to land at the winner index, and no historical sender balance/nonce rewrite;
+  oracle victims require an
   independent trusted quote delta on the declared route edge. A later
   quote-only or submit-only stage requires its own trusted harness to land on main before it may gate B.
 

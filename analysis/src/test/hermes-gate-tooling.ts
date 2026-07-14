@@ -179,6 +179,15 @@ const checks: Array<() => void> = [
       [COFFEEBABE],
     );
   }),
+  () => expectPass("schema-v3 run analysis records both production lanes", () => {
+    const artifact = dualLaneArtifact();
+    validateManualArtifact(artifact, { from: 1, to: 2 }, [COFFEEBABE]);
+  }),
+  () => expectFail("schema-v3 run analysis cannot omit the backrun funnel", () => {
+    const artifact = dualLaneArtifact();
+    delete artifact.run_analysis.lanes.backrun;
+    validateManualArtifact(artifact, { from: 1, to: 2 }, [COFFEEBABE]);
+  }, "run_analysis.lanes.backrun missing"),
   () => expectPass("current competitor profile accepts all four swept EOAs", () => {
     const artifact = manualArtifact();
     artifact.watchlist_profile = LIVE_PROFILE;
@@ -570,6 +579,23 @@ function manualArtifact(overrides: { dominant_drop?: string; evidence?: string }
       prev_round: null,
     },
   };
+}
+
+function dualLaneArtifact(): any {
+  const artifact = manualArtifact();
+  artifact.schema_version = 3;
+  artifact.run_analysis.lane_mode = "dual";
+  artifact.run_analysis.lanes = {
+    block_scan: {
+      funnel: { completed_passes: 2, candidates: 1, final_sim_success: 0 },
+      dominant_drop: "quote_negative",
+    },
+    backrun: {
+      funnel: { pending_received: 3, impacts: 1, final_sim_success: 0 },
+      dominant_drop: "no_candidate_plans",
+    },
+  };
+  return artifact;
 }
 
 function baseCase(overrides: Partial<LearningCase> = {}): LearningCase {

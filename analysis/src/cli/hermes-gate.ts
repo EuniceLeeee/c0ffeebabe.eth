@@ -371,7 +371,7 @@ export function validateTxRecord(tx: any, eoa: string, win: { from: number; to: 
   if (isPlaceholder(String(tx.gap_class ?? ""))) fail(`tx ${tx.hash} missing gap_class`);
 }
 
-function validateRunAnalysis(json: any): void {
+export function validateRunAnalysis(json: any): void {
   const ra = json.run_analysis;
   if (!ra || typeof ra !== "object") {
     return fail("artifact.run_analysis missing — the standard post-dry-run funnel/pipeline_dropped analysis is mandatory");
@@ -384,6 +384,25 @@ function validateRunAnalysis(json: any): void {
   }
   if (isPlaceholder(String(ra.events_source ?? ""))) {
     fail("run_analysis.events_source missing — declare jsonl vs log-counter (prefer jsonl)");
+  }
+  if (Number(json.schema_version ?? 0) >= 3) {
+    if (ra.lane_mode !== "dual") {
+      fail("schema-v3 run_analysis.lane_mode must be dual (block-scan + public-mempool backrun)");
+    }
+    for (const lane of ["block_scan", "backrun"] as const) {
+      const analysis = ra.lanes?.[lane];
+      if (!analysis || typeof analysis !== "object") {
+        fail(`schema-v3 run_analysis.lanes.${lane} missing`);
+        continue;
+      }
+      if (!analysis.funnel || typeof analysis.funnel !== "object"
+          || Object.keys(analysis.funnel).length === 0) {
+        fail(`schema-v3 run_analysis.lanes.${lane}.funnel missing/empty`);
+      }
+      if (isPlaceholder(String(analysis.dominant_drop ?? ""))) {
+        fail(`schema-v3 run_analysis.lanes.${lane}.dominant_drop missing`);
+      }
+    }
   }
 }
 
@@ -422,8 +441,17 @@ export function validateAbExternalCalibration(
       fail(`ab_external_calibration.competitors missing ${expected}`);
     }
   }
-  if (calibration.strategy_kind !== "block-scan" || calibration.comparable_filter !== "atomic_loop") {
-    fail("ab_external_calibration must compare block-scan against comparable_filter=atomic_loop");
+  const strategyKinds = Array.isArray(calibration.strategy_kinds)
+    ? calibration.strategy_kinds.map((value: unknown) => String(value)).sort()
+    : calibration.strategy_kind === "block-scan"
+      ? ["block-scan"]
+      : [];
+  const expectedStrategies = Number(json.schema_version ?? 0) >= 3
+    ? ["backrun", "block-scan"]
+    : ["block-scan"];
+  if (JSON.stringify(strategyKinds) !== JSON.stringify(expectedStrategies)
+      || calibration.comparable_filter !== "atomic_loop") {
+    fail(`ab_external_calibration must compare ${expectedStrategies.join("+")} against comparable_filter=atomic_loop`);
   }
   if (isPlaceholder(String(calibration.tool_artifact ?? ""))) {
     fail("ab_external_calibration.tool_artifact missing");

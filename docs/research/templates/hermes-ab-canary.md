@@ -10,9 +10,9 @@
 - **change_class:** performance | correctness | capability
 - **one-change scope:**
 - **deterministic gate + pinned sample:**
-- **lane mode:** blockscan-only | dual
-- **production sample:** real tx/block · net +EV evidence · victim-independent block-scan, or declared
-  public/MEV-Share victim with pre/post counterfactual in dual mode
+- **lane mode:** dual (atomic block-scan + public-mempool backrun; MEV-Share off)
+- **production sample:** real tx/block · net +EV evidence · either victim-independent block-scan or a
+  declared public swap/oracle trigger with boundary/trigger-only/full-prefix replay
 - **stage flip:** not_admitted → path_found → final_sim_success (other stages need a trusted main-side harness first)
 - **not doing:**
 
@@ -35,12 +35,12 @@
 - **window / tool artifact:**
 - **classifier calibration:** capability query + successful tool receipt(s) · pass/fail · sample count
 - **current competitor-profile sweep:**
-- **comparable filter:** conserving `atomic_loop`; victim-independent in blockscan-only, verified
-  swap/oracle victim permitted in dual
+- **comparable filter:** conserving `atomic_loop`; either victim-independent block-scan or a verified
+  public-mempool swap/oracle backrun
 - **excluded:** inventory · sandwich · keeper/liquidation · JIT-LP · standing-credit
 - **B vs comparable takes:** not_seen | pool | path | adapter | quote/sim | execution | economics
 - **next production blocker filed:**
-- **Step-1 `ab_external_calibration`:** competitor · strategy_kind=`block-scan` ·
+- **Step-1 `ab_external_calibration`:** competitors · strategy_kinds=`["backrun","block-scan"]` ·
   comparable_filter=`atomic_loop` · tool_artifact · tool_manifest + SHA-256 ·
   `classifier_calibration{command,status,samples}` ·
   comparable_txs[] · excluded_counts{} · gap_counts{} · next_problem_id
@@ -82,7 +82,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
   "change_class": "capability",
   "hypothesis": "<causal hypothesis and semantic success criterion>",
   "input_mode": "shared",
-  "lane_mode": "blockscan-only",
+  "lane_mode": "dual",
   "infrastructure_shakedown": false,
   "expected_runtime_view_delta": false,
   "allowed_config_delta": [],
@@ -148,7 +148,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
       "block_number": 0,
       "expected_net_profit_usd": 0,
       "evidence": "<net-profit and strategy-source evidence>",
-      "victim_tx_hash": "<dual backrun only>",
+      "victim_tx_hash": "<backrun only; omit for block-scan>",
       "oracle_route_edge_index": "<required for oracle-update; zero-based expected_route index>",
       "expected_route": []
     },
@@ -198,8 +198,10 @@ Required for every capability win and every conflict/inconclusive/artifact conce
 }
 ```
 
-The deploy wrapper, not the challenger, runs this unchanged harness from both A and B at the sample's
-untouched parent block and binds its machine result to the sample's on-chain DEX pool IDs. Test, fixture,
+The deploy wrapper, not the challenger, runs the unchanged strategy-specific harness from both A and B and
+binds its machine result to the sample's on-chain DEX pool IDs. Block-scan uses the untouched parent state;
+backrun uses boundary, selected-trigger-only, and full-prefix states and requires the latter two to agree.
+Test, fixture,
 replay-harness, analysis, or governance changes must be merged before B and are rejected in the challenger.
 The branch may contain later report/evidence-only commits, but the wrapper deploys and promotion merges only
 the frozen `challenger_commit`; it reads evidence from the descendant branch tip without promoting that tip.

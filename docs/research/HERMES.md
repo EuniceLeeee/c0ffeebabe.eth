@@ -65,6 +65,10 @@ Events + local reth live on the NODE (run via SSM); the events path is the runni
   - **WATCHLIST (current profile):** load `analysis/config/live-competitors.json`; never copy addresses into a second list. Sweep every configured EOA and its executor(s). The Step-1 block and artifact must name the file's `profile_id`; Coffee remains `full`, the other configured entities are outcome-driven samples.
   - **Both agents run this and cite it.** Each works from PRIMARY sources independently (raw script JSON + own on-chain trace), **never the other's curated facts/conclusion**. Secondary-source-validate ≥1 key tx via Alchemy/Tenderly. **MANUAL analysis, not script-only:** the label is a hypothesis; hand-trace the watchlist's key txs — a root-cause is INVALID unless it names the specific source swap (or proves atomic) from a manual trace.
 - **ENFORCEMENT — the hermes-gate (forcing function).** After EVERY dry-run, `cd analysis && npm run hermes-gate -- <hermes-md>` MUST exit 0 before `Final Approval`. It validates a structured on-disk artifact (prose can't satisfy it) and enforces five analyses: (1) standard `run_analysis` (funnel + `dominant_drop` + `events_source`); (2) per-profile-EOA comparison; (3) every configured `analysis_mode:"full"` entity (EVERY tx hand-analyzed, pools in/out of `runtime-graph-pools.json` + `gap_class`); (4) configured `analysis_mode:"sample"` entities; (5) **intake audit — the funnel-EXTERNAL lens** (router-allowlist + MEV-Share intake gaps never ENTER the funnel, so `pipeline_dropped` can't see them). Doctrine the gate encodes: a "private" victim is NOT a human gate until the MEV-Share feed is ruled in; "coverage exhausted" is INVALID without the intake fraction; an `atomic` competitor is a scanner/strategy gap, NOT a market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow. Record `hermes_gate: PASS`.
+  New production artifacts use `schema_version:3`; the gate then additionally requires
+  `run_analysis.lane_mode=dual` plus separate non-empty `run_analysis.lanes.block_scan` and `.backrun`
+  funnels/dominant drops. Legacy schema-v2 reports remain replayable but cannot be used as a new production
+  Hermes artifact.
 
 ## Rounds — the canonical live-run loop
 Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carries what it can't.
@@ -74,7 +78,9 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                    KEEP=/tmp/mev-sleep-keeper.pid
                    if [ -f "$KEEP" ] && kill -0 "$(cat "$KEEP" 2>/dev/null)" 2>/dev/null; then echo alive; \
                    else nohup caffeinate -i -d -s -t 10800 >/dev/null 2>&1 & echo $! >"$KEEP"; fi
-1. LIVE RUN      ~30-min window. Deploy latest FIRST; do not analyze stale code.
+1. LIVE RUN      ~30-min window. Deploy latest FIRST; do not analyze stale code. Current production Hermes
+                 always runs BOTH atomic block-scan and public-mempool backrun; MEV-Share stays off. Record
+                 the two funnels separately. A missing/disconnected lane makes the window incomplete.
 2. AUTO ANALYSIS Run Facts + structured pipeline_dropped + before/after vs the prior round. If the dominant
                  drop is `no_candidate_plans`, classify: flash borrowability / path template / token-graph
                  coverage / unsupported shape (drill-down is standard in the `redact-live-run` tool).
@@ -106,9 +112,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 
 - **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
 - **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
-- Both are EV-gated and may submit simultaneously. `blockscan-only` remains the default; explicit
-  `AB_LANE_MODE=dual` runs block-scan plus backrun/public-mempool on both sides. Mixed A/B postures are
-  invalid. Wallets, BotVMs, main/block-scan anvil ports, events, logs, and CPU sets are separate. The dated
+- Both are EV-gated and may submit simultaneously. Production Hermes explicitly uses
+  `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`: block-scan plus public-mempool backrun on both sides,
+  with MEV-Share disabled. `blockscan-only` is only a fail-closed diagnostics/infrastructure fallback and
+  cannot close a production Hermes round. Mixed A/B postures are invalid. Wallets, BotVMs,
+  main/block-scan anvil ports, events, logs, and CPU sets are separate. The dated
   authorization and circuit breakers are in `docs/live-safety-envelope.md`.
 - Many analysis branches may exist, but there is exactly **one persistent B runtime lease** because every
   challenger shares wallet-2/BotVM-2/port 8567/unit `mev-ab-b`. The lease is resource coordination, not a
@@ -128,9 +136,11 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
 2. **PICK A PRODUCTION SAMPLE, NOT A METRIC.** Select the highest-impact unclaimed blocker only after one
    real on-chain `+EV` sample in the current production scope proves where we stop. The sample MUST be a
-   position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed loop. In `blockscan-only` it must be
-   victim-independent. In `dual` it may instead bind one real earlier same-block swap/oracle victim and must
-   prove the same route is non-positive pre-victim and +EV post-victim. `winner_style=atomic_loop` alone is
+   position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed loop. The single challenger
+   objective may come from either observed lane: a victim-independent block-scan sample, or one real public
+   same-block swap/oracle backrun trigger whose causal replay proves the route transition. Only the chosen
+   lane needs the deterministic stage flip; the untouched lane must remain live and pass safety/no-regression
+   review. `winner_style=atomic_loop` alone is
    insufficient for either claim. Keeper/reward, inventory, private-path, credit, sandwich, and JIT-LP
    samples are excluded. If the queue is empty, run the normal Hermes manual+tool analysis to
    find one; do not invent a code change merely to keep the loop busy. One branch = one causal hypothesis.
@@ -168,10 +178,16 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 4. **FIX + FREEZE.** Codex writes; the non-author agent
    reviews; the same production sample must advance at least one stage
    (`not_admitted→path_found→final_sim_success`) in a pinned replay (rule 12). Block-scan replays start from
-   the untouched sample parent-block state. Backrun replays reconstruct the real FIFO prefix and mine the
-   candidate immediately before/after the victim in that same historical block; historical senders are not
-   funded or otherwise rewritten. Oracle causality is an independent trusted pre/post quote on the declared
-   route edge, never a challenger detector's self-reported delta. Predeploy runs the trusted
+   the untouched sample parent-block state. Backrun replays freeze the winner and selected trigger, then run
+   three facts: `boundary` (untouched parent), `trigger_only` (only the raw selected trigger through the real
+   detector→planner→solver→sim path), and `full_prefix` (all transactions before the winner). Historical
+   senders are never funded and nonces are never rewritten. `trigger_only` and `full_prefix` must match on
+   route signature, final-sim result, and EV-sign bucket; divergence/unreplayable prefix is
+   `implemented_not_validated` + `manual_followup_required`, never `fixed`. Hermes, not the gate, then tests a
+   different swap/oracle trigger or records a multi-transaction dependency. If a change touches websocket/
+   router intake before the detector, this detector-to-sim harness is insufficient and a trusted intake
+   harness is additionally required. Oracle causality is an independent trusted pre/post quote on the
+   declared route edge, never a challenger detector's self-reported delta. Predeploy runs the trusted
    unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the same universe,
    champion `SEARCHER_POOL_UNIVERSE_TOP_N`, and on-chain identities. An exit-zero build/test or
    challenger-authored replay harness is not evidence. Push B. Two
@@ -200,19 +216,27 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    correctness/capability experiment. It never restarts A. Direct `systemd-run`, hand-written B env,
    or deployment from the challenger branch is invalid. Block-scan-only A/B requires
    `SEARCHER_ENABLE_BACKRUN=0` **and** `SEARCHER_ENABLE_MEMPOOL=0` on both sides. Dual A/B requires both equal
-   to `1` on both sides, eagerly listening and separately owned main/block-scan Anvil ports, matching startup banners, and a connected
-   MEV-Share stream whose hashed endpoint identity is equal on both current processes. A preflight or renewal
-   envelope failure must stop both A and B and remove the champion live marker. The searcher itself must also
+   to `1` on both sides, eagerly listening and separately owned main/block-scan Anvil ports, and matching
+   startup banners. Current production Hermes additionally requires `AB_VICTIM_MODE=public-only`, matching
+   disabled MEV-Share posture, no MEV-Share hints, and a connected public-mempool stream on both processes. A preflight or renewal
+   safety-envelope/posture failure must stop both A and B and remove the champion live marker. Failure to
+   extend an already-running B unit's hard runtime after those validations pass is not an envelope failure:
+   the wrapper must leave A/B and the live marker unchanged, keep the existing hard deadline, avoid advancing
+   the journal lease, and return a distinct non-zero result. The searcher itself must also
    validate its effective live envelope before constructing any production submission component. Both lanes must use the same local-reth
    HTTP/WS inputs and the same content-addressed dynamic router admission snapshot. Their effective process
    environments must identify the exact A/B commits, and dual mode must show the latest public-mempool state
    as connected on both sides. A and B share one deployment lock, so champion deploy is forbidden during an active B
    lease. B has `Restart=no` plus a unit-level hard runtime limit; renewal revalidates PIDs, commits, posture,
-   ports, graph/view/feed identities, and universe hashes before extending it. The wrapper's default is blockscan-only; a dual run must declare `lane_mode=dual` in the
-   report and `AB_LANE_MODE=dual` in the trusted B environment.
+   ports, graph/view/feed identities, and universe hashes before attempting an extension. On a node whose
+   systemd cannot change the active unit's runtime limit, close/redeploy a fresh bounded window before the
+   existing deadline rather than pretending the lease was renewed. The wrapper remains fail-closed
+   by default, but every production Hermes report must declare `lane_mode=dual`, and the trusted environment
+   must explicitly set `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`.
 6. **MEASURE PAIRED BLOCKS.** Exclude startup/full-warm, pass-budget, and catch-up blocks where either lane's
    incremental warm range spans more than one block; those lanes have different cache histories and are not
-   a causal pair. Renew the lease if needed. A and B must see the same remaining block numbers. Record restart
+   a causal pair. Renew the lease only when the hard runtime extension succeeds; otherwise finish or redeploy
+   before the existing deadline. A and B must see the same remaining block numbers. Record restart
    deltas and before/after input hashes. For shared-input tests all
    universe hashes and discovery cutoffs match. Unless the intervention explicitly targets graph admission,
    the full runtime pool-view and TokenEdge graph hashes must also match and remain stable. Budget-censored
@@ -225,8 +249,8 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
    then run the selected
    current tool against every entity in `analysis/config/live-competitors.json` (EOA + executor scan
    addresses, findings attributed to the EOA) and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
-   `atomic_loop`** transactions: blockscan-only requires victim independence; dual additionally admits a
-   public/MEV-Share swap-or-oracle victim with a verified pre/post counterfactual. The in-tx route must close
+   `atomic_loop`** transactions from both lanes: atomic samples require victim independence; backruns require
+   a public swap/oracle trigger with the verified three-state causal replay. The in-tx route must close
    to a priced token and leave no standing position. Exclude
    `sandwich`, `one_leg_inventory`, keeper/liquidation, JIT-LP, standing-credit, and private-inventory
    rebalances before classifying any gap; they are different postures and cannot judge either lane.

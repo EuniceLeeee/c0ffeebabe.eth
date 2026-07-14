@@ -77,9 +77,15 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
      guarded restart path; NEVER restart the searcher by hand — [[project-node-env-dryrun-guard]]) and
      re-verify (a)+(b) before measuring. If it still won't come up fresh after a second attempt, STOP the
      round and report (do not measure on stale code).
+  1c. **VERIFY DUAL-LANE POSTURE.** Current production Hermes requires atomic block-scan plus public-mempool
+      backrun together: `SEARCHER_ENABLE_BLOCK_SCAN=1`, `SEARCHER_ENABLE_BACKRUN=1`,
+      `SEARCHER_ENABLE_MEMPOOL=1`, MEV-Share disabled, and a current-generation
+      `mempool_state=connected`. A missing lane makes the round incomplete; do not silently downgrade to a
+      blockscan-only production conclusion.
   2. Confirm `SEARCHER_EVENTS_PATH` is set (`/var/log/mev/events/searcher-live.jsonl`) right after the
      banner — a window without the structured JSONL is not a valid Hermes window.
-  3. ~30–45 min bounded-live measurement window.
+  3. ~30–45 min bounded-live measurement window. Record atomic block-scan and public-mempool backrun funnels
+     separately; the round's one production blocker may come from either lane.
   4. **Structured `pipeline_dropped` analysis filtered by the CURRENT `run_id`** (source of truth; a
      restart starts a new run_id — segment across the boundary), before/after vs the previous round.
   5. **MANDATORY competitor cross-reference on local reth (zero-CU)** — load the versioned entities from
@@ -96,20 +102,17 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
      - **(b) INTAKE AUDIT — the funnel-EXTERNAL lens (this is the fix for the structural blind spot).**
        For each BACKRUN whose source swap is PUBLIC (paid a priority fee — `analysis/src/pnl/sender-flow.ts`,
        `maxPriorityFeePerGas>0`), check `seen_in_our_feed` (grep the running `SEARCHER_EVENTS_PATH` for the
-       source-swap hash). A public source swap we **NEVER SAW** = a **flow-admission gap** — our mempool
-       ADMISSION dropped it BEFORE the funnel (the `MEMPOOL_ROUTER_ADDRESSES` allowlist `main.ts:206`, or a
-       disabled MEV-Share / `enableHashOnly`). This is **structurally invisible to `pipeline_dropped`**
+       source-swap hash). A public source swap we **NEVER SAW** = a **flow-admission gap** — our public-mempool
+       ADMISSION dropped it BEFORE the funnel (for example, the `MEMPOOL_ROUTER_ADDRESSES` allowlist
+       `main.ts:206`). This is **structurally invisible to `pipeline_dropped`**
        (which only sees what ENTERED the funnel) — this audit is the ONLY lens that can find it. Distinct,
        closable class (widen admission to pool-touch / enable the discarded flow).
-       - **CRITICAL: a source swap NOT in our public feed is NOT automatically "private orderflow / human
-         gate".** MEV-Share is retroactively INDISTINGUISHABLE from truly-private on-chain (no on-chain
-         marker — `sender-flow.ts` never emits `mev-share`), so you cannot read it off the victim. Instead
-         **audit OUR OWN intake config**: is the MEV-Share / private-hint feed ENABLED (`enableHashOnly`
-         etc.)? If DISABLED, a not-in-public-feed victim is a **flow-admission gap (turn the feed ON — a
-         config flag WE control), NOT a human gate.** MEV-Share is ~72× public-mempool volume, so misfiling
-         it as "private → Lever B human gate" (which R13–R21 did) throws away the single largest
-         controllable flow. Human-gate ONLY if the private-hint feed is ALREADY on AND the victim is still
-         unreachable.
+       - **CRITICAL: current production Hermes intentionally keeps MEV-Share off and calibrates only public
+         mempool backruns.** On-chain data cannot prove that an unseen source came from MEV-Share rather than
+         other private orderflow (`sender-flow.ts` never emits a proven `mev-share` label). Such a source is
+         therefore `non_comparable_private_or_unknown`, not evidence for automatically enabling a new feed
+         and not a production B variable in this round. Only a source independently shown to be public may
+         establish a public-mempool admission gap.
      - **(c) pool / path coverage** (the pre-existing lens): pools the competitor touched that we lack.
        Tooling is v4-`in_graph`-correct + native-ETH-classifier-correct (`b8a29a5` / `223ae05`).
      **Gap taxonomy — classify into ONE:** pool · path · **flow-admission (intake, pre-funnel)** ·
@@ -127,7 +130,9 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
      conclusion B from the raw DATA package (blind to A); compare → finalize the Implementation Brief.
   7. **Codex writes the fix** (`scripts/codex-run.sh`, never hand-write the codex line) → review + the
      **repair-replay gate (rule 12): the pinned fixture must FLIP** (`no_candidate→plans>0` / pool routes /
-     native-ETH-atomic classified / `sim.success`). No flip = not fixed. → commit (sign as the ACTUAL
+     native-ETH-atomic classified / `sim.success`). Backrun fixtures additionally require matching
+     parent-boundary, raw trigger-only production-pipeline, and full winner-prefix results; divergence is
+     `implemented_not_validated`, not fixed. No flip = not fixed. → commit (sign as the ACTUAL
      orchestrating model per the harness git rule).
   8. If the fix must reach the node: `git push origin HEAD:main` (retry once on a transient SSL/network
      error) → re-deploy (re-run the mode-preservation verify).

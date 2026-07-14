@@ -211,10 +211,12 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /Restart=no/);
   assert.match(script, /extend_runtime_deadline/);
   assert.ok(
-    script.indexOf('(state_update lease_until "$((now + LEASE_SECONDS))")') <
-      script.indexOf("(extend_runtime_deadline) || safety_abort runtime_deadline_renewal_failed"),
-    "renewal must persist the new lease before extending the hard runtime deadline",
+    script.indexOf("if ! extend_runtime_deadline; then") <
+      script.indexOf('(state_update lease_until "$((now + LEASE_SECONDS))")'),
+    "renewal must extend the hard deadline before persisting a later journal lease",
   );
+  assert.match(script, /RENEW_UNSUPPORTED: systemd cannot extend the active B runtime; A\/B remain running/);
+  assert.doesNotMatch(script, /safety_abort runtime_deadline_renewal_failed/);
   assert.match(script, /A\/B stop verified and champion live marker removed/);
   assert.match(script, /stop_unit_verified "\$A_UNIT"/);
   assert.match(script, /systemctl kill --kill-who=all --signal=KILL/);

@@ -36,9 +36,10 @@ companion doc, not here.
    counts unless it moves a real gap toward closed, or moves us toward a live +EV bundle.** Don't drift.
 
 **Current production phase:** B challengers target position-conserving `DEX↔DEX` or
-`DEX↔permissionless protocol` closed loops. The default lane is victim-independent `block-scan`; the dated
-dual-lane envelope also permits a reproducible backrun whose real public/MEV-Share victim is a swap or oracle
-update and whose pinned pre-victim→post-victim replay flips the same route to +EV. Keeper/reward flows,
+`DEX↔permissionless protocol` closed loops. Production Hermes windows run both victim-independent
+`block-scan` and public-mempool `backrun` (MEV-Share remains off); one challenger may target a proven blocker
+in either lane while both funnels remain observed. A backrun must bind a real swap/oracle trigger and pass the
+trusted boundary/trigger-only/full-prefix causal replay in `docs/research/gates.md`. Keeper/reward flows,
 inventory, private paths, credit, sandwich, and JIT-LP remain outside the target and cannot justify an
 `ab/*` deployment.
 

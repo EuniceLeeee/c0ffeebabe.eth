@@ -588,6 +588,9 @@ export function validateAbProductionCandidate(
   if (experiment.infrastructure_shakedown === true) {
     errors.push("production challenger cannot declare infrastructure_shakedown=true");
   }
+  if ((context.laneMode ?? experiment.lane_mode) !== "dual") {
+    errors.push("production Hermes candidate requires lane_mode=dual so block-scan and public-mempool backrun are both observed");
+  }
   if (experiment.deterministic_gate?.result !== "pass") {
     errors.push("candidate deployment requires deterministic_gate.result=pass");
   }

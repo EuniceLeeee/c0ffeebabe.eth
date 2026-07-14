@@ -26,10 +26,10 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 ## 1. Pick + predeclare
 1. Fetch `origin/main`. Read open LearningCases/Findings plus recent A/B reports. Exclude every `problem_id`
    whose latest verdict is `needs_escalation`/retained and every problem already owned by an active branch.
-2. Pick the highest-impact remaining blocker only when one real +EV, victim-independent `block-scan` sample
-   in the current DEX-DEX / DEX-permissionless-protocol scope proves the failed production stage. In explicit
-   dual mode, a position-conserving public/MEV-Share swap-or-oracle backrun may qualify only when the pinned
-   replay flips from pre-victim non-positive to post-victim +EV. Keeper/reward, inventory, private-path,
+2. Pick the highest-impact remaining blocker only when one real +EV sample in the current DEX-DEX /
+   DEX-permissionless-protocol scope proves the failed production stage. Every production round is dual-lane:
+   the sample may be a victim-independent block-scan loop or a position-conserving public-mempool
+   swap/oracle backrun whose trusted three-state replay validates the trigger. Keeper/reward, inventory, private-path,
    credit, sandwich and JIT-LP samples do not qualify. If none exists, make the independent manual judgment,
    run `tool-index --check`, select current tools by the
    required semantic capabilities into an execution manifest, execute the chosen indexed IDs through
@@ -51,8 +51,10 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 2. Use the HERMES generator/evaluator split. Two stalled generator attempts or three failed review passes
    produce `needs_escalation`; retain/push the branch + evidence and let the next hourly wake pick another.
 3. Run the pinned replay/fork gate and require the same real +EV sample to advance at least one production
-   stage. Block-scan starts from untouched `sample.block_number - 1`; backrun reconstructs the real same-block
-   prefix and compares the declared route immediately before/after the declared victim. The trusted wrapper
+   stage. Block-scan starts from untouched `sample.block_number - 1`; backrun compares `boundary` (parent),
+   raw `trigger_only` through detector→planner→solver→sim, and the real `full_prefix` before the winner.
+   Trigger/full route signature, final-sim result, and EV-sign bucket must match; divergence or an
+   unreplayable prefix is `implemented_not_validated` and retained for manual follow-up. The trusted wrapper
    runs the unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both roots against the same
    frozen universe and on-chain identities; a challenger-authored harness is invalid. A
    performance optimization with no such sample flip is ineligible. Build-only is never
@@ -66,10 +68,12 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    `deploy-ab-challenger.sh deploy <id> <ab/branch> <base-sha> <challenger-sha>
    <docs/research/reports/ab-...-hermes.md> <allow-view-delta>`;
    pass `1` only when the schema-v3 journal predeclares `expected_runtime_view_delta=true`, else `0`.
-   The wrapper recomputes source shape, winner style and net PnL from local reth, executes the declared
+   Declare `lane_mode=dual` and run the trusted wrapper with
+   `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`; MEV-Share stays off. The wrapper recomputes source shape, winner style and net PnL from local reth, executes the declared
    existing pinned replay, binds all deployment identity/config declarations, and rejects non-runtime or
    mixed tooling/governance challengers. Direct B `systemd-run` or challenger-owned deploy code is invalid.
-2. Run the predeclared paired-block window. Exclude startup/full-warm, budget-censored, and catch-up blocks
+2. Run the predeclared paired-block window with both atomic block-scan and public-mempool backrun active on A
+   and B. Record both funnels separately; either disconnected/missing lane invalidates the window. Exclude startup/full-warm, budget-censored, and catch-up blocks
    where either lane warmed a multi-block range after a skip. Renew the B lease before expiry. Record the
    shared discovery cutoff and stable runtime pool-view/TokenEdge graph hashes alongside config/universe
    hashes.
@@ -82,8 +86,8 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    then run the selected IDs through `tool-run` with the exact measured window and
    recommended coverage set and any justified related cross-check on the same window for every EOA and
    executor in `analysis/config/live-competitors.json`; record its exact `profile_id`. Keep only conserving,
-   replicable `atomic_loop` takes. Blockscan-only requires victim independence; dual may include a verified
-   public/MEV-Share swap-or-oracle backrun. Exclude inventory, sandwich, keeper, JIT-LP, and standing-credit
+   replicable `atomic_loop` takes from both lanes. Atomic samples require victim independence; backruns require
+   a verified public swap/oracle trigger and matching three-state replay. Exclude inventory, sandwich, keeper, JIT-LP, and standing-credit
    before gap
    classification. Compare B with those takes, classify the remaining pool/path/adapter/quote/sim/execution/
    economics gap, and file the next blocker. If zero same-window comparable samples, record that honestly

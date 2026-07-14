@@ -1266,8 +1266,11 @@ renew() {
   run_preflight_safely
   (validate_running_pair) || safety_abort running_pair_validation_failed
   now=$(date +%s)
+  if ! extend_runtime_deadline; then
+    echo "RENEW_UNSUPPORTED: systemd cannot extend the active B runtime; A/B remain running under the existing hard deadline" >&2
+    return 10
+  fi
   (state_update lease_until "$((now + LEASE_SECONDS))") || safety_abort journal_renewal_failed
-  (extend_runtime_deadline) || safety_abort runtime_deadline_renewal_failed
   cat "$STATE"
 }
 
