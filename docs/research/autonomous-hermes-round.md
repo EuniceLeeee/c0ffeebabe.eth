@@ -82,9 +82,10 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
   3. ~30–45 min bounded-live measurement window.
   4. **Structured `pipeline_dropped` analysis filtered by the CURRENT `run_id`** (source of truth; a
      restart starts a new run_id — segment across the boundary), before/after vs the previous round.
-  5. **MANDATORY competitor cross-reference on local reth (zero-CU)** — coffeebabe
-     `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (EVERY window tx, full manual trace) + `0xae2Fc483…FaE13`
-     (sampled, outcome-driven; extend the window if thin). Run **all THREE lenses per competitor tx**, not
+  5. **MANDATORY competitor cross-reference on local reth (zero-CU)** — load the versioned entities from
+     `analysis/config/live-competitors.json`, scan every EOA + executor, and follow each entity's
+     `analysis_mode` (`full` or outcome-driven `sample`; extend the window if thin). Record the exact
+     `profile_id` in Step-1 and its artifact. Run **all THREE lenses per competitor tx**, not
      just pool coverage — pool coverage alone is the funnel-INTERNAL lens that structurally missed the
      router-allowlist + MEV-Share gaps for a whole night:
      - **(a) atomic-vs-backrun** (`analysis/src/pnl/victim-source.ts`): is there a preceding swap on a
@@ -131,8 +132,8 @@ You are the Hermes orchestrator for the MEV arbitrage searcher (`/Users/eunice/s
   8. If the fix must reach the node: `git push origin HEAD:main` (retry once on a transient SSL/network
      error) → re-deploy (re-run the mode-preservation verify).
   9. **`cd analysis && npm run hermes-gate -- <round-md>` MUST exit 0 before closing** the round — the
-     mechanical enforcement of the four mandatory post-window analyses (standard / competitor / coffeebabe
-     full / watchlist sample). Record `hermes_gate: PASS`.
+     mechanical enforcement of the mandatory post-window analyses (standard / every configured competitor /
+     profile full-mode entities / profile sample-mode entities). Record `hermes_gate: PASS`.
   10. Write the round doc (`docs/research/reports/live-run-<run_id>-hermes.md`, lean impl-cycle template by
       default) + the Findings Ledger (every finding → `owner` + `carry_to_round`). Auto-commit/push the md.
 

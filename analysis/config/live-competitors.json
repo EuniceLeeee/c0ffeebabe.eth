@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "profile_id": "live-competitors-20260714-v1",
+  "entities": [
+    {
+      "id": "coffee",
+      "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+      "executors": ["0xe08d97e151473a848c3d9ca3f323cb720472d015"],
+      "analysis_mode": "full"
+    },
+    {
+      "id": "competitor-3e00",
+      "eoa": "0x3e00d14c2fc4bada34f57fdadb8e2fb2341eae90",
+      "executors": ["0x84cc5f0bc0aa4bf47f3f60628c51cb1ab2745572"],
+      "analysis_mode": "sample"
+    },
+    {
+      "id": "competitor-567c",
+      "eoa": "0x567ccffad113f74357fc54863e5fcda75e190819",
+      "executors": ["0x92eae2d4f34f17eb32bf390af5019a37d375418e"],
+      "analysis_mode": "sample"
+    },
+    {
+      "id": "competitor-7ada",
+      "eoa": "0x7adac85639050c1dea443889e3b4c4adb26ec593",
+      "executors": ["0xeefe6da5a69365b9fc6d95480122aa075dd3150f"],
+      "analysis_mode": "sample"
+    }
+  ]
+}

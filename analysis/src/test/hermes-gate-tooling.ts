@@ -10,6 +10,13 @@ import {
 import type { LearningCase } from "../learning/learning-case.js";
 
 const COFFEEBABE = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
+const LIVE_PROFILE = "live-competitors-20260714-v1";
+const LIVE_EOAS = [
+  COFFEEBABE,
+  "0x3e00d14c2fc4bada34f57fdadb8e2fb2341eae90",
+  "0x567ccffad113f74357fc54863e5fcda75e190819",
+  "0x7adac85639050c1dea443889e3b4c4adb26ec593",
+];
 const TEST_POOL = "0x1111111111111111111111111111111111111111";
 
 const checks: Array<() => void> = [
@@ -172,6 +179,34 @@ const checks: Array<() => void> = [
       [COFFEEBABE],
     );
   }),
+  () => expectPass("current competitor profile accepts all four swept EOAs", () => {
+    const artifact = manualArtifact();
+    artifact.watchlist_profile = LIVE_PROFILE;
+    artifact.watchlist = LIVE_EOAS;
+    artifact.findings = LIVE_EOAS.map((eoa, index) => ({
+      eoa,
+      swept: true,
+      txCount: index === 0 ? 1 : 0,
+      method: "local reth block sweep",
+      analysis_mode: index === 0 ? "full" : "sample",
+      txs: index === 0 ? artifact.findings[0].txs : [],
+      sampleSize: index === 0 ? undefined : 0,
+    }));
+    validateManualArtifact(artifact, { from: 1, to: 2 }, LIVE_EOAS, false, undefined, LIVE_PROFILE);
+  }),
+  () => expectFail("current competitor profile rejects a missing configured EOA", () => {
+    const artifact = manualArtifact();
+    artifact.watchlist_profile = LIVE_PROFILE;
+    artifact.watchlist = LIVE_EOAS.slice(0, 3);
+    validateManualArtifact(
+      artifact,
+      { from: 1, to: 2 },
+      LIVE_EOAS.slice(0, 3),
+      false,
+      undefined,
+      LIVE_PROFILE,
+    );
+  }, `watchlist must include ${LIVE_EOAS[3]}`),
   () => expectPass("coverage KPI excludes explicitly non-comparable tx venues", () => {
     const artifact = manualArtifact();
     artifact.findings[0].txCount = 2;

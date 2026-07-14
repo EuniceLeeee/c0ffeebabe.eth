@@ -34,7 +34,7 @@
 ## External Production Calibration
 - **window / tool artifact:**
 - **classifier calibration:** capability query + successful tool receipt(s) · pass/fail · sample count
-- **coffeebabe + watchlist sweep:**
+- **current competitor-profile sweep:**
 - **comparable filter:** conserving `atomic_loop`; victim-independent in blockscan-only, verified
   swap/oracle victim permitted in dual
 - **excluded:** inventory · sandwich · keeper/liquidation · JIT-LP · standing-credit
@@ -229,7 +229,8 @@ When a later main commit resolves a retained experiment, add a main-committed cl
 ```step1
 run_id: <experiment_id>
 window_blocks: <from>..<to>
-watchlist: 0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2fc483527b8ef99eb5d9b44875f005ba1fae13
+watchlist: 0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0x3e00d14c2fc4bada34f57fdadb8e2fb2341eae90,0x567ccffad113f74357fc54863e5fcda75e190819,0x7adac85639050c1dea443889e3b4c4adb26ec593
+watchlist_profile: live-competitors-20260714-v1
 artifact: docs/research/reports/step1-<experiment_id>.json
 method: manual-onchain-trace
 fable_manual: no

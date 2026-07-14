@@ -62,9 +62,9 @@ Events + local reth live on the NODE (run via SSM); the events path is the runni
   a pure metrics/deploy window (a metrics gate answers "did we regress"; Step-1 answers "what did competitors
   capture that we missed"). **Precondition: `SEARCHER_EVENTS_PATH` set before the window** (verify the events
   file writes right after the banner) — a window without structured JSONL is not a valid Hermes window.
-  - **WATCHLIST (seed):** `0xc0ffeebabe5d496b2dde509f9fa189c25cf29671` (coffeebabe), `0xae2Fc483527B8EF99EB5D9B44875F005ba1FaE13`.
+  - **WATCHLIST (current profile):** load `analysis/config/live-competitors.json`; never copy addresses into a second list. Sweep every configured EOA and its executor(s). The Step-1 block and artifact must name the file's `profile_id`; Coffee remains `full`, the other configured entities are outcome-driven samples.
   - **Both agents run this and cite it.** Each works from PRIMARY sources independently (raw script JSON + own on-chain trace), **never the other's curated facts/conclusion**. Secondary-source-validate ≥1 key tx via Alchemy/Tenderly. **MANUAL analysis, not script-only:** the label is a hypothesis; hand-trace the watchlist's key txs — a root-cause is INVALID unless it names the specific source swap (or proves atomic) from a manual trace.
-- **ENFORCEMENT — the hermes-gate (forcing function).** After EVERY dry-run, `cd analysis && npm run hermes-gate -- <hermes-md>` MUST exit 0 before `Final Approval`. It validates a structured on-disk artifact (prose can't satisfy it) and enforces five analyses: (1) standard `run_analysis` (funnel + `dominant_drop` + `events_source`); (2) per-watchlist-EOA comparison; (3) coffeebabe `analysis_mode:"full"` (EVERY tx hand-analyzed, pools in/out of `runtime-graph-pools.json` + `gap_class`); (4) other bots `analysis_mode:"sample"`; (5) **intake audit — the funnel-EXTERNAL lens** (router-allowlist + MEV-Share intake gaps never ENTER the funnel, so `pipeline_dropped` can't see them). Doctrine the gate encodes: a "private" victim is NOT a human gate until the MEV-Share feed is ruled in; "coverage exhausted" is INVALID without the intake fraction; an `atomic` competitor is a scanner/strategy gap, NOT a market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow. Record `hermes_gate: PASS`.
+- **ENFORCEMENT — the hermes-gate (forcing function).** After EVERY dry-run, `cd analysis && npm run hermes-gate -- <hermes-md>` MUST exit 0 before `Final Approval`. It validates a structured on-disk artifact (prose can't satisfy it) and enforces five analyses: (1) standard `run_analysis` (funnel + `dominant_drop` + `events_source`); (2) per-profile-EOA comparison; (3) every configured `analysis_mode:"full"` entity (EVERY tx hand-analyzed, pools in/out of `runtime-graph-pools.json` + `gap_class`); (4) configured `analysis_mode:"sample"` entities; (5) **intake audit — the funnel-EXTERNAL lens** (router-allowlist + MEV-Share intake gaps never ENTER the funnel, so `pipeline_dropped` can't see them). Doctrine the gate encodes: a "private" victim is NOT a human gate until the MEV-Share feed is ruled in; "coverage exhausted" is INVALID without the intake fraction; an `atomic` competitor is a scanner/strategy gap, NOT a market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow. Record `hermes_gate: PASS`.
 
 ## Rounds — the canonical live-run loop
 Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carries what it can't.
@@ -82,7 +82,8 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  (walk opportunity_seen → plans → solverEntered → simSuccess; simSuccess must be +EV not dust —
                  if dust is the ceiling, ECONOMICS is the blocker). • COMPLEMENTARY (funnel-EXTERNAL) what
                  competitors capture that never enters our funnel (step 3 is the only lens on pools we don't index).
-3. COMPETITOR    MANDATORY: coffeebabe — MANUAL, every live-window tx; 0xae2Fc4… — SAMPLED, size OUTCOME-DRIVEN
+3. COMPETITOR    MANDATORY: every entity in `analysis/config/live-competitors.json`; obey each entity's
+                 `analysis_mode` (`full` means every tx; `sample` means outcome-driven sampling)
    CROSS-REF     (extend a thin window to hours; never conclude a true-negative from a starved sample — the R3 trap).
                  Classify what WE missed (pool/path/unanticipated) + confirm the blocker is on a REAL captured opp.
 4. BLOCKER       Two BLIND-INDEPENDENT analyses of the same raw material, then compare (NOT analyze-then-review —
@@ -222,8 +223,8 @@ merge decision** (a honeypot filter can correctly reduce `quotePositive` and loo
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, use the generated tool index
    after the manual trace to select `competitor-window,classification,block-scan` into an execution manifest,
    then run the selected
-   current tool against coffeebabe `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` (plus the standing
-   watchlist) and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
+   current tool against every entity in `analysis/config/live-competitors.json` (EOA + executor scan
+   addresses, findings attributed to the EOA) and emit the normal Step-1 artifact. Compare B only with **replicable, conserving
    `atomic_loop`** transactions: blockscan-only requires victim independence; dual additionally admits a
    public/MEV-Share swap-or-oracle victim with a verified pre/post counterfactual. The in-tx route must close
    to a priced token and leave no standing position. Exclude

@@ -10,10 +10,11 @@
 # routing_gap is ALSO a standalone column so the structural flag stays visible on non_comparable rows.
 # Runs ON the node (local reth = zero CU for recent windows; older than ~10k blocks needs archive RPC).
 # Usage: census-gap.sh <from-block> <to-block> [watch-csv] [out-dir] [--blockscan-log <path>]
+# Omit watch-csv to use analysis/config/live-competitors.json (EOAs + executors).
 # MEV_ANALYSIS_ROOT may point at a frozen analysis worktree; runtime graph/events still default to champion A.
 set -euo pipefail
 FROM=${1:?from-block}; TO=${2:?to-block}
-WATCH=${3:-0xc0ffeebabe5d496b2dde509f9fa189c25cf29671,0xae2fc483527b8ef99eb5d9b44875f005ba1fae13}
+WATCH=${3:-}
 OUT=${4:-/tmp/census-gap-$FROM-$TO}
 BLOCKSCAN_LOG=${BLOCKSCAN_LOG:-}
 if [ "${5:-}" = "--blockscan-log" ]; then
@@ -25,6 +26,7 @@ fi
 RPC=${RPC:-http://127.0.0.1:8545}
 EVENTS=${EVENTS:-}
 ANALYSIS_ROOT=${MEV_ANALYSIS_ROOT:-/opt/MEV}
+WATCH_CONFIG=${WATCH_CONFIG:-$ANALYSIS_ROOT/analysis/config/live-competitors.json}
 GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-graph-pools.json}
 if [ -z "$BLOCKSCAN_LOG" ]; then
   UNIT_LOG=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null \
@@ -50,6 +52,11 @@ rm -f "$OUT/census.json" "$OUT/census.err" "$OUT/blockscan.log" \
   "$OUT/verdicts.tsv" "$OUT"/pm-0x*.json
 cd "$ANALYSIS_ROOT/analysis"
 
+WATCH_ARGS=(--watch-config "$WATCH_CONFIG")
+if [ -n "$WATCH" ]; then
+  WATCH_ARGS=(--watch "$WATCH")
+fi
+
 # Read the potentially large mixed live log once. The PM parser still needs all
 # block-scan markers to distinguish a rotated target from an in-window absence,
 # but each per-tx process can consume this much smaller lane-only slice.
@@ -59,7 +66,7 @@ if [ -r "$BLOCKSCAN_LOG" ]; then
   grep '\[searcher/blockscan\]' "$BLOCKSCAN_LOG" > "$BLOCKSCAN_INPUT" || true
 fi
 
-npm run -s census-report -- --watch "$WATCH" --from-block "$FROM" --to-block "$TO" \
+npm run -s census-report -- "${WATCH_ARGS[@]}" --from-block "$FROM" --to-block "$TO" \
   --rpc "$RPC" --graph "$GRAPH" --out "$OUT/census.json" >/dev/null 2>"$OUT/census.err" \
   || { echo "census failed:"; tail -3 "$OUT/census.err"; exit 1; }
 jq -e '

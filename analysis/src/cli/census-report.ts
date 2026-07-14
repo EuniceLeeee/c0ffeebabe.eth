@@ -8,6 +8,11 @@ import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import { parseArgs, writeText } from "../util.js";
 import { strategyKindFromTxShape, type StrategyKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
 import {
+  competitorScanAddresses,
+  loadLiveCompetitorProfile,
+  type LiveCompetitorEntity,
+} from "../live-competitors.js";
+import {
   classifyWinnerTxStyle,
   decodeExtraData,
   extractOtherVenues,
@@ -40,7 +45,7 @@ const TX_SHAPE_SWAP_TOPICS = [
   TOPICS.balancerV2Swap,
 ].map(lower);
 
-const USAGE = `Usage: npm run census-report -- --watch <addr[,addr]> --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]`;
+const USAGE = `Usage: npm run census-report -- [--watch <addr[,addr]> | --watch-config <live-competitors.json>] --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]`;
 
 interface BlockWindow {
   from: number;
@@ -170,6 +175,8 @@ export interface CensusReport {
   summary: {
     window: BlockWindow;
     watch: string[];
+    watch_profile?: string;
+    watch_entities?: LiveCompetitorEntity[];
     matched_txs: number;
     qualifying_txs: number;
     actor_batch_candidates: number;
@@ -193,7 +200,12 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || Object.keys(args).length === 0) usage();
 
-  const watch = parseWatch(stringArg(args, "watch"));
+  const watchProfile = args.watch
+    ? undefined
+    : loadLiveCompetitorProfile(args["watch-config"] ? resolveCliPath(String(args["watch-config"])) : undefined);
+  const watch = args.watch
+    ? parseWatch(stringArg(args, "watch"))
+    : competitorScanAddresses(watchProfile!);
   const fromBlock = integerArg(args, "from-block");
   const toBlock = integerArg(args, "to-block");
   const rpcUrl = stringArg(args, "rpc");
@@ -280,6 +292,10 @@ async function main(): Promise<void> {
     watch,
     blockFingerprints,
   );
+  if (watchProfile) {
+    report.summary.watch_profile = watchProfile.profile_id;
+    report.summary.watch_entities = watchProfile.entities;
+  }
   const json = `${JSON.stringify(report, jsonReplacer, 2)}\n`;
   process.stdout.write(json);
   if (outPath) await writeText(outPath, json);

@@ -87,6 +87,9 @@ test("census-gap defaults to the runtime routing graph", async () => {
   assert.match(script, /EVENTS=\$\{EVENTS:-\/var\/log\/mev\/events\/searcher-live\.jsonl\}/);
   assert.match(script, /events file unreadable: \$EVENTS/);
   assert.match(script, /--blockscan-log "\$BLOCKSCAN_INPUT"/);
+  assert.match(script, /WATCH_CONFIG=\$\{WATCH_CONFIG:-\$ANALYSIS_ROOT\/analysis\/config\/live-competitors\.json\}/);
+  assert.match(script, /WATCH_ARGS=\(--watch-config "\$WATCH_CONFIG"\)/);
+  assert.doesNotMatch(script, /0xae2fc483527b8ef99eb5d9b44875f005ba1fae13/i);
 });
 
 test("census-gap excludes stale and failed postmortem artifacts", async () => {

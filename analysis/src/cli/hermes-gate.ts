@@ -17,6 +17,11 @@ import {
   parseMethodTraceFields,
   type MethodTraceField,
 } from "../learning/method-trace.js";
+import {
+  competitorEoas,
+  fullAnalysisEoas,
+  loadLiveCompetitorProfile,
+} from "../live-competitors.js";
 
 /** Walk up from a path to the git repo root (dir containing .git); fallback = cwd. */
 function repoRoot(from: string): string {
@@ -45,7 +50,8 @@ function repoRoot(from: string): string {
  *   ```step1
  *   run_id: 20260702-v3fork
  *   window_blocks: 25442352..25442520
- *   watchlist: 0xc0ffee...,0xae2f...
+ *   watchlist: <EOAs from analysis/config/live-competitors.json>
+ *   watchlist_profile: <profile_id from analysis/config/live-competitors.json>
  *   artifact: docs/research/reports/step1-20260702-v3fork.json
  *   method: manual-onchain-trace   # or: live-loss-watch
  *   fable_manual: no               # yes|no
@@ -335,7 +341,7 @@ function parseAddrs(v: string): string[] {
 }
 
 // EOAs that MUST be analyzed at full depth (every tx), not sampled.
-const REQUIRE_FULL = new Set(["0xc0ffeebabe5d496b2dde509f9fa189c25cf29671"]);
+const LEGACY_REQUIRE_FULL = new Set(["0xc0ffeebabe5d496b2dde509f9fa189c25cf29671"]);
 
 export function validateTxRecord(tx: any, eoa: string, win: { from: number; to: number }): void {
   if (!/^0x[a-f0-9]{64}$/i.test(String(tx.hash ?? ""))) fail(`tx in ${eoa} missing valid hash`);
@@ -399,15 +405,22 @@ export function validateIntakeAudit(json: any): void {
 
 export function validateAbExternalCalibration(
   json: any,
-  context?: { artifactPath: string; window: { from: number; to: number } },
+  context?: { artifactPath: string; window: { from: number; to: number }; watchlistProfile?: string },
 ): void {
   const calibration = json?.ab_external_calibration;
   if (!calibration || typeof calibration !== "object" || Array.isArray(calibration)) {
     return fail("artifact.ab_external_calibration missing for A/B cycle");
   }
-  if (String(calibration.competitor ?? "").toLowerCase()
-      !== "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671") {
-    fail("ab_external_calibration.competitor must be coffeebabe");
+  const declaredCompetitors = Array.isArray(calibration.competitors)
+    ? calibration.competitors.map((address: unknown) => String(address).toLowerCase())
+    : [String(calibration.competitor ?? "").toLowerCase()].filter(Boolean);
+  const expectedCompetitors = context?.watchlistProfile
+    ? competitorEoas(loadLiveCompetitorProfile())
+    : [...LEGACY_REQUIRE_FULL];
+  for (const expected of expectedCompetitors) {
+    if (!declaredCompetitors.includes(expected)) {
+      fail(`ab_external_calibration.competitors missing ${expected}`);
+    }
   }
   if (calibration.strategy_kind !== "block-scan" || calibration.comparable_filter !== "atomic_loop") {
     fail("ab_external_calibration must compare block-scan against comparable_filter=atomic_loop");
@@ -614,6 +627,7 @@ export function validateManualArtifact(
   watchlist: string[],
   requireAbCalibration = false,
   artifactPath?: string,
+  watchlistProfile?: string,
 ): void {
   if (!json || typeof json !== "object") return fail("artifact is not a JSON object");
   const w = json.window;
@@ -630,16 +644,29 @@ export function validateManualArtifact(
   validateIntakeAudit(json);
   if (requireAbCalibration) validateAbExternalCalibration(
     json,
-    artifactPath ? { artifactPath, window: win } : undefined,
+    artifactPath ? { artifactPath, window: win, watchlistProfile } : undefined,
   );
+
+  let requiredWatchlist: string[] = [];
+  let requireFull = LEGACY_REQUIRE_FULL;
+  if (watchlistProfile) {
+    const profile = loadLiveCompetitorProfile();
+    if (watchlistProfile !== profile.profile_id) {
+      fail(`step1.watchlist_profile ${watchlistProfile} != current profile ${profile.profile_id}`);
+    }
+    if (String(json.watchlist_profile ?? "") !== watchlistProfile) {
+      fail(`artifact.watchlist_profile must equal ${watchlistProfile}`);
+    }
+    requiredWatchlist = competitorEoas(profile);
+    requireFull = fullAnalysisEoas(profile);
+  }
 
   const aw: string[] = Array.isArray(json.watchlist) ? json.watchlist.map((s: string) => String(s).toLowerCase()) : [];
   for (const addr of watchlist) {
     if (!aw.includes(addr)) fail(`artifact.watchlist missing declared watchlist addr ${addr}`);
   }
-  // coffeebabe must always be in the watchlist for a window
-  for (const req of REQUIRE_FULL) {
-    if (!watchlist.includes(req)) fail(`watchlist must include ${req} (mandatory full analysis)`);
+  for (const req of watchlistProfile ? requiredWatchlist : [...LEGACY_REQUIRE_FULL]) {
+    if (!watchlist.includes(req)) fail(`watchlist must include ${req} (competitor profile requirement)`);
   }
   if (!Array.isArray(json.findings) || json.findings.length === 0) {
     return fail("artifact.findings is empty — no watchlist EOA was analyzed");
@@ -654,11 +681,11 @@ export function validateManualArtifact(
     if (!("txCount" in f) || typeof f.txCount !== "number") fail(`findings ${addr}: txCount must be a number from a real window sweep`);
     if (isPlaceholder(String(f.method ?? ""))) fail(`findings ${addr}: method missing (how the sweep was done, e.g. nonce delta)`);
 
-    const isFull = REQUIRE_FULL.has(addr) || f.analysis_mode === "full";
+    const isFull = requireFull.has(addr) || f.analysis_mode === "full";
     const txs: any[] = Array.isArray(f.txs) ? f.txs : [];
 
     if (isFull) {
-      // (3) coffeebabe: EVERY tx must be hand-analyzed
+      // Full-mode entities: EVERY tx must be hand-analyzed.
       if (typeof f.txCount === "number" && f.txCount > 0 && txs.length !== f.txCount) {
         fail(`findings ${addr} is FULL mode: txs analyzed (${txs.length}) != txCount (${f.txCount}) — every tx must be analyzed`);
       }
@@ -750,7 +777,14 @@ function main(): void {
               process.exit(0);
             }
           } else {
-            validateManualArtifact(json, win, watchlist, /```ab_experiment\s*\n/.test(md), artifactPath);
+            validateManualArtifact(
+              json,
+              win,
+              watchlist,
+              /```ab_experiment\s*\n/.test(md),
+              artifactPath,
+              step1.watchlist_profile,
+            );
           }
         }
       }

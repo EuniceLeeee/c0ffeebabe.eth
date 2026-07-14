@@ -80,8 +80,8 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 1. **External production calibration:** after the independent manual trace, run `tool-index --check`, query
    `classification,calibration` and `competitor-window,classification,block-scan` into execution manifests,
    then run the selected IDs through `tool-run` with the exact measured window and
-   recommended coverage set and any justified related cross-check on the same window for coffeebabe
-   `0xC0ffeEBABE5D496B2DDE509f9fa189C25cF29671` and the standing watchlist. Keep only conserving,
+   recommended coverage set and any justified related cross-check on the same window for every EOA and
+   executor in `analysis/config/live-competitors.json`; record its exact `profile_id`. Keep only conserving,
    replicable `atomic_loop` takes. Blockscan-only requires victim independence; dual may include a verified
    public/MEV-Share swap-or-oracle backrun. Exclude inventory, sandwich, keeper, JIT-LP, and standing-credit
    before gap
