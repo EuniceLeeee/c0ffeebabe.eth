@@ -289,10 +289,12 @@
         "issue": "AppleDouble ._* metadata caused node-only false CLI failures and could be indexed as repository scripts",
         "evidence": "node error: analysis CLI has no package-script index entry: src/cli/._live-loss.ts; the real live-loss.ts is registered in analysis/package.json",
         "codify_target": "ignore only the reserved ._* metadata namespace in CLI/script discovery, remove those sidecars after deploy backup, and retain orphan-CLI detection in regression coverage",
-        "status": "open"
+        "codify_commit": "b420a293e7fe81c42d014eb297d541fc9f1c6b77",
+        "status": "codified",
+        "validation": "analysis build; tool-index 10/10 including AppleDouble plus ordinary orphan fixture; local catalog check indexed 150; node rerun required after deploy"
       },
       "created_at": "2026-07-14T06:39:00.000Z",
-      "updated_at": "2026-07-14T06:39:00.000Z"
+      "updated_at": "2026-07-14T06:43:00.000Z"
     }
   ]
 }
