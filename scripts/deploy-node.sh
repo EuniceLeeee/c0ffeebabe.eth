@@ -164,11 +164,15 @@ PY
   fi
 fi
 
-if [ -f "$REPO/.mempool" ] && [ ! -f "$REPO/.backrun" ]; then
-  abort_runtime ".mempool requires .backrun; public pending flow cannot run without the backrun lane"
+if { [ -f "$REPO/.mempool" ] || [ -f "$REPO/.mev-share" ]; } && [ ! -f "$REPO/.backrun" ]; then
+  abort_runtime "victim-source markers require .backrun"
+fi
+if [ -f "$REPO/.backrun" ] && [ ! -f "$REPO/.mempool" ] && [ ! -f "$REPO/.mev-share" ]; then
+  abort_runtime ".backrun requires .mempool and/or .mev-share"
 fi
 if [ -f "$REPO/.backrun" ]; then BACKRUN_VAL=1; else BACKRUN_VAL=0; fi
 if [ -f "$REPO/.mempool" ]; then MEMPOOL_VAL=1; else MEMPOOL_VAL=0; fi
+if [ -f "$REPO/.mev-share" ]; then MEV_SHARE_VAL=1; else MEV_SHARE_VAL=0; fi
 
 cd "$REPO" || abort_runtime "missing repository $REPO"
 DISCOVERY_TO_BLOCK=$(curl -sS "$LOCAL_RPC" -H 'content-type: application/json' \
@@ -182,7 +186,7 @@ recover_running_env() {
     [ -n "$line" ] || continue
     key=${line%%=*}
     case "$key" in
-      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
+      SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT) continue ;;
       SEARCHER_*) echo "$line"; continue ;;
     esac
     for wanted in $NON_SEARCHER_KEYS; do
@@ -227,10 +231,10 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # measured 100% phantom-victim rate — pure ghost flow that starved the mempool/atomic paths of CPU).
   # Ingest+sim only (submission also gated by allowHashOnlySubmit). Create the marker to re-enable.
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"
-  # Victim sources are independently marker-controlled. .backrun enables MEV-Share processing;
-  # .mempool additionally enables the public pending stream and is rejected without .backrun.
+  # Victim sources are independently marker-controlled behind the shared backrun lane.
   echo "SEARCHER_ENABLE_BACKRUN=$BACKRUN_VAL" >> "$tmp"
   echo "SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_VAL" >> "$tmp"
+  echo "SEARCHER_ENABLE_MEV_SHARE=$MEV_SHARE_VAL" >> "$tmp"
   echo "SEARCHER_EAGER_STATE_BACKEND=$BACKRUN_VAL" >> "$tmp"
   echo "SEARCHER_ANVIL_PORT=$ANVIL_PORT" >> "$tmp"
   canonicalize_env "$tmp" \
@@ -244,7 +248,7 @@ else
   EVENTS_PATH=${SEARCHER_EVENTS_PATH:-${EXISTING_EVENTS_PATH:-$DEFAULT_EVENTS_PATH}}
   tmp=$(mktemp)
   cp -f "$ENVF" "$ENVF.bak-$TS" 2>/dev/null
-  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
+  [ -f "$ENVF" ] && grep -v -E '^(SEARCHER_DRY_RUN|SEARCHER_OPP_TTL_MS|SEARCHER_POOL_UNIVERSE_TOP_N|SEARCHER_DISCOVERY_TO_BLOCK|SEARCHER_EVENTS_PATH|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_FORCE_INCLUDE_ROUTERS_PATH|SEARCHER_BRIBE_ALL_ABOVE_GAS|SEARCHER_ENABLE_HASH_ONLY|SEARCHER_ENABLE_BACKRUN|SEARCHER_ENABLE_MEMPOOL|SEARCHER_ENABLE_MEV_SHARE|SEARCHER_EAGER_STATE_BACKEND|SEARCHER_ANVIL_PORT|SEARCHER_ENABLE_PROTOCOL_EDGES|SEARCHER_ENABLE_BLOCK_SCAN|SEARCHER_BLOCKSCAN_SUBMIT)=' "$ENVF" > "$tmp"
   echo "SEARCHER_OPP_TTL_MS=$OPP_TTL_MS" >> "$tmp"
   echo "SEARCHER_POOL_UNIVERSE_TOP_N=$POOL_UNIVERSE_TOP_N" >> "$tmp"
   echo "SEARCHER_DISCOVERY_TO_BLOCK=$DISCOVERY_TO_BLOCK" >> "$tmp"
@@ -259,6 +263,7 @@ else
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share consumption marker-gated, DEFAULT OFF (2026-07-07 ghost flow)
   echo "SEARCHER_ENABLE_BACKRUN=$BACKRUN_VAL" >> "$tmp"
   echo "SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_VAL" >> "$tmp"
+  echo "SEARCHER_ENABLE_MEV_SHARE=$MEV_SHARE_VAL" >> "$tmp"
   echo "SEARCHER_EAGER_STATE_BACKEND=$BACKRUN_VAL" >> "$tmp"
   echo "SEARCHER_ANVIL_PORT=$ANVIL_PORT" >> "$tmp"
   canonicalize_env "$tmp" \
@@ -468,8 +473,10 @@ PROCESS_UNIVERSE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null \
   | sed -n 's/^SEARCHER_POOL_UNIVERSE_PATH=//p' | tail -1)
 BACKRUN_EXPECTED=$BACKRUN_VAL
 MEMPOOL_EXPECTED=$MEMPOOL_VAL
+MEV_SHARE_EXPECTED=$MEV_SHARE_VAL
 BACKRUN=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_BACKRUN=$BACKRUN_EXPECTED")
 MEMPOOL=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_MEMPOOL=$MEMPOOL_EXPECTED")
+MEV_SHARE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | grep -c "^SEARCHER_ENABLE_MEV_SHARE=$MEV_SHARE_EXPECTED")
 PROCESS_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_ANVIL_PORT=//p' | tail -1)
 PROCESS_EAGER_STATE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_EAGER_STATE_BACKEND=//p' | tail -1)
 PROCESS_RUNTIME_COMMIT=$(process_env_value SEARCHER_RUNTIME_COMMIT "$NEWPID")
@@ -483,6 +490,9 @@ if [ "$BACKRUN" != "1" ]; then
 fi
 if [ "$MEMPOOL" != "1" ]; then
   abort_runtime "restarted process SEARCHER_ENABLE_MEMPOOL != $MEMPOOL_EXPECTED"
+fi
+if [ "$MEV_SHARE" != "1" ]; then
+  abort_runtime "restarted process SEARCHER_ENABLE_MEV_SHARE != $MEV_SHARE_EXPECTED"
 fi
 if [ "$PROCESS_ANVIL_PORT" != "$ANVIL_PORT" ]; then
   abort_runtime "restarted process SEARCHER_ANVIL_PORT != $ANVIL_PORT"
@@ -534,6 +544,13 @@ tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep "\[searcher/live\] mempool=$( [ "$MEMPOOL_EXPECTED" = "1" ] && echo enabled || echo disabled )" >/dev/null \
   || abort_runtime "mempool startup banner does not match marker-controlled posture"
+tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
+  | grep "\[searcher/live\] mevshare=$( [ "$MEV_SHARE_EXPECTED" = "1" ] && echo enabled || echo disabled )" >/dev/null \
+  || abort_runtime "MEV-Share startup banner does not match marker-controlled posture"
+if [ "$MEV_SHARE_EXPECTED" = "0" ]; then
+  ! tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null | grep -q 'MEV-Share SSE connected' \
+    || abort_runtime "MEV-Share connected despite disabled marker posture"
+fi
 tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null \
   | grep -F "[searcher/live] events emit → $EVENTS_PATH" >/dev/null \
   || abort_runtime "events telemetry banner missing for $EVENTS_PATH"

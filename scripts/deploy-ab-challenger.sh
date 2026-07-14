@@ -53,6 +53,14 @@ lane_mode() {
     *) die "AB_LANE_MODE must be blockscan-only|dual" ;;
   esac
 }
+victim_mode() {
+  local mode
+  mode=$(env_get AB_VICTIM_MODE); mode=${mode:-both}
+  case "$mode" in
+    public-only|both) printf '%s\n' "$mode" ;;
+    *) die "AB_VICTIM_MODE must be public-only|both" ;;
+  esac
+}
 file_env_get() { sed -n "s/^$2=//p" "$1" | tail -1; }
 process_env_get() {
   tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | tail -1
@@ -466,14 +474,17 @@ preflight() {
   [ -f "$ENVF" ] || die "missing $ENVF"
   [ "$(stat -c %a "$ENVF")" = "600" ] || die "$ENVF must be mode 600"
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] || die "champion unit is not active"
-  local apid mode expected_backrun expected_mempool a_rpc a_ws a_log a_runtime_commit a_router_path
+  local apid mode sources expected_backrun expected_mempool expected_mev_share a_rpc a_ws a_log a_runtime_commit a_router_path
   mode=$(lane_mode)
+  sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
     expected_backrun=1
     expected_mempool=1
+    [ "$sources" = "both" ] && expected_mev_share=1 || expected_mev_share=0
   else
     expected_backrun=0
     expected_mempool=0
+    expected_mev_share=0
   fi
   apid=$(systemctl show -p MainPID --value "$A_UNIT")
   [ -r "/proc/$apid/environ" ] || die "cannot read champion environment"
@@ -481,7 +492,7 @@ preflight() {
   chmod 600 "$A_PROCESS_ENV"
   for pair in \
     SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
-    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ANVIL_PORT=8555 \
+    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ENABLE_MEV_SHARE=$expected_mev_share SEARCHER_ANVIL_PORT=8555 \
     SEARCHER_EAGER_STATE_BACKEND=$expected_backrun \
     SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8556; do
     local key=${pair%%=*} expected=${pair#*=}
@@ -504,7 +515,7 @@ preflight() {
 
   for pair in \
     SEARCHER_DRY_RUN=0 SEARCHER_EV_GATE=1 SEARCHER_ENABLE_BACKRUN=$expected_backrun \
-    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ANVIL_PORT=8566 \
+    SEARCHER_ENABLE_MEMPOOL=$expected_mempool SEARCHER_ENABLE_MEV_SHARE=$expected_mev_share SEARCHER_ANVIL_PORT=8566 \
     SEARCHER_EAGER_STATE_BACKEND=$expected_backrun \
     SEARCHER_ENABLE_BLOCK_SCAN=1 SEARCHER_BLOCKSCAN_SUBMIT=1 SEARCHER_BLOCKSCAN_ANVIL_PORT=8567; do
     local key=${pair%%=*} expected=${pair#*=}
@@ -516,8 +527,15 @@ preflight() {
   check_wallet_envelope "$ENVF" "$EXPECTED_WALLET" "$EXPECTED_BOTVM" challenger "$ROOT/.b-start-balance-wei"
   if [ "$mode" = "dual" ]; then
     a_log=$(unit_log_path "$A_UNIT" /var/log/mev-live.log)
-    current_generation_has "$a_log" 'MEV-Share SSE connected' \
-      || die "champion current process has not connected its MEV-Share victim stream"
+    if [ "$expected_mev_share" = "1" ]; then
+      current_generation_has "$a_log" 'MEV-Share SSE connected' \
+        || die "champion current process has not connected its MEV-Share victim stream"
+    else
+      current_generation_has "$a_log" '\[searcher/live\] mevshare=disabled' \
+        || die "champion did not confirm MEV-Share is disabled"
+      ! current_generation_has "$a_log" 'MEV-Share SSE connected' \
+        || die "champion unexpectedly connected MEV-Share"
+    fi
     [ "$(current_generation_mempool_state "$a_log")" = "connected" ] \
       || die "champion public mempool subscription is not currently connected"
   fi
@@ -528,14 +546,17 @@ run_preflight_safely() {
 }
 
 validate_running_pair() {
-  local mode expected_backrun expected_mempool a_pid b_pid a_log b_log key expected a_router_path b_router_path
+  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path
   mode=$(lane_mode)
+  sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
     expected_backrun=1
     expected_mempool=1
+    [ "$sources" = "both" ] && expected_mev_share=1 || expected_mev_share=0
   else
     expected_backrun=0
     expected_mempool=0
+    expected_mev_share=0
   fi
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] || die "champion unit is inactive"
   [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] || die "challenger unit is inactive"
@@ -565,6 +586,10 @@ validate_running_pair() {
     || die "champion mempool posture drift"
   [ "$(process_env_get "$b_pid" SEARCHER_ENABLE_MEMPOOL)" = "$expected_mempool" ] \
     || die "challenger mempool posture drift"
+  [ "$(process_env_get "$a_pid" SEARCHER_ENABLE_MEV_SHARE)" = "$expected_mev_share" ] \
+    || die "champion MEV-Share posture drift"
+  [ "$(process_env_get "$b_pid" SEARCHER_ENABLE_MEV_SHARE)" = "$expected_mev_share" ] \
+    || die "challenger MEV-Share posture drift"
   [ "$(process_env_get "$a_pid" SEARCHER_EAGER_STATE_BACKEND)" = "$expected_backrun" ] \
     || die "champion eager-state posture drift"
   [ "$(process_env_get "$b_pid" SEARCHER_EAGER_STATE_BACKEND)" = "$expected_backrun" ] \
@@ -590,8 +615,13 @@ validate_running_pair() {
   a_log=$(state_field a_log_path)
   b_log=$(state_field b_log_path)
   if [ "$mode" = "dual" ]; then
-    current_generation_has "$a_log" 'MEV-Share SSE connected' || die "champion victim stream missing"
-    current_generation_has "$b_log" 'MEV-Share SSE connected' || die "challenger victim stream missing"
+    if [ "$expected_mev_share" = "1" ]; then
+      current_generation_has "$a_log" 'MEV-Share SSE connected' || die "champion victim stream missing"
+      current_generation_has "$b_log" 'MEV-Share SSE connected' || die "challenger victim stream missing"
+    else
+      ! current_generation_has "$a_log" 'MEV-Share SSE connected' || die "champion unexpected MEV-Share stream"
+      ! current_generation_has "$b_log" 'MEV-Share SSE connected' || die "challenger unexpected MEV-Share stream"
+    fi
     [ "$(current_generation_mempool_state "$a_log")" = "connected" ] \
       || die "champion public mempool subscription disconnected"
     [ "$(current_generation_mempool_state "$b_log")" = "connected" ] \
@@ -611,14 +641,17 @@ validate_running_pair() {
 
 build_runtime_env() {
   local experiment=$1 b_commit=$2 input_mode allowed a_env runtime_env a_common b_common a_pool_path a_sse b_sse b_cap
-  local mode expected_backrun expected_mempool
+  local mode sources expected_backrun expected_mempool expected_mev_share
   mode=$(lane_mode)
+  sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
     expected_backrun=1
     expected_mempool=1
+    [ "$sources" = "both" ] && expected_mev_share=1 || expected_mev_share=0
   else
     expected_backrun=0
     expected_mempool=0
+    expected_mev_share=0
   fi
   input_mode=$(env_get AB_INPUT_MODE); input_mode=${input_mode:-shared}
   [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] || die "AB_INPUT_MODE must be shared|challenger"
@@ -660,6 +693,7 @@ SEARCHER_DRY_RUN=0
 SEARCHER_EV_GATE=1
 SEARCHER_ENABLE_BACKRUN=$expected_backrun
 SEARCHER_ENABLE_MEMPOOL=$expected_mempool
+SEARCHER_ENABLE_MEV_SHARE=$expected_mev_share
 SEARCHER_EAGER_STATE_BACKEND=$expected_backrun
 SEARCHER_ENABLE_BLOCK_SCAN=1
 SEARCHER_BLOCKSCAN_SUBMIT=1
@@ -826,7 +860,7 @@ resolve_a_universe() {
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
-  local requested_lane_mode requested_shakedown branch_tip candidate_report
+  local requested_lane_mode requested_victim_mode requested_shakedown branch_tip candidate_report
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
@@ -841,6 +875,7 @@ deploy() {
   [ -z "$requested_config_delta" ] \
     || die "A/B candidate config deltas are forbidden; change one reviewed code variable instead"
   requested_lane_mode=$(lane_mode)
+  requested_victim_mode=$(victim_mode)
   requested_shakedown=$(env_get AB_SHAKEDOWN); requested_shakedown=${requested_shakedown:-0}
   [ "$requested_shakedown" = "0" ] || [ "$requested_shakedown" = "1" ] \
     || die "AB_SHAKEDOWN must be 0|1"
@@ -1001,14 +1036,26 @@ deploy() {
   [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] \
     || safety_abort challenger_failed_to_start
   grep -q '\[searcher/live\] mode=live' "$LOG" || safety_abort challenger_live_banner_missing
-  local mode
+  local mode sources expected_mev_share
   mode=$(lane_mode)
+  sources=$(victim_mode)
+  if [ "$mode" = "dual" ] && [ "$sources" = "both" ]; then
+    expected_mev_share=1
+  else
+    expected_mev_share=0
+  fi
   if [ "$mode" = "dual" ]; then
     grep -q 'backrun=enabled' "$LOG" || safety_abort challenger_backrun_banner_missing
     grep -q 'mempool=enabled' "$LOG" || safety_abort challenger_mempool_banner_missing
   else
     grep -q 'backrun=disabled' "$LOG" || safety_abort challenger_backrun_banner_mismatch
     grep -q 'mempool=disabled' "$LOG" || safety_abort challenger_mempool_banner_mismatch
+    ! grep -q 'MEV-Share SSE connected' "$LOG" || safety_abort challenger_unexpected_mev_share_connection
+    ! grep -q 'src=mev-share' "$LOG" || safety_abort challenger_unexpected_mev_share_hint
+  fi
+  grep -q "mevshare=$( [ "$expected_mev_share" = "1" ] && echo enabled || echo disabled )" "$LOG" \
+    || safety_abort challenger_mev_share_banner_mismatch
+  if [ "$expected_mev_share" = "0" ]; then
     ! grep -q 'MEV-Share SSE connected' "$LOG" || safety_abort challenger_unexpected_mev_share_connection
     ! grep -q 'src=mev-share' "$LOG" || safety_abort challenger_unexpected_mev_share_hint
   fi
@@ -1023,15 +1070,17 @@ deploy() {
   [ "$scan_ready" = "1" ] \
     || safety_abort challenger_first_blockscan_timeout
   if [ "$mode" = "dual" ]; then
-    local victim_ready=0
-    for _ in $(seq 1 60); do
-      if grep -q 'MEV-Share SSE connected' "$LOG"; then
-        victim_ready=1
-        break
-      fi
-      sleep 1
-    done
-    [ "$victim_ready" = "1" ] || safety_abort challenger_victim_stream_timeout
+    if [ "$expected_mev_share" = "1" ]; then
+      local victim_ready=0
+      for _ in $(seq 1 60); do
+        if grep -q 'MEV-Share SSE connected' "$LOG"; then
+          victim_ready=1
+          break
+        fi
+        sleep 1
+      done
+      [ "$victim_ready" = "1" ] || safety_abort challenger_victim_stream_timeout
+    fi
     local mempool_ready=0
     for _ in $(seq 1 60); do
       if [ "$(current_generation_mempool_state "$LOG")" = "connected" ]; then
@@ -1050,7 +1099,7 @@ deploy() {
     || safety_abort champion_restarted_during_challenger_warmup
   [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
     || safety_abort champion_commit_changed_during_challenger_warmup
-  if [ "$mode" = "dual" ]; then
+  if [ "$mode" = "dual" ] && [ "$expected_mev_share" = "1" ]; then
     current_generation_has "$(unit_log_path "$A_UNIT" /var/log/mev-live.log)" 'MEV-Share SSE connected' \
       || safety_abort champion_current_victim_stream_missing
   fi
@@ -1115,7 +1164,7 @@ deploy() {
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
     discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \
-    lane_mode "$mode" infrastructure_shakedown "$requested_shakedown" \
+    lane_mode "$mode" victim_mode "$requested_victim_mode" infrastructure_shakedown "$requested_shakedown" \
     a_victim_feed_hash "$a_feed_hash" b_victim_feed_hash "$b_feed_hash" \
     a_blockscan_view_hash "$a_view_hash" b_blockscan_view_hash "$b_view_hash" \
     a_blockscan_view_hash_after "$a_view_hash" b_blockscan_view_hash_after "$b_view_hash" \

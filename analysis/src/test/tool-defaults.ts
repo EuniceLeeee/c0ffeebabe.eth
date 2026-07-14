@@ -128,8 +128,10 @@ test("node deploy installs and verifies production analysis tooling before resta
   );
   assert.match(script, /echo "SEARCHER_EVENTS_PATH=\$EVENTS_PATH"/);
   assert.match(script, /events telemetry banner missing for \$EVENTS_PATH/);
-  assert.match(script, /\.mempool requires \.backrun/);
+  assert.match(script, /victim-source markers require \.backrun/);
+  assert.match(script, /\.backrun requires \.mempool and\/or \.mev-share/);
   assert.match(script, /echo "SEARCHER_ENABLE_MEMPOOL=\$MEMPOOL_VAL"/);
+  assert.match(script, /echo "SEARCHER_ENABLE_MEV_SHARE=\$MEV_SHARE_VAL"/);
   assert.match(script, /echo "SEARCHER_ANVIL_PORT=\$ANVIL_PORT"/);
   assert.match(script, /echo "SEARCHER_EAGER_STATE_BACKEND=\$BACKRUN_VAL"/);
   assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);
@@ -163,6 +165,8 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /blockscan-only\|dual/);
   assert.match(script, /SEARCHER_ENABLE_BACKRUN=\$expected_backrun/);
   assert.match(script, /SEARCHER_ENABLE_MEMPOOL=\$expected_mempool/);
+  assert.match(script, /SEARCHER_ENABLE_MEV_SHARE=\$expected_mev_share/);
+  assert.match(script, /AB_VICTIM_MODE must be public-only\|both/);
   assert.match(script, /SEARCHER_ANVIL_PORT=8566/);
   assert.match(script, /SEARCHER_EAGER_STATE_BACKEND=\$expected_backrun/);
   assert.match(script, /challenger_victim_stream_timeout/);
@@ -192,6 +196,7 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /current_generation_mempool_state/);
   assert.match(script, /champion public mempool subscription is not currently connected/);
   assert.match(script, /challenger_mempool_stream_timeout/);
+  assert.match(script, /challenger_unexpected_mev_share_connection/);
   assert.match(script, /champion running commit does not match checkout HEAD/);
   assert.match(script, /router_snapshot_hash/);
   assert.match(script, /validate_running_pair/);

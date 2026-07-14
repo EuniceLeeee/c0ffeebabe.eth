@@ -5,7 +5,7 @@ import {
   DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
   loadForceIncludeRouters,
 } from "../force-include.js";
-import { buildMempoolToAddressFilter } from "../main.js";
+import { buildMempoolToAddressFilter, victimSourceMode } from "../main.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -20,6 +20,18 @@ const DEBRIDGE = "0x663dc15d3c1ac63ff12e45ab68fea3f0a883c251";
 const UNIV2_ROUTER02 = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
 
 async function main(): Promise<void> {
+  assert(victimSourceMode(false, false, false) === "disabled", "disabled lane has no victim source");
+  assert(victimSourceMode(true, true, false) === "public-mempool", "public-only mode excludes MEV-Share");
+  assert(victimSourceMode(true, false, true) === "mev-share", "MEV-Share-only mode remains explicit");
+  assert(victimSourceMode(true, true, true) === "both", "dual-source mode remains explicit");
+  let emptySourceRejected = false;
+  try {
+    victimSourceMode(true, false, false);
+  } catch {
+    emptySourceRejected = true;
+  }
+  assert(emptySourceRejected, "enabled backrun lane rejects an empty victim-source set");
+
   const dir = mkdtempSync(join(tmpdir(), "mempool-router-filter-"));
   try {
     const emptyPath = join(dir, "empty-routers.json");

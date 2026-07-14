@@ -182,12 +182,14 @@ interface HintLog {
 
 interface LiveConfig {
   rpcUrl: string;
-  /** Enable victim-driven backrun processing from MEV-Share and, optionally, public mempool. */
+  /** Enable victim-driven backrun processing from one or more configured sources. */
   enableBackrun: boolean;
   /** WebSocket URL for public mempool pending-tx subscription (route B). */
   wsUrl: string;
   /** Subscribe to the public mempool as a victim source (route B). */
   enableMempool: boolean;
+  /** Subscribe to MEV-Share as a victim source. */
+  enableMevShare: boolean;
   /** A6 live-enable: admit NEW protocol-conversion edges (wsteth/ERC4626) into the live
    *  graph. Default OFF until the operator's fork-sim + dry-run window; the pre-existing PSM
    *  entry is grandfathered (D4-style) and unaffected. */
@@ -532,11 +534,19 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
 
   const wsUrl = liveWsUrl(rpcUrl);
 
+  const enableBackrun = process.env.SEARCHER_ENABLE_BACKRUN !== "0";
+  const enableMempool = enableBackrun && process.env.SEARCHER_ENABLE_MEMPOOL === "1";
+  const enableMevShare = enableBackrun && process.env.SEARCHER_ENABLE_MEV_SHARE !== "0";
+  if (enableBackrun && !enableMempool && !enableMevShare) {
+    throw new Error("SEARCHER_ENABLE_BACKRUN=1 requires at least one victim source");
+  }
+
   return {
     rpcUrl,
     wsUrl,
-    enableBackrun: process.env.SEARCHER_ENABLE_BACKRUN !== "0",
-    enableMempool: process.env.SEARCHER_ENABLE_MEMPOOL === "1",
+    enableBackrun,
+    enableMempool,
+    enableMevShare,
     enableProtocolEdges: process.env.SEARCHER_ENABLE_PROTOCOL_EDGES === "1",
     mevShareSseUrl: process.env.MEV_SHARE_SSE_URL ?? DEFAULT_MEV_SHARE_SSE_URL,
     liveBackend: parseLiveBackendKind(process.env.SEARCHER_LIVE_BACKEND ?? "rpc"),
@@ -728,13 +738,23 @@ async function main(): Promise<void> {
     blockscanPreemptMarginBps: Number(process.env.SEARCHER_BLOCKSCAN_PREEMPT_MARGIN_BPS ?? 0),
   });
 
-  console.log("[searcher/live] starting V5 MEV-Share searcher");
+  console.log("[searcher/live] starting V5 searcher");
   initEvents();
   console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
-  const victimFeedHash = createHash("sha256").update(config.mevShareSseUrl).digest("hex");
+  const sourceMode = victimSourceMode(
+    config.enableBackrun,
+    config.enableMempool,
+    config.enableMevShare,
+  );
+  const victimFeedHash = createHash("sha256").update(JSON.stringify({
+    sourceMode,
+    mempool: config.enableMempool ? config.wsUrl : null,
+    mevShare: config.enableMevShare ? config.mevShareSseUrl : null,
+  })).digest("hex");
   console.log(`[searcher/live] victim_feed_hash=0x${victimFeedHash}`);
   console.log(`[searcher/live] backrun=${config.enableBackrun ? "enabled" : "disabled"}`);
   console.log(`[searcher/live] mempool=${config.enableMempool ? "enabled" : "disabled"}`);
+  console.log(`[searcher/live] mevshare=${config.enableMevShare ? "enabled" : "disabled"}`);
   console.log(
     `[searcher/live] bribeBps=${config.bribeBps} ` +
       `bribeAllAboveGas=${config.bribeAllAboveGas ? "on" : "off"} ` +
@@ -1591,17 +1611,17 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const hintStream = !config.enableBackrun
+  const mempoolStream = () => {
+    console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
+    return mempoolHints(config.wsUrl, provider, allPools, counters);
+  };
+  const hintStream = sourceMode === "disabled"
     ? disabledHints()
-    : config.enableMempool
-      ? (() => {
-          console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
-          return mergeHints(
-            mevShareHints(config.mevShareSseUrl),
-            mempoolHints(config.wsUrl, provider, allPools, counters),
-          );
-        })()
-      : mevShareHints(config.mevShareSseUrl);
+    : sourceMode === "public-mempool"
+      ? mempoolStream()
+      : sourceMode === "mev-share"
+        ? mevShareHints(config.mevShareSseUrl)
+        : mergeHints(mevShareHints(config.mevShareSseUrl), mempoolStream());
 
   try {
     for await (const hint of hintStream) {
@@ -5183,6 +5203,20 @@ function parseWsJson(data: unknown): Record<string, any> | null {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export type VictimSourceMode = "disabled" | "public-mempool" | "mev-share" | "both";
+
+export function victimSourceMode(
+  enableBackrun: boolean,
+  enableMempool: boolean,
+  enableMevShare: boolean,
+): VictimSourceMode {
+  if (!enableBackrun) return "disabled";
+  if (enableMempool && enableMevShare) return "both";
+  if (enableMempool) return "public-mempool";
+  if (enableMevShare) return "mev-share";
+  throw new Error("backrun lane requires at least one victim source");
 }
 
 function stringField(value: unknown): string | undefined {
