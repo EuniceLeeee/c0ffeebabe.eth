@@ -45,9 +45,8 @@ function testV2FeeMath(): void {
 function testV2FeeTable(): void {
   assert(v2FeeBpsForFactory(UNIV2_FACTORY) === 30n, "UniV2 fee bps should be 30");
   assert(v2FeeBpsForFactory(SUSHI_FACTORY) === 30n, "SushiV2 fee bps should be 30");
-  // Tail forks (incl. this PancakeV2 candidate) are NOT in the table until their
-  // fee is empirically fork-swap-verified — they fall back to the safe 30 default.
-  assert(v2FeeBpsForFactory(PANCAKE_V2_FACTORY) === 30n, "unverified tail factory defaults to 30");
+  // Fork-swap-verified 0.25% fork (see v2-fee.ts proof); other tail forks stay 30.
+  assert(v2FeeBpsForFactory(PANCAKE_V2_FACTORY) === 25n, "verified 0.25% fork should be 25");
   assert(v2FeeBpsForFactory("0x000000000000000000000000000000000000dEaD") === 30n, "unknown factory default");
   assert(v2FeeBpsForFactory(undefined) === 30n, "undefined factory default");
   console.log("[victim-apply] v2 fee table: PASS");
