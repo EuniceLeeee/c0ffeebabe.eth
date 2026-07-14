@@ -193,7 +193,7 @@ export function discoverToolIndex(repoRoot: string): ToolDescriptor[] {
   const scriptRoot = path.join(repoRoot, "scripts");
   const visit = (directory: string): void => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (entry.name === "__pycache__") continue;
+      if (entry.name === "__pycache__" || entry.name.startsWith("._")) continue;
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         visit(absolute);
@@ -240,7 +240,9 @@ export function validateToolIndex(repoRoot: string, tools = discoverToolIndex(re
   const referenced = new Set(tools
     .filter((tool) => tool.package === "analysis" && tool.implementation?.startsWith("src/cli/"))
     .map((tool) => path.basename(tool.implementation!)));
-  for (const file of fs.readdirSync(cliDirectory).filter((file) => file.endsWith(".ts")).sort()) {
+  for (const file of fs.readdirSync(cliDirectory)
+    .filter((file) => file.endsWith(".ts") && !file.startsWith("._"))
+    .sort()) {
     if (!referenced.has(file)) errors.push(`analysis CLI has no package-script index entry: src/cli/${file}`);
   }
   return errors;

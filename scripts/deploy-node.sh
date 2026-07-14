@@ -319,6 +319,9 @@ fi
 # ── 3. Backup dirty files, then update code ──
 git ls-files -m -o --exclude-standard 2>/dev/null | grep -v node_modules > "/tmp/dirty-$TS.txt"
 tar czf "$REPO-deploy-$TS.tar.gz" -T "/tmp/dirty-$TS.txt" 2>/dev/null
+# macOS AppleDouble sidecars are not source files. Preserve them in the backup
+# above, then remove only the two namespaces scanned by the production tool index.
+find "$REPO/analysis/src/cli" "$REPO/scripts" -type f -name '._*' -delete 2>/dev/null || true
 git fetch origin -q || abort_runtime "git fetch origin failed"
 git reset --hard origin/main || abort_runtime "git reset to origin/main failed"
 say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -69,6 +70,32 @@ test("generated index covers every analysis CLI and every curated package/repo t
   const tools = discoverToolIndex(repoRoot);
   assert.deepEqual(validateToolIndex(repoRoot, tools), []);
   assert.ok(tools.length > 80, `expected analysis + listener inventory, got ${tools.length}`);
+});
+
+test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-"));
+  try {
+    fs.mkdirSync(path.join(fixture, "analysis/src/cli"), { recursive: true });
+    fs.mkdirSync(path.join(fixture, "listener"), { recursive: true });
+    fs.mkdirSync(path.join(fixture, "scripts"), { recursive: true });
+    fs.copyFileSync(path.join(repoRoot, "analysis/package.json"), path.join(fixture, "analysis/package.json"));
+    fs.copyFileSync(path.join(repoRoot, "listener/package.json"), path.join(fixture, "listener/package.json"));
+    fs.writeFileSync(path.join(fixture, "analysis/src/cli/live-loss.ts"), "");
+    fs.writeFileSync(path.join(fixture, "analysis/src/cli/._live-loss.ts"), "AppleDouble metadata");
+    fs.writeFileSync(path.join(fixture, "analysis/src/cli/orphan.ts"), "");
+    for (const name of ["census-gap.sh", "deploy-ab-challenger.sh", "deploy-node.sh"]) {
+      fs.writeFileSync(path.join(fixture, "scripts", name), "#!/bin/sh\n");
+    }
+    fs.writeFileSync(path.join(fixture, "scripts/._ghost.sh"), "AppleDouble metadata");
+
+    const tools = discoverToolIndex(fixture);
+    assert.deepEqual(validateToolIndex(fixture, tools), [
+      "analysis CLI has no package-script index entry: src/cli/orphan.ts",
+    ]);
+    assert.equal(tools.some((tool) => tool.id.includes("._ghost.sh")), false);
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 test("production decision cannot under-declare the evidence capability query", () => {

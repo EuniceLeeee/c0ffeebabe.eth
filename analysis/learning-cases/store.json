@@ -266,6 +266,33 @@
       },
       "created_at": "2026-07-13T04:47:49.000Z",
       "updated_at": "2026-07-13T04:47:49.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260714-tool-index-appledouble",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "node_tool_index_treated_appledouble_metadata_as_unregistered_cli",
+      "evidence": {
+        "window": "25528974..25529120",
+        "manual": "local tool-index check passed with 150 tools, while the same commit on the node failed on analysis/src/cli/._live-loss.ts",
+        "canonical_before": "tool-run could not start because node tool-index --check exited 1 before writing a manifest",
+        "reviewer": "019f5f5a-35bd-7413-9de8-68afc90c4e16 independently confirmed an AppleDouble false positive and recommended strict ._* exclusion plus scoped deployment cleanup"
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/tool-index.ts and scripts/deploy-node.sh",
+        "issue": "AppleDouble ._* metadata caused node-only false CLI failures and could be indexed as repository scripts",
+        "evidence": "node error: analysis CLI has no package-script index entry: src/cli/._live-loss.ts; the real live-loss.ts is registered in analysis/package.json",
+        "codify_target": "ignore only the reserved ._* metadata namespace in CLI/script discovery, remove those sidecars after deploy backup, and retain orphan-CLI detection in regression coverage",
+        "status": "open"
+      },
+      "created_at": "2026-07-14T06:39:00.000Z",
+      "updated_at": "2026-07-14T06:39:00.000Z"
     }
   ]
 }
