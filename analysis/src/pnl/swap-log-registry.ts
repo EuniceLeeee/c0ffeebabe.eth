@@ -10,6 +10,10 @@ export interface DecodedSwap {
   direction: SwapDirection;
   poolId: string;
   sizeRaw: bigint;
+  tokenIn?: string;
+  tokenOut?: string;
+  tokenInIndex?: number;
+  tokenOutIndex?: number;
 }
 
 const V2_SWAP_IFACE = new ethers.Interface([
@@ -162,6 +166,8 @@ export function curveSwapFromLog(log: any): DecodedSwap | null {
       ...base,
       direction,
       sizeRaw: tokensSold + tokensBought,
+      tokenInIndex: Number(soldId),
+      tokenOutIndex: Number(boughtId),
     };
   } catch {
     return null;
@@ -186,6 +192,8 @@ export function balancerV2SwapFromLog(log: any): DecodedSwap | null {
       ...base,
       direction,
       sizeRaw: amountIn + amountOut,
+      tokenIn,
+      tokenOut,
     };
   } catch {
     return null;

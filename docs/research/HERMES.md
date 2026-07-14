@@ -110,6 +110,11 @@ machine**: the agent chooses/implements/judges; a thin JSON journal plus small m
 safety, fairness, evidence, recovery, and branch lifecycle. Metrics provide evidence but **never own the
 merge decision** (a honeypot filter can correctly reduce `quotePositive` and look worse numerically).
 
+Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Only changes classified there as
+live-distribution dependent (`flow-admission`, `latency`, `candidate-ranking`) enter this A/B loop; analysis
+tool fixes merge separately, while deterministic searcher fixes must first exhaust replay+short-smoke
+validation. Both entry points share the schema-v3 candidate gate and current production scope.
+
 - **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
 - **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
 - Both are EV-gated and may submit simultaneously. Production Hermes explicitly uses

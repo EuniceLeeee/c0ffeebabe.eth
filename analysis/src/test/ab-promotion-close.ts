@@ -144,6 +144,31 @@ function experiment(
           block_number: 25_519_817,
           expected_net_profit_usd: 1.65,
           evidence: "priced terminal deltas prove positive net profit and no victim dependency",
+          expected_route: [
+            {
+              adapterId: "univ3-swap",
+              slotKind: "swap" as const,
+              target: `0x${"2".repeat(40)}`,
+              poolId: `0x${"2".repeat(40)}`,
+              tokenIn: `0x${"3".repeat(40)}`,
+              tokenOut: `0x${"4".repeat(40)}`,
+            },
+            {
+              adapterId: "erc4626-deposit",
+              slotKind: "protocol" as const,
+              target: `0x${"5".repeat(40)}`,
+              tokenIn: `0x${"4".repeat(40)}`,
+              tokenOut: `0x${"6".repeat(40)}`,
+            },
+            {
+              adapterId: "univ3-swap",
+              slotKind: "swap" as const,
+              target: `0x${"7".repeat(40)}`,
+              poolId: `0x${"7".repeat(40)}`,
+              tokenIn: `0x${"6".repeat(40)}`,
+              tokenOut: `0x${"3".repeat(40)}`,
+            },
+          ],
         },
         classification_review: {
           verdict: "pass" as const,

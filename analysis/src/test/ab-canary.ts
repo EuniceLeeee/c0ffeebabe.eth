@@ -8,6 +8,9 @@ import {
   compareBlockScanLogs,
   parseAbExperiment,
   parseBlockScanLog,
+  readAbLocalReportArtifact,
+  resolveAbLocalReportArtifactPath,
+  resolveAbReportArtifactPath,
   validateAbExperiment,
   validateAbProductionCandidate,
   type AbCompareResult,
@@ -442,6 +445,14 @@ function productionCandidate(tmp: string): AbExperiment {
       block_number: 25_519_817,
       expected_net_profit_usd: 1.65,
       evidence: "priced terminal deltas prove positive net profit and no preceding victim dependency",
+      expected_route: [
+        {
+          adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03",
+        },
+        {
+          adapterId: "protocol-redeem", slotKind: "protocol", tokenIn: "0x02", tokenOut: "0x01", target: "0x04",
+        },
+      ],
     },
     classification_review: {
       verdict: "pass",
@@ -469,6 +480,24 @@ function productionCandidate(tmp: string): AbExperiment {
 test("production candidate schema accepts a dual-lane stage-advancing block-scan declaration", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   assert.deepEqual(validateAbProductionCandidate(productionCandidate(tmp)), []);
+});
+
+test("production candidate requires one complete closed route for scanner and backrun", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-route-"));
+  const missing = productionCandidate(tmp);
+  delete missing.production_evidence!.sample.expected_route;
+  assert.ok(validateAbProductionCandidate(missing)
+    .some((error) => error.includes("expected_route with 2..8")));
+
+  const wrongScope = productionCandidate(tmp);
+  wrongScope.production_evidence!.route_scope = "dex-dex";
+  assert.ok(validateAbProductionCandidate(wrongScope)
+    .some((error) => error.includes("slot kinds")));
+
+  const brokenLoop = productionCandidate(tmp);
+  brokenLoop.production_evidence!.sample.expected_route![1].tokenOut = "0x05";
+  assert.ok(validateAbProductionCandidate(brokenLoop)
+    .some((error) => error.includes("closed token loop")));
 });
 
 test("production candidate gate rejects blockscan-only Hermes deployment", () => {
@@ -500,8 +529,8 @@ test("production candidate schema accepts a reviewed oracle-triggered backrun in
   value.production_evidence!.challenger_stage = "final_sim_success";
   value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
   value.production_evidence!.sample.expected_route = [
-    { adapterId: "univ3-swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
-    { adapterId: "protocol-redeem", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
+    { adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
+    { adapterId: "protocol-redeem", slotKind: "protocol", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
   value.production_evidence!.sample.oracle_route_edge_index = 1;
   value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
@@ -518,8 +547,8 @@ test("oracle-triggered backrun requires a route-bound oracle edge", () => {
   value.production_evidence!.challenger_stage = "final_sim_success";
   value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
   value.production_evidence!.sample.expected_route = [
-    { adapterId: "univ3-swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
-    { adapterId: "protocol-redeem", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
+    { adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
+    { adapterId: "protocol-redeem", slotKind: "protocol", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
   value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
   assert.ok(validateAbProductionCandidate(value, { laneMode: "dual" })
@@ -534,8 +563,8 @@ test("backrun candidate is rejected outside the explicit dual lane", () => {
   value.production_evidence!.posture.victim_dependent = true;
   value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
   value.production_evidence!.sample.expected_route = [
-    { adapterId: "univ2-swap", tokenIn: "0x01", tokenOut: "0x02" },
-    { adapterId: "univ3-swap", tokenIn: "0x02", tokenOut: "0x01" },
+    { adapterId: "univ2-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
+    { adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
   value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
   const errors = validateAbProductionCandidate(value, { laneMode: "blockscan-only" });
@@ -593,6 +622,11 @@ test("successful infrastructure shakedown can close without pretending to be a p
     evidence: "origin/main still equals the tested base",
   };
   assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "decision"), []);
+  const outside = path.join(path.dirname(tmp), `${path.basename(tmp)}-outside.json`);
+  fs.writeFileSync(outside, JSON.stringify(artifact));
+  value.analysis.script_artifact = outside;
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "decision")
+    .some((error) => error.includes("schema-v3 report artifact must be report-relative")));
 });
 
 test("production candidate gate rejects analysis-only or metric-only challengers", () => {
@@ -952,6 +986,50 @@ test("malformed journals fail closed without crashing the validator", () => {
   assert.deepEqual(validateAbExperiment({} as AbExperiment, "/tmp/report.md", "decision"), [
     "analysis object missing",
   ]);
+});
+
+test("schema-v3 report artifacts cannot escape docs/research/reports", () => {
+  assert.equal(
+    resolveAbReportArtifactPath("docs/research/reports/ab-x.md", "tools.json", "tool manifest"),
+    "docs/research/reports/tools.json",
+  );
+  assert.equal(
+    resolveAbReportArtifactPath("docs/research/reports/nested/ab-x.md", "../tools.json", "tool manifest"),
+    "docs/research/reports/tools.json",
+  );
+  assert.throws(
+    () => resolveAbReportArtifactPath("docs/research/reports/ab-x.md", "../stale-tools.json", "tool manifest"),
+    /must stay under docs\/research\/reports/,
+  );
+  assert.throws(
+    () => resolveAbReportArtifactPath("docs/research/ab-x.md", "tools.json", "tool manifest"),
+    /report path must stay under docs\/research\/reports/,
+  );
+});
+
+test("local schema-v3 artifacts cannot escape reports through a symlink", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ab-artifact-path-"));
+  const reports = path.join(repo, "docs/research/reports");
+  fs.mkdirSync(reports, { recursive: true });
+  fs.writeFileSync(path.join(reports, "tools.json"), "{}\n");
+  assert.equal(
+    resolveAbLocalReportArtifactPath(repo, "docs/research/reports/tools.json"),
+    fs.realpathSync(path.join(reports, "tools.json")),
+  );
+  assert.equal(
+    readAbLocalReportArtifact(repo, "docs/research/reports/tools.json").toString("utf8"),
+    "{}\n",
+  );
+  fs.writeFileSync(path.join(repo, "docs/research/stale-tools.json"), "{}\n");
+  fs.symlinkSync("../stale-tools.json", path.join(reports, "escaped.json"));
+  assert.throws(
+    () => resolveAbLocalReportArtifactPath(repo, "docs/research/reports/escaped.json"),
+    /resolves outside docs\/research\/reports/,
+  );
+  assert.throws(
+    () => readAbLocalReportArtifact(repo, "docs/research/reports/escaped.json"),
+    /resolves outside docs\/research\/reports/,
+  );
 });
 
 test("cleanup gate verifies a real no-ff merge and actual local/remote branch deletion", () => {

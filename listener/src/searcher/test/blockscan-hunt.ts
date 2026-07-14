@@ -110,6 +110,15 @@ interface OpportunityReport {
     slotKind: string;
     poolId?: string;
   }>;
+  swapPath: Array<{ pool_id: string; direction: "0for1" | "1for0" }> | null;
+  route: Array<{
+    adapterId: string;
+    slotKind: "swap" | "protocol";
+    target: string;
+    tokenIn: string;
+    tokenOut: string;
+    poolId?: string;
+  }>;
 }
 
 interface SolveReport {
@@ -319,11 +328,14 @@ function emitProductionReplayResult(
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   if (expectedPools.length === 0) return;
+  const expectedSwapPath = parseExpectedSwapPath(process.env.AB_EXPECTED_SWAP_PATH_JSON ?? "");
+  const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
   const expectedProtocol = process.env.AB_EXPECTED_ROUTE_SCOPE === "dex-permissionless-protocol";
-  const opportunityIndex = opportunities.findIndex((entry) => {
-    const pools = new Set(entry.pools.map((pool) => pool.toLowerCase()));
-    return expectedPools.every((pool) => pools.has(pool)) && entry.hasProtocolEdge === expectedProtocol;
-  });
+  const opportunityIndex = opportunities.findIndex((entry) =>
+    entry.swapPath !== null
+    && JSON.stringify(entry.swapPath) === JSON.stringify(expectedSwapPath)
+    && JSON.stringify(entry.route) === JSON.stringify(expectedRoute)
+    && entry.hasProtocolEdge === expectedProtocol);
   const opportunity = opportunityIndex >= 0 ? opportunities[opportunityIndex] : null;
   const solve = opportunityIndex >= 0 ? solved[opportunityIndex] ?? null : null;
   let stage = "not_admitted";
@@ -340,6 +352,10 @@ function emitProductionReplayResult(
     stage,
     expected_pool_ids: expectedPools,
     matched_pool_ids: opportunity?.pools.map((pool) => pool.toLowerCase()) ?? [],
+    expected_swap_path: expectedSwapPath,
+    matched_swap_path: opportunity?.swapPath ?? [],
+    expected_route: expectedRoute,
+    matched_route: opportunity?.route ?? [],
     has_protocol_edge: opportunity?.hasProtocolEdge ?? false,
     closed_route: closedRoute,
     final_sim_success: stage === "final_sim_success",
@@ -813,7 +829,102 @@ function describeOpportunity(
       slotKind: edge.slotKind,
       ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
     })),
+    swapPath: opportunitySwapPath(opp.seedEdges),
+    route: opportunityRoute(opp.seedEdges),
   };
+}
+
+function parseExpectedRoute(value: string): OpportunityReport["route"] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("AB_EXPECTED_ROUTE_JSON must be valid JSON");
+  }
+  if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 8 || parsed.some((step) => {
+    const edge = step as Record<string, unknown>;
+    return typeof edge.adapterId !== "string"
+      || (edge.slotKind !== "swap" && edge.slotKind !== "protocol")
+      || typeof edge.target !== "string"
+      || typeof edge.tokenIn !== "string"
+      || typeof edge.tokenOut !== "string"
+      || (edge.poolId !== undefined && typeof edge.poolId !== "string");
+  })) {
+    throw new Error("AB_EXPECTED_ROUTE_JSON must contain 2..8 complete ordered route edges");
+  }
+  return parsed.map((step) => {
+    const edge = step as OpportunityReport["route"][number];
+    return {
+      adapterId: edge.adapterId,
+      slotKind: edge.slotKind,
+      target: edge.target.toLowerCase(),
+      tokenIn: edge.tokenIn.toLowerCase(),
+      tokenOut: edge.tokenOut.toLowerCase(),
+      ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+    };
+  });
+}
+
+function opportunityRoute(edges: TokenEdge[]): OpportunityReport["route"] {
+  return edges.map((edge) => ({
+    adapterId: edge.adapterId,
+    slotKind: edge.slotKind === "protocol" ? "protocol" : "swap",
+    target: edge.target.toLowerCase(),
+    tokenIn: edge.tokenIn.toLowerCase(),
+    tokenOut: edge.tokenOut.toLowerCase(),
+    ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+  }));
+}
+
+function parseExpectedSwapPath(value: string): Array<{ pool_id: string; direction: "0for1" | "1for0" }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("AB_EXPECTED_SWAP_PATH_JSON must be valid JSON");
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0 || parsed.some((step) => {
+    const entry = step as { pool_id?: unknown; direction?: unknown };
+    return typeof entry?.pool_id !== "string"
+      || (entry.direction !== "0for1" && entry.direction !== "1for0");
+  })) {
+    throw new Error("AB_EXPECTED_SWAP_PATH_JSON must contain ordered pool_id/direction steps");
+  }
+  return parsed.map((step) => {
+    const entry = step as { pool_id: string; direction: "0for1" | "1for0" };
+    return { pool_id: entry.pool_id.toLowerCase(), direction: entry.direction };
+  });
+}
+
+function opportunitySwapPath(
+  edges: TokenEdge[],
+): Array<{ pool_id: string; direction: "0for1" | "1for0" }> | null {
+  const result: Array<{ pool_id: string; direction: "0for1" | "1for0" }> = [];
+  for (const edge of edges) {
+    if (edge.slotKind !== "swap") continue;
+    const direction = edgeSwapDirection(edge);
+    if (!direction) return null;
+    result.push({ pool_id: edgePoolIdentity(edge), direction });
+  }
+  return result;
+}
+
+function edgeSwapDirection(edge: TokenEdge): "0for1" | "1for0" | null {
+  if (edge.curveI !== undefined && edge.curveJ !== undefined) {
+    return edge.curveI < edge.curveJ ? "0for1" : "1for0";
+  }
+  const token0 = (edge.nativeCurrency0 ? ADDR.WETH : edge.poolToken0)?.toLowerCase();
+  const token1 = (edge.nativeCurrency1 ? ADDR.WETH : edge.poolToken1)?.toLowerCase();
+  const tokenIn = edge.tokenIn.toLowerCase();
+  const tokenOut = edge.tokenOut.toLowerCase();
+  if (token0 && token1) {
+    if (tokenIn === token0 && tokenOut === token1) return "0for1";
+    if (tokenIn === token1 && tokenOut === token0) return "1for0";
+  }
+  if (edge.adapterId.toLowerCase().includes("balancer")) {
+    return tokenIn < tokenOut ? "0for1" : "1for0";
+  }
+  return null;
 }
 
 function estimateSpreadBps(

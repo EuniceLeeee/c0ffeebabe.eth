@@ -100,6 +100,8 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
       poolId: CURVE_POOL,
       direction: "0for1",
       sizeRaw: 150n,
+      tokenInIndex: 0,
+      tokenOutIndex: 1,
     },
     {
       name: "curve 1for0 (sold_id > bought_id)",
@@ -112,6 +114,8 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
       poolId: CURVE_POOL,
       direction: "1for0",
       sizeRaw: 150n,
+      tokenInIndex: 1,
+      tokenOutIndex: 0,
     },
     {
       name: "curve underlying 0for1",
@@ -119,6 +123,8 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
       poolId: CURVE_POOL,
       direction: "0for1",
       sizeRaw: 150n,
+      tokenInIndex: 0,
+      tokenOutIndex: 1,
     },
     {
       name: "curve tricrypto 0for1",
@@ -131,6 +137,8 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
       poolId: CURVE_POOL,
       direction: "0for1",
       sizeRaw: 150n,
+      tokenInIndex: 0,
+      tokenOutIndex: 2,
     },
     {
       name: "balancer 0for1 (tokenIn < tokenOut)",
@@ -144,6 +152,8 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
       poolId: BALANCER_POOL_ID,
       direction: "0for1",
       sizeRaw: 150n,
+      tokenIn: lower(TOKEN_A),
+      tokenOut: lower(TOKEN_B),
     },
     {
       name: "balancer 1for0 (tokenIn > tokenOut)",
@@ -157,6 +167,8 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
       poolId: BALANCER_POOL_ID,
       direction: "1for0",
       sizeRaw: 150n,
+      tokenIn: lower(TOKEN_B),
+      tokenOut: lower(TOKEN_A),
     },
   ];
 
@@ -167,6 +179,10 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
     assert.match(decoded.direction, /^(0for1|1for0)$/, `${item.name} direction shape`);
     assert.equal(decoded.direction, item.direction, `${item.name} direction`);
     assert.equal(decoded.sizeRaw, item.sizeRaw, `${item.name} sizeRaw`);
+    assert.equal(decoded.tokenInIndex, item.tokenInIndex, `${item.name} tokenInIndex`);
+    assert.equal(decoded.tokenOutIndex, item.tokenOutIndex, `${item.name} tokenOutIndex`);
+    assert.equal(decoded.tokenIn, item.tokenIn, `${item.name} tokenIn`);
+    assert.equal(decoded.tokenOut, item.tokenOut, `${item.name} tokenOut`);
   }
 });
 

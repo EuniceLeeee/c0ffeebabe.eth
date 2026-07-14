@@ -165,6 +165,10 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   retain-and-advance on inconclusive; auto-runs bounded live).
   Read it **fully** when running such a cycle (the `docs/research/autonomous-*.md` routines do). Hermes rule
   numbers are load-bearing; do not renumber.
+- `docs/research/HISTORICAL-GAP.md` — batch repair from pinned historical transactions without a full live
+  research window. It accepts only scanner/backrun conserving DEX or DEX+permissionless-protocol loops and
+  mechanically routes tooling work direct-to-main, deterministic fixes through replay+smoke, and
+  admission/latency/ranking changes back to Hermes A/B.
 - `docs/research/gates.md` — the validation contract (`fixed` vs `implemented`, replay flips, test harnesses).
   Read before claiming a deterministic change is fixed.
 - `docs/decision-log.md` — dated decisions / verified facts / dead-ends. Read the ✅/❌ entries **before

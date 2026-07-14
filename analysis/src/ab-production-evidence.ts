@@ -1,7 +1,11 @@
+import fs from "node:fs";
+import { ethers } from "ethers";
 import { classifyWinnerTxStyle } from "./cli/bundle-postmortem.js";
 import type { AbExperiment } from "./ab-canary.js";
+import { decodeTransfer } from "./decode/erc20.js";
 import { fetchEthUsd, priceArb } from "./pnl/arb-profit.js";
 import { classifyTxShape, type RawLog } from "./pnl/tx-shape.js";
+import { decodeAnySwapLog, type DecodedSwap } from "./pnl/swap-log-registry.js";
 import { deriveEdgeKindsFromLogs } from "./learning/edge-kinds.js";
 import { hexToBigInt, RpcClient } from "./rpc/client.js";
 import { lower } from "./registry/protocols.js";
@@ -14,6 +18,8 @@ export interface ProductionSampleObservation {
   winner_style: string;
   net_profit_usd: number | null;
   arb_pools: string[];
+  arb_swap_path: Array<{ pool_id: string; direction: DecodedSwap["direction"] }>;
+  protocol_calls: Array<{ target: string; selector: string }>;
   edge_kinds: string[];
   victim_tx_hash?: string;
   victim_transaction_index?: number;
@@ -21,11 +27,36 @@ export interface ProductionSampleObservation {
   victim_edge_kinds?: string[];
 }
 
+export interface ProductionSwapPathStep {
+  pool_id: string;
+  direction: DecodedSwap["direction"];
+}
+
+export interface ProductionRouteStep {
+  adapterId: string;
+  slotKind: "swap" | "protocol";
+  target: string;
+  tokenIn: string;
+  tokenOut: string;
+  poolId?: string;
+}
+
+export function validateExactProductionSwapPath(
+  expected: ProductionSwapPathStep[],
+  matched: ProductionSwapPathStep[] | undefined,
+): string[] {
+  if (!matched || JSON.stringify(matched) !== JSON.stringify(expected)) {
+    return ["hunt did not match the exact ordered pool/direction path from the on-chain sample"];
+  }
+  return [];
+}
+
 /** Recompute the sample classification from the local archive node at deploy time. This prevents a
  * report from relabelling a backrun (or a fake tx hash) as a standing-state atomic sample. */
 export async function verifyOnchainProductionSample(
   experiment: AbExperiment,
   rpcUrl: string,
+  universePath: string,
 ): Promise<{ errors: string[]; observation?: ProductionSampleObservation }> {
   const errors: string[] = [];
   const sample = experiment.production_evidence?.sample;
@@ -55,6 +86,37 @@ export async function verifyOnchainProductionSample(
     .map((entry: Record<string, any>) => lower(String(entry.hash ?? "")));
   const allLogs = receipts.flatMap((entry) => rawLogs(entry, transactionByHash));
   const receiptLogs = rawLogs(receipt, transactionByHash);
+  const decodedSwaps = receiptLogs
+    .map((log) => decodeAnySwapLog(log))
+    .filter((swap): swap is DecodedSwap => swap !== null)
+    .sort((a, b) => a.logIndex - b.logIndex);
+  const arbSwapPath = decodedSwaps
+    .map((swap) => ({ pool_id: swap.poolId, direction: swap.direction }));
+  const expectedRoute = sample.expected_route ?? [];
+  const expectedSwapPools = expectedRoute
+    .filter((edge) => edge.slotKind === "swap")
+    .map((edge) => lower(String(edge.poolId ?? edge.target)));
+  const observedSwapPools = arbSwapPath.map((step) => lower(step.pool_id));
+  if (JSON.stringify(expectedSwapPools) !== JSON.stringify(observedSwapPools)) {
+    errors.push("production sample expected_route swap sequence does not match the ordered on-chain swap logs");
+  }
+  const universe = loadProductionUniverse(universePath);
+  await validateOnchainSwapRoute(
+    expectedRoute.filter((edge) => edge.slotKind === "swap"),
+    decodedSwaps,
+    universe,
+    rpc,
+    receipt.blockNumber,
+    errors,
+  );
+  const trace = await rpc.traceTransaction(sample.tx_hash);
+  const protocolCalls = validateOnchainExecutionRoute(
+    expectedRoute,
+    trace,
+    receipt.logs,
+    tx,
+    errors,
+  );
   const transactionIndex = Number(hexToBigInt(receipt.transactionIndex));
   const shape = classifyTxShape({
     receiptLogs,
@@ -157,6 +219,8 @@ export async function verifyOnchainProductionSample(
       winner_style: style.winner_style,
       net_profit_usd: profit.netProfitUsd,
       arb_pools: shape.arb_pools,
+      arb_swap_path: arbSwapPath,
+      protocol_calls: protocolCalls,
       edge_kinds: edgeKinds,
       victim_tx_hash: victimTxHash,
       victim_transaction_index: victimTransactionIndex,
@@ -164,6 +228,240 @@ export async function verifyOnchainProductionSample(
       victim_edge_kinds: victimEdgeKinds,
     },
   };
+}
+
+export interface UniversePoolFact {
+  address: string;
+  adapter: string;
+  venueId?: string;
+  factory?: string;
+  identitySource?: string;
+  poolId?: string;
+  token0?: string;
+  token1?: string;
+  currency0?: string;
+  currency1?: string;
+  fixedTokenIn?: string;
+  fixedTokenOut?: string;
+}
+
+interface OrderedCall {
+  target: string;
+  selector: string;
+}
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+const PAIR_IFACE = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+]);
+const CURVE_UINT_IFACE = new ethers.Interface(["function coins(uint256) view returns (address)"]);
+const CURVE_INT_IFACE = new ethers.Interface(["function coins(int128) view returns (address)"]);
+const ROUTE_SELECTORS = new Map<string, Set<string>>([
+  ["univ2-swap", selectors("swap(uint256,uint256,address,bytes)")],
+  ["univ2-router-swap-exact-in", selectors("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)")],
+  ["univ2-router-swap-exact-in-alt", selectors("swapExactTokensForTokens(address,address,uint256,uint256,address)")],
+  ["univ3-swap", selectors("swap(address,bool,int256,uint160,bytes)")],
+  ["univ4-unlock", selectors("unlock(bytes)")],
+  ["curve-exchange", new Set(["0xafb43012"])],
+  ["curve-exchange-received-uint", new Set(["0x767691e7"])],
+  ["curve-exchange-nr", new Set(["0x7e3db030"])],
+  ["curve-exchange-plain", new Set(["0x3df02124"])],
+  ["curve-router-execute-path", selectors("executePath(bytes,uint256[],address)")],
+  ["fluid-dex-swap", selectors("swapIn(bool,uint256,uint256,address)")],
+  ["wsteth-wrap", selectors("wrap(uint256)")],
+  ["wsteth-unwrap", selectors("unwrap(uint256)")],
+  ["erc4626-deposit", selectors("deposit(uint256,address)")],
+  ["erc4626-redeem", selectors("redeem(uint256,address,address)")],
+  ["erc4626-redeem-silo", selectors("redeem(address,uint256,address,address)")],
+  ["metronome-synth-swap", selectors("swap(address,address,uint256)")],
+  ["metronome-hgusdc-exit", selectors("executePath(bytes,uint256[],address)")],
+  ["psm", selectors("sellGem(address,uint256)", "buyGem(address,uint256)")],
+]);
+
+function loadProductionUniverse(universePath: string): UniversePoolFact[] {
+  const parsed = JSON.parse(fs.readFileSync(universePath, "utf8")) as unknown;
+  const pools = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { pools?: unknown }).pools)
+      ? (parsed as { pools: unknown[] }).pools
+      : null;
+  if (!pools) throw new Error("production universe must be an array or { pools: [...] }");
+  return pools.filter((entry): entry is UniversePoolFact => Boolean(
+    entry && typeof entry === "object"
+      && typeof (entry as UniversePoolFact).address === "string"
+      && typeof (entry as UniversePoolFact).adapter === "string",
+  ));
+}
+
+export async function validateOnchainSwapRoute(
+  expected: ProductionRouteStep[],
+  observed: DecodedSwap[],
+  universe: UniversePoolFact[],
+  rpc: RpcClient,
+  blockTag: string,
+  errors: string[],
+): Promise<void> {
+  if (expected.length !== observed.length) return;
+  for (let index = 0; index < expected.length; index++) {
+    const edge = expected[index];
+    const swap = observed[index];
+    const pool = universe.find((candidate) => candidate.adapter === "univ4"
+      ? lower(String(candidate.poolId ?? "")) === lower(swap.poolId)
+      : lower(candidate.address) === lower(swap.poolId));
+    if (!pool) {
+      errors.push(`production swap route[${index}] is absent from the attested universe`);
+      continue;
+    }
+    const expectedTarget = pool.adapter === "univ4" ? lower(pool.address) : lower(swap.poolId);
+    if (lower(edge.target) !== expectedTarget) {
+      errors.push(`production swap route[${index}] target does not match the attested venue identity`);
+    }
+    if (!adapterMatchesUniverse(edge.adapterId, pool.adapter)) {
+      errors.push(`production swap route[${index}] adapter ${edge.adapterId} does not match universe ${pool.adapter}`);
+    }
+    if ((pool.adapter === "univ2" || pool.adapter === "univ3")
+        && (!pool.factory || !pool.venueId || !pool.identitySource)) {
+      errors.push(`production swap route[${index}] lacks factory-backed venue identity attestation`);
+    }
+    const tokens = await resolveObservedSwapTokens(pool, swap, rpc, blockTag);
+    if (!tokens || canonicalToken(edge.tokenIn) !== canonicalToken(tokens.tokenIn)
+        || canonicalToken(edge.tokenOut) !== canonicalToken(tokens.tokenOut)) {
+      errors.push(`production swap route[${index}] token direction is not grounded by the landed swap`);
+    }
+  }
+}
+
+function adapterMatchesUniverse(adapterId: string, universeAdapter: string): boolean {
+  if (universeAdapter === "univ2") return adapterId === "univ2-swap";
+  if (universeAdapter === "univ3") return adapterId === "univ3-swap";
+  if (universeAdapter === "univ4") return adapterId === "univ4-unlock";
+  if (universeAdapter === "curve" || universeAdapter === "curve-nr") return adapterId.startsWith("curve-");
+  if (universeAdapter === "fluid-dex") return adapterId === "fluid-dex-swap";
+  return false;
+}
+
+async function resolveObservedSwapTokens(
+  pool: UniversePoolFact,
+  swap: DecodedSwap,
+  rpc: RpcClient,
+  blockTag: string,
+): Promise<{ tokenIn: string; tokenOut: string } | null> {
+  if (swap.tokenIn && swap.tokenOut) return { tokenIn: swap.tokenIn, tokenOut: swap.tokenOut };
+  let token0 = pool.adapter === "univ4" ? pool.currency0 : pool.token0;
+  let token1 = pool.adapter === "univ4" ? pool.currency1 : pool.token1;
+  if ((!token0 || !token1) && (pool.adapter === "univ2" || pool.adapter === "univ3")) {
+    try {
+      [token0, token1] = await Promise.all([
+        ethCallAddress(rpc, pool.address, PAIR_IFACE, "token0", [], blockTag),
+        ethCallAddress(rpc, pool.address, PAIR_IFACE, "token1", [], blockTag),
+      ]);
+    } catch {
+      return null;
+    }
+  }
+  if ((pool.adapter === "curve" || pool.adapter === "curve-nr")
+      && swap.tokenInIndex !== undefined && swap.tokenOutIndex !== undefined) {
+    try {
+      const [tokenIn, tokenOut] = await Promise.all([
+        curveCoin(rpc, pool.address, swap.tokenInIndex, blockTag),
+        curveCoin(rpc, pool.address, swap.tokenOutIndex, blockTag),
+      ]);
+      return { tokenIn, tokenOut };
+    } catch {
+      return null;
+    }
+  }
+  if (!token0 || !token1) return null;
+  return swap.direction === "0for1"
+    ? { tokenIn: token0, tokenOut: token1 }
+    : { tokenIn: token1, tokenOut: token0 };
+}
+
+async function ethCallAddress(
+  rpc: RpcClient,
+  target: string,
+  iface: ethers.Interface,
+  method: string,
+  values: unknown[],
+  blockTag: string,
+): Promise<string> {
+  const data = iface.encodeFunctionData(method, values);
+  const raw = await rpc.call<string>("eth_call", [{ to: target, data }, blockTag]);
+  return lower(String(iface.decodeFunctionResult(method, raw)[0]));
+}
+
+async function curveCoin(rpc: RpcClient, target: string, index: number, blockTag: string): Promise<string> {
+  try {
+    return await ethCallAddress(rpc, target, CURVE_UINT_IFACE, "coins", [index], blockTag);
+  } catch {
+    return ethCallAddress(rpc, target, CURVE_INT_IFACE, "coins", [index], blockTag);
+  }
+}
+
+function canonicalToken(token: string): string {
+  const value = lower(token);
+  return value === ZERO_ADDRESS || value === "0x0" ? WETH : value;
+}
+
+export function validateOnchainExecutionRoute(
+  expected: ProductionRouteStep[],
+  trace: Record<string, any>,
+  logs: Record<string, any>[],
+  tx: Record<string, any>,
+  errors: string[],
+): OrderedCall[] {
+  const calls = flattenSuccessfulStateChangingCalls(trace);
+  const matched: OrderedCall[] = [];
+  let cursor = 0;
+  const executorActors = new Set([lower(String(tx.from ?? "")), lower(String(tx.to ?? ""))]);
+  const transferTokens = new Set(logs.map((log) => decodeTransfer(log)).filter(Boolean)
+    .map((transfer) => lower(transfer!.token)));
+  for (const [index, edge] of expected.entries()) {
+    if (edge.slotKind === "protocol" && executorActors.has(lower(edge.target))) {
+      errors.push(`production protocol route[${index}] targets the winner's private actor, not a permissionless venue`);
+    }
+    const allowedSelectors = ROUTE_SELECTORS.get(edge.adapterId);
+    if (!allowedSelectors) {
+      errors.push(`production route[${index}] adapter ${edge.adapterId} has no trusted selector contract`);
+      continue;
+    }
+    const callIndex = calls.findIndex((call, candidateIndex) =>
+      candidateIndex >= cursor
+      && call.target === lower(edge.target)
+      && allowedSelectors.has(call.selector));
+    if (callIndex < 0) {
+      errors.push(`production route[${index}] adapter selector is absent or out of order in the successful call trace`);
+      continue;
+    }
+    const call = calls[callIndex];
+    if (edge.slotKind === "protocol") matched.push(call);
+    cursor = callIndex + 1;
+    if (edge.slotKind === "protocol" && !edge.adapterId.startsWith("weth-")
+        && (!transferTokens.has(lower(edge.tokenIn)) || !transferTokens.has(lower(edge.tokenOut)))) {
+      errors.push(`production protocol route[${index}] token flow is absent from the landed receipt`);
+    }
+  }
+  return matched;
+}
+
+function selectors(...signatures: string[]): Set<string> {
+  return new Set(signatures.map((signature) => ethers.id(signature).slice(0, 10).toLowerCase()));
+}
+
+function flattenSuccessfulStateChangingCalls(node: Record<string, any> | null | undefined): OrderedCall[] {
+  if (!node || typeof node !== "object" || node.error) return [];
+  const result: OrderedCall[] = [];
+  const type = String(node.type ?? "CALL").toUpperCase();
+  const input = String(node.input ?? "0x");
+  if (typeof node.to === "string" && type !== "STATICCALL" && input.length >= 10) {
+    result.push({ target: lower(node.to), selector: input.slice(0, 10).toLowerCase() });
+  }
+  for (const child of Array.isArray(node.calls) ? node.calls : []) {
+    result.push(...flattenSuccessfulStateChangingCalls(child));
+  }
+  return result;
 }
 
 function rawLogs(

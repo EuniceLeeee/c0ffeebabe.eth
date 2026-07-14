@@ -40,9 +40,10 @@ import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
 interface EdgeSpec {
   adapterId: string;
+  slotKind: "swap" | "protocol";
   tokenIn: string;
   tokenOut: string;
-  target?: string;
+  target: string;
   poolId?: string;
 }
 
@@ -55,6 +56,8 @@ interface HuntResult {
   stage: "not_admitted" | "path_found" | "final_sim_success";
   expected_pool_ids: string[];
   matched_pool_ids: string[];
+  expected_route: EdgeSpec[];
+  matched_route: EdgeSpec[];
   has_protocol_edge: boolean;
   closed_route: boolean;
   final_sim_success: boolean;
@@ -189,6 +192,7 @@ async function main(): Promise<void> {
         winnerIndex,
         victimTxHash,
         expectedPools,
+        route,
         [],
         "not_admitted",
         anchors,
@@ -211,6 +215,7 @@ async function main(): Promise<void> {
           winnerIndex,
           victimTxHash,
           expectedPools,
+          route,
           matchedPath,
           "not_admitted",
           anchors,
@@ -268,6 +273,7 @@ async function main(): Promise<void> {
           winnerIndex,
           victimTxHash,
           expectedPools,
+          route,
           matchedPath,
           "not_admitted",
           anchors,
@@ -299,6 +305,7 @@ async function main(): Promise<void> {
           winnerIndex,
           victimTxHash,
           expectedPools,
+          route,
           matchedPath,
           "not_admitted",
           anchors,
@@ -327,6 +334,7 @@ async function main(): Promise<void> {
           winnerIndex,
           victimTxHash,
           expectedPools,
+          route,
           matchedPath,
           "path_found",
           anchors,
@@ -410,6 +418,7 @@ async function main(): Promise<void> {
         winnerIndex,
         victimTxHash,
         expectedPools,
+        route,
         matchedPath,
         finalSuccess ? "final_sim_success" : "path_found",
         anchors,
@@ -709,9 +718,11 @@ function evBucket(result: ExactExecutionResult | null): HuntResult["trigger_ev_b
 function routeSignature(route: EdgeSpec[]): string {
   return route.map((edge) => [
     edge.adapterId,
+    edge.slotKind,
+    edge.target.toLowerCase(),
     edge.tokenIn.toLowerCase(),
     edge.tokenOut.toLowerCase(),
-    edge.poolId?.toLowerCase() ?? edge.target?.toLowerCase() ?? "",
+    edge.poolId?.toLowerCase() ?? "",
   ].join(":"))
     .join("|");
 }
@@ -726,6 +737,7 @@ function pathResult(
   winnerTransactionIndex: number,
   victimTxHash: string,
   expectedPools: string[],
+  expectedRoute: EdgeSpec[],
   path: TokenEdge[],
   stage: HuntResult["stage"],
   anchors: StateAnchors,
@@ -739,6 +751,8 @@ function pathResult(
     stage,
     expected_pool_ids: expectedPools,
     matched_pool_ids: unique(path.map((edge) => (edge.poolId ?? edge.target).toLowerCase())),
+    expected_route: normalizeRoute(expectedRoute),
+    matched_route: normalizePath(path),
     has_protocol_edge: path.some((edge) => edge.slotKind === "protocol"),
     closed_route: path.length > 1 && same(path[0].tokenIn, path.at(-1)!.tokenOut),
     final_sim_success: false,
@@ -794,9 +808,10 @@ function pathMatches(path: TokenPath, specs: EdgeSpec[]): boolean {
 
 function edgeMatches(edge: TokenEdge, spec: EdgeSpec): boolean {
   return edge.adapterId === spec.adapterId &&
+    edge.slotKind === spec.slotKind &&
     same(edge.tokenIn, spec.tokenIn) &&
     same(edge.tokenOut, spec.tokenOut) &&
-    (!spec.target || same(edge.target, spec.target)) &&
+    same(edge.target, spec.target) &&
     (!spec.poolId || same(edge.poolId ?? "", spec.poolId));
 }
 
@@ -815,13 +830,38 @@ function parseRoute(raw: string): EdgeSpec[] {
   return parsed.map((entry) => {
     if (!entry || typeof entry !== "object") throw new Error("route edge must be an object");
     const edge = entry as Record<string, unknown>;
-    for (const key of ["adapterId", "tokenIn", "tokenOut"] as const) {
+    for (const key of ["adapterId", "target", "tokenIn", "tokenOut"] as const) {
       if (typeof edge[key] !== "string" || edge[key].length === 0) {
         throw new Error(`route edge ${key} missing`);
       }
     }
+    if (edge.slotKind !== "swap" && edge.slotKind !== "protocol") {
+      throw new Error("route edge slotKind must be swap|protocol");
+    }
     return edge as unknown as EdgeSpec;
   });
+}
+
+function normalizeRoute(route: EdgeSpec[]): EdgeSpec[] {
+  return route.map((edge) => ({
+    adapterId: edge.adapterId,
+    slotKind: edge.slotKind,
+    target: edge.target.toLowerCase(),
+    tokenIn: edge.tokenIn.toLowerCase(),
+    tokenOut: edge.tokenOut.toLowerCase(),
+    ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+  }));
+}
+
+function normalizePath(path: TokenEdge[]): EdgeSpec[] {
+  return path.map((edge) => ({
+    adapterId: edge.adapterId,
+    slotKind: edge.slotKind === "protocol" ? "protocol" : "swap",
+    target: edge.target.toLowerCase(),
+    tokenIn: edge.tokenIn.toLowerCase(),
+    tokenOut: edge.tokenOut.toLowerCase(),
+    ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+  }));
 }
 
 function requiredEnv(name: string): string {

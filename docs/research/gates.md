@@ -170,3 +170,72 @@ fixtures do not count and may not change) and rejects analysis, governance, depe
 challenger diff. Tool corrections are same-round auxiliary work: fix,
 review, merge, and immediately rerun them before the B branch is cut. They never count as the B variable.
 Historical schema-v1/v2 reports remain readable; only schema-v3 can pass the candidate phase.
+
+## Historical transaction repair gate
+
+`docs/research/HISTORICAL-GAP.md` is the non-live entry to this same validation contract. Its mechanical
+`historical-gap-gate` enforces three mutually exclusive tracks:
+
+- analysis tools/classifiers/gates: build, regression tests and fresh review, then direct-to-main without B;
+- deterministic searcher behavior (adapter/identity/graph/scanner/detector/planner/quote/execution): every
+  grouped +EV sample must pass the existing schema-v3 candidate gate and unchanged trusted scanner/backrun
+  replay, followed by a >=10 minute process-liveness smoke under gate-owned dual-lane dry-run configuration;
+- flow admission, latency and candidate ranking: historical evidence may classify the gap, but promotion is
+  rejected and the branch routes to Hermes A/B.
+
+The direct-main gate surface includes only `analysis/src` implementation files, same-named analysis tests,
+script-only changes to `analysis/package.json`, archived report artifacts, and the exact trusted
+`blockscan-hunt.ts` / `backrun-hunt.ts` replay harnesses. Fixtures, dependencies/lockfiles, lifecycle scripts,
+governance documents, hooks, deploy/guard scripts and arbitrary listener tests remain ineligible.
+
+The only accepted samples are position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed loops,
+from either scanner standing state or a real swap/oracle backrun trigger. Every sample binds one complete
+ordered route (`adapterId`, `slotKind`, `target`, `tokenIn`, `tokenOut`, optional `poolId`) to canonical
+on-chain swap order/direction, factory-backed V2/V3 venue identity, and one successful state-changing call
+trace that matches every DEX and protocol adapter target/selector in the declared interleaved order. Protocol
+token flow and the exact trusted replay route are checked separately. A protocol target equal to
+the winner's private caller/executor is rejected; pool-set membership alone is insufficient. Build/test
+without sample replay is
+always `implemented_not_validated`. Before a new searcher branch is accepted, the gate binds an inventory of
+main, all local heads/tags/stash/custom refs, all refs from every configured remote, worktrees, durable
+reports/resolutions and local uncommitted evidence so a
+prior unmerged fix is inspected rather than duplicated. Every entry requires an exact fingerprint and an
+explicit resolved disposition; remote-only objects are fetched temporarily for same-gap inspection. A
+reportless ref/worktree that overlaps a candidate runtime path cannot be dismissed as unrelated; it must be
+reused, superseded or left blocking. A
+challenger may contain only deploy-wrapper-approved `.ts` runtime files: no tests,
+fixtures, dependency files, scripts, reports or validation runners. Adapter and shared runtime paths count as
+production. Only explicitly enumerated deterministic runtime owners may promote historically. Mixed
+orchestration owners are routed to Hermes regardless of identifier names; diff signals add a second veto for
+intake, ranking, caps, thresholds, budgets, deadlines, concurrency and latency inside otherwise deterministic
+files.
+The non-author review separately attests that an allowlisted diff contains no cross-opportunity intake,
+ordering, cardinality, timing or resource-budget change. The report binds that review to the exact base,
+challenger and Git-patch SHA-256 and the gate requires the separate committed review artifact. Historical
+replay also binds the exact production pool-universe snapshot/top-N to a provenance artifact and independently
+attests the active champion's runtime commit, content-addressed path, hash and top-N through SSM before and
+after replay/smoke. It also attests the active champion's local-reth chain ID, exact winner/trigger receipts
+and parent block hashes. It rejects caller RPC/WS endpoints and creates SSM loopback tunnels to the exact
+HTTP/WS ports read from that champion process. A tunnel is accepted only after the gate-owned Session Manager
+child reports ownership of that exact local port and the port answers; identical facts are checked before and after the run.
+Caller-provided paths, endpoints or top-N cannot establish production equivalence.
+The short smoke uses
+a disposable signer and never receives a production private key. It proves full-duration process liveness,
+not lane activity from challenger-authored stdout; unchanged replay gates provide the lane capability proof.
+A historical causal backrun fixture does not prove public/private network propagation. Any visibility or
+source-intake claim is flow-admission work and routes to Hermes. Successful direct-main or deterministic
+promotion emits an authenticated shared-Git-dir receipt only after trusted subprocesses finish. Authentication
+is computed by node root through SSM from a root-only key. Candidate subprocesses run under a macOS sandbox
+that permits outbound network only to loopback, permits writes only under a gate-owned temporary directory,
+and permits file-content reads only from gate-created detached worktrees, content-hashed dependencies,
+required system runtimes and the gate-owned universe copy. They receive no AWS credential environment or SSH agent. Receipt
+close state is included in a newly issued node-root authentication tag. Hermes-routed
+work emits none and closes through the A/B gate.
+Historical close requires that receipt plus byte-identical candidate reports, tool manifests,
+review and universe-provenance artifacts on main before branch/worktree deletion can pass. Close revalidates
+track-specific replay, reth/universe and smoke evidence and rejects unsigned or edited receipts. An open receipt
+blocks inventory for the next gap. A reusable prior ref must contribute a concrete
+commit to challenger ancestry; prose-only reuse cannot promote.
+Replay worktrees containing a root `.env` are rejected, close requires the merge tree to equal the frozen
+challenger tree, and challenger-descendant worktrees outside `origin/main` must be removed before
+the promotion receipt can close.

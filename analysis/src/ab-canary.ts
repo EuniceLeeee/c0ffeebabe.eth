@@ -15,6 +15,88 @@ export type ResolutionReplaySpec = {
 
 const SAFE_REPLAY_EXECUTABLES = new Set(["node", "npm", "pnpm", "forge", "cargo"]);
 
+export function resolveAbReportArtifactPath(
+  reportRelative: string,
+  artifact: string,
+  label = "report artifact",
+): string {
+  const normalizedReport = reportRelative.split(path.sep).join("/");
+  const normalizedArtifact = artifact.split(path.sep).join("/");
+  if (!normalizedReport.startsWith("docs/research/reports/")
+      || path.posix.isAbsolute(normalizedReport)
+      || normalizedReport.split("/").includes("..")) {
+    throw new Error("report path must stay under docs/research/reports");
+  }
+  if (!normalizedArtifact.trim() || path.posix.isAbsolute(normalizedArtifact)) {
+    throw new Error(`${label} must be report-relative`);
+  }
+  const resolved = path.posix.normalize(path.posix.join(
+    path.posix.dirname(normalizedReport),
+    normalizedArtifact,
+  ));
+  if (!resolved.startsWith("docs/research/reports/")) {
+    throw new Error(`${label} must stay under docs/research/reports`);
+  }
+  return resolved;
+}
+
+export function resolveAbLocalReportArtifactPath(repoRoot: string, artifactRelative: string): string {
+  if (path.isAbsolute(artifactRelative)) {
+    throw new Error("local report artifact must be repository-relative");
+  }
+  const reportsRoot = fs.realpathSync(path.join(repoRoot, "docs/research/reports"));
+  const resolved = fs.realpathSync(path.resolve(repoRoot, artifactRelative));
+  if (resolved !== reportsRoot && !resolved.startsWith(`${reportsRoot}${path.sep}`)) {
+    throw new Error("local report artifact resolves outside docs/research/reports");
+  }
+  return resolved;
+}
+
+export function readAbLocalReportArtifact(repoRoot: string, artifactRelative: string): Buffer {
+  const reportsRoot = fs.realpathSync(path.join(repoRoot, "docs/research/reports"));
+  const resolved = resolveAbLocalReportArtifactPath(repoRoot, artifactRelative);
+  return readContainedArtifact(reportsRoot, resolved);
+}
+
+export function readAbSchema3ReportArtifact(reportPath: string, artifactRelative: string): Buffer {
+  if (!artifactRelative.trim() || path.isAbsolute(artifactRelative)) {
+    throw new Error("schema-v3 report artifact must be report-relative");
+  }
+  const absoluteReport = path.resolve(reportPath);
+  const reportDirectory = path.dirname(absoluteReport);
+  const reportsMarker = `${path.sep}docs${path.sep}research${path.sep}reports`;
+  const markerIndex = absoluteReport.lastIndexOf(reportsMarker);
+  const artifactRoot = markerIndex >= 0
+    ? absoluteReport.slice(0, markerIndex + reportsMarker.length)
+    : reportDirectory;
+  const artifactPath = path.resolve(reportDirectory, artifactRelative);
+  return readContainedArtifact(artifactRoot, artifactPath);
+}
+
+function readContainedArtifact(root: string, artifactPath: string): Buffer {
+  const reportsRoot = fs.realpathSync(root);
+  const resolved = fs.realpathSync(artifactPath);
+  if (resolved !== reportsRoot && !resolved.startsWith(`${reportsRoot}${path.sep}`)) {
+    throw new Error("local report artifact resolves outside docs/research/reports");
+  }
+  const fd = fs.openSync(resolved, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile()) throw new Error("local report artifact must be a regular file");
+    const currentPath = fs.realpathSync(resolved);
+    if (currentPath !== reportsRoot && !currentPath.startsWith(`${reportsRoot}${path.sep}`)) {
+      throw new Error("local report artifact resolves outside docs/research/reports");
+    }
+    const current = fs.statSync(currentPath);
+    if (opened.dev !== current.dev || opened.ino !== current.ino) {
+      throw new Error("local report artifact changed while it was being opened");
+    }
+    return fs.readFileSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export function validateResolutionReplay(replay: ResolutionReplaySpec | undefined): string[] {
   const errors: string[] = [];
   if (!replay || typeof replay !== "object") return ["resolution_replay is required"];
@@ -443,9 +525,10 @@ export type AbExperiment = {
       oracle_route_edge_index?: number;
       expected_route?: Array<{
         adapterId: string;
+        slotKind: "swap" | "protocol";
         tokenIn: string;
         tokenOut: string;
-        target?: string;
+        target: string;
         poolId?: string;
       }>;
     };
@@ -659,18 +742,32 @@ export function validateAbProductionCandidate(
     if (!nonEmpty(sample.evidence)) {
       errors.push("production_evidence.sample.evidence missing/placeholder");
     }
+    if (!Array.isArray(sample.expected_route) || sample.expected_route.length < 2 || sample.expected_route.length > 8) {
+      errors.push("production sample requires expected_route with 2..8 ordered edges");
+    } else {
+      for (const [index, edge] of sample.expected_route.entries()) {
+        if (!nonEmpty(edge?.adapterId) || !nonEmpty(edge?.tokenIn) || !nonEmpty(edge?.tokenOut)
+            || !nonEmpty(edge?.target)
+            || (edge?.slotKind !== "swap" && edge?.slotKind !== "protocol")) {
+          errors.push(`expected_route[${index}] requires slotKind/adapterId/target/tokenIn/tokenOut`);
+        }
+        if (index > 0
+            && edge?.tokenIn?.toLowerCase() !== sample.expected_route[index - 1]?.tokenOut?.toLowerCase()) {
+          errors.push(`expected_route[${index}] is not token-contiguous with the previous edge`);
+        }
+      }
+      if (sample.expected_route[0]?.tokenIn?.toLowerCase()
+          !== sample.expected_route.at(-1)?.tokenOut?.toLowerCase()) {
+        errors.push("expected_route must be a closed token loop");
+      }
+      const hasProtocol = sample.expected_route.some((edge) => edge.slotKind === "protocol");
+      if (hasProtocol !== (evidence.route_scope === "dex-permissionless-protocol")) {
+        errors.push("expected_route slot kinds do not match production_evidence.route_scope");
+      }
+    }
     if (evidence.strategy_kind === "backrun") {
       if (!/^0x[a-f0-9]{64}$/i.test(sample.victim_tx_hash ?? "")) {
         errors.push("backrun production sample requires a full victim_tx_hash");
-      }
-      if (!Array.isArray(sample.expected_route) || sample.expected_route.length < 2 || sample.expected_route.length > 8) {
-        errors.push("backrun production sample requires expected_route with 2..8 edges");
-      } else {
-        for (const [index, edge] of sample.expected_route.entries()) {
-          if (!nonEmpty(edge?.adapterId) || !nonEmpty(edge?.tokenIn) || !nonEmpty(edge?.tokenOut)) {
-            errors.push(`backrun expected_route[${index}] requires adapterId/tokenIn/tokenOut`);
-          }
-        }
       }
       if (evidence.trigger_kind === "oracle-update"
           && (!Number.isSafeInteger(sample.oracle_route_edge_index)
@@ -1042,14 +1139,13 @@ export function validateAbExperiment(
 
   const artifactPath = experiment.analysis?.script_artifact;
   if (experiment.analysis?.script_exit_code === 0 && nonEmpty(artifactPath)) {
-    const resolvedPath = path.isAbsolute(artifactPath)
-      ? artifactPath
-      : path.resolve(path.dirname(reportPath), artifactPath);
-    if (!fs.existsSync(resolvedPath)) {
-      errors.push(`script_artifact not found: ${artifactPath}`);
-    } else {
-      try {
-        const artifact = JSON.parse(fs.readFileSync(resolvedPath, "utf8")) as AbCompareResult;
+    try {
+      const artifactSource = experiment.schema_version === 3
+        ? readAbSchema3ReportArtifact(reportPath, artifactPath)
+        : fs.readFileSync(path.isAbsolute(artifactPath)
+          ? artifactPath
+          : path.resolve(path.dirname(reportPath), artifactPath));
+      const artifact = JSON.parse(artifactSource.toString("utf8")) as AbCompareResult;
         if (artifact.script_assessment !== experiment.analysis.script_assessment) {
           errors.push("script_assessment disagrees with script_artifact");
         }
@@ -1064,9 +1160,8 @@ export function validateAbExperiment(
             && (!artifact.require_output_match || artifact.output_mismatches !== 0)) {
           errors.push("performance win requires output-match guard with zero mismatches");
         }
-      } catch (error) {
-        errors.push(`invalid script_artifact: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    } catch (error) {
+      errors.push(`invalid script_artifact: ${error instanceof Error ? error.message : String(error)}`);
     }
   } else if (experiment.analysis?.script_exit_code === 0) {
     errors.push("successful comparison command requires script_artifact");

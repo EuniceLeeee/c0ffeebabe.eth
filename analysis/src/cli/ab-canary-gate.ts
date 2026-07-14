@@ -5,12 +5,17 @@ import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import {
   parseAbExperiment,
+  readAbLocalReportArtifact,
+  resolveAbReportArtifactPath,
   validateAbExperiment,
   validateAbProductionCandidate,
+  type AbExperiment,
   type ManualVerdictArtifact,
 } from "../ab-canary.js";
 import {
   verifyOnchainProductionSample,
+  validateExactProductionSwapPath,
+  type ProductionRouteStep,
   type ProductionSampleObservation,
 } from "../ab-production-evidence.js";
 import {
@@ -28,6 +33,8 @@ import {
 
 const args = process.argv.slice(2);
 const report = args[0];
+const gateTmpRoot = process.env.MEV_GATE_TMPDIR || "/tmp";
+if (!path.isAbsolute(gateTmpRoot)) throw new Error("MEV_GATE_TMPDIR must be absolute");
 const phaseIndex = args.indexOf("--phase");
 const phase = phaseIndex >= 0 ? args[phaseIndex + 1] : "decision";
 if (!report || (phase !== "candidate" && phase !== "decision" && phase !== "close")) {
@@ -50,39 +57,43 @@ const errors = phase === "candidate"
   ? validateAbProductionCandidate(experiment, candidateContext)
   : validateAbExperiment(experiment, report, phase);
 let onchainObservation: ProductionSampleObservation | undefined;
-if (experiment.schema_version === 3
-    && experiment.infrastructure_shakedown !== true
-    && errors.length === 0) {
+if (experiment.schema_version === 3 && errors.length === 0) {
   const repoRoot = gitOutput(["rev-parse", "--show-toplevel"]);
-  const tools = discoverToolIndex(repoRoot);
-  errors.push(...validateToolIndex(repoRoot, tools));
-  let executionManifest: ToolExecutionManifest | undefined;
-  try {
-    const manifestSource = readReportArtifact(repoRoot, experiment.analysis.tool_selection?.evidence_manifest ?? "", "tool execution manifest");
-    const manifestHash = createHash("sha256").update(manifestSource).digest("hex");
-    if (manifestHash !== experiment.analysis.tool_selection?.evidence_manifest_sha256) {
-      errors.push("tool execution manifest SHA-256 does not match the A/B journal");
+  if (experiment.infrastructure_shakedown !== true) {
+    const tools = discoverToolIndex(repoRoot);
+    errors.push(...validateToolIndex(repoRoot, tools));
+    let executionManifest: ToolExecutionManifest | undefined;
+    try {
+      const manifestSource = readReportArtifact(repoRoot, experiment.analysis.tool_selection?.evidence_manifest ?? "", "tool execution manifest");
+      const manifestHash = createHash("sha256").update(manifestSource).digest("hex");
+      if (manifestHash !== experiment.analysis.tool_selection?.evidence_manifest_sha256) {
+        errors.push("tool execution manifest SHA-256 does not match the A/B journal");
+      }
+      executionManifest = JSON.parse(manifestSource.toString("utf8")) as ToolExecutionManifest;
+    } catch (error) {
+      errors.push(`tool execution manifest validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-    executionManifest = JSON.parse(manifestSource.toString("utf8")) as ToolExecutionManifest;
-  } catch (error) {
-    errors.push(`tool execution manifest validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(...validateRecordedToolSelection(
+      experiment.analysis.tool_selection,
+      tools,
+      phase === "candidate" ? PRODUCTION_CANDIDATE_CAPABILITIES : PRODUCTION_DECISION_CAPABILITIES,
+      executionManifest,
+      phase === "candidate" ? undefined : {
+        from: experiment.window.measured_from_block!,
+        to: experiment.window.measured_to_block!,
+      },
+    ));
   }
-  errors.push(...validateRecordedToolSelection(
-    experiment.analysis.tool_selection,
-    tools,
-    phase === "candidate" ? PRODUCTION_CANDIDATE_CAPABILITIES : PRODUCTION_DECISION_CAPABILITIES,
-    executionManifest,
-    phase === "candidate" ? undefined : {
-      from: experiment.window.measured_from_block!,
-      to: experiment.window.measured_to_block!,
-    },
-  ));
   if (phase !== "candidate" && errors.length === 0) {
     errors.push(...validateAnalysisArtifacts(repoRoot));
   }
 }
 if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown) {
-  const onchain = await verifyOnchainProductionSample(experiment, requiredArg("--rpc"));
+  const onchain = await verifyOnchainProductionSample(
+    experiment,
+    requiredArg("--rpc"),
+    requiredArg("--universe"),
+  );
   errors.push(...onchain.errors);
   onchainObservation = onchain.observation;
   if (onchain.observation) {
@@ -117,14 +128,8 @@ function csvArg(name: string): string[] {
 }
 
 function reportArtifactRelative(repoRoot: string, artifact: string, label: string): string {
-  if (!artifact?.trim() || path.isAbsolute(artifact)) throw new Error(`${label} must be repository-relative`);
   const reportRelative = option("--report-repo-path") ?? path.relative(repoRoot, path.resolve(report!));
-  if (path.isAbsolute(reportRelative) || reportRelative === ".." || reportRelative.startsWith(`..${path.sep}`)) {
-    throw new Error("report path escapes the repository");
-  }
-  const relative = path.normalize(path.join(path.dirname(reportRelative), artifact));
-  if (relative === ".." || relative.startsWith(`..${path.sep}`)) throw new Error(`${label} escapes the repository`);
-  return relative.split(path.sep).join("/");
+  return resolveAbReportArtifactPath(reportRelative, artifact, label);
 }
 
 function readReportArtifact(repoRoot: string, artifact: string, label: string): Buffer {
@@ -133,7 +138,7 @@ function readReportArtifact(repoRoot: string, artifact: string, label: string): 
   if (artifactRef) {
     return execFileSync("git", ["show", `${artifactRef}:${relative}`], { cwd: repoRoot });
   }
-  return fs.readFileSync(path.join(repoRoot, relative));
+  return readAbLocalReportArtifact(repoRoot, relative);
 }
 
 function validateAnalysisArtifacts(repoRoot: string): string[] {
@@ -182,6 +187,13 @@ interface HuntResult {
   net_profit_raw: string | null;
 }
 
+interface BlockscanHuntResult extends HuntResult {
+  expected_swap_path: Array<{ pool_id: string; direction: "0for1" | "1for0" }>;
+  matched_swap_path: Array<{ pool_id: string; direction: "0for1" | "1for0" }>;
+  expected_route: ProductionRouteStep[];
+  matched_route: ProductionRouteStep[];
+}
+
 interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
   winner_tx_hash: string;
   winner_transaction_index: number;
@@ -201,6 +213,8 @@ interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
   post_state_anchor_kind: "victim-tx";
   post_state_anchor_hash: string;
   victim_effect_kind: "swap" | "oracle" | null;
+  expected_route: ProductionRouteStep[];
+  matched_route: ProductionRouteStep[];
   oracle_route_edge_index: number | null;
   oracle_probe_amount_in_raw: string | null;
   oracle_before_amount_out_raw: string | null;
@@ -234,12 +248,29 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
   const sample = experiment.production_evidence!.sample;
   const universe = fs.realpathSync(requiredArg("--universe"));
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
+  const expectedSwapPath = observation.arb_swap_path.map((step) => ({
+    pool_id: step.pool_id.toLowerCase(),
+    direction: step.direction,
+  }));
+  const expectedRoute = normalizeProductionRoute(experiment.production_evidence!.sample.expected_route ?? []);
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
   if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
-  const baseline = runHunt("baseline", baseRoot, 8568, universe, sample.block_number - 1, expectedPools, maxPools);
-  const challenger = runHunt("challenger", challengerRoot, 8569, universe, sample.block_number - 1, expectedPools, maxPools);
-  validateHuntResult("baseline", baseline, experiment.production_evidence!.baseline_stage, sample.block_number - 1, expectedPools);
-  validateHuntResult("challenger", challenger, experiment.production_evidence!.challenger_stage, sample.block_number - 1, expectedPools);
+  const baseline = runHunt(
+    "baseline", baseRoot, 8568, universe, sample.block_number - 1,
+    expectedPools, expectedSwapPath, expectedRoute, maxPools,
+  );
+  const challenger = runHunt(
+    "challenger", challengerRoot, 8569, universe, sample.block_number - 1,
+    expectedPools, expectedSwapPath, expectedRoute, maxPools,
+  );
+  validateHuntResult(
+    "baseline", baseline, experiment.production_evidence!.baseline_stage,
+    sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
+  );
+  validateHuntResult(
+    "challenger", challenger, experiment.production_evidence!.challenger_stage,
+    sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
+  );
   console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
 }
 
@@ -294,15 +325,9 @@ function runBackrunHunt(
   maxPools: number,
 ): BackrunHuntResult {
   const trustedSource = path.join(trustedRoot, "listener", "src", "searcher", "test", "backrun-hunt.ts");
-  const targetSource = path.join(
-    targetRoot,
-    "listener",
-    "src",
-    "searcher",
-    "test",
-    `.ab-trusted-backrun-hunt-${process.pid}-${label}.ts`,
-  );
-  fs.copyFileSync(trustedSource, targetSource);
+  const targetSource = resolveTrustedBackrunHarness(label, trustedSource, trustedRoot, targetRoot);
+  const removeTargetSource = targetSource !== trustedSource
+    && option(`--trusted-backrun-hunt-${label}`) === undefined;
   const childEnv = { ...process.env };
   delete childEnv.NODE_OPTIONS;
   delete childEnv.npm_config_script_shell;
@@ -348,8 +373,42 @@ function runBackrunHunt(
     if (!marker) throw new Error(`${label} backrun hunt emitted no machine result`);
     return JSON.parse(marker.slice("BACKRUN_HUNT_RESULT=".length)) as BackrunHuntResult;
   } finally {
-    fs.rmSync(targetSource, { force: true });
+    if (removeTargetSource) fs.rmSync(targetSource, { force: true });
   }
+}
+
+function resolveTrustedBackrunHarness(
+  label: string,
+  trustedSource: string,
+  trustedRoot: string,
+  targetRoot: string,
+): string {
+  if (targetRoot === trustedRoot) return trustedSource;
+  const preinstalledSource = option(`--trusted-backrun-hunt-${label}`);
+  if (preinstalledSource !== undefined) {
+    const resolved = fs.realpathSync(preinstalledSource);
+    const expectedDirectory = fs.realpathSync(path.join(targetRoot, "listener", "src", "searcher", "test"));
+    if (path.dirname(resolved) !== expectedDirectory
+        || !path.basename(resolved).startsWith(".ab-trusted-backrun-hunt-")) {
+      throw new Error(`${label} trusted backrun harness must be preinstalled under the target test directory`);
+    }
+    const trustedDigest = createHash("sha256").update(fs.readFileSync(trustedSource)).digest("hex");
+    const resolvedDigest = createHash("sha256").update(fs.readFileSync(resolved)).digest("hex");
+    if (resolvedDigest !== trustedDigest) {
+      throw new Error(`${label} trusted backrun harness does not match the frozen base harness`);
+    }
+    return resolved;
+  }
+  const targetSource = path.join(
+    targetRoot,
+    "listener",
+    "src",
+    "searcher",
+    "test",
+    `.ab-trusted-backrun-hunt-${process.pid}-${label}.ts`,
+  );
+  fs.copyFileSync(trustedSource, targetSource, fs.constants.COPYFILE_EXCL);
+  return targetSource;
 }
 
 function validateBackrunHuntResult(
@@ -389,6 +448,14 @@ function validateBackrunHuntResult(
     }
   }
   const expectedProtocol = experiment.production_evidence!.route_scope === "dex-permissionless-protocol";
+  const expectedRoute = normalizeProductionRoute(experiment.production_evidence!.sample.expected_route ?? []);
+  if (JSON.stringify(result.expected_route) !== JSON.stringify(expectedRoute)) {
+    throw new Error(`${label} backrun hunt did not bind the declared complete route`);
+  }
+  if (expectedStage !== "not_admitted"
+      && JSON.stringify(result.matched_route) !== JSON.stringify(expectedRoute)) {
+    throw new Error(`${label} backrun hunt did not match the complete adapter/slot/target/token route`);
+  }
   if (expectedStage !== "not_admitted" && result.has_protocol_edge !== expectedProtocol) {
     throw new Error(`${label} backrun hunt route scope does not match the winner sample`);
   }
@@ -434,9 +501,11 @@ function runHunt(
   universe: string,
   forkBlock: number,
   expectedPools: string[],
+  expectedSwapPath: ProductionSampleObservation["arb_swap_path"],
+  expectedRoute: ProductionRouteStep[],
   maxPools: number,
-): HuntResult {
-  const outDir = fs.mkdtempSync(path.join("/tmp", `mev-ab-${label}-`));
+): BlockscanHuntResult {
+  const outDir = fs.mkdtempSync(path.join(gateTmpRoot, `mev-ab-${label}-`));
   const childEnv = { ...process.env };
   delete childEnv.NODE_OPTIONS;
   delete childEnv.npm_config_script_shell;
@@ -460,6 +529,8 @@ function runHunt(
       HUNT_TOP_K: "8",
       HUNT_OUT: path.join(outDir, "hunt.json"),
       AB_EXPECTED_POOL_IDS: expectedPools.join(","),
+      AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(expectedSwapPath),
+      AB_EXPECTED_ROUTE_JSON: JSON.stringify(expectedRoute),
       AB_EXPECTED_ROUTE_SCOPE: experiment.production_evidence!.route_scope,
     },
   });
@@ -473,7 +544,7 @@ function runHunt(
     .at(-1);
   if (!marker) throw new Error(`${label} blockscan hunt emitted no machine result`);
   try {
-    return JSON.parse(marker.slice("BLOCKSCAN_HUNT_RESULT=".length)) as HuntResult;
+    return JSON.parse(marker.slice("BLOCKSCAN_HUNT_RESULT=".length)) as BlockscanHuntResult;
   } catch (error) {
     throw new Error(`${label} blockscan hunt result is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -481,10 +552,12 @@ function runHunt(
 
 function validateHuntResult(
   label: string,
-  result: HuntResult,
+  result: BlockscanHuntResult,
   expectedStage: string,
   forkBlock: number,
   expectedPools: string[],
+  expectedSwapPath: ProductionSampleObservation["arb_swap_path"],
+  expectedRoute: ProductionRouteStep[],
 ): void {
   if (result.schema_version !== 1 || result.fork_block !== forkBlock) {
     throw new Error(`${label} hunt did not execute at the untouched sample parent block`);
@@ -496,8 +569,21 @@ function validateHuntResult(
   if (JSON.stringify(reportedPools) !== JSON.stringify(expectedPools)) {
     throw new Error(`${label} hunt pool identity does not match the on-chain sample`);
   }
+  if (JSON.stringify(result.expected_swap_path) !== JSON.stringify(expectedSwapPath)) {
+    throw new Error(`${label} hunt swap path declaration does not match the ordered on-chain sample`);
+  }
+  if (JSON.stringify(result.expected_route) !== JSON.stringify(expectedRoute)) {
+    throw new Error(`${label} hunt route declaration does not match the complete ordered sample route`);
+  }
   if (expectedStage !== "not_admitted" && result.closed_route !== true) {
     throw new Error(`${label} hunt did not find the sample pools in a closed route`);
+  }
+  if (expectedStage !== "not_admitted") {
+    const pathErrors = validateExactProductionSwapPath(expectedSwapPath, result.matched_swap_path);
+    if (pathErrors.length > 0) throw new Error(`${label} ${pathErrors.join("; ")}`);
+    if (JSON.stringify(result.matched_route) !== JSON.stringify(expectedRoute)) {
+      throw new Error(`${label} hunt did not match the complete ordered adapter/target/token route`);
+    }
   }
   const expectedProtocol = experiment.production_evidence!.route_scope === "dex-permissionless-protocol";
   if (expectedStage !== "not_admitted" && result.has_protocol_edge !== expectedProtocol) {
@@ -507,6 +593,19 @@ function validateHuntResult(
       && (!result.final_sim_success || result.net_profit_raw === null || BigInt(result.net_profit_raw) <= 0n)) {
     throw new Error(`${label} hunt did not produce a positive final simulation`);
   }
+}
+
+function normalizeProductionRoute(
+  route: NonNullable<NonNullable<AbExperiment["production_evidence"]>["sample"]["expected_route"]>,
+): ProductionRouteStep[] {
+  return route.map((edge) => ({
+    adapterId: edge.adapterId,
+    slotKind: edge.slotKind,
+    target: edge.target.toLowerCase(),
+    tokenIn: edge.tokenIn.toLowerCase(),
+    tokenOut: edge.tokenOut.toLowerCase(),
+    ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
+  }));
 }
 
 function gitOutput(args: string[]): string {
@@ -577,7 +676,7 @@ function localBranchExists(): boolean {
   }
 }
 
-const marker = path.join("/tmp", `mev-ab-cleanup-${createHash("sha256").update(experiment.branch).digest("hex")}`);
+const marker = path.join(gateTmpRoot, `mev-ab-cleanup-${createHash("sha256").update(experiment.branch).digest("hex")}`);
 const authorizeCleanup = args.includes("--authorize-cleanup");
 if (authorizeCleanup) {
   const resolvedCleanup = phase === "close"

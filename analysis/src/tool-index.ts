@@ -89,6 +89,7 @@ const CURATED: Record<string, Curated> = {
   "analysis:hermes-gate": meta("gate", ["hermes", "close-gate", "method-trace"], "zero-cu", "Mechanical Hermes report close gate.", 100),
   "analysis:ab-canary-compare": meta("analysis", ["ab", "comparison", "block-scan"], "zero-cu", "Compare paired A/B block-scan logs after manual analysis.", 100),
   "analysis:ab-canary-gate": meta("gate", ["ab", "candidate-gate", "close-gate"], "local-rpc", "Validate A/B candidate, decision, and cleanup invariants.", 100),
+  "analysis:historical-gap-gate": meta("gate", ["historical-gap", "promotion", "pinned-replay", "branch-lifecycle"], "fork", "Route historical gap repairs to direct-main, replay-plus-smoke, or Hermes A/B and enforce promotion evidence.", 100),
   "analysis:ab-promotion-close": meta("ops", ["ab", "branch-lifecycle", "promotion", "cleanup"], "zero-cu", "Execute an already adjudicated win/lose: exact merge or reject, archive, gate, and cleanup.", 100),
   "analysis:ab-resolution-sweep": meta("ops", ["ab", "branch-lifecycle", "pinned-replay"], "fork", "Re-run main-committed resolution claims and clean resolved retained branches.", 100),
   "analysis:competitor-calibration": meta("gate", ["classification", "calibration", "fixture"], "zero-cu", "Regression calibration for competitor style and comparability classification; it does not inspect a live window.", 100),
