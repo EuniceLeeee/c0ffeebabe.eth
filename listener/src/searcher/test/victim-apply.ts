@@ -2,6 +2,7 @@ import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { applyVictimSwapLocally } from "../solver/victim-apply.js";
 import { curvePlainGetDy } from "../solver/curve-math.js";
 import { v3SwapExactInput, v3SwapToState, type V3PoolState } from "../solver/v3-math.js";
+import { quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolImpact } from "../detector/pool-impact.js";
 
@@ -13,12 +14,42 @@ const POOL = "0x0000000000000000000000000000000000000c01";
 const TOKEN0 = "0x00000000000000000000000000000000000000a0";
 const TOKEN1 = "0x00000000000000000000000000000000000000b1";
 const BLOCK = 123;
+const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+const SUSHI_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
+const PANCAKE_V2_FACTORY = "0x1097053fd2ea711dad45caccc45eff7548fcb362";
 
 const noState = {
   async call(): Promise<string> {
     throw new Error("state.call should not be used");
   },
 } as unknown as StateBackend;
+
+function testV2FeeMath(): void {
+  const reserveIn = 2_000_000n;
+  const reserveOut = 1_000_000n;
+  const amountIn = 10_000n;
+  const old997Over1000Expected = 4960n;
+
+  const out30 = quoteV2ExactInput(reserveIn, reserveOut, amountIn, 30n);
+  assert(
+    out30 === old997Over1000Expected,
+    `v2 30bps regression ${out30} != ${old997Over1000Expected}`,
+  );
+  console.log("[victim-apply] v2 30bps regression: PASS");
+
+  const out25 = quoteV2ExactInput(reserveIn, reserveOut, amountIn, 25n);
+  assert(out25 > out30, `v2 25bps output ${out25} should exceed 30bps ${out30}`);
+  console.log("[victim-apply] v2 25bps higher output: PASS");
+}
+
+function testV2FeeTable(): void {
+  assert(v2FeeBpsForFactory(UNIV2_FACTORY) === 30n, "UniV2 fee bps should be 30");
+  assert(v2FeeBpsForFactory(SUSHI_FACTORY) === 30n, "SushiV2 fee bps should be 30");
+  assert(v2FeeBpsForFactory(PANCAKE_V2_FACTORY) === 25n, "PancakeV2 fee bps should be 25");
+  assert(v2FeeBpsForFactory("0x000000000000000000000000000000000000dEaD") === 30n, "unknown factory default");
+  assert(v2FeeBpsForFactory(undefined) === 30n, "undefined factory default");
+  console.log("[victim-apply] v2 fee table: PASS");
+}
 
 async function testV2VictimApply(): Promise<void> {
   const cache = new PoolStateCache();
@@ -28,11 +59,12 @@ async function testV2VictimApply(): Promise<void> {
     token1: TOKEN1,
     reserve0: 2_000_000n,
     reserve1: 1_000_000n,
+    feeBps: 25n,
     blockNumber: BLOCK,
   });
 
   const victimAmount = 10_000n;
-  const expectedVictimOut = quoteV2(2_000_000n, 1_000_000n, victimAmount);
+  const expectedVictimOut = quoteV2ExactInput(2_000_000n, 1_000_000n, victimAmount, 25n);
   const impact: PoolImpact = {
     pool: POOL,
     tokenIn: TOKEN0,
@@ -44,17 +76,20 @@ async function testV2VictimApply(): Promise<void> {
   const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: v2 victim apply should succeed");
   assert(applied.amountOut === expectedVictimOut, `v2 victim out ${applied.amountOut} != ${expectedVictimOut}`);
+  if (applied.postImpact.kind !== "v2") throw new Error("FAIL: v2 apply should return v2 post-impact seed");
+  assert(applied.postImpact.feeBps === 25n, `v2 post-impact feeBps ${applied.postImpact.feeBps} != 25`);
 
   cache.beginHint(BLOCK, { postImpact: [applied.postImpact] });
   const followAmount = 20_000n;
-  const expectedFollowOut = quoteV2(
+  const expectedFollowOut = quoteV2ExactInput(
     2_000_000n + victimAmount,
     1_000_000n - expectedVictimOut,
     followAmount,
+    25n,
   );
   const followOut = await cache.quoteV2(noState, POOL, TOKEN0, TOKEN1, followAmount);
   assert(followOut === expectedFollowOut, `v2 post-state quote ${followOut} != ${expectedFollowOut}`);
-  console.log("[victim-apply] v2 post-impact cache: PASS");
+  console.log("[victim-apply] v2 fee threading + post-impact cache: PASS");
 }
 
 async function testV3VictimApply(): Promise<void> {
@@ -157,16 +192,13 @@ async function testCurveVictimApply(): Promise<void> {
   console.log("[victim-apply] curve post-impact cache: PASS");
 }
 
-function quoteV2(reserveIn: bigint, reserveOut: bigint, amountIn: bigint): bigint {
-  const amountInWithFee = amountIn * 997n;
-  return (amountInWithFee * reserveOut) / (reserveIn * 1000n + amountInWithFee);
-}
-
 async function main(): Promise<void> {
+  testV2FeeMath();
+  testV2FeeTable();
   await testV2VictimApply();
   await testV3VictimApply();
   await testCurveVictimApply();
-  console.log("victim-apply PASS (3/3)");
+  console.log("victim-apply PASS (6/6)");
 }
 
 main().catch((err) => {

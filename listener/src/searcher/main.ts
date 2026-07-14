@@ -62,6 +62,7 @@ import {
   type V4Seed,
 } from "./solver/pool-state-cache.js";
 import { PoolStateUpdater } from "./solver/pool-state-updater.js";
+import { DEFAULT_V2_FEE_BPS } from "./solver/v2-fee.js";
 import { postImpactStateOverrides } from "./solver/post-impact-overrides.js";
 import { resolveErc20BalanceSlot } from "./solver/balance-slots.js";
 import { applyVictimSwapLocally, type LocalVictimApplyResult } from "./solver/victim-apply.js";
@@ -3764,6 +3765,7 @@ function sameV2Seed(a: V2Seed, b: V2Seed): boolean {
     a.token1.toLowerCase() === b.token1.toLowerCase() &&
     a.reserve0 === b.reserve0 &&
     a.reserve1 === b.reserve1 &&
+    a.feeBps === b.feeBps &&
     a.blockTimestampLast === b.blockTimestampLast;
 }
 
@@ -3814,7 +3816,7 @@ function sameBigintArray(a: bigint[], b: bigint[]): boolean {
 }
 
 function formatV2Seed(seed: V2Seed): string {
-  return `${seed.reserve0}/${seed.reserve1}/${seed.blockTimestampLast ?? "n/a"}`;
+  return `${seed.reserve0}/${seed.reserve1}/${seed.feeBps}/${seed.blockTimestampLast ?? "n/a"}`;
 }
 
 function formatV3LiveSeed(seed: V3LiveSeed): string {
@@ -4373,6 +4375,7 @@ function v2EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V2PostI
     token1,
     reserve0: impact.v2PostState.reserve0,
     reserve1: impact.v2PostState.reserve1,
+    feeBps: DEFAULT_V2_FEE_BPS,
     blockTimestampLast: impact.v2PostState.blockTimestampLast,
     blockNumber,
   };

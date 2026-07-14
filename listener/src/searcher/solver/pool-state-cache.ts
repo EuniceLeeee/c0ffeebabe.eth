@@ -22,6 +22,11 @@ import {
   type CurveNgState,
 } from "./curve-math.js";
 import { V3MissingBitmapWordError, v3SwapExactInput, type V3PoolState } from "./v3-math.js";
+import {
+  DEFAULT_V2_FEE_BPS,
+  quoteV2ExactInput,
+  v2FeeBpsForFactory,
+} from "./v2-fee.js";
 
 const curveIface = new ethers.Interface([
   "function A() view returns (uint256)",
@@ -34,6 +39,7 @@ const curveIface = new ethers.Interface([
 const erc20Iface = new ethers.Interface(["function decimals() view returns (uint8)"]);
 const univ2Iface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
 ]);
@@ -117,6 +123,7 @@ interface V2Cached {
   token1: string; // lowercase
   reserve0: bigint;
   reserve1: bigint;
+  feeBps: bigint;
   blockTimestampLast?: number;
   blockNumber?: number;
   source: "seed" | "lazy";
@@ -144,6 +151,7 @@ export interface V2Seed {
   token1: string;
   reserve0: bigint;
   reserve1: bigint;
+  feeBps: bigint;
   blockTimestampLast?: number;
   blockNumber: number;
 }
@@ -424,6 +432,7 @@ export class PoolStateCache {
       token1: seed.token1.toLowerCase(),
       reserve0: seed.reserve0,
       reserve1: seed.reserve1,
+      feeBps: seed.feeBps,
       blockTimestampLast: seed.blockTimestampLast,
       blockNumber: seed.blockNumber,
       source: "seed",
@@ -499,6 +508,7 @@ export class PoolStateCache {
       token1: cached.token1,
       reserve0: cached.reserve0,
       reserve1: cached.reserve1,
+      feeBps: cached.feeBps,
       blockTimestampLast: cached.blockTimestampLast,
       blockNumber: cached.blockNumber ?? blockNumber ?? 0,
     };
@@ -702,10 +712,10 @@ export class PoolStateCache {
   }
 
   /**
-   * Local constant-product (UniV2) quote, warming token0 + reserves once per
-   * hint then computing the 0.3%-fee output locally for every trial. Reserves
-   * shift with the victim swap, so the cache is cleared each hint. Throws on
-   * any failure so the caller can fall back to the eth_call quoter.
+   * Local constant-product (UniV2-lineage) quote, warming token0 + reserves +
+   * per-pool fee once per hint then computing output locally for every trial.
+   * Reserves shift with the victim swap, so the cache is cleared each hint.
+   * Throws on any failure so the caller can fall back to the eth_call quoter.
    */
   async quoteV2(
     state: StateBackend,
@@ -744,25 +754,34 @@ export class PoolStateCache {
     const [reserveIn, reserveOut] = zeroForOne
       ? [cached.reserve0, cached.reserve1]
       : [cached.reserve1, cached.reserve0];
-    // UniV2 constant-product with 0.3% fee (matches the eth_call quoter).
-    const amountInWithFee = amountIn * 997n;
-    return (amountInWithFee * reserveOut) / (reserveIn * 1000n + amountInWithFee);
+    return quoteV2ExactInput(reserveIn, reserveOut, amountIn, cached.feeBps);
   }
 
   private async warmV2(state: StateBackend, pool: string): Promise<V2Cached> {
-    const [t0Res, t1Res, resvRes] = await Promise.all([
+    const [t0Res, t1Res, resvRes, factoryRes] = await Promise.all([
       state.call({ to: pool, data: univ2Iface.encodeFunctionData("token0") }),
       state.call({ to: pool, data: univ2Iface.encodeFunctionData("token1") }),
       state.call({ to: pool, data: univ2Iface.encodeFunctionData("getReserves") }),
+      state.call({ to: pool, data: univ2Iface.encodeFunctionData("factory") }).catch(() => undefined),
     ]);
     const token0 = ethers.getAddress("0x" + t0Res.slice(-40)).toLowerCase();
     const token1 = ethers.getAddress("0x" + t1Res.slice(-40)).toLowerCase();
     const decoded = univ2Iface.decodeFunctionResult("getReserves", resvRes);
+    let feeBps = DEFAULT_V2_FEE_BPS;
+    if (factoryRes) {
+      try {
+        const factory = univ2Iface.decodeFunctionResult("factory", factoryRes)[0] as string;
+        feeBps = v2FeeBpsForFactory(factory);
+      } catch {
+        feeBps = DEFAULT_V2_FEE_BPS;
+      }
+    }
     return {
       token0,
       token1,
       reserve0: BigInt(decoded[0]),
       reserve1: BigInt(decoded[1]),
+      feeBps,
       blockTimestampLast: Number(decoded[2]),
       blockNumber: this.tickBlock,
       source: "lazy",

@@ -25,6 +25,7 @@ import {
   encodeUniV4QuoteExactInputSingle,
   uniV4QuoterIface,
 } from "../solver/quoter.js";
+import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import {
   postImpactStateOverrides,
   postImpactSupportsStateOverrides,
@@ -45,6 +46,7 @@ const CURVE_UINT_IFACE = new ethers.Interface([
 ]);
 const UNIV2_IFACE = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
 ]);
 const BALANCE_OF_IFACE = new ethers.Interface([
@@ -70,6 +72,7 @@ export class RevmLiveBackend implements LiveStateBackend {
   readonly kind = "revm" as const;
   private preparedBlock: number | null = null;
   private readonly feeCache = new Map<string, number>();
+  private readonly v2FeeCache = new Map<string, bigint>();
 
   constructor(
     private readonly client: RevmSimClient,
@@ -495,6 +498,25 @@ export class RevmLiveBackend implements LiveStateBackend {
     return fee;
   }
 
+  private async resolveUniv2FeeBps(pool: string): Promise<bigint> {
+    const key = pool.toLowerCase();
+    const cached = this.v2FeeCache.get(key);
+    if (cached !== undefined) return cached;
+    let feeBps = DEFAULT_V2_FEE_BPS;
+    try {
+      const raw = await this.provider.call({
+        to: pool,
+        data: UNIV2_IFACE.encodeFunctionData("factory", []),
+      });
+      const factory = UNIV2_IFACE.decodeFunctionResult("factory", raw)[0] as string;
+      feeBps = v2FeeBpsForFactory(factory);
+    } catch {
+      feeBps = DEFAULT_V2_FEE_BPS;
+    }
+    this.v2FeeCache.set(key, feeBps);
+    return feeBps;
+  }
+
   private findEdge(req: QuoteRequest): TokenEdge | undefined {
     const target = req.target.toLowerCase();
     const tokenIn = req.tokenIn.toLowerCase();
@@ -581,11 +603,13 @@ export class RevmLiveBackend implements LiveStateBackend {
     const [r0, r1] = [BigInt(decoded[0]), BigInt(decoded[1])];
     const zeroForOne = req.tokenIn.toLowerCase() === token0.toLowerCase();
     const [reserveIn, reserveOut] = zeroForOne ? [r0, r1] : [r1, r0];
+    const feeBps = await this.resolveUniv2FeeBps(req.target);
 
-    const amountInWithFee = req.amountIn * 997n;
-    const numerator = amountInWithFee * reserveOut;
-    const denominator = reserveIn * 1000n + amountInWithFee;
-    return { amountOut: numerator / denominator, latencyMs, cacheStats: reservesCall.cacheStats };
+    return {
+      amountOut: quoteV2ExactInput(reserveIn, reserveOut, req.amountIn, feeBps),
+      latencyMs,
+      cacheStats: reservesCall.cacheStats,
+    };
   }
 
   private async quoteUniV3(

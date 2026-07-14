@@ -227,6 +227,7 @@ async function testSeedFreshnessAndOverlayBypass(): Promise<void> {
     token1: TOKEN1,
     reserve0: 2_000_000n,
     reserve1: 1_000_000n,
+    feeBps: 30n,
     blockNumber: 100,
   });
   cache.beginHint(100);
@@ -248,6 +249,7 @@ async function testSeedFreshnessAndOverlayBypass(): Promise<void> {
     token1: TOKEN1,
     reserve0: 2_000_000n,
     reserve1: 1_000_000n,
+    feeBps: 30n,
     blockNumber: 102,
   });
   cache.beginHint(102, [POOL]);

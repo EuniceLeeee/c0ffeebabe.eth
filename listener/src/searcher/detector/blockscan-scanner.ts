@@ -315,7 +315,7 @@ function readV2Mid(snapshot: V2Seed | null, pool: string, edges: TokenEdge[], a:
     pool,
     edges,
     mid,
-    feeBps: 30,
+    feeBps: Number(snapshot.feeBps),
     reserveA,
     reserveB,
     depthProxy: Number(minBigint(reserveA, reserveB)),

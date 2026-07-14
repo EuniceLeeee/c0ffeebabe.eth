@@ -140,6 +140,7 @@ function seedV2(cache: PoolStateCache, pool: string, token: string, tokenReserve
     token1: WETH,
     reserve0: tokenReserve,
     reserve1: wethReserve,
+    feeBps: 30n,
     blockNumber: BLOCK,
   });
 }
@@ -158,6 +159,7 @@ function seedV2Pair(
     token1,
     reserve0,
     reserve1,
+    feeBps: 30n,
     blockNumber: BLOCK,
   });
 }

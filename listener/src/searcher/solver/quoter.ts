@@ -5,6 +5,7 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import { type V4PoolKey, v4HooksAffectSwap } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quoteV4ExactInLocal } from "./v4-math.js";
+import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "./v2-fee.js";
 
 /**
  * Quoter — per-protocol amountOut estimation on the current fork state.
@@ -295,8 +296,29 @@ export async function quoteSiloRedeem(
 
 const univ2Iface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
 ]);
+const univ2FeeBpsCache = new Map<string, bigint>();
+
+async function resolveUniV2FeeBps(state: StateBackend, pool: string): Promise<bigint> {
+  const key = pool.toLowerCase();
+  const cached = univ2FeeBpsCache.get(key);
+  if (cached !== undefined) return cached;
+  let feeBps = DEFAULT_V2_FEE_BPS;
+  try {
+    const raw = await state.call({
+      to: pool,
+      data: univ2Iface.encodeFunctionData("factory"),
+    });
+    const factory = univ2Iface.decodeFunctionResult("factory", raw)[0] as string;
+    feeBps = v2FeeBpsForFactory(factory);
+  } catch {
+    feeBps = DEFAULT_V2_FEE_BPS;
+  }
+  univ2FeeBpsCache.set(key, feeBps);
+  return feeBps;
+}
 
 async function quoteUniV2(
   state: StateBackend,
@@ -319,12 +341,9 @@ async function quoteUniV2(
   const decoded = univ2Iface.decodeFunctionResult("getReserves", reservesResult);
   const [r0, r1] = [BigInt(decoded[0]), BigInt(decoded[1])];
   const [reserveIn, reserveOut] = zeroForOne ? [r0, r1] : [r1, r0];
+  const feeBps = await resolveUniV2FeeBps(state, pool);
 
-  // UniV2 constant-product with 0.3% fee
-  const amountInWithFee = amountIn * 997n;
-  const numerator = amountInWithFee * reserveOut;
-  const denominator = reserveIn * 1000n + amountInWithFee;
-  return numerator / denominator;
+  return quoteV2ExactInput(reserveIn, reserveOut, amountIn, feeBps);
 }
 
 // ── UniV4 (local math, V4Quoter fallback) ─────────────────────

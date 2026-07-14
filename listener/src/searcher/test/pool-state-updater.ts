@@ -4,6 +4,7 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import { v4PoolId, type V4PoolKey } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
+import { quoteV2ExactInput } from "../solver/v2-fee.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -15,6 +16,7 @@ const V2_POOL = "0x0000000000000000000000000000000000000a02";
 const V3_POOL = "0x0000000000000000000000000000000000000a03";
 const TOKEN0 = "0x00000000000000000000000000000000000000a0";
 const TOKEN1 = "0x00000000000000000000000000000000000000b1";
+const PANCAKE_V2_FACTORY = "0x1097053fd2ea711dad45caccc45eff7548fcb362";
 const SQRT_PRICE_1_1 = 1n << 96n;
 const V4_KEY: V4PoolKey = {
   currency0: TOKEN0,
@@ -30,6 +32,7 @@ const multicallIface = new ethers.Interface([
 ]);
 const v2Iface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
 ]);
@@ -108,7 +111,7 @@ async function main(): Promise<void> {
     },
   ]);
   assert(aggregateCalls === 2, `expected mutable aggregate + tick aggregate, got ${aggregateCalls}`);
-  assert(mutableCalls === 11, `expected 11 mutable/static subcalls, got ${mutableCalls}`);
+  assert(mutableCalls === 12, `expected 12 mutable/static subcalls, got ${mutableCalls}`);
   assert(tickCalls > 0, `expected TickLens subcalls in aggregate`);
   const v4 = cache.snapshotV4(V4_POOL_ID, 123);
   assert(v4?.sqrtPriceX96 === SQRT_PRICE_1_1, "v4 slot0 seeded by PoolStateUpdater");
@@ -122,7 +125,8 @@ async function main(): Promise<void> {
   cache.beginHint(123);
   const v2Out = await cache.quoteV2(noState, V2_POOL, TOKEN0, TOKEN1, 10_000n);
   const v3Out = await cache.quoteV3(noState, V3_POOL, TOKEN0, TOKEN1, 1_000n);
-  assert(v2Out > 0n, `seeded v2 quote should produce output`);
+  const expectedV2Out = quoteV2ExactInput(2_000_000n, 1_000_000n, 10_000n, 25n);
+  assert(v2Out === expectedV2Out, `seeded v2 quote ${v2Out} != ${expectedV2Out}`);
   assert(v3Out > 0n, `seeded v3 quote should produce output`);
   console.log("[pool-updater] multicall seed + local quote: PASS");
 }
@@ -133,6 +137,9 @@ function encodeV2(selector: string): string {
   }
   if (selector === v2Iface.getFunction("token1")!.selector) {
     return v2Iface.encodeFunctionResult("token1", [TOKEN1]);
+  }
+  if (selector === v2Iface.getFunction("factory")!.selector) {
+    return v2Iface.encodeFunctionResult("factory", [PANCAKE_V2_FACTORY]);
   }
   if (selector === v2Iface.getFunction("getReserves")!.selector) {
     return v2Iface.encodeFunctionResult("getReserves", [2_000_000n, 1_000_000n, 0]);

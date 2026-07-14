@@ -23,6 +23,7 @@ function v2Seed(): V2PostImpactSeed {
     token1: TOKEN1,
     reserve0: 111n,
     reserve1: 222n,
+    feeBps: 30n,
     blockTimestampLast: 7,
     blockNumber: 123,
   };
@@ -36,6 +37,7 @@ function testV2Packing(): void {
     token1: TOKEN1,
     reserve0: 1n,
     reserve1: 2n,
+    feeBps: 30n,
     blockTimestampLast: 3,
     blockNumber: 123,
   });

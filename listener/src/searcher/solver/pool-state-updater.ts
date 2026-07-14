@@ -9,6 +9,7 @@ import {
   type V3TicksSeed,
   type V4Seed,
 } from "./pool-state-cache.js";
+import { v2FeeBpsForFactory } from "./v2-fee.js";
 
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
 const TICK_LENS = "0xbfd8137f7d1516D3ea5cA83523914859ec47F573";
@@ -19,6 +20,7 @@ const multicallIface = new ethers.Interface([
 ]);
 const v2Iface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
 ]);
@@ -52,9 +54,12 @@ export interface PoolStateUpdateOptions {
 interface StaticV2 {
   token0: string;
   token1: string;
+  feeBps: bigint;
 }
 
-interface StaticV3 extends StaticV2 {
+interface StaticV3 {
+  token0: string;
+  token1: string;
   fee: bigint;
   tickSpacing: number;
 }
@@ -152,6 +157,7 @@ export class PoolStateUpdater {
       if (!this.v2Static.has(key)) {
         calls.push({ target: pool.target, callData: v2Iface.encodeFunctionData("token0"), label: `${key}:token0` });
         calls.push({ target: pool.target, callData: v2Iface.encodeFunctionData("token1"), label: `${key}:token1` });
+        calls.push({ target: pool.target, callData: v2Iface.encodeFunctionData("factory"), label: `${key}:factory` });
       }
       calls.push({ target: pool.target, callData: v2Iface.encodeFunctionData("getReserves"), label: `${key}:reserves` });
     }
@@ -190,7 +196,8 @@ export class PoolStateUpdater {
         const token0 = decodeAddress(results.get(`${key}:token0`), "token0");
         const token1 = decodeAddress(results.get(`${key}:token1`), "token1");
         if (!token0 || !token1) continue;
-        stat = { token0, token1 };
+        const factory = decodeOptionalAddress(results.get(`${key}:factory`), "factory");
+        stat = { token0, token1, feeBps: v2FeeBpsForFactory(factory) };
         this.v2Static.set(key, stat);
       }
       const reservesData = results.get(`${key}:reserves`);
@@ -202,6 +209,7 @@ export class PoolStateUpdater {
         token1: stat.token1,
         reserve0: BigInt(decoded[0]),
         reserve1: BigInt(decoded[1]),
+        feeBps: stat.feeBps,
         blockTimestampLast: Number(decoded[2]),
         blockNumber,
       };
@@ -398,5 +406,13 @@ function decodeAddress(data: string | undefined, label: string): string | null {
     return ethers.getAddress("0x" + data.slice(-40));
   } catch {
     throw new Error(`bad address result for ${label}`);
+  }
+}
+
+function decodeOptionalAddress(data: string | undefined, label: string): string | undefined {
+  try {
+    return decodeAddress(data, label) ?? undefined;
+  } catch {
+    return undefined;
   }
 }

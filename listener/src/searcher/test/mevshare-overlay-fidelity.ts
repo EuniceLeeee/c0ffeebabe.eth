@@ -174,6 +174,7 @@ function v2SeedFromEvent(reserve0: bigint, reserve1: bigint): V2PostImpactSeed {
     token1: TOKEN1,
     reserve0,
     reserve1,
+    feeBps: 30n,
     blockNumber: BLOCK,
   };
 }

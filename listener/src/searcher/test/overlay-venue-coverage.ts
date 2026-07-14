@@ -137,6 +137,7 @@ function seedForAdapter(adapterId: string): PostImpactSeed | null {
       token1: TOKEN1,
       reserve0: 1n,
       reserve1: 2n,
+      feeBps: 30n,
       blockNumber: 1,
     };
   }

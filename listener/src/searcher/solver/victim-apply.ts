@@ -9,6 +9,7 @@ import {
 } from "./pool-state-cache.js";
 import { curveNgGetDy, curvePlainGetDy } from "./curve-math.js";
 import { v3SwapToState } from "./v3-math.js";
+import { quoteV2ExactInput } from "./v2-fee.js";
 
 export interface LocalVictimApplyResult {
   postImpact: PostImpactSeed;
@@ -53,7 +54,7 @@ function applyV2(
   const [reserveIn, reserveOut] = zeroForOne
     ? [pre.reserve0, pre.reserve1]
     : [pre.reserve1, pre.reserve0];
-  const amountOut = quoteV2ExactInput(reserveIn, reserveOut, impact.amountIn);
+  const amountOut = quoteV2ExactInput(reserveIn, reserveOut, impact.amountIn, pre.feeBps);
   if (amountOut <= 0n || amountOut >= reserveOut) return null;
 
   const post: V2PostImpactSeed = {
@@ -63,6 +64,7 @@ function applyV2(
     token1: pre.token1,
     reserve0: zeroForOne ? pre.reserve0 + impact.amountIn : pre.reserve0 - amountOut,
     reserve1: zeroForOne ? pre.reserve1 - amountOut : pre.reserve1 + impact.amountIn,
+    feeBps: pre.feeBps,
     blockTimestampLast: pre.blockTimestampLast,
     blockNumber,
   };
@@ -160,10 +162,4 @@ async function applyCurve(
     post.ng = ng;
   }
   return { postImpact: post, amountOut };
-}
-
-function quoteV2ExactInput(reserveIn: bigint, reserveOut: bigint, amountIn: bigint): bigint {
-  if (amountIn <= 0n || reserveIn <= 0n || reserveOut <= 0n) return 0n;
-  const amountInWithFee = amountIn * 997n;
-  return (amountInWithFee * reserveOut) / (reserveIn * 1000n + amountInWithFee);
 }
