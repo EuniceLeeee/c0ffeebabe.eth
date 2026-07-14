@@ -61,6 +61,7 @@ export const TOPICS = {
   univ4Swap: ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)"),
   univ4Initialize: ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)"),
   curveTokenExchange: ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"),
+  curveCryptoTokenExchange: ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256,uint256,uint256)"),
   curveTokenExchangeUnderlying: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
   balancerV2Swap: ethers.id("Swap(bytes32,address,address,uint256,uint256)"),
   univ2Mint: ethers.id("Mint(address,uint256,uint256)"),

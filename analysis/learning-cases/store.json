@@ -295,6 +295,35 @@
       },
       "created_at": "2026-07-14T06:39:00.000Z",
       "updated_at": "2026-07-14T06:43:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260714-tricrypto-atomic-backrun",
+      "status": "manual_required",
+      "strategy_kind": "backrun",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x56f6f03fa6f55bc5d54e4420697fb9e7ba2a8dc62b1aaa530312483e60dcf30c",
+      "source_block": 25529256,
+      "comparable": true,
+      "primary_gap": "manual_required",
+      "gap_detail": "closed_tricrypto_backrun_misclassified_inventory_and_route_leg_omitted",
+      "evidence": {
+        "manual": "ordered flow closes WETH->crvUSD->USDC->WETH, repays the PoolManager take/settle source and leaves +0.000210700510961548 WETH with no standing token position",
+        "canonical_before": "bundle-postmortem reported one_leg_inventory and omitted Curve Tricrypto venue 0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+        "source": "same-block idx8 0x20f2773f7dcd9eecd7f965ce598da75743a903dea3a7817cc073cc3cbaa30d35 moved UniV3 0xe0554a47 in the opposite direction immediately before idx9",
+        "reviewer": "019f5f7e-5a4f-71e3-9131-4655bdc72b13 independently confirmed atomic_loop, the builder-payment/native-position bug, the Curve Tricrypto topic omission and backrun-disabled as the production miss"
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/cli/bundle-postmortem.ts + analysis/src/pnl/arb-profit.ts + shared swap topic registry",
+        "issue": "direct coinbase payment was treated as native inventory funding; an N-1 tick heuristic overrode a closed route; Curve Tricrypto's 7-argument TokenExchange was not decoded",
+        "evidence": "tx 0x56f6f03f: direct coinbase call=101775969566202 wei, priority tip=565896000000 wei, prestate coinbase delta includes both; receipt topic 0x143f1f8e... is TokenExchange(address,uint256,uint256,uint256,uint256,uint256,uint256)",
+        "codify_target": "derive direct payment from callTracer, classify from the payment-adjusted native position delta, let closed flow dominate the tick heuristic, register/decode the Tricrypto topic, and pin regressions",
+        "status": "open"
+      },
+      "created_at": "2026-07-14T07:34:00.000Z",
+      "updated_at": "2026-07-14T07:34:00.000Z"
     }
   ]
 }

@@ -164,6 +164,7 @@ function isSwapTopic(topic: string): boolean {
     TOPICS.univ3Swap,
     TOPICS.univ4Swap,
     TOPICS.curveTokenExchange,
+    TOPICS.curveCryptoTokenExchange,
     TOPICS.curveTokenExchangeUnderlying,
   ].map(lower).includes(topic);
 }

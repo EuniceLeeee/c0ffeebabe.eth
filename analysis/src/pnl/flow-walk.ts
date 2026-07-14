@@ -19,6 +19,7 @@ const VENUE_TOPIC_LABELS: Array<{ topic: string; label: string }> = [
   { topic: lower(TOPICS.univ3Swap), label: "univ3" },
   { topic: lower(TOPICS.univ4Swap), label: "univ4-manager" },
   { topic: lower(TOPICS.curveTokenExchange), label: "curve" },
+  { topic: lower(TOPICS.curveCryptoTokenExchange), label: "curve" },
   { topic: lower(TOPICS.curveTokenExchangeUnderlying), label: "curve" },
   { topic: lower(TOPICS.balancerV2Swap), label: "balancerV2" },
   { topic: lower(TOPICS.pancakeV3Swap), label: "pancakeV3" },

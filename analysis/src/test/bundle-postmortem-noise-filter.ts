@@ -156,6 +156,18 @@ const tickForcedStyle = classifyWinnerStyle({
   sandwich_detected: false,
 });
 
+// A closed cross-venue backrun can leave one venue beyond block N-1. The closed transaction flow
+// is decisive; the tick heuristic must not turn it into inventory.
+const tickMovedClosedAtomicStyle = classifyWinnerStyle({
+  pricedDeltas: [delta(ADDR.WETH, 210_700_510_961_548n, "WETH", 18)],
+  unpricedDeltas: [],
+  nativeWeiPositive: false,
+  nativeWeiNegative: false,
+  unpricedInTokensWithoutCounterTransfer: [],
+  winner_moved_price_beyond_prestate: true,
+  sandwich_detected: false,
+});
+
 const sandwichVerdict = buildVerdict(
   event("100", "50"),
   [competitor("sandwich", "200")],
@@ -244,6 +256,7 @@ const checks: Array<() => void> = [
   () => assert.equal(oneLegStyle, "one_leg_inventory"),
   () => assert.equal(pricedOneLegStyle, "one_leg_inventory"),
   () => assert.equal(tickForcedStyle, "one_leg_inventory"),
+  () => assert.equal(tickMovedClosedAtomicStyle, "atomic_loop"),
   () => assert.equal(oneLegVerdict.winner_style, "one_leg_inventory"),
   () => assert.equal(oneLegVerdict.route_gap_decisive, false),
   () => assert.equal(oneLegVerdict.non_comparable_winner, true),

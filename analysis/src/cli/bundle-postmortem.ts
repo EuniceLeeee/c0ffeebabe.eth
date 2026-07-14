@@ -7,7 +7,7 @@ import { decodeTransfer } from "../decode/erc20.js";
 import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
 import type { LearningCase, PrimaryGap } from "../learning/learning-case.js";
 import {
-  builderPaymentWeiFromPrestate,
+  directCoinbasePaymentWeiFromCallTrace,
   fetchEthUsd,
   priceArb,
 } from "../pnl/arb-profit.js";
@@ -42,6 +42,7 @@ const RFQ_DEADLINE_MAX_AHEAD_S = 3600;
 const RFQ_DEADLINE_MAX_BEHIND_S = 120;
 const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
   { topic: lower(TOPICS.curveTokenExchange), protocol: "curve" },
+  { topic: lower(TOPICS.curveCryptoTokenExchange), protocol: "curve" },
   { topic: lower(TOPICS.curveTokenExchangeUnderlying), protocol: "curve" },
   { topic: lower(TOPICS.balancerV2Swap), protocol: "balancerV2" },
   { topic: lower(TOPICS.pancakeV3Swap), protocol: "pancakeV3" },
@@ -248,6 +249,7 @@ export interface WinnerStyleTxInput {
     unpricedDeltas: TokenDelta[];
     beneficiary: string;
     ethDeltaEth: number;
+    positionEthDeltaEth?: number;
     nativeTraceUsed: boolean;
   };
   transactionIndex: number;
@@ -1379,10 +1381,8 @@ async function computeBuilderPaymentWei(
   const priorityFee = effectiveGasPrice > baseFeePerGas ? effectiveGasPrice - baseFeePerGas : 0n;
   const priorityTipWei = gasUsed * priorityFee;
   try {
-    const trace = await rpc.tracePrestate(txHash);
-    const pre = normalizeStateMap(trace?.pre ?? {});
-    const post = normalizeStateMap(trace?.post ?? {});
-    const coinbaseTransferWei = builderPaymentWeiFromPrestate(pre, post, coinbase);
+    const trace = await rpc.traceTransaction(txHash);
+    const coinbaseTransferWei = directCoinbasePaymentWeiFromCallTrace(trace, coinbase);
     return {
       priorityTipWei,
       coinbaseTransferWei,
@@ -1399,12 +1399,6 @@ async function computeBuilderPaymentWei(
       traceError: (err as Error).message,
     };
   }
-}
-
-function normalizeStateMap(state: Record<string, any>): Record<string, any> {
-  const out: Record<string, any> = {};
-  for (const [address, value] of Object.entries(state)) out[lower(address)] = value;
-  return out;
 }
 
 export function extractTouchedVenues(receipt: Json, graph: GraphMembership | null): TouchedVenue[] {
@@ -1662,7 +1656,14 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
   const selectorInventory = Boolean(input.inventory_rebalance_selector_hit)
     && !hasAtomicLoopFlow(input.pricedDeltas, input.unpricedDeltas, input.nativeWeiPositive ?? false);
   if (shareImbalance || selectorInventory) return "inventory_vault_rebalance";
-  if (input.winner_moved_price_beyond_prestate) return "one_leg_inventory";
+  const closedAtomicFlow = hasAtomicLoopFlow(
+    input.pricedDeltas,
+    input.unpricedDeltas,
+    input.nativeWeiPositive ?? false,
+  );
+  // A backrun can push one venue beyond block N-1 while still closing through other venues. Tick
+  // movement is inventory evidence only when the transaction-level flow is not already closed.
+  if (input.winner_moved_price_beyond_prestate && !closedAtomicFlow) return "one_leg_inventory";
   if (input.sandwich_detected) return "sandwich";
   if (hasOneLegInventoryFlow(
     input.pricedDeltas,
@@ -1672,11 +1673,7 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
   )) {
     return "one_leg_inventory";
   }
-  if (hasAtomicLoopFlow(
-    input.pricedDeltas,
-    input.unpricedDeltas,
-    input.nativeWeiPositive ?? false,
-  )) return "atomic_loop";
+  if (closedAtomicFlow) return "atomic_loop";
   return "unknown";
 }
 
@@ -1686,10 +1683,11 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
   // A successful WETH Withdrawal to the executor is the receipt-level native
   // profit exit used by Coffee's atomic loops. Use it only when prestate trace
   // is unavailable; an available trace remains authoritative for native net.
+  const positionEthDeltaEth = input.profit.positionEthDeltaEth ?? input.profit.ethDeltaEth;
   const nativeWeiPositive = input.profit.nativeTraceUsed
-    ? input.profit.ethDeltaEth > 0
+    ? positionEthDeltaEth > 0
     : receiptWethUnwrapExit;
-  const nativeWeiNegative = input.profit.nativeTraceUsed && input.profit.ethDeltaEth < 0;
+  const nativeWeiNegative = input.profit.nativeTraceUsed && positionEthDeltaEth < 0;
   const unpricedTokenInFlow = unpricedTokenInFlowTokens(input.profit.unpricedDeltas);
   const unpricedInTokensWithoutCounterTransfer = await unpricedInTokensWithoutCounterTransfers(
     input.rpc,
@@ -1897,8 +1895,8 @@ function hasOneLegInventoryFlow(
   // Native ETH spent (nativeWeiNegative) counts as an inventory-priced spend: a native-ETH-funded
   // one-leg buy (v4 native settle / any value-funded buy) shows the spend ONLY as a negative native
   // delta, invisible to the priced-token check. Guarded by the leftover-bought-token term below —
-  // an atomic loop leaves no such token, and (ethDeltaEth net) a native atomic loop is net-positive
-  // so nativeWeiNegative is false for it (mutually exclusive with nativeWeiPositive).
+  // an atomic loop leaves no such token. The caller passes a direct-builder-payment-adjusted native
+  // position delta, so paying the builder cannot masquerade as native inventory funding.
   const spentPricedOrNative =
     pricedDeltas.some((delta) => delta.raw < -PRICED_POSITION_DUST_RAW
       && INVENTORY_PRICED_TOKENS.has(lower(delta.token)))

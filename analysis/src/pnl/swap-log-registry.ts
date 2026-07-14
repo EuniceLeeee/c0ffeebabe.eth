@@ -23,6 +23,7 @@ const V4_SWAP_IFACE = new ethers.Interface([
 ]);
 const CURVE_SWAP_IFACE = new ethers.Interface([
   "event TokenExchange(address indexed buyer, int128 sold_id, uint256 tokens_sold, int128 bought_id, uint256 tokens_bought)",
+  "event TokenExchange(address indexed buyer, uint256 sold_id, uint256 tokens_sold, uint256 bought_id, uint256 tokens_bought, uint256 fee, uint256 packed_price_scale)",
   "event TokenExchangeUnderlying(address indexed buyer, int128 sold_id, uint256 tokens_sold, int128 bought_id, uint256 tokens_bought)",
 ]);
 const BALANCER_V2_SWAP_IFACE = new ethers.Interface([
@@ -35,6 +36,7 @@ export function decodeAnySwapLog(log: any): DecodedSwap | null {
   if (topic === lower(TOPICS.univ3Swap)) return v3SwapFromLog(log);
   if (topic === lower(TOPICS.univ4Swap)) return v4SwapFromLog(log);
   if (topic === lower(TOPICS.curveTokenExchange)) return curveSwapFromLog(log);
+  if (topic === lower(TOPICS.curveCryptoTokenExchange)) return curveSwapFromLog(log);
   if (topic === lower(TOPICS.curveTokenExchangeUnderlying)) return curveSwapFromLog(log);
   if (topic === lower(TOPICS.balancerV2Swap)) return balancerV2SwapFromLog(log);
   return null;

@@ -45,8 +45,12 @@ export interface ArbProfit {
   unpricedDeltas: TokenDelta[];
   profitConfidence: "high" | "medium" | "requires_decode" | "unsafe";
   ethDeltaEth: number;
+  /** Native entity delta before an explicit direct coinbase payment. This is the native position
+   *  signal; `ethDeltaEth` remains the realized-PnL signal and is net of that payment. */
+  positionEthDeltaEth: number;
   ethProfitUsd: number;
   nativeTraceUsed: boolean;
+  coinbaseTransferWei: bigint | null;
   beneficiary: string;
   v4Swaps: V4Swap[];
   v4PoolIds: string[];
@@ -166,6 +170,22 @@ export function builderPaymentWeiFromPrestate(
   return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
 }
 
+/** Sum successful explicit value transfers to coinbase from a callTracer tree.
+ *  Unlike a prestate coinbase balance delta, this never includes the protocol priority-fee tip. */
+export function directCoinbasePaymentWeiFromCallTrace(trace: any, coinbase: string): bigint {
+  const target = lower(coinbase);
+  if (!target) return 0n;
+
+  const visit = (frame: any): bigint => {
+    if (!frame || typeof frame !== "object" || frame.error) return 0n;
+    let total = lower(String(frame.to ?? "")) === target ? hexToBigInt(frame.value) : 0n;
+    for (const child of frame.calls ?? []) total += visit(child);
+    return total;
+  };
+
+  return visit(trace);
+}
+
 /**
  * Realized profit of an arb tx = net value the caller-supplied bot entity actors
  * gained, in USD. Covers ERC20 (incl. WETH) via Transfer logs AND
@@ -193,9 +213,8 @@ export async function priceArb(
   // Native ETH: add gas back only when tx.from is part of the supplied entity.
   let ethWei = 0n;
   let tracedEth = false;
-  // Direct-to-coinbase transfers within the tx (this reth's prestateTracer diffMode does NOT
-  // credit the coinbase with the priority-fee tip, so the coinbase balance delta = explicit
-  // coinbase transfers only). Total builder payment = priority-fee tip (below) + this.
+  // Direct-to-coinbase transfers within the tx. Derive them from callTracer because client/version
+  // prestate deltas disagree on whether the priority tip is already credited to coinbase.
   let coinbaseTransferWei: bigint | null = null;
   if (options.allowTrace) {
     try {
@@ -208,7 +227,6 @@ export async function priceArb(
         if (b0 === null && b1 === null) return 0n;
         return (b1 ?? b0 ?? 0n) - (b0 ?? b1 ?? 0n);
       };
-      if (options.coinbase) coinbaseTransferWei = builderPaymentWeiFromPrestate(pre, post, options.coinbase);
       const gas = hexToBigInt(receipt?.gasUsed) * hexToBigInt(receipt?.effectiveGasPrice);
       for (const actor of actors) {
         ethWei += delta(actor);
@@ -219,7 +237,20 @@ export async function priceArb(
       // trace unavailable → ETH profit unknown, leave 0
     }
   }
+  if (options.allowTrace && options.coinbase) {
+    try {
+      coinbaseTransferWei = directCoinbasePaymentWeiFromCallTrace(
+        await rpc.traceTransaction(txHash),
+        options.coinbase,
+      );
+    } catch {
+      // A prestate coinbase delta is ambiguous across clients: some include the priority tip and
+      // some do not. Leave the direct component unknown rather than altering position semantics.
+      coinbaseTransferWei = null;
+    }
+  }
   const ethDeltaEth = Number(ethWei) / 1e18;
+  const positionEthDeltaEth = ethDeltaEth + Number(coinbaseTransferWei ?? 0n) / 1e18;
   const ethProfitUsd = ethDeltaEth * ethUsd;
   // Priority-fee tip to the builder = gasUsed * (effectiveGasPrice - baseFee). Protocol-defined,
   // needs no trace; usually the DOMINANT builder-payment term (coffeebabe's top tx: $2.13 tip vs
@@ -274,8 +305,10 @@ export async function priceArb(
     unpricedDeltas: valuedDeltas.unpriced,
     profitConfidence,
     ethDeltaEth,
+    positionEthDeltaEth,
     ethProfitUsd,
     nativeTraceUsed: tracedEth,
+    coinbaseTransferWei,
     beneficiary,
     v4Swaps,
     v4PoolIds,

@@ -27,11 +27,26 @@ function prestateWithCoinbaseDelta(deltaWei: bigint): {
   };
 }
 
-async function priceWith(prestate: { pre: any; post: any }, baseFeePerGas: bigint | undefined) {
+async function priceWith(
+  prestate: { pre: any; post: any },
+  baseFeePerGas: bigint | undefined,
+  directTransferWei = 0n,
+) {
   const rpc = {
     tracePrestate: async (hash: string) => {
       assert.equal(hash, TX_HASH);
       return prestate;
+    },
+    traceTransaction: async (hash: string) => {
+      assert.equal(hash, TX_HASH);
+      return {
+        from: BOT,
+        to: BOT,
+        value: "0x0",
+        calls: directTransferWei > 0n
+          ? [{ from: BOT, to: COINBASE, value: hex(directTransferWei), calls: [] }]
+          : [],
+      };
     },
   } as unknown as RpcClient;
   return priceArb(
@@ -50,10 +65,7 @@ async function main(): Promise<void> {
   const synthetic = prestateWithCoinbaseDelta(syntheticDelta);
   assert.equal(builderPaymentWeiFromPrestate(synthetic.pre, synthetic.post, COINBASE), syntheticDelta);
 
-  // 2. PIN: real 0xf0da00 gas + baseFee, coinbase direct-transfer = 0 → builder_payment == priority tip.
-  //    This is the corrected semantics: the prestate coinbase delta on our reth EXCLUDES the priority
-  //    fee, so builder_payment MUST add the gas-derived tip (else it undercounts ~100x, the bug the
-  //    node re-measure caught: $0.15 total across 11 txs vs this one tx's $2.13 tip).
+  // 2. No direct transfer: builder payment is the priority tip.
   const tipOnly = await priceWith(prestateWithCoinbaseDelta(0n), BASE_FEE);
   const tipEth = Number(PRIORITY_TIP_WEI) / 1e18;
   assert.equal(tipOnly.builderPaymentEth, tipEth);
@@ -61,16 +73,16 @@ async function main(): Promise<void> {
 
   // 3. COMBINED: priority tip + a direct coinbase transfer sum.
   const directTransfer = 5_000_000_000_000n;
-  const combined = await priceWith(prestateWithCoinbaseDelta(directTransfer), BASE_FEE);
+  const combined = await priceWith(prestateWithCoinbaseDelta(directTransfer), BASE_FEE, directTransfer);
   assert.equal(combined.builderPaymentEth, Number(PRIORITY_TIP_WEI + directTransfer) / 1e18);
 
   // 4. No baseFee available → builder_payment falls back to direct-transfer component only.
-  const noBaseFee = await priceWith(prestateWithCoinbaseDelta(directTransfer), undefined);
+  const noBaseFee = await priceWith(prestateWithCoinbaseDelta(directTransfer), undefined, directTransfer);
   assert.equal(noBaseFee.builderPaymentEth, Number(directTransfer) / 1e18);
 
   console.log(`builder_payment_priority_tip_eth=${tipEth.toFixed(6)} (pin 0xf0da00 = $2.13)`);
   console.log(`builder_payment_combined_wei=${PRIORITY_TIP_WEI + directTransfer}`);
-  console.log("expected_transition: coinbase-delta-only (undercounts ~100x) -> priority-tip + direct coinbase transfer");
+  console.log("expected_transition: priority tip + exact callTracer direct payment -> one builder total");
   console.log("BUILDER PAYMENT: PASS");
 }
 

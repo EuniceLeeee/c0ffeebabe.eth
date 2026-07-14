@@ -62,11 +62,17 @@ async function price(input: {
   actors?: string[];
   logs?: unknown[];
   trace?: { pre: Record<string, unknown>; post: Record<string, unknown> } | Error;
+  callTrace?: unknown | Error;
 }) {
   const rpc = {
     tracePrestate: async () => {
       if (input.trace instanceof Error) throw input.trace;
       return input.trace ?? { pre: {}, post: {} };
+    },
+    traceTransaction: async () => {
+      if (input.callTrace instanceof Error) throw input.callTrace;
+      if (input.callTrace === undefined) throw new Error("callTracer unavailable");
+      return input.callTrace;
     },
   } as unknown as RpcClient;
   const beneficiary = input.beneficiary ?? BOT;
@@ -166,7 +172,14 @@ test("gas and direct coinbase payment are each accounted once", async () => {
       [lower(COINBASE)]: direct,
     },
   );
-  const result = await price({ trace });
+  const result = await price({
+    trace,
+    callTrace: {
+      to: BOT,
+      value: "0x0",
+      calls: [{ from: BOT, to: COINBASE, value: hex(direct), calls: [] }],
+    },
+  });
   const expectedRealized = Number(gross - direct) / 1e18 * 1e18;
   const expectedGas = Number(GAS_WEI) / 1e18 * 1e18;
   const expectedBuilder = Number(GAS_USED * (GAS_PRICE - BASE_FEE) + direct) / 1e18 * 1e18;
@@ -175,4 +188,59 @@ test("gas and direct coinbase payment are each accounted once", async () => {
   assert.equal(result.netProfitUsd, expectedRealized - expectedGas);
   assert.equal(result.builderPaymentUsd, expectedBuilder);
   assert.equal(result.profitConfidence, "high");
+});
+
+test("callTracer separates a direct builder payment from a prestate delta that includes the tip", async () => {
+  const gross = 5_000n;
+  const direct = 300n;
+  const priorityTip = GAS_USED * (GAS_PRICE - BASE_FEE);
+  const trace = prestate(
+    {
+      [lower(EOA)]: 10_000n,
+      [lower(BOT)]: 10_000n,
+      [lower(COINBASE)]: 10_000n,
+    },
+    {
+      [lower(EOA)]: -GAS_WEI,
+      [lower(BOT)]: gross - direct,
+      // Current reth prestateTracer includes both the explicit transfer and the priority tip.
+      [lower(COINBASE)]: direct + priorityTip,
+    },
+  );
+  const result = await price({
+    trace,
+    callTrace: {
+      to: BOT,
+      value: "0x0",
+      calls: [{ from: BOT, to: COINBASE, value: hex(direct), calls: [] }],
+    },
+  });
+
+  assert.equal(result.coinbaseTransferWei, direct);
+  assert.equal(result.builderPaymentUsd, Number(direct + priorityTip));
+  assert.equal(result.positionEthDeltaEth, Number(gross) / 1e18);
+  assert.equal(result.ethDeltaEth, Number(gross - direct) / 1e18);
+});
+
+test("callTracer failure does not reinterpret an ambiguous coinbase prestate delta", async () => {
+  const gross = 5_000n;
+  const direct = 300n;
+  const priorityTip = GAS_USED * (GAS_PRICE - BASE_FEE);
+  const trace = prestate(
+    {
+      [lower(EOA)]: 10_000n,
+      [lower(BOT)]: 10_000n,
+      [lower(COINBASE)]: 10_000n,
+    },
+    {
+      [lower(EOA)]: -GAS_WEI,
+      [lower(BOT)]: gross - direct,
+      [lower(COINBASE)]: direct + priorityTip,
+    },
+  );
+  const result = await price({ trace, callTrace: new Error("callTracer unavailable") });
+
+  assert.equal(result.coinbaseTransferWei, null);
+  assert.equal(result.builderPaymentUsd, Number(priorityTip));
+  assert.equal(result.positionEthDeltaEth, result.ethDeltaEth);
 });

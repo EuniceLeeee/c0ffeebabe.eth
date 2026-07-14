@@ -28,6 +28,7 @@ const V4_SWAP_IFACE = new ethers.Interface([
 ]);
 const CURVE_SWAP_IFACE = new ethers.Interface([
   "event TokenExchange(address indexed buyer, int128 sold_id, uint256 tokens_sold, int128 bought_id, uint256 tokens_bought)",
+  "event TokenExchange(address indexed buyer, uint256 sold_id, uint256 tokens_sold, uint256 bought_id, uint256 tokens_bought, uint256 fee, uint256 packed_price_scale)",
   "event TokenExchangeUnderlying(address indexed buyer, int128 sold_id, uint256 tokens_sold, int128 bought_id, uint256 tokens_bought)",
 ]);
 const BALANCER_V2_SWAP_IFACE = new ethers.Interface([
@@ -90,14 +91,24 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
     },
     {
       name: "curve 0for1 (sold_id < bought_id)",
-      log: eventLog(CURVE_POOL, CURVE_SWAP_IFACE, "TokenExchange", [BUYER, 0, 100n, 1, 50n]),
+      log: eventLog(
+        CURVE_POOL,
+        CURVE_SWAP_IFACE,
+        "TokenExchange(address,int128,uint256,int128,uint256)",
+        [BUYER, 0, 100n, 1, 50n],
+      ),
       poolId: CURVE_POOL,
       direction: "0for1",
       sizeRaw: 150n,
     },
     {
       name: "curve 1for0 (sold_id > bought_id)",
-      log: eventLog(CURVE_POOL, CURVE_SWAP_IFACE, "TokenExchange", [BUYER, 1, 100n, 0, 50n]),
+      log: eventLog(
+        CURVE_POOL,
+        CURVE_SWAP_IFACE,
+        "TokenExchange(address,int128,uint256,int128,uint256)",
+        [BUYER, 1, 100n, 0, 50n],
+      ),
       poolId: CURVE_POOL,
       direction: "1for0",
       sizeRaw: 150n,
@@ -105,6 +116,18 @@ test("decodeAnySwapLog decodes v2/v3/v4/curve/balancer swap logs (both direction
     {
       name: "curve underlying 0for1",
       log: eventLog(CURVE_POOL, CURVE_SWAP_IFACE, "TokenExchangeUnderlying", [BUYER, 0, 100n, 1, 50n]),
+      poolId: CURVE_POOL,
+      direction: "0for1",
+      sizeRaw: 150n,
+    },
+    {
+      name: "curve tricrypto 0for1",
+      log: eventLog(
+        CURVE_POOL,
+        CURVE_SWAP_IFACE,
+        "TokenExchange(address,uint256,uint256,uint256,uint256,uint256,uint256)",
+        [BUYER, 0, 100n, 2, 50n, 1n, 2n],
+      ),
       poolId: CURVE_POOL,
       direction: "0for1",
       sizeRaw: 150n,
@@ -179,6 +202,7 @@ test("decodeAnySwapLog returns null for malformed logs without throwing", () => 
   assert.equal(decodeAnySwapLog(truncated(TOPICS.univ3Swap, [pad(SENDER), pad(RECIPIENT)])), null, "v3 truncated data");
   assert.equal(decodeAnySwapLog(truncated(TOPICS.univ4Swap, [V4_POOL_ID, pad(SENDER)])), null, "v4 truncated data");
   assert.equal(decodeAnySwapLog(truncated(TOPICS.curveTokenExchange, [pad(BUYER)])), null, "curve truncated data");
+  assert.equal(decodeAnySwapLog(truncated(TOPICS.curveCryptoTokenExchange, [pad(BUYER)])), null, "curve crypto truncated data");
   assert.equal(
     decodeAnySwapLog(truncated(TOPICS.balancerV2Swap, [BALANCER_POOL_ID, pad(TOKEN_A), pad(TOKEN_B)])),
     null,

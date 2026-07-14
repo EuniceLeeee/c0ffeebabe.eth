@@ -42,6 +42,7 @@ export const SUPPORTED_SWAP_TOPICS: ReadonlySet<string> = new Set(
     TOPICS.pancakeV3Swap, // 0x19b47279
     TOPICS.univ4Swap, // 0x40e9cecb (PoolManager singleton)
     TOPICS.curveTokenExchange, // TokenExchange int128 variant 0x8b3e96f2
+    TOPICS.curveCryptoTokenExchange, // CryptoSwap/Tricrypto 7-argument variant 0x143f1f8e
     "0xb2e76ae99761dc136e598d4a629bb347eccb9532a5f8bbd72e18467c3c34cc98", // curve TokenExchange(address,uint256,uint256,uint256,uint256) 0xb2e76ae9 — easy-to-miss uint256 variant
     TOPICS.curveTokenExchangeUnderlying, // 0xd013ca23
     TOPICS.balancerV2Swap, // 0x2170c741 — supported per edge-kinds.ts SWAP set

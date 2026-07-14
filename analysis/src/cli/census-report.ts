@@ -41,6 +41,7 @@ const TX_SHAPE_SWAP_TOPICS = [
   TOPICS.univ3Swap,
   TOPICS.univ4Swap,
   TOPICS.curveTokenExchange,
+  TOPICS.curveCryptoTokenExchange,
   TOPICS.curveTokenExchangeUnderlying,
   TOPICS.balancerV2Swap,
 ].map(lower);
