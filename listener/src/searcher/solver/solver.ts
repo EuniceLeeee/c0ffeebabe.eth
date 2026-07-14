@@ -21,6 +21,7 @@
 
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
+import type { Opportunity } from "../detector/detector.js";
 import type { CandidatePlan } from "../planner/planner.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
@@ -188,6 +189,11 @@ export class AnvilSolver implements Solver {
     if (maxFlashAmount !== null && maxFlashAmount <= 0n) {
       throw new Error(`no profitable plan (flash cap is zero)`);
     }
+    const isOracleVictim = plan.opportunity.kind === "backrun-arb" &&
+      plan.opportunity.victimEffect.kind === "oracle";
+    if (isOracleVictim && maxFlashAmount === null) {
+      throw new Error("no profitable plan (oracle victim requires a live flash cap)");
+    }
     const center = clampToMax(rawCenter, maxFlashAmount);
 
     // ── Phase 1: quote-only amount search (no Anvil sim) ──────────
@@ -234,8 +240,11 @@ export class AnvilSolver implements Solver {
         lastFailure = `deadline ${deadlineMs}ms reached during quote search`;
         break;
       }
-      // Coarse pass: victim-anchored geometric grid.
-      const grid = capGrid(geometricGrid(center, gridHalfWidth), maxFlashAmount);
+      // Coarse pass: swap victims use a victim-anchored grid; oracle victims
+      // search down from the live flash-liquidity cap.
+      const grid = isOracleVictim
+        ? oracleSearchGrid(maxFlashAmount!)
+        : capGrid(geometricGrid(center, gridHalfWidth), maxFlashAmount);
       let bestX = grid[0] ?? center;
       let bestVal = FAIL_SCORE;
       for (const x of grid) {
@@ -518,10 +527,13 @@ export async function resolveSearchCenter(
   if (plan.opportunity.kind === "block-scan-arb") {
     return plan.opportunity.searchSeed.searchCenter;
   }
+  if (plan.opportunity.victimEffect.kind === "oracle") {
+    return plan.maxFlashAmount ?? 1n;
+  }
   const victimAmount = plan.opportunity.victimAmountIn;
   if (victimAmount <= 0n) return 1n;
 
-  const impact = impactFromOpportunity(plan.opportunity.hints.impact);
+  const impact = impactFromOpportunity(plan.opportunity);
   if (!impact) return victimAmount;
 
   const usePathAwareCenter = plan.maxFlashAmount !== undefined;
@@ -666,26 +678,28 @@ async function approximatePrefixInputForOutput(
   return hi;
 }
 
-function impactFromOpportunity(impact: unknown): OpportunityImpact | null {
-  if (!impact || typeof impact !== "object") return null;
-  const maybe = impact as Partial<OpportunityImpact>;
-  if (
-    typeof maybe.pool !== "string" ||
-    typeof maybe.tokenIn !== "string" ||
-    typeof maybe.tokenOut !== "string" ||
-    typeof maybe.matchedAdapterId !== "string"
-  ) {
-    return null;
-  }
+function impactFromOpportunity(opportunity: Opportunity): OpportunityImpact | null {
+  if (opportunity.victimEffect.kind !== "swap") return null;
+  const impact = opportunity.victimEffect.impact;
   return {
-    pool: maybe.pool,
-    tokenIn: maybe.tokenIn,
-    tokenOut: maybe.tokenOut,
-    matchedAdapterId: maybe.matchedAdapterId,
-    poolToken0: typeof maybe.poolToken0 === "string" ? maybe.poolToken0 : undefined,
-    poolToken1: typeof maybe.poolToken1 === "string" ? maybe.poolToken1 : undefined,
-    poolId: typeof maybe.poolId === "string" ? maybe.poolId : undefined,
+    pool: impact.pool,
+    tokenIn: impact.tokenIn,
+    tokenOut: impact.tokenOut,
+    matchedAdapterId: impact.matchedAdapterId,
+    poolToken0: impact.poolToken0,
+    poolToken1: impact.poolToken1,
+    poolId: impact.poolId,
   };
+}
+
+function oracleSearchGrid(maxFlashAmount: bigint): bigint[] {
+  const grid: bigint[] = [];
+  let amount = maxFlashAmount;
+  for (let i = 0; i <= 20 && amount > 0n; i++) {
+    grid.push(amount);
+    amount /= 2n;
+  }
+  return capGrid(grid, maxFlashAmount);
 }
 
 function sameAddress(a: string, b: string): boolean {

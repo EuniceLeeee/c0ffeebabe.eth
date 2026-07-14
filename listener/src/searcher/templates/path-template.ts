@@ -23,6 +23,7 @@ export interface PathTemplate {
 const SWAP_ADAPTERS = [
   "psm",
   ...PROTOCOL_LEG_DESCRIPTORS.map((desc) => desc.id),
+  "metronome-hgusdc-exit",
   "fluid-dex-swap",
   "univ4-unlock",
   "univ3-swap",

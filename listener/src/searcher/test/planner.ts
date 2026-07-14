@@ -105,6 +105,16 @@ function opportunity(): Opportunity {
     startToken: A,
     profitToken: A,
     victimAmountIn: 1_000_000n,
+    victimEffect: {
+      kind: "swap",
+      impact: {
+        pool: P1,
+        tokenIn: A,
+        tokenOut: B,
+        amountIn: 1_000_000n,
+        matchedAdapterId: "univ3-swap",
+      },
+    },
     hints: {
       impact: {
         pool: P1,
@@ -125,6 +135,16 @@ function opportunityWithImpact(tokenIn: string, tokenOut: string, pool: string, 
     startToken: start,
     profitToken: start,
     victimAmountIn: 1_000_000n,
+    victimEffect: {
+      kind: "swap",
+      impact: {
+        pool,
+        tokenIn,
+        tokenOut,
+        amountIn: 1_000_000n,
+        matchedAdapterId: "univ3-swap",
+      },
+    },
     hints: {
       impact: {
         pool,
@@ -466,6 +486,17 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
     startToken: WETH,
     profitToken: WETH,
     victimAmountIn: 1_000_000n,
+    victimEffect: {
+      kind: "swap",
+      impact: {
+        pool: ADDR.UNISWAP_V4_POOL_MANAGER,
+        tokenIn: WETH,
+        tokenOut: USDC,
+        amountIn: 1_000_000n,
+        matchedAdapterId: "univ4-unlock",
+        poolId,
+      },
+    },
     hints: {
       impact: {
         pool: ADDR.UNISWAP_V4_POOL_MANAGER,

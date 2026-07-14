@@ -31,6 +31,7 @@
     "searcher:v4-hook-admission": "tsx src/searcher/test/v4-hook-admission.ts",
     "searcher:validate-v4-quote": "tsx src/searcher/test/validate-v4-quote.ts",
     "searcher:victim-source-filter": "tsx src/searcher/test/victim-source-filter.ts",
+    "searcher:victim-effect": "node --import tsx src/searcher/test/victim-effect.ts",
     "searcher:arb-relevance": "tsx src/searcher/test/pool-universe-arb-relevance.ts",
     "searcher:pruning": "tsx src/searcher/test/path-pruning.ts",
     "searcher:planner": "node --import tsx src/searcher/test/planner.ts",

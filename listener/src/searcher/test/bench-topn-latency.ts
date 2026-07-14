@@ -139,6 +139,17 @@ function opportunity(impact: TokenEdge, hotToken: string): Opportunity {
     startToken: hotToken,
     profitToken: hotToken,
     victimAmountIn: 1_000_000n,
+    victimEffect: {
+      kind: "swap",
+      impact: {
+        pool: impact.target,
+        tokenIn,
+        tokenOut,
+        amountIn: 1_000_000n,
+        matchedAdapterId: impact.adapterId,
+        ...(impact.poolId ? { poolId: impact.poolId } : {}),
+      },
+    },
     hints: {
       impact: {
         pool: impact.target,

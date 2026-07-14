@@ -117,9 +117,20 @@ async function testSearchCenterTokenNormalization(): Promise<void> {
 
   const plan = {
     opportunity: {
+      kind: "backrun-arb",
       startToken: weth,
       profitToken: weth,
       victimAmountIn: 35_000_000n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool,
+          tokenIn: usdc,
+          tokenOut: weth,
+          amountIn: 35_000_000n,
+          matchedAdapterId: "univ3-swap",
+        },
+      },
       hints: {
         impact: {
           pool,
@@ -200,6 +211,16 @@ async function testSolverUsesUnifiedDefaultSafety(): Promise<void> {
       startToken: tokenA,
       profitToken: tokenA,
       victimAmountIn: 1000n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: pool1,
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          amountIn: 1000n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
       targetNetProfit: 1n,
       hints: {},
     },
@@ -275,6 +296,16 @@ async function testQuoteProfitFloorAdmitsNearMiss(): Promise<void> {
       startToken: tokenA,
       profitToken: tokenA,
       victimAmountIn: 1000n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool,
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          amountIn: 1000n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
       targetNetProfit: 1n,
       hints: {},
     },

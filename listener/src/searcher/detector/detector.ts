@@ -2,6 +2,11 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
 import { detectPoolImpact } from "./pool-impact.js";
 import { defaultTokenGraph, type TokenEdge, type TokenQueryBackend } from "../planner/token-graph.js";
+import {
+  matchOracleVictimEffect,
+  oracleAffectedGraphEdges,
+  type VictimEffect,
+} from "./victim-effect.js";
 
 export interface Opportunity {
   kind: "backrun-arb";
@@ -12,6 +17,7 @@ export interface Opportunity {
   startToken: string;
   profitToken: string;
   victimAmountIn: bigint;
+  victimEffect: VictimEffect;
   targetNetProfit?: bigint;
   hints: Record<string, unknown>;
 }
@@ -62,7 +68,7 @@ export class BackrunDetector implements Detector {
     this.tokenQuery = backend;
   }
 
-  async detect(event: OrderflowEvent, _state: StateBackend): Promise<Opportunity[]> {
+  async detect(event: OrderflowEvent, state: StateBackend): Promise<Opportunity[]> {
     const graph = this.graph ?? defaultTokenGraph();
     const impacts = await detectPoolImpact(event, graph, this.poolAddrs, this.tokenQuery);
 
@@ -87,9 +93,43 @@ export class BackrunDetector implements Detector {
         startToken,
         profitToken: startToken,
         victimAmountIn: impact.amountIn,
+        victimEffect: { kind: "swap", impact },
         targetNetProfit: event.minProfit,
         hints: { impact },
       });
+    }
+
+    const oracleEffect = await matchOracleVictimEffect(
+      event.to,
+      event.input,
+      graph,
+      this.tokenQuery,
+      Math.max(0, event.blockNumber - 1),
+      state,
+    );
+    if (oracleEffect) {
+      const affectedEdges = oracleAffectedGraphEdges(graph, oracleEffect);
+      const affectedTokens = uniqueAddresses(
+        affectedEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
+      );
+      const affectedPools = uniqueAddresses(
+        affectedEdges.map((edge) => edge.poolId ?? edge.target),
+      );
+      for (const startToken of connectedComponentSeeds(affectedEdges)) {
+        opportunities.push({
+          kind: "backrun-arb",
+          victimTxHash: event.txHash,
+          blockNumber: event.blockNumber,
+          affectedPools,
+          affectedTokens,
+          startToken,
+          profitToken: startToken,
+          victimAmountIn: 0n,
+          victimEffect: oracleEffect,
+          targetNetProfit: event.minProfit,
+          hints: { oracleDescriptorId: oracleEffect.descriptorId },
+        });
+      }
     }
     return opportunities;
   }
@@ -135,4 +175,40 @@ function uniqueAddresses(addresses: string[]): string[] {
     seen.add(key);
     return true;
   });
+}
+
+function connectedComponentSeeds(edges: TokenEdge[]): string[] {
+  const byToken = new Map<string, { address: string; neighbors: Set<string> }>();
+  const ensure = (address: string): { address: string; neighbors: Set<string> } => {
+    const key = address.toLowerCase();
+    const existing = byToken.get(key);
+    if (existing) return existing;
+    const created = { address, neighbors: new Set<string>() };
+    byToken.set(key, created);
+    return created;
+  };
+  for (const edge of edges) {
+    const from = ensure(edge.tokenIn);
+    const to = ensure(edge.tokenOut);
+    from.neighbors.add(edge.tokenOut.toLowerCase());
+    to.neighbors.add(edge.tokenIn.toLowerCase());
+  }
+
+  const seeds: string[] = [];
+  const visited = new Set<string>();
+  for (const [key, node] of byToken) {
+    if (visited.has(key)) continue;
+    seeds.push(node.address);
+    const pending = [key];
+    visited.add(key);
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      for (const neighbor of byToken.get(current)?.neighbors ?? []) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        pending.push(neighbor);
+      }
+    }
+  }
+  return seeds;
 }

@@ -6,7 +6,7 @@ import type { VenueIdentitySource } from "../venues/identity.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
-  call(req: { to: string; data: string }): Promise<string>;
+  call(req: { to: string; data: string; blockTag?: ethers.BlockTag }): Promise<string>;
   getLogs?(req: {
     address: string;
     topics: string[];

@@ -96,7 +96,7 @@
       ]
     },
     {
-      "label": "Uniswap V3 USDT/WETH 0.3% - Metronome oracle route",
+      "label": "Uniswap V3 USDT/WETH 0.3%",
       "address": "0x4e68ccd3e89f51c3074ca5072bbac773960dfa36",
       "adapter": "univ3",
       "warmDirections": [
@@ -140,7 +140,7 @@
       ]
     },
     {
-      "label": "Curve WETH/msETH - Metronome oracle route",
+      "label": "Curve WETH/msETH",
       "address": "0xa4c567c662349bec3d0fb94c4e7f85ba95e208e4",
       "adapter": "curve",
       "warmDirections": [

@@ -6,6 +6,7 @@ import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
+import { oracleVictimWatchTargets } from "./detector/victim-effect.js";
 import {
   detectBlockScanOpportunities,
   type BlockScanConfig,
@@ -373,6 +374,7 @@ const MEMPOOL_ROUTER_ADDRESSES = new Set<string>(
     "0xdef1c0ded9bec7f1a1670819833240f027b25eff", // 0x Exchange Proxy
     "0x6131b5fae19ea4f9d964eac0408e4408b66337b5", // KyberSwap MetaAggregator
     "0x881d40237659c251811cec9c364ef91dc08d300c", // Metamask Swap Router
+    ...oracleVictimWatchTargets(),
   ].map((a) => a.toLowerCase()),
 );
 
@@ -3308,20 +3310,12 @@ function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {
 }
 
 function poolImpactFromOpportunity(
-  opportunity: { hints: Record<string, unknown> } | undefined,
+  opportunity: Opportunity | BlockScanOpportunity | undefined,
 ): PoolImpact | null {
-  const impact = opportunity?.hints.impact;
-  if (!impact || typeof impact !== "object") return null;
-  const maybe = impact as Partial<PoolImpact>;
-  if (
-    typeof maybe.pool !== "string" ||
-    typeof maybe.tokenIn !== "string" ||
-    typeof maybe.tokenOut !== "string" ||
-    typeof maybe.amountIn !== "bigint"
-  ) {
-    return null;
-  }
-  return maybe as PoolImpact;
+  if (!opportunity || opportunity.kind !== "backrun-arb") return null;
+  return opportunity.victimEffect.kind === "swap"
+    ? opportunity.victimEffect.impact
+    : null;
 }
 
 function isTimeoutMessage(message: string): boolean {

@@ -196,6 +196,16 @@ async function main(): Promise<void> {
       startToken: ADDR.WETH,
       profitToken: ADDR.WETH,
       victimAmountIn: 10n * 10n ** 18n, // estimate
+      victimEffect: {
+        kind: "swap" as const,
+        impact: {
+          pool: ADDR.UNISWAP_V4_POOL_MANAGER,
+          tokenIn: ADDR.WETH,
+          tokenOut: ADDR.USDT,
+          amountIn: 10n * 10n ** 18n,
+          matchedAdapterId: "univ4-unlock",
+        },
+      },
       targetNetProfit: 1n,
       hints: {
         impact: {

@@ -4,6 +4,10 @@ import type { PathTemplate } from "../templates/path-template.js";
 import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
+import {
+  edgeMatchesVictimSelector,
+  type OracleVictimEffect,
+} from "../detector/victim-effect.js";
 
 export interface BlockScanPlannedOpportunity extends BlockScanOpportunity {
   startToken: string;
@@ -160,6 +164,7 @@ export class TemplatePlanner implements Planner {
       console.warn("[planner] empty graph — no candidates will be generated; call setGraph()");
     }
     const impact = impactFromOpportunity(opp);
+    const oracleEffect = opp.victimEffect.kind === "oracle" ? opp.victimEffect : null;
     const debug: string[] = [];
     const diagnostics: NoCandidateTemplateDiagnostic[] = [];
     const seenPathKeys = new Set<string>();
@@ -184,9 +189,17 @@ export class TemplatePlanner implements Planner {
       );
       // Pin the victim pool so top-N pruning never drops the edge the backrun
       // must reverse through (it may have a low activity score yet be essential).
-      const pinnedPools = impact ? new Set([impact.pool.toLowerCase()]) : undefined;
+      const pinnedPools = impact
+        ? new Set([impact.pool.toLowerCase()])
+        : oracleEffect
+          ? new Set(oracleEffect.affectedEdges
+            .map((selector) => selector.target?.toLowerCase())
+            .filter((target): target is string => target !== undefined))
+          : undefined;
       const rawPaths = buildTokenPaths(graph, opp.startToken, opp.profitToken, {
-        maxHops: this.maxHops,
+        maxHops: oracleEffect
+          ? Math.max(this.maxHops, oracleEffect.maxSearchHops)
+          : this.maxHops,
         maxPoolsPerToken: this.maxPoolsPerToken,
         pinnedPools,
         deadlineAtMs: opts?.deadlineAtMs,
@@ -195,7 +208,9 @@ export class TemplatePlanner implements Planner {
       const roundtripPrunedPaths = rawPaths.filter((path) => !hasImmediateSamePoolReverse(path));
       const prunedRoundtrip = rawPaths.length - roundtripPrunedPaths.length;
       const focus = focusPathsOnImpact(roundtripPrunedPaths, impact);
-      const paths = focus.paths;
+      const paths = oracleEffect
+        ? focusPathsOnOracleEffect(roundtripPrunedPaths, oracleEffect)
+        : focus.paths;
 
       let constraintPass = 0;
       let duplicatePath = 0;
@@ -504,22 +519,38 @@ interface OpportunityImpact {
 }
 
 function impactFromOpportunity(opp: Opportunity): OpportunityImpact | null {
-  const impact = opp.hints.impact;
-  if (!impact || typeof impact !== "object") return null;
-  const maybe = impact as Partial<OpportunityImpact>;
-  if (
-    typeof maybe.pool !== "string" ||
-    typeof maybe.tokenIn !== "string" ||
-    typeof maybe.tokenOut !== "string"
-  ) {
-    return null;
-  }
+  if (opp.victimEffect.kind !== "swap") return null;
+  const impact = opp.victimEffect.impact;
   return {
-    pool: maybe.pool,
-    tokenIn: maybe.tokenIn,
-    tokenOut: maybe.tokenOut,
-    poolId: typeof maybe.poolId === "string" ? maybe.poolId : undefined,
+    pool: impact.pool,
+    tokenIn: impact.tokenIn,
+    tokenOut: impact.tokenOut,
+    poolId: impact.poolId,
   };
+}
+
+function focusPathsOnOracleEffect(
+  paths: TokenPath[],
+  effect: OracleVictimEffect,
+): TokenPath[] {
+  return paths
+    .map((path) => ({
+      path,
+      changedEdges: path.edges.filter((edge) =>
+        effect.affectedEdges.some((selector) => edgeMatchesVictimSelector(edge, selector)),
+      ).length,
+    }))
+    .filter(({ path, changedEdges }) =>
+      changedEdges > 0 && path.edges.some((edge) =>
+        !effect.priceScope.some((selector) => edgeMatchesVictimSelector(edge, selector)),
+      ),
+    )
+    .sort((a, b) =>
+      b.changedEdges - a.changedEdges ||
+      a.path.edges.length - b.path.edges.length ||
+      tokenPathKey(a.path).localeCompare(tokenPathKey(b.path)),
+    )
+    .map(({ path }) => path);
 }
 
 interface ImpactFocus {
