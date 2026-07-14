@@ -291,7 +291,7 @@
         "codify_target": "ignore only the reserved ._* metadata namespace in CLI/script discovery, remove those sidecars after deploy backup, and retain orphan-CLI detection in regression coverage",
         "codify_commit": "b420a293e7fe81c42d014eb297d541fc9f1c6b77",
         "status": "codified",
-        "validation": "analysis build; tool-index 10/10 including AppleDouble plus ordinary orphan fixture; local catalog check indexed 150; node rerun required after deploy"
+        "validation": "analysis build; tool-index 10/10 including AppleDouble plus ordinary orphan fixture; local and deployed-node catalog checks indexed 150; node tool-run census-gap exit 0 on window 25528974..25529120"
       },
       "created_at": "2026-07-14T06:39:00.000Z",
       "updated_at": "2026-07-14T06:43:00.000Z"
