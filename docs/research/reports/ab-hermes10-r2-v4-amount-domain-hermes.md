@@ -1,5 +1,12 @@
 # Hermes A/B Canary `hermes10-r2-v4-amount-domain`
 
+> Operator closure (2026-07-14): deleted unmerged. The branch proved a
+> structural candidate-slot transition but did not advance a reproducible
+> positive-EV sample, produced no quote/final-sim/submit delta, and retained
+> unresolved hot-path latency risk. Under the current production gate this is
+> not an eligible challenger; another live window would only measure an
+> unqualified optimization hypothesis.
+
 > Round 2 of the unattended ten-round production run. The strategy challenger is retained for escalation;
 > the analysis-tool defect discovered during the round is independently fixed on main.
 

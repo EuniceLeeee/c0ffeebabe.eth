@@ -1,5 +1,11 @@
 # Hermes A/B Canary `hermes10-r3-curve-ng-schema-cache`
 
+> Operator closure (2026-07-14): deleted unmerged. This experiment reduced
+> Curve warm latency by 294ms but changed no candidate, quote, final-sim, or
+> submit outcome and was not tied to a reproducible positive-EV sample. It is a
+> performance optimization, not the production blocker required for an A/B
+> challenger, so no additional live window is warranted.
+
 > Round 3 of the unattended ten-round production run. This is a predeclared performance experiment;
 > metrics are evidence, not merge authority. Raw logs/events/secrets remain node-local.
 
