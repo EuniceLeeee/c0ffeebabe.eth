@@ -125,7 +125,10 @@ async function main(): Promise<void> {
   cache.beginHint(123);
   const v2Out = await cache.quoteV2(noState, V2_POOL, TOKEN0, TOKEN1, 10_000n);
   const v3Out = await cache.quoteV3(noState, V3_POOL, TOKEN0, TOKEN1, 1_000n);
-  const expectedV2Out = quoteV2ExactInput(2_000_000n, 1_000_000n, 10_000n, 25n);
+  // The mocked factory() is an unverified tail fork (not in the fee table), so the
+  // updater must resolve it to the safe 30bps DEFAULT and quote with it. (Non-30
+  // fee threading is proven separately in test/victim-apply.ts with a seeded 25bps.)
+  const expectedV2Out = quoteV2ExactInput(2_000_000n, 1_000_000n, 10_000n, 30n);
   assert(v2Out === expectedV2Out, `seeded v2 quote ${v2Out} != ${expectedV2Out}`);
   assert(v3Out > 0n, `seeded v3 quote should produce output`);
   console.log("[pool-updater] multicall seed + local quote: PASS");
