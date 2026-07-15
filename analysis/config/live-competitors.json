@@ -6,6 +6,10 @@
       "id": "coffee",
       "eoa": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
       "executors": ["0xe08d97e151473a848c3d9ca3f323cb720472d015"],
+      "position_accounts": [
+        "0xb8280955ae7b5207af4cdbdcd775135bd38157fe",
+        "0x4825eff24f9b7b76eeafa2ecc6a1d5dfcb3c1c3f"
+      ],
       "analysis_mode": "full"
     },
     {

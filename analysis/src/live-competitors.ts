@@ -8,6 +8,7 @@ export interface LiveCompetitorEntity {
   id: string;
   eoa: string;
   executors: string[];
+  position_accounts?: string[];
   analysis_mode: CompetitorAnalysisMode;
 }
 
@@ -38,12 +39,17 @@ export function loadLiveCompetitorProfile(
     entity.eoa = normalizeAddress(entity.eoa, `${entity.id}.eoa`);
     entity.executors = entity.executors.map((address) =>
       normalizeAddress(address, `${entity.id}.executors`));
+    if (entity.position_accounts !== undefined && !Array.isArray(entity.position_accounts)) {
+      throw new Error(`invalid position_accounts for ${entity.id}`);
+    }
+    entity.position_accounts = (entity.position_accounts ?? []).map((address) =>
+      normalizeAddress(address, `${entity.id}.position_accounts`));
     if (!entity.id || ids.has(entity.id)) throw new Error(`duplicate/blank competitor id: ${entity.id}`);
     if (entity.analysis_mode !== "full" && entity.analysis_mode !== "sample") {
       throw new Error(`invalid analysis_mode for ${entity.id}: ${entity.analysis_mode}`);
     }
     ids.add(entity.id);
-    for (const address of [entity.eoa, ...entity.executors]) {
+    for (const address of [entity.eoa, ...entity.executors, ...entity.position_accounts]) {
       if (addresses.has(address)) throw new Error(`duplicate competitor address: ${address}`);
       addresses.add(address);
     }
@@ -58,6 +64,18 @@ export function competitorEoas(profile: LiveCompetitorProfile): string[] {
 
 export function competitorScanAddresses(profile: LiveCompetitorProfile): string[] {
   return profile.entities.flatMap((entity) => [entity.eoa, ...entity.executors]);
+}
+
+export function positionAccountsForActors(
+  profile: LiveCompetitorProfile,
+  actors: Iterable<string>,
+): string[] {
+  const normalizedActors = new Set(
+    [...actors].map((address) => String(address).toLowerCase()).filter((address) => ADDRESS_RE.test(address)),
+  );
+  const matches = profile.entities.filter((entity) =>
+    [entity.eoa, ...entity.executors].some((address) => normalizedActors.has(address)));
+  return matches.length === 1 ? [...(matches[0].position_accounts ?? [])] : [];
 }
 
 export function fullAnalysisEoas(profile: LiveCompetitorProfile): Set<string> {

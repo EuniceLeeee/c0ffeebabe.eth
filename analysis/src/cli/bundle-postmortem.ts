@@ -7,6 +7,11 @@ import { decodeTransfer } from "../decode/erc20.js";
 import { deriveEdgeKindsFromLogs, deriveEdgeKindsFromLogsAndTrace } from "../learning/edge-kinds.js";
 import type { LearningCase, PrimaryGap } from "../learning/learning-case.js";
 import {
+  loadLiveCompetitorProfile,
+  positionAccountsForActors,
+  type LiveCompetitorProfile,
+} from "../live-competitors.js";
+import {
   directCoinbasePaymentWeiFromCallTrace,
   fetchEthUsd,
   priceArb,
@@ -75,6 +80,13 @@ const POSITION_DUST_USD_MICROS = 10_000n; // one cent
 const REGISTERED_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
 // Preserve the pre-value-aware raw-unit boundary when no authoritative decimals are registered.
 const UNKNOWN_TOKEN_DUST_RAW = 1000n;
+const LIQUITY_MINT_CONTEXT_TOPICS = new Set([
+  lower(TOPICS.liquityTroveOperation),
+  lower(TOPICS.liquityTroveUpdated),
+  lower(TOPICS.liquityBatchUpdated),
+]);
+const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
+let liveCompetitorProfile: LiveCompetitorProfile | null = null;
 
 export type WinnerStyle =
   | "atomic_loop"
@@ -98,10 +110,10 @@ export type TickDirection = "down" | "up";
 // atomic ERC4626 arb (which also calls deposit/redeem but round-trips to ~zero net shares), the
 // selector hit is corroborated by Layer 2.
 //
-// Layer 2 (robust general signal): an actor-owned ERC4626/vault-share mint/burn imbalance from the
-// receipt — but ONLY for token contracts that also emitted an ERC4626 Deposit/Withdraw in this tx.
-// A generic Transfer(0x0, ...) is not enough, and protocol counterparties are not actor inventory.
-// Pure receipt computation — no extra RPC.
+// Layer 2 (robust general signal): an explicitly entity-owned ERC4626/vault-share mint/burn
+// imbalance from the receipt — but ONLY for token contracts that also emitted an ERC4626
+// Deposit/Withdraw in this tx. A generic Transfer(0x0, ...) is not enough, and protocol
+// counterparties are not actor inventory. Pure receipt computation — no extra RPC.
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 // deposit(uint256,address) 0x6e553f65 and redeem(uint256,address,address) 0xba087652 — the two
 // vault-wrapper legs of the 0x9be73297 inventory rebalance (bundler 0xb8280955 / mediator 0x4825eff2).
@@ -1114,7 +1126,8 @@ function renderAnyTxSummary(report: any): string {
   lines.push(`  winner_style: ${report.winner_style}${report.non_comparable_winner ? " (NON-COMPARABLE)" : ""}`
     + ` [claim_selector=${signals.claim_selector_hit} sink_cut=${signals.conserved_sink_cut}`
     + ` rfq_sigs=${signals.rfq_sig_count} deadline=${signals.rfq_deadline_in_calldata}`
-    + ` external_mints=${(signals.external_mint_recipients ?? []).length}]`
+    + ` external_mints=${(signals.external_mint_recipients ?? []).length}`
+    + ` mint_context=${signals.external_mint_protocol_context ?? "none"}]`
     + ` edges=[${(report.edgeKinds ?? []).join(",")}]`);
   if ((signals.external_mint_recipients ?? []).length > 0) {
     lines.push(`  external_mint_recipients: ${signals.external_mint_recipients.join(",")}`);
@@ -1643,13 +1656,16 @@ export function winnerMovedPriceBeyondPrestate(
 //    signature(s) plus a seconds-scale deadline near the block timestamp in the calldata (verified on
 //    0x15352456: 3 sigs + deadline = block_ts+29s).
 //  - external mint: a non-actor, non-venue recipient retains a material token balance created by an
-//    in-tx mint. It is overlaid onto the closest existing non-comparable style, one_leg_inventory.
+//    in-tx mint. This remains diagnostic; an unrecognized unknown-token co-mint makes closure unknown
+//    but never manufactures competitor inventory ownership.
 export interface NonArbSignals {
   claim_selector_hit: boolean;
   conserved_sink_cut: boolean;
   rfq_sig_count: number;
   rfq_deadline_in_calldata: boolean;
   external_mint_recipients: string[];
+  external_mint_unknown_tokens: string[];
+  external_mint_protocol_context: "liquity" | null;
 }
 
 interface FlowLedgerToken {
@@ -1728,22 +1744,29 @@ export function detectNonArbSignals(
   blockTimestamp: number | null,
 ): NonArbSignals {
   const inputHex = lower(String(txInput ?? "")).replace(/^0x/, "");
+  const externalMint = retainedExternalMintEvidence(receipt, executors);
   return {
     claim_selector_hit: KEEPER_CLAIM_SELECTORS.some((selector) => inputHex.includes(selector)),
     conserved_sink_cut: hasConservedSinkCutShape(buildFlowLedger(receipt), executors),
     rfq_sig_count: countAbiEncodedSignatures(inputHex),
     rfq_deadline_in_calldata: blockTimestamp != null && hasDeadlineWord(inputHex, blockTimestamp),
-    external_mint_recipients: retainedExternalMintRecipients(receipt, executors),
+    external_mint_recipients: externalMint.recipients,
+    external_mint_unknown_tokens: externalMint.unknownTokens,
+    external_mint_protocol_context: externalMint.recipients.length > 0
+      ? recognizedExternalMintProtocolContext(receipt, externalMint.unknownTokens)
+      : null,
   };
 }
 
 // Overlay the non-arb classes on a base style. keeper_claim needs the decisive selector OR the flow
-// shape; external mint and rfq_fill only reinterpret an otherwise atomic/unknown win (a sandwich or
-// inventory verdict is already non-comparable and more specific).
+// shape. An external co-mint is diagnostic, not proof of competitor inventory. A material unknown
+// token co-mint without recognized protocol semantics makes closure ambiguous, so fail to unknown;
+// rfq_fill only reinterprets an otherwise atomic/unknown win.
 export function overlayNonArbStyle(base: WinnerStyle, signals: NonArbSignals): WinnerStyle {
   if (signals.claim_selector_hit || signals.conserved_sink_cut) return "keeper_claim";
-  if (signals.external_mint_recipients.length > 0
-    && (base === "atomic_loop" || base === "unknown")) return "one_leg_inventory";
+  if (signals.external_mint_unknown_tokens.length > 0
+    && signals.external_mint_protocol_context === null
+    && (base === "atomic_loop" || base === "unknown")) return "unknown";
   if (signals.rfq_sig_count >= 1 && signals.rfq_deadline_in_calldata
     && (base === "atomic_loop" || base === "unknown")) return "rfq_fill";
   return base;
@@ -1784,6 +1807,7 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
 
 export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
   const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
+  const positionOwners = competitorPositionOwners(beneficiaries);
   const receiptWethUnwrapExit = hasBeneficiaryWethUnwrapExit(input.receipt, beneficiaries);
   // A successful WETH Withdrawal to the executor is the receipt-level native
   // profit exit used by Coffee's atomic loops. Use it only when prestate trace
@@ -1827,7 +1851,7 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
     )
     : false;
   // Atomicity / inventory-rebalance detector (F-009). Layer 2 first (pure receipt, no RPC).
-  const shareImbalanceTokens = shareTokenImbalanceTokens(input.receipt, beneficiaries);
+  const shareImbalanceTokens = shareTokenImbalanceTokens(input.receipt, positionOwners);
   // Layer 1 (hardcoded selectors) needs the inner calls (top-level input is a private entrypoint),
   // so it reads a callTracer trace — but only when Layer 2 is silent, to avoid the extra RPC on the
   // common case. Graceful degrade: if the trace is unavailable the imbalance layer still catches it.
@@ -1879,13 +1903,13 @@ export function hasBeneficiaryWethUnwrapExit(
 }
 
 // Layer 2 (F-009): a vault-share supply change is inventory evidence only when a material residual
-// belongs to the competitor actor or to a vault helper directly linked to that actor by an ERC4626
-// event. Public vault counterparties, settlement recipients, and swap venues are not competitor
-// inventory merely because their receipt-local share net is nonzero. This keeps the private nested
-// wrappers in 0x9be73297 visible while allowing position-conserving sUSDS loops to remain atomic.
-export function shareTokenImbalanceTokens(receipt: Json | null, actors: Set<string>): string[] {
+// belongs to an explicitly supplied competitor/entity position owner. Public vault counterparties,
+// settlement recipients, and swap venues are never inferred as competitor inventory from ERC4626
+// event participation. This keeps configured private accounts visible while allowing nested public
+// wrappers and position-conserving sUSDS loops to remain atomic.
+export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: Set<string>): string[] {
   const evidencedVaultTokens = erc4626VaultTokens(receipt);
-  const actorOwnedHolders = actorLinkedVaultHolders(receipt, actors);
+  const explicitOwners = new Set([...positionOwners].map(lower).filter(isAddress));
   const supplyChangedTokens = new Set<string>();
   const perHolder = new Map<string, Map<string, bigint>>();
   const venueEmitters = swapVenueEmitters(receipt);
@@ -1911,7 +1935,7 @@ export function shareTokenImbalanceTokens(receipt: Json | null, actors: Set<stri
   for (const token of supplyChangedTokens) {
     const holders = perHolder.get(token) ?? new Map<string, bigint>();
     for (const [holder, holderNet] of holders) {
-      if (actorOwnedHolders.has(holder)
+      if (explicitOwners.has(holder)
         && !venueEmitters.has(holder)
         && isMaterialTokenAmount(token, holderNet)) {
         out.push(token);
@@ -1922,11 +1946,17 @@ export function shareTokenImbalanceTokens(receipt: Json | null, actors: Set<stri
   return out.sort();
 }
 
-// A generic protocol mint to the executor can be part of an atomic protocol/DEX loop. A material
-// mint that leaves a positive balance at an unrelated non-venue address is different: the receipt
-// contains an externally retained leg, so the win is not a closed atomic loop even when executor PnL
-// itself is clean. ERC4626 share mints stay with the actor-aware inventory detector above.
+// A generic protocol mint to the executor can be part of an atomic protocol/DEX loop. Retained
+// balances at unrelated non-venue addresses are recorded as co-mint evidence; they are not ownership
+// evidence. ERC4626 share mints stay with the explicit-position-owner detector above.
 export function retainedExternalMintRecipients(receipt: Json | null, actors: Set<string>): string[] {
+  return retainedExternalMintEvidence(receipt, actors).recipients;
+}
+
+function retainedExternalMintEvidence(
+  receipt: Json | null,
+  actors: Set<string>,
+): { recipients: string[]; unknownTokens: string[] } {
   const normalizedActors = new Set([...actors].map(lower).filter(isAddress));
   const vaultTokens = erc4626VaultTokens(receipt);
   const venueEmitters = swapVenueEmitters(receipt);
@@ -1940,6 +1970,7 @@ export function retainedExternalMintRecipients(receipt: Json | null, actors: Set
   }
 
   const recipients = new Set<string>();
+  const unknownTokens = new Set<string>();
   const ledger = buildFlowLedger(receipt);
   for (const token of mintedTokens) {
     for (const [holder, amount] of ledger.get(token)?.net ?? []) {
@@ -1947,9 +1978,21 @@ export function retainedExternalMintRecipients(receipt: Json | null, actors: Set
       if (holder === ZERO_ADDRESS || holder === token || normalizedActors.has(holder)) continue;
       if (venueEmitters.has(holder) || vaultTokens.has(holder)) continue;
       recipients.add(holder);
+      if (!TOKEN_META[token]) unknownTokens.add(token);
     }
   }
-  return [...recipients].sort();
+  return { recipients: [...recipients].sort(), unknownTokens: [...unknownTokens].sort() };
+}
+
+function recognizedExternalMintProtocolContext(
+  receipt: Json | null,
+  unknownTokens: string[],
+): "liquity" | null {
+  if (unknownTokens.length !== 1 || unknownTokens[0] !== LIQUITY_BOLD) return null;
+  return (receipt?.logs ?? []).some((log: Json) =>
+    LIQUITY_MINT_CONTEXT_TOPICS.has(lower(String(log?.topics?.[0] ?? ""))))
+    ? "liquity"
+    : null;
 }
 
 function erc4626VaultTokens(receipt: Json | null): Set<string> {
@@ -1963,25 +2006,6 @@ function erc4626VaultTokens(receipt: Json | null): Set<string> {
     }
   }
   return out;
-}
-
-function actorLinkedVaultHolders(receipt: Json | null, actors: Set<string>): Set<string> {
-  const normalizedActors = new Set([...actors].map(lower).filter(isAddress));
-  const out = new Set(normalizedActors);
-  for (const log of receipt?.logs ?? []) {
-    const topic0 = lower(String(log?.topics?.[0] ?? ""));
-    if (topic0 !== lower(TOPICS.erc4626Deposit) && topic0 !== lower(TOPICS.erc4626Withdraw)) continue;
-    const emitter = lower(String(log?.address ?? ""));
-    const linkedToActor = Array.isArray(log?.topics)
-      && log.topics.slice(1).some((topic: unknown) => normalizedActors.has(indexedTopicAddress(topic)));
-    if (isAddress(emitter) && linkedToActor) out.add(emitter);
-  }
-  return out;
-}
-
-function indexedTopicAddress(topic: unknown): string {
-  const value = lower(typeof topic === "string" ? topic : "");
-  return /^0x[0-9a-f]{64}$/.test(value) ? `0x${value.slice(-40)}` : "";
 }
 
 function swapVenueEmitters(receipt: Json | null): Set<string> {
@@ -2098,6 +2122,14 @@ function competitorBeneficiaries(tx: Json | null, receipt: Json | null, benefici
       .map((address) => lower(String(address ?? "")))
       .filter(isAddress),
   );
+}
+
+function competitorPositionOwners(beneficiaries: Set<string>): Set<string> {
+  liveCompetitorProfile ??= loadLiveCompetitorProfile();
+  return new Set([
+    ...beneficiaries,
+    ...positionAccountsForActors(liveCompetitorProfile, beneficiaries),
+  ]);
 }
 
 async function unpricedInTokensWithoutCounterTransfers(
@@ -2441,20 +2473,19 @@ function numberOrUndefined(value: unknown): number | undefined {
 
 function nonComparableWinnerNote(style: WinnerStyle, signals?: NonArbSignals): string {
   const externalMintRecipients = signals?.external_mint_recipients ?? [];
-  const externalMint = externalMintRecipients.length > 0;
-  const label = externalMint
-    ? `one_leg_inventory/external co-mint retained by ${externalMintRecipients.join(",")}`
-    : style === "one_leg_inventory"
-      ? "one_leg_inventory/CEX-DEX"
-      : style === "inventory_vault_rebalance"
-        ? "inventory_vault_rebalance (residual vault-share position; needs pre-held inventory)"
-        : style === "keeper_claim"
-          ? "keeper_claim/protocol reward harvest"
-          : style === "rfq_fill"
-            ? "rfq_fill/off-chain signed liquidity"
-            : "sandwich";
-  const posture = externalMint ? "outside closed-loop posture" : "off-chain/out-of-posture";
-  return `winner is ${label}; ${posture} - our atomic sim gross is the correct ceiling; no coverage/sizing/bid fix`;
+  const label = style === "one_leg_inventory"
+    ? "one_leg_inventory/CEX-DEX"
+    : style === "inventory_vault_rebalance"
+      ? "inventory_vault_rebalance (residual vault-share position; needs pre-held inventory)"
+      : style === "keeper_claim"
+        ? "keeper_claim/protocol reward harvest"
+        : style === "rfq_fill"
+          ? "rfq_fill/off-chain signed liquidity"
+          : "sandwich";
+  const coMintDiagnostic = externalMintRecipients.length > 0
+    ? `; external co-mint diagnostic recipients=${externalMintRecipients.join(",")}`
+    : "";
+  return `winner is ${label}${coMintDiagnostic}; off-chain/out-of-posture - our atomic sim gross is the correct ceiling; no coverage/sizing/bid fix`;
 }
 
 function pendingVerdict(): Verdict {

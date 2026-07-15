@@ -11,6 +11,11 @@ import {
   shareTokenImbalanceTokens,
   type WinnerStyle,
 } from "./cli/bundle-postmortem.js";
+import {
+  loadLiveCompetitorProfile,
+  positionAccountsForActors,
+  type LiveCompetitorProfile,
+} from "./live-competitors.js";
 import { valueDeltas } from "./pnl/arb-profit.js";
 import { classifyTxShape, type RawLog } from "./pnl/tx-shape.js";
 import { ADDR, lower, tokenMeta } from "./registry/protocols.js";
@@ -24,6 +29,11 @@ const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
 const SCALE_KEEPER_TX = "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628";
 const COFFEE_EXECUTOR = "0xe08d97e151473a848c3d9ca3f323cb720472d015";
+const LIQUITY_EXTERNAL_MINT_RECIPIENTS = [
+  "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1",
+  "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b",
+];
+let liveCompetitorProfile: LiveCompetitorProfile | null = null;
 const SUSDS_ATOMIC_LOOP_TXS = [
   "0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8",
   "0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4",
@@ -134,9 +144,22 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
 
     const tx2Signals = shareTokenImbalanceTokens(
       { logs: tx2.receiptLogs },
-      new Set([lower(tx2.tx.from), lower(tx2.tx.to)]),
+      positionOwners(new Set([lower(tx2.tx.from), lower(tx2.tx.to)])),
     );
     checks.push(check(tx2.txHash, "vault_inventory_signal", "none", tx2Signals.join(",") || "none"));
+    checks.push(check(tx2.txHash, "winner_style", "atomic_loop", offlineWinnerStyle(tx2)));
+    const tx2NonArb = detectNonArbSignals(
+      null,
+      { logs: tx2.receiptLogs },
+      new Set([lower(tx2.tx.from), lower(tx2.tx.to)]),
+      null,
+    );
+    checks.push(check(
+      tx2.txHash,
+      "external_mint_signal",
+      LIQUITY_EXTERNAL_MINT_RECIPIENTS.join(","),
+      tx2NonArb.external_mint_recipients.join(",") || "none",
+    ));
     checks.push(check(tx3.txHash, "winner_style", "atomic_loop", offlineWinnerStyle(tx3)));
     checks.push(check(tx4.txHash, "winner_style", "atomic_loop", offlineWinnerStyle(tx4)));
 
@@ -145,7 +168,7 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     );
     const inventorySignals = shareTokenImbalanceTokens(
       inventoryReceipt,
-      new Set([lower(COFFEE), lower(COFFEE_EXECUTOR)]),
+      positionOwners(new Set([lower(COFFEE), lower(COFFEE_EXECUTOR)])),
     ).sort();
     const inventoryStyle = classifyWinnerStyle({
       pricedDeltas: [{ token: ADDR.WETH, symbol: "WETH", decimals: 18, raw: 1n }],
@@ -193,7 +216,7 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     }
     for (const receipt of disputedReceipts.externalMintNonComparable) {
       const actual = offlineActualReceiptStyle(receipt);
-      checks.push(check(receipt.transactionHash, "winner_style", "one_leg_inventory", actual.style));
+      checks.push(check(receipt.transactionHash, "winner_style", "unknown", actual.style));
       checks.push(check(
         receipt.transactionHash,
         "external_mint_signal",
@@ -283,7 +306,7 @@ function offlineHoldoutStyle(holdout: HoldoutFixture): {
       .map((delta) => delta.token),
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
-    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, actors),
+    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, positionOwners(actors)),
     inventory_rebalance_selector_hit: false,
   });
   const nonArbSignal = nonArb.claim_selector_hit || nonArb.conserved_sink_cut
@@ -302,7 +325,7 @@ function offlineActualReceiptStyle(receipt: ActualReceiptFixture): {
   const actors = new Set([lower(receipt.from), lower(receipt.to)]);
   const rawDeltas = actionsFromLogs(receipt, [...actors]).rawDeltas;
   const valued = valueDeltas(rawDeltas, 1746.76);
-  const shareImbalanceTokens = shareTokenImbalanceTokens(receipt, actors);
+  const shareImbalanceTokens = shareTokenImbalanceTokens(receipt, positionOwners(actors));
   const nonArb = detectNonArbSignals(null, receipt, actors, null);
   const base = classifyWinnerStyle({
     pricedDeltas: valued.priced,
@@ -341,7 +364,7 @@ function offlineWinnerStyle(fixture: CoffeeFixture): WinnerStyle {
     [fixture.tx.from, fixture.tx.to],
   ).rawDeltas;
   const valued = valueDeltas(rawDeltas, 1746.76);
-  return classifyWinnerStyle({
+  const base = classifyWinnerStyle({
     pricedDeltas: valued.priced,
     unpricedDeltas: valued.unpriced,
     nativeWeiPositive: hasBeneficiaryWethUnwrapExit(receipt, actors),
@@ -351,9 +374,18 @@ function offlineWinnerStyle(fixture: CoffeeFixture): WinnerStyle {
       .map((delta) => delta.token),
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
-    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, actors),
+    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, positionOwners(actors)),
     inventory_rebalance_selector_hit: false,
   });
+  return overlayNonArbStyle(base, detectNonArbSignals(null, receipt, actors, null));
+}
+
+function positionOwners(actors: Set<string>): Set<string> {
+  liveCompetitorProfile ??= loadLiveCompetitorProfile();
+  return new Set([
+    ...actors,
+    ...positionAccountsForActors(liveCompetitorProfile, actors),
+  ]);
 }
 
 function loadDisputedReceipts(): DisputedReceiptFixture {
