@@ -80,11 +80,7 @@ const POSITION_DUST_USD_MICROS = 10_000n; // one cent
 const REGISTERED_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
 // Preserve the pre-value-aware raw-unit boundary when no authoritative decimals are registered.
 const UNKNOWN_TOKEN_DUST_RAW = 1000n;
-const LIQUITY_MINT_CONTEXT_TOPICS = new Set([
-  lower(TOPICS.liquityTroveOperation),
-  lower(TOPICS.liquityTroveUpdated),
-  lower(TOPICS.liquityBatchUpdated),
-]);
+const LIQUITY_PROTOCOL_EMITTER = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
 const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
 const SUSDS_MINT_CONTEXT_TOKENS = new Set([lower(ADDR.USDS), lower(ADDR.SUSDS)]);
 
@@ -104,20 +100,11 @@ export type TickDirection = "down" | "up";
 // misclassifies as atomic_loop and pollutes atomic-arb competitor analysis. It is NOT ours: it needs
 // pre-held vault-share inventory (~$2.9M) and leaves a residual position in helper contracts.
 //
-// Layer 1 (operator directive — flag by FUNCTION/selector, NOT by contract, because the SAME
-// contract's deposit/redeem are legit protocol-arb calls): a hardcoded set of ERC4626 vault-share
-// rebalance selectors observed as the inventory legs of 0x9be73297. To avoid over-flagging a plain
-// atomic ERC4626 arb (which also calls deposit/redeem but round-trips to ~zero net shares), the
-// selector hit is corroborated by Layer 2.
-//
-// Layer 2 (robust general signal): an explicitly entity-owned ERC4626/vault-share mint/burn
+// The robust general signal is an explicitly entity-owned ERC4626/vault-share mint/burn
 // imbalance from the receipt — but ONLY for token contracts that also emitted an ERC4626
 // Deposit/Withdraw in this tx. A generic Transfer(0x0, ...) is not enough, and protocol
 // counterparties are not actor inventory. Pure receipt computation — no extra RPC.
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-// deposit(uint256,address) 0x6e553f65 and redeem(uint256,address,address) 0xba087652 — the two
-// vault-wrapper legs of the 0x9be73297 inventory rebalance (bundler 0xb8280955 / mediator 0x4825eff2).
-const INVENTORY_REBALANCE_SELECTORS = new Set(["0x6e553f65", "0xba087652"]);
 type RealizedProfitUsd = number | null | string;
 
 type Json = Record<string, any>;
@@ -252,7 +239,8 @@ export interface WinnerStyleInput {
   unpricedInTokensWithoutCounterTransfer: string[];
   winner_moved_price_beyond_prestate: boolean;
   sandwich_detected: boolean;
-  // Atomicity detector (F-009). Both optional so existing callers/fixtures are unchanged.
+  // Retained for report/test compatibility. A generic vault selector is diagnostic only and cannot
+  // establish competitor ownership without a receipt-grounded share/account imbalance.
   inventory_rebalance_selector_hit?: boolean;
   share_imbalance_tokens?: string[];
 }
@@ -1768,7 +1756,7 @@ export function detectNonArbSignals(
     external_mint_tokens: externalMint.tokens,
     external_mint_unknown_tokens: externalMint.unknownTokens,
     external_mint_protocol_context: externalMint.recipients.length > 0
-      ? recognizedExternalMintProtocolContext(receipt, externalMint.tokens)
+      ? recognizedExternalMintProtocolContext(receipt, externalMint)
       : null,
   };
 }
@@ -1789,16 +1777,10 @@ export function overlayNonArbStyle(base: WinnerStyle, signals: NonArbSignals): W
 
 export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerStyle {
   // Atomicity check FIRST: a vault-share inventory rebalance (F-009) otherwise reads as atomic_loop
-  // because the executor's intra-tx net is clean. Two layers, either is sufficient to flag:
-  //  - Layer 2 (robust): an actor-owned residual share-token mint/burn imbalance in the receipt.
-  //  - Layer 1 (operator first cut): a hardcoded ERC4626 rebalance selector. Trusted alone ONLY when
-  //    the winner is NOT a comparable atomic loop; a plain atomic ERC4626 arb also calls
-  //    deposit/redeem but round-trips to ~zero net shares (no imbalance) and returns to a priced
-  //    token (an atomic loop), so the selector never fires against it.
+  // because the executor's intra-tx net is clean. Only explicit receipt/account ownership evidence
+  // is sufficient; generic ERC4626 selectors are shared by ordinary deposits and redemptions.
   const shareImbalance = (input.share_imbalance_tokens?.length ?? 0) > 0;
-  const selectorInventory = Boolean(input.inventory_rebalance_selector_hit)
-    && !hasAtomicLoopFlow(input.pricedDeltas, input.unpricedDeltas, input.nativeWeiPositive ?? false);
-  if (shareImbalance || selectorInventory) return "inventory_vault_rebalance";
+  if (shareImbalance) return "inventory_vault_rebalance";
   const closedAtomicFlow = hasAtomicLoopFlow(
     input.pricedDeltas,
     input.unpricedDeltas,
@@ -1827,7 +1809,6 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
     input.competitorProfile,
     input.positionAccounts,
   );
-  const positionOwners = new Set([...beneficiaries, ...entityPositionAccounts]);
   const receiptWethUnwrapExit = hasBeneficiaryWethUnwrapExit(input.receipt, beneficiaries);
   // A successful WETH Withdrawal to the executor is the receipt-level native
   // profit exit used by Coffee's atomic loops. Use it only when prestate trace
@@ -1870,17 +1851,12 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       input.blockNumber,
     )
     : false;
-  // Atomicity / inventory-rebalance detector (F-009). Layer 2 first (pure receipt, no RPC).
+  // Atomicity / inventory-rebalance detector (F-009): receipt-grounded actor drawdown plus the
+  // aggregate net of explicitly configured entity position accounts.
   const shareImbalanceTokens = [...new Set([
-    ...shareTokenImbalanceTokens(input.receipt, positionOwners),
+    ...shareTokenImbalanceTokens(input.receipt, beneficiaries),
     ...positionAccountImbalanceTokens(input.receipt, entityPositionAccounts),
   ])].sort();
-  // Layer 1 (hardcoded selectors) needs the inner calls (top-level input is a private entrypoint),
-  // so it reads a callTracer trace — but only when Layer 2 is silent, to avoid the extra RPC on the
-  // common case. Graceful degrade: if the trace is unavailable the imbalance layer still catches it.
-  const inventoryRebalanceSelectorHit = shareImbalanceTokens.length > 0
-    ? true
-    : await inventoryRebalanceSelectorPresent(input.rpc, input.txHash);
   const nonArbSignals = detectNonArbSignals(
     input.tx?.input,
     input.receipt,
@@ -1897,7 +1873,6 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       sandwich_detected: sandwichDetected,
       nativeWeiPositive,
       nativeWeiNegative,
-      inventory_rebalance_selector_hit: inventoryRebalanceSelectorHit,
       share_imbalance_tokens: shareImbalanceTokens,
     }), nonArbSignals),
     receipt_weth_unwrap_exit: receiptWethUnwrapExit,
@@ -1925,11 +1900,10 @@ export function hasBeneficiaryWethUnwrapExit(
   return false;
 }
 
-// Layer 2 (F-009): a vault-share supply change is inventory evidence only when a material residual
-// belongs to an explicitly supplied competitor/entity position owner. Public vault counterparties,
-// settlement recipients, and swap venues are never inferred as competitor inventory from ERC4626
-// event participation. This keeps configured private accounts visible while allowing nested public
-// wrappers and position-conserving sUSDS loops to remain atomic.
+// A vault-share supply change is actor inventory evidence only when an explicit actor materially
+// draws down shares. A positive share mint can be ordinary profit/new position creation and cannot
+// prove use of pre-held inventory. Configured entity accounts are handled sign-symmetrically by
+// positionAccountImbalanceTokens below.
 export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: Set<string>): string[] {
   const evidencedVaultTokens = erc4626VaultTokens(receipt);
   const explicitOwners = new Set([...positionOwners].map(lower).filter(isAddress));
@@ -1958,7 +1932,8 @@ export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: 
   for (const token of supplyChangedTokens) {
     const holders = perHolder.get(token) ?? new Map<string, bigint>();
     for (const [holder, holderNet] of holders) {
-      if (explicitOwners.has(holder)
+      if (holderNet < 0n
+        && explicitOwners.has(holder)
         && !venueEmitters.has(holder)
         && isMaterialTokenAmount(token, holderNet)) {
         out.push(token);
@@ -1969,9 +1944,9 @@ export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: 
   return out.sort();
 }
 
-// Declared entity position accounts are stronger ownership evidence than receipt roles. Any material
-// ERC20 net change on one of those accounts is position inventory, even when the tx only transfers
-// pre-held shares and emits no ERC4626 Deposit/Withdraw event. Net-zero transit remains conserved.
+// Declared entity position accounts are stronger ownership evidence than receipt roles. Aggregate
+// their net per token so internal A->B movement conserves the entity position, while any material
+// external drawdown/deposit remains inventory evidence even without an ERC4626 event.
 export function positionAccountImbalanceTokens(
   receipt: Json | null,
   positionAccounts: Set<string>,
@@ -1979,12 +1954,9 @@ export function positionAccountImbalanceTokens(
   const accounts = new Set([...positionAccounts].map(lower).filter(isAddress));
   const out = new Set<string>();
   for (const [token, { net }] of buildFlowLedger(receipt)) {
-    for (const account of accounts) {
-      if (isMaterialTokenAmount(token, net.get(account) ?? 0n)) {
-        out.add(token);
-        break;
-      }
-    }
+    let entityNet = 0n;
+    for (const account of accounts) entityNet += net.get(account) ?? 0n;
+    if (isMaterialTokenAmount(token, entityNet)) out.add(token);
   }
   return [...out].sort();
 }
@@ -1997,58 +1969,195 @@ export function retainedExternalMintRecipients(receipt: Json | null, actors: Set
   return retainedExternalMintEvidence(receipt, actors).recipients;
 }
 
+interface RetainedExternalMintEvidence {
+  recipients: string[];
+  tokens: string[];
+  unknownTokens: string[];
+  recipientsByToken: Map<string, string[]>;
+}
+
 function retainedExternalMintEvidence(
   receipt: Json | null,
   actors: Set<string>,
-): { recipients: string[]; tokens: string[]; unknownTokens: string[] } {
+): RetainedExternalMintEvidence {
   const normalizedActors = new Set([...actors].map(lower).filter(isAddress));
   const venueEmitters = swapVenueEmitters(receipt);
-  const mintedTokens = new Set<string>();
+  const mintedAmounts = new Map<string, bigint>();
   for (const log of receipt?.logs ?? []) {
     if (lower(String(log?.topics?.[0] ?? "")) !== TOPIC_TRANSFER) continue;
     const transfer = decodeTransfer(log);
     if (!transfer || lower(transfer.from) !== ZERO_ADDRESS) continue;
     const token = lower(transfer.token);
-    if (isMaterialTokenAmount(token, transfer.amount)) mintedTokens.add(token);
+    mintedAmounts.set(token, (mintedAmounts.get(token) ?? 0n) + transfer.amount);
   }
+  const mintedTokens = [...mintedAmounts]
+    .filter(([token, amount]) => isMaterialTokenAmount(token, amount))
+    .map(([token]) => token);
 
   const recipients = new Set<string>();
   const tokens = new Set<string>();
   const unknownTokens = new Set<string>();
+  const recipientSetsByToken = new Map<string, Set<string>>();
   const ledger = buildFlowLedger(receipt);
   for (const token of mintedTokens) {
+    const eligibleRecipients: Array<[string, bigint]> = [];
     for (const [holder, amount] of ledger.get(token)?.net ?? []) {
-      if (amount <= 0n || !isMaterialTokenAmount(token, amount)) continue;
+      if (amount <= 0n) continue;
       if (holder === ZERO_ADDRESS || holder === token || normalizedActors.has(holder)) continue;
       if (venueEmitters.has(holder)) continue;
+      eligibleRecipients.push([holder, amount]);
+    }
+    const materialRecipients = eligibleRecipients.filter(([, amount]) =>
+      isMaterialTokenAmount(token, amount));
+    const subthresholdRecipients = eligibleRecipients.filter(([, amount]) =>
+      !isMaterialTokenAmount(token, amount));
+    const subthresholdTotal = subthresholdRecipients.reduce((sum, [, amount]) => sum + amount, 0n);
+    const evidencedRecipients = isMaterialTokenAmount(token, subthresholdTotal)
+      ? [...materialRecipients, ...subthresholdRecipients]
+      : materialRecipients;
+    for (const [holder] of evidencedRecipients) {
       recipients.add(holder);
       tokens.add(token);
       if (!TOKEN_META[token]) unknownTokens.add(token);
+      let tokenRecipients = recipientSetsByToken.get(token);
+      if (!tokenRecipients) {
+        tokenRecipients = new Set();
+        recipientSetsByToken.set(token, tokenRecipients);
+      }
+      tokenRecipients.add(holder);
     }
   }
   return {
     recipients: [...recipients].sort(),
     tokens: [...tokens].sort(),
     unknownTokens: [...unknownTokens].sort(),
+    recipientsByToken: new Map(
+      [...recipientSetsByToken].map(([token, tokenRecipients]) =>
+        [token, [...tokenRecipients].sort()]),
+    ),
   };
 }
 
 function recognizedExternalMintProtocolContext(
   receipt: Json | null,
-  tokens: string[],
+  evidence: RetainedExternalMintEvidence,
 ): "liquity" | "susds" | null {
-  if (tokens.length === 1
-    && tokens[0] === LIQUITY_BOLD
-    && (receipt?.logs ?? []).some((log: Json) =>
-      LIQUITY_MINT_CONTEXT_TOPICS.has(lower(String(log?.topics?.[0] ?? ""))))) {
+  if (evidence.tokens.length === 1
+    && evidence.tokens[0] === LIQUITY_BOLD
+    && hasGroundedLiquityBoldMint(receipt)) {
     return "liquity";
   }
-  if (tokens.length > 0
-    && tokens.every((token) => SUSDS_MINT_CONTEXT_TOKENS.has(token))
-    && erc4626VaultTokens(receipt).has(lower(ADDR.SUSDS))) {
+  if (evidence.tokens.length > 0
+    && evidence.tokens.every((token) => SUSDS_MINT_CONTEXT_TOKENS.has(token))
+    && hasGroundedSusdsMintContext(receipt, evidence)) {
     return "susds";
   }
   return null;
+}
+
+function hasGroundedLiquityBoldMint(receipt: Json | null): boolean {
+  const operationSubjects = new Set<string>();
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.address ?? "")) !== LIQUITY_PROTOCOL_EMITTER
+      || lower(String(log?.topics?.[0] ?? "")) !== lower(TOPICS.liquityBatchUpdated)) continue;
+    const subject = addressFromTopic(log?.topics?.[1]);
+    if (subject) operationSubjects.add(subject);
+  }
+  const boldMints = zeroMintAmountsByRecipient(receipt, LIQUITY_BOLD);
+  return [...operationSubjects].some((subject) =>
+    isMaterialTokenAmount(LIQUITY_BOLD, boldMints.get(subject) ?? 0n));
+}
+
+function hasGroundedSusdsMintContext(
+  receipt: Json | null,
+  evidence: RetainedExternalMintEvidence,
+): boolean {
+  const susds = lower(ADDR.SUSDS);
+  const usds = lower(ADDR.USDS);
+  if (!erc4626VaultTokens(receipt).has(susds)) return false;
+
+  if (evidence.tokens.includes(usds)) {
+    const retainedUsdsRecipients = evidence.recipientsByToken.get(usds) ?? [];
+    const usdsMints = zeroMintAmountsByRecipient(receipt, usds);
+    if (retainedUsdsRecipients.length === 0
+      || retainedUsdsRecipients.some((recipient) => recipient !== susds)
+      || (!isMaterialTokenAmount(usds, usdsMints.get(susds) ?? 0n)
+        && !hasMaterialSusdsDepositAssetFlow(receipt))) return false;
+  }
+
+  if (evidence.tokens.includes(susds)) {
+    const shareMints = zeroMintAmountsByRecipient(receipt, susds);
+    const depositShares = susdsDepositSharesByOwner(receipt);
+    let sawMaterialShareMint = false;
+    for (const [recipient, amount] of shareMints) {
+      if (!isMaterialTokenAmount(susds, amount)) continue;
+      sawMaterialShareMint = true;
+      if ((depositShares.get(recipient) ?? 0n) !== amount) return false;
+    }
+    if (!sawMaterialShareMint) return false;
+  }
+  return true;
+}
+
+function hasMaterialSusdsDepositAssetFlow(receipt: Json | null): boolean {
+  const depositedBySender = new Map<string, bigint>();
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.address ?? "")) !== lower(ADDR.SUSDS)
+      || lower(String(log?.topics?.[0] ?? "")) !== lower(TOPICS.erc4626Deposit)) continue;
+    const sender = addressFromTopic(log?.topics?.[1]);
+    const assets = dataWord(log?.data, 0);
+    if (!sender || assets === null) continue;
+    depositedBySender.set(sender, (depositedBySender.get(sender) ?? 0n) + assets);
+  }
+
+  const transferredBySender = new Map<string, bigint>();
+  for (const { from, to, amount } of buildFlowLedger(receipt).get(lower(ADDR.USDS))?.edges ?? []) {
+    if (to !== lower(ADDR.SUSDS)) continue;
+    transferredBySender.set(from, (transferredBySender.get(from) ?? 0n) + amount);
+  }
+  return [...depositedBySender].some(([sender, assets]) =>
+    isMaterialTokenAmount(ADDR.USDS, assets)
+      && transferredBySender.get(sender) === assets);
+}
+
+function zeroMintAmountsByRecipient(receipt: Json | null, token: string): Map<string, bigint> {
+  const out = new Map<string, bigint>();
+  for (const log of receipt?.logs ?? []) {
+    const transfer = decodeTransfer(log);
+    if (!transfer
+      || lower(transfer.token) !== lower(token)
+      || lower(transfer.from) !== ZERO_ADDRESS) continue;
+    const recipient = lower(transfer.to);
+    out.set(recipient, (out.get(recipient) ?? 0n) + transfer.amount);
+  }
+  return out;
+}
+
+function susdsDepositSharesByOwner(receipt: Json | null): Map<string, bigint> {
+  const out = new Map<string, bigint>();
+  for (const log of receipt?.logs ?? []) {
+    if (lower(String(log?.address ?? "")) !== lower(ADDR.SUSDS)
+      || lower(String(log?.topics?.[0] ?? "")) !== lower(TOPICS.erc4626Deposit)) continue;
+    const owner = addressFromTopic(log?.topics?.[2]);
+    const shares = dataWord(log?.data, 1);
+    if (!owner || shares === null) continue;
+    out.set(owner, (out.get(owner) ?? 0n) + shares);
+  }
+  return out;
+}
+
+function addressFromTopic(topic: unknown): string | null {
+  const hex = lower(String(topic ?? "")).replace(/^0x/, "");
+  if (!/^[a-f0-9]{64}$/.test(hex)) return null;
+  const address = `0x${hex.slice(-40)}`;
+  return isAddress(address) ? address : null;
+}
+
+function dataWord(data: unknown, index: number): bigint | null {
+  const hex = lower(String(data ?? "")).replace(/^0x/, "");
+  const word = hex.slice(index * 64, (index + 1) * 64);
+  if (!/^[a-f0-9]{64}$/.test(word)) return null;
+  return BigInt(`0x${word}`);
 }
 
 function erc4626VaultTokens(receipt: Json | null): Set<string> {
@@ -2077,28 +2186,6 @@ function swapVenueEmitters(receipt: Json | null): Set<string> {
     }
   }
   return out;
-}
-
-// Layer 1 (F-009, operator directive): scan the tx call tree for a hardcoded ERC4626 vault-share
-// rebalance selector (deposit/redeem observed as the inventory legs of 0x9be73297). Keyed by
-// FUNCTION selector, NOT contract, since the same contracts' deposit/redeem are legit protocol-arb
-// calls; the selector hit is only trusted by classifyWinnerStyle when it is NOT a comparable atomic
-// loop. Best-effort: any trace failure returns false (Layer 2 remains the robust catch).
-async function inventoryRebalanceSelectorPresent(rpc: RpcClient, txHash: string): Promise<boolean> {
-  try {
-    const trace = await rpc.traceTransaction(txHash);
-    return callTreeHasSelector(trace, INVENTORY_REBALANCE_SELECTORS);
-  } catch {
-    return false;
-  }
-}
-
-function callTreeHasSelector(node: Json | null | undefined, selectors: Set<string>): boolean {
-  if (!node || typeof node !== "object") return false;
-  const selector = lower(String(node.input ?? "0x")).slice(0, 10);
-  if (selectors.has(selector)) return true;
-  const calls = Array.isArray(node.calls) ? node.calls : [];
-  return calls.some((child) => callTreeHasSelector(child, selectors));
 }
 
 export function realizedProfitUsdForReport(
@@ -2185,9 +2272,15 @@ function competitorPositionAccounts(
   profile: LiveCompetitorProfile | undefined,
   supplied: Iterable<string> | undefined,
 ): Set<string> {
-  const accounts = supplied !== undefined
-    ? [...supplied]
-    : profile !== undefined ? positionAccountsForActors(profile, beneficiaries) : [];
+  if (supplied !== undefined) {
+    return new Set([...supplied].map(lower).filter(isAddress));
+  }
+  // Profileless library consumers use the same validated default profile as the CLI. Load it for
+  // each call so a caller-provided/watch profile and the default can never diverge through a cache.
+  const accounts = positionAccountsForActors(
+    profile ?? loadLiveCompetitorProfile(),
+    beneficiaries,
+  );
   return new Set(accounts.map(lower).filter(isAddress));
 }
 

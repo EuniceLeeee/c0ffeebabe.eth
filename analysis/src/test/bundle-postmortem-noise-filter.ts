@@ -132,6 +132,10 @@ const UNKNOWN_TOKEN_CASES = [
   { token: "0x0000000000000000000000000000000000001818", symbol: "UNK18", decimals: 18 },
 ] as const;
 const EXTERNAL_RECIPIENT = "0x00000000000000000000000000000000000000e5";
+const SECOND_POSITION_ACCOUNT = "0x00000000000000000000000000000000000000e6";
+const SPLIT_MINT_RECIPIENT = "0x00000000000000000000000000000000000000e7";
+const LIQUITY_PROTOCOL_EMITTER = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
+const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
 const erc20If = new ethers.Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
 const erc4626If = new ethers.Interface([
   "event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)",
@@ -154,6 +158,12 @@ const vaultDepositLog = (vault: string, sender: string, owner: string, amount: b
   const { data, topics } = erc4626If.encodeEventLog("Deposit", [sender, owner, amount, amount]);
   return { address: vault, topics, data, logIndex: "0x" + li.toString(16) };
 };
+const liquityContextLog = (emitter: string, subject: string, li: number) => ({
+  address: emitter,
+  topics: [TOPICS.liquityBatchUpdated, ethers.zeroPadValue(subject, 32)],
+  data: "0x",
+  logIndex: "0x" + li.toString(16),
+});
 const SHARE_AMT = 934n * 10n ** 18n;
 // buy the share from a swap venue, redeem it (burn) — executor nets 0 => NOT inventory (the fix).
 const atomicBuyRedeem = { logs: [v3SwapLog(SWAP_VENUE, 0), xfer(SHARE_TOK, SWAP_VENUE, EXEC_ACTOR, SHARE_AMT, 1), xfer(SHARE_TOK, EXEC_ACTOR, ethers.ZeroAddress, SHARE_AMT, 2), vaultWithdrawLog(SHARE_TOK, EXEC_ACTOR, SHARE_AMT, 3)] };
@@ -188,6 +198,18 @@ const transientPositionFlow = {
     xfer(SHARE_TOK, INV_HELPER, EXTERNAL_RECIPIENT, SHARE_AMT, 1),
   ],
 };
+const internalPositionTransfer = {
+  logs: [xfer(SHARE_TOK, INV_HELPER, SECOND_POSITION_ACCOUNT, SHARE_AMT, 0)],
+};
+const positivePositionDeposit = {
+  logs: [xfer(SHARE_TOK, EXTERNAL_RECIPIENT, INV_HELPER, SHARE_AMT, 0)],
+};
+const positiveActorShareMint = {
+  logs: [
+    vaultDepositLog(SHARE_TOK, EXEC_ACTOR, EXEC_ACTOR, SHARE_AMT, 0),
+    xfer(SHARE_TOK, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 1),
+  ],
+};
 const transferOnlyPositionImbalance = positionAccountImbalanceTokens(
   transferOnlyPositionDrawdown,
   new Set([INV_HELPER]),
@@ -195,6 +217,18 @@ const transferOnlyPositionImbalance = positionAccountImbalanceTokens(
 const transientPositionImbalance = positionAccountImbalanceTokens(
   transientPositionFlow,
   new Set([INV_HELPER]),
+);
+const internalPositionImbalance = positionAccountImbalanceTokens(
+  internalPositionTransfer,
+  new Set([INV_HELPER, SECOND_POSITION_ACCOUNT]),
+);
+const positivePositionImbalance = positionAccountImbalanceTokens(
+  positivePositionDeposit,
+  new Set([INV_HELPER]),
+);
+const positiveActorShareImbalance = shareTokenImbalanceTokens(
+  positiveActorShareMint,
+  new Set([EXEC_ACTOR]),
 );
 const registeredUsdsMintSignals = detectNonArbSignals(
   null,
@@ -239,6 +273,63 @@ const unrelatedLiquityCoMintSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const fakeEmitterBoldMintSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, EXTERNAL_RECIPIENT, SHARE_AMT, 0),
+      liquityContextLog(INV_HELPER, EXTERNAL_RECIPIENT, 1),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const unlinkedCanonicalBoldMintSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, EXTERNAL_RECIPIENT, SHARE_AMT, 0),
+      liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 1),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const unrelatedUsdsBesideSusdsDepositSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      vaultDepositLog(ADDR.SUSDS, EXEC_ACTOR, EXEC_ACTOR, SHARE_AMT, 0),
+      xfer(ADDR.SUSDS, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 1),
+      xfer(ADDR.USDS, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 10n ** 18n, 2),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const unrelatedSusdsBesideSusdsDepositSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      vaultDepositLog(ADDR.SUSDS, EXEC_ACTOR, EXEC_ACTOR, SHARE_AMT, 0),
+      xfer(ADDR.SUSDS, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 1),
+      xfer(ADDR.SUSDS, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 10n ** 18n, 2),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const splitExternalMintSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(UNKNOWN_TOKEN_CASES[0].token, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 600n, 0),
+      xfer(UNKNOWN_TOKEN_CASES[0].token, ethers.ZeroAddress, SPLIT_MINT_RECIPIENT, 600n, 1),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const CUSTOM_EOA = "0x00000000000000000000000000000000000000f1";
 const CUSTOM_EXECUTOR = "0x00000000000000000000000000000000000000f2";
 const CUSTOM_POSITION_ACCOUNT = "0x00000000000000000000000000000000000000f3";
@@ -270,6 +361,8 @@ const classifierRpc = {
 } as unknown as RpcClient;
 const customProfileClassification = classifyTransferOnlyPosition(loadedCustomProfile);
 const noProfileClassification = classifyTransferOnlyPosition();
+const defaultProfileInventoryClassification = classifyDefaultProfileInventory();
+const positiveActorShareClassification = classifyPositiveActorShare();
 const liquityMintImbalance = shareTokenImbalanceTokens(
   { logs: liquityMintReceipt.receiptLogs },
   COMPETITOR_POSITION_OWNERS,
@@ -346,6 +439,17 @@ const atomicWithSelectorHit = classifyWinnerStyle({
   winner_moved_price_beyond_prestate: false,
   sandwich_detected: false,
   share_imbalance_tokens: atomicImbalanceTokens,
+  inventory_rebalance_selector_hit: true,
+});
+
+const positiveShareWithSelectorStyle = classifyWinnerStyle({
+  pricedDeltas: [],
+  unpricedDeltas: [delta(SHARE_TOK, SHARE_AMT, "SHARE", 18)],
+  nativeWeiPositive: false,
+  unpricedInTokensWithoutCounterTransfer: [lower(SHARE_TOK)],
+  winner_moved_price_beyond_prestate: false,
+  sandwich_detected: false,
+  share_imbalance_tokens: positiveActorShareImbalance,
   inventory_rebalance_selector_hit: true,
 });
 
@@ -619,10 +723,14 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(buyRedeemImbalance, []),
   // ...but a genuine pre-held burn (non-venue helper -> 0x0, no in-tx source) still flags.
   () => assert.deepEqual(preHeldBurnImbalance, [lower(SHARE_TOK)]),
-  // Explicit entity position accounts are ledger-owned: a transfer-only drawdown is inventory even
-  // without an ERC4626 event, while equal in/out transit closes to zero.
+  // Explicit entity position accounts are ledger-owned: external changes in either direction are
+  // inventory even without an ERC4626 event. Transit and A->B movement inside the entity net to zero.
   () => assert.deepEqual(transferOnlyPositionImbalance, [lower(SHARE_TOK)]),
+  () => assert.deepEqual(positivePositionImbalance, [lower(SHARE_TOK)]),
   () => assert.deepEqual(transientPositionImbalance, []),
+  () => assert.deepEqual(internalPositionImbalance, []),
+  // A beneficiary's positive share mint is not evidence that it spent pre-held inventory.
+  () => assert.deepEqual(positiveActorShareImbalance, []),
   // Nested public-wrapper backing is protocol inventory, not competitor inventory. The actor's
   // own wrapper position closes to zero, and no undeclared wrapper account may be inferred as owned.
   // Its ungrounded retained backing mint is conservatively unknown, never competitor inventory.
@@ -642,9 +750,34 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(unrelatedVaultShareMintSignals.external_mint_recipients, [lower(EXTERNAL_RECIPIENT)]),
   () => assert.equal(unrelatedVaultShareMintSignals.external_mint_protocol_context, null),
   () => assert.equal(overlayNonArbStyle("atomic_loop", unrelatedVaultShareMintSignals), "unknown"),
-  // A coincidental Liquity event does not bless an unrelated unknown-token co-mint as closed.
+  // Protocol context is flow/emitter grounded: neither a coincidental unknown mint, a fake Liquity
+  // emitter, nor a canonical event whose indexed subject did not receive BOLD can bless closure.
   () => assert.equal(unrelatedLiquityCoMintSignals.external_mint_protocol_context, null),
   () => assert.equal(overlayNonArbStyle("atomic_loop", unrelatedLiquityCoMintSignals), "unknown"),
+  () => assert.equal(fakeEmitterBoldMintSignals.external_mint_protocol_context, null),
+  () => assert.equal(overlayNonArbStyle("atomic_loop", fakeEmitterBoldMintSignals), "unknown"),
+  () => assert.equal(unlinkedCanonicalBoldMintSignals.external_mint_protocol_context, null),
+  () => assert.equal(overlayNonArbStyle("atomic_loop", unlinkedCanonicalBoldMintSignals), "unknown"),
+  // A real canonical sUSDS Deposit cannot bless unrelated retained USDS or an unmatched sUSDS mint.
+  () => assert.deepEqual(unrelatedUsdsBesideSusdsDepositSignals.external_mint_tokens, [lower(ADDR.USDS)]),
+  () => assert.equal(unrelatedUsdsBesideSusdsDepositSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", unrelatedUsdsBesideSusdsDepositSignals),
+    "unknown",
+  ),
+  () => assert.deepEqual(unrelatedSusdsBesideSusdsDepositSignals.external_mint_tokens, [lower(ADDR.SUSDS)]),
+  () => assert.equal(unrelatedSusdsBesideSusdsDepositSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", unrelatedSusdsBesideSusdsDepositSignals),
+    "unknown",
+  ),
+  // Materiality is applied after aggregating mint events for a token.
+  () => assert.deepEqual(splitExternalMintSignals.external_mint_tokens, [lower(UNKNOWN_TOKEN_CASES[0].token)]),
+  () => assert.deepEqual(splitExternalMintSignals.external_mint_recipients, [
+    lower(EXTERNAL_RECIPIENT),
+    lower(SPLIT_MINT_RECIPIENT),
+  ]),
+  () => assert.equal(overlayNonArbStyle("atomic_loop", splitExternalMintSignals), "unknown"),
   // Coffee #2 is a Liquity BOLD protocol mint, not an ERC4626 share position. A plain token mint
   // without Deposit/Withdraw evidence must not poison comparable atomic-loop analysis.
   () => assert.deepEqual(liquityMintImbalance, []),
@@ -761,10 +894,11 @@ const checks: Array<() => void> = [
   () => assert.equal(inventoryVaultVerdict.non_comparable_winner, true),
   () => assert.equal(inventoryVaultVerdict.route_gap_decisive, false),
   () => assert.match(inventoryVaultVerdict.note ?? "", /inventory_vault_rebalance/),
-  // Guard: hardcoded selector hit alone on a clean atomic loop (no share imbalance) does NOT
-  // reclassify it — a plain ERC4626 arb calls deposit/redeem but nets zero shares. Stays atomic_loop.
+  // A generic vault selector cannot establish ownership, on either a closed loop or an unresolved
+  // positive actor share mint.
   () => assert.equal(atomicWithSelectorHit, "atomic_loop"),
-  // Guard: a residual share imbalance with NO selector hit STILL flags (Layer 2 is sufficient alone).
+  () => assert.equal(positiveShareWithSelectorStyle, "unknown"),
+  // A receipt-grounded residual share imbalance with no selector still flags.
   () => assert.equal(classifyWinnerStyle({
     pricedDeltas: [delta(ADDR.WETH, 399744634603446n, "WETH", 18)],
     unpricedDeltas: [],
@@ -796,14 +930,18 @@ const checks: Array<() => void> = [
 
 async function run(): Promise<void> {
   try {
-    const [withCustomProfile, withoutProfile] = await Promise.all([
+    const [withCustomProfile, withoutProfile, withDefaultProfile, positiveActorShare] = await Promise.all([
       customProfileClassification,
       noProfileClassification,
+      defaultProfileInventoryClassification,
+      positiveActorShareClassification,
     ]);
     const allChecks = [
       ...checks,
       () => assert.equal(withCustomProfile.winner_style, "inventory_vault_rebalance"),
       () => assert.equal(withoutProfile.winner_style, "atomic_loop"),
+      () => assert.equal(withDefaultProfile.winner_style, "inventory_vault_rebalance"),
+      () => assert.equal(positiveActorShare.winner_style, "unknown"),
       () => assert.deepEqual(competitorScanAddresses(loadedCustomProfile), [CUSTOM_EOA, CUSTOM_EXECUTOR]),
     ];
     for (const check of allChecks) check();
@@ -836,6 +974,44 @@ function classifyTransferOnlyPosition(profile?: LiveCompetitorProfile) {
     blockNumber: 1,
     prestateBlock: 0,
     ...(profile ? { competitorProfile: profile } : {}),
+  });
+}
+
+function classifyDefaultProfileInventory() {
+  return classifyWinnerTxStyle({
+    rpc: classifierRpc,
+    txHash: "0x9be73297e0fd8b0ff9760356480b372e3f78b12ce6bc6dc9bb83888d1314b862",
+    tx: { from: COFFEE, to: COFFEE_EXECUTOR, input: "0x" },
+    receipt: inventoryReceipt,
+    profit: {
+      pricedDeltas: [delta(ADDR.WETH, 399744634603446n, "WETH", 18)],
+      unpricedDeltas: [],
+      beneficiary: COFFEE_EXECUTOR,
+      ethDeltaEth: 0,
+      nativeTraceUsed: false,
+    },
+    transactionIndex: 0,
+    blockNumber: 1,
+    prestateBlock: 0,
+  });
+}
+
+function classifyPositiveActorShare() {
+  return classifyWinnerTxStyle({
+    rpc: classifierRpc,
+    txHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    tx: { from: CUSTOM_EOA, to: EXEC_ACTOR, input: "0x" },
+    receipt: positiveActorShareMint,
+    profit: {
+      pricedDeltas: [],
+      unpricedDeltas: [delta(SHARE_TOK, SHARE_AMT, "SHARE", 18)],
+      beneficiary: EXEC_ACTOR,
+      ethDeltaEth: 0,
+      nativeTraceUsed: false,
+    },
+    transactionIndex: 0,
+    blockNumber: 1,
+    prestateBlock: 0,
   });
 }
 
