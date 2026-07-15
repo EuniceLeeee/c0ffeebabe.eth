@@ -25,6 +25,8 @@ import {
 import { buildExactBlockScanCurveMids } from "../detector/blockscan-curve-mids.js";
 import { refineBlockScanCandidates } from "../detector/blockscan-candidate-refinement.js";
 import {
+  blockScanPassBudgetExceeded,
+  resolveBlockScanHuntBudgets,
   selectedReplayOpportunityIndexes,
   solveForOpportunityIndex,
 } from "./blockscan-hunt-selection.js";
@@ -77,7 +79,8 @@ interface HuntConfig {
   maxPools: number;
   maxHops: number;
   minSpreadBps: number;
-  budgetMs: number;
+  scanBudgetMs: number;
+  passBudgetMs: number;
   maxCandidates: number;
   topK: number;
   outPath: string;
@@ -99,6 +102,7 @@ interface CurveWarmCounts {
 interface ProtocolMidResult {
   mids: Map<string, ProtocolMid>;
   classCounts: Map<ProtocolClass, number>;
+  deadlineHit: boolean;
 }
 
 interface OpportunityReport {
@@ -243,20 +247,27 @@ async function main(): Promise<void> {
       curveCounts.curveWarmed + curveCounts.curveFailed === uniqueCurvePools(edges).size,
     );
 
+    const passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
+    console.log(
+      `[blockscan-hunt] budgets scan=${cfg.scanBudgetMs}ms pass=${cfg.passBudgetMs}ms`,
+    );
+
     const protocolMidResult = await buildProtocolMids(
       provider,
       callBackend,
       cfg.blockNumber,
       edges,
-      Date.now() + cfg.budgetMs,
+      passDeadlineAtMs,
     );
+    requirePassBudget("protocol_mids", passDeadlineAtMs, protocolMidResult.deadlineHit);
     const exactCurveMidResult = await buildExactBlockScanCurveMids(
       provider,
       cfg.blockNumber,
       cache,
       edges,
-      Date.now() + cfg.budgetMs,
+      passDeadlineAtMs,
     );
+    requirePassBudget("curve_mids", passDeadlineAtMs, exactCurveMidResult.deadlineHit);
     const protocolMids = new Map([
       ...protocolMidResult.mids,
       ...exactCurveMidResult.mids,
@@ -281,7 +292,7 @@ async function main(): Promise<void> {
       maxHops: cfg.maxHops,
       minSpreadBps: cfg.minSpreadBps,
       maxCandidates: cfg.maxCandidates,
-      budgetMs: cfg.budgetMs,
+      budgetMs: cfg.scanBudgetMs,
       pricedTokens: pricedTokenLimits,
       protocolMids,
       pinnedOutsideBudget: true,
@@ -297,13 +308,15 @@ async function main(): Promise<void> {
       swapTouched: null,
       cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
     });
+    requirePassBudget("scan", passDeadlineAtMs);
     const refinement = await refineBlockScanCandidates(
       callBackend,
       coarseScan.opportunities,
       cfg.maxCandidates,
-      Date.now() + cfg.budgetMs,
+      passDeadlineAtMs,
       pricedTokenLimits,
     );
+    requirePassBudget("refine", passDeadlineAtMs, refinement.deadlineHit);
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
     console.log(
       `[blockscan-hunt] exact route probes attempted=${refinement.attempted} ` +
@@ -448,6 +461,7 @@ function readExpectedReplayTarget(
 function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
   void rpcUrl;
   const anvilPort = envInt("SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT", 8566);
+  const budgets = resolveBlockScanHuntBudgets(process.env);
   return {
     rpcUrl,
     blockNumber,
@@ -455,7 +469,7 @@ function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
     maxPools: envInt("HUNT_MAX_POOLS", 1500),
     maxHops: envInt("HUNT_MAX_HOPS", 4),
     minSpreadBps: envInt("HUNT_MIN_SPREAD_BPS", 10),
-    budgetMs: envInt("HUNT_BUDGET_MS", 10_000),
+    ...budgets,
     maxCandidates: envInt("HUNT_MAX_CANDIDATES", 16),
     topK: envInt("HUNT_TOP_K", 3),
     outPath: process.env.HUNT_OUT ?? `/tmp/blockscan-hunt-${blockNumber}.json`,
@@ -483,6 +497,11 @@ function envInt(name: string, fallback: number): number {
     throw new Error(`${name} must be a non-negative integer, got ${raw}`);
   }
   return parsed;
+}
+
+function requirePassBudget(stage: string, deadlineAtMs: number, deadlineHit = false): void {
+  if (!blockScanPassBudgetExceeded(deadlineAtMs, deadlineHit)) return;
+  throw new Error(`blockscan pass budget exceeded at ${stage}`);
 }
 
 function tokenBackend(provider: ethers.JsonRpcProvider, blockNumber: number): TokenQueryBackend {
@@ -696,7 +715,7 @@ async function buildProtocolMids(
       `externalSwap=${externalSwapMids} externalSwapFailed=${externalSwapFailed} ` +
       `deadline=${deadlineHit ? 1 : 0}`,
   );
-  return { mids, classCounts };
+  return { mids, classCounts, deadlineHit };
 }
 
 function isExternallyQuotedSwap(edge: TokenEdge): boolean {
