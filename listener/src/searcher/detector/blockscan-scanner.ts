@@ -533,6 +533,16 @@ function scoreRing(
   return Number.isFinite(estSpreadBps) && estSpreadBps > 0 ? { estSpreadBps, minDepth } : null;
 }
 
+/** Production-owned coarse spread estimate used by diagnostics and replay reports. */
+export function estimateBlockScanRingSpreadBps(
+  cache: PoolStateCache,
+  sourceBlock: number,
+  edges: TokenEdge[],
+  protocolMids?: ReadonlyMap<string, ProtocolMid>,
+): number | null {
+  return scoreRing(cache, sourceBlock, edges, protocolMids)?.estSpreadBps ?? null;
+}
+
 function isClosedContinuousRing(edges: TokenEdge[]): boolean {
   if (edges.length === 0) return false;
   for (let i = 1; i < edges.length; i++) {

@@ -17,7 +17,11 @@ import {
   DEFAULT_SEARCHER_OWNER,
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
-import { detectBlockScanOpportunities, type ProtocolMid } from "../detector/blockscan-scanner.js";
+import {
+  detectBlockScanOpportunities,
+  estimateBlockScanRingSpreadBps,
+  type ProtocolMid,
+} from "../detector/blockscan-scanner.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
@@ -57,7 +61,6 @@ const V3META = new ethers.Interface([
 
 const WAD = 10n ** 18n;
 const PSM_TO18 = 10n ** 12n;
-const Q96 = 1n << 96n;
 
 type ProtocolClass = "erc4626" | "wsteth" | "psm" | "metronome" | "other";
 
@@ -793,7 +796,12 @@ async function solveTopK(
   const reports: SolveReport[] = [];
 
   for (const opp of top) {
-    const spreadBps = estimateSpreadBps(cache, cfg.blockNumber, opp.seedEdges, protocolMids);
+    const spreadBps = estimateBlockScanRingSpreadBps(
+      cache,
+      cfg.blockNumber,
+      opp.seedEdges,
+      protocolMids,
+    );
     let planCount = 0;
     let solved: ResolvedPlan | null = null;
     let solveError: string | null = null;
@@ -850,7 +858,7 @@ function describeOpportunity(
     pools: uniqueStrings(opp.seedEdges.map(edgePoolIdentity)),
     poolIds: uniqueStrings(opp.seedEdges.map((edge) => edge.poolId?.toLowerCase()).filter(isString)),
     adapterIds: opp.seedEdges.map((edge) => edge.adapterId),
-    spreadBps: estimateSpreadBps(cache, blockNumber, opp.seedEdges, protocolMids),
+    spreadBps: estimateBlockScanRingSpreadBps(cache, blockNumber, opp.seedEdges, protocolMids),
     searchCenter: opp.searchSeed.searchCenter.toString(),
     maxInput: opp.searchSeed.maxInput.toString(),
     hasProtocolEdge: opp.seedEdges.some((edge) => edge.slotKind === "protocol"),
@@ -958,117 +966,6 @@ function edgeSwapDirection(edge: TokenEdge): "0for1" | "1for0" | null {
     return tokenIn < tokenOut ? "0for1" : "1for0";
   }
   return null;
-}
-
-function estimateSpreadBps(
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-  protocolMids: ReadonlyMap<string, ProtocolMid>,
-): number | null {
-  let product = 1;
-  for (const edge of edges) {
-    const mid = directedMid(cache, blockNumber, edge, protocolMids);
-    if (mid === null) return null;
-    product *= mid.mid * (1 - mid.feeBps / 10_000);
-  }
-  const spread = (product - 1) * 10_000;
-  return Number.isFinite(spread) ? spread : null;
-}
-
-function directedMid(
-  cache: PoolStateCache,
-  blockNumber: number,
-  edge: TokenEdge,
-  protocolMids: ReadonlyMap<string, ProtocolMid>,
-): { mid: number; feeBps: number } | null {
-  const tokenIn = edge.tokenIn.toLowerCase();
-  const tokenOut = edge.tokenOut.toLowerCase();
-  if (edge.slotKind === "protocol" || isExternallyQuotedSwap(edge)) {
-    return externalDirectedMid(protocolMids, edge.target, tokenIn, tokenOut);
-  }
-  if (edge.adapterId === "univ2-swap") {
-    const snap = cache.snapshotV2(edge.target, blockNumber);
-    if (!snap) return null;
-    return reserveMid(
-      tokenIn,
-      tokenOut,
-      snap.token0,
-      snap.token1,
-      snap.reserve0,
-      snap.reserve1,
-      30,
-    );
-  }
-  if (edge.adapterId === "univ3-swap") {
-    const snap = cache.snapshotV3(edge.target, blockNumber);
-    if (!snap || snap.state.sqrtPriceX96 <= 0n) return null;
-    const price0To1 = (Number(snap.state.sqrtPriceX96) / Number(Q96)) ** 2;
-    if (snap.token0.toLowerCase() === tokenIn && snap.token1.toLowerCase() === tokenOut) {
-      return { mid: price0To1, feeBps: Number(snap.state.fee) / 100 };
-    }
-    if (snap.token1.toLowerCase() === tokenIn && snap.token0.toLowerCase() === tokenOut) {
-      return { mid: 1 / price0To1, feeBps: Number(snap.state.fee) / 100 };
-    }
-    return null;
-  }
-  if (isLocallyModelledCurve(edge.adapterId)) {
-    const snap = cache.snapshotCurve(edge.target, blockNumber);
-    if (!snap) return null;
-    const i = snap.coins.findIndex((coin) => coin.toLowerCase() === tokenIn);
-    const j = snap.coins.findIndex((coin) => coin.toLowerCase() === tokenOut);
-    if (i < 0 || j < 0) return null;
-    const state = snap.kind === "plain" ? snap.plain : snap.ng;
-    if (!state) return null;
-    return reserveMid(
-      tokenIn,
-      tokenOut,
-      tokenIn,
-      tokenOut,
-      state.balances[i],
-      state.balances[j],
-      state.fee === undefined ? 4 : Number(state.fee) / 1_000_000,
-    );
-  }
-  return null;
-}
-
-function externalDirectedMid(
-  mids: ReadonlyMap<string, ProtocolMid>,
-  target: string,
-  tokenIn: string,
-  tokenOut: string,
-): { mid: number; feeBps: number } | null {
-  const direct = mids.get(protocolKey(target, tokenIn, tokenOut));
-  if (direct) return { mid: direct.mid, feeBps: direct.feeBps };
-  const reverse = mids.get(protocolKey(target, tokenOut, tokenIn));
-  if (!reverse || !Number.isFinite(reverse.mid) || reverse.mid <= 0) return null;
-  return { mid: 1 / reverse.mid, feeBps: reverse.feeBps };
-}
-
-function reserveMid(
-  tokenIn: string,
-  tokenOut: string,
-  token0: string,
-  token1: string,
-  reserve0: bigint,
-  reserve1: bigint,
-  feeBps: number,
-): { mid: number; feeBps: number } | null {
-  const t0 = token0.toLowerCase();
-  const t1 = token1.toLowerCase();
-  let reserveIn: bigint | null = null;
-  let reserveOut: bigint | null = null;
-  if (t0 === tokenIn && t1 === tokenOut) {
-    reserveIn = reserve0;
-    reserveOut = reserve1;
-  } else if (t1 === tokenIn && t0 === tokenOut) {
-    reserveIn = reserve1;
-    reserveOut = reserve0;
-  }
-  if (reserveIn === null || reserveOut === null || reserveIn <= 0n || reserveOut <= 0n) return null;
-  const mid = Number(reserveOut) / Number(reserveIn);
-  return Number.isFinite(mid) && mid > 0 ? { mid, feeBps } : null;
 }
 
 function ringTokens(edges: TokenEdge[]): string[] {

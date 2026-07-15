@@ -434,16 +434,19 @@ const tests: TestCase[] = [
     },
   },
   {
-    name: "cycleFingerprint dedup",
+    name: "identical route dedup",
     run: () => {
       const { cache, edges } = triangleFixture(true);
       const outcome = run(edges, cache);
       const seen = new Set<string>();
       for (const opp of outcome.opportunities) {
-        assert(!seen.has(opp.cycleFingerprint), "duplicate cycleFingerprint");
-        seen.add(opp.cycleFingerprint);
+        const route = opp.seedEdges.map((edge) =>
+          `${edge.adapterId}|${edge.poolId ?? edge.target}|${edge.tokenIn}>${edge.tokenOut}`.toLowerCase()
+        ).join(";");
+        assert(!seen.has(route), "duplicate directed route");
+        seen.add(route);
       }
-      console.log("[blockscan-scanner] cycleFingerprint dedup: PASS");
+      console.log("[blockscan-scanner] identical route dedup: PASS");
     },
   },
   {
