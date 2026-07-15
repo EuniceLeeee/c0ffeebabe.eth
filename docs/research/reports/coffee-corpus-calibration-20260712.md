@@ -23,12 +23,21 @@ Atomicity remains a second stage: every transaction with named protocol evidence
 - Contents: 857 unique successful Coffee transactions, 18,541 receipt-log rows
 - Canonical schema-v4 output SHA-256:
   `b9f0104ff0cb5bb8daecb2354ec0ceaf02565c7c6c31703d7868ff9840a583b6`
+- Committed canonical-input projection: 857 transactions and 9,810 unique `(emitter, topic0)`
+  observations in `analysis/src/test/fixtures/loop-coverage-v4.json`; projection SHA-256
+  `5b26c301a89de4d5d18ec746b0c5d35e2259aa6031e9c95f0f9be2bcf936b97e`.
 - Generated local artifacts: `analysis/outputs/coffee-corpus/venues.json` and
   `analysis/outputs/coffee-corpus/loop-coverage.json`
 
 There was no second 857-transaction corpus in the repo to delete. The uploaded CSV itself contains exactly
 857 transactions. The nine small committed Coffee fixtures remain intentionally: they are deterministic
 regression gates, not a duplicate full corpus.
+
+The full-corpus regression no longer trusts copied counts. It decodes the committed projection, reruns
+`classifyTxLoopCoverage` for all 857 transactions, reconstructs the canonical output byte-for-byte, hashes
+it, and derives the exact Balancer FlashLoan/Swap/PoolBalanceChanged and DODO transaction sets. The raw CSV
+remains gitignored; the normalized projection is the reviewable semantic input actually consumed by the
+classifier.
 
 ## Corrected contract
 

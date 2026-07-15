@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -18,6 +19,13 @@ interface ExactFixture {
     sourceSha256: string;
     canonicalOutputSha256: string;
     corpus: { transactionCount: number; receiptLogRowCount: number };
+    canonicalInput: {
+      projectionSha256: string;
+      observationCount: number;
+      addresses: string[];
+      topics: string[];
+      transactions: Array<[string, Array<[number, number]>]>;
+    };
     summary: {
       transactionCount: number;
       swapRouteGapTxs: number;
@@ -63,19 +71,41 @@ const ARBITRARY_SWAP_EMITTER = "0x0000000000000000000000000000000000005a7a";
 
 test("full-corpus evidence binds exact event buckets to the canonical output", () => {
   const evidence = FIXTURE.fullCorpusEvidence;
+  const canonicalInput = evidence.canonicalInput;
   assert.equal(evidence.sourceSha256, FIXTURE.sourceSha256);
-  assert.match(evidence.canonicalOutputSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(evidence.corpus, { transactionCount: 857, receiptLogRowCount: 18_541 });
-  assert.equal(evidence.summary.transactionCount, 857);
-  assert.equal(evidence.summary.swapRouteGapTxs, 19);
-  assert.equal(evidence.summary.swapRouteGapCount, 19);
-  assert.equal(evidence.summary.unassessedSwapTxs, 740);
-  assert.equal(evidence.summary.unassessedSwapVenueCount, 1_940);
-  assert.equal(evidence.summary.unclassifiedEmitterTxs, 702);
-  assertEvidenceTxs(evidence.eventTxs.balancerFlashLoan, 489);
-  assertEvidenceTxs(evidence.eventTxs.balancerSwap, 19);
-  assertEvidenceTxs(evidence.eventTxs.balancerPoolBalanceChanged, 2);
-  assertEvidenceTxs(evidence.eventTxs.dodoObserved, 39);
+  assert.equal(canonicalInput.transactions.length, 857);
+  assert.equal(canonicalInput.observationCount, 9_810);
+  assert.equal(
+    sha256(JSON.stringify({
+      addresses: canonicalInput.addresses,
+      topics: canonicalInput.topics,
+      transactions: canonicalInput.transactions,
+    })),
+    canonicalInput.projectionSha256,
+  );
+
+  const decoded = decodeCanonicalInput(canonicalInput);
+  assert.equal(decoded.reduce((count, tx) => count + tx.receiptLogs.length, 0), 9_810);
+  const output = buildLoopCoverageOutput(decoded.map((tx) => classifyTxLoopCoverage(tx)));
+  assert.equal(sha256(`${JSON.stringify(output, null, 2)}\n`), evidence.canonicalOutputSha256);
+  assert.deepEqual(output.summary, evidence.summary);
+
+  const derivedEventTxs = {
+    balancerFlashLoan: observedTxs(decoded, BALANCER_VAULT, TOPICS.balancerV2FlashLoan),
+    balancerSwap: observedTxs(decoded, BALANCER_VAULT, TOPICS.balancerV2Swap),
+    balancerPoolBalanceChanged: observedTxs(
+      decoded,
+      BALANCER_VAULT,
+      TOPICS.balancerV2PoolBalanceChanged,
+    ),
+    dodoObserved: observedTxs(decoded, null, TOPICS.dodoSwap),
+  };
+  assert.deepEqual(derivedEventTxs, evidence.eventTxs);
+  assertEvidenceTxs(derivedEventTxs.balancerFlashLoan, 489);
+  assertEvidenceTxs(derivedEventTxs.balancerSwap, 19);
+  assertEvidenceTxs(derivedEventTxs.balancerPoolBalanceChanged, 2);
+  assertEvidenceTxs(derivedEventTxs.dodoObserved, 39);
 });
 
 test("Coffee 0x89cb exposes the attested Balancer gap and keeps DODO identity unassessed", () => {
@@ -544,4 +574,43 @@ function assertEvidenceTxs(txs: string[], expected: number): void {
   assert.equal(new Set(txs).size, expected);
   assert.deepEqual(txs, [...txs].sort());
   for (const tx of txs) assert.match(tx, /^0x[a-f0-9]{64}$/);
+}
+
+function decodeCanonicalInput(
+  input: ExactFixture["fullCorpusEvidence"]["canonicalInput"],
+): Array<{ txHash: string; receiptLogs: Array<{ address: string; topics: string[] }> }> {
+  assert.deepEqual(input.addresses, [...input.addresses].sort());
+  assert.deepEqual(input.topics, [...input.topics].sort());
+  return input.transactions.map(([txHash, observations]) => {
+    assert.match(txHash, /^0x[a-f0-9]{64}$/);
+    return {
+      txHash,
+      receiptLogs: observations.map(([addressIndex, topicIndex]) => {
+        const address = input.addresses[addressIndex];
+        const topic0 = input.topics[topicIndex];
+        assert.ok(address, `invalid canonical address index ${addressIndex}`);
+        assert.notEqual(topic0, undefined, `invalid canonical topic index ${topicIndex}`);
+        return { address, topics: topic0 ? [topic0] : [] };
+      }),
+    };
+  });
+}
+
+function observedTxs(
+  input: Array<{ txHash: string; receiptLogs: Array<{ address: string; topics: string[] }> }>,
+  address: string | null,
+  topic0: string,
+): string[] {
+  const normalizedAddress = address?.toLowerCase() ?? null;
+  const normalizedTopic = topic0.toLowerCase();
+  return input
+    .filter((tx) => tx.receiptLogs.some((log) =>
+      (normalizedAddress === null || log.address.toLowerCase() === normalizedAddress)
+        && String(log.topics[0] ?? "").toLowerCase() === normalizedTopic))
+    .map((tx) => tx.txHash)
+    .sort();
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
