@@ -1,5 +1,6 @@
 import type { EdgeKind, ProtocolAction } from "../../../listener/src/searcher/strategy-taxonomy.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
+import { ethers } from "ethers";
 
 const SWAP_TOPICS = topicSet([
   TOPICS.univ2Swap,
@@ -73,6 +74,36 @@ export function deriveEdgeKindsFromLogs(logs: Array<{ topics?: unknown }> | unde
     if (PROTOCOL_TOPICS.has(topic0)) seen.add("protocol");
   }
   return STABLE_ORDER.filter((kind) => seen.has(kind));
+}
+
+const CALL_DEFINED_PROTOCOLS = new Map<string, Set<string>>([
+  [lower(ADDR.GOLDX), new Set([ethers.id("mint(address,uint256)").slice(0, 10).toLowerCase()])],
+]);
+
+/**
+ * Add protocol legs whose semantics live in successful calls rather than a
+ * named receipt event. Target + selector are both required: a generic mint()
+ * selector on an unrelated token is not protocol-conversion evidence.
+ */
+export function deriveEdgeKindsFromLogsAndTrace(
+  logs: Array<{ topics?: unknown }> | undefined | null,
+  trace: unknown,
+): EdgeKind[] {
+  const seen = new Set<EdgeKind>(deriveEdgeKindsFromLogs(logs));
+  if (traceHasCallDefinedProtocol(trace)) seen.add("protocol");
+  return STABLE_ORDER.filter((kind) => seen.has(kind));
+}
+
+function traceHasCallDefinedProtocol(node: unknown): boolean {
+  if (!node || typeof node !== "object") return false;
+  const call = node as { to?: unknown; input?: unknown; error?: unknown; calls?: unknown };
+  if (!call.error) {
+    const target = typeof call.to === "string" ? lower(call.to) : "";
+    const input = typeof call.input === "string" ? lower(call.input) : "";
+    const selectors = CALL_DEFINED_PROTOCOLS.get(target);
+    if (selectors?.has(input.slice(0, 10))) return true;
+  }
+  return Array.isArray(call.calls) && call.calls.some(traceHasCallDefinedProtocol);
 }
 
 const ACTION_ORDER: ProtocolAction[] = ["mint", "redeem", "wrap", "unwrap", "convert", "stake", "unstake"];

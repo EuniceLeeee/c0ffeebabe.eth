@@ -24,12 +24,16 @@ interface TxProfit {
   gasCostUsd: number | null;
   unpricedDeltas: unknown[];
   gasUsed: number | null;
+  ethUsd: number | null;
 }
 
-async function priceOne(rpc: RpcClient, ethUsd: number, hash: string): Promise<TxProfit> {
+async function priceOne(rpc: RpcClient, hash: string): Promise<TxProfit> {
   const [tx, receipt] = await Promise.all([rpc.getTransaction(hash), rpc.getReceipt(hash)]);
   const blockNumber = receipt?.blockNumber != null ? Number(hexToBigInt(receipt.blockNumber)) : null;
   const block = blockNumber != null ? await rpc.getBlockByNumber(blockNumber, false) : null;
+  const ethUsd = blockNumber != null
+    ? await fetchEthUsd(rpc, receipt.blockNumber)
+    : await fetchEthUsd(rpc);
   const coinbase = lower(block?.miner ?? "");
   const baseFeePerGas = block?.baseFeePerGas != null ? hexToBigInt(block.baseFeePerGas) : 0n;
   const profit = await priceArb(rpc, hash, tx, receipt, ethUsd, {
@@ -50,6 +54,7 @@ async function priceOne(rpc: RpcClient, ethUsd: number, hash: string): Promise<T
     gasCostUsd: profit.gasCostUsd,
     unpricedDeltas: profit.unpricedDeltas,
     gasUsed: receipt?.gasUsed != null ? Number(hexToBigInt(receipt.gasUsed)) : null,
+    ethUsd,
   };
 }
 
@@ -63,21 +68,22 @@ async function main(): Promise<void> {
   }
   const hashes = txArg.split(",").map((h) => h.trim()).filter(Boolean);
   const rpc = new RpcClient(rpcUrl);
-  const ethUsd = await fetchEthUsd(rpc);
   const results: TxProfit[] = [];
   for (const hash of hashes) {
     try {
-      results.push(await priceOne(rpc, ethUsd, hash));
+      results.push(await priceOne(rpc, hash));
     } catch (err) {
       console.error(`[tx-profit] ${hash}: FAILED ${err instanceof Error ? err.message : String(err)}`);
       results.push({ tx: hash, block: null, status: null, realizedProfitUsd: null, builderPaymentEth: null,
-        builderPaymentUsd: null, netProfitUsd: null, gasCostUsd: null, unpricedDeltas: [], gasUsed: null });
+        builderPaymentUsd: null, netProfitUsd: null, gasCostUsd: null, unpricedDeltas: [], gasUsed: null,
+        ethUsd: null });
     }
   }
   if (args.json) {
     console.log(JSON.stringify(results, null, 2));
   } else {
-    console.log(`ethUsd=${ethUsd}`);
+    const marks = [...new Set(results.map((result) => result.ethUsd).filter((mark): mark is number => mark !== null))];
+    console.log(`ethUsd=${marks.length === 1 ? marks[0] : "per-tx historical"}`);
     console.log("tx".padEnd(12), "block".padEnd(10), "realized$".padEnd(11), "builder$".padEnd(10),
       "net$".padEnd(9), "unpriced");
     for (const r of results) {

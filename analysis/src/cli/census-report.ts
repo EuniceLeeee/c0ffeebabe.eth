@@ -16,7 +16,7 @@ import {
   classifyWinnerTxStyle,
   decodeExtraData,
   extractOtherVenues,
-  extractTouchedVenues,
+  resolveLandedTouchedVenues,
   isNonComparableWinnerStyle,
   loadGraphMembership,
   type GraphMembership,
@@ -222,7 +222,6 @@ async function main(): Promise<void> {
   }
 
   const rpc = new RpcClient(rpcUrl);
-  const ethUsd = await fetchEthUsd(rpc);
   const watchSet = new Set(watch);
   const perTx: CensusPerTx[] = [];
   const blockFingerprints: BlockFingerprint[] = [];
@@ -234,6 +233,9 @@ async function main(): Promise<void> {
     const blockBuilderHint = decodeExtraData(block?.extraData);
     const txs: any[] = Array.isArray(block?.transactions) ? block.transactions : [];
     const matches = txs.filter((tx) => txMatchesWatch(tx, watchSet));
+    const ethUsd = matches.length > 0
+      ? await fetchEthUsd(rpc, toQuantity(blockNumber))
+      : 0;
     if (matches.length > 0) blockFingerprints.push(buildBlockFingerprint(blockNumber, block, matches));
     const actorTxHashes = actorTxHashesBySender(txs);
     const sameBlockSwapLogs = matches.length > 0
@@ -272,7 +274,7 @@ async function main(): Promise<void> {
         blockFeeRecipient: coinbase || undefined,
         realizedUsd: profit.realizedProfitUsd,
         touchedVenues: [
-          ...extractTouchedVenues(receipt, graph),
+          ...await resolveLandedTouchedVenues(rpc, receipt, graph, blockNumber),
           ...extractOtherVenues(receipt, graph),
         ],
         txIndex: Number(hexToBigInt(receipt?.transactionIndex ?? tx?.transactionIndex)),

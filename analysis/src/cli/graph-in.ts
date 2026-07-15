@@ -1,7 +1,8 @@
-// graph-in — v4-aware "is this pool in the graph" check. Uses the CANONICAL loadGraphMembership
+// graph-in — v4-aware discovery-membership check. Uses the CANONICAL loadGraphMembership
 // (which unions active-pools.json v4 poolIds, since runtime-graph-pools.json stores v4 by PoolManager
 // address only). Use THIS instead of grepping runtime-graph-pools.json for a poolId — that grep is a
-// systematic false-negative for every v4 pool.
+// systematic false-negative for every v4 pool. This does NOT prove that
+// buildTokenGraph successfully emitted a routable TokenEdge.
 //
 // Usage: npm run graph-in -- --graph <runtime-graph-pools.json> <address-or-poolId> [<id> ...]
 //   defaults --graph to listener/searcher/pools/runtime-graph-pools.json
@@ -26,7 +27,7 @@ function main(): void {
   }
   for (const id of ids) {
     const inGraph = g.status === "loaded" ? g.members.has(id.toLowerCase()) : null;
-    console.log(`${inGraph === null ? "UNKNOWN" : inGraph ? "IN " : "OUT"}  ${id}`);
+    console.log(`${inGraph === null ? "UNKNOWN" : inGraph ? "DISCOVERY_IN" : "OUT"}  ${id}`);
   }
 }
 

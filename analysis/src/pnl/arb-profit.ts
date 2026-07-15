@@ -117,12 +117,16 @@ export function aggregateNetProfit(legs: PricedLeg[]): {
   return { total, viaV4, byBotBlock };
 }
 
-/** Chainlink ETH/USD (8 decimals). Falls back on any failure. */
-export async function fetchEthUsd(rpc: RpcClient, fallback = 3500): Promise<number> {
+/** Chainlink ETH/USD (8 decimals) at the requested state block. Falls back on any failure. */
+export async function fetchEthUsd(
+  rpc: RpcClient,
+  blockTag: string = "latest",
+  fallback = 3500,
+): Promise<number> {
   try {
     const res = await rpc.call<string>("eth_call", [
       { to: CHAINLINK_ETH_USD, data: "0x50d25bcd" },
-      "latest",
+      blockTag,
     ]);
     const raw = hexToBigInt(res);
     if (raw > 0n) return Number(raw) / 1e8;

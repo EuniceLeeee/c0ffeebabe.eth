@@ -4,7 +4,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { decodeTransfer } from "../decode/erc20.js";
-import { deriveEdgeKindsFromLogs } from "../learning/edge-kinds.js";
+import { deriveEdgeKindsFromLogs, deriveEdgeKindsFromLogsAndTrace } from "../learning/edge-kinds.js";
 import type { LearningCase, PrimaryGap } from "../learning/learning-case.js";
 import {
   directCoinbasePaymentWeiFromCallTrace,
@@ -40,10 +40,14 @@ const KEEPER_CLAIM_SELECTORS = [
 ];
 const RFQ_DEADLINE_MAX_AHEAD_S = 3600;
 const RFQ_DEADLINE_MAX_BEHIND_S = 120;
-const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string }> = [
-  { topic: lower(TOPICS.curveTokenExchange), protocol: "curve" },
-  { topic: lower(TOPICS.curveCryptoTokenExchange), protocol: "curve" },
-  { topic: lower(TOPICS.curveTokenExchangeUnderlying), protocol: "curve" },
+const OTHER_SWAP_TOPIC_PROTOCOLS: Array<{ topic: string; protocol: string; landedAdapter?: string }> = [
+  { topic: lower(TOPICS.curveTokenExchange), protocol: "curve", landedAdapter: "curve-exchange" },
+  { topic: lower(TOPICS.curveCryptoTokenExchange), protocol: "curve", landedAdapter: "curve-exchange" },
+  {
+    topic: lower(TOPICS.curveTokenExchangeUnderlying),
+    protocol: "curve",
+    landedAdapter: "curve-exchange-underlying",
+  },
   { topic: lower(TOPICS.balancerV2Swap), protocol: "balancerV2" },
   { topic: lower(TOPICS.pancakeV3Swap), protocol: "pancakeV3" },
   { topic: lower(TOPICS.dodoSwap), protocol: "dodo" },
@@ -55,6 +59,7 @@ const V3_SLOT0_SELECTOR = "0x3850c7bd";
 const V3_SWAP_IFACE = new ethers.Interface([
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
 ]);
+const FACTORY_IFACE = new ethers.Interface(["function factory() view returns (address)"]);
 const FRAX = "0x853d955acef822db058eb8505911ed77f175b99e";
 const WBTC = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 const INVENTORY_PRICED_TOKENS = new Set([
@@ -136,6 +141,12 @@ export interface TouchedVenue {
    *  pool sits in active-pools (in_graph=true) but token-graph admission skips it (0 edges), so a
    *  ring through it can never close. false here = the structural reason a take is unreproducible. */
   routing_admitted?: boolean | null;
+  /** Topic is only the landed event family; factory facts carry actual venue identity. */
+  venue_id?: string;
+  factory?: string;
+  identity_source?: "factory-call" | "event-shape-only" | "v4-pool-manager";
+  landed_adapter?: string | null;
+  routing_reason?: "not_in_graph" | "hooked_v4" | "routed_edge_unverified";
 }
 
 export interface GraphMembership {
@@ -358,7 +369,7 @@ async function main(): Promise<void> {
     [triggeringHash, ownTxHash],
   );
   const selected = selectCandidatesForPricing(candidates);
-  const ethUsd = selected.length > 0 ? await fetchEthUsd(rpc) : null;
+  const ethUsd = selected.length > 0 ? await fetchEthUsd(rpc, toQuantity(landingBlockNumber)) : null;
   const competitors: CompetitorReport[] = [];
 
   for (const candidate of selected) {
@@ -449,6 +460,7 @@ export interface OtherVenue {
   id: string;
   emitter: string;
   in_graph: boolean | null;
+  landed_adapter?: string;
 }
 
 // Swap-like venues OUTSIDE the univ2/3/4 lineages extractTouchedVenues covers — the census verdict
@@ -467,6 +479,7 @@ export function extractOtherVenues(receipt: Json, graph: GraphMembership | null)
       id: emitter,
       emitter,
       in_graph: graph?.status === "loaded" ? graph.members.has(emitter) : null,
+      ...(hit.landedAdapter ? { landed_adapter: hit.landedAdapter } : {}),
     });
   }
   return out;
@@ -957,7 +970,7 @@ async function anyTxPostmortem(
   const coinbase = lower(block?.miner ?? "");
   const blockTimestamp = quantityToNumber(block?.timestamp);
   const graph = loadGraphMembership(graphPath);
-  const ethUsd = await fetchEthUsd(rpc);
+  const ethUsd = await fetchEthUsd(rpc, toQuantity(blockNumber));
   const profit = await priceArb(rpc, txHash, tx, receipt, ethUsd, {
     entityActors: [tx?.to, tx?.from].filter((actor): actor is string => typeof actor === "string" && actor.length > 0),
     allowTrace: true,
@@ -976,7 +989,7 @@ async function anyTxPostmortem(
     prestateBlock: Math.max(blockNumber - 1, 0),
     blockTimestamp,
   });
-  const touchedVenues = extractTouchedVenues(receipt, graph);
+  const touchedVenues = await resolveLandedTouchedVenues(rpc, receipt, graph, blockNumber);
   const otherVenues = extractOtherVenues(receipt, graph);
   const jitPoolIds = detectJitLiquidity(receipt);
   const v4LegFills = decodeV4SwapFills(receipt, new Set(jitPoolIds));
@@ -1056,7 +1069,7 @@ async function anyTxPostmortem(
     receipt_weth_unwrap_exit: styleAnalysis.receipt_weth_unwrap_exit,
     non_comparable_winner: isNonComparableWinnerStyle(styleAnalysis.winner_style) ? true : undefined,
     non_arb_signals: styleAnalysis.non_arb_signals,
-    edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
+    edgeKinds: deriveEdgeKindsFromLogsAndTrace(receipt?.logs, payment.callTrace),
     touchedVenues,
     v4LegFills,
     jitPoolIds: jitPoolIds.length > 0 ? jitPoolIds : undefined,
@@ -1102,7 +1115,15 @@ function renderAnyTxSummary(report: any): string {
     + ` [claim_selector=${signals.claim_selector_hit} sink_cut=${signals.conserved_sink_cut}`
     + ` rfq_sigs=${signals.rfq_sig_count} deadline=${signals.rfq_deadline_in_calldata}]`
     + ` edges=[${(report.edgeKinds ?? []).join(",")}]`);
-  const venueLine = (venue: any) => `${venue.protocol}:${venue.id.slice(0, 12)}… in_graph=${venue.in_graph}`;
+  const venueLine = (venue: any) => {
+    const identity = venue.venue_id ? ` venue=${venue.venue_id}` : "";
+    const factory = venue.factory ? ` factory=${venue.factory}` : "";
+    const adapter = venue.landed_adapter ? ` adapter=${venue.landed_adapter}` : "";
+    const routing = venue.routing_admitted === undefined
+      ? ""
+      : ` routing=${venue.routing_admitted}${venue.routing_reason ? `(${venue.routing_reason})` : ""}`;
+    return `${venue.protocol}:${venue.id.slice(0, 12)}… in_graph=${venue.in_graph}${identity}${factory}${adapter}${routing}`;
+  };
   lines.push(`  venues: ${[...report.touchedVenues, ...report.otherVenues].map(venueLine).join(" | ") || "none"}`);
   if (report.out_of_graph_venues.length > 0) {
     lines.push(`  OUT-OF-GRAPH: ${report.out_of_graph_venues.map(venueLine).join(" | ")}`);
@@ -1354,8 +1375,8 @@ async function analyzeCompetitor(
     traceError: payment.traceError,
     v4Swaps: profit.v4Swaps.length,
     v4PoolIds: profit.v4PoolIds,
-    touchedVenues: extractTouchedVenues(receipt, graph),
-    edgeKinds: deriveEdgeKindsFromLogs(receipt?.logs),
+    touchedVenues: await resolveLandedTouchedVenues(rpc, receipt, graph, blockNumber),
+    edgeKinds: deriveEdgeKindsFromLogsAndTrace(receipt?.logs, payment.callTrace),
     winner_style: winnerStyleAnalysis.winner_style,
     receipt_weth_unwrap_exit: winnerStyleAnalysis.receipt_weth_unwrap_exit,
     winner_moved_price_beyond_prestate: winnerStyleAnalysis.winner_moved_price_beyond_prestate,
@@ -1375,6 +1396,7 @@ async function computeBuilderPaymentWei(
   builderPaymentWei: bigint;
   traceUsed: boolean;
   traceError: string | null;
+  callTrace: Json | null;
 }> {
   const gasUsed = hexToBigInt(receipt?.gasUsed);
   const effectiveGasPrice = hexToBigInt(receipt?.effectiveGasPrice);
@@ -1389,6 +1411,7 @@ async function computeBuilderPaymentWei(
       builderPaymentWei: priorityTipWei + coinbaseTransferWei,
       traceUsed: true,
       traceError: null,
+      callTrace: trace,
     };
   } catch (err) {
     return {
@@ -1397,6 +1420,7 @@ async function computeBuilderPaymentWei(
       builderPaymentWei: priorityTipWei,
       traceUsed: false,
       traceError: (err as Error).message,
+      callTrace: null,
     };
   }
 }
@@ -1424,6 +1448,56 @@ export function extractTouchedVenues(receipt: Json, graph: GraphMembership | nul
   });
 }
 
+/**
+ * Resolve landed factory identity at the transaction block. Swap topics only
+ * prove an ABI/event family; they never prove official Uniswap lineage.
+ */
+export async function resolveLandedTouchedVenues(
+  rpc: Pick<RpcClient, "call">,
+  receipt: Json,
+  graph: GraphMembership | null,
+  blockNumber: number,
+): Promise<TouchedVenue[]> {
+  const venues = extractTouchedVenues(receipt, graph);
+  await Promise.all(venues.map(async (item) => {
+    if (item.protocol === "univ4") return;
+    try {
+      const raw = await rpc.call<string>("eth_call", [
+        { to: item.emitter, data: FACTORY_IFACE.encodeFunctionData("factory") },
+        toQuantity(blockNumber),
+      ]);
+      const factory = lower(String(FACTORY_IFACE.decodeFunctionResult("factory", raw)[0]));
+      const capability = await runtimeVenueByFactory(factory);
+      item.factory = factory;
+      item.venue_id = capability?.venue ?? "unknown";
+      item.identity_source = "factory-call";
+      item.landed_adapter = capability?.runtimeAdapter
+        ? `${capability.runtimeAdapter}-swap`
+        : null;
+    } catch {
+      item.venue_id = "unknown";
+      item.identity_source = "event-shape-only";
+      item.landed_adapter = null;
+    }
+  }));
+  return venues;
+}
+
+async function runtimeVenueByFactory(factory: string): Promise<{
+  venue: string;
+  runtimeAdapter?: "univ2" | "univ3";
+} | null> {
+  try {
+    // Dynamic on purpose: Hermes lifecycle tests replay old repository commits
+    // that predate the production venue registry. Current checkouts reuse the
+    // production fact source; old checkouts degrade honestly to unknown.
+    const registry = await import("../../../listener/src/searcher/venues/capability.js");
+    return registry.findVenueByFactory(factory);
+  } catch {
+    return null;
+  }
+}
+
 function venue(
   protocol: TouchedVenue["protocol"],
   id: string,
@@ -1432,8 +1506,20 @@ function venue(
 ): TouchedVenue {
   const inGraph = graph?.status === "loaded" ? graph.members.has(lower(id)) : null;
   if (protocol !== "univ4") {
-    // v2/v3 in_graph checks the runtime graph = routing level already.
-    return { protocol, id, emitter, in_graph: inGraph, routing_admitted: inGraph };
+    // Current runtime-*-pools files are admitted pool views, not proof that
+    // buildTokenGraph emitted a successful TokenEdge. OUT is decisive; IN is
+    // discovery evidence only until the routed-edge index lands.
+    return {
+      protocol,
+      id,
+      emitter,
+      in_graph: inGraph,
+      routing_admitted: inGraph === false ? false : null,
+      routing_reason: inGraph === false ? "not_in_graph" : "routed_edge_unverified",
+      venue_id: "unknown",
+      identity_source: "event-shape-only",
+      landed_adapter: null,
+    };
   }
   const hooks = graph?.v4Hooks.get(lower(id));
   const hooked = hooks !== undefined ? (BigInt(hooks || "0x0") & V4_SWAP_HOOK_MASK) !== 0n : null;
@@ -1443,7 +1529,15 @@ function venue(
     emitter,
     in_graph: inGraph,
     hooked,
-    routing_admitted: inGraph === true ? (hooked === null ? null : !hooked) : inGraph,
+    routing_admitted: inGraph === false ? false : hooked === true ? false : null,
+    routing_reason: inGraph === false
+      ? "not_in_graph"
+      : hooked === true
+        ? "hooked_v4"
+        : "routed_edge_unverified",
+    venue_id: "univ4",
+    identity_source: "v4-pool-manager",
+    landed_adapter: hooked === false ? "univ4-unlock" : null,
   };
 }
 

@@ -76,11 +76,11 @@ test("explicit paths override defaults and events remain optional", async () => 
   });
 });
 
-test("census-gap defaults to the runtime routing graph", async () => {
+test("census-gap defaults to the runtime block-scan pool view", async () => {
   const script = await readFile(join(repoRoot, "scripts", "census-gap.sh"), "utf8");
   assert.match(
     script,
-    /^GRAPH=\$\{GRAPH:-\/opt\/MEV\/listener\/searcher\/pools\/runtime-graph-pools\.json\}$/m,
+    /^GRAPH=\$\{GRAPH:-\/opt\/MEV\/listener\/searcher\/pools\/runtime-blockscan-pools\.json\}$/m,
   );
   assert.match(script, /^BLOCKSCAN_LOG=\$\{BLOCKSCAN_LOG:-\}$/m);
   assert.match(script, /BLOCKSCAN_LOG=\$\{UNIT_LOG:-\/var\/log\/mev-live\.log\}/);
@@ -105,6 +105,7 @@ test("census-gap excludes stale and failed postmortem artifacts", async () => {
   assert.doesNotMatch(script, /scan_submitted_lost/);
   assert.match(script, /scan_related_submission_seen/);
   assert.match(script, /scan_pass_had_submission/);
+  assert.match(script, /routing_unverified\(tokenedge-index-required/);
   assert.match(script, /unknown_competitor_tokens/);
   assert.ok(
     script.indexOf("unknown_competitor_tokens") < script.indexOf("scan_candidate_token_gap"),

@@ -27,7 +27,7 @@ RPC=${RPC:-http://127.0.0.1:8545}
 EVENTS=${EVENTS:-}
 ANALYSIS_ROOT=${MEV_ANALYSIS_ROOT:-/opt/MEV}
 WATCH_CONFIG=${WATCH_CONFIG:-$ANALYSIS_ROOT/analysis/config/live-competitors.json}
-GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-graph-pools.json}
+GRAPH=${GRAPH:-/opt/MEV/listener/searcher/pools/runtime-blockscan-pools.json}
 if [ -z "$BLOCKSCAN_LOG" ]; then
   UNIT_LOG=$(systemctl show mev-searcher -p StandardOutput --value 2>/dev/null \
     | sed -n 's/^append://p' || true)
@@ -101,18 +101,21 @@ done
 
 [ "${#PM_FILES[@]}" -gt 0 ] || { echo "no postmortems produced (failures=$PM_FAILURES)"; exit 1; }
 {
-  printf 'block\ttx\tstyle\tnet_usd\tour_events\toverlap\tbs_source\tbs_status\tbs_rings\tbs_token_overlap\trouting_gap\toog\tverdict\n'
+  printf 'block\ttx\tstyle\tnet_usd\tour_events\toverlap\tbs_source\tbs_status\tbs_rings\tbs_token_overlap\trouting_gap\trouting_unverified\toog\tverdict\n'
   jq -r -s 'sort_by(.tx.block)[] |
     (.our_events_at_block.total // 0) as $ev |
     ((.our_events_at_block.venue_overlap // []) | length) as $ov |
     ((.out_of_graph_venues // []) | length) as $oog |
     ([(.touchedVenues // [])[] | select(.routing_admitted == false)] | length) as $rg |
+    ([(.touchedVenues // [])[] | select(.routing_admitted == null and .routing_reason == "routed_edge_unverified")] | length) as $ru |
+    ([(.touchedVenues // [])[] | select(.routing_admitted == false) | (.routing_reason // "unverified")] | unique | join(",")) as $rr |
     (.our_blockscan_for_target // null) as $bs |
     ($bs.status // "unset") as $bss |
     (if .non_comparable_winner == true then "non_comparable:" + (.winner_style // "?")
      elif (.winner_style // "unknown") != "atomic_loop" then "manual_required:" + (.winner_style // "unknown")
-     elif $rg > 0 then "routing_gap(hooked-v4 x\($rg))"
      elif $oog > 0 then "pool_gap(\($oog) oog)"
+     elif $rg > 0 then "routing_gap(\($rr) x\($rg))"
+     elif $ru > 0 then "routing_unverified(tokenedge-index-required x\($ru))"
      elif $bs != null and $bss == "unknown_log_rotated" then "unknown_log_rotated"
      elif $bs != null and ($bss == "unknown_log_not_covered" or $bss == "unknown_log_empty" or $bss == "log_unavailable") then "unknown_log_unavailable:\($bss)"
      elif $bs != null and ($bss == "incomplete" or $bss == "error") then "unknown_log_incomplete:\($bss)"
@@ -130,7 +133,7 @@ done
     [.tx.block, .tx.hash[0:10], (.winner_style // "?"), (.pnl.netProfitUsd // "null"),
      $ev, $ov, ($bs.source_block // "-"), $bss, ($bs.solve_ring_count // 0),
      (($bs.token_overlap_count // 0) | tostring) + "/" + (($bs.competitor_token_count // 0) | tostring),
-     $rg, $oog, $v] | @tsv' "${PM_FILES[@]}"
+     $rg, $ru, $oog, $v] | @tsv' "${PM_FILES[@]}"
 } | tee "$OUT/verdicts.tsv"
 echo "reports: $OUT (census.json, pm-<tx>.json, verdicts.tsv)" >&2
 if [ "$PM_FAILURES" -gt 0 ]; then

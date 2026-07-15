@@ -5,11 +5,18 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { ethers } from "ethers";
 import {
+  extractOtherVenues,
   learningCaseFromPostmortem,
+  resolveLandedTouchedVenues,
   type PostmortemReport,
 } from "../cli/bundle-postmortem.js";
-import { deriveEdgeKindsFromLogs, deriveProtocolActionsFromLogs } from "../learning/edge-kinds.js";
+import {
+  deriveEdgeKindsFromLogs,
+  deriveEdgeKindsFromLogsAndTrace,
+  deriveProtocolActionsFromLogs,
+} from "../learning/edge-kinds.js";
 import {
   advanceStatus,
   loadCases,
@@ -96,6 +103,57 @@ test("deriveEdgeKindsFromLogs classifies topic0 into stable edge kinds", () => {
 
   assert.deepEqual(deriveEdgeKindsFromLogs(undefined), []);
   assert.deepEqual(deriveEdgeKindsFromLogs(null), []);
+});
+
+test("call-defined GOLDx mint adds protocol only for the exact successful target", () => {
+  const selector = ethers.id("mint(address,uint256)").slice(0, 10);
+  const swapLogs = [{ topics: [TOPICS.univ3Swap] }];
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: "0x0000000000000000000000000000000000000001",
+    input: "0xdeadbeef",
+    calls: [{ to: "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0", input: selector }],
+  }), ["swap", "protocol"]);
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: "0x0000000000000000000000000000000000000002",
+    input: selector,
+  }), ["swap"]);
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+    input: selector,
+    error: "execution reverted",
+  }), ["swap"]);
+});
+
+test("landed venue facts preserve unknown factory and Curve underlying adapter", async () => {
+  const moxiePool = "0x1bc6104bf242ac7047d1d50f01bb02529a0c7250";
+  const moxieFactory = "0x197F4d712D0544E6aE1417867e1f066fc54Dcff8";
+  const factoryIface = new ethers.Interface(["function factory() view returns (address)"]);
+  const v2Receipt = { logs: [{ address: moxiePool, topics: [TOPICS.univ2Swap] }] };
+  const venues = await resolveLandedTouchedVenues({
+    call: async <T>(_method: string, params: unknown[] = []): Promise<T> => {
+      assert.equal(params[1], "0x185a0af");
+      return factoryIface.encodeFunctionResult("factory", [moxieFactory]) as T;
+    },
+  }, v2Receipt, null, 25534639);
+  assert.equal(venues[0]?.protocol, "univ2", "topic remains an event-family observation");
+  assert.equal(venues[0]?.venue_id, "unknown");
+  assert.equal(venues[0]?.factory, moxieFactory.toLowerCase());
+  assert.equal(venues[0]?.landed_adapter, null);
+
+  const curveUnderlyingIface = new ethers.Interface([
+    "event TokenExchangeUnderlying(address indexed buyer, int128 sold_id, uint256 tokens_sold, int128 bought_id, uint256 tokens_bought)",
+  ]);
+  const encoded = curveUnderlyingIface.encodeEventLog("TokenExchangeUnderlying", [
+    "0x0000000000000000000000000000000000000001", 3, 100n, 2, 101n,
+  ]);
+  const other = extractOtherVenues({
+    logs: [{
+      address: "0xfe0a8e9d60131404ffaee95b48ebf908f4d8d808",
+      topics: encoded.topics,
+      data: encoded.data,
+    }],
+  }, null);
+  assert.equal(other[0]?.landed_adapter, "curve-exchange-underlying");
 });
 
 test("coffee tx-2 (Liquity BOLD mint) flips to [flash,swap,protocol] with a mint action", () => {

@@ -639,18 +639,21 @@ function makeRpcWinnerAnalysis(rpc: RpcClient): {
   classifyWinnerStyle: OnchainWinnerStyleClassifier;
   priceWinner: OnchainWinnerProfitPricer;
 } {
-  let ethUsd: Promise<number> | null = null;
+  const ethUsdByBlock = new Map<number, Promise<number>>();
   const profitCache = new Map<string, Promise<{ profit: ArbProfit; ethUsd: number }>>();
 
-  const getEthUsd = (): Promise<number> => {
-    ethUsd ??= fetchEthUsd(rpc);
-    return ethUsd;
+  const getEthUsd = (blockNumber: number): Promise<number> => {
+    const cached = ethUsdByBlock.get(blockNumber);
+    if (cached) return cached;
+    const mark = fetchEthUsd(rpc, toQuantity(blockNumber));
+    ethUsdByBlock.set(blockNumber, mark);
+    return mark;
   };
   const getProfit = (block: OnchainScanBlock, winner: JoinedTx): Promise<{ profit: ArbProfit; ethUsd: number }> => {
     const existing = profitCache.get(winner.hash);
     if (existing) return existing;
     const promise = (async () => {
-      const mark = await getEthUsd();
+      const mark = await getEthUsd(block.number);
       const tx = txForPricing(winner);
       const profit = await priceArb(rpc, winner.hash, tx, winner.receipt, mark, {
         entityActors: winnerProfitActors(winner),
