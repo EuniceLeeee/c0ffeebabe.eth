@@ -24,6 +24,10 @@ import {
 } from "../detector/blockscan-scanner.js";
 import { buildExactBlockScanCurveMids } from "../detector/blockscan-curve-mids.js";
 import { refineBlockScanCandidates } from "../detector/blockscan-candidate-refinement.js";
+import {
+  selectedReplayOpportunityIndexes,
+  solveForOpportunityIndex,
+} from "./blockscan-hunt-selection.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
@@ -127,6 +131,7 @@ interface OpportunityReport {
 }
 
 interface SolveReport {
+  opportunityIndex: number;
   ring: string[];
   pools: string[];
   spreadBps: number | null;
@@ -271,12 +276,13 @@ async function main(): Promise<void> {
     // Production treats code-owned protocol edges as admission guarantees outside
     // the scored DEX-edge budget. Older scanner versions ignore this forward-
     // compatible field; challengers that implement it must replay the same view.
+    const pricedTokenLimits = pricedTokens();
     const scanCfg = {
       maxHops: cfg.maxHops,
       minSpreadBps: cfg.minSpreadBps,
       maxCandidates: cfg.maxCandidates,
       budgetMs: cfg.budgetMs,
-      pricedTokens: pricedTokens(),
+      pricedTokens: pricedTokenLimits,
       protocolMids,
       pinnedOutsideBudget: true,
     };
@@ -296,6 +302,7 @@ async function main(): Promise<void> {
       coarseScan.opportunities,
       cfg.maxCandidates,
       Date.now() + cfg.budgetMs,
+      pricedTokenLimits,
     );
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
     console.log(
@@ -319,9 +326,22 @@ async function main(): Promise<void> {
       );
     }
 
-    const solvedReports = await solveTopK(state, cache, cfg, scan.opportunities, protocolMids);
+    const expectedTarget = readExpectedReplayTarget(opportunityReports);
+    const solveIndexes = selectedReplayOpportunityIndexes(
+      scan.opportunities.length,
+      cfg.topK,
+      expectedTarget?.opportunityIndex ?? null,
+    );
+    const solvedReports = await solveSelected(
+      state,
+      cache,
+      cfg,
+      scan.opportunities,
+      protocolMids,
+      solveIndexes,
+    );
     await check("fork-solve top candidates recorded", () =>
-      solvedReports.length === Math.min(cfg.topK, scan.opportunities.length),
+      solvedReports.length === solveIndexes.length,
     );
 
     const bestNet = bestSolvedNet(solvedReports);
@@ -350,7 +370,7 @@ async function main(): Promise<void> {
     mkdirSync(dirname(cfg.outPath), { recursive: true });
     writeFileSync(cfg.outPath, `${JSON.stringify(report, jsonReplacer, 2)}\n`);
     await check("report written", () => readFileSync(cfg.outPath, "utf8").length > 0);
-    emitProductionReplayResult(cfg, opportunityReports, solvedReports);
+    emitProductionReplayResult(cfg, opportunityReports, solvedReports, expectedTarget);
 
     console.log(
       `blockscan-hunt verdict=${verdict} block=${cfg.blockNumber} ` +
@@ -366,22 +386,14 @@ function emitProductionReplayResult(
   cfg: HuntConfig,
   opportunities: OpportunityReport[],
   solved: SolveReport[],
+  expectedTarget: ExpectedReplayTarget | null,
 ): void {
-  const expectedPools = (process.env.AB_EXPECTED_POOL_IDS ?? "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  if (expectedPools.length === 0) return;
-  const expectedSwapPath = parseExpectedSwapPath(process.env.AB_EXPECTED_SWAP_PATH_JSON ?? "");
-  const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
-  const expectedProtocol = process.env.AB_EXPECTED_ROUTE_SCOPE === "dex-permissionless-protocol";
-  const opportunityIndex = opportunities.findIndex((entry) =>
-    entry.swapPath !== null
-    && JSON.stringify(entry.swapPath) === JSON.stringify(expectedSwapPath)
-    && JSON.stringify(entry.route) === JSON.stringify(expectedRoute)
-    && entry.hasProtocolEdge === expectedProtocol);
+  if (!expectedTarget) return;
+  const { expectedPools, expectedSwapPath, expectedRoute, opportunityIndex } = expectedTarget;
   const opportunity = opportunityIndex >= 0 ? opportunities[opportunityIndex] : null;
-  const solve = opportunityIndex >= 0 ? solved[opportunityIndex] ?? null : null;
+  const solve = opportunityIndex >= 0
+    ? solveForOpportunityIndex(solved, opportunityIndex)
+    : null;
   let stage = "not_admitted";
   if (opportunity) stage = "path_found";
   if (solve?.solved !== null && solve?.solved !== undefined) {
@@ -405,6 +417,32 @@ function emitProductionReplayResult(
     final_sim_success: stage === "final_sim_success",
     net_profit_raw: solve?.solved ?? null,
   })}`);
+}
+
+interface ExpectedReplayTarget {
+  expectedPools: string[];
+  expectedSwapPath: OpportunityReport["swapPath"];
+  expectedRoute: OpportunityReport["route"];
+  opportunityIndex: number;
+}
+
+function readExpectedReplayTarget(
+  opportunities: OpportunityReport[],
+): ExpectedReplayTarget | null {
+  const expectedPools = (process.env.AB_EXPECTED_POOL_IDS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  if (expectedPools.length === 0) return null;
+  const expectedSwapPath = parseExpectedSwapPath(process.env.AB_EXPECTED_SWAP_PATH_JSON ?? "");
+  const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
+  const expectedProtocol = process.env.AB_EXPECTED_ROUTE_SCOPE === "dex-permissionless-protocol";
+  const opportunityIndex = opportunities.findIndex((entry) =>
+    entry.swapPath !== null
+    && JSON.stringify(entry.swapPath) === JSON.stringify(expectedSwapPath)
+    && JSON.stringify(entry.route) === JSON.stringify(expectedRoute)
+    && entry.hasProtocolEdge === expectedProtocol);
+  return { expectedPools, expectedSwapPath, expectedRoute, opportunityIndex };
 }
 
 function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
@@ -806,15 +844,15 @@ function pricedTokens(): Map<string, { maxBorrow: bigint }> {
   ]);
 }
 
-async function solveTopK(
+async function solveSelected(
   state: AnvilStateBackend,
   cache: PoolStateCache,
   cfg: HuntConfig,
   opportunities: BlockScanOpportunity[],
   protocolMids: ReadonlyMap<string, ProtocolMid>,
+  opportunityIndexes: readonly number[],
 ): Promise<SolveReport[]> {
-  const top = opportunities.slice(0, cfg.topK);
-  if (top.length === 0) return [];
+  if (opportunityIndexes.length === 0) return [];
 
   console.log(
     `[blockscan-hunt] fork upstream=${redactRpcUrl(cfg.rpcUrl)} ` +
@@ -828,7 +866,8 @@ async function solveTopK(
   const simulator = new BotVMSimulator(state, DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER);
   const reports: SolveReport[] = [];
 
-  for (const opp of top) {
+  for (const opportunityIndex of opportunityIndexes) {
+    const opp = opportunities[opportunityIndex];
     const spreadBps = estimateBlockScanRingSpreadBps(
       cache,
       cfg.blockNumber,
@@ -861,6 +900,7 @@ async function solveTopK(
       solveError = err instanceof Error ? err.message : String(err);
     }
     const report = {
+      opportunityIndex,
       ring: ringTokens(opp.seedEdges),
       pools: uniqueStrings(opp.seedEdges.map(edgePoolIdentity)),
       spreadBps,
@@ -871,7 +911,7 @@ async function solveTopK(
     };
     reports.push(report);
     console.log(
-      `[blockscan-hunt] solve rank=${reports.length} planCount=${planCount} ` +
+      `[blockscan-hunt] solve rank=${opportunityIndex + 1} planCount=${planCount} ` +
         `net=${report.solved ?? "null"} error=${solveError ? solveError.slice(0, 160) : "none"}`,
     );
   }

@@ -16,20 +16,22 @@ export interface BlockScanRefinementResult {
 interface RankedProbe {
   opportunity: BlockScanOpportunity;
   marginBps: number;
+  priority: number;
   index: number;
 }
 
 /**
  * Cheap exact route probe before GSS/final-sim. Quotes every leg through the
  * production dispatcher without the approximate pool cache, then keeps the
- * highest executable margins. Failed/unprobed routes remain fallback entries;
- * routes proven non-positive at the probe are removed.
+ * highest normalized expected returns. Failed/unprobed routes remain fallback
+ * entries; routes proven non-positive at the probe are removed.
  */
 export async function refineBlockScanCandidates(
   state: StateBackend,
   opportunities: readonly BlockScanOpportunity[],
   maxCandidates: number,
   deadlineAtMs: number,
+  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
   concurrency = DEFAULT_CONCURRENCY,
 ): Promise<BlockScanRefinementResult> {
   const ranked: RankedProbe[] = [];
@@ -53,7 +55,14 @@ export async function refineBlockScanCandidates(
         attempted++;
         try {
           const marginBps = await exactProbeMarginBps(state, opportunity);
-          if (marginBps > 0) ranked.push({ opportunity, marginBps, index });
+          if (marginBps > 0) {
+            ranked.push({
+              opportunity,
+              marginBps,
+              priority: exactProbePriority(opportunity, marginBps, pricedTokens),
+              index,
+            });
+          }
           else negative++;
         } catch {
           failed++;
@@ -64,7 +73,9 @@ export async function refineBlockScanCandidates(
   );
   await Promise.all(workers);
 
-  ranked.sort((a, b) => b.marginBps - a.marginBps || a.index - b.index);
+  ranked.sort((a, b) =>
+    b.priority - a.priority || b.marginBps - a.marginBps || a.index - b.index
+  );
   fallback.sort((a, b) => a.index - b.index);
   const selected = [
     ...ranked.map((entry) => entry.opportunity),
@@ -78,6 +89,20 @@ export async function refineBlockScanCandidates(
     failed,
     deadlineHit: attempted < opportunities.length,
   };
+}
+
+/** Compare exact probe returns across flash assets without comparing raw units. */
+export function exactProbePriority(
+  opportunity: BlockScanOpportunity,
+  marginBps: number,
+  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
+): number {
+  const maxBorrow = pricedTokens.get(opportunity.flashToken.toLowerCase())?.maxBorrow ?? 0n;
+  if (maxBorrow <= 0n) return 0;
+  const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
+  const capacityShare = Number(ceiling) / Number(maxBorrow);
+  const priority = marginBps * capacityShare;
+  return Number.isFinite(priority) && priority > 0 ? priority : 0;
 }
 
 async function exactProbeMarginBps(
