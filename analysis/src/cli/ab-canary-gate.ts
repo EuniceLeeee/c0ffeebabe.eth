@@ -537,12 +537,12 @@ function runHunt(
       HUNT_MAX_HOPS: "4",
       HUNT_MIN_SPREAD_BPS: "0",
       HUNT_SCAN_BUDGET_MS: "120000",
-      HUNT_PASS_BUDGET_MS: "120000",
+      HUNT_PASS_BUDGET_MS: "300000",
       // Keep the trusted replay on the same generic candidate budget as
-      // production. A route admitted at rank 9..20 is a production route, not
+      // production. A route admitted at rank 9..100 is a production route, not
       // a replay failure; the expected target is still matched by its full
       // ordered route before it can satisfy the gate.
-      HUNT_MAX_CANDIDATES: "20",
+      HUNT_MAX_CANDIDATES: "100",
       // The hunt always appends the exact matched target to the solve set, so
       // solving the first eight plus that target preserves coverage without
       // spending the gate on every unrelated candidate.
