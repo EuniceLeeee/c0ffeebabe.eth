@@ -387,6 +387,17 @@ const liquityRouterMintDrawdownSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const liquityUnrelatedRouterInflowSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      ...canonicalLiquityInterestLogs,
+      xfer(LIQUITY_BOLD, EXTERNAL_RECIPIENT, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 6),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const unrelatedUsdsBesideSusdsDepositSignals = detectNonArbSignals(
   null,
   {
@@ -920,6 +931,11 @@ const checks: Array<() => void> = [
   () => assert.equal(liquityRouterMintDrawdownSignals.external_mint_protocol_context, null),
   () => assert.equal(
     overlayNonArbStyle("atomic_loop", liquityRouterMintDrawdownSignals),
+    "unknown",
+  ),
+  () => assert.equal(liquityUnrelatedRouterInflowSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", liquityUnrelatedRouterInflowSignals),
     "unknown",
   ),
   // A real canonical sUSDS Deposit cannot bless unrelated retained USDS or an unmatched sUSDS mint.

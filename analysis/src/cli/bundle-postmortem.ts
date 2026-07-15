@@ -2008,7 +2008,8 @@ interface RetainedExternalMintEvidence {
   tokens: string[];
   unknownTokens: string[];
   recipientsByToken: Map<string, string[]>;
-  retainedAmountsByToken: Map<string, Map<string, bigint>>;
+  retainedProvenanceByToken: Map<string, Map<string, bigint>>;
+  transactionNetByToken: Map<string, Map<string, bigint>>;
 }
 
 function retainedExternalMintEvidence(
@@ -2027,9 +2028,10 @@ function retainedExternalMintEvidence(
   const tokens = new Set<string>();
   const unknownTokens = new Set<string>();
   const recipientSetsByToken = new Map<string, Set<string>>();
-  const retainedAmountsByToken = new Map<string, Map<string, bigint>>();
+  const retainedProvenanceByToken = new Map<string, Map<string, bigint>>();
+  const transactionNetByToken = new Map<string, Map<string, bigint>>();
   for (const token of mintedTokens) {
-    const eligibleRecipients: Array<[string, bigint]> = [];
+    const eligibleRecipients: Array<[string, bigint, bigint]> = [];
     for (const [holder, amount] of provenance.balancesByToken.get(token) ?? []) {
       if (amount <= 0n) continue;
       if (holder === ZERO_ADDRESS || holder === token || normalizedActors.has(holder)) continue;
@@ -2039,17 +2041,19 @@ function retainedExternalMintEvidence(
       // mint recipient. Require positive transaction-level net as well as surviving provenance.
       const positiveNet = ledger.get(token)?.net.get(holder) ?? 0n;
       if (positiveNet <= 0n) continue;
-      eligibleRecipients.push([holder, positiveNet < amount ? positiveNet : amount]);
+      eligibleRecipients.push([holder, amount, positiveNet]);
     }
-    const materialRecipients = eligibleRecipients.filter(([, amount]) =>
-      isMaterialTokenAmount(token, amount));
-    const subthresholdRecipients = eligibleRecipients.filter(([, amount]) =>
-      !isMaterialTokenAmount(token, amount));
-    const subthresholdTotal = subthresholdRecipients.reduce((sum, [, amount]) => sum + amount, 0n);
+    const retainedAmount = (entry: [string, bigint, bigint]): bigint =>
+      entry[1] < entry[2] ? entry[1] : entry[2];
+    const materialRecipients = eligibleRecipients.filter((entry) =>
+      isMaterialTokenAmount(token, retainedAmount(entry)));
+    const subthresholdRecipients = eligibleRecipients.filter((entry) =>
+      !isMaterialTokenAmount(token, retainedAmount(entry)));
+    const subthresholdTotal = subthresholdRecipients.reduce((sum, entry) => sum + retainedAmount(entry), 0n);
     const evidencedRecipients = isMaterialTokenAmount(token, subthresholdTotal)
       ? [...materialRecipients, ...subthresholdRecipients]
       : materialRecipients;
-    for (const [holder, amount] of evidencedRecipients) {
+    for (const [holder, provenanceAmount, positiveNet] of evidencedRecipients) {
       recipients.add(holder);
       tokens.add(token);
       if (!TOKEN_META[token]) unknownTokens.add(token);
@@ -2059,12 +2063,18 @@ function retainedExternalMintEvidence(
         recipientSetsByToken.set(token, tokenRecipients);
       }
       tokenRecipients.add(holder);
-      let retainedAmounts = retainedAmountsByToken.get(token);
-      if (!retainedAmounts) {
-        retainedAmounts = new Map();
-        retainedAmountsByToken.set(token, retainedAmounts);
+      let retainedProvenance = retainedProvenanceByToken.get(token);
+      if (!retainedProvenance) {
+        retainedProvenance = new Map();
+        retainedProvenanceByToken.set(token, retainedProvenance);
       }
-      retainedAmounts.set(holder, amount);
+      retainedProvenance.set(holder, provenanceAmount);
+      let transactionNet = transactionNetByToken.get(token);
+      if (!transactionNet) {
+        transactionNet = new Map();
+        transactionNetByToken.set(token, transactionNet);
+      }
+      transactionNet.set(holder, positiveNet);
     }
   }
   return {
@@ -2075,7 +2085,8 @@ function retainedExternalMintEvidence(
       [...recipientSetsByToken].map(([token, tokenRecipients]) =>
         [token, [...tokenRecipients].sort()]),
     ),
-    retainedAmountsByToken,
+    retainedProvenanceByToken,
+    transactionNetByToken,
   };
 }
 
@@ -2149,7 +2160,8 @@ function hasGroundedLiquityBoldMint(
 
   const boldMints = zeroMintAmountsByRecipient(receipt, LIQUITY_BOLD);
   const retainedRecipients = evidence.recipientsByToken.get(LIQUITY_BOLD) ?? [];
-  const retainedAmounts = evidence.retainedAmountsByToken.get(LIQUITY_BOLD) ?? new Map();
+  const retainedProvenance = evidence.retainedProvenanceByToken.get(LIQUITY_BOLD) ?? new Map();
+  const transactionNet = evidence.transactionNetByToken.get(LIQUITY_BOLD) ?? new Map();
   if (retainedRecipients.length !== 2
       || !retainedRecipients.includes(LIQUITY_INTEREST_ROUTER)
       || !retainedRecipients.includes(LIQUITY_STABILITY_POOL)) return false;
@@ -2174,8 +2186,10 @@ function hasGroundedLiquityBoldMint(
       || stabilityAmount !== totalInterest * 75n / 100n) continue;
     if (boldMints.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
       || boldMints.get(LIQUITY_STABILITY_POOL) !== stabilityAmount) continue;
-    if (retainedAmounts.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
-      || retainedAmounts.get(LIQUITY_STABILITY_POOL) !== stabilityAmount) continue;
+    if (retainedProvenance.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
+      || retainedProvenance.get(LIQUITY_STABILITY_POOL) !== stabilityAmount
+      || transactionNet.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
+      || transactionNet.get(LIQUITY_STABILITY_POOL) !== stabilityAmount) continue;
     return true;
   }
   return false;
