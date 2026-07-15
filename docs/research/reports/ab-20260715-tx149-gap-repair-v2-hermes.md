@@ -15,7 +15,8 @@
 - **change_class:** capability
 - **one-change scope:** generic venue/capability discovery, GOLDx conversion, Curve-underlying quote/build,
   scanner candidate refinement, and the generic block-scan candidate default `20→100` needed to retain the
-  rank-87 route. The operator accepts the larger candidate set; latency is measured separately.
+  rank-89 route in the current production view. The operator accepts the larger candidate set; latency is
+  measured separately.
 - **deterministic gate + pinned sample:** tx `0x149df3ec…fde60`, parent block `25535055`; trusted
   `blockscan-hunt.ts` self-enumerates the four ordered edges and fork-simulates `net_profit_raw=442380`.
 - **lane mode:** dual (atomic block-scan + public-mempool backrun; MEV-Share off)
@@ -57,7 +58,7 @@
 - **verdict:** inconclusive before live pairing.
 - **causal evidence:** deterministic evidence isolates a real capability transition and the candidate is
   generic rather than sample-conditioned; paired production distribution evidence is still pending.
-- **why misleading raw metrics do/do not change the semantic verdict:** rank-87 retention is intentionally
+- **why misleading raw metrics do/do not change the semantic verdict:** rank-89 retention is intentionally
   allowed. Latency does not erase the deterministic capability fact, but safety, starvation, or semantic
   regression in the paired window can still block promotion.
 
@@ -164,7 +165,6 @@
           "adapterId": "univ3-swap",
           "slotKind": "swap",
           "target": "0x7cb85f75e61226060453a997a7733f76707df337",
-          "poolId": "0x7cb85f75e61226060453a997a7733f76707df337",
           "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
           "tokenOut": "0x45804880de22913dafe09f4980848ece6ecbaf78"
         },
@@ -179,7 +179,6 @@
           "adapterId": "univ2-swap",
           "slotKind": "swap",
           "target": "0xef6317e783b22b2a2fc073e68260450236c20779",
-          "poolId": "0xef6317e783b22b2a2fc073e68260450236c20779",
           "tokenIn": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
           "tokenOut": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549"
         },
@@ -187,7 +186,6 @@
           "adapterId": "curve-exchange-underlying",
           "slotKind": "swap",
           "target": "0xfe0a8e9d60131404ffaee95b48ebf908f4d8d808",
-          "poolId": "0xfe0a8e9d60131404ffaee95b48ebf908f4d8d808",
           "tokenIn": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549",
           "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7"
         }
@@ -249,7 +247,7 @@ fable_manual: no
 ## Findings Ledger
 | finding | owner | carry_to | status |
 |---|---|---|---|
-| tx149 route self-enumerates at rank 87 when the generic candidate cap is 100 | this experiment | paired production window | done |
+| tx149 route self-enumerates at rank 89 in the current production view when the generic candidate cap is 100 | this experiment | paired production window | done |
 | call-defined GOLDx evidence was dropped by the production gate | main `58be1f3` / `3d42774` | LearningCase | done |
 | candidate latency and distribution effect | paired A/B | final adjudication | open |
 
