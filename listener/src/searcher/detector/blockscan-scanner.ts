@@ -287,7 +287,7 @@ function readVenueMid(
   if (kind === "v4") return readV4Mid(cache.snapshotV4(pool, sourceBlock), pool, edges, a, b);
   if (kind === "protocol") return readExternalMid("protocol", protocolMids, pool, edges, a, b);
   if (kind === "fluid") return readExternalMid("fluid", protocolMids, pool, edges, a, b);
-  return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b);
+  return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b, protocolMids);
 }
 
 function venueKind(edge: TokenEdge): VenueKind | null {
@@ -426,6 +426,7 @@ function readCurveMid(
   edges: TokenEdge[],
   a: string,
   b: string,
+  protocolMids?: ReadonlyMap<string, ProtocolMid>,
 ): VenueMid | null {
   if (!snapshot) return null;
   const state = snapshot.kind === "plain" ? snapshot.plain : snapshot.ng;
@@ -436,14 +437,15 @@ function readCurveMid(
   const reserveA = state.balances[i];
   const reserveB = state.balances[j];
   if (reserveA <= 0n || reserveB <= 0n) return null;
-  const mid = Number(reserveB) / Number(reserveA);
+  const exact = protocolMids?.get(`${pool}|${a}|${b}`);
+  const mid = exact?.mid ?? Number(reserveB) / Number(reserveA);
   if (!Number.isFinite(mid) || mid <= 0) return null;
   return {
     kind: "curve",
     pool,
     edges,
     mid,
-    feeBps: state.fee === undefined ? 4 : Number(state.fee) / 1_000_000,
+    feeBps: exact?.feeBps ?? (state.fee === undefined ? 4 : Number(state.fee) / 1_000_000),
     reserveA,
     reserveB,
     depthProxy: Number(minBigint(reserveA, reserveB)),

@@ -22,6 +22,7 @@ import {
   estimateBlockScanRingSpreadBps,
   type ProtocolMid,
 } from "../detector/blockscan-scanner.js";
+import { buildExactBlockScanCurveMids } from "../detector/blockscan-curve-mids.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
@@ -243,7 +244,22 @@ async function main(): Promise<void> {
       edges,
       Date.now() + cfg.budgetMs,
     );
-    const protocolMids = protocolMidResult.mids;
+    const exactCurveMidResult = await buildExactBlockScanCurveMids(
+      provider,
+      cfg.blockNumber,
+      cache,
+      edges,
+      Date.now() + cfg.budgetMs,
+    );
+    const protocolMids = new Map([
+      ...protocolMidResult.mids,
+      ...exactCurveMidResult.mids,
+    ]);
+    console.log(
+      `[blockscan-hunt] exact curve mids attempted=${exactCurveMidResult.attempted} ` +
+        `quoted=${exactCurveMidResult.quoted} failed=${exactCurveMidResult.failed} ` +
+        `deadline=${exactCurveMidResult.deadlineHit ? 1 : 0}`,
+    );
     await check("protocol mids cover erc4626, wsteth, psm, and metronome", () =>
       (protocolMidResult.classCounts.get("erc4626") ?? 0) > 0 &&
       (protocolMidResult.classCounts.get("wsteth") ?? 0) > 0 &&
