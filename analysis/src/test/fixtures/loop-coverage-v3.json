@@ -1,0 +1,169 @@
+{
+  "source": "analysis/outputs/coffee-corpus/coffee-logs.csv",
+  "sourceSha256": "156930644045a3769306424660a7eaf87ad0c9190e556b7894d2282be89f415e",
+  "selection": "Exact representative CSV rows for every role and observed swap venue asserted by the regressions.",
+  "cases": [
+    {
+      "label": "primary-balancer-dodo-univ3",
+      "txHash": "0x89cbf09d0bea6d16a9e191e704f12eb28994b90331b63d7589de5c678ef54cec",
+      "blockNumber": 24559256,
+      "transactionIndex": 154,
+      "receiptLogs": [
+        {
+          "logIndex": 247,
+          "address": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+          "topics": [
+            "0xc76f1b4fe4396ac07a9fa55a415d4ca430e72651d37d3401f3bed7cb13fc4f12",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          ]
+        },
+        {
+          "logIndex": 249,
+          "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+          "topics": [
+            "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b",
+            "0x0b09dea16768f0799065c475be02919503cb2a3500020000000000000000001a",
+            "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "0x0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f"
+          ]
+        },
+        {
+          "logIndex": 256,
+          "address": "0x3058ef90929cb8180174d74c507176cca6835d73",
+          "topics": [
+            "0xc2c0245e056d5fb095f04cd6373bc770802ebd1e6c918eb78fdef843cdb37b0f"
+          ]
+        },
+        {
+          "logIndex": 259,
+          "address": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+          "topics": [
+            "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "secondary-dodo-with-balancer-flashloan",
+      "txHash": "0x52c27c6e5741eb9abc4601760d5c249987cc3584d9128372d0ad43680e89b404",
+      "blockNumber": 24562193,
+      "transactionIndex": 40,
+      "receiptLogs": [
+        {
+          "logIndex": 314,
+          "address": "0xbb2b8038a1640196fbe3e38816f3e67cba72d940",
+          "topics": [
+            "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822",
+            "0x0000000000000000000000007a250d5630b4cf539739df2c5dacb4c659f2488d",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        },
+        {
+          "logIndex": 319,
+          "address": "0xaf5a67e524158f813784e8d39b91ec30c3a13de1",
+          "topics": [
+            "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822",
+            "0x0000000000000000000000007a250d5630b4cf539739df2c5dacb4c659f2488d",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        },
+        {
+          "logIndex": 325,
+          "address": "0xf361bde39aedcfe926f14feccfda2f2c646ef189",
+          "topics": [
+            "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822",
+            "0x0000000000000000000000007a250d5630b4cf539739df2c5dacb4c659f2488d",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        },
+        {
+          "logIndex": 330,
+          "address": "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
+          "topics": [
+            "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1"
+          ]
+        },
+        {
+          "logIndex": 340,
+          "address": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+          "topics": [
+            "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        },
+        {
+          "logIndex": 345,
+          "address": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+          "topics": [
+            "0xef75f5a47cc9a929968796ceb84f19e7541617b4577f2c228ea95200e1572081",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        },
+        {
+          "logIndex": 350,
+          "address": "0x3058ef90929cb8180174d74c507176cca6835d73",
+          "topics": [
+            "0xc2c0245e056d5fb095f04cd6373bc770802ebd1e6c918eb78fdef843cdb37b0f"
+          ]
+        },
+        {
+          "logIndex": 356,
+          "address": "0xe6ff8b9a37b0fab776134636d9981aa778c4e718",
+          "topics": [
+            "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        },
+        {
+          "logIndex": 358,
+          "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+          "topics": [
+            "0x0d7d75e01ab95780d3cd1c8ec0dd6c2ce19e3a20427eec8bf53283b6fb8e95f0",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x0000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "secondary-balancer-swap-not-flashloan",
+      "txHash": "0xf7a689faa3118fc3d045a613f3e28f23c876defc4ea3de75f2badf0ee1a71689",
+      "blockNumber": 24582334,
+      "transactionIndex": 60,
+      "receiptLogs": [
+        {
+          "logIndex": 1011,
+          "address": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+          "topics": [
+            "0xef75f5a47cc9a929968796ceb84f19e7541617b4577f2c228ea95200e1572081",
+            "0x00000000000000000000000050f02612ea1f79a84ef72d6912a5452f40a88edd"
+          ]
+        },
+        {
+          "logIndex": 1012,
+          "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+          "topics": [
+            "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b",
+            "0x0b09dea16768f0799065c475be02919503cb2a3500020000000000000000001a",
+            "0x0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",
+            "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          ]
+        },
+        {
+          "logIndex": 1017,
+          "address": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+          "topics": [
+            "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        }
+      ]
+    }
+  ]
+}

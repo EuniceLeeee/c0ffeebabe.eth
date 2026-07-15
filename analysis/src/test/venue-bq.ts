@@ -85,13 +85,25 @@ test("receipt-log coverage separates protocol gaps from unknown emitters and req
   assert.deepEqual(deriveEdgeKindsFromLogs([logs[2]]), ["swap"]);
   assert.deepEqual(result.vaults, []);
   assert.deepEqual(result.protocolVenues, [HG_USDC, ADDR.SKY_PSM_LITE.toLowerCase()].sort());
+  assert.deepEqual(result.observedSwapVenues, [
+    {
+      addr: ADDR.FLUID_DEX_USDC_USDT.toLowerCase(),
+      family: "fluid",
+      topic0s: [TOPICS.fluidDexSwap.toLowerCase()],
+      productionRoutability: "unassessed",
+      reason: "factory_or_routing_graph_not_attested",
+      in_graph: null,
+    },
+  ]);
+  assert.deepEqual(result.swapRouteGaps, []);
+  // Deprecated count alias remains exact and cannot hide per-venue routability.
   assert.equal(result.swapVenues, 1);
   assert.deepEqual(result.protocolVenueGaps, []);
-  assert.deepEqual(result.gapVenues, []);
   assert.deepEqual(result.unclassifiedEmitters, [{ addr: UNKNOWN_HELPER, topic0: UNKNOWN_TOPIC }]);
   assert.equal(result.protocolAdapterCandidate, true);
   assert.equal(result.fullyCovered, false);
   assert.equal(result.coverageScope, "receipt_log_emitters_only");
+  assert.equal(result.routabilityScope, "production_listener_descriptors_receipt_only");
   assert.equal(result.comparability, "requires_trace");
 });
 

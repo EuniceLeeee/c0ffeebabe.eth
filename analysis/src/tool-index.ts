@@ -98,7 +98,7 @@ const CURATED: Record<string, Curated> = {
   "analysis:distill-harvest": meta("ops", ["method-trace", "learning"], "zero-cu", "Harvest validated Method Traces into the shared learning asset.", 80),
   "analysis:venue-discovery-scan": meta("analysis", ["venue-discovery", "classification", "fixture"], "zero-cu", "Classify venue candidates from a fixture.", 75),
   "analysis:venue-discovery-window": meta("analysis", ["venue-discovery", "competitor-window"], "local-rpc", "Discover and aggregate venues over an RPC block window.", 75),
-  "analysis:venue-discovery-bq": meta("analysis", ["venue-discovery", "historical-export", "bigquery"], "zero-cu", "Classify exported BigQuery receipt logs without node crawling; the export itself does not prove an exact live window.", 75),
+  "analysis:venue-discovery-bq": meta("analysis", ["venue-discovery", "historical-export", "bigquery"], "zero-cu", "Classify exported BigQuery receipt roles and descriptor-backed production routability without node crawling; the export itself does not attest routing identity or an exact live window.", 75),
   "analysis:venue-registry": meta("ops", ["venue-discovery", "venue-registry"], "zero-cu", "Ingest and inspect the durable venue evidence registry.", 70),
   "analysis:graph-in": meta("view", ["graph", "single-venue"], "zero-cu", "Check canonical runtime graph membership without conflating unavailable and absent.", 95),
   "analysis:block-activity": meta("view", ["single-block", "production-events", "block-scan"], "zero-cu", "Summarize one block's production funnel and block-scan evidence.", 90),

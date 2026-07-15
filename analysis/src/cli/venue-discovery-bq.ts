@@ -15,10 +15,10 @@ const USAGE = `Usage: npm run venue-discovery-bq -- [--input <rows.ndjson|rows.c
   Accepts NDJSON (one BqLogRow per line) OR a BigQuery CSV export (header
   tx_hash,...,log_address,topic0,topics,receipt_status; topics = "[0x..,0x..]"). Format auto-detected.
   Default: per-VENUE aggregation (edgeKinds/protocolActions/txCount).
-  --loop-coverage (alias --per-tx): per-TX loop-coverage — classifies each tx's venues into
-    supported-swap / registered protocol / unsupported protocol / token / flashloan / unclassified.
-    This is receipt-log adapter coverage only; comparability remains requires_trace. Emits a
-    { perTx, summary } JSON object instead.`;
+  --loop-coverage (alias --per-tx): per-TX loop coverage — records topic-derived emitter roles,
+    observed swaps, and production-listener routability without treating event recognition as adapter
+    support. Receipt-only identity-dependent swaps remain unassessed; comparability remains requires_trace.
+    Emits a schema-v3 { perTx, summary } JSON object instead.`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -60,34 +60,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 /** Per-TX receipt-log coverage mode. Candidate rows surface first, but only bundle-postmortem/trace may
  *  promote one to a conserving atomic_loop. */
 async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promise<void> {
-  const sorted = [...perTx].sort(
-    (a, b) =>
-      Number(b.protocolAdapterCandidate) - Number(a.protocolAdapterCandidate)
-      || a.protocolVenueGaps.length - b.protocolVenueGaps.length
-      || a.unclassifiedEmitters.length - b.unclassifiedEmitters.length
-      || b.protocolVenues.length - a.protocolVenues.length
-      || a.tx.localeCompare(b.tx),
-  );
-  const withProtocol = sorted.filter((t) => t.protocolVenues.length >= 1);
-  const withNamedProtocolEvidence = sorted.filter(
-    (t) => t.protocolVenues.length >= 1 || t.protocolVenueGaps.length >= 1,
-  );
-  const summary = {
-    schema_version: 2,
-    coverage_scope: "receipt_log_emitters_only",
-    txs: perTx.length,
-    txsWithVaultLeg: sorted.filter((t) => t.vaults.length >= 1).length,
-    txsWithProtocolLeg: withProtocol.length,
-    txsWithNamedProtocolEvidence: withNamedProtocolEvidence.length,
-    protocolAdapterCandidates: perTx.filter((t) => t.protocolAdapterCandidate).length,
-    requiresTrace: withNamedProtocolEvidence.length,
-    knownProtocolGapTxs: perTx.filter((t) => t.protocolVenueGaps.length > 0).length,
-    unclassifiedEmitterTxs: withNamedProtocolEvidence.filter((t) => t.unclassifiedEmitters.length > 0).length,
-    // Legacy fields retained for downstream readers. "fullyCovered" is strict log cleanliness only.
-    fullyCovered: perTx.filter((t) => t.fullyCovered).length,
-    oneGapWithVault: withProtocol.filter((t) => t.protocolVenueGaps.length === 1).length,
-  };
-  const json = `${JSON.stringify({ summary, perTx: sorted }, null, 2)}\n`;
+  const output = buildLoopCoverageOutput(perTx);
+  const { summary } = output;
+  const json = `${JSON.stringify(output, null, 2)}\n`;
 
   process.stdout.write(json);
   if (outPath) await writeText(outPath, json);
@@ -97,13 +72,64 @@ async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promis
       "[analysis/venue-discovery-bq loop-coverage]",
       `txs=${summary.txs}`,
       `txs_with_vault_leg=${summary.txsWithVaultLeg}`,
+      `observed_swap_venues=${summary.observedSwapVenues}`,
+      `swap_route_gap_txs=${summary.swapRouteGapTxs}`,
+      `unassessed_swap_txs=${summary.unassessedSwapTxs}`,
       `protocol_adapter_candidates=${summary.protocolAdapterCandidates}`,
       `requires_trace=${summary.requiresTrace}`,
       `known_protocol_gap_txs=${summary.knownProtocolGapTxs}`,
-      `fully_covered=${summary.fullyCovered}`,
       `unclassified_emitter_txs=${summary.unclassifiedEmitterTxs}`,
     ].join(" "),
   );
+}
+
+export function buildLoopCoverageOutput(perTx: TxLoopCoverage[]) {
+  const sorted = [...perTx].sort(
+    (a, b) =>
+      b.swapRouteGaps.length - a.swapRouteGaps.length
+      || Number(b.protocolAdapterCandidate) - Number(a.protocolAdapterCandidate)
+      || a.protocolVenueGaps.length - b.protocolVenueGaps.length
+      || a.unclassifiedEmitters.length - b.unclassifiedEmitters.length
+      || b.protocolVenues.length - a.protocolVenues.length
+      || a.tx.localeCompare(b.tx),
+  );
+  const withProtocol = sorted.filter((t) => t.protocolVenues.length >= 1);
+  const withNamedProtocolEvidence = sorted.filter(
+    (t) => t.protocolVenues.length >= 1 || t.protocolVenueGaps.length >= 1,
+  );
+  const withObservedSwaps = sorted.filter((t) => t.observedSwapVenues.length >= 1);
+  const withUnassessedSwaps = sorted.filter((t) =>
+    t.observedSwapVenues.some((venue) => venue.productionRoutability === "unassessed")
+  );
+  const summary = {
+    schema_version: 3,
+    coverage_scope: "receipt_log_emitters_only",
+    routability_scope: "production_listener_descriptors_receipt_only",
+    txs: perTx.length,
+    txsWithVaultLeg: sorted.filter((t) => t.vaults.length >= 1).length,
+    txsWithProtocolLeg: withProtocol.length,
+    txsWithNamedProtocolEvidence: withNamedProtocolEvidence.length,
+    txsWithObservedSwaps: withObservedSwaps.length,
+    observedSwapVenues: perTx.reduce((count, tx) => count + tx.observedSwapVenues.length, 0),
+    swapRouteGapTxs: perTx.filter((t) => t.swapRouteGaps.length > 0).length,
+    swapRouteGaps: perTx.reduce((count, tx) => count + tx.swapRouteGaps.length, 0),
+    unassessedSwapTxs: withUnassessedSwaps.length,
+    unassessedSwapVenues: perTx.reduce(
+      (count, tx) => count + tx.observedSwapVenues.filter(
+        (venue) => venue.productionRoutability === "unassessed",
+      ).length,
+      0,
+    ),
+    protocolAdapterCandidates: perTx.filter((t) => t.protocolAdapterCandidate).length,
+    requiresTrace: withNamedProtocolEvidence.length,
+    knownProtocolGapTxs: perTx.filter((t) => t.protocolVenueGaps.length > 0).length,
+    unclassifiedEmitterTxs: withNamedProtocolEvidence.filter((t) => t.unclassifiedEmitters.length > 0).length,
+    deprecated_aliases: ["perTx[].swapVenues", "perTx[].fullyCovered", "summary.fullyCovered"],
+    // Conservative compatibility alias only; it is never proof of route closure.
+    fullyCovered: perTx.filter((t) => t.fullyCovered).length,
+    oneGapWithVault: withProtocol.filter((t) => t.protocolVenueGaps.length === 1).length,
+  };
+  return { summary, perTx: sorted };
 }
 
 /** Auto-detect: JSON array ('['), NDJSON ('{' per line), or a BigQuery CSV export (header row).

@@ -1,62 +1,70 @@
+import { ADAPTER_DESCRIPTORS } from "../../../listener/src/adapters/adapter-descriptors.js";
 import { POOL_REGISTRY } from "../../../listener/src/searcher/planner/token-graph.js";
-import { ADDR, lower, TOPICS } from "../registry/protocols.js";
+import { lower, TOPICS } from "../registry/protocols.js";
 import type { VenueScanInput } from "./venue-evidence.js";
 
 /**
- * PER-TX loop-coverage classifier — the canonical fold of the throwaway per-tx classifier.
- *
- * Where the per-VENUE path (venue-evidence.ts) asks "what edge kinds does THIS emitter show across the
- * whole export?", this path asks a stricter per-TX question: is every venue this ONE tx touched inside
- * OUR supported set, and does it contain a REAL protocol leg (one of our vaults emitting an ERC4626
- * Deposit/Withdraw in this tx)? This is deliberately a RECEIPT-LOG candidate classifier, not an
- * atomicity or route-closure oracle. Position conservation, helper inventory and call ordering require
- * bundle-postmortem/trace. `protocolAdapterCandidate` only means that every NAMED protocol event in the
- * receipt maps to an adapter we already have.
- *
- * The classes and their REAL sets (do NOT hand-guess a subset — these are the authoritative
- * literals; the SWAP set here is intentionally BROADER than edge-kinds.ts SWAP_TOPICS because the coverage
- * question includes univ2 Sync / the curve TokenExchange uint256 variant / the curve router Exchange, which
- * the per-venue edge-kind derivation does not need):
- *   - supported-swap    : the emitter logs one of SUPPORTED_SWAP_TOPICS
- *                         (univ2/v3/v4/pancake/curve/balancer/dodo/fluid).
- *   - our-vault         : the emitter is one of OUR POOL_REGISTRY ERC4626 addresses AND it emits a
- *                         REAL ERC4626 event (Deposit 0xdcbc1c05 / Withdraw 0xfbde797d) in THIS tx.
- *   - our-protocol      : a non-ERC4626 protocol action (currently Sky PSM) maps to our registered adapter.
- *   - unsupported-protocol: a named protocol event is real, but its emitter has no matching registered adapter.
- *   - token             : the emitter only logs token topics (ERC20 Transfer/Approval + WETH wrap/unwrap).
- *   - flashloan         : Balancer V2 Vault / Aave V3 Pool — arb FUNDING, not an arb leg (excluded from gaps).
- *   - unclassified-emitter: anything else. It is evidence to trace, NOT automatically a route gap; helper,
- *                           accounting and token-specific events commonly land here.
- *
- * A vault-share token that is merely Transferred in a swap is a TOKEN here, not a protocol leg — only an
- * actual ERC4626 Deposit/Withdraw emitted BY one of our vault addresses counts as `our-vault`.
+ * Per-transaction receipt evidence. Topic recognition says what happened; it does not by itself prove
+ * that the production listener can route the emitting venue. Swap routability is assessed separately
+ * against the listener's adapter descriptors and remains unassessed when receipt-only input cannot
+ * attest factory identity or routing-graph membership.
  */
 
-// ── SWAP topics (authoritative literals; broader than edge-kinds.ts SWAP_TOPICS on purpose) ──
-// Full 32-byte topic0s (derived via ethers.id, cross-checked against the operator-provided 4-byte prefixes).
-export const SUPPORTED_SWAP_TOPICS: ReadonlySet<string> = new Set(
+export type ObservedRole = "flashloan" | "protocol" | "swap" | "token" | "unclassified";
+
+export type ObservedSwapFamily =
+  | "balancer-v2"
+  | "curve"
+  | "dodo"
+  | "fluid"
+  | "pancake-v3"
+  | "univ2"
+  | "univ3"
+  | "univ4";
+
+export type ProductionRoutability = "routable" | "not_routable" | "unassessed";
+
+export type ProductionRoutabilityReason =
+  | "factory_or_routing_graph_not_attested"
+  | "no_adapter"
+  | "no_swap_adapter"
+  | "routing_attested";
+
+// Topic-to-family recognition is receipt evidence only. Production capability is derived below from
+// listener adapter descriptors, never from this map.
+export const OBSERVED_SWAP_TOPIC_FAMILIES: ReadonlyMap<string, ObservedSwapFamily> = new Map<
+  string,
+  ObservedSwapFamily
+>(
   [
-    TOPICS.univ2Swap, // 0xd78ad95f
-    "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1", // univ2 Sync(uint112,uint112) 0x1c411e9a
-    TOPICS.univ3Swap, // 0xc42079f9
-    TOPICS.pancakeV3Swap, // 0x19b47279
-    TOPICS.univ4Swap, // 0x40e9cecb (PoolManager singleton)
-    TOPICS.curveTokenExchange, // TokenExchange int128 variant 0x8b3e96f2
-    TOPICS.curveCryptoTokenExchange, // CryptoSwap/Tricrypto 7-argument variant 0x143f1f8e
-    "0xb2e76ae99761dc136e598d4a629bb347eccb9532a5f8bbd72e18467c3c34cc98", // curve TokenExchange(address,uint256,uint256,uint256,uint256) 0xb2e76ae9 — easy-to-miss uint256 variant
-    TOPICS.curveTokenExchangeUnderlying, // 0xd013ca23
-    TOPICS.balancerV2Swap, // 0x2170c741 — supported per edge-kinds.ts SWAP set
-    TOPICS.dodoSwap, // 0xc2c0245e — supported per edge-kinds.ts SWAP set
-    TOPICS.fluidDexSwap, // 0xdc004dbc — Fluid DEX T1 (receipt-verified 0x9be73297)
+    [lower(TOPICS.univ2Swap), "univ2"],
+    // Sync is retained as UniV2 venue evidence for compatibility with the broader coverage scan.
+    ["0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1", "univ2"],
+    [lower(TOPICS.univ3Swap), "univ3"],
+    [lower(TOPICS.pancakeV3Swap), "pancake-v3"],
+    [lower(TOPICS.univ4Swap), "univ4"],
+    [lower(TOPICS.curveTokenExchange), "curve"],
+    [lower(TOPICS.curveCryptoTokenExchange), "curve"],
+    ["0xb2e76ae99761dc136e598d4a629bb347eccb9532a5f8bbd72e18467c3c34cc98", "curve"],
+    [lower(TOPICS.curveTokenExchangeUnderlying), "curve"],
+    [lower(TOPICS.balancerV2Swap), "balancer-v2"],
+    [lower(TOPICS.dodoSwap), "dodo"],
+    [lower(TOPICS.fluidDexSwap), "fluid"],
+  ] as const,
+);
+
+// Curve router Exchange is an observed topic prefix whose full ABI variant is not available.
+const CURVE_ROUTER_EXCHANGE_PREFIX = "0x56d0661e";
+
+export const FLASHLOAN_EVENT_TOPICS: ReadonlySet<string> = new Set(
+  [
+    TOPICS.balancerV2FlashLoan,
+    TOPICS.morphoFlashLoan,
+    TOPICS.univ3Flash,
+    TOPICS.aaveV3FlashLoan,
   ].map(lower),
 );
 
-// Curve router Exchange — matched by the operator-provided 4-byte selector prefix 0x56d0661e (the full
-// 32-byte topic0 is not re-derivable from the router ABI variants we tried; prefix-match is authoritative
-// and safe here — no other supported/token/flashloan topic shares this prefix).
-const CURVE_ROUTER_EXCHANGE_PREFIX = "0x56d0661e";
-
-// ── ERC4626 protocol-leg event topics (a REAL protocol action, not a token move) ──
 export const ERC4626_EVENT_TOPICS: ReadonlySet<string> = new Set(
   [TOPICS.erc4626Deposit, TOPICS.erc4626Withdraw].map(lower),
 );
@@ -65,9 +73,9 @@ const PSM_EVENT_TOPICS: ReadonlySet<string> = new Set(
   [TOPICS.psmSellGem, TOPICS.psmBuyGem].map(lower),
 );
 
-/** Named protocol evidence is strong enough to say "unsupported protocol" when no adapter matches.
- *  Morpho Supply/Withdraw is intentionally absent: a vault may emit it internally and that does not make
- *  the transaction a credit/protocol leg we take (decision-log F-007/F-009). */
+/** Named protocol evidence is strong enough to report a protocol gap when no registered adapter matches.
+ * Morpho Supply/Withdraw is intentionally absent: a vault may emit it internally without making the
+ * transaction a credit/protocol leg we take (decision-log F-007/F-009). */
 const NAMED_PROTOCOL_EVENT_TOPICS: ReadonlySet<string> = new Set(
   [
     ...ERC4626_EVENT_TOPICS,
@@ -78,16 +86,12 @@ const NAMED_PROTOCOL_EVENT_TOPICS: ReadonlySet<string> = new Set(
   ].map(lower),
 );
 
-// ── Token-only topics (an emitter with ONLY these is a plain token, not a venue) ──
 export const TOKEN_TOPICS: ReadonlySet<string> = new Set(
-  [TOPICS.transfer, "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925", // Approval
-    TOPICS.wethDeposit, TOPICS.wethWithdrawal].map(lower),
-);
-
-// ── Flashloan funding venues (NOT arb legs — excluded from the gap set) ──
-export const FLASHLOAN_ADDRESSES: ReadonlySet<string> = new Set(
-  ["0xba12222222228d8ba445958a75a0704d566bf2c8", // Balancer V2 Vault
-    "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2", // Aave V3 Pool
+  [
+    TOPICS.transfer,
+    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+    TOPICS.wethDeposit,
+    TOPICS.wethWithdrawal,
   ].map(lower),
 );
 
@@ -103,63 +107,57 @@ export const OUR_VAULT_ADDRESSES: ReadonlySet<string> = new Set(
   POOL_REGISTRY.filter((entry) => entry.adapter === "erc4626").map((entry) => lower(entry.address)),
 );
 
-export type VenueClass =
-  | "supported-swap"
-  | "our-vault"
-  | "our-protocol"
-  | "unsupported-protocol"
-  | "token"
-  | "flashloan"
-  | "unclassified-emitter";
+const PRODUCTION_SWAP_LINEAGES: ReadonlySet<string> = new Set(
+  Object.values(ADAPTER_DESCRIPTORS)
+    .filter((descriptor) => descriptor.edgeKind === "swap" && descriptor.action === "swap")
+    .map((descriptor) => descriptor.lineage),
+);
 
-export interface ClassifiedVenue {
+export interface ObservedSwapVenue {
   addr: string;
-  klass: VenueClass;
+  family: ObservedSwapFamily;
+  topic0s: string[];
+  productionRoutability: ProductionRoutability;
+  reason: ProductionRoutabilityReason;
+  /** Bundle-postmortem-compatible graph fact: null means receipt-only evidence cannot assess identity. */
+  in_graph: boolean | null;
+}
+
+export interface ObservedVenue {
+  addr: string;
+  observedRoles: ObservedRole[];
+  observedSwapFamilies: ObservedSwapFamily[];
   topic0s: string[];
 }
 
+/** @deprecated Use ObservedVenue. The alias no longer exposes a scalar class. */
+export type ClassifiedVenue = ObservedVenue;
+
 export interface TxLoopCoverage {
   tx: string;
-  /** OUR vault addresses that emitted a real ERC4626 event in this tx. */
+  /** OUR vault addresses that emitted a real ERC4626 event in this transaction. */
   vaults: string[];
   /** All registered protocol venues evidenced in the receipt (includes vaults and PSM). */
   protocolVenues: string[];
-  /** count of distinct supported-swap venues touched. */
+  /** Distinct observed swap address/family pairs with an independent production assessment. */
+  observedSwapVenues: ObservedSwapVenue[];
+  /** Definitive production route gaps. Unassessed receipt-only venues are not gaps. */
+  swapRouteGaps: ObservedSwapVenue[];
+  /** @deprecated Use observedSwapVenues.length. */
   swapVenues: number;
   /** Named protocol events whose emitter has no matching registered adapter. */
   protocolVenueGaps: Array<{ addr: string; topic0: string }>;
-  /** Unknown emitters needing trace/call-order inspection; NOT automatically route gaps. */
+  /** Unknown emitters needing trace/call-order inspection; not automatically route gaps. */
   unclassifiedEmitters: Array<{ addr: string; topic0: string }>;
-  /** @deprecated compatibility alias for protocolVenueGaps. */
-  gapVenues: Array<{ addr: string; topic0: string }>;
   /** Receipt evidence maps every named protocol leg to an adapter. Still requires a trace. */
   protocolAdapterCandidate: boolean;
-  /** Strict legacy signal: no known protocol gap AND no unclassified emitter. Not proof of closure. */
+  /** @deprecated Conservative compatibility signal only; never proof of route closure or comparability. */
   fullyCovered: boolean;
   coverageScope: "receipt_log_emitters_only";
+  routabilityScope: "production_listener_descriptors_receipt_only";
   comparability: "requires_trace";
-  /** full per-venue classification (audit trail). */
-  venues: ClassifiedVenue[];
-}
-
-/** Classify one emitter given its distinct topic0s in this tx. */
-function classifyEmitter(addr: string, topic0s: string[]): VenueClass {
-  const set = new Set(topic0s);
-  const entry = REGISTERED_ENTRY_BY_ADDRESS.get(addr);
-  const adapter = entry?.adapter;
-  // Adapter support requires BOTH the registered target and evidence for that adapter's real action.
-  if (adapter === "erc4626" && topic0s.some((t) => ERC4626_EVENT_TOPICS.has(t))) return "our-vault";
-  if (entry?.fixedSlotKind === "protocol" && topic0s.some((t) => NAMED_PROTOCOL_EVENT_TOPICS.has(t))) {
-    return "our-protocol";
-  }
-  if (FLASHLOAN_ADDRESSES.has(addr)) return "flashloan";
-  if (topic0s.some((t) => SUPPORTED_SWAP_TOPICS.has(t) || t.startsWith(CURVE_ROUTER_EXCHANGE_PREFIX))) {
-    return "supported-swap";
-  }
-  if (topic0s.some((t) => NAMED_PROTOCOL_EVENT_TOPICS.has(t))) return "unsupported-protocol";
-  // A vault-share token merely Transferred, or any plain token, is token-only.
-  if (topic0s.length > 0 && [...set].every((t) => TOKEN_TOPICS.has(t))) return "token";
-  return "unclassified-emitter";
+  /** Full per-emitter role observation (audit trail). */
+  venues: ObservedVenue[];
 }
 
 export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
@@ -167,57 +165,147 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
   for (const log of input.receiptLogs) {
     const addr = lower(log.address);
     if (!addr) continue;
-    const t0 = topic0Of(log.topics);
-    if (!t0) continue;
-    const set = topicsByEmitter.get(addr);
-    if (set) set.add(t0);
-    else topicsByEmitter.set(addr, new Set([t0]));
+    const topic0 = topic0Of(log.topics);
+    if (!topic0) continue;
+    const topics = topicsByEmitter.get(addr);
+    if (topics) topics.add(topic0);
+    else topicsByEmitter.set(addr, new Set([topic0]));
   }
 
-  const venues: ClassifiedVenue[] = [];
+  const venues: ObservedVenue[] = [];
+  const observedSwapVenues: ObservedSwapVenue[] = [];
   const vaults: string[] = [];
   const protocolVenues: string[] = [];
   const protocolVenueGaps: Array<{ addr: string; topic0: string }> = [];
   const unclassifiedEmitters: Array<{ addr: string; topic0: string }> = [];
-  let swapVenues = 0;
 
   for (const [addr, topicSet] of topicsByEmitter) {
-    const topic0s = [...topicSet];
-    const klass = classifyEmitter(addr, topic0s);
-    venues.push({ addr, klass, topic0s });
-    if (klass === "our-vault") {
-      vaults.push(addr);
-      protocolVenues.push(addr);
-    } else if (klass === "our-protocol") protocolVenues.push(addr);
-    else if (klass === "supported-swap") swapVenues++;
-    else if (klass === "unsupported-protocol") {
-      protocolVenueGaps.push({
+    const topic0s = [...topicSet].sort();
+    const observedSwapFamilies = observedSwapFamiliesFor(topic0s);
+    const observedRoles = observedRolesFor(topic0s, observedSwapFamilies);
+    venues.push({ addr, observedRoles, observedSwapFamilies, topic0s });
+
+    for (const family of observedSwapFamilies) {
+      observedSwapVenues.push({
         addr,
-        topic0: topic0s.find((topic) => NAMED_PROTOCOL_EVENT_TOPICS.has(topic)) ?? "",
+        family,
+        topic0s: topic0s.filter((topic0) => observedSwapFamilyForTopic(topic0) === family),
+        ...assessProductionRoutability(family),
       });
-    } else if (klass === "unclassified-emitter") {
+    }
+
+    const namedProtocolTopic = topic0s.find((topic0) => NAMED_PROTOCOL_EVENT_TOPICS.has(topic0));
+    if (namedProtocolTopic) {
+      const entry = REGISTERED_ENTRY_BY_ADDRESS.get(addr);
+      if (hasRegisteredProtocolEvent(entry, topic0s)) {
+        protocolVenues.push(addr);
+        if (entry?.adapter === "erc4626") vaults.push(addr);
+      } else {
+        protocolVenueGaps.push({ addr, topic0: namedProtocolTopic });
+      }
+    }
+
+    if (observedRoles.length === 1 && observedRoles[0] === "unclassified") {
       unclassifiedEmitters.push({ addr, topic0: topic0s[0] ?? "" });
     }
   }
 
+  const sortedObservedSwaps = observedSwapVenues.sort(compareObservedSwaps);
+  const swapRouteGaps = sortedObservedSwaps.filter(
+    (venue) => venue.productionRoutability === "not_routable",
+  );
+  const hasUnassessedSwap = sortedObservedSwaps.some(
+    (venue) => venue.productionRoutability === "unassessed",
+  );
   const sortedProtocolGaps = protocolVenueGaps.sort((a, b) => a.addr.localeCompare(b.addr));
   const sortedUnclassified = unclassifiedEmitters.sort((a, b) => a.addr.localeCompare(b.addr));
-  const protocolAdapterCandidate = protocolVenues.length >= 1 && sortedProtocolGaps.length === 0;
+  const sortedProtocolVenues = protocolVenues.sort();
+  const protocolAdapterCandidate = sortedProtocolVenues.length >= 1 && sortedProtocolGaps.length === 0;
 
   return {
     tx: input.txHash ?? "",
     vaults: vaults.sort(),
-    protocolVenues: protocolVenues.sort(),
-    swapVenues,
+    protocolVenues: sortedProtocolVenues,
+    observedSwapVenues: sortedObservedSwaps,
+    swapRouteGaps,
+    swapVenues: sortedObservedSwaps.length,
     protocolVenueGaps: sortedProtocolGaps,
     unclassifiedEmitters: sortedUnclassified,
-    gapVenues: sortedProtocolGaps,
     protocolAdapterCandidate,
-    fullyCovered: protocolAdapterCandidate && sortedUnclassified.length === 0,
+    fullyCovered: protocolAdapterCandidate
+      && sortedProtocolGaps.length === 0
+      && sortedUnclassified.length === 0
+      && swapRouteGaps.length === 0
+      && !hasUnassessedSwap,
     coverageScope: "receipt_log_emitters_only",
+    routabilityScope: "production_listener_descriptors_receipt_only",
     comparability: "requires_trace",
     venues: venues.sort((a, b) => a.addr.localeCompare(b.addr)),
   };
+}
+
+function observedRolesFor(
+  topic0s: string[],
+  observedSwapFamilies: ObservedSwapFamily[],
+): ObservedRole[] {
+  const roles = new Set<ObservedRole>();
+  if (observedSwapFamilies.length > 0) roles.add("swap");
+  if (topic0s.some((topic0) => FLASHLOAN_EVENT_TOPICS.has(topic0))) roles.add("flashloan");
+  if (topic0s.some((topic0) => NAMED_PROTOCOL_EVENT_TOPICS.has(topic0))) roles.add("protocol");
+  if (topic0s.some((topic0) => TOKEN_TOPICS.has(topic0))) roles.add("token");
+  if (roles.size === 0) roles.add("unclassified");
+  return [...roles].sort();
+}
+
+function observedSwapFamiliesFor(topic0s: string[]): ObservedSwapFamily[] {
+  return [...new Set(topic0s.map(observedSwapFamilyForTopic).filter(isObservedSwapFamily))].sort();
+}
+
+function observedSwapFamilyForTopic(topic0: string): ObservedSwapFamily | null {
+  return OBSERVED_SWAP_TOPIC_FAMILIES.get(topic0)
+    ?? (topic0.startsWith(CURVE_ROUTER_EXCHANGE_PREFIX) ? "curve" : null);
+}
+
+function assessProductionRoutability(
+  family: ObservedSwapFamily,
+): Pick<ObservedSwapVenue, "productionRoutability" | "reason" | "in_graph"> {
+  const productionLineage = family === "pancake-v3"
+    ? "univ3"
+    : family === "fluid"
+      ? "fluid-dex"
+      : family;
+  if (!PRODUCTION_SWAP_LINEAGES.has(productionLineage)) {
+    return {
+      productionRoutability: "not_routable",
+      reason: family === "balancer-v2" ? "no_swap_adapter" : "no_adapter",
+      in_graph: false,
+    };
+  }
+  return {
+    productionRoutability: "unassessed",
+    reason: "factory_or_routing_graph_not_attested",
+    in_graph: null,
+  };
+}
+
+function hasRegisteredProtocolEvent(
+  entry: (typeof POOL_REGISTRY)[number] | undefined,
+  topic0s: string[],
+): boolean {
+  if (!entry) return false;
+  if (entry.adapter === "erc4626") {
+    return topic0s.some((topic0) => ERC4626_EVENT_TOPICS.has(topic0));
+  }
+  return entry.fixedSlotKind === "protocol"
+    && topic0s.some((topic0) => NAMED_PROTOCOL_EVENT_TOPICS.has(topic0));
+}
+
+function compareObservedSwaps(a: ObservedSwapVenue, b: ObservedSwapVenue): number {
+  return a.addr.localeCompare(b.addr) || a.family.localeCompare(b.family);
+}
+
+function isObservedSwapFamily(value: ObservedSwapFamily | null): value is ObservedSwapFamily {
+  return value !== null;
 }
 
 function topic0Of(topics: unknown): string {
