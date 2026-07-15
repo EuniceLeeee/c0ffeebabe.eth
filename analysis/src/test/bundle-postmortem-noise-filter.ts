@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
+import { actionsFromLogs } from "../actions/from-logs.js";
 import {
   buildVerdict,
   classifyWinnerStyle,
@@ -11,6 +12,7 @@ import {
   detectNonArbSignals,
   detectJitLiquidity,
   extractOtherVenues,
+  hasBeneficiaryWethUnwrapExit,
   isNonComparableWinnerStyle,
   loadGraphMembership,
   overlayNonArbStyle,
@@ -19,10 +21,28 @@ import {
   winnerMovedPriceBeyondPrestate,
   type WinnerStyle,
 } from "../cli/bundle-postmortem.js";
+import { valueDeltas } from "../pnl/arb-profit.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
 import type { TokenDelta } from "../types.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+interface ActualReceiptFixture {
+  transactionHash: string;
+  blockNumber: string;
+  from: string;
+  to: string;
+  status: string;
+  logs: Array<Record<string, unknown>>;
+}
+
+interface DisputedReceiptFixture {
+  susdsAtomicLoops: ActualReceiptFixture[];
+  externalMintNonComparable: ActualReceiptFixture[];
+}
+
+const COFFEE = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
+const COFFEE_EXECUTOR = "0xe08d97e151473a848c3d9ca3f323cb720472d015";
+const COMPETITOR_ACTORS = new Set([COFFEE, COFFEE_EXECUTOR]);
 // F-009 atomicity detector: a real inventory-rebalance receipt (0x9be73297: steakUSDC/steakUSDT
 // rebalance through private vault-wrappers) vs a clean atomic 4-leg AMM loop (0xf2de7499).
 const inventoryReceipt = JSON.parse(
@@ -34,10 +54,13 @@ const atomicReceipt = JSON.parse(
 const liquityMintReceipt = JSON.parse(
   readFileSync(join(FIXTURES, "coffee-20260704", "tx-2.json"), "utf8"),
 );
+const disputedReceipts = JSON.parse(
+  readFileSync(join(FIXTURES, "bundle-postmortem-disputed-receipts.json"), "utf8"),
+) as DisputedReceiptFixture;
 const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
-const inventoryImbalanceTokens = shareTokenImbalanceTokens(inventoryReceipt).sort();
-const atomicImbalanceTokens = shareTokenImbalanceTokens(atomicReceipt);
+const inventoryImbalanceTokens = shareTokenImbalanceTokens(inventoryReceipt, COMPETITOR_ACTORS).sort();
+const atomicImbalanceTokens = shareTokenImbalanceTokens(atomicReceipt, COMPETITOR_ACTORS);
 
 // FALSE-POSITIVE FIX (coffeebabe srUSDe loops 0xf391d0 / 0x2b84e28c): an atomic loop that BUYS a vault
 // share in-tx (from a swap venue) then REDEEMS it (burn to 0x0) shows a GLOBAL net BURN but the executor
@@ -70,12 +93,27 @@ const SHARE_AMT = 934n * 10n ** 18n;
 const atomicBuyRedeem = { logs: [v3SwapLog(SWAP_VENUE, 0), xfer(SHARE_TOK, SWAP_VENUE, EXEC_ACTOR, SHARE_AMT, 1), xfer(SHARE_TOK, EXEC_ACTOR, ethers.ZeroAddress, SHARE_AMT, 2), vaultWithdrawLog(SHARE_TOK, EXEC_ACTOR, SHARE_AMT, 3)] };
 // a non-venue helper burns a PRE-HELD share (no in-tx source) => still inventory.
 const preHeldBurn = { logs: [xfer(SHARE_TOK, INV_HELPER, ethers.ZeroAddress, SHARE_AMT, 0), vaultWithdrawLog(SHARE_TOK, INV_HELPER, SHARE_AMT, 1)] };
-const buyRedeemImbalance = shareTokenImbalanceTokens(atomicBuyRedeem);
-const preHeldBurnImbalance = shareTokenImbalanceTokens(preHeldBurn);
-const liquityMintImbalance = shareTokenImbalanceTokens({ logs: liquityMintReceipt.receiptLogs });
+const buyRedeemImbalance = shareTokenImbalanceTokens(atomicBuyRedeem, new Set([EXEC_ACTOR]));
+const preHeldBurnImbalance = shareTokenImbalanceTokens(preHeldBurn, new Set([INV_HELPER]));
+const liquityMintImbalance = shareTokenImbalanceTokens(
+  { logs: liquityMintReceipt.receiptLogs },
+  new Set([lower(liquityMintReceipt.tx.from), lower(liquityMintReceipt.tx.to)]),
+);
 const fluidOtherVenues = extractOtherVenues({
   logs: [{ address: ADDR.FLUID_DEX_USDC_USDT, topics: [TOPICS.fluidDexSwap] }],
 }, null);
+const susdsLoopAnalyses = disputedReceipts.susdsAtomicLoops.map(analyzeActualReceiptFixture);
+const externalMintAnalyses = disputedReceipts.externalMintNonComparable.map(analyzeActualReceiptFixture);
+const expectedExternalMintRecipients = new Map([
+  [
+    "0xe45fee762983a4f3eddf3395d32069778e5b7637df985c06a91635fe6f1812f5",
+    ["0x34cf4cdb502b8ff43943149224060c0de2ddff82"],
+  ],
+  [
+    "0x191b9eb5ea5f8d08e1c38a450950c1eba76ffb943086934f012e712e59661912",
+    ["0xe1f4b19806573681ee761776a5ff8a6dd04fcec5"],
+  ],
+]);
 
 const CFG = "0xcccccccccccccccccccccccccccccccccccccccc";
 const reach = {
@@ -302,6 +340,32 @@ const checks: Array<() => void> = [
     unpricedInTokensWithoutCounterTransfer: [],
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
+  }), "atomic_loop"),
+  // Dust is sign-symmetric and value-aware: either sign below one cent is ignored, while a
+  // material stablecoin drawdown still prevents a closed-loop verdict.
+  () => assert.equal(classifyWinnerStyle({
+    pricedDeltas: [delta(ADDR.SUSDS, 1_000_000_000_000n, "sUSDS", 18)],
+    unpricedDeltas: [],
+    nativeWeiPositive: true,
+    unpricedInTokensWithoutCounterTransfer: [],
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+  }), "atomic_loop"),
+  () => assert.equal(classifyWinnerStyle({
+    pricedDeltas: [delta(ADDR.SUSDS, -1_000_000_000_000n, "sUSDS", 18)],
+    unpricedDeltas: [],
+    nativeWeiPositive: true,
+    unpricedInTokensWithoutCounterTransfer: [],
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+  }), "atomic_loop"),
+  () => assert.equal(classifyWinnerStyle({
+    pricedDeltas: [delta(ADDR.SUSDS, -20_000_000_000_000_000n, "sUSDS", 18)],
+    unpricedDeltas: [],
+    nativeWeiPositive: true,
+    unpricedInTokensWithoutCounterTransfer: [],
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
   }), "unknown"),
   // Deliverable 3: native-ETH-funded one-leg inventory buy (ETH spent invisibly, bought token kept,
   // no counter-transfer) -> one_leg_inventory (was unknown: native-blind AND v4/v2 has no tick check).
@@ -346,6 +410,25 @@ const checks: Array<() => void> = [
     emitter: lower(ADDR.FLUID_DEX_USDC_USDT),
     in_graph: null,
   }]),
+
+  // Actual-receipt regressions: ten position-conserving sUSDS/ERC4626 loops carry only actor dust.
+  // Counterparty and settlement-address share nets must not become competitor inventory.
+  ...susdsLoopAnalyses.flatMap((analysis) => [
+    () => assert.equal(analysis.style, "atomic_loop", analysis.receipt.transactionHash),
+    () => assert.deepEqual(analysis.shareImbalanceTokens, [], analysis.receipt.transactionHash),
+    () => assert.deepEqual(analysis.signals.external_mint_recipients, [], analysis.receipt.transactionHash),
+  ]),
+  // Two independent token shapes prove the retained external-mint rule is generic: direct
+  // zero->recipient (GENI) and mint-to-token-then-settle-to-recipient both become non-comparable.
+  ...externalMintAnalyses.flatMap((analysis) => [
+    () => assert.equal(analysis.style, "one_leg_inventory", analysis.receipt.transactionHash),
+    () => assert.equal(isNonComparableWinnerStyle(analysis.style), true, analysis.receipt.transactionHash),
+    () => assert.deepEqual(
+      analysis.signals.external_mint_recipients,
+      expectedExternalMintRecipients.get(analysis.receipt.transactionHash),
+      analysis.receipt.transactionHash,
+    ),
+  ]),
 
   // F-009 atomicity / inventory-rebalance detector ---------------------------------------------
   // Layer 2 (robust receipt signal): 0x9be73297 leaves a residual position in BOTH vault-share
@@ -397,10 +480,37 @@ try {
   for (const check of checks) check();
   rmSync(graphFixtureDir, { recursive: true, force: true });
   console.log(`bundle-postmortem-noise-filter PASS (${checks.length}/${checks.length})`);
-  console.log("expected_transition: non-comparable winner (one_leg_inventory/sandwich/inventory_vault_rebalance) no longer triggers a false route_gap_decisive; a flash-wrapped vault-share inventory rebalance (0x9be73297, F-009) that reads as atomic on the executor axis is now flagged non-comparable via the receipt share mint/burn imbalance. verdict: fixed");
+  console.log("expected_transition: ten sUSDS/ERC4626 receipts inventory_vault_rebalance->atomic_loop with no vault-inventory signal; two externally retained mint receipts atomic_loop->one_leg_inventory with explicit recipients; private-helper control 0x9be73297 remains inventory_vault_rebalance. verdict: fixed");
 } catch (err) {
   console.error(`bundle-postmortem-noise-filter FAIL: ${(err as Error).message}`);
   process.exit(1);
+}
+
+function analyzeActualReceiptFixture(receipt: ActualReceiptFixture) {
+  const actors = new Set([lower(receipt.from), lower(receipt.to)]);
+  const rawDeltas = actionsFromLogs(receipt, [...actors]).rawDeltas;
+  const valued = valueDeltas(rawDeltas, 3500);
+  const shareImbalanceTokens = shareTokenImbalanceTokens(receipt, actors);
+  const signals = detectNonArbSignals(null, receipt, actors, null);
+  const base = classifyWinnerStyle({
+    pricedDeltas: valued.priced,
+    unpricedDeltas: valued.unpriced,
+    nativeWeiPositive: hasBeneficiaryWethUnwrapExit(receipt, actors),
+    nativeWeiNegative: false,
+    unpricedInTokensWithoutCounterTransfer: valued.unpriced
+      .filter((delta) => delta.raw > 0n)
+      .map((delta) => delta.token),
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+    share_imbalance_tokens: shareImbalanceTokens,
+    inventory_rebalance_selector_hit: false,
+  });
+  return {
+    receipt,
+    shareImbalanceTokens,
+    signals,
+    style: overlayNonArbStyle(base, signals),
+  };
 }
 
 function event(simulatedProfit: string, bid: string): Record<string, unknown> {

@@ -6,21 +6,46 @@ import {
   classifyWinnerStyle,
   detectNonArbSignals,
   extractOtherVenues,
+  hasBeneficiaryWethUnwrapExit,
   overlayNonArbStyle,
   shareTokenImbalanceTokens,
   type WinnerStyle,
 } from "./cli/bundle-postmortem.js";
 import { valueDeltas } from "./pnl/arb-profit.js";
 import { classifyTxShape, type RawLog } from "./pnl/tx-shape.js";
-import { ADDR, lower } from "./registry/protocols.js";
+import { ADDR, lower, tokenMeta } from "./registry/protocols.js";
 
 const COFFEE = "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671";
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "test", "fixtures");
 const COFFEE_FIXTURES = join(FIXTURES, "coffee-20260704");
 const HOLDOUT_FIXTURE = join(FIXTURES, "competitor-calibration-holdouts.json");
+const DISPUTED_RECEIPTS_FIXTURE = join(FIXTURES, "bundle-postmortem-disputed-receipts.json");
 const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
 const SCALE_KEEPER_TX = "0xd63fa66f8c9e6effeb6d17030c16d4003beceb75a1ee31e8b4e4dca62747c628";
+const COFFEE_EXECUTOR = "0xe08d97e151473a848c3d9ca3f323cb720472d015";
+const SUSDS_ATOMIC_LOOP_TXS = [
+  "0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8",
+  "0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4",
+  "0x9d5156cb01a7dfbcaed31ecb028132089d59517472901da130d95e5e4b3020be",
+  "0xf2130409bfe9636c5cb6e7b85c523b07a0e20c209508f43a6e375607da3a4527",
+  "0x17f767fda9db5e4ad7ddb325c9b125436f2262df8ed09e97cb497fe6f0e2ce7d",
+  "0x1c2999d6422e16cea36973416e16dd8e84410f7cf5adf78f5531f4d160d5eaf2",
+  "0x69075e9e45ed3840f6bf46c37552b62b66e5537aab1369475a57027750b68c70",
+  "0xa82dafbae5f82a016736fc35dea9ed8d9b154b8692b243d074d07c62f0738e85",
+  "0x8b56e5d54f3be0a13cfb6f837291c81c416ef79b4269927e4a1c2b1b6e9a8a63",
+  "0xba5a95362281d11b1b132c99c6cdc220d076da240e5741bf392a445a134c4a26",
+];
+const EXTERNAL_MINT_RECIPIENTS = new Map([
+  [
+    "0xe45fee762983a4f3eddf3395d32069778e5b7637df985c06a91635fe6f1812f5",
+    "0x34cf4cdb502b8ff43943149224060c0de2ddff82",
+  ],
+  [
+    "0x191b9eb5ea5f8d08e1c38a450950c1eba76ffb943086934f012e712e59661912",
+    "0xe1f4b19806573681ee761776a5ff8a6dd04fcec5",
+  ],
+]);
 
 interface TxInputFixture {
   hash: string;
@@ -48,9 +73,22 @@ interface HoldoutFixture {
   receiptLogs: RawLog[];
 }
 
+interface ActualReceiptFixture {
+  transactionHash: string;
+  from: string;
+  to: string;
+  logs: RawLog[];
+}
+
+interface DisputedReceiptFixture {
+  susdsAtomicLoops: ActualReceiptFixture[];
+  externalMintNonComparable: ActualReceiptFixture[];
+}
+
 export interface CompetitorCalibrationCheck {
   tx_hash: string;
-  axis: "source_shape" | "winner_style" | "vault_inventory_signal" | "venue_lineage" | "non_arb_signal";
+  axis: "source_shape" | "winner_style" | "vault_inventory_signal" | "venue_lineage"
+    | "non_arb_signal" | "external_mint_signal" | "token_metadata";
   expected: string;
   actual: string;
   pass: boolean;
@@ -94,7 +132,10 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     const tx4 = fixtures.find((fixture) => fixture.label === "4");
     if (!tx2 || !tx3 || !tx4) throw new Error("coffee fixtures #2/#3/#4 missing");
 
-    const tx2Signals = shareTokenImbalanceTokens({ logs: tx2.receiptLogs });
+    const tx2Signals = shareTokenImbalanceTokens(
+      { logs: tx2.receiptLogs },
+      new Set([lower(tx2.tx.from), lower(tx2.tx.to)]),
+    );
     checks.push(check(tx2.txHash, "vault_inventory_signal", "none", tx2Signals.join(",") || "none"));
     checks.push(check(tx3.txHash, "winner_style", "atomic_loop", offlineWinnerStyle(tx3)));
     checks.push(check(tx4.txHash, "winner_style", "atomic_loop", offlineWinnerStyle(tx4)));
@@ -102,7 +143,10 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     const inventoryReceipt = JSON.parse(
       readFileSync(join(FIXTURES, "postmortem-0x9be73297", "receipt.json"), "utf8"),
     );
-    const inventorySignals = shareTokenImbalanceTokens(inventoryReceipt).sort();
+    const inventorySignals = shareTokenImbalanceTokens(
+      inventoryReceipt,
+      new Set([lower(COFFEE), lower(COFFEE_EXECUTOR)]),
+    ).sort();
     const inventoryStyle = classifyWinnerStyle({
       pricedDeltas: [{ token: ADDR.WETH, symbol: "WETH", decimals: 18, raw: 1n }],
       unpricedDeltas: [],
@@ -135,6 +179,36 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
       "fluidDex",
       fluidLineages.join(",") || "none",
     ));
+
+    const disputedReceipts = loadDisputedReceipts();
+    for (const receipt of disputedReceipts.susdsAtomicLoops) {
+      const actual = offlineActualReceiptStyle(receipt);
+      checks.push(check(receipt.transactionHash, "winner_style", "atomic_loop", actual.style));
+      checks.push(check(
+        receipt.transactionHash,
+        "vault_inventory_signal",
+        "none",
+        actual.shareImbalanceTokens.join(",") || "none",
+      ));
+    }
+    for (const receipt of disputedReceipts.externalMintNonComparable) {
+      const actual = offlineActualReceiptStyle(receipt);
+      checks.push(check(receipt.transactionHash, "winner_style", "one_leg_inventory", actual.style));
+      checks.push(check(
+        receipt.transactionHash,
+        "external_mint_signal",
+        EXTERNAL_MINT_RECIPIENTS.get(receipt.transactionHash) ?? "missing_expected_recipient",
+        actual.externalMintRecipients.join(",") || "none",
+      ));
+    }
+    const usdsMeta = tokenMeta(ADDR.USDS);
+    checks.push(check(
+      ADDR.USDS,
+      "token_metadata",
+      "USDS/18/1",
+      `${usdsMeta.symbol}/${usdsMeta.decimals}/${usdsMeta.roughUsd ?? "unpriced"}`,
+    ));
+
     const keeperFixture = JSON.parse(
       readFileSync(join(FIXTURES, "postmortem-0xd63fa66f", "tx.json"), "utf8"),
     ) as TxInputFixture;
@@ -177,7 +251,7 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
   return {
     schema_version: 1,
     competitor: COFFEE,
-    fixture_set: "coffee-20260704 + postmortem-0x9be73297 + postmortem-0xd63fa66f + three manually-labelled holdouts",
+    fixture_set: "coffee-20260704 + disputed actual receipts + postmortem-0x9be73297 + postmortem-0xd63fa66f + three manually-labelled holdouts",
     checks,
     passed: checks.length - failed,
     failed,
@@ -190,12 +264,13 @@ function offlineHoldoutStyle(holdout: HoldoutFixture): {
   nonArbSignal: HoldoutFixture["expectedNonArbSignal"];
 } {
   const receipt = { logs: holdout.receiptLogs };
+  const actors = new Set([lower(holdout.tx.from), lower(holdout.tx.to)]);
   const rawDeltas = actionsFromLogs(receipt, [holdout.tx.from, holdout.tx.to]).rawDeltas;
   const valued = valueDeltas(rawDeltas, 1746.76);
   const nonArb = detectNonArbSignals(
     holdout.tx.input,
     receipt,
-    new Set([lower(holdout.tx.from), lower(holdout.tx.to)]),
+    actors,
     holdout.blockTimestamp,
   );
   const base = classifyWinnerStyle({
@@ -208,7 +283,7 @@ function offlineHoldoutStyle(holdout: HoldoutFixture): {
       .map((delta) => delta.token),
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
-    share_imbalance_tokens: shareTokenImbalanceTokens(receipt),
+    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   const nonArbSignal = nonArb.claim_selector_hit || nonArb.conserved_sink_cut
@@ -217,6 +292,36 @@ function offlineHoldoutStyle(holdout: HoldoutFixture): {
       ? "rfq"
       : "none";
   return { style: overlayNonArbStyle(base, nonArb), nonArbSignal };
+}
+
+function offlineActualReceiptStyle(receipt: ActualReceiptFixture): {
+  style: WinnerStyle;
+  shareImbalanceTokens: string[];
+  externalMintRecipients: string[];
+} {
+  const actors = new Set([lower(receipt.from), lower(receipt.to)]);
+  const rawDeltas = actionsFromLogs(receipt, [...actors]).rawDeltas;
+  const valued = valueDeltas(rawDeltas, 1746.76);
+  const shareImbalanceTokens = shareTokenImbalanceTokens(receipt, actors);
+  const nonArb = detectNonArbSignals(null, receipt, actors, null);
+  const base = classifyWinnerStyle({
+    pricedDeltas: valued.priced,
+    unpricedDeltas: valued.unpriced,
+    nativeWeiPositive: hasBeneficiaryWethUnwrapExit(receipt, actors),
+    nativeWeiNegative: false,
+    unpricedInTokensWithoutCounterTransfer: valued.unpriced
+      .filter((delta) => delta.raw > 0n)
+      .map((delta) => delta.token),
+    winner_moved_price_beyond_prestate: false,
+    sandwich_detected: false,
+    share_imbalance_tokens: shareImbalanceTokens,
+    inventory_rebalance_selector_hit: false,
+  });
+  return {
+    style: overlayNonArbStyle(base, nonArb),
+    shareImbalanceTokens,
+    externalMintRecipients: nonArb.external_mint_recipients,
+  };
 }
 
 function check(
@@ -229,24 +334,55 @@ function check(
 }
 
 function offlineWinnerStyle(fixture: CoffeeFixture): WinnerStyle {
+  const actors = new Set([lower(fixture.tx.from), lower(fixture.tx.to)]);
+  const receipt = { logs: fixture.receiptLogs };
   const rawDeltas = actionsFromLogs(
-    { logs: fixture.receiptLogs },
+    receipt,
     [fixture.tx.from, fixture.tx.to],
   ).rawDeltas;
   const valued = valueDeltas(rawDeltas, 1746.76);
   return classifyWinnerStyle({
     pricedDeltas: valued.priced,
     unpricedDeltas: valued.unpriced,
-    nativeWeiPositive: false,
+    nativeWeiPositive: hasBeneficiaryWethUnwrapExit(receipt, actors),
     nativeWeiNegative: false,
     unpricedInTokensWithoutCounterTransfer: valued.unpriced
       .filter((delta) => delta.raw > 0n)
       .map((delta) => delta.token),
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
-    share_imbalance_tokens: shareTokenImbalanceTokens({ logs: fixture.receiptLogs }),
+    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
+}
+
+function loadDisputedReceipts(): DisputedReceiptFixture {
+  const fixture = JSON.parse(readFileSync(DISPUTED_RECEIPTS_FIXTURE, "utf8")) as DisputedReceiptFixture;
+  if (!Array.isArray(fixture.susdsAtomicLoops)
+    || !Array.isArray(fixture.externalMintNonComparable)) {
+    throw new Error("disputed receipt fixture groups missing");
+  }
+  const actualLoops = fixture.susdsAtomicLoops.map((sample) => lower(sample.transactionHash)).sort();
+  const expectedLoops = SUSDS_ATOMIC_LOOP_TXS.map(lower).sort();
+  const actualExternal = fixture.externalMintNonComparable
+    .map((sample) => lower(sample.transactionHash))
+    .sort();
+  const expectedExternal = [...EXTERNAL_MINT_RECIPIENTS.keys()].map(lower).sort();
+  if (actualLoops.join(",") !== expectedLoops.join(",")) {
+    throw new Error("sUSDS disputed receipt hash set mismatch");
+  }
+  if (actualExternal.join(",") !== expectedExternal.join(",")) {
+    throw new Error("external-mint disputed receipt hash set mismatch");
+  }
+  for (const sample of [...fixture.susdsAtomicLoops, ...fixture.externalMintNonComparable]) {
+    if (lower(sample.from) !== lower(COFFEE)
+      || lower(sample.to) !== lower(COFFEE_EXECUTOR)
+      || !Array.isArray(sample.logs)
+      || sample.logs.length === 0) {
+      throw new Error(`invalid disputed receipt fixture ${sample.transactionHash}`);
+    }
+  }
+  return fixture;
 }
 
 function loadCoffeeFixtures(): CoffeeFixture[] {
