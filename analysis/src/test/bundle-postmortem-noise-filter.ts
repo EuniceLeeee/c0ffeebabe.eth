@@ -137,6 +137,8 @@ const SECOND_POSITION_ACCOUNT = "0x00000000000000000000000000000000000000e6";
 const SPLIT_MINT_RECIPIENT = "0x00000000000000000000000000000000000000e7";
 const LIQUITY_PROTOCOL_EMITTER = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
 const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
+const LIQUITY_INTEREST_ROUTER = "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1";
+const LIQUITY_STABILITY_POOL = "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b";
 const erc20If = new ethers.Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
 const erc4626If = new ethers.Interface([
   "event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)",
@@ -162,7 +164,16 @@ const vaultDepositLog = (vault: string, sender: string, owner: string, amount: b
 const liquityContextLog = (emitter: string, subject: string, li: number) => ({
   address: emitter,
   topics: [TOPICS.liquityBatchUpdated, ethers.zeroPadValue(subject, 32)],
-  data: "0x",
+  data: ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint8", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
+    [3, 0, 0, 0, 0, 0, 0],
+  ),
+  logIndex: "0x" + li.toString(16),
+});
+const liquityRewardsUpdateLog = (li: number) => ({
+  address: LIQUITY_STABILITY_POOL,
+  topics: [ethers.id("B_Updated(uint256,uint256)")],
+  data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [1, 0]),
   logIndex: "0x" + li.toString(16),
 });
 const SHARE_AMT = 934n * 10n ** 18n;
@@ -313,6 +324,33 @@ const unrelatedCanonicalBoldCoMintSignals = detectNonArbSignals(
       liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 0),
       xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 1),
       xfer(LIQUITY_BOLD, ethers.ZeroAddress, EXTERNAL_RECIPIENT, SHARE_AMT, 2),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const unrelatedKnownLiquityRecipientSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 0),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 1),
+      xfer(LIQUITY_BOLD, INV_HELPER, EXEC_ACTOR, SHARE_AMT, 2),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 3),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const malformedLiquityInterestSplitSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 0),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 1),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 2),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_STABILITY_POOL, SHARE_AMT, 3),
+      liquityRewardsUpdateLog(4),
     ],
   },
   new Set([EXEC_ACTOR]),
@@ -829,6 +867,16 @@ const checks: Array<() => void> = [
   () => assert.equal(unrelatedCanonicalBoldCoMintSignals.external_mint_protocol_context, null),
   () => assert.equal(
     overlayNonArbStyle("atomic_loop", unrelatedCanonicalBoldCoMintSignals),
+    "unknown",
+  ),
+  () => assert.equal(unrelatedKnownLiquityRecipientSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", unrelatedKnownLiquityRecipientSignals),
+    "unknown",
+  ),
+  () => assert.equal(malformedLiquityInterestSplitSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", malformedLiquityInterestSplitSignals),
     "unknown",
   ),
   // A real canonical sUSDS Deposit cannot bless unrelated retained USDS or an unmatched sUSDS mint.

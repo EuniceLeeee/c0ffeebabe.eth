@@ -82,12 +82,10 @@ const REGISTERED_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
 const UNKNOWN_TOKEN_DUST_RAW = 1000n;
 const LIQUITY_PROTOCOL_EMITTER = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
 const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
-// Canonical BOLD interest recipients observed alongside the deployment's BatchUpdated flow.
-// Unknown co-mint recipients remain diagnostic/unknown rather than inheriting Liquity context.
-const LIQUITY_BOLD_PROTOCOL_MINT_RECIPIENTS = new Set([
-  "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1",
-  "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b",
-]);
+const LIQUITY_INTEREST_ROUTER = "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1";
+const LIQUITY_STABILITY_POOL = "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b";
+const LIQUITY_STABILITY_POOL_B_UPDATED = lower(ethers.id("B_Updated(uint256,uint256)"));
+const LIQUITY_APPLY_BATCH_INTEREST_AND_FEE = 3n;
 const SUSDS_MINT_CONTEXT_TOKENS = new Set([lower(ADDR.USDS), lower(ADDR.SUSDS)]);
 
 export type WinnerStyle =
@@ -2135,15 +2133,51 @@ function hasGroundedLiquityBoldMint(
     if (lower(String(log?.address ?? "")) !== LIQUITY_PROTOCOL_EMITTER
       || lower(String(log?.topics?.[0] ?? "")) !== lower(TOPICS.liquityBatchUpdated)) continue;
     const subject = addressFromTopic(log?.topics?.[1]);
-    if (subject) operationSubjects.add(subject);
+    const operation = dataWord(log?.data, 0);
+    if (subject && operation === LIQUITY_APPLY_BATCH_INTEREST_AND_FEE) operationSubjects.add(subject);
   }
+  if (operationSubjects.size === 0) return false;
+
   const boldMints = zeroMintAmountsByRecipient(receipt, LIQUITY_BOLD);
   const retainedRecipients = evidence.recipientsByToken.get(LIQUITY_BOLD) ?? [];
-  return retainedRecipients.length > 0
-    && retainedRecipients.every((recipient) =>
-      LIQUITY_BOLD_PROTOCOL_MINT_RECIPIENTS.has(recipient))
-    && [...operationSubjects].some((subject) =>
-      isMaterialTokenAmount(LIQUITY_BOLD, boldMints.get(subject) ?? 0n));
+  if (retainedRecipients.length !== 2
+      || !retainedRecipients.includes(LIQUITY_INTEREST_ROUTER)
+      || !retainedRecipients.includes(LIQUITY_STABILITY_POOL)) return false;
+
+  const logs = receipt?.logs ?? [];
+  for (let index = 0; index + 3 < logs.length; index++) {
+    const batchMint = decodeTransfer(logs[index]);
+    const routerMint = decodeTransfer(logs[index + 1]);
+    const stabilityMint = decodeTransfer(logs[index + 2]);
+    const rewardsUpdate = logs[index + 3];
+    if (!isBoldMintTo(batchMint, operationSubjects)
+      || !isBoldMintTo(routerMint, new Set([LIQUITY_INTEREST_ROUTER]))
+      || !isBoldMintTo(stabilityMint, new Set([LIQUITY_STABILITY_POOL]))) continue;
+    if (lower(String(rewardsUpdate?.address ?? "")) !== LIQUITY_STABILITY_POOL
+      || lower(String(rewardsUpdate?.topics?.[0] ?? "")) !== LIQUITY_STABILITY_POOL_B_UPDATED) continue;
+
+    const routerAmount = routerMint!.amount;
+    const stabilityAmount = stabilityMint!.amount;
+    const totalInterest = routerAmount + stabilityAmount;
+    if (!isMaterialTokenAmount(LIQUITY_BOLD, batchMint!.amount)
+      || !isMaterialTokenAmount(LIQUITY_BOLD, totalInterest)
+      || stabilityAmount !== totalInterest * 75n / 100n) continue;
+    if (boldMints.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
+      || boldMints.get(LIQUITY_STABILITY_POOL) !== stabilityAmount) continue;
+    return true;
+  }
+  return false;
+}
+
+function isBoldMintTo(
+  transfer: ReturnType<typeof decodeTransfer>,
+  recipients: ReadonlySet<string>,
+): boolean {
+  return transfer !== null
+    && lower(transfer.token) === LIQUITY_BOLD
+    && lower(transfer.from) === ZERO_ADDRESS
+    && recipients.has(lower(transfer.to))
+    && transfer.amount > 0n;
 }
 
 function hasGroundedSusdsMintContext(
