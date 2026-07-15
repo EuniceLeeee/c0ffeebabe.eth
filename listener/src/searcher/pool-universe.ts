@@ -10,6 +10,7 @@ export const DEFAULT_POOL_UNIVERSE_PATH = resolve("searcher", "pools", "active-p
 export interface PoolUniverseEntry extends PoolEntry {
   token0?: string;
   token1?: string;
+  underlyingCoins?: string[];
   fee?: number;
   tickSpacing?: number;
   hooks?: string;
@@ -38,6 +39,7 @@ export interface PoolUniverseLoadOptions {
 const ADAPTERS = new Set<PoolEntry["adapter"]>([
   "curve",
   "curve-nr",
+  "curve-underlying",
   "univ3",
   "univ2",
   "univ4",
@@ -264,6 +266,7 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
     fixedSlotKind: parseFixedSlotKind(raw.fixedSlotKind, `${field}.fixedSlotKind`),
     token0: optionalAddress(raw.token0, `${field}.token0`),
     token1: optionalAddress(raw.token1, `${field}.token1`),
+    underlyingCoins: optionalAddressArray(raw.underlyingCoins, `${field}.underlyingCoins`),
     currency0: optionalCurrency(raw.currency0, `${field}.currency0`),
     currency1: optionalCurrency(raw.currency1, `${field}.currency1`),
     fee: numberField(raw.fee, `${field}.fee`),
@@ -299,24 +302,39 @@ function stringField(value: unknown, field: string): string | undefined {
 
 function venueIdField(value: unknown, field: string): VenueId | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || findVenueCapability(value) === null) {
-    throw new Error(`${field} must be a known venue id`);
+  if (typeof value !== "string") {
+    throw new Error(`${field} must be a registered venue id or unknown`);
   }
-  return value.toLowerCase() as VenueId;
+  const normalized = value.toLowerCase();
+  if (normalized !== "unknown" && findVenueCapability(normalized) === null) {
+    throw new Error(`${field} must be a registered venue id or unknown`);
+  }
+  return normalized as VenueId;
 }
 
 function identitySourceField(value: unknown, field: string): VenueIdentitySource | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (
     value !== "factory-call" &&
+    value !== "factory-call-provisional" &&
     value !== "factory-event" &&
     value !== "curve-metaregistry" &&
+    value !== "curve-metaregistry-underlying" &&
+    value !== "curve-underlying-provisional" &&
     value !== "v4-manager" &&
     value !== "seed"
   ) {
     throw new Error(`${field} has unsupported identity source ${String(value)}`);
   }
   return value;
+}
+
+function optionalAddressArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${field} must be an address array`);
+  const addresses = value.map((item, index) => checksumField(item, `${field}[${index}]`));
+  if (addresses.length < 2) throw new Error(`${field} must contain at least two addresses`);
+  return addresses;
 }
 
 function numberField(value: unknown, field: string): number | undefined {

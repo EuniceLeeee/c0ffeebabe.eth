@@ -1,4 +1,5 @@
 export type VenueId =
+  | "unknown"
   | "univ2"
   | "sushiswap-v2"
   | "univ3"
@@ -8,6 +9,7 @@ export type VenueId =
   | "univ4"
   | "curve"
   | "curve-nr"
+  | "goldx"
   | "psm"
   | "fluid"
   | "smardex"
@@ -24,7 +26,7 @@ export type VenueDiscovery =
 export interface VenueCapability {
   venue: VenueId;
   discovery: VenueDiscovery;
-  /** Explicit adapter choice for this exact factory lineage; absence means fail closed. */
+  /** Proven adapter for this factory lineage; provisional admission may retain the event-derived shape. */
   runtimeAdapter?: "univ2" | "univ3";
   discoverable: boolean;
   quotable: boolean;
@@ -106,6 +108,14 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   {
     venue: "curve",
     discovery: { mode: "custom" },
+    discoverable: true,
+    quotable: true,
+    buildable: true,
+    supported_in_prod: true,
+  },
+  {
+    venue: "goldx",
+    discovery: { mode: "seed", seeds: ["0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0"] },
     discoverable: true,
     quotable: true,
     buildable: true,

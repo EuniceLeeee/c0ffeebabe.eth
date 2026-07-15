@@ -103,6 +103,15 @@ export function makeProtocolAdapter(desc: ProtocolLegDescriptor): ActionAdapter 
 
 export const PROTOCOL_LEG_DESCRIPTORS: ProtocolLegDescriptor[] = [
   {
+    // Fully collateralized PAXG -> GOLDx conversion. The amount argument is
+    // PAXG input; GOLDx output is floor(amount * unit() / 1e18).
+    id: "goldx-mint",
+    signature: "mint(address,uint256)",
+    amountArg: 1,
+    executorArgs: [0],
+    needsApprove: true,
+  },
+  {
     id: "wsteth-wrap",
     signature: "wrap(uint256)",
     amountArg: 0,

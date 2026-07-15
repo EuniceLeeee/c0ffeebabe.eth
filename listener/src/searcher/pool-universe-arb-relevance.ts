@@ -2,6 +2,7 @@ export interface RankablePool {
   key: string;
   token0?: string;
   token1?: string;
+  tokens?: string[];
   count: number;
   lastSwapBlock: number;
 }
@@ -14,7 +15,7 @@ export interface ArbRelevanceConfig {
 // Returns the selected pools (<= maxPools), loop-completers first.
 export function selectArbRelevantPools<T extends RankablePool>(
   candidates: T[],
-  externalTokenPools: Iterable<{ token0?: string; token1?: string }>,
+  externalTokenPools: Iterable<{ token0?: string; token1?: string; tokens?: string[] }>,
   cfg: ArbRelevanceConfig,
 ): T[] {
   if (!cfg.enabled) {
@@ -35,7 +36,7 @@ export function selectArbRelevantPools<T extends RankablePool>(
 
 function buildTokenDegree(
   candidates: RankablePool[],
-  externalTokenPools: Iterable<{ token0?: string; token1?: string }>,
+  externalTokenPools: Iterable<{ token0?: string; token1?: string; tokens?: string[] }>,
 ): Map<string, number> {
   const degree = new Map<string, number>();
   const seenCandidates = new Set<string>();
@@ -55,18 +56,21 @@ function buildTokenDegree(
 
 function addPoolTokens(
   degree: Map<string, number>,
-  pool: { token0?: string; token1?: string },
+  pool: { token0?: string; token1?: string; tokens?: string[] },
 ): void {
   const tokens = new Set<string>();
   if (pool.token0) tokens.add(pool.token0.toLowerCase());
   if (pool.token1) tokens.add(pool.token1.toLowerCase());
+  for (const token of pool.tokens ?? []) tokens.add(token.toLowerCase());
   for (const token of tokens) {
     degree.set(token, (degree.get(token) ?? 0) + 1);
   }
 }
 
 function isLoopCompleter(pool: RankablePool, tokenDegree: Map<string, number>): boolean {
-  if (!pool.token0 || !pool.token1) return false;
-  return (tokenDegree.get(pool.token0.toLowerCase()) ?? 0) >= 2 &&
-    (tokenDegree.get(pool.token1.toLowerCase()) ?? 0) >= 2;
+  const tokens = new Set<string>();
+  if (pool.token0) tokens.add(pool.token0.toLowerCase());
+  if (pool.token1) tokens.add(pool.token1.toLowerCase());
+  for (const token of pool.tokens ?? []) tokens.add(token.toLowerCase());
+  return [...tokens].filter((token) => (tokenDegree.get(token) ?? 0) >= 2).length >= 2;
 }

@@ -31,6 +31,7 @@ const SWAP_ADAPTERS = [
   "curve-exchange",
   "curve-exchange-nr",
   "curve-exchange-plain",
+  "curve-exchange-underlying",
   "curve-exchange-received-uint",
 ];
 

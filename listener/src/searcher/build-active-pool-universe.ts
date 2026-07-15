@@ -7,8 +7,10 @@ import { selectArbRelevantPools, type RankablePool } from "./pool-universe-arb-r
 import { DEFAULT_POOL_UNIVERSE_PATH, type PoolUniverseEntry, type PoolUniverseFile } from "./pool-universe.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { resolvePoolIdentity } from "./venues/identity.js";
+import { resolveCurveUnderlyingMetadata } from "./venues/curve-underlying.js";
 
 const BLOCKS_PER_DAY = 7200;
+export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
 
 const SWAP_TOPICS: Array<{ topic: string; adapter: PoolEntry["adapter"]; label: string }> = [
   {
@@ -17,7 +19,7 @@ const SWAP_TOPICS: Array<{ topic: string; adapter: PoolEntry["adapter"]; label: 
     label: "univ3",
   },
   {
-    // The distinct topic only discovers candidates; factory identity still controls admission.
+    // The distinct topic only discovers a candidate shape; factory identity remains recorded.
     topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
     adapter: "univ3",
     label: "pancake-v3",
@@ -39,7 +41,7 @@ const SWAP_TOPICS: Array<{ topic: string; adapter: PoolEntry["adapter"]; label: 
   },
   {
     topic: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
-    adapter: "curve",
+    adapter: "curve-underlying",
     label: "curve-underlying",
   },
 ];
@@ -145,6 +147,7 @@ async function main(): Promise<void> {
   const provider = new ethers.JsonRpcProvider(rpcUrl);
 
   const latest = Number(process.env.POOL_UNIVERSE_TO_BLOCK ?? await provider.getBlockNumber());
+  const stateProvider = pinProviderCallsToBlock(provider, latest);
   const lookbackBlocks = Number(
     process.env.POOL_UNIVERSE_LOOKBACK_BLOCKS ??
       String(Number(process.env.POOL_UNIVERSE_LOOKBACK_DAYS ?? "30") * BLOCKS_PER_DAY),
@@ -154,7 +157,9 @@ async function main(): Promise<void> {
   // (loop-completers first), so a hard cap silently drops real venues whose tokens look low-degree
   // in isolation but DO close loops on-chain (e.g. coffee's low-volume pools). Set the env to re-cap.
   const maxPools = Number(process.env.POOL_UNIVERSE_MAX_POOLS ?? "0") || Infinity;
-  const minSwaps = Number(process.env.POOL_UNIVERSE_MIN_SWAPS ?? "2");
+  const minSwaps = Number(
+    process.env.POOL_UNIVERSE_MIN_SWAPS ?? String(DEFAULT_POOL_UNIVERSE_MIN_SWAPS),
+  );
   const logBatch = Number(process.env.POOL_UNIVERSE_LOG_BATCH ?? "1000");
   const metadataConcurrency = Number(process.env.POOL_UNIVERSE_METADATA_CONCURRENCY ?? "24");
   const arbRelevance = process.env.POOL_UNIVERSE_ARB_RELEVANCE !== "0";
@@ -197,7 +202,7 @@ async function main(): Promise<void> {
   for (let start = fromBlock; start <= latest; start += logBatch) {
     const end = Math.min(start + logBatch - 1, latest);
     v4InitLogs.push(...await getLogsWithSplitRetry(
-      provider,
+      stateProvider,
       V4_INITIALIZE_TOPIC,
       start,
       end,
@@ -217,7 +222,7 @@ async function main(): Promise<void> {
   }
   const v4Pools = await buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps, async (poolId) => {
     return resolveV4InitViaPositionManagerThenBackward(
-      provider,
+      stateProvider,
       ADDR.UNISWAP_V4_POSITION_MANAGER,
       ADDR.UNISWAP_V4_POOL_MANAGER,
       V4_INITIALIZE_TOPIC,
@@ -243,7 +248,7 @@ async function main(): Promise<void> {
     if ((idx + 1) % 250 === 0) {
       console.log(`[pool-universe] metadata ${idx + 1}/${poolsToEnrich.length}`);
     }
-    return enrichPool(provider, pool);
+    return enrichPool(stateProvider, pool);
   });
   const enrichedCandidates: EnrichedRankablePool[] = [];
   for (let i = 0; i < enriched.length; i++) {
@@ -254,6 +259,7 @@ async function main(): Promise<void> {
       key: activityPool.address.toLowerCase(),
       token0: pool.token0,
       token1: pool.token1,
+      tokens: pool.underlyingCoins,
       count: activityPool.count,
       lastSwapBlock: activityPool.lastSwapBlock,
       pool,
@@ -273,9 +279,10 @@ async function main(): Promise<void> {
   for (const pool of validPools) {
     if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
+    for (const token of pool.underlyingCoins ?? []) tokenSet.add(token.toLowerCase());
   }
   const discoveryQueuePath = resolve("searcher", "pools", "discovery-queue.json");
-  const { included, blocked } = await consumeDiscoveryQueue(provider, discoveryQueuePath, tokenSet);
+  const { included, blocked } = await consumeDiscoveryQueue(stateProvider, discoveryQueuePath, tokenSet);
   const poolByAddress = new Map<string, PoolUniverseEntry>();
   for (const pool of validPools) {
     poolByAddress.set(pool.address.toLowerCase(), pool);
@@ -301,6 +308,44 @@ async function main(): Promise<void> {
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, JSON.stringify(file, null, 2) + "\n");
   console.log(`[pool-universe] wrote ${file.pools.length} pools to ${outPath}`);
+}
+
+/**
+ * Keep metadata attestation on the same state block as the frozen log window.
+ * JsonRpcProvider.call() and the one raw eth_call path are both covered; all
+ * other methods stay bound to the original provider so its private fields are
+ * never invoked with the Proxy as `this`.
+ */
+export function pinProviderCallsToBlock(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+): ethers.JsonRpcProvider {
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+    throw new Error("pool-universe metadata block must be a non-negative safe integer");
+  }
+  const blockTag = ethers.toQuantity(blockNumber);
+  return new Proxy(provider, {
+    get(target, property) {
+      if (property === "call") {
+        return (request: ethers.TransactionRequest) => target.call({
+          ...request,
+          blockTag,
+        });
+      }
+      if (property === "send") {
+        return (method: string, params: unknown[]) => {
+          if (method === "eth_call") {
+            const pinned = [...params];
+            pinned[1] = blockTag;
+            return target.send(method, pinned);
+          }
+          return target.send(method, params);
+        };
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 async function getLogsWithSplitRetry(
@@ -582,7 +627,7 @@ function dedupeV4ByPoolId(pools: PoolUniverseEntry[]): PoolUniverseEntry[] {
   );
 }
 
-function v4TokenPool(pool: PoolUniverseEntry): { token0?: string; token1?: string } {
+function v4TokenPool(pool: PoolUniverseEntry): { token0?: string; token1?: string; tokens?: string[] } {
   return {
     token0: pool.token0 ?? pool.currency0,
     token1: pool.token1 ?? pool.currency1,
@@ -592,7 +637,7 @@ function v4TokenPool(pool: PoolUniverseEntry): { token0?: string; token1?: strin
 function countLoopCompleters(
   selected: EnrichedRankablePool[],
   candidates: EnrichedRankablePool[],
-  externalTokenPools: Array<{ token0?: string; token1?: string }>,
+  externalTokenPools: Array<{ token0?: string; token1?: string; tokens?: string[] }>,
 ): number {
   const tokenDegree = new Map<string, number>();
   const seenCandidates = new Set<string>();
@@ -606,24 +651,27 @@ function countLoopCompleters(
     addTokenDegree(tokenDegree, pool);
   }
 
-  return selected.filter((pool) =>
-    pool.token0 !== undefined &&
-    pool.token1 !== undefined &&
-    (tokenDegree.get(pool.token0.toLowerCase()) ?? 0) >= 2 &&
-    (tokenDegree.get(pool.token1.toLowerCase()) ?? 0) >= 2
-  ).length;
+  return selected.filter((pool) => {
+    const tokens = poolTokens(pool);
+    return tokens.filter((token) => (tokenDegree.get(token) ?? 0) >= 2).length >= 2;
+  }).length;
 }
 
 function addTokenDegree(
   tokenDegree: Map<string, number>,
-  pool: { token0?: string; token1?: string },
+  pool: { token0?: string; token1?: string; tokens?: string[] },
 ): void {
+  for (const token of poolTokens(pool)) {
+    tokenDegree.set(token, (tokenDegree.get(token) ?? 0) + 1);
+  }
+}
+
+function poolTokens(pool: { token0?: string; token1?: string; tokens?: string[] }): string[] {
   const tokens = new Set<string>();
   if (pool.token0) tokens.add(pool.token0.toLowerCase());
   if (pool.token1) tokens.add(pool.token1.toLowerCase());
-  for (const token of tokens) {
-    tokenDegree.set(token, (tokenDegree.get(token) ?? 0) + 1);
-  }
+  for (const token of pool.tokens ?? []) tokens.add(token.toLowerCase());
+  return [...tokens];
 }
 
 function normalizeBytes32Topic(value: string | undefined, field: string): string {
@@ -648,8 +696,30 @@ async function enrichPool(
   pool: PoolActivity,
 ): Promise<PoolUniverseEntry | null> {
   const adapterHint = bestAdapter(pool.adapterCounts);
+  if (adapterHint === "curve-underlying") {
+    const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
+      allowProvisionalCurveUnderlying: true,
+    });
+    if (!identity.ok) return null;
+    const metadata = await resolveCurveUnderlyingMetadata(provider, pool.address, {
+      allowDirectPoolFallback: true,
+    });
+    return {
+      address: pool.address,
+      adapter: "curve-underlying",
+      venueId: identity.venueId,
+      identitySource: identity.identitySource,
+      underlyingCoins: metadata.coins,
+      score: pool.count,
+      swapCount30d: pool.count,
+      lastSwapBlock: pool.lastSwapBlock,
+      source: "alchemy-swap-logs",
+    };
+  }
   if (adapterHint !== "univ2" && adapterHint !== "univ3" && adapterHint !== "curve") return null;
-  const identity = await resolvePoolIdentity(provider, pool.address, adapterHint);
+  const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
+    allowProvisionalFactories: true,
+  });
   if (!identity.ok) return null;
   const adapter = identity.adapter;
   const base: PoolUniverseEntry = {
@@ -696,7 +766,9 @@ async function probePoolShape(
   addr: string,
 ): Promise<ProbedPoolShape | null> {
   const address = ethers.getAddress(addr);
-  const identity = await resolvePoolIdentity(provider, address, "univ3");
+  const identity = await resolvePoolIdentity(provider, address, "univ3", {
+    allowProvisionalFactories: true,
+  });
   if (!identity.ok) return null;
   if (identity.adapter === "univ3") try {
     const [token0, token1, fee, tickSpacing] = await Promise.all([

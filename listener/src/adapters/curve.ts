@@ -18,6 +18,10 @@ const ifacePlainExchange = new ethers.Interface([
   "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)",
 ]);
 
+const ifaceExchangeUnderlying = new ethers.Interface([
+  "function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+]);
+
 const ifaceExecutePath = new ethers.Interface([
   "function executePath(bytes path, uint256[] amounts, address receiver)",
 ]);
@@ -111,6 +115,27 @@ export const curvePlainExchangeAdapter: ActionAdapter = {
 
   matchTrace(_target: string, selector: string) {
     return selector === "0x3df02124";
+  },
+};
+
+/** Curve exchange_underlying(int128,int128,uint256,uint256). */
+export const curveExchangeUnderlyingAdapter: ActionAdapter = {
+  id: "curve-exchange-underlying",
+  isWrapper: false,
+  field2Offset: null,
+
+  encode(node: ResolvedPlanNode, _executor: string, _inner: Uint8Array) {
+    const calldata = ifaceExchangeUnderlying.encodeFunctionData("exchange_underlying", [
+      node.params.i as bigint,
+      node.params.j as bigint,
+      node.amount,
+      node.params.minDy as bigint,
+    ]);
+    return encodeCall(node.target, ethers.getBytes(calldata));
+  },
+
+  matchTrace(_target: string, selector: string) {
+    return selector === "0xa6417ed6";
   },
 };
 

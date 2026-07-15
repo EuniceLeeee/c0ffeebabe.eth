@@ -183,6 +183,22 @@ async function buildEdgeNode(
   }
 
   switch (edge.adapterId) {
+    case "curve-exchange-underlying": {
+      ensureApprove(edge.tokenIn, edge.target);
+      if (edge.curveI === undefined || edge.curveJ === undefined) {
+        throw new Error(`curve-underlying edge ${edge.target} missing resolved indices`);
+      }
+      return {
+        adapterId: "curve-exchange-underlying",
+        target: edge.target,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amount: amtIn,
+        params: { i: BigInt(edge.curveI), j: BigInt(edge.curveJ), minDy: 0n },
+        children: [],
+      };
+    }
+
     case "metronome-hgusdc-exit":
       // The router starts with Curve exchange_received; it does not pull msUSD.
       // Pre-fund the exact Curve pool, matching the successful reference trace.

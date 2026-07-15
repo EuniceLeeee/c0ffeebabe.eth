@@ -3,6 +3,10 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
 import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
+import {
+  probeCurveUnderlyingQuote,
+  resolveCurveUnderlyingMetadata,
+} from "../venues/curve-underlying.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -51,10 +55,10 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626" | "metronome-synth" | "metronome-hgusdc";
+  adapter: "curve" | "curve-nr" | "curve-underlying" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626" | "goldx" | "metronome-synth" | "metronome-hgusdc";
   /** Contracts that emit the protocol action when execution goes through a different target. */
   receiptEmitters?: string[];
-  /** Dynamic venue identity proven before admission; event selectors alone never set this. */
+  /** Dynamic venue identity/provenance recorded before admission; may be explicitly provisional. */
   venueId?: VenueId;
   /** Factory returned by the pool, for factory-backed venues. */
   factory?: string;
@@ -63,6 +67,8 @@ export interface PoolEntry {
   /** Optional file-backed metadata for standard two-token pools. */
   token0?: string;
   token1?: string;
+  /** Complete token domain for Curve exchange_underlying pools. */
+  underlyingCoins?: string[];
   /** Optional v4 pool id from Initialize/Swap logs. address remains the PoolManager target. */
   poolId?: string;
   /** Uniswap v4 PoolKey fields. Required for univ4 entries. */
@@ -130,6 +136,17 @@ export function v4HooksAffectSwap(hooks: string): boolean {
 // DEX pools are discovered via scanActivePools / factory events.
 // Only protocol-specific contracts without standard factory go here.
 export const POOL_REGISTRY: PoolEntry[] = [
+  {
+    address: ADDR.GOLDX,
+    adapter: "goldx",
+    venueId: "goldx",
+    identitySource: "seed",
+    fixedTokenIn: ADDR.PAXG,
+    fixedTokenOut: ADDR.GOLDX,
+    fixedSlotKind: "protocol",
+    // GOLDx mint is fully collateralized PAXG conversion, not debt creation.
+    fixedProtocolAction: "convert",
+  },
   {
     address: ADDR.SKY_PSM_LITE,
     adapter: "psm",
@@ -244,6 +261,7 @@ const v4PoolKeyCache = new Map<string, V4PoolKey>();
 const ADAPTER_MAP: Record<string, string> = {
   "curve": "curve-exchange-plain",
   "curve-nr": "curve-exchange-nr",
+  "curve-underlying": "curve-exchange-underlying",
   "univ3": "univ3-swap",
   "univ2": "univ2-swap",
   "univ4": "univ4-unlock",
@@ -330,6 +348,27 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
             ...deriveEdgeTaxonomy("swap"),
           });
         }
+      }
+      break;
+    }
+    case "curve-underlying": {
+      const { coins } = await resolveCurveUnderlyingMetadata(backend, pool.address, {
+        allowDirectPoolFallback: true,
+      });
+      for (let i = 0; i < coins.length; i++) {
+        for (let j = 0; j < coins.length; j++) {
+          if (i === j) continue;
+          if (!await probeCurveUnderlyingQuote(backend, pool.address, i, j)) continue;
+          edges.push({
+            adapterId, target: pool.address,
+            tokenIn: coins[i], tokenOut: coins[j],
+            slotKind: "swap", curveI: i, curveJ: j,
+            ...deriveEdgeTaxonomy("swap"),
+          });
+        }
+      }
+      if (edges.length === 0) {
+        throw new Error(`curve-underlying pool ${pool.address} exposed no quotable directions`);
       }
       break;
     }
@@ -469,6 +508,21 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         slotKind: "protocol",
         protocolAction: "redeem",
         ...deriveEdgeTaxonomy("protocol", "redeem"),
+      });
+      break;
+    }
+    case "goldx": {
+      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
+        throw new Error(`goldx pool ${pool.address} missing fixed token metadata`);
+      }
+      edges.push({
+        adapterId: "goldx-mint",
+        target: pool.address,
+        tokenIn: ethers.getAddress(pool.fixedTokenIn),
+        tokenOut: ethers.getAddress(pool.fixedTokenOut),
+        slotKind: "protocol",
+        protocolAction: "convert",
+        ...deriveEdgeTaxonomy("protocol", "convert"),
       });
       break;
     }
@@ -724,6 +778,10 @@ export interface PathOpts {
   maxPoolsPerToken?: number;
   /** Pool addresses (lowercase) exempt from top-N truncation (e.g. the victim/affected pool). */
   pinnedPools?: Set<string>;
+  /** Treat pinned/code-owned edges as admission guarantees outside the scored pool budget. */
+  pinnedOutsideBudget?: boolean;
+  /** Rank direct edges to the requested profit token before unrelated high-score exits. */
+  preferDirectClosure?: boolean;
   /** Hard safety cap on total enumerated paths (prevents DFS blow-up / OOM). */
   maxPaths?: number;
   deadlineAtMs?: number;
@@ -747,6 +805,8 @@ export function buildTokenPaths(
   const maxHops = opts.maxHops ?? 8;
   const maxPoolsPerToken = opts.maxPoolsPerToken ?? Infinity;
   const pinnedPools = opts.pinnedPools;
+  const pinnedOutsideBudget = opts.pinnedOutsideBudget === true;
+  const preferDirectClosure = opts.preferDirectClosure === true;
   const maxPaths = opts.maxPaths ?? 20000;
   const deadlineAtMs = opts.deadlineAtMs;
 
@@ -768,8 +828,17 @@ export function buildTokenPaths(
       const pinned = arr.filter(isPinned);
       const rest = arr
         .filter((e) => !isPinned(e))
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-        .slice(0, Math.max(0, maxPoolsPerToken - pinned.length));
+        .sort((a, b) =>
+          Number(preferDirectClosure && b.tokenOut.toLowerCase() === profitToken.toLowerCase()) -
+            Number(preferDirectClosure && a.tokenOut.toLowerCase() === profitToken.toLowerCase()) ||
+          (b.score ?? 0) - (a.score ?? 0)
+        )
+        .slice(
+          0,
+          pinnedOutsideBudget
+            ? maxPoolsPerToken
+            : Math.max(0, maxPoolsPerToken - pinned.length),
+        );
       outByToken.set(k, [...pinned, ...rest]);
     }
   }
