@@ -92,7 +92,7 @@ if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown
   const onchain = await verifyOnchainProductionSample(
     experiment,
     requiredArg("--rpc"),
-    requiredArg("--universe"),
+    candidateUniverseArg("challenger"),
   );
   errors.push(...onchain.errors);
   onchainObservation = onchain.observation;
@@ -117,6 +117,16 @@ function requiredArg(name: string): string {
   const value = option(name);
   if (value === undefined || value.length === 0 || value.startsWith("--")) {
     throw new Error(`${name} is required for candidate phase`);
+  }
+  return value;
+}
+
+function candidateUniverseArg(role: "baseline" | "challenger"): string {
+  const roleSpecific = option(`--${role}-universe`);
+  const shared = option("--universe");
+  const value = roleSpecific ?? shared;
+  if (value === undefined || value.length === 0 || value.startsWith("--")) {
+    throw new Error(`--${role}-universe or --universe is required for candidate phase`);
   }
   return value;
 }
@@ -246,7 +256,8 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
   const baseRoot = fs.realpathSync(requiredArg("--base-root"));
   const challengerRoot = fs.realpathSync(requiredArg("--challenger-root"));
   const sample = experiment.production_evidence!.sample;
-  const universe = fs.realpathSync(requiredArg("--universe"));
+  const baselineUniverse = fs.realpathSync(candidateUniverseArg("baseline"));
+  const challengerUniverse = fs.realpathSync(candidateUniverseArg("challenger"));
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
   const expectedSwapPath = observation.arb_swap_path.map((step) => ({
     pool_id: step.pool_id.toLowerCase(),
@@ -256,11 +267,11 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
   if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
   const baseline = runHunt(
-    "baseline", baseRoot, 8568, universe, sample.block_number - 1,
+    "baseline", baseRoot, 8568, baselineUniverse, sample.block_number - 1,
     expectedPools, expectedSwapPath, expectedRoute, maxPools,
   );
   const challenger = runHunt(
-    "challenger", challengerRoot, 8569, universe, sample.block_number - 1,
+    "challenger", challengerRoot, 8569, challengerUniverse, sample.block_number - 1,
     expectedPools, expectedSwapPath, expectedRoute, maxPools,
   );
   validateHuntResult(
@@ -284,15 +295,16 @@ function runBackrunCandidateReplay(observation: ProductionSampleObservation): vo
   const baseRoot = fs.realpathSync(requiredArg("--base-root"));
   const challengerRoot = fs.realpathSync(requiredArg("--challenger-root"));
   const sample = experiment.production_evidence!.sample;
-  const universe = fs.realpathSync(requiredArg("--universe"));
+  const baselineUniverse = fs.realpathSync(candidateUniverseArg("baseline"));
+  const challengerUniverse = fs.realpathSync(candidateUniverseArg("challenger"));
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
   if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
   const baseline = runBackrunHunt(
-    "baseline", baseRoot, baseRoot, 8570, 8572, 8574, universe, expectedPools, maxPools,
+    "baseline", baseRoot, baseRoot, 8570, 8572, 8574, baselineUniverse, expectedPools, maxPools,
   );
   const challenger = runBackrunHunt(
-    "challenger", baseRoot, challengerRoot, 8571, 8573, 8575, universe, expectedPools, maxPools,
+    "challenger", baseRoot, challengerRoot, 8571, 8573, 8575, challengerUniverse, expectedPools, maxPools,
   );
   validateBackrunHuntResult(
     "baseline",

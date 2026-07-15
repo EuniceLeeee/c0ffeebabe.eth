@@ -102,6 +102,7 @@ doc = json.load(open(state)) if os.path.exists(state) else {"schema_version": 1}
 integer_keys = {
     "lease_until", "updated_at", "a_restarts_before", "a_restart_delta",
     "b_restarts", "a_pid_before", "a_pid_after", "b_pid_before", "champion_pid_changed",
+    "a_universe_from_block", "a_universe_to_block", "b_universe_from_block", "b_universe_to_block",
 }
 for i in range(0, len(pairs), 2):
     key, value = pairs[i:i + 2]
@@ -725,15 +726,9 @@ EOF
     A_UNIVERSE="$MAIN_REPO/listener/$a_pool_path"
   fi
   [ -f "$A_UNIVERSE" ] || die "champion pool universe missing: $A_UNIVERSE"
-  if [ "$input_mode" = "shared" ]; then
-    local snapshot="$ROOT/universe/$experiment-active-pools.json"
-    cp -f "$A_UNIVERSE" "$snapshot"
-    echo "SEARCHER_POOL_UNIVERSE_PATH=$snapshot" >> "$runtime_env"
-    B_UNIVERSE="$snapshot"
-  else
-    B_UNIVERSE="$WT/listener/searcher/pools/active-pools.json"
-    echo "SEARCHER_POOL_UNIVERSE_PATH=$B_UNIVERSE" >> "$runtime_env"
-  fi
+  [ -n "${B_UNIVERSE:-}" ] && [ -f "$B_UNIVERSE" ] \
+    || die "prepared challenger pool universe missing"
+  echo "SEARCHER_POOL_UNIVERSE_PATH=$B_UNIVERSE" >> "$runtime_env"
   python3 - "$a_common" "$runtime_env" <<'PY'
 import sys
 for path in sys.argv[1:]:
@@ -869,6 +864,57 @@ resolve_a_universe() {
   [ -f "$A_UNIVERSE" ] || die "champion pool universe missing: $A_UNIVERSE"
 }
 
+prepare_candidate_universes() {
+  local experiment=$1 input_mode=$2 from_block to_block generator_log universe_tmp universe_hash universe_snapshot
+  A_REPLAY_UNIVERSE="$ROOT/universe/$experiment-baseline-active-pools.json"
+  cp -f "$A_UNIVERSE" "$A_REPLAY_UNIVERSE"
+  [ "$(hash_file "$A_REPLAY_UNIVERSE")" = "$(hash_file "$A_UNIVERSE")" ] \
+    || die "could not freeze the champion replay universe"
+
+  if [ "$input_mode" = "shared" ]; then
+    B_UNIVERSE="$ROOT/universe/$experiment-challenger-active-pools.json"
+    cp -f "$A_UNIVERSE" "$B_UNIVERSE"
+    return
+  fi
+
+  from_block=$(jq -er '.fromBlock | select(type == "number" and floor == . and . >= 0)' "$A_UNIVERSE") \
+    || die "champion universe has invalid fromBlock"
+  to_block=$(jq -er '.toBlock | select(type == "number" and floor == . and . >= 0)' "$A_UNIVERSE") \
+    || die "champion universe has invalid toBlock"
+  [ "$from_block" -le "$to_block" ] || die "champion universe block window is inverted"
+  universe_tmp="$ROOT/universe/$experiment-challenger-active-pools.tmp.json"
+  generator_log="$ROOT/candidate/$experiment-universe-build.log"
+  rm -f "$universe_tmp"
+  (
+    cd "$WT/listener"
+    MAINNET_RPC_URL="$LOCAL_RPC" \
+    POOL_UNIVERSE_FROM_BLOCK="$from_block" \
+    POOL_UNIVERSE_TO_BLOCK="$to_block" \
+    POOL_UNIVERSE_OUT="$universe_tmp" \
+      timeout 900 npx tsx src/searcher/build-active-pool-universe.ts
+  ) >"$generator_log" 2>&1 \
+    || die "challenger universe generation failed (see $generator_log)"
+  [ -f "$universe_tmp" ] || die "challenger universe generator produced no file"
+  jq -e --argjson from "$from_block" --argjson to "$to_block" '
+    .schemaVersion == 2
+    and .fromBlock == $from
+    and .toBlock == $to
+    and (.pools | type == "array" and length > 0)
+  ' "$universe_tmp" >/dev/null \
+    || die "challenger universe does not preserve the champion block window"
+  universe_hash=$(hash_file "$universe_tmp")
+  [[ "$universe_hash" =~ ^[a-f0-9]{64}$ ]] || die "challenger universe hash is invalid"
+  universe_snapshot="$ROOT/universe/active-pools-$universe_hash.json"
+  if [ -f "$universe_snapshot" ]; then
+    [ "$(hash_file "$universe_snapshot")" = "$universe_hash" ] \
+      || die "existing challenger universe snapshot hash mismatch"
+    rm -f "$universe_tmp"
+  else
+    mv "$universe_tmp" "$universe_snapshot"
+  fi
+  B_UNIVERSE="$universe_snapshot"
+}
+
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
@@ -979,6 +1025,7 @@ deploy() {
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
   prepare_trusted_base "$a_commit"
+  prepare_candidate_universes "$experiment" "$requested_input_mode"
   run_preflight_safely
   local gate_a_pid gate_a_restarts gate_a_commit
   gate_a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
@@ -991,8 +1038,7 @@ deploy() {
   assert_port_free 8571
   assert_port_free 8572
   assert_port_free 8573
-  local replay_universe="$ROOT/universe/$experiment-replay-active-pools.json" replay_top_n
-  cp -f "$A_UNIVERSE" "$replay_universe"
+  local replay_top_n
   replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)
   replay_top_n=${replay_top_n:-6000}
   [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "champion SEARCHER_POOL_UNIVERSE_TOP_N is invalid"
@@ -1013,7 +1059,8 @@ deploy() {
     "${shakedown_arg[@]}" \
     --base-root "$TRUSTED_BASE" \
     --challenger-root "$WT" \
-    --universe "$replay_universe" \
+    --baseline-universe "$A_REPLAY_UNIVERSE" \
+    --challenger-universe "$B_UNIVERSE" \
     --pool-universe-top-n "$replay_top_n" \
     --rpc "$LOCAL_RPC") \
     >/tmp/mev-ab-candidate-gate.log 2>&1 \
@@ -1130,11 +1177,22 @@ deploy() {
     || safety_abort router_admission_paths_differ
   router_hash=$(hash_file "$a_router_path")
   [[ "$router_hash" =~ ^[0-9a-f]{64}$ ]] || safety_abort router_admission_hash_unavailable
-  local a_universe_hash b_universe_hash a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
+  local a_universe_hash b_universe_hash a_universe_from a_universe_to b_universe_from b_universe_to
+  local a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
   local a_feed_hash b_feed_hash
   local discovery_to_block
   a_universe_hash=$(hash_file "$A_UNIVERSE")
   b_universe_hash=$(hash_file "$B_UNIVERSE")
+  a_universe_from=$(jq -er '.fromBlock | select(type == "number" and floor == .)' "$A_UNIVERSE") \
+    || safety_abort champion_universe_window_unavailable
+  a_universe_to=$(jq -er '.toBlock | select(type == "number" and floor == .)' "$A_UNIVERSE") \
+    || safety_abort champion_universe_window_unavailable
+  b_universe_from=$(jq -er '.fromBlock | select(type == "number" and floor == .)' "$B_UNIVERSE") \
+    || safety_abort challenger_universe_window_unavailable
+  b_universe_to=$(jq -er '.toBlock | select(type == "number" and floor == .)' "$B_UNIVERSE") \
+    || safety_abort challenger_universe_window_unavailable
+  [ "$a_universe_from" = "$b_universe_from" ] && [ "$a_universe_to" = "$b_universe_to" ] \
+    || safety_abort universe_windows_differ
   a_log=$(unit_log_path "$A_UNIT" /var/log/mev-live.log)
   a_view_hash=$(current_generation_hash "$a_log" blockscan_view_hash)
   b_view_hash=$(current_generation_hash "$LOG" blockscan_view_hash)
@@ -1166,6 +1224,9 @@ deploy() {
     router_snapshot_path "$a_router_path" router_snapshot_hash "$router_hash" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
+    a_universe_from_block "$a_universe_from" a_universe_to_block "$a_universe_to" \
+    b_universe_from_block "$b_universe_from" b_universe_to_block "$b_universe_to" \
+    b_universe_generator_commit "$b_commit" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
     discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \

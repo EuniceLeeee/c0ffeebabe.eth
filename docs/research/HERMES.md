@@ -193,8 +193,13 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    router intake before the detector, this detector-to-sim harness is insufficient and a trusted intake
    harness is additionally required. Oracle causality is an independent trusted pre/post quote on the
    declared route edge, never a challenger detector's self-reported delta. Predeploy runs the trusted
-   unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the same universe,
-   champion `SEARCHER_POOL_UNIVERSE_TOP_N`, and on-chain identities. An exit-zero build/test or
+   unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the declared
+   universe inputs, champion `SEARCHER_POOL_UNIVERSE_TOP_N`, and on-chain identities. In `shared` input mode
+   both sides receive the same immutable champion snapshot. In `challenger` input mode A keeps that snapshot
+   while the trusted wrapper runs the frozen challenger indexer over exactly the champion snapshot's
+   `fromBlock..toBlock`, pins all metadata calls to `toBlock`, validates a non-empty schema/window, and gives B
+   the resulting content-addressed snapshot; the trusted replay must bind baseline to A and challenger to B.
+   A missing, empty, latest-state, or window-mismatched challenger universe fails before B starts. An exit-zero build/test or
    challenger-authored replay harness is not evidence. Push B. Two
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
    `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it

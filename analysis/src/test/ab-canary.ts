@@ -26,6 +26,26 @@ function log(totalBase: number, candidateOffset = 0): string {
   return lines.join("\n");
 }
 
+test("challenger universe mode prepares an immutable input before candidate replay", () => {
+  const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+  const repoRoot = path.resolve(analysisRoot, "..");
+  const wrapper = fs.readFileSync(path.join(repoRoot, "scripts/deploy-ab-challenger.sh"), "utf8");
+  const gate = fs.readFileSync(path.join(analysisRoot, "src/cli/ab-canary-gate.ts"), "utf8");
+
+  assert.doesNotMatch(wrapper, /B_UNIVERSE="\$WT\/listener\/searcher\/pools\/active-pools\.json"/);
+  assert.match(wrapper, /prepare_candidate_universes "\$experiment" "\$requested_input_mode"/);
+  assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
+  assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
+  assert.match(wrapper, /active-pools-\$universe_hash\.json/);
+  assert.match(wrapper, /--baseline-universe "\$A_REPLAY_UNIVERSE"/);
+  assert.match(wrapper, /--challenger-universe "\$B_UNIVERSE"/);
+
+  assert.match(gate, /candidateUniverseArg\("baseline"\)/);
+  assert.match(gate, /candidateUniverseArg\("challenger"\)/);
+  assert.match(gate, /"baseline", baseRoot, 8568, baselineUniverse/);
+  assert.match(gate, /"challenger", challengerRoot, 8569, challengerUniverse/);
+});
+
 test("paired comparator excludes warmup and detects a guarded performance win", () => {
   const result = compareBlockScanLogs(log(100), log(80), {
     metric: "total_ms",
