@@ -8,6 +8,7 @@ import {
   extractOtherVenues,
   hasBeneficiaryWethUnwrapExit,
   overlayNonArbStyle,
+  positionAccountImbalanceTokens,
   shareTokenImbalanceTokens,
   type WinnerStyle,
 } from "./cli/bundle-postmortem.js";
@@ -33,7 +34,7 @@ const LIQUITY_EXTERNAL_MINT_RECIPIENTS = [
   "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1",
   "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b",
 ];
-let liveCompetitorProfile: LiveCompetitorProfile | null = null;
+const liveCompetitorProfile: LiveCompetitorProfile = loadLiveCompetitorProfile();
 const SUSDS_ATOMIC_LOOP_TXS = [
   "0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8",
   "0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4",
@@ -56,6 +57,30 @@ const EXTERNAL_MINT_RECIPIENTS = new Map([
     "0xe1f4b19806573681ee761776a5ff8a6dd04fcec5",
   ],
 ]);
+const EXTERNAL_MINT_TOKENS = new Map([
+  [
+    "0xe45fee762983a4f3eddf3395d32069778e5b7637df985c06a91635fe6f1812f5",
+    "0x444444444444c1a66f394025ac839a535246fcc8",
+  ],
+  [
+    "0x191b9eb5ea5f8d08e1c38a450950c1eba76ffb943086934f012e712e59661912",
+    "0x5d2caad2b7f851dcb001e7d1156fdc3b4936666c",
+  ],
+]);
+const DISPUTED_RECEIPT_LOG_COUNTS = new Map([
+  ["0x17f767fda9db5e4ad7ddb325c9b125436f2262df8ed09e97cb497fe6f0e2ce7d", 68],
+  ["0x191b9eb5ea5f8d08e1c38a450950c1eba76ffb943086934f012e712e59661912", 90],
+  ["0x1c2999d6422e16cea36973416e16dd8e84410f7cf5adf78f5531f4d160d5eaf2", 40],
+  ["0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8", 50],
+  ["0x69075e9e45ed3840f6bf46c37552b62b66e5537aab1369475a57027750b68c70", 37],
+  ["0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4", 59],
+  ["0x8b56e5d54f3be0a13cfb6f837291c81c416ef79b4269927e4a1c2b1b6e9a8a63", 70],
+  ["0x9d5156cb01a7dfbcaed31ecb028132089d59517472901da130d95e5e4b3020be", 59],
+  ["0xa82dafbae5f82a016736fc35dea9ed8d9b154b8692b243d074d07c62f0738e85", 71],
+  ["0xba5a95362281d11b1b132c99c6cdc220d076da240e5741bf392a445a134c4a26", 74],
+  ["0xe45fee762983a4f3eddf3395d32069778e5b7637df985c06a91635fe6f1812f5", 23],
+  ["0xf2130409bfe9636c5cb6e7b85c523b07a0e20c209508f43a6e375607da3a4527", 30],
+]);
 
 interface TxInputFixture {
   hash: string;
@@ -67,6 +92,7 @@ interface CoffeeFixture {
   label: string;
   txHash: string;
   txIndex: number;
+  receiptStatus?: string;
   tx: { from: string; to: string };
   receiptLogs: RawLog[];
   sameBlockSwapLogs: RawLog[];
@@ -87,6 +113,7 @@ interface ActualReceiptFixture {
   transactionHash: string;
   from: string;
   to: string;
+  status: string;
   logs: RawLog[];
 }
 
@@ -98,7 +125,7 @@ interface DisputedReceiptFixture {
 export interface CompetitorCalibrationCheck {
   tx_hash: string;
   axis: "source_shape" | "winner_style" | "vault_inventory_signal" | "venue_lineage"
-    | "non_arb_signal" | "external_mint_signal" | "token_metadata";
+    | "non_arb_signal" | "external_mint_signal" | "receipt_integrity" | "token_metadata";
   expected: string;
   actual: string;
   pass: boolean;
@@ -142,9 +169,16 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     const tx4 = fixtures.find((fixture) => fixture.label === "4");
     if (!tx2 || !tx3 || !tx4) throw new Error("coffee fixtures #2/#3/#4 missing");
 
-    const tx2Signals = shareTokenImbalanceTokens(
+    const tx2LogHashes = new Set(tx2.receiptLogs.map((log) => lower(String(log.transactionHash ?? ""))));
+    checks.push(check(
+      tx2.txHash,
+      "receipt_integrity",
+      `0x1/21/${lower(tx2.txHash)}`,
+      `${tx2.receiptStatus}/${tx2.receiptLogs.length}/${[...tx2LogHashes].join(",")}`,
+    ));
+    const tx2Signals = inventoryImbalanceTokens(
       { logs: tx2.receiptLogs },
-      positionOwners(new Set([lower(tx2.tx.from), lower(tx2.tx.to)])),
+      new Set([lower(tx2.tx.from), lower(tx2.tx.to)]),
     );
     checks.push(check(tx2.txHash, "vault_inventory_signal", "none", tx2Signals.join(",") || "none"));
     checks.push(check(tx2.txHash, "winner_style", "atomic_loop", offlineWinnerStyle(tx2)));
@@ -166,9 +200,9 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     const inventoryReceipt = JSON.parse(
       readFileSync(join(FIXTURES, "postmortem-0x9be73297", "receipt.json"), "utf8"),
     );
-    const inventorySignals = shareTokenImbalanceTokens(
+    const inventorySignals = inventoryImbalanceTokens(
       inventoryReceipt,
-      positionOwners(new Set([lower(COFFEE), lower(COFFEE_EXECUTOR)])),
+      new Set([lower(COFFEE), lower(COFFEE_EXECUTOR)]),
     ).sort();
     const inventoryStyle = classifyWinnerStyle({
       pricedDeltas: [{ token: ADDR.WETH, symbol: "WETH", decimals: 18, raw: 1n }],
@@ -206,6 +240,12 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     const disputedReceipts = loadDisputedReceipts();
     for (const receipt of disputedReceipts.susdsAtomicLoops) {
       const actual = offlineActualReceiptStyle(receipt);
+      checks.push(check(
+        receipt.transactionHash,
+        "receipt_integrity",
+        `0x1/${DISPUTED_RECEIPT_LOG_COUNTS.get(receipt.transactionHash)}`,
+        `${receipt.status}/${receipt.logs.length}`,
+      ));
       checks.push(check(receipt.transactionHash, "winner_style", "atomic_loop", actual.style));
       checks.push(check(
         receipt.transactionHash,
@@ -216,12 +256,24 @@ export function runCompetitorCalibration(): CompetitorCalibrationResult {
     }
     for (const receipt of disputedReceipts.externalMintNonComparable) {
       const actual = offlineActualReceiptStyle(receipt);
+      checks.push(check(
+        receipt.transactionHash,
+        "receipt_integrity",
+        `0x1/${DISPUTED_RECEIPT_LOG_COUNTS.get(receipt.transactionHash)}`,
+        `${receipt.status}/${receipt.logs.length}`,
+      ));
       checks.push(check(receipt.transactionHash, "winner_style", "unknown", actual.style));
       checks.push(check(
         receipt.transactionHash,
         "external_mint_signal",
         EXTERNAL_MINT_RECIPIENTS.get(receipt.transactionHash) ?? "missing_expected_recipient",
         actual.externalMintRecipients.join(",") || "none",
+      ));
+      checks.push(check(
+        receipt.transactionHash,
+        "external_mint_signal",
+        EXTERNAL_MINT_TOKENS.get(receipt.transactionHash) ?? "missing_expected_token",
+        actual.externalMintTokens.join(",") || "none",
       ));
     }
     const usdsMeta = tokenMeta(ADDR.USDS);
@@ -306,7 +358,7 @@ function offlineHoldoutStyle(holdout: HoldoutFixture): {
       .map((delta) => delta.token),
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
-    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, positionOwners(actors)),
+    share_imbalance_tokens: inventoryImbalanceTokens(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   const nonArbSignal = nonArb.claim_selector_hit || nonArb.conserved_sink_cut
@@ -321,11 +373,12 @@ function offlineActualReceiptStyle(receipt: ActualReceiptFixture): {
   style: WinnerStyle;
   shareImbalanceTokens: string[];
   externalMintRecipients: string[];
+  externalMintTokens: string[];
 } {
   const actors = new Set([lower(receipt.from), lower(receipt.to)]);
   const rawDeltas = actionsFromLogs(receipt, [...actors]).rawDeltas;
   const valued = valueDeltas(rawDeltas, 1746.76);
-  const shareImbalanceTokens = shareTokenImbalanceTokens(receipt, positionOwners(actors));
+  const shareImbalanceTokens = inventoryImbalanceTokens(receipt, actors);
   const nonArb = detectNonArbSignals(null, receipt, actors, null);
   const base = classifyWinnerStyle({
     pricedDeltas: valued.priced,
@@ -344,6 +397,7 @@ function offlineActualReceiptStyle(receipt: ActualReceiptFixture): {
     style: overlayNonArbStyle(base, nonArb),
     shareImbalanceTokens,
     externalMintRecipients: nonArb.external_mint_recipients,
+    externalMintTokens: nonArb.external_mint_tokens,
   };
 }
 
@@ -374,18 +428,19 @@ function offlineWinnerStyle(fixture: CoffeeFixture): WinnerStyle {
       .map((delta) => delta.token),
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
-    share_imbalance_tokens: shareTokenImbalanceTokens(receipt, positionOwners(actors)),
+    share_imbalance_tokens: inventoryImbalanceTokens(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   return overlayNonArbStyle(base, detectNonArbSignals(null, receipt, actors, null));
 }
 
-function positionOwners(actors: Set<string>): Set<string> {
-  liveCompetitorProfile ??= loadLiveCompetitorProfile();
-  return new Set([
-    ...actors,
-    ...positionAccountsForActors(liveCompetitorProfile, actors),
-  ]);
+function inventoryImbalanceTokens(receipt: { logs: RawLog[] }, actors: Set<string>): string[] {
+  const positionAccounts = new Set(positionAccountsForActors(liveCompetitorProfile, actors));
+  const positionOwners = new Set([...actors, ...positionAccounts]);
+  return [...new Set([
+    ...shareTokenImbalanceTokens(receipt, positionOwners),
+    ...positionAccountImbalanceTokens(receipt, positionAccounts),
+  ])].sort();
 }
 
 function loadDisputedReceipts(): DisputedReceiptFixture {
@@ -407,10 +462,15 @@ function loadDisputedReceipts(): DisputedReceiptFixture {
     throw new Error("external-mint disputed receipt hash set mismatch");
   }
   for (const sample of [...fixture.susdsAtomicLoops, ...fixture.externalMintNonComparable]) {
+    const hash = lower(sample.transactionHash);
+    const logHashes = new Set(sample.logs.map((log) => lower(String(log.transactionHash ?? ""))));
     if (lower(sample.from) !== lower(COFFEE)
       || lower(sample.to) !== lower(COFFEE_EXECUTOR)
+      || sample.status !== "0x1"
       || !Array.isArray(sample.logs)
-      || sample.logs.length === 0) {
+      || sample.logs.length !== DISPUTED_RECEIPT_LOG_COUNTS.get(hash)
+      || logHashes.size !== 1
+      || !logHashes.has(hash)) {
       throw new Error(`invalid disputed receipt fixture ${sample.transactionHash}`);
     }
   }

@@ -3,6 +3,7 @@
   "txHash": "0x803a36936a1a58392bad9b47a90d1c7b4afe3da4a3cb61b6bab651b200727ba3",
   "block": 25455024,
   "txIndex": 201,
+  "receiptStatus": "0x1",
   "tx": {
     "from": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
     "to": "0xe08d97e151473a848c3d9ca3f323cb720472d015",

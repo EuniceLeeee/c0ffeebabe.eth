@@ -262,6 +262,7 @@ async function main(): Promise<void> {
         transactionIndex: Number(hexToBigInt(receipt?.transactionIndex ?? tx?.transactionIndex)),
         blockNumber,
         prestateBlock: Math.max(blockNumber - 1, 0),
+        competitorProfile: watchProfile,
       });
       perTx.push({
         hash,

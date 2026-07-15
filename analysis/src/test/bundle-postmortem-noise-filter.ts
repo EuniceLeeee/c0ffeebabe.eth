@@ -7,6 +7,7 @@ import { ethers } from "ethers";
 import { actionsFromLogs } from "../actions/from-logs.js";
 import {
   buildVerdict,
+  classifyWinnerTxStyle,
   classifyWinnerStyle,
   decodeV4SwapFills,
   detectNonArbSignals,
@@ -16,6 +17,7 @@ import {
   isNonComparableWinnerStyle,
   loadGraphMembership,
   overlayNonArbStyle,
+  positionAccountImbalanceTokens,
   realizedProfitUsdForReport,
   retainedExternalMintRecipients,
   shareTokenImbalanceTokens,
@@ -26,9 +28,11 @@ import {
   competitorScanAddresses,
   loadLiveCompetitorProfile,
   positionAccountsForActors,
+  type LiveCompetitorProfile,
 } from "../live-competitors.js";
 import { valueDeltas } from "../pnl/arb-profit.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
+import type { RpcClient } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -51,6 +55,7 @@ const COFFEE_EXECUTOR = "0xe08d97e151473a848c3d9ca3f323cb720472d015";
 const COMPETITOR_ACTORS = new Set([COFFEE, COFFEE_EXECUTOR]);
 const liveCompetitorProfile = loadLiveCompetitorProfile();
 const coffeePositionAccounts = positionAccountsForActors(liveCompetitorProfile, COMPETITOR_ACTORS);
+const coffeePositionAccountSet = new Set(coffeePositionAccounts);
 const COMPETITOR_POSITION_OWNERS = new Set([...COMPETITOR_ACTORS, ...coffeePositionAccounts]);
 const competitorScanAddressSet = new Set(competitorScanAddresses(liveCompetitorProfile));
 // F-009 atomicity detector: a real inventory-rebalance receipt (0x9be73297: steakUSDC/steakUSDT
@@ -67,10 +72,50 @@ const liquityMintReceipt = JSON.parse(
 const disputedReceipts = JSON.parse(
   readFileSync(join(FIXTURES, "bundle-postmortem-disputed-receipts.json"), "utf8"),
 ) as DisputedReceiptFixture;
+const EXPECTED_SUSDS_RECEIPT_HASHES = [
+  "0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8",
+  "0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4",
+  "0x9d5156cb01a7dfbcaed31ecb028132089d59517472901da130d95e5e4b3020be",
+  "0xf2130409bfe9636c5cb6e7b85c523b07a0e20c209508f43a6e375607da3a4527",
+  "0x17f767fda9db5e4ad7ddb325c9b125436f2262df8ed09e97cb497fe6f0e2ce7d",
+  "0x1c2999d6422e16cea36973416e16dd8e84410f7cf5adf78f5531f4d160d5eaf2",
+  "0x69075e9e45ed3840f6bf46c37552b62b66e5537aab1369475a57027750b68c70",
+  "0xa82dafbae5f82a016736fc35dea9ed8d9b154b8692b243d074d07c62f0738e85",
+  "0x8b56e5d54f3be0a13cfb6f837291c81c416ef79b4269927e4a1c2b1b6e9a8a63",
+  "0xba5a95362281d11b1b132c99c6cdc220d076da240e5741bf392a445a134c4a26",
+];
+const EXPECTED_EXTERNAL_MINT_RECEIPT_HASHES = [
+  "0xe45fee762983a4f3eddf3395d32069778e5b7637df985c06a91635fe6f1812f5",
+  "0x191b9eb5ea5f8d08e1c38a450950c1eba76ffb943086934f012e712e59661912",
+];
+const EXPECTED_DISPUTED_LOG_COUNTS = new Map<string, number>([
+  ["0x17f767fda9db5e4ad7ddb325c9b125436f2262df8ed09e97cb497fe6f0e2ce7d", 68],
+  ["0x191b9eb5ea5f8d08e1c38a450950c1eba76ffb943086934f012e712e59661912", 90],
+  ["0x1c2999d6422e16cea36973416e16dd8e84410f7cf5adf78f5531f4d160d5eaf2", 40],
+  ["0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8", 50],
+  ["0x69075e9e45ed3840f6bf46c37552b62b66e5537aab1369475a57027750b68c70", 37],
+  ["0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4", 59],
+  ["0x8b56e5d54f3be0a13cfb6f837291c81c416ef79b4269927e4a1c2b1b6e9a8a63", 70],
+  ["0x9d5156cb01a7dfbcaed31ecb028132089d59517472901da130d95e5e4b3020be", 59],
+  ["0xa82dafbae5f82a016736fc35dea9ed8d9b154b8692b243d074d07c62f0738e85", 71],
+  ["0xba5a95362281d11b1b132c99c6cdc220d076da240e5741bf392a445a134c4a26", 74],
+  ["0xe45fee762983a4f3eddf3395d32069778e5b7637df985c06a91635fe6f1812f5", 23],
+  ["0xf2130409bfe9636c5cb6e7b85c523b07a0e20c209508f43a6e375607da3a4527", 30],
+]);
+const allDisputedReceipts = [
+  ...disputedReceipts.susdsAtomicLoops,
+  ...disputedReceipts.externalMintNonComparable,
+];
 const STEAK_USDT = "0xbeef047a543e45807105e51a8bbefcc5950fcfba";
 const STEAK_USDC = "0xbeef01735c132ada46aa9aa4c54623caa92a64cb";
-const inventoryImbalanceTokens = shareTokenImbalanceTokens(inventoryReceipt, COMPETITOR_POSITION_OWNERS).sort();
-const atomicImbalanceTokens = shareTokenImbalanceTokens(atomicReceipt, COMPETITOR_POSITION_OWNERS);
+const inventoryImbalanceTokens = [...new Set([
+  ...shareTokenImbalanceTokens(inventoryReceipt, COMPETITOR_POSITION_OWNERS),
+  ...positionAccountImbalanceTokens(inventoryReceipt, coffeePositionAccountSet),
+])].sort();
+const atomicImbalanceTokens = [...new Set([
+  ...shareTokenImbalanceTokens(atomicReceipt, COMPETITOR_POSITION_OWNERS),
+  ...positionAccountImbalanceTokens(atomicReceipt, coffeePositionAccountSet),
+])].sort();
 
 // FALSE-POSITIVE FIX (coffeebabe srUSDe loops 0xf391d0 / 0x2b84e28c): an atomic loop that BUYS a vault
 // share in-tx (from a swap venue) then REDEEMS it (burn to 0x0) shows a GLOBAL net BURN but the executor
@@ -134,6 +179,46 @@ const nestedPublicWrapperImbalance = shareTokenImbalanceTokens(
   nestedPublicWrapper,
   new Set([EXEC_ACTOR]),
 );
+const transferOnlyPositionDrawdown = {
+  logs: [xfer(SHARE_TOK, INV_HELPER, EXTERNAL_RECIPIENT, SHARE_AMT, 0)],
+};
+const transientPositionFlow = {
+  logs: [
+    xfer(SHARE_TOK, EXTERNAL_RECIPIENT, INV_HELPER, SHARE_AMT, 0),
+    xfer(SHARE_TOK, INV_HELPER, EXTERNAL_RECIPIENT, SHARE_AMT, 1),
+  ],
+};
+const transferOnlyPositionImbalance = positionAccountImbalanceTokens(
+  transferOnlyPositionDrawdown,
+  new Set([INV_HELPER]),
+);
+const transientPositionImbalance = positionAccountImbalanceTokens(
+  transientPositionFlow,
+  new Set([INV_HELPER]),
+);
+const registeredUsdsMintSignals = detectNonArbSignals(
+  null,
+  { logs: [xfer(ADDR.USDS, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 10n ** 18n, 0)] },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const unrelatedVaultShareMintSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(SHARE_TOK, ethers.ZeroAddress, EXTERNAL_RECIPIENT, SHARE_AMT, 0),
+      vaultDepositLog(SHARE_TOK, EXEC_ACTOR, EXTERNAL_RECIPIENT, SHARE_AMT, 1),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const nestedPublicWrapperSignals = detectNonArbSignals(
+  null,
+  nestedPublicWrapper,
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const unknownExternalMintDustRecipients = retainedExternalMintRecipients(
   { logs: [xfer(UNKNOWN_TOKEN_CASES[0].token, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 1000n, 0)] },
   new Set([EXEC_ACTOR]),
@@ -154,6 +239,37 @@ const unrelatedLiquityCoMintSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const CUSTOM_EOA = "0x00000000000000000000000000000000000000f1";
+const CUSTOM_EXECUTOR = "0x00000000000000000000000000000000000000f2";
+const CUSTOM_POSITION_ACCOUNT = "0x00000000000000000000000000000000000000f3";
+const customProfile = {
+  schema_version: 1,
+  profile_id: "custom-position-profile",
+  entities: [{
+    id: "custom",
+    eoa: CUSTOM_EOA,
+    executors: [CUSTOM_EXECUTOR],
+    position_accounts: [CUSTOM_POSITION_ACCOUNT],
+    analysis_mode: "full",
+  }],
+} satisfies LiveCompetitorProfile;
+const customProfileFixtureDir = mkdtempSync(join(tmpdir(), "bundle-postmortem-profile-"));
+const customProfilePath = join(customProfileFixtureDir, "live-competitors.json");
+writeFileSync(customProfilePath, JSON.stringify(customProfile));
+const loadedCustomProfile = loadLiveCompetitorProfile(customProfilePath);
+const customProfileReceipt = {
+  from: CUSTOM_EOA,
+  to: CUSTOM_EXECUTOR,
+  logs: [xfer(SHARE_TOK, CUSTOM_POSITION_ACCOUNT, EXTERNAL_RECIPIENT, SHARE_AMT, 0)],
+};
+const classifierRpc = {
+  async getLogs() { return []; },
+  async getTransaction() { return null; },
+  async call() { throw new Error("not needed by fixture"); },
+  async traceTransaction() { throw new Error("not needed by fixture"); },
+} as unknown as RpcClient;
+const customProfileClassification = classifyTransferOnlyPosition(loadedCustomProfile);
+const noProfileClassification = classifyTransferOnlyPosition();
 const liquityMintImbalance = shareTokenImbalanceTokens(
   { logs: liquityMintReceipt.receiptLogs },
   COMPETITOR_POSITION_OWNERS,
@@ -163,7 +279,7 @@ const liquityMintAnalysis = analyzeActualReceiptFixture({
   blockNumber: "0x0",
   from: liquityMintReceipt.tx.from,
   to: liquityMintReceipt.tx.to,
-  status: "0x1",
+  status: liquityMintReceipt.receiptStatus,
   logs: liquityMintReceipt.receiptLogs,
 });
 const fluidOtherVenues = extractOtherVenues({
@@ -503,14 +619,29 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(buyRedeemImbalance, []),
   // ...but a genuine pre-held burn (non-venue helper -> 0x0, no in-tx source) still flags.
   () => assert.deepEqual(preHeldBurnImbalance, [lower(SHARE_TOK)]),
+  // Explicit entity position accounts are ledger-owned: a transfer-only drawdown is inventory even
+  // without an ERC4626 event, while equal in/out transit closes to zero.
+  () => assert.deepEqual(transferOnlyPositionImbalance, [lower(SHARE_TOK)]),
+  () => assert.deepEqual(transientPositionImbalance, []),
   // Nested public-wrapper backing is protocol inventory, not competitor inventory. The actor's
   // own wrapper position closes to zero, and no undeclared wrapper account may be inferred as owned.
+  // Its ungrounded retained backing mint is conservatively unknown, never competitor inventory.
   () => assert.deepEqual(nestedPublicWrapperImbalance, []),
+  () => assert.equal(overlayNonArbStyle("atomic_loop", nestedPublicWrapperSignals), "unknown"),
   // The same unknown-token fallback feeds external-mint detection: boundary dust is ignored, but
   // a modest retained mint is material for every hypothetical decimal shape above.
   () => assert.deepEqual(unknownExternalMintDustRecipients, []),
   ...unknownExternalMintMaterialRecipients.map((recipients) =>
     () => assert.deepEqual(recipients, [lower(EXTERNAL_RECIPIENT)])),
+  // Registered tokens and ERC4626 shares are equally capable of making closure ambiguous.
+  () => assert.deepEqual(registeredUsdsMintSignals.external_mint_tokens, [lower(ADDR.USDS)]),
+  () => assert.deepEqual(registeredUsdsMintSignals.external_mint_unknown_tokens, []),
+  () => assert.equal(registeredUsdsMintSignals.external_mint_protocol_context, null),
+  () => assert.equal(overlayNonArbStyle("atomic_loop", registeredUsdsMintSignals), "unknown"),
+  () => assert.deepEqual(unrelatedVaultShareMintSignals.external_mint_tokens, [lower(SHARE_TOK)]),
+  () => assert.deepEqual(unrelatedVaultShareMintSignals.external_mint_recipients, [lower(EXTERNAL_RECIPIENT)]),
+  () => assert.equal(unrelatedVaultShareMintSignals.external_mint_protocol_context, null),
+  () => assert.equal(overlayNonArbStyle("atomic_loop", unrelatedVaultShareMintSignals), "unknown"),
   // A coincidental Liquity event does not bless an unrelated unknown-token co-mint as closed.
   () => assert.equal(unrelatedLiquityCoMintSignals.external_mint_protocol_context, null),
   () => assert.equal(overlayNonArbStyle("atomic_loop", unrelatedLiquityCoMintSignals), "unknown"),
@@ -519,12 +650,26 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(liquityMintImbalance, []),
   // Full receipt style path: external BOLD recipients stay diagnostic, while canonical Liquity
   // trove-operation context preserves the known atomic protocol loop.
+  () => assert.equal(liquityMintReceipt.receiptStatus, "0x1"),
+  () => assert.equal(liquityMintReceipt.receiptLogs.length, 21),
+  () => assert.deepEqual(
+    [...new Set(liquityMintReceipt.receiptLogs.map((log: Record<string, unknown>) =>
+      lower(String(log.transactionHash ?? ""))))],
+    [lower(liquityMintReceipt.txHash)],
+  ),
+  () => assert.deepEqual(
+    liquityMintReceipt.receiptLogs.map((log: Record<string, unknown>) => Number(log.logIndex)),
+    Array.from({ length: 21 }, (_, index) => 429 + index),
+  ),
   () => assert.equal(liquityMintAnalysis.style, "atomic_loop"),
   () => assert.deepEqual(liquityMintAnalysis.signals.external_mint_recipients, [
     "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1",
     "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b",
   ]),
   () => assert.deepEqual(liquityMintAnalysis.signals.external_mint_unknown_tokens, [
+    "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+  ]),
+  () => assert.deepEqual(liquityMintAnalysis.signals.external_mint_tokens, [
     "0x6440f144b7e50d6a8439336510312d2f54beb01d",
   ]),
   () => assert.equal(liquityMintAnalysis.signals.external_mint_protocol_context, "liquity"),
@@ -536,12 +681,44 @@ const checks: Array<() => void> = [
     in_graph: null,
   }]),
 
+  // The archive fixture is exact: bind both disputed group hash sets and every complete receipt's
+  // successful status, full log count, and per-log transaction hash.
+  () => assert.deepEqual(
+    disputedReceipts.susdsAtomicLoops.map((receipt) => lower(receipt.transactionHash)).sort(),
+    EXPECTED_SUSDS_RECEIPT_HASHES.map(lower).sort(),
+  ),
+  () => assert.deepEqual(
+    disputedReceipts.externalMintNonComparable.map((receipt) => lower(receipt.transactionHash)).sort(),
+    EXPECTED_EXTERNAL_MINT_RECEIPT_HASHES.map(lower).sort(),
+  ),
+  ...allDisputedReceipts.flatMap((receipt) => [
+    () => assert.equal(receipt.status, "0x1", receipt.transactionHash),
+    () => assert.equal(
+      receipt.logs.length,
+      EXPECTED_DISPUTED_LOG_COUNTS.get(lower(receipt.transactionHash)),
+      receipt.transactionHash,
+    ),
+    () => assert.deepEqual(
+      [...new Set(receipt.logs.map((log) => lower(String(log.transactionHash ?? ""))))],
+      [lower(receipt.transactionHash)],
+      receipt.transactionHash,
+    ),
+  ]),
   // Actual-receipt regressions: ten position-conserving sUSDS/ERC4626 loops carry only actor dust.
   // Counterparty and settlement-address share nets must not become competitor inventory.
   ...susdsLoopAnalyses.flatMap((analysis) => [
     () => assert.equal(analysis.style, "atomic_loop", analysis.receipt.transactionHash),
     () => assert.deepEqual(analysis.shareImbalanceTokens, [], analysis.receipt.transactionHash),
-    () => assert.deepEqual(analysis.signals.external_mint_recipients, [], analysis.receipt.transactionHash),
+    () => assert.equal(
+      analysis.signals.external_mint_protocol_context,
+      analysis.signals.external_mint_tokens.length > 0 ? "susds" : null,
+      analysis.receipt.transactionHash,
+    ),
+    () => assert.ok(
+      analysis.signals.external_mint_tokens.every((token) =>
+        token === lower(ADDR.USDS) || token === lower(ADDR.SUSDS)),
+      analysis.receipt.transactionHash,
+    ),
   ]),
   // Two independent token shapes prove the retained external-mint rule is generic: direct
   // zero->recipient (GENI) and mint-to-token-then-settle-to-recipient remain diagnostic, but absent
@@ -552,6 +729,11 @@ const checks: Array<() => void> = [
     () => assert.deepEqual(
       analysis.signals.external_mint_recipients,
       expectedExternalMintRecipients.get(analysis.receipt.transactionHash),
+      analysis.receipt.transactionHash,
+    ),
+    () => assert.deepEqual(
+      analysis.signals.external_mint_tokens,
+      expectedExternalMintTokens.get(analysis.receipt.transactionHash),
       analysis.receipt.transactionHash,
     ),
     () => assert.deepEqual(
@@ -612,25 +794,64 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(addAfterJit, []),
 ];
 
-try {
-  for (const check of checks) check();
-  rmSync(graphFixtureDir, { recursive: true, force: true });
-  console.log(`bundle-postmortem-noise-filter PASS (${checks.length}/${checks.length})`);
-  console.log("expected_transition: ten sUSDS/ERC4626 receipts inventory_vault_rebalance->atomic_loop with no vault-inventory signal; Liquity 0x803a stays atomic_loop with diagnostic co-mints; 0xe45/0x191b become unknown with explicit co-mint evidence; private-helper control 0x9be73297 remains inventory_vault_rebalance. verdict: fixed");
-} catch (err) {
-  console.error(`bundle-postmortem-noise-filter FAIL: ${(err as Error).message}`);
-  process.exit(1);
+async function run(): Promise<void> {
+  try {
+    const [withCustomProfile, withoutProfile] = await Promise.all([
+      customProfileClassification,
+      noProfileClassification,
+    ]);
+    const allChecks = [
+      ...checks,
+      () => assert.equal(withCustomProfile.winner_style, "inventory_vault_rebalance"),
+      () => assert.equal(withoutProfile.winner_style, "atomic_loop"),
+      () => assert.deepEqual(competitorScanAddresses(loadedCustomProfile), [CUSTOM_EOA, CUSTOM_EXECUTOR]),
+    ];
+    for (const check of allChecks) check();
+    rmSync(graphFixtureDir, { recursive: true, force: true });
+    rmSync(customProfileFixtureDir, { recursive: true, force: true });
+    console.log(`bundle-postmortem-noise-filter PASS (${allChecks.length}/${allChecks.length})`);
+    console.log("expected_transition: ten complete sUSDS/ERC4626 receipts remain atomic_loop with no inventory signal and only grounded sUSDS mint diagnostics; Liquity 0x803a stays atomic_loop with recognized diagnostic co-mints; ungrounded retained mints become unknown; explicit position-account drawdowns become inventory_vault_rebalance; 0xe45/0x191b remain unknown; 0x9be remains inventory_vault_rebalance. verdict: fixed");
+  } catch (err) {
+    console.error(`bundle-postmortem-noise-filter FAIL: ${(err as Error).message}`);
+    process.exit(1);
+  }
+}
+
+void run();
+
+function classifyTransferOnlyPosition(profile?: LiveCompetitorProfile) {
+  return classifyWinnerTxStyle({
+    rpc: classifierRpc,
+    txHash: "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    tx: { from: CUSTOM_EOA, to: CUSTOM_EXECUTOR, input: "0x" },
+    receipt: customProfileReceipt,
+    profit: {
+      pricedDeltas: [delta(ADDR.WETH, 10n ** 18n, "WETH", 18)],
+      unpricedDeltas: [],
+      beneficiary: CUSTOM_EXECUTOR,
+      ethDeltaEth: 0,
+      nativeTraceUsed: false,
+    },
+    transactionIndex: 0,
+    blockNumber: 1,
+    prestateBlock: 0,
+    ...(profile ? { competitorProfile: profile } : {}),
+  });
 }
 
 function analyzeActualReceiptFixture(receipt: ActualReceiptFixture) {
   const actors = new Set([lower(receipt.from), lower(receipt.to)]);
+  const positionAccounts = new Set(positionAccountsForActors(liveCompetitorProfile, actors));
   const positionOwners = new Set([
     ...actors,
-    ...positionAccountsForActors(liveCompetitorProfile, actors),
+    ...positionAccounts,
   ]);
   const rawDeltas = actionsFromLogs(receipt, [...actors]).rawDeltas;
   const valued = valueDeltas(rawDeltas, 3500);
-  const shareImbalanceTokens = shareTokenImbalanceTokens(receipt, positionOwners);
+  const shareImbalanceTokens = [...new Set([
+    ...shareTokenImbalanceTokens(receipt, positionOwners),
+    ...positionAccountImbalanceTokens(receipt, positionAccounts),
+  ])].sort();
   const signals = detectNonArbSignals(null, receipt, actors, null);
   const base = classifyWinnerStyle({
     pricedDeltas: valued.priced,

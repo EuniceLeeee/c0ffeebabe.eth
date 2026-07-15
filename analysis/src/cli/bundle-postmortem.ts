@@ -86,7 +86,7 @@ const LIQUITY_MINT_CONTEXT_TOPICS = new Set([
   lower(TOPICS.liquityBatchUpdated),
 ]);
 const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
-let liveCompetitorProfile: LiveCompetitorProfile | null = null;
+const SUSDS_MINT_CONTEXT_TOKENS = new Set([lower(ADDR.USDS), lower(ADDR.SUSDS)]);
 
 export type WinnerStyle =
   | "atomic_loop"
@@ -281,6 +281,10 @@ export interface WinnerStyleTxInput {
   // Optional: enables the rfq_fill deadline check (F-010). Callers without a block header simply
   // skip that signal; keeper_claim detection works regardless.
   blockTimestamp?: number | null;
+  // Ownership is caller-selected. CLI callers pass the profile they loaded (including a custom
+  // --watch-config); library callers may instead supply already-resolved entity position accounts.
+  competitorProfile?: LiveCompetitorProfile;
+  positionAccounts?: Iterable<string>;
 }
 
 export interface WinnerStyleAnalysis {
@@ -291,7 +295,7 @@ export interface WinnerStyleAnalysis {
   non_arb_signals?: NonArbSignals;
 }
 
-const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--graph <runtime-graph-pools.json>] [--blockscan-log <mev-live.log>] [--out <report.json>]
+const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--watch-config <live-competitors.json>] [--graph <runtime-graph-pools.json>] [--blockscan-log <mev-live.log>] [--out <report.json>]
   --tx with a FULL hash that matches no bundle_submitted falls back to any-tx competitor mode:
   PnL + winner_style (incl. keeper_claim/rfq_fill signals) + venues incl. non-univ lineages +
   same-block prior movers + our-events venue overlap.`;
@@ -307,6 +311,9 @@ async function main(): Promise<void> {
   const graphPath = args.graph ? resolveCliPath(String(args.graph)) : DEFAULT_GRAPH_PATH;
   const blockScanLogPath = args["blockscan-log"] ? resolveCliPath(String(args["blockscan-log"])) : "";
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";
+  const competitorProfile = loadLiveCompetitorProfile(
+    args["watch-config"] ? resolveCliPath(String(args["watch-config"])) : undefined,
+  );
 
   if (!eventsPath || !rpcUrl || Boolean(txQuery) === Boolean(opportunityQuery)) usage();
 
@@ -329,6 +336,7 @@ async function main(): Promise<void> {
         outPath,
         resolveCliPath(eventsPath),
         blockScanLogPath,
+        competitorProfile,
       );
       return;
     }
@@ -395,6 +403,7 @@ async function main(): Promise<void> {
         graph,
         prestateBlock,
         blockInfo.timestamp,
+        competitorProfile,
       ),
     );
   }
@@ -972,6 +981,7 @@ async function anyTxPostmortem(
   outPath: string,
   eventsPath: string,
   blockScanLogPath: string,
+  competitorProfile: LiveCompetitorProfile,
 ): Promise<void> {
   const [tx, receipt] = await Promise.all([rpc.getTransaction(txHash), rpc.getReceipt(txHash)]);
   if (!tx || !receipt) throw new Error(`any-tx mode: ${txHash} not found on-chain (need the full hash of a mined tx)`);
@@ -1000,6 +1010,7 @@ async function anyTxPostmortem(
     blockNumber,
     prestateBlock: Math.max(blockNumber - 1, 0),
     blockTimestamp,
+    competitorProfile,
   });
   const touchedVenues = await resolveLandedTouchedVenues(rpc, receipt, graph, blockNumber);
   const otherVenues = extractOtherVenues(receipt, graph);
@@ -1349,6 +1360,7 @@ async function analyzeCompetitor(
   graph: GraphMembership,
   prestateBlock: number,
   blockTimestamp: number | null = null,
+  competitorProfile?: LiveCompetitorProfile,
 ): Promise<CompetitorReport> {
   const [tx, receipt] = await Promise.all([
     rpc.getTransaction(candidate.hash),
@@ -1372,6 +1384,7 @@ async function analyzeCompetitor(
     blockNumber,
     prestateBlock,
     blockTimestamp,
+    competitorProfile,
   });
   return {
     ...candidate,
@@ -1656,16 +1669,17 @@ export function winnerMovedPriceBeyondPrestate(
 //    signature(s) plus a seconds-scale deadline near the block timestamp in the calldata (verified on
 //    0x15352456: 3 sigs + deadline = block_ts+29s).
 //  - external mint: a non-actor, non-venue recipient retains a material token balance created by an
-//    in-tx mint. This remains diagnostic; an unrecognized unknown-token co-mint makes closure unknown
-//    but never manufactures competitor inventory ownership.
+//    in-tx mint. This remains diagnostic; any unrecognized co-mint makes closure unknown but never
+//    manufactures competitor inventory ownership.
 export interface NonArbSignals {
   claim_selector_hit: boolean;
   conserved_sink_cut: boolean;
   rfq_sig_count: number;
   rfq_deadline_in_calldata: boolean;
   external_mint_recipients: string[];
+  external_mint_tokens: string[];
   external_mint_unknown_tokens: string[];
-  external_mint_protocol_context: "liquity" | null;
+  external_mint_protocol_context: "liquity" | "susds" | null;
 }
 
 interface FlowLedgerToken {
@@ -1751,20 +1765,21 @@ export function detectNonArbSignals(
     rfq_sig_count: countAbiEncodedSignatures(inputHex),
     rfq_deadline_in_calldata: blockTimestamp != null && hasDeadlineWord(inputHex, blockTimestamp),
     external_mint_recipients: externalMint.recipients,
+    external_mint_tokens: externalMint.tokens,
     external_mint_unknown_tokens: externalMint.unknownTokens,
     external_mint_protocol_context: externalMint.recipients.length > 0
-      ? recognizedExternalMintProtocolContext(receipt, externalMint.unknownTokens)
+      ? recognizedExternalMintProtocolContext(receipt, externalMint.tokens)
       : null,
   };
 }
 
 // Overlay the non-arb classes on a base style. keeper_claim needs the decisive selector OR the flow
-// shape. An external co-mint is diagnostic, not proof of competitor inventory. A material unknown
-// token co-mint without recognized protocol semantics makes closure ambiguous, so fail to unknown;
+// shape. An external co-mint is diagnostic, not proof of competitor inventory. A material co-mint
+// without recognized protocol semantics makes closure ambiguous, so fail to unknown;
 // rfq_fill only reinterprets an otherwise atomic/unknown win.
 export function overlayNonArbStyle(base: WinnerStyle, signals: NonArbSignals): WinnerStyle {
   if (signals.claim_selector_hit || signals.conserved_sink_cut) return "keeper_claim";
-  if (signals.external_mint_unknown_tokens.length > 0
+  if (signals.external_mint_tokens.length > 0
     && signals.external_mint_protocol_context === null
     && (base === "atomic_loop" || base === "unknown")) return "unknown";
   if (signals.rfq_sig_count >= 1 && signals.rfq_deadline_in_calldata
@@ -1807,7 +1822,12 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
 
 export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
   const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
-  const positionOwners = competitorPositionOwners(beneficiaries);
+  const entityPositionAccounts = competitorPositionAccounts(
+    beneficiaries,
+    input.competitorProfile,
+    input.positionAccounts,
+  );
+  const positionOwners = new Set([...beneficiaries, ...entityPositionAccounts]);
   const receiptWethUnwrapExit = hasBeneficiaryWethUnwrapExit(input.receipt, beneficiaries);
   // A successful WETH Withdrawal to the executor is the receipt-level native
   // profit exit used by Coffee's atomic loops. Use it only when prestate trace
@@ -1851,7 +1871,10 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
     )
     : false;
   // Atomicity / inventory-rebalance detector (F-009). Layer 2 first (pure receipt, no RPC).
-  const shareImbalanceTokens = shareTokenImbalanceTokens(input.receipt, positionOwners);
+  const shareImbalanceTokens = [...new Set([
+    ...shareTokenImbalanceTokens(input.receipt, positionOwners),
+    ...positionAccountImbalanceTokens(input.receipt, entityPositionAccounts),
+  ])].sort();
   // Layer 1 (hardcoded selectors) needs the inner calls (top-level input is a private entrypoint),
   // so it reads a callTracer trace — but only when Layer 2 is silent, to avoid the extra RPC on the
   // common case. Graceful degrade: if the trace is unavailable the imbalance layer still catches it.
@@ -1946,9 +1969,30 @@ export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: 
   return out.sort();
 }
 
+// Declared entity position accounts are stronger ownership evidence than receipt roles. Any material
+// ERC20 net change on one of those accounts is position inventory, even when the tx only transfers
+// pre-held shares and emits no ERC4626 Deposit/Withdraw event. Net-zero transit remains conserved.
+export function positionAccountImbalanceTokens(
+  receipt: Json | null,
+  positionAccounts: Set<string>,
+): string[] {
+  const accounts = new Set([...positionAccounts].map(lower).filter(isAddress));
+  const out = new Set<string>();
+  for (const [token, { net }] of buildFlowLedger(receipt)) {
+    for (const account of accounts) {
+      if (isMaterialTokenAmount(token, net.get(account) ?? 0n)) {
+        out.add(token);
+        break;
+      }
+    }
+  }
+  return [...out].sort();
+}
+
 // A generic protocol mint to the executor can be part of an atomic protocol/DEX loop. Retained
 // balances at unrelated non-venue addresses are recorded as co-mint evidence; they are not ownership
-// evidence. ERC4626 share mints stay with the explicit-position-owner detector above.
+// evidence. ERC4626 share mints follow the same diagnostic path, while inventory still requires an
+// explicitly owned account above.
 export function retainedExternalMintRecipients(receipt: Json | null, actors: Set<string>): string[] {
   return retainedExternalMintEvidence(receipt, actors).recipients;
 }
@@ -1956,9 +2000,8 @@ export function retainedExternalMintRecipients(receipt: Json | null, actors: Set
 function retainedExternalMintEvidence(
   receipt: Json | null,
   actors: Set<string>,
-): { recipients: string[]; unknownTokens: string[] } {
+): { recipients: string[]; tokens: string[]; unknownTokens: string[] } {
   const normalizedActors = new Set([...actors].map(lower).filter(isAddress));
-  const vaultTokens = erc4626VaultTokens(receipt);
   const venueEmitters = swapVenueEmitters(receipt);
   const mintedTokens = new Set<string>();
   for (const log of receipt?.logs ?? []) {
@@ -1966,33 +2009,46 @@ function retainedExternalMintEvidence(
     const transfer = decodeTransfer(log);
     if (!transfer || lower(transfer.from) !== ZERO_ADDRESS) continue;
     const token = lower(transfer.token);
-    if (!vaultTokens.has(token) && isMaterialTokenAmount(token, transfer.amount)) mintedTokens.add(token);
+    if (isMaterialTokenAmount(token, transfer.amount)) mintedTokens.add(token);
   }
 
   const recipients = new Set<string>();
+  const tokens = new Set<string>();
   const unknownTokens = new Set<string>();
   const ledger = buildFlowLedger(receipt);
   for (const token of mintedTokens) {
     for (const [holder, amount] of ledger.get(token)?.net ?? []) {
       if (amount <= 0n || !isMaterialTokenAmount(token, amount)) continue;
       if (holder === ZERO_ADDRESS || holder === token || normalizedActors.has(holder)) continue;
-      if (venueEmitters.has(holder) || vaultTokens.has(holder)) continue;
+      if (venueEmitters.has(holder)) continue;
       recipients.add(holder);
+      tokens.add(token);
       if (!TOKEN_META[token]) unknownTokens.add(token);
     }
   }
-  return { recipients: [...recipients].sort(), unknownTokens: [...unknownTokens].sort() };
+  return {
+    recipients: [...recipients].sort(),
+    tokens: [...tokens].sort(),
+    unknownTokens: [...unknownTokens].sort(),
+  };
 }
 
 function recognizedExternalMintProtocolContext(
   receipt: Json | null,
-  unknownTokens: string[],
-): "liquity" | null {
-  if (unknownTokens.length !== 1 || unknownTokens[0] !== LIQUITY_BOLD) return null;
-  return (receipt?.logs ?? []).some((log: Json) =>
-    LIQUITY_MINT_CONTEXT_TOPICS.has(lower(String(log?.topics?.[0] ?? ""))))
-    ? "liquity"
-    : null;
+  tokens: string[],
+): "liquity" | "susds" | null {
+  if (tokens.length === 1
+    && tokens[0] === LIQUITY_BOLD
+    && (receipt?.logs ?? []).some((log: Json) =>
+      LIQUITY_MINT_CONTEXT_TOPICS.has(lower(String(log?.topics?.[0] ?? ""))))) {
+    return "liquity";
+  }
+  if (tokens.length > 0
+    && tokens.every((token) => SUSDS_MINT_CONTEXT_TOKENS.has(token))
+    && erc4626VaultTokens(receipt).has(lower(ADDR.SUSDS))) {
+    return "susds";
+  }
+  return null;
 }
 
 function erc4626VaultTokens(receipt: Json | null): Set<string> {
@@ -2124,12 +2180,15 @@ function competitorBeneficiaries(tx: Json | null, receipt: Json | null, benefici
   );
 }
 
-function competitorPositionOwners(beneficiaries: Set<string>): Set<string> {
-  liveCompetitorProfile ??= loadLiveCompetitorProfile();
-  return new Set([
-    ...beneficiaries,
-    ...positionAccountsForActors(liveCompetitorProfile, beneficiaries),
-  ]);
+function competitorPositionAccounts(
+  beneficiaries: Set<string>,
+  profile: LiveCompetitorProfile | undefined,
+  supplied: Iterable<string> | undefined,
+): Set<string> {
+  const accounts = supplied !== undefined
+    ? [...supplied]
+    : profile !== undefined ? positionAccountsForActors(profile, beneficiaries) : [];
+  return new Set(accounts.map(lower).filter(isAddress));
 }
 
 async function unpricedInTokensWithoutCounterTransfers(
