@@ -324,6 +324,36 @@
       },
       "created_at": "2026-07-14T07:34:00.000Z",
       "updated_at": "2026-07-14T07:34:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260715-postmortem-core-route-gap",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "flash",
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
+      "source_block": 25535055,
+      "comparable": true,
+      "primary_gap": "manual_required",
+      "gap_detail": "unordered_touch_set_misreported_as_pool_gap",
+      "evidence": {
+        "manual": "receipt and call trace show a closed USDT->PAXG->GOLDX->USDX->USDT route with an ordered GOLDX mint protocol call and Curve TokenExchangeUnderlying leg; an additional V2-compatible touch is not sufficient evidence that it belongs to the core route",
+        "canonical_before": "bundle-postmortem exposed GOLDX only as edgeKinds=protocol and census-gap converted every out-of-graph touched venue into pool_gap(3 oog)",
+        "reviewer": "fresh non-author adversarial review confirmed that the all-touch set cannot establish the ordered core route and that census must fail closed before pool_gap"
+      },
+      "tooling_defect": {
+        "tool": "analysis:bundle-postmortem + repo:scripts/census-gap.sh",
+        "issue": "census used an unordered set of all landed venue touches as the core production route even when bundle-postmortem had unresolved protocol legs",
+        "evidence": "tx 0x149df3ec... canonical output reported flash,swap,protocol plus Curve-underlying evidence, yet census emitted pool_gap(3 oog) without a mechanically reconstructed protocol route",
+        "codify_target": "bundle-postmortem emits fail-closed route-gap readiness for unresolved non-swap legs; census consumes it before pool/routing gap verdicts; pin regressions",
+        "status": "open"
+      },
+      "created_at": "2026-07-15T10:45:00.000Z",
+      "updated_at": "2026-07-15T10:45:00.000Z"
     }
   ]
 }

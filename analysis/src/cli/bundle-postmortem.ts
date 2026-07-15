@@ -478,6 +478,28 @@ export interface OtherVenue {
   landed_adapter?: string;
 }
 
+export interface RouteGapAnalysis {
+  status: "swap_venues_only" | "manual_required";
+  reason?: "non_swap_leg_order_unresolved";
+  unresolved_edge_kinds: EdgeKind[];
+}
+
+/**
+ * touchedVenues/otherVenues are landed venue facts, not a reconstructed core route. Until call-defined
+ * protocol/credit/LP legs are ordered with the swap legs, their full touch set cannot honestly drive an
+ * automatic production pool-gap verdict. Fail closed and leave the detailed replay to the repair gate.
+ */
+export function assessRouteGapAnalysis(edgeKinds: EdgeKind[]): RouteGapAnalysis {
+  const unresolved = edgeKinds.filter((kind) => kind === "protocol" || kind === "credit" || kind === "lp");
+  return unresolved.length > 0
+    ? {
+        status: "manual_required",
+        reason: "non_swap_leg_order_unresolved",
+        unresolved_edge_kinds: unresolved,
+      }
+    : { status: "swap_venues_only", unresolved_edge_kinds: [] };
+}
+
 // Swap-like venues OUTSIDE the univ2/3/4 lineages extractTouchedVenues covers — the census verdict
 // is blind to these (filed defect), so the any-tx report surfaces them explicitly.
 export function extractOtherVenues(receipt: Json, graph: GraphMembership | null): OtherVenue[] {
@@ -1051,6 +1073,7 @@ async function anyTxPostmortem(
       loaded.events,
     )
     : undefined;
+  const edgeKinds = deriveEdgeKindsFromLogsAndTrace(receipt?.logs, payment.callTrace);
   const report = {
     command: "bundle-postmortem" as const,
     mode: "any_tx" as const,
@@ -1086,7 +1109,8 @@ async function anyTxPostmortem(
     receipt_weth_unwrap_exit: styleAnalysis.receipt_weth_unwrap_exit,
     non_comparable_winner: isNonComparableWinnerStyle(styleAnalysis.winner_style) ? true : undefined,
     non_arb_signals: styleAnalysis.non_arb_signals,
-    edgeKinds: deriveEdgeKindsFromLogsAndTrace(receipt?.logs, payment.callTrace),
+    edgeKinds,
+    route_gap_analysis: assessRouteGapAnalysis(edgeKinds),
     touchedVenues,
     v4LegFills,
     jitPoolIds: jitPoolIds.length > 0 ? jitPoolIds : undefined,
@@ -1134,6 +1158,9 @@ function renderAnyTxSummary(report: any): string {
     + ` external_mints=${(signals.external_mint_recipients ?? []).length}`
     + ` mint_context=${signals.external_mint_protocol_context ?? "none"}]`
     + ` edges=[${(report.edgeKinds ?? []).join(",")}]`);
+  if (report.route_gap_analysis?.status === "manual_required") {
+    lines.push(`  route gap: MANUAL REQUIRED (${report.route_gap_analysis.reason}; unresolved=${report.route_gap_analysis.unresolved_edge_kinds.join(",")})`);
+  }
   if ((signals.external_mint_recipients ?? []).length > 0) {
     lines.push(`  external_mint_recipients: ${signals.external_mint_recipients.join(",")}`);
   }

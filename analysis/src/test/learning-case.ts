@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import {
+  assessRouteGapAnalysis,
   extractOtherVenues,
   learningCaseFromPostmortem,
   resolveLandedTouchedVenues,
@@ -122,6 +123,23 @@ test("call-defined GOLDx mint adds protocol only for the exact successful target
     input: selector,
     error: "execution reverted",
   }), ["swap"]);
+});
+
+test("route gap analysis fails closed when a non-swap leg has not been ordered", () => {
+  assert.deepEqual(assessRouteGapAnalysis(["flash", "swap"]), {
+    status: "swap_venues_only",
+    unresolved_edge_kinds: [],
+  });
+  assert.deepEqual(assessRouteGapAnalysis(["flash", "swap", "protocol"]), {
+    status: "manual_required",
+    reason: "non_swap_leg_order_unresolved",
+    unresolved_edge_kinds: ["protocol"],
+  });
+  assert.deepEqual(assessRouteGapAnalysis(["swap", "credit", "lp"]), {
+    status: "manual_required",
+    reason: "non_swap_leg_order_unresolved",
+    unresolved_edge_kinds: ["credit", "lp"],
+  });
 });
 
 test("landed venue facts preserve unknown factory and Curve underlying adapter", async () => {

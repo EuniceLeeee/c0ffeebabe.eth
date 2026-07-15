@@ -109,10 +109,12 @@ done
     ([(.touchedVenues // [])[] | select(.routing_admitted == false)] | length) as $rg |
     ([(.touchedVenues // [])[] | select(.routing_admitted == null and .routing_reason == "routed_edge_unverified")] | length) as $ru |
     ([(.touchedVenues // [])[] | select(.routing_admitted == false) | (.routing_reason // "unverified")] | unique | join(",")) as $rr |
+    (.route_gap_analysis // null) as $ra |
     (.our_blockscan_for_target // null) as $bs |
     ($bs.status // "unset") as $bss |
     (if .non_comparable_winner == true then "non_comparable:" + (.winner_style // "?")
      elif (.winner_style // "unknown") != "atomic_loop" then "manual_required:" + (.winner_style // "unknown")
+     elif ($ra.status // "") == "manual_required" then "manual_required:route_incomplete(" + (($ra.unresolved_edge_kinds // []) | join(",")) + ")"
      elif $oog > 0 then "pool_gap(\($oog) oog)"
      elif $rg > 0 then "routing_gap(\($rr) x\($rg))"
      elif $ru > 0 then "routing_unverified(tokenedge-index-required x\($ru))"
