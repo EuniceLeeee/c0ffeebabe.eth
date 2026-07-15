@@ -23,6 +23,7 @@ import {
   type ProtocolMid,
 } from "../detector/blockscan-scanner.js";
 import { buildExactBlockScanCurveMids } from "../detector/blockscan-curve-mids.js";
+import { refineBlockScanCandidates } from "../detector/blockscan-candidate-refinement.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
@@ -279,13 +280,29 @@ async function main(): Promise<void> {
       protocolMids,
       pinnedOutsideBudget: true,
     };
-    const scan = detectBlockScanOpportunities({
+    const coarseMaxCandidates = Math.max(
+      cfg.maxCandidates,
+      envInt("HUNT_REFINE_CANDIDATES", 512),
+    );
+    const coarseScan = detectBlockScanOpportunities({
       edges,
       cache,
       sourceBlock: cfg.blockNumber,
       swapTouched: null,
-      cfg: scanCfg,
+      cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
     });
+    const refinement = await refineBlockScanCandidates(
+      callBackend,
+      coarseScan.opportunities,
+      cfg.maxCandidates,
+      Date.now() + cfg.budgetMs,
+    );
+    const scan = { ...coarseScan, opportunities: refinement.opportunities };
+    console.log(
+      `[blockscan-hunt] exact route probes attempted=${refinement.attempted} ` +
+        `positive=${refinement.positive} negative=${refinement.negative} ` +
+        `failed=${refinement.failed} deadline=${refinement.deadlineHit ? 1 : 0}`,
+    );
     await check("block scan executed", () =>
       scan.stateBlock === cfg.blockNumber && scan.scannedPairs >= 0,
     );
