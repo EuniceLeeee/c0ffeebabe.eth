@@ -409,7 +409,8 @@
         "issue": "A/B used different revm-sim artifact availability and Cargo resolution, invalidating the challenger backrun lane",
         "evidence": "B log reported Cargo 1.75 edition2024 parse failures; A had target/debug/revm-sim linked to a release binary and B had no binary",
         "codify_target": "stage a content-addressed revm-sim artifact without mutating the running A path, bind the same immutable hash into A/B process environments and durable fairness state, and revalidate it through close",
-        "status": "open"
+        "codify_commit": "8984c39431d9276a715845aaa750acf14cf8d802",
+        "status": "codified"
       },
       "created_at": "2026-07-15T18:30:00.000Z",
       "updated_at": "2026-07-15T18:30:00.000Z"
