@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import {
+  deriveProductionSampleEdgeKinds,
   selectProductionSwapWindow,
   validateOnchainExecutionRoute,
   validateOnchainSwapRoute,
@@ -18,6 +19,7 @@ const TOKEN_B = "0x4444444444444444444444444444444444444444";
 const VAULT = "0x5555555555555555555555555555555555555555";
 const EXECUTOR = "0x6666666666666666666666666666666666666666";
 const CALLER = "0x7777777777777777777777777777777777777777";
+const GOLDX = "0x355c665e101b9da58704a8fddb5feef210ef20c0";
 
 test("landed swap route requires factory-backed identity and exact token direction", async () => {
   const route: ProductionRouteStep = {
@@ -187,6 +189,59 @@ test("landed protocol route binds adapter selector order and receipt token flow"
     [route], trace, [transfer(TOKEN_A)], { from: CALLER, to: EXECUTOR }, missingFlow,
   );
   assert.match(missingFlow.join("\n"), /token flow/);
+});
+
+test("production sample edge kinds include successful call-defined protocol legs", () => {
+  const logs = [
+    { topics: [ethers.id("FlashLoan(address,address,uint256,uint256)")] },
+    { topics: [ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)")] },
+  ];
+  const nested = traceCalls([call(GOLDX, "mint(address,uint256)")]);
+  assert.deepEqual(deriveProductionSampleEdgeKinds(logs, nested), ["flash", "swap", "protocol"]);
+
+  const wrongTarget = traceCalls([call(VAULT, "mint(address,uint256)")]);
+  assert.deepEqual(deriveProductionSampleEdgeKinds(logs, wrongTarget), ["flash", "swap"]);
+
+  const reverted = traceCalls([{ ...call(GOLDX, "mint(address,uint256)"), error: "execution reverted" }]);
+  assert.deepEqual(deriveProductionSampleEdgeKinds(logs, reverted), ["flash", "swap"]);
+});
+
+test("landed GOLDx mint route binds target, selector, order and token flow", () => {
+  const route: ProductionRouteStep = {
+    adapterId: "goldx-mint",
+    slotKind: "protocol",
+    target: GOLDX,
+    tokenIn: TOKEN_A,
+    tokenOut: GOLDX,
+  };
+  const logs = [transfer(TOKEN_A), transfer(GOLDX)];
+  const errors: string[] = [];
+  const matched = validateOnchainExecutionRoute(
+    [route], call(GOLDX, "mint(address,uint256)"), logs,
+    { from: CALLER, to: EXECUTOR }, errors,
+  );
+  assert.deepEqual(errors, []);
+  assert.equal(matched[0]?.target, GOLDX);
+
+  const wrongSelector: string[] = [];
+  validateOnchainExecutionRoute(
+    [route], call(GOLDX, "deposit(uint256,address)"), logs,
+    { from: CALLER, to: EXECUTOR }, wrongSelector,
+  );
+  assert.match(wrongSelector.join("\n"), /adapter selector/);
+
+  const wrongOrder: string[] = [];
+  validateOnchainExecutionRoute(
+    [
+      route,
+      { ...route, adapterId: "erc4626-deposit", target: VAULT, tokenIn: GOLDX, tokenOut: TOKEN_B },
+    ],
+    traceCalls([call(VAULT, "deposit(uint256,address)"), call(GOLDX, "mint(address,uint256)")]),
+    [...logs, transfer(TOKEN_B)],
+    { from: CALLER, to: EXECUTOR },
+    wrongOrder,
+  );
+  assert.match(wrongOrder.join("\n"), /absent or out of order/);
 });
 
 test("landed DEX and protocol calls must match one interleaved execution order", () => {

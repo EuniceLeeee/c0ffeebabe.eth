@@ -6,7 +6,10 @@ import { decodeTransfer } from "./decode/erc20.js";
 import { fetchEthUsd, priceArb } from "./pnl/arb-profit.js";
 import { classifyTxShape, type RawLog } from "./pnl/tx-shape.js";
 import { decodeAnySwapLog, type DecodedSwap } from "./pnl/swap-log-registry.js";
-import { deriveEdgeKindsFromLogs } from "./learning/edge-kinds.js";
+import {
+  deriveEdgeKindsFromLogs,
+  deriveEdgeKindsFromLogsAndTrace,
+} from "./learning/edge-kinds.js";
 import { hexToBigInt, RpcClient } from "./rpc/client.js";
 import { lower } from "./registry/protocols.js";
 
@@ -196,7 +199,7 @@ export async function verifyOnchainProductionSample(
       }
     }
   }
-  const edgeKinds = deriveEdgeKindsFromLogs(receipt.logs);
+  const edgeKinds = deriveProductionSampleEdgeKinds(receipt.logs, trace);
   if (!edgeKinds.includes("swap")) errors.push("production sample does not contain a recognized DEX swap edge");
   if (edgeKinds.includes("credit") || edgeKinds.includes("lp")) {
     errors.push(`production sample edge kinds [${edgeKinds.join(",")}] are outside the current no-credit/no-LP scope`);
@@ -315,8 +318,22 @@ const ROUTE_SELECTORS = new Map<string, Set<string>>([
   ["erc4626-redeem-silo", selectors("redeem(address,uint256,address,address)")],
   ["metronome-synth-swap", selectors("swap(address,address,uint256)")],
   ["metronome-hgusdc-exit", selectors("executePath(bytes,uint256[],address)")],
+  ["goldx-mint", selectors("mint(address,uint256)")],
   ["psm", selectors("sellGem(address,uint256)", "buyGem(address,uint256)")],
 ]);
+
+/**
+ * Production evidence must classify the winner from both receipt events and
+ * successful calls. Some permissionless conversion legs (for example GOLDx
+ * mint) have no named protocol event, so a log-only classification drops a
+ * real protocol edge before the route gate can validate it.
+ */
+export function deriveProductionSampleEdgeKinds(
+  logs: Array<{ topics?: unknown }> | undefined | null,
+  trace: unknown,
+): string[] {
+  return deriveEdgeKindsFromLogsAndTrace(logs, trace);
+}
 
 function loadProductionUniverse(universePath: string): UniversePoolFact[] {
   const parsed = JSON.parse(fs.readFileSync(universePath, "utf8")) as unknown;

@@ -355,6 +355,36 @@
       },
       "created_at": "2026-07-15T10:45:00.000Z",
       "updated_at": "2026-07-15T10:45:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260715-production-evidence-call-defined-protocol",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "flash",
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
+      "source_block": 25535055,
+      "comparable": true,
+      "primary_gap": "manual_required",
+      "gap_detail": "production_gate_dropped_call_defined_protocol_evidence",
+      "evidence": {
+        "manual": "the winner trace contains a successful GOLDx mint(address,uint256) call between landed DEX legs, while receipt logs alone expose only flash and swap",
+        "canonical_before": "verifyOnchainProductionSample fetched the trace but classified winner edgeKinds from receipt logs only; validateOnchainExecutionRoute also had no selector contract for goldx-mint",
+        "reviewer": "fresh non-author adversarial review independently reproduced [flash,swap] from the gate and [flash,swap,protocol] from canonical trace-aware classification"
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/ab-production-evidence.ts",
+        "issue": "the Hermes production-evidence gate ignored successful call-defined protocol legs and rejected a supported GOLDx route because its adapter selector was unregistered",
+        "evidence": "tx 0x149df3ec... calls GOLDx 0x355c665e... with selector 0x40c10f19; trace-aware edge classification adds protocol, but the pre-fix gate used deriveEdgeKindsFromLogs and ROUTE_SELECTORS lacked goldx-mint",
+        "codify_target": "classify winner edge kinds from receipt plus successful trace, register the GOLDx mint selector, and pin target/selector/revert/order regressions",
+        "status": "open"
+      },
+      "created_at": "2026-07-15T16:20:00.000Z",
+      "updated_at": "2026-07-15T16:20:00.000Z"
     }
   ]
 }
