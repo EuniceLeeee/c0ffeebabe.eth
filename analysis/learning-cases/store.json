@@ -350,7 +350,8 @@
         "issue": "census used an unordered set of all landed venue touches as the core production route even when bundle-postmortem had unresolved protocol legs",
         "evidence": "tx 0x149df3ec... canonical output reported flash,swap,protocol plus Curve-underlying evidence, yet census emitted pool_gap(3 oog) without a mechanically reconstructed protocol route",
         "codify_target": "bundle-postmortem emits fail-closed route-gap readiness for unresolved non-swap legs; census consumes it before pool/routing gap verdicts; pin regressions",
-        "status": "open"
+        "codify_commit": "f33eb2b3da2015cdeeff168928075f6995ee486f",
+        "status": "codified"
       },
       "created_at": "2026-07-15T10:45:00.000Z",
       "updated_at": "2026-07-15T10:45:00.000Z"
