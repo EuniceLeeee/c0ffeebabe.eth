@@ -64,6 +64,7 @@ export const TOPICS = {
   curveCryptoTokenExchange: ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256,uint256,uint256)"),
   curveTokenExchangeUnderlying: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
   balancerV2Swap: ethers.id("Swap(bytes32,address,address,uint256,uint256)"),
+  balancerV2PoolBalanceChanged: ethers.id("PoolBalanceChanged(bytes32,address,address[],int256[],uint256[])"),
   univ2Mint: ethers.id("Mint(address,uint256,uint256)"),
   univ2Burn: ethers.id("Burn(address,uint256,uint256,address)"),
   univ3Mint: ethers.id("Mint(address,address,int24,int24,uint128,uint256,uint256)"),

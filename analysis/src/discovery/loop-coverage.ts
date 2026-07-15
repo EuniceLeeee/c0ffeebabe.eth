@@ -32,6 +32,7 @@ export type ObservedSwapFamily =
 export type ProductionRoutability = "routable" | "not_routable" | "unassessed";
 
 export type ProductionRoutabilityReason =
+  | "emitter_or_routing_graph_not_attested"
   | "factory_or_routing_graph_not_attested"
   | "no_adapter"
   | "no_swap_adapter"
@@ -117,7 +118,14 @@ export const TOKEN_TOPICS: ReadonlySet<string> = new Set(
 );
 
 const LIQUIDITY_EVENT_TOPICS: ReadonlySet<string> = new Set(
-  [TOPICS.univ2Mint, TOPICS.univ2Burn, TOPICS.univ3Mint, TOPICS.univ3Burn, TOPICS.univ4ModifyLiquidity]
+  [
+    TOPICS.balancerV2PoolBalanceChanged,
+    TOPICS.univ2Mint,
+    TOPICS.univ2Burn,
+    TOPICS.univ3Mint,
+    TOPICS.univ3Burn,
+    TOPICS.univ4ModifyLiquidity,
+  ]
     .map(lower),
 );
 
@@ -144,6 +152,10 @@ const REGISTERED_ENTRY_BY_ADDRESS = new Map(
     [lower(entry.address), entry] as const,
     ...(entry.receiptEmitters ?? []).map((emitter) => [lower(emitter), entry] as const),
   ]),
+);
+
+const REGISTERED_POOL_ENTRY_BY_ADDRESS = new Map(
+  POOL_REGISTRY.map((entry) => [lower(entry.address), entry] as const),
 );
 
 /** Backward-compatible export used by callers that need our registered ERC4626 vault set. */
@@ -232,8 +244,8 @@ export interface TxLoopCoverage {
   fundingIdentityGaps: ObservedFundingVenue[];
   /** Identity-attested funding venues for which production has no flash adapter. */
   fundingRouteGaps: ObservedFundingVenue[];
-  /** @deprecated Distinct observed swap emitter addresses; use observedSwapVenues for family/evidence. */
-  swapVenues: number;
+  /** Distinct emitter addresses with at least one observed swap event. */
+  observedSwapEmitterCount: number;
   /** Named protocol events whose emitter has no matching registered adapter. */
   protocolVenueGaps: Array<{ addr: string; topic0: string }>;
   /** One entry per unrecognized topic (or role-less known topic) needing trace inspection. */
@@ -241,12 +253,11 @@ export interface TxLoopCoverage {
   /** Receipt evidence maps every named protocol leg to an adapter. Still requires a trace. */
   protocolAdapterCandidate: boolean;
   /**
-   * @deprecated Stable conservative receipt signal: true only when at least one named protocol event
-   * is adapter-matched, every named protocol event is matched, every swap/funding observation is
-   * production-routable, and no evidence is unclassified or identity-unassessed. It is never proof of
-   * trace comparability or loop closure.
+   * True only when at least one named protocol event is adapter-matched, every named protocol event is
+   * matched, every swap/funding observation is production-routable, and no receipt evidence is
+   * unclassified or identity-unassessed. It is never proof of trace comparability or loop closure.
    */
-  fullyCovered: boolean;
+  receiptRouteCoverageComplete: boolean;
   coverageScope: "receipt_log_emitters_only";
   routabilityScope: "production_listener_descriptors_receipt_only";
   comparability: "requires_trace";
@@ -299,7 +310,7 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
         addr,
         family,
         topic0s: topic0s.filter((topic0) => observedSwapFamilyForTopic(topic0) === family),
-        ...assessProductionRoutability(family),
+        ...assessProductionRoutability(addr, family),
       });
     }
 
@@ -372,11 +383,11 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
     observedFundingVenues: sortedObservedFunding,
     fundingIdentityGaps,
     fundingRouteGaps,
-    swapVenues: new Set(sortedObservedSwaps.map((venue) => venue.addr)).size,
+    observedSwapEmitterCount: new Set(sortedObservedSwaps.map((venue) => venue.addr)).size,
     protocolVenueGaps: sortedProtocolGaps,
     unclassifiedEmitters: sortedUnclassified,
     protocolAdapterCandidate,
-    fullyCovered: protocolAdapterCandidate
+    receiptRouteCoverageComplete: protocolAdapterCandidate
       && sortedProtocolGaps.length === 0
       && sortedUnclassified.length === 0
       && swapRouteGaps.length === 0
@@ -432,6 +443,7 @@ function isRecognizedTopic(topic0: string): boolean {
 }
 
 function assessProductionRoutability(
+  addr: string,
   family: ObservedSwapFamily,
 ): Pick<ObservedSwapVenue, "productionRoutability" | "reason" | "in_graph"> {
   const productionLineage = family === "pancake-v3"
@@ -446,9 +458,19 @@ function assessProductionRoutability(
       in_graph: false,
     };
   }
+  const registeredEntry = REGISTERED_POOL_ENTRY_BY_ADDRESS.get(addr);
+  if (family === "fluid" && registeredEntry?.adapter === "fluid-dex") {
+    return {
+      productionRoutability: "routable",
+      reason: "routing_attested",
+      in_graph: true,
+    };
+  }
   return {
     productionRoutability: "unassessed",
-    reason: "factory_or_routing_graph_not_attested",
+    reason: family === "fluid"
+      ? "emitter_or_routing_graph_not_attested"
+      : "factory_or_routing_graph_not_attested",
     in_graph: null,
   };
 }

@@ -1,13 +1,14 @@
 # Coffee full-corpus classifier calibration — 2026-07-12
 
 Scope: authorized defensive arbitrage research. Public on-chain receipts only; no broadcast or key use.
+Follow-up schema-v4 rerun: 2026-07-15.
 
 ## Result
 
-The full Coffee export is now useful as a **candidate generator**, not an atomic-loop oracle. The receipt-log
-classifier had four production-affecting defects: Fluid DEX was not a swap lineage, Sky PSM was reported as a
-gap despite an existing adapter, every unknown emitter was promoted to a route gap, and the summary counted
-only one of 24 known protocol-gap transactions. All four are fixed and mechanically gated.
+The full Coffee export is useful as a **candidate generator**, not an atomic-loop oracle. The receipt-log
+classifier separates observed roles from production routability: exact registered Fluid DEX evidence is
+routing-attested, DODO and Balancer Swap remain real swap-route gaps, Balancer flash loans remain supported
+funding, and Balancer `PoolBalanceChanged` is liquidity evidence only.
 
 Atomicity remains a second stage: every transaction with named protocol evidence must pass canonical
 `bundle-postmortem` position-conservation analysis before it can influence an A/B verdict.
@@ -28,13 +29,18 @@ regression gates, not a duplicate full corpus.
 
 ## Corrected contract
 
-`venue-discovery-bq --loop-coverage` now emits schema v2:
+`venue-discovery-bq --loop-coverage` now emits schema v4:
 
 - `protocolAdapterCandidate`: every **named** protocol event maps to a registered adapter.
 - `protocolVenueGaps`: named protocol evidence with no registered adapter.
 - `unclassifiedEmitters`: helper/accounting/token-specific events requiring trace; not automatically a gap.
+- `observedSwapVenues` and `observedFundingVenues`: receipt observations with independent identity and
+  production-routability assessments.
+- `observedSwapEmitterCount`: distinct swap emitters in that transaction.
+- `receiptRouteCoverageComplete`: conservative receipt-route coverage only; never trace comparability or
+  loop closure.
 - `coverageScope: receipt_log_emitters_only` and `comparability: requires_trace` on every row.
-- Legacy `fullyCovered` remains a strict log-cleanliness field only; it is explicitly not proof of closure.
+- Schema v4 removes `swapVenues`, `fullyCovered`, and `gapVenues` rather than silently changing their meaning.
 
 The canonical postmortem now also recognizes Fluid DEX topic
 `0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7` as `fluidDex`.
@@ -45,16 +51,22 @@ The canonical postmortem now also recognizes Fluid DEX topic
 |---|---:|
 | transactions | 857 |
 | transactions with named protocol evidence | 78 |
-| transactions with a supported protocol leg | 55 |
-| registered-protocol candidates | 54 |
-| known protocol-gap transactions | 24 |
-| transactions requiring trace before comparability | 78 |
-| strict log-clean rows | 3 |
-| protocol-evidence rows with unclassified emitters | 74 |
+| transactions with a supported protocol leg | 54 |
+| registered-protocol candidates | 53 |
+| known protocol-gap transactions | 25 |
+| transactions requiring trace before comparability | 857 |
+| receipt-route-coverage-complete transactions | 0 |
+| transactions with unclassified emitters | 674 |
+| Balancer `FlashLoan` (`0x0d7d75e0…`) transactions | 489 |
+| Balancer `Swap` (`0x2170c741…`) gap transactions | 19 |
+| Balancer `PoolBalanceChanged` (`0xe5ce2490…`) liquidity transactions | 2 |
+| DODO swap-gap transactions | 39 |
 
-The 24 known-gap transactions reference eight unsupported ERC4626/protocol emitters. The largest buckets are
-`0xe4b91faf8810f8895772e7ca065d4cb889120f94` (16 tx) and
-`0x74ad2f789ed583dbd141bbdafc673fe1f033718b` (3 tx).
+The two `PoolBalanceChanged` observations are no longer unclassified and create no swap or funding gap. Eight
+observations from the exact registered Fluid singleton are routing-attested; the other 24 Fluid-topic
+observations remain unassessed because their emitter identity is not registered. DODO event recognition is
+observation evidence only: all 40 DODO emitter observations across 39 gap transactions remain
+production-unroutable with `no_adapter`.
 
 ## Manual plus canonical sampling
 
@@ -68,9 +80,9 @@ Each log-level result class was sampled independently, then reconciled with the 
 | candidate, unknown emitters | `0x1cc4cd4f…` | `inventory_vault_rebalance` | +0.1560 | private vault inventory negative control |
 | candidate, unknown emitters | `0x17f767fd…` | `inventory_vault_rebalance` | +4.7817 | high profit still excluded when position is not conserved |
 | candidate, unknown emitters | `0xba5a9536…` | `inventory_vault_rebalance` | +1.5868 | same exclusion at another profit level |
-| strict log-clean | `0x52c27c6e…` | `atomic_loop` | +0.1124 | clean positive control |
-| strict log-clean | `0xd5f6eb8c…` | `atomic_loop` | -0.0035 | closed shape does not imply positive net EV |
-| strict log-clean | `0xf7a689fa…` | `one_leg_inventory` | +0.0120 | decisive proof that log cleanliness cannot authorize comparability |
+| DODO swap-route gap | `0x52c27c6e…` | `atomic_loop` | +0.1124 | DODO is observed but production has no adapter |
+| unassessed swap identity | `0xd5f6eb8c…` | `atomic_loop` | -0.0035 | closed shape does not imply receipt-only routability or positive net EV |
+| Balancer swap-route gap | `0xf7a689fa…` | `one_leg_inventory` | +0.0120 | Balancer funding support does not imply Balancer swap support |
 | known protocol gap | `0x6dc56877…` | `atomic_loop` | +0.5096 | real production gap, not classifier noise |
 | dominant protocol-gap family | `0x17c61de3…` | `atomic_loop` | +0.0661 | real but below the project's $0.10 dust threshold |
 | pinned inventory control | `0x9be73297…` | `inventory_vault_rebalance` | see F-009 | Fluid lineage recognized, but private inventory still excluded |
@@ -95,9 +107,9 @@ calibration change deliberately does not add the adapter or pool.
 
 ```text
 analysis build: PASS
-analysis tests: 102/102 PASS
-competitor calibration: 15/15 PASS
-venue-bq focused tests: 4/4 PASS
-bundle-postmortem noise filter: 51/51 PASS
-full corpus: 857 tx parsed; schema v2 summary generated
+analysis tests: 221/221 PASS
+competitor calibration: 22/22 PASS
+loop-coverage + venue-bq focused tests: 16/16 PASS
+bundle-postmortem noise filter: 57/57 PASS
+full corpus: 857 tx parsed; schema v4 summary generated
 ```

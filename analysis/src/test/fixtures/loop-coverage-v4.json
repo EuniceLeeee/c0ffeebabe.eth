@@ -1,7 +1,7 @@
 {
   "source": "analysis/outputs/coffee-corpus/coffee-logs.csv",
   "sourceSha256": "156930644045a3769306424660a7eaf87ad0c9190e556b7894d2282be89f415e",
-  "selection": "Exact representative CSV rows for every asserted role, observed swap venue, and the UniV2 liquidity-only emitter excluded from swap evidence.",
+  "selection": "Exact representative CSV rows for every asserted role, observed swap venue, the UniV2 liquidity-only emitter excluded from swap evidence, and both Balancer PoolBalanceChanged observations.",
   "cases": [
     {
       "label": "primary-balancer-dodo-univ3",
@@ -178,6 +178,40 @@
           "topics": [
             "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",
             "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "pool-balance-changed-12b2",
+      "txHash": "0x12b25c37cc18470604506c1bed4744bcd19343ee21864bda6f2ba71f93823451",
+      "blockNumber": 24563388,
+      "transactionIndex": 28,
+      "receiptLogs": [
+        {
+          "logIndex": 321,
+          "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+          "topics": [
+            "0xe5ce249087ce04f05a957192435400fd97868dba0e6a4b4c049abf8af80dae78",
+            "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
+            "0x00000000000000000000000068655ad9852a99c87c0934c7290bb62cfa5d4123"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "pool-balance-changed-c909",
+      "txHash": "0xc9094ba2db584bc92854c79d50c77464ed9e324decba9da1a0ee6fa4e9d71594",
+      "blockNumber": 24583933,
+      "transactionIndex": 198,
+      "receiptLogs": [
+        {
+          "logIndex": 610,
+          "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+          "topics": [
+            "0xe5ce249087ce04f05a957192435400fd97868dba0e6a4b4c049abf8af80dae78",
+            "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
             "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
           ]
         }

@@ -7,6 +7,7 @@ import { buildLoopCoverageOutput } from "../cli/venue-discovery-bq.js";
 import { classifyTxLoopCoverage, type TxLoopCoverage } from "../discovery/loop-coverage.js";
 import { TOPICS } from "../registry/protocols.js";
 import { ADDR } from "../../../listener/src/shared/constants/addresses.js";
+import { POOL_REGISTRY } from "../../../listener/src/searcher/planner/token-graph.js";
 
 interface ExactFixture {
   source: string;
@@ -25,7 +26,7 @@ interface ExactCase {
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = JSON.parse(
-  readFileSync(join(TEST_DIR, "fixtures", "loop-coverage-v3.json"), "utf8"),
+  readFileSync(join(TEST_DIR, "fixtures", "loop-coverage-v4.json"), "utf8"),
 ) as ExactFixture;
 const BALANCER_VAULT = "0xba12222222228d8ba445958a75a0704d566bf2c8";
 const DODO_POOL = "0x3058ef90929cb8180174d74c507176cca6835d73";
@@ -38,15 +39,17 @@ const ARBITRARY_FLASH_EMITTER = "0x000000000000000000000000000000000000f1a5";
 const UNKNOWN_TOPIC = `0x${"11".repeat(32)}`;
 const SECOND_UNKNOWN_TOPIC = `0x${"22".repeat(32)}`;
 const APPROVAL_TOPIC = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925";
+const POOL_BALANCE_CHANGED_TOPIC = "0xe5ce249087ce04f05a957192435400fd97868dba0e6a4b4c049abf8af80dae78";
+const ARBITRARY_SWAP_EMITTER = "0x0000000000000000000000000000000000005a7a";
 
 test("Coffee 0x89cb observes three swaps and exposes DODO/Balancer route gaps", () => {
   const fixture = exactCase("primary-balancer-dodo-univ3");
   const result = classifyExact(fixture);
   const reversed = classifyExact({ ...fixture, receiptLogs: [...fixture.receiptLogs].reverse() });
 
-  assert.deepEqual(reversed, result, "receipt log order must not change schema-v3 output");
+  assert.deepEqual(reversed, result, "receipt log order must not change schema-v4 output");
   assert.equal(result.observedSwapVenues.length, 3);
-  assert.equal(result.swapVenues, 3, "deprecated count alias follows observedSwapVenues");
+  assert.equal(result.observedSwapEmitterCount, 3);
   assert.deepEqual(swapAssessments(result), [
     [DODO_POOL, "dodo", "not_routable", "no_adapter", false],
     [BALANCER_VAULT, "balancer-v2", "not_routable", "no_swap_adapter", false],
@@ -116,6 +119,77 @@ test("same-address Balancer Swap and FlashLoan expose both roles independent of 
   assert.deepEqual(forward.unclassifiedEmitters, []);
 });
 
+test("both exact Coffee PoolBalanceChanged rows are liquidity, never swap or funding gaps", () => {
+  assert.equal(TOPICS.balancerV2PoolBalanceChanged.toLowerCase(), POOL_BALANCE_CHANGED_TOPIC);
+
+  for (const label of ["pool-balance-changed-12b2", "pool-balance-changed-c909"]) {
+    const result = classifyExact(exactCase(label));
+    const balancer = venue(result, BALANCER_VAULT);
+
+    assert.deepEqual(balancer.observedRoles, ["liquidity"]);
+    assert.deepEqual(balancer.observedSwapFamilies, []);
+    assert.deepEqual(balancer.observedFundingFamilies, []);
+    assert.deepEqual(balancer.unrecognizedTopic0s, []);
+    assert.deepEqual(result.observedSwapVenues, []);
+    assert.deepEqual(result.swapRouteGaps, []);
+    assert.deepEqual(result.observedFundingVenues, []);
+    assert.deepEqual(result.fundingIdentityGaps, []);
+    assert.deepEqual(result.fundingRouteGaps, []);
+    assert.deepEqual(result.unclassifiedEmitters, []);
+  }
+});
+
+test("only the registered Fluid singleton is routing-attested from its exact swap event", () => {
+  const fluidAddress = ADDR.FLUID_DEX_USDC_USDT.toLowerCase();
+  const fluidEntry = POOL_REGISTRY.find((entry) => entry.address.toLowerCase() === fluidAddress);
+  assert.equal(fluidEntry?.adapter, "fluid-dex");
+
+  const registered = classifyTxLoopCoverage({
+    txHash: "0xregistered-fluid",
+    receiptLogs: [{ address: fluidAddress, topics: [TOPICS.fluidDexSwap] }],
+  });
+  assert.deepEqual(swapAssessments(registered), [
+    [fluidAddress, "fluid", "routable", "routing_attested", true],
+  ]);
+
+  const arbitraryFluid = classifyTxLoopCoverage({
+    txHash: "0xarbitrary-fluid",
+    receiptLogs: [{ address: ARBITRARY_SWAP_EMITTER, topics: [TOPICS.fluidDexSwap] }],
+  });
+  assert.deepEqual(swapAssessments(arbitraryFluid), [
+    [
+      ARBITRARY_SWAP_EMITTER,
+      "fluid",
+      "unassessed",
+      "emitter_or_routing_graph_not_attested",
+      null,
+    ],
+  ]);
+
+  const factoryTopicOnly = classifyTxLoopCoverage({
+    txHash: "0xfactory-topic-only",
+    receiptLogs: [
+      { address: ARBITRARY_SWAP_EMITTER, topics: [TOPICS.curveTokenExchange] },
+      { address: ARBITRARY_SWAP_EMITTER, topics: [TOPICS.univ2Swap] },
+      { address: ARBITRARY_SWAP_EMITTER, topics: [TOPICS.univ3Swap] },
+    ],
+  });
+  assert.deepEqual(
+    factoryTopicOnly.observedSwapVenues.map((swap) => [
+      swap.family,
+      swap.productionRoutability,
+      swap.reason,
+      swap.in_graph,
+    ]),
+    ["curve", "univ2", "univ3"].map((family) => [
+      family,
+      "unassessed",
+      "factory_or_routing_graph_not_attested",
+      null,
+    ]),
+  );
+});
+
 test("mixed known and unknown topics preserve every unrecognized topic on the emitter", () => {
   const mixedEmitter = ADDR.SKY_PSM_LITE.toLowerCase();
   const result = classifyTxLoopCoverage({
@@ -151,14 +225,14 @@ test("mixed known and unknown topics preserve every unrecognized topic on the em
   ]);
 });
 
-test("Coffee 0x52c2 flips legacy clean coverage on its DODO route gap", () => {
+test("Coffee 0x52c2 exposes DODO no_adapter while Balancer FlashLoan stays funding", () => {
   const fixture = exactCase("secondary-dodo-with-balancer-flashloan");
   const result = classifyExact(fixture);
   const reversed = classifyExact({ ...fixture, receiptLogs: [...fixture.receiptLogs].reverse() });
 
   assert.deepEqual(reversed, result);
   assert.equal(result.observedSwapVenues.length, 6);
-  assert.equal(result.swapVenues, 6);
+  assert.equal(result.observedSwapEmitterCount, 6);
   assert.deepEqual(result.swapRouteGaps.map((gap) => [gap.family, gap.reason]), [
     ["dodo", "no_adapter"],
   ]);
@@ -177,10 +251,10 @@ test("Coffee 0x52c2 flips legacy clean coverage on its DODO route gap", () => {
     funding.productionRoutability,
   ]), [[BALANCER_VAULT, "balancer-v2", "attested", "routable"]]);
   assert.equal(result.protocolAdapterCandidate, true);
-  assert.equal(result.fullyCovered, false);
+  assert.equal(result.receiptRouteCoverageComplete, false);
 });
 
-test("Coffee 0xf7a6 flips legacy clean coverage on Balancer Swap without inventing flashloan", () => {
+test("Coffee 0xf7a6 exposes a Balancer swap gap without inventing flashloan", () => {
   const result = classifyExact(exactCase("secondary-balancer-swap-not-flashloan"));
   const swaps = new Map(result.observedSwapVenues.map((swap) => [swap.family, swap]));
 
@@ -191,7 +265,7 @@ test("Coffee 0xf7a6 flips legacy clean coverage on Balancer Swap without inventi
   assert.equal(swaps.get("univ3")?.productionRoutability, "unassessed");
   assert.equal(swaps.get("univ3")?.in_graph, null);
   assert.equal(result.protocolAdapterCandidate, true);
-  assert.equal(result.fullyCovered, false);
+  assert.equal(result.receiptRouteCoverageComplete, false);
 });
 
 test("PSM support is event-specific and preserves multiple Liquity gaps on the same emitter", () => {
@@ -215,7 +289,7 @@ test("PSM support is event-specific and preserves multiple Liquity gaps on the s
   ].map((topic0) => ({ addr: psm, topic0: topic0.toLowerCase() })).sort(compareGap));
   assert.deepEqual(forward.unclassifiedEmitters, []);
   assert.equal(forward.protocolAdapterCandidate, false);
-  assert.equal(forward.fullyCovered, false);
+  assert.equal(forward.receiptRouteCoverageComplete, false);
 });
 
 test("ERC4626 support matches only Deposit/Withdraw and exposes another named topic as a gap", () => {
@@ -235,7 +309,7 @@ test("ERC4626 support matches only Deposit/Withdraw and exposes another named to
   ]);
   assert.deepEqual(result.unclassifiedEmitters, []);
   assert.equal(result.protocolAdapterCandidate, false);
-  assert.equal(result.fullyCovered, false);
+  assert.equal(result.receiptRouteCoverageComplete, false);
 });
 
 test("funding identity and flash-adapter support are independent conservative assessments", () => {
@@ -244,7 +318,7 @@ test("funding identity and flash-adapter support are independent conservative as
     txHash: "0xclean-protocol-receipt",
     receiptLogs: [{ address: psm, topics: [TOPICS.psmSellGem] }],
   });
-  assert.equal(clean.fullyCovered, true);
+  assert.equal(clean.receiptRouteCoverageComplete, true);
 
   const result = classifyTxLoopCoverage({
     txHash: "0xfunding-identities",
@@ -287,10 +361,14 @@ test("funding identity and flash-adapter support are independent conservative as
   assert.deepEqual(venue(result, ARBITRARY_FLASH_EMITTER).unrecognizedTopic0s, []);
   assert.deepEqual(result.unclassifiedEmitters, []);
   assert.equal(result.protocolAdapterCandidate, true);
-  assert.equal(result.fullyCovered, false, "unattested funding identity must defeat the alias");
+  assert.equal(
+    result.receiptRouteCoverageComplete,
+    false,
+    "unattested funding identity must defeat receipt route coverage",
+  );
 });
 
-test("deprecated swapVenues remains a distinct-emitter count", () => {
+test("schema v4 exposes an exact swap-emitter count without legacy aliases", () => {
   const result = classifyTxLoopCoverage({
     txHash: "0xcompat-emitter-count",
     receiptLogs: [
@@ -300,31 +378,52 @@ test("deprecated swapVenues remains a distinct-emitter count", () => {
   });
 
   assert.equal(result.observedSwapVenues.length, 2);
-  assert.equal(result.swapVenues, 1);
+  assert.equal(result.observedSwapEmitterCount, 1);
+  assert.equal("swapVenues" in result, false);
+  assert.equal("fullyCovered" in result, false);
+  assert.equal("gapVenues" in result, false);
 });
 
-test("loop-coverage output summarizes observed evidence and routability as schema v3", () => {
+test("loop-coverage output summarizes observed evidence and routability as schema v4", () => {
   const perTx = FIXTURE.cases.map(classifyExact);
   const { summary } = buildLoopCoverageOutput(perTx);
 
-  assert.equal(summary.schema_version, 3);
-  assert.equal(summary.observedSwapVenues, 11);
-  assert.equal(summary.observedSwapEmitters, 11);
+  assert.equal(summary.schema_version, 4);
+  assert.equal(summary.transactionCount, 5);
+  assert.equal(summary.observedSwapVenueCount, 11);
+  assert.equal(summary.observedSwapEmitterCount, 11);
   assert.equal(summary.swapRouteGapTxs, 3);
-  assert.equal(summary.swapRouteGaps, 4);
+  assert.equal(summary.swapRouteGapCount, 4);
   assert.equal(summary.unassessedSwapTxs, 3);
-  assert.equal(summary.unassessedSwapVenues, 7);
-  assert.equal(summary.observedFundingVenues, 2);
+  assert.equal(summary.unassessedSwapVenueCount, 7);
+  assert.equal(summary.observedFundingVenueCount, 2);
   assert.equal(summary.fundingIdentityGapTxs, 0);
-  assert.equal(summary.fundingIdentityGaps, 0);
+  assert.equal(summary.fundingIdentityGapCount, 0);
   assert.equal(summary.fundingRouteGapTxs, 0);
-  assert.equal(summary.fundingRouteGaps, 0);
-  assert.equal(summary.requiresTrace, 3);
-  assert.deepEqual(summary.deprecated_aliases, {
-    "perTx[].swapVenues": "distinct observed swap emitter count; use observedSwapVenues for evidence",
-    "perTx[].fullyCovered": "conservative receipt-evidence coverage; never trace comparability or closure",
-    "summary.fullyCovered": "count of perTx entries satisfying the conservative deprecated signal",
-  });
+  assert.equal(summary.fundingRouteGapCount, 0);
+  assert.equal(summary.protocolAdapterCandidateTxCount, 2);
+  assert.equal(summary.requiresTraceTxCount, 5);
+  assert.equal(summary.receiptRouteCoverageCompleteTxCount, 0);
+  assert.deepEqual(summary.removed_v4_fields, [
+    "perTx[].swapVenues",
+    "perTx[].fullyCovered",
+    "perTx[].gapVenues",
+    "summary.txs",
+    "summary.observedSwapVenues",
+    "summary.observedSwapEmitters",
+    "summary.swapRouteGaps",
+    "summary.unassessedSwapVenues",
+    "summary.observedFundingVenues",
+    "summary.fundingIdentityGaps",
+    "summary.fundingRouteGaps",
+    "summary.deprecated_aliases",
+    "summary.fullyCovered",
+    "summary.oneGapWithVault",
+    "summary.protocolAdapterCandidates",
+    "summary.requiresTrace",
+  ]);
+  assert.equal("fullyCovered" in summary, false);
+  assert.equal(summary.singleProtocolVenueGapWithProtocolLegTxCount, 0);
 });
 
 function exactCase(label: string): ExactCase {

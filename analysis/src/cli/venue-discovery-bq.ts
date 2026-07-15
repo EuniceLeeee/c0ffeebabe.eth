@@ -18,7 +18,7 @@ const USAGE = `Usage: npm run venue-discovery-bq -- [--input <rows.ndjson|rows.c
   --loop-coverage (alias --per-tx): per-TX loop coverage — records topic-derived emitter roles,
     unrecognized topics, observed swaps/funding, and production-listener routability without treating
     event recognition as adapter support. Receipt-only identity-dependent evidence remains unassessed;
-    comparability remains requires_trace. Emits a schema-v3 { perTx, summary } JSON object instead.`;
+    comparability remains requires_trace. Emits a schema-v4 { perTx, summary } JSON object instead.`;
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -70,15 +70,15 @@ async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promis
   console.error(
     [
       "[analysis/venue-discovery-bq loop-coverage]",
-      `txs=${summary.txs}`,
+      `txs=${summary.transactionCount}`,
       `txs_with_vault_leg=${summary.txsWithVaultLeg}`,
-      `observed_swap_venues=${summary.observedSwapVenues}`,
+      `observed_swap_venues=${summary.observedSwapVenueCount}`,
       `swap_route_gap_txs=${summary.swapRouteGapTxs}`,
       `unassessed_swap_txs=${summary.unassessedSwapTxs}`,
       `funding_identity_gap_txs=${summary.fundingIdentityGapTxs}`,
       `funding_route_gap_txs=${summary.fundingRouteGapTxs}`,
-      `protocol_adapter_candidates=${summary.protocolAdapterCandidates}`,
-      `requires_trace=${summary.requiresTrace}`,
+      `protocol_adapter_candidates=${summary.protocolAdapterCandidateTxCount}`,
+      `requires_trace=${summary.requiresTraceTxCount}`,
       `known_protocol_gap_txs=${summary.knownProtocolGapTxs}`,
       `unclassified_emitter_txs=${summary.unclassifiedEmitterTxs}`,
     ].join(" "),
@@ -106,41 +106,58 @@ export function buildLoopCoverageOutput(perTx: TxLoopCoverage[]) {
     t.observedSwapVenues.some((venue) => venue.productionRoutability === "unassessed")
   );
   const summary = {
-    schema_version: 3,
+    schema_version: 4,
     coverage_scope: "receipt_log_emitters_only",
     routability_scope: "production_listener_descriptors_receipt_only",
-    txs: perTx.length,
+    transactionCount: perTx.length,
     txsWithVaultLeg: sorted.filter((t) => t.vaults.length >= 1).length,
     txsWithProtocolLeg: withProtocol.length,
     txsWithNamedProtocolEvidence: withNamedProtocolEvidence.length,
     txsWithObservedSwaps: withObservedSwaps.length,
-    observedSwapVenues: perTx.reduce((count, tx) => count + tx.observedSwapVenues.length, 0),
-    observedSwapEmitters: perTx.reduce((count, tx) => count + tx.swapVenues, 0),
+    observedSwapVenueCount: perTx.reduce((count, tx) => count + tx.observedSwapVenues.length, 0),
+    observedSwapEmitterCount: perTx.reduce((count, tx) => count + tx.observedSwapEmitterCount, 0),
     swapRouteGapTxs: perTx.filter((t) => t.swapRouteGaps.length > 0).length,
-    swapRouteGaps: perTx.reduce((count, tx) => count + tx.swapRouteGaps.length, 0),
+    swapRouteGapCount: perTx.reduce((count, tx) => count + tx.swapRouteGaps.length, 0),
     unassessedSwapTxs: withUnassessedSwaps.length,
-    unassessedSwapVenues: perTx.reduce(
+    unassessedSwapVenueCount: perTx.reduce(
       (count, tx) => count + tx.observedSwapVenues.filter(
         (venue) => venue.productionRoutability === "unassessed",
       ).length,
       0,
     ),
-    observedFundingVenues: perTx.reduce((count, tx) => count + tx.observedFundingVenues.length, 0),
+    observedFundingVenueCount: perTx.reduce((count, tx) => count + tx.observedFundingVenues.length, 0),
     fundingIdentityGapTxs: perTx.filter((t) => t.fundingIdentityGaps.length > 0).length,
-    fundingIdentityGaps: perTx.reduce((count, tx) => count + tx.fundingIdentityGaps.length, 0),
+    fundingIdentityGapCount: perTx.reduce((count, tx) => count + tx.fundingIdentityGaps.length, 0),
     fundingRouteGapTxs: perTx.filter((t) => t.fundingRouteGaps.length > 0).length,
-    fundingRouteGaps: perTx.reduce((count, tx) => count + tx.fundingRouteGaps.length, 0),
-    protocolAdapterCandidates: perTx.filter((t) => t.protocolAdapterCandidate).length,
-    requiresTrace: sorted.filter((t) => t.comparability === "requires_trace").length,
+    fundingRouteGapCount: perTx.reduce((count, tx) => count + tx.fundingRouteGaps.length, 0),
+    protocolAdapterCandidateTxCount: perTx.filter((t) => t.protocolAdapterCandidate).length,
+    requiresTraceTxCount: sorted.filter((t) => t.comparability === "requires_trace").length,
     knownProtocolGapTxs: perTx.filter((t) => t.protocolVenueGaps.length > 0).length,
     unclassifiedEmitterTxs: perTx.filter((t) => t.unclassifiedEmitters.length > 0).length,
-    deprecated_aliases: {
-      "perTx[].swapVenues": "distinct observed swap emitter count; use observedSwapVenues for evidence",
-      "perTx[].fullyCovered": "conservative receipt-evidence coverage; never trace comparability or closure",
-      "summary.fullyCovered": "count of perTx entries satisfying the conservative deprecated signal",
-    },
-    fullyCovered: perTx.filter((t) => t.fullyCovered).length,
-    oneGapWithVault: withProtocol.filter((t) => t.protocolVenueGaps.length === 1).length,
+    removed_v4_fields: [
+      "perTx[].swapVenues",
+      "perTx[].fullyCovered",
+      "perTx[].gapVenues",
+      "summary.txs",
+      "summary.observedSwapVenues",
+      "summary.observedSwapEmitters",
+      "summary.swapRouteGaps",
+      "summary.unassessedSwapVenues",
+      "summary.observedFundingVenues",
+      "summary.fundingIdentityGaps",
+      "summary.fundingRouteGaps",
+      "summary.deprecated_aliases",
+      "summary.fullyCovered",
+      "summary.oneGapWithVault",
+      "summary.protocolAdapterCandidates",
+      "summary.requiresTrace",
+    ],
+    receiptRouteCoverageCompleteTxCount: perTx.filter(
+      (t) => t.receiptRouteCoverageComplete,
+    ).length,
+    singleProtocolVenueGapWithProtocolLegTxCount: withProtocol.filter(
+      (t) => t.protocolVenueGaps.length === 1
+    ).length,
   };
   return { summary, perTx: sorted };
 }
