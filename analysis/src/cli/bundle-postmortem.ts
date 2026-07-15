@@ -2008,6 +2008,7 @@ interface RetainedExternalMintEvidence {
   tokens: string[];
   unknownTokens: string[];
   recipientsByToken: Map<string, string[]>;
+  retainedAmountsByToken: Map<string, Map<string, bigint>>;
 }
 
 function retainedExternalMintEvidence(
@@ -2026,6 +2027,7 @@ function retainedExternalMintEvidence(
   const tokens = new Set<string>();
   const unknownTokens = new Set<string>();
   const recipientSetsByToken = new Map<string, Set<string>>();
+  const retainedAmountsByToken = new Map<string, Map<string, bigint>>();
   for (const token of mintedTokens) {
     const eligibleRecipients: Array<[string, bigint]> = [];
     for (const [holder, amount] of provenance.balancesByToken.get(token) ?? []) {
@@ -2047,7 +2049,7 @@ function retainedExternalMintEvidence(
     const evidencedRecipients = isMaterialTokenAmount(token, subthresholdTotal)
       ? [...materialRecipients, ...subthresholdRecipients]
       : materialRecipients;
-    for (const [holder] of evidencedRecipients) {
+    for (const [holder, amount] of evidencedRecipients) {
       recipients.add(holder);
       tokens.add(token);
       if (!TOKEN_META[token]) unknownTokens.add(token);
@@ -2057,6 +2059,12 @@ function retainedExternalMintEvidence(
         recipientSetsByToken.set(token, tokenRecipients);
       }
       tokenRecipients.add(holder);
+      let retainedAmounts = retainedAmountsByToken.get(token);
+      if (!retainedAmounts) {
+        retainedAmounts = new Map();
+        retainedAmountsByToken.set(token, retainedAmounts);
+      }
+      retainedAmounts.set(holder, amount);
     }
   }
   return {
@@ -2067,6 +2075,7 @@ function retainedExternalMintEvidence(
       [...recipientSetsByToken].map(([token, tokenRecipients]) =>
         [token, [...tokenRecipients].sort()]),
     ),
+    retainedAmountsByToken,
   };
 }
 
@@ -2140,6 +2149,7 @@ function hasGroundedLiquityBoldMint(
 
   const boldMints = zeroMintAmountsByRecipient(receipt, LIQUITY_BOLD);
   const retainedRecipients = evidence.recipientsByToken.get(LIQUITY_BOLD) ?? [];
+  const retainedAmounts = evidence.retainedAmountsByToken.get(LIQUITY_BOLD) ?? new Map();
   if (retainedRecipients.length !== 2
       || !retainedRecipients.includes(LIQUITY_INTEREST_ROUTER)
       || !retainedRecipients.includes(LIQUITY_STABILITY_POOL)) return false;
@@ -2164,6 +2174,8 @@ function hasGroundedLiquityBoldMint(
       || stabilityAmount !== totalInterest * 75n / 100n) continue;
     if (boldMints.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
       || boldMints.get(LIQUITY_STABILITY_POOL) !== stabilityAmount) continue;
+    if (retainedAmounts.get(LIQUITY_INTEREST_ROUTER) !== routerAmount
+      || retainedAmounts.get(LIQUITY_STABILITY_POOL) !== stabilityAmount) continue;
     return true;
   }
   return false;

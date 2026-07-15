@@ -356,6 +356,37 @@ const malformedLiquityInterestSplitSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const canonicalLiquityInterestLogs = [
+  liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 0),
+  xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 1),
+  xfer(LIQUITY_BOLD, INV_HELPER, EXEC_ACTOR, SHARE_AMT, 2),
+  xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 3),
+  xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_STABILITY_POOL, SHARE_AMT * 3n, 4),
+  liquityRewardsUpdateLog(5),
+];
+const liquityExtraRetainedRouterProvenanceSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      ...canonicalLiquityInterestLogs,
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, SPLIT_MINT_RECIPIENT, SHARE_AMT, 6),
+      xfer(LIQUITY_BOLD, SPLIT_MINT_RECIPIENT, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 7),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const liquityRouterMintDrawdownSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      ...canonicalLiquityInterestLogs,
+      xfer(LIQUITY_BOLD, LIQUITY_INTEREST_ROUTER, EXTERNAL_RECIPIENT, SHARE_AMT / 2n, 6),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const unrelatedUsdsBesideSusdsDepositSignals = detectNonArbSignals(
   null,
   {
@@ -877,6 +908,18 @@ const checks: Array<() => void> = [
   () => assert.equal(malformedLiquityInterestSplitSignals.external_mint_protocol_context, null),
   () => assert.equal(
     overlayNonArbStyle("atomic_loop", malformedLiquityInterestSplitSignals),
+    "unknown",
+  ),
+  // Canonical direct mint amounts are insufficient: the exact receipt-local amount retained at
+  // each protocol recipient must still equal the 25/75 co-mint after every later transfer.
+  () => assert.equal(liquityExtraRetainedRouterProvenanceSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", liquityExtraRetainedRouterProvenanceSignals),
+    "unknown",
+  ),
+  () => assert.equal(liquityRouterMintDrawdownSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", liquityRouterMintDrawdownSignals),
     "unknown",
   ),
   // A real canonical sUSDS Deposit cannot bless unrelated retained USDS or an unmatched sUSDS mint.
