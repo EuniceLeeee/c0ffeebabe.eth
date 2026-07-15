@@ -30,17 +30,17 @@
 - **diff scope:** exactly one frozen production commit, 22 files under `listener/src`; no tests, fixtures,
   analysis, governance, deploy runner, or evidence changes inside the frozen SHA.
 - **build:** listener build and focused universe, identity, refinement, scanner, pruning, planner, protocol,
-  and hunt-selection suites pass. Main analysis suite passes 215 tests plus Coffee calibration 64/64.
+  and hunt-selection suites pass. Main analysis suite passes 231 tests plus Coffee calibration 64/64.
 - **replay/fork result:** trusted node replay on the same listener tree reached `final_sim_success`, exact
   four-edge route, and `net_profit_raw=442380`; the deploy wrapper will rerun both base and challenger.
-- **base SHA / challenger SHA:** `3d42774a9f0b006a6e84911ec0538ad40c104e1b` /
-  `f915295b062679b7353c9f999d94fa976ae61a65`.
+- **base SHA / challenger SHA:** `840069d9d30b40d0c9585ed5a879091a666aa533` /
+  `58f204571a572c3077208ddc27d763a8180a9a36`.
 
 ## Paired Live Evidence
 - **window / warmup excluded:** pending trusted-wrapper run; require at least 120 paired blocks after 10
   warmup blocks and all catch-up/budget/full-warm exclusions.
 - **A/B logs (redacted):** pending.
-- **node slot state:** B not started at report creation.
+- **node slot state:** the first B attempt was safety-aborted before a measured window; A was restored.
 - **fairness evidence:** pending wrapper-owned same-block/config/universe/view/graph/restart/CPU evidence.
 
 ## External Production Calibration
@@ -71,7 +71,7 @@
 ## Fresh Non-Author Adversarial Review
 - **reviewer:** `tx149_final_adversarial` (fresh non-author)
 - **verdict:** deterministic PASS; live decision pending.
-- **evidence:** no P0/P1 in frozen code; no tx/pool/rank production conditional; cap 100 retains rank 87;
+- **evidence:** no P0/P1 in frozen code; no tx/pool/rank production conditional; cap 100 retains rank 89;
   route is conserving; paired distribution validation remains mandatory before merge.
 
 ## Final Decision
@@ -86,8 +86,8 @@
   "experiment_id": "20260715-tx149-gap-repair-v2",
   "problem_id": "tx149-goldx-curve-underlying-route-gap",
   "branch": "ab/tx149-gap-repair-v2",
-  "base_commit": "3d42774a9f0b006a6e84911ec0538ad40c104e1b",
-  "challenger_commit": "f915295b062679b7353c9f999d94fa976ae61a65",
+  "base_commit": "840069d9d30b40d0c9585ed5a879091a666aa533",
+  "challenger_commit": "58f204571a572c3077208ddc27d763a8180a9a36",
   "change_class": "capability",
   "hypothesis": "generic unknown-factory capability admission, GOLDx conversion, Curve-underlying support and a 100-candidate block-scan cap make the unchanged scanner self-enumerate and final-sim the positive-EV tx149 route",
   "input_mode": "challenger",
@@ -96,7 +96,7 @@
   "expected_runtime_view_delta": true,
   "allowed_config_delta": [],
   "a": {
-    "commit": "3d42774a9f0b006a6e84911ec0538ad40c104e1b",
+    "commit": "840069d9d30b40d0c9585ed5a879091a666aa533",
     "config_hash": "pending",
     "universe_hash": "pending",
     "discovery_to_block": 0,
@@ -104,7 +104,7 @@
     "blockscan_graph_hash": "pending"
   },
   "b": {
-    "commit": "f915295b062679b7353c9f999d94fa976ae61a65",
+    "commit": "58f204571a572c3077208ddc27d763a8180a9a36",
     "config_hash": "pending",
     "universe_hash": "pending",
     "discovery_to_block": 0,
@@ -249,6 +249,7 @@ fable_manual: no
 |---|---|---|---|
 | tx149 route self-enumerates at rank 89 in the current production view when the generic candidate cap is 100 | this experiment | paired production window | done |
 | call-defined GOLDx evidence was dropped by the production gate | main `58be1f3` / `3d42774` | LearningCase | done |
+| challenger lacked the champion revm-sim artifact | main `8984c39` / `840069d` | LearningCase | done |
 | candidate latency and distribution effect | paired A/B | final adjudication | open |
 
 ## Method Trace
@@ -258,8 +259,8 @@ tools_used: bundle-postmortem, census-gap, trusted blockscan-hunt, Anvil fork, a
 evidence_order: on-chain tx facts; canonical tool reconciliation; exact scanner replay; fresh non-author code review; paired A/B pending
 analysis_frame: prove a conserving positive-EV route first, then locate the production stage loss, then require the unchanged scanner to self-enumerate before live distribution validation
 sanity_checks: no sample conditional; exact ordered route and token continuity; successful trace-defined protocol leg; 100-candidate generic cap; final fork sim positive
-tool_gap: tooldef-20260715-production-evidence-call-defined-protocol
-codify_next: codified by 58be1f3dbc045f9824a256c0d08c7479541e7720 and closed by 3d42774a9f0b006a6e84911ec0538ad40c104e1b
+tool_gap: tooldef-20260715-production-evidence-call-defined-protocol; tooldef-20260715-ab-revm-artifact-parity
+codify_next: production evidence codified by 58be1f3dbc045f9824a256c0d08c7479541e7720; A/B revm artifact parity codified by 8984c39431d9276a715845aaa750acf14cf8d802 and closed by 840069d9d30b40d0c9585ed5a879091a666aa533
 distill_for_opus: call-defined protocol conversions require target-plus-selector trace evidence in both analysis and production gates; landed route capability is not fixed until the unchanged scanner self-enumerates it
 ```
 
