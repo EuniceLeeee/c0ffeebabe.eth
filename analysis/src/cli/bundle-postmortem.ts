@@ -2148,16 +2148,6 @@ function hasGroundedLiquityBoldMint(
   receipt: Json | null,
   evidence: RetainedExternalMintEvidence,
 ): boolean {
-  const operationSubjects = new Set<string>();
-  for (const log of receipt?.logs ?? []) {
-    if (lower(String(log?.address ?? "")) !== LIQUITY_PROTOCOL_EMITTER
-      || lower(String(log?.topics?.[0] ?? "")) !== lower(TOPICS.liquityBatchUpdated)) continue;
-    const subject = addressFromTopic(log?.topics?.[1]);
-    const operation = dataWord(log?.data, 0);
-    if (subject && operation === LIQUITY_APPLY_BATCH_INTEREST_AND_FEE) operationSubjects.add(subject);
-  }
-  if (operationSubjects.size === 0) return false;
-
   const boldMints = zeroMintAmountsByRecipient(receipt, LIQUITY_BOLD);
   const retainedRecipients = evidence.recipientsByToken.get(LIQUITY_BOLD) ?? [];
   const retainedProvenance = evidence.retainedProvenanceByToken.get(LIQUITY_BOLD) ?? new Map();
@@ -2167,13 +2157,29 @@ function hasGroundedLiquityBoldMint(
       || !retainedRecipients.includes(LIQUITY_STABILITY_POOL)) return false;
 
   const logs = receipt?.logs ?? [];
+  const pendingOperationSubjects = new Set<string>();
   for (let index = 0; index + 3 < logs.length; index++) {
+    const log = logs[index];
+    if (lower(String(log?.address ?? "")) === LIQUITY_PROTOCOL_EMITTER
+      && lower(String(log?.topics?.[0] ?? "")) === lower(TOPICS.liquityBatchUpdated)) {
+      const subject = addressFromTopic(log?.topics?.[1]);
+      const operation = dataWord(log?.data, 0);
+      if (subject && operation === LIQUITY_APPLY_BATCH_INTEREST_AND_FEE) {
+        pendingOperationSubjects.add(subject);
+      }
+      continue;
+    }
+
     const batchMint = decodeTransfer(logs[index]);
     const routerMint = decodeTransfer(logs[index + 1]);
     const stabilityMint = decodeTransfer(logs[index + 2]);
     const rewardsUpdate = logs[index + 3];
-    if (!isBoldMintTo(batchMint, operationSubjects)
-      || !isBoldMintTo(routerMint, new Set([LIQUITY_INTEREST_ROUTER]))
+    const batchRecipient = batchMint ? lower(batchMint.to) : "";
+    if (!isBoldMintTo(batchMint, pendingOperationSubjects)) continue;
+    // One canonical BatchUpdated may ground only the next matching batch mint. Consuming it here
+    // prevents stale context from blessing a later, unrelated mint quartet.
+    pendingOperationSubjects.delete(batchRecipient);
+    if (!isBoldMintTo(routerMint, new Set([LIQUITY_INTEREST_ROUTER]))
       || !isBoldMintTo(stabilityMint, new Set([LIQUITY_STABILITY_POOL]))) continue;
     if (lower(String(rewardsUpdate?.address ?? "")) !== LIQUITY_STABILITY_POOL
       || lower(String(rewardsUpdate?.topics?.[0] ?? "")) !== LIQUITY_STABILITY_POOL_B_UPDATED) continue;

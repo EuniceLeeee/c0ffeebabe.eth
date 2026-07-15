@@ -359,10 +359,10 @@ const malformedLiquityInterestSplitSignals = detectNonArbSignals(
 const canonicalLiquityInterestLogs = [
   liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 0),
   xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 1),
-  xfer(LIQUITY_BOLD, INV_HELPER, EXEC_ACTOR, SHARE_AMT, 2),
-  xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 3),
-  xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_STABILITY_POOL, SHARE_AMT * 3n, 4),
-  liquityRewardsUpdateLog(5),
+  xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 2),
+  xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_STABILITY_POOL, SHARE_AMT * 3n, 3),
+  liquityRewardsUpdateLog(4),
+  xfer(LIQUITY_BOLD, INV_HELPER, EXEC_ACTOR, SHARE_AMT, 5),
 ];
 const liquityExtraRetainedRouterProvenanceSignals = detectNonArbSignals(
   null,
@@ -393,6 +393,24 @@ const liquityUnrelatedRouterInflowSignals = detectNonArbSignals(
     logs: [
       ...canonicalLiquityInterestLogs,
       xfer(LIQUITY_BOLD, EXTERNAL_RECIPIENT, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 6),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
+const liquityRetroactiveContextSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 0),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_INTEREST_ROUTER, SHARE_AMT, 1),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, LIQUITY_STABILITY_POOL, SHARE_AMT * 3n, 2),
+      liquityRewardsUpdateLog(3),
+      xfer(LIQUITY_BOLD, INV_HELPER, EXEC_ACTOR, SHARE_AMT, 4),
+      liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 5),
+      { address: INV_HELPER, topics: [TOPICS.liquityTroveOperation], data: "0x", logIndex: "0x6" },
+      { address: INV_HELPER, topics: [TOPICS.liquityTroveOperation], data: "0x", logIndex: "0x7" },
+      { address: INV_HELPER, topics: [TOPICS.liquityTroveOperation], data: "0x", logIndex: "0x8" },
     ],
   },
   new Set([EXEC_ACTOR]),
@@ -936,6 +954,11 @@ const checks: Array<() => void> = [
   () => assert.equal(liquityUnrelatedRouterInflowSignals.external_mint_protocol_context, null),
   () => assert.equal(
     overlayNonArbStyle("atomic_loop", liquityUnrelatedRouterInflowSignals),
+    "unknown",
+  ),
+  () => assert.equal(liquityRetroactiveContextSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", liquityRetroactiveContextSignals),
     "unknown",
   ),
   // A real canonical sUSDS Deposit cannot bless unrelated retained USDS or an unmatched sUSDS mint.
