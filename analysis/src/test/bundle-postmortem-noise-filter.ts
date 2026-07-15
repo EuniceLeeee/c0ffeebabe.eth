@@ -306,6 +306,18 @@ const unlinkedCanonicalBoldMintSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const unrelatedCanonicalBoldCoMintSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      liquityContextLog(LIQUITY_PROTOCOL_EMITTER, INV_HELPER, 0),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 1),
+      xfer(LIQUITY_BOLD, ethers.ZeroAddress, EXTERNAL_RECIPIENT, SHARE_AMT, 2),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const unrelatedUsdsBesideSusdsDepositSignals = detectNonArbSignals(
   null,
   {
@@ -355,6 +367,17 @@ const mintedFlashRepaymentSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const dustPositiveMintedFlashRepaymentSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(UNKNOWN_TOKEN_CASES[0].token, EXTERNAL_RECIPIENT, EXEC_ACTOR, SHARE_AMT - 1n, 0),
+      xfer(UNKNOWN_TOKEN_CASES[0].token, ethers.ZeroAddress, EXTERNAL_RECIPIENT, SHARE_AMT, 1),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const splitExternalMintSignals = detectNonArbSignals(
   null,
   {
@@ -384,6 +407,11 @@ const customProfileFixtureDir = mkdtempSync(join(tmpdir(), "bundle-postmortem-pr
 const customProfilePath = join(customProfileFixtureDir, "live-competitors.json");
 writeFileSync(customProfilePath, JSON.stringify(customProfile));
 const loadedCustomProfile = loadLiveCompetitorProfile(customProfilePath);
+const positiveActorProfile: LiveCompetitorProfile = {
+  ...loadedCustomProfile,
+  profile_id: "positive-actor-profile",
+  entities: [{ ...loadedCustomProfile.entities[0], executors: [EXEC_ACTOR] }],
+};
 const customProfileReceipt = {
   from: CUSTOM_EOA,
   to: CUSTOM_EXECUTOR,
@@ -798,6 +826,11 @@ const checks: Array<() => void> = [
   () => assert.equal(overlayNonArbStyle("atomic_loop", fakeEmitterBoldMintSignals), "unknown"),
   () => assert.equal(unlinkedCanonicalBoldMintSignals.external_mint_protocol_context, null),
   () => assert.equal(overlayNonArbStyle("atomic_loop", unlinkedCanonicalBoldMintSignals), "unknown"),
+  () => assert.equal(unrelatedCanonicalBoldCoMintSignals.external_mint_protocol_context, null),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", unrelatedCanonicalBoldCoMintSignals),
+    "unknown",
+  ),
   // A real canonical sUSDS Deposit cannot bless unrelated retained USDS or an unmatched sUSDS mint.
   () => assert.deepEqual(unrelatedUsdsBesideSusdsDepositSignals.external_mint_tokens, [lower(ADDR.USDS)]),
   () => assert.equal(unrelatedUsdsBesideSusdsDepositSignals.external_mint_protocol_context, null),
@@ -821,6 +854,8 @@ const checks: Array<() => void> = [
   // A lender repaid with newly minted tokens remains net-zero and has no retained mint position.
   () => assert.deepEqual(mintedFlashRepaymentSignals.external_mint_tokens, []),
   () => assert.deepEqual(mintedFlashRepaymentSignals.external_mint_recipients, []),
+  () => assert.deepEqual(dustPositiveMintedFlashRepaymentSignals.external_mint_tokens, []),
+  () => assert.deepEqual(dustPositiveMintedFlashRepaymentSignals.external_mint_recipients, []),
   // Materiality is applied after aggregating mint events for a token.
   () => assert.deepEqual(splitExternalMintSignals.external_mint_tokens, [lower(UNKNOWN_TOKEN_CASES[0].token)]),
   () => assert.deepEqual(splitExternalMintSignals.external_mint_recipients, [
@@ -1078,6 +1113,7 @@ function classifyPositiveActorShare() {
     transactionIndex: 0,
     blockNumber: 1,
     prestateBlock: 0,
+    competitorProfile: positiveActorProfile,
   });
 }
 
@@ -1094,7 +1130,7 @@ function classifyPublicWrapperMint() {
     profit: {
       pricedDeltas: [delta(ADDR.WETH, 10n ** 18n, "WETH", 18)],
       unpricedDeltas: [],
-      beneficiary: EXEC_ACTOR,
+      beneficiary: PUBLIC_WRAPPER,
       ethDeltaEth: 0,
       nativeTraceUsed: false,
     },
@@ -1121,7 +1157,7 @@ function classifyPublicWrapperBurn() {
     profit: {
       pricedDeltas: [delta(ADDR.WETH, 10n ** 18n, "WETH", 18)],
       unpricedDeltas: [],
-      beneficiary: EXEC_ACTOR,
+      beneficiary: PUBLIC_WRAPPER,
       ethDeltaEth: 0,
       nativeTraceUsed: false,
     },

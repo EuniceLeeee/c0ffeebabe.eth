@@ -82,6 +82,12 @@ const REGISTERED_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
 const UNKNOWN_TOKEN_DUST_RAW = 1000n;
 const LIQUITY_PROTOCOL_EMITTER = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
 const LIQUITY_BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d";
+// Canonical BOLD interest recipients observed alongside the deployment's BatchUpdated flow.
+// Unknown co-mint recipients remain diagnostic/unknown rather than inheriting Liquity context.
+const LIQUITY_BOLD_PROTOCOL_MINT_RECIPIENTS = new Set([
+  "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1",
+  "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b",
+]);
 const SUSDS_MINT_CONTEXT_TOKENS = new Set([lower(ADDR.USDS), lower(ADDR.SUSDS)]);
 
 export type WinnerStyle =
@@ -1032,7 +1038,7 @@ async function anyTxPostmortem(
     lower(String(tx?.from ?? "")),
   );
   const venueEmitters = new Set([...addressVenues.map(lower), ...(v4PoolIds.length > 0 ? [UNIV4_POOL_MANAGER] : [])]);
-  const executors = competitorBeneficiaries(tx, receipt, profit.beneficiary);
+  const executors = competitorBeneficiaries(tx, receipt, competitorProfile);
   const flowReport = await buildFlowReport(rpc, receipt, executors);
   const competitorTokens = competitorArbTokenSet(
     flowReport.steps,
@@ -1808,7 +1814,11 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
 }
 
 export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<WinnerStyleAnalysis> {
-  const beneficiaries = competitorBeneficiaries(input.tx, input.receipt, input.profit.beneficiary);
+  const beneficiaries = competitorBeneficiaries(
+    input.tx,
+    input.receipt,
+    input.competitorProfile,
+  );
   const entityPositionAccounts = competitorPositionAccounts(
     beneficiaries,
     input.competitorProfile,
@@ -2027,8 +2037,9 @@ function retainedExternalMintEvidence(
       // Mint provenance can settle a debt without creating a retained position. A flash lender
       // that sends X before the mint and receives the minted X later is net-zero, not an external
       // mint recipient. Require positive transaction-level net as well as surviving provenance.
-      if ((ledger.get(token)?.net.get(holder) ?? 0n) <= 0n) continue;
-      eligibleRecipients.push([holder, amount]);
+      const positiveNet = ledger.get(token)?.net.get(holder) ?? 0n;
+      if (positiveNet <= 0n) continue;
+      eligibleRecipients.push([holder, positiveNet < amount ? positiveNet : amount]);
     }
     const materialRecipients = eligibleRecipients.filter(([, amount]) =>
       isMaterialTokenAmount(token, amount));
@@ -2104,7 +2115,7 @@ function recognizedExternalMintProtocolContext(
 ): "liquity" | "susds" | null {
   if (evidence.tokens.length === 1
     && evidence.tokens[0] === LIQUITY_BOLD
-    && hasGroundedLiquityBoldMint(receipt)) {
+    && hasGroundedLiquityBoldMint(receipt, evidence)) {
     return "liquity";
   }
   if (evidence.tokens.length > 0
@@ -2115,7 +2126,10 @@ function recognizedExternalMintProtocolContext(
   return null;
 }
 
-function hasGroundedLiquityBoldMint(receipt: Json | null): boolean {
+function hasGroundedLiquityBoldMint(
+  receipt: Json | null,
+  evidence: RetainedExternalMintEvidence,
+): boolean {
   const operationSubjects = new Set<string>();
   for (const log of receipt?.logs ?? []) {
     if (lower(String(log?.address ?? "")) !== LIQUITY_PROTOCOL_EMITTER
@@ -2124,8 +2138,12 @@ function hasGroundedLiquityBoldMint(receipt: Json | null): boolean {
     if (subject) operationSubjects.add(subject);
   }
   const boldMints = zeroMintAmountsByRecipient(receipt, LIQUITY_BOLD);
-  return [...operationSubjects].some((subject) =>
-    isMaterialTokenAmount(LIQUITY_BOLD, boldMints.get(subject) ?? 0n));
+  const retainedRecipients = evidence.recipientsByToken.get(LIQUITY_BOLD) ?? [];
+  return retainedRecipients.length > 0
+    && retainedRecipients.every((recipient) =>
+      LIQUITY_BOLD_PROTOCOL_MINT_RECIPIENTS.has(recipient))
+    && [...operationSubjects].some((subject) =>
+      isMaterialTokenAmount(LIQUITY_BOLD, boldMints.get(subject) ?? 0n));
 }
 
 function hasGroundedSusdsMintContext(
@@ -2317,13 +2335,24 @@ function unpricedTokenInFlowTokens(unpricedDeltas: TokenDelta[]): string[] {
   );
 }
 
-function competitorBeneficiaries(tx: Json | null, receipt: Json | null, beneficiary: string): Set<string> {
+function competitorBeneficiaries(
+  tx: Json | null,
+  receipt: Json | null,
+  suppliedProfile?: LiveCompetitorProfile,
+): Set<string> {
+  const profile = suppliedProfile ?? loadLiveCompetitorProfile();
+  const observed = new Set(
+    [tx?.from, receipt?.from, tx?.to, receipt?.to]
+      .map((address) => lower(String(address ?? "")))
+      .filter(isAddress),
+  );
+  const matches = profile.entities.filter((entity) =>
+    [entity.eoa, ...entity.executors].some((address) => observed.has(address)));
+  const owned = matches.length === 1
+    ? [matches[0].eoa, ...matches[0].executors]
+    : [tx?.from, receipt?.from];
   return new Set(
-    [
-      tx?.from,
-      receipt?.from,
-      beneficiary,
-    ]
+    owned
       .map((address) => lower(String(address ?? "")))
       .filter(isAddress),
   );
