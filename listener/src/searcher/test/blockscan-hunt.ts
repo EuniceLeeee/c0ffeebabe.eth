@@ -248,19 +248,24 @@ async function main(): Promise<void> {
       (protocolMidResult.classCounts.get("metronome") ?? 0) > 0,
     );
 
+    // Production treats code-owned protocol edges as admission guarantees outside
+    // the scored DEX-edge budget. Older scanner versions ignore this forward-
+    // compatible field; challengers that implement it must replay the same view.
+    const scanCfg = {
+      maxHops: cfg.maxHops,
+      minSpreadBps: cfg.minSpreadBps,
+      maxCandidates: cfg.maxCandidates,
+      budgetMs: cfg.budgetMs,
+      pricedTokens: pricedTokens(),
+      protocolMids,
+      pinnedOutsideBudget: true,
+    };
     const scan = detectBlockScanOpportunities({
       edges,
       cache,
       sourceBlock: cfg.blockNumber,
       swapTouched: null,
-      cfg: {
-        maxHops: cfg.maxHops,
-        minSpreadBps: cfg.minSpreadBps,
-        maxCandidates: cfg.maxCandidates,
-        budgetMs: cfg.budgetMs,
-        pricedTokens: pricedTokens(),
-        protocolMids,
-      },
+      cfg: scanCfg,
     });
     await check("block scan executed", () =>
       scan.stateBlock === cfg.blockNumber && scan.scannedPairs >= 0,
