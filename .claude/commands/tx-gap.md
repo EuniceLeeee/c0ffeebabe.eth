@@ -39,6 +39,44 @@
 
 按根因形成 cohort；同一 cohort 共享一个生产 branch，每桶选代表 tx，并验证其余样本确属同一根因。
 
+### 工具错误只记录，不修
+
+发现现有工具报错、漏字段或与人工链上真值冲突时，必须留下可批量处理的持久记录：
+
+- 路径：`docs/research/tool-divergences/<divergence_id>.md`；
+- `divergence_id` 按“工具 + 错误根因”稳定命名，同根因只维护一个文件，不按 tx 重复建档；
+- 每次命中都追加**完整 tx hash**，并记录 block、tx index、样本角色（scanner/backrun victim/winner）、
+  目标内策略类型以及关联的 production gap/cohort id；
+- 记录工具 id/version 或 commit、原始输出/错误、人工 ground truth、两者最小差异，以及支撑真值的
+  receipt/log/trace/fork 命令和输出 SHA-256；
+- 状态固定为 `open_frozen`，并写 `deferred_reason: analysis-tool freeze`。不得伪写 `fixed`、
+  `human_killed` 或虚构 codify commit；
+- 后续再遇到相同根因，只追加 tx 和新证据。解除 freeze 后按 `divergence_id` 聚合修复，并用文件内
+  全部 tx 作为回归 cohort。
+
+最小记录格式：
+
+```yaml
+divergence_id: <tool>-<root-cause>
+status: open_frozen
+tool: <indexed tool id + commit>
+capability: <classification|pnl|venue|graph|causality|...>
+root_cause: <one precise sentence>
+deferred_reason: analysis-tool freeze
+transactions:
+  - tx_hash: 0x<full hash>
+    block: <number>
+    tx_index: <number|unknown>
+    role: scanner | backrun_victim | backrun_winner
+    production_gap_id: <stable id>
+    tool_actual: <value/error>
+    manual_ground_truth: <value>
+    evidence: <receipt/log/trace/fork artifact + sha256>
+fixed_by: null
+```
+
+该记录允许直接进入 main，但属于欠账台账，不算本批次生产推进，也不得成为 challenger diff。
+
 ## 2. 本批次只有生产修复线
 
 本批次可交付的代码 diff 必须改变 searcher 生产行为，并落在 `listener/**`。允许报告记录证据，但：
@@ -111,7 +149,8 @@ challenger 不得修改 harness、fixture 或验收入口。
 4. 六步各自证据与 reviewer 结论；
 5. 是否需要/完成短 smoke 或 A/B；
 6. merge SHA 与 branch 是否已删除；
-7. `tool_divergence`（如有），明确写“本批次冻结，未修工具”，不得把它算作生产成果。
+7. `tool_divergence`（如有），引用对应 `divergence_id`、记录文件和本轮新增的完整 tx hash，明确写
+   “本批次冻结，未修工具”，不得把它算作生产成果。
 
 本批次唯一成功指标：至少一个真实目标样本沿生产漏斗推进。分析工具变好、测试数量增加、报告变完整，
 都不计为生产推进。
