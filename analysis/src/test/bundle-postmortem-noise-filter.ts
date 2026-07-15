@@ -20,6 +20,7 @@ import {
   positionAccountImbalanceTokens,
   realizedProfitUsdForReport,
   retainedExternalMintRecipients,
+  retainedSharePositionTokensForOwners,
   shareTokenImbalanceTokens,
   winnerMovedPriceBeyondPrestate,
   type WinnerStyle,
@@ -210,6 +211,12 @@ const positiveActorShareMint = {
     xfer(SHARE_TOK, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 1),
   ],
 };
+const positiveActorPricedShareMint = {
+  logs: [
+    vaultDepositLog(ADDR.SUSDS, EXEC_ACTOR, EXEC_ACTOR, SHARE_AMT, 0),
+    xfer(ADDR.SUSDS, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 1),
+  ],
+};
 const transferOnlyPositionImbalance = positionAccountImbalanceTokens(
   transferOnlyPositionDrawdown,
   new Set([INV_HELPER]),
@@ -227,6 +234,10 @@ const positivePositionImbalance = positionAccountImbalanceTokens(
   new Set([INV_HELPER]),
 );
 const positiveActorShareImbalance = shareTokenImbalanceTokens(
+  positiveActorShareMint,
+  new Set([EXEC_ACTOR]),
+);
+const positiveActorRetainedShares = retainedSharePositionTokensForOwners(
   positiveActorShareMint,
   new Set([EXEC_ACTOR]),
 );
@@ -319,6 +330,31 @@ const unrelatedSusdsBesideSusdsDepositSignals = detectNonArbSignals(
   new Set([EXEC_ACTOR]),
   null,
 );
+const unrelatedActorMintWithIndependentSusdsDepositSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(ADDR.USDS, ethers.ZeroAddress, INV_HELPER, SHARE_AMT, 0),
+      vaultDepositLog(ADDR.SUSDS, EXEC_ACTOR, EXEC_ACTOR, SHARE_AMT, 1),
+      xfer(ADDR.USDS, EXEC_ACTOR, ADDR.SUSDS, SHARE_AMT, 2),
+      xfer(ADDR.SUSDS, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 3),
+    ],
+  },
+  new Set([EXEC_ACTOR, INV_HELPER]),
+  null,
+);
+const mintedFlashRepaymentSignals = detectNonArbSignals(
+  null,
+  {
+    logs: [
+      xfer(ADDR.USDS, EXTERNAL_RECIPIENT, EXEC_ACTOR, SHARE_AMT, 0),
+      xfer(ADDR.USDS, ethers.ZeroAddress, EXEC_ACTOR, SHARE_AMT, 1),
+      xfer(ADDR.USDS, EXEC_ACTOR, EXTERNAL_RECIPIENT, SHARE_AMT, 2),
+    ],
+  },
+  new Set([EXEC_ACTOR]),
+  null,
+);
 const splitExternalMintSignals = detectNonArbSignals(
   null,
   {
@@ -363,6 +399,8 @@ const customProfileClassification = classifyTransferOnlyPosition(loadedCustomPro
 const noProfileClassification = classifyTransferOnlyPosition();
 const defaultProfileInventoryClassification = classifyDefaultProfileInventory();
 const positiveActorShareClassification = classifyPositiveActorShare();
+const publicWrapperMintClassification = classifyPublicWrapperMint();
+const publicWrapperBurnClassification = classifyPublicWrapperBurn();
 const liquityMintImbalance = shareTokenImbalanceTokens(
   { logs: liquityMintReceipt.receiptLogs },
   COMPETITOR_POSITION_OWNERS,
@@ -450,6 +488,7 @@ const positiveShareWithSelectorStyle = classifyWinnerStyle({
   winner_moved_price_beyond_prestate: false,
   sandwich_detected: false,
   share_imbalance_tokens: positiveActorShareImbalance,
+  retained_share_position_tokens: positiveActorRetainedShares,
   inventory_rebalance_selector_hit: true,
 });
 
@@ -731,6 +770,7 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(internalPositionImbalance, []),
   // A beneficiary's positive share mint is not evidence that it spent pre-held inventory.
   () => assert.deepEqual(positiveActorShareImbalance, []),
+  () => assert.deepEqual(positiveActorRetainedShares, [lower(SHARE_TOK)]),
   // Nested public-wrapper backing is protocol inventory, not competitor inventory. The actor's
   // own wrapper position closes to zero, and no undeclared wrapper account may be inferred as owned.
   // Its ungrounded retained backing mint is conservatively unknown, never competitor inventory.
@@ -771,6 +811,16 @@ const checks: Array<() => void> = [
     overlayNonArbStyle("atomic_loop", unrelatedSusdsBesideSusdsDepositSignals),
     "unknown",
   ),
+  // A mint retained by an actor cannot be reassigned to an unrelated external sUSDS deposit that
+  // occurred later in the receipt. Ordered provenance removes the false external-mint evidence.
+  () => assert.deepEqual(unrelatedActorMintWithIndependentSusdsDepositSignals.external_mint_tokens, []),
+  () => assert.equal(
+    overlayNonArbStyle("atomic_loop", unrelatedActorMintWithIndependentSusdsDepositSignals),
+    "atomic_loop",
+  ),
+  // A lender repaid with newly minted tokens remains net-zero and has no retained mint position.
+  () => assert.deepEqual(mintedFlashRepaymentSignals.external_mint_tokens, []),
+  () => assert.deepEqual(mintedFlashRepaymentSignals.external_mint_recipients, []),
   // Materiality is applied after aggregating mint events for a token.
   () => assert.deepEqual(splitExternalMintSignals.external_mint_tokens, [lower(UNKNOWN_TOKEN_CASES[0].token)]),
   () => assert.deepEqual(splitExternalMintSignals.external_mint_recipients, [
@@ -930,11 +980,20 @@ const checks: Array<() => void> = [
 
 async function run(): Promise<void> {
   try {
-    const [withCustomProfile, withoutProfile, withDefaultProfile, positiveActorShare] = await Promise.all([
+    const [
+      withCustomProfile,
+      withoutProfile,
+      withDefaultProfile,
+      positiveActorShare,
+      publicWrapperMint,
+      publicWrapperBurn,
+    ] = await Promise.all([
       customProfileClassification,
       noProfileClassification,
       defaultProfileInventoryClassification,
       positiveActorShareClassification,
+      publicWrapperMintClassification,
+      publicWrapperBurnClassification,
     ]);
     const allChecks = [
       ...checks,
@@ -942,6 +1001,13 @@ async function run(): Promise<void> {
       () => assert.equal(withoutProfile.winner_style, "atomic_loop"),
       () => assert.equal(withDefaultProfile.winner_style, "inventory_vault_rebalance"),
       () => assert.equal(positiveActorShare.winner_style, "unknown"),
+      () => assert.deepEqual(positiveActorShare.retained_share_position_tokens, [lower(ADDR.SUSDS)]),
+      () => assert.equal(publicWrapperMint.winner_style, "unknown"),
+      () => assert.deepEqual(
+        publicWrapperMint.non_arb_signals?.external_mint_recipients,
+        [lower(PUBLIC_WRAPPER)],
+      ),
+      () => assert.equal(publicWrapperBurn.winner_style, "atomic_loop"),
       () => assert.deepEqual(competitorScanAddresses(loadedCustomProfile), [CUSTOM_EOA, CUSTOM_EXECUTOR]),
     ];
     for (const check of allChecks) check();
@@ -1001,10 +1067,10 @@ function classifyPositiveActorShare() {
     rpc: classifierRpc,
     txHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     tx: { from: CUSTOM_EOA, to: EXEC_ACTOR, input: "0x" },
-    receipt: positiveActorShareMint,
+    receipt: positiveActorPricedShareMint,
     profit: {
-      pricedDeltas: [],
-      unpricedDeltas: [delta(SHARE_TOK, SHARE_AMT, "SHARE", 18)],
+      pricedDeltas: [delta(ADDR.SUSDS, SHARE_AMT, "sUSDS", 18)],
+      unpricedDeltas: [],
       beneficiary: EXEC_ACTOR,
       ethDeltaEth: 0,
       nativeTraceUsed: false,
@@ -1012,6 +1078,57 @@ function classifyPositiveActorShare() {
     transactionIndex: 0,
     blockNumber: 1,
     prestateBlock: 0,
+  });
+}
+
+function classifyPublicWrapperMint() {
+  return classifyWinnerTxStyle({
+    rpc: classifierRpc,
+    txHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    tx: { from: CUSTOM_EOA, to: PUBLIC_WRAPPER, input: "0x" },
+    receipt: {
+      from: CUSTOM_EOA,
+      to: PUBLIC_WRAPPER,
+      logs: [xfer(ADDR.USDS, ethers.ZeroAddress, PUBLIC_WRAPPER, SHARE_AMT, 0)],
+    },
+    profit: {
+      pricedDeltas: [delta(ADDR.WETH, 10n ** 18n, "WETH", 18)],
+      unpricedDeltas: [],
+      beneficiary: EXEC_ACTOR,
+      ethDeltaEth: 0,
+      nativeTraceUsed: false,
+    },
+    transactionIndex: 0,
+    blockNumber: 1,
+    prestateBlock: 0,
+    positionAccounts: [],
+  });
+}
+
+function classifyPublicWrapperBurn() {
+  return classifyWinnerTxStyle({
+    rpc: classifierRpc,
+    txHash: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    tx: { from: CUSTOM_EOA, to: PUBLIC_WRAPPER, input: "0x" },
+    receipt: {
+      from: CUSTOM_EOA,
+      to: PUBLIC_WRAPPER,
+      logs: [
+        xfer(SHARE_TOK, PUBLIC_WRAPPER, ethers.ZeroAddress, SHARE_AMT, 0),
+        vaultWithdrawLog(SHARE_TOK, PUBLIC_WRAPPER, SHARE_AMT, 1),
+      ],
+    },
+    profit: {
+      pricedDeltas: [delta(ADDR.WETH, 10n ** 18n, "WETH", 18)],
+      unpricedDeltas: [],
+      beneficiary: EXEC_ACTOR,
+      ethDeltaEth: 0,
+      nativeTraceUsed: false,
+    },
+    transactionIndex: 0,
+    blockNumber: 1,
+    prestateBlock: 0,
+    positionAccounts: [],
   });
 }
 
@@ -1040,6 +1157,7 @@ function analyzeActualReceiptFixture(receipt: ActualReceiptFixture) {
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
     share_imbalance_tokens: shareImbalanceTokens,
+    retained_share_position_tokens: retainedSharePositionTokensForOwners(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   return {

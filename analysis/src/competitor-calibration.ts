@@ -9,13 +9,13 @@ import {
   hasBeneficiaryWethUnwrapExit,
   overlayNonArbStyle,
   positionAccountImbalanceTokens,
+  retainedSharePositionTokensForOwners,
   shareTokenImbalanceTokens,
   type WinnerStyle,
 } from "./cli/bundle-postmortem.js";
 import {
   loadLiveCompetitorProfile,
   positionAccountsForActors,
-  type LiveCompetitorProfile,
 } from "./live-competitors.js";
 import { valueDeltas } from "./pnl/arb-profit.js";
 import { classifyTxShape, type RawLog } from "./pnl/tx-shape.js";
@@ -34,7 +34,6 @@ const LIQUITY_EXTERNAL_MINT_RECIPIENTS = [
   "0x807def5e7d057df05c796f4bc75c3fe82bd6eee1",
   "0x9502b7c397e9aa22fe9db7ef7daf21cd2aebe56b",
 ];
-const liveCompetitorProfile: LiveCompetitorProfile = loadLiveCompetitorProfile();
 const SUSDS_ATOMIC_LOOP_TXS = [
   "0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8",
   "0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4",
@@ -359,6 +358,7 @@ function offlineHoldoutStyle(holdout: HoldoutFixture): {
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
     share_imbalance_tokens: inventoryImbalanceTokens(receipt, actors),
+    retained_share_position_tokens: retainedSharePositionTokensForOwners(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   const nonArbSignal = nonArb.claim_selector_hit || nonArb.conserved_sink_cut
@@ -391,6 +391,7 @@ function offlineActualReceiptStyle(receipt: ActualReceiptFixture): {
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
     share_imbalance_tokens: shareImbalanceTokens,
+    retained_share_position_tokens: retainedSharePositionTokensForOwners(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   return {
@@ -429,16 +430,19 @@ function offlineWinnerStyle(fixture: CoffeeFixture): WinnerStyle {
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
     share_imbalance_tokens: inventoryImbalanceTokens(receipt, actors),
+    retained_share_position_tokens: retainedSharePositionTokensForOwners(receipt, actors),
     inventory_rebalance_selector_hit: false,
   });
   return overlayNonArbStyle(base, detectNonArbSignals(null, receipt, actors, null));
 }
 
 function inventoryImbalanceTokens(receipt: { logs: RawLog[] }, actors: Set<string>): string[] {
-  const positionAccounts = new Set(positionAccountsForActors(liveCompetitorProfile, actors));
-  const positionOwners = new Set([...actors, ...positionAccounts]);
+  // Match production: actor-owned share drawdowns are evaluated per holder, while configured
+  // position accounts are evaluated only as one aggregate entity. Load the default profile per call,
+  // matching the profileless library path instead of retaining module-global ownership state.
+  const positionAccounts = new Set(positionAccountsForActors(loadLiveCompetitorProfile(), actors));
   return [...new Set([
-    ...shareTokenImbalanceTokens(receipt, positionOwners),
+    ...shareTokenImbalanceTokens(receipt, actors),
     ...positionAccountImbalanceTokens(receipt, positionAccounts),
   ])].sort();
 }

@@ -243,6 +243,7 @@ export interface WinnerStyleInput {
   // establish competitor ownership without a receipt-grounded share/account imbalance.
   inventory_rebalance_selector_hit?: boolean;
   share_imbalance_tokens?: string[];
+  retained_share_position_tokens?: string[];
 }
 
 type WinnerStyleClassifierInput = Omit<WinnerStyleInput, "nativeWeiPositive" | "nativeWeiNegative"> & {
@@ -280,6 +281,7 @@ export interface WinnerStyleAnalysis {
   receipt_weth_unwrap_exit: boolean;
   winner_moved_price_beyond_prestate: boolean;
   unpriced_token_in_flow: string[];
+  retained_share_position_tokens?: string[];
   non_arb_signals?: NonArbSignals;
 }
 
@@ -1781,6 +1783,9 @@ export function classifyWinnerStyle(input: WinnerStyleClassifierInput): WinnerSt
   // is sufficient; generic ERC4626 selectors are shared by ordinary deposits and redemptions.
   const shareImbalance = (input.share_imbalance_tokens?.length ?? 0) > 0;
   if (shareImbalance) return "inventory_vault_rebalance";
+  // Opening or retaining a material actor-owned vault-share position is not a closed atomic loop.
+  // It also does not prove use of pre-held inventory, so preserve the honest unknown distinction.
+  if ((input.retained_share_position_tokens?.length ?? 0) > 0) return "unknown";
   const closedAtomicFlow = hasAtomicLoopFlow(
     input.pricedDeltas,
     input.unpricedDeltas,
@@ -1857,6 +1862,10 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
     ...shareTokenImbalanceTokens(input.receipt, beneficiaries),
     ...positionAccountImbalanceTokens(input.receipt, entityPositionAccounts),
   ])].sort();
+  const retainedSharePositionTokens = retainedSharePositionTokensForOwners(
+    input.receipt,
+    beneficiaries,
+  );
   const nonArbSignals = detectNonArbSignals(
     input.tx?.input,
     input.receipt,
@@ -1874,10 +1883,12 @@ export async function classifyWinnerTxStyle(input: WinnerStyleTxInput): Promise<
       nativeWeiPositive,
       nativeWeiNegative,
       share_imbalance_tokens: shareImbalanceTokens,
+      retained_share_position_tokens: retainedSharePositionTokens,
     }), nonArbSignals),
     receipt_weth_unwrap_exit: receiptWethUnwrapExit,
     winner_moved_price_beyond_prestate: winnerMovedPriceBeyondPrestate,
     unpriced_token_in_flow: unpricedTokenInFlow,
+    retained_share_position_tokens: retainedSharePositionTokens,
   };
 }
 
@@ -1905,6 +1916,21 @@ export function hasBeneficiaryWethUnwrapExit(
 // prove use of pre-held inventory. Configured entity accounts are handled sign-symmetrically by
 // positionAccountImbalanceTokens below.
 export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: Set<string>): string[] {
+  return actorVaultSharePositionTokens(receipt, positionOwners, (net) => net < 0n);
+}
+
+export function retainedSharePositionTokensForOwners(
+  receipt: Json | null,
+  positionOwners: Set<string>,
+): string[] {
+  return actorVaultSharePositionTokens(receipt, positionOwners, (net) => net > 0n);
+}
+
+function actorVaultSharePositionTokens(
+  receipt: Json | null,
+  positionOwners: Set<string>,
+  matchesDirection: (net: bigint) => boolean,
+): string[] {
   const evidencedVaultTokens = erc4626VaultTokens(receipt);
   const explicitOwners = new Set([...positionOwners].map(lower).filter(isAddress));
   const supplyChangedTokens = new Set<string>();
@@ -1932,7 +1958,7 @@ export function shareTokenImbalanceTokens(receipt: Json | null, positionOwners: 
   for (const token of supplyChangedTokens) {
     const holders = perHolder.get(token) ?? new Map<string, bigint>();
     for (const [holder, holderNet] of holders) {
-      if (holderNet < 0n
+      if (matchesDirection(holderNet)
         && explicitOwners.has(holder)
         && !venueEmitters.has(holder)
         && isMaterialTokenAmount(token, holderNet)) {
@@ -1982,15 +2008,9 @@ function retainedExternalMintEvidence(
 ): RetainedExternalMintEvidence {
   const normalizedActors = new Set([...actors].map(lower).filter(isAddress));
   const venueEmitters = swapVenueEmitters(receipt);
-  const mintedAmounts = new Map<string, bigint>();
-  for (const log of receipt?.logs ?? []) {
-    if (lower(String(log?.topics?.[0] ?? "")) !== TOPIC_TRANSFER) continue;
-    const transfer = decodeTransfer(log);
-    if (!transfer || lower(transfer.from) !== ZERO_ADDRESS) continue;
-    const token = lower(transfer.token);
-    mintedAmounts.set(token, (mintedAmounts.get(token) ?? 0n) + transfer.amount);
-  }
-  const mintedTokens = [...mintedAmounts]
+  const provenance = mintProvenance(receipt);
+  const ledger = buildFlowLedger(receipt);
+  const mintedTokens = [...provenance.mintedAmounts]
     .filter(([token, amount]) => isMaterialTokenAmount(token, amount))
     .map(([token]) => token);
 
@@ -1998,13 +2018,16 @@ function retainedExternalMintEvidence(
   const tokens = new Set<string>();
   const unknownTokens = new Set<string>();
   const recipientSetsByToken = new Map<string, Set<string>>();
-  const ledger = buildFlowLedger(receipt);
   for (const token of mintedTokens) {
     const eligibleRecipients: Array<[string, bigint]> = [];
-    for (const [holder, amount] of ledger.get(token)?.net ?? []) {
+    for (const [holder, amount] of provenance.balancesByToken.get(token) ?? []) {
       if (amount <= 0n) continue;
       if (holder === ZERO_ADDRESS || holder === token || normalizedActors.has(holder)) continue;
       if (venueEmitters.has(holder)) continue;
+      // Mint provenance can settle a debt without creating a retained position. A flash lender
+      // that sends X before the mint and receives the minted X later is net-zero, not an external
+      // mint recipient. Require positive transaction-level net as well as surviving provenance.
+      if ((ledger.get(token)?.net.get(holder) ?? 0n) <= 0n) continue;
       eligibleRecipients.push([holder, amount]);
     }
     const materialRecipients = eligibleRecipients.filter(([, amount]) =>
@@ -2036,6 +2059,43 @@ function retainedExternalMintEvidence(
         [token, [...tokenRecipients].sort()]),
     ),
   };
+}
+
+interface MintProvenance {
+  mintedAmounts: Map<string, bigint>;
+  balancesByToken: Map<string, Map<string, bigint>>;
+}
+
+// Receipt-local provenance is ordered. A later mint cannot retroactively explain an unrelated
+// earlier deposit, and only the minted portion of a mixed holder balance propagates downstream.
+function mintProvenance(receipt: Json | null): MintProvenance {
+  const mintedAmounts = new Map<string, bigint>();
+  const balancesByToken = new Map<string, Map<string, bigint>>();
+  for (const log of receipt?.logs ?? []) {
+    const transfer = decodeTransfer(log);
+    if (!transfer || transfer.amount <= 0n) continue;
+    const token = lower(transfer.token);
+    const from = lower(transfer.from);
+    const to = lower(transfer.to);
+    let balances = balancesByToken.get(token);
+    if (!balances) {
+      balances = new Map();
+      balancesByToken.set(token, balances);
+    }
+    if (from === ZERO_ADDRESS) {
+      mintedAmounts.set(token, (mintedAmounts.get(token) ?? 0n) + transfer.amount);
+      if (to !== ZERO_ADDRESS) balances.set(to, (balances.get(to) ?? 0n) + transfer.amount);
+      continue;
+    }
+    const available = balances.get(from) ?? 0n;
+    const moved = available < transfer.amount ? available : transfer.amount;
+    if (moved === 0n) continue;
+    const remaining = available - moved;
+    if (remaining === 0n) balances.delete(from);
+    else balances.set(from, remaining);
+    if (to !== ZERO_ADDRESS) balances.set(to, (balances.get(to) ?? 0n) + moved);
+  }
+  return { mintedAmounts, balancesByToken };
 }
 
 function recognizedExternalMintProtocolContext(
@@ -2082,7 +2142,7 @@ function hasGroundedSusdsMintContext(
     if (retainedUsdsRecipients.length === 0
       || retainedUsdsRecipients.some((recipient) => recipient !== susds)
       || (!isMaterialTokenAmount(usds, usdsMints.get(susds) ?? 0n)
-        && !hasMaterialSusdsDepositAssetFlow(receipt))) return false;
+        && !hasGroundedSusdsDepositAssetFlow(receipt, usdsMints))) return false;
   }
 
   if (evidence.tokens.includes(susds)) {
@@ -2099,7 +2159,10 @@ function hasGroundedSusdsMintContext(
   return true;
 }
 
-function hasMaterialSusdsDepositAssetFlow(receipt: Json | null): boolean {
+function hasGroundedSusdsDepositAssetFlow(
+  receipt: Json | null,
+  zeroMintsByRecipient: Map<string, bigint>,
+): boolean {
   const depositedBySender = new Map<string, bigint>();
   for (const log of receipt?.logs ?? []) {
     if (lower(String(log?.address ?? "")) !== lower(ADDR.SUSDS)
@@ -2117,7 +2180,8 @@ function hasMaterialSusdsDepositAssetFlow(receipt: Json | null): boolean {
   }
   return [...depositedBySender].some(([sender, assets]) =>
     isMaterialTokenAmount(ADDR.USDS, assets)
-      && transferredBySender.get(sender) === assets);
+      && transferredBySender.get(sender) === assets
+      && (zeroMintsByRecipient.get(sender) ?? 0n) >= assets);
 }
 
 function zeroMintAmountsByRecipient(receipt: Json | null, token: string): Map<string, bigint> {
@@ -2257,9 +2321,7 @@ function competitorBeneficiaries(tx: Json | null, receipt: Json | null, benefici
   return new Set(
     [
       tx?.from,
-      tx?.to,
       receipt?.from,
-      receipt?.to,
       beneficiary,
     ]
       .map((address) => lower(String(address ?? "")))
