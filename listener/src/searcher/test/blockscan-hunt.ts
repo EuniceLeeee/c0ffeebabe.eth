@@ -32,7 +32,7 @@ import {
 import { DEFAULT_POOL_UNIVERSE_PATH, loadPoolUniverse } from "../pool-universe.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
-import { metronomeSynthPoolIface, quoteFluidDex } from "../solver/quoter.js";
+import { metronomeSynthPoolIface, quote } from "../solver/quoter.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
@@ -59,7 +59,7 @@ const WAD = 10n ** 18n;
 const PSM_TO18 = 10n ** 12n;
 const Q96 = 1n << 96n;
 
-type ProtocolClass = "erc4626" | "wsteth" | "psm" | "metronome";
+type ProtocolClass = "erc4626" | "wsteth" | "psm" | "metronome" | "other";
 
 interface HuntConfig {
   rpcUrl: string;
@@ -211,7 +211,10 @@ async function main(): Promise<void> {
     const protocolPools = POOL_REGISTRY
       .filter((pool) => pool.adapter !== "fluid-vault")
       .map(lowerPoolEntry);
-    const pools = mergePoolRegistries(universePools, protocolPools);
+    // Production starts from code-owned protocol seeds, then admits the
+    // file-backed universe. Keep the same precedence so stale file metadata
+    // cannot replace a newer exact adapter classification in the replay.
+    const pools = mergePoolRegistries(protocolPools, universePools);
     const rawEdges = await buildTokenGraph(graphBackend, pools);
     const edges = rawEdges.map(lowerEdge);
     const protocolEdges = edges.filter((edge) => edge.slotKind === "protocol");
@@ -522,7 +525,7 @@ async function warmCurves(
 function uniqueCurvePools(edges: TokenEdge[]): Map<string, TokenEdge> {
   const out = new Map<string, TokenEdge>();
   for (const edge of edges) {
-    if (edge.slotKind !== "swap" || !edge.adapterId.includes("curve")) continue;
+    if (edge.slotKind !== "swap" || !isLocallyModelledCurve(edge.adapterId)) continue;
     const key = edge.target.toLowerCase();
     if (!out.has(key)) out.set(key, edge);
   }
@@ -539,61 +542,66 @@ async function buildProtocolMids(
   const mids = new Map<string, ProtocolMid>();
   const classCounts = new Map<ProtocolClass, number>();
   const decimals = new Map<string, number>();
-  let fluidFailed = 0;
-  let fluidMids = 0;
+  let externalSwapFailed = 0;
+  let externalSwapMids = 0;
   let deadlineHit = false;
 
+  // Externally quoted swap edges have no local-cache fallback. Price them
+  // before the larger protocol set so a valid route is not hidden by harness
+  // iteration order. Dispatch remains production-owned through quote().
   for (const edge of edges) {
     if (Date.now() >= deadlineAtMs) {
       deadlineHit = true;
       break;
     }
-    const protocolClass = classifyProtocol(edge);
-    if (!protocolClass) continue;
+    if (!isExternallyQuotedSwap(edge)) continue;
     try {
       const tokenInDec = await tokenDecimals(provider, blockNumber, edge.tokenIn, decimals);
       const oneIn = 10n ** BigInt(tokenInDec);
-      const mid = await readProtocolMid(provider, blockNumber, edge, oneIn);
+      const mid = await readDispatchedMid(state, edge, oneIn);
       if (!Number.isFinite(mid) || mid <= 0) continue;
-      // Crude rank/size proxy only. The fork solver truth-checks executable
-      // sizes, so this depth value is not load-bearing.
-      const depthIn = oneIn * 10_000n;
       mids.set(protocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
         mid,
         feeBps: 0,
-        depthIn,
+        depthIn: oneIn * 10_000n,
       });
-      classCounts.set(protocolClass, (classCounts.get(protocolClass) ?? 0) + 1);
+      externalSwapMids++;
     } catch (err) {
+      externalSwapFailed++;
       console.log(
-        `[blockscan-hunt] protocol mid failed adapter=${edge.adapterId} target=${edge.target} ` +
+        `[blockscan-hunt] external swap mid failed adapter=${edge.adapterId} target=${edge.target} ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
 
   if (!deadlineHit) {
-    for (const edge of edges) {
+    const protocolEdges = edges
+      .filter((edge) => classifyProtocol(edge) !== null)
+      .sort((a, b) => protocolMidPriority(a) - protocolMidPriority(b));
+    for (const edge of protocolEdges) {
       if (Date.now() >= deadlineAtMs) {
         deadlineHit = true;
         break;
       }
-      if (!isFluidDexSwap(edge)) continue;
+      const protocolClass = classifyProtocol(edge);
+      if (!protocolClass) continue;
       try {
         const tokenInDec = await tokenDecimals(provider, blockNumber, edge.tokenIn, decimals);
         const oneIn = 10n ** BigInt(tokenInDec);
-        const mid = await readFluidDexMid(state, edge, oneIn);
+        const mid = await readProtocolMid(provider, state, blockNumber, edge, oneIn);
         if (!Number.isFinite(mid) || mid <= 0) continue;
+        // Crude rank/size proxy only. The fork solver truth-checks executable
+        // sizes, so this depth value is not load-bearing.
         mids.set(protocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
           mid,
           feeBps: 0,
           depthIn: oneIn * 10_000n,
         });
-        fluidMids++;
+        classCounts.set(protocolClass, (classCounts.get(protocolClass) ?? 0) + 1);
       } catch (err) {
-        fluidFailed++;
         console.log(
-          `[blockscan-hunt] fluid mid failed adapter=${edge.adapterId} target=${edge.target} ` +
+          `[blockscan-hunt] protocol mid failed adapter=${edge.adapterId} target=${edge.target} ` +
             `${err instanceof Error ? err.message : String(err)}`,
         );
       }
@@ -605,13 +613,22 @@ async function buildProtocolMids(
       `erc4626=${classCounts.get("erc4626") ?? 0} ` +
       `wsteth=${classCounts.get("wsteth") ?? 0} psm=${classCounts.get("psm") ?? 0} ` +
       `metronome=${classCounts.get("metronome") ?? 0} ` +
-      `fluid=${fluidMids} fluidFailed=${fluidFailed} deadline=${deadlineHit ? 1 : 0}`,
+      `other=${classCounts.get("other") ?? 0} ` +
+      `externalSwap=${externalSwapMids} externalSwapFailed=${externalSwapFailed} ` +
+      `deadline=${deadlineHit ? 1 : 0}`,
   );
   return { mids, classCounts };
 }
 
-function isFluidDexSwap(edge: TokenEdge): boolean {
-  return edge.slotKind === "swap" && edge.adapterId.toLowerCase().includes("fluid-dex");
+function isExternallyQuotedSwap(edge: TokenEdge): boolean {
+  return edge.slotKind === "swap" && edge.adapterId !== "univ2-swap"
+    && edge.adapterId !== "univ3-swap" && edge.adapterId !== "univ4-unlock"
+    && !isLocallyModelledCurve(edge.adapterId);
+}
+
+function isLocallyModelledCurve(adapterId: string): boolean {
+  return adapterId === "curve-exchange" || adapterId === "curve-exchange-nr"
+    || adapterId === "curve-exchange-plain" || adapterId === "curve-exchange-received-uint";
 }
 
 function classifyProtocol(edge: TokenEdge): ProtocolClass | null {
@@ -625,11 +642,19 @@ function classifyProtocol(edge: TokenEdge): ProtocolClass | null {
   ) {
     return "erc4626";
   }
-  return null;
+  return edge.slotKind === "protocol" ? "other" : null;
+}
+
+function protocolMidPriority(edge: TokenEdge): number {
+  const kind = classifyProtocol(edge);
+  if (kind === "other" || kind === "psm") return 0;
+  if (kind === "metronome" || kind === "wsteth") return 1;
+  return 2;
 }
 
 async function readProtocolMid(
   provider: ethers.JsonRpcProvider,
+  state: StateBackend,
   blockNumber: number,
   edge: TokenEdge,
   oneIn: bigint,
@@ -677,20 +702,23 @@ async function readProtocolMid(
     const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
     return Number(decoded[0]) / Number(oneIn);
   }
-  throw new Error(`unsupported protocol adapter ${edge.adapterId}`);
+  return readDispatchedMid(state, edge, oneIn);
 }
 
-async function readFluidDexMid(
+async function readDispatchedMid(
   state: StateBackend,
   edge: TokenEdge,
   oneIn: bigint,
 ): Promise<number> {
-  const out = await quoteFluidDex(
-    state,
+  const out = await quote(
+    edge.adapterId,
     edge.target,
     edge.tokenIn,
     edge.tokenOut,
     oneIn,
+    state,
+    undefined,
+    edge.v4PoolKey,
     edge.poolToken0,
     edge.poolToken1,
   );
@@ -951,7 +979,7 @@ function directedMid(
 ): { mid: number; feeBps: number } | null {
   const tokenIn = edge.tokenIn.toLowerCase();
   const tokenOut = edge.tokenOut.toLowerCase();
-  if (edge.slotKind === "protocol" || isFluidDexSwap(edge)) {
+  if (edge.slotKind === "protocol" || isExternallyQuotedSwap(edge)) {
     return externalDirectedMid(protocolMids, edge.target, tokenIn, tokenOut);
   }
   if (edge.adapterId === "univ2-swap") {
@@ -979,7 +1007,7 @@ function directedMid(
     }
     return null;
   }
-  if (edge.adapterId.includes("curve")) {
+  if (isLocallyModelledCurve(edge.adapterId)) {
     const snap = cache.snapshotCurve(edge.target, blockNumber);
     if (!snap) return null;
     const i = snap.coins.findIndex((coin) => coin.toLowerCase() === tokenIn);
