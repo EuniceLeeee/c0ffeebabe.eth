@@ -887,11 +887,14 @@ prepare_candidate_universes() {
   rm -f "$universe_tmp"
   (
     cd "$WT/listener"
-    MAINNET_RPC_URL="$LOCAL_RPC" \
-    POOL_UNIVERSE_FROM_BLOCK="$from_block" \
-    POOL_UNIVERSE_TO_BLOCK="$to_block" \
-    POOL_UNIVERSE_OUT="$universe_tmp" \
-      timeout 900 npx tsx src/searcher/build-active-pool-universe.ts
+    timeout 900 env -i \
+      PATH="$PATH" HOME="${HOME:-/root}" \
+      MAINNET_RPC_URL="$LOCAL_RPC" \
+      POOL_UNIVERSE_FROM_BLOCK="$from_block" \
+      POOL_UNIVERSE_TO_BLOCK="$to_block" \
+      POOL_UNIVERSE_OUT="$universe_tmp" \
+      POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0 \
+      npx tsx src/searcher/build-active-pool-universe.ts
   ) >"$generator_log" 2>&1 \
     || die "challenger universe generation failed (see $generator_log)"
   [ -f "$universe_tmp" ] || die "challenger universe generator produced no file"

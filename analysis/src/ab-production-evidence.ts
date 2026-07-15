@@ -51,6 +51,38 @@ export function validateExactProductionSwapPath(
   return [];
 }
 
+export function selectProductionSwapWindow(
+  expectedRoute: ProductionRouteStep[],
+  observed: DecodedSwap[],
+): { matched: DecodedSwap[]; errors: string[] } {
+  const expectedPools = expectedRoute
+    .filter((edge) => edge.slotKind === "swap")
+    .map((edge) => lower(String(edge.poolId ?? edge.target)));
+  if (expectedPools.length === 0) {
+    return { matched: [], errors: ["production sample expected_route contains no swap edge"] };
+  }
+  const windows: DecodedSwap[][] = [];
+  for (let start = 0; start + expectedPools.length <= observed.length; start++) {
+    const candidate = observed.slice(start, start + expectedPools.length);
+    if (candidate.every((swap, offset) => lower(swap.poolId) === expectedPools[offset])) {
+      windows.push(candidate);
+    }
+  }
+  if (windows.length === 0) {
+    return {
+      matched: [],
+      errors: ["production sample expected_route swap sequence is not a contiguous on-chain swap window"],
+    };
+  }
+  if (windows.length > 1) {
+    return {
+      matched: [],
+      errors: ["production sample expected_route swap sequence is ambiguous in the on-chain swap logs"],
+    };
+  }
+  return { matched: windows[0], errors: [] };
+}
+
 /** Recompute the sample classification from the local archive node at deploy time. This prevents a
  * report from relabelling a backrun (or a fake tx hash) as a standing-state atomic sample. */
 export async function verifyOnchainProductionSample(
@@ -90,20 +122,16 @@ export async function verifyOnchainProductionSample(
     .map((log) => decodeAnySwapLog(log))
     .filter((swap): swap is DecodedSwap => swap !== null)
     .sort((a, b) => a.logIndex - b.logIndex);
-  const arbSwapPath = decodedSwaps
-    .map((swap) => ({ pool_id: swap.poolId, direction: swap.direction }));
   const expectedRoute = sample.expected_route ?? [];
-  const expectedSwapPools = expectedRoute
-    .filter((edge) => edge.slotKind === "swap")
-    .map((edge) => lower(String(edge.poolId ?? edge.target)));
-  const observedSwapPools = arbSwapPath.map((step) => lower(step.pool_id));
-  if (JSON.stringify(expectedSwapPools) !== JSON.stringify(observedSwapPools)) {
-    errors.push("production sample expected_route swap sequence does not match the ordered on-chain swap logs");
-  }
+  const selectedSwapWindow = selectProductionSwapWindow(expectedRoute, decodedSwaps);
+  errors.push(...selectedSwapWindow.errors);
+  const routeSwaps = selectedSwapWindow.matched;
+  const arbSwapPath = routeSwaps
+    .map((swap) => ({ pool_id: swap.poolId, direction: swap.direction }));
   const universe = loadProductionUniverse(universePath);
   await validateOnchainSwapRoute(
     expectedRoute.filter((edge) => edge.slotKind === "swap"),
-    decodedSwaps,
+    routeSwaps,
     universe,
     rpc,
     receipt.blockNumber,
@@ -118,8 +146,9 @@ export async function verifyOnchainProductionSample(
     errors,
   );
   const transactionIndex = Number(hexToBigInt(receipt.transactionIndex));
+  const routeSwapLogIndexes = new Set(routeSwaps.map((swap) => swap.logIndex));
   const shape = classifyTxShape({
-    receiptLogs,
+    receiptLogs: receiptLogs.filter((log) => routeSwapLogIndexes.has(log.logIndex)),
     txIndex: transactionIndex,
     sameBlockSwapLogs: allLogs,
     sameActorTxHashes,
@@ -241,6 +270,7 @@ export interface UniversePoolFact {
   token1?: string;
   currency0?: string;
   currency1?: string;
+  underlyingCoins?: string[];
   fixedTokenIn?: string;
   fixedTokenOut?: string;
 }
@@ -258,6 +288,13 @@ const PAIR_IFACE = new ethers.Interface([
 ]);
 const CURVE_UINT_IFACE = new ethers.Interface(["function coins(uint256) view returns (address)"]);
 const CURVE_INT_IFACE = new ethers.Interface(["function coins(int128) view returns (address)"]);
+const CURVE_UNDERLYING_INT_IFACE = new ethers.Interface([
+  "function underlying_coins(int128) view returns (address)",
+]);
+const CURVE_METAREGISTRY = "0xf98b45fa17de75fb1ad0e7afd971b0ca00e379fc";
+const CURVE_METAREGISTRY_IFACE = new ethers.Interface([
+  "function get_underlying_coins(address pool) view returns (address[8])",
+]);
 const ROUTE_SELECTORS = new Map<string, Set<string>>([
   ["univ2-swap", selectors("swap(uint256,uint256,address,bytes)")],
   ["univ2-router-swap-exact-in", selectors("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)")],
@@ -268,6 +305,7 @@ const ROUTE_SELECTORS = new Map<string, Set<string>>([
   ["curve-exchange-received-uint", new Set(["0x767691e7"])],
   ["curve-exchange-nr", new Set(["0x7e3db030"])],
   ["curve-exchange-plain", new Set(["0x3df02124"])],
+  ["curve-exchange-underlying", new Set(["0xa6417ed6"])],
   ["curve-router-execute-path", selectors("executePath(bytes,uint256[],address)")],
   ["fluid-dex-swap", selectors("swapIn(bool,uint256,uint256,address)")],
   ["wsteth-wrap", selectors("wrap(uint256)")],
@@ -337,6 +375,7 @@ function adapterMatchesUniverse(adapterId: string, universeAdapter: string): boo
   if (universeAdapter === "univ2") return adapterId === "univ2-swap";
   if (universeAdapter === "univ3") return adapterId === "univ3-swap";
   if (universeAdapter === "univ4") return adapterId === "univ4-unlock";
+  if (universeAdapter === "curve-underlying") return adapterId === "curve-exchange-underlying";
   if (universeAdapter === "curve" || universeAdapter === "curve-nr") return adapterId.startsWith("curve-");
   if (universeAdapter === "fluid-dex") return adapterId === "fluid-dex-swap";
   return false;
@@ -373,6 +412,24 @@ async function resolveObservedSwapTokens(
       return null;
     }
   }
+  if (pool.adapter === "curve-underlying"
+      && swap.tokenInIndex !== undefined && swap.tokenOutIndex !== undefined) {
+    try {
+      const [tokenIn, tokenOut] = await Promise.all([
+        curveUnderlyingCoin(rpc, pool.address, swap.tokenInIndex, blockTag),
+        curveUnderlyingCoin(rpc, pool.address, swap.tokenOutIndex, blockTag),
+      ]);
+      const recordedIn = pool.underlyingCoins?.[swap.tokenInIndex];
+      const recordedOut = pool.underlyingCoins?.[swap.tokenOutIndex];
+      if ((recordedIn && lower(recordedIn) !== tokenIn)
+          || (recordedOut && lower(recordedOut) !== tokenOut)) {
+        return null;
+      }
+      return { tokenIn, tokenOut };
+    } catch {
+      return null;
+    }
+  }
   if (!token0 || !token1) return null;
   return swap.direction === "0for1"
     ? { tokenIn: token0, tokenOut: token1 }
@@ -397,6 +454,33 @@ async function curveCoin(rpc: RpcClient, target: string, index: number, blockTag
     return await ethCallAddress(rpc, target, CURVE_UINT_IFACE, "coins", [index], blockTag);
   } catch {
     return ethCallAddress(rpc, target, CURVE_INT_IFACE, "coins", [index], blockTag);
+  }
+}
+
+async function curveUnderlyingCoin(
+  rpc: RpcClient,
+  target: string,
+  index: number,
+  blockTag: string,
+): Promise<string> {
+  try {
+    return await ethCallAddress(
+      rpc,
+      target,
+      CURVE_UNDERLYING_INT_IFACE,
+      "underlying_coins",
+      [index],
+      blockTag,
+    );
+  } catch {
+    const data = CURVE_METAREGISTRY_IFACE.encodeFunctionData("get_underlying_coins", [target]);
+    const raw = await rpc.call<string>("eth_call", [{ to: CURVE_METAREGISTRY, data }, blockTag]);
+    const coins = Array.from(
+      CURVE_METAREGISTRY_IFACE.decodeFunctionResult("get_underlying_coins", raw)[0] as readonly string[],
+    ).map((coin) => lower(String(coin)));
+    const coin = coins[index];
+    if (!coin || coin === ZERO_ADDRESS) throw new Error("curve underlying coin index is unavailable");
+    return coin;
   }
 }
 

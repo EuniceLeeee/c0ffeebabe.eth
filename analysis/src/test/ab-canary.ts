@@ -36,6 +36,8 @@ test("challenger universe mode prepares an immutable input before candidate repl
   assert.match(wrapper, /prepare_candidate_universes "\$experiment" "\$requested_input_mode"/);
   assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
   assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
+  assert.match(wrapper, /timeout 900 env -i/);
+  assert.match(wrapper, /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/);
   assert.match(wrapper, /active-pools-\$universe_hash\.json/);
   assert.match(wrapper, /--baseline-universe "\$A_REPLAY_UNIVERSE"/);
   assert.match(wrapper, /--challenger-universe "\$B_UNIVERSE"/);

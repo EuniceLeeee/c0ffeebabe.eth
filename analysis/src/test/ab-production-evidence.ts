@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import {
+  selectProductionSwapWindow,
   validateOnchainExecutionRoute,
   validateOnchainSwapRoute,
   type ProductionRouteStep,
@@ -60,6 +61,93 @@ test("landed swap route requires factory-backed identity and exact token directi
     [swap], [pool], {} as RpcClient, "0x1", wrongDirection,
   );
   assert.match(wrongDirection.join("\n"), /token direction/);
+});
+
+test("production swap window excludes a trailing builder-payment swap", () => {
+  const poolB = "0x8888888888888888888888888888888888888888";
+  const paymentPool = "0x9999999999999999999999999999999999999999";
+  const route: ProductionRouteStep[] = [
+    {
+      adapterId: "univ2-swap", slotKind: "swap", target: POOL, poolId: POOL,
+      tokenIn: TOKEN_A, tokenOut: TOKEN_B,
+    },
+    {
+      adapterId: "univ3-swap", slotKind: "swap", target: poolB, poolId: poolB,
+      tokenIn: TOKEN_B, tokenOut: TOKEN_A,
+    },
+  ];
+  const swap = (poolId: string, logIndex: number): DecodedSwap => ({
+    txHash: `0x${"3".repeat(64)}`,
+    index: 1,
+    logIndex,
+    direction: "0for1",
+    poolId,
+    sizeRaw: 1n,
+  });
+  const core = [swap(POOL, 1), swap(poolB, 2)];
+  const selected = selectProductionSwapWindow(route, [...core, swap(paymentPool, 3)]);
+  assert.deepEqual(selected.errors, []);
+  assert.deepEqual(selected.matched, core);
+
+  const ambiguous = selectProductionSwapWindow(route, [...core, ...core]);
+  assert.match(ambiguous.errors.join("\n"), /ambiguous/);
+  assert.deepEqual(ambiguous.matched, []);
+
+  const interleaved = selectProductionSwapWindow(
+    route,
+    [core[0], swap(paymentPool, 2), core[1]],
+  );
+  assert.match(interleaved.errors.join("\n"), /not a contiguous/);
+});
+
+test("Curve underlying route is grounded by historical underlying_coins metadata", async () => {
+  const route: ProductionRouteStep = {
+    adapterId: "curve-exchange-underlying",
+    slotKind: "swap",
+    target: POOL,
+    poolId: POOL,
+    tokenIn: TOKEN_B,
+    tokenOut: TOKEN_A,
+  };
+  const swap: DecodedSwap = {
+    txHash: `0x${"2".repeat(64)}`,
+    index: 1,
+    logIndex: 2,
+    direction: "1for0",
+    poolId: POOL,
+    sizeRaw: 2n,
+    tokenInIndex: 1,
+    tokenOutIndex: 0,
+  };
+  const pool: UniversePoolFact = {
+    address: POOL,
+    adapter: "curve-underlying",
+    venueId: "curve",
+    identitySource: "curve-metaregistry-underlying",
+    underlyingCoins: [TOKEN_A, TOKEN_B],
+  };
+  const iface = new ethers.Interface(["function underlying_coins(int128) view returns (address)"]);
+  const rpc = {
+    call: async (_method: string, params: Array<{ data: string } | string>) => {
+      assert.equal(params[1], "0x123");
+      const index = Number(iface.decodeFunctionData("underlying_coins", (params[0] as { data: string }).data)[0]);
+      return iface.encodeFunctionResult("underlying_coins", [index === 0 ? TOKEN_A : TOKEN_B]);
+    },
+  } as RpcClient;
+  const errors: string[] = [];
+  await validateOnchainSwapRoute([route], [swap], [pool], rpc, "0x123", errors);
+  assert.deepEqual(errors, []);
+
+  const staleMetadata: string[] = [];
+  await validateOnchainSwapRoute(
+    [route],
+    [swap],
+    [{ ...pool, underlyingCoins: [TOKEN_B, TOKEN_A] }],
+    rpc,
+    "0x123",
+    staleMetadata,
+  );
+  assert.match(staleMetadata.join("\n"), /token direction/);
 });
 
 test("landed protocol route binds adapter selector order and receipt token flow", () => {
