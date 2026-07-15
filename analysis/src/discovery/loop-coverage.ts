@@ -147,6 +147,21 @@ const RECOGNIZED_AUXILIARY_TOPICS: ReadonlySet<string> = new Set(
   ].map(lower),
 );
 
+// These known credit events still require a trace before a transaction can be called route-complete.
+// Sync/Initialize are benign pool bookkeeping and remain recognized without creating a trace gap.
+const TRACE_REQUIRED_AUXILIARY_TOPICS: ReadonlySet<string> = new Set(
+  [
+    TOPICS.morphoBorrow,
+    TOPICS.morphoRepay,
+    TOPICS.morphoSupply,
+    TOPICS.morphoWithdraw,
+    TOPICS.morphoSupplyCollateral,
+    TOPICS.morphoWithdrawCollateral,
+    TOPICS.aaveV3Borrow,
+    TOPICS.aaveV3Repay,
+  ].map(lower),
+);
+
 const REGISTERED_ENTRY_BY_ADDRESS = new Map(
   POOL_REGISTRY.flatMap((entry) => [
     [lower(entry.address), entry] as const,
@@ -270,8 +285,9 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
   for (const log of input.receiptLogs) {
     const addr = lower(log.address);
     if (!addr) continue;
-    const topic0 = topic0Of(log.topics);
-    if (!topic0) continue;
+    // Anonymous events have no topic0. Preserve the emitter conservatively instead of silently
+    // removing receipt evidence and making route coverage look complete.
+    const topic0 = topic0Of(log.topics) ?? "";
     const topics = topicsByEmitter.get(addr);
     if (topics) topics.add(topic0);
     else topicsByEmitter.set(addr, new Set([topic0]));
@@ -290,11 +306,14 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
     const observedSwapFamilies = observedSwapFamiliesFor(topic0s);
     const observedFundingFamilies = observedFundingFamiliesFor(topic0s);
     const unrecognizedTopic0s = topic0s.filter((topic0) => !isRecognizedTopic(topic0));
+    const traceRequiredTopic0s = topic0s.filter(
+      (topic0) => unrecognizedTopic0s.includes(topic0) || TRACE_REQUIRED_AUXILIARY_TOPICS.has(topic0),
+    );
     const observedRoles = observedRolesFor(
       topic0s,
       observedSwapFamilies,
       observedFundingFamilies,
-      unrecognizedTopic0s,
+      traceRequiredTopic0s,
     );
     venues.push({
       addr,
@@ -340,15 +359,8 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
       }
     }
 
-    for (const topic0 of unrecognizedTopic0s) {
+    for (const topic0 of traceRequiredTopic0s) {
       unclassifiedEmitters.push({ addr, topic0 });
-    }
-    if (
-      unrecognizedTopic0s.length === 0
-      && observedRoles.length === 1
-      && observedRoles[0] === "unclassified"
-    ) {
-      unclassifiedEmitters.push({ addr, topic0: topic0s[0] ?? "" });
     }
   }
 
@@ -406,7 +418,7 @@ function observedRolesFor(
   topic0s: string[],
   observedSwapFamilies: ObservedSwapFamily[],
   observedFundingFamilies: ObservedFundingFamily[],
-  unrecognizedTopic0s: string[],
+  traceRequiredTopic0s: string[],
 ): ObservedRole[] {
   const roles = new Set<ObservedRole>();
   if (observedSwapFamilies.length > 0) roles.add("swap");
@@ -414,7 +426,7 @@ function observedRolesFor(
   if (topic0s.some((topic0) => LIQUIDITY_EVENT_TOPICS.has(topic0))) roles.add("liquidity");
   if (topic0s.some((topic0) => NAMED_PROTOCOL_EVENT_TOPICS.has(topic0))) roles.add("protocol");
   if (topic0s.some((topic0) => TOKEN_TOPICS.has(topic0))) roles.add("token");
-  if (roles.size === 0 || unrecognizedTopic0s.length > 0) roles.add("unclassified");
+  if (roles.size === 0 || traceRequiredTopic0s.length > 0) roles.add("unclassified");
   return [...roles].sort();
 }
 
@@ -451,6 +463,27 @@ function assessProductionRoutability(
     : family === "fluid"
       ? "fluid-dex"
       : family;
+
+  // Balancer V2 is a canonical singleton. A matching Swap from any other emitter is only a
+  // topic observation until its identity is established by trace/registry evidence.
+  if (family === "balancer-v2" && addr !== lower(LISTENER_ADDR.BALANCER_VAULT)) {
+    return {
+      productionRoutability: "unassessed",
+      reason: "emitter_or_routing_graph_not_attested",
+      in_graph: null,
+    };
+  }
+
+  // DODO is factory/pool based and production has no DODO registry. The event signature proves an
+  // observed family, not that an arbitrary emitter is a real DODO pool.
+  if (family === "dodo") {
+    return {
+      productionRoutability: "unassessed",
+      reason: "factory_or_routing_graph_not_attested",
+      in_graph: null,
+    };
+  }
+
   if (!PRODUCTION_SWAP_LINEAGES.has(productionLineage)) {
     return {
       productionRoutability: "not_routable",

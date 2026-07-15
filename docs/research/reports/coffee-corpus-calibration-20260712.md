@@ -7,8 +7,9 @@ Follow-up schema-v4 rerun: 2026-07-15.
 
 The full Coffee export is useful as a **candidate generator**, not an atomic-loop oracle. The receipt-log
 classifier separates observed roles from production routability: exact registered Fluid DEX evidence is
-routing-attested, DODO and Balancer Swap remain real swap-route gaps, Balancer flash loans remain supported
-funding, and Balancer `PoolBalanceChanged` is liquidity evidence only.
+routing-attested, canonical Balancer Vault Swap events expose a real swap-route gap, Balancer flash loans
+remain supported funding, and Balancer `PoolBalanceChanged` is liquidity evidence only. DODO Swap topics
+remain candidate evidence until pool identity is attested; topic recognition alone is not production support.
 
 Atomicity remains a second stage: every transaction with named protocol evidence must pass canonical
 `bundle-postmortem` position-conservation analysis before it can influence an A/B verdict.
@@ -20,6 +21,8 @@ Atomicity remains a second stage: every transaction with named protocol evidence
 - Window: blocks `24558871..24588564`, `2026-03-01 00:00:47 UTC` through
   `2026-03-05 03:25:59 UTC`
 - Contents: 857 unique successful Coffee transactions, 18,541 receipt-log rows
+- Canonical schema-v4 output SHA-256:
+  `b9f0104ff0cb5bb8daecb2354ec0ceaf02565c7c6c31703d7868ff9840a583b6`
 - Generated local artifacts: `analysis/outputs/coffee-corpus/venues.json` and
   `analysis/outputs/coffee-corpus/loop-coverage.json`
 
@@ -56,17 +59,18 @@ The canonical postmortem now also recognizes Fluid DEX topic
 | known protocol-gap transactions | 25 |
 | transactions requiring trace before comparability | 857 |
 | receipt-route-coverage-complete transactions | 0 |
-| transactions with unclassified emitters | 674 |
+| transactions with unclassified emitters | 702 |
 | Balancer `FlashLoan` (`0x0d7d75e0…`) transactions | 489 |
 | Balancer `Swap` (`0x2170c741…`) gap transactions | 19 |
 | Balancer `PoolBalanceChanged` (`0xe5ce2490…`) liquidity transactions | 2 |
-| DODO swap-gap transactions | 39 |
+| DODO topic-observed, identity-unassessed transactions | 39 |
 
 The two `PoolBalanceChanged` observations are no longer unclassified and create no swap or funding gap. Eight
 observations from the exact registered Fluid singleton are routing-attested; the other 24 Fluid-topic
 observations remain unassessed because their emitter identity is not registered. DODO event recognition is
-observation evidence only: all 40 DODO emitter observations across 39 gap transactions remain
-production-unroutable with `no_adapter`.
+observation evidence only: all 40 DODO emitter observations across 39 transactions remain
+`unassessed/factory_or_routing_graph_not_attested`. The production listener has no DODO adapter, but receipt
+topic evidence alone cannot prove that an arbitrary emitter is a genuine DODO pool.
 
 ## Manual plus canonical sampling
 
@@ -80,7 +84,7 @@ Each log-level result class was sampled independently, then reconciled with the 
 | candidate, unknown emitters | `0x1cc4cd4f…` | `inventory_vault_rebalance` | +0.1560 | private vault inventory negative control |
 | candidate, unknown emitters | `0x17f767fd…` | `inventory_vault_rebalance` | +4.7817 | high profit still excluded when position is not conserved |
 | candidate, unknown emitters | `0xba5a9536…` | `inventory_vault_rebalance` | +1.5868 | same exclusion at another profit level |
-| DODO swap-route gap | `0x52c27c6e…` | `atomic_loop` | +0.1124 | DODO is observed but production has no adapter |
+| DODO identity-unassessed | `0x52c27c6e…` | `atomic_loop` | +0.1124 | DODO topic observed; trace/factory identity is still required before declaring a route gap |
 | unassessed swap identity | `0xd5f6eb8c…` | `atomic_loop` | -0.0035 | closed shape does not imply receipt-only routability or positive net EV |
 | Balancer swap-route gap | `0xf7a689fa…` | `one_leg_inventory` | +0.0120 | Balancer funding support does not imply Balancer swap support |
 | known protocol gap | `0x6dc56877…` | `atomic_loop` | +0.5096 | real production gap, not classifier noise |
@@ -94,7 +98,7 @@ calibration change deliberately does not add the adapter or pool.
 
 ## Hermes / A/B use
 
-1. Run `npm run competitor-calibration`; current gate is 15/15, including Fluid lineage and the Coffee
+1. Run `npm run competitor-calibration`; current gate is 22/22, including Fluid lineage and the Coffee
    inventory control.
 2. On the same measured block window run `scripts/census-gap.sh`; it joins the complete matched Coffee takes
    to canonical postmortems and source-block scanner evidence.
@@ -107,9 +111,9 @@ calibration change deliberately does not add the adapter or pool.
 
 ```text
 analysis build: PASS
-analysis tests: 221/221 PASS
+analysis tests: 223/223 PASS
 competitor calibration: 22/22 PASS
-loop-coverage + venue-bq focused tests: 16/16 PASS
+loop-coverage + venue-bq focused tests: 18/18 PASS
 bundle-postmortem noise filter: 57/57 PASS
-full corpus: 857 tx parsed; schema v4 summary generated
+full corpus: 857 tx / 18,541 receipt-log rows parsed; schema v4 output SHA-256 b9f0104f…83b6
 ```

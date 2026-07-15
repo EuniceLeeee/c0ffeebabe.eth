@@ -14,6 +14,25 @@ interface ExactFixture {
   sourceSha256: string;
   selection: string;
   cases: ExactCase[];
+  fullCorpusEvidence: {
+    sourceSha256: string;
+    canonicalOutputSha256: string;
+    corpus: { transactionCount: number; receiptLogRowCount: number };
+    summary: {
+      transactionCount: number;
+      swapRouteGapTxs: number;
+      swapRouteGapCount: number;
+      unassessedSwapTxs: number;
+      unassessedSwapVenueCount: number;
+      unclassifiedEmitterTxs: number;
+    };
+    eventTxs: {
+      balancerFlashLoan: string[];
+      balancerSwap: string[];
+      balancerPoolBalanceChanged: string[];
+      dodoObserved: string[];
+    };
+  };
 }
 
 interface ExactCase {
@@ -42,7 +61,24 @@ const APPROVAL_TOPIC = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200a
 const POOL_BALANCE_CHANGED_TOPIC = "0xe5ce249087ce04f05a957192435400fd97868dba0e6a4b4c049abf8af80dae78";
 const ARBITRARY_SWAP_EMITTER = "0x0000000000000000000000000000000000005a7a";
 
-test("Coffee 0x89cb observes three swaps and exposes DODO/Balancer route gaps", () => {
+test("full-corpus evidence binds exact event buckets to the canonical output", () => {
+  const evidence = FIXTURE.fullCorpusEvidence;
+  assert.equal(evidence.sourceSha256, FIXTURE.sourceSha256);
+  assert.match(evidence.canonicalOutputSha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(evidence.corpus, { transactionCount: 857, receiptLogRowCount: 18_541 });
+  assert.equal(evidence.summary.transactionCount, 857);
+  assert.equal(evidence.summary.swapRouteGapTxs, 19);
+  assert.equal(evidence.summary.swapRouteGapCount, 19);
+  assert.equal(evidence.summary.unassessedSwapTxs, 740);
+  assert.equal(evidence.summary.unassessedSwapVenueCount, 1_940);
+  assert.equal(evidence.summary.unclassifiedEmitterTxs, 702);
+  assertEvidenceTxs(evidence.eventTxs.balancerFlashLoan, 489);
+  assertEvidenceTxs(evidence.eventTxs.balancerSwap, 19);
+  assertEvidenceTxs(evidence.eventTxs.balancerPoolBalanceChanged, 2);
+  assertEvidenceTxs(evidence.eventTxs.dodoObserved, 39);
+});
+
+test("Coffee 0x89cb exposes the attested Balancer gap and keeps DODO identity unassessed", () => {
   const fixture = exactCase("primary-balancer-dodo-univ3");
   const result = classifyExact(fixture);
   const reversed = classifyExact({ ...fixture, receiptLogs: [...fixture.receiptLogs].reverse() });
@@ -51,12 +87,11 @@ test("Coffee 0x89cb observes three swaps and exposes DODO/Balancer route gaps", 
   assert.equal(result.observedSwapVenues.length, 3);
   assert.equal(result.observedSwapEmitterCount, 3);
   assert.deepEqual(swapAssessments(result), [
-    [DODO_POOL, "dodo", "not_routable", "no_adapter", false],
+    [DODO_POOL, "dodo", "unassessed", "factory_or_routing_graph_not_attested", null],
     [BALANCER_VAULT, "balancer-v2", "not_routable", "no_swap_adapter", false],
     [PRIMARY_UNIV3_POOL, "univ3", "unassessed", "factory_or_routing_graph_not_attested", null],
   ]);
   assert.deepEqual(result.swapRouteGaps.map((venue) => [venue.addr, venue.reason]), [
-    [DODO_POOL, "no_adapter"],
     [BALANCER_VAULT, "no_swap_adapter"],
   ]);
   assert.deepEqual(result.unclassifiedEmitters, []);
@@ -188,6 +223,20 @@ test("only the registered Fluid singleton is routing-attested from its exact swa
       null,
     ]),
   );
+
+  const arbitraryBalancer = classifyTxLoopCoverage({
+    txHash: "0xarbitrary-balancer",
+    receiptLogs: [{ address: ARBITRARY_SWAP_EMITTER, topics: [TOPICS.balancerV2Swap] }],
+  });
+  assert.deepEqual(swapAssessments(arbitraryBalancer), [
+    [
+      ARBITRARY_SWAP_EMITTER,
+      "balancer-v2",
+      "unassessed",
+      "emitter_or_routing_graph_not_attested",
+      null,
+    ],
+  ]);
 });
 
 test("mixed known and unknown topics preserve every unrecognized topic on the emitter", () => {
@@ -220,12 +269,14 @@ test("mixed known and unknown topics preserve every unrecognized topic on the em
   assert.equal(venue(result, mixedEmitter).unrecognizedTopic0s.includes(APPROVAL_TOPIC), false);
   assert.deepEqual(result.protocolVenueGaps, []);
   assert.deepEqual(result.fundingIdentityGaps.map((funding) => funding.addr), [mixedEmitter]);
-  assert.deepEqual(result.swapRouteGaps.map((gap) => [gap.family, gap.reason]), [
-    ["dodo", "no_adapter"],
-  ]);
+  assert.deepEqual(result.swapRouteGaps, []);
+  assert.deepEqual(
+    result.observedSwapVenues.map((swap) => [swap.family, swap.productionRoutability, swap.reason]),
+    [["dodo", "unassessed", "factory_or_routing_graph_not_attested"]],
+  );
 });
 
-test("Coffee 0x52c2 exposes DODO no_adapter while Balancer FlashLoan stays funding", () => {
+test("Coffee 0x52c2 observes DODO without attesting identity while Balancer FlashLoan stays funding", () => {
   const fixture = exactCase("secondary-dodo-with-balancer-flashloan");
   const result = classifyExact(fixture);
   const reversed = classifyExact({ ...fixture, receiptLogs: [...fixture.receiptLogs].reverse() });
@@ -233,12 +284,10 @@ test("Coffee 0x52c2 exposes DODO no_adapter while Balancer FlashLoan stays fundi
   assert.deepEqual(reversed, result);
   assert.equal(result.observedSwapVenues.length, 6);
   assert.equal(result.observedSwapEmitterCount, 6);
-  assert.deepEqual(result.swapRouteGaps.map((gap) => [gap.family, gap.reason]), [
-    ["dodo", "no_adapter"],
-  ]);
+  assert.deepEqual(result.swapRouteGaps, []);
   assert.equal(
     result.observedSwapVenues.filter((swap) => swap.productionRoutability === "unassessed").length,
-    5,
+    6,
   );
   assert.deepEqual(venue(result, LIQUIDITY_ONLY_UNIV2).observedRoles, ["liquidity", "token"]);
   assert.deepEqual(venue(result, LIQUIDITY_ONLY_UNIV2).observedSwapFamilies, []);
@@ -368,6 +417,28 @@ test("funding identity and flash-adapter support are independent conservative as
   );
 });
 
+test("anonymous and known credit auxiliary events remain visible as trace-required evidence", () => {
+  const anonymousEmitter = "0x000000000000000000000000000000000000a110";
+  const result = classifyTxLoopCoverage({
+    txHash: "0xtrace-required-evidence",
+    receiptLogs: [
+      { address: anonymousEmitter, topics: [] },
+      { address: MORPHO, topics: [TOPICS.morphoSupply] },
+      { address: MORPHO, topics: [TOPICS.morphoWithdraw] },
+    ],
+  });
+
+  assert.deepEqual(venue(result, anonymousEmitter).topic0s, [""]);
+  assert.deepEqual(venue(result, anonymousEmitter).unrecognizedTopic0s, [""]);
+  assert.deepEqual(venue(result, MORPHO).observedRoles, ["unclassified"]);
+  assert.deepEqual(result.unclassifiedEmitters, [
+    { addr: anonymousEmitter, topic0: "" },
+    { addr: MORPHO, topic0: TOPICS.morphoSupply.toLowerCase() },
+    { addr: MORPHO, topic0: TOPICS.morphoWithdraw.toLowerCase() },
+  ].sort(compareGap));
+  assert.equal(result.receiptRouteCoverageComplete, false);
+});
+
 test("schema v4 exposes an exact swap-emitter count without legacy aliases", () => {
   const result = classifyTxLoopCoverage({
     txHash: "0xcompat-emitter-count",
@@ -392,10 +463,10 @@ test("loop-coverage output summarizes observed evidence and routability as schem
   assert.equal(summary.transactionCount, 5);
   assert.equal(summary.observedSwapVenueCount, 11);
   assert.equal(summary.observedSwapEmitterCount, 11);
-  assert.equal(summary.swapRouteGapTxs, 3);
-  assert.equal(summary.swapRouteGapCount, 4);
+  assert.equal(summary.swapRouteGapTxs, 2);
+  assert.equal(summary.swapRouteGapCount, 2);
   assert.equal(summary.unassessedSwapTxs, 3);
-  assert.equal(summary.unassessedSwapVenueCount, 7);
+  assert.equal(summary.unassessedSwapVenueCount, 9);
   assert.equal(summary.observedFundingVenueCount, 2);
   assert.equal(summary.fundingIdentityGapTxs, 0);
   assert.equal(summary.fundingIdentityGapCount, 0);
@@ -466,4 +537,11 @@ function fundingAssessment(
 
 function compareGap(a: { addr: string; topic0: string }, b: { addr: string; topic0: string }): number {
   return a.addr.localeCompare(b.addr) || a.topic0.localeCompare(b.topic0);
+}
+
+function assertEvidenceTxs(txs: string[], expected: number): void {
+  assert.equal(txs.length, expected);
+  assert.equal(new Set(txs).size, expected);
+  assert.deepEqual(txs, [...txs].sort());
+  for (const tx of txs) assert.match(tx, /^0x[a-f0-9]{64}$/);
 }
