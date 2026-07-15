@@ -17,6 +17,7 @@ import {
   loadGraphMembership,
   overlayNonArbStyle,
   realizedProfitUsdForReport,
+  retainedExternalMintRecipients,
   shareTokenImbalanceTokens,
   winnerMovedPriceBeyondPrestate,
   type WinnerStyle,
@@ -71,6 +72,12 @@ const SHARE_TOK = "0x00000000000000000000000000000000000000a1";
 const SWAP_VENUE = "0x00000000000000000000000000000000000000b2";
 const EXEC_ACTOR = "0x00000000000000000000000000000000000000c3";
 const INV_HELPER = "0x00000000000000000000000000000000000000d4";
+const UNKNOWN_TOKEN_CASES = [
+  { token: "0x0000000000000000000000000000000000000606", symbol: "UNK6", decimals: 6 },
+  { token: "0x0000000000000000000000000000000000000808", symbol: "UNK8", decimals: 8 },
+  { token: "0x0000000000000000000000000000000000001818", symbol: "UNK18", decimals: 18 },
+] as const;
+const EXTERNAL_RECIPIENT = "0x00000000000000000000000000000000000000e5";
 const erc20If = new ethers.Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
 const erc4626If = new ethers.Interface([
   "event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)",
@@ -95,6 +102,15 @@ const atomicBuyRedeem = { logs: [v3SwapLog(SWAP_VENUE, 0), xfer(SHARE_TOK, SWAP_
 const preHeldBurn = { logs: [xfer(SHARE_TOK, INV_HELPER, ethers.ZeroAddress, SHARE_AMT, 0), vaultWithdrawLog(SHARE_TOK, INV_HELPER, SHARE_AMT, 1)] };
 const buyRedeemImbalance = shareTokenImbalanceTokens(atomicBuyRedeem, new Set([EXEC_ACTOR]));
 const preHeldBurnImbalance = shareTokenImbalanceTokens(preHeldBurn, new Set([INV_HELPER]));
+const unknownExternalMintDustRecipients = retainedExternalMintRecipients(
+  { logs: [xfer(UNKNOWN_TOKEN_CASES[0].token, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 1000n, 0)] },
+  new Set([EXEC_ACTOR]),
+);
+const unknownExternalMintMaterialRecipients = UNKNOWN_TOKEN_CASES.map(({ token }) =>
+  retainedExternalMintRecipients(
+    { logs: [xfer(token, ethers.ZeroAddress, EXTERNAL_RECIPIENT, 1001n, 0)] },
+    new Set([EXEC_ACTOR]),
+  ));
 const liquityMintImbalance = shareTokenImbalanceTokens(
   { logs: liquityMintReceipt.receiptLogs },
   new Set([lower(liquityMintReceipt.tx.from), lower(liquityMintReceipt.tx.to)]),
@@ -341,6 +357,27 @@ const checks: Array<() => void> = [
     winner_moved_price_beyond_prestate: false,
     sandwich_detected: false,
   }), "atomic_loop"),
+  // Unknown metadata must retain the original raw-unit boundary without assuming 18 decimals.
+  // Rounding dust is ignored at either sign, while the first material unit is not swallowed for
+  // hypothetical 6-, 8-, or 18-decimal unregistered tokens.
+  ...UNKNOWN_TOKEN_CASES.flatMap(({ token, symbol, decimals }) =>
+    ([-1000n, 1000n] as const).map((raw) => () => assert.equal(classifyWinnerStyle({
+      pricedDeltas: [],
+      unpricedDeltas: [delta(token, raw, symbol, decimals)],
+      nativeWeiPositive: true,
+      unpricedInTokensWithoutCounterTransfer: [],
+      winner_moved_price_beyond_prestate: false,
+      sandwich_detected: false,
+    }), "atomic_loop", `${symbol} unknown-token dust ${raw}`))),
+  ...UNKNOWN_TOKEN_CASES.flatMap(({ token, symbol, decimals }) =>
+    ([-1001n, 1001n] as const).map((raw) => () => assert.equal(classifyWinnerStyle({
+      pricedDeltas: [],
+      unpricedDeltas: [delta(token, raw, symbol, decimals)],
+      nativeWeiPositive: true,
+      unpricedInTokensWithoutCounterTransfer: [],
+      winner_moved_price_beyond_prestate: false,
+      sandwich_detected: false,
+    }), "unknown", `${symbol} material raw delta ${raw}`))),
   // Dust is sign-symmetric and value-aware: either sign below one cent is ignored, while a
   // material stablecoin drawdown still prevents a closed-loop verdict.
   () => assert.equal(classifyWinnerStyle({
@@ -400,6 +437,11 @@ const checks: Array<() => void> = [
   () => assert.deepEqual(buyRedeemImbalance, []),
   // ...but a genuine pre-held burn (non-venue helper -> 0x0, no in-tx source) still flags.
   () => assert.deepEqual(preHeldBurnImbalance, [lower(SHARE_TOK)]),
+  // The same unknown-token fallback feeds external-mint detection: boundary dust is ignored, but
+  // a modest retained mint is material for every hypothetical decimal shape above.
+  () => assert.deepEqual(unknownExternalMintDustRecipients, []),
+  ...unknownExternalMintMaterialRecipients.map((recipients) =>
+    () => assert.deepEqual(recipients, [lower(EXTERNAL_RECIPIENT)])),
   // Coffee #2 is a Liquity BOLD protocol mint, not an ERC4626 share position. A plain token mint
   // without Deposit/Withdraw evidence must not poison comparable atomic-loop analysis.
   () => assert.deepEqual(liquityMintImbalance, []),

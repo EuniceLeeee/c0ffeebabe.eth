@@ -13,7 +13,7 @@ import {
 } from "../pnl/arb-profit.js";
 import { buildFlowReport, formatTokenAmount, renderFlowWalk } from "../pnl/flow-walk.js";
 import { decodeAnySwapLog, v4SwapFillFromLog } from "../pnl/swap-log-registry.js";
-import { ADDR, lower, tokenMeta, TOPICS } from "../registry/protocols.js";
+import { ADDR, lower, TOKEN_META, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
 import { parseArgs, uniq, writeText } from "../util.js";
@@ -72,7 +72,9 @@ const INVENTORY_PRICED_TOKENS = new Set([
 ]);
 const USD_MICRO_SCALE = 1_000_000n;
 const POSITION_DUST_USD_MICROS = 10_000n; // one cent
-const UNKNOWN_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
+const REGISTERED_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
+// Preserve the pre-value-aware raw-unit boundary when no authoritative decimals are registered.
+const UNKNOWN_TOKEN_DUST_RAW = 1000n;
 
 export type WinnerStyle =
   | "atomic_loop"
@@ -2065,13 +2067,14 @@ function hasAtomicLoopFlow(
 function isMaterialTokenAmount(token: string, raw: bigint): boolean {
   const magnitude = raw < 0n ? -raw : raw;
   if (magnitude === 0n) return false;
-  const meta = tokenMeta(token);
+  const meta = TOKEN_META[lower(token)];
+  if (!meta) return magnitude > UNKNOWN_TOKEN_DUST_RAW;
   const unit = 10n ** BigInt(meta.decimals);
   if (meta.roughUsd !== undefined) {
     const roughUsdMicros = BigInt(Math.round(meta.roughUsd * Number(USD_MICRO_SCALE)));
     return magnitude * roughUsdMicros > unit * POSITION_DUST_USD_MICROS;
   }
-  const fractionalDigits = Math.min(meta.decimals, UNKNOWN_TOKEN_DUST_DECIMALS);
+  const fractionalDigits = Math.min(meta.decimals, REGISTERED_TOKEN_DUST_DECIMALS);
   return magnitude > 10n ** BigInt(meta.decimals - fractionalDigits);
 }
 
