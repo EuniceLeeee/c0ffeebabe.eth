@@ -1,7 +1,7 @@
 {
   "source": "analysis/outputs/coffee-corpus/coffee-logs.csv",
   "sourceSha256": "156930644045a3769306424660a7eaf87ad0c9190e556b7894d2282be89f415e",
-  "selection": "Exact representative CSV rows for every role and observed swap venue asserted by the regressions.",
+  "selection": "Exact representative CSV rows for every asserted role, observed swap venue, and the UniV2 liquidity-only emitter excluded from swap evidence.",
   "cases": [
     {
       "label": "primary-balancer-dodo-univ3",
@@ -80,10 +80,28 @@
           ]
         },
         {
+          "logIndex": 326,
+          "address": "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
+          "topics": [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x00000000000000000000000044086035439e676c02d411880fccb9837ce37c57",
+            "0x000000000000000000000000ae461ca67b15dc8dc81ce7615e0320da1a9ab8d5"
+          ]
+        },
+        {
           "logIndex": 330,
           "address": "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
           "topics": [
             "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1"
+          ]
+        },
+        {
+          "logIndex": 331,
+          "address": "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
+          "topics": [
+            "0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496",
+            "0x0000000000000000000000007a250d5630b4cf539739df2c5dacb4c659f2488d",
+            "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"
           ]
         },
         {
