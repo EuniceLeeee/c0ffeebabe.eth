@@ -31,17 +31,23 @@
   analysis, governance, deploy runner, or evidence changes inside the frozen SHA.
 - **build:** listener build and focused universe, identity, refinement, scanner, pruning, planner, protocol,
   and hunt-selection suites pass. Main analysis suite passes 231 tests plus Coffee calibration 64/64.
-- **replay/fork result:** trusted node replay on the same listener tree reached `final_sim_success`, exact
-  four-edge route, and `net_profit_raw=442380`; the deploy wrapper will rerun both base and challenger.
+- **replay/fork result:** trusted node candidate gate consumed freshly regenerated current
+  base/challenger production views, ran the unchanged `blockscan-hunt.ts` on both trees, and observed
+  `not_admitted -> final_sim_success`, the exact four-edge route, and `net_profit_raw=442380` without path
+  or amount injection.
 - **base SHA / challenger SHA:** `840069d9d30b40d0c9585ed5a879091a666aa533` /
   `58f204571a572c3077208ddc27d763a8180a9a36`.
 
 ## Paired Live Evidence
-- **window / warmup excluded:** pending trusted-wrapper run; require at least 120 paired blocks after 10
-  warmup blocks and all catch-up/budget/full-warm exclusions.
-- **A/B logs (redacted):** pending.
-- **node slot state:** the first B attempt was safety-aborted before a measured window; A was restored.
-- **fairness evidence:** pending wrapper-owned same-block/config/universe/view/graph/restart/CPU evidence.
+- **window / warmup excluded:** no valid measured window. The first B attempt ran for about 249 seconds but
+  never completed a `scannedPairs` pass, so zero blocks are admissible for comparison.
+- **A/B logs (redacted):** B full-warm passes exhausted the 30-second startup budget; later passes exhausted
+  the 11-second pass budget at `protocol_mids` with 241/347/360 external swap mids processed. The prior
+  challenger-only revm artifact failure was independently fixed and codified on main before this rerun.
+- **node slot state:** B is stopped; A was restored and redeployed at base
+  `840069d9d30b40d0c9585ed5a879091a666aa533` with the pinned revm artifact.
+- **fairness evidence:** unavailable because readiness never completed. Candidate cap remains 100 by operator
+  decision; candidate enumeration latency is explicitly deferred to a separate production decision.
 
 ## External Production Calibration
 - **window / tool artifact:** pinned landed block `25535056` for candidate eligibility;
@@ -50,12 +56,13 @@
   successfully.
 - **comparable filter:** conserving `atomic_loop`, victim-independent block-scan sample.
 - **excluded:** inventory, sandwich, keeper/liquidation, JIT-LP, standing-credit, RFQ/private path.
-- **B vs comparable takes:** pending paired live window.
-- **next production blocker filed:** pending live evidence.
+- **B vs comparable takes:** unavailable; no valid paired live window.
+- **next production blocker filed:** candidate readiness/latency before `scannedPairs` at the larger generic
+  universe; the operator owns the later latency decision and this branch does not reduce coverage.
 
 ## Agent Manual Analysis
 - **author:** codex-orchestrator
-- **verdict:** inconclusive before live pairing.
+- **verdict:** deterministic capability fixed; production promotion needs escalation.
 - **causal evidence:** deterministic evidence isolates a real capability transition and the candidate is
   generic rather than sample-conditioned; paired production distribution evidence is still pending.
 - **why misleading raw metrics do/do not change the semantic verdict:** rank-89 retention is intentionally
@@ -63,10 +70,11 @@
   regression in the paired window can still block promotion.
 
 ## Canonical Script Reconciliation
-- **command + real exit code:** pending manual seal and indexed paired comparator.
-- **artifact:** pending.
-- **assessment:** inconclusive.
-- **reconciliation:** inconclusive.
+- **command + real exit code:** trusted `ab-canary-gate --phase candidate` on the production node, exit 0.
+- **artifact:** `/tmp/mev-ab-candidate-gate-rebased-2.log` on the production node; raw log remains off Git.
+- **assessment:** `needs_escalation`.
+- **reconciliation:** script and manual analysis agree: the deterministic gap is fixed, while promotion is
+  blocked by the absence of a valid paired production window.
 
 ## Fresh Non-Author Adversarial Review
 - **reviewer:** `tx149_final_adversarial` (fresh non-author)
@@ -75,10 +83,10 @@
   route is conserving; paired distribution validation remains mandatory before merge.
 
 ## Final Decision
-- **verdict:** needs_escalation (pre-window placeholder)
+- **verdict:** needs_escalation
 - **branch action:** retained
-- **merge/deploy/cleanup evidence:** none yet; B has not started.
-- **stronger-model handoff:** not applicable while the authorized paired run is active.
+- **merge/deploy/cleanup evidence:** not merged or deployed; B stopped and A healthy on current main.
+- **stronger-model handoff:** not required; candidate latency/readiness is an explicit operator-owned decision.
 
 ```ab_experiment
 {
@@ -158,7 +166,7 @@
     "sample": {
       "tx_hash": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
       "block_number": 25535056,
-      "expected_net_profit_usd": 0.21401122258732488,
+      "expected_net_profit_usd": 0.22099604616880186,
       "evidence": "canonical tx-profit and trace show a conserving atomic loop; trusted fork replay returns positive net_profit_raw=442380",
       "expected_route": [
         {
@@ -207,13 +215,13 @@
   },
   "analysis": {
     "agent_manual_author": "codex-orchestrator",
-    "agent_manual_verdict": "inconclusive",
-    "agent_manual_evidence": "deterministic capability flip is proven; paired safety, distribution and semantic evidence are pending",
-    "agent_manual_written_at": "2026-07-15T17:00:00.000Z",
-    "script_exit_code": 1,
-    "script_assessment": "inconclusive",
-    "script_artifact": "pending",
-    "reconciliation": "inconclusive",
+    "agent_manual_verdict": "needs_escalation",
+    "agent_manual_evidence": "deterministic capability flip is proven; B did not complete readiness, so no paired safety or distribution window exists",
+    "agent_manual_written_at": "2026-07-15T19:20:44.000Z",
+    "script_exit_code": 0,
+    "script_assessment": "needs_escalation",
+    "script_artifact": "/tmp/mev-ab-candidate-gate-rebased-2.log",
+    "reconciliation": "script and manual analysis agree: deterministic fixed, production promotion blocked by readiness latency",
     "tool_selection": {
       "capability_query": ["single-transaction", "causality", "pnl", "competitor-window", "classification", "block-scan"],
       "selected_tools": ["analysis:bundle-postmortem", "repo:scripts/census-gap.sh"],
@@ -222,15 +230,15 @@
       "evidence_manifest_sha256": "f915fe1a0f74124eb296efb13b3fdf46906a7b4a1ce31eb878420a94074d1207"
     },
     "adversarial_review": {
-      "verdict": "inconclusive",
-      "evidence": "deterministic review passed; paired live decision review remains pending",
+      "verdict": "needs_escalation",
+      "evidence": "deterministic review passed; no valid paired live window exists because B never completed a scan",
       "reviewer": "tx149_final_adversarial"
     }
   },
   "final_verdict": "needs_escalation",
   "branch_action": "retained",
-  "b_stopped": false,
-  "evidence_bundle": "pinned replay, indexed tool receipts, and on-chain tx149 evidence; paired live artifacts pending"
+  "b_stopped": true,
+  "evidence_bundle": "pinned current-view replay, indexed tool receipts, on-chain tx149 evidence, and invalid-readiness attempt; no paired live window"
 }
 ```
 
@@ -250,7 +258,7 @@ fable_manual: no
 | tx149 route self-enumerates at rank 89 in the current production view when the generic candidate cap is 100 | this experiment | paired production window | done |
 | call-defined GOLDx evidence was dropped by the production gate | main `58be1f3` / `3d42774` | LearningCase | done |
 | challenger lacked the champion revm-sim artifact | main `8984c39` / `840069d` | LearningCase | done |
-| candidate latency and distribution effect | paired A/B | final adjudication | open |
+| candidate readiness stalls before `scannedPairs` at the larger production view | operator latency decision | future production adjudication | deferred |
 
 ## Method Trace
 ```text
