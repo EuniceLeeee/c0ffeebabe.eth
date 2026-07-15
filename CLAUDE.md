@@ -25,6 +25,16 @@ companion doc, not here.
   (`docs/research/gates.md`).
 - **Verify against code/data, not memory.** A recalled fact / a stale memory is a hypothesis to re-check by
   reading the actual file or on-chain data, never a conclusion.
+- **Derive identity on-chain; never gate admission on a hardcoded allowlist.** Venue / pool / factory /
+  adapter admission must come from **reverse-verified on-chain identity** (`factory()` / `getPair` / Curve
+  MetaRegistry / a registry call), with any hardcoded set demoted to **provenance / labeling only — never the
+  admission gate**. A per-instance hardcoded allowlist "works" only for the samples you enumerated; the next
+  fork / pool / metapool silently drops = a **coverage bug masquerading as a fix** (the seed-gated
+  Curve-underlying that dropped Ubiquity is the type case). Mirror how V2/V3 already treat `factory()` =
+  provenance, not a hard gate. Pinning an **infrastructure singleton** (a registry / vault / oracle address,
+  token constants) is fine — that is the identity *source*, not an instance allowlist. The mandatory **final
+  sim stays the fail-closed gate**, never the list. If you catch yourself adding an address to a table so one
+  more sample passes, stop: derive it instead.
 
 ## 3. Mission / North Star (every window stays anchored here)
 1. **Ship to production** — a profitable, live on-chain arbitrage searcher. Broadcast is a hard human gate
