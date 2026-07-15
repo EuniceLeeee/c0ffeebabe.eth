@@ -321,7 +321,7 @@ safety_abort() {
 
 capture_fairness() {
   [ -f "$STATE" ] || return 0
-  local a_before a_now b_now a_path b_path a_pid_before a_pid_after pid_changed a_log b_log
+  local a_before a_now b_now a_path b_path a_pid_before a_pid_after pid_changed a_log b_log a_revm_path b_revm_path
   a_before=$(state_field a_restarts_before); a_before=${a_before:-0}
   a_now=$(unit_restarts "$A_UNIT")
   b_now=$(unit_restarts "$UNIT")
@@ -332,6 +332,8 @@ capture_fairness() {
   b_path=$(state_field b_universe_path)
   a_log=$(state_field a_log_path)
   b_log=$(state_field b_log_path)
+  a_revm_path=$(state_field a_revm_path)
+  b_revm_path=$(state_field b_revm_path)
   state_update \
     a_restart_delta "$((a_now - a_before))" \
     a_pid_after "$a_pid_after" champion_pid_changed "$pid_changed" \
@@ -342,6 +344,8 @@ capture_fairness() {
     b_blockscan_view_hash_after "$(runtime_hash "$b_log" blockscan_view_hash)" \
     a_blockscan_graph_hash_after "$(runtime_hash "$a_log" blockscan_graph_hash)" \
     b_blockscan_graph_hash_after "$(runtime_hash "$b_log" blockscan_graph_hash)" \
+    a_revm_hash_after "$(hash_or_unavailable "$a_revm_path")" \
+    b_revm_hash_after "$(hash_or_unavailable "$b_revm_path")" \
     failure_reason ""
 }
 
@@ -559,7 +563,7 @@ run_preflight_safely() {
 }
 
 validate_running_pair() {
-  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path
+  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path a_revm_path b_revm_path
   mode=$(lane_mode)
   sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
@@ -585,6 +589,18 @@ validate_running_pair() {
     || die "champion running commit drift"
   [ "$(process_env_get "$b_pid" SEARCHER_RUNTIME_COMMIT)" = "$(state_field b_commit)" ] \
     || die "challenger running commit drift"
+  a_revm_path=$(process_env_get "$a_pid" SEARCHER_REVM_SIM_BIN)
+  b_revm_path=$(process_env_get "$b_pid" SEARCHER_REVM_SIM_BIN)
+  [ "$a_revm_path" = "$(state_field a_revm_path)" ] \
+    || die "champion revm-sim path drift"
+  [ "$b_revm_path" = "$(state_field b_revm_path)" ] \
+    || die "challenger revm-sim path drift"
+  [ "$(hash_file "$a_revm_path")" = "$(state_field a_revm_hash)" ] \
+    || die "champion revm-sim artifact drift"
+  [ "$(hash_file "$b_revm_path")" = "$(state_field b_revm_hash)" ] \
+    || die "challenger revm-sim artifact drift"
+  [ "$(state_field a_revm_hash)" = "$(state_field b_revm_hash)" ] \
+    || die "A/B revm-sim artifacts differ"
   for key in SEARCHER_DRY_RUN SEARCHER_EV_GATE SEARCHER_ENABLE_BLOCK_SCAN SEARCHER_BLOCKSCAN_SUBMIT; do
     expected=1
     [ "$key" = "SEARCHER_DRY_RUN" ] && expected=0
@@ -922,6 +938,7 @@ deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
   local requested_lane_mode requested_victim_mode requested_shakedown branch_tip candidate_report
+  local a_revm_path b_revm_path a_revm_hash b_revm_hash
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
   [[ "$expected_a" =~ ^[a-f0-9]{40}$ ]] || die "base commit must be a full SHA"
@@ -1076,6 +1093,13 @@ deploy() {
   [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
     || die "champion commit changed during candidate replay"
   build_runtime_env "$experiment" "$b_commit"
+  a_revm_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_REVM_SIM_BIN)
+  b_revm_path=$(file_env_get "$B_PROCESS_ENV" SEARCHER_REVM_SIM_BIN)
+  [ -x "$a_revm_path" ] || die "champion canonical revm-sim artifact missing"
+  [ "$a_revm_path" = "$b_revm_path" ] || die "A/B revm-sim paths differ"
+  a_revm_hash=$(hash_file "$a_revm_path")
+  b_revm_hash=$(hash_file "$b_revm_path")
+  [ "$a_revm_hash" = "$b_revm_hash" ] || die "A/B revm-sim artifacts differ"
   cpu_layout
   local a_restarts_before a_pid_before
   a_restarts_before=$gate_a_restarts
@@ -1088,7 +1112,7 @@ deploy() {
     --property="AllowedCPUs=$B_CPUS" \
     --property="EnvironmentFile=$B_PROCESS_ENV" \
     --property="Environment=HOME=/root" \
-    --property="Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    --property="Environment=PATH=/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     --property="Restart=no" --property="RuntimeMaxSec=${LEASE_SECONDS}s" \
     --property="StandardOutput=append:$LOG" --property="StandardError=append:$LOG" \
     /usr/bin/npm run searcher:live \
@@ -1226,6 +1250,9 @@ deploy() {
     branch_tip_commit "$branch_tip" \
     router_snapshot_path "$a_router_path" router_snapshot_hash "$router_hash" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
+    a_revm_path "$a_revm_path" b_revm_path "$b_revm_path" \
+    a_revm_hash "$a_revm_hash" b_revm_hash "$b_revm_hash" \
+    a_revm_hash_after "$a_revm_hash" b_revm_hash_after "$b_revm_hash" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
     a_universe_from_block "$a_universe_from" a_universe_to_block "$a_universe_to" \
     b_universe_from_block "$b_universe_from" b_universe_to_block "$b_universe_to" \
@@ -1253,6 +1280,7 @@ pause_experiment() {
   current=$(state_field experiment_id)
   [ "$current" = "$experiment" ] || die "state belongs to $current, not $experiment"
   [ "$(state_field status)" = "running" ] || die "experiment is not running"
+  (validate_running_pair) || safety_abort running_pair_validation_failed
   capture_fairness
   stop_b || safety_abort challenger_pause_stop_verification_failed
   state_update status paused lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
@@ -1300,6 +1328,7 @@ PY
   rm -f "$tmp"
   status=$(state_field status)
   if [ "$status" = "running" ]; then
+    (validate_running_pair) || safety_abort running_pair_validation_failed
     capture_fairness
     stop_b || safety_abort challenger_close_stop_verification_failed
   elif [ "$status" != "paused" ]; then

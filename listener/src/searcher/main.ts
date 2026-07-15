@@ -986,7 +986,10 @@ async function main(): Promise<void> {
   // Now that the graph exists, wire the configured revm/hybrid backend.
   if (config.liveBackend !== "rpc") {
     const revmLiveBackend = new RevmLiveBackend(
-      new RevmSimClient({ timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000") }),
+      new RevmSimClient({
+        executablePath: process.env.SEARCHER_REVM_SIM_BIN,
+        timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+      }),
       config.botvmAddress,
       config.wallet.address,
       provider,

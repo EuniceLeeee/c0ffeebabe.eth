@@ -34,8 +34,7 @@
         "issue": "classifies an ERC4626 as loop-closable from asset()+previewRedeem alone; checks NEITHER a DEX share-venue NOR a credit return path — so vaults are promoted into the live graph with their actual return leg (DEX or Morpho credit) unverified",
         "evidence": "node active-pools.json exact token0/token1 match: steakUSDC/steakUSDT/srUSDe/sfrxETH/waEthUSDT/waEthUSDC each have 0 share-token swap venues; wstETH 7, sUSDS 2",
         "codify_target": "analysis/src/discovery: gate vault promotion on a return-path check (DEX share-venue OR a wired credit edge); + main.ts banner count of loop-closable protocol edges",
-        "codify_commit": "58be1f3dbc045f9824a256c0d08c7479541e7720",
-        "status": "codified"
+        "status": "open"
       },
       "created_at": "2026-07-06T03:09:51.018Z",
       "updated_at": "2026-07-06T03:38:20.525Z"
@@ -382,10 +381,38 @@
         "issue": "the Hermes production-evidence gate ignored successful call-defined protocol legs and rejected a supported GOLDx route because its adapter selector was unregistered",
         "evidence": "tx 0x149df3ec... calls GOLDx 0x355c665e... with selector 0x40c10f19; trace-aware edge classification adds protocol, but the pre-fix gate used deriveEdgeKindsFromLogs and ROUTE_SELECTORS lacked goldx-mint",
         "codify_target": "classify winner edge kinds from receipt plus successful trace, register the GOLDx mint selector, and pin target/selector/revert/order regressions",
-        "status": "open"
+        "codify_commit": "58be1f3dbc045f9824a256c0d08c7479541e7720",
+        "status": "codified"
       },
       "created_at": "2026-07-15T16:20:00.000Z",
       "updated_at": "2026-07-15T16:20:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260715-ab-revm-artifact-parity",
+      "status": "manual_required",
+      "strategy_kind": "backrun",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "live_ab_infrastructure",
+      "comparable": true,
+      "primary_gap": "manual_required",
+      "gap_detail": "challenger_revm_runtime_artifact_missing",
+      "evidence": {
+        "manual": "the champion had a prebuilt listener/revm-sim runtime executable, while the clean challenger worktree did not",
+        "canonical_before": "deploy-ab-challenger fixed B PATH without materializing the champion revm binary, so RevmSimClient fell back to /usr/bin/cargo 1.75 and rejected edition=2024",
+        "reviewer": "fresh non-author review confirmed candidate Rust sources were unchanged and separated the Cargo failure from protocol_mids budget saturation"
+      },
+      "tooling_defect": {
+        "tool": "scripts/deploy-node.sh + scripts/deploy-ab-challenger.sh",
+        "issue": "A/B used different revm-sim artifact availability and Cargo resolution, invalidating the challenger backrun lane",
+        "evidence": "B log reported Cargo 1.75 edition2024 parse failures; A had target/debug/revm-sim linked to a release binary and B had no binary",
+        "codify_target": "stage a content-addressed revm-sim artifact without mutating the running A path, bind the same immutable hash into A/B process environments and durable fairness state, and revalidate it through close",
+        "status": "open"
+      },
+      "created_at": "2026-07-15T18:30:00.000Z",
+      "updated_at": "2026-07-15T18:30:00.000Z"
     }
   ]
 }

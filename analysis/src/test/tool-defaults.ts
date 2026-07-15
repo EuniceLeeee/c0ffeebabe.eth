@@ -121,6 +121,10 @@ test("census-gap excludes stale and failed postmortem artifacts", async () => {
 test("node deploy installs and verifies production analysis tooling before restart", async () => {
   const script = await readFile(join(repoRoot, "scripts", "deploy-node.sh"), "utf8");
   const searcher = await readFile(join(repoRoot, "listener", "src", "searcher", "main.ts"), "utf8");
+  const revmClient = await readFile(
+    join(repoRoot, "listener", "src", "searcher", "revm-sim-client.ts"),
+    "utf8",
+  );
   assert.match(script, /cd "\$REPO\/analysis"/);
   assert.match(script, /npm ci --include=dev --prefer-offline --no-audit --no-fund/);
   assert.match(script, /npm run build/);
@@ -157,6 +161,20 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /SEARCHER_RUNTIME_COMMIT=\$DEPLOY_COMMIT/);
   assert.match(script, /SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=\$ROUTER_SNAPSHOT/);
   assert.match(script, /router allowlist pinned: hash=\$ROUTER_HASH/);
+  assert.match(script, /REVM_CARGO=\$\{REVM_CARGO:-\/root\/\.cargo\/bin\/cargo\}/);
+  assert.match(script, /CARGO_TARGET_DIR="\$REVM_BUILD_DIR" "\$REVM_CARGO" build --release --locked/);
+  assert.match(script, /REVM_RUNTIME_BIN="\$REVM_RUNTIME_DIR\/revm-sim-\$REVM_RUNTIME_HASH"/);
+  assert.match(script, /install -m 0555 "\$REVM_BUILD_BIN" "\$REVM_RUNTIME_TMP"/);
+  assert.match(script, /echo "SEARCHER_REVM_SIM_BIN=\$REVM_RUNTIME_BIN"/);
+  assert.match(script, /restarted process did not retain the verified revm-sim artifact/);
+  assert.ok(
+    script.indexOf("analysis preflight failed") <
+      script.indexOf('echo "SEARCHER_REVM_SIM_BIN=$REVM_RUNTIME_BIN"'),
+    "the live environment must not select the staged daemon before preflight passes",
+  );
+  assert.match(searcher, /executablePath: process\.env\.SEARCHER_REVM_SIM_BIN/);
+  assert.match(revmClient, /configured revm-sim executable missing/);
+  assert.match(revmClient, /this\.executablePath \?\? \(useBinary \? binary : "cargo"\)/);
   assert.match(script, /searcher stop verified and live marker removed/);
   assert.match(script, /systemctl kill --kill-who=all --signal=KILL mev-searcher/);
   assert.match(script, /mempool startup banner does not match marker-controlled posture/);
@@ -187,6 +205,19 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /challenger branch changed non-evidence file after frozen code SHA/);
   assert.match(script, /reset --hard "\$b_commit"/);
   assert.match(script, /clean -fdx/);
+  assert.match(script, /champion canonical revm-sim artifact missing/);
+  assert.match(script, /A\/B revm-sim paths differ/);
+  assert.match(script, /a_revm_hash "\$a_revm_hash" b_revm_hash "\$b_revm_hash"/);
+  assert.match(script, /champion revm-sim artifact drift/);
+  assert.match(script, /challenger revm-sim artifact drift/);
+  assert.match(script, /a_revm_hash_after/);
+  assert.match(script, /b_revm_hash_after/);
+  assert.ok(
+    script.indexOf('a_revm_hash=$(hash_file "$a_revm_path")') <
+      script.indexOf('systemd-run --unit="$UNIT"'),
+    "the challenger must bind the champion revm artifact before it starts",
+  );
+  assert.match(script, /Environment=PATH=\/root\/\.cargo\/bin:/);
   assert.match(script, /prepare_trusted_base "\$a_commit"/);
   assert.match(script, /--base-root "\$TRUSTED_BASE"/);
   assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);

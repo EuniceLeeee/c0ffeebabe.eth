@@ -337,6 +337,37 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
 # ── 4. Build + production-analysis preflight ──
 ( cd "$REPO/listener" && npm run build ) \
   || abort_runtime "listener build failed after checkout update"
+# Build the next revm daemon outside the live worktree. The old A process keeps
+# its immutable process environment throughout every later preflight; only the
+# restarted process receives the new content-addressed executable path.
+DEPLOY_COMMIT=$(git rev-parse HEAD)
+[[ "$DEPLOY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || abort_runtime "deployed commit identity is invalid"
+REVM_MANIFEST="$REPO/listener/revm-sim/Cargo.toml"
+REVM_CARGO=${REVM_CARGO:-/root/.cargo/bin/cargo}
+REVM_RUNTIME_DIR=/opt/MEV-runtime/revm
+REVM_BUILD_DIR="$REVM_RUNTIME_DIR/build-$DEPLOY_COMMIT-$$"
+REVM_BUILD_BIN="$REVM_BUILD_DIR/release/revm-sim"
+[ -x "$REVM_CARGO" ] \
+  || abort_runtime "modern Cargo missing at $REVM_CARGO"
+mkdir -p "$REVM_RUNTIME_DIR"
+CARGO_TARGET_DIR="$REVM_BUILD_DIR" "$REVM_CARGO" build --release --locked --manifest-path "$REVM_MANIFEST" \
+  || abort_runtime "revm-sim release build failed after checkout update"
+[ -x "$REVM_BUILD_BIN" ] || abort_runtime "staged revm-sim runtime artifact missing after build"
+REVM_RUNTIME_HASH=$(sha256sum "$REVM_BUILD_BIN" | awk '{print $1}')
+[[ "$REVM_RUNTIME_HASH" =~ ^[a-f0-9]{64}$ ]] \
+  || abort_runtime "canonical revm-sim runtime artifact hash is invalid"
+REVM_RUNTIME_BIN="$REVM_RUNTIME_DIR/revm-sim-$REVM_RUNTIME_HASH"
+if [ ! -f "$REVM_RUNTIME_BIN" ]; then
+  REVM_RUNTIME_TMP="$REVM_RUNTIME_BIN.tmp.$$"
+  install -m 0555 "$REVM_BUILD_BIN" "$REVM_RUNTIME_TMP"
+  mv "$REVM_RUNTIME_TMP" "$REVM_RUNTIME_BIN"
+fi
+rm -rf "$REVM_BUILD_DIR"
+[ -x "$REVM_RUNTIME_BIN" ] \
+  || abort_runtime "canonical revm-sim runtime artifact missing after publish"
+[ "$(sha256sum "$REVM_RUNTIME_BIN" | awk '{print $1}')" = "$REVM_RUNTIME_HASH" ] \
+  || abort_runtime "content-addressed revm-sim runtime artifact failed verification"
+say "revm-sim staged: hash=$REVM_RUNTIME_HASH binary=$REVM_RUNTIME_BIN"
 # Analysis CLIs execute TypeScript directly via the devDependency `tsx`. A git
 # reset updates their source but not ignored node_modules, so install the exact
 # lockfile and verify the production blockscan joins before this checkout is
@@ -348,11 +379,10 @@ say "code now at $(git rev-parse --short HEAD): $(git log --oneline -1)"
       src/test/live-loss-blockscan.ts ) \
   || abort_runtime "analysis preflight failed after checkout update"
 
-DEPLOY_COMMIT=$(git rev-parse HEAD)
-[[ "$DEPLOY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || abort_runtime "deployed commit identity is invalid"
 tmp=$(mktemp)
-grep -v '^SEARCHER_RUNTIME_COMMIT=' "$ENVF" > "$tmp" || true
+grep -vE '^SEARCHER_(RUNTIME_COMMIT|REVM_SIM_BIN)=' "$ENVF" > "$tmp" || true
 echo "SEARCHER_RUNTIME_COMMIT=$DEPLOY_COMMIT" >> "$tmp"
+echo "SEARCHER_REVM_SIM_BIN=$REVM_RUNTIME_BIN" >> "$tmp"
 canonicalize_env "$tmp" || { rm -f "$tmp"; abort_runtime "could not bind runtime commit"; }
 cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 
@@ -484,6 +514,7 @@ PROCESS_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n
 PROCESS_BLOCKSCAN_ANVIL_PORT=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_BLOCKSCAN_ANVIL_PORT=//p' | tail -1)
 PROCESS_EAGER_STATE=$(tr '\0' '\n' < "/proc/$NEWPID/environ" 2>/dev/null | sed -n 's/^SEARCHER_EAGER_STATE_BACKEND=//p' | tail -1)
 PROCESS_RUNTIME_COMMIT=$(process_env_value SEARCHER_RUNTIME_COMMIT "$NEWPID")
+PROCESS_REVM_SIM_BIN=$(process_env_value SEARCHER_REVM_SIM_BIN "$NEWPID")
 PROCESS_ROUTER_SNAPSHOT=$(process_env_value SEARCHER_FORCE_INCLUDE_ROUTERS_PATH "$NEWPID")
 say "restarted: active=$ACTIVE pid=$NEWPID mode=$MODE dry_run_env=$(tr '\0' '\n' < /proc/$NEWPID/environ 2>/dev/null | grep '^SEARCHER_DRY_RUN=' | cut -d= -f2)"
 if [ "$DRY" != "1" ]; then
@@ -509,6 +540,10 @@ if [ "$PROCESS_EAGER_STATE" != "$BACKRUN_EXPECTED" ]; then
 fi
 if [ "$PROCESS_RUNTIME_COMMIT" != "$DEPLOY_COMMIT" ]; then
   abort_runtime "restarted process runtime commit does not match deployed checkout"
+fi
+if [ "$PROCESS_REVM_SIM_BIN" != "$REVM_RUNTIME_BIN" ] \
+   || [ "$(sha256sum "$PROCESS_REVM_SIM_BIN" 2>/dev/null | awk '{print $1}')" != "$REVM_RUNTIME_HASH" ]; then
+  abort_runtime "restarted process did not retain the verified revm-sim artifact"
 fi
 if [ "$PROCESS_ROUTER_SNAPSHOT" != "$ROUTER_SNAPSHOT" ] \
    || [ "$(sha256sum "$PROCESS_ROUTER_SNAPSHOT" 2>/dev/null | awk '{print $1}')" != "$ROUTER_HASH" ]; then

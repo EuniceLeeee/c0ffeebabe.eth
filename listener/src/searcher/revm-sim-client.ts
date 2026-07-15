@@ -148,17 +148,22 @@ export class RevmSimClient {
   private readonly queue: Pending[] = [];
   private readonly timeoutMs: number;
   private readonly manifestPath: string;
+  private readonly executablePath?: string;
 
-  constructor(options: { manifestPath?: string; timeoutMs?: number } = {}) {
+  constructor(options: { manifestPath?: string; executablePath?: string; timeoutMs?: number } = {}) {
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.manifestPath = options.manifestPath ?? resolve("revm-sim", "Cargo.toml");
+    this.executablePath = options.executablePath;
   }
 
   private ensureProc(): DaemonProc {
     if (this.proc) return this.proc;
+    if (this.executablePath && !existsSync(this.executablePath)) {
+      throw new Error(`configured revm-sim executable missing: ${this.executablePath}`);
+    }
     const binary = resolve(this.manifestPath, "..", "target", "debug", "revm-sim");
-    const useBinary = existsSync(binary);
-    const command = useBinary ? binary : "cargo";
+    const useBinary = Boolean(this.executablePath) || existsSync(binary);
+    const command = this.executablePath ?? (useBinary ? binary : "cargo");
     const args = useBinary
       ? ["serve"]
       : ["run", "--quiet", "--manifest-path", this.manifestPath, "--", "serve"];
