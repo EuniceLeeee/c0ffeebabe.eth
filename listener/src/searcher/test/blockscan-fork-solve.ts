@@ -799,7 +799,7 @@ function sameRouteEdge(a: TokenEdge, b: TokenEdge): boolean {
 /** Map the fixture's flash venue to the plan-builder's flash adapter id. */
 function flashAdapterIdForVenue(venue: string): string {
   if (venue === "balancer-v2") return "balancer-flash";
-  // Aave/others not yet wired into plan-builder's FLASH_ADAPTER_TARGETS; fail clearly at build time.
+  // Aave/others are not yet declared in FLASH_PROVIDER_DESCRIPTORS; fail clearly at build time.
   throw new Error(`no flash adapter wired for venue "${venue}" (plan-builder supports balancer-flash/morpho-flash)`);
 }
 
