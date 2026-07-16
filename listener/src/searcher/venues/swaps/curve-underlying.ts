@@ -42,6 +42,7 @@ export const curveUnderlyingAdapter = Object.freeze({
       );
       return { amountOut, latencyMs: Date.now() - started };
     },
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
       if (ctx.edge?.curveI === undefined || ctx.edge.curveJ === undefined) return [];
       return [{

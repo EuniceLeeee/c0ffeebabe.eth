@@ -40,6 +40,7 @@ export const psmAdapter = Object.freeze({
       ),
       latencyMs: 0,
     }),
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async () => [],
     allowanceSpender: () => null,
     prewarmAddresses: () => [ADDR.SKY_PSM_LITE],

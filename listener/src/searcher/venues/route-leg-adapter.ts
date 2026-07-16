@@ -122,6 +122,7 @@ export interface PreparedRouteContext {
 
 export interface PreparedRouteCapability {
   readonly quote: ((ctx: PreparedRouteContext) => Promise<PreparedRouteQuoteResult>) | null;
+  readonly quoteUnsupportedReason: string | null;
   readonly encodeQuotePrewarm:
     ((ctx: PreparedRouteContext) => Promise<readonly PreparedRouteCall[]>) | null;
   readonly allowanceSpender: ((request: PreparedRouteRequest) => string | null) | null;

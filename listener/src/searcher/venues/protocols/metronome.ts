@@ -51,6 +51,7 @@ export const metronomeSynthAdapter = Object.freeze({
         cacheStats: quoted.cacheStats,
       };
     },
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
       from: ethers.ZeroAddress,
       to: ctx.request.target,

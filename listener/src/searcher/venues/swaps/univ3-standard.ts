@@ -39,6 +39,7 @@ export const univ3StandardAdapter = Object.freeze({
   warm: { kind: "mutable-pool", cache: "v3" },
   prepared: {
     quote: quoteUniV3Prepared,
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
       const fee = await resolvePreparedFee(ctx, ctx.request.target);
       return [{

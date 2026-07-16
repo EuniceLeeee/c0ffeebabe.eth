@@ -63,6 +63,7 @@ export const univ4Adapter = Object.freeze({
   warm: { kind: "mutable-pool", cache: "v4" },
   prepared: {
     quote: quoteUniV4Prepared,
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
       from: ethers.ZeroAddress,
       to: ADDR.UNISWAP_V4_QUOTER,

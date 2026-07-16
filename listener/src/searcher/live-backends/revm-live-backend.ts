@@ -340,6 +340,9 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (adapter?.prepared?.quote) {
       return adapter.prepared.quote(this.preparedContext(req, req.amountIn));
     }
+    if (adapter?.prepared?.quoteUnsupportedReason) {
+      throw new Error(adapter.prepared.quoteUnsupportedReason);
+    }
     // Fluid DEX remains the one explicitly blocked legacy family in the plan.
     if (req.adapterId === "fluid-dex-swap") return this.quoteFluidDex(req);
     throw new Error(`no revm quoter for adapter ${req.adapterId}`);

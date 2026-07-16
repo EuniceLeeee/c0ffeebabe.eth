@@ -272,7 +272,6 @@ async function main(): Promise<void> {
     "psm",
     "metronome-synth-swap",
     "goldx-mint",
-    "fluid-vault",
   ]);
   for (const routeAdapter of adapters) {
     assert("prepared" in routeAdapter, `${routeAdapter.id} must declare prepared capability`);
@@ -284,6 +283,11 @@ async function main(): Promise<void> {
       `${routeAdapter.id} prepared quote coverage`,
     );
     if (routeAdapter.prepared) {
+      assert(
+        (routeAdapter.prepared.quote === null) !==
+          (routeAdapter.prepared.quoteUnsupportedReason === null),
+        `${routeAdapter.id} must declare either prepared quote or unsupported reason`,
+      );
       assert(
         routeAdapter.prepared.encodeQuotePrewarm !== null,
         `${routeAdapter.id} must explicitly declare prepared prewarm encoding`,

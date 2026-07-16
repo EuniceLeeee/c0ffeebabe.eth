@@ -33,6 +33,7 @@ export const goldxAdapter = Object.freeze({
       );
       return { amountOut, latencyMs: Date.now() - started };
     },
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
       from: ethers.ZeroAddress,
       to: ctx.request.target,

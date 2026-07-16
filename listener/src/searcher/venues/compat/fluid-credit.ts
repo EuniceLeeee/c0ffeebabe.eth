@@ -6,7 +6,6 @@ import type {
   ExactQuoteContext,
   PlanBuildContext,
   PlanFragment,
-  PreparedRouteContext,
 } from "../route-leg-adapter.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
@@ -26,9 +25,8 @@ export const fluidCreditCompatAdapter = Object.freeze({
   readMid: null,
   warm: null,
   prepared: {
-    quote: async (_ctx: PreparedRouteContext) => {
-      throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
-    },
+    quote: null,
+    quoteUnsupportedReason: "unsupported exact quote: fluid-vault requires solver debt search",
     encodeQuotePrewarm: async () => [],
     allowanceSpender: () => null,
     prewarmAddresses: () => [ADDR.FLUID_VAULT_WSTUSR_USDC],

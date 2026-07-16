@@ -36,6 +36,7 @@ export const curvePlainAdapter = Object.freeze({
   warm: { kind: "curve-pool" },
   prepared: {
     quote: quoteCurvePlainPrepared,
+    quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
       const [i, j] = preparedCurveIndices(ctx);
       const args = [BigInt(i), BigInt(j), ctx.request.amountIn] as const;
