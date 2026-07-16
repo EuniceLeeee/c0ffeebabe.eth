@@ -115,6 +115,9 @@ OPP_TTL_MS="${SEARCHER_OPP_TTL_MS:-5000}"
 # because SSM spawns a fresh sh (no SEARCHER_* inherited), so the :-fallback ALWAYS applied. Deploy-
 # controlled (like OPP_TTL_MS) so it survives the recover-from-process .env rebuild. Latency-affordable.
 POOL_UNIVERSE_TOP_N="${SEARCHER_POOL_UNIVERSE_TOP_N:-20000}"
+STARTUP_BANNER_TIMEOUT_SECONDS="${SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS:-600}"
+[ "$STARTUP_BANNER_TIMEOUT_SECONDS" -ge 60 ] && [ "$STARTUP_BANNER_TIMEOUT_SECONDS" -le 1200 ] \
+  || { say "ABORT: SEARCHER_STARTUP_BANNER_TIMEOUT_SECONDS must be 60..1200"; exit 9; }
 LIVE_MARKER=$REPO/.deploy-live
 LOCAL_RPC=http://127.0.0.1:8545
 LOCAL_WS=ws://127.0.0.1:8546
@@ -572,7 +575,7 @@ if [ "$PROCESS_UNIVERSE" != "$UNIVERSE_SNAPSHOT" ] \
 fi
 say "runtime universe verified: $PROCESS_UNIVERSE hash=$UNIVERSE_HASH"
 BANNER=""
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "$STARTUP_BANNER_TIMEOUT_SECONDS"); do
   BANNER=$(tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null | grep 'pool registry:' | tail -1)
   [ -n "$BANNER" ] && break
   sleep 1
