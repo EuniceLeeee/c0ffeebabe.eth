@@ -79,6 +79,55 @@ export type WarmSpec =
 
 export type SyncMidReader = (ctx: SyncMidReadContext) => RouteVenueMid | null;
 
+export interface PreparedRouteRequest {
+  adapterId: string;
+  target: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: bigint;
+  poolToken0?: string;
+  poolToken1?: string;
+  v4PoolKey?: TokenEdge["v4PoolKey"];
+}
+
+export interface PreparedRouteCall {
+  from: string;
+  to: string;
+  calldata: string;
+  gasLimit?: number;
+}
+
+export interface PreparedRouteCallResult {
+  output: string;
+  latencyMs: number;
+  cacheStats?: { warmHits: number; coldMisses: number };
+}
+
+export interface PreparedRouteQuoteResult {
+  amountOut: bigint;
+  latencyMs: number;
+  cacheStats?: { warmHits: number; coldMisses: number };
+}
+
+export interface PreparedRouteContext {
+  request: PreparedRouteRequest;
+  edge?: TokenEdge;
+  callPrepared(
+    to: string,
+    data: string,
+    options?: { from?: string; gasLimit?: number },
+  ): Promise<PreparedRouteCallResult>;
+  readChain(req: { to: string; data: string }): Promise<string>;
+}
+
+export interface PreparedRouteCapability {
+  readonly quote: ((ctx: PreparedRouteContext) => Promise<PreparedRouteQuoteResult>) | null;
+  readonly encodeQuotePrewarm:
+    ((ctx: PreparedRouteContext) => Promise<readonly PreparedRouteCall[]>) | null;
+  readonly allowanceSpender: ((request: PreparedRouteRequest) => string | null) | null;
+  readonly prewarmAddresses: ((request: PreparedRouteRequest) => readonly string[]) | null;
+}
+
 export interface RouteLegAdapter {
   readonly id: ExecutionFamilyId;
   readonly kind: RouteLegKind;
@@ -90,6 +139,8 @@ export interface RouteLegAdapter {
   readonly readMid: SyncMidReader | null;
   /** Declarative prewarm class; the coordinator remains the sole scheduler/state owner. */
   readonly warm: WarmSpec | null;
+  /** Optional prepared-state/Revm lane capability; null means fail closed in that lane. */
+  readonly prepared: PreparedRouteCapability | null;
 
   buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]>;
   quoteExact(ctx: ExactQuoteContext): Promise<bigint>;

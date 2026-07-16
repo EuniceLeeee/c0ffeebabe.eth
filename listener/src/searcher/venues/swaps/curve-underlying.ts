@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import {
@@ -6,10 +7,19 @@ import {
   resolveCurveUnderlyingMetadata,
   type CurveUnderlyingCallBackend,
 } from "../curve-underlying.js";
-import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PlanBuildContext,
+  PlanFragment,
+  PreparedRouteContext,
+  SwapAdapter,
+} from "../route-leg-adapter.js";
 import { readCurveUnderlyingExternalMid } from "../mid-readers.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
+const curveUnderlyingIface = new ethers.Interface([
+  "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
+]);
 
 export const curveUnderlyingAdapter = Object.freeze({
   id: "curve-underlying",
@@ -20,6 +30,34 @@ export const curveUnderlyingAdapter = Object.freeze({
   actionAdapterIds: ["curve-exchange-underlying", "erc20-approve"],
   readMid: readCurveUnderlyingExternalMid,
   warm: { kind: "external-mid" },
+  prepared: {
+    quote: async (ctx: PreparedRouteContext) => {
+      const started = Date.now();
+      const amountOut = await quoteCurveUnderlying(
+        { call: async ({ to, data }) => (await ctx.callPrepared(to, data)).output },
+        ctx.request.target,
+        ctx.request.tokenIn,
+        ctx.request.tokenOut,
+        ctx.request.amountIn,
+      );
+      return { amountOut, latencyMs: Date.now() - started };
+    },
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
+      if (ctx.edge?.curveI === undefined || ctx.edge.curveJ === undefined) return [];
+      return [{
+        from: ethers.ZeroAddress,
+        to: ctx.request.target,
+        calldata: curveUnderlyingIface.encodeFunctionData("get_dy_underlying", [
+          BigInt(ctx.edge.curveI),
+          BigInt(ctx.edge.curveJ),
+          ctx.request.amountIn,
+        ]),
+        gasLimit: 3_000_000,
+      }];
+    },
+    allowanceSpender: (request) => ethers.getAddress(request.target),
+    prewarmAddresses: () => [],
+  },
 
   buildEdges: buildCurveUnderlyingEdges,
   quoteExact: quoteCurveUnderlyingExact,

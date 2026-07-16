@@ -3,10 +3,18 @@ import type { ResolvedPlanNode } from "../../../shared/types/plan.js";
 import type { StateBackend } from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
-import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PlanBuildContext,
+  PlanFragment,
+  PreparedRouteContext,
+  PreparedRouteQuoteResult,
+  SwapAdapter,
+} from "../route-leg-adapter.js";
 import { readV3WarmMid } from "../mid-readers.js";
 
 const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
+const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 const poolIface = new ethers.Interface([
@@ -18,6 +26,7 @@ const quoterV2Iface = new ethers.Interface([
   "function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96)) returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
 ]);
 const poolTokensCache = new Map<string, [string, string]>();
+const preparedFeeCache = new Map<string, number>();
 
 export const univ3StandardAdapter = Object.freeze({
   id: "univ3-standard",
@@ -28,6 +37,26 @@ export const univ3StandardAdapter = Object.freeze({
   actionAdapterIds: ["univ3-swap", "erc20-transfer"],
   readMid: readV3WarmMid,
   warm: { kind: "mutable-pool", cache: "v3" },
+  prepared: {
+    quote: quoteUniV3Prepared,
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
+      const fee = await resolvePreparedFee(ctx, ctx.request.target);
+      return [{
+        from: ethers.ZeroAddress,
+        to: UNIV3_QUOTER_V2,
+        calldata: quoterV2Iface.encodeFunctionData("quoteExactInputSingle", [{
+          tokenIn: ctx.request.tokenIn,
+          tokenOut: ctx.request.tokenOut,
+          amountIn: ctx.request.amountIn,
+          fee,
+          sqrtPriceLimitX96: 0n,
+        }]),
+        gasLimit: 3_000_000,
+      }];
+    },
+    allowanceSpender: () => UNIV3_SWAP_ROUTER,
+    prewarmAddresses: () => [],
+  },
 
   buildEdges: buildUniV3Edges,
   quoteExact: quoteUniV3Exact,
@@ -126,6 +155,34 @@ async function buildUniV3PlanFragment(ctx: PlanBuildContext): Promise<PlanFragme
       children: [transfer],
     }],
   };
+}
+
+async function quoteUniV3Prepared(ctx: PreparedRouteContext): Promise<PreparedRouteQuoteResult> {
+  const fee = await resolvePreparedFee(ctx, ctx.request.target);
+  const data = quoterV2Iface.encodeFunctionData("quoteExactInputSingle", [{
+    tokenIn: ctx.request.tokenIn,
+    tokenOut: ctx.request.tokenOut,
+    amountIn: ctx.request.amountIn,
+    fee,
+    sqrtPriceLimitX96: 0n,
+  }]);
+  const quoted = await ctx.callPrepared(UNIV3_QUOTER_V2, data, { gasLimit: 3_000_000 });
+  const decoded = quoterV2Iface.decodeFunctionResult("quoteExactInputSingle", quoted.output);
+  return {
+    amountOut: BigInt(decoded[0]),
+    latencyMs: quoted.latencyMs,
+    cacheStats: quoted.cacheStats,
+  };
+}
+
+async function resolvePreparedFee(ctx: PreparedRouteContext, pool: string): Promise<number> {
+  const key = pool.toLowerCase();
+  const cached = preparedFeeCache.get(key);
+  if (cached !== undefined) return cached;
+  const raw = await ctx.readChain({ to: pool, data: poolIface.encodeFunctionData("fee", []) });
+  const fee = Number(BigInt(raw));
+  preparedFeeCache.set(key, fee);
+  return fee;
 }
 
 async function queryPoolTokens(

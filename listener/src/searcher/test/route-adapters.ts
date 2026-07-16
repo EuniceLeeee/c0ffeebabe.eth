@@ -133,6 +133,25 @@ async function main(): Promise<void> {
     quoted === quoteV2ExactInput(1_000_000n, 2_000_000n, amountIn, 30n),
     `univ2 quote ${quoted}`,
   );
+  assert(adapter.prepared?.quote !== null && adapter.prepared?.quote !== undefined, "univ2 prepared quote");
+  const preparedV2Context = {
+    request: {
+      adapterId: "univ2-swap", target: pair, tokenIn: token0, tokenOut: token1, amountIn,
+    },
+    edge: edges[0],
+    async callPrepared(to: string, data: string) {
+      return {
+        output: await backend.call({ to, data }),
+        latencyMs: 1,
+        cacheStats: { warmHits: 1, coldMisses: 0 },
+      };
+    },
+    readChain: (req: { to: string; data: string }) => backend.call(req),
+  };
+  const preparedV2Quote = await adapter.prepared.quote(preparedV2Context);
+  assert(preparedV2Quote.amountOut === quoted, `univ2 prepared quote ${preparedV2Quote.amountOut}`);
+  const preparedV2Calls = await adapter.prepared.encodeQuotePrewarm!(preparedV2Context);
+  assert(preparedV2Calls.length === 1, `univ2 prepared prewarm count ${preparedV2Calls.length}`);
   console.log("[route-adapters] univ2 quote equivalence: PASS");
 
   const fragment = await adapter.buildPlanFragment({
@@ -164,6 +183,25 @@ async function main(): Promise<void> {
     amountIn,
   });
   assert(curveQuote === amountIn * 2n, `curve quote ${curveQuote}`);
+  assert(curveAdapter.prepared?.quote !== null && curveAdapter.prepared?.quote !== undefined, "curve prepared quote");
+  const preparedCurveContext = {
+    request: {
+      adapterId: "curve-exchange-plain", target: curvePool,
+      tokenIn: token0, tokenOut: token1, amountIn,
+    },
+    edge: curveEdges[0],
+    async callPrepared(to: string, data: string) {
+      return { output: await curveBackend.call({ to, data }), latencyMs: 1 };
+    },
+    readChain: (req: { to: string; data: string }) => curveBackend.call(req),
+  };
+  const preparedCurveQuote = await curveAdapter.prepared.quote(preparedCurveContext);
+  assert(
+    preparedCurveQuote.amountOut === curveQuote,
+    `curve prepared quote ${preparedCurveQuote.amountOut}`,
+  );
+  const preparedCurveCalls = await curveAdapter.prepared.encodeQuotePrewarm!(preparedCurveContext);
+  assert(preparedCurveCalls.length === 2, `curve prepared prewarm count ${preparedCurveCalls.length}`);
   const curveFragment = await curveAdapter.buildPlanFragment({
     edge: curveEdges[0], amountIn, amountOut: curveQuote,
     executor: ethers.ZeroAddress, state: curveBackend as never,
@@ -222,6 +260,46 @@ async function main(): Promise<void> {
   }
   console.log("[route-adapters] sync-over-prewarmed mid contract: PASS");
 
+  const preparedQuoteEdges = new Set([
+    "curve-exchange",
+    "curve-exchange-nr",
+    "curve-exchange-plain",
+    "curve-exchange-received-uint",
+    "curve-exchange-underlying",
+    "univ2-swap",
+    "univ3-swap",
+    "univ4-unlock",
+    "psm",
+    "metronome-synth-swap",
+    "goldx-mint",
+    "fluid-vault",
+  ]);
+  for (const routeAdapter of adapters) {
+    assert("prepared" in routeAdapter, `${routeAdapter.id} must declare prepared capability`);
+    const expectsPreparedQuote = routeAdapter.edgeAdapterIds.some((edgeId) =>
+      preparedQuoteEdges.has(edgeId)
+    );
+    assert(
+      Boolean(routeAdapter.prepared?.quote) === expectsPreparedQuote,
+      `${routeAdapter.id} prepared quote coverage`,
+    );
+    if (routeAdapter.prepared) {
+      assert(
+        routeAdapter.prepared.encodeQuotePrewarm !== null,
+        `${routeAdapter.id} must explicitly declare prepared prewarm encoding`,
+      );
+      assert(
+        routeAdapter.prepared.allowanceSpender !== null,
+        `${routeAdapter.id} must explicitly declare prepared allowance policy`,
+      );
+      assert(
+        routeAdapter.prepared.prewarmAddresses !== null,
+        `${routeAdapter.id} must explicitly declare prepared address policy`,
+      );
+    }
+  }
+  console.log("[route-adapters] prepared-state capability coverage: PASS");
+
   const badAdapter: SwapAdapter = {
     ...adapter,
     id: "custom-swap:bad",
@@ -246,7 +324,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (9/9)");
+  console.log("route-adapters PASS (10/10)");
 }
 
 await main();

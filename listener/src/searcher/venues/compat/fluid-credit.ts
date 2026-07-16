@@ -1,3 +1,4 @@
+import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type {
@@ -5,6 +6,7 @@ import type {
   ExactQuoteContext,
   PlanBuildContext,
   PlanFragment,
+  PreparedRouteContext,
 } from "../route-leg-adapter.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
@@ -23,6 +25,14 @@ export const fluidCreditCompatAdapter = Object.freeze({
   actionAdapterIds: ["fluid-vault", "erc20-approve"],
   readMid: null,
   warm: null,
+  prepared: {
+    quote: async (_ctx: PreparedRouteContext) => {
+      throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
+    },
+    encodeQuotePrewarm: async () => [],
+    allowanceSpender: () => null,
+    prewarmAddresses: () => [ADDR.FLUID_VAULT_WSTUSR_USDC],
+  },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`fluid-vault pool ${pool.address} missing fixedTokenIn/Out`);

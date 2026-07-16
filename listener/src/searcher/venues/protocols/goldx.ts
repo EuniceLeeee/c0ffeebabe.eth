@@ -1,10 +1,16 @@
 import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
-import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PreparedRouteContext,
+  ProtocolConversionAdapter,
+} from "../route-leg-adapter.js";
 import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteGoldxMint } from "./protocol-quote.js";
+
+const goldxIface = new ethers.Interface(["function unit() view returns (uint256)"]);
 
 export const goldxAdapter = Object.freeze({
   id: "protocol:goldx",
@@ -15,6 +21,27 @@ export const goldxAdapter = Object.freeze({
   actionAdapterIds: ["goldx-mint", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 0 },
+  prepared: {
+    quote: async (ctx: PreparedRouteContext) => {
+      const started = Date.now();
+      const amountOut = await quoteGoldxMint(
+        { call: async ({ to, data }) => (await ctx.callPrepared(to, data)).output },
+        ctx.request.target,
+        ctx.request.tokenIn,
+        ctx.request.tokenOut,
+        ctx.request.amountIn,
+      );
+      return { amountOut, latencyMs: Date.now() - started };
+    },
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
+      from: ethers.ZeroAddress,
+      to: ctx.request.target,
+      calldata: goldxIface.encodeFunctionData("unit"),
+      gasLimit: 300_000,
+    }],
+    allowanceSpender: () => null,
+    prewarmAddresses: () => [],
+  },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`goldx pool ${pool.address} missing fixed token metadata`);

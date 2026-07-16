@@ -15,6 +15,7 @@ export const rocksolidAdapter = Object.freeze({
   actionAdapterIds: ["rocksolid-sync-deposit", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 2 },
+  prepared: null,
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn) throw new Error(`rocksolid pool ${pool.address} missing fixedTokenIn`);
     return [{

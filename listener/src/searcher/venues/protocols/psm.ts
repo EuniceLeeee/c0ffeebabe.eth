@@ -1,7 +1,13 @@
 import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
-import type { ExactQuoteContext, PlanBuildContext, PlanFragment, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PlanBuildContext,
+  PlanFragment,
+  PreparedRouteContext,
+  ProtocolConversionAdapter,
+} from "../route-leg-adapter.js";
 import { readProtocolExternalMid } from "../mid-readers.js";
 import { quotePSM, quotePSMSellGemPrewarm } from "./protocol-quote.js";
 
@@ -24,6 +30,19 @@ export const psmAdapter = Object.freeze({
         ctx.state, ctx.target, ctx.tokenIn, ctx.tokenOut, ctx.amountIn,
       );
     },
+  },
+  prepared: {
+    quote: async (ctx: PreparedRouteContext) => ({
+      amountOut: quotePreparedPSM(
+        ctx.request.tokenIn,
+        ctx.request.tokenOut,
+        ctx.request.amountIn,
+      ),
+      latencyMs: 0,
+    }),
+    encodeQuotePrewarm: async () => [],
+    allowanceSpender: () => null,
+    prewarmAddresses: () => [ADDR.SKY_PSM_LITE],
   },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
@@ -53,3 +72,13 @@ export const psmAdapter = Object.freeze({
     };
   },
 } satisfies ProtocolConversionAdapter);
+
+function quotePreparedPSM(tokenIn: string, tokenOut: string, amountIn: bigint): bigint {
+  const usdc = ADDR.USDC.toLowerCase();
+  const dai = ADDR.DAI.toLowerCase();
+  const tIn = tokenIn.toLowerCase();
+  const tOut = tokenOut.toLowerCase();
+  if (tIn === usdc && tOut === dai) return amountIn * 10n ** 12n;
+  if (tIn === dai && tOut === usdc) return amountIn / 10n ** 12n;
+  throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
+}

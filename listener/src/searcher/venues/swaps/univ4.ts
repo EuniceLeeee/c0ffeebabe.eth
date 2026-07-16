@@ -8,6 +8,8 @@ import type {
   ExactQuoteContext,
   PlanBuildContext,
   PlanFragment,
+  PreparedRouteContext,
+  PreparedRouteQuoteResult,
   SwapAdapter,
   V4QuotePathStats,
 } from "../route-leg-adapter.js";
@@ -59,11 +61,46 @@ export const univ4Adapter = Object.freeze({
   ],
   readMid: readV4WarmMid,
   warm: { kind: "mutable-pool", cache: "v4" },
+  prepared: {
+    quote: quoteUniV4Prepared,
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
+      from: ethers.ZeroAddress,
+      to: ADDR.UNISWAP_V4_QUOTER,
+      calldata: encodeUniV4QuoteExactInputSingle(
+        ctx.request.tokenIn,
+        ctx.request.tokenOut,
+        ctx.request.amountIn,
+        ctx.request.v4PoolKey ?? ctx.edge?.v4PoolKey,
+      ),
+      gasLimit: 3_000_000,
+    }],
+    allowanceSpender: () => null,
+    prewarmAddresses: () => [],
+  },
 
   buildEdges: buildUniV4Edges,
   quoteExact: quoteUniV4Exact,
   buildPlanFragment: buildUniV4PlanFragment,
 } satisfies SwapAdapter);
+
+async function quoteUniV4Prepared(ctx: PreparedRouteContext): Promise<PreparedRouteQuoteResult> {
+  const data = encodeUniV4QuoteExactInputSingle(
+    ctx.request.tokenIn,
+    ctx.request.tokenOut,
+    ctx.request.amountIn,
+    ctx.request.v4PoolKey ?? ctx.edge?.v4PoolKey,
+  );
+  const quoted = await ctx.callPrepared(ADDR.UNISWAP_V4_QUOTER, data, {
+    gasLimit: 3_000_000,
+  });
+  return {
+    amountOut: BigInt(
+      uniV4QuoterIface.decodeFunctionResult("quoteExactInputSingle", quoted.output)[0],
+    ),
+    latencyMs: quoted.latencyMs,
+    cacheStats: quoted.cacheStats,
+  };
+}
 
 export function encodeUniV4QuoteExactInputSingle(
   tokenIn: string,

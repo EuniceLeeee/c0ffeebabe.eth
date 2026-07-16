@@ -1,10 +1,24 @@
+import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
-import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PlanBuildContext,
+  PlanFragment,
+  PreparedRouteContext,
+  PreparedRouteQuoteResult,
+  SwapAdapter,
+} from "../route-leg-adapter.js";
 import { readCurveWarmMid } from "../mid-readers.js";
 import { queryCurveCoins, quoteCurvePlain, resolveCurveIndices } from "./curve-shared.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
+const curveIntIface = new ethers.Interface([
+  "function get_dy(int128 i, int128 j, uint256 dx) view returns (uint256)",
+]);
+const curveUintIface = new ethers.Interface([
+  "function get_dy(uint256 i, uint256 j, uint256 dx) view returns (uint256)",
+]);
 
 export const curvePlainAdapter = Object.freeze({
   id: "curve-plain",
@@ -20,11 +34,69 @@ export const curvePlainAdapter = Object.freeze({
   actionAdapterIds: ["curve-exchange-plain", "erc20-approve"],
   readMid: readCurveWarmMid,
   warm: { kind: "curve-pool" },
+  prepared: {
+    quote: quoteCurvePlainPrepared,
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
+      const [i, j] = preparedCurveIndices(ctx);
+      const args = [BigInt(i), BigInt(j), ctx.request.amountIn] as const;
+      return [
+        {
+          from: ethers.ZeroAddress,
+          to: ctx.request.target,
+          calldata: curveIntIface.encodeFunctionData("get_dy", args),
+          gasLimit: 3_000_000,
+        },
+        {
+          from: ethers.ZeroAddress,
+          to: ctx.request.target,
+          calldata: curveUintIface.encodeFunctionData("get_dy", args),
+          gasLimit: 3_000_000,
+        },
+      ];
+    },
+    allowanceSpender: (request) => ethers.getAddress(request.target),
+    prewarmAddresses: () => [],
+  },
 
   buildEdges: buildCurvePlainEdges,
   quoteExact: quoteCurvePlainExact,
   buildPlanFragment: buildCurvePlainPlanFragment,
 } satisfies SwapAdapter);
+
+async function quoteCurvePlainPrepared(
+  ctx: PreparedRouteContext,
+): Promise<PreparedRouteQuoteResult> {
+  const [i, j] = preparedCurveIndices(ctx);
+  const args = [BigInt(i), BigInt(j), ctx.request.amountIn] as const;
+  try {
+    const quoted = await ctx.callPrepared(
+      ctx.request.target,
+      curveIntIface.encodeFunctionData("get_dy", args),
+    );
+    return {
+      amountOut: BigInt(curveIntIface.decodeFunctionResult("get_dy", quoted.output)[0]),
+      latencyMs: quoted.latencyMs,
+      cacheStats: quoted.cacheStats,
+    };
+  } catch {
+    const quoted = await ctx.callPrepared(
+      ctx.request.target,
+      curveUintIface.encodeFunctionData("get_dy", args),
+    );
+    return {
+      amountOut: BigInt(curveUintIface.decodeFunctionResult("get_dy", quoted.output)[0]),
+      latencyMs: quoted.latencyMs,
+      cacheStats: quoted.cacheStats,
+    };
+  }
+}
+
+function preparedCurveIndices(ctx: PreparedRouteContext): [number, number] {
+  if (ctx.edge?.curveI === undefined || ctx.edge.curveJ === undefined) {
+    throw new Error(`revm curve quote missing graph indices for ${ctx.request.target}`);
+  }
+  return [ctx.edge.curveI, ctx.edge.curveJ];
+}
 
 async function buildCurvePlainEdges(
   pool: PoolEntry,

@@ -20,20 +20,17 @@ import {
 } from "../revm-sim-client.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
-import {
-  quoteFluidDex,
-  quoteGoldxMint,
-  encodeUniV4QuoteExactInputSingle,
-  metronomeSynthPoolIface,
-  uniV4QuoterIface,
-} from "../solver/quoter.js";
-import { quoteCurveUnderlying } from "../venues/swaps/curve-underlying.js";
-import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
+import { quoteFluidDex } from "../solver/quoter.js";
 import {
   postImpactStateOverrides,
   postImpactSupportsStateOverrides,
 } from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import type {
+  PreparedRouteContext,
+  PreparedRouteRequest,
+} from "../venues/route-leg-adapter.js";
 import { buildVictimOverlay, overlaySupportsAdapter } from "./victim-overlay.js";
 
 const UNIV3_FEE_IFACE = new ethers.Interface(["function fee() view returns (uint24)"]);
@@ -41,26 +38,8 @@ const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 const WHALE = "0x000000000000000000000000000000000000dEaD";
 const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
 const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-const CURVE_INT_IFACE = new ethers.Interface([
-  "function get_dy(int128 i, int128 j, uint256 dx) view returns (uint256)",
-]);
-const CURVE_UINT_IFACE = new ethers.Interface([
-  "function get_dy(uint256 i, uint256 j, uint256 dx) view returns (uint256)",
-]);
-const CURVE_UNDERLYING_IFACE = new ethers.Interface([
-  "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
-]);
-const GOLDX_IFACE = new ethers.Interface(["function unit() view returns (uint256)"]);
-const UNIV2_IFACE = new ethers.Interface([
-  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-  "function factory() view returns (address)",
-  "function token0() view returns (address)",
-]);
 const BALANCE_OF_IFACE = new ethers.Interface([
   "function balanceOf(address) view returns (uint256)",
-]);
-const UNIV3_QUOTER_IFACE = new ethers.Interface([
-  "function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
 ]);
 
 /**
@@ -79,7 +58,6 @@ export class RevmLiveBackend implements LiveStateBackend {
   readonly kind = "revm" as const;
   private preparedBlock: number | null = null;
   private readonly feeCache = new Map<string, number>();
-  private readonly v2FeeCache = new Map<string, bigint>();
 
   constructor(
     private readonly client: RevmSimClient,
@@ -179,9 +157,9 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (stateOverrideOnly) {
       for (const hop of input.routeHops ?? []) {
         push(hop.target);
-        if (hop.adapterId === "psm") push(ADDR.SKY_PSM_LITE);
-        if (hop.adapterId === "fluid-vault") push(ADDR.FLUID_VAULT_WSTUSR_USDC);
-        if (hop.adapterId === "fluid-dex-swap") push(hop.target);
+        const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId);
+        const request = this.preparedRequest(hop, input.impact?.amountIn ?? 0n);
+        for (const address of adapter?.prepared?.prewarmAddresses?.(request) ?? []) push(address);
       }
       return [...prewarm.values()];
     }
@@ -326,125 +304,20 @@ export class RevmLiveBackend implements LiveStateBackend {
     await this.warmHotPools(input.baseBlock, hops);
   }
 
-  /** Encode the quote view-call(s) for one hop. Empty when the adapter quotes
-   *  via local math (psm/fluid) or the graph edge is missing. */
+  /** Encode the quote view-call(s) declared by the route adapter. */
   private async encodeHopQuoteCalls(
     hop: QuoteHop,
     amountIn: bigint,
   ): Promise<OverlayPreCall[]> {
-    const calls: OverlayPreCall[] = [];
     try {
-      switch (hop.adapterId) {
-        case "curve-exchange":
-        case "curve-exchange-nr":
-        case "curve-exchange-plain":
-        case "curve-exchange-received-uint": {
-          const edge = this.findEdge({
-            adapterId: hop.adapterId,
-            target: hop.target,
-            tokenIn: hop.tokenIn,
-            tokenOut: hop.tokenOut,
-            amountIn,
-          });
-          if (edge?.curveI === undefined || edge.curveJ === undefined) break;
-          const args = [BigInt(edge.curveI), BigInt(edge.curveJ), amountIn] as const;
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: hop.target,
-            calldata: CURVE_INT_IFACE.encodeFunctionData("get_dy", args),
-            gasLimit: 3_000_000,
-          });
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: hop.target,
-            calldata: CURVE_UINT_IFACE.encodeFunctionData("get_dy", args),
-            gasLimit: 3_000_000,
-          });
-          break;
-        }
-        case "curve-exchange-underlying": {
-          const edge = this.findEdge({
-            adapterId: hop.adapterId,
-            target: hop.target,
-            tokenIn: hop.tokenIn,
-            tokenOut: hop.tokenOut,
-            amountIn,
-          });
-          if (edge?.curveI === undefined || edge.curveJ === undefined) break;
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: hop.target,
-            calldata: CURVE_UNDERLYING_IFACE.encodeFunctionData("get_dy_underlying", [
-              BigInt(edge.curveI),
-              BigInt(edge.curveJ),
-              amountIn,
-            ]),
-            gasLimit: 3_000_000,
-          });
-          break;
-        }
-        case "univ2-swap":
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: hop.target,
-            calldata: UNIV2_IFACE.encodeFunctionData("getReserves", []),
-            gasLimit: 300_000,
-          });
-          break;
-        case "univ3-swap": {
-          const fee = await this.resolveUniv3Fee(hop.target);
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: UNIV3_QUOTER_V2,
-            calldata: UNIV3_QUOTER_IFACE.encodeFunctionData("quoteExactInputSingle", [
-              { tokenIn: hop.tokenIn, tokenOut: hop.tokenOut, amountIn, fee, sqrtPriceLimitX96: 0n },
-            ]),
-            gasLimit: 3_000_000,
-          });
-          break;
-        }
-        case "univ4-unlock": {
-          const poolKey = this.resolveV4PoolKey(hop);
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: ADDR.UNISWAP_V4_QUOTER,
-            calldata: encodeUniV4QuoteExactInputSingle(
-              hop.tokenIn,
-              hop.tokenOut,
-              amountIn,
-              poolKey,
-            ),
-            gasLimit: 3_000_000,
-          });
-          break;
-        }
-        case "metronome-synth-swap":
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: hop.target,
-            calldata: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
-              hop.tokenIn,
-              hop.tokenOut,
-              amountIn,
-            ]),
-            gasLimit: 1_000_000,
-          });
-          break;
-        case "goldx-mint":
-          calls.push({
-            from: ethers.ZeroAddress,
-            to: hop.target,
-            calldata: GOLDX_IFACE.encodeFunctionData("unit"),
-            gasLimit: 300_000,
-          });
-          break;
-        default:
-          break;
-      }
+      const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId);
+      const encode = adapter?.prepared?.encodeQuotePrewarm;
+      if (!encode) return [];
+      return [...await encode(this.preparedContext(hop, amountIn))];
     } catch {
       // best-effort prewarm; the hop just stays cold
+      return [];
     }
-    return calls;
   }
 
   async quote(req: QuoteRequest): Promise<QuoteResult> {
@@ -463,54 +336,13 @@ export class RevmLiveBackend implements LiveStateBackend {
   }
 
   private async quoteByAdapter(req: QuoteRequest): Promise<QuoteResult> {
-    switch (req.adapterId) {
-      case "curve-exchange":
-      case "curve-exchange-nr":
-      case "curve-exchange-plain":
-      case "curve-exchange-received-uint":
-        return this.quoteCurve(req);
-      case "curve-exchange-underlying": {
-        const started = Date.now();
-        const amountOut = await quoteCurveUnderlying(
-          this,
-          req.target,
-          req.tokenIn,
-          req.tokenOut,
-          req.amountIn,
-        );
-        return { amountOut, latencyMs: Date.now() - started };
-      }
-      case "univ2-swap":
-        return this.quoteUniV2(req);
-      case "univ3-swap":
-        return this.quoteUniV3(req.target, req.tokenIn, req.tokenOut, req.amountIn);
-      case "univ4-unlock":
-        return this.quoteUniV4(req);
-      case "psm":
-        return {
-          amountOut: quotePSM(req.tokenIn, req.tokenOut, req.amountIn),
-          latencyMs: 0,
-        };
-      case "fluid-dex-swap":
-        return this.quoteFluidDex(req);
-      case "metronome-synth-swap":
-        return this.quoteMetronomeSynthSwap(req);
-      case "goldx-mint": {
-        const started = Date.now();
-        const amountOut = await quoteGoldxMint(
-          this,
-          req.target,
-          req.tokenIn,
-          req.tokenOut,
-          req.amountIn,
-        );
-        return { amountOut, latencyMs: Date.now() - started };
-      }
-      case "fluid-vault":
-        throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
-      default:
-        throw new Error(`no revm quoter for adapter ${req.adapterId}`);
+    const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(req.adapterId);
+    if (adapter?.prepared?.quote) {
+      return adapter.prepared.quote(this.preparedContext(req, req.amountIn));
     }
+    // Fluid DEX remains the one explicitly blocked legacy family in the plan.
+    if (req.adapterId === "fluid-dex-swap") return this.quoteFluidDex(req);
+    throw new Error(`no revm quoter for adapter ${req.adapterId}`);
   }
 
   /**
@@ -570,25 +402,6 @@ export class RevmLiveBackend implements LiveStateBackend {
     return fee;
   }
 
-  private async resolveUniv2FeeBps(pool: string): Promise<bigint> {
-    const key = pool.toLowerCase();
-    const cached = this.v2FeeCache.get(key);
-    if (cached !== undefined) return cached;
-    let feeBps = DEFAULT_V2_FEE_BPS;
-    try {
-      const raw = await this.provider.call({
-        to: pool,
-        data: UNIV2_IFACE.encodeFunctionData("factory", []),
-      });
-      const factory = UNIV2_IFACE.decodeFunctionResult("factory", raw)[0] as string;
-      feeBps = v2FeeBpsForFactory(factory);
-    } catch {
-      feeBps = DEFAULT_V2_FEE_BPS;
-    }
-    this.v2FeeCache.set(key, feeBps);
-    return feeBps;
-  }
-
   private findEdge(req: QuoteRequest): TokenEdge | undefined {
     const target = req.target.toLowerCase();
     const tokenIn = req.tokenIn.toLowerCase();
@@ -629,105 +442,6 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { output: resp.output, latencyMs: resp.latencyMs, cacheStats: resp.cacheStats };
   }
 
-  private async quoteCurve(req: QuoteRequest): Promise<QuoteResult> {
-    const edge = this.findEdge(req);
-    if (edge?.curveI === undefined || edge.curveJ === undefined) {
-      throw new Error(`revm curve quote missing graph indices for ${req.target}`);
-    }
-
-    const args = [BigInt(edge.curveI), BigInt(edge.curveJ), req.amountIn] as const;
-    try {
-      const quoted = await this.callPrepared(
-        req.target,
-        CURVE_INT_IFACE.encodeFunctionData("get_dy", args),
-      );
-      const decoded = CURVE_INT_IFACE.decodeFunctionResult("get_dy", quoted.output);
-      return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
-    } catch (err) {
-      const quoted = await this.callPrepared(
-        req.target,
-        CURVE_UINT_IFACE.encodeFunctionData("get_dy", args),
-      );
-      const decoded = CURVE_UINT_IFACE.decodeFunctionResult("get_dy", quoted.output);
-      return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
-    }
-  }
-
-  private async quoteUniV2(req: QuoteRequest): Promise<QuoteResult> {
-    const edge = this.findEdge(req);
-    let token0 = edge?.poolToken0;
-    let latencyMs = 0;
-    if (!token0) {
-      const token0Call = await this.callPrepared(
-        req.target,
-        UNIV2_IFACE.encodeFunctionData("token0", []),
-      );
-      token0 = ethers.getAddress("0x" + token0Call.output.slice(-40));
-      latencyMs += token0Call.latencyMs;
-    }
-
-    const reservesCall = await this.callPrepared(
-      req.target,
-      UNIV2_IFACE.encodeFunctionData("getReserves", []),
-    );
-    latencyMs += reservesCall.latencyMs;
-    const decoded = UNIV2_IFACE.decodeFunctionResult("getReserves", reservesCall.output);
-    const [r0, r1] = [BigInt(decoded[0]), BigInt(decoded[1])];
-    const zeroForOne = req.tokenIn.toLowerCase() === token0.toLowerCase();
-    const [reserveIn, reserveOut] = zeroForOne ? [r0, r1] : [r1, r0];
-    const feeBps = await this.resolveUniv2FeeBps(req.target);
-
-    return {
-      amountOut: quoteV2ExactInput(reserveIn, reserveOut, req.amountIn, feeBps),
-      latencyMs,
-      cacheStats: reservesCall.cacheStats,
-    };
-  }
-
-  private async quoteUniV3(
-    pool: string,
-    tokenIn: string,
-    tokenOut: string,
-    amountIn: bigint,
-  ): Promise<QuoteResult> {
-    const fee = await this.resolveUniv3Fee(pool);
-    const data = UNIV3_QUOTER_IFACE.encodeFunctionData("quoteExactInputSingle", [
-      {
-        tokenIn,
-        tokenOut,
-        amountIn,
-        fee,
-        sqrtPriceLimitX96: 0n,
-      },
-    ]);
-    const quoted = await this.callPrepared(UNIV3_QUOTER_V2, data, {
-      gasLimit: 3_000_000,
-    });
-    const decoded = UNIV3_QUOTER_IFACE.decodeFunctionResult(
-      "quoteExactInputSingle",
-      quoted.output,
-    );
-    return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
-  }
-
-  private async quoteUniV4(req: QuoteRequest): Promise<QuoteResult> {
-    const poolKey = this.resolveV4PoolKey(req);
-    const data = encodeUniV4QuoteExactInputSingle(
-      req.tokenIn,
-      req.tokenOut,
-      req.amountIn,
-      poolKey,
-    );
-    const quoted = await this.callPrepared(ADDR.UNISWAP_V4_QUOTER, data, {
-      gasLimit: 3_000_000,
-    });
-    const decoded = uniV4QuoterIface.decodeFunctionResult(
-      "quoteExactInputSingle",
-      quoted.output,
-    );
-    return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
-  }
-
   private async quoteFluidDex(req: QuoteRequest): Promise<QuoteResult> {
     const started = Date.now();
     const edge = this.findEdge(req);
@@ -743,45 +457,29 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { amountOut, latencyMs: Date.now() - started };
   }
 
-  private async quoteMetronomeSynthSwap(req: QuoteRequest): Promise<QuoteResult> {
-    const quoted = await this.callPrepared(
-      req.target,
-      metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
-        req.tokenIn,
-        req.tokenOut,
-        req.amountIn,
-      ]),
-      { gasLimit: 1_000_000 },
-    );
-    const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", quoted.output);
-    return { amountOut: BigInt(decoded[0]), latencyMs: quoted.latencyMs, cacheStats: quoted.cacheStats };
+  private preparedRequest(hop: QuoteHop, amountIn: bigint): PreparedRouteRequest {
+    return { ...hop, amountIn };
   }
 
-  private resolveV4PoolKey(req: QuoteHop) {
-    if (req.v4PoolKey) return req.v4PoolKey;
-    const edge = this.findEdge({ ...req, amountIn: 0n });
-    if (edge?.v4PoolKey) return edge.v4PoolKey;
-    throw new Error(`V4 quoter: missing PoolKey for ${req.tokenIn} -> ${req.tokenOut}`);
+  private preparedContext(hop: QuoteHop, amountIn: bigint): PreparedRouteContext {
+    const request = this.preparedRequest(hop, amountIn);
+    return {
+      request,
+      edge: this.findEdge(request),
+      callPrepared: (to, data, options) => this.callPrepared(to, data, options),
+      readChain: ({ to, data }) => this.provider.call({ to, data }),
+    };
   }
 }
 
-function quotePSM(tokenIn: string, tokenOut: string, amountIn: bigint): bigint {
-  const usdc = ADDR.USDC.toLowerCase();
-  const dai = ADDR.DAI.toLowerCase();
-  const tIn = tokenIn.toLowerCase();
-  const tOut = tokenOut.toLowerCase();
-  if (tIn === usdc && tOut === dai) return amountIn * 10n ** 12n;
-  if (tIn === dai && tOut === usdc) return amountIn / 10n ** 12n;
-  throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
-}
-
-function overlayApproveSpender(hop: { adapterId: string; target: string }): string | null {
-  if (hop.adapterId === "univ2-swap") return UNIV2_ROUTER;
-  if (hop.adapterId === "univ3-swap") return UNIV3_SWAP_ROUTER;
-  if (hop.adapterId.startsWith("curve-")) return ethers.getAddress(hop.target);
+function overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
   if (hop.adapterId === "fluid-dex-swap") return ethers.getAddress(hop.target);
-  if (hop.adapterId === "metronome-synth-swap") return ethers.getAddress(hop.target);
-  return null;
+  const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId);
+  const request: PreparedRouteRequest = {
+    ...hop,
+    amountIn: "amountIn" in hop ? hop.amountIn : 0n,
+  };
+  return adapter?.prepared?.allowanceSpender?.(request) ?? null;
 }
 
 function v4PoolKeyIdentity(key: TokenEdge["v4PoolKey"] | undefined): string {

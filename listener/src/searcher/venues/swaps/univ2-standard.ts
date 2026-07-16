@@ -4,7 +4,14 @@ import type { StateBackend } from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../../solver/v2-fee.js";
-import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PlanBuildContext,
+  PlanFragment,
+  PreparedRouteContext,
+  PreparedRouteQuoteResult,
+  SwapAdapter,
+} from "../route-leg-adapter.js";
 import { readV2WarmMid } from "../mid-readers.js";
 
 const pairIface = new ethers.Interface([
@@ -14,6 +21,7 @@ const pairIface = new ethers.Interface([
   "function token1() view returns (address)",
 ]);
 const feeBpsCache = new Map<string, bigint>();
+const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
 export const univ2StandardAdapter = Object.freeze({
   id: "univ2-standard",
@@ -24,6 +32,17 @@ export const univ2StandardAdapter = Object.freeze({
   actionAdapterIds: ["univ2-swap", "erc20-transfer"],
   readMid: readV2WarmMid,
   warm: { kind: "mutable-pool", cache: "v2" },
+  prepared: {
+    quote: quoteUniV2Prepared,
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
+      from: ethers.ZeroAddress,
+      to: ctx.request.target,
+      calldata: pairIface.encodeFunctionData("getReserves", []),
+      gasLimit: 300_000,
+    }],
+    allowanceSpender: () => UNIV2_ROUTER,
+    prewarmAddresses: () => [],
+  },
 
   buildEdges: buildUniV2Edges,
   quoteExact: quoteUniV2Exact,
@@ -110,7 +129,7 @@ async function quoteUniV2Onchain(
   return quoteV2ExactInput(reserveIn, reserveOut, amountIn, feeBps);
 }
 
-async function resolveFeeBps(state: StateBackend, pool: string): Promise<bigint> {
+async function resolveFeeBps(state: Pick<StateBackend, "call">, pool: string): Promise<bigint> {
   const key = pool.toLowerCase();
   const cached = feeBpsCache.get(key);
   if (cached !== undefined) return cached;
@@ -128,6 +147,37 @@ async function resolveFeeBps(state: StateBackend, pool: string): Promise<bigint>
   }
   feeBpsCache.set(key, feeBps);
   return feeBps;
+}
+
+async function quoteUniV2Prepared(ctx: PreparedRouteContext): Promise<PreparedRouteQuoteResult> {
+  const { request, edge } = ctx;
+  let token0 = edge?.poolToken0;
+  let latencyMs = 0;
+  if (!token0) {
+    const token0Call = await ctx.callPrepared(
+      request.target,
+      pairIface.encodeFunctionData("token0", []),
+    );
+    token0 = ethers.getAddress(`0x${token0Call.output.slice(-40)}`);
+    latencyMs += token0Call.latencyMs;
+  }
+  const reservesCall = await ctx.callPrepared(
+    request.target,
+    pairIface.encodeFunctionData("getReserves", []),
+  );
+  latencyMs += reservesCall.latencyMs;
+  const decoded = pairIface.decodeFunctionResult("getReserves", reservesCall.output);
+  const [reserve0, reserve1] = [BigInt(decoded[0]), BigInt(decoded[1])];
+  const zeroForOne = request.tokenIn.toLowerCase() === token0.toLowerCase();
+  const [reserveIn, reserveOut] = zeroForOne
+    ? [reserve0, reserve1]
+    : [reserve1, reserve0];
+  const feeBps = await resolveFeeBps({ call: ctx.readChain }, request.target);
+  return {
+    amountOut: quoteV2ExactInput(reserveIn, reserveOut, request.amountIn, feeBps),
+    latencyMs,
+    cacheStats: reservesCall.cacheStats,
+  };
 }
 
 async function buildUniV2PlanFragment(ctx: PlanBuildContext): Promise<PlanFragment> {

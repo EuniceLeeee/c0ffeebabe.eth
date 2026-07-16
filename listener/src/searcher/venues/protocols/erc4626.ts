@@ -19,6 +19,7 @@ export const erc4626Adapter = Object.freeze({
   ],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 2 },
+  prepared: null,
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn) throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
     if (pool.nonStandardRedeem) {

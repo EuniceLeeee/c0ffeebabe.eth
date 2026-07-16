@@ -18,6 +18,7 @@ export const wstethAdapter = Object.freeze({
   actionAdapterIds: ["wsteth-wrap", "wsteth-unwrap", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 1 },
+  prepared: null,
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     return [
       {

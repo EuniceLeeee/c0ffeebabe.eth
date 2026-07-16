@@ -2,7 +2,13 @@ import { ethers } from "ethers";
 import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
-import type { ExactQuoteContext, PlanBuildContext, PlanFragment, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import type {
+  ExactQuoteContext,
+  PlanBuildContext,
+  PlanFragment,
+  PreparedRouteContext,
+  ProtocolConversionAdapter,
+} from "../route-leg-adapter.js";
 import { readProtocolExternalMid } from "../mid-readers.js";
 import { quoteCurvePlain } from "../swaps/curve-shared.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
@@ -26,6 +32,38 @@ export const metronomeSynthAdapter = Object.freeze({
   actionAdapterIds: ["metronome-synth-swap", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 1 },
+  prepared: {
+    quote: async (ctx: PreparedRouteContext) => {
+      const quoted = await ctx.callPrepared(
+        ctx.request.target,
+        metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+          ctx.request.tokenIn,
+          ctx.request.tokenOut,
+          ctx.request.amountIn,
+        ]),
+        { gasLimit: 1_000_000 },
+      );
+      return {
+        amountOut: BigInt(
+          metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", quoted.output)[0],
+        ),
+        latencyMs: quoted.latencyMs,
+        cacheStats: quoted.cacheStats,
+      };
+    },
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
+      from: ethers.ZeroAddress,
+      to: ctx.request.target,
+      calldata: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
+        ctx.request.tokenIn,
+        ctx.request.tokenOut,
+        ctx.request.amountIn,
+      ]),
+      gasLimit: 1_000_000,
+    }],
+    allowanceSpender: (request) => ethers.getAddress(request.target),
+    prewarmAddresses: () => [],
+  },
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     const synths = await queryMetronomeSynths(backend, pool.address);
     const edges: TokenEdge[] = [];
@@ -58,6 +96,7 @@ export const metronomeHgusdcAdapter = Object.freeze({
   actionAdapterIds: ["metronome-hgusdc-exit", "erc20-transfer"],
   readMid: null,
   warm: null,
+  prepared: null,
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);

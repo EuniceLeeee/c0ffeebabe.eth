@@ -27,6 +27,7 @@ export const balancerV3Adapter = Object.freeze({
   ],
   readMid: readProtocolExternalMid,
   warm: { kind: "external-mid" },
+  prepared: null,
 
   buildEdges: buildBalancerV3Edges,
   quoteExact: quoteBalancerV3Exact,
