@@ -661,6 +661,30 @@ test("production candidate gate rejects analysis-only or metric-only challengers
   assert.ok(errors.some((error) => error.includes("advance at least one production stage")));
 });
 
+test("stage-advance switch defaults on and can disable only that assertion", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-stage-switch-"));
+  const defaultOn = productionCandidate(tmp);
+  defaultOn.production_evidence!.challenger_stage = defaultOn.production_evidence!.baseline_stage;
+  assert.ok(validateAbProductionCandidate(defaultOn)
+    .some((error) => error.includes("advance at least one production stage")));
+
+  const disabled = productionCandidate(tmp);
+  disabled.require_stage_advance = false;
+  disabled.production_evidence!.challenger_stage = disabled.production_evidence!.baseline_stage;
+  assert.deepEqual(
+    validateAbProductionCandidate(disabled, { requireStageAdvance: false }),
+    [],
+  );
+
+  disabled.deterministic_gate.result = "fail";
+  assert.ok(validateAbProductionCandidate(disabled, { requireStageAdvance: false })
+    .some((error) => error.includes("deterministic_gate.result=pass")));
+  disabled.deterministic_gate.result = "pass";
+
+  assert.ok(validateAbProductionCandidate(disabled, { requireStageAdvance: true })
+    .some((error) => error.includes("require_stage_advance does not match")));
+});
+
 test("production candidate gate requires indexed tool selection evidence", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   const value = productionCandidate(tmp);

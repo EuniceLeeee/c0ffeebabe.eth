@@ -463,6 +463,8 @@ export type AbExperiment = {
   input_mode: "shared" | "challenger";
   lane_mode?: "blockscan-only" | "dual";
   infrastructure_shakedown?: boolean;
+  /** Defaults true. A trusted deploy request may disable only the stage-advance assertion. */
+  require_stage_advance?: boolean;
   expected_runtime_view_delta?: boolean;
   allowed_config_delta: string[];
   a: {
@@ -600,6 +602,7 @@ export interface AbProductionCandidateContext {
   allowedConfigDelta?: string[];
   laneMode?: "blockscan-only" | "dual";
   shakedown?: boolean;
+  requireStageAdvance?: boolean;
 }
 
 export function validateAbProductionCandidate(
@@ -646,6 +649,11 @@ export function validateAbProductionCandidate(
   }
   if (context.laneMode !== undefined && experiment.lane_mode !== context.laneMode) {
     errors.push("candidate report lane_mode does not match the deployment request");
+  }
+  const requireStageAdvance = experiment.require_stage_advance ?? true;
+  if (context.requireStageAdvance !== undefined
+      && requireStageAdvance !== context.requireStageAdvance) {
+    errors.push("candidate report require_stage_advance does not match the deployment request");
   }
   if (context.shakedown === true) {
     if (experiment.infrastructure_shakedown !== true) {
@@ -782,7 +790,7 @@ export function validateAbProductionCandidate(
   const after = PRODUCTION_STAGE_ORDER.get(evidence.challenger_stage);
   if (before === undefined) errors.push("production_evidence.baseline_stage invalid");
   if (after === undefined) errors.push("production_evidence.challenger_stage invalid");
-  if (before !== undefined && after !== undefined && after <= before) {
+  if (requireStageAdvance && before !== undefined && after !== undefined && after <= before) {
     errors.push("the same +EV sample must advance at least one production stage before B deployment");
   }
   if (!evidence.replay || evidence.replay.result !== "pass") {

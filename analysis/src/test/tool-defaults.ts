@@ -196,6 +196,10 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /SEARCHER_EAGER_STATE_BACKEND=\$expected_backrun/);
   assert.match(script, /challenger_victim_stream_timeout/);
   assert.match(script, /infrastructure shakedown must run identical searcher code/);
+  assert.match(script, /requested_require_stage_advance=\$\{requested_require_stage_advance:-1\}/);
+  assert.match(script, /AB_REQUIRE_STAGE_ADVANCE must be 0\|1/);
+  assert.match(script, /--require-stage-advance "\$requested_require_stage_advance"/);
+  assert.match(script, /require_stage_advance "\$requested_require_stage_advance"/);
   assert.match(script, /replay_top_n=.*SEARCHER_POOL_UNIVERSE_TOP_N/);
   assert.match(script, /--pool-universe-top-n "\$replay_top_n"/);
   assert.match(script, /--expected-challenger "\$expected_b"/);

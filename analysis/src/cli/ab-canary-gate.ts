@@ -52,6 +52,7 @@ const candidateContext = phase === "candidate" ? {
   allowedConfigDelta: csvArg("--expected-config-delta"),
   laneMode: requiredArg("--expected-lane-mode") as "blockscan-only" | "dual",
   shakedown: args.includes("--shakedown"),
+  requireStageAdvance: binaryArg("--require-stage-advance", true),
 } : undefined;
 const errors = phase === "candidate"
   ? validateAbProductionCandidate(experiment, candidateContext)
@@ -135,6 +136,14 @@ function csvArg(name: string): string[] {
   const value = option(name);
   if (value === undefined) throw new Error(`${name} is required for candidate phase`);
   return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+function binaryArg(name: string, defaultValue: boolean): boolean {
+  const value = option(name);
+  if (value === undefined) return defaultValue;
+  if (value === "1") return true;
+  if (value === "0") return false;
+  throw new Error(`${name} must be 0|1`);
 }
 
 function reportArtifactRelative(repoRoot: string, artifact: string, label: string): string {

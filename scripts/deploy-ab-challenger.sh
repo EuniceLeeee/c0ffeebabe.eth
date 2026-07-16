@@ -937,7 +937,7 @@ prepare_candidate_universes() {
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
-  local requested_lane_mode requested_victim_mode requested_shakedown branch_tip candidate_report
+  local requested_lane_mode requested_victim_mode requested_shakedown requested_require_stage_advance branch_tip candidate_report
   local a_revm_path b_revm_path a_revm_hash b_revm_hash
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
@@ -957,6 +957,10 @@ deploy() {
   requested_shakedown=$(env_get AB_SHAKEDOWN); requested_shakedown=${requested_shakedown:-0}
   [ "$requested_shakedown" = "0" ] || [ "$requested_shakedown" = "1" ] \
     || die "AB_SHAKEDOWN must be 0|1"
+  requested_require_stage_advance=$(env_get AB_REQUIRE_STAGE_ADVANCE)
+  requested_require_stage_advance=${requested_require_stage_advance:-1}
+  [ "$requested_require_stage_advance" = "0" ] || [ "$requested_require_stage_advance" = "1" ] \
+    || die "AB_REQUIRE_STAGE_ADVANCE must be 0|1"
   if [ "$requested_shakedown" = "1" ]; then
     [ "$requested_input_mode" = "shared" ] \
       || die "infrastructure shakedown requires AB_INPUT_MODE=shared"
@@ -1076,6 +1080,7 @@ deploy() {
     --artifact-ref "origin/$branch" \
     --report-repo-path "$report_path" \
     --expected-lane-mode "$requested_lane_mode" \
+    --require-stage-advance "$requested_require_stage_advance" \
     "${shakedown_arg[@]}" \
     --base-root "$TRUSTED_BASE" \
     --challenger-root "$WT" \
@@ -1261,6 +1266,7 @@ deploy() {
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
     discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \
     lane_mode "$mode" victim_mode "$requested_victim_mode" infrastructure_shakedown "$requested_shakedown" \
+    require_stage_advance "$requested_require_stage_advance" \
     a_victim_feed_hash "$a_feed_hash" b_victim_feed_hash "$b_feed_hash" \
     a_blockscan_view_hash "$a_view_hash" b_blockscan_view_hash "$b_view_hash" \
     a_blockscan_view_hash_after "$a_view_hash" b_blockscan_view_hash_after "$b_view_hash" \

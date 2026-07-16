@@ -162,6 +162,13 @@ the second live searcher starts. It requires one `production_evidence` object pr
   independent trusted quote delta on the declared route edge. A later
   quote-only or submit-only stage requires its own trusted harness to land on main before it may gate B.
 
+`require_stage_advance` is a narrow, fail-closed switch for equivalence refactors. It defaults to `true`
+when absent, and the trusted wrapper defaults `AB_REQUIRE_STAGE_ADVANCE=1`. An explicitly reviewed run may
+set both to `false`; this disables only the `challenger_stage > baseline_stage` assertion. The real +EV
+sample, trusted replay, production-only diff, deterministic gate, safety posture, fairness, input/config,
+wallet, port, and runtime protections remain mandatory. The wrapper binds the report value to the trusted
+deployment request and records the selected value in A/B state.
+
 The trusted deploy wrapper binds the report to the requested experiment, branch, tested base, frozen
 challenger code SHA, input mode, and runtime-view declaration. Candidate config deltas are forbidden. The
 branch tip may advance beyond the code SHA only through the named report; the wrapper deploys the code SHA,
