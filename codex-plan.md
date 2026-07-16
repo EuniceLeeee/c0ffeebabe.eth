@@ -927,6 +927,20 @@ logs 直接塞给 decoder 来绕过 intake。
 - local-reth intake 使用 registry 派生的完整 direct/graph/dynamic-router 集合；新增 adapter 时
   `main.ts` router/pool filter 零修改。外部 provider 的地址截断必须产生结构化 coverage 事件。
 
+### A/B 冻结边界（对抗审查补充）
+
+本轮开发 worktree 可以同时包含生产代码、fixture 和测试，但不能把这个混合 diff 直接冻结成
+production challenger。部署前必须拆成以下顺序，防止 gate 把测试/配置变化误当成运行时因果：
+
+1. 把从旧中央 router 表迁出的 aggregator seeds 作为 prep 配置先落到 champion；A、B 都从这份相同的
+   content-addressed dynamic-router snapshot 启动。配置不是 challenger 变量。
+2. 从 prep champion 切出 **runtime-only** challenger；相对 A 只包含 listener 生产 `.ts`，不包含
+   `package.json`、测试文件、fixture 或 router JSON 差异。冻结这个 SHA 做 paired-block A/B。
+3. 测试/fixture 在开发分支上验证同一份 runtime patch；A/B 判赢并合入精确 challenger 后，再以独立
+   test-only commit 落库。测试不能为了通过 gate 被删除，也不能混进 B 改变部署输入。
+4. 若 prep 后 runtime pool-view、TokenEdge graph 或 dynamic-router snapshot hash 在 A/B 不一致，直接判
+   fairness failure；不能用性能结果解释该差异。
+
 ### 时机
 属已合并 route-leg-adapter 之上的独立行为变化；从当前 `origin/main` 新开分支，原有 venue 做严格
 impact 等价，Balancer V3 与 adapter-derived intake 作为预声明的新覆盖分别跑 receipt 与 intake flip。
