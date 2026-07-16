@@ -48,6 +48,10 @@ import {
 } from "./runtime-pool-refresh.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
+  createProfitTokenValuation,
+  type ProfitTokenValuation,
+} from "./profit-token-valuation.js";
+import {
   BlockScanWarmCoordinator,
   blockScanMutableQuoteRequests,
   blockScanV4PoolId,
@@ -580,7 +584,9 @@ async function main(): Promise<void> {
     console.log(`[searcher/live] eager state backend ready port=${anvilPort}`);
   }
   const detector = new BackrunDetector();
+  const profitTokenValuation = createProfitTokenValuation();
   const planner = new TemplatePlanner();
+  planner.setProfitTokenValuation(profitTokenValuation);
   const maxCandidates = Number(process.env.SEARCHER_MAX_CANDIDATES ?? "20");
   planner.setMaxCandidates(maxCandidates);
   const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
@@ -631,6 +637,7 @@ async function main(): Promise<void> {
     );
     const isolatedCache = new PoolStateCache(provider);
     const isolatedPlanner = new TemplatePlanner();
+    isolatedPlanner.setProfitTokenValuation(profitTokenValuation);
     isolatedPlanner.setMaxCandidates(maxCandidates);
     isolatedPlanner.setMaxHops(maxHops);
     isolatedPlanner.setMaxPoolsPerToken(maxPoolsPerToken);
@@ -1544,6 +1551,7 @@ async function main(): Promise<void> {
                         strategy_view_version: strategyViews.versions.strategy_view_version,
                         blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
                       },
+                      profitTokenValuation,
                     });
                   } finally {
                     solveSubmitMs += Date.now() - submitStarted;
@@ -1702,6 +1710,7 @@ async function main(): Promise<void> {
             state,
             detector,
             planner,
+            profitTokenValuation,
             solver,
             simulator,
             bundleRouter,
@@ -1753,6 +1762,7 @@ interface HandleCtx {
   state: AnvilStateBackend;
   detector: BackrunDetector;
   planner: TemplatePlanner;
+  profitTokenValuation: ProfitTokenValuation;
   solver: AnvilSolver;
   simulator: BotVMSimulator;
   bundleRouter: BundleRouter;
@@ -2257,7 +2267,9 @@ async function processOpportunities(
         "plan",
         noCandidateDiagnostic?.classification === "plan_budget_exhausted"
           ? "plan_budget_exhausted"
-          : "no_candidate_plans",
+          : noCandidateDiagnostic?.classification === "unpriceable_profit_token"
+            ? "unpriceable_profit_token"
+            : "no_candidate_plans",
         undefined,
         {
           plans: 0,
@@ -2705,14 +2717,30 @@ async function processOpportunities(
           sim.netProfit,
           sim.gasUsed,
           ctx.config,
+          ctx.profitTokenValuation,
         );
         const {
+          valuationAvailable,
           expectedProfitEth,
           gasUnits,
           gasCostEth,
           bidEth,
           netEvWei,
         } = ev;
+
+        if (ctx.config.evGate && !valuationAvailable) {
+          ctx.counters.finalVerifySkipped++;
+          lastTerminalState = "no-profitable-quote";
+          lastTerminalError = `unpriceable profit token ${resolved.profitToken}`;
+          console.log(`[searcher/live] skip unpriceable: ${lastTerminalError}`);
+          emitPipelineDropped("submit_gate", "unpriceable_profit_token", lastTerminalError, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+          });
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
 
         const creditLiveMarkerPath =
           process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
@@ -2738,8 +2766,8 @@ async function processOpportunities(
         }
 
         // Net-EV gate: only go on-chain when profit ETH exceeds gas + bribe by
-        // minNetEth. Skips dust whose costs would exceed it (no more net-loss
-        // submits) and unvaluable profit tokens (profitEth=0 → fails the gate).
+        // minNetEth. Skips dust whose costs would exceed it. Unpriceable assets
+        // are rejected explicitly above and never masquerade as below_ev_gate.
         //
         // Bug #1 fix: base fee is volatile (sub-gwei off-peak → gwei in busy
         // blocks). The tx pays base fee AT LANDING, not at gate time, up to its
@@ -2877,6 +2905,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   plans: number;
   passDeadlineAtMs: number;
   rejectBlacklist: BlockScanRejectBlacklistState;
+  profitTokenValuation: ProfitTokenValuation;
   strategyVersions: {
     strategy_view_version: string;
     blockscan_view_hash: string;
@@ -2896,6 +2925,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     plans,
     passDeadlineAtMs,
     rejectBlacklist,
+    profitTokenValuation,
     strategyVersions,
   } = params;
   const route = resolvedRouteSummary(resolved.root);
@@ -3003,14 +3033,23 @@ async function maybeSubmitBlockScanAtomic(params: {
       sim.netProfit,
       sim.gasUsed,
       config,
+      profitTokenValuation,
     );
     const {
+      valuationAvailable,
       expectedProfitEth,
       gasUnits,
       gasCostEth,
       bidEth,
       netEvWei,
     } = ev;
+
+    if (config.evGate && !valuationAvailable) {
+      const error = `unpriceable profit token ${resolved.profitToken}`;
+      console.log(`[searcher/blockscan] block=${sourceBlock} skip unpriceable ring=${ring}: ${error}`);
+      drop(targetBlock, "submit_gate", "unpriceable_profit_token", error);
+      return;
+    }
 
     const creditLiveMarkerPath =
       process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;

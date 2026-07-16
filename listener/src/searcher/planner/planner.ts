@@ -4,6 +4,7 @@ import type { PathTemplate } from "../templates/path-template.js";
 import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
+import type { ProfitTokenValuation } from "../profit-token-valuation.js";
 import {
   edgeMatchesVictimSelector,
   type OracleVictimEffect,
@@ -63,6 +64,7 @@ export type NoCandidateClassification =
   | "impact_token_no_supported_return_venue"
   | "return_venue_pruned_by_bounds"
   | "template_constraint_failed"
+  | "unpriceable_profit_token"
   | "borrowability_missing"
   | "plan_budget_exhausted"
   | "unknown_no_candidate";
@@ -80,6 +82,7 @@ export interface NoCandidateTemplateDiagnostic {
   focused_count: number;
   constraint_pass: number;
   no_borrowable: number;
+  unpriceable_profit_tokens: string[];
   rotated_plans: number;
 }
 
@@ -103,6 +106,7 @@ export interface NoCandidateDiagnostic {
   pruned_immediate_same_pool_reverse: number;
   constraint_pass: number;
   no_borrowable: number;
+  unpriceable_profit_tokens: string[];
   rotated_plans: number;
   classification: NoCandidateClassification;
   templates: NoCandidateTemplateDiagnostic[];
@@ -115,6 +119,7 @@ export class TemplatePlanner implements Planner {
   private maxPoolsPerToken = Infinity;
   private maxRotationsPerPath = 3;
   private flashLiquidity: FlashLiquidityView | null = null;
+  private profitTokenValuation: ProfitTokenValuation | null = null;
   private lastDiagnostic: NoCandidateDiagnostic | null = null;
 
   /** Inject a pre-built graph (from buildTokenGraph). Falls back to hardcoded default. */
@@ -146,6 +151,11 @@ export class TemplatePlanner implements Planner {
    *  rotates each complete cycle to borrowable start tokens here. */
   setFlashLiquidity(liquidity: FlashLiquidityView): void {
     this.flashLiquidity = liquidity;
+  }
+
+  /** Share the same synchronous valuation capability used by the final EV gate. */
+  setProfitTokenValuation(valuation: ProfitTokenValuation): void {
+    this.profitTokenValuation = valuation;
   }
 
   async plan(
@@ -215,6 +225,7 @@ export class TemplatePlanner implements Planner {
       let constraintPass = 0;
       let duplicatePath = 0;
       let noBorrowable = 0;
+      const unpriceableProfitTokens = new Set<string>();
       let rotatedPlanCount = 0;
       for (const path of paths) {
         if (opts?.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
@@ -228,16 +239,24 @@ export class TemplatePlanner implements Planner {
           continue;
         }
         constraintPass++;
-        const rotations = buildBorrowabilityRotations(
+        const rotationResult = buildBorrowabilityRotations(
           path,
           opp,
           flashAdapters,
           preferredFlash,
           this.flashLiquidity,
+          this.profitTokenValuation,
           this.maxRotationsPerPath,
         );
+        const rotations = rotationResult.rotations;
         if (rotations.length === 0) {
-          noBorrowable++;
+          if (rotationResult.unpriceableTokens.length > 0) {
+            for (const token of rotationResult.unpriceableTokens) {
+              unpriceableProfitTokens.add(token.toLowerCase());
+            }
+          } else {
+            noBorrowable++;
+          }
           continue;
         }
         for (const rotation of rotations) {
@@ -280,7 +299,8 @@ export class TemplatePlanner implements Planner {
         `${template.name}: edges=${graph.length}/${baseGraph.length} raw=${rawPaths.length} ` +
           `focused=${paths.length} prunedRoundtrip=${prunedRoundtrip} ` +
           `duplicates=${duplicatePath} constraintPass=${constraintPass}` +
-          (this.flashLiquidity ? ` rotatedPlans=${rotatedPlanCount} noBorrowable=${noBorrowable}` : ""),
+          (this.flashLiquidity ? ` rotatedPlans=${rotatedPlanCount} noBorrowable=${noBorrowable}` : "") +
+          (unpriceableProfitTokens.size > 0 ? ` unpriceable=${unpriceableProfitTokens.size}` : ""),
       );
       diagnostics.push({
         template: template.name,
@@ -295,6 +315,7 @@ export class TemplatePlanner implements Planner {
         focused_count: paths.length,
         constraint_pass: constraintPass,
         no_borrowable: noBorrowable,
+        unpriceable_profit_tokens: [...unpriceableProfitTokens],
         rotated_plans: rotatedPlanCount,
       });
     }
@@ -308,7 +329,9 @@ export class TemplatePlanner implements Planner {
         `[planner] 0 candidates start=${opp.startToken} profit=${opp.profitToken} ` +
           `impact=${impact ? `${impact.pool} ${impact.tokenIn}->${impact.tokenOut}` : "none"} | ` +
           `class=${this.lastDiagnostic.classification} | ` +
-          (this.flashLiquidity ? "skip=no_borrowable_token_or_no_path | " : "") +
+          (this.lastDiagnostic.classification === "unpriceable_profit_token"
+            ? "skip=unpriceable_profit_token | "
+            : this.flashLiquidity ? "skip=no_borrowable_token_or_no_path | " : "") +
           debug.join(" | "),
       );
     }
@@ -426,31 +449,47 @@ interface CandidateRotation {
   borrowableTokens?: BorrowableCycleToken[];
 }
 
+interface RotationBuildResult {
+  rotations: CandidateRotation[];
+  unpriceableTokens: string[];
+}
+
 function buildBorrowabilityRotations(
   path: TokenPath,
   opp: Opportunity,
   templateFlashAdapters: string[],
   preferredFlash: string,
   flashLiquidity: FlashLiquidityView | null,
+  profitTokenValuation: ProfitTokenValuation | null,
   maxRotationsPerPath: number,
-): CandidateRotation[] {
+): RotationBuildResult {
   if (!flashLiquidity) {
-    return [{
-      opportunity: opp,
-      tokenPath: path,
-      flashAdapterIds: [...templateFlashAdapters],
-      flashAdapterId: preferredFlash,
-    }];
+    return {
+      rotations: [{
+        opportunity: opp,
+        tokenPath: path,
+        flashAdapterIds: [...templateFlashAdapters],
+        flashAdapterId: preferredFlash,
+      }],
+      unpriceableTokens: [],
+    };
   }
 
   const cycleTokens = collectCycleTokens(path);
-  const borrowableTokens = cycleTokens
+  const allBorrowableTokens = cycleTokens
     .map((token): BorrowableCycleToken | null => {
       const source = flashLiquidity.source(token);
       if (!source || source.amount <= 0n) return null;
       return { token, amount: source.amount, adapterId: source.adapterId };
     })
-    .filter((x): x is BorrowableCycleToken => x !== null)
+    .filter((x): x is BorrowableCycleToken => x !== null);
+  const unpriceableTokens = profitTokenValuation
+    ? allBorrowableTokens
+      .filter((item) => !profitTokenValuation.canValue(item.token))
+      .map((item) => item.token)
+    : [];
+  const borrowableTokens = allBorrowableTokens
+    .filter((item) => !profitTokenValuation || profitTokenValuation.canValue(item.token))
     .sort((a, b) => b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0)
     .slice(0, maxRotationsPerPath);
 
@@ -478,7 +517,7 @@ function buildBorrowabilityRotations(
       });
     }
   }
-  return rotations;
+  return { rotations, unpriceableTokens };
 }
 
 function collectCycleTokens(path: TokenPath): string[] {
@@ -713,6 +752,7 @@ function aggregateTemplateDiagnostics(
   | "pruned_immediate_same_pool_reverse"
   | "constraint_pass"
   | "no_borrowable"
+  | "unpriceable_profit_tokens"
   | "rotated_plans"
 > {
   return {
@@ -724,6 +764,9 @@ function aggregateTemplateDiagnostics(
     pruned_immediate_same_pool_reverse: sum(templates, (x) => x.pruned_immediate_same_pool_reverse),
     constraint_pass: sum(templates, (x) => x.constraint_pass),
     no_borrowable: sum(templates, (x) => x.no_borrowable),
+    unpriceable_profit_tokens: uniqueAddresses(
+      templates.flatMap((item) => item.unpriceable_profit_tokens),
+    ),
     rotated_plans: sum(templates, (x) => x.rotated_plans),
   };
 }
@@ -733,6 +776,7 @@ function classifyNoCandidate(
     | "focused_count"
     | "constraint_pass"
     | "no_borrowable"
+    | "unpriceable_profit_tokens"
     | "rotated_plans"
   >,
   coverage: Pick<NoCandidateDiagnostic,
@@ -768,6 +812,13 @@ function classifyNoCandidate(
   }
   if (aggregate.focused_count > 0 && aggregate.constraint_pass === 0) {
     return "template_constraint_failed";
+  }
+  if (
+    aggregate.constraint_pass > 0 &&
+    aggregate.rotated_plans === 0 &&
+    aggregate.unpriceable_profit_tokens.length > 0
+  ) {
+    return "unpriceable_profit_token";
   }
   if (aggregate.constraint_pass > 0 && aggregate.rotated_plans === 0 && aggregate.no_borrowable > 0) {
     return "borrowability_missing";

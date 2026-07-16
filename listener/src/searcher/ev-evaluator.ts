@@ -1,10 +1,7 @@
-const WETH_ADDR = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
-const STABLE_DECIMALS = new Map<string, number>([
-  ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6],
-  ["0xdac17f958d2ee523a2206206994597c13d831ec7", 6],
-  ["0x6b175474e89094c44da98b954eedeac495271d0f", 18],
-  ["0x853d955acef822db058eb8505911ed77f175b99e", 18],
-]);
+import {
+  DEFAULT_PROFIT_TOKEN_VALUATION,
+  type ProfitTokenValuation,
+} from "./profit-token-valuation.js";
 
 export interface EvPolicy {
   ethUsd: number;
@@ -17,6 +14,7 @@ export interface EvPolicy {
 }
 
 export interface EvEvaluation {
+  valuationAvailable: boolean;
   rawProfitEth: bigint;
   expectedProfitEth: bigint;
   gasUnits: bigint;
@@ -29,13 +27,13 @@ interface BaseFeeProvider {
   getBlock(tag: "latest"): Promise<{ baseFeePerGas?: bigint | null } | null>;
 }
 
-export function valueInEth(token: string, amount: bigint, ethUsd: number): bigint {
-  const key = token.toLowerCase();
-  if (key === WETH_ADDR) return amount;
-  const decimals = STABLE_DECIMALS.get(key);
-  if (decimals === undefined || ethUsd <= 0) return 0n;
-  return (amount * 10n ** 18n) /
-    (10n ** BigInt(decimals) * BigInt(Math.round(ethUsd)));
+export function valueInEth(
+  token: string,
+  amount: bigint,
+  ethUsd: number,
+  valuation: ProfitTokenValuation = DEFAULT_PROFIT_TOKEN_VALUATION,
+): bigint {
+  return valuation.valueInEth(token, amount, ethUsd) ?? 0n;
 }
 
 export function computeBidEth(
@@ -55,13 +53,16 @@ export async function evaluateEv(
   netProfit: bigint,
   measuredGasUsed: bigint,
   policy: EvPolicy,
+  valuation: ProfitTokenValuation = DEFAULT_PROFIT_TOKEN_VALUATION,
 ): Promise<EvEvaluation> {
-  const rawProfitEth = valueInEth(profitToken, netProfit, policy.ethUsd);
+  const valuedProfit = valuation.valueInEth(profitToken, netProfit, policy.ethUsd);
+  const valuationAvailable = valuedProfit !== null;
+  const rawProfitEth = valuedProfit ?? 0n;
   const expectedProfitEth =
     (rawProfitEth * BigInt(10000 - policy.profitHaircutBps)) / 10000n;
   const gasUnits = measuredGasUsed > 0n ? measuredGasUsed : BigInt(policy.defaultGasUsed);
   let gasCostEth = 0n;
-  if (policy.evGate || policy.bribeAllAboveGas) {
+  if (valuationAvailable && (policy.evGate || policy.bribeAllAboveGas)) {
     const latest = await provider.getBlock("latest");
     const baseFee = latest?.baseFeePerGas ?? 0n;
     const worstBaseFee = (baseFee * BigInt(policy.gasBufferMultX10)) / 10n;
@@ -69,6 +70,7 @@ export async function evaluateEv(
   }
   const bidEth = computeBidEth(expectedProfitEth, gasCostEth, policy);
   return {
+    valuationAvailable,
     rawProfitEth,
     expectedProfitEth,
     gasUnits,
