@@ -7,6 +7,7 @@ import { selectArbRelevantPools, type RankablePool } from "./pool-universe-arb-r
 import { DEFAULT_POOL_UNIVERSE_PATH, type PoolUniverseEntry, type PoolUniverseFile } from "./pool-universe.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { resolvePoolIdentity } from "./venues/identity.js";
+import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { resolveCurveUnderlyingMetadata } from "./venues/curve-underlying.js";
 
 const BLOCKS_PER_DAY = 7200;
@@ -768,7 +769,7 @@ async function enrichPool(
   const adapterHint = bestAdapter(pool.adapterCounts);
   if (adapterHint === "curve-underlying") {
     const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     });
     if (!identity.ok) return null;
     const metadata = await resolveCurveUnderlyingMetadata(provider, pool.address, {
@@ -788,7 +789,7 @@ async function enrichPool(
   }
   if (adapterHint !== "univ2" && adapterHint !== "univ3" && adapterHint !== "curve") return null;
   const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
-    allowProvisionalFactories: true,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   if (!identity.ok) return null;
   const adapter = identity.adapter;
@@ -837,7 +838,7 @@ async function probePoolShape(
 ): Promise<ProbedPoolShape | null> {
   const address = ethers.getAddress(addr);
   const identity = await resolvePoolIdentity(provider, address, "univ3", {
-    allowProvisionalFactories: true,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   if (!identity.ok) return null;
   if (identity.adapter === "univ3") try {

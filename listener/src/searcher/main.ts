@@ -36,6 +36,7 @@ import {
   createPoolIdentityCache,
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
+import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
@@ -878,26 +879,22 @@ async function main(): Promise<void> {
     attestPoolIdentities(provider, rawPinnedWarmPools, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawUniversePools, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawBlockscanUniverse, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawBlockScanOverrides, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
   ]);
   const pinnedWarmPools = pinnedIdentity.accepted;
@@ -913,8 +910,7 @@ async function main(): Promise<void> {
   const factoryPools = await indexFactoryPools(provider, factoryBlocks, discoveryToBlock);
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
   const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN, discoveryToBlock, {
-    allowProvisionalFactories: true,
-    allowProvisionalCurveUnderlying: true,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
@@ -1047,8 +1043,7 @@ async function main(): Promise<void> {
   const refreshTimer = setInterval(async () => {
     try {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
-        allowProvisionalFactories: true,
-        allowProvisionalCurveUnderlying: true,
+        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
       const newPools = fresh.filter((p) => !knownPoolAddrs.has(p.address.toLowerCase()));
       if (newPools.length === 0) return;
