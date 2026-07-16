@@ -1,4 +1,5 @@
 import { createRouteAdapterRegistry } from "./route-adapter-registry.js";
+import { fluidCreditCompatAdapter } from "./compat/fluid-credit.js";
 import { erc4626Adapter } from "./protocols/erc4626.js";
 import { goldxAdapter } from "./protocols/goldx.js";
 import { metronomeAdapter } from "./protocols/metronome.js";
@@ -29,4 +30,5 @@ export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
     rocksolidAdapter,
     wstethAdapter,
   ],
+  compat: [fluidCreditCompatAdapter],
 });

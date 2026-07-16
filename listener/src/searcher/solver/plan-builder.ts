@@ -179,22 +179,6 @@ async function buildEdgeNode(
   transferToPool: (token: string, pool: string, amount: bigint) => void,
 ): Promise<ResolvedPlanNode | null> {
   switch (edge.adapterId) {
-    case "fluid-vault":
-      ensureApprove(edge.tokenIn, edge.target);
-      return {
-        adapterId: "fluid-vault",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {
-          nftId: 0n,
-          collateralDelta: amtIn,
-          debtDelta: amtOut,
-        },
-        children: [],
-      };
-
     case "fluid-dex-swap": {
       ensureApprove(edge.tokenIn, edge.target);
       if (!edge.poolToken0 || !edge.poolToken1) {

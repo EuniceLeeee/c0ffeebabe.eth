@@ -309,20 +309,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       );
       break;
     }
-    case "fluid-vault": {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`${pool.adapter} pool ${pool.address} missing fixedTokenIn/Out`);
-      }
-      const slotKind = pool.fixedSlotKind ?? "swap";
-      edges.push({
-        adapterId, target: pool.address,
-        tokenIn: pool.fixedTokenIn, tokenOut: pool.fixedTokenOut,
-        slotKind,
-        ...(pool.fixedProtocolAction ? { protocolAction: pool.fixedProtocolAction } : {}),
-        ...deriveEdgeTaxonomy(slotKind, pool.fixedProtocolAction),
-      });
-      break;
-    }
   }
 
   // Propagate the discovery activity score onto every edge of this pool.

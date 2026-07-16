@@ -35,10 +35,6 @@ export const FLUID_DEX_ADDRESS_DEAD = "0x000000000000000000000000000000000000dEa
 
 type CallBackend = Pick<StateBackend, "call">;
 
-function quoteFluidVault(): bigint {
-  throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
-}
-
 // ── Fluid DEX T1 ------------------------------------------------
 
 export const fluidDexSwapIface = new ethers.Interface([
@@ -205,8 +201,6 @@ export async function quote(
   switch (adapterId) {
     case "fluid-dex-swap":
       return quoteFluidDex(state, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1);
-    case "fluid-vault":
-      return quoteFluidVault();
     default:
       throw new Error(`no quoter for adapter ${adapterId}`);
   }
