@@ -4,6 +4,7 @@ import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
 import { findVenueCapability, type VenueId } from "./venues/capability.js";
 import type { VenueIdentitySource } from "./venues/identity.js";
+import { isProductionPoolAdapter } from "./venues/pool-adapter-policy.js";
 
 export const DEFAULT_POOL_UNIVERSE_PATH = resolve("searcher", "pools", "active-pools.json");
 
@@ -36,18 +37,6 @@ export interface PoolUniverseLoadOptions {
   highSpreadMinFee?: number;
 }
 
-const ADAPTERS = new Set<PoolEntry["adapter"]>([
-  "curve",
-  "curve-nr",
-  "curve-underlying",
-  "univ3",
-  "univ2",
-  "univ4",
-  "balancer-v3",
-  "psm",
-  "fluid-vault",
-  "fluid-dex",
-]);
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 
@@ -243,7 +232,7 @@ function appendForceIncluded(
 function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry {
   if (!isRecord(raw)) throw new Error(`${field} must be an object`);
   const adapter = raw.adapter;
-  if (typeof adapter !== "string" || !ADAPTERS.has(adapter as PoolEntry["adapter"])) {
+  if (!isProductionPoolAdapter(adapter)) {
     throw new Error(`${field}.adapter unsupported: ${String(adapter)}`);
   }
   const score = numberField(raw.score, `${field}.score`) ??
@@ -252,7 +241,7 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
   const isV4 = adapter === "univ4";
   return {
     address: checksumField(raw.address ?? raw.pool, `${field}.address`),
-    adapter: adapter as PoolEntry["adapter"],
+    adapter,
     venueId: venueIdField(raw.venueId, `${field}.venueId`),
     factory: optionalAddress(raw.factory, `${field}.factory`),
     identitySource: identitySourceField(raw.identitySource, `${field}.identitySource`),

@@ -99,6 +99,7 @@
     "searcher:replay-live-fixtures": "tsx src/searcher/test/replay-live-fixtures.ts",
     "searcher:bench-topn": "tsx src/searcher/test/bench-topn-latency.ts",
     "searcher:adapter-descriptors": "node --import tsx src/searcher/test/adapter-descriptors.ts",
+    "searcher:pool-adapter-policy": "node --import tsx src/searcher/test/pool-adapter-policy.ts",
     "searcher:route-adapters": "node --import tsx src/searcher/test/route-adapters.ts",
     "searcher:victim-model-registry": "node --import tsx src/searcher/test/victim-model-registry.ts",
     "searcher:swap-observation": "node --import tsx src/searcher/test/swap-observation.ts",

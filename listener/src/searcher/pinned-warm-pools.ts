@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import type { QuoteRequest } from "./live-state-backend.js";
 import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
+import { isProductionPoolAdapter } from "./venues/pool-adapter-policy.js";
 
 export const DEFAULT_PINNED_WARM_POOLS_PATH = resolve(
   "searcher",
@@ -28,18 +29,6 @@ export interface PinnedWarmHop extends QuoteRequest {
 }
 
 type RawPinnedWarmPoolFile = unknown[] | { pools?: unknown[] };
-
-const ADAPTERS = new Set<PoolEntry["adapter"]>([
-  "curve",
-  "curve-nr",
-  "univ3",
-  "univ2",
-  "univ4",
-  "balancer-v3",
-  "psm",
-  "fluid-vault",
-  "fluid-dex",
-]);
 
 export function loadPinnedWarmPools(
   path = DEFAULT_PINNED_WARM_POOLS_PATH,
@@ -96,12 +85,12 @@ export function pinnedWarmHopsFromGraph(
 function parsePinnedWarmPool(raw: unknown, index: number, path: string): PinnedWarmPoolEntry {
   if (!isRecord(raw)) throw new Error(`pinned warm pool ${path}[${index}] must be an object`);
   const adapter = raw.adapter;
-  if (typeof adapter !== "string" || !ADAPTERS.has(adapter as PoolEntry["adapter"])) {
+  if (!isProductionPoolAdapter(adapter)) {
     throw new Error(`pinned warm pool ${path}[${index}] has unsupported adapter ${String(adapter)}`);
   }
   const entry: PinnedWarmPoolEntry = {
     address: checksumField(raw.address, `${path}[${index}].address`),
-    adapter: adapter as PoolEntry["adapter"],
+    adapter,
     label: typeof raw.label === "string" ? raw.label : undefined,
     poolId: optionalString(raw.poolId, `${path}[${index}].poolId`),
     fixedTokenIn: adapter === "univ4"

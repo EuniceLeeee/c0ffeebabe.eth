@@ -1,14 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { PoolEntry } from "./planner/token-graph.js";
+import { isProductionPoolAdapter } from "./venues/pool-adapter-policy.js";
 
 export const DEFAULT_BLOCKSCAN_VIEW_OVERRIDES_PATH = resolve(
   "searcher",
   "pools",
   "blockscan-view-overrides.json",
 );
-
-const ADAPTERS = new Set(["curve", "curve-nr", "univ3", "univ2", "univ4", "psm", "fluid-vault", "fluid-dex"]);
 
 export function loadBlockScanViewOverrides(
   path = DEFAULT_BLOCKSCAN_VIEW_OVERRIDES_PATH,
@@ -39,7 +38,7 @@ function isPoolEntryLike(value: unknown): value is PoolEntry {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as { address?: unknown; adapter?: unknown; fixedSlotKind?: unknown };
   if (typeof entry.address !== "string") return false;
-  if (typeof entry.adapter !== "string" || !ADAPTERS.has(entry.adapter)) return false;
+  if (!isProductionPoolAdapter(entry.adapter)) return false;
   if (
     entry.fixedSlotKind !== undefined &&
     entry.fixedSlotKind !== "lend" &&

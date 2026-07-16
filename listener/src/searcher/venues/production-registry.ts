@@ -22,9 +22,11 @@ import {
   type IdentityResolverDescriptor,
 } from "./identity.js";
 import { assertLandedEventCoverage } from "./landed-event-registry.js";
+import type { PoolEntry } from "../planner/token-graph.js";
 
 export interface LegacyRouteEdgeDescriptor {
   readonly edgeAdapterId: string;
+  readonly poolAdapters: readonly PoolEntry["adapter"][];
   readonly slotKind: "swap" | "protocol";
   readonly reason: string;
 }
@@ -37,6 +39,7 @@ export interface LegacyRouteEdgeDescriptor {
 export const LEGACY_PRODUCTION_ROUTE_EDGES: readonly LegacyRouteEdgeDescriptor[] = Object.freeze([
   Object.freeze({
     edgeAdapterId: "fluid-dex-swap",
+    poolAdapters: Object.freeze(["fluid-dex"] as const),
     slotKind: "swap",
     reason: "legacy Fluid DEX route; RouteAdapter migration is fixture-blocked",
   }),
