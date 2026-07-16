@@ -11,6 +11,7 @@ import {
 import { curveNgGetDy, curvePlainGetDy } from "./curve-math.js";
 import { v3SwapToState } from "./v3-math.js";
 import { quoteV2ExactInput } from "./v2-fee.js";
+import { PRODUCTION_VICTIM_MODELS } from "../venues/victim-model-registry.js";
 
 export interface LocalVictimApplyResult {
   postImpact: PostImpactSeed;
@@ -23,17 +24,15 @@ export async function applyVictimSwapLocally(
   blockNumber: number,
   state?: StateBackend,
 ): Promise<LocalVictimApplyResult | null> {
-  switch (impact.matchedAdapterId) {
-    case "univ2-swap":
+  const variant = PRODUCTION_VICTIM_MODELS.forEdge(impact.matchedAdapterId)?.localApplyVariant;
+  switch (variant) {
+    case "univ2":
       return applyV2(cache, impact, blockNumber);
-    case "univ3-swap":
+    case "univ3":
       return applyV3(cache, impact, blockNumber);
-    case "univ4-unlock":
+    case "univ4":
       return applyV4(impact, blockNumber);
-    case "curve-exchange":
-    case "curve-exchange-nr":
-    case "curve-exchange-plain":
-    case "curve-exchange-received-uint":
+    case "curve":
       return applyCurve(cache, impact, blockNumber, state);
     default:
       return null;

@@ -93,6 +93,7 @@
     "searcher:bench-topn": "tsx src/searcher/test/bench-topn-latency.ts",
     "searcher:adapter-descriptors": "node --import tsx src/searcher/test/adapter-descriptors.ts",
     "searcher:route-adapters": "node --import tsx src/searcher/test/route-adapters.ts",
+    "searcher:victim-model-registry": "node --import tsx src/searcher/test/victim-model-registry.ts",
     "searcher:taxonomy": "node --import tsx src/searcher/test/taxonomy.ts",
     "searcher:universe-split": "node --import tsx src/searcher/test/universe-split.ts",
     "searcher:venue-identity": "node --import tsx src/searcher/test/venue-identity.ts",

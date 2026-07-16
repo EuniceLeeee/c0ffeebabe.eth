@@ -38,6 +38,7 @@ import {
 } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
+import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import {
   BlockScanWarmCoordinator,
@@ -106,7 +107,6 @@ import {
   DEFAULT_CREDIT_LIVE_MARKER_PATH,
   evaluateStandingGuard,
 } from "./standing-guard.js";
-import { pathLeavesStandingPosition } from "./strategy-taxonomy.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
@@ -2286,7 +2286,9 @@ async function processOpportunities(
       );
       if (!localVictimApply) {
         try {
-          if (oppImpact.matchedAdapterId === "univ2-swap" || oppImpact.matchedAdapterId === "univ3-swap") {
+          const victimVariant = PRODUCTION_VICTIM_MODELS
+            .forEdge(oppImpact.matchedAdapterId)?.localApplyVariant;
+          if (victimVariant === "univ2" || victimVariant === "univ3") {
             await ctx.poolStateUpdater.update(prepareInput.baseBlock, [{
               adapterId: oppImpact.matchedAdapterId,
               target: oppImpact.pool,
@@ -2685,16 +2687,17 @@ async function processOpportunities(
 
         const creditLiveMarkerPath =
           process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
-        const containsStandingPosition = pathLeavesStandingPosition(candidate.tokenPath.edges);
         const standingGuard = evaluateStandingGuard(
           candidate.tokenPath.edges,
           creditLiveMarkerPath,
-          containsStandingPosition,
         );
+        const containsStandingPosition = standingGuard.containsStandingPosition;
         if (!standingGuard.allowed) {
           ctx.counters.finalVerifySkipped++;
           lastTerminalState = "no-profitable-quote";
-          lastTerminalError = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+          lastTerminalError = standingGuard.reason === "edge_taxonomy_inconsistent"
+            ? "standing guard: edge taxonomy inconsistent"
+            : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
           console.log(`[searcher/live] reject standing-position: ${lastTerminalError}`);
           emitPipelineDropped("submit_gate", standingGuard.reason, lastTerminalError, {
             pathId: resolvedRouteSummary(resolved.root),
@@ -2988,14 +2991,15 @@ async function maybeSubmitBlockScanAtomic(params: {
 
     const creditLiveMarkerPath =
       process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
-    const containsStandingPosition = pathLeavesStandingPosition(opp.seedEdges);
     const standingGuard = evaluateStandingGuard(
       opp.seedEdges,
       creditLiveMarkerPath,
-      containsStandingPosition,
     );
+    const containsStandingPosition = standingGuard.containsStandingPosition;
     if (!standingGuard.allowed) {
-      const error = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+      const error = standingGuard.reason === "edge_taxonomy_inconsistent"
+        ? "standing guard: edge taxonomy inconsistent"
+        : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} reject standing-position ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", standingGuard.reason, error);
       return;
@@ -3223,9 +3227,9 @@ function blockReadState(
 }
 
 function isLocalVictimApplyAdapter(adapterId: string): boolean {
-  return adapterId === "univ2-swap" ||
-    adapterId === "univ3-swap" ||
-    isCurveAdapter(adapterId);
+  const variant = PRODUCTION_VICTIM_MODELS.forEdge(adapterId)?.localApplyVariant;
+  // V4 local apply is event-post-state driven and enters through overlayExact.
+  return variant === "univ2" || variant === "univ3" || variant === "curve";
 }
 
 function opportunityIdFor(
@@ -3474,6 +3478,11 @@ async function impersonateSwap(
   impact: PoolImpact,
   graph: TokenEdge[],
 ): Promise<void> {
+  const variant = PRODUCTION_VICTIM_MODELS
+    .forEdge(impact.matchedAdapterId)?.overlayReplayVariant;
+  if (!variant) {
+    throw new Error(`hash-only impersonate unsupported adapter ${impact.matchedAdapterId}`);
+  }
   const whaleAddr = ethers.getAddress(WHALE);
 
   await state.provider.send("anvil_setBalance", [whaleAddr, FORK_ETH_BALANCE]);
@@ -3483,9 +3492,9 @@ async function impersonateSwap(
   try {
     const poolAddr = ethers.getAddress(impact.pool);
     let approveTarget: string;
-    if (isCurveAdapter(impact.matchedAdapterId)) {
+    if (variant === "curve") {
       approveTarget = poolAddr;
-    } else if (impact.matchedAdapterId === "univ2-swap") {
+    } else if (variant === "univ2") {
       approveTarget = UNIV2_ROUTER;
     } else {
       approveTarget = UNIV3_SWAP_ROUTER;
@@ -3493,7 +3502,7 @@ async function impersonateSwap(
     const approveData = ERC20_IFACE.encodeFunctionData("approve", [approveTarget, impact.amountIn * 2n]);
     await state.send({ from: whaleAddr, to: impact.tokenIn, data: approveData });
 
-    if (isCurveAdapter(impact.matchedAdapterId)) {
+    if (variant === "curve") {
       const poolEdge = graph.find(
         (e) => e.target.toLowerCase() === impact.pool.toLowerCase() &&
           e.tokenIn.toLowerCase() === impact.tokenIn.toLowerCase() &&
@@ -3507,14 +3516,14 @@ async function impersonateSwap(
       ]);
       await state.send({ from: whaleAddr, to: poolAddr, data: exchangeData, gas: "0x1000000" });
 
-    } else if (impact.matchedAdapterId === "univ2-swap") {
+    } else if (variant === "univ2") {
       const deadline = Math.floor(Date.now() / 1000) + 3600;
       const swapData = UNIV2_ROUTER_IFACE.encodeFunctionData("swapExactTokensForTokens", [
         impact.amountIn, 0, [impact.tokenIn, impact.tokenOut], whaleAddr, deadline,
       ]);
       await state.send({ from: whaleAddr, to: UNIV2_ROUTER, data: swapData, gas: "0x1000000" });
 
-    } else if (impact.matchedAdapterId === "univ3-swap") {
+    } else if (variant === "univ3") {
       const feeData = UNIV3_FEE_IFACE.encodeFunctionData("fee", []);
       const feeResult = await state.call({ to: impact.pool, data: feeData });
       const fee = Number(BigInt(feeResult));
@@ -3529,19 +3538,10 @@ async function impersonateSwap(
         sqrtPriceLimitX96: 0n,
       }]);
       await state.send({ from: whaleAddr, to: UNIV3_SWAP_ROUTER, data: swapData, gas: "0x1000000" });
-    } else {
-      throw new Error(`hash-only impersonate unsupported adapter ${impact.matchedAdapterId}`);
     }
   } finally {
     await state.provider.send("anvil_stopImpersonatingAccount", [whaleAddr]);
   }
-}
-
-function isCurveAdapter(adapterId: string): boolean {
-  return adapterId === "curve-exchange" ||
-    adapterId === "curve-exchange-nr" ||
-    adapterId === "curve-exchange-plain" ||
-    adapterId === "curve-exchange-received-uint";
 }
 
 function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
