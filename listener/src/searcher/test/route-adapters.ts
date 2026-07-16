@@ -92,7 +92,7 @@ const curveUnderlyingBackend: TokenQueryBackend = {
 
 async function main(): Promise<void> {
   const adapters = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list();
-  assert(adapters.length === 6, `production route adapter count ${adapters.length}`);
+  assert(adapters.length === 12, `production route adapter count ${adapters.length}`);
   for (const routeAdapter of adapters) {
     for (const poolAdapter of routeAdapter.poolAdapters) {
       assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);

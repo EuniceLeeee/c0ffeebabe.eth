@@ -7,7 +7,6 @@
  * before lending/swaps, and inserting the assert-balance guard before flash repay.
  */
 
-import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
@@ -179,35 +178,7 @@ async function buildEdgeNode(
   ensureApprove: (token: string, spender: string) => void,
   transferToPool: (token: string, pool: string, amount: bigint) => void,
 ): Promise<ResolvedPlanNode | null> {
-  const protocolLeg = PROTOCOL_LEG_DESCRIPTORS.find((desc) => desc.id === edge.adapterId);
-  if (protocolLeg) {
-    if (protocolLeg.needsApprove) ensureApprove(edge.tokenIn, edge.target);
-    return {
-      adapterId: edge.adapterId,
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      amount: amtIn,
-      params: {},
-      children: [],
-    };
-  }
-
   switch (edge.adapterId) {
-    case "metronome-hgusdc-exit":
-      // The router starts with Curve exchange_received; it does not pull msUSD.
-      // Pre-fund the exact Curve pool, matching the successful reference trace.
-      transferToPool(edge.tokenIn, ADDR.CURVE_MSUSD_FRXUSD, amtIn);
-      return {
-        adapterId: "metronome-hgusdc-exit",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {},
-        children: [],
-      };
-
     case "fluid-vault":
       ensureApprove(edge.tokenIn, edge.target);
       return {
@@ -221,20 +192,6 @@ async function buildEdgeNode(
           collateralDelta: amtIn,
           debtDelta: amtOut,
         },
-        children: [],
-      };
-
-    case "psm":
-      // sellGem/buyGem gemAmt is always the USDC-side amount.
-      ensureApprove(edge.tokenIn, edge.target);
-      const gemAmount = edge.tokenIn.toLowerCase() === ADDR.USDC.toLowerCase() ? amtIn : amtOut;
-      return {
-        adapterId: "psm",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: gemAmount,
-        params: {},
         children: [],
       };
 

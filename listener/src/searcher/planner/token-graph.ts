@@ -222,9 +222,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
 
-const metronomeSynthPoolIface = new ethers.Interface([
-  "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
-]);
 
 const ADAPTER_MAP: Record<string, string> = {
   "curve": "curve-exchange-plain",
@@ -239,12 +236,6 @@ const ADAPTER_MAP: Record<string, string> = {
   "fluid-dex": "fluid-dex-swap",
   "metronome-synth": "metronome-synth-swap",
 };
-
-const METRONOME_SYNTH_TOKENS = [
-  ADDR.MSETH,
-  ADDR.MSBTC,
-  ADDR.MSUSD,
-] as const;
 
 /**
  * Build the token graph by querying each pool's tokens on-chain.
@@ -318,137 +309,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       );
       break;
     }
-    case "wsteth": {
-      edges.push(
-        {
-          adapterId: "wsteth-wrap",
-          target: pool.address,
-          tokenIn: ADDR.STETH,
-          tokenOut: ADDR.WSTETH,
-          slotKind: "protocol",
-          protocolAction: "wrap",
-          ...deriveEdgeTaxonomy("protocol", "wrap"),
-        },
-        {
-          adapterId: "wsteth-unwrap",
-          target: pool.address,
-          tokenIn: ADDR.WSTETH,
-          tokenOut: ADDR.STETH,
-          slotKind: "protocol",
-          protocolAction: "unwrap",
-          ...deriveEdgeTaxonomy("protocol", "unwrap"),
-        },
-      );
-      break;
-    }
-    case "erc4626": {
-      if (!pool.fixedTokenIn) {
-        throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
-      }
-      if (pool.nonStandardRedeem) {
-        // The generic deposit/redeem pair would be wrong on token AND amount, so it stays
-        // suppressed. When the receipt-verified payout token is declared, emit the correct
-        // silo redeem edge (share -> redeemTokenOut) quoted by quoteSiloRedeem. A flagged
-        // vault WITHOUT redeemTokenOut still emits ZERO edges (fail-closed).
-        if (pool.redeemTokenOut) {
-          edges.push({
-            adapterId: "erc4626-redeem-silo",
-            target: pool.address,
-            tokenIn: pool.address,
-            tokenOut: pool.redeemTokenOut,
-            slotKind: "protocol",
-            protocolAction: "redeem",
-            ...deriveEdgeTaxonomy("protocol", "redeem"),
-          });
-        }
-        break;
-      }
-      edges.push(
-        {
-          adapterId: "erc4626-deposit",
-          target: pool.address,
-          tokenIn: pool.fixedTokenIn,
-          tokenOut: pool.address,
-          slotKind: "protocol",
-          protocolAction: "wrap",
-          ...deriveEdgeTaxonomy("protocol", "wrap"),
-        },
-        {
-          adapterId: "erc4626-redeem",
-          target: pool.address,
-          tokenIn: pool.address,
-          tokenOut: pool.fixedTokenIn,
-          slotKind: "protocol",
-          protocolAction: "redeem",
-          ...deriveEdgeTaxonomy("protocol", "redeem"),
-        },
-      );
-      break;
-    }
-    case "rocksolid": {
-      if (!pool.fixedTokenIn) {
-        throw new Error(`rocksolid pool ${pool.address} missing fixedTokenIn`);
-      }
-      edges.push({
-        adapterId: "rocksolid-sync-deposit",
-        target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn),
-        tokenOut: ethers.getAddress(pool.address),
-        slotKind: "protocol",
-        protocolAction: "wrap",
-        ...deriveEdgeTaxonomy("protocol", "wrap"),
-      });
-      break;
-    }
-    case "metronome-hgusdc": {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);
-      }
-      edges.push({
-        adapterId: "metronome-hgusdc-exit",
-        target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn),
-        tokenOut: ethers.getAddress(pool.fixedTokenOut),
-        slotKind: "protocol",
-        protocolAction: "redeem",
-        ...deriveEdgeTaxonomy("protocol", "redeem"),
-      });
-      break;
-    }
-    case "goldx": {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`goldx pool ${pool.address} missing fixed token metadata`);
-      }
-      edges.push({
-        adapterId: "goldx-mint",
-        target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn),
-        tokenOut: ethers.getAddress(pool.fixedTokenOut),
-        slotKind: "protocol",
-        protocolAction: "convert",
-        ...deriveEdgeTaxonomy("protocol", "convert"),
-      });
-      break;
-    }
-    case "metronome-synth": {
-      const synths = await queryMetronomeSynths(backend, pool.address);
-      for (let i = 0; i < synths.length; i++) {
-        for (let j = 0; j < synths.length; j++) {
-          if (i === j) continue;
-          edges.push({
-            adapterId,
-            target: pool.address,
-            tokenIn: synths[i],
-            tokenOut: synths[j],
-            slotKind: "protocol",
-            protocolAction: "convert",
-            ...deriveEdgeTaxonomy("protocol", "convert"),
-          });
-        }
-      }
-      break;
-    }
-    case "psm":
     case "fluid-vault": {
       if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
         throw new Error(`${pool.adapter} pool ${pool.address} missing fixedTokenIn/Out`);
@@ -472,20 +332,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
 }
 
 // ─── On-chain queries ─────────────────────────────────────────
-
-async function queryMetronomeSynths(backend: TokenQueryBackend, pool: string): Promise<string[]> {
-  const out: string[] = [];
-  for (const synth of METRONOME_SYNTH_TOKENS) {
-    const data = metronomeSynthPoolIface.encodeFunctionData("doesSyntheticTokenExist", [synth]);
-    const result = await backend.call({ to: pool, data });
-    const exists = Boolean(metronomeSynthPoolIface.decodeFunctionResult("doesSyntheticTokenExist", result)[0]);
-    if (exists) out.push(ethers.getAddress(synth));
-  }
-  if (out.length < 2) {
-    throw new Error(`metronome synth pool ${pool} has fewer than two known synths`);
-  }
-  return out;
-}
 
 // ─── Sync fallback (used by AC-3 tests that don't want async init) ──
 

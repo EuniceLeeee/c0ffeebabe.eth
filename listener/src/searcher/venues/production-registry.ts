@@ -1,4 +1,10 @@
 import { createRouteAdapterRegistry } from "./route-adapter-registry.js";
+import { erc4626Adapter } from "./protocols/erc4626.js";
+import { goldxAdapter } from "./protocols/goldx.js";
+import { metronomeAdapter } from "./protocols/metronome.js";
+import { psmAdapter } from "./protocols/psm.js";
+import { rocksolidAdapter } from "./protocols/rocksolid.js";
+import { wstethAdapter } from "./protocols/wsteth.js";
 import { balancerV3Adapter } from "./swaps/balancer-v3.js";
 import { curvePlainAdapter } from "./swaps/curve-plain.js";
 import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
@@ -15,5 +21,12 @@ export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
     balancerV3Adapter,
     univ4Adapter,
   ],
-  protocols: [],
+  protocols: [
+    erc4626Adapter,
+    goldxAdapter,
+    metronomeAdapter,
+    psmAdapter,
+    rocksolidAdapter,
+    wstethAdapter,
+  ],
 });
