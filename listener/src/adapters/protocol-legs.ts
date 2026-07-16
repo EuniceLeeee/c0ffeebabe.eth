@@ -18,11 +18,13 @@ export interface ProtocolLegDescriptor {
    * standard legs whose out-token is implicit.
    */
   tokenOutArg?: number;
+  /** Address arguments that must be the literal zero address, not the executor. */
+  zeroAddressArgs?: number[];
   needsApprove: boolean;
   quoteSig?: string;
 }
 
-type ArgSource = "amount" | "executor" | "tokenIn" | "tokenOut";
+type ArgSource = "amount" | "executor" | "tokenIn" | "tokenOut" | "zeroAddress";
 
 function functionName(signature: string): string {
   const paren = signature.indexOf("(");
@@ -54,6 +56,9 @@ function argSources(desc: ProtocolLegDescriptor, argCount: number): ArgSource[] 
   }
   if (desc.tokenOutArg !== undefined) {
     setArg(desc.tokenOutArg, "tokenOut");
+  }
+  for (const index of desc.zeroAddressArgs ?? []) {
+    setArg(index, "zeroAddress");
   }
 
   const missing = sources.findIndex((source) => source === undefined);
@@ -90,6 +95,7 @@ export function makeProtocolAdapter(desc: ProtocolLegDescriptor): ActionAdapter 
           }
           return node.tokenOut;
         }
+        if (source === "zeroAddress") return ethers.ZeroAddress;
         return executor;
       });
       return encodeCall(node.target, ethers.getBytes(iface.encodeFunctionData(fnName, args)));
@@ -157,6 +163,15 @@ export const PROTOCOL_LEG_DESCRIPTORS: ProtocolLegDescriptor[] = [
     amountArg: 1,
     executorArgs: [2, 3],
     needsApprove: false,
+  },
+  {
+    id: "rocksolid-sync-deposit",
+    signature: "syncDeposit(uint256,address,address)",
+    amountArg: 0,
+    executorArgs: [1],
+    zeroAddressArgs: [2],
+    needsApprove: true,
+    quoteSig: "convertToShares(uint256)",
   },
   {
     id: "metronome-synth-swap",

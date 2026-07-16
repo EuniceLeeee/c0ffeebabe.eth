@@ -5,7 +5,12 @@
 
 import { ADDR } from "../../shared/constants/addresses.js";
 import { cycleFingerprint } from "../detector/cycle-fingerprint.js";
-import { detectBlockScanOpportunities, type BlockScanConfig, type ProtocolMid } from "../detector/blockscan-scanner.js";
+import {
+  detectBlockScanOpportunities,
+  isAdmissibleBlockScanRingShape,
+  type BlockScanConfig,
+  type ProtocolMid,
+} from "../detector/blockscan-scanner.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { type TokenEdge, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
@@ -276,6 +281,30 @@ function triangleFixture(profitable: boolean): { cache: PoolStateCache; edges: T
   return { cache, edges, ringPools: [P1, P2, P3] };
 }
 
+function repeatedIntermediateFixture(): {
+  cache: PoolStateCache;
+  edges: TokenEdge[];
+  protocolMids: ReadonlyMap<string, ProtocolMid>;
+  reth: string;
+  rockReth: string;
+} {
+  const cache = new PoolStateCache();
+  const reth = tokenAt(30);
+  const rockReth = tokenAt(31);
+  seedV2Pair(cache, P1, WETH, reth, 1_000_000n * UNIT, 1_000_000n * UNIT);
+  seedV2Pair(cache, P3, rockReth, reth, 1_000_000n * UNIT, 1_009_300n * UNIT);
+  const wrap = protocol(reth, rockReth, P2, "erc4626-deposit", "wrap");
+  return {
+    cache,
+    edges: [...pairEdges(WETH, reth, P1), wrap, ...pairEdges(rockReth, reth, P3)],
+    protocolMids: new Map([
+      [protocolKey(P2, reth, rockReth), { mid: 1, feeBps: 0, depthIn: 1_000_000n * UNIT }],
+    ]),
+    reth,
+    rockReth,
+  };
+}
+
 function assertMainAnchor(opp: BlockScanOpportunity): void {
   assert(opp.kind === "block-scan-arb", "opportunity kind");
   assert(opp.seedEdges.length === 2, "seed edge count");
@@ -416,6 +445,59 @@ const tests: TestCase[] = [
       assert(actualPools.join(",") === ringPools.sort().join(","), "3-hop ring pools");
       assert(ring.searchSeed.searchCenter > 8n, "3-hop ring search center is usable");
       console.log("[blockscan-scanner] 3-hop cycle found: PASS");
+    },
+  },
+  {
+    name: "repeated intermediate low-spread cycle found",
+    run: () => {
+      const { cache, edges, protocolMids, reth, rockReth } = repeatedIntermediateFixture();
+      const productionThreshold = run(edges, cache, { minSpreadBps: 0, protocolMids });
+      const ring = productionThreshold.opportunities.find((opp) =>
+        opp.seedEdges.length === 4 &&
+        opp.seedEdges.map((edge) => edge.tokenIn.toLowerCase()).join(",") ===
+          [WETH, reth, rockReth, reth].join(","),
+      );
+      assert(ring !== undefined, "WETH->rETH->rock.rETH->rETH->WETH ring should be admitted");
+      assert(ring.seedEdges[3].tokenOut.toLowerCase() === WETH, "repeated-token ring closes in WETH");
+      assert(
+        !isAdmissibleBlockScanRingShape(ring.seedEdges, new Map([
+          [WETH, { maxBorrow: 10_000n * UNIT }],
+          [reth, { maxBorrow: 10_000n * UNIT }],
+        ])),
+        "a priced repeated token should use its own smaller funding ring",
+      );
+      assert(
+        !isAdmissibleBlockScanRingShape(
+          ring.seedEdges.map((edge) => ({ ...edge, slotKind: "swap" as const })),
+          new Map([[WETH, { maxBorrow: 10_000n * UNIT }]]),
+        ),
+        "a repeated segment without a protocol edge should be rejected",
+      );
+      const a = tokenAt(32);
+      const b = tokenAt(33);
+      const c = tokenAt(34);
+      const multiRepeat = [
+        swap(WETH, a, P1),
+        { ...swap(a, b, P2), slotKind: "protocol" as const },
+        swap(b, a, P3),
+        swap(a, c, P4),
+        { ...swap(c, b, P5), slotKind: "protocol" as const },
+        swap(b, WETH, P6),
+      ];
+      assert(
+        !isAdmissibleBlockScanRingShape(
+          multiRepeat,
+          new Map([[WETH, { maxBorrow: 10_000n * UNIT }]]),
+        ),
+        "rings with multiple repeated intermediates should be rejected",
+      );
+
+      const legacyThreshold = run(edges, cache, { minSpreadBps: 10, protocolMids });
+      assert(
+        !legacyThreshold.opportunities.some((opp) => opp.seedEdges.length === 4),
+        "legacy 10 bps threshold should demonstrate the pre-fix miss",
+      );
+      console.log("[blockscan-scanner] repeated intermediate low-spread cycle found: PASS");
     },
   },
   {

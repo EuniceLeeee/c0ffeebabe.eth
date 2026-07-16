@@ -62,6 +62,9 @@ const v4InitializeIface = new ethers.Interface([
 ]);
 const V4_INITIALIZE_TOPIC = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
 const V4_SWAP_TOPIC = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+export const BALANCER_V3_SWAP_TOPIC = ethers.id(
+  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
+);
 const V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = "0x86b6be7d";
 
 interface DiscoveryQueueEntry {
@@ -95,6 +98,49 @@ export interface RawLog {
   topics: string[];
   data: string;
   blockNumber: string;
+}
+
+export function buildBalancerV3PoolEntries(
+  logs: RawLog[],
+  minSwaps: number,
+): PoolUniverseEntry[] {
+  const pools = new Map<string, PoolUniverseEntry>();
+  for (const log of logs) {
+    if (log.address.toLowerCase() !== ADDR.BALANCER_V3_VAULT.toLowerCase()) continue;
+    if (log.topics[0]?.toLowerCase() !== BALANCER_V3_SWAP_TOPIC.toLowerCase()) continue;
+    const poolTopic = log.topics[1];
+    const tokenInTopic = log.topics[2];
+    const tokenOutTopic = log.topics[3];
+    if (!poolTopic || !tokenInTopic || !tokenOutTopic) continue;
+    try {
+      const address = ethers.getAddress(`0x${poolTopic.slice(-40)}`);
+      const tokenIn = ethers.getAddress(`0x${tokenInTopic.slice(-40)}`);
+      const tokenOut = ethers.getAddress(`0x${tokenOutTopic.slice(-40)}`);
+      const key = address.toLowerCase();
+      const current = pools.get(key);
+      if (current) {
+        current.score = (current.score ?? 0) + 1;
+        current.swapCount30d = (current.swapCount30d ?? 0) + 1;
+        current.lastSwapBlock = Math.max(current.lastSwapBlock ?? 0, parseInt(log.blockNumber, 16));
+      } else {
+        pools.set(key, {
+          address,
+          adapter: "balancer-v3",
+          venueId: "balancer-v3",
+          identitySource: "balancer-v3-vault",
+          token0: tokenIn,
+          token1: tokenOut,
+          score: 1,
+          swapCount30d: 1,
+          lastSwapBlock: parseInt(log.blockNumber, 16),
+          source: "balancer-v3-vault-swap",
+        });
+      }
+    } catch { /* malformed indexed address */ }
+  }
+  return [...pools.values()]
+    .filter((pool) => (pool.swapCount30d ?? 0) >= minSwaps)
+    .sort((a, b) => (b.swapCount30d ?? 0) - (a.swapCount30d ?? 0));
 }
 
 interface PoolActivity {
@@ -232,6 +278,23 @@ async function main(): Promise<void> {
   });
   console.log(`[pool-universe] univ4: ${v4InitLogs.length} Initialize events, ${v4Pools.length} above minSwaps`);
 
+  const balancerV3Logs: RawLog[] = [];
+  for (let start = fromBlock; start <= latest; start += logBatch) {
+    const end = Math.min(start + logBatch - 1, latest);
+    balancerV3Logs.push(...await getLogsWithSplitRetry(
+      provider,
+      BALANCER_V3_SWAP_TOPIC,
+      start,
+      end,
+      ADDR.BALANCER_V3_VAULT,
+    ));
+  }
+  const balancerV3Pools = buildBalancerV3PoolEntries(balancerV3Logs, minSwaps);
+  console.log(
+    `[pool-universe] balancer-v3: ${balancerV3Logs.length} Swap events, ` +
+      `${balancerV3Pools.length} pools above minSwaps`,
+  );
+
   const countRanked = [...activity.values()]
     .filter((pool) => pool.count >= minSwaps)
     .sort((a, b) => b.count - a.count || b.lastSwapBlock - a.lastSwapBlock);
@@ -281,10 +344,17 @@ async function main(): Promise<void> {
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
     for (const token of pool.underlyingCoins ?? []) tokenSet.add(token.toLowerCase());
   }
+  for (const pool of balancerV3Pools) {
+    if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
+    if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
+  }
   const discoveryQueuePath = resolve("searcher", "pools", "discovery-queue.json");
   const { included, blocked } = await consumeDiscoveryQueue(stateProvider, discoveryQueuePath, tokenSet);
   const poolByAddress = new Map<string, PoolUniverseEntry>();
   for (const pool of validPools) {
+    poolByAddress.set(pool.address.toLowerCase(), pool);
+  }
+  for (const pool of balancerV3Pools) {
     poolByAddress.set(pool.address.toLowerCase(), pool);
   }
   for (const pool of included) {

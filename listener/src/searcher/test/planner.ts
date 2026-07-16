@@ -557,6 +557,8 @@ const POOL_1151_USDT_A = "0x5ea523e496D049e2bA8B303C8D85C83FB6F285F8";
 const POOL_1151_USDT_B = "0x1e84865E17B49286f26D356DC39fF671EDfaA199";
 const POOL_WSTETH_STETH_SYNTH = "0x0000000000000000000000000000000000000e7e";
 const POOL_SUSDS_USDS_SYNTH = "0x0000000000000000000000000000000000004626";
+const POOL_7CE631_UNIV3_RETH_WETH = "0x553e9c493678d8606d6a5ba284643db2110df823";
+const POOL_7CE631_BALANCER_V3 = "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc";
 
 async function testBlockScanPlannerBinding(): Promise<void> {
   const token = TOK_874376;
@@ -628,6 +630,31 @@ interface ReplayFixture {
 }
 
 const REPLAY_FIXTURES: ReplayFixture[] = [
+  {
+    id: "tx-7ce631-rocksolid-balancer-v3-gap",
+    provenance: "tx 0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87 block 25535037; RockSolid and Balancer V3 edges absent",
+    edges: [
+      swap(REAL_WETH, ADDR.RETH, POOL_7CE631_UNIV3_RETH_WETH),
+      swap(ADDR.RETH, REAL_WETH, POOL_7CE631_UNIV3_RETH_WETH),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: ADDR.RETH, pool: POOL_7CE631_UNIV3_RETH_WETH, start: REAL_WETH },
+    maxHops: 4,
+    expectPlans: 0,
+    expectClass: "only_immediate_same_pool_reverse",
+  },
+  {
+    id: "tx-7ce631-rocksolid-balancer-v3-flip",
+    provenance: "tx 0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87 block 25535037; full four-edge route admitted",
+    edges: [
+      swap(REAL_WETH, ADDR.RETH, POOL_7CE631_UNIV3_RETH_WETH),
+      swap(ADDR.RETH, REAL_WETH, POOL_7CE631_UNIV3_RETH_WETH),
+      protocol(ADDR.RETH, ADDR.ROCKSOLID_RETH, ADDR.ROCKSOLID_RETH, "wrap", "rocksolid-sync-deposit"),
+      swap(ADDR.ROCKSOLID_RETH, ADDR.RETH, POOL_7CE631_BALANCER_V3, "balancer-v3-unlock"),
+    ],
+    impact: { tokenIn: REAL_WETH, tokenOut: ADDR.RETH, pool: POOL_7CE631_UNIV3_RETH_WETH, start: REAL_WETH },
+    maxHops: 4,
+    expectMinPlans: 1,
+  },
   {
     // CR-3a credit-edge routing gate, modeled on reference tx
     // 0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970 (block 24710788).

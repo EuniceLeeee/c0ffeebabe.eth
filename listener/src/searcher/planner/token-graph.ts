@@ -55,7 +55,9 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "curve-underlying" | "univ3" | "univ2" | "univ4" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626" | "goldx" | "metronome-synth" | "metronome-hgusdc";
+  adapter: "curve" | "curve-nr" | "curve-underlying" | "univ3" | "univ2" | "univ4"
+    | "balancer-v3" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626"
+    | "goldx" | "rocksolid" | "metronome-synth" | "metronome-hgusdc";
   /** Contracts that emit the protocol action when execution goes through a different target. */
   receiptEmitters?: string[];
   /** Dynamic venue identity/provenance recorded before admission; may be explicitly provisional. */
@@ -160,6 +162,13 @@ export const POOL_REGISTRY: PoolEntry[] = [
     adapter: "wsteth",
   },
   {
+    address: ADDR.ROCKSOLID_RETH,
+    adapter: "rocksolid",
+    fixedTokenIn: ADDR.RETH,
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "wrap",
+  },
+  {
     address: ADDR.METRONOME_SYNTH_POOL,
     adapter: "metronome-synth",
   },
@@ -251,6 +260,9 @@ const univ2ReservesIface = new ethers.Interface([
 const metronomeSynthPoolIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
+const balancerV3VaultIface = new ethers.Interface([
+  "function getPoolTokens(address pool) view returns (address[] tokens)",
+]);
 const v4InitializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
@@ -265,6 +277,7 @@ const ADAPTER_MAP: Record<string, string> = {
   "univ3": "univ3-swap",
   "univ2": "univ2-swap",
   "univ4": "univ4-unlock",
+  "balancer-v3": "balancer-v3-unlock",
   "psm": "psm",
   "fluid-vault": "fluid-vault",
   "fluid-dex": "fluid-dex-swap",
@@ -429,6 +442,29 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       );
       break;
     }
+    case "balancer-v3": {
+      const data = balancerV3VaultIface.encodeFunctionData("getPoolTokens", [pool.address]);
+      const result = await backend.call({ to: ADDR.BALANCER_V3_VAULT, data });
+      const decoded = balancerV3VaultIface.decodeFunctionResult("getPoolTokens", result);
+      const tokens = (decoded[0] as string[]).map((token) => ethers.getAddress(token));
+      if (tokens.length < 2) {
+        throw new Error(`balancer-v3 pool ${pool.address} returned fewer than two tokens`);
+      }
+      for (let i = 0; i < tokens.length; i++) {
+        for (let j = 0; j < tokens.length; j++) {
+          if (i === j) continue;
+          edges.push({
+            adapterId,
+            target: ethers.getAddress(pool.address),
+            tokenIn: tokens[i],
+            tokenOut: tokens[j],
+            slotKind: "swap",
+            ...deriveEdgeTaxonomy("swap"),
+          });
+        }
+      }
+      break;
+    }
     case "wsteth": {
       edges.push(
         {
@@ -494,6 +530,21 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
           ...deriveEdgeTaxonomy("protocol", "redeem"),
         },
       );
+      break;
+    }
+    case "rocksolid": {
+      if (!pool.fixedTokenIn) {
+        throw new Error(`rocksolid pool ${pool.address} missing fixedTokenIn`);
+      }
+      edges.push({
+        adapterId: "rocksolid-sync-deposit",
+        target: pool.address,
+        tokenIn: ethers.getAddress(pool.fixedTokenIn),
+        tokenOut: ethers.getAddress(pool.address),
+        slotKind: "protocol",
+        protocolAction: "wrap",
+        ...deriveEdgeTaxonomy("protocol", "wrap"),
+      });
       break;
     }
     case "metronome-hgusdc": {

@@ -35,6 +35,7 @@ const ADAPTERS = new Set<PoolEntry["adapter"]>([
   "univ3",
   "univ2",
   "univ4",
+  "balancer-v3",
   "psm",
   "fluid-vault",
   "fluid-dex",

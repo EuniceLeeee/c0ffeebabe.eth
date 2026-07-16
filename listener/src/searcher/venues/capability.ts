@@ -7,6 +7,7 @@ export type VenueId =
   | "univ3-fork-075c"
   | "panoramaswap-v1"
   | "univ4"
+  | "balancer-v3"
   | "curve"
   | "curve-nr"
   | "goldx"
@@ -27,7 +28,7 @@ export interface VenueCapability {
   venue: VenueId;
   discovery: VenueDiscovery;
   /** Proven adapter for this factory lineage; provisional admission may retain the event-derived shape. */
-  runtimeAdapter?: "univ2" | "univ3";
+  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3";
   discoverable: boolean;
   quotable: boolean;
   buildable: boolean;
@@ -100,6 +101,15 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   {
     venue: "univ4",
     discovery: { mode: "custom", seeds: ["0x000000000004444c5dc75cB358380D2e3dE08A90"] },
+    discoverable: true,
+    quotable: true,
+    buildable: true,
+    supported_in_prod: true,
+  },
+  {
+    venue: "balancer-v3",
+    discovery: { mode: "custom", seeds: ["0xbA1333333333a1BA1108E8412f11850A5C319bA9"] },
+    runtimeAdapter: "balancer-v3",
     discoverable: true,
     quotable: true,
     buildable: true,

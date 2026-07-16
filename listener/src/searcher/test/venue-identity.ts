@@ -6,6 +6,7 @@ import {
   resolvePoolIdentity,
   type IdentityPoolEntry,
 } from "../venues/identity.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -14,6 +15,9 @@ function assert(condition: boolean, message: string): asserts condition {
 const factoryIface = new ethers.Interface(["function factory() view returns (address)"]);
 const curveMetaRegistryIface = new ethers.Interface([
   "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
+]);
+const balancerV3VaultIface = new ethers.Interface([
+  "function isPoolRegistered(address pool) view returns (bool)",
 ]);
 
 const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
@@ -33,10 +37,15 @@ const UNREGISTERED_CURVE_POOL = address(0x106);
 const FAKE_V4_MANAGER = address(0x107);
 const PSM_SEED = address(0x108);
 const FAKE_PSM = address(0x109);
+const BALANCER_V3_POOL = address(0x10a);
+const FAKE_BALANCER_V3_POOL = address(0x10b);
 
 const V2_SWAP_TOPIC = ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
 const CURVE_SWAP_TOPIC = ethers.id("TokenExchange(address,int128,uint256,int128,uint256)");
+const BALANCER_V3_SWAP_TOPIC = ethers.id(
+  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
+);
 
 class FakeProvider {
   readonly factoryCalls: string[] = [];
@@ -54,7 +63,7 @@ class FakeProvider {
     throw new Error("pinned test must not query the head");
   }
 
-  async send(method: string, args: Array<{ topics?: string[] }>): Promise<Array<{ address: string }>> {
+  async send(method: string, args: Array<{ topics?: string[] }>): Promise<Array<{ address: string; topics?: string[] }>> {
     assert(method === "eth_getLogs", `unexpected RPC method ${method}`);
     const topic = args[0]?.topics?.[0]?.toLowerCase();
     if (topic === V2_SWAP_TOPIC.toLowerCase()) {
@@ -64,6 +73,12 @@ class FakeProvider {
     if (topic === V3_SWAP_TOPIC.toLowerCase()) return [{ address: V3_FORK_POOL }];
     if (topic === CURVE_SWAP_TOPIC.toLowerCase()) {
       return [{ address: CURVE_POOL }, { address: UNREGISTERED_CURVE_POOL }];
+    }
+    if (topic === BALANCER_V3_SWAP_TOPIC.toLowerCase()) {
+      return [{
+        address: ADDR.BALANCER_V3_VAULT,
+        topics: [BALANCER_V3_SWAP_TOPIC, ethers.zeroPadValue(BALANCER_V3_POOL, 32)],
+      }];
     }
     return [];
   }
@@ -83,6 +98,13 @@ class FakeProvider {
         "get_registry_handlers_from_pool",
         [handlers],
       );
+    }
+    if (target === ADDR.BALANCER_V3_VAULT.toLowerCase()) {
+      const decoded = balancerV3VaultIface.decodeFunctionData("isPoolRegistered", req.data);
+      const pool = String(decoded[0]).toLowerCase();
+      return balancerV3VaultIface.encodeFunctionResult("isPoolRegistered", [
+        pool === BALANCER_V3_POOL.toLowerCase(),
+      ]);
     }
 
     assert(req.data.slice(0, 10) === factoryIface.getFunction("factory")!.selector, "expected factory() call");
@@ -131,6 +153,11 @@ async function testRuntimeScanUsesIdentity(): Promise<void> {
     byAddress.get(CURVE_POOL.toLowerCase())?.venueId === "curve",
     "MetaRegistry proves Curve venue identity",
   );
+  assert(byAddress.has(BALANCER_V3_POOL.toLowerCase()), "registered Balancer V3 pool should be admitted");
+  assert(
+    byAddress.get(BALANCER_V3_POOL.toLowerCase())?.venueId === "balancer-v3",
+    "Balancer V3 Vault proves pool identity",
+  );
   assert(!byAddress.has(PANORAMA_POOL.toLowerCase()), "Panoramaswap must remain outside runtime graph");
   assert(!byAddress.has(UNKNOWN_PAIR.toLowerCase()), "unknown V2 factory must remain outside runtime graph");
   assert(
@@ -143,6 +170,19 @@ async function testRuntimeScanUsesIdentity(): Promise<void> {
     "scanner must query Curve MetaRegistry",
   );
   console.log("[venue-identity] runtime scan identity gate: PASS");
+}
+
+async function testBalancerV3Identity(): Promise<void> {
+  const provider = new FakeProvider();
+  const registered = await resolvePoolIdentity(provider, BALANCER_V3_POOL, "balancer-v3");
+  assert(registered.ok, "registered Balancer V3 pool should pass identity attestation");
+  assert(registered.adapter === "balancer-v3", "Balancer V3 runtime adapter mismatch");
+  assert(registered.identitySource === "balancer-v3-vault", "Balancer V3 identity provenance missing");
+
+  const fake = await resolvePoolIdentity(provider, FAKE_BALANCER_V3_POOL, "balancer-v3");
+  assert(!fake.ok, "unregistered Balancer V3 pool must fail closed");
+  assert(fake.reason === "balancer_v3_unregistered", `Balancer V3 rejection reason=${fake.reason}`);
+  console.log("[venue-identity] Balancer V3 Vault registration gate: PASS");
 }
 
 async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
@@ -219,4 +259,5 @@ await testPersistedMetadataCannotBypassNodeIdentity();
 await testCurveIdentityDoesNotChooseAdapter();
 await testV4ManagerIdentity();
 await testProtocolAdaptersRequireExactEnabledSeeds();
-console.log("venue-identity PASS (6/6)");
+await testBalancerV3Identity();
+console.log("venue-identity PASS (7/7)");

@@ -43,6 +43,7 @@ const ADAPTERS = new Set<PoolEntry["adapter"]>([
   "univ3",
   "univ2",
   "univ4",
+  "balancer-v3",
   "psm",
   "fluid-vault",
   "fluid-dex",
@@ -322,6 +323,7 @@ function identitySourceField(value: unknown, field: string): VenueIdentitySource
     value !== "curve-metaregistry-underlying" &&
     value !== "curve-underlying-provisional" &&
     value !== "v4-manager" &&
+    value !== "balancer-v3-vault" &&
     value !== "seed"
   ) {
     throw new Error(`${field} has unsupported identity source ${String(value)}`);
