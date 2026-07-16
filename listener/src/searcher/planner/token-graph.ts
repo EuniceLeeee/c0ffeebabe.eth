@@ -244,9 +244,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
 const metronomeSynthPoolIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
-const balancerV3VaultIface = new ethers.Interface([
-  "function getPoolTokens(address pool) view returns (address[] tokens)",
-]);
 const v4InitializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
@@ -369,29 +366,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
         { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
         { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
       );
-      break;
-    }
-    case "balancer-v3": {
-      const data = balancerV3VaultIface.encodeFunctionData("getPoolTokens", [pool.address]);
-      const result = await backend.call({ to: ADDR.BALANCER_V3_VAULT, data });
-      const decoded = balancerV3VaultIface.decodeFunctionResult("getPoolTokens", result);
-      const tokens = (decoded[0] as string[]).map((token) => ethers.getAddress(token));
-      if (tokens.length < 2) {
-        throw new Error(`balancer-v3 pool ${pool.address} returned fewer than two tokens`);
-      }
-      for (let i = 0; i < tokens.length; i++) {
-        for (let j = 0; j < tokens.length; j++) {
-          if (i === j) continue;
-          edges.push({
-            adapterId,
-            target: ethers.getAddress(pool.address),
-            tokenIn: tokens[i],
-            tokenOut: tokens[j],
-            slotKind: "swap",
-            ...deriveEdgeTaxonomy("swap"),
-          });
-        }
-      }
       break;
     }
     case "wsteth": {

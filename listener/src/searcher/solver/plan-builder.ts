@@ -418,63 +418,6 @@ async function buildEdgeNode(
       };
     }
 
-    case "balancer-v3-unlock": {
-      const outputAmount = rawOut ?? amtOut;
-      const vault = ADDR.BALANCER_V3_VAULT;
-      const unlockChildren: ResolvedPlanNode[] = [
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: vault, amount: amtIn },
-          children: [],
-        },
-        {
-          adapterId: "balancer-v3-settle",
-          target: vault,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { token: edge.tokenIn },
-          children: [],
-        },
-        {
-          adapterId: "balancer-v3-swap",
-          target: vault,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenOut,
-          amount: amtIn,
-          params: {
-            kind: 0n,
-            pool: edge.target,
-            limitRaw: 0n,
-            userData: "0x",
-          },
-          children: [],
-        },
-        {
-          adapterId: "balancer-v3-send-to",
-          target: vault,
-          tokenIn: edge.tokenOut,
-          tokenOut: edge.tokenOut,
-          amount: outputAmount,
-          params: { token: edge.tokenOut },
-          children: [],
-        },
-      ];
-      return {
-        adapterId: "balancer-v3-unlock",
-        target: vault,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: 0n,
-        params: {},
-        children: unlockChildren,
-      };
-    }
-
     default:
       throw new Error(`plan-builder: no handler for adapter ${edge.adapterId}`);
   }

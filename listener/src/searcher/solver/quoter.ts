@@ -4,6 +4,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { type V4PoolKey, v4HooksAffectSwap } from "../planner/token-graph.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+export { quoteBalancerV3 } from "../venues/swaps/balancer-v3.js";
 import { quoteCurvePlain } from "../venues/swaps/curve-shared.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quoteV4ExactInLocal } from "./v4-math.js";
@@ -176,31 +177,6 @@ export async function quoteSiloRedeem(
   const outData = siloRedeemIface.encodeFunctionData("previewWithdraw", [assets]);
   const outRaw = await state.call({ to: outToken, data: outData });
   return BigInt(siloRedeemIface.decodeFunctionResult("previewWithdraw", outRaw)[0]);
-}
-
-const balancerV3RouterIface = new ethers.Interface([
-  "function querySwapSingleTokenExactIn(address pool,address tokenIn,address tokenOut,uint256 exactAmountIn,address sender,bytes userData) returns (uint256 amountOut)",
-]);
-
-export async function quoteBalancerV3(
-  state: CallBackend,
-  pool: string,
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-): Promise<bigint> {
-  const data = balancerV3RouterIface.encodeFunctionData("querySwapSingleTokenExactIn", [
-    pool,
-    tokenIn,
-    tokenOut,
-    amountIn,
-    ethers.ZeroAddress,
-    "0x",
-  ]);
-  const result = await state.call({ to: ADDR.BALANCER_V3_ROUTER, data });
-  return BigInt(
-    balancerV3RouterIface.decodeFunctionResult("querySwapSingleTokenExactIn", result)[0],
-  );
 }
 
 // ── Metronome Synth Pool --------------------------------------
@@ -575,8 +551,6 @@ export async function quote(
     case "univ4-unlock":
       // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);
-    case "balancer-v3-unlock":
-      return quoteBalancerV3(state, target, tokenIn, tokenOut, amountIn);
     case "psm":
       return quotePSM(state, target, tokenIn, tokenOut, amountIn);
     case "fluid-dex-swap":
