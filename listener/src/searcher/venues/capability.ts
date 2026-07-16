@@ -33,7 +33,6 @@ export interface VenueCapability {
   discoverable: boolean;
   quotable: boolean;
   buildable: boolean;
-  supported_in_prod: boolean;
 }
 
 // Source-of-truth cross-check:
@@ -51,7 +50,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: descriptor.discoverable,
     quotable: descriptor.quotable,
     buildable: descriptor.buildable,
-    supported_in_prod: descriptor.supportedInProd,
   })),
   {
     venue: "univ3",
@@ -60,7 +58,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     // Pancake V3 remains a distinct venue even though its approved runtime adapter is V3-compatible.
@@ -70,7 +67,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     // Coffee fixture 20260702: exact factory verified and the missing graph leg has a pinned fixture.
@@ -80,7 +76,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     // Standard-looking V2 events are insufficient: this venue needs its own invariant replay.
@@ -89,7 +84,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: false,
     quotable: false,
     buildable: false,
-    supported_in_prod: false,
   },
   {
     venue: "univ4",
@@ -97,7 +91,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     venue: "balancer-v3",
@@ -106,7 +99,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     venue: "curve",
@@ -114,7 +106,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     venue: "goldx",
@@ -122,7 +113,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     venue: "curve-nr",
@@ -130,7 +120,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     venue: "psm",
@@ -138,7 +127,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     venue: "fluid",
@@ -152,7 +140,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: true,
     quotable: true,
     buildable: true,
-    supported_in_prod: true,
   },
   {
     // factories resolved on-chain from tx 0x4db34b5c…d4b606 pools 0xf3a4…0179 / 0xae26…97e4.
@@ -161,7 +148,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: false,
     quotable: false,
     buildable: false,
-    supported_in_prod: false,
   },
   {
     // OUSD has no factory() — seeds are the specific AMM pools seen on-chain (bytecode-signature fallback also covers it).
@@ -170,7 +156,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: false,
     quotable: false,
     buildable: false,
-    supported_in_prod: false,
   },
   {
     // Enzyme redeemSharesInKind vault (non-AMM); seed is the vault seen on-chain.
@@ -179,7 +164,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: false,
     quotable: false,
     buildable: false,
-    supported_in_prod: false,
   },
 ];
 

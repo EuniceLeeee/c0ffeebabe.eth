@@ -45,6 +45,7 @@ export interface OnchainIdentityResolverContext {
   pool: string;
   poolAdapter: PoolEntry["adapter"];
   admissionPolicy: IdentityAdmissionPolicy;
+  isPoolAdapterSupported: (poolAdapter: string) => boolean;
 }
 
 export type OnchainIdentityResolver = (
@@ -69,8 +70,13 @@ export type IdentityResolverDescriptor =
 
 export class IdentityResolverRegistry {
   private readonly byPoolAdapter = new Map<PoolEntry["adapter"], IdentityResolverDescriptor>();
+  private readonly isRoutePoolSupported: (poolAdapter: PoolEntry["adapter"]) => boolean;
 
-  constructor(descriptors: readonly IdentityResolverDescriptor[]) {
+  constructor(
+    descriptors: readonly IdentityResolverDescriptor[],
+    isRoutePoolSupported: (poolAdapter: PoolEntry["adapter"]) => boolean,
+  ) {
+    this.isRoutePoolSupported = isRoutePoolSupported;
     for (const descriptor of descriptors) {
       if (this.byPoolAdapter.has(descriptor.poolAdapter)) {
         throw new Error(
@@ -91,6 +97,10 @@ export class IdentityResolverRegistry {
       throw new Error(`identity resolver registry: missing identity policy ${poolAdapter}`);
     }
     return descriptor;
+  }
+
+  supportsRoutePool(poolAdapter: string): boolean {
+    return this.isRoutePoolSupported(poolAdapter as PoolEntry["adapter"]);
   }
 }
 
@@ -197,6 +207,7 @@ export async function resolvePoolIdentity(
       pool,
       poolAdapter: descriptor.poolAdapter,
       admissionPolicy: policy,
+      isPoolAdapterSupported: (candidate) => options.identityRegistry.supportsRoutePool(candidate),
     });
   }
   return resolveTrustedSingleton(descriptor, pool);
@@ -270,6 +281,7 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
       pool.address,
       descriptor,
       options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
+      options.identityRegistry,
     );
     if (!resolved.ok) {
       return {
@@ -305,6 +317,7 @@ function cachedResolution(
   address: string,
   descriptor: Extract<IdentityResolverDescriptor, { policy: "onchain-resolver" }>,
   admissionPolicy: IdentityAdmissionPolicy,
+  identityRegistry: IdentityResolverRegistry,
 ): Promise<PoolIdentityResult> {
   const provisionalFactories = allowProvisionalFactories(admissionPolicy);
   const provisionalCurveUnderlying = allowProvisionalCurveUnderlying(admissionPolicy);
@@ -318,6 +331,7 @@ function cachedResolution(
       pool: ethers.getAddress(address),
       poolAdapter: descriptor.poolAdapter,
       admissionPolicy,
+      isPoolAdapterSupported: (candidate) => identityRegistry.supportsRoutePool(candidate),
     });
     cache.resolutions.set(key, pending);
   }
@@ -338,6 +352,7 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
   pool,
   poolAdapter,
   admissionPolicy,
+  isPoolAdapterSupported,
 }) => {
   if (poolAdapter !== "univ2" && poolAdapter !== "univ3") {
     throw new Error(`factory identity resolver: unsupported pool adapter ${poolAdapter}`);
@@ -361,7 +376,7 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
     !capability.discoverable ||
     !capability.quotable ||
     !capability.buildable ||
-    !capability.supported_in_prod
+    !isPoolAdapterSupported(capability.runtimeAdapter)
   ) {
     if (!allowProvisionalFactories(admissionPolicy)) {
       return capability

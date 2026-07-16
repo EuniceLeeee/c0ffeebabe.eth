@@ -19,7 +19,6 @@ export interface V2LineageDescriptor {
   readonly discoverable: boolean;
   readonly quotable: boolean;
   readonly buildable: boolean;
-  readonly supportedInProd: boolean;
   /** Absent means the factory is not fee-verified and retains the legacy fallback. */
   readonly measuredFeeRule: V2MeasuredFeeRule | null;
 }
@@ -27,7 +26,7 @@ export interface V2LineageDescriptor {
 /**
  * Single source for V2 factory provenance, execution compatibility, and
  * measured fee rules. A factory belongs here only when its lineage has been
- * investigated; production flags still fail closed independently.
+ * investigated; production execution support is derived from the route registry.
  */
 export const V2_LINEAGES: readonly V2LineageDescriptor[] = Object.freeze([
   Object.freeze({
@@ -38,7 +37,6 @@ export const V2_LINEAGES: readonly V2LineageDescriptor[] = Object.freeze([
     discoverable: true,
     quotable: true,
     buildable: true,
-    supportedInProd: true,
     measuredFeeRule: Object.freeze({
       kind: "constant-bps",
       feeBps: 30n,
@@ -53,7 +51,6 @@ export const V2_LINEAGES: readonly V2LineageDescriptor[] = Object.freeze([
     discoverable: true,
     quotable: true,
     buildable: true,
-    supportedInProd: true,
     measuredFeeRule: Object.freeze({
       kind: "constant-bps",
       feeBps: 30n,
@@ -68,7 +65,6 @@ export const V2_LINEAGES: readonly V2LineageDescriptor[] = Object.freeze([
     discoverable: true,
     quotable: true,
     buildable: true,
-    supportedInProd: true,
     measuredFeeRule: Object.freeze({
       kind: "constant-bps",
       feeBps: 25n,
@@ -84,7 +80,6 @@ export const V2_LINEAGES: readonly V2LineageDescriptor[] = Object.freeze([
     discoverable: false,
     quotable: true,
     buildable: true,
-    supportedInProd: false,
     measuredFeeRule: null,
   }),
   Object.freeze({
@@ -95,7 +90,6 @@ export const V2_LINEAGES: readonly V2LineageDescriptor[] = Object.freeze([
     discoverable: false,
     quotable: true,
     buildable: true,
-    supportedInProd: false,
     measuredFeeRule: null,
   }),
 ]);

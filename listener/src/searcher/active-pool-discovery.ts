@@ -4,7 +4,10 @@ import { poolRegistryKey } from "./pool-universe.js";
 import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
 import { attestPoolIdentities } from "./venues/identity.js";
 import type { IdentityAdmissionPolicy } from "./venues/admission.js";
-import { PRODUCTION_IDENTITY_RESOLVERS } from "./venues/production-registry.js";
+import {
+  PRODUCTION_IDENTITY_RESOLVERS,
+  PRODUCTION_ROUTE_ADAPTERS,
+} from "./venues/production-registry.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import {
   buildV4PoolEntries,
@@ -42,7 +45,7 @@ const FACTORIES: FactoryDef[] = VENUE_CAPABILITIES.flatMap((capability) => {
     !capability.discoverable ||
     !capability.quotable ||
     !capability.buildable ||
-    !capability.supported_in_prod
+    PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(capability.runtimeAdapter) === null
   ) {
     return [];
   }

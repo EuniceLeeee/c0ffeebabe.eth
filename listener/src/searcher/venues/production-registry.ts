@@ -102,6 +102,7 @@ const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
  */
 export const PRODUCTION_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
   PRODUCTION_IDENTITY_POLICIES,
+  (poolAdapter) => PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(poolAdapter) !== null,
 );
 
 assertIdentityResolverCoverage(

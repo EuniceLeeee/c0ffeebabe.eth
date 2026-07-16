@@ -4,6 +4,8 @@ import {
   CURVE_METAREGISTRY,
   assertIdentityResolverCoverage,
   attestPoolIdentities,
+  factoryIdentityResolver,
+  IdentityResolverRegistry,
   resolvePoolIdentity,
   type IdentityPoolEntry,
 } from "../venues/identity.js";
@@ -155,7 +157,10 @@ async function testV2LineageDescriptor(): Promise<void> {
       capability.runtimeAdapter === descriptor.runtimeAdapter,
       `${descriptor.venue} execution family projection`,
     );
-    if (descriptor.supportedInProd) {
+    const routeSupported = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(
+      descriptor.runtimeAdapter,
+    ) !== null;
+    if (descriptor.discoverable && descriptor.quotable && descriptor.buildable && routeSupported) {
       assert(descriptor.measuredFeeRule !== null, `${descriptor.venue} production fee must be measured`);
       assert(
         v2FeeBpsForFactory(descriptor.factory) === descriptor.measuredFeeRule.feeBps,
@@ -166,7 +171,11 @@ async function testV2LineageDescriptor(): Promise<void> {
 
   const pancake = findV2LineageByFactory(PANCAKE_V2_FACTORY);
   assert(pancake?.venue === "pancake-v2", "Pancake V2 lineage identity");
-  assert(pancake.discoverable && pancake.supportedInProd, "Pancake V2 factory discovery flags");
+  assert(pancake.discoverable, "Pancake V2 factory discovery flag");
+  assert(
+    PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pancake.runtimeAdapter) !== null,
+    "Pancake V2 execution support must come from the route registry",
+  );
   assert(pancake.measuredFeeRule?.feeBps === 25n, "Pancake V2 measured fee");
 
   const provider = new FakeProvider();
@@ -391,6 +400,27 @@ function testIdentityRegistryConformance(): void {
   console.log("[venue-identity] route/identity registry conformance: PASS");
 }
 
+async function testRouteRegistryOwnsProductionSupport(): Promise<void> {
+  assert(PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("univ2"), "registered route pool support");
+  assert(
+    !PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("fluid-dex"),
+    "legacy identity policy must not imply route support",
+  );
+  assert(
+    !PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("synthetic-pool-adapter"),
+    "unknown identity must not imply route support",
+  );
+
+  const executionDisabled = new IdentityResolverRegistry([
+    { poolAdapter: "univ2", policy: "onchain-resolver", resolve: factoryIdentityResolver },
+  ], () => false);
+  const result = await resolvePoolIdentity(new FakeProvider(), UNI_PAIR, "univ2", {
+    identityRegistry: executionDisabled,
+  });
+  assert(!result.ok && result.reason === "unsupported_venue", "route support must own admission");
+  console.log("[venue-identity] route registry owns production support: PASS");
+}
+
 function address(n: number): string {
   return ethers.getAddress("0x" + n.toString(16).padStart(40, "0"));
 }
@@ -403,5 +433,6 @@ await testV4ManagerIdentity();
 await testProtocolAdaptersRequireExactEnabledSeeds();
 await testBalancerV3Identity();
 testIdentityRegistryConformance();
+await testRouteRegistryOwnsProductionSupport();
 await testV2LineageDescriptor();
-console.log("venue-identity PASS (9/9)");
+console.log("venue-identity PASS (10/10)");
