@@ -3,6 +3,24 @@
 > Capability repair for one production gap cohort. The frozen challenger changes production searcher
 > code only; this evidence descendant is not part of the promoted code SHA. Raw node logs remain off Git.
 
+## Superseding Historical-Gap Resolution (2026-07-16)
+
+The original A/B close below remains an accurate record of the invalid readiness window, but it no longer
+controls this branch's deterministic repair verdict. The user explicitly selected the six-step physical fact
+chain in `.claude/commands/tx-gap.md` as the acceptance boundary for this historical batch; latency and A/B
+distribution are not promotion predicates here.
+
+- Frozen production SHA: `58f204571a572c3077208ddc27d763a8180a9a36`.
+- Baseline: `840069d9d30b40d0c9585ed5a879091a666aa533`, `not_admitted`.
+- Unchanged production entry replay: `searcher:blockscan-hunt-tx149` self-enumerated the complete
+  `USDT -> PAXG -> GOLDx -> USDx -> USDT` route from the production universe.
+- Planner/solver/fork/EV result: `candidate_plans > 0`, adapter-encoded calldata executed without a standing
+  position, and production accounting returned `final_sim_success` with `net_profit_raw=442380`.
+- Same-input transition: `not_admitted -> final_sim_success`.
+- Six-step verdict: **PASS / fixed**. The earlier candidate-readiness latency remains a separate optimization
+  observation and does not reopen this route-capability gap.
+- Promotion: frozen production tree merged by `8945622`; report-only descendants were archived afterward.
+
 ## Problem + Implementation Brief
 - **problem_id:** `tx149-goldx-curve-underlying-route-gap`
 - **root cause / causal hypothesis:** production excluded provisionally compatible V2 factories and
