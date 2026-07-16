@@ -74,6 +74,11 @@ export type SearcherEvent =
       to_addresses: string[];
       address_count: number;
       router_count: number;
+      full_address_count?: number;
+      canonical_target_count?: number;
+      dynamic_target_count?: number;
+      graph_target_count?: number;
+      filtered_truncated?: boolean;
       max_addresses?: number;
     }
   | {

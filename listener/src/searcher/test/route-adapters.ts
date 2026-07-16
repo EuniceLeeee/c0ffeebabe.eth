@@ -310,6 +310,16 @@ async function main(): Promise<void> {
     kind: "swap",
     poolAdapters: ["univ2"],
     edgeAdapterIds: ["bad-edge"],
+    observation: {
+      topics: [],
+      canonicalIntakeTargets: [],
+      observedPoolIdentity() {
+        return null;
+      },
+      async decodeSwapImpacts() {
+        return [];
+      },
+    },
     async buildEdges() {
       return [{
         ...edges[0],

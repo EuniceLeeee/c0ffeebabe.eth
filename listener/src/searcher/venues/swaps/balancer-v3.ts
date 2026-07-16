@@ -4,6 +4,7 @@ import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
 import { readProtocolExternalMid } from "../mid-readers.js";
+import { createBalancerV3SwapObservation } from "../swap-observation.js";
 
 const vaultIface = new ethers.Interface([
   "function getPoolTokens(address pool) view returns (address[] tokens)",
@@ -25,6 +26,10 @@ export const balancerV3Adapter = Object.freeze({
     "balancer-v3-send-to",
     "erc20-transfer",
   ],
+  observation: createBalancerV3SwapObservation({
+    adapterIds: ["balancer-v3-unlock"],
+    canonicalIntakeTargets: [ADDR.BALANCER_V3_ROUTER, ADDR.BALANCER_V3_VAULT],
+  }),
   readMid: readProtocolExternalMid,
   warm: { kind: "external-mid" },
   prepared: null,

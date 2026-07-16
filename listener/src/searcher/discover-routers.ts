@@ -7,6 +7,7 @@ import {
   DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
 } from "./force-include.js";
 import { buildMempoolToAddressFilter } from "./main.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
 
 export interface BlockData {
   number: number;
@@ -40,10 +41,7 @@ export interface DiscoverRoutersResult {
   added: string[];
 }
 
-const V2_SWAP_TOPIC0 = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822";
-const V3_SWAP_TOPIC0 = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
-const V4_SWAP_TOPIC0 = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
-const SWAP_TOPIC0S = new Set([V2_SWAP_TOPIC0, V3_SWAP_TOPIC0, V4_SWAP_TOPIC0]);
+const SWAP_OBSERVATIONS_BY_TOPIC = buildSwapObservationsByTopic();
 
 interface MutableStats {
   address: string;
@@ -106,16 +104,14 @@ export async function discoverRouters(
       const key = to.toLowerCase();
       if (allowlist.has(key)) continue;
 
-      const swapLogs = receipt.logs.filter((log) => isSwapLog(log));
-      if (swapLogs.length === 0) continue;
+      const swapPoolIdentities = receipt.logs
+        .flatMap((log) => observedSwapPoolIdentities(log));
+      if (swapPoolIdentities.length === 0) continue;
 
       const stats = getStats(statsByTo, to);
       stats.txs++;
-      stats.swaps += swapLogs.length;
-      for (const log of swapLogs) {
-        const pool = normalizeAddress(log.address);
-        if (pool) stats.pools.add(pool.toLowerCase());
-      }
+      stats.swaps += swapPoolIdentities.length;
+      for (const poolIdentity of swapPoolIdentities) stats.pools.add(poolIdentity);
     }
   }
 
@@ -147,9 +143,26 @@ export async function discoverRouters(
   return { candidates, qualified, added };
 }
 
-function isSwapLog(log: { topics: string[] }): boolean {
+function observedSwapPoolIdentities(log: { address: string; topics: string[] }): string[] {
   const topic0 = log.topics[0];
-  return typeof topic0 === "string" && SWAP_TOPIC0S.has(topic0.toLowerCase());
+  if (typeof topic0 !== "string") return [];
+  const observations = SWAP_OBSERVATIONS_BY_TOPIC.get(topic0.toLowerCase()) ?? [];
+  return [...new Set(observations
+    .map((observation) => observation.observedPoolIdentity({ ...log, data: "0x" }))
+    .filter((identity): identity is string => identity !== null))];
+}
+
+function buildSwapObservationsByTopic() {
+  const byTopic = new Map<string, typeof PRODUCTION_ROUTE_ADAPTERS.swaps[number]["observation"][]>();
+  for (const adapter of PRODUCTION_ROUTE_ADAPTERS.swaps) {
+    for (const topic of adapter.observation.topics) {
+      const key = topic.toLowerCase();
+      const observations = byTopic.get(key) ?? [];
+      if (!observations.includes(adapter.observation)) observations.push(adapter.observation);
+      byTopic.set(key, observations);
+    }
+  }
+  return byTopic;
 }
 
 function getStats(statsByTo: Map<string, MutableStats>, address: string): MutableStats {

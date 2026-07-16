@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import {
   discoverRouters,
   type BlockData,
@@ -21,6 +22,9 @@ function assertArrayEq(actual: string[], expected: string[], msg: string): void 
 
 const V3_SWAP_TOPIC0 = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 const TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const BALANCER_V3_SWAP_TOPIC0 = ethers.id(
+  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
+);
 
 const ROUTER = address(0xaa);
 const ARB_BOT = address(0xbb);
@@ -143,6 +147,57 @@ async function main(): Promise<void> {
       "allowlisted router should not be re-suggested",
     );
 
+    const singleton = await discoverRouters({
+      fromBlock: 1,
+      toBlock: 1,
+      allowlist: new Set(),
+      minTxs: 2,
+      minPools: 2,
+      minCallers: 1,
+      append: false,
+      async fetchBlock() {
+        const pools = [address(0xe1), address(0xe2)];
+        return {
+          number: 1,
+          txs: pools.map(() => ({ to: ROUTER, from: address(0xe0) })),
+          receipts: pools.map((pool) => ({
+            to: ROUTER,
+            logs: [{
+              address: ADDR.BALANCER_V3_VAULT,
+              topics: [BALANCER_V3_SWAP_TOPIC0, ethers.zeroPadValue(pool, 32)],
+            }],
+          })),
+        };
+      },
+    });
+    assert(
+      singleton.qualified[0]?.pools === 2,
+      "Balancer V3 discovery should count indexed pools, not one Vault emitter",
+    );
+    const fakeSingleton = await discoverRouters({
+      fromBlock: 1,
+      toBlock: 1,
+      allowlist: new Set(),
+      minTxs: 1,
+      minPools: 1,
+      minCallers: 1,
+      append: false,
+      async fetchBlock() {
+        return {
+          number: 1,
+          txs: [{ to: ROUTER, from: address(0xe0) }],
+          receipts: [{
+            to: ROUTER,
+            logs: [{
+              address: address(0xef),
+              topics: [BALANCER_V3_SWAP_TOPIC0, ethers.zeroPadValue(address(0xe1), 32)],
+            }],
+          }],
+        };
+      },
+    });
+    assert(fakeSingleton.qualified.length === 0, "fake Vault emitter must not qualify a router");
+
     const first = await discoverRouters({
       fromBlock: 1,
       toBlock: 4,
@@ -171,7 +226,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("[discover-routers] router qualifies, arb-bot/token/allowlisted excluded, idempotent PASS");
+  console.log("[discover-routers] adapter topics + singleton pool identity + idempotence PASS");
 }
 
 main().catch((err) => {

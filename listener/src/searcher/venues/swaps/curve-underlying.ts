@@ -15,6 +15,7 @@ import type {
   SwapAdapter,
 } from "../route-leg-adapter.js";
 import { readCurveUnderlyingExternalMid } from "../mid-readers.js";
+import { curveSwapObservation } from "../swap-observation.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 const curveUnderlyingIface = new ethers.Interface([
@@ -28,6 +29,7 @@ export const curveUnderlyingAdapter = Object.freeze({
   edgeAdapterIds: ["curve-exchange-underlying"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["curve-exchange-underlying", "erc20-approve"],
+  observation: curveSwapObservation,
   readMid: readCurveUnderlyingExternalMid,
   warm: { kind: "external-mid" },
   prepared: {
