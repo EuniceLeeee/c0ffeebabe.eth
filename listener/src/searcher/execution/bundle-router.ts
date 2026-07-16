@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { buildSignedBackrunTx, submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
+import { submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
 import type { SubmitResult } from "../../types.js";
 
 export interface BundleSubmission {
@@ -37,8 +37,6 @@ export class DryRunBundleRouter implements BundleRouter {
   submissions: BundleSubmission[] = [];
 
   constructor(
-    private readonly wallet?: ethers.Wallet,
-    private readonly provider?: ethers.JsonRpcProvider,
     private readonly botvmAddress?: string,
     private readonly defaultGasUsed = 12_000_000,
   ) {}
@@ -47,31 +45,39 @@ export class DryRunBundleRouter implements BundleRouter {
     const safetyReject = standingPositionSafetyReject(bundle);
     if (safetyReject) return [safetyReject];
     this.submissions.push(bundle);
-    if (!this.wallet || !this.provider || !this.botvmAddress) return [];
-    try {
-      const signed = await buildSignedBackrunTx({
-        calldataHex: bundle.backrunCalldata,
-        gasUsed: Number(bundle.gasUsed ?? this.defaultGasUsed),
-        wallet: this.wallet,
-        botvmAddress: this.botvmAddress,
-        provider: this.provider,
-        expectedProfitEth: bundle.expectedProfitEth,
-        bribeBps: bundle.bribeBps,
-        bribeWei: bundle.bribeWei,
-      });
-      return [{
-        builder: "dry-run",
-        accepted: false,
-        backrunTxHash: signed.backrunTxHash,
-      }];
-    } catch (err) {
-      return [{
-        builder: "dry-run",
-        accepted: false,
-        error: `dry-run-sign-failed: ${err instanceof Error ? err.message : String(err)}`,
-      }];
-    }
+    return [{
+      builder: "dry-run",
+      accepted: false,
+      backrunTxHash: dryRunSubmissionId(bundle, this.botvmAddress, this.defaultGasUsed),
+      error: "dry-run-unsigned",
+    }];
   }
+}
+
+export function dryRunSubmissionId(
+  bundle: BundleSubmission,
+  botvmAddress?: string,
+  defaultGasUsed = 12_000_000,
+): string {
+  const gasUsed = typeof bundle.gasUsed === "bigint"
+    ? bundle.gasUsed
+    : BigInt(Math.ceil(bundle.gasUsed ?? defaultGasUsed));
+  const unsigned = JSON.stringify({
+    schema: "dry-run-unsigned-v1",
+    to: botvmAddress?.toLowerCase() ?? null,
+    data: bundle.backrunCalldata,
+    gasLimit: ((gasUsed * 13n + 9n) / 10n).toString(),
+    targetBlock: bundle.targetBlock,
+    mode: bundle.mode ?? null,
+    victimTxHash: bundle.victimTxHash,
+    victimRawTx: bundle.victimRawTx ?? null,
+    expectedProfit: bundle.expectedProfit.toString(),
+    expectedProfitEth: bundle.expectedProfitEth?.toString() ?? null,
+    bribeBps: bundle.bribeBps ?? null,
+    bribeWei: bundle.bribeWei?.toString() ?? null,
+    safety: bundle.safety ?? null,
+  });
+  return ethers.id(unsigned);
 }
 
 export class ProductionBundleRouter implements BundleRouter {
@@ -146,4 +152,21 @@ export class ProductionBundleRouter implements BundleRouter {
 
     return results;
   }
+}
+
+export function createBundleRouter(input: {
+  dryRun: boolean;
+  wallet: ethers.Wallet;
+  provider: ethers.JsonRpcProvider;
+  botvmAddress: string;
+  defaultGasUsed: number;
+}): BundleRouter {
+  return input.dryRun
+    ? new DryRunBundleRouter(input.botvmAddress, input.defaultGasUsed)
+    : new ProductionBundleRouter(
+      input.wallet,
+      input.provider,
+      input.botvmAddress,
+      input.defaultGasUsed,
+    );
 }

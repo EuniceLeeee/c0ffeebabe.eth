@@ -1,4 +1,5 @@
 import {
+  createBundleRouter,
   DryRunBundleRouter,
   standingPositionSafetyReject,
   type BundleSubmission,
@@ -69,16 +70,52 @@ test("dry-run router rejects unauthorized standing-position before recording", a
   assert(router.submissions.length === 0, `unauthorized dry-run: recorded ${router.submissions.length}`);
 });
 
-test("dry-run router records normal bundles in no-wallet path", async () => {
+test("dry-run router records normal bundles with unsigned diagnostics", async () => {
   for (const [label, safety] of [
     ["authorized", { leavesStandingPosition: true, authorized: true }],
     ["absent", undefined],
   ] as const) {
     const router = new DryRunBundleRouter();
     const results = await router.submit(minimalBundle(safety));
-    assert(results.length === 0, `${label}: expected no-wallet [] result, got ${results.length}`);
+    assert(results.length === 1, `${label}: expected one diagnostic result, got ${results.length}`);
+    assert(results[0].builder === "dry-run", `${label}: builder ${results[0].builder}`);
+    assert(results[0].accepted === false, `${label}: dry-run must not report accepted`);
+    assert(results[0].error === "dry-run-unsigned", `${label}: error ${results[0].error}`);
+    assert(/^0x[0-9a-f]{64}$/.test(results[0].backrunTxHash ?? ""), `${label}: diagnostic ID`);
     assert(router.submissions.length === 1, `${label}: recorded ${router.submissions.length}`);
   }
+});
+
+test("production dry-run construction never signs or probes provider", async () => {
+  let signCalls = 0;
+  let providerCalls = 0;
+  const wallet = {
+    address: "0x0000000000000000000000000000000000000001",
+    async signTransaction() {
+      signCalls++;
+      throw new Error("dry-run must not sign");
+    },
+  };
+  const provider = new Proxy({}, {
+    get() {
+      providerCalls++;
+      throw new Error("dry-run must not probe provider");
+    },
+  });
+  const router = createBundleRouter({
+    dryRun: true,
+    wallet: wallet as never,
+    provider: provider as never,
+    botvmAddress: "0x0000000000000000000000000000000000000002",
+    defaultGasUsed: 100_000,
+  });
+  const bundle = minimalBundle();
+  const first = await router.submit(bundle);
+  const second = await router.submit(bundle);
+  assert(signCalls === 0, `dry-run sign calls ${signCalls}`);
+  assert(providerCalls === 0, `dry-run provider calls ${providerCalls}`);
+  assert(first[0].backrunTxHash === second[0].backrunTxHash, "diagnostic ID must be stable");
+  assert(first[0].error === "dry-run-unsigned", `diagnostic error ${first[0].error}`);
 });
 
 let passed = 0;

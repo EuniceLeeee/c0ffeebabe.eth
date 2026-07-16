@@ -17,7 +17,7 @@ import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refine
 import { buildExactBlockScanCurveMids } from "./detector/blockscan-curve-mids.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
-import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
+import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner, type CandidatePlan } from "./planner/planner.js";
@@ -631,19 +631,13 @@ async function main(): Promise<void> {
   // revm/hybrid backends are constructed after the routing graph is built (they
   // need it to encode the victim overlay); default to rpc until then.
   let liveBackend: LiveStateBackend = rpcLiveBackend;
-  const bundleRouter: BundleRouter = config.dryRun
-    ? new DryRunBundleRouter(
-      config.wallet,
-      provider,
-      config.botvmAddress,
-      config.defaultGasUsed,
-    )
-    : new ProductionBundleRouter(
-      config.wallet,
-      provider,
-      config.botvmAddress,
-      config.defaultGasUsed,
-    );
+  const bundleRouter: BundleRouter = createBundleRouter({
+    dryRun: config.dryRun,
+    wallet: config.wallet,
+    provider,
+    botvmAddress: config.botvmAddress,
+    defaultGasUsed: config.defaultGasUsed,
+  });
   const submissionCoordinator = new SubmissionCoordinator({
     blockscanPreemptMarginBps: Number(process.env.SEARCHER_BLOCKSCAN_PREEMPT_MARGIN_BPS ?? 0),
   });
