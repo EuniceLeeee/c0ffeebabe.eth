@@ -13,6 +13,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 import { resolveCurveIndices } from "./quoter.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
@@ -64,7 +65,7 @@ export async function buildResolvedPlanFromPath(
   const inner: ResolvedPlanNode[] = [];
   const approvedSpenders = new Set<string>(); // key = "token@spender" lowercased
 
-  function ensureApprove(token: string, spender: string): void {
+  function ensureApprove(token: string, spender: string, amount: bigint = MAX_UINT): void {
     const key = `${token.toLowerCase()}@${spender.toLowerCase()}`;
     if (approvedSpenders.has(key)) return;
     approvedSpenders.add(key);
@@ -73,8 +74,8 @@ export async function buildResolvedPlanFromPath(
       target: token,
       tokenIn: token,
       tokenOut: token,
-      amount: MAX_UINT,
-      params: { spender, amount: MAX_UINT },
+      amount,
+      params: { spender, amount },
       children: [],
     });
   }
@@ -96,6 +97,27 @@ export async function buildResolvedPlanFromPath(
     const amtIn = amounts[i];
     const amtOut = amounts[i + 1];
     const rawOut = rawOutputs?.[i];
+
+    const routeAdapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+    if (routeAdapter) {
+      const fragment = await routeAdapter.buildPlanFragment({
+        edge,
+        amountIn: amtIn,
+        amountOut: amtOut,
+        rawOut,
+        executor,
+        state,
+      });
+      for (const requirement of fragment.requirements) {
+        if (requirement.kind === "approve") {
+          ensureApprove(requirement.token, requirement.spender, requirement.amount);
+        } else {
+          transferToPool(requirement.token, requirement.pool, requirement.amount);
+        }
+      }
+      inner.push(...fragment.nodes);
+      continue;
+    }
 
     const node = await buildEdgeNode(
       edge,
@@ -532,37 +554,6 @@ async function buildEdgeNode(
       };
     }
 
-    case "univ2-swap": {
-      // UniV2: transfer tokenIn to pair, then call swap(amount0Out, amount1Out, to, data).
-      // Callback children handle the transfer.
-      const [t0, t1] = sortedPair(edge.tokenIn, edge.tokenOut);
-      const zeroForOne = edge.tokenIn.toLowerCase() === t0.toLowerCase();
-      const callbackChildren: ResolvedPlanNode[] = [
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: edge.target, amount: amtIn },
-          children: [],
-        },
-      ];
-      return {
-        adapterId: "univ2-swap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {
-          amount0Out: zeroForOne ? 0n : amtOut,
-          amount1Out: zeroForOne ? amtOut : 0n,
-          to: executor,
-        },
-        children: callbackChildren,
-      };
-    }
-
     default:
       throw new Error(`plan-builder: no handler for adapter ${edge.adapterId}`);
   }
@@ -591,10 +582,6 @@ async function uniV3PoolTokens(
   const t1 = ethers.getAddress("0x" + t1Result.slice(-40));
   univ3PoolCache.set(key, [t0, t1]);
   return [t0, t1];
-}
-
-function sortedPair(a: string, b: string): [string, string] {
-  return a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a];
 }
 
 function normalizeV4PoolKey(poolKey: NonNullable<TokenEdge["v4PoolKey"]>): NonNullable<TokenEdge["v4PoolKey"]> {

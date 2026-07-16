@@ -7,9 +7,9 @@ import {
   quoteCurveUnderlyingByIndex,
   resolveCurveUnderlyingMetadata,
 } from "../venues/curve-underlying.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quoteV4ExactInLocal } from "./v4-math.js";
-import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "./v2-fee.js";
 
 /**
  * Quoter — per-protocol amountOut estimation on the current fork state.
@@ -394,60 +394,6 @@ export async function quoteMetronomeSynthSwap(
   return BigInt(decoded[0]);
 }
 
-// ── UniV2 (constant-product) ──────────────────────────────────
-
-const univ2Iface = new ethers.Interface([
-  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-  "function factory() view returns (address)",
-  "function token0() view returns (address)",
-]);
-const univ2FeeBpsCache = new Map<string, bigint>();
-
-async function resolveUniV2FeeBps(state: StateBackend, pool: string): Promise<bigint> {
-  const key = pool.toLowerCase();
-  const cached = univ2FeeBpsCache.get(key);
-  if (cached !== undefined) return cached;
-  let feeBps = DEFAULT_V2_FEE_BPS;
-  try {
-    const raw = await state.call({
-      to: pool,
-      data: univ2Iface.encodeFunctionData("factory"),
-    });
-    const factory = univ2Iface.decodeFunctionResult("factory", raw)[0] as string;
-    feeBps = v2FeeBpsForFactory(factory);
-  } catch {
-    feeBps = DEFAULT_V2_FEE_BPS;
-  }
-  univ2FeeBpsCache.set(key, feeBps);
-  return feeBps;
-}
-
-async function quoteUniV2(
-  state: StateBackend,
-  pool: string,
-  tokenIn: string,
-  _tokenOut: string,
-  amountIn: bigint,
-): Promise<bigint> {
-  const t0Result = await state.call({
-    to: pool,
-    data: univ2Iface.encodeFunctionData("token0"),
-  });
-  const token0 = ethers.getAddress("0x" + t0Result.slice(-40));
-  const zeroForOne = tokenIn.toLowerCase() === token0.toLowerCase();
-
-  const reservesResult = await state.call({
-    to: pool,
-    data: univ2Iface.encodeFunctionData("getReserves"),
-  });
-  const decoded = univ2Iface.decodeFunctionResult("getReserves", reservesResult);
-  const [r0, r1] = [BigInt(decoded[0]), BigInt(decoded[1])];
-  const [reserveIn, reserveOut] = zeroForOne ? [r0, r1] : [r1, r0];
-  const feeBps = await resolveUniV2FeeBps(state, pool);
-
-  return quoteV2ExactInput(reserveIn, reserveOut, amountIn, feeBps);
-}
-
 // ── UniV4 (local math, V4Quoter fallback) ─────────────────────
 
 export const uniV4QuoterIface = new ethers.Interface([
@@ -781,6 +727,18 @@ export async function quote(
   v4QuoteStats?: V4QuotePathStats,
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
+  const routeAdapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(adapterId);
+  if (routeAdapter) {
+    return routeAdapter.quoteExact({
+      state,
+      target,
+      edgeAdapterId: adapterId,
+      amountIn,
+      tokenIn,
+      tokenOut,
+      cache,
+    });
+  }
   switch (adapterId) {
     case "curve-exchange":
     case "curve-exchange-nr":
@@ -809,16 +767,6 @@ export async function quote(
         }
       }
       return quoteUniV3(state, target, tokenIn, tokenOut, amountIn);
-    case "univ2-swap":
-      // Path B: prefer warmed local constant-product; fall back to on-chain reads.
-      if (cache) {
-        try {
-          return await cache.quoteV2(state, target, tokenIn, tokenOut, amountIn);
-        } catch {
-          /* fall through to eth_call */
-        }
-      }
-      return quoteUniV2(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
       // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);

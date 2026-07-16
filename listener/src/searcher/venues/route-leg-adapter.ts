@@ -1,6 +1,7 @@
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import type { ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
 
 export type SwapExecutionFamilyId =
@@ -10,7 +11,8 @@ export type SwapExecutionFamilyId =
   | "curve-plain"
   | "curve-underlying"
   | "balancer-v3"
-  | "fluid-dex";
+  | "fluid-dex"
+  | `custom-swap:${string}`;
 
 export type ProtocolExecutionFamilyId = `protocol:${string}`;
 export type CompatExecutionFamilyId = `compat:${string}`;
@@ -52,6 +54,7 @@ export interface ExactQuoteContext {
   tokenIn?: string;
   tokenOut?: string;
   edge?: TokenEdge;
+  cache?: PoolStateCache;
 }
 
 export interface RouteLegAdapter {

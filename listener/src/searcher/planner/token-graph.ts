@@ -7,6 +7,7 @@ import {
   probeCurveUnderlyingQuote,
   resolveCurveUnderlyingMetadata,
 } from "../venues/curve-underlying.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -254,9 +255,6 @@ const univ3Iface = new ethers.Interface([
   "function token0() view returns (address)",
   "function token1() view returns (address)",
 ]);
-const univ2ReservesIface = new ethers.Interface([
-  "function getReserves() view returns (uint112, uint112, uint32)",
-]);
 const metronomeSynthPoolIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
@@ -344,6 +342,9 @@ export function buildTokenIndex(edges: TokenEdge[]): Map<string, Set<string>> {
 }
 
 async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  if (PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pool.adapter)) {
+    return PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, backend);
+  }
   const adapterId = ADAPTER_MAP[pool.adapter];
   const edges: TokenEdge[] = [];
 
@@ -389,17 +390,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       const [t0, t1] = pool.token0 && pool.token1
         ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
         : await queryUniV3Tokens(backend, pool.address);
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-      );
-      break;
-    }
-    case "univ2": {
-      const [t0, t1] = pool.token0 && pool.token1
-        ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
-        : await queryUniV3Tokens(backend, pool.address);
-      await verifyUniV2Pair(backend, pool.address);
       edges.push(
         { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
         { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
@@ -656,14 +646,6 @@ async function queryUniV3Tokens(backend: TokenQueryBackend, pool: string): Promi
     ethers.getAddress("0x" + r0.slice(-40)),
     ethers.getAddress("0x" + r1.slice(-40)),
   ];
-}
-
-async function verifyUniV2Pair(backend: TokenQueryBackend, pool: string): Promise<void> {
-  const data = univ2ReservesIface.encodeFunctionData("getReserves");
-  const result = await backend.call({ to: pool, data });
-  if (!result || result === "0x" || result.length < 194) {
-    throw new Error(`${pool} failed getReserves — not a valid UniV2 pair`);
-  }
 }
 
 async function queryMetronomeSynths(backend: TokenQueryBackend, pool: string): Promise<string[]> {

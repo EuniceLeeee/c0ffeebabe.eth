@@ -22,15 +22,23 @@ export class RouteLegRegistry {
   }
 
   forPool(poolAdapter: PoolEntry["adapter"]): RouteLegAdapter {
-    const adapter = this.byPoolAdapter.get(poolAdapter);
+    const adapter = this.findForPool(poolAdapter);
     if (!adapter) throw new Error(`route-leg registry: unsupported pool adapter ${poolAdapter}`);
     return adapter;
   }
 
   forEdge(edgeAdapterId: string): RouteLegAdapter {
-    const adapter = this.byEdgeAdapter.get(edgeAdapterId);
+    const adapter = this.findForEdge(edgeAdapterId);
     if (!adapter) throw new Error(`route-leg registry: unsupported edge adapter ${edgeAdapterId}`);
     return adapter;
+  }
+
+  findForPool(poolAdapter: PoolEntry["adapter"]): RouteLegAdapter | null {
+    return this.byPoolAdapter.get(poolAdapter) ?? null;
+  }
+
+  findForEdge(edgeAdapterId: string): RouteLegAdapter | null {
+    return this.byEdgeAdapter.get(edgeAdapterId) ?? null;
   }
 
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {

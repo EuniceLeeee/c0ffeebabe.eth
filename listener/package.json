@@ -92,6 +92,7 @@
     "searcher:replay-live-fixtures": "tsx src/searcher/test/replay-live-fixtures.ts",
     "searcher:bench-topn": "tsx src/searcher/test/bench-topn-latency.ts",
     "searcher:adapter-descriptors": "node --import tsx src/searcher/test/adapter-descriptors.ts",
+    "searcher:route-adapters": "node --import tsx src/searcher/test/route-adapters.ts",
     "searcher:taxonomy": "node --import tsx src/searcher/test/taxonomy.ts",
     "searcher:universe-split": "node --import tsx src/searcher/test/universe-split.ts",
     "searcher:venue-identity": "node --import tsx src/searcher/test/venue-identity.ts",
