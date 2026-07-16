@@ -63,6 +63,7 @@
     "searcher:blockscan-contract": "node --import tsx src/searcher/test/blockscan-contract.ts",
     "searcher:blockscan-candidate-refinement": "node --import tsx src/searcher/test/blockscan-candidate-refinement.ts",
     "searcher:blockscan-scanner": "node --import tsx src/searcher/test/blockscan-scanner.ts",
+    "searcher:blockscan-warm-coordinator": "node --import tsx src/searcher/test/blockscan-warm-coordinator.ts",
     "searcher:blockscan-a0": "node --import tsx src/searcher/test/blockscan-a0-replay.ts",
     "searcher:poolcache": "tsx src/searcher/test/pool-state-cache.ts",
     "searcher:poolupdater": "tsx src/searcher/test/pool-state-updater.ts",

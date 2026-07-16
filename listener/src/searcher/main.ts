@@ -38,6 +38,13 @@ import {
 } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
+import {
+  BlockScanWarmCoordinator,
+  blockScanMutableQuoteRequests,
+  blockScanV4PoolId,
+  formatBlockScanWarmPlan,
+  type BlockScanWarmPlan,
+} from "./blockscan-warm-coordinator.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
@@ -133,59 +140,6 @@ const WSTETH = new ethers.Interface([
 const PSM = new ethers.Interface(["function tin() view returns (uint256)"]);
 const WAD = 10n ** 18n;
 const PSM_TO18 = 10n ** 12n;
-const BLOCKSCAN_V2_SYNC_TOPIC = ethers.id("Sync(uint112,uint112)");
-const BLOCKSCAN_V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
-const BLOCKSCAN_V3_MINT_TOPIC = ethers.id("Mint(address,address,int24,int24,uint128,uint256,uint256)");
-const BLOCKSCAN_V3_BURN_TOPIC = ethers.id("Burn(address,int24,int24,uint128,uint256,uint256)");
-const BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
-);
-const BLOCKSCAN_V4_SWAP_TOPIC = ethers.id(
-  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
-);
-const BLOCKSCAN_BALANCER_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
-);
-const BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC = ethers.id(
-  "ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)",
-);
-const BLOCKSCAN_CURVE_N_COINS = [2, 3, 4, 5, 6, 7, 8] as const;
-const BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS = BLOCKSCAN_CURVE_N_COINS.flatMap((n) => [
-  ethers.id(`AddLiquidity(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
-  ethers.id(`RemoveLiquidity(address,uint256[${n}],uint256[${n}],uint256)`),
-  ethers.id(`RemoveLiquidityImbalance(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
-]);
-const BLOCKSCAN_CURVE_EVENT_TOPICS = [
-  ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"),
-  ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
-  ethers.id("TokenExchangeUnderlying(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("AddLiquidity(address,uint256[],uint256[],uint256,uint256)"),
-  ethers.id("RemoveLiquidity(address,uint256[],uint256[],uint256)"),
-  ethers.id("RemoveLiquidityImbalance(address,uint256[],uint256[],uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,int128,uint256,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("RampA(uint256,uint256,uint256,uint256)"),
-  ethers.id("StopRampA(uint256,uint256)"),
-  ethers.id("ApplyNewFee(uint256,uint256)"),
-  ethers.id("NewFee(uint256,uint256)"),
-  ethers.id("SetNewMATime(uint256,uint256)"),
-  ...BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS,
-];
-const BLOCKSCAN_WARM_EVENT_TOPICS = [
-  BLOCKSCAN_V2_SYNC_TOPIC,
-  BLOCKSCAN_V3_SWAP_TOPIC,
-  BLOCKSCAN_V3_MINT_TOPIC,
-  BLOCKSCAN_V3_BURN_TOPIC,
-  BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC,
-  BLOCKSCAN_V4_SWAP_TOPIC,
-  BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC,
-  BLOCKSCAN_BALANCER_V3_SWAP_TOPIC,
-  ...BLOCKSCAN_CURVE_EVENT_TOPICS,
-];
-
 const WHALE = "0x000000000000000000000000000000000000dEaD";
 
 interface HintLog {
@@ -685,6 +639,7 @@ async function main(): Promise<void> {
   let blockScanState: AnvilStateBackend | undefined;
   let blockScanCache: PoolStateCache | undefined;
   let blockScanUpdater: PoolStateUpdater | undefined;
+  let blockScanWarmCoordinator: BlockScanWarmCoordinator | undefined;
   let blockScanPlanner: TemplatePlanner | undefined;
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
@@ -722,6 +677,12 @@ async function main(): Promise<void> {
     blockScanUpdater = new PoolStateUpdater(provider, isolatedCache, {
       maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
     });
+    blockScanWarmCoordinator = new BlockScanWarmCoordinator(
+      provider,
+      isolatedCache,
+      blockScanUpdater,
+      blockScanFullRewarmBlocks,
+    );
     blockScanPlanner = isolatedPlanner;
     blockScanSolver = new AnvilSolver();
     blockScanSimulator = new BotVMSimulator(isolatedState, config.botvmAddress, config.wallet.address);
@@ -1178,8 +1139,6 @@ async function main(): Promise<void> {
   // pool then reused across blocks — see seedBlockScanV3TickMetadata.
   const blockScanV3Meta = new Map<string, V3PoolMeta>();
   const blockScanDecimals = new Map<string, number>();
-  let blockScanLastWarmedBlock: number | null = null;
-  let blockScanLastFullWarmBlock: number | null = null;
   const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
     enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
     after: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2")),
@@ -1193,6 +1152,7 @@ async function main(): Promise<void> {
     const blockScanStateForPass = blockScanState;
     const blockScanCacheForPass = blockScanCache;
     const blockScanUpdaterForPass = blockScanUpdater;
+    const blockScanWarmCoordinatorForPass = blockScanWarmCoordinator;
     const blockScanPlannerForPass = blockScanPlanner;
     const blockScanSolverForPass = blockScanSolver;
     const blockScanSimulatorForPass = blockScanSimulator;
@@ -1202,6 +1162,7 @@ async function main(): Promise<void> {
       !blockScanStateForPass ||
       !blockScanCacheForPass ||
       !blockScanUpdaterForPass ||
+      !blockScanWarmCoordinatorForPass ||
       !blockScanPlannerForPass ||
       !blockScanSolverForPass ||
       !blockScanSimulatorForPass
@@ -1258,15 +1219,9 @@ async function main(): Promise<void> {
           try {
             await blockScanStateForPass.forkAt(blockNumber);
             blockScanCacheForPass.beginBlockScanPass(blockNumber);
-            warmPlan = await planBlockScanWarm(
-              provider,
-              blockScanCacheForPass,
-              blockScanUpdaterForPass,
+            warmPlan = await blockScanWarmCoordinatorForPass.plan(
               blockNumber,
               allHops,
-              blockScanLastWarmedBlock,
-              blockScanLastFullWarmBlock,
-              blockScanFullRewarmBlocks,
               edges,
             );
           } catch (err) {
@@ -1326,8 +1281,7 @@ async function main(): Promise<void> {
               }
             }
           }
-          blockScanLastWarmedBlock = blockNumber;
-          if (warmPlan.kind === "full") blockScanLastFullWarmBlock = blockNumber;
+          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(blockNumber, warmPlan);
           const v3TickMeta = await seedBlockScanV3TickMetadata(
             provider,
             blockScanCacheForPass,
@@ -3623,210 +3577,6 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
     }));
 }
 
-type BlockScanFullWarmReason = "startup" | "logs_error" | "reorg" | "interval" | "range";
-
-// Cap the incremental getLogs span: after a long stall (RPC outage / paused
-// passes) a chain-wide topic query over hundreds of blocks is heavier than a
-// full rewarm — just rewarm.
-const BLOCKSCAN_MAX_INCREMENTAL_RANGE_BLOCKS = 32;
-
-interface BlockScanChangedPools {
-  fromBlock: number;
-  toBlock: number;
-  logs: number;
-  hops: QuoteRequest[];
-  pools: Set<string>;
-  v4PoolIds: Set<string>;
-  curvePools: Set<string>;
-}
-
-type BlockScanWarmPlan =
-  | { kind: "full"; reason: BlockScanFullWarmReason; error?: string }
-  | { kind: "incremental"; changed: BlockScanChangedPools };
-
-async function planBlockScanWarm(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  updater: PoolStateUpdater,
-  blockNumber: number,
-  hops: QuoteRequest[],
-  lastWarmedBlock: number | null,
-  lastFullWarmBlock: number | null,
-  fullRewarmBlocks: number,
-  edges: TokenEdge[],
-): Promise<BlockScanWarmPlan> {
-  if (lastWarmedBlock === null) return { kind: "full", reason: "startup" };
-  if (blockNumber <= lastWarmedBlock) return { kind: "full", reason: "reorg" };
-  if (blockNumber - lastWarmedBlock > BLOCKSCAN_MAX_INCREMENTAL_RANGE_BLOCKS) {
-    return { kind: "full", reason: "range" };
-  }
-  if (
-    lastFullWarmBlock !== null &&
-    blockNumber - lastFullWarmBlock >= fullRewarmBlocks
-  ) {
-    return { kind: "full", reason: "interval" };
-  }
-
-  try {
-    const changed = await detectBlockScanChangedPools(
-      provider,
-      cache,
-      updater,
-      lastWarmedBlock + 1,
-      blockNumber,
-      hops,
-      uniqueBlockScanCurvePools(edges),
-    );
-    return { kind: "incremental", changed };
-  } catch (err) {
-    return {
-      kind: "full",
-      reason: "logs_error",
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-async function detectBlockScanChangedPools(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  updater: PoolStateUpdater,
-  fromBlock: number,
-  toBlock: number,
-  hops: QuoteRequest[],
-  curvePoolEdges: TokenEdge[],
-): Promise<BlockScanChangedPools> {
-  const mutableHops = blockScanMutableQuoteRequests(hops);
-  const byAddress = new Map<string, QuoteRequest[]>();
-  const byV4PoolId = new Map<string, QuoteRequest[]>();
-  for (const hop of mutableHops) {
-    const poolId = blockScanV4PoolId(hop);
-    if (poolId) {
-      const existing = byV4PoolId.get(poolId);
-      if (existing) existing.push(hop);
-      else byV4PoolId.set(poolId, [hop]);
-      continue;
-    }
-    const key = hop.target.toLowerCase();
-    const existing = byAddress.get(key);
-    if (existing) existing.push(hop);
-    else byAddress.set(key, [hop]);
-  }
-  const curvePoolKeys = new Set(curvePoolEdges.map((edge) => edge.target.toLowerCase()));
-
-  const logs = await provider.getLogs({
-    fromBlock,
-    toBlock,
-    topics: [BLOCKSCAN_WARM_EVENT_TOPICS],
-  });
-
-  const changedKeys = new Set<string>();
-  const changedPools = new Set<string>();
-  const changedV4PoolIds = new Set<string>();
-  const changedCurvePools = new Set<string>();
-  const markChanged = (hop: QuoteRequest): void => {
-    const pool = hop.target.toLowerCase();
-    changedPools.add(pool);
-    for (const candidate of byAddress.get(pool) ?? [hop]) {
-      changedKeys.add(blockScanWarmKey(candidate));
-    }
-  };
-
-  for (const log of logs) {
-    const pool = log.address.toLowerCase();
-    const topic0 = log.topics[0]?.toLowerCase();
-    if (
-      pool === ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase() &&
-      (topic0 === BLOCKSCAN_V4_SWAP_TOPIC || topic0 === BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC)
-    ) {
-      const poolId = log.topics[1]?.toLowerCase();
-      if (poolId) {
-        changedV4PoolIds.add(poolId);
-        for (const hop of byV4PoolId.get(poolId) ?? []) markChanged(hop);
-      }
-    }
-    if (
-      pool === ADDR.BALANCER_V3_VAULT.toLowerCase() &&
-      topic0 === BLOCKSCAN_BALANCER_V3_SWAP_TOPIC
-    ) {
-      const indexedPool = log.topics[1];
-      if (indexedPool) {
-        try {
-          changedPools.add(ethers.getAddress(`0x${indexedPool.slice(-40)}`).toLowerCase());
-        } catch { /* malformed indexed pool */ }
-      }
-    }
-    const poolHops = byAddress.get(pool);
-    if (poolHops) {
-      for (const hop of poolHops) markChanged(hop);
-    }
-    if (curvePoolKeys.has(pool)) changedCurvePools.add(pool);
-  }
-
-  for (const hop of mutableHops) {
-    if (!blockScanHasWarmState(cache, updater, hop)) markChanged(hop);
-  }
-  for (const edge of curvePoolEdges) {
-    const pool = edge.target.toLowerCase();
-    // NG stored_rates can refresh by timer without a pool log, so they are never event-incremental.
-    if (!cache.hasCurve(pool) || cache.curveKind(pool) === "ng") changedCurvePools.add(pool);
-  }
-
-  return {
-    fromBlock,
-    toBlock,
-    logs: logs.length,
-    hops: mutableHops.filter((hop) => changedKeys.has(blockScanWarmKey(hop))),
-    pools: changedPools,
-    v4PoolIds: changedV4PoolIds,
-    curvePools: changedCurvePools,
-  };
-}
-
-function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
-  const seen = new Set<string>();
-  const out: QuoteRequest[] = [];
-  for (const hop of hops) {
-    if (
-      hop.adapterId !== "univ2-swap" &&
-      hop.adapterId !== "univ3-swap" &&
-      hop.adapterId !== "univ4-unlock"
-    ) continue;
-    const key = blockScanWarmKey(hop);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(hop);
-  }
-  return out;
-}
-
-function blockScanWarmKey(hop: QuoteRequest): string {
-  return `${hop.adapterId}:${blockScanV4PoolId(hop) ?? hop.target.toLowerCase()}`;
-}
-
-function blockScanHasWarmState(
-  cache: PoolStateCache,
-  updater: PoolStateUpdater,
-  hop: QuoteRequest,
-): boolean {
-  if (hop.adapterId === "univ2-swap") {
-    return cache.hasV2(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
-  }
-  if (hop.adapterId === "univ3-swap") {
-    return cache.hasV3Live(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
-  }
-  if (hop.adapterId === "univ4-unlock") {
-    const poolId = blockScanV4PoolId(hop);
-    return poolId !== null && cache.hasV4(poolId);
-  }
-  return true;
-}
-
-function blockScanV4PoolId(hop: QuoteRequest): string | null {
-  if (hop.adapterId !== "univ4-unlock" || !hop.v4PoolKey) return null;
-  return v4PoolId(hop.v4PoolKey).toLowerCase();
-}
-
 async function warmBlockScanV2V3(
   updater: PoolStateUpdater,
   blockNumber: number,
@@ -4044,17 +3794,6 @@ function formatCurveSnapshot(seed: CurveSnapshot): string {
     ].join("/");
   }
   return `${seed.kind}/coins=${seed.coins.join(",")}/missing-state`;
-}
-
-function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
-  if (plan.kind === "full") {
-    const suffix = plan.error ? ` error=${blockScanErrorMessage(plan.error)}` : "";
-    return `warm=full reason=${plan.reason}${suffix}`;
-  }
-  return `warm=incremental changed=${plan.changed.pools.size} ` +
-    `changedV4=${plan.changed.v4PoolIds.size} ` +
-    `changedCurve=${plan.changed.curvePools.size} ` +
-    `range=${plan.changed.fromBlock}-${plan.changed.toBlock} logs=${plan.changed.logs}`;
 }
 
 type BlockScanProtocolAdapter =
