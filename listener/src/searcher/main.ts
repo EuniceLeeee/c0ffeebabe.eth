@@ -106,7 +106,7 @@ import {
 } from "./live-fixture-recorder.js";
 import { parseLiveBackendKind, type LiveBackendKind } from "./live-state-backend.js";
 import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
-import { validateLiveEnvelope } from "./live-envelope.js";
+import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
 import { RevmSimClient } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
@@ -527,7 +527,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
     maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
-    bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? "10000"),
+    bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
     bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
     ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
     evGate: process.env.SEARCHER_EV_GATE === "1",
@@ -556,6 +556,8 @@ async function main(): Promise<void> {
     {
       dryRun: config.dryRun,
       evGate: config.evGate,
+      bribeBps: config.bribeBps,
+      bribeAllAboveGas: config.bribeAllAboveGas,
       walletAddress: config.wallet.address,
       botvmAddress: config.botvmAddress,
       configuredBotvmOwner: process.env.BOTVM_OWNER,

@@ -1,4 +1,8 @@
-import { validateLiveEnvelope, type LiveEnvelopeInput } from "../live-envelope.js";
+import {
+  DEFAULT_BRIBE_BPS,
+  validateLiveEnvelope,
+  type LiveEnvelopeInput,
+} from "../live-envelope.js";
 
 const WALLET = "0x0000000000000000000000000000000000000001";
 const BOTVM = "0x0000000000000000000000000000000000000002";
@@ -29,6 +33,8 @@ async function expectReject(
 const live: LiveEnvelopeInput = {
   dryRun: false,
   evGate: true,
+  bribeBps: DEFAULT_BRIBE_BPS,
+  bribeAllAboveGas: false,
   walletAddress: WALLET,
   botvmAddress: BOTVM,
   configuredBotvmOwner: WALLET,
@@ -40,6 +46,12 @@ await validateLiveEnvelope(live, {
   botvmOwner: async () => WALLET,
 });
 await expectReject({ ...live, evGate: false }, "SEARCHER_EV_GATE=1");
+await expectReject({ ...live, bribeBps: 10_000 }, "retain positive EV");
+await expectReject({ ...live, bribeBps: 10_001 }, "between 0 and 10000");
+await validateLiveEnvelope({ ...live, bribeBps: 10_000, bribeAllAboveGas: true }, {
+  walletBalance: async () => 1n,
+  botvmOwner: async () => WALLET,
+});
 await expectReject({ ...live, configuredBotvmOwner: undefined }, "BOTVM_OWNER");
 await expectReject({ ...live, configuredBotvmOwner: OTHER }, "does not match BOTVM_OWNER");
 await expectReject({ ...live, maxWalletEth: "0.200000000000000001" }, "no greater than 0.2 ETH");
@@ -51,4 +63,4 @@ await validateLiveEnvelope({ ...live, dryRun: true, evGate: false }, {
   botvmOwner: async () => { throw new Error("dry-run must not probe owner"); },
 });
 
-console.log("live-envelope PASS (8/8)");
+console.log("live-envelope PASS (11/11)");
