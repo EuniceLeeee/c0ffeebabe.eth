@@ -26,7 +26,9 @@ LOCAL_RPC=http://127.0.0.1:8545
 # enough for warmup + the full window + close; stale/crashed slots are still reaped automatically.
 LEASE_SECONDS=${AB_LEASE_SECONDS:-5400}
 PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
-FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-240}
+# The 20k production universe can need several dual-lane blocks before one uncensored pass gets CPU.
+# Keep readiness mandatory, but give the cold start enough wall-clock time to prove it.
+FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-1200}
 MEMPOOL_READY_TIMEOUT_SECONDS=${AB_MEMPOOL_READY_TIMEOUT_SECONDS:-60}
 
 mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe" "$ROOT/candidate"
@@ -74,8 +76,8 @@ valid_report_path() {
 }
 [ "$LEASE_SECONDS" -ge 300 ] && [ "$LEASE_SECONDS" -le 7200 ] || die "AB_LEASE_SECONDS must be 300..7200"
 [ "$PAUSE_LEASE_SECONDS" -ge 60 ] && [ "$PAUSE_LEASE_SECONDS" -le 1800 ] || die "AB_PAUSE_LEASE_SECONDS must be 60..1800"
-[ "$FIRST_SCAN_TIMEOUT_SECONDS" -ge 90 ] && [ "$FIRST_SCAN_TIMEOUT_SECONDS" -le 600 ] \
-  || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..600"
+[ "$FIRST_SCAN_TIMEOUT_SECONDS" -ge 90 ] && [ "$FIRST_SCAN_TIMEOUT_SECONDS" -le 1200 ] \
+  || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..1200"
 [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -ge 5 ] && [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -le 120 ] \
   || die "AB_MEMPOOL_READY_TIMEOUT_SECONDS must be 5..120"
 
