@@ -106,3 +106,31 @@ Therefore the architecture and local approximate-95% performance checks are comp
 3. R1 是硬门:在拿到这个逐-wei 结果前,`implemented_not_validated` 成立,但理由应更正为"本地等价回放未跑",而非"trusted A/B 限制"。
 
 诚实性认可(未部署、未绕门);但**验证深度不足**:性能保持率 + edge counts 替代不了等价重构的逐-wei 断言。
+
+---
+
+## 逐-wei 等价核对 — 可执行人工 checklist(节点数据)
+
+总纲:**同块 + 同 universe/graph 种子 + 同 warm 状态**喂 A(baseline 4392ffc)与 B(冻结 SHA),B 用 `SEARCHER_DRY_RUN=1`(不广播、不占 bounded-live、不需第二个 funded wallet)。逐块 diff;**比集合/字节/wei,不比计数**;第一个出现 diff 的块 + 阶段 = bug 落点。延迟/CPU/内存不算(另一条 95% 性能轴)。
+
+### 前置(2 个小改,否则阶段1/3 核不了)
+1. **dumpRuntimeGraphPools 加 edge 级安全位**:当前 dump 是 pool 级(address/adapter/venueId/factory/poolId…),**不含 `edgeKind`/`leavesStandingPosition`**。核 H7 安全位需给 dump 增这两字段(或以 standing-guard 的 `edge_taxonomy_inconsistent` 日志代替 —— 一旦触发即安全位不一致)。
+2. **确认被丢弃 ring 的 net 日志足够**:进 sim 的 ring 靠阶段4 calldata 核;**没进 sim 就丢弃的 ring** 靠 `[searcher/blockscan] solve ring=X net=... / error=no_plans` 日志核其 net/quoteProfit。
+
+### 逐阶段(dump 源 + diff 方法 + 精度)
+
+| 阶段 | dump 源 | diff | 精度 |
+|---|---|---|---|
+| **1 图** | `runtime-graph-pools.json`(+前置1的 edgeKind/leavesStandingPosition) | pool 集合逐元素 `(address,adapter,venueId,factory,poolId)` 一一对应;每边 edgeKind/leavesStandingPosition 相同 | 集合精确,不是数量 |
+| **2 枚举 rings** | `[searcher/blockscan] block=X solve ring=Y` 日志 | 每块 ring 集合逐个比(ring 身份=`path_id`/`resolvedRouteSummary`) | 集合精确 |
+| **3 报价/solve** | 进 sim 的→阶段4吸收;未进 sim 的→`solve ring=X net=...` 日志 | 未进 sim 的 ring 逐个比 net/quoteProfit;进 sim 的 per-hop 金额由阶段4 calldata 保证 | 逐 wei |
+| **4 sim** | 结构化输出 `{calldata, profitToken, netProfit, gasUsed}` | 进 final-sim 的 ring 集合相同;每 ring calldata **字节相同**、success/revert 相同、netProfit/gasUsed 逐 wei | 字节 + 逐 wei |
+| **5 EV/提交决策** | drop reason 日志(`error=no_plans`/blacklist skip/below_ev)+ quotePositive | 每 ring allow/reject 判定+reason 相同;过 EV 门"会提交"集合相同 | 精确 |
+
+**"进 top-N/进 sim 的 ring 集合"必须相同**(非时间问题):重构改了 edge 对象形状可能影响排序 tie-break,分数相等时选中不同 ring = 真回归。
+
+### 允许 diff 的两条路径(R2/R3,须预声明,否则误判回归)
+1. **standing-guard**(R2):新增 `edge_taxonomy_inconsistent` 拒绝路径。正确边上**不应触发** —— 若触发是真 bug(某 adapter taxonomy 派生错),**不是**预期差异。
+2. **curve-underlying victim**(R3/§19):新覆盖了以前没有的 victim。仅 **backrun lane** 的 curve-underlying ring 集合会合法多出;block-scan lane 不受影响。
+
+**除这两条外,阶段 1–5 全部逐元素/逐字节/逐 wei 相同,才判等价通过。** 有 diff 落在这两条外 = 回归,不合。
