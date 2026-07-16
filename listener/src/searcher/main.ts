@@ -60,6 +60,7 @@ import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
 import {
   metronomeSynthPoolIface,
+  quoteBalancerV3,
   quoteCurveUnderlying,
   quoteFluidDex,
   quoteGoldxMint,
@@ -122,6 +123,7 @@ const ERC4626 = new ethers.Interface([
   "function previewDeposit(uint256 assets) view returns (uint256 shares)",
   "function previewRedeem(uint256 shares) view returns (uint256 assets)",
   "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
+  "function convertToShares(uint256 assets) view returns (uint256 shares)",
 ]);
 const WSTETH = new ethers.Interface([
   "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
@@ -139,6 +141,9 @@ const BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC = ethers.id(
 );
 const BLOCKSCAN_V4_SWAP_TOPIC = ethers.id(
   "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
+);
+const BLOCKSCAN_BALANCER_V3_SWAP_TOPIC = ethers.id(
+  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
 );
 const BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC = ethers.id(
   "ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)",
@@ -176,6 +181,7 @@ const BLOCKSCAN_WARM_EVENT_TOPICS = [
   BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC,
   BLOCKSCAN_V4_SWAP_TOPIC,
   BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC,
+  BLOCKSCAN_BALANCER_V3_SWAP_TOPIC,
   ...BLOCKSCAN_CURVE_EVENT_TOPICS,
 ];
 
@@ -3744,6 +3750,17 @@ async function detectBlockScanChangedPools(
         for (const hop of byV4PoolId.get(poolId) ?? []) markChanged(hop);
       }
     }
+    if (
+      pool === ADDR.BALANCER_V3_VAULT.toLowerCase() &&
+      topic0 === BLOCKSCAN_BALANCER_V3_SWAP_TOPIC
+    ) {
+      const indexedPool = log.topics[1];
+      if (indexedPool) {
+        try {
+          changedPools.add(ethers.getAddress(`0x${indexedPool.slice(-40)}`).toLowerCase());
+        } catch { /* malformed indexed pool */ }
+      }
+    }
     const poolHops = byAddress.get(pool);
     if (poolHops) {
       for (const hop of poolHops) markChanged(hop);
@@ -4049,6 +4066,7 @@ type BlockScanProtocolAdapter =
   | "erc4626-deposit"
   | "erc4626-redeem"
   | "erc4626-redeem-silo"
+  | "rocksolid-sync-deposit"
   | "wsteth-wrap"
   | "wsteth-unwrap"
   | "metronome-synth-swap"
@@ -4155,7 +4173,8 @@ async function buildBlockScanProtocolMids(
 function isBlockScanExternallyQuotedSwap(edge: TokenEdge): boolean {
   return edge.slotKind === "swap" && (
     edge.adapterId === "fluid-dex-swap" ||
-    edge.adapterId === "curve-exchange-underlying"
+    edge.adapterId === "curve-exchange-underlying" ||
+    edge.adapterId === "balancer-v3-unlock"
   );
 }
 
@@ -4174,6 +4193,8 @@ function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | n
       return "erc4626-redeem";
     case "erc4626-redeem-silo":
       return "erc4626-redeem-silo";
+    case "rocksolid-sync-deposit":
+      return "rocksolid-sync-deposit";
     case "wsteth-wrap":
       return "wsteth-wrap";
     case "wsteth-unwrap":
@@ -4237,6 +4258,17 @@ async function readBlockScanProtocolMid(
         ERC4626.encodeFunctionData("previewWithdraw", [value]),
         ERC4626,
         "previewWithdraw",
+      );
+      return Number(out) / Number(oneIn);
+    }
+    case "rocksolid-sync-deposit": {
+      const out = await blockScanCallUint(
+        provider,
+        blockNumber,
+        edge.target,
+        ERC4626.encodeFunctionData("convertToShares", [oneIn]),
+        ERC4626,
+        "convertToShares",
       );
       return Number(out) / Number(oneIn);
     }
@@ -4311,9 +4343,13 @@ async function readBlockScanExternalSwapMid(
   edge: TokenEdge,
   oneIn: bigint,
 ): Promise<number> {
-  const out = edge.adapterId === "curve-exchange-underlying"
-    ? await quoteCurveUnderlying(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn)
-    : await quoteFluidDex(
+  let out: bigint;
+  if (edge.adapterId === "curve-exchange-underlying") {
+    out = await quoteCurveUnderlying(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn);
+  } else if (edge.adapterId === "balancer-v3-unlock") {
+    out = await quoteBalancerV3(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn);
+  } else {
+    out = await quoteFluidDex(
         state,
         edge.target,
         edge.tokenIn,
@@ -4322,6 +4358,7 @@ async function readBlockScanExternalSwapMid(
         edge.poolToken0,
         edge.poolToken1,
       );
+  }
   return Number(out) / Number(oneIn);
 }
 
@@ -5135,6 +5172,7 @@ export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean)
     pool.adapter !== "wsteth" &&
     pool.adapter !== "erc4626" &&
     pool.adapter !== "goldx" &&
+    pool.adapter !== "rocksolid" &&
     pool.adapter !== "metronome-synth" &&
     pool.adapter !== "metronome-hgusdc"
   );

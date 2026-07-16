@@ -32,8 +32,20 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
+import {
+  detectBlockScanOpportunities,
+  type ProtocolMid,
+} from "../detector/blockscan-scanner.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
+import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { filterLiveProtocolRegistry } from "../main.js";
+import { loadPinnedWarmPools } from "../pinned-warm-pools.js";
 import { TemplatePlanner } from "../planner/planner.js";
+import {
+  loadPoolUniverse,
+  loadPoolUniverseGeneratedAt,
+  poolRegistryKey,
+} from "../pool-universe.js";
 import {
   buildTokenGraph,
   POOL_REGISTRY,
@@ -47,8 +59,11 @@ import {
 import { attestPoolIdentities } from "../venues/identity.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
+import { PoolStateCache } from "../solver/pool-state-cache.js";
+import { quoteBalancerV3, quoteProtocolLeg } from "../solver/quoter.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { deriveEdgeTaxonomy, pathLeavesStandingPosition } from "../strategy-taxonomy.js";
+import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
 const FIXTURE_URL = new URL("./fixtures/blockscan-coffee-f2de7499.json", import.meta.url);
@@ -70,6 +85,8 @@ const LEG_KIND_TO_ADAPTER: Record<string, PoolEntry["adapter"] | undefined> = {
   univ4: "univ4",
   curve: "curve",
   erc4626: "erc4626",
+  rocksolid: "rocksolid",
+  "balancer-v3": "balancer-v3",
   "balancer-v1": undefined,
 };
 
@@ -124,7 +141,7 @@ interface CoffeeFixture {
 /** A leg as emitted by extract-loop-fixture.ts (superset of the hand-authored shapes). */
 interface ExtractedLeg {
   seq: number;
-  kind: "univ2" | "univ3" | "univ4" | "curve" | "balancer-v1" | "erc4626";
+  kind: "univ2" | "univ3" | "univ4" | "curve" | "balancer-v1" | "erc4626" | "rocksolid" | "balancer-v3";
   poolId?: string;
   poolKey?: { recovered?: boolean } & Partial<FixtureV4PoolKey>;
   address?: string;
@@ -149,6 +166,8 @@ interface ExtractedFixture {
   executionBlock: number;
   sourceBlock: number;
   txIndex: number;
+  /** Optional exact in-block predecessor used to fork immediately before the competitor. */
+  forkAfterTx?: string;
   flash: { venue: string; token: string; amount: string; fee: string };
   loopToken: string;
   legs: ExtractedLeg[];
@@ -327,16 +346,21 @@ async function runDefaultF2de7499Gate(): Promise<void> {
 
 interface LoopGateArgs {
   fixturePaths: string[];
+  productionUniversePath?: string;
 }
 
 /** Resolve --fixture <path> / SEARCHER_LOOP_FIXTURE_DIR into a concrete list of fixture files. */
 function resolveLoopFixtures(): LoopGateArgs | null {
   const argv = process.argv.slice(2);
   const fixtureArgs: string[] = [];
+  let productionUniversePath: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--fixture") {
       const p = argv[++i];
       if (p) fixtureArgs.push(p);
+    } else if (argv[i] === "--production-universe") {
+      const p = argv[++i];
+      if (p) productionUniversePath = resolve(p);
     }
   }
   const dir = process.env.SEARCHER_LOOP_FIXTURE_DIR;
@@ -352,7 +376,7 @@ function resolveLoopFixtures(): LoopGateArgs | null {
     }
   }
   if (paths.length === 0) return null;
-  return { fixturePaths: paths };
+  return { fixturePaths: paths, productionUniversePath };
 }
 
 function loadExtractedFixture(path: string): ExtractedFixture {
@@ -383,6 +407,11 @@ function poolEntryForLeg(leg: ExtractedLeg, adapter: PoolEntry["adapter"]): Pool
     const isRedeem = leg.tokenIn && leg.tokenIn.toLowerCase() === address.toLowerCase();
     const asset = isRedeem ? leg.tokenOut : leg.tokenIn;
     if (asset) entry.fixedTokenIn = ethers.getAddress(asset);
+  }
+  if (adapter === "rocksolid") {
+    if (leg.tokenIn) entry.fixedTokenIn = ethers.getAddress(leg.tokenIn);
+    entry.fixedSlotKind = "protocol";
+    entry.fixedProtocolAction = "wrap";
   }
   return entry;
 }
@@ -477,6 +506,7 @@ async function assertEdgesInGraph(
 async function assertClosedLoopExecutes(
   fixture: ExtractedFixture,
   state: AnvilStateBackend,
+  productionUniversePath?: string,
 ): Promise<void> {
   // Every loop leg must be adapter-backed; if not, seed-building fails clearly before any execution.
   await check("Assertion B: every loop leg is encodable via its venue adapter", () => {
@@ -556,7 +586,22 @@ async function assertClosedLoopExecutes(
   const withSolver =
     process.env.SEARCHER_LOOP_GATE_SOLVER === "1" || process.argv.slice(2).includes("--with-solver");
   if (withSolver) {
-    const opp = buildExtractedOpportunity(fixture, seedEdges);
+    const detected = fixture.legs.some((leg) => leg.kind === "rocksolid") &&
+      fixture.legs.some((leg) => leg.kind === "balancer-v3")
+      ? await detectRocksolidBalancerV3Opportunity(
+          fixture,
+          seedEdges,
+          state,
+          productionUniversePath,
+        )
+      : null;
+    if (detected) {
+      await check("Assertion C: production scanner admits the repeated-token low-spread ring", () =>
+        detected.seedEdges.map((edge) => edge.adapterId).join(",") ===
+          seedEdges.map((edge) => edge.adapterId).join(","),
+      );
+    }
+    const opp = detected ?? buildExtractedOpportunity(fixture, seedEdges);
     const planner = new TemplatePlanner();
     planner.setGraph(seedEdges);
     const plans = await planner.planBlockScanFromSeedEdges(opp, [FLASH_SWAP_REPAY]);
@@ -569,7 +614,9 @@ async function assertClosedLoopExecutes(
         finalSimTopN: 3,
         gssMaxTries: 8,
         quoteProfitFloorBps: 0n,
-        quoteSafetyBps: 9999n,
+        // Block-scan production intentionally quotes exact amounts, then runs the
+        // terminal BotVM simulation before submission (main.ts solvePlanned).
+        quoteSafetyBps: 10000n,
       });
     } catch (err) {
       solveError = err instanceof Error ? err.message : String(err);
@@ -583,6 +630,162 @@ async function assertClosedLoopExecutes(
       solved !== null && solved.netProfit >= floor,
     );
   }
+}
+
+async function detectRocksolidBalancerV3Opportunity(
+  fixture: ExtractedFixture,
+  expectedEdges: TokenEdge[],
+  state: AnvilStateBackend,
+  productionUniversePath?: string,
+): Promise<BlockScanOpportunity | null> {
+  const blockNumber = fixture.executionBlock;
+  const cache = new PoolStateCache();
+  let edges = expectedEdges;
+  if (productionUniversePath) {
+    const universeTopN = Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "6000");
+    const blockscanViewMaxPools = Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? "6000");
+    const liveRegistry = filterLiveProtocolRegistry(POOL_REGISTRY, true);
+    await check("Assertion C: production protocol admission includes RockSolid", () =>
+      liveRegistry.some((pool) => pool.adapter === "rocksolid"),
+    );
+
+    const rawUniverse = loadPoolUniverse(productionUniversePath, { maxPools: 0, minScore: 0 });
+    const rawTopUniverse = loadPoolUniverse(productionUniversePath, {
+      maxPools: universeTopN,
+      minScore: 0,
+    });
+    const rawPinned = loadPinnedWarmPools();
+    const [universeIdentity, pinnedIdentity] = await Promise.all([
+      attestPoolIdentities(state.provider, rawUniverse, { seedEntries: liveRegistry }),
+      attestPoolIdentities(state.provider, rawPinned, { seedEntries: liveRegistry }),
+    ]);
+    const topUniverseKeys = new Set(rawTopUniverse.map(poolRegistryKey));
+    const topUniverse = universeIdentity.accepted.filter((pool) =>
+      topUniverseKeys.has(poolRegistryKey(pool)),
+    );
+    const basePools = mergePoolRegistries(
+      mergePoolRegistries(liveRegistry, pinnedIdentity.accepted),
+      topUniverse,
+    );
+    const strategyViews = buildStrategyViews(basePools, universeIdentity.accepted, [], {
+      blockscanMaxPools: blockscanViewMaxPools,
+      poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(productionUniversePath),
+    });
+    const backend: TokenQueryBackend = {
+      call: (req) => state.call(req),
+      getLogs: (req) => state.provider.send("eth_getLogs", [req]),
+    };
+    edges = await buildTokenGraph(backend, strategyViews.blockscan);
+    console.log(
+      `[blockscan-fork-solve] Assertion C production universe: ` +
+        `raw=${rawUniverse.length} accepted=${universeIdentity.accepted.length} ` +
+        `rejected=${universeIdentity.rejected.length} view=${strategyViews.blockscan.length} ` +
+        `edges=${edges.length} graphHash=${hashTokenGraph(edges)} path=${productionUniversePath}`,
+    );
+    await check("Assertion C: full production graph contains every expected route edge", () =>
+      expectedEdges.every((expected) => edges.some((edge) => sameRouteEdge(edge, expected))),
+    );
+  }
+  const v3Iface = new ethers.Interface([
+    "function token0() view returns (address)",
+    "function token1() view returns (address)",
+    "function fee() view returns (uint24)",
+    "function tickSpacing() view returns (int24)",
+    "function liquidity() view returns (uint128)",
+    "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  ]);
+  const v3Pools = [...new Set(
+    expectedEdges
+      .filter((edge) => edge.adapterId === "univ3-swap")
+      .map((edge) => edge.target.toLowerCase()),
+  )];
+  for (const pool of v3Pools) {
+    const call = async (fn: string): Promise<ethers.Result> => {
+      const raw = await state.call({ to: pool, data: v3Iface.encodeFunctionData(fn) });
+      return v3Iface.decodeFunctionResult(fn, raw);
+    };
+    const [token0, token1, fee, tickSpacing, liquidity, slot0] = await Promise.all([
+      call("token0"),
+      call("token1"),
+      call("fee"),
+      call("tickSpacing"),
+      call("liquidity"),
+      call("slot0"),
+    ]);
+    cache.seedV3Ticks({
+      pool,
+      token0: String(token0[0]),
+      token1: String(token1[0]),
+      fee: BigInt(fee[0]),
+      tickSpacing: Number(tickSpacing[0]),
+      tickBitmap: new Map(),
+      ticks: new Map(),
+      blockNumber,
+    });
+    cache.seedV3Live({
+      pool,
+      sqrtPriceX96: BigInt(slot0[0]),
+      tick: Number(slot0[1]),
+      liquidity: BigInt(liquidity[0]),
+      blockNumber,
+    });
+  }
+
+  const protocolMids = new Map<string, ProtocolMid>();
+  for (let i = 0; i < expectedEdges.length; i++) {
+    const edge = expectedEdges[i];
+    if (edge.adapterId !== "rocksolid-sync-deposit" && edge.adapterId !== "balancer-v3-unlock") {
+      continue;
+    }
+    const amountIn = BigInt(fixture.legs[i].realized.amountIn);
+    const amountOut = edge.adapterId === "rocksolid-sync-deposit"
+      ? await quoteProtocolLeg(state, edge.target, edge.adapterId, amountIn)
+      : await quoteBalancerV3(state, edge.target, edge.tokenIn, edge.tokenOut, amountIn);
+    protocolMids.set(
+      `${edge.target.toLowerCase()}|${edge.tokenIn.toLowerCase()}|${edge.tokenOut.toLowerCase()}`,
+      {
+        mid: Number(amountOut) / Number(amountIn),
+        feeBps: 0,
+        depthIn: amountIn * 10n,
+      },
+    );
+  }
+
+  const flashToken = ethers.getAddress(fixture.flash.token).toLowerCase();
+  const pricedTokens = productionUniversePath
+    ? new Map([
+        [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
+        [ADDR.USDC.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
+        [ADDR.USDT.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
+        [ADDR.DAI.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 18n }],
+      ])
+    : new Map([[flashToken, { maxBorrow: BigInt(fixture.flash.amount) * 2n }]]);
+  const scan = detectBlockScanOpportunities({
+    edges,
+    cache,
+    sourceBlock: blockNumber,
+    swapTouched: null,
+    cfg: {
+      maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
+      minSpreadBps: Number(process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "0"),
+      maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "8"),
+      budgetMs: Number(process.env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
+      pricedTokens,
+      protocolMids,
+    },
+  });
+  return scan.opportunities.find(
+    (opp) =>
+      opp.seedEdges.length === expectedEdges.length &&
+      opp.seedEdges.every((edge, index) => sameRouteEdge(edge, expectedEdges[index])),
+  ) ?? null;
+}
+
+function sameRouteEdge(a: TokenEdge, b: TokenEdge): boolean {
+  return a.adapterId === b.adapterId &&
+    a.target.toLowerCase() === b.target.toLowerCase() &&
+    a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
+    a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase();
 }
 
 /** Map the fixture's flash venue to the plan-builder's flash adapter id. */
@@ -660,6 +863,27 @@ function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
         slotKind: "protocol",
         protocolAction: isRedeem ? "redeem" : "wrap",
         ...deriveEdgeTaxonomy("protocol", isRedeem ? "redeem" : "wrap"),
+        score: 100,
+      });
+    } else if (leg.kind === "rocksolid") {
+      edges.push({
+        adapterId: "rocksolid-sync-deposit",
+        target: ethers.getAddress(leg.vault ?? leg.address!),
+        tokenIn,
+        tokenOut,
+        slotKind: "protocol",
+        protocolAction: "wrap",
+        ...deriveEdgeTaxonomy("protocol", "wrap"),
+        score: 100,
+      });
+    } else if (leg.kind === "balancer-v3") {
+      edges.push({
+        adapterId: "balancer-v3-unlock",
+        target: ethers.getAddress(leg.pool ?? leg.address!),
+        tokenIn,
+        tokenOut,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
         score: 100,
       });
     } else {
@@ -769,10 +993,10 @@ async function runLoopForkGate(args: LoopGateArgs): Promise<void> {
       };
       await assertEdgesInGraph(fixture, graphBackend);
 
-      // Fork AFTER the competitor tx so its own state is applied, then run Assertion B.
-      console.log(`[blockscan-fork-solve] forkAfterTx ${fixture.txHash} anvil=${ANVIL_URL}`);
-      await state.forkAfterTx(fixture.txHash);
-      await assertClosedLoopExecutes(fixture, state);
+      const forkAfterTx = fixture.forkAfterTx ?? fixture.txHash;
+      console.log(`[blockscan-fork-solve] forkAfterTx ${forkAfterTx} anvil=${ANVIL_URL}`);
+      await state.forkAfterTx(forkAfterTx);
+      await assertClosedLoopExecutes(fixture, state, args.productionUniversePath);
     } finally {
       state.stop();
       upstream.destroy();

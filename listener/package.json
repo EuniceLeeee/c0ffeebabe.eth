@@ -23,6 +23,8 @@
     "route-gap-watcher": "node --import tsx src/searcher/route-gap-watcher.ts",
     "searcher:pooluniverse": "tsx src/searcher/test/pool-universe.ts",
     "searcher:pooluniversev4": "tsx src/searcher/test/build-active-pool-universe-v4.ts",
+    "searcher:pooluniverse-balancer-v3": "tsx src/searcher/test/build-active-pool-universe-balancer-v3.ts",
+    "searcher:balancer-v3": "node --import tsx src/searcher/test/balancer-v3.ts",
     "searcher:auto-close-route-gap": "node --import tsx src/searcher/test/auto-close-route-gap.ts",
     "searcher:auto-close-router-gap": "node --import tsx src/searcher/test/auto-close-router-gap.ts",
     "searcher:discover-routers": "node --import tsx src/searcher/test/discover-routers.ts",

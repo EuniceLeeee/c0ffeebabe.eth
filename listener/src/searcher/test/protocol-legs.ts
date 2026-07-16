@@ -69,6 +69,12 @@ const CASES: ProtocolCase[] = [
     expectedArgs: (node, executor) => [node.tokenOut, node.amount, executor, executor],
   },
   {
+    id: "rocksolid-sync-deposit",
+    signature: "syncDeposit(uint256,address,address)",
+    selector: "0xd01d073a",
+    expectedArgs: (node, executor) => [node.amount, executor, ethers.ZeroAddress],
+  },
+  {
     id: "metronome-synth-swap",
     signature: "swap(address,address,uint256)",
     selector: "0xdf791e50",
@@ -161,6 +167,9 @@ function testRoundTrip(): void {
     }
     if (desc.tokenInArg !== undefined) {
       assertEqual(String(decoded[desc.tokenInArg]).toLowerCase(), NODE.tokenIn.toLowerCase(), `${testCase.id} tokenIn arg ${desc.tokenInArg}`);
+    }
+    for (const index of desc.zeroAddressArgs ?? []) {
+      assertEqual(String(decoded[index]).toLowerCase(), ethers.ZeroAddress, `${testCase.id} zero-address arg ${index}`);
     }
   }
   console.log("[protocol-legs] round-trip decode: PASS");

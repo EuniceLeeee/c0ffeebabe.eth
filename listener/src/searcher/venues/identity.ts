@@ -16,7 +16,8 @@ export type IdentityCheckedAdapter =
   | "univ3"
   | "curve"
   | "curve-nr"
-  | "curve-underlying";
+  | "curve-underlying"
+  | "balancer-v3";
 export type VenueIdentitySource =
   | "factory-call"
   | "factory-call-provisional"
@@ -25,6 +26,7 @@ export type VenueIdentitySource =
   | "curve-metaregistry-underlying"
   | "curve-underlying-provisional"
   | "v4-manager"
+  | "balancer-v3-vault"
   | "seed";
 
 export interface VenueIdentityMetadata {
@@ -43,6 +45,7 @@ export type PoolIdentityFailureReason =
   | "unsupported_venue"
   | "adapter_mismatch"
   | "curve_unregistered"
+  | "balancer_v3_unregistered"
   | "untrusted_seed";
 
 export interface IdentityPoolEntry extends VenueIdentityMetadata {
@@ -94,13 +97,17 @@ const factoryIface = new ethers.Interface([
 const curveMetaRegistryIface = new ethers.Interface([
   "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
 ]);
+const balancerV3VaultIface = new ethers.Interface([
+  "function isPoolRegistered(address pool) view returns (bool)",
+]);
 
 export function requiresOnchainIdentity(adapter: string): adapter is IdentityCheckedAdapter {
   return adapter === "univ2" ||
     adapter === "univ3" ||
     adapter === "curve" ||
     adapter === "curve-nr" ||
-    adapter === "curve-underlying";
+    adapter === "curve-underlying" ||
+    adapter === "balancer-v3";
 }
 
 export async function resolvePoolIdentity(
@@ -120,6 +127,9 @@ export async function resolvePoolIdentity(
       adapter,
       options.allowProvisionalCurveUnderlying === true,
     );
+  }
+  if (adapter === "balancer-v3") {
+    return resolveBalancerV3Identity(backend, pool);
   }
   return resolveFactoryIdentity(
     backend,
@@ -361,6 +371,32 @@ async function resolveCurveIdentity(
     };
   } catch {
     return { ok: false, reason: "identity_call_failed", venueId: "curve" };
+  }
+}
+
+async function resolveBalancerV3Identity(
+  backend: IdentityCallBackend,
+  pool: string,
+): Promise<PoolIdentityResult> {
+  try {
+    const raw = await backend.call({
+      to: ADDR.BALANCER_V3_VAULT,
+      data: balancerV3VaultIface.encodeFunctionData("isPoolRegistered", [pool]),
+    });
+    const registered = Boolean(
+      balancerV3VaultIface.decodeFunctionResult("isPoolRegistered", raw)[0],
+    );
+    if (!registered) {
+      return { ok: false, reason: "balancer_v3_unregistered", venueId: "balancer-v3" };
+    }
+    return {
+      ok: true,
+      adapter: "balancer-v3",
+      venueId: "balancer-v3",
+      identitySource: "balancer-v3-vault",
+    };
+  } catch {
+    return { ok: false, reason: "identity_call_failed", venueId: "balancer-v3" };
   }
 }
 

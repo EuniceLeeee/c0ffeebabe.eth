@@ -196,6 +196,9 @@ export function detectBlockScanOpportunities(input: {
     anchorTokens.add(edge.tokenIn.toLowerCase());
     anchorTokens.add(edge.tokenOut.toLowerCase());
   }
+  for (const token of input.cfg.pricedTokens.keys()) {
+    anchorTokens.add(token.toLowerCase());
+  }
 
   const considerRing = (ringEdges: TokenEdge[]): void => {
     if (pathLeavesStandingPosition(ringEdges)) return;
@@ -352,6 +355,7 @@ function venueKind(edge: TokenEdge): VenueKind | null {
   const adapterId = edge.adapterId.toLowerCase();
   if (adapterId.includes("fluid-dex")) return "fluid";
   if (adapterId === "curve-exchange-underlying") return "curve-underlying";
+  if (adapterId.includes("balancer-v3")) return "protocol";
   if (adapterId.includes("univ2")) return "v2";
   if (adapterId.includes("univ3")) return "v3";
   if (adapterId.includes("univ4")) return "v4";
@@ -611,8 +615,6 @@ function scoreRing(
   protocolMids?: ReadonlyMap<string, ProtocolMid>,
 ): { estSpreadBps: number; maxStartDepth: number } | null {
   if (edges.length === 0 || !isClosedContinuousRing(edges)) return null;
-  const tokens = ringTokensWithoutRepeat(edges);
-  if (new Set(tokens).size !== tokens.length) return null;
   let logSum = 0;
   let cumulativeMid = 1;
   let maxStartDepth = Infinity;
@@ -661,6 +663,30 @@ function ringTokensWithoutRepeat(edges: TokenEdge[]): string[] {
   const tokens = [edges[0].tokenIn.toLowerCase(), ...edges.map((edge) => edge.tokenOut.toLowerCase())];
   if (tokens.length > 1 && tokens[tokens.length - 1] === tokens[0]) tokens.pop();
   return tokens;
+}
+
+export function isAdmissibleBlockScanRingShape(
+  edges: TokenEdge[],
+  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
+): boolean {
+  const tokens = ringTokensWithoutRepeat(edges);
+  const positions = new Map<string, number[]>();
+  for (let i = 0; i < tokens.length; i++) {
+    const seen = positions.get(tokens[i]);
+    if (seen) seen.push(i);
+    else positions.set(tokens[i], [i]);
+  }
+  const repeated = [...positions.entries()].filter(([, indexes]) => indexes.length > 1);
+  if (repeated.length === 0) return true;
+  if (repeated.length !== 1) return false;
+
+  const [token, indexes] = repeated[0];
+  if (indexes.length !== 2 || pricedTokens.has(token)) return false;
+  const [start, end] = indexes;
+  // Admit a nested conversion cycle only when it is protocol-defined. This
+  // covers funded NAV/conversion loops without letting arbitrary concatenated
+  // AMM cycles crowd out the scanner's bounded candidate set.
+  return edges.slice(start, end).some((edge) => edge.slotKind === "protocol");
 }
 
 function pickRingFlashToken(ringTokens: string[], pricedTokens: Map<string, { maxBorrow: bigint }>): string | null {

@@ -3,10 +3,12 @@ import type { PoolEntry } from "./planner/token-graph.js";
 import { poolRegistryKey } from "./pool-universe.js";
 import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
 import { attestPoolIdentities } from "./venues/identity.js";
+import { ADDR } from "../shared/constants/addresses.js";
 
 // Factory event topics
 const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
 const UNIV3_POOL_CREATED = ethers.id("PoolCreated(address,address,uint24,int24,address)");
+const BALANCER_V3_SWAP = ethers.id("Swap(address,address,address,uint256,uint256,uint256,uint256)");
 
 // ─── Factory-based full pool indexing ───────────────────────
 
@@ -24,6 +26,7 @@ const FACTORIES: FactoryDef[] = VENUE_CAPABILITIES.flatMap((capability) => {
   if (
     capability.discovery.mode !== "factory" ||
     !capability.runtimeAdapter ||
+    (capability.runtimeAdapter !== "univ2" && capability.runtimeAdapter !== "univ3") ||
     !capability.discoverable ||
     !capability.quotable ||
     !capability.buildable ||
@@ -124,7 +127,7 @@ async function getFactoryLogs(
 
 // Swap topics discover candidate shapes. factory()/MetaRegistry records identity provenance.
 
-type DiscoveredAdapter = "univ2" | "univ3" | "curve" | "curve-underlying";
+type DiscoveredAdapter = "univ2" | "univ3" | "curve" | "curve-underlying" | "balancer-v3";
 
 const SWAP_TOPICS: { topic: string; adapter: DiscoveredAdapter }[] = [
   // UniV3
@@ -184,6 +187,25 @@ export async function scanActivePools(
     }
   }
 
+  for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
+    const end = Math.min(start + LOG_BATCH - 1, latest);
+    const logs = await getBalancerV3LogsWithSplitRetry(provider, start, end);
+    for (const log of logs) {
+      const topic = log.topics?.[1];
+      if (!topic) continue;
+      try {
+        const addr = ethers.getAddress(`0x${topic.slice(-40)}`).toLowerCase();
+        const existing = poolCounts.get(addr);
+        if (existing) {
+          existing.count++;
+          existing.adapterCounts.set("balancer-v3", (existing.adapterCounts.get("balancer-v3") ?? 0) + 1);
+        } else {
+          poolCounts.set(addr, { adapterCounts: new Map([["balancer-v3", 1]]), count: 1 });
+        }
+      } catch { /* malformed indexed pool */ }
+    }
+  }
+
   const candidates: PoolEntry[] = [...poolCounts.entries()]
     .sort((a, b) => b[1].count - a[1].count)
     .map(([addr, item]) => ({
@@ -221,6 +243,28 @@ function bestAdapter(
   adapterCounts: Map<DiscoveredAdapter, number>,
 ): DiscoveredAdapter {
   return [...adapterCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
+async function getBalancerV3LogsWithSplitRetry(
+  provider: ethers.JsonRpcProvider,
+  fromBlock: number,
+  toBlock: number,
+): Promise<Array<{ topics: string[] }>> {
+  try {
+    return await provider.send("eth_getLogs", [{
+      address: ADDR.BALANCER_V3_VAULT,
+      fromBlock: "0x" + fromBlock.toString(16),
+      toBlock: "0x" + toBlock.toString(16),
+      topics: [BALANCER_V3_SWAP],
+    }]);
+  } catch {
+    if (fromBlock >= toBlock) return [];
+    const mid = Math.floor((fromBlock + toBlock) / 2);
+    return [
+      ...await getBalancerV3LogsWithSplitRetry(provider, fromBlock, mid),
+      ...await getBalancerV3LogsWithSplitRetry(provider, mid + 1, toBlock),
+    ];
+  }
 }
 
 async function getLogsWithSplitRetry(

@@ -2,7 +2,8 @@ import type { EdgeKind } from "../searcher/strategy-taxonomy.js";
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
-  | "psm" | "erc4626" | "goldx" | "wsteth" | "metronome" | "weth" | "fluid-credit" | "fluid-dex" | "erc20-infra";
+  | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
+  | "fluid-credit" | "fluid-dex" | "balancer-v3" | "erc20-infra";
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
 export type AdapterAction =
@@ -200,6 +201,38 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     canSendValue: true,
     leavesStandingPositionDefault: false,
   },
+  "balancer-v3-unlock": {
+    adapterId: "balancer-v3-unlock",
+    lineage: "balancer-v3",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "balancer-v3-settle": {
+    adapterId: "balancer-v3-settle",
+    lineage: "balancer-v3",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "balancer-v3-swap": {
+    adapterId: "balancer-v3-swap",
+    lineage: "balancer-v3",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "balancer-v3-send-to": {
+    adapterId: "balancer-v3-send-to",
+    lineage: "balancer-v3",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
   "fluid-dex-swap": {
     adapterId: "fluid-dex-swap",
     lineage: "fluid-dex",
@@ -261,6 +294,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     lineage: "erc4626",
     edgeKind: "protocol",
     action: "redeem",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "rocksolid-sync-deposit": {
+    adapterId: "rocksolid-sync-deposit",
+    lineage: "rocksolid",
+    edgeKind: "protocol",
+    action: "deposit",
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },

@@ -6,7 +6,7 @@ function assert(condition: boolean, message: string): asserts condition {
 }
 
 const disabled = filterLiveProtocolRegistry(POOL_REGISTRY, false);
-for (const adapter of ["wsteth", "erc4626", "metronome-synth", "metronome-hgusdc"]) {
+for (const adapter of ["wsteth", "erc4626", "rocksolid", "metronome-synth", "metronome-hgusdc"]) {
   assert(!disabled.some((pool) => pool.adapter === adapter), `${adapter} must be disabled`);
 }
 assert(disabled.some((pool) => pool.adapter === "psm"), "grandfathered PSM must remain admitted");

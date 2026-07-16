@@ -26,6 +26,7 @@ const SWAP_ADAPTERS = [
   "metronome-hgusdc-exit",
   "fluid-dex-swap",
   "univ4-unlock",
+  "balancer-v3-unlock",
   "univ3-swap",
   "univ2-swap",
   "curve-exchange",

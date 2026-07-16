@@ -346,6 +346,31 @@ export async function quoteSiloRedeem(
   return BigInt(siloRedeemIface.decodeFunctionResult("previewWithdraw", outRaw)[0]);
 }
 
+const balancerV3RouterIface = new ethers.Interface([
+  "function querySwapSingleTokenExactIn(address pool,address tokenIn,address tokenOut,uint256 exactAmountIn,address sender,bytes userData) returns (uint256 amountOut)",
+]);
+
+export async function quoteBalancerV3(
+  state: CallBackend,
+  pool: string,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  const data = balancerV3RouterIface.encodeFunctionData("querySwapSingleTokenExactIn", [
+    pool,
+    tokenIn,
+    tokenOut,
+    amountIn,
+    ethers.ZeroAddress,
+    "0x",
+  ]);
+  const result = await state.call({ to: ADDR.BALANCER_V3_ROUTER, data });
+  return BigInt(
+    balancerV3RouterIface.decodeFunctionResult("querySwapSingleTokenExactIn", result)[0],
+  );
+}
+
 // ── Metronome Synth Pool --------------------------------------
 
 export const metronomeSynthPoolIface = new ethers.Interface([
@@ -797,6 +822,8 @@ export async function quote(
     case "univ4-unlock":
       // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);
+    case "balancer-v3-unlock":
+      return quoteBalancerV3(state, target, tokenIn, tokenOut, amountIn);
     case "psm":
       return quotePSM(state, target, tokenIn, tokenOut, amountIn);
     case "fluid-dex-swap":
@@ -805,6 +832,7 @@ export async function quote(
     case "wsteth-unwrap":
     case "erc4626-deposit":
     case "erc4626-redeem":
+    case "rocksolid-sync-deposit":
       return quoteProtocolLeg(state, target, adapterId, amountIn);
     case "goldx-mint":
       return quoteGoldxMint(state, target, tokenIn, tokenOut, amountIn);

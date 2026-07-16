@@ -32,6 +32,12 @@ import {
   wethWithdrawAmountAdapter,
 } from "./wrap.js";
 import { metronomeHgUsdcExitAdapter } from "./metronome-hgusdc.js";
+import {
+  balancerV3SendToAdapter,
+  balancerV3SettleAdapter,
+  balancerV3SwapAdapter,
+  balancerV3UnlockAdapter,
+} from "./balancer-v3.js";
 
 // Flash
 register(morphoFlashAdapter);
@@ -58,6 +64,10 @@ register(univ4TakeAdapter);
 register(univ4SyncAdapter);
 register(univ4SettleAdapter);
 register(univ4SettleValueAdapter);
+register(balancerV3UnlockAdapter);
+register(balancerV3SettleAdapter);
+register(balancerV3SwapAdapter);
+register(balancerV3SendToAdapter);
 register(curveExchangeAdapter);
 register(curveExchangeReceivedUintAdapter);
 register(curveExchangeNoReceiverAdapter);
