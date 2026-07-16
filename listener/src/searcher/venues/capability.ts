@@ -1,7 +1,8 @@
+import { V2_LINEAGES, type V2LineageVenueId } from "./v2-lineage.js";
+
 export type VenueId =
+  | V2LineageVenueId
   | "unknown"
-  | "univ2"
-  | "sushiswap-v2"
   | "univ3"
   | "pancake-v3"
   | "univ3-fork-075c"
@@ -43,24 +44,15 @@ export interface VenueCapability {
 // - path-template.ts derives trade-leg edge ids from PRODUCTION_ROUTE_ADAPTERS,
 //   plus an explicit fixture-blocked legacy descriptor for Fluid DEX.
 export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
-  {
-    venue: "univ2",
-    discovery: { mode: "factory", factories: ["0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"] },
-    runtimeAdapter: "univ2",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-    supported_in_prod: true,
-  },
-  {
-    venue: "sushiswap-v2",
-    discovery: { mode: "factory", factories: ["0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"] },
-    runtimeAdapter: "univ2",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-    supported_in_prod: true,
-  },
+  ...V2_LINEAGES.map((descriptor): VenueCapability => ({
+    venue: descriptor.venue,
+    discovery: { mode: "factory", factories: [descriptor.factory] },
+    runtimeAdapter: descriptor.runtimeAdapter,
+    discoverable: descriptor.discoverable,
+    quotable: descriptor.quotable,
+    buildable: descriptor.buildable,
+    supported_in_prod: descriptor.supportedInProd,
+  })),
   {
     venue: "univ3",
     discovery: { mode: "factory", factories: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"] },
@@ -187,24 +179,6 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     discoverable: false,
     quotable: false,
     buildable: false,
-    supported_in_prod: false,
-  },
-  {
-    // v2-fork: quote/build reuse univ2 math once epic #2 promotes the factory into discovery.
-    venue: "rigelswap",
-    discovery: { mode: "factory", factories: ["0x880AE0A0aF8FF8f31F51599891baa8A65dB5e152"] },
-    discoverable: false,
-    quotable: true,
-    buildable: true,
-    supported_in_prod: false,
-  },
-  {
-    // v2-fork: same as rigelswap.
-    venue: "difx",
-    discovery: { mode: "factory", factories: ["0xe5aaA01C4732d6B20cBb8522803f84a2cDf96334"] },
-    discoverable: false,
-    quotable: true,
-    buildable: true,
     supported_in_prod: false,
   },
 ];

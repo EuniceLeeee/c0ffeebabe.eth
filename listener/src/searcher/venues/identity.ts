@@ -16,6 +16,7 @@ import {
   type IdentityAdmissionPolicy,
 } from "./admission.js";
 import type { PoolEntry } from "../planner/token-graph.js";
+import { findV2LineageByFactory } from "./v2-lineage.js";
 export { CURVE_METAREGISTRY } from "./curve-underlying.js";
 
 export type VenueIdentitySource =
@@ -118,6 +119,7 @@ export function assertIdentityResolverCoverage(
 export type PoolIdentityFailureReason =
   | "identity_call_failed"
   | "unknown_factory"
+  | "unmeasured_v2_fee"
   | "unsupported_venue"
   | "adapter_mismatch"
   | "curve_unregistered"
@@ -365,6 +367,14 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
       return capability
         ? { ok: false, reason: "unsupported_venue", venueId: capability.venue, factory }
         : { ok: false, reason: "unknown_factory", factory };
+    }
+    if (poolAdapter === "univ2" && !findV2LineageByFactory(factory)?.measuredFeeRule) {
+      return {
+        ok: false,
+        reason: "unmeasured_v2_fee",
+        venueId: capability?.venue,
+        factory,
+      };
     }
     // Factory is provenance, not a hard admission gate. Keep the observed V2/V3
     // shape explicit; token-graph ABI checks and mandatory final sim remain fail-closed.

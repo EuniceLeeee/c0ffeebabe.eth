@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { scanActivePools } from "../active-pool-discovery.js";
+import { indexFactoryPools, scanActivePools } from "../active-pool-discovery.js";
 import {
   CURVE_METAREGISTRY,
   assertIdentityResolverCoverage,
@@ -12,6 +12,10 @@ import {
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_ROUTE_ADAPTERS,
 } from "../venues/production-registry.js";
+import { findVenueByFactory } from "../venues/capability.js";
+import { findV2LineageByFactory, V2_LINEAGES } from "../venues/v2-lineage.js";
+import { v2FeeBpsForFactory } from "../solver/v2-fee.js";
+import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -29,6 +33,7 @@ const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
 const SUSHI_V2_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
 const REPLAYED_V3_FORK_FACTORY = "0x075C42cD233a1c723c0F18f6dd575c8d679FEA85";
 const PANORAMA_FACTORY = "0x82Eeb5A22A25310ac15352197d92d6C17A49602e";
+const PANCAKE_V2_FACTORY = "0x1097053fd2ea711dad45caccc45eff7548fcb362";
 const UNKNOWN_FACTORY = address(0xfac7);
 const CURVE_HANDLER = address(0xc0de);
 
@@ -44,6 +49,7 @@ const PSM_SEED = address(0x108);
 const FAKE_PSM = address(0x109);
 const BALANCER_V3_POOL = address(0x10a);
 const FAKE_BALANCER_V3_POOL = address(0x10b);
+const PANCAKE_V2_PAIR = address(0x10c);
 
 const V2_SWAP_TOPIC = ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
@@ -51,9 +57,11 @@ const CURVE_SWAP_TOPIC = ethers.id("TokenExchange(address,int128,uint256,int128,
 const BALANCER_V3_SWAP_TOPIC = ethers.id(
   "Swap(address,address,address,uint256,uint256,uint256,uint256)",
 );
+const V2_PAIR_CREATED_TOPIC = ethers.id("PairCreated(address,address,address,uint256)");
 
 class FakeProvider {
   readonly factoryCalls: string[] = [];
+  readonly factoryIndexCalls: string[] = [];
   readonly curveCalls: string[] = [];
   readonly factories = new Map<string, string>([
     [UNI_PAIR.toLowerCase(), UNIV2_FACTORY],
@@ -61,6 +69,7 @@ class FakeProvider {
     [V3_FORK_POOL.toLowerCase(), REPLAYED_V3_FORK_FACTORY],
     [PANORAMA_POOL.toLowerCase(), PANORAMA_FACTORY],
     [UNKNOWN_PAIR.toLowerCase(), UNKNOWN_FACTORY],
+    [PANCAKE_V2_PAIR.toLowerCase(), PANCAKE_V2_FACTORY],
   ]);
   readonly registeredCurvePools = new Set([CURVE_POOL.toLowerCase()]);
 
@@ -68,9 +77,25 @@ class FakeProvider {
     throw new Error("pinned test must not query the head");
   }
 
-  async send(method: string, args: Array<{ topics?: string[] }>): Promise<Array<{ address: string; topics?: string[] }>> {
+  async send(
+    method: string,
+    args: Array<{ address?: string; topics?: string[] }>,
+  ): Promise<Array<{ address: string; data?: string; topics?: string[] }>> {
     assert(method === "eth_getLogs", `unexpected RPC method ${method}`);
+    const requestAddress = args[0]?.address?.toLowerCase();
     const topic = args[0]?.topics?.[0]?.toLowerCase();
+    if (topic === V2_PAIR_CREATED_TOPIC.toLowerCase() && requestAddress) {
+      this.factoryIndexCalls.push(requestAddress);
+      if (requestAddress !== PANCAKE_V2_FACTORY.toLowerCase()) return [];
+      return [{
+        address: PANCAKE_V2_FACTORY,
+        data: ethers.AbiCoder.defaultAbiCoder().encode(
+          ["address", "uint256"],
+          [PANCAKE_V2_PAIR, 1n],
+        ),
+        topics: [V2_PAIR_CREATED_TOPIC],
+      }];
+    }
     if (topic === V2_SWAP_TOPIC.toLowerCase()) {
       return [UNI_PAIR, UNI_PAIR, SUSHI_PAIR, PANORAMA_POOL, UNKNOWN_PAIR]
         .map((address) => ({ address }));
@@ -120,6 +145,52 @@ class FakeProvider {
   }
 }
 
+async function testV2LineageDescriptor(): Promise<void> {
+  const factories = V2_LINEAGES.map((descriptor) => descriptor.factory.toLowerCase());
+  assert(new Set(factories).size === factories.length, "V2 lineage factories must be unique");
+  for (const descriptor of V2_LINEAGES) {
+    const capability = findVenueByFactory(descriptor.factory);
+    assert(capability?.venue === descriptor.venue, `${descriptor.venue} capability provenance`);
+    assert(
+      capability.runtimeAdapter === descriptor.runtimeAdapter,
+      `${descriptor.venue} execution family projection`,
+    );
+    if (descriptor.supportedInProd) {
+      assert(descriptor.measuredFeeRule !== null, `${descriptor.venue} production fee must be measured`);
+      assert(
+        v2FeeBpsForFactory(descriptor.factory) === descriptor.measuredFeeRule.feeBps,
+        `${descriptor.venue} fee projection`,
+      );
+    }
+  }
+
+  const pancake = findV2LineageByFactory(PANCAKE_V2_FACTORY);
+  assert(pancake?.venue === "pancake-v2", "Pancake V2 lineage identity");
+  assert(pancake.discoverable && pancake.supportedInProd, "Pancake V2 factory discovery flags");
+  assert(pancake.measuredFeeRule?.feeBps === 25n, "Pancake V2 measured fee");
+
+  const provider = new FakeProvider();
+  const identity = await resolvePoolIdentity(provider, PANCAKE_V2_PAIR, "univ2", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
+  assert(identity.ok && identity.venueId === "pancake-v2", "Pancake V2 strict identity");
+  assert(identity.ok && identity.adapter === "univ2", "Pancake V2 execution adapter");
+
+  const indexed = await indexFactoryPools(provider as never, 1, 1_000);
+  const pancakePool = indexed.find((pool) => pool.address === PANCAKE_V2_PAIR);
+  assert(pancakePool?.adapter === "univ2", "Pancake V2 factory pool execution adapter");
+  assert(pancakePool.venueId === "pancake-v2", "Pancake V2 factory pool venue identity");
+  assert(
+    pancakePool.factory?.toLowerCase() === PANCAKE_V2_FACTORY.toLowerCase(),
+    "Pancake V2 factory provenance",
+  );
+  assert(
+    provider.factoryIndexCalls.includes(PANCAKE_V2_FACTORY.toLowerCase()),
+    "Pancake V2 factory must enter factory indexing",
+  );
+  console.log("[venue-identity] V2 lineage identity/discovery/fee projection: PASS");
+}
+
 async function testResolverRejectsSelectorLookalikes(): Promise<void> {
   const provider = new FakeProvider();
   const panorama = await resolvePoolIdentity(provider, PANORAMA_POOL, "univ2", {
@@ -139,6 +210,23 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
   });
   assert(corrected.ok, "known factory must resolve despite a wrong event-derived adapter hint");
   assert(corrected.adapter === "univ2", "factory must select the canonical runtime adapter");
+
+  const provisionalV2 = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ2", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  });
+  assert(
+    !provisionalV2.ok && provisionalV2.reason === "unmeasured_v2_fee",
+    "provisional V2 without a measured fee rule must fail closed",
+  );
+  const provisionalV3 = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ3", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  });
+  assert(
+    provisionalV3.ok && provisionalV3.identitySource === "factory-call-provisional",
+    "V3 provisional policy must remain independent from V2 fee admission",
+  );
   console.log("[venue-identity] selector lookalikes fail closed: PASS");
 }
 
@@ -315,4 +403,5 @@ await testV4ManagerIdentity();
 await testProtocolAdaptersRequireExactEnabledSeeds();
 await testBalancerV3Identity();
 testIdentityRegistryConformance();
-console.log("venue-identity PASS (8/8)");
+await testV2LineageDescriptor();
+console.log("venue-identity PASS (9/9)");
