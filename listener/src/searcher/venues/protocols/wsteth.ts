@@ -15,6 +15,7 @@ export const wstethAdapter = Object.freeze({
     { slotKind: "protocol", protocolAction: "wrap" },
     { slotKind: "protocol", protocolAction: "unwrap" },
   ],
+  requiresProtocolEdgesFlag: true,
   actionAdapterIds: ["wsteth-wrap", "wsteth-unwrap", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 1 },

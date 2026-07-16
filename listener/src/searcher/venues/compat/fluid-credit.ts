@@ -21,6 +21,7 @@ export const fluidCreditCompatAdapter = Object.freeze({
   poolAdapters: ["fluid-vault"],
   edgeAdapterIds: ["fluid-vault"],
   allowedTaxonomy: [{ slotKind: "lend" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: ["fluid-vault", "erc20-approve"],
   readMid: null,
   warm: null,

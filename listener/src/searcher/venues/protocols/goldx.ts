@@ -18,6 +18,7 @@ export const goldxAdapter = Object.freeze({
   poolAdapters: ["goldx"],
   edgeAdapterIds: ["goldx-mint"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
+  requiresProtocolEdgesFlag: true,
   actionAdapterIds: ["goldx-mint", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 0 },

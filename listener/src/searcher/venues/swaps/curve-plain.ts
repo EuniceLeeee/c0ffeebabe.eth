@@ -32,6 +32,7 @@ export const curvePlainAdapter = Object.freeze({
     "curve-exchange-received-uint",
   ],
   allowedTaxonomy: [{ slotKind: "swap" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: ["curve-exchange-plain", "erc20-approve"],
   observation: curveSwapObservation,
   readMid: readCurveWarmMid,

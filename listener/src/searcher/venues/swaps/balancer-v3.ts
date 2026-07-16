@@ -19,6 +19,7 @@ export const balancerV3Adapter = Object.freeze({
   poolAdapters: ["balancer-v3"],
   edgeAdapterIds: ["balancer-v3-unlock"],
   allowedTaxonomy: [{ slotKind: "swap" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: [
     "balancer-v3-unlock",
     "balancer-v3-settle",

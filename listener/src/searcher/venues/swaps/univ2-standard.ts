@@ -30,6 +30,7 @@ export const univ2StandardAdapter = Object.freeze({
   poolAdapters: ["univ2"],
   edgeAdapterIds: ["univ2-swap"],
   allowedTaxonomy: [{ slotKind: "swap" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: ["univ2-swap", "erc20-transfer"],
   observation: createUniV2SwapObservation({
     adapterIds: ["univ2-swap"],

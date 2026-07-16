@@ -19,6 +19,7 @@ export const psmAdapter = Object.freeze({
   poolAdapters: ["psm"],
   edgeAdapterIds: ["psm"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: ["psm", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: {

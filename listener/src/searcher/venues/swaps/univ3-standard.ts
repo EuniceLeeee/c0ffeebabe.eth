@@ -36,6 +36,7 @@ export const univ3StandardAdapter = Object.freeze({
   poolAdapters: ["univ3"],
   edgeAdapterIds: ["univ3-swap"],
   allowedTaxonomy: [{ slotKind: "swap" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: ["univ3-swap", "erc20-transfer"],
   observation: createUniV3SwapObservation({
     adapterIds: ["univ3-swap"],

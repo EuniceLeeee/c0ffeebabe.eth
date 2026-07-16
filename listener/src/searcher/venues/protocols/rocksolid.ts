@@ -12,6 +12,7 @@ export const rocksolidAdapter = Object.freeze({
   poolAdapters: ["rocksolid"],
   edgeAdapterIds: ["rocksolid-sync-deposit"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "wrap" }],
+  requiresProtocolEdgesFlag: true,
   actionAdapterIds: ["rocksolid-sync-deposit", "erc20-approve"],
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 2 },

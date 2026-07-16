@@ -137,6 +137,8 @@ export interface RouteLegAdapter {
   readonly edgeAdapterIds: readonly string[];
   readonly allowedTaxonomy: readonly AllowedTaxonomy[];
   readonly actionAdapterIds: readonly string[];
+  /** Admission metadata for the global SEARCHER_ENABLE_PROTOCOL_EDGES switch. */
+  readonly requiresProtocolEdgesFlag: boolean;
   /** Sync-only hot-path read over state published by the prewarm phase. */
   readonly readMid: SyncMidReader | null;
   /** Declarative prewarm class; the coordinator remains the sole scheduler/state owner. */

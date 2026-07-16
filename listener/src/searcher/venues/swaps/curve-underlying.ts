@@ -28,6 +28,7 @@ export const curveUnderlyingAdapter = Object.freeze({
   poolAdapters: ["curve-underlying"],
   edgeAdapterIds: ["curve-exchange-underlying"],
   allowedTaxonomy: [{ slotKind: "swap" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: ["curve-exchange-underlying", "erc20-approve"],
   observation: curveSwapObservation,
   readMid: readCurveUnderlyingExternalMid,

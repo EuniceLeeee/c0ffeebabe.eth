@@ -864,7 +864,11 @@ async function main(): Promise<void> {
     `[searcher/live] pair-completion: +${pairCompletionAdded} alternate-venue pools` +
       (config.pairCompletion ? "" : " (disabled)"),
   );
-  console.log(`[searcher/live] protocolEdges=${config.enableProtocolEdges ? "enabled" : "disabled (wsteth/erc4626/metronome off)"}`);
+  console.log(
+    `[searcher/live] protocolEdges=${config.enableProtocolEdges
+      ? "enabled"
+      : "disabled (registry-gated protocol venues off)"}`,
+  );
   console.log(
     `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
       `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
@@ -4692,12 +4696,7 @@ let wsRpcId = 1;
 export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean): PoolEntry[] {
   if (enabled) return pools;
   return pools.filter((pool) =>
-    pool.adapter !== "wsteth" &&
-    pool.adapter !== "erc4626" &&
-    pool.adapter !== "goldx" &&
-    pool.adapter !== "rocksolid" &&
-    pool.adapter !== "metronome-synth" &&
-    pool.adapter !== "metronome-hgusdc"
+    PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pool.adapter)?.requiresProtocolEdgesFlag !== true
   );
 }
 

@@ -14,6 +14,7 @@ export const erc4626Adapter = Object.freeze({
     { slotKind: "protocol", protocolAction: "wrap" },
     { slotKind: "protocol", protocolAction: "redeem" },
   ],
+  requiresProtocolEdgesFlag: true,
   actionAdapterIds: [
     "erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo", "erc20-approve",
   ],

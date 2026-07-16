@@ -51,6 +51,7 @@ export const univ4Adapter = Object.freeze({
   poolAdapters: ["univ4"],
   edgeAdapterIds: ["univ4-unlock"],
   allowedTaxonomy: [{ slotKind: "swap" }],
+  requiresProtocolEdgesFlag: false,
   actionAdapterIds: [
     "univ4-unlock",
     "univ4-swap",
