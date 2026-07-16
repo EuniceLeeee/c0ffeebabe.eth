@@ -39,6 +39,7 @@ import {
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
+import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
@@ -277,29 +278,6 @@ export function hashOnlySubmitDecision(
 ): boolean {
   return rawTx || (overlayExact && allowHashOnlyMevShareSubmit) || allowApprox;
 }
-
-// Major DEX routers/aggregators — mempool server-side filter (route B). A
-// pending tx is only worth forking when tx.to is a tracked pool OR one of these
-// entrypoints; the fork receipt then reveals which pool was actually impacted.
-const MEMPOOL_ROUTER_ADDRESSES = new Set<string>(
-  [
-    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d", // UniV2 Router02
-    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45", // UniV3 SwapRouter02
-    "0xe592427a0aece92de3edee1f18e0157c05861564", // UniV3 SwapRouter
-    "0x66a9893cc07d91d95644aedd05d03f95e1dba8af", // Uniswap Universal Router (v2)
-    "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad", // Uniswap Universal Router (v1)
-    "0x000000000004444c5dc75cb358380d2e3de08a90", // Uniswap v4 PoolManager
-    "0xba12222222228d8ba445958a75a0704d566bf2c8", // Balancer Vault
-    "0x99a58482bd75cbab83b27ec03ca68ff489b5788f", // Curve Router
-    "0x16c6521dff6bab339122a0fe25a9116693265353", // Curve Router NG
-    "0x1111111254eeb25477b68fb85ed929f73a960582", // 1inch v5
-    "0x111111125421ca6dc452d289314280a0f8842a65", // 1inch v6
-    "0xdef1c0ded9bec7f1a1670819833240f027b25eff", // 0x Exchange Proxy
-    "0x6131b5fae19ea4f9d964eac0408e4408b66337b5", // KyberSwap MetaAggregator
-    "0x881d40237659c251811cec9c364ef91dc08d300c", // Metamask Swap Router
-    ...oracleVictimWatchTargets(),
-  ].map((a) => a.toLowerCase()),
-);
 
 interface StageCounters {
   hints: number;
@@ -1602,7 +1580,7 @@ async function main(): Promise<void> {
 
   const mempoolStream = () => {
     console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
-    return mempoolHints(config.wsUrl, provider, allPools, counters);
+    return mempoolHints(config.wsUrl, provider, allPools, counters, knownPoolAddrs);
   };
   const hintStream = sourceMode === "disabled"
     ? disabledHints()
@@ -3392,7 +3370,14 @@ async function matchPoolImpactFromLogs(
   tokenQuery?: TokenQueryBackend,
 ): Promise<PoolImpact | null> {
   const impacts = await detectImpactFromLogs(logs, graph, broadPoolAddrs, tokenQuery);
-  return impacts.length > 0 ? impacts[0] : null;
+  return impacts.find((impact) => hashOnlyImpactReplayAdmitted(impact.matchedAdapterId)) ?? null;
+}
+
+export function hashOnlyImpactReplayAdmitted(adapterId: string): boolean {
+  const model = PRODUCTION_VICTIM_MODELS.forEdge(adapterId);
+  return Boolean(model && (
+    model.localApplyVariant !== null || model.overlayReplayVariant !== null
+  ));
 }
 
 const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -4219,35 +4204,44 @@ function rebuildSignedRawTx(txHash: string, tx: ethers.TransactionResponse): str
 /**
  * Route B: subscribe to the public mempool and yield pending swaps as victims.
  *
- * Pre-filter: Alchemy filters by `toAddress` server-side and sends full pending
- * tx objects (`hashesOnly:false`). We never subscribe to the hash firehose and
- * never call getTransaction for each pending hash. Yielded envelopes carry the
- * full tx + locally rebuilt rawTx so handleHint applies the victim on the fork.
+ * Adapter observation capabilities, the runtime graph and the chain-derived
+ * router index form one complete target set. A local firehose filters against
+ * that full set; an external provider receives a capped server-side subset and
+ * reports any coverage gap. Yielded envelopes carry the full tx + locally
+ * rebuilt rawTx so handleHint applies the victim on the fork.
  */
 async function* mempoolHints(
   wsUrl: string,
   provider: ethers.JsonRpcProvider,
   pools: PoolEntry[],
   counters: StageCounters,
+  liveGraphTargets?: ReadonlySet<string>,
 ): AsyncGenerator<HintEnvelope> {
   const routersPath = process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined;
   const forceIncludeRouters = loadForceIncludeRouters(routersPath);
-  const toAddress = buildMempoolToAddressFilterWithRouters(pools, forceIncludeRouters);
-  const toAddressSet = new Set(toAddress.map((a) => a.toLowerCase()));
+  const intake = buildMempoolIntakeWithRouters(pools, forceIncludeRouters);
+  const toAddress = intake.filteredTargets;
+  const fullAddressSet = new Set(intake.fullTargets.map((address) => address.toLowerCase()));
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
   const interesting = (to: string | null | undefined): boolean =>
-    Boolean(to && toAddressSet.has(to.toLowerCase()));
+    isMempoolIntakeTarget(to, fullAddressSet, liveGraphTargets);
   const mode = parseMempoolMode();
   console.log(
-    `[searcher/live] mempool mode=${mode} toAddress=${toAddress.length} ` +
-      `routers=${MEMPOOL_ROUTER_ADDRESSES.size} forceIncludeRouters=${forceIncludeRouters.length}`,
+    `[searcher/live] mempool mode=${mode} fullTargets=${intake.fullTargets.length} ` +
+      `filteredTargets=${toAddress.length} canonical=${intake.canonicalTargetCount} ` +
+      `dynamicRouters=${intake.dynamicTargetCount}`,
   );
   emitEvent({
     type: "mempool_filter_config",
     source: "filtered_mempool",
-    to_addresses: toAddress,
+    to_addresses: [...toAddress],
     address_count: toAddress.length,
-    router_count: MEMPOOL_ROUTER_ADDRESSES.size,
+    router_count: intake.canonicalTargetCount + intake.dynamicTargetCount,
+    full_address_count: intake.fullTargets.length,
+    canonical_target_count: intake.canonicalTargetCount,
+    dynamic_target_count: intake.dynamicTargetCount,
+    graph_target_count: intake.graphTargetCount,
+    filtered_truncated: intake.filteredTruncated,
     max_addresses: maxAddresses,
   });
   if (mode === "local_firehose") {
@@ -4258,7 +4252,7 @@ async function* mempoolHints(
   for (;;) {
     let ws: WebSocket | null = null;
     try {
-      ws = await connectFilteredMempool(wsUrl, toAddress);
+      ws = await connectFilteredMempool(wsUrl, [...toAddress]);
     } catch (err) {
       if (err instanceof FatalMempoolSubscriptionError) {
         if (mode === "auto" && shouldUseLocalFirehoseFallback(wsUrl, err)) {
@@ -4553,46 +4547,43 @@ export function buildMempoolToAddressFilter(pools: PoolEntry[], routersPath?: st
   const forceRouters = loadForceIncludeRouters(
     routersPath ?? process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined,
   );
-  return buildMempoolToAddressFilterWithRouters(pools, forceRouters);
+  return [...buildMempoolIntakeWithRouters(pools, forceRouters).filteredTargets];
 }
 
-function buildMempoolToAddressFilterWithRouters(
+export function isMempoolIntakeTarget(
+  to: string | null | undefined,
+  startupTargets: ReadonlySet<string>,
+  liveGraphTargets?: ReadonlySet<string>,
+): boolean {
+  if (!to) return false;
+  const key = to.toLowerCase();
+  return startupTargets.has(key) || liveGraphTargets?.has(key) === true;
+}
+
+export function buildMempoolIntakeWithRouters(
   pools: PoolEntry[],
   forceRouters: readonly string[],
-): string[] {
+): MempoolIntakePlan {
   const hotPoolTopN = Number(process.env.SEARCHER_MEMPOOL_FILTER_TOP_N ?? "200");
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
-  const fixed = [...MEMPOOL_ROUTER_ADDRESSES, ...forceRouters];
-  const pinned = pools
-    .filter((p) => p.score === undefined)
-    .map((p) => p.address);
-  const hot = pools
-    .filter((p) => p.score !== undefined)
-    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    .slice(0, Math.max(0, hotPoolTopN))
-    .map((p) => p.address);
-  const candidates = [...fixed, ...pinned, ...hot]
-    .map((raw) => normalizeAddress(raw))
-    .filter((addr): addr is string => addr !== null);
-  const totalUnique = new Set(candidates.map((addr) => addr.toLowerCase())).size;
-  const addresses: string[] = [];
-  const seen = new Set<string>();
-  for (const addr of candidates) {
-    const key = addr.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    addresses.push(addr);
-    if (addresses.length >= maxAddresses) break;
-  }
-  if (addresses.length === 0) {
+  const intake = buildMempoolIntakePlan({
+    pools,
+    swaps: PRODUCTION_ROUTE_ADAPTERS.swaps,
+    dynamicRouterTargets: forceRouters,
+    additionalCanonicalTargets: oracleVictimWatchTargets(),
+    options: { hotPoolTopN, filteredMaxAddresses: maxAddresses },
+  });
+  if (intake.filteredTargets.length === 0) {
     throw new FatalMempoolSubscriptionError("mempool filtered subscription has empty toAddress list");
   }
-  if (totalUnique > addresses.length) {
+  if (intake.filteredTruncated) {
     console.log(
-      `[searcher/live] mempool toAddress truncated to ${addresses.length}/${totalUnique} entries`,
+      `[searcher/live] external mempool coverage truncated to ` +
+        `${intake.filteredTargets.length}/${intake.fullTargets.length} targets; ` +
+        `local firehose retains the complete set`,
     );
   }
-  return addresses;
+  return intake;
 }
 
 async function connectFilteredMempool(wsUrl: string, toAddress: string[]): Promise<WebSocket> {

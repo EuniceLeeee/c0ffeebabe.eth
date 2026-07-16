@@ -10,6 +10,7 @@ import type {
   SwapAdapter,
 } from "../route-leg-adapter.js";
 import { readCurveWarmMid } from "../mid-readers.js";
+import { curveSwapObservation } from "../swap-observation.js";
 import { queryCurveCoins, quoteCurvePlain, resolveCurveIndices } from "./curve-shared.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
@@ -32,6 +33,7 @@ export const curvePlainAdapter = Object.freeze({
   ],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["curve-exchange-plain", "erc20-approve"],
+  observation: curveSwapObservation,
   readMid: readCurveWarmMid,
   warm: { kind: "curve-pool" },
   prepared: {

@@ -13,6 +13,7 @@ import type {
   SwapAdapter,
 } from "../route-leg-adapter.js";
 import { readV2WarmMid } from "../mid-readers.js";
+import { createUniV2SwapObservation } from "../swap-observation.js";
 
 const pairIface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
@@ -30,6 +31,10 @@ export const univ2StandardAdapter = Object.freeze({
   edgeAdapterIds: ["univ2-swap"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["univ2-swap", "erc20-transfer"],
+  observation: createUniV2SwapObservation({
+    adapterIds: ["univ2-swap"],
+    canonicalIntakeTargets: [UNIV2_ROUTER],
+  }),
   readMid: readV2WarmMid,
   warm: { kind: "mutable-pool", cache: "v2" },
   prepared: {

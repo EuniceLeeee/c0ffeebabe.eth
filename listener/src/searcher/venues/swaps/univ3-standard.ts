@@ -12,9 +12,11 @@ import type {
   SwapAdapter,
 } from "../route-leg-adapter.js";
 import { readV3WarmMid } from "../mid-readers.js";
+import { createUniV3SwapObservation } from "../swap-observation.js";
 
 const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
+const UNIV3_SWAP_ROUTER_V1 = "0xe592427a0aece92de3edee1f18e0157c05861564";
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 const poolIface = new ethers.Interface([
@@ -35,6 +37,10 @@ export const univ3StandardAdapter = Object.freeze({
   edgeAdapterIds: ["univ3-swap"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["univ3-swap", "erc20-transfer"],
+  observation: createUniV3SwapObservation({
+    adapterIds: ["univ3-swap"],
+    canonicalIntakeTargets: [UNIV3_SWAP_ROUTER, UNIV3_SWAP_ROUTER_V1],
+  }),
   readMid: readV3WarmMid,
   warm: { kind: "mutable-pool", cache: "v3" },
   prepared: {

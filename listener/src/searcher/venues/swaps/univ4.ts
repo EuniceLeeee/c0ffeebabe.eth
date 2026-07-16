@@ -14,6 +14,7 @@ import type {
   V4QuotePathStats,
 } from "../route-leg-adapter.js";
 import { readV4WarmMid } from "../mid-readers.js";
+import { createUniV4SwapObservation } from "../swap-observation.js";
 import {
   int24,
   normalizeV4Currency,
@@ -30,6 +31,8 @@ const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 const MAX_UINT128 = (1n << 128n) - 1n;
 const V4_POOL_MANAGER_DEPLOY_BLOCK = "0x0";
+const UNISWAP_UNIVERSAL_ROUTER_V1 = "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad";
+const UNISWAP_UNIVERSAL_ROUTER_V2 = "0x66a9893cc07d91d95644aedd05d03f95e1dba8af";
 const initializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
@@ -59,6 +62,14 @@ export const univ4Adapter = Object.freeze({
     "weth-deposit-value",
     "weth-withdraw-amount",
   ],
+  observation: createUniV4SwapObservation({
+    adapterIds: ["univ4-unlock"],
+    canonicalIntakeTargets: [
+      ADDR.UNISWAP_V4_POOL_MANAGER,
+      UNISWAP_UNIVERSAL_ROUTER_V1,
+      UNISWAP_UNIVERSAL_ROUTER_V2,
+    ],
+  }),
   readMid: readV4WarmMid,
   warm: { kind: "mutable-pool", cache: "v4" },
   prepared: {

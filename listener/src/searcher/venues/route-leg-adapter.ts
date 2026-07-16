@@ -4,6 +4,7 @@ import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-g
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import type { ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
 import type { RouteVenueMid, SyncMidReadContext } from "./mid-readers.js";
+import type { SwapObservationCapability } from "./swap-observation.js";
 
 export type SwapExecutionFamilyId =
   | "univ2-standard"
@@ -150,6 +151,7 @@ export interface RouteLegAdapter {
 
 export interface SwapAdapter extends RouteLegAdapter {
   readonly kind: "swap";
+  readonly observation: SwapObservationCapability;
 }
 
 export interface ProtocolConversionAdapter extends RouteLegAdapter {
