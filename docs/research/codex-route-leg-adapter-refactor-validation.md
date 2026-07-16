@@ -73,3 +73,36 @@ More importantly, the trusted deployment contract mechanically rejects this cand
 Creating a production-only branch would remove the first veto but not the second. Inventing a stage transition or using the shakedown path for changed code would falsify the trusted evidence, so deployment was stopped before mutating A or B.
 
 Therefore the architecture and local approximate-95% performance checks are complete, but the requested trusted-node A/B acceptance is not. Under `docs/research/gates.md`, the honest verdict remains `implemented_not_validated` until the project adds an equivalence/performance-only trusted A/B mode or authorizes a different non-production parity harness.
+
+---
+
+## 对抗审查(fable,非作者)— `implemented_not_validated` 诚实,但归因错、且非"纯等价"重构
+
+判决:同意不部署、`implemented_not_validated`。**但阻断的真实原因不是报告说的"trusted A/B 没有 equivalence 模式",而是"等价重构唯一该跑的本地逐-wei 等价回放,根本没跑"。** 且此重构**不是纯等价**——它捆绑了 ≥2 处行为改进,"equivalence"是错误的框。
+
+### 已核实清白(不构成问题)
+- **v4-math.ts**:仅 import 从 token-graph 迁到 venues/swaps/univ4-common,数学未动。
+- **victim-apply.ts**:dispatch 从 4 curve + univ2/3/4 的显式 switch 收敛进 `victim-model-registry`;核实 registry `edgeAdapterIds` **覆盖全部 7 个 baseline id + 新增 curve-exchange-underlying**,无静默 drop。
+- 诚实未部署、未绕安全门、main.ts 5565→4936、未过度引入 FlashAdapter、两轮 subagent review —— 均认可。
+
+### 🔴 R1 — 等价断言从未运行,且被误归因(核心)
+报告(line 60/75)证明的是 **"edge counts equivalent" + planner 延迟保持率 96–98%**;plan §7/§11 要求的是 **"scanner rings 相同 / candidate plan 数量与顺序相同 / compiled calldata 字节相同 / gross/net profit 逐 wei 相同"**。edge 数量相等 ≠ 边相同 ≠ 报价相同 ≠ wei 相同 —— **这是弱得多的检查**。
+报告把 `implemented_not_validated` 归因于"trusted-node A/B 缺 equivalence 模式"。**但本地逐-wei 等价回放不需要生产部署、不需要 trusted A/B**:在 baseline 4392ffc 与冻结 SHA 各跑一遍 tx149/rocksolid/coffee 代表 corpus 的 fork replay,断言 rings/plans/calldata/wei 前后相同即可。这是 plan 自己指定的本地门,**Sol 没跑**。所以诚实标记方向对,但**真实缺口是"没跑本地等价回放",不是"trusted A/B 限制"**。
+
+### 🟡 R2 — standing-guard.ts 是捆绑进"等价"重构的行为变更
+`evaluateStandingGuard` 从"信任 edge 存的 `leavesStandingPosition`"改为**用 `deriveEdgeTaxonomy` 重新派生 + 交叉核对,不一致则新增 `edge_taxonomy_inconsistent` 拒绝**。这是好改进(正是 §16 H7 的缓解),但:
+- 它**新增了一条拒绝路径** → 纯等价重构里不该有任何 verdict 变化;
+- 若任一 refactor 产出的 edge 存的 bit ≠ 派生 bit,先前 allowed 的机会会翻成 rejected;
+- 因此**破坏了"任何 diff = 回归"的等价不变式** —— 无法区分"有意的安全改进"和"意外回归"。
+**必做**:(a) 拆成独立 commit / 独立验证;或 (b) 在等价 corpus 上显式断言此新拒绝路径**不触发**(若触发,说明某新 adapter 的 taxonomy 派生有 bug,是真发现)。
+
+### 🟡 R3 — victim 覆盖扩大(curve-underlying)也是捆绑的行为变更
+新 registry 给 victim overlay 加了 `curve-exchange-underlying`(baseline 的 victim-apply 没有)。好事,但 backrun 等价 corpus 会因此**合法地不同**(现在能 overlay 以前不能的 victim)。同 R2:改进被藏在"equivalence"下。
+
+### 结论
+**此重构不是纯等价——至少捆绑了 standing-guard 重派生(R2)与 victim curve-underlying 覆盖(R3)两处行为改进。** 所以:
+1. "equivalence" 是错误的框;逐-wei corpus 在这两条路径上会**合法地 diff**,不能简单"全相同"。
+2. 正确验证 = 跑本地逐-wei 等价 corpus,对**未变路径**断言逐 wei 相同,对**已变的两条**断言 diff 正是那两处有意改进(非意外)。
+3. R1 是硬门:在拿到这个逐-wei 结果前,`implemented_not_validated` 成立,但理由应更正为"本地等价回放未跑",而非"trusted A/B 限制"。
+
+诚实性认可(未部署、未绕门);但**验证深度不足**:性能保持率 + edge counts 替代不了等价重构的逐-wei 断言。
