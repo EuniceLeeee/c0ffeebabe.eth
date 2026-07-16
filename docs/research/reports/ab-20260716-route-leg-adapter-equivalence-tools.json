@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "repo_root": "/Users/eunice/src/MEV-route-leg-adapter-ab",
-  "pending_nonce": "a1f547b2-19c6-4443-b015-e7d7ff2851db",
+  "repo_root": "/opt/MEV-ab/evidence",
+  "pending_nonce": "6fd7f3a5-e6b8-4997-a9c8-bb5361275ac5",
   "requested_capabilities": [
     "single-transaction",
     "causality",
@@ -577,32 +577,60 @@
       "priority": 10,
       "curated": false,
       "window_binding": null
-    },
-    {
-      "id": "listener:searcher:blockscan-warm-coordinator",
-      "package": "listener",
-      "script": "searcher:blockscan-warm-coordinator",
-      "command": "cd listener && npm run searcher:blockscan-warm-coordinator --",
-      "implementation": "src/searcher/test/blockscan-warm-coordinator.ts",
-      "kind": "replay",
-      "capabilities": [
-        "block-scan",
-        "blockscan",
-        "coordinator",
-        "listener",
-        "replay",
-        "searcher",
-        "verification",
-        "warm"
-      ],
-      "cost": "zero-cu",
-      "summary": "listener package script: searcher:blockscan-warm-coordinator",
-      "priority": 10,
-      "curated": false,
-      "window_binding": null
     }
   ],
-  "executions": [],
-  "generated_at": "2026-07-16T09:23:06.767Z",
-  "updated_at": "2026-07-16T09:23:06.768Z"
+  "executions": [
+    {
+      "schema_version": 1,
+      "tool_id": "analysis:bundle-postmortem",
+      "descriptor_sha256": "ebd4d61f8766d282fed217269cf3bede1cc52b97e5a8d32a4bdd6ae8de472af6",
+      "started_at": "2026-07-16T09:26:52.063Z",
+      "finished_at": "2026-07-16T09:26:55.012Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "860eae213d9563c35dc8d6a57ed2d46f9b73aa42b1b7aceb37e2fdbe3c58b716",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "bundle-postmortem",
+        "--",
+        "--events",
+        "/dev/null",
+        "--tx",
+        "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
+        "--rpc",
+        "<redacted>"
+      ],
+      "stdout_sha256": "c02a939ddb7ef48a7fd0ce7a67b05632f06c662f2c2a622aad4782ab8a366f98",
+      "stderr_sha256": "7ce985599b745daf2d22f5e73d42a80b2ef018842833de4e54a1bad4ab2e1fb7",
+      "stdout_bytes": 2453,
+      "stderr_bytes": 148
+    },
+    {
+      "schema_version": 1,
+      "tool_id": "repo:scripts/census-gap.sh",
+      "descriptor_sha256": "5aee42b665269c40bdb395c627e82e942d4856a2df46c6833a857d2692e3c903",
+      "started_at": "2026-07-16T09:26:55.446Z",
+      "finished_at": "2026-07-16T09:26:59.324Z",
+      "exit_code": 0,
+      "cwd": ".",
+      "argv_sha256": "bf8d20ae826ad29feaeb00f29921a86978480d20ca36f08ec7f279ba6d200d84",
+      "argv_redacted": [
+        "bash",
+        "/opt/MEV-ab/evidence/scripts/census-gap.sh",
+        "25535037",
+        "25535037"
+      ],
+      "window": {
+        "from": 25535037,
+        "to": 25535037
+      },
+      "stdout_sha256": "34ccd11187c7363a977c2b6f562592724eb0f0d4afbfbed2fc98c9b6e4773930",
+      "stderr_sha256": "3cc0a2bdedd93611403cbc5d11a35d9efd3f51550290cadb134b8e40a94a5a11",
+      "stdout_bytes": 248,
+      "stderr_bytes": 240
+    }
+  ],
+  "generated_at": "2026-07-16T09:26:51.623Z",
+  "updated_at": "2026-07-16T09:26:59.324Z"
 }

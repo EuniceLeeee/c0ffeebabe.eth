@@ -164,7 +164,7 @@
       "selected_tools": ["analysis:bundle-postmortem", "repo:scripts/census-gap.sh"],
       "catalog_check_exit_code": 0,
       "evidence_manifest": "ab-20260716-route-leg-adapter-equivalence-tools.json",
-      "evidence_manifest_sha256": "pending"
+      "evidence_manifest_sha256": "c69041f80da2e694686158053111eec00312b3fcccaee7ba3d689fa77594399e"
     }
   },
   "final_verdict": "needs_escalation",
