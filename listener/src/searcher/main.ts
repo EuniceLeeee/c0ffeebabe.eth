@@ -69,10 +69,10 @@ import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
 import {
   metronomeSynthPoolIface,
   quoteBalancerV3,
-  quoteCurveUnderlying,
   quoteFluidDex,
   quoteGoldxMint,
 } from "./solver/quoter.js";
+import { quoteCurveUnderlying } from "./venues/swaps/curve-underlying.js";
 import {
   PoolStateCache,
   type CurveSnapshot,

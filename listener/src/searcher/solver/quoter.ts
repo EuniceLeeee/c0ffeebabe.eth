@@ -3,11 +3,8 @@ import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { type V4PoolKey, v4HooksAffectSwap } from "../planner/token-graph.js";
-import {
-  quoteCurveUnderlyingByIndex,
-  resolveCurveUnderlyingMetadata,
-} from "../venues/curve-underlying.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import { quoteCurvePlain } from "../venues/swaps/curve-shared.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quoteV4ExactInLocal } from "./v4-math.js";
 
@@ -32,131 +29,6 @@ export interface V4QuotePathStats {
   fallback: number;
   localFailures: number;
   hookSkipped: number;
-}
-
-// ── Curve ──────────────────────────────────────────────────────
-
-const curveIface = new ethers.Interface([
-  "function get_dy(int128 i, int128 j, uint256 dx) view returns (uint256)",
-  "function coins(uint256 i) view returns (address)",
-]);
-const curveIfaceUint = new ethers.Interface([
-  "function get_dy(uint256 i, uint256 j, uint256 dx) view returns (uint256)",
-]);
-const curveIfaceIntCoins = new ethers.Interface([
-  "function coins(int128 i) view returns (address)",
-]);
-const curveCoinsCache = new Map<string, string[]>();
-
-async function curveCoins(state: StateBackend, pool: string): Promise<string[]> {
-  const key = pool.toLowerCase();
-  const cached = curveCoinsCache.get(key);
-  if (cached) return cached;
-  const coins: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    const addr = await curveCoinAt(state, pool, i);
-    if (!addr) {
-      break;
-    }
-    coins.push(addr.toLowerCase());
-  }
-  if (coins.length === 0) throw new Error(`curve pool ${pool} exposed no coins`);
-  curveCoinsCache.set(key, coins);
-  return coins;
-}
-
-async function curveCoinAt(
-  state: StateBackend,
-  pool: string,
-  index: number,
-): Promise<string | null> {
-  for (const iface of [curveIface, curveIfaceIntCoins]) {
-    try {
-      const data = iface.encodeFunctionData("coins", [BigInt(index)]);
-      const result = await state.call({ to: pool, data });
-      if (!result || result === "0x") continue;
-      const addr = ethers.getAddress("0x" + result.slice(-40));
-      if (addr === ethers.ZeroAddress) return null;
-      return addr;
-    } catch {
-      // Try the next common Curve ABI shape.
-    }
-  }
-  return null;
-}
-
-function findIndex(coins: string[], token: string): number {
-  const t = token.toLowerCase();
-  const idx = coins.indexOf(t);
-  if (idx < 0) throw new Error(`token ${token} not in curve pool coins [${coins.join(",")}]`);
-  return idx;
-}
-
-/** Look up (i, j) indices for a Curve pool given tokenIn/tokenOut. Cached. */
-export async function resolveCurveIndices(
-  state: StateBackend,
-  pool: string,
-  tokenIn: string,
-  tokenOut: string,
-): Promise<[number, number]> {
-  const coins = await curveCoins(state, pool);
-  return [findIndex(coins, tokenIn), findIndex(coins, tokenOut)];
-}
-
-async function quoteCurve(
-  state: StateBackend,
-  pool: string,
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-): Promise<bigint> {
-  const coins = await curveCoins(state, pool);
-  const i = findIndex(coins, tokenIn);
-  const j = findIndex(coins, tokenOut);
-
-  // Try int128 signature first (most pools)
-  try {
-    const data = curveIface.encodeFunctionData("get_dy", [
-      BigInt(i),
-      BigInt(j),
-      amountIn,
-    ]);
-    const result = await state.call({ to: pool, data });
-    return BigInt(result);
-  } catch {
-    // Fallback to uint256 signature (newer pools)
-    const data = curveIfaceUint.encodeFunctionData("get_dy", [
-      BigInt(i),
-      BigInt(j),
-      amountIn,
-    ]);
-    const result = await state.call({ to: pool, data });
-    return BigInt(result);
-  }
-}
-
-export async function resolveCurveUnderlyingIndices(
-  state: CallBackend,
-  pool: string,
-  tokenIn: string,
-  tokenOut: string,
-): Promise<[number, number]> {
-  const metadata = await resolveCurveUnderlyingMetadata(state, pool, {
-    allowDirectPoolFallback: true,
-  });
-  const coins = metadata.coins.map((coin) => coin.toLowerCase());
-  return [findIndex(coins, tokenIn), findIndex(coins, tokenOut)];
-}
-
-export async function quoteCurveUnderlying(
-  state: CallBackend,
-  pool: string,
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-): Promise<bigint> {
-  const [i, j] = await resolveCurveUnderlyingIndices(state, pool, tokenIn, tokenOut);
-  return quoteCurveUnderlyingByIndex(state, pool, i, j, amountIn);
 }
 
 // ── GOLDx (fully collateralized PAXG conversion) ─────────────
@@ -700,23 +572,6 @@ export async function quote(
     });
   }
   switch (adapterId) {
-    case "curve-exchange":
-    case "curve-exchange-nr":
-    case "curve-exchange-plain":
-    case "curve-exchange-received-uint":
-      // Path B: prefer warmed local math; fall back to on-chain get_dy.
-      if (cache) {
-        try {
-          return await cache.quoteCurve(state, target, tokenIn, tokenOut, amountIn);
-        } catch {
-          /* fall through to eth_call */
-        }
-      }
-      return quoteCurve(state, target, tokenIn, tokenOut, amountIn);
-    case "curve-exchange-underlying":
-      // Underlying pools have a distinct balance/rate domain. Never route
-      // through the regular Curve PoolStateCache local math.
-      return quoteCurveUnderlying(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
       // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);
@@ -750,7 +605,7 @@ export async function quote(
             amountIn,
           );
         } catch {
-          frxUsdOut = await quoteCurve(
+          frxUsdOut = await quoteCurvePlain(
             state,
             ADDR.CURVE_MSUSD_FRXUSD,
             ADDR.MSUSD,
@@ -759,7 +614,7 @@ export async function quote(
           );
         }
       } else {
-        frxUsdOut = await quoteCurve(
+        frxUsdOut = await quoteCurvePlain(
           state,
           ADDR.CURVE_MSUSD_FRXUSD,
           ADDR.MSUSD,

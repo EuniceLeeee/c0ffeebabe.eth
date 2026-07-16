@@ -14,7 +14,6 @@ import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
-import { resolveCurveIndices } from "./quoter.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 const MIN_SQRT_PRICE = 4295128740n;
@@ -198,22 +197,6 @@ async function buildEdgeNode(
   }
 
   switch (edge.adapterId) {
-    case "curve-exchange-underlying": {
-      ensureApprove(edge.tokenIn, edge.target);
-      if (edge.curveI === undefined || edge.curveJ === undefined) {
-        throw new Error(`curve-underlying edge ${edge.target} missing resolved indices`);
-      }
-      return {
-        adapterId: "curve-exchange-underlying",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: { i: BigInt(edge.curveI), j: BigInt(edge.curveJ), minDy: 0n },
-        children: [],
-      };
-    }
-
     case "metronome-hgusdc-exit":
       // The router starts with Curve exchange_received; it does not pull msUSD.
       // Pre-fund the exact Curve pool, matching the successful reference trace.
@@ -257,28 +240,6 @@ async function buildEdgeNode(
         params: {},
         children: [],
       };
-
-    case "curve-exchange":
-    case "curve-exchange-received-uint":
-    case "curve-exchange-nr":
-    case "curve-exchange-plain": {
-      // Always use plain exchange (transferFrom mode) — avoids the
-      // "transfer pre-estimated amount to pool" problem of _received variants
-      // which is fragile when quoter is off by even one wei.
-      // Plain exchange uses transferFrom so BotVM doesn't need to know the
-      // exact actual amount mid-execution.
-      ensureApprove(edge.tokenIn, edge.target);
-      const [i, j] = await resolveCurveIndices(state, edge.target, edge.tokenIn, edge.tokenOut);
-      return {
-        adapterId: "curve-exchange-plain",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: { i: BigInt(i), j: BigInt(j), minDy: 0n },
-        children: [],
-      };
-    }
 
     case "fluid-dex-swap": {
       ensureApprove(edge.tokenIn, edge.target);

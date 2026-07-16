@@ -3,10 +3,6 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
 import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
-import {
-  probeCurveUnderlyingQuote,
-  resolveCurveUnderlyingMetadata,
-} from "../venues/curve-underlying.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
@@ -245,12 +241,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
 
-const curveCoinsIface = new ethers.Interface([
-  "function coins(uint256 i) view returns (address)",
-]);
-const curveCoinsIntIface = new ethers.Interface([
-  "function coins(int128 i) view returns (address)",
-]);
 const metronomeSynthPoolIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
@@ -345,43 +335,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
   const edges: TokenEdge[] = [];
 
   switch (pool.adapter) {
-    case "curve":
-    case "curve-nr": {
-      const coins = await queryCurveCoins(backend, pool.address);
-      for (let i = 0; i < coins.length; i++) {
-        for (let j = 0; j < coins.length; j++) {
-          if (i === j) continue;
-          edges.push({
-            adapterId, target: pool.address,
-            tokenIn: coins[i], tokenOut: coins[j],
-            slotKind: "swap", curveI: i, curveJ: j,
-            ...deriveEdgeTaxonomy("swap"),
-          });
-        }
-      }
-      break;
-    }
-    case "curve-underlying": {
-      const { coins } = await resolveCurveUnderlyingMetadata(backend, pool.address, {
-        allowDirectPoolFallback: true,
-      });
-      for (let i = 0; i < coins.length; i++) {
-        for (let j = 0; j < coins.length; j++) {
-          if (i === j) continue;
-          if (!await probeCurveUnderlyingQuote(backend, pool.address, i, j)) continue;
-          edges.push({
-            adapterId, target: pool.address,
-            tokenIn: coins[i], tokenOut: coins[j],
-            slotKind: "swap", curveI: i, curveJ: j,
-            ...deriveEdgeTaxonomy("swap"),
-          });
-        }
-      }
-      if (edges.length === 0) {
-        throw new Error(`curve-underlying pool ${pool.address} exposed no quotable directions`);
-      }
-      break;
-    }
     case "fluid-dex": {
       if (!pool.token0 || !pool.token1) {
         throw new Error(`fluid-dex pool ${pool.address} missing pinned token0/token1 metadata`);
@@ -595,33 +548,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
 }
 
 // ─── On-chain queries ─────────────────────────────────────────
-
-async function queryCurveCoins(backend: TokenQueryBackend, pool: string): Promise<string[]> {
-  const coins: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    const addr = await queryCurveCoinAt(backend, pool, i);
-    if (!addr) break;
-    coins.push(addr);
-  }
-  if (coins.length === 0) throw new Error(`curve pool ${pool} returned no coins`);
-  return coins;
-}
-
-async function queryCurveCoinAt(backend: TokenQueryBackend, pool: string, index: number): Promise<string | null> {
-  for (const iface of [curveCoinsIface, curveCoinsIntIface]) {
-    try {
-      const data = iface.encodeFunctionData("coins", [BigInt(index)]);
-      const result = await backend.call({ to: pool, data });
-      if (!result || result === "0x") continue;
-      const addr = ethers.getAddress("0x" + result.slice(-40));
-      if (addr === ethers.ZeroAddress) return null;
-      return addr;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
 
 async function queryMetronomeSynths(backend: TokenQueryBackend, pool: string): Promise<string[]> {
   const out: string[] = [];

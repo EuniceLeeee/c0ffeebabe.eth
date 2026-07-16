@@ -14,6 +14,8 @@ function assert(cond: boolean, message: string): asserts cond {
 }
 
 const pair = "0x00000000000000000000000000000000000000A1";
+const curvePool = "0x00000000000000000000000000000000000000C1";
+const curveUnderlyingPool = "0x00000000000000000000000000000000000000C2";
 const token0 = "0x0000000000000000000000000000000000000001";
 const token1 = "0x0000000000000000000000000000000000000002";
 const uniswapV2Factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
@@ -22,6 +24,15 @@ const pairIface = new ethers.Interface([
   "function factory() view returns (address)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
+]);
+const curveIface = new ethers.Interface([
+  "function coins(uint256 i) view returns (address)",
+  "function coins(int128 i) view returns (address)",
+  "function get_dy(int128 i, int128 j, uint256 dx) view returns (uint256)",
+]);
+const curveUnderlyingIface = new ethers.Interface([
+  "function underlying_coins(int128 i) view returns (address)",
+  "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
 ]);
 
 const backend: TokenQueryBackend = {
@@ -43,9 +54,53 @@ const backend: TokenQueryBackend = {
   },
 };
 
+const curveBackend: TokenQueryBackend = {
+  async call(req) {
+    const selector = req.data.slice(0, 10);
+    const uintCoins = curveIface.getFunction("coins(uint256)")!;
+    const intCoins = curveIface.getFunction("coins(int128)")!;
+    if (selector === uintCoins.selector || selector === intCoins.selector) {
+      const fn = selector === uintCoins.selector ? uintCoins : intCoins;
+      const index = Number(curveIface.decodeFunctionData(fn, req.data)[0]);
+      const token = index === 0 ? token0 : index === 1 ? token1 : ethers.ZeroAddress;
+      return curveIface.encodeFunctionResult(fn, [token]);
+    }
+    if (selector === curveIface.getFunction("get_dy")!.selector) {
+      const amountIn = BigInt(curveIface.decodeFunctionData("get_dy", req.data)[2]);
+      return curveIface.encodeFunctionResult("get_dy", [amountIn * 2n]);
+    }
+    throw new Error(`unexpected Curve selector ${selector}`);
+  },
+};
+
+const curveUnderlyingBackend: TokenQueryBackend = {
+  async call(req) {
+    const selector = req.data.slice(0, 10);
+    if (selector === curveUnderlyingIface.getFunction("underlying_coins")!.selector) {
+      const index = Number(curveUnderlyingIface.decodeFunctionData("underlying_coins", req.data)[0]);
+      if (index > 1) throw new Error("underlying coin index out of range");
+      return curveUnderlyingIface.encodeFunctionResult("underlying_coins", [index === 0 ? token0 : token1]);
+    }
+    if (selector === curveUnderlyingIface.getFunction("get_dy_underlying")!.selector) {
+      const amountIn = BigInt(curveUnderlyingIface.decodeFunctionData("get_dy_underlying", req.data)[2]);
+      return curveUnderlyingIface.encodeFunctionResult("get_dy_underlying", [amountIn * 3n]);
+    }
+    // Force the explicitly allowed direct-pool fallback instead of fabricating MetaRegistry state.
+    throw new Error(`unexpected Curve underlying selector ${selector}`);
+  },
+};
+
 async function main(): Promise<void> {
   const adapters = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list();
-  assert(adapters.length === 2, `production route adapter count ${adapters.length}`);
+  assert(adapters.length === 4, `production route adapter count ${adapters.length}`);
+  for (const routeAdapter of adapters) {
+    for (const poolAdapter of routeAdapter.poolAdapters) {
+      assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);
+    }
+    for (const edgeAdapterId of routeAdapter.edgeAdapterIds) {
+      assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge(edgeAdapterId) === routeAdapter, `${routeAdapter.id} edge alias`);
+    }
+  }
   const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge("univ2-swap");
   assert(adapter.id === "univ2-standard", `univ2 family ${adapter.id}`);
   assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool("univ2") === adapter, "pool alias lookup");
@@ -89,6 +144,53 @@ async function main(): Promise<void> {
   assert(fragment.nodes[0].children[0]?.adapterId === "erc20-transfer", "univ2 callback transfer");
   console.log("[route-adapters] univ2 plan fragment equivalence: PASS");
 
+  const curveAdapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily("curve-plain");
+  const curveEdges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
+    { address: curvePool, adapter: "curve", score: 5 },
+    curveBackend,
+  );
+  assert(curveEdges.length === 2, `curve edge count ${curveEdges.length}`);
+  assert(curveEdges.every((edge) => edge.curveI !== edge.curveJ && edge.score === 5), "curve indices/score");
+  const curveQuote = await curveAdapter.quoteExact({
+    state: curveBackend as never,
+    target: curvePool,
+    edgeAdapterId: "curve-exchange-plain",
+    tokenIn: token0,
+    tokenOut: token1,
+    amountIn,
+  });
+  assert(curveQuote === amountIn * 2n, `curve quote ${curveQuote}`);
+  const curveFragment = await curveAdapter.buildPlanFragment({
+    edge: curveEdges[0], amountIn, amountOut: curveQuote,
+    executor: ethers.ZeroAddress, state: curveBackend as never,
+  });
+  assert(curveFragment.requirements[0]?.kind === "approve", "curve approval requirement");
+  assert(curveFragment.nodes[0]?.adapterId === "curve-exchange-plain", "curve plain action");
+  console.log("[route-adapters] curve plain graph/quote/plan equivalence: PASS");
+
+  const underlyingAdapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily("curve-underlying");
+  const underlyingEdges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
+    { address: curveUnderlyingPool, adapter: "curve-underlying", score: 3 },
+    curveUnderlyingBackend,
+  );
+  assert(underlyingEdges.length === 2, `curve underlying edge count ${underlyingEdges.length}`);
+  const underlyingQuote = await underlyingAdapter.quoteExact({
+    state: curveUnderlyingBackend as never,
+    target: curveUnderlyingPool,
+    edgeAdapterId: "curve-exchange-underlying",
+    tokenIn: token0,
+    tokenOut: token1,
+    amountIn,
+  });
+  assert(underlyingQuote === amountIn * 3n, `curve underlying quote ${underlyingQuote}`);
+  const underlyingFragment = await underlyingAdapter.buildPlanFragment({
+    edge: underlyingEdges[0], amountIn, amountOut: underlyingQuote,
+    executor: ethers.ZeroAddress, state: curveUnderlyingBackend as never,
+  });
+  assert(underlyingFragment.requirements[0]?.kind === "approve", "underlying approval requirement");
+  assert(underlyingFragment.nodes[0]?.adapterId === "curve-exchange-underlying", "underlying action");
+  console.log("[route-adapters] curve underlying graph/quote/plan equivalence: PASS");
+
   const actionIds = new Set(listAll().map((action) => action.id));
   for (const routeAdapter of adapters) {
     for (const actionId of routeAdapter.actionAdapterIds) {
@@ -121,7 +223,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (6/6)");
+  console.log("route-adapters PASS (8/8)");
 }
 
 await main();

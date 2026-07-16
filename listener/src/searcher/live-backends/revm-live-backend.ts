@@ -22,12 +22,12 @@ import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
 import {
   quoteFluidDex,
-  quoteCurveUnderlying,
   quoteGoldxMint,
   encodeUniV4QuoteExactInputSingle,
   metronomeSynthPoolIface,
   uniV4QuoterIface,
 } from "../solver/quoter.js";
+import { quoteCurveUnderlying } from "../venues/swaps/curve-underlying.js";
 import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import {
   postImpactStateOverrides,
