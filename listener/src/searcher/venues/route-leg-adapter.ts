@@ -55,6 +55,15 @@ export interface ExactQuoteContext {
   tokenOut?: string;
   edge?: TokenEdge;
   cache?: PoolStateCache;
+  v4PoolKey?: TokenEdge["v4PoolKey"];
+  v4QuoteStats?: V4QuotePathStats;
+}
+
+export interface V4QuotePathStats {
+  local: number;
+  fallback: number;
+  localFailures: number;
+  hookSkipped: number;
 }
 
 export interface RouteLegAdapter {

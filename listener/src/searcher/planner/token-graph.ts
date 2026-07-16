@@ -4,6 +4,7 @@ import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind }
 import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -110,26 +111,6 @@ export interface V4PoolKey {
   fee: number;
   tickSpacing: number;
   hooks: string;
-}
-
-const V4_POOLKEY_TUPLE =
-  "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
-const V4_SWAP_HOOK_MASK = 0xccn;
-
-/** Canonical Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). */
-export function v4PoolId(key: V4PoolKey): string {
-  return ethers
-    .keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        [V4_POOLKEY_TUPLE],
-        [[key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]],
-      ),
-    )
-    .toLowerCase();
-}
-
-export function v4HooksAffectSwap(hooks: string): boolean {
-  return (BigInt(hooks) & V4_SWAP_HOOK_MASK) !== 0n;
 }
 
 // DEX pools are discovered via scanActivePools / factory events.
@@ -244,12 +225,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
 const metronomeSynthPoolIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
-const v4InitializeIface = new ethers.Interface([
-  "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
-]);
-const V4_INITIALIZE_TOPIC = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
-const V4_POOL_MANAGER_DEPLOY_BLOCK = "0x0";
-const v4PoolKeyCache = new Map<string, V4PoolKey>();
 
 const ADAPTER_MAP: Record<string, string> = {
   "curve": "curve-exchange-plain",
@@ -340,31 +315,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       edges.push(
         { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
         { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-      );
-      break;
-    }
-    case "univ4": {
-      // V4 pools live inside the PoolManager — no individual contracts.
-      // Edges must carry fixedTokenIn/fixedTokenOut and the full PoolKey from the registry entry.
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`univ4 pool ${pool.address} requires fixedTokenIn/fixedTokenOut`);
-      }
-      const poolKey = await resolveV4PoolKey(pool, backend);
-      if (v4HooksAffectSwap(poolKey.hooks)) {
-        // Swap-hooked v4 pools need hookData our quote/execution path does not supply.
-        break;
-      }
-      const tIn = normalizeV4Currency(pool.fixedTokenIn, "fixedTokenIn");
-      const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut");
-      validateV4Pair(pool.address, poolKey, tIn, tOut);
-      const poolId = v4PoolId(poolKey);
-      const graphIn = tIn === ethers.ZeroAddress ? ADDR.WETH : tIn;
-      const graphOut = tOut === ethers.ZeroAddress ? ADDR.WETH : tOut;
-      const nc0 = poolKey.currency0 === ethers.ZeroAddress;
-      const nc1 = poolKey.currency1 === ethers.ZeroAddress;
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
       );
       break;
     }
@@ -783,107 +733,6 @@ function sameDirectedEdge(a: TokenEdge, b: TokenEdge): boolean {
     a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
     a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase() &&
     v4PoolKeyIdentity(a.v4PoolKey) === v4PoolKeyIdentity(b.v4PoolKey);
-}
-
-async function resolveV4PoolKey(pool: PoolEntry, backend: TokenQueryBackend): Promise<V4PoolKey> {
-  if (hasInlineV4PoolKey(pool)) return v4PoolKeyFromEntry(pool);
-  if (pool.poolId && backend.getLogs) {
-    const cached = v4PoolKeyCache.get(pool.poolId.toLowerCase());
-    if (cached) return cached;
-    const logs = await backend.getLogs({
-      address: ADDR.UNISWAP_V4_POOL_MANAGER,
-      topics: [V4_INITIALIZE_TOPIC, normalizeBytes32(pool.poolId, "poolId")],
-      fromBlock: V4_POOL_MANAGER_DEPLOY_BLOCK,
-      toBlock: "latest",
-    });
-    const first = logs[0];
-    if (first) {
-      const parsed = v4InitializeIface.parseLog({ topics: first.topics, data: first.data });
-      if (parsed) {
-        const key = {
-          currency0: normalizeV4Currency(String(parsed.args.currency0), "currency0"),
-          currency1: normalizeV4Currency(String(parsed.args.currency1), "currency1"),
-          fee: uint24(Number(parsed.args.fee), "fee"),
-          tickSpacing: int24(Number(parsed.args.tickSpacing), "tickSpacing"),
-          hooks: normalizeV4Currency(String(parsed.args.hooks), "hooks"),
-        };
-        v4PoolKeyCache.set(pool.poolId.toLowerCase(), key);
-        return key;
-      }
-    }
-  }
-  return v4PoolKeyFromEntry(pool);
-}
-
-function hasInlineV4PoolKey(pool: PoolEntry): boolean {
-  return pool.currency0 !== undefined &&
-    pool.currency1 !== undefined &&
-    pool.fee !== undefined &&
-    pool.tickSpacing !== undefined &&
-    pool.hooks !== undefined;
-}
-
-function v4PoolKeyFromEntry(pool: PoolEntry): V4PoolKey {
-  const missing: string[] = [];
-  if (pool.currency0 === undefined) missing.push("currency0");
-  if (pool.currency1 === undefined) missing.push("currency1");
-  if (pool.fee === undefined) missing.push("fee");
-  if (pool.tickSpacing === undefined) missing.push("tickSpacing");
-  if (pool.hooks === undefined) missing.push("hooks");
-  if (missing.length > 0) {
-    const id = pool.poolId ? `${pool.address} poolId=${pool.poolId}` : pool.address;
-    throw new Error(`univ4 pool ${id} missing PoolKey field(s): ${missing.join(", ")}`);
-  }
-  const { currency0, currency1, fee, tickSpacing, hooks } = pool as Required<
-    Pick<PoolEntry, "currency0" | "currency1" | "fee" | "tickSpacing" | "hooks">
-  >;
-  return {
-    currency0: normalizeV4Currency(currency0, "currency0"),
-    currency1: normalizeV4Currency(currency1, "currency1"),
-    fee: uint24(fee, "fee"),
-    tickSpacing: int24(tickSpacing, "tickSpacing"),
-    hooks: normalizeV4Currency(hooks, "hooks"),
-  };
-}
-
-function normalizeBytes32(value: string, field: string): string {
-  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error(`univ4 ${field} must be bytes32, got ${value}`);
-  }
-  return value.toLowerCase();
-}
-
-function validateV4Pair(pool: string, key: V4PoolKey, tokenIn: string, tokenOut: string): void {
-  const currencies = new Set([key.currency0.toLowerCase(), key.currency1.toLowerCase()]);
-  if (!currencies.has(tokenIn.toLowerCase()) || !currencies.has(tokenOut.toLowerCase())) {
-    throw new Error(
-      `univ4 pool ${pool} fixed tokens ${tokenIn}/${tokenOut} do not match PoolKey ` +
-        `${key.currency0}/${key.currency1}`,
-    );
-  }
-}
-
-function normalizeV4Currency(value: string, field: string): string {
-  if (value.toLowerCase() === "0x0") return ethers.ZeroAddress;
-  try {
-    return ethers.getAddress(value);
-  } catch {
-    throw new Error(`univ4 PoolKey ${field} must be an address or 0x0, got ${value}`);
-  }
-}
-
-function uint24(value: number, field: string): number {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
-    throw new Error(`univ4 PoolKey ${field} must be a uint24, got ${value}`);
-  }
-  return value;
-}
-
-function int24(value: number, field: string): number {
-  if (!Number.isInteger(value) || value < -0x800000 || value > 0x7fffff) {
-    throw new Error(`univ4 PoolKey ${field} must be an int24, got ${value}`);
-  }
-  return value;
 }
 
 function v4PoolKeyIdentity(key: V4PoolKey | undefined): string {

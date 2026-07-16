@@ -2,12 +2,17 @@ import { ethers } from "ethers";
 import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import { type V4PoolKey, v4HooksAffectSwap } from "../planner/token-graph.js";
+import type { V4PoolKey } from "../planner/token-graph.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 export { quoteBalancerV3 } from "../venues/swaps/balancer-v3.js";
 import { quoteCurvePlain } from "../venues/swaps/curve-shared.js";
+import type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
+export type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
+export {
+  encodeUniV4QuoteExactInputSingle,
+  uniV4QuoterIface,
+} from "../venues/swaps/univ4.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
-import { quoteV4ExactInLocal } from "./v4-math.js";
 
 /**
  * Quoter — per-protocol amountOut estimation on the current fork state.
@@ -24,13 +29,6 @@ const FLUID_DEX_RESOLVER_ENV = "FLUID_DEX_RESOLVER";
 export const FLUID_DEX_ADDRESS_DEAD = "0x000000000000000000000000000000000000dEaD";
 
 type CallBackend = Pick<StateBackend, "call">;
-
-export interface V4QuotePathStats {
-  local: number;
-  fallback: number;
-  localFailures: number;
-  hookSkipped: number;
-}
 
 // ── GOLDx (fully collateralized PAXG conversion) ─────────────
 
@@ -202,186 +200,6 @@ export async function quoteMetronomeSynthSwap(
   return BigInt(decoded[0]);
 }
 
-// ── UniV4 (local math, V4Quoter fallback) ─────────────────────
-
-export const uniV4QuoterIface = new ethers.Interface([
-  "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
-]);
-
-const MAX_UINT128 = (1n << 128n) - 1n;
-
-async function quoteUniV4(
-  state: StateBackend,
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-  poolKey: V4PoolKey | undefined,
-  stats?: V4QuotePathStats,
-): Promise<bigint> {
-  const key = validateUniV4QuoteInput(tokenIn, tokenOut, amountIn, poolKey);
-  if (isLocalV4QuoteEligible(key)) {
-    try {
-      const amountOut = await quoteV4ExactInLocal(state, key, tokenIn, tokenOut, amountIn);
-      if (stats) stats.local++;
-      return amountOut;
-    } catch {
-      if (stats) stats.localFailures++;
-      /* fall through to V4Quoter eth_call */
-    }
-  } else if (stats) {
-    stats.hookSkipped++;
-  }
-
-  if (stats) stats.fallback++;
-  const data = encodeUniV4QuoteExactInputSingle(tokenIn, tokenOut, amountIn, key);
-  const result = await state.call({ to: ADDR.UNISWAP_V4_QUOTER, data });
-  const decoded = uniV4QuoterIface.decodeFunctionResult("quoteExactInputSingle", result);
-  return BigInt(decoded[0]);
-}
-
-function validateUniV4QuoteInput(
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-  poolKey: V4PoolKey | undefined,
-): V4PoolKey {
-  if (!poolKey) {
-    throw new Error(`V4 quoter: missing PoolKey for ${tokenIn} -> ${tokenOut}`);
-  }
-  if (amountIn < 0n || amountIn > MAX_UINT128) {
-    throw new Error(`V4 quoter: exactAmount does not fit uint128: ${amountIn}`);
-  }
-  const key = normalizeV4PoolKey(poolKey);
-  const inCurrency = normalizeV4Currency(tokenIn, "tokenIn");
-  const outCurrency = normalizeV4Currency(tokenOut, "tokenOut");
-  v4ZeroForOne(key, inCurrency, outCurrency);
-  return key;
-}
-
-function isLocalV4QuoteEligible(key: V4PoolKey): boolean {
-  return key.hooks.toLowerCase() === ethers.ZeroAddress.toLowerCase() && !v4HooksAffectSwap(key.hooks);
-}
-
-export function encodeUniV4QuoteExactInputSingle(
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-  poolKey: V4PoolKey | undefined,
-): string {
-  if (!poolKey) {
-    throw new Error(`V4 quoter: missing PoolKey for ${tokenIn} -> ${tokenOut}`);
-  }
-  if (amountIn < 0n || amountIn > MAX_UINT128) {
-    throw new Error(`V4 quoter: exactAmount does not fit uint128: ${amountIn}`);
-  }
-  const key = normalizeV4PoolKey(poolKey);
-  const inCurrency = normalizeV4Currency(tokenIn, "tokenIn");
-  const outCurrency = normalizeV4Currency(tokenOut, "tokenOut");
-  const zeroForOne = v4ZeroForOne(key, inCurrency, outCurrency);
-  return uniV4QuoterIface.encodeFunctionData("quoteExactInputSingle", [
-    {
-      poolKey: key,
-      zeroForOne,
-      exactAmount: amountIn,
-      hookData: "0x",
-    },
-  ]);
-}
-
-export function normalizeV4PoolKey(poolKey: V4PoolKey): V4PoolKey {
-  return {
-    currency0: normalizeV4Currency(poolKey.currency0, "currency0"),
-    currency1: normalizeV4Currency(poolKey.currency1, "currency1"),
-    fee: uint24(poolKey.fee, "fee"),
-    tickSpacing: int24(poolKey.tickSpacing, "tickSpacing"),
-    hooks: normalizeV4Currency(poolKey.hooks, "hooks"),
-  };
-}
-
-function v4ZeroForOne(key: V4PoolKey, tokenIn: string, tokenOut: string): boolean {
-  rejectNativeWethV4Pool(key, "V4 quoter");
-  const realIn = realV4Currency(tokenIn, key, "tokenIn");
-  const realOut = realV4Currency(tokenOut, key, "tokenOut");
-  validateV4CurrencyPair(realIn, realOut, key, "V4 quoter");
-  const c0 = key.currency0.toLowerCase();
-  const c1 = key.currency1.toLowerCase();
-  const tIn = realIn.toLowerCase();
-  const tOut = realOut.toLowerCase();
-  if (tIn === c0 && tOut === c1) return true;
-  if (tIn === c1 && tOut === c0) return false;
-  throw new Error(
-    `V4 quoter: tokens ${tokenIn} -> ${tokenOut} do not match PoolKey ` +
-      `${key.currency0} / ${key.currency1}`,
-  );
-}
-
-function normalizeV4Currency(value: string, field: string): string {
-  if (value.toLowerCase() === "0x0") return ethers.ZeroAddress;
-  try {
-    return ethers.getAddress(value);
-  } catch {
-    throw new Error(`V4 quoter: ${field} must be an address or 0x0, got ${value}`);
-  }
-}
-
-function realV4Currency(token: string, key: V4PoolKey, field: string): string {
-  const c0 = key.currency0;
-  const c1 = key.currency1;
-  const t = token.toLowerCase();
-  if (t === c0.toLowerCase()) return c0;
-  if (t === c1.toLowerCase()) return c1;
-
-  const c0Native = c0.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-  const c1Native = c1.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-  if (c0Native !== c1Native && t === ADDR.WETH.toLowerCase()) {
-    return c0Native ? c0 : c1;
-  }
-
-  throw new Error(
-    `V4 quoter: ${field} ${token} does not match PoolKey ${c0} / ${c1}`,
-  );
-}
-
-function validateV4CurrencyPair(
-  realIn: string,
-  realOut: string,
-  key: V4PoolKey,
-  context: string,
-): void {
-  const a = [realIn.toLowerCase(), realOut.toLowerCase()].sort().join("/");
-  const b = [key.currency0.toLowerCase(), key.currency1.toLowerCase()].sort().join("/");
-  if (a !== b) {
-    throw new Error(
-      `${context}: resolved pair ${realIn} / ${realOut} does not match PoolKey ` +
-        `${key.currency0} / ${key.currency1}`,
-    );
-  }
-}
-
-function rejectNativeWethV4Pool(key: V4PoolKey, context: string): void {
-  const c0 = key.currency0.toLowerCase();
-  const c1 = key.currency1.toLowerCase();
-  const weth = ADDR.WETH.toLowerCase();
-  const zero = ethers.ZeroAddress.toLowerCase();
-  if ((c0 === zero && c1 === weth) || (c1 === zero && c0 === weth)) {
-    throw new Error(`${context}: native/WETH v4 pool not supported (ambiguous alias)`);
-  }
-}
-
-function uint24(value: number, field: string): number {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
-    throw new Error(`V4 quoter: PoolKey ${field} must be a uint24, got ${value}`);
-  }
-  return value;
-}
-
-function int24(value: number, field: string): number {
-  if (!Number.isInteger(value) || value < -0x800000 || value > 0x7fffff) {
-    throw new Error(`V4 quoter: PoolKey ${field} must be an int24, got ${value}`);
-  }
-  return value;
-}
-
 function quoteFluidVault(): bigint {
   throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
 }
@@ -545,12 +363,11 @@ export async function quote(
       tokenIn,
       tokenOut,
       cache,
+      v4PoolKey,
+      v4QuoteStats,
     });
   }
   switch (adapterId) {
-    case "univ4-unlock":
-      // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
-      return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);
     case "psm":
       return quotePSM(state, target, tokenIn, tokenOut, amountIn);
     case "fluid-dex-swap":

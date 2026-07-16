@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { type V4PoolKey, v4HooksAffectSwap, v4PoolId } from "../planner/token-graph.js";
+import type { V4PoolKey } from "../planner/token-graph.js";
+import { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 import {
   computeSwapStep,
   getSqrtRatioAtTick,

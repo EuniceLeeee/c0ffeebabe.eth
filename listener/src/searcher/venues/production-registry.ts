@@ -4,6 +4,7 @@ import { curvePlainAdapter } from "./swaps/curve-plain.js";
 import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
 import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
 import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
+import { univ4Adapter } from "./swaps/univ4.js";
 
 export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
   swaps: [
@@ -12,6 +13,7 @@ export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
     curvePlainAdapter,
     curveUnderlyingAdapter,
     balancerV3Adapter,
+    univ4Adapter,
   ],
   protocols: [],
 });
