@@ -64,7 +64,7 @@
 
 | # | 优先级 | 当前性 | 新卡点 | 交叉裁决 |
 |---|---|---|---|---|
-| 30 | **P0** | 当前安全违规 | **dry-run 仍用真实私钥签名** | fresh reviewer 提出,Codex 同意。`buildConfig()` 无论 dry/live 都构造 Wallet;dry router 收到 Wallet 后仍调 `buildSignedBackrunTx()`。不广播不改变“已在未授权 dry 包络中使用私钥签名”的事实,违反 `CLAUDE.md` Rule 1 |
+| 30 | **P0** | 当前安全违规 | **dry-run 仍用真实私钥签名** | fresh reviewer 提出,Codex 同意。`buildConfig()` 无论 dry/live 都构造 Wallet;dry router 收到 Wallet 后仍调 `buildSignedBackrunTx()`。不广播不改变“已在未授权 dry 包络中使用私钥签名”的事实,违反 `CLAUDE.md` Rule 1。**Claude 独立核实成立**:`main.ts:657-658` 确传 `config.wallet`(非 undefined);`test/bundle-router-safety.ts:62,77` 用无-wallet `new DryRunBundleRouter()` 绕开生产 with-wallet 构造 → 假绿。三方一致 |
 | 31 | **P1** | 当前,需开启 protocol edges + blockscan | **Metronome hGUSDC route 可 build/quote/plan,却永久无 blockscan mid** | fresh reviewer 提出,Codex 同意。adapter 的 `readMid=null,warm=null`;production mid collector 只处理 `warm.kind=protocol-mid`;scanner 遇到该腿返回 null 并静默丢环。现有 Metronome fork gate 是 backrun 固定 trigger 路径,不能证明 blockscan 消费者完整 |
 | 32 | **P1** | 当前生产覆盖 | **5 分钟 pool refresh 不发现 V4;对已发现的其他 pool 又只更新 backrun graph,且可永久毒化失败 pool** | fresh reviewer 与 Codex 独立命中主问题。最终反驳纠正 Codex 的 V4 子结论:`scanActivePools()` 当前根本没有 V4 topic/parser,因此不是“发现后被 address 去重吞掉”;未来接入 V4 refresh 时才必须同时改用 `poolRegistryKey()` |
 | 33 | **P1** | 当前 backrun 生产覆盖;blockscan 为相邻 policy 问题 | **backrun 可选全 graph 的 borrowable profit token,但 EV 只估 WETH+四稳定币** | fresh reviewer 与 Codex 独立命中主问题。planner/sim 可得正利润,最终 EV 却因不可估值算成 0 并 `below_ev_gate`。blockscan 四币 map 是独立的风险/额度策略,未有证据表明“四币”本身是 correctness bug;可共享 valuation capability,但不强制共享起始币集合 |
