@@ -1,7 +1,7 @@
 # Codex Plan — Searcher Route-Leg Adapter 架构重构
 
-> 基线：`origin/main@4392ffc59fd4aa593500c6ee4fb83b34fe50340a`  
-> 状态：施工计划；第一阶段只做行为等价重构，不引入新的 venue 能力。  
+> 基线：`origin/main@4392ffc59fd4aa593500c6ee4fb83b34fe50340a`
+> 状态：施工计划；第一阶段只做行为等价重构，不引入新的 venue 能力。
 > 目标：让新增 DEX 不再修改 `main.ts`、`token-graph.ts`、`quoter.ts`、`plan-builder.ts` 等核心分发文件，同时保留 unknown factory 的长尾发现能力和 final simulation 的 fail-closed 安全门。
 
 ## 1. 结论
