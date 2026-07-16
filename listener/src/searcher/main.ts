@@ -99,6 +99,7 @@ import { RevmSimClient } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
+import { replayVictimSwapOnAnvil } from "./live-backends/rpc-victim-replay.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
 import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js";
@@ -122,8 +123,6 @@ const V3_META = new ethers.Interface([
   "function tickSpacing() view returns (int24)",
 ]);
 const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
-const WHALE = "0x000000000000000000000000000000000000dEaD";
-
 interface HintLog {
   address: string;
   topics: string[];
@@ -2392,7 +2391,7 @@ async function processOpportunities(
             `${postImpactSummary(exactPostImpact)} overrides=${overrides}`,
         );
       } else {
-        await impersonateSwap(ctx.state, oppImpact, ctx.graph);
+        await replayVictimSwapOnAnvil(ctx.state, oppImpact, ctx.graph);
       }
       await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
       deps.segMark(exactPostImpact ? "anvilExactOverlay" : "anvilOverlay");
@@ -3452,98 +3451,6 @@ function hintLogsMatchTokenIndex(
   return false;
 }
 
-// ─── Impersonate Swap (Path A simulation) ─────────────────────
-
-const CURVE_EXCHANGE_IFACE = new ethers.Interface([
-  "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)",
-]);
-const UNIV3_ROUTER_IFACE = new ethers.Interface([
-  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)",
-]);
-const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-const UNIV2_ROUTER_IFACE = new ethers.Interface([
-  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
-]);
-const ERC20_IFACE = new ethers.Interface([
-  "function approve(address spender, uint256 amount)",
-  "function balanceOf(address account) view returns (uint256)",
-]);
-const UNIV3_FEE_IFACE = new ethers.Interface([
-  "function fee() view returns (uint24)",
-]);
-
-async function impersonateSwap(
-  state: AnvilStateBackend,
-  impact: PoolImpact,
-  graph: TokenEdge[],
-): Promise<void> {
-  const variant = PRODUCTION_VICTIM_MODELS
-    .forEdge(impact.matchedAdapterId)?.overlayReplayVariant;
-  if (!variant) {
-    throw new Error(`hash-only impersonate unsupported adapter ${impact.matchedAdapterId}`);
-  }
-  const whaleAddr = ethers.getAddress(WHALE);
-
-  await state.provider.send("anvil_setBalance", [whaleAddr, FORK_ETH_BALANCE]);
-  await dealToken(state, impact.tokenIn, whaleAddr, impact.amountIn * 2n);
-  await state.provider.send("anvil_impersonateAccount", [whaleAddr]);
-
-  try {
-    const poolAddr = ethers.getAddress(impact.pool);
-    let approveTarget: string;
-    if (variant === "curve") {
-      approveTarget = poolAddr;
-    } else if (variant === "univ2") {
-      approveTarget = UNIV2_ROUTER;
-    } else {
-      approveTarget = UNIV3_SWAP_ROUTER;
-    }
-    const approveData = ERC20_IFACE.encodeFunctionData("approve", [approveTarget, impact.amountIn * 2n]);
-    await state.send({ from: whaleAddr, to: impact.tokenIn, data: approveData });
-
-    if (variant === "curve") {
-      const poolEdge = graph.find(
-        (e) => e.target.toLowerCase() === impact.pool.toLowerCase() &&
-          e.tokenIn.toLowerCase() === impact.tokenIn.toLowerCase() &&
-          e.curveI !== undefined,
-      );
-      if (!poolEdge || poolEdge.curveI === undefined || poolEdge.curveJ === undefined) {
-        throw new Error(`no curve edge for impersonate: ${impact.pool}`);
-      }
-      const exchangeData = CURVE_EXCHANGE_IFACE.encodeFunctionData("exchange", [
-        poolEdge.curveI, poolEdge.curveJ, impact.amountIn, 0,
-      ]);
-      await state.send({ from: whaleAddr, to: poolAddr, data: exchangeData, gas: "0x1000000" });
-
-    } else if (variant === "univ2") {
-      const deadline = Math.floor(Date.now() / 1000) + 3600;
-      const swapData = UNIV2_ROUTER_IFACE.encodeFunctionData("swapExactTokensForTokens", [
-        impact.amountIn, 0, [impact.tokenIn, impact.tokenOut], whaleAddr, deadline,
-      ]);
-      await state.send({ from: whaleAddr, to: UNIV2_ROUTER, data: swapData, gas: "0x1000000" });
-
-    } else if (variant === "univ3") {
-      const feeData = UNIV3_FEE_IFACE.encodeFunctionData("fee", []);
-      const feeResult = await state.call({ to: impact.pool, data: feeData });
-      const fee = Number(BigInt(feeResult));
-
-      const swapData = UNIV3_ROUTER_IFACE.encodeFunctionData("exactInputSingle", [{
-        tokenIn: impact.tokenIn,
-        tokenOut: impact.tokenOut,
-        fee,
-        recipient: whaleAddr,
-        amountIn: impact.amountIn,
-        amountOutMinimum: 0n,
-        sqrtPriceLimitX96: 0n,
-      }]);
-      await state.send({ from: whaleAddr, to: UNIV3_SWAP_ROUTER, data: swapData, gas: "0x1000000" });
-    }
-  } finally {
-    await state.provider.send("anvil_stopImpersonatingAccount", [whaleAddr]);
-  }
-}
-
 function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
   return edges
     .filter((edge) => edge.slotKind === "swap")
@@ -4291,63 +4198,6 @@ async function resolveAnvilBalanceSlot(
       return ret && ret !== "0x" ? BigInt(ret) : 0n;
     },
   });
-}
-
-/**
- * Deal ERC-20 tokens to an address on Anvil.
- * Uses anvil_setStorageAt to write the balanceOf mapping slot.
- * Handles both standard (slot 0) and non-standard storage layouts by
- * trying common balance slots.
- */
-async function dealToken(
-  state: AnvilStateBackend,
-  token: string,
-  to: string,
-  amount: bigint,
-): Promise<void> {
-  const tokenAddr = ethers.getAddress(token);
-  const toAddr = ethers.getAddress(to);
-
-  // Common ERC-20 balanceOf mapping base slots.
-  // For each candidate, compute keccak256(abi.encode(address, slotIndex))
-  // and try writing. Use snapshot/revert so wrong guesses don't pollute state.
-  const BALANCE_SLOTS_TO_TRY = [0, 1, 2, 3, 4, 5, 9, 51];
-
-  for (const slotIndex of BALANCE_SLOTS_TO_TRY) {
-    const snap = await state.snapshot();
-    const slot = ethers.keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        ["address", "uint256"],
-        [toAddr, slotIndex],
-      ),
-    );
-    const value = ethers.zeroPadValue(ethers.toBeHex(amount), 32);
-    await state.provider.send("anvil_setStorageAt", [tokenAddr, slot, value]);
-
-    const balAfter = await readBalance(state, tokenAddr, toAddr);
-    if (balAfter >= amount) return; // Correct slot found, state is clean
-
-    // Wrong slot — revert to avoid polluting storage
-    await state.revert(snap);
-  }
-
-  // None worked. The impersonate swap will fail with insufficient balance.
-  // Caller catches this as a normal hint-skip.
-  console.log(
-    `[searcher/live] warning: dealToken could not find balance slot for ${tokenAddr}`,
-  );
-}
-
-async function readBalance(
-  state: AnvilStateBackend,
-  token: string,
-  account: string,
-): Promise<bigint> {
-  try {
-    return await state.getTokenBalance(token, account);
-  } catch {
-    return 0n;
-  }
 }
 
 async function prepareForkExecutor(
