@@ -40,7 +40,8 @@ export interface VenueCapability {
 // - quoter.ts supports curve*, univ2-swap, univ3-swap, univ4-unlock, psm, fluid-dex-swap, fluid-vault.
 // - plan-builder.ts supports those same swap/lend adapter ids.
 // - ActionAdapter registry registers univ2/univ3/univ4/curve/psm/fluid adapters.
-// - path-template.ts includes psm/univ4/univ3/univ2/curve* swap adapters.
+// - path-template.ts derives trade-leg edge ids from PRODUCTION_ROUTE_ADAPTERS,
+//   plus an explicit fixture-blocked legacy descriptor for Fluid DEX.
 export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   {
     venue: "univ2",

@@ -5,12 +5,26 @@ import { listAll } from "../../adapters/registry.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { PoolEntry, TokenQueryBackend } from "../planner/token-graph.js";
 import { quoteV2ExactInput } from "../solver/v2-fee.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import {
+  LEGACY_PRODUCTION_ROUTE_EDGES,
+  PRODUCTION_ROUTE_ADAPTERS,
+} from "../venues/production-registry.js";
+import {
+  deriveTemplateTradeAdapterIds,
+  FLASH_LEND_SWAP_REPAY,
+  FLASH_SWAP_REPAY,
+} from "../templates/path-template.js";
 import { RouteLegRegistry } from "../venues/route-leg-registry.js";
 import type { SwapAdapter } from "../venues/route-leg-adapter.js";
 
 function assert(cond: boolean, message: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${message}`);
+}
+
+function assertSetEqual(actual: ReadonlySet<string>, expected: ReadonlySet<string>, message: string): void {
+  const missing = [...expected].filter((item) => !actual.has(item));
+  const extra = [...actual].filter((item) => !expected.has(item));
+  assert(missing.length === 0 && extra.length === 0, `${message}: missing=${missing} extra=${extra}`);
 }
 
 const pair = "0x00000000000000000000000000000000000000A1";
@@ -241,6 +255,35 @@ async function main(): Promise<void> {
   }
   console.log("[route-adapters] action registry coverage: PASS");
 
+  const expectedTemplateAdapters = deriveTemplateTradeAdapterIds(
+    PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+    LEGACY_PRODUCTION_ROUTE_EDGES,
+  );
+  for (const template of [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]) {
+    const slotAdapters = template.slots.find((slot) => slot.id === "swap")?.adapters ?? [];
+    assertSetEqual(
+      new Set(slotAdapters),
+      new Set(expectedTemplateAdapters),
+      `${template.name} trade adapter registry drift`,
+    );
+  }
+  const withSynthetic = deriveTemplateTradeAdapterIds([
+    ...PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+    {
+      edgeAdapterIds: ["synthetic-route-adapter"],
+      allowedTaxonomy: [{ slotKind: "swap" }],
+    },
+  ], LEGACY_PRODUCTION_ROUTE_EDGES);
+  assert(
+    withSynthetic.includes("synthetic-route-adapter"),
+    "new registry adapter must flow into path templates without a second allowlist",
+  );
+  assert(
+    expectedTemplateAdapters.includes("fluid-dex-swap"),
+    "fixture-blocked Fluid DEX legacy route must stay explicitly admitted",
+  );
+  console.log("[route-adapters] path-template registry derivation: PASS");
+
   for (const protocolAdapter of PRODUCTION_ROUTE_ADAPTERS.protocols) {
     const blockscanAdmitted = protocolAdapter.allowedTaxonomy.some((taxonomy) =>
       taxonomy.slotKind === "protocol" &&
@@ -352,7 +395,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (11/11)");
+  console.log("route-adapters PASS (12/12)");
 }
 
 await main();

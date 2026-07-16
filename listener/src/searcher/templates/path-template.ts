@@ -1,4 +1,10 @@
-import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
+import { deriveEdgeTaxonomy, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
+import type { AllowedTaxonomy } from "../venues/route-leg-adapter.js";
+import {
+  LEGACY_PRODUCTION_ROUTE_EDGES,
+  PRODUCTION_ROUTE_ADAPTERS,
+  type LegacyRouteEdgeDescriptor,
+} from "../venues/production-registry.js";
 
 export type TemplateSlotKind = "flash" | "lend" | "swap" | "repay" | "guard";
 
@@ -20,28 +26,52 @@ export interface PathTemplate {
   constraints: TemplateConstraint[];
 }
 
-const SWAP_ADAPTERS = [
-  "psm",
-  ...PROTOCOL_LEG_DESCRIPTORS.map((desc) => desc.id),
-  "metronome-hgusdc-exit",
-  "fluid-dex-swap",
-  "univ4-unlock",
-  "balancer-v3-unlock",
-  "univ3-swap",
-  "univ2-swap",
-  "curve-exchange",
-  "curve-exchange-nr",
-  "curve-exchange-plain",
-  "curve-exchange-underlying",
-  "curve-exchange-received-uint",
-];
+export interface TemplateTradeRouteDescriptor {
+  readonly edgeAdapterIds: readonly string[];
+  readonly allowedTaxonomy: readonly AllowedTaxonomy[];
+}
+
+/**
+ * Derive closed-loop trade legs from the execution registry. Protocol conversions
+ * are intentionally admitted alongside swaps when their taxonomy closes without
+ * leaving a standing position. Credit/lend legs remain in the dedicated lend slot.
+ */
+export function deriveTemplateTradeAdapterIds(
+  adapters: readonly TemplateTradeRouteDescriptor[],
+  legacy: readonly LegacyRouteEdgeDescriptor[] = [],
+): string[] {
+  const ids: string[] = [];
+  for (const adapter of adapters) {
+    if (!adapter.allowedTaxonomy.some(isTemplateTradeTaxonomy)) continue;
+    ids.push(...adapter.edgeAdapterIds);
+  }
+  for (const descriptor of legacy) {
+    if (descriptor.slotKind === "swap" || descriptor.slotKind === "protocol") {
+      ids.push(descriptor.edgeAdapterId);
+    }
+  }
+  return [...new Set(ids)];
+}
+
+function isTemplateTradeTaxonomy(input: {
+  slotKind: SlotKind;
+  protocolAction?: ProtocolAction;
+}): boolean {
+  if (input.slotKind !== "swap" && input.slotKind !== "protocol") return false;
+  return !deriveEdgeTaxonomy(input.slotKind, input.protocolAction).leavesStandingPosition;
+}
+
+const TRADE_LEG_ADAPTERS = deriveTemplateTradeAdapterIds(
+  PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+  LEGACY_PRODUCTION_ROUTE_EDGES,
+);
 
 export const FLASH_LEND_SWAP_REPAY: PathTemplate = {
   name: "flash-lend-swap-repay",
   slots: [
     { id: "flash", kind: "flash", adapters: ["morpho-flash", "balancer-flash"] },
     { id: "lend", kind: "lend", adapters: ["fluid-vault", "fluid-dex-liquidate"], min: 1, max: 4 },
-    { id: "swap", kind: "swap", adapters: SWAP_ADAPTERS, min: 1, max: 8 },
+    { id: "swap", kind: "swap", adapters: TRADE_LEG_ADAPTERS, min: 1, max: 8 },
     { id: "repay", kind: "repay", adapters: ["erc20-approve", "erc20-transfer"] },
     { id: "guard", kind: "guard", adapters: ["assert-balance"] },
   ],
@@ -55,7 +85,7 @@ export const FLASH_SWAP_REPAY: PathTemplate = {
   name: "flash-swap-repay",
   slots: [
     { id: "flash", kind: "flash", adapters: ["morpho-flash", "balancer-flash"] },
-    { id: "swap", kind: "swap", adapters: SWAP_ADAPTERS, min: 1, max: 8 },
+    { id: "swap", kind: "swap", adapters: TRADE_LEG_ADAPTERS, min: 1, max: 8 },
     { id: "repay", kind: "repay", adapters: ["erc20-approve", "erc20-transfer"] },
     { id: "guard", kind: "guard", adapters: ["assert-balance"] },
   ],
