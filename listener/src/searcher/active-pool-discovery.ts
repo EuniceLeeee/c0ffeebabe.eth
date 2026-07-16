@@ -3,6 +3,7 @@ import type { PoolEntry } from "./planner/token-graph.js";
 import { poolRegistryKey } from "./pool-universe.js";
 import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
 import { attestPoolIdentities } from "./venues/identity.js";
+import type { IdentityAdmissionPolicy } from "./venues/admission.js";
 import { ADDR } from "../shared/constants/addresses.js";
 
 // Factory event topics
@@ -158,8 +159,7 @@ export async function scanActivePools(
   maxPools = 100,
   toBlock?: number,
   options: {
-    allowProvisionalFactories?: boolean;
-    allowProvisionalCurveUnderlying?: boolean;
+    admissionPolicy?: IdentityAdmissionPolicy;
   } = {},
 ): Promise<PoolEntry[]> {
   const latest = toBlock ?? await provider.getBlockNumber();
@@ -214,8 +214,7 @@ export async function scanActivePools(
       score: item.count,
     }));
   const { accepted, rejected } = await attestPoolIdentities(provider, candidates, {
-    allowProvisionalFactories: options.allowProvisionalFactories,
-    allowProvisionalCurveUnderlying: options.allowProvisionalCurveUnderlying,
+    admissionPolicy: options.admissionPolicy,
   });
   const ranked = accepted.slice(0, maxPools);
   const provisional = accepted.filter(

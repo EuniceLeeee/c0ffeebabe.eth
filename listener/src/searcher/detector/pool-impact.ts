@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
 import { v4PoolId, type TokenEdge, type TokenQueryBackend } from "../planner/token-graph.js";
+import { PRODUCTION_VICTIM_MODELS } from "../venues/victim-model-registry.js";
 
 export interface PoolImpact {
   pool: string;
@@ -49,9 +50,14 @@ interface EventLog {
 }
 
 interface ImpactDecoder {
-  adapterIds: string[];
+  adapterIds: readonly string[];
   decodeLog(log: EventLog, edges: TokenEdge[]): PoolImpact[];
 }
+
+const CURVE_IMPACT_ADAPTER_IDS = PRODUCTION_VICTIM_MODELS.edgeAdapterIdsForImpact("curve");
+const UNIV2_IMPACT_ADAPTER_IDS = PRODUCTION_VICTIM_MODELS.edgeAdapterIdsForImpact("univ2");
+const UNIV3_IMPACT_ADAPTER_IDS = PRODUCTION_VICTIM_MODELS.edgeAdapterIdsForImpact("univ3");
+const UNIV4_IMPACT_ADAPTER_IDS = PRODUCTION_VICTIM_MODELS.edgeAdapterIdsForImpact("univ4");
 
 // ─── Topic hashes (computed, not hand-written) ────────────────
 
@@ -141,13 +147,7 @@ const CURVE_SELECTORS = new Set([
 // ─── Curve decoder ────────────────────────────────────────────
 
 const curveDecoder: ImpactDecoder = {
-  adapterIds: [
-    "curve-exchange-plain",
-    "curve-exchange-nr",
-    "curve-exchange",
-    "curve-exchange-received-uint",
-    "curve-exchange-underlying",
-  ],
+  adapterIds: CURVE_IMPACT_ADAPTER_IDS,
 
   decodeLog(log, edges) {
     if (!CURVE_TOKEN_EXCHANGE_TOPICS.has(log.topics[0]?.toLowerCase() ?? "")) return [];
@@ -209,7 +209,7 @@ function impactsFromCurveIds(
 // ─── UniV3 decoder ────────────────────────────────────────────
 
 const uniV3Decoder: ImpactDecoder = {
-  adapterIds: ["univ3-swap"],
+  adapterIds: UNIV3_IMPACT_ADAPTER_IDS,
 
   decodeLog(log, edges) {
     if (log.topics[0]?.toLowerCase() !== UNIV3_SWAP) return [];
@@ -225,7 +225,7 @@ const uniV3Decoder: ImpactDecoder = {
 
     const edge = edges.find(
       (e) =>
-        e.adapterId === "univ3-swap" &&
+        UNIV3_IMPACT_ADAPTER_IDS.includes(e.adapterId) &&
         e.tokenIn.toLowerCase() === tokenIn.toLowerCase() &&
         e.tokenOut.toLowerCase() === tokenOut.toLowerCase(),
     );
@@ -245,7 +245,7 @@ const uniV3Decoder: ImpactDecoder = {
 // ─── UniV2 decoder ────────────────────────────────────────────
 
 const uniV2Decoder: ImpactDecoder = {
-  adapterIds: ["univ2-swap"],
+  adapterIds: UNIV2_IMPACT_ADAPTER_IDS,
 
   decodeLog(log, edges) {
     if (log.topics[0]?.toLowerCase() !== UNIV2_SWAP) return [];
@@ -261,7 +261,7 @@ const uniV2Decoder: ImpactDecoder = {
 
     const edge = edges.find(
       (e) =>
-        e.adapterId === "univ2-swap" &&
+        UNIV2_IMPACT_ADAPTER_IDS.includes(e.adapterId) &&
         e.tokenIn.toLowerCase() === tokenIn.toLowerCase() &&
         e.tokenOut.toLowerCase() === tokenOut.toLowerCase(),
     );
@@ -290,7 +290,7 @@ const uniV2Decoder: ImpactDecoder = {
 // cross-checked with the V4Quoter.
 
 const uniV4Decoder: ImpactDecoder = {
-  adapterIds: ["univ4-unlock"],
+  adapterIds: UNIV4_IMPACT_ADAPTER_IDS,
 
   decodeLog(log, edges) {
     if (log.topics[0]?.toLowerCase() !== UNIV4_SWAP) return [];

@@ -9,6 +9,12 @@ import {
   CURVE_METAREGISTRY,
   resolveCurveUnderlyingMetadata,
 } from "./curve-underlying.js";
+import {
+  allowProvisionalCurveUnderlying,
+  allowProvisionalFactories,
+  STRICT_IDENTITY_ADMISSION,
+  type IdentityAdmissionPolicy,
+} from "./admission.js";
 export { CURVE_METAREGISTRY } from "./curve-underlying.js";
 
 export type IdentityCheckedAdapter =
@@ -115,17 +121,17 @@ export async function resolvePoolIdentity(
   address: string,
   adapter: IdentityCheckedAdapter,
   options: {
-    allowProvisionalFactories?: boolean;
-    allowProvisionalCurveUnderlying?: boolean;
+    admissionPolicy?: IdentityAdmissionPolicy;
   } = {},
 ): Promise<PoolIdentityResult> {
   const pool = ethers.getAddress(address);
+  const policy = options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION;
   if (adapter === "curve" || adapter === "curve-nr" || adapter === "curve-underlying") {
     return resolveCurveIdentity(
       backend,
       pool,
       adapter,
-      options.allowProvisionalCurveUnderlying === true,
+      allowProvisionalCurveUnderlying(policy),
     );
   }
   if (adapter === "balancer-v3") {
@@ -135,7 +141,7 @@ export async function resolvePoolIdentity(
     backend,
     pool,
     adapter,
-    options.allowProvisionalFactories === true,
+    allowProvisionalFactories(policy),
   );
 }
 
@@ -158,8 +164,7 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
     concurrency?: number;
     cache?: PoolIdentityCache;
     seedEntries?: readonly IdentityPoolEntry[];
-    allowProvisionalFactories?: boolean;
-    allowProvisionalCurveUnderlying?: boolean;
+    admissionPolicy?: IdentityAdmissionPolicy;
   } = {},
 ): Promise<{ accepted: AttestedPoolEntry<T>[]; rejected: RejectedPoolIdentity[] }> {
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? 32));
@@ -211,8 +216,7 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
       backend,
       pool.address,
       pool.adapter,
-      options.allowProvisionalFactories === true,
-      options.allowProvisionalCurveUnderlying === true,
+      options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
     );
     if (!resolved.ok) {
       return {
@@ -247,17 +251,17 @@ function cachedResolution(
   backend: IdentityCallBackend,
   address: string,
   adapter: IdentityCheckedAdapter,
-  allowProvisionalFactories: boolean,
-  allowProvisionalCurveUnderlying: boolean,
+  admissionPolicy: IdentityAdmissionPolicy,
 ): Promise<PoolIdentityResult> {
+  const provisionalFactories = allowProvisionalFactories(admissionPolicy);
+  const provisionalCurveUnderlying = allowProvisionalCurveUnderlying(admissionPolicy);
   const key = `${address.toLowerCase()}:${adapter}:` +
-    `${allowProvisionalFactories ? "factory-provisional" : "factory-strict"}:` +
-    `${allowProvisionalCurveUnderlying ? "curve-provisional" : "curve-strict"}`;
+    `${provisionalFactories ? "factory-provisional" : "factory-strict"}:` +
+    `${provisionalCurveUnderlying ? "curve-provisional" : "curve-strict"}`;
   let pending = cache.resolutions.get(key);
   if (!pending) {
     pending = resolvePoolIdentity(backend, address, adapter, {
-      allowProvisionalFactories,
-      allowProvisionalCurveUnderlying,
+      admissionPolicy,
     });
     cache.resolutions.set(key, pending);
   }

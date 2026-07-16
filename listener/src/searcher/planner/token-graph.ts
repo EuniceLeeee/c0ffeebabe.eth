@@ -3,10 +3,8 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
 import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
-import {
-  probeCurveUnderlyingQuote,
-  resolveCurveUnderlyingMetadata,
-} from "../venues/curve-underlying.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -113,26 +111,6 @@ export interface V4PoolKey {
   fee: number;
   tickSpacing: number;
   hooks: string;
-}
-
-const V4_POOLKEY_TUPLE =
-  "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
-const V4_SWAP_HOOK_MASK = 0xccn;
-
-/** Canonical Uniswap v4 poolId = keccak256(abi.encode(PoolKey)). */
-export function v4PoolId(key: V4PoolKey): string {
-  return ethers
-    .keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        [V4_POOLKEY_TUPLE],
-        [[key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]],
-      ),
-    )
-    .toLowerCase();
-}
-
-export function v4HooksAffectSwap(hooks: string): boolean {
-  return (BigInt(hooks) & V4_SWAP_HOOK_MASK) !== 0n;
 }
 
 // DEX pools are discovered via scanActivePools / factory events.
@@ -244,31 +222,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
 
-const curveCoinsIface = new ethers.Interface([
-  "function coins(uint256 i) view returns (address)",
-]);
-const curveCoinsIntIface = new ethers.Interface([
-  "function coins(int128 i) view returns (address)",
-]);
-const univ3Iface = new ethers.Interface([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-]);
-const univ2ReservesIface = new ethers.Interface([
-  "function getReserves() view returns (uint112, uint112, uint32)",
-]);
-const metronomeSynthPoolIface = new ethers.Interface([
-  "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
-]);
-const balancerV3VaultIface = new ethers.Interface([
-  "function getPoolTokens(address pool) view returns (address[] tokens)",
-]);
-const v4InitializeIface = new ethers.Interface([
-  "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
-]);
-const V4_INITIALIZE_TOPIC = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
-const V4_POOL_MANAGER_DEPLOY_BLOCK = "0x0";
-const v4PoolKeyCache = new Map<string, V4PoolKey>();
 
 const ADAPTER_MAP: Record<string, string> = {
   "curve": "curve-exchange-plain",
@@ -283,12 +236,6 @@ const ADAPTER_MAP: Record<string, string> = {
   "fluid-dex": "fluid-dex-swap",
   "metronome-synth": "metronome-synth-swap",
 };
-
-const METRONOME_SYNTH_TOKENS = [
-  ADDR.MSETH,
-  ADDR.MSBTC,
-  ADDR.MSUSD,
-] as const;
 
 /**
  * Build the token graph by querying each pool's tokens on-chain.
@@ -344,68 +291,13 @@ export function buildTokenIndex(edges: TokenEdge[]): Map<string, Set<string>> {
 }
 
 async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  if (PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pool.adapter)) {
+    return PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, backend);
+  }
   const adapterId = ADAPTER_MAP[pool.adapter];
   const edges: TokenEdge[] = [];
 
   switch (pool.adapter) {
-    case "curve":
-    case "curve-nr": {
-      const coins = await queryCurveCoins(backend, pool.address);
-      for (let i = 0; i < coins.length; i++) {
-        for (let j = 0; j < coins.length; j++) {
-          if (i === j) continue;
-          edges.push({
-            adapterId, target: pool.address,
-            tokenIn: coins[i], tokenOut: coins[j],
-            slotKind: "swap", curveI: i, curveJ: j,
-            ...deriveEdgeTaxonomy("swap"),
-          });
-        }
-      }
-      break;
-    }
-    case "curve-underlying": {
-      const { coins } = await resolveCurveUnderlyingMetadata(backend, pool.address, {
-        allowDirectPoolFallback: true,
-      });
-      for (let i = 0; i < coins.length; i++) {
-        for (let j = 0; j < coins.length; j++) {
-          if (i === j) continue;
-          if (!await probeCurveUnderlyingQuote(backend, pool.address, i, j)) continue;
-          edges.push({
-            adapterId, target: pool.address,
-            tokenIn: coins[i], tokenOut: coins[j],
-            slotKind: "swap", curveI: i, curveJ: j,
-            ...deriveEdgeTaxonomy("swap"),
-          });
-        }
-      }
-      if (edges.length === 0) {
-        throw new Error(`curve-underlying pool ${pool.address} exposed no quotable directions`);
-      }
-      break;
-    }
-    case "univ3": {
-      const [t0, t1] = pool.token0 && pool.token1
-        ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
-        : await queryUniV3Tokens(backend, pool.address);
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-      );
-      break;
-    }
-    case "univ2": {
-      const [t0, t1] = pool.token0 && pool.token1
-        ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
-        : await queryUniV3Tokens(backend, pool.address);
-      await verifyUniV2Pair(backend, pool.address);
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-      );
-      break;
-    }
     case "fluid-dex": {
       if (!pool.token0 || !pool.token1) {
         throw new Error(`fluid-dex pool ${pool.address} missing pinned token0/token1 metadata`);
@@ -417,199 +309,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       );
       break;
     }
-    case "univ4": {
-      // V4 pools live inside the PoolManager — no individual contracts.
-      // Edges must carry fixedTokenIn/fixedTokenOut and the full PoolKey from the registry entry.
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`univ4 pool ${pool.address} requires fixedTokenIn/fixedTokenOut`);
-      }
-      const poolKey = await resolveV4PoolKey(pool, backend);
-      if (v4HooksAffectSwap(poolKey.hooks)) {
-        // Swap-hooked v4 pools need hookData our quote/execution path does not supply.
-        break;
-      }
-      const tIn = normalizeV4Currency(pool.fixedTokenIn, "fixedTokenIn");
-      const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut");
-      validateV4Pair(pool.address, poolKey, tIn, tOut);
-      const poolId = v4PoolId(poolKey);
-      const graphIn = tIn === ethers.ZeroAddress ? ADDR.WETH : tIn;
-      const graphOut = tOut === ethers.ZeroAddress ? ADDR.WETH : tOut;
-      const nc0 = poolKey.currency0 === ethers.ZeroAddress;
-      const nc1 = poolKey.currency1 === ethers.ZeroAddress;
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: graphIn, tokenOut: graphOut, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: graphOut, tokenOut: graphIn, slotKind: "swap", v4PoolKey: poolKey, poolId, nativeCurrency0: nc0, nativeCurrency1: nc1, ...deriveEdgeTaxonomy("swap") },
-      );
-      break;
-    }
-    case "balancer-v3": {
-      const data = balancerV3VaultIface.encodeFunctionData("getPoolTokens", [pool.address]);
-      const result = await backend.call({ to: ADDR.BALANCER_V3_VAULT, data });
-      const decoded = balancerV3VaultIface.decodeFunctionResult("getPoolTokens", result);
-      const tokens = (decoded[0] as string[]).map((token) => ethers.getAddress(token));
-      if (tokens.length < 2) {
-        throw new Error(`balancer-v3 pool ${pool.address} returned fewer than two tokens`);
-      }
-      for (let i = 0; i < tokens.length; i++) {
-        for (let j = 0; j < tokens.length; j++) {
-          if (i === j) continue;
-          edges.push({
-            adapterId,
-            target: ethers.getAddress(pool.address),
-            tokenIn: tokens[i],
-            tokenOut: tokens[j],
-            slotKind: "swap",
-            ...deriveEdgeTaxonomy("swap"),
-          });
-        }
-      }
-      break;
-    }
-    case "wsteth": {
-      edges.push(
-        {
-          adapterId: "wsteth-wrap",
-          target: pool.address,
-          tokenIn: ADDR.STETH,
-          tokenOut: ADDR.WSTETH,
-          slotKind: "protocol",
-          protocolAction: "wrap",
-          ...deriveEdgeTaxonomy("protocol", "wrap"),
-        },
-        {
-          adapterId: "wsteth-unwrap",
-          target: pool.address,
-          tokenIn: ADDR.WSTETH,
-          tokenOut: ADDR.STETH,
-          slotKind: "protocol",
-          protocolAction: "unwrap",
-          ...deriveEdgeTaxonomy("protocol", "unwrap"),
-        },
-      );
-      break;
-    }
-    case "erc4626": {
-      if (!pool.fixedTokenIn) {
-        throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
-      }
-      if (pool.nonStandardRedeem) {
-        // The generic deposit/redeem pair would be wrong on token AND amount, so it stays
-        // suppressed. When the receipt-verified payout token is declared, emit the correct
-        // silo redeem edge (share -> redeemTokenOut) quoted by quoteSiloRedeem. A flagged
-        // vault WITHOUT redeemTokenOut still emits ZERO edges (fail-closed).
-        if (pool.redeemTokenOut) {
-          edges.push({
-            adapterId: "erc4626-redeem-silo",
-            target: pool.address,
-            tokenIn: pool.address,
-            tokenOut: pool.redeemTokenOut,
-            slotKind: "protocol",
-            protocolAction: "redeem",
-            ...deriveEdgeTaxonomy("protocol", "redeem"),
-          });
-        }
-        break;
-      }
-      edges.push(
-        {
-          adapterId: "erc4626-deposit",
-          target: pool.address,
-          tokenIn: pool.fixedTokenIn,
-          tokenOut: pool.address,
-          slotKind: "protocol",
-          protocolAction: "wrap",
-          ...deriveEdgeTaxonomy("protocol", "wrap"),
-        },
-        {
-          adapterId: "erc4626-redeem",
-          target: pool.address,
-          tokenIn: pool.address,
-          tokenOut: pool.fixedTokenIn,
-          slotKind: "protocol",
-          protocolAction: "redeem",
-          ...deriveEdgeTaxonomy("protocol", "redeem"),
-        },
-      );
-      break;
-    }
-    case "rocksolid": {
-      if (!pool.fixedTokenIn) {
-        throw new Error(`rocksolid pool ${pool.address} missing fixedTokenIn`);
-      }
-      edges.push({
-        adapterId: "rocksolid-sync-deposit",
-        target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn),
-        tokenOut: ethers.getAddress(pool.address),
-        slotKind: "protocol",
-        protocolAction: "wrap",
-        ...deriveEdgeTaxonomy("protocol", "wrap"),
-      });
-      break;
-    }
-    case "metronome-hgusdc": {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);
-      }
-      edges.push({
-        adapterId: "metronome-hgusdc-exit",
-        target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn),
-        tokenOut: ethers.getAddress(pool.fixedTokenOut),
-        slotKind: "protocol",
-        protocolAction: "redeem",
-        ...deriveEdgeTaxonomy("protocol", "redeem"),
-      });
-      break;
-    }
-    case "goldx": {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`goldx pool ${pool.address} missing fixed token metadata`);
-      }
-      edges.push({
-        adapterId: "goldx-mint",
-        target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn),
-        tokenOut: ethers.getAddress(pool.fixedTokenOut),
-        slotKind: "protocol",
-        protocolAction: "convert",
-        ...deriveEdgeTaxonomy("protocol", "convert"),
-      });
-      break;
-    }
-    case "metronome-synth": {
-      const synths = await queryMetronomeSynths(backend, pool.address);
-      for (let i = 0; i < synths.length; i++) {
-        for (let j = 0; j < synths.length; j++) {
-          if (i === j) continue;
-          edges.push({
-            adapterId,
-            target: pool.address,
-            tokenIn: synths[i],
-            tokenOut: synths[j],
-            slotKind: "protocol",
-            protocolAction: "convert",
-            ...deriveEdgeTaxonomy("protocol", "convert"),
-          });
-        }
-      }
-      break;
-    }
-    case "psm":
-    case "fluid-vault": {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`${pool.adapter} pool ${pool.address} missing fixedTokenIn/Out`);
-      }
-      const slotKind = pool.fixedSlotKind ?? "swap";
-      edges.push({
-        adapterId, target: pool.address,
-        tokenIn: pool.fixedTokenIn, tokenOut: pool.fixedTokenOut,
-        slotKind,
-        ...(pool.fixedProtocolAction ? { protocolAction: pool.fixedProtocolAction } : {}),
-        ...deriveEdgeTaxonomy(slotKind, pool.fixedProtocolAction),
-      });
-      break;
-    }
   }
 
   // Propagate the discovery activity score onto every edge of this pool.
@@ -619,66 +318,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
 }
 
 // ─── On-chain queries ─────────────────────────────────────────
-
-async function queryCurveCoins(backend: TokenQueryBackend, pool: string): Promise<string[]> {
-  const coins: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    const addr = await queryCurveCoinAt(backend, pool, i);
-    if (!addr) break;
-    coins.push(addr);
-  }
-  if (coins.length === 0) throw new Error(`curve pool ${pool} returned no coins`);
-  return coins;
-}
-
-async function queryCurveCoinAt(backend: TokenQueryBackend, pool: string, index: number): Promise<string | null> {
-  for (const iface of [curveCoinsIface, curveCoinsIntIface]) {
-    try {
-      const data = iface.encodeFunctionData("coins", [BigInt(index)]);
-      const result = await backend.call({ to: pool, data });
-      if (!result || result === "0x") continue;
-      const addr = ethers.getAddress("0x" + result.slice(-40));
-      if (addr === ethers.ZeroAddress) return null;
-      return addr;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-async function queryUniV3Tokens(backend: TokenQueryBackend, pool: string): Promise<[string, string]> {
-  const t0Data = univ3Iface.encodeFunctionData("token0");
-  const t1Data = univ3Iface.encodeFunctionData("token1");
-  const r0 = await backend.call({ to: pool, data: t0Data });
-  const r1 = await backend.call({ to: pool, data: t1Data });
-  return [
-    ethers.getAddress("0x" + r0.slice(-40)),
-    ethers.getAddress("0x" + r1.slice(-40)),
-  ];
-}
-
-async function verifyUniV2Pair(backend: TokenQueryBackend, pool: string): Promise<void> {
-  const data = univ2ReservesIface.encodeFunctionData("getReserves");
-  const result = await backend.call({ to: pool, data });
-  if (!result || result === "0x" || result.length < 194) {
-    throw new Error(`${pool} failed getReserves — not a valid UniV2 pair`);
-  }
-}
-
-async function queryMetronomeSynths(backend: TokenQueryBackend, pool: string): Promise<string[]> {
-  const out: string[] = [];
-  for (const synth of METRONOME_SYNTH_TOKENS) {
-    const data = metronomeSynthPoolIface.encodeFunctionData("doesSyntheticTokenExist", [synth]);
-    const result = await backend.call({ to: pool, data });
-    const exists = Boolean(metronomeSynthPoolIface.decodeFunctionResult("doesSyntheticTokenExist", result)[0]);
-    if (exists) out.push(ethers.getAddress(synth));
-  }
-  if (out.length < 2) {
-    throw new Error(`metronome synth pool ${pool} has fewer than two known synths`);
-  }
-  return out;
-}
 
 // ─── Sync fallback (used by AC-3 tests that don't want async init) ──
 
@@ -926,107 +565,6 @@ function sameDirectedEdge(a: TokenEdge, b: TokenEdge): boolean {
     a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
     a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase() &&
     v4PoolKeyIdentity(a.v4PoolKey) === v4PoolKeyIdentity(b.v4PoolKey);
-}
-
-async function resolveV4PoolKey(pool: PoolEntry, backend: TokenQueryBackend): Promise<V4PoolKey> {
-  if (hasInlineV4PoolKey(pool)) return v4PoolKeyFromEntry(pool);
-  if (pool.poolId && backend.getLogs) {
-    const cached = v4PoolKeyCache.get(pool.poolId.toLowerCase());
-    if (cached) return cached;
-    const logs = await backend.getLogs({
-      address: ADDR.UNISWAP_V4_POOL_MANAGER,
-      topics: [V4_INITIALIZE_TOPIC, normalizeBytes32(pool.poolId, "poolId")],
-      fromBlock: V4_POOL_MANAGER_DEPLOY_BLOCK,
-      toBlock: "latest",
-    });
-    const first = logs[0];
-    if (first) {
-      const parsed = v4InitializeIface.parseLog({ topics: first.topics, data: first.data });
-      if (parsed) {
-        const key = {
-          currency0: normalizeV4Currency(String(parsed.args.currency0), "currency0"),
-          currency1: normalizeV4Currency(String(parsed.args.currency1), "currency1"),
-          fee: uint24(Number(parsed.args.fee), "fee"),
-          tickSpacing: int24(Number(parsed.args.tickSpacing), "tickSpacing"),
-          hooks: normalizeV4Currency(String(parsed.args.hooks), "hooks"),
-        };
-        v4PoolKeyCache.set(pool.poolId.toLowerCase(), key);
-        return key;
-      }
-    }
-  }
-  return v4PoolKeyFromEntry(pool);
-}
-
-function hasInlineV4PoolKey(pool: PoolEntry): boolean {
-  return pool.currency0 !== undefined &&
-    pool.currency1 !== undefined &&
-    pool.fee !== undefined &&
-    pool.tickSpacing !== undefined &&
-    pool.hooks !== undefined;
-}
-
-function v4PoolKeyFromEntry(pool: PoolEntry): V4PoolKey {
-  const missing: string[] = [];
-  if (pool.currency0 === undefined) missing.push("currency0");
-  if (pool.currency1 === undefined) missing.push("currency1");
-  if (pool.fee === undefined) missing.push("fee");
-  if (pool.tickSpacing === undefined) missing.push("tickSpacing");
-  if (pool.hooks === undefined) missing.push("hooks");
-  if (missing.length > 0) {
-    const id = pool.poolId ? `${pool.address} poolId=${pool.poolId}` : pool.address;
-    throw new Error(`univ4 pool ${id} missing PoolKey field(s): ${missing.join(", ")}`);
-  }
-  const { currency0, currency1, fee, tickSpacing, hooks } = pool as Required<
-    Pick<PoolEntry, "currency0" | "currency1" | "fee" | "tickSpacing" | "hooks">
-  >;
-  return {
-    currency0: normalizeV4Currency(currency0, "currency0"),
-    currency1: normalizeV4Currency(currency1, "currency1"),
-    fee: uint24(fee, "fee"),
-    tickSpacing: int24(tickSpacing, "tickSpacing"),
-    hooks: normalizeV4Currency(hooks, "hooks"),
-  };
-}
-
-function normalizeBytes32(value: string, field: string): string {
-  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error(`univ4 ${field} must be bytes32, got ${value}`);
-  }
-  return value.toLowerCase();
-}
-
-function validateV4Pair(pool: string, key: V4PoolKey, tokenIn: string, tokenOut: string): void {
-  const currencies = new Set([key.currency0.toLowerCase(), key.currency1.toLowerCase()]);
-  if (!currencies.has(tokenIn.toLowerCase()) || !currencies.has(tokenOut.toLowerCase())) {
-    throw new Error(
-      `univ4 pool ${pool} fixed tokens ${tokenIn}/${tokenOut} do not match PoolKey ` +
-        `${key.currency0}/${key.currency1}`,
-    );
-  }
-}
-
-function normalizeV4Currency(value: string, field: string): string {
-  if (value.toLowerCase() === "0x0") return ethers.ZeroAddress;
-  try {
-    return ethers.getAddress(value);
-  } catch {
-    throw new Error(`univ4 PoolKey ${field} must be an address or 0x0, got ${value}`);
-  }
-}
-
-function uint24(value: number, field: string): number {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
-    throw new Error(`univ4 PoolKey ${field} must be a uint24, got ${value}`);
-  }
-  return value;
-}
-
-function int24(value: number, field: string): number {
-  if (!Number.isInteger(value) || value < -0x800000 || value > 0x7fffff) {
-    throw new Error(`univ4 PoolKey ${field} must be an int24, got ${value}`);
-  }
-  return value;
 }
 
 function v4PoolKeyIdentity(key: V4PoolKey | undefined): string {

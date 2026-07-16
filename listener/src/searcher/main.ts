@@ -36,7 +36,18 @@ import {
   createPoolIdentityCache,
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
+import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
+import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
+import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
+import {
+  BlockScanWarmCoordinator,
+  blockScanMutableQuoteRequests,
+  blockScanV4PoolId,
+  formatBlockScanWarmPlan,
+  type BlockScanWarmPlan,
+} from "./blockscan-warm-coordinator.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
@@ -58,13 +69,7 @@ import {
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import {
-  metronomeSynthPoolIface,
-  quoteBalancerV3,
-  quoteCurveUnderlying,
-  quoteFluidDex,
-  quoteGoldxMint,
-} from "./solver/quoter.js";
+import { quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
   type CurveSnapshot,
@@ -95,6 +100,7 @@ import { RevmSimClient } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
+import { replayVictimSwapOnAnvil } from "./live-backends/rpc-victim-replay.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
 import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
 import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js";
@@ -103,7 +109,6 @@ import {
   DEFAULT_CREDIT_LIVE_MARKER_PATH,
   evaluateStandingGuard,
 } from "./standing-guard.js";
-import { pathLeavesStandingPosition } from "./strategy-taxonomy.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
@@ -119,74 +124,6 @@ const V3_META = new ethers.Interface([
   "function tickSpacing() view returns (int24)",
 ]);
 const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
-const ERC4626 = new ethers.Interface([
-  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
-  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
-  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
-  "function convertToShares(uint256 assets) view returns (uint256 shares)",
-]);
-const WSTETH = new ethers.Interface([
-  "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
-  "function getStETHByWstETH(uint256 _wstETHAmount) view returns (uint256)",
-]);
-const PSM = new ethers.Interface(["function tin() view returns (uint256)"]);
-const WAD = 10n ** 18n;
-const PSM_TO18 = 10n ** 12n;
-const BLOCKSCAN_V2_SYNC_TOPIC = ethers.id("Sync(uint112,uint112)");
-const BLOCKSCAN_V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
-const BLOCKSCAN_V3_MINT_TOPIC = ethers.id("Mint(address,address,int24,int24,uint128,uint256,uint256)");
-const BLOCKSCAN_V3_BURN_TOPIC = ethers.id("Burn(address,int24,int24,uint128,uint256,uint256)");
-const BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
-);
-const BLOCKSCAN_V4_SWAP_TOPIC = ethers.id(
-  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
-);
-const BLOCKSCAN_BALANCER_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
-);
-const BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC = ethers.id(
-  "ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)",
-);
-const BLOCKSCAN_CURVE_N_COINS = [2, 3, 4, 5, 6, 7, 8] as const;
-const BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS = BLOCKSCAN_CURVE_N_COINS.flatMap((n) => [
-  ethers.id(`AddLiquidity(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
-  ethers.id(`RemoveLiquidity(address,uint256[${n}],uint256[${n}],uint256)`),
-  ethers.id(`RemoveLiquidityImbalance(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
-]);
-const BLOCKSCAN_CURVE_EVENT_TOPICS = [
-  ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"),
-  ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
-  ethers.id("TokenExchangeUnderlying(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("AddLiquidity(address,uint256[],uint256[],uint256,uint256)"),
-  ethers.id("RemoveLiquidity(address,uint256[],uint256[],uint256)"),
-  ethers.id("RemoveLiquidityImbalance(address,uint256[],uint256[],uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,int128,uint256,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("RampA(uint256,uint256,uint256,uint256)"),
-  ethers.id("StopRampA(uint256,uint256)"),
-  ethers.id("ApplyNewFee(uint256,uint256)"),
-  ethers.id("NewFee(uint256,uint256)"),
-  ethers.id("SetNewMATime(uint256,uint256)"),
-  ...BLOCKSCAN_CURVE_STATIC_LIQUIDITY_TOPICS,
-];
-const BLOCKSCAN_WARM_EVENT_TOPICS = [
-  BLOCKSCAN_V2_SYNC_TOPIC,
-  BLOCKSCAN_V3_SWAP_TOPIC,
-  BLOCKSCAN_V3_MINT_TOPIC,
-  BLOCKSCAN_V3_BURN_TOPIC,
-  BLOCKSCAN_PANCAKE_V3_SWAP_TOPIC,
-  BLOCKSCAN_V4_SWAP_TOPIC,
-  BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC,
-  BLOCKSCAN_BALANCER_V3_SWAP_TOPIC,
-  ...BLOCKSCAN_CURVE_EVENT_TOPICS,
-];
-
-const WHALE = "0x000000000000000000000000000000000000dEaD";
-
 interface HintLog {
   address: string;
   topics: string[];
@@ -321,27 +258,7 @@ interface PlannedBlockScanSolve {
   planCount: number;
 }
 
-// Profit-token → ETH valuation for sizing the proposer bribe (route B). WETH is
-// 1:1; the major stables convert via ethUsd; anything else returns 0 (no full
-// bribe — we fall back to the default priority fee for exotic profit tokens).
-const WETH_ADDR = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
-const STABLE_DECIMALS = new Map<string, number>([
-  ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6], // USDC
-  ["0xdac17f958d2ee523a2206206994597c13d831ec7", 6], // USDT
-  ["0x6b175474e89094c44da98b954eedeac495271d0f", 18], // DAI
-  ["0x853d955acef822db058eb8505911ed77f175b99e", 18], // FRAX
-]);
-
-export function valueInEth(token: string, amount: bigint, ethUsd: number): bigint {
-  const t = token.toLowerCase();
-  if (t === WETH_ADDR) return amount;
-  const decimals = STABLE_DECIMALS.get(t);
-  if (decimals !== undefined && ethUsd > 0) {
-    // amount (stable units) → ETH wei: amount/10^dec USD ÷ ethUsd × 1e18
-    return (amount * 10n ** 18n) / (10n ** BigInt(decimals) * BigInt(Math.round(ethUsd)));
-  }
-  return 0n;
-}
+export { computeBidEth, valueInEth };
 
 function buildBlockScanPricedTokens(): BlockScanConfig["pricedTokens"] {
   return new Map([
@@ -350,17 +267,6 @@ function buildBlockScanPricedTokens(): BlockScanConfig["pricedTokens"] {
     [ADDR.USDT.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
     [ADDR.DAI.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 18n }],
   ]);
-}
-
-export function computeBidEth(
-  expectedProfitEth: bigint,
-  gasCostEth: bigint,
-  opts: { bribeAllAboveGas: boolean; bribeBps: number },
-): bigint {
-  if (opts.bribeAllAboveGas) {
-    return expectedProfitEth > gasCostEth ? expectedProfitEth - gasCostEth : 0n;
-  }
-  return (expectedProfitEth * BigInt(opts.bribeBps)) / 10000n;
 }
 
 export function hashOnlySubmitDecision(
@@ -684,6 +590,7 @@ async function main(): Promise<void> {
   let blockScanState: AnvilStateBackend | undefined;
   let blockScanCache: PoolStateCache | undefined;
   let blockScanUpdater: PoolStateUpdater | undefined;
+  let blockScanWarmCoordinator: BlockScanWarmCoordinator | undefined;
   let blockScanPlanner: TemplatePlanner | undefined;
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
@@ -721,6 +628,12 @@ async function main(): Promise<void> {
     blockScanUpdater = new PoolStateUpdater(provider, isolatedCache, {
       maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
     });
+    blockScanWarmCoordinator = new BlockScanWarmCoordinator(
+      provider,
+      isolatedCache,
+      blockScanUpdater,
+      blockScanFullRewarmBlocks,
+    );
     blockScanPlanner = isolatedPlanner;
     blockScanSolver = new AnvilSolver();
     blockScanSimulator = new BotVMSimulator(isolatedState, config.botvmAddress, config.wallet.address);
@@ -878,26 +791,22 @@ async function main(): Promise<void> {
     attestPoolIdentities(provider, rawPinnedWarmPools, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawUniversePools, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawBlockscanUniverse, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawBlockScanOverrides, {
       cache: identityCache,
       seedEntries: liveRegistry,
-      allowProvisionalFactories: true,
-      allowProvisionalCurveUnderlying: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
   ]);
   const pinnedWarmPools = pinnedIdentity.accepted;
@@ -913,8 +822,7 @@ async function main(): Promise<void> {
   const factoryPools = await indexFactoryPools(provider, factoryBlocks, discoveryToBlock);
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
   const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN, discoveryToBlock, {
-    allowProvisionalFactories: true,
-    allowProvisionalCurveUnderlying: true,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
   });
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
@@ -1047,8 +955,7 @@ async function main(): Promise<void> {
   const refreshTimer = setInterval(async () => {
     try {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
-        allowProvisionalFactories: true,
-        allowProvisionalCurveUnderlying: true,
+        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
       const newPools = fresh.filter((p) => !knownPoolAddrs.has(p.address.toLowerCase()));
       if (newPools.length === 0) return;
@@ -1183,8 +1090,6 @@ async function main(): Promise<void> {
   // pool then reused across blocks — see seedBlockScanV3TickMetadata.
   const blockScanV3Meta = new Map<string, V3PoolMeta>();
   const blockScanDecimals = new Map<string, number>();
-  let blockScanLastWarmedBlock: number | null = null;
-  let blockScanLastFullWarmBlock: number | null = null;
   const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
     enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
     after: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2")),
@@ -1198,6 +1103,7 @@ async function main(): Promise<void> {
     const blockScanStateForPass = blockScanState;
     const blockScanCacheForPass = blockScanCache;
     const blockScanUpdaterForPass = blockScanUpdater;
+    const blockScanWarmCoordinatorForPass = blockScanWarmCoordinator;
     const blockScanPlannerForPass = blockScanPlanner;
     const blockScanSolverForPass = blockScanSolver;
     const blockScanSimulatorForPass = blockScanSimulator;
@@ -1207,6 +1113,7 @@ async function main(): Promise<void> {
       !blockScanStateForPass ||
       !blockScanCacheForPass ||
       !blockScanUpdaterForPass ||
+      !blockScanWarmCoordinatorForPass ||
       !blockScanPlannerForPass ||
       !blockScanSolverForPass ||
       !blockScanSimulatorForPass
@@ -1263,15 +1170,9 @@ async function main(): Promise<void> {
           try {
             await blockScanStateForPass.forkAt(blockNumber);
             blockScanCacheForPass.beginBlockScanPass(blockNumber);
-            warmPlan = await planBlockScanWarm(
-              provider,
-              blockScanCacheForPass,
-              blockScanUpdaterForPass,
+            warmPlan = await blockScanWarmCoordinatorForPass.plan(
               blockNumber,
               allHops,
-              blockScanLastWarmedBlock,
-              blockScanLastFullWarmBlock,
-              blockScanFullRewarmBlocks,
               edges,
             );
           } catch (err) {
@@ -1331,8 +1232,7 @@ async function main(): Promise<void> {
               }
             }
           }
-          blockScanLastWarmedBlock = blockNumber;
-          if (warmPlan.kind === "full") blockScanLastFullWarmBlock = blockNumber;
+          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(blockNumber, warmPlan);
           const v3TickMeta = await seedBlockScanV3TickMetadata(
             provider,
             blockScanCacheForPass,
@@ -2355,7 +2255,9 @@ async function processOpportunities(
       );
       if (!localVictimApply) {
         try {
-          if (oppImpact.matchedAdapterId === "univ2-swap" || oppImpact.matchedAdapterId === "univ3-swap") {
+          const victimVariant = PRODUCTION_VICTIM_MODELS
+            .forEdge(oppImpact.matchedAdapterId)?.localApplyVariant;
+          if (victimVariant === "univ2" || victimVariant === "univ3") {
             await ctx.poolStateUpdater.update(prepareInput.baseBlock, [{
               adapterId: oppImpact.matchedAdapterId,
               target: oppImpact.pool,
@@ -2459,7 +2361,7 @@ async function processOpportunities(
             `${postImpactSummary(exactPostImpact)} overrides=${overrides}`,
         );
       } else {
-        await impersonateSwap(ctx.state, oppImpact, ctx.graph);
+        await replayVictimSwapOnAnvil(ctx.state, oppImpact, ctx.graph);
       }
       await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
       deps.segMark(exactPostImpact ? "anvilExactOverlay" : "anvilOverlay");
@@ -2732,38 +2634,34 @@ async function processOpportunities(
         // damps the adverse-selection: we'd otherwise overbribe exactly the bundles
         // we most over-estimated, and win the losers). Calibrate the haircut from
         // the reconciliation of landed txs (real profit vs the logged sim profit).
-        const rawProfitEth = valueInEth(
+        const ev = await evaluateEv(
+          ctx.provider,
           resolved.profitToken,
           sim.netProfit,
-          ctx.config.ethUsd,
+          sim.gasUsed,
+          ctx.config,
         );
-        const expectedProfitEth =
-          (rawProfitEth * BigInt(10000 - ctx.config.profitHaircutBps)) / 10000n;
-        const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(ctx.config.defaultGasUsed);
-        let gasCostEth = 0n;
-        if (ctx.config.evGate || ctx.config.bribeAllAboveGas) {
-          const latest = await ctx.provider.getBlock("latest");
-          const baseFee = latest?.baseFeePerGas ?? 0n;
-          const worstBaseFee = (baseFee * BigInt(ctx.config.gasBufferMultX10)) / 10n;
-          gasCostEth = gasUnits * worstBaseFee;
-        }
-        const bidEth = computeBidEth(expectedProfitEth, gasCostEth, {
-          bribeAllAboveGas: ctx.config.bribeAllAboveGas,
-          bribeBps: ctx.config.bribeBps,
-        });
+        const {
+          expectedProfitEth,
+          gasUnits,
+          gasCostEth,
+          bidEth,
+          netEvWei,
+        } = ev;
 
         const creditLiveMarkerPath =
           process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
-        const containsStandingPosition = pathLeavesStandingPosition(candidate.tokenPath.edges);
         const standingGuard = evaluateStandingGuard(
           candidate.tokenPath.edges,
           creditLiveMarkerPath,
-          containsStandingPosition,
         );
+        const containsStandingPosition = standingGuard.containsStandingPosition;
         if (!standingGuard.allowed) {
           ctx.counters.finalVerifySkipped++;
           lastTerminalState = "no-profitable-quote";
-          lastTerminalError = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+          lastTerminalError = standingGuard.reason === "edge_taxonomy_inconsistent"
+            ? "standing guard: edge taxonomy inconsistent"
+            : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
           console.log(`[searcher/live] reject standing-position: ${lastTerminalError}`);
           emitPipelineDropped("submit_gate", standingGuard.reason, lastTerminalError, {
             pathId: resolvedRouteSummary(resolved.root),
@@ -2784,12 +2682,11 @@ async function processOpportunities(
         // (baseFee × gasBufferMult, matching the submitter's maxFee cap) so a
         // bundle that's only +EV at the current low base fee can't land at a loss.
         if (ctx.config.evGate) {
-          const netEth = expectedProfitEth - gasCostEth - bidEth;
-          if (netEth < ctx.config.minNetEth) {
+          if (netEvWei < ctx.config.minNetEth) {
             ctx.counters.finalVerifySkipped++;
             lastTerminalState = "no-profitable-quote";
             lastTerminalError =
-              `EV gate: net ${netEth} < ${ctx.config.minNetEth} ` +
+              `EV gate: net ${netEvWei} < ${ctx.config.minNetEth} ` +
               `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
               `token=${resolved.profitToken.slice(0, 10)})`;
 	            console.log(`[searcher/live] skip below-EV: ${lastTerminalError}`);
@@ -2802,7 +2699,7 @@ async function processOpportunities(
 	            continue;
 	          }
           console.log(
-            `[searcher/live] EV ok: net=${ethers.formatEther(netEth)} ETH ` +
+            `[searcher/live] EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
               `profitEth=${ethers.formatEther(expectedProfitEth)} gas=${ethers.formatEther(gasCostEth)} ` +
               `bribe=${ethers.formatEther(bidEth)}`,
           );
@@ -2813,7 +2710,7 @@ async function processOpportunities(
           strategy: "backrun",
           opportunityId,
           targetBlock,
-          netEvWei: expectedProfitEth - gasCostEth - bidEth,
+          netEvWei,
           deadlineAtMs: oppDeadlineAtMs,
         });
         if (!decision.admit) {
@@ -3035,42 +2932,37 @@ async function maybeSubmitBlockScanAtomic(params: {
       return;
     }
 
-    const rawProfitEth = valueInEth(
+    const ev = await evaluateEv(
+      provider,
       resolved.profitToken,
       sim.netProfit,
-      config.ethUsd,
+      sim.gasUsed,
+      config,
     );
-    const expectedProfitEth =
-      (rawProfitEth * BigInt(10000 - config.profitHaircutBps)) / 10000n;
-    const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(config.defaultGasUsed);
-    let gasCostEth = 0n;
-    if (config.evGate || config.bribeAllAboveGas) {
-      const latest = await provider.getBlock("latest");
-      const baseFee = latest?.baseFeePerGas ?? 0n;
-      const worstBaseFee = (baseFee * BigInt(config.gasBufferMultX10)) / 10n;
-      gasCostEth = gasUnits * worstBaseFee;
-    }
-    const bidEth = computeBidEth(expectedProfitEth, gasCostEth, {
-      bribeAllAboveGas: config.bribeAllAboveGas,
-      bribeBps: config.bribeBps,
-    });
+    const {
+      expectedProfitEth,
+      gasUnits,
+      gasCostEth,
+      bidEth,
+      netEvWei,
+    } = ev;
 
     const creditLiveMarkerPath =
       process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
-    const containsStandingPosition = pathLeavesStandingPosition(opp.seedEdges);
     const standingGuard = evaluateStandingGuard(
       opp.seedEdges,
       creditLiveMarkerPath,
-      containsStandingPosition,
     );
+    const containsStandingPosition = standingGuard.containsStandingPosition;
     if (!standingGuard.allowed) {
-      const error = `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+      const error = standingGuard.reason === "edge_taxonomy_inconsistent"
+        ? "standing guard: edge taxonomy inconsistent"
+        : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} reject standing-position ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", standingGuard.reason, error);
       return;
     }
 
-    const netEvWei = expectedProfitEth - gasCostEth - bidEth;
     if (config.evGate) {
       if (netEvWei < config.minNetEth) {
         const error =
@@ -3292,9 +3184,9 @@ function blockReadState(
 }
 
 function isLocalVictimApplyAdapter(adapterId: string): boolean {
-  return adapterId === "univ2-swap" ||
-    adapterId === "univ3-swap" ||
-    isCurveAdapter(adapterId);
+  const variant = PRODUCTION_VICTIM_MODELS.forEdge(adapterId)?.localApplyVariant;
+  // V4 local apply is event-post-state driven and enters through overlayExact.
+  return variant === "univ2" || variant === "univ3" || variant === "curve";
 }
 
 function opportunityIdFor(
@@ -3517,102 +3409,6 @@ function hintLogsMatchTokenIndex(
   return false;
 }
 
-// ─── Impersonate Swap (Path A simulation) ─────────────────────
-
-const CURVE_EXCHANGE_IFACE = new ethers.Interface([
-  "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)",
-]);
-const UNIV3_ROUTER_IFACE = new ethers.Interface([
-  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)",
-]);
-const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-const UNIV2_ROUTER_IFACE = new ethers.Interface([
-  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
-]);
-const ERC20_IFACE = new ethers.Interface([
-  "function approve(address spender, uint256 amount)",
-  "function balanceOf(address account) view returns (uint256)",
-]);
-const UNIV3_FEE_IFACE = new ethers.Interface([
-  "function fee() view returns (uint24)",
-]);
-
-async function impersonateSwap(
-  state: AnvilStateBackend,
-  impact: PoolImpact,
-  graph: TokenEdge[],
-): Promise<void> {
-  const whaleAddr = ethers.getAddress(WHALE);
-
-  await state.provider.send("anvil_setBalance", [whaleAddr, FORK_ETH_BALANCE]);
-  await dealToken(state, impact.tokenIn, whaleAddr, impact.amountIn * 2n);
-  await state.provider.send("anvil_impersonateAccount", [whaleAddr]);
-
-  try {
-    const poolAddr = ethers.getAddress(impact.pool);
-    let approveTarget: string;
-    if (isCurveAdapter(impact.matchedAdapterId)) {
-      approveTarget = poolAddr;
-    } else if (impact.matchedAdapterId === "univ2-swap") {
-      approveTarget = UNIV2_ROUTER;
-    } else {
-      approveTarget = UNIV3_SWAP_ROUTER;
-    }
-    const approveData = ERC20_IFACE.encodeFunctionData("approve", [approveTarget, impact.amountIn * 2n]);
-    await state.send({ from: whaleAddr, to: impact.tokenIn, data: approveData });
-
-    if (isCurveAdapter(impact.matchedAdapterId)) {
-      const poolEdge = graph.find(
-        (e) => e.target.toLowerCase() === impact.pool.toLowerCase() &&
-          e.tokenIn.toLowerCase() === impact.tokenIn.toLowerCase() &&
-          e.curveI !== undefined,
-      );
-      if (!poolEdge || poolEdge.curveI === undefined || poolEdge.curveJ === undefined) {
-        throw new Error(`no curve edge for impersonate: ${impact.pool}`);
-      }
-      const exchangeData = CURVE_EXCHANGE_IFACE.encodeFunctionData("exchange", [
-        poolEdge.curveI, poolEdge.curveJ, impact.amountIn, 0,
-      ]);
-      await state.send({ from: whaleAddr, to: poolAddr, data: exchangeData, gas: "0x1000000" });
-
-    } else if (impact.matchedAdapterId === "univ2-swap") {
-      const deadline = Math.floor(Date.now() / 1000) + 3600;
-      const swapData = UNIV2_ROUTER_IFACE.encodeFunctionData("swapExactTokensForTokens", [
-        impact.amountIn, 0, [impact.tokenIn, impact.tokenOut], whaleAddr, deadline,
-      ]);
-      await state.send({ from: whaleAddr, to: UNIV2_ROUTER, data: swapData, gas: "0x1000000" });
-
-    } else if (impact.matchedAdapterId === "univ3-swap") {
-      const feeData = UNIV3_FEE_IFACE.encodeFunctionData("fee", []);
-      const feeResult = await state.call({ to: impact.pool, data: feeData });
-      const fee = Number(BigInt(feeResult));
-
-      const swapData = UNIV3_ROUTER_IFACE.encodeFunctionData("exactInputSingle", [{
-        tokenIn: impact.tokenIn,
-        tokenOut: impact.tokenOut,
-        fee,
-        recipient: whaleAddr,
-        amountIn: impact.amountIn,
-        amountOutMinimum: 0n,
-        sqrtPriceLimitX96: 0n,
-      }]);
-      await state.send({ from: whaleAddr, to: UNIV3_SWAP_ROUTER, data: swapData, gas: "0x1000000" });
-    } else {
-      throw new Error(`hash-only impersonate unsupported adapter ${impact.matchedAdapterId}`);
-    }
-  } finally {
-    await state.provider.send("anvil_stopImpersonatingAccount", [whaleAddr]);
-  }
-}
-
-function isCurveAdapter(adapterId: string): boolean {
-  return adapterId === "curve-exchange" ||
-    adapterId === "curve-exchange-nr" ||
-    adapterId === "curve-exchange-plain" ||
-    adapterId === "curve-exchange-received-uint";
-}
-
 function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
   return edges
     .filter((edge) => edge.slotKind === "swap")
@@ -3626,210 +3422,6 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
       poolToken1: edge.poolToken1,
       ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
     }));
-}
-
-type BlockScanFullWarmReason = "startup" | "logs_error" | "reorg" | "interval" | "range";
-
-// Cap the incremental getLogs span: after a long stall (RPC outage / paused
-// passes) a chain-wide topic query over hundreds of blocks is heavier than a
-// full rewarm — just rewarm.
-const BLOCKSCAN_MAX_INCREMENTAL_RANGE_BLOCKS = 32;
-
-interface BlockScanChangedPools {
-  fromBlock: number;
-  toBlock: number;
-  logs: number;
-  hops: QuoteRequest[];
-  pools: Set<string>;
-  v4PoolIds: Set<string>;
-  curvePools: Set<string>;
-}
-
-type BlockScanWarmPlan =
-  | { kind: "full"; reason: BlockScanFullWarmReason; error?: string }
-  | { kind: "incremental"; changed: BlockScanChangedPools };
-
-async function planBlockScanWarm(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  updater: PoolStateUpdater,
-  blockNumber: number,
-  hops: QuoteRequest[],
-  lastWarmedBlock: number | null,
-  lastFullWarmBlock: number | null,
-  fullRewarmBlocks: number,
-  edges: TokenEdge[],
-): Promise<BlockScanWarmPlan> {
-  if (lastWarmedBlock === null) return { kind: "full", reason: "startup" };
-  if (blockNumber <= lastWarmedBlock) return { kind: "full", reason: "reorg" };
-  if (blockNumber - lastWarmedBlock > BLOCKSCAN_MAX_INCREMENTAL_RANGE_BLOCKS) {
-    return { kind: "full", reason: "range" };
-  }
-  if (
-    lastFullWarmBlock !== null &&
-    blockNumber - lastFullWarmBlock >= fullRewarmBlocks
-  ) {
-    return { kind: "full", reason: "interval" };
-  }
-
-  try {
-    const changed = await detectBlockScanChangedPools(
-      provider,
-      cache,
-      updater,
-      lastWarmedBlock + 1,
-      blockNumber,
-      hops,
-      uniqueBlockScanCurvePools(edges),
-    );
-    return { kind: "incremental", changed };
-  } catch (err) {
-    return {
-      kind: "full",
-      reason: "logs_error",
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-async function detectBlockScanChangedPools(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  updater: PoolStateUpdater,
-  fromBlock: number,
-  toBlock: number,
-  hops: QuoteRequest[],
-  curvePoolEdges: TokenEdge[],
-): Promise<BlockScanChangedPools> {
-  const mutableHops = blockScanMutableQuoteRequests(hops);
-  const byAddress = new Map<string, QuoteRequest[]>();
-  const byV4PoolId = new Map<string, QuoteRequest[]>();
-  for (const hop of mutableHops) {
-    const poolId = blockScanV4PoolId(hop);
-    if (poolId) {
-      const existing = byV4PoolId.get(poolId);
-      if (existing) existing.push(hop);
-      else byV4PoolId.set(poolId, [hop]);
-      continue;
-    }
-    const key = hop.target.toLowerCase();
-    const existing = byAddress.get(key);
-    if (existing) existing.push(hop);
-    else byAddress.set(key, [hop]);
-  }
-  const curvePoolKeys = new Set(curvePoolEdges.map((edge) => edge.target.toLowerCase()));
-
-  const logs = await provider.getLogs({
-    fromBlock,
-    toBlock,
-    topics: [BLOCKSCAN_WARM_EVENT_TOPICS],
-  });
-
-  const changedKeys = new Set<string>();
-  const changedPools = new Set<string>();
-  const changedV4PoolIds = new Set<string>();
-  const changedCurvePools = new Set<string>();
-  const markChanged = (hop: QuoteRequest): void => {
-    const pool = hop.target.toLowerCase();
-    changedPools.add(pool);
-    for (const candidate of byAddress.get(pool) ?? [hop]) {
-      changedKeys.add(blockScanWarmKey(candidate));
-    }
-  };
-
-  for (const log of logs) {
-    const pool = log.address.toLowerCase();
-    const topic0 = log.topics[0]?.toLowerCase();
-    if (
-      pool === ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase() &&
-      (topic0 === BLOCKSCAN_V4_SWAP_TOPIC || topic0 === BLOCKSCAN_V4_MODIFY_LIQUIDITY_TOPIC)
-    ) {
-      const poolId = log.topics[1]?.toLowerCase();
-      if (poolId) {
-        changedV4PoolIds.add(poolId);
-        for (const hop of byV4PoolId.get(poolId) ?? []) markChanged(hop);
-      }
-    }
-    if (
-      pool === ADDR.BALANCER_V3_VAULT.toLowerCase() &&
-      topic0 === BLOCKSCAN_BALANCER_V3_SWAP_TOPIC
-    ) {
-      const indexedPool = log.topics[1];
-      if (indexedPool) {
-        try {
-          changedPools.add(ethers.getAddress(`0x${indexedPool.slice(-40)}`).toLowerCase());
-        } catch { /* malformed indexed pool */ }
-      }
-    }
-    const poolHops = byAddress.get(pool);
-    if (poolHops) {
-      for (const hop of poolHops) markChanged(hop);
-    }
-    if (curvePoolKeys.has(pool)) changedCurvePools.add(pool);
-  }
-
-  for (const hop of mutableHops) {
-    if (!blockScanHasWarmState(cache, updater, hop)) markChanged(hop);
-  }
-  for (const edge of curvePoolEdges) {
-    const pool = edge.target.toLowerCase();
-    // NG stored_rates can refresh by timer without a pool log, so they are never event-incremental.
-    if (!cache.hasCurve(pool) || cache.curveKind(pool) === "ng") changedCurvePools.add(pool);
-  }
-
-  return {
-    fromBlock,
-    toBlock,
-    logs: logs.length,
-    hops: mutableHops.filter((hop) => changedKeys.has(blockScanWarmKey(hop))),
-    pools: changedPools,
-    v4PoolIds: changedV4PoolIds,
-    curvePools: changedCurvePools,
-  };
-}
-
-function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
-  const seen = new Set<string>();
-  const out: QuoteRequest[] = [];
-  for (const hop of hops) {
-    if (
-      hop.adapterId !== "univ2-swap" &&
-      hop.adapterId !== "univ3-swap" &&
-      hop.adapterId !== "univ4-unlock"
-    ) continue;
-    const key = blockScanWarmKey(hop);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(hop);
-  }
-  return out;
-}
-
-function blockScanWarmKey(hop: QuoteRequest): string {
-  return `${hop.adapterId}:${blockScanV4PoolId(hop) ?? hop.target.toLowerCase()}`;
-}
-
-function blockScanHasWarmState(
-  cache: PoolStateCache,
-  updater: PoolStateUpdater,
-  hop: QuoteRequest,
-): boolean {
-  if (hop.adapterId === "univ2-swap") {
-    return cache.hasV2(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
-  }
-  if (hop.adapterId === "univ3-swap") {
-    return cache.hasV3Live(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
-  }
-  if (hop.adapterId === "univ4-unlock") {
-    const poolId = blockScanV4PoolId(hop);
-    return poolId !== null && cache.hasV4(poolId);
-  }
-  return true;
-}
-
-function blockScanV4PoolId(hop: QuoteRequest): string | null {
-  if (hop.adapterId !== "univ4-unlock" || !hop.v4PoolKey) return null;
-  return v4PoolId(hop.v4PoolKey).toLowerCase();
 }
 
 async function warmBlockScanV2V3(
@@ -3867,7 +3459,8 @@ async function verifyBlockScanIncrementalWarm(
   for (const hop of blockScanMutableQuoteRequests(allHops)) {
     const pool = blockScanV4PoolId(hop) ?? hop.target.toLowerCase();
     if (changedPools.has(pool) || changedV4PoolIds.has(pool)) continue;
-    if (hop.adapterId === "univ2-swap") {
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
+    if (warm?.kind === "mutable-pool" && warm.cache === "v2") {
       const cached = cache.snapshotV2(hop.target, blockNumber);
       const fresh = scratchCache.snapshotV2(hop.target, blockNumber);
       if (!fresh) continue;
@@ -3880,7 +3473,7 @@ async function verifyBlockScanIncrementalWarm(
             `fresh=${formatV2Seed(fresh)}`,
         );
       }
-    } else if (hop.adapterId === "univ3-swap") {
+    } else if (warm?.kind === "mutable-pool" && warm.cache === "v3") {
       const cached = cache.snapshotV3Live(hop.target, blockNumber);
       const fresh = scratchCache.snapshotV3Live(hop.target, blockNumber);
       if (!fresh) continue;
@@ -3893,7 +3486,7 @@ async function verifyBlockScanIncrementalWarm(
           `fresh=${formatV3LiveSeed(fresh)}`,
         );
       }
-    } else if (hop.adapterId === "univ4-unlock") {
+    } else if (warm?.kind === "mutable-pool" && warm.cache === "v4") {
       const poolId = blockScanV4PoolId(hop);
       if (!poolId) continue;
       const cached = cache.snapshotV4(poolId, blockNumber);
@@ -4051,28 +3644,6 @@ function formatCurveSnapshot(seed: CurveSnapshot): string {
   return `${seed.kind}/coins=${seed.coins.join(",")}/missing-state`;
 }
 
-function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
-  if (plan.kind === "full") {
-    const suffix = plan.error ? ` error=${blockScanErrorMessage(plan.error)}` : "";
-    return `warm=full reason=${plan.reason}${suffix}`;
-  }
-  return `warm=incremental changed=${plan.changed.pools.size} ` +
-    `changedV4=${plan.changed.v4PoolIds.size} ` +
-    `changedCurve=${plan.changed.curvePools.size} ` +
-    `range=${plan.changed.fromBlock}-${plan.changed.toBlock} logs=${plan.changed.logs}`;
-}
-
-type BlockScanProtocolAdapter =
-  | "erc4626-deposit"
-  | "erc4626-redeem"
-  | "erc4626-redeem-silo"
-  | "rocksolid-sync-deposit"
-  | "wsteth-wrap"
-  | "wsteth-unwrap"
-  | "metronome-synth-swap"
-  | "goldx-mint"
-  | "psm";
-
 async function buildBlockScanProtocolMids(
   provider: ethers.JsonRpcProvider,
   state: StateBackend,
@@ -4125,15 +3696,18 @@ async function buildBlockScanProtocolMids(
 
   if (!deadlineHit) {
     const protocolEdges = edges
-      .filter((edge) => edge.slotKind === "protocol" && blockScanProtocolAdapter(edge) !== null)
-      .sort((a, b) => blockScanProtocolMidPriority(a) - blockScanProtocolMidPriority(b));
+      .filter((edge) =>
+        PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm?.kind === "protocol-mid"
+      )
+      .sort((a, b) => protocolMidPriority(a) - protocolMidPriority(b));
+    const pinnedState = blockReadStateForProtocol(provider, blockNumber) as StateBackend;
     for (const edge of protocolEdges) {
       if (Date.now() >= deadlineAtMs) {
         deadlineHit = true;
         break;
       }
-      const adapterId = blockScanProtocolAdapter(edge);
-      if (!adapterId) continue;
+      const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+      if (adapter?.warm?.kind !== "protocol-mid") continue;
 
       try {
         const tokenInDec = await blockScanTokenDecimals(
@@ -4147,7 +3721,19 @@ async function buildBlockScanProtocolMids(
           break;
         }
         const oneIn = 10n ** BigInt(tokenInDec);
-        const mid = await readBlockScanProtocolMid(provider, blockNumber, edge, adapterId, oneIn);
+        const quoteCtx = {
+          state: pinnedState,
+          target: edge.target,
+          edgeAdapterId: edge.adapterId,
+          tokenIn: edge.tokenIn,
+          tokenOut: edge.tokenOut,
+          amountIn: oneIn,
+          edge,
+        };
+        const out = adapter.warm.quotePrewarm
+          ? await adapter.warm.quotePrewarm(quoteCtx)
+          : await adapter.quoteExact(quoteCtx);
+        const mid = Number(out) / Number(oneIn);
         if (!Number.isFinite(mid) || mid <= 0) continue;
         mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
           mid,
@@ -4171,171 +3757,14 @@ async function buildBlockScanProtocolMids(
 }
 
 function isBlockScanExternallyQuotedSwap(edge: TokenEdge): boolean {
-  return edge.slotKind === "swap" && (
-    edge.adapterId === "fluid-dex-swap" ||
-    edge.adapterId === "curve-exchange-underlying" ||
-    edge.adapterId === "balancer-v3-unlock"
-  );
+  if (edge.slotKind !== "swap") return false;
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+  return warm?.kind === "external-mid" || edge.adapterId === "fluid-dex-swap";
 }
 
-function blockScanProtocolMidPriority(edge: TokenEdge): number {
-  const adapter = blockScanProtocolAdapter(edge);
-  if (adapter === "goldx-mint" || adapter === "psm") return 0;
-  if (adapter === "metronome-synth-swap" || adapter === "wsteth-wrap" || adapter === "wsteth-unwrap") return 1;
-  return 2;
-}
-
-function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | null {
-  switch (edge.adapterId) {
-    case "erc4626-deposit":
-      return "erc4626-deposit";
-    case "erc4626-redeem":
-      return "erc4626-redeem";
-    case "erc4626-redeem-silo":
-      return "erc4626-redeem-silo";
-    case "rocksolid-sync-deposit":
-      return "rocksolid-sync-deposit";
-    case "wsteth-wrap":
-      return "wsteth-wrap";
-    case "wsteth-unwrap":
-      return "wsteth-unwrap";
-    case "psm":
-      return "psm";
-    case "metronome-synth-swap":
-      return "metronome-synth-swap";
-    case "goldx-mint":
-      return "goldx-mint";
-    default:
-      return null;
-  }
-}
-
-async function readBlockScanProtocolMid(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  edge: TokenEdge,
-  adapterId: BlockScanProtocolAdapter,
-  oneIn: bigint,
-): Promise<number> {
-  switch (adapterId) {
-    case "erc4626-deposit": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("previewDeposit", [oneIn]),
-        ERC4626,
-        "previewDeposit",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "erc4626-redeem": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
-        ERC4626,
-        "previewRedeem",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "erc4626-redeem-silo": {
-      // Non-standard silo redeem: value = vault.previewRedeem(oneIn) (asset()-denominated),
-      // out = outToken.previewWithdraw(value) — byte-exact to the on-chain payout.
-      const value = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
-        ERC4626,
-        "previewRedeem",
-      );
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.tokenOut,
-        ERC4626.encodeFunctionData("previewWithdraw", [value]),
-        ERC4626,
-        "previewWithdraw",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "rocksolid-sync-deposit": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("convertToShares", [oneIn]),
-        ERC4626,
-        "convertToShares",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "wsteth-wrap": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        WSTETH.encodeFunctionData("getWstETHByStETH", [oneIn]),
-        WSTETH,
-        "getWstETHByStETH",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "wsteth-unwrap": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        WSTETH.encodeFunctionData("getStETHByWstETH", [oneIn]),
-        WSTETH,
-        "getStETHByWstETH",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "psm": {
-      let tin = 0n;
-      try {
-        tin = await blockScanCallUint(
-          provider,
-          blockNumber,
-          edge.target,
-          PSM.encodeFunctionData("tin"),
-          PSM,
-          "tin",
-        );
-      } catch {
-        tin = 0n;
-      }
-      return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
-    }
-    case "metronome-synth-swap": {
-      const result = await provider.call({
-        to: edge.target,
-        data: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
-          edge.tokenIn,
-          edge.tokenOut,
-          oneIn,
-        ]),
-        blockTag: blockNumber,
-      });
-      const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
-      return Number(decoded[0]) / Number(oneIn);
-    }
-    case "goldx-mint": {
-      const state = blockReadStateForProtocol(provider, blockNumber);
-      const out = await quoteGoldxMint(
-        state,
-        edge.target,
-        edge.tokenIn,
-        edge.tokenOut,
-        oneIn,
-      );
-      return Number(out) / Number(oneIn);
-    }
-  }
-  throw new Error(`unsupported protocol adapter ${adapterId}`);
+function protocolMidPriority(edge: TokenEdge): number {
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+  return warm?.kind === "protocol-mid" ? warm.priority : 2;
 }
 
 async function readBlockScanExternalSwapMid(
@@ -4343,22 +3772,26 @@ async function readBlockScanExternalSwapMid(
   edge: TokenEdge,
   oneIn: bigint,
 ): Promise<number> {
-  let out: bigint;
-  if (edge.adapterId === "curve-exchange-underlying") {
-    out = await quoteCurveUnderlying(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn);
-  } else if (edge.adapterId === "balancer-v3-unlock") {
-    out = await quoteBalancerV3(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn);
-  } else {
-    out = await quoteFluidDex(
+  const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+  const out = adapter?.warm?.kind === "external-mid"
+    ? await adapter.quoteExact({
         state,
-        edge.target,
-        edge.tokenIn,
-        edge.tokenOut,
-        oneIn,
-        edge.poolToken0,
-        edge.poolToken1,
-      );
-  }
+        target: edge.target,
+        edgeAdapterId: edge.adapterId,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amountIn: oneIn,
+        edge,
+      })
+    : await quoteFluidDex(
+      state,
+      edge.target,
+      edge.tokenIn,
+      edge.tokenOut,
+      oneIn,
+      edge.poolToken0,
+      edge.poolToken1,
+    );
   return Number(out) / Number(oneIn);
 }
 
@@ -4390,18 +3823,6 @@ async function blockScanTokenDecimals(
   return decimals;
 }
 
-async function blockScanCallUint(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  target: string,
-  data: string,
-  iface: ethers.Interface,
-  fnName: string,
-): Promise<bigint> {
-  const result = await provider.call({ to: target, data, blockTag: blockNumber });
-  return BigInt(iface.decodeFunctionResult(fnName, result)[0]);
-}
-
 function blockScanProtocolKey(target: string, tokenIn: string, tokenOut: string): string {
   return `${target.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
 }
@@ -4423,7 +3844,10 @@ async function seedBlockScanV3TickMetadata(
 ): Promise<number> {
   const pools = new Set<string>();
   for (const edge of edges) {
-    if (edge.slotKind === "swap" && edge.adapterId === "univ3-swap") pools.add(edge.target.toLowerCase());
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (edge.slotKind === "swap" && warm?.kind === "mutable-pool" && warm.cache === "v3") {
+      pools.add(edge.target.toLowerCase());
+    }
   }
 
   // token0/token1/fee/tickSpacing are IMMUTABLE — read once per pool (metaCache
@@ -4522,7 +3946,8 @@ function uniqueBlockScanCurvePools(edges: TokenEdge[]): TokenEdge[] {
   const seen = new Set<string>();
   const out: TokenEdge[] = [];
   for (const edge of edges) {
-    if (edge.slotKind !== "swap" || !isCurveAdapter(edge.adapterId)) continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (edge.slotKind !== "swap" || warm?.kind !== "curve-pool") continue;
     const key = edge.target.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -4540,12 +3965,13 @@ function countBlockScanWarmedV2V3(
   let warmed = 0;
   for (const edge of edges) {
     if (edge.slotKind !== "swap") continue;
-    if (edge.adapterId !== "univ2-swap" && edge.adapterId !== "univ3-swap") continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (warm?.kind !== "mutable-pool" || (warm.cache !== "v2" && warm.cache !== "v3")) continue;
     const key = `${edge.adapterId}:${edge.target.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    if (edge.adapterId === "univ2-swap" && cache.snapshotV2(edge.target, blockNumber)) warmed++;
-    if (edge.adapterId === "univ3-swap" && cache.snapshotV3(edge.target, blockNumber)) warmed++;
+    if (warm.cache === "v2" && cache.snapshotV2(edge.target, blockNumber)) warmed++;
+    if (warm.cache === "v3" && cache.snapshotV3(edge.target, blockNumber)) warmed++;
   }
   return warmed;
 }
@@ -4558,7 +3984,8 @@ function countBlockScanWarmedV4(
   const seen = new Set<string>();
   let warmed = 0;
   for (const edge of edges) {
-    if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (warm?.kind !== "mutable-pool" || warm.cache !== "v4" || !edge.v4PoolKey) continue;
     const poolId = (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
     if (seen.has(poolId)) continue;
     seen.add(poolId);
@@ -4576,7 +4003,8 @@ function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
 }
 
 function blockScanEdgeIdentity(edge: TokenEdge): string {
-  if (edge.adapterId === "univ4-unlock" && edge.v4PoolKey) {
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+  if (warm?.kind === "mutable-pool" && warm.cache === "v4" && edge.v4PoolKey) {
     return (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
   }
   return edge.target.toLowerCase();
@@ -4728,63 +4156,6 @@ async function resolveAnvilBalanceSlot(
       return ret && ret !== "0x" ? BigInt(ret) : 0n;
     },
   });
-}
-
-/**
- * Deal ERC-20 tokens to an address on Anvil.
- * Uses anvil_setStorageAt to write the balanceOf mapping slot.
- * Handles both standard (slot 0) and non-standard storage layouts by
- * trying common balance slots.
- */
-async function dealToken(
-  state: AnvilStateBackend,
-  token: string,
-  to: string,
-  amount: bigint,
-): Promise<void> {
-  const tokenAddr = ethers.getAddress(token);
-  const toAddr = ethers.getAddress(to);
-
-  // Common ERC-20 balanceOf mapping base slots.
-  // For each candidate, compute keccak256(abi.encode(address, slotIndex))
-  // and try writing. Use snapshot/revert so wrong guesses don't pollute state.
-  const BALANCE_SLOTS_TO_TRY = [0, 1, 2, 3, 4, 5, 9, 51];
-
-  for (const slotIndex of BALANCE_SLOTS_TO_TRY) {
-    const snap = await state.snapshot();
-    const slot = ethers.keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        ["address", "uint256"],
-        [toAddr, slotIndex],
-      ),
-    );
-    const value = ethers.zeroPadValue(ethers.toBeHex(amount), 32);
-    await state.provider.send("anvil_setStorageAt", [tokenAddr, slot, value]);
-
-    const balAfter = await readBalance(state, tokenAddr, toAddr);
-    if (balAfter >= amount) return; // Correct slot found, state is clean
-
-    // Wrong slot — revert to avoid polluting storage
-    await state.revert(snap);
-  }
-
-  // None worked. The impersonate swap will fail with insufficient balance.
-  // Caller catches this as a normal hint-skip.
-  console.log(
-    `[searcher/live] warning: dealToken could not find balance slot for ${tokenAddr}`,
-  );
-}
-
-async function readBalance(
-  state: AnvilStateBackend,
-  token: string,
-  account: string,
-): Promise<bigint> {
-  try {
-    return await state.getTokenBalance(token, account);
-  } catch {
-    return 0n;
-  }
 }
 
 async function prepareForkExecutor(

@@ -7,24 +7,13 @@
  * before lending/swaps, and inserting the assert-balance guard before flash repay.
  */
 
-import { ethers } from "ethers";
-import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
-import { resolveCurveIndices } from "./quoter.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
-const MIN_SQRT_PRICE = 4295128740n;
-const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
-
-const poolFeeIface = new ethers.Interface([
-  "function fee() view returns (uint24)",
-  "function tickSpacing() view returns (int24)",
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-]);
 
 /**
  * Build a complete ResolvedPlanNode wrapped in the flash adapter.
@@ -64,7 +53,7 @@ export async function buildResolvedPlanFromPath(
   const inner: ResolvedPlanNode[] = [];
   const approvedSpenders = new Set<string>(); // key = "token@spender" lowercased
 
-  function ensureApprove(token: string, spender: string): void {
+  function ensureApprove(token: string, spender: string, amount: bigint = MAX_UINT): void {
     const key = `${token.toLowerCase()}@${spender.toLowerCase()}`;
     if (approvedSpenders.has(key)) return;
     approvedSpenders.add(key);
@@ -73,8 +62,8 @@ export async function buildResolvedPlanFromPath(
       target: token,
       tokenIn: token,
       tokenOut: token,
-      amount: MAX_UINT,
-      params: { spender, amount: MAX_UINT },
+      amount,
+      params: { spender, amount },
       children: [],
     });
   }
@@ -96,6 +85,27 @@ export async function buildResolvedPlanFromPath(
     const amtIn = amounts[i];
     const amtOut = amounts[i + 1];
     const rawOut = rawOutputs?.[i];
+
+    const routeAdapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+    if (routeAdapter) {
+      const fragment = await routeAdapter.buildPlanFragment({
+        edge,
+        amountIn: amtIn,
+        amountOut: amtOut,
+        rawOut,
+        executor,
+        state,
+      });
+      for (const requirement of fragment.requirements) {
+        if (requirement.kind === "approve") {
+          ensureApprove(requirement.token, requirement.spender, requirement.amount);
+        } else {
+          transferToPool(requirement.token, requirement.pool, requirement.amount);
+        }
+      }
+      inner.push(...fragment.nodes);
+      continue;
+    }
 
     const node = await buildEdgeNode(
       edge,
@@ -168,103 +178,7 @@ async function buildEdgeNode(
   ensureApprove: (token: string, spender: string) => void,
   transferToPool: (token: string, pool: string, amount: bigint) => void,
 ): Promise<ResolvedPlanNode | null> {
-  const protocolLeg = PROTOCOL_LEG_DESCRIPTORS.find((desc) => desc.id === edge.adapterId);
-  if (protocolLeg) {
-    if (protocolLeg.needsApprove) ensureApprove(edge.tokenIn, edge.target);
-    return {
-      adapterId: edge.adapterId,
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      amount: amtIn,
-      params: {},
-      children: [],
-    };
-  }
-
   switch (edge.adapterId) {
-    case "curve-exchange-underlying": {
-      ensureApprove(edge.tokenIn, edge.target);
-      if (edge.curveI === undefined || edge.curveJ === undefined) {
-        throw new Error(`curve-underlying edge ${edge.target} missing resolved indices`);
-      }
-      return {
-        adapterId: "curve-exchange-underlying",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: { i: BigInt(edge.curveI), j: BigInt(edge.curveJ), minDy: 0n },
-        children: [],
-      };
-    }
-
-    case "metronome-hgusdc-exit":
-      // The router starts with Curve exchange_received; it does not pull msUSD.
-      // Pre-fund the exact Curve pool, matching the successful reference trace.
-      transferToPool(edge.tokenIn, ADDR.CURVE_MSUSD_FRXUSD, amtIn);
-      return {
-        adapterId: "metronome-hgusdc-exit",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {},
-        children: [],
-      };
-
-    case "fluid-vault":
-      ensureApprove(edge.tokenIn, edge.target);
-      return {
-        adapterId: "fluid-vault",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {
-          nftId: 0n,
-          collateralDelta: amtIn,
-          debtDelta: amtOut,
-        },
-        children: [],
-      };
-
-    case "psm":
-      // sellGem/buyGem gemAmt is always the USDC-side amount.
-      ensureApprove(edge.tokenIn, edge.target);
-      const gemAmount = edge.tokenIn.toLowerCase() === ADDR.USDC.toLowerCase() ? amtIn : amtOut;
-      return {
-        adapterId: "psm",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: gemAmount,
-        params: {},
-        children: [],
-      };
-
-    case "curve-exchange":
-    case "curve-exchange-received-uint":
-    case "curve-exchange-nr":
-    case "curve-exchange-plain": {
-      // Always use plain exchange (transferFrom mode) — avoids the
-      // "transfer pre-estimated amount to pool" problem of _received variants
-      // which is fragile when quoter is off by even one wei.
-      // Plain exchange uses transferFrom so BotVM doesn't need to know the
-      // exact actual amount mid-execution.
-      ensureApprove(edge.tokenIn, edge.target);
-      const [i, j] = await resolveCurveIndices(state, edge.target, edge.tokenIn, edge.tokenOut);
-      return {
-        adapterId: "curve-exchange-plain",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: { i: BigInt(i), j: BigInt(j), minDy: 0n },
-        children: [],
-      };
-    }
-
     case "fluid-dex-swap": {
       ensureApprove(edge.tokenIn, edge.target);
       if (!edge.poolToken0 || !edge.poolToken1) {
@@ -297,372 +211,7 @@ async function buildEdgeNode(
       };
     }
 
-    case "univ3-swap": {
-      // Wrapper: callback is BotVM transferring tokenIn (the inbound) to pool.
-      // exactInput mode: amountSpecified > 0
-      const [token0, token1] = await uniV3PoolTokens(state, edge.target);
-      const zeroForOne = edge.tokenIn.toLowerCase() === token0.toLowerCase();
-      const sqrtLimit = zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE;
-      const callbackChildren: ResolvedPlanNode[] = [
-        // Inside V3 callback: transfer the exact amountIn to the pool
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: edge.target, amount: amtIn },
-          children: [],
-        },
-      ];
-      return {
-        adapterId: "univ3-swap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {
-          zeroForOne,
-          amountSpecified: amtIn, // exactInput (positive)
-          sqrtPriceLimit: sqrtLimit,
-        },
-        children: callbackChildren,
-      };
-    }
-
-    case "univ4-unlock": {
-      // V4 unlock wrapper. Inside callback: swap, take output, then resolve
-      // input debt through either ERC20 transfer+settle or native settle{value}.
-      // The PoolKey MUST come from the edge (the exact pool the quote used) — never a
-      // hardcoded fee, because pinned v4 pools have different fee tiers (e.g. 7 vs 8);
-      // quoting one pool and executing another reverts.
-      const key = edge.v4PoolKey;
-      if (!key) {
-        throw new Error(`univ4-unlock edge missing v4PoolKey: ${edge.tokenIn} -> ${edge.tokenOut}`);
-      }
-      const normalizedKey = normalizeV4PoolKey(key);
-      rejectNativeWethV4Pool(normalizedKey, "plan-builder");
-      const c0 = normalizedKey.currency0;
-      const c1 = normalizedKey.currency1;
-      const hooks = normalizedKey.hooks;
-      // params encode as bigint (ResolvedParam); V4PoolKey stores fee/tickSpacing as number.
-      const fee = BigInt(normalizedKey.fee);
-      const tickSpacing = BigInt(normalizedKey.tickSpacing);
-      const realIn = realV4Currency(edge.tokenIn, normalizedKey, "tokenIn");
-      const realOut = realV4Currency(edge.tokenOut, normalizedKey, "tokenOut");
-      validateV4CurrencyPair(realIn, realOut, normalizedKey, "plan-builder");
-      const zeroForOne = realIn.toLowerCase() === c0.toLowerCase();
-      const inputIsNative = realIn.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-      const outputIsNative = realOut.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-      const takeAmount = rawOut ?? amtOut;
-
-      const unlockChildren: ResolvedPlanNode[] = [
-        // swap: exactInput (amountSpecified negative in V4 convention)
-        {
-          adapterId: "univ4-swap",
-          target: edge.target,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenOut,
-          amount: amtIn,
-          params: {
-            currency0: c0,
-            currency1: c1,
-            fee,
-            tickSpacing,
-            hooks,
-            zeroForOne,
-            amountSpecified: -amtIn, // V4 exactIn = negative
-            sqrtPriceLimit: zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE,
-          },
-          children: [],
-        },
-        // take output to executor; native pools must take the real 0x0 currency.
-        {
-          adapterId: "univ4-take",
-          target: edge.target,
-          tokenIn: "",
-          tokenOut: edge.tokenOut,
-          amount: takeAmount,
-          params: { currency: realOut },
-          children: [],
-        },
-      ];
-
-      if (outputIsNative) {
-        unlockChildren.push({
-          adapterId: "weth-deposit-value",
-          target: ADDR.WETH,
-          tokenIn: realOut,
-          tokenOut: ADDR.WETH,
-          amount: takeAmount,
-          params: {},
-          children: [],
-        });
-      }
-
-      if (inputIsNative) {
-        unlockChildren.push(
-          {
-            adapterId: "weth-withdraw-amount",
-            target: ADDR.WETH,
-            tokenIn: ADDR.WETH,
-            tokenOut: realIn,
-            amount: amtIn,
-            params: {},
-            children: [],
-          },
-          {
-            adapterId: "univ4-sync",
-            target: edge.target,
-            tokenIn: realIn,
-            tokenOut: "",
-            amount: 0n,
-            params: { currency: ethers.ZeroAddress },
-            children: [],
-          },
-          {
-            adapterId: "univ4-settle-value",
-            target: edge.target,
-            tokenIn: "",
-            tokenOut: "",
-            amount: amtIn,
-            params: {},
-            children: [],
-          },
-        );
-      } else {
-        unlockChildren.push(
-          // sync input
-          {
-            adapterId: "univ4-sync",
-            target: edge.target,
-            tokenIn: realIn,
-            tokenOut: "",
-            amount: 0n,
-            params: { currency: realIn },
-            children: [],
-          },
-          // transfer input to PM
-          {
-            adapterId: "erc20-transfer",
-            target: realIn,
-            tokenIn: realIn,
-            tokenOut: realIn,
-            amount: amtIn,
-            params: { to: edge.target, amount: amtIn },
-            children: [],
-          },
-          // settle
-          {
-            adapterId: "univ4-settle",
-            target: edge.target,
-            tokenIn: "",
-            tokenOut: "",
-            amount: 0n,
-            params: {},
-            children: [],
-          },
-        );
-      }
-      return {
-        adapterId: "univ4-unlock",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: 0n,
-        params: {},
-        children: unlockChildren,
-      };
-    }
-
-    case "balancer-v3-unlock": {
-      const outputAmount = rawOut ?? amtOut;
-      const vault = ADDR.BALANCER_V3_VAULT;
-      const unlockChildren: ResolvedPlanNode[] = [
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: vault, amount: amtIn },
-          children: [],
-        },
-        {
-          adapterId: "balancer-v3-settle",
-          target: vault,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { token: edge.tokenIn },
-          children: [],
-        },
-        {
-          adapterId: "balancer-v3-swap",
-          target: vault,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenOut,
-          amount: amtIn,
-          params: {
-            kind: 0n,
-            pool: edge.target,
-            limitRaw: 0n,
-            userData: "0x",
-          },
-          children: [],
-        },
-        {
-          adapterId: "balancer-v3-send-to",
-          target: vault,
-          tokenIn: edge.tokenOut,
-          tokenOut: edge.tokenOut,
-          amount: outputAmount,
-          params: { token: edge.tokenOut },
-          children: [],
-        },
-      ];
-      return {
-        adapterId: "balancer-v3-unlock",
-        target: vault,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: 0n,
-        params: {},
-        children: unlockChildren,
-      };
-    }
-
-    case "univ2-swap": {
-      // UniV2: transfer tokenIn to pair, then call swap(amount0Out, amount1Out, to, data).
-      // Callback children handle the transfer.
-      const [t0, t1] = sortedPair(edge.tokenIn, edge.tokenOut);
-      const zeroForOne = edge.tokenIn.toLowerCase() === t0.toLowerCase();
-      const callbackChildren: ResolvedPlanNode[] = [
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: edge.target, amount: amtIn },
-          children: [],
-        },
-      ];
-      return {
-        adapterId: "univ2-swap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {
-          amount0Out: zeroForOne ? 0n : amtOut,
-          amount1Out: zeroForOne ? amtOut : 0n,
-          to: executor,
-        },
-        children: callbackChildren,
-      };
-    }
-
     default:
       throw new Error(`plan-builder: no handler for adapter ${edge.adapterId}`);
-  }
-}
-
-// ─── Protocol metadata helpers ─────────────────────────────────
-
-const univ3PoolCache = new Map<string, [string, string]>();
-
-async function uniV3PoolTokens(
-  state: StateBackend,
-  pool: string,
-): Promise<[string, string]> {
-  const key = pool.toLowerCase();
-  const cached = univ3PoolCache.get(key);
-  if (cached) return cached;
-  const t0Result = await state.call({
-    to: pool,
-    data: poolFeeIface.encodeFunctionData("token0"),
-  });
-  const t1Result = await state.call({
-    to: pool,
-    data: poolFeeIface.encodeFunctionData("token1"),
-  });
-  const t0 = ethers.getAddress("0x" + t0Result.slice(-40));
-  const t1 = ethers.getAddress("0x" + t1Result.slice(-40));
-  univ3PoolCache.set(key, [t0, t1]);
-  return [t0, t1];
-}
-
-function sortedPair(a: string, b: string): [string, string] {
-  return a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a];
-}
-
-function normalizeV4PoolKey(poolKey: NonNullable<TokenEdge["v4PoolKey"]>): NonNullable<TokenEdge["v4PoolKey"]> {
-  return {
-    currency0: normalizeV4Currency(poolKey.currency0, "currency0"),
-    currency1: normalizeV4Currency(poolKey.currency1, "currency1"),
-    fee: poolKey.fee,
-    tickSpacing: poolKey.tickSpacing,
-    hooks: normalizeV4Currency(poolKey.hooks, "hooks"),
-  };
-}
-
-function normalizeV4Currency(value: string, field: string): string {
-  if (value.toLowerCase() === "0x0") return ethers.ZeroAddress;
-  try {
-    return ethers.getAddress(value);
-  } catch {
-    throw new Error(`plan-builder: v4 ${field} must be an address or 0x0, got ${value}`);
-  }
-}
-
-function realV4Currency(
-  token: string,
-  key: NonNullable<TokenEdge["v4PoolKey"]>,
-  field: string,
-): string {
-  const c0 = key.currency0;
-  const c1 = key.currency1;
-  const t = token.toLowerCase();
-  if (t === c0.toLowerCase()) return c0;
-  if (t === c1.toLowerCase()) return c1;
-
-  const c0Native = c0.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-  const c1Native = c1.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-  if (c0Native !== c1Native && t === ADDR.WETH.toLowerCase()) {
-    return c0Native ? c0 : c1;
-  }
-
-  throw new Error(
-    `plan-builder: v4 ${field} ${token} does not match PoolKey ${c0} / ${c1}`,
-  );
-}
-
-function validateV4CurrencyPair(
-  realIn: string,
-  realOut: string,
-  key: NonNullable<TokenEdge["v4PoolKey"]>,
-  context: string,
-): void {
-  const resolved = [realIn.toLowerCase(), realOut.toLowerCase()].sort().join("/");
-  const poolPair = [key.currency0.toLowerCase(), key.currency1.toLowerCase()].sort().join("/");
-  if (resolved !== poolPair) {
-    throw new Error(
-      `${context}: resolved pair ${realIn} / ${realOut} does not match PoolKey ` +
-        `${key.currency0} / ${key.currency1}`,
-    );
-  }
-}
-
-function rejectNativeWethV4Pool(
-  key: NonNullable<TokenEdge["v4PoolKey"]>,
-  context: string,
-): void {
-  const c0 = key.currency0.toLowerCase();
-  const c1 = key.currency1.toLowerCase();
-  const weth = ADDR.WETH.toLowerCase();
-  const zero = ethers.ZeroAddress.toLowerCase();
-  if ((c0 === zero && c1 === weth) || (c1 === zero && c0 === weth)) {
-    throw new Error(`${context}: native/WETH v4 pool not supported (ambiguous alias)`);
   }
 }

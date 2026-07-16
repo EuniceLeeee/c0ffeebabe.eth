@@ -64,6 +64,21 @@ function testAllSwapEdgesAllowed(tmpDir: string): void {
   console.log("[standing-guard] all-swap edges allowed: PASS");
 }
 
+function testFinalGuardRederivesTaxonomy(tmpDir: string): void {
+  const markerPath = join(tmpDir, "absent-derived-marker");
+  const forgedSafeCredit = evaluateStandingGuard([{
+    slotKind: "lend",
+    leavesStandingPosition: false,
+  }], markerPath);
+  assert(forgedSafeCredit.allowed === false, "forged safe credit should be rejected");
+  assert(
+    forgedSafeCredit.reason === "edge_taxonomy_inconsistent",
+    `forged safe credit reason ${forgedSafeCredit.reason}`,
+  );
+  assert(forgedSafeCredit.containsStandingPosition, "credit should be re-derived as standing");
+  console.log("[standing-guard] final taxonomy re-derivation: PASS");
+}
+
 async function testFluidVaultEdgeFlowsThrough(tmpDir: string): Promise<void> {
   const fluidEntry = POOL_REGISTRY.find((entry) => entry.adapter === "fluid-vault");
   assert(fluidEntry !== undefined, "POOL_REGISTRY fluid-vault entry missing");
@@ -85,8 +100,9 @@ async function main(): Promise<void> {
     testAbsentMarkerRejectsStandingEdge(tmpDir);
     testPresentMarkerAllowsStandingEdge(tmpDir);
     testAllSwapEdgesAllowed(tmpDir);
+    testFinalGuardRederivesTaxonomy(tmpDir);
     await testFluidVaultEdgeFlowsThrough(tmpDir);
-    console.log("standing-guard PASS (4/4)");
+    console.log("standing-guard PASS (5/5)");
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
