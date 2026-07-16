@@ -127,7 +127,7 @@ async function getFactoryLogs(
 
 // Swap topics discover candidate shapes. factory()/MetaRegistry records identity provenance.
 
-type DiscoveredAdapter = "univ2" | "univ3" | "curve" | "curve-underlying";
+type DiscoveredAdapter = "univ2" | "univ3" | "curve" | "curve-underlying" | "balancer-v3";
 
 const SWAP_TOPICS: { topic: string; adapter: DiscoveredAdapter }[] = [
   // UniV3
