@@ -22,7 +22,6 @@ import { quoteV4ExactInLocal } from "./v4-math.js";
  * dry-run path fail-fast here instead of emitting placeholder amounts.
  */
 
-const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 const FLUID_DEX_RESOLVER_ENV = "FLUID_DEX_RESOLVER";
 export const FLUID_DEX_ADDRESS_DEAD = "0x000000000000000000000000000000000000dEaD";
 
@@ -185,45 +184,6 @@ export async function quoteGoldxMint(
   const unit = BigInt(goldxIface.decodeFunctionResult("unit", result)[0]);
   if (unit <= 0n) throw new Error(`GOLDx unit() returned ${unit}`);
   return amountIn * unit / GOLDX_WAD;
-}
-
-// ── UniV3 (QuoterV2) ───────────────────────────────────────────
-
-const poolFeeIface = new ethers.Interface([
-  "function fee() view returns (uint24)",
-]);
-const quoterV2Iface = new ethers.Interface([
-  "function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
-]);
-
-async function quoteUniV3(
-  state: StateBackend,
-  pool: string,
-  tokenIn: string,
-  tokenOut: string,
-  amountIn: bigint,
-): Promise<bigint> {
-  const feeResult = await state.call({
-    to: pool,
-    data: poolFeeIface.encodeFunctionData("fee"),
-  });
-  const fee = Number(BigInt(feeResult));
-
-  const data = quoterV2Iface.encodeFunctionData("quoteExactInputSingle", [
-    {
-      tokenIn,
-      tokenOut,
-      amountIn,
-      fee,
-      sqrtPriceLimitX96: 0n,
-    },
-  ]);
-  const result = await state.call({ to: UNIV3_QUOTER_V2, data });
-  const decoded = quoterV2Iface.decodeFunctionResult(
-    "quoteExactInputSingle",
-    result,
-  );
-  return BigInt(decoded[0]);
 }
 
 // ── PSM (Sky/Maker stable swap, 1:1 with decimal scaling) ──────
@@ -757,16 +717,6 @@ export async function quote(
       // Underlying pools have a distinct balance/rate domain. Never route
       // through the regular Curve PoolStateCache local math.
       return quoteCurveUnderlying(state, target, tokenIn, tokenOut, amountIn);
-    case "univ3-swap":
-      // Path B: prefer warmed local cross-tick math; fall back to QuoterV2.
-      if (cache) {
-        try {
-          return await cache.quoteV3(state, target, tokenIn, tokenOut, amountIn);
-        } catch {
-          /* fall through to eth_call (e.g. swap crosses beyond warmed words) */
-        }
-      }
-      return quoteUniV3(state, target, tokenIn, tokenOut, amountIn);
     case "univ4-unlock":
       // Path B: prefer hookless local v4 Pool.swap math; fall back to V4Quoter.
       return quoteUniV4(state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats);

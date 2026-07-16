@@ -45,7 +45,7 @@ const backend: TokenQueryBackend = {
 
 async function main(): Promise<void> {
   const adapters = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list();
-  assert(adapters.length === 1, `production route adapter count ${adapters.length}`);
+  assert(adapters.length === 2, `production route adapter count ${adapters.length}`);
   const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge("univ2-swap");
   assert(adapter.id === "univ2-standard", `univ2 family ${adapter.id}`);
   assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool("univ2") === adapter, "pool alias lookup");
@@ -90,8 +90,10 @@ async function main(): Promise<void> {
   console.log("[route-adapters] univ2 plan fragment equivalence: PASS");
 
   const actionIds = new Set(listAll().map((action) => action.id));
-  for (const actionId of adapter.actionAdapterIds) {
-    assert(actionIds.has(actionId), `missing action adapter ${actionId}`);
+  for (const routeAdapter of adapters) {
+    for (const actionId of routeAdapter.actionAdapterIds) {
+      assert(actionIds.has(actionId), `missing action adapter ${actionId}`);
+    }
   }
   console.log("[route-adapters] action registry coverage: PASS");
 

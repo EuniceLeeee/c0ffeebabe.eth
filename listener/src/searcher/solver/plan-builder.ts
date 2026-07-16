@@ -20,13 +20,6 @@ const MAX_UINT = (1n << 256n) - 1n;
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 
-const poolFeeIface = new ethers.Interface([
-  "function fee() view returns (uint24)",
-  "function tickSpacing() view returns (int24)",
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-]);
-
 /**
  * Build a complete ResolvedPlanNode wrapped in the flash adapter.
  *
@@ -319,39 +312,6 @@ async function buildEdgeNode(
       };
     }
 
-    case "univ3-swap": {
-      // Wrapper: callback is BotVM transferring tokenIn (the inbound) to pool.
-      // exactInput mode: amountSpecified > 0
-      const [token0, token1] = await uniV3PoolTokens(state, edge.target);
-      const zeroForOne = edge.tokenIn.toLowerCase() === token0.toLowerCase();
-      const sqrtLimit = zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE;
-      const callbackChildren: ResolvedPlanNode[] = [
-        // Inside V3 callback: transfer the exact amountIn to the pool
-        {
-          adapterId: "erc20-transfer",
-          target: edge.tokenIn,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenIn,
-          amount: amtIn,
-          params: { to: edge.target, amount: amtIn },
-          children: [],
-        },
-      ];
-      return {
-        adapterId: "univ3-swap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: {
-          zeroForOne,
-          amountSpecified: amtIn, // exactInput (positive)
-          sqrtPriceLimit: sqrtLimit,
-        },
-        children: callbackChildren,
-      };
-    }
-
     case "univ4-unlock": {
       // V4 unlock wrapper. Inside callback: swap, take output, then resolve
       // input debt through either ERC20 transfer+settle or native settle{value}.
@@ -557,31 +517,6 @@ async function buildEdgeNode(
     default:
       throw new Error(`plan-builder: no handler for adapter ${edge.adapterId}`);
   }
-}
-
-// ─── Protocol metadata helpers ─────────────────────────────────
-
-const univ3PoolCache = new Map<string, [string, string]>();
-
-async function uniV3PoolTokens(
-  state: StateBackend,
-  pool: string,
-): Promise<[string, string]> {
-  const key = pool.toLowerCase();
-  const cached = univ3PoolCache.get(key);
-  if (cached) return cached;
-  const t0Result = await state.call({
-    to: pool,
-    data: poolFeeIface.encodeFunctionData("token0"),
-  });
-  const t1Result = await state.call({
-    to: pool,
-    data: poolFeeIface.encodeFunctionData("token1"),
-  });
-  const t0 = ethers.getAddress("0x" + t0Result.slice(-40));
-  const t1 = ethers.getAddress("0x" + t1Result.slice(-40));
-  univ3PoolCache.set(key, [t0, t1]);
-  return [t0, t1];
 }
 
 function normalizeV4PoolKey(poolKey: NonNullable<TokenEdge["v4PoolKey"]>): NonNullable<TokenEdge["v4PoolKey"]> {

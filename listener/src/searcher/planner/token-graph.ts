@@ -251,10 +251,6 @@ const curveCoinsIface = new ethers.Interface([
 const curveCoinsIntIface = new ethers.Interface([
   "function coins(int128 i) view returns (address)",
 ]);
-const univ3Iface = new ethers.Interface([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-]);
 const metronomeSynthPoolIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
@@ -384,16 +380,6 @@ async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Prom
       if (edges.length === 0) {
         throw new Error(`curve-underlying pool ${pool.address} exposed no quotable directions`);
       }
-      break;
-    }
-    case "univ3": {
-      const [t0, t1] = pool.token0 && pool.token1
-        ? [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)]
-        : await queryUniV3Tokens(backend, pool.address);
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-      );
       break;
     }
     case "fluid-dex": {
@@ -635,17 +621,6 @@ async function queryCurveCoinAt(backend: TokenQueryBackend, pool: string, index:
     }
   }
   return null;
-}
-
-async function queryUniV3Tokens(backend: TokenQueryBackend, pool: string): Promise<[string, string]> {
-  const t0Data = univ3Iface.encodeFunctionData("token0");
-  const t1Data = univ3Iface.encodeFunctionData("token1");
-  const r0 = await backend.call({ to: pool, data: t0Data });
-  const r1 = await backend.call({ to: pool, data: t1Data });
-  return [
-    ethers.getAddress("0x" + r0.slice(-40)),
-    ethers.getAddress("0x" + r1.slice(-40)),
-  ];
 }
 
 async function queryMetronomeSynths(backend: TokenQueryBackend, pool: string): Promise<string[]> {
