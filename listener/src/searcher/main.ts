@@ -40,6 +40,7 @@ import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
+import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
   BlockScanWarmCoordinator,
   blockScanMutableQuoteRequests,
@@ -257,27 +258,7 @@ interface PlannedBlockScanSolve {
   planCount: number;
 }
 
-// Profit-token → ETH valuation for sizing the proposer bribe (route B). WETH is
-// 1:1; the major stables convert via ethUsd; anything else returns 0 (no full
-// bribe — we fall back to the default priority fee for exotic profit tokens).
-const WETH_ADDR = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
-const STABLE_DECIMALS = new Map<string, number>([
-  ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6], // USDC
-  ["0xdac17f958d2ee523a2206206994597c13d831ec7", 6], // USDT
-  ["0x6b175474e89094c44da98b954eedeac495271d0f", 18], // DAI
-  ["0x853d955acef822db058eb8505911ed77f175b99e", 18], // FRAX
-]);
-
-export function valueInEth(token: string, amount: bigint, ethUsd: number): bigint {
-  const t = token.toLowerCase();
-  if (t === WETH_ADDR) return amount;
-  const decimals = STABLE_DECIMALS.get(t);
-  if (decimals !== undefined && ethUsd > 0) {
-    // amount (stable units) → ETH wei: amount/10^dec USD ÷ ethUsd × 1e18
-    return (amount * 10n ** 18n) / (10n ** BigInt(decimals) * BigInt(Math.round(ethUsd)));
-  }
-  return 0n;
-}
+export { computeBidEth, valueInEth };
 
 function buildBlockScanPricedTokens(): BlockScanConfig["pricedTokens"] {
   return new Map([
@@ -286,17 +267,6 @@ function buildBlockScanPricedTokens(): BlockScanConfig["pricedTokens"] {
     [ADDR.USDT.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
     [ADDR.DAI.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 18n }],
   ]);
-}
-
-export function computeBidEth(
-  expectedProfitEth: bigint,
-  gasCostEth: bigint,
-  opts: { bribeAllAboveGas: boolean; bribeBps: number },
-): bigint {
-  if (opts.bribeAllAboveGas) {
-    return expectedProfitEth > gasCostEth ? expectedProfitEth - gasCostEth : 0n;
-  }
-  return (expectedProfitEth * BigInt(opts.bribeBps)) / 10000n;
 }
 
 export function hashOnlySubmitDecision(
@@ -2664,25 +2634,20 @@ async function processOpportunities(
         // damps the adverse-selection: we'd otherwise overbribe exactly the bundles
         // we most over-estimated, and win the losers). Calibrate the haircut from
         // the reconciliation of landed txs (real profit vs the logged sim profit).
-        const rawProfitEth = valueInEth(
+        const ev = await evaluateEv(
+          ctx.provider,
           resolved.profitToken,
           sim.netProfit,
-          ctx.config.ethUsd,
+          sim.gasUsed,
+          ctx.config,
         );
-        const expectedProfitEth =
-          (rawProfitEth * BigInt(10000 - ctx.config.profitHaircutBps)) / 10000n;
-        const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(ctx.config.defaultGasUsed);
-        let gasCostEth = 0n;
-        if (ctx.config.evGate || ctx.config.bribeAllAboveGas) {
-          const latest = await ctx.provider.getBlock("latest");
-          const baseFee = latest?.baseFeePerGas ?? 0n;
-          const worstBaseFee = (baseFee * BigInt(ctx.config.gasBufferMultX10)) / 10n;
-          gasCostEth = gasUnits * worstBaseFee;
-        }
-        const bidEth = computeBidEth(expectedProfitEth, gasCostEth, {
-          bribeAllAboveGas: ctx.config.bribeAllAboveGas,
-          bribeBps: ctx.config.bribeBps,
-        });
+        const {
+          expectedProfitEth,
+          gasUnits,
+          gasCostEth,
+          bidEth,
+          netEvWei,
+        } = ev;
 
         const creditLiveMarkerPath =
           process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
@@ -2717,12 +2682,11 @@ async function processOpportunities(
         // (baseFee × gasBufferMult, matching the submitter's maxFee cap) so a
         // bundle that's only +EV at the current low base fee can't land at a loss.
         if (ctx.config.evGate) {
-          const netEth = expectedProfitEth - gasCostEth - bidEth;
-          if (netEth < ctx.config.minNetEth) {
+          if (netEvWei < ctx.config.minNetEth) {
             ctx.counters.finalVerifySkipped++;
             lastTerminalState = "no-profitable-quote";
             lastTerminalError =
-              `EV gate: net ${netEth} < ${ctx.config.minNetEth} ` +
+              `EV gate: net ${netEvWei} < ${ctx.config.minNetEth} ` +
               `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
               `token=${resolved.profitToken.slice(0, 10)})`;
 	            console.log(`[searcher/live] skip below-EV: ${lastTerminalError}`);
@@ -2735,7 +2699,7 @@ async function processOpportunities(
 	            continue;
 	          }
           console.log(
-            `[searcher/live] EV ok: net=${ethers.formatEther(netEth)} ETH ` +
+            `[searcher/live] EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
               `profitEth=${ethers.formatEther(expectedProfitEth)} gas=${ethers.formatEther(gasCostEth)} ` +
               `bribe=${ethers.formatEther(bidEth)}`,
           );
@@ -2746,7 +2710,7 @@ async function processOpportunities(
           strategy: "backrun",
           opportunityId,
           targetBlock,
-          netEvWei: expectedProfitEth - gasCostEth - bidEth,
+          netEvWei,
           deadlineAtMs: oppDeadlineAtMs,
         });
         if (!decision.admit) {
@@ -2968,25 +2932,20 @@ async function maybeSubmitBlockScanAtomic(params: {
       return;
     }
 
-    const rawProfitEth = valueInEth(
+    const ev = await evaluateEv(
+      provider,
       resolved.profitToken,
       sim.netProfit,
-      config.ethUsd,
+      sim.gasUsed,
+      config,
     );
-    const expectedProfitEth =
-      (rawProfitEth * BigInt(10000 - config.profitHaircutBps)) / 10000n;
-    const gasUnits = sim.gasUsed > 0n ? sim.gasUsed : BigInt(config.defaultGasUsed);
-    let gasCostEth = 0n;
-    if (config.evGate || config.bribeAllAboveGas) {
-      const latest = await provider.getBlock("latest");
-      const baseFee = latest?.baseFeePerGas ?? 0n;
-      const worstBaseFee = (baseFee * BigInt(config.gasBufferMultX10)) / 10n;
-      gasCostEth = gasUnits * worstBaseFee;
-    }
-    const bidEth = computeBidEth(expectedProfitEth, gasCostEth, {
-      bribeAllAboveGas: config.bribeAllAboveGas,
-      bribeBps: config.bribeBps,
-    });
+    const {
+      expectedProfitEth,
+      gasUnits,
+      gasCostEth,
+      bidEth,
+      netEvWei,
+    } = ev;
 
     const creditLiveMarkerPath =
       process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH;
@@ -3004,7 +2963,6 @@ async function maybeSubmitBlockScanAtomic(params: {
       return;
     }
 
-    const netEvWei = expectedProfitEth - gasCostEth - bidEth;
     if (config.evGate) {
       if (netEvWei < config.minNetEth) {
         const error =

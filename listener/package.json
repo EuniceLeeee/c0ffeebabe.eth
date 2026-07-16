@@ -70,6 +70,7 @@
     "searcher:victimapply": "tsx src/searcher/test/victim-apply.ts",
     "searcher:postimpactoverrides": "tsx src/searcher/test/post-impact-overrides.ts",
     "searcher:valueineth": "tsx src/searcher/test/value-in-eth.ts",
+    "searcher:ev-evaluator": "node --import tsx src/searcher/test/ev-evaluator.ts",
     "searcher:balanceslots": "tsx src/searcher/test/balance-slots.ts",
     "searcher:finalverifygate": "tsx src/searcher/test/final-verify-gate.ts",
     "searcher:submit-gate": "node --import tsx src/searcher/test/hashonly-submit-gate.ts",
