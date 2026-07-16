@@ -75,6 +75,25 @@ type ActionAdapterId = string;
 - `SwapCapabilityId`：已经验证的交换语义，用于选择高阶 adapter。
 - `ActionAdapterId`：BotVM action 编码 ID，例如 `univ4-take`、`univ4-settle`。
 
+这三个概念不要求在 `TokenEdge` 上新增三个可漂移字段。现有 `TokenEdge.adapterId` 是日志、fixture、
+analysis 和 planner 共用的稳定序列化键，本次重构不全局重命名它，也不再新增一个
+`edge.swapCapabilityId` 与它并存。`SwapRegistry` 维护经过唯一性校验的
+`edgeAdapterId → SwapCapabilityId` alias 索引：
+
+```ts
+interface SwapAdapter {
+  readonly id: SwapCapabilityId;
+  readonly edgeAdapterIds: readonly string[]; // existing TokenEdge.adapterId values
+}
+
+swapRegistry.forEdge(edge.adapterId); // alias 必须唯一命中一个 SwapAdapter
+```
+
+`PoolDescriptor.swapCapabilityId` 只存在于 pool→edge 生命周期，用于选择 `buildEdges` 实现；adapter
+产出的 edge 继续使用现有稳定 `adapterId`。`ResolvedPlanNode.adapterId` 才是 `ActionAdapterId`。
+若未来要重命名跨系统 edge key，必须作为独立 schema migration，同步修改 listener、fixtures、日志和
+analysis consumers；不夹在本次行为等价重构中。
+
 建议的 pool 描述：
 
 ```ts
@@ -91,13 +110,28 @@ interface PoolDescriptor {
 }
 ```
 
-`TokenEdge` 继续携带执行所需 metadata，但 adapter 选择只读 `swapCapabilityId`，不再根据协议名称猜测执行方式。
+### 与现有 TokenEdge safety taxonomy 对齐
+
+所有 `buildEdges` 输出必须通过唯一共享 constructor，由显式 `slotKind` / `protocolAction` 调用
+`deriveEdgeTaxonomy` 派生 `edgeKind` 和 `leavesStandingPosition`。adapter 禁止独立赋值或覆盖后两者：
+
+```ts
+function createAdapterEdge(input: EdgeInput): TokenEdge {
+  const taxonomy = deriveEdgeTaxonomy(input.slotKind, input.protocolAction);
+  return { ...input, ...taxonomy };
+}
+```
+
+本次 production registry 只接入当前 mission 内的 position-conserving swap/protocol capability；
+credit/standing-position 策略不借此接口预留或放行。现有 credit edge 继续由 standing guard fail closed，
+未来若 mission 改变，应另立策略、风险和验证合同。
 
 ## 4. 高阶 SwapAdapter 契约
 
 ```ts
 interface SwapAdapter {
   readonly id: SwapCapabilityId;
+  readonly edgeAdapterIds: readonly string[];
 
   buildEdges(ctx: EdgeBuildContext): Promise<TokenEdge[]>;
   buildPlan(ctx: PlanBuildContext): Promise<ResolvedPlanNode>;
@@ -350,11 +384,46 @@ not_admitted → path_found → final_sim_success
 
 工作：
 
-1. 记录 main SHA、生产 view/universe SHA 和 replay fixture。
-2. 运行现有 adapter descriptor、planner、quote/math、final verify 和代表性 fork harness。
-3. 保存 scanner rings、candidate plans、compiled calldata 和逐 wei profit 作为等价性基线。
+1. 等所有修改 graph/quoter/plan-builder/main 的在飞 feature/cherry-pick 已合入、放弃或移出重叠文件后，
+   从最新 `origin/main` 建立干净 worktree；不得从当前冲突态或旧 feature branch 起重构。
+2. 记录 main SHA、生产 view/universe SHA 和 replay fixture。
+3. 为下表每个即将迁移的 capability 记录 fixture、命令、输入 artifact SHA-256 和基线输出 SHA-256。
+4. 运行现有 adapter descriptor、planner、quote/math、final verify 和对应 fork harness。
+5. 保存 scanner rings、candidate plans、compiled calldata 和逐 wei profit 作为等价性基线。
 
-验证：现有 harness 全绿；不修改 fixture/harness。
+验证：现有 harness 全绿；不修改 fixture/harness。缺失的 fixture 必须先在独立 prerequisite
+commit 中补齐并合入 main，再重新冻结重构基线，不能由架构 challenger 同时修改 trusted harness。
+
+#### Capability 等价性 corpus（开工门，不是建议清单）
+
+表中的“现有锚点”只是候选输入，不等于已经满足开工门；Phase 0 必须实际运行并记录 receipt。
+迁移单位是 `SwapCapabilityId × production lane`，不是模糊的 venue 品牌。每个被迁 capability
+至少需要一个覆盖 graph → quote → plan → compile → final simulation 的 pinned known-good fixture；
+backrun 能力还必须覆盖 impact → postImpact → victimOverlay。
+
+| capability | `origin/main` 现有锚点 | Phase 0 状态/动作 |
+|---|---|---|
+| `univ2-standard` | `blockscan-coffee-f2de7499.json`、`yeti-balancerv1-0ffa9acf.json` | 运行 parameterized loop fork；未得到完整成功锚前不得迁移 |
+| `univ3-standard` | `rocksolid-balancer-v3-7ce631.json`、`sfrxeth-8756ba5c.json` | 记录 loop fork、逐腿 quote 和 calldata 基线 |
+| `univ4` | `blockscan-coffee-f2de7499.json`、`sfrxeth-8756ba5c.json`、`searcher:validate-v4-quote` | 记录 native/WETH、hook、quote 与多 action calldata 基线 |
+| `curve-plain` | `sfrxeth-8756ba5c.json`、`searcher:curvemath` | 固定 block；记录 local/on-chain quote 与 loop final sim |
+| `curve-underlying` | main 尚无独立 pinned loop fixture | **BLOCKED**：先以独立 prerequisite commit 增加并验证 fixture |
+| `fluid-dex` | `searcher:fluid-dex-verify` | 记录其 pinned tx/block、plan、calldata 与 quote 输出 |
+| `balancer-v3` / `rocksolid` | `rocksolid-balancer-v3-7ce631.json` | 运行 parameterized loop fork，记录四腿 plan/calldata/profit |
+| `erc4626` | `sfrxeth-8756ba5c.json`、`searcher:blockscan-fork-solve-f391` | 分别覆盖标准与 Silo redeem 形状 |
+| `psm` | `searcher:protocol-loop` | 记录 PSM+Curve 原子闭环与 calldata |
+| `wsteth` | `searcher:wsteth-quote` | **BLOCKED**：quote 单测不足，先增加 closed-loop/final-sim fixture |
+| `metronome` | `searcher:blockscan-fork-solve-metronome` | 记录 oracle victim 前后反事实和 final sim |
+| `goldx` | `searcher:blockscan-hunt-tx149` | 记录 pinned hunt 的 graph/plan/calldata/final-sim 输出 |
+
+#### 并发施工门
+
+1. 同一时刻只允许一个 SwapAdapter capability 迁移 PR；不得把多个 venue 迁移堆在同一 branch。
+2. 每个 phase 开始时从最新 main 重建基线，并对该 phase 的重叠 capability/文件实行短期 ownership；
+   新 gap-repair 可以继续做非重叠模块，重叠改动必须等待该 phase 合入后再 rebase。
+3. 禁止把旧 feature commit 直接 cherry-pick 穿过已经重写的 graph/quoter/plan-builder；应在新边界上重放意图。
+4. 如果 main 在 phase 期间出现重叠语义变更，本 phase 立即失效：rebase、重新生成 corpus 基线并重跑等价门。
+5. 不做覆盖整个重构周期的全仓冻结；用小 phase、明确 ownership 和快速合入降低 feature 停顿时间。
 
 ### Phase 1 — 脚手架与 admission policy
 
@@ -369,6 +438,19 @@ not_admitted → path_found → final_sim_success
 
 验证：build、adapter descriptor、venue identity、planner 输出完全不变。
 
+### Phase 1.5 — 先固定 warm coordinator 边界
+
+在迁移任何 per-venue warm 逻辑之前，将 `main.ts` 现有 full/incremental/reorg/logs-error 状态机封装为
+唯一 `BlockScanWarmCoordinator`。这一 phase 只移动所有权，不改变 request 集合、并发度、deadline、
+cache invalidation/restamp 或发布时机；旧 venue 分支仍通过临时 legacy `WarmSpec` 进入同一个 coordinator。
+
+必须先为 startup full warm、incremental changed-pool、reorg/range fallback、logs error、budget timeout
+和“失败时不发布部分 snapshot”建立 characterization assertions。若现有 harness 不覆盖，测试补充作为
+Phase 0 prerequisite 单独合入 main，然后重新冻结基线。
+
+验证：相同 block/log 输入生成相同 warm plan、RPC request multiset、cache generation 和 scanner 输出；
+`searcher:blockscan-scanner`、`searcher:curve-warm-batch` 及对应 warm/replay gate 全绿。
+
 ### Phase 2 — UniV2 完整纵向迁移
 
 把 UniV2 的以下逻辑迁进 `univ2-standard.ts`：
@@ -376,10 +458,11 @@ not_admitted → path_found → final_sim_success
 - pool edge 构建与 token/reserve 校验
 - exact quote 与 fee model
 - plan subtree 构建
-- mid/warm metadata
+- `mid`/`quoteLocal` 的同步读实现与 declarative `WarmSpec`
 - pool impact、victim apply/overlay
 
-核心文件改为 `swapRegistry.get(edge.swapCapabilityId)`，不再判断 `univ2-swap`。
+核心文件改为 `swapRegistry.forEdge(edge.adapterId)`；alias 索引完成唯一分发，核心文件不再判断
+`univ2-swap`。不在 `TokenEdge` 上同时维护 `adapterId` 和 `swapCapabilityId`。
 
 验证：V2 scanner、planner、quote、overlay、final sim 等价；`main.ts` 中 UniV2 分支归零。
 
@@ -422,12 +505,13 @@ main.ts
   → searcher-bootstrap.ts
   → opportunity-processor.ts
   → blockscan-runtime.ts
-  → blockscan-warm-coordinator.ts
   → mempool-source.ts
   → shutdown.ts
 ```
 
-目标：`main.ts` 只保留配置加载、依赖构造、source 启动和 shutdown wiring，不包含 ABI、event topic、quote、warm 或 protocol switch。
+`blockscan-warm-coordinator.ts` 已在 Phase 1.5 建立，本阶段只把其 wiring 从 `main.ts` 移入
+`blockscan-runtime.ts`。目标：`main.ts` 只保留配置加载、依赖构造、source 启动和 shutdown wiring，
+不包含 ABI、event topic、quote、warm 或 protocol switch。
 
 ## 10. 硬编码治理
 
@@ -468,7 +552,8 @@ npm run searcher:finaloverlayequiv
 npm run searcher:finalverifygate
 ```
 
-并按 adapter 增加对应 math/quote/fork replay。等价性判据：
+并按 Phase 0 corpus 表运行该 capability 的 pinned math/quote/fork replay；receipt、输入 hash 和输出 hash
+必须绑定同一 baseline/challenger SHA。等价性判据：
 
 - scanner rings 相同
 - candidate plan 数量与顺序相同
@@ -476,6 +561,8 @@ npm run searcher:finalverifygate
 - final simulation success/revert 相同
 - gas/profit 口径相同
 - gross/net profit 逐 wei 相同
+- 每条 edge 的 `adapterId`、`slotKind`、`protocolAction`、`edgeKind`、`leavesStandingPosition` 相同
+- warm request multiset、snapshot block/generation 和失败时的 fail-closed 行为相同
 
 ### unknown factory 能力变化
 
@@ -498,11 +585,15 @@ verdict:
 新增 adapter conformance suite，启动和 CI 均检查：
 
 1. `SwapCapabilityId` 唯一。
-2. 所有生产 pool descriptor 都能解析到一个 adapter。
-3. adapter 生成的 action IDs 均存在于 ActionAdapter registry。
-4. block-scan/backrun lane 的必需能力没有空缺。
-5. adapter 的 edge token 顺序、quote token 顺序和 plan token 顺序一致。
-6. 任何 unsupported capability 都有稳定 drop reason，而不是落入默认分支。
+2. 每个现有 `TokenEdge.adapterId` alias 唯一映射到一个 `SwapCapabilityId`，不存在双键漂移。
+3. 所有生产 pool descriptor 都能解析到一个 adapter，adapter 产出的 edge alias 必须反解回自身。
+4. adapter 生成的 action IDs 均存在于 ActionAdapter registry。
+5. block-scan/backrun lane 的必需能力没有空缺；backrun 明确校验 impact/postImpact/overlay 三段。
+6. `mid` / `quoteLocal` 的类型签名不允许 Promise，且在 instrumentation test 中不产生 I/O。
+7. 每条 edge 的 `edgeKind` / `leavesStandingPosition` 必须等于
+   `deriveEdgeTaxonomy(slotKind, protocolAction)`，adapter 不得独立覆盖安全位。
+8. adapter 的 edge token 顺序、quote token 顺序和 plan token 顺序一致。
+9. 任何 unsupported capability 都有稳定 drop reason，而不是落入默认分支。
 
 ## 13. 风险与回滚
 
@@ -513,6 +604,8 @@ verdict:
 - identity 与 capability 再次合并，使 known factory allowlist 变成准入门。
 - pure refactor 同时改变 quote/fallback/ranking，无法定位行为差异。
 - side-effect registry 导致测试顺序依赖。
+- warm scheduler 与 adapter 同时持有 TTL/reorg/last-warmed 状态，产生部分 snapshot 或重复请求。
+- 与 graph/quoter/plan-builder 的在飞 feature 并发，导致语义冲突被误当成机械 merge。
 
 控制措施：
 
@@ -521,6 +614,8 @@ verdict:
 3. registry 显式构造并冻结，测试使用独立 registry 实例。
 4. 任何输出差异先判定为重构回归，不解释成“优化”。
 5. 每个阶段独立 commit，可按阶段 revert，不做 big-bang 合并。
+6. warm 调度状态只有 coordinator 一个 owner；adapter 只提供 `WarmSpec`。
+7. 每 phase 使用短期文件/capability ownership，main 重叠变化后废弃旧基线并重新验证。
 
 ## 14. Definition of Done
 
@@ -531,78 +626,40 @@ verdict:
 - [ ] `quoter.ts` 只提供通用入口/共享数学，不包含 per-venue dispatch switch。
 - [ ] `plan-builder.ts` 只协调 path 和公共 approve/guard/flash 语义，不包含 per-venue plan switch。
 - [ ] warm、impact、victim overlay 通过同一 SwapAdapter capability 查找。
+- [ ] warm coordinator 是 TTL/reorg/deadline/snapshot generation 的唯一 owner；scanner 热读无 I/O。
 - [ ] identity admission policy 只有一个生产配置入口。
 - [ ] unknown V2/V3 的身份、能力、fee/quote confidence 均可审计。
+- [ ] `TokenEdge.adapterId` 保持跨系统稳定，alias 唯一；未新增会漂移的 edge capability 双键。
+- [ ] 所有 edge safety taxonomy 只由 `deriveEdgeTaxonomy` 派生，重构前后逐 edge 相同。
 - [ ] 新增一个标准兼容 DEX 不需要修改 main、graph、quoter、plan-builder。
 - [ ] trusted harness 未被架构 challenger 修改。
-- [ ] 代表性 corpus 的 scanner、plan、calldata 和 final profit 等价。
+- [ ] Phase 0 corpus 表中每个被迁 capability/lane 都有成功 receipt，scanner、plan、calldata 和 final profit 等价。
 - [ ] final simulation 和 EV gate 继续 fail closed。
 
-
 ---
 
-## 15. 对抗审查(fable,非作者)— 基线采用,施工前必修 6 项
+## 17. 第二位 reviewer(Sol)架构审阅 — 收敛点 + 仍存盲点
 
-判决:**这份 plan 强于 fable 的草案**,尤其 §1 两层拆分、§3 三 ID、§12 conformance suite。采用作基线。但代码级核实后有 6 个洞,3 高危,施工前必修。
+Sol 独立审阅,与本 plan **收敛到同一两层拆分**(`PoolIdentity`/`ExecutionFamily` ≈ 本 plan 的 `VenueId`/`SwapCapabilityId`),验证方向稳。Sol 未动存在冲突的生产 worktree(正确 —— 印证 H3:核心文件正被多分支漂移,非落地时机)。
 
-强于 fable 草案之处(记录,防复审重复讨论):
-- **§1 两层拆分修正了 fable 草案的真错误**:fable 草案写 `SwapVenue.encode = ActionAdapter.encode`(单 encode);实测 plan-builder 有 `case "univ4-unlock"` + `case "balancer-v3-unlock"`——一条逻辑 swap 展开成多 action。单 encode 表达不了,本 plan 的 `buildPlan → ResolvedPlanNode 子树`才对。
-- §3 三 ID(VenueId/SwapCapabilityId/ActionAdapterId)、§4 显式 DI(拒 side-effect import)、§12 conformance suite、§4 lane-aware 能力校验,均强于 fable 草案。
+### 采纳 Sol 的增量:六步责任组件分解(比 §8 更细,折进 §8)
 
-### 🔴 H1 — sync/mid 契约未钉死(最热路径的隐性延迟回归)
-§4 `quote(ctx): Promise<bigint>` + `mid: MidQuoter | null` 没规定 `mid`/`warm` 必须 **sync-over-prewarmed-state**。实测 [blockscan-scanner.ts](listener/src/searcher/detector/blockscan-scanner.ts) 的 `readVenueMid` 是同步、每块调上千次、TTL-bound;若 `MidQuoter` async,scorer await 上千 Promise = 延迟回归。
-**必补**:接口显式三段分层 —— `prewarm(async,每块一次,外部 venue 的 eth_call 在此做完并存入 WarmState)` / `mid + quoteLocal(SYNC,纯函数读 WarmState)` / `quoteExact(async,非热路径,solver 定稿)`。外部 venue(dodo/balancer-v3/curve-underlying)的报价**必须在 prewarm 做完、热循环同步读**,镜像现有 `PoolStateCache` + `protocolMids`。
+| 步骤 | 责任组件(main 只组装/调用,不含 venue 分支) |
+|---|---|
+| 1 scanner | DiscoveryRegistry · VenueIdentity · GraphBuilder · OpportunityEnumerator |
+| 2 planner | PathEnumerator · RoutePlanner;plan-builder 只编译 plan |
+| 3 solver | QuoteRegistry · SizingEngine · 各 execution family 的 quote |
+| 4 fork sim | RouteEncoder · SimulationRunner · 通用 revm backend |
+| 5 EV | 独立 EvEvaluator;main 只调用 |
+| 6 replay | 现有 trusted harness,challenger 不得修改 |
 
-### 🔴 H2 — warm 协调器阶段错序,产生 live 半脑中间态
-Phase 2 把 UniV2 warm 迁进 adapter,但 main 的 ~600 行增量 warm 协调器(`planBlockScanWarm`/`verifyIncrementalWarm`)留到 Phase 6。中间几个 phase warm 逻辑一半在 adapter、一半在 main = 对活体 searcher 最危险的窗口(增量暖态状态机被劈开)。
-**必改**:warm 协调器抽成**独立 phase,早于任何 per-venue warm 迁移**(即 Phase 1.5),不是垫底。warm 是枢纽不是边角。
+Sol 的 PanoramaSwap 探测清单(token0/token1/getReserves/swap 形状/储备变化/fee 规则/calldata,**fee 不默认 997/1000**,final sim 强门)与 §6 一致,并入 §6 作为 V2 探测的最小集。
 
-### 🔴 H3 — 未处理"与在飞 feature work 并发"(流程杀手)
-本重构改 token-graph/quoter/plan-builder/main —— 正是 gap-repair(此刻 rocksolid worktree 卡在 DODO cherry-pick 半态,curve-underlying/tx149 也在动这些)在改的同一批文件。大重构 + 同文件并发 feature = merge 地狱。
-**必定**:重构与 feature work **串行化** —— 要么冻结 gap-repair 直到重构落地,要么重构让位到当前 feature(DODO/curve-underlying/tx149)全部合入 main 后再起。plan 必须写明这个前置。
+### Sol 仍漏的两个高危(与 §16 H7 / §15 H1 重合 —— 两位 reviewer 都漏,更须显式钉进正文)
 
-### 🟡 H4 — 等价性 corpus 未 pin 到每个被迁 venue
-§11 只说"代表性 corpus",不点具体 tx、不要求每个被迁 venue 一个 known-good fork fixture。Phase 5(balancer-v3/fluid/协议类)可能根本没有 known-good replay fixture = 无等价性锚。
-**必补**:每 phase 开工前先确认该 venue 的 pinned fork fixture 存在;corpus = {每个被迁 venue 至少一笔已知好 tx},缺 fixture 的 venue 先补 fixture 再迁。
+- **H7(安全位)**:Sol 六步责任表未提 `slotKind/edgeKind/leavesStandingPosition/deriveEdgeTaxonomy`。"新增标准 V2 只进 identity/discovery 数据"未保证这些 edge 的 `leavesStandingPosition` 仍经 `deriveEdgeTaxonomy` 派生 → 孤立安全位 = S2 guard 绕过风险。**两位独立 reviewer 同漏,证明此条隐蔽,必须成为 §3 + §12 的硬约束。**
+- **H1(sync 契约)**:Sol 步骤 3 "QuoteRegistry / 各 family 的 quote" 未区分 `prewarm`(async,每块一次)vs 热循环 `mid`(sync,每块上千次)。async-agnostic 的责任分解会在热路径回归延迟。QuoteRegistry 必须内建 prewarm/sync-read 分层。
 
-### 🟡 H5 — 引用 2 个不存在的文件
-`detector/blockscan-candidate-refinement.ts`、`detector/blockscan-curve-mids.ts` 仓库中不存在(其余 compiler.ts / execution/*.ts / live-state-backend.ts 均真实)。删除或标 `(new,待建)`。
-
-### 🟢 H6 — 目录命名撞车
-§7 高阶 adapter 放 `searcher/venues/adapters/`,与低阶 `listener/src/adapters/` 同名 → 混淆。高阶层改名 `venues/swaps/` 或 `venues/*`(不嵌 `adapters/`)。
-
-### 补充 — credit/脱锚借贷的可拓展性(现在不实现,接口留门)
-三 ID 模型能容纳未来 credit 腿,但 plan 未写。关键认知:**借贷腿在 leg 层与 swap 结构相同** —— `amountIn`=存入抵押物,`amountOut`=借出资产,就是一条边,`buildEdges/quote/buildPlan/prewarm/mid` 共用同一套签名。差异只有两处、都不在 SwapAdapter 接口内:(1) quote 实现不同(credit 的 amountOut = LTV×oracle 价,是各 adapter 自己 `quote` 的实现);(2) PnL 算法不同(verdict/PnL 层读 `edgeKind` 分支)。
-**建议**:`SwapCapabilityId` 之外,pool descriptor / edge 带一个 `edgeKind: "swap" | "credit" | "protocol"` 纯标记字段 + `leavesStandingPositionDefault`(swap=false, credit=true),供下游 PnL/guard 层查。加 credit venue = 实现同一 SwapAdapter 接口 + edgeKind:"credit" + 自己的 quote,**接口零改动**。注意:套利腿留仓=危险(guard 拒),脱锚借贷留仓=策略本身(guard 放行、走仓位风险验收)—— 这个 feature/violation 之别在 guard 层按 edgeKind 判,不在 adapter 接口。两价 oracle-vs-market EV / 跨块仓位 PnL / 退出腿是策略层未来的活,与本次重构解耦。当前 Mission 之外,仅留门。
-
-### 结论
-基线采用。**H1(sync 契约)、H2(warm 协调器提前)、H3(与 feature work 串行化)三高危不修,分别导致延迟回归 / live 半脑态 / merge 地狱。** H4/H5/H6 收尾清理。credit 可拓展性零成本留门。
-
----
-
-## 16. 对抗审查第二轮(fable)— 新增 H7(安全相关)+ 前轮状态
-
-基线 4392ffc == 当前 origin/main tip,有效(RockSolid/BalancerV3 已合入 main)。
-
-**前轮状态**:§15 的 H1–H6 是**审查记录,尚未回填进 plan 正文 §1–14**。照 §1–14 施工的人仍会踩 H1(sync 契约)/H2(warm 错序)/H3(并发)。Codex 下一版须把 H1–H3 折进正文,不能只留在 §15。
-- 附:H3 已被现实验证——一次 DODO cherry-pick 撞上 rocksolid 的 token-graph/quoter/main **炸了 10 个文件冲突**,正是"重构 vs feature 抢同文件 = merge 地狱"的活样本。
-
-### 🔴 H7(新,安全相关)— §3 三 ID 模型无视现有 TokenEdge 安全 taxonomy,有 S2 guard 绕过风险
-
-代码核实:
-- `leavesStandingPosition`(S2 standing-guard 的唯一安全位)**只**由 [`deriveEdgeTaxonomy(slotKind, protocolAction)`](listener/src/searcher/strategy-taxonomy.ts) 派生:credit→true、protocol 非安全 action(mint/未声明)→true(fail-closed)、swap/flash→false。
-- 今天的分发键**已经是 `edge.adapterId`**(plan-builder:185 `switch(edge.adapterId)`、quoter:730 `switch(adapterId)`)。
-- `TokenEdge` **已带** `adapterId / slotKind / protocolAction / edgeKind / leavesStandingPosition`,后三者由 `deriveEdgeTaxonomy` 构造时派生,**不得独立设置**。
-
-plan §3/§4 的领域模型(`VenueId` / `SwapCapabilityId` / `PoolDescriptor`)**完全没提** `slotKind`/`protocolAction`/`edgeKind`/`leavesStandingPosition`/`deriveEdgeTaxonomy`。两个具体风险:
-
-1. **重复/漂移**:`SwapCapabilityId` 与既有 `adapterId` 都是"选执行方式"的判别键。edge 同时带两个 = 可漂移。**必须二选一**:要么保留 `adapterId` 作分发键、映射到 SwapAdapter;要么显式全局替换 `adapterId→swapCapabilityId`(含分析侧 bundle-postmortem 读 adapterId 的地方)。不能两个并存。`adapterId` 是**跨系统稳定键**(分析侧也读),动它要连带评估。
-
-2. **安全位被孤立(高危)**:若 SwapAdapter 的 `buildEdges` 产出 `TokenEdge` 却**不经 `deriveEdgeTaxonomy`** 派生 `leavesStandingPosition`,S2 guard 就可能拿到错误/缺失的安全位 = **standing-position guard 绕过**(真安全回归,不是外观问题)。**plan 必须硬性要求**:所有 adapter 产出的 edge,其 `slotKind`/`protocolAction` 显式设置、`edgeKind`/`leavesStandingPosition` 一律经 `deriveEdgeTaxonomy` 派生,永不独立写。等价性 corpus 须断言重构前后每条 edge 的 `leavesStandingPosition` 逐条相同。
-
-3. **与 credit 可拓展性(§15)同源**:§15 说 credit 腿靠 `edgeKind` 纯标记——那个标记**就是**现有的 `TokenEdge.edgeKind` + `deriveEdgeTaxonomy`。所以 plan 不该新造 taxonomy,而应**建在既有 `slotKind→deriveEdgeTaxonomy→edgeKind/leavesStandingPosition` 之上**。credit venue 的 `buildEdges` 产出 `slotKind:"lend"` → deriveEdgeTaxonomy 自动给 `edgeKind:"credit"` + `leavesStandingPosition:true`。零新增分类系统。
-
-**修法**:§3 领域模型增加一节"与现有 TokenEdge taxonomy 的对齐"——`SwapCapabilityId` 只做执行选择,**不替代** `slotKind/protocolAction/edgeKind/leavesStandingPosition`;所有 edge 构造走 `deriveEdgeTaxonomy`;§12 conformance suite 加一条"每条 adapter 产出 edge 的 leavesStandingPosition 与 deriveEdgeTaxonomy 一致"。
-
-### 结论(第二轮)
-基线仍采用。**H7 升为与 H1/H2/H3 同级的高危(它是安全回归面),必须在 §3 显式对齐既有安全 taxonomy。** 加上前轮 H1/H2/H3 尚未回填正文——Codex 下一版 plan 需:回填 H1–H3 + 新增 §3 taxonomy 对齐(H7)。H4/H5/H6 收尾不变。
+### 结论(汇总两位 reviewer + 两轮)
+方向三方收敛(plan / fable / Sol),稳。落地前**正文必修**:H1(sync 分层)、H2(warm 协调器提前)、H3(与 feature work 串行化 + feature 冻结窗口)、H7(deriveEdgeTaxonomy 安全位对齐)。采纳 Sol 的六步责任组件分解 + V2 探测最小集。H4/H5/H6 收尾。
+**时机**:核心文件(token-graph/quoter/plan-builder/main)现被 ~10 条未合并 ab/* 分支漂移;须先收敛在飞 feature、开 feature 冻结窗口,再起 strangler。plan ready,timing not。
