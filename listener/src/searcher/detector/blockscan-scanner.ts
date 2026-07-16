@@ -1,12 +1,16 @@
-import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { buildTokenPaths, type TokenEdge, v4PoolId } from "../planner/token-graph.js";
-import type { CurveSnapshot, PoolStateCache, V2Seed, V3Snapshot, V4Snapshot } from "../solver/pool-state-cache.js";
-import { curveNgGetDy, curvePlainGetDy } from "../solver/curve-math.js";
+import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import { getAmount0Delta, getAmount1Delta } from "../solver/v3-math.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
+import {
+  readProtocolExternalMid,
+  type ExternalMidQuote,
+  type RouteVenueMid,
+} from "../venues/mid-readers.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 
 export interface BlockScanConfig {
   maxHops: number;
@@ -19,13 +23,7 @@ export interface BlockScanConfig {
   pinnedOutsideBudget?: boolean;
 }
 
-export interface ProtocolMid {
-  /** tokenOut raw units per 1 raw unit of tokenIn (decimals INCLUDED, same convention as AMM mids). */
-  mid: number;
-  feeBps: number;
-  /** Max plausible size in tokenIn raw units (depth proxy for sizing/ranking). */
-  depthIn: bigint;
-}
+export interface ProtocolMid extends ExternalMidQuote {}
 
 export interface BlockScanOutcome {
   outcome: "ran" | "budget_exceeded";
@@ -36,26 +34,13 @@ export interface BlockScanOutcome {
   debug?: { skippedVenues: number };
 }
 
-type VenueKind = "v2" | "v3" | "v4" | "curve" | "curve-underlying" | "protocol" | "fluid";
-
 interface PairGroup {
   a: string;
   b: string;
   venues: Map<string, TokenEdge[]>;
 }
 
-interface VenueMid {
-  kind: VenueKind;
-  pool: string;
-  edges: TokenEdge[];
-  mid: number;
-  feeBps: number;
-  reserveA?: bigint;
-  reserveB?: bigint;
-  sqrtABX96?: bigint;
-  liquidity?: bigint;
-  depthProxy: number;
-}
+type VenueMid = RouteVenueMid;
 
 interface RankedOpportunity {
   opportunity: BlockScanOpportunity;
@@ -63,7 +48,6 @@ interface RankedOpportunity {
 }
 
 const Q96 = 1n << 96n;
-const Q192 = Q96 * Q96;
 const MIN_SEARCH_CENTER = 1_000n;
 const WETH = ADDR.WETH.toLowerCase();
 
@@ -337,220 +321,32 @@ function readVenueMid(
   edges: TokenEdge[],
   protocolMids?: ReadonlyMap<string, ProtocolMid>,
 ): VenueMid | null {
-  const kind = venueKind(edges[0]);
-  if (!kind) return null;
-  if (kind === "v2") return readV2Mid(cache.snapshotV2(pool, sourceBlock), pool, edges, a, b);
-  if (kind === "v3") return readV3Mid(cache.snapshotV3(pool, sourceBlock), pool, edges, a, b);
-  if (kind === "v4") return readV4Mid(cache.snapshotV4(pool, sourceBlock), pool, edges, a, b);
-  if (kind === "protocol") return readExternalMid("protocol", protocolMids, pool, edges, a, b);
-  if (kind === "fluid") return readExternalMid("fluid", protocolMids, pool, edges, a, b);
-  if (kind === "curve-underlying") {
-    return readExternalMid("curve-underlying", protocolMids, pool, edges, a, b);
+  const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edges[0]?.adapterId ?? "");
+  if (adapter?.readMid) {
+    return adapter.readMid({
+      cache,
+      sourceBlock,
+      a,
+      b,
+      pool,
+      edges,
+      externalMids: protocolMids,
+    });
   }
-  return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b, protocolMids);
-}
-
-function venueKind(edge: TokenEdge): VenueKind | null {
-  if (edge.slotKind === "protocol") return "protocol";
-  const adapterId = edge.adapterId.toLowerCase();
-  if (adapterId.includes("fluid-dex")) return "fluid";
-  if (adapterId === "curve-exchange-underlying") return "curve-underlying";
-  if (adapterId.includes("balancer-v3")) return "protocol";
-  if (adapterId.includes("univ2")) return "v2";
-  if (adapterId.includes("univ3")) return "v3";
-  if (adapterId.includes("univ4")) return "v4";
-  if (adapterId.includes("curve")) return "curve";
+  // Phase 5 remains fixture-blocked. Keep Fluid DEX behavior explicit until
+  // it has a pinned graph→final-simulation equivalence corpus.
+  if (edges[0]?.adapterId === "fluid-dex-swap") {
+    return readProtocolExternalMid({
+      cache,
+      sourceBlock,
+      a,
+      b,
+      pool,
+      edges,
+      externalMids: protocolMids,
+    });
+  }
   return null;
-}
-
-function readV2Mid(snapshot: V2Seed | null, pool: string, edges: TokenEdge[], a: string, b: string): VenueMid | null {
-  if (!snapshot) return null;
-  const token0 = snapshot.token0.toLowerCase();
-  const token1 = snapshot.token1.toLowerCase();
-  const reserveA = token0 === a ? snapshot.reserve0 : token1 === a ? snapshot.reserve1 : null;
-  const reserveB = token0 === b ? snapshot.reserve0 : token1 === b ? snapshot.reserve1 : null;
-  if (reserveA === null || reserveB === null || reserveA <= 0n || reserveB <= 0n) return null;
-  const mid = Number(reserveB) / Number(reserveA);
-  if (!Number.isFinite(mid) || mid <= 0) return null;
-  return {
-    kind: "v2",
-    pool,
-    edges,
-    mid,
-    feeBps: Number(snapshot.feeBps),
-    reserveA,
-    reserveB,
-    depthProxy: Number(minBigint(reserveA, reserveB)),
-  };
-}
-
-function readExternalMid(
-  kind: "protocol" | "fluid" | "curve-underlying",
-  protocolMids: ReadonlyMap<string, ProtocolMid> | undefined,
-  pool: string,
-  edges: TokenEdge[],
-  a: string,
-  b: string,
-): VenueMid | null {
-  if (!protocolMids || !findEdge(edges, a, b)) return null;
-  const direct = protocolMids.get(`${pool}|${a}|${b}`);
-  const reverse = direct ? null : protocolMids.get(`${pool}|${b}|${a}`);
-  const quoted = direct ?? reverse;
-  if (!quoted || !Number.isFinite(quoted.mid) || quoted.mid <= 0 || quoted.depthIn <= 0n) return null;
-  const mid = direct ? quoted.mid : 1 / quoted.mid;
-  const reserveANumber = direct ? Number(quoted.depthIn) : Number(quoted.depthIn) / quoted.mid;
-  const reserveBNumber = direct ? Number(quoted.depthIn) * quoted.mid : Number(quoted.depthIn);
-  if (
-    !Number.isFinite(mid) || mid <= 0 ||
-    !Number.isFinite(reserveANumber) || reserveANumber <= 0 ||
-    !Number.isFinite(reserveBNumber) || reserveBNumber <= 0
-  ) {
-    return null;
-  }
-  const reserveA = BigInt(Math.floor(reserveANumber));
-  const reserveB = BigInt(Math.floor(reserveBNumber));
-  if (reserveA <= 0n || reserveB <= 0n) return null;
-  return {
-    kind,
-    pool,
-    edges,
-    mid,
-    feeBps: quoted.feeBps,
-    reserveA,
-    reserveB,
-    depthProxy: Number(minBigint(reserveA, reserveB)),
-  };
-}
-
-function readV3Mid(snapshot: V3Snapshot | null, pool: string, edges: TokenEdge[], a: string, b: string): VenueMid | null {
-  if (!snapshot || snapshot.state.sqrtPriceX96 <= 0n || snapshot.state.liquidity <= 0n) return null;
-  const token0 = snapshot.token0.toLowerCase();
-  const token1 = snapshot.token1.toLowerCase();
-  const price0To1 = sqrtPriceToNumber(snapshot.state.sqrtPriceX96) ** 2;
-  let mid: number;
-  let sqrtABX96: bigint;
-  if (token0 === a && token1 === b) {
-    mid = price0To1;
-    sqrtABX96 = snapshot.state.sqrtPriceX96;
-  } else if (token0 === b && token1 === a) {
-    mid = 1 / price0To1;
-    sqrtABX96 = Q192 / snapshot.state.sqrtPriceX96;
-  } else {
-    return null;
-  }
-  if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
-  const reserveA = snapshot.state.liquidity * Q96 / sqrtABX96;
-  const reserveB = snapshot.state.liquidity * sqrtABX96 / Q96;
-  if (reserveA <= 0n || reserveB <= 0n) return null;
-  return {
-    kind: "v3",
-    pool,
-    edges,
-    mid,
-    feeBps: Number(snapshot.state.fee) / 100,
-    sqrtABX96,
-    liquidity: snapshot.state.liquidity,
-    reserveA,
-    reserveB,
-    depthProxy: Number(minBigint(reserveA, reserveB)),
-  };
-}
-
-function readV4Mid(
-  snapshot: V4Snapshot | null,
-  pool: string,
-  edges: TokenEdge[],
-  a: string,
-  b: string,
-): VenueMid | null {
-  const key = edges[0]?.v4PoolKey;
-  if (!snapshot || !key || snapshot.sqrtPriceX96 <= 0n || snapshot.liquidity <= 0n) return null;
-  const token0 = normalizeV4GraphCurrency(key.currency0);
-  const token1 = normalizeV4GraphCurrency(key.currency1);
-  const price0To1 = sqrtPriceToNumber(snapshot.sqrtPriceX96) ** 2;
-  let mid: number;
-  let sqrtABX96: bigint;
-  if (token0 === a && token1 === b) {
-    mid = price0To1;
-    sqrtABX96 = snapshot.sqrtPriceX96;
-  } else if (token0 === b && token1 === a) {
-    mid = 1 / price0To1;
-    sqrtABX96 = Q192 / snapshot.sqrtPriceX96;
-  } else {
-    return null;
-  }
-  if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
-  const reserveA = snapshot.liquidity * Q96 / sqrtABX96;
-  const reserveB = snapshot.liquidity * sqrtABX96 / Q96;
-  if (reserveA <= 0n || reserveB <= 0n) return null;
-  return {
-    kind: "v4",
-    pool,
-    edges,
-    mid,
-    feeBps: Number(snapshot.lpFee) / 100,
-    sqrtABX96,
-    liquidity: snapshot.liquidity,
-    reserveA,
-    reserveB,
-    depthProxy: Number(minBigint(reserveA, reserveB)),
-  };
-}
-
-function readCurveMid(
-  snapshot: CurveSnapshot | null,
-  pool: string,
-  edges: TokenEdge[],
-  a: string,
-  b: string,
-  protocolMids?: ReadonlyMap<string, ProtocolMid>,
-): VenueMid | null {
-  if (!snapshot) return null;
-  const state = snapshot.kind === "plain" ? snapshot.plain : snapshot.ng;
-  if (!state || !state.balances || state.balances.length === 0) return null;
-  const i = snapshot.coins.findIndex((coin) => coin.toLowerCase() === a);
-  const j = snapshot.coins.findIndex((coin) => coin.toLowerCase() === b);
-  if (i < 0 || j < 0) return null;
-  const reserveA = state.balances[i];
-  const reserveB = state.balances[j];
-  if (reserveA <= 0n || reserveB <= 0n) return null;
-  const exact = protocolMids?.get(`${pool}|${a}|${b}`);
-  let mid: number;
-  let feeBps: number;
-  if (exact) {
-    mid = exact.mid;
-    feeBps = exact.feeBps;
-  } else {
-    // Raw reserve ratios are not Curve prices. Fall back to warmed local math
-    // only when the exact batched get_dy probe was unavailable.
-    const probeIn = reserveA / 1_000_000n > 0n ? reserveA / 1_000_000n : 1n;
-    let probeOut: bigint;
-    try {
-      probeOut = snapshot.kind === "plain"
-        ? curvePlainGetDy(snapshot.plain!, i, j, probeIn)
-        : curveNgGetDy(snapshot.ng!, i, j, probeIn);
-    } catch {
-      return null;
-    }
-    if (probeOut <= 0n) return null;
-    mid = Number(probeOut) / Number(probeIn);
-    feeBps = 0;
-  }
-  if (!Number.isFinite(mid) || mid <= 0) return null;
-  return {
-    kind: "curve",
-    pool,
-    edges,
-    mid,
-    feeBps,
-    reserveA,
-    reserveB,
-    depthProxy: Number(minBigint(reserveA, reserveB)),
-  };
-}
-
-function sqrtPriceToNumber(sqrtPriceX96: bigint): number {
-  return Number(sqrtPriceX96) / Number(Q96);
 }
 
 function pickFlashToken(a: string, b: string, pricedTokens: Map<string, { maxBorrow: bigint }>): string | null {
@@ -589,11 +385,6 @@ function edgeVenueIdentity(edge: TokenEdge): string {
     return (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
   }
   return edge.target.toLowerCase();
-}
-
-function normalizeV4GraphCurrency(currency: string): string {
-  const normalized = currency.toLowerCase();
-  return normalized === ethers.ZeroAddress.toLowerCase() ? WETH : normalized;
 }
 
 function edgeMidTimesOneMinusFee(

@@ -2,6 +2,7 @@ import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg } from "./protocol-quote.js";
 
@@ -15,6 +16,8 @@ export const wstethAdapter = Object.freeze({
     { slotKind: "protocol", protocolAction: "unwrap" },
   ],
   actionAdapterIds: ["wsteth-wrap", "wsteth-unwrap", "erc20-approve"],
+  readMid: readProtocolExternalMid,
+  warm: { kind: "protocol-mid", priority: 1 },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     return [
       {

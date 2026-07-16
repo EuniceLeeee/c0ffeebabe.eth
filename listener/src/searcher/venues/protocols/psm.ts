@@ -2,7 +2,8 @@ import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, ProtocolConversionAdapter } from "../route-leg-adapter.js";
-import { quotePSM } from "./protocol-quote.js";
+import { readProtocolExternalMid } from "../mid-readers.js";
+import { quotePSM, quotePSMSellGemPrewarm } from "./protocol-quote.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 
@@ -13,6 +14,17 @@ export const psmAdapter = Object.freeze({
   edgeAdapterIds: ["psm"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   actionAdapterIds: ["psm", "erc20-approve"],
+  readMid: readProtocolExternalMid,
+  warm: {
+    kind: "protocol-mid",
+    priority: 0,
+    async quotePrewarm(ctx: ExactQuoteContext): Promise<bigint> {
+      if (!ctx.tokenIn || !ctx.tokenOut) throw new Error("psm prewarm requires tokenIn/tokenOut");
+      return quotePSMSellGemPrewarm(
+        ctx.state, ctx.target, ctx.tokenIn, ctx.tokenOut, ctx.amountIn,
+      );
+    },
+  },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`psm pool ${pool.address} missing fixedTokenIn/Out`);

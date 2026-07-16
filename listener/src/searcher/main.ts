@@ -37,6 +37,7 @@ import {
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import {
   BlockScanWarmCoordinator,
@@ -66,13 +67,7 @@ import {
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import {
-  metronomeSynthPoolIface,
-  quoteBalancerV3,
-  quoteFluidDex,
-  quoteGoldxMint,
-} from "./solver/quoter.js";
-import { quoteCurveUnderlying } from "./venues/swaps/curve-underlying.js";
+import { quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
   type CurveSnapshot,
@@ -127,19 +122,6 @@ const V3_META = new ethers.Interface([
   "function tickSpacing() view returns (int24)",
 ]);
 const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
-const ERC4626 = new ethers.Interface([
-  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
-  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
-  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
-  "function convertToShares(uint256 assets) view returns (uint256 shares)",
-]);
-const WSTETH = new ethers.Interface([
-  "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
-  "function getStETHByWstETH(uint256 _wstETHAmount) view returns (uint256)",
-]);
-const PSM = new ethers.Interface(["function tin() view returns (uint256)"]);
-const WAD = 10n ** 18n;
-const PSM_TO18 = 10n ** 12n;
 const WHALE = "0x000000000000000000000000000000000000dEaD";
 
 interface HintLog {
@@ -3612,7 +3594,8 @@ async function verifyBlockScanIncrementalWarm(
   for (const hop of blockScanMutableQuoteRequests(allHops)) {
     const pool = blockScanV4PoolId(hop) ?? hop.target.toLowerCase();
     if (changedPools.has(pool) || changedV4PoolIds.has(pool)) continue;
-    if (hop.adapterId === "univ2-swap") {
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
+    if (warm?.kind === "mutable-pool" && warm.cache === "v2") {
       const cached = cache.snapshotV2(hop.target, blockNumber);
       const fresh = scratchCache.snapshotV2(hop.target, blockNumber);
       if (!fresh) continue;
@@ -3625,7 +3608,7 @@ async function verifyBlockScanIncrementalWarm(
             `fresh=${formatV2Seed(fresh)}`,
         );
       }
-    } else if (hop.adapterId === "univ3-swap") {
+    } else if (warm?.kind === "mutable-pool" && warm.cache === "v3") {
       const cached = cache.snapshotV3Live(hop.target, blockNumber);
       const fresh = scratchCache.snapshotV3Live(hop.target, blockNumber);
       if (!fresh) continue;
@@ -3638,7 +3621,7 @@ async function verifyBlockScanIncrementalWarm(
           `fresh=${formatV3LiveSeed(fresh)}`,
         );
       }
-    } else if (hop.adapterId === "univ4-unlock") {
+    } else if (warm?.kind === "mutable-pool" && warm.cache === "v4") {
       const poolId = blockScanV4PoolId(hop);
       if (!poolId) continue;
       const cached = cache.snapshotV4(poolId, blockNumber);
@@ -3796,17 +3779,6 @@ function formatCurveSnapshot(seed: CurveSnapshot): string {
   return `${seed.kind}/coins=${seed.coins.join(",")}/missing-state`;
 }
 
-type BlockScanProtocolAdapter =
-  | "erc4626-deposit"
-  | "erc4626-redeem"
-  | "erc4626-redeem-silo"
-  | "rocksolid-sync-deposit"
-  | "wsteth-wrap"
-  | "wsteth-unwrap"
-  | "metronome-synth-swap"
-  | "goldx-mint"
-  | "psm";
-
 async function buildBlockScanProtocolMids(
   provider: ethers.JsonRpcProvider,
   state: StateBackend,
@@ -3859,15 +3831,18 @@ async function buildBlockScanProtocolMids(
 
   if (!deadlineHit) {
     const protocolEdges = edges
-      .filter((edge) => edge.slotKind === "protocol" && blockScanProtocolAdapter(edge) !== null)
-      .sort((a, b) => blockScanProtocolMidPriority(a) - blockScanProtocolMidPriority(b));
+      .filter((edge) =>
+        PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm?.kind === "protocol-mid"
+      )
+      .sort((a, b) => protocolMidPriority(a) - protocolMidPriority(b));
+    const pinnedState = blockReadStateForProtocol(provider, blockNumber) as StateBackend;
     for (const edge of protocolEdges) {
       if (Date.now() >= deadlineAtMs) {
         deadlineHit = true;
         break;
       }
-      const adapterId = blockScanProtocolAdapter(edge);
-      if (!adapterId) continue;
+      const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+      if (adapter?.warm?.kind !== "protocol-mid") continue;
 
       try {
         const tokenInDec = await blockScanTokenDecimals(
@@ -3881,7 +3856,19 @@ async function buildBlockScanProtocolMids(
           break;
         }
         const oneIn = 10n ** BigInt(tokenInDec);
-        const mid = await readBlockScanProtocolMid(provider, blockNumber, edge, adapterId, oneIn);
+        const quoteCtx = {
+          state: pinnedState,
+          target: edge.target,
+          edgeAdapterId: edge.adapterId,
+          tokenIn: edge.tokenIn,
+          tokenOut: edge.tokenOut,
+          amountIn: oneIn,
+          edge,
+        };
+        const out = adapter.warm.quotePrewarm
+          ? await adapter.warm.quotePrewarm(quoteCtx)
+          : await adapter.quoteExact(quoteCtx);
+        const mid = Number(out) / Number(oneIn);
         if (!Number.isFinite(mid) || mid <= 0) continue;
         mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
           mid,
@@ -3905,171 +3892,14 @@ async function buildBlockScanProtocolMids(
 }
 
 function isBlockScanExternallyQuotedSwap(edge: TokenEdge): boolean {
-  return edge.slotKind === "swap" && (
-    edge.adapterId === "fluid-dex-swap" ||
-    edge.adapterId === "curve-exchange-underlying" ||
-    edge.adapterId === "balancer-v3-unlock"
-  );
+  if (edge.slotKind !== "swap") return false;
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+  return warm?.kind === "external-mid" || edge.adapterId === "fluid-dex-swap";
 }
 
-function blockScanProtocolMidPriority(edge: TokenEdge): number {
-  const adapter = blockScanProtocolAdapter(edge);
-  if (adapter === "goldx-mint" || adapter === "psm") return 0;
-  if (adapter === "metronome-synth-swap" || adapter === "wsteth-wrap" || adapter === "wsteth-unwrap") return 1;
-  return 2;
-}
-
-function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | null {
-  switch (edge.adapterId) {
-    case "erc4626-deposit":
-      return "erc4626-deposit";
-    case "erc4626-redeem":
-      return "erc4626-redeem";
-    case "erc4626-redeem-silo":
-      return "erc4626-redeem-silo";
-    case "rocksolid-sync-deposit":
-      return "rocksolid-sync-deposit";
-    case "wsteth-wrap":
-      return "wsteth-wrap";
-    case "wsteth-unwrap":
-      return "wsteth-unwrap";
-    case "psm":
-      return "psm";
-    case "metronome-synth-swap":
-      return "metronome-synth-swap";
-    case "goldx-mint":
-      return "goldx-mint";
-    default:
-      return null;
-  }
-}
-
-async function readBlockScanProtocolMid(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  edge: TokenEdge,
-  adapterId: BlockScanProtocolAdapter,
-  oneIn: bigint,
-): Promise<number> {
-  switch (adapterId) {
-    case "erc4626-deposit": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("previewDeposit", [oneIn]),
-        ERC4626,
-        "previewDeposit",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "erc4626-redeem": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
-        ERC4626,
-        "previewRedeem",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "erc4626-redeem-silo": {
-      // Non-standard silo redeem: value = vault.previewRedeem(oneIn) (asset()-denominated),
-      // out = outToken.previewWithdraw(value) — byte-exact to the on-chain payout.
-      const value = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("previewRedeem", [oneIn]),
-        ERC4626,
-        "previewRedeem",
-      );
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.tokenOut,
-        ERC4626.encodeFunctionData("previewWithdraw", [value]),
-        ERC4626,
-        "previewWithdraw",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "rocksolid-sync-deposit": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        ERC4626.encodeFunctionData("convertToShares", [oneIn]),
-        ERC4626,
-        "convertToShares",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "wsteth-wrap": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        WSTETH.encodeFunctionData("getWstETHByStETH", [oneIn]),
-        WSTETH,
-        "getWstETHByStETH",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "wsteth-unwrap": {
-      const out = await blockScanCallUint(
-        provider,
-        blockNumber,
-        edge.target,
-        WSTETH.encodeFunctionData("getStETHByWstETH", [oneIn]),
-        WSTETH,
-        "getStETHByWstETH",
-      );
-      return Number(out) / Number(oneIn);
-    }
-    case "psm": {
-      let tin = 0n;
-      try {
-        tin = await blockScanCallUint(
-          provider,
-          blockNumber,
-          edge.target,
-          PSM.encodeFunctionData("tin"),
-          PSM,
-          "tin",
-        );
-      } catch {
-        tin = 0n;
-      }
-      return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
-    }
-    case "metronome-synth-swap": {
-      const result = await provider.call({
-        to: edge.target,
-        data: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
-          edge.tokenIn,
-          edge.tokenOut,
-          oneIn,
-        ]),
-        blockTag: blockNumber,
-      });
-      const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
-      return Number(decoded[0]) / Number(oneIn);
-    }
-    case "goldx-mint": {
-      const state = blockReadStateForProtocol(provider, blockNumber);
-      const out = await quoteGoldxMint(
-        state,
-        edge.target,
-        edge.tokenIn,
-        edge.tokenOut,
-        oneIn,
-      );
-      return Number(out) / Number(oneIn);
-    }
-  }
-  throw new Error(`unsupported protocol adapter ${adapterId}`);
+function protocolMidPriority(edge: TokenEdge): number {
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+  return warm?.kind === "protocol-mid" ? warm.priority : 2;
 }
 
 async function readBlockScanExternalSwapMid(
@@ -4077,22 +3907,26 @@ async function readBlockScanExternalSwapMid(
   edge: TokenEdge,
   oneIn: bigint,
 ): Promise<number> {
-  let out: bigint;
-  if (edge.adapterId === "curve-exchange-underlying") {
-    out = await quoteCurveUnderlying(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn);
-  } else if (edge.adapterId === "balancer-v3-unlock") {
-    out = await quoteBalancerV3(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn);
-  } else {
-    out = await quoteFluidDex(
+  const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+  const out = adapter?.warm?.kind === "external-mid"
+    ? await adapter.quoteExact({
         state,
-        edge.target,
-        edge.tokenIn,
-        edge.tokenOut,
-        oneIn,
-        edge.poolToken0,
-        edge.poolToken1,
-      );
-  }
+        target: edge.target,
+        edgeAdapterId: edge.adapterId,
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amountIn: oneIn,
+        edge,
+      })
+    : await quoteFluidDex(
+      state,
+      edge.target,
+      edge.tokenIn,
+      edge.tokenOut,
+      oneIn,
+      edge.poolToken0,
+      edge.poolToken1,
+    );
   return Number(out) / Number(oneIn);
 }
 
@@ -4124,18 +3958,6 @@ async function blockScanTokenDecimals(
   return decimals;
 }
 
-async function blockScanCallUint(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  target: string,
-  data: string,
-  iface: ethers.Interface,
-  fnName: string,
-): Promise<bigint> {
-  const result = await provider.call({ to: target, data, blockTag: blockNumber });
-  return BigInt(iface.decodeFunctionResult(fnName, result)[0]);
-}
-
 function blockScanProtocolKey(target: string, tokenIn: string, tokenOut: string): string {
   return `${target.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
 }
@@ -4157,7 +3979,10 @@ async function seedBlockScanV3TickMetadata(
 ): Promise<number> {
   const pools = new Set<string>();
   for (const edge of edges) {
-    if (edge.slotKind === "swap" && edge.adapterId === "univ3-swap") pools.add(edge.target.toLowerCase());
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (edge.slotKind === "swap" && warm?.kind === "mutable-pool" && warm.cache === "v3") {
+      pools.add(edge.target.toLowerCase());
+    }
   }
 
   // token0/token1/fee/tickSpacing are IMMUTABLE — read once per pool (metaCache
@@ -4256,7 +4081,8 @@ function uniqueBlockScanCurvePools(edges: TokenEdge[]): TokenEdge[] {
   const seen = new Set<string>();
   const out: TokenEdge[] = [];
   for (const edge of edges) {
-    if (edge.slotKind !== "swap" || !isCurveAdapter(edge.adapterId)) continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (edge.slotKind !== "swap" || warm?.kind !== "curve-pool") continue;
     const key = edge.target.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -4274,12 +4100,13 @@ function countBlockScanWarmedV2V3(
   let warmed = 0;
   for (const edge of edges) {
     if (edge.slotKind !== "swap") continue;
-    if (edge.adapterId !== "univ2-swap" && edge.adapterId !== "univ3-swap") continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (warm?.kind !== "mutable-pool" || (warm.cache !== "v2" && warm.cache !== "v3")) continue;
     const key = `${edge.adapterId}:${edge.target.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    if (edge.adapterId === "univ2-swap" && cache.snapshotV2(edge.target, blockNumber)) warmed++;
-    if (edge.adapterId === "univ3-swap" && cache.snapshotV3(edge.target, blockNumber)) warmed++;
+    if (warm.cache === "v2" && cache.snapshotV2(edge.target, blockNumber)) warmed++;
+    if (warm.cache === "v3" && cache.snapshotV3(edge.target, blockNumber)) warmed++;
   }
   return warmed;
 }
@@ -4292,7 +4119,8 @@ function countBlockScanWarmedV4(
   const seen = new Set<string>();
   let warmed = 0;
   for (const edge of edges) {
-    if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (warm?.kind !== "mutable-pool" || warm.cache !== "v4" || !edge.v4PoolKey) continue;
     const poolId = (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
     if (seen.has(poolId)) continue;
     seen.add(poolId);
@@ -4310,7 +4138,8 @@ function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
 }
 
 function blockScanEdgeIdentity(edge: TokenEdge): string {
-  if (edge.adapterId === "univ4-unlock" && edge.v4PoolKey) {
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+  if (warm?.kind === "mutable-pool" && warm.cache === "v4" && edge.v4PoolKey) {
     return (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
   }
   return edge.target.toLowerCase();

@@ -3,6 +3,7 @@ import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import { readProtocolExternalMid } from "../mid-readers.js";
 
 const vaultIface = new ethers.Interface([
   "function getPoolTokens(address pool) view returns (address[] tokens)",
@@ -24,6 +25,8 @@ export const balancerV3Adapter = Object.freeze({
     "balancer-v3-send-to",
     "erc20-transfer",
   ],
+  readMid: readProtocolExternalMid,
+  warm: { kind: "external-mid" },
 
   buildEdges: buildBalancerV3Edges,
   quoteExact: quoteBalancerV3Exact,

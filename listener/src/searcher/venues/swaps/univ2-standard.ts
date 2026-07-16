@@ -5,6 +5,7 @@ import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../../solver/v2-fee.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import { readV2WarmMid } from "../mid-readers.js";
 
 const pairIface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
@@ -21,6 +22,8 @@ export const univ2StandardAdapter = Object.freeze({
   edgeAdapterIds: ["univ2-swap"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["univ2-swap", "erc20-transfer"],
+  readMid: readV2WarmMid,
+  warm: { kind: "mutable-pool", cache: "v2" },
 
   buildEdges: buildUniV2Edges,
   quoteExact: quoteUniV2Exact,

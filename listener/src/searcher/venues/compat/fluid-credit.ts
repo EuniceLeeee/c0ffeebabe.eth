@@ -21,6 +21,8 @@ export const fluidCreditCompatAdapter = Object.freeze({
   edgeAdapterIds: ["fluid-vault"],
   allowedTaxonomy: [{ slotKind: "lend" }],
   actionAdapterIds: ["fluid-vault", "erc20-approve"],
+  readMid: null,
+  warm: null,
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`fluid-vault pool ${pool.address} missing fixedTokenIn/Out`);

@@ -11,6 +11,7 @@ import type {
   SwapAdapter,
   V4QuotePathStats,
 } from "../route-leg-adapter.js";
+import { readV4WarmMid } from "../mid-readers.js";
 import {
   int24,
   normalizeV4Currency,
@@ -56,6 +57,8 @@ export const univ4Adapter = Object.freeze({
     "weth-deposit-value",
     "weth-withdraw-amount",
   ],
+  readMid: readV4WarmMid,
+  warm: { kind: "mutable-pool", cache: "v4" },
 
   buildEdges: buildUniV4Edges,
   quoteExact: quoteUniV4Exact,

@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteGoldxMint } from "./protocol-quote.js";
 
@@ -12,6 +13,8 @@ export const goldxAdapter = Object.freeze({
   edgeAdapterIds: ["goldx-mint"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   actionAdapterIds: ["goldx-mint", "erc20-approve"],
+  readMid: readProtocolExternalMid,
+  warm: { kind: "protocol-mid", priority: 0 },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`goldx pool ${pool.address} missing fixed token metadata`);

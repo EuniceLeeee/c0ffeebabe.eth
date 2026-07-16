@@ -1,6 +1,7 @@
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg, quoteSiloRedeem } from "./protocol-quote.js";
 
@@ -16,6 +17,8 @@ export const erc4626Adapter = Object.freeze({
   actionAdapterIds: [
     "erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo", "erc20-approve",
   ],
+  readMid: readProtocolExternalMid,
+  warm: { kind: "protocol-mid", priority: 2 },
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn) throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
     if (pool.nonStandardRedeem) {

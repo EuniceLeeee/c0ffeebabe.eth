@@ -92,7 +92,7 @@ const curveUnderlyingBackend: TokenQueryBackend = {
 
 async function main(): Promise<void> {
   const adapters = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list();
-  assert(adapters.length === 13, `production route adapter count ${adapters.length}`);
+  assert(adapters.length === 14, `production route adapter count ${adapters.length}`);
   for (const routeAdapter of adapters) {
     for (const poolAdapter of routeAdapter.poolAdapters) {
       assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);
@@ -100,6 +100,10 @@ async function main(): Promise<void> {
     for (const edgeAdapterId of routeAdapter.edgeAdapterIds) {
       assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge(edgeAdapterId) === routeAdapter, `${routeAdapter.id} edge alias`);
     }
+    assert(
+      (routeAdapter.readMid === null) === (routeAdapter.warm === null),
+      `${routeAdapter.id} mid/warm capability mismatch`,
+    );
   }
   const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge("univ2-swap");
   assert(adapter.id === "univ2-standard", `univ2 family ${adapter.id}`);
@@ -199,6 +203,25 @@ async function main(): Promise<void> {
   }
   console.log("[route-adapters] action registry coverage: PASS");
 
+  const coldCache = new Proxy({}, {
+    get() {
+      return () => null;
+    },
+  });
+  for (const routeAdapter of adapters) {
+    if (!routeAdapter.readMid) continue;
+    const result = routeAdapter.readMid({
+      cache: coldCache as never,
+      sourceBlock: 1,
+      a: token0.toLowerCase(),
+      b: token1.toLowerCase(),
+      pool: pair.toLowerCase(),
+      edges: [edges[0]],
+    });
+    assert(!(result instanceof Promise), `${routeAdapter.id} mid reader returned Promise`);
+  }
+  console.log("[route-adapters] sync-over-prewarmed mid contract: PASS");
+
   const badAdapter: SwapAdapter = {
     ...adapter,
     id: "custom-swap:bad",
@@ -223,7 +246,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (8/8)");
+  console.log("route-adapters PASS (9/9)");
 }
 
 await main();

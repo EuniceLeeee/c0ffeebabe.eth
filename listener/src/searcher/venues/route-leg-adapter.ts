@@ -3,6 +3,7 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import type { ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
+import type { RouteVenueMid, SyncMidReadContext } from "./mid-readers.js";
 
 export type SwapExecutionFamilyId =
   | "univ2-standard"
@@ -66,6 +67,18 @@ export interface V4QuotePathStats {
   hookSkipped: number;
 }
 
+export type WarmSpec =
+  | { kind: "mutable-pool"; cache: "v2" | "v3" | "v4" }
+  | { kind: "curve-pool" }
+  | { kind: "external-mid" }
+  | {
+      kind: "protocol-mid";
+      priority: 0 | 1 | 2;
+      quotePrewarm?: (ctx: ExactQuoteContext) => Promise<bigint>;
+    };
+
+export type SyncMidReader = (ctx: SyncMidReadContext) => RouteVenueMid | null;
+
 export interface RouteLegAdapter {
   readonly id: ExecutionFamilyId;
   readonly kind: RouteLegKind;
@@ -73,6 +86,10 @@ export interface RouteLegAdapter {
   readonly edgeAdapterIds: readonly string[];
   readonly allowedTaxonomy: readonly AllowedTaxonomy[];
   readonly actionAdapterIds: readonly string[];
+  /** Sync-only hot-path read over state published by the prewarm phase. */
+  readonly readMid: SyncMidReader | null;
+  /** Declarative prewarm class; the coordinator remains the sole scheduler/state owner. */
+  readonly warm: WarmSpec | null;
 
   buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]>;
   quoteExact(ctx: ExactQuoteContext): Promise<bigint>;

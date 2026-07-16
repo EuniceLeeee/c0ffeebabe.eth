@@ -4,6 +4,7 @@ import type { QuoteRequest } from "./live-state-backend.js";
 import { v4PoolId, type TokenEdge } from "./planner/token-graph.js";
 import type { PoolStateCache } from "./solver/pool-state-cache.js";
 import type { PoolStateUpdater } from "./solver/pool-state-updater.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
 
 const V2_SYNC_TOPIC = ethers.id("Sync(uint112,uint112)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
@@ -151,11 +152,8 @@ export function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteReques
   const seen = new Set<string>();
   const out: QuoteRequest[] = [];
   for (const hop of hops) {
-    if (
-      hop.adapterId !== "univ2-swap" &&
-      hop.adapterId !== "univ3-swap" &&
-      hop.adapterId !== "univ4-unlock"
-    ) continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
+    if (warm?.kind !== "mutable-pool") continue;
     const key = warmKey(hop);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -165,7 +163,8 @@ export function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteReques
 }
 
 export function blockScanV4PoolId(hop: QuoteRequest): string | null {
-  if (hop.adapterId !== "univ4-unlock" || !hop.v4PoolKey) return null;
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
+  if (warm?.kind !== "mutable-pool" || warm.cache !== "v4" || !hop.v4PoolKey) return null;
   return v4PoolId(hop.v4PoolKey).toLowerCase();
 }
 
@@ -267,13 +266,15 @@ function hasWarmState(
   updater: WarmUpdater,
   hop: QuoteRequest,
 ): boolean {
-  if (hop.adapterId === "univ2-swap") {
+  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
+  if (warm?.kind !== "mutable-pool") return true;
+  if (warm.cache === "v2") {
     return cache.hasV2(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
   }
-  if (hop.adapterId === "univ3-swap") {
+  if (warm.cache === "v3") {
     return cache.hasV3Live(hop.target) && updater.hasStaticMetadata(hop.adapterId, hop.target);
   }
-  if (hop.adapterId === "univ4-unlock") {
+  if (warm.cache === "v4") {
     const poolId = blockScanV4PoolId(hop);
     return poolId !== null && cache.hasV4(poolId);
   }
@@ -284,20 +285,14 @@ function uniqueCurvePools(edges: TokenEdge[]): TokenEdge[] {
   const seen = new Set<string>();
   const out: TokenEdge[] = [];
   for (const edge of edges) {
-    if (edge.slotKind !== "swap" || !isCurveAdapter(edge.adapterId)) continue;
+    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
+    if (edge.slotKind !== "swap" || warm?.kind !== "curve-pool") continue;
     const key = edge.target.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(edge);
   }
   return out;
-}
-
-function isCurveAdapter(adapterId: string): boolean {
-  return adapterId === "curve-exchange" ||
-    adapterId === "curve-exchange-nr" ||
-    adapterId === "curve-exchange-plain" ||
-    adapterId === "curve-exchange-received-uint";
 }
 
 function formatError(err: unknown): string {

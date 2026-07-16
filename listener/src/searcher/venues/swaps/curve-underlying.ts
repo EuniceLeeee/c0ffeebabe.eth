@@ -7,6 +7,7 @@ import {
   type CurveUnderlyingCallBackend,
 } from "../curve-underlying.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import { readCurveUnderlyingExternalMid } from "../mid-readers.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 
@@ -17,6 +18,8 @@ export const curveUnderlyingAdapter = Object.freeze({
   edgeAdapterIds: ["curve-exchange-underlying"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["curve-exchange-underlying", "erc20-approve"],
+  readMid: readCurveUnderlyingExternalMid,
+  warm: { kind: "external-mid" },
 
   buildEdges: buildCurveUnderlyingEdges,
   quoteExact: quoteCurveUnderlyingExact,

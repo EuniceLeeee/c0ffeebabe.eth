@@ -3,6 +3,7 @@ import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, ProtocolConversionAdapter } from "../route-leg-adapter.js";
+import { readProtocolExternalMid } from "../mid-readers.js";
 import { quoteCurvePlain } from "../swaps/curve-shared.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import {
@@ -16,28 +17,16 @@ const synthPoolDiscoveryIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
 
-export const metronomeAdapter = Object.freeze({
-  id: "protocol:metronome",
+export const metronomeSynthAdapter = Object.freeze({
+  id: "protocol:metronome-synth",
   kind: "protocol-conversion",
-  poolAdapters: ["metronome-synth", "metronome-hgusdc"],
-  edgeAdapterIds: ["metronome-synth-swap", "metronome-hgusdc-exit"],
-  allowedTaxonomy: [
-    { slotKind: "protocol", protocolAction: "convert" },
-    { slotKind: "protocol", protocolAction: "redeem" },
-  ],
-  actionAdapterIds: ["metronome-synth-swap", "metronome-hgusdc-exit", "erc20-approve", "erc20-transfer"],
+  poolAdapters: ["metronome-synth"],
+  edgeAdapterIds: ["metronome-synth-swap"],
+  allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
+  actionAdapterIds: ["metronome-synth-swap", "erc20-approve"],
+  readMid: readProtocolExternalMid,
+  warm: { kind: "protocol-mid", priority: 1 },
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
-    if (pool.adapter === "metronome-hgusdc") {
-      if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-        throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);
-      }
-      return [{
-        adapterId: "metronome-hgusdc-exit", target: pool.address,
-        tokenIn: ethers.getAddress(pool.fixedTokenIn), tokenOut: ethers.getAddress(pool.fixedTokenOut),
-        slotKind: "protocol", protocolAction: "redeem", score: pool.score,
-        ...deriveEdgeTaxonomy("protocol", "redeem"),
-      }];
-    }
     const synths = await queryMetronomeSynths(backend, pool.address);
     const edges: TokenEdge[] = [];
     for (let i = 0; i < synths.length; i++) {
@@ -55,9 +44,32 @@ export const metronomeAdapter = Object.freeze({
   },
   async quoteExact(ctx: ExactQuoteContext): Promise<bigint> {
     if (!ctx.tokenIn || !ctx.tokenOut) throw new Error("metronome quote requires tokenIn/tokenOut");
-    if (ctx.edgeAdapterId === "metronome-synth-swap") {
-      return quoteMetronomeSynthSwap(ctx.state, ctx.target, ctx.tokenIn, ctx.tokenOut, ctx.amountIn);
+    return quoteMetronomeSynthSwap(ctx.state, ctx.target, ctx.tokenIn, ctx.tokenOut, ctx.amountIn);
+  },
+  buildPlanFragment: buildDescriptorProtocolPlan,
+} satisfies ProtocolConversionAdapter);
+
+export const metronomeHgusdcAdapter = Object.freeze({
+  id: "protocol:metronome-hgusdc",
+  kind: "protocol-conversion",
+  poolAdapters: ["metronome-hgusdc"],
+  edgeAdapterIds: ["metronome-hgusdc-exit"],
+  allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
+  actionAdapterIds: ["metronome-hgusdc-exit", "erc20-transfer"],
+  readMid: null,
+  warm: null,
+  async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
+    if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
+      throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);
     }
+    return [{
+      adapterId: "metronome-hgusdc-exit", target: pool.address,
+      tokenIn: ethers.getAddress(pool.fixedTokenIn), tokenOut: ethers.getAddress(pool.fixedTokenOut),
+      slotKind: "protocol", protocolAction: "redeem", score: pool.score,
+      ...deriveEdgeTaxonomy("protocol", "redeem"),
+    }];
+  },
+  async quoteExact(ctx: ExactQuoteContext): Promise<bigint> {
     let frxUsdOut: bigint;
     if (ctx.cache) {
       try {
@@ -77,9 +89,6 @@ export const metronomeAdapter = Object.freeze({
     return quoteProtocolLeg(ctx.state, ADDR.HGUSDC, "erc4626-redeem", frxUsdOut);
   },
   async buildPlanFragment(ctx: PlanBuildContext): Promise<PlanFragment> {
-    if (ctx.edge.adapterId === "metronome-synth-swap") {
-      return buildDescriptorProtocolPlan(ctx);
-    }
     return {
       requirements: [{
         kind: "transfer-to-pool",

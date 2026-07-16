@@ -66,6 +66,25 @@ export async function quotePSM(
   return (amountIn * WAD / (WAD + tout)) / PSM_TO18;
 }
 
+/** Block-scan graph only admits the USDC→DAI leg; preserve its one-call prewarm shape. */
+export async function quotePSMSellGemPrewarm(
+  state: StateBackend,
+  target: string,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  if (
+    tokenIn.toLowerCase() !== ADDR.USDC.toLowerCase() ||
+    tokenOut.toLowerCase() !== ADDR.DAI.toLowerCase()
+  ) {
+    throw new Error(`PSM prewarm only supports USDC->DAI, got ${tokenIn} -> ${tokenOut}`);
+  }
+  const tin = await readPSMFee(state, target, "tin");
+  const gemAmt18 = amountIn * PSM_TO18;
+  return gemAmt18 - gemAmt18 * tin / WAD;
+}
+
 export async function quoteProtocolLeg(
   state: StateBackend,
   target: string,

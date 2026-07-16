@@ -4,6 +4,7 @@ import type { StateBackend } from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, PlanBuildContext, PlanFragment, SwapAdapter } from "../route-leg-adapter.js";
+import { readV3WarmMid } from "../mid-readers.js";
 
 const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 const MIN_SQRT_PRICE = 4295128740n;
@@ -25,6 +26,8 @@ export const univ3StandardAdapter = Object.freeze({
   edgeAdapterIds: ["univ3-swap"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   actionAdapterIds: ["univ3-swap", "erc20-transfer"],
+  readMid: readV3WarmMid,
+  warm: { kind: "mutable-pool", cache: "v3" },
 
   buildEdges: buildUniV3Edges,
   quoteExact: quoteUniV3Exact,
