@@ -2,11 +2,16 @@ import { ethers } from "ethers";
 import { scanActivePools } from "../active-pool-discovery.js";
 import {
   CURVE_METAREGISTRY,
+  assertIdentityResolverCoverage,
   attestPoolIdentities,
   resolvePoolIdentity,
   type IdentityPoolEntry,
 } from "../venues/identity.js";
 import { ADDR } from "../../shared/constants/addresses.js";
+import {
+  PRODUCTION_IDENTITY_RESOLVERS,
+  PRODUCTION_ROUTE_ADAPTERS,
+} from "../venues/production-registry.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -117,15 +122,21 @@ class FakeProvider {
 
 async function testResolverRejectsSelectorLookalikes(): Promise<void> {
   const provider = new FakeProvider();
-  const panorama = await resolvePoolIdentity(provider, PANORAMA_POOL, "univ2");
+  const panorama = await resolvePoolIdentity(provider, PANORAMA_POOL, "univ2", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
   assert(!panorama.ok, "Panoramaswap must not reuse univ2 from the Swap topic");
   assert(panorama.reason === "unsupported_venue", `Panoramaswap reason=${panorama.reason}`);
   assert(panorama.venueId === "panoramaswap-v1", `Panoramaswap venue=${panorama.venueId}`);
 
-  const unknown = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ2");
+  const unknown = await resolvePoolIdentity(provider, UNKNOWN_PAIR, "univ2", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
   assert(!unknown.ok && unknown.reason === "unknown_factory", "unknown factory must fail closed");
 
-  const corrected = await resolvePoolIdentity(provider, UNI_PAIR, "univ3");
+  const corrected = await resolvePoolIdentity(provider, UNI_PAIR, "univ3", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
   assert(corrected.ok, "known factory must resolve despite a wrong event-derived adapter hint");
   assert(corrected.adapter === "univ2", "factory must select the canonical runtime adapter");
   console.log("[venue-identity] selector lookalikes fail closed: PASS");
@@ -174,12 +185,16 @@ async function testRuntimeScanUsesIdentity(): Promise<void> {
 
 async function testBalancerV3Identity(): Promise<void> {
   const provider = new FakeProvider();
-  const registered = await resolvePoolIdentity(provider, BALANCER_V3_POOL, "balancer-v3");
+  const registered = await resolvePoolIdentity(provider, BALANCER_V3_POOL, "balancer-v3", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
   assert(registered.ok, "registered Balancer V3 pool should pass identity attestation");
   assert(registered.adapter === "balancer-v3", "Balancer V3 runtime adapter mismatch");
   assert(registered.identitySource === "balancer-v3-vault", "Balancer V3 identity provenance missing");
 
-  const fake = await resolvePoolIdentity(provider, FAKE_BALANCER_V3_POOL, "balancer-v3");
+  const fake = await resolvePoolIdentity(provider, FAKE_BALANCER_V3_POOL, "balancer-v3", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
   assert(!fake.ok, "unregistered Balancer V3 pool must fail closed");
   assert(fake.reason === "balancer_v3_unregistered", `Balancer V3 rejection reason=${fake.reason}`);
   console.log("[venue-identity] Balancer V3 Vault registration gate: PASS");
@@ -193,7 +208,7 @@ async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
     venueId: "univ2" as const,
     factory: UNIV2_FACTORY,
     identitySource: "factory-call" as const,
-  }]);
+  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
   assert(result.accepted.length === 0, "forged persisted identity must not be admitted");
   assert(result.rejected[0]?.venueId === "panoramaswap-v1", "node factory must replace stale metadata");
   assert(
@@ -205,7 +220,7 @@ async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
     address: UNI_PAIR,
     adapter: "univ3",
     venueId: "univ3" as const,
-  }]);
+  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
   assert(corrected.accepted.length === 1, "known factory should correct stale adapter metadata");
   assert(corrected.accepted[0]?.adapter === "univ2", "persisted adapter must yield to factory identity");
   assert(corrected.accepted[0]?.venueId === "univ2", "persisted venue must yield to factory identity");
@@ -214,7 +229,9 @@ async function testPersistedMetadataCannotBypassNodeIdentity(): Promise<void> {
 
 async function testCurveIdentityDoesNotChooseAdapter(): Promise<void> {
   const provider = new FakeProvider();
-  const identity = await resolvePoolIdentity(provider, CURVE_POOL, "curve-nr");
+  const identity = await resolvePoolIdentity(provider, CURVE_POOL, "curve-nr", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
   assert(identity.ok, "registered Curve pool should pass identity attestation");
   assert(identity.adapter === "curve-nr", "curated adapter must remain unchanged");
   assert(identity.venueId === "curve", "MetaRegistry must not pretend to identify an adapter subtype");
@@ -223,10 +240,18 @@ async function testCurveIdentityDoesNotChooseAdapter(): Promise<void> {
 
 async function testV4ManagerIdentity(): Promise<void> {
   const provider = new FakeProvider();
+  const canonical = await attestPoolIdentities(provider, [{
+    address: ADDR.UNISWAP_V4_POOL_MANAGER,
+    adapter: "univ4",
+  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
+  assert(canonical.accepted.length === 1, "canonical v4 manager must be admitted");
+  assert(canonical.accepted[0]?.venueId === "univ4", "v4 canonical venue identity");
+  assert(canonical.accepted[0]?.identitySource === "v4-manager", "v4 identity provenance");
+
   const result = await attestPoolIdentities(provider, [{
     address: FAKE_V4_MANAGER,
     adapter: "univ4",
-  }]);
+  }], { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS });
   assert(result.accepted.length === 0, "arbitrary v4 manager must not be admitted");
   assert(result.rejected[0]?.reason === "adapter_mismatch", "v4 rejection reason");
   console.log("[venue-identity] v4 manager identity: PASS");
@@ -239,6 +264,7 @@ async function testProtocolAdaptersRequireExactEnabledSeeds(): Promise<void> {
     { address: FAKE_PSM, adapter: "psm" },
   ];
   const result = await attestPoolIdentities(provider, candidates, {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
     seedEntries: [{ address: PSM_SEED, adapter: "psm" }],
   });
   assert(result.accepted.length === 1, "exact enabled protocol seed should be admitted");
@@ -247,6 +273,34 @@ async function testProtocolAdaptersRequireExactEnabledSeeds(): Promise<void> {
   assert(result.rejected[0]?.address === FAKE_PSM, "arbitrary protocol target must be rejected");
   assert(result.rejected[0]?.reason === "untrusted_seed", "protocol rejection reason");
   console.log("[venue-identity] protocol exact-seed gate: PASS");
+}
+
+function testIdentityRegistryConformance(): void {
+  assertIdentityResolverCoverage(
+    PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+    PRODUCTION_IDENTITY_RESOLVERS,
+  );
+  let missingPolicyError = "";
+  try {
+    assertIdentityResolverCoverage([
+      ...PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+      { id: "compat:synthetic", poolAdapters: ["synthetic-pool-adapter"] },
+    ], PRODUCTION_IDENTITY_RESOLVERS);
+  } catch (error) {
+    missingPolicyError = error instanceof Error ? error.message : String(error);
+  }
+  assert(
+    missingPolicyError.includes("missing=[synthetic-pool-adapter]"),
+    "synthetic route adapter without identity policy must fail explicitly",
+  );
+  const fluidLegacy = PRODUCTION_IDENTITY_RESOLVERS.list().find(
+    (descriptor) => descriptor.poolAdapter === "fluid-dex",
+  );
+  assert(
+    fluidLegacy?.legacyReason?.includes("fixture-blocked") === true,
+    "legacy Fluid DEX identity admission must remain explicit",
+  );
+  console.log("[venue-identity] route/identity registry conformance: PASS");
 }
 
 function address(n: number): string {
@@ -260,4 +314,5 @@ await testCurveIdentityDoesNotChooseAdapter();
 await testV4ManagerIdentity();
 await testProtocolAdaptersRequireExactEnabledSeeds();
 await testBalancerV3Identity();
-console.log("venue-identity PASS (7/7)");
+testIdentityRegistryConformance();
+console.log("venue-identity PASS (8/8)");

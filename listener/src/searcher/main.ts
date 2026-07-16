@@ -38,7 +38,10 @@ import {
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
+import {
+  PRODUCTION_IDENTITY_RESOLVERS,
+  PRODUCTION_ROUTE_ADAPTERS,
+} from "./venues/production-registry.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
@@ -804,21 +807,25 @@ async function main(): Promise<void> {
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] = await Promise.all([
     attestPoolIdentities(provider, rawPinnedWarmPools, {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawUniversePools, {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawBlockscanUniverse, {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
     attestPoolIdentities(provider, rawBlockScanOverrides, {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,

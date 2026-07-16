@@ -57,6 +57,7 @@ import {
   type V4PoolKey,
 } from "../planner/token-graph.js";
 import { attestPoolIdentities } from "../venues/identity.js";
+import { PRODUCTION_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
@@ -441,6 +442,7 @@ async function assertEdgesInGraph(
         try {
           const candidate = poolEntryForLeg(leg, adapter);
           const identity = await attestPoolIdentities(backend, [candidate], {
+            identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
             seedEntries: POOL_REGISTRY,
           });
           if (identity.accepted.length !== 1) {
@@ -656,8 +658,14 @@ async function detectRocksolidBalancerV3Opportunity(
     });
     const rawPinned = loadPinnedWarmPools();
     const [universeIdentity, pinnedIdentity] = await Promise.all([
-      attestPoolIdentities(state.provider, rawUniverse, { seedEntries: liveRegistry }),
-      attestPoolIdentities(state.provider, rawPinned, { seedEntries: liveRegistry }),
+      attestPoolIdentities(state.provider, rawUniverse, {
+        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        seedEntries: liveRegistry,
+      }),
+      attestPoolIdentities(state.provider, rawPinned, {
+        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        seedEntries: liveRegistry,
+      }),
     ]);
     const topUniverseKeys = new Set(rawTopUniverse.map(poolRegistryKey));
     const topUniverse = universeIdentity.accepted.filter((pool) =>

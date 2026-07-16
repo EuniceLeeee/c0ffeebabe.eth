@@ -4,6 +4,7 @@ import { poolRegistryKey } from "./pool-universe.js";
 import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
 import { attestPoolIdentities } from "./venues/identity.js";
 import type { IdentityAdmissionPolicy } from "./venues/admission.js";
+import { PRODUCTION_IDENTITY_RESOLVERS } from "./venues/production-registry.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import {
   buildV4PoolEntries,
@@ -253,6 +254,7 @@ export async function scanActivePools(
     ...v4Pools,
   ].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const { accepted, rejected } = await attestPoolIdentities(provider, candidates, {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
     admissionPolicy: options.admissionPolicy,
   });
   const ranked = accepted.slice(0, maxPools);

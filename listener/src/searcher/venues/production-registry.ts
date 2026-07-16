@@ -1,4 +1,5 @@
 import { createRouteAdapterRegistry } from "./route-adapter-registry.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 import { fluidCreditCompatAdapter } from "./compat/fluid-credit.js";
 import { erc4626Adapter } from "./protocols/erc4626.js";
 import { goldxAdapter } from "./protocols/goldx.js";
@@ -12,6 +13,14 @@ import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
 import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
 import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
 import { univ4Adapter } from "./swaps/univ4.js";
+import {
+  assertIdentityResolverCoverage,
+  balancerV3IdentityResolver,
+  curveIdentityResolver,
+  factoryIdentityResolver,
+  IdentityResolverRegistry,
+  type IdentityResolverDescriptor,
+} from "./identity.js";
 
 export interface LegacyRouteEdgeDescriptor {
   readonly edgeAdapterId: string;
@@ -52,3 +61,49 @@ export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
   ],
   compat: [fluidCreditCompatAdapter],
 });
+
+const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
+  { poolAdapter: "univ2", policy: "onchain-resolver", resolve: factoryIdentityResolver },
+  { poolAdapter: "univ3", policy: "onchain-resolver", resolve: factoryIdentityResolver },
+  { poolAdapter: "curve", policy: "onchain-resolver", resolve: curveIdentityResolver },
+  { poolAdapter: "curve-nr", policy: "onchain-resolver", resolve: curveIdentityResolver },
+  { poolAdapter: "curve-underlying", policy: "onchain-resolver", resolve: curveIdentityResolver },
+  {
+    poolAdapter: "balancer-v3",
+    policy: "onchain-resolver",
+    resolve: balancerV3IdentityResolver,
+  },
+  {
+    poolAdapter: "univ4",
+    policy: "trusted-singleton-seed",
+    canonicalAddress: ADDR.UNISWAP_V4_POOL_MANAGER,
+    canonicalVenueId: "univ4",
+    canonicalIdentitySource: "v4-manager",
+  },
+  { poolAdapter: "erc4626", policy: "trusted-singleton-seed" },
+  { poolAdapter: "goldx", policy: "trusted-singleton-seed" },
+  { poolAdapter: "metronome-synth", policy: "trusted-singleton-seed" },
+  { poolAdapter: "metronome-hgusdc", policy: "trusted-singleton-seed" },
+  { poolAdapter: "psm", policy: "trusted-singleton-seed" },
+  { poolAdapter: "rocksolid", policy: "trusted-singleton-seed" },
+  { poolAdapter: "wsteth", policy: "trusted-singleton-seed" },
+  { poolAdapter: "fluid-vault", policy: "trusted-singleton-seed" },
+  {
+    poolAdapter: "fluid-dex",
+    policy: "trusted-singleton-seed",
+    legacyReason: "legacy Fluid DEX route; RouteAdapter migration is fixture-blocked",
+  },
+];
+
+/**
+ * Identity admission stays independent from execution, while startup-time
+ * conformance makes a newly registered route pool impossible to omit silently.
+ */
+export const PRODUCTION_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
+  PRODUCTION_IDENTITY_POLICIES,
+);
+
+assertIdentityResolverCoverage(
+  PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+  PRODUCTION_IDENTITY_RESOLVERS,
+);

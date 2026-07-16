@@ -15,15 +15,9 @@ import {
   STRICT_IDENTITY_ADMISSION,
   type IdentityAdmissionPolicy,
 } from "./admission.js";
+import type { PoolEntry } from "../planner/token-graph.js";
 export { CURVE_METAREGISTRY } from "./curve-underlying.js";
 
-export type IdentityCheckedAdapter =
-  | "univ2"
-  | "univ3"
-  | "curve"
-  | "curve-nr"
-  | "curve-underlying"
-  | "balancer-v3";
 export type VenueIdentitySource =
   | "factory-call"
   | "factory-call-provisional"
@@ -45,6 +39,82 @@ export interface IdentityCallBackend {
   call(req: { to: string; data: string }): Promise<string>;
 }
 
+export interface OnchainIdentityResolverContext {
+  backend: IdentityCallBackend;
+  pool: string;
+  poolAdapter: PoolEntry["adapter"];
+  admissionPolicy: IdentityAdmissionPolicy;
+}
+
+export type OnchainIdentityResolver = (
+  context: OnchainIdentityResolverContext,
+) => Promise<PoolIdentityResult>;
+
+export type IdentityResolverDescriptor =
+  | {
+      readonly poolAdapter: PoolEntry["adapter"];
+      readonly policy: "onchain-resolver";
+      readonly resolve: OnchainIdentityResolver;
+      readonly legacyReason?: string;
+    }
+  | {
+      readonly poolAdapter: PoolEntry["adapter"];
+      readonly policy: "trusted-singleton-seed";
+      readonly canonicalAddress?: string;
+      readonly canonicalVenueId?: VenueId;
+      readonly canonicalIdentitySource?: VenueIdentitySource;
+      readonly legacyReason?: string;
+    };
+
+export class IdentityResolverRegistry {
+  private readonly byPoolAdapter = new Map<PoolEntry["adapter"], IdentityResolverDescriptor>();
+
+  constructor(descriptors: readonly IdentityResolverDescriptor[]) {
+    for (const descriptor of descriptors) {
+      if (this.byPoolAdapter.has(descriptor.poolAdapter)) {
+        throw new Error(
+          `identity resolver registry: duplicate identity policy ${descriptor.poolAdapter}`,
+        );
+      }
+      this.byPoolAdapter.set(descriptor.poolAdapter, Object.freeze({ ...descriptor }));
+    }
+  }
+
+  list(): readonly IdentityResolverDescriptor[] {
+    return [...this.byPoolAdapter.values()];
+  }
+
+  forPool(poolAdapter: string): IdentityResolverDescriptor {
+    const descriptor = this.byPoolAdapter.get(poolAdapter as PoolEntry["adapter"]);
+    if (!descriptor) {
+      throw new Error(`identity resolver registry: missing identity policy ${poolAdapter}`);
+    }
+    return descriptor;
+  }
+}
+
+export function assertIdentityResolverCoverage(
+  routeAdapters: readonly { readonly id: string; readonly poolAdapters: readonly string[] }[],
+  registry: IdentityResolverRegistry,
+): void {
+  const routePoolAdapters = new Set<string>(
+    routeAdapters.flatMap((adapter) => adapter.poolAdapters),
+  );
+  const identityPoolAdapters = new Set<string>(
+    registry.list()
+      .filter((descriptor) => descriptor.legacyReason === undefined)
+      .map((descriptor) => descriptor.poolAdapter),
+  );
+  const missing = [...routePoolAdapters].filter((adapter) => !identityPoolAdapters.has(adapter));
+  const extra = [...identityPoolAdapters].filter((adapter) => !routePoolAdapters.has(adapter));
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error(
+      "identity resolver registry: route coverage mismatch " +
+        `missing=[${missing.sort().join(",")}] extra=[${extra.sort().join(",")}]`,
+    );
+  }
+}
+
 export type PoolIdentityFailureReason =
   | "identity_call_failed"
   | "unknown_factory"
@@ -64,7 +134,7 @@ export type AttestedPoolEntry<T extends IdentityPoolEntry> = Omit<
   "adapter" | keyof VenueIdentityMetadata
 > & {
   /** Factory identity may correct a V2/V3 event-derived adapter hint. */
-  adapter: T["adapter"] | IdentityCheckedAdapter;
+  adapter: T["adapter"] | PoolEntry["adapter"];
   venueId?: VenueId;
   factory?: string;
   identitySource: VenueIdentitySource;
@@ -85,7 +155,7 @@ export interface PoolIdentityCache {
 export type PoolIdentityResult =
   | {
       ok: true;
-      adapter: IdentityCheckedAdapter;
+      adapter: PoolEntry["adapter"];
       venueId: VenueId;
       factory?: string;
       identitySource: VenueIdentitySource;
@@ -107,50 +177,27 @@ const balancerV3VaultIface = new ethers.Interface([
   "function isPoolRegistered(address pool) view returns (bool)",
 ]);
 
-export function requiresOnchainIdentity(adapter: string): adapter is IdentityCheckedAdapter {
-  return adapter === "univ2" ||
-    adapter === "univ3" ||
-    adapter === "curve" ||
-    adapter === "curve-nr" ||
-    adapter === "curve-underlying" ||
-    adapter === "balancer-v3";
-}
-
 export async function resolvePoolIdentity(
   backend: IdentityCallBackend,
   address: string,
-  adapter: IdentityCheckedAdapter,
+  adapter: string,
   options: {
+    identityRegistry: IdentityResolverRegistry;
     admissionPolicy?: IdentityAdmissionPolicy;
-  } = {},
+  },
 ): Promise<PoolIdentityResult> {
   const pool = ethers.getAddress(address);
   const policy = options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION;
-  if (adapter === "curve" || adapter === "curve-nr" || adapter === "curve-underlying") {
-    return resolveCurveIdentity(
+  const descriptor = options.identityRegistry.forPool(adapter);
+  if (descriptor.policy === "onchain-resolver") {
+    return descriptor.resolve({
       backend,
       pool,
-      adapter,
-      allowProvisionalCurveUnderlying(policy),
-    );
+      poolAdapter: descriptor.poolAdapter,
+      admissionPolicy: policy,
+    });
   }
-  if (adapter === "balancer-v3") {
-    return resolveBalancerV3Identity(backend, pool);
-  }
-  return resolveFactoryIdentity(
-    backend,
-    pool,
-    adapter,
-    allowProvisionalFactories(policy),
-  );
-}
-
-export function isCanonicalV4Manager(address: string): boolean {
-  try {
-    return ethers.getAddress(address) === ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER);
-  } catch {
-    return false;
-  }
+  return resolveTrustedSingleton(descriptor, pool);
 }
 
 export function createPoolIdentityCache(): PoolIdentityCache {
@@ -161,11 +208,12 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
   backend: IdentityCallBackend,
   pools: readonly T[],
   options: {
+    identityRegistry: IdentityResolverRegistry;
     concurrency?: number;
     cache?: PoolIdentityCache;
     seedEntries?: readonly IdentityPoolEntry[];
     admissionPolicy?: IdentityAdmissionPolicy;
-  } = {},
+  },
 ): Promise<{ accepted: AttestedPoolEntry<T>[]; rejected: RejectedPoolIdentity[] }> {
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? 32));
   const cache = options.cache ?? createPoolIdentityCache();
@@ -173,23 +221,26 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
     (options.seedEntries ?? []).map((seed) => [identityPoolKey(seed), seed]),
   );
   const results = await mapLimit(pools, concurrency, async (pool) => {
-    if (pool.adapter === "univ4") {
-      if (!isCanonicalV4Manager(pool.address)) {
+    const descriptor = options.identityRegistry.forPool(pool.adapter);
+    if (descriptor.policy === "trusted-singleton-seed") {
+      if (descriptor.canonicalAddress !== undefined) {
+        const resolved = resolveTrustedSingleton(descriptor, pool.address);
+        if (!resolved.ok) {
+          return {
+            accepted: null,
+            rejected: rejection(pool, resolved.reason, resolved.venueId, resolved.factory),
+          };
+        }
         return {
-          accepted: null,
-          rejected: rejection(pool, "adapter_mismatch"),
+          accepted: {
+            ...pool,
+            adapter: resolved.adapter,
+            venueId: resolved.venueId,
+            identitySource: resolved.identitySource,
+          },
+          rejected: null,
         };
       }
-      return {
-        accepted: {
-          ...pool,
-          venueId: "univ4" as VenueId,
-          identitySource: "v4-manager" as VenueIdentitySource,
-        },
-        rejected: null,
-      };
-    }
-    if (!requiresOnchainIdentity(pool.adapter)) {
       const seed = seedEntries.get(identityPoolKey(pool));
       if (!seed) {
         return {
@@ -215,7 +266,7 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
       cache,
       backend,
       pool.address,
-      pool.adapter,
+      descriptor,
       options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
     );
     if (!resolved.ok) {
@@ -250,17 +301,20 @@ function cachedResolution(
   cache: PoolIdentityCache,
   backend: IdentityCallBackend,
   address: string,
-  adapter: IdentityCheckedAdapter,
+  descriptor: Extract<IdentityResolverDescriptor, { policy: "onchain-resolver" }>,
   admissionPolicy: IdentityAdmissionPolicy,
 ): Promise<PoolIdentityResult> {
   const provisionalFactories = allowProvisionalFactories(admissionPolicy);
   const provisionalCurveUnderlying = allowProvisionalCurveUnderlying(admissionPolicy);
-  const key = `${address.toLowerCase()}:${adapter}:` +
+  const key = `${address.toLowerCase()}:${descriptor.poolAdapter}:` +
     `${provisionalFactories ? "factory-provisional" : "factory-strict"}:` +
     `${provisionalCurveUnderlying ? "curve-provisional" : "curve-strict"}`;
   let pending = cache.resolutions.get(key);
   if (!pending) {
-    pending = resolvePoolIdentity(backend, address, adapter, {
+    pending = descriptor.resolve({
+      backend,
+      pool: ethers.getAddress(address),
+      poolAdapter: descriptor.poolAdapter,
       admissionPolicy,
     });
     cache.resolutions.set(key, pending);
@@ -277,12 +331,15 @@ function rejection(
   return { address: pool.address, adapter: pool.adapter, reason, venueId, factory };
 }
 
-async function resolveFactoryIdentity(
-  backend: IdentityCallBackend,
-  pool: string,
-  adapterHint: "univ2" | "univ3",
-  allowProvisionalFactories: boolean,
-): Promise<PoolIdentityResult> {
+export const factoryIdentityResolver: OnchainIdentityResolver = async ({
+  backend,
+  pool,
+  poolAdapter,
+  admissionPolicy,
+}) => {
+  if (poolAdapter !== "univ2" && poolAdapter !== "univ3") {
+    throw new Error(`factory identity resolver: unsupported pool adapter ${poolAdapter}`);
+  }
   let factory: string;
   try {
     const raw = await backend.call({
@@ -304,7 +361,7 @@ async function resolveFactoryIdentity(
     !capability.buildable ||
     !capability.supported_in_prod
   ) {
-    if (!allowProvisionalFactories) {
+    if (!allowProvisionalFactories(admissionPolicy)) {
       return capability
         ? { ok: false, reason: "unsupported_venue", venueId: capability.venue, factory }
         : { ok: false, reason: "unknown_factory", factory };
@@ -313,7 +370,7 @@ async function resolveFactoryIdentity(
     // shape explicit; token-graph ABI checks and mandatory final sim remain fail-closed.
     return {
       ok: true,
-      adapter: capability?.runtimeAdapter ?? adapterHint,
+      adapter: capability?.runtimeAdapter ?? poolAdapter,
       venueId: capability?.venue ?? "unknown",
       factory,
       identitySource: "factory-call-provisional",
@@ -327,29 +384,33 @@ async function resolveFactoryIdentity(
     factory,
     identitySource: "factory-call",
   };
-}
+};
 
-async function resolveCurveIdentity(
-  backend: IdentityCallBackend,
-  pool: string,
-  adapter: "curve" | "curve-nr" | "curve-underlying",
-  allowProvisionalCurveUnderlying: boolean,
-): Promise<PoolIdentityResult> {
-  if (adapter === "curve-underlying") {
+export const curveIdentityResolver: OnchainIdentityResolver = async ({
+  backend,
+  pool,
+  poolAdapter,
+  admissionPolicy,
+}) => {
+  if (poolAdapter !== "curve" && poolAdapter !== "curve-nr" && poolAdapter !== "curve-underlying") {
+    throw new Error(`curve identity resolver: unsupported pool adapter ${poolAdapter}`);
+  }
+  if (poolAdapter === "curve-underlying") {
+    const allowProvisional = allowProvisionalCurveUnderlying(admissionPolicy);
     try {
       const metadata = await resolveCurveUnderlyingMetadata(backend, pool, {
-        allowDirectPoolFallback: allowProvisionalCurveUnderlying,
+        allowDirectPoolFallback: allowProvisional,
       });
       return {
         ok: true,
-        adapter,
+        adapter: poolAdapter,
         venueId: metadata.source === "curve-metaregistry-underlying" ? "curve" : "unknown",
         identitySource: metadata.source,
       };
     } catch {
       return {
         ok: false,
-        reason: allowProvisionalCurveUnderlying ? "identity_call_failed" : "curve_unregistered",
+        reason: allowProvisional ? "identity_call_failed" : "curve_unregistered",
         venueId: "curve",
       };
     }
@@ -369,19 +430,23 @@ async function resolveCurveIdentity(
     }
     return {
       ok: true,
-      adapter,
+      adapter: poolAdapter,
       venueId: "curve",
       identitySource: "curve-metaregistry",
     };
   } catch {
     return { ok: false, reason: "identity_call_failed", venueId: "curve" };
   }
-}
+};
 
-async function resolveBalancerV3Identity(
-  backend: IdentityCallBackend,
-  pool: string,
-): Promise<PoolIdentityResult> {
+export const balancerV3IdentityResolver: OnchainIdentityResolver = async ({
+  backend,
+  pool,
+  poolAdapter,
+}) => {
+  if (poolAdapter !== "balancer-v3") {
+    throw new Error(`Balancer V3 identity resolver: unsupported pool adapter ${poolAdapter}`);
+  }
   try {
     const raw = await backend.call({
       to: ADDR.BALANCER_V3_VAULT,
@@ -402,6 +467,28 @@ async function resolveBalancerV3Identity(
   } catch {
     return { ok: false, reason: "identity_call_failed", venueId: "balancer-v3" };
   }
+};
+
+function resolveTrustedSingleton(
+  descriptor: Extract<IdentityResolverDescriptor, { policy: "trusted-singleton-seed" }>,
+  address: string,
+): PoolIdentityResult {
+  if (descriptor.canonicalAddress === undefined) {
+    return { ok: false, reason: "untrusted_seed" };
+  }
+  try {
+    if (ethers.getAddress(address) !== ethers.getAddress(descriptor.canonicalAddress)) {
+      return { ok: false, reason: "adapter_mismatch" };
+    }
+  } catch {
+    return { ok: false, reason: "adapter_mismatch" };
+  }
+  return {
+    ok: true,
+    adapter: descriptor.poolAdapter,
+    venueId: descriptor.canonicalVenueId ?? "unknown",
+    identitySource: descriptor.canonicalIdentitySource ?? "seed",
+  };
 }
 
 async function mapLimit<T, R>(
