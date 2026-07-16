@@ -68,3 +68,29 @@
 6. 最后收口 pool 文件解析白名单、Flash 双表与低风险元数据。
 
 保留多入口,统一事实源。
+
+## 4. Claude 主动扫描发现(非审 Codex,fable 提出;待 Codex 填意见)
+
+系统性对照:14 个注册 route adapter × 每个 per-venue 消费点(quoter / plan-builder / path-template / pool-impact / victim-model / mid-readers / warm),找 route 有、某消费点无的不对称。
+
+| # | 点 | 提出方 | Codex 意见 | 核实结论 |
+|---|---|---|---|---|
+| C1 | **victim 漏配不止 Balancer V3——Fluid DEX 同样漏**。pool-impact decoder + victim-model **只认 {univ2,univ3,univ4,curve}**;`balancer-v3` 和 `fluid-dex-swap` 都是可路由 swap venue,但两处都 0 → **两个都能路由不能 backrun**。Codex 的 #1 只标了 balancer-v3。证明:**手工逐个找永远漏下一个** | Claude | (待填) | 实锤:`grep -ic` pool-impact/victim-model 对 fluid/balancer 均 0;quoter/plan-builder 对二者均有。fluid-dex-swap 是真 swap（plan-builder 有 case），victim 不可解 |
+| C2 | **建议:一个 registry-conformance 测试,把整类"加了跟没加一样"堵死**(比逐点修高杠杆)。不止 victim(Codex #1 已提 victim 反向检查),而是**每个消费点都对齐 registry 或显式弃权**:quote / build(或 protocol-leg descriptor)/ path-template / victim-decoder+impact / mid / warm。adapter 自声明 `isSwapVenue`;是 swap venue 就必须有 victim decoder+impact+进 path-template,否则 `unsupported(reason)` 显式弃权。**违反即 CI 红,不再生产静默丢流** | Claude | (待填) | 今天就会当场红 ≥2 条(balancer-v3、fluid-dex 无 victim)。零 runtime 成本、纯静态断言、不碰热路径、不需等价验收 → 应**优先于** §1 那 13 条逐点修:先装探测器,再修它报红的 |
+
+**C2 conformance 骨架(供 Codex 填实现/意见):**
+```ts
+// test/route-adapter-conformance.ts —— route registry 是唯一真源
+for (const a of PRODUCTION_ROUTE_ADAPTERS) {
+  assert(quoter.handles(a.id),                                    `${a.id}: route 有 quote 无`);
+  assert(planBuilder.handles(a.id) || protocolLegDescriptors.has(a.id), `${a.id}: quote 有 build 无`);
+  assert(pathTemplate.SWAP_ADAPTERS.includes(a.id),              `${a.id}: 寻路白名单缺 → 静默 no_candidate`);
+  if (a.isSwapVenue) {
+    assert(a.decodeSwapImpact != null,   `${a.id}: swap venue 无 victim decoder → 不能 backrun`);
+    assert(midReaders.canScore(a.id),    `${a.id}: block-scan 打分器认不出`);
+  } else {
+    assert(a.victimSupport === "n/a",    `${a.id}: 非 swap venue 须显式弃权 victim`);
+  }
+}
+```
+关联设计点(§2 / codex-plan §20):`decodeSwapImpact` 应为 **receipt 级**(`decodeSwapImpacts(logs, edges)`),因 V2 需 Swap+Sync 配对取精确储备、Balancer V3/V4 单例需按 topic 的 poolId 跨 edge 匹配——单条 log 缺上下文。
