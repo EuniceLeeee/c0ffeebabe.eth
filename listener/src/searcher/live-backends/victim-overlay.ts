@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import type { PoolImpact } from "../detector/pool-impact.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { knownTokenStorageLayout } from "../solver/balance-slots.js";
+import { PRODUCTION_VICTIM_MODELS } from "../venues/victim-model-registry.js";
 
 /**
  * Victim-state overlay for the revm backend.
@@ -60,10 +61,7 @@ export interface VictimOverlay {
 }
 
 export function isCurveAdapter(adapterId: string): boolean {
-  return adapterId === "curve-exchange" ||
-    adapterId === "curve-exchange-nr" ||
-    adapterId === "curve-exchange-plain" ||
-    adapterId === "curve-exchange-received-uint";
+  return PRODUCTION_VICTIM_MODELS.forEdge(adapterId)?.overlayReplayVariant === "curve";
 }
 
 /**
@@ -71,11 +69,8 @@ export function isCurveAdapter(adapterId: string): boolean {
  * Mirrors the adapters `impersonateSwap` supports.
  */
 export function overlaySupportsAdapter(adapterId: string): boolean {
-  return (
-    isCurveAdapter(adapterId) ||
-    adapterId === "univ2-swap" ||
-    adapterId === "univ3-swap"
-  );
+  return PRODUCTION_VICTIM_MODELS.forEdge(adapterId)?.overlayReplayVariant !== null &&
+    PRODUCTION_VICTIM_MODELS.forEdge(adapterId)?.overlayReplayVariant !== undefined;
 }
 
 export interface OverlayResolveCtx {
@@ -93,6 +88,10 @@ export async function buildVictimOverlay(
   impact: PoolImpact,
   ctx: OverlayResolveCtx,
 ): Promise<VictimOverlay> {
+  const variant = PRODUCTION_VICTIM_MODELS.forEdge(impact.matchedAdapterId)?.overlayReplayVariant;
+  if (!variant) {
+    throw new Error(`overlay: unsupported adapter ${impact.matchedAdapterId}`);
+  }
   const whale = ethers.getAddress(WHALE);
   const tokenIn = ethers.getAddress(impact.tokenIn);
   const pool = ethers.getAddress(impact.pool);
@@ -110,7 +109,7 @@ export async function buildVictimOverlay(
   let approveTarget: string;
   let swapCall: OverlayPreCall;
 
-  if (isCurveAdapter(impact.matchedAdapterId)) {
+  if (variant === "curve") {
     approveTarget = pool;
     const edge = ctx.graph.find(
       (e) =>
@@ -132,7 +131,7 @@ export async function buildVictimOverlay(
       ]),
       gasLimit: 0x1000000,
     };
-  } else if (impact.matchedAdapterId === "univ2-swap") {
+  } else if (variant === "univ2") {
     approveTarget = UNIV2_ROUTER;
     const deadline = Math.floor(Date.now() / 1000) + 3600;
     swapCall = {
@@ -147,7 +146,8 @@ export async function buildVictimOverlay(
       ]),
       gasLimit: 0x1000000,
     };
-  } else if (impact.matchedAdapterId === "univ3-swap") {
+  } else {
+    // The registry narrows the remaining replay-capable variant to UniV3.
     approveTarget = UNIV3_SWAP_ROUTER;
     const fee = await ctx.resolveUniv3Fee(pool);
     swapCall = {
@@ -166,8 +166,6 @@ export async function buildVictimOverlay(
       ]),
       gasLimit: 0x1000000,
     };
-  } else {
-    throw new Error(`overlay: unsupported adapter ${impact.matchedAdapterId}`);
   }
 
   const approveCall: OverlayPreCall = {
