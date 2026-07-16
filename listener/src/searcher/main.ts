@@ -23,6 +23,7 @@ import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner, type CandidatePlan } from "./planner/planner.js";
 import {
   buildTokenGraph,
+  buildTokenGraphWithResults,
   buildTokenIndex,
   POOL_REGISTRY,
   v4PoolId,
@@ -41,6 +42,10 @@ import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
+import {
+  MempoolIntakeRefreshSignal,
+  prepareRuntimePoolRefresh,
+} from "./runtime-pool-refresh.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
   BlockScanWarmCoordinator,
@@ -65,6 +70,7 @@ import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
   loadPoolUniverseGeneratedAt,
+  poolRegistryKey,
   selectPairCompletionPools,
 } from "./pool-universe.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
@@ -327,6 +333,34 @@ function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[])
   console.log(
     `[searcher/live] venue identity rejected source=${source} count=${rejected.length} ${summary}`,
   );
+}
+
+function logRuntimeRefreshFailures(
+  failed: Array<{ pool: PoolEntry; reason: string }>,
+): void {
+  for (const item of failed.slice(0, 5)) {
+    console.log(
+      `[searcher/live] refresh retryable pool=${poolRegistryKey(item.pool)} ` +
+        `reason=${item.reason}`,
+    );
+  }
+  if (failed.length > 5) {
+    console.log(`[searcher/live] refresh retryable additional=${failed.length - 5}`);
+  }
+}
+
+function replaceArray<T>(target: T[], next: readonly T[]): void {
+  target.splice(0, target.length, ...next);
+}
+
+function replaceMap<K, V>(target: Map<K, V>, next: ReadonlyMap<K, V>): void {
+  target.clear();
+  for (const [key, value] of next) target.set(key, value);
+}
+
+function replaceSet<T>(target: Set<T>, next: ReadonlySet<T>): void {
+  target.clear();
+  for (const value of next) target.add(value);
 }
 
 function loadEnv(): void {
@@ -830,15 +864,17 @@ async function main(): Promise<void> {
       `${pairCompletionAdded} pair-completion = ` +
       `${allPools.length} total`,
   );
-  const strategyViews = buildStrategyViews(
-    allPools,
+  const strategyViewOptions = {
+    blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
+    poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
+  };
+  const rebuildStrategyViews = (backrunPools: PoolEntry[]) => buildStrategyViews(
+    backrunPools,
     blockscanUniverse,
     blockScanOverrides,
-    {
-      blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
-      poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
-    },
+    strategyViewOptions,
   );
+  let strategyViews = rebuildStrategyViews(allPools);
   console.log(
     `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
       `blockscan=${strategyViews.blockscan.length} ` +
@@ -854,7 +890,11 @@ async function main(): Promise<void> {
   // eth_call unless the generated file is missing that metadata.
   // Factory pools are queried for token0/token1 in parallel batches.
   // This is ~1500 eth_call pairs at startup but gives full routing coverage.
-  const graph = await buildTokenGraph(mainnetBackend, strategyViews.backrun);
+  const backrunGraphBuild = await buildTokenGraphWithResults(
+    mainnetBackend,
+    strategyViews.backrun,
+  );
+  const graph = backrunGraphBuild.edges;
   let blockScanGraph: TokenEdge[] | undefined;
   if (enableBlockScan) {
     blockScanGraph = await buildTokenGraph(mainnetBackend, strategyViews.blockscan);
@@ -923,21 +963,67 @@ async function main(): Promise<void> {
   }
 
   // Incremental refresh: scan recent blocks for new pools every N minutes
-  const knownPoolAddrs = new Set(allPools.map((p) => p.address.toLowerCase()));
+  const knownPoolKeys = new Set(
+    backrunGraphBuild.successful.map((item) => poolRegistryKey(item.pool)),
+  );
+  const knownPoolAddrs = new Set(
+    strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
+  );
+  const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
   const refreshTimer = setInterval(async () => {
     try {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
         admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
-      const newPools = fresh.filter((p) => !knownPoolAddrs.has(p.address.toLowerCase()));
-      if (newPools.length === 0) return;
+      const candidates = fresh.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool)));
+      if (candidates.length === 0) return;
 
-      const newEdges = await buildTokenGraph(mainnetBackend, newPools);
-      graph.push(...newEdges);
-      for (const p of newPools) knownPoolAddrs.add(p.address.toLowerCase());
+      const projection = await prepareRuntimePoolRefresh({
+        backend: mainnetBackend,
+        freshPools: candidates,
+        knownPoolKeys,
+        currentBackrunPools: strategyViews.backrun,
+        currentBackrunGraph: graph,
+        currentBlockscanGraph: blockScanGraph,
+        buildStrategyViews: rebuildStrategyViews,
+      });
+      if (projection.admittedPools.length === 0) {
+        logRuntimeRefreshFailures(projection.failedPools);
+        return;
+      }
 
+      // Commit every consumer projection without an await between mutations.
+      // The shared graph array stays stable for RevmLiveBackend while its
+      // contents, detector/planner views and all derived indexes advance as one.
+      replaceArray(graph, projection.backrunGraph);
+      replaceMap(tokenIndex, projection.tokenIndex);
+      replaceMap(allPoolMap, projection.poolAddressMap);
+      replaceArray(flashTokens, projection.flashTokens);
+      replaceSet(knownPoolKeys, projection.knownPoolKeys);
+      replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
+      strategyViews = projection.strategyViews;
+      if (blockScanGraph && projection.blockscanGraph) {
+        replaceArray(blockScanGraph, projection.blockscanGraph);
+        blockScanPlanner?.setGraph(blockScanGraph);
+      }
+      detector.setGraph(graph);
+      detector.setPoolAddressMap(allPoolMap);
+      planner.setGraph(graph);
+      mempoolIntakeRefresh.notify();
+
+      dumpRuntimeGraphPools(strategyViews.backrun);
+      dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
+      void flashLiquidity.refresh(flashTokens).catch(() => {
+        // The token projection is committed; the existing slow timer retries
+        // liquidity reads without losing discovery admission.
+      });
+      logRuntimeRefreshFailures(projection.failedPools);
       console.log(
-        `[searcher/live] refresh: +${newPools.length} pools, +${newEdges.length} edges (total ${graph.length})`,
+        `[searcher/live] refresh: +${projection.admittedPools.length}/` +
+          `${projection.attemptedPools.length} pools, graph=${graph.length} edges ` +
+          `tokens=${tokenIndex.size} poolMap=${allPoolMap.size} flashTokens=${flashTokens.length} ` +
+          `blockscan=${blockScanGraph?.length ?? 0} ` +
+          `view_version=${strategyViews.versions.strategy_view_version}`,
       );
     } catch (err) {
       console.log(
@@ -1574,7 +1660,14 @@ async function main(): Promise<void> {
 
   const mempoolStream = () => {
     console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
-    return mempoolHints(config.wsUrl, provider, allPools, counters, knownPoolAddrs);
+    return mempoolHints(
+      config.wsUrl,
+      provider,
+      () => strategyViews.backrun,
+      counters,
+      knownPoolAddrs,
+      mempoolIntakeRefresh,
+    );
   };
   const hintStream = sourceMode === "disabled"
     ? disabledHints()
@@ -4207,108 +4300,108 @@ function rebuildSignedRawTx(txHash: string, tx: ethers.TransactionResponse): str
 async function* mempoolHints(
   wsUrl: string,
   provider: ethers.JsonRpcProvider,
-  pools: PoolEntry[],
+  getPools: () => PoolEntry[],
   counters: StageCounters,
   liveGraphTargets?: ReadonlySet<string>,
+  refreshSignal?: MempoolIntakeRefreshSignal,
 ): AsyncGenerator<HintEnvelope> {
   const routersPath = process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined;
   const forceIncludeRouters = loadForceIncludeRouters(routersPath);
-  const intake = buildMempoolIntakeWithRouters(pools, forceIncludeRouters);
-  const toAddress = intake.filteredTargets;
-  const fullAddressSet = new Set(intake.fullTargets.map((address) => address.toLowerCase()));
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
+  const initialIntake = buildMempoolIntakeWithRouters(getPools(), forceIncludeRouters);
+  const fullAddressSet = new Set(
+    initialIntake.fullTargets.map((address) => address.toLowerCase()),
+  );
   const interesting = (to: string | null | undefined): boolean =>
     isMempoolIntakeTarget(to, fullAddressSet, liveGraphTargets);
   const mode = parseMempoolMode();
-  console.log(
-    `[searcher/live] mempool mode=${mode} fullTargets=${intake.fullTargets.length} ` +
-      `filteredTargets=${toAddress.length} canonical=${intake.canonicalTargetCount} ` +
-      `dynamicRouters=${intake.dynamicTargetCount}`,
-  );
-  emitEvent({
-    type: "mempool_filter_config",
-    source: "filtered_mempool",
-    to_addresses: [...toAddress],
-    address_count: toAddress.length,
-    router_count: intake.canonicalTargetCount + intake.dynamicTargetCount,
-    full_address_count: intake.fullTargets.length,
-    canonical_target_count: intake.canonicalTargetCount,
-    dynamic_target_count: intake.dynamicTargetCount,
-    graph_target_count: intake.graphTargetCount,
-    filtered_truncated: intake.filteredTruncated,
-    max_addresses: maxAddresses,
-  });
   if (mode === "local_firehose") {
+    reportMempoolIntake(mode, initialIntake, maxAddresses);
     yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
     return;
   }
 
+  let lastIntakeKey = "";
   for (;;) {
-    let ws: WebSocket | null = null;
-    try {
-      ws = await connectFilteredMempool(wsUrl, [...toAddress]);
-    } catch (err) {
-      if (err instanceof FatalMempoolSubscriptionError) {
-        if (mode === "auto" && shouldUseLocalFirehoseFallback(wsUrl, err)) {
-          console.log(
-            `[searcher/live] mempool filtered subscription unsupported by local node; ` +
-              `falling back to newPendingTransactions firehose`,
-          );
-          yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
-          return;
-        }
-        throw err;
-      }
-      console.log(
-        `[searcher/live] mempool WS connect failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      console.log("[searcher/live] mempool_state=disconnected");
-      await sleep(1_000);
-      continue;
+    const intake = buildMempoolIntakeWithRouters(getPools(), forceIncludeRouters);
+    const toAddress = [...intake.filteredTargets];
+    const intakeKey = toAddress.map((address) => address.toLowerCase()).join(",");
+    if (intakeKey !== lastIntakeKey) {
+      reportMempoolIntake(mode, intake, maxAddresses);
+      lastIntakeKey = intakeKey;
     }
 
-    // Bounded queue: keep only the freshest victims; a stale pending tx is
-    // useless once newer blocks/txs land, so drop oldest past the cap.
-    const queue: HintEnvelope[] = [];
-    let wake: (() => void) | null = null;
-    let failed = false;
-    const seen = new Set<string>();
-
-    const fail = () => {
-      if (!failed) console.log("[searcher/live] mempool_state=disconnected");
-      failed = true;
-      wake?.();
-    };
-    ws.addEventListener("error", fail);
-    ws.addEventListener("close", fail);
-
-    ws.addEventListener("message", (event) => {
-      const msg = parseWsJson(event.data);
-      const result = msg?.method === "eth_subscription" ? msg.params?.result : undefined;
-      if (!isRecord(result)) return;
-      counters.pendingReceived++;
-      const tx = pendingTxFromAlchemy(result);
-      if (!tx || !interesting(tx.to)) return;
-      const hash = tx.hash.toLowerCase();
-      if (seen.has(hash)) return;
-      seen.add(hash);
-      if (seen.size > 100_000) seen.clear();
-
-      const rawTx = rebuildSignedRawTx(hash, tx);
-      if (!rawTx) return;
-
-      counters.pendingFilteredReceived++;
-      queue.push({
-        payload: { mempool: true },
-        hashes: [tx.hash],
-        source: "mempool",
-        prefetched: { tx, rawTx },
-      });
-      if (queue.length > 64) queue.shift();
-      wake?.();
+    let ws: WebSocket | null = null;
+    let refreshRequested = false;
+    const unsubscribeRefresh = refreshSignal?.subscribe(() => {
+      refreshRequested = true;
+      try { ws?.close(); } catch { /* reconnect below */ }
     });
-
     try {
+      try {
+        ws = await connectFilteredMempool(wsUrl, toAddress);
+      } catch (err) {
+        if (err instanceof FatalMempoolSubscriptionError) {
+          if (mode === "auto" && shouldUseLocalFirehoseFallback(wsUrl, err)) {
+            console.log(
+              `[searcher/live] mempool filtered subscription unsupported by local node; ` +
+                `falling back to newPendingTransactions firehose`,
+            );
+            yield* localFirehoseMempoolHints(wsUrl, provider, interesting, counters);
+            return;
+          }
+          throw err;
+        }
+        console.log(
+          `[searcher/live] mempool WS connect failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        console.log("[searcher/live] mempool_state=disconnected");
+        await sleep(1_000);
+        continue;
+      }
+      if (refreshRequested) continue;
+
+      // Bounded queue: keep only the freshest victims; a stale pending tx is
+      // useless once newer blocks/txs land, so drop oldest past the cap.
+      const queue: HintEnvelope[] = [];
+      let wake: (() => void) | null = null;
+      let failed = false;
+      const seen = new Set<string>();
+
+      const fail = () => {
+        if (!failed && !refreshRequested) console.log("[searcher/live] mempool_state=disconnected");
+        failed = true;
+        wake?.();
+      };
+      ws.addEventListener("error", fail);
+      ws.addEventListener("close", fail);
+
+      ws.addEventListener("message", (event) => {
+        const msg = parseWsJson(event.data);
+        const result = msg?.method === "eth_subscription" ? msg.params?.result : undefined;
+        if (!isRecord(result)) return;
+        counters.pendingReceived++;
+        const tx = pendingTxFromAlchemy(result);
+        if (!tx || !interesting(tx.to)) return;
+        const hash = tx.hash.toLowerCase();
+        if (seen.has(hash)) return;
+        seen.add(hash);
+        if (seen.size > 100_000) seen.clear();
+
+        const rawTx = rebuildSignedRawTx(hash, tx);
+        if (!rawTx) return;
+
+        counters.pendingFilteredReceived++;
+        queue.push({
+          payload: { mempool: true },
+          hashes: [tx.hash],
+          source: "mempool",
+          prefetched: { tx, rawTx },
+        });
+        if (queue.length > 64) queue.shift();
+        wake?.();
+      });
+
       for (;;) {
         if (failed) break;
         if (queue.length === 0) {
@@ -4321,11 +4414,41 @@ async function* mempoolHints(
         yield queue.shift()!;
       }
     } finally {
-      try { ws.close(); } catch { /* already closed */ }
+      try { ws?.close(); } catch { /* already closed */ }
+      unsubscribeRefresh?.();
+    }
+    if (refreshRequested) {
+      console.log("[searcher/live] mempool filtered targets refreshed; reconnecting");
+      continue;
     }
     console.log("[searcher/live] mempool WS reconnect");
     await sleep(1_000);
   }
+}
+
+function reportMempoolIntake(
+  mode: MempoolMode,
+  intake: MempoolIntakePlan,
+  maxAddresses: number,
+): void {
+  console.log(
+    `[searcher/live] mempool mode=${mode} fullTargets=${intake.fullTargets.length} ` +
+      `filteredTargets=${intake.filteredTargets.length} canonical=${intake.canonicalTargetCount} ` +
+      `dynamicRouters=${intake.dynamicTargetCount}`,
+  );
+  emitEvent({
+    type: "mempool_filter_config",
+    source: "filtered_mempool",
+    to_addresses: [...intake.filteredTargets],
+    address_count: intake.filteredTargets.length,
+    router_count: intake.canonicalTargetCount + intake.dynamicTargetCount,
+    full_address_count: intake.fullTargets.length,
+    canonical_target_count: intake.canonicalTargetCount,
+    dynamic_target_count: intake.dynamicTargetCount,
+    graph_target_count: intake.graphTargetCount,
+    filtered_truncated: intake.filteredTruncated,
+    max_addresses: maxAddresses,
+  });
 }
 
 type MempoolMode = "auto" | "alchemy_filtered" | "local_firehose";

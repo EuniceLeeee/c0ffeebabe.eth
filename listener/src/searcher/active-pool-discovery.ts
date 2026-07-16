@@ -5,11 +5,22 @@ import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
 import { attestPoolIdentities } from "./venues/identity.js";
 import type { IdentityAdmissionPolicy } from "./venues/admission.js";
 import { ADDR } from "../shared/constants/addresses.js";
+import {
+  buildV4PoolEntries,
+  resolveV4PoolKeyViaPositionManager,
+  type RawLog,
+} from "./build-active-pool-universe.js";
 
 // Factory event topics
 const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
 const UNIV3_POOL_CREATED = ethers.id("PoolCreated(address,address,uint24,int24,address)");
 const BALANCER_V3_SWAP = ethers.id("Swap(address,address,address,uint256,uint256,uint256,uint256)");
+const UNIV4_INITIALIZE = ethers.id(
+  "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+);
+const UNIV4_SWAP = ethers.id(
+  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
+);
 
 // ─── Factory-based full pool indexing ───────────────────────
 
@@ -206,13 +217,41 @@ export async function scanActivePools(
     }
   }
 
-  const candidates: PoolEntry[] = [...poolCounts.entries()]
+  const v4InitializeLogs: RawLog[] = [];
+  const v4SwapLogs: RawLog[] = [];
+  for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
+    const end = Math.min(start + LOG_BATCH - 1, latest);
+    const [initialize, swaps] = await Promise.all([
+      getV4LogsWithSplitRetry(provider, UNIV4_INITIALIZE, start, end),
+      getV4LogsWithSplitRetry(provider, UNIV4_SWAP, start, end),
+    ]);
+    v4InitializeLogs.push(...initialize);
+    v4SwapLogs.push(...swaps);
+  }
+  const v4Pools = await buildV4PoolEntries(
+    v4InitializeLogs,
+    v4SwapLogs,
+    1,
+    async (poolId) => {
+      const resolved = await resolveV4PoolKeyViaPositionManager(
+        provider,
+        ADDR.UNISWAP_V4_POSITION_MANAGER,
+        poolId,
+      );
+      return resolved ? { ...resolved, source: "v4-positionmanager-poolkeys" } : null;
+    },
+  );
+
+  const candidates: PoolEntry[] = [
+    ...[...poolCounts.entries()]
     .sort((a, b) => b[1].count - a[1].count)
     .map(([addr, item]) => ({
       address: ethers.getAddress(addr),
       adapter: bestAdapter(item.adapterCounts),
       score: item.count,
-    }));
+    })),
+    ...v4Pools,
+  ].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const { accepted, rejected } = await attestPoolIdentities(provider, candidates, {
     admissionPolicy: options.admissionPolicy,
   });
@@ -230,12 +269,36 @@ export async function scanActivePools(
     .join(",");
 
   console.log(
-    `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size} candidates, ` +
+    `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size + v4Pools.length} candidates ` +
+      `(v4=${v4Pools.length}), ` +
       `${accepted.length} identity-admitted (provisional=${provisional}), taking top ${ranked.length}` +
       (rejectedSummary ? `, rejected(${rejectedSummary})` : ""),
   );
 
   return ranked;
+}
+
+async function getV4LogsWithSplitRetry(
+  provider: ethers.JsonRpcProvider,
+  topic: string,
+  fromBlock: number,
+  toBlock: number,
+): Promise<RawLog[]> {
+  try {
+    return await provider.send("eth_getLogs", [{
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      fromBlock: "0x" + fromBlock.toString(16),
+      toBlock: "0x" + toBlock.toString(16),
+      topics: [topic],
+    }]);
+  } catch {
+    if (fromBlock >= toBlock) return [];
+    const mid = Math.floor((fromBlock + toBlock) / 2);
+    return [
+      ...await getV4LogsWithSplitRetry(provider, topic, fromBlock, mid),
+      ...await getV4LogsWithSplitRetry(provider, topic, mid + 1, toBlock),
+    ];
+  }
 }
 
 function bestAdapter(

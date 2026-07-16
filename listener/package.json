@@ -78,6 +78,7 @@
     "searcher:overlay-fidelity": "node --import tsx src/searcher/test/mevshare-overlay-fidelity.ts",
     "searcher:overlay-coverage": "node --import tsx src/searcher/test/overlay-venue-coverage.ts",
     "searcher:mempool-router-filter": "node --import tsx src/searcher/test/mempool-router-filter.ts",
+    "searcher:runtime-pool-refresh": "node --import tsx src/searcher/test/runtime-pool-refresh.ts",
     "searcher:amtsearch": "tsx src/searcher/test/amount-search.ts",
     "searcher:curvemath": "tsx src/searcher/test/curve-math-equiv.ts",
     "searcher:curve-warm-batch": "tsx src/searcher/test/curve-warm-batch.ts",

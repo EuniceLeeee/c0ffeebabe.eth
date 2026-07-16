@@ -245,8 +245,37 @@ export async function buildTokenGraph(
   backend: TokenQueryBackend,
   pools: PoolEntry[] = POOL_REGISTRY,
 ): Promise<TokenEdge[]> {
+  return (await buildTokenGraphWithResults(backend, pools)).edges;
+}
+
+export interface PoolGraphBuildSuccess {
+  pool: PoolEntry;
+  edges: TokenEdge[];
+}
+
+export interface PoolGraphBuildFailure {
+  pool: PoolEntry;
+  reason: string;
+}
+
+export interface TokenGraphBuildResult {
+  edges: TokenEdge[];
+  successful: PoolGraphBuildSuccess[];
+  failed: PoolGraphBuildFailure[];
+}
+
+/**
+ * Result-bearing graph build used by incremental discovery. A caller may only
+ * mark pools in `successful` as known; failed pools remain eligible for the
+ * next refresh instead of being permanently poisoned by a transient RPC read.
+ */
+export async function buildTokenGraphWithResults(
+  backend: TokenQueryBackend,
+  pools: PoolEntry[] = POOL_REGISTRY,
+): Promise<TokenGraphBuildResult> {
   const edges: TokenEdge[] = [];
-  let skipped = 0;
+  const successful: PoolGraphBuildSuccess[] = [];
+  const failed: PoolGraphBuildFailure[] = [];
 
   const BATCH = 50;
   for (let i = 0; i < pools.length; i += BATCH) {
@@ -254,20 +283,35 @@ export async function buildTokenGraph(
     const results = await Promise.allSettled(
       batch.map((pool) => queryPoolEdges(pool, backend)),
     );
-    for (const r of results) {
-      if (r.status === "fulfilled") edges.push(...r.value);
-      else skipped++;
+    for (let j = 0; j < results.length; j++) {
+      const pool = batch[j];
+      const result = results[j];
+      if (result.status === "fulfilled" && result.value.length > 0) {
+        edges.push(...result.value);
+        successful.push({ pool, edges: result.value });
+        continue;
+      }
+      failed.push({
+        pool,
+        reason: result.status === "rejected"
+          ? errorMessage(result.reason)
+          : "pool produced no route edges",
+      });
     }
     if (pools.length > 200 && i % 500 === 0 && i > 0) {
-      console.log(`[token-graph] progress: ${i}/${pools.length} pools, ${edges.length} edges, ${skipped} skipped`);
+      console.log(`[token-graph] progress: ${i}/${pools.length} pools, ${edges.length} edges, ${failed.length} skipped`);
     }
   }
 
   console.log(
     `[token-graph] built ${edges.length} edges from ${pools.length} pools` +
-      (skipped > 0 ? ` (${skipped} skipped)` : ""),
+      (failed.length > 0 ? ` (${failed.length} skipped)` : ""),
   );
-  return edges;
+  return { edges, successful, failed };
+}
+
+function errorMessage(value: unknown): string {
+  return value instanceof Error ? value.message : String(value);
 }
 
 /**

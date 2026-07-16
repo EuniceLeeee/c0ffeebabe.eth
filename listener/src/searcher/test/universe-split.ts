@@ -1,6 +1,9 @@
-import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
+import { ethers } from "ethers";
+import { v4PoolId, type PoolEntry, type TokenEdge } from "../planner/token-graph.js";
 import { indexFactoryPools, scanActivePools } from "../active-pool-discovery.js";
 import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
+import { poolRegistryKey } from "../pool-universe.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 import {
   deriveEdgeTaxonomy,
   edgeKindFromPoolEntry,
@@ -261,6 +264,101 @@ async function testPinnedDiscoveryCutoff(): Promise<void> {
   console.log("[universe-split] pinned discovery cutoff: PASS");
 }
 
+async function testRuntimeV4DiscoveryKeepsPoolIds(): Promise<void> {
+  const manager = ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER);
+  const initIface = new ethers.Interface([
+    "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)",
+  ]);
+  const swapIface = new ethers.Interface([
+    "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+  ]);
+  const initEvent = initIface.getEvent("Initialize")!;
+  const swapEvent = swapIface.getEvent("Swap")!;
+  const makePool = (n: number) => {
+    const currency0 = address(0x8000 + n * 2);
+    const currency1 = address(0x8001 + n * 2);
+    const fee = 500;
+    const tickSpacing = 10;
+    const hooks = address(0);
+    return {
+      currency0,
+      currency1,
+      fee,
+      tickSpacing,
+      hooks,
+      poolId: v4PoolId({ currency0, currency1, fee, tickSpacing, hooks }),
+    };
+  };
+  const pools = [makePool(1), makePool(2)];
+  const initLogs = pools.map((pool) => {
+    const encoded = initIface.encodeEventLog(initEvent, [
+      pool.poolId,
+      pool.currency0,
+      pool.currency1,
+      pool.fee,
+      pool.tickSpacing,
+      pool.hooks,
+      1n << 96n,
+      0,
+    ]);
+    return {
+      address: manager,
+      topics: encoded.topics,
+      data: encoded.data,
+      blockNumber: "0x3e7",
+    };
+  });
+  const swapLogs = pools.map((pool) => {
+    const encoded = swapIface.encodeEventLog(swapEvent, [
+      pool.poolId,
+      address(0xdead),
+      1n,
+      -1n,
+      1n << 96n,
+      1_000n,
+      0,
+      pool.fee,
+    ]);
+    return {
+      address: manager,
+      topics: encoded.topics,
+      data: encoded.data,
+      blockNumber: "0x3e8",
+    };
+  });
+  const initializeTopic = ethers.id(
+    "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+  );
+  const swapTopic = ethers.id(
+    "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
+  );
+  const provider = {
+    getBlockNumber(): never {
+      throw new Error("pinned runtime discovery should not query latest");
+    },
+    async send(method: string, args: Array<{ address?: string; topics?: string[] }>): Promise<unknown[]> {
+      assert(method === "eth_getLogs", `unexpected runtime v4 method ${method}`);
+      const filter = args[0];
+      if (filter.address?.toLowerCase() !== manager.toLowerCase()) return [];
+      if (filter.topics?.[0] === initializeTopic) return initLogs;
+      if (filter.topics?.[0] === swapTopic) return swapLogs;
+      return [];
+    },
+  };
+  const discovered = await scanActivePools(provider as never, 10, 10, 1_000);
+  const v4 = discovered.filter((pool) => pool.adapter === "univ4");
+  assert(v4.length === 2, `expected two runtime v4 pools, got ${v4.length}`);
+  assert(
+    v4.every((pool) => pool.address.toLowerCase() === manager.toLowerCase()),
+    "runtime v4 entries should retain the singleton PoolManager target",
+  );
+  assert(
+    new Set(v4.map(poolRegistryKey)).size === 2,
+    "distinct v4 poolIds sharing PoolManager must retain distinct registry identities",
+  );
+  console.log("[universe-split] runtime v4 poolId discovery/dedupe: PASS");
+}
+
 async function main(): Promise<void> {
   testBackrunIsBasePoolsAsIs();
   testBlockscanSupersetAndOverrides();
@@ -271,7 +369,8 @@ async function main(): Promise<void> {
   testEdgeKindFromPoolEntry();
   testTokenGraphHash();
   await testPinnedDiscoveryCutoff();
-  console.log("universe-split PASS (9/9)");
+  await testRuntimeV4DiscoveryKeepsPoolIds();
+  console.log("universe-split PASS (10/10)");
 }
 
 await main();
