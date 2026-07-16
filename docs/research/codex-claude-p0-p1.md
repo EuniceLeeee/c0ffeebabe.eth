@@ -57,19 +57,6 @@
 
 **报告一致性补充**:`codex-route-leg-adapter-refactor-validation.md` 顶部已是 `accepted_deterministic_equivalence`,但底部仍保留验收前的 `implemented_not_validated` 对抗裁决。历史不应删除,应把旧段标为"验收前、已被后续 exact-SHA 证据取代",并新增 final reconciliation,避免同一报告出现两个现行结论。
 
-## 4. 分析侧 dedup(14 项)— Claude 大幅否决
-
-| # | 点 | 提出方 | 对方是否同意 | 结论 |
-|---|---|---|---|---|
-| 30 | "分析侧 swap decoder/topic/routability 是冗余,删掉改 source 生产" | Codex | **Claude 强烈不同意**:那是**独立验证引擎**——删了 bundle-postmortem 就无法独立验生产(逐-wei/ground-truth 对质全靠它);dedup 恰会让"分析能验证生产"消失 | 拒绝主线 |
-| 31 | RouteIndex(生产导出真实可路由 edge,修 in_graph 误导) | Codex | **Claude 部分同意**:分析**读它作数据对照**可以,但**不 source 自己的判别逻辑** | 只读不 source |
-| 32 | 真冗余子集:死文件 victim-source/sender-flow、双 blockscan parser、纯地址常量 | Codex | **Claude 同意删** | 安全可做 |
-| 33 | cli/index.ts 删除 | Codex | **Claude 不同意**:`"analysis":"tsx src/cli/index.ts"` 仍在用,非架空 | 先确认 umbrella 无人用 |
-| 34 | arb-profit/flow-walk PnL 改读生产 | Codex | **Claude 不同意**:刚 3 轮 review+golden 修对,动它极可能再破;且是独立验证引擎 | 不动 |
-
-## 判别标准(区分"真冗余"vs"独立性")
-> **删掉它、改指向生产那份,我还能不能抓出生产的 bug?** 能 → 真冗余,删;不能(俩变成同一份代码) → 独立验证引擎,留。
-
 ## Mission 校验(贯穿所有条目)
 以上多数是 infra/extensibility 硬化,**当前不直接关闭新的 +EV gap**。merge 已过等价验收,没有证据表明本轮重构制造了线上故障;但单一注册源缺口会让下一个 adapter 出现静默漏配。执行顺序按生产风险和改动收益收敛为:
 
@@ -80,4 +67,4 @@
 5. 建共享 landed-event descriptors,供两套 discovery 入口、router、warm invalidation、debug 消费。
 6. 最后收口 pool 文件解析白名单、Flash 双表与低风险元数据。
 
-保留多入口,统一事实源;保留分析侧独立验证算法,但让它读取生产导出的事实作对照。不能为了 dedup 让分析与生产调用同一判断实现,否则会失去发现生产 bug 的能力。
+保留多入口,统一事实源。
