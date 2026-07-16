@@ -838,11 +838,45 @@ SwapVenueAdapter:
 **注册一个 swap adapter ⇒ 自动获得 public-mempool victim 检测。** victim-model-registry 不再决定"一个 swap 能否作 victim";它只留 oracle/非-swap trigger + 可选的 overlay/applyLocal 加速。
 
 ### 改法
-1. **`SwapLegAdapter` 接口加必选 `decodeSwapImpact(log): PoolImpact | null`**([route-leg-adapter.ts:151](listener/src/searcher/venues/route-leg-adapter.ts:151) 现在没有)。每个 swap adapter(univ2/v3/v4/curve/curve-underlying/**balancer-v3**)实现它——把 `pool-impact.ts` 现有 per-venue decoder **搬进各自 adapter**。
-2. **`pool-impact.ts` 去 per-venue 硬编码**:改为遍历 route registry `for (a of routeRegistry) a.decodeSwapImpact(log)`。新增 swap adapter 自带 decoder,pool-impact 不用改。
-3. **`victim-model-registry` 删掉所有 swap edgeAdapterIds**:只保留 oracle/非-swap trigger(那个 `[]` 项)+ 把 overlay/applyLocal 降为**按 adapterId 索引的可选优化表**(不是 detectability 的门)。
-4. **测试改方向(承重)**:断言**每个 production route swap adapter 都产出非空 decodeSwapImpact**(route→victim)。这条会**当场抓住 Balancer V3**。保留旧的 victim→route 方向作双检。
-5. **附带闭合**:Balancer V3 随 §20.1 自动获得 decoder，先闭合“已进入 intake 后”的 receipt→impact；
+1. **`SwapAdapter` 接口加必选 receipt-level observation capability**([route-leg-adapter.ts:151](listener/src/searcher/venues/route-leg-adapter.ts:151) 现在没有)。不是单条 `decodeSwapImpact(log)`，而是：
+
+   ```ts
+   interface SwapObservationCapability {
+     readonly topics: readonly string[];
+     readonly canonicalIntakeTargets: readonly string[];
+     decodeSwapImpacts(ctx: {
+       logs: readonly EventLog[];
+       graphIndex: SwapGraphIndex;
+       tokenQuery?: TokenQueryBackend | null;
+     }): Promise<readonly PoolImpact[]>;
+   }
+
+   interface SwapAdapter extends RouteLegAdapter {
+     readonly kind: "swap";
+     readonly observation: SwapObservationCapability;
+   }
+   ```
+
+   每个 swap adapter(univ2/v3/v4/curve/curve-underlying/**balancer-v3**)实现它；同一 adapter 可声明多个
+   event variant。`canonicalIntakeTargets` 只放该 family 的 Router/Vault/Manager singleton，跨 venue
+   aggregator 仍由下面的 chain-derived router index 提供。
+2. **decoder 必须看完整 receipt，而不是逐 log 调用**：
+   - UniV2 在同一 pool 的 Swap 前后寻找相邻 Sync，优先采用 Sync 的精确 post-reserves；缺 Sync 时才允许
+     从 pre-reserves + Swap amounts 计算，并保持现有 fail-closed/error 行为。
+   - UniV4 由 singleton PoolManager 发事件，按 `topics[1].poolId ↔ edge.v4PoolKey/poolId` 匹配。
+   - Balancer V3 由 singleton Vault 发事件，`log.address` 是 Vault，真实 pool/tokenIn/tokenOut 在 indexed
+     topics；decoder 必须用 indexed pool identity 匹配 graph edge，不能沿用 `log.address → edges`。
+   - 一笔 receipt 可产生多个 impacts；decoder 返回数组，保留 log 顺序后再由 coordinator 稳定去重。
+3. **`pool-impact.ts` 去 per-venue ABI/topic 硬编码，但保留 receipt coordinator**：composition root 从
+   production swap registry 构建 `topic0 → observation[]` 索引；一份 receipt 只调用命中 topic 的
+   observation。coordinator 继续负责 graph index、direct-call/Transfer 通用 fallback、跨 adapter 汇总和
+   deterministic dedupe，不把这些通用职责硬塞进某一个 venue adapter。
+4. **`victim-model-registry` 删掉所有 swap edgeAdapterIds**:只保留 oracle/非-swap trigger(那个 `[]` 项)+ 把 overlay/applyLocal 降为**按 adapterId 索引的可选优化表**(不是 detectability 的门)。
+5. **测试改方向(承重)**:断言每个 production route swap adapter 都有非空 `observation.topics`、合法
+   canonical targets，并至少有一份真实 receipt fixture 使 `decodeSwapImpacts` 产出预期 impact
+   (route→victim)。UniV2 fixture 必含 Swap+Sync 并断言精确 post-reserves；V4/Balancer V3 fixture 必断言
+   singleton log emitter 能反解到正确 pool identity。保留旧的 victim→route 方向作双检。
+6. **附带闭合**:Balancer V3 随 §20.1 自动获得 decoder，先闭合“已进入 intake 后”的 receipt→impact；
    完整 public-mempool 覆盖还必须同时闭合下面的 intake 派生。
 
 ### 同轮必做:mempool intake 从 production swap capabilities 派生
@@ -880,8 +914,13 @@ logs 直接塞给 decoder 来绕过 intake。
 - **discovery topic 三处硬编码**([active-pool-discovery.ts:133](listener/src/searcher/active-pool-discovery.ts:133)、[build-active-pool-universe.ts:16](listener/src/searcher/build-active-pool-universe.ts:16)、[pool-impact.ts:66](listener/src/searcher/detector/pool-impact.ts:66)):同 §18 —— 各 adapter 自声明 topic(`ethers.id(sig)`),三处改为读 registry 汇总。新增协议只改一处。
 
 ### 验收
-- **conformance**:production-registry 每个 route swap adapter 有非空 decodeSwapImpact(route→victim),Balancer V3 必过。
+- **conformance**:production-registry 每个 route swap adapter 有非空 receipt-level observation，且每个
+  event variant 都有 fixture(route→victim)；Balancer V3 必过。
 - **等价性**:原有 victim 的 venue(univ2/v3/v4/curve-underlying)decoder 搬进 adapter 后,产出的 `PoolImpact` 对同一 victim tx **逐字节/逐 wei 相同** vs baseline。
+- **V2 精确后态**:同 receipt 的 Swap+Sync 必须使用 Sync reserves；去掉 Sync 后才走 pre-reserve 计算
+  fallback，两条路径均有断言。
+- **singleton identity**:V4/Balancer V3 的 `log.address` 不作为 pool identity；fixture 分别断言 poolId/
+  indexed pool → graph edge 的精确映射。
 - **Balancer V3 = 新覆盖**(预声明 diff:它获得了以前没有的 victim 检测,非回归)。
 - 每个 swap venue 一笔 public-mempool backrun tx 走通新路径；Balancer V3 必须从 canonical Router
   intake 开始，不能只测 decoder。
@@ -889,4 +928,5 @@ logs 直接塞给 decoder 来绕过 intake。
   `main.ts` router/pool filter 零修改。外部 provider 的地址截断必须产生结构化 coverage 事件。
 
 ### 时机
-属 route-leg-adapter 之上的能力补齐;仍受"先过 route-adapter 逐-wei 等价再动"约束(但这条是**修分支已有的漏配 bug**,可与等价验收并行——它本身也需要等价+conformance 验收)。
+属已合并 route-leg-adapter 之上的独立行为变化；从当前 `origin/main` 新开分支，原有 venue 做严格
+impact 等价，Balancer V3 与 adapter-derived intake 作为预声明的新覆盖分别跑 receipt 与 intake flip。
