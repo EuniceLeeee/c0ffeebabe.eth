@@ -241,6 +241,20 @@ async function main(): Promise<void> {
   }
   console.log("[route-adapters] action registry coverage: PASS");
 
+  for (const protocolAdapter of PRODUCTION_ROUTE_ADAPTERS.protocols) {
+    const blockscanAdmitted = protocolAdapter.allowedTaxonomy.some((taxonomy) =>
+      taxonomy.slotKind === "protocol" &&
+      !deriveEdgeTaxonomy(taxonomy.slotKind, taxonomy.protocolAction).leavesStandingPosition
+    );
+    if (!blockscanAdmitted) continue;
+    assert(protocolAdapter.readMid !== null, `${protocolAdapter.id} missing blockscan mid reader`);
+    assert(
+      protocolAdapter.warm?.kind === "protocol-mid",
+      `${protocolAdapter.id} missing blockscan protocol-mid warm capability`,
+    );
+  }
+  console.log("[route-adapters] blockscan protocol mid capability coverage: PASS");
+
   const coldCache = new Proxy({}, {
     get() {
       return () => null;
@@ -338,7 +352,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (10/10)");
+  console.log("route-adapters PASS (11/11)");
 }
 
 await main();

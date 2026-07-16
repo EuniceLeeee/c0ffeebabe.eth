@@ -95,8 +95,8 @@ export const metronomeHgusdcAdapter = Object.freeze({
   edgeAdapterIds: ["metronome-hgusdc-exit"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   actionAdapterIds: ["metronome-hgusdc-exit", "erc20-transfer"],
-  readMid: null,
-  warm: null,
+  readMid: readProtocolExternalMid,
+  warm: { kind: "protocol-mid", priority: 1 },
   prepared: null,
   async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
