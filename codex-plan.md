@@ -821,3 +821,38 @@ SwapVenueAdapter:
   applyLocal?                       → 可选加速,缺省 = raw-tx-replay
 ```
 不再有"可路由 swap venue 却 detect-only/drop"的配置可能。
+
+---
+
+## 20. Plan — swap victim 从 route 派生,消灭第二张易漏配的 victim 表(代码核实)
+
+### 核实(远端 837fa829,fable 复核 Sol 发现,全部成立)
+- `production-registry.ts` 注册 6 swap adapter(univ2/univ3/univ4/curvePlain/curveUnderlying/**balancerV3**)。
+- `victim-model-registry.ts` 覆盖 `univ2-swap/univ3-swap/univ4-unlock/curve-exchange-underlying + []`(oracle)——**零 balancer**。
+- `pool-impact.ts` decoder 仅 UNIV2/UNIV3/UNIV4/curve —— **无 Balancer V3**。
+- **测试方向反了**:`test/victim-model-registry.ts` 遍历 VICTIM 条目查其有无 route(victim→route),**不查 route→victim**,故 Balancer V3(有 route 无 victim)静默 PASS。
+- **净后果**:public-mempool 的 Balancer V3 swap 即便 raw-tx 回放拿到 receipt logs,也无 decoder 转成 `PoolImpact` → **无法 backrun**。这就是"两套表漂移"的实例。
+- 纠正 Sol 一处:curve-underlying 的 `null/null` 只关掉 hash-only 的 local-apply/overlay;raw-tx 路径本身能拿 receipt(`main.ts:1842`)。真问题是"能否 detect"仍由第二张表决定,而非从 route 派生。
+
+### 目标(用户原则)
+**注册一个 swap adapter ⇒ 自动获得 public-mempool victim 检测。** victim-model-registry 不再决定"一个 swap 能否作 victim";它只留 oracle/非-swap trigger + 可选的 overlay/applyLocal 加速。
+
+### 改法
+1. **`SwapLegAdapter` 接口加必选 `decodeSwapImpact(log): PoolImpact | null`**([route-leg-adapter.ts:151](listener/src/searcher/venues/route-leg-adapter.ts:151) 现在没有)。每个 swap adapter(univ2/v3/v4/curve/curve-underlying/**balancer-v3**)实现它——把 `pool-impact.ts` 现有 per-venue decoder **搬进各自 adapter**。
+2. **`pool-impact.ts` 去 per-venue 硬编码**:改为遍历 route registry `for (a of routeRegistry) a.decodeSwapImpact(log)`。新增 swap adapter 自带 decoder,pool-impact 不用改。
+3. **`victim-model-registry` 删掉所有 swap edgeAdapterIds**:只保留 oracle/非-swap trigger(那个 `[]` 项)+ 把 overlay/applyLocal 降为**按 adapterId 索引的可选优化表**(不是 detectability 的门)。
+4. **测试改方向(承重)**:断言**每个 production route swap adapter 都产出非空 decodeSwapImpact**(route→victim)。这条会**当场抓住 Balancer V3**。保留旧的 victim→route 方向作双检。
+5. **附带闭合**:Balancer V3 随 §20.1 自动获得 decoder → mempool victim 检测通。
+
+### 附:同模式的另两处(可同轮或跟进)
+- **discovery topic 三处硬编码**([active-pool-discovery.ts:133](listener/src/searcher/active-pool-discovery.ts:133)、[build-active-pool-universe.ts:16](listener/src/searcher/build-active-pool-universe.ts:16)、[pool-impact.ts:66](listener/src/searcher/detector/pool-impact.ts:66)):同 §18 —— 各 adapter 自声明 topic(`ethers.id(sig)`),三处改为读 registry 汇总。新增协议只改一处。
+- **router allowlist**([main.ts:284](listener/src/searcher/main.ts:284) + hot-pool top-N [4559](listener/src/searcher/main.ts:4559)):tx 进了 mempool 但 `tx.to` 不在 ~14 硬编码 router 或热池内仍被自己过滤掉([[project-mempool-router-allowlist-blindspot]])。**这是 intake 层、不是 victim-detect**,同"硬编码清单丢流"模式但独立修,可能不在本次范围——标记,别混进 victim 改动。
+
+### 验收
+- **conformance**:production-registry 每个 route swap adapter 有非空 decodeSwapImpact(route→victim),Balancer V3 必过。
+- **等价性**:原有 victim 的 venue(univ2/v3/v4/curve-underlying)decoder 搬进 adapter 后,产出的 `PoolImpact` 对同一 victim tx **逐字节/逐 wei 相同** vs baseline。
+- **Balancer V3 = 新覆盖**(预声明 diff:它获得了以前没有的 victim 检测,非回归)。
+- 每个 swap venue 一笔 backrun tx(含 Balancer V3)走通新路径。
+
+### 时机
+属 route-leg-adapter 之上的能力补齐;仍受"先过 route-adapter 逐-wei 等价再动"约束(但这条是**修分支已有的漏配 bug**,可与等价验收并行——它本身也需要等价+conformance 验收)。
