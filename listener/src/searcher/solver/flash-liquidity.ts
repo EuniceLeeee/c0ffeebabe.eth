@@ -1,5 +1,8 @@
 import { ethers } from "ethers";
-import { ADDR } from "../../shared/constants/addresses.js";
+import {
+  DEFAULT_FLASH_ADAPTER_ID,
+  FLASH_PROVIDER_DESCRIPTORS,
+} from "../../adapters/flash-providers.js";
 
 /**
  * Dynamic flash-loan borrowability, read from chain — NOT a hardcoded allowlist.
@@ -31,10 +34,14 @@ export interface FlashProvider {
   holder: string;
 }
 
-export const DEFAULT_FLASH_PROVIDERS: FlashProvider[] = [
-  { adapterId: "balancer-flash", holder: ADDR.BALANCER_VAULT },
-  { adapterId: "morpho-flash", holder: ADDR.MORPHO },
-];
+export const DEFAULT_FLASH_PROVIDERS: readonly FlashProvider[] = Object.freeze(
+  [...FLASH_PROVIDER_DESCRIPTORS]
+    .sort((a, b) => a.liquidityPriority - b.liquidityPriority)
+    .map((descriptor) => Object.freeze({
+      adapterId: descriptor.adapterId,
+      holder: descriptor.liquidityHolder,
+    })),
+);
 
 export interface FlashSource {
   /** Largest single-provider borrowable amount for the token. */
@@ -54,7 +61,7 @@ export class FlashLiquidityCache {
 
   constructor(
     private readonly provider: ethers.JsonRpcProvider,
-    private readonly providers: FlashProvider[] = DEFAULT_FLASH_PROVIDERS,
+    private readonly providers: readonly FlashProvider[] = DEFAULT_FLASH_PROVIDERS,
   ) {}
 
   /** Borrowable depth for a token (0 if unknown/none). */
@@ -109,7 +116,10 @@ export class FlashLiquidityCache {
 
       let i = 0;
       for (const token of batch) {
-        let best: FlashSource = { amount: 0n, adapterId: this.providers[0]?.adapterId ?? "balancer-flash" };
+        let best: FlashSource = {
+          amount: 0n,
+          adapterId: this.providers[0]?.adapterId ?? DEFAULT_FLASH_ADAPTER_ID,
+        };
         for (const p of this.providers) {
           const r = results[i++];
           if (r?.success && r.returnData && r.returnData !== "0x") {

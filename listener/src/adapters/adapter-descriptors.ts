@@ -1,4 +1,5 @@
 import type { EdgeKind } from "../searcher/strategy-taxonomy.js";
+import { FLASH_PROVIDER_DESCRIPTORS } from "./flash-providers.js";
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
@@ -18,6 +19,17 @@ export interface AdapterDescriptor {
   canSendValue: boolean;
   leavesStandingPositionDefault: boolean;
 }
+
+const FLASH_ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = Object.fromEntries(
+  FLASH_PROVIDER_DESCRIPTORS.map((descriptor) => [descriptor.adapterId, {
+    adapterId: descriptor.adapterId,
+    lineage: descriptor.lineage,
+    edgeKind: "flash",
+    action: "flash",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  }]),
+);
 
 // Credit adapters default `leavesStandingPositionDefault:true` to match the runtime fail-closed law
 // (deriveEdgeTaxonomy: credit -> leavesStandingPosition:true). A credit leg that actually closes in-tx
@@ -49,22 +61,7 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },
-  "balancer-flash": {
-    adapterId: "balancer-flash",
-    lineage: "balancer-flash",
-    edgeKind: "flash",
-    action: "flash",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
-  "morpho-flash": {
-    adapterId: "morpho-flash",
-    lineage: "morpho-flash",
-    edgeKind: "flash",
-    action: "flash",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
+  ...FLASH_ADAPTER_DESCRIPTORS,
   "curve-exchange": {
     adapterId: "curve-exchange",
     lineage: "curve",

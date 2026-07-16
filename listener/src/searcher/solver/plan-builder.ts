@@ -7,7 +7,10 @@
  * before lending/swaps, and inserting the assert-balance guard before flash repay.
  */
 
-import { ADDR } from "../../shared/constants/addresses.js";
+import {
+  DEFAULT_FLASH_ADAPTER_ID,
+  findFlashProviderDescriptor,
+} from "../../adapters/flash-providers.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
@@ -36,7 +39,7 @@ export async function buildResolvedPlanFromPath(
   executor: string,
   state: StateBackend,
   minProfit: bigint = 1n,
-  flashAdapterId: string = "morpho-flash",
+  flashAdapterId: string = DEFAULT_FLASH_ADAPTER_ID,
   rawOutputs?: bigint[],
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
@@ -136,23 +139,23 @@ export async function buildResolvedPlanFromPath(
   // verifies its own balance is restored), so the repay must be a TRANSFER to the vault. An approve is a
   // silent no-op for Balancer and the flashLoan then reverts. (Balancer protocol flash fee is 0, so we
   // transfer exactly flashAmount.)
-  const flashTarget = FLASH_ADAPTER_TARGETS[flashAdapterId];
-  if (!flashTarget) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
-  if (flashAdapterId === "balancer-flash") {
-    transferToPool(flashToken, flashTarget, flashAmount);
+  const flashProvider = findFlashProviderDescriptor(flashAdapterId);
+  if (!flashProvider) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
+  if (flashProvider.repayment === "transfer") {
+    transferToPool(flashToken, flashProvider.target, flashAmount);
   } else {
-    ensureApprove(flashToken, flashTarget);
+    ensureApprove(flashToken, flashProvider.target);
   }
 
   // Wrap entire sequence in flash loan
   const flashParams: Record<string, string[] | bigint[]> =
-    flashAdapterId === "balancer-flash"
+    flashProvider.paramShape === "tokens-and-amounts"
       ? { tokens: [flashToken], amounts: [flashAmount] }
       : {};
 
   return {
     adapterId: flashAdapterId,
-    target: flashTarget,
+    target: flashProvider.target,
     tokenIn: flashToken,
     tokenOut: flashToken,
     amount: flashAmount,
@@ -160,11 +163,6 @@ export async function buildResolvedPlanFromPath(
     children: inner,
   };
 }
-
-const FLASH_ADAPTER_TARGETS: Record<string, string> = {
-  "morpho-flash": ADDR.MORPHO,
-  "balancer-flash": ADDR.BALANCER_VAULT,
-};
 
 // ─── Per-adapter node builders ─────────────────────────────────
 

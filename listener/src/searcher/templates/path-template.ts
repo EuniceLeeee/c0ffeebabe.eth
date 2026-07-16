@@ -5,6 +5,7 @@ import {
   PRODUCTION_ROUTE_ADAPTERS,
   type LegacyRouteEdgeDescriptor,
 } from "../venues/production-registry.js";
+import { FLASH_PLANNING_ADAPTER_IDS } from "../../adapters/flash-providers.js";
 
 export type TemplateSlotKind = "flash" | "lend" | "swap" | "repay" | "guard";
 
@@ -69,7 +70,7 @@ const TRADE_LEG_ADAPTERS = deriveTemplateTradeAdapterIds(
 export const FLASH_LEND_SWAP_REPAY: PathTemplate = {
   name: "flash-lend-swap-repay",
   slots: [
-    { id: "flash", kind: "flash", adapters: ["morpho-flash", "balancer-flash"] },
+    { id: "flash", kind: "flash", adapters: [...FLASH_PLANNING_ADAPTER_IDS] },
     { id: "lend", kind: "lend", adapters: ["fluid-vault", "fluid-dex-liquidate"], min: 1, max: 4 },
     { id: "swap", kind: "swap", adapters: TRADE_LEG_ADAPTERS, min: 1, max: 8 },
     { id: "repay", kind: "repay", adapters: ["erc20-approve", "erc20-transfer"] },
@@ -84,7 +85,7 @@ export const FLASH_LEND_SWAP_REPAY: PathTemplate = {
 export const FLASH_SWAP_REPAY: PathTemplate = {
   name: "flash-swap-repay",
   slots: [
-    { id: "flash", kind: "flash", adapters: ["morpho-flash", "balancer-flash"] },
+    { id: "flash", kind: "flash", adapters: [...FLASH_PLANNING_ADAPTER_IDS] },
     { id: "swap", kind: "swap", adapters: TRADE_LEG_ADAPTERS, min: 1, max: 8 },
     { id: "repay", kind: "repay", adapters: ["erc20-approve", "erc20-transfer"] },
     { id: "guard", kind: "guard", adapters: ["assert-balance"] },

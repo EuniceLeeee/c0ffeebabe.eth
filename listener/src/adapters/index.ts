@@ -1,7 +1,6 @@
 /** Register all adapters on import. */
 import { register } from "./registry.js";
-import { morphoFlashAdapter } from "./morpho-flash.js";
-import { balancerFlashAdapter } from "./balancer-flash.js";
+import { FLASH_PROVIDER_DESCRIPTORS } from "./flash-providers.js";
 import { fluidVaultAdapter } from "./fluid-vault.js";
 import { fluidDexLiquidateAdapter, fluidDexSwapAdapter } from "./fluid-dex.js";
 import { erc20ApproveAdapter, erc20TransferAdapter } from "./erc20.js";
@@ -40,8 +39,10 @@ import {
 } from "./balancer-v3.js";
 
 // Flash
-register(morphoFlashAdapter);
-register(balancerFlashAdapter);
+for (const descriptor of [...FLASH_PROVIDER_DESCRIPTORS]
+  .sort((a, b) => a.planningPriority - b.planningPriority)) {
+  register(descriptor.actionAdapter);
+}
 // Lending
 register(fluidVaultAdapter);
 register(fluidDexLiquidateAdapter);

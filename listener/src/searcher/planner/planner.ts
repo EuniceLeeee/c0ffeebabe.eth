@@ -6,6 +6,10 @@ import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.j
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
 import type { ProfitTokenValuation } from "../profit-token-valuation.js";
 import {
+  DEFAULT_FLASH_ADAPTER_ID,
+  findFlashProviderDescriptor,
+} from "../../adapters/flash-providers.js";
+import {
   edgeMatchesVictimSelector,
   type OracleVictimEffect,
 } from "../detector/victim-effect.js";
@@ -186,8 +190,8 @@ export class TemplatePlanner implements Planner {
         break;
       }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
-      const flashAdapters = flashSlot?.adapters ?? ["morpho-flash"];
-      const preferredFlash = flashAdapters[0] ?? "morpho-flash";
+      const flashAdapters = flashSlot?.adapters ?? [DEFAULT_FLASH_ADAPTER_ID];
+      const preferredFlash = flashAdapters[0] ?? DEFAULT_FLASH_ADAPTER_ID;
 
       // Full graph (template-adapter-filtered only). Relevance to the victim
       // impact is enforced at the PATH level by focusPathsOnImpact below — NOT by
@@ -371,8 +375,8 @@ export class TemplatePlanner implements Planner {
         break;
       }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
-      const flashAdapters = flashSlot?.adapters ?? ["morpho-flash"];
-      const preferredFlash = flashAdapters[0] ?? "morpho-flash";
+      const flashAdapters = flashSlot?.adapters ?? [DEFAULT_FLASH_ADAPTER_ID];
+      const preferredFlash = flashAdapters[0] ?? DEFAULT_FLASH_ADAPTER_ID;
 
       if (!satisfiesRequiredSlots(tokenPath, template)) {
         continue;
@@ -412,17 +416,12 @@ export class TemplatePlanner implements Planner {
   }
 }
 
-const FLASH_TARGETS: Record<string, string> = {
-  "morpho-flash": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
-  "balancer-flash": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
-};
-
 function buildAbstractRoot(path: TokenPath, opp: Pick<PlannedOpportunity, "startToken" | "profitToken">, flashAdapterId: string): PlanNode {
-  const flashTarget = FLASH_TARGETS[flashAdapterId];
-  if (!flashTarget) throw new Error(`unknown flash adapter: ${flashAdapterId}`);
+  const flashProvider = findFlashProviderDescriptor(flashAdapterId);
+  if (!flashProvider) throw new Error(`unknown flash adapter: ${flashAdapterId}`);
   return {
     adapterId: flashAdapterId,
-    target: flashTarget,
+    target: flashProvider.target,
     tokenIn: opp.startToken,
     tokenOut: opp.startToken,
     amount: { kind: "balance-bps", token: opp.startToken, account: "executor", bps: 0 },
