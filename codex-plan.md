@@ -1,4 +1,4 @@
-# Codex Plan — Searcher Swap Adapter 架构重构
+# Codex Plan — Searcher Route-Leg Adapter 架构重构
 
 > 基线：`origin/main@4392ffc59fd4aa593500c6ee4fb83b34fe50340a`  
 > 状态：施工计划；第一阶段只做行为等价重构，不引入新的 venue 能力。  
@@ -27,8 +27,8 @@
   共享 `univ2-standard`，只有执行语义特殊时才新增 family adapter。
 - `SwapAdapter` / `ProtocolConversionAdapter` / `LiquidityAdapter`：分别承载纯 swap、协议转换和
   LP mint/burn 的特有能力。
-- `FlashAdapter`：融资/执行 envelope，属于 `RouteAdapterRegistry.flash`，但不是 route edge，不能被迫
-  实现 graph/quote/impact 接口。
+- Flash：继续沿用当前 planner/template + flash `ActionAdapter` 架构，作为 route 外层融资 envelope；
+  本次不新增 registry、不迁移、不改行为。
 - `ActionAdapter`：执行子树中的单个 action 如何编码成 BotVM opcode。
 
 UniV4 和 Balancer V3 的一条逻辑 swap 会展开成多个 action；保留这两层可以避免把协议语义和 opcode 编码重新耦合。
@@ -46,9 +46,8 @@ UniV4 和 Balancer V3 的一条逻辑 swap 会展开成多个 action；保留这
 1. `main.ts` 不再出现 `curve-exchange-underlying`、`univ2-swap`、`balancer-v3-unlock` 等具体协议分支。
 2. graph、quote、plan、warm 通过 `RouteAdapterRegistry.routeLegs` 找到 family 实现；victim 处理通过正交的
    `VictimModelRegistry` 找到 pool-swap 或 oracle-rawtx 模型。
-3. 协议身份与交换能力分开：unknown factory 可以保留 `venueId=unknown`，同时使用经过探测的标准 V2/V3 能力。
-4. 每个生产 execution family 在启动时完成 lane 覆盖校验，避免只接入 quote 却漏掉 plan 或 warm；
-   flash provider 单独按融资能力校验。
+3. 协议身份与执行语义分开：unknown factory 可以保留 `protocol=unknown`，同时使用经过探测的标准 V2/V3 execution family。
+4. 每个生产 execution family 在启动时完成 lane 覆盖校验，避免只接入 quote 却漏掉 plan 或 warm。
 5. 第一轮迁移保持 scanner 输出、candidate plan、calldata 和逐 wei 模拟结果不变。
 6. `main.ts` 最终只承担配置、依赖组装、source 启停和优雅关闭。
 
@@ -59,6 +58,7 @@ UniV4 和 Balancer V3 的一条逻辑 swap 会展开成多个 action；保留这
 3. 不在架构重构中顺带修 planner ranking、top-N 或 sizing 问题。
 4. 不修改 trusted replay/hunt harness 来制造成功结果。
 5. 不把 factory、pool 或 token 实例 allowlist 作为 admission gate。
+6. 不重构 flash provider、flash template 或现有 flash `ActionAdapter`。
 
 ## 3. 核心领域模型
 
@@ -74,7 +74,7 @@ type ProtocolId =
   | string;
 
 interface IdentityProof {
-  kind: "factory-reverse-lookup" | "registry-lookup" | "behavior-probe";
+  kind: "factory-reverse-lookup" | "registry-lookup" | "code-hash" | "behavior-probe";
   target: string;
   blockNumber: number;
   resultHash: string;
@@ -95,11 +95,20 @@ type SwapExecutionFamilyId =
   | "curve-plain"
   | "curve-underlying"
   | "dodo-v2"
+  | "ekubo"
+  | "zamm"
   | "balancer-v3"
-  | "fluid-dex";
+  | "fluid-dex"
+  | `custom-swap:${string}`;
 
-type ProtocolExecutionFamilyId = `protocol:${string}` | `compat:${string}`;
-type ExecutionFamilyId = SwapExecutionFamilyId | ProtocolExecutionFamilyId;
+type ProtocolExecutionFamilyId = `protocol:${string}`;
+type LiquidityExecutionFamilyId = `liquidity:${string}`;
+type CompatExecutionFamilyId = `compat:${string}`;
+type ExecutionFamilyId =
+  | SwapExecutionFamilyId
+  | ProtocolExecutionFamilyId
+  | LiquidityExecutionFamilyId
+  | CompatExecutionFamilyId;
 
 type ActionAdapterId = string;
 ```
@@ -161,36 +170,60 @@ edge 上序列化的 `leavesStandingPosition`。
 standing guard fail closed。未来若 mission 改变，应另立策略、风险和验证合同，不能把 credit 塞进
 `SwapAdapter` 或借本次重构放行。
 
-## 4. 高阶 SwapAdapter 契约
+## 4. 高阶 RouteLegAdapter 契约
 
 ```ts
-interface SwapAdapter {
-  readonly id: SwapCapabilityId;
+type RouteLegKind = "swap" | "protocol-conversion" | "liquidity" | "compat";
+
+interface RouteLegAdapter {
+  readonly id: ExecutionFamilyId;
+  readonly kind: RouteLegKind;
   readonly edgeAdapterIds: readonly string[];
+  readonly allowedTaxonomy: readonly AllowedTaxonomy[];
 
   buildEdges(ctx: EdgeBuildContext): Promise<TokenEdge[]>;
-  buildPlan(ctx: PlanBuildContext): Promise<ResolvedPlanNode>;
+  buildPlanFragment(ctx: PlanBuildContext): Promise<PlanFragment>;
 
-  // scanner 热路径：只能同步读取本 block 已发布的 immutable warm snapshot。
+  // scanner 热路径：只能同步读取本 block 已完成 warm 的 view。
   readonly mid: MidQuoter | null;
   readonly quoteLocal: LocalQuoter | null;
 
   // solver 定稿路径：允许异步读取 fork/revm/RPC，生产 adapter 必须显式提供。
-  readonly quoteExact: ExactQuoter;
+  readonly quoteExact: ExactQuoter | null;
 
-  // adapter 只声明“需要暖什么”；调度、去重、deadline、reorg 与原子发布归 coordinator。
+  // adapter 声明请求、失效来源和结果应用；调度、去重、deadline、reorg 归 coordinator。
   readonly warm: WarmSpec | null;
-  readonly impact: ImpactDecoder | null;
-  readonly postImpact: PostImpactApplier | null;
-  readonly victimOverlay: VictimOverlayBuilder | null;
+  readonly victimModels: readonly VictimModelId[];
+}
+
+interface SwapAdapter extends RouteLegAdapter { readonly kind: "swap" }
+interface ProtocolConversionAdapter extends RouteLegAdapter { readonly kind: "protocol-conversion" }
+interface LiquidityAdapter extends RouteLegAdapter { readonly kind: "liquidity" }
+interface CompatRouteLegAdapter extends RouteLegAdapter { readonly kind: "compat" }
+
+interface PlanBuildContext {
+  edge: TokenEdge;
+  amountIn: bigint;
+  amountOut: bigint;
+  rawOut: bigint;
+  executor: string;
+}
+
+type PlanRequirement =
+  | { kind: "approve"; token: string; spender: string; amount: bigint }
+  | { kind: "transfer-to-pool"; token: string; pool: string; amount: bigint };
+
+interface PlanFragment {
+  requirements: readonly PlanRequirement[];
+  nodes: readonly ResolvedPlanNode[];
 }
 
 interface MidQuoter {
-  read(ctx: MidReadContext, snapshot: WarmSnapshot): VenueMid | null; // no Promise
+  read(ctx: MidReadContext, view: WarmView): VenueMid | null; // no Promise
 }
 
 interface LocalQuoter {
-  quote(ctx: LocalQuoteContext, snapshot: WarmSnapshot): bigint | null; // no Promise
+  quote(ctx: LocalQuoteContext, view: WarmView): bigint | null; // no Promise
 }
 
 interface ExactQuoter {
@@ -198,41 +231,60 @@ interface ExactQuoter {
 }
 
 interface WarmSpec {
+  invalidationSources(ctx: WarmInvalidationContext): readonly WarmInvalidationSource[];
   requests(ctx: WarmRequestContext): readonly WarmRequest[];
-  invalidationKeys(ctx: WarmInvalidationContext): readonly string[];
+  apply(result: WarmResult, target: WarmDraft): WarmApplyResult;
 }
 ```
 
-`WarmSnapshot` 必须绑定唯一 `blockNumber`/generation，并且只在该 block 的全部必需 warm request
-成功后一次性发布；scanner 不得看到部分更新的 snapshot。外部 venue 的 `eth_call`、batch quote
-或状态读取必须在 prewarm 阶段完成，`mid.read` / `quoteLocal.quote` 中禁止 I/O、`await` 和隐式 fallback。
+`RoutePlanner` 统一收集 `PlanFragment.requirements`，在共享 approval set 上去重并按腿顺序 materialize
+sibling approve/transfer，再追加 fragment nodes。这样 Curve/Fluid 的 approve、V4/Balancer 的嵌套 action
+都可表达；adapter 不得直接修改外层 `inner`。`compiler.ts` 仍是唯一调用 `ActionAdapter.encode` 的地方。
+
+`WarmView` 必须绑定 blockNumber。外部 venue 的 `eth_call`、batch quote 或状态读取必须在 prewarm 阶段
+完成，`mid.read` / `quoteLocal.quote` 中禁止 I/O、`await` 和隐式 fallback。
 
 `WarmSpec` 不是调度器。唯一的 `BlockScanWarmCoordinator` 负责 full/incremental/reorg 决策、跨 adapter
-请求去重、deadline、cache restamp/invalidate 和 snapshot 原子切换。adapter 不拥有 last-warmed block、
-TTL 或并发状态。
+请求去重、deadline 和 cache restamp/invalidate。第一阶段严格保留 main 当前的 mutable/allow-partial
+语义：原子单位是单个 pool/key，best-effort pool 失败不得阻塞整个 block；scanner 只在本 lane 的 required
+warm 阶段完成后运行。全局 immutable generation/全请求成功后发布属于独立 correctness change，不混入
+行为等价搬移。adapter 不拥有 last-warmed block、TTL 或并发状态。
+
+Victim 语义与 route family 正交，由 `VictimModelRegistry` 提供：
+
+- `pool-swap-overlay`：整组 logs/graph 解码 → post-impact seed → local overlay。
+- `oracle-rawtx`：识别 oracle trigger，应用真实 raw tx，再探测 post-victim price；不要求 pool overlay。
+
+backrun 启动校验针对 lane 声明的 victim model 和整条 route，不要求 route 中每个 adapter 同时实现
+impact/postImpact/overlay。
 
 可选能力必须显式为实现或 `null`，不能靠方法是否存在来猜测。registry 在启动时按 lane 校验：
 
-- block-scan 生产支持：`buildEdges + quoteExact + buildPlan + mid/quoteLocal/warm policy + final sim`。
-- backrun 生产支持：在上面基础上还要求匹配的 `impact + postImpact + victimOverlay` 能力。
+- block-scan 生产支持：`buildEdges + quoteExact + buildPlanFragment + final sim` 必须存在；另按该 family
+  声明的热路径校验 `mid/quoteLocal/warm`。无外部状态的实现可显式 `warm=null`，不能用空壳方法冒充能力。
+- backrun 生产支持：在上面基础上要求 route 绑定的 victim model 可用；oracle-rawtx 与 pool-swap-overlay
+  分别验证，不能互相冒充。
 - 缺能力时 fail closed，并给出确定的 admission/drop reason。
 
 注册采用显式依赖注入：
 
 ```ts
-export function createProductionSwapRegistry(): SwapRegistry {
-  return createSwapRegistry([
-    univ2StandardAdapter,
-    univ3StandardAdapter,
-    univ4Adapter,
-    curvePlainAdapter,
-    curveUnderlyingAdapter,
-    balancerV3Adapter,
-  ]);
+interface RouteAdapterRegistry {
+  routeLegs: {
+    swaps: RouteLegRegistry<SwapAdapter>;
+    protocols: RouteLegRegistry<ProtocolConversionAdapter>;
+    liquidity: RouteLegRegistry<LiquidityAdapter>;
+    // 只用于重构期保留历史 graph/diagnostic 语义；production lane 永不准入。
+    compat: RouteLegRegistry<CompatRouteLegAdapter>;
+  };
 }
 ```
 
-不使用 side-effect import 或目录自动扫描，避免注册顺序和测试隔离不透明。新增协议的核心改动应为一个实现模块和 registry assembly 中一行显式注册。
+这里有意不包含 flash：flash 仍由现有 route 外层 template/provider 选择，并复用低阶 flash
+`ActionAdapter`；它不是 `RouteLegAdapter` 子类。
+
+不使用 side-effect import 或目录自动扫描，避免注册顺序和测试隔离不透明。标准 clone 只增加
+identity/discovery proof；只有新的 execution family 才增加实现模块和 registry assembly 中一行显式注册。
 
 ## 5. Identity admission 与 adapter 分离
 
@@ -250,7 +302,7 @@ export const PRODUCTION_IDENTITY_ADMISSION: IdentityAdmissionPolicy = {
 };
 ```
 
-`main.ts` 只注入一份 policy，不出现 Curve/V2/V3 的具体分支。identity resolver 仍负责反向验证链上身份；capability probe 决定能否使用通用执行 adapter。
+`main.ts` 只注入一份 policy，不出现 Curve/V2/V3 的具体分支。identity resolver 仍负责反向验证链上身份；execution-family probe 决定能否使用通用执行 adapter。
 
 ## 6. unknown factory 的长尾策略
 
@@ -262,9 +314,14 @@ unknown factory 可以使用通用 V2/V3 adapter，但必须经过能力探测�
 
 1. `token0()`、`token1()`、`getReserves()` 可读且返回合法值。
 2. `factory()` 可读时，调用 `factory.getPair(token0, token1)` 反查当前 pool。
-3. 标准 `swap(uint256,uint256,address,bytes)` selector/callback 形状与执行计划兼容。
-4. 手续费模型有明确来源；未知时不得静默把默认 30bps 当作精确定价。
-5. provisional quote 只能用于候选排序，最终必须由 fork/revm simulation 校正。
+3. 标准 `swap(uint256,uint256,address,bytes)` selector、callback、calldata 和收款语义与执行计划兼容。
+4. 在本地 fork/dry-run 上执行最小行为 probe，验证 token balance/reserve 的方向变化、invariant 和 callback；
+   不在 mainnet 发送探测交易。
+5. 手续费模型必须有 factory config、verified code 或行为 probe 的证据；未知时不得静默套
+   `997/1000`、30bps 或任何默认 fee。
+6. 每项 proof 记录 target、block、proof kind 和 result hash；单凭 Swap topic 永远不足以分配
+   `univ2-standard`。
+7. provisional quote 只能用于候选排序，最终必须由 fork/revm simulation 校正。
 
 ### unknown V3
 
@@ -280,10 +337,13 @@ unknown factory 可以使用通用 V2/V3 adapter，但必须经过能力探测�
 
 ```ts
 {
-  venueId: "unknown",
-  factory: "0x...",
-  confidence: "provisional",
-  swapCapabilityId: "univ2-standard"
+  identity: {
+    protocol: "unknown",
+    factory: "0x...",
+    confidence: "provisional",
+    identityProof: [/* reverse lookup + behavior probe hashes */]
+  },
+  executionFamily: "univ2-standard"
 }
 ```
 
@@ -295,28 +355,47 @@ final simulation 始终是生产提交前的 fail-closed gate。
 listener/src/searcher/venues/
   admission.ts
   identity.ts
-  capability-probe.ts
+  execution-family-probe.ts
   pool-descriptor.ts
-  swap-adapter.ts
-  swap-registry.ts
-  production-registry.ts
+  route-leg-adapter.ts
+  route-leg-registry.ts
+  route-adapter-registry.ts
+  victim-model-registry.ts
   swaps/
     univ2-standard.ts
     univ3-standard.ts
     univ4.ts
     curve-plain.ts
     curve-underlying.ts
+    dodo-v2.ts
+    ekubo.ts
+    zamm.ts
     balancer-v3.ts
     fluid-dex.ts
-    protocol-conversion.ts
+  protocols/
+    erc4626.ts
+    psm.ts
+    rpl-migration.ts
+    wrapper-conversion.ts
+  liquidity/
+    curve-liquidity.ts
 ```
 
 现有 `listener/src/adapters/*` 保持 action 编码层定位，不搬进 searcher venue 目录。
-高阶实现目录使用 `venues/swaps/`，避免与低阶 opcode `adapters/` 同名。
+flash provider/loan 选择、template 和低阶 flash `ActionAdapter` 保持现状，不进入本轮目录重构。
 
 ## 8. 六步检查矩阵
 
 同一文件可能跨多个阶段；迁移时按阶段验证，而不是只看文件是否编译。
+
+| 步骤 | 新责任边界 |
+|---|---|
+| 1 scanner | `DiscoveryRegistry` → `VenueIdentity` → `GraphBuilder` → `OpportunityEnumerator` |
+| 2 planner | `PathEnumerator` → `RoutePlanner`；family adapter 产出 plan fragment，`compiler.ts` 才编码 action |
+| 3 solver | `QuoteRegistry` → `SizingEngine` → execution-family exact/local quote |
+| 4 fork/revm | `RouteEncoder` → `SimulationRunner` → 通用 state backend；backend 不含 venue dispatch |
+| 5 EV | 独立 `EvEvaluator`，main 只消费统一结果 |
+| 6 replay | 现有 trusted harness；架构 challenger 不得修改输入或成功判据 |
 
 ### 步骤 1 — scanner 自发发现
 
@@ -349,6 +428,8 @@ listener/src/searcher/venues/
 - `listener/src/searcher/solver/plan-builder.ts`
 
 判据：重构前后 `candidate_plans` 数量和路径边序一致；plan 子树按 edge 顺序展开。
+`RoutePlanner` 负责 requirement 去重和 fragment 组装，`plan-builder` 不再含 family switch；
+`compiler.ts` 继续独占 `ActionAdapter.encode`。
 
 ### 步骤 3 — quote 与 sizing
 
@@ -387,6 +468,7 @@ listener/src/searcher/venues/
 - `listener/src/searcher/standing-guard.ts`
 
 判据：calldata 字节一致、模拟成功状态一致、闪电贷归还一致、毛利逐 wei 一致、无 standing position。
+`RouteEncoder` 只消费完整 `ResolvedPlan`，revm/anvil/hybrid backend 只执行统一 calldata 和 state overlay。
 
 ### 步骤 5 — EV 门
 
@@ -407,7 +489,7 @@ trusted harness：
 - `listener/src/searcher/test/blockscan-fork-solve.ts`
 - `listener/src/searcher/test/blockscan-hunt.ts`
 
-纯重构要求等价，不要求伪造 capability flip；harness 在 challenger 中保持不变。unknown factory 新能力另开变更，用同一真实失败样本验证：
+纯重构要求等价，不要求伪造 execution-family flip；harness 在 challenger 中保持不变。unknown factory 新能力另开变更，用同一真实失败样本验证：
 
 ```text
 not_admitted → path_found → final_sim_success
@@ -422,39 +504,43 @@ not_admitted → path_found → final_sim_success
 1. 等所有修改 graph/quoter/plan-builder/main 的在飞 feature/cherry-pick 已合入、放弃或移出重叠文件后，
    从最新 `origin/main` 建立干净 worktree；不得从当前冲突态或旧 feature branch 起重构。
 2. 记录 main SHA、生产 view/universe SHA 和 replay fixture。
-3. 为下表每个即将迁移的 capability 记录 fixture、命令、输入 artifact SHA-256 和基线输出 SHA-256。
+3. 为下表每个即将迁移的 execution family 记录 fixture、命令、输入 artifact SHA-256 和基线输出 SHA-256。
 4. 运行现有 adapter descriptor、planner、quote/math、final verify 和对应 fork harness。
 5. 保存 scanner rings、candidate plans、compiled calldata 和逐 wei profit 作为等价性基线。
 
 验证：现有 harness 全绿；不修改 fixture/harness。缺失的 fixture 必须先在独立 prerequisite
 commit 中补齐并合入 main，再重新冻结重构基线，不能由架构 challenger 同时修改 trusted harness。
 
-#### Capability 等价性 corpus（开工门，不是建议清单）
+#### Execution-family 等价性 corpus（开工门，不是建议清单）
 
 表中的“现有锚点”只是候选输入，不等于已经满足开工门；Phase 0 必须实际运行并记录 receipt。
-迁移单位是 `SwapCapabilityId × production lane`，不是模糊的 venue 品牌。每个被迁 capability
+迁移单位是 `ExecutionFamilyId × production lane`，不是模糊的 venue 品牌。每个被迁 family
 至少需要一个覆盖 graph → quote → plan → compile → final simulation 的 pinned known-good fixture；
-backrun 能力还必须覆盖 impact → postImpact → victimOverlay。
+backrun lane 还必须覆盖其声明的 victim model（pool overlay 或 oracle rawtx）。
 
-| capability | `origin/main` 现有锚点 | Phase 0 状态/动作 |
+| execution family | `origin/main` 现有锚点 | Phase 0 状态/动作 |
 |---|---|---|
-| `univ2-standard` | `blockscan-coffee-f2de7499.json`、`yeti-balancerv1-0ffa9acf.json` | 运行 parameterized loop fork；未得到完整成功锚前不得迁移 |
+| `univ2-standard` | `blockscan-coffee-f2de7499.json`、`yeti-balancerv1-0ffa9acf.json` 都不是可用成功闭环 | **BLOCKED**：先补真正覆盖 V2 graph→final-sim 的 fixture |
 | `univ3-standard` | `rocksolid-balancer-v3-7ce631.json`、`sfrxeth-8756ba5c.json` | 记录 loop fork、逐腿 quote 和 calldata 基线 |
 | `univ4` | `blockscan-coffee-f2de7499.json`、`sfrxeth-8756ba5c.json`、`searcher:validate-v4-quote` | 记录 native/WETH、hook、quote 与多 action calldata 基线 |
 | `curve-plain` | `sfrxeth-8756ba5c.json`、`searcher:curvemath` | 固定 block；记录 local/on-chain quote 与 loop final sim |
-| `curve-underlying` | main 尚无独立 pinned loop fixture | **BLOCKED**：先以独立 prerequisite commit 增加并验证 fixture |
-| `fluid-dex` | `searcher:fluid-dex-verify` | 记录其 pinned tx/block、plan、calldata 与 quote 输出 |
+| `curve-underlying` | `searcher:blockscan-hunt-tx149` 包含 underlying 且断言 final sim | 复用该 pinned receipt，并补齐逐腿 quote/calldata hash |
+| `dodo-v2` | 尚未在 main；在飞 DODO feature 不属于本重构基线 | **BLOCKED**：feature 独立合入 main 并固定 replay 后再迁移 |
+| `fluid-dex` | `searcher:fluid-dex-verify` 只覆盖 plan/calldata/quote | **BLOCKED**：补 final-simulation fixture 后再迁移 |
 | `balancer-v3` / `rocksolid` | `rocksolid-balancer-v3-7ce631.json` | 运行 parameterized loop fork，记录四腿 plan/calldata/profit |
 | `erc4626` | `sfrxeth-8756ba5c.json`、`searcher:blockscan-fork-solve-f391` | 分别覆盖标准与 Silo redeem 形状 |
 | `psm` | `searcher:protocol-loop` | 记录 PSM+Curve 原子闭环与 calldata |
 | `wsteth` | `searcher:wsteth-quote` | **BLOCKED**：quote 单测不足，先增加 closed-loop/final-sim fixture |
 | `metronome` | `searcher:blockscan-fork-solve-metronome` | 记录 oracle victim 前后反事实和 final sim |
 | `goldx` | `searcher:blockscan-hunt-tx149` | 记录 pinned hunt 的 graph/plan/calldata/final-sim 输出 |
+| `liquidity:curve` | gap batch 的 Curve LP lifecycle cohort，main 无统一 end-to-end fixture | **BLOCKED**：按 lifecycle family 固定 add/remove LP replay |
+| `protocol:rpl-migration` / `protocol:cashiva` / `protocol:goldfish` | 对应 feature 尚未全部在 main | **BLOCKED**：各自先独立落地并固定 replay |
+| `compat:fluid-credit` | planner 的 credit absent/present fixtures | 保持 edge/diagnostic 等价，并断言 production submission 继续 fail closed |
 
 #### 并发施工门
 
-1. 同一时刻只允许一个 SwapAdapter capability 迁移 PR；不得把多个 venue 迁移堆在同一 branch。
-2. 每个 phase 开始时从最新 main 重建基线，并对该 phase 的重叠 capability/文件实行短期 ownership；
+1. 同一时刻只允许一个 execution family 迁移 PR；不得把多个 venue/family 迁移堆在同一 branch。
+2. 每个 phase 开始时从最新 main 重建基线，并对该 phase 的重叠 execution family/文件实行短期 ownership；
    新 gap-repair 可以继续做非重叠模块，重叠改动必须等待该 phase 合入后再 rebase。
 3. 禁止把旧 feature commit 直接 cherry-pick 穿过已经重写的 graph/quoter/plan-builder；应在新边界上重放意图。
 4. 如果 main 在 phase 期间出现重叠语义变更，本 phase 立即失效：rebase、重新生成 corpus 基线并重跑等价门。
@@ -464,9 +550,9 @@ backrun 能力还必须覆盖 impact → postImpact → victimOverlay。
 
 新增：
 
-- `venues/swap-adapter.ts`
-- `venues/swap-registry.ts`
-- `venues/production-registry.ts`
+- `venues/route-leg-adapter.ts`
+- `venues/route-leg-registry.ts`
+- `venues/route-adapter-registry.ts`
 - `venues/admission.ts`
 
 改动：集中 main 中重复的 provisional admission 参数；registry 暂不接管生产分发。
@@ -480,10 +566,10 @@ backrun 能力还必须覆盖 impact → postImpact → victimOverlay。
 cache invalidation/restamp 或发布时机；旧 venue 分支仍通过临时 legacy `WarmSpec` 进入同一个 coordinator。
 
 必须先为 startup full warm、incremental changed-pool、reorg/range fallback、logs error、budget timeout
-和“失败时不发布部分 snapshot”建立 characterization assertions。若现有 harness 不覆盖，测试补充作为
+和 partial-pool failure 的 cache/marker 可见性建立 characterization assertions。若现有 harness 不覆盖，测试补充作为
 Phase 0 prerequisite 单独合入 main，然后重新冻结基线。
 
-验证：相同 block/log 输入生成相同 warm plan、RPC request multiset、cache generation 和 scanner 输出；
+验证：相同 block/log 输入生成相同 warm plan、RPC request multiset、cache keys、last-warmed marker 和 scanner 输出；
 `searcher:blockscan-scanner`、`searcher:curve-warm-batch` 及对应 warm/replay gate 全绿。
 
 ### Phase 2 — UniV2 完整纵向迁移
@@ -494,22 +580,21 @@ Phase 0 prerequisite 单独合入 main，然后重新冻结基线。
 - exact quote 与 fee model
 - plan subtree 构建
 - `mid`/`quoteLocal` 的同步读实现与 declarative `WarmSpec`
-- pool impact、victim apply/overlay
 
-核心文件改为 `swapRegistry.forEdge(edge.adapterId)`；alias 索引完成唯一分发，核心文件不再判断
-`univ2-swap`。不在 `TokenEdge` 上同时维护 `adapterId` 和 `swapCapabilityId`。
+核心文件改为 `routeLegRegistry.forEdge(edge.adapterId)`；alias 索引完成唯一分发，核心文件不再判断
+`univ2-swap`。不在 `TokenEdge` 上同时维护 `adapterId` 和 `executionFamilyId`。
 
-验证：V2 scanner、planner、quote、overlay、final sim 等价；`main.ts` 中 UniV2 分支归零。
+验证：V2 scanner、planner、quote、plan fragment 和 final sim 等价；旧 backrun victim 分发暂时保留。
 
-### Phase 3 — UniV3 与 UniV4
+### Phase 3 — UniV3
 
-先迁 UniV3，再迁 UniV4。V4 的 PoolKey、native/WETH alias、hook admission 和 unlock action 展开必须保留在 adapter 内部，不下沉到通用 planner。
+迁移 UniV3 graph、mid/local/exact quote、plan fragment 和 warm spec。
 
-验证：V3 local/fallback quote、V4 hook/native replay 和 calldata 等价。
+验证：V3 local/fallback quote、planner、calldata 和 final sim 等价。
 
 ### Phase 4 — Curve family
 
-拆成至少两个 capability：
+拆成至少两个 execution family：
 
 - `curve-plain`
 - `curve-underlying`
@@ -518,19 +603,41 @@ MetaRegistry identity、coin/index 解析、get_dy 路径、mid、warm 和 plan 
 
 验证：Curve math equivalence、underlying 代表性 fork replay、final verify 逐 wei 一致。
 
-### Phase 5 — 外部报价 DEX 与 protocol conversion
+### Phase 5 — DODO 与 Fluid DEX
 
-依次迁移：
+只有对应 feature 和 fixture 已先独立落到 main，才依次迁移：
 
-1. Fluid DEX
-2. Balancer V3
-3. PSM / ERC4626 / wstETH / RockSolid / Metronome / GoldX
+1. DODO V2
+2. Fluid DEX
 
-protocol conversion 可以复用 descriptor-driven base adapter，但特殊多调用 quote 或复合 plan 必须保留独立 override。
+验证：各自 graph、external/local quote、plan fragment、calldata 和 final sim 等价。
 
-验证：每迁一个 capability，就删除该 capability 在核心文件中的分支并运行对应 replay。
+### Phase 6 — UniV4 与 Balancer V3
 
-### Phase 6 — main.ts 瘦身
+V4 的 PoolKey、native/WETH alias、hook admission 和 unlock/take/settle action fragment 保持在
+`SwapAdapter`；Balancer V3 的 unlock/swap/settle/send-to fragment 同理，不下沉通用 planner。
+
+验证：V4 hook/native replay、Balancer V3/RockSolid loop、calldata 与 final sim 等价。
+
+### Phase 7 — Protocol 与 victim models
+
+1. 迁移 main 已有的 ERC4626、PSM、wstETH、RockSolid、Metronome、GoldX 等
+   `ProtocolConversionAdapter`；RPL/Cashiva/Goldfish 等尚未落 main 的 family 仍是独立后续 feature。
+2. 以 `compat:fluid-credit` 消除 token-graph 的旧 credit switch，但保持 production fail closed。
+3. 最后把 pool-impact/victim-apply/overlay 迁进 `VictimModelRegistry.pool-swap-overlay`，把 Metronome
+   oracle backrun 迁进 `oracle-rawtx`；确认两种模型不会互相要求错误能力。
+
+每迁一个 family/model，就删除对应核心分支并运行其 pinned replay。
+
+### LiquidityAdapter 后续门（不属于本次行为等价 strangler）
+
+Curve `add_liquidity/remove_liquidity_one_coin` 当前没有 runtime `SlotKind`，不能仅靠新增类名伪装成已支持。
+它也不等同于 JIT-LP：gap batch 中存在把 LP token 作为原子闭环中间资产的 position-conserving lifecycle。
+后续 execution-family change 必须先确定 runtime taxonomy（新 liquidity slot，或明确的 protocol mint_lp/burn_lp
+语义）、让 final guard 验证整条 route 最终不残留 LP token/头寸，并用 Curve LP lifecycle pinned replay
+证明 add→route→remove 闭环。完成前 `RouteAdapterRegistry.routeLegs.liquidity` 保持空，不参与 production admission。
+
+### Phase 8 — main.ts 瘦身
 
 adapter 迁移完成后再拆 orchestration：
 
@@ -565,8 +672,8 @@ main.ts
 约束：
 
 1. factory/registry 地址只能是身份来源或 provenance，不能替代反向验证。
-2. `force-include` 只影响候选覆盖，不能绕过 identity/capability/final sim。
-3. unknown capability 不能静默套用默认 fee、quoter 或 calldata 语义。
+2. `force-include` 只影响候选覆盖，不能绕过 identity/execution-family/final sim。
+3. unknown execution family 不能静默套用默认 fee、quoter 或 calldata 语义。
 4. 所有 provisional 路径在事件和日志中携带 confidence/source。
 
 ## 11. 验证合同
@@ -587,7 +694,7 @@ npm run searcher:finaloverlayequiv
 npm run searcher:finalverifygate
 ```
 
-并按 Phase 0 corpus 表运行该 capability 的 pinned math/quote/fork replay；receipt、输入 hash 和输出 hash
+并按 Phase 0 corpus 表运行该 execution family 的 pinned math/quote/fork replay；receipt、输入 hash 和输出 hash
 必须绑定同一 baseline/challenger SHA。等价性判据：
 
 - scanner rings 相同
@@ -597,7 +704,7 @@ npm run searcher:finalverifygate
 - gas/profit 口径相同
 - gross/net profit 逐 wei 相同
 - 每条 edge 的 `adapterId`、`slotKind`、`protocolAction`、`edgeKind`、`leavesStandingPosition` 相同
-- warm request multiset、snapshot block/generation 和失败时的 fail-closed 行为相同
+- warm request multiset、cache keys、last-warmed marker、partial failure 和 fail-closed 行为相同
 
 ### unknown factory 能力变化
 
@@ -619,16 +726,19 @@ verdict:
 
 新增 adapter conformance suite，启动和 CI 均检查：
 
-1. `SwapCapabilityId` 唯一。
-2. 每个现有 `TokenEdge.adapterId` alias 唯一映射到一个 `SwapCapabilityId`，不存在双键漂移。
+1. `ExecutionFamilyId` 唯一，route-leg kind 与子 registry 一致。
+2. 每个现有 `TokenEdge.adapterId` alias 唯一映射到一个 `ExecutionFamilyId`，不存在双键漂移。
 3. 所有生产 pool descriptor 都能解析到一个 adapter，adapter 产出的 edge alias 必须反解回自身。
 4. adapter 生成的 action IDs 均存在于 ActionAdapter registry。
-5. block-scan/backrun lane 的必需能力没有空缺；backrun 明确校验 impact/postImpact/overlay 三段。
+5. block-scan/backrun lane 的必需能力没有空缺；backrun 按声明分别校验 pool-swap-overlay 或
+   oracle-rawtx victim model，不要求每个 route adapter 实现 overlay。
 6. `mid` / `quoteLocal` 的类型签名不允许 Promise，且在 instrumentation test 中不产生 I/O。
-7. 每条 edge 的 `edgeKind` / `leavesStandingPosition` 必须等于
-   `deriveEdgeTaxonomy(slotKind, protocolAction)`，adapter 不得独立覆盖安全位。
-8. adapter 的 edge token 顺序、quote token 顺序和 plan token 顺序一致。
-9. 任何 unsupported capability 都有稳定 drop reason，而不是落入默认分支。
+7. registry wrapper 对每次动态 `buildEdges` 校验 allowed taxonomy，并重新派生
+   `edgeKind` / `leavesStandingPosition`；final guard 同样重新派生，不能只做启动测试。
+8. adapter 的 edge token 顺序、quote token 顺序和 plan token 顺序一致；plan fragment 的 requirements
+   经共享 assembler 去重后与基线 sibling action 顺序一致。
+9. `compat:fluid-credit` 保持 graph/diagnostic fixture 等价，但 production submission 稳定拒绝。
+10. 任何 unsupported family 都有稳定 drop reason，而不是落入默认分支。
 
 ## 13. 风险与回滚
 
@@ -636,7 +746,7 @@ verdict:
 
 - adapter 接口过胖，最终只是把 switch 搬进一个文件。
 - optional method 漏接导致某 lane 静默丢路径。
-- identity 与 capability 再次合并，使 known factory allowlist 变成准入门。
+- identity 与 execution family 再次合并，使 known factory allowlist 变成准入门。
 - pure refactor 同时改变 quote/fallback/ranking，无法定位行为差异。
 - side-effect registry 导致测试顺序依赖。
 - warm scheduler 与 adapter 同时持有 TTL/reorg/last-warmed 状态，产生部分 snapshot 或重复请求。
@@ -644,13 +754,13 @@ verdict:
 
 控制措施：
 
-1. 按 capability 纵向迁移，一次只迁一个协议族。
+1. 按 execution family 纵向迁移，一次只迁一个 family。
 2. 每阶段保持旧实现可回切，等价性通过后才删除旧分支。
 3. registry 显式构造并冻结，测试使用独立 registry 实例。
 4. 任何输出差异先判定为重构回归，不解释成“优化”。
 5. 每个阶段独立 commit，可按阶段 revert，不做 big-bang 合并。
 6. warm 调度状态只有 coordinator 一个 owner；adapter 只提供 `WarmSpec`。
-7. 每 phase 使用短期文件/capability ownership，main 重叠变化后废弃旧基线并重新验证。
+7. 每 phase 使用短期文件/execution-family ownership，main 重叠变化后废弃旧基线并重新验证。
 
 ## 14. Definition of Done
 
@@ -660,77 +770,14 @@ verdict:
 - [ ] `token-graph.ts` 只协调 pool→edge，不包含 per-venue switch。
 - [ ] `quoter.ts` 只提供通用入口/共享数学，不包含 per-venue dispatch switch。
 - [ ] `plan-builder.ts` 只协调 path 和公共 approve/guard/flash 语义，不包含 per-venue plan switch。
-- [ ] warm、impact、victim overlay 通过同一 SwapAdapter capability 查找。
-- [ ] warm coordinator 是 TTL/reorg/deadline/snapshot generation 的唯一 owner；scanner 热读无 I/O。
+- [ ] 已迁移的 swap/protocol leg 只依赖各自 `RouteLegAdapter` 子接口；liquidity 子 registry 在后续门完成前为空，flash 架构保持基线不变。
+- [ ] warm 通过 route-leg family 查找，victim 通过独立 VictimModelRegistry 查找。
+- [ ] warm coordinator 是 TTL/reorg/deadline/last-warmed 的唯一 owner；scanner 热读无 I/O。
 - [ ] identity admission policy 只有一个生产配置入口。
 - [ ] unknown V2/V3 的身份、能力、fee/quote confidence 均可审计。
-- [ ] `TokenEdge.adapterId` 保持跨系统稳定，alias 唯一；未新增会漂移的 edge capability 双键。
-- [ ] 所有 edge safety taxonomy 只由 `deriveEdgeTaxonomy` 派生，重构前后逐 edge 相同。
+- [ ] `TokenEdge.adapterId` 保持跨系统稳定，alias 唯一；未新增会漂移的 edge family 双键。
+- [ ] 动态 edge 和 final guard 都重新执行 taxonomy/allowed-family 校验，重构前后逐 edge 相同。
 - [ ] 新增一个标准兼容 DEX 不需要修改 main、graph、quoter、plan-builder。
 - [ ] trusted harness 未被架构 challenger 修改。
-- [ ] Phase 0 corpus 表中每个被迁 capability/lane 都有成功 receipt，scanner、plan、calldata 和 final profit 等价。
+- [ ] Phase 0 corpus 表中每个被迁 family/lane 都有成功 receipt，scanner、plan、calldata 和 final profit 等价。
 - [ ] final simulation 和 EV gate 继续 fail closed。
-
----
-
-## 17. 第二位 reviewer(Sol)架构审阅 — 收敛点 + 仍存盲点
-
-Sol 独立审阅,与本 plan **收敛到同一两层拆分**(`PoolIdentity`/`ExecutionFamily` ≈ 本 plan 的 `VenueId`/`SwapCapabilityId`),验证方向稳。Sol 未动存在冲突的生产 worktree(正确 —— 印证 H3:核心文件正被多分支漂移,非落地时机)。
-
-### 采纳 Sol 的增量:六步责任组件分解(比 §8 更细,折进 §8)
-
-| 步骤 | 责任组件(main 只组装/调用,不含 venue 分支) |
-|---|---|
-| 1 scanner | DiscoveryRegistry · VenueIdentity · GraphBuilder · OpportunityEnumerator |
-| 2 planner | PathEnumerator · RoutePlanner;plan-builder 只编译 plan |
-| 3 solver | QuoteRegistry · SizingEngine · 各 execution family 的 quote |
-| 4 fork sim | RouteEncoder · SimulationRunner · 通用 revm backend |
-| 5 EV | 独立 EvEvaluator;main 只调用 |
-| 6 replay | 现有 trusted harness,challenger 不得修改 |
-
-Sol 的 PanoramaSwap 探测清单(token0/token1/getReserves/swap 形状/储备变化/fee 规则/calldata,**fee 不默认 997/1000**,final sim 强门)与 §6 一致,并入 §6 作为 V2 探测的最小集。
-
-### Sol 仍漏的两个高危(与 §16 H7 / §15 H1 重合 —— 两位 reviewer 都漏,更须显式钉进正文)
-
-- **H7(安全位)**:Sol 六步责任表未提 `slotKind/edgeKind/leavesStandingPosition/deriveEdgeTaxonomy`。"新增标准 V2 只进 identity/discovery 数据"未保证这些 edge 的 `leavesStandingPosition` 仍经 `deriveEdgeTaxonomy` 派生 → 孤立安全位 = S2 guard 绕过风险。**两位独立 reviewer 同漏,证明此条隐蔽,必须成为 §3 + §12 的硬约束。**
-- **H1(sync 契约)**:Sol 步骤 3 "QuoteRegistry / 各 family 的 quote" 未区分 `prewarm`(async,每块一次)vs 热循环 `mid`(sync,每块上千次)。async-agnostic 的责任分解会在热路径回归延迟。QuoteRegistry 必须内建 prewarm/sync-read 分层。
-
-### 结论(汇总两位 reviewer + 两轮)
-方向三方收敛(plan / fable / Sol),稳。落地前**正文必修**:H1(sync 分层)、H2(warm 协调器提前)、H3(与 feature work 串行化 + feature 冻结窗口)、H7(deriveEdgeTaxonomy 安全位对齐)。采纳 Sol 的六步责任组件分解 + V2 探测最小集。H4/H5/H6 收尾。
-**时机**:核心文件(token-graph/quoter/plan-builder/main)现被 ~10 条未合并 ab/* 分支漂移;须先收敛在飞 feature、开 feature 冻结窗口,再起 strangler。plan ready,timing not。
-
----
-
-## 18. 四类 RouteLegAdapter 分类(Sol)— 采纳,但校准 LiquidityAdapter 与 taxonomy
-
-Sol 提议按 leg 领域语义分四类(不硬塞 union),**采纳**——比单一 `SwapVenue` 或 `Venue{edgeKind}` 清晰:
-
-```
-RouteLegAdapter
-├── SwapAdapter            (UniV2/V3/V4 · Curve swap · DODO/Ekubo/zAMM · Balancer/Fluid)
-├── ProtocolConversionAdapter (ERC4626 · PSM · RPL migration · wrapper mint/burn …)
-├── LiquidityAdapter       (Curve add/remove_liquidity_one_coin)   ← 见下,占位不实现
-└── FlashAdapter           (Balancer/Aave/Morpho flash)
-RouteAdapterRegistry = { SwapAdapterRegistry, ProtocolAdapterRegistry, LiquidityAdapterRegistry, FlashAdapterRegistry }
-```
-底层 `ActionAdapter` 继续只编码 BotVM action。main/graph/quoter/planner 只面向统一 `RouteLegAdapter`。
-
-### 与现有 SlotKind/EdgeKind 的对齐(必须核对,防平行分类=H7 重犯)
-
-| 类别 | SlotKind → EdgeKind | 状态 |
-|---|---|---|
-| SwapAdapter | `swap` → `swap` | ✓ 对齐,重构现有 |
-| ProtocolConversionAdapter | `protocol` → `protocol` | ✓ 对齐,**复用现有 descriptor 框架**(adapter-descriptors/protocol-legs/makeProtocolAdapter,srUSDe/GOLDx/PSM 已在);是 formalize 既有,不是新建,风险低 |
-| FlashAdapter | `flash` → `flash` | ✓ 对齐 |
-| **LiquidityAdapter** | **无对应 SlotKind → `lp`** | ✗ 见下 |
-
-### 🟡 H8(新)— LiquidityAdapter 无 runtime slot,应占位不实现(同 credit)
-
-代码核实:`EdgeKind.lp` 明文"reserved analysis vocabulary, **never derived from a runtime slot**";无 `SlotKind` 对应;Curve `add_liquidity/remove_liquidity` 当前**零 adapter 零 quote**。要让它成 runtime leg 须:新增一个 `SlotKind` + 把 `lp` 翻成可派生 + **给 `deriveEdgeTaxonomy` 定 LP 腿的 `leavesStandingPosition`**(加流动性拿 LP token = 留仓位,与 credit 同类)。这是 H7 安全派生面,不能静默。且 **JIT-LP 在 Mission 之外**。
-**结论**:LiquidityAdapter **接口占位、不进本次 strangler 迁移**(与 credit 同待遇,留门不实现)。本次只迁 Swap/ProtocolConversion/Flash 三类(它们都对齐既有 slotKind + 有现成代码)。
-
-### H7 对四类全适用(强化)
-`RouteAdapterRegistry` 每个子 registry 产的 edge 都必须经 `deriveEdgeTaxonomy` 派生 `edgeKind`/`leavesStandingPosition`,永不独立写 —— swap→false、protocol→按 protocolAction、credit/lp→true。四类拆分让"安全位统一派生"更关键,§12 conformance 的 leavesStandingPosition 断言覆盖全部四类。
-
-### 结论(本轮)
-四类分法采纳(领域语义清晰)。本次迁移范围 = **Swap + ProtocolConversion + Flash 三类**;LiquidityAdapter/credit 仅接口占位不实现(H8/§15)。ProtocolConversion 是 formalize 既有 descriptor,非新建。安全位 H7 覆盖四类。时机不变:先冻结 feature、核心文件停漂再起。
