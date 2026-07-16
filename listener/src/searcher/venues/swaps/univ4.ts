@@ -15,6 +15,7 @@ import type {
 } from "../route-leg-adapter.js";
 import { readV4WarmMid } from "../mid-readers.js";
 import { createUniV4SwapObservation } from "../swap-observation.js";
+import { UNIV4_INITIALIZE_TOPIC } from "../landed-event-registry.js";
 import {
   int24,
   normalizeV4Currency,
@@ -36,9 +37,6 @@ const UNISWAP_UNIVERSAL_ROUTER_V2 = "0x66a9893cc07d91d95644aedd05d03f95e1dba8af"
 const initializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
-const INITIALIZE_TOPIC = ethers.id(
-  "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
-);
 const poolKeyCache = new Map<string, V4PoolKey>();
 
 export const uniV4QuoterIface = new ethers.Interface([
@@ -365,7 +363,7 @@ async function resolveV4PoolKey(pool: PoolEntry, backend: TokenQueryBackend): Pr
     if (cached) return cached;
     const logs = await backend.getLogs({
       address: ADDR.UNISWAP_V4_POOL_MANAGER,
-      topics: [INITIALIZE_TOPIC, normalizeBytes32(pool.poolId, "poolId")],
+      topics: [UNIV4_INITIALIZE_TOPIC, normalizeBytes32(pool.poolId, "poolId")],
       fromBlock: V4_POOL_MANAGER_DEPLOY_BLOCK,
       toBlock: "latest",
     });

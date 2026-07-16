@@ -2,6 +2,28 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { v4PoolId } from "./swaps/univ4-common.js";
+import {
+  BALANCER_V3_SWAP_TOPIC,
+  CURVE_TOKEN_EXCHANGE_TOPICS,
+  LANDED_SWAP_EVENTS,
+  PANCAKE_V3_SWAP_TOPIC,
+  UNIV2_SWAP_TOPIC,
+  UNIV2_SYNC_TOPIC,
+  UNIV3_SWAP_TOPIC,
+  UNIV4_SWAP_TOPIC,
+  landedSwapEventsForFamily,
+  landedSwapTopicsForFamily,
+  observedLandedPoolIdentity,
+} from "./landed-event-registry.js";
+export {
+  BALANCER_V3_SWAP_TOPIC,
+  CURVE_TOKEN_EXCHANGE_TOPICS,
+  PANCAKE_V3_SWAP_TOPIC,
+  UNIV2_SWAP_TOPIC,
+  UNIV2_SYNC_TOPIC,
+  UNIV3_SWAP_TOPIC,
+  UNIV4_SWAP_TOPIC,
+} from "./landed-event-registry.js";
 
 export interface PoolImpact {
   pool: string;
@@ -63,28 +85,6 @@ export interface SwapObservationCapability {
   decodeSwapImpacts(ctx: SwapObservationContext): Promise<readonly ObservedSwapImpact[]>;
 }
 
-export const UNIV2_SWAP_TOPIC = ethers.id(
-  "Swap(address,uint256,uint256,uint256,uint256,address)",
-).toLowerCase();
-export const UNIV2_SYNC_TOPIC = ethers.id("Sync(uint112,uint112)").toLowerCase();
-export const UNIV3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,int256,int256,uint160,uint128,int24)",
-).toLowerCase();
-export const PANCAKE_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
-).toLowerCase();
-export const UNIV4_SWAP_TOPIC = ethers.id(
-  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
-).toLowerCase();
-export const BALANCER_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
-).toLowerCase();
-export const CURVE_TOKEN_EXCHANGE_TOPICS = Object.freeze([
-  ethers.id("TokenExchange(address,int128,uint256,int128,uint256)").toLowerCase(),
-  ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)").toLowerCase(),
-  ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)").toLowerCase(),
-]);
-
 const univ2PairIface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
   "function token0() view returns (address)",
@@ -95,8 +95,9 @@ export function createUniV2SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
 }): SwapObservationCapability {
+  const topics = landedSwapTopicsForFamily("univ2-standard");
   return Object.freeze({
-    topics: [UNIV2_SWAP_TOPIC],
+    topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity: addressEmitterPoolIdentity,
     async decodeSwapImpacts(ctx: SwapObservationContext) {
@@ -146,7 +147,7 @@ export function createUniV3SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
 }): SwapObservationCapability {
-  const topics = [UNIV3_SWAP_TOPIC, PANCAKE_V3_SWAP_TOPIC];
+  const topics = landedSwapTopicsForFamily("univ3-standard");
   return Object.freeze({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
@@ -192,9 +193,10 @@ export function createCurveSwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
 }): SwapObservationCapability {
-  const topicSet = new Set(CURVE_TOKEN_EXCHANGE_TOPICS);
+  const topics = landedSwapTopicsForFamily("curve-plain");
+  const topicSet = new Set(topics);
   return Object.freeze({
-    topics: CURVE_TOKEN_EXCHANGE_TOPICS,
+    topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity: addressEmitterPoolIdentity,
     async decodeSwapImpacts(ctx: SwapObservationContext) {
@@ -242,13 +244,12 @@ export function createUniV4SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
 }): SwapObservationCapability {
+  const events = landedSwapEventsForFamily("univ4");
   return Object.freeze({
-    topics: [UNIV4_SWAP_TOPIC],
+    topics: landedSwapTopicsForFamily("univ4"),
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity(log: SwapEventLog) {
-      return topic0(log) === UNIV4_SWAP_TOPIC && sameAddress(log.address, ADDR.UNISWAP_V4_POOL_MANAGER)
-        ? log.topics[1]?.toLowerCase() ?? null
-        : null;
+      return observedFamilyPoolIdentity(events, log);
     },
     async decodeSwapImpacts(ctx: SwapObservationContext) {
       const impacts: ObservedSwapImpact[] = [];
@@ -316,13 +317,12 @@ export function createBalancerV3SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
 }): SwapObservationCapability {
+  const events = landedSwapEventsForFamily("balancer-v3");
   return Object.freeze({
-    topics: [BALANCER_V3_SWAP_TOPIC],
+    topics: landedSwapTopicsForFamily("balancer-v3"),
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity(log: SwapEventLog) {
-      return topic0(log) === BALANCER_V3_SWAP_TOPIC && sameAddress(log.address, ADDR.BALANCER_V3_VAULT)
-        ? indexedAddress(log.topics[1])?.toLowerCase() ?? null
-        : null;
+      return observedFamilyPoolIdentity(events, log);
     },
     async decodeSwapImpacts(ctx: SwapObservationContext) {
       const impacts: ObservedSwapImpact[] = [];
@@ -361,6 +361,17 @@ export function createBalancerV3SwapObservation(input: {
       return impacts;
     },
   });
+}
+
+function observedFamilyPoolIdentity(
+  events: readonly typeof LANDED_SWAP_EVENTS[number][],
+  log: SwapEventLog,
+): string | null {
+  for (const event of events) {
+    const identity = observedLandedPoolIdentity(event, log);
+    if (identity !== null) return identity;
+  }
+  return null;
 }
 
 export function decodeUniV2SwapData(data: string): {

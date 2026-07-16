@@ -21,6 +21,7 @@ import {
   IdentityResolverRegistry,
   type IdentityResolverDescriptor,
 } from "./identity.js";
+import { assertLandedEventCoverage } from "./landed-event-registry.js";
 
 export interface LegacyRouteEdgeDescriptor {
   readonly edgeAdapterId: string;
@@ -107,3 +108,5 @@ assertIdentityResolverCoverage(
   PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
   PRODUCTION_IDENTITY_RESOLVERS,
 );
+
+assertLandedEventCoverage(PRODUCTION_ROUTE_ADAPTERS.swaps);

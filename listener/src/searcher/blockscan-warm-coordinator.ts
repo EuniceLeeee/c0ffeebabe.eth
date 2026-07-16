@@ -5,59 +5,12 @@ import { v4PoolId, type TokenEdge } from "./planner/token-graph.js";
 import type { PoolStateCache } from "./solver/pool-state-cache.js";
 import type { PoolStateUpdater } from "./solver/pool-state-updater.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
-
-const V2_SYNC_TOPIC = ethers.id("Sync(uint112,uint112)");
-const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
-const V3_MINT_TOPIC = ethers.id("Mint(address,address,int24,int24,uint128,uint256,uint256)");
-const V3_BURN_TOPIC = ethers.id("Burn(address,int24,int24,uint128,uint256,uint256)");
-const PANCAKE_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
-);
-const V4_SWAP_TOPIC = ethers.id(
-  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
-);
-const BALANCER_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
-);
-const V4_MODIFY_LIQUIDITY_TOPIC = ethers.id(
-  "ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)",
-);
-const CURVE_N_COINS = [2, 3, 4, 5, 6, 7, 8] as const;
-const CURVE_STATIC_LIQUIDITY_TOPICS = CURVE_N_COINS.flatMap((n) => [
-  ethers.id(`AddLiquidity(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
-  ethers.id(`RemoveLiquidity(address,uint256[${n}],uint256[${n}],uint256)`),
-  ethers.id(`RemoveLiquidityImbalance(address,uint256[${n}],uint256[${n}],uint256,uint256)`),
-]);
-const CURVE_EVENT_TOPICS = [
-  ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"),
-  ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
-  ethers.id("TokenExchangeUnderlying(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("AddLiquidity(address,uint256[],uint256[],uint256,uint256)"),
-  ethers.id("RemoveLiquidity(address,uint256[],uint256[],uint256)"),
-  ethers.id("RemoveLiquidityImbalance(address,uint256[],uint256[],uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,int128,uint256,uint256,uint256)"),
-  ethers.id("RemoveLiquidityOne(address,uint256,uint256,uint256,uint256)"),
-  ethers.id("RampA(uint256,uint256,uint256,uint256)"),
-  ethers.id("StopRampA(uint256,uint256)"),
-  ethers.id("ApplyNewFee(uint256,uint256)"),
-  ethers.id("NewFee(uint256,uint256)"),
-  ethers.id("SetNewMATime(uint256,uint256)"),
-  ...CURVE_STATIC_LIQUIDITY_TOPICS,
-];
-const WARM_EVENT_TOPICS = [
-  V2_SYNC_TOPIC,
-  V3_SWAP_TOPIC,
-  V3_MINT_TOPIC,
-  V3_BURN_TOPIC,
-  PANCAKE_V3_SWAP_TOPIC,
-  V4_SWAP_TOPIC,
-  V4_MODIFY_LIQUIDITY_TOPIC,
+import {
   BALANCER_V3_SWAP_TOPIC,
-  ...CURVE_EVENT_TOPICS,
-];
+  LANDED_WARM_EVENT_TOPICS,
+  UNIV4_MODIFY_LIQUIDITY_TOPIC,
+  UNIV4_SWAP_TOPIC,
+} from "./venues/landed-event-registry.js";
 
 const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
 
@@ -197,7 +150,7 @@ async function detectChangedPools(
   const logs = await provider.getLogs({
     fromBlock,
     toBlock,
-    topics: [WARM_EVENT_TOPICS],
+    topics: [[...LANDED_WARM_EVENT_TOPICS]],
   });
 
   const changedKeys = new Set<string>();
@@ -215,7 +168,7 @@ async function detectChangedPools(
     const topic0 = log.topics[0]?.toLowerCase();
     if (
       pool === ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase() &&
-      (topic0 === V4_SWAP_TOPIC || topic0 === V4_MODIFY_LIQUIDITY_TOPIC)
+      (topic0 === UNIV4_SWAP_TOPIC || topic0 === UNIV4_MODIFY_LIQUIDITY_TOPIC)
     ) {
       const poolId = log.topics[1]?.toLowerCase();
       if (poolId) {

@@ -43,6 +43,7 @@ import {
   PRODUCTION_ROUTE_ADAPTERS,
 } from "./venues/production-registry.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
+import { isLandedSwapTopic } from "./venues/landed-event-registry.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
 import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import {
@@ -2026,11 +2027,7 @@ async function handleHint(
         data: log.data,
       }));
       // Debug: classify receipt log events
-      const SWAP_TOPICS_DEBUG = new Set([
-        "0xd78ad95ff46318e747eaa5cff20e23073340ceaa01c11f3ebc2f1e60f7ee5c52", // UniV2 Swap
-        "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67", // UniV3 Swap
-      ]);
-      const swapCount = eventLogs.filter((l) => SWAP_TOPICS_DEBUG.has(l.topics[0]?.toLowerCase() ?? "")).length;
+      const swapCount = eventLogs.filter((log) => isLandedSwapTopic(log.topics[0])).length;
       const xferCount = eventLogs.filter((l) => l.topics[0]?.toLowerCase() === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").length;
       console.log(
         `[searcher/live] ${txHash.slice(0, 10)} receipt: ${eventLogs.length} logs (${xferCount} Transfer, ${swapCount} Swap)`,

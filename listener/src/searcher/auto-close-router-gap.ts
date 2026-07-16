@@ -7,6 +7,10 @@ import {
   DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
 } from "./force-include.js";
 import { buildMempoolToAddressFilter } from "./main.js";
+import {
+  landedSwapEventsForTopic,
+  observedLandedPoolIdentity,
+} from "./venues/landed-event-registry.js";
 
 export type ResolveSourceSwapToFn = (
   txHash: string,
@@ -32,11 +36,6 @@ export interface AutoCloseRouterGapResult {
   skippedNonComparable: string[];
   failed: { hash: string; error: string }[];
 }
-
-const V2_SWAP_TOPIC0 = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822";
-const V3_SWAP_TOPIC0 = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
-const V4_SWAP_TOPIC0 = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
-const SWAP_TOPIC0S = new Set([V2_SWAP_TOPIC0, V3_SWAP_TOPIC0, V4_SWAP_TOPIC0]);
 
 const DEFAULT_AUTO_CLOSE_ROUTER_FINDINGS_PATH = resolve(
   "searcher",
@@ -291,16 +290,14 @@ function appendAdmitted(out: string[], seen: Set<string>, address: string): void
 function swapPoolEmitters(logs: Iterable<{ address: string; topics: readonly string[] }>): Set<string> {
   const pools = new Set<string>();
   for (const log of logs) {
-    if (!isSwapLog(log)) continue;
-    const address = normalizeAddress(log.address);
-    if (address) pools.add(address.toLowerCase());
+    const topic0 = log.topics[0];
+    if (typeof topic0 !== "string") continue;
+    for (const event of landedSwapEventsForTopic(topic0)) {
+      const identity = observedLandedPoolIdentity(event, log);
+      if (identity) pools.add(identity);
+    }
   }
   return pools;
-}
-
-function isSwapLog(log: { topics: readonly string[] }): boolean {
-  const topic0 = log.topics[0];
-  return typeof topic0 === "string" && SWAP_TOPIC0S.has(topic0.toLowerCase());
 }
 
 function parseRpcReceipts(value: unknown): ParsedRpcReceipt[] {

@@ -11,17 +11,16 @@ import {
   resolveV4PoolKeyViaPositionManager,
   type RawLog,
 } from "./build-active-pool-universe.js";
+import {
+  BALANCER_V3_SWAP_TOPIC,
+  UNIV4_INITIALIZE_TOPIC,
+  UNIV4_SWAP_TOPIC,
+} from "./venues/landed-event-registry.js";
+import { scanAddressLandedSwapActivity } from "./venues/landed-event-scanner.js";
 
 // Factory event topics
 const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
 const UNIV3_POOL_CREATED = ethers.id("PoolCreated(address,address,uint24,int24,address)");
-const BALANCER_V3_SWAP = ethers.id("Swap(address,address,address,uint256,uint256,uint256,uint256)");
-const UNIV4_INITIALIZE = ethers.id(
-  "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
-);
-const UNIV4_SWAP = ethers.id(
-  "Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)",
-);
 
 // ─── Factory-based full pool indexing ───────────────────────
 
@@ -138,26 +137,6 @@ async function getFactoryLogs(
   }
 }
 
-// Swap topics discover candidate shapes. factory()/MetaRegistry records identity provenance.
-
-type DiscoveredAdapter = "univ2" | "univ3" | "curve" | "curve-underlying" | "balancer-v3";
-
-const SWAP_TOPICS: { topic: string; adapter: DiscoveredAdapter }[] = [
-  // UniV3
-  { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"), adapter: "univ3" },
-  // PancakeSwap V3 — UniV3-lineage clone; its Swap event adds protocolFeesToken0/1 so the topic differs
-  // (0x19b47279…, cast-verified against coffee's pancake pools). Same swap/slot0/tick interface ⇒ univ3
-  // Topics only discover candidates. Known factories select their proven adapter;
-  // unproven factories retain this shape provisionally until graph build/final sim.
-  { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"), adapter: "univ3" },
-  // V2-shaped candidate. An identical event does not prove a compatible invariant.
-  { topic: ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"), adapter: "univ2" },
-  // Curve — multiple event signatures across pool versions
-  { topic: ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"), adapter: "curve" },
-  { topic: ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"), adapter: "curve" },
-  { topic: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"), adapter: "curve-underlying" },
-];
-
 const LOG_BATCH = 50;
 const RETRY_LOG_BATCH = 10;
 
@@ -177,27 +156,13 @@ export async function scanActivePools(
   const latest = toBlock ?? await provider.getBlockNumber();
   const fromBlock = Math.max(0, latest - blocksBack);
 
-  const poolCounts = new Map<
-    string,
-    { adapterCounts: Map<DiscoveredAdapter, number>; count: number }
-  >();
-
-  for (const { topic, adapter } of SWAP_TOPICS) {
-    for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
-      const end = Math.min(start + LOG_BATCH - 1, latest);
-      const logs = await getLogsWithSplitRetry(provider, topic, start, end);
-      for (const log of logs) {
-        const addr = log.address.toLowerCase();
-        const existing = poolCounts.get(addr);
-        if (existing) {
-          existing.count++;
-          existing.adapterCounts.set(adapter, (existing.adapterCounts.get(adapter) ?? 0) + 1);
-        } else {
-          poolCounts.set(addr, { adapterCounts: new Map([[adapter, 1]]), count: 1 });
-        }
-      }
-    }
-  }
+  const addressScan = await scanAddressLandedSwapActivity({
+    fromBlock,
+    toBlock: latest,
+    batchSize: LOG_BATCH,
+    getLogs: (event, start, end) => getLogsWithSplitRetry(provider, event.topic, start, end),
+  });
+  const poolCounts = addressScan.activity;
 
   for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
     const end = Math.min(start + LOG_BATCH - 1, latest);
@@ -212,7 +177,12 @@ export async function scanActivePools(
           existing.count++;
           existing.adapterCounts.set("balancer-v3", (existing.adapterCounts.get("balancer-v3") ?? 0) + 1);
         } else {
-          poolCounts.set(addr, { adapterCounts: new Map([["balancer-v3", 1]]), count: 1 });
+          poolCounts.set(addr, {
+            address: ethers.getAddress(addr),
+            adapterCounts: new Map([["balancer-v3", 1]]),
+            count: 1,
+            lastSwapBlock: 0,
+          });
         }
       } catch { /* malformed indexed pool */ }
     }
@@ -223,8 +193,8 @@ export async function scanActivePools(
   for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
     const end = Math.min(start + LOG_BATCH - 1, latest);
     const [initialize, swaps] = await Promise.all([
-      getV4LogsWithSplitRetry(provider, UNIV4_INITIALIZE, start, end),
-      getV4LogsWithSplitRetry(provider, UNIV4_SWAP, start, end),
+      getV4LogsWithSplitRetry(provider, UNIV4_INITIALIZE_TOPIC, start, end),
+      getV4LogsWithSplitRetry(provider, UNIV4_SWAP_TOPIC, start, end),
     ]);
     v4InitializeLogs.push(...initialize);
     v4SwapLogs.push(...swaps);
@@ -304,8 +274,8 @@ async function getV4LogsWithSplitRetry(
 }
 
 function bestAdapter(
-  adapterCounts: Map<DiscoveredAdapter, number>,
-): DiscoveredAdapter {
+  adapterCounts: Map<PoolEntry["adapter"], number>,
+): PoolEntry["adapter"] {
   return [...adapterCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
@@ -319,7 +289,7 @@ async function getBalancerV3LogsWithSplitRetry(
       address: ADDR.BALANCER_V3_VAULT,
       fromBlock: "0x" + fromBlock.toString(16),
       toBlock: "0x" + toBlock.toString(16),
-      topics: [BALANCER_V3_SWAP],
+      topics: [BALANCER_V3_SWAP_TOPIC],
     }]);
   } catch {
     if (fromBlock >= toBlock) return [];

@@ -4,6 +4,15 @@ import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import {
+  CURVE_TOKEN_EXCHANGE_TOPICS,
+  LANDED_MUTATION_EVENTS,
+  LANDED_SWAP_EVENTS,
+  LANDED_WARM_EVENT_TOPICS,
+  assertLandedEventCoverage,
+  isLandedSwapTopic,
+} from "../venues/landed-event-registry.js";
+import { scanAddressLandedSwapActivity } from "../venues/landed-event-scanner.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -131,6 +140,7 @@ async function testCrossFamilyReceiptOrder(): Promise<void> {
 }
 
 function testRegistryConformance(): void {
+  assertLandedEventCoverage(PRODUCTION_ROUTE_ADAPTERS.swaps);
   for (const adapter of PRODUCTION_ROUTE_ADAPTERS.swaps) {
     assert(adapter.observation.topics.length > 0, `${adapter.id} observation topics`);
     assert(
@@ -138,6 +148,60 @@ function testRegistryConformance(): void {
       `${adapter.id} canonical intake targets`,
     );
   }
+  assert(CURVE_TOKEN_EXCHANGE_TOPICS.length === 4, "all Curve plain/underlying swap topics");
+  assert(
+    LANDED_SWAP_EVENTS.every((event) => isLandedSwapTopic(event.topic)),
+    "debug swap classification must derive from landed events",
+  );
+  const warmTopics = new Set(LANDED_WARM_EVENT_TOPICS);
+  assert(
+    LANDED_MUTATION_EVENTS.every((event) => warmTopics.has(event.topic)),
+    "warm invalidation must contain every landed mutation event",
+  );
+  assert(
+    LANDED_SWAP_EVENTS
+      .filter((event) => event.invalidatesWarmState)
+      .every((event) => warmTopics.has(event.topic)),
+    "warm invalidation must contain every state-changing swap event",
+  );
+  let missingEventError = "";
+  try {
+    assertLandedEventCoverage([
+      ...PRODUCTION_ROUTE_ADAPTERS.swaps,
+      { id: "custom-swap:synthetic", observation: { topics: [ethers.ZeroHash] } },
+    ]);
+  } catch (error) {
+    missingEventError = error instanceof Error ? error.message : String(error);
+  }
+  assert(
+    missingEventError.includes("missing=[custom-swap:synthetic]"),
+    "synthetic swap family without landed events must fail explicitly",
+  );
+}
+
+async function testSharedAddressScanner(): Promise<void> {
+  const queried = new Set<string>();
+  const result = await scanAddressLandedSwapActivity({
+    fromBlock: 10,
+    toBlock: 11,
+    batchSize: 1,
+    async getLogs(event, fromBlock) {
+      queried.add(event.id);
+      if (event.id !== "curve-underlying-uint") return [];
+      return [{ address: POOL, blockNumber: fromBlock }];
+    },
+  });
+  const activity = result.activity.get(POOL.toLowerCase());
+  assert(activity?.count === 2, "shared scanner must aggregate both block batches");
+  assert(activity.lastSwapBlock === 11, "shared scanner last swap block");
+  assert(
+    activity.adapterCounts.get("curve-underlying") === 2,
+    "shared scanner must project descriptor pool adapter",
+  );
+  assert(
+    queried.has("univ2-swap") && queried.has("balancer-v3-swap") === false,
+    "shared address scanner must query address emitters only",
+  );
 }
 
 await testReceiptLevelV2Correlation();
@@ -145,4 +209,5 @@ await testV2FinalReceiptStateAndMalformedIsolation();
 await testBalancerV3IndexedPoolIdentity();
 await testCrossFamilyReceiptOrder();
 testRegistryConformance();
+await testSharedAddressScanner();
 console.log("swap-observation PASS (receipt V2 + Balancer V3 + log order + registry)");

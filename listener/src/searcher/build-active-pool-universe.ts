@@ -10,43 +10,20 @@ import { resolvePoolIdentity } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import { PRODUCTION_IDENTITY_RESOLVERS } from "./venues/production-registry.js";
 import { resolveCurveUnderlyingMetadata } from "./venues/curve-underlying.js";
+import {
+  BALANCER_V3_SWAP_TOPIC,
+  LANDED_SWAP_EVENTS,
+  UNIV4_INITIALIZE_TOPIC,
+  UNIV4_SWAP_TOPIC,
+} from "./venues/landed-event-registry.js";
+export { BALANCER_V3_SWAP_TOPIC } from "./venues/landed-event-registry.js";
+import {
+  scanAddressLandedSwapActivity,
+  type AddressLandedSwapActivity,
+} from "./venues/landed-event-scanner.js";
 
 const BLOCKS_PER_DAY = 7200;
 export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
-
-const SWAP_TOPICS: Array<{ topic: string; adapter: PoolEntry["adapter"]; label: string }> = [
-  {
-    topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"),
-    adapter: "univ3",
-    label: "univ3",
-  },
-  {
-    // The distinct topic only discovers a candidate shape; factory identity remains recorded.
-    topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"),
-    adapter: "univ3",
-    label: "pancake-v3",
-  },
-  {
-    topic: ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"),
-    adapter: "univ2",
-    label: "univ2",
-  },
-  {
-    topic: ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"),
-    adapter: "curve",
-    label: "curve-i128",
-  },
-  {
-    topic: ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"),
-    adapter: "curve",
-    label: "curve-uint",
-  },
-  {
-    topic: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"),
-    adapter: "curve-underlying",
-    label: "curve-underlying",
-  },
-];
 
 const univ2Iface = new ethers.Interface([
   "function token0() view returns (address)",
@@ -62,11 +39,6 @@ const univ3Iface = new ethers.Interface([
 const v4InitializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
-const V4_INITIALIZE_TOPIC = ethers.id("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)");
-const V4_SWAP_TOPIC = ethers.id("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
-export const BALANCER_V3_SWAP_TOPIC = ethers.id(
-  "Swap(address,address,address,uint256,uint256,uint256,uint256)",
-);
 const V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = "0x86b6be7d";
 
 interface DiscoveryQueueEntry {
@@ -145,12 +117,7 @@ export function buildBalancerV3PoolEntries(
     .sort((a, b) => (b.swapCount30d ?? 0) - (a.swapCount30d ?? 0));
 }
 
-interface PoolActivity {
-  address: string;
-  adapterCounts: Map<PoolEntry["adapter"], number>;
-  count: number;
-  lastSwapBlock: number;
-}
+type PoolActivity = AddressLandedSwapActivity;
 
 interface EnrichedRankablePool extends RankablePool {
   pool: PoolUniverseEntry;
@@ -222,28 +189,18 @@ async function main(): Promise<void> {
       `(blocks=${latest - fromBlock}, batch=${logBatch})`,
   );
 
-  const activity = new Map<string, PoolActivity>();
-  for (const { topic, adapter, label } of SWAP_TOPICS) {
-    let topicLogs = 0;
-    for (let start = fromBlock; start <= latest; start += logBatch) {
-      const end = Math.min(start + logBatch - 1, latest);
-      const logs = await getLogsWithSplitRetry(provider, topic, start, end);
-      topicLogs += logs.length;
-      for (const log of logs) {
-        const address = ethers.getAddress(log.address);
-        const key = address.toLowerCase();
-        const block = parseInt(log.blockNumber, 16);
-        let item = activity.get(key);
-        if (!item) {
-          item = { address, adapterCounts: new Map(), count: 0, lastSwapBlock: 0 };
-          activity.set(key, item);
-        }
-        item.count++;
-        item.lastSwapBlock = Math.max(item.lastSwapBlock, block);
-        item.adapterCounts.set(adapter, (item.adapterCounts.get(adapter) ?? 0) + 1);
-      }
-    }
-    console.log(`[pool-universe] ${label}: ${topicLogs} swap logs`);
+  const addressScan = await scanAddressLandedSwapActivity({
+    fromBlock,
+    toBlock: latest,
+    batchSize: logBatch,
+    getLogs: (event, start, end) => getLogsWithSplitRetry(provider, event.topic, start, end),
+  });
+  const activity: Map<string, PoolActivity> = addressScan.activity;
+  for (const event of LANDED_SWAP_EVENTS.filter((candidate) => candidate.emitter.mode === "address")) {
+    console.log(
+      `[pool-universe] ${event.discovery.label}: ` +
+        `${addressScan.logCountsByEventId.get(event.id) ?? 0} swap logs`,
+    );
   }
 
   const v4InitLogs: RawLog[] = [];
@@ -251,7 +208,7 @@ async function main(): Promise<void> {
     const end = Math.min(start + logBatch - 1, latest);
     v4InitLogs.push(...await getLogsWithSplitRetry(
       stateProvider,
-      V4_INITIALIZE_TOPIC,
+      UNIV4_INITIALIZE_TOPIC,
       start,
       end,
       ADDR.UNISWAP_V4_POOL_MANAGER,
@@ -262,7 +219,7 @@ async function main(): Promise<void> {
     const end = Math.min(start + logBatch - 1, latest);
     v4SwapLogs.push(...await getLogsWithSplitRetry(
       provider,
-      V4_SWAP_TOPIC,
+      UNIV4_SWAP_TOPIC,
       start,
       end,
       ADDR.UNISWAP_V4_POOL_MANAGER,
@@ -273,7 +230,7 @@ async function main(): Promise<void> {
       stateProvider,
       ADDR.UNISWAP_V4_POSITION_MANAGER,
       ADDR.UNISWAP_V4_POOL_MANAGER,
-      V4_INITIALIZE_TOPIC,
+      UNIV4_INITIALIZE_TOPIC,
       poolId,
       fromBlock,
     );

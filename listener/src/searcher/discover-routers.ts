@@ -7,7 +7,10 @@ import {
   DEFAULT_FORCE_INCLUDE_ROUTERS_PATH,
 } from "./force-include.js";
 import { buildMempoolToAddressFilter } from "./main.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "./venues/production-registry.js";
+import {
+  landedSwapEventsForTopic,
+  observedLandedPoolIdentity,
+} from "./venues/landed-event-registry.js";
 
 export interface BlockData {
   number: number;
@@ -40,8 +43,6 @@ export interface DiscoverRoutersResult {
   qualified: RouterCandidate[];
   added: string[];
 }
-
-const SWAP_OBSERVATIONS_BY_TOPIC = buildSwapObservationsByTopic();
 
 interface MutableStats {
   address: string;
@@ -146,23 +147,9 @@ export async function discoverRouters(
 function observedSwapPoolIdentities(log: { address: string; topics: string[] }): string[] {
   const topic0 = log.topics[0];
   if (typeof topic0 !== "string") return [];
-  const observations = SWAP_OBSERVATIONS_BY_TOPIC.get(topic0.toLowerCase()) ?? [];
-  return [...new Set(observations
-    .map((observation) => observation.observedPoolIdentity({ ...log, data: "0x" }))
+  return [...new Set(landedSwapEventsForTopic(topic0)
+    .map((event) => observedLandedPoolIdentity(event, log))
     .filter((identity): identity is string => identity !== null))];
-}
-
-function buildSwapObservationsByTopic() {
-  const byTopic = new Map<string, typeof PRODUCTION_ROUTE_ADAPTERS.swaps[number]["observation"][]>();
-  for (const adapter of PRODUCTION_ROUTE_ADAPTERS.swaps) {
-    for (const topic of adapter.observation.topics) {
-      const key = topic.toLowerCase();
-      const observations = byTopic.get(key) ?? [];
-      if (!observations.includes(adapter.observation)) observations.push(adapter.observation);
-      byTopic.set(key, observations);
-    }
-  }
-  return byTopic;
 }
 
 function getStats(statsByTo: Map<string, MutableStats>, address: string): MutableStats {
