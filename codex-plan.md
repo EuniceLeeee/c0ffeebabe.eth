@@ -100,20 +100,52 @@ interface SwapAdapter {
   readonly id: SwapCapabilityId;
 
   buildEdges(ctx: EdgeBuildContext): Promise<TokenEdge[]>;
-  quote(ctx: QuoteContext): Promise<bigint>;
   buildPlan(ctx: PlanBuildContext): Promise<ResolvedPlanNode>;
 
+  // scanner 热路径：只能同步读取本 block 已发布的 immutable warm snapshot。
   readonly mid: MidQuoter | null;
-  readonly warm: WarmPlanner | null;
+  readonly quoteLocal: LocalQuoter | null;
+
+  // solver 定稿路径：允许异步读取 fork/revm/RPC，生产 adapter 必须显式提供。
+  readonly quoteExact: ExactQuoter;
+
+  // adapter 只声明“需要暖什么”；调度、去重、deadline、reorg 与原子发布归 coordinator。
+  readonly warm: WarmSpec | null;
   readonly impact: ImpactDecoder | null;
+  readonly postImpact: PostImpactApplier | null;
   readonly victimOverlay: VictimOverlayBuilder | null;
+}
+
+interface MidQuoter {
+  read(ctx: MidReadContext, snapshot: WarmSnapshot): VenueMid | null; // no Promise
+}
+
+interface LocalQuoter {
+  quote(ctx: LocalQuoteContext, snapshot: WarmSnapshot): bigint | null; // no Promise
+}
+
+interface ExactQuoter {
+  quote(ctx: ExactQuoteContext): Promise<bigint>;
+}
+
+interface WarmSpec {
+  requests(ctx: WarmRequestContext): readonly WarmRequest[];
+  invalidationKeys(ctx: WarmInvalidationContext): readonly string[];
 }
 ```
 
+`WarmSnapshot` 必须绑定唯一 `blockNumber`/generation，并且只在该 block 的全部必需 warm request
+成功后一次性发布；scanner 不得看到部分更新的 snapshot。外部 venue 的 `eth_call`、batch quote
+或状态读取必须在 prewarm 阶段完成，`mid.read` / `quoteLocal.quote` 中禁止 I/O、`await` 和隐式 fallback。
+
+`WarmSpec` 不是调度器。唯一的 `BlockScanWarmCoordinator` 负责 full/incremental/reorg 决策、跨 adapter
+请求去重、deadline、cache restamp/invalidate 和 snapshot 原子切换。adapter 不拥有 last-warmed block、
+TTL 或并发状态。
+
 可选能力必须显式为实现或 `null`，不能靠方法是否存在来猜测。registry 在启动时按 lane 校验：
 
-- block-scan 生产支持：`buildEdges + quote + buildPlan + mid/warm policy + final sim`。
-- backrun 生产支持：在上面基础上还要求匹配的 `impact` 和 `victimOverlay`/post-impact 能力。
+- block-scan 生产支持：`buildEdges + quoteExact + buildPlan + mid/quoteLocal/warm policy + final sim`。
+- backrun 生产支持：在上面基础上还要求匹配的 `impact + postImpact + victimOverlay` 能力。
 - 缺能力时 fail closed，并给出确定的 admission/drop reason。
 
 注册采用显式依赖注入：
@@ -199,7 +231,7 @@ listener/src/searcher/venues/
   swap-adapter.ts
   swap-registry.ts
   production-registry.ts
-  adapters/
+  swaps/
     univ2-standard.ts
     univ3-standard.ts
     univ4.ts
@@ -211,6 +243,7 @@ listener/src/searcher/venues/
 ```
 
 现有 `listener/src/adapters/*` 保持 action 编码层定位，不搬进 searcher venue 目录。
+高阶实现目录使用 `venues/swaps/`，避免与低阶 opcode `adapters/` 同名。
 
 ## 8. 六步检查矩阵
 
@@ -544,3 +577,32 @@ Phase 2 把 UniV2 warm 迁进 adapter,但 main 的 ~600 行增量 warm 协调器
 
 ### 结论
 基线采用。**H1(sync 契约)、H2(warm 协调器提前)、H3(与 feature work 串行化)三高危不修,分别导致延迟回归 / live 半脑态 / merge 地狱。** H4/H5/H6 收尾清理。credit 可拓展性零成本留门。
+
+---
+
+## 16. 对抗审查第二轮(fable)— 新增 H7(安全相关)+ 前轮状态
+
+基线 4392ffc == 当前 origin/main tip,有效(RockSolid/BalancerV3 已合入 main)。
+
+**前轮状态**:§15 的 H1–H6 是**审查记录,尚未回填进 plan 正文 §1–14**。照 §1–14 施工的人仍会踩 H1(sync 契约)/H2(warm 错序)/H3(并发)。Codex 下一版须把 H1–H3 折进正文,不能只留在 §15。
+- 附:H3 已被现实验证——一次 DODO cherry-pick 撞上 rocksolid 的 token-graph/quoter/main **炸了 10 个文件冲突**,正是"重构 vs feature 抢同文件 = merge 地狱"的活样本。
+
+### 🔴 H7(新,安全相关)— §3 三 ID 模型无视现有 TokenEdge 安全 taxonomy,有 S2 guard 绕过风险
+
+代码核实:
+- `leavesStandingPosition`(S2 standing-guard 的唯一安全位)**只**由 [`deriveEdgeTaxonomy(slotKind, protocolAction)`](listener/src/searcher/strategy-taxonomy.ts) 派生:credit→true、protocol 非安全 action(mint/未声明)→true(fail-closed)、swap/flash→false。
+- 今天的分发键**已经是 `edge.adapterId`**(plan-builder:185 `switch(edge.adapterId)`、quoter:730 `switch(adapterId)`)。
+- `TokenEdge` **已带** `adapterId / slotKind / protocolAction / edgeKind / leavesStandingPosition`,后三者由 `deriveEdgeTaxonomy` 构造时派生,**不得独立设置**。
+
+plan §3/§4 的领域模型(`VenueId` / `SwapCapabilityId` / `PoolDescriptor`)**完全没提** `slotKind`/`protocolAction`/`edgeKind`/`leavesStandingPosition`/`deriveEdgeTaxonomy`。两个具体风险:
+
+1. **重复/漂移**:`SwapCapabilityId` 与既有 `adapterId` 都是"选执行方式"的判别键。edge 同时带两个 = 可漂移。**必须二选一**:要么保留 `adapterId` 作分发键、映射到 SwapAdapter;要么显式全局替换 `adapterId→swapCapabilityId`(含分析侧 bundle-postmortem 读 adapterId 的地方)。不能两个并存。`adapterId` 是**跨系统稳定键**(分析侧也读),动它要连带评估。
+
+2. **安全位被孤立(高危)**:若 SwapAdapter 的 `buildEdges` 产出 `TokenEdge` 却**不经 `deriveEdgeTaxonomy`** 派生 `leavesStandingPosition`,S2 guard 就可能拿到错误/缺失的安全位 = **standing-position guard 绕过**(真安全回归,不是外观问题)。**plan 必须硬性要求**:所有 adapter 产出的 edge,其 `slotKind`/`protocolAction` 显式设置、`edgeKind`/`leavesStandingPosition` 一律经 `deriveEdgeTaxonomy` 派生,永不独立写。等价性 corpus 须断言重构前后每条 edge 的 `leavesStandingPosition` 逐条相同。
+
+3. **与 credit 可拓展性(§15)同源**:§15 说 credit 腿靠 `edgeKind` 纯标记——那个标记**就是**现有的 `TokenEdge.edgeKind` + `deriveEdgeTaxonomy`。所以 plan 不该新造 taxonomy,而应**建在既有 `slotKind→deriveEdgeTaxonomy→edgeKind/leavesStandingPosition` 之上**。credit venue 的 `buildEdges` 产出 `slotKind:"lend"` → deriveEdgeTaxonomy 自动给 `edgeKind:"credit"` + `leavesStandingPosition:true`。零新增分类系统。
+
+**修法**:§3 领域模型增加一节"与现有 TokenEdge taxonomy 的对齐"——`SwapCapabilityId` 只做执行选择,**不替代** `slotKind/protocolAction/edgeKind/leavesStandingPosition`;所有 edge 构造走 `deriveEdgeTaxonomy`;§12 conformance suite 加一条"每条 adapter 产出 edge 的 leavesStandingPosition 与 deriveEdgeTaxonomy 一致"。
+
+### 结论(第二轮)
+基线仍采用。**H7 升为与 H1/H2/H3 同级的高危(它是安全回归面),必须在 §3 显式对齐既有安全 taxonomy。** 加上前轮 H1/H2/H3 尚未回填正文——Codex 下一版 plan 需:回填 H1–H3 + 新增 §3 taxonomy 对齐(H7)。H4/H5/H6 收尾不变。
