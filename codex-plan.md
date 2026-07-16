@@ -842,17 +842,51 @@ SwapVenueAdapter:
 2. **`pool-impact.ts` 去 per-venue 硬编码**:改为遍历 route registry `for (a of routeRegistry) a.decodeSwapImpact(log)`。新增 swap adapter 自带 decoder,pool-impact 不用改。
 3. **`victim-model-registry` 删掉所有 swap edgeAdapterIds**:只保留 oracle/非-swap trigger(那个 `[]` 项)+ 把 overlay/applyLocal 降为**按 adapterId 索引的可选优化表**(不是 detectability 的门)。
 4. **测试改方向(承重)**:断言**每个 production route swap adapter 都产出非空 decodeSwapImpact**(route→victim)。这条会**当场抓住 Balancer V3**。保留旧的 victim→route 方向作双检。
-5. **附带闭合**:Balancer V3 随 §20.1 自动获得 decoder → mempool victim 检测通。
+5. **附带闭合**:Balancer V3 随 §20.1 自动获得 decoder，先闭合“已进入 intake 后”的 receipt→impact；
+   完整 public-mempool 覆盖还必须同时闭合下面的 intake 派生。
 
-### 附:同模式的另两处(可同轮或跟进)
+### 同轮必做:mempool intake 从 production swap capabilities 派生
+
+中央 `MEMPOOL_ROUTER_ADDRESSES` 不能继续作为 public-mempool 覆盖的准入真相。当前实现把 14 个内置
+router、force-include seed、pinned pools 和 hot-pool top-N 拼成 `toAddress` filter；新增一个可路由、
+可 decode 的 swap adapter 后，如果其 canonical Router/Vault/Manager 不在这张表，pending tx 仍会在
+进入 victim pipeline 前被过滤。Balancer V3 就是现成反例：route adapter 已知 canonical Router/Vault，
+但 central intake 没有从 adapter 读取它们。
+
+正确边界：
+
+1. production `SwapAdapter` 的 observation capability 同时声明其事件 topics 和 **canonical direct
+   entrypoints**（Router/Vault/Manager；基础设施 singleton 可以固定在 adapter 内，不在 `main.ts`
+   维护第二张表）。注册 adapter 后，这些 direct targets 自动进入 intake plan。
+2. graph 中所有可路由 pool/manager identity 自动进入本地 firehose 的内存匹配集合；`hot-pool top-N`
+   只允许作为外部 provider server-side filter 的容量降级，不能成为 local-reth intake 的覆盖边界。
+3. 1inch、桥和其他跨 venue aggregator 不属于任一 execution family，不能硬塞进某个 swap adapter。
+   复用并改造 `discover-routers.ts`：按 production registry 汇总的 swap topics 扫描成功 receipt，只有
+   `tx.to` 在链上实际产生已注册 swap observation 时才进入动态 router index；intake coordinator 合并
+   adapter direct targets + graph targets + 该 chain-derived router index。
+4. dynamic router index 是 load-shedding 输入，不是安全凭证；route identity、完整 raw-tx fork replay、
+   final sim 和 EV gate 仍然 fail closed。新 router 在历史样本形成前可能暂时未知，另设有预算的
+   exploration/audit lane，不能重新退化成手工往中央 allowlist 加地址。
+5. `main.ts` 删除 `MEMPOOL_ROUTER_ADDRESSES` 和 venue/router 常量，只调用统一的 mempool intake plan；
+   新增标准 swap adapter 不再修改 main。外部 filtered subscription 若有地址上限，必须记录 truncation
+   与未覆盖集合；本轮把 local-reth firehose 改为使用完整集合，不再复用被截断的 server-side
+   `toAddress` 列表。
+
+这条与 decoder 同轮验收：Balancer V3 fixture 必须从 `tx.to = canonical Balancer V3 Router` 的 pending
+raw tx 开始，经过 intake → fork-apply → Vault Swap receipt decode → `PoolImpact`，不能把预构造 receipt
+logs 直接塞给 decoder 来绕过 intake。
+
+### 附:同模式的另一处(可同轮或跟进)
 - **discovery topic 三处硬编码**([active-pool-discovery.ts:133](listener/src/searcher/active-pool-discovery.ts:133)、[build-active-pool-universe.ts:16](listener/src/searcher/build-active-pool-universe.ts:16)、[pool-impact.ts:66](listener/src/searcher/detector/pool-impact.ts:66)):同 §18 —— 各 adapter 自声明 topic(`ethers.id(sig)`),三处改为读 registry 汇总。新增协议只改一处。
-- **router allowlist**([main.ts:284](listener/src/searcher/main.ts:284) + hot-pool top-N [4559](listener/src/searcher/main.ts:4559)):tx 进了 mempool 但 `tx.to` 不在 ~14 硬编码 router 或热池内仍被自己过滤掉([[project-mempool-router-allowlist-blindspot]])。**这是 intake 层、不是 victim-detect**,同"硬编码清单丢流"模式但独立修,可能不在本次范围——标记,别混进 victim 改动。
 
 ### 验收
 - **conformance**:production-registry 每个 route swap adapter 有非空 decodeSwapImpact(route→victim),Balancer V3 必过。
 - **等价性**:原有 victim 的 venue(univ2/v3/v4/curve-underlying)decoder 搬进 adapter 后,产出的 `PoolImpact` 对同一 victim tx **逐字节/逐 wei 相同** vs baseline。
 - **Balancer V3 = 新覆盖**(预声明 diff:它获得了以前没有的 victim 检测,非回归)。
-- 每个 swap venue 一笔 backrun tx(含 Balancer V3)走通新路径。
+- 每个 swap venue 一笔 public-mempool backrun tx 走通新路径；Balancer V3 必须从 canonical Router
+  intake 开始，不能只测 decoder。
+- local-reth intake 使用 registry 派生的完整 direct/graph/dynamic-router 集合；新增 adapter 时
+  `main.ts` router/pool filter 零修改。外部 provider 的地址截断必须产生结构化 coverage 事件。
 
 ### 时机
 属 route-leg-adapter 之上的能力补齐;仍受"先过 route-adapter 逐-wei 等价再动"约束(但这条是**修分支已有的漏配 bug**,可与等价验收并行——它本身也需要等价+conformance 验收)。
