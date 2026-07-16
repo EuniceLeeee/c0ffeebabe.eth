@@ -23,8 +23,7 @@ function testBindingsAreRouteBacked(): void {
 
 function testPoolSwapCapabilities(): void {
   const v2 = PRODUCTION_VICTIM_MODELS.forEdge("univ2-swap");
-  assert(v2?.impactVariant === "univ2", "univ2 impact variant");
-  assert(v2.localApplyVariant === "univ2", "univ2 local apply");
+  assert(v2?.localApplyVariant === "univ2", "univ2 local apply");
   assert(v2.overlayReplayVariant === "univ2", "univ2 overlay replay");
 
   const v4 = PRODUCTION_VICTIM_MODELS.forEdge("univ4-unlock");
@@ -35,8 +34,7 @@ function testPoolSwapCapabilities(): void {
 
 function testCurveUnderlyingFailsClosed(): void {
   const underlying = PRODUCTION_VICTIM_MODELS.forEdge("curve-exchange-underlying");
-  assert(underlying?.impactVariant === "curve", "curve underlying impact decode");
-  assert(underlying.localApplyVariant === null, "curve underlying local apply must stay disabled");
+  assert(underlying?.localApplyVariant === null, "curve underlying local apply must stay disabled");
   assert(underlying.overlayReplayVariant === null, "curve underlying replay must stay disabled");
   console.log("[victim-model-registry] curve underlying fail-closed: PASS");
 }
@@ -58,7 +56,6 @@ function testDuplicateBindingRejected(): void {
     id: "test:a",
     kind: "pool-swap-overlay",
     edgeAdapterIds: ["test-swap"],
-    impactVariant: "univ2",
     localApplyVariant: "univ2",
     overlayReplayVariant: "univ2",
   };
