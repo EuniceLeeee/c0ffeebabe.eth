@@ -8,33 +8,47 @@
 
 当前项目已经有一层可用的 `ActionAdapter` registry，它负责把 `ResolvedPlanNode` 编译成 BotVM action。它不应该被扩成同时负责 discovery、identity、quote、graph 和 warm 的巨型接口。
 
-本次在它上面新增一层高阶 `SwapAdapter`：
+本次在它上面新增一层高阶 `RouteLegAdapter`。Swap、protocol conversion 和 liquidity conversion
+共享最小 route-leg 契约，但保留不同子接口；不能因为都产生 edge 就把所有 leg 硬叫成 swap：
 
 ```text
 候选池发现
   → 链上身份反查
-  → 交换能力探测
-  → SwapAdapter registry
+  → execution-family 行为探测
+  → RouteAdapterRegistry.routeLegs
   → graph / quote / plan / warm / impact
   → 现有 ActionAdapter compiler
   → final simulation
 ```
 
-两层职责如下：
+执行与编码职责如下：
 
-- `SwapAdapter`：一条逻辑 swap 如何建图、报价、生成执行子树、预热和处理状态影响。
+- `RouteLegAdapter`：一种经过验证的执行语义如何建图、报价并生成 plan fragment；标准 V2 clone
+  共享 `univ2-standard`，只有执行语义特殊时才新增 family adapter。
+- `SwapAdapter` / `ProtocolConversionAdapter` / `LiquidityAdapter`：分别承载纯 swap、协议转换和
+  LP mint/burn 的特有能力。
+- `FlashAdapter`：融资/执行 envelope，属于 `RouteAdapterRegistry.flash`，但不是 route edge，不能被迫
+  实现 graph/quote/impact 接口。
 - `ActionAdapter`：执行子树中的单个 action 如何编码成 BotVM opcode。
 
 UniV4 和 Balancer V3 的一条逻辑 swap 会展开成多个 action；保留这两层可以避免把协议语义和 opcode 编码重新耦合。
+
+这也符合冻结的 gap batch `docs/research/reports/tx-gap-1784084501081-batch.md`（input SHA-256
+`38336afb798d37009c502676c138eac96c0449eec4231fde1c4e168cc0e969c0`）：排除 2 条 scope-pending 后的
+28 条当前目标中，5 条纯 DEX 需要新增 swap family，22 条 DEX-protocol 主要需要
+`ProtocolConversionAdapter` / `LiquidityAdapter`，另 1 条标准 V2/V3 应先查 trigger/discovery/ranking，
+不能误诊为缺 adapter。
 
 ## 2. 目标与非目标
 
 ### 目标
 
 1. `main.ts` 不再出现 `curve-exchange-underlying`、`univ2-swap`、`balancer-v3-unlock` 等具体协议分支。
-2. graph、quote、plan、warm、impact、victim overlay 通过同一个高阶 registry 找到实现。
+2. graph、quote、plan、warm 通过 `RouteAdapterRegistry.routeLegs` 找到 family 实现；victim 处理通过正交的
+   `VictimModelRegistry` 找到 pool-swap 或 oracle-rawtx 模型。
 3. 协议身份与交换能力分开：unknown factory 可以保留 `venueId=unknown`，同时使用经过探测的标准 V2/V3 能力。
-4. 每个生产 adapter 在启动时完成能力覆盖校验，避免只接入 quote 却漏掉 plan、warm 或 overlay。
+4. 每个生产 execution family 在启动时完成 lane 覆盖校验，避免只接入 quote 却漏掉 plan 或 warm；
+   flash provider 单独按融资能力校验。
 5. 第一轮迁移保持 scanner 输出、candidate plan、calldata 和逐 wei 模拟结果不变。
 6. `main.ts` 最终只承担配置、依赖组装、source 启停和优雅关闭。
 
@@ -48,10 +62,10 @@ UniV4 和 Balancer V3 的一条逻辑 swap 会展开成多个 action；保留这
 
 ## 3. 核心领域模型
 
-必须拆开三个目前容易混淆的 ID：
+必须拆开 pool identity、execution family 和 action encoding 三个目前容易混淆的层次：
 
 ```ts
-type VenueId =
+type ProtocolId =
   | "unknown"
   | "uniswap"
   | "sushiswap"
@@ -59,37 +73,57 @@ type VenueId =
   | "balancer-v3"
   | string;
 
-type SwapCapabilityId =
+interface IdentityProof {
+  kind: "factory-reverse-lookup" | "registry-lookup" | "behavior-probe";
+  target: string;
+  blockNumber: number;
+  resultHash: string;
+}
+
+interface PoolIdentity {
+  protocol: ProtocolId;
+  factory?: string;
+  confidence: "verified" | "provisional";
+  source: string;
+  identityProof: readonly IdentityProof[];
+}
+
+type SwapExecutionFamilyId =
   | "univ2-standard"
   | "univ3-standard"
   | "univ4"
   | "curve-plain"
   | "curve-underlying"
+  | "dodo-v2"
   | "balancer-v3"
   | "fluid-dex";
+
+type ProtocolExecutionFamilyId = `protocol:${string}` | `compat:${string}`;
+type ExecutionFamilyId = SwapExecutionFamilyId | ProtocolExecutionFamilyId;
 
 type ActionAdapterId = string;
 ```
 
-- `VenueId`：链上来源和协议标签，不决定执行。
-- `SwapCapabilityId`：已经验证的交换语义，用于选择高阶 adapter。
+- `PoolIdentity`：链上来源、factory、置信度和可审计 proof；不决定执行。
+- `ExecutionFamilyId`：已经验证的行为/调用语义，用于选择高阶 adapter。PanoramaSwap 之类未知
+  factory 在 proof 充分时可以是 `protocol=unknown + executionFamily=univ2-standard`。
 - `ActionAdapterId`：BotVM action 编码 ID，例如 `univ4-take`、`univ4-settle`。
 
 这三个概念不要求在 `TokenEdge` 上新增三个可漂移字段。现有 `TokenEdge.adapterId` 是日志、fixture、
 analysis 和 planner 共用的稳定序列化键，本次重构不全局重命名它，也不再新增一个
-`edge.swapCapabilityId` 与它并存。`SwapRegistry` 维护经过唯一性校验的
-`edgeAdapterId → SwapCapabilityId` alias 索引：
+`edge.executionFamilyId` 与它并存。`RouteLegRegistry` 维护经过唯一性校验的
+`edgeAdapterId → ExecutionFamilyId` alias 索引：
 
 ```ts
-interface SwapAdapter {
-  readonly id: SwapCapabilityId;
+interface RouteLegAdapter {
+  readonly id: ExecutionFamilyId;
   readonly edgeAdapterIds: readonly string[]; // existing TokenEdge.adapterId values
 }
 
-swapRegistry.forEdge(edge.adapterId); // alias 必须唯一命中一个 SwapAdapter
+routeLegRegistry.forEdge(edge.adapterId); // alias 必须唯一命中一个 RouteLegAdapter
 ```
 
-`PoolDescriptor.swapCapabilityId` 只存在于 pool→edge 生命周期，用于选择 `buildEdges` 实现；adapter
+`PoolDescriptor.executionFamily` 只存在于 pool→edge 生命周期，用于选择 `buildEdges` 实现；adapter
 产出的 edge 继续使用现有稳定 `adapterId`。`ResolvedPlanNode.adapterId` 才是 `ActionAdapterId`。
 若未来要重命名跨系统 edge key，必须作为独立 schema migration，同步修改 listener、fixtures、日志和
 analysis consumers；不夹在本次行为等价重构中。
@@ -99,13 +133,8 @@ analysis consumers；不夹在本次行为等价重构中。
 ```ts
 interface PoolDescriptor {
   address: string;
-  identity: {
-    venueId: VenueId;
-    factory?: string;
-    source: string;
-    confidence: "verified" | "provisional";
-  };
-  swapCapabilityId: SwapCapabilityId;
+  identity: PoolIdentity;
+  executionFamily: ExecutionFamilyId;
   metadata: PoolMetadata;
 }
 ```
@@ -122,9 +151,15 @@ function createAdapterEdge(input: EdgeInput): TokenEdge {
 }
 ```
 
-本次 production registry 只接入当前 mission 内的 position-conserving swap/protocol capability；
-credit/standing-position 策略不借此接口预留或放行。现有 credit edge 继续由 standing guard fail closed，
-未来若 mission 改变，应另立策略、风险和验证合同。
+constructor 约定不能只靠 TypeScript/CI。每个 `RouteLegAdapter` 必须声明允许的
+`slotKind/protocolAction` 集合；registry wrapper 对每次动态 `buildEdges`（包括运行时发现的 unknown pool）
+重新派生并验证 taxonomy。提交前 standing guard 再从 `slotKind/protocolAction` 派生安全位，不直接信任
+edge 上序列化的 `leavesStandingPosition`。
+
+当前 main 仍会构造 `fluid-vault` credit edge，并有 planner fixture 依赖其存在。为保持 graph 行为等价，
+迁移时提供 `compat:fluid-credit` adapter，但 lane policy 永远不授予 production submission；它继续被
+standing guard fail closed。未来若 mission 改变，应另立策略、风险和验证合同，不能把 credit 塞进
+`SwapAdapter` 或借本次重构放行。
 
 ## 4. 高阶 SwapAdapter 契约
 
@@ -663,3 +698,39 @@ Sol 的 PanoramaSwap 探测清单(token0/token1/getReserves/swap 形状/储备�
 ### 结论(汇总两位 reviewer + 两轮)
 方向三方收敛(plan / fable / Sol),稳。落地前**正文必修**:H1(sync 分层)、H2(warm 协调器提前)、H3(与 feature work 串行化 + feature 冻结窗口)、H7(deriveEdgeTaxonomy 安全位对齐)。采纳 Sol 的六步责任组件分解 + V2 探测最小集。H4/H5/H6 收尾。
 **时机**:核心文件(token-graph/quoter/plan-builder/main)现被 ~10 条未合并 ab/* 分支漂移;须先收敛在飞 feature、开 feature 冻结窗口,再起 strangler。plan ready,timing not。
+
+---
+
+## 18. 四类 RouteLegAdapter 分类(Sol)— 采纳,但校准 LiquidityAdapter 与 taxonomy
+
+Sol 提议按 leg 领域语义分四类(不硬塞 union),**采纳**——比单一 `SwapVenue` 或 `Venue{edgeKind}` 清晰:
+
+```
+RouteLegAdapter
+├── SwapAdapter            (UniV2/V3/V4 · Curve swap · DODO/Ekubo/zAMM · Balancer/Fluid)
+├── ProtocolConversionAdapter (ERC4626 · PSM · RPL migration · wrapper mint/burn …)
+├── LiquidityAdapter       (Curve add/remove_liquidity_one_coin)   ← 见下,占位不实现
+└── FlashAdapter           (Balancer/Aave/Morpho flash)
+RouteAdapterRegistry = { SwapAdapterRegistry, ProtocolAdapterRegistry, LiquidityAdapterRegistry, FlashAdapterRegistry }
+```
+底层 `ActionAdapter` 继续只编码 BotVM action。main/graph/quoter/planner 只面向统一 `RouteLegAdapter`。
+
+### 与现有 SlotKind/EdgeKind 的对齐(必须核对,防平行分类=H7 重犯)
+
+| 类别 | SlotKind → EdgeKind | 状态 |
+|---|---|---|
+| SwapAdapter | `swap` → `swap` | ✓ 对齐,重构现有 |
+| ProtocolConversionAdapter | `protocol` → `protocol` | ✓ 对齐,**复用现有 descriptor 框架**(adapter-descriptors/protocol-legs/makeProtocolAdapter,srUSDe/GOLDx/PSM 已在);是 formalize 既有,不是新建,风险低 |
+| FlashAdapter | `flash` → `flash` | ✓ 对齐 |
+| **LiquidityAdapter** | **无对应 SlotKind → `lp`** | ✗ 见下 |
+
+### 🟡 H8(新)— LiquidityAdapter 无 runtime slot,应占位不实现(同 credit)
+
+代码核实:`EdgeKind.lp` 明文"reserved analysis vocabulary, **never derived from a runtime slot**";无 `SlotKind` 对应;Curve `add_liquidity/remove_liquidity` 当前**零 adapter 零 quote**。要让它成 runtime leg 须:新增一个 `SlotKind` + 把 `lp` 翻成可派生 + **给 `deriveEdgeTaxonomy` 定 LP 腿的 `leavesStandingPosition`**(加流动性拿 LP token = 留仓位,与 credit 同类)。这是 H7 安全派生面,不能静默。且 **JIT-LP 在 Mission 之外**。
+**结论**:LiquidityAdapter **接口占位、不进本次 strangler 迁移**(与 credit 同待遇,留门不实现)。本次只迁 Swap/ProtocolConversion/Flash 三类(它们都对齐既有 slotKind + 有现成代码)。
+
+### H7 对四类全适用(强化)
+`RouteAdapterRegistry` 每个子 registry 产的 edge 都必须经 `deriveEdgeTaxonomy` 派生 `edgeKind`/`leavesStandingPosition`,永不独立写 —— swap→false、protocol→按 protocolAction、credit/lp→true。四类拆分让"安全位统一派生"更关键,§12 conformance 的 leavesStandingPosition 断言覆盖全部四类。
+
+### 结论(本轮)
+四类分法采纳(领域语义清晰)。本次迁移范围 = **Swap + ProtocolConversion + Flash 三类**;LiquidityAdapter/credit 仅接口占位不实现(H8/§15)。ProtocolConversion 是 formalize 既有 descriptor,非新建。安全位 H7 覆盖四类。时机不变:先冻结 feature、核心文件停漂再起。
