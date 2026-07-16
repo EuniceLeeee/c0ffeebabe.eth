@@ -1,9 +1,9 @@
 # Codex Route Leg Adapter Refactor — Implementation and Validation
 
-Date: 2026-07-16  
-Status: `implemented_not_validated`  
-Baseline: `4392ffc59fd4aa593500c6ee4fb83b34fe50340a`  
-Candidate: `f72ccde0ba61f9acd02f694694cfa66be35fe10e`  
+Date: 2026-07-16
+Status: `accepted_deterministic_equivalence`
+Baseline: `69e12b30719a7f80403f87d2dd18d8652d0f0865`
+Candidate: `837fa829fc7f651e5f918108edbf5bf78829b9b6`
 Branch: `codex/route-leg-adapter-refactor`
 
 ## Scope implemented
@@ -41,7 +41,24 @@ At both baseline and candidate:
 - Planner passes 15/15, replay fixtures 22/22, plus the high-spread universe replay.
 - Final verify, standing guard, submit gate, taxonomy, warm coordinator, victim model/apply, protocol legs, protocol quotes, overlay fidelity, V4 admission, Balancer V3, universe split, and EV evaluator gates pass.
 
-The final candidate ran 23 no-RPC gates successfully. `searcher:blockscan-scanner` retains the exact baseline-known failure at `delta-restrict` after 4/17 (`untouched anchor should be filtered`); it is not a candidate regression. RPC/fork gates were not run locally because no `MAINNET_RPC_URL` was available.
+The final candidate ran 23 no-RPC gates successfully. `searcher:blockscan-scanner` retains the exact baseline-known failure at `delta-restrict` after 4/17 (`untouched anchor should be filtered`); it is not a candidate regression.
+
+## Exact-SHA deterministic equivalence acceptance
+
+The final acceptance compared the exact baseline and candidate SHAs above on the trusted node's local archive RPC. It did not deploy a live challenger. Both revisions used one frozen universe generated from blocks `25,523,961..25,538,361`: 12,721 file-backed pools, SHA-256 `8a058eaff0f204b092ef4fecb49e2f336c778c3c4b4c576e22f9d9a5cc26c20d`.
+
+The primary replay was pinned to block `25,535,055`. A read-only observer recorded normalized graph edges, resolved plans, complete calldata, simulation results, and solver outcomes without changing the trusted harness or either production tree.
+
+| Stage | Exact comparison | Result |
+|---|---|---|
+| Graph | 12,749 merged pools; 25,674 sorted `(adapterId,target,tokenIn,tokenOut,edgeKind,leavesStandingPosition)` rows | PASS; both graph dumps SHA-256 `b02e808e8e7d602602b57b1562845e7cfc617d9737649867cc2e3810fd0a0cb7` |
+| Ring enumeration | 100 complete opportunity records, including ring identity, pools, adapters, seed edges, spread and sizing bounds | PASS; both reports SHA-256 `8344bfeab56aa0ba1b95456c7d73e29f06ee96a79cb5be52acc7802562071ffd` |
+| Quote / solve | Same selected top-8; 83 normalized solver lines covering per-hop amounts, quote profit, sizing and terminal reason | PASS; both solver extracts SHA-256 `6a858eb90eb11fb73c929b60ede1bc60bd4b74fcda65435afce374e3f632c986` |
+| Final simulation | 24 final-sim attempts plus 8 solve errors, including resolved plans, calldata, success/revert, net profit and gas | PASS; both traces SHA-256 `b701b68d295fbb93c410eaec83c1cd81a3ea26b17da88f8e579af0f057f22ba8` |
+| Positive simulation | Fixed-path tx `0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87` at block `25,535,037` | PASS; `success=true`, `grossProfit=netProfit=150817806425095`, `gasUsed=530191`, complete calldata identical; both traces SHA-256 `9b57a3c50e4716f23f1b6bd40401d585f0f44d8336786856a28519261aed257b` |
+| EV decision | Same pinned base fee and policy inputs over the positive simulation | PASS; default-bribe path is `below_ev_gate` with `netEvWei=-67302363890586`; zero-bribe control is `allow` with `netEvWei=53351881249490`; every intermediate EV value is identical |
+
+The first differing block/stage does not exist for this corpus. Under the operator-selected five-stage fixed-block gate, the refactor is accepted. This result establishes deterministic semantic equivalence; the local performance benchmark below remains a separate measurement axis.
 
 ## Local performance comparison
 
@@ -61,7 +78,7 @@ The edge counts and graph-build latency are equivalent. Median planner latency r
 
 Raw AB/BA log-set digest: `dc42d3e3db8eca5f6fb711035e6fe55df3092b6e5e896d8223c28b423b0557a1`.
 
-## Trusted A/B deployment decision
+## Historical trusted A/B deployment preflight
 
 No production A/B was started, and the active A process was not changed. Read-only preflight found A running commit `840069d9d30b40d0c9585ed5a879091a666aa533`; the requested baseline is `4392ffc`, so the deployed champion is not the requested baseline.
 
@@ -72,7 +89,7 @@ More importantly, the trusted deployment contract mechanically rejects this cand
 
 Creating a production-only branch would remove the first veto but not the second. Inventing a stage transition or using the shakedown path for changed code would falsify the trusted evidence, so deployment was stopped before mutating A or B.
 
-Therefore the architecture and local approximate-95% performance checks are complete, but the requested trusted-node A/B acceptance is not. Under `docs/research/gates.md`, the honest verdict remains `implemented_not_validated` until the project adds an equivalence/performance-only trusted A/B mode or authorizes a different non-production parity harness.
+This preflight predates the exact-SHA fixed-block acceptance above. The operator subsequently selected deterministic five-stage replay as the acceptance gate for this refactor, so no live challenger deployment is required for the merge decision. The trusted live A/B path remains available for a later, separate competitiveness/latency experiment.
 
 ---
 
