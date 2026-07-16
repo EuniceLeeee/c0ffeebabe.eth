@@ -505,3 +505,42 @@ verdict:
 - [ ] 代表性 corpus 的 scanner、plan、calldata 和 final profit 等价。
 - [ ] final simulation 和 EV gate 继续 fail closed。
 
+
+---
+
+## 15. 对抗审查(fable,非作者)— 基线采用,施工前必修 6 项
+
+判决:**这份 plan 强于 fable 的草案**,尤其 §1 两层拆分、§3 三 ID、§12 conformance suite。采用作基线。但代码级核实后有 6 个洞,3 高危,施工前必修。
+
+强于 fable 草案之处(记录,防复审重复讨论):
+- **§1 两层拆分修正了 fable 草案的真错误**:fable 草案写 `SwapVenue.encode = ActionAdapter.encode`(单 encode);实测 plan-builder 有 `case "univ4-unlock"` + `case "balancer-v3-unlock"`——一条逻辑 swap 展开成多 action。单 encode 表达不了,本 plan 的 `buildPlan → ResolvedPlanNode 子树`才对。
+- §3 三 ID(VenueId/SwapCapabilityId/ActionAdapterId)、§4 显式 DI(拒 side-effect import)、§12 conformance suite、§4 lane-aware 能力校验,均强于 fable 草案。
+
+### 🔴 H1 — sync/mid 契约未钉死(最热路径的隐性延迟回归)
+§4 `quote(ctx): Promise<bigint>` + `mid: MidQuoter | null` 没规定 `mid`/`warm` 必须 **sync-over-prewarmed-state**。实测 [blockscan-scanner.ts](listener/src/searcher/detector/blockscan-scanner.ts) 的 `readVenueMid` 是同步、每块调上千次、TTL-bound;若 `MidQuoter` async,scorer await 上千 Promise = 延迟回归。
+**必补**:接口显式三段分层 —— `prewarm(async,每块一次,外部 venue 的 eth_call 在此做完并存入 WarmState)` / `mid + quoteLocal(SYNC,纯函数读 WarmState)` / `quoteExact(async,非热路径,solver 定稿)`。外部 venue(dodo/balancer-v3/curve-underlying)的报价**必须在 prewarm 做完、热循环同步读**,镜像现有 `PoolStateCache` + `protocolMids`。
+
+### 🔴 H2 — warm 协调器阶段错序,产生 live 半脑中间态
+Phase 2 把 UniV2 warm 迁进 adapter,但 main 的 ~600 行增量 warm 协调器(`planBlockScanWarm`/`verifyIncrementalWarm`)留到 Phase 6。中间几个 phase warm 逻辑一半在 adapter、一半在 main = 对活体 searcher 最危险的窗口(增量暖态状态机被劈开)。
+**必改**:warm 协调器抽成**独立 phase,早于任何 per-venue warm 迁移**(即 Phase 1.5),不是垫底。warm 是枢纽不是边角。
+
+### 🔴 H3 — 未处理"与在飞 feature work 并发"(流程杀手)
+本重构改 token-graph/quoter/plan-builder/main —— 正是 gap-repair(此刻 rocksolid worktree 卡在 DODO cherry-pick 半态,curve-underlying/tx149 也在动这些)在改的同一批文件。大重构 + 同文件并发 feature = merge 地狱。
+**必定**:重构与 feature work **串行化** —— 要么冻结 gap-repair 直到重构落地,要么重构让位到当前 feature(DODO/curve-underlying/tx149)全部合入 main 后再起。plan 必须写明这个前置。
+
+### 🟡 H4 — 等价性 corpus 未 pin 到每个被迁 venue
+§11 只说"代表性 corpus",不点具体 tx、不要求每个被迁 venue 一个 known-good fork fixture。Phase 5(balancer-v3/fluid/协议类)可能根本没有 known-good replay fixture = 无等价性锚。
+**必补**:每 phase 开工前先确认该 venue 的 pinned fork fixture 存在;corpus = {每个被迁 venue 至少一笔已知好 tx},缺 fixture 的 venue 先补 fixture 再迁。
+
+### 🟡 H5 — 引用 2 个不存在的文件
+`detector/blockscan-candidate-refinement.ts`、`detector/blockscan-curve-mids.ts` 仓库中不存在(其余 compiler.ts / execution/*.ts / live-state-backend.ts 均真实)。删除或标 `(new,待建)`。
+
+### 🟢 H6 — 目录命名撞车
+§7 高阶 adapter 放 `searcher/venues/adapters/`,与低阶 `listener/src/adapters/` 同名 → 混淆。高阶层改名 `venues/swaps/` 或 `venues/*`(不嵌 `adapters/`)。
+
+### 补充 — credit/脱锚借贷的可拓展性(现在不实现,接口留门)
+三 ID 模型能容纳未来 credit 腿,但 plan 未写。关键认知:**借贷腿在 leg 层与 swap 结构相同** —— `amountIn`=存入抵押物,`amountOut`=借出资产,就是一条边,`buildEdges/quote/buildPlan/prewarm/mid` 共用同一套签名。差异只有两处、都不在 SwapAdapter 接口内:(1) quote 实现不同(credit 的 amountOut = LTV×oracle 价,是各 adapter 自己 `quote` 的实现);(2) PnL 算法不同(verdict/PnL 层读 `edgeKind` 分支)。
+**建议**:`SwapCapabilityId` 之外,pool descriptor / edge 带一个 `edgeKind: "swap" | "credit" | "protocol"` 纯标记字段 + `leavesStandingPositionDefault`(swap=false, credit=true),供下游 PnL/guard 层查。加 credit venue = 实现同一 SwapAdapter 接口 + edgeKind:"credit" + 自己的 quote,**接口零改动**。注意:套利腿留仓=危险(guard 拒),脱锚借贷留仓=策略本身(guard 放行、走仓位风险验收)—— 这个 feature/violation 之别在 guard 层按 edgeKind 判,不在 adapter 接口。两价 oracle-vs-market EV / 跨块仓位 PnL / 退出腿是策略层未来的活,与本次重构解耦。当前 Mission 之外,仅留门。
+
+### 结论
+基线采用。**H1(sync 契约)、H2(warm 协调器提前)、H3(与 feature work 串行化)三高危不修,分别导致延迟回归 / live 半脑态 / merge 地狱。** H4/H5/H6 收尾清理。credit 可拓展性零成本留门。
