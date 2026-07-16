@@ -60,7 +60,10 @@ export interface VictimOverlay {
 }
 
 export function isCurveAdapter(adapterId: string): boolean {
-  return adapterId.startsWith("curve-");
+  return adapterId === "curve-exchange" ||
+    adapterId === "curve-exchange-nr" ||
+    adapterId === "curve-exchange-plain" ||
+    adapterId === "curve-exchange-received-uint";
 }
 
 /**

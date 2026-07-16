@@ -20,6 +20,7 @@ import {
 import {
   curveExchangeAdapter,
   curveExchangeNoReceiverAdapter,
+  curveExchangeUnderlyingAdapter,
   curveExchangeReceivedUintAdapter,
   curvePlainExchangeAdapter,
   curveRouterExecutePathAdapter,
@@ -61,6 +62,7 @@ register(curveExchangeAdapter);
 register(curveExchangeReceivedUintAdapter);
 register(curveExchangeNoReceiverAdapter);
 register(curvePlainExchangeAdapter);
+register(curveExchangeUnderlyingAdapter);
 register(curveRouterExecutePathAdapter);
 register(metronomeHgUsdcExitAdapter);
 // Wrap

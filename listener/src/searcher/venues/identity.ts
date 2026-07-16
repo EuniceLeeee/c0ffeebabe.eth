@@ -5,14 +5,25 @@ import {
   findVenueBySeed,
   type VenueId,
 } from "./capability.js";
+import {
+  CURVE_METAREGISTRY,
+  resolveCurveUnderlyingMetadata,
+} from "./curve-underlying.js";
+export { CURVE_METAREGISTRY } from "./curve-underlying.js";
 
-export const CURVE_METAREGISTRY = "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC";
-
-export type IdentityCheckedAdapter = "univ2" | "univ3" | "curve" | "curve-nr";
+export type IdentityCheckedAdapter =
+  | "univ2"
+  | "univ3"
+  | "curve"
+  | "curve-nr"
+  | "curve-underlying";
 export type VenueIdentitySource =
   | "factory-call"
+  | "factory-call-provisional"
   | "factory-event"
   | "curve-metaregistry"
+  | "curve-metaregistry-underlying"
+  | "curve-underlying-provisional"
   | "v4-manager"
   | "seed";
 
@@ -85,19 +96,37 @@ const curveMetaRegistryIface = new ethers.Interface([
 ]);
 
 export function requiresOnchainIdentity(adapter: string): adapter is IdentityCheckedAdapter {
-  return adapter === "univ2" || adapter === "univ3" || adapter === "curve" || adapter === "curve-nr";
+  return adapter === "univ2" ||
+    adapter === "univ3" ||
+    adapter === "curve" ||
+    adapter === "curve-nr" ||
+    adapter === "curve-underlying";
 }
 
 export async function resolvePoolIdentity(
   backend: IdentityCallBackend,
   address: string,
   adapter: IdentityCheckedAdapter,
+  options: {
+    allowProvisionalFactories?: boolean;
+    allowProvisionalCurveUnderlying?: boolean;
+  } = {},
 ): Promise<PoolIdentityResult> {
   const pool = ethers.getAddress(address);
-  if (adapter === "curve" || adapter === "curve-nr") {
-    return resolveCurveIdentity(backend, pool, adapter);
+  if (adapter === "curve" || adapter === "curve-nr" || adapter === "curve-underlying") {
+    return resolveCurveIdentity(
+      backend,
+      pool,
+      adapter,
+      options.allowProvisionalCurveUnderlying === true,
+    );
   }
-  return resolveFactoryIdentity(backend, pool);
+  return resolveFactoryIdentity(
+    backend,
+    pool,
+    adapter,
+    options.allowProvisionalFactories === true,
+  );
 }
 
 export function isCanonicalV4Manager(address: string): boolean {
@@ -119,6 +148,8 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
     concurrency?: number;
     cache?: PoolIdentityCache;
     seedEntries?: readonly IdentityPoolEntry[];
+    allowProvisionalFactories?: boolean;
+    allowProvisionalCurveUnderlying?: boolean;
   } = {},
 ): Promise<{ accepted: AttestedPoolEntry<T>[]; rejected: RejectedPoolIdentity[] }> {
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? 32));
@@ -165,7 +196,14 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
     // Persisted metadata is evidence for reports, never an admission credential.
     // Re-attest against the local node so a stale or hand-edited universe cannot
     // relabel a selector-compatible contract as a supported venue.
-    const resolved = await cachedResolution(cache, backend, pool.address, pool.adapter);
+    const resolved = await cachedResolution(
+      cache,
+      backend,
+      pool.address,
+      pool.adapter,
+      options.allowProvisionalFactories === true,
+      options.allowProvisionalCurveUnderlying === true,
+    );
     if (!resolved.ok) {
       return {
         accepted: null,
@@ -199,11 +237,18 @@ function cachedResolution(
   backend: IdentityCallBackend,
   address: string,
   adapter: IdentityCheckedAdapter,
+  allowProvisionalFactories: boolean,
+  allowProvisionalCurveUnderlying: boolean,
 ): Promise<PoolIdentityResult> {
-  const key = `${address.toLowerCase()}:${adapter}`;
+  const key = `${address.toLowerCase()}:${adapter}:` +
+    `${allowProvisionalFactories ? "factory-provisional" : "factory-strict"}:` +
+    `${allowProvisionalCurveUnderlying ? "curve-provisional" : "curve-strict"}`;
   let pending = cache.resolutions.get(key);
   if (!pending) {
-    pending = resolvePoolIdentity(backend, address, adapter);
+    pending = resolvePoolIdentity(backend, address, adapter, {
+      allowProvisionalFactories,
+      allowProvisionalCurveUnderlying,
+    });
     cache.resolutions.set(key, pending);
   }
   return pending;
@@ -221,6 +266,8 @@ function rejection(
 async function resolveFactoryIdentity(
   backend: IdentityCallBackend,
   pool: string,
+  adapterHint: "univ2" | "univ3",
+  allowProvisionalFactories: boolean,
 ): Promise<PoolIdentityResult> {
   let factory: string;
   try {
@@ -235,15 +282,28 @@ async function resolveFactoryIdentity(
   }
 
   const capability = findVenueByFactory(factory);
-  if (!capability) return { ok: false, reason: "unknown_factory", factory };
   if (
+    !capability ||
     !capability.runtimeAdapter ||
     !capability.discoverable ||
     !capability.quotable ||
     !capability.buildable ||
     !capability.supported_in_prod
   ) {
-    return { ok: false, reason: "unsupported_venue", venueId: capability.venue, factory };
+    if (!allowProvisionalFactories) {
+      return capability
+        ? { ok: false, reason: "unsupported_venue", venueId: capability.venue, factory }
+        : { ok: false, reason: "unknown_factory", factory };
+    }
+    // Factory is provenance, not a hard admission gate. Keep the observed V2/V3
+    // shape explicit; token-graph ABI checks and mandatory final sim remain fail-closed.
+    return {
+      ok: true,
+      adapter: capability?.runtimeAdapter ?? adapterHint,
+      venueId: capability?.venue ?? "unknown",
+      factory,
+      identitySource: "factory-call-provisional",
+    };
   }
 
   return {
@@ -258,8 +318,28 @@ async function resolveFactoryIdentity(
 async function resolveCurveIdentity(
   backend: IdentityCallBackend,
   pool: string,
-  adapter: "curve" | "curve-nr",
+  adapter: "curve" | "curve-nr" | "curve-underlying",
+  allowProvisionalCurveUnderlying: boolean,
 ): Promise<PoolIdentityResult> {
+  if (adapter === "curve-underlying") {
+    try {
+      const metadata = await resolveCurveUnderlyingMetadata(backend, pool, {
+        allowDirectPoolFallback: allowProvisionalCurveUnderlying,
+      });
+      return {
+        ok: true,
+        adapter,
+        venueId: metadata.source === "curve-metaregistry-underlying" ? "curve" : "unknown",
+        identitySource: metadata.source,
+      };
+    } catch {
+      return {
+        ok: false,
+        reason: allowProvisionalCurveUnderlying ? "identity_call_failed" : "curve_unregistered",
+        venueId: "curve",
+      };
+    }
+  }
   try {
     const raw = await backend.call({
       to: CURVE_METAREGISTRY,

@@ -4,6 +4,7 @@ import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { buildTokenPaths, type TokenEdge, v4PoolId } from "../planner/token-graph.js";
 import type { CurveSnapshot, PoolStateCache, V2Seed, V3Snapshot, V4Snapshot } from "../solver/pool-state-cache.js";
+import { curveNgGetDy, curvePlainGetDy } from "../solver/curve-math.js";
 import { getAmount0Delta, getAmount1Delta } from "../solver/v3-math.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 
@@ -14,6 +15,8 @@ export interface BlockScanConfig {
   budgetMs: number;
   pricedTokens: Map<string, { maxBorrow: bigint }>;
   protocolMids?: ReadonlyMap<string, ProtocolMid>;
+  /** Code-owned protocol edges do not consume the scored DEX-edge budget. */
+  pinnedOutsideBudget?: boolean;
 }
 
 export interface ProtocolMid {
@@ -33,7 +36,7 @@ export interface BlockScanOutcome {
   debug?: { skippedVenues: number };
 }
 
-type VenueKind = "v2" | "v3" | "v4" | "curve" | "protocol" | "fluid";
+type VenueKind = "v2" | "v3" | "v4" | "curve" | "curve-underlying" | "protocol" | "fluid";
 
 interface PairGroup {
   a: string;
@@ -84,10 +87,11 @@ export function detectBlockScanOpportunities(input: {
   const finish = (outcome: BlockScanOutcome["outcome"]): BlockScanOutcome => {
     ranked.sort((a, b) => b.rank - a.rank);
     const deduped: RankedOpportunity[] = [];
-    const seenFingerprints = new Set<string>();
+    const seenRoutes = new Set<string>();
     for (const entry of ranked) {
-      if (seenFingerprints.has(entry.opportunity.cycleFingerprint)) continue;
-      seenFingerprints.add(entry.opportunity.cycleFingerprint);
+      const route = directedRouteFingerprint(entry.opportunity.seedEdges);
+      if (seenRoutes.has(route)) continue;
+      seenRoutes.add(route);
       deduped.push(entry);
     }
     return {
@@ -144,7 +148,20 @@ export function detectBlockScanOpportunities(input: {
     const seedEdges = [buyCheap, sellRich];
 
     const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
-    const sizing = estimateSizing(cheapVenue, flashToken, group.a, group.b, minVenue.mid, maxVenue.mid, estSpreadBps, maxBorrow);
+    const routeScore = scoreRing(input.cache, input.sourceBlock, seedEdges, input.cfg.protocolMids);
+    if (!routeScore) continue;
+    const routeMaxInput = bigintFloor(routeScore.maxStartDepth / 4);
+    const sizing = estimateSizing(
+      cheapVenue,
+      flashToken,
+      group.a,
+      group.b,
+      minVenue.mid,
+      maxVenue.mid,
+      routeScore.estSpreadBps,
+      maxBorrow,
+      routeMaxInput,
+    );
     if (!sizing || sizing.searchCenter <= 8n) continue;
 
     const ring = [flashToken, otherToken];
@@ -166,21 +183,105 @@ export function detectBlockScanOpportunities(input: {
       affectedPools: [cheapVenue.pool, richVenue.pool],
       affectedTokens: canonicalRing,
     };
-    const depth = Math.max(1, Math.min(cheapVenue.depthProxy, richVenue.depthProxy));
-    ranked.push({ opportunity, rank: estSpreadBps * Math.log10(depth) });
+    ranked.push({
+      opportunity,
+      rank: expectedReturnRank(routeScore.estSpreadBps, sizing.searchCenter, maxBorrow),
+    });
   }
 
-  for (const edge of input.edges) {
-    if (edge.slotKind !== "protocol" || edge.leavesStandingPosition) continue;
+  const protocolEdges = input.edges.filter(
+    (edge) => edge.slotKind === "protocol" && !edge.leavesStandingPosition,
+  );
+  for (const edge of protocolEdges) {
     anchorTokens.add(edge.tokenIn.toLowerCase());
     anchorTokens.add(edge.tokenOut.toLowerCase());
+  }
+
+  const considerRing = (ringEdges: TokenEdge[]): void => {
+    if (pathLeavesStandingPosition(ringEdges)) return;
+    const score = scoreRing(input.cache, input.sourceBlock, ringEdges, input.cfg.protocolMids);
+    if (!score || score.estSpreadBps <= input.cfg.minSpreadBps) return;
+
+    const ringTokens = ringTokensWithoutRepeat(ringEdges);
+    const flashToken = pickRingFlashToken(ringTokens, input.cfg.pricedTokens);
+    if (!flashToken) return;
+    const seedEdges = rotateRingEdges(ringEdges, flashToken);
+    if (!seedEdges) return;
+
+    const rotatedScore = scoreRing(input.cache, input.sourceBlock, seedEdges, input.cfg.protocolMids);
+    if (!rotatedScore || rotatedScore.estSpreadBps <= input.cfg.minSpreadBps) return;
+
+    const firstVenue = readEdgeVenueMid(input.cache, input.sourceBlock, seedEdges[0], input.cfg.protocolMids);
+    if (!firstVenue) return;
+    const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
+    const spreadMultiplier = 1 + rotatedScore.estSpreadBps / 10_000;
+    const minMid = firstVenue.mid / Math.max(spreadMultiplier, 1);
+    const routeMaxInput = bigintFloor(rotatedScore.maxStartDepth / 4);
+    const sizing = estimateSizing(
+      firstVenue,
+      flashToken,
+      seedEdges[0].tokenIn.toLowerCase(),
+      seedEdges[0].tokenOut.toLowerCase(),
+      minMid,
+      firstVenue.mid,
+      rotatedScore.estSpreadBps,
+      maxBorrow,
+      routeMaxInput,
+    );
+    if (!sizing || sizing.searchCenter <= 8n) return;
+
+    const rotatedRingTokens = ringTokensWithoutRepeat(seedEdges);
+    const canonicalRing = canonicalTokenRing(rotatedRingTokens);
+    const opportunity: BlockScanOpportunity = {
+      kind: "block-scan-arb",
+      sourceBlock: input.sourceBlock,
+      stateBlock: input.sourceBlock,
+      cycleId: canonicalRing.join("|"),
+      cycleFingerprint: cycleFingerprint(input.sourceBlock, rotatedRingTokens),
+      seedEdges,
+      flashToken,
+      searchSeed: {
+        startToken: flashToken,
+        searchCenter: sizing.searchCenter,
+        maxInput: sizing.maxInput,
+      },
+      leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
+      affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
+      affectedTokens: canonicalRing,
+    };
+    ranked.push({
+      opportunity,
+      rank: expectedReturnRank(rotatedScore.estSpreadBps, sizing.searchCenter, maxBorrow),
+    });
+  };
+
+  // A protocol conversion is itself the uncommon middle edge. Enumerate its
+  // swap-only return path directly so a low-volume closing venue cannot be
+  // crowded out by unrelated exits before the protocol edge is ever reached.
+  for (const protocolEdge of protocolEdges) {
+    if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
+    const tails = buildTokenPaths(input.edges, protocolEdge.tokenOut, protocolEdge.tokenIn, {
+      maxHops: Math.max(0, input.cfg.maxHops - 1),
+      maxPoolsPerToken: 20,
+      pinnedOutsideBudget: input.cfg.pinnedOutsideBudget,
+      preferDirectClosure: true,
+      maxPaths: 2000,
+      deadlineAtMs,
+    });
+    for (const tail of tails) {
+      if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
+      considerRing([protocolEdge, ...tail.edges]);
+    }
   }
 
   for (const anchorToken of anchorTokens) {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
     const rings = buildTokenPaths(input.edges, anchorToken, anchorToken, {
       maxHops: input.cfg.maxHops,
-      maxPoolsPerToken: 8,
+      // Keep broader closure coverage while maxPaths/deadline remain hard
+      // bounds. This is a generic path budget, not a venue allowlist.
+      maxPoolsPerToken: 20,
+      pinnedOutsideBudget: input.cfg.pinnedOutsideBudget,
       maxPaths: 2000,
       deadlineAtMs,
     });
@@ -188,54 +289,7 @@ export function detectBlockScanOpportunities(input: {
 
     for (const ring of rings) {
       if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
-      if (pathLeavesStandingPosition(ring.edges)) continue;
-      const score = scoreRing(input.cache, input.sourceBlock, ring.edges, input.cfg.protocolMids);
-      if (!score || score.estSpreadBps <= input.cfg.minSpreadBps) continue;
-
-      const ringTokens = ringTokensWithoutRepeat(ring.edges);
-      const flashToken = pickRingFlashToken(ringTokens, input.cfg.pricedTokens);
-      if (!flashToken) continue;
-      const seedEdges = rotateRingEdges(ring.edges, flashToken);
-      if (!seedEdges) continue;
-
-      const firstVenue = readEdgeVenueMid(input.cache, input.sourceBlock, seedEdges[0], input.cfg.protocolMids);
-      if (!firstVenue) continue;
-      const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
-      const spreadMultiplier = 1 + score.estSpreadBps / 10_000;
-      const minMid = firstVenue.mid / Math.max(spreadMultiplier, 1);
-      const sizing = estimateSizing(
-        firstVenue,
-        flashToken,
-        seedEdges[0].tokenIn.toLowerCase(),
-        seedEdges[0].tokenOut.toLowerCase(),
-        minMid,
-        firstVenue.mid,
-        score.estSpreadBps,
-        maxBorrow,
-      );
-      if (!sizing || sizing.searchCenter <= 8n) continue;
-
-      const rotatedRingTokens = ringTokensWithoutRepeat(seedEdges);
-      const canonicalRing = canonicalTokenRing(rotatedRingTokens);
-      const opportunity: BlockScanOpportunity = {
-        kind: "block-scan-arb",
-        sourceBlock: input.sourceBlock,
-        stateBlock: input.sourceBlock,
-        cycleId: canonicalRing.join("|"),
-        cycleFingerprint: cycleFingerprint(input.sourceBlock, rotatedRingTokens),
-        seedEdges,
-        flashToken,
-        searchSeed: {
-          startToken: flashToken,
-          searchCenter: sizing.searchCenter,
-          maxInput: sizing.maxInput,
-        },
-        leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
-        affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
-        affectedTokens: canonicalRing,
-      };
-      const depth = Math.max(1, score.minDepth);
-      ranked.push({ opportunity, rank: score.estSpreadBps * Math.log10(depth) });
+      considerRing(ring.edges);
     }
   }
 
@@ -287,6 +341,9 @@ function readVenueMid(
   if (kind === "v4") return readV4Mid(cache.snapshotV4(pool, sourceBlock), pool, edges, a, b);
   if (kind === "protocol") return readExternalMid("protocol", protocolMids, pool, edges, a, b);
   if (kind === "fluid") return readExternalMid("fluid", protocolMids, pool, edges, a, b);
+  if (kind === "curve-underlying") {
+    return readExternalMid("curve-underlying", protocolMids, pool, edges, a, b);
+  }
   return readCurveMid(cache.snapshotCurve(pool, sourceBlock), pool, edges, a, b, protocolMids);
 }
 
@@ -294,6 +351,7 @@ function venueKind(edge: TokenEdge): VenueKind | null {
   if (edge.slotKind === "protocol") return "protocol";
   const adapterId = edge.adapterId.toLowerCase();
   if (adapterId.includes("fluid-dex")) return "fluid";
+  if (adapterId === "curve-exchange-underlying") return "curve-underlying";
   if (adapterId.includes("univ2")) return "v2";
   if (adapterId.includes("univ3")) return "v3";
   if (adapterId.includes("univ4")) return "v4";
@@ -323,7 +381,7 @@ function readV2Mid(snapshot: V2Seed | null, pool: string, edges: TokenEdge[], a:
 }
 
 function readExternalMid(
-  kind: "protocol" | "fluid",
+  kind: "protocol" | "fluid" | "curve-underlying",
   protocolMids: ReadonlyMap<string, ProtocolMid> | undefined,
   pool: string,
   edges: TokenEdge[],
@@ -336,13 +394,18 @@ function readExternalMid(
   const quoted = direct ?? reverse;
   if (!quoted || !Number.isFinite(quoted.mid) || quoted.mid <= 0 || quoted.depthIn <= 0n) return null;
   const mid = direct ? quoted.mid : 1 / quoted.mid;
-  const reserveBNumber = Number(quoted.depthIn) * mid;
-  if (!Number.isFinite(mid) || mid <= 0 || !Number.isFinite(reserveBNumber) || reserveBNumber <= 0) {
+  const reserveANumber = direct ? Number(quoted.depthIn) : Number(quoted.depthIn) / quoted.mid;
+  const reserveBNumber = direct ? Number(quoted.depthIn) * quoted.mid : Number(quoted.depthIn);
+  if (
+    !Number.isFinite(mid) || mid <= 0 ||
+    !Number.isFinite(reserveANumber) || reserveANumber <= 0 ||
+    !Number.isFinite(reserveBNumber) || reserveBNumber <= 0
+  ) {
     return null;
   }
-  const reserveA = quoted.depthIn;
+  const reserveA = BigInt(Math.floor(reserveANumber));
   const reserveB = BigInt(Math.floor(reserveBNumber));
-  if (reserveB <= 0n) return null;
+  if (reserveA <= 0n || reserveB <= 0n) return null;
   return {
     kind,
     pool,
@@ -372,6 +435,9 @@ function readV3Mid(snapshot: V3Snapshot | null, pool: string, edges: TokenEdge[]
     return null;
   }
   if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
+  const reserveA = snapshot.state.liquidity * Q96 / sqrtABX96;
+  const reserveB = snapshot.state.liquidity * sqrtABX96 / Q96;
+  if (reserveA <= 0n || reserveB <= 0n) return null;
   return {
     kind: "v3",
     pool,
@@ -380,7 +446,9 @@ function readV3Mid(snapshot: V3Snapshot | null, pool: string, edges: TokenEdge[]
     feeBps: Number(snapshot.state.fee) / 100,
     sqrtABX96,
     liquidity: snapshot.state.liquidity,
-    depthProxy: Number(snapshot.state.liquidity),
+    reserveA,
+    reserveB,
+    depthProxy: Number(minBigint(reserveA, reserveB)),
   };
 }
 
@@ -408,6 +476,9 @@ function readV4Mid(
     return null;
   }
   if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
+  const reserveA = snapshot.liquidity * Q96 / sqrtABX96;
+  const reserveB = snapshot.liquidity * sqrtABX96 / Q96;
+  if (reserveA <= 0n || reserveB <= 0n) return null;
   return {
     kind: "v4",
     pool,
@@ -416,7 +487,9 @@ function readV4Mid(
     feeBps: Number(snapshot.lpFee) / 100,
     sqrtABX96,
     liquidity: snapshot.liquidity,
-    depthProxy: Number(snapshot.liquidity),
+    reserveA,
+    reserveB,
+    depthProxy: Number(minBigint(reserveA, reserveB)),
   };
 }
 
@@ -438,14 +511,34 @@ function readCurveMid(
   const reserveB = state.balances[j];
   if (reserveA <= 0n || reserveB <= 0n) return null;
   const exact = protocolMids?.get(`${pool}|${a}|${b}`);
-  const mid = exact?.mid ?? Number(reserveB) / Number(reserveA);
+  let mid: number;
+  let feeBps: number;
+  if (exact) {
+    mid = exact.mid;
+    feeBps = exact.feeBps;
+  } else {
+    // Raw reserve ratios are not Curve prices. Fall back to warmed local math
+    // only when the exact batched get_dy probe was unavailable.
+    const probeIn = reserveA / 1_000_000n > 0n ? reserveA / 1_000_000n : 1n;
+    let probeOut: bigint;
+    try {
+      probeOut = snapshot.kind === "plain"
+        ? curvePlainGetDy(snapshot.plain!, i, j, probeIn)
+        : curveNgGetDy(snapshot.ng!, i, j, probeIn);
+    } catch {
+      return null;
+    }
+    if (probeOut <= 0n) return null;
+    mid = Number(probeOut) / Number(probeIn);
+    feeBps = 0;
+  }
   if (!Number.isFinite(mid) || mid <= 0) return null;
   return {
     kind: "curve",
     pool,
     edges,
     mid,
-    feeBps: exact?.feeBps ?? (state.fee === undefined ? 4 : Number(state.fee) / 1_000_000),
+    feeBps,
     reserveA,
     reserveB,
     depthProxy: Number(minBigint(reserveA, reserveB)),
@@ -516,23 +609,33 @@ function scoreRing(
   sourceBlock: number,
   edges: TokenEdge[],
   protocolMids?: ReadonlyMap<string, ProtocolMid>,
-): { estSpreadBps: number; minDepth: number } | null {
+): { estSpreadBps: number; maxStartDepth: number } | null {
   if (edges.length === 0 || !isClosedContinuousRing(edges)) return null;
   const tokens = ringTokensWithoutRepeat(edges);
   if (new Set(tokens).size !== tokens.length) return null;
   let logSum = 0;
-  let minDepth = Infinity;
+  let cumulativeMid = 1;
+  let maxStartDepth = Infinity;
   for (const edge of edges) {
     const adjustedMid = edgeMidTimesOneMinusFee(cache, sourceBlock, edge, protocolMids);
     if (adjustedMid === null) return null;
     const venue = readEdgeVenueMid(cache, sourceBlock, edge, protocolMids);
     if (!venue) return null;
+    const inputDepth = venue.reserveA ?? venue.liquidity;
+    if (inputDepth === undefined || inputDepth <= 0n || !Number.isFinite(cumulativeMid) || cumulativeMid <= 0) {
+      return null;
+    }
+    const startDepth = Number(inputDepth) / cumulativeMid;
+    if (!Number.isFinite(startDepth) || startDepth <= 0) return null;
+    maxStartDepth = Math.min(maxStartDepth, startDepth);
     logSum += Math.log(adjustedMid);
-    minDepth = Math.min(minDepth, venue.depthProxy);
+    cumulativeMid *= adjustedMid;
   }
-  if (!Number.isFinite(logSum) || logSum <= 0 || !Number.isFinite(minDepth)) return null;
+  if (!Number.isFinite(logSum) || logSum <= 0 || !Number.isFinite(maxStartDepth)) return null;
   const estSpreadBps = (Math.exp(logSum) - 1) * 10_000;
-  return Number.isFinite(estSpreadBps) && estSpreadBps > 0 ? { estSpreadBps, minDepth } : null;
+  return Number.isFinite(estSpreadBps) && estSpreadBps > 0
+    ? { estSpreadBps, maxStartDepth }
+    : null;
 }
 
 /** Production-owned coarse spread estimate used by diagnostics and replay reports. */
@@ -588,6 +691,32 @@ function uniqueLowercase(values: string[]): string[] {
   return out;
 }
 
+function directedRouteFingerprint(edges: TokenEdge[]): string {
+  const parts = edges.map((edge) =>
+    `${edge.adapterId.toLowerCase()}|${edgeVenueIdentity(edge)}|` +
+      `${edge.tokenIn.toLowerCase()}>${edge.tokenOut.toLowerCase()}`
+  );
+  if (parts.length <= 1) return parts.join(";");
+  let canonical = parts.join(";");
+  for (let i = 1; i < parts.length; i++) {
+    const rotated = [...parts.slice(i), ...parts.slice(0, i)].join(";");
+    if (rotated < canonical) canonical = rotated;
+  }
+  return canonical;
+}
+
+function expectedReturnRank(estSpreadBps: number, searchCenter: bigint, maxBorrow: bigint): number {
+  if (maxBorrow <= 0n || searchCenter <= 0n) return 0;
+  const capitalFraction = Number(searchCenter) / Number(maxBorrow);
+  if (!Number.isFinite(capitalFraction) || capitalFraction <= 0) return 0;
+  return estSpreadBps * Math.min(1, capitalFraction);
+}
+
+function bigintFloor(value: number): bigint {
+  if (!Number.isFinite(value) || value <= 0) return 0n;
+  return BigInt(Math.floor(value));
+}
+
 function estimateSizing(
   cheapVenue: VenueMid,
   flashToken: string,
@@ -597,9 +726,13 @@ function estimateSizing(
   maxMid: number,
   estSpreadBps: number,
   maxBorrow: bigint,
+  routeMaxInput?: bigint,
 ): { searchCenter: bigint; maxInput: bigint } | null {
   const reserveIn = reserveForToken(cheapVenue, flashToken, a, b);
-  const ceiling = minBigint(reserveIn / 4n, maxBorrow);
+  const venueCeiling = minBigint(reserveIn / 4n, maxBorrow);
+  const ceiling = routeMaxInput === undefined
+    ? venueCeiling
+    : minBigint(venueCeiling, routeMaxInput);
   if (ceiling <= 8n) return null;
 
   let rawCenter: bigint;

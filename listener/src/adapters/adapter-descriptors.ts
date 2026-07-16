@@ -2,7 +2,7 @@ import type { EdgeKind } from "../searcher/strategy-taxonomy.js";
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
-  | "psm" | "erc4626" | "wsteth" | "metronome" | "weth" | "fluid-credit" | "fluid-dex" | "erc20-infra";
+  | "psm" | "erc4626" | "goldx" | "wsteth" | "metronome" | "weth" | "fluid-credit" | "fluid-dex" | "erc20-infra";
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
 export type AdapterAction =
@@ -82,6 +82,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
   },
   "curve-exchange-plain": {
     adapterId: "curve-exchange-plain",
+    lineage: "curve",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "curve-exchange-underlying": {
+    adapterId: "curve-exchange-underlying",
     lineage: "curve",
     edgeKind: "swap",
     action: "swap",
@@ -219,6 +227,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
   psm: {
     adapterId: "psm",
     lineage: "psm",
+    edgeKind: "protocol",
+    action: "convert",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "goldx-mint": {
+    adapterId: "goldx-mint",
+    lineage: "goldx",
     edgeKind: "protocol",
     action: "convert",
     canSendValue: false,

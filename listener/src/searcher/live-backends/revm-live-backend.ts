@@ -22,6 +22,8 @@ import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
 import {
   quoteFluidDex,
+  quoteCurveUnderlying,
+  quoteGoldxMint,
   encodeUniV4QuoteExactInputSingle,
   metronomeSynthPoolIface,
   uniV4QuoterIface,
@@ -45,6 +47,10 @@ const CURVE_INT_IFACE = new ethers.Interface([
 const CURVE_UINT_IFACE = new ethers.Interface([
   "function get_dy(uint256 i, uint256 j, uint256 dx) view returns (uint256)",
 ]);
+const CURVE_UNDERLYING_IFACE = new ethers.Interface([
+  "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
+]);
+const GOLDX_IFACE = new ethers.Interface(["function unit() view returns (uint256)"]);
 const UNIV2_IFACE = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
   "function factory() view returns (address)",
@@ -356,6 +362,27 @@ export class RevmLiveBackend implements LiveStateBackend {
           });
           break;
         }
+        case "curve-exchange-underlying": {
+          const edge = this.findEdge({
+            adapterId: hop.adapterId,
+            target: hop.target,
+            tokenIn: hop.tokenIn,
+            tokenOut: hop.tokenOut,
+            amountIn,
+          });
+          if (edge?.curveI === undefined || edge.curveJ === undefined) break;
+          calls.push({
+            from: ethers.ZeroAddress,
+            to: hop.target,
+            calldata: CURVE_UNDERLYING_IFACE.encodeFunctionData("get_dy_underlying", [
+              BigInt(edge.curveI),
+              BigInt(edge.curveJ),
+              amountIn,
+            ]),
+            gasLimit: 3_000_000,
+          });
+          break;
+        }
         case "univ2-swap":
           calls.push({
             from: ethers.ZeroAddress,
@@ -403,6 +430,14 @@ export class RevmLiveBackend implements LiveStateBackend {
             gasLimit: 1_000_000,
           });
           break;
+        case "goldx-mint":
+          calls.push({
+            from: ethers.ZeroAddress,
+            to: hop.target,
+            calldata: GOLDX_IFACE.encodeFunctionData("unit"),
+            gasLimit: 300_000,
+          });
+          break;
         default:
           break;
       }
@@ -434,6 +469,17 @@ export class RevmLiveBackend implements LiveStateBackend {
       case "curve-exchange-plain":
       case "curve-exchange-received-uint":
         return this.quoteCurve(req);
+      case "curve-exchange-underlying": {
+        const started = Date.now();
+        const amountOut = await quoteCurveUnderlying(
+          this,
+          req.target,
+          req.tokenIn,
+          req.tokenOut,
+          req.amountIn,
+        );
+        return { amountOut, latencyMs: Date.now() - started };
+      }
       case "univ2-swap":
         return this.quoteUniV2(req);
       case "univ3-swap":
@@ -449,6 +495,17 @@ export class RevmLiveBackend implements LiveStateBackend {
         return this.quoteFluidDex(req);
       case "metronome-synth-swap":
         return this.quoteMetronomeSynthSwap(req);
+      case "goldx-mint": {
+        const started = Date.now();
+        const amountOut = await quoteGoldxMint(
+          this,
+          req.target,
+          req.tokenIn,
+          req.tokenOut,
+          req.amountIn,
+        );
+        return { amountOut, latencyMs: Date.now() - started };
+      }
       case "fluid-vault":
         throw new Error("unsupported exact quote: fluid-vault requires solver debt search");
       default:

@@ -2,7 +2,7 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import { quote } from "../solver/quoter.js";
 import type { BlockScanOpportunity } from "./detector.js";
 
-const DEFAULT_CONCURRENCY = 12;
+const DEFAULT_CONCURRENCY = 24;
 
 export interface BlockScanRefinementResult {
   opportunities: BlockScanOpportunity[];

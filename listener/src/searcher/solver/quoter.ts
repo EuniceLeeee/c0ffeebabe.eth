@@ -3,6 +3,10 @@ import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { type V4PoolKey, v4HooksAffectSwap } from "../planner/token-graph.js";
+import {
+  quoteCurveUnderlyingByIndex,
+  resolveCurveUnderlyingMetadata,
+} from "../venues/curve-underlying.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quoteV4ExactInLocal } from "./v4-math.js";
 import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "./v2-fee.js";
@@ -43,7 +47,6 @@ const curveIfaceUint = new ethers.Interface([
 const curveIfaceIntCoins = new ethers.Interface([
   "function coins(int128 i) view returns (address)",
 ]);
-
 const curveCoinsCache = new Map<string, string[]>();
 
 async function curveCoins(state: StateBackend, pool: string): Promise<string[]> {
@@ -131,6 +134,57 @@ async function quoteCurve(
     const result = await state.call({ to: pool, data });
     return BigInt(result);
   }
+}
+
+export async function resolveCurveUnderlyingIndices(
+  state: CallBackend,
+  pool: string,
+  tokenIn: string,
+  tokenOut: string,
+): Promise<[number, number]> {
+  const metadata = await resolveCurveUnderlyingMetadata(state, pool, {
+    allowDirectPoolFallback: true,
+  });
+  const coins = metadata.coins.map((coin) => coin.toLowerCase());
+  return [findIndex(coins, tokenIn), findIndex(coins, tokenOut)];
+}
+
+export async function quoteCurveUnderlying(
+  state: CallBackend,
+  pool: string,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  const [i, j] = await resolveCurveUnderlyingIndices(state, pool, tokenIn, tokenOut);
+  return quoteCurveUnderlyingByIndex(state, pool, i, j, amountIn);
+}
+
+// ── GOLDx (fully collateralized PAXG conversion) ─────────────
+
+const goldxIface = new ethers.Interface([
+  "function unit() view returns (uint256)",
+]);
+const GOLDX_WAD = 10n ** 18n;
+
+export async function quoteGoldxMint(
+  state: CallBackend,
+  target: string,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+): Promise<bigint> {
+  if (
+    tokenIn.toLowerCase() !== ADDR.PAXG.toLowerCase() ||
+    tokenOut.toLowerCase() !== ADDR.GOLDX.toLowerCase()
+  ) {
+    throw new Error(`GOLDx mint only supports PAXG->GOLDx, got ${tokenIn} -> ${tokenOut}`);
+  }
+  const data = goldxIface.encodeFunctionData("unit");
+  const result = await state.call({ to: target, data });
+  const unit = BigInt(goldxIface.decodeFunctionResult("unit", result)[0]);
+  if (unit <= 0n) throw new Error(`GOLDx unit() returned ${unit}`);
+  return amountIn * unit / GOLDX_WAD;
 }
 
 // ── UniV3 (QuoterV2) ───────────────────────────────────────────
@@ -716,6 +770,10 @@ export async function quote(
         }
       }
       return quoteCurve(state, target, tokenIn, tokenOut, amountIn);
+    case "curve-exchange-underlying":
+      // Underlying pools have a distinct balance/rate domain. Never route
+      // through the regular Curve PoolStateCache local math.
+      return quoteCurveUnderlying(state, target, tokenIn, tokenOut, amountIn);
     case "univ3-swap":
       // Path B: prefer warmed local cross-tick math; fall back to QuoterV2.
       if (cache) {
@@ -748,6 +806,8 @@ export async function quote(
     case "erc4626-deposit":
     case "erc4626-redeem":
       return quoteProtocolLeg(state, target, adapterId, amountIn);
+    case "goldx-mint":
+      return quoteGoldxMint(state, target, tokenIn, tokenOut, amountIn);
     case "erc4626-redeem-silo":
       return quoteSiloRedeem(state, target, tokenOut, amountIn);
     case "metronome-synth-swap":

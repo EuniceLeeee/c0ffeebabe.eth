@@ -127,6 +127,7 @@ const curveIface = new ethers.Interface([
   "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy, address receiver)",
   "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy)",
   "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy, address receiver)",
+  "function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy)",
 ]);
 
 const CURVE_SELECTORS = new Set([
@@ -134,6 +135,7 @@ const CURVE_SELECTORS = new Set([
   "0xddc1f59d",
   "0x7e3db030",
   "0xafb43012",
+  "0xa6417ed6",
 ]);
 
 // ─── Curve decoder ────────────────────────────────────────────
@@ -144,6 +146,7 @@ const curveDecoder: ImpactDecoder = {
     "curve-exchange-nr",
     "curve-exchange",
     "curve-exchange-received-uint",
+    "curve-exchange-underlying",
   ],
 
   decodeLog(log, edges) {

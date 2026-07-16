@@ -13,6 +13,8 @@ import {
   type BlockScanConfig,
   type ProtocolMid,
 } from "./detector/blockscan-scanner.js";
+import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refinement.js";
+import { buildExactBlockScanCurveMids } from "./detector/blockscan-curve-mids.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import { ProductionBundleRouter, DryRunBundleRouter } from "./execution/bundle-router.js";
@@ -56,7 +58,12 @@ import {
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
 import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import { metronomeSynthPoolIface, quoteFluidDex } from "./solver/quoter.js";
+import {
+  metronomeSynthPoolIface,
+  quoteCurveUnderlying,
+  quoteFluidDex,
+  quoteGoldxMint,
+} from "./solver/quoter.js";
 import {
   PoolStateCache,
   type CurveSnapshot,
@@ -660,7 +667,7 @@ async function main(): Promise<void> {
     ? {
         maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
         minSpreadBps: Number(process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10"),
-        maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "8"),
+        maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "100"),
         budgetMs: Number(process.env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
         pricedTokens: buildBlockScanPricedTokens(),
       }
@@ -682,6 +689,12 @@ async function main(): Promise<void> {
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
     : 4;
+  const blockScanRefineCandidatesRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? "512",
+  );
+  const blockScanRefineCandidates = Number.isFinite(blockScanRefineCandidatesRaw)
+    ? Math.max(blockScanCfg?.maxCandidates ?? 0, Math.floor(blockScanRefineCandidatesRaw))
+    : 512;
   const blockScanFullRewarmBlocks = Number(process.env.SEARCHER_BLOCKSCAN_FULL_REWARM_BLOCKS ?? "600");
   const blockScanWarmVerify = process.env.SEARCHER_BLOCKSCAN_WARM_VERIFY === "1";
   if (enableBlockScan) {
@@ -776,6 +789,7 @@ async function main(): Promise<void> {
     `[searcher/blockscan] enabled=${enableBlockScan ? "on" : "off"} ` +
       `submit=${config.blockScanSubmit ? "on" : "off"} ` +
       `solveConcurrency=${blockScanSolveConcurrency} ` +
+      `refineCandidates=${blockScanRefineCandidates} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -839,9 +853,7 @@ async function main(): Promise<void> {
   };
   // Protocol adapters are admitted only through the currently enabled exact
   // code-owned seeds. File-backed pools cannot bypass protocol-edge posture.
-  const liveRegistry = config.enableProtocolEdges
-    ? POOL_REGISTRY
-    : POOL_REGISTRY.filter((pool) => pool.adapter !== "wsteth" && pool.adapter !== "erc4626");
+  const liveRegistry = filterLiveProtocolRegistry(POOL_REGISTRY, config.enableProtocolEdges);
   const identityCache = createPoolIdentityCache();
   const rawPinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
   const rawUniversePools = loadPoolUniverse(config.poolUniversePath, {
@@ -857,10 +869,30 @@ async function main(): Promise<void> {
   });
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] = await Promise.all([
-    attestPoolIdentities(provider, rawPinnedWarmPools, { cache: identityCache, seedEntries: liveRegistry }),
-    attestPoolIdentities(provider, rawUniversePools, { cache: identityCache, seedEntries: liveRegistry }),
-    attestPoolIdentities(provider, rawBlockscanUniverse, { cache: identityCache, seedEntries: liveRegistry }),
-    attestPoolIdentities(provider, rawBlockScanOverrides, { cache: identityCache, seedEntries: liveRegistry }),
+    attestPoolIdentities(provider, rawPinnedWarmPools, {
+      cache: identityCache,
+      seedEntries: liveRegistry,
+      allowProvisionalFactories: true,
+      allowProvisionalCurveUnderlying: true,
+    }),
+    attestPoolIdentities(provider, rawUniversePools, {
+      cache: identityCache,
+      seedEntries: liveRegistry,
+      allowProvisionalFactories: true,
+      allowProvisionalCurveUnderlying: true,
+    }),
+    attestPoolIdentities(provider, rawBlockscanUniverse, {
+      cache: identityCache,
+      seedEntries: liveRegistry,
+      allowProvisionalFactories: true,
+      allowProvisionalCurveUnderlying: true,
+    }),
+    attestPoolIdentities(provider, rawBlockScanOverrides, {
+      cache: identityCache,
+      seedEntries: liveRegistry,
+      allowProvisionalFactories: true,
+      allowProvisionalCurveUnderlying: true,
+    }),
   ]);
   const pinnedWarmPools = pinnedIdentity.accepted;
   const universePools = universeIdentity.accepted;
@@ -874,7 +906,10 @@ async function main(): Promise<void> {
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
   const factoryPools = await indexFactoryPools(provider, factoryBlocks, discoveryToBlock);
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
-  const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN, discoveryToBlock);
+  const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN, discoveryToBlock, {
+    allowProvisionalFactories: true,
+    allowProvisionalCurveUnderlying: true,
+  });
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
   // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
@@ -1005,7 +1040,10 @@ async function main(): Promise<void> {
   const knownPoolAddrs = new Set(allPools.map((p) => p.address.toLowerCase()));
   const refreshTimer = setInterval(async () => {
     try {
-      const fresh = await scanActivePools(provider, 25, discoveryTopN * 2);
+      const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
+        allowProvisionalFactories: true,
+        allowProvisionalCurveUnderlying: true,
+      });
       const newPools = fresh.filter((p) => !knownPoolAddrs.has(p.address.toLowerCase()));
       if (newPools.length === 0) return;
 
@@ -1346,27 +1384,69 @@ async function main(): Promise<void> {
             logSeg();
             return;
           }
+          const exactCurveMids = await buildExactBlockScanCurveMids(
+            provider,
+            blockNumber,
+            blockScanCacheForPass,
+            edges,
+            passDeadlineAtMs,
+          );
+          for (const [key, mid] of exactCurveMids.mids) protocolMids.set(key, mid);
+          segMark("curve_mids");
+          if (passBudgetExceeded("curve_mids")) {
+            logSeg();
+            return;
+          }
           const warmedV2V3 = countBlockScanWarmedV2V3(blockScanCacheForPass, blockNumber, edges);
           const warmedV4 = countBlockScanWarmedV4(blockScanCacheForPass, blockNumber, edges);
           console.log(
             `[searcher/blockscan] block=${blockNumber} warmedV2V3=${warmedV2V3} ` +
               `warmedV4=${warmedV4} ` +
               `warmedCurve=${curveWarm.warmed} v3TickMeta=${v3TickMeta} ` +
-              `protocolMids=${protocolMids.size}`,
+              `protocolMids=${protocolMids.size} ` +
+              `exactCurveMids=${exactCurveMids.quoted}/${exactCurveMids.attempted} ` +
+              `exactCurveMidFailed=${exactCurveMids.failed}`,
           );
 
           if (passBudgetExceeded("scan")) {
             logSeg();
             return;
           }
-          const scan = detectBlockScanOpportunities({
+          const coarseScan = detectBlockScanOpportunities({
             edges,
             cache: blockScanCacheForPass,
             sourceBlock: blockNumber,
             swapTouched: null,
-            cfg: { ...cfg, protocolMids },
+            cfg: {
+              ...cfg,
+              maxCandidates: blockScanRefineCandidates,
+              protocolMids,
+              pinnedOutsideBudget: true,
+            },
           });
           segMark("scan");
+          if (passBudgetExceeded("refine")) {
+            logSeg();
+            return;
+          }
+          const refinement = await refineBlockScanCandidates(
+            blockScanStateForPass,
+            coarseScan.opportunities,
+            cfg.maxCandidates,
+            passDeadlineAtMs,
+            cfg.pricedTokens,
+          );
+          const scan = { ...coarseScan, opportunities: refinement.opportunities };
+          segMark("refine");
+          console.log(
+            `[searcher/blockscan] block=${blockNumber} exactRouteProbes=${refinement.attempted} ` +
+              `positive=${refinement.positive} negative=${refinement.negative} ` +
+              `failed=${refinement.failed} deadline=${refinement.deadlineHit ? 1 : 0}`,
+          );
+          if (passBudgetExceeded("refine")) {
+            logSeg();
+            return;
+          }
           let quotePositive = 0;
           let bestNet: bigint | null = null;
           const blacklistSkipLogged = new Set<string>();
@@ -3208,7 +3288,7 @@ function blockReadState(
 function isLocalVictimApplyAdapter(adapterId: string): boolean {
   return adapterId === "univ2-swap" ||
     adapterId === "univ3-swap" ||
-    adapterId.startsWith("curve-");
+    isCurveAdapter(adapterId);
 }
 
 function opportunityIdFor(
@@ -3521,7 +3601,10 @@ async function impersonateSwap(
 }
 
 function isCurveAdapter(adapterId: string): boolean {
-  return adapterId.startsWith("curve-");
+  return adapterId === "curve-exchange" ||
+    adapterId === "curve-exchange-nr" ||
+    adapterId === "curve-exchange-plain" ||
+    adapterId === "curve-exchange-received-uint";
 }
 
 function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
@@ -3969,6 +4052,7 @@ type BlockScanProtocolAdapter =
   | "wsteth-wrap"
   | "wsteth-unwrap"
   | "metronome-synth-swap"
+  | "goldx-mint"
   | "psm";
 
 async function buildBlockScanProtocolMids(
@@ -3981,18 +4065,20 @@ async function buildBlockScanProtocolMids(
 ): Promise<Map<string, ProtocolMid>> {
   const mids = new Map<string, ProtocolMid>();
   let protocolFailed = 0;
-  let fluidFailed = 0;
-  let fluidMids = 0;
+  let externalSwapFailed = 0;
+  let externalSwapMids = 0;
   let deadlineHit = false;
 
+  // External swap venues have no local cache fallback. Resolve them before
+  // the much larger ERC-4626 protocol set so a slow long-tail vault cannot
+  // consume the whole pass budget and make otherwise executable DEX routes
+  // disappear from the scanner.
   for (const edge of edges) {
     if (Date.now() >= deadlineAtMs) {
       deadlineHit = true;
       break;
     }
-    if (edge.slotKind !== "protocol") continue;
-    const adapterId = blockScanProtocolAdapter(edge);
-    if (!adapterId) continue;
+    if (!isBlockScanExternallyQuotedSwap(edge)) continue;
 
     try {
       const tokenInDec = await blockScanTokenDecimals(
@@ -4006,25 +4092,30 @@ async function buildBlockScanProtocolMids(
         break;
       }
       const oneIn = 10n ** BigInt(tokenInDec);
-      const mid = await readBlockScanProtocolMid(provider, blockNumber, edge, adapterId, oneIn);
+      const mid = await readBlockScanExternalSwapMid(state, edge, oneIn);
       if (!Number.isFinite(mid) || mid <= 0) continue;
       mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
         mid,
         feeBps: 0,
         depthIn: oneIn * 10_000n,
       });
+      externalSwapMids++;
     } catch {
-      protocolFailed++;
+      externalSwapFailed++;
     }
   }
 
   if (!deadlineHit) {
-    for (const edge of edges) {
+    const protocolEdges = edges
+      .filter((edge) => edge.slotKind === "protocol" && blockScanProtocolAdapter(edge) !== null)
+      .sort((a, b) => blockScanProtocolMidPriority(a) - blockScanProtocolMidPriority(b));
+    for (const edge of protocolEdges) {
       if (Date.now() >= deadlineAtMs) {
         deadlineHit = true;
         break;
       }
-      if (!isBlockScanFluidDexSwap(edge)) continue;
+      const adapterId = blockScanProtocolAdapter(edge);
+      if (!adapterId) continue;
 
       try {
         const tokenInDec = await blockScanTokenDecimals(
@@ -4038,32 +4129,41 @@ async function buildBlockScanProtocolMids(
           break;
         }
         const oneIn = 10n ** BigInt(tokenInDec);
-        const mid = await readBlockScanFluidDexMid(state, edge, oneIn);
+        const mid = await readBlockScanProtocolMid(provider, blockNumber, edge, adapterId, oneIn);
         if (!Number.isFinite(mid) || mid <= 0) continue;
         mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
           mid,
           feeBps: 0,
           depthIn: oneIn * 10_000n,
         });
-        fluidMids++;
       } catch {
-        fluidFailed++;
+        protocolFailed++;
       }
     }
   }
 
-  if (protocolFailed > 0 || fluidFailed > 0 || deadlineHit) {
+  if (protocolFailed > 0 || externalSwapFailed > 0 || deadlineHit) {
     console.log(
       `[searcher/blockscan] block=${blockNumber} protocolMidFailed=${protocolFailed} ` +
-        `fluidMidFailed=${fluidFailed} protocolMidDeadline=${deadlineHit ? 1 : 0} ` +
-        `fluidMids=${fluidMids} protocolMids=${mids.size}`,
+        `externalSwapMidFailed=${externalSwapFailed} protocolMidDeadline=${deadlineHit ? 1 : 0} ` +
+        `externalSwapMids=${externalSwapMids} protocolMids=${mids.size}`,
     );
   }
   return mids;
 }
 
-function isBlockScanFluidDexSwap(edge: TokenEdge): boolean {
-  return edge.slotKind === "swap" && edge.adapterId.toLowerCase().includes("fluid-dex");
+function isBlockScanExternallyQuotedSwap(edge: TokenEdge): boolean {
+  return edge.slotKind === "swap" && (
+    edge.adapterId === "fluid-dex-swap" ||
+    edge.adapterId === "curve-exchange-underlying"
+  );
+}
+
+function blockScanProtocolMidPriority(edge: TokenEdge): number {
+  const adapter = blockScanProtocolAdapter(edge);
+  if (adapter === "goldx-mint" || adapter === "psm") return 0;
+  if (adapter === "metronome-synth-swap" || adapter === "wsteth-wrap" || adapter === "wsteth-unwrap") return 1;
+  return 2;
 }
 
 function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | null {
@@ -4082,6 +4182,8 @@ function blockScanProtocolAdapter(edge: TokenEdge): BlockScanProtocolAdapter | n
       return "psm";
     case "metronome-synth-swap":
       return "metronome-synth-swap";
+    case "goldx-mint":
+      return "goldx-mint";
     default:
       return null;
   }
@@ -4189,25 +4291,47 @@ async function readBlockScanProtocolMid(
       const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
       return Number(decoded[0]) / Number(oneIn);
     }
+    case "goldx-mint": {
+      const state = blockReadStateForProtocol(provider, blockNumber);
+      const out = await quoteGoldxMint(
+        state,
+        edge.target,
+        edge.tokenIn,
+        edge.tokenOut,
+        oneIn,
+      );
+      return Number(out) / Number(oneIn);
+    }
   }
   throw new Error(`unsupported protocol adapter ${adapterId}`);
 }
 
-async function readBlockScanFluidDexMid(
+async function readBlockScanExternalSwapMid(
   state: StateBackend,
   edge: TokenEdge,
   oneIn: bigint,
 ): Promise<number> {
-  const out = await quoteFluidDex(
-    state,
-    edge.target,
-    edge.tokenIn,
-    edge.tokenOut,
-    oneIn,
-    edge.poolToken0,
-    edge.poolToken1,
-  );
+  const out = edge.adapterId === "curve-exchange-underlying"
+    ? await quoteCurveUnderlying(state, edge.target, edge.tokenIn, edge.tokenOut, oneIn)
+    : await quoteFluidDex(
+        state,
+        edge.target,
+        edge.tokenIn,
+        edge.tokenOut,
+        oneIn,
+        edge.poolToken0,
+        edge.poolToken1,
+      );
   return Number(out) / Number(oneIn);
+}
+
+function blockReadStateForProtocol(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+): Pick<StateBackend, "call"> {
+  return {
+    call: (req) => provider.call({ ...req, blockTag: blockNumber }),
+  };
 }
 
 async function blockScanTokenDecimals(
@@ -5010,6 +5134,7 @@ export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean)
   return pools.filter((pool) =>
     pool.adapter !== "wsteth" &&
     pool.adapter !== "erc4626" &&
+    pool.adapter !== "goldx" &&
     pool.adapter !== "metronome-synth" &&
     pool.adapter !== "metronome-hgusdc"
   );

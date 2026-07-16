@@ -122,22 +122,24 @@ async function getFactoryLogs(
   }
 }
 
-// Swap topics discover candidates only. factory()/MetaRegistry decides venue identity.
+// Swap topics discover candidate shapes. factory()/MetaRegistry records identity provenance.
 
-const SWAP_TOPICS: { topic: string; adapter: "univ2" | "univ3" | "curve" }[] = [
+type DiscoveredAdapter = "univ2" | "univ3" | "curve" | "curve-underlying";
+
+const SWAP_TOPICS: { topic: string; adapter: DiscoveredAdapter }[] = [
   // UniV3
   { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"), adapter: "univ3" },
   // PancakeSwap V3 — UniV3-lineage clone; its Swap event adds protocolFeesToken0/1 so the topic differs
   // (0x19b47279…, cast-verified against coffee's pancake pools). Same swap/slot0/tick interface ⇒ univ3
-  // Topics only discover candidates. Exact factories must be present in the
-  // capability registry with a replayed runtime adapter before admission.
+  // Topics only discover candidates. Known factories select their proven adapter;
+  // unproven factories retain this shape provisionally until graph build/final sim.
   { topic: ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)"), adapter: "univ3" },
   // V2-shaped candidate. An identical event does not prove a compatible invariant.
   { topic: ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"), adapter: "univ2" },
   // Curve — multiple event signatures across pool versions
   { topic: ethers.id("TokenExchange(address,int128,uint256,int128,uint256)"), adapter: "curve" },
   { topic: ethers.id("TokenExchange(address,uint256,uint256,uint256,uint256)"), adapter: "curve" },
-  { topic: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"), adapter: "curve" },
+  { topic: ethers.id("TokenExchangeUnderlying(address,int128,uint256,int128,uint256)"), adapter: "curve-underlying" },
 ];
 
 const LOG_BATCH = 50;
@@ -152,13 +154,17 @@ export async function scanActivePools(
   blocksBack = 300,
   maxPools = 100,
   toBlock?: number,
+  options: {
+    allowProvisionalFactories?: boolean;
+    allowProvisionalCurveUnderlying?: boolean;
+  } = {},
 ): Promise<PoolEntry[]> {
   const latest = toBlock ?? await provider.getBlockNumber();
   const fromBlock = Math.max(0, latest - blocksBack);
 
   const poolCounts = new Map<
     string,
-    { adapterCounts: Map<"univ2" | "univ3" | "curve", number>; count: number }
+    { adapterCounts: Map<DiscoveredAdapter, number>; count: number }
   >();
 
   for (const { topic, adapter } of SWAP_TOPICS) {
@@ -185,8 +191,14 @@ export async function scanActivePools(
       adapter: bestAdapter(item.adapterCounts),
       score: item.count,
     }));
-  const { accepted, rejected } = await attestPoolIdentities(provider, candidates);
+  const { accepted, rejected } = await attestPoolIdentities(provider, candidates, {
+    allowProvisionalFactories: options.allowProvisionalFactories,
+    allowProvisionalCurveUnderlying: options.allowProvisionalCurveUnderlying,
+  });
   const ranked = accepted.slice(0, maxPools);
+  const provisional = accepted.filter(
+    (pool) => pool.identitySource === "factory-call-provisional",
+  ).length;
   const rejectedByReason = new Map<string, number>();
   for (const item of rejected) {
     rejectedByReason.set(item.reason, (rejectedByReason.get(item.reason) ?? 0) + 1);
@@ -198,7 +210,7 @@ export async function scanActivePools(
 
   console.log(
     `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size} candidates, ` +
-      `${accepted.length} identity-verified, taking top ${ranked.length}` +
+      `${accepted.length} identity-admitted (provisional=${provisional}), taking top ${ranked.length}` +
       (rejectedSummary ? `, rejected(${rejectedSummary})` : ""),
   );
 
@@ -206,8 +218,8 @@ export async function scanActivePools(
 }
 
 function bestAdapter(
-  adapterCounts: Map<"univ2" | "univ3" | "curve", number>,
-): "univ2" | "univ3" | "curve" {
+  adapterCounts: Map<DiscoveredAdapter, number>,
+): DiscoveredAdapter {
   return [...adapterCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
