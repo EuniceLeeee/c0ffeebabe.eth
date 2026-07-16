@@ -1,0 +1,608 @@
+{
+  "schema_version": 2,
+  "repo_root": "/Users/eunice/src/MEV-route-leg-adapter-ab",
+  "pending_nonce": "a1f547b2-19c6-4443-b015-e7d7ff2851db",
+  "requested_capabilities": [
+    "single-transaction",
+    "causality",
+    "pnl",
+    "competitor-window",
+    "classification",
+    "block-scan"
+  ],
+  "recommended_tools": [
+    {
+      "id": "analysis:bundle-postmortem",
+      "package": "analysis",
+      "script": "bundle-postmortem",
+      "command": "cd analysis && npm run bundle-postmortem --",
+      "implementation": "src/cli/bundle-postmortem.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "single-transaction",
+        "competitor-loss",
+        "causality",
+        "pnl",
+        "flow",
+        "graph"
+      ],
+      "cost": "archive-rpc",
+      "summary": "Canonical deep landed/lost transaction analysis.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "repo:scripts/census-gap.sh",
+      "package": "repo",
+      "script": "scripts/census-gap.sh",
+      "command": "scripts/census-gap.sh",
+      "implementation": "scripts/census-gap.sh",
+      "kind": "analysis",
+      "capabilities": [
+        "competitor-window",
+        "classification",
+        "competitor-loss",
+        "block-scan"
+      ],
+      "cost": "local-rpc",
+      "summary": "Canonical production-window glue from census takes to per-transaction and scanner evidence.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": {
+        "kind": "positionals",
+        "from_index": 0,
+        "to_index": 1
+      }
+    }
+  ],
+  "related_tools": [
+    {
+      "id": "analysis:bundle-postmortem",
+      "package": "analysis",
+      "script": "bundle-postmortem",
+      "command": "cd analysis && npm run bundle-postmortem --",
+      "implementation": "src/cli/bundle-postmortem.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "single-transaction",
+        "competitor-loss",
+        "causality",
+        "pnl",
+        "flow",
+        "graph"
+      ],
+      "cost": "archive-rpc",
+      "summary": "Canonical deep landed/lost transaction analysis.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "repo:scripts/census-gap.sh",
+      "package": "repo",
+      "script": "scripts/census-gap.sh",
+      "command": "scripts/census-gap.sh",
+      "implementation": "scripts/census-gap.sh",
+      "kind": "analysis",
+      "capabilities": [
+        "competitor-window",
+        "classification",
+        "competitor-loss",
+        "block-scan"
+      ],
+      "cost": "local-rpc",
+      "summary": "Canonical production-window glue from census takes to per-transaction and scanner evidence.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": {
+        "kind": "positionals",
+        "from_index": 0,
+        "to_index": 1
+      }
+    },
+    {
+      "id": "analysis:census-report",
+      "package": "analysis",
+      "script": "census-report",
+      "command": "cd analysis && npm run census-report --",
+      "implementation": "src/cli/census-report.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "competitor-window",
+        "classification",
+        "pnl",
+        "graph"
+      ],
+      "cost": "local-rpc",
+      "summary": "Enumerate and classify a watchlist over a bounded block window.",
+      "priority": 90,
+      "curated": true,
+      "window_binding": {
+        "kind": "flags",
+        "from": "--from-block",
+        "to": "--to-block"
+      }
+    },
+    {
+      "id": "analysis:tx-profit",
+      "package": "analysis",
+      "script": "tx-profit",
+      "command": "cd analysis && npm run tx-profit --",
+      "implementation": "src/cli/tx-profit.ts",
+      "kind": "view",
+      "capabilities": [
+        "single-transaction",
+        "pnl"
+      ],
+      "cost": "archive-rpc",
+      "summary": "Thin PnL-only transaction view over the canonical pricer.",
+      "priority": 95,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:onchain-loss-scan",
+      "package": "analysis",
+      "script": "onchain-loss-scan",
+      "command": "cd analysis && npm run onchain-loss-scan --",
+      "implementation": "src/cli/onchain-loss-scan.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "competitor-window",
+        "chain-first",
+        "loss-attribution",
+        "classification"
+      ],
+      "cost": "local-rpc",
+      "summary": "Find chain-first competitor wins absent from our funnel.",
+      "priority": 85,
+      "curated": true,
+      "window_binding": {
+        "kind": "flags",
+        "from": "--from-block",
+        "to": "--to-block"
+      }
+    },
+    {
+      "id": "analysis:ab-canary-compare",
+      "package": "analysis",
+      "script": "ab-canary-compare",
+      "command": "cd analysis && npm run ab-canary-compare --",
+      "implementation": "src/cli/ab-canary-compare.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "ab",
+        "comparison",
+        "block-scan"
+      ],
+      "cost": "zero-cu",
+      "summary": "Compare paired A/B block-scan logs after manual analysis.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:competitor-calibration",
+      "package": "analysis",
+      "script": "competitor-calibration",
+      "command": "cd analysis && npm run competitor-calibration --",
+      "implementation": "src/cli/competitor-calibration.ts",
+      "kind": "gate",
+      "capabilities": [
+        "classification",
+        "calibration",
+        "fixture"
+      ],
+      "cost": "zero-cu",
+      "summary": "Regression calibration for competitor style and comparability classification; it does not inspect a live window.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-hunt",
+      "package": "listener",
+      "script": "searcher:blockscan-hunt",
+      "command": "cd listener && npm run searcher:blockscan-hunt --",
+      "implementation": "src/searcher/test/blockscan-hunt.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "pinned-replay",
+        "production-stage"
+      ],
+      "cost": "fork",
+      "summary": "Trusted parent-block replay for a pinned production sample.",
+      "priority": 100,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:tx-flow",
+      "package": "analysis",
+      "script": "tx-flow",
+      "command": "cd analysis && npm run tx-flow --",
+      "implementation": "src/cli/tx-flow.ts",
+      "kind": "view",
+      "capabilities": [
+        "single-transaction",
+        "flow"
+      ],
+      "cost": "archive-rpc",
+      "summary": "Thin ordered token-flow transaction view.",
+      "priority": 95,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:loop-fork-gate",
+      "package": "listener",
+      "script": "searcher:loop-fork-gate",
+      "command": "cd listener && npm run searcher:loop-fork-gate --",
+      "implementation": "src/searcher/test/blockscan-fork-solve.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "pinned-replay",
+        "closed-loop"
+      ],
+      "cost": "fork",
+      "summary": "Fork gate for one explicit closed-loop fixture.",
+      "priority": 95,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:block-activity",
+      "package": "analysis",
+      "script": "block-activity",
+      "command": "cd analysis && npm run block-activity --",
+      "implementation": "src/cli/block-activity.ts",
+      "kind": "view",
+      "capabilities": [
+        "single-block",
+        "production-events",
+        "block-scan"
+      ],
+      "cost": "zero-cu",
+      "summary": "Summarize one block's production funnel and block-scan evidence.",
+      "priority": 90,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:live-loss",
+      "package": "analysis",
+      "script": "live-loss",
+      "command": "cd analysis && npm run live-loss --",
+      "implementation": "src/cli/live-loss.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "competitor-window",
+        "production-events",
+        "loss-attribution"
+      ],
+      "cost": "local-rpc",
+      "summary": "Analyze watched competitors or our dropped opportunities over a live window.",
+      "priority": 80,
+      "curated": true,
+      "window_binding": {
+        "kind": "flags",
+        "from": "--from-block",
+        "to": "--to-block"
+      }
+    },
+    {
+      "id": "listener:searcher:taxonomy",
+      "package": "listener",
+      "script": "searcher:taxonomy",
+      "command": "cd listener && npm run searcher:taxonomy --",
+      "implementation": "src/searcher/test/taxonomy.ts",
+      "kind": "test",
+      "capabilities": [
+        "classification",
+        "taxonomy"
+      ],
+      "cost": "zero-cu",
+      "summary": "Strategy/edge taxonomy regression suite.",
+      "priority": 80,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:venue-discovery-scan",
+      "package": "analysis",
+      "script": "venue-discovery-scan",
+      "command": "cd analysis && npm run venue-discovery-scan --",
+      "implementation": "src/cli/venue-discovery-scan.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "venue-discovery",
+        "classification",
+        "fixture"
+      ],
+      "cost": "zero-cu",
+      "summary": "Classify venue candidates from a fixture.",
+      "priority": 75,
+      "curated": true,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:venue-discovery-window",
+      "package": "analysis",
+      "script": "venue-discovery-window",
+      "command": "cd analysis && npm run venue-discovery-window --",
+      "implementation": "src/cli/venue-discovery-window.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "venue-discovery",
+        "competitor-window"
+      ],
+      "cost": "local-rpc",
+      "summary": "Discover and aggregate venues over an RPC block window.",
+      "priority": 75,
+      "curated": true,
+      "window_binding": {
+        "kind": "flags",
+        "from": "--from-block",
+        "to": "--to-block"
+      }
+    },
+    {
+      "id": "listener:searcher:blockscan-a0",
+      "package": "listener",
+      "script": "searcher:blockscan-a0",
+      "command": "cd listener && npm run searcher:blockscan-a0 --",
+      "implementation": "src/searcher/test/blockscan-a0-replay.ts",
+      "kind": "replay",
+      "capabilities": [
+        "a0",
+        "block-scan",
+        "blockscan",
+        "listener",
+        "replay",
+        "searcher",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "listener package script: searcher:blockscan-a0",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-candidate-refinement",
+      "package": "listener",
+      "script": "searcher:blockscan-candidate-refinement",
+      "command": "cd listener && npm run searcher:blockscan-candidate-refinement --",
+      "implementation": "src/searcher/test/blockscan-candidate-refinement.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "candidate",
+        "listener",
+        "refinement",
+        "replay",
+        "searcher",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "listener package script: searcher:blockscan-candidate-refinement",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-contract",
+      "package": "listener",
+      "script": "searcher:blockscan-contract",
+      "command": "cd listener && npm run searcher:blockscan-contract --",
+      "implementation": "src/searcher/test/blockscan-contract.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "contract",
+        "listener",
+        "replay",
+        "searcher",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "listener package script: searcher:blockscan-contract",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-fork-solve",
+      "package": "listener",
+      "script": "searcher:blockscan-fork-solve",
+      "command": "cd listener && npm run searcher:blockscan-fork-solve --",
+      "implementation": "src/searcher/test/blockscan-fork-solve.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "fork",
+        "listener",
+        "replay",
+        "searcher",
+        "solve",
+        "verification"
+      ],
+      "cost": "fork",
+      "summary": "listener package script: searcher:blockscan-fork-solve",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-fork-solve-f391",
+      "package": "listener",
+      "script": "searcher:blockscan-fork-solve-f391",
+      "command": "cd listener && npm run searcher:blockscan-fork-solve-f391 --",
+      "implementation": "src/searcher/test/blockscan-fork-solve-f391.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "f391",
+        "fork",
+        "listener",
+        "replay",
+        "searcher",
+        "solve",
+        "verification"
+      ],
+      "cost": "fork",
+      "summary": "listener package script: searcher:blockscan-fork-solve-f391",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-fork-solve-metronome",
+      "package": "listener",
+      "script": "searcher:blockscan-fork-solve-metronome",
+      "command": "cd listener && npm run searcher:blockscan-fork-solve-metronome --",
+      "implementation": "src/searcher/test/blockscan-fork-solve-metronome.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "fork",
+        "listener",
+        "metronome",
+        "replay",
+        "searcher",
+        "solve",
+        "verification"
+      ],
+      "cost": "fork",
+      "summary": "listener package script: searcher:blockscan-fork-solve-metronome",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-hunt-selection",
+      "package": "listener",
+      "script": "searcher:blockscan-hunt-selection",
+      "command": "cd listener && npm run searcher:blockscan-hunt-selection --",
+      "implementation": "src/searcher/test/blockscan-hunt-selection.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "hunt",
+        "listener",
+        "replay",
+        "searcher",
+        "selection",
+        "verification"
+      ],
+      "cost": "fork",
+      "summary": "listener package script: searcher:blockscan-hunt-selection",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-hunt-tx149",
+      "package": "listener",
+      "script": "searcher:blockscan-hunt-tx149",
+      "command": "cd listener && npm run searcher:blockscan-hunt-tx149 --",
+      "implementation": "src/searcher/test/blockscan-hunt-tx149.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "hunt",
+        "listener",
+        "replay",
+        "searcher",
+        "tx149",
+        "verification"
+      ],
+      "cost": "fork",
+      "summary": "listener package script: searcher:blockscan-hunt-tx149",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-scanner",
+      "package": "listener",
+      "script": "searcher:blockscan-scanner",
+      "command": "cd listener && npm run searcher:blockscan-scanner --",
+      "implementation": "src/searcher/test/blockscan-scanner.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "listener",
+        "replay",
+        "scanner",
+        "searcher",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "listener package script: searcher:blockscan-scanner",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-solver-center",
+      "package": "listener",
+      "script": "searcher:blockscan-solver-center",
+      "command": "cd listener && npm run searcher:blockscan-solver-center --",
+      "implementation": "src/searcher/test/blockscan-solver-center.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "center",
+        "listener",
+        "replay",
+        "searcher",
+        "solver",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "listener package script: searcher:blockscan-solver-center",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "listener:searcher:blockscan-warm-coordinator",
+      "package": "listener",
+      "script": "searcher:blockscan-warm-coordinator",
+      "command": "cd listener && npm run searcher:blockscan-warm-coordinator --",
+      "implementation": "src/searcher/test/blockscan-warm-coordinator.ts",
+      "kind": "replay",
+      "capabilities": [
+        "block-scan",
+        "blockscan",
+        "coordinator",
+        "listener",
+        "replay",
+        "searcher",
+        "verification",
+        "warm"
+      ],
+      "cost": "zero-cu",
+      "summary": "listener package script: searcher:blockscan-warm-coordinator",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "executions": [],
+  "generated_at": "2026-07-16T09:23:06.767Z",
+  "updated_at": "2026-07-16T09:23:06.768Z"
+}
