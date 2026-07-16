@@ -781,3 +781,43 @@ verdict:
 - [ ] trusted harness 未被架构 challenger 修改。
 - [ ] Phase 0 corpus 表中每个被迁 family/lane 都有成功 receipt，scanner、plan、calldata 和 final profit 等价。
 - [ ] final simulation 和 EV gate 继续 fail closed。
+
+---
+
+## 19. victim detect 从 route 派生(纠正 detect-only 默认)— 仅限 swap-leg
+
+用户定夺 + 代码核实(route-leg-adapter 分支):**swap-leg 的 victim detect 必须从 route 能力直接派生,不是另外声明的可选 `victim` 块。** 纠正 Sol §18 victim 三级模型的错误默认。
+
+### 代码事实(route-leg-adapter 分支)
+- `detectImpact`(识别 victim)用的**就是和 discovery/quote 同一份事件 ABI + 池数学**:[pool-impact.ts](listener/src/searcher/detector/pool-impact.ts) 的 `UNIV3_SWAP`/`UNIV2_SWAP`/`TokenExchangeUnderlying` topic + `decodeUniV3SwapData(amount0/amount1)`,与该 venue 的 discovery topic、quote 曲线同源。
+- `applyLocal` 用的就是和 quote 同一份 v2/v3/curve math。
+- **curve-underlying 现状 = `localApplyVariant:null` + `overlayReplayVariant:null`** = detect 到了却无任何重现路径 = **backrun 直接 drop**。这是配置漏了,不是能力天花板。
+
+### 正确模型:可路由 ⇒ 自动可 detect ⇒ 至少 raw-tx-replay ⇒ backrun 永不因"没配 victim"而 drop
+
+分级的不是"识别",是"重现":
+
+| 能力 | 来源 | 可选? |
+|---|---|---|
+| **detect** | route + 事件 ABI **派生**(swap-leg) | **不可选,可路由即有** |
+| **重现: raw-tx-replay** | fork 回放真实 victim tx,无需 venue 专属状态数学 | **万能兜底,永远有** |
+| **重现: applyLocal** | 复用 quote 数学(仅结构简单的 venue) | **可选加速**;建不了就退回 raw-tx-replay,**不退回丢弃** |
+
+- **没有任何可路由的 swap venue 应该"不能 backrun"**。最差 = `detect + raw-tx-replay`(慢但正确),永不是 `detect-only + drop`。
+- Sol 的 detect-only 默认反了:detect 应自动,只有"是否 applyLocal 加速"才 opt-in。
+- **安全澄清**:自动 detect 无安全代价 —— detect 只"认出 victim 存在",要不要 backrun 仍由下游 sim/EV/phantom-guard 判。把"丢弃"改成"进入下游判定",不放宽任何门。
+
+### 立即修正(route-leg-adapter 分支)
+curve-underlying 从 `detect-only`(null/null)升为 **`detect + raw-tx-replay`**:能 backrun,走 fork 回放真 victim(不手算 metapool 的多池/费用连带状态,与 §18 一致 —— 手算不可靠,回放真值)。这是配置修正,不是新能力。
+
+### 范围(用户明确)
+**本条只适用 swap-leg。** swap 是 position-conserving、事件语义标准(一 Swap 事件 = 一次价格移动),detect 派生天然成立。**protocol/credit 等其他 leg 的 victim 先不管** —— 它们的 victim 语义(mint/burn/oracle 各异)复杂,留到需要时设计,不提前。oracle/rate trigger(victim 非 swap、与 route adapter 非 1:1)仍走独立 TriggerAdapter(§18)。
+
+### 对 VenueAdapter 接口的影响
+swap venue 的 `victim.detect` **不声明也存在**(由 route 的事件 ABI 派生);venue 只需可选声明 `applyLocal`(加速)。即:
+```
+SwapVenueAdapter:
+  route + discovery(topic 自声明)  → detect 自动派生 + raw-tx-replay 兜底(白送)
+  applyLocal?                       → 可选加速,缺省 = raw-tx-replay
+```
+不再有"可路由 swap venue 却 detect-only/drop"的配置可能。
