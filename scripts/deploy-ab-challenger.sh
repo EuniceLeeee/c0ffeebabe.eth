@@ -213,7 +213,9 @@ assert_port_owned() {
 run_candidate_gate_worker() {
   set -Eeuo pipefail
   local analysis_dir=$1 proxy_port=$2 worker_timeout=$3 evidence_rpc
-  local proxy_pid="" timeout_pid="" proxy_ready=0 listener_pids
+  local proxy_ready=0 listener_pids
+  EVIDENCE_PROXY_PID=""
+  EVIDENCE_TIMEOUT_PID=""
   shift 3
   export -n -f run_candidate_gate_worker 2>/dev/null || true
   [[ "$worker_timeout" =~ ^[1-9][0-9]*$ ]] || {
@@ -227,6 +229,7 @@ run_candidate_gate_worker() {
   }
   cd "$analysis_dir"
   cleanup_evidence_proxy() {
+    local timeout_pid=${EVIDENCE_TIMEOUT_PID:-} proxy_pid=${EVIDENCE_PROXY_PID:-}
     if [[ "$timeout_pid" =~ ^[1-9][0-9]*$ ]]; then
       kill "$timeout_pid" 2>/dev/null || true
       wait "$timeout_pid" 2>/dev/null || true
@@ -240,17 +243,20 @@ run_candidate_gate_worker() {
   trap 'trap - INT; kill -INT -- -$$ 2>/dev/null || true; exit 130' INT
   trap 'trap - TERM; kill -TERM -- -$$ 2>/dev/null || true; exit 143' TERM
   (sleep "$worker_timeout"; kill -TERM -- -$$ 2>/dev/null || true) &
-  timeout_pid=$!
+  EVIDENCE_TIMEOUT_PID=$!
 
   # The upstream URL enters only through stdin and stays out of gate/hunt argv and logs. The loopback
   # proxy is credential hygiene, not a privilege boundary between same-UID production processes.
   printf '%s' "$evidence_rpc" | MEV_AB_EVIDENCE_PROXY_PORT="$proxy_port" node -e '
     const http = require("node:http");
+    const https = require("node:https");
     const upstreamChunks = [];
     process.stdin.on("data", (chunk) => upstreamChunks.push(chunk));
     process.stdin.on("end", () => {
-      const upstream = Buffer.concat(upstreamChunks).toString("utf8");
-      if (!/^https:\/\/\S+$/.test(upstream)) process.exit(2);
+      const upstreamText = Buffer.concat(upstreamChunks).toString("utf8");
+      if (!/^https:\/\/\S+$/.test(upstreamText)) process.exit(2);
+      const upstream = new URL(upstreamText);
+      const agent = new https.Agent({ keepAlive: true, maxSockets: 64 });
       const server = http.createServer(async (request, response) => {
         if (request.method !== "POST") {
           response.writeHead(405, { "content-type": "text/plain" });
@@ -265,17 +271,54 @@ run_candidate_gate_worker() {
             if (bytes > 16 * 1024 * 1024) throw new Error("request too large");
             chunks.push(chunk);
           }
-          const result = await fetch(upstream, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: Buffer.concat(chunks),
-            signal: AbortSignal.timeout(60_000),
+          await new Promise((resolve) => {
+            let finalized = false;
+            let upstreamRequest;
+            const finalize = () => {
+              if (finalized) return;
+              finalized = true;
+              clearTimeout(absoluteTimeout);
+              resolve();
+            };
+            const finishUnavailable = () => {
+              if (finalized) return;
+              if (!response.headersSent) {
+                response.writeHead(502, { "content-type": "text/plain" });
+                response.end("archive rpc unavailable");
+              } else {
+                response.destroy();
+              }
+              finalize();
+            };
+            const absoluteTimeout = setTimeout(() => {
+              upstreamRequest?.destroy(new Error("archive rpc timeout"));
+              finishUnavailable();
+            }, 60_000);
+            upstreamRequest = https.request(upstream, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              agent,
+            }, (upstreamResponse) => {
+              if (finalized) {
+                upstreamResponse.destroy();
+                return;
+              }
+              response.writeHead(upstreamResponse.statusCode ?? 502, {
+                "content-type": upstreamResponse.headers["content-type"] ?? "application/json",
+              });
+              upstreamResponse.pipe(response);
+              upstreamResponse.once("end", finalize);
+              upstreamResponse.once("aborted", finishUnavailable);
+              upstreamResponse.once("error", finishUnavailable);
+            });
+            response.once("finish", finalize);
+            response.once("close", () => {
+              if (!finalized) upstreamRequest.destroy(new Error("gate client closed"));
+              finalize();
+            });
+            upstreamRequest.once("error", finishUnavailable);
+            upstreamRequest.end(Buffer.concat(chunks));
           });
-          const body = Buffer.from(await result.arrayBuffer());
-          response.writeHead(result.status, {
-            "content-type": result.headers.get("content-type") ?? "application/json",
-          });
-          response.end(body);
         } catch {
           response.writeHead(502, { "content-type": "text/plain" });
           response.end("archive rpc unavailable");
@@ -284,14 +327,14 @@ run_candidate_gate_worker() {
       server.listen(Number(process.env.MEV_AB_EVIDENCE_PROXY_PORT), "127.0.0.1");
     });
   ' >/tmp/mev-ab-evidence-proxy.log 2>&1 &
-  proxy_pid=$!
+  EVIDENCE_PROXY_PID=$!
   for _ in $(seq 1 50); do
-    kill -0 "$proxy_pid" 2>/dev/null || break
+    kill -0 "$EVIDENCE_PROXY_PID" 2>/dev/null || break
     listener_pids=$(
       ss -H -ltnp "sport = :$proxy_port" 2>/dev/null \
         | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
     )
-    if [ "$listener_pids" = "$proxy_pid" ]; then
+    if [ "$listener_pids" = "$EVIDENCE_PROXY_PID" ]; then
       proxy_ready=1
       break
     fi

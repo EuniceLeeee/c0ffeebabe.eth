@@ -213,7 +213,11 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /server\.listen\(Number\(process\.env\.MEV_AB_EVIDENCE_PROXY_PORT\), "127\.0\.0\.1"\)/);
   assert.match(script, /run_candidate_gate_worker/);
   assert.match(script, /AB_CANDIDATE_GATE_TIMEOUT_SECONDS:-2700/);
-  assert.match(script, /signal: AbortSignal\.timeout\(60_000\)/);
+  assert.match(script, /new https\.Agent\(\{ keepAlive: true, maxSockets: 64 \}\)/);
+  assert.match(script, /const absoluteTimeout = setTimeout/);
+  assert.match(script, /upstreamResponse\.once\("aborted", finishUnavailable\)/);
+  assert.match(script, /EVIDENCE_TIMEOUT_PID=\$!/);
+  assert.match(script, /EVIDENCE_PROXY_PID=\$!/);
   assert.match(script, /libc\.prctl\(1, signal\.SIGTERM/);
   assert.match(script, /os\.setsid\(\)/);
   assert.match(script, /kill -TERM -- "-\$pid"/);
