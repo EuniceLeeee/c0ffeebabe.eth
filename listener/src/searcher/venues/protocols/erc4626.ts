@@ -1,9 +1,12 @@
+import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
 import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg, quoteSiloRedeem } from "./protocol-quote.js";
+
+const erc4626Iface = new ethers.Interface(["function asset() view returns (address)"]);
 
 export const erc4626Adapter = Object.freeze({
   id: "protocol:erc4626",
@@ -23,9 +26,11 @@ export const erc4626Adapter = Object.freeze({
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 2 },
   prepared: null,
-  async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn) throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
     if (pool.nonStandardRedeem) {
+      // fixedTokenIn feeds no edge here and silo payout semantics are verified
+      // at the fork-receipt level, so no asset() attestation on this branch.
       if (!pool.redeemTokenOut) return [];
       return [{
         adapterId: "erc4626-redeem-silo", target: pool.address,
@@ -33,6 +38,15 @@ export const erc4626Adapter = Object.freeze({
         slotKind: "protocol", protocolAction: "redeem", score: pool.score,
         ...deriveEdgeTaxonomy("protocol", "redeem"),
       }];
+    }
+    // previewDeposit/previewRedeem quotes are denominated in asset(); a vault
+    // whose asset drifts from the registry pin must fail edge build.
+    const raw = await backend.call({ to: pool.address, data: erc4626Iface.encodeFunctionData("asset") });
+    const reported = String(erc4626Iface.decodeFunctionResult("asset", raw)[0]);
+    if (reported.toLowerCase() !== pool.fixedTokenIn.toLowerCase()) {
+      throw new Error(
+        `erc4626 identity attestation failed: ${pool.address} reports asset ${reported}, pinned ${pool.fixedTokenIn}`,
+      );
     }
     return [
       {

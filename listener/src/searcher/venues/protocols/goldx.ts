@@ -57,9 +57,16 @@ export const goldxAdapter = Object.freeze({
     allowanceSpender: () => null,
     prewarmAddresses: () => [],
   },
-  async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`goldx pool ${pool.address} missing fixed token metadata`);
+    }
+    // GOLDx exposes no collateral-token view, so the pair stays code-owned;
+    // attest the one identity-bearing view the mint quote depends on.
+    const raw = await backend.call({ to: pool.address, data: goldxIface.encodeFunctionData("unit") });
+    const unit = BigInt(goldxIface.decodeFunctionResult("unit", raw)[0]);
+    if (unit <= 0n) {
+      throw new Error(`goldx identity attestation failed: ${pool.address} unit() = ${unit}`);
     }
     return [{
       adapterId: "goldx-mint", target: pool.address,

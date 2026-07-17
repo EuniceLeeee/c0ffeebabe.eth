@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
@@ -12,6 +13,10 @@ import { readProtocolExternalMid } from "../mid-readers.js";
 import { quotePSM, quotePSMSellGemPrewarm } from "./protocol-quote.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
+const litePsmIface = new ethers.Interface([
+  "function gem() view returns (address)",
+  "function dai() view returns (address)",
+]);
 
 export const psmAdapter = Object.freeze({
   id: "protocol:psm",
@@ -56,9 +61,17 @@ export const psmAdapter = Object.freeze({
     allowanceSpender: () => null,
     prewarmAddresses: () => [ADDR.SKY_PSM_LITE],
   },
-  async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`psm pool ${pool.address} missing fixedTokenIn/Out`);
+    }
+    // LitePSM publishes its pair as immutables; the declared pair must match them.
+    for (const [fn, expected] of [["gem", pool.fixedTokenIn], ["dai", pool.fixedTokenOut]] as const) {
+      const raw = await backend.call({ to: pool.address, data: litePsmIface.encodeFunctionData(fn) });
+      const reported = String(litePsmIface.decodeFunctionResult(fn, raw)[0]);
+      if (reported.toLowerCase() !== expected.toLowerCase()) {
+        throw new Error(`psm identity attestation failed: ${pool.address} reports ${fn}() ${reported}`);
+      }
     }
     return [{
       adapterId: "psm", target: pool.address,

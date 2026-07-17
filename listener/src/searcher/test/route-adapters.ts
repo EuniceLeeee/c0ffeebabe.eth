@@ -195,6 +195,97 @@ async function main(): Promise<void> {
   assert(missingDeclarationRejected, "protocol adapter without venues/reason must fail closed");
   console.log("[route-adapters] declared protocol venue graph derivation: PASS");
 
+  const attestIface = new ethers.Interface([
+    "function stETH() view returns (address)",
+    "function gem() view returns (address)",
+    "function dai() view returns (address)",
+    "function asset() view returns (address)",
+    "function unit() view returns (uint256)",
+    "function convertToShares(uint256 assets) view returns (uint256 shares)",
+  ]);
+  const attestBackend = (answers: Record<string, string>): TokenQueryBackend => ({
+    async call(req) {
+      const answer = answers[req.data.slice(0, 10)];
+      if (!answer) throw new Error(`unexpected attest selector ${req.data.slice(0, 10)}`);
+      return answer;
+    },
+  });
+  const attestSelector = (fn: string): string => attestIface.getFunction(fn)!.selector;
+  const attestAnswer = (fn: string, value: string | bigint): [string, string] =>
+    [attestSelector(fn), attestIface.encodeFunctionResult(fn, [value])];
+  const declaredPool = (adapterName: string): PoolEntry => {
+    const entry = POOL_REGISTRY.find((candidate) => candidate.adapter === adapterName);
+    assert(entry !== undefined, `POOL_REGISTRY missing ${adapterName} entry`);
+    return entry;
+  };
+  const attestCases: Array<{
+    adapter: string;
+    pool: PoolEntry;
+    good: Record<string, string>;
+    bad: Record<string, string>;
+    edgeCount: number;
+  }> = [
+    {
+      adapter: "wsteth", pool: declaredPool("wsteth"),
+      good: Object.fromEntries([attestAnswer("stETH", ADDR.STETH)]),
+      bad: Object.fromEntries([attestAnswer("stETH", token0)]),
+      edgeCount: 2,
+    },
+    {
+      adapter: "psm", pool: declaredPool("psm"),
+      good: Object.fromEntries([attestAnswer("gem", ADDR.USDC), attestAnswer("dai", ADDR.DAI)]),
+      bad: Object.fromEntries([attestAnswer("gem", token0), attestAnswer("dai", ADDR.DAI)]),
+      edgeCount: 1,
+    },
+    {
+      adapter: "goldx", pool: declaredPool("goldx"),
+      good: Object.fromEntries([attestAnswer("unit", 10n ** 18n)]),
+      bad: Object.fromEntries([attestAnswer("unit", 0n)]),
+      edgeCount: 1,
+    },
+    {
+      adapter: "rocksolid", pool: declaredPool("rocksolid"),
+      good: Object.fromEntries([attestAnswer("convertToShares", 10n ** 18n)]),
+      bad: Object.fromEntries([attestAnswer("convertToShares", 0n)]),
+      edgeCount: 1,
+    },
+    {
+      adapter: "metronome-hgusdc", pool: declaredPool("metronome-hgusdc"),
+      good: Object.fromEntries([attestAnswer("asset", ADDR.USDC)]),
+      bad: Object.fromEntries([attestAnswer("asset", token0)]),
+      edgeCount: 1,
+    },
+    {
+      adapter: "erc4626",
+      pool: { address: pair, adapter: "erc4626", fixedTokenIn: token0 },
+      good: Object.fromEntries([attestAnswer("asset", token0)]),
+      bad: Object.fromEntries([attestAnswer("asset", token1)]),
+      edgeCount: 2,
+    },
+  ];
+  for (const testCase of attestCases) {
+    const built = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
+      testCase.pool, attestBackend(testCase.good),
+    );
+    assert(
+      built.length === testCase.edgeCount,
+      `${testCase.adapter} attested edge count ${built.length}`,
+    );
+    let attestRejected = false;
+    try {
+      await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(testCase.pool, attestBackend(testCase.bad));
+    } catch {
+      attestRejected = true;
+    }
+    assert(attestRejected, `${testCase.adapter} attestation mismatch must fail edge build`);
+  }
+  const siloEdges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
+    { address: pair, adapter: "erc4626", fixedTokenIn: token0, nonStandardRedeem: true, redeemTokenOut: token1 },
+    attestBackend({}),
+  );
+  assert(siloEdges.length === 1, "silo vault must build without asset() attestation");
+  console.log("[route-adapters] declared venue identity attestation: PASS");
+
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };
   const edges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, backend);
   assert(edges.length === 2, `univ2 edge count ${edges.length}`);
@@ -482,7 +573,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (13/13)");
+  console.log("route-adapters PASS (14/14)");
 }
 
 await main();

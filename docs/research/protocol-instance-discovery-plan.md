@@ -16,6 +16,15 @@
   (命名即债务标记),是本计划 Slice C 的清除对象。
 - conformance(route-adapters)13/13 实跑 PASS。
 
+**声明档接口自证(declared-venue attestation,后续追加)**:各 protocol adapter 的 `buildEdges`
+在建边前用 venue 自身接口 eth_call 核对声明绑定 —— wsteth `stETH()`、psm `gem()/dai()`、
+erc4626 标准分支 `asset()==fixedTokenIn`(silo 分支跳过:fixed 字段不喂边,行为验证归 fork 收据)、
+hgusdc 经 `HGUSDC.asset()`;goldx/rocksolid 无 token-address view,attest 报价依赖的
+`unit()`/`convertToShares()` 活性,pair 保持 code-owned。失败 = 该 pool 建边失败(进
+`buildTokenGraphWithResults.failed`,boot 日志可见)。这是 **pin 的漂移防护,不是准入**
+——Slice C 的 attestIdentity(行为即身份)仍按原设计另行实现,`asset()` 可读单独不构成
+准入身份的边界不变。conformance 扩为 14/14(正反例 + silo 跳过)。
+
 ## 1. 模型:Instance 与 Route 两层(已核实的代码约束)
 
 - `poolRegistryKey`(非 v4)= 纯地址 → **一个实例一条 PoolEntry**,同址第二条路线会被去重吞掉

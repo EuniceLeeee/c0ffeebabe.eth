@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   buildTokenGraph,
@@ -39,6 +40,30 @@ const unusedBackend: TokenQueryBackend = {
 
 const trueBoolBackend: TokenQueryBackend = {
   call: async () => `0x${"0".repeat(63)}1`,
+};
+
+// Answers the declared-venue identity attestations (gem/dai for the PSM,
+// asset for the ERC4626 vault under test and the hgUSDC exit vault).
+const attestIface = new ethers.Interface([
+  "function gem() view returns (address)",
+  "function dai() view returns (address)",
+  "function asset() view returns (address)",
+]);
+const attestedBackend: TokenQueryBackend = {
+  call: async (req) => {
+    const selector = req.data.slice(0, 10);
+    if (selector === attestIface.getFunction("gem")!.selector) {
+      return attestIface.encodeFunctionResult("gem", [ADDR.USDC]);
+    }
+    if (selector === attestIface.getFunction("dai")!.selector) {
+      return attestIface.encodeFunctionResult("dai", [ADDR.DAI]);
+    }
+    if (selector === attestIface.getFunction("asset")!.selector) {
+      const asset = req.to.toLowerCase() === ADDR.HGUSDC.toLowerCase() ? ADDR.USDC : ADDR.USDS;
+      return attestIface.encodeFunctionResult("asset", [asset]);
+    }
+    throw new Error(`taxonomy attest backend: unexpected selector ${selector}`);
+  },
 };
 
 function testSlotKindMapping(): void {
@@ -105,7 +130,7 @@ async function testTokenGraphEdges(): Promise<void> {
   assert(psmEntry !== undefined, "POOL_REGISTRY psm entry missing");
   assert(psmEntry.fixedSlotKind === "protocol", `psm fixedSlotKind ${psmEntry.fixedSlotKind}`);
   assert(psmEntry.fixedProtocolAction === "convert", `psm fixedProtocolAction ${psmEntry.fixedProtocolAction}`);
-  const psmEdges = await buildTokenGraph(unusedBackend, [psmEntry]);
+  const psmEdges = await buildTokenGraph(attestedBackend, [psmEntry]);
   assert(psmEdges.length === 1, `psm edge count ${psmEdges.length}`);
   assert(psmEdges[0].protocolAction === "convert", `psm edge protocolAction ${psmEdges[0].protocolAction}`);
   assertTaxonomy(psmEdges[0], "protocol", false, "psm protocol/convert edge");
@@ -118,7 +143,7 @@ async function testTokenGraphEdges(): Promise<void> {
     entry.adapter === "erc4626" && entry.address.toLowerCase() === ADDR.SUSDS.toLowerCase()
   );
   assert(erc4626Entry !== undefined, "POOL_REGISTRY sUSDS ERC4626 entry missing");
-  const erc4626Edges = await buildTokenGraph(unusedBackend, [erc4626Entry]);
+  const erc4626Edges = await buildTokenGraph(attestedBackend, [erc4626Entry]);
   assert(erc4626Edges.length === 2, `erc4626 edge count ${erc4626Edges.length}`);
   const depositEdge = erc4626Edges.find((edge) => edge.adapterId === "erc4626-deposit");
   const redeemEdge = erc4626Edges.find((edge) => edge.adapterId === "erc4626-redeem");
@@ -141,7 +166,7 @@ async function testTokenGraphEdges(): Promise<void> {
     hgUsdcEntry.fixedSlotKind === "protocol" && hgUsdcEntry.fixedProtocolAction === "redeem",
     "Metronome hgUSDC protocol metadata missing",
   );
-  const hgUsdcEdges = await buildTokenGraph(unusedBackend, [hgUsdcEntry]);
+  const hgUsdcEdges = await buildTokenGraph(attestedBackend, [hgUsdcEntry]);
   const hgUsdcExit = hgUsdcEdges.find((edge) => edge.adapterId === "metronome-hgusdc-exit");
   assert(hgUsdcExit !== undefined, "Metronome hgUSDC exit edge missing");
   assert(
