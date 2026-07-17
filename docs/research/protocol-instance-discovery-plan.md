@@ -40,6 +40,14 @@ interface ProtocolConversionAdapter {
   // 已有:declaredVenues / undeclaredVenueReason / buildEdges / quoteExact / buildPlanFragment
   readonly discovery?: {
     discoverInstances(ctx: DiscoveryContext): Promise<ProtocolCandidate[]>;
+
+    // 强制,且必须位于 route 枚举/probe 之前:地址准入。
+    // 返回 null = 身份根不认该地址 → quarantine,不得 enumerate/quote/入图。
+    attestIdentity(
+      candidate: ProtocolCandidate,
+      blockTag: BlockTag,
+    ): Promise<ProtocolInstance | null>;
+
     enumerateRoutes(instance: ProtocolInstance, blockTag: BlockTag): Promise<ProtocolRoute[]>;
     probeRoute(route: ProtocolRoute, ctx: ProbeContext): Promise<RouteProbeResult>;
     watchRouteChanges?(...): AsyncIterable<RouteChange>;   // Slice D
@@ -47,13 +55,22 @@ interface ProtocolConversionAdapter {
 }
 ```
 
+管道固定为:`discover/call observation → attestIdentity → enumerateRoutes → probeRoute → PoolEntry`。
+
+职责分层(勿混):**`matchTrace` = 候选分类**(selector → adapter family;动态发现时 target 本来
+未知,不要求 matchTrace 先认识地址——现有实现本就混合:balancer-flash/metronome-hgusdc/morpho-flash/
+univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计划改动);
+**`attestIdentity` = 地址准入**(reverse-verify 身份根)。验证通过后持久化绑定
+`(target, selector) → adapter`,proxy 记 implementation/code hash,升级即失效重 attest。
+
 退化语义:无 `discovery` 的 adapter = 只有 declaredVenues(现状,单例协议永远停在这档即可)。
 
 ## 3. 分相(每片独立合并,通道按 HISTORICAL-GAP 路由)
 
 ### Slice B — discovery coordinator(管道,shadow 模式)【deterministic → replay+smoke 直进 main】
-- 新 coordinator:遍历注册 adapter → `discoverInstances` → `enumerateRoutes` → `probeRoute`
-  → 产 `PoolEntry` → 喂 `prepareRuntimePoolRefresh`(与 main.ts 现有 `scanActivePools()` 喂法并列)。
+- 新 coordinator:遍历注册 adapter → `discoverInstances` → **`attestIdentity`** → `enumerateRoutes`
+  → `probeRoute` → 产 `PoolEntry` → 喂 `prepareRuntimePoolRefresh`(与 main.ts 现有
+  `scanActivePools()` 喂法并列)。attest 失败 → quarantine,不进后续任何一步。
 - **shadow 模式**:本片内 probe 结果只打结构化日志(`protocol_discovery` 事件:candidate、
   probe verdict、would-admit),**不改图**。零准入变更。
 - 复用 builder 的 `blocked_on_adapter` 停车场:coordinator 报告哪些停车候选在 discovery 下会出队
@@ -64,7 +81,10 @@ interface ProtocolConversionAdapter {
 
 ### Slice C — erc4626 接口派生 discovery(第一个真准入变更)【Hermes A/B】
 - `discoverInstances`:候选源 = DEX universe 的 token 集 + 现有 legacy 名单(自检回归用);
-  `asset()` 可读且 share/asset 任一在图内 → 候选。
+  `asset()` 可读且 share/asset 任一在图内 → **仅是候选**。
+- `attestIdentity`:**`asset()` 可读单独不构成身份**(假合约也能实现 asset());erc4626 的身份 =
+  标准接口自洽检查(asset/totalAssets/convertTo* 互相一致)+ 下述 preview 与 fork 收据行为验证
+  整体通过 —— 行为即身份,任一环节不符 → null(quarantine)。
 - `probeRoute`:`previewDeposit/previewRedeem` 一致性 + **fork 收据级 redeem 验证**(继承
   `nonStandardRedeem` 纪律原文:"错边比没边更糟" —— srUSDe 类 preview 与实付不符的 vault
   整体排除,除非其 declaredVenues 带专用 metadata);loop-closable(asset 与 share 至少一端
@@ -79,35 +99,31 @@ interface ProtocolConversionAdapter {
 - `watchRouteChanges`(AssetAdded/Removed、实现升级)→ 重 probe → 增删边;
 - 安全边界:删除路径只允许 discovery-owned 边;declaredVenues 边永不被自动删除。
 
-### Slice E — observed-selector quarantine 泳道(最低可信度,最后做)【Hermes A/B】
-- 已知 selector 命中未知 target → quarantine → **身份根 attest** → getter/quote probe → 热进图。
-- 沿用性(核实 origin/main):`ActionAdapter.matchTrace(target, selector)` 接口已带 address 参数、
-  dispatch 已传 `target`,**但现有实现全是 `_target`(仅按 selector 匹配)** —— 本片必须让 address
-  那一层真正生效。`poolRegistryKey`(非 v4)= 裸地址,多 token 路线需新增 `protocolRouteId`
-  (`selector:tokenIn:tokenOut`)进键,否则同址第二路线被去重吞掉。receipt→trace shortlist 基础设施
-  散在 detector/pool-impact,可复用,不新建 daemon。工程量 = 一个 scanner + 一个 route key + 两个
-  调用点(启动回扫最近 N 块 + 现有 refresh timer 扫新块)。
-- **身份根 attest 是准入前置,不是可选优化(宪法 §2 硬要求)**:命中 selector 只产生 candidate;必须
-  再过 adapter 声明的 `attestIdentity(target)` —— reverse-verify on-chain 身份 —— 通过才 probe/进图,
-  否则 quarantine 不进图。**只按 selector 放行 = 把身份门降级成 selector 门 = 蜜罐可仿冒**(造一个
-  假 target 发对的 burn+mint,quote-probe 会通过、执行时罚没)。attest 形状:Ubiquity =
-  `Manager.hasRole(BURNER_ROLE, target)`(**已链上实测 = true**,见下);erc4626 = `asset()` 可读且
-  share/asset 自洽;proxy 记 implementation/code hash,升级即失效重 attest。
-- **定位诚实(硬约束)**:observed-flow 定义即"先在链上看到才学到" → **首次收割永远抓不到**
-  (信息论边界)。本片命名 = `observed-protocol-route catch-up`,报告必须写明"不覆盖首次收割";
-  **cold-pool / standing-state 首次收割类 gap(tx14 死池、tx2b48 V4 cold-pool)不因本 scanner 上线
-  而在 gap 台账关闭** —— 关闭它们要靠主动枚举(Slice C 的 `asset()` 反查 / 身份根枚举),那才是北极星
-  要的东西,运维债消除只是附带。被动兜底与主动枚举**汇入同一个带身份根的 verified-route 出口**,不可
-  只留被动这一条泳道。
+### Slice E — observed-protocol-route catch-up(被动泳道,最低可信度,最后做)【Hermes A/B】
+硬边界(逐条验收):
+- selector 命中只产生 **quarantine candidate**(`matchTrace` = 候选分类,见 §2 分层)。
+- **`attestIdentity` 未通过,不得 enumerate、不得 quote、不得入图。**
+- 本 Slice **不覆盖任何 route 的首次出现**(observed-flow 定义即"先看到才学到",信息论边界)。
+- **不得据此关闭 tx14、cold-pool、首次收割类 gap** —— 关它们靠 Slice C 主动枚举。
+- 本 Slice **不替代 Slice C,也不能满足 Slice C 的验收**。
 
-### 关于 Ubiquity 身份根:证据已从"不足"变为"充分"(链上实测,本轮补)
-- 早前结论"CreditNftManager singleton 证据不足、不能白名单化"**已被链上数据了结**:
-  `converter(0x4321).manager()` = `0x4DA97a8b…`(正向),且身份根 `Manager.hasRole(UBQ_MINTER_ROLE,
-  0x4321)` = **true**、`hasRole(UBQ_BURNER_ROLE, 0x4321)` = **true**(反向认证)。这满足宪法的
-  reverse-verified on-chain identity —— 合宪准入依据 = pin Manager + `hasRole` 派生,**不是** pin 样本
-  地址 `0x4321`。这条同时证明了上面 attest 钩子对 Ubiquity 的具体实现可行。
-- **但立项状态不变**:ubiquity-credit 仍不过 EV 入场门($0.02/次,残余协议),**不立项**;上述身份根
-  只是把它从"证据不足"移到"证据充分但不值",并作为 Slice E `attestIdentity` 的样本形状留档。
+只按 selector 放行 = 把身份门降级成 selector 门 = 蜜罐可仿冒(造假 target 发对的 burn+mint,
+quote-probe 会通过、执行时罚没)—— 这是 attestIdentity 强制的原因(宪法 §2)。
+
+沿用性(核实 origin/main):`poolRegistryKey`(非 v4)= 裸地址,多 token 路线需新增
+`protocolRouteId`(`selector:tokenIn:tokenOut`)进键,否则同址第二路线被去重吞掉。receipt→trace
+shortlist 基础设施散在 detector/pool-impact,可复用,不新建 daemon。工程量 = 一个 scanner + 一个
+route key + 两个调用点(启动回扫最近 N 块 + 现有 refresh timer 扫新块)。
+
+### 关于 Ubiquity 身份根(attestIdentity 样本形状,链上实测)
+- `Manager.hasRole(UBQ_BURNER_ROLE, observedTarget) == true` 且 `hasRole(UBQ_MINTER_ROLE, …) == true`
+  (另有正向 `converter.manager() == Manager`)—— 作为 **block-pinned reverse identity 前置**成立,
+  了结了早前"singleton 证据不足"的疑问:合宪准入依据 = pin Manager + `hasRole` 派生,**不是** pin
+  样本地址 `0x4321`。
+- **边界:`hasRole` 只证明授权身份,不单独证明报价与执行语义** —— 通过后仍需 code/selector/route
+  probe(quote 一致性 + fork 行为验证)才可产 PoolEntry。
+- **立项状态不变**:ubiquity-credit 仍不过 EV 入场门($0.02/次,残余协议),**不立项**;此段仅作
+  attestIdentity 的具体实现样本留档。
 
 ## 4. 全局边界(每片都适用)
 
