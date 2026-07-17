@@ -181,6 +181,9 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   admission/latency/ranking changes back to Hermes A/B.
 - `docs/research/gates.md` — the validation contract (`fixed` vs `implemented`, replay flips, test harnesses).
   Read before claiming a deterministic change is fixed.
+- `docs/research/tx-gap-analysis-format.md` — required user-facing format when one landed transaction is
+  supplied for production-gap, tool, file, or function diagnosis. It separates the core conserving route
+  from profit-disposal touches and requires current-main funnel/replay evidence before saying `fixed`.
 - `docs/decision-log.md` — dated decisions / verified facts / dead-ends. Read the ✅/❌ entries **before
   re-opening a settled question**.
 - `docs/live-safety-envelope.md` — the bounded-live authorization specifics (behind Rule 1).

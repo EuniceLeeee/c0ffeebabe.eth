@@ -1,80 +1,117 @@
 # TX Gap 分析 — 固定回答格式
 
-> 输入:一笔**竞争者已落地**的 tx hash。目标:定位"生产为何不能复现它",精确到**哪个文件、哪个函数、哪一层**。
-> 本文件是**回答模板**:任何 agent(Claude/Codex)做单笔 tx gap 分析都按此格式输出。基线以当前 `origin/main` 为准,不凭记忆。
+> 输入：一笔竞争者已落地的 tx hash。目标：以当前 `origin/main` 为基线，回答生产能否复现、首个失败阶段、具体文件/函数，以及是否只需补 adapter。
 
-## 0. 工具链(固定;tool-index 选正式入口,禁记忆硬编码工具名)
+## 0. 固定方法
 
-1. `tool-index` 按 capability 选 canonical 工具 → 正式入口 `analysis:bundle-postmortem`;`tool-run` 留 receipt。
-2. `bundle-postmortem`:winner_style / PnL / 资金流 / 身份 / 需要的 adapter。
-3. `graph-in`:对照生产节点**实际** runtime graph(不是默认图)。
-4. **本地 reth `callTracer`**:补 bundle-postmortem 没覆盖的 **call-defined 腿**(mint/burn/借贷等按 selector 而非事件 topic 的腿)。
-5. 说明**不用** `census-gap` 的理由(单笔 tx 不需窗口枚举)。
+1. 先从 receipt、trace、token continuity 和现有 pinned replay 人工重建事实。
+2. 再运行当前生成的 `tool-index`，按所需 capability 选择正式工具，并通过 `tool-run` 留 execution receipt；禁止凭记忆硬编码工具名。
+3. 单笔交易通常不调用 `census-gap`，因为它解决窗口枚举，不解决单笔深挖。
+4. `graph-in` 只说明生产快照成员关系；“生产能复现”必须继续看到成功 TokenEdge、scanner 自发枚举、quote、plan 和 final sim。
+5. 如果 postmortem 因无法区分核心闭环与利润处置而输出 `MANUAL REQUIRED`，这是 fail-closed；用 token continuity 和可信 replay 消歧，不能把全部 touched venues 强行拼成路线。
 
-## 1. 交易结果
+## 1. 结论
 
-- 区块 / txIndex / builder
-- 形态 `winner_style`(atomic_loop / backrun / …)
-- PnL:毛利润 / builder payment / gas / **净利润**
-- positioning:standing_state_take / after_in_block_movers
-- **机会来源**:未做 prefix replay 就写 `unknown`,**不臆断** standing-state
-- 排除替代解释:hop-limit(数实际腿数 vs 生产 MAX_HOPS)/ TTL / 没扫到块 —— 先排除,gap 才归"缺腿"
+- **交易：** `<full tx hash>`
+- **审计基线：** `origin/main @ <full sha>`
+- **当前生产结论：** `可复现 | 不可复现 | 已修复 | 证据不足`
+- **Gap 类型：** `pool | identity/admission | edge | path/enumeration | quote | plan | final-sim | EV | intake/causality | none`
+- **是否只需补 adapter：** `已完成 | 是 | 否 | 部分`
+- **一句话根因：** `<最先失败的生产阶段；已修复时写当前通过到哪一阶段>`
 
-## 2. 完整路线表(每腿逐条)
+先回答当前结论。不得把历史缺口写成当前缺口，也不得用 `build 通过`、`in_graph=true` 或手工拼路线代替生产可复现证据。
 
-| 路线腿 | 生产 graph | 结论 |
+## 2. 调用工具
+
+| 顺序 | 工具 | 用途 | 结果/证据 |
+|---:|---|---|---|
+| 1 | `<raw receipt / callTracer / pinned replay>` | `<人工事实>` | `<artifact>` |
+| 2 | `<indexed tool id>` | `<capability query>` | `<manifest + execution receipt>` |
+
+- **未调用的相邻工具：** `<例如：单笔 tx 不调用 census-gap>`
+- **正式工具清单来源：** `<tool-index manifest path + SHA-256>`
+
+## 3. 交易事实
+
+- **区块 / txIndex / builder：** `<values>`
+- **形态：** `<atomic_loop | backrun | inventory | keeper | rfq | unknown>`
+- **毛利润 / builder payment / gas / 净利润：** `<values + denomination>`
+- **因果状态：** `<boundary / trigger-only / full-prefix 已跑或未跑；未跑不得猜>`
+- **闭环跳数 / 生产上限：** `<n / limit>`
+
+## 4. 实际核心闭环
+
+| # | Token in → out | Venue / target | Adapter / edge | 当前生产阶段 | 结论 |
+|---:|---|---|---|---|---|
+| 1 | `<tokenIn → tokenOut>` | `<pool/target>` | `<adapterId>` | `<edge/quote/plan/sim>` | `<pass/fail>` |
+
+只列维持本金闭合所必需的有序路线。flash principal、builder payment、利润换币、库存处置和无关 touch 单列，不能混成路线腿。
+
+- **路线外动作：** `<例如：核心环赚取 USDT 后再换 WETH，属于利润退出腿>`
+- **路线真值来源：** `<receipt/call trace token continuity + trusted self-enumerating replay>`
+
+## 5. 生产漏斗定位
+
+| 阶段 | 结果 | 证据 |
 |---|---|---|
-| `tokenIn→tokenOut, venue 0x…` | IN / OUT | 已支持 / 缺哪一层 |
+| 身份 / discovery / admission | `<pass/fail/not-run>` | `<fact>` |
+| TokenEdge 构建 / runtime graph | `<pass/fail/not-run>` | `<fact>` |
+| Scanner 自发枚举 | `<pass/fail/not-run>` | `<fact>` |
+| Quote | `<pass/fail/not-run>` | `<fact>` |
+| Plan build | `<pass/fail/not-run>` | `<fact>` |
+| Final sim | `<pass/fail/not-run>` | `<fact>` |
+| EV / submit | `<pass/fail/not-run>` | `<fact>` |
 
-一腿一行;IN=生产图里有可路由 edge,OUT=没有。
+Gap 定位到第一个失败阶段。`fixed` 必须由同一历史输入的阶段翻转证明；手工注入 path/amount 只证明可执行性，不证明生产能找到。
 
-## 3. 每条 gap 分层定位(核心 — 不许笼统写"缺 adapter")
+## 6. 精确代码定位
 
-**必须先判 gap 属哪一层**,因为不同层的修法完全不同。层与"是不是 adapter"的对应:
+| Gap / 能力 | 文件 | 函数或注册项 | 失败机制 | 最小改动 |
+|---|---|---|---|---|
+| `<gap>` | `<absolute repo path>` | `<symbol>` | `<mechanism>` | `<change>` |
 
-| gap 层 | 是不是 adapter? | 精确到文件:函数 |
-|---|---|---|
-| **活动门**(minSwaps 等) | ❌ 全局准入策略,补 adapter 无用 | `build-active-pool-universe.ts` |
-| **身份门**(factory / MetaRegistry 反查) | ❌ 准入策略;未知→provisional | `venues/identity.ts` |
-| **capability/universe 准入** | ❌ 准入 | `venues/capability.ts` / `pool-universe.ts` |
-| **图边生成** | 部分(缺 edge 类型才是 adapter) | `planner/token-graph.ts` |
-| **报价** | ✅ adapter | `solver/quoter.ts` / `venues/**` |
-| **执行 encode / plan** | ✅ adapter | `solver/plan-builder.ts` / `adapters/**` |
-| **block-scan 打分器 venueKind** | ❌ 进图仍可能被跳过,必查 | `detector/blockscan-scanner.ts` / `venues/mid-readers.ts` |
+以函数/注册项为主，行号为辅。若当前已修复，列“能力现在落在哪”，不要再把旧文件位置写成待修问题。
 
-每条 gap:列出它踩了**哪几层**、每层 `文件:函数`,并标注该层**是不是 adapter 能解决的**。
+## 7. 是否只需补 adapter
 
-> **关键纪律**:"补 adapter"只解决**执行能力**(报价/encode)。**活动门(minSwaps)、身份门(factory/MetaRegistry)、universe 准入、打分器 venueKind 都不是 adapter** —— 一条腿可能同时踩 adapter 层 + 准入层,只补 adapter 修不好。回答里必须显式区分。
+逐项核对：
 
-## 4. 工具 gap(如有)
+- [ ] 已有 adapter family 可直接复用
+- [ ] 新协议身份/discovery 能从 adapter metadata 或统一 identity policy 派生
+- [ ] edge、quote、plan、warm/prepared/final-sim 均被覆盖
+- [ ] block-scan landed event 能从共享 event metadata 派生
+- [ ] 如需 backrun，victim model / impact decoder / intake 已覆盖
+- [ ] profit-token valuation、flash liquidity 与风险策略没有另一个缺口
+- [ ] search budget / candidate cap 没有在 adapter 之后剪掉路线
 
-bundle-postmortem 是否**漏报**了某条腿(如 call-defined mint 腿只被报成 `edges=[flash,swap]`)?精确到:
-- `analysis/src/learning/edge-kinds.ts`(只看事件 topic)
-- `analysis/src/cli/bundle-postmortem.ts`(未从 callTracer 重建协议腿)
+**唯一裁决：** `已经完成 | adapter-only | adapter + registry metadata | adapter + victim model | 非 adapter 的 admission/planner/economics gap`
 
-工具 gap 与生产 gap **分开列**;工具修复走 rule-16(对抗审查 → 直接 main),生产修复走 branch。
+“补 adapter”只代表执行能力主路径。新 victim 类型、因果 intake、估值、flash 资金和搜索预算仍可能是独立能力，不能用 adapter 结论代替检查。
 
-## 5. 裁决
+## 8. 验收
 
-- 生产缺 **N 条腿**,每条属哪层(adapter / 准入 / graph / quote);
-- 当前正式工具能**自动**指出其中几条,几条需 callTracer 才发现;
-- 下一步:按**独立 gap 分支**修(一 gap 一 branch),replay 验收。
+- **失败样本：** `<tx hash>`
+- **baseline：** `<first failing stage>`
+- **fix commit：** `<sha or none>`
+- **可信命令：** `<existing pinned harness>`
+- **期望翻转：** `<no_candidate → path_found → final_sim_success, etc.>`
+- **实际结果：** `<result>`
+- **scanner 是否自发产出路线：** `是/否`
+- **是否注入 path / amount：** `否` 才能证明枚举修复
+- **是否需要 live：** `<确定性正确性通常不需要；仅分布/延迟/intake 可见性需要>`
 
-## 硬纪律(每次回答都带)
+## 9. 工具一致性
 
-1. **区分 adapter vs 准入层**:adapter=执行能力(quote/encode);minSwaps/factory/universe/venueKind=准入策略,非 adapter。笼统说"补 adapter"是错的。
-2. **能编译 ≠ fixed**:grep 到 adapter/常量存在,只证"代码级支持";证"这笔 tx 能复现"必须 **scanner 自发枚举该环 + fork 逐 wei**(替代解释:hand-fed 路线不算)。
-3. **机会来源写 unknown**:未做 prefix replay 不臆断 standing-state。
-4. **verify against code/data, not memory**:行号/工具清单现场取,基线以当前 origin/main 为准。
-5. **禁硬编码 allowlist 做准入门**(CLAUDE.md §2):身份链上反查,硬编码集只作 provenance。
-6. **诚实 caveat**:哪些代码级确定、哪些需活节点 graph-in 确认、哪些没验证不签字。
+- **人工事实 vs 正式工具：** `一致 | 有意 fail-closed | 分歧`
+- **解释：** `<例如：postmortem 识别 protocol touch，但因未重建有序核心路线而 MANUAL REQUIRED>`
+- **工具缺陷：** `none | <LearningCase + file/function + codify commit>`
+- **对抗审查：** `<reviewer + verdict；仅在人工/工具覆盖冲突时必填>`
 
-## 附:一次示范(tx 0x149df3…,2026-07,新架构复核)
+## 示例：`0x149df3ec…fde60` 的当前结论
 
-三条 gap 腿 = 三种不同性质,印证"不是补 adapter 就完":
-- GOLDx mint = **adapter**(执行)→ `venues/protocols/goldx.ts` 已补
-- dForce underlying = **adapter + 身份门** → `venues/swaps/curve-underlying.ts` + `identity.ts` MetaRegistry 已补
-- MoxieSwap unknown factory = **准入层(非 adapter)**:活动门 `minSwaps` + 身份门 provisional-factory → `build-active-pool-universe.ts`(minSwaps 默认已 1)+ `venues/identity.ts`(`factory-call-provisional`)已改
-- 工具 gap:GOLDx mint 是 call-defined 腿,bundle-postmortem 需 callTracer 才发现(`edge-kinds.ts` 只看 topic)
-
-裁决:三层不同性质的 gap 在当前 main 均**代码级已处理**;**端到端复现待 replay 终验**(scanner 自产 5 腿环 + fork 逐 wei)。
+- 核心闭环是四腿：`USDT→PAXG→GOLDx→USDx→USDT`。
+- Moxie `0x1bc610…` 把闭环赚到的约 `0.442405 USDT` 换成 WETH，是利润退出腿，不是核心闭环第五腿。
+- GOLDx 能力位于 `venues/protocols/goldx.ts::goldxAdapter`；Curve underlying 能力位于 `venues/swaps/curve-underlying.ts::curveUnderlyingAdapter`；两者均在 `production-registry.ts::PRODUCTION_ROUTE_ADAPTERS` 注册。
+- `blockscan-hunt-tx149.ts` 使用冻结 production universe，让未改造的 scanner 自发枚举四腿；不注入 path/amount，结果从 `not_admitted` 翻转为 `final_sim_success`，`net_profit_raw=442380`。
+- 因此这笔在当前 main 已修复，不需要再补 adapter。历史修复也不只是 adapter：rank 89 路线还依赖通用 block-scan candidate cap 从 20 扩到 100。
+- 当前 `bundle-postmortem` 已通过 `GOLDx target + mint(address,uint256)` 识别 `protocol`，但故意不从 touch-set 自动猜核心闭环，因此 `MANUAL REQUIRED` 是诚实降级，不是工具缺陷。
