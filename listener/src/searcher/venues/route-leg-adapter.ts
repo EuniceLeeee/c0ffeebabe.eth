@@ -3,6 +3,7 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import type { ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
+import type { AttestedPoolEntry } from "./identity.js";
 import type { RouteVenueMid, SyncMidReadContext } from "./mid-readers.js";
 import type { SwapObservationCapability } from "./swap-observation.js";
 
@@ -79,6 +80,93 @@ export type WarmSpec =
     };
 
 export type SyncMidReader = (ctx: SyncMidReadContext) => RouteVenueMid | null;
+
+export interface ProtocolDiscoveryLog {
+  readonly address: string;
+  readonly topics: readonly string[];
+  readonly data: string;
+  readonly transactionHash?: string;
+  readonly blockNumber?: number;
+}
+
+export interface ProtocolDiscoveryReceipt {
+  readonly status: number | null;
+  readonly logs: readonly ProtocolDiscoveryLog[];
+}
+
+/**
+ * Every method is pinned by the coordinator to ProtocolDiscoveryContext.blockNumber.
+ * Adapter code deliberately cannot supply a block tag or fall through to `latest`.
+ */
+export interface ProtocolDiscoveryReadBackend {
+  call(req: { to: string; data: string }): Promise<string>;
+  getCode(address: string): Promise<string>;
+  getStorageAt(address: string, position: bigint): Promise<string>;
+  getCodeAt(address: string, blockNumber: number): Promise<string>;
+  getStorageAtBlock(address: string, position: bigint, blockNumber: number): Promise<string>;
+  getLogs(req: {
+    readonly address?: string;
+    readonly topics: readonly string[];
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  }): Promise<readonly ProtocolDiscoveryLog[]>;
+  getTransactionReceipt(txHash: string): Promise<ProtocolDiscoveryReceipt | null>;
+  traceTransaction(txHash: string): Promise<unknown>;
+}
+
+export interface ProtocolDiscoveryContext {
+  readonly backend: ProtocolDiscoveryReadBackend;
+  readonly blockNumber: number;
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  /** Graph tokens are candidates only; an adapter may use a stronger registry/event source instead. */
+  readonly candidateTokens: readonly string[];
+  /** Complete graph domain used for loop-closability checks; candidateTokens may be incremental. */
+  readonly graphTokens: readonly string[];
+  /** Previously admitted instances are re-probed so upgrades and route removal replace atomically. */
+  readonly retainedInstances: readonly AttestedProtocolInstance[];
+}
+
+export interface ProtocolCandidate {
+  readonly pool: PoolEntry;
+  readonly source: string;
+  /** Present only for observed-call candidates; active discovery normally omits it. */
+  readonly selector?: string;
+  /** Adapter-owned evidence. The coordinator treats it as opaque and never turns it into identity. */
+  readonly evidence?: readonly unknown[];
+}
+
+export interface AttestedProtocolInstance {
+  readonly pool: AttestedPoolEntry<PoolEntry>;
+  readonly sources: readonly string[];
+  /** Candidate classification remains address+selector; instance admission aggregates by address. */
+  readonly selectors: readonly string[];
+  readonly evidence: readonly unknown[];
+}
+
+/**
+ * Candidate enumeration and route probing stay adapter-owned. Identity remains
+ * a coordinator-owned canonical gate between these two calls.
+ */
+export interface ProtocolDiscoveryCapability {
+  discoverCandidates(
+    ctx: ProtocolDiscoveryContext,
+  ): Promise<readonly ProtocolCandidate[]>;
+  probeCandidate(
+    instance: AttestedProtocolInstance,
+    ctx: ProtocolDiscoveryContext,
+  ): Promise<readonly TokenEdge[]>;
+  /** Optional Slice-E source. Selector match is only a candidate; identity/probe still follow. */
+  candidateFromObservedCall?(
+    call: {
+      readonly target: string;
+      readonly selector: string;
+      readonly txHash: string;
+      readonly receipt: ProtocolDiscoveryReceipt;
+    },
+    ctx: ProtocolDiscoveryContext,
+  ): Promise<ProtocolCandidate | null>;
+}
 
 export interface PreparedRouteRequest {
   adapterId: string;
@@ -170,6 +258,8 @@ export interface ProtocolConversionAdapter extends RouteLegAdapter {
   readonly declaredVenues: readonly DeclaredProtocolVenue[];
   /** Required only for families whose instances must come from discovery/probe admission. */
   readonly undeclaredVenueReason: string | null;
+  /** Optional active discovery path. Absence preserves declared-venue-only behavior. */
+  readonly discovery?: ProtocolDiscoveryCapability;
 }
 
 export interface CompatRouteLegAdapter extends RouteLegAdapter {

@@ -118,50 +118,40 @@ export interface V4PoolKey {
 // singletons come from their registered adapters; externally discovered families
 // and legacy compat venues stay here until they have a derived admission source.
 const EXTERNAL_AND_LEGACY_POOL_REGISTRY: PoolEntry[] = [
+  // Compatibility fallbacks remain until each address passes the no-seed
+  // scanner + path + final-sim gate. Discovery never receives these entries as
+  // identity credentials, so they cannot make self-enumeration false-green.
+  { address: ADDR.SUSDS, adapter: "erc4626", fixedTokenIn: ADDR.USDS },
+  { address: ADDR.WSTUSR, adapter: "erc4626", fixedTokenIn: ADDR.USR },
+  { address: "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
+  // Non-standard Strata srUSDe remains an explicit safety exception: Withdraw
+  // pays sUSDe rather than asset() and execution needs the four-argument exact-in
+  // selector plus a two-contract quote. Generic EIP-4626 discovery intentionally
+  // rejects it until those semantics are derivable from code-owned evidence.
   {
-    address: ADDR.SUSDS,
+    address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
     adapter: "erc4626",
-    fixedTokenIn: ADDR.USDS,
+    fixedTokenIn: ADDR.USDE,
+    nonStandardRedeem: true,
+    redeemTokenOut: "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
   },
-  {
-    address: ADDR.WSTUSR,
-    adapter: "erc4626",
-    fixedTokenIn: ADDR.USR,
-  },
-  // ERC4626 vaults discovered in coffee's flow (2026-07-05 venue-discovery-bq + adapter-probe verified:
-  // asset()/previewRedeem respond on node reth). Loop-closable via each asset's DEX venues.
-  { address: "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // steakUSDC
-  { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // steakUSDT
-  // srUSDe (Strata Senior USDe): NON-STANDARD ERC4626. deposit pulls USDe (asset(), standard),
-  // but redeem pays sUSDe (0x9d39a5de...) via a silo, NOT USDe — previewRedeem returns the
-  // USDe-denominated VALUE, so the generic share->asset()/previewRedeem edge is wrong on token AND
-  // amount (fork receipt: 934.46 srUSDe -> 773.99 sUSDe, previewRedeem said 958.15 USDe). The
-  // generic pair stays SUPPRESSED (nonStandardRedeem); redeemTokenOut opts in the correct
-  // erc4626-redeem-silo edge quoted as sUSDe.previewWithdraw(srUSDe.previewRedeem(shares)) —
-  // byte-exact to the on-chain payout (see docs/analysis/20260707-srusde-silo-redeem-edge-design.md).
-  { address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003", adapter: "erc4626", fixedTokenIn: ADDR.USDE, nonStandardRedeem: true, redeemTokenOut: "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497" },  // srUSDe -> sUSDe
-  { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH }, // sfrxETH
-  { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // waEthUSDT
-  { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
-  // Batch 2 (2026-07-06 venue-discovery + probe-verified, loop-closable assets only — exotic-asset vaults
-  // deferred pending a return-path venue, per the open return-path tooling_defect):
-  { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // pfUSDC-24
-  { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },  // pfWETH-4
-  { address: "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // USD3
-  { address: "0xe3DA4B83C9dd4c4D185ecE42077462b3F35c454a", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // vvUSDC
-  { address: "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367", adapter: "erc4626", fixedTokenIn: ADDR.CRVUSD }, // scrvUSD
-  { address: "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // wYLDS
-  { address: "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547", adapter: "erc4626", fixedTokenIn: ADDR.USDT },  // vvUSDT
-  // Batch 2b: loop-closable via EITHER side in the DEX universe (corrected dead-edge test — a vault is
-  // dead only if NEITHER asset NOR share appears in any indexed DEX pool; the solver decides closability):
-  { address: "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7", adapter: "erc4626", fixedTokenIn: "0x23238f20b894f29041f48D88eE91131C395Aaa71" }, // sUSDat (share in DEX)
-  { address: "0xC255910618158F48FA461874471Aa24AEfbDC23A", adapter: "erc4626", fixedTokenIn: "0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D5" }, // pfOHM (asset OHM in DEX)
-  { address: "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C", adapter: "erc4626", fixedTokenIn: "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" }, // waEthLidoGHO (asset GHO in DEX)
-  { address: "0x43680aBF18cf54898Be84C6eF78237CFBD441883", adapter: "erc4626", fixedTokenIn: "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0" }, // wTSLAx (asset in DEX)
-  // MetaMorpho vaults — standard ERC4626, redeem pays asset (receipt-verified: 0x4825… -> USDC in tx
-  // 0x9be73297, 0xB828… -> USDT in tx 0x175f7024). coffee 2nd CSV window (24.55M), ~17 tx each.
-  { address: "0x4825eFF24F9B7b76EEAFA2ecc6A1D5dFCb3c1c3f", adapter: "erc4626", fixedTokenIn: ADDR.USDC }, // MetaMorpho USDC
-  { address: "0xB8280955aE7b5207AF4CDbdCd775135Bd38157fE", adapter: "erc4626", fixedTokenIn: ADDR.USDT }, // MetaMorpho USDT
+  { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH },
+  { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
+  { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },
+  { address: "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0xe3DA4B83C9dd4c4D185ecE42077462b3F35c454a", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367", adapter: "erc4626", fixedTokenIn: ADDR.CRVUSD },
+  { address: "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
+  { address: "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7", adapter: "erc4626", fixedTokenIn: "0x23238f20b894f29041f48D88eE91131C395Aaa71" },
+  { address: "0xC255910618158F48FA461874471Aa24AEfbDC23A", adapter: "erc4626", fixedTokenIn: "0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D5" },
+  { address: "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C", adapter: "erc4626", fixedTokenIn: "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" },
+  { address: "0x43680aBF18cf54898Be84C6eF78237CFBD441883", adapter: "erc4626", fixedTokenIn: "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0" },
+  { address: "0x4825eFF24F9B7b76EEAFA2ecc6A1D5dFCb3c1c3f", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
+  { address: "0xB8280955aE7b5207AF4CDbdCd775135Bd38157fE", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
   {
     // Fluid deployment registry: "Fluid Dex Pool - USDC-USDT-CONCENTRATED".
     // Plain swapIn token order is USDC(token0) -> USDT(token1).

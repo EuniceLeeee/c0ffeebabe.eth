@@ -69,6 +69,28 @@ export function makeBlockScanOpportunityId(input: {
 
 export type SearcherEvent =
   | {
+      type: "protocol_discovery";
+      adapter_id: string;
+      target?: string;
+      selectors: string[];
+      sources: string[];
+      verdict: "rejected" | "would_admit" | "admitted" | "removed";
+      stage: "feature_flag" | "candidate" | "identity" | "probe" | "lifecycle";
+      reason?: string;
+      edge_count: number;
+      mode: "shadow" | "active" | "observed";
+      block_number: number;
+    }
+  | {
+      type: "protocol_discovery_unknown_selector";
+      target: string;
+      selector: string;
+      reason: "protocol_like_flow_unknown_selector";
+      recommendation: "inspect_calltrace";
+      tx_hash: string;
+      block_number: number;
+    }
+  | {
       type: "mempool_filter_config";
       source: "filtered_mempool";
       to_addresses: string[];
