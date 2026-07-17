@@ -63,6 +63,9 @@ test("historical candidate replay preserves production shape without using its l
   assert.match(gate, /runEquivalenceResolutionReplayPair\(observation\)/);
   assert.match(gate, /validateHuntResult\([\s\S]*"baseline resolution replay"/);
   assert.match(gate, /TX149_RESOLUTION_RESULT=/);
+  assert.match(gate, /equivalence candidate must use the trusted tx149 resolution replay/);
+  assert.match(gate, /"--runtime-listener-root", replayCwd/);
+  assert.match(gate, /"--hunt-pass-budget-ms", "600000"/);
   assert.match(gate, /equivalence resolution replay machine results differ/);
   assert.match(gate, /must emit exactly one TX149 machine result/);
 });

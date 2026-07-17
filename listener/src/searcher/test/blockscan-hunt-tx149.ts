@@ -8,13 +8,20 @@
  * injected into the planner/solver.
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const LISTENER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const cli = parseCli(process.argv.slice(2));
+const LISTENER_ROOT = realpathSync(
+  cli.runtimeListenerRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../.."),
+);
+const HUNT_PASS_BUDGET_MS = cli.huntPassBudgetMs ?? "300000";
+if (HUNT_PASS_BUDGET_MS !== "300000" && HUNT_PASS_BUDGET_MS !== "600000") {
+  throw new Error("--hunt-pass-budget-ms must be 300000|600000");
+}
 const RPC_URL = process.env.TX149_REPLAY_RPC_URL
   ?? process.env.SEARCHER_LIVE_RPC_URL
   ?? process.env.MAINNET_RPC_URL
@@ -74,6 +81,28 @@ interface HuntResult {
   matched_route?: unknown;
   final_sim_success?: boolean;
   net_profit_raw?: string | null;
+}
+
+function parseCli(args: string[]): {
+  runtimeListenerRoot?: string;
+  huntPassBudgetMs?: string;
+} {
+  const parsed: { runtimeListenerRoot?: string; huntPassBudgetMs?: string } = {};
+  for (let index = 0; index < args.length; index += 2) {
+    const name = args[index];
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${name} requires one value`);
+    if (name === "--runtime-listener-root") {
+      if (parsed.runtimeListenerRoot !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.runtimeListenerRoot = value;
+    } else if (name === "--hunt-pass-budget-ms") {
+      if (parsed.huntPassBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.huntPassBudgetMs = value;
+    } else {
+      throw new Error(`unsupported tx149 replay option ${name}`);
+    }
+  }
+  return parsed;
 }
 
 function cleanEnv(): NodeJS.ProcessEnv {
@@ -156,7 +185,7 @@ function run(): void {
           HUNT_MAX_HOPS: "4",
           HUNT_MIN_SPREAD_BPS: "0",
           HUNT_SCAN_BUDGET_MS: "120000",
-          HUNT_PASS_BUDGET_MS: "300000",
+          HUNT_PASS_BUDGET_MS,
           HUNT_MAX_CANDIDATES: "100",
           HUNT_TOP_K: "8",
           HUNT_OUT: huntOut,

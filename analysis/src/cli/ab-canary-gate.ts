@@ -330,6 +330,11 @@ function runDeclaredResolutionReplay(
   root: string,
 ): { machine: string; result: BlockscanHuntResult } {
   const replay = experiment.resolution_replay!;
+  if (replay.cwd !== "listener"
+      || JSON.stringify(replay.argv)
+        !== JSON.stringify(["npm", "run", "searcher:blockscan-hunt-tx149"])) {
+    throw new Error("equivalence candidate must use the trusted tx149 resolution replay");
+  }
   const replayCwd = fs.realpathSync(path.resolve(root, replay.cwd));
   if (replayCwd !== root && !replayCwd.startsWith(`${root}${path.sep}`)) {
     throw new Error(`${label} resolution replay cwd escapes the frozen runtime root`);
@@ -346,8 +351,14 @@ function runDeclaredResolutionReplay(
   delete childEnv.TX149_REPLAY_RPC_URL;
   childEnv.SEARCHER_LIVE_RPC_URL = requiredArg("--rpc");
   childEnv.MAINNET_RPC_URL = requiredArg("--rpc");
-  const result = spawnSync(replay.argv[0], replay.argv.slice(1), {
-    cwd: replayCwd,
+  const trustedRoot = fs.realpathSync(gitOutput(["rev-parse", "--show-toplevel"]));
+  const trustedListener = fs.realpathSync(path.join(trustedRoot, "listener"));
+  const result = spawnSync(process.execPath, [
+    "--import", "tsx", "src/searcher/test/blockscan-hunt-tx149.ts",
+    "--runtime-listener-root", replayCwd,
+    "--hunt-pass-budget-ms", "600000",
+  ], {
+    cwd: trustedListener,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: (replay.timeout_seconds ?? 1_200) * 1_000,
