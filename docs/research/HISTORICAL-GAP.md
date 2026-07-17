@@ -27,6 +27,39 @@ the causal replay, not by the word `atomic` or by its bundle container.
 | flow admission, latency, candidate ranking | pinned replay where applicable, then full Hermes A/B | route to `HERMES.md`; history alone cannot promote |
 | build/test only | `implemented_not_validated` | retain; never claim fixed or merge as the repair |
 
+## Adapter Replay and Production Replay
+
+Historical route repairs have exactly two validation levels. Do not split adapter execution and solver sizing
+into separate success verdicts.
+
+| Validation level | Supplied by the fixture | Must be produced by production code | Verdict |
+|---|---|---|---|
+| **Adapter Replay** | The complete ordered route recovered from the landed trace: adapter identity, target or pool id, token direction and lane-correct state anchor. | Planner output, solver-selected input amount, every quote, adapter encoding, fork final simulation, flash repayment, token conservation and a positive decision from the production EV evaluator. | `adapter_fixed` |
+| **Production Replay** | Only the historical transaction and its lane-correct state anchor; no route and no amount. | Universe membership, scanner or backrun-detector discovery, planner output, solver sizing, quotes, encoding, fork final simulation, repayment, conservation and positive production EV. | `production_fixed` |
+
+Adapter Replay deliberately bypasses active-pool admission and scanner/backrun discovery so one deterministic
+adapter can be validated and merged without being blocked by a separate universe or detector gap. It may pin
+the trace-proven route, but it must not inject realized per-leg amounts, quotes, encoded actions, calldata or a
+prebuilt plan. Landed amounts are diagnostic references only. The unchanged production planner and solver must
+compose the plan and choose a profitable input amount themselves; if the route executes only when the landed
+amount is forced, the Adapter Replay fails.
+
+Use the parent block state for a standing scanner sample. Use the exact trigger-only or full-prefix state for a
+backrun sample. A successful Adapter Replay does not claim that production can discover the transaction; only
+Production Replay may make that claim.
+
+Every successful Adapter Replay writes a compact, redacted receipt containing the transaction hash, ordered
+route hash, state block and state root, base and adapter commit, adapter source hash, shared adapter API hash,
+solver-selected amount, final-sim gross profit, production-EV result, harness hash and replay command. Raw RPC
+logs remain gitignored. A later Production Replay may inherit the `adapter_fixed` finding when the adapter
+commit is an ancestor and all recorded code/input hashes still match, but it still re-executes the complete
+production quote/sim path. A change to that adapter or the shared planner/solver/quote/encode API invalidates
+the inherited receipt; an unrelated adapter change does not.
+
+An adapter-only branch may modify only its adapter-owned implementation, descriptor, fixtures and replay
+receipts. Changes to universe, scanner, detector, planner, solver or shared adapter interfaces are a separate
+gap/framework change and cannot be hidden inside an `adapter_fixed` verdict.
+
 The smoke is not a report-authored receipt. During `promote`, the trusted gate starts the frozen challenger
 itself with dry-run forced on, scanner and public-mempool backrun configured on, and MEV-Share off. It measures
 wall clock and rejects an early process exit or fatal process output. Challenger-authored log markers do not
