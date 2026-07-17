@@ -260,10 +260,13 @@ run_candidate_gate_worker() {
       // replay performs many historical eth_call requests; opening one TLS
       // socket per local caller can turn a healthy archive into a wall of 429s.
       const agent = new https.Agent({ keepAlive: true, maxSockets: 8 });
-      // HTTP 429 is deliberately not retried here. It and Retry-After are
-      // forwarded intact so the ethers caller owns the one retry budget.
+      // Own only transport retries. Ethers already has a bounded HTTP 429
+      // retry policy, so forwarding 429 avoids multiplying two retry budgets.
+      // Providers that hide saturation in an HTTP 200 JSON-RPC error are
+      // normalized to HTTP 429 below so they use that same single owner.
       const retryableStatuses = new Set([502, 503, 504]);
       const maxAttempts = 5;
+      const jsonRpcInspectionLimitBytes = 1024 * 1024;
       const requestTimeoutMs = Number(
         process.env.MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS ?? "300000",
       );
@@ -275,6 +278,27 @@ run_candidate_gate_worker() {
           return Math.min(10_000, Number(retryAfter) * 1_000);
         }
         return Math.min(4_000, 250 * (2 ** attempt));
+      };
+
+      const isJsonRpcRateLimit = (body) => {
+        let payload;
+        try {
+          payload = JSON.parse(body.toString("utf8"));
+        } catch {
+          return false;
+        }
+        const entries = Array.isArray(payload) ? payload : [payload];
+        return entries.some((entry) => {
+          const error = entry && typeof entry === "object" ? entry.error : null;
+          if (!error || typeof error !== "object") return false;
+          const code = Number(error.code);
+          if (code === 429) return true;
+          const message = typeof error.message === "string" ? error.message : "";
+          const hasRevertData = error.data !== undefined && error.data !== null;
+          if (code === 3 || hasRevertData) return false;
+          const saturationMessage = /\brate limit(?:ed|ing)?\b|\btoo many requests\b|\brequest throttled\b|\bthrottling\b|\bcompute units capacity exceeded\b/i.test(message);
+          return saturationMessage && (code === -32005 || !Number.isFinite(code));
+        });
       };
 
       const server = http.createServer(async (request, response) => {
@@ -363,6 +387,51 @@ run_candidate_gate_worker() {
                 for (const name of ["content-encoding", "content-length", "retry-after"]) {
                   const value = upstreamResponse.headers[name];
                   if (typeof value === "string") headers[name] = value;
+                }
+                if (status === 200 && headers["content-encoding"] === undefined) {
+                  const declaredLength = Number(headers["content-length"]);
+                  if (Number.isFinite(declaredLength) && declaredLength > jsonRpcInspectionLimitBytes) {
+                    response.writeHead(status, headers);
+                    upstreamResponse.pipe(response);
+                    upstreamResponse.once("end", () => settleAttempt(finalize));
+                    upstreamResponse.once("aborted", () => settleAttempt(finishUnavailable));
+                    upstreamResponse.once("error", () => settleAttempt(finishUnavailable));
+                    return;
+                  }
+                  const responseChunks = [];
+                  let responseBytes = 0;
+                  let streaming = false;
+                  const onData = (chunk) => {
+                    responseChunks.push(chunk);
+                    responseBytes += chunk.length;
+                    if (responseBytes <= jsonRpcInspectionLimitBytes) return;
+                    streaming = true;
+                    upstreamResponse.pause();
+                    upstreamResponse.off("data", onData);
+                    response.writeHead(status, headers);
+                    for (const buffered of responseChunks) response.write(buffered);
+                    responseChunks.length = 0;
+                    upstreamResponse.pipe(response, { end: false });
+                    upstreamResponse.resume();
+                  };
+                  upstreamResponse.on("data", onData);
+                  upstreamResponse.once("end", () => settleAttempt(() => {
+                    if (streaming) {
+                      response.end();
+                      finalize();
+                      return;
+                    }
+                    const responseBody = Buffer.concat(responseChunks, responseBytes);
+                    const rateLimited = isJsonRpcRateLimit(responseBody);
+                    const responseStatus = rateLimited ? 429 : status;
+                    headers["content-length"] = String(responseBody.length);
+                    response.writeHead(responseStatus, headers);
+                    response.end(responseBody);
+                    finalize();
+                  }));
+                  upstreamResponse.once("aborted", () => settleAttempt(finishUnavailable));
+                  upstreamResponse.once("error", () => settleAttempt(finishUnavailable));
+                  return;
                 }
                 response.writeHead(status, headers);
                 upstreamResponse.pipe(response);

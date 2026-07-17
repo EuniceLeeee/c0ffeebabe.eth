@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { JsonRpcProvider } from "ethers";
 import {
   DEFAULT_INPUT_LOCATIONS,
   resolveInputPaths,
@@ -219,7 +220,12 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /new https\.Agent\(\{ keepAlive: true, maxSockets: 8 \}\)/);
   assert.match(script, /const retryableStatuses = new Set\(\[502, 503, 504\]\)/);
   assert.match(script, /const maxAttempts = 5/);
+  assert.match(script, /const jsonRpcInspectionLimitBytes = 1024 \* 1024/);
   assert.match(script, /MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS \?\? "300000"/);
+  assert.match(script, /const isJsonRpcRateLimit = \(body\) =>/);
+  assert.match(script, /code === 429/);
+  assert.match(script, /saturationMessage && \(code === -32005 \|\| !Number\.isFinite\(code\)\)/);
+  assert.match(script, /const responseStatus = rateLimited \? 429 : status/);
   assert.match(script, /"content-length": String\(body\.length\)/);
   assert.match(script, /for \(const name of \["content-encoding", "content-length", "retry-after"\]\)/);
   assert.match(script, /upstreamResponse\.pipe\(response\)/);
@@ -307,7 +313,7 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /assert_port_owned "\$b_pid_now" challenger 8567/);
 });
 
-test("archive evidence proxy preserves JSON-RPC and owns only transport retries", async (t) => {
+test("archive evidence proxy preserves JSON-RPC with one saturation retry owner", async (t) => {
   const script = await readFile(join(repoRoot, "scripts", "deploy-ab-challenger.sh"), "utf8");
   const proxySource = script.match(
     /node -e '\n([\s\S]*?)\n  ' >\/tmp\/mev-ab-evidence-proxy\.log/,
@@ -343,11 +349,65 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
       calls.set(rpc.method, (calls.get(rpc.method) ?? 0) + 1);
 
       if (rpc.method === "rate_limited") {
+        const payload = calls.get(rpc.method)! < 3
+          ? Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, error: { code: 429 } }))
+          : Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: "0x2a" }));
+        response.writeHead(calls.get(rpc.method)! < 3 ? 429 : 200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+          "retry-after": "0",
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "always_rate_limited") {
         const payload = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, error: { code: 429 } }));
         response.writeHead(429, {
           "content-type": "application/json",
           "content-length": String(payload.length),
-          "retry-after": "2",
+          "retry-after": "0",
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "json_rate_limited") {
+        const payload = calls.get(rpc.method)! < 3
+          ? Buffer.from(JSON.stringify({
+            jsonrpc: "2.0",
+            id: rpc.id,
+            error: { code: -32005, message: "compute units capacity exceeded" },
+          }))
+          : Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: "0x2b" }));
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+          "retry-after": "0",
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "permanent_json_limit") {
+        const payload = Buffer.from(JSON.stringify({
+          jsonrpc: "2.0",
+          id: rpc.id,
+          error: { code: -32005, message: "query returned more than 10000 results" },
+        }));
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "mixed_batch_rate_limited") {
+        const payload = Buffer.from(JSON.stringify([
+          { jsonrpc: "2.0", id: rpc.id, result: "0x1" },
+          { jsonrpc: "2.0", id: rpc.id + 1, error: { code: -32005, message: "compute units capacity exceeded" } },
+        ]));
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+          "retry-after": "0",
         });
         response.end(payload);
         return;
@@ -357,6 +417,19 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
           jsonrpc: "2.0",
           id: rpc.id,
           error: { code: 3, message: "execution reverted", data: "0xdeadbeef" },
+        }));
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "evm_capacity_revert") {
+        const payload = Buffer.from(JSON.stringify({
+          jsonrpc: "2.0",
+          id: rpc.id,
+          error: { code: 3, message: "execution reverted: capacity exceeded", data: "0xdeadbeef" },
         }));
         response.writeHead(200, {
           "content-type": "application/json",
@@ -389,6 +462,13 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
         response.write(payload.subarray(0, 8));
         await pause(5);
         response.destroy();
+        return;
+      }
+      if (rpc.method === "large_chunked") {
+        const payload = Buffer.alloc((1024 * 1024) + 17, "x");
+        response.writeHead(200, { "content-type": "application/json" });
+        response.write(payload.subarray(0, 700_000));
+        response.end(payload.subarray(700_000));
         return;
       }
 
@@ -438,6 +518,12 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
       body,
     });
   };
+  const provider = new JsonRpcProvider(
+    `http://127.0.0.1:${proxyPort}`,
+    1,
+    { staticNetwork: true, batchMaxCount: 1 },
+  );
+  t.after(() => provider.destroy());
 
   const concurrentBodies = Array.from({ length: 32 }, (_, index) =>
     JSON.stringify({ jsonrpc: "2.0", id: index + 1, method: `echo_${index}`, params: [] }));
@@ -451,12 +537,38 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
   assert.ok(maxActive <= 8, `archive upstream concurrency must stay <=8, observed ${maxActive}`);
   assert.equal(contentLengthMatched, true);
 
-  const limited = await request(101, "rate_limited");
-  const limitedBody = await limited.text();
-  assert.equal(limited.status, 429);
-  assert.equal(limited.headers.get("retry-after"), "2");
-  assert.equal(limitedBody, JSON.stringify({ jsonrpc: "2.0", id: 101, error: { code: 429 } }));
-  assert.equal(calls.get("rate_limited"), 1, "the proxy must not multiply the ethers 429 retry budget");
+  assert.equal(await provider.send("rate_limited", []), "0x2a");
+  assert.equal(calls.get("rate_limited"), 3);
+
+  const persistentlyLimited = await request(109, "always_rate_limited");
+  assert.equal(persistentlyLimited.status, 429);
+  assert.equal(persistentlyLimited.headers.get("retry-after"), "0");
+  assert.equal(
+    await persistentlyLimited.text(),
+    JSON.stringify({ jsonrpc: "2.0", id: 109, error: { code: 429 } }),
+  );
+  assert.equal(calls.get("always_rate_limited"), 1, "the proxy must not multiply the ethers 429 budget");
+
+  assert.equal(await provider.send("json_rate_limited", []), "0x2b");
+  assert.equal(calls.get("json_rate_limited"), 3);
+
+  const mixedBatchBody = JSON.stringify([
+    { jsonrpc: "2.0", id: 110, result: "0x1" },
+    { jsonrpc: "2.0", id: 111, error: { code: -32005, message: "compute units capacity exceeded" } },
+  ]);
+  const mixedBatch = await request(110, "mixed_batch_rate_limited");
+  assert.equal(mixedBatch.status, 429);
+  assert.equal(await mixedBatch.text(), mixedBatchBody);
+  assert.equal(calls.get("mixed_batch_rate_limited"), 1);
+
+  const permanentLimit = await request(114, "permanent_json_limit");
+  assert.equal(permanentLimit.status, 200);
+  assert.equal(await permanentLimit.text(), JSON.stringify({
+    jsonrpc: "2.0",
+    id: 114,
+    error: { code: -32005, message: "query returned more than 10000 results" },
+  }));
+  assert.equal(calls.get("permanent_json_limit"), 1);
 
   const reverted = await request(102, "revert");
   assert.equal(reverted.status, 200);
@@ -465,6 +577,15 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
     id: 102,
     error: { code: 3, message: "execution reverted", data: "0xdeadbeef" },
   }));
+
+  const capacityRevert = await request(112, "evm_capacity_revert");
+  assert.equal(capacityRevert.status, 200);
+  assert.equal(await capacityRevert.text(), JSON.stringify({
+    jsonrpc: "2.0",
+    id: 112,
+    error: { code: 3, message: "execution reverted: capacity exceeded", data: "0xdeadbeef" },
+  }));
+  assert.equal(calls.get("evm_capacity_revert"), 1);
 
   const retried = await request(103, "transport_retry");
   assert.equal(retried.status, 200);
@@ -482,10 +603,15 @@ test("archive evidence proxy preserves JSON-RPC and owns only transport retries"
   await pause(10);
   assert.equal(hungUpstreamClosed, 1, "a timed-out proxy call must close its upstream request");
 
-  await assert.rejects(async () => {
-    const partial = await request(107, "partial_abort");
-    await partial.text();
-  });
+  const partial = await request(107, "partial_abort");
+  assert.equal(partial.status, 502);
+  assert.equal(await partial.text(), "archive rpc unavailable");
+  const large = await request(113, "large_chunked");
+  assert.equal(large.status, 200);
+  const largeBody = Buffer.from(await large.arrayBuffer());
+  assert.equal(largeBody.length, (1024 * 1024) + 17);
+  assert.equal(largeBody.equals(Buffer.alloc((1024 * 1024) + 17, "x")), true);
+  assert.equal(calls.get("large_chunked"), 1);
   const afterTimeout = await request(105, "after_timeout");
   assert.equal(afterTimeout.status, 200);
   assert.equal(JSON.parse(await afterTimeout.text()).id, 105);
