@@ -80,8 +80,9 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
   fork 环境可见样本。
 
 ### Slice C — erc4626 接口派生 discovery(第一个真准入变更)【Hermes A/B】
-- `discoverInstances`:候选源 = DEX universe 的 token 集 + 现有 legacy 名单(自检回归用);
-  `asset()` 可读且 share/asset 任一在图内 → **仅是候选**。
+- `discoverInstances`:**候选源 = DEX universe 的 token 集,仅此一个**。legacy 名单**不是候选源**
+  ——它只作为期望召回的答案卷,保存在 discovery 路径之外做比对(P0-1 修正:名单若进候选源,
+  "全部重新发现"即循环论证的假阳性)。
 - `attestIdentity`:**`asset()` 可读单独不构成身份**(假合约也能实现 asset());erc4626 的身份 =
   标准接口自洽检查(asset/totalAssets/convertTo* 互相一致)+ 下述 preview 与 fork 收据行为验证
   整体通过 —— 行为即身份,任一环节不符 → null(quarantine)。
@@ -89,9 +90,24 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
   `nonStandardRedeem` 纪律原文:"错边比没边更糟" —— srUSDe 类 preview 与实付不符的 vault
   整体排除,除非其 declaredVenues 带专用 metadata);loop-closable(asset 与 share 至少一端
   能在图内闭环)。
-- **A/B 验收**:challenger 图 ⊇ champion 图的 erc4626 边(legacy 20+ 条必须全部被 discovery
-  重新发现,一条都不能少 —— 少一条即 discovery 有假阴,fail);新增 vault 边计数与 probe 拒绝
-  计数入 journal;live 窗口漏斗无回归。
+- **probe 否决必须有承载体(P0-2 修正)**:`probeRoute → PoolEntry` 的管道有结构洞——refresh 收到
+  PoolEntry 后由通用 builder 重新调 `buildEdges()`,而现 erc4626 `buildEdges` 只凭
+  `fixedTokenIn/nonStandardRedeem` 发边,probe 拒绝的 redeem 会被重新长出来。**唯一承载方式**:
+  `PoolEntry` 携带逐 route 的 `verifiedRoutes[]` metadata,`buildEdges()` 只允许为已验证 route 发边;
+  并加断言:**identity/probe 任一步失败 → zero edge**(discovery 来源的 PoolEntry 无 verifiedRoutes
+  = 不发任何边)。
+- **flag 门在 refresh 前重执行(P0-3 修正)**:`SEARCHER_ENABLE_PROTOCOL_EDGES` 现只在启动时过滤
+  静态 registry(`filterLiveProtocolRegistry`),`prepareRuntimePoolRefresh` 对 freshPools **零复查**
+  (已核:refresh 文件中 flag 出现次数=0)——coordinator 必须在喂 refresh 前强制执行
+  `requiresProtocolEdgesFlag` 门,并加测试:**flag off + 有效 discovery 结果 = graph hash 不变**。
+- **A/B 验收(P0-1 修正后)**:
+  1. 召回比对:discovery 产出 ⊇ legacy 20+ 条(答案卷比对,legacy 不在候选源);少一条即假阴,fail。
+  2. **无 seed replay(强制)**:完全移除目标 legacy/`POOL_REGISTRY` seed 后重放,必须走通
+     `scanner 自发枚举 → identity/probe 通过 → edge 入图 → path_found → final_sim_success`;
+     注意现 `blockscan-hunt.ts` 第 225-231 行直接 merge `POOL_REGISTRY`——**trusted harness 需先加
+     no-seed 模式**,否则结构性无法证明无 seed 枚举。不满足此 replay 的只能记
+     `implemented_not_validated`,不得记 fixed(gates.md 的 bucket-transition 要求)。
+  3. 新增 vault 边计数与 probe 拒绝计数入 journal;live 窗口漏斗无回归。
 - 通过后:删除 `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 的 erc4626 段(计划的核心交付物)。
 
 ### Slice D — route 生命周期(增删/重 probe)【replay 门 + 谨慎 A/B】
@@ -104,7 +120,11 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
 - selector 命中只产生 **quarantine candidate**(`matchTrace` = 候选分类,见 §2 分层)。
 - **`attestIdentity` 未通过,不得 enumerate、不得 quote、不得入图。**
 - 本 Slice **不覆盖任何 route 的首次出现**(observed-flow 定义即"先看到才学到",信息论边界)。
-- **不得据此关闭 tx14、cold-pool、首次收割类 gap** —— 关它们靠 Slice C 主动枚举。
+- **不得据此关闭 tx14、cold-pool、首次收割类 gap**。**本计划整体也不关闭 tx14(P0-4 修正)**:
+  protocol instance discovery 与 **DEX cold-pool admission 是两个独立缺口**——tx14 的残余堵点是
+  uCR/WETH 死 DEX 池(arb-relevance/cold-pool 修复,另行立项),Slice C 只服务 protocol 实例
+  (erc4626 类)的首次机会,Ubiquity adapter 又不立项;任何 slice 上线都不得据此在台账关闭
+  tx14 或 V4 cold-pool。
 - 本 Slice **不替代 Slice C,也不能满足 Slice C 的验收**。
 
 只按 selector 放行 = 把身份门降级成 selector 门 = 蜜罐可仿冒(造假 target 发对的 burn+mint,
