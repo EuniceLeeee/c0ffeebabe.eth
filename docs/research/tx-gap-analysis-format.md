@@ -9,7 +9,22 @@
 3. 单笔交易通常不调用 `census-gap`，因为它解决窗口枚举，不解决单笔深挖。
 4. `graph-in` 只说明生产快照成员关系；“生产能复现”必须继续看到成功 TokenEdge、scanner 自发枚举、quote、plan 和 final sim。
 5. 如果 postmortem 因无法区分核心闭环与利润处置而输出 `MANUAL REQUIRED`，这是 fail-closed；用 token continuity 和可信 replay 消歧，不能把全部 touched venues 强行拼成路线。
-6. 漏斗归因必须锚定 **tx 时刻生效的输入快照**，不是今天的重建产物。universe 成员关系以节点 hash-pin 文件为准（`/opt/MEV-runtime/universe/active-pools-<sha>.json`，按部署/进程启动时间选出 tx 时刻实际加载的那份；“当前生效”以运行进程 env `SEARCHER_POOL_UNIVERSE_PATH` 为真源）。“当时为何漏”用 tx 时刻 pin，“当前能否复现”用当前 pin 或冻结 universe——两问分开锚定、分开作答。用 cron 刚重建的 active-pools 回答历史成员关系 = 锚错时点，结论作废（type case：`0x14026eed…` 首查用了窗口起点晚于 tx 90 分钟的重建文件，得出与 tx 时刻 pin 相反的准入结论）。dust 池的成员身份随 2 天活动窗口闪烁，任何单一快照都不可外推到其他时点。“现建对照”实验必须同时声明建图所用 builder 代码版本——同一窗口，不同代码建出的 universe 不同（type case：58f2045 引入 factory-call-provisional 前后，未知 factory V2 pair 的准入相反）。
+6. universe 成员关系的**判定标准 = tx 前 lookback 窗口现算**：用 canonical builder 钉窗重建
+   （`POOL_UNIVERSE_FROM_BLOCK=<tx_block-lookback> POOL_UNIVERSE_TO_BLOCK=<tx_block-1> POOL_UNIVERSE_OUT=<scratch> npm run searcher:pool-universe`，
+   lookback 取生产参数 `POOL_UNIVERSE_LOOKBACK_DAYS × 7200`，当前 2 天 = 14400 块），或等价地按 landed-event-registry
+   的 topic 集对该池数 `[tx-lookback, tx-1]` 内的 swap 事件是否 ≥ minSwaps。这是链上可复算、任何人可复验的标准。
+   tx 时刻实际加载的 hash-pin（`/opt/MEV-runtime/universe/active-pools-<sha>.json`，按部署/进程启动时间选；“当前生效”
+   以进程 env `SEARCHER_POOL_UNIVERSE_PATH` 为真源）只是**实际行为证据**，用来解释生产当时真实的漏斗输出，不是 gap
+   分类的判定标准。两者分歧 = **刷新滞后**（pin 老化的 ops 问题），单列一行，不得计入 pool/admission gap。用 cron 刚
+   重建的今日文件回答历史成员关系 = 锚错时点，结论作废（type case：`0x14026eed…` 首查用了窗口起点晚于 tx 90 分钟的
+   重建文件，结论与 pre-tx 现算相反）。现算/pin 对照必须声明 builder 代码版本——同一窗口不同代码结论相反（type
+   case：58f2045 引入 factory-call-provisional 前后，未知 factory V2 pair 准入相反）。两个已知边界：
+   （a）**minSwaps 判定只适用于 DEX swap 池**。protocol venue 不发标准 swap 事件，活动扫描原理上看不见它，走
+   token-graph 静态 protocol entry 声明式进图（curated backbone，不闪烁）；对 protocol 腿判"当时在不在图"只看
+   当时代码里有无该 entry + adapter，不查活动窗口。（b）钉窗重建把身份 eth_call pin 到窗口末块；tx 早于节点状态
+   保留期（reth --full 约 1 万块）时这些调用失败，未知 factory 池被 fail-closed 掉——这是证据局限不是准入结论
+   （type case：`0x3a8414b0` 窗口内 19 笔 swap，本地钉窗重建因裁剪拒之，节点新鲜状态构建收之）。老 tx 用
+   landed-event topic 事件计数 + tx 时刻 pin 交叉，或换 archive RPC。
 7. **禁止 look-ahead 输入**：复现判定与 §8 验收的冻结 universe，窗口必须止于 tx 块之前（`toBlock ≤ tx_block - 1`，或直接用 tx 时刻生效的 pin）。窗口含 tx 块的 universe 已被该 tx 自身的 swap 污染——死池正是被竞争者这笔交易注入 universe 的；它只能证明“事后 2 天内看得见”，不能证明“当时能自发抓到”。type case：`0x14026eed…` 的 uCR/WETH pair 在含 tx 窗口的 pin 里存在，在所有 pre-tx 窗口（含 tx 时刻现建）都不存在；用含 tx 的 pin 判定会得出“只缺 adapter”的假结论。
 
 ## 1. 结论
@@ -66,7 +81,7 @@
 
 Gap 定位到第一个失败阶段。`fixed` 必须由同一历史输入的阶段翻转证明；手工注入 path/amount 只证明可执行性，不证明生产能找到。
 
-每格证据必须注明输入锚（universe pin 标识 + 窗口/generatedAt，或状态块高）。tx 时刻与当前状态结论不一致时（活动窗口闪烁是常态），分两行分别写明各自的锚，不得合并成单一 pass/fail。
+每格证据必须注明输入锚。准入行的判定锚 = **pre-tx lookback 窗口现算**（§0.6：窗口 `[tx-lookback, tx-1]` + minSwaps + builder 代码 SHA）；pin 只作实际行为证据（标识 + 窗口/generatedAt）。现算与 pin 结论不一致 = 刷新滞后，单列一行；tx 时刻与当前状态不一致（活动窗口闪烁是常态）也分两行写明各自的锚，均不得合并成单一 pass/fail。
 
 ## 6. 精确代码定位
 
