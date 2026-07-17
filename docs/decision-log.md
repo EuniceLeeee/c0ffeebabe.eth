@@ -61,6 +61,26 @@
   "coverage exhausted" was measured on ~1.4% of flow because this was off. Ingest+sim only — submission is
   separately gated (D-001). [[project-mevshare-flow-discarded]]
 
+### D-005 | 2026-07-17 | ✅ | Declared-venue hardcode posture: pin the root, attest the pair, never derive at admission
+- **Decision:** singleton venue addresses stay pinned in `declaredVenues` (identity root, §2
+  infrastructure-singleton carve-out); declared token pairs are demoted to **attested expectations** —
+  `buildEdges` eth_calls the venue's own interface before any edge exists (wsteth `stETH()`, psm
+  `gem()/dai()`, erc4626 standard branch `asset()==fixedTokenIn`, hgusdc `HGUSDC.asset()==tokenOut`);
+  goldx/rocksolid expose no token view → liveness attest only (`unit()`/`convertToShares()`), pair stays
+  code-owned behind the final sim. Attestation failure = that pool's edge build fails closed, logged
+  per-pool on boot (backrun+blockscan) and refresh paths. Commit `106d1b5` + boot-logging follow-up;
+  conformance `route-adapters` 14/14; fork-level flip pending (env network policy) ⇒ `implemented`
+  per gates.md.
+- **Why attest, not derive:** attest is fail-closed, derive is open-ended (a venue upgrade returning an
+  unexpected address would silently build an edge to a foreign token); pair constants are woven through
+  the quote/plan layer (`quotePreparedPSM` scaling, `quoteGoldxMint` guard, `psm.buildPlanFragment`
+  direction), so deriving only at build time is a fake removal. Tx-time eth_call reads the same static
+  views as build time — the timing adds zero information; trace-extracted in/out is behavior evidence,
+  used for detection/nomination only (observation side, Slice E quarantine), never admission — behavior
+  is spoofable (honeypot flows). Admission evidence chain stays: pin identity root → interface attest →
+  final sim. Full derivation for singletons = Slice C `enumerateRoutes` shape; revisit only after the
+  erc4626 family pipeline is proven. See the discovery plan §0 for the three-state hardcode taxonomy.
+
 ---
 
 ## Facts (verified project state)
