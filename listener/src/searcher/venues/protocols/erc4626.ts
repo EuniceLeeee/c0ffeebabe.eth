@@ -4,6 +4,7 @@ import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-
 import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg, quoteSiloRedeem } from "./protocol-quote.js";
+import { erc4626Discovery } from "./erc4626-discovery.js";
 
 export const erc4626Adapter = Object.freeze({
   id: "protocol:erc4626",
@@ -11,6 +12,7 @@ export const erc4626Adapter = Object.freeze({
   poolAdapters: ["erc4626"],
   declaredVenues: [],
   undeclaredVenueReason: "ERC4626 instances require external discovery and per-vault probe admission",
+  discovery: erc4626Discovery,
   edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo"],
   allowedTaxonomy: [
     { slotKind: "protocol", protocolAction: "wrap" },

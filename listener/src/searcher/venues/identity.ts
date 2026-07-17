@@ -31,6 +31,7 @@ export type VenueIdentitySource =
   | "v4-manager"
   | "balancer-v3-vault"
   | "dodo-factory-registry"
+  | "erc4626-standard"
   | "seed";
 
 export interface VenueIdentityMetadata {
@@ -41,6 +42,7 @@ export interface VenueIdentityMetadata {
 
 export interface IdentityCallBackend {
   call(req: { to: string; data: string }): Promise<string>;
+  getCode?(address: string): Promise<string>;
 }
 
 export interface OnchainIdentityResolverContext {
@@ -138,6 +140,7 @@ export type PoolIdentityFailureReason =
   | "curve_unregistered"
   | "balancer_v3_unregistered"
   | "dodo_unregistered"
+  | "erc4626_nonstandard"
   | "untrusted_seed";
 
 export interface IdentityPoolEntry extends VenueIdentityMetadata {
@@ -199,6 +202,71 @@ const dodoPoolIface = new ethers.Interface([
 const dodoFactoryIface = new ethers.Interface([
   "function getDODOPool(address baseToken,address quoteToken) view returns (address[] pools)",
 ]);
+const erc4626IdentityIface = new ethers.Interface([
+  "function asset() view returns (address)",
+  "function totalAssets() view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function convertToShares(uint256 assets) view returns (uint256)",
+  "function convertToAssets(uint256 shares) view returns (uint256)",
+  "function previewDeposit(uint256 assets) view returns (uint256)",
+  "function previewRedeem(uint256 shares) view returns (uint256)",
+]);
+
+/**
+ * ERC4626 has no universal factory. Its code-owned identity root is the EIP-4626
+ * interface itself, re-read at one pinned block. This only attests the family;
+ * payout-token evidence remains a mandatory route-probe concern.
+ */
+export const erc4626IdentityResolver: OnchainIdentityResolver = async ({
+  backend,
+  pool,
+  poolAdapter,
+}) => {
+  if (poolAdapter !== "erc4626") {
+    throw new Error(`erc4626 identity resolver: unsupported pool adapter ${poolAdapter}`);
+  }
+  if (!backend.getCode) return { ok: false, reason: "identity_call_failed" };
+  try {
+    const code = await backend.getCode(pool);
+    if (code === "0x") return { ok: false, reason: "erc4626_nonstandard" };
+    const assetRaw = await backend.call({
+      to: pool,
+      data: erc4626IdentityIface.encodeFunctionData("asset"),
+    });
+    const asset = ethers.getAddress(String(
+      erc4626IdentityIface.decodeFunctionResult("asset", assetRaw)[0],
+    ));
+    if (asset === ethers.ZeroAddress || asset.toLowerCase() === pool.toLowerCase()) {
+      return { ok: false, reason: "erc4626_nonstandard" };
+    }
+    const assetCode = await backend.getCode(asset);
+    if (assetCode === "0x") return { ok: false, reason: "erc4626_nonstandard" };
+
+    const probes: Array<[string, readonly unknown[]]> = [
+      ["totalAssets", []],
+      ["totalSupply", []],
+      ["convertToShares", [1n]],
+      ["convertToAssets", [1n]],
+      ["previewDeposit", [1n]],
+      ["previewRedeem", [1n]],
+    ];
+    for (const [fn, args] of probes) {
+      const raw = await backend.call({
+        to: pool,
+        data: erc4626IdentityIface.encodeFunctionData(fn, args),
+      });
+      erc4626IdentityIface.decodeFunctionResult(fn, raw);
+    }
+    return {
+      ok: true,
+      adapter: "erc4626",
+      venueId: "erc4626",
+      identitySource: "erc4626-standard",
+    };
+  } catch {
+    return { ok: false, reason: "identity_call_failed" };
+  }
+};
 
 export async function resolvePoolIdentity(
   backend: IdentityCallBackend,

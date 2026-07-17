@@ -57,7 +57,10 @@ import {
   type V4PoolKey,
 } from "../planner/token-graph.js";
 import { attestPoolIdentities } from "../venues/identity.js";
-import { PRODUCTION_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
+import {
+  PRODUCTION_IDENTITY_RESOLVERS,
+  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+} from "../venues/production-registry.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
@@ -67,6 +70,12 @@ import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { deriveEdgeTaxonomy, pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
+import {
+  createCanonicalProtocolIdentityAttester,
+  createPinnedProtocolDiscoveryContext,
+  runProtocolDiscovery,
+} from "../protocol-instance-discovery.js";
+import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 
 const FIXTURE_URL = new URL("./fixtures/blockscan-coffee-f2de7499.json", import.meta.url);
 const EXECUTION_STATE_TX =
@@ -429,6 +438,7 @@ function poolEntryForLeg(leg: ExtractedLeg, adapter: PoolEntry["adapter"]): Pool
 async function assertEdgesInGraph(
   fixture: ExtractedFixture,
   backend: TokenQueryBackend,
+  discoveredProtocolEdges: readonly TokenEdge[] = [],
 ): Promise<void> {
   for (const leg of fixture.legs) {
     const adapter = LEG_KIND_TO_ADAPTER[leg.kind];
@@ -445,6 +455,11 @@ async function assertEdgesInGraph(
         let edges: TokenEdge[] = [];
         try {
           const candidate = poolEntryForLeg(leg, adapter);
+          if (adapter === "erc4626" && discoveredProtocolEdges.length > 0) {
+            edges = discoveredProtocolEdges.filter(
+              (edge) => edge.target.toLowerCase() === candidate.address.toLowerCase(),
+            );
+          } else {
           const identity = await attestPoolIdentities(backend, [candidate], {
             identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
             seedEntries: POOL_REGISTRY,
@@ -459,6 +474,7 @@ async function assertEdgesInGraph(
             return false;
           }
           edges = await buildTokenGraph(backend, identity.accepted);
+          }
         } catch (err) {
           console.error(
             `[blockscan-fork-solve]   -> buildTokenGraph threw for leg ${leg.seq} (${leg.kind}): ` +
@@ -513,6 +529,7 @@ async function assertClosedLoopExecutes(
   fixture: ExtractedFixture,
   state: AnvilStateBackend,
   productionUniversePath?: string,
+  discoveredProtocolEdges: readonly TokenEdge[] = [],
 ): Promise<void> {
   // Every loop leg must be adapter-backed; if not, seed-building fails clearly before any execution.
   await check("Assertion B: every loop leg is encodable via its venue adapter", () => {
@@ -527,7 +544,7 @@ async function assertClosedLoopExecutes(
     return true;
   });
 
-  const seedEdges = buildExtractedSeedEdges(fixture);
+  const seedEdges = buildExtractedSeedEdges(fixture, discoveredProtocolEdges);
   const path: TokenPath = { edges: seedEdges };
   const flashToken = ethers.getAddress(fixture.flash.token);
   const flashAmount = BigInt(fixture.flash.amount);
@@ -542,6 +559,15 @@ async function assertClosedLoopExecutes(
       i === 0 || seedEdges[i - 1].tokenOut.toLowerCase() === edge.tokenIn.toLowerCase(),
     ),
   );
+  if (discoveredProtocolEdges.length > 0) {
+    const scannerPlanner = new TemplatePlanner();
+    scannerPlanner.setGraph(seedEdges);
+    const scannerPlans = await scannerPlanner.planBlockScanFromSeedEdges(
+      buildExtractedOpportunity(fixture, seedEdges),
+      [FLASH_SWAP_REPAY],
+    );
+    await check("Assertion B0: no-seed discovered edge reaches path_found", () => scannerPlans.length > 0);
+  }
 
   await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
 
@@ -827,7 +853,10 @@ function flashAdapterIdForVenue(venue: string): string {
  * fixed log-order amounts array won't be balance-consistent and Assertion B will (correctly) revert at
  * execution. Composing branched loops is a follow-up (needs a per-token flow DAG, not a linear chain).
  */
-function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
+function buildExtractedSeedEdges(
+  fixture: ExtractedFixture,
+  discoveredProtocolEdges: readonly TokenEdge[] = [],
+): TokenEdge[] {
   const edges: TokenEdge[] = [];
   for (const leg of fixture.legs) {
     const adapter = LEG_KIND_TO_ADAPTER[leg.kind];
@@ -877,7 +906,15 @@ function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
       // Standard vault redeem (shares->asset) or deposit (asset->shares); direction from tokenIn == vault.
       const vault = ethers.getAddress(leg.vault ?? leg.address!);
       const isRedeem = tokenIn.toLowerCase() === vault.toLowerCase();
-      edges.push({
+      const discovered = discoveredProtocolEdges.find((edge) =>
+        edge.target.toLowerCase() === vault.toLowerCase() &&
+        edge.tokenIn.toLowerCase() === tokenIn.toLowerCase() &&
+        edge.tokenOut.toLowerCase() === tokenOut.toLowerCase()
+      );
+      if (discoveredProtocolEdges.length > 0 && !discovered) {
+        throw new Error(`leg ${leg.seq}: scanner did not self-enumerate ERC4626 route`);
+      }
+      edges.push(discovered ?? {
         adapterId: isRedeem ? "erc4626-redeem" : "erc4626-deposit",
         target: vault,
         tokenIn,
@@ -996,6 +1033,62 @@ function buildExtractedOpportunity(fixture: ExtractedFixture, seedEdges: TokenEd
   };
 }
 
+async function discoverFixtureProtocolEdges(
+  fixture: ExtractedFixture,
+  provider: ethers.JsonRpcProvider,
+): Promise<TokenEdge[]> {
+  const protocolLegs = fixture.legs.filter((leg) => leg.kind === "erc4626");
+  if (protocolLegs.length === 0) return [];
+  if (!fixture.forkAfterTx) {
+    throw new Error(
+      "no-seed protocol gate requires fixture.forkAfterTx so final sim runs before the competitor",
+    );
+  }
+  const graphTokens = fixture.legs.flatMap((leg) => [
+    leg.tokenIn,
+    leg.tokenOut,
+  ]).filter((value): value is string => typeof value === "string");
+  const evidenceToBlock = fixture.executionBlock - 1;
+  const discoveryBlocks = Math.max(
+    1,
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_BLOCKS ?? "50000"),
+  );
+  const context = createPinnedProtocolDiscoveryContext({
+    provider,
+    blockNumber: evidenceToBlock,
+    fromBlock: Math.max(0, evidenceToBlock - discoveryBlocks + 1),
+    toBlock: evidenceToBlock,
+    // Deliberately empty: the fixture must not feed its target address back into
+    // discovery. The harness proves event-source self-enumeration before the
+    // competitor; graphTokens only define loop closability after attestation.
+    candidateTokens: [],
+    graphTokens,
+  });
+  const result = await runProtocolDiscovery({
+    adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+    context,
+    protocolEdgesEnabled: true,
+    attestIdentity: createCanonicalProtocolIdentityAttester({
+      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+    }),
+  });
+  if (!result.sourceComplete) {
+    throw new Error("no-seed protocol scanner source incomplete; cursor must remain retryable");
+  }
+  const edges = result.wouldAdmit.flatMap((item) => [...item.edges]);
+  for (const leg of protocolLegs) {
+    const target = ethers.getAddress(leg.vault ?? leg.address!);
+    if (!edges.some((edge) => edge.target.toLowerCase() === target.toLowerCase())) {
+      throw new Error(`no-seed scanner failed to self-enumerate ${target}`);
+    }
+  }
+  console.log(
+    `[blockscan-fork-solve] no-seed protocol discovery: ` +
+      `instances=${result.wouldAdmit.length} edges=${edges.length}`,
+  );
+  return edges;
+}
+
 async function runLoopForkGate(args: LoopGateArgs): Promise<void> {
   const rpcUrl = process.env.SEARCHER_LIVE_RPC_URL || process.env.MAINNET_RPC_URL;
   if (!rpcUrl) {
@@ -1028,12 +1121,22 @@ async function runLoopForkGate(args: LoopGateArgs): Promise<void> {
       const graphBackend: TokenQueryBackend = {
         call: (req) => upstream.call(req as ethers.TransactionRequest),
       };
-      await assertEdgesInGraph(fixture, graphBackend);
+      const noSeedDiscovery = process.env.SEARCHER_PROTOCOL_DISCOVERY_NO_SEED === "1" ||
+        process.argv.slice(2).includes("--protocol-discovery-no-seed");
+      const discoveredProtocolEdges = noSeedDiscovery
+        ? await discoverFixtureProtocolEdges(fixture, upstream)
+        : [];
+      await assertEdgesInGraph(fixture, graphBackend, discoveredProtocolEdges);
 
       const forkAfterTx = fixture.forkAfterTx ?? fixture.txHash;
       console.log(`[blockscan-fork-solve] forkAfterTx ${forkAfterTx} anvil=${ANVIL_URL}`);
       await state.forkAfterTx(forkAfterTx);
-      await assertClosedLoopExecutes(fixture, state, args.productionUniversePath);
+      await assertClosedLoopExecutes(
+        fixture,
+        state,
+        args.productionUniversePath,
+        discoveredProtocolEdges,
+      );
     } finally {
       state.stop();
       upstream.destroy();

@@ -193,6 +193,27 @@ async function main(): Promise<void> {
     missingDeclarationRejected = true;
   }
   assert(missingDeclarationRejected, "protocol adapter without venues/reason must fail closed");
+  const grandfatheredProtocol = PRODUCTION_ROUTE_ADAPTERS.protocols.find(
+    (item) => !item.requiresProtocolEdgesFlag,
+  );
+  assert(grandfatheredProtocol !== undefined, "test requires one grandfathered protocol adapter");
+  let ungatedDiscoveryRejected = false;
+  try {
+    createRouteAdapterRegistry({
+      swaps: [],
+      protocols: [{
+        ...grandfatheredProtocol,
+        id: "protocol:ungated-discovery",
+        discovery: {
+          async discoverCandidates() { return []; },
+          async probeCandidate() { return []; },
+        },
+      }],
+    });
+  } catch {
+    ungatedDiscoveryRejected = true;
+  }
+  assert(ungatedDiscoveryRejected, "dynamic protocol discovery must stay behind feature admission");
   console.log("[route-adapters] declared protocol venue graph derivation: PASS");
 
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };

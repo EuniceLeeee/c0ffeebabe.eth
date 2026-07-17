@@ -17,6 +17,17 @@ import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refine
 import { buildExactBlockScanCurveMids } from "./detector/blockscan-curve-mids.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
+import {
+  prepareActiveProtocolDiscoveryPass,
+  prepareObservedProtocolDiscoveryPass,
+} from "./protocol-discovery-runtime.js";
+import {
+  EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  type ProtocolDiscoveryEvent,
+  type ProtocolDiscoveryOwnership,
+  type ProtocolDiscoveryProjection,
+} from "./protocol-instance-discovery.js";
+import { shouldTraceForProtocolDiscovery } from "./observed-protocol-discovery.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
@@ -40,8 +51,10 @@ import {
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   PRODUCTION_IDENTITY_RESOLVERS,
+  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ROUTE_ADAPTERS,
 } from "./venues/production-registry.js";
+import type { ProtocolDiscoveryReceipt } from "./venues/route-leg-adapter.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { isLandedSwapTopic } from "./venues/landed-event-registry.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
@@ -355,6 +368,28 @@ function logRuntimeRefreshFailures(
   }
   if (failed.length > 5) {
     console.log(`[searcher/live] refresh retryable additional=${failed.length - 5}`);
+  }
+}
+
+function emitProtocolDiscoveryEvents(
+  events: readonly ProtocolDiscoveryEvent[],
+  mode: "shadow" | "active" | "observed",
+  blockNumber: number,
+): void {
+  for (const event of events) {
+    emitEvent({
+      type: "protocol_discovery",
+      adapter_id: event.adapterId,
+      ...(event.target === null ? {} : { target: event.target }),
+      selectors: [...event.selectors],
+      sources: [...event.sources],
+      verdict: event.verdict,
+      stage: event.stage,
+      ...(event.reason === null ? {} : { reason: event.reason }),
+      edge_count: event.wouldAdmitEdges,
+      mode,
+      block_number: blockNumber,
+    });
   }
 }
 
@@ -779,6 +814,11 @@ async function main(): Promise<void> {
   const discoveryBlocks = Number(process.env.SEARCHER_DISCOVERY_BLOCKS ?? "300");
   const discoveryTopN = Number(process.env.SEARCHER_DISCOVERY_TOP_N ?? "100");
   const factoryBlocks = Number(process.env.SEARCHER_FACTORY_BLOCKS ?? "50000");
+  const protocolDiscoveryBlocks = Math.max(
+    1,
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_BLOCKS ?? String(factoryBlocks)),
+  );
+  const protocolDiscoveryShadow = process.env.SEARCHER_PROTOCOL_DISCOVERY_SHADOW === "1";
   const discoveryToBlock = process.env.SEARCHER_DISCOVERY_TO_BLOCK === undefined
     ? await provider.getBlockNumber()
     : Number(process.env.SEARCHER_DISCOVERY_TO_BLOCK);
@@ -790,8 +830,8 @@ async function main(): Promise<void> {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
   };
-  // Protocol adapters are admitted only through the currently enabled exact
-  // code-owned seeds. File-backed pools cannot bypass protocol-edge posture.
+  // Declared singleton/compat protocol venues start here. Permissionless
+  // families join later only through canonical discovery identity + route probe.
   const liveRegistry = filterLiveProtocolRegistry(POOL_REGISTRY, config.enableProtocolEdges);
   const identityCache = createPoolIdentityCache();
   const rawPinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
@@ -897,6 +937,12 @@ async function main(): Promise<void> {
     strategyViewOptions,
   );
   let strategyViews = rebuildStrategyViews(allPools);
+  let protocolDiscoveryOwnership: ProtocolDiscoveryOwnership =
+    EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP;
+  let lastProtocolDiscoveryBlock = Math.max(
+    -1,
+    discoveryToBlock - protocolDiscoveryBlocks,
+  );
   console.log(
     `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
       `blockscan=${strategyViews.blockscan.length} ` +
@@ -925,10 +971,55 @@ async function main(): Promise<void> {
     console.log(
       `[searcher/blockscan] graph built: edges=${blockScanGraph.length} ` +
         `from blockscan view=${strategyViews.blockscan.length} ` +
-        `blockscan_graph_hash=${blockscanGraphHash}`,
+      `blockscan_graph_hash=${blockscanGraphHash}`,
     );
   }
+  const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
+    provider,
+    adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+    protocolEdgesEnabled: config.enableProtocolEdges,
+    currentOwnership: protocolDiscoveryOwnership,
+    currentBackrunPools: strategyViews.backrun,
+    currentBackrunGraph: graph,
+    currentBlockscanGraph: blockScanGraph,
+    buildStrategyViews: rebuildStrategyViews,
+    blockNumber: discoveryToBlock,
+    fromBlock: Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1),
+    candidateTokens: [
+      ...buildTokenIndex(graph).keys(),
+      ...(blockScanGraph ? buildTokenIndex(blockScanGraph).keys() : []),
+    ],
+    shadow: protocolDiscoveryShadow,
+  });
+  emitProtocolDiscoveryEvents(
+    initialProtocolDiscovery.result.events,
+    protocolDiscoveryShadow ? "shadow" : "active",
+    discoveryToBlock,
+  );
+  if (initialProtocolDiscovery.projection) {
+    const projection = initialProtocolDiscovery.projection;
+    replaceArray(graph, projection.backrunGraph);
+    strategyViews = projection.strategyViews;
+    protocolDiscoveryOwnership = projection.ownership;
+    if (blockScanGraph && projection.blockscanGraph) {
+      replaceArray(blockScanGraph, projection.blockscanGraph);
+      blockScanPlanner?.setGraph(blockScanGraph);
+    }
+  }
+  if (initialProtocolDiscovery.result.sourceComplete) {
+    lastProtocolDiscoveryBlock = discoveryToBlock;
+  }
+  console.log(
+    `[searcher/live] protocol discovery ${protocolDiscoveryShadow ? "shadow" : "active"}: ` +
+      `instances=${protocolDiscoveryOwnership.admissions.size} ` +
+      `would_admit=${initialProtocolDiscovery.result.wouldAdmit.length} ` +
+      `range=${Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1)}-${discoveryToBlock}`,
+  );
   const tokenIndex = buildTokenIndex(graph);
+  const knownProtocolCandidateTokens = new Set(
+    initialProtocolDiscovery.result.sourceComplete ? tokenIndex.keys() : [],
+  );
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
   // for matching hint logs. Map: address → adapter type.
@@ -986,73 +1077,259 @@ async function main(): Promise<void> {
 
   // Incremental refresh: scan recent blocks for new pools every N minutes
   const knownPoolKeys = new Set(
-    backrunGraphBuild.successful.map((item) => poolRegistryKey(item.pool)),
+    [
+      ...backrunGraphBuild.successful.map((item) => poolRegistryKey(item.pool)),
+      ...[...protocolDiscoveryOwnership.admissions.values()]
+        .map((item) => poolRegistryKey(item.instance.pool)),
+    ],
   );
   const knownPoolAddrs = new Set(
     strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
   );
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
+  const commitProtocolProjection = (projection: ProtocolDiscoveryProjection): void => {
+    if (projection.baseOwnershipVersion !== protocolDiscoveryOwnership.version) {
+      throw new Error(
+        `stale protocol discovery projection base=${projection.baseOwnershipVersion} ` +
+          `current=${protocolDiscoveryOwnership.version}`,
+      );
+    }
+    // No await between mutations: every graph consumer advances as one projection.
+    replaceArray(graph, projection.backrunGraph);
+    replaceMap(tokenIndex, projection.tokenIndex);
+    replaceMap(allPoolMap, projection.poolAddressMap);
+    replaceArray(flashTokens, projection.flashTokens);
+    replaceSet(knownPoolKeys, projection.knownPoolKeys);
+    replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
+    strategyViews = projection.strategyViews;
+    protocolDiscoveryOwnership = projection.ownership;
+    if (blockScanGraph && projection.blockscanGraph) {
+      replaceArray(blockScanGraph, projection.blockscanGraph);
+      blockScanPlanner?.setGraph(blockScanGraph);
+    }
+    detector.setGraph(graph);
+    detector.setPoolAddressMap(allPoolMap);
+    planner.setGraph(graph);
+    mempoolIntakeRefresh.notify();
+    dumpRuntimeGraphPools(strategyViews.backrun);
+    dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
+    void flashLiquidity.refresh(flashTokens).catch(() => {
+      // The token projection is committed; the slow refresh retries RPC reads.
+    });
+  };
+  let protocolDiscoveryQueue: Promise<void> = Promise.resolve();
+  const enqueueProtocolDiscovery = (
+    label: "active" | "observed",
+    work: () => Promise<void>,
+  ): Promise<void> => {
+    const run = protocolDiscoveryQueue.then(work);
+    protocolDiscoveryQueue = run.catch((error) => {
+      console.log(
+        `[searcher/live] protocol discovery ${label} error: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+    return run;
+  };
   const refreshTimer = setInterval(async () => {
     try {
+      await enqueueProtocolDiscovery("active", async () => {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
         admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
       const candidates = fresh.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool)));
-      if (candidates.length === 0) return;
-
-      const projection = await prepareRuntimePoolRefresh({
-        backend: mainnetBackend,
-        freshPools: candidates,
-        knownPoolKeys,
-        currentBackrunPools: strategyViews.backrun,
-        currentBackrunGraph: graph,
-        currentBlockscanGraph: blockScanGraph,
-        buildStrategyViews: rebuildStrategyViews,
-      });
-      if (projection.admittedPools.length === 0) {
+      if (candidates.length > 0) {
+        const projection = await prepareRuntimePoolRefresh({
+          backend: mainnetBackend,
+          freshPools: candidates,
+          knownPoolKeys,
+          currentBackrunPools: strategyViews.backrun,
+          currentBackrunGraph: graph,
+          currentBlockscanGraph: blockScanGraph,
+          buildStrategyViews: rebuildStrategyViews,
+        });
         logRuntimeRefreshFailures(projection.failedPools);
-        return;
+        if (projection.admittedPools.length > 0) {
+          // Commit every consumer projection without an await between mutations.
+          replaceArray(graph, projection.backrunGraph);
+          replaceMap(tokenIndex, projection.tokenIndex);
+          replaceMap(allPoolMap, projection.poolAddressMap);
+          replaceArray(flashTokens, projection.flashTokens);
+          replaceSet(knownPoolKeys, projection.knownPoolKeys);
+          replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
+          strategyViews = projection.strategyViews;
+          if (blockScanGraph && projection.blockscanGraph) {
+            replaceArray(blockScanGraph, projection.blockscanGraph);
+            blockScanPlanner?.setGraph(blockScanGraph);
+          }
+          detector.setGraph(graph);
+          detector.setPoolAddressMap(allPoolMap);
+          planner.setGraph(graph);
+          mempoolIntakeRefresh.notify();
+          console.log(
+            `[searcher/live] refresh: +${projection.admittedPools.length}/` +
+              `${projection.attemptedPools.length} pools, graph=${graph.length} edges ` +
+              `tokens=${tokenIndex.size} poolMap=${allPoolMap.size} flashTokens=${flashTokens.length} ` +
+              `blockscan=${blockScanGraph?.length ?? 0} ` +
+              `view_version=${strategyViews.versions.strategy_view_version}`,
+          );
+        }
       }
 
-      // Commit every consumer projection without an await between mutations.
-      // The shared graph array stays stable for RevmLiveBackend while its
-      // contents, detector/planner views and all derived indexes advance as one.
-      replaceArray(graph, projection.backrunGraph);
-      replaceMap(tokenIndex, projection.tokenIndex);
-      replaceMap(allPoolMap, projection.poolAddressMap);
-      replaceArray(flashTokens, projection.flashTokens);
-      replaceSet(knownPoolKeys, projection.knownPoolKeys);
-      replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
-      strategyViews = projection.strategyViews;
-      if (blockScanGraph && projection.blockscanGraph) {
-        replaceArray(blockScanGraph, projection.blockscanGraph);
-        blockScanPlanner?.setGraph(blockScanGraph);
+      {
+        const latestProtocolBlock = await provider.getBlockNumber();
+        if (latestProtocolBlock <= lastProtocolDiscoveryBlock) return;
+        const newProtocolCandidateTokens = [...tokenIndex.keys()].filter(
+          (token) => !knownProtocolCandidateTokens.has(token),
+        );
+        const pass = await prepareActiveProtocolDiscoveryPass({
+          provider,
+          adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+          identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+          protocolEdgesEnabled: config.enableProtocolEdges,
+          currentOwnership: protocolDiscoveryOwnership,
+          currentBackrunPools: strategyViews.backrun,
+          currentBackrunGraph: graph,
+          currentBlockscanGraph: blockScanGraph,
+          currentKnownPoolKeys: knownPoolKeys,
+          buildStrategyViews: rebuildStrategyViews,
+          blockNumber: latestProtocolBlock,
+          fromBlock: lastProtocolDiscoveryBlock + 1,
+          candidateTokens: newProtocolCandidateTokens,
+          graphTokens: [...tokenIndex.keys()],
+          shadow: protocolDiscoveryShadow,
+        });
+        emitProtocolDiscoveryEvents(
+          pass.result.events,
+          protocolDiscoveryShadow ? "shadow" : "active",
+          latestProtocolBlock,
+        );
+        if (pass.projection) commitProtocolProjection(pass.projection);
+        if (pass.result.sourceComplete) {
+          for (const token of tokenIndex.keys()) knownProtocolCandidateTokens.add(token);
+          lastProtocolDiscoveryBlock = latestProtocolBlock;
+        }
       }
-      detector.setGraph(graph);
-      detector.setPoolAddressMap(allPoolMap);
-      planner.setGraph(graph);
-      mempoolIntakeRefresh.notify();
-
-      dumpRuntimeGraphPools(strategyViews.backrun);
-      dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
-      void flashLiquidity.refresh(flashTokens).catch(() => {
-        // The token projection is committed; the existing slow timer retries
-        // liquidity reads without losing discovery admission.
       });
-      logRuntimeRefreshFailures(projection.failedPools);
-      console.log(
-        `[searcher/live] refresh: +${projection.admittedPools.length}/` +
-          `${projection.attemptedPools.length} pools, graph=${graph.length} edges ` +
-          `tokens=${tokenIndex.size} poolMap=${allPoolMap.size} flashTokens=${flashTokens.length} ` +
-          `blockscan=${blockScanGraph?.length ?? 0} ` +
-          `view_version=${strategyViews.versions.strategy_view_version}`,
-      );
     } catch (err) {
       console.log(
         `[searcher/live] refresh error: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }, refreshIntervalMs);
+
+  const observedProtocolTxs = new Map<string, number>();
+  const observedProtocolSelectors = new Map<string, number>();
+  const unknownProtocolSelectorLastBlock = new Map<string, number>();
+  const processObservedProtocolReceipt = async (input: {
+    txHash: string;
+    blockNumber: number;
+    receipt: ProtocolDiscoveryReceipt;
+  }): Promise<void> => {
+    if (
+      !config.enableProtocolEdges ||
+      protocolDiscoveryShadow ||
+      !shouldTraceForProtocolDiscovery(input.receipt.logs)
+    ) return;
+    const txKey = input.txHash.toLowerCase();
+    for (const [key, block] of observedProtocolTxs) {
+      if (input.blockNumber - block >= 100) observedProtocolTxs.delete(key);
+    }
+    for (const [key, block] of observedProtocolSelectors) {
+      if (input.blockNumber - block >= 100) observedProtocolSelectors.delete(key);
+    }
+    if (observedProtocolTxs.has(txKey)) return;
+    let trace: unknown;
+    try {
+      trace = await provider.send("debug_traceTransaction", [
+        input.txHash,
+        { tracer: "callTracer" },
+      ]);
+    } catch (error) {
+      console.log(
+        `[searcher/live] protocol discovery trace unavailable tx=${input.txHash.slice(0, 10)} ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+    const pass = await prepareObservedProtocolDiscoveryPass({
+      provider,
+      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+      protocolEdgesEnabled: config.enableProtocolEdges,
+      currentOwnership: protocolDiscoveryOwnership,
+      currentBackrunPools: strategyViews.backrun,
+      currentBackrunGraph: graph,
+      currentBlockscanGraph: blockScanGraph,
+      currentKnownPoolKeys: knownPoolKeys,
+      buildStrategyViews: rebuildStrategyViews,
+      blockNumber: input.blockNumber,
+      txHash: input.txHash,
+      receipt: input.receipt,
+      trace,
+      candidateTokens: [],
+      graphTokens: [...tokenIndex.keys()],
+      seenAddressSelectors: new Set(observedProtocolSelectors.keys()),
+    });
+    emitProtocolDiscoveryEvents(pass.result.events, "observed", input.blockNumber);
+    for (const event of pass.result.events) {
+      if (!event.target || event.verdict !== "would_admit") continue;
+      for (const selector of event.selectors) {
+        observedProtocolSelectors.set(
+          `${event.target.toLowerCase()}|${selector}`,
+          input.blockNumber,
+        );
+      }
+    }
+    for (const diagnostic of pass.unknownSelectors) {
+      const key = `${diagnostic.target.toLowerCase()}|${diagnostic.selector}`;
+      const last = unknownProtocolSelectorLastBlock.get(key) ?? -Infinity;
+      if (input.blockNumber - last < 100) continue;
+      unknownProtocolSelectorLastBlock.set(key, input.blockNumber);
+      emitEvent({
+        type: "protocol_discovery_unknown_selector",
+        target: diagnostic.target,
+        selector: diagnostic.selector,
+        reason: diagnostic.reason,
+        recommendation: diagnostic.recommendation,
+        tx_hash: input.txHash,
+        block_number: input.blockNumber,
+      });
+    }
+    if (pass.result.evaluatedInstanceKeys.size > 0) commitProtocolProjection(pass.projection);
+    // Mark complete only after trace + identity/probe processing. A transient
+    // downstream failure stays retryable if the same landed tx is observed again.
+    observedProtocolTxs.set(txKey, input.blockNumber);
+  };
+  const observeProtocolReceipt = (input: {
+    txHash: string;
+    blockNumber: number;
+    receipt: ProtocolDiscoveryReceipt;
+  }): Promise<void> => enqueueProtocolDiscovery(
+    "observed",
+    () => processObservedProtocolReceipt(input),
+  );
+  const observeProtocolTxHash = (txHash: string): Promise<void> => enqueueProtocolDiscovery(
+    "observed",
+    async () => {
+      const receipt = await provider.getTransactionReceipt(txHash);
+      if (!receipt || receipt.status !== 1 || receipt.blockNumber === null) return;
+      await processObservedProtocolReceipt({
+        txHash,
+        blockNumber: receipt.blockNumber,
+        receipt: {
+          status: receipt.status,
+          logs: receipt.logs.map((log) => ({
+            address: log.address,
+            topics: [...log.topics],
+            data: log.data,
+            transactionHash: log.transactionHash,
+            blockNumber: log.blockNumber,
+          })),
+        },
+      });
+    },
+  );
 
   let processedHints = 0;
   let busy = false;
@@ -1764,6 +2041,8 @@ async function main(): Promise<void> {
             recentWarmPools,
             pinnedWarmTargets,
             blockTracker,
+            observeProtocolReceipt,
+            observeProtocolTxHash,
           });
         } catch (err) {
           console.log(
@@ -1821,6 +2100,12 @@ interface HandleCtx {
   pinnedWarmTargets: Set<string>;
   /** Latest mined block, kept fresh by the WS newHeads stream (no per-hint poll). */
   blockTracker: { latest: number };
+  observeProtocolReceipt(input: {
+    txHash: string;
+    blockNumber: number;
+    receipt: ProtocolDiscoveryReceipt;
+  }): Promise<void>;
+  observeProtocolTxHash(txHash: string): Promise<void>;
 }
 
 /**
@@ -1908,6 +2193,7 @@ async function handleHint(
   let eventTo: string | null = null;
   let eventInput = "0x";
   let eventBlockNumber = latestBlock + 1;
+  let observedProtocolReceipt: ProtocolDiscoveryReceipt | null = null;
   let submissionMode: BundleSubmission["mode"] = "hash-only";
   let fixturePath: LiveFixturePath = "hash-only";
   let countedHintImpact = false;
@@ -2017,6 +2303,9 @@ async function handleHint(
       stage: "detect",
       reason: "no_matching_graph_pool",
     });
+    if (shouldTraceForProtocolDiscovery(hintLogs)) {
+      void ctx.observeProtocolTxHash(txHash);
+    }
     throw new Error("no matching graph pool");
   } else {
     // Token hit but no pool impact — try to fetch full tx from RPC
@@ -2046,6 +2335,16 @@ async function handleHint(
         topics: [...log.topics],
         data: log.data,
       }));
+      observedProtocolReceipt = {
+        status: receipt.status,
+        logs: receipt.logs.map((log) => ({
+          address: log.address,
+          topics: [...log.topics],
+          data: log.data,
+          transactionHash: log.transactionHash,
+          blockNumber: log.blockNumber,
+        })),
+      };
       // Debug: classify receipt log events
       const swapCount = eventLogs.filter((log) => isLandedSwapTopic(log.topics[0])).length;
       const xferCount = eventLogs.filter((l) => l.topics[0]?.toLowerCase() === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").length;
@@ -2130,6 +2429,14 @@ async function handleHint(
     logs: eventLogs,
     minProfit: ctx.config.minProfit,
   };
+
+  if (observedProtocolReceipt) {
+    void ctx.observeProtocolReceipt({
+      txHash,
+      blockNumber: eventBlockNumber,
+      receipt: observedProtocolReceipt,
+    });
+  }
 
   segMark("prep"); // path A impersonateSwap / path B applyRawTx / path C refetch
   const opportunities = await ctx.detector.detect(event, ctx.state);
