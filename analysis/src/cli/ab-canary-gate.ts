@@ -546,7 +546,10 @@ function runHunt(
       HUNT_MAX_HOPS: "4",
       HUNT_MIN_SPREAD_BPS: "0",
       HUNT_SCAN_BUDGET_MS: "120000",
-      HUNT_PASS_BUDGET_MS: "300000",
+      // Historical archive mids are transport-bound and are not the live
+      // performance measurement. Keep the production candidate/refine shape,
+      // but leave enough wall time for both commits to complete semantic replay.
+      HUNT_PASS_BUDGET_MS: "600000",
       // Keep the trusted replay on the same generic candidate budget as
       // production. A route admitted at rank 9..100 is a production route, not
       // a replay failure; the expected target is still matched by its full

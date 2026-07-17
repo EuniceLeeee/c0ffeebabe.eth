@@ -7,6 +7,7 @@ ROOT=/opt/MEV-ab
 MAIN_REPO=/opt/MEV
 WT=$ROOT/b
 TRUSTED_BASE=$ROOT/trusted-base
+GATE_TOOL=$ROOT/gate-tool
 ENVF=$ROOT/b.env
 B_SECRETS=$ROOT/b-secrets.env
 B_PROCESS_ENV=$ROOT/b-process.env
@@ -1143,6 +1144,28 @@ prepare_trusted_base() {
     || die "trusted base analysis build failed (see /tmp/mev-ab-trusted-analysis-build.log)"
 }
 
+prepare_gate_tooling() {
+  local commit=$1 base_commit=$2 dependency_drift
+  dependency_drift=$(git -C "$MAIN_REPO" diff --name-only "$base_commit..$commit" -- \
+    analysis/package.json analysis/package-lock.json)
+  [ -z "$dependency_drift" ] \
+    || die "trusted gate tooling dependencies differ from the installed champion dependencies"
+  if [ -e "$GATE_TOOL/.git" ]; then
+    git -C "$GATE_TOOL" reset --hard "$commit" >/dev/null
+    git -C "$GATE_TOOL" clean -fdx >/dev/null
+  elif [ -e "$GATE_TOOL" ]; then
+    die "$GATE_TOOL exists but is not a git worktree"
+  else
+    git -C "$MAIN_REPO" worktree add --detach "$GATE_TOOL" "$commit" >/dev/null
+  fi
+  [ "$(git -C "$GATE_TOOL" rev-parse HEAD)" = "$commit" ] \
+    || die "trusted gate tooling checkout does not match the pinned origin/main SHA"
+  [ -d "$MAIN_REPO/analysis/node_modules" ] || die "champion analysis/node_modules missing"
+  ln -s "$MAIN_REPO/analysis/node_modules" "$GATE_TOOL/analysis/node_modules"
+  (cd "$GATE_TOOL/analysis" && npm run build >/tmp/mev-ab-gate-tool-build.log 2>&1) \
+    || die "trusted gate tooling build failed (see /tmp/mev-ab-gate-tool-build.log)"
+}
+
 verify_forge_dependency() {
   local commit=$1 expected actual
   [ -d "$MAIN_REPO/lib/forge-std" ] || die "champion forge-std dependency missing"
@@ -1284,7 +1307,7 @@ deploy() {
   fi
   run_preflight_safely
   resolve_a_universe
-  local a_commit b_commit branch_tip candidate_report post_freeze_file
+  local a_commit b_commit branch_tip candidate_report post_freeze_file gate_tool_commit
   a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
   [ "$a_commit" = "$expected_a" ] || die "champion commit drift: expected $expected_a got $a_commit"
   git -C "$MAIN_REPO" fetch origin "$branch" -q
@@ -1293,6 +1316,9 @@ deploy() {
   git -C "$MAIN_REPO" cat-file -e "$expected_b^{commit}" 2>/dev/null \
     || die "frozen challenger commit is unavailable: $expected_b"
   b_commit=$expected_b
+  gate_tool_commit=$(git -C "$MAIN_REPO" rev-parse 'origin/main^{commit}')
+  git -C "$MAIN_REPO" merge-base --is-ancestor "$a_commit" "$gate_tool_commit" \
+    || die "trusted origin/main gate tooling does not descend from the frozen champion"
   git -C "$MAIN_REPO" merge-base --is-ancestor "$b_commit" "$branch_tip" \
     || die "frozen challenger is not an ancestor of the report branch tip"
   [ "$(git -C "$MAIN_REPO" merge-base "$a_commit" "$b_commit")" = "$a_commit" ] \
@@ -1353,6 +1379,7 @@ deploy() {
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
   prepare_trusted_base "$a_commit"
+  prepare_gate_tooling "$gate_tool_commit" "$a_commit"
   prepare_candidate_universes "$experiment" "$requested_input_mode"
   run_preflight_safely
   local gate_a_pid gate_a_restarts gate_a_commit
@@ -1423,7 +1450,7 @@ if os.getppid() == 1:
 os.setsid()
 os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
 ' 'run_candidate_gate_worker "$@"' \
-    "$TRUSTED_BASE/analysis" "$EVIDENCE_PROXY_PORT" "$CANDIDATE_GATE_TIMEOUT_SECONDS" \
+    "$GATE_TOOL/analysis" "$EVIDENCE_PROXY_PORT" "$CANDIDATE_GATE_TIMEOUT_SECONDS" \
     "${gate_args[@]}" \
     >/tmp/mev-ab-candidate-gate.log 2>&1 &
   GATE_WORKER_PID=$!
@@ -1449,6 +1476,10 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
   stop_gate_worker
   [ "$gate_status" = "0" ] \
     || die "production candidate gate failed (see /tmp/mev-ab-candidate-gate.log)"
+  [ "$(git -C "$GATE_TOOL" rev-parse HEAD)" = "$gate_tool_commit" ] \
+    || die "trusted gate tooling commit drifted during candidate replay"
+  [ -z "$(git -C "$GATE_TOOL" status --porcelain --untracked-files=no)" ] \
+    || die "trusted gate tooling became dirty during candidate replay"
   assert_port_free "$EVIDENCE_PROXY_PORT"
   run_preflight_safely
   [ "$(systemctl show -p MainPID --value "$A_UNIT")" = "$gate_a_pid" ] \
@@ -1611,7 +1642,7 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
     production_report_path "$report_path" production_report_hash "$(hash_file "$candidate_report")" \
-    a_commit "$a_commit" b_commit "$b_commit" report_commit "$branch_tip" \
+    a_commit "$a_commit" b_commit "$b_commit" gate_tool_commit "$gate_tool_commit" report_commit "$branch_tip" \
     branch_tip_commit "$branch_tip" \
     router_snapshot_path "$a_router_path" router_snapshot_hash "$router_hash" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \

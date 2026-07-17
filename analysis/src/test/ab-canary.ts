@@ -48,6 +48,17 @@ test("challenger universe mode prepares an immutable input before candidate repl
   assert.match(gate, /"challenger", challengerRoot, 8569, challengerUniverse/);
 });
 
+test("historical candidate replay preserves production shape without using its live deadline", () => {
+  const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+  const gate = fs.readFileSync(path.join(analysisRoot, "src/cli/ab-canary-gate.ts"), "utf8");
+
+  assert.match(gate, /HUNT_SCAN_BUDGET_MS: "120000"/);
+  assert.match(gate, /HUNT_PASS_BUDGET_MS: "600000"/);
+  assert.match(gate, /HUNT_MAX_CANDIDATES: "100"/);
+  assert.match(gate, /HUNT_TOP_K: "8"/);
+  assert.match(gate, /timeout: 20 \* 60 \* 1000/);
+});
+
 test("paired comparator excludes warmup and detects a guarded performance win", () => {
   const result = compareBlockScanLogs(log(100), log(80), {
     metric: "total_ms",

@@ -267,6 +267,10 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   );
   assert.match(script, /Environment=PATH=\/root\/\.cargo\/bin:/);
   assert.match(script, /prepare_trusted_base "\$a_commit"/);
+  assert.match(script, /GATE_TOOL=\$ROOT\/gate-tool/);
+  assert.match(script, /prepare_gate_tooling "\$gate_tool_commit" "\$a_commit"/);
+  assert.match(script, /"\$GATE_TOOL\/analysis" "\$EVIDENCE_PROXY_PORT"/);
+  assert.doesNotMatch(script, /"\$TRUSTED_BASE\/analysis" "\$EVIDENCE_PROXY_PORT"/);
   assert.match(script, /--base-root "\$TRUSTED_BASE"/);
   assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);
   assert.match(script, /allowed = \{"PRIVATE_KEY", "OWNER_PRIVATE_KEY", "BOTVM_ADDRESS", "BOTVM_OWNER"\}/);
