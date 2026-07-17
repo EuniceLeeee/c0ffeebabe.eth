@@ -31,6 +31,15 @@ import {
   type ToolExecutionManifest,
 } from "../tool-index.js";
 
+const CLOSED_LOOP_EQUIVALENCE_LIMITS = Object.freeze({
+  maxPools: 20_000,
+  maxCandidates: 300,
+  refineCandidates: 512,
+  scanBudgetMs: 600_000,
+  passBudgetMs: 1_200_000,
+  childTimeoutSeconds: 3_600,
+});
+
 const args = process.argv.slice(2);
 const report = args[0];
 const gateTmpRoot = process.env.MEV_GATE_TMPDIR || "/tmp";
@@ -302,8 +311,22 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
 }
 
 function runEquivalenceResolutionReplayPair(observation: ProductionSampleObservation): void {
-  const baseline = runDeclaredResolutionReplay("baseline", fs.realpathSync(requiredArg("--base-root")));
-  const challenger = runDeclaredResolutionReplay("challenger", fs.realpathSync(requiredArg("--challenger-root")));
+  const baselineUniverse = fs.realpathSync(candidateUniverseArg("baseline"));
+  const challengerUniverse = fs.realpathSync(candidateUniverseArg("challenger"));
+  if (candidateContext?.inputMode === "shared"
+      && sha256File(baselineUniverse) !== sha256File(challengerUniverse)) {
+    throw new Error("shared equivalence replay universes must be byte-identical");
+  }
+  const baseline = runDeclaredResolutionReplay(
+    "baseline",
+    fs.realpathSync(requiredArg("--base-root")),
+    baselineUniverse,
+  );
+  const challenger = runDeclaredResolutionReplay(
+    "challenger",
+    fs.realpathSync(requiredArg("--challenger-root")),
+    challengerUniverse,
+  );
   const sample = experiment.production_evidence!.sample;
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
   const expectedSwapPath = observation.arb_swap_path.map((step) => ({
@@ -328,12 +351,16 @@ function runEquivalenceResolutionReplayPair(observation: ProductionSampleObserva
 function runDeclaredResolutionReplay(
   label: string,
   root: string,
+  universe: string,
 ): { machine: string; result: BlockscanHuntResult } {
   const replay = experiment.resolution_replay!;
   if (replay.cwd !== "listener"
       || JSON.stringify(replay.argv)
         !== JSON.stringify(["npm", "run", "searcher:blockscan-hunt-tx149"])) {
     throw new Error("equivalence candidate must use the trusted tx149 resolution replay");
+  }
+  if ((replay.timeout_seconds ?? 0) < CLOSED_LOOP_EQUIVALENCE_LIMITS.childTimeoutSeconds) {
+    throw new Error("equivalence resolution replay must declare timeout_seconds=3600");
   }
   const replayCwd = fs.realpathSync(path.resolve(root, replay.cwd));
   if (replayCwd !== root && !replayCwd.startsWith(`${root}${path.sep}`)) {
@@ -356,12 +383,17 @@ function runDeclaredResolutionReplay(
   const result = spawnSync(process.execPath, [
     "--import", "tsx", "src/searcher/test/blockscan-hunt-tx149.ts",
     "--runtime-listener-root", replayCwd,
-    "--hunt-pass-budget-ms", "600000",
+    "--universe-path", universe,
+    "--hunt-max-pools", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.maxPools),
+    "--hunt-max-candidates", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.maxCandidates),
+    "--hunt-refine-candidates", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.refineCandidates),
+    "--hunt-scan-budget-ms", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.scanBudgetMs),
+    "--hunt-pass-budget-ms", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.passBudgetMs),
   ], {
     cwd: trustedListener,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: (replay.timeout_seconds ?? 1_200) * 1_000,
+    timeout: replay.timeout_seconds! * 1_000,
     env: childEnv,
   });
   if (result.error) {
@@ -387,6 +419,10 @@ function runDeclaredResolutionReplay(
     );
   }
   return { machine: machine[0], result: parsed };
+}
+
+function sha256File(file: string): string {
+  return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
 function runBackrunCandidateReplay(observation: ProductionSampleObservation): void {

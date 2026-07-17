@@ -2,10 +2,11 @@
  * Self-contained resolution replay for the tx 0x149df3ec...fde60 gap.
  *
  * This is intentionally a pinned test fixture, not production admission
- * logic and not a general replay CLI. It regenerates the production universe
- * from the same frozen log window, then asks the unchanged blockscan-hunt to
- * self-enumerate and fork-simulate the landed core route. No path or amount is
- * injected into the planner/solver.
+ * logic and not a general replay CLI. Standalone use regenerates the production
+ * universe from the same frozen log window. The trusted equivalence gate may
+ * instead provide its already-frozen universe and wider search budgets. Both
+ * paths ask the unchanged blockscan-hunt to self-enumerate and fork-simulate the
+ * landed core route; no path or amount is injected into planner/solver.
  */
 
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
@@ -19,9 +20,13 @@ const LISTENER_ROOT = realpathSync(
   cli.runtimeListenerRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../.."),
 );
 const HUNT_PASS_BUDGET_MS = cli.huntPassBudgetMs ?? "300000";
-if (HUNT_PASS_BUDGET_MS !== "300000" && HUNT_PASS_BUDGET_MS !== "600000") {
-  throw new Error("--hunt-pass-budget-ms must be 300000|600000");
+if (!["300000", "600000", "1200000"].includes(HUNT_PASS_BUDGET_MS)) {
+  throw new Error("--hunt-pass-budget-ms must be 300000|600000|1200000");
 }
+const HUNT_MAX_POOLS = cli.huntMaxPools ?? "20000";
+const HUNT_MAX_CANDIDATES = cli.huntMaxCandidates ?? "100";
+const HUNT_REFINE_CANDIDATES = cli.huntRefineCandidates ?? "512";
+const HUNT_SCAN_BUDGET_MS = cli.huntScanBudgetMs ?? "120000";
 const RPC_URL = process.env.TX149_REPLAY_RPC_URL
   ?? process.env.SEARCHER_LIVE_RPC_URL
   ?? process.env.MAINNET_RPC_URL
@@ -85,6 +90,11 @@ interface HuntResult {
 
 function parseCli(args: string[]): {
   runtimeListenerRoot?: string;
+  universePath?: string;
+  huntMaxPools?: string;
+  huntMaxCandidates?: string;
+  huntRefineCandidates?: string;
+  huntScanBudgetMs?: string;
   huntPassBudgetMs?: string;
   diagnosticMaxCandidates?: string;
   diagnosticScanBudgetMs?: string;
@@ -93,6 +103,11 @@ function parseCli(args: string[]): {
 } {
   const parsed: {
     runtimeListenerRoot?: string;
+    universePath?: string;
+    huntMaxPools?: string;
+    huntMaxCandidates?: string;
+    huntRefineCandidates?: string;
+    huntScanBudgetMs?: string;
     huntPassBudgetMs?: string;
     diagnosticMaxCandidates?: string;
     diagnosticScanBudgetMs?: string;
@@ -106,20 +121,39 @@ function parseCli(args: string[]): {
     if (name === "--runtime-listener-root") {
       if (parsed.runtimeListenerRoot !== undefined) throw new Error(`${name} may appear only once`);
       parsed.runtimeListenerRoot = value;
+    } else if (name === "--universe-path") {
+      if (parsed.universePath !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.universePath = value;
+    } else if (name === "--hunt-max-pools") {
+      if (parsed.huntMaxPools !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveInt(name, value);
+      parsed.huntMaxPools = value;
+    } else if (name === "--hunt-max-candidates") {
+      if (parsed.huntMaxCandidates !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveInt(name, value);
+      parsed.huntMaxCandidates = value;
+    } else if (name === "--hunt-refine-candidates") {
+      if (parsed.huntRefineCandidates !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveInt(name, value);
+      parsed.huntRefineCandidates = value;
+    } else if (name === "--hunt-scan-budget-ms") {
+      if (parsed.huntScanBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveInt(name, value);
+      parsed.huntScanBudgetMs = value;
     } else if (name === "--hunt-pass-budget-ms") {
       if (parsed.huntPassBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
       parsed.huntPassBudgetMs = value;
     } else if (name === "--diagnostic-max-candidates") {
       if (parsed.diagnosticMaxCandidates !== undefined) throw new Error(`${name} may appear only once`);
-      assertPositiveDiagnosticInt(name, value);
+      assertPositiveInt(name, value);
       parsed.diagnosticMaxCandidates = value;
     } else if (name === "--diagnostic-scan-budget-ms") {
       if (parsed.diagnosticScanBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
-      assertPositiveDiagnosticInt(name, value);
+      assertPositiveInt(name, value);
       parsed.diagnosticScanBudgetMs = value;
     } else if (name === "--diagnostic-pass-budget-ms") {
       if (parsed.diagnosticPassBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
-      assertPositiveDiagnosticInt(name, value);
+      assertPositiveInt(name, value);
       parsed.diagnosticPassBudgetMs = value;
     } else if (name === "--diagnostic-stop-after") {
       if (parsed.diagnosticStopAfter !== undefined) throw new Error(`${name} may appear only once`);
@@ -143,7 +177,7 @@ function parseCli(args: string[]): {
   return parsed;
 }
 
-function assertPositiveDiagnosticInt(name: string, value: string): void {
+function assertPositiveInt(name: string, value: string): void {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new Error(`${name} must be a positive integer`);
@@ -239,53 +273,75 @@ async function runCommand(
 
 async function run(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "mev-tx149-replay-"));
-  const universe = join(work, "active-pools.json");
+  const universe = cli.universePath === undefined
+    ? join(work, "active-pools.json")
+    : realpathSync(cli.universePath);
   const huntOut = join(work, "hunt.json");
   const baseEnv = cleanEnv();
   const diagnostic = cli.diagnosticMaxCandidates !== undefined;
+  const trustedAcceptanceOverride = cli.universePath !== undefined
+    || cli.huntMaxPools !== undefined
+    || cli.huntMaxCandidates !== undefined
+    || cli.huntRefineCandidates !== undefined
+    || cli.huntScanBudgetMs !== undefined
+    || cli.huntPassBudgetMs !== undefined;
   const huntTimeoutMs = diagnostic
     ? Math.max(
         60 * 60 * 1_000,
         Number(cli.diagnosticPassBudgetMs ?? HUNT_PASS_BUDGET_MS) + 45 * 60 * 1_000,
       )
-    : 20 * 60 * 1_000;
+    : trustedAcceptanceOverride
+      ? 55 * 60 * 1_000
+      : 20 * 60 * 1_000;
 
   try {
-    const generated = await runCommand(
-      ["--import", "tsx", "src/searcher/build-active-pool-universe.ts"],
-      {
-        ...baseEnv,
-        MAINNET_RPC_URL: RPC_URL,
-        POOL_UNIVERSE_FROM_BLOCK: String(UNIVERSE_FROM_BLOCK),
-        POOL_UNIVERSE_TO_BLOCK: String(UNIVERSE_TO_BLOCK),
-        POOL_UNIVERSE_OUT: universe,
-        POOL_UNIVERSE_MAX_POOLS: "0",
-        POOL_UNIVERSE_ARB_RELEVANCE: "1",
-        POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS: "0",
-      },
-      diagnostic,
-    );
-    if (generated.error || generated.status !== 0) {
-      throw new Error(
-        `universe generation failed (${generated.status ?? "signal"}): `
-        + `${generated.error?.message ?? tail(generated.stderr)}`,
+    if (cli.universePath === undefined) {
+      const generated = await runCommand(
+        ["--import", "tsx", "src/searcher/build-active-pool-universe.ts"],
+        {
+          ...baseEnv,
+          MAINNET_RPC_URL: RPC_URL,
+          POOL_UNIVERSE_FROM_BLOCK: String(UNIVERSE_FROM_BLOCK),
+          POOL_UNIVERSE_TO_BLOCK: String(UNIVERSE_TO_BLOCK),
+          POOL_UNIVERSE_OUT: universe,
+          POOL_UNIVERSE_MAX_POOLS: "0",
+          POOL_UNIVERSE_ARB_RELEVANCE: "1",
+          POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS: "0",
+        },
+        diagnostic,
       );
+      if (generated.error || generated.status !== 0) {
+        throw new Error(
+          `universe generation failed (${generated.status ?? "signal"}): `
+          + `${generated.error?.message ?? tail(generated.stderr)}`,
+        );
+      }
     }
 
     const universeFile = JSON.parse(readFileSync(universe, "utf8")) as {
+      schemaVersion?: number;
       fromBlock?: number;
       toBlock?: number;
       pools?: unknown[];
     };
-    if (universeFile.fromBlock !== UNIVERSE_FROM_BLOCK
-        || universeFile.toBlock !== UNIVERSE_TO_BLOCK
+    const validWindow = Number.isSafeInteger(universeFile.fromBlock)
+      && Number.isSafeInteger(universeFile.toBlock)
+      && universeFile.fromBlock! >= 0
+      && universeFile.fromBlock! <= universeFile.toBlock!;
+    if (universeFile.schemaVersion !== 2
+        || !validWindow
         || !Array.isArray(universeFile.pools)
         || universeFile.pools.length === 0) {
-      throw new Error("generated universe does not match the pinned non-empty window");
+      throw new Error("replay universe must be a non-empty schema-v2 snapshot with a valid block window");
+    }
+    if (cli.universePath === undefined
+        && (universeFile.fromBlock !== UNIVERSE_FROM_BLOCK
+          || universeFile.toBlock !== UNIVERSE_TO_BLOCK)) {
+      throw new Error("generated universe does not match the pinned tx149 window");
     }
     console.log(
       `[tx149-replay] universe=${universeFile.pools.length} `
-      + `window=${UNIVERSE_FROM_BLOCK}..${UNIVERSE_TO_BLOCK}`,
+      + `window=${universeFile.fromBlock}..${universeFile.toBlock}`,
     );
 
     const diagnosticArgs = cli.diagnosticMaxCandidates === undefined
@@ -312,12 +368,13 @@ async function run(): Promise<void> {
         SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: "8574",
         HUNT_BLOCK: String(FORK_BLOCK),
         HUNT_UNIVERSE_PATH: universe,
-        HUNT_MAX_POOLS: "20000",
+        HUNT_MAX_POOLS,
         HUNT_MAX_HOPS: "4",
         HUNT_MIN_SPREAD_BPS: "0",
-        HUNT_SCAN_BUDGET_MS: "120000",
+        HUNT_SCAN_BUDGET_MS,
         HUNT_PASS_BUDGET_MS,
-        HUNT_MAX_CANDIDATES: "100",
+        HUNT_MAX_CANDIDATES,
+        HUNT_REFINE_CANDIDATES,
         HUNT_TOP_K: "8",
         HUNT_OUT: huntOut,
         AB_EXPECTED_POOL_IDS: [V3_POOL, GOLDX, V2_POOL, CURVE_POOL].join(","),

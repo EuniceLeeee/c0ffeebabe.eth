@@ -125,7 +125,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
   "resolution_replay": {
     "cwd": "listener",
     "argv": ["npm", "run", "searcher:<self-contained-pinned-fixture>"],
-    "timeout_seconds": 1200,
+    "timeout_seconds": 3600,
     "expected_transition": "<exact old failure bucket -> success bucket>"
   },
   "production_evidence": {

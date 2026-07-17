@@ -46,28 +46,61 @@ test("challenger universe mode prepares an immutable input before candidate repl
   assert.match(gate, /candidateUniverseArg\("challenger"\)/);
   assert.match(gate, /"baseline", baseRoot, 8568, baselineUniverse/);
   assert.match(gate, /"challenger", challengerRoot, 8569, challengerUniverse/);
+  assert.match(gate, /shared equivalence replay universes must be byte-identical/);
+  assert.match(gate, /sha256File\(baselineUniverse\) !== sha256File\(challengerUniverse\)/);
 });
 
-test("historical candidate replay preserves production shape without using its live deadline", () => {
+test("generic candidate replay preserves production shape while equivalence gets wider budgets", () => {
   const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+  const repoRoot = path.resolve(analysisRoot, "..");
   const gate = fs.readFileSync(path.join(analysisRoot, "src/cli/ab-canary-gate.ts"), "utf8");
+  const tx149 = fs.readFileSync(
+    path.join(repoRoot, "listener/src/searcher/test/blockscan-hunt-tx149.ts"),
+    "utf8",
+  );
 
+  // Generic stage-advance replay remains production-shaped.
   assert.match(gate, /HUNT_SCAN_BUDGET_MS: "120000"/);
   assert.match(gate, /HUNT_PASS_BUDGET_MS: "600000"/);
   assert.match(gate, /HUNT_MAX_CANDIDATES: "100"/);
   assert.match(gate, /HUNT_TOP_K: "8"/);
   assert.match(gate, /timeout: 20 \* 60 \* 1000/);
+
+  // Only the explicit equivalence branch receives the closed-loop profile.
   assert.match(gate, /candidateContext\?\.requireStageAdvance === false/);
   assert.match(gate, /baseline_stage === "final_sim_success"/);
   assert.match(gate, /challenger_stage === "final_sim_success"/);
   assert.match(gate, /runEquivalenceResolutionReplayPair\(observation\)/);
+  assert.match(gate, /maxPools: 20_000/);
+  assert.match(gate, /maxCandidates: 300/);
+  assert.match(gate, /refineCandidates: 512/);
+  assert.match(gate, /scanBudgetMs: 600_000/);
+  assert.match(gate, /passBudgetMs: 1_200_000/);
+  assert.match(gate, /childTimeoutSeconds: 3_600/);
   assert.match(gate, /validateHuntResult\([\s\S]*"baseline resolution replay"/);
   assert.match(gate, /TX149_RESOLUTION_RESULT=/);
   assert.match(gate, /equivalence candidate must use the trusted tx149 resolution replay/);
   assert.match(gate, /"--runtime-listener-root", replayCwd/);
-  assert.match(gate, /"--hunt-pass-budget-ms", "600000"/);
+  assert.match(gate, /"--universe-path", universe/);
+  assert.match(gate, /"--hunt-max-pools", String\(CLOSED_LOOP_EQUIVALENCE_LIMITS\.maxPools\)/);
+  assert.match(gate, /"--hunt-max-candidates", String\(CLOSED_LOOP_EQUIVALENCE_LIMITS\.maxCandidates\)/);
+  assert.match(gate, /"--hunt-refine-candidates", String\(CLOSED_LOOP_EQUIVALENCE_LIMITS\.refineCandidates\)/);
+  assert.match(gate, /"--hunt-scan-budget-ms", String\(CLOSED_LOOP_EQUIVALENCE_LIMITS\.scanBudgetMs\)/);
+  assert.match(gate, /"--hunt-pass-budget-ms", String\(CLOSED_LOOP_EQUIVALENCE_LIMITS\.passBudgetMs\)/);
+  assert.match(gate, /equivalence resolution replay must declare timeout_seconds=3600/);
+  assert.match(gate, /timeout: replay\.timeout_seconds! \* 1_000/);
   assert.match(gate, /equivalence resolution replay machine results differ/);
   assert.match(gate, /must emit exactly one TX149 machine result/);
+
+  // Standalone tx149 repair keeps its old defaults; only trusted CLI args override them.
+  assert.match(tx149, /cli\.huntMaxCandidates \?\? "100"/);
+  assert.match(tx149, /cli\.huntMaxPools \?\? "20000"/);
+  assert.match(tx149, /cli\.huntRefineCandidates \?\? "512"/);
+  assert.match(tx149, /cli\.huntScanBudgetMs \?\? "120000"/);
+  assert.match(tx149, /cli\.huntPassBudgetMs \?\? "300000"/);
+  assert.match(tx149, /if \(cli\.universePath === undefined\) \{/);
+  assert.match(tx149, /cli\.universePath === undefined[\s\S]*generated universe does not match the pinned tx149 window/);
+  assert.match(tx149, /HUNT_REFINE_CANDIDATES,/);
 });
 
 test("paired comparator excludes warmup and detects a guarded performance win", () => {

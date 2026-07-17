@@ -217,6 +217,10 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /server\.listen\(Number\(process\.env\.MEV_AB_EVIDENCE_PROXY_PORT\), "127\.0\.0\.1"\)/);
   assert.match(script, /run_candidate_gate_worker/);
   assert.match(script, /AB_CANDIDATE_GATE_TIMEOUT_SECONDS:-2700/);
+  assert.match(script, /AB_CANDIDATE_GATE_TIMEOUT_SECONDS must be 300\.\.9000/);
+  assert.match(script, /requested_require_stage_advance" = "0".*candidate_gate_timeout" -lt 9000/s);
+  assert.match(script, /candidate_gate_timeout=9000/);
+  assert.match(script, /replay_top_n=\$\{replay_top_n:-6000\}/);
   assert.match(script, /new https\.Agent\(\{ keepAlive: true, maxSockets: 8 \}\)/);
   assert.match(script, /const retryableStatuses = new Set\(\[502, 503, 504\]\)/);
   assert.match(script, /const maxAttempts = 5/);

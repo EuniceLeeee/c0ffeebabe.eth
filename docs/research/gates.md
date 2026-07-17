@@ -171,6 +171,15 @@ sample, trusted replay, production-only diff, deterministic gate, safety posture
 wallet, port, and runtime protections remain mandatory. The wrapper binds the report value to the trusted
 deployment request and records the selected value in A/B state.
 
+Only this explicit `require_stage_advance=false` equivalence replay receives the closed-loop search budget:
+the already-frozen A/B universe is reused, at most 20,000 pools are loaded, 512 coarse candidates may be
+exact-refined, the final admitted set may extend through rank 300, and scan/pass budgets are 600/1,200 seconds.
+The expected route is still matched by its complete ordered identity and appended to the eight-route solve
+set, so this widens discovery without injecting a path or bypassing simulation/EV. Shared-input runs first
+require byte-identical universe snapshots, and the report must declare the 3,600-second per-side timeout.
+Standalone historical repair, ordinary stage-advance candidate
+gates, and live searcher defaults keep their production-shaped limits.
+
 The trusted deploy wrapper binds the report to the requested experiment, branch, tested base, frozen
 challenger code SHA, input mode, and runtime-view declaration. Candidate config deltas are forbidden. The
 branch tip may advance beyond the code SHA only through the named report; the wrapper deploys the code SHA,

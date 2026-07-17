@@ -110,8 +110,8 @@ valid_report_path() {
   || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..1200"
 [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -ge 5 ] && [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -le 120 ] \
   || die "AB_MEMPOOL_READY_TIMEOUT_SECONDS must be 5..120"
-[ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -ge 300 ] && [ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -le 3600 ] \
-  || die "AB_CANDIDATE_GATE_TIMEOUT_SECONDS must be 300..3600"
+[ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -ge 300 ] && [ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -le 9000 ] \
+  || die "AB_CANDIDATE_GATE_TIMEOUT_SECONDS must be 300..9000"
 
 state_field() {
   python3 - "$STATE" "$1" <<'PY'
@@ -1265,6 +1265,7 @@ deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
   local requested_lane_mode requested_victim_mode requested_shakedown requested_require_stage_advance branch_tip candidate_report
+  local candidate_gate_timeout
   local a_revm_path b_revm_path a_revm_hash b_revm_hash
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
@@ -1288,6 +1289,10 @@ deploy() {
   requested_require_stage_advance=${requested_require_stage_advance:-1}
   [ "$requested_require_stage_advance" = "0" ] || [ "$requested_require_stage_advance" = "1" ] \
     || die "AB_REQUIRE_STAGE_ADVANCE must be 0|1"
+  candidate_gate_timeout=$CANDIDATE_GATE_TIMEOUT_SECONDS
+  if [ "$requested_require_stage_advance" = "0" ] && [ "$candidate_gate_timeout" -lt 9000 ]; then
+    candidate_gate_timeout=9000
+  fi
   if [ "$requested_shakedown" = "1" ]; then
     [ "$requested_input_mode" = "shared" ] \
       || die "infrastructure shakedown requires AB_INPUT_MODE=shared"
@@ -1451,7 +1456,7 @@ if os.getppid() == 1:
 os.setsid()
 os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
 ' 'run_candidate_gate_worker "$@"' \
-    "$GATE_TOOL/analysis" "$EVIDENCE_PROXY_PORT" "$CANDIDATE_GATE_TIMEOUT_SECONDS" \
+    "$GATE_TOOL/analysis" "$EVIDENCE_PROXY_PORT" "$candidate_gate_timeout" \
     "${gate_args[@]}" \
     >/tmp/mev-ab-candidate-gate.log 2>&1 &
   GATE_WORKER_PID=$!

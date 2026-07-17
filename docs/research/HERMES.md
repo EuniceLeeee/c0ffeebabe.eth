@@ -211,7 +211,9 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>
    <candidate-report.md> <allow-view-delta>` over SSM, where the last argument is `1` only when
    `expected_runtime_view_delta=true` was predeclared
-   (otherwise `0`). It validates
+   (otherwise `0`). Set the SSM `AWS-RunShellScript.executionTimeout` to at least 12,000 seconds; the trusted
+   closed-loop equivalence replay may run A and B sequentially for up to one hour each before any live
+   process is changed. It validates
    the schema-v3 production candidate gate; recomputes the sample's receipt/block, PnL, winner style and
    victim independence through the champion's configured private archive endpoint (evidence only; live A/B
    stay pinned to the same local reth); executes the trusted dual-worktree parent-state hunt; binds the
