@@ -28,17 +28,23 @@ export function createPinnedProtocolDiscoveryContext(input: {
   blockNumber: number;
   fromBlock: number;
   toBlock?: number;
+  rpcTimeoutMs?: number;
   candidateTokens: readonly string[];
   graphTokens?: readonly string[];
   retainedInstances?: readonly AttestedProtocolInstance[];
 }): ProtocolDiscoveryContext {
   const toBlock = input.toBlock ?? input.blockNumber;
+  const rpcTimeoutMs = input.rpcTimeoutMs ?? Math.max(
+    1_000,
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_RPC_TIMEOUT_MS ?? "15000"),
+  );
   if (
     !Number.isSafeInteger(input.blockNumber) || input.blockNumber < 0 ||
     !Number.isSafeInteger(input.fromBlock) || input.fromBlock < 0 ||
-    !Number.isSafeInteger(toBlock) || toBlock < input.fromBlock || toBlock > input.blockNumber
+    !Number.isSafeInteger(toBlock) || toBlock < input.fromBlock || toBlock > input.blockNumber ||
+    !Number.isFinite(rpcTimeoutMs) || rpcTimeoutMs < 1
   ) {
-    throw new Error("invalid protocol discovery block range");
+    throw new Error("invalid protocol discovery block range or RPC timeout");
   }
   return {
     blockNumber: input.blockNumber,
@@ -48,23 +54,47 @@ export function createPinnedProtocolDiscoveryContext(input: {
     graphTokens: unique((input.graphTokens ?? input.candidateTokens).map((token) => token.toLowerCase())),
     retainedInstances: input.retainedInstances ?? [],
     backend: {
-      call: (req) => input.provider.send("eth_call", [
-        req,
-        `0x${input.blockNumber.toString(16)}`,
-      ]),
-      getCode: (address) => input.provider.getCode(address, input.blockNumber),
+      call: (req) => withRpcTimeout(
+        input.provider.send("eth_call", [
+          req,
+          `0x${input.blockNumber.toString(16)}`,
+        ]),
+        rpcTimeoutMs,
+        "eth_call",
+      ),
+      getCode: (address) => withRpcTimeout(
+        input.provider.getCode(address, input.blockNumber),
+        rpcTimeoutMs,
+        "eth_getCode",
+      ),
       getStorageAt: (address, position) =>
-        input.provider.getStorage(address, position, input.blockNumber),
-      getCodeAt: (address, blockNumber) => input.provider.getCode(address, blockNumber),
+        withRpcTimeout(
+          input.provider.getStorage(address, position, input.blockNumber),
+          rpcTimeoutMs,
+          "eth_getStorageAt",
+        ),
+      getCodeAt: (address, blockNumber) => withRpcTimeout(
+        input.provider.getCode(address, blockNumber),
+        rpcTimeoutMs,
+        "historical eth_getCode",
+      ),
       getStorageAtBlock: (address, position, blockNumber) =>
-        input.provider.getStorage(address, position, blockNumber),
+        withRpcTimeout(
+          input.provider.getStorage(address, position, blockNumber),
+          rpcTimeoutMs,
+          "historical eth_getStorageAt",
+        ),
       getLogs: async (req) => {
-        const logs = await input.provider.getLogs({
-          ...(req.address === undefined ? {} : { address: req.address }),
-          topics: [...req.topics],
-          fromBlock: req.fromBlock,
-          toBlock: req.toBlock,
-        });
+        const logs = await withRpcTimeout(
+          input.provider.getLogs({
+            ...(req.address === undefined ? {} : { address: req.address }),
+            topics: [...req.topics],
+            fromBlock: req.fromBlock,
+            toBlock: req.toBlock,
+          }),
+          rpcTimeoutMs,
+          "eth_getLogs",
+        );
         return logs.map((log) => ({
           address: log.address,
           topics: [...log.topics],
@@ -74,7 +104,11 @@ export function createPinnedProtocolDiscoveryContext(input: {
         }));
       },
       getTransactionReceipt: async (txHash) => {
-        const receipt = await input.provider.getTransactionReceipt(txHash);
+        const receipt = await withRpcTimeout(
+          input.provider.getTransactionReceipt(txHash),
+          rpcTimeoutMs,
+          "eth_getTransactionReceipt",
+        );
         if (!receipt) return null;
         return {
           status: receipt.status,
@@ -87,12 +121,35 @@ export function createPinnedProtocolDiscoveryContext(input: {
           })),
         };
       },
-      traceTransaction: (txHash) => input.provider.send("debug_traceTransaction", [
-        txHash,
-        { tracer: "callTracer" },
-      ]),
+      traceTransaction: (txHash) => withRpcTimeout(
+        input.provider.send("debug_traceTransaction", [
+          txHash,
+          { tracer: "callTracer" },
+        ]),
+        rpcTimeoutMs,
+        "debug_traceTransaction",
+      ),
     },
   };
+}
+
+function withRpcTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`protocol discovery ${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 export type ProtocolDiscoveryStage = "feature_flag" | "candidate" | "identity" | "probe";

@@ -51,6 +51,7 @@
     "searcher:protocol-instance-discovery": "node --import tsx src/searcher/test/protocol-instance-discovery.ts",
     "searcher:erc4626-instance-discovery": "node --import tsx src/searcher/test/erc4626-instance-discovery.ts",
     "searcher:observed-protocol-discovery": "node --import tsx src/searcher/test/observed-protocol-discovery.ts",
+    "searcher:protocol-discovery-live-smoke": "node --import tsx src/searcher/test/protocol-discovery-live-smoke.ts",
     "searcher:audit-erc4626": "node --import tsx src/searcher/test/audit-erc4626-redeem.ts",
     "searcher:sim-gas-on-revert": "node --import tsx src/searcher/test/sim-gas-on-revert.ts",
     "searcher:cycle-fingerprint": "node --import tsx src/searcher/test/cycle-fingerprint.ts",
