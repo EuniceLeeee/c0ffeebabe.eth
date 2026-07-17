@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { createServer as createHttpsServer } from "node:https";
+import { createConnection, createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -213,9 +216,15 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /server\.listen\(Number\(process\.env\.MEV_AB_EVIDENCE_PROXY_PORT\), "127\.0\.0\.1"\)/);
   assert.match(script, /run_candidate_gate_worker/);
   assert.match(script, /AB_CANDIDATE_GATE_TIMEOUT_SECONDS:-2700/);
-  assert.match(script, /new https\.Agent\(\{ keepAlive: true, maxSockets: 64 \}\)/);
+  assert.match(script, /new https\.Agent\(\{ keepAlive: true, maxSockets: 8 \}\)/);
+  assert.match(script, /const retryableStatuses = new Set\(\[502, 503, 504\]\)/);
+  assert.match(script, /const maxAttempts = 5/);
+  assert.match(script, /MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS \?\? "300000"/);
+  assert.match(script, /"content-length": String\(body\.length\)/);
+  assert.match(script, /for \(const name of \["content-encoding", "content-length", "retry-after"\]\)/);
+  assert.match(script, /upstreamResponse\.pipe\(response\)/);
   assert.match(script, /const absoluteTimeout = setTimeout/);
-  assert.match(script, /upstreamResponse\.once\("aborted", finishUnavailable\)/);
+  assert.match(script, /upstreamResponse\.once\("aborted", \(\) => settleAttempt\(finishUnavailable\)\)/);
   assert.match(script, /EVIDENCE_TIMEOUT_PID=\$!/);
   assert.match(script, /EVIDENCE_PROXY_PID=\$!/);
   assert.match(script, /libc\.prctl\(1, signal\.SIGTERM/);
@@ -298,6 +307,190 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /assert_port_owned "\$b_pid_now" challenger 8567/);
 });
 
+test("archive evidence proxy preserves JSON-RPC and owns only transport retries", async (t) => {
+  const script = await readFile(join(repoRoot, "scripts", "deploy-ab-challenger.sh"), "utf8");
+  const proxySource = script.match(
+    /node -e '\n([\s\S]*?)\n  ' >\/tmp\/mev-ab-evidence-proxy\.log/,
+  )?.[1];
+  assert.ok(proxySource, "inline archive proxy source must be extractable for behavior tests");
+
+  const root = await mkdtemp(join(tmpdir(), "mev-archive-proxy-"));
+  const keyPath = join(root, "key.pem");
+  const certPath = join(root, "cert.pem");
+  const certificate = spawnSync("openssl", [
+    "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+    "-keyout", keyPath, "-out", certPath, "-days", "1", "-subj", "/CN=127.0.0.1",
+  ], { stdio: "ignore" });
+  assert.equal(certificate.status, 0, "openssl must create the local HTTPS test certificate");
+
+  const calls = new Map<string, number>();
+  let active = 0;
+  let maxActive = 0;
+  let contentLengthMatched = true;
+  let hungUpstreamClosed = 0;
+  const upstream = createHttpsServer({
+    key: await readFile(keyPath),
+    cert: await readFile(certPath),
+  }, async (request, response) => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks);
+      contentLengthMatched &&= request.headers["content-length"] === String(body.length);
+      const rpc = JSON.parse(body.toString("utf8")) as { id: number; method: string };
+      calls.set(rpc.method, (calls.get(rpc.method) ?? 0) + 1);
+
+      if (rpc.method === "rate_limited") {
+        const payload = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, error: { code: 429 } }));
+        response.writeHead(429, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+          "retry-after": "2",
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "revert") {
+        const payload = Buffer.from(JSON.stringify({
+          jsonrpc: "2.0",
+          id: rpc.id,
+          error: { code: 3, message: "execution reverted", data: "0xdeadbeef" },
+        }));
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+        });
+        response.end(payload);
+        return;
+      }
+      if (rpc.method === "transport_retry" && calls.get(rpc.method)! < 3) {
+        response.writeHead(503, { "content-type": "text/plain", "retry-after": "0" });
+        response.end("try later");
+        return;
+      }
+      if (rpc.method === "always_503") {
+        response.writeHead(503, { "content-type": "text/plain", "retry-after": "0" });
+        response.end("still unavailable");
+        return;
+      }
+      if (rpc.method === "hang") {
+        response.once("close", () => { hungUpstreamClosed++; });
+        return;
+      }
+      if (rpc.method === "partial_abort") {
+        const payload = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: "complete" }));
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "content-length": String(payload.length),
+        });
+        response.flushHeaders();
+        response.write(payload.subarray(0, 8));
+        await pause(5);
+        response.destroy();
+        return;
+      }
+
+      await pause(15);
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(body.length),
+      });
+      response.end(body);
+    } finally {
+      active--;
+    }
+  });
+  await new Promise<void>((resolve, reject) => {
+    upstream.once("error", reject);
+    upstream.listen(0, "127.0.0.1", resolve);
+  });
+
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  const proxyPort = await reservePort();
+  const proxy = spawn(process.execPath, ["-e", proxySource], {
+    env: {
+      ...process.env,
+      MEV_AB_EVIDENCE_PROXY_PORT: String(proxyPort),
+      MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS: "100",
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
+    },
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  let proxyStderr = "";
+  proxy.stderr.on("data", (chunk) => { proxyStderr += String(chunk); });
+  proxy.stdin.end(`https://127.0.0.1:${upstreamPort}/rpc`);
+
+  t.after(async () => {
+    proxy.kill("SIGTERM");
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  });
+  await waitForPort(proxyPort, () => proxyStderr);
+
+  const request = async (id: number, method: string): Promise<Response> => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id, method, params: [] });
+    return fetch(`http://127.0.0.1:${proxyPort}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  };
+
+  const concurrentBodies = Array.from({ length: 32 }, (_, index) =>
+    JSON.stringify({ jsonrpc: "2.0", id: index + 1, method: `echo_${index}`, params: [] }));
+  const concurrentResponses = await Promise.all(concurrentBodies.map((body) =>
+    fetch(`http://127.0.0.1:${proxyPort}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    }).then(async (response) => ({ status: response.status, body: await response.text() }))));
+  assert.deepEqual(concurrentResponses, concurrentBodies.map((body) => ({ status: 200, body })));
+  assert.ok(maxActive <= 8, `archive upstream concurrency must stay <=8, observed ${maxActive}`);
+  assert.equal(contentLengthMatched, true);
+
+  const limited = await request(101, "rate_limited");
+  const limitedBody = await limited.text();
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "2");
+  assert.equal(limitedBody, JSON.stringify({ jsonrpc: "2.0", id: 101, error: { code: 429 } }));
+  assert.equal(calls.get("rate_limited"), 1, "the proxy must not multiply the ethers 429 retry budget");
+
+  const reverted = await request(102, "revert");
+  assert.equal(reverted.status, 200);
+  assert.equal(await reverted.text(), JSON.stringify({
+    jsonrpc: "2.0",
+    id: 102,
+    error: { code: 3, message: "execution reverted", data: "0xdeadbeef" },
+  }));
+
+  const retried = await request(103, "transport_retry");
+  assert.equal(retried.status, 200);
+  assert.equal(JSON.parse(await retried.text()).id, 103);
+  assert.equal(calls.get("transport_retry"), 3);
+
+  const unavailable = await request(106, "always_503");
+  assert.equal(unavailable.status, 503);
+  assert.equal(await unavailable.text(), "still unavailable");
+  assert.equal(calls.get("always_503"), 5, "transport retries must be finite and exact");
+
+  const timedOut = await request(104, "hang");
+  assert.equal(timedOut.status, 502);
+  assert.equal(await timedOut.text(), "archive rpc unavailable");
+  await pause(10);
+  assert.equal(hungUpstreamClosed, 1, "a timed-out proxy call must close its upstream request");
+
+  await assert.rejects(async () => {
+    const partial = await request(107, "partial_abort");
+    await partial.text();
+  });
+  const afterTimeout = await request(105, "after_timeout");
+  assert.equal(afterTimeout.status, 200);
+  assert.equal(JSON.parse(await afterTimeout.text()).id, 105);
+});
+
 async function withLocations(run: (locations: InputLocations) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "mev-tool-defaults-"));
   const locations: InputLocations = {
@@ -318,4 +511,37 @@ async function withLocations(run: (locations: InputLocations) => Promise<void>):
 async function write(path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "fixture\n");
+}
+
+async function reservePort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const port = (server.address() as AddressInfo).port;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+  return port;
+}
+
+async function waitForPort(port: number, stderr: () => string): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const connected = await new Promise<boolean>((resolve) => {
+      const socket = createConnection({ host: "127.0.0.1", port });
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => resolve(false));
+    });
+    if (connected) return;
+    await pause(20);
+  }
+  throw new Error(`archive proxy did not listen: ${stderr()}`);
+}
+
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -256,7 +256,27 @@ run_candidate_gate_worker() {
       const upstreamText = Buffer.concat(upstreamChunks).toString("utf8");
       if (!/^https:\/\/\S+$/.test(upstreamText)) process.exit(2);
       const upstream = new URL(upstreamText);
-      const agent = new https.Agent({ keepAlive: true, maxSockets: 64 });
+      // Keep the proxy below the archive provider burst ceiling. The trusted
+      // replay performs many historical eth_call requests; opening one TLS
+      // socket per local caller can turn a healthy archive into a wall of 429s.
+      const agent = new https.Agent({ keepAlive: true, maxSockets: 8 });
+      // HTTP 429 is deliberately not retried here. It and Retry-After are
+      // forwarded intact so the ethers caller owns the one retry budget.
+      const retryableStatuses = new Set([502, 503, 504]);
+      const maxAttempts = 5;
+      const requestTimeoutMs = Number(
+        process.env.MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS ?? "300000",
+      );
+      if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 50) process.exit(2);
+
+      const retryDelayMs = (headers, attempt) => {
+        const retryAfter = headers["retry-after"];
+        if (typeof retryAfter === "string" && /^\d+$/.test(retryAfter)) {
+          return Math.min(10_000, Number(retryAfter) * 1_000);
+        }
+        return Math.min(4_000, 250 * (2 ** attempt));
+      };
+
       const server = http.createServer(async (request, response) => {
         if (request.method !== "POST") {
           response.writeHead(405, { "content-type": "text/plain" });
@@ -271,13 +291,17 @@ run_candidate_gate_worker() {
             if (bytes > 16 * 1024 * 1024) throw new Error("request too large");
             chunks.push(chunk);
           }
+          const body = Buffer.concat(chunks);
           await new Promise((resolve) => {
             let finalized = false;
             let upstreamRequest;
+            let retryTimer;
+            let attempt = 0;
             const finalize = () => {
               if (finalized) return;
               finalized = true;
               clearTimeout(absoluteTimeout);
+              clearTimeout(retryTimer);
               resolve();
             };
             const finishUnavailable = () => {
@@ -293,31 +317,72 @@ run_candidate_gate_worker() {
             const absoluteTimeout = setTimeout(() => {
               upstreamRequest?.destroy(new Error("archive rpc timeout"));
               finishUnavailable();
-            }, 60_000);
-            upstreamRequest = https.request(upstream, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              agent,
-            }, (upstreamResponse) => {
-              if (finalized) {
-                upstreamResponse.destroy();
+            }, requestTimeoutMs);
+
+            const retryOrFail = (headers = {}) => {
+              if (finalized) return;
+              if (attempt >= maxAttempts - 1) {
+                finishUnavailable();
                 return;
               }
-              response.writeHead(upstreamResponse.statusCode ?? 502, {
-                "content-type": upstreamResponse.headers["content-type"] ?? "application/json",
+              const delay = retryDelayMs(headers, attempt);
+              attempt++;
+              retryTimer = setTimeout(send, delay);
+            };
+
+            const send = () => {
+              if (finalized) return;
+              let attemptSettled = false;
+              const settleAttempt = (next) => {
+                if (attemptSettled || finalized) return;
+                attemptSettled = true;
+                next();
+              };
+              upstreamRequest = https.request(upstream, {
+                method: "POST",
+                headers: {
+                  "accept": "application/json",
+                  "content-type": request.headers["content-type"] ?? "application/json",
+                  "content-length": String(body.length),
+                },
+                agent,
+              }, (upstreamResponse) => {
+                const status = upstreamResponse.statusCode ?? 502;
+                if (retryableStatuses.has(status) && attempt < maxAttempts - 1) {
+                  upstreamResponse.once("end", () => settleAttempt(() => {
+                    retryOrFail(upstreamResponse.headers);
+                  }));
+                  upstreamResponse.once("aborted", () => settleAttempt(() => retryOrFail()));
+                  upstreamResponse.once("error", () => settleAttempt(() => retryOrFail()));
+                  upstreamResponse.resume();
+                  return;
+                }
+                const headers = {
+                  "content-type": upstreamResponse.headers["content-type"] ?? "application/json",
+                };
+                for (const name of ["content-encoding", "content-length", "retry-after"]) {
+                  const value = upstreamResponse.headers[name];
+                  if (typeof value === "string") headers[name] = value;
+                }
+                response.writeHead(status, headers);
+                upstreamResponse.pipe(response);
+                upstreamResponse.once("end", () => settleAttempt(finalize));
+                upstreamResponse.once("aborted", () => settleAttempt(finishUnavailable));
+                upstreamResponse.once("error", () => settleAttempt(finishUnavailable));
               });
-              upstreamResponse.pipe(response);
-              upstreamResponse.once("end", finalize);
-              upstreamResponse.once("aborted", finishUnavailable);
-              upstreamResponse.once("error", finishUnavailable);
-            });
+              upstreamRequest.once("error", () => settleAttempt(() => {
+                if (response.headersSent) finishUnavailable();
+                else retryOrFail();
+              }));
+              upstreamRequest.end(body);
+            };
+
             response.once("finish", finalize);
             response.once("close", () => {
               if (!finalized) upstreamRequest.destroy(new Error("gate client closed"));
               finalize();
             });
-            upstreamRequest.once("error", finishUnavailable);
-            upstreamRequest.end(Buffer.concat(chunks));
+            send();
           });
         } catch {
           response.writeHead(502, { "content-type": "text/plain" });
