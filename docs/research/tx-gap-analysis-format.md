@@ -9,6 +9,7 @@
 3. 单笔交易通常不调用 `census-gap`，因为它解决窗口枚举，不解决单笔深挖。
 4. `graph-in` 只说明生产快照成员关系；“生产能复现”必须继续看到成功 TokenEdge、scanner 自发枚举、quote、plan 和 final sim。
 5. 如果 postmortem 因无法区分核心闭环与利润处置而输出 `MANUAL REQUIRED`，这是 fail-closed；用 token continuity 和可信 replay 消歧，不能把全部 touched venues 强行拼成路线。
+6. 漏斗归因必须锚定 **tx 时刻生效的输入快照**，不是今天的重建产物。universe 成员关系以节点 hash-pin 文件为准（`/opt/MEV-runtime/universe/active-pools-<sha>.json`，按部署/进程启动时间选出 tx 时刻实际加载的那份；“当前生效”以运行进程 env `SEARCHER_POOL_UNIVERSE_PATH` 为真源）。“当时为何漏”用 tx 时刻 pin，“当前能否复现”用当前 pin 或冻结 universe——两问分开锚定、分开作答。用 cron 刚重建的 active-pools 回答历史成员关系 = 锚错时点，结论作废（type case：`0x14026eed…` 首查用了窗口起点晚于 tx 90 分钟的重建文件，得出与 tx 时刻 pin 相反的准入结论）。dust 池的成员身份随 2 天活动窗口闪烁，任何单一快照都不可外推到其他时点。
 
 ## 1. 结论
 
@@ -63,6 +64,8 @@
 | EV / submit | `<pass/fail/not-run>` | `<fact>` |
 
 Gap 定位到第一个失败阶段。`fixed` 必须由同一历史输入的阶段翻转证明；手工注入 path/amount 只证明可执行性，不证明生产能找到。
+
+每格证据必须注明输入锚（universe pin 标识 + 窗口/generatedAt，或状态块高）。tx 时刻与当前状态结论不一致时（活动窗口闪烁是常态），分两行分别写明各自的锚，不得合并成单一 pass/fail。
 
 ## 6. 精确代码定位
 
