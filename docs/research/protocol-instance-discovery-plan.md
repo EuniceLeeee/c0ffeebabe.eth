@@ -80,13 +80,34 @@ interface ProtocolConversionAdapter {
 - 安全边界:删除路径只允许 discovery-owned 边;declaredVenues 边永不被自动删除。
 
 ### Slice E — observed-selector quarantine 泳道(最低可信度,最后做)【Hermes A/B】
-- 已知 selector 命中未知 target → quarantine → identity/getter/quote probe → 热进图。
-- 明示局限:首次收割抓不到(信息论边界,不是实现缺陷);价值在第二次及路线尾巴。
+- 已知 selector 命中未知 target → quarantine → **身份根 attest** → getter/quote probe → 热进图。
+- 沿用性(核实 origin/main):`ActionAdapter.matchTrace(target, selector)` 接口已带 address 参数、
+  dispatch 已传 `target`,**但现有实现全是 `_target`(仅按 selector 匹配)** —— 本片必须让 address
+  那一层真正生效。`poolRegistryKey`(非 v4)= 裸地址,多 token 路线需新增 `protocolRouteId`
+  (`selector:tokenIn:tokenOut`)进键,否则同址第二路线被去重吞掉。receipt→trace shortlist 基础设施
+  散在 detector/pool-impact,可复用,不新建 daemon。工程量 = 一个 scanner + 一个 route key + 两个
+  调用点(启动回扫最近 N 块 + 现有 refresh timer 扫新块)。
+- **身份根 attest 是准入前置,不是可选优化(宪法 §2 硬要求)**:命中 selector 只产生 candidate;必须
+  再过 adapter 声明的 `attestIdentity(target)` —— reverse-verify on-chain 身份 —— 通过才 probe/进图,
+  否则 quarantine 不进图。**只按 selector 放行 = 把身份门降级成 selector 门 = 蜜罐可仿冒**(造一个
+  假 target 发对的 burn+mint,quote-probe 会通过、执行时罚没)。attest 形状:Ubiquity =
+  `Manager.hasRole(BURNER_ROLE, target)`(**已链上实测 = true**,见下);erc4626 = `asset()` 可读且
+  share/asset 自洽;proxy 记 implementation/code hash,升级即失效重 attest。
+- **定位诚实(硬约束)**:observed-flow 定义即"先在链上看到才学到" → **首次收割永远抓不到**
+  (信息论边界)。本片命名 = `observed-protocol-route catch-up`,报告必须写明"不覆盖首次收割";
+  **cold-pool / standing-state 首次收割类 gap(tx14 死池、tx2b48 V4 cold-pool)不因本 scanner 上线
+  而在 gap 台账关闭** —— 关闭它们要靠主动枚举(Slice C 的 `asset()` 反查 / 身份根枚举),那才是北极星
+  要的东西,运维债消除只是附带。被动兜底与主动枚举**汇入同一个带身份根的 verified-route 出口**,不可
+  只留被动这一条泳道。
 
-### 不在本计划:Ubiquity
-- ubiquity-credit 不过 EV 入场门($0.02/次,残余协议),**不立项**。若将来立项,形状已定:
-  pin Ubiquity Manager `0x4da97a8b`(身份根)→ getter 反查 CreditNftManager → 单例 declaredVenue
-  或 registry discovery,不 pin 样本地址 `0x4321…`。
+### 关于 Ubiquity 身份根:证据已从"不足"变为"充分"(链上实测,本轮补)
+- 早前结论"CreditNftManager singleton 证据不足、不能白名单化"**已被链上数据了结**:
+  `converter(0x4321).manager()` = `0x4DA97a8b…`(正向),且身份根 `Manager.hasRole(UBQ_MINTER_ROLE,
+  0x4321)` = **true**、`hasRole(UBQ_BURNER_ROLE, 0x4321)` = **true**(反向认证)。这满足宪法的
+  reverse-verified on-chain identity —— 合宪准入依据 = pin Manager + `hasRole` 派生,**不是** pin 样本
+  地址 `0x4321`。这条同时证明了上面 attest 钩子对 Ubiquity 的具体实现可行。
+- **但立项状态不变**:ubiquity-credit 仍不过 EV 入场门($0.02/次,残余协议),**不立项**;上述身份根
+  只是把它从"证据不足"移到"证据充分但不值",并作为 Slice E `attestIdentity` 的样本形状留档。
 
 ## 4. 全局边界(每片都适用)
 
@@ -98,7 +119,12 @@ interface ProtocolConversionAdapter {
    allowance 都不同,默认被 probeRoute 排除;要支持需独立 route metadata,另立 slice。
 5. **新 adapter 立项仍过 EV/频次入场门**(§7 决策树 + 出现 ≥N 次或累计毛利 ≥$X);本计划管"写好的
    adapter 自动进图",不授权 adapter 扩产。
-6. Codex 产 diff,逐 hunk 审(gate-full-codex-diff);每片一个 rule-12 gate。
+6. **身份根 attest 是任何 discovery/observed 泳道的准入前置**:进图单位是 `(chainId, target,
+   selector, tokenIn, tokenOut)`,但 `target` 必须先过 `attestIdentity` 反查 on-chain 身份根
+   (registry/factory/role/标准接口),命中 selector ≠ 通过身份;只按 selector 放行 = 蜜罐可仿冒。
+7. **被动 catch-up 不得冒充首次收割修复**:observed-flow 结构性抓不到首次;任何 slice 的报告不许把
+   "第二次学到了"写成 cold-pool/standing-state gap 已关闭。
+8. Codex 产 diff,逐 hunk 审(gate-full-codex-diff);每片一个 rule-12 gate。
 
 ## 5. 风险
 
