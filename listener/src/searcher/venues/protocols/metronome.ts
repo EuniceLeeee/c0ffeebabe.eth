@@ -23,6 +23,7 @@ const SYNTH_TOKENS = [ADDR.MSETH, ADDR.MSBTC, ADDR.MSUSD] as const;
 const synthPoolDiscoveryIface = new ethers.Interface([
   "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
 ]);
+const hgusdcVaultIface = new ethers.Interface(["function asset() view returns (address)"]);
 
 export const metronomeSynthAdapter = Object.freeze({
   id: "protocol:metronome-synth",
@@ -118,9 +119,19 @@ export const metronomeHgusdcAdapter = Object.freeze({
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 1 },
   prepared: null,
-  async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
       throw new Error(`metronome-hgusdc pool ${pool.address} missing fixed token metadata`);
+    }
+    // The exit quote treats hgUSDC previewRedeem output as the edge's tokenOut
+    // amount, which is only sound while the vault's asset is that token.
+    const raw = await backend.call({
+      to: ADDR.HGUSDC,
+      data: hgusdcVaultIface.encodeFunctionData("asset"),
+    });
+    const reported = String(hgusdcVaultIface.decodeFunctionResult("asset", raw)[0]);
+    if (reported.toLowerCase() !== pool.fixedTokenOut.toLowerCase()) {
+      throw new Error(`metronome-hgusdc identity attestation failed: hgUSDC reports asset ${reported}`);
     }
     return [{
       adapterId: "metronome-hgusdc-exit", target: pool.address,

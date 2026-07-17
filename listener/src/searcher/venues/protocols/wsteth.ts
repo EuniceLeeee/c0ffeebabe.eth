@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
@@ -5,6 +6,8 @@ import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-
 import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg } from "./protocol-quote.js";
+
+const wstethIface = new ethers.Interface(["function stETH() view returns (address)"]);
 
 export const wstethAdapter = Object.freeze({
   id: "protocol:wsteth",
@@ -26,7 +29,17 @@ export const wstethAdapter = Object.freeze({
   readMid: readProtocolExternalMid,
   warm: { kind: "protocol-mid", priority: 1 },
   prepared: null,
-  async buildEdges(pool: PoolEntry, _backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
+    // The declared singleton is a hypothesis until the venue's own interface
+    // confirms it: a wrong pin must fail edge build, not surface in the sim.
+    const raw = await backend.call({
+      to: pool.address,
+      data: wstethIface.encodeFunctionData("stETH"),
+    });
+    const reported = String(wstethIface.decodeFunctionResult("stETH", raw)[0]);
+    if (reported.toLowerCase() !== ADDR.STETH.toLowerCase()) {
+      throw new Error(`wsteth identity attestation failed: ${pool.address} reports stETH ${reported}`);
+    }
     return [
       {
         adapterId: "wsteth-wrap", target: pool.address,
