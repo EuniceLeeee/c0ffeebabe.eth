@@ -106,7 +106,7 @@ test("census-gap excludes stale and failed postmortem artifacts", async () => {
   assert.match(script, /scan_related_submission_seen/);
   assert.match(script, /scan_pass_had_submission/);
   assert.match(script, /routing_unverified\(tokenedge-index-required/);
-  assert.match(script, /manual_required:route_incomplete/);
+  assert.match(script, /manual_required:" \+ \(\$ra\.reason \/\/ "route_incomplete"\)/);
   assert.ok(
     script.indexOf('($ra.status // "") == "manual_required"') < script.indexOf('elif $oog > 0'),
     "an unresolved non-swap route must stop for manual review before any all-touch pool-gap verdict",

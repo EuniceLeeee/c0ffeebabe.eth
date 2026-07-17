@@ -204,6 +204,8 @@ export interface CompetitorReport extends CandidateTx {
   v4PoolIds: string[];
   touchedVenues: TouchedVenue[];
   edgeKinds: EdgeKind[];
+  /** Which evidence sources were available; this is not a claim that every protocol is decoded. */
+  edgeKindEvidence?: EdgeKindEvidenceMode;
   winner_style: WinnerStyle;
   receipt_weth_unwrap_exit: boolean;
   winner_moved_price_beyond_prestate: boolean;
@@ -493,17 +495,29 @@ export interface OtherVenue {
 
 export interface RouteGapAnalysis {
   status: "swap_venues_only" | "manual_required";
-  reason?: "non_swap_leg_order_unresolved";
+  reason?: "non_swap_leg_order_unresolved" | "call_trace_unavailable";
   unresolved_edge_kinds: EdgeKind[];
 }
+
+export type EdgeKindEvidenceMode = "logs_only" | "logs_plus_call_trace";
 
 /**
  * touchedVenues/otherVenues are landed venue facts, not a reconstructed core route. Until call-defined
  * protocol/credit/LP legs are ordered with the swap legs, their full touch set cannot honestly drive an
  * automatic production pool-gap verdict. Fail closed and leave the detailed replay to the repair gate.
  */
-export function assessRouteGapAnalysis(edgeKinds: EdgeKind[]): RouteGapAnalysis {
+export function assessRouteGapAnalysis(
+  edgeKinds: EdgeKind[],
+  evidenceMode: EdgeKindEvidenceMode = "logs_plus_call_trace",
+): RouteGapAnalysis {
   const unresolved = edgeKinds.filter((kind) => kind === "protocol" || kind === "credit" || kind === "lp");
+  if (evidenceMode === "logs_only") {
+    return {
+      status: "manual_required",
+      reason: "call_trace_unavailable",
+      unresolved_edge_kinds: unresolved,
+    };
+  }
   return unresolved.length > 0
     ? {
         status: "manual_required",
@@ -1087,6 +1101,9 @@ async function anyTxPostmortem(
     )
     : undefined;
   const edgeKinds = await deriveProductionAwareEdgeKinds(receipt?.logs, payment.callTrace);
+  const edgeKindEvidence: EdgeKindEvidenceMode = payment.callTrace === null
+    ? "logs_only"
+    : "logs_plus_call_trace";
   const report = {
     command: "bundle-postmortem" as const,
     mode: "any_tx" as const,
@@ -1123,7 +1140,12 @@ async function anyTxPostmortem(
     non_comparable_winner: isNonComparableWinnerStyle(styleAnalysis.winner_style) ? true : undefined,
     non_arb_signals: styleAnalysis.non_arb_signals,
     edgeKinds,
-    route_gap_analysis: assessRouteGapAnalysis(edgeKinds),
+    edge_kind_evidence: {
+      mode: edgeKindEvidence,
+      call_trace_available: payment.callTrace !== null,
+      error: payment.traceError,
+    },
+    route_gap_analysis: assessRouteGapAnalysis(edgeKinds, edgeKindEvidence),
     touchedVenues,
     v4LegFills,
     jitPoolIds: jitPoolIds.length > 0 ? jitPoolIds : undefined,
@@ -1170,7 +1192,7 @@ function renderAnyTxSummary(report: any): string {
     + ` rfq_sigs=${signals.rfq_sig_count} deadline=${signals.rfq_deadline_in_calldata}`
     + ` external_mints=${(signals.external_mint_recipients ?? []).length}`
     + ` mint_context=${signals.external_mint_protocol_context ?? "none"}]`
-    + ` edges=[${(report.edgeKinds ?? []).join(",")}]`);
+    + ` edges=[${(report.edgeKinds ?? []).join(",")}] evidence=${report.edge_kind_evidence?.mode ?? "unknown"}`);
   if (report.route_gap_analysis?.status === "manual_required") {
     lines.push(`  route gap: MANUAL REQUIRED (${report.route_gap_analysis.reason}; unresolved=${report.route_gap_analysis.unresolved_edge_kinds.join(",")})`);
   }
@@ -1441,6 +1463,7 @@ async function analyzeCompetitor(
     v4PoolIds: profit.v4PoolIds,
     touchedVenues: await resolveLandedTouchedVenues(rpc, receipt, graph, blockNumber),
     edgeKinds: await deriveProductionAwareEdgeKinds(receipt?.logs, payment.callTrace),
+    edgeKindEvidence: payment.callTrace === null ? "logs_only" : "logs_plus_call_trace",
     winner_style: winnerStyleAnalysis.winner_style,
     receipt_weth_unwrap_exit: winnerStyleAnalysis.receipt_weth_unwrap_exit,
     winner_moved_price_beyond_prestate: winnerStyleAnalysis.winner_moved_price_beyond_prestate,
@@ -1469,6 +1492,9 @@ async function computeBuilderPaymentWei(
   const priorityTipWei = gasUsed * priorityFee;
   try {
     const trace = await rpc.traceTransaction(txHash);
+    if (!trace || typeof trace !== "object") {
+      throw new Error("callTracer returned no root frame");
+    }
     const coinbaseTransferWei = directCoinbasePaymentWeiFromCallTrace(trace, coinbase);
     return {
       priorityTipWei,
@@ -2676,10 +2702,18 @@ export function buildVerdict(event: Json, competitors: CompetitorReport[], build
     winner: winner.hash,
     winnerPaymentWei: winner.builderPaymentWei,
     outbid: bid === null ? null : winnerPayment > bid,
-    route_gap_decisive: simulatedProfit === null ? null : comparableAtomic ? winnerPayment > simulatedProfit : false,
+    route_gap_decisive: winner.edgeKindEvidence === "logs_only" || simulatedProfit === null
+      ? null
+      : comparableAtomic
+        ? winnerPayment > simulatedProfit
+        : false,
     winner_style: winner.winner_style,
     non_comparable_winner: nonComparable ? true : undefined,
-    note: nonComparable ? nonComparableWinnerNote(winner.winner_style, winner.non_arb_signals) : undefined,
+    note: nonComparable
+      ? nonComparableWinnerNote(winner.winner_style, winner.non_arb_signals)
+      : winner.edgeKindEvidence === "logs_only"
+        ? "callTracer unavailable; edge kinds are incomplete and route-gap judgment is manual"
+        : undefined,
     one_shot: oneShotSummary(event),
     builder_reach: builderReach,
   };
@@ -2748,6 +2782,7 @@ export function learningCaseFromPostmortem(report: PostmortemReport): LearningCa
         id: venue.id,
         in_graph: venue.in_graph,
       })),
+      edge_kind_evidence: winner?.edgeKindEvidence ?? null,
     },
     created_at: createdAt,
     updated_at: createdAt,
@@ -2762,6 +2797,7 @@ function postmortemPrimaryGap(
 ): PrimaryGap {
   const winnerStyle = report.verdict.winner_style ?? winner?.winner_style ?? "unknown";
   if (isNonComparableWinnerStyle(winnerStyle)) return "non_comparable_winner";
+  if (winner?.edgeKindEvidence === "logs_only") return "manual_required";
   if (comparable && report.verdict.route_gap_decisive === true && missingVenues.length > 0) {
     return "venue_missing";
   }
@@ -2958,6 +2994,7 @@ function renderSummary(report: Json): string {
     lines.push(
       `winner: ${winner.hash} index=${winner.transactionIndex} backrun_positioned=${String(winner.backrun_positioned)}`,
       `winner_style: ${winner.winner_style} winner_moved_price_beyond_prestate=${String(winner.winner_moved_price_beyond_prestate)} unpriced_token_in_flow=${winner.unpriced_token_in_flow.length === 0 ? "none" : winner.unpriced_token_in_flow.join(",")} external_mint_recipients=${externalMintRecipients.length === 0 ? "none" : externalMintRecipients.join(",")}`,
+      `winner_edge_kinds: [${winner.edgeKinds.join(",")}] evidence=${winner.edgeKindEvidence ?? "unknown"} call_trace=${winner.tracePrestateUsed ? "available" : "unavailable"}`,
       `winner_payment_wei: ${winner.builderPaymentWei} priority_tip_wei=${winner.priorityTipWei} coinbase_transfer_wei=${winner.coinbaseTransferWei ?? "unavailable"}`,
       `our_bid_wei: ${report.bundle_submitted.bid ?? "unknown"} simulated_profit_wei=${report.bundle_submitted.simulated_profit ?? "unknown"}`,
       `winner_realized_profit_usd: ${formatUsd(winner.realizedProfitUsd)} builder_payment_usd=${formatUsd(winner.builderPaymentUsd)}`,

@@ -699,6 +699,13 @@ const unknownVerdict = buildVerdict(
   [competitor("unknown", "200")],
   reach,
 );
+const traceUnavailableAtomic = competitor("atomic_loop", "200");
+traceUnavailableAtomic.edgeKindEvidence = "logs_only";
+const traceUnavailableVerdict = buildVerdict(
+  event("100", "50"),
+  [traceUnavailableAtomic],
+  reach,
+);
 
 // Graph-membership v4 fixture: runtime-graph-pools.json stores v4 by PoolManager ADDRESS only
 // (no poolId), so in_graph for v4 must come from the sibling active-pools.json poolId set — else
@@ -773,6 +780,8 @@ const checks: Array<() => void> = [
   () => assert.equal(atomicVerdict.route_gap_decisive, true),
   () => assert.equal(atomicVerdict.non_comparable_winner, undefined),
   () => assert.equal(unknownVerdict.route_gap_decisive, false),
+  () => assert.equal(traceUnavailableVerdict.route_gap_decisive, null),
+  () => assert.match(traceUnavailableVerdict.note ?? "", /callTracer unavailable/),
   () => assert.equal(scaleKeeperSignals.claim_selector_hit, true),
   () => assert.equal(overlayNonArbStyle("unknown", scaleKeeperSignals), "keeper_claim"),
   () => assert.equal(isNonComparableWinnerStyle("keeper_claim"), true),

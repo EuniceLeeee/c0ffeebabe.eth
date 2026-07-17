@@ -114,7 +114,11 @@ done
     ($bs.status // "unset") as $bss |
     (if .non_comparable_winner == true then "non_comparable:" + (.winner_style // "?")
      elif (.winner_style // "unknown") != "atomic_loop" then "manual_required:" + (.winner_style // "unknown")
-     elif ($ra.status // "") == "manual_required" then "manual_required:route_incomplete(" + (($ra.unresolved_edge_kinds // []) | join(",")) + ")"
+     elif ($ra.status // "") == "manual_required" then
+       "manual_required:" + ($ra.reason // "route_incomplete")
+       + (if (($ra.unresolved_edge_kinds // []) | length) > 0
+          then "(" + (($ra.unresolved_edge_kinds // []) | join(",")) + ")"
+          else "" end)
      elif $oog > 0 then "pool_gap(\($oog) oog)"
      elif $rg > 0 then "routing_gap(\($rr) x\($rg))"
      elif $ru > 0 then "routing_unverified(tokenedge-index-required x\($ru))"

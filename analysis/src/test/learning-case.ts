@@ -185,6 +185,11 @@ test("route gap analysis fails closed when a non-swap leg has not been ordered",
     reason: "non_swap_leg_order_unresolved",
     unresolved_edge_kinds: ["credit", "lp"],
   });
+  assert.deepEqual(assessRouteGapAnalysis(["flash", "swap"], "logs_only"), {
+    status: "manual_required",
+    reason: "call_trace_unavailable",
+    unresolved_edge_kinds: [],
+  });
 });
 
 test("landed venue facts preserve unknown factory and Curve underlying adapter", async () => {
@@ -273,6 +278,14 @@ test("learningCaseFromPostmortem carries derived edgeKinds and preserves old-rep
   delete (oldWinner as { edgeKinds?: unknown }).edgeKinds;
   assert.ok(oldWinner.touchedVenues.length > 0, "fixture winner has touched venues");
   assert.deepEqual(learningCaseFromPostmortem(oldReport).edge_kinds, ["swap"]);
+
+  const logsOnlyReport = readJsonFixture<PostmortemReport>("postmortem-0xa32b/report.json");
+  const logsOnlyWinner = winnerInReport(logsOnlyReport);
+  logsOnlyWinner.edgeKindEvidence = "logs_only";
+  logsOnlyReport.verdict.route_gap_decisive = true;
+  const logsOnlyCase = learningCaseFromPostmortem(logsOnlyReport);
+  assert.equal(logsOnlyCase.primary_gap, "manual_required");
+  assert.equal(logsOnlyCase.evidence.edge_kind_evidence, "logs_only");
 });
 
 test("coffee tx-shape fixtures construct competitor-observation LearningCases", () => {
