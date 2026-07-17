@@ -6,6 +6,7 @@
  * ranked candidates on local Anvil state.
  */
 
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ethers } from "ethers";
@@ -23,7 +24,10 @@ import {
   type ProtocolMid,
 } from "../detector/blockscan-scanner.js";
 import { buildExactBlockScanCurveMids } from "../detector/blockscan-curve-mids.js";
-import { refineBlockScanCandidates } from "../detector/blockscan-candidate-refinement.js";
+import {
+  refineBlockScanCandidates,
+  type BlockScanProbeDiagnostic,
+} from "../detector/blockscan-candidate-refinement.js";
 import {
   blockScanPassBudgetExceeded,
   resolveBlockScanHuntBudgets,
@@ -47,6 +51,8 @@ import { PoolStateUpdater } from "../solver/pool-state-updater.js";
 import { metronomeSynthPoolIface, quote } from "../solver/quoter.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
+import { evaluateEv } from "../ev-evaluator.js";
+import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 
 const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
@@ -71,6 +77,19 @@ const WAD = 10n ** 18n;
 const PSM_TO18 = 10n ** 12n;
 
 type ProtocolClass = "erc4626" | "wsteth" | "psm" | "metronome" | "other";
+
+type DiagnosticStopAfter = "graph" | "enumeration" | "refine" | "solve" | "sim" | "ev";
+
+interface DiagnosticOptions {
+  enabled: boolean;
+  maxCandidates?: number;
+  scanBudgetMs?: number;
+  passBudgetMs?: number;
+  topK?: number;
+  stopAfter?: DiagnosticStopAfter;
+}
+
+const DIAGNOSTIC = parseDiagnosticArgs(process.argv.slice(2));
 
 interface HuntConfig {
   rpcUrl: string;
@@ -143,10 +162,94 @@ interface SolveReport {
   solved: string | null;
   solveError: string | null;
   searchCenter: string | null;
+  diagnosticSimulation?: {
+    success: boolean;
+    profitToken: string;
+    grossProfit: string;
+    gasUsed: string;
+    netProfit: string;
+    calldataHash: string;
+    revertReason: string | null;
+  };
+  diagnosticEv?: {
+    decision: "allow" | "below_ev_gate" | "unpriceable_profit_token" | "disabled";
+    evGate: boolean;
+    netEvWei: string;
+    expectedProfitEth: string;
+    gasCostEth: string;
+    bidEth: string;
+    minNetEth: string;
+  };
 }
 
 let checks = 0;
 let passed = 0;
+let lastDiagnosticStep = 0;
+
+function parseDiagnosticArgs(args: string[]): DiagnosticOptions {
+  if (args.length === 0) return { enabled: false };
+  const parsed: DiagnosticOptions = { enabled: false };
+  for (let index = 0; index < args.length;) {
+    const name = args[index++];
+    if (name === "--diagnostic") {
+      if (parsed.enabled) throw new Error("--diagnostic may appear only once");
+      parsed.enabled = true;
+      continue;
+    }
+    const value = args[index++];
+    if (value === undefined || value.startsWith("--")) {
+      throw new Error(`${name} requires one value`);
+    }
+    if (name === "--max-candidates") {
+      if (parsed.maxCandidates !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.maxCandidates = diagnosticPositiveInt(name, value);
+    } else if (name === "--scan-budget-ms") {
+      if (parsed.scanBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.scanBudgetMs = diagnosticPositiveInt(name, value);
+    } else if (name === "--pass-budget-ms") {
+      if (parsed.passBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.passBudgetMs = diagnosticPositiveInt(name, value);
+    } else if (name === "--top-k") {
+      if (parsed.topK !== undefined) throw new Error(`${name} may appear only once`);
+      parsed.topK = diagnosticPositiveInt(name, value);
+    } else if (name === "--stop-after") {
+      if (parsed.stopAfter !== undefined) throw new Error(`${name} may appear only once`);
+      if (!(["graph", "enumeration", "refine", "solve", "sim", "ev"] as string[]).includes(value)) {
+        throw new Error("--stop-after must be graph|enumeration|refine|solve|sim|ev");
+      }
+      parsed.stopAfter = value as DiagnosticStopAfter;
+    } else {
+      throw new Error(`unsupported blockscan diagnostic option ${name}`);
+    }
+  }
+  if (!parsed.enabled) {
+    throw new Error("diagnostic options require --diagnostic");
+  }
+  return parsed;
+}
+
+function diagnosticPositiveInt(name: string, value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function emitDiagnostic(
+  step: 1 | 2 | 3 | 4 | 5 | 6,
+  stage: string,
+  status: "pass" | "fail" | "reject" | "not_reached",
+  details: Record<string, unknown>,
+): void {
+  if (!DIAGNOSTIC.enabled) return;
+  lastDiagnosticStep = Math.max(lastDiagnosticStep, step);
+  console.log(`SIX_STEP_DIAGNOSTIC=${JSON.stringify({ step, stage, status, ...details })}`);
+}
+
+function diagnosticStopsAfter(stage: DiagnosticStopAfter): boolean {
+  return DIAGNOSTIC.enabled && DIAGNOSTIC.stopAfter === stage;
+}
 
 function loadEnv(): void {
   let text = "";
@@ -237,6 +340,27 @@ async function main(): Promise<void> {
       edges.length > 0 && protocolEdges.length > 0,
     );
 
+    if (DIAGNOSTIC.enabled) {
+      const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
+      const missingEdges = expectedRoute.filter((expected) =>
+        !edges.some((edge) => sameRouteStep(opportunityRoute([edge])[0], expected)),
+      );
+      const poolAdmission = describeExpectedPoolAdmission(
+        expectedPoolIds(),
+        universePools,
+        protocolPools,
+        edges,
+      );
+      emitDiagnostic(1, "graph", missingEdges.length === 0 ? "pass" : "fail", {
+        graphEdges: edges.length,
+        expectedEdges: expectedRoute.length,
+        missingEdges,
+        poolAdmission,
+      });
+      if (diagnosticStopsAfter("graph")) return;
+      if (missingEdges.length > 0) return;
+    }
+
     const warmCounts = await warmSwapState(provider, cache, cfg, edges);
     await check("v2/v3 state warm completed", () =>
       warmCounts.swapHops === 0 || warmCounts.chunks > 0,
@@ -308,16 +432,113 @@ async function main(): Promise<void> {
       swapTouched: null,
       cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
     });
+    let diagnosticCoarseTarget: ExpectedReplayTarget | null = null;
+    if (DIAGNOSTIC.enabled) {
+      const coarseReports = coarseScan.opportunities.map((opp, index) =>
+        describeOpportunity(index + 1, opp, cache, cfg.blockNumber, protocolMids),
+      );
+      diagnosticCoarseTarget = readExpectedReplayTarget(coarseReports);
+      const found = (diagnosticCoarseTarget?.opportunityIndex ?? -1) >= 0;
+      const rankComplete = coarseScan.outcome === "ran";
+      const passBudgetExceeded = blockScanPassBudgetExceeded(passDeadlineAtMs, false);
+      emitDiagnostic(
+        2,
+        "enumeration",
+        passBudgetExceeded
+          ? "not_reached"
+          : found
+            ? "pass"
+            : rankComplete
+              ? "fail"
+              : "not_reached",
+        {
+          observedRank: found
+            ? diagnosticCoarseTarget!.opportunityIndex + 1
+            : null,
+          rankComplete,
+          candidatesSearched: coarseReports.length,
+          candidateCap: coarseMaxCandidates,
+          scannerOutcome: coarseScan.outcome,
+          scannedPairs: coarseScan.scannedPairs,
+          passBudgetExceeded,
+          reason: passBudgetExceeded
+            ? "pass_budget_exceeded"
+            : !found && !rankComplete
+              ? "scan_budget_exceeded_before_target"
+              : !found
+                ? "target_not_in_ranked_candidate_cap"
+                : null,
+        },
+      );
+      if (diagnosticStopsAfter("enumeration")) return;
+      if (passBudgetExceeded || !found) return;
+    }
     requirePassBudget("scan", passDeadlineAtMs);
+    const probeDiagnostics = new Map<number, BlockScanProbeDiagnostic>();
+    const diagnosticTargetIndex = diagnosticCoarseTarget?.opportunityIndex ?? -1;
     const refinement = await refineBlockScanCandidates(
       callBackend,
       coarseScan.opportunities,
       cfg.maxCandidates,
       passDeadlineAtMs,
       pricedTokenLimits,
+      DIAGNOSTIC.enabled && diagnosticTargetIndex >= 0
+        ? (probe) => {
+            if (probe.index === diagnosticTargetIndex) probeDiagnostics.set(probe.index, probe);
+          }
+        : undefined,
     );
-    requirePassBudget("refine", passDeadlineAtMs, refinement.deadlineHit);
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
+    if (DIAGNOSTIC.enabled) {
+      const refinedReports = scan.opportunities.map((opp, index) =>
+        describeOpportunity(index + 1, opp, cache, cfg.blockNumber, protocolMids),
+      );
+      const refinedTarget = readExpectedReplayTarget(refinedReports);
+      const refinedRank = (refinedTarget?.opportunityIndex ?? -1) >= 0
+        ? refinedTarget!.opportunityIndex + 1
+        : null;
+      const targetProbe = probeDiagnostics.get(diagnosticTargetIndex);
+      const probeStatus = targetProbe?.status
+        ?? (diagnosticTargetIndex < 0 ? "not_enumerated" : "unprobed");
+      const passBudgetExceeded = blockScanPassBudgetExceeded(
+        passDeadlineAtMs,
+        refinement.deadlineHit,
+      );
+      emitDiagnostic(
+        3,
+        "exact_quote_refine",
+        passBudgetExceeded || probeStatus === "unprobed"
+          ? "not_reached"
+          : probeStatus === "positive" && refinedRank !== null
+            ? "pass"
+            : "fail",
+        {
+          refinedRank,
+          probeStatus,
+          probeMarginBps: targetProbe?.marginBps ?? null,
+          retainedAsFallback: refinedRank !== null && probeStatus === "failed",
+          reason: probeStatus === "positive" && refinedRank === null
+            ? "positive_but_below_candidate_cap"
+            : probeStatus === "failed"
+              ? "exact_quote_failed"
+              : probeStatus === "negative"
+                ? "exact_quote_non_positive"
+                : probeStatus === "not_enumerated"
+                  ? "target_not_enumerated"
+                  : null,
+          selectedCandidates: refinedReports.length,
+          attempted: refinement.attempted,
+          positive: refinement.positive,
+          negative: refinement.negative,
+          failed: refinement.failed,
+          deadlineHit: refinement.deadlineHit,
+          passBudgetExceeded,
+        },
+      );
+      if (diagnosticStopsAfter("refine")) return;
+      if (passBudgetExceeded || probeStatus !== "positive" || refinedRank === null) return;
+    }
+    requirePassBudget("refine", passDeadlineAtMs, refinement.deadlineHit);
     console.log(
       `[blockscan-hunt] exact route probes attempted=${refinement.attempted} ` +
         `positive=${refinement.positive} negative=${refinement.negative} ` +
@@ -340,6 +561,10 @@ async function main(): Promise<void> {
     }
 
     const expectedTarget = readExpectedReplayTarget(opportunityReports);
+    const expectedOpportunityIndex = expectedTarget?.opportunityIndex ?? -1;
+    const selectedByTopK = expectedOpportunityIndex >= 0
+      && expectedOpportunityIndex < Math.min(cfg.topK, scan.opportunities.length);
+    const forcedProbe = expectedOpportunityIndex >= 0 && !selectedByTopK;
     const solveIndexes = selectedReplayOpportunityIndexes(
       scan.opportunities.length,
       cfg.topK,
@@ -356,6 +581,52 @@ async function main(): Promise<void> {
     await check("fork-solve top candidates recorded", () =>
       solvedReports.length === solveIndexes.length,
     );
+
+    if (DIAGNOSTIC.enabled) {
+      const expectedSolve = expectedTarget && expectedTarget.opportunityIndex >= 0
+        ? solveForOpportunityIndex(solvedReports, expectedTarget.opportunityIndex)
+        : null;
+      const solveSucceeded = expectedSolve?.solved !== null
+        && expectedSolve?.solved !== undefined
+        && expectedSolve.solveError === null;
+      emitDiagnostic(
+        4,
+        "planner_and_solver",
+        solveSucceeded ? "pass" : "fail",
+        {
+          opportunityRank: expectedTarget && expectedTarget.opportunityIndex >= 0
+            ? expectedTarget.opportunityIndex + 1
+            : null,
+          selectedByTopK,
+          forcedProbe,
+          selectionMode: selectedByTopK ? "top_k" : forcedProbe ? "forced_probe" : "not_found",
+          planCount: expectedSolve?.planCount ?? 0,
+          solveSucceeded,
+          includesInternalFinalSim: true,
+          searchCenter: expectedSolve?.searchCenter ?? null,
+          error: expectedSolve?.solveError ?? (expectedTarget?.opportunityIndex === -1 ? "route_not_enumerated" : null),
+        },
+      );
+      if (diagnosticStopsAfter("solve")) return;
+      const simulation = expectedSolve?.diagnosticSimulation;
+      emitDiagnostic(5, "resolved_plan_resim", simulation?.success ? "pass" : "fail", {
+        ...(simulation ?? {
+          success: false,
+          netProfit: expectedSolve?.solved ?? null,
+          error: expectedSolve?.solveError ?? "simulation_not_reached",
+        }),
+      });
+      if (diagnosticStopsAfter("sim")) return;
+      const ev = expectedSolve?.diagnosticEv;
+      emitDiagnostic(6, "ev", ev?.decision === "allow"
+        ? "pass"
+        : ev?.decision === "disabled" || !ev
+          ? "not_reached"
+          : "reject", {
+        ...(ev ?? { decision: null, error: "simulation_not_reached" }),
+      });
+      if (diagnosticStopsAfter("ev")) return;
+    }
 
     const bestNet = bestSolvedNet(solvedReports);
     const verdict = scan.opportunities.length === 0
@@ -439,13 +710,46 @@ interface ExpectedReplayTarget {
   opportunityIndex: number;
 }
 
-function readExpectedReplayTarget(
-  opportunities: OpportunityReport[],
-): ExpectedReplayTarget | null {
-  const expectedPools = (process.env.AB_EXPECTED_POOL_IDS ?? "")
+function expectedPoolIds(): string[] {
+  return (process.env.AB_EXPECTED_POOL_IDS ?? "")
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
+}
+
+function describeExpectedPoolAdmission(
+  expectedPools: readonly string[],
+  universePools: readonly PoolEntry[],
+  protocolPools: readonly PoolEntry[],
+  edges: readonly TokenEdge[],
+): Array<Record<string, unknown>> {
+  return expectedPools.map((expectedPool) => {
+    const protocolPool = protocolPools.find((pool) => poolEntryMatches(pool, expectedPool));
+    const universePool = universePools.find((pool) => poolEntryMatches(pool, expectedPool));
+    const sourcePool = protocolPool ?? universePool;
+    const activity = sourcePool as (PoolEntry & { swapCount30d?: number }) | undefined;
+    const graphEdgeCount = edges.filter((edge) => edgePoolIdentity(edge) === expectedPool).length;
+    return {
+      pool: expectedPool,
+      source: protocolPool ? "protocol_registry" : universePool ? "generated_universe" : "missing",
+      adapter: sourcePool?.adapter ?? null,
+      score: sourcePool?.score ?? null,
+      swapCount30d: activity?.swapCount30d ?? null,
+      graphEdgeCount,
+      admittedToGraph: graphEdgeCount > 0,
+    };
+  });
+}
+
+function poolEntryMatches(pool: PoolEntry, expectedPool: string): boolean {
+  return pool.address.toLowerCase() === expectedPool
+    || pool.poolId?.toLowerCase() === expectedPool;
+}
+
+function readExpectedReplayTarget(
+  opportunities: OpportunityReport[],
+): ExpectedReplayTarget | null {
+  const expectedPools = expectedPoolIds();
   if (expectedPools.length === 0) return null;
   const expectedSwapPath = parseExpectedSwapPath(process.env.AB_EXPECTED_SWAP_PATH_JSON ?? "");
   const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
@@ -469,9 +773,10 @@ function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
     maxPools: envInt("HUNT_MAX_POOLS", 1500),
     maxHops: envInt("HUNT_MAX_HOPS", 4),
     minSpreadBps: envInt("HUNT_MIN_SPREAD_BPS", 10),
-    ...budgets,
-    maxCandidates: envInt("HUNT_MAX_CANDIDATES", 16),
-    topK: envInt("HUNT_TOP_K", 3),
+    scanBudgetMs: DIAGNOSTIC.scanBudgetMs ?? budgets.scanBudgetMs,
+    passBudgetMs: DIAGNOSTIC.passBudgetMs ?? budgets.passBudgetMs,
+    maxCandidates: DIAGNOSTIC.maxCandidates ?? envInt("HUNT_MAX_CANDIDATES", 16),
+    topK: DIAGNOSTIC.topK ?? envInt("HUNT_TOP_K", 3),
     outPath: process.env.HUNT_OUT ?? `/tmp/blockscan-hunt-${blockNumber}.json`,
     anvilPort,
     stateChunk: envInt("HUNT_STATE_CHUNK", 250),
@@ -897,6 +1202,8 @@ async function solveSelected(
     let solved: ResolvedPlan | null = null;
     let solveError: string | null = null;
     let searchCenter: string | null = null;
+    let diagnosticSimulation: SolveReport["diagnosticSimulation"];
+    let diagnosticEv: SolveReport["diagnosticEv"];
     try {
       planner.setGraph(opp.seedEdges);
       const plans = await planner.planBlockScanFromSeedEdges(opp, [FLASH_SWAP_REPAY]);
@@ -918,6 +1225,52 @@ async function solveSelected(
     } catch (err) {
       solveError = err instanceof Error ? err.message : String(err);
     }
+    if (DIAGNOSTIC.enabled && solved) {
+      const simulation = await simulator.simulate(solved);
+      diagnosticSimulation = {
+        success: simulation.success,
+        profitToken: simulation.profitToken.toLowerCase(),
+        grossProfit: simulation.grossProfit.toString(),
+        gasUsed: simulation.gasUsed.toString(),
+        netProfit: simulation.netProfit.toString(),
+        calldataHash: createHash("sha256").update(simulation.calldata).digest("hex"),
+        revertReason: simulation.revertReason ?? null,
+      };
+      if (simulation.success) {
+        const minNetEth = BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0");
+        const evGate = process.env.SEARCHER_EV_GATE === "1";
+        const evaluation = await evaluateEv(
+          state.provider,
+          simulation.profitToken,
+          simulation.netProfit,
+          simulation.gasUsed,
+          {
+            ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
+            profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
+            defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
+            gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
+            evGate,
+            bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
+            bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
+          },
+        );
+        diagnosticEv = {
+          decision: !evGate
+            ? "disabled"
+            : !evaluation.valuationAvailable
+              ? "unpriceable_profit_token"
+              : evaluation.netEvWei < minNetEth
+                ? "below_ev_gate"
+                : "allow",
+          evGate,
+          netEvWei: evaluation.netEvWei.toString(),
+          expectedProfitEth: evaluation.expectedProfitEth.toString(),
+          gasCostEth: evaluation.gasCostEth.toString(),
+          bidEth: evaluation.bidEth.toString(),
+          minNetEth: minNetEth.toString(),
+        };
+      }
+    }
     const report = {
       opportunityIndex,
       ring: ringTokens(opp.seedEdges),
@@ -927,6 +1280,8 @@ async function solveSelected(
       solved: solved ? solved.netProfit.toString() : null,
       solveError,
       searchCenter,
+      ...(diagnosticSimulation ? { diagnosticSimulation } : {}),
+      ...(diagnosticEv ? { diagnosticEv } : {}),
     };
     reports.push(report);
     console.log(
@@ -1007,6 +1362,18 @@ function opportunityRoute(edges: TokenEdge[]): OpportunityReport["route"] {
     tokenOut: edge.tokenOut.toLowerCase(),
     ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
   }));
+}
+
+function sameRouteStep(
+  actual: OpportunityReport["route"][number],
+  expected: OpportunityReport["route"][number],
+): boolean {
+  return actual.adapterId === expected.adapterId
+    && actual.slotKind === expected.slotKind
+    && actual.target === expected.target
+    && actual.tokenIn === expected.tokenIn
+    && actual.tokenOut === expected.tokenOut
+    && (expected.poolId === undefined || actual.poolId === expected.poolId);
 }
 
 function parseExpectedSwapPath(value: string): Array<{ pool_id: string; direction: "0for1" | "1for0" }> {
@@ -1254,6 +1621,14 @@ class PinnedCallBackend implements StateBackend {
 }
 
 main().catch((err) => {
-  console.error(`blockscan-hunt FAIL: ${err instanceof Error ? err.message : String(err)}`);
+  const message = err instanceof Error ? err.message : String(err);
+  if (DIAGNOSTIC.enabled && lastDiagnosticStep < 6) {
+    const nextStep = Math.max(1, Math.min(6, lastDiagnosticStep + 1)) as 1 | 2 | 3 | 4 | 5 | 6;
+    emitDiagnostic(nextStep, "execution_error", "fail", {
+      afterStep: lastDiagnosticStep,
+      error: message.replace(/https?:\/\/[^\s]+/g, "<rpc-url>").slice(0, 500),
+    });
+  }
+  console.error(`blockscan-hunt FAIL: ${message}`);
   process.exit(1);
 });

@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const cli = parseCli(process.argv.slice(2));
 const LISTENER_ROOT = realpathSync(
@@ -86,8 +86,19 @@ interface HuntResult {
 function parseCli(args: string[]): {
   runtimeListenerRoot?: string;
   huntPassBudgetMs?: string;
+  diagnosticMaxCandidates?: string;
+  diagnosticScanBudgetMs?: string;
+  diagnosticPassBudgetMs?: string;
+  diagnosticStopAfter?: string;
 } {
-  const parsed: { runtimeListenerRoot?: string; huntPassBudgetMs?: string } = {};
+  const parsed: {
+    runtimeListenerRoot?: string;
+    huntPassBudgetMs?: string;
+    diagnosticMaxCandidates?: string;
+    diagnosticScanBudgetMs?: string;
+    diagnosticPassBudgetMs?: string;
+    diagnosticStopAfter?: string;
+  } = {};
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     const value = args[index + 1];
@@ -98,11 +109,45 @@ function parseCli(args: string[]): {
     } else if (name === "--hunt-pass-budget-ms") {
       if (parsed.huntPassBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
       parsed.huntPassBudgetMs = value;
+    } else if (name === "--diagnostic-max-candidates") {
+      if (parsed.diagnosticMaxCandidates !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveDiagnosticInt(name, value);
+      parsed.diagnosticMaxCandidates = value;
+    } else if (name === "--diagnostic-scan-budget-ms") {
+      if (parsed.diagnosticScanBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveDiagnosticInt(name, value);
+      parsed.diagnosticScanBudgetMs = value;
+    } else if (name === "--diagnostic-pass-budget-ms") {
+      if (parsed.diagnosticPassBudgetMs !== undefined) throw new Error(`${name} may appear only once`);
+      assertPositiveDiagnosticInt(name, value);
+      parsed.diagnosticPassBudgetMs = value;
+    } else if (name === "--diagnostic-stop-after") {
+      if (parsed.diagnosticStopAfter !== undefined) throw new Error(`${name} may appear only once`);
+      if (!["graph", "enumeration", "refine", "solve", "sim", "ev"].includes(value)) {
+        throw new Error(`${name} must be graph|enumeration|refine|solve|sim|ev`);
+      }
+      parsed.diagnosticStopAfter = value;
     } else {
       throw new Error(`unsupported tx149 replay option ${name}`);
     }
   }
+  const diagnosticOptions = [
+    parsed.diagnosticScanBudgetMs,
+    parsed.diagnosticPassBudgetMs,
+    parsed.diagnosticStopAfter,
+  ];
+  if (diagnosticOptions.some((value) => value !== undefined)
+      && parsed.diagnosticMaxCandidates === undefined) {
+    throw new Error("diagnostic options require --diagnostic-max-candidates");
+  }
   return parsed;
+}
+
+function assertPositiveDiagnosticInt(name: string, value: string): void {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
 }
 
 function cleanEnv(): NodeJS.ProcessEnv {
@@ -118,31 +163,107 @@ function cleanEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function run(): void {
+interface CommandResult {
+  status: number | null;
+  error?: Error;
+  stdout: string;
+  stderr: string;
+}
+
+async function runCommand(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  stream: boolean,
+  timeoutMs = 20 * 60 * 1_000,
+): Promise<CommandResult> {
+  if (!stream) {
+    const result = spawnSync(process.execPath, args, {
+      cwd: LISTENER_ROOT,
+      encoding: "utf8",
+      timeout: timeoutMs,
+      env,
+    });
+    return {
+      status: result.status,
+      ...(result.error ? { error: result.error } : {}),
+      stdout: String(result.stdout ?? ""),
+      stderr: String(result.stderr ?? ""),
+    };
+  }
+
+  return await new Promise<CommandResult>((resolveResult) => {
+    const child = spawn(process.execPath, args, {
+      cwd: LISTENER_ROOT,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    const appendTail = (current: string, chunk: string): string =>
+      `${current}${chunk}`.slice(-16 * 1024 * 1024);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      process.stdout.write(chunk);
+      stdout = appendTail(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk: string) => {
+      process.stderr.write(chunk);
+      stderr = appendTail(stderr, chunk);
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+    const finish = (result: CommandResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolveResult(result);
+    };
+    child.once("error", (error) => finish({ status: null, error, stdout, stderr }));
+    child.once("close", (status, signal) => finish({
+      status,
+      ...(timedOut
+        ? { error: new Error(`command timed out after ${timeoutMs}ms`) }
+        : signal
+          ? { error: new Error(`command terminated by ${signal}`) }
+          : {}),
+      stdout,
+      stderr,
+    }));
+  });
+}
+
+async function run(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "mev-tx149-replay-"));
   const universe = join(work, "active-pools.json");
   const huntOut = join(work, "hunt.json");
   const baseEnv = cleanEnv();
+  const diagnostic = cli.diagnosticMaxCandidates !== undefined;
+  const huntTimeoutMs = diagnostic
+    ? Math.max(
+        60 * 60 * 1_000,
+        Number(cli.diagnosticPassBudgetMs ?? HUNT_PASS_BUDGET_MS) + 45 * 60 * 1_000,
+      )
+    : 20 * 60 * 1_000;
 
   try {
-    const generated = spawnSync(
-      process.execPath,
+    const generated = await runCommand(
       ["--import", "tsx", "src/searcher/build-active-pool-universe.ts"],
       {
-        cwd: LISTENER_ROOT,
-        encoding: "utf8",
-        timeout: 20 * 60 * 1_000,
-        env: {
-          ...baseEnv,
-          MAINNET_RPC_URL: RPC_URL,
-          POOL_UNIVERSE_FROM_BLOCK: String(UNIVERSE_FROM_BLOCK),
-          POOL_UNIVERSE_TO_BLOCK: String(UNIVERSE_TO_BLOCK),
-          POOL_UNIVERSE_OUT: universe,
-          POOL_UNIVERSE_MAX_POOLS: "0",
-          POOL_UNIVERSE_ARB_RELEVANCE: "1",
-          POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS: "0",
-        },
+        ...baseEnv,
+        MAINNET_RPC_URL: RPC_URL,
+        POOL_UNIVERSE_FROM_BLOCK: String(UNIVERSE_FROM_BLOCK),
+        POOL_UNIVERSE_TO_BLOCK: String(UNIVERSE_TO_BLOCK),
+        POOL_UNIVERSE_OUT: universe,
+        POOL_UNIVERSE_MAX_POOLS: "0",
+        POOL_UNIVERSE_ARB_RELEVANCE: "1",
+        POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS: "0",
       },
+      diagnostic,
     );
     if (generated.error || generated.status !== 0) {
       throw new Error(
@@ -167,40 +288,54 @@ function run(): void {
       + `window=${UNIVERSE_FROM_BLOCK}..${UNIVERSE_TO_BLOCK}`,
     );
 
-    const hunted = spawnSync(
-      process.execPath,
-      ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
+    const diagnosticArgs = cli.diagnosticMaxCandidates === undefined
+      ? []
+      : [
+          "--diagnostic",
+          "--max-candidates", cli.diagnosticMaxCandidates,
+          ...(cli.diagnosticScanBudgetMs
+            ? ["--scan-budget-ms", cli.diagnosticScanBudgetMs]
+            : []),
+          ...(cli.diagnosticPassBudgetMs
+            ? ["--pass-budget-ms", cli.diagnosticPassBudgetMs]
+            : []),
+          ...(cli.diagnosticStopAfter
+            ? ["--stop-after", cli.diagnosticStopAfter]
+            : []),
+        ];
+    const hunted = await runCommand(
+      ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts", ...diagnosticArgs],
       {
-        cwd: LISTENER_ROOT,
-        encoding: "utf8",
-        timeout: 20 * 60 * 1_000,
-        env: {
-          ...baseEnv,
-          SEARCHER_LIVE_RPC_URL: RPC_URL,
-          MAINNET_RPC_URL: RPC_URL,
-          SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: "8574",
-          HUNT_BLOCK: String(FORK_BLOCK),
-          HUNT_UNIVERSE_PATH: universe,
-          HUNT_MAX_POOLS: "20000",
-          HUNT_MAX_HOPS: "4",
-          HUNT_MIN_SPREAD_BPS: "0",
-          HUNT_SCAN_BUDGET_MS: "120000",
-          HUNT_PASS_BUDGET_MS,
-          HUNT_MAX_CANDIDATES: "100",
-          HUNT_TOP_K: "8",
-          HUNT_OUT: huntOut,
-          AB_EXPECTED_POOL_IDS: [V3_POOL, GOLDX, V2_POOL, CURVE_POOL].join(","),
-          AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(EXPECTED_SWAP_PATH),
-          AB_EXPECTED_ROUTE_JSON: JSON.stringify(EXPECTED_ROUTE),
-          AB_EXPECTED_ROUTE_SCOPE: "dex-permissionless-protocol",
-        },
+        ...baseEnv,
+        SEARCHER_LIVE_RPC_URL: RPC_URL,
+        MAINNET_RPC_URL: RPC_URL,
+        SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: "8574",
+        HUNT_BLOCK: String(FORK_BLOCK),
+        HUNT_UNIVERSE_PATH: universe,
+        HUNT_MAX_POOLS: "20000",
+        HUNT_MAX_HOPS: "4",
+        HUNT_MIN_SPREAD_BPS: "0",
+        HUNT_SCAN_BUDGET_MS: "120000",
+        HUNT_PASS_BUDGET_MS,
+        HUNT_MAX_CANDIDATES: "100",
+        HUNT_TOP_K: "8",
+        HUNT_OUT: huntOut,
+        AB_EXPECTED_POOL_IDS: [V3_POOL, GOLDX, V2_POOL, CURVE_POOL].join(","),
+        AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(EXPECTED_SWAP_PATH),
+        AB_EXPECTED_ROUTE_JSON: JSON.stringify(EXPECTED_ROUTE),
+        AB_EXPECTED_ROUTE_SCOPE: "dex-permissionless-protocol",
       },
+      diagnostic,
+      huntTimeoutMs,
     );
     if (hunted.error || hunted.status !== 0) {
       throw new Error(
         `blockscan hunt failed (${hunted.status ?? "signal"}): `
         + `${hunted.error?.message ?? tail(`${hunted.stdout}\n${hunted.stderr}`)}`,
       );
+    }
+    if (diagnostic) {
+      if (cli.diagnosticStopAfter !== undefined) return;
     }
     const marker = String(hunted.stdout ?? "")
       .split(/\r?\n/)
@@ -224,9 +359,7 @@ function tail(value: unknown): string {
   return String(value ?? "").trim().slice(-4_000);
 }
 
-try {
-  run();
-} catch (error) {
+run().catch((error) => {
   console.error(`[tx149-replay] FAIL: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
-}
+});

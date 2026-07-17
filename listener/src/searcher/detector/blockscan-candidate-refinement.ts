@@ -13,6 +13,12 @@ export interface BlockScanRefinementResult {
   deadlineHit: boolean;
 }
 
+export interface BlockScanProbeDiagnostic {
+  index: number;
+  status: "positive" | "negative" | "failed" | "unprobed";
+  marginBps: number | null;
+}
+
 interface RankedProbe {
   opportunity: BlockScanOpportunity;
   marginBps: number;
@@ -32,6 +38,7 @@ export async function refineBlockScanCandidates(
   maxCandidates: number,
   deadlineAtMs: number,
   pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
+  onProbe?: (diagnostic: BlockScanProbeDiagnostic) => void,
   concurrency = DEFAULT_CONCURRENCY,
 ): Promise<BlockScanRefinementResult> {
   const ranked: RankedProbe[] = [];
@@ -50,6 +57,7 @@ export async function refineBlockScanCandidates(
         const opportunity = opportunities[index];
         if (Date.now() >= deadlineAtMs) {
           fallback.push({ opportunity, index });
+          onProbe?.({ index, status: "unprobed", marginBps: null });
           continue;
         }
         attempted++;
@@ -62,11 +70,16 @@ export async function refineBlockScanCandidates(
               priority: exactProbePriority(opportunity, marginBps, pricedTokens),
               index,
             });
+            onProbe?.({ index, status: "positive", marginBps });
           }
-          else negative++;
+          else {
+            negative++;
+            onProbe?.({ index, status: "negative", marginBps });
+          }
         } catch {
           failed++;
           fallback.push({ opportunity, index });
+          onProbe?.({ index, status: "failed", marginBps: null });
         }
       }
     },

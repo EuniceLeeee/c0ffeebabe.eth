@@ -59,6 +59,7 @@
     "searcher:loop-fork-gate": "node --import tsx src/searcher/test/blockscan-fork-solve.ts",
     "searcher:fluid-dex-verify": "node --import tsx src/searcher/test/fluid-dex-verify.ts",
     "searcher:blockscan-hunt": "node --import tsx src/searcher/test/blockscan-hunt.ts",
+    "searcher:six-step-diagnose:tx149": "node --import tsx src/searcher/test/blockscan-hunt-tx149.ts --diagnostic-max-candidates 5000 --diagnostic-scan-budget-ms 600000 --diagnostic-pass-budget-ms 1200000",
     "searcher:blockscan-hunt-tx149": "node --import tsx src/searcher/test/blockscan-hunt-tx149.ts",
     "searcher:blockscan-hunt-selection": "node --import tsx src/searcher/test/blockscan-hunt-selection.ts",
     "searcher:bundle-router-safety": "node --import tsx src/searcher/test/bundle-router-safety.ts",
