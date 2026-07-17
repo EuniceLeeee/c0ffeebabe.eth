@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { decodeTransfer } from "../decode/erc20.js";
 import { deriveEdgeKindsFromLogs, deriveEdgeKindsFromLogsAndTrace } from "../learning/edge-kinds.js";
+import { requireProductionRouteCallRegistry } from "../learning/production-route-calls.js";
 import type { LearningCase, PrimaryGap } from "../learning/learning-case.js";
 import {
   loadLiveCompetitorProfile,
@@ -78,6 +79,18 @@ const INVENTORY_PRICED_TOKENS = new Set([
 const USD_MICRO_SCALE = 1_000_000n;
 const POSITION_DUST_USD_MICROS = 10_000n; // one cent
 const REGISTERED_TOKEN_DUST_DECIMALS = 9; // one billionth of a token
+
+async function deriveProductionAwareEdgeKinds(
+  logs: Array<{ topics?: unknown }> | undefined | null,
+  trace: unknown,
+): Promise<EdgeKind[]> {
+  const registry = await requireProductionRouteCallRegistry();
+  return deriveEdgeKindsFromLogsAndTrace(
+    logs,
+    trace,
+    (target, selector) => registry.matchesProtocolCall(target, selector),
+  );
+}
 // Preserve the pre-value-aware raw-unit boundary when no authoritative decimals are registered.
 const UNKNOWN_TOKEN_DUST_RAW = 1000n;
 const LIQUITY_PROTOCOL_EMITTER = "0xa2895d6a3bf110561dfe4b71ca539d84e1928b22";
@@ -1073,7 +1086,7 @@ async function anyTxPostmortem(
       loaded.events,
     )
     : undefined;
-  const edgeKinds = deriveEdgeKindsFromLogsAndTrace(receipt?.logs, payment.callTrace);
+  const edgeKinds = await deriveProductionAwareEdgeKinds(receipt?.logs, payment.callTrace);
   const report = {
     command: "bundle-postmortem" as const,
     mode: "any_tx" as const,
@@ -1427,7 +1440,7 @@ async function analyzeCompetitor(
     v4Swaps: profit.v4Swaps.length,
     v4PoolIds: profit.v4PoolIds,
     touchedVenues: await resolveLandedTouchedVenues(rpc, receipt, graph, blockNumber),
-    edgeKinds: deriveEdgeKindsFromLogsAndTrace(receipt?.logs, payment.callTrace),
+    edgeKinds: await deriveProductionAwareEdgeKinds(receipt?.logs, payment.callTrace),
     winner_style: winnerStyleAnalysis.winner_style,
     receipt_weth_unwrap_exit: winnerStyleAnalysis.receipt_weth_unwrap_exit,
     winner_moved_price_beyond_prestate: winnerStyleAnalysis.winner_moved_price_beyond_prestate,

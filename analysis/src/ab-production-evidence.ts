@@ -9,7 +9,12 @@ import { decodeAnySwapLog, type DecodedSwap } from "./pnl/swap-log-registry.js";
 import {
   deriveEdgeKindsFromLogs,
   deriveEdgeKindsFromLogsAndTrace,
+  type ProtocolCallMatcher,
 } from "./learning/edge-kinds.js";
+import {
+  loadProductionRouteCallRegistry,
+  type ProductionRouteCallRegistry,
+} from "./learning/production-route-calls.js";
 import { hexToBigInt, RpcClient } from "./rpc/client.js";
 import { lower } from "./registry/protocols.js";
 
@@ -141,13 +146,18 @@ export async function verifyOnchainProductionSample(
     errors,
   );
   const trace = await rpc.traceTransaction(sample.tx_hash);
-  const protocolCalls = validateOnchainExecutionRoute(
-    expectedRoute,
-    trace,
-    receipt.logs,
-    tx,
-    errors,
-  );
+  const routeCallRegistry = await loadProductionRouteCallRegistry();
+  if (!routeCallRegistry) errors.push("production route/action registry is unavailable");
+  const protocolCalls = routeCallRegistry
+    ? validateOnchainExecutionRoute(
+      expectedRoute,
+      trace,
+      receipt.logs,
+      tx,
+      errors,
+      routeCallRegistry,
+    )
+    : [];
   const transactionIndex = Number(hexToBigInt(receipt.transactionIndex));
   const routeSwapLogIndexes = new Set(routeSwaps.map((swap) => swap.logIndex));
   const shape = classifyTxShape({
@@ -199,7 +209,13 @@ export async function verifyOnchainProductionSample(
       }
     }
   }
-  const edgeKinds = deriveProductionSampleEdgeKinds(receipt.logs, trace);
+  const edgeKinds = deriveProductionSampleEdgeKinds(
+    receipt.logs,
+    trace,
+    routeCallRegistry
+      ? (target, selector) => routeCallRegistry.matchesProtocolCall(target, selector, universe)
+      : undefined,
+  );
   if (!edgeKinds.includes("swap")) errors.push("production sample does not contain a recognized DEX swap edge");
   if (edgeKinds.includes("credit") || edgeKinds.includes("lp")) {
     errors.push(`production sample edge kinds [${edgeKinds.join(",")}] are outside the current no-credit/no-LP scope`);
@@ -298,30 +314,6 @@ const CURVE_METAREGISTRY = "0xf98b45fa17de75fb1ad0e7afd971b0ca00e379fc";
 const CURVE_METAREGISTRY_IFACE = new ethers.Interface([
   "function get_underlying_coins(address pool) view returns (address[8])",
 ]);
-const ROUTE_SELECTORS = new Map<string, Set<string>>([
-  ["univ2-swap", selectors("swap(uint256,uint256,address,bytes)")],
-  ["univ2-router-swap-exact-in", selectors("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)")],
-  ["univ2-router-swap-exact-in-alt", selectors("swapExactTokensForTokens(address,address,uint256,uint256,address)")],
-  ["univ3-swap", selectors("swap(address,bool,int256,uint160,bytes)")],
-  ["univ4-unlock", selectors("unlock(bytes)")],
-  ["curve-exchange", new Set(["0xafb43012"])],
-  ["curve-exchange-received-uint", new Set(["0x767691e7"])],
-  ["curve-exchange-nr", new Set(["0x7e3db030"])],
-  ["curve-exchange-plain", new Set(["0x3df02124"])],
-  ["curve-exchange-underlying", new Set(["0xa6417ed6"])],
-  ["curve-router-execute-path", selectors("executePath(bytes,uint256[],address)")],
-  ["fluid-dex-swap", selectors("swapIn(bool,uint256,uint256,address)")],
-  ["wsteth-wrap", selectors("wrap(uint256)")],
-  ["wsteth-unwrap", selectors("unwrap(uint256)")],
-  ["erc4626-deposit", selectors("deposit(uint256,address)")],
-  ["erc4626-redeem", selectors("redeem(uint256,address,address)")],
-  ["erc4626-redeem-silo", selectors("redeem(address,uint256,address,address)")],
-  ["metronome-synth-swap", selectors("swap(address,address,uint256)")],
-  ["metronome-hgusdc-exit", selectors("executePath(bytes,uint256[],address)")],
-  ["goldx-mint", selectors("mint(address,uint256)")],
-  ["psm", selectors("sellGem(address,uint256)", "buyGem(address,uint256)")],
-]);
-
 /**
  * Production evidence must classify the winner from both receipt events and
  * successful calls. Some permissionless conversion legs (for example GOLDx
@@ -331,8 +323,9 @@ const ROUTE_SELECTORS = new Map<string, Set<string>>([
 export function deriveProductionSampleEdgeKinds(
   logs: Array<{ topics?: unknown }> | undefined | null,
   trace: unknown,
+  matchesProtocolCall?: ProtocolCallMatcher,
 ): string[] {
-  return deriveEdgeKindsFromLogsAndTrace(logs, trace);
+  return deriveEdgeKindsFromLogsAndTrace(logs, trace, matchesProtocolCall);
 }
 
 function loadProductionUniverse(universePath: string): UniversePoolFact[] {
@@ -512,6 +505,7 @@ export function validateOnchainExecutionRoute(
   logs: Record<string, any>[],
   tx: Record<string, any>,
   errors: string[],
+  routeCallRegistry: ProductionRouteCallRegistry,
 ): OrderedCall[] {
   const calls = flattenSuccessfulStateChangingCalls(trace);
   const matched: OrderedCall[] = [];
@@ -523,15 +517,15 @@ export function validateOnchainExecutionRoute(
     if (edge.slotKind === "protocol" && executorActors.has(lower(edge.target))) {
       errors.push(`production protocol route[${index}] targets the winner's private actor, not a permissionless venue`);
     }
-    const allowedSelectors = ROUTE_SELECTORS.get(edge.adapterId);
-    if (!allowedSelectors) {
+    const actionAdapter = routeCallRegistry.findRouteActionAdapter(edge.adapterId);
+    if (!actionAdapter) {
       errors.push(`production route[${index}] adapter ${edge.adapterId} has no trusted selector contract`);
       continue;
     }
     const callIndex = calls.findIndex((call, candidateIndex) =>
       candidateIndex >= cursor
       && call.target === lower(edge.target)
-      && allowedSelectors.has(call.selector));
+      && actionAdapter.matchTrace(call.target, call.selector));
     if (callIndex < 0) {
       errors.push(`production route[${index}] adapter selector is absent or out of order in the successful call trace`);
       continue;
@@ -545,10 +539,6 @@ export function validateOnchainExecutionRoute(
     }
   }
   return matched;
-}
-
-function selectors(...signatures: string[]): Set<string> {
-  return new Set(signatures.map((signature) => ethers.id(signature).slice(0, 10).toLowerCase()));
 }
 
 function flattenSuccessfulStateChangingCalls(node: Record<string, any> | null | undefined): OrderedCall[] {

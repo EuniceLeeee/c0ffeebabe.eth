@@ -18,13 +18,14 @@ import {
   deriveEdgeKindsFromLogsAndTrace,
   deriveProtocolActionsFromLogs,
 } from "../learning/edge-kinds.js";
+import { requireProductionRouteCallRegistry } from "../learning/production-route-calls.js";
 import {
   advanceStatus,
   loadCases,
   type LearningCase,
   upsertCase,
 } from "../learning/learning-case.js";
-import { ADDR, TOPICS } from "../registry/protocols.js";
+import { TOPICS } from "../registry/protocols.js";
 import {
   classifyTxShape,
   type RawLog,
@@ -106,41 +107,67 @@ test("deriveEdgeKindsFromLogs classifies topic0 into stable edge kinds", () => {
   assert.deepEqual(deriveEdgeKindsFromLogs(null), []);
 });
 
-test("call-defined GOLDx mint adds protocol only for the exact successful target", () => {
+test("production-registered GOLDx mint adds protocol only for the successful registered target", async () => {
+  const registry = await requireProductionRouteCallRegistry();
+  const matchesProtocolCall = (target: string, callSelector: string) =>
+    registry.matchesProtocolCall(target, callSelector);
   const selector = ethers.id("mint(address,uint256)").slice(0, 10);
+  const goldx = registry.pools.find((pool) => pool.adapter === "goldx");
+  assert(goldx, "production GOLDx pool missing");
   const swapLogs = [{ topics: [TOPICS.univ3Swap] }];
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
     to: "0x0000000000000000000000000000000000000001",
     input: "0xdeadbeef",
-    calls: [{ to: "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0", input: selector }],
-  }), ["swap", "protocol"]);
+    calls: [{ to: goldx.address, input: selector }],
+  }, matchesProtocolCall), ["swap", "protocol"]);
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
     to: "0x0000000000000000000000000000000000000002",
     input: selector,
-  }), ["swap"]);
+  }, matchesProtocolCall), ["swap"]);
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
-    to: "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+    to: goldx.address,
     input: selector,
     error: "execution reverted",
-  }), ["swap"]);
+  }, matchesProtocolCall), ["swap"]);
 });
 
-test("call-defined RockSolid syncDeposit adds protocol only for the exact successful target", () => {
+test("production-registered RockSolid syncDeposit needs no analysis target list", async () => {
+  const registry = await requireProductionRouteCallRegistry();
+  const matchesProtocolCall = (target: string, callSelector: string) =>
+    registry.matchesProtocolCall(target, callSelector);
   const selector = ethers.id("syncDeposit(uint256,address,address)").slice(0, 10);
+  const rocksolid = registry.pools.find((pool) => pool.adapter === "rocksolid");
+  assert(rocksolid, "production RockSolid pool missing");
   const swapLogs = [{ topics: [TOPICS.univ3Swap] }];
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
-    to: ADDR.ROCKSOLID_RETH,
+    to: rocksolid.address,
     input: selector,
-  }), ["swap", "protocol"]);
+  }, matchesProtocolCall), ["swap", "protocol"]);
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
     to: "0x0000000000000000000000000000000000000001",
     input: selector,
-  }), ["swap"]);
+  }, matchesProtocolCall), ["swap"]);
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
-    to: ADDR.ROCKSOLID_RETH,
+    to: rocksolid.address,
     input: selector,
     error: "execution reverted",
-  }), ["swap"]);
+  }, matchesProtocolCall), ["swap"]);
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: "0x0000000000000000000000000000000000000001",
+    input: "0xdeadbeef",
+    error: "execution reverted",
+    calls: [{ to: rocksolid.address, input: selector }],
+  }, matchesProtocolCall), ["swap"]);
+
+  const derivedTarget = "0x00000000000000000000000000000000000000aa";
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: derivedTarget,
+    input: selector,
+  }, (target, callSelector) => registry.matchesProtocolCall(
+    target,
+    callSelector,
+    [{ address: derivedTarget, adapter: "rocksolid" }],
+  )), ["swap", "protocol"]);
 });
 
 test("route gap analysis fails closed when a non-swap leg has not been ordered", () => {

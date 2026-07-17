@@ -252,6 +252,21 @@ async function main(): Promise<void> {
     for (const actionId of routeAdapter.actionAdapterIds) {
       assert(actionIds.has(actionId), `missing action adapter ${actionId}`);
     }
+    for (const edgeAdapterId of routeAdapter.edgeAdapterIds) {
+      assert(actionIds.has(edgeAdapterId), `missing edge action adapter ${edgeAdapterId}`);
+      if (routeAdapter.kind === "protocol-conversion") {
+        assert(
+          routeAdapter.actionAdapterIds.includes(edgeAdapterId),
+          `${routeAdapter.id} protocol edge ${edgeAdapterId} missing from actionAdapterIds`,
+        );
+      }
+    }
+  }
+  for (const legacy of LEGACY_PRODUCTION_ROUTE_EDGES) {
+    assert(
+      actionIds.has(legacy.edgeAdapterId),
+      `missing legacy edge action adapter ${legacy.edgeAdapterId}`,
+    );
   }
   console.log("[route-adapters] action registry coverage: PASS");
 

@@ -1,6 +1,7 @@
 import type { EdgeKind, ProtocolAction } from "../../../listener/src/searcher/strategy-taxonomy.js";
 import { ADDR, lower, TOPICS } from "../registry/protocols.js";
-import { ethers } from "ethers";
+
+export type ProtocolCallMatcher = (target: string, selector: string) => boolean;
 
 const SWAP_TOPICS = topicSet([
   TOPICS.univ2Swap,
@@ -76,37 +77,36 @@ export function deriveEdgeKindsFromLogs(logs: Array<{ topics?: unknown }> | unde
   return STABLE_ORDER.filter((kind) => seen.has(kind));
 }
 
-const CALL_DEFINED_PROTOCOLS = new Map<string, Set<string>>([
-  [lower(ADDR.GOLDX), new Set([ethers.id("mint(address,uint256)").slice(0, 10).toLowerCase()])],
-  [lower(ADDR.ROCKSOLID_RETH), new Set([
-    ethers.id("syncDeposit(uint256,address,address)").slice(0, 10).toLowerCase(),
-  ])],
-]);
-
 /**
  * Add protocol legs whose semantics live in successful calls rather than a
- * named receipt event. Target + selector are both required: a generic mint()
- * selector on an unrelated token is not protocol-conversion evidence.
+ * named receipt event. Target + selector are resolved through the production
+ * pool, RouteAdapter and ActionAdapter registries; analysis owns no parallel
+ * protocol address/selector list.
  */
 export function deriveEdgeKindsFromLogsAndTrace(
   logs: Array<{ topics?: unknown }> | undefined | null,
   trace: unknown,
+  matchesProtocolCall?: ProtocolCallMatcher,
 ): EdgeKind[] {
   const seen = new Set<EdgeKind>(deriveEdgeKindsFromLogs(logs));
-  if (traceHasCallDefinedProtocol(trace)) seen.add("protocol");
+  if (traceHasCallDefinedProtocol(trace, matchesProtocolCall)) seen.add("protocol");
   return STABLE_ORDER.filter((kind) => seen.has(kind));
 }
 
-function traceHasCallDefinedProtocol(node: unknown): boolean {
+function traceHasCallDefinedProtocol(
+  node: unknown,
+  matchesProtocolCall?: ProtocolCallMatcher,
+): boolean {
   if (!node || typeof node !== "object") return false;
   const call = node as { to?: unknown; input?: unknown; error?: unknown; calls?: unknown };
-  if (!call.error) {
-    const target = typeof call.to === "string" ? lower(call.to) : "";
-    const input = typeof call.input === "string" ? lower(call.input) : "";
-    const selectors = CALL_DEFINED_PROTOCOLS.get(target);
-    if (selectors?.has(input.slice(0, 10))) return true;
-  }
-  return Array.isArray(call.calls) && call.calls.some(traceHasCallDefinedProtocol);
+  // A reverted ancestor rolls back every apparently successful child call in
+  // its subtree, even when an outer caller later catches that revert.
+  if (call.error) return false;
+  const target = typeof call.to === "string" ? lower(call.to) : "";
+  const input = typeof call.input === "string" ? lower(call.input) : "";
+  if (matchesProtocolCall?.(target, input.slice(0, 10))) return true;
+  return Array.isArray(call.calls)
+    && call.calls.some((child) => traceHasCallDefinedProtocol(child, matchesProtocolCall));
 }
 
 const ACTION_ORDER: ProtocolAction[] = ["mint", "redeem", "wrap", "unwrap", "convert", "stake", "unstake"];

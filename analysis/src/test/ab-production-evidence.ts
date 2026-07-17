@@ -11,6 +11,9 @@ import {
 } from "../ab-production-evidence.js";
 import type { DecodedSwap } from "../pnl/swap-log-registry.js";
 import type { RpcClient } from "../rpc/client.js";
+import { requireProductionRouteCallRegistry } from "../learning/production-route-calls.js";
+
+const ROUTE_CALLS = await requireProductionRouteCallRegistry();
 
 const POOL = "0x1111111111111111111111111111111111111111";
 const FACTORY = "0x2222222222222222222222222222222222222222";
@@ -164,7 +167,7 @@ test("landed protocol route binds adapter selector order and receipt token flow"
   const logs = [transfer(TOKEN_A), transfer(TOKEN_B)];
   const errors: string[] = [];
   const matched = validateOnchainExecutionRoute(
-    [route], trace, logs, { from: CALLER, to: EXECUTOR }, errors,
+    [route], trace, logs, { from: CALLER, to: EXECUTOR }, errors, ROUTE_CALLS,
   );
   assert.deepEqual(errors, []);
   assert.equal(matched[0]?.target, VAULT);
@@ -173,20 +176,20 @@ test("landed protocol route binds adapter selector order and receipt token flow"
   const wrongSelector: string[] = [];
   validateOnchainExecutionRoute(
     [route], call(VAULT, "redeem(uint256,address,address)"), logs,
-    { from: CALLER, to: EXECUTOR }, wrongSelector,
+    { from: CALLER, to: EXECUTOR }, wrongSelector, ROUTE_CALLS,
   );
   assert.match(wrongSelector.join("\n"), /adapter selector/);
 
   const privateTarget: string[] = [];
   validateOnchainExecutionRoute(
     [{ ...route, target: EXECUTOR }], call(EXECUTOR, "deposit(uint256,address)"), logs,
-    { from: CALLER, to: EXECUTOR }, privateTarget,
+    { from: CALLER, to: EXECUTOR }, privateTarget, ROUTE_CALLS,
   );
   assert.match(privateTarget.join("\n"), /private actor/);
 
   const missingFlow: string[] = [];
   validateOnchainExecutionRoute(
-    [route], trace, [transfer(TOKEN_A)], { from: CALLER, to: EXECUTOR }, missingFlow,
+    [route], trace, [transfer(TOKEN_A)], { from: CALLER, to: EXECUTOR }, missingFlow, ROUTE_CALLS,
   );
   assert.match(missingFlow.join("\n"), /token flow/);
 });
@@ -197,13 +200,24 @@ test("production sample edge kinds include successful call-defined protocol legs
     { topics: [ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)")] },
   ];
   const nested = traceCalls([call(GOLDX, "mint(address,uint256)")]);
-  assert.deepEqual(deriveProductionSampleEdgeKinds(logs, nested), ["flash", "swap", "protocol"]);
+  const matchesProtocolCall = (target: string, selector: string) =>
+    ROUTE_CALLS.matchesProtocolCall(target, selector);
+  assert.deepEqual(
+    deriveProductionSampleEdgeKinds(logs, nested, matchesProtocolCall),
+    ["flash", "swap", "protocol"],
+  );
 
   const wrongTarget = traceCalls([call(VAULT, "mint(address,uint256)")]);
-  assert.deepEqual(deriveProductionSampleEdgeKinds(logs, wrongTarget), ["flash", "swap"]);
+  assert.deepEqual(
+    deriveProductionSampleEdgeKinds(logs, wrongTarget, matchesProtocolCall),
+    ["flash", "swap"],
+  );
 
   const reverted = traceCalls([{ ...call(GOLDX, "mint(address,uint256)"), error: "execution reverted" }]);
-  assert.deepEqual(deriveProductionSampleEdgeKinds(logs, reverted), ["flash", "swap"]);
+  assert.deepEqual(
+    deriveProductionSampleEdgeKinds(logs, reverted, matchesProtocolCall),
+    ["flash", "swap"],
+  );
 });
 
 test("landed GOLDx mint route binds target, selector, order and token flow", () => {
@@ -218,7 +232,7 @@ test("landed GOLDx mint route binds target, selector, order and token flow", () 
   const errors: string[] = [];
   const matched = validateOnchainExecutionRoute(
     [route], call(GOLDX, "mint(address,uint256)"), logs,
-    { from: CALLER, to: EXECUTOR }, errors,
+    { from: CALLER, to: EXECUTOR }, errors, ROUTE_CALLS,
   );
   assert.deepEqual(errors, []);
   assert.equal(matched[0]?.target, GOLDX);
@@ -226,7 +240,7 @@ test("landed GOLDx mint route binds target, selector, order and token flow", () 
   const wrongSelector: string[] = [];
   validateOnchainExecutionRoute(
     [route], call(GOLDX, "deposit(uint256,address)"), logs,
-    { from: CALLER, to: EXECUTOR }, wrongSelector,
+    { from: CALLER, to: EXECUTOR }, wrongSelector, ROUTE_CALLS,
   );
   assert.match(wrongSelector.join("\n"), /adapter selector/);
 
@@ -240,6 +254,7 @@ test("landed GOLDx mint route binds target, selector, order and token flow", () 
     [...logs, transfer(TOKEN_B)],
     { from: CALLER, to: EXECUTOR },
     wrongOrder,
+    ROUTE_CALLS,
   );
   assert.match(wrongOrder.join("\n"), /absent or out of order/);
 });
@@ -267,7 +282,9 @@ test("landed DEX and protocol calls must match one interleaved execution order",
     call(poolB, "swap(address,bool,int256,uint160,bytes)"),
   ]);
   const errors: string[] = [];
-  validateOnchainExecutionRoute(route, ordered, logs, { from: CALLER, to: EXECUTOR }, errors);
+  validateOnchainExecutionRoute(
+    route, ordered, logs, { from: CALLER, to: EXECUTOR }, errors, ROUTE_CALLS,
+  );
   assert.deepEqual(errors, []);
 
   const splitSubsequenceOnly = traceCalls([
@@ -277,7 +294,7 @@ test("landed DEX and protocol calls must match one interleaved execution order",
   ]);
   const outOfOrder: string[] = [];
   validateOnchainExecutionRoute(
-    route, splitSubsequenceOnly, logs, { from: CALLER, to: EXECUTOR }, outOfOrder,
+    route, splitSubsequenceOnly, logs, { from: CALLER, to: EXECUTOR }, outOfOrder, ROUTE_CALLS,
   );
   assert.match(outOfOrder.join("\n"), /absent or out of order/);
 });
