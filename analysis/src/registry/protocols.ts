@@ -6,6 +6,7 @@ export const ADDR = {
   DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
   USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
   GOLDX: "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+  ROCKSOLID_RETH: "0x936fACDF10c8C36294e7B9D28345255539d81bc7",
   USDS: "0xdC035D45d973E3EC169d2276DDab16f1e407384F",
   WSTUSR: "0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055",
   DOLA: "0x865377367054516e17014CcdED1e7d814EDC9ce4",
@@ -54,6 +55,7 @@ export const PROTOCOLS: Record<string, { name: string; kind: string }> = indexBy
   [ADDR.CURVE_DOLA_WSTUSR]: { name: "Curve DOLA/wstUSR", kind: "swap" },
   [ADDR.UNIV3_USDT_WETH]: { name: "Uniswap v3 USDT/WETH", kind: "swap" },
   [ADDR.GOLDX]: { name: "GOLDx", kind: "protocol-convert" },
+  [ADDR.ROCKSOLID_RETH]: { name: "RockSolid rock.rETH Vault", kind: "protocol-convert" },
 });
 
 export const TOPICS = {

@@ -24,7 +24,7 @@ import {
   type LearningCase,
   upsertCase,
 } from "../learning/learning-case.js";
-import { TOPICS } from "../registry/protocols.js";
+import { ADDR, TOPICS } from "../registry/protocols.js";
 import {
   classifyTxShape,
   type RawLog,
@@ -120,6 +120,24 @@ test("call-defined GOLDx mint adds protocol only for the exact successful target
   }), ["swap"]);
   assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
     to: "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+    input: selector,
+    error: "execution reverted",
+  }), ["swap"]);
+});
+
+test("call-defined RockSolid syncDeposit adds protocol only for the exact successful target", () => {
+  const selector = ethers.id("syncDeposit(uint256,address,address)").slice(0, 10);
+  const swapLogs = [{ topics: [TOPICS.univ3Swap] }];
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: ADDR.ROCKSOLID_RETH,
+    input: selector,
+  }), ["swap", "protocol"]);
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: "0x0000000000000000000000000000000000000001",
+    input: selector,
+  }), ["swap"]);
+  assert.deepEqual(deriveEdgeKindsFromLogsAndTrace(swapLogs, {
+    to: ADDR.ROCKSOLID_RETH,
     input: selector,
     error: "execution reverted",
   }), ["swap"]);

@@ -78,6 +78,9 @@ export function deriveEdgeKindsFromLogs(logs: Array<{ topics?: unknown }> | unde
 
 const CALL_DEFINED_PROTOCOLS = new Map<string, Set<string>>([
   [lower(ADDR.GOLDX), new Set([ethers.id("mint(address,uint256)").slice(0, 10).toLowerCase()])],
+  [lower(ADDR.ROCKSOLID_RETH), new Set([
+    ethers.id("syncDeposit(uint256,address,address)").slice(0, 10).toLowerCase(),
+  ])],
 ]);
 
 /**
