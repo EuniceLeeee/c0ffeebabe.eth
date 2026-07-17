@@ -1147,7 +1147,7 @@ prepare_trusted_base() {
 prepare_gate_tooling() {
   local commit=$1 base_commit=$2 dependency_drift
   dependency_drift=$(git -C "$MAIN_REPO" diff --name-only "$base_commit..$commit" -- \
-    analysis/package.json analysis/package-lock.json)
+    analysis/package.json analysis/package-lock.json listener/package-lock.json)
   [ -z "$dependency_drift" ] \
     || die "trusted gate tooling dependencies differ from the installed champion dependencies"
   if [ -e "$GATE_TOOL/.git" ]; then
@@ -1161,9 +1161,9 @@ prepare_gate_tooling() {
   [ "$(git -C "$GATE_TOOL" rev-parse HEAD)" = "$commit" ] \
     || die "trusted gate tooling checkout does not match the pinned origin/main SHA"
   [ -d "$MAIN_REPO/analysis/node_modules" ] || die "champion analysis/node_modules missing"
+  [ -d "$MAIN_REPO/listener/node_modules" ] || die "champion listener/node_modules missing"
   ln -s "$MAIN_REPO/analysis/node_modules" "$GATE_TOOL/analysis/node_modules"
-  (cd "$GATE_TOOL/analysis" && npm run build >/tmp/mev-ab-gate-tool-build.log 2>&1) \
-    || die "trusted gate tooling build failed (see /tmp/mev-ab-gate-tool-build.log)"
+  ln -s "$MAIN_REPO/listener/node_modules" "$GATE_TOOL/listener/node_modules"
 }
 
 verify_forge_dependency() {

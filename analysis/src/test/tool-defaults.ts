@@ -269,6 +269,9 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /prepare_trusted_base "\$a_commit"/);
   assert.match(script, /GATE_TOOL=\$ROOT\/gate-tool/);
   assert.match(script, /prepare_gate_tooling "\$gate_tool_commit" "\$a_commit"/);
+  assert.match(script, /analysis\/package\.json analysis\/package-lock\.json listener\/package-lock\.json/);
+  assert.match(script, /"\$GATE_TOOL\/listener\/node_modules"/);
+  assert.doesNotMatch(script, /mev-ab-gate-tool-build\.log/);
   assert.match(script, /"\$GATE_TOOL\/analysis" "\$EVIDENCE_PROXY_PORT"/);
   assert.doesNotMatch(script, /"\$TRUSTED_BASE\/analysis" "\$EVIDENCE_PROXY_PORT"/);
   assert.match(script, /--base-root "\$TRUSTED_BASE"/);
