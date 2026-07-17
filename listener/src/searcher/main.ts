@@ -23,6 +23,7 @@ import {
 } from "./protocol-discovery-runtime.js";
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  protocolEdgeKey,
   type ProtocolDiscoveryEvent,
   type ProtocolDiscoveryOwnership,
   type ProtocolDiscoveryProjection,
@@ -974,6 +975,8 @@ async function main(): Promise<void> {
       `blockscan_graph_hash=${blockscanGraphHash}`,
     );
   }
+  const protocolGraphBefore = graph.filter((edge) => edge.slotKind === "protocol");
+  const protocolEdgeKeysBefore = new Set(protocolGraphBefore.map(protocolEdgeKey));
   const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
     provider,
     adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
@@ -1010,12 +1013,24 @@ async function main(): Promise<void> {
   if (initialProtocolDiscovery.result.sourceComplete) {
     lastProtocolDiscoveryBlock = discoveryToBlock;
   }
+  const protocolGraphAfter = graph.filter((edge) => edge.slotKind === "protocol");
+  const addedProtocolEdges = protocolGraphAfter.filter(
+    (edge) => !protocolEdgeKeysBefore.has(protocolEdgeKey(edge)),
+  );
   console.log(
     `[searcher/live] protocol discovery ${protocolDiscoveryShadow ? "shadow" : "active"}: ` +
       `instances=${protocolDiscoveryOwnership.admissions.size} ` +
       `would_admit=${initialProtocolDiscovery.result.wouldAdmit.length} ` +
+      `protocol_edges=${protocolGraphBefore.length}->${protocolGraphAfter.length} ` +
+      `added=${addedProtocolEdges.length} ` +
       `range=${Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1)}-${discoveryToBlock}`,
   );
+  for (const edge of addedProtocolEdges) {
+    console.log(
+      `[searcher/live] protocol graph + adapter=${edge.adapterId} target=${edge.target} ` +
+        `${edge.tokenIn}->${edge.tokenOut}`,
+    );
+  }
   const tokenIndex = buildTokenIndex(graph);
   const knownProtocolCandidateTokens = new Set(
     initialProtocolDiscovery.result.sourceComplete ? tokenIndex.keys() : [],
