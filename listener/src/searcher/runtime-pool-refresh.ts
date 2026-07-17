@@ -36,6 +36,23 @@ export interface RuntimePoolRefreshProjection {
 }
 
 /**
+ * Refresh candidate selection. Swap-event discovery can never re-surface a
+ * declared protocol venue, so registry venues whose edge build has not yet
+ * succeeded (absent from knownPoolKeys — e.g. a transient RPC error during
+ * boot identity attestation) are retried ahead of the discovered pools.
+ */
+export function selectRefreshCandidates(
+  registryVenues: readonly PoolEntry[],
+  discovered: readonly PoolEntry[],
+  knownPoolKeys: ReadonlySet<string>,
+): PoolEntry[] {
+  return [
+    ...registryVenues.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
+    ...discovered.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
+  ];
+}
+
+/**
  * Prepare every runtime pool projection off to the side. The caller commits
  * this object synchronously, so graph/index/map/flash/mempool consumers never
  * observe a half-refreshed state. Pools whose edge build failed are absent from

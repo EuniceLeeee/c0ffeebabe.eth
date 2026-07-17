@@ -49,6 +49,7 @@ import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import {
   MempoolIntakeRefreshSignal,
   prepareRuntimePoolRefresh,
+  selectRefreshCandidates,
 } from "./runtime-pool-refresh.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
@@ -953,9 +954,10 @@ async function main(): Promise<void> {
 
   // Discovery plan Slice B: shadow-mode instance discovery. Structured logs
   // only — the coordinator has no graph/refresh access, so admission cannot
-  // change here. Detached so live startup is not delayed; startup one-shot
-  // (no per-refresh re-attest) keeps the CU cost bounded.
-  if (process.env.SEARCHER_PROTOCOL_DISCOVERY_SHADOW !== "0") {
+  // change here. Opt-in (zero-CU-first): the sweep costs roughly one eth_call
+  // per universe token plus ~9 per vault, sequential, against the same RPC the
+  // startup-critical reads use — enable for fork sampling / acceptance runs.
+  if (process.env.SEARCHER_PROTOCOL_DISCOVERY_SHADOW === "1") {
     void runProtocolDiscoveryShadow({
       adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
       backend: mainnetBackend,
@@ -1036,16 +1038,7 @@ async function main(): Promise<void> {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
         admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
-      // Swap-event discovery can never re-surface a declared protocol venue, so
-      // registry venues whose boot edge build failed (e.g. a transient RPC error
-      // during identity attestation) are retried here until they admit.
-      const retryProtocolPools = liveRegistry.filter(
-        (pool) => !knownPoolKeys.has(poolRegistryKey(pool)),
-      );
-      const candidates = [
-        ...retryProtocolPools,
-        ...fresh.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
-      ];
+      const candidates = selectRefreshCandidates(liveRegistry, fresh, knownPoolKeys);
       if (candidates.length === 0) return;
 
       const projection = await prepareRuntimePoolRefresh({

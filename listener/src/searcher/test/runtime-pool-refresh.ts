@@ -5,6 +5,7 @@ import { buildMempoolIntakeWithRouters } from "../main.js";
 import {
   MempoolIntakeRefreshSignal,
   prepareRuntimePoolRefresh,
+  selectRefreshCandidates,
 } from "../runtime-pool-refresh.js";
 import { buildStrategyViews, type StrategyViews } from "../strategy-views.js";
 
@@ -204,8 +205,21 @@ async function main(): Promise<void> {
     },
   };
   const bootViews = views([BASE, PSM_POOL]);
-  const retryCandidates = [PSM_POOL].filter((pool) => !baseKnown.has(pool.address.toLowerCase()));
+  // The production timer feeds selectRefreshCandidates(liveRegistry, fresh, known);
+  // pin its semantics: unknown registry venues lead, known pools are filtered.
+  const retryCandidates = selectRefreshCandidates([PSM_POOL], [], baseKnown);
   assert(retryCandidates.length === 1, "boot-failed protocol venue must be a retry candidate");
+  const orderedCandidates = selectRefreshCandidates(
+    [PSM_POOL, BASE],
+    [FRESH, BASE],
+    baseKnown,
+  );
+  assert(
+    orderedCandidates.length === 2 &&
+      orderedCandidates[0].address === PSM_POOL.address &&
+      orderedCandidates[1].address === FRESH.address,
+    "registry retry must lead and known pools must be filtered from both feeds",
+  );
   const failedRetry = await prepareRuntimePoolRefresh({
     backend: psmBackend,
     freshPools: retryCandidates,

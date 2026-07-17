@@ -375,6 +375,61 @@ async function main(): Promise<void> {
       shadowInconsistent.adapters[0].routes.length === 0,
     "convertTo* round-trip mismatch must quarantine before enumerate/probe",
   );
+  // Decimal-skew vaults: a single raw probe amount reads as whole assets but
+  // dust shares. Both dominant shapes must attest AND pass both route probes.
+  const skewFactor = 10n ** 12n;
+  const skewedVault = (sharesPerAsset: boolean): TokenQueryBackend => ({
+    async call(req) {
+      const selector = req.data.slice(0, 10);
+      const fnFor = (name: string) => discoveryIface.getFunction(name)!;
+      if (selector === fnFor("asset").selector) {
+        return discoveryIface.encodeFunctionResult("asset", [token0]);
+      }
+      if (selector === fnFor("totalAssets").selector) {
+        return discoveryIface.encodeFunctionResult("totalAssets", [10n ** 12n]);
+      }
+      for (const toShares of ["convertToShares", "previewDeposit"] as const) {
+        if (selector === fnFor(toShares).selector) {
+          const amount = BigInt(discoveryIface.decodeFunctionData(toShares, req.data)[0]);
+          return discoveryIface.encodeFunctionResult(
+            toShares, [sharesPerAsset ? amount * skewFactor : amount / skewFactor],
+          );
+        }
+      }
+      for (const toAssets of ["convertToAssets", "previewRedeem"] as const) {
+        if (selector === fnFor(toAssets).selector) {
+          const amount = BigInt(discoveryIface.decodeFunctionData(toAssets, req.data)[0]);
+          return discoveryIface.encodeFunctionResult(
+            toAssets, [sharesPerAsset ? amount / skewFactor : amount * skewFactor],
+          );
+        }
+      }
+      throw new Error(`unexpected discovery selector ${selector}`);
+    },
+  });
+  for (const [label, sharesPerAsset] of [
+    ["18-dec shares over 6-dec asset", true],
+    ["low-dec shares under 18-dec asset", false],
+  ] as const) {
+    const skewed = await runProtocolDiscoveryShadow({
+      adapters: [erc4626RouteAdapter],
+      backend: skewedVault(sharesPerAsset),
+      universeTokens: [pair],
+      enableProtocolEdges: true,
+      log: silentLog,
+    });
+    const skewedReport = skewed.adapters[0];
+    assert(
+      skewedReport.attested === 1 && skewedReport.quarantined === 0,
+      `${label}: vault must attest`,
+    );
+    assert(
+      skewedReport.routes.length === 2 && skewedReport.routes.every((verdict) => verdict.probe.ok),
+      `${label}: both route probes must pass, got ${JSON.stringify(
+        skewedReport.routes.map((verdict) => verdict.probe),
+      )}`,
+    );
+  }
   const discoveryCalls: string[] = [];
   const fakeDiscoveryAdapter = {
     ...erc4626RouteAdapter,

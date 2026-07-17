@@ -106,12 +106,19 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
 > quarantine(attest null/throw 不得 enumerate/probe)、probe revert fail-closed、P0-3 flag 重
 > 执行、would_admit 需 `receiptVerified`(preview 级恒 false ⇒ 恒不 admissible)。erc4626 挂
 > 了 shadow 级 discovery 钩子(候选=universe token 集;attest=asset/totalAssets/convertTo*
-> 自洽;probe=preview 一致性)。main.ts 启动后 detached 一次性运行(`SEARCHER_PROTOCOL_
-> DISCOVERY_SHADOW=0` 关),parked 停车候选(discovery-queue.json)喂 attest 报 would-dequeue。
-> conformance 15/15(隔离/fail-closed/flag 门/去重/parked)。接口偏差:attest/enumerate/probe
-> 收 `ProbeContext{backend}` 而非裸 blockTag(attest 需要 backend 才能调链,计划签名系伪码)。
-> 未完:fork 环境 shadow 日志样本、graph SHA 逐位比对(需网络);receipt 级 probe、refresh
-> 喂入、召回比对与无 seed replay 全部属 Slice C【Hermes A/B】,此片零准入变更。
+> 自洽;probe=preview 一致性,**面额自适应** 1e6→1e18 且 redeem 侧按份额等值计价——单一 raw
+> 面额把 18 位份额/低位资产的主流 vault 形状 floor 成 0 = 系统性假失败,对抗审查第二轮发现,
+> 同轮修复)。main.ts 启动后 detached 一次性运行,**opt-in**(`SEARCHER_PROTOCOL_DISCOVERY_
+> SHADOW=1` 开;实测每 universe token ~1 次、每 vault ~9 次串行 eth_call 落在启动关键读同一
+> RPC 上,zero-CU-first 故默认关,fork 采样/验收时打开),parked 停车候选
+> (discovery-queue.json)喂 attest 报 would-dequeue(discover 失败不吞 parked 报告)。probe
+> revert = fail-closed verdict(ok=false 永不 admissible,route 留在报告内可归因)。refresh
+> 候选选择提取为 `selectRefreshCandidates`(注册 venue 重试语义由 `runtime-pool-refresh` 6/6
+> 直接钉住)。conformance 15/15(隔离/fail-closed/flag 门/去重/parked/两类小数位偏斜 vault)。
+> 接口偏差:attest/enumerate/probe 收 `ProbeContext{backend}` 而非裸 blockTag(attest 需要
+> backend 才能调链,计划签名系伪码)。未完:fork 环境 shadow 日志样本、graph SHA 逐位比对
+> (需网络);receipt 级 probe、refresh 喂入、召回比对与无 seed replay 全部属 Slice C
+> 【Hermes A/B】,此片零准入变更。
 - 新 coordinator:遍历注册 adapter → `discoverInstances` → **`attestIdentity`** → `enumerateRoutes`
   → `probeRoute` → 产 `PoolEntry` → 喂 `prepareRuntimePoolRefresh`(与 main.ts 现有
   `scanActivePools()` 喂法并列)。attest 失败 → quarantine,不进后续任何一步。
@@ -144,6 +151,12 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
   静态 registry(`filterLiveProtocolRegistry`),`prepareRuntimePoolRefresh` 对 freshPools **零复查**
   (已核:refresh 文件中 flag 出现次数=0)——coordinator 必须在喂 refresh 前强制执行
   `requiresProtocolEdgesFlag` 门,并加测试:**flag off + 有效 discovery 结果 = graph hash 不变**。
+- **已知召回风险类(Slice B 对抗审查实测,答案卷比对时必须核对)**:(1) `convertToAssets`
+  内含费 ≥ ~10bps 的 spec 违规但可用 vault 会被自洽检查 quarantine(5bps 通过)——deliberate,
+  但差集分析时须与"真丢失"区分;(2) 极端 assets-per-share 比率(>~2000 且不整除)可能超出
+  round-trip 容差。另:coordinator 现信任 adapter 自报的 `receiptVerified` 位——shadow 下无害,
+  **Slice C 准入前必须改为 coordinator 侧可证**(fork 收据由 coordinator/受信 harness 出具,
+  不接受 adapter 断言)。
 - **A/B 验收(P0-1 修正后)**:
   1. 召回比对:discovery 产出 ⊇ legacy 20+ 条(答案卷比对,legacy 不在候选源);少一条即假阴,fail。
   2. **无 seed replay(强制)**:完全移除目标 legacy/`POOL_REGISTRY` seed 后重放,必须走通

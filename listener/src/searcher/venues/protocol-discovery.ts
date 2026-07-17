@@ -17,7 +17,8 @@ import type {
  * Enforced here, not left to adapters:
  * - attestIdentity null/throw → quarantine; the candidate never reaches
  *   enumerate/probe.
- * - any probe call revert → that route is not produced (fail-closed).
+ * - any probe call revert → a fail-closed probe verdict (ok=false, never
+ *   admissible); the route stays in the report so the failure is attributable.
  * - requiresProtocolEdgesFlag is re-executed on the coordinator side (P0-3):
  *   flag off → would_admit=false even for a fully verified route.
  * - would_admit additionally requires receipt-level verification; preview-only
@@ -73,16 +74,10 @@ export async function runProtocolDiscoveryShadow(
         universeTokens: input.universeTokens,
       });
     } catch (err) {
+      // Candidate discovery failing must not suppress the parked-candidate
+      // report below — attestIdentity is independent of discoverInstances.
       emit("discover_failed", { adapter: adapter.id, reason: String(err) });
-      reports.push({
-        adapterId: adapter.id,
-        candidates: 0,
-        attested: 0,
-        quarantined: 0,
-        routes: [],
-        parkedWouldDequeue: [],
-      });
-      continue;
+      candidates = [];
     }
     const seen = new Set<string>();
     const deduped = candidates.filter((candidate) => {

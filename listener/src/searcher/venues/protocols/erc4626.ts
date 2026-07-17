@@ -22,10 +22,23 @@ const erc4626Iface = new ethers.Interface([
   "function previewRedeem(uint256 shares) view returns (uint256 assets)",
 ]);
 
-// Small enough to be harmless against supply caps, large enough that per-call
-// rounding stays inside the tolerance below for 6- and 18-decimal assets.
-const DISCOVERY_PROBE_AMOUNT = 10n ** 6n;
+// Probe in asset terms, escalating when decimal skew floors the small amount
+// to zero shares (e.g. share decimals far below asset decimals). Redeem-side
+// probes are denominated in the share equivalent — a single raw amount reads
+// as 1 USDC of assets but 1e-12 of an 18-decimal share and floors to zero.
+const DISCOVERY_PROBE_AMOUNTS = [10n ** 6n, 10n ** 18n] as const;
 const roundingTolerance = (value: bigint): bigint => value / 1000n + 2n;
+
+async function pickAssetProbe(
+  backend: TokenQueryBackend,
+  vault: string,
+): Promise<{ assets: bigint; shares: bigint } | null> {
+  for (const assets of DISCOVERY_PROBE_AMOUNTS) {
+    const shares = await readVaultUint(backend, vault, "convertToShares", [assets]);
+    if (shares > 0n) return { assets, shares };
+  }
+  return null;
+}
 
 async function readVaultUint(
   backend: TokenQueryBackend,
@@ -125,13 +138,11 @@ export const erc4626Adapter = Object.freeze({
         const asset = await readVaultAsset(ctx.backend, vault);
         if (asset === ethers.ZeroAddress || asset.toLowerCase() === vault.toLowerCase()) return null;
         await readVaultUint(ctx.backend, vault, "totalAssets", []);
-        const shares = await readVaultUint(ctx.backend, vault, "convertToShares", [DISCOVERY_PROBE_AMOUNT]);
-        if (shares <= 0n) return null;
-        const roundTrip = await readVaultUint(ctx.backend, vault, "convertToAssets", [shares]);
-        const drift = roundTrip > DISCOVERY_PROBE_AMOUNT
-          ? roundTrip - DISCOVERY_PROBE_AMOUNT
-          : DISCOVERY_PROBE_AMOUNT - roundTrip;
-        if (drift > roundingTolerance(DISCOVERY_PROBE_AMOUNT)) return null;
+        const probe = await pickAssetProbe(ctx.backend, vault);
+        if (probe === null) return null;
+        const roundTrip = await readVaultUint(ctx.backend, vault, "convertToAssets", [probe.shares]);
+        const drift = roundTrip > probe.assets ? roundTrip - probe.assets : probe.assets - roundTrip;
+        if (drift > roundingTolerance(probe.assets)) return null;
         return { target: vault, adapter: "erc4626" };
       } catch {
         return null;
@@ -153,11 +164,19 @@ export const erc4626Adapter = Object.freeze({
     async probeRoute(route, ctx: ProbeContext): Promise<RouteProbeResult> {
       // Fee-bearing vaults may preview below convertTo*, but a preview ABOVE
       // it over-promises output — inconsistent, fail.
-      const [previewFn, convertFn] = route.edgeAdapterId === "erc4626-deposit"
-        ? (["previewDeposit", "convertToShares"] as const)
-        : (["previewRedeem", "convertToAssets"] as const);
-      const preview = await readVaultUint(ctx.backend, route.target, previewFn, [DISCOVERY_PROBE_AMOUNT]);
-      const converted = await readVaultUint(ctx.backend, route.target, convertFn, [DISCOVERY_PROBE_AMOUNT]);
+      const probe = await pickAssetProbe(ctx.backend, route.target);
+      if (probe === null) {
+        return {
+          ok: false,
+          reason: "convertToShares returned 0 at every probe denomination",
+          receiptVerified: false,
+        };
+      }
+      const [previewFn, convertFn, amount] = route.edgeAdapterId === "erc4626-deposit"
+        ? (["previewDeposit", "convertToShares", probe.assets] as const)
+        : (["previewRedeem", "convertToAssets", probe.shares] as const);
+      const preview = await readVaultUint(ctx.backend, route.target, previewFn, [amount]);
+      const converted = await readVaultUint(ctx.backend, route.target, convertFn, [amount]);
       if (preview <= 0n) {
         return { ok: false, reason: `${previewFn} returned ${preview}`, receiptVerified: false };
       }
