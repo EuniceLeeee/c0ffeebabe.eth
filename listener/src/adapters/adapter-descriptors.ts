@@ -4,7 +4,7 @@ import { FLASH_PROVIDER_DESCRIPTORS } from "./flash-providers.js";
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
   | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
-  | "fluid-credit" | "fluid-dex" | "balancer-v3" | "erc20-infra";
+  | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra";
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
 export type AdapterAction =
@@ -145,6 +145,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
   "univ3-swap": {
     adapterId: "univ3-swap",
     lineage: "univ3",
+    edgeKind: "swap",
+    action: "swap",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "dodo-v2-swap": {
+    adapterId: "dodo-v2-swap",
+    lineage: "dodo-v2",
     edgeKind: "swap",
     action: "swap",
     canSendValue: false,

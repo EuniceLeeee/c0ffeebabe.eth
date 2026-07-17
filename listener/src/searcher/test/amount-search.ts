@@ -161,6 +161,391 @@ async function testSearchCenterTokenNormalization(): Promise<void> {
   console.log("[amtsearch] center token normalization: PASS");
 }
 
+// Regression: an unbounded flash-swap-repay plan still needs a path-aware
+// center. The victim amount is denominated in the final route token, not the
+// flash token, so using it directly can collapse an earlier hop to zero.
+async function testUnboundedReverseImpactCenter(): Promise<void> {
+  const weth = "0x00000000000000000000000000000000000000a1";
+  const ftx = "0x00000000000000000000000000000000000000a2";
+  const kel = "0x00000000000000000000000000000000000000a3";
+  const cel = "0x00000000000000000000000000000000000000a4";
+  const pools = [1, 2, 3, 4].map((n) => `0x${n.toString(16).padStart(40, "0")}`);
+
+  const plan = {
+    opportunity: {
+      kind: "backrun-arb",
+      startToken: weth,
+      profitToken: weth,
+      victimAmountIn: 20n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: pools[3],
+          tokenIn: weth,
+          tokenOut: cel,
+          amountIn: 20n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: pools[0], tokenIn: weth, tokenOut: ftx },
+        { adapterId: "univ2-swap", target: pools[1], tokenIn: ftx, tokenOut: kel },
+        { adapterId: "univ3-swap", target: pools[2], tokenIn: kel, tokenOut: cel },
+        { adapterId: "univ2-swap", target: pools[3], tokenIn: cel, tokenOut: weth },
+      ],
+    },
+    flashAdapterId: "univ2-flash",
+  } as unknown as CandidatePlan;
+
+  const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
+    quoteSource: {
+      quote: async (req) => {
+        if (req.target === pools[3] && req.tokenIn === weth && req.tokenOut === cel) {
+          return { amountOut: 1000n, latencyMs: 0 };
+        }
+        const multiplier = req.target === pools[0] ? 2n : req.target === pools[1] ? 3n : 5n;
+        return { amountOut: req.amountIn * multiplier, latencyMs: 0 };
+      },
+    },
+  });
+
+  assert(center === 34n, `unbounded reverse center: expected 34, got ${center}`);
+  console.log("[amtsearch] unbounded reverse-impact center: PASS");
+}
+
+async function testCrossDecimalReverseImpactCenter(): Promise<void> {
+  const weth = "0x00000000000000000000000000000000000000b1";
+  const usdc = "0x00000000000000000000000000000000000000b2";
+  const firstPool = "0x0000000000000000000000000000000000000011";
+  const impactPool = "0x0000000000000000000000000000000000000012";
+  let prefixQuotes = 0;
+
+  const plan = {
+    opportunity: {
+      kind: "backrun-arb",
+      startToken: weth,
+      profitToken: weth,
+      victimAmountIn: 100_000_000_000_000_000n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: impactPool,
+          tokenIn: weth,
+          tokenOut: usdc,
+          amountIn: 100_000_000_000_000_000n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: firstPool, tokenIn: weth, tokenOut: usdc },
+        { adapterId: "univ2-swap", target: impactPool, tokenIn: usdc, tokenOut: weth },
+      ],
+    },
+    flashAdapterId: "morpho-flash",
+  } as unknown as CandidatePlan;
+
+  const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
+    quoteSource: {
+      quote: async (req) => {
+        if (req.target === impactPool && req.tokenIn === weth && req.tokenOut === usdc) {
+          return { amountOut: 2_000_000n, latencyMs: 0 };
+        }
+        prefixQuotes++;
+        return { amountOut: req.amountIn / 1_000_000_000_000n, latencyMs: 0 };
+      },
+    },
+  });
+
+  assert(center >= 2_000_000_000_000_000_000n, `cross-decimal center too small: ${center}`);
+  assert(center < 2_001_000_000_000_000_000n, `cross-decimal center too large: ${center}`);
+  assert(prefixQuotes > 0 && prefixQuotes < 24, `cross-decimal prefix quotes: ${prefixQuotes}`);
+  console.log("[amtsearch] cross-decimal reverse-impact center: PASS");
+}
+
+async function testMinimalNonZeroReverseImpactCenter(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000d1";
+  const tokenB = "0x00000000000000000000000000000000000000d2";
+  const prefixPool = "0x0000000000000000000000000000000000000031";
+  const impactPool = "0x0000000000000000000000000000000000000032";
+  const plan = {
+    opportunity: {
+      kind: "backrun-arb",
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: impactPool,
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          amountIn: 1n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: prefixPool, tokenIn: tokenA, tokenOut: tokenB },
+        { adapterId: "univ2-swap", target: impactPool, tokenIn: tokenB, tokenOut: tokenA },
+      ],
+    },
+    flashAdapterId: "morpho-flash",
+  } as unknown as CandidatePlan;
+
+  const center = await resolveSearchCenter(plan, tokenA, {} as StateBackend, {
+    quoteSource: {
+      quote: async (req) => ({
+        amountOut: req.target === impactPool && req.tokenIn === tokenA
+          ? 1n
+          : req.amountIn / 1_000_000_000_000n,
+        latencyMs: 0,
+      }),
+    },
+  });
+
+  assert(center >= 1_000_000_000_000n, `minimal nonzero center too small: ${center}`);
+  assert(center < 2_000_000_000_000n, `minimal nonzero center too large: ${center}`);
+  console.log("[amtsearch] minimal nonzero reverse-impact center: PASS");
+}
+
+async function testBoundedCenterFallsBackToCap(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000e1";
+  const tokenB = "0x00000000000000000000000000000000000000e2";
+  const prefixPool = "0x0000000000000000000000000000000000000041";
+  const impactPool = "0x0000000000000000000000000000000000000042";
+  const plan = {
+    opportunity: {
+      kind: "backrun-arb",
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: impactPool,
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          amountIn: 1n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: prefixPool, tokenIn: tokenA, tokenOut: tokenB },
+        { adapterId: "univ2-swap", target: impactPool, tokenIn: tokenB, tokenOut: tokenA },
+      ],
+    },
+    flashAdapterId: "morpho-flash",
+    maxFlashAmount: 100n,
+  } as unknown as CandidatePlan;
+
+  const center = await resolveSearchCenter(plan, tokenA, {} as StateBackend, {
+    quoteSource: {
+      quote: async (req) => ({
+        amountOut: req.target === impactPool && req.tokenIn === tokenA ? 1000n : req.amountIn,
+        latencyMs: 0,
+      }),
+    },
+  });
+
+  assert(center === 100n, `bounded reverse-impact center: ${center}`);
+  console.log("[amtsearch] bounded reverse-impact center uses cap: PASS");
+}
+
+async function testMinimalNonZeroCenterFindsProfit(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000e3";
+  const tokenB = "0x00000000000000000000000000000000000000e4";
+  const prefixPool = "0x0000000000000000000000000000000000000043";
+  const impactPool = "0x0000000000000000000000000000000000000044";
+  const plan: CandidatePlan = {
+    templateName: "flash-swap-repay",
+    root: {} as CandidatePlan["root"],
+    opportunity: {
+      kind: "backrun-arb",
+      victimTxHash: "0xminimal-nonzero",
+      blockNumber: 1,
+      affectedPools: [impactPool],
+      affectedTokens: [tokenA, tokenB],
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: impactPool,
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          amountIn: 1n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      targetNetProfit: 1n,
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: prefixPool, tokenIn: tokenA, tokenOut: tokenB, slotKind: "swap", ...deriveEdgeTaxonomy("swap") },
+        { adapterId: "univ2-swap", target: impactPool, tokenIn: tokenB, tokenOut: tokenA, slotKind: "swap", ...deriveEdgeTaxonomy("swap") },
+      ],
+    },
+    flashAdapterIds: ["morpho-flash"],
+    flashAdapterId: "morpho-flash",
+  };
+
+  let simulatedAmount = 0n;
+  const result = await new AnvilSolver().solve(
+    plan,
+    {} as StateBackend,
+    {
+      executor: "0x00000000000000000000000000000000000000ee",
+      simulate: async (resolved) => {
+        simulatedAmount = resolved.flashAmount;
+        return { success: true, netProfit: 1n };
+      },
+    },
+    {
+      finalSimTopN: 1,
+      quoteSafetyBps: 10000n,
+      quoteSource: {
+        quote: async (req) => {
+          if (req.target === impactPool && req.tokenIn === tokenA) {
+            return { amountOut: 1n, latencyMs: 0 };
+          }
+          if (req.target === prefixPool) {
+            return { amountOut: req.amountIn / 1_000_000_000_000n, latencyMs: 0 };
+          }
+          return {
+            amountOut: req.amountIn === 1n ? 1_500_000_000_000n : req.amountIn,
+            latencyMs: 0,
+          };
+        },
+      },
+    },
+  );
+
+  assert(simulatedAmount >= 1_000_000_000_000n, `minimal nonzero solve amount too small: ${simulatedAmount}`);
+  assert(simulatedAmount < 2_000_000_000_000n, `minimal nonzero solve amount too large: ${simulatedAmount}`);
+  assert(result.flashAmount === simulatedAmount, "minimal nonzero solver returned a different amount");
+  console.log("[amtsearch] minimal nonzero center reaches profitable solver point: PASS");
+}
+
+async function testReverseImpactDeadlineBetweenPrefixHops(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000f1";
+  const tokenB = "0x00000000000000000000000000000000000000f2";
+  const tokenC = "0x00000000000000000000000000000000000000f3";
+  const pools = [0x51, 0x52, 0x53].map((n) => `0x${n.toString(16).padStart(40, "0")}`);
+  let stop = false;
+  let secondPrefixQuotes = 0;
+  const plan = {
+    opportunity: {
+      kind: "backrun-arb",
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: pools[2],
+          tokenIn: tokenA,
+          tokenOut: tokenC,
+          amountIn: 1n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "univ2-swap", target: pools[0], tokenIn: tokenA, tokenOut: tokenB },
+        { adapterId: "univ2-swap", target: pools[1], tokenIn: tokenB, tokenOut: tokenC },
+        { adapterId: "univ2-swap", target: pools[2], tokenIn: tokenC, tokenOut: tokenA },
+      ],
+    },
+    flashAdapterId: "morpho-flash",
+  } as unknown as CandidatePlan;
+
+  let message = "";
+  try {
+    await resolveSearchCenter(plan, tokenA, {} as StateBackend, {
+      shouldStop: () => stop,
+      quoteSource: {
+        quote: async (req) => {
+          if (req.target === pools[2] && req.tokenIn === tokenA) return { amountOut: 10n, latencyMs: 0 };
+          if (req.target === pools[0]) {
+            stop = true;
+            return { amountOut: req.amountIn, latencyMs: 0 };
+          }
+          secondPrefixQuotes++;
+          return { amountOut: req.amountIn, latencyMs: 0 };
+        },
+      },
+    });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  assert(message.includes("deadline reached"), `deadline propagation message: ${message}`);
+  assert(secondPrefixQuotes === 0, `deadline quoted later prefix hops: ${secondPrefixQuotes}`);
+  console.log("[amtsearch] reverse-impact deadline between prefix hops: PASS");
+}
+
+async function testParameterizedPrefixKeepsDebtSearch(): Promise<void> {
+  const weth = "0x00000000000000000000000000000000000000c1";
+  const debt = "0x00000000000000000000000000000000000000c2";
+  const vault = "0x0000000000000000000000000000000000000021";
+  const impactPool = "0x0000000000000000000000000000000000000022";
+  let quotes = 0;
+  const plan = {
+    opportunity: {
+      kind: "backrun-arb",
+      startToken: weth,
+      profitToken: weth,
+      victimAmountIn: 123_456n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool: impactPool,
+          tokenIn: weth,
+          tokenOut: debt,
+          amountIn: 123_456n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      hints: {},
+    },
+    tokenPath: {
+      edges: [
+        { adapterId: "fluid-vault", target: vault, tokenIn: weth, tokenOut: debt },
+        { adapterId: "univ2-swap", target: impactPool, tokenIn: debt, tokenOut: weth },
+      ],
+    },
+    flashAdapterId: "morpho-flash",
+  } as unknown as CandidatePlan;
+
+  const center = await resolveSearchCenter(plan, weth, {} as StateBackend, {
+    quoteSource: {
+      quote: async () => {
+        quotes++;
+        throw new Error("parameterized prefix must be left to the debt-bps search");
+      },
+    },
+  });
+
+  assert(center === 123_456n, `parameterized prefix center: ${center}`);
+  assert(quotes === 0, `parameterized prefix unexpectedly quoted ${quotes} times`);
+  console.log("[amtsearch] parameterized prefix fallback: PASS");
+}
+
 // ── Regression: default quote propagation should not haircut execution amounts ─
 async function testDefaultSafetyHasNoHaircut(): Promise<void> {
   const tokenA = "0x00000000000000000000000000000000000000aa";
@@ -351,10 +736,17 @@ async function main(): Promise<void> {
   await testGssShouldStop();
   testBid();
   await testSearchCenterTokenNormalization();
+  await testUnboundedReverseImpactCenter();
+  await testCrossDecimalReverseImpactCenter();
+  await testMinimalNonZeroReverseImpactCenter();
+  await testBoundedCenterFallsBackToCap();
+  await testMinimalNonZeroCenterFindsProfit();
+  await testReverseImpactDeadlineBetweenPrefixHops();
+  await testParameterizedPrefixKeepsDebtSearch();
   await testDefaultSafetyHasNoHaircut();
   await testSolverUsesUnifiedDefaultSafety();
   await testQuoteProfitFloorAdmitsNearMiss();
-  console.log("amount-search PASS (9/9)");
+  console.log("amount-search PASS (16/16)");
 }
 
 main().catch((err) => {

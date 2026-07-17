@@ -5,6 +5,7 @@ import { v4PoolId } from "./swaps/univ4-common.js";
 import {
   BALANCER_V3_SWAP_TOPIC,
   CURVE_TOKEN_EXCHANGE_TOPICS,
+  DODO_V2_SWAP_TOPIC,
   LANDED_SWAP_EVENTS,
   PANCAKE_V3_SWAP_TOPIC,
   UNIV2_SWAP_TOPIC,
@@ -18,6 +19,7 @@ import {
 export {
   BALANCER_V3_SWAP_TOPIC,
   CURVE_TOKEN_EXCHANGE_TOPICS,
+  DODO_V2_SWAP_TOPIC,
   PANCAKE_V3_SWAP_TOPIC,
   UNIV2_SWAP_TOPIC,
   UNIV2_SYNC_TOPIC,
@@ -277,9 +279,11 @@ export function createUniV4SwapObservation(input: {
           const key = matching[0].v4PoolKey!;
           const aliasWeth = (currency: string): string =>
             currency === ethers.ZeroAddress ? ADDR.WETH : currency;
-          const tokenIn = aliasWeth(a0 > 0n ? key.currency0 : key.currency1);
-          const tokenOut = aliasWeth(a0 > 0n ? key.currency1 : key.currency0);
-          const amountIn = a0 > 0n ? a0 : a1;
+          // PoolManager Swap publishes the swapper's BalanceDelta: the paid
+          // currency is negative and the received currency is positive.
+          const tokenIn = aliasWeth(a0 < 0n ? key.currency0 : key.currency1);
+          const tokenOut = aliasWeth(a0 < 0n ? key.currency1 : key.currency0);
+          const amountIn = a0 < 0n ? -a0 : -a1;
           if (amountIn <= 0n) continue;
           const edge = matching.find((candidate) =>
             sameAddress(candidate.tokenIn, tokenIn) && sameAddress(candidate.tokenOut, tokenOut)
@@ -292,7 +296,7 @@ export function createUniV4SwapObservation(input: {
               tokenIn: edge.tokenIn,
               tokenOut: edge.tokenOut,
               amountIn,
-              amountOut: a0 > 0n ? -a1 : -a0,
+              amountOut: a0 < 0n ? a1 : a0,
               matchedAdapterId: edge.adapterId,
               poolId,
               v4PostState: {
@@ -352,6 +356,53 @@ export function createBalancerV3SwapObservation(input: {
               amountIn: BigInt(amountIn),
               amountOut: BigInt(amountOut),
               matchedAdapterId: edge.adapterId,
+            },
+          });
+        } catch {
+          continue;
+        }
+      }
+      return impacts;
+    },
+  });
+}
+
+export function createDodoV2SwapObservation(input: {
+  adapterIds: readonly string[];
+  canonicalIntakeTargets: readonly string[];
+}): SwapObservationCapability {
+  const topics = landedSwapTopicsForFamily("custom-swap:dodo-v2");
+  return Object.freeze({
+    topics,
+    canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
+    observedPoolIdentity: addressEmitterPoolIdentity,
+    async decodeSwapImpacts(ctx: SwapObservationContext) {
+      const impacts: ObservedSwapImpact[] = [];
+      for (let index = 0; index < ctx.logs.length; index++) {
+        const log = ctx.logs[index];
+        if (topic0(log) !== DODO_V2_SWAP_TOPIC) continue;
+        try {
+          const [fromToken, toToken, fromAmount, toAmount] =
+            ethers.AbiCoder.defaultAbiCoder().decode(
+              ["address", "address", "uint256", "uint256", "address", "address"],
+              log.data,
+            );
+          const edge = matchingTargetEdges(ctx, log.address, input.adapterIds).find((candidate) =>
+            sameAddress(candidate.tokenIn, String(fromToken)) &&
+            sameAddress(candidate.tokenOut, String(toToken))
+          );
+          if (!edge) continue;
+          impacts.push({
+            logIndex: index,
+            impact: {
+              pool: edge.target,
+              tokenIn: edge.tokenIn,
+              tokenOut: edge.tokenOut,
+              amountIn: BigInt(fromAmount),
+              amountOut: BigInt(toAmount),
+              matchedAdapterId: edge.adapterId,
+              poolToken0: edge.poolToken0,
+              poolToken1: edge.poolToken1,
             },
           });
         } catch {

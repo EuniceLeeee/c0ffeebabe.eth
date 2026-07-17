@@ -36,6 +36,10 @@ const univ3Iface = new ethers.Interface([
   "function fee() view returns (uint24)",
   "function tickSpacing() view returns (int24)",
 ]);
+const dodoV2Iface = new ethers.Interface([
+  "function _BASE_TOKEN_() view returns (address)",
+  "function _QUOTE_TOKEN_() view returns (address)",
+]);
 const v4InitializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
@@ -746,7 +750,12 @@ async function enrichPool(
       source: "alchemy-swap-logs",
     };
   }
-  if (adapterHint !== "univ2" && adapterHint !== "univ3" && adapterHint !== "curve") return null;
+  if (
+    adapterHint !== "univ2" &&
+    adapterHint !== "univ3" &&
+    adapterHint !== "dodo-v2" &&
+    adapterHint !== "curve"
+  ) return null;
   const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
@@ -779,6 +788,13 @@ async function enrichPool(
       const [token0, token1] = await Promise.all([
         callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token0")),
         callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token1")),
+      ]);
+      return { ...base, token0, token1 };
+    }
+    if (adapter === "dodo-v2") {
+      const [token0, token1] = await Promise.all([
+        callAddress(provider, pool.address, dodoV2Iface.encodeFunctionData("_BASE_TOKEN_")),
+        callAddress(provider, pool.address, dodoV2Iface.encodeFunctionData("_QUOTE_TOKEN_")),
       ]);
       return { ...base, token0, token1 };
     }

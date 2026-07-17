@@ -183,6 +183,7 @@ export class AnvilSolver implements Solver {
         cache: opts.cache,
         quoteSource: opts.quoteSource,
         v4QuoteStats,
+        shouldStop: pastDeadline,
       }),
     );
     const maxFlashAmount = normalizedMaxFlashAmount(plan);
@@ -519,7 +520,12 @@ export async function resolveSearchCenter(
   plan: CandidatePlan,
   flashToken: string,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
+  options: {
+    cache?: PoolStateCache;
+    quoteSource?: AmountQuoteSource;
+    v4QuoteStats?: V4QuotePathStats;
+    shouldStop?: () => boolean;
+  },
 ): Promise<bigint> {
   // Block-scan (no source swap): the scanner already sized the loop; use its
   // searchCenter directly (in flashToken units) and skip the victim-amount /
@@ -536,10 +542,9 @@ export async function resolveSearchCenter(
   const impact = impactFromOpportunity(plan.opportunity);
   if (!impact) return victimAmount;
 
-  const usePathAwareCenter = plan.maxFlashAmount !== undefined;
-  const reverseImpactIndex = usePathAwareCenter ? findReverseImpactEdgeIndex(plan, impact) : -1;
+  const reverseImpactIndex = findReverseImpactEdgeIndex(plan, impact);
   const impactV4PoolKey = findImpactV4PoolKey(plan, impact);
-  if (reverseImpactIndex >= 0) {
+  if (reverseImpactIndex >= 0 && prefixCanBeInverted(plan, reverseImpactIndex)) {
     const desiredImpactInput = await quoteImpactOutput(
       impact,
       victimAmount,
@@ -566,6 +571,11 @@ export async function resolveSearchCenter(
   }
 
   return victimAmount;
+}
+
+function prefixCanBeInverted(plan: CandidatePlan, reverseImpactIndex: number): boolean {
+  return !plan.tokenPath.edges.slice(0, reverseImpactIndex)
+    .some((edge) => edge.adapterId === "fluid-vault");
 }
 
 function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpact): number {
@@ -602,9 +612,15 @@ async function quoteImpactOutput(
   impact: OpportunityImpact,
   victimAmount: bigint,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
+  options: {
+    cache?: PoolStateCache;
+    quoteSource?: AmountQuoteSource;
+    v4QuoteStats?: V4QuotePathStats;
+    shouldStop?: () => boolean;
+  },
   v4PoolKey?: V4PoolKey,
 ): Promise<bigint> {
+  if (options.shouldStop?.()) throw new Error("reverse-impact center aborted: deadline reached");
   let quoted: bigint;
   try {
     quoted = await quote(
@@ -641,39 +657,71 @@ async function approximatePrefixInputForOutput(
   reverseImpactIndex: number,
   desiredOutput: bigint,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
+  options: {
+    cache?: PoolStateCache;
+    quoteSource?: AmountQuoteSource;
+    v4QuoteStats?: V4QuotePathStats;
+    shouldStop?: () => boolean;
+  },
 ): Promise<bigint> {
   if (desiredOutput <= 0n) return 1n;
   const prefix = { edges: plan.tokenPath.edges.slice(0, reverseImpactIndex) };
   if (prefix.edges.length === 0) return desiredOutput;
 
   const maxFlash = normalizedMaxFlashAmount(plan);
+  const searchCap = maxFlash ?? ((1n << 256n) - 1n);
   const quotePrefix = async (flashAmount: bigint): Promise<bigint> => {
-    const amounts = await propagateAmounts(prefix, flashAmount, state, {
-      cache: options.cache,
-      quoteSource: options.quoteSource,
-      v4QuoteStats: options.v4QuoteStats,
-    });
-    return amounts[amounts.length - 1] ?? 0n;
+    if (options.shouldStop?.()) throw new Error("reverse-impact center aborted: deadline reached");
+    try {
+      const amounts = await propagateAmounts(prefix, flashAmount, state, {
+        cache: options.cache,
+        quoteSource: options.quoteSource,
+        v4QuoteStats: options.v4QuoteStats,
+        shouldStop: options.shouldStop,
+      });
+      return amounts[amounts.length - 1] ?? 0n;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("propagation produced zero at edge ")) {
+        return 0n;
+      }
+      throw error;
+    }
   };
 
-  let lo = 1n;
+  let lo = 0n;
   let hi = clampToMax(desiredOutput, maxFlash);
   let hiOut = await quotePrefix(hi);
-  for (let i = 0; i < 16 && hiOut < desiredOutput; i++) {
-    if (maxFlash !== null && hi >= maxFlash) return hi;
+  for (let i = 0; i < 64 && hiOut < desiredOutput; i++) {
+    if (hi >= searchCap) {
+      if (maxFlash !== null) return hi;
+      throw new Error(`unable to bracket reverse-impact prefix output ${desiredOutput}`);
+    }
     lo = hi;
-    hi = clampToMax(hi * 2n, maxFlash);
-    if (hi <= lo) return hi;
+    hi = hi > searchCap / 16n ? searchCap : hi * 16n;
+    if (hi <= lo) throw new Error(`unable to grow reverse-impact prefix input above ${lo}`);
     hiOut = await quotePrefix(hi);
   }
-  if (hiOut < desiredOutput) return hi;
-
-  for (let i = 0; i < 16 && hi - lo > 1n; i++) {
-    const mid = (lo + hi) / 2n;
-    const out = await quotePrefix(mid);
-    if (out < desiredOutput) lo = mid;
-    else hi = mid;
+  if (hiOut < desiredOutput) {
+    if (maxFlash !== null && hi === maxFlash) return hi;
+    throw new Error(`unable to bracket reverse-impact prefix output ${desiredOutput}`);
+  }
+  // The prefix quote is monotone for the admitted edge families. Find the
+  // target within a one-percent input bracket so the geometric grid remains
+  // anchored even across large decimal differences.
+  for (let i = 0; i < 256 && hi - lo > 1n && (lo === 0n || hi * 100n > lo * 101n); i++) {
+    let probe = hiOut > desiredOutput
+      ? (hi * desiredOutput) / hiOut
+      : (lo + hi) / 2n;
+    if (probe <= lo || probe >= hi) probe = (lo + hi) / 2n;
+    const out = await quotePrefix(probe);
+    if (out < desiredOutput) lo = probe;
+    else {
+      hi = probe;
+      hiOut = out;
+    }
+  }
+  if (hi - lo > 1n && (lo === 0n || hi * 100n > lo * 101n)) {
+    throw new Error(`unable to refine reverse-impact prefix input for ${desiredOutput}`);
   }
   return hi;
 }

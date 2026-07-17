@@ -54,7 +54,7 @@ export interface TokenPath {
 export interface PoolEntry {
   address: string;
   adapter: "curve" | "curve-nr" | "curve-underlying" | "univ3" | "univ2" | "univ4"
-    | "balancer-v3" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626"
+    | "balancer-v3" | "dodo-v2" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626"
     | "goldx" | "rocksolid" | "metronome-synth" | "metronome-hgusdc";
   /** Contracts that emit the protocol action when execution goes through a different target. */
   receiptEmitters?: string[];

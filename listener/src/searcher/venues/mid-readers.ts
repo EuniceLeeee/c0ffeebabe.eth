@@ -22,6 +22,7 @@ export type RouteVenueMidKind =
   | "v4"
   | "curve"
   | "curve-underlying"
+  | "external-swap"
   | "protocol";
 
 export interface RouteVenueMid {
@@ -73,6 +74,10 @@ export function readCurveUnderlyingExternalMid(ctx: SyncMidReadContext): RouteVe
 
 export function readProtocolExternalMid(ctx: SyncMidReadContext): RouteVenueMid | null {
   return readExternalMid("protocol", ctx);
+}
+
+export function readExternalSwapMid(ctx: SyncMidReadContext): RouteVenueMid | null {
+  return readExternalMid("external-swap", ctx);
 }
 
 function readV2Mid(snapshot: V2Seed | null, ctx: SyncMidReadContext): RouteVenueMid | null {
@@ -186,7 +191,7 @@ function readCurveMid(snapshot: CurveSnapshot | null, ctx: SyncMidReadContext): 
 }
 
 function readExternalMid(
-  kind: "protocol" | "curve-underlying",
+  kind: "protocol" | "curve-underlying" | "external-swap",
   ctx: SyncMidReadContext,
 ): RouteVenueMid | null {
   if (!ctx.externalMids || !findEdge(ctx.edges, ctx.a, ctx.b)) return null;

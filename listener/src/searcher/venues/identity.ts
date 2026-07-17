@@ -2,7 +2,9 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   findVenueByFactory,
+  findVenueByPoolRegistry,
   findVenueBySeed,
+  VENUE_CAPABILITIES,
   type VenueId,
 } from "./capability.js";
 import {
@@ -28,6 +30,7 @@ export type VenueIdentitySource =
   | "curve-underlying-provisional"
   | "v4-manager"
   | "balancer-v3-vault"
+  | "dodo-factory-registry"
   | "seed";
 
 export interface VenueIdentityMetadata {
@@ -134,6 +137,7 @@ export type PoolIdentityFailureReason =
   | "adapter_mismatch"
   | "curve_unregistered"
   | "balancer_v3_unregistered"
+  | "dodo_unregistered"
   | "untrusted_seed";
 
 export interface IdentityPoolEntry extends VenueIdentityMetadata {
@@ -187,6 +191,13 @@ const curveMetaRegistryIface = new ethers.Interface([
 ]);
 const balancerV3VaultIface = new ethers.Interface([
   "function isPoolRegistered(address pool) view returns (bool)",
+]);
+const dodoPoolIface = new ethers.Interface([
+  "function _BASE_TOKEN_() view returns (address)",
+  "function _QUOTE_TOKEN_() view returns (address)",
+]);
+const dodoFactoryIface = new ethers.Interface([
+  "function getDODOPool(address baseToken,address quoteToken) view returns (address[] pools)",
 ]);
 
 export async function resolvePoolIdentity(
@@ -492,6 +503,84 @@ export const balancerV3IdentityResolver: OnchainIdentityResolver = async ({
   } catch {
     return { ok: false, reason: "identity_call_failed", venueId: "balancer-v3" };
   }
+};
+
+export const dodoV2IdentityResolver: OnchainIdentityResolver = async ({
+  backend,
+  pool,
+  poolAdapter,
+}) => {
+  if (poolAdapter !== "dodo-v2") {
+    throw new Error(`DODO V2 identity resolver: unsupported pool adapter ${poolAdapter}`);
+  }
+
+  let baseToken: string;
+  let quoteToken: string;
+  try {
+    const [baseRaw, quoteRaw] = await Promise.all([
+      backend.call({ to: pool, data: dodoPoolIface.encodeFunctionData("_BASE_TOKEN_") }),
+      backend.call({ to: pool, data: dodoPoolIface.encodeFunctionData("_QUOTE_TOKEN_") }),
+    ]);
+    baseToken = ethers.getAddress(String(
+      dodoPoolIface.decodeFunctionResult("_BASE_TOKEN_", baseRaw)[0],
+    ));
+    quoteToken = ethers.getAddress(String(
+      dodoPoolIface.decodeFunctionResult("_QUOTE_TOKEN_", quoteRaw)[0],
+    ));
+    if (
+      baseToken === ethers.ZeroAddress ||
+      quoteToken === ethers.ZeroAddress ||
+      baseToken === quoteToken
+    ) {
+      return { ok: false, reason: "identity_call_failed", venueId: "dodo-v2" };
+    }
+  } catch {
+    return { ok: false, reason: "identity_call_failed", venueId: "dodo-v2" };
+  }
+
+  const registries = VENUE_CAPABILITIES.flatMap((capability) =>
+    capability.venue === "dodo-v2" && capability.discovery.mode === "pool-registry"
+      ? capability.discovery.registries
+      : [],
+  );
+  let successfulCalls = 0;
+  for (const registry of registries) {
+    try {
+      const factory = ethers.getAddress(registry);
+      const raw = await backend.call({
+        to: factory,
+        data: dodoFactoryIface.encodeFunctionData("getDODOPool", [baseToken, quoteToken]),
+      });
+      const pools = Array.from(
+        dodoFactoryIface.decodeFunctionResult("getDODOPool", raw)[0] as readonly string[],
+      ).map((candidate) => ethers.getAddress(candidate));
+      successfulCalls++;
+      if (!pools.some((candidate) => candidate === pool)) continue;
+
+      const capability = findVenueByPoolRegistry(factory);
+      if (
+        !capability ||
+        capability.runtimeAdapter !== "dodo-v2" ||
+        !capability.discoverable ||
+        !capability.quotable ||
+        !capability.buildable
+      ) {
+        return { ok: false, reason: "unsupported_venue", venueId: "dodo-v2", factory };
+      }
+      return {
+        ok: true,
+        adapter: "dodo-v2",
+        venueId: "dodo-v2",
+        factory,
+        identitySource: "dodo-factory-registry",
+      };
+    } catch {
+      // A failed registry call does not invalidate a listing in another canonical registry.
+    }
+  }
+  return successfulCalls === 0
+    ? { ok: false, reason: "identity_call_failed", venueId: "dodo-v2" }
+    : { ok: false, reason: "dodo_unregistered", venueId: "dodo-v2" };
 };
 
 function resolveTrustedSingleton(

@@ -59,6 +59,7 @@ import {
 import { attestPoolIdentities } from "../venues/identity.js";
 import { PRODUCTION_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
+import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { quoteBalancerV3, quoteProtocolLeg } from "../solver/quoter.js";
@@ -84,6 +85,7 @@ const LEG_KIND_TO_ADAPTER: Record<string, PoolEntry["adapter"] | undefined> = {
   univ2: "univ2",
   univ3: "univ3",
   univ4: "univ4",
+  "dodo-v2": "dodo-v2",
   curve: "curve",
   erc4626: "erc4626",
   rocksolid: "rocksolid",
@@ -142,7 +144,7 @@ interface CoffeeFixture {
 /** A leg as emitted by extract-loop-fixture.ts (superset of the hand-authored shapes). */
 interface ExtractedLeg {
   seq: number;
-  kind: "univ2" | "univ3" | "univ4" | "curve" | "balancer-v1" | "erc4626" | "rocksolid" | "balancer-v3";
+  kind: "univ2" | "univ3" | "univ4" | "dodo-v2" | "curve" | "balancer-v1" | "erc4626" | "rocksolid" | "balancer-v3";
   poolId?: string;
   poolKey?: { recovered?: boolean } & Partial<FixtureV4PoolKey>;
   address?: string;
@@ -173,6 +175,8 @@ interface ExtractedFixture {
   loopToken: string;
   legs: ExtractedLeg[];
   expectedGrossWeiRealized: string;
+  /** Re-quote the pinned path on the fork state instead of replaying competitor leg amounts verbatim. */
+  quoteExactPath?: boolean;
 }
 
 let checks = 0;
@@ -388,7 +392,7 @@ function loadExtractedFixture(path: string): ExtractedFixture {
 function poolEntryForLeg(leg: ExtractedLeg, adapter: PoolEntry["adapter"]): PoolEntry {
   const address = ethers.getAddress(leg.pool ?? leg.address ?? leg.vault ?? ethers.ZeroAddress);
   const entry: PoolEntry = { address, adapter };
-  if ((adapter === "univ2" || adapter === "univ3") && leg.token0 && leg.token1) {
+  if ((adapter === "univ2" || adapter === "univ3" || adapter === "dodo-v2") && leg.token0 && leg.token1) {
     entry.token0 = ethers.getAddress(leg.token0);
     entry.token1 = ethers.getAddress(leg.token1);
   }
@@ -541,15 +545,24 @@ async function assertClosedLoopExecutes(
 
   await installForkBotVm(state.provider, DEFAULT_SEARCHER_OWNER, DEFAULT_SEARCHER_EXECUTOR);
 
-  // FIXED amounts straight from the fixture — each leg's realized.amountIn verbatim, plus the final
-  // leg's realized.amountOut as the loop output. No adapter re-quote, no solver re-size. buildResolved
-  // PlanFromPath wants length = edges + 1: amounts[i] flows INTO edge i, amounts[last] is the final out.
-  const amounts: bigint[] = [
+  // By default use FIXED amounts straight from the fixture. A fixture can opt into quoteExactPath when
+  // the acceptance target is today's adapter quote+encode behavior on the pinned state rather than the
+  // competitor's internal per-leg sizing. buildResolvedPlanFromPath wants length = edges + 1.
+  let amounts: bigint[] = [
     ...fixture.legs.map((leg) => BigInt(leg.realized.amountIn)),
     BigInt(fixture.legs[fixture.legs.length - 1].realized.amountOut),
   ];
+  let rawOutputs = fixture.legs.map((leg) => BigInt(leg.realized.amountOut));
+  if (fixture.quoteExactPath) {
+    const propagated = await propagateAmountsWithRawOutputs(path, flashAmount, state, {
+      safetyBps: 10000n,
+    });
+    amounts = propagated.amounts;
+    rawOutputs = propagated.rawOutputs;
+  }
   console.log(
-    `[blockscan-fork-solve] Assertion B fixed realized amounts: [${amounts.join(", ")}] ` +
+    `[blockscan-fork-solve] Assertion B ${fixture.quoteExactPath ? "re-quoted" : "fixed realized"} amounts: ` +
+      `[${amounts.join(", ")}] ` +
       `(flash=${flashAmount}, expected surplus>=${floor})`,
   );
 
@@ -563,6 +576,7 @@ async function assertClosedLoopExecutes(
     state,
     floor > 0n ? floor : 1n,
     flashAdapterIdForVenue(fixture.flash.venue),
+    rawOutputs,
   );
   const plan: ResolvedPlan = {
     root,
@@ -576,7 +590,7 @@ async function assertClosedLoopExecutes(
   const sim = await simulator.simulate(plan);
   console.log(
     `[blockscan-fork-solve] Assertion B execute: success=${sim.success} grossProfit=${sim.grossProfit} ` +
-      `(expected ${expected}, floor ${floor})${sim.revertReason ? ` revert=${sim.revertReason.slice(0, 160)}` : ""}`,
+      `(expected ${expected}, floor ${floor})${sim.revertReason ? ` revert=${sim.revertReason}` : ""}`,
   );
   await check(
     "Assertion B: fixed-path adapter-encoded loop executes and closes >= expectedGrossWeiRealized * tolerance",
@@ -891,6 +905,21 @@ function buildExtractedSeedEdges(fixture: ExtractedFixture): TokenEdge[] {
         tokenIn,
         tokenOut,
         slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+        score: 100,
+      });
+    } else if (leg.kind === "dodo-v2") {
+      if (!leg.token0 || !leg.token1) {
+        throw new Error(`leg ${leg.seq} dodo-v2 missing base/quote token order`);
+      }
+      edges.push({
+        adapterId: "dodo-v2-swap",
+        target: ethers.getAddress(leg.pool ?? leg.address!),
+        tokenIn,
+        tokenOut,
+        slotKind: "swap",
+        poolToken0: ethers.getAddress(leg.token0),
+        poolToken1: ethers.getAddress(leg.token1),
         ...deriveEdgeTaxonomy("swap"),
         score: 100,
       });

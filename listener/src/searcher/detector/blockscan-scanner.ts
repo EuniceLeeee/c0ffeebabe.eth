@@ -185,7 +185,9 @@ export function detectBlockScanOpportunities(input: {
   }
 
   const considerRing = (ringEdges: TokenEdge[]): void => {
+    if (touched && !ringEdges.some((edge) => touched.has(edgeVenueIdentity(edge)))) return;
     if (pathLeavesStandingPosition(ringEdges)) return;
+    if (!isAdmissibleBlockScanRingShape(ringEdges, input.cfg.pricedTokens)) return;
     const score = scoreRing(input.cache, input.sourceBlock, ringEdges, input.cfg.protocolMids);
     if (!score || score.estSpreadBps <= input.cfg.minSpreadBps) return;
 

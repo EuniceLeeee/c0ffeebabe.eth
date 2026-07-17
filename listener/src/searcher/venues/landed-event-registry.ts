@@ -58,6 +58,9 @@ export const UNIV4_MODIFY_LIQUIDITY_TOPIC = topic(
 export const BALANCER_V3_SWAP_TOPIC = topic(
   "Swap(address,address,address,uint256,uint256,uint256,uint256)",
 );
+export const DODO_V2_SWAP_TOPIC = topic(
+  "DODOSwap(address,address,uint256,uint256,address,address)",
+);
 export const CURVE_TOKEN_EXCHANGE_TOPICS = Object.freeze([
   topic("TokenExchange(address,int128,uint256,int128,uint256)"),
   topic("TokenExchange(address,uint256,uint256,uint256,uint256)"),
@@ -105,6 +108,14 @@ export const LANDED_SWAP_EVENTS: readonly LandedSwapEventDescriptor[] = Object.f
     discovery: { poolAdapter: "univ2", label: "univ2" },
     // Sync is the exact reserve publication and remains the V2 invalidation event.
     invalidatesWarmState: false,
+  }),
+  swapEvent({
+    id: "dodo-v2-swap",
+    topic: DODO_V2_SWAP_TOPIC,
+    executionFamilies: ["custom-swap:dodo-v2"],
+    emitter: ADDRESS_EMITTER,
+    discovery: { poolAdapter: "dodo-v2", label: "dodo-v2" },
+    invalidatesWarmState: true,
   }),
   ...CURVE_TOKEN_EXCHANGE_TOPICS.map((eventTopic, index): LandedSwapEventDescriptor =>
     swapEvent({

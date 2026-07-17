@@ -13,10 +13,12 @@ import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
 import { univ2StandardAdapter } from "./swaps/univ2-standard.js";
 import { univ3StandardAdapter } from "./swaps/univ3-standard.js";
 import { univ4Adapter } from "./swaps/univ4.js";
+import { dodoV2Adapter } from "./swaps/dodo-v2.js";
 import {
   assertIdentityResolverCoverage,
   balancerV3IdentityResolver,
   curveIdentityResolver,
+  dodoV2IdentityResolver,
   factoryIdentityResolver,
   IdentityResolverRegistry,
   type IdentityResolverDescriptor,
@@ -53,6 +55,7 @@ export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
     curveUnderlyingAdapter,
     balancerV3Adapter,
     univ4Adapter,
+    dodoV2Adapter,
   ],
   protocols: [
     erc4626Adapter,
@@ -76,6 +79,11 @@ const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
     poolAdapter: "balancer-v3",
     policy: "onchain-resolver",
     resolve: balancerV3IdentityResolver,
+  },
+  {
+    poolAdapter: "dodo-v2",
+    policy: "onchain-resolver",
+    resolve: dodoV2IdentityResolver,
   },
   {
     poolAdapter: "univ4",

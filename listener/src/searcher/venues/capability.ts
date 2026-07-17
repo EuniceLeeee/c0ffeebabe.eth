@@ -9,6 +9,7 @@ export type VenueId =
   | "panoramaswap-v1"
   | "univ4"
   | "balancer-v3"
+  | "dodo-v2"
   | "curve"
   | "curve-nr"
   | "goldx"
@@ -22,6 +23,7 @@ export type VenueId =
 
 export type VenueDiscovery =
   | { mode: "factory"; factories: readonly string[] }
+  | { mode: "pool-registry"; registries: readonly string[] }
   | { mode: "seed"; seeds?: readonly string[] }
   | { mode: "custom"; seeds?: readonly string[] };
 
@@ -29,7 +31,7 @@ export interface VenueCapability {
   venue: VenueId;
   discovery: VenueDiscovery;
   /** Proven adapter for this factory lineage; provisional admission may retain the event-derived shape. */
-  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3";
+  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3" | "dodo-v2";
   discoverable: boolean;
   quotable: boolean;
   buildable: boolean;
@@ -96,6 +98,21 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
     venue: "balancer-v3",
     discovery: { mode: "custom", seeds: ["0xbA1333333333a1BA1108E8412f11850A5C319bA9"] },
     runtimeAdapter: "balancer-v3",
+    discoverable: true,
+    quotable: true,
+    buildable: true,
+  },
+  {
+    venue: "dodo-v2",
+    discovery: {
+      mode: "pool-registry",
+      registries: [
+        "0x72d220cE168C4f361dD4deE5D826a01AD8598f6C",
+        "0x5336edE8F971339F6c0e304c66ba16F1296A2Fbe",
+        "0x6fdDB76c93299D985f4d3FC7ac468F9A168577A4",
+      ],
+    },
+    runtimeAdapter: "dodo-v2",
     discoverable: true,
     quotable: true,
     buildable: true,
@@ -177,6 +194,14 @@ export function findVenueByFactory(factory: string | null | undefined): VenueCap
   return VENUE_CAPABILITIES.find((entry) =>
     entry.discovery.mode === "factory" &&
     entry.discovery.factories.some((pattern) => addressPatternMatches(pattern, factory)),
+  ) ?? null;
+}
+
+export function findVenueByPoolRegistry(registry: string | null | undefined): VenueCapability | null {
+  if (!registry) return null;
+  return VENUE_CAPABILITIES.find((entry) =>
+    entry.discovery.mode === "pool-registry" &&
+    entry.discovery.registries.some((pattern) => addressPatternMatches(pattern, registry)),
   ) ?? null;
 }
 

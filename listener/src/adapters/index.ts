@@ -37,6 +37,7 @@ import {
   balancerV3SwapAdapter,
   balancerV3UnlockAdapter,
 } from "./balancer-v3.js";
+import { dodoV2ActionAdapter } from "./dodo-v2.js";
 
 // Flash
 for (const descriptor of [...FLASH_PROVIDER_DESCRIPTORS]
@@ -59,6 +60,7 @@ register(univ3Adapter);
 register(univ2Adapter);
 register(univ2RouterAdapter);
 register(univ2RouterAltAdapter);
+register(dodoV2ActionAdapter);
 register(univ4UnlockAdapter);
 register(univ4SwapAdapter);
 register(univ4TakeAdapter);

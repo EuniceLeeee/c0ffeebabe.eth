@@ -79,6 +79,11 @@ function testEdgeKindCounts(): void {
 
 function testClassifyCall(): void {
   assertDescriptor(
+    classifyCall("0x0000000000000000000000000000000000000001", "0xbd6015b4"),
+    { lineage: "dodo-v2", edgeKind: "swap", action: "swap" },
+    "dodo-v2 sellBase",
+  );
+  assertDescriptor(
     classifyCall("0x0000000000000000000000000000000000000001", "0x128acb08"),
     { lineage: "univ3", edgeKind: "swap" },
     "univ3 swap",

@@ -13,6 +13,7 @@ import {
   isLandedSwapTopic,
 } from "../venues/landed-event-registry.js";
 import { scanAddressLandedSwapActivity } from "../venues/landed-event-scanner.js";
+import { v4PoolId } from "../venues/swaps/univ4-common.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -33,6 +34,12 @@ const BALANCER_V3_IFACE = new ethers.Interface([
 ]);
 const V3_IFACE = new ethers.Interface([
   "event Swap(address indexed sender,address indexed recipient,int256 amount0,int256 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick)",
+]);
+const DODO_IFACE = new ethers.Interface([
+  "event DODOSwap(address fromToken,address toToken,uint256 fromAmount,uint256 toAmount,address trader,address receiver)",
+]);
+const V4_IFACE = new ethers.Interface([
+  "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
 ]);
 
 function eventLog(
@@ -139,6 +146,57 @@ async function testCrossFamilyReceiptOrder(): Promise<void> {
   assert(impacts[1]?.matchedAdapterId === "univ2-swap", "later V2 impact must stay second");
 }
 
+async function testDodoV2ReceiptObservation(): Promise<void> {
+  const graph = [edge({
+    adapterId: "dodo-v2-swap",
+    target: POOL,
+    poolToken0: TOKEN0,
+    poolToken1: TOKEN1,
+  })];
+  const impacts = await detectImpactFromLogs([
+    eventLog(DODO_IFACE, "DODOSwap", POOL, [TOKEN0, TOKEN1, 123n, 120n, SENDER, RECIPIENT]),
+  ], graph);
+  const impact = impacts.find((candidate) => candidate.matchedAdapterId === "dodo-v2-swap");
+  assert(impact !== undefined, "DODO V2 receipt should decode through its SwapAdapter");
+  assert(impact.amountIn === 123n && impact.amountOut === 120n, "DODO V2 amounts");
+}
+
+async function testV4SwapperDeltaSign(): Promise<void> {
+  const key = {
+    currency0: TOKEN0,
+    currency1: TOKEN1,
+    fee: 3000,
+    tickSpacing: 60,
+    hooks: ethers.ZeroAddress,
+  };
+  const poolId = v4PoolId(key);
+  const graph = [edge({
+    adapterId: "univ4-unlock",
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    tokenIn: TOKEN0,
+    tokenOut: TOKEN1,
+    poolId,
+    v4PoolKey: key,
+  })];
+  const impacts = await detectImpactFromLogs([
+    eventLog(V4_IFACE, "Swap", ADDR.UNISWAP_V4_POOL_MANAGER, [
+      poolId,
+      SENDER,
+      -900n,
+      1_000n,
+      1n << 96n,
+      123n,
+      1,
+      3000,
+    ]),
+  ], graph);
+  const impact = impacts.find((candidate) => candidate.matchedAdapterId === "univ4-unlock");
+  assert(impact !== undefined, "V4 swapper delta should match the route edge");
+  assert(impact.tokenIn.toLowerCase() === TOKEN0.toLowerCase(), "negative currency0 is input");
+  assert(impact.tokenOut.toLowerCase() === TOKEN1.toLowerCase(), "positive currency1 is output");
+  assert(impact.amountIn === 900n && impact.amountOut === 1_000n, "V4 absolute amounts");
+}
+
 function testRegistryConformance(): void {
   assertLandedEventCoverage(PRODUCTION_ROUTE_ADAPTERS.swaps);
   for (const adapter of PRODUCTION_ROUTE_ADAPTERS.swaps) {
@@ -208,6 +266,8 @@ await testReceiptLevelV2Correlation();
 await testV2FinalReceiptStateAndMalformedIsolation();
 await testBalancerV3IndexedPoolIdentity();
 await testCrossFamilyReceiptOrder();
+await testDodoV2ReceiptObservation();
+await testV4SwapperDeltaSign();
 testRegistryConformance();
 await testSharedAddressScanner();
 console.log("swap-observation PASS (receipt V2 + Balancer V3 + log order + registry)");

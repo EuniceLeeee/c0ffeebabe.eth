@@ -313,6 +313,7 @@ function identitySourceField(value: unknown, field: string): VenueIdentitySource
     value !== "curve-underlying-provisional" &&
     value !== "v4-manager" &&
     value !== "balancer-v3-vault" &&
+    value !== "dodo-factory-registry" &&
     value !== "seed"
   ) {
     throw new Error(`${field} has unsupported identity source ${String(value)}`);

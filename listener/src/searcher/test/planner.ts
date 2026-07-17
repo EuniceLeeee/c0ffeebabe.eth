@@ -456,7 +456,7 @@ async function testNativeEthV4RoutesViaWethAlias(): Promise<void> {
     topics: [UNIV4_SWAP_TOPIC, poolId, "0x000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015"],
     data: ethers.AbiCoder.defaultAbiCoder().encode(
       ["int128", "int128", "uint160", "uint128", "int24", "uint24"],
-      [1_000_000n, -900n, 0n, 0n, 0, 500],
+      [-900n, 1_000_000n, 0n, 0n, 0, 500],
     ),
   };
   const v4Impacts = (await detectImpactFromLogs([nativeSwapLog], nativeV4Edges))
