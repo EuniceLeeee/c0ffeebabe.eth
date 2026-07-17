@@ -405,20 +405,21 @@
       "evidence": {
         "manual": "callTracer shows successful syncDeposit(uint256,address,address) to RockSolid rock.rETH vault 0x936facdf10c8c36294e7b9d28345255539d81bc7 between the UniV3 and Balancer V3 legs",
         "canonical_before": "bundle-postmortem reported edgeKinds=[flash,swap] and winner_style=unknown, so route-gap fail-closed was bypassed",
-        "canonical_after": "trace-aware edge classification reports edgeKinds=[flash,swap,protocol] and route_gap_analysis=manual_required",
+        "canonical_after": "formal tool-index/tool-run at cce6055 with archive callTracer reports edgeKinds=[flash,swap,protocol], edge_kind_evidence.mode=logs_plus_call_trace, and route_gap_analysis=manual_required(non_swap_leg_order_unresolved)",
+        "canonical_no_trace": "the same formal tool-run against node-local pruned reth reports edge_kind_evidence.mode=logs_only and route_gap_analysis=manual_required(call_trace_unavailable), rather than a false swap-only verdict",
         "replay": "existing loop-fork-gate self-admits the four-edge route and passes candidate_plans, fork execution, and solver net output",
-        "reviewer": "fresh non-author adversarial review confirmed the call-defined coverage defect and target/selector mapping"
+        "reviewer": "fresh non-author adversarial review rejected the first analysis-owned target/selector list, required production-registry derivation, and separately confirmed fail-closed behavior when callTracer history is pruned"
       },
       "tooling_defect": {
         "tool": "analysis:bundle-postmortem via analysis/src/learning/edge-kinds.ts",
-        "issue": "CALL_DEFINED_PROTOCOLS only recognized GOLDx mint and omitted the registered RockSolid syncDeposit protocol leg",
-        "evidence": "tx 0x7ce631... calls 0x936facdf... with selector 0xd01d073a; pre-fix edgeKinds=[flash,swap] despite the RockSolid leg closing the route",
-        "codify_target": "register RockSolid target and syncDeposit selector in the shared analysis protocol registry and pin successful, wrong-target, and reverted-call regressions",
-        "codify_commit": "c9f2c59",
+        "issue": "event-only classification omitted RockSolid; the first sample fix then duplicated production target/selector facts in analysis, and pruned callTracer history could still silently restore the false swap-only verdict",
+        "evidence": "tx 0x7ce631... calls production pool 0x936facdf... with selector 0xd01d073a; exact cce6055 tool-runs prove archive=[flash,swap,protocol]/manual and pruned-local=logs_only/manual(call_trace_unavailable)",
+        "codify_target": "derive call-defined protocol matching from POOL_REGISTRY -> PRODUCTION_ROUTE_ADAPTERS -> ActionAdapter.matchTrace, reject reverted subtrees, and mark logs-only classifications as manual instead of complete",
+        "codify_commit": "cce6055",
         "status": "codified"
       },
       "created_at": "2026-07-17T03:00:00.000Z",
-      "updated_at": "2026-07-17T03:00:00.000Z"
+      "updated_at": "2026-07-17T03:40:00.000Z"
     },
     {
       "learning_case_id": "tooldef-20260715-ab-revm-artifact-parity",

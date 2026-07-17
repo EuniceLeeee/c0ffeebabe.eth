@@ -1,11 +1,11 @@
 ---
 divergence_id: bundle-postmortem-call-defined-protocol-leg-coverage
 status: partially_codified
-tool: analysis:bundle-postmortem@f95ddb8367a489d02dff0552a9e9d529bc4db7e7
+tool: analysis:bundle-postmortem@cce6055
 capability: classification
 root_cause: Event-led edge classification omits successful call-defined mint, migration, LP lifecycle, burn-to-native, and surplus protocol legs that are required to close the landed route.
 deferred_reason: analysis-tool freeze
-fixed_by: c9f2c59
+fixed_by: cce6055
 ---
 
 # Bundle postmortem call-defined protocol leg coverage
@@ -41,6 +41,20 @@ transactions:
   - { tx_hash: 0x9d7cc2a9e6d42c7867558e2139853bd42f313721dbff4ed5f1885021d4a93d5b, block: 25524250, tx_index: 97, role: backrun_winner, production_gap_id: goldfish-conversion, tool_actual: "edgeKinds=[flash,swap]", manual_ground_truth: "Goldfish protocol conversion closes the DEX route; exact selector awaits archive trace" }
 ```
 
-The RockSolid row is codified by registering its exact target and `syncDeposit(uint256,address,address)`
-selector in the trace-aware analyzer, with successful/wrong-target/reverted-call regressions. The remaining
-rows stay open: they require their own target/selector evidence and must not be generalized from this one fix.
+The RockSolid row is codified without an analysis-owned address or selector table. The analyzer now derives
+the pool target and permitted call shape through the production chain
+`POOL_REGISTRY -> PRODUCTION_ROUTE_ADAPTERS -> ActionAdapter.matchTrace`, with successful, wrong-target,
+direct-revert, and reverted-ancestor regressions. Route/action registry conformance is checked in the listener
+test suite so a production route edge cannot silently lack a trace matcher.
+
+Formal `tool-index -> tool-run -> bundle-postmortem` evidence at `cce6055` covers both RPC conditions:
+
+- node-local pruned reth: `edge_kind_evidence.mode=logs_only`,
+  `route_gap_analysis=manual_required(call_trace_unavailable)`;
+- archive callTracer: `edgeKinds=[flash,swap,protocol]`,
+  `edge_kind_evidence.mode=logs_plus_call_trace`,
+  `route_gap_analysis=manual_required(non_swap_leg_order_unresolved)`.
+
+`logs_plus_call_trace` names the available evidence; it is not a claim that every call-defined protocol is
+decoded. The remaining rows stay open and require production adapter/ActionAdapter support or their own
+grounded call semantics. They must not be generalized from the RockSolid fix.
