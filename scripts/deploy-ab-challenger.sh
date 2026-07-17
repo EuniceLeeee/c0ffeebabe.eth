@@ -22,6 +22,7 @@ EXPECTED_A_WALLET=0xb8578B6de173C8554FF0390dB5a7effA567DDA3c
 EXPECTED_A_BOTVM=0x4aF9495C4aC24c5CD3b0C90611550a1996415BCe
 AUTHORIZED_MAX_WALLET_ETH=0.2
 LOCAL_RPC=http://127.0.0.1:8545
+EVIDENCE_PROXY_PORT=8576
 # A measured Hermes window is 60 minutes after challenger cold-start/warmup. Keep one bounded lease long
 # enough for warmup + the full window + close; stale/crashed slots are still reaped automatically.
 LEASE_SECONDS=${AB_LEASE_SECONDS:-5400}
@@ -30,6 +31,7 @@ PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
 # Keep readiness mandatory, but give the cold start enough wall-clock time to prove it.
 FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-1200}
 MEMPOOL_READY_TIMEOUT_SECONDS=${AB_MEMPOOL_READY_TIMEOUT_SECONDS:-60}
+CANDIDATE_GATE_TIMEOUT_SECONDS=${AB_CANDIDATE_GATE_TIMEOUT_SECONDS:-2700}
 
 mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe" "$ROOT/candidate"
 touch "$LOCK"
@@ -37,7 +39,34 @@ exec 9>"$LOCK"
 flock -x 9
 A_PROCESS_ENV=$(mktemp /run/mev-ab-a-process.XXXXXX)
 chmod 600 "$A_PROCESS_ENV"
-trap 'rm -f "$A_PROCESS_ENV"' EXIT
+GATE_WORKER_PID=""
+
+stop_gate_worker() {
+  local pid=${GATE_WORKER_PID:-}
+  if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    kill -TERM "$pid" 2>/dev/null || true
+    kill -TERM -- "-$pid" 2>/dev/null || true
+    for _ in $(seq 1 50); do
+      if ! kill -0 "$pid" 2>/dev/null && ! kill -0 -- "-$pid" 2>/dev/null; then
+        break
+      fi
+      sleep 0.1
+    done
+    kill -KILL "$pid" 2>/dev/null || true
+    kill -KILL -- "-$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  GATE_WORKER_PID=""
+}
+
+cleanup_ab_wrapper() {
+  stop_gate_worker
+  rm -f "$A_PROCESS_ENV"
+}
+
+trap cleanup_ab_wrapper EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 die() { echo "ABORT: $*" >&2; exit 9; }
 env_get() {
@@ -80,6 +109,8 @@ valid_report_path() {
   || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..1200"
 [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -ge 5 ] && [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -le 120 ] \
   || die "AB_MEMPOOL_READY_TIMEOUT_SECONDS must be 5..120"
+[ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -ge 300 ] && [ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -le 3600 ] \
+  || die "AB_CANDIDATE_GATE_TIMEOUT_SECONDS must be 300..3600"
 
 state_field() {
   python3 - "$STATE" "$1" <<'PY'
@@ -177,6 +208,100 @@ assert_port_owned() {
     pid_descends_from "$listener" "$root_pid" \
       || die "$label port $port is owned outside its unit tree (pid=$listener)"
   done
+}
+
+run_candidate_gate_worker() {
+  set -Eeuo pipefail
+  local analysis_dir=$1 proxy_port=$2 worker_timeout=$3 evidence_rpc
+  local proxy_pid="" timeout_pid="" proxy_ready=0 listener_pids
+  shift 3
+  export -n -f run_candidate_gate_worker 2>/dev/null || true
+  [[ "$worker_timeout" =~ ^[1-9][0-9]*$ ]] || {
+    echo "historical evidence worker timeout is invalid" >&2
+    return 9
+  }
+  evidence_rpc=$(cat)
+  [[ "$evidence_rpc" =~ ^https://[^[:space:]]+$ ]] || {
+    echo "historical evidence RPC is not a private HTTPS endpoint" >&2
+    return 9
+  }
+  cd "$analysis_dir"
+  cleanup_evidence_proxy() {
+    if [[ "$timeout_pid" =~ ^[1-9][0-9]*$ ]]; then
+      kill "$timeout_pid" 2>/dev/null || true
+      wait "$timeout_pid" 2>/dev/null || true
+    fi
+    if [[ "$proxy_pid" =~ ^[1-9][0-9]*$ ]]; then
+      kill "$proxy_pid" 2>/dev/null || true
+      wait "$proxy_pid" 2>/dev/null || true
+    fi
+  }
+  trap cleanup_evidence_proxy EXIT
+  trap 'trap - INT; kill -INT -- -$$ 2>/dev/null || true; exit 130' INT
+  trap 'trap - TERM; kill -TERM -- -$$ 2>/dev/null || true; exit 143' TERM
+  (sleep "$worker_timeout"; kill -TERM -- -$$ 2>/dev/null || true) &
+  timeout_pid=$!
+
+  # The upstream URL enters only through stdin and stays out of gate/hunt argv and logs. The loopback
+  # proxy is credential hygiene, not a privilege boundary between same-UID production processes.
+  printf '%s' "$evidence_rpc" | MEV_AB_EVIDENCE_PROXY_PORT="$proxy_port" node -e '
+    const http = require("node:http");
+    const upstreamChunks = [];
+    process.stdin.on("data", (chunk) => upstreamChunks.push(chunk));
+    process.stdin.on("end", () => {
+      const upstream = Buffer.concat(upstreamChunks).toString("utf8");
+      if (!/^https:\/\/\S+$/.test(upstream)) process.exit(2);
+      const server = http.createServer(async (request, response) => {
+        if (request.method !== "POST") {
+          response.writeHead(405, { "content-type": "text/plain" });
+          response.end("method not allowed");
+          return;
+        }
+        try {
+          const chunks = [];
+          let bytes = 0;
+          for await (const chunk of request) {
+            bytes += chunk.length;
+            if (bytes > 16 * 1024 * 1024) throw new Error("request too large");
+            chunks.push(chunk);
+          }
+          const result = await fetch(upstream, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: Buffer.concat(chunks),
+            signal: AbortSignal.timeout(60_000),
+          });
+          const body = Buffer.from(await result.arrayBuffer());
+          response.writeHead(result.status, {
+            "content-type": result.headers.get("content-type") ?? "application/json",
+          });
+          response.end(body);
+        } catch {
+          response.writeHead(502, { "content-type": "text/plain" });
+          response.end("archive rpc unavailable");
+        }
+      });
+      server.listen(Number(process.env.MEV_AB_EVIDENCE_PROXY_PORT), "127.0.0.1");
+    });
+  ' >/tmp/mev-ab-evidence-proxy.log 2>&1 &
+  proxy_pid=$!
+  for _ in $(seq 1 50); do
+    kill -0 "$proxy_pid" 2>/dev/null || break
+    listener_pids=$(
+      ss -H -ltnp "sport = :$proxy_port" 2>/dev/null \
+        | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
+    )
+    if [ "$listener_pids" = "$proxy_pid" ]; then
+      proxy_ready=1
+      break
+    fi
+    sleep 0.1
+  done
+  [ "$proxy_ready" = "1" ] || {
+    echo "historical evidence RPC proxy failed to start" >&2
+    return 9
+  }
+  node --import tsx src/cli/ab-canary-gate.ts "$@"
 }
 
 unit_log_path() {
@@ -1064,34 +1189,90 @@ deploy() {
   assert_port_free 8571
   assert_port_free 8572
   assert_port_free 8573
-  local replay_top_n
+  assert_port_free "$EVIDENCE_PROXY_PORT"
+  local replay_top_n evidence_rpc
   replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)
   replay_top_n=${replay_top_n:-6000}
   [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "champion SEARCHER_POOL_UNIVERSE_TOP_N is invalid"
+  # Historical production samples can outlive local reth's call-trace retention even while
+  # receipts and live state remain available. Bind replay to the champion's existing private
+  # archive endpoint; live A/B runtime RPCs remain pinned to LOCAL_RPC and are checked separately.
+  evidence_rpc=$(file_env_get "$A_PROCESS_ENV" MAINNET_RPC_URL)
+  [[ "$evidence_rpc" =~ ^https://[^[:space:]]+$ ]] \
+    || die "champion MAINNET_RPC_URL must be a private HTTPS archive endpoint for historical evidence"
+  local gate_rpc="http://127.0.0.1:$EVIDENCE_PROXY_PORT"
   local shakedown_arg=()
   [ "$requested_shakedown" = "0" ] || shakedown_arg=(--shakedown)
-  (cd "$TRUSTED_BASE/analysis" && npm run ab-canary-gate -- "$candidate_report" \
-    --phase candidate \
-    --expected-experiment "$experiment" \
-    --expected-branch "$branch" \
-    --expected-base "$expected_a" \
-    --expected-challenger "$expected_b" \
-    --expected-runtime-view-delta "$allow_runtime_view_delta" \
-    --expected-input-mode "$requested_input_mode" \
-    --expected-config-delta "$requested_config_delta" \
-    --artifact-ref "origin/$branch" \
-    --report-repo-path "$report_path" \
-    --expected-lane-mode "$requested_lane_mode" \
-    --require-stage-advance "$requested_require_stage_advance" \
-    "${shakedown_arg[@]}" \
-    --base-root "$TRUSTED_BASE" \
-    --challenger-root "$WT" \
-    --baseline-universe "$A_REPLAY_UNIVERSE" \
-    --challenger-universe "$B_UNIVERSE" \
-    --pool-universe-top-n "$replay_top_n" \
-    --rpc "$LOCAL_RPC") \
-    >/tmp/mev-ab-candidate-gate.log 2>&1 \
+  local gate_args=(
+    "$candidate_report"
+    --phase candidate
+    --expected-experiment "$experiment"
+    --expected-branch "$branch"
+    --expected-base "$expected_a"
+    --expected-challenger "$expected_b"
+    --expected-runtime-view-delta "$allow_runtime_view_delta"
+    --expected-input-mode "$requested_input_mode"
+    --expected-config-delta "$requested_config_delta"
+    --artifact-ref "origin/$branch"
+    --report-repo-path "$report_path"
+    --expected-lane-mode "$requested_lane_mode"
+    --require-stage-advance "$requested_require_stage_advance"
+  )
+  gate_args+=("${shakedown_arg[@]}")
+  gate_args+=(
+    --base-root "$TRUSTED_BASE"
+    --challenger-root "$WT"
+    --baseline-universe "$A_REPLAY_UNIVERSE"
+    --challenger-universe "$B_UNIVERSE"
+    --pool-universe-top-n "$replay_top_n"
+    --rpc "$gate_rpc"
+  )
+  # Keep the private upstream out of gate/hunt process command lines and logs.
+  # The trusted wrapper sends it once over stdin to a loopback-only proxy; gate, hunts and Anvil see
+  # only gate_rpc. The worker is its own process group, receives a parent-death signal, and is always
+  # reaped before live deployment proceeds.
+  export -f run_candidate_gate_worker
+  printf '%s' "$evidence_rpc" | python3 -c '
+import ctypes
+import os
+import signal
+import sys
+
+libc = ctypes.CDLL(None)
+if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0:  # PR_SET_PDEATHSIG
+    raise SystemExit(2)
+if os.getppid() == 1:
+    raise SystemExit(2)
+os.setsid()
+os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
+' 'run_candidate_gate_worker "$@"' \
+    "$TRUSTED_BASE/analysis" "$EVIDENCE_PROXY_PORT" "$CANDIDATE_GATE_TIMEOUT_SECONDS" \
+    "${gate_args[@]}" \
+    >/tmp/mev-ab-candidate-gate.log 2>&1 &
+  GATE_WORKER_PID=$!
+  local gate_worker_ready=0 gate_worker_pgid gate_status
+  for _ in $(seq 1 50); do
+    kill -0 "$GATE_WORKER_PID" 2>/dev/null || break
+    gate_worker_pgid=$(ps -o pgid= -p "$GATE_WORKER_PID" 2>/dev/null | tr -d ' ' || true)
+    if [ "$gate_worker_pgid" = "$GATE_WORKER_PID" ]; then
+      gate_worker_ready=1
+      break
+    fi
+    sleep 0.1
+  done
+  if [ "$gate_worker_ready" != "1" ]; then
+    stop_gate_worker
+    die "production candidate gate worker failed to start (see /tmp/mev-ab-candidate-gate.log)"
+  fi
+  if wait "$GATE_WORKER_PID"; then
+    gate_status=0
+  else
+    gate_status=$?
+  fi
+  stop_gate_worker
+  [ "$gate_status" = "0" ] \
     || die "production candidate gate failed (see /tmp/mev-ab-candidate-gate.log)"
+  assert_port_free "$EVIDENCE_PROXY_PORT"
   run_preflight_safely
   [ "$(systemctl show -p MainPID --value "$A_UNIT")" = "$gate_a_pid" ] \
     || die "champion PID changed during candidate replay"

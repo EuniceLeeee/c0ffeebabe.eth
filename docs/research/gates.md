@@ -137,7 +137,9 @@ the second live searcher starts. It requires one `production_evidence` object pr
   self-reported command;
 
 - a real on-chain transaction whose successful receipt, block, positive net PnL and canonical
-  `winner_style=atomic_loop` are recomputed from the local archive node at deploy time. Block-scan requires
+  `winner_style=atomic_loop` are recomputed from the champion's configured private archive endpoint at
+  deploy time. This endpoint is evidence-only; both live A/B runtimes remain pinned to the same local reth.
+  Block-scan requires
   `source_shape=atomic_state_arb`; dual backrun additionally verifies its declared earlier victim and exact
   pre/post counterfactual;
 - a fresh non-author classification review confirming the sample is in scope;

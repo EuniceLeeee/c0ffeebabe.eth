@@ -213,7 +213,8 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    `expected_runtime_view_delta=true` was predeclared
    (otherwise `0`). It validates
    the schema-v3 production candidate gate; recomputes the sample's receipt/block, PnL, winner style and
-   victim independence from local reth; executes the trusted dual-worktree parent-state hunt; binds the
+   victim independence through the champion's configured private archive endpoint (evidence only; live A/B
+   stay pinned to the same local reth); executes the trusted dual-worktree parent-state hunt; binds the
    report to the requested experiment/branch/base/input declarations and exact frozen challenger SHA; and requires a deployable
    listener runtime diff with no mixed analysis/governance/dependency-script edits. The trusted replay source
    comes from a clean detached checkout of the frozen A SHA, not the mutable deployed working tree; ignored

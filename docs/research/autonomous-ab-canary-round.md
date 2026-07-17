@@ -69,7 +69,7 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    <docs/research/reports/ab-...-hermes.md> <allow-view-delta>`;
    pass `1` only when the schema-v3 journal predeclares `expected_runtime_view_delta=true`, else `0`.
    Declare `lane_mode=dual` and run the trusted wrapper with
-   `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`; MEV-Share stays off. The wrapper recomputes source shape, winner style and net PnL from local reth, executes the declared
+   `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`; MEV-Share stays off. The wrapper recomputes source shape, winner style and net PnL through the champion's configured private archive endpoint while keeping both live runtimes on local reth, executes the declared
    existing pinned replay, binds all deployment identity/config declarations, and rejects non-runtime or
    mixed tooling/governance challengers. Direct B `systemd-run` or challenger-owned deploy code is invalid.
 2. Run the predeclared paired-block window with both atomic block-scan and public-mempool backrun active on A
