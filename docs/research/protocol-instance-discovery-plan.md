@@ -16,14 +16,30 @@
   (命名即债务标记),是本计划 Slice C 的清除对象。
 - conformance(route-adapters)13/13 实跑 PASS。
 
-**声明档接口自证(declared-venue attestation,后续追加)**:各 protocol adapter 的 `buildEdges`
-在建边前用 venue 自身接口 eth_call 核对声明绑定 —— wsteth `stETH()`、psm `gem()/dai()`、
-erc4626 标准分支 `asset()==fixedTokenIn`(silo 分支跳过:fixed 字段不喂边,行为验证归 fork 收据)、
-hgusdc 经 `HGUSDC.asset()`;goldx/rocksolid 无 token-address view,attest 报价依赖的
-`unit()`/`convertToShares()` 活性,pair 保持 code-owned。失败 = 该 pool 建边失败(进
-`buildTokenGraphWithResults.failed`,boot 日志可见)。这是 **pin 的漂移防护,不是准入**
-——Slice C 的 attestIdentity(行为即身份)仍按原设计另行实现,`asset()` 可读单独不构成
-准入身份的边界不变。conformance 扩为 14/14(正反例 + silo 跳过)。
+**声明档接口自证(declared-venue attestation,`106d1b5` + boot 日志 follow-up)**:各 protocol
+adapter 的 `buildEdges` 在建边前用 venue 自身接口 eth_call 核对声明绑定 —— wsteth `stETH()`、
+psm `gem()/dai()`、erc4626 标准分支 `asset()==fixedTokenIn`(silo 分支跳过:fixed 字段不喂边,
+行为验证归 fork 收据)、hgusdc 经 `HGUSDC.asset()==声明 tokenOut`(router 本体无可查 view,
+其地址绑定靠 trusted-singleton-seed 身份门 + final sim);goldx/rocksolid 无 token-address view,
+attest 报价依赖的 `unit()`/`convertToShares()` 活性,pair 保持 code-owned。失败 = 该 pool 建边
+失败进 `buildTokenGraphWithResults.failed`,boot(backrun+blockscan)与 refresh 三条路径均逐
+pool 打日志(cap 5 + 溢出计数)。conformance 扩为 14/14(正反例 + silo 跳过)。fork 级 flip
+因环境网络策略未跑,按 gates.md 记 `implemented`。
+
+**硬编码三态定论(D-005,勿重开)**:
+1. **venue 地址 pin = 身份根,保留**。单例无 factory/registry 可反查,pin 是 attest 的锚点
+   (宪法 §2 infrastructure-singleton 豁免);Ubiquity 型"pin 权威 + `hasRole` 派生"仅当链上
+   存在权威合约时可用,GOLDx/RockSolid 类无权威 → pin 不可再削。
+2. **token pair 声明 = 被 attest 的预期值**。字面还在代码里,但从"无条件断言"降级为"合约
+   接口核对不过即拒"。**核对(fail-closed)而非派生(open-ended)**:派生模式下合约升级返回
+   意外地址会静默建边指向陌生 token;且 pair 常量织入 quote/plan 层(`quotePreparedPSM` 精度、
+   `quoteGoldxMint` 守卫、`psm.buildPlanFragment` 方向判定),仅建边点派生 = 假去除。单例真
+   派生 = Slice C `enumerateRoutes` 形态,等 erc4626 家族管道走通后再评估,不单独立项。
+3. **goldx/rocksolid pair = 残余 code-owned**(合约不暴露 token view,链上无物可核),活性
+   attest + final sim(自己在 fork 执行该 pair)兜底。
+   交易时点的 eth_call 与建边时点读的是**同一静态 view,时点不产生新信息**;从交易 trace 提取
+   in/out 属行为证据,只做检测/候选提名(观察侧 + Slice E 隔离区),不做准入 —— 行为可仿冒
+   (蜜罐流),准入证据链固定为 pin 身份根 → 接口 attest → final sim 实测。
 
 ## 1. 模型:Instance 与 Route 两层(已核实的代码约束)
 

@@ -22,7 +22,6 @@ import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner, type CandidatePlan } from "./planner/planner.js";
 import {
-  buildTokenGraph,
   buildTokenGraphWithResults,
   buildTokenIndex,
   POOL_REGISTRY,
@@ -345,15 +344,16 @@ function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[])
 
 function logRuntimeRefreshFailures(
   failed: Array<{ pool: PoolEntry; reason: string }>,
+  context = "refresh retryable",
 ): void {
   for (const item of failed.slice(0, 5)) {
     console.log(
-      `[searcher/live] refresh retryable pool=${poolRegistryKey(item.pool)} ` +
+      `[searcher/live] ${context} pool=${poolRegistryKey(item.pool)} ` +
         `reason=${item.reason}`,
     );
   }
   if (failed.length > 5) {
-    console.log(`[searcher/live] refresh retryable additional=${failed.length - 5}`);
+    console.log(`[searcher/live] ${context} additional=${failed.length - 5}`);
   }
 }
 
@@ -916,9 +916,15 @@ async function main(): Promise<void> {
     strategyViews.backrun,
   );
   const graph = backrunGraphBuild.edges;
+  logRuntimeRefreshFailures(backrunGraphBuild.failed, "graph build skipped");
   let blockScanGraph: TokenEdge[] | undefined;
   if (enableBlockScan) {
-    blockScanGraph = await buildTokenGraph(mainnetBackend, strategyViews.blockscan);
+    const blockscanGraphBuild = await buildTokenGraphWithResults(
+      mainnetBackend,
+      strategyViews.blockscan,
+    );
+    blockScanGraph = blockscanGraphBuild.edges;
+    logRuntimeRefreshFailures(blockscanGraphBuild.failed, "blockscan graph build skipped");
     blockScanPlanner?.setGraph(blockScanGraph);
     const blockscanGraphHash = hashTokenGraph(blockScanGraph);
     console.log(
