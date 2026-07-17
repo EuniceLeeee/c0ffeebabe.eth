@@ -9,7 +9,8 @@
 3. 单笔交易通常不调用 `census-gap`，因为它解决窗口枚举，不解决单笔深挖。
 4. `graph-in` 只说明生产快照成员关系；“生产能复现”必须继续看到成功 TokenEdge、scanner 自发枚举、quote、plan 和 final sim。
 5. 如果 postmortem 因无法区分核心闭环与利润处置而输出 `MANUAL REQUIRED`，这是 fail-closed；用 token continuity 和可信 replay 消歧，不能把全部 touched venues 强行拼成路线。
-6. 漏斗归因必须锚定 **tx 时刻生效的输入快照**，不是今天的重建产物。universe 成员关系以节点 hash-pin 文件为准（`/opt/MEV-runtime/universe/active-pools-<sha>.json`，按部署/进程启动时间选出 tx 时刻实际加载的那份；“当前生效”以运行进程 env `SEARCHER_POOL_UNIVERSE_PATH` 为真源）。“当时为何漏”用 tx 时刻 pin，“当前能否复现”用当前 pin 或冻结 universe——两问分开锚定、分开作答。用 cron 刚重建的 active-pools 回答历史成员关系 = 锚错时点，结论作废（type case：`0x14026eed…` 首查用了窗口起点晚于 tx 90 分钟的重建文件，得出与 tx 时刻 pin 相反的准入结论）。dust 池的成员身份随 2 天活动窗口闪烁，任何单一快照都不可外推到其他时点。
+6. 漏斗归因必须锚定 **tx 时刻生效的输入快照**，不是今天的重建产物。universe 成员关系以节点 hash-pin 文件为准（`/opt/MEV-runtime/universe/active-pools-<sha>.json`，按部署/进程启动时间选出 tx 时刻实际加载的那份；“当前生效”以运行进程 env `SEARCHER_POOL_UNIVERSE_PATH` 为真源）。“当时为何漏”用 tx 时刻 pin，“当前能否复现”用当前 pin 或冻结 universe——两问分开锚定、分开作答。用 cron 刚重建的 active-pools 回答历史成员关系 = 锚错时点，结论作废（type case：`0x14026eed…` 首查用了窗口起点晚于 tx 90 分钟的重建文件，得出与 tx 时刻 pin 相反的准入结论）。dust 池的成员身份随 2 天活动窗口闪烁，任何单一快照都不可外推到其他时点。“现建对照”实验必须同时声明建图所用 builder 代码版本——同一窗口，不同代码建出的 universe 不同（type case：58f2045 引入 factory-call-provisional 前后，未知 factory V2 pair 的准入相反）。
+7. **禁止 look-ahead 输入**：复现判定与 §8 验收的冻结 universe，窗口必须止于 tx 块之前（`toBlock ≤ tx_block - 1`，或直接用 tx 时刻生效的 pin）。窗口含 tx 块的 universe 已被该 tx 自身的 swap 污染——死池正是被竞争者这笔交易注入 universe 的；它只能证明“事后 2 天内看得见”，不能证明“当时能自发抓到”。type case：`0x14026eed…` 的 uCR/WETH pair 在含 tx 窗口的 pin 里存在，在所有 pre-tx 窗口（含 tx 时刻现建）都不存在；用含 tx 的 pin 判定会得出“只缺 adapter”的假结论。
 
 ## 1. 结论
 
@@ -94,6 +95,7 @@ Gap 定位到第一个失败阶段。`fixed` 必须由同一历史输入的阶�
 ## 8. 验收
 
 - **失败样本：** `<tx hash>`
+- **冻结 universe 锚：** `<pin 标识或重建参数；窗口必须 toBlock ≤ tx_block - 1（§0.7 禁止 look-ahead）+ 建图代码 SHA>`
 - **baseline：** `<first failing stage>`
 - **fix commit：** `<sha or none>`
 - **可信命令：** `<existing pinned harness>`
