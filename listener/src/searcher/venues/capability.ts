@@ -191,10 +191,16 @@ export function findVenueCapability(venue: string | null | undefined): VenueCapa
 
 export function findVenueByFactory(factory: string | null | undefined): VenueCapability | null {
   if (!factory) return null;
-  return VENUE_CAPABILITIES.find((entry) =>
+  const matches = VENUE_CAPABILITIES.filter((entry) =>
     entry.discovery.mode === "factory" &&
     entry.discovery.factories.some((pattern) => addressPatternMatches(pattern, factory)),
-  ) ?? null;
+  );
+  // An explicit unsupported identity must win over an auto-generated V2 clone.
+  // Otherwise a dynamic snapshot entry could shadow PanoramaSwap/other known
+  // non-standard factories simply because V2 lineages are projected first.
+  return matches.find((entry) =>
+    !entry.runtimeAdapter || !entry.discoverable || !entry.quotable || !entry.buildable
+  ) ?? matches[0] ?? null;
 }
 
 export function findVenueByPoolRegistry(registry: string | null | undefined): VenueCapability | null {

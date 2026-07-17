@@ -18,6 +18,7 @@
     "searcher:ac3": "tsx src/searcher/test/ac3.ts",
     "searcher:liveready": "tsx src/searcher/test/live-readiness.ts",
     "searcher:pool-universe": "tsx src/searcher/build-active-pool-universe.ts",
+    "refresh-v2-lineages": "node --import tsx src/searcher/refresh-v2-lineages.ts",
     "v4-backfill-poolid": "node --import tsx src/searcher/backfill-v4-poolid.ts",
     "auto-close-route-gap": "node --import tsx src/searcher/auto-close-route-gap.ts",
     "auto-close-router-gap": "node --import tsx src/searcher/auto-close-router-gap.ts",
@@ -108,6 +109,7 @@
     "searcher:taxonomy": "node --import tsx src/searcher/test/taxonomy.ts",
     "searcher:universe-split": "node --import tsx src/searcher/test/universe-split.ts",
     "searcher:venue-identity": "node --import tsx src/searcher/test/venue-identity.ts",
+    "searcher:v2-lineage-refresh": "node --import tsx src/searcher/test/v2-lineage-refresh.ts",
     "searcher:standing-guard": "node --import tsx src/searcher/test/standing-guard.ts",
     "searcher:live": "tsx src/searcher/main.ts",
     "searcher:protocol-loop": "tsx src/searcher/test/protocol-loop-execute.ts"

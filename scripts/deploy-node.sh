@@ -389,6 +389,76 @@ echo "SEARCHER_REVM_SIM_BIN=$REVM_RUNTIME_BIN" >> "$tmp"
 canonicalize_env "$tmp" || { rm -f "$tmp"; abort_runtime "could not bind runtime commit"; }
 cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 
+# ── V2 factory/fee lineage refresh (one snapshot shared by every process) ──
+V2_LINEAGE_LOOKBACK_BLOCKS="${V2_LINEAGE_LOOKBACK_BLOCKS:-7200}"
+V2_LINEAGE_DIR=/opt/MEV-runtime/v2-lineages
+mkdir -p "$V2_LINEAGE_DIR" \
+  || abort_runtime "could not create V2 lineage snapshot directory"
+V2_LINEAGE_TMP="$V2_LINEAGE_DIR/.v2-lineages.refresh.$$.json"
+V2_LINEAGE_CURRENT=$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")
+V2_LINEAGE_PINNED_PATH="${V2_LINEAGE_PINNED_PATH:-}"
+V2_LINEAGE_SNAPSHOT=""
+if [ -n "$V2_LINEAGE_CURRENT" ] && [ ! -f "$V2_LINEAGE_CURRENT" ]; then
+  abort_runtime "configured V2 lineage snapshot is missing: $V2_LINEAGE_CURRENT"
+fi
+if [ -n "$V2_LINEAGE_PINNED_PATH" ]; then
+  [ -f "$V2_LINEAGE_PINNED_PATH" ] \
+    || abort_runtime "pinned V2 lineage snapshot is missing: $V2_LINEAGE_PINNED_PATH"
+  V2_LINEAGE_HASH=$(sha256sum "$V2_LINEAGE_PINNED_PATH" | awk '{print $1}')
+  [[ "$V2_LINEAGE_HASH" =~ ^[0-9a-f]{64}$ ]] \
+    || abort_runtime "pinned V2 lineage snapshot hash is invalid"
+  V2_LINEAGE_SNAPSHOT="$V2_LINEAGE_PINNED_PATH"
+  say "using pinned V2 lineages: hash=$V2_LINEAGE_HASH"
+elif say "refreshing V2 factory/fee lineages (${V2_LINEAGE_LOOKBACK_BLOCKS} blocks)…"; \
+   timeout 240 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+       V2_LINEAGE_OUT="$V2_LINEAGE_TMP" \
+       SEARCHER_V2_LINEAGES_PATH="$V2_LINEAGE_CURRENT" \
+       sh -c 'cd "$0/listener" && npm run refresh-v2-lineages -- --blocks "$1"' \
+         "$REPO" "$V2_LINEAGE_LOOKBACK_BLOCKS" \
+       >/tmp/deploy-v2-lineages.log 2>&1 \
+   && [ -s "$V2_LINEAGE_TMP" ] \
+   && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("chainId")==1 and len(d.get("lineages",[]))>0 else 1)' "$V2_LINEAGE_TMP"; then
+  V2_LINEAGE_HASH=$(sha256sum "$V2_LINEAGE_TMP" | awk '{print $1}')
+  [[ "$V2_LINEAGE_HASH" =~ ^[0-9a-f]{64}$ ]] \
+    || abort_runtime "generated V2 lineage snapshot hash is invalid"
+  V2_LINEAGE_SNAPSHOT="$V2_LINEAGE_DIR/v2-lineages-$V2_LINEAGE_HASH.json"
+  if [ ! -f "$V2_LINEAGE_SNAPSHOT" ]; then
+    chmod 444 "$V2_LINEAGE_TMP"
+    mv "$V2_LINEAGE_TMP" "$V2_LINEAGE_SNAPSHOT"
+  else
+    rm -f "$V2_LINEAGE_TMP"
+  fi
+  [ "$(sha256sum "$V2_LINEAGE_SNAPSHOT" | awk '{print $1}')" = "$V2_LINEAGE_HASH" ] \
+    || abort_runtime "content-addressed V2 lineage snapshot failed verification"
+else
+  rm -f "$V2_LINEAGE_TMP" 2>/dev/null || true
+  if [ -n "$V2_LINEAGE_CURRENT" ]; then
+    say "WARNING: V2 lineage refresh failed/timed out — keeping $V2_LINEAGE_CURRENT."
+  else
+    say "WARNING: V2 lineage refresh failed/timed out — keeping the built-in verified baseline."
+  fi
+fi
+# Validate the exact snapshot selected for the next process with the same
+# production parser the searcher imports. This deliberately runs before the
+# lineage env rewrite and systemd restart, so an invalid pinned/current fallback
+# is never persisted or started. The existing deploy-wide fail-closed policy
+# still applies. An empty path validates the bundled baseline.
+V2_LINEAGE_VALIDATION_PATH="${V2_LINEAGE_SNAPSHOT:-$V2_LINEAGE_CURRENT}"
+( cd "$REPO/listener" \
+    && env SEARCHER_V2_LINEAGES_PATH="$V2_LINEAGE_VALIDATION_PATH" \
+      node --input-type=module -e \
+        'const { loadV2Lineages } = await import("./dist/searcher/venues/v2-lineage.js"); loadV2Lineages(process.env.SEARCHER_V2_LINEAGES_PATH || undefined);' ) \
+  || abort_runtime "selected V2 lineage snapshot failed production validation"
+if [ -n "$V2_LINEAGE_SNAPSHOT" ]; then
+  tmp=$(mktemp)
+  grep -v '^SEARCHER_V2_LINEAGES_PATH=' "$ENVF" > "$tmp" || true
+  echo "SEARCHER_V2_LINEAGES_PATH=$V2_LINEAGE_SNAPSHOT" >> "$tmp"
+  canonicalize_env "$tmp" || { rm -f "$tmp"; abort_runtime "could not pin V2 lineage snapshot"; }
+  cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
+  V2_LINEAGE_COUNT=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["lineages"]))' "$V2_LINEAGE_SNAPSHOT")
+  say "V2 lineages pinned: hash=$V2_LINEAGE_HASH lineages=$V2_LINEAGE_COUNT"
+fi
+
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
 REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
 # V4 backfill (per-poolId backward Initialize search, default 2M blocks) is the scan's perf killer:
@@ -413,6 +483,7 @@ if [ "$REINDEX_HEAD" -gt 0 ] && [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
   say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, head=$REINDEX_HEAD, $((REINDEX_HEAD - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
 elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"; \
    timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+       SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
        POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS="$REINDEX_V4_BACKFILL" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \

@@ -161,6 +161,10 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /SEARCHER_RUNTIME_COMMIT=\$DEPLOY_COMMIT/);
   assert.match(script, /SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=\$ROUTER_SNAPSHOT/);
   assert.match(script, /router allowlist pinned: hash=\$ROUTER_HASH/);
+  assert.match(script, /V2_LINEAGE_PINNED_PATH/);
+  assert.match(script, /loadV2Lineages/);
+  assert.match(script, /selected V2 lineage snapshot failed production validation/);
+  assert.match(script, /V2 lineages pinned: hash=\$V2_LINEAGE_HASH/);
   assert.match(script, /REVM_CARGO=\$\{REVM_CARGO:-\/root\/\.cargo\/bin\/cargo\}/);
   assert.match(script, /CARGO_TARGET_DIR="\$REVM_BUILD_DIR" "\$REVM_CARGO" build --release --locked/);
   assert.match(script, /REVM_RUNTIME_BIN="\$REVM_RUNTIME_DIR\/revm-sim-\$REVM_RUNTIME_HASH"/);
@@ -193,6 +197,9 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /SEARCHER_ENABLE_MEV_SHARE=\$expected_mev_share/);
   assert.match(script, /AB_VICTIM_MODE must be public-only\|both/);
   assert.match(script, /SEARCHER_ANVIL_PORT=8566/);
+  assert.match(script, /SEARCHER_V2_LINEAGES_PATH may not be an A\/B config delta/);
+  assert.match(script, /v2_lineage_snapshot_path/);
+  assert.match(script, /v2_lineage_snapshot_hash/);
   assert.match(script, /SEARCHER_EAGER_STATE_BACKEND=\$expected_backrun/);
   assert.match(script, /challenger_victim_stream_timeout/);
   assert.match(script, /infrastructure shakedown must run identical searcher code/);
