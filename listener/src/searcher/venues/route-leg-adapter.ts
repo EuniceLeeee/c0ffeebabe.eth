@@ -165,11 +165,61 @@ export type DeclaredProtocolVenue = Readonly<
   }
 >;
 
+/** Identity: the unit that enters the registry (one instance, one PoolEntry). */
+export interface ProtocolInstance {
+  readonly target: string;
+  readonly adapter: PoolEntry["adapter"];
+}
+
+export interface ProtocolCandidate {
+  readonly target: string;
+  readonly source: "universe-token" | "parked";
+}
+
+/** Behavior: the unit routes/quotes/encodes are derived from. */
+export interface ProtocolRoute {
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly action: ProtocolAction;
+  readonly edgeAdapterId: string;
+}
+
+export interface RouteProbeResult {
+  readonly ok: boolean;
+  readonly reason: string | null;
+  /** Fork receipt-level behavior verification (admission grade, Slice C); preview-only probes stay false. */
+  readonly receiptVerified: boolean;
+}
+
+export interface DiscoveryContext {
+  readonly backend: TokenQueryBackend;
+  readonly universeTokens: readonly string[];
+}
+
+export interface ProbeContext {
+  readonly backend: TokenQueryBackend;
+}
+
+/**
+ * Instance discovery hooks (discovery plan §2). attestIdentity is the address
+ * admission gate: null = the identity root does not recognise this address —
+ * the candidate is quarantined and must never reach enumerate/probe/graph.
+ */
+export interface ProtocolInstanceDiscovery {
+  discoverInstances(ctx: DiscoveryContext): Promise<ProtocolCandidate[]>;
+  attestIdentity(candidate: ProtocolCandidate, ctx: ProbeContext): Promise<ProtocolInstance | null>;
+  enumerateRoutes(instance: ProtocolInstance, ctx: ProbeContext): Promise<ProtocolRoute[]>;
+  probeRoute(route: ProtocolRoute, ctx: ProbeContext): Promise<RouteProbeResult>;
+}
+
 export interface ProtocolConversionAdapter extends RouteLegAdapter {
   readonly kind: "protocol-conversion";
   readonly declaredVenues: readonly DeclaredProtocolVenue[];
   /** Required only for families whose instances must come from discovery/probe admission. */
   readonly undeclaredVenueReason: string | null;
+  /** Absent = declaredVenues only (singletons stay in that tier permanently). */
+  readonly discovery?: ProtocolInstanceDiscovery;
 }
 
 export interface CompatRouteLegAdapter extends RouteLegAdapter {

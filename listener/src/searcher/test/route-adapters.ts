@@ -23,6 +23,7 @@ import {
 } from "../templates/path-template.js";
 import { RouteLegRegistry } from "../venues/route-leg-registry.js";
 import { createRouteAdapterRegistry } from "../venues/route-adapter-registry.js";
+import { runProtocolDiscoveryShadow } from "../venues/protocol-discovery.js";
 import type { SwapAdapter } from "../venues/route-leg-adapter.js";
 
 function assert(cond: boolean, message: string): asserts cond {
@@ -285,6 +286,161 @@ async function main(): Promise<void> {
   );
   assert(siloEdges.length === 1, "silo vault must build without asset() attestation");
   console.log("[route-adapters] declared venue identity attestation: PASS");
+
+  const discoveryIface = new ethers.Interface([
+    "function asset() view returns (address)",
+    "function totalAssets() view returns (uint256)",
+    "function convertToShares(uint256 assets) view returns (uint256 shares)",
+    "function convertToAssets(uint256 shares) view returns (uint256 assets)",
+    "function previewDeposit(uint256 assets) view returns (uint256 shares)",
+    "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+  ]);
+  const vaultBackend = (consistent: boolean): TokenQueryBackend => ({
+    async call(req) {
+      const selector = req.data.slice(0, 10);
+      const fnFor = (name: string) => discoveryIface.getFunction(name)!;
+      if (selector === fnFor("asset").selector) {
+        return discoveryIface.encodeFunctionResult("asset", [token0]);
+      }
+      if (selector === fnFor("totalAssets").selector) {
+        return discoveryIface.encodeFunctionResult("totalAssets", [10n ** 12n]);
+      }
+      for (const doubling of ["convertToShares", "previewDeposit"] as const) {
+        if (selector === fnFor(doubling).selector) {
+          const amount = BigInt(discoveryIface.decodeFunctionData(doubling, req.data)[0]);
+          return discoveryIface.encodeFunctionResult(doubling, [amount * 2n]);
+        }
+      }
+      for (const halving of ["convertToAssets", "previewRedeem"] as const) {
+        if (selector === fnFor(halving).selector) {
+          const amount = BigInt(discoveryIface.decodeFunctionData(halving, req.data)[0]);
+          return discoveryIface.encodeFunctionResult(halving, [consistent ? amount / 2n : amount]);
+        }
+      }
+      throw new Error(`unexpected discovery selector ${selector}`);
+    },
+  });
+  const silentLog = (): void => {};
+  const erc4626RouteAdapter = PRODUCTION_ROUTE_ADAPTERS.protocols.find(
+    (candidate) => candidate.id === "protocol:erc4626",
+  );
+  assert(erc4626RouteAdapter !== undefined, "erc4626 route adapter missing");
+  const shadowConsistent = await runProtocolDiscoveryShadow({
+    adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+    backend: vaultBackend(true),
+    universeTokens: [pair, pair],
+    enableProtocolEdges: true,
+    parkedCandidates: [token1],
+    log: silentLog,
+  });
+  assert(shadowConsistent.adapters.length === 1, "only discovery-bearing adapters may report");
+  const erc4626Report = shadowConsistent.adapters[0];
+  assert(erc4626Report.adapterId === "protocol:erc4626", `discovery adapter ${erc4626Report.adapterId}`);
+  assert(erc4626Report.candidates === 1, `duplicate candidates must dedupe: ${erc4626Report.candidates}`);
+  assert(erc4626Report.attested === 1 && erc4626Report.quarantined === 0, "consistent vault must attest");
+  assert(erc4626Report.routes.length === 2, `erc4626 discovery route count ${erc4626Report.routes.length}`);
+  assert(
+    erc4626Report.routes.every((verdict) =>
+      verdict.probe.ok && !verdict.wouldAdmit && verdict.wouldAdmitReason === "receipt_verification_pending"
+    ),
+    "preview-grade probes must never report admissible",
+  );
+  assert(
+    erc4626Report.parkedWouldDequeue.length === 1 &&
+      erc4626Report.parkedWouldDequeue[0] === token1,
+    "attest-passing parked candidate must report as dequeueable",
+  );
+  const shadowInconsistent = await runProtocolDiscoveryShadow({
+    adapters: [erc4626RouteAdapter],
+    backend: vaultBackend(false),
+    universeTokens: [pair],
+    enableProtocolEdges: true,
+    log: silentLog,
+  });
+  assert(
+    shadowInconsistent.adapters[0].quarantined === 1 &&
+      shadowInconsistent.adapters[0].attested === 0 &&
+      shadowInconsistent.adapters[0].routes.length === 0,
+    "convertTo* round-trip mismatch must quarantine before enumerate/probe",
+  );
+  const discoveryCalls: string[] = [];
+  const fakeDiscoveryAdapter = {
+    ...erc4626RouteAdapter,
+    id: "protocol:fake-discovery" as const,
+    requiresProtocolEdgesFlag: true,
+    discovery: {
+      async discoverInstances() {
+        return [
+          { target: token0, source: "universe-token" as const },
+          { target: token1, source: "universe-token" as const },
+        ];
+      },
+      async attestIdentity(candidate: { target: string }) {
+        return candidate.target === token0
+          ? null
+          : { target: candidate.target, adapter: "erc4626" as const };
+      },
+      async enumerateRoutes(instance: { target: string }) {
+        discoveryCalls.push(`enumerate:${instance.target}`);
+        return [
+          {
+            target: instance.target, tokenIn: token0, tokenOut: instance.target,
+            action: "wrap" as const, edgeAdapterId: "erc4626-deposit",
+          },
+          {
+            target: instance.target, tokenIn: instance.target, tokenOut: token0,
+            action: "redeem" as const, edgeAdapterId: "erc4626-redeem",
+          },
+        ];
+      },
+      async probeRoute(route: { edgeAdapterId: string }) {
+        discoveryCalls.push(`probe:${route.edgeAdapterId}`);
+        if (route.edgeAdapterId === "erc4626-redeem") throw new Error("probe revert");
+        return { ok: true, reason: null, receiptVerified: true };
+      },
+    },
+  };
+  const shadowFlagOff = await runProtocolDiscoveryShadow({
+    adapters: [fakeDiscoveryAdapter],
+    backend: backend,
+    universeTokens: [],
+    enableProtocolEdges: false,
+    log: silentLog,
+  });
+  const fakeReport = shadowFlagOff.adapters[0];
+  assert(fakeReport.quarantined === 1, "attest null must quarantine");
+  assert(
+    !discoveryCalls.some((entry) => entry.includes(token0.toLowerCase()) || entry.includes(token0)),
+    "quarantined candidate must never reach enumerate/probe",
+  );
+  const depositVerdict = fakeReport.routes.find((v) => v.route.edgeAdapterId === "erc4626-deposit");
+  const redeemVerdict = fakeReport.routes.find((v) => v.route.edgeAdapterId === "erc4626-redeem");
+  assert(depositVerdict !== undefined && redeemVerdict !== undefined, "fake discovery routes missing");
+  assert(
+    !depositVerdict.wouldAdmit && depositVerdict.wouldAdmitReason === "protocol_edges_flag_off",
+    "flag gate must be re-executed on the coordinator side (P0-3)",
+  );
+  assert(
+    !redeemVerdict.probe.ok && !redeemVerdict.wouldAdmit &&
+      redeemVerdict.wouldAdmitReason.startsWith("probe_failed"),
+    "probe revert must fail closed",
+  );
+  const shadowFlagOn = await runProtocolDiscoveryShadow({
+    adapters: [fakeDiscoveryAdapter],
+    backend: backend,
+    universeTokens: [],
+    enableProtocolEdges: true,
+    log: silentLog,
+  });
+  const admittedVerdict = shadowFlagOn.adapters[0].routes.find(
+    (v) => v.route.edgeAdapterId === "erc4626-deposit",
+  );
+  assert(
+    admittedVerdict !== undefined && admittedVerdict.wouldAdmit &&
+      admittedVerdict.wouldAdmitReason === "admissible",
+    "verified route with flag on must report admissible",
+  );
+  console.log("[route-adapters] shadow discovery coordinator: PASS");
 
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };
   const edges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, backend);
@@ -573,7 +729,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (14/14)");
+  console.log("route-adapters PASS (15/15)");
 }
 
 await main();

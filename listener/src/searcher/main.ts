@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -41,6 +41,7 @@ import {
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_ROUTE_ADAPTERS,
 } from "./venues/production-registry.js";
+import { runProtocolDiscoveryShadow } from "./venues/protocol-discovery.js";
 import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
 import { isLandedSwapTopic } from "./venues/landed-event-registry.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
@@ -340,6 +341,21 @@ function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[])
   console.log(
     `[searcher/live] venue identity rejected source=${source} count=${rejected.length} ${summary}`,
   );
+}
+
+function loadParkedDiscoveryCandidates(): string[] {
+  const queuePath = resolve("searcher", "pools", "discovery-queue.json");
+  if (!existsSync(queuePath)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(queuePath, "utf8")) as {
+      queue?: Array<{ addr?: unknown }>;
+    };
+    return (parsed.queue ?? [])
+      .map((entry) => (typeof entry.addr === "string" ? entry.addr : ""))
+      .filter((addr) => addr.length > 0);
+  } catch {
+    return [];
+  }
 }
 
 function logRuntimeRefreshFailures(
@@ -934,6 +950,24 @@ async function main(): Promise<void> {
     );
   }
   const tokenIndex = buildTokenIndex(graph);
+
+  // Discovery plan Slice B: shadow-mode instance discovery. Structured logs
+  // only — the coordinator has no graph/refresh access, so admission cannot
+  // change here. Detached so live startup is not delayed; startup one-shot
+  // (no per-refresh re-attest) keeps the CU cost bounded.
+  if (process.env.SEARCHER_PROTOCOL_DISCOVERY_SHADOW !== "0") {
+    void runProtocolDiscoveryShadow({
+      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      backend: mainnetBackend,
+      universeTokens: [...tokenIndex.keys()],
+      enableProtocolEdges: config.enableProtocolEdges,
+      parkedCandidates: loadParkedDiscoveryCandidates(),
+    }).catch((err) => {
+      console.log(
+        `[searcher/live] protocol discovery shadow error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
   // for matching hint logs. Map: address → adapter type.

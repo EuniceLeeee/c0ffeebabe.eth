@@ -93,6 +93,19 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
 ## 3. 分相(每片独立合并,通道按 HISTORICAL-GAP 路由)
 
 ### Slice B — discovery coordinator(管道,shadow 模式)【deterministic → replay+smoke 直进 main】
+
+> **[IMPLEMENTED 2026-07-17]**(`claude/protocol-adapter-graph-fix-z8io2d`):
+> `venues/protocol-discovery.ts` `runProtocolDiscoveryShadow` — shadow by construction(无
+> graph/refresh 访问,只回 report + `protocol_discovery` 结构化日志);coordinator 侧强制
+> quarantine(attest null/throw 不得 enumerate/probe)、probe revert fail-closed、P0-3 flag 重
+> 执行、would_admit 需 `receiptVerified`(preview 级恒 false ⇒ 恒不 admissible)。erc4626 挂
+> 了 shadow 级 discovery 钩子(候选=universe token 集;attest=asset/totalAssets/convertTo*
+> 自洽;probe=preview 一致性)。main.ts 启动后 detached 一次性运行(`SEARCHER_PROTOCOL_
+> DISCOVERY_SHADOW=0` 关),parked 停车候选(discovery-queue.json)喂 attest 报 would-dequeue。
+> conformance 15/15(隔离/fail-closed/flag 门/去重/parked)。接口偏差:attest/enumerate/probe
+> 收 `ProbeContext{backend}` 而非裸 blockTag(attest 需要 backend 才能调链,计划签名系伪码)。
+> 未完:fork 环境 shadow 日志样本、graph SHA 逐位比对(需网络);receipt 级 probe、refresh
+> 喂入、召回比对与无 seed replay 全部属 Slice C【Hermes A/B】,此片零准入变更。
 - 新 coordinator:遍历注册 adapter → `discoverInstances` → **`attestIdentity`** → `enumerateRoutes`
   → `probeRoute` → 产 `PoolEntry` → 喂 `prepareRuntimePoolRefresh`(与 main.ts 现有
   `scanActivePools()` 喂法并列)。attest 失败 → quarantine,不进后续任何一步。
