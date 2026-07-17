@@ -202,6 +202,16 @@ test("production sample edge kinds include successful call-defined protocol legs
   const nested = traceCalls([call(GOLDX, "mint(address,uint256)")]);
   const matchesProtocolCall = (target: string, selector: string) =>
     ROUTE_CALLS.matchesProtocolCall(target, selector);
+  const discoveredSwapOnly = [{ address: POOL, adapter: "univ2" }];
+  assert.equal(
+    ROUTE_CALLS.matchesProtocolCall(
+      GOLDX,
+      ethers.id("mint(address,uint256)").slice(0, 10),
+      discoveredSwapOnly,
+    ),
+    true,
+    "attested swap facts must not hide fixed protocol identities from the production registry",
+  );
   assert.deepEqual(
     deriveProductionSampleEdgeKinds(logs, nested, matchesProtocolCall),
     ["flash", "swap", "protocol"],

@@ -69,20 +69,25 @@ async function loadRegistry(): Promise<ProductionRouteCallRegistry | null> {
       const normalizedSelector = selector.slice(0, 10).toLowerCase();
       if (!/^0x[a-f0-9]{8}$/.test(normalizedSelector)) return false;
 
-      for (const pool of poolFacts) {
-        if (pool.address.toLowerCase() !== normalizedTarget) continue;
+      // A runtime universe is primarily a discovered swap-pool snapshot and
+      // can omit fixed protocol-conversion identities such as GOLDx. Preserve
+      // those production registry facts while still admitting dynamic vaults
+      // supplied by the attested universe.
+      const matchesPool = (pool: ProductionRoutePoolFact): boolean => {
+        if (pool.address.toLowerCase() !== normalizedTarget) return false;
         const route = production.PRODUCTION_ROUTE_ADAPTERS.routeLegs.list().find((candidate) =>
           candidate.poolAdapters.some((adapter) => adapter === pool.adapter)
         );
-        if (route?.kind !== "protocol-conversion") continue;
-        if (route.edgeAdapterIds.some((edgeAdapterId) =>
+        if (route?.kind !== "protocol-conversion") return false;
+        return route.edgeAdapterIds.some((edgeAdapterId) =>
           findRouteActionAdapter(edgeAdapterId)?.matchTrace(
             normalizedTarget,
             normalizedSelector,
           ) ?? false
-        )) return true;
-      }
-      return false;
+        );
+      };
+      if (pools.some(matchesPool)) return true;
+      return poolFacts !== pools && poolFacts.some(matchesPool);
     }
 
     return Object.freeze({ pools, findRouteActionAdapter, matchesProtocolCall });
