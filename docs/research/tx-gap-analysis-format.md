@@ -67,6 +67,12 @@ tx 时刻 pin（§0.7 禁止 look-ahead），**当前状态**用 §1 审计基�
 `已支持/已覆盖`（adapter+准入都在）、`可闭合`（能力路径已定但未建/未准入，写明缺哪半）、
 `仍然缺失`（结构性缺口，写明层）。两列结论不一致时（修复落地或活动窗口闪烁）不得合并成单一判定。
 
+表格之后必须给出一行汇总读数（§7 裁决在路线层的直接投影）：
+
+- **新增缺失 adapter 后能否闭合：** `能 | 不能（剩余堵点：<层 + 具体 venue/池>）`
+  —— 假设所有"可闭合"腿的 adapter 都补齐，逐腿检查是否仍有"仍然缺失"腿：有任何一条即填
+  `不能` 并列出该腿的层与地址；全部消除才填 `能`。这一行防止"补 adapter"被误当成整环修复。
+
 只列维持本金闭合所必需的有序路线。flash principal、builder payment、利润换币、库存处置和无关 touch 单列，不能混成路线腿。
 
 - **路线外动作：** `<例如：核心环赚取 USDT 后再换 WETH，属于利润退出腿>`
@@ -153,6 +159,11 @@ pre-tx 锚 = 窗口 `[tx-14400, tx-1]` 现算 + tx 时刻 pin `4caf4b2f`；当�
 | uCR→WETH，V2 `0xd9dc4a…` | pre-tx 所有窗口 0 swap，不在 universe | **仍然缺失**（死池活动门盲区，归 arb-relevance） | fail |
 | WETH→USDT，V2 `0x3a8414…` | 19 笔活动但身份门拒未知 factory | 已覆盖（`58f2045` provisional 修复有证据） | pass |
 
+- **新增缺失 adapter 后能否闭合：不能（剩余堵点：pool/admission，uCR/WETH `0xd9dc4a…` 死池
+  不在任何 pre-tx universe 窗口）** —— 补齐 ubiquity-credit adapter 后腿 3 变 pass，但腿 4
+  仍缺边，环闭不上；该堵点归 arb-relevance/cold-pool 修复，不归 adapter 工作。
+
 示范要点：腿 3 两列不一致（当时无边 → 现在路径已定但未建）与腿 5 两列不一致（当时身份拒 →
 现已修复）各自写明原因，不合并；腿 4 是唯一双锚都缺的结构性缺口，`Gap 类型` 因此填
-`pool/admission`，不被腿 3 的 `可闭合` 稀释。
+`pool/admission`，不被腿 3 的 `可闭合` 稀释；汇总行"能否闭合 = 不能"正是 §7 裁决
+`adapter + 非 adapter 的 admission gap` 的路线层读数。
