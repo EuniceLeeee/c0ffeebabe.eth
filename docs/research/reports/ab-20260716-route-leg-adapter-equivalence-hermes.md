@@ -9,7 +9,7 @@
 - **problem_id:** route-leg-adapter-architecture-equivalence
 - **causal hypothesis:** routing venue identity, quote, warm, planning and encoding through explicit
   registries preserves semantic output while retaining at least 95% of the baseline paired performance.
-- **semantic success criterion:** the trusted RockSolid/Balancer V3 closed-loop replay reaches
+- **semantic success criterion:** the trusted tx149 GOLDx/Curve-underlying closed-loop replay reaches
   `final_sim_success` on both commits; live paired semantic outputs match; candidate p50 performance is at
   least 95% of baseline, with tail differences explained from paired evidence.
 - **change_class:** performance
@@ -20,8 +20,8 @@
 
 ## Deterministic Evidence
 
-- Existing trusted fixture: `listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json`.
-- Existing acceptance: `docs/research/reports/tx-gap-7ce631-rocksolid-balancer-v3.md` records scanner,
+- Existing trusted replay: `npm run searcher:blockscan-hunt-tx149`.
+- Existing acceptance: `docs/research/reports/ab-20260715-tx149-gap-repair-v2-hermes.md` records scanner,
   planner, quote, fork execution and positive EV closure.
 - Candidate uses the unchanged main-side `blockscan-hunt.ts`; no candidate harness or fixture changes.
 
@@ -78,11 +78,11 @@
   },
   "deterministic_gate": {
     "result": "pass",
-    "evidence": "unchanged RockSolid/Balancer V3 loop fixture records scanner admission, composed plan, positive quote, successful fork execution and positive net EV"
+    "evidence": "unchanged blockscan-hunt self-enumerated USDT-PAXG-GOLDx-USDx-USDT at parent 25535055 and fork-simulated net_profit_raw=442380"
   },
   "resolution_replay": {
     "cwd": "listener",
-    "argv": ["npm", "run", "searcher:loop-fork-gate", "--", "--fixture", "src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json", "--with-solver"],
+    "argv": ["npm", "run", "searcher:blockscan-hunt-tx149"],
     "timeout_seconds": 1200,
     "expected_transition": "final_sim_success remains final_sim_success with identical closed-loop route semantics"
   },
@@ -102,45 +102,45 @@
       "jit_lp": false
     },
     "sample": {
-      "tx_hash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
-      "block_number": 25535037,
-      "expected_net_profit_usd": 0.198,
-      "evidence": "canonical receipt and accepted fork fixture show a victim-independent atomic WETH closed loop with realized gross profit 150817806425095 wei",
+      "tx_hash": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
+      "block_number": 25535056,
+      "expected_net_profit_usd": 0.22099604616880186,
+      "evidence": "canonical tx-profit and trace show a conserving atomic loop; trusted fork replay returns positive net_profit_raw=442380",
       "expected_route": [
         {
           "adapterId": "univ3-swap",
           "slotKind": "swap",
-          "target": "0x553e9c493678d8606d6a5ba284643db2110df823",
-          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393"
+          "target": "0x7cb85f75e61226060453a997a7733f76707df337",
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x45804880de22913dafe09f4980848ece6ecbaf78"
         },
         {
-          "adapterId": "rocksolid-sync-deposit",
+          "adapterId": "goldx-mint",
           "slotKind": "protocol",
-          "target": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
-          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
-          "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7"
+          "target": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+          "tokenIn": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+          "tokenOut": "0x355c665e101b9da58704a8fddb5feef210ef20c0"
         },
         {
-          "adapterId": "balancer-v3-unlock",
+          "adapterId": "univ2-swap",
           "slotKind": "swap",
-          "target": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
-          "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
-          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393"
+          "target": "0xef6317e783b22b2a2fc073e68260450236c20779",
+          "tokenIn": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+          "tokenOut": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549"
         },
         {
-          "adapterId": "univ3-swap",
+          "adapterId": "curve-exchange-underlying",
           "slotKind": "swap",
-          "target": "0x553e9c493678d8606d6a5ba284643db2110df823",
-          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
-          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          "target": "0xfe0a8e9d60131404ffaee95b48ebf908f4d8d808",
+          "tokenIn": "0xeb269732ab75a6fd61ea60b06fe994cd32a83549",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7"
         }
       ]
     },
     "classification_review": {
       "verdict": "pass",
-      "reviewer": "Cicero adversarial_code_review",
-      "evidence": "fresh non-author review of the frozen refactor found no P0/P1, no sample-conditioned branch, and no change to the existing position-conserving RockSolid/Balancer route semantics"
+      "reviewer": "Cicero adversarial_code_review (2026-07-17 route-adapter A/B)",
+      "evidence": "fresh non-author review confirmed tx149 remains a victim-independent position-conserving dex-permissionless-protocol atomic loop, and audited 69e12b3..2a06229 without finding tx-hash, block, pool or rank special-casing; the registry refactor follows generic production paths"
     },
     "baseline_stage": "final_sim_success",
     "challenger_stage": "final_sim_success",
@@ -148,7 +148,7 @@
       "result": "pass",
       "cwd": "listener",
       "argv": ["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
-      "evidence": "trusted deployment gate reruns the unchanged parent-state hunt on both frozen worktrees; equivalence mode expects final_sim_success on both"
+      "evidence": "trusted deployment gate reruns the unchanged tx149 parent-state hunt on both frozen worktrees; equivalence mode expects final_sim_success on both"
     }
   },
   "analysis": {
@@ -163,8 +163,8 @@
       "capability_query": ["single-transaction", "causality", "pnl", "competitor-window", "classification", "block-scan"],
       "selected_tools": ["analysis:bundle-postmortem", "repo:scripts/census-gap.sh"],
       "catalog_check_exit_code": 0,
-      "evidence_manifest": "ab-20260716-route-leg-adapter-equivalence-tools.json",
-      "evidence_manifest_sha256": "c69041f80da2e694686158053111eec00312b3fcccaee7ba3d689fa77594399e"
+      "evidence_manifest": "ab-20260715-tx149-gap-repair-v2-tools.json",
+      "evidence_manifest_sha256": "f915fe1a0f74124eb296efb13b3fdf46906a7b4a1ce31eb878420a94074d1207"
     }
   },
   "final_verdict": "needs_escalation",
