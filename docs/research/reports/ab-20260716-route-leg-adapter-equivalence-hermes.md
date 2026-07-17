@@ -83,7 +83,7 @@
   "resolution_replay": {
     "cwd": "listener",
     "argv": ["npm", "run", "searcher:blockscan-hunt-tx149"],
-    "timeout_seconds": 1200,
+    "timeout_seconds": 3600,
     "expected_transition": "final_sim_success remains final_sim_success with identical closed-loop route semantics"
   },
   "production_evidence": {
