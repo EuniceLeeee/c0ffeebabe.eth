@@ -252,6 +252,13 @@ interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
 }
 
 function runCandidateReplay(observation: ProductionSampleObservation): void {
+  if (candidateContext?.requireStageAdvance === false
+      && experiment.production_evidence!.strategy_kind === "block-scan"
+      && experiment.production_evidence!.baseline_stage === "final_sim_success"
+      && experiment.production_evidence!.challenger_stage === "final_sim_success") {
+    runEquivalenceResolutionReplayPair(observation);
+    return;
+  }
   if (experiment.production_evidence!.strategy_kind === "backrun") {
     runBackrunCandidateReplay(observation);
     return;
@@ -292,6 +299,83 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
     sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
   );
   console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
+}
+
+function runEquivalenceResolutionReplayPair(observation: ProductionSampleObservation): void {
+  const baseline = runDeclaredResolutionReplay("baseline", fs.realpathSync(requiredArg("--base-root")));
+  const challenger = runDeclaredResolutionReplay("challenger", fs.realpathSync(requiredArg("--challenger-root")));
+  const sample = experiment.production_evidence!.sample;
+  const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
+  const expectedSwapPath = observation.arb_swap_path.map((step) => ({
+    pool_id: step.pool_id.toLowerCase(),
+    direction: step.direction,
+  }));
+  const expectedRoute = normalizeProductionRoute(sample.expected_route ?? []);
+  validateHuntResult(
+    "baseline resolution replay", baseline.result, "final_sim_success",
+    sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
+  );
+  validateHuntResult(
+    "challenger resolution replay", challenger.result, "final_sim_success",
+    sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
+  );
+  if (baseline.machine !== challenger.machine) {
+    throw new Error("equivalence resolution replay machine results differ between baseline and challenger");
+  }
+  console.log(`candidate_resolution_replay=pass machine=${baseline.machine}`);
+}
+
+function runDeclaredResolutionReplay(
+  label: string,
+  root: string,
+): { machine: string; result: BlockscanHuntResult } {
+  const replay = experiment.resolution_replay!;
+  const replayCwd = fs.realpathSync(path.resolve(root, replay.cwd));
+  if (replayCwd !== root && !replayCwd.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`${label} resolution replay cwd escapes the frozen runtime root`);
+  }
+  const childEnv = { ...process.env };
+  for (const key of Object.keys(childEnv)) {
+    if (key.startsWith("HUNT_") || key.startsWith("POOL_UNIVERSE_") || key.startsWith("AB_EXPECTED_")) {
+      delete childEnv[key];
+    }
+  }
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.npm_config_script_shell;
+  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  delete childEnv.TX149_REPLAY_RPC_URL;
+  childEnv.SEARCHER_LIVE_RPC_URL = requiredArg("--rpc");
+  childEnv.MAINNET_RPC_URL = requiredArg("--rpc");
+  const result = spawnSync(replay.argv[0], replay.argv.slice(1), {
+    cwd: replayCwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: (replay.timeout_seconds ?? 1_200) * 1_000,
+    env: childEnv,
+  });
+  if (result.error) {
+    throw new Error(`${label} resolution replay failed to start: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4_000);
+    throw new Error(`${label} resolution replay exited ${result.status ?? "signal"}: ${output}`);
+  }
+  const machine = String(result.stdout ?? "")
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("TX149_RESOLUTION_RESULT="));
+  if (machine.length !== 1) {
+    throw new Error(`${label} resolution replay must emit exactly one TX149 machine result`);
+  }
+  let parsed: BlockscanHuntResult;
+  try {
+    parsed = JSON.parse(machine[0].slice("TX149_RESOLUTION_RESULT=".length)) as BlockscanHuntResult;
+  } catch (error) {
+    throw new Error(
+      `${label} resolution replay machine result is invalid JSON: `
+      + `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return { machine: machine[0], result: parsed };
 }
 
 function runBackrunCandidateReplay(observation: ProductionSampleObservation): void {

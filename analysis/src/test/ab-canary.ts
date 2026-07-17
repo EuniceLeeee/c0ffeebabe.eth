@@ -57,6 +57,14 @@ test("historical candidate replay preserves production shape without using its l
   assert.match(gate, /HUNT_MAX_CANDIDATES: "100"/);
   assert.match(gate, /HUNT_TOP_K: "8"/);
   assert.match(gate, /timeout: 20 \* 60 \* 1000/);
+  assert.match(gate, /candidateContext\?\.requireStageAdvance === false/);
+  assert.match(gate, /baseline_stage === "final_sim_success"/);
+  assert.match(gate, /challenger_stage === "final_sim_success"/);
+  assert.match(gate, /runEquivalenceResolutionReplayPair\(observation\)/);
+  assert.match(gate, /validateHuntResult\([\s\S]*"baseline resolution replay"/);
+  assert.match(gate, /TX149_RESOLUTION_RESULT=/);
+  assert.match(gate, /equivalence resolution replay machine results differ/);
+  assert.match(gate, /must emit exactly one TX149 machine result/);
 });
 
 test("paired comparator excludes warmup and detects a guarded performance win", () => {

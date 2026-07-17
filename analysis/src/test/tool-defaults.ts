@@ -242,6 +242,7 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /trap 'exit 130' INT/);
   assert.match(script, /trap 'exit 143' TERM/);
   assert.match(script, /--rpc "\$gate_rpc"/);
+  assert.match(script, /assert_port_free 8574/);
   assert.match(script, /assert_port_free "\$EVIDENCE_PROXY_PORT"[\s\S]*run_preflight_safely/);
   assert.doesNotMatch(script, /--rpc "\$evidence_rpc"/);
   assert.doesNotMatch(script, /SEARCHER_LIVE_RPC_URL: requiredArg\("--rpc"\).*evidence_rpc/);

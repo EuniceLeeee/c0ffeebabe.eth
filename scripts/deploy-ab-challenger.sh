@@ -1393,6 +1393,7 @@ deploy() {
   assert_port_free 8571
   assert_port_free 8572
   assert_port_free 8573
+  assert_port_free 8574
   assert_port_free "$EVIDENCE_PROXY_PORT"
   local replay_top_n evidence_rpc
   replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)
@@ -1480,6 +1481,7 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
     || die "trusted gate tooling commit drifted during candidate replay"
   [ -z "$(git -C "$GATE_TOOL" status --porcelain --untracked-files=no)" ] \
     || die "trusted gate tooling became dirty during candidate replay"
+  assert_port_free 8574
   assert_port_free "$EVIDENCE_PROXY_PORT"
   run_preflight_safely
   [ "$(systemctl show -p MainPID --value "$A_UNIT")" = "$gate_a_pid" ] \
