@@ -66,8 +66,14 @@ export const psmAdapter = Object.freeze({
       throw new Error(`psm pool ${pool.address} missing fixedTokenIn/Out`);
     }
     // LitePSM publishes its pair as immutables; the declared pair must match them.
-    for (const [fn, expected] of [["gem", pool.fixedTokenIn], ["dai", pool.fixedTokenOut]] as const) {
-      const raw = await backend.call({ to: pool.address, data: litePsmIface.encodeFunctionData(fn) });
+    const [gemRaw, daiRaw] = await Promise.all([
+      backend.call({ to: pool.address, data: litePsmIface.encodeFunctionData("gem") }),
+      backend.call({ to: pool.address, data: litePsmIface.encodeFunctionData("dai") }),
+    ]);
+    for (const [fn, raw, expected] of [
+      ["gem", gemRaw, pool.fixedTokenIn],
+      ["dai", daiRaw, pool.fixedTokenOut],
+    ] as const) {
       const reported = String(litePsmIface.decodeFunctionResult(fn, raw)[0]);
       if (reported.toLowerCase() !== expected.toLowerCase()) {
         throw new Error(`psm identity attestation failed: ${pool.address} reports ${fn}() ${reported}`);

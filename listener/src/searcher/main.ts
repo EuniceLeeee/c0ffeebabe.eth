@@ -1256,7 +1256,16 @@ async function main(): Promise<void> {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
         admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
-      const candidates = fresh.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool)));
+      // Swap-event discovery can never re-surface a declared protocol venue, so
+      // registry venues whose boot edge build failed (e.g. a transient RPC error
+      // during identity attestation) are retried here until they admit.
+      const retryProtocolPools = liveRegistry.filter(
+        (pool) => !knownPoolKeys.has(poolRegistryKey(pool)),
+      );
+      const candidates = [
+        ...retryProtocolPools,
+        ...fresh.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
+      ];
       if (candidates.length > 0) {
         const projection = await prepareRuntimePoolRefresh({
           backend: mainnetBackend,

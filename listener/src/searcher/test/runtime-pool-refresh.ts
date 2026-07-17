@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { buildMempoolIntakeWithRouters } from "../main.js";
 import {
@@ -173,7 +174,77 @@ async function main(): Promise<void> {
   assert(reconnects === 1, "filtered mempool refresh should notify active subscription once");
   console.log("[runtime-refresh] filtered mempool reconnect signal: PASS");
 
-  console.log("runtime-pool-refresh PASS (5/5)");
+  // Declared protocol venues never re-surface through swap-event discovery, so
+  // a boot-time attestation failure must stay retryable via the registry-based
+  // candidate feed (main.ts liveRegistry minus knownPoolKeys) until it admits.
+  const PSM_POOL: PoolEntry = {
+    address: ADDR.SKY_PSM_LITE,
+    adapter: "psm",
+    fixedTokenIn: ADDR.USDC,
+    fixedTokenOut: ADDR.DAI,
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "convert",
+  };
+  const litePsm = new ethers.Interface([
+    "function gem() view returns (address)",
+    "function dai() view returns (address)",
+  ]);
+  let psmRpcHealthy = false;
+  const psmBackend: TokenQueryBackend = {
+    call: async (req) => {
+      if (!psmRpcHealthy) throw new Error("transient attestation rpc");
+      const selector = req.data.slice(0, 10);
+      if (selector === litePsm.getFunction("gem")!.selector) {
+        return litePsm.encodeFunctionResult("gem", [ADDR.USDC]);
+      }
+      if (selector === litePsm.getFunction("dai")!.selector) {
+        return litePsm.encodeFunctionResult("dai", [ADDR.DAI]);
+      }
+      return RESERVES;
+    },
+  };
+  const bootViews = views([BASE, PSM_POOL]);
+  const retryCandidates = [PSM_POOL].filter((pool) => !baseKnown.has(pool.address.toLowerCase()));
+  assert(retryCandidates.length === 1, "boot-failed protocol venue must be a retry candidate");
+  const failedRetry = await prepareRuntimePoolRefresh({
+    backend: psmBackend,
+    freshPools: retryCandidates,
+    knownPoolKeys: baseKnown,
+    currentBackrunPools: bootViews.backrun,
+    currentBackrunGraph: BASE_GRAPH,
+    currentBlockscanGraph: BASE_GRAPH,
+    buildStrategyViews: views,
+  });
+  assert(failedRetry.admittedPools.length === 0, "still-failing attestation must not admit");
+  assert(failedRetry.failedPools.length === 1, "attestation failure must stay attributable on refresh");
+  assert(
+    !failedRetry.knownPoolKeys.has(PSM_POOL.address.toLowerCase()),
+    "boot-failed venue must remain retryable",
+  );
+  psmRpcHealthy = true;
+  const healedRetry = await prepareRuntimePoolRefresh({
+    backend: psmBackend,
+    freshPools: retryCandidates,
+    knownPoolKeys: failedRetry.knownPoolKeys,
+    currentBackrunPools: failedRetry.strategyViews.backrun,
+    currentBackrunGraph: failedRetry.backrunGraph,
+    currentBlockscanGraph: failedRetry.blockscanGraph,
+    buildStrategyViews: views,
+  });
+  assert(healedRetry.admittedPools.length === 1, "healed attestation must admit the protocol venue");
+  assert(
+    healedRetry.backrunGraph.some((item) => item.adapterId === "psm"),
+    "psm edge must enter the graph on retry",
+  );
+  assert(
+    healedRetry.strategyViews.backrun.filter(
+      (pool) => pool.address.toLowerCase() === PSM_POOL.address.toLowerCase(),
+    ).length === 1,
+    "retried venue must not duplicate in the strategy view",
+  );
+  console.log("[runtime-refresh] boot-failed protocol venue retries to admission: PASS");
+
+  console.log("runtime-pool-refresh PASS (6/6)");
 }
 
 await main();
