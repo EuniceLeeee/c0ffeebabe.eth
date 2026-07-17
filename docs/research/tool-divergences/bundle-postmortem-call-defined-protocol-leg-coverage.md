@@ -1,11 +1,11 @@
 ---
 divergence_id: bundle-postmortem-call-defined-protocol-leg-coverage
-status: open_frozen
+status: partially_codified
 tool: analysis:bundle-postmortem@f95ddb8367a489d02dff0552a9e9d529bc4db7e7
 capability: classification
 root_cause: Event-led edge classification omits successful call-defined mint, migration, LP lifecycle, burn-to-native, and surplus protocol legs that are required to close the landed route.
 deferred_reason: analysis-tool freeze
-fixed_by: null
+fixed_by: c9f2c59
 ---
 
 # Bundle postmortem call-defined protocol leg coverage
@@ -22,7 +22,7 @@ Evidence hashes:
 
 ```yaml
 transactions:
-  - { tx_hash: 0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87, block: 25535037, tx_index: 65, role: scanner, production_gap_id: rocksolid-balancer-v3, tool_actual: "edgeKinds=[flash,swap]; style=unknown", manual_ground_truth: "RockSolid share deposit/redeem closes the rETH route" }
+  - { tx_hash: 0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87, block: 25535037, tx_index: 65, role: scanner, production_gap_id: rocksolid-balancer-v3, tool_actual: "pre-fix edgeKinds=[flash,swap]; post-fix edgeKinds=[flash,swap,protocol], route_gap=manual_required", manual_ground_truth: "RockSolid share deposit/redeem closes the rETH route" }
   - { tx_hash: 0x14026eeda918e2be6f5efe754fe93fc4acdf2cc7a70b24f39ea62ed097f4fd53, block: 25534878, tx_index: 213, role: scanner, production_gap_id: uad-uar-conversion, tool_actual: "edgeKinds=[flash,swap]", manual_ground_truth: "uAD burn/uAR mint conversion is interleaved with Curve underlying" }
   - { tx_hash: 0xda01c3be4a34740d9379fb9db9d90bd245a24191eb177ea2547a3ee6b5127d8b, block: 25534839, tx_index: 70, role: backrun_winner, production_gap_id: legacy-rpl-migration, tool_actual: "edgeKinds=[flash,swap]", manual_ground_truth: "legacy RPL migration converts old RPL to new RPL" }
   - { tx_hash: 0xecf9079f202b00a44c7e104e502e63d153d6d3a2d5dcf9272c23676fd8ecc161, block: 25534716, tx_index: 91, role: scanner, production_gap_id: curve-lp-lifecycle, tool_actual: "edgeKinds=[flash,swap]", manual_ground_truth: "Curve add-liquidity and remove-one-coin LP legs close the route" }
@@ -41,5 +41,6 @@ transactions:
   - { tx_hash: 0x9d7cc2a9e6d42c7867558e2139853bd42f313721dbff4ed5f1885021d4a93d5b, block: 25524250, tx_index: 97, role: backrun_winner, production_gap_id: goldfish-conversion, tool_actual: "edgeKinds=[flash,swap]", manual_ground_truth: "Goldfish protocol conversion closes the DEX route; exact selector awaits archive trace" }
 ```
 
-The batch-scoped freeze forbids changing the analyzer or adding fixtures now. A later tooling round should use
-this full list as the call-defined-leg regression cohort.
+The RockSolid row is codified by registering its exact target and `syncDeposit(uint256,address,address)`
+selector in the trace-aware analyzer, with successful/wrong-target/reverted-call regressions. The remaining
+rows stay open: they require their own target/selector evidence and must not be generalized from this one fix.

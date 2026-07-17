@@ -388,6 +388,39 @@
       "updated_at": "2026-07-15T16:20:00.000Z"
     },
     {
+      "learning_case_id": "tooldef-20260717-rocksolid-call-defined-leg",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "flash",
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
+      "source_block": 25535036,
+      "comparable": true,
+      "primary_gap": "manual_required",
+      "gap_detail": "bundle_postmortem_missed_rocksolid_call_defined_protocol_leg",
+      "evidence": {
+        "manual": "callTracer shows successful syncDeposit(uint256,address,address) to RockSolid rock.rETH vault 0x936facdf10c8c36294e7b9d28345255539d81bc7 between the UniV3 and Balancer V3 legs",
+        "canonical_before": "bundle-postmortem reported edgeKinds=[flash,swap] and winner_style=unknown, so route-gap fail-closed was bypassed",
+        "canonical_after": "trace-aware edge classification reports edgeKinds=[flash,swap,protocol] and route_gap_analysis=manual_required",
+        "replay": "existing loop-fork-gate self-admits the four-edge route and passes candidate_plans, fork execution, and solver net output",
+        "reviewer": "fresh non-author adversarial review confirmed the call-defined coverage defect and target/selector mapping"
+      },
+      "tooling_defect": {
+        "tool": "analysis:bundle-postmortem via analysis/src/learning/edge-kinds.ts",
+        "issue": "CALL_DEFINED_PROTOCOLS only recognized GOLDx mint and omitted the registered RockSolid syncDeposit protocol leg",
+        "evidence": "tx 0x7ce631... calls 0x936facdf... with selector 0xd01d073a; pre-fix edgeKinds=[flash,swap] despite the RockSolid leg closing the route",
+        "codify_target": "register RockSolid target and syncDeposit selector in the shared analysis protocol registry and pin successful, wrong-target, and reverted-call regressions",
+        "codify_commit": "c9f2c59",
+        "status": "codified"
+      },
+      "created_at": "2026-07-17T03:00:00.000Z",
+      "updated_at": "2026-07-17T03:00:00.000Z"
+    },
+    {
       "learning_case_id": "tooldef-20260715-ab-revm-artifact-parity",
       "status": "manual_required",
       "strategy_kind": "backrun",
