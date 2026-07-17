@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
@@ -10,6 +11,15 @@ export const rocksolidAdapter = Object.freeze({
   id: "protocol:rocksolid",
   kind: "protocol-conversion",
   poolAdapters: ["rocksolid"],
+  declaredVenues: [{
+    address: ADDR.ROCKSOLID_RETH,
+    adapter: "rocksolid",
+    fixedTokenIn: ADDR.RETH,
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "wrap",
+    graphOrder: 3,
+  }],
+  undeclaredVenueReason: null,
   edgeAdapterIds: ["rocksolid-sync-deposit"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "wrap" }],
   requiresProtocolEdgesFlag: true,

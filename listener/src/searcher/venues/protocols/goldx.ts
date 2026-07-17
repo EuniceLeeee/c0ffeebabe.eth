@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type {
@@ -16,6 +17,18 @@ export const goldxAdapter = Object.freeze({
   id: "protocol:goldx",
   kind: "protocol-conversion",
   poolAdapters: ["goldx"],
+  declaredVenues: [{
+    address: ADDR.GOLDX,
+    adapter: "goldx",
+    venueId: "goldx",
+    identitySource: "seed",
+    fixedTokenIn: ADDR.PAXG,
+    fixedTokenOut: ADDR.GOLDX,
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "convert",
+    graphOrder: 0,
+  }],
+  undeclaredVenueReason: null,
   edgeAdapterIds: ["goldx-mint"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   requiresProtocolEdgesFlag: true,

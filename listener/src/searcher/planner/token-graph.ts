@@ -4,6 +4,7 @@ import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind }
 import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import type { DeclaredProtocolVenue } from "../venues/route-leg-adapter.js";
 export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
@@ -113,43 +114,10 @@ export interface V4PoolKey {
   hooks: string;
 }
 
-// DEX pools are discovered via scanActivePools / factory events.
-// Only protocol-specific contracts without standard factory go here.
-export const POOL_REGISTRY: PoolEntry[] = [
-  {
-    address: ADDR.GOLDX,
-    adapter: "goldx",
-    venueId: "goldx",
-    identitySource: "seed",
-    fixedTokenIn: ADDR.PAXG,
-    fixedTokenOut: ADDR.GOLDX,
-    fixedSlotKind: "protocol",
-    // GOLDx mint is fully collateralized PAXG conversion, not debt creation.
-    fixedProtocolAction: "convert",
-  },
-  {
-    address: ADDR.SKY_PSM_LITE,
-    adapter: "psm",
-    fixedTokenIn: ADDR.USDC,
-    fixedTokenOut: ADDR.DAI,
-    fixedSlotKind: "protocol",
-    fixedProtocolAction: "convert",
-  },
-  {
-    address: ADDR.WSTETH,
-    adapter: "wsteth",
-  },
-  {
-    address: ADDR.ROCKSOLID_RETH,
-    adapter: "rocksolid",
-    fixedTokenIn: ADDR.RETH,
-    fixedSlotKind: "protocol",
-    fixedProtocolAction: "wrap",
-  },
-  {
-    address: ADDR.METRONOME_SYNTH_POOL,
-    adapter: "metronome-synth",
-  },
+// DEX pools are discovered via scanActivePools / factory events. Static protocol
+// singletons come from their registered adapters; externally discovered families
+// and legacy compat venues stay here until they have a derived admission source.
+const EXTERNAL_AND_LEGACY_POOL_REGISTRY: PoolEntry[] = [
   {
     address: ADDR.SUSDS,
     adapter: "erc4626",
@@ -177,15 +145,6 @@ export const POOL_REGISTRY: PoolEntry[] = [
   { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // waEthUSDC
   // Batch 2 (2026-07-06 venue-discovery + probe-verified, loop-closable assets only — exotic-asset vaults
   // deferred pending a return-path venue, per the open return-path tooling_defect):
-  {
-    address: ADDR.METRONOME_HGUSDC_ROUTER,
-    adapter: "metronome-hgusdc",
-    receiptEmitters: [ADDR.HGUSDC],
-    fixedTokenIn: ADDR.MSUSD,
-    fixedTokenOut: ADDR.USDC,
-    fixedSlotKind: "protocol",
-    fixedProtocolAction: "redeem",
-  }, // authorized msUSD -> frxUSD -> hgUSDC exit; direct hgUSDC redeem is not executable
   { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // pfUSDC-24
   { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },  // pfWETH-4
   { address: "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },  // USD3
@@ -219,6 +178,57 @@ export const POOL_REGISTRY: PoolEntry[] = [
     fixedSlotKind: "lend",
   },
 ];
+
+/**
+ * Merge adapter-owned static venues into the legacy registry without changing
+ * the pre-migration edge order. New declarations omit graphOrder and append.
+ */
+export function mergeDeclaredProtocolVenues(
+  externalAndLegacy: readonly PoolEntry[],
+  declared: readonly DeclaredProtocolVenue[],
+): PoolEntry[] {
+  const ordered = new Map<number, PoolEntry>();
+  const appended: PoolEntry[] = [];
+  for (const venue of declared) {
+    const { graphOrder, ...pool } = venue;
+    if (graphOrder === undefined) {
+      appended.push(pool);
+      continue;
+    }
+    if (!Number.isSafeInteger(graphOrder) || graphOrder < 0) {
+      throw new Error(`invalid declared graph order ${graphOrder}`);
+    }
+    if (ordered.has(graphOrder)) throw new Error(`duplicate declared graph order ${graphOrder}`);
+    ordered.set(graphOrder, pool);
+  }
+  const preservedLength = externalAndLegacy.length + ordered.size;
+  for (const order of ordered.keys()) {
+    if (order >= preservedLength) throw new Error(`declared graph order ${order} exceeds registry`);
+  }
+  const merged: PoolEntry[] = [];
+  let externalIndex = 0;
+  for (let index = 0; index < preservedLength; index++) {
+    const declaredPool = ordered.get(index);
+    if (declaredPool) merged.push(declaredPool);
+    else merged.push(externalAndLegacy[externalIndex++]);
+  }
+  if (externalIndex !== externalAndLegacy.length) {
+    throw new Error("declared graph ordering did not consume the external registry");
+  }
+  const result = [...merged, ...appended];
+  const addresses = new Set<string>();
+  for (const pool of result) {
+    const address = pool.address.toLowerCase();
+    if (addresses.has(address)) throw new Error(`duplicate protocol registry venue ${address}`);
+    addresses.add(address);
+  }
+  return result;
+}
+
+export const POOL_REGISTRY: PoolEntry[] = mergeDeclaredProtocolVenues(
+  EXTERNAL_AND_LEGACY_POOL_REGISTRY,
+  PRODUCTION_ROUTE_ADAPTERS.protocols.flatMap((adapter) => adapter.declaredVenues),
+);
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
 

@@ -2,11 +2,18 @@ import "../../shared/adapters/index.js";
 
 import { ethers } from "ethers";
 import { listAll } from "../../adapters/registry.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import type { PoolEntry, TokenQueryBackend } from "../planner/token-graph.js";
+import {
+  mergeDeclaredProtocolVenues,
+  POOL_REGISTRY,
+  type PoolEntry,
+  type TokenQueryBackend,
+} from "../planner/token-graph.js";
 import { quoteV2ExactInput } from "../solver/v2-fee.js";
 import {
   LEGACY_PRODUCTION_ROUTE_EDGES,
+  PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_ROUTE_ADAPTERS,
 } from "../venues/production-registry.js";
 import {
@@ -15,6 +22,7 @@ import {
   FLASH_SWAP_REPAY,
 } from "../templates/path-template.js";
 import { RouteLegRegistry } from "../venues/route-leg-registry.js";
+import { createRouteAdapterRegistry } from "../venues/route-adapter-registry.js";
 import type { SwapAdapter } from "../venues/route-leg-adapter.js";
 
 function assert(cond: boolean, message: string): asserts cond {
@@ -123,6 +131,69 @@ async function main(): Promise<void> {
   assert(adapter.id === "univ2-standard", `univ2 family ${adapter.id}`);
   assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool("univ2") === adapter, "pool alias lookup");
   console.log("[route-adapters] registry aliases: PASS");
+
+  const declaredVenues = PRODUCTION_ROUTE_ADAPTERS.protocols.flatMap((protocolAdapter) => {
+    const reason = protocolAdapter.undeclaredVenueReason?.trim() ?? "";
+    assert(
+      protocolAdapter.declaredVenues.length > 0 ? reason.length === 0 : reason.length > 0,
+      `${protocolAdapter.id} venue declaration contract`,
+    );
+    for (const venue of protocolAdapter.declaredVenues) {
+      assert(venue.score === undefined, `${protocolAdapter.id} static venue must stay pinned`);
+      assert(
+        POOL_REGISTRY.some((pool) =>
+          pool.address.toLowerCase() === venue.address.toLowerCase() && pool.adapter === venue.adapter
+        ),
+        `${protocolAdapter.id} declared venue missing from graph registry`,
+      );
+      PRODUCTION_IDENTITY_RESOLVERS.forPool(venue.adapter);
+    }
+    return protocolAdapter.declaredVenues;
+  });
+  assert(declaredVenues.length === 6, `declared static protocol venue count ${declaredVenues.length}`);
+  assert(POOL_REGISTRY.length === 29, `production pool registry count ${POOL_REGISTRY.length}`);
+  assert(POOL_REGISTRY[0].address === ADDR.GOLDX, "GOLDx graph order changed");
+  assert(POOL_REGISTRY[1].address === ADDR.SKY_PSM_LITE, "PSM graph order changed");
+  assert(POOL_REGISTRY[2].address === ADDR.WSTETH, "wstETH graph order changed");
+  assert(POOL_REGISTRY[3].address === ADDR.ROCKSOLID_RETH, "RockSolid graph order changed");
+  assert(POOL_REGISTRY[4].address === ADDR.METRONOME_SYNTH_POOL, "Metronome synth graph order changed");
+  assert(POOL_REGISTRY[13].address === ADDR.METRONOME_HGUSDC_ROUTER, "Metronome exit graph order changed");
+  const syntheticMerge = mergeDeclaredProtocolVenues(
+    [{ address: pair, adapter: "erc4626" }],
+    [
+      { address: token0, adapter: "goldx", graphOrder: 0 },
+      { address: token1, adapter: "psm" },
+    ],
+  );
+  assert(syntheticMerge[0].address === token0, "ordered declared venue must preserve its graph slot");
+  assert(syntheticMerge[1].address === pair, "external venue order must be preserved");
+  assert(syntheticMerge[2].address === token1, "new declared venue must append automatically");
+  let duplicateVenueRejected = false;
+  try {
+    mergeDeclaredProtocolVenues(
+      [{ address: pair, adapter: "erc4626" }],
+      [{ address: pair, adapter: "goldx" }],
+    );
+  } catch {
+    duplicateVenueRejected = true;
+  }
+  assert(duplicateVenueRejected, "declared venue may not duplicate an external registry address");
+  let missingDeclarationRejected = false;
+  try {
+    createRouteAdapterRegistry({
+      swaps: [],
+      protocols: [{
+        ...PRODUCTION_ROUTE_ADAPTERS.protocols[0],
+        id: "protocol:missing-venue-declaration",
+        declaredVenues: [],
+        undeclaredVenueReason: null,
+      }],
+    });
+  } catch {
+    missingDeclarationRejected = true;
+  }
+  assert(missingDeclarationRejected, "protocol adapter without venues/reason must fail closed");
+  console.log("[route-adapters] declared protocol venue graph derivation: PASS");
 
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };
   const edges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, backend);
@@ -411,7 +482,7 @@ async function main(): Promise<void> {
   assert(rejected, "runtime taxonomy mismatch must reject");
   console.log("[route-adapters] dynamic taxonomy guard: PASS");
 
-  console.log("route-adapters PASS (12/12)");
+  console.log("route-adapters PASS (13/13)");
 }
 
 await main();

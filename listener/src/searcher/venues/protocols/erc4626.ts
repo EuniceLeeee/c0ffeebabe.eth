@@ -9,6 +9,8 @@ export const erc4626Adapter = Object.freeze({
   id: "protocol:erc4626",
   kind: "protocol-conversion",
   poolAdapters: ["erc4626"],
+  declaredVenues: [],
+  undeclaredVenueReason: "ERC4626 instances require external discovery and per-vault probe admission",
   edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo"],
   allowedTaxonomy: [
     { slotKind: "protocol", protocolAction: "wrap" },

@@ -10,6 +10,12 @@ export const wstethAdapter = Object.freeze({
   id: "protocol:wsteth",
   kind: "protocol-conversion",
   poolAdapters: ["wsteth"],
+  declaredVenues: [{
+    address: ADDR.WSTETH,
+    adapter: "wsteth",
+    graphOrder: 2,
+  }],
+  undeclaredVenueReason: null,
   edgeAdapterIds: ["wsteth-wrap", "wsteth-unwrap"],
   allowedTaxonomy: [
     { slotKind: "protocol", protocolAction: "wrap" },

@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import type {
   CompatRouteLegAdapter,
   ProtocolConversionAdapter,
@@ -19,6 +20,7 @@ export function createRouteAdapterRegistry(input: {
   compat?: readonly CompatRouteLegAdapter[];
 }): RouteAdapterRegistry {
   const compat = input.compat ?? [];
+  assertProtocolVenueDeclarations(input.protocols);
   const all: RouteLegAdapter[] = [...input.swaps, ...input.protocols, ...compat];
   return Object.freeze({
     routeLegs: new RouteLegRegistry(all),
@@ -26,4 +28,48 @@ export function createRouteAdapterRegistry(input: {
     protocols: Object.freeze([...input.protocols]),
     compat: Object.freeze([...compat]),
   });
+}
+
+function assertProtocolVenueDeclarations(
+  adapters: readonly ProtocolConversionAdapter[],
+): void {
+  const addresses = new Set<string>();
+  const graphOrders = new Set<number>();
+  for (const adapter of adapters) {
+    const reason = adapter.undeclaredVenueReason?.trim() ?? "";
+    if (adapter.declaredVenues.length === 0 ? reason.length === 0 : reason.length !== 0) {
+      throw new Error(
+        `route adapter registry: ${adapter.id} must declare venues or one undeclared-venue reason`,
+      );
+    }
+    for (const venue of adapter.declaredVenues) {
+      if (!adapter.poolAdapters.includes(venue.adapter)) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} declared foreign pool adapter ${venue.adapter}`,
+        );
+      }
+      if (venue.score !== undefined) {
+        throw new Error(`route adapter registry: ${adapter.id} declared a scored static venue`);
+      }
+      let address: string;
+      try {
+        address = ethers.getAddress(venue.address).toLowerCase();
+      } catch {
+        throw new Error(`route adapter registry: ${adapter.id} declared an invalid venue address`);
+      }
+      if (addresses.has(address)) {
+        throw new Error(`route adapter registry: duplicate declared venue ${address}`);
+      }
+      addresses.add(address);
+      if (venue.graphOrder !== undefined) {
+        if (!Number.isSafeInteger(venue.graphOrder) || venue.graphOrder < 0) {
+          throw new Error(`route adapter registry: ${adapter.id} declared invalid graph order`);
+        }
+        if (graphOrders.has(venue.graphOrder)) {
+          throw new Error(`route adapter registry: duplicate declared graph order ${venue.graphOrder}`);
+        }
+        graphOrders.add(venue.graphOrder);
+      }
+    }
+  }
 }

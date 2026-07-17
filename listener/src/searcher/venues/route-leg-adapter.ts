@@ -156,8 +156,20 @@ export interface SwapAdapter extends RouteLegAdapter {
   readonly observation: SwapObservationCapability;
 }
 
+export type DeclaredProtocolVenue = Readonly<
+  Omit<PoolEntry, "score"> & {
+    /** Static protocol venues are code-owned and never consume the scored pool budget. */
+    readonly score?: never;
+    /** Preserve pre-registry graph order during migration; new venues append when omitted. */
+    readonly graphOrder?: number;
+  }
+>;
+
 export interface ProtocolConversionAdapter extends RouteLegAdapter {
   readonly kind: "protocol-conversion";
+  readonly declaredVenues: readonly DeclaredProtocolVenue[];
+  /** Required only for families whose instances must come from discovery/probe admission. */
+  readonly undeclaredVenueReason: string | null;
 }
 
 export interface CompatRouteLegAdapter extends RouteLegAdapter {
