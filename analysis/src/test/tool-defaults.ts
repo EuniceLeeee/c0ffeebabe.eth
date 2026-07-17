@@ -197,9 +197,6 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /SEARCHER_ENABLE_MEV_SHARE=\$expected_mev_share/);
   assert.match(script, /AB_VICTIM_MODE must be public-only\|both/);
   assert.match(script, /SEARCHER_ANVIL_PORT=8566/);
-  assert.match(script, /SEARCHER_V2_LINEAGES_PATH may not be an A\/B config delta/);
-  assert.match(script, /v2_lineage_snapshot_path/);
-  assert.match(script, /v2_lineage_snapshot_hash/);
   assert.match(script, /SEARCHER_EAGER_STATE_BACKEND=\$expected_backrun/);
   assert.match(script, /challenger_victim_stream_timeout/);
   assert.match(script, /infrastructure shakedown must run identical searcher code/);

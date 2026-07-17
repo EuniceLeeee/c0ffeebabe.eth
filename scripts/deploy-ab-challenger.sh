@@ -22,8 +22,6 @@ EXPECTED_A_WALLET=0xb8578B6de173C8554FF0390dB5a7effA567DDA3c
 EXPECTED_A_BOTVM=0x4aF9495C4aC24c5CD3b0C90611550a1996415BCe
 AUTHORIZED_MAX_WALLET_ETH=0.2
 LOCAL_RPC=http://127.0.0.1:8545
-V2_LINEAGE_SNAPSHOT_PATH=""
-V2_LINEAGE_SNAPSHOT_HASH=""
 # A measured Hermes window is 60 minutes after challenger cold-start/warmup. Keep one bounded lease long
 # enough for warmup + the full window + close; stale/crashed slots are still reaped automatically.
 LEASE_SECONDS=${AB_LEASE_SECONDS:-5400}
@@ -344,7 +342,6 @@ capture_fairness() {
     b_restarts "$b_now" \
     a_universe_hash_after "$(hash_or_unavailable "$a_path")" \
     b_universe_hash_after "$(hash_or_unavailable "$b_path")" \
-    v2_lineage_snapshot_hash_after "$(hash_or_unavailable "$(state_field v2_lineage_snapshot_path)")" \
     a_blockscan_view_hash_after "$(runtime_hash "$a_log" blockscan_view_hash)" \
     b_blockscan_view_hash_after "$(runtime_hash "$b_log" blockscan_view_hash)" \
     a_blockscan_graph_hash_after "$(runtime_hash "$a_log" blockscan_graph_hash)" \
@@ -568,7 +565,7 @@ run_preflight_safely() {
 }
 
 validate_running_pair() {
-  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path a_v2_path b_v2_path a_revm_path b_revm_path
+  local mode sources expected_backrun expected_mempool expected_mev_share a_pid b_pid a_log b_log key expected a_router_path b_router_path a_revm_path b_revm_path
   mode=$(lane_mode)
   sources=$(victim_mode)
   if [ "$mode" = "dual" ]; then
@@ -638,12 +635,6 @@ validate_running_pair() {
     || die "router admission snapshot path drift"
   [ "$(hash_file "$a_router_path")" = "$(state_field router_snapshot_hash)" ] \
     || die "router admission snapshot content drift"
-  a_v2_path=$(process_env_get "$a_pid" SEARCHER_V2_LINEAGES_PATH)
-  b_v2_path=$(process_env_get "$b_pid" SEARCHER_V2_LINEAGES_PATH)
-  [ "$a_v2_path" = "$b_v2_path" ] && [ "$a_v2_path" = "$(state_field v2_lineage_snapshot_path)" ] \
-    || die "V2 lineage snapshot path drift"
-  [ "$(hash_file "$a_v2_path")" = "$(state_field v2_lineage_snapshot_hash)" ] \
-    || die "V2 lineage snapshot content drift"
   (assert_no_port_owner "$b_pid" challenger 8555 8556) || return 1
   (assert_no_port_owner "$a_pid" champion 8566 8567) || return 1
   if [ "$mode" = "dual" ]; then
@@ -677,12 +668,10 @@ validate_running_pair() {
     || die "champion universe drift"
   [ "$(hash_file "$(state_field b_universe_path)")" = "$(state_field b_universe_hash)" ] \
     || die "challenger universe drift"
-  [ "$(hash_file "$(state_field v2_lineage_snapshot_path)")" = "$(state_field v2_lineage_snapshot_hash)" ] \
-    || die "V2 lineage snapshot drift"
 }
 
 build_runtime_env() {
-  local experiment=$1 b_commit=$2 input_mode allowed a_env runtime_env a_common b_common a_pool_path a_v2_path a_sse b_sse b_cap
+  local experiment=$1 b_commit=$2 input_mode allowed a_env runtime_env a_common b_common a_pool_path a_sse b_sse b_cap
   local mode sources expected_backrun expected_mempool expected_mev_share
   mode=$(lane_mode)
   sources=$(victim_mode)
@@ -698,8 +687,6 @@ build_runtime_env() {
   input_mode=$(env_get AB_INPUT_MODE); input_mode=${input_mode:-shared}
   [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] || die "AB_INPUT_MODE must be shared|challenger"
   allowed=",$(env_get AB_ALLOWED_CONFIG_DELTA),"
-  [[ "$allowed" != *",SEARCHER_V2_LINEAGES_PATH,"* ]] \
-    || die "SEARCHER_V2_LINEAGES_PATH may not be an A/B config delta"
   a_env="$ROOT/a-search.env"
   runtime_env="$ROOT/b-runtime.env"
   a_common="$ROOT/a-common.env"
@@ -717,7 +704,7 @@ build_runtime_env() {
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_V2_LINEAGES_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$a_common"
@@ -760,14 +747,6 @@ EOF
   [ -n "${B_UNIVERSE:-}" ] && [ -f "$B_UNIVERSE" ] \
     || die "prepared challenger pool universe missing"
   echo "SEARCHER_POOL_UNIVERSE_PATH=$B_UNIVERSE" >> "$runtime_env"
-  a_v2_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_V2_LINEAGES_PATH)
-  [ -n "$a_v2_path" ] && [ -f "$a_v2_path" ] \
-    || die "champion V2 lineage snapshot missing"
-  V2_LINEAGE_SNAPSHOT_PATH="$a_v2_path"
-  V2_LINEAGE_SNAPSHOT_HASH=$(hash_file "$a_v2_path")
-  [[ "$V2_LINEAGE_SNAPSHOT_HASH" =~ ^[a-f0-9]{64}$ ]] \
-    || die "champion V2 lineage snapshot hash is invalid"
-  echo "SEARCHER_V2_LINEAGES_PATH=$V2_LINEAGE_SNAPSHOT_PATH" >> "$runtime_env"
   python3 - "$a_common" "$runtime_env" <<'PY'
 import sys
 for path in sys.argv[1:]:
@@ -784,7 +763,7 @@ PY
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_V2_LINEAGES_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$b_common"
@@ -1225,23 +1204,13 @@ deploy() {
     || safety_abort champion_runtime_commit_mismatch
   [ "$(process_env_get "$b_pid_now" SEARCHER_RUNTIME_COMMIT)" = "$b_commit" ] \
     || safety_abort challenger_runtime_commit_mismatch
-  local a_router_path b_router_path router_hash a_v2_path b_v2_path v2_lineage_hash
+  local a_router_path b_router_path router_hash
   a_router_path=$(process_env_get "$a_pid_now" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
   b_router_path=$(process_env_get "$b_pid_now" SEARCHER_FORCE_INCLUDE_ROUTERS_PATH)
   [ -n "$a_router_path" ] && [ "$a_router_path" = "$b_router_path" ] \
     || safety_abort router_admission_paths_differ
   router_hash=$(hash_file "$a_router_path")
   [[ "$router_hash" =~ ^[0-9a-f]{64}$ ]] || safety_abort router_admission_hash_unavailable
-  a_v2_path=$(process_env_get "$a_pid_now" SEARCHER_V2_LINEAGES_PATH)
-  b_v2_path=$(process_env_get "$b_pid_now" SEARCHER_V2_LINEAGES_PATH)
-  [ -n "$a_v2_path" ] && [ "$a_v2_path" = "$b_v2_path" ] \
-    || safety_abort v2_lineage_snapshot_paths_differ
-  v2_lineage_hash=$(hash_file "$a_v2_path")
-  [[ "$v2_lineage_hash" =~ ^[0-9a-f]{64}$ ]] \
-    || safety_abort v2_lineage_snapshot_hash_unavailable
-  [ "$a_v2_path" = "$V2_LINEAGE_SNAPSHOT_PATH" ] \
-    && [ "$v2_lineage_hash" = "$V2_LINEAGE_SNAPSHOT_HASH" ] \
-    || safety_abort v2_lineage_snapshot_changed_during_deploy
   local a_universe_hash b_universe_hash a_universe_from a_universe_to b_universe_from b_universe_to
   local a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
   local a_feed_hash b_feed_hash
@@ -1287,8 +1256,6 @@ deploy() {
     a_commit "$a_commit" b_commit "$b_commit" report_commit "$branch_tip" \
     branch_tip_commit "$branch_tip" \
     router_snapshot_path "$a_router_path" router_snapshot_hash "$router_hash" \
-    v2_lineage_snapshot_path "$a_v2_path" v2_lineage_snapshot_hash "$v2_lineage_hash" \
-    v2_lineage_snapshot_hash_after "$v2_lineage_hash" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
     a_revm_path "$a_revm_path" b_revm_path "$b_revm_path" \
     a_revm_hash "$a_revm_hash" b_revm_hash "$b_revm_hash" \
