@@ -5,6 +5,37 @@
 > 本表记录**谁提出、对方是否同意、核实结论**。Codex = Sol;Claude = fable(非作者对抗审查,逐条核代码)。
 > **总纲共识**:merge 合理且线上已跑新 searcher(systemd `mev-searcher` ExecStart=`searcher:live`=`main.ts`,active,已核);等价性只证"重构未改坏行为",不证"无预存 gap / 未来不漏配"。§1 多数是未来漂移硬化;§4 同时列出当前可触发的生产 P0/P1 与显式标注的 future hardening,两者不可混写。
 
+## 状态更新(2026-07-17,origin/main `3a6b044`,双方核实)
+
+> **昨天计划中的生产 P0/P1 已全部关闭。** 以下 `resolved_by` commit 已逐条核对存在且 message 匹配(fable 核 + Codex 核一致)。下表各节的 "待修/未来漂移" 描述是**发现当时**的状态,现以本块为准。
+
+| 项 | 状态 | resolved_by |
+|---|---|---|
+| #30 dry-run 私钥签名(P0 安全) | ✅ 已修(dry-run-unsigned,不再签名) | `f4b5432` |
+| #32 runtime pool refresh(半状态/失败池毒化/V4 漏发现) | ✅ 已修 | `3661974` |
+| #1 Balancer V3 victim + **victim 从 adapter 派生**(observation 能力) | ✅ 已修(所有 swap adapter 带 `observation`;conformance `test/route-adapters.ts`) | `1266ba6` `4a47cfa` |
+| #31 Metronome hGUSDC blockscan mid | ✅ 已修 | `3ea587c` |
+| #33 非 WETH profit-token 估值 | ✅ 已修 | `f768799` |
+| #34 死 EV/bribe 默认 | ✅ 已修 | `d4a23c3` |
+| #4 默认入口 footgun(start/dev→旧 searcher) | ✅ 已修(现指 `searcher/main.js`) | `d4a23c3` |
+| #5 path-template 手工 SWAP_ADAPTERS | ✅ 已修(从 route registry 派生) | `fdc722a` |
+| #6 protocol flag 手工清单 | ✅ 已修(从 route metadata 派生) | `d6646a3` |
+| #35 identity union/dispatcher 漂移 | ✅ 已修(独立 IdentityResolverRegistry + conformance) | `12db53d` |
+| P0-4/#7 V2 factory 身份 vs fee 分裂 | ✅ 已修(单一真源 `V2_LINEAGES`;消费端不再存 fee 表) | `c0f2339` |
+| #3/#8/#9/#11 landed topics/scanner/warm 各写一份 | ✅ 已修(统一 landed-event registry) | `514a2c5` |
+| #10 supported_in_prod 双真值 | ✅ 已修(派生) | `e9bfbe5` |
+| #12 pool adapter 解析白名单 | ✅ 已修(派生) | `81f5438` |
+| #13 flash 双表 | ✅ 已修(统一 descriptors) | `a3d6ba5` |
+
+**#35 与 P0-4/#7 是两个不同问题**(前者 identity 漂移、后者 V2 fee 表分裂),已各自单独修。**注意**:`V2_LINEAGES` 仍需**显式登记** factory + 实测 fee —— fee 无法从 factory 地址自动推导,这是**单一真源**,不是重复消费者表,不违反"禁硬编码 allowlist"(它是 provenance + measured-fee,不是准入门)。
+
+### 目前真正还开着的(唯一)
+- **Fluid DEX 仍是显式 legacy route,未迁入 `PRODUCTION_ROUTE_ADAPTERS`**;
+- legacy Fluid 的**完整 victim 能力矩阵**(receipt event / paired-transfer / local-apply / overlay / raw-replay)尚未逐维覆盖。
+- 这是 C1/C2 的收尾项,非当前 outage。相关定向测试当前全过。
+
+---
+
 ## 1. 生产侧"手工平行清单会漂"点(核心议题)
 
 | # | 点 | 提出方 | 对方是否同意 | 核实结论 |
