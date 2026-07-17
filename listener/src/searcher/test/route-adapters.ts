@@ -204,8 +204,11 @@ async function main(): Promise<void> {
     "function unit() view returns (uint256)",
     "function convertToShares(uint256 assets) view returns (uint256 shares)",
   ]);
-  const attestBackend = (answers: Record<string, string>): TokenQueryBackend => ({
+  const attestBackend = (answers: Record<string, string>, expectedTo?: string): TokenQueryBackend => ({
     async call(req) {
+      if (expectedTo !== undefined && req.to.toLowerCase() !== expectedTo.toLowerCase()) {
+        throw new Error(`attest call sent to ${req.to}, expected ${expectedTo}`);
+      }
       const answer = answers[req.data.slice(0, 10)];
       if (!answer) throw new Error(`unexpected attest selector ${req.data.slice(0, 10)}`);
       return answer;
@@ -225,6 +228,8 @@ async function main(): Promise<void> {
     good: Record<string, string>;
     bad: Record<string, string>;
     edgeCount: number;
+    /** The contract the attest eth_call must target; defaults to the pool address. */
+    attestTarget?: string;
   }> = [
     {
       adapter: "wsteth", pool: declaredPool("wsteth"),
@@ -255,6 +260,7 @@ async function main(): Promise<void> {
       good: Object.fromEntries([attestAnswer("asset", ADDR.USDC)]),
       bad: Object.fromEntries([attestAnswer("asset", token0)]),
       edgeCount: 1,
+      attestTarget: ADDR.HGUSDC,
     },
     {
       adapter: "erc4626",
@@ -265,20 +271,26 @@ async function main(): Promise<void> {
     },
   ];
   for (const testCase of attestCases) {
+    const attestTarget = testCase.attestTarget ?? testCase.pool.address;
     const built = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
-      testCase.pool, attestBackend(testCase.good),
+      testCase.pool, attestBackend(testCase.good, attestTarget),
     );
     assert(
       built.length === testCase.edgeCount,
       `${testCase.adapter} attested edge count ${built.length}`,
     );
-    let attestRejected = false;
+    let attestError = "";
     try {
-      await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(testCase.pool, attestBackend(testCase.bad));
-    } catch {
-      attestRejected = true;
+      await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
+        testCase.pool, attestBackend(testCase.bad, attestTarget),
+      );
+    } catch (err) {
+      attestError = err instanceof Error ? err.message : String(err);
     }
-    assert(attestRejected, `${testCase.adapter} attestation mismatch must fail edge build`);
+    assert(
+      attestError.includes("identity attestation failed"),
+      `${testCase.adapter} bad case must fail on the attestation check, got: ${attestError}`,
+    );
   }
   const siloEdges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
     { address: pair, adapter: "erc4626", fixedTokenIn: token0, nonStandardRedeem: true, redeemTokenOut: token1 },

@@ -67,19 +67,32 @@
   `buildEdges` eth_calls the venue's own interface before any edge exists (wsteth `stETH()`, psm
   `gem()/dai()`, erc4626 standard branch `asset()==fixedTokenIn`, hgusdc `HGUSDC.asset()==tokenOut`);
   goldx/rocksolid expose no token view → liveness attest only (`unit()`/`convertToShares()`), pair stays
-  code-owned behind the final sim. Attestation failure = that pool's edge build fails closed, logged
-  per-pool on boot (backrun+blockscan) and refresh paths. Commit `106d1b5` + boot-logging follow-up;
-  conformance `route-adapters` 14/14; fork-level flip pending (env network policy) ⇒ `implemented`
-  per gates.md.
+  code-owned behind the final sim. Attestation failure = that pool's edge build fails closed with
+  per-pool logging (capped 5 + overflow count) on boot (backrun+blockscan) and on refresh; because
+  swap-event discovery can never re-surface a protocol singleton, the refresh timer explicitly retries
+  registry venues absent from `knownPoolKeys` until they admit — a transient boot RPC error therefore
+  costs at most one refresh interval, not the process lifetime (adversarial-review finding, fixed same
+  round). Commits `106d1b5`/`0ec553a` + retry fix; conformance `route-adapters` 15/15,
+  `runtime-pool-refresh` 6/6.
+- **Validation state (honest):** `implemented`, NOT `fixed` (gates.md): no attest selector has executed
+  against the real contracts yet (env network policy). Settling evidence before any `fixed` claim:
+  `npm run searcher:audit-erc4626` (checks exactly `asset()==fixedTokenIn` per vault) + one fork/node
+  boot showing all six declared venues admit. Cast-verified provenance exists in-repo only for
+  sUSDS/wstUSR/sfrxETH/scrvUSD/srUSDe; the remaining vault pins rest on the probe's liveness note, and
+  LitePSM `gem()`/`dai()` + `HGUSDC.asset()` rest on published-source knowledge only.
 - **Why attest, not derive:** attest is fail-closed, derive is open-ended (a venue upgrade returning an
   unexpected address would silently build an edge to a foreign token); pair constants are woven through
   the quote/plan layer (`quotePreparedPSM` scaling, `quoteGoldxMint` guard, `psm.buildPlanFragment`
-  direction), so deriving only at build time is a fake removal. Tx-time eth_call reads the same static
-  views as build time — the timing adds zero information; trace-extracted in/out is behavior evidence,
-  used for detection/nomination only (observation side, Slice E quarantine), never admission — behavior
-  is spoofable (honeypot flows). Admission evidence chain stays: pin identity root → interface attest →
-  final sim. Full derivation for singletons = Slice C `enumerateRoutes` shape; revisit only after the
-  erc4626 family pipeline is proven. See the discovery plan §0 for the three-state hardcode taxonomy.
+  direction), so deriving only at build time is a fake removal. The attestation is **boot+retry-scoped
+  drift protection, not a standing guarantee**: post-boot drift (e.g. a proxy upgrade behind a pinned
+  venue) is caught by neither this check nor a hypothetical tx-time read unless re-attested on a cadence;
+  the standing backstop is the final sim, and per-tx reads buy only drift-since-boot at CU cost.
+  Trace-extracted in/out is behavior evidence, used for detection/nomination only (observation side,
+  Slice E quarantine), never admission — behavior is spoofable (honeypot flows). Admission evidence
+  chain stays: pin identity root → interface attest → final sim. Full derivation for singletons =
+  Slice C `enumerateRoutes` shape; revisit only after the erc4626 family pipeline is proven. See the
+  discovery plan §0 for the three-state hardcode taxonomy. Known standing bypass (pre-existing, unused
+  in production): `defaultTokenGraph()` still hardcodes an unattested PSM edge as a planner fallback.
 
 ---
 

@@ -23,8 +23,12 @@ psm `gem()/dai()`、erc4626 标准分支 `asset()==fixedTokenIn`(silo 分支跳�
 其地址绑定靠 trusted-singleton-seed 身份门 + final sim);goldx/rocksolid 无 token-address view,
 attest 报价依赖的 `unit()`/`convertToShares()` 活性,pair 保持 code-owned。失败 = 该 pool 建边
 失败进 `buildTokenGraphWithResults.failed`,boot(backrun+blockscan)与 refresh 三条路径均逐
-pool 打日志(cap 5 + 溢出计数)。conformance 扩为 14/14(正反例 + silo 跳过)。fork 级 flip
-因环境网络策略未跑,按 gates.md 记 `implemented`。
+pool 打日志(cap 5 + 溢出计数);且因 swap 事件发现永远端不出协议单例,refresh timer 显式重试
+`liveRegistry` 中不在 `knownPoolKeys` 的 venue 直至准入 —— boot 瞬时 RPC 失败最多损失一个
+refresh 周期,不再是进程生命周期(对抗审查发现,同轮修复;`runtime-pool-refresh` 6/6 回归)。
+conformance 扩为 15/15(正反例 + silo 跳过 + attest 目标合约校验)。fork 级 flip 因环境网络
+策略未跑,按 gates.md 记 `implemented`;定案证据 = `npm run searcher:audit-erc4626`(逐 vault
+验 `asset()==fixedTokenIn`)+ 一次 fork/node boot 六 venue 全准入。
 
 **硬编码三态定论(D-005,勿重开)**:
 1. **venue 地址 pin = 身份根,保留**。单例无 factory/registry 可反查,pin 是 attest 的锚点
@@ -37,7 +41,9 @@ pool 打日志(cap 5 + 溢出计数)。conformance 扩为 14/14(正反例 + silo
    派生 = Slice C `enumerateRoutes` 形态,等 erc4626 家族管道走通后再评估,不单独立项。
 3. **goldx/rocksolid pair = 残余 code-owned**(合约不暴露 token view,链上无物可核),活性
    attest + final sim(自己在 fork 执行该 pair)兜底。
-   交易时点的 eth_call 与建边时点读的是**同一静态 view,时点不产生新信息**;从交易 trace 提取
+   attestation 是 **boot+retry 时点的漂移防护,不是持续保证**:boot 后的漂移(如 pin 背后的
+   proxy 升级)本检查与"交易时点再读一次"同样都不覆盖,除非按节奏重 attest;持续兜底是
+   final sim,逐笔交易时点读 view 只换来 drift-since-boot、代价是 CU。从交易 trace 提取
    in/out 属行为证据,只做检测/候选提名(观察侧 + Slice E 隔离区),不做准入 —— 行为可仿冒
    (蜜罐流),准入证据链固定为 pin 身份根 → 接口 attest → final sim 实测。
 
