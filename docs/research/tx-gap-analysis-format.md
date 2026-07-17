@@ -56,11 +56,16 @@
 - **因果状态：** `<boundary / trigger-only / full-prefix 已跑或未跑；未跑不得猜>`
 - **闭环跳数 / 生产上限：** `<n / limit>`
 
-## 4. 实际核心闭环
+## 4. 实际核心闭环（逐腿双锚）
 
-| # | Token in → out | Venue / target | Adapter / edge | 当前生产阶段 | 结论 |
-|---:|---|---|---|---|---|
-| 1 | `<tokenIn → tokenOut>` | `<pool/target>` | `<adapterId>` | `<edge/quote/plan/sim>` | `<pass/fail>` |
+| # | Token in → out | Venue / target | Adapter / edge | 交易前状态（pre-tx 锚） | 当前状态（审计基线） | 结论 |
+|---:|---|---|---|---|---|---|
+| 1 | `<tokenIn → tokenOut>` | `<pool/target>` | `<adapterId>` | `<当时 universe/edge/adapter 状态>` | `<已覆盖/可闭合/仍然缺失>` | `<pass/fail>` |
+
+每腿必须分开填两个时点（§0.6 双锚纪律的逐腿粒度）：**交易前状态**用 pre-tx lookback 现算或
+tx 时刻 pin（§0.7 禁止 look-ahead），**当前状态**用 §1 审计基线 SHA。当前状态词表：
+`已支持/已覆盖`（adapter+准入都在）、`可闭合`（能力路径已定但未建/未准入，写明缺哪半）、
+`仍然缺失`（结构性缺口，写明层）。两列结论不一致时（修复落地或活动窗口闪烁）不得合并成单一判定。
 
 只列维持本金闭合所必需的有序路线。flash principal、builder payment、利润换币、库存处置和无关 touch 单列，不能混成路线腿。
 
@@ -135,3 +140,19 @@ Gap 定位到第一个失败阶段。`fixed` 必须由同一历史输入的阶�
 - `blockscan-hunt-tx149.ts` 使用冻结 production universe，让未改造的 scanner 自发枚举四腿；不注入 path/amount，结果从 `not_admitted` 翻转为 `final_sim_success`，`net_profit_raw=442380`。
 - 因此这笔在当前 main 已修复，不需要再补 adapter。历史修复也不只是 adapter：rank 89 路线还依赖通用 block-scan candidate cap 从 20 扩到 100。
 - 当前 `bundle-postmortem` 已通过 `GOLDx target + mint(address,uint256)` 识别 `protocol`，但故意不从 touch-set 自动猜核心闭环，因此 `MANUAL REQUIRED` 是诚实降级，不是工具缺陷。
+
+## 示例：`0x14026eed…f4fd53` 的逐腿双锚表（§4 的填法范本）
+
+pre-tx 锚 = 窗口 `[tx-14400, tx-1]` 现算 + tx 时刻 pin `4caf4b2f`；当前锚 = 复核当日 origin/main。
+
+| 腿 | 交易前状态（pre-tx 锚） | 当前状态 | 结论 |
+|---|---|---|---|
+| Flash USDT（Balancer V2 Vault） | 已支持 | 不变 | pass |
+| USDT→uAD，Curve `0x20955c…` | 2 天窗内有活动（2 笔），adapter 已有 | 已覆盖 | pass |
+| uAD→uCR，Manager `0x432120…` | 无 protocol edge，无 adapter | **可闭合**（身份根 `hasRole` 已证 + declaredVenues 路径已定；adapter 未建，EV 门不立项） | fail |
+| uCR→WETH，V2 `0xd9dc4a…` | pre-tx 所有窗口 0 swap，不在 universe | **仍然缺失**（死池活动门盲区，归 arb-relevance） | fail |
+| WETH→USDT，V2 `0x3a8414…` | 19 笔活动但身份门拒未知 factory | 已覆盖（`58f2045` provisional 修复有证据） | pass |
+
+示范要点：腿 3 两列不一致（当时无边 → 现在路径已定但未建）与腿 5 两列不一致（当时身份拒 →
+现已修复）各自写明原因，不合并；腿 4 是唯一双锚都缺的结构性缺口，`Gap 类型` 因此填
+`pool/admission`，不被腿 3 的 `可闭合` 稀释。
