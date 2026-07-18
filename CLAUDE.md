@@ -21,8 +21,10 @@ companion doc, not here.
   remove only the orphans *your* change created; mention unrelated dead code, don't delete it. Every changed
   line traces to the request. **Never `rg -rn`/`-rln`** (`-r` = `--replace`, corrupts reads).
 - **Goal-driven execution.** Turn tasks into `[step] → verify: [check]` pairs; loop until verified. **Build
-  passing is `implemented`, not `fixed`** — a deterministic searcher fix needs a replay/harness flip
-  (`docs/research/gates.md`).
+  passing is `implemented`, not `fixed`** — a change is accepted by ONE of the two declarative acceptance
+  checklists: **四步验收** (deterministic local change) or **六步验收** (production-funnel capability/gap
+  repair) — see `docs/research/HERMES.md` §验收标准. They are human-verified checklists, NOT hooks or
+  gate scripts.
 - **Verify against code/data, not memory.** A recalled fact / a stale memory is a hypothesis to re-check by
   reading the actual file or on-chain data, never a conclusion.
 - **Derive identity on-chain; never gate admission on a hardcoded allowlist.** Venue / pool / factory /
@@ -48,8 +50,8 @@ companion doc, not here.
 **Current production phase:** B challengers target position-conserving `DEX↔DEX` or
 `DEX↔permissionless protocol` closed loops. Production Hermes windows run both victim-independent
 `block-scan` and public-mempool `backrun` (MEV-Share remains off); one challenger may target a proven blocker
-in either lane while both funnels remain observed. A backrun must bind a real swap/oracle trigger and pass the
-trusted boundary/trigger-only/full-prefix causal replay in `docs/research/gates.md`. Keeper/reward flows,
+in either lane while both funnels remain observed. A backrun must bind a real swap/oracle trigger and satisfy the 六步验收
+(incl. causal trigger-replay evidence; `docs/research/HERMES.md` §验收标准). Keeper/reward flows,
 inventory, private paths, credit, sandwich, and JIT-LP remain outside the target and cannot justify an
 `ab/*` deployment.
 
@@ -125,7 +127,7 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   the tool's correctness or coverage, call a fresh non-author adversarial reviewer. When both analyses agree
   the tool is wrong or incomplete, file the exact `tooling_defect` LearningCase, fix the tool, add its regression
   test, and cite the `codify_commit` before closing that same turn/Hermes round. Do not defer an agreed tool bug
-  into a historical backlog. `hermes-gate` blocks only defects explicitly referenced by the current Method
+  into a historical backlog. The acceptance checklist covers only defects explicitly referenced by the current Method
   Trace; unrelated old cases neither block the round nor excuse skipping this closure.
 - **Live-run follow-up** — after a run, auto-analyze without waiting; first pass **zero-CU** where possible
   (read JSONL / redacted logs / code / registries before RPC/traces). The `no_candidate_plans` drill-down +
@@ -179,8 +181,9 @@ Primary case study: wstUSR depeg arbitrage — see `docs/project-context.md`.
   research window. It accepts only scanner/backrun conserving DEX or DEX+permissionless-protocol loops and
   mechanically routes tooling work direct-to-main, deterministic fixes through replay+smoke, and
   admission/latency/ranking changes back to Hermes A/B.
-- `docs/research/gates.md` — the validation contract (`fixed` vs `implemented`, replay flips, test harnesses).
-  Read before claiming a deterministic change is fixed.
+- `docs/research/gates.md` — harness/replay command reference (and the record of the legacy gate scripts,
+  now optional self-check aids). The acceptance standard itself is the 四步/六步验收 checklist in
+  `docs/research/HERMES.md` §验收标准 — read THAT before claiming a change is fixed.
 - `docs/research/tx-gap-analysis-format.md` — required user-facing format when one landed transaction is
   supplied for production-gap, tool, file, or function diagnosis. It separates the core conserving route
   from profit-disposal touches and requires current-main funnel/replay evidence before saying `fixed`.

@@ -9,8 +9,9 @@ You are the A/B orchestrator for `/Users/eunice/src/MEV`. The user is away. Exec
 exit; an external hourly wake runs the next problem. Do not ask mid-loop questions.
 
 ## 0. Load + recover
-1. Read `CLAUDE.md`, `docs/research/HERMES.md` fully (especially §A/B Canary + rules 11–17),
-   `docs/research/gates.md`, and `docs/live-safety-envelope.md`. `touch /tmp/mev-workflow-active`.
+1. Read `CLAUDE.md`, `docs/research/HERMES.md` fully (especially §验收标准 + §A/B Canary + rules 11–17)
+   and `docs/live-safety-envelope.md` (`docs/research/gates.md` stays available as the harness/replay
+   command reference). `touch /tmp/mev-workflow-active`.
 2. Work in an isolated worktree; do not edit/reset a concurrent user's worktree.
 3. On the node, run the trusted `origin/main:scripts/deploy-ab-challenger.sh reap` through SSM. If a healthy
    B lease belongs to another experiment, NO-OP; branches may coexist but the B runtime slot may not.
@@ -112,7 +113,10 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    disagreement/inconclusive result or suspected honeypot/phantom/inventory artifact. A metric may worsen
    while the change correctly removes a false-positive; the reviewer judges causality, not threshold votes.
 5. If review remains inconclusive/unavailable, verdict=`needs_escalation`, branch=`retained`; proceed to close.
-6. Run `npm run ab-canary-gate -- <report> --phase decision`. A failed hard gate vetoes win and becomes
+6. Verify the decision against `HERMES.md` §验收标准 plus the safety/fairness/evidence checklist and
+   record every item in the report (declarative acceptance — not a hook/gate).
+   `npm run ab-canary-gate -- <report> --phase decision` may be run as an optional self-check and its
+   output cited as evidence. A hard safety/fairness/evidence failure vetoes win and becomes
    `needs_escalation`; it never asks the user.
 
 ## 5. Close without stalling

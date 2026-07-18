@@ -3,13 +3,44 @@
 > **Load this when you are running a live-run / Hermes / handoff round** (the autonomous routines in
 > `docs/research/autonomous-*.md` read it). It is NOT always-on: a normal interactive task doesn't need
 > it — that's why it lives here and not in `CLAUDE.md`. `CLAUDE.md` (behavioral base + Mission + Safety
-> Rules) and `docs/research/gates.md` (the validation contract, rule 12) are the companions.
+> Rules) is the companion; the acceptance standard lives in §验收标准 below
+> (`docs/research/gates.md` remains the harness/replay command reference).
 >
 > Hermes is the fixed collaboration + decision record between **Claude** and **Codex** after each live
 > run (a 作战记录 + 决策协议, not a product). One markdown file per run; GitHub is the shared state.
 > Rule **numbers 1–17 are load-bearing** — hooks + routines reference rules 11/12/13/14/15 by number.
 > Never renumber; compress in place. Safety Rules and their dated bounded-live authorizations live in
 > `CLAUDE.md` / `docs/live-safety-envelope.md` and override everything here.
+
+## 验收标准 — 四步 / 六步(声明式;不作为 hook,不作为 gate)
+
+> **[2026-07-18 起]** 变更验收以下面两套标准**之一**为准,按改动性质选择。它们是**声明式验收清单**:
+> 人工逐项核对、在报告/commit 里记录每步证据,必要时由 fresh non-author reviewer 复核 —— 不由 hook
+> 强制、不以 gate 脚本 exit code 为阻塞前置。既有脚本(`hermes-gate` / `ab-canary-gate` /
+> `historical-gap-gate` 等)降级为**可选自查工具**:可以跑、可以引用其输出作证据,但 Final Approval
+> / merge 不再以它们为前置。硬安全/公平红线仍然否决 win —— 那是标准内容本身,由清单记录承载,
+> 不靠 hook 执行。
+
+**四步验收 — 确定性局部改动**(adapter/decoder/template/planner/quote/工具/等价重构):
+1. **同样本 replay 翻转**:同一失败样本 pinned replay 出现预期 bucket transition
+   (如 `no_candidate → plans>0`、`not_admitted → final_sim_success`);build/test 通过只算 `implemented`。
+2. **回归全绿**:build + 既有 conformance/回归套件(tsc、相关 `searcher:*`)。
+3. **短 smoke**:启动/安全/资源无回归(改动触及运行时进程时)。
+4. **非作者复核**:fresh non-author reviewer 以 REFUTE 为目标复核;发现同轮闭环。
+
+**六步验收 — 生产漏斗能力 / gap 修复**(发现/准入/路由/报价/执行链路上的能力变更;定义源 =
+`.claude/commands/tx-gap.md` §4 人工六步物理事实链):
+1. scanner/detector **自发发现**(完整 production universe,不注入 route/opportunity;backrun 须真实
+   prefix/victim 触发);
+2. planner **出 plan**(`candidate_plans > 0`,plan 边序与 trace 调用腿序一致);
+3. solver **定价/sizing** 与目标块真实池状态及 receipt/trace 成交量对齐;
+4. **fork sim 逐 wei**(正确 parent/prefix 态执行生产 calldata,成功还贷且无 standing position,
+   用原始 balance delta 独立复算 gross);
+5. **生产 EV gate** 出 net(不以手算美元值替代生产判定);
+6. **同桶翻转**(同一历史输入从 baseline 的明确失败阶段推进;build/test 通过 ≠ fixed)。
+
+选择规则:改动是否改变生产漏斗对真实机会的处理?是 → 六步;否(确定性局部修复/等价重构/工具)
+→ 四步。任一步无法证明,verdict 即 `implemented_not_validated`,不得声明 `fixed`。
 
 ## Generator / Evaluator split — DEFAULT for all code work
 Codex (gpt-5.5 xhigh) is the generator; Claude authors the brief and is the **non-author evaluator** of the diff (rule 11 protocol). Rounds depend on the orchestrating model:
@@ -38,7 +69,7 @@ deployment, cleanup, fork, and unrelated test entrypoints.
    MISSED (`not_seen`). Neither is skipped. Select `single-transaction,competitor-loss,causality` for the
    first and `competitor-window,classification` for the second.
 2. **FILTER non-comparable winners FIRST** (else it's noise). Only `atomic_loop` (a closed loop returning to a priced token in-tx) is comparable to our atomic sim. REJECT: `sandwich`, `one_leg_inventory` (one-way swap, profit realized off-chain / CEX-DEX — decisive check: the winner's Swap pushed the pool tick PAST the pre-triggering-swap `slot0` tick), plain transfers, JIT-LP → `non_comparable_winner`; our sim was RIGHT and correctly lost. The selected canonical deep transaction analyzer owns `winner_style`.
-3. **AUTO-IMPROVE from the tool's verdict** — classify + close per gap class (pool/path/execution-adapter/detection/pure-outbid), validate with a rule-12 fixture flip (`docs/research/gates.md`).
+3. **AUTO-IMPROVE from the tool's verdict** — classify + close per gap class (pool/path/execution-adapter/detection/pure-outbid), validate per §验收标准 (四步验收的同样本 replay 翻转;涉生产漏斗能力则走六步).
 4. **INCONCLUSIVE → MANUAL escalation → codify:** auto-close closed 0 yet we demonstrably LOST ⇒ the tool hit a class it can't name ("auto-analysis empty" is itself a finding). Package {postmortem JSON + auto-close result + our sim/bid + winner touchedVenues/builderPayment} → a FRESH analyst (Fable PRIORITY, Opus 4.8 fallback) names the missed class → CODIFY it back into the tool (rule 16). A `pending-manual-analysis` package left unanalyzed BLOCKS cycle-close.
 
 ```bash
@@ -64,8 +95,8 @@ Events + local reth live on the NODE (run via SSM); the events path is the runni
   file writes right after the banner) — a window without structured JSONL is not a valid Hermes window.
   - **WATCHLIST (current profile):** load `analysis/config/live-competitors.json`; never copy addresses into a second list. Sweep every configured EOA and its executor(s). The Step-1 block and artifact must name the file's `profile_id`; Coffee remains `full`, the other configured entities are outcome-driven samples.
   - **Both agents run this and cite it.** Each works from PRIMARY sources independently (raw script JSON + own on-chain trace), **never the other's curated facts/conclusion**. Secondary-source-validate ≥1 key tx via Alchemy/Tenderly. **MANUAL analysis, not script-only:** the label is a hypothesis; hand-trace the watchlist's key txs — a root-cause is INVALID unless it names the specific source swap (or proves atomic) from a manual trace.
-- **ENFORCEMENT — the hermes-gate (forcing function).** After EVERY dry-run, `cd analysis && npm run hermes-gate -- <hermes-md>` MUST exit 0 before `Final Approval`. It validates a structured on-disk artifact (prose can't satisfy it) and enforces five analyses: (1) standard `run_analysis` (funnel + `dominant_drop` + `events_source`); (2) per-profile-EOA comparison; (3) every configured `analysis_mode:"full"` entity (EVERY tx hand-analyzed, pools in/out of `runtime-graph-pools.json` + `gap_class`); (4) configured `analysis_mode:"sample"` entities; (5) **intake audit — the funnel-EXTERNAL lens** (router-allowlist + MEV-Share intake gaps never ENTER the funnel, so `pipeline_dropped` can't see them). Doctrine the gate encodes: a "private" victim is NOT a human gate until the MEV-Share feed is ruled in; "coverage exhausted" is INVALID without the intake fraction; an `atomic` competitor is a scanner/strategy gap, NOT a market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow. Record `hermes_gate: PASS`.
-  New production artifacts use `schema_version:3`; the gate then additionally requires
+- **ACCEPTANCE SELF-CHECK(声明式,非 hook/gate)。** After EVERY dry-run the round report MUST contain the five analyses below as a structured on-disk artifact, human-verified per §验收标准; `cd analysis && npm run hermes-gate -- <hermes-md>` remains available as an OPTIONAL self-check aid whose output may be cited as evidence, but it is no longer a blocking precondition for `Final Approval`. The five analyses: (1) standard `run_analysis` (funnel + `dominant_drop` + `events_source`); (2) per-profile-EOA comparison; (3) every configured `analysis_mode:"full"` entity (EVERY tx hand-analyzed, pools in/out of `runtime-graph-pools.json` + `gap_class`); (4) configured `analysis_mode:"sample"` entities; (5) **intake audit — the funnel-EXTERNAL lens** (router-allowlist + MEV-Share intake gaps never ENTER the funnel, so `pipeline_dropped` can't see them). Doctrine the checklist encodes: a "private" victim is NOT a human gate until the MEV-Share feed is ruled in; "coverage exhausted" is INVALID without the intake fraction; an `atomic` competitor is a scanner/strategy gap, NOT a market ceiling; "dust" ≡ per-tx NET USD < $0.1; `maxPriorityFeePerGas=0` ≠ private orderflow. Record `acceptance_check: PASS`(五项分析逐项核对).
+  New production artifacts use `schema_version:3`; the checklist then additionally requires
   `run_analysis.lane_mode=dual` plus separate non-empty `run_analysis.lanes.block_scan` and `.backrun`
   funnels/dominant drops. Legacy schema-v2 reports remain replayable but cannot be used as a new production
   Hermes artifact.
@@ -97,7 +128,8 @@ Each round DISCOVERS the next blocker from competitors, fixes it, gates it, carr
                  (kept from Codex); Codex, handed ONLY raw material as DATA → B blind to A. Agree = high-confidence;
                  differ = the disagreement is the signal. Only the Brief drives code.
 5. IMPLEMENT     Codex writes → Claude review ↔ Codex fix (≤3 passes) → Final Approval or explicit stop.
-6. GATE          deterministic → local FORK/REPLAY flip confirms (rule 12, docs/research/gates.md; no flip = not fixed);
+6. ACCEPT        deterministic → 四步验收 (同样本 replay 翻转/回归/smoke/非作者复核; no flip = not fixed);
+                 生产漏斗能力/gap → 六步验收 (§验收标准; 声明式清单, 非 hook/gate);
                  non-deterministic (latency/inclusion/economics/bid/mempool) → record with carry_to_round, next
                  round's metrics decide.
 7. CARRY         Next round READS this round's conclusion + open findings FIRST; resolve any finding past its
@@ -274,7 +306,7 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    “did the tested gap to a mature searcher shrink?” and seeds the next problem. It does not replace A/B.
    Before trusting those labels, select and run `classification,calibration`: it replays the nine
    pinned coffee source-shape fixtures plus conserving/inventory receipt controls. Record its JSON summary
-   under `classifier_calibration`; `hermes-gate` independently reruns the same checks. A failure means the
+   under `classifier_calibration`; the optional self-check script can rerun the same checks. A failure means the
    analysis tool is not authoritative: file/fix the tooling defect, retain this B as `needs_escalation`, and
    do not merge from an uncalibrated external comparison. Source-shape `atomic_state_arb` is never by itself
    proof of winner-style `atomic_loop`; the latter additionally requires in-tx position conservation.
@@ -294,9 +326,13 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    honeypot/phantom/inventory artifact, or semantic-vs-metric disagreement also requires one. The reviewer
    checks which causal interpretation is correct; it does not vote by threshold. If the fresh review still
    cannot decide, final verdict is `needs_escalation`.
-11. **MECHANICAL VETO.** `npm run ab-canary-gate -- <report> --phase decision` verifies safety/fairness,
-    exact evidence, script artifact, non-author review, replay requirements, and B stopped. It can reject a
-    decision; it cannot create a win. `hermes-gate` also runs the A/B close validation when the journal exists.
+11. **ACCEPTANCE CHECK(声明式,非机械否决)。** The A/B decision is accepted against §验收标准 plus the
+    safety/fairness/evidence checklist — exact tested commits, config/universe fairness, script artifact,
+    non-author review, replay requirements, and B stopped — human-verified and recorded in the report.
+    `npm run ab-canary-gate -- <report> --phase decision` remains an optional self-check aid whose output
+    may be cited as evidence; it is not a blocking precondition. A hard safety/fairness/evidence failure
+    still vetoes a win — that is the standard itself, carried by the recorded checklist, not by hook
+    enforcement. A check can reject a decision; it can never create a win.
 12. **CLOSE EXACTLY ONE WAY.** Commit/push the completed B report first (`b_stopped=true`, final verdict and
     matching pending branch action), then run `deploy-ab-challenger.sh close <id> <verdict>`; the wrapper
     refuses an outcome that differs from that committed report.
@@ -364,27 +400,27 @@ in-session timer is required. All node ops use SSM to `i-0ff908dedeec9ebc6`; sec
     - **Stalled:** alive + under hard timeout = running (retrying). Hard timeout + empty `git diff` = one stalled attempt. 2 consecutive = Codex stalled. Never declare stalled before the hard timeout.
     - **One Codex task = one narrow patch** (≤1–3 files, allowed/forbidden files stated). No racing. Resume a fix pass with `codex exec resume <SESSION_ID>` (prefer the recorded id over `--last`).
     - **Fallback:** genuinely stalled → Claude takes over only fully-specified mechanical edits, labelled `authored_by: claude (codex stalled)`; NEVER judgment/design (the turn stops and waits). *(Unattended rounds override the stop-and-wait: fall back to an Opus 4.8 generator — Fable stays the non-author evaluator.)*
-12. **Repair-replay double-gate → see `docs/research/gates.md` (the validation contract).** A deterministic change is `fixed` only when the SAME failing sample, replayed, flips buckets; "build passes" is never enough. No flip = not fixed. `turn_class: observability-only` if there's nothing to replay.
+12. **Acceptance → §验收标准(四步/六步之一,声明式,非 hook/gate)。** A deterministic change is `fixed` only when the SAME failing sample, replayed, flips buckets (四步第 1 步); "build passes" is never enough. No flip = not fixed. `turn_class: observability-only` if there's nothing to replay. (Harness/replay command reference: `docs/research/gates.md`.)
 13. **Convert findings to fixes — forcing functions.** Rules 1–12 prevent bad changes; none forces impactful ones, so analysis commits masquerade as progress. Counterweights:
     - **Anti-drift cap:** at most ONE consecutive `observability-only` turn; the next Brief MUST change searcher behavior (proven by a rule-12 flip) or STOP + escalate — no third analysis turn.
     - **No orphan findings:** every finding → `owner` + `carry_to_round: N`. Deferred past it blocks new work until done or human-killed.
     - **Brief gate:** every Brief carries `searcher_behavior_change: yes | no`. Two consecutive `no` escalate.
     - **Epic escalation:** a finding too big for one round → `decision: epic`, ordered slices with their own gates. **Mechanical trigger:** the same `gap_class` in ≥3 samples/window OR ≥2 consecutive rounds → a MANDATORY epic; per-pool pins for that class are then forbidden. A systemic single fix beats N per-pool pins.
-    - **Architecture-review trigger:** ≥2 consecutive rounds with NO growth in a genuine +EV `simSuccess` → a MANDATORY arch-level review in a fresh context, DUAL-BLIND like step 4. **FRAME AUDIT first** (the R13–R21 failure was a shared WRONG frame dual-blind can't catch): (1) is "coverage exhausted" measured on COMPLETE intake or only the admitted fraction? (audit `MEMPOOL_ROUTER_ADDRESSES` + MEV-Share, quantify `pending_filtered` vs `pending_received`); (2) are we conflating "not-backrunnable-BY-US" (posture) with "no opportunity" (market)? Record the frame answers, THEN localize the lever (`funnel | coverage | flow-admission | scanner-strategy | no-replicable-atomic-EV`). Template `docs/research/templates/architecture-review.md` + a per-firing handoff regenerated FRESH — never hardcode past rounds; the arch-review handoff MUST include the Architecture Coverage Matrix (12 axes); missing/blank = invalid handoff (hermes-gate blocks).
+    - **Architecture-review trigger:** ≥2 consecutive rounds with NO growth in a genuine +EV `simSuccess` → a MANDATORY arch-level review in a fresh context, DUAL-BLIND like step 4. **FRAME AUDIT first** (the R13–R21 failure was a shared WRONG frame dual-blind can't catch): (1) is "coverage exhausted" measured on COMPLETE intake or only the admitted fraction? (audit `MEMPOOL_ROUTER_ADDRESSES` + MEV-Share, quantify `pending_filtered` vs `pending_received`); (2) are we conflating "not-backrunnable-BY-US" (posture) with "no opportunity" (market)? Record the frame answers, THEN localize the lever (`funnel | coverage | flow-admission | scanner-strategy | no-replicable-atomic-EV`). Template `docs/research/templates/architecture-review.md` + a per-firing handoff regenerated FRESH — never hardcode past rounds; the arch-review handoff MUST include the Architecture Coverage Matrix (12 axes); missing/blank = invalid handoff (验收清单核对项).
     - **Impact counterweight:** a round that shipped a clean analysis patch but changed nothing the searcher does is a **null round** — label it so.
 14. **Multi-round = user-away autonomy.** >1 round means the user is NOT at the keyboard: self-serve architecture/scope calls (pick the option best for the extraction goal + PROCEED + **record the decision: choice + rationale + explicit not-doing**), do NOT block with `AskUserQuestion`. This includes **auto-firing the rule-13 arch review when its trigger hits — just run it; do NOT ask "should I run the architecture review?"**. Real stop conditions still wait for the human (out-of-envelope broadcast/funding/cap/key/standing-credit, CU-cap). The dated dual-live A/B, merge-on-proven-win, and gate-authorized literal `ab/*` cleanup are already authorized and are not ask points. **ENFORCED** by `scripts/hooks/guard-workflow-noask.py` (`touch /tmp/mev-workflow-active` at start; the hook blocks AskUserQuestion unless it names a real stop condition — full rationale in the hook's docstring).
 15. **A status report is NOT a stop.** While `/tmp/mev-workflow-active` exists, every turn ends with either a work-continuing / self-re-invoking tool call OR an explicit real stop condition — reporting rides ALONGSIDE the next action, never instead of it. **ENFORCED** by `scripts/hooks/guard-workflow-nostall.py` (full rationale in the hook's docstring).
 16. **Fable manual analysis is also a TEST of our tooling — codify its findings (hard).** The fresh fable analyst works from raw data with ad-hoc curl/jq, routinely finding where our permanent scripts are wrong (valuation artifacts) or missing a metric. When manual and canonical results disagree about tool correctness, a fresh non-author reviewer MUST adjudicate before the tool is changed. If both analyses agree the tool is wrong/incomplete, the loop MUST create the exact `tooling_defect` LearningCase, fix/extend the script, add a regression test, and cite its `codify_commit` **in this same round** (Codex writes, non-author gates). An agreed tool defect cannot be deferred to a historical backlog or a later round. Only defects explicitly referenced by the current Method Trace block this cycle; unrelated historical cases remain evidence, not a global stop. *(Honest: public-mempool membership for out-of-window txs + positive MEV-Share identification are NOT determinable from data we hold; `sender_flow` returns labeled-confidence proxies, never a fabricated proof.)*
     - **Method Trace (MANDATORY — the auditable frame, not the hidden chain-of-thought).** Every handoff
       whose `step1` block declares `fable_manual: yes` MUST end with a `## Method Trace`.
-      **Missing Method Trace = invalid handoff** (`hermes-gate` enforces its presence + fields). The
+      **Missing Method Trace = invalid handoff**(验收清单核对其存在 + 字段). The
       declaration, not prose, is the gate trigger. It is not "how it thought" — it is *what tools it ran,
       in what order it verified, what frame it judged by, which tool-miss it caught, and which rule Opus
       should learn.* This is the reusable project-method asset that trains/constrains Opus (distilled into
       `docs/distill/`), and it feeds the tooling-defect close loop: **if `tool_gap` != `none`, a
       `tooling_defect` LearningCase MUST be created and closed (`codify_commit` or `human_killed`) before
-      cycle-close** (see rule 17 / the `tooling_defect` gate in `hermes-gate`).
-      **When `task_class: architecture_review`, the Method Trace MUST be accompanied by a `## Architecture Coverage Matrix` (the 12 axes: strategy source / edge model / universe·admission / planner / quote·pnl / state·freshness / sim·replay / execution / safety·position / learning·auto-close / observability·tooling / non-goals·isolation) with a filled decision per axis — hermes-gate enforces it. Not a second framework; the matrix is the arch-review variant of the one Method Trace.**
+      cycle-close** (see rule 17 的 `tooling_defect` 验收项).
+      **When `task_class: architecture_review`, the Method Trace MUST be accompanied by a `## Architecture Coverage Matrix` (the 12 axes: strategy source / edge model / universe·admission / planner / quote·pnl / state·freshness / sim·replay / execution / safety·position / learning·auto-close / observability·tooling / non-goals·isolation) with a filled decision per axis — 验收清单核对. Not a second framework; the matrix is the arch-review variant of the one Method Trace.**
       ```
       ## Method Trace
       task_class:       competitor_path | bundle_postmortem | architecture_review | replay_fixture | protocol_leg | implementation

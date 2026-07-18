@@ -1,11 +1,16 @@
-# Validation Gates — the repo's test contract
+# Validation Gates — harness/replay reference (acceptance standard moved)
 
+> **[2026-07-18 定位调整]** 验收标准本体 = **四步 / 六步验收**(声明式清单,人工逐项核对 + 必要时
+> 非作者复核,不作为 hook/gate 强制)—— 见 `docs/research/HERMES.md` §验收标准。本文档降级为
+> harness/replay **命令参考**与既有 gate 脚本(`hermes-gate` / `ab-canary-gate` /
+> `historical-gap-gate` 等)的行为记录;这些脚本自此为**可选自查工具**,其输出可作证据引用,
+> 但不再是 Final Approval / merge 的阻塞前置。下文中的 "gate"/"MUST" 语句按此定位阅读。
+>
 > Scope: authorized defensive on-chain arbitrage research (fork/dry-run; broadcast is a human gate).
-> This is where "how do we know a change is actually correct" lives — extracted from the Hermes
-> protocol (was governance rule 12) so it reads as a **test contract**, not always-loaded prose.
-> `docs/research/HERMES.md` rule 12 is a one-line pointer here. The endgame (distill-kit doctrine): correctness
-> rules become **assertions in the harnesses below** and get DELETED from prose — see §Correctness
-> properties.
+> This doc was extracted from the Hermes protocol (was governance rule 12) as a test contract;
+> `docs/research/HERMES.md` rule 12 now points to §验收标准 and references this file for harness
+> commands. The endgame (distill-kit doctrine): correctness rules become **assertions in the harnesses
+> below** and get DELETED from prose — see §Correctness properties.
 
 ## Rule 12 — repair-replay double-gate (anti-instrument-drift)
 
