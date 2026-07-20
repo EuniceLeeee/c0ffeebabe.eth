@@ -74,6 +74,65 @@ export interface ProtocolDiscoveryRangeResult extends ObservedProtocolDiscoveryR
   readonly addressStats: ProtocolAddressDiscoveryStats;
 }
 
+export interface ProtocolTraceMemoStats {
+  hits: number;
+  misses: number;
+}
+
+/**
+ * Cross-entrance trace memo: the live observed lane and the range scanner
+ * share it so one transaction is debug_traced at most once globally. Failed
+ * fetches are never memoized, so transient trace errors stay retryable.
+ */
+export interface ProtocolTraceMemo {
+  trace(txHash: string, blockNumber: number, fetch: () => Promise<unknown>): Promise<unknown>;
+  readonly stats: ProtocolTraceMemoStats;
+  prune(currentBlock: number): void;
+}
+
+export function createProtocolTraceMemo(
+  maxAgeBlocks = 100,
+  maxEntries = 2_048,
+): ProtocolTraceMemo {
+  const entries = new Map<string, { blockNumber: number; trace: Promise<unknown> }>();
+  const stats: ProtocolTraceMemoStats = { hits: 0, misses: 0 };
+  const prune = (currentBlock: number): void => {
+    for (const [key, entry] of entries) {
+      if (currentBlock - entry.blockNumber >= maxAgeBlocks) entries.delete(key);
+    }
+    while (entries.size > maxEntries) {
+      let oldestKey: string | null = null;
+      let oldestBlock = Infinity;
+      for (const [key, entry] of entries) {
+        if (entry.blockNumber < oldestBlock) {
+          oldestBlock = entry.blockNumber;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey === null) break;
+      entries.delete(oldestKey);
+    }
+  };
+  return {
+    stats,
+    prune,
+    trace(txHash, blockNumber, fetch) {
+      const key = txHash.toLowerCase();
+      const cached = entries.get(key);
+      if (cached) {
+        stats.hits++;
+        return cached.trace;
+      }
+      stats.misses++;
+      const pending = fetch();
+      entries.set(key, { blockNumber, trace: pending });
+      pending.catch(() => entries.delete(key));
+      prune(blockNumber);
+      return pending;
+    },
+  };
+}
+
 /** Receipt-only, cheap gate for deciding whether a call trace can teach us a protocol route. */
 export function shouldTraceForProtocolDiscovery(
   logs: readonly ProtocolDiscoveryLog[],
@@ -110,6 +169,7 @@ export async function scanProtocolDiscoveryRange(input: {
   context: ProtocolDiscoveryContext;
   candidateAddresses?: readonly string[];
   evidenceCache?: ProtocolDiscoveryEvidenceCache;
+  traceMemo?: ProtocolTraceMemo;
 }): Promise<ProtocolDiscoveryRangeResult> {
   const candidatesByAdapter = new Map<string, ProtocolCandidate[]>();
   const unknownSelectors: UnknownProtocolSelectorDiagnostic[] = [];
@@ -161,9 +221,15 @@ export async function scanProtocolDiscoveryRange(input: {
   }
 
   const txHashes = new Set<string>();
+  const txBlocks = new Map<string, number>();
   for (const log of eventLogs) {
-    if (log.transactionHash) txHashes.add(log.transactionHash.toLowerCase());
-    else {
+    if (log.transactionHash) {
+      const txHash = log.transactionHash.toLowerCase();
+      txHashes.add(txHash);
+      if (log.blockNumber !== undefined && !txBlocks.has(txHash)) {
+        txBlocks.set(txHash, log.blockNumber);
+      }
+    } else {
       eventSourceErrors.push({
         adapterId: null,
         target: log.address,
@@ -176,7 +242,13 @@ export async function scanProtocolDiscoveryRange(input: {
     try {
       const receipt = await input.context.backend.getTransactionReceipt(txHash);
       if (!receipt) throw new Error("receipt unavailable for discovery event");
-      const trace = await input.context.backend.traceTransaction(txHash);
+      const trace = input.traceMemo
+        ? await input.traceMemo.trace(
+          txHash,
+          txBlocks.get(txHash) ?? input.context.toBlock,
+          () => input.context.backend.traceTransaction(txHash),
+        )
+        : await input.context.backend.traceTransaction(txHash);
       const observed = await scanObservedProtocolTrace({
         adapters: input.adapters,
         context: input.context,

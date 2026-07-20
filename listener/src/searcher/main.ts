@@ -42,7 +42,10 @@ import {
   recordProtocolRouteOwnership,
   saveProtocolDiscoveryEvidenceCache,
 } from "./protocol-discovery-cache.js";
-import { shouldTraceForProtocolDiscovery } from "./observed-protocol-discovery.js";
+import {
+  createProtocolTraceMemo,
+  shouldTraceForProtocolDiscovery,
+} from "./observed-protocol-discovery.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
@@ -1129,9 +1132,15 @@ async function main(): Promise<void> {
     }
   };
   const initialProtocolAddressCandidates = currentProtocolDexDomain();
+  // One memo across the live observed lane and the range scanner: a landed tx
+  // is debug_traced at most once no matter which entrance sees it first.
+  const protocolTraceMemo = createProtocolTraceMemo();
   console.log(
     `[searcher/live] protocol discovery cache: address=${protocolDiscoveryCache.addressEntries.size} ` +
-      `verified=${protocolDiscoveryCache.verifiedCandidates.size} path=${protocolDiscoveryCachePath}`,
+      `verified=${protocolDiscoveryCache.verifiedCandidates.size} ` +
+      `cursor=${protocolDiscoveryCache.runtime.observedCursor ?? "none"} ` +
+      `ownership=${protocolDiscoveryCache.routeOwnership.admissions.length} ` +
+      `path=${protocolDiscoveryCachePath}`,
   );
   const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
     provider,
@@ -1149,6 +1158,7 @@ async function main(): Promise<void> {
     candidateAddresses: initialProtocolAddressCandidates,
     evidenceCache: protocolDiscoveryCache,
     bootstrapCandidates: cachedProtocolCandidates(protocolDiscoveryCache),
+    traceMemo: protocolTraceMemo,
     shadow: protocolDiscoveryShadow,
   });
   emitProtocolDiscoveryEvents(
@@ -1395,6 +1405,7 @@ async function main(): Promise<void> {
       graphTokens: protocolDexDomain,
       candidateAddresses: protocolDexDomain,
       evidenceCache: protocolDiscoveryCache,
+      traceMemo: protocolTraceMemo,
       shadow: protocolDiscoveryShadow,
     });
     emitProtocolDiscoveryEvents(
@@ -1438,10 +1449,11 @@ async function main(): Promise<void> {
     if (observedProtocolTxs.has(txKey)) return;
     let trace: unknown;
     try {
-      trace = await provider.send("debug_traceTransaction", [
-        input.txHash,
-        { tracer: "callTracer" },
-      ]);
+      trace = await protocolTraceMemo.trace(txKey, input.blockNumber, () =>
+        provider.send("debug_traceTransaction", [
+          input.txHash,
+          { tracer: "callTracer" },
+        ]));
     } catch (error) {
       console.log(
         `[searcher/live] protocol discovery trace unavailable tx=${input.txHash.slice(0, 10)} ` +

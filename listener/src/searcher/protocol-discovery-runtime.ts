@@ -17,6 +17,7 @@ import {
   scanObservedProtocolTrace,
   scanProtocolDiscoveryRange,
   type ProtocolDiscoveryRangeResult,
+  type ProtocolTraceMemo,
 } from "./observed-protocol-discovery.js";
 import type { StrategyViews } from "./strategy-views.js";
 import type { IdentityResolverRegistry } from "./venues/identity.js";
@@ -94,6 +95,7 @@ export async function prepareActiveProtocolDiscoveryPass(
     readonly candidateAddresses: readonly string[];
     readonly evidenceCache?: ProtocolDiscoveryEvidenceCache;
     readonly bootstrapCandidates?: ReadonlyMap<string, readonly ProtocolCandidate[]>;
+    readonly traceMemo?: ProtocolTraceMemo;
     readonly shadow: boolean;
   },
 ): Promise<{
@@ -115,6 +117,7 @@ export async function prepareActiveProtocolDiscoveryPass(
       context,
       candidateAddresses: input.candidateAddresses,
       evidenceCache: input.evidenceCache ?? createProtocolDiscoveryEvidenceCache(),
+      ...(input.traceMemo === undefined ? {} : { traceMemo: input.traceMemo }),
     })
     : {
       candidatesByAdapter: new Map(),

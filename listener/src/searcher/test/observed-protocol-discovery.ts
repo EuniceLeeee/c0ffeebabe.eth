@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import {
+  createProtocolTraceMemo,
   scanObservedProtocolTrace,
   scanProtocolDiscoveryRange,
   shouldTraceForProtocolDiscovery,
@@ -167,6 +168,52 @@ assert(range.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1, "shared s
 assert(logReads === 1, "one block window must be scanned once outside the adapter");
 assert(receiptReads === 1, "duplicate event logs must share one receipt read per tx");
 assert(traceReads === 1, "candidate parsing and evidence must share one trace read per tx");
+
+// Acceptance 3: the live observed lane and the range scanner share one trace
+// memo, so a tx observed live is never debug_traced again by the range sweep.
+{
+  logReads = 0;
+  receiptReads = 0;
+  traceReads = 0;
+  const memo = createProtocolTraceMemo();
+  const observedLaneTrace = await memo.trace(
+    TX_HASH,
+    123,
+    () => rangeContext.backend.traceTransaction(TX_HASH),
+  );
+  assert(observedLaneTrace !== undefined && traceReads === 1, "observed lane fetches the first trace");
+  const memoized = await scanProtocolDiscoveryRange({
+    adapters: [erc4626Adapter],
+    context: rangeContext,
+    traceMemo: memo,
+  });
+  assert(
+    memoized.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1,
+    "memoized trace must still produce the observed candidate",
+  );
+  assert(traceReads === 1, "range scanner must reuse the observed lane trace instead of re-tracing");
+  assert(memo.stats.hits === 1 && memo.stats.misses === 1, "trace memo must account one hit and one miss");
+
+  let failingReads = 0;
+  const failingFetch = () => {
+    failingReads++;
+    return Promise.reject(new Error("trace backend down"));
+  };
+  await memo.trace(`0x${"ef".repeat(32)}`, 123, failingFetch).catch(() => {});
+  await memo.trace(`0x${"ef".repeat(32)}`, 123, failingFetch).catch(() => {});
+  assert(failingReads === 2, "failed trace fetches must never be memoized");
+
+  memo.prune(1_000);
+  const repruned = await scanProtocolDiscoveryRange({
+    adapters: [erc4626Adapter],
+    context: rangeContext,
+    traceMemo: memo,
+  });
+  assert(
+    repruned.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1 && Number(traceReads) === 2,
+    "expired memo entries must re-trace instead of serving stale traces",
+  );
+}
 
 const splitSourceContext: ProtocolDiscoveryContext = {
   ...rangeContext,
