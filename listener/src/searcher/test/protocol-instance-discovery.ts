@@ -1,6 +1,7 @@
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   prepareProtocolDiscoveryProjection,
+  protocolDiscoveryProjectionChangesRouting,
   runProtocolDiscoveryShadow,
 } from "../protocol-instance-discovery.js";
 import { buildStrategyViews } from "../strategy-views.js";
@@ -296,6 +297,41 @@ const projection = prepareProtocolDiscoveryProjection({
 });
 assert(projection.baseOwnershipVersion === 0, "projection must carry its ownership CAS base");
 assert(projection.ownership.version === 1, "evaluated admission must advance ownership version");
+assert(
+  protocolDiscoveryProjectionChangesRouting({
+    strategyViews: buildStrategyViews([], [], [], {
+      blockscanMaxPools: 100,
+      poolUniverseGeneratedAt: "test",
+    }),
+    backrunGraph: [],
+    blockscanGraph: [],
+  }, projection),
+  "first verified admission must report a routing change",
+);
+const repeatProjection = prepareProtocolDiscoveryProjection({
+  currentOwnership: projection.ownership,
+  result: success,
+  currentBackrunPools: projection.strategyViews.backrun,
+  currentBackrunGraph: projection.backrunGraph,
+  currentBlockscanGraph: projection.blockscanGraph,
+  currentKnownPoolKeys: projection.knownPoolKeys,
+  buildStrategyViews: (pools) => buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 100,
+    poolUniverseGeneratedAt: "test",
+  }),
+});
+assert(
+  repeatProjection.ownership.version === 2,
+  "repeat verification must still advance the ownership evidence version",
+);
+assert(
+  !protocolDiscoveryProjectionChangesRouting({
+    strategyViews: projection.strategyViews,
+    backrunGraph: projection.backrunGraph,
+    blockscanGraph: projection.blockscanGraph,
+  }, repeatProjection),
+  "repeat verification of identical routes must be a routing no-op",
+);
 
 const retainedContext: ProtocolDiscoveryContext = {
   ...context,

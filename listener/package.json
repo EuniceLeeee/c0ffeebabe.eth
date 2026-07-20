@@ -49,6 +49,7 @@
     "searcher:metronome-synth-quote": "node --import tsx src/searcher/test/metronome-synth-quote.ts",
     "searcher:protocol-edge-admission": "node --import tsx src/searcher/test/protocol-edge-admission.ts",
     "searcher:protocol-instance-discovery": "node --import tsx src/searcher/test/protocol-instance-discovery.ts",
+    "searcher:protocol-discovery-rpc-cancellation": "node --import tsx src/searcher/test/protocol-discovery-rpc-cancellation.ts",
     "searcher:erc4626-instance-discovery": "node --import tsx src/searcher/test/erc4626-instance-discovery.ts",
     "searcher:observed-protocol-discovery": "node --import tsx src/searcher/test/observed-protocol-discovery.ts",
     "searcher:protocol-discovery-live-smoke": "node --import tsx src/searcher/test/protocol-discovery-live-smoke.ts",

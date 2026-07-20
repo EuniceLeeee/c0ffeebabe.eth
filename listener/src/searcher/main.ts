@@ -27,6 +27,7 @@ import {
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   protocolEdgeKey,
+  protocolDiscoveryProjectionChangesRouting,
   type ProtocolDiscoveryEvent,
   type ProtocolDiscoveryOwnership,
   type ProtocolDiscoveryProjection,
@@ -1207,13 +1208,21 @@ async function main(): Promise<void> {
     strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
   );
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
-  const commitProtocolProjection = (projection: ProtocolDiscoveryProjection): void => {
+  const commitProtocolProjection = (projection: ProtocolDiscoveryProjection): boolean => {
     if (projection.baseOwnershipVersion !== protocolDiscoveryOwnership.version) {
       throw new Error(
         `stale protocol discovery projection base=${projection.baseOwnershipVersion} ` +
-          `current=${protocolDiscoveryOwnership.version}`,
+        `current=${protocolDiscoveryOwnership.version}`,
       );
     }
+    const routingChanged = protocolDiscoveryProjectionChangesRouting({
+      strategyViews,
+      backrunGraph: graph,
+      blockscanGraph: blockScanGraph,
+    }, projection);
+    // Evidence and the CAS version still advance after a no-op re-attestation.
+    protocolDiscoveryOwnership = projection.ownership;
+    if (!routingChanged) return false;
     // No await between mutations: every graph consumer advances as one projection.
     replaceArray(graph, projection.backrunGraph);
     replaceMap(tokenIndex, projection.tokenIndex);
@@ -1222,7 +1231,6 @@ async function main(): Promise<void> {
     replaceSet(knownPoolKeys, projection.knownPoolKeys);
     replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
     strategyViews = projection.strategyViews;
-    protocolDiscoveryOwnership = projection.ownership;
     if (blockScanGraph && projection.blockscanGraph) {
       replaceArray(blockScanGraph, projection.blockscanGraph);
       blockScanPlanner?.setGraph(blockScanGraph);
@@ -1236,6 +1244,7 @@ async function main(): Promise<void> {
     void flashLiquidity.refresh(flashTokens).catch(() => {
       // The token projection is committed; the slow refresh retries RPC reads.
     });
+    return true;
   };
   let protocolDiscoveryQueue: Promise<void> = Promise.resolve();
   const enqueueProtocolDiscovery = (
@@ -1286,6 +1295,11 @@ async function main(): Promise<void> {
           detector.setPoolAddressMap(allPoolMap);
           planner.setGraph(graph);
           mempoolIntakeRefresh.notify();
+          dumpRuntimeGraphPools(strategyViews.backrun);
+          dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
+          void flashLiquidity.refresh(flashTokens).catch(() => {
+            // The token projection is committed; the slow timer retries RPC reads.
+          });
           console.log(
             `[searcher/live] refresh: +${projection.admittedPools.length}/` +
               `${projection.attemptedPools.length} pools, graph=${graph.length} edges ` +

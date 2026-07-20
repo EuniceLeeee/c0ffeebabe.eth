@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
 import { mergePoolRegistries } from "./active-pool-discovery.js";
 import {
   buildTokenIndex,
@@ -6,7 +6,7 @@ import {
   type TokenEdge,
 } from "./planner/token-graph.js";
 import { poolRegistryKey } from "./pool-universe.js";
-import type { StrategyViews } from "./strategy-views.js";
+import { hashTokenGraph, type StrategyViews } from "./strategy-views.js";
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
 import { STRICT_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
@@ -45,6 +45,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
   ) {
     throw new Error("invalid protocol discovery block range or RPC timeout");
   }
+  const blockTag = ethers.toQuantity(input.blockNumber);
   return {
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
@@ -52,69 +53,62 @@ export function createPinnedProtocolDiscoveryContext(input: {
     graphTokens: unique(input.graphTokens.map((token) => token.toLowerCase())),
     retainedInstances: input.retainedInstances ?? [],
     backend: {
-      call: (req) => withRpcTimeout(
-        input.provider.send("eth_call", [
-          req,
-          `0x${input.blockNumber.toString(16)}`,
-        ]),
+      call: (req) => sendProtocolDiscoveryRpc<string>(
+        input.provider,
+        "eth_call",
+        [input.provider.getRpcTransaction(req), blockTag],
         rpcTimeoutMs,
         "eth_call",
       ),
-      getCode: (address) => withRpcTimeout(
-        input.provider.getCode(address, input.blockNumber),
+      getCode: (address) => sendProtocolDiscoveryRpc<string>(
+        input.provider,
+        "eth_getCode",
+        [address, blockTag],
         rpcTimeoutMs,
         "eth_getCode",
       ),
-      getStorageAt: (address, position) =>
-        withRpcTimeout(
-          input.provider.getStorage(address, position, input.blockNumber),
-          rpcTimeoutMs,
-          "eth_getStorageAt",
-        ),
+      getStorageAt: (address, position) => sendProtocolDiscoveryRpc<string>(
+        input.provider,
+        "eth_getStorageAt",
+        [address, ethers.toQuantity(position), blockTag],
+        rpcTimeoutMs,
+        "eth_getStorageAt",
+      ),
       getLogs: async (req) => {
-        const logs = await withRpcTimeout(
-          input.provider.getLogs({
+        const logs = await sendProtocolDiscoveryRpc<RawProtocolDiscoveryLog[]>(
+          input.provider,
+          "eth_getLogs",
+          [{
             ...(req.address === undefined ? {} : { address: req.address }),
             topics: req.topics.map((topic) =>
               typeof topic === "string" || topic === null ? topic : [...topic]
             ),
-            fromBlock: req.fromBlock,
-            toBlock: req.toBlock,
-          }),
+            fromBlock: ethers.toQuantity(req.fromBlock),
+            toBlock: ethers.toQuantity(req.toBlock),
+          }],
           rpcTimeoutMs,
           "eth_getLogs",
         );
-        return logs.map((log) => ({
-          address: log.address,
-          topics: [...log.topics],
-          data: log.data,
-          transactionHash: log.transactionHash,
-          blockNumber: log.blockNumber,
-        }));
+        return logs.map(normalizeProtocolDiscoveryLog);
       },
       getTransactionReceipt: async (txHash) => {
-        const receipt = await withRpcTimeout(
-          input.provider.getTransactionReceipt(txHash),
+        const receipt = await sendProtocolDiscoveryRpc<RawProtocolDiscoveryReceipt | null>(
+          input.provider,
+          "eth_getTransactionReceipt",
+          [txHash],
           rpcTimeoutMs,
           "eth_getTransactionReceipt",
         );
         if (!receipt) return null;
         return {
-          status: receipt.status,
-          logs: receipt.logs.map((log) => ({
-            address: log.address,
-            topics: [...log.topics],
-            data: log.data,
-            transactionHash: log.transactionHash,
-            blockNumber: log.blockNumber,
-          })),
+          status: receipt.status === null ? null : Number(BigInt(receipt.status)),
+          logs: receipt.logs.map(normalizeProtocolDiscoveryLog),
         };
       },
-      traceTransaction: (txHash) => withRpcTimeout(
-        input.provider.send("debug_traceTransaction", [
-          txHash,
-          { tracer: "callTracer" },
-        ]),
+      traceTransaction: (txHash) => sendProtocolDiscoveryRpc<unknown>(
+        input.provider,
+        "debug_traceTransaction",
+        [txHash, { tracer: "callTracer" }],
         rpcTimeoutMs,
         "debug_traceTransaction",
       ),
@@ -122,23 +116,83 @@ export function createPinnedProtocolDiscoveryContext(input: {
   };
 }
 
-function withRpcTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`protocol discovery ${label} timed out after ${timeoutMs}ms`)),
-      timeoutMs,
-    );
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
+interface RawProtocolDiscoveryLog {
+  readonly address: string;
+  readonly topics: readonly string[];
+  readonly data: string;
+  readonly transactionHash: string;
+  readonly blockNumber: string;
+}
+
+interface RawProtocolDiscoveryReceipt {
+  readonly status: string | null;
+  readonly logs: readonly RawProtocolDiscoveryLog[];
+}
+
+function normalizeProtocolDiscoveryLog(log: RawProtocolDiscoveryLog) {
+  return {
+    address: log.address,
+    topics: [...log.topics],
+    data: log.data,
+    transactionHash: log.transactionHash,
+    blockNumber: Number(BigInt(log.blockNumber)),
+  };
+}
+
+let protocolDiscoveryRpcId = 0;
+
+async function sendProtocolDiscoveryRpc<T>(
+  provider: ethers.JsonRpcProvider,
+  method: string,
+  params: unknown[],
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  const payload: JsonRpcPayload = {
+    id: ++protocolDiscoveryRpcId,
+    jsonrpc: "2.0",
+    method,
+    params,
+  };
+  // Ethers does not expose an AbortSignal per provider.send call. Reuse its
+  // connection URL and resolved auth headers, but issue this deadline-bound
+  // request through fetch so AbortController closes the actual transport.
+  const connection = provider._getConnection();
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    const response = await fetch(connection.url, {
+      method: "POST",
+      headers: { ...connection.headers, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(
+        `protocol discovery ${label} HTTP ${response.status} ${response.statusText}`,
+      );
+    }
+    const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
+    if (body.error) throw provider.getRpcError(payload, body as JsonRpcError);
+    if (!("result" in body)) {
+      throw new Error(`protocol discovery ${label} returned no result`);
+    }
+    return body.result as T;
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(
+        `protocol discovery ${label} timed out after ${timeoutMs}ms`,
+        { cause: error },
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export type ProtocolDiscoveryStage = "feature_flag" | "candidate" | "identity" | "probe";
@@ -412,6 +466,30 @@ export interface ProtocolDiscoveryProjection {
   readonly flashTokens: string[];
   readonly knownPoolKeys: Set<string>;
   readonly knownPoolAddresses: Set<string>;
+}
+
+/**
+ * Re-attestation can refresh ownership evidence without changing any routing
+ * consumer. Keep that evidence update, but do not rebuild graphs or reconnect
+ * the public-mempool subscription for a routing no-op.
+ */
+export function protocolDiscoveryProjectionChangesRouting(
+  current: {
+    readonly strategyViews: StrategyViews;
+    readonly backrunGraph: TokenEdge[];
+    readonly blockscanGraph?: TokenEdge[];
+  },
+  projection: ProtocolDiscoveryProjection,
+): boolean {
+  if (
+    current.strategyViews.versions.strategy_view_version !==
+      projection.strategyViews.versions.strategy_view_version
+  ) return true;
+  if (hashTokenGraph(current.backrunGraph) !== hashTokenGraph(projection.backrunGraph)) return true;
+  if (current.blockscanGraph === undefined || projection.blockscanGraph === undefined) {
+    return current.blockscanGraph !== projection.blockscanGraph;
+  }
+  return hashTokenGraph(current.blockscanGraph) !== hashTokenGraph(projection.blockscanGraph);
 }
 
 /**

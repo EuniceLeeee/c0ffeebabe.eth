@@ -274,6 +274,60 @@ const addressOnly = await runProtocolDiscovery({
 assert(addressOnly.wouldAdmit.length === 1, "address-only evidence must admit one standard vault");
 assert(addressOnly.wouldAdmit[0].edges.length === 2, "address-only vault must emit both graph edges");
 
+for (const [label, sharesPerAsset] of [
+  ["18-dec shares over 6-dec asset", true],
+  ["low-dec shares under 18-dec asset", false],
+] as const) {
+  const skewFactor = 10n ** 12n;
+  const skewContext: ProtocolDiscoveryContext = {
+    ...addressContext,
+    backend: {
+      ...addressContext.backend,
+      async call(req) {
+        const selector = req.data.slice(0, 10);
+        for (const fn of ["convertToShares", "previewDeposit"] as const) {
+          if (selector === ERC4626.getFunction(fn)!.selector) {
+            const amount = BigInt(ERC4626.decodeFunctionData(fn, req.data)[0]);
+            return ERC4626.encodeFunctionResult(
+              fn,
+              [sharesPerAsset ? amount * skewFactor : amount / skewFactor],
+            );
+          }
+        }
+        for (const fn of ["convertToAssets", "previewRedeem"] as const) {
+          if (selector === ERC4626.getFunction(fn)!.selector) {
+            const amount = BigInt(ERC4626.decodeFunctionData(fn, req.data)[0]);
+            return ERC4626.encodeFunctionResult(
+              fn,
+              [sharesPerAsset ? amount / skewFactor : amount * skewFactor],
+            );
+          }
+        }
+        return addressContext.backend.call(req);
+      },
+    },
+  };
+  const skewScan = await scanProtocolDiscoveryRange({
+    adapters: [erc4626Adapter],
+    context: skewContext,
+    candidateAddresses: [VAULT],
+    evidenceCache: createProtocolDiscoveryEvidenceCache(1n),
+  });
+  const skewResult = await runProtocolDiscovery({
+    adapters: [erc4626Adapter],
+    context: skewContext,
+    protocolEdgesEnabled: true,
+    attestIdentity: attester,
+    candidatesByAdapter: skewScan.candidatesByAdapter,
+    sourceComplete: skewScan.sourceComplete,
+    sourceErrors: skewScan.sourceErrors,
+  });
+  assert(
+    skewResult.wouldAdmit.length === 1 && skewResult.wouldAdmit[0].edges.length === 2,
+    `${label} must survive address evidence and both route probes`,
+  );
+}
+
 const permanentIdentityContext: ProtocolDiscoveryContext = {
   ...addressContext,
   backend: {
