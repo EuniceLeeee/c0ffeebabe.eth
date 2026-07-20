@@ -95,40 +95,48 @@ interface ProtocolObservationCapability {
   adapter 其 matchInteraction 必须 fail-closed(receipt/trace 缺任一 → null);(b)ambiguous 交互
   产出零边;tsc;shadow 日志在 fork 环境可见样本。
 
-### Slice C — erc4626 作为通用 scanner 的第一个租户(第一个真准入变更)【Hermes A/B】
+> **Slice C 拆两片(2026-07-20 scope 收窄)**:v1 通用 scanner **只做 observed**(不含 DEX 主动
+> 枚举),所以 legacy 删除**不在 v1**。C1 = observed-only 落地;C2 = 加 DEX 主动枚举,C2 才拥有
+> legacy 删除。**在 C2 落地前,legacy 硬编码必须保留**——observed-only 对休眠 vault(实测 wYLDS 30d
+> 无 Withdraw、pfOHM 11d)结构性召回不到,谁在 C1 删 legacy,这些 vault 立刻回退零边。
+
+### Slice C1 — erc4626 作为通用 scanner 的第一个租户,observed-only【Hermes A/B】
 - **首期只接 erc4626 一个 observation**(其余协议后续逐个接入,架构一次成型、租户逐个上)。
   erc4626 文件只保留 `eventTopics=[Withdraw,Deposit]` / `selectors=[redeem,withdraw,deposit,mint]`
-  + `matchInteraction` + `matchAddressCandidate`(`asset()` 反查)+ `deriveEdges`;**getLogs/block
-  loop 全部上移到 Slice B 的通用 scanner**。
-- 候选来源两条,均由通用 scanner 驱动:观测交互(scanner 扫 topic union)+ graph-token 主动
-  (scanner 遍历 DEX universe token 调 `matchAddressCandidate`)。**legacy 名单不是候选源**——只作
-  期望召回答案卷,存在 discovery 路径之外比对(P0-1:名单进候选源 = 循环论证假阳性)。
+  + `matchInteraction` + `deriveEdges`;**getLogs/block loop 全部上移到 Slice B 的通用 scanner**。
+- **候选来源仅一条:observed 交互**(scanner 扫 topic union → receipt → trace → match)。
+  **v1 不读 DEX universe、不用 graph-token 逐地址 probe**(`matchAddressCandidate` 与 DEX 遍历留到
+  C2)。因此 v1 是纯 catch-up:抓不到首次,休眠 vault 无 Withdraw 即不产出——这是 v1 的已知边界,
+  不是 bug。
 - `attestIdentity`:**`asset()` 可读单独不构成身份**(假合约也能实现 asset());erc4626 的身份 =
-  标准接口自洽检查(asset/totalAssets/convertTo* 互相一致)+ 下述 preview 与 fork 收据行为验证
+  标准接口自洽检查(asset/totalAssets/convertTo* 互相一致)+ preview 与 receipt/trace 行为验证
   整体通过 —— 行为即身份,任一环节不符 → null(quarantine)。
-- `probeRoute`:`previewDeposit/previewRedeem` 一致性 + **fork 收据级 redeem 验证**(继承
-  `nonStandardRedeem` 纪律原文:"错边比没边更糟" —— srUSDe 类 preview 与实付不符的 vault
-  整体排除,除非其 declaredVenues 带专用 metadata);loop-closable(asset 与 share 至少一端
-  能在图内闭环)。
-- **probe 否决必须有承载体(P0-2 修正)**:`probeRoute → PoolEntry` 的管道有结构洞——refresh 收到
-  PoolEntry 后由通用 builder 重新调 `buildEdges()`,而现 erc4626 `buildEdges` 只凭
-  `fixedTokenIn/nonStandardRedeem` 发边,probe 拒绝的 redeem 会被重新长出来。**唯一承载方式**:
-  `PoolEntry` 携带逐 route 的 `verifiedRoutes[]` metadata,`buildEdges()` 只允许为已验证 route 发边;
-  并加断言:**identity/probe 任一步失败 → zero edge**(discovery 来源的 PoolEntry 无 verifiedRoutes
-  = 不发任何边)。
-- **flag 门在 refresh 前重执行(P0-3 修正)**:`SEARCHER_ENABLE_PROTOCOL_EDGES` 现只在启动时过滤
-  静态 registry(`filterLiveProtocolRegistry`),`prepareRuntimePoolRefresh` 对 freshPools **零复查**
-  (已核:refresh 文件中 flag 出现次数=0)——coordinator 必须在喂 refresh 前强制执行
-  `requiresProtocolEdgesFlag` 门,并加测试:**flag off + 有效 discovery 结果 = graph hash 不变**。
-- **A/B 验收(P0-1 修正后)**:
-  1. 召回比对:discovery 产出 ⊇ legacy 20+ 条(答案卷比对,legacy 不在候选源);少一条即假阴,fail。
+- `probeRoute`:`previewDeposit/previewRedeem` 一致性 + **receipt/trace 级 redeem 验证**(继承
+  `nonStandardRedeem` 纪律:"错边比没边更糟" —— srUSDe 类 preview 与实付不符的 vault 整体排除);
+  loop-closable(asset 与 share 至少一端能在图内闭环)。
+- **probe 否决必须有承载体(P0-2)**:`PoolEntry` 携带逐 route 的 `verifiedRoutes[]`,`buildEdges()`
+  只为已验证 route 发边;断言 **identity/probe 任一步失败 → zero edge**。
+- **flag 门在 refresh 前重执行(P0-3)**:coordinator 喂 refresh 前强制 `requiresProtocolEdgesFlag`;
+  测试 **flag off + 有效 discovery = graph hash 不变**。
+- **C1 验收(不含 legacy 删除)**:注册 erc4626 observation;喂一笔真实 Withdraw tx → 通用 scanner
+  一次拉 receipt+trace → match → attest → probe → 入图;只 Withdraw topic 无匹配 trace = 零边;
+  ambiguous(如有)隔离零边;live 窗口漏斗无回归。**C1 不删 legacy、不做召回验收**(那是 C2)。
+
+### Slice C2 — DEX 主动枚举 + legacy 删除【Hermes A/B】
+- 加第二个候选源:scanner 遍历 DEX universe token 调 erc4626 `matchAddressCandidate`(`asset()` 反查),
+  对休眠 vault 不等 Withdraw 主动召回。**legacy 名单仍不是候选源**——只作期望召回答案卷,存在
+  discovery 路径之外比对(P0-1:名单进候选源 = 循环论证假阳性)。
+- 依赖 Slice D 的证据 cache 落盘(否则重启后主动召回也回退,见 D)。
+- **A/B 验收(legacy 删除的前置)**:
+  1. 召回比对:discovery 产出 ⊇ legacy 全集(答案卷比对,legacy 不在候选源);**少一条即 fail**——
+     休眠 vault 靠主动枚举 + 证据 cache 必须能召回。
   2. **无 seed replay(强制)**:完全移除目标 legacy/`POOL_REGISTRY` seed 后重放,必须走通
      `scanner 自发枚举 → identity/probe 通过 → edge 入图 → path_found → final_sim_success`;
-     注意现 `blockscan-hunt.ts` 第 225-231 行直接 merge `POOL_REGISTRY`——**trusted harness 需先加
-     no-seed 模式**,否则结构性无法证明无 seed 枚举。不满足此 replay 的只能记
-     `implemented_not_validated`,不得记 fixed(gates.md 的 bucket-transition 要求)。
+     现 `blockscan-hunt.ts:225-231` 直接 merge `POOL_REGISTRY`——**trusted harness 需先加 no-seed
+     模式**。不满足只记 `implemented_not_validated`,不得记 fixed(gates.md bucket-transition)。
   3. 新增 vault 边计数与 probe 拒绝计数入 journal;live 窗口漏斗无回归。
-- 通过后:删除 `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 的 erc4626 段(计划的核心交付物)。
+- 上述全过后:删除 `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 的 erc4626 段(计划的核心交付物)。
+  **C2 之前不得删。**
 
 ### Slice D — route 生命周期 + 证据 cache 持久化(增删/重 probe/跨重启)【replay 门 + 谨慎 A/B】
 - `runtime-pool-refresh` 增加 remove/replace 语义(原子替换 graph/index/filter,不再只 append);
