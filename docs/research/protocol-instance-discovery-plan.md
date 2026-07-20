@@ -2,14 +2,14 @@
 
 > 目标:protocol adapter 注册后,实例**自动**发现、probe、建边、热更新进图 —— 消灭 per-instance
 > 手写名单(erc4626 vault 类),保留经证明的身份根 pin(registry/factory/singleton)。
-> 基线:`origin/main b7f087a`(刀1 已落地,见下)。
+> 实现基线:`origin/main 445c523`；候选实现提交:`5f9defb`(节点证据完成后再补最终文档提交)。
 
-## 当前实现状态（`codex/protocol-instance-discovery`，基线 `origin/main ba18f0d`）
+## 当前实现状态（`codex/protocol-instance-discovery`）
 
 裁决：**implemented_not_validated**，不是 `fixed`。代码已经把 B/C1/C2/D/E 的共享骨架接入生产
 启动、周期 refresh 与 landed-receipt 两个调用点；首个且唯一已注册动态 family 是 ERC4626。但当前
-完整 DEX universe 对 legacy ERC4626 的召回仍不完整，legacy 静态条目因此保留；系统性 scanner/
-universe 变更还缺当前 gate 要求的预声明 cohort + paired Hermes A/B，亦未取得同一失败样本的
+legacy 静态条目仍保留，直到完整 recall gate 逐项通过；系统性 scanner/universe 变更还缺当前 gate
+要求的预声明 cohort + paired Hermes A/B，亦未取得同一失败样本的
 `scanner self-enumeration → path_found → final_sim_success` 证据，禁止写 fixed。
 
 实际代码形状：
@@ -17,20 +17,32 @@ universe 变更还缺当前 gate 要求的预声明 cohort + paired Hermes A/B�
 - `observed-protocol-discovery.ts::scanProtocolDiscoveryRange()` 是唯一 scanner，统一拥有 DEX 地址遍历、
   topic union、receipt/trace 去重、并发、错误与歧义裁决；family 文件没有 block loop/getLogs。
 - `erc4626-discovery.ts::erc4626Discovery` 只声明 address matcher、Withdraw/redeem/withdraw observed
-  matcher 与 route probe。DEX 地址源可召回没有近期 Withdraw 的 vault；observed 源必须同时通过
-  selector、Withdraw、asset Transfer 和 causal calltrace。
+  matcher 与 route probe。DEX 地址源可召回没有近期 Withdraw 的 vault；地址源除 view 自洽外还要
+  让 adapter 的 `deposit(0)`/`redeem(0)` 执行面 eth_call 成功才发对应方向。observed 源必须同时通过
+  selector、Withdraw、vault share burn、asset payout，且 asset `transfer()` 必须位于对应
+  redeem/withdraw call subtree，sibling payout 不算因果证据。
 - `protocol-instance-discovery.ts::runProtocolDiscovery()` 统一执行 identity + probe；
   `prepareProtocolDiscoveryProjection()` 原子 replace/remove discovery-owned pools、edges、strategy views、
   token index、pool map、flash token 与 blockscan graph。临时 reth/网络错误不会把 retained route 当作
   已完成否决而删除。
-- `protocol-discovery-cache.ts` 持久化 machine-generated 正/负证据；每轮比较 runtime code hash、
-  EIP-1967 implementation word 与 matcher version，负缓存另有 7,200-block TTL；reload 后仍重新走
-  identity/probe，不能 load 即 admit。
-- DEX 主动候选来自完整 `blockscanUniverse` 的 token metadata，加当前 swap graph 增量；固定 protocol
-  token/edge 不参与候选或 loop-closability，避免 legacy/static 自证。
+- `protocol-discovery-cache.ts` 持久化 chain-scoped machine-generated 正/负证据；每轮比较 runtime
+  code hash、EIP-1967 implementation word 与 matcher version，负缓存另有 7,200-block TTL；reload 后
+  仍重新走 identity/probe，不能 load 即 admit。失效按 `evaluatedInstanceKeys` 逐 key 对账，不因无关
+  地址 timeout 阻止已完成 key 的移除。
+- DEX 主动候选来自**未按 score 截断的完整文件 universe** token metadata，加当前 swap graph 增量；
+  helper 强制要求 row 的 adapter 属于注册 swap family。固定 protocol token/edge 不参与候选或
+  loop-closability，避免 legacy/static 自证。
 - 生产 endpoint 不新增付费 RPC：`deploy-node.sh` 强制 `SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545`，
-  discovery 复用同一 provider。reth 已裁剪的旧事件状态记为证据不足并跳过，不自动回退外部 archive；
-  当前状态的主动 DEX 枚举仍可工作。
+  discovery 复用同一 provider。启动 observed 回看默认收窄为 300 blocks；所有 code/storage/identity/
+  probe 都只读 pinned current state，不做历史状态 eth_call。若 reth 无法重放旧 trace，该条证据
+  fail-closed 跳过且 cursor 可前进，不自动回退外部 archive；当前状态的主动 DEX 枚举仍可工作。
+
+第二轮 `gpt-5.6-sol/ultra` 对抗审查的 8 个 P1 已逐项处理：受信 fork harness 的 challenger 修改已
+撤回；DEX 域完整性与 swap-family 隔离、执行面 probe、receipt/trace 因果绑定、matcher timeout 下
+唯一性未决 fail-closed、永久 ABI 否决与暂态 reth 失败分流、archive-state 依赖、chain-scoped cache
+及 per-key invalidation 均有回归测试。P2 中 selector 100-block 去重已删除，启动 projection 后立即
+刷新 runtime graph snapshot。尚未完成的是公共 transfer/call evidence IR；当前 scanner 已统一所有
+I/O/cursor/trace 去重，但 family matcher 仍解析一次共享的 raw receipt/trace，见 §2 的诚实边界。
 
 当前边界：ERC4626 observed v1 只接退出侧（Withdraw + redeem/withdraw）；deposit/mint 不作为第三个
 候选源，vault 的冷启动召回由同一个 DEX-universe 地址源完成。其他协议不会自动“猜 adapter”；以后
@@ -48,6 +60,30 @@ adapter，tx `0x14026eed…f4fd53` 另有 uCR/WETH cold DEX pool admission 缺�
 - equivalence/resource：flag-off/shadow graph 不变；未触及 swap edge 集；记录启动地址数、code reads、
   expensive matcher probes、cache hits、scan wall time；A/B 同块比较两条现有 lane 的 pass latency、
   budget censoring、candidate composition 与 final-sim false-positive 数。
+
+### 2026-07-20 实际工具与节点证据
+
+- 本地在候选提交 `5f9defb` 上实际运行 `tool-index --check`：179 tools；随后用同一 schema-v2
+  manifest 经 `tool-run` 跑 8 个工具：ERC4626 instance、observed scanner、coordinator、route-adapters、
+  runtime refresh、protocol-edge admission、protocol legs、universe split，8/8 exit 0。manifest:
+  `/tmp/mev-protocol-instance-discovery-tools-5f9defb.json`，SHA-256
+  `2c34494ef57cd6c84d58093517fd35f51f460c8a662b4f174cd7b2002db9b4f8`。
+- 生产节点 SSM command `43b87ba5-8cdc-4d5e-baa5-b148bb355e85`：临时 detached checkout，唯一 endpoint
+  `SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545`，未启动 searcher、未签名、未广播。节点自身重新执行
+  `tool-index --check`(179) 与 `tool-run listener:searcher:protocol-discovery-dex-live-smoke`，receipt exit 0；
+  node manifest SHA-256 `e6d50bb9bac2b5b5494d2fba28eb42397295b638d2b93c048baf594bae431825`，
+  SSM elapsed `PT3M8.398S`。
+- pinned block `25571701`，完整 DEX token 地址 8,410；移除全部 ERC4626 seed 后自动 admission 34 个实例，
+  protocol graph `12 → 71`，新增 59 edges。第二轮 `probes=0/cacheHits=8410`，证明地址 cache 生效。
+- observed 实链 smoke 另由 SSM command `c7457aca-208c-4a79-8335-a64628b3b48b` 在同一本机 reth
+  上完成，300-block 窗口内从真实 tx
+  `0xb5625de6c01a3c2fdc618c4fa4cb458d3417530104c5cd16b39c25dc01242932` 自发识别未在 seed 的
+  target `0x9a1D6bd5b8642C41F25e0958129B85f8E1176F3e`，`sourceComplete=true`，protocol graph
+  `53 → 55`，新增 deposit/redeem 两边。tool-run exit 0；manifest SHA-256
+  `c26c4b9ef350e0d62c8949014321652a478035bac82f270e78b0962d488b5ee9`，elapsed `PT2.517S`。
+- legacy 标准 ERC4626 的候选召回 `11/20`、最终 admission `6/20`。因此节点 smoke 证明“adapter 注册后
+  可由 DEX source 自动入图”已经实现，但也实证 C2 的 legacy 删除门**未通过**；其余 14 个不得靠
+  静态答案卷反喂候选。此证据只支持 `implemented_not_validated`，不支持 `fixed`。
 
 ## 0. 已完成(不在本计划内)
 
@@ -87,32 +123,23 @@ ProtocolRoute { target, tokenIn, tokenOut, action,      // 行为:建边/报价/
 scanner、同一 tx 被多 adapter 重复拉 trace、扫描调度与协议语义纠缠。
 
 ```ts
-// 通用 scanner 产出的标准化交互(scanner 不认识任何具体协议)
-interface ObservedInteraction {
-  txHash; blockNumber; target; selector; calldata;
-  call: TraceCall; receipt: TransactionReceipt;
-  transfers: TokenTransfer[]; mints: TokenTransfer[]; burns: TokenTransfer[];  // 从整笔 receipt 标准化
-  trace: CallTrace;  // 成功 call tree
-}
-
-// adapter 只声明协议语义,零扫描机制
-interface ProtocolObservationCapability {
-  readonly eventTopics: readonly string[];   // scanner 聚合成 topic union,一次查询
-  readonly selectors: readonly string[];     // 廉价 shortlist
-  // 完整协议匹配:必须用 receipt Transfer + trace 因果退出双验(不是 selector+asset 就算)
-  matchInteraction(i: ObservedInteraction, ctx): Promise<ProtocolInteractionMatch | null>;
-  // graph-token 主动候选(无观测交互时,对一个地址试匹配);同样只声明语义,循环归 scanner
-  matchAddressCandidate?(address: string, ctx): Promise<ProtocolInteractionMatch | null>;
-  // 从完整匹配生成边;attestIdentity 的 code-hash/impl 绑定与 evidence 复验在此之后仍强制
-  deriveEdges(m: ProtocolInteractionMatch, ctx): Promise<readonly TokenEdge[]>;
+// 当前落地接口：adapter 只声明协议语义，零扫描机制。
+interface ProtocolDiscoveryCapability {
+  readonly eventTopics: readonly string[];       // scanner 聚合 topic union
+  readonly callSelectors: readonly string[];     // address+selector shortlist
+  readonly addressMatcherVersion?: string;       // cache 语义版本
+  candidateFromAddress?(fingerprint, ctx): Promise<ProtocolCandidate | null>;
+  candidateFromObservedCall?(callWithSharedReceiptAndTrace, ctx):
+    Promise<ProtocolCandidate | null>;
+  probeCandidate(attestedInstance, ctx): Promise<readonly TokenEdge[]>;
 }
 ```
 
 通用 scanner 管道(一次成型,所有协议共用):
 ```
 通用 scanner:聚合所有 adapter 的 topic/selector → getLogs(topic union) → 按 txHash 去重
-  → 每 tx 只读一次 receipt + 一次 trace → normalize 成 ObservedInteraction
-    → 分发给所有 observation:matchInteraction
+  → 每 tx 只读一次 receipt + 一次 trace → 展平成功的 address+selector call shortlist
+    → 把同一份 receipt/trace 分发给所有 capability:candidateFromObservedCall
       → 0 个完整匹配 = unknown/skip;1 个 = attestIdentity → deriveEdges → 入图;
         >1 个 = ambiguous,隔离记录不入图(唯一性裁决,见 §4.7)
 ```
@@ -121,6 +148,10 @@ interface ProtocolObservationCapability {
 绝不入图);**matchInteraction = 完整协议匹配**(target/receiver/amount/selector/Transfer 五项 + trace
 因果退出);**attestIdentity = 身份根准入**(reverse-verify,code-hash/impl 绑定,升级即失效重 attest)。
 `matchTrace` 现有混合实现(部分 target-aware、部分仅 selector)保留,仅作 shortlist,均无需改。
+
+诚实边界：scanner 已统一 getLogs/cursor/receipt/trace/并发/歧义，新增 family 不会再写一套 scanner；
+但 transfers/mints/burns/call-tree 尚未抽成公共 IR，family 仍需解析一次共享 raw evidence。这是后续
+可复用性优化，不影响当前 ERC4626 的因果准入，也不得在文档中冒充已经完成。
 
 退化语义:无 `observation` 的 adapter = 只有 declaredVenues(单例协议永远停在这档即可)。
 
@@ -147,7 +178,7 @@ interface ProtocolObservationCapability {
 
 ### Slice C1 — erc4626 作为通用 scanner 的第一个租户,observed-only【Hermes A/B】
 - **首期只接 erc4626 一个 observation**(其余协议后续逐个接入,架构一次成型、租户逐个上)。
-  erc4626 文件只保留 `eventTopics=[Withdraw,Deposit]` / `selectors=[redeem,withdraw,deposit,mint]`
+  erc4626 文件当前只接 `eventTopics=[Withdraw]` / `selectors=[redeem,withdraw]`
   + `matchInteraction` + `deriveEdges`;**getLogs/block loop 全部上移到 Slice B 的通用 scanner**。
 - **候选来源仅一条:observed 交互**(scanner 扫 topic union → receipt → trace → match)。
   **v1 不读 DEX universe、不用 graph-token 逐地址 probe**(`matchAddressCandidate` 与 DEX 遍历留到
@@ -177,8 +208,9 @@ interface ProtocolObservationCapability {
      休眠 vault 靠主动枚举 + 证据 cache 必须能召回。
   2. **无 seed replay(强制)**:完全移除目标 legacy/`POOL_REGISTRY` seed 后重放,必须走通
      `scanner 自发枚举 → identity/probe 通过 → edge 入图 → path_found → final_sim_success`;
-     现 `blockscan-hunt.ts:225-231` 直接 merge `POOL_REGISTRY`——**trusted harness 需先加 no-seed
-     模式**。不满足只记 `implemented_not_validated`,不得记 fixed(gates.md bucket-transition)。
+     challenger **不得修改 trusted harness**；应由独立 no-seed harness 先产 scanner graph，再把同一
+     样本交给未改动的 trusted final-sim 出口。当前只有 graph 前后 smoke，没有合格 final-sim receipt，
+     故只记 `implemented_not_validated`,不得记 fixed(gates.md bucket-transition)。
   3. 新增 vault 边计数与 probe 拒绝计数入 journal;live 窗口漏斗无回归。
 - 上述全过后:删除 `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 的 erc4626 段(计划的核心交付物)。
   **C2 之前不得删。**
