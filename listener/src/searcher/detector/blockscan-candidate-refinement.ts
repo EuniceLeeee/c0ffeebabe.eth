@@ -26,6 +26,8 @@ interface RankedProbe {
   index: number;
 }
 
+class ProbeDeadlineError extends Error {}
+
 /**
  * Cheap exact route probe before GSS/final-sim. Quotes every leg through the
  * production dispatcher without the approximate pool cache, then keeps the
@@ -47,6 +49,7 @@ export async function refineBlockScanCandidates(
   let negative = 0;
   let failed = 0;
   let next = 0;
+  let deadlineHit = false;
 
   const workers = Array.from(
     { length: Math.max(1, Math.min(concurrency, opportunities.length)) },
@@ -56,13 +59,14 @@ export async function refineBlockScanCandidates(
         if (index >= opportunities.length) return;
         const opportunity = opportunities[index];
         if (Date.now() >= deadlineAtMs) {
+          deadlineHit = true;
           fallback.push({ opportunity, index });
           onProbe?.({ index, status: "unprobed", marginBps: null });
           continue;
         }
         attempted++;
         try {
-          const marginBps = await exactProbeMarginBps(state, opportunity);
+          const marginBps = await exactProbeMarginBps(state, opportunity, deadlineAtMs);
           if (marginBps > 0) {
             ranked.push({
               opportunity,
@@ -76,10 +80,15 @@ export async function refineBlockScanCandidates(
             negative++;
             onProbe?.({ index, status: "negative", marginBps });
           }
-        } catch {
-          failed++;
+        } catch (error) {
           fallback.push({ opportunity, index });
-          onProbe?.({ index, status: "failed", marginBps: null });
+          if (error instanceof ProbeDeadlineError) {
+            deadlineHit = true;
+            onProbe?.({ index, status: "unprobed", marginBps: null });
+          } else {
+            failed++;
+            onProbe?.({ index, status: "failed", marginBps: null });
+          }
         }
       }
     },
@@ -100,7 +109,7 @@ export async function refineBlockScanCandidates(
     positive: ranked.length,
     negative,
     failed,
-    deadlineHit: attempted < opportunities.length,
+    deadlineHit: deadlineHit || attempted < opportunities.length,
   };
 }
 
@@ -121,23 +130,27 @@ export function exactProbePriority(
 async function exactProbeMarginBps(
   state: StateBackend,
   opportunity: BlockScanOpportunity,
+  deadlineAtMs: number,
 ): Promise<number> {
   const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
   const amountIn = maxBigint(9n, ceiling / 1024n);
   if (amountIn > ceiling || amountIn <= 0n) return 0;
   let amount = amountIn;
   for (const edge of opportunity.seedEdges) {
-    amount = await quote(
-      edge.adapterId,
-      edge.target,
-      edge.tokenIn,
-      edge.tokenOut,
-      amount,
-      state,
-      undefined,
-      edge.v4PoolKey,
-      edge.poolToken0,
-      edge.poolToken1,
+    amount = await beforeProbeDeadline(
+      deadlineAtMs,
+      () => quote(
+        edge.adapterId,
+        edge.target,
+        edge.tokenIn,
+        edge.tokenOut,
+        amount,
+        state,
+        undefined,
+        edge.v4PoolKey,
+        edge.poolToken0,
+        edge.poolToken1,
+      ),
     );
     if (amount <= 0n) return 0;
   }
@@ -145,6 +158,29 @@ async function exactProbeMarginBps(
   if (profit <= 0n) return 0;
   const marginBps = Number(profit) * 10_000 / Number(amountIn);
   return Number.isFinite(marginBps) && marginBps > 0 ? marginBps : 0;
+}
+
+async function beforeProbeDeadline<T>(
+  deadlineAtMs: number,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) throw new ProbeDeadlineError("exact probe deadline reached");
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new ProbeDeadlineError("exact probe deadline reached")),
+          remainingMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 function minBigint(a: bigint, b: bigint): bigint {

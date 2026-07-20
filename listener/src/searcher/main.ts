@@ -675,16 +675,30 @@ async function main(): Promise<void> {
   let blockScanPlanner: TemplatePlanner | undefined;
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
-  const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
-  const blockScanLargeGraphPassBudgetMs = Number(
+  const blockScanPassBudgetRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000",
+  );
+  const blockScanPassBudgetMs = Number.isFinite(blockScanPassBudgetRaw)
+    ? Math.max(1, Math.floor(blockScanPassBudgetRaw))
+    : 11_000;
+  const blockScanLargeGraphPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
   );
-  const blockScanLargeGraphEdgeThreshold = Number(
+  const blockScanLargeGraphPassBudgetMs = Number.isFinite(blockScanLargeGraphPassBudgetRaw)
+    ? Math.max(blockScanPassBudgetMs, Math.floor(blockScanLargeGraphPassBudgetRaw))
+    : Math.max(blockScanPassBudgetMs, 30_000);
+  const blockScanLargeGraphEdgeThresholdRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD ?? "20000",
   );
-  const blockScanSolveReserveMs = Number(
+  const blockScanLargeGraphEdgeThreshold = Number.isFinite(blockScanLargeGraphEdgeThresholdRaw)
+    ? Math.max(1, Math.floor(blockScanLargeGraphEdgeThresholdRaw))
+    : 20_000;
+  const blockScanSolveReserveRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000",
   );
+  const blockScanSolveReserveMs = Number.isFinite(blockScanSolveReserveRaw)
+    ? Math.max(0, Math.floor(blockScanSolveReserveRaw))
+    : 8_000;
   const blockScanFullWarmBudgetMs = Number(
     process.env.SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS ?? "240000",
   );
@@ -3499,6 +3513,26 @@ async function processOpportunities(
   deps.recordFinalState(lastTerminalState, lastTerminalError);
 }
 
+async function readUncachedLatestBlock(
+  provider: ethers.JsonRpcProvider,
+): Promise<{ number: number; hash: string }> {
+  const block = await provider.send("eth_getBlockByNumber", ["latest", false]) as {
+    number?: unknown;
+    hash?: unknown;
+  } | null;
+  if (
+    typeof block?.number !== "string" ||
+    typeof block.hash !== "string" ||
+    !ethers.isHexString(block.hash, 32)
+  ) {
+    throw new Error("latest block response missing a valid number/hash");
+  }
+  return {
+    number: ethers.toNumber(block.number),
+    hash: block.hash.toLowerCase(),
+  };
+}
+
 async function maybeSubmitBlockScanAtomic(params: {
   config: LiveConfig;
   provider: ethers.JsonRpcProvider;
@@ -3595,12 +3629,10 @@ async function maybeSubmitBlockScanAtomic(params: {
 
   let targetBlock = sourceBlock + 1;
   try {
-    const [currentHead, canonicalSourceBlock] = await Promise.all([
-      provider.getBlockNumber(),
-      provider.getBlock(sourceBlock),
-    ]);
+    const latestAtVerify = await readUncachedLatestBlock(provider);
+    const currentHead = latestAtVerify.number;
     targetBlock = Math.max(sourceBlock, currentHead) + 1;
-    const canonicalSourceBlockHash = canonicalSourceBlock?.hash?.toLowerCase();
+    const canonicalSourceBlockHash = latestAtVerify.hash;
     if (
       currentHead !== sourceBlock ||
       canonicalSourceBlockHash !== sourceBlockHash.toLowerCase()
@@ -3708,6 +3740,22 @@ async function maybeSubmitBlockScanAtomic(params: {
           `profitEth=${ethers.formatEther(expectedProfitEth)} ` +
           `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)}`,
       );
+    }
+
+    const latestAtSubmit = await readUncachedLatestBlock(provider);
+    const submitHead = latestAtSubmit.number;
+    const submitHeadHash = latestAtSubmit.hash;
+    if (
+      submitHead !== sourceBlock ||
+      submitHeadHash !== sourceBlockHash.toLowerCase()
+    ) {
+      targetBlock = Math.max(sourceBlock, submitHead) + 1;
+      const error =
+        `stale source block ${sourceBlock} head=${submitHead} ` +
+        `forkHash=${sourceBlockHash} canonicalHash=${submitHeadHash}`;
+      console.log(`[searcher/blockscan] block=${sourceBlock} stale before submit ring=${ring}: ${error}`);
+      drop(targetBlock, "submit_gate", "blockscan_stale_state", error);
+      return;
     }
 
     const decision = submissionCoordinator.offer({
