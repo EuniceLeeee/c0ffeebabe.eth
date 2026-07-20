@@ -27,6 +27,7 @@ import {
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   protocolEdgeKey,
+  protocolInstanceKey,
   protocolDiscoveryProjectionChangesRouting,
   type ProtocolDiscoveryEvent,
   type ProtocolDiscoveryOwnership,
@@ -36,7 +37,9 @@ import {
 import {
   cachedProtocolCandidates,
   loadProtocolDiscoveryEvidenceCache,
+  pruneRecentProcessedProtocolTxs,
   reconcileProtocolDiscoveryEvidenceCache,
+  recordProtocolRouteOwnership,
   saveProtocolDiscoveryEvidenceCache,
 } from "./protocol-discovery-cache.js";
 import { shouldTraceForProtocolDiscovery } from "./observed-protocol-discovery.js";
@@ -882,6 +885,16 @@ async function main(): Promise<void> {
     throw new Error("SEARCHER_DISCOVERY_TO_BLOCK must be a non-negative safe integer");
   }
   const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
+  // Protocol discovery runs on its own cadence, decoupled from the DEX refresh
+  // timer. Both lanes still serialize through one mutation queue below.
+  const protocolDiscoveryIntervalMs = Math.max(
+    1_000,
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_INTERVAL_MS ?? "300000"),
+  );
+  const protocolDiscoveryMaxCatchupBlocks = Math.max(
+    protocolDiscoveryBlocks,
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_MAX_CATCHUP_BLOCKS ?? "50000"),
+  );
   const mainnetBackend: TokenQueryBackend = {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
@@ -1059,11 +1072,53 @@ async function main(): Promise<void> {
     protocolDiscoveryCachePath,
     protocolDiscoveryChainId,
   );
+  // Resume the observed event cursor instead of rescanning the default window.
+  // A long outage is caught up bounded by the explicit catch-up cap, and the
+  // dropped range (if any) is logged rather than silently skipped.
+  if (protocolDiscoveryCache.runtime.observedCursor !== null) {
+    const persistedCursor = Math.min(
+      protocolDiscoveryCache.runtime.observedCursor,
+      discoveryToBlock,
+    );
+    const catchupFloor = discoveryToBlock - protocolDiscoveryMaxCatchupBlocks;
+    const resumedCursor = Math.max(persistedCursor, catchupFloor);
+    if (resumedCursor > persistedCursor) {
+      console.warn(
+        `[searcher/live] protocol discovery cursor catch-up clamped: ` +
+          `dropped_blocks=${persistedCursor + 1}-${resumedCursor} ` +
+          `cap=${protocolDiscoveryMaxCatchupBlocks}`,
+      );
+    }
+    lastProtocolDiscoveryBlock = resumedCursor;
+  }
+  // Reload persisted route ownership as retained CANDIDATES only: edges were
+  // stripped at save time, so nothing routes until this pass re-attests and
+  // re-probes each instance. Addresses that collide with a static/declared pool
+  // stay compatibility-owned, exactly as the projection would enforce.
+  if (protocolDiscoveryCache.routeOwnership.admissions.length > 0) {
+    const staticPoolKeys = new Set(strategyViews.backrun.map(poolRegistryKey));
+    const reloadedAdmissions = new Map(
+      protocolDiscoveryCache.routeOwnership.admissions
+        .filter((item) => !staticPoolKeys.has(poolRegistryKey(item.instance.pool)))
+        .map((item) => [
+          protocolInstanceKey(item.adapterId, item.instance.pool.address),
+          { adapterId: item.adapterId, instance: item.instance, edges: [] },
+        ] as const),
+    );
+    protocolDiscoveryOwnership = {
+      version: protocolDiscoveryCache.routeOwnership.version,
+      admissions: reloadedAdmissions,
+    };
+  }
   const persistProtocolDiscoveryEvidence = (result: ProtocolDiscoveryResult): void => {
     if (protocolDiscoveryShadow || !config.enableProtocolEdges) return;
     // evaluatedInstanceKeys excludes retryable identity/probe failures, so
     // per-key reconciliation is safe even when an unrelated source read failed.
     reconcileProtocolDiscoveryEvidenceCache(protocolDiscoveryCache, result);
+    protocolDiscoveryCache.runtime.observedCursor = lastProtocolDiscoveryBlock >= 0
+      ? lastProtocolDiscoveryBlock
+      : null;
+    recordProtocolRouteOwnership(protocolDiscoveryCache, protocolDiscoveryOwnership);
     try {
       saveProtocolDiscoveryEvidenceCache(protocolDiscoveryCachePath, protocolDiscoveryCache);
     } catch (error) {
@@ -1089,14 +1144,13 @@ async function main(): Promise<void> {
     currentBlockscanGraph: blockScanGraph,
     buildStrategyViews: rebuildStrategyViews,
     blockNumber: discoveryToBlock,
-    fromBlock: Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1),
+    fromBlock: Math.min(discoveryToBlock, Math.max(0, lastProtocolDiscoveryBlock + 1)),
     graphTokens: initialProtocolAddressCandidates,
     candidateAddresses: initialProtocolAddressCandidates,
     evidenceCache: protocolDiscoveryCache,
     bootstrapCandidates: cachedProtocolCandidates(protocolDiscoveryCache),
     shadow: protocolDiscoveryShadow,
   });
-  persistProtocolDiscoveryEvidence(initialProtocolDiscovery.result);
   emitProtocolDiscoveryEvents(
     initialProtocolDiscovery.result.events,
     protocolDiscoveryShadow ? "shadow" : "active",
@@ -1120,6 +1174,8 @@ async function main(): Promise<void> {
   ) {
     lastProtocolDiscoveryBlock = discoveryToBlock;
   }
+  // Persist after ownership/cursor advanced so the snapshot survives a restart.
+  persistProtocolDiscoveryEvidence(initialProtocolDiscovery.result);
   const protocolGraphAfter = graph.filter((edge) => edge.slotKind === "protocol");
   const addedProtocolEdges = protocolGraphAfter.filter(
     (edge) => !protocolEdgeKeysBefore.has(protocolEdgeKey(edge)),
@@ -1248,7 +1304,7 @@ async function main(): Promise<void> {
   };
   let protocolDiscoveryQueue: Promise<void> = Promise.resolve();
   const enqueueProtocolDiscovery = (
-    label: "active" | "observed",
+    label: "active" | "observed" | "dex-refresh",
     work: () => Promise<void>,
   ): Promise<void> => {
     const run = protocolDiscoveryQueue.then(work);
@@ -1262,7 +1318,7 @@ async function main(): Promise<void> {
   };
   const refreshTimer = setInterval(async () => {
     try {
-      await enqueueProtocolDiscovery("active", async () => {
+      await enqueueProtocolDiscovery("dex-refresh", async () => {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
         admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
       });
@@ -1309,47 +1365,6 @@ async function main(): Promise<void> {
           );
         }
       }
-
-      {
-        const latestProtocolBlock = await provider.getBlockNumber();
-        if (latestProtocolBlock <= lastProtocolDiscoveryBlock) return;
-        const protocolDexDomain = currentProtocolDexDomain();
-        const pass = await prepareActiveProtocolDiscoveryPass({
-          provider,
-          adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
-          identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-          protocolEdgesEnabled: config.enableProtocolEdges,
-          currentOwnership: protocolDiscoveryOwnership,
-          currentBackrunPools: strategyViews.backrun,
-          currentBackrunGraph: graph,
-          currentBlockscanGraph: blockScanGraph,
-          currentKnownPoolKeys: knownPoolKeys,
-          buildStrategyViews: rebuildStrategyViews,
-          blockNumber: latestProtocolBlock,
-          fromBlock: lastProtocolDiscoveryBlock + 1,
-          graphTokens: protocolDexDomain,
-          candidateAddresses: protocolDexDomain,
-          evidenceCache: protocolDiscoveryCache,
-          shadow: protocolDiscoveryShadow,
-        });
-        persistProtocolDiscoveryEvidence(pass.result);
-        emitProtocolDiscoveryEvents(
-          pass.result.events,
-          protocolDiscoveryShadow ? "shadow" : "active",
-          latestProtocolBlock,
-        );
-        console.log(
-          `[searcher/live] protocol address scan: addresses=${pass.scanner.addressStats.addresses} ` +
-            `code_reads=${pass.scanner.addressStats.codeReads} ` +
-            `cache_hits=${pass.scanner.addressStats.cacheHits} probes=${pass.scanner.addressStats.probes} ` +
-            `matches=${pass.scanner.addressStats.matches} negatives=${pass.scanner.addressStats.negatives} ` +
-            `ambiguous=${pass.scanner.addressStats.ambiguous}`,
-        );
-        if (pass.projection) commitProtocolProjection(pass.projection);
-        if (pass.scanner.eventSourceComplete && pass.result.evaluationComplete) {
-          lastProtocolDiscoveryBlock = latestProtocolBlock;
-        }
-      }
       });
     } catch (err) {
       console.log(
@@ -1357,8 +1372,56 @@ async function main(): Promise<void> {
       );
     }
   }, refreshIntervalMs);
+  const runActiveProtocolDiscoveryPass = async (): Promise<void> => {
+    const latestProtocolBlock = await provider.getBlockNumber();
+    if (latestProtocolBlock <= lastProtocolDiscoveryBlock) return;
+    const protocolDexDomain = currentProtocolDexDomain();
+    const pass = await prepareActiveProtocolDiscoveryPass({
+      provider,
+      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+      protocolEdgesEnabled: config.enableProtocolEdges,
+      currentOwnership: protocolDiscoveryOwnership,
+      currentBackrunPools: strategyViews.backrun,
+      currentBackrunGraph: graph,
+      currentBlockscanGraph: blockScanGraph,
+      currentKnownPoolKeys: knownPoolKeys,
+      buildStrategyViews: rebuildStrategyViews,
+      blockNumber: latestProtocolBlock,
+      fromBlock: Math.max(
+        lastProtocolDiscoveryBlock + 1,
+        latestProtocolBlock - protocolDiscoveryMaxCatchupBlocks + 1,
+      ),
+      graphTokens: protocolDexDomain,
+      candidateAddresses: protocolDexDomain,
+      evidenceCache: protocolDiscoveryCache,
+      shadow: protocolDiscoveryShadow,
+    });
+    emitProtocolDiscoveryEvents(
+      pass.result.events,
+      protocolDiscoveryShadow ? "shadow" : "active",
+      latestProtocolBlock,
+    );
+    console.log(
+      `[searcher/live] protocol address scan: addresses=${pass.scanner.addressStats.addresses} ` +
+        `code_reads=${pass.scanner.addressStats.codeReads} ` +
+        `cache_hits=${pass.scanner.addressStats.cacheHits} probes=${pass.scanner.addressStats.probes} ` +
+        `matches=${pass.scanner.addressStats.matches} negatives=${pass.scanner.addressStats.negatives} ` +
+        `ambiguous=${pass.scanner.addressStats.ambiguous}`,
+    );
+    if (pass.projection) commitProtocolProjection(pass.projection);
+    if (pass.scanner.eventSourceComplete && pass.result.evaluationComplete) {
+      lastProtocolDiscoveryBlock = latestProtocolBlock;
+    }
+    persistProtocolDiscoveryEvidence(pass.result);
+  };
+  const protocolDiscoveryTimer = setInterval(() => {
+    void enqueueProtocolDiscovery("active", runActiveProtocolDiscoveryPass);
+  }, protocolDiscoveryIntervalMs);
 
-  const observedProtocolTxs = new Map<string, number>();
+  // Observed-tx dedup state lives in the evidence cache so a restart resumes
+  // from persisted state instead of re-tracing the recent window.
+  const observedProtocolTxs = protocolDiscoveryCache.runtime.recentProcessedTxs;
   const unknownProtocolSelectorLastBlock = new Map<string, number>();
   const processObservedProtocolReceipt = async (input: {
     txHash: string;
@@ -1371,9 +1434,7 @@ async function main(): Promise<void> {
       !shouldTraceForProtocolDiscovery(input.receipt.logs, PRODUCTION_ROUTE_ADAPTERS.protocols)
     ) return;
     const txKey = input.txHash.toLowerCase();
-    for (const [key, block] of observedProtocolTxs) {
-      if (input.blockNumber - block >= 100) observedProtocolTxs.delete(key);
-    }
+    pruneRecentProcessedProtocolTxs(protocolDiscoveryCache, input.blockNumber, 100);
     if (observedProtocolTxs.has(txKey)) return;
     let trace: unknown;
     try {
@@ -1406,7 +1467,6 @@ async function main(): Promise<void> {
       trace,
       graphTokens: protocolDexDomain,
     });
-    persistProtocolDiscoveryEvidence(pass.result);
     emitProtocolDiscoveryEvents(pass.result.events, "observed", input.blockNumber);
     for (const diagnostic of pass.unknownSelectors) {
       const key = `${diagnostic.target.toLowerCase()}|${diagnostic.selector}`;
@@ -1430,6 +1490,7 @@ async function main(): Promise<void> {
     // Mark complete only after trace + identity/probe processing. A transient
     // downstream failure stays retryable if the same landed tx is observed again.
     if (pass.result.evaluationComplete) observedProtocolTxs.set(txKey, input.blockNumber);
+    persistProtocolDiscoveryEvidence(pass.result);
   };
   const observeProtocolReceipt = (input: {
     txHash: string;
@@ -2280,6 +2341,7 @@ async function main(): Promise<void> {
     logStageCounters(counters);
     cancelScheduledWarm();
     clearInterval(refreshTimer);
+    clearInterval(protocolDiscoveryTimer);
     clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();
@@ -2374,6 +2436,7 @@ async function main(): Promise<void> {
     logStageCounters(counters);
     cancelScheduledWarm();
     clearInterval(refreshTimer);
+    clearInterval(protocolDiscoveryTimer);
     clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();

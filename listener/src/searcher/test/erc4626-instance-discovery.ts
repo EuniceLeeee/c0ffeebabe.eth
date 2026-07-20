@@ -15,7 +15,9 @@ import {
   createProtocolDiscoveryEvidenceCache,
   loadProtocolDiscoveryEvidenceCache,
   protocolAddressCacheKey,
+  pruneRecentProcessedProtocolTxs,
   reconcileProtocolDiscoveryEvidenceCache,
+  recordProtocolRouteOwnership,
   recordVerifiedProtocolCandidates,
   saveProtocolDiscoveryEvidenceCache,
 } from "../protocol-discovery-cache.js";
@@ -539,6 +541,15 @@ assert(negativeExpired.addressStats.probes === 1, "negative evidence must expire
 assert(Number(nonVaultCalls) === 4, "expired negative must retry even when code fingerprints are stable");
 
 recordVerifiedProtocolCandidates(addressCache, addressOnly.wouldAdmit);
+addressCache.runtime.observedCursor = 123;
+addressCache.runtime.recentProcessedTxs.set(TX_HASH.toLowerCase(), 123);
+recordProtocolRouteOwnership(addressCache, {
+  version: 7,
+  admissions: new Map([[
+    protocolAddressCacheKey(erc4626Adapter.id, VAULT),
+    { adapterId: erc4626Adapter.id, instance: addressOnly.wouldAdmit[0].instance },
+  ]]),
+});
 const cacheDir = mkdtempSync(join(tmpdir(), "mev-protocol-cache-"));
 const cachePath = join(cacheDir, "cache.json");
 try {
@@ -546,6 +557,47 @@ try {
   const reloaded = loadProtocolDiscoveryEvidenceCache(cachePath, 1n);
   assert(reloaded.addressEntries.size >= 2, "positive and negative address evidence must persist");
   assert(reloaded.verifiedCandidates.size === 1, "verified admission evidence must persist");
+  assert(reloaded.runtime.observedCursor === 123, "observed event cursor must survive a restart");
+  assert(
+    reloaded.runtime.recentProcessedTxs.get(TX_HASH.toLowerCase()) === 123,
+    "recently processed observed txs must survive a restart",
+  );
+  assert(
+    reloaded.routeOwnership.version === 7 && reloaded.routeOwnership.admissions.length === 1,
+    "route ownership snapshot must survive a restart",
+  );
+  const reloadedInstance = reloaded.routeOwnership.admissions[0].instance;
+  assert(
+    reloadedInstance.evidence.some((item) =>
+      typeof (item as { sampleAssets?: unknown }).sampleAssets === "bigint"
+    ),
+    "persisted ownership evidence must round-trip bigint fields",
+  );
+  const retainedFromDisk = await runProtocolDiscovery({
+    adapters: [erc4626Adapter],
+    context: { ...addressContext, retainedInstances: [reloadedInstance] },
+    protocolEdgesEnabled: true,
+    attestIdentity: attester,
+  });
+  assert(
+    retainedFromDisk.wouldAdmit.length === 1,
+    "reloaded ownership must re-enter as a retained candidate and re-verify",
+  );
+  const retainedRejected = await runProtocolDiscovery({
+    adapters: [erc4626Adapter],
+    context: { ...addressContext, retainedInstances: [reloadedInstance] },
+    protocolEdgesEnabled: true,
+    async attestIdentity() { return null; },
+  });
+  assert(
+    retainedRejected.wouldAdmit.length === 0,
+    "reloaded ownership must never route without passing identity attestation",
+  );
+  pruneRecentProcessedProtocolTxs(reloaded, 300, 100);
+  assert(
+    reloaded.runtime.recentProcessedTxs.size === 0,
+    "recent observed txs must expire by block age",
+  );
   const wrongChain = loadProtocolDiscoveryEvidenceCache(cachePath, 10n);
   assert(
     wrongChain.addressEntries.size === 0 && wrongChain.verifiedCandidates.size === 0,
