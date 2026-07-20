@@ -14,6 +14,7 @@ import {
   type ProtocolMid,
 } from "./detector/blockscan-scanner.js";
 import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refinement.js";
+import { runBlockScanMidBatch } from "./detector/blockscan-mid-batch.js";
 import { buildExactBlockScanCurveMids } from "./detector/blockscan-curve-mids.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
@@ -674,6 +675,12 @@ async function main(): Promise<void> {
   const blockScanRefineCandidates = Number.isFinite(blockScanRefineCandidatesRaw)
     ? Math.max(blockScanCfg?.maxCandidates ?? 0, Math.floor(blockScanRefineCandidatesRaw))
     : 512;
+  const blockScanMidConcurrencyRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ?? "24",
+  );
+  const blockScanMidConcurrency = Number.isFinite(blockScanMidConcurrencyRaw)
+    ? Math.max(1, Math.floor(blockScanMidConcurrencyRaw))
+    : 24;
   const blockScanFullRewarmBlocks = Number(process.env.SEARCHER_BLOCKSCAN_FULL_REWARM_BLOCKS ?? "600");
   const blockScanWarmVerify = process.env.SEARCHER_BLOCKSCAN_WARM_VERIFY === "1";
   if (enableBlockScan) {
@@ -1821,16 +1828,18 @@ async function main(): Promise<void> {
             logSeg();
             return;
           }
-          const protocolMids = await buildBlockScanProtocolMids(
+          const protocolMidResult = await buildBlockScanProtocolMids(
             provider,
             blockScanStateForPass,
             blockNumber,
             edges,
             passDeadlineAtMs,
             blockScanDecimals,
+            blockScanMidConcurrency,
           );
+          const protocolMids = protocolMidResult.mids;
           segMark("protocol_mids");
-          if (passBudgetExceeded("protocol_mids")) {
+          if (protocolMidResult.deadlineHit || passBudgetExceeded("protocol_mids")) {
             logSeg();
             return;
           }
@@ -4262,6 +4271,16 @@ function formatCurveSnapshot(seed: CurveSnapshot): string {
   return `${seed.kind}/coins=${seed.coins.join(",")}/missing-state`;
 }
 
+interface BlockScanProtocolMidResult {
+  mids: Map<string, ProtocolMid>;
+  deadlineHit: boolean;
+}
+
+type BlockScanMidReadResult =
+  | { kind: "mid"; key: string; value: ProtocolMid }
+  | { kind: "failed" }
+  | { kind: "skipped" };
+
 async function buildBlockScanProtocolMids(
   provider: ethers.JsonRpcProvider,
   state: StateBackend,
@@ -4269,45 +4288,58 @@ async function buildBlockScanProtocolMids(
   edges: TokenEdge[],
   deadlineAtMs: number,
   decimalsCache: Map<string, number>,
-): Promise<Map<string, ProtocolMid>> {
+  concurrency: number,
+): Promise<BlockScanProtocolMidResult> {
   const mids = new Map<string, ProtocolMid>();
   let protocolFailed = 0;
   let externalSwapFailed = 0;
   let externalSwapMids = 0;
   let deadlineHit = false;
+  const decimalsInFlight = new Map<string, Promise<number>>();
+  const readDecimals = (token: string): Promise<number> => {
+    const key = token.toLowerCase();
+    const cached = decimalsCache.get(key);
+    if (cached !== undefined) return Promise.resolve(cached);
+    const pending = decimalsInFlight.get(key);
+    if (pending) return pending;
+    const read = blockScanTokenDecimals(provider, blockNumber, token, decimalsCache)
+      .finally(() => decimalsInFlight.delete(key));
+    decimalsInFlight.set(key, read);
+    return read;
+  };
 
   // External swap venues have no local cache fallback. Resolve them before
   // the much larger ERC-4626 protocol set so a slow long-tail vault cannot
   // consume the whole pass budget and make otherwise executable DEX routes
   // disappear from the scanner.
-  for (const edge of edges) {
-    if (Date.now() >= deadlineAtMs) {
-      deadlineHit = true;
-      break;
-    }
-    if (!isBlockScanExternallyQuotedSwap(edge)) continue;
-
-    try {
-      const tokenInDec = await blockScanTokenDecimals(
-        provider,
-        blockNumber,
-        edge.tokenIn,
-        decimalsCache,
-      );
-      if (Date.now() >= deadlineAtMs) {
-        deadlineHit = true;
-        break;
+  const externalEdges = edges.filter(isBlockScanExternallyQuotedSwap);
+  const externalBatch = await runBlockScanMidBatch(
+    externalEdges,
+    concurrency,
+    deadlineAtMs,
+    async (edge): Promise<BlockScanMidReadResult> => {
+      try {
+        const tokenInDec = await readDecimals(edge.tokenIn);
+        if (Date.now() >= deadlineAtMs) return { kind: "skipped" };
+        const oneIn = 10n ** BigInt(tokenInDec);
+        const mid = await readBlockScanExternalSwapMid(state, edge, oneIn);
+        if (!Number.isFinite(mid) || mid <= 0) return { kind: "skipped" };
+        return {
+          kind: "mid",
+          key: blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut),
+          value: { mid, feeBps: 0, depthIn: oneIn * 10_000n },
+        };
+      } catch {
+        return { kind: "failed" };
       }
-      const oneIn = 10n ** BigInt(tokenInDec);
-      const mid = await readBlockScanExternalSwapMid(state, edge, oneIn);
-      if (!Number.isFinite(mid) || mid <= 0) continue;
-      mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
-        mid,
-        feeBps: 0,
-        depthIn: oneIn * 10_000n,
-      });
+    },
+  );
+  deadlineHit = externalBatch.deadlineHit;
+  for (const result of externalBatch.results) {
+    if (result?.kind === "mid") {
+      mids.set(result.key, result.value);
       externalSwapMids++;
-    } catch {
+    } else if (result?.kind === "failed") {
       externalSwapFailed++;
     }
   }
@@ -4319,46 +4351,46 @@ async function buildBlockScanProtocolMids(
       )
       .sort((a, b) => protocolMidPriority(a) - protocolMidPriority(b));
     const pinnedState = blockReadStateForProtocol(provider, blockNumber) as StateBackend;
-    for (const edge of protocolEdges) {
-      if (Date.now() >= deadlineAtMs) {
-        deadlineHit = true;
-        break;
-      }
-      const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
-      if (adapter?.warm?.kind !== "protocol-mid") continue;
-
-      try {
-        const tokenInDec = await blockScanTokenDecimals(
-          provider,
-          blockNumber,
-          edge.tokenIn,
-          decimalsCache,
-        );
-        if (Date.now() >= deadlineAtMs) {
-          deadlineHit = true;
-          break;
+    const protocolBatch = await runBlockScanMidBatch(
+      protocolEdges,
+      concurrency,
+      deadlineAtMs,
+      async (edge): Promise<BlockScanMidReadResult> => {
+        const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+        if (adapter?.warm?.kind !== "protocol-mid") return { kind: "skipped" };
+        try {
+          const tokenInDec = await readDecimals(edge.tokenIn);
+          if (Date.now() >= deadlineAtMs) return { kind: "skipped" };
+          const oneIn = 10n ** BigInt(tokenInDec);
+          const quoteCtx = {
+            state: pinnedState,
+            target: edge.target,
+            edgeAdapterId: edge.adapterId,
+            tokenIn: edge.tokenIn,
+            tokenOut: edge.tokenOut,
+            amountIn: oneIn,
+            edge,
+          };
+          const out = adapter.warm.quotePrewarm
+            ? await adapter.warm.quotePrewarm(quoteCtx)
+            : await adapter.quoteExact(quoteCtx);
+          const mid = Number(out) / Number(oneIn);
+          if (!Number.isFinite(mid) || mid <= 0) return { kind: "skipped" };
+          return {
+            kind: "mid",
+            key: blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut),
+            value: { mid, feeBps: 0, depthIn: oneIn * 10_000n },
+          };
+        } catch {
+          return { kind: "failed" };
         }
-        const oneIn = 10n ** BigInt(tokenInDec);
-        const quoteCtx = {
-          state: pinnedState,
-          target: edge.target,
-          edgeAdapterId: edge.adapterId,
-          tokenIn: edge.tokenIn,
-          tokenOut: edge.tokenOut,
-          amountIn: oneIn,
-          edge,
-        };
-        const out = adapter.warm.quotePrewarm
-          ? await adapter.warm.quotePrewarm(quoteCtx)
-          : await adapter.quoteExact(quoteCtx);
-        const mid = Number(out) / Number(oneIn);
-        if (!Number.isFinite(mid) || mid <= 0) continue;
-        mids.set(blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
-          mid,
-          feeBps: 0,
-          depthIn: oneIn * 10_000n,
-        });
-      } catch {
+      },
+    );
+    deadlineHit = protocolBatch.deadlineHit;
+    for (const result of protocolBatch.results) {
+      if (result?.kind === "mid") {
+        mids.set(result.key, result.value);
+      } else if (result?.kind === "failed") {
         protocolFailed++;
       }
     }
@@ -4371,7 +4403,7 @@ async function buildBlockScanProtocolMids(
         `externalSwapMids=${externalSwapMids} protocolMids=${mids.size}`,
     );
   }
-  return mids;
+  return { mids, deadlineHit };
 }
 
 function isBlockScanExternallyQuotedSwap(edge: TokenEdge): boolean {
