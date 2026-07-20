@@ -621,7 +621,7 @@ async function main(): Promise<void> {
   let blockScanSimulator: BotVMSimulator | undefined;
   const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
   const blockScanFullWarmBudgetMs = Number(
-    process.env.SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS ?? "600000",
+    process.env.SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS ?? "240000",
   );
   const blockScanSolveConcurrencyRaw = Number(process.env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
@@ -1170,6 +1170,10 @@ async function main(): Promise<void> {
   // pool then reused across blocks — see seedBlockScanV3TickMetadata.
   const blockScanV3Meta = new Map<string, V3PoolMeta>();
   const blockScanDecimals = new Map<string, number>();
+  // A failed Curve batch is retried once on the next incremental pass. This
+  // preserves transient-failure coverage without letting a permanently bad
+  // pool monopolize every later block.
+  const blockScanCurveRetryPools = new Set<string>();
   const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
     enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
     after: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2")),
@@ -1327,17 +1331,27 @@ async function main(): Promise<void> {
             logSeg();
             return;
           }
+          const priorCurveRetries = warmPlan.kind === "full"
+            ? new Set<string>()
+            : new Set(blockScanCurveRetryPools);
+          const curvePoolsForPass = warmPlan.kind === "full"
+            ? undefined
+            : new Set([...warmPlan.changed.curvePools, ...priorCurveRetries]);
           const curveWarm = await warmBlockScanCurves(
             blockScanStateForPass,
             blockScanCacheForPass,
             blockNumber,
             edges,
             passDeadlineAtMs,
-            warmPlan.kind === "full" ? undefined : warmPlan.changed.curvePools,
+            curvePoolsForPass,
           );
+          blockScanCurveRetryPools.clear();
+          for (const pool of curveWarm.failedPools) {
+            if (!priorCurveRetries.has(pool)) blockScanCurveRetryPools.add(pool);
+          }
           segMark("warm_curve");
-          if (warmPlan.kind === "incremental") {
-            blockScanCacheForPass.restampBlockScanCurve(blockNumber, warmPlan.changed.curvePools);
+          if (curvePoolsForPass) {
+            blockScanCacheForPass.restampBlockScanCurve(blockNumber, curvePoolsForPass);
           }
           if (passBudgetExceeded("warm_curve")) {
             logSeg();
@@ -1350,7 +1364,7 @@ async function main(): Promise<void> {
               blockNumber,
               edges,
               blockScanCacheForPass,
-              warmPlan.changed.curvePools,
+              curvePoolsForPass!,
             );
             segMark("warm_verify_curve");
             if (passBudgetExceeded("warm_verify_curve")) {
@@ -4043,11 +4057,12 @@ async function warmBlockScanCurves(
   edges: TokenEdge[],
   deadlineAtMs: number,
   onlyPools?: ReadonlySet<string>,
-): Promise<{ warmed: number; failed: number }> {
+): Promise<{ warmed: number; failed: number; failedPools: ReadonlySet<string> }> {
   // Warm curve pool state via Multicall3. 31 pools keeps worst-case 8-coin
   // plain pools below 500 subcalls in round 2 (balances + token decimals).
   let warmed = 0;
   let failed = 0;
+  const failedPools = new Set<string>();
   const pools = uniqueBlockScanCurvePools(edges).filter(
     (edge) => onlyPools === undefined || onlyPools.has(edge.target.toLowerCase()),
   );
@@ -4061,12 +4076,16 @@ async function warmBlockScanCurves(
     } catch {
       // Count from snapshots below; a failed aggregate leaves the chunk cold.
     }
-    for (const edge of chunk) {
-      if (cache.snapshotCurve(edge.target, blockNumber)) warmed++;
-      else failed++;
+  }
+  for (const edge of pools) {
+    if (cache.snapshotCurve(edge.target, blockNumber)) {
+      warmed++;
+    } else {
+      failed++;
+      failedPools.add(edge.target.toLowerCase());
     }
   }
-  return { warmed, failed };
+  return { warmed, failed, failedPools };
 }
 
 function uniqueBlockScanCurvePools(edges: TokenEdge[]): TokenEdge[] {

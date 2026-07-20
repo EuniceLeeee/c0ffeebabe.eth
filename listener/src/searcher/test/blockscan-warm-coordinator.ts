@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const startup = await subject.plan(100, [], []);
   assert(startup.kind === "full" && startup.reason === "startup", "startup full warm");
   assert(
-    blockScanWarmPassBudgetMs(startup, 11_000, 600_000) === 600_000,
+    blockScanWarmPassBudgetMs(startup, 11_000, 240_000) === 240_000,
     "full warm receives the bounded full-warm deadline",
   );
   subject.markV2V3WarmComplete(100, startup);
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   assert(incremental.kind === "incremental", "next block incremental");
   assert(incremental.changed.logs === 0, "empty incremental logs");
   assert(
-    blockScanWarmPassBudgetMs(incremental, 11_000, 600_000) === 11_000,
+    blockScanWarmPassBudgetMs(incremental, 11_000, 240_000) === 11_000,
     "incremental warm retains the per-pass deadline",
   );
   subject.markV2V3WarmComplete(101, incremental);

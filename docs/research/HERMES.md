@@ -361,7 +361,7 @@ immediately as `crashed_needs_escalation`, restores A's CPUs, preserves the bran
 the next problem. It never waits for the nominal lease to expire.
 **Traps (codified 2026-07-08/12/20):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Every
 full warm (startup/range/interval/reorg/log fallback) is an atomic pinned-block cache transition with its
-own `SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS` hard deadline (default 600000); incremental passes remain
+own `SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS` hard deadline (default 240000); incremental passes remain
 11000. The warm cursor advances only after V2/V3/V4 metadata and Curve state complete. The B wrapper refuses
 readiness until one complete `scannedPairs=` pass, preventing a `lastWarmedBlock=null` / `warm=full` restart
 from masquerading as a healthy deploy. • stableswap-NG `stored_rate` refreshes OFF-event →
