@@ -60,6 +60,7 @@ import {
   blockScanMutableQuoteRequests,
   blockScanV4PoolId,
   formatBlockScanWarmPlan,
+  shouldStopBlockScanV2V3Warm,
   type BlockScanWarmPlan,
 } from "./blockscan-warm-coordinator.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
@@ -1285,7 +1286,10 @@ async function main(): Promise<void> {
             blockScanUpdaterForPass,
             blockNumber,
             warmHops,
-            () => passBudgetExceeded("warm_v2v3"),
+            () => shouldStopBlockScanV2V3Warm(
+              warmPlan,
+              () => passBudgetExceeded("warm_v2v3"),
+            ),
           );
           segMark("warm_v2v3");
           if (!v2v3WarmComplete) {

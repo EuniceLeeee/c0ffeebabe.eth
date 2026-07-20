@@ -101,6 +101,19 @@ export function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
     `range=${plan.changed.fromBlock}-${plan.changed.toBlock} logs=${plan.changed.logs}`;
 }
 
+/**
+ * A full warm clears the mutable cache before it starts, so aborting it at the
+ * per-pass deadline would make the next block restart from batch zero forever.
+ * Keep the ordinary pass budget for incremental refreshes; a full warm is one
+ * pinned-block operation and is bounded by the outer startup/readiness guard.
+ */
+export function shouldStopBlockScanV2V3Warm(
+  plan: BlockScanWarmPlan,
+  passBudgetExceeded: () => boolean,
+): boolean {
+  return plan.kind === "incremental" && passBudgetExceeded();
+}
+
 export function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
   const seen = new Set<string>();
   const out: QuoteRequest[] = [];

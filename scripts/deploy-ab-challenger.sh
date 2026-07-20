@@ -1940,6 +1940,30 @@ renew() {
   cat "$STATE"
 }
 
+cancel_pending() {
+  local expected_b=$1 status a_pid_before a_pid_after b_pid actual_b
+  [[ "$expected_b" =~ ^[a-f0-9]{40}$ ]] || die "pending challenger commit must be a full SHA"
+  status=$(state_field status)
+  [ "$status" != "running" ] && [ "$status" != "paused" ] \
+    || die "journaled experiment must use pause/close, not cancel-pending"
+  a_pid_before=$(systemctl show -p MainPID --value "$A_UNIT" 2>/dev/null || echo 0)
+  [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] \
+    && [[ "$a_pid_before" =~ ^[1-9][0-9]*$ ]] \
+    || die "champion must be active before pending challenger cleanup"
+  b_pid=$(systemctl show -p MainPID --value "$UNIT" 2>/dev/null || echo 0)
+  if [[ "$b_pid" =~ ^[1-9][0-9]*$ ]]; then
+    actual_b=$(process_env_get "$b_pid" SEARCHER_RUNTIME_COMMIT)
+    [ "$actual_b" = "$expected_b" ] \
+      || die "pending challenger runtime commit mismatch: expected $expected_b got ${actual_b:-unavailable}"
+  fi
+  stop_b || die "pending challenger stop verification failed"
+  a_pid_after=$(systemctl show -p MainPID --value "$A_UNIT" 2>/dev/null || echo 0)
+  [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] \
+    && [ "$a_pid_after" = "$a_pid_before" ] \
+    || die "champion changed during pending challenger cleanup"
+  echo "cancelled pending challenger commit=$expected_b; champion pid=$a_pid_after unchanged"
+}
+
 cmd=${1:-status}
 case "$cmd" in
   preflight) run_preflight_safely; echo "PASS: challenger bounded-live preflight" ;;
@@ -1950,7 +1974,8 @@ case "$cmd" in
   acceptance) [ "$#" -eq 2 ] || die "usage: acceptance <experiment-id>"; six_step_acceptance "$2" ;;
   close) [ "$#" -eq 3 ] || die "usage: close <experiment-id> <outcome>"; close_experiment "$2" "$3" ;;
   renew) [ "$#" -eq 2 ] || die "usage: renew <experiment-id>"; renew "$2" ;;
+  cancel-pending) [ "$#" -eq 2 ] || die "usage: cancel-pending <challenger-sha>"; cancel_pending "$2" ;;
   reap) reap_stale; [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
   status) reap_stale; [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
-  *) die "usage: $0 preflight|deploy|pause|acceptance|close|renew|reap|status" ;;
+  *) die "usage: $0 preflight|deploy|pause|acceptance|close|renew|cancel-pending|reap|status" ;;
 esac

@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import {
   BlockScanWarmCoordinator,
   formatBlockScanWarmPlan,
+  shouldStopBlockScanV2V3Warm,
 } from "../blockscan-warm-coordinator.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 
@@ -57,11 +58,24 @@ async function main(): Promise<void> {
   const subject = coordinator(provider);
   const startup = await subject.plan(100, [], []);
   assert(startup.kind === "full" && startup.reason === "startup", "startup full warm");
+  let fullBudgetChecks = 0;
+  assert(
+    !shouldStopBlockScanV2V3Warm(startup, () => {
+      fullBudgetChecks++;
+      return true;
+    }),
+    "full warm ignores the per-pass deadline",
+  );
+  assert(fullBudgetChecks === 0, "full warm does not evaluate the per-pass deadline");
   subject.markV2V3WarmComplete(100, startup);
 
   const incremental = await subject.plan(101, [], []);
   assert(incremental.kind === "incremental", "next block incremental");
   assert(incremental.changed.logs === 0, "empty incremental logs");
+  assert(
+    shouldStopBlockScanV2V3Warm(incremental, () => true),
+    "incremental warm retains the per-pass deadline",
+  );
   subject.markV2V3WarmComplete(101, incremental);
 
   const reorg = await subject.plan(101, [], []);
