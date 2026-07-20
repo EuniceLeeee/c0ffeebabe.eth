@@ -96,6 +96,13 @@ export interface ProtocolDiscoveryReceipt {
 
 export type ProtocolDiscoveryTopicFilter = string | readonly string[] | null;
 
+export interface ProtocolDiscoverySimulatedCallResult {
+  /** 1 = success, 0 = revert. */
+  readonly status: number;
+  readonly returnData: string;
+  readonly logs: readonly ProtocolDiscoveryLog[];
+}
+
 /** All state reads are pinned to one current block on the configured node. */
 export interface ProtocolDiscoveryReadBackend {
   call(req: { to: string; data: string; from?: string }): Promise<string>;
@@ -109,6 +116,18 @@ export interface ProtocolDiscoveryReadBackend {
   }): Promise<readonly ProtocolDiscoveryLog[]>;
   getTransactionReceipt(txHash: string): Promise<ProtocolDiscoveryReceipt | null>;
   traceTransaction(txHash: string): Promise<unknown>;
+  /**
+   * Optional block-pinned execution simulation with state overrides
+   * (eth_simulateV1 on a node or local fork). Enables nonzero execution
+   * evidence for dormant instances; absence degrades adapters to their
+   * view-only probes.
+   */
+  simulateCalls?(req: {
+    readonly calls: readonly { readonly from: string; readonly to: string; readonly data: string }[];
+    readonly stateOverrides?: Readonly<Record<string, {
+      readonly stateDiff?: Readonly<Record<string, string>>;
+    }>>;
+  }): Promise<readonly ProtocolDiscoverySimulatedCallResult[]>;
 }
 
 export interface ProtocolDiscoveryContext {

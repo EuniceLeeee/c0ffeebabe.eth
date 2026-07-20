@@ -38,6 +38,8 @@ import {
 } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import {
+  ERC4626_FORK_PROBE_HOLDER,
+  ERC4626_FORK_PROBE_RECEIVER,
   probeErc4626Candidate,
   type Erc4626PayoutEvidence,
 } from "../venues/protocols/erc4626-discovery.js";
@@ -62,6 +64,7 @@ const ERC4626 = new ethers.Interface([
   "function asset() view returns (address)",
   "function totalAssets() view returns (uint256)",
   "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
   "function convertToShares(uint256) view returns (uint256)",
   "function convertToAssets(uint256) view returns (uint256)",
   "function previewDeposit(uint256) view returns (uint256)",
@@ -380,6 +383,153 @@ assert(
   assert(
     inflated instanceof Error && /round-trip preview inflates value/.test(inflated.message),
     "cross-block drift must be caught by the adapter-owned round-trip invariant",
+  );
+}
+
+// C2 second evidence (core 8 / acceptance 10): without an observed payout, a
+// dormant vault's redeem route must prove a NONZERO redeem on the pinned fork
+// state (state-override simulation, decoded receipt, payout == previewRedeem).
+{
+  const CODE_HASH = ethers.keccak256(CODE).toLowerCase();
+  const HOLDER_SLOT0 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+    ["address", "uint256"],
+    [ERC4626_FORK_PROBE_HOLDER, 0n],
+  ));
+  const addressOnlyInstance = (): AttestedProtocolInstance => ({
+    pool: {
+      address: VAULT,
+      adapter: "erc4626",
+      fixedTokenIn: ASSET,
+      identitySource: "erc4626-standard",
+    },
+    sources: ["dex-universe-address"],
+    selectors: [],
+    evidence: [{
+      kind: "erc4626-address-probe",
+      asset: ASSET,
+      sampleAssets: 1_000_000n,
+      sampleShares: 900_000n,
+      codeHash: CODE_HASH,
+      implementationWord: ZERO_WORD,
+    }],
+  });
+  const simulatedVaultContext = (behavior: {
+    payoutFactor?: bigint;
+    revertRedeem?: boolean;
+    totalSupply?: bigint;
+  }): { context: ProtocolDiscoveryContext; counters: { balanceOf: number; redeem: number } } => {
+    const counters = { balanceOf: 0, redeem: 0 };
+    const totalSupply = behavior.totalSupply ?? 100n;
+    const base = createContext();
+    const context: ProtocolDiscoveryContext = {
+      ...base,
+      backend: {
+        ...base.backend,
+        async call(req) {
+          if (
+            req.to.toLowerCase() === VAULT.toLowerCase() &&
+            req.data.slice(0, 10) === ERC4626.getFunction("totalSupply")!.selector
+          ) {
+            return ERC4626.encodeFunctionResult("totalSupply", [totalSupply]);
+          }
+          return base.backend.call(req);
+        },
+        async simulateCalls(req) {
+          const call = req.calls[0];
+          const selector = call.data.slice(0, 10).toLowerCase();
+          const fundedRaw = req.stateOverrides?.[VAULT]?.stateDiff?.[HOLDER_SLOT0];
+          const funded = fundedRaw === undefined ? 0n : BigInt(fundedRaw);
+          if (selector === ERC4626.getFunction("balanceOf")!.selector) {
+            counters.balanceOf++;
+            return [{
+              status: 1,
+              returnData: ERC4626.encodeFunctionResult("balanceOf", [funded]),
+              logs: [],
+            }];
+          }
+          if (selector === ERC4626.getFunction("redeem")!.selector) {
+            counters.redeem++;
+            const [shares, receiver, owner] = ERC4626.decodeFunctionData("redeem", call.data);
+            const sharesValue = BigInt(shares);
+            if (behavior.revertRedeem || funded < sharesValue || totalSupply < sharesValue) {
+              return [{ status: 0, returnData: "0x", logs: [] }];
+            }
+            const paid = sharesValue * 10n / 9n * (behavior.payoutFactor ?? 1n);
+            return [{
+              status: 1,
+              returnData: ERC4626.encodeFunctionResult("redeem", [paid]),
+              logs: [
+                {
+                  address: VAULT,
+                  topics: [
+                    WITHDRAW,
+                    topicAddress(String(owner)),
+                    topicAddress(String(receiver)),
+                    topicAddress(String(owner)),
+                  ],
+                  data: ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["uint256", "uint256"],
+                    [paid, sharesValue],
+                  ),
+                  blockNumber: 123,
+                },
+                {
+                  address: ASSET,
+                  topics: [TRANSFER, topicAddress(VAULT), topicAddress(String(receiver))],
+                  data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [paid]),
+                  blockNumber: 123,
+                },
+                {
+                  address: VAULT,
+                  topics: [TRANSFER, topicAddress(String(owner)), ZERO_WORD],
+                  data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [sharesValue]),
+                  blockNumber: 123,
+                },
+              ],
+            }];
+          }
+          return [{ status: 0, returnData: "0x", logs: [] }];
+        },
+      },
+    };
+    return { context, counters };
+  };
+
+  const honest = simulatedVaultContext({});
+  const honestEdges = await probeErc4626Candidate(addressOnlyInstance(), honest.context);
+  assert(
+    honestEdges.length === 2 &&
+      honestEdges.some((edge) => edge.adapterId === "erc4626-redeem"),
+    "nonzero fork redeem evidence must admit the dormant redeem route",
+  );
+  assert(
+    honest.counters.redeem === 1 && honest.counters.balanceOf >= 1,
+    "fork evidence must execute one nonzero redeem simulation",
+  );
+
+  const lying = simulatedVaultContext({ payoutFactor: 2n });
+  const lyingEdges = await probeErc4626Candidate(addressOnlyInstance(), lying.context);
+  assert(
+    lyingEdges.length === 1 && lyingEdges[0].adapterId === "erc4626-deposit",
+    "a payout inconsistent with previewRedeem must fail the redeem route closed",
+  );
+
+  const reverting = simulatedVaultContext({ revertRedeem: true });
+  const revertingEdges = await probeErc4626Candidate(addressOnlyInstance(), reverting.context);
+  assert(
+    revertingEdges.length === 1 && revertingEdges[0].adapterId === "erc4626-deposit",
+    "a reverting fork redeem must fail the redeem route closed",
+  );
+
+  const empty = simulatedVaultContext({ totalSupply: 0n });
+  const emptyEdges = await probeErc4626Candidate(addressOnlyInstance(), empty.context);
+  assert(
+    emptyEdges.length === 1 && emptyEdges[0].adapterId === "erc4626-deposit",
+    "an empty vault cannot prove a nonzero redeem and must not ship the route",
+  );
+  assert(
+    ERC4626_FORK_PROBE_RECEIVER.toLowerCase() !== ERC4626_FORK_PROBE_HOLDER.toLowerCase(),
+    "fork probe receiver and holder must stay distinct for causal payout checks",
   );
 }
 

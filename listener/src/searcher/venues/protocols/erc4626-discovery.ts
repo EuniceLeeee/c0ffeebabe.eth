@@ -12,6 +12,8 @@ import type {
 
 const ERC4626 = new ethers.Interface([
   "function asset() view returns (address)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address owner) view returns (uint256)",
   "function convertToShares(uint256 assets) view returns (uint256)",
   "function convertToAssets(uint256 shares) view returns (uint256)",
   "function previewDeposit(uint256 assets) view returns (uint256)",
@@ -29,6 +31,12 @@ const IMPLEMENTATION_SLOT = BigInt(
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
 );
 const ADDRESS_PROBE_AMOUNTS = [10n ** 6n, 10n ** 18n] as const;
+/** Synthetic accounts used only inside state-override simulations. */
+export const ERC4626_FORK_PROBE_HOLDER = ethers.getAddress(`0x${"00".repeat(18)}face`);
+export const ERC4626_FORK_PROBE_RECEIVER = ethers.getAddress(`0x${"00".repeat(18)}beef`);
+const SHARE_BALANCE_SLOT_CANDIDATES = 32;
+/** Process-lifetime memo keyed by target|codeHash so upgrades re-discover. */
+const shareBalanceSlotMemo = new Map<string, string>();
 
 export interface Erc4626PayoutEvidence {
   readonly kind: "erc4626-withdraw-payout";
@@ -47,6 +55,24 @@ export interface Erc4626AddressEvidence {
   readonly asset: string;
   readonly sampleAssets: bigint;
   readonly sampleShares: bigint;
+  readonly codeHash: string;
+  readonly implementationWord: string;
+}
+
+/**
+ * C2 second evidence: a NONZERO redeem executed on the pinned fork state via
+ * state-override simulation, with the receipt decoded and the actual asset()
+ * payout bound to previewRedeem. This is what lets a dormant vault (no
+ * observed Withdraw) ship a redeem route without a static seed.
+ */
+export interface Erc4626ForkRedeemEvidence {
+  readonly kind: "erc4626-fork-redeem";
+  readonly blockNumber: number;
+  readonly sampleShares: bigint;
+  readonly paidAssets: bigint;
+  readonly previewAssets: bigint;
+  readonly receiver: string;
+  readonly shareBalanceSlot: string;
   readonly codeHash: string;
   readonly implementationWord: string;
 }
@@ -210,16 +236,174 @@ export async function probeErc4626Candidate(
   if (await supportsZeroAmountCall(ctx, target, "deposit", [0n, target])) {
     edges.push(protocolEdge("erc4626-deposit", target, asset, target, "wrap", instance.pool.score));
   }
-  if (
-    payoutEvidence ||
-    await supportsZeroAmountCall(ctx, target, "redeem", [0n, target, target])
-  ) {
+  let redeemVerified = payoutEvidence !== null;
+  if (!redeemVerified) {
+    if (ctx.backend.simulateCalls) {
+      // Without an observed payout, the redeem route needs the C2 second
+      // evidence: a nonzero redeem executed on the pinned fork state whose
+      // decoded receipt pays asset() consistently with previewRedeem.
+      redeemVerified = await buildForkRedeemEvidence(
+        ctx,
+        target,
+        asset,
+        sampleShares,
+        currentCodeHash,
+        currentImplementationWord,
+      ) !== null;
+    } else {
+      // View-only backends (no simulation capability) keep the legacy
+      // zero-amount surface probe.
+      redeemVerified = await supportsZeroAmountCall(ctx, target, "redeem", [0n, target, target]);
+    }
+  }
+  if (redeemVerified) {
     edges.push(protocolEdge("erc4626-redeem", target, target, asset, "redeem", instance.pool.score));
   }
   if (edges.length === 0) {
     throw new Error("erc4626 execution surface rejected both deposit and redeem probes");
   }
   return edges;
+}
+
+/**
+ * Discover the vault's share balance mapping slot for the synthetic holder by
+ * probing solidity keccak(holder,slot) and vyper keccak(slot,holder) layouts
+ * against balanceOf under a state override. Memoized per target|codeHash.
+ */
+async function discoverShareBalanceSlot(
+  ctx: ProtocolDiscoveryContext,
+  target: string,
+  codeHash: string,
+  probeValue: bigint,
+): Promise<string | null> {
+  const simulate = ctx.backend.simulateCalls?.bind(ctx.backend);
+  if (!simulate) return null;
+  const memoKey = `${target.toLowerCase()}|${codeHash.toLowerCase()}`;
+  const memoized = shareBalanceSlotMemo.get(memoKey);
+  const balanceOfData = ERC4626.encodeFunctionData("balanceOf", [ERC4626_FORK_PROBE_HOLDER]);
+  const probeSlot = async (slotKey: string): Promise<boolean> => {
+    const [result] = await simulate({
+      calls: [{ from: ERC4626_FORK_PROBE_HOLDER, to: target, data: balanceOfData }],
+      stateOverrides: {
+        [target]: { stateDiff: { [slotKey]: ethers.toBeHex(probeValue, 32) } },
+      },
+    });
+    if (!result || result.status !== 1) return false;
+    try {
+      return BigInt(ERC4626.decodeFunctionResult("balanceOf", result.returnData)[0]) === probeValue;
+    } catch {
+      return false;
+    }
+  };
+  if (memoized !== undefined) {
+    if (await probeSlot(memoized)) return memoized;
+    shareBalanceSlotMemo.delete(memoKey);
+  }
+  const abi = ethers.AbiCoder.defaultAbiCoder();
+  for (let slot = 0; slot < SHARE_BALANCE_SLOT_CANDIDATES; slot++) {
+    for (const layout of ["solidity", "vyper"] as const) {
+      const slotKey = ethers.keccak256(layout === "solidity"
+        ? abi.encode(["address", "uint256"], [ERC4626_FORK_PROBE_HOLDER, BigInt(slot)])
+        : abi.encode(["uint256", "address"], [BigInt(slot), ERC4626_FORK_PROBE_HOLDER]));
+      if (await probeSlot(slotKey)) {
+        shareBalanceSlotMemo.set(memoKey, slotKey);
+        return slotKey;
+      }
+    }
+  }
+  return null;
+}
+
+export async function buildForkRedeemEvidence(
+  ctx: ProtocolDiscoveryContext,
+  target: string,
+  asset: string,
+  desiredShares: bigint,
+  codeHash: string,
+  implementationWord: string,
+): Promise<Erc4626ForkRedeemEvidence | null> {
+  const simulate = ctx.backend.simulateCalls?.bind(ctx.backend);
+  if (!simulate) return null;
+  try {
+    const totalSupply = await callUint(ctx, target, "totalSupply", []);
+    // Burning overridden shares must not underflow totalSupply; an empty vault
+    // cannot prove a nonzero redeem at all.
+    if (totalSupply <= 1n) return null;
+    const cappedShares = desiredShares > 0n && desiredShares <= totalSupply / 2n
+      ? desiredShares
+      : totalSupply / 2n;
+    if (cappedShares <= 0n) return null;
+    const slotKey = await discoverShareBalanceSlot(ctx, target, codeHash, cappedShares);
+    if (!slotKey) return null;
+    const previewAssets = await callUint(ctx, target, "previewRedeem", [cappedShares]);
+    if (previewAssets <= 0n) return null;
+    const [result] = await simulate({
+      calls: [{
+        from: ERC4626_FORK_PROBE_HOLDER,
+        to: target,
+        data: ERC4626.encodeFunctionData("redeem", [
+          cappedShares,
+          ERC4626_FORK_PROBE_RECEIVER,
+          ERC4626_FORK_PROBE_HOLDER,
+        ]),
+      }],
+      stateOverrides: {
+        [target]: { stateDiff: { [slotKey]: ethers.toBeHex(cappedShares, 32) } },
+      },
+    });
+    if (!result || result.status !== 1) return null;
+    const withdraw = [...result.logs].reverse().find((log) =>
+      log.address.toLowerCase() === target.toLowerCase() &&
+      log.topics[0]?.toLowerCase() === WITHDRAW_TOPIC &&
+      log.topics.length >= 4 &&
+      log.topics[2]?.toLowerCase() ===
+        ethers.zeroPadValue(ERC4626_FORK_PROBE_RECEIVER, 32).toLowerCase()
+    );
+    if (!withdraw) return null;
+    let paidAssets: bigint;
+    let burnedShares: bigint;
+    try {
+      const decoded = ethers.AbiCoder.defaultAbiCoder().decode(["uint256", "uint256"], withdraw.data);
+      paidAssets = BigInt(decoded[0]);
+      burnedShares = BigInt(decoded[1]);
+    } catch {
+      return null;
+    }
+    if (burnedShares !== cappedShares || paidAssets <= 0n) return null;
+    const paid = result.logs.some((log) => {
+      if (log.address.toLowerCase() !== asset.toLowerCase()) return false;
+      if (log.topics[0]?.toLowerCase() !== TRANSFER_TOPIC || log.topics.length < 3) return false;
+      if (`0x${log.topics[1].slice(-40)}`.toLowerCase() !== target.toLowerCase()) return false;
+      if (
+        `0x${log.topics[2].slice(-40)}`.toLowerCase() !==
+          ERC4626_FORK_PROBE_RECEIVER.toLowerCase()
+      ) return false;
+      try {
+        return BigInt(log.data) >= paidAssets;
+      } catch {
+        return false;
+      }
+    });
+    if (!paid) return null;
+    if (absoluteDifference(paidAssets, previewAssets) > roundingTolerance(previewAssets)) {
+      // The vault's preview lies about its executed payout: fail closed.
+      return null;
+    }
+    return {
+      kind: "erc4626-fork-redeem",
+      blockNumber: ctx.blockNumber,
+      sampleShares: cappedShares,
+      paidAssets,
+      previewAssets,
+      receiver: ERC4626_FORK_PROBE_RECEIVER,
+      shareBalanceSlot: slotKey,
+      codeHash: codeHash.toLowerCase(),
+      implementationWord: implementationWord.toLowerCase(),
+    };
+  } catch (error) {
+    if (isRetryableSourceFailure(error)) throw error;
+    return null;
+  }
 }
 
 export async function erc4626EvidenceFromReceipt(input: {
@@ -375,7 +559,7 @@ async function readAsset(ctx: ProtocolDiscoveryContext, target: string): Promise
 async function callUint(
   ctx: ProtocolDiscoveryContext,
   target: string,
-  fn: "convertToShares" | "convertToAssets" | "previewDeposit" | "previewRedeem",
+  fn: "convertToShares" | "convertToAssets" | "previewDeposit" | "previewRedeem" | "totalSupply",
   args: readonly bigint[],
 ): Promise<bigint> {
   const raw = await ctx.backend.call({ to: target, data: ERC4626.encodeFunctionData(fn, args) });

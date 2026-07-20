@@ -114,6 +114,62 @@ export function createPinnedProtocolDiscoveryContext(input: {
         rpcTimeoutMs,
         "debug_traceTransaction",
       ),
+      simulateCalls: async (req) => {
+        const raw = await sendProtocolDiscoveryRpc<unknown>(
+          input.provider,
+          "eth_simulateV1",
+          [{
+            blockStateCalls: [{
+              ...(req.stateOverrides === undefined ? {} : { stateOverrides: req.stateOverrides }),
+              calls: req.calls.map((call) => ({
+                from: call.from,
+                to: call.to,
+                data: call.data,
+              })),
+            }],
+            validation: false,
+            traceTransfers: false,
+          }, blockTag],
+          rpcTimeoutMs,
+          "eth_simulateV1",
+        );
+        const firstBlock = Array.isArray(raw) ? raw[0] as { calls?: unknown } : null;
+        const calls = firstBlock && Array.isArray(firstBlock.calls) ? firstBlock.calls : [];
+        return calls.map((entry) => {
+          const call = entry as {
+            status?: unknown;
+            returnData?: unknown;
+            logs?: unknown;
+          };
+          let status = 0;
+          try {
+            status = Number(BigInt(String(call.status ?? "0x0")));
+          } catch {
+            status = 0;
+          }
+          const logs = Array.isArray(call.logs)
+            ? call.logs.flatMap((log) => {
+              const item = log as {
+                address?: unknown;
+                topics?: unknown;
+                data?: unknown;
+              };
+              if (typeof item.address !== "string" || !Array.isArray(item.topics)) return [];
+              return [{
+                address: item.address,
+                topics: item.topics.filter((topic): topic is string => typeof topic === "string"),
+                data: typeof item.data === "string" ? item.data : "0x",
+                blockNumber: input.blockNumber,
+              }];
+            })
+            : [];
+          return {
+            status,
+            returnData: typeof call.returnData === "string" ? call.returnData : "0x",
+            logs,
+          };
+        });
+      },
     },
   };
 }
