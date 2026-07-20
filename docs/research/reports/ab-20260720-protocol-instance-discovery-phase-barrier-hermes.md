@@ -25,6 +25,19 @@
 - Record solve/refine/total stage distributions, B restarts, subsequent-pass recovery, and any low-level RPC carry-over. A new long pass is classified by its first long stage rather than attributed to solver by total wall time.
 - This is a systemic resource/liveness check. The optional transaction-bound six-step diagnostic is `not_applicable` and must not gate deployment.
 
+## Live Result
+
+- **Deployment lifecycle:** The trusted wrapper started exact runtime SHA `fdc88d4cc2a10f9676e862462da6c74694221765` as B with PID `1156445`, restart count `0`, the dual/public-only posture, and the existing isolated B ports. A remained exact SHA `27f499c3780db8390c291b4cbfe2160ffd46d6bb`, PID `1136234`, restart count `0`. B did not reach the wrapper's first-`scannedPairs` readiness condition, so the in-progress deploy was cancelled and the trusted `cancel-pending` path stopped B; it verified champion PID `1136234` unchanged.
+- **Phase-barrier flip:** Startup block `25573051` attempted 512 probes (`positive=214 negative=267 failed=10`), hit the refinement deadline, emitted `skip solve reason=refinement_deadline inFlightProbePromises=0`, and recorded `solve_planner/solver/quote/sim/submit=0ms`. Catch-up block `25573074` repeated the same invariant after 442 probes (`positive=180 negative=235 failed=5`), again with no solver work.
+- **Remaining runtime blocker:** Strict ownership exposed the underlying cost instead of mislabeling it as solve: block `25573051` spent `89246ms` in refinement (`239303ms` total startup full-warm), and block `25573074` spent `87888ms` in refinement (`98796ms` total). With up to 512 exact RPC route probes, waiting for every started probe prevents the 24+4 overlap but leaves no ordinary pass able to reach `scannedPairs` under the current structure.
+- **Architecture evidence:** At the same fixed discovery cutoff, this restart produced `instances=0 would_admit=0 protocol_edges=53->53`, whereas the prior process had `instances=222` and `53->497`. This confirms that the current code does not implement the attachment's persisted verified/negative caches, reload re-attestation, or fork-simulated C2 evidence; pruned historical payout evidence can collapse discovery recall after restart.
+
+## Decision
+
+- **Verdict:** `needs_escalation`; do not merge this challenger as the protocol-discovery solution.
+- **What is fixed:** The refinement-local false cancellation and same-block refinement→solver overlap have a deterministic red/green test and a live behavior flip.
+- **What is not fixed:** The two-stage algorithm still performs hundreds of exact RPC probes before an exact solver. Under a real phase barrier this consumes roughly 88 seconds and prevents readiness. The next design must remove duplicate exact work—coarse/cache-only refinement followed by one bounded exact solver queue—rather than add another timeout, arbitrary concurrency knob, or deployment exception.
+
 ```ab_experiment
 {
   "schema_version": 3,
@@ -86,21 +99,20 @@
   "analysis": {
     "agent_manual_author": "Codex",
     "agent_manual_verdict": "inconclusive",
-    "agent_manual_evidence": "Predeploy: deterministic phase-barrier regression passes; live B evidence pending.",
+    "agent_manual_evidence": "Live B proved the phase barrier twice: deadline blocks 25573051 and 25573074 emitted skip-solve and zero solve-stage work. It also exposed 89s/88s refinement cost, preventing first-scannedPairs readiness; B was stopped through trusted cancel-pending and A PID 1136234 remained unchanged.",
     "script_exit_code": 1,
     "script_assessment": "inconclusive",
     "script_artifact": "pending",
     "reconciliation": "inconclusive",
     "adversarial_review": {
       "verdict": "inconclusive",
-      "evidence": "Predeploy code review P0/P1/P2=0; live resource result pending.",
+      "evidence": "Code review P0/P1/P2=0. Live behavior confirmed zero same-block solver work after refinement deadline, but strict barrier exposed an unresolved 88s exact-refinement workload and no readiness pass.",
       "reviewer": "phase_barrier_adversarial"
     }
   },
   "final_verdict": "needs_escalation",
   "branch_action": "retained",
   "b_stopped": true,
-  "evidence_bundle": "predeploy deterministic evidence; live bundle pending"
+  "evidence_bundle": "trusted wrapper startup/cancel-pending receipts plus redacted blockscan summaries for blocks 25573051, 25573071, and 25573074"
 }
 ```
-
