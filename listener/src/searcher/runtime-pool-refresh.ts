@@ -36,6 +36,22 @@ export interface RuntimePoolRefreshProjection {
 }
 
 /**
+ * Select refresh candidates from both feeds. Declared protocol venues cannot
+ * be rediscovered from swap events, so a boot-time edge-build failure stays
+ * retryable through the registry feed until its key is admitted.
+ */
+export function selectRefreshCandidates(
+  registryVenues: readonly PoolEntry[],
+  discovered: readonly PoolEntry[],
+  knownPoolKeys: ReadonlySet<string>,
+): PoolEntry[] {
+  return [
+    ...registryVenues.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
+    ...discovered.filter((pool) => !knownPoolKeys.has(poolRegistryKey(pool))),
+  ];
+}
+
+/**
  * Prepare every runtime pool projection off to the side. The caller commits
  * this object synchronously, so graph/index/map/flash/mempool consumers never
  * observe a half-refreshed state. Pools whose edge build failed are absent from
