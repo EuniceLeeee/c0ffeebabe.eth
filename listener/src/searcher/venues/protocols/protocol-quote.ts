@@ -1,7 +1,10 @@
 import { ethers } from "ethers";
 import { PROTOCOL_LEG_DESCRIPTORS } from "../../../adapters/protocol-legs.js";
 import { ADDR } from "../../../shared/constants/addresses.js";
-import type { StateBackend } from "../../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../../shared/state/state-backend.js";
 
 type CallBackend = Pick<StateBackend, "call">;
 
@@ -147,7 +150,8 @@ async function readPSMFee(
   try {
     const result = await state.call({ to: target, data: psmIface.encodeFunctionData(fee) });
     return BigInt(psmIface.decodeFunctionResult(fee, result)[0]);
-  } catch {
+  } catch (error) {
+    if (isStateCallAbortedError(error)) throw error;
     return 0n;
   }
 }

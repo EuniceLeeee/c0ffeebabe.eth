@@ -1,5 +1,8 @@
 import { ethers } from "ethers";
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 export { quoteBalancerV3 } from "../venues/swaps/balancer-v3.js";
@@ -87,7 +90,8 @@ export async function quoteFluidDex(
       const result = await state.call({ to: resolver, data });
       const decoded = fluidDexResolverIface.decodeFunctionResult("estimateSwapIn", result);
       return BigInt(decoded[0]);
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       // Resolver deployments vary by environment. Fall through to the pool's
       // documented ADDRESS_DEAD estimate path if the configured resolver is not usable.
     }

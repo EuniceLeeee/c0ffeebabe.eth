@@ -1,5 +1,8 @@
 import { ethers } from "ethers";
-import type { StateBackend } from "../../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../../shared/state/state-backend.js";
 
 const curveIface = new ethers.Interface([
   "function get_dy(int128 i, int128 j, uint256 dx) view returns (uint256)",
@@ -53,7 +56,8 @@ export async function quoteCurvePlain(
     const data = curveIface.encodeFunctionData("get_dy", [BigInt(i), BigInt(j), amountIn]);
     const result = await state.call({ to: pool, data });
     return BigInt(result);
-  } catch {
+  } catch (error) {
+    if (isStateCallAbortedError(error)) throw error;
     const data = curveIfaceUint.encodeFunctionData("get_dy", [BigInt(i), BigInt(j), amountIn]);
     const result = await state.call({ to: pool, data });
     return BigInt(result);
@@ -73,7 +77,8 @@ async function queryCurveCoinAt(
       const addr = ethers.getAddress(`0x${result.slice(-40)}`);
       if (addr === ethers.ZeroAddress) return null;
       return addr;
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       // Try the next common Curve ABI shape.
     }
   }

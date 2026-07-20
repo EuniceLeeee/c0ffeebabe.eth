@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { isStateCallAbortedError } from "../../shared/state/state-backend.js";
 
 export const CURVE_METAREGISTRY = "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC";
 
@@ -64,7 +65,8 @@ export async function probeCurveUnderlyingQuote(
     });
     poolIface.decodeFunctionResult("get_dy_underlying", raw);
     return true;
-  } catch {
+  } catch (error) {
+    if (isStateCallAbortedError(error)) throw error;
     return false;
   }
 }
@@ -110,7 +112,8 @@ async function resolveMetadataUncached(
         return { coins, source: "curve-metaregistry-underlying" };
       }
     }
-  } catch {
+  } catch (error) {
+    if (isStateCallAbortedError(error)) throw error;
     // Registry-uncovered pools are considered only through the explicit fallback below.
   }
 
@@ -127,7 +130,8 @@ async function resolveMetadataUncached(
       const coin = ethers.getAddress(poolIface.decodeFunctionResult("underlying_coins", raw)[0]);
       if (coin === ethers.ZeroAddress) break;
       coins.push(coin);
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       break;
     }
   }

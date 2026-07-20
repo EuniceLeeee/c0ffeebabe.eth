@@ -1,6 +1,9 @@
 import { ethers } from "ethers";
 import type { ResolvedPlanNode } from "../../../shared/types/plan.js";
-import type { StateBackend } from "../../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import { DEFAULT_V2_FEE_BPS, quoteV2ExactInput, v2FeeBpsForFactory } from "../../solver/v2-fee.js";
@@ -104,7 +107,8 @@ async function quoteUniV2Exact(ctx: ExactQuoteContext): Promise<bigint> {
   if (cache) {
     try {
       return await cache.quoteV2(state, target, tokenIn, tokenOut, amountIn);
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       // Preserve the existing exact-quote fallback to on-chain pair reads.
     }
   }
@@ -148,7 +152,8 @@ async function resolveFeeBps(state: Pick<StateBackend, "call">, pool: string): P
     });
     const factory = pairIface.decodeFunctionResult("factory", raw)[0] as string;
     feeBps = v2FeeBpsForFactory(factory);
-  } catch {
+  } catch (error) {
+    if (isStateCallAbortedError(error)) throw error;
     // Behavior-equivalence phase: retain the baseline fallback. Tightening
     // provisional-factory fee admission is a separate replay-gated change.
   }

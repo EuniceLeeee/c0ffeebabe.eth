@@ -1,6 +1,9 @@
 import { ethers } from "ethers";
 import type { ResolvedPlanNode } from "../../../shared/types/plan.js";
-import type { StateBackend } from "../../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type {
@@ -112,7 +115,8 @@ async function quoteUniV3Exact(ctx: ExactQuoteContext): Promise<bigint> {
   if (cache) {
     try {
       return await cache.quoteV3(state, target, tokenIn, tokenOut, amountIn);
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       // Crossed ticks outside the warm window fall back to QuoterV2.
     }
   }
