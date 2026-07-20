@@ -33,7 +33,12 @@ import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
+import {
+  probeErc4626Candidate,
+  type Erc4626PayoutEvidence,
+} from "../venues/protocols/erc4626-discovery.js";
 import type {
+  AttestedProtocolInstance,
   ProtocolConversionAdapter,
   ProtocolDiscoveryContext,
 } from "../venues/route-leg-adapter.js";
@@ -256,6 +261,89 @@ assert(
       !claim.semanticRouteKey.includes(claim.edgeAdapterId)
     ),
     "claims must bind identity root and execution shape without leaking selectors into semantics",
+  );
+}
+
+// Evidence priority (acceptance 4): current-block evidence is checked in full
+// and an older matching payout can never shadow a fresh contradiction; without
+// current-block evidence, the newest historical fingerprint match drives the
+// sample and only the adapter-owned round-trip invariant guards drift.
+{
+  const CODE_HASH = ethers.keccak256(CODE).toLowerCase();
+  const payoutAt = (blockNumber: number, assets: bigint, shares: bigint): Erc4626PayoutEvidence => ({
+    kind: "erc4626-withdraw-payout",
+    txHash: TX_HASH,
+    blockNumber,
+    asset: ASSET,
+    receiver: RECEIVER,
+    assets,
+    shares,
+    codeHash: CODE_HASH,
+    implementationWord: ZERO_WORD,
+  });
+  const evidenceInstance = (evidence: readonly unknown[]): AttestedProtocolInstance => ({
+    pool: {
+      address: VAULT,
+      adapter: "erc4626",
+      fixedTokenIn: ASSET,
+      identitySource: "erc4626-standard",
+    },
+    sources: ["observed-calltrace"],
+    selectors: [],
+    evidence: [...evidence],
+  });
+  const priorityContext = createContext();
+  const shadowed = await probeErc4626Candidate(
+    evidenceInstance([payoutAt(100, 100n, 90n), payoutAt(123, 50n, 90n)]),
+    priorityContext,
+  ).then(() => null, (error: unknown) => error);
+  assert(
+    shadowed instanceof Error && /same-block previewRedeem disagrees/.test(shadowed.message),
+    "older evidence must not shadow a contradicting same-block payout",
+  );
+  const consistent = await probeErc4626Candidate(
+    evidenceInstance([payoutAt(100, 100n, 90n), payoutAt(123, 100n, 90n)]),
+    priorityContext,
+  );
+  assert(consistent.length === 2, "consistent same-block evidence must admit both routes");
+  const historicalOnly = await probeErc4626Candidate(
+    evidenceInstance([payoutAt(90, 100n, 90n), payoutAt(110, 100n, 90n)]),
+    priorityContext,
+  );
+  assert(
+    historicalOnly.length === 2,
+    "historical payout evidence must admit without comparing payout absolutes",
+  );
+  const inflatingBase = createContext();
+  const inflatingContext: ProtocolDiscoveryContext = {
+    ...inflatingBase,
+    backend: {
+      ...inflatingBase.backend,
+      async call(req) {
+        const selector = req.data.slice(0, 10);
+        for (const fn of ["convertToShares", "previewDeposit"] as const) {
+          if (selector === ERC4626.getFunction(fn)!.selector) {
+            const amount = BigInt(ERC4626.decodeFunctionData(fn, req.data)[0]);
+            return ERC4626.encodeFunctionResult(fn, [amount]);
+          }
+        }
+        for (const fn of ["convertToAssets", "previewRedeem"] as const) {
+          if (selector === ERC4626.getFunction(fn)!.selector) {
+            const amount = BigInt(ERC4626.decodeFunctionData(fn, req.data)[0]);
+            return ERC4626.encodeFunctionResult(fn, [amount * 2n]);
+          }
+        }
+        return inflatingBase.backend.call(req);
+      },
+    },
+  };
+  const inflated = await probeErc4626Candidate(
+    evidenceInstance([payoutAt(100, 200n, 100n)]),
+    inflatingContext,
+  ).then(() => null, (error: unknown) => error);
+  assert(
+    inflated instanceof Error && /round-trip preview inflates value/.test(inflated.message),
+    "cross-block drift must be caught by the adapter-owned round-trip invariant",
   );
 }
 

@@ -136,21 +136,48 @@ export async function probeErc4626Candidate(
 
   const currentCodeHash = ethers.keccak256(await ctx.backend.getCode(target));
   const currentImplementationWord = (await ctx.backend.getStorageAt(target, IMPLEMENTATION_SLOT)).toLowerCase();
-  const payoutEvidence = instance.evidence.find((item): item is Erc4626PayoutEvidence =>
-    isPayoutEvidence(item) &&
+  const matchesCurrentFingerprint = (item: {
+    readonly asset: string;
+    readonly codeHash: string;
+    readonly implementationWord: string;
+  }): boolean =>
     item.asset.toLowerCase() === asset.toLowerCase() &&
     item.codeHash.toLowerCase() === currentCodeHash.toLowerCase() &&
-    item.implementationWord.toLowerCase() === currentImplementationWord
-  );
+    item.implementationWord.toLowerCase() === currentImplementationWord;
+  const payoutEvidences = instance.evidence
+    .filter(isPayoutEvidence)
+    .filter(matchesCurrentFingerprint);
   const addressEvidence = instance.evidence.find((item): item is Erc4626AddressEvidence =>
-    isAddressEvidence(item) &&
-    item.asset.toLowerCase() === asset.toLowerCase() &&
-    item.codeHash.toLowerCase() === currentCodeHash.toLowerCase() &&
-    item.implementationWord.toLowerCase() === currentImplementationWord
+    isAddressEvidence(item) && matchesCurrentFingerprint(item)
   );
-  if (!payoutEvidence && !addressEvidence) {
+  if (payoutEvidences.length === 0 && !addressEvidence) {
     throw new Error("erc4626 route lacks current receipt or address-probe evidence");
   }
+
+  // Current-block evidence has priority and is checked in FULL: any same-block
+  // payout that disagrees with the pinned previewRedeem rejects the route, so
+  // an older matching evidence can never shadow a fresh contradiction.
+  const currentBlockPayouts = payoutEvidences.filter(
+    (item) => item.blockNumber === ctx.blockNumber,
+  );
+  for (const evidence of currentBlockPayouts) {
+    const evidenceShares = evidence.shares > 0n ? evidence.shares : 1n;
+    const previewForEvidence = await callUint(ctx, target, "previewRedeem", [evidenceShares]);
+    if (
+      absoluteDifference(previewForEvidence, evidence.assets) >
+        roundingTolerance(evidence.assets)
+    ) {
+      throw new Error("erc4626 same-block previewRedeem disagrees with observed asset payout");
+    }
+  }
+  // Without current-block evidence, the NEWEST fingerprint-matching historical
+  // payout drives the sample; historical payout amounts are never compared in
+  // absolute terms (vault rates legitimately drift across blocks).
+  const payoutEvidence = (currentBlockPayouts.length > 0 ? currentBlockPayouts : payoutEvidences)
+    .reduce<Erc4626PayoutEvidence | null>(
+      (newest, item) => newest === null || item.blockNumber >= newest.blockNumber ? item : newest,
+      null,
+    );
 
   const sampleAssets = payoutEvidence
     ? (payoutEvidence.assets > 0n ? payoutEvidence.assets : 1n)
@@ -171,11 +198,12 @@ export async function probeErc4626Candidate(
   ) {
     throw new Error("erc4626 preview exceeds standard conversion bound");
   }
-  if (
-    payoutEvidence?.blockNumber === ctx.blockNumber &&
-    absoluteDifference(previewRedeem, payoutEvidence.assets) > roundingTolerance(payoutEvidence.assets)
-  ) {
-    throw new Error("erc4626 same-block previewRedeem disagrees with observed asset payout");
+  // Adapter-owned cross-block drift invariant: deposit-then-redeem previewed at
+  // the CURRENT block must not create value. This replaces any comparison
+  // against historical payout absolutes.
+  const roundTripAssets = await callUint(ctx, target, "previewRedeem", [previewDeposit]);
+  if (roundTripAssets > sampleAssets + roundingTolerance(sampleAssets)) {
+    throw new Error("erc4626 current-state round-trip preview inflates value");
   }
 
   const edges: TokenEdge[] = [];
