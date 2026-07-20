@@ -1576,7 +1576,7 @@ export async function resolveLandedTouchedVenues(
 
 async function runtimeVenueByFactory(factory: string): Promise<{
   venue: string;
-  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3";
+  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3" | "dodo-v2";
 } | null> {
   try {
     // Dynamic on purpose: Hermes lifecycle tests replay old repository commits

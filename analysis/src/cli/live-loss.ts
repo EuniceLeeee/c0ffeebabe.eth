@@ -905,8 +905,9 @@ function classifyResolvedVenue(
     };
   }
 
+  const supportedInProd = capability.discoverable && capability.quotable && capability.buildable;
   let gapType: VenueGapType;
-  if (!capability.supported_in_prod || !capability.discoverable) {
+  if (!supportedInProd || !capability.discoverable) {
     gapType = capability.discoverable && (!capability.quotable || !capability.buildable)
       ? "execution_adapter_gap"
       : "venue_class_gap";
@@ -927,7 +928,7 @@ function classifyResolvedVenue(
     discoverable: capability.discoverable,
     quotable: capability.quotable,
     buildable: capability.buildable,
-    supported_in_prod: capability.supported_in_prod,
+    supported_in_prod: supportedInProd,
   };
 }
 
