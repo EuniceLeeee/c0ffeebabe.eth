@@ -20,6 +20,8 @@ import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } 
 import {
   prepareActiveProtocolDiscoveryPass,
   prepareObservedProtocolDiscoveryPass,
+  protocolCandidateAddressesFromDexGraph,
+  protocolCandidateAddressesFromDexUniverse,
 } from "./protocol-discovery-runtime.js";
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
@@ -27,7 +29,14 @@ import {
   type ProtocolDiscoveryEvent,
   type ProtocolDiscoveryOwnership,
   type ProtocolDiscoveryProjection,
+  type ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
+import {
+  cachedProtocolCandidates,
+  loadProtocolDiscoveryEvidenceCache,
+  reconcileProtocolDiscoveryEvidenceCache,
+  saveProtocolDiscoveryEvidenceCache,
+} from "./protocol-discovery-cache.js";
 import { shouldTraceForProtocolDiscovery } from "./observed-protocol-discovery.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
@@ -143,6 +152,11 @@ import {
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
 const DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH = resolve("searcher", "pools", "runtime-blockscan-pools.json");
+const DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH = resolve(
+  "searcher",
+  "pools",
+  "runtime-protocol-discovery-cache.json",
+);
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -817,7 +831,7 @@ async function main(): Promise<void> {
   const factoryBlocks = Number(process.env.SEARCHER_FACTORY_BLOCKS ?? "50000");
   const protocolDiscoveryBlocks = Math.max(
     1,
-    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_BLOCKS ?? String(factoryBlocks)),
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_BLOCKS ?? "300"),
   );
   const protocolDiscoveryShadow = process.env.SEARCHER_PROTOCOL_DISCOVERY_SHADOW === "1";
   const discoveryToBlock = process.env.SEARCHER_DISCOVERY_TO_BLOCK === undefined
@@ -845,7 +859,10 @@ async function main(): Promise<void> {
   });
   const rawBlockscanUniverse = loadPoolUniverse(config.poolUniversePath, {
     maxPools: 0,
-    minScore: config.poolUniverseMinScore,
+    // Protocol address discovery consumes the complete file-backed DEX token
+    // domain. Arb score ranks swap planning; it is not an identity gate for a
+    // share token that may expose a protocol conversion route.
+    minScore: 0,
   });
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] = await Promise.all([
@@ -975,8 +992,45 @@ async function main(): Promise<void> {
       `blockscan_graph_hash=${blockscanGraphHash}`,
     );
   }
+  const dexPoolAdapters = new Set(
+    PRODUCTION_ROUTE_ADAPTERS.swaps.flatMap((adapter) => [...adapter.poolAdapters]),
+  );
+  const fullDexUniverseTokens = protocolCandidateAddressesFromDexUniverse(
+    rawBlockscanUniverse,
+    dexPoolAdapters,
+  );
+  const currentProtocolDexDomain = (): string[] => [...new Set([
+    ...fullDexUniverseTokens,
+    ...protocolCandidateAddressesFromDexGraph(graph, blockScanGraph),
+  ])];
   const protocolGraphBefore = graph.filter((edge) => edge.slotKind === "protocol");
   const protocolEdgeKeysBefore = new Set(protocolGraphBefore.map(protocolEdgeKey));
+  const protocolDiscoveryCachePath = process.env.SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH ??
+    DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH;
+  const protocolDiscoveryChainId = (await provider.getNetwork()).chainId;
+  const protocolDiscoveryCache = loadProtocolDiscoveryEvidenceCache(
+    protocolDiscoveryCachePath,
+    protocolDiscoveryChainId,
+  );
+  const persistProtocolDiscoveryEvidence = (result: ProtocolDiscoveryResult): void => {
+    if (protocolDiscoveryShadow || !config.enableProtocolEdges) return;
+    // evaluatedInstanceKeys excludes retryable identity/probe failures, so
+    // per-key reconciliation is safe even when an unrelated source read failed.
+    reconcileProtocolDiscoveryEvidenceCache(protocolDiscoveryCache, result);
+    try {
+      saveProtocolDiscoveryEvidenceCache(protocolDiscoveryCachePath, protocolDiscoveryCache);
+    } catch (error) {
+      console.warn(
+        `[searcher/live] protocol discovery cache write failed: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
+  const initialProtocolAddressCandidates = currentProtocolDexDomain();
+  console.log(
+    `[searcher/live] protocol discovery cache: address=${protocolDiscoveryCache.addressEntries.size} ` +
+      `verified=${protocolDiscoveryCache.verifiedCandidates.size} path=${protocolDiscoveryCachePath}`,
+  );
   const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
     provider,
     adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
@@ -989,12 +1043,13 @@ async function main(): Promise<void> {
     buildStrategyViews: rebuildStrategyViews,
     blockNumber: discoveryToBlock,
     fromBlock: Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1),
-    candidateTokens: [
-      ...buildTokenIndex(graph).keys(),
-      ...(blockScanGraph ? buildTokenIndex(blockScanGraph).keys() : []),
-    ],
+    graphTokens: initialProtocolAddressCandidates,
+    candidateAddresses: initialProtocolAddressCandidates,
+    evidenceCache: protocolDiscoveryCache,
+    bootstrapCandidates: cachedProtocolCandidates(protocolDiscoveryCache),
     shadow: protocolDiscoveryShadow,
   });
+  persistProtocolDiscoveryEvidence(initialProtocolDiscovery.result);
   emitProtocolDiscoveryEvents(
     initialProtocolDiscovery.result.events,
     protocolDiscoveryShadow ? "shadow" : "active",
@@ -1009,8 +1064,13 @@ async function main(): Promise<void> {
       replaceArray(blockScanGraph, projection.blockscanGraph);
       blockScanPlanner?.setGraph(blockScanGraph);
     }
+    dumpRuntimeGraphPools(strategyViews.backrun);
+    dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
   }
-  if (initialProtocolDiscovery.result.sourceComplete) {
+  if (
+    initialProtocolDiscovery.scanner.eventSourceComplete &&
+    initialProtocolDiscovery.result.evaluationComplete
+  ) {
     lastProtocolDiscoveryBlock = discoveryToBlock;
   }
   const protocolGraphAfter = graph.filter((edge) => edge.slotKind === "protocol");
@@ -1023,6 +1083,8 @@ async function main(): Promise<void> {
       `would_admit=${initialProtocolDiscovery.result.wouldAdmit.length} ` +
       `protocol_edges=${protocolGraphBefore.length}->${protocolGraphAfter.length} ` +
       `added=${addedProtocolEdges.length} ` +
+      `address_probe=${initialProtocolDiscovery.scanner.addressStats.probes} ` +
+      `address_cache_hit=${initialProtocolDiscovery.scanner.addressStats.cacheHits} ` +
       `range=${Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1)}-${discoveryToBlock}`,
   );
   for (const edge of addedProtocolEdges) {
@@ -1032,9 +1094,6 @@ async function main(): Promise<void> {
     );
   }
   const tokenIndex = buildTokenIndex(graph);
-  const knownProtocolCandidateTokens = new Set(
-    initialProtocolDiscovery.result.sourceComplete ? tokenIndex.keys() : [],
-  );
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
   // for matching hint logs. Map: address → adapter type.
@@ -1194,9 +1253,7 @@ async function main(): Promise<void> {
       {
         const latestProtocolBlock = await provider.getBlockNumber();
         if (latestProtocolBlock <= lastProtocolDiscoveryBlock) return;
-        const newProtocolCandidateTokens = [...tokenIndex.keys()].filter(
-          (token) => !knownProtocolCandidateTokens.has(token),
-        );
+        const protocolDexDomain = currentProtocolDexDomain();
         const pass = await prepareActiveProtocolDiscoveryPass({
           provider,
           adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
@@ -1210,18 +1267,26 @@ async function main(): Promise<void> {
           buildStrategyViews: rebuildStrategyViews,
           blockNumber: latestProtocolBlock,
           fromBlock: lastProtocolDiscoveryBlock + 1,
-          candidateTokens: newProtocolCandidateTokens,
-          graphTokens: [...tokenIndex.keys()],
+          graphTokens: protocolDexDomain,
+          candidateAddresses: protocolDexDomain,
+          evidenceCache: protocolDiscoveryCache,
           shadow: protocolDiscoveryShadow,
         });
+        persistProtocolDiscoveryEvidence(pass.result);
         emitProtocolDiscoveryEvents(
           pass.result.events,
           protocolDiscoveryShadow ? "shadow" : "active",
           latestProtocolBlock,
         );
+        console.log(
+          `[searcher/live] protocol address scan: addresses=${pass.scanner.addressStats.addresses} ` +
+            `code_reads=${pass.scanner.addressStats.codeReads} ` +
+            `cache_hits=${pass.scanner.addressStats.cacheHits} probes=${pass.scanner.addressStats.probes} ` +
+            `matches=${pass.scanner.addressStats.matches} negatives=${pass.scanner.addressStats.negatives} ` +
+            `ambiguous=${pass.scanner.addressStats.ambiguous}`,
+        );
         if (pass.projection) commitProtocolProjection(pass.projection);
-        if (pass.result.sourceComplete) {
-          for (const token of tokenIndex.keys()) knownProtocolCandidateTokens.add(token);
+        if (pass.scanner.eventSourceComplete && pass.result.evaluationComplete) {
           lastProtocolDiscoveryBlock = latestProtocolBlock;
         }
       }
@@ -1234,7 +1299,6 @@ async function main(): Promise<void> {
   }, refreshIntervalMs);
 
   const observedProtocolTxs = new Map<string, number>();
-  const observedProtocolSelectors = new Map<string, number>();
   const unknownProtocolSelectorLastBlock = new Map<string, number>();
   const processObservedProtocolReceipt = async (input: {
     txHash: string;
@@ -1244,14 +1308,11 @@ async function main(): Promise<void> {
     if (
       !config.enableProtocolEdges ||
       protocolDiscoveryShadow ||
-      !shouldTraceForProtocolDiscovery(input.receipt.logs)
+      !shouldTraceForProtocolDiscovery(input.receipt.logs, PRODUCTION_ROUTE_ADAPTERS.protocols)
     ) return;
     const txKey = input.txHash.toLowerCase();
     for (const [key, block] of observedProtocolTxs) {
       if (input.blockNumber - block >= 100) observedProtocolTxs.delete(key);
-    }
-    for (const [key, block] of observedProtocolSelectors) {
-      if (input.blockNumber - block >= 100) observedProtocolSelectors.delete(key);
     }
     if (observedProtocolTxs.has(txKey)) return;
     let trace: unknown;
@@ -1267,6 +1328,7 @@ async function main(): Promise<void> {
       );
       return;
     }
+    const protocolDexDomain = currentProtocolDexDomain();
     const pass = await prepareObservedProtocolDiscoveryPass({
       provider,
       adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
@@ -1282,20 +1344,10 @@ async function main(): Promise<void> {
       txHash: input.txHash,
       receipt: input.receipt,
       trace,
-      candidateTokens: [],
-      graphTokens: [...tokenIndex.keys()],
-      seenAddressSelectors: new Set(observedProtocolSelectors.keys()),
+      graphTokens: protocolDexDomain,
     });
+    persistProtocolDiscoveryEvidence(pass.result);
     emitProtocolDiscoveryEvents(pass.result.events, "observed", input.blockNumber);
-    for (const event of pass.result.events) {
-      if (!event.target || event.verdict !== "would_admit") continue;
-      for (const selector of event.selectors) {
-        observedProtocolSelectors.set(
-          `${event.target.toLowerCase()}|${selector}`,
-          input.blockNumber,
-        );
-      }
-    }
     for (const diagnostic of pass.unknownSelectors) {
       const key = `${diagnostic.target.toLowerCase()}|${diagnostic.selector}`;
       const last = unknownProtocolSelectorLastBlock.get(key) ?? -Infinity;
@@ -1307,6 +1359,9 @@ async function main(): Promise<void> {
         selector: diagnostic.selector,
         reason: diagnostic.reason,
         recommendation: diagnostic.recommendation,
+        ...(diagnostic.matchingAdapterIds === undefined
+          ? {}
+          : { matching_adapter_ids: [...diagnostic.matchingAdapterIds] }),
         tx_hash: input.txHash,
         block_number: input.blockNumber,
       });
@@ -1314,7 +1369,7 @@ async function main(): Promise<void> {
     if (pass.result.evaluatedInstanceKeys.size > 0) commitProtocolProjection(pass.projection);
     // Mark complete only after trace + identity/probe processing. A transient
     // downstream failure stays retryable if the same landed tx is observed again.
-    observedProtocolTxs.set(txKey, input.blockNumber);
+    if (pass.result.evaluationComplete) observedProtocolTxs.set(txKey, input.blockNumber);
   };
   const observeProtocolReceipt = (input: {
     txHash: string;
@@ -2318,7 +2373,7 @@ async function handleHint(
       stage: "detect",
       reason: "no_matching_graph_pool",
     });
-    if (shouldTraceForProtocolDiscovery(hintLogs)) {
+    if (shouldTraceForProtocolDiscovery(hintLogs, PRODUCTION_ROUTE_ADAPTERS.protocols)) {
       void ctx.observeProtocolTxHash(txHash);
     }
     throw new Error("no matching graph pool");

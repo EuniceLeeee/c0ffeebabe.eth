@@ -7,6 +7,7 @@ import {
   protocolEdgeKey,
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
+import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import {
   buildTokenGraph,
   POOL_REGISTRY,
@@ -77,7 +78,7 @@ async function main(): Promise<void> {
         const raw = await provider.send("eth_call", [{
           to: target,
           data: ERC4626.encodeFunctionData("asset"),
-        }, ethers.toQuantity(log.blockNumber)]);
+        }, ethers.toQuantity(pinnedBlock)]);
         asset = ethers.getAddress(String(ERC4626.decodeFunctionResult("asset", raw)[0]));
       } catch {
         continue;
@@ -89,19 +90,25 @@ async function main(): Promise<void> {
 
       const context = createPinnedProtocolDiscoveryContext({
         provider,
-        blockNumber: log.blockNumber,
+        blockNumber: pinnedBlock,
         fromBlock: log.blockNumber,
         toBlock: log.blockNumber,
         rpcTimeoutMs: timeoutMs,
-        // No target seed: this candidate must come from the Withdraw event.
-        candidateTokens: [],
+        // The scanner receives no target seed; graph tokens only gate loop closability.
         graphTokens: baselineTokens,
+      });
+      const scanned = await scanProtocolDiscoveryRange({
+        adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+        context,
       });
       const result = await runProtocolDiscovery({
         adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
         context,
         protocolEdgesEnabled: true,
         attestIdentity: attester,
+        candidatesByAdapter: scanned.candidatesByAdapter,
+        sourceComplete: scanned.sourceComplete,
+        sourceErrors: scanned.sourceErrors,
       });
       const admission = result.wouldAdmit.find(
         (item) => item.instance.pool.address.toLowerCase() === target.toLowerCase(),

@@ -85,8 +85,11 @@ export type SearcherEvent =
       type: "protocol_discovery_unknown_selector";
       target: string;
       selector: string;
-      reason: "protocol_like_flow_unknown_selector";
+      reason: "protocol_like_flow_unknown_selector" |
+        "protocol_like_flow_unverified_match" |
+        "protocol_like_flow_ambiguous_adapter";
       recommendation: "inspect_calltrace";
+      matching_adapter_ids?: string[];
       tx_hash: string;
       block_number: number;
     }

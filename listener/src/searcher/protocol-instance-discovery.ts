@@ -29,8 +29,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
   fromBlock: number;
   toBlock?: number;
   rpcTimeoutMs?: number;
-  candidateTokens: readonly string[];
-  graphTokens?: readonly string[];
+  graphTokens: readonly string[];
   retainedInstances?: readonly AttestedProtocolInstance[];
 }): ProtocolDiscoveryContext {
   const toBlock = input.toBlock ?? input.blockNumber;
@@ -50,8 +49,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
     toBlock,
-    candidateTokens: unique(input.candidateTokens.map((token) => token.toLowerCase())),
-    graphTokens: unique((input.graphTokens ?? input.candidateTokens).map((token) => token.toLowerCase())),
+    graphTokens: unique(input.graphTokens.map((token) => token.toLowerCase())),
     retainedInstances: input.retainedInstances ?? [],
     backend: {
       call: (req) => withRpcTimeout(
@@ -73,22 +71,13 @@ export function createPinnedProtocolDiscoveryContext(input: {
           rpcTimeoutMs,
           "eth_getStorageAt",
         ),
-      getCodeAt: (address, blockNumber) => withRpcTimeout(
-        input.provider.getCode(address, blockNumber),
-        rpcTimeoutMs,
-        "historical eth_getCode",
-      ),
-      getStorageAtBlock: (address, position, blockNumber) =>
-        withRpcTimeout(
-          input.provider.getStorage(address, position, blockNumber),
-          rpcTimeoutMs,
-          "historical eth_getStorageAt",
-        ),
       getLogs: async (req) => {
         const logs = await withRpcTimeout(
           input.provider.getLogs({
             ...(req.address === undefined ? {} : { address: req.address }),
-            topics: [...req.topics],
+            topics: req.topics.map((topic) =>
+              typeof topic === "string" || topic === null ? topic : [...topic]
+            ),
             fromBlock: req.fromBlock,
             toBlock: req.toBlock,
           }),
@@ -177,7 +166,9 @@ export interface ProtocolDiscoveryResult {
   readonly wouldAdmit: readonly VerifiedProtocolAdmission[];
   /** Instance keys evaluated this pass. Lifecycle replacement may only touch these keys. */
   readonly evaluatedInstanceKeys: ReadonlySet<string>;
-  /** False means at least one adapter source failed; scan cursors must not advance. */
+  /** False means identity/probe hit a retryable read failure. */
+  readonly evaluationComplete: boolean;
+  /** False means a candidate source or identity/probe read failed. */
   readonly sourceComplete: boolean;
 }
 
@@ -200,7 +191,15 @@ export function createCanonicalProtocolIdentityAttester(input: {
       // Discovery candidates never receive legacy seed credentials.
       seedEntries: [],
     });
-    return result.accepted[0] ?? null;
+    const accepted = result.accepted[0];
+    if (accepted) return accepted;
+    const rejected = result.rejected[0];
+    if (rejected?.reason === "identity_call_failed") {
+      throw new RetryableProtocolDiscoveryError(
+        `identity_call_failed for ${rejected.address}`,
+      );
+    }
+    return null;
   };
 }
 
@@ -214,14 +213,37 @@ export async function runProtocolDiscovery(input: {
   context: ProtocolDiscoveryContext;
   protocolEdgesEnabled: boolean;
   attestIdentity: ProtocolIdentityAttester;
-  observedCandidates?: ReadonlyMap<string, readonly ProtocolCandidate[]>;
-  runActiveDiscovery?: boolean;
+  candidatesByAdapter?: ReadonlyMap<string, readonly ProtocolCandidate[]>;
+  sourceComplete?: boolean;
+  sourceErrors?: readonly {
+    readonly adapterId: string | null;
+    readonly target: string | null;
+    readonly reason: string;
+    readonly retryable?: boolean;
+  }[];
   includeRetained?: boolean;
 }): Promise<ProtocolDiscoveryResult> {
   const events: ProtocolDiscoveryEvent[] = [];
   const wouldAdmit: VerifiedProtocolAdmission[] = [];
   const evaluatedInstanceKeys = new Set<string>();
-  let sourceComplete = true;
+  const candidateSourceComplete = input.sourceComplete ?? true;
+  let evaluationComplete = true;
+  const ambiguousTargets = crossAdapterAmbiguousTargets(input);
+  const reportedAmbiguities = new Set<string>();
+
+  for (const error of input.sourceErrors ?? []) {
+    events.push({
+      event: "protocol_discovery",
+      adapterId: error.adapterId ?? "protocol-scanner",
+      target: error.target,
+      selectors: [],
+      sources: ["shared-scanner"],
+      verdict: "rejected",
+      stage: "candidate",
+      reason: error.reason,
+      wouldAdmitEdges: 0,
+    });
+  }
 
   for (const adapter of input.adapters) {
     const discovery = adapter.discovery;
@@ -237,17 +259,10 @@ export async function runProtocolDiscovery(input: {
         .filter((instance) => adapter.poolAdapters.includes(instance.pool.adapter))
         .map(candidateFromRetained)
       : [];
-    if (input.runActiveDiscovery ?? true) {
-      try {
-        rawCandidates.push(...await discovery.discoverCandidates(input.context));
-      } catch (error) {
-        sourceComplete = false;
-        events.push(eventFor(adapter.id, null, "rejected", "candidate", safeError(error), 0));
-      }
-    }
-    rawCandidates.push(...(input.observedCandidates?.get(adapter.id) ?? []));
+    rawCandidates.push(...(input.candidatesByAdapter?.get(adapter.id) ?? []));
 
     const grouped = new Map<string, CandidateAggregate>();
+    const quarantinedKeys = new Set<string>();
     for (const rawCandidate of rawCandidates) {
       let candidate: ProtocolCandidate;
       try {
@@ -257,6 +272,27 @@ export async function runProtocolDiscovery(input: {
         continue;
       }
       const key = protocolInstanceKey(adapter.id, candidate.pool.address);
+      const target = candidate.pool.address.toLowerCase();
+      const ambiguousAdapterIds = ambiguousTargets.get(target);
+      if (ambiguousAdapterIds) {
+        grouped.delete(key);
+        quarantinedKeys.add(key);
+        evaluatedInstanceKeys.add(key);
+        const reportKey = `${adapter.id}|${target}`;
+        if (!reportedAmbiguities.has(reportKey)) {
+          reportedAmbiguities.add(reportKey);
+          events.push(eventFor(
+            adapter.id,
+            candidate,
+            "rejected",
+            "candidate",
+            `ambiguous target adapters: ${ambiguousAdapterIds.join(",")}`,
+            0,
+          ));
+        }
+        continue;
+      }
+      if (quarantinedKeys.has(key)) continue;
       const current = grouped.get(key);
       try {
         if (
@@ -273,22 +309,28 @@ export async function runProtocolDiscovery(input: {
         }
       } catch (error) {
         grouped.delete(key);
+        quarantinedKeys.add(key);
         evaluatedInstanceKeys.add(key);
         events.push(eventFor(adapter.id, candidate, "rejected", "candidate", safeError(error), 0));
       }
     }
 
     for (const [key, aggregate] of grouped) {
-      evaluatedInstanceKeys.add(key);
       const candidate = aggregate.candidate;
       let attestedPool: AttestedPoolEntry<PoolEntry> | null;
       try {
         attestedPool = await input.attestIdentity(adapter, candidate, input.context);
       } catch (error) {
+        if (isRetryableProtocolDiscoveryFailure(error)) {
+          evaluationComplete = false;
+        } else {
+          evaluatedInstanceKeys.add(key);
+        }
         events.push(eventFor(adapter.id, aggregate, "rejected", "identity", safeError(error), 0));
         continue;
       }
       if (!attestedPool) {
+        evaluatedInstanceKeys.add(key);
         events.push(eventFor(adapter.id, aggregate, "rejected", "identity", "identity_not_attested", 0));
         continue;
       }
@@ -297,6 +339,7 @@ export async function runProtocolDiscovery(input: {
       try {
         instance = normalizeAttestedInstance(adapter, aggregate, attestedPool);
       } catch (error) {
+        evaluatedInstanceKeys.add(key);
         events.push(eventFor(adapter.id, aggregate, "rejected", "identity", safeError(error), 0));
         continue;
       }
@@ -306,16 +349,28 @@ export async function runProtocolDiscovery(input: {
         edges = await discovery.probeCandidate(instance, input.context);
         assertVerifiedEdges(adapter, instance, edges);
       } catch (error) {
+        if (isRetryableProtocolDiscoveryFailure(error)) {
+          evaluationComplete = false;
+        } else {
+          evaluatedInstanceKeys.add(key);
+        }
         events.push(eventFor(adapter.id, aggregate, "rejected", "probe", safeError(error), 0));
         continue;
       }
 
+      evaluatedInstanceKeys.add(key);
       wouldAdmit.push({ adapterId: adapter.id, instance, edges: [...edges] });
       events.push(eventFor(adapter.id, aggregate, "would_admit", "probe", null, edges.length));
     }
   }
 
-  return { events, wouldAdmit, evaluatedInstanceKeys, sourceComplete };
+  return {
+    events,
+    wouldAdmit,
+    evaluatedInstanceKeys,
+    evaluationComplete,
+    sourceComplete: candidateSourceComplete && evaluationComplete,
+  };
 }
 
 /** Compatibility name retained for the explicit Slice-B shadow gate. */
@@ -629,4 +684,67 @@ function safeError(value: unknown): string {
   const message = (value instanceof Error ? value.message : String(value))
     .replace(/https?:\/\/\S+/g, "<redacted-url>");
   return message.slice(0, 240) || "unknown_error";
+}
+
+class RetryableProtocolDiscoveryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RetryableProtocolDiscoveryError";
+  }
+}
+
+function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
+  if (value instanceof RetryableProtocolDiscoveryError) return true;
+  const code = value && typeof value === "object" && "code" in value
+    ? String((value as { code?: unknown }).code).toUpperCase()
+    : "";
+  if (new Set([
+    "NETWORK_ERROR",
+    "SERVER_ERROR",
+    "TIMEOUT",
+    "ETIMEDOUT",
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "EPIPE",
+    "UND_ERR_CONNECT_TIMEOUT",
+  ]).has(code)) return true;
+  const message = value instanceof Error ? value.message : String(value);
+  return /timed?\s*out|network|socket|connection (?:closed|reset|refused)|temporarily unavailable|\b(?:429|502|503|504)\b/i
+    .test(message);
+}
+
+function crossAdapterAmbiguousTargets(input: {
+  adapters: readonly ProtocolConversionAdapter[];
+  context: ProtocolDiscoveryContext;
+  candidatesByAdapter?: ReadonlyMap<string, readonly ProtocolCandidate[]>;
+  includeRetained?: boolean;
+}): ReadonlyMap<string, readonly string[]> {
+  const byTarget = new Map<string, Set<string>>();
+  for (const adapter of input.adapters) {
+    if (!adapter.discovery) continue;
+    const candidates: ProtocolCandidate[] = [
+      ...(input.candidatesByAdapter?.get(adapter.id) ?? []),
+    ];
+    if (input.includeRetained ?? true) {
+      candidates.push(...input.context.retainedInstances
+        .filter((instance) => adapter.poolAdapters.includes(instance.pool.adapter))
+        .map(candidateFromRetained));
+    }
+    for (const candidate of candidates) {
+      if (!adapter.poolAdapters.includes(candidate.pool.adapter)) continue;
+      try {
+        const target = ethers.getAddress(candidate.pool.address).toLowerCase();
+        const ids = byTarget.get(target) ?? new Set<string>();
+        ids.add(adapter.id);
+        byTarget.set(target, ids);
+      } catch {
+        // Malformed addresses are rejected by normalizeCandidate, not arbitration.
+      }
+    }
+  }
+  return new Map(
+    [...byTarget.entries()]
+      .filter(([, ids]) => ids.size > 1)
+      .map(([target, ids]) => [target, [...ids].sort()] as const),
+  );
 }

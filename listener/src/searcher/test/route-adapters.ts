@@ -205,7 +205,8 @@ async function main(): Promise<void> {
         ...grandfatheredProtocol,
         id: "protocol:ungated-discovery",
         discovery: {
-          async discoverCandidates() { return []; },
+          eventTopics: [],
+          callSelectors: [],
           async probeCandidate() { return []; },
         },
       }],
@@ -214,6 +215,27 @@ async function main(): Promise<void> {
     ungatedDiscoveryRejected = true;
   }
   assert(ungatedDiscoveryRejected, "dynamic protocol discovery must stay behind feature admission");
+  let unversionedAddressMatcherRejected = false;
+  try {
+    createRouteAdapterRegistry({
+      swaps: [],
+      protocols: [{
+        ...PRODUCTION_ROUTE_ADAPTERS.protocols.find((item) => item.id === "protocol:erc4626")!,
+        discovery: {
+          eventTopics: [],
+          callSelectors: [],
+          async candidateFromAddress() { return null; },
+          async probeCandidate() { return []; },
+        },
+      }],
+    });
+  } catch {
+    unversionedAddressMatcherRejected = true;
+  }
+  assert(
+    unversionedAddressMatcherRejected,
+    "address discovery matcher must version persisted positive/negative evidence",
+  );
   console.log("[route-adapters] declared protocol venue graph derivation: PASS");
 
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };

@@ -94,19 +94,16 @@ export interface ProtocolDiscoveryReceipt {
   readonly logs: readonly ProtocolDiscoveryLog[];
 }
 
-/**
- * Every method is pinned by the coordinator to ProtocolDiscoveryContext.blockNumber.
- * Adapter code deliberately cannot supply a block tag or fall through to `latest`.
- */
+export type ProtocolDiscoveryTopicFilter = string | readonly string[] | null;
+
+/** All state reads are pinned to one current block on the configured node. */
 export interface ProtocolDiscoveryReadBackend {
-  call(req: { to: string; data: string }): Promise<string>;
+  call(req: { to: string; data: string; from?: string }): Promise<string>;
   getCode(address: string): Promise<string>;
   getStorageAt(address: string, position: bigint): Promise<string>;
-  getCodeAt(address: string, blockNumber: number): Promise<string>;
-  getStorageAtBlock(address: string, position: bigint, blockNumber: number): Promise<string>;
   getLogs(req: {
     readonly address?: string;
-    readonly topics: readonly string[];
+    readonly topics: readonly ProtocolDiscoveryTopicFilter[];
     readonly fromBlock: number;
     readonly toBlock: number;
   }): Promise<readonly ProtocolDiscoveryLog[]>;
@@ -119,9 +116,7 @@ export interface ProtocolDiscoveryContext {
   readonly blockNumber: number;
   readonly fromBlock: number;
   readonly toBlock: number;
-  /** Graph tokens are candidates only; an adapter may use a stronger registry/event source instead. */
-  readonly candidateTokens: readonly string[];
-  /** Complete graph domain used for loop-closability checks; candidateTokens may be incremental. */
+  /** Complete graph domain used only for post-match loop-closability checks. */
   readonly graphTokens: readonly string[];
   /** Previously admitted instances are re-probed so upgrades and route removal replace atomically. */
   readonly retainedInstances: readonly AttestedProtocolInstance[];
@@ -130,7 +125,7 @@ export interface ProtocolDiscoveryContext {
 export interface ProtocolCandidate {
   readonly pool: PoolEntry;
   readonly source: string;
-  /** Present only for observed-call candidates; active discovery normally omits it. */
+  /** Present for candidates derived from a concrete calltrace interaction. */
   readonly selector?: string;
   /** Adapter-owned evidence. The coordinator treats it as opaque and never turns it into identity. */
   readonly evidence?: readonly unknown[];
@@ -145,13 +140,26 @@ export interface AttestedProtocolInstance {
 }
 
 /**
- * Candidate enumeration and route probing stay adapter-owned. Identity remains
- * a coordinator-owned canonical gate between these two calls.
+ * The shared scanner owns block/log/receipt/trace enumeration. A family adapter
+ * only declares its cheap event shortlist and parses addresses/interactions into
+ * candidates. Identity and route probing remain shared admission gates.
  */
 export interface ProtocolDiscoveryCapability {
-  discoverCandidates(
+  /** Topic-0 values that make a transaction worth receipt+trace inspection. */
+  readonly eventTopics: readonly string[];
+  /** Manually adapted on-chain calls that may establish this family's interaction. */
+  readonly callSelectors: readonly string[];
+  /** Bump when address matching semantics change so persisted negatives retry. */
+  readonly addressMatcherVersion?: string;
+  /** Optional C2 matcher; the shared scanner owns DEX-token iteration and caching. */
+  candidateFromAddress?(
+    candidate: {
+      readonly target: string;
+      readonly codeHash: string;
+      readonly implementationWord: string;
+    },
     ctx: ProtocolDiscoveryContext,
-  ): Promise<readonly ProtocolCandidate[]>;
+  ): Promise<ProtocolCandidate | null>;
   probeCandidate(
     instance: AttestedProtocolInstance,
     ctx: ProtocolDiscoveryContext,
@@ -163,6 +171,8 @@ export interface ProtocolDiscoveryCapability {
       readonly selector: string;
       readonly txHash: string;
       readonly receipt: ProtocolDiscoveryReceipt;
+      /** Full transaction trace fetched once by the shared scanner. */
+      readonly trace: unknown;
     },
     ctx: ProtocolDiscoveryContext,
   ): Promise<ProtocolCandidate | null>;
