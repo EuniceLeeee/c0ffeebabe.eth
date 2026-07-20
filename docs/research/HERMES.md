@@ -360,9 +360,18 @@ The hourly opening `reap` also reconciles runtime liveness: `state=running` with
 immediately as `crashed_needs_escalation`, restores A's CPUs, preserves the branch/evidence, and advances to
 the next problem. It never waits for the nominal lease to expire.
 **Traps (codified 2026-07-08/12/20):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Every
-full warm (startup/range/interval/reorg/log fallback) is an atomic pinned-block cache transition with its
-own `SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS` hard deadline (default 240000); incremental passes remain
-11000. The warm cursor advances only after V2/V3/V4 metadata and Curve state complete. The B wrapper refuses
+full warm (startup/interval/reorg/log fallback) is an atomic pinned-block cache transition with its own
+`SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS` batch-admission deadline (default 240000); an RPC batch already in
+flight may finish after it, while incremental passes remain 11000. An unfinished full warm remains pinned
+to the same block hash and reuses completed V2/V3/V4, metadata, and Curve batches on its next pass; it never
+clears and restarts from batch zero merely because one pass budget ended. A block-hash change or observed
+height rollback discards every partial cache and restarts on the current canonical block. Session creation,
+resume, and cursor commit verify the Anvil fork hash against the canonical RPC hash; a selected full warm
+remains forced until that hash-bound session exists. The warm cursor
+advances only after all cache families complete. If the head advances by more than 32 blocks during warm,
+later passes scan bounded
+32-block log chunks and do not solve until the cursor catches the head; they do not restart another full warm
+solely because of the gap. The B wrapper refuses
 readiness until one complete `scannedPairs=` pass, preventing a `lastWarmedBlock=null` / `warm=full` restart
 from masquerading as a healthy deploy. • stableswap-NG `stored_rate` refreshes OFF-event →
 getLogs-changed incremental MISSES it → always re-warm `kind==="ng"`, only plain-curve is event-incremental.

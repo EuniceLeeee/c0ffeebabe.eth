@@ -14,13 +14,14 @@ import {
 
 const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
 
-type WarmCache = Pick<
+export type BlockScanWarmCache = Pick<
   PoolStateCache,
   "hasV2" | "hasV3Live" | "hasV4" | "hasCurve" | "curveKind"
 >;
-type WarmUpdater = Pick<PoolStateUpdater, "hasStaticMetadata">;
+export type BlockScanWarmUpdater = Pick<PoolStateUpdater, "hasStaticMetadata">;
+export type BlockScanCurveWarmCache = Pick<PoolStateCache, "snapshotCurve">;
 
-export type BlockScanFullWarmReason = "startup" | "logs_error" | "reorg" | "interval" | "range";
+export type BlockScanFullWarmReason = "startup" | "logs_error" | "reorg" | "interval";
 
 export interface BlockScanChangedPools {
   fromBlock: number;
@@ -42,8 +43,8 @@ export class BlockScanWarmCoordinator {
 
   constructor(
     private readonly provider: ethers.JsonRpcProvider,
-    private readonly cache: WarmCache,
-    private readonly updater: WarmUpdater,
+    private readonly cache: BlockScanWarmCache,
+    private readonly updater: BlockScanWarmUpdater,
     private readonly fullRewarmBlocks: number,
   ) {}
 
@@ -54,9 +55,6 @@ export class BlockScanWarmCoordinator {
   ): Promise<BlockScanWarmPlan> {
     if (this.lastWarmedBlock === null) return { kind: "full", reason: "startup" };
     if (blockNumber <= this.lastWarmedBlock) return { kind: "full", reason: "reorg" };
-    if (blockNumber - this.lastWarmedBlock > MAX_INCREMENTAL_RANGE_BLOCKS) {
-      return { kind: "full", reason: "range" };
-    }
     if (
       this.lastFullWarmBlock !== null &&
       blockNumber - this.lastFullWarmBlock >= this.fullRewarmBlocks
@@ -65,12 +63,16 @@ export class BlockScanWarmCoordinator {
     }
 
     try {
+      const incrementalToBlock = Math.min(
+        blockNumber,
+        this.lastWarmedBlock + MAX_INCREMENTAL_RANGE_BLOCKS,
+      );
       const changed = await detectChangedPools(
         this.provider,
         this.cache,
         this.updater,
         this.lastWarmedBlock + 1,
-        blockNumber,
+        incrementalToBlock,
         hops,
         uniqueCurvePools(edges),
       );
@@ -105,7 +107,9 @@ export function formatBlockScanWarmPlan(plan: BlockScanWarmPlan): string {
  * A full warm clears the mutable cache before it starts, so aborting it at the
  * per-pass deadline would make the next block restart from batch zero forever.
  * Keep the ordinary pass budget for incremental refreshes; a full warm is one
- * pinned-block operation with its own explicit hard deadline.
+ * pinned-block operation with its own batch-admission deadline. An RPC batch
+ * already in flight may complete after that deadline, and main resumes any
+ * unfinished full warm against the same pinned block on the next pass.
  */
 export function blockScanWarmPassBudgetMs(
   plan: BlockScanWarmPlan,
@@ -115,6 +119,35 @@ export function blockScanWarmPassBudgetMs(
   return plan.kind === "full"
     ? Math.max(incrementalBudgetMs, fullWarmBudgetMs)
     : incrementalBudgetMs;
+}
+
+export function blockScanWarmCaughtUp(
+  warmedThroughBlock: number,
+  observedBlock: number,
+): boolean {
+  return warmedThroughBlock >= observedBlock;
+}
+
+export function blockScanFullWarmSessionMatchesCanonical(
+  sessionBlock: number,
+  sessionBlockHash: string,
+  observedBlock: number,
+  canonicalBlockHash: string,
+): boolean {
+  return observedBlock >= sessionBlock &&
+    sessionBlockHash.toLowerCase() === canonicalBlockHash.toLowerCase();
+}
+
+export function blockScanCurveRetriesAfterPass(
+  priorRetries: ReadonlySet<string>,
+  failedPools: ReadonlySet<string>,
+  attemptedPools: ReadonlySet<string>,
+): Set<string> {
+  const retries = new Set<string>();
+  for (const pool of failedPools) {
+    if (!priorRetries.has(pool) || !attemptedPools.has(pool)) retries.add(pool);
+  }
+  return retries;
 }
 
 export function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteRequest[] {
@@ -131,6 +164,24 @@ export function blockScanMutableQuoteRequests(hops: QuoteRequest[]): QuoteReques
   return out;
 }
 
+export function blockScanUnwarmedMutableQuoteRequests(
+  hops: QuoteRequest[],
+  cache: BlockScanWarmCache,
+  updater: BlockScanWarmUpdater,
+): QuoteRequest[] {
+  return blockScanMutableQuoteRequests(hops).filter((hop) => !hasWarmState(cache, updater, hop));
+}
+
+export function blockScanUnwarmedCurveEdges(
+  edges: TokenEdge[],
+  cache: BlockScanCurveWarmCache,
+  blockNumber: number,
+): TokenEdge[] {
+  return uniqueCurvePools(edges).filter(
+    (edge) => cache.snapshotCurve(edge.target, blockNumber) === null,
+  );
+}
+
 export function blockScanV4PoolId(hop: QuoteRequest): string | null {
   const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
   if (warm?.kind !== "mutable-pool" || warm.cache !== "v4" || !hop.v4PoolKey) return null;
@@ -139,8 +190,8 @@ export function blockScanV4PoolId(hop: QuoteRequest): string | null {
 
 async function detectChangedPools(
   provider: ethers.JsonRpcProvider,
-  cache: WarmCache,
-  updater: WarmUpdater,
+  cache: BlockScanWarmCache,
+  updater: BlockScanWarmUpdater,
   fromBlock: number,
   toBlock: number,
   hops: QuoteRequest[],
@@ -231,8 +282,8 @@ function warmKey(hop: QuoteRequest): string {
 }
 
 function hasWarmState(
-  cache: WarmCache,
-  updater: WarmUpdater,
+  cache: BlockScanWarmCache,
+  updater: BlockScanWarmUpdater,
   hop: QuoteRequest,
 ): boolean {
   const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;

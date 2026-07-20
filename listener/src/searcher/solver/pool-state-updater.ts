@@ -128,6 +128,11 @@ export class PoolStateUpdater {
     return true;
   }
 
+  clearStaticMetadata(): void {
+    this.v2Static.clear();
+    this.v3Static.clear();
+  }
+
   private dedupe(hops: QuoteRequest[]): QuoteRequest[] {
     const seen = new Set<string>();
     const out: QuoteRequest[] = [];

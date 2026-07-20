@@ -342,6 +342,13 @@ export class PoolStateCache {
     this.overlayPools.clear();
   }
 
+  /** Discard every block-derived layer after a canonical hash change. */
+  clearBlockScanWarmProgress(): void {
+    this.clear();
+    this.v3Ticks.clear();
+    this.tickBlock = undefined;
+  }
+
   /**
    * Block-scan pass boundary: keep seeded V2 reserves, V3 slot0/liquidity, and
    * Curve pool state across blocks. The block-scan warm planner invalidates the

@@ -57,8 +57,13 @@ import {
 } from "./profit-token-valuation.js";
 import {
   BlockScanWarmCoordinator,
+  blockScanCurveRetriesAfterPass,
+  blockScanFullWarmSessionMatchesCanonical,
+  blockScanWarmCaughtUp,
   blockScanWarmPassBudgetMs,
   blockScanMutableQuoteRequests,
+  blockScanUnwarmedMutableQuoteRequests,
+  blockScanUnwarmedCurveEdges,
   blockScanV4PoolId,
   formatBlockScanWarmPlan,
   type BlockScanWarmPlan,
@@ -1174,6 +1179,15 @@ async function main(): Promise<void> {
   // preserves transient-failure coverage without letting a permanently bad
   // pool monopolize every later block.
   const blockScanCurveRetryPools = new Set<string>();
+  // A full warm may span several pass budgets. Keep it pinned to one block so
+  // completed batches can be reused safely instead of clearing and restarting
+  // from batch zero at every new head.
+  let blockScanFullWarmSession: {
+    blockNumber: number;
+    blockHash: string;
+    plan: Extract<BlockScanWarmPlan, { kind: "full" }>;
+  } | null = null;
+  let blockScanForceFullWarm = false;
   const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
     enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
     after: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2")),
@@ -1202,6 +1216,15 @@ async function main(): Promise<void> {
       !blockScanSolverForPass ||
       !blockScanSimulatorForPass
     ) return;
+    const discardFullWarmProgress = (): void => {
+      blockScanFullWarmSession = null;
+      blockScanForceFullWarm = true;
+      blockScanCacheForPass.clearBlockScanWarmProgress();
+      blockScanUpdaterForPass.clearStaticMetadata();
+      blockScanV3Meta.clear();
+      blockScanDecimals.clear();
+      blockScanCurveRetryPools.clear();
+    };
     setImmediate(() => {
       void (async () => {
         if (blockScanBusy) {
@@ -1250,15 +1273,75 @@ async function main(): Promise<void> {
         };
         try {
           const allHops = blockScanQuoteRequests(edges);
+          if (blockScanFullWarmSession) {
+            if (blockNumber < blockScanFullWarmSession.blockNumber) {
+              console.log(
+                `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
+                  `target=${blockScanFullWarmSession.blockNumber} reason=height_rollback`,
+              );
+              discardFullWarmProgress();
+            } else {
+              let canonicalHash: string;
+              try {
+                canonicalHash = await readBlockHash(
+                  provider,
+                  blockScanFullWarmSession.blockNumber,
+                );
+              } catch (err) {
+                console.log(
+                  `[searcher/blockscan] block=${blockNumber} warm_session_hash error=` +
+                    `${err instanceof Error ? err.message : String(err)}`,
+                );
+                return;
+              }
+              if (!blockScanFullWarmSessionMatchesCanonical(
+                blockScanFullWarmSession.blockNumber,
+                blockScanFullWarmSession.blockHash,
+                blockNumber,
+                canonicalHash,
+              )) {
+                console.log(
+                  `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
+                    `target=${blockScanFullWarmSession.blockNumber} reason=reorg`,
+                );
+                discardFullWarmProgress();
+              }
+            }
+          }
+          const stateBlockNumber = blockScanFullWarmSession?.blockNumber ?? blockNumber;
+          const continuingFullWarm = blockScanFullWarmSession !== null;
           let warmPlan: BlockScanWarmPlan;
           try {
-            await blockScanStateForPass.forkAt(blockNumber);
-            blockScanCacheForPass.beginBlockScanPass(blockNumber);
-            warmPlan = await blockScanWarmCoordinatorForPass.plan(
-              blockNumber,
-              allHops,
-              edges,
-            );
+            await blockScanStateForPass.forkAt(stateBlockNumber);
+            blockScanCacheForPass.beginBlockScanPass(stateBlockNumber);
+            warmPlan = blockScanFullWarmSession?.plan ??
+              (blockScanForceFullWarm
+                ? { kind: "full", reason: "reorg" }
+                : await blockScanWarmCoordinatorForPass.plan(
+                    stateBlockNumber,
+                    allHops,
+                    edges,
+                  ));
+            if (continuingFullWarm) {
+              const session = blockScanFullWarmSession!;
+              const forkedBlockHash = await readBlockHash(
+                blockScanStateForPass.provider,
+                stateBlockNumber,
+              );
+              if (!blockScanFullWarmSessionMatchesCanonical(
+                session.blockNumber,
+                session.blockHash,
+                blockNumber,
+                forkedBlockHash,
+              )) {
+                console.log(
+                  `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
+                    `target=${stateBlockNumber} reason=fork_hash_mismatch`,
+                );
+                discardFullWarmProgress();
+                return;
+              }
+            }
           } catch (err) {
             console.log(
               `[searcher/blockscan] block=${blockNumber} fork error: ` +
@@ -1267,7 +1350,10 @@ async function main(): Promise<void> {
             return;
           }
 
-          console.log(`[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)}`);
+          console.log(
+            `[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)} ` +
+              `stateBlock=${stateBlockNumber}`,
+          );
           activePassBudgetMs = blockScanWarmPassBudgetMs(
             warmPlan,
             blockScanPassBudgetMs,
@@ -1275,7 +1361,39 @@ async function main(): Promise<void> {
           );
           passDeadlineAtMs = passStarted + activePassBudgetMs;
           if (warmPlan.kind === "full") {
-            blockScanCacheForPass.clear();
+            if (!continuingFullWarm) {
+              // Once a full transition is selected, keep forcing it until a
+              // hash-bound session is established; an RPC error must not let
+              // the next block fall back to incremental state.
+              blockScanForceFullWarm = true;
+              if (warmPlan.reason === "reorg") discardFullWarmProgress();
+              const canonicalHash = await readBlockHash(provider, stateBlockNumber);
+              const forkedBlockHash = await readBlockHash(
+                blockScanStateForPass.provider,
+                stateBlockNumber,
+              );
+              if (!blockScanFullWarmSessionMatchesCanonical(
+                stateBlockNumber,
+                forkedBlockHash,
+                blockNumber,
+                canonicalHash,
+              )) {
+                console.log(
+                  `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
+                    `target=${stateBlockNumber} reason=fork_hash_mismatch`,
+                );
+                discardFullWarmProgress();
+                logSeg();
+                return;
+              }
+              blockScanFullWarmSession = {
+                blockNumber: stateBlockNumber,
+                blockHash: forkedBlockHash,
+                plan: warmPlan,
+              };
+              blockScanForceFullWarm = false;
+              blockScanCacheForPass.clear();
+            }
           } else {
             blockScanCacheForPass.invalidateBlockScanV2V3(warmPlan.changed.pools);
             blockScanCacheForPass.invalidateBlockScanV4(warmPlan.changed.v4PoolIds);
@@ -1290,7 +1408,8 @@ async function main(): Promise<void> {
           const warmHops = warmPlan.kind === "full" ? allHops : warmPlan.changed.hops;
           const v2v3WarmComplete = await warmBlockScanV2V3(
             blockScanUpdaterForPass,
-            blockNumber,
+            blockScanCacheForPass,
+            stateBlockNumber,
             warmHops,
             () => passBudgetExceeded("warm_v2v3"),
           );
@@ -1321,7 +1440,7 @@ async function main(): Promise<void> {
           const v3TickMeta = await seedBlockScanV3TickMetadata(
             provider,
             blockScanCacheForPass,
-            blockNumber,
+            stateBlockNumber,
             edges,
             passDeadlineAtMs,
             blockScanV3Meta,
@@ -1340,14 +1459,18 @@ async function main(): Promise<void> {
           const curveWarm = await warmBlockScanCurves(
             blockScanStateForPass,
             blockScanCacheForPass,
-            blockNumber,
+            stateBlockNumber,
             edges,
             passDeadlineAtMs,
             curvePoolsForPass,
           );
           blockScanCurveRetryPools.clear();
-          for (const pool of curveWarm.failedPools) {
-            if (!priorCurveRetries.has(pool)) blockScanCurveRetryPools.add(pool);
+          for (const pool of blockScanCurveRetriesAfterPass(
+            priorCurveRetries,
+            curveWarm.failedPools,
+            curveWarm.attemptedPools,
+          )) {
+            blockScanCurveRetryPools.add(pool);
           }
           segMark("warm_curve");
           if (curvePoolsForPass) {
@@ -1375,7 +1498,37 @@ async function main(): Promise<void> {
           // Advance the warm cursor only after every cache family cleared or
           // invalidated by this plan is complete. Otherwise a deadline between
           // V2/V3 and Curve warming can strand unchanged pools cold forever.
-          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(blockNumber, warmPlan);
+          const warmedThroughBlock = warmPlan.kind === "incremental"
+            ? warmPlan.changed.toBlock
+            : stateBlockNumber;
+          if (warmPlan.kind === "full") {
+            const session = blockScanFullWarmSession;
+            const canonicalHash = await readBlockHash(provider, stateBlockNumber);
+            if (!session || !blockScanFullWarmSessionMatchesCanonical(
+              session.blockNumber,
+              session.blockHash,
+              blockNumber,
+              canonicalHash,
+            )) {
+              console.log(
+                `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
+                  `target=${stateBlockNumber} reason=reorg_before_commit`,
+              );
+              discardFullWarmProgress();
+              logSeg();
+              return;
+            }
+          }
+          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(warmedThroughBlock, warmPlan);
+          if (warmPlan.kind === "full") blockScanFullWarmSession = null;
+          if (!blockScanWarmCaughtUp(warmedThroughBlock, blockNumber)) {
+            console.log(
+              `[searcher/blockscan] block=${blockNumber} warm_catch_up ` +
+                `through=${warmedThroughBlock} target=${blockNumber}`,
+            );
+            logSeg();
+            return;
+          }
           const protocolMids = await buildBlockScanProtocolMids(
             provider,
             blockScanStateForPass,
@@ -3567,13 +3720,15 @@ function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
 
 async function warmBlockScanV2V3(
   updater: PoolStateUpdater,
+  cache: PoolStateCache,
   blockNumber: number,
   hops: QuoteRequest[],
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
-  for (let i = 0; i < hops.length; i += 500) {
+  const pending = blockScanUnwarmedMutableQuoteRequests(hops, cache, updater);
+  for (let i = 0; i < pending.length; i += 500) {
     if (shouldStop()) return false;
-    await updater.update(blockNumber, hops.slice(i, i + 500), {
+    await updater.update(blockNumber, pending.slice(i, i + 500), {
       awaitTicks: false,
       maxTickPools: 0,
     });
@@ -3593,7 +3748,7 @@ async function verifyBlockScanIncrementalWarm(
   const scratchUpdater = new PoolStateUpdater(provider, scratchCache, {
     maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
   });
-  await warmBlockScanV2V3(scratchUpdater, blockNumber, allHops);
+  await warmBlockScanV2V3(scratchUpdater, scratchCache, blockNumber, allHops);
 
   let checked = 0;
   let mismatches = 0;
@@ -3945,6 +4100,15 @@ function blockReadStateForProtocol(
   };
 }
 
+async function readBlockHash(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+): Promise<string> {
+  const block = await provider.getBlock(blockNumber);
+  if (!block?.hash) throw new Error(`missing canonical hash for block ${blockNumber}`);
+  return block.hash.toLowerCase();
+}
+
 async function blockScanTokenDecimals(
   provider: ethers.JsonRpcProvider,
   blockNumber: number,
@@ -4057,20 +4221,28 @@ async function warmBlockScanCurves(
   edges: TokenEdge[],
   deadlineAtMs: number,
   onlyPools?: ReadonlySet<string>,
-): Promise<{ warmed: number; failed: number; failedPools: ReadonlySet<string> }> {
+): Promise<{
+  warmed: number;
+  failed: number;
+  failedPools: ReadonlySet<string>;
+  attemptedPools: ReadonlySet<string>;
+}> {
   // Warm curve pool state via Multicall3. 31 pools keeps worst-case 8-coin
   // plain pools below 500 subcalls in round 2 (balances + token decimals).
   let warmed = 0;
   let failed = 0;
   const failedPools = new Set<string>();
+  const attemptedPools = new Set<string>();
   const pools = uniqueBlockScanCurvePools(edges).filter(
     (edge) => onlyPools === undefined || onlyPools.has(edge.target.toLowerCase()),
   );
+  const pendingPools = blockScanUnwarmedCurveEdges(pools, cache, blockNumber);
   const CURVE_BATCH_POOLS = 31;
   cache.setTickBlock(blockNumber);
-  for (let i = 0; i < pools.length; i += CURVE_BATCH_POOLS) {
+  for (let i = 0; i < pendingPools.length; i += CURVE_BATCH_POOLS) {
     if (Date.now() >= deadlineAtMs) break;
-    const chunk = pools.slice(i, i + CURVE_BATCH_POOLS);
+    const chunk = pendingPools.slice(i, i + CURVE_BATCH_POOLS);
+    for (const edge of chunk) attemptedPools.add(edge.target.toLowerCase());
     try {
       await cache.warmCurvesBatch(state, chunk.map((edge) => edge.target));
     } catch {
@@ -4085,7 +4257,7 @@ async function warmBlockScanCurves(
       failedPools.add(edge.target.toLowerCase());
     }
   }
-  return { warmed, failed, failedPools };
+  return { warmed, failed, failedPools, attemptedPools };
 }
 
 function uniqueBlockScanCurvePools(edges: TokenEdge[]): TokenEdge[] {

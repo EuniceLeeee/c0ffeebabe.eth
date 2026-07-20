@@ -1,10 +1,16 @@
 import { ethers } from "ethers";
 import {
   BlockScanWarmCoordinator,
+  blockScanCurveRetriesAfterPass,
+  blockScanFullWarmSessionMatchesCanonical,
+  blockScanWarmCaughtUp,
   blockScanWarmPassBudgetMs,
+  blockScanUnwarmedMutableQuoteRequests,
+  blockScanUnwarmedCurveEdges,
   formatBlockScanWarmPlan,
 } from "../blockscan-warm-coordinator.js";
 import type { QuoteRequest } from "../live-state-backend.js";
+import type { TokenEdge } from "../planner/token-graph.js";
 
 function assert(cond: boolean, message: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${message}`);
@@ -87,8 +93,98 @@ async function main(): Promise<void> {
   const rangeStartup = await rangeSubject.plan(300, [], []);
   rangeSubject.markV2V3WarmComplete(300, rangeStartup);
   const range = await rangeSubject.plan(333, [], []);
-  assert(range.kind === "full" && range.reason === "range", "range fallback");
-  console.log("[blockscan-warm-coordinator] interval/range: PASS");
+  assert(range.kind === "incremental", "large gap uses incremental catch-up");
+  assert(
+    range.changed.fromBlock === 301 && range.changed.toBlock === 332,
+    "catch-up range is bounded to 32 blocks",
+  );
+  rangeSubject.markV2V3WarmComplete(range.changed.toBlock, range);
+  const rangeTail = await rangeSubject.plan(334, [], []);
+  assert(rangeTail.kind === "incremental", "catch-up tail remains incremental");
+  assert(
+    rangeTail.changed.fromBlock === 333 && rangeTail.changed.toBlock === 334,
+    "catch-up resumes after the committed cursor",
+  );
+  assert(!blockScanWarmCaughtUp(range.changed.toBlock, 333), "catch-up does not solve while behind");
+  assert(blockScanWarmCaughtUp(rangeTail.changed.toBlock, 334), "catch-up may solve at the head");
+  console.log("[blockscan-warm-coordinator] interval/catch-up: PASS");
+
+  const curveRetries = blockScanCurveRetriesAfterPass(
+    new Set(["attempted", "deferred"]),
+    new Set(["attempted", "deferred", "new"]),
+    new Set(["attempted"]),
+  );
+  assert(!curveRetries.has("attempted"), "attempted prior Curve retry is consumed");
+  assert(curveRetries.has("deferred"), "unattempted prior Curve retry is retained");
+  assert(curveRetries.has("new"), "new Curve failure receives one retry");
+
+  let cached = false;
+  let metadata = false;
+  const resumableCache = { ...warmCache, hasV2: () => cached };
+  const resumableUpdater = { hasStaticMetadata: () => metadata };
+  const resumableHop = v2Hop("0x00000000000000000000000000000000000000b1");
+  assert(
+    blockScanUnwarmedMutableQuoteRequests(
+      [resumableHop],
+      resumableCache,
+      resumableUpdater,
+    ).length === 1,
+    "cold full-warm batch is pending",
+  );
+  cached = true;
+  assert(
+    blockScanUnwarmedMutableQuoteRequests(
+      [resumableHop],
+      resumableCache,
+      resumableUpdater,
+    ).length === 1,
+    "partial pool state without metadata remains pending",
+  );
+  metadata = true;
+  assert(
+    blockScanUnwarmedMutableQuoteRequests(
+      [resumableHop],
+      resumableCache,
+      resumableUpdater,
+    ).length === 0,
+    "completed full-warm batch is reused on resume",
+  );
+
+  const curveEdge: TokenEdge = {
+    adapterId: "curve-exchange-plain",
+    target: "0x00000000000000000000000000000000000000c1",
+    tokenIn: "0x0000000000000000000000000000000000000001",
+    tokenOut: "0x0000000000000000000000000000000000000002",
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+  };
+  let curveCached = false;
+  const resumableCurveCache = {
+    snapshotCurve: () => curveCached ? {} as never : null,
+  };
+  assert(
+    blockScanUnwarmedCurveEdges([curveEdge], resumableCurveCache, 333).length === 1,
+    "cold Curve batch is pending",
+  );
+  curveCached = true;
+  assert(
+    blockScanUnwarmedCurveEdges([curveEdge], resumableCurveCache, 333).length === 0,
+    "completed Curve batch is reused on resume",
+  );
+
+  assert(
+    blockScanFullWarmSessionMatchesCanonical(333, "0xAbC", 334, "0xabc"),
+    "full warm resumes on the same canonical block",
+  );
+  assert(
+    !blockScanFullWarmSessionMatchesCanonical(333, "0xabc", 334, "0xdef"),
+    "full warm rejects a changed canonical block hash",
+  );
+  assert(
+    !blockScanFullWarmSessionMatchesCanonical(333, "0xabc", 332, "0xabc"),
+    "full warm rejects an observed block rollback",
+  );
 
   const failingProvider = new FakeProvider();
   const failingSubject = coordinator(failingProvider);

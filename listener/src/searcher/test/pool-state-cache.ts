@@ -128,8 +128,25 @@ async function main(): Promise<void> {
 
   await testV2LocalMath();
   await testSeedFreshnessAndOverlayBypass();
+  await testBlockScanReorgClear();
 
-  console.log("pool-state-cache PASS (6/6)");
+  console.log("pool-state-cache PASS (7/7)");
+}
+
+async function testBlockScanReorgClear(): Promise<void> {
+  const { state, provider, counts } = makeMocks();
+  const cache = new PoolStateCache(provider);
+  cache.setTickBlock(100);
+  await cache.quoteV3(state, POOL, TOKEN0, TOKEN1, AMOUNT);
+  const firstTickReads = counts.tickLens;
+  cache.clearBlockScanWarmProgress();
+  cache.setTickBlock(100);
+  await cache.quoteV3(state, POOL, TOKEN0, TOKEN1, AMOUNT);
+  assert(
+    counts.tickLens === firstTickReads * 2,
+    `canonical reset must discard tick data (${counts.tickLens} vs ${firstTickReads * 2})`,
+  );
+  console.log("[poolcache] canonical reset drops every block-derived layer: PASS");
 }
 
 // ── v2 constant-product: warm token0+reserves once, reuse, clear() re-warms ──
