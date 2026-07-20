@@ -1691,7 +1691,7 @@ function runCandidateReplays(
           || experiment.challenger_commit !== record.challenger_commit) {
         throw new Error(`sample ${index} candidate report identity does not match historical gap record`);
       }
-      if (!evidence || evidence.sample.tx_hash.toLowerCase() !== sample.tx_hash.toLowerCase()
+      if (!evidence?.sample || evidence.sample.tx_hash.toLowerCase() !== sample.tx_hash.toLowerCase()
           || evidence.sample.block_number !== sample.block_number
           || evidence.strategy_kind !== sample.strategy_kind
           || evidence.trigger_kind !== sample.trigger_kind

@@ -55,12 +55,13 @@ Events + local reth live on the NODE (run via SSM); the events path is the runni
 - One file per run: `docs/research/reports/live-run-<run_id>-hermes.md`. Two templates: **implementation cycle** (known fix → code → gate → merge) uses the lean `hermes-impl-cycle.md`; **live-run analysis cycle** uses the full `hermes-live-run.md`. Governance rules 11/12/13 apply to both.
 - **Step 1 — competitor cross-reference (MANDATORY, before any conclusion).** First make the independent
   manual judgment. Then run `cd analysis && npm run tool-index -- --check` and select the current tools for
-  `competitor-window,classification` plus `single-transaction,competitor-loss,causality`; use the indexed
-  repo glue when `block-scan` is also required. Write the selection manifest, run the chosen indexed IDs via
+  the common window capabilities `competitor-window,classification,block-scan` plus the hypothesis-specific
+  capabilities declared before the run. Add `single-transaction,competitor-loss,causality,pnl` only when the
+  hypothesis or a real lost bundle is transaction-bound; a systemic scanner/graph/universe/performance
+  cohort does not manufacture a transaction receipt. Write the selection manifest, run the chosen indexed IDs via
   `tool-run` over the same block window on local reth (zero Alchemy CU), and record query + successful IDs +
-  manifest path/SHA-256. This applies to EVERY measured window — including
-  a pure metrics/deploy window (a metrics gate answers "did we regress"; Step-1 answers "what did competitors
-  capture that we missed"). **Precondition: `SEARCHER_EVENTS_PATH` set before the window** (verify the events
+  manifest path/SHA-256. The common window cross-reference applies to EVERY measured window — including a
+  pure metrics/deploy window; the single-transaction supplement does not. **Precondition: `SEARCHER_EVENTS_PATH` set before the window** (verify the events
   file writes right after the banner) — a window without structured JSONL is not a valid Hermes window.
   - **WATCHLIST (current profile):** load `analysis/config/live-competitors.json`; never copy addresses into a second list. Sweep every configured EOA and its executor(s). The Step-1 block and artifact must name the file's `profile_id`; Coffee remains `full`, the other configured entities are outcome-driven samples.
   - **Both agents run this and cite it.** Each works from PRIMARY sources independently (raw script JSON + own on-chain trace), **never the other's curated facts/conclusion**. Secondary-source-validate ≥1 key tx via Alchemy/Tenderly. **MANUAL analysis, not script-only:** the label is a hypothesis; hand-trace the watchlist's key txs — a root-cause is INVALID unless it names the specific source swap (or proves atomic) from a manual trace.
@@ -110,10 +111,13 @@ machine**: the agent chooses/implements/judges; a thin JSON journal plus small m
 safety, fairness, evidence, recovery, and branch lifecycle. Metrics provide evidence but **never own the
 merge decision** (a honeypot filter can correctly reduce `quotePositive` and look worse numerically).
 
-Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Only changes classified there as
-live-distribution dependent (`flow-admission`, `latency`, `candidate-ranking`) enter this A/B loop; analysis
-tool fixes merge separately, while deterministic searcher fixes must first exhaust replay+short-smoke
-validation. Both entry points share the schema-v3 candidate gate and current production scope.
+Pinned historical batches begin in `docs/research/HISTORICAL-GAP.md`. Changes classified there as
+live-distribution dependent (`flow-admission`, `latency`, `candidate-ranking`) or systemic
+scanner/graph/universe/coverage work enter this A/B loop; analysis tool fixes merge separately, while
+deterministic single-route searcher fixes must first exhaust replay+short-smoke validation. Both entry points
+share the schema-v3 production scope. The six-step route diagnostic is
+available when it matches the hypothesis, but historical semantic replay is not part of the live deployment,
+decision, or promotion critical path.
 
 - **A = champion:** deployed `/opt/MEV` (`mev-searcher`), bounded-live wallet/BotVM 1.
 - **B = challenger:** literal `ab/*` branch in `/opt/MEV-ab/b` (`mev-ab-b`), bounded-live wallet/BotVM 2.
@@ -132,26 +136,33 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    stopped, A gets all CPUs back, its branch is retained, and the report becomes `needs_escalation`. Read the
    newest A/B reports. Then run `cd analysis && npm run ab-resolution-sweep -- --apply`. A later fix closes
    an old branch only through a main-committed `docs/research/resolutions/*.json` claim naming the same stable
-   `problem_id`, exact report, exact retained branch-tip SHA, and `resolved_by_commit`. The old report, not
-   the new claim, owns the pinned `resolution_replay` command and expected transition. The runner executes it
-   in the named commit worktree; only exit 0 may archive the report, authorize `resolved_deleted`, and delete
-   the clean literal `ab/*` branch/worktree. Missing claim/report, replay failure, dirty worktree, main drift,
-   or gate failure retains it. Skip every still-retained `problem_id`; never retry the same hard problem every
+   `problem_id`, exact report, exact retained branch-tip SHA, and `resolved_by_commit`. For a retained
+   route-stage/equivalence claim, the old report owns the pinned `resolution_replay` command and expected
+   transition; only its successful rerun may archive and delete the clean literal `ab/*` branch/worktree. A
+   retained systemic claim instead owns its original cohort/coverage/output/fairness/resource contract and
+   must be retested and closed through the normal A/B lifecycle; it never fabricates a route replay. Missing
+   claim/report, failed hypothesis-specific validation, dirty worktree, main drift, or gate failure retains
+   it. Skip every still-retained `problem_id`; never retry the same hard problem every
    hour. With no active B lease, sync champion A to `origin/main` through guarded
    `deploy-node.sh` if its deployed SHA differs; verify posture before taking the experiment base SHA.
-2. **PICK A PRODUCTION SAMPLE, NOT A METRIC.** Select the highest-impact unclaimed blocker only after one
-   real on-chain `+EV` sample in the current production scope proves where we stop. The sample MUST be a
-   position-conserving `DEX↔DEX` or `DEX↔permissionless protocol` closed loop. The single challenger
-   objective may come from either observed lane: a victim-independent block-scan sample, or one real public
-   same-block swap/oracle backrun trigger whose causal replay proves the route transition. Only the chosen
-   lane needs the deterministic stage flip; the untouched lane must remain live and pass safety/no-regression
-   review. `winner_style=atomic_loop` alone is
-   insufficient for either claim. Keeper/reward, inventory, private-path, credit, sandwich, and JIT-LP
-   samples are excluded. If the queue is empty, run the normal Hermes manual+tool analysis to
-   find one; do not invent a code change merely to keep the loop busy. One branch = one causal hypothesis.
-   A latency/CPU/cache optimization becomes eligible only when the SAME +EV sample demonstrably misses a
-   production stage because of that limit and the replay advances it; aggregate milliseconds alone are not
-   a blocker.
+2. **PICK ONE PRODUCTION HYPOTHESIS AND ITS OWN ACCEPTANCE CONTRACT.** Select the highest-impact unclaimed
+   blocker only after current production evidence proves a concrete gap. For a single-route funnel or
+   equivalence claim, that evidence is one real on-chain `+EV`, position-conserving `DEX↔DEX` or
+   `DEX↔permissionless protocol` loop: either victim-independent block-scan, or one public same-block
+   swap/oracle backrun trigger with causal replay. Only this claim class uses the transaction-bound stage
+   flip and optional six-step diagnostic. `winner_style=atomic_loop` alone is insufficient.
+
+   A systemic protocol-scanner, graph, universe, coverage, distribution, or performance hypothesis instead
+   starts from a predeclared representative cohort and a causal before/after contract: positive and negative
+   coverage controls, output/route-set equivalence where applicable, same-block A/B fairness, and CPU,
+   pass-latency, budget-censoring, candidate-composition and final-sim false-positive measurements. It does
+   not need a single transaction, stage flip, or route replay. Aggregate movement is evidence only when the
+   cohort and resource mechanism were predeclared; an unbounded metric fishing exercise is not a blocker.
+
+   Both claim classes stay inside the static production scope and exclude keeper/reward, inventory,
+   private-path, credit, sandwich, and JIT-LP posture. If the queue is empty, run the normal Hermes
+   manual+tool analysis to find a concrete route gap or systemic cohort; do not invent a code change merely
+   to keep the loop busy. One branch = one causal hypothesis.
    If manual analysis finds an analysis tool wrong or incomplete, invoke a fresh non-author reviewer. When
    both agree, fix the tool and its regression test immediately, rerun it in this same wake, and merge that
    auxiliary tooling commit before selecting/forking B. Tooling work does not consume the round's production
@@ -159,8 +170,8 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
 3. **PREDECLARE.** Create `ab/<problem>` from the exact deployed A SHA, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from the A/B template and fill its `ab_experiment`
    schema-v3 journal: exact problem/base SHA, change class, hypothesis, semantic success criterion,
-   `production_evidence` (real tx/block/net +EV evidence, current-scope posture, baseline→challenger funnel
-   stage, passing replay), deterministic gate, and `analysis.tool_selection` (capability query, successfully
+   `production_evidence` safety declaration (current strategy/route scope, position conservation and posture),
+   the hypothesis-specific deterministic/A/B criteria, and `analysis.tool_selection` (capability query, successfully
    executed selected IDs, generated-catalog check, execution-manifest path + SHA-256). The query names
    evidence capabilities, never executable names; the
    generated index inventories every current analysis/listener package command and repository TS/Bash/Python
@@ -168,8 +179,10 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    whenever the first set is partial or contradictory. Every selected tool runs through `tool-run`, whose
    machine receipt binds its current descriptor, argv/output hashes, real exit code, timestamps, and exact
    live window. The gate judges successful receipt capability union, not a hardcoded tool list or self-reported
-   command. Also include a self-contained `resolution_replay` command and expected
-   transition that a later resolution claim cannot replace,
+   command. A route-stage/equivalence hypothesis additionally records its real tx/block/net +EV sample,
+   baseline→challenger funnel stage, passing replay, and a self-contained `resolution_replay` command and expected
+   transition that a later route-resolution claim cannot replace. Scanner, universe, distribution, and
+   performance hypotheses instead record their own cohort/coverage/output/latency criteria,
    intended metric evidence, input mode, allowed config delta, and whether the change is expected to alter
    the runtime block-scan view/graph. `challenger_commit` is temporarily pending here because a commit cannot
    contain its own SHA. Commit/push the initial report on B. The later frozen code SHA may be followed by
@@ -180,9 +193,10 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    trusted `AB_SHAKEDOWN=1`. The wrapper then requires a report-only challenger and identical runtime tree.
    A successful equivalence window may merge only that report and gate-delete the temporary branch; it does
    not count as a production capability win.
-4. **FIX + FREEZE.** Codex writes; the non-author agent
-   reviews; the same production sample must advance at least one stage
-   (`not_admitted→path_found→final_sim_success`) in a pinned replay (rule 12). Block-scan replays start from
+4. **FIX + FREEZE.** Codex writes; the non-author agent reviews. When the hypothesis is a single-route funnel
+   or equivalence claim, the report declares the expected same-sample stage transition
+   (`not_admitted→path_found→final_sim_success`). Only that claim class uses the following transaction-bound
+   replay and optional six-step diagnostic. Block-scan replays start from
    the untouched sample parent-block state. Backrun replays freeze the winner and selected trigger, then run
    three facts: `boundary` (untouched parent), `trigger_only` (only the raw selected trigger through the real
    detector→planner→solver→sim path), and `full_prefix` (all transactions before the winner). Historical
@@ -192,14 +206,20 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    different swap/oracle trigger or records a multi-transaction dependency. If a change touches websocket/
    router intake before the detector, this detector-to-sim harness is insufficient and a trusted intake
    harness is additionally required. Oracle causality is an independent trusted pre/post quote on the
-   declared route edge, never a challenger detector's self-reported delta. Predeploy runs the trusted
-   unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the declared
+   declared route edge, never a challenger detector's self-reported delta. The independent six-step
+   acceptance runs the trusted unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both A and B against the declared
    universe inputs, champion `SEARCHER_POOL_UNIVERSE_TOP_N`, and on-chain identities. In `shared` input mode
    both sides receive the same immutable champion snapshot. In `challenger` input mode A keeps that snapshot
    while the trusted wrapper runs the frozen challenger indexer over exactly the champion snapshot's
    `fromBlock..toBlock`, pins all metadata calls to `toBlock`, validates a non-empty schema/window, and gives B
    the resulting content-addressed snapshot; the trusted replay must bind baseline to A and challenger to B.
-   A missing, empty, latest-state, or window-mismatched challenger universe fails before B starts. An exit-zero build/test or
+   A systemic protocol-scanner, graph, universe, coverage, distribution, or performance hypothesis does not
+   invoke those route harnesses. Its frozen report instead owns the predeclared cohort, coverage/output,
+   fairness and resource assertions, and the paired live comparison records those results.
+
+   Deploy still rejects a missing, empty, latest-state, or window-mismatched runtime universe. If the optional
+   route diagnostic is requested, failure to find its historical sample invalidates only that route claim
+   after the live window; it is not a reason to delay B startup or reject an unrelated experiment. An exit-zero build/test or
    challenger-authored replay harness is not evidence. Push B. Two
    failed generator attempts or three review passes do not block the loop: retain branch + evidence as
    `needs_escalation`, then the next wake selects another problem. Freeze the exact tested code SHA while it
@@ -211,16 +231,12 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    `scripts/deploy-ab-challenger.sh deploy <id> <branch> <base-sha> <challenger-sha>
    <candidate-report.md> <allow-view-delta>` over SSM, where the last argument is `1` only when
    `expected_runtime_view_delta=true` was predeclared
-   (otherwise `0`). Set the SSM `AWS-RunShellScript.executionTimeout` to at least 12,000 seconds; the trusted
-   closed-loop equivalence replay may run A and B sequentially for up to one hour each before any live
-   process is changed. It validates
-   the schema-v3 production candidate gate; recomputes the sample's receipt/block, PnL, winner style and
-   victim independence through the champion's configured private archive endpoint (evidence only; live A/B
-   stay pinned to the same local reth); executes the trusted dual-worktree parent-state hunt; binds the
-   report to the requested experiment/branch/base/input declarations and exact frozen challenger SHA; and requires a deployable
-   listener runtime diff with no mixed analysis/governance/dependency-script edits. The trusted replay source
-   comes from a clean detached checkout of the frozen A SHA, not the mutable deployed working tree; ignored
-   challenger `.env` files are removed and B receives only allowlisted secrets through a systemd environment
+   (otherwise `0`). Deploy performs only the fast schema-v3 report/commit/config identity binding plus the
+   bounded-live safety and fairness preflight; it does not call or wait for archive evidence or historical
+   A/B replay. It binds the report to the requested experiment/branch/base/input declarations and exact frozen challenger SHA; and requires a deployable
+   listener runtime diff with no mixed analysis/governance/dependency-script edits. The later acceptance
+   replay source comes from a clean detached checkout of the frozen A SHA, not the mutable deployed working
+   tree. During deploy, ignored challenger `.env` files are removed and B receives only allowlisted secrets through a systemd environment
    file, never shell-sourced input. It then validates both
    wallet envelopes/ownership, exact commits, A's live posture, normalized A/B config with no candidate
    config deltas, protected state/port code, runtime socket ownership,
@@ -257,6 +273,16 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
    sample. A fairness failure cannot yield a decisive verdict.
 7. **PAUSE B BEFORE JUDGMENT.** Run `deploy-ab-challenger.sh pause <id>` to stop broadcasts and restore all
    CPUs to A. Preserve logs/events and copy only redacted evidence into the report bundle.
+7a. **OPTIONAL INDEPENDENT SIX-STEP ACCEPTANCE.** For a predeclared route-stage/equivalence claim, run
+   `deploy-ab-challenger.sh acceptance <id>` only after pause. It uses the frozen A/B commits, immutable
+   universes, trusted harness and A's private archive endpoint to record scanner/graph, enumeration,
+   quote/solve, resolved-plan sim, production EV and baseline↔challenger evidence. It may take much longer
+   than deployment and holds the A/B slot lock while the already-stopped B is inspected. Its status is
+   diagnostic evidence for that claim only; it never controls deploy, close, or promotion for an unrelated
+   scanner, universe, distribution, or performance experiment. Correcting an acceptance report or external
+   checker does not require re-warming or redeploying B: runtime SHA/universes remain frozen, while acceptance
+   may consume only a report/JSON-only descendant of B and compatible trusted `origin/main` tooling that
+   descends from A. A runtime-coupled hunt-harness change still needs an explicitly compatible harness.
 8. **EXTERNAL PRODUCTION CALIBRATION (MANDATORY).** Over the same block window, use the generated tool index
    after the manual trace to select `competitor-window,classification,block-scan` into an execution manifest,
    then run the selected
@@ -316,12 +342,15 @@ validation. Both entry points share the schema-v3 candidate gate and current pro
     - `needs_escalation` / unfinished / crash: branch action is `retained` while unresolved; do not merge or
       delete yet. Record the unresolved question so a stronger model can inspect it. The next hourly wake
       moves to a new problem.
-    - later resolution: add a main-committed resolution claim and run `ab-resolution-sweep -- --apply` at the
-      next wake and after every win merge. It proves the old pinned replay fails on the retained base and
-      passes on the claimed main SHA, writes the report resolution,
+    - later route-stage/equivalence resolution: add a main-committed resolution claim and run
+      `ab-resolution-sweep -- --apply` at the next wake and after every win merge. It proves the old pinned
+      replay fails on the retained base and passes on the claimed main SHA, writes the report resolution,
       pushes the durable archive, invokes the existing close gate, and only then deletes local+remote branch
-      and clean worktree. The report on main, not a permanent branch, is the archive. A recorded SHA alone is
-      not durable for an unmerged Git object, so unresolved branches remain until this condition is met.
+      and clean worktree. A retained systemic scanner/graph/universe/distribution/performance experiment has
+      no route replay and is not sweep-resolved: retest its original cohort contract in a fresh normal A/B
+      round, then archive/delete through that decisive lifecycle. The report on main, not a permanent branch,
+      is the archive. A recorded SHA alone is not durable for an unmerged Git object, so unresolved branches
+      remain until the applicable validation completes.
 
 **No mid-loop questions.** This dual-live/merge/`ab/*` cleanup sequence is explicitly authorized inside the
 dated bounded envelope. Only funding/cap/key changes, standing-credit enablement, or out-of-envelope

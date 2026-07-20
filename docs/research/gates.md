@@ -9,17 +9,23 @@
 
 ## Rule 12 — repair-replay double-gate (anti-instrument-drift)
 
-Every turn that claims to **improve extraction** ships a pinned replay fixture that flips, run BEFORE the
-next dry-run:
-- **correctness / coverage / path** → a deterministic replay asserts the behavior flip
+Every transaction-bound deterministic turn that claims to improve a specific route ships a pinned replay
+fixture that flips, run BEFORE the next dry-run:
+- **single-route correctness / coverage / path** → a deterministic replay asserts the behavior flip
   (`no_candidate → plans>0` / pool now routes / `sim.success`). No flip = not fixed, or the change was
   instrument-only.
 - **latency** → replay the SAME fixture before/after, compare per-stage `seg` ms. Relative only
   (harness-bound), valid ONLY if the harness faithfully reproduces the latency source (cold state / real
   backend).
 
+A systemic protocol scanner, graph/universe, distribution, or performance change is not proven by one
+transaction. It predeclares a representative positive/negative cohort plus coverage/output equivalence,
+same-block fairness, CPU/pass-latency, budget-censoring, candidate-composition, and final-sim false-positive
+criteria as applicable. Its decisive check is that cohort contract plus Hermes A/B; the optional six-step
+route diagnostic is not a deployment, decision, close, or merge switch.
+
 ### `fixed` vs `implemented` (the definition of "fixed")
-For a deterministic searcher change (path / pool / decoder / template / planner / adapter / graph):
+For a transaction-bound deterministic searcher change (path / pool / decoder / template / planner / adapter / graph):
 - `implemented` = code written + build/tests pass.
 - **`fixed` = the SAME failing sample, replayed locally, shows the expected bucket transition.**
   **"Build passes" is NEVER enough.**
@@ -29,6 +35,9 @@ Final Approval MUST record, or the verdict is `implemented_not_validated` (not `
 failing_sample: / baseline_failure: / fix_commit: / replay_command: / replay_result: /
 expected_transition: / verdict: fixed | implemented_not_validated | deferred
 ```
+Systemic changes instead record the predeclared cohort identity, positive/negative controls, before/after
+coverage/output/resource results, same-block fairness evidence, and reviewer verdict; they do not fabricate
+the fields above for an unrelated transaction.
 Example `expected_transition`s: graph_gap → `pool_in_routing_graph false→true`; no_candidate_plans →
 `candidate_plans>0` (ideally `solverEntered>0`); v4 decode → poolId→token pair emitted; pricing → old
 wrong number gone + auditable artifact.
@@ -106,15 +115,14 @@ thin `ab_experiment` journal:
   comparator output. The artifact seals the exact A/B log hashes and byte counts; the comparator must bind
   the same hashes plus seal nonce and start later than the artifact. Timestamps typed into prose or a seal for
   different log bytes cannot satisfy the gate;
-- deterministic replay `pass` before any correctness/capability win;
+- the predeclared hypothesis-specific deterministic/cohort check passes before any correctness/capability
+  win; only route-stage/equivalence claims require the pinned single-route replay;
 - agent-manual evidence written independently; a distinct fresh reviewer for every capability win and
   every manual/script conflict or inconclusive result;
-- branch lifecycle: decisive win/lose may clean only literal `ab/*`; unresolved/crashed work is retained only
-  until a later validated `resolved_by_commit` is on `origin/main`. Resolved cleanup additionally requires
-  a main-committed resolution claim that pins the old branch tip, an unchanged report-owned replay that fails
-  on the old base and passes at the exact resolution SHA, and the final report on
-  main with exact base/challenger/resolution SHAs before branch deletion. `ab-resolution-sweep -- --apply`
-  is the mechanical claim→replay→archive→gate→delete connection.
+- branch lifecycle: decisive win/lose may clean only literal `ab/*`. A retained route-stage/equivalence
+  report can later use a main-committed resolution claim, its unchanged report-owned replay, and
+  `ab-resolution-sweep -- --apply`. A retained systemic report instead requires a fresh normal A/B retest of
+  its original cohort contract; it cannot be deleted through a fabricated route replay.
 - external comparator calibration: the pinned coffee corpus must still separate source shape from
   position-conserving winner style; `hermes-gate` reruns it and rejects an A/B close on classifier drift.
 
@@ -122,23 +130,38 @@ The agent's causal judgment owns `win|lose|needs_escalation`. A raw metric can c
 fix (for example, filtering a high-scoring honeypot); in that case a fresh reviewer may confirm the win.
 Hard safety/correctness/fairness failures can only veto or escalate. They cannot create a win.
 
-### Production candidate gate (schema v3, pre-deploy)
+### Optional production six-step acceptance (schema v3, independent of deployment)
 
-Every new B deployment runs `ab-canary-gate --phase candidate` from the trusted champion checkout before
-the second live searcher starts. It requires one `production_evidence` object proving:
+`deploy-ab-challenger.sh deploy` does **not** invoke or wait for historical replay. It runs only the fast
+`--phase binding` check (report/experiment/branch/base/challenger/input/config/lane identity) plus the hard
+bounded-live safety/fairness preflight, then starts B. If the predeclared hypothesis is a route-stage or
+equivalence claim, pause B after the paired live window and optionally run
+`deploy-ab-challenger.sh acceptance <id>`. This invokes the legacy-named `ab-canary-gate --phase acceptance`
+checker from trusted tooling against the frozen A/B commits and immutable universes. The status
+`not_run|running|pass|fail|not_applicable` is diagnostic evidence for that claim only; it is never a deploy, decision, close, or
+promotion switch. Scanner, universe, distribution, and performance changes use their own predeclared A/B
+criteria.
+The check may use the latest report/JSON-only descendant of the frozen B SHA and the then-current trusted
+`origin/main` checker (which must descend from A and retain dependency compatibility). Therefore correcting
+an acceptance report or external checker never requires a new B deployment or another warmup. A
+runtime-coupled hunt-harness change still needs an explicitly compatible harness.
+
+When invoked, the six-step check requires a fully populated `production_evidence` object proving:
 
 - `analysis.tool_selection` records a successful generated catalog check, the capability query made only
   after independent manual analysis, successfully executed tool IDs, and a machine execution-manifest path
   + SHA-256. Every receipt binds the current descriptor fingerprint, redacted argv hash, output hashes/byte
-  counts, timestamps, and real exit code; live-window tools must bind the exact measured range. Candidate
-  evidence must cover single-transaction causality/PnL plus competitor-window classification/block-scan;
-  decision evidence additionally covers A/B comparison. The gate validates successful receipt capability
+  counts, timestamps, and real exit code; live-window tools must bind the exact measured range. Acceptance
+  evidence must cover single-transaction causality/PnL plus competitor-window classification/block-scan.
+  Decision/close independently require the common competitor-window/classification/block-scan and A/B
+  comparison capabilities plus whatever the hypothesis predeclared; they do not inherit the optional
+  acceptance check's single-transaction/causality/PnL requirements. The checker validates successful receipt capability
   union from the current generated inventory, never a fixed executable name, fixture-only substitute, or
   self-reported command;
 
 - a real on-chain transaction whose successful receipt, block, positive net PnL and canonical
-  `winner_style=atomic_loop` are recomputed from the champion's configured private archive endpoint at
-  deploy time. This endpoint is evidence-only; both live A/B runtimes remain pinned to the same local reth.
+  `winner_style=atomic_loop` are recomputed from the champion's configured private archive endpoint during
+  acceptance. This endpoint is evidence-only; both live A/B runtimes remain pinned to the same local reth.
   Block-scan requires
   `source_shape=atomic_state_arb`; dual backrun additionally verifies its declared earlier victim and exact
   pre/post counterfactual;
@@ -161,15 +184,24 @@ the second live searcher starts. It requires one `production_evidence` object pr
   `final_sim_success` additionally requires trigger-only and full-prefix route/sim/EV buckets to match, the
   full-prefix route transaction to land at the winner index, and no historical sender balance/nonce rewrite;
   oracle victims require an
-  independent trusted quote delta on the declared route edge. A later
-  quote-only or submit-only stage requires its own trusted harness to land on main before it may gate B.
+  independent trusted quote delta on the declared route edge. A later quote-only or submit-only stage
+  requires its own trusted harness before it may satisfy acceptance.
 
-`require_stage_advance` is a narrow, fail-closed switch for equivalence refactors. It defaults to `true`
-when absent, and the trusted wrapper defaults `AB_REQUIRE_STAGE_ADVANCE=1`. An explicitly reviewed run may
-set both to `false`; this disables only the `challenger_stage > baseline_stage` assertion. The real +EV
-sample, trusted replay, production-only diff, deterministic gate, safety posture, fairness, input/config,
-wallet, port, and runtime protections remain mandatory. The wrapper binds the report value to the trusted
-deployment request and records the selected value in A/B state.
+For block-scan, acceptance records the six physical stages separately: (1) graph/admission, (2) route
+enumeration, (3) exact quote/refine, (4) planner+solver, (5) resolved-plan fork re-sim with calldata/profit/gas,
+and (6) production EV allow/reject. The final comparison binds those facts across baseline and challenger.
+Backrun uses the same six-slot evidence shape as (1) raw trigger/state anchor, (2) route enumeration,
+(3) pre/post counterfactual quote, (4) resolved-plan fork sim, (5) production EV, and (6) trigger-only versus
+full-prefix replay equivalence.
+For a stage-advance change the challenger must emit the ordered diagnostics through its declared stage and the baseline must fail at its
+declared stage; for an equivalence refactor both sides must emit one ordered `pass` result for steps 1..6.
+The canonical human evidence contract remains `.claude/commands/tx-gap.md`.
+
+Inside the optional checker, `require_stage_advance` is a narrow, fail-closed switch for equivalence
+refactors. It defaults to `true` when absent. An explicitly reviewed report may set it to `false`; this
+disables only the `challenger_stage > baseline_stage` assertion in that check. It is read only when
+`acceptance <id>` runs and cannot block deployment. Wallet, port, runtime, lane and posture protections are
+independent hard boundaries.
 
 Only this explicit `require_stage_advance=false` equivalence replay receives the closed-loop search budget:
 the already-frozen A/B universe is reused, at most 20,000 pools are loaded, 512 coarse candidates may be
@@ -177,17 +209,20 @@ exact-refined, the final admitted set may extend through rank 300, and scan/pass
 The expected route is still matched by its complete ordered identity and appended to the eight-route solve
 set, so this widens discovery without injecting a path or bypassing simulation/EV. Shared-input runs first
 require byte-identical universe snapshots, and the report must declare the 3,600-second per-side timeout.
-Standalone historical repair, ordinary stage-advance candidate
-gates, and live searcher defaults keep their production-shaped limits.
+Standalone historical repair, ordinary stage-advance acceptance, and live searcher defaults keep their
+production-shaped limits. These widened values are acceptance-only and never change live searcher defaults.
 
-The trusted deploy wrapper binds the report to the requested experiment, branch, tested base, frozen
-challenger code SHA, input mode, and runtime-view declaration. Candidate config deltas are forbidden. The
+The trusted deploy wrapper's fast binding checks the report against the requested experiment, branch, tested base, frozen
+challenger code SHA, input mode, runtime-view declaration, and cheap static bounded-live scope/posture fields.
+It performs no archive lookup, tool discovery, historical classification or replay. Candidate config deltas are forbidden. The
 branch tip may advance beyond the code SHA only through the named report; the wrapper deploys the code SHA,
 not that report tip. It requires a deployable listener runtime diff (tests and
 fixtures do not count and may not change) and rejects analysis, governance, dependency-script, or runner changes in the
-challenger diff. Tool corrections are same-round auxiliary work: fix,
-review, merge, and immediately rerun them before the B branch is cut. They never count as the B variable.
-Historical schema-v1/v2 reports remain readable; only schema-v3 can pass the candidate phase.
+challenger diff. Tool corrections are same-round auxiliary work: fix, review, merge to trusted main, and
+rerun the optional acceptance when relevant; they may land after the B window without changing or redeploying B, and never
+count as the B variable.
+Historical schema-v1/v2 reports remain readable; only schema-v3 can pass new deployment binding or invoke
+the optional six-step checker.
 
 ## Historical transaction repair gate
 
@@ -195,9 +230,10 @@ Historical schema-v1/v2 reports remain readable; only schema-v3 can pass the can
 `historical-gap-gate` enforces three mutually exclusive tracks:
 
 - analysis tools/classifiers/gates: build, regression tests and fresh review, then direct-to-main without B;
-- deterministic searcher behavior (adapter/identity/graph/scanner/detector/planner/quote/execution): every
-  grouped +EV sample must pass the existing schema-v3 candidate gate and unchanged trusted scanner/backrun
-  replay, followed by a >=10 minute process-liveness smoke under gate-owned dual-lane dry-run configuration;
+- deterministic single-route searcher behavior (adapter/identity/graph/detector/planner/quote/execution)
+  uses the schema-v3 six-step check, unchanged trusted replay, and >=10 minute process-liveness smoke;
+- systemic scanner/graph/universe work uses its predeclared cohort/coverage/equivalence contract and proceeds
+  to the paired Hermes A/B window instead of the historical smoke/replay path;
 - flow admission, latency and candidate ranking: historical evidence may classify the gap, but promotion is
   rejected and the branch routes to Hermes A/B.
 

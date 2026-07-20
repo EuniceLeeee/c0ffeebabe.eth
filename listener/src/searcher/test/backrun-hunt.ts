@@ -6,6 +6,7 @@
  * and victim are data supplied by the signed A/B report, not hard-coded here.
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -37,6 +38,8 @@ import { FlashLiquidityCache } from "../solver/flash-liquidity.js";
 import { AnvilSolver, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
+import { evaluateEv } from "../ev-evaluator.js";
+import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 
 interface EdgeSpec {
   adapterId: string;
@@ -90,6 +93,8 @@ interface HuntResult {
   full_prefix_execution_index: number | null;
   trigger_ev_bucket: "positive" | "non_positive" | "unverified";
   full_prefix_ev_bucket: "positive" | "non_positive" | "unverified";
+  trigger_ev: ProductionEvEvidence | null;
+  full_prefix_ev: ProductionEvEvidence | null;
   full_vs_trigger: "match" | "diverge" | "unverified";
   causal_replay_error: string | null;
 }
@@ -113,6 +118,19 @@ interface ExactExecutionResult {
   netProfit: bigint;
   blockNumber: number | null;
   transactionIndex: number | null;
+  ev: ProductionEvEvidence | null;
+}
+
+interface ProductionEvEvidence {
+  decision: "allow" | "below_ev_gate" | "unpriceable_profit_token" | "disabled";
+  profitToken: string;
+  gasUsed: string;
+  calldataHash: string;
+  netEvWei: string;
+  expectedProfitEth: string;
+  gasCostEth: string;
+  bidEth: string;
+  minNetEth: string;
 }
 
 const CANDIDATE_CAP = 6;
@@ -445,6 +463,8 @@ async function main(): Promise<void> {
       full_prefix_execution_index: fullPrefixExecution?.transactionIndex ?? null,
       trigger_ev_bucket: triggerBucket,
       full_prefix_ev_bucket: fullPrefixBucket,
+      trigger_ev: postExecution.ev,
+      full_prefix_ev: fullPrefixExecution?.ev ?? null,
       full_vs_trigger: fullVsTrigger,
       causal_replay_error: fullPrefixError,
     });
@@ -695,24 +715,72 @@ async function executeResolvedPlan(
     await state.mineQueuedHistoricalBlock([...prefixHashes, txHash], "backrun-counterfactual-block");
     const receipt = await state.provider.getTransactionReceipt(txHash);
     if (!receipt || receipt.status !== 1) {
-      return { success: false, netProfit: 0n, blockNumber: null, transactionIndex: null };
+      return { success: false, netProfit: 0n, blockNumber: null, transactionIndex: null, ev: null };
     }
     const post = BigInt(await state.provider.call({ to: plan.profitToken, data: balanceData }));
     const netProfit = post - pre;
+    const ev = await productionEvEvidence(state, plan, netProfit, receipt.gasUsed, calldata);
     return {
       success: netProfit > 0n,
       netProfit,
       blockNumber: receipt.blockNumber,
       transactionIndex: Number(receipt.index),
+      ev,
     };
   } catch {
-    return { success: false, netProfit: 0n, blockNumber: null, transactionIndex: null };
+    return { success: false, netProfit: 0n, blockNumber: null, transactionIndex: null, ev: null };
   }
 }
 
 function evBucket(result: ExactExecutionResult | null): HuntResult["trigger_ev_bucket"] {
   if (result === null) return "unverified";
-  return result.success && result.netProfit > 0n ? "positive" : "non_positive";
+  if (!result.ev) return "unverified";
+  return result.success && result.netProfit > 0n && result.ev.decision === "allow"
+    ? "positive"
+    : "non_positive";
+}
+
+async function productionEvEvidence(
+  state: AnvilStateBackend,
+  plan: ResolvedPlan,
+  netProfit: bigint,
+  gasUsed: bigint,
+  calldata: string,
+): Promise<ProductionEvEvidence> {
+  const minNetEth = BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0");
+  const evGate = process.env.SEARCHER_EV_GATE === "1";
+  const evaluation = await evaluateEv(
+    state.provider,
+    plan.profitToken,
+    netProfit,
+    gasUsed,
+    {
+      ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
+      profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
+      defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
+      gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
+      evGate,
+      bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
+      bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
+    },
+  );
+  return {
+    decision: !evGate
+      ? "disabled"
+      : !evaluation.valuationAvailable
+        ? "unpriceable_profit_token"
+        : evaluation.netEvWei < minNetEth
+          ? "below_ev_gate"
+          : "allow",
+    profitToken: plan.profitToken.toLowerCase(),
+    gasUsed: gasUsed.toString(),
+    calldataHash: createHash("sha256").update(calldata).digest("hex"),
+    netEvWei: evaluation.netEvWei.toString(),
+    expectedProfitEth: evaluation.expectedProfitEth.toString(),
+    gasCostEth: evaluation.gasCostEth.toString(),
+    bidEth: evaluation.bidEth.toString(),
+    minNetEth: minNetEth.toString(),
+  };
 }
 
 function routeSignature(route: EdgeSpec[]): string {
@@ -785,6 +853,8 @@ function pathResult(
     full_prefix_execution_index: null,
     trigger_ev_bucket: "unverified",
     full_prefix_ev_bucket: "unverified",
+    trigger_ev: null,
+    full_prefix_ev: null,
     full_vs_trigger: "unverified",
     causal_replay_error: null,
   };

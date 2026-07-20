@@ -11,13 +11,18 @@
   inside a hard, script-enforced envelope, so worst-case loss is bounded to a tiny test wallet.
 - **2026-07-12:** user authorized unattended **dual-live A/B canaries** for block-scan-only search: champion
   A plus one challenger B may run and submit simultaneously; a proven B may be merged/deployed to champion
-  without another prompt. This authorization is conditional on every gate below and does not authorize
+  without another prompt. This authorization is conditional on every hard safety boundary below and does not authorize
   funding, cap/key changes, standing-credit positions, or any out-of-envelope broadcast.
 - **2026-07-13:** user extended that same bounded dual-live authorization to an explicit `dual` lane where
   A and B run block-scan plus victim-driven backrun together. Self-competition is accepted at this stage.
   The extension covers only position-conserving DEX or DEX+permissionless-protocol routes triggered by a
   public/MEV-Share swap or oracle update; wallet caps, EV/final-sim gates, keys, and all other exclusions are
   unchanged.
+- **2026-07-20:** user authorized separating historical semantic replay from B startup. Once the fast
+  report/SHA/config binding and every hard bounded-live safety check pass, B may start without waiting for
+  archive lookup or six-step replay. The independent six-step acceptance is an opt-in diagnostic for
+  route-stage/equivalence claims, not a deployment, close, or merge switch. Unrelated scanner, universe,
+  distribution, and performance experiments are judged by their own predeclared A/B criteria.
 
 ## The envelope (all must hold, else stay dry-run)
 - Live is gated by the node-side marker `/opt/MEV/.deploy-live`.
@@ -46,21 +51,25 @@
   the trusted wrapper verifies matching A/B banners plus a live MEV-Share connection.
 - B may start only through `scripts/deploy-ab-challenger.sh` fetched from trusted `origin/main`. The script
   verifies the exact A/B commits, derives B's normalized config from A's running process, checks declared
-  config deltas, runs the trusted replay from a detached checkout of the exact A SHA, removes ignored `.env`
+  config deltas, performs a fast static report identity binding, removes ignored `.env`
   files from B, passes only an allowlisted secret environment without a shell, snapshots/records universe
   inputs, owns the single B runtime lease, and stops/reaps B. In dual mode both main Anvil backends start
   eagerly so the wrapper can require and attribute the A/B sockets before accepting the run. A and B also
   inherit the same champion victim-stream endpoint; only its SHA-256 identity is logged and the wrapper
   rejects the run unless both current processes report the same identity. Both consume the same local reth
   HTTP/WS endpoints and the same content-addressed dynamic router allowlist. Each process carries its exact
-  runtime commit in its environment, which must match the running unit's checkout. Dual readiness and renewal
+  runtime commit in its environment, which must match the running unit's checkout. Historical archive/replay
+  runs later through `acceptance <id>` from detached exact-SHA checkouts and never authorizes a broadcast.
+  Dual readiness and renewal
   require the latest public-mempool connection state to be connected, not merely a historical startup line.
   `deploy-node.sh` and the B wrapper share one slot lock, and A deployment is refused while any live B unit or
   unclosed lease exists.
-- Metrics are evidence, not merge authority. An agent records the causal/manual verdict after inspecting the
+- Metrics and an optional six-step result are evidence, not merge authority. An agent records the causal/manual verdict after inspecting the
   paired window, reconciles it with the canonical comparison script, and uses a fresh non-author reviewer
-  for every capability win or disagreement. Safety/correctness/evidence gates may veto; they cannot invent
-  a win. Unresolved/crashed work retains its `ab/*` branch and stops B.
+  for every capability win or disagreement. The experiment's predeclared correctness/fairness criteria may
+  veto its own claim; an unrelated six-step result may not. Only hard bounded-live safety checks veto B
+  startup. Neither class can invent a win. Unresolved/crashed work
+  retains its `ab/*` branch and stops B at close/pause.
 - A proven `win` may merge to `main`, deploy through the existing guarded `deploy-node.sh`, and delete only
   the gate-authorized literal `ab/*` branch. A decisive `lose` may delete its `ab/*` branch. No other branch
   deletion is authorized by this envelope.

@@ -7,9 +7,13 @@ import {
   parseAbExperiment,
   readAbLocalReportArtifact,
   resolveAbReportArtifactPath,
+  sixStepDiagnosticsError,
+  sixStepEquivalenceError,
   validateAbExperiment,
+  validateAbDeploymentBinding,
   validateAbProductionCandidate,
   type AbExperiment,
+  type AbSixStepDiagnostic,
   type ManualVerdictArtifact,
 } from "../ab-canary.js";
 import {
@@ -46,12 +50,15 @@ const gateTmpRoot = process.env.MEV_GATE_TMPDIR || "/tmp";
 if (!path.isAbsolute(gateTmpRoot)) throw new Error("MEV_GATE_TMPDIR must be absolute");
 const phaseIndex = args.indexOf("--phase");
 const phase = phaseIndex >= 0 ? args[phaseIndex + 1] : "decision";
-if (!report || (phase !== "candidate" && phase !== "decision" && phase !== "close")) {
-  throw new Error("usage: ab-canary-gate <report.md> --phase candidate|decision|close [candidate identity args]");
+const isAcceptancePhase = phase === "acceptance" || phase === "candidate";
+if (!report || (!isAcceptancePhase && phase !== "binding" && phase !== "decision" && phase !== "close")) {
+  throw new Error(
+    "usage: ab-canary-gate <report.md> --phase binding|acceptance|candidate|decision|close [identity args]",
+  );
 }
 const md = fs.readFileSync(report, "utf8");
 const experiment = parseAbExperiment(md);
-const candidateContext = phase === "candidate" ? {
+const candidateContext = (isAcceptancePhase || phase === "binding") ? {
   experimentId: requiredArg("--expected-experiment"),
   branch: requiredArg("--expected-branch"),
   baseCommit: requiredArg("--expected-base"),
@@ -61,13 +68,17 @@ const candidateContext = phase === "candidate" ? {
   allowedConfigDelta: csvArg("--expected-config-delta"),
   laneMode: requiredArg("--expected-lane-mode") as "blockscan-only" | "dual",
   shakedown: args.includes("--shakedown"),
-  requireStageAdvance: binaryArg("--require-stage-advance", true),
+  ...(isAcceptancePhase
+    ? { requireStageAdvance: binaryArg("--require-stage-advance", true) }
+    : {}),
 } : undefined;
-const errors = phase === "candidate"
-  ? validateAbProductionCandidate(experiment, candidateContext)
-  : validateAbExperiment(experiment, report, phase);
+const errors = phase === "binding"
+  ? validateAbDeploymentBinding(experiment, candidateContext)
+  : isAcceptancePhase
+    ? validateAbProductionCandidate(experiment, candidateContext)
+    : validateAbExperiment(experiment, report, phase);
 let onchainObservation: ProductionSampleObservation | undefined;
-if (experiment.schema_version === 3 && errors.length === 0) {
+if (phase !== "binding" && experiment.schema_version === 3 && errors.length === 0) {
   const repoRoot = gitOutput(["rev-parse", "--show-toplevel"]);
   if (experiment.infrastructure_shakedown !== true) {
     const tools = discoverToolIndex(repoRoot);
@@ -86,19 +97,19 @@ if (experiment.schema_version === 3 && errors.length === 0) {
     errors.push(...validateRecordedToolSelection(
       experiment.analysis.tool_selection,
       tools,
-      phase === "candidate" ? PRODUCTION_CANDIDATE_CAPABILITIES : PRODUCTION_DECISION_CAPABILITIES,
+      isAcceptancePhase ? PRODUCTION_CANDIDATE_CAPABILITIES : PRODUCTION_DECISION_CAPABILITIES,
       executionManifest,
-      phase === "candidate" ? undefined : {
+      isAcceptancePhase ? undefined : {
         from: experiment.window.measured_from_block!,
         to: experiment.window.measured_to_block!,
       },
     ));
   }
-  if (phase !== "candidate" && errors.length === 0) {
+  if (!isAcceptancePhase && errors.length === 0) {
     errors.push(...validateAnalysisArtifacts(repoRoot));
   }
 }
-if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown) {
+if (isAcceptancePhase && errors.length === 0 && !candidateContext?.shakedown) {
   const onchain = await verifyOnchainProductionSample(
     experiment,
     requiredArg("--rpc"),
@@ -110,7 +121,7 @@ if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown
     console.log(`candidate_onchain=${JSON.stringify(onchain.observation)}`);
   }
 }
-if (phase === "candidate" && errors.length === 0 && !candidateContext?.shakedown) {
+if (isAcceptancePhase && errors.length === 0 && !candidateContext?.shakedown) {
   runCandidateReplay(onchainObservation!);
 }
 if (errors.length > 0) {
@@ -126,7 +137,7 @@ function option(name: string): string | undefined {
 function requiredArg(name: string): string {
   const value = option(name);
   if (value === undefined || value.length === 0 || value.startsWith("--")) {
-    throw new Error(`${name} is required for candidate phase`);
+    throw new Error(`${name} is required for acceptance/candidate phase`);
   }
   return value;
 }
@@ -136,14 +147,14 @@ function candidateUniverseArg(role: "baseline" | "challenger"): string {
   const shared = option("--universe");
   const value = roleSpecific ?? shared;
   if (value === undefined || value.length === 0 || value.startsWith("--")) {
-    throw new Error(`--${role}-universe or --universe is required for candidate phase`);
+    throw new Error(`--${role}-universe or --universe is required for acceptance/candidate phase`);
   }
   return value;
 }
 
 function csvArg(name: string): string[] {
   const value = option(name);
-  if (value === undefined) throw new Error(`${name} is required for candidate phase`);
+  if (value === undefined) throw new Error(`${name} is required for acceptance/candidate phase`);
   return value.split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
@@ -215,11 +226,33 @@ interface HuntResult {
   net_profit_raw: string | null;
 }
 
+type SixStepDiagnostic = AbSixStepDiagnostic;
+
+type ProductionEvidence = NonNullable<AbExperiment["production_evidence"]>;
+type ProductionSample = NonNullable<ProductionEvidence["sample"]>;
+type AcceptanceEvidence = ProductionEvidence & {
+  sample: ProductionSample;
+  classification_review: NonNullable<ProductionEvidence["classification_review"]>;
+  baseline_stage: NonNullable<ProductionEvidence["baseline_stage"]>;
+  challenger_stage: NonNullable<ProductionEvidence["challenger_stage"]>;
+  replay: NonNullable<ProductionEvidence["replay"]>;
+};
+
+function acceptanceEvidence(): AcceptanceEvidence {
+  const evidence = experiment.production_evidence;
+  if (!evidence?.sample || !evidence.classification_review
+      || !evidence.baseline_stage || !evidence.challenger_stage || !evidence.replay) {
+    throw new Error("six-step acceptance requires complete sample/classification/stage/replay evidence");
+  }
+  return evidence as AcceptanceEvidence;
+}
+
 interface BlockscanHuntResult extends HuntResult {
   expected_swap_path: Array<{ pool_id: string; direction: "0for1" | "1for0" }>;
   matched_swap_path: Array<{ pool_id: string; direction: "0for1" | "1for0" }>;
   expected_route: ProductionRouteStep[];
   matched_route: ProductionRouteStep[];
+  six_step_diagnostics?: SixStepDiagnostic[];
 }
 
 interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
@@ -256,23 +289,38 @@ interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
   full_prefix_execution_index: number | null;
   trigger_ev_bucket: "positive" | "non_positive" | "unverified";
   full_prefix_ev_bucket: "positive" | "non_positive" | "unverified";
+  trigger_ev: BackrunEvEvidence | null;
+  full_prefix_ev: BackrunEvEvidence | null;
   full_vs_trigger: "match" | "diverge" | "unverified";
   causal_replay_error: string | null;
 }
 
+interface BackrunEvEvidence {
+  decision: "allow" | "below_ev_gate" | "unpriceable_profit_token" | "disabled";
+  profitToken: string;
+  gasUsed: string;
+  calldataHash: string;
+  netEvWei: string;
+  expectedProfitEth: string;
+  gasCostEth: string;
+  bidEth: string;
+  minNetEth: string;
+}
+
 function runCandidateReplay(observation: ProductionSampleObservation): void {
+  const evidence = acceptanceEvidence();
   if (candidateContext?.requireStageAdvance === false
-      && experiment.production_evidence!.strategy_kind === "block-scan"
-      && experiment.production_evidence!.baseline_stage === "final_sim_success"
-      && experiment.production_evidence!.challenger_stage === "final_sim_success") {
+      && evidence.strategy_kind === "block-scan"
+      && evidence.baseline_stage === "final_sim_success"
+      && evidence.challenger_stage === "final_sim_success") {
     runEquivalenceResolutionReplayPair(observation);
     return;
   }
-  if (experiment.production_evidence!.strategy_kind === "backrun") {
+  if (evidence.strategy_kind === "backrun") {
     runBackrunCandidateReplay(observation);
     return;
   }
-  const replay = experiment.production_evidence!.replay;
+  const replay = evidence.replay;
   if (JSON.stringify(replay.argv)
       !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"])
       || replay.cwd !== "listener") {
@@ -280,7 +328,7 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
   }
   const baseRoot = fs.realpathSync(requiredArg("--base-root"));
   const challengerRoot = fs.realpathSync(requiredArg("--challenger-root"));
-  const sample = experiment.production_evidence!.sample;
+  const sample = evidence.sample;
   const baselineUniverse = fs.realpathSync(candidateUniverseArg("baseline"));
   const challengerUniverse = fs.realpathSync(candidateUniverseArg("challenger"));
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
@@ -288,7 +336,7 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
     pool_id: step.pool_id.toLowerCase(),
     direction: step.direction,
   }));
-  const expectedRoute = normalizeProductionRoute(experiment.production_evidence!.sample.expected_route ?? []);
+  const expectedRoute = normalizeProductionRoute(sample.expected_route ?? []);
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
   if (!Number.isSafeInteger(maxPools) || maxPools <= 0) throw new Error("--pool-universe-top-n must be a positive integer");
   const baseline = runHunt(
@@ -300,17 +348,42 @@ function runCandidateReplay(observation: ProductionSampleObservation): void {
     expectedPools, expectedSwapPath, expectedRoute, maxPools,
   );
   validateHuntResult(
-    "baseline", baseline, experiment.production_evidence!.baseline_stage,
+    "baseline", baseline, evidence.baseline_stage,
     sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
   );
   validateHuntResult(
-    "challenger", challenger, experiment.production_evidence!.challenger_stage,
+    "challenger", challenger, evidence.challenger_stage,
     sample.block_number - 1, expectedPools, expectedSwapPath, expectedRoute,
   );
+  if (isAcceptancePhase) {
+    const baselineDiagnostics = runHuntDiagnostics(
+      "baseline", baseRoot, 8568, baselineUniverse, sample.block_number - 1,
+      expectedPools, expectedSwapPath, expectedRoute, maxPools,
+    );
+    const challengerDiagnostics = runHuntDiagnostics(
+      "challenger", challengerRoot, 8569, challengerUniverse, sample.block_number - 1,
+      expectedPools, expectedSwapPath, expectedRoute, maxPools,
+    );
+    baseline.six_step_diagnostics = baselineDiagnostics;
+    challenger.six_step_diagnostics = challengerDiagnostics;
+    requireStageDiagnostics(
+      "baseline",
+      baselineDiagnostics,
+      evidence.baseline_stage,
+    );
+    requireStageDiagnostics(
+      "challenger",
+      challengerDiagnostics,
+      evidence.challenger_stage,
+    );
+    emitSixStepDiagnostics("baseline", baselineDiagnostics);
+    emitSixStepDiagnostics("challenger", challengerDiagnostics);
+  }
   console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
 }
 
 function runEquivalenceResolutionReplayPair(observation: ProductionSampleObservation): void {
+  const evidence = acceptanceEvidence();
   const baselineUniverse = fs.realpathSync(candidateUniverseArg("baseline"));
   const challengerUniverse = fs.realpathSync(candidateUniverseArg("challenger"));
   if (candidateContext?.inputMode === "shared"
@@ -327,7 +400,7 @@ function runEquivalenceResolutionReplayPair(observation: ProductionSampleObserva
     fs.realpathSync(requiredArg("--challenger-root")),
     challengerUniverse,
   );
-  const sample = experiment.production_evidence!.sample;
+  const sample = evidence.sample;
   const expectedPools = observation.arb_pools.map((pool) => pool.toLowerCase()).sort();
   const expectedSwapPath = observation.arb_swap_path.map((step) => ({
     pool_id: step.pool_id.toLowerCase(),
@@ -345,6 +418,12 @@ function runEquivalenceResolutionReplayPair(observation: ProductionSampleObserva
   if (baseline.machine !== challenger.machine) {
     throw new Error("equivalence resolution replay machine results differ between baseline and challenger");
   }
+  if (isAcceptancePhase) {
+    const equivalenceError = sixStepEquivalenceError(baseline.diagnostics, challenger.diagnostics);
+    if (equivalenceError) throw new Error(`resolution replay ${equivalenceError}`);
+    emitSixStepDiagnostics("baseline", baseline.diagnostics);
+    emitSixStepDiagnostics("challenger", challenger.diagnostics);
+  }
   console.log(`candidate_resolution_replay=pass machine=${baseline.machine}`);
 }
 
@@ -352,7 +431,7 @@ function runDeclaredResolutionReplay(
   label: string,
   root: string,
   universe: string,
-): { machine: string; result: BlockscanHuntResult } {
+): { machine: string; result: BlockscanHuntResult; diagnostics: SixStepDiagnostic[] } {
   const replay = experiment.resolution_replay!;
   if (replay.cwd !== "listener"
       || JSON.stringify(replay.argv)
@@ -380,6 +459,13 @@ function runDeclaredResolutionReplay(
   childEnv.MAINNET_RPC_URL = requiredArg("--rpc");
   const trustedRoot = fs.realpathSync(gitOutput(["rev-parse", "--show-toplevel"]));
   const trustedListener = fs.realpathSync(path.join(trustedRoot, "listener"));
+  const diagnosticArgs = isAcceptancePhase
+    ? [
+        "--diagnostic-max-candidates", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.maxCandidates),
+        "--diagnostic-scan-budget-ms", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.scanBudgetMs),
+        "--diagnostic-pass-budget-ms", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.passBudgetMs),
+      ]
+    : [];
   const result = spawnSync(process.execPath, [
     "--import", "tsx", "src/searcher/test/blockscan-hunt-tx149.ts",
     "--runtime-listener-root", replayCwd,
@@ -389,11 +475,13 @@ function runDeclaredResolutionReplay(
     "--hunt-refine-candidates", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.refineCandidates),
     "--hunt-scan-budget-ms", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.scanBudgetMs),
     "--hunt-pass-budget-ms", String(CLOSED_LOOP_EQUIVALENCE_LIMITS.passBudgetMs),
+    ...diagnosticArgs,
   ], {
     cwd: trustedListener,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: replay.timeout_seconds! * 1_000,
+    maxBuffer: 32 * 1024 * 1024,
     env: childEnv,
   });
   if (result.error) {
@@ -418,7 +506,46 @@ function runDeclaredResolutionReplay(
       + `${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return { machine: machine[0], result: parsed };
+  return {
+    machine: machine[0],
+    result: parsed,
+    diagnostics: parseSixStepDiagnostics(String(result.stdout ?? ""), label),
+  };
+}
+
+function parseSixStepDiagnostics(output: string, label: string): SixStepDiagnostic[] {
+  const diagnostics: SixStepDiagnostic[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.startsWith("SIX_STEP_DIAGNOSTIC=")) continue;
+    try {
+      diagnostics.push(JSON.parse(line.slice("SIX_STEP_DIAGNOSTIC=".length)) as SixStepDiagnostic);
+    } catch (error) {
+      throw new Error(
+        `${label} emitted invalid six-step diagnostic JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return diagnostics;
+}
+
+function requireSixStepPass(label: string, diagnostics: SixStepDiagnostic[]): void {
+  const error = sixStepDiagnosticsError(diagnostics, "final_sim_success");
+  if (error) throw new Error(`${label} ${error}`);
+}
+
+function requireStageDiagnostics(label: string, diagnostics: SixStepDiagnostic[], expectedStage: string): void {
+  if (expectedStage !== "not_admitted" && expectedStage !== "path_found"
+      && expectedStage !== "final_sim_success") {
+    throw new Error(`${label} has unsupported declared stage ${expectedStage}`);
+  }
+  const error = sixStepDiagnosticsError(diagnostics, expectedStage);
+  if (error) throw new Error(`${label} ${error}`);
+}
+
+function emitSixStepDiagnostics(label: string, diagnostics: SixStepDiagnostic[]): void {
+  for (const diagnostic of diagnostics) {
+    console.log(`SIX_STEP_ACCEPTANCE=${JSON.stringify({ role: label, ...diagnostic })}`);
+  }
 }
 
 function sha256File(file: string): string {
@@ -426,7 +553,8 @@ function sha256File(file: string): string {
 }
 
 function runBackrunCandidateReplay(observation: ProductionSampleObservation): void {
-  const replay = experiment.production_evidence!.replay;
+  const evidence = acceptanceEvidence();
+  const replay = evidence.replay;
   if (JSON.stringify(replay.argv)
       !== JSON.stringify(["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"])
       || replay.cwd !== "listener") {
@@ -434,7 +562,7 @@ function runBackrunCandidateReplay(observation: ProductionSampleObservation): vo
   }
   const baseRoot = fs.realpathSync(requiredArg("--base-root"));
   const challengerRoot = fs.realpathSync(requiredArg("--challenger-root"));
-  const sample = experiment.production_evidence!.sample;
+  const sample = evidence.sample;
   const baselineUniverse = fs.realpathSync(candidateUniverseArg("baseline"));
   const challengerUniverse = fs.realpathSync(candidateUniverseArg("challenger"));
   const maxPools = Number(requiredArg("--pool-universe-top-n"));
@@ -449,7 +577,7 @@ function runBackrunCandidateReplay(observation: ProductionSampleObservation): vo
   validateBackrunHuntResult(
     "baseline",
     baseline,
-    experiment.production_evidence!.baseline_stage,
+    evidence.baseline_stage,
     sample.block_number - 1,
     expectedPools,
     observation,
@@ -457,12 +585,149 @@ function runBackrunCandidateReplay(observation: ProductionSampleObservation): vo
   validateBackrunHuntResult(
     "challenger",
     challenger,
-    experiment.production_evidence!.challenger_stage,
+    evidence.challenger_stage,
     sample.block_number - 1,
     expectedPools,
     observation,
   );
+  if (isAcceptancePhase) {
+    const baselineDiagnostics = backrunSixStepDiagnostics(baseline, expectedPools);
+    const challengerDiagnostics = backrunSixStepDiagnostics(challenger, expectedPools);
+    requireStageDiagnostics(
+      "baseline backrun",
+      baselineDiagnostics,
+      evidence.baseline_stage,
+    );
+    requireStageDiagnostics(
+      "challenger backrun",
+      challengerDiagnostics,
+      evidence.challenger_stage,
+    );
+    emitSixStepDiagnostics("baseline", baselineDiagnostics);
+    emitSixStepDiagnostics("challenger", challengerDiagnostics);
+  }
   console.log(`candidate_replay=pass baseline=${JSON.stringify(baseline)} challenger=${JSON.stringify(challenger)}`);
+}
+
+/** Backrun's six steps are derived by the trusted acceptance runner from the already-validated causal
+ * replay result; they are not challenger-authored success claims. */
+function backrunSixStepDiagnostics(
+  result: BackrunHuntResult,
+  expectedPools: string[],
+): SixStepDiagnostic[] {
+  const evidence = acceptanceEvidence();
+  const expectedRoute = normalizeProductionRoute(evidence.sample.expected_route ?? []);
+  const matchedPools = new Set((result.matched_pool_ids ?? []).map((pool) => pool.toLowerCase()));
+  const triggerPass = result.pre_state_anchor_kind === "parent-block"
+    && result.pre_state_anchor_hash === null
+    && result.post_state_anchor_kind === "victim-tx"
+    && result.post_state_anchor_hash.toLowerCase()
+      === evidence.sample.victim_tx_hash!.toLowerCase();
+  const routePass = result.closed_route
+    && expectedPools.every((pool) => matchedPools.has(pool))
+    && JSON.stringify(result.matched_route) === JSON.stringify(expectedRoute);
+  const quotePass = rawAtMostZero(result.pre_gross_raw) && rawPositive(result.post_gross_raw);
+  const simulationPass = result.final_sim_success
+    && rawPositive(result.net_profit_raw)
+    && result.pre_execution_success === false
+    && rawAtMostZero(result.pre_execution_net_raw)
+    && result.post_execution_success === true
+    && rawPositive(result.post_execution_net_raw)
+    && rawEqual(result.post_execution_net_raw, result.net_profit_raw)
+    && result.trigger_ev !== null
+    && rawPositive(result.trigger_ev.gasUsed)
+    && /^[a-f0-9]{64}$/.test(result.trigger_ev.calldataHash);
+  const evPass = simulationPass
+    && result.trigger_ev_bucket === "positive"
+    && result.trigger_ev?.decision === "allow"
+    && BigInt(result.trigger_ev.netEvWei) >= BigInt(result.trigger_ev.minNetEth);
+  const fullPrefixPass = evPass
+    && result.full_prefix_execution_success === true
+    && rawPositive(result.full_prefix_execution_net_raw)
+    && result.full_vs_trigger === "match"
+    && result.trigger_route_signature !== null
+    && result.trigger_route_signature === result.full_prefix_route_signature
+    && result.full_prefix_ev_bucket === "positive"
+    && result.full_prefix_ev?.decision === "allow"
+    && BigInt(result.full_prefix_ev.netEvWei) >= BigInt(result.full_prefix_ev.minNetEth)
+    && result.causal_replay_error === null;
+  const conditions = [triggerPass, routePass, quotePass, simulationPass, evPass, fullPrefixPass];
+  const stages = [
+    "trigger_and_admission",
+    "route_enumeration",
+    "counterfactual_quote",
+    "resolved_plan_fork_sim",
+    "production_ev",
+    "full_prefix_replay",
+  ];
+  const details: Array<Record<string, unknown>> = [
+    {
+      preStateAnchorKind: result.pre_state_anchor_kind,
+      preStateAnchorHash: result.pre_state_anchor_hash,
+      postStateAnchorKind: result.post_state_anchor_kind,
+      postStateAnchorHash: result.post_state_anchor_hash,
+      victimEffectKind: result.victim_effect_kind,
+    },
+    {
+      expectedPools,
+      matchedPools: [...matchedPools].sort(),
+      expectedRoute,
+      matchedRoute: result.matched_route,
+      closedRoute: result.closed_route,
+    },
+    {
+      preGrossRaw: result.pre_gross_raw,
+      postGrossRaw: result.post_gross_raw,
+      oracleProbeAmountInRaw: result.oracle_probe_amount_in_raw,
+      oracleBeforeAmountOutRaw: result.oracle_before_amount_out_raw,
+      oracleAfterAmountOutRaw: result.oracle_after_amount_out_raw,
+    },
+    {
+      success: result.post_execution_success,
+      netProfitRaw: result.post_execution_net_raw,
+      block: result.post_execution_block,
+      transactionIndex: result.post_execution_index,
+      gasUsed: result.trigger_ev?.gasUsed ?? null,
+      calldataHash: result.trigger_ev?.calldataHash ?? null,
+    },
+    { ...(result.trigger_ev ?? { decision: null }) },
+    {
+      routeSignature: result.full_prefix_route_signature,
+      triggerRouteSignature: result.trigger_route_signature,
+      success: result.full_prefix_execution_success,
+      netProfitRaw: result.full_prefix_execution_net_raw,
+      block: result.full_prefix_execution_block,
+      transactionIndex: result.full_prefix_execution_index,
+      ev: result.full_prefix_ev,
+      fullVsTrigger: result.full_vs_trigger,
+      error: result.causal_replay_error,
+    },
+  ];
+  let reached = true;
+  return conditions.map((condition, index) => {
+    const status: SixStepDiagnostic["status"] = reached
+      ? condition ? "pass" : "fail"
+      : "not_reached";
+    reached &&= condition;
+    return {
+      step: (index + 1) as SixStepDiagnostic["step"],
+      stage: stages[index],
+      status,
+      ...details[index],
+    };
+  });
+}
+
+function rawPositive(value: string | null): boolean {
+  return value !== null && BigInt(value) > 0n;
+}
+
+function rawAtMostZero(value: string | null): boolean {
+  return value !== null && BigInt(value) <= 0n;
+}
+
+function rawEqual(left: string | null, right: string | null): boolean {
+  return left !== null && right !== null && BigInt(left) === BigInt(right);
 }
 
 function runBackrunHunt(
@@ -476,6 +741,7 @@ function runBackrunHunt(
   expectedPools: string[],
   maxPools: number,
 ): BackrunHuntResult {
+  const evidence = acceptanceEvidence();
   const trustedSource = path.join(trustedRoot, "listener", "src", "searcher", "test", "backrun-hunt.ts");
   const targetSource = resolveTrustedBackrunHarness(label, trustedSource, trustedRoot, targetRoot);
   const removeTargetSource = targetSource !== trustedSource
@@ -499,18 +765,18 @@ function runBackrunHunt(
           SEARCHER_BACKRUN_HUNT_ANVIL_PORT: String(anvilPort),
           SEARCHER_BACKRUN_HUNT_PRE_ANVIL_PORT: String(preAnvilPort),
           SEARCHER_BACKRUN_HUNT_FULL_PREFIX_ANVIL_PORT: String(fullPrefixAnvilPort),
-          HUNT_SAMPLE_BLOCK: String(experiment.production_evidence!.sample.block_number),
-          HUNT_WINNER_TX_HASH: experiment.production_evidence!.sample.tx_hash,
-          HUNT_VICTIM_TX_HASH: experiment.production_evidence!.sample.victim_tx_hash!,
+          HUNT_SAMPLE_BLOCK: String(evidence.sample.block_number),
+          HUNT_WINNER_TX_HASH: evidence.sample.tx_hash,
+          HUNT_VICTIM_TX_HASH: evidence.sample.victim_tx_hash!,
           HUNT_UNIVERSE_PATH: universe,
           HUNT_MAX_POOLS: String(maxPools),
           HUNT_TRUSTED_ROOT: trustedRoot,
           AB_EXPECTED_POOL_IDS: expectedPools.join(","),
-          AB_EXPECTED_ROUTE_JSON: JSON.stringify(experiment.production_evidence!.sample.expected_route),
-          AB_TRIGGER_KIND: experiment.production_evidence!.trigger_kind,
-          AB_ORACLE_ROUTE_EDGE_INDEX: experiment.production_evidence!.sample.oracle_route_edge_index === undefined
+          AB_EXPECTED_ROUTE_JSON: JSON.stringify(evidence.sample.expected_route),
+          AB_TRIGGER_KIND: evidence.trigger_kind,
+          AB_ORACLE_ROUTE_EDGE_INDEX: evidence.sample.oracle_route_edge_index === undefined
             ? ""
-            : String(experiment.production_evidence!.sample.oracle_route_edge_index),
+            : String(evidence.sample.oracle_route_edge_index),
         },
       },
     );
@@ -571,12 +837,13 @@ function validateBackrunHuntResult(
   expectedPools: string[],
   observation: ProductionSampleObservation,
 ): void {
+  const evidence = acceptanceEvidence();
   const causalErrors = validateBackrunCausalReplay(result, {
     stage: expectedStage,
     parentBlock: forkBlock,
-    winnerTxHash: experiment.production_evidence!.sample.tx_hash,
+    winnerTxHash: evidence.sample.tx_hash,
     winnerTransactionIndex: observation.transaction_index,
-    victimTxHash: experiment.production_evidence!.sample.victim_tx_hash!,
+    victimTxHash: evidence.sample.victim_tx_hash!,
     blockNumber: observation.block_number,
   });
   if (causalErrors.length > 0) {
@@ -599,8 +866,8 @@ function validateBackrunHuntResult(
       throw new Error(`${label} backrun hunt route is missing on-chain DEX pools: ${missing.join(",")}`);
     }
   }
-  const expectedProtocol = experiment.production_evidence!.route_scope === "dex-permissionless-protocol";
-  const expectedRoute = normalizeProductionRoute(experiment.production_evidence!.sample.expected_route ?? []);
+  const expectedProtocol = evidence.route_scope === "dex-permissionless-protocol";
+  const expectedRoute = normalizeProductionRoute(evidence.sample.expected_route ?? []);
   if (JSON.stringify(result.expected_route) !== JSON.stringify(expectedRoute)) {
     throw new Error(`${label} backrun hunt did not bind the declared complete route`);
   }
@@ -628,12 +895,12 @@ function validateBackrunHuntResult(
         || BigInt(result.post_execution_net_raw) !== BigInt(result.net_profit_raw)) {
       throw new Error(`${label} backrun hunt did not independently execute the exact route after the victim`);
     }
-    const triggerKind = experiment.production_evidence!.trigger_kind;
+    const triggerKind = evidence.trigger_kind;
     if (triggerKind === "victim-swap" && result.victim_effect_kind !== "swap") {
       throw new Error(`${label} backrun hunt did not bind the route to a swap victim effect`);
     }
     if (triggerKind === "oracle-update") {
-      const expectedEdgeIndex = experiment.production_evidence!.sample.oracle_route_edge_index!;
+      const expectedEdgeIndex = evidence.sample.oracle_route_edge_index!;
       if (result.victim_effect_kind !== "oracle"
           || result.oracle_route_edge_index !== expectedEdgeIndex
           || result.oracle_probe_amount_in_raw === null
@@ -662,11 +929,15 @@ function runHunt(
   delete childEnv.NODE_OPTIONS;
   delete childEnv.npm_config_script_shell;
   delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
-  const result = spawnSync(process.execPath, ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts"], {
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
+    {
     cwd: path.join(root, "listener"),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 20 * 60 * 1000,
+    maxBuffer: 32 * 1024 * 1024,
     env: {
       ...childEnv,
       SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
@@ -694,9 +965,10 @@ function runHunt(
       AB_EXPECTED_POOL_IDS: expectedPools.join(","),
       AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(expectedSwapPath),
       AB_EXPECTED_ROUTE_JSON: JSON.stringify(expectedRoute),
-      AB_EXPECTED_ROUTE_SCOPE: experiment.production_evidence!.route_scope,
+      AB_EXPECTED_ROUTE_SCOPE: acceptanceEvidence().route_scope,
     },
-  });
+    },
+  );
   if (result.error) throw new Error(`${label} blockscan hunt failed to start: ${result.error.message}`);
   if (result.status !== 0) {
     const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4000);
@@ -711,6 +983,77 @@ function runHunt(
   } catch (error) {
     throw new Error(`${label} blockscan hunt result is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/** Run the same production-shaped historical hunt in diagnostic mode.
+ * Diagnostic mode may intentionally return after the first failing stage, so this parser consumes only
+ * ordered SIX_STEP_DIAGNOSTIC markers and never requires a final BLOCKSCAN_HUNT_RESULT marker. */
+function runHuntDiagnostics(
+  label: string,
+  root: string,
+  anvilPort: number,
+  universe: string,
+  forkBlock: number,
+  expectedPools: string[],
+  expectedSwapPath: ProductionSampleObservation["arb_swap_path"],
+  expectedRoute: ProductionRouteStep[],
+  maxPools: number,
+): SixStepDiagnostic[] {
+  const outDir = fs.mkdtempSync(path.join(gateTmpRoot, `mev-ab-${label}-diagnostic-`));
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.npm_config_script_shell;
+  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--import", "tsx", "src/searcher/test/blockscan-hunt.ts",
+      "--diagnostic",
+      "--max-candidates", "100",
+      "--scan-budget-ms", "120000",
+      "--pass-budget-ms", "600000",
+      "--top-k", "8",
+    ],
+    {
+      cwd: path.join(root, "listener"),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30 * 60 * 1000,
+      maxBuffer: 32 * 1024 * 1024,
+      env: {
+        ...childEnv,
+        SEARCHER_LIVE_RPC_URL: requiredArg("--rpc"),
+        SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT: String(anvilPort),
+        HUNT_BLOCK: String(forkBlock),
+        HUNT_UNIVERSE_PATH: universe,
+        HUNT_MAX_POOLS: String(maxPools),
+        HUNT_MAX_HOPS: "4",
+        HUNT_MIN_SPREAD_BPS: "0",
+        HUNT_SCAN_BUDGET_MS: "120000",
+        HUNT_PASS_BUDGET_MS: "600000",
+        HUNT_MAX_CANDIDATES: "100",
+        HUNT_REFINE_CANDIDATES: "512",
+        HUNT_TOP_K: "8",
+        HUNT_OUT: path.join(outDir, "hunt.json"),
+        AB_EXPECTED_POOL_IDS: expectedPools.join(","),
+        AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(expectedSwapPath),
+        AB_EXPECTED_ROUTE_JSON: JSON.stringify(expectedRoute),
+        AB_EXPECTED_ROUTE_SCOPE: acceptanceEvidence().route_scope,
+      },
+    },
+  );
+  if (result.error) {
+    throw new Error(`${label} six-step diagnostic failed to start: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim().slice(-4_000);
+    throw new Error(`${label} six-step diagnostic exited ${result.status ?? "signal"}: ${output}`);
+  }
+  const diagnostics = parseSixStepDiagnostics(String(result.stdout ?? ""), label);
+  if (diagnostics.length === 0) {
+    throw new Error(`${label} six-step diagnostic emitted no stage markers`);
+  }
+  return diagnostics;
 }
 
 function validateHuntResult(
@@ -748,7 +1091,7 @@ function validateHuntResult(
       throw new Error(`${label} hunt did not match the complete ordered adapter/target/token route`);
     }
   }
-  const expectedProtocol = experiment.production_evidence!.route_scope === "dex-permissionless-protocol";
+  const expectedProtocol = acceptanceEvidence().route_scope === "dex-permissionless-protocol";
   if (expectedStage !== "not_admitted" && result.has_protocol_edge !== expectedProtocol) {
     throw new Error(`${label} hunt route scope does not match the on-chain sample`);
   }
@@ -759,7 +1102,7 @@ function validateHuntResult(
 }
 
 function normalizeProductionRoute(
-  route: NonNullable<NonNullable<AbExperiment["production_evidence"]>["sample"]["expected_route"]>,
+  route: NonNullable<ProductionSample["expected_route"]>,
 ): ProductionRouteStep[] {
   return route.map((edge) => ({
     adapterId: edge.adapterId,

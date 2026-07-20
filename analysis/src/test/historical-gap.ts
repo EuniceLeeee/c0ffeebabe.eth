@@ -111,8 +111,23 @@ function record(overrides: Partial<HistoricalGapRecord> = {}): HistoricalGapReco
 test("validation tracks are exclusive and derived from change components", () => {
   assert.equal(historicalValidationTrack(["analysis-tool", "classifier"]), "direct-main");
   assert.equal(historicalValidationTrack(["adapter", "planner"]), "historical-replay");
+  assert.equal(historicalValidationTrack(["scanner"]), "hermes-ab");
   assert.equal(historicalValidationTrack(["latency"]), "hermes-ab");
   assert.equal(historicalValidationTrack(["adapter", "latency"]), null);
+});
+
+test("systemic protocol scanner routes to cohort A/B without a transaction sample", () => {
+  const value = record({
+    components: ["scanner"],
+    samples: [],
+    decision: {
+      status: "route_to_hermes",
+      claim: "implemented_not_validated",
+      branch_action: "retained",
+      evidence: "Protocol scanner coverage needs a predeclared positive/negative cohort and live distribution check.",
+    },
+  });
+  assert.deepEqual(validateHistoricalGap(value, "promote"), []);
 });
 
 test("deterministic production repair can promote after replay and smoke evidence", () => {

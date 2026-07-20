@@ -21,7 +21,7 @@ function git(repo: string, args: string[]): string {
 function experiment(
   base = "a".repeat(40),
   challenger = "b".repeat(40),
-  replay: ResolutionReplaySpec = {
+  replay: ResolutionReplaySpec | null = {
     cwd: ".",
     argv: ["node", "replay-check.mjs"],
     timeout_seconds: 30,
@@ -70,7 +70,7 @@ function experiment(
     branch_action: "retained",
     b_stopped: true,
     evidence_bundle: "redacted evidence",
-    resolution_replay: replay,
+    ...(replay ? { resolution_replay: replay } : {}),
   };
 }
 
@@ -95,7 +95,7 @@ interface FixtureRepo {
   branchTip: string;
 }
 
-function fixtureRepo(replay?: ResolutionReplaySpec): FixtureRepo {
+function fixtureRepo(replay?: ResolutionReplaySpec | null): FixtureRepo {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-resolution-"));
   const remote = path.join(tmp, "remote.git");
   const repo = path.join(tmp, "repo");
@@ -211,6 +211,16 @@ test("apply runs the old pinned replay, archives, exact-deletes, and is idempote
 
   const retry = runResolutionSweep(fixture.repo, "apply");
   assert.equal(retry.find((entry) => entry.branch === "ab/old-gap")?.status, "resolved_deleted");
+});
+
+test("systemic retained work stays on the cohort A/B path even if a route claim is filed", { timeout: 30_000 }, () => {
+  const fixture = fixtureRepo(null);
+  commitFixAndClaim(fixture);
+  const result = runResolutionSweep(fixture.repo, "apply");
+  const entry = result.find((candidate) => candidate.branch === "ab/old-gap");
+  assert.equal(entry?.status, "retained");
+  assert.match(entry?.detail ?? "", /fresh cohort A\/B retest/);
+  assert.notEqual(git(fixture.repo, ["ls-remote", "--heads", "origin", "refs/heads/ab/old-gap"]), "");
 });
 
 test("apply resumes after the report was archived but before branch deletion", { timeout: 60_000 }, () => {

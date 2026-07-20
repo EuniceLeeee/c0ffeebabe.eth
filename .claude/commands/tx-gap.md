@@ -1,4 +1,4 @@
-# Historical Gap Repair v2 - 以物理事实为验收门的批量 tx 修复流程
+# Historical Gap Repair v2 - 以物理事实链诊断批量 tx 修复
 
 输入交易或语料: `$ARGUMENTS`
 
@@ -9,7 +9,8 @@
 >
 > **本批次启用 analysis-tool freeze。** 可以调用现有分析工具辅助分桶和交叉检查，但禁止修改或
 > 新建 `analysis/**`、诊断 CLI、分类器、tool-index、分析 gate/hook。工具报错、结论冲突或覆盖不足时，
-> 记录 `tool_divergence` 后停止投入工具，直接用下述人工六步物理事实链完成生产修复验收。
+> 记录 `tool_divergence` 后停止投入工具；若本轮声明是单笔 route-stage 修复，再用下述人工六步
+> 物理事实链完成该声明的诊断。
 > 工具缺陷不占本批次目标，不创建 challenger，也不得阻止已经被原始链上事实证实的生产修复。
 > 这是用户显式的 task-scoped freeze；执行本命令时，它优先于“同轮修复 tooling defect”的默认流程。
 
@@ -108,6 +109,10 @@ fixed_by: null
 
 现有工具可提供旁证，但六步的事实来源必须是原始链上数据、未修改的生产入口和 fork 执行结果。
 challenger 不得修改 harness、fixture 或验收入口。
+六步独立于 A/B deployment：`deploy` 不运行也不等待它；需要时在 live 窗口结束并 pause B 后执行。
+它是 route-stage/等价声明的可选诊断，不是 deploy、decision、close 或 merge 的强制开关。若本轮
+预声明目标就是某笔交易的六步推进，失败只否定该声明；protocol scanner、universe、分布或性能改动
+按各自预声明的 cohort/覆盖率/公平性标准验收，不得被无关的六步样本否决。
 
 | # | 步骤 | 独立判据 |
 |---|---|---|
@@ -116,27 +121,29 @@ challenger 不得修改 harness、fixture 或验收入口。
 | 3 | solver 定价与 sizing | 逐腿 quote 与目标块真实池状态及 receipt/trace 成交量对齐；人工列出输入、输出、fee 和 rounding。 |
 | 4 | fork sim 逐 wei | 在正确 parent/prefix 状态执行生产 calldata，成功还贷且无 standing position；用 fork 前后原始 `balanceOf`/ETH delta 独立复算 gross。 |
 | 5 | 生产 EV gate | 调用生产同一 EV-gate/成本口径得到 net；不以手算美元值代替生产判定。 |
-| 6 | 同桶翻转 | 同一历史输入从 baseline 的明确失败阶段推进到 `path_found`、`plans>0` 或 `final_sim_success`；build/test 通过不等于 fixed。 |
+| 6 | 同桶翻转/等价 | 功能修复：同一历史输入从 baseline 的明确失败阶段推进到 `path_found`、`plans>0` 或 `final_sim_success`。等价重构：步骤 1–5 的集合/逐 wei/calldata/EV 判定一致，再单独检查 live performance 不低于预定阈值；build/test 通过不等于 fixed。 |
 
 若 canonical 工具无法生成某一步，不修改工具：保存原始 RPC/trace/fork 命令与输出哈希，由主持 agent
 人工完成六步，并让 fresh non-author reviewer 以 REFUTE 为目标复核。人工与 reviewer 均必须明确引用
-每一步的证据；无法证明则 verdict=`implemented_not_validated`，不得合并。
+每一步的证据；无法证明时只能放弃该 route-stage 声明，不能拿它证明 `fixed`。无关类型的改动仍按
+自己预声明的 cohort/覆盖率/公平性标准决定。
 
 ## 5. Cohort、分布和资源验收
 
-- 代表 tx 跑完整六步；cohort 其余交易至少跑确定性 baseline/challenger 翻转并逐笔记录 hash/result。
+- route-stage/等价声明的代表 tx 跑完整六步；cohort 其余交易至少跑确定性 baseline/challenger 翻转并逐笔记录 hash/result。
 - 若部分失败，先判断是否误分 cohort；不是同根因则拆桶，不让通过样本替失败样本搭便车。
-- adapter/detector/planner/quote/execution 的确定性修复：六步通过后做短 smoke，验证启动、安全和资源无回归。
-- top-N、candidate cap、排序、admission 等分布改动：除六步外，必须有 cohort 正负例和短 smoke/A-B，
+- 单笔 adapter/detector/planner/quote/execution funnel 修复：六步通过后做短 smoke，验证启动、安全和资源无回归。
+- protocol scanner、graph/universe、top-N、candidate cap、排序、admission 等系统/分布改动：使用
+  cohort 正负例、覆盖率/输出等价和短 smoke/A-B，
   记录 CPU、pass latency、budget-censored blocks、候选组成及 final-sim 假阳性；不能只看一个样本。
 - smoke 可回答资源/回归，不能替代 pinned replay；历史 replay 可回答确定性能力，不能证明竞争 inclusion。
 
 ## 6. 合并与分支生命周期
 
-- 六步、cohort、必要 smoke/reviewer 全绿：rebase/merge 到最新 `origin/main`，确认生产 diff 未漂移，
+- 本轮预声明的验收标准、必要 smoke/reviewer 全绿（route-stage 声明才包含六步）：rebase/merge 到最新 `origin/main`，确认生产 diff 未漂移，
   push 后立即删除对应本地/远端 branch 和 worktree。
 - 红或证据不足：不合并为 fixed；记录 exact base/challenger、失败步骤、复现命令和未解问题。
-- 后续 main 修复同一 stable problem id 时，重跑旧 pinned 六步；通过后归档旧报告并删除旧 branch。
+- 后续 main 修复同一 stable problem id 时，重跑该问题原先声明的 pinned 验收；通过后归档旧报告并删除旧 branch。
 - main 是 champion。下一 gap 永远从最新 main 新切，不在旧 challenger 上堆叠。
 
 ## 7. 收尾报告
@@ -146,7 +153,7 @@ challenger 不得修改 harness、fixture 或验收入口。
 1. 样本 tx 与为何属于目标内闭环；
 2. baseline 卡在哪个生产阶段；
 3. 修改的 `listener/**` 文件/函数；
-4. 六步各自证据与 reviewer 结论；
+4. 本轮预声明验收的逐项证据与 reviewer 结论（适用时附六步）；
 5. 是否需要/完成短 smoke 或 A/B；
 6. merge SHA 与 branch 是否已删除；
 7. `tool_divergence`（如有），引用对应 `divergence_id`、记录文件和本轮新增的完整 tx hash，明确写

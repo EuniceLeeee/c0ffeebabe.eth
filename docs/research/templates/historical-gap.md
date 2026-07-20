@@ -120,8 +120,10 @@ The fresh reviewer writes a separate JSON artifact committed at the report-only 
 top-N, and capture time. The gate independently checks those fields through SSM before and after replay/smoke.
 Both artifacts must later be archived byte-identically on main.
 
-Every referenced schema-v3 candidate report must declare `production_evidence.sample.expected_route` for
-both scanner and backrun sources. It is one ordered closed array whose edges contain `adapterId`,
+Every schema-v3 candidate report referenced by the single-route historical-replay track must declare
+`production_evidence.sample.expected_route` for both block-scan and backrun sources. Systemic scanner/graph/
+universe work uses the cohort/Hermes path and does not fabricate these per-sample reports. The route is one
+ordered closed array whose edges contain `adapterId`,
 `slotKind=swap|protocol`, `target`, `tokenIn`, `tokenOut`, and `poolId` when the adapter has a distinct pool
 identity. The route must match canonical receipt swap order/direction, one interleaved successful call-trace
 sequence for every declared DEX/protocol adapter target and selector, and the trusted replay route exactly.

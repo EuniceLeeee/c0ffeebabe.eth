@@ -43,9 +43,11 @@ import {
   POOL_REGISTRY,
   type PoolEntry,
   type TokenEdge,
+  type TokenPath,
   type TokenQueryBackend,
 } from "../planner/token-graph.js";
 import { DEFAULT_POOL_UNIVERSE_PATH, loadPoolUniverse } from "../pool-universe.js";
+import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
 import { metronomeSynthPoolIface, quote } from "../solver/quoter.js";
@@ -140,6 +142,8 @@ interface OpportunityReport {
     tokenIn: string;
     tokenOut: string;
     slotKind: string;
+    edgeKind: string;
+    leavesStandingPosition: boolean;
     poolId?: string;
   }>;
   swapPath: Array<{ pool_id: string; direction: "0for1" | "1for0" }> | null;
@@ -149,6 +153,8 @@ interface OpportunityReport {
     target: string;
     tokenIn: string;
     tokenOut: string;
+    edgeKind?: string;
+    leavesStandingPosition?: boolean;
     poolId?: string;
   }>;
 }
@@ -162,6 +168,16 @@ interface SolveReport {
   solved: string | null;
   solveError: string | null;
   searchCenter: string | null;
+  diagnosticHopAmounts?: Array<{
+    adapterId: string;
+    target: string;
+    tokenIn: string;
+    tokenOut: string;
+    amountIn: string;
+    amountOut: string;
+    rawAmountOut: string;
+  }>;
+  diagnosticAmountError?: string;
   diagnosticSimulation?: {
     success: boolean;
     profitToken: string;
@@ -342,6 +358,7 @@ async function main(): Promise<void> {
 
     if (DIAGNOSTIC.enabled) {
       const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
+      const edgeIdentities = edges.map(canonicalEdgeIdentity);
       const missingEdges = expectedRoute.filter((expected) =>
         !edges.some((edge) => sameRouteStep(opportunityRoute([edge])[0], expected)),
       );
@@ -353,6 +370,8 @@ async function main(): Promise<void> {
       );
       emitDiagnostic(1, "graph", missingEdges.length === 0 ? "pass" : "fail", {
         graphEdges: edges.length,
+        edgeSetSize: new Set(edgeIdentities).size,
+        edgeSetSha256: canonicalSetSha256(edgeIdentities),
         expectedEdges: expectedRoute.length,
         missingEdges,
         poolAdmission,
@@ -437,6 +456,9 @@ async function main(): Promise<void> {
       const coarseReports = coarseScan.opportunities.map((opp, index) =>
         describeOpportunity(index + 1, opp, cache, cfg.blockNumber, protocolMids),
       );
+      const ringIdentities = coarseScan.opportunities.map((opp) =>
+        canonicalRingIdentity(opp.seedEdges),
+      );
       diagnosticCoarseTarget = readExpectedReplayTarget(coarseReports);
       const found = (diagnosticCoarseTarget?.opportunityIndex ?? -1) >= 0;
       const rankComplete = coarseScan.outcome === "ran";
@@ -457,6 +479,8 @@ async function main(): Promise<void> {
             : null,
           rankComplete,
           candidatesSearched: coarseReports.length,
+          ringSetSize: new Set(ringIdentities).size,
+          ringSetSha256: canonicalSetSha256(ringIdentities),
           candidateCap: coarseMaxCandidates,
           scannerOutcome: coarseScan.outcome,
           scannedPairs: coarseScan.scannedPairs,
@@ -588,7 +612,9 @@ async function main(): Promise<void> {
         : null;
       const solveSucceeded = expectedSolve?.solved !== null
         && expectedSolve?.solved !== undefined
-        && expectedSolve.solveError === null;
+        && expectedSolve.solveError === null
+        && expectedSolve.diagnosticAmountError === undefined
+        && expectedSolve.diagnosticHopAmounts?.length === expectedTarget?.expectedRoute.length;
       emitDiagnostic(
         4,
         "planner_and_solver",
@@ -604,7 +630,10 @@ async function main(): Promise<void> {
           solveSucceeded,
           includesInternalFinalSim: true,
           searchCenter: expectedSolve?.searchCenter ?? null,
-          error: expectedSolve?.solveError ?? (expectedTarget?.opportunityIndex === -1 ? "route_not_enumerated" : null),
+          hopAmounts: expectedSolve?.diagnosticHopAmounts ?? [],
+          error: expectedSolve?.solveError
+            ?? expectedSolve?.diagnosticAmountError
+            ?? (expectedTarget?.opportunityIndex === -1 ? "route_not_enumerated" : null),
         },
       );
       if (diagnosticStopsAfter("solve")) return;
@@ -1200,8 +1229,11 @@ async function solveSelected(
     );
     let planCount = 0;
     let solved: ResolvedPlan | null = null;
+    let solvedTokenPath: TokenPath | null = null;
     let solveError: string | null = null;
     let searchCenter: string | null = null;
+    let diagnosticHopAmounts: SolveReport["diagnosticHopAmounts"];
+    let diagnosticAmountError: string | undefined;
     let diagnosticSimulation: SolveReport["diagnosticSimulation"];
     let diagnosticEv: SolveReport["diagnosticEv"];
     try {
@@ -1211,6 +1243,7 @@ async function solveSelected(
       if (plans.length === 0) {
         throw new Error("no candidate plans");
       }
+      solvedTokenPath = plans[0].tokenPath;
       // Exact solve reads the FORK directly (matches searcher:blockscan-fork-solve); do NOT pass
       // the detection cache — it holds metadata-only v3 ticks for cheap mids, which would corrupt
       // a cache-local exact quote. The fork + eth_call quoter is the source of truth for EV.
@@ -1225,7 +1258,26 @@ async function solveSelected(
     } catch (err) {
       solveError = err instanceof Error ? err.message : String(err);
     }
-    if (DIAGNOSTIC.enabled && solved) {
+    if (DIAGNOSTIC.enabled && solved && solvedTokenPath) {
+      try {
+        const propagated = await propagateAmountsWithRawOutputs(
+          solvedTokenPath,
+          solved.flashAmount,
+          state,
+          { safetyBps: 10000n },
+        );
+        diagnosticHopAmounts = opp.seedEdges.map((edge, index) => ({
+          adapterId: edge.adapterId,
+          target: edge.target.toLowerCase(),
+          tokenIn: edge.tokenIn.toLowerCase(),
+          tokenOut: edge.tokenOut.toLowerCase(),
+          amountIn: propagated.amounts[index].toString(),
+          amountOut: propagated.amounts[index + 1].toString(),
+          rawAmountOut: propagated.rawOutputs[index].toString(),
+        }));
+      } catch (error) {
+        diagnosticAmountError = error instanceof Error ? error.message : String(error);
+      }
       const simulation = await simulator.simulate(solved);
       diagnosticSimulation = {
         success: simulation.success,
@@ -1280,6 +1332,8 @@ async function solveSelected(
       solved: solved ? solved.netProfit.toString() : null,
       solveError,
       searchCenter,
+      ...(diagnosticHopAmounts ? { diagnosticHopAmounts } : {}),
+      ...(diagnosticAmountError ? { diagnosticAmountError } : {}),
       ...(diagnosticSimulation ? { diagnosticSimulation } : {}),
       ...(diagnosticEv ? { diagnosticEv } : {}),
     };
@@ -1315,6 +1369,8 @@ function describeOpportunity(
       tokenIn: edge.tokenIn.toLowerCase(),
       tokenOut: edge.tokenOut.toLowerCase(),
       slotKind: edge.slotKind,
+      edgeKind: edge.edgeKind,
+      leavesStandingPosition: edge.leavesStandingPosition,
       ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
     })),
     swapPath: opportunitySwapPath(opp.seedEdges),
@@ -1360,8 +1416,33 @@ function opportunityRoute(edges: TokenEdge[]): OpportunityReport["route"] {
     target: edge.target.toLowerCase(),
     tokenIn: edge.tokenIn.toLowerCase(),
     tokenOut: edge.tokenOut.toLowerCase(),
+    edgeKind: edge.edgeKind,
+    leavesStandingPosition: edge.leavesStandingPosition,
     ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
   }));
+}
+
+function canonicalEdgeIdentity(edge: TokenEdge): string {
+  return JSON.stringify([
+    edge.adapterId,
+    edge.target.toLowerCase(),
+    edge.tokenIn.toLowerCase(),
+    edge.tokenOut.toLowerCase(),
+    edge.slotKind,
+    edge.edgeKind,
+    edge.leavesStandingPosition,
+    edge.poolId?.toLowerCase() ?? null,
+  ]);
+}
+
+function canonicalRingIdentity(edges: TokenEdge[]): string {
+  return JSON.stringify(edges.map(canonicalEdgeIdentity));
+}
+
+function canonicalSetSha256(values: string[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify([...new Set(values)].sort()))
+    .digest("hex");
 }
 
 function sameRouteStep(
@@ -1373,6 +1454,9 @@ function sameRouteStep(
     && actual.target === expected.target
     && actual.tokenIn === expected.tokenIn
     && actual.tokenOut === expected.tokenOut
+    && (expected.edgeKind === undefined || actual.edgeKind === expected.edgeKind)
+    && (expected.leavesStandingPosition === undefined
+      || actual.leavesStandingPosition === expected.leavesStandingPosition)
     && (expected.poolId === undefined || actual.poolId === expected.poolId);
 }
 

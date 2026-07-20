@@ -551,6 +551,19 @@ export function runResolutionSweep(
       continue;
     }
     const claimed = claimsByBranch.get(item.branch);
+    const routeResolution = item.experiment.production_evidence?.sample !== undefined
+      || item.experiment.resolution_replay !== undefined;
+    if (!routeResolution) {
+      results.push({
+        branch: item.branch,
+        problem_id: item.experiment.problem_id,
+        report_path: item.report_path,
+        claim_path: claimed?.path ?? null,
+        status: "retained",
+        detail: "systemic experiment requires a fresh cohort A/B retest; route resolution claims/replays do not apply",
+      });
+      continue;
+    }
     if (!claimed) {
       results.push({
         branch: item.branch,

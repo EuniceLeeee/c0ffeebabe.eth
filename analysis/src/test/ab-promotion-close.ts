@@ -123,22 +123,22 @@ function experiment(
       timeout_seconds: 1200,
       expected_transition: "same pinned sample advances one production stage",
     },
-    ...(verdict === "win" ? {
-      production_evidence: {
-        searcher_behavior_change: true,
-        strategy_kind: "block-scan" as const,
-        trigger_kind: "standing-state" as const,
-        route_scope: "dex-permissionless-protocol" as const,
-        position_conserving: true,
-        posture: {
-          victim_dependent: false,
-          keeper: false,
-          inventory: false,
-          private_path: false,
-          credit: false,
-          sandwich: false,
-          jit_lp: false,
-        },
+    production_evidence: {
+      searcher_behavior_change: true,
+      strategy_kind: "block-scan" as const,
+      trigger_kind: "standing-state" as const,
+      route_scope: "dex-permissionless-protocol" as const,
+      position_conserving: true,
+      posture: {
+        victim_dependent: false,
+        keeper: false,
+        inventory: false,
+        private_path: false,
+        credit: false,
+        sandwich: false,
+        jit_lp: false,
+      },
+      ...(verdict === "win" ? {
         sample: {
           tx_hash: `0x${"1".repeat(64)}`,
           block_number: 25_519_817,
@@ -183,8 +183,8 @@ function experiment(
           argv: ["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
           evidence: "trusted replay advances the same sample",
         },
-      },
-    } : {}),
+      } : {}),
+    },
   };
 }
 

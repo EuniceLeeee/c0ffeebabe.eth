@@ -98,12 +98,16 @@ test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", ()
   }
 });
 
-test("production decision cannot under-declare the evidence capability query", () => {
+test("production decision requires common A/B evidence without forcing a route transaction", () => {
   const tools = discoverToolIndex(repoRoot);
   const record = evidence(["analysis:ab-canary-compare"], ["ab", "comparison"]);
   const errors = validateRecordedToolSelection(record.selection, tools, PRODUCTION_DECISION_CAPABILITIES, record.manifest);
-  assert.ok(errors.some((error) => error.includes("single-transaction")));
   assert.ok(errors.some((error) => error.includes("competitor-window")));
+  assert.ok(errors.some((error) => error.includes("classification")));
+  assert.ok(errors.some((error) => error.includes("block-scan")));
+  assert.ok(!errors.some((error) => error.includes("single-transaction")));
+  assert.ok(!errors.some((error) => error.includes("causality")));
+  assert.ok(!errors.some((error) => error.includes("pnl")));
 });
 
 test("generated tool index does not replace the legacy analysis dispatcher", () => {

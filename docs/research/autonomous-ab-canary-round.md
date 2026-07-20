@@ -16,9 +16,11 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    B lease belongs to another experiment, NO-OP; branches may coexist but the B runtime slot may not.
 4. If reap reports `crashed_needs_escalation`, update that experiment's report/journal: B stopped, branch
    retained, crash evidence linked. Commit/push the md. Do not retry that `problem_id` this wake.
-5. Run `cd analysis && npm run ab-resolution-sweep -- --apply` before selecting new work. A branch closes
-   only when a main-committed claim pins its exact old tip and a later main SHA, then the replay frozen in the
-   original report flips. The runner archives, gates, and exact-deletes crash-idempotently. Still-unresolved,
+5. Run `cd analysis && npm run ab-resolution-sweep -- --apply` before selecting new work. For retained
+   route-stage/equivalence claims, a branch closes only when a main-committed claim pins its exact old tip and
+   a later main SHA, then the replay frozen in the original report flips. The runner archives, gates, and
+   exact-deletes crash-idempotently. Retained systemic experiments are reported but deliberately not
+   sweep-resolved; they require a fresh normal A/B retest of the original cohort contract. Still-unresolved,
    moved, dirty, replay-failing, or unclaimed branches remain retained.
 6. With no active B lease, compare deployed A HEAD to `origin/main`. If different, use guarded
    `deploy-node.sh` to sync A and verify the bounded-live lane posture before choosing base SHA.
@@ -26,21 +28,22 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
 ## 1. Pick + predeclare
 1. Fetch `origin/main`. Read open LearningCases/Findings plus recent A/B reports. Exclude every `problem_id`
    whose latest verdict is `needs_escalation`/retained and every problem already owned by an active branch.
-2. Pick the highest-impact remaining blocker only when one real +EV sample in the current DEX-DEX /
-   DEX-permissionless-protocol scope proves the failed production stage. Every production round is dual-lane:
-   the sample may be a victim-independent block-scan loop or a position-conserving public-mempool
-   swap/oracle backrun whose trusted three-state replay validates the trigger. Keeper/reward, inventory, private-path,
-   credit, sandwich and JIT-LP samples do not qualify. If none exists, make the independent manual judgment,
-   run `tool-index --check`, select current tools by the
+2. Pick the highest-impact remaining blocker only when it has a concrete, predeclared success distribution:
+   a route-stage/equivalence claim uses one real +EV transaction, while protocol scanner, universe, coverage,
+   distribution and performance work uses a pinned cohort plus output/coverage/fairness/resource criteria.
+   Every production round is dual-lane and stays within position-conserving DEX-DEX or
+   DEX-permissionless-protocol scope. Keeper/reward, inventory, private-path, credit, sandwich and JIT-LP
+   postures do not qualify. Make the independent manual judgment, run `tool-index --check`, select current tools by the
    required semantic capabilities into an execution manifest, execute the chosen indexed IDs through
-   `tool-run`, and reconcile their machine receipts to discover/file one; if
+   `tool-run`, and reconcile their machine receipts; if
    the tool is wrong, get fresh non-author agreement, fix/test/rerun it immediately, and merge that auxiliary
-   tool commit before cutting B. If there is still no qualifying sample, clean NO-OP.
+   tool commit before cutting B. If there is still no qualifying transaction or cohort for the chosen
+   hypothesis, clean NO-OP.
 3. Create `ab/<problem>` from exact deployed A, then before code create
    `docs/research/reports/ab-<experiment_id>-hermes.md` from `templates/hermes-ab-canary.md`; fill the
    schema-v3 `ab_experiment` block with exact base SHA, hypothesis, semantic success criterion, change class,
-   complete `production_evidence`, deterministic stage-flip gate, immutable `resolution_replay`, input mode,
-   config deltas, and initial
+   static `production_evidence` safety declaration, hypothesis-specific deterministic/A/B criteria, input
+   mode, config deltas, and initial
    branch action. `challenger_commit` is pending
    here because a commit cannot contain its own SHA. Commit/push this initial report on B so a crash always
    leaves a durable handoff.
@@ -50,15 +53,12 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    Analysis/tooling/governance fixes must already be merged to the base and may not appear in the B diff.
 2. Use the HERMES generator/evaluator split. Two stalled generator attempts or three failed review passes
    produce `needs_escalation`; retain/push the branch + evidence and let the next hourly wake pick another.
-3. Run the pinned replay/fork gate and require the same real +EV sample to advance at least one production
-   stage. Block-scan starts from untouched `sample.block_number - 1`; backrun compares `boundary` (parent),
-   raw `trigger_only` through detector→planner→solver→sim, and the real `full_prefix` before the winner.
-   Trigger/full route signature, final-sim result, and EV-sign bucket must match; divergence or an
-   unreplayable prefix is `implemented_not_validated` and retained for manual follow-up. The trusted wrapper
-   runs the unchanged `searcher:blockscan-hunt` or `searcher:backrun-hunt` from both roots against the same
-   frozen universe and on-chain identities; a challenger-authored harness is invalid. A
-   performance optimization with no such sample flip is ineligible. Build-only is never
-   fixed. Push/freeze the exact code SHA while it is the remote branch tip and deploy it.
+3. Run the deterministic check that matches the predeclared hypothesis. For a route-stage/equivalence claim,
+   the optional six-step replay uses the real +EV sample: block-scan starts from
+   `sample.block_number - 1`; backrun compares boundary, raw trigger-only and full-prefix states. For protocol
+   scanner, graph/universe, coverage, distribution or performance work, use the pinned cohort and declared
+   output/coverage/resource contract instead; do not fabricate a route flip. A challenger-authored harness
+   is invalid, and build-only is never proof. Push/freeze the exact code SHA while it is the remote branch tip and deploy it.
    Later branch commits may change only `docs/research/reports/*.md|*.json`; the final report records the
    frozen deployed code SHA as `challenger_commit`, not its own evidence-tip commit. The wrapper reads that
    descendant evidence tip while checking out and deploying the frozen code SHA.
@@ -69,8 +69,8 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    <docs/research/reports/ab-...-hermes.md> <allow-view-delta>`;
    pass `1` only when the schema-v3 journal predeclares `expected_runtime_view_delta=true`, else `0`.
    Declare `lane_mode=dual` and run the trusted wrapper with
-   `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`; MEV-Share stays off. The wrapper recomputes source shape, winner style and net PnL through the champion's configured private archive endpoint while keeping both live runtimes on local reth, executes the declared
-   existing pinned replay, binds all deployment identity/config declarations, and rejects non-runtime or
+   `AB_LANE_MODE=dual AB_VICTIM_MODE=public-only`; MEV-Share stays off. The wrapper performs the fast
+   report/SHA/config binding and hard bounded-live checks, and rejects non-runtime or
    mixed tooling/governance challengers. Direct B `systemd-run` or challenger-owned deploy code is invalid.
 2. Run the predeclared paired-block window with both atomic block-scan and public-mempool backrun active on A
    and B. Record both funnels separately; either disconnected/missing lane invalidates the window. Exclude startup/full-warm, budget-censored, and catch-up blocks
@@ -78,7 +78,11 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    shared discovery cutoff and stable runtime pool-view/TokenEdge graph hashes alongside config/universe
    hashes.
 3. Run `deploy-ab-challenger.sh pause <id>` **before analysis**; B is now stopped and A owns all CPUs.
-4. Copy/redact evidence. Never commit raw logs/events or secrets.
+4. If the predeclared hypothesis is a route-stage or equivalence claim, optionally run
+   `deploy-ab-challenger.sh acceptance <id>` for the independent six-step archive/A/B replay. It is evidence
+   for that claim only, never a deploy/close/merge switch for unrelated scanner, universe, distribution, or
+   performance work.
+5. Copy/redact evidence. Never commit raw logs/events or secrets.
 
 ## 4. Judgment — agent owns the decision
 1. **External production calibration:** after the independent manual trace, run `tool-index --check`, query
@@ -125,9 +129,11 @@ exit; an external hourly wake runs the next problem. Do not ask mid-loop questio
    challenger code, then gates and deletes. After a win, guarded-deploy the new `origin/main` as A and run
    `ab-resolution-sweep -- --apply`. The next B deploy is refused until this decisive close is complete.
 3. **needs_escalation/crash/unfinished:** mark `retained` while unresolved; never merge/delete yet. Record
-   exactly what a stronger model must decide and freeze a self-contained `resolution_replay`. Future hourly
-   wakes skip this problem. Once a later validated main commit resolves it, the opening sweep archives its
-   report and gate-deletes the old branch.
+   exactly what a stronger model must decide. A route-stage/equivalence claim freezes a self-contained
+   `resolution_replay`; a systemic scanner/graph/universe/distribution/performance claim instead freezes its
+   cohort/coverage/output/fairness/resource contract and never invents a route replay. Future hourly wakes
+   skip this problem. A later route resolution uses the opening sweep; a systemic resolution uses a fresh
+   normal A/B retest and decisive close.
 4. Confirm `ab-promotion-close` ran both A/B and Hermes close gates and that the decisive B ref is gone (or an
    escalation ref remains). Commit/push any Method Trace. Remove `/tmp/mev-workflow-active`. Exit; the next wake
    starts a fresh branch from the promoted champion.

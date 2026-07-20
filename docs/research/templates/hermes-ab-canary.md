@@ -9,18 +9,20 @@
 - **semantic success criterion:**
 - **change_class:** performance | correctness | capability
 - **one-change scope:**
-- **deterministic gate + pinned sample:**
+- **predeclared acceptance evidence:** route sample/stage replay when relevant; otherwise
+  cohort/coverage/output/fairness/resource criteria
 - **lane mode:** dual (atomic block-scan + public-mempool backrun; MEV-Share off)
-- **production sample:** real tx/block · net +EV evidence · either victim-independent block-scan or a
-  declared public swap/oracle trigger with boundary/trigger-only/full-prefix replay
-- **stage flip:** not_admitted → path_found → final_sim_success (other stages need a trusted main-side harness first)
+- **route sample (route-stage/equivalence only; otherwise n/a):** real tx/block · net +EV evidence ·
+  victim-independent block-scan or a public swap/oracle trigger with boundary/trigger-only/full-prefix replay
+- **systemic cohort (scanner/graph/universe/coverage/distribution/performance only; otherwise n/a):** cohort
+  definition · positive/negative controls · coverage/output/fairness/resource thresholds
 - **not doing:**
 
-## Implementation + Gate
+## Implementation + Checks
 - **generator / evaluator:**
 - **diff scope:**
 - **build:**
-- **replay/fork result:**
+- **hypothesis-specific validation result:**
 - **base SHA / challenger SHA:** challenger = frozen deployed code commit; commit this filled report as the
   only allowed descendant, while the wrapper checks out the frozen code SHA
 
@@ -69,7 +71,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
 - **branch action:** pending_merge | pending_delete | merged_deleted | deleted_unmerged | retained | resolved_deleted
 - **merge/deploy/cleanup evidence:**
 - **stronger-model handoff (if retained):**
-- **later resolution (if resolved_deleted):** resolved_by_commit · replay/A/B evidence · report-on-main commit
+- **later resolution (if resolved_deleted):** resolved_by_commit · original hypothesis-contract evidence · report-on-main commit
 
 ```ab_experiment
 {
@@ -121,13 +123,7 @@ Required for every capability win and every conflict/inconclusive/artifact conce
     "a_blockscan_graph_hash_after": "unavailable",
     "b_blockscan_graph_hash_after": "unavailable"
   },
-  "deterministic_gate": { "result": "pass", "evidence": "<gate command/result>" },
-  "resolution_replay": {
-    "cwd": "listener",
-    "argv": ["npm", "run", "searcher:<self-contained-pinned-fixture>"],
-    "timeout_seconds": 3600,
-    "expected_transition": "<exact old failure bucket -> success bucket>"
-  },
+  "deterministic_gate": { "result": "pass", "evidence": "<hypothesis-specific check command/result>" },
   "production_evidence": {
     "searcher_behavior_change": true,
     "strategy_kind": "block-scan",
@@ -142,7 +138,57 @@ Required for every capability win and every conflict/inconclusive/artifact conce
       "credit": false,
       "sandwich": false,
       "jit_lp": false
+    }
+  },
+  "analysis": {
+    "agent_manual_author": "<orchestrator>",
+    "agent_manual_verdict": "inconclusive",
+    "agent_manual_evidence": "<independent causal analysis written before script result>",
+    "agent_manual_written_at": "<ISO-8601 timestamp when the manual verdict was persisted>",
+    "agent_manual_artifact": "ab-<id>-manual.json",
+    "agent_manual_artifact_sha256": "<sha256 of exact manual artifact bytes>",
+    "comparator_started_at": "<later ISO-8601 timestamp captured before starting the indexed comparator>",
+    "script_exit_code": 1,
+    "script_assessment": "inconclusive",
+    "script_artifact": "<relative redacted compare.json path>",
+    "reconciliation": "inconclusive",
+    "tool_selection": {
+      "capability_query": ["<hypothesis-specific-capability>", "competitor-window", "classification", "block-scan", "ab", "comparison"],
+      "selected_tools": ["<successfully executed current indexed IDs; never copy a fixed tool list>"],
+      "catalog_check_exit_code": 0,
+      "evidence_manifest": "ab-<id>-tools.json",
+      "evidence_manifest_sha256": "<sha256 of exact machine execution manifest bytes>"
     },
+    "adversarial_review": {
+      "verdict": "inconclusive",
+      "evidence": "<fresh non-author evidence>",
+      "reviewer": "<fresh reviewer distinct from agent_manual_author>"
+    }
+  },
+  "final_verdict": "needs_escalation",
+  "branch_action": "retained",
+  "b_stopped": false,
+  "evidence_bundle": "<redacted evidence paths>"
+}
+```
+
+The common `ab_experiment` block above contains only the static production-safety declaration. For an
+explicit route-stage/equivalence claim, merge this optional fragment into it before invoking six-step
+acceptance; systemic scanner/graph/universe/coverage/distribution/performance reports omit the fragment and
+record their cohort contract in the prose/evidence bundle instead:
+
+```jsonc
+{
+  // top-level siblings
+  "require_stage_advance": true,
+  "resolution_replay": {
+    "cwd": "listener",
+    "argv": ["npm", "run", "searcher:<self-contained-pinned-fixture>"],
+    "timeout_seconds": 3600,
+    "expected_transition": "<exact old failure bucket -> success bucket>"
+  },
+  "production_evidence": {
+    // retain every static production_evidence field from the common block, then add:
     "sample": {
       "tx_hash": "<full-onchain-tx-hash>",
       "block_number": 0,
@@ -165,42 +211,14 @@ Required for every capability win and every conflict/inconclusive/artifact conce
       "argv": ["node", "--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
       "evidence": "<same sample stage transition>"
     }
-  },
-  "analysis": {
-    "agent_manual_author": "<orchestrator>",
-    "agent_manual_verdict": "inconclusive",
-    "agent_manual_evidence": "<independent causal analysis written before script result>",
-    "agent_manual_written_at": "<ISO-8601 timestamp when the manual verdict was persisted>",
-    "agent_manual_artifact": "ab-<id>-manual.json",
-    "agent_manual_artifact_sha256": "<sha256 of exact manual artifact bytes>",
-    "comparator_started_at": "<later ISO-8601 timestamp captured before starting the indexed comparator>",
-    "script_exit_code": 1,
-    "script_assessment": "inconclusive",
-    "script_artifact": "<relative redacted compare.json path>",
-    "reconciliation": "inconclusive",
-    "tool_selection": {
-      "capability_query": ["single-transaction", "causality", "pnl", "competitor-window", "classification", "block-scan", "ab", "comparison"],
-      "selected_tools": ["<successfully executed current indexed IDs; never copy a fixed tool list>"],
-      "catalog_check_exit_code": 0,
-      "evidence_manifest": "ab-<id>-tools.json",
-      "evidence_manifest_sha256": "<sha256 of exact machine execution manifest bytes>"
-    },
-    "adversarial_review": {
-      "verdict": "inconclusive",
-      "evidence": "<fresh non-author evidence>",
-      "reviewer": "<fresh reviewer distinct from agent_manual_author>"
-    }
-  },
-  "final_verdict": "needs_escalation",
-  "branch_action": "retained",
-  "b_stopped": false,
-  "evidence_bundle": "<redacted evidence paths>"
+  }
 }
 ```
 
-The deploy wrapper, not the challenger, runs the unchanged strategy-specific harness from both A and B and
-binds its machine result to the sample's on-chain DEX pool IDs. Block-scan uses the untouched parent state;
-backrun uses boundary, selected-trigger-only, and full-prefix states and requires the latter two to agree.
+Only the explicitly invoked acceptance command runs the unchanged strategy-specific harness from both A and
+B and binds its machine result to the route sample. Block-scan uses the untouched parent state; backrun uses
+boundary, selected-trigger-only, and full-prefix states and requires the latter two to agree. Deploy,
+decision, close and promotion do not invoke that route diagnostic.
 Test, fixture,
 replay-harness, analysis, or governance changes must be merged before B and are rejected in the challenger.
 The branch may contain later report/evidence-only commits, but the wrapper deploys and promotion merges only
@@ -216,10 +234,12 @@ npm run tool-run -- --manifest ../docs/research/reports/ab-<id>-tools.json --too
   [--window <from>..<to>] -- <tool-args>
 ```
 
-When a later main commit resolves a retained experiment, add a main-committed claim under
-`docs/research/resolutions/` with the exact retained branch tip and run
-`npm run ab-resolution-sweep -- --apply`. The claim cannot replace the replay: the runner uses the
-`resolution_replay` frozen in this original report. It sets
+When a later main commit resolves a retained route-stage/equivalence experiment, add a main-committed claim
+under `docs/research/resolutions/` with the exact retained branch tip and run
+`npm run ab-resolution-sweep -- --apply`. The claim cannot replace the route replay: the runner uses the
+`resolution_replay` frozen in the original route report. A retained systemic experiment must instead be
+retested against its original cohort/A-B contract and closed through the normal lifecycle; do not invent a
+single-route replay to satisfy cleanup. A resolved report sets
 `branch_action=resolved_deleted` and adds:
 ```json
 "resolution": {
@@ -251,6 +271,8 @@ npm run ab-canary-gate -- ../docs/research/reports/ab-<id>-hermes.md --phase clo
 npm run hermes-gate -- ../docs/research/reports/ab-<id>-hermes.md
 ```
 
-The candidate phase is intentionally not a hand-run close command. The trusted node-side
-`deploy-ab-challenger.sh deploy ...` wrapper supplies and verifies the frozen deployment identity,
-local archive RPC, runtime declarations, and challenger worktree before B can start.
+Deployment runs only the fast static binding and hard bounded-live checks. After the measured window and
+`pause`, a route-stage/equivalence experiment may run `deploy-ab-challenger.sh acceptance <id>` for the
+independent six-step archive/A/B replay. Its `not_run|running|pass|fail|not_applicable` status is diagnostic
+evidence, not a deploy/decision/close/merge switch. Other experiment classes use their own predeclared A/B
+criteria. Decision/close remain the hand-run close commands above.

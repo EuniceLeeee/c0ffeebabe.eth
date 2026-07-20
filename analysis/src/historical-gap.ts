@@ -165,10 +165,12 @@ const DIRECT_MAIN_COMPONENTS = new Set<HistoricalChangeComponent>([
   "analysis-tool", "classifier", "gate",
 ]);
 const HISTORICAL_REPLAY_COMPONENTS = new Set<HistoricalChangeComponent>([
-  "adapter", "venue-identity", "graph", "scanner", "detector", "planner", "quote", "execution",
+  "adapter", "venue-identity", "graph", "detector", "planner", "quote", "execution",
 ]);
 const HERMES_COMPONENTS = new Set<HistoricalChangeComponent>([
-  "flow-admission", "latency", "candidate-ranking",
+  // Scanner changes alter cross-opportunity admission/cardinality. A single pinned transaction cannot
+  // prove their live distribution, so they belong to cohort-based Hermes A/B rather than route replay.
+  "scanner", "flow-admission", "latency", "candidate-ranking",
 ]);
 const SHA40_RE = /^[a-f0-9]{40}$/i;
 const SHA64_RE = /^[a-f0-9]{64}$/i;
@@ -278,8 +280,8 @@ export function validateHistoricalGap(
     errors.push("searcher behavior work must use a literal ab/* branch for lifecycle enforcement");
   }
 
-  if (track !== "direct-main" && (!Array.isArray(record.samples) || record.samples.length === 0)) {
-    errors.push("searcher behavior work requires at least one real +EV historical sample");
+  if (track === "historical-replay" && (!Array.isArray(record.samples) || record.samples.length === 0)) {
+    errors.push("single-route historical replay requires at least one real +EV historical sample");
   }
   for (const [index, sample] of (record.samples ?? []).entries()) {
     errors.push(...validateSample(sample).map((error) => `samples[${index}]: ${error}`));

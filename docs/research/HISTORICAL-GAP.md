@@ -23,7 +23,8 @@ the causal replay, not by the word `atomic` or by its bundle container.
 | Change | Required evidence | Destination |
 |---|---|---|
 | analysis tool, classifier, gate | build + regression tests + fresh non-author review | merge directly to `main`; never deploy as B |
-| adapter, venue identity, graph, scanner, detector, planner, quote, execution | every pinned +EV sample advances through the trusted replay; then the trusted gate itself runs a >=10 minute dual-lane dry-run smoke | merge exact frozen SHA after smoke |
+| single-route adapter, venue identity, deterministic graph edge, detector, planner, quote, execution | every pinned +EV sample in that route cohort advances through the trusted replay; then the trusted gate itself runs a >=10 minute dual-lane dry-run smoke | merge exact frozen SHA after smoke |
+| systemic protocol scanner, graph/universe construction, coverage or cross-opportunity distribution/performance | predeclared positive/negative cohort, coverage and output contract, then same-input fairness/resource evidence | route to `HERMES.md`; no per-sample candidate or single-route stage flip |
 | flow admission, latency, candidate ranking | pinned replay where applicable, then full Hermes A/B | route to `HERMES.md`; history alone cannot promote |
 | build/test only | `implemented_not_validated` | retain; never claim fixed or merge as the repair |
 
@@ -44,7 +45,7 @@ prebuilt plan. Landed amounts are diagnostic references only. The unchanged prod
 compose the plan and choose a profitable input amount themselves; if the route executes only when the landed
 amount is forced, the Adapter Replay fails.
 
-Use the parent block state for a standing scanner sample. Use the exact trigger-only or full-prefix state for a
+Use the parent block state for a standing block-scan sample. Use the exact trigger-only or full-prefix state for a
 backrun sample. A successful Adapter Replay does not claim that production can discover the transaction; only
 Production Replay may make that claim.
 
@@ -116,8 +117,9 @@ admission is `flow-admission` and must go to Hermes A/B rather than using this h
 5. **Group by root cause.** One gap class gets one branch and may carry multiple transactions. Do not create
    one branch per transaction. Searcher behavior branches are literal `ab/*` so existing lifecycle cleanup
    applies; analysis-only work must not occupy B.
-6. **Build one schema-v3 candidate report per sample.** The report's `production_evidence` owns the on-chain
-   classification and trusted replay declaration. Both scanner and backrun samples must declare one complete,
+6. **For the single-route historical-replay track only, build one schema-v3 candidate report per sample.**
+   The report's `production_evidence` owns the on-chain
+   classification and trusted replay declaration. Both block-scan and backrun samples must declare one complete,
    ordered, closed `expected_route`; every edge binds `adapterId`, `slotKind`, `target`, `tokenIn`, `tokenOut`
    and optional `poolId`. The gate checks the ordered swap pool/direction sequence against canonical receipt
    logs and matches the entire interleaved DEX/protocol route against one successful state-changing call trace.
@@ -127,10 +129,14 @@ admission is `flow-admission` and must go to Hermes A/B rather than using this h
    be the winner's private caller/executor, and its input/output tokens must be present in the landed receipt
    flow. The entire route must then match the trusted replay byte-for-byte. Pool membership or a two-pool
    signature alone cannot identify a route. The
-   historical report only groups those sample reports and declares the promotion track.
+   historical report only groups those sample reports and declares the promotion track. Systemic protocol
+   scanner, graph/universe, coverage, distribution or performance work does not create these per-sample
+   candidate reports. It predeclares a representative positive/negative cohort plus coverage, output,
+   fairness and resource criteria, then proceeds through Hermes A/B.
 7. **Run the historical gate.** It recomputes scope, checks base/branch/ref inventory and actual diff class,
-   reruns repository gates, then invokes the existing `ab-canary-gate --phase candidate` for every sample.
-   The old gate executes unchanged `blockscan-hunt` or `backrun-hunt`; a challenger-authored success string
+   reruns repository gates, then invokes the existing `ab-canary-gate --phase candidate` for every sample in
+   the single-route historical-replay track only.
+   The trusted gate executes unchanged `blockscan-hunt` or `backrun-hunt` six-step diagnostics; a challenger-authored success string
    cannot satisfy it. Runtime-path and added/removed diff signals mechanically route intake, ranking,
    threshold, deadline, budget, concurrency and latency behavior to Hermes even if the report labels it
    `detector` or `planner`.

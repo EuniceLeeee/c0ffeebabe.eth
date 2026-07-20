@@ -11,11 +11,16 @@ import {
   readAbLocalReportArtifact,
   resolveAbLocalReportArtifactPath,
   resolveAbReportArtifactPath,
+  sixStepDiagnosticsError,
+  sixStepEquivalenceError,
   validateAbExperiment,
+  validateAbDeploymentBinding,
   validateAbProductionCandidate,
   type AbCompareResult,
   type AbExperiment,
+  type AbSixStepDiagnostic,
 } from "../ab-canary.js";
+import { PRODUCTION_DECISION_CAPABILITIES } from "../tool-index.js";
 
 function log(totalBase: number, candidateOffset = 0): string {
   const lines: string[] = [];
@@ -26,7 +31,7 @@ function log(totalBase: number, candidateOffset = 0): string {
   return lines.join("\n");
 }
 
-test("challenger universe mode prepares an immutable input before candidate replay", () => {
+test("deploy freezes immutable universes for independent acceptance", () => {
   const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
   const repoRoot = path.resolve(analysisRoot, "..");
   const wrapper = fs.readFileSync(path.join(repoRoot, "scripts/deploy-ab-challenger.sh"), "utf8");
@@ -39,8 +44,12 @@ test("challenger universe mode prepares an immutable input before candidate repl
   assert.match(wrapper, /timeout 900 env -i/);
   assert.match(wrapper, /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/);
   assert.match(wrapper, /active-pools-\$universe_hash\.json/);
-  assert.match(wrapper, /--baseline-universe "\$A_REPLAY_UNIVERSE"/);
-  assert.match(wrapper, /--challenger-universe "\$B_UNIVERSE"/);
+  assert.match(wrapper, /baseline_replay_universe_path "\$A_REPLAY_UNIVERSE"/);
+  assert.match(wrapper, /--baseline-universe "\$baseline_universe"/);
+  assert.match(wrapper, /--challenger-universe "\$challenger_universe"/);
+  const deployBody = wrapper.slice(wrapper.indexOf("deploy() {"), wrapper.indexOf("\npause_experiment()"));
+  assert.doesNotMatch(deployBody, /--phase (?:candidate|acceptance)/);
+  assert.match(wrapper, /acceptance\) .*six_step_acceptance/);
 
   assert.match(gate, /candidateUniverseArg\("baseline"\)/);
   assert.match(gate, /candidateUniverseArg\("challenger"\)/);
@@ -50,12 +59,20 @@ test("challenger universe mode prepares an immutable input before candidate repl
   assert.match(gate, /sha256File\(baselineUniverse\) !== sha256File\(challengerUniverse\)/);
 });
 
-test("generic candidate replay preserves production shape while equivalence gets wider budgets", () => {
+test("acceptance preserves production replay and emits explicit six-step equivalence evidence", () => {
   const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
   const repoRoot = path.resolve(analysisRoot, "..");
   const gate = fs.readFileSync(path.join(analysisRoot, "src/cli/ab-canary-gate.ts"), "utf8");
   const tx149 = fs.readFileSync(
     path.join(repoRoot, "listener/src/searcher/test/blockscan-hunt-tx149.ts"),
+    "utf8",
+  );
+  const blockscan = fs.readFileSync(
+    path.join(repoRoot, "listener/src/searcher/test/blockscan-hunt.ts"),
+    "utf8",
+  );
+  const backrun = fs.readFileSync(
+    path.join(repoRoot, "listener/src/searcher/test/backrun-hunt.ts"),
     "utf8",
   );
 
@@ -65,6 +82,16 @@ test("generic candidate replay preserves production shape while equivalence gets
   assert.match(gate, /HUNT_MAX_CANDIDATES: "100"/);
   assert.match(gate, /HUNT_TOP_K: "8"/);
   assert.match(gate, /timeout: 20 \* 60 \* 1000/);
+  assert.match(gate, /timeout: 30 \* 60 \* 1000/);
+  assert.match(gate, /const baselineDiagnostics = runHuntDiagnostics/);
+  assert.match(gate, /const challengerDiagnostics = runHuntDiagnostics/);
+  assert.match(gate, /requireStageDiagnostics\(\s*"baseline"/);
+  assert.match(gate, /backrunSixStepDiagnostics\(baseline, expectedPools\)/);
+  assert.match(gate, /"full_prefix_replay"/);
+  assert.match(gate, /SIX_STEP_ACCEPTANCE=/);
+  assert.equal((gate.match(/phase === "acceptance"/g) ?? []).length, 1,
+    "candidate compatibility phase must execute the same diagnostics as acceptance");
+  assert.match(gate, /if \(isAcceptancePhase\) \{[\s\S]*runHuntDiagnostics/);
 
   // Only the explicit equivalence branch receives the closed-loop profile.
   assert.match(gate, /candidateContext\?\.requireStageAdvance === false/);
@@ -91,6 +118,20 @@ test("generic candidate replay preserves production shape while equivalence gets
   assert.match(gate, /timeout: replay\.timeout_seconds! \* 1_000/);
   assert.match(gate, /equivalence resolution replay machine results differ/);
   assert.match(gate, /must emit exactly one TX149 machine result/);
+  assert.match(gate, /--diagnostic-max-candidates/);
+  assert.match(gate, /parseSixStepDiagnostics/);
+  assert.match(gate, /sixStepEquivalenceError\(baseline\.diagnostics, challenger\.diagnostics\)/);
+  assert.match(blockscan, /hopAmounts: expectedSolve\?\.diagnosticHopAmounts/);
+  assert.match(blockscan, /edgeSetSha256: canonicalSetSha256\(edgeIdentities\)/);
+  assert.match(blockscan, /ringSetSha256: canonicalSetSha256\(ringIdentities\)/);
+  assert.match(blockscan, /edge\.edgeKind/);
+  assert.match(blockscan, /edge\.leavesStandingPosition/);
+  assert.match(blockscan, /amountIn: propagated\.amounts\[index\]\.toString\(\)/);
+  assert.match(blockscan, /rawAmountOut: propagated\.rawOutputs\[index\]\.toString\(\)/);
+  assert.match(backrun, /await evaluateEv\(/);
+  assert.match(backrun, /decision: !evGate/);
+  assert.match(backrun, /gasUsed: gasUsed\.toString\(\)/);
+  assert.match(backrun, /calldataHash: createHash\("sha256"\)/);
 
   // Standalone tx149 repair keeps its old defaults; only trusted CLI args override them.
   assert.match(tx149, /cli\.huntMaxCandidates \?\? "100"/);
@@ -101,6 +142,58 @@ test("generic candidate replay preserves production shape while equivalence gets
   assert.match(tx149, /if \(cli\.universePath === undefined\) \{/);
   assert.match(tx149, /cli\.universePath === undefined[\s\S]*generated universe does not match the pinned tx149 window/);
   assert.match(tx149, /HUNT_REFINE_CANDIDATES,/);
+  assert.match(tx149, /55 \* 60 \* 1_000/);
+  assert.match(tx149, /\+ 30 \* 60 \* 1_000/);
+});
+
+test("six-step stage evidence rejects budget truncation and equivalence compares exact details", () => {
+  const graphPass: AbSixStepDiagnostic = { step: 1, stage: "graph", status: "pass" };
+  assert.match(
+    sixStepDiagnosticsError([
+      graphPass,
+      { step: 2, stage: "enumeration", status: "not_reached", reason: "pass_budget_exceeded" },
+    ], "not_admitted") ?? "",
+    /explicit graph or enumeration failure/,
+  );
+  assert.equal(sixStepDiagnosticsError([
+    graphPass,
+    { step: 2, stage: "enumeration", status: "fail", reason: "target_not_in_ranked_candidate_cap" },
+  ], "not_admitted"), null);
+  assert.equal(sixStepDiagnosticsError([
+    { step: 1, stage: "graph", status: "fail", missingEdges: ["edge"] },
+  ], "not_admitted"), null);
+
+  const pass = [
+    { step: 1, stage: "graph", status: "pass", graphEdges: 10, edgeSetSha256: "e".repeat(64) },
+    { step: 2, stage: "enumeration", status: "pass", observedRank: 2, ringSetSha256: "r".repeat(64) },
+    { step: 3, stage: "exact_quote_refine", status: "pass", probeMarginBps: 12 },
+    { step: 4, stage: "planner_and_solver", status: "pass", hopAmounts: [{ amountIn: "1", amountOut: "2" }] },
+    { step: 5, stage: "resolved_plan_resim", status: "pass", calldataHash: "a".repeat(64), gasUsed: "7", netProfit: "3" },
+    { step: 6, stage: "ev", status: "pass", decision: "allow", netEvWei: "2" },
+  ] as AbSixStepDiagnostic[];
+  assert.equal(sixStepEquivalenceError(pass, structuredClone(pass)), null);
+  const changed = structuredClone(pass);
+  changed[4].gasUsed = "8";
+  assert.match(sixStepEquivalenceError(pass, changed) ?? "", /differs at step 5/);
+  const changedGraph = structuredClone(pass);
+  changedGraph[0].edgeSetSha256 = "f".repeat(64);
+  assert.match(sixStepEquivalenceError(pass, changedGraph) ?? "", /differs at step 1/);
+  const changedRings = structuredClone(pass);
+  changedRings[1].ringSetSha256 = "s".repeat(64);
+  assert.match(sixStepEquivalenceError(pass, changedRings) ?? "", /differs at step 2/);
+});
+
+test("systemic A/B decisions do not require a single-transaction six-step receipt", () => {
+  assert.deepEqual(PRODUCTION_DECISION_CAPABILITIES, [
+    "competitor-window",
+    "classification",
+    "block-scan",
+    "ab",
+    "comparison",
+  ]);
+  assert.ok(!PRODUCTION_DECISION_CAPABILITIES.includes("single-transaction" as never));
+  assert.ok(!PRODUCTION_DECISION_CAPABILITIES.includes("causality" as never));
+  assert.ok(!PRODUCTION_DECISION_CAPABILITIES.includes("pnl" as never));
 });
 
 test("paired comparator excludes warmup and detects a guarded performance win", () => {
@@ -562,7 +655,7 @@ test("production candidate schema accepts a dual-lane stage-advancing block-scan
 test("production candidate requires one complete closed route for scanner and backrun", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-route-"));
   const missing = productionCandidate(tmp);
-  delete missing.production_evidence!.sample.expected_route;
+  delete missing.production_evidence!.sample!.expected_route;
   assert.ok(validateAbProductionCandidate(missing)
     .some((error) => error.includes("expected_route with 2..8")));
 
@@ -572,7 +665,7 @@ test("production candidate requires one complete closed route for scanner and ba
     .some((error) => error.includes("slot kinds")));
 
   const brokenLoop = productionCandidate(tmp);
-  brokenLoop.production_evidence!.sample.expected_route![1].tokenOut = "0x05";
+  brokenLoop.production_evidence!.sample!.expected_route![1].tokenOut = "0x05";
   assert.ok(validateAbProductionCandidate(brokenLoop)
     .some((error) => error.includes("closed token loop")));
 });
@@ -604,13 +697,13 @@ test("production candidate schema accepts a reviewed oracle-triggered backrun in
   value.production_evidence!.trigger_kind = "oracle-update";
   value.production_evidence!.posture.victim_dependent = true;
   value.production_evidence!.challenger_stage = "final_sim_success";
-  value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
-  value.production_evidence!.sample.expected_route = [
+  value.production_evidence!.sample!.victim_tx_hash = `0x${"2".repeat(64)}`;
+  value.production_evidence!.sample!.expected_route = [
     { adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
     { adapterId: "protocol-redeem", slotKind: "protocol", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
-  value.production_evidence!.sample.oracle_route_edge_index = 1;
-  value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
+  value.production_evidence!.sample!.oracle_route_edge_index = 1;
+  value.production_evidence!.replay!.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
   assert.deepEqual(validateAbProductionCandidate(value, { laneMode: "dual" }), []);
 });
 
@@ -622,12 +715,12 @@ test("oracle-triggered backrun requires a route-bound oracle edge", () => {
   value.production_evidence!.trigger_kind = "oracle-update";
   value.production_evidence!.posture.victim_dependent = true;
   value.production_evidence!.challenger_stage = "final_sim_success";
-  value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
-  value.production_evidence!.sample.expected_route = [
+  value.production_evidence!.sample!.victim_tx_hash = `0x${"2".repeat(64)}`;
+  value.production_evidence!.sample!.expected_route = [
     { adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
     { adapterId: "protocol-redeem", slotKind: "protocol", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
-  value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
+  value.production_evidence!.replay!.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
   assert.ok(validateAbProductionCandidate(value, { laneMode: "dual" })
     .some((error) => error.includes("oracle_route_edge_index")));
 });
@@ -638,12 +731,12 @@ test("backrun candidate is rejected outside the explicit dual lane", () => {
   value.production_evidence!.strategy_kind = "backrun";
   value.production_evidence!.trigger_kind = "victim-swap";
   value.production_evidence!.posture.victim_dependent = true;
-  value.production_evidence!.sample.victim_tx_hash = `0x${"2".repeat(64)}`;
-  value.production_evidence!.sample.expected_route = [
+  value.production_evidence!.sample!.victim_tx_hash = `0x${"2".repeat(64)}`;
+  value.production_evidence!.sample!.expected_route = [
     { adapterId: "univ2-swap", slotKind: "swap", tokenIn: "0x01", tokenOut: "0x02", target: "0x03" },
     { adapterId: "univ3-swap", slotKind: "swap", tokenIn: "0x02", tokenOut: "0x01", target: "0x04" },
   ];
-  value.production_evidence!.replay.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
+  value.production_evidence!.replay!.argv = ["node", "--import", "tsx", "src/searcher/test/backrun-hunt.ts"];
   const errors = validateAbProductionCandidate(value, { laneMode: "blockscan-only" });
   assert.ok(errors.some((error) => error.includes("lane_mode=dual")));
 });
@@ -750,6 +843,7 @@ test("production candidate gate requires indexed tool selection evidence", () =>
 test("production candidate gate binds deployment identity and requires a passing deterministic gate", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   const value = productionCandidate(tmp);
+  value.require_stage_advance = false;
   value.deterministic_gate.result = "fail";
   const errors = validateAbProductionCandidate(value, {
     experimentId: "different-experiment",
@@ -770,6 +864,89 @@ test("production candidate gate binds deployment identity and requires a passing
   assert.ok(errors.some((error) => error.includes("allowed_config_delta")));
 });
 
+test("fast deployment binding keeps static safety but does not execute semantic acceptance", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-deploy-binding-"));
+  const value = productionCandidate(tmp);
+  value.deterministic_gate.result = "fail";
+  value.production_evidence!.replay!.result = "fail";
+  const context = {
+    experimentId: value.experiment_id,
+    branch: value.branch,
+    baseCommit: value.base_commit,
+    challengerCommit: value.challenger_commit,
+    expectedRuntimeViewDelta: value.expected_runtime_view_delta,
+    inputMode: value.input_mode,
+    allowedConfigDelta: value.allowed_config_delta,
+    laneMode: value.lane_mode,
+  };
+  assert.deepEqual(validateAbDeploymentBinding(value, context), []);
+  assert.ok(validateAbProductionCandidate(value, context)
+    .some((error) => error.includes("deterministic_gate.result=pass")));
+
+  value.production_evidence!.position_conserving = false;
+  assert.ok(validateAbDeploymentBinding(value, context)
+    .some((error) => error.includes("position-conserving")));
+  value.production_evidence!.position_conserving = true;
+  value.production_evidence!.posture.credit = true;
+  assert.ok(validateAbDeploymentBinding(value, context)
+    .some((error) => error.includes("posture.credit")));
+  value.production_evidence!.posture.credit = false;
+
+  delete value.production_evidence;
+  assert.ok(validateAbDeploymentBinding(value, context)
+    .some((error) => error.includes("safety declaration")));
+});
+
+test("six-step replay is not a universal decision or promotion switch", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-optional-six-step-"));
+  const value = productionCandidate(tmp);
+  value.analysis.adversarial_review = {
+    verdict: "win",
+    evidence: "fresh reviewer confirms the predeclared scanner cohort and paired A/B result",
+    reviewer: "fresh-scanner-reviewer",
+  };
+  value.production_evidence!.sample!.tx_hash = "not-a-transaction";
+  value.production_evidence!.replay!.result = "fail";
+  value.resolution_replay!.timeout_seconds = 0;
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "decision"), []);
+  assert.ok(validateAbProductionCandidate(value)
+    .some((error) => error.includes("transaction hash") || error.includes("replay.result")));
+});
+
+test("fast deployment binding rejects a shakedown declaration mismatch", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-deploy-binding-"));
+  const value = productionCandidate(tmp);
+  value.infrastructure_shakedown = true;
+  value.deterministic_gate = { result: "not_applicable", evidence: "identical runtime" };
+  delete value.production_evidence;
+  assert.ok(validateAbDeploymentBinding(value, { shakedown: false })
+    .some((error) => error.includes("infrastructure_shakedown does not match")));
+});
+
+test("binding CLI ignores optional six-step controls", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-binding-cli-"));
+  const value = productionCandidate(tmp);
+  value.require_stage_advance = false;
+  value.deterministic_gate.result = "fail";
+  value.production_evidence!.replay!.result = "fail";
+  const report = path.join(tmp, "report.md");
+  fs.writeFileSync(report, `\`\`\`ab_experiment\n${JSON.stringify(value)}\n\`\`\`\n`);
+  const cli = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../cli/ab-canary-gate.ts");
+  const result = spawnSync(process.execPath, [
+    "--import", "tsx", cli, report,
+    "--phase", "binding",
+    "--expected-experiment", value.experiment_id,
+    "--expected-branch", value.branch,
+    "--expected-base", value.base_commit,
+    "--expected-challenger", value.challenger_commit,
+    "--expected-runtime-view-delta", "0",
+    "--expected-input-mode", "shared",
+    "--expected-config-delta", "",
+    "--expected-lane-mode", "dual",
+  ], { cwd: path.resolve(path.dirname(cli), "../.."), encoding: "utf8" });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
 test("production candidates cannot hide a safety-sensitive config change", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   const value = productionCandidate(tmp);
@@ -781,13 +958,32 @@ test("production candidates cannot hide a safety-sensitive config change", () =>
 test("schema v3 failed replay may close honestly as needs_escalation", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-production-gate-"));
   const value = productionCandidate(tmp);
-  value.production_evidence!.replay.result = "fail";
+  value.production_evidence!.replay!.result = "fail";
   value.deterministic_gate = { result: "fail", evidence: "pinned sample did not advance" };
   value.final_verdict = "needs_escalation";
   value.branch_action = "retained";
   value.b_stopped = true;
   const errors = validateAbExperiment(value, path.join(tmp, "report.md"), "close");
   assert.deepEqual(errors, []);
+});
+
+test("retained systemic scanner work does not fabricate a route resolution replay", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-systemic-retained-"));
+  const value = productionCandidate(tmp);
+  delete value.production_evidence!.sample;
+  delete value.production_evidence!.classification_review;
+  delete value.production_evidence!.baseline_stage;
+  delete value.production_evidence!.challenger_stage;
+  delete value.production_evidence!.replay;
+  delete value.resolution_replay;
+  value.deterministic_gate = { result: "fail", evidence: "the predeclared scanner cohort was inconclusive" };
+  value.final_verdict = "needs_escalation";
+  value.branch_action = "retained";
+  value.b_stopped = true;
+  assert.deepEqual(validateAbExperiment(value, path.join(tmp, "report.md"), "close"), []);
+  delete value.production_evidence;
+  assert.ok(validateAbExperiment(value, path.join(tmp, "report.md"), "close")
+    .some((error) => error.includes("safety declaration")));
 });
 
 test("schema v3 mechanically requires manual judgment before the comparator starts", () => {

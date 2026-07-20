@@ -76,9 +76,11 @@ local reth = 0 remote CU. Node: EC2 `i-0ff908dedeec9ebc6`, SSM-only. `<FROM>`/`<
 cd /opt/MEV/analysis
 npm run tool-index -- --check
 npm run tool-index -- --select competitor-window,classification --out /tmp/<run_id>-window-tools.json --json
+# Only for a transaction-bound route claim or an actual lost bundle; omit for systemic cohort experiments:
 npm run tool-index -- --select single-transaction,competitor-loss,causality --out /tmp/<run_id>-tx-tools.json --json
 # Inspect recommended_tools + related_tools. Run each chosen indexed ID through the generic runner:
 npm run tool-run -- --manifest /tmp/<run_id>-window-tools.json --tool <indexed-id> --window <FROM>..<TO> -- <args>
+# Run only when the optional transaction manifest above exists:
 npm run tool-run -- --manifest /tmp/<run_id>-tx-tools.json --tool <indexed-id> -- <args>
 # Archive the manifests beside the Step-1 artifact; record their paths + SHA-256, not self-reported exit codes.
 ```

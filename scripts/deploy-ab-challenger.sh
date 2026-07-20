@@ -7,7 +7,7 @@ ROOT=/opt/MEV-ab
 MAIN_REPO=/opt/MEV
 WT=$ROOT/b
 TRUSTED_BASE=$ROOT/trusted-base
-GATE_TOOL=$ROOT/gate-tool
+ACCEPTANCE_TOOL=$ROOT/acceptance-tool
 ENVF=$ROOT/b.env
 B_SECRETS=$ROOT/b-secrets.env
 B_PROCESS_ENV=$ROOT/b-process.env
@@ -32,7 +32,7 @@ PAUSE_LEASE_SECONDS=${AB_PAUSE_LEASE_SECONDS:-900}
 # Keep readiness mandatory, but give the cold start enough wall-clock time to prove it.
 FIRST_SCAN_TIMEOUT_SECONDS=${AB_FIRST_SCAN_TIMEOUT_SECONDS:-1200}
 MEMPOOL_READY_TIMEOUT_SECONDS=${AB_MEMPOOL_READY_TIMEOUT_SECONDS:-60}
-CANDIDATE_GATE_TIMEOUT_SECONDS=${AB_CANDIDATE_GATE_TIMEOUT_SECONDS:-2700}
+SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS=${AB_SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS:-9000}
 
 mkdir -p "$ROOT" "$ROOT/archive" "$ROOT/universe" "$ROOT/candidate"
 touch "$LOCK"
@@ -40,10 +40,10 @@ exec 9>"$LOCK"
 flock -x 9
 A_PROCESS_ENV=$(mktemp /run/mev-ab-a-process.XXXXXX)
 chmod 600 "$A_PROCESS_ENV"
-GATE_WORKER_PID=""
+ACCEPTANCE_WORKER_PID=""
 
-stop_gate_worker() {
-  local pid=${GATE_WORKER_PID:-}
+stop_acceptance_worker() {
+  local pid=${ACCEPTANCE_WORKER_PID:-}
   if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
     kill -TERM "$pid" 2>/dev/null || true
     kill -TERM -- "-$pid" 2>/dev/null || true
@@ -57,11 +57,11 @@ stop_gate_worker() {
     kill -KILL -- "-$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   fi
-  GATE_WORKER_PID=""
+  ACCEPTANCE_WORKER_PID=""
 }
 
 cleanup_ab_wrapper() {
-  stop_gate_worker
+  stop_acceptance_worker
   rm -f "$A_PROCESS_ENV"
 }
 
@@ -110,9 +110,6 @@ valid_report_path() {
   || die "AB_FIRST_SCAN_TIMEOUT_SECONDS must be 90..1200"
 [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -ge 5 ] && [ "$MEMPOOL_READY_TIMEOUT_SECONDS" -le 120 ] \
   || die "AB_MEMPOOL_READY_TIMEOUT_SECONDS must be 5..120"
-[ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -ge 300 ] && [ "$CANDIDATE_GATE_TIMEOUT_SECONDS" -le 9000 ] \
-  || die "AB_CANDIDATE_GATE_TIMEOUT_SECONDS must be 300..9000"
-
 state_field() {
   python3 - "$STATE" "$1" <<'PY'
 import json, os, sys
@@ -137,6 +134,7 @@ integer_keys = {
     "lease_until", "updated_at", "a_restarts_before", "a_restart_delta",
     "b_restarts", "a_pid_before", "a_pid_after", "b_pid_before", "champion_pid_changed",
     "a_universe_from_block", "a_universe_to_block", "b_universe_from_block", "b_universe_to_block",
+    "six_step_acceptance_started_at", "six_step_acceptance_completed_at", "pool_universe_top_n",
 }
 for i in range(0, len(pairs), 2):
     key, value = pairs[i:i + 2]
@@ -211,14 +209,14 @@ assert_port_owned() {
   done
 }
 
-run_candidate_gate_worker() {
+run_six_step_acceptance_worker() {
   set -Eeuo pipefail
   local analysis_dir=$1 proxy_port=$2 worker_timeout=$3 evidence_rpc
   local proxy_ready=0 listener_pids
   EVIDENCE_PROXY_PID=""
   EVIDENCE_TIMEOUT_PID=""
   shift 3
-  export -n -f run_candidate_gate_worker 2>/dev/null || true
+  export -n -f run_six_step_acceptance_worker 2>/dev/null || true
   [[ "$worker_timeout" =~ ^[1-9][0-9]*$ ]] || {
     echo "historical evidence worker timeout is invalid" >&2
     return 9
@@ -449,7 +447,7 @@ run_candidate_gate_worker() {
 
             response.once("finish", finalize);
             response.once("close", () => {
-              if (!finalized) upstreamRequest.destroy(new Error("gate client closed"));
+              if (!finalized) upstreamRequest.destroy(new Error("acceptance client closed"));
               finalize();
             });
             send();
@@ -1144,26 +1142,26 @@ prepare_trusted_base() {
     || die "trusted base analysis build failed (see /tmp/mev-ab-trusted-analysis-build.log)"
 }
 
-prepare_gate_tooling() {
+prepare_acceptance_tooling() {
   local commit=$1 base_commit=$2 dependency_drift
   dependency_drift=$(git -C "$MAIN_REPO" diff --name-only "$base_commit..$commit" -- \
     analysis/package.json analysis/package-lock.json listener/package-lock.json)
   [ -z "$dependency_drift" ] \
-    || die "trusted gate tooling dependencies differ from the installed champion dependencies"
-  if [ -e "$GATE_TOOL/.git" ]; then
-    git -C "$GATE_TOOL" reset --hard "$commit" >/dev/null
-    git -C "$GATE_TOOL" clean -fdx >/dev/null
-  elif [ -e "$GATE_TOOL" ]; then
-    die "$GATE_TOOL exists but is not a git worktree"
+    || die "trusted acceptance tooling dependencies differ from the installed champion dependencies"
+  if [ -e "$ACCEPTANCE_TOOL/.git" ]; then
+    git -C "$ACCEPTANCE_TOOL" reset --hard "$commit" >/dev/null
+    git -C "$ACCEPTANCE_TOOL" clean -fdx >/dev/null
+  elif [ -e "$ACCEPTANCE_TOOL" ]; then
+    die "$ACCEPTANCE_TOOL exists but is not a git worktree"
   else
-    git -C "$MAIN_REPO" worktree add --detach "$GATE_TOOL" "$commit" >/dev/null
+    git -C "$MAIN_REPO" worktree add --detach "$ACCEPTANCE_TOOL" "$commit" >/dev/null
   fi
-  [ "$(git -C "$GATE_TOOL" rev-parse HEAD)" = "$commit" ] \
-    || die "trusted gate tooling checkout does not match the pinned origin/main SHA"
+  [ "$(git -C "$ACCEPTANCE_TOOL" rev-parse HEAD)" = "$commit" ] \
+    || die "trusted acceptance tooling checkout does not match the pinned origin/main SHA"
   [ -d "$MAIN_REPO/analysis/node_modules" ] || die "champion analysis/node_modules missing"
   [ -d "$MAIN_REPO/listener/node_modules" ] || die "champion listener/node_modules missing"
-  ln -s "$MAIN_REPO/analysis/node_modules" "$GATE_TOOL/analysis/node_modules"
-  ln -s "$MAIN_REPO/listener/node_modules" "$GATE_TOOL/listener/node_modules"
+  ln -s "$MAIN_REPO/analysis/node_modules" "$ACCEPTANCE_TOOL/analysis/node_modules"
+  ln -s "$MAIN_REPO/listener/node_modules" "$ACCEPTANCE_TOOL/listener/node_modules"
 }
 
 verify_forge_dependency() {
@@ -1264,8 +1262,7 @@ prepare_candidate_universes() {
 deploy() {
   local experiment=$1 branch=$2 expected_a=$3 expected_b=$4 report_path=$5 allow_runtime_view_delta=${6:-0}
   local now lease current_status current_lease current_experiment requested_input_mode requested_config_delta
-  local requested_lane_mode requested_victim_mode requested_shakedown requested_require_stage_advance branch_tip candidate_report
-  local candidate_gate_timeout
+  local requested_lane_mode requested_victim_mode requested_shakedown branch_tip candidate_report
   local a_revm_path b_revm_path a_revm_hash b_revm_hash
   valid_id "$experiment" || die "invalid experiment id"
   valid_branch "$branch" || die "branch must match ab/*"
@@ -1285,14 +1282,6 @@ deploy() {
   requested_shakedown=$(env_get AB_SHAKEDOWN); requested_shakedown=${requested_shakedown:-0}
   [ "$requested_shakedown" = "0" ] || [ "$requested_shakedown" = "1" ] \
     || die "AB_SHAKEDOWN must be 0|1"
-  requested_require_stage_advance=$(env_get AB_REQUIRE_STAGE_ADVANCE)
-  requested_require_stage_advance=${requested_require_stage_advance:-1}
-  [ "$requested_require_stage_advance" = "0" ] || [ "$requested_require_stage_advance" = "1" ] \
-    || die "AB_REQUIRE_STAGE_ADVANCE must be 0|1"
-  candidate_gate_timeout=$CANDIDATE_GATE_TIMEOUT_SECONDS
-  if [ "$requested_require_stage_advance" = "0" ] && [ "$candidate_gate_timeout" -lt 9000 ]; then
-    candidate_gate_timeout=9000
-  fi
   if [ "$requested_shakedown" = "1" ]; then
     [ "$requested_input_mode" = "shared" ] \
       || die "infrastructure shakedown requires AB_INPUT_MODE=shared"
@@ -1312,7 +1301,7 @@ deploy() {
   fi
   run_preflight_safely
   resolve_a_universe
-  local a_commit b_commit branch_tip candidate_report post_freeze_file gate_tool_commit
+  local a_commit b_commit branch_tip candidate_report post_freeze_file
   a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
   [ "$a_commit" = "$expected_a" ] || die "champion commit drift: expected $expected_a got $a_commit"
   git -C "$MAIN_REPO" fetch origin "$branch" -q
@@ -1321,9 +1310,6 @@ deploy() {
   git -C "$MAIN_REPO" cat-file -e "$expected_b^{commit}" 2>/dev/null \
     || die "frozen challenger commit is unavailable: $expected_b"
   b_commit=$expected_b
-  gate_tool_commit=$(git -C "$MAIN_REPO" rev-parse 'origin/main^{commit}')
-  git -C "$MAIN_REPO" merge-base --is-ancestor "$a_commit" "$gate_tool_commit" \
-    || die "trusted origin/main gate tooling does not descend from the frozen champion"
   git -C "$MAIN_REPO" merge-base --is-ancestor "$b_commit" "$branch_tip" \
     || die "frozen challenger is not an ancestor of the report branch tip"
   [ "$(git -C "$MAIN_REPO" merge-base "$a_commit" "$b_commit")" = "$a_commit" ] \
@@ -1339,6 +1325,24 @@ deploy() {
   git -C "$MAIN_REPO" show "origin/$branch:$report_path" > "$candidate_report" 2>/dev/null \
     || die "candidate report is not present on the challenger evidence tip"
   chmod 600 "$candidate_report"
+  local binding_args=(
+    "$candidate_report"
+    --phase binding
+    --expected-experiment "$experiment"
+    --expected-branch "$branch"
+    --expected-base "$expected_a"
+    --expected-challenger "$expected_b"
+    --expected-runtime-view-delta "$allow_runtime_view_delta"
+    --expected-input-mode "$requested_input_mode"
+    --expected-config-delta "$requested_config_delta"
+    --expected-lane-mode "$requested_lane_mode"
+  )
+  [ "$requested_shakedown" = "0" ] || binding_args+=(--shakedown)
+  (
+    cd "$MAIN_REPO/analysis"
+    node --import tsx src/cli/ab-canary-gate.ts "${binding_args[@]}"
+  ) >/tmp/mev-ab-deploy-binding.log 2>&1 \
+    || die "A/B report identity binding failed (see /tmp/mev-ab-deploy-binding.log)"
   stop_b || safety_abort previous_challenger_stop_verification_failed
   sleep 1
   assert_port_free 8566
@@ -1383,118 +1387,16 @@ deploy() {
   fi
   prepare_challenger_dependencies
   (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
-  prepare_trusted_base "$a_commit"
-  prepare_gate_tooling "$gate_tool_commit" "$a_commit"
   prepare_candidate_universes "$experiment" "$requested_input_mode"
   run_preflight_safely
-  local gate_a_pid gate_a_restarts gate_a_commit
-  gate_a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
-  gate_a_restarts=$(unit_restarts "$A_UNIT")
-  gate_a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
-  [ "$gate_a_commit" = "$a_commit" ] || die "champion commit drifted before candidate replay"
-  assert_port_free 8568
-  assert_port_free 8569
-  assert_port_free 8570
-  assert_port_free 8571
-  assert_port_free 8572
-  assert_port_free 8573
-  assert_port_free 8574
-  assert_port_free "$EVIDENCE_PROXY_PORT"
-  local replay_top_n evidence_rpc
+  local deploy_a_pid deploy_a_restarts deploy_a_commit replay_top_n
+  deploy_a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
+  deploy_a_restarts=$(unit_restarts "$A_UNIT")
+  deploy_a_commit=$(git -C "$MAIN_REPO" rev-parse HEAD)
+  [ "$deploy_a_commit" = "$a_commit" ] || die "champion commit drifted before challenger start"
   replay_top_n=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_TOP_N)
-  replay_top_n=${replay_top_n:-6000}
+  replay_top_n=${replay_top_n:-20000}
   [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "champion SEARCHER_POOL_UNIVERSE_TOP_N is invalid"
-  # Historical production samples can outlive local reth's call-trace retention even while
-  # receipts and live state remain available. Bind replay to the champion's existing private
-  # archive endpoint; live A/B runtime RPCs remain pinned to LOCAL_RPC and are checked separately.
-  evidence_rpc=$(file_env_get "$A_PROCESS_ENV" MAINNET_RPC_URL)
-  [[ "$evidence_rpc" =~ ^https://[^[:space:]]+$ ]] \
-    || die "champion MAINNET_RPC_URL must be a private HTTPS archive endpoint for historical evidence"
-  local gate_rpc="http://127.0.0.1:$EVIDENCE_PROXY_PORT"
-  local shakedown_arg=()
-  [ "$requested_shakedown" = "0" ] || shakedown_arg=(--shakedown)
-  local gate_args=(
-    "$candidate_report"
-    --phase candidate
-    --expected-experiment "$experiment"
-    --expected-branch "$branch"
-    --expected-base "$expected_a"
-    --expected-challenger "$expected_b"
-    --expected-runtime-view-delta "$allow_runtime_view_delta"
-    --expected-input-mode "$requested_input_mode"
-    --expected-config-delta "$requested_config_delta"
-    --artifact-ref "origin/$branch"
-    --report-repo-path "$report_path"
-    --expected-lane-mode "$requested_lane_mode"
-    --require-stage-advance "$requested_require_stage_advance"
-  )
-  gate_args+=("${shakedown_arg[@]}")
-  gate_args+=(
-    --base-root "$TRUSTED_BASE"
-    --challenger-root "$WT"
-    --baseline-universe "$A_REPLAY_UNIVERSE"
-    --challenger-universe "$B_UNIVERSE"
-    --pool-universe-top-n "$replay_top_n"
-    --rpc "$gate_rpc"
-  )
-  # Keep the private upstream out of gate/hunt process command lines and logs.
-  # The trusted wrapper sends it once over stdin to a loopback-only proxy; gate, hunts and Anvil see
-  # only gate_rpc. The worker is its own process group, receives a parent-death signal, and is always
-  # reaped before live deployment proceeds.
-  export -f run_candidate_gate_worker
-  printf '%s' "$evidence_rpc" | python3 -c '
-import ctypes
-import os
-import signal
-import sys
-
-libc = ctypes.CDLL(None)
-if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0:  # PR_SET_PDEATHSIG
-    raise SystemExit(2)
-if os.getppid() == 1:
-    raise SystemExit(2)
-os.setsid()
-os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
-' 'run_candidate_gate_worker "$@"' \
-    "$GATE_TOOL/analysis" "$EVIDENCE_PROXY_PORT" "$candidate_gate_timeout" \
-    "${gate_args[@]}" \
-    >/tmp/mev-ab-candidate-gate.log 2>&1 &
-  GATE_WORKER_PID=$!
-  local gate_worker_ready=0 gate_worker_pgid gate_status
-  for _ in $(seq 1 50); do
-    kill -0 "$GATE_WORKER_PID" 2>/dev/null || break
-    gate_worker_pgid=$(ps -o pgid= -p "$GATE_WORKER_PID" 2>/dev/null | tr -d ' ' || true)
-    if [ "$gate_worker_pgid" = "$GATE_WORKER_PID" ]; then
-      gate_worker_ready=1
-      break
-    fi
-    sleep 0.1
-  done
-  if [ "$gate_worker_ready" != "1" ]; then
-    stop_gate_worker
-    die "production candidate gate worker failed to start (see /tmp/mev-ab-candidate-gate.log)"
-  fi
-  if wait "$GATE_WORKER_PID"; then
-    gate_status=0
-  else
-    gate_status=$?
-  fi
-  stop_gate_worker
-  [ "$gate_status" = "0" ] \
-    || die "production candidate gate failed (see /tmp/mev-ab-candidate-gate.log)"
-  [ "$(git -C "$GATE_TOOL" rev-parse HEAD)" = "$gate_tool_commit" ] \
-    || die "trusted gate tooling commit drifted during candidate replay"
-  [ -z "$(git -C "$GATE_TOOL" status --porcelain --untracked-files=no)" ] \
-    || die "trusted gate tooling became dirty during candidate replay"
-  assert_port_free 8574
-  assert_port_free "$EVIDENCE_PROXY_PORT"
-  run_preflight_safely
-  [ "$(systemctl show -p MainPID --value "$A_UNIT")" = "$gate_a_pid" ] \
-    || die "champion PID changed during candidate replay"
-  [ "$(unit_restarts "$A_UNIT")" = "$gate_a_restarts" ] \
-    || die "champion restarted during candidate replay"
-  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
-    || die "champion commit changed during candidate replay"
   build_runtime_env "$experiment" "$b_commit"
   a_revm_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_REVM_SIM_BIN)
   b_revm_path=$(file_env_get "$B_PROCESS_ENV" SEARCHER_REVM_SIM_BIN)
@@ -1505,8 +1407,8 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
   [ "$a_revm_hash" = "$b_revm_hash" ] || die "A/B revm-sim artifacts differ"
   cpu_layout
   local a_restarts_before a_pid_before
-  a_restarts_before=$gate_a_restarts
-  a_pid_before=$gate_a_pid
+  a_restarts_before=$deploy_a_restarts
+  a_pid_before=$deploy_a_pid
   systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$A_CPUS" >/dev/null
   : > "$LOG"
   now=$(date +%s); lease=$((now + LEASE_SECONDS))
@@ -1576,10 +1478,10 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
   local a_pid_now b_pid_now
   a_pid_now=$(systemctl show -p MainPID --value "$A_UNIT")
   b_pid_now=$(systemctl show -p MainPID --value "$UNIT")
-  [ "$a_pid_now" = "$gate_a_pid" ] || safety_abort champion_pid_changed_during_challenger_warmup
-  [ "$(unit_restarts "$A_UNIT")" = "$gate_a_restarts" ] \
+  [ "$a_pid_now" = "$deploy_a_pid" ] || safety_abort champion_pid_changed_during_challenger_warmup
+  [ "$(unit_restarts "$A_UNIT")" = "$deploy_a_restarts" ] \
     || safety_abort champion_restarted_during_challenger_warmup
-  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$gate_a_commit" ] \
+  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$deploy_a_commit" ] \
     || safety_abort champion_commit_changed_during_challenger_warmup
   if [ "$mode" = "dual" ] && [ "$expected_mev_share" = "1" ]; then
     current_generation_has "$(unit_log_path "$A_UNIT" /var/log/mev-live.log)" 'MEV-Share SSE connected' \
@@ -1649,7 +1551,7 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
   state_update \
     experiment_id "$experiment" branch "$branch" status running lease_until "$lease" outcome "" \
     production_report_path "$report_path" production_report_hash "$(hash_file "$candidate_report")" \
-    a_commit "$a_commit" b_commit "$b_commit" gate_tool_commit "$gate_tool_commit" report_commit "$branch_tip" \
+    a_commit "$a_commit" b_commit "$b_commit" report_commit "$branch_tip" \
     branch_tip_commit "$branch_tip" \
     router_snapshot_path "$a_router_path" router_snapshot_hash "$router_hash" \
     a_config_hash "$A_CONFIG_HASH" b_config_hash "$B_CONFIG_HASH" \
@@ -1662,9 +1564,14 @@ os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-gate-worker", *sys.argv[2:]])
     b_universe_generator_commit "$b_commit" \
     a_universe_hash_after "$a_universe_hash" b_universe_hash_after "$b_universe_hash" failure_reason "" \
     a_universe_path "$A_UNIVERSE" b_universe_path "$B_UNIVERSE" input_mode "$INPUT_MODE" \
+    baseline_replay_universe_path "$A_REPLAY_UNIVERSE" \
+    baseline_replay_universe_hash "$(hash_file "$A_REPLAY_UNIVERSE")" \
+    pool_universe_top_n "$replay_top_n" \
+    six_step_acceptance_status not_run six_step_acceptance_failure "" \
+    six_step_acceptance_log "$ROOT/candidate/$experiment-six-step-acceptance.log" \
+    six_step_acceptance_report "$ROOT/candidate/$experiment-acceptance-report.md" \
     discovery_to_block "$discovery_to_block" allow_runtime_view_delta "$allow_runtime_view_delta" \
     lane_mode "$mode" victim_mode "$requested_victim_mode" infrastructure_shakedown "$requested_shakedown" \
-    require_stage_advance "$requested_require_stage_advance" \
     a_victim_feed_hash "$a_feed_hash" b_victim_feed_hash "$b_feed_hash" \
     a_blockscan_view_hash "$a_view_hash" b_blockscan_view_hash "$b_view_hash" \
     a_blockscan_view_hash_after "$a_view_hash" b_blockscan_view_hash_after "$b_view_hash" \
@@ -1688,6 +1595,268 @@ pause_experiment() {
   capture_fairness
   stop_b || safety_abort challenger_pause_stop_verification_failed
   state_update status paused lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+  cat "$STATE"
+}
+
+six_step_acceptance() {
+  local experiment=$1 current status
+  local branch report_path deployment_report_commit acceptance_report_commit a_commit b_commit acceptance_tool_commit
+  local baseline_universe challenger_universe baseline_hash challenger_hash replay_top_n
+  local allow_runtime_view_delta input_mode lane require_stage_advance shakedown
+  local candidate_report evidence_rpc acceptance_rpc acceptance_timeout acceptance_log acceptance_report_path
+  local a_pid a_restarts a_commit_before worker_ready=0 worker_pgid acceptance_status
+  valid_id "$experiment" || die "invalid experiment id"
+  current=$(state_field experiment_id)
+  [ "$current" = "$experiment" ] || die "state belongs to $current, not $experiment"
+  status=$(state_field status)
+  [ "$status" = "paused" ] \
+    || die "six-step acceptance requires a paused experiment so replay cannot contaminate the live A/B window"
+  unit_is_stopped "$UNIT" || die "challenger must be stopped before six-step acceptance"
+
+  branch=$(state_field branch)
+  report_path=$(state_field production_report_path)
+  deployment_report_commit=$(state_field report_commit)
+  a_commit=$(state_field a_commit)
+  b_commit=$(state_field b_commit)
+  baseline_universe=$(state_field baseline_replay_universe_path)
+  challenger_universe=$(state_field b_universe_path)
+  baseline_hash=$(state_field baseline_replay_universe_hash)
+  challenger_hash=$(state_field b_universe_hash)
+  replay_top_n=$(state_field pool_universe_top_n)
+  allow_runtime_view_delta=$(state_field allow_runtime_view_delta)
+  input_mode=$(state_field input_mode)
+  lane=$(state_field lane_mode)
+  shakedown=$(state_field infrastructure_shakedown)
+  acceptance_log=$(state_field six_step_acceptance_log)
+  acceptance_report_path=$(state_field six_step_acceptance_report)
+
+  valid_branch "$branch" || die "acceptance state has invalid branch"
+  valid_report_path "$report_path" || die "acceptance state has invalid report path"
+  for commit in "$deployment_report_commit" "$a_commit" "$b_commit"; do
+    [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || die "acceptance state contains an invalid commit"
+    git -C "$MAIN_REPO" cat-file -e "$commit^{commit}" 2>/dev/null \
+      || die "acceptance commit is unavailable: $commit"
+  done
+  [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" = "$a_commit" ] \
+    || die "champion commit drifted before six-step acceptance"
+  [ "$(git -C "$WT" rev-parse HEAD)" = "$b_commit" ] \
+    || die "challenger worktree drifted before six-step acceptance"
+  [ -z "$(git -C "$WT" status --porcelain --untracked-files=no)" ] \
+    || die "challenger worktree has tracked changes before six-step acceptance"
+  # Evidence/checker fixes are intentionally decoupled from the live deployment. The runtime SHA stays
+  # frozen, while acceptance consumes the latest report-only descendant and current trusted main tooling.
+  git -C "$MAIN_REPO" fetch origin main "$branch" -q \
+    || die "cannot fetch acceptance report/tooling refs"
+  acceptance_tool_commit=$(git -C "$MAIN_REPO" rev-parse 'origin/main^{commit}')
+  acceptance_report_commit=$(git -C "$MAIN_REPO" rev-parse "origin/$branch^{commit}")
+  git -C "$MAIN_REPO" merge-base --is-ancestor "$a_commit" "$acceptance_tool_commit" \
+    || die "trusted acceptance tooling does not descend from the frozen champion"
+  git -C "$MAIN_REPO" merge-base --is-ancestor "$b_commit" "$acceptance_report_commit" \
+    || die "acceptance report tip does not descend from the frozen challenger"
+  local acceptance_changed_file
+  while IFS= read -r acceptance_changed_file; do
+    [ -n "$acceptance_changed_file" ] || continue
+    case "$acceptance_changed_file" in
+      docs/research/reports/*.md|docs/research/reports/*.json) ;;
+      *) die "acceptance branch changed runtime/non-evidence file after frozen challenger: $acceptance_changed_file" ;;
+    esac
+  done < <(git -C "$MAIN_REPO" diff --name-only "$b_commit..$acceptance_report_commit")
+  [ -n "$acceptance_report_path" ] \
+    || acceptance_report_path="$ROOT/candidate/$experiment-acceptance-report.md"
+  git -C "$MAIN_REPO" show "$acceptance_report_commit:$report_path" > "$acceptance_report_path" 2>/dev/null \
+    || die "acceptance report is missing from the latest report-only tip"
+  chmod 600 "$acceptance_report_path"
+  candidate_report="$acceptance_report_path"
+  require_stage_advance=$(python3 - "$candidate_report" <<'PY'
+import json, re, sys
+text = open(sys.argv[1]).read()
+match = re.search(r"```ab_experiment\s*\n([\s\S]*?)\n```", text)
+if not match:
+    raise SystemExit("acceptance report is missing ab_experiment JSON")
+value = json.loads(match.group(1)).get("require_stage_advance", True)
+if not isinstance(value, bool):
+    raise SystemExit("require_stage_advance must be boolean when present")
+print("1" if value else "0")
+PY
+  ) || die "cannot read require_stage_advance from the acceptance report"
+  [ "$(hash_file "$baseline_universe")" = "$baseline_hash" ] \
+    || die "frozen baseline replay universe hash drifted"
+  [ "$(hash_file "$challenger_universe")" = "$challenger_hash" ] \
+    || die "frozen challenger replay universe hash drifted"
+  [[ "$replay_top_n" =~ ^[1-9][0-9]*$ ]] || die "acceptance pool universe top-N is invalid"
+  [ "$allow_runtime_view_delta" = "0" ] || [ "$allow_runtime_view_delta" = "1" ] \
+    || die "acceptance runtime-view delta is invalid"
+  [ "$input_mode" = "shared" ] || [ "$input_mode" = "challenger" ] \
+    || die "acceptance input mode is invalid"
+  [ "$lane" = "blockscan-only" ] || [ "$lane" = "dual" ] \
+    || die "acceptance lane mode is invalid"
+  [ "$require_stage_advance" = "0" ] || [ "$require_stage_advance" = "1" ] \
+    || die "acceptance stage-advance setting is invalid"
+  [ "$shakedown" = "0" ] || [ "$shakedown" = "1" ] \
+    || die "acceptance shakedown setting is invalid"
+  if [ "$shakedown" = "1" ]; then
+    state_update six_step_acceptance_status not_applicable \
+      six_step_acceptance_failure "infrastructure_shakedown" \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    cat "$STATE"
+    return
+  fi
+
+  [ "$SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS" -ge 300 ] \
+    && [ "$SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS" -le 9000 ] \
+    || die "AB_SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS must be 300..9000"
+  acceptance_timeout=$SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS
+  # B is already stopped. Extend only the journal's paused lease so status/reap cannot misclassify a long
+  # acceptance as a crashed live experiment while the wrapper holds the slot lock.
+  state_update lease_until "$(( $(date +%s) + acceptance_timeout + 900 ))"
+  # Acceptance is evidence collection, not a live-safety gate. Refresh only A's read-only process snapshot;
+  # never call safety_abort here, because a semantic-check failure must not stop the champion.
+  [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] \
+    || die "champion unit is not active for six-step acceptance"
+  a_pid=$(systemctl show -p MainPID --value "$A_UNIT")
+  [ -r "/proc/$a_pid/environ" ] || die "cannot read champion environment for six-step acceptance"
+  tr '\0' '\n' < "/proc/$a_pid/environ" > "$A_PROCESS_ENV"
+  chmod 600 "$A_PROCESS_ENV"
+  a_restarts=$(unit_restarts "$A_UNIT")
+  a_commit_before=$(git -C "$MAIN_REPO" rev-parse HEAD)
+  prepare_trusted_base "$a_commit"
+  prepare_acceptance_tooling "$acceptance_tool_commit" "$a_commit"
+  for port in 8568 8569 8570 8571 8572 8573 8574 8575 "$EVIDENCE_PROXY_PORT"; do
+    assert_port_free "$port"
+  done
+  # Historical evidence may outlive local reth's trace/state retention. Only the independent acceptance
+  # uses A's private archive endpoint; live A/B runtime remains pinned to LOCAL_RPC.
+  evidence_rpc=$(file_env_get "$A_PROCESS_ENV" MAINNET_RPC_URL)
+  [[ "$evidence_rpc" =~ ^https://[^[:space:]]+$ ]] \
+    || die "champion MAINNET_RPC_URL must be a private HTTPS archive endpoint for six-step acceptance"
+  [ "$(file_env_get "$A_PROCESS_ENV" SEARCHER_EV_GATE)" = "1" ] \
+    || die "champion SEARCHER_EV_GATE must be enabled for six-step acceptance"
+  acceptance_rpc="http://127.0.0.1:$EVIDENCE_PROXY_PORT"
+  [ -n "$acceptance_log" ] || acceptance_log="$ROOT/candidate/$experiment-six-step-acceptance.log"
+
+  local shakedown_arg=()
+  local acceptance_args=(
+    "$candidate_report"
+    --phase acceptance
+    --expected-experiment "$experiment"
+    --expected-branch "$branch"
+    --expected-base "$a_commit"
+    --expected-challenger "$b_commit"
+    --expected-runtime-view-delta "$allow_runtime_view_delta"
+    --expected-input-mode "$input_mode"
+    --expected-config-delta ""
+    --artifact-ref "$acceptance_report_commit"
+    --report-repo-path "$report_path"
+    --expected-lane-mode "$lane"
+    --require-stage-advance "$require_stage_advance"
+    --base-root "$TRUSTED_BASE"
+    --challenger-root "$WT"
+    --baseline-universe "$baseline_universe"
+    --challenger-universe "$challenger_universe"
+    --pool-universe-top-n "$replay_top_n"
+    --rpc "$acceptance_rpc"
+  )
+  [ "$shakedown" = "0" ] || shakedown_arg=(--shakedown)
+  acceptance_args+=("${shakedown_arg[@]}")
+
+  local acceptance_env=() key value
+  for key in SEARCHER_EV_GATE SEARCHER_MIN_NET_ETH SEARCHER_ETH_USD \
+    SEARCHER_PROFIT_HAIRCUT_BPS SEARCHER_BACKRUN_GAS_USED SEARCHER_GAS_BUFFER_MULT_X10 \
+    SEARCHER_BRIBE_ALL_ABOVE_GAS SEARCHER_BRIBE_BPS; do
+    value=$(file_env_get "$A_PROCESS_ENV" "$key")
+    [ -z "$value" ] || acceptance_env+=("$key=$value")
+  done
+  state_update six_step_acceptance_status running six_step_acceptance_failure "" \
+    six_step_acceptance_started_at "$(date +%s)" six_step_acceptance_completed_at 0 \
+    require_stage_advance "$require_stage_advance" \
+    acceptance_tool_commit "$acceptance_tool_commit" \
+    six_step_acceptance_report_commit "$acceptance_report_commit" \
+    six_step_acceptance_report_hash "$(hash_file "$candidate_report")"
+  export -f run_six_step_acceptance_worker
+  printf '%s' "$evidence_rpc" | env "${acceptance_env[@]}" python3 -c '
+import ctypes
+import os
+import signal
+import sys
+
+libc = ctypes.CDLL(None)
+if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0:  # PR_SET_PDEATHSIG
+    raise SystemExit(2)
+if os.getppid() == 1:
+    raise SystemExit(2)
+os.setsid()
+os.execvp("bash", ["bash", "-c", sys.argv[1], "ab-acceptance-worker", *sys.argv[2:]])
+' 'run_six_step_acceptance_worker "$@"' \
+    "$ACCEPTANCE_TOOL/analysis" "$EVIDENCE_PROXY_PORT" "$acceptance_timeout" \
+    "${acceptance_args[@]}" \
+    >"$acceptance_log" 2>&1 &
+  ACCEPTANCE_WORKER_PID=$!
+  for _ in $(seq 1 50); do
+    kill -0 "$ACCEPTANCE_WORKER_PID" 2>/dev/null || break
+    worker_pgid=$(ps -o pgid= -p "$ACCEPTANCE_WORKER_PID" 2>/dev/null | tr -d ' ' || true)
+    if [ "$worker_pgid" = "$ACCEPTANCE_WORKER_PID" ]; then
+      worker_ready=1
+      break
+    fi
+    sleep 0.1
+  done
+  if [ "$worker_ready" != "1" ]; then
+    stop_acceptance_worker
+    state_update six_step_acceptance_status fail \
+      six_step_acceptance_failure worker_start_failed six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "six-step acceptance worker failed to start (see $acceptance_log)"
+  fi
+  if wait "$ACCEPTANCE_WORKER_PID"; then
+    acceptance_status=0
+  else
+    acceptance_status=$?
+  fi
+  stop_acceptance_worker
+  if [ "$acceptance_status" != "0" ]; then
+    state_update six_step_acceptance_status fail \
+      six_step_acceptance_failure "worker_exit_$acceptance_status" \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "six-step acceptance failed (see $acceptance_log)"
+  fi
+  if [ "$(git -C "$ACCEPTANCE_TOOL" rev-parse HEAD)" != "$acceptance_tool_commit" ]; then
+    state_update six_step_acceptance_status fail six_step_acceptance_failure tooling_commit_drift \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "trusted acceptance tooling commit drifted"
+  fi
+  if [ -n "$(git -C "$ACCEPTANCE_TOOL" status --porcelain --untracked-files=no)" ]; then
+    state_update six_step_acceptance_status fail six_step_acceptance_failure tooling_dirty \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "trusted acceptance tooling became dirty"
+  fi
+  for port in 8568 8569 8570 8571 8572 8573 8574 8575 "$EVIDENCE_PROXY_PORT"; do
+    assert_port_free "$port"
+  done
+  if [ "$(systemctl show -p MainPID --value "$A_UNIT")" != "$a_pid" ]; then
+    state_update six_step_acceptance_status fail six_step_acceptance_failure champion_pid_changed \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "champion PID changed during six-step acceptance"
+  fi
+  if [ "$(unit_restarts "$A_UNIT")" != "$a_restarts" ]; then
+    state_update six_step_acceptance_status fail six_step_acceptance_failure champion_restarted \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "champion restarted during six-step acceptance"
+  fi
+  if [ "$(git -C "$MAIN_REPO" rev-parse HEAD)" != "$a_commit_before" ]; then
+    state_update six_step_acceptance_status fail six_step_acceptance_failure champion_commit_changed \
+      six_step_acceptance_completed_at "$(date +%s)" \
+      lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
+    die "champion commit changed during six-step acceptance"
+  fi
+  state_update six_step_acceptance_status pass six_step_acceptance_failure "" \
+    six_step_acceptance_completed_at "$(date +%s)" \
+    lease_until "$(( $(date +%s) + PAUSE_LEASE_SECONDS ))"
   cat "$STATE"
 }
 
@@ -1778,9 +1947,10 @@ case "$cmd" in
     || die "usage: deploy <experiment-id> <ab/branch> <base-sha> <challenger-sha> <candidate-report.md> [allow-runtime-view-delta=0|1]"; \
     deploy "$2" "$3" "$4" "$5" "$6" "${7:-0}" ;;
   pause) [ "$#" -eq 2 ] || die "usage: pause <experiment-id>"; pause_experiment "$2" ;;
+  acceptance) [ "$#" -eq 2 ] || die "usage: acceptance <experiment-id>"; six_step_acceptance "$2" ;;
   close) [ "$#" -eq 3 ] || die "usage: close <experiment-id> <outcome>"; close_experiment "$2" "$3" ;;
   renew) [ "$#" -eq 2 ] || die "usage: renew <experiment-id>"; renew "$2" ;;
   reap) reap_stale; [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
   status) reap_stale; [ -f "$STATE" ] && cat "$STATE" || echo '{}' ;;
-  *) die "usage: $0 preflight|deploy|pause|close|renew|reap|status" ;;
+  *) die "usage: $0 preflight|deploy|pause|acceptance|close|renew|reap|status" ;;
 esac

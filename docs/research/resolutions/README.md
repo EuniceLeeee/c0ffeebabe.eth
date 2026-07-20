@@ -1,7 +1,11 @@
-# A/B Resolution Claims
+# Route-stage A/B Resolution Claims
 
-Retained `ab/*` branches are deleted only after a later commit on `origin/main` re-runs the old pinned
-replay successfully. Add one `<problem_id>.json` claim after the later fix is merged:
+This claim/sweep mechanism applies only to retained route-stage or route-equivalence reports that already
+own a pinned replay. Retained systemic scanner/graph/universe/coverage/distribution/performance experiments
+have no route replay: they stay retained until their original cohort contract is retested in a fresh normal
+A/B round and closed through that decisive lifecycle.
+
+For a route report, add one `<problem_id>.json` claim after the later fix is merged:
 
 ```json
 {

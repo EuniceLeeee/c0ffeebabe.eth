@@ -6,6 +6,75 @@ export type ScriptAssessment = "supports" | "contradicts" | "inconclusive";
 export type FinalVerdict = "win" | "lose" | "needs_escalation";
 export type ChangeClass = "performance" | "correctness" | "capability";
 
+export interface AbSixStepDiagnostic {
+  step: 1 | 2 | 3 | 4 | 5 | 6;
+  stage: string;
+  status: "pass" | "fail" | "reject" | "not_reached";
+  [key: string]: unknown;
+}
+
+export function sixStepDiagnosticsError(
+  diagnostics: AbSixStepDiagnostic[],
+  expectedStage: "not_admitted" | "path_found" | "final_sim_success",
+): string | null {
+  const steps = diagnostics.map((entry) => entry.step);
+  if (steps.length === 0 || new Set(steps).size !== steps.length
+      || steps.some((step, index) => index > 0 && step <= steps[index - 1])) {
+    return "did not emit ordered, unique six-step diagnostics";
+  }
+  if (expectedStage === "final_sim_success") {
+    if (JSON.stringify(steps) !== JSON.stringify([1, 2, 3, 4, 5, 6])) {
+      return "did not emit exactly one ordered diagnostic for steps 1..6";
+    }
+    const failed = diagnostics.find((entry) => entry.status !== "pass");
+    return failed
+      ? `six-step acceptance failed at step ${failed.step} (${failed.stage}): ${failed.status}`
+      : null;
+  }
+  if (expectedStage === "path_found") {
+    for (const step of [1, 2] as const) {
+      if (diagnostics.find((entry) => entry.step === step)?.status !== "pass") {
+        return `did not prove path_found at diagnostic step ${step}`;
+      }
+    }
+    return diagnostics.length === 6 && diagnostics.every((entry) => entry.status === "pass")
+      ? "diagnostics reached final_sim_success but the declared stage is path_found"
+      : null;
+  }
+  const graph = diagnostics.find((entry) => entry.step === 1);
+  if (graph?.status === "fail") return null;
+  const enumeration = diagnostics.find((entry) => entry.step === 2);
+  if (graph?.status === "pass" && enumeration?.status === "fail") return null;
+  return "did not prove an explicit graph or enumeration failure for not_admitted";
+}
+
+export function sixStepEquivalenceError(
+  baseline: AbSixStepDiagnostic[],
+  challenger: AbSixStepDiagnostic[],
+): string | null {
+  const baselineError = sixStepDiagnosticsError(baseline, "final_sim_success");
+  if (baselineError) return `baseline ${baselineError}`;
+  const challengerError = sixStepDiagnosticsError(challenger, "final_sim_success");
+  if (challengerError) return `challenger ${challengerError}`;
+  for (let index = 0; index < baseline.length; index++) {
+    if (stableJson(baseline[index]) !== stableJson(challenger[index])) {
+      return `six-step equivalence differs at step ${baseline[index].step} (${baseline[index].stage})`;
+    }
+  }
+  return null;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`;
+  }
+  return value === undefined ? "\"__undefined__\"" : JSON.stringify(value);
+}
+
 export type ResolutionReplaySpec = {
   cwd: string;
   argv: string[];
@@ -518,7 +587,7 @@ export type AbExperiment = {
       sandwich: boolean;
       jit_lp: boolean;
     };
-    sample: {
+    sample?: {
       tx_hash: string;
       block_number: number;
       expected_net_profit_usd: number;
@@ -534,10 +603,10 @@ export type AbExperiment = {
         poolId?: string;
       }>;
     };
-    classification_review: { verdict: "pass" | "fail"; reviewer: string; evidence: string };
-    baseline_stage: "not_admitted" | "path_found" | "final_sim_success";
-    challenger_stage: "not_admitted" | "path_found" | "final_sim_success";
-    replay: {
+    classification_review?: { verdict: "pass" | "fail"; reviewer: string; evidence: string };
+    baseline_stage?: "not_admitted" | "path_found" | "final_sim_success";
+    challenger_stage?: "not_admitted" | "path_found" | "final_sim_success";
+    replay?: {
       result: "pass" | "fail";
       cwd: "listener" | "analysis";
       argv: string[];
@@ -589,9 +658,8 @@ const PRODUCTION_STAGE_ORDER = new Map([
   ["final_sim_success", 2],
 ]);
 
-/** Pre-deploy veto for the current production phase. Historical schema-v2 reports remain readable, but
- * every new B deployment must use schema v3 and bind its behavior change to one real, profitable sample:
- * victim-independent for block-scan, or a pinned swap/oracle counterfactual for dual-lane backrun. */
+/** Identity/configuration binding shared by the fast deploy preflight and the independent acceptance.
+ * This deliberately performs no archive lookup, historical replay, or semantic stage validation. */
 export interface AbProductionCandidateContext {
   experimentId?: string;
   branch?: string;
@@ -605,14 +673,14 @@ export interface AbProductionCandidateContext {
   requireStageAdvance?: boolean;
 }
 
-export function validateAbProductionCandidate(
+export function validateAbDeploymentBinding(
   experiment: AbExperiment,
   context: AbProductionCandidateContext = {},
 ): string[] {
   const errors: string[] = [];
   if (!experiment || typeof experiment !== "object") return ["ab_experiment must be a JSON object"];
   if (experiment.schema_version !== 3) {
-    errors.push("candidate deployment requires schema_version=3 production evidence");
+    errors.push("A/B deployment binding requires schema_version=3");
     return errors;
   }
   if (context.experimentId !== undefined && experiment.experiment_id !== context.experimentId) {
@@ -645,7 +713,7 @@ export function validateAbProductionCandidate(
     }
   }
   if ((experiment.allowed_config_delta ?? []).length !== 0) {
-    errors.push("candidate deployment forbids config deltas; B must differ by one reviewed code variable only");
+    errors.push("A/B deployment forbids config deltas; B must differ by one reviewed code variable only");
   }
   if (context.laneMode !== undefined && experiment.lane_mode !== context.laneMode) {
     errors.push("candidate report lane_mode does not match the deployment request");
@@ -655,7 +723,11 @@ export function validateAbProductionCandidate(
       && requireStageAdvance !== context.requireStageAdvance) {
     errors.push("candidate report require_stage_advance does not match the deployment request");
   }
-  if (context.shakedown === true) {
+  if (context.shakedown !== undefined
+      && (experiment.infrastructure_shakedown === true) !== context.shakedown) {
+    errors.push("candidate report infrastructure_shakedown does not match the deployment request");
+  }
+  if (context.shakedown === true || experiment.infrastructure_shakedown === true) {
     if (experiment.infrastructure_shakedown !== true) {
       errors.push("infrastructure shakedown deployment requires infrastructure_shakedown=true");
     }
@@ -674,35 +746,32 @@ export function validateAbProductionCandidate(
     if (experiment.expected_runtime_view_delta !== false) {
       errors.push("infrastructure shakedown requires expected_runtime_view_delta=false");
     }
-    return errors;
+  } else {
+    errors.push(...validateStaticProductionScope(experiment, context));
   }
-  if (experiment.infrastructure_shakedown === true) {
-    errors.push("production challenger cannot declare infrastructure_shakedown=true");
-  }
+  return errors;
+}
+
+/** Cheap, declaration-only authorization boundary for starting a bounded-live B.
+ * It deliberately does not inspect a receipt, call an RPC, discover tools, or run a replay. */
+function validateStaticProductionScope(
+  experiment: AbExperiment,
+  context: AbProductionCandidateContext,
+): string[] {
+  const errors: string[] = [];
   if ((context.laneMode ?? experiment.lane_mode) !== "dual") {
     errors.push("production Hermes candidate requires lane_mode=dual so block-scan and public-mempool backrun are both observed");
   }
-  if (experiment.deterministic_gate?.result !== "pass") {
-    errors.push("candidate deployment requires deterministic_gate.result=pass");
-  }
-  errors.push(...validateResolutionReplay(experiment.resolution_replay));
-  const selection = experiment.analysis?.tool_selection;
-  if (!selection || selection.catalog_check_exit_code !== 0
-      || !Array.isArray(selection.capability_query) || selection.capability_query.length === 0
-      || !Array.isArray(selection.selected_tools) || selection.selected_tools.length === 0) {
-    errors.push("candidate deployment requires a successful indexed analysis.tool_selection");
-  }
-
   const evidence = experiment.production_evidence;
   if (!evidence || typeof evidence !== "object") {
-    errors.push("production_evidence is required before deploying B");
+    errors.push("production_evidence safety declaration is required for bounded-live deployment");
     return errors;
   }
   if (evidence.searcher_behavior_change !== true) {
     errors.push("production_evidence.searcher_behavior_change must be true; tooling/docs/analysis-only work cannot deploy as B");
   }
   if (evidence.strategy_kind !== "block-scan" && evidence.strategy_kind !== "backrun") {
-    errors.push("production candidate strategy_kind must be block-scan|backrun");
+    errors.push("bounded-live strategy_kind must be block-scan|backrun");
   }
   if (evidence.strategy_kind === "block-scan" && evidence.trigger_kind !== "standing-state") {
     errors.push("block-scan candidate trigger_kind must be standing-state");
@@ -712,19 +781,12 @@ export function validateAbProductionCandidate(
       && evidence.trigger_kind !== "oracle-update") {
     errors.push("backrun candidate trigger_kind must be victim-swap|oracle-update");
   }
-  if (evidence.strategy_kind === "backrun" && (context.laneMode ?? experiment.lane_mode) !== "dual") {
-    errors.push("backrun candidate requires lane_mode=dual");
-  }
-  if (evidence.strategy_kind === "backrun" && evidence.challenger_stage !== "final_sim_success") {
-    errors.push("backrun challenger must reach final_sim_success on the pinned victim counterfactual");
-  }
   if (evidence.route_scope !== "dex-dex" && evidence.route_scope !== "dex-permissionless-protocol") {
     errors.push("production_evidence.route_scope must be dex-dex|dex-permissionless-protocol");
   }
   if (evidence.position_conserving !== true) {
-    errors.push("production candidate must be position-conserving inside the transaction");
+    errors.push("bounded-live scope must be position-conserving inside the transaction");
   }
-
   const posture = evidence.posture;
   const expectedVictimDependent = evidence.strategy_kind === "backrun";
   if (!posture || posture.victim_dependent !== expectedVictimDependent) {
@@ -732,6 +794,45 @@ export function validateAbProductionCandidate(
   }
   for (const key of ["keeper", "inventory", "private_path", "credit", "sandwich", "jit_lp"] as const) {
     if (!posture || posture[key] !== false) errors.push(`production_evidence.posture.${key} must be false`);
+  }
+  return errors;
+}
+
+/** Optional semantic acceptance for a route-stage/equivalence claim. It is intentionally not invoked by
+ * deploy, decision, close, or promotion; it owns only the real on-chain sample, trusted replay, and
+ * baseline/challenger stage evidence for callers that explicitly request this diagnostic. */
+export function validateAbProductionCandidate(
+  experiment: AbExperiment,
+  context: AbProductionCandidateContext = {},
+): string[] {
+  const errors = validateAbDeploymentBinding(experiment, context);
+  if (!experiment || typeof experiment !== "object" || experiment.schema_version !== 3) return errors;
+  if (context.shakedown === true) return errors;
+  const requireStageAdvance = experiment.require_stage_advance ?? true;
+  if (experiment.infrastructure_shakedown === true) {
+    errors.push("production challenger cannot declare infrastructure_shakedown=true");
+  }
+  if (experiment.deterministic_gate?.result !== "pass") {
+    errors.push("six-step acceptance requires deterministic_gate.result=pass");
+  }
+  errors.push(...validateResolutionReplay(experiment.resolution_replay));
+  const selection = experiment.analysis?.tool_selection;
+  if (!selection || selection.catalog_check_exit_code !== 0
+      || !Array.isArray(selection.capability_query) || selection.capability_query.length === 0
+      || !Array.isArray(selection.selected_tools) || selection.selected_tools.length === 0) {
+    errors.push("six-step acceptance requires a successful indexed analysis.tool_selection");
+  }
+
+  const evidence = experiment.production_evidence;
+  if (!evidence || typeof evidence !== "object") {
+    errors.push("production_evidence is required for six-step acceptance");
+    return errors;
+  }
+  if (evidence.strategy_kind === "backrun" && evidence.challenger_stage !== "final_sim_success") {
+    errors.push("backrun challenger must reach final_sim_success on the pinned victim counterfactual");
+  }
+  if (!requireStageAdvance && evidence.strategy_kind === "backrun") {
+    errors.push("backrun equivalence acceptance requires a dedicated trusted comparator; require_stage_advance=false is block-scan-only");
   }
 
   const sample = evidence.sample;
@@ -786,12 +887,16 @@ export function validateAbProductionCandidate(
     }
   }
 
-  const before = PRODUCTION_STAGE_ORDER.get(evidence.baseline_stage);
-  const after = PRODUCTION_STAGE_ORDER.get(evidence.challenger_stage);
+  const before = evidence.baseline_stage === undefined
+    ? undefined
+    : PRODUCTION_STAGE_ORDER.get(evidence.baseline_stage);
+  const after = evidence.challenger_stage === undefined
+    ? undefined
+    : PRODUCTION_STAGE_ORDER.get(evidence.challenger_stage);
   if (before === undefined) errors.push("production_evidence.baseline_stage invalid");
   if (after === undefined) errors.push("production_evidence.challenger_stage invalid");
   if (requireStageAdvance && before !== undefined && after !== undefined && after <= before) {
-    errors.push("the same +EV sample must advance at least one production stage before B deployment");
+    errors.push("the same +EV sample must advance at least one production stage in six-step acceptance");
   }
   if (!evidence.replay || evidence.replay.result !== "pass") {
     errors.push("production_evidence.replay.result must be pass");
@@ -1079,13 +1184,18 @@ export function validateAbExperiment(
       && experiment.mergeability === undefined) {
     errors.push("schema_version>=2 final win requires mergeability evidence for current origin/main vs tested base");
   }
-  if (experiment.schema_version === 3 && experiment.final_verdict === "win") {
-    errors.push(...validateAbProductionCandidate(
+  if (experiment.schema_version === 3) {
+    // Six-step replay is an opt-in diagnostic for route-stage claims, not a universal promotion gate.
+    // Every archived decision still has to preserve the cheap bounded-live identity/scope declaration,
+    // including lose/escalation reports, so the durable safety audit cannot be weakened after deployment.
+    errors.push(...validateAbDeploymentBinding(
       experiment,
       experiment.infrastructure_shakedown === true ? { shakedown: true } : {},
     ));
   }
-  if (experiment.schema_version === 3 && experiment.branch_action === "retained") {
+  if (experiment.schema_version === 3 && experiment.branch_action === "retained"
+      && (experiment.production_evidence?.sample !== undefined
+        || experiment.resolution_replay !== undefined)) {
     errors.push(...validateResolutionReplay(experiment.resolution_replay));
   }
   const resolvedArchive = phase === "close" && experiment.branch_action === "resolved_deleted";

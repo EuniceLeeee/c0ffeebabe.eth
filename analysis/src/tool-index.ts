@@ -70,7 +70,9 @@ export const PRODUCTION_CANDIDATE_CAPABILITIES = [
 ] as const;
 
 export const PRODUCTION_DECISION_CAPABILITIES = [
-  ...PRODUCTION_CANDIDATE_CAPABILITIES,
+  "competitor-window",
+  "classification",
+  "block-scan",
   "ab",
   "comparison",
 ] as const;

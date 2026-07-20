@@ -192,8 +192,11 @@ test("node deploy installs and verifies production analysis tooling before resta
   );
 });
 
-test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode", async () => {
+test("A/B deploy keeps hard safety checks while six-step acceptance is independent", async () => {
   const script = await readFile(join(repoRoot, "scripts", "deploy-ab-challenger.sh"), "utf8");
+  const promotion = await readFile(join(repoRoot, "analysis/src/ab-promotion-close.ts"), "utf8");
+  const deployBody = script.slice(script.indexOf("deploy() {"), script.indexOf("\npause_experiment()"));
+  const closeBody = script.slice(script.indexOf("close_experiment() {"), script.indexOf("\nrenew()"));
   assert.match(script, /mode=\$\(env_get AB_LANE_MODE\); mode=\$\{mode:-blockscan-only\}/);
   assert.match(script, /blockscan-only\|dual/);
   assert.match(script, /SEARCHER_ENABLE_BACKRUN=\$expected_backrun/);
@@ -204,10 +207,9 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /SEARCHER_EAGER_STATE_BACKEND=\$expected_backrun/);
   assert.match(script, /challenger_victim_stream_timeout/);
   assert.match(script, /infrastructure shakedown must run identical searcher code/);
-  assert.match(script, /requested_require_stage_advance=\$\{requested_require_stage_advance:-1\}/);
-  assert.match(script, /AB_REQUIRE_STAGE_ADVANCE must be 0\|1/);
-  assert.match(script, /--require-stage-advance "\$requested_require_stage_advance"/);
-  assert.match(script, /require_stage_advance "\$requested_require_stage_advance"/);
+  assert.doesNotMatch(deployBody, /AB_REQUIRE_STAGE_ADVANCE|--require-stage-advance/);
+  assert.match(script, /get\("require_stage_advance", True\)/);
+  assert.match(script, /--require-stage-advance "\$require_stage_advance"/);
   assert.match(script, /replay_top_n=.*SEARCHER_POOL_UNIVERSE_TOP_N/);
   assert.match(script, /--pool-universe-top-n "\$replay_top_n"/);
   assert.match(script, /evidence_rpc=\$\(file_env_get "\$A_PROCESS_ENV" MAINNET_RPC_URL\)/);
@@ -215,12 +217,12 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /EVIDENCE_PROXY_PORT=8576/);
   assert.match(script, /printf '%s' "\$evidence_rpc" \| MEV_AB_EVIDENCE_PROXY_PORT=/);
   assert.match(script, /server\.listen\(Number\(process\.env\.MEV_AB_EVIDENCE_PROXY_PORT\), "127\.0\.0\.1"\)/);
-  assert.match(script, /run_candidate_gate_worker/);
-  assert.match(script, /AB_CANDIDATE_GATE_TIMEOUT_SECONDS:-2700/);
-  assert.match(script, /AB_CANDIDATE_GATE_TIMEOUT_SECONDS must be 300\.\.9000/);
-  assert.match(script, /requested_require_stage_advance" = "0".*candidate_gate_timeout" -lt 9000/s);
-  assert.match(script, /candidate_gate_timeout=9000/);
-  assert.match(script, /replay_top_n=\$\{replay_top_n:-6000\}/);
+  assert.match(script, /run_six_step_acceptance_worker/);
+  assert.match(script, /AB_SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS:-9000/);
+  assert.match(script, /AB_SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS must be 300\.\.9000/);
+  assert.doesNotMatch(script, /require_stage_advance" = "0".*acceptance_timeout" -lt 9000/s);
+  assert.match(script, /six_step_acceptance_status not_run/);
+  assert.match(script, /replay_top_n=\$\{replay_top_n:-20000\}/);
   assert.match(script, /new https\.Agent\(\{ keepAlive: true, maxSockets: 8 \}\)/);
   assert.match(script, /const retryableStatuses = new Set\(\[502, 503, 504\]\)/);
   assert.match(script, /const maxAttempts = 5/);
@@ -240,14 +242,13 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   assert.match(script, /libc\.prctl\(1, signal\.SIGTERM/);
   assert.match(script, /os\.setsid\(\)/);
   assert.match(script, /kill -TERM -- "-\$pid"/);
-  assert.match(script, /GATE_WORKER_PID=\$!/);
+  assert.match(script, /ACCEPTANCE_WORKER_PID=\$!/);
   assert.match(script, /trap cleanup_evidence_proxy EXIT/);
   assert.match(script, /trap cleanup_ab_wrapper EXIT/);
   assert.match(script, /trap 'exit 130' INT/);
   assert.match(script, /trap 'exit 143' TERM/);
-  assert.match(script, /--rpc "\$gate_rpc"/);
-  assert.match(script, /assert_port_free 8574/);
-  assert.match(script, /assert_port_free "\$EVIDENCE_PROXY_PORT"[\s\S]*run_preflight_safely/);
+  assert.match(script, /--rpc "\$acceptance_rpc"/);
+  assert.match(script, /for port in 8568 8569 8570 8571 8572 8573 8574 8575 "\$EVIDENCE_PROXY_PORT"/);
   assert.doesNotMatch(script, /--rpc "\$evidence_rpc"/);
   assert.doesNotMatch(script, /SEARCHER_LIVE_RPC_URL: requiredArg\("--rpc"\).*evidence_rpc/);
   assert.doesNotMatch(script, /npm run ab-canary-gate/);
@@ -272,14 +273,29 @@ test("A/B wrapper keeps blockscan-only as default and gates explicit dual mode",
   );
   assert.match(script, /Environment=PATH=\/root\/\.cargo\/bin:/);
   assert.match(script, /prepare_trusted_base "\$a_commit"/);
-  assert.match(script, /GATE_TOOL=\$ROOT\/gate-tool/);
-  assert.match(script, /prepare_gate_tooling "\$gate_tool_commit" "\$a_commit"/);
+  assert.match(script, /ACCEPTANCE_TOOL=\$ROOT\/acceptance-tool/);
+  assert.match(script, /prepare_acceptance_tooling "\$acceptance_tool_commit" "\$a_commit"/);
   assert.match(script, /analysis\/package\.json analysis\/package-lock\.json listener\/package-lock\.json/);
-  assert.match(script, /"\$GATE_TOOL\/listener\/node_modules"/);
+  assert.match(script, /"\$ACCEPTANCE_TOOL\/listener\/node_modules"/);
   assert.doesNotMatch(script, /mev-ab-gate-tool-build\.log/);
-  assert.match(script, /"\$GATE_TOOL\/analysis" "\$EVIDENCE_PROXY_PORT"/);
+  assert.match(script, /"\$ACCEPTANCE_TOOL\/analysis" "\$EVIDENCE_PROXY_PORT"/);
   assert.doesNotMatch(script, /"\$TRUSTED_BASE\/analysis" "\$EVIDENCE_PROXY_PORT"/);
   assert.match(script, /--base-root "\$TRUSTED_BASE"/);
+  assert.match(deployBody, /--phase binding/);
+  assert.doesNotMatch(deployBody, /--phase (?:candidate|acceptance)/);
+  assert.doesNotMatch(deployBody, /AB_SIX_STEP_ACCEPTANCE_TIMEOUT_SECONDS must be/);
+  assert.doesNotMatch(deployBody, /run_six_step_acceptance_worker/);
+  assert.doesNotMatch(deployBody, /prepare_trusted_base|prepare_acceptance_tooling/);
+  assert.doesNotMatch(deployBody, /acceptance_tool_commit/);
+  assert.doesNotMatch(closeBody, /six_step_acceptance_status|--phase acceptance|validateAbProductionCandidate/);
+  assert.doesNotMatch(promotion, /six_step_acceptance_status|--phase acceptance|validateAbProductionCandidate/);
+  assert.match(script, /fetch origin main "\$branch"/);
+  assert.match(script, /diff --name-only "\$b_commit\.\.\$acceptance_report_commit"/);
+  assert.match(script, /acceptance branch changed runtime\/non-evidence file after frozen challenger/);
+  assert.ok(
+    deployBody.indexOf("--phase binding") < deployBody.indexOf('systemd-run --unit="$UNIT"'),
+    "fast report binding must precede challenger start",
+  );
   assert.match(script, /AUTHORIZED_MAX_WALLET_ETH=0\.2/);
   assert.match(script, /allowed = \{"PRIVATE_KEY", "OWNER_PRIVATE_KEY", "BOTVM_ADDRESS", "BOTVM_OWNER"\}/);
   assert.match(script, /--property="EnvironmentFile=\$B_PROCESS_ENV"/);
@@ -505,7 +521,9 @@ test("archive evidence proxy preserves JSON-RPC with one saturation retry owner"
     env: {
       ...process.env,
       MEV_AB_EVIDENCE_PROXY_PORT: String(proxyPort),
-      MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS: "100",
+      // Leave enough headroom for the 32-request queue when the full Node test suite runs concurrently;
+      // this still exercises and bounds the deliberately hung upstream call.
+      MEV_AB_EVIDENCE_REQUEST_TIMEOUT_MS: "500",
       NODE_TLS_REJECT_UNAUTHORIZED: "0",
     },
     stdio: ["pipe", "ignore", "pipe"],

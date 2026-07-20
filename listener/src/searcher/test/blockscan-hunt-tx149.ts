@@ -287,8 +287,8 @@ async function run(): Promise<void> {
     || cli.huntPassBudgetMs !== undefined;
   const huntTimeoutMs = diagnostic
     ? Math.max(
-        60 * 60 * 1_000,
-        Number(cli.diagnosticPassBudgetMs ?? HUNT_PASS_BUDGET_MS) + 45 * 60 * 1_000,
+        55 * 60 * 1_000,
+        Number(cli.diagnosticPassBudgetMs ?? HUNT_PASS_BUDGET_MS) + 30 * 60 * 1_000,
       )
     : trustedAcceptanceOverride
       ? 55 * 60 * 1_000
