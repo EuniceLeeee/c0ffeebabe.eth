@@ -2009,7 +2009,13 @@ async function main(): Promise<void> {
               `positive=${refinement.positive} negative=${refinement.negative} ` +
               `failed=${refinement.failed} deadline=${refinement.deadlineHit ? 1 : 0}`,
           );
-          if (passBudgetExceeded("refine")) {
+          if (refinement.deadlineHit || passBudgetExceeded("refine")) {
+            if (refinement.deadlineHit) {
+              console.log(
+                `[searcher/blockscan] block=${blockNumber} skip solve ` +
+                  `reason=refinement_deadline inFlightProbePromises=0`,
+              );
+            }
             logSeg();
             return;
           }

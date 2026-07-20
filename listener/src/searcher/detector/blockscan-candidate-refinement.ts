@@ -67,6 +67,7 @@ export async function refineBlockScanCandidates(
         attempted++;
         try {
           const marginBps = await exactProbeMarginBps(state, opportunity, deadlineAtMs);
+          if (Date.now() >= deadlineAtMs) deadlineHit = true;
           if (marginBps > 0) {
             ranked.push({
               opportunity,
@@ -81,6 +82,7 @@ export async function refineBlockScanCandidates(
             onProbe?.({ index, status: "negative", marginBps });
           }
         } catch (error) {
+          if (Date.now() >= deadlineAtMs) deadlineHit = true;
           fallback.push({ opportunity, index });
           if (error instanceof ProbeDeadlineError) {
             deadlineHit = true;
@@ -109,7 +111,7 @@ export async function refineBlockScanCandidates(
     positive: ranked.length,
     negative,
     failed,
-    deadlineHit: deadlineHit || attempted < opportunities.length,
+    deadlineHit: deadlineHit || attempted < opportunities.length || Date.now() >= deadlineAtMs,
   };
 }
 
@@ -137,20 +139,20 @@ async function exactProbeMarginBps(
   if (amountIn > ceiling || amountIn <= 0n) return 0;
   let amount = amountIn;
   for (const edge of opportunity.seedEdges) {
-    amount = await beforeProbeDeadline(
-      deadlineAtMs,
-      () => quote(
-        edge.adapterId,
-        edge.target,
-        edge.tokenIn,
-        edge.tokenOut,
-        amount,
-        state,
-        undefined,
-        edge.v4PoolKey,
-        edge.poolToken0,
-        edge.poolToken1,
-      ),
+    if (Date.now() >= deadlineAtMs) {
+      throw new ProbeDeadlineError("exact probe deadline reached");
+    }
+    amount = await quote(
+      edge.adapterId,
+      edge.target,
+      edge.tokenIn,
+      edge.tokenOut,
+      amount,
+      state,
+      undefined,
+      edge.v4PoolKey,
+      edge.poolToken0,
+      edge.poolToken1,
     );
     if (amount <= 0n) return 0;
   }
@@ -158,29 +160,6 @@ async function exactProbeMarginBps(
   if (profit <= 0n) return 0;
   const marginBps = Number(profit) * 10_000 / Number(amountIn);
   return Number.isFinite(marginBps) && marginBps > 0 ? marginBps : 0;
-}
-
-async function beforeProbeDeadline<T>(
-  deadlineAtMs: number,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const remainingMs = deadlineAtMs - Date.now();
-  if (remainingMs <= 0) throw new ProbeDeadlineError("exact probe deadline reached");
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation(),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new ProbeDeadlineError("exact probe deadline reached")),
-          remainingMs,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }
 
 function minBigint(a: bigint, b: bigint): bigint {
