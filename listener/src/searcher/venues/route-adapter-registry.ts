@@ -36,6 +36,11 @@ function assertProtocolVenueDeclarations(
   const addresses = new Set<string>();
   const graphOrders = new Set<number>();
   for (const adapter of adapters) {
+    if (adapter.discovery && !adapter.requiresProtocolEdgesFlag) {
+      throw new Error(
+        `route adapter registry: ${adapter.id} discovery must remain behind protocol edge admission`,
+      );
+    }
     const reason = adapter.undeclaredVenueReason?.trim() ?? "";
     if (adapter.declaredVenues.length === 0 ? reason.length === 0 : reason.length !== 0) {
       throw new Error(

@@ -19,6 +19,7 @@ import {
   balancerV3IdentityResolver,
   curveIdentityResolver,
   dodoV2IdentityResolver,
+  erc4626IdentityResolver,
   factoryIdentityResolver,
   IdentityResolverRegistry,
   type IdentityResolverDescriptor,
@@ -92,6 +93,9 @@ const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
     canonicalVenueId: "univ4",
     canonicalIdentitySource: "v4-manager",
   },
+  // Ordinary file/factory intake must not bypass the discovery payout probe.
+  // The discovery-only registry below replaces this exact-seed policy after an
+  // adapter-owned source has produced a candidate.
   { poolAdapter: "erc4626", policy: "trusted-singleton-seed" },
   { poolAdapter: "goldx", policy: "trusted-singleton-seed" },
   { poolAdapter: "metronome-synth", policy: "trusted-singleton-seed" },
@@ -116,9 +120,29 @@ export const PRODUCTION_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
   (poolAdapter) => PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(poolAdapter) !== null,
 );
 
+const PROTOCOL_DISCOVERY_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =
+  PRODUCTION_IDENTITY_POLICIES.map((descriptor) => descriptor.poolAdapter === "erc4626"
+    ? { poolAdapter: "erc4626", policy: "onchain-resolver", resolve: erc4626IdentityResolver }
+    : descriptor
+  );
+
+/**
+ * Canonical production identity registry for adapter-owned protocol discovery.
+ * It differs only at ERC4626: candidate provenance is already constrained by
+ * the discovery capability, and the mandatory payout probe follows identity.
+ */
+export const PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
+  PROTOCOL_DISCOVERY_IDENTITY_POLICIES,
+  (poolAdapter) => PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(poolAdapter) !== null,
+);
+
 assertIdentityResolverCoverage(
   PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
   PRODUCTION_IDENTITY_RESOLVERS,
+);
+assertIdentityResolverCoverage(
+  PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 );
 
 assertLandedEventCoverage(PRODUCTION_ROUTE_ADAPTERS.swaps);

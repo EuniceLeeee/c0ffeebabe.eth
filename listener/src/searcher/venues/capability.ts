@@ -10,6 +10,7 @@ export type VenueId =
   | "univ4"
   | "balancer-v3"
   | "dodo-v2"
+  | "erc4626"
   | "curve"
   | "curve-nr"
   | "goldx"
