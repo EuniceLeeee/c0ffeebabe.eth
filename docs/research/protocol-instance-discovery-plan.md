@@ -63,11 +63,11 @@ adapter，tx `0x14026eed…f4fd53` 另有 uCR/WETH cold DEX pool admission 缺�
 
 ### 2026-07-20 实际工具与节点证据
 
-- 本地在候选提交 `5f9defb` 上实际运行 `tool-index --check`：179 tools；随后用同一 schema-v2
+- 本地在最终文档提交前的候选 `2ef158a` 上实际运行 `tool-index --check`：179 tools；随后用同一 schema-v2
   manifest 经 `tool-run` 跑 8 个工具：ERC4626 instance、observed scanner、coordinator、route-adapters、
   runtime refresh、protocol-edge admission、protocol legs、universe split，8/8 exit 0。manifest:
-  `/tmp/mev-protocol-instance-discovery-tools-5f9defb.json`，SHA-256
-  `2c34494ef57cd6c84d58093517fd35f51f460c8a662b4f174cd7b2002db9b4f8`。
+  `/tmp/mev-protocol-instance-discovery-tools-2ef158a.json`，SHA-256
+  `88f36a3c498ef8b815a30eac3861208fcdcba3225ea4eb8630ba6b7d651ea141`。
 - 生产节点 SSM command `43b87ba5-8cdc-4d5e-baa5-b148bb355e85`：临时 detached checkout，唯一 endpoint
   `SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545`，未启动 searcher、未签名、未广播。节点自身重新执行
   `tool-index --check`(179) 与 `tool-run listener:searcher:protocol-discovery-dex-live-smoke`，receipt exit 0；
