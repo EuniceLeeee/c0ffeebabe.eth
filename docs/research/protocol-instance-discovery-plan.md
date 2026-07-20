@@ -33,56 +33,76 @@ ProtocolRoute { target, tokenIn, tokenOut, action,      // 行为:建边/报价/
                 selector, quoteTarget?, allowanceSpender? }
 ```
 
-## 2. 接口(在 declaredVenues 基础上追加,全部可选、缺省退化)
+## 2. 接口:通用 scanner + 声明式 observation(一个扫描器,多租户)
+
+**核心原则(2026-07-20 收敛):协议种类不各自写 scanner。** 一个通用 protocol interaction scanner
+拥有全部扫描机制(block/log 遍历、cursor、receipt/trace 读取与去重、并发、timeout);每个协议 adapter
+只声明一份 `observation` capability(廉价 shortlist 提示 + 完整匹配 + 建边),不碰 getLogs/cursor。
+错误的旧形状(per-adapter `discoverInstances` 各自 `getLogs`)已废弃——它会让每加一个协议就长一套
+scanner、同一 tx 被多 adapter 重复拉 trace、扫描调度与协议语义纠缠。
 
 ```ts
-interface ProtocolConversionAdapter {
-  // 已有:declaredVenues / undeclaredVenueReason / buildEdges / quoteExact / buildPlanFragment
-  readonly discovery?: {
-    discoverInstances(ctx: DiscoveryContext): Promise<ProtocolCandidate[]>;
+// 通用 scanner 产出的标准化交互(scanner 不认识任何具体协议)
+interface ObservedInteraction {
+  txHash; blockNumber; target; selector; calldata;
+  call: TraceCall; receipt: TransactionReceipt;
+  transfers: TokenTransfer[]; mints: TokenTransfer[]; burns: TokenTransfer[];  // 从整笔 receipt 标准化
+  trace: CallTrace;  // 成功 call tree
+}
 
-    // 强制,且必须位于 route 枚举/probe 之前:地址准入。
-    // 返回 null = 身份根不认该地址 → quarantine,不得 enumerate/quote/入图。
-    attestIdentity(
-      candidate: ProtocolCandidate,
-      blockTag: BlockTag,
-    ): Promise<ProtocolInstance | null>;
-
-    enumerateRoutes(instance: ProtocolInstance, blockTag: BlockTag): Promise<ProtocolRoute[]>;
-    probeRoute(route: ProtocolRoute, ctx: ProbeContext): Promise<RouteProbeResult>;
-    watchRouteChanges?(...): AsyncIterable<RouteChange>;   // Slice D
-  };
+// adapter 只声明协议语义,零扫描机制
+interface ProtocolObservationCapability {
+  readonly eventTopics: readonly string[];   // scanner 聚合成 topic union,一次查询
+  readonly selectors: readonly string[];     // 廉价 shortlist
+  // 完整协议匹配:必须用 receipt Transfer + trace 因果退出双验(不是 selector+asset 就算)
+  matchInteraction(i: ObservedInteraction, ctx): Promise<ProtocolInteractionMatch | null>;
+  // graph-token 主动候选(无观测交互时,对一个地址试匹配);同样只声明语义,循环归 scanner
+  matchAddressCandidate?(address: string, ctx): Promise<ProtocolInteractionMatch | null>;
+  // 从完整匹配生成边;attestIdentity 的 code-hash/impl 绑定与 evidence 复验在此之后仍强制
+  deriveEdges(m: ProtocolInteractionMatch, ctx): Promise<readonly TokenEdge[]>;
 }
 ```
 
-管道固定为:`discover/call observation → attestIdentity → enumerateRoutes → probeRoute → PoolEntry`。
+通用 scanner 管道(一次成型,所有协议共用):
+```
+通用 scanner:聚合所有 adapter 的 topic/selector → getLogs(topic union) → 按 txHash 去重
+  → 每 tx 只读一次 receipt + 一次 trace → normalize 成 ObservedInteraction
+    → 分发给所有 observation:matchInteraction
+      → 0 个完整匹配 = unknown/skip;1 个 = attestIdentity → deriveEdges → 入图;
+        >1 个 = ambiguous,隔离记录不入图(唯一性裁决,见 §4.7)
+```
 
-职责分层(勿混):**`matchTrace` = 候选分类**(selector → adapter family;动态发现时 target 本来
-未知,不要求 matchTrace 先认识地址——现有实现本就混合:balancer-flash/metronome-hgusdc/morpho-flash/
-univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计划改动);
-**`attestIdentity` = 地址准入**(reverse-verify 身份根)。验证通过后持久化绑定
-`(target, selector) → adapter`,proxy 记 implementation/code hash,升级即失效重 attest。
+三条职责分层(勿混):**shortlist(selector/topic)= 廉价初筛**(命中只决定"交给哪个 adapter 深看",
+绝不入图);**matchInteraction = 完整协议匹配**(target/receiver/amount/selector/Transfer 五项 + trace
+因果退出);**attestIdentity = 身份根准入**(reverse-verify,code-hash/impl 绑定,升级即失效重 attest)。
+`matchTrace` 现有混合实现(部分 target-aware、部分仅 selector)保留,仅作 shortlist,均无需改。
 
-退化语义:无 `discovery` 的 adapter = 只有 declaredVenues(现状,单例协议永远停在这档即可)。
+退化语义:无 `observation` 的 adapter = 只有 declaredVenues(单例协议永远停在这档即可)。
 
 ## 3. 分相(每片独立合并,通道按 HISTORICAL-GAP 路由)
 
-### Slice B — discovery coordinator(管道,shadow 模式)【deterministic → replay+smoke 直进 main】
-- 新 coordinator:遍历注册 adapter → `discoverInstances` → **`attestIdentity`** → `enumerateRoutes`
-  → `probeRoute` → 产 `PoolEntry` → 喂 `prepareRuntimePoolRefresh`(与 main.ts 现有
-  `scanActivePools()` 喂法并列)。attest 失败 → quarantine,不进后续任何一步。
-- **shadow 模式**:本片内 probe 结果只打结构化日志(`protocol_discovery` 事件:candidate、
-  probe verdict、would-admit),**不改图**。零准入变更。
-- 复用 builder 的 `blocked_on_adapter` 停车场:coordinator 报告哪些停车候选在 discovery 下会出队
-  (仅日志)。
-- 验收:graph SHA 与 main 逐位一致(shadow 不改图);conformance 扩一条(有 discovery 的 adapter
-  其 probe 必须 fail-closed:任一 probe 调用 revert → 该 route 不产出);tsc;shadow 日志在
-  fork 环境可见样本。
+### Slice B — 通用 protocol interaction scanner(管道,shadow 模式)【deterministic → replay+smoke 直进 main】
+- 新建**一个**通用 scanner:聚合所有注册 adapter 的 `observation.eventTopics/selectors` → topic union
+  `getLogs` → 按 txHash 去重 → 每 tx 只拉一次 receipt + 一次 trace → normalize `ObservedInteraction`
+  → 分发 `matchInteraction` → `attestIdentity` → `deriveEdges` → 喂 `prepareRuntimePoolRefresh`
+  (与 main.ts 现有 `scanActivePools()` 并列)。任一步失败 → 该交互不产出。scanner 拥有 cursor/并发/
+  timeout;**adapter 侧零 getLogs、零 block loop**。
+- **shadow 模式**:probe 结果只打结构化日志(`protocol_discovery` 事件:candidate、verdict、
+  would-admit、ambiguous),**不改图**。零准入变更。
+- 复用 builder 的 `blocked_on_adapter` 停车场:report 哪些停车候选在 discovery 下会出队(仅日志)。
+- **唯一性裁决进 scanner(§4.7)**:一个交互被 ≥2 个 adapter 完整匹配 → ambiguous,隔离记录,不入图。
+- 验收:graph SHA 与 main 逐位一致(shadow 不改图);conformance 扩两条——(a)有 observation 的
+  adapter 其 matchInteraction 必须 fail-closed(receipt/trace 缺任一 → null);(b)ambiguous 交互
+  产出零边;tsc;shadow 日志在 fork 环境可见样本。
 
-### Slice C — erc4626 接口派生 discovery(第一个真准入变更)【Hermes A/B】
-- `discoverInstances`:**候选源 = DEX universe 的 token 集,仅此一个**。legacy 名单**不是候选源**
-  ——它只作为期望召回的答案卷,保存在 discovery 路径之外做比对(P0-1 修正:名单若进候选源,
-  "全部重新发现"即循环论证的假阳性)。
+### Slice C — erc4626 作为通用 scanner 的第一个租户(第一个真准入变更)【Hermes A/B】
+- **首期只接 erc4626 一个 observation**(其余协议后续逐个接入,架构一次成型、租户逐个上)。
+  erc4626 文件只保留 `eventTopics=[Withdraw,Deposit]` / `selectors=[redeem,withdraw,deposit,mint]`
+  + `matchInteraction` + `matchAddressCandidate`(`asset()` 反查)+ `deriveEdges`;**getLogs/block
+  loop 全部上移到 Slice B 的通用 scanner**。
+- 候选来源两条,均由通用 scanner 驱动:观测交互(scanner 扫 topic union)+ graph-token 主动
+  (scanner 遍历 DEX universe token 调 `matchAddressCandidate`)。**legacy 名单不是候选源**——只作
+  期望召回答案卷,存在 discovery 路径之外比对(P0-1:名单进候选源 = 循环论证假阳性)。
 - `attestIdentity`:**`asset()` 可读单独不构成身份**(假合约也能实现 asset());erc4626 的身份 =
   标准接口自洽检查(asset/totalAssets/convertTo* 互相一致)+ 下述 preview 与 fork 收据行为验证
   整体通过 —— 行为即身份,任一环节不符 → null(quarantine)。
@@ -110,10 +130,24 @@ univ4 是 target-aware,curve/dodo/balancer-v3 只看 selector,均无需为本计
   3. 新增 vault 边计数与 probe 拒绝计数入 journal;live 窗口漏斗无回归。
 - 通过后:删除 `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 的 erc4626 段(计划的核心交付物)。
 
-### Slice D — route 生命周期(增删/重 probe)【replay 门 + 谨慎 A/B】
+### Slice D — route 生命周期 + 证据 cache 持久化(增删/重 probe/跨重启)【replay 门 + 谨慎 A/B】
 - `runtime-pool-refresh` 增加 remove/replace 语义(原子替换 graph/index/filter,不再只 append);
 - `watchRouteChanges`(AssetAdded/Removed、实现升级)→ 重 probe → 增删边;
 - 安全边界:删除路径只允许 discovery-owned 边;declaredVenues 边永不被自动删除。
+- **证据 cache 落盘(删 legacy 安全的必要条件,2026-07-20 审出)**:现 `protocolDiscoveryOwnership`
+  纯内存(main.ts 启动 `EMPTY_OWNERSHIP`,无落盘),**逐轮不覆盖(retained 实例带 evidence 复验,
+  休眠 vault 只要实现没变一直留着),但进程重启清零** → 休眠 vault(实测 wYLDS 30d 无 Withdraw、
+  pfOHM 11d)每次重启回退零边,直到 bootstrap 窗口内再现一笔 Withdraw。修法 = 把 admissions+evidence
+  落一个**机器生成的 discovery cache**(每条 `{address, asset, evidence.txHash, codeHash, implWord}`),
+  启动 reload。
+- **reload 必须走 attest,绝不 load 即 admit(合宪红线)**:加载的条目是**候选**,每轮/启动都过
+  `attestIdentity`——用**当前块** `getCode`/`getStorageAt`(自建全节点零 CU)算 code-hash,和 cache 里
+  的比;一致 = 证据仍有效 → admit(不需要新 Withdraw、不碰 archive、不依赖窗口),升级/asset 变 →
+  自动失效 drop。一旦有人让 loaded 条目跳过 attest,它立刻退化回不合宪的手写白名单。
+- 这个 cache 才是删 legacy 的**正解**:它与手写名单的本质区别 = 每条带可链上复验的 evidence 且每轮
+  自复验(machine-generated + reverse-verifiable),而非无条件信任的地址白名单。**删 legacy = 用此
+  cache 替换,不是删了留空**;删除门改为"每个 legacy vault 至少产出过一次 verified 边并入 cache"的
+  持久化召回,而非单次窗口扫描。
 
 ### Slice E — observed-protocol-route catch-up(被动泳道,最低可信度,最后做)【Hermes A/B】
 硬边界(逐条验收):
@@ -158,9 +192,14 @@ route key + 两个调用点(启动回扫最近 N 块 + 现有 refresh timer 扫�
 6. **身份根 attest 是任何 discovery/observed 泳道的准入前置**:进图单位是 `(chainId, target,
    selector, tokenIn, tokenOut)`,但 `target` 必须先过 `attestIdentity` 反查 on-chain 身份根
    (registry/factory/role/标准接口),命中 selector ≠ 通过身份;只按 selector 放行 = 蜜罐可仿冒。
-7. **被动 catch-up 不得冒充首次收割修复**:observed-flow 结构性抓不到首次;任何 slice 的报告不许把
-   "第二次学到了"写成 cold-pool/standing-state gap 已关闭。
-8. Codex 产 diff,逐 hunk 审(gate-full-codex-diff);每片一个 rule-12 gate。
+7. **唯一性裁决(通用 scanner 强制)**:一个 `ObservedInteraction` 被 `matchInteraction` 完整命中
+   `0` 个 = unknown/skip;`1` 个 = 交给该 adapter;`>1` 个 = **ambiguous,隔离记录,不入图**。禁止对
+   selector-shortlist 命中的多 adapter 各自 probe 后取并集(会产生重复/冲突 admission)。
+8. **蜜罐只造假阳性,无资金风险(定性依据,非豁免)**:我们是单笔 flashloan 原子闭环 + 交易完成即
+   转出,蜜罐最坏是白烧 final-sim/TTL(假阳性),不构成资金损失。**但这不豁免身份根 attest**——假阳性
+   仍烧算力/挤占预算,§4.6 的 attest + §2 的 receipt/trace 双验仍是把假阳性挡在开工前的正门;final sim
+   是最后而非唯一的门。
+9. Codex 产 diff,逐 hunk 审(gate-full-codex-diff);每片一个 rule-12 gate。
 
 ## 5. 风险
 
