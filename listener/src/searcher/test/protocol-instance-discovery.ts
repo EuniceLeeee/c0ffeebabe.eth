@@ -4,7 +4,7 @@ import {
   protocolDiscoveryProjectionChangesRouting,
   runProtocolDiscoveryShadow,
 } from "../protocol-instance-discovery.js";
-import { buildStrategyViews } from "../strategy-views.js";
+import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type {
@@ -433,5 +433,45 @@ const probeTimeout = await runProtocolDiscoveryShadow({
 });
 assert(!probeTimeout.evaluationComplete, "probe transport failure must leave evaluation retryable");
 assert(probeTimeout.evaluatedInstanceKeys.size === 0, "probe transport failure must preserve ownership");
+
+// Acceptance 12: flag OFF must leave the graph bit-identical even when the
+// candidate source would otherwise admit a verified instance.
+const flagOffBaseGraph = [edge(TARGET_B, "shadow-wrap", ASSET_B, TARGET_B)];
+const flagOffPools: PoolEntry[] = [{
+  address: TARGET_B, adapter: "erc4626", fixedTokenIn: ASSET_B,
+}];
+const flagOffResult = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter],
+  context,
+  protocolEdgesEnabled: false,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([[successAdapter.id, [candidate(TARGET_A)]]]),
+});
+const flagOffProjection = prepareProtocolDiscoveryProjection({
+  currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  result: flagOffResult,
+  currentBackrunPools: flagOffPools,
+  currentBackrunGraph: flagOffBaseGraph,
+  currentKnownPoolKeys: new Set(flagOffPools.map((pool) => pool.address.toLowerCase())),
+  buildStrategyViews: (pools) => buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 100,
+    poolUniverseGeneratedAt: "test",
+  }),
+});
+assert(
+  flagOffResult.wouldAdmit.length === 0,
+  "flag off must admit zero discovery instances",
+);
+assert(
+  hashTokenGraph(flagOffProjection.backrunGraph) === hashTokenGraph(flagOffBaseGraph),
+  "flag off + valid discovery must leave the graph hash unchanged",
+);
+assert(
+  !protocolDiscoveryProjectionChangesRouting(
+    { strategyViews: flagOffProjection.strategyViews, backrunGraph: flagOffBaseGraph },
+    flagOffProjection,
+  ),
+  "flag off projection must not signal a routing change",
+);
 
 console.log("protocol-instance-discovery PASS");
