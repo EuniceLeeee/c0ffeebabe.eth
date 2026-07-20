@@ -63,6 +63,7 @@ function universePools(path: string, maxPools: number): PoolEntry[] {
 }
 
 async function main(): Promise<void> {
+  const startedAt = Date.now();
   const provider = new ethers.JsonRpcProvider(requiredRpcUrl());
   const universePath = requiredUniversePath();
   const maxPools = Math.max(
@@ -186,13 +187,14 @@ async function main(): Promise<void> {
       );
     }
     console.log(
-      `[protocol-discovery-dex-live-smoke] PASS block=${blockNumber} pools=${maxPools} ` +
+      `[protocol-discovery-dex-live-smoke] PASS block=${blockNumber} pools=${dexUniverse.length} ` +
         `addresses=${candidateAddresses.length} sourceComplete=${firstScan.sourceComplete} ` +
         `admissions=${result.wouldAdmit.length} protocolEdges=${baselineProtocol.length}->${afterProtocol.length} ` +
         `added=${added.length} firstProbes=${firstScan.addressStats.probes} ` +
         `secondProbes=${secondScan.addressStats.probes} secondCacheHits=${secondScan.addressStats.cacheHits} ` +
         `legacyCandidateRecall=${legacyCandidates.length}/${legacyStandard.length} ` +
-        `legacyAdmissionRecall=${legacyRecalled.length}/${legacyStandard.length}`,
+        `legacyAdmissionRecall=${legacyRecalled.length}/${legacyStandard.length} ` +
+        `wallMs=${Date.now() - startedAt}`,
     );
     if (legacyMissing.length > 0) {
       console.log(
