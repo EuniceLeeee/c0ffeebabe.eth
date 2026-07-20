@@ -483,45 +483,141 @@ export async function runProtocolDiscovery(input: {
     }
   }
 
-  // Post-probe cross-adapter adjudication: every claimant above verified its
-  // own candidate first, so this decision is evidence-backed rather than a
-  // pre-identity shortlist kill. Target-level isolation here is interim; route
-  // arbitration (semantic key + fingerprints) refines it per route below.
-  const adaptersByTarget = new Map<string, Set<string>>();
-  for (const admission of wouldAdmit) {
-    const target = admission.instance.pool.address.toLowerCase();
-    const ids = adaptersByTarget.get(target) ?? new Set<string>();
-    ids.add(admission.adapterId);
-    adaptersByTarget.set(target, ids);
-  }
-  const contestedTargets = new Set(
-    [...adaptersByTarget.entries()]
-      .filter(([, ids]) => ids.size > 1)
-      .map(([target]) => target),
-  );
-  const arbitratedAdmissions = wouldAdmit.filter((admission) => {
-    const target = admission.instance.pool.address.toLowerCase();
-    if (!contestedTargets.has(target)) return true;
-    events.push(eventFor(
-      admission.adapterId,
-      { pool: admission.instance.pool, source: admission.instance.sources[0] ?? "verified" },
-      "rejected",
-      "arbitration",
-      `post-probe target contested by adapters: ${
-        [...adaptersByTarget.get(target) ?? []].sort().join(",")
-      }`,
-      0,
-    ));
-    return false;
-  });
+  // Post-probe GLOBAL route arbitration over VerifiedRouteClaims. Every
+  // claimant verified its own candidate first, so this decision is
+  // evidence-backed. Same semantic route + same execution fingerprint =
+  // equivalent claims that deduplicate at edge merge; same semantic route +
+  // DIFFERENT execution fingerprints means at least one adapter admitted a
+  // contract it should not have -> isolate the route and alert. Different
+  // token pairs on one target are distinct semantic routes and coexist.
+  const arbitration = arbitrateRouteClaims(wouldAdmit, events);
 
   return {
     events,
-    wouldAdmit: arbitratedAdmissions,
+    wouldAdmit: arbitration,
     evaluatedInstanceKeys,
     evaluationComplete,
     sourceComplete: candidateSourceComplete && evaluationComplete,
   };
+}
+
+const AUTHORITY_RANKS: Readonly<Record<string, number>> = Object.freeze({
+  "factory-call": 3,
+  "curve-metaregistry": 3,
+  "curve-metaregistry-underlying": 3,
+  "v4-manager": 3,
+  "balancer-v3-vault": 3,
+  "dodo-factory-registry": 3,
+  "erc4626-standard": 3,
+  "factory-event": 2,
+  "factory-call-provisional": 1,
+  "curve-underlying-provisional": 1,
+  "seed": 0,
+});
+
+function authorityRankOf(fingerprint: string): number {
+  return AUTHORITY_RANKS[fingerprint.split("|")[0] ?? ""] ?? 0;
+}
+
+function arbitrateRouteClaims(
+  wouldAdmit: readonly VerifiedProtocolAdmission[],
+  events: ProtocolDiscoveryEvent[],
+): VerifiedProtocolAdmission[] {
+  interface RouteClaimant {
+    readonly admissionIndex: number;
+    readonly claim: VerifiedRouteClaim;
+  }
+  const claimsByRoute = new Map<string, RouteClaimant[]>();
+  wouldAdmit.forEach((admission, admissionIndex) => {
+    for (const claim of admission.claims) {
+      const claimants = claimsByRoute.get(claim.semanticRouteKey) ?? [];
+      claimants.push({ admissionIndex, claim });
+      claimsByRoute.set(claim.semanticRouteKey, claimants);
+    }
+  });
+
+  const quarantinedRouteKeys = new Set<string>();
+  for (const [routeKey, claimants] of claimsByRoute) {
+    const claimantAdapterIds = unique(
+      claimants.map((item) => wouldAdmit[item.admissionIndex].adapterId),
+    );
+    if (claimantAdapterIds.length < 2) continue;
+    const target = claimants[0].claim.edge.target;
+    const fingerprints = unique(claimants.map((item) => item.claim.executionFingerprint));
+    if (fingerprints.length === 1) {
+      // Equivalent claims: the route is admitted once (identical edge identity
+      // deduplicates at merge). The primary owner is chosen by EXPLICIT
+      // authority credential rank, then incumbency; a full tie is co-owned.
+      // Registration order and lexical order never decide.
+      const rankedClaimants = claimants.map((item) => ({
+        adapterId: wouldAdmit[item.admissionIndex].adapterId,
+        rank: authorityRankOf(item.claim.authorityFingerprint),
+        incumbent: wouldAdmit[item.admissionIndex].instance.sources.includes("retained-instance"),
+      }));
+      const maxRank = Math.max(...rankedClaimants.map((item) => item.rank));
+      const topRanked = rankedClaimants.filter((item) => item.rank === maxRank);
+      const incumbents = topRanked.filter((item) => item.incumbent);
+      const primary = topRanked.length === 1
+        ? topRanked[0].adapterId
+        : incumbents.length === 1
+          ? incumbents[0].adapterId
+          : null;
+      events.push({
+        event: "protocol_discovery",
+        adapterId: primary ?? "co-owned",
+        target,
+        selectors: [],
+        sources: ["route-arbitration"],
+        verdict: "would_admit",
+        stage: "arbitration",
+        reason: `equivalent_route_claims claimants=${[...claimantAdapterIds].sort().join(",")}`,
+        wouldAdmitEdges: 1,
+      });
+      continue;
+    }
+    // Non-equivalent full verifications of one semantic route are a
+    // verification-looseness red flag, not a tie to break: isolate the route
+    // for every claimant and alert so the loose gate gets tightened.
+    quarantinedRouteKeys.add(routeKey);
+    for (const adapterId of claimantAdapterIds) {
+      events.push({
+        event: "protocol_discovery",
+        adapterId,
+        target,
+        selectors: [],
+        sources: ["route-arbitration"],
+        verdict: "rejected",
+        stage: "arbitration",
+        reason: `non_equivalent_execution_fingerprints claimants=${
+          [...claimantAdapterIds].sort().join(",")
+        }`,
+        wouldAdmitEdges: 0,
+      });
+    }
+  }
+  if (quarantinedRouteKeys.size === 0) return [...wouldAdmit];
+
+  const arbitrated: VerifiedProtocolAdmission[] = [];
+  for (const admission of wouldAdmit) {
+    const keptClaims = admission.claims.filter(
+      (claim) => !quarantinedRouteKeys.has(claim.semanticRouteKey),
+    );
+    if (keptClaims.length === admission.claims.length) {
+      arbitrated.push(admission);
+      continue;
+    }
+    // A quarantined route strips its edge from every claimant; an admission
+    // left with zero verified routes is dropped (and, being evaluated, any
+    // prior ownership for it is revoked).
+    if (keptClaims.length === 0) continue;
+    const keptEdgeKeys = new Set(keptClaims.map((claim) => protocolEdgeKey(claim.edge)));
+    arbitrated.push({
+      ...admission,
+      edges: admission.edges.filter((edge) => keptEdgeKeys.has(protocolEdgeKey(edge))),
+      claims: keptClaims,
+    });
+  }
+  return arbitrated;
 }
 
 /** Compatibility name retained for the explicit Slice-B shadow gate. */

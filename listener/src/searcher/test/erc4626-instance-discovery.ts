@@ -7,6 +7,7 @@ import {
   createCanonicalProtocolIdentityAttester,
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   prepareProtocolDiscoveryProjection,
+  protocolEdgeKey,
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
@@ -553,7 +554,84 @@ const ambiguousResult = await runProtocolDiscovery({
   sourceComplete: ambiguousAddress.sourceComplete,
   sourceErrors: ambiguousAddress.sourceErrors,
 });
-assert(ambiguousResult.wouldAdmit.length === 0, "cross-adapter target ambiguity must admit no edge");
+// Equivalent full verifications (same semantic routes, same execution
+// fingerprints) deduplicate instead of killing the target: both claimants stay
+// verified, the edge identity is shared, and arbitration reports the tie
+// explicitly as co-owned rather than picking by registration or lexical order.
+assert(
+  ambiguousResult.wouldAdmit.length === 2,
+  "equivalent cross-adapter claims must both stay verified",
+);
+{
+  const [firstAdmission, secondAdmission] = ambiguousResult.wouldAdmit;
+  const firstKeys = [...firstAdmission.edges.map(protocolEdgeKey)].sort().join(";");
+  const secondKeys = [...secondAdmission.edges.map(protocolEdgeKey)].sort().join(";");
+  assert(
+    firstKeys === secondKeys,
+    "equivalent claims must share one edge identity that deduplicates at merge",
+  );
+  assert(
+    ambiguousResult.events.some((event) =>
+      event.stage === "arbitration" &&
+      event.verdict === "would_admit" &&
+      event.adapterId === "co-owned" &&
+      /equivalent_route_claims/.test(event.reason ?? "")
+    ),
+    "equivalent-claim dedup must be reported with explicit authority outcome",
+  );
+}
+
+// Non-equivalent execution fingerprints on ONE semantic route are a
+// verification-looseness red flag: the contested route is isolated for every
+// claimant (other routes keep flowing) and the alert is explicit.
+const execAdapter = {
+  ...erc4626Adapter,
+  id: "protocol:erc4626-test-exec",
+  edgeAdapterIds: ["test-exec-redeem"],
+  discovery: {
+    eventTopics: [],
+    callSelectors: [],
+    async probeCandidate(instance: AttestedProtocolInstance) {
+      return [{
+        adapterId: "test-exec-redeem",
+        target: instance.pool.address,
+        tokenIn: instance.pool.address,
+        tokenOut: instance.pool.fixedTokenIn ?? ASSET,
+        slotKind: "protocol" as const,
+        protocolAction: "redeem" as const,
+        ...deriveEdgeTaxonomy("protocol", "redeem"),
+      }];
+    },
+  },
+} satisfies ProtocolConversionAdapter;
+const execArbitration = await runProtocolDiscovery({
+  adapters: [erc4626Adapter, execAdapter],
+  context: addressContext,
+  protocolEdgesEnabled: true,
+  attestIdentity: attester,
+  candidatesByAdapter: new Map([
+    [erc4626Adapter.id, addressScan.candidatesByAdapter.get(erc4626Adapter.id) ?? []],
+    [execAdapter.id, [{
+      pool: { address: VAULT, adapter: "erc4626" as const, fixedTokenIn: ASSET },
+      source: "test-exec-source",
+    }]],
+  ]),
+});
+assert(
+  execArbitration.wouldAdmit.length === 1 &&
+    execArbitration.wouldAdmit[0].adapterId === erc4626Adapter.id &&
+    execArbitration.wouldAdmit[0].edges.length === 1 &&
+    execArbitration.wouldAdmit[0].edges[0].adapterId === "erc4626-deposit",
+  "non-equivalent claims must isolate only the contested route",
+);
+assert(
+  execArbitration.events.filter((event) =>
+    event.stage === "arbitration" &&
+    event.verdict === "rejected" &&
+    /non_equivalent_execution_fingerprints/.test(event.reason ?? "")
+  ).length === 2,
+  "non-equivalent route claims must alert for every claimant",
+);
 
 // Core 5: a retained instance re-enters ONLY its owning family's candidate
 // set. A sibling family sharing the pool adapter kind must not inherit it.
