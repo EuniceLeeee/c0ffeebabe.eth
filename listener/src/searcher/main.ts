@@ -662,6 +662,15 @@ async function main(): Promise<void> {
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
   const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
+  const blockScanLargeGraphPassBudgetMs = Number(
+    process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
+  );
+  const blockScanLargeGraphEdgeThreshold = Number(
+    process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD ?? "20000",
+  );
+  const blockScanSolveReserveMs = Number(
+    process.env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000",
+  );
   const blockScanFullWarmBudgetMs = Number(
     process.env.SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS ?? "240000",
   );
@@ -777,6 +786,10 @@ async function main(): Promise<void> {
       `submit=${config.blockScanSubmit ? "on" : "off"} ` +
       `solveConcurrency=${blockScanSolveConcurrency} ` +
       `refineCandidates=${blockScanRefineCandidates} ` +
+      `passBudgetMs=${blockScanPassBudgetMs} ` +
+      `largeGraphBudgetMs=${blockScanLargeGraphPassBudgetMs} ` +
+      `largeGraphEdges=${blockScanLargeGraphEdgeThreshold} ` +
+      `solveReserveMs=${blockScanSolveReserveMs} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -1653,9 +1666,12 @@ async function main(): Promise<void> {
             `[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)} ` +
               `stateBlock=${stateBlockNumber}`,
           );
+          const incrementalPassBudgetMs = edges.length >= blockScanLargeGraphEdgeThreshold
+            ? Math.max(blockScanPassBudgetMs, blockScanLargeGraphPassBudgetMs)
+            : blockScanPassBudgetMs;
           activePassBudgetMs = blockScanWarmPassBudgetMs(
             warmPlan,
-            blockScanPassBudgetMs,
+            incrementalPassBudgetMs,
             blockScanFullWarmBudgetMs,
           );
           passDeadlineAtMs = passStarted + activePassBudgetMs;
@@ -1867,6 +1883,20 @@ async function main(): Promise<void> {
               `exactCurveMidFailed=${exactCurveMids.failed}`,
           );
 
+          const [sourceBlockHash, canonicalSourceBlockHash] = await Promise.all([
+            readBlockHash(blockScanStateForPass.provider, blockNumber),
+            readBlockHash(provider, blockNumber),
+          ]);
+          if (sourceBlockHash !== canonicalSourceBlockHash) {
+            console.log(
+              `[searcher/blockscan] block=${blockNumber} source_hash_mismatch ` +
+                `fork=${sourceBlockHash} canonical=${canonicalSourceBlockHash}`,
+            );
+            discardFullWarmProgress();
+            logSeg();
+            return;
+          }
+
           if (passBudgetExceeded("scan")) {
             logSeg();
             return;
@@ -1888,11 +1918,19 @@ async function main(): Promise<void> {
             logSeg();
             return;
           }
+          const refinementReserveMs = Math.min(
+            Math.max(0, blockScanSolveReserveMs),
+            Math.max(1, Math.floor(activePassBudgetMs / 3)),
+          );
+          const refinementDeadlineAtMs = Math.max(
+            Date.now(),
+            passDeadlineAtMs - refinementReserveMs,
+          );
           const refinement = await refineBlockScanCandidates(
             blockScanStateForPass,
             coarseScan.opportunities,
             cfg.maxCandidates,
-            passDeadlineAtMs,
+            refinementDeadlineAtMs,
             cfg.pricedTokens,
           );
           const scan = { ...coarseScan, opportunities: refinement.opportunities };
@@ -2040,6 +2078,7 @@ async function main(): Promise<void> {
                         blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
                       },
                       profitTokenValuation,
+                      sourceBlockHash,
                     });
                   } finally {
                     solveSubmitMs += Date.now() - submitStarted;
@@ -3420,6 +3459,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   passDeadlineAtMs: number;
   rejectBlacklist: BlockScanRejectBlacklistState;
   profitTokenValuation: ProfitTokenValuation;
+  sourceBlockHash: string;
   strategyVersions: {
     strategy_view_version: string;
     blockscan_view_hash: string;
@@ -3440,6 +3480,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     passDeadlineAtMs,
     rejectBlacklist,
     profitTokenValuation,
+    sourceBlockHash,
     strategyVersions,
   } = params;
   const route = resolvedRouteSummary(resolved.root);
@@ -3499,7 +3540,23 @@ async function maybeSubmitBlockScanAtomic(params: {
 
   let targetBlock = sourceBlock + 1;
   try {
-    targetBlock = Math.max(sourceBlock, await provider.getBlockNumber()) + 1;
+    const [currentHead, canonicalSourceBlock] = await Promise.all([
+      provider.getBlockNumber(),
+      provider.getBlock(sourceBlock),
+    ]);
+    targetBlock = Math.max(sourceBlock, currentHead) + 1;
+    const canonicalSourceBlockHash = canonicalSourceBlock?.hash?.toLowerCase();
+    if (
+      currentHead !== sourceBlock ||
+      canonicalSourceBlockHash !== sourceBlockHash.toLowerCase()
+    ) {
+      const error =
+        `stale source block ${sourceBlock} head=${currentHead} ` +
+        `forkHash=${sourceBlockHash} canonicalHash=${canonicalSourceBlockHash ?? "missing"}`;
+      console.log(`[searcher/blockscan] block=${sourceBlock} stale source ring=${ring}: ${error}`);
+      drop(targetBlock, "final_verify", "blockscan_stale_state", error);
+      return;
+    }
     const sim = await simulator.simulate(resolved);
     emitEvent({
       type: "simulation_result",
