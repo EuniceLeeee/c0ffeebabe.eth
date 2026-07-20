@@ -1,5 +1,9 @@
-import type { ethers } from "ethers";
+import { ethers } from "ethers";
 import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
+import {
+  createProtocolDiscoveryEvidenceCache,
+  type ProtocolDiscoveryEvidenceCache,
+} from "./protocol-discovery-cache.js";
 import {
   createCanonicalProtocolIdentityAttester,
   createPinnedProtocolDiscoveryContext,
@@ -9,10 +13,15 @@ import {
   type ProtocolDiscoveryProjection,
   type ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
-import { scanObservedProtocolTrace } from "./observed-protocol-discovery.js";
+import {
+  scanObservedProtocolTrace,
+  scanProtocolDiscoveryRange,
+  type ProtocolDiscoveryRangeResult,
+} from "./observed-protocol-discovery.js";
 import type { StrategyViews } from "./strategy-views.js";
 import type { IdentityResolverRegistry } from "./venues/identity.js";
 import type {
+  ProtocolCandidate,
   ProtocolConversionAdapter,
   ProtocolDiscoveryReceipt,
 } from "./venues/route-leg-adapter.js";
@@ -30,24 +39,100 @@ export interface ProtocolDiscoveryRuntimeInput {
   readonly buildStrategyViews: (pools: PoolEntry[]) => StrategyViews;
 }
 
+/**
+ * The active protocol address source is the DEX graph only. Protocol edges are
+ * deliberately excluded so a legacy/static protocol row cannot become its own
+ * discovery credential.
+ */
+export function protocolCandidateAddressesFromDexGraph(
+  backrunGraph: readonly TokenEdge[],
+  blockscanGraph?: readonly TokenEdge[],
+): string[] {
+  return [...new Set(
+    [...backrunGraph, ...(blockscanGraph ?? [])]
+      .filter((edge) => edge.slotKind === "swap")
+      .flatMap((edge) => [edge.tokenIn.toLowerCase(), edge.tokenOut.toLowerCase()]),
+  )];
+}
+
+/**
+ * Full file-backed DEX universe domain. This deliberately reads only DEX token
+ * metadata; fixed protocol tokens are not allowed to bootstrap discovery.
+ */
+export function protocolCandidateAddressesFromDexUniverse(
+  pools: readonly PoolEntry[],
+  dexPoolAdapters: ReadonlySet<string>,
+): string[] {
+  const addresses = new Set<string>();
+  for (const pool of pools) {
+    if (!dexPoolAdapters.has(pool.adapter)) continue;
+    const rawTokens = [
+      pool.token0,
+      pool.token1,
+      pool.currency0,
+      pool.currency1,
+      ...(pool.underlyingCoins ?? []),
+    ];
+    for (const raw of rawTokens) {
+      if (!raw) continue;
+      try {
+        const address = ethers.getAddress(raw);
+        if (address !== ethers.ZeroAddress) addresses.add(address.toLowerCase());
+      } catch {
+        // Invalid universe metadata was already rejected by identity admission.
+      }
+    }
+  }
+  return [...addresses].sort();
+}
+
 export async function prepareActiveProtocolDiscoveryPass(
   input: ProtocolDiscoveryRuntimeInput & {
     readonly blockNumber: number;
     readonly fromBlock: number;
-    readonly candidateTokens: readonly string[];
-    readonly graphTokens?: readonly string[];
+    readonly graphTokens: readonly string[];
+    readonly candidateAddresses: readonly string[];
+    readonly evidenceCache?: ProtocolDiscoveryEvidenceCache;
+    readonly bootstrapCandidates?: ReadonlyMap<string, readonly ProtocolCandidate[]>;
     readonly shadow: boolean;
   },
-): Promise<{ result: ProtocolDiscoveryResult; projection: ProtocolDiscoveryProjection | null }> {
+): Promise<{
+  result: ProtocolDiscoveryResult;
+  projection: ProtocolDiscoveryProjection | null;
+  scanner: ProtocolDiscoveryRangeResult;
+}> {
   const retainedInstances = [...input.currentOwnership.admissions.values()].map((item) => item.instance);
   const context = createPinnedProtocolDiscoveryContext({
     provider: input.provider,
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
-    candidateTokens: input.candidateTokens,
     graphTokens: input.graphTokens,
     retainedInstances,
   });
+  const scanned = input.protocolEdgesEnabled
+    ? await scanProtocolDiscoveryRange({
+      adapters: input.adapters,
+      context,
+      candidateAddresses: input.candidateAddresses,
+      evidenceCache: input.evidenceCache ?? createProtocolDiscoveryEvidenceCache(),
+    })
+    : {
+      candidatesByAdapter: new Map(),
+      unknownSelectors: [],
+      sourceComplete: true,
+      eventSourceComplete: true,
+      addressSourceComplete: true,
+      sourceErrors: [],
+      addressStats: {
+        addresses: 0,
+        codeReads: 0,
+        cacheHits: 0,
+        probes: 0,
+        matches: 0,
+        negatives: 0,
+        ambiguous: 0,
+      },
+    };
   const result = await runProtocolDiscovery({
     adapters: input.adapters,
     context,
@@ -55,9 +140,16 @@ export async function prepareActiveProtocolDiscoveryPass(
     attestIdentity: createCanonicalProtocolIdentityAttester({
       identityRegistry: input.identityRegistry,
     }),
+    candidatesByAdapter: mergeCandidateMaps(
+      scanned.candidatesByAdapter,
+      input.bootstrapCandidates,
+    ),
+    sourceComplete: scanned.sourceComplete,
+    sourceErrors: scanned.sourceErrors,
   });
   return {
     result,
+    scanner: scanned,
     projection: input.shadow
       ? null
       : prepareProtocolDiscoveryProjection({
@@ -78,9 +170,7 @@ export async function prepareObservedProtocolDiscoveryPass(
     readonly txHash: string;
     readonly receipt: ProtocolDiscoveryReceipt;
     readonly trace: unknown;
-    readonly candidateTokens: readonly string[];
-    readonly graphTokens?: readonly string[];
-    readonly seenAddressSelectors?: ReadonlySet<string>;
+    readonly graphTokens: readonly string[];
   },
 ): Promise<{
   result: ProtocolDiscoveryResult;
@@ -91,18 +181,18 @@ export async function prepareObservedProtocolDiscoveryPass(
     provider: input.provider,
     blockNumber: input.blockNumber,
     fromBlock: input.blockNumber,
-    candidateTokens: input.candidateTokens,
     graphTokens: input.graphTokens,
     retainedInstances: [],
   });
-  const observed = await scanObservedProtocolTrace({
-    adapters: input.adapters,
-    context,
-    txHash: input.txHash,
-    receipt: input.receipt,
-    trace: input.trace,
-    seenAddressSelectors: input.seenAddressSelectors,
-  });
+  const observed = input.protocolEdgesEnabled
+    ? await scanObservedProtocolTrace({
+      adapters: input.adapters,
+      context,
+      txHash: input.txHash,
+      receipt: input.receipt,
+      trace: input.trace,
+    })
+    : { candidatesByAdapter: new Map(), unknownSelectors: [] };
   const result = await runProtocolDiscovery({
     adapters: input.adapters,
     context,
@@ -110,8 +200,7 @@ export async function prepareObservedProtocolDiscoveryPass(
     attestIdentity: createCanonicalProtocolIdentityAttester({
       identityRegistry: input.identityRegistry,
     }),
-    observedCandidates: observed.candidatesByAdapter,
-    runActiveDiscovery: false,
+    candidatesByAdapter: observed.candidatesByAdapter,
     includeRetained: false,
   });
   const projection = prepareProtocolDiscoveryProjection({
@@ -124,4 +213,19 @@ export async function prepareObservedProtocolDiscoveryPass(
     buildStrategyViews: input.buildStrategyViews,
   });
   return { result, projection, unknownSelectors: observed.unknownSelectors };
+}
+
+function mergeCandidateMaps(
+  first: ReadonlyMap<string, readonly ProtocolCandidate[]>,
+  second?: ReadonlyMap<string, readonly ProtocolCandidate[]>,
+): ReadonlyMap<string, readonly ProtocolCandidate[]> {
+  const merged = new Map<string, ProtocolCandidate[]>();
+  for (const source of [first, second ?? new Map()]) {
+    for (const [adapterId, candidates] of source) {
+      const current = merged.get(adapterId) ?? [];
+      current.push(...candidates);
+      merged.set(adapterId, current);
+    }
+  }
+  return merged;
 }

@@ -41,6 +41,14 @@ function assertProtocolVenueDeclarations(
         `route adapter registry: ${adapter.id} discovery must remain behind protocol edge admission`,
       );
     }
+    if (
+      adapter.discovery?.candidateFromAddress &&
+      !adapter.discovery.addressMatcherVersion?.trim()
+    ) {
+      throw new Error(
+        `route adapter registry: ${adapter.id} address discovery requires addressMatcherVersion`,
+      );
+    }
     const reason = adapter.undeclaredVenueReason?.trim() ?? "";
     if (adapter.declaredVenues.length === 0 ? reason.length === 0 : reason.length !== 0) {
       throw new Error(

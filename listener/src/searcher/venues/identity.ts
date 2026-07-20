@@ -263,10 +263,27 @@ export const erc4626IdentityResolver: OnchainIdentityResolver = async ({
       venueId: "erc4626",
       identitySource: "erc4626-standard",
     };
-  } catch {
-    return { ok: false, reason: "identity_call_failed" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: isPermanentErc4626IdentityFailure(error)
+        ? "erc4626_nonstandard"
+        : "identity_call_failed",
+    };
   }
 };
+
+function isPermanentErc4626IdentityFailure(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code).toUpperCase()
+    : "";
+  if (new Set(["CALL_EXCEPTION", "BAD_DATA", "INVALID_ARGUMENT", "NUMERIC_FAULT"]).has(code)) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /execution reverted|could not decode|invalid (?:result|data|address)|unsupported operation/i
+    .test(message);
+}
 
 export async function resolvePoolIdentity(
   backend: IdentityCallBackend,

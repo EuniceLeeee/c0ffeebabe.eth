@@ -28,15 +28,12 @@ const context: ProtocolDiscoveryContext = {
   blockNumber: 123,
   fromBlock: 100,
   toBlock: 123,
-  candidateTokens: [TARGET_A, TARGET_B, TARGET_C, TARGET_D],
   graphTokens: [TARGET_A, TARGET_B, TARGET_C, TARGET_D],
   retainedInstances: [],
   backend: {
     async call() { throw new Error("unexpected call"); },
     async getCode() { throw new Error("unexpected getCode"); },
     async getStorageAt() { throw new Error("unexpected getStorageAt"); },
-    async getCodeAt() { throw new Error("unexpected getCodeAt"); },
-    async getStorageAtBlock() { throw new Error("unexpected getStorageAtBlock"); },
     async getLogs() { return []; },
     async getTransactionReceipt() { return null; },
     async traceTransaction() { throw new Error("unexpected traceTransaction"); },
@@ -100,13 +97,11 @@ function adapter(discovery: ProtocolDiscoveryCapability): ProtocolConversionAdap
 const originalGraph = [edge(TARGET_B, "shadow-wrap", ASSET_B, TARGET_B)];
 const originalGraphSnapshot = JSON.stringify(originalGraph);
 
-const calls = { discover: 0, identity: 0, probe: 0 };
+const calls = { identity: 0, probe: 0 };
 const callCount = (name: keyof typeof calls): number => calls[name];
 const successAdapter = adapter({
-  async discoverCandidates() {
-    calls.discover++;
-    return [candidate(TARGET_A), candidate(TARGET_A)];
-  },
+  eventTopics: [],
+  callSelectors: [],
   async probeCandidate(instance) {
     calls.probe++;
     return [
@@ -126,8 +121,8 @@ const disabled = await runProtocolDiscoveryShadow({
     calls.identity++;
     return null;
   },
+  candidatesByAdapter: new Map([[successAdapter.id, [candidate(TARGET_A), candidate(TARGET_A)]]]),
 });
-assert(callCount("discover") === 0, "feature flag must stop candidate discovery");
 assert(callCount("identity") === 0, "feature flag must stop identity attestation");
 assert(callCount("probe") === 0, "feature flag must stop route probing");
 assert(disabled.wouldAdmit.length === 0, "feature flag off must admit zero edges");
@@ -141,8 +136,8 @@ const success = await runProtocolDiscoveryShadow({
     calls.identity++;
     return { ...item.pool, identitySource: "seed" };
   },
+  candidatesByAdapter: new Map([[successAdapter.id, [candidate(TARGET_A), candidate(TARGET_A)]]]),
 });
-assert(callCount("discover") === 1, "enabled shadow must discover once");
 assert(callCount("identity") === 1, "duplicate candidate must attest once");
 assert(callCount("probe") === 1, "duplicate candidate must probe once");
 assert(success.wouldAdmit.length === 1, "verified instance must produce one shadow admission");
@@ -153,12 +148,8 @@ assert(JSON.stringify(originalGraph) === originalGraphSnapshot, "shadow discover
 
 const changedRoute = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    async discoverCandidates() {
-      return [{
-        pool: { address: TARGET_A, adapter: "erc4626", fixedTokenIn: ASSET_B },
-        source: "current-chain-source",
-      }];
-    },
+    eventTopics: [],
+    callSelectors: [],
     async probeCandidate(instance) {
       const asset = instance.pool.fixedTokenIn!;
       return [edge(instance.pool.address, "shadow-wrap", asset, instance.pool.address)];
@@ -167,6 +158,10 @@ const changedRoute = await runProtocolDiscoveryShadow({
   context: { ...context, retainedInstances: [success.wouldAdmit[0].instance] },
   protocolEdgesEnabled: true,
   async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([["protocol:shadow-test", [{
+    pool: { address: TARGET_A, adapter: "erc4626", fixedTokenIn: ASSET_B },
+    source: "current-chain-source",
+  }]]]),
 });
 assert(changedRoute.wouldAdmit.length === 1, "current metadata must replace retained instance shape");
 assert(
@@ -177,7 +172,8 @@ assert(
 let rejectedProbeCalls = 0;
 const identityRejected = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    async discoverCandidates() { return [candidate(TARGET_A), candidate(TARGET_B)]; },
+    eventTopics: [],
+    callSelectors: [],
     async probeCandidate() {
       rejectedProbeCalls++;
       return [edge(TARGET_A, "shadow-wrap", ASSET_A, TARGET_A)];
@@ -189,6 +185,7 @@ const identityRejected = await runProtocolDiscoveryShadow({
     if (item.pool.address.toLowerCase() === TARGET_A.toLowerCase()) return null;
     throw new Error("identity rpc reverted");
   },
+  candidatesByAdapter: new Map([["protocol:shadow-test", [candidate(TARGET_A), candidate(TARGET_B)]]]),
 });
 assert(identityRejected.wouldAdmit.length === 0, "identity failure must admit zero edges");
 assert(rejectedProbeCalls === 0, "identity failure must stop probing");
@@ -199,7 +196,8 @@ assert(
 
 const probeRejected = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    async discoverCandidates() { return [candidate(TARGET_A), candidate(TARGET_B)]; },
+    eventTopics: [],
+    callSelectors: [],
     async probeCandidate(instance) {
       if (instance.pool.address.toLowerCase() === TARGET_A.toLowerCase()) {
         throw new Error("probe reverted");
@@ -210,6 +208,7 @@ const probeRejected = await runProtocolDiscoveryShadow({
   context,
   protocolEdgesEnabled: true,
   async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([["protocol:shadow-test", [candidate(TARGET_A), candidate(TARGET_B)]]]),
 });
 assert(probeRejected.wouldAdmit.length === 0, "probe revert/empty must admit zero edges");
 assert(
@@ -219,9 +218,8 @@ assert(
 
 const malformedEdges = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    async discoverCandidates() {
-      return [candidate(TARGET_A), candidate(TARGET_B), candidate(TARGET_C), candidate(TARGET_D)];
-    },
+    eventTopics: [],
+    callSelectors: [],
     async probeCandidate(instance) {
       const target = instance.pool.address.toLowerCase();
       const valid = edge(instance.pool.address, "shadow-wrap", ASSET_A, instance.pool.address);
@@ -234,6 +232,10 @@ const malformedEdges = await runProtocolDiscoveryShadow({
   context,
   protocolEdgesEnabled: true,
   async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([[
+    "protocol:shadow-test",
+    [candidate(TARGET_A), candidate(TARGET_B), candidate(TARGET_C), candidate(TARGET_D)],
+  ]]),
 });
 assert(malformedEdges.wouldAdmit.length === 0, "malformed/duplicate routes must admit zero edges");
 assert(
@@ -244,14 +246,41 @@ assert(ordinaryBuildEdgesCalls === 0, "shadow probe results must not be re-expan
 
 const incomplete = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    async discoverCandidates() { throw new Error("rpc range failed"); },
+    eventTopics: [],
+    callSelectors: [],
     async probeCandidate() { return []; },
   })],
   context,
   protocolEdgesEnabled: true,
   async attestIdentity() { return null; },
+  sourceComplete: false,
+  sourceErrors: [{ adapterId: null, target: null, reason: "rpc range failed" }],
 });
 assert(!incomplete.sourceComplete, "candidate-source failure must prevent scan cursor advancement");
+
+const competingAdapter: ProtocolConversionAdapter = {
+  ...successAdapter,
+  id: "protocol:shadow-test-competing",
+};
+const ambiguousAcrossSources = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter, competingAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity() { throw new Error("ambiguous target must not reach identity"); },
+  candidatesByAdapter: new Map([
+    [successAdapter.id, [candidate(TARGET_C)]],
+    [competingAdapter.id, [{ ...candidate(TARGET_C), source: "second-source" }]],
+  ]),
+});
+assert(
+  ambiguousAcrossSources.wouldAdmit.length === 0,
+  "one target classified by different adapters across sources must be quarantined",
+);
+assert(
+  ambiguousAcrossSources.events.length === 2 &&
+    ambiguousAcrossSources.events.every((item) => item.reason?.startsWith("ambiguous target adapters:")),
+  "cross-source adapter ambiguity must be explicit for both ownership keys",
+);
 
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
@@ -267,5 +296,52 @@ const projection = prepareProtocolDiscoveryProjection({
 });
 assert(projection.baseOwnershipVersion === 0, "projection must carry its ownership CAS base");
 assert(projection.ownership.version === 1, "evaluated admission must advance ownership version");
+
+const retainedContext: ProtocolDiscoveryContext = {
+  ...context,
+  retainedInstances: [success.wouldAdmit[0].instance],
+};
+const identityTimeout = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter],
+  context: retainedContext,
+  protocolEdgesEnabled: true,
+  async attestIdentity() {
+    throw Object.assign(new Error("local reth request timed out"), { code: "TIMEOUT" });
+  },
+});
+assert(!identityTimeout.evaluationComplete, "identity timeout must leave evaluation retryable");
+assert(identityTimeout.evaluatedInstanceKeys.size === 0, "identity timeout must not mark ownership evaluated");
+const retainedAfterIdentityTimeout = prepareProtocolDiscoveryProjection({
+  currentOwnership: projection.ownership,
+  result: identityTimeout,
+  currentBackrunPools: projection.strategyViews.backrun,
+  currentBackrunGraph: projection.backrunGraph,
+  currentBlockscanGraph: projection.blockscanGraph,
+  currentKnownPoolKeys: projection.knownPoolKeys,
+  buildStrategyViews: (pools) => buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 100,
+    poolUniverseGeneratedAt: "test",
+  }),
+});
+assert(
+  retainedAfterIdentityTimeout.ownership.admissions.size === 1 &&
+    retainedAfterIdentityTimeout.backrunGraph.length === 4,
+  "transient identity failure must retain the last verified graph routes",
+);
+
+const probeTimeout = await runProtocolDiscoveryShadow({
+  adapters: [adapter({
+    eventTopics: [],
+    callSelectors: [],
+    async probeCandidate() {
+      throw Object.assign(new Error("local reth socket reset"), { code: "ECONNRESET" });
+    },
+  })],
+  context: retainedContext,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+});
+assert(!probeTimeout.evaluationComplete, "probe transport failure must leave evaluation retryable");
+assert(probeTimeout.evaluatedInstanceKeys.size === 0, "probe transport failure must preserve ownership");
 
 console.log("protocol-instance-discovery PASS");

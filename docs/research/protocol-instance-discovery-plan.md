@@ -4,6 +4,51 @@
 > 手写名单(erc4626 vault 类),保留经证明的身份根 pin(registry/factory/singleton)。
 > 基线:`origin/main b7f087a`(刀1 已落地,见下)。
 
+## 当前实现状态（`codex/protocol-instance-discovery`，基线 `origin/main ba18f0d`）
+
+裁决：**implemented_not_validated**，不是 `fixed`。代码已经把 B/C1/C2/D/E 的共享骨架接入生产
+启动、周期 refresh 与 landed-receipt 两个调用点；首个且唯一已注册动态 family 是 ERC4626。但当前
+完整 DEX universe 对 legacy ERC4626 的召回仍不完整，legacy 静态条目因此保留；系统性 scanner/
+universe 变更还缺当前 gate 要求的预声明 cohort + paired Hermes A/B，亦未取得同一失败样本的
+`scanner self-enumeration → path_found → final_sim_success` 证据，禁止写 fixed。
+
+实际代码形状：
+
+- `observed-protocol-discovery.ts::scanProtocolDiscoveryRange()` 是唯一 scanner，统一拥有 DEX 地址遍历、
+  topic union、receipt/trace 去重、并发、错误与歧义裁决；family 文件没有 block loop/getLogs。
+- `erc4626-discovery.ts::erc4626Discovery` 只声明 address matcher、Withdraw/redeem/withdraw observed
+  matcher 与 route probe。DEX 地址源可召回没有近期 Withdraw 的 vault；observed 源必须同时通过
+  selector、Withdraw、asset Transfer 和 causal calltrace。
+- `protocol-instance-discovery.ts::runProtocolDiscovery()` 统一执行 identity + probe；
+  `prepareProtocolDiscoveryProjection()` 原子 replace/remove discovery-owned pools、edges、strategy views、
+  token index、pool map、flash token 与 blockscan graph。临时 reth/网络错误不会把 retained route 当作
+  已完成否决而删除。
+- `protocol-discovery-cache.ts` 持久化 machine-generated 正/负证据；每轮比较 runtime code hash、
+  EIP-1967 implementation word 与 matcher version，负缓存另有 7,200-block TTL；reload 后仍重新走
+  identity/probe，不能 load 即 admit。
+- DEX 主动候选来自完整 `blockscanUniverse` 的 token metadata，加当前 swap graph 增量；固定 protocol
+  token/edge 不参与候选或 loop-closability，避免 legacy/static 自证。
+- 生产 endpoint 不新增付费 RPC：`deploy-node.sh` 强制 `SEARCHER_LIVE_RPC_URL=http://127.0.0.1:8545`，
+  discovery 复用同一 provider。reth 已裁剪的旧事件状态记为证据不足并跳过，不自动回退外部 archive；
+  当前状态的主动 DEX 枚举仍可工作。
+
+当前边界：ERC4626 observed v1 只接退出侧（Withdraw + redeem/withdraw）；deposit/mint 不作为第三个
+候选源，vault 的冷启动召回由同一个 DEX-universe 地址源完成。其他协议不会自动“猜 adapter”；以后
+新增 family 仍需人工实现 capability/identity/probe，注册后才自动共享这两条候选源。Ubiquity 尚无
+adapter，tx `0x14026eed…f4fd53` 另有 uCR/WETH cold DEX pool admission 缺口，因此本分支不关闭该 tx。
+
+系统性验收 cohort（合并前仍待 paired Hermes A/B）：
+
+- positive/observed：真实 Withdraw tx `0x0b46f1ff…db30a8`，目标不在 seed，要求 scanner 自发枚举并
+  新增 deposit/redeem 两边；
+- positive/DEX：生产完整 universe 中的标准 ERC4626 share token，先移除全部 ERC4626 seed，再比较
+  graph 前后与第二轮 cache hit；legacy 全集只作答案卷，不作候选；
+- negative：普通 ERC20 地址、伪 Withdraw（无对应 asset payout/causal trace）、纯 LP mint/burn、
+  同 target 多 adapter 完整匹配、reth pruned historical state、identity/probe transport timeout；
+- equivalence/resource：flag-off/shadow graph 不变；未触及 swap edge 集；记录启动地址数、code reads、
+  expensive matcher probes、cache hits、scan wall time；A/B 同块比较两条现有 lane 的 pass latency、
+  budget censoring、candidate composition 与 final-sim false-positive 数。
+
 ## 0. 已完成(不在本计划内)
 
 **b7f087a "derive static protocol venues from adapters"** 已实现刀1:
