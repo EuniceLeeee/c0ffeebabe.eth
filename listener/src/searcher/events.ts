@@ -75,7 +75,7 @@ export type SearcherEvent =
       selectors: string[];
       sources: string[];
       verdict: "rejected" | "would_admit" | "admitted" | "removed";
-      stage: "feature_flag" | "candidate" | "identity" | "probe" | "lifecycle";
+      stage: "feature_flag" | "candidate" | "identity" | "probe" | "arbitration" | "lifecycle";
       reason?: string;
       edge_count: number;
       mode: "shadow" | "active" | "observed";

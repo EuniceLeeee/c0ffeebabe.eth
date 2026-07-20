@@ -29,6 +29,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
   fromBlock: number;
   toBlock?: number;
   rpcTimeoutMs?: number;
+  chainId?: bigint | number | string;
   graphTokens: readonly string[];
   retainedInstances?: readonly AttestedProtocolInstance[];
 }): ProtocolDiscoveryContext {
@@ -50,6 +51,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
     toBlock,
+    ...(input.chainId === undefined ? {} : { chainId: BigInt(input.chainId).toString() }),
     graphTokens: unique(input.graphTokens.map((token) => token.toLowerCase())),
     retainedInstances: input.retainedInstances ?? [],
     backend: {
@@ -195,7 +197,12 @@ async function sendProtocolDiscoveryRpc<T>(
   }
 }
 
-export type ProtocolDiscoveryStage = "feature_flag" | "candidate" | "identity" | "probe";
+export type ProtocolDiscoveryStage =
+  | "feature_flag"
+  | "candidate"
+  | "identity"
+  | "probe"
+  | "arbitration";
 
 export interface ProtocolDiscoveryEvent {
   readonly event: "protocol_discovery";
@@ -209,10 +216,80 @@ export interface ProtocolDiscoveryEvent {
   readonly wouldAdmitEdges: number;
 }
 
+/**
+ * One independently verified route. The semantic key names WHAT the route
+ * converts; the execution fingerprint names HOW it executes. Observed/shortlist
+ * selectors never enter either: they are candidate provenance, not identity.
+ */
+export interface VerifiedRouteClaim {
+  readonly semanticRouteKey: string;
+  readonly producerAdapterId: string;
+  readonly edgeAdapterId: string;
+  /** Identity root that admitted the instance (identitySource|venueId|factory). */
+  readonly authorityFingerprint: string;
+  /** Execution surface shape (edge adapter + execution-relevant edge fields). */
+  readonly executionFingerprint: string;
+  readonly edge: TokenEdge;
+}
+
 export interface VerifiedProtocolAdmission {
   readonly adapterId: string;
   readonly instance: AttestedProtocolInstance;
   readonly edges: readonly TokenEdge[];
+  readonly claims: readonly VerifiedRouteClaim[];
+}
+
+export function semanticRouteKey(chainId: string | undefined, edge: TokenEdge): string {
+  return [
+    chainId ?? "0",
+    edge.target.toLowerCase(),
+    edge.poolId?.toLowerCase() ?? "",
+    edge.tokenIn.toLowerCase(),
+    edge.tokenOut.toLowerCase(),
+    edge.slotKind,
+    edge.protocolAction ?? "",
+  ].join("|");
+}
+
+export function executionFingerprint(edge: TokenEdge): string {
+  return [
+    edge.adapterId,
+    edge.curveI === undefined ? "" : String(edge.curveI),
+    edge.curveJ === undefined ? "" : String(edge.curveJ),
+    edge.poolId?.toLowerCase() ?? "",
+    edge.v4PoolKey === undefined ? "" : [
+      edge.v4PoolKey.currency0.toLowerCase(),
+      edge.v4PoolKey.currency1.toLowerCase(),
+      String(edge.v4PoolKey.fee),
+      String(edge.v4PoolKey.tickSpacing),
+      edge.v4PoolKey.hooks.toLowerCase(),
+    ].join(":"),
+  ].join("|");
+}
+
+export function authorityFingerprint(instance: AttestedProtocolInstance): string {
+  return [
+    instance.pool.identitySource ?? "",
+    instance.pool.venueId ?? "",
+    instance.pool.factory?.toLowerCase() ?? "",
+  ].join("|");
+}
+
+export function deriveVerifiedRouteClaims(
+  producerAdapterId: string,
+  instance: AttestedProtocolInstance,
+  edges: readonly TokenEdge[],
+  chainId: string | undefined,
+): VerifiedRouteClaim[] {
+  const authority = authorityFingerprint(instance);
+  return edges.map((edge) => ({
+    semanticRouteKey: semanticRouteKey(chainId, edge),
+    producerAdapterId,
+    edgeAdapterId: edge.adapterId,
+    authorityFingerprint: authority,
+    executionFingerprint: executionFingerprint(edge),
+    edge,
+  }));
 }
 
 export interface ProtocolDiscoveryResult {
@@ -259,7 +336,10 @@ export function createCanonicalProtocolIdentityAttester(input: {
 
 /**
  * Evaluate active, retained, and observed candidates through one fail-closed
- * identity/probe outlet. The function itself never mutates a graph; callers
+ * per-candidate outlet: normalize -> identity -> adapter evidence/probe ->
+ * single-adapter edge assertion. No candidate is discarded before its own
+ * verification; cross-adapter disagreement is adjudicated post-probe over
+ * VerifiedRouteClaims. The function itself never mutates a graph; callers
  * atomically project the verified result with prepareProtocolDiscoveryProjection.
  */
 export async function runProtocolDiscovery(input: {
@@ -282,8 +362,6 @@ export async function runProtocolDiscovery(input: {
   const evaluatedInstanceKeys = new Set<string>();
   const candidateSourceComplete = input.sourceComplete ?? true;
   let evaluationComplete = true;
-  const ambiguousTargets = crossAdapterAmbiguousTargets(input);
-  const reportedAmbiguities = new Set<string>();
 
   for (const error of input.sourceErrors ?? []) {
     events.push({
@@ -326,26 +404,6 @@ export async function runProtocolDiscovery(input: {
         continue;
       }
       const key = protocolInstanceKey(adapter.id, candidate.pool.address);
-      const target = candidate.pool.address.toLowerCase();
-      const ambiguousAdapterIds = ambiguousTargets.get(target);
-      if (ambiguousAdapterIds) {
-        grouped.delete(key);
-        quarantinedKeys.add(key);
-        evaluatedInstanceKeys.add(key);
-        const reportKey = `${adapter.id}|${target}`;
-        if (!reportedAmbiguities.has(reportKey)) {
-          reportedAmbiguities.add(reportKey);
-          events.push(eventFor(
-            adapter.id,
-            candidate,
-            "rejected",
-            "candidate",
-            `ambiguous target adapters: ${ambiguousAdapterIds.join(",")}`,
-            0,
-          ));
-        }
-        continue;
-      }
       if (quarantinedKeys.has(key)) continue;
       const current = grouped.get(key);
       try {
@@ -413,14 +471,51 @@ export async function runProtocolDiscovery(input: {
       }
 
       evaluatedInstanceKeys.add(key);
-      wouldAdmit.push({ adapterId: adapter.id, instance, edges: [...edges] });
+      wouldAdmit.push({
+        adapterId: adapter.id,
+        instance,
+        edges: [...edges],
+        claims: deriveVerifiedRouteClaims(adapter.id, instance, edges, input.context.chainId),
+      });
       events.push(eventFor(adapter.id, aggregate, "would_admit", "probe", null, edges.length));
     }
   }
 
+  // Post-probe cross-adapter adjudication: every claimant above verified its
+  // own candidate first, so this decision is evidence-backed rather than a
+  // pre-identity shortlist kill. Target-level isolation here is interim; route
+  // arbitration (semantic key + fingerprints) refines it per route below.
+  const adaptersByTarget = new Map<string, Set<string>>();
+  for (const admission of wouldAdmit) {
+    const target = admission.instance.pool.address.toLowerCase();
+    const ids = adaptersByTarget.get(target) ?? new Set<string>();
+    ids.add(admission.adapterId);
+    adaptersByTarget.set(target, ids);
+  }
+  const contestedTargets = new Set(
+    [...adaptersByTarget.entries()]
+      .filter(([, ids]) => ids.size > 1)
+      .map(([target]) => target),
+  );
+  const arbitratedAdmissions = wouldAdmit.filter((admission) => {
+    const target = admission.instance.pool.address.toLowerCase();
+    if (!contestedTargets.has(target)) return true;
+    events.push(eventFor(
+      admission.adapterId,
+      { pool: admission.instance.pool, source: admission.instance.sources[0] ?? "verified" },
+      "rejected",
+      "arbitration",
+      `post-probe target contested by adapters: ${
+        [...adaptersByTarget.get(target) ?? []].sort().join(",")
+      }`,
+      0,
+    ));
+    return false;
+  });
+
   return {
     events,
-    wouldAdmit,
+    wouldAdmit: arbitratedAdmissions,
     evaluatedInstanceKeys,
     evaluationComplete,
     sourceComplete: candidateSourceComplete && evaluationComplete,
@@ -791,38 +886,3 @@ function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
     .test(message);
 }
 
-function crossAdapterAmbiguousTargets(input: {
-  adapters: readonly ProtocolConversionAdapter[];
-  context: ProtocolDiscoveryContext;
-  candidatesByAdapter?: ReadonlyMap<string, readonly ProtocolCandidate[]>;
-  includeRetained?: boolean;
-}): ReadonlyMap<string, readonly string[]> {
-  const byTarget = new Map<string, Set<string>>();
-  for (const adapter of input.adapters) {
-    if (!adapter.discovery) continue;
-    const candidates: ProtocolCandidate[] = [
-      ...(input.candidatesByAdapter?.get(adapter.id) ?? []),
-    ];
-    if (input.includeRetained ?? true) {
-      candidates.push(...input.context.retainedInstances
-        .filter((instance) => adapter.poolAdapters.includes(instance.pool.adapter))
-        .map(candidateFromRetained));
-    }
-    for (const candidate of candidates) {
-      if (!adapter.poolAdapters.includes(candidate.pool.adapter)) continue;
-      try {
-        const target = ethers.getAddress(candidate.pool.address).toLowerCase();
-        const ids = byTarget.get(target) ?? new Set<string>();
-        ids.add(adapter.id);
-        byTarget.set(target, ids);
-      } catch {
-        // Malformed addresses are rejected by normalizeCandidate, not arbitration.
-      }
-    }
-  }
-  return new Map(
-    [...byTarget.entries()]
-      .filter(([, ids]) => ids.size > 1)
-      .map(([target, ids]) => [target, [...ids].sort()] as const),
-  );
-}

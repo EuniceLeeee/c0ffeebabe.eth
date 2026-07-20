@@ -240,6 +240,24 @@ assert(
   first.wouldAdmit[0].instance.pool.identitySource === "erc4626-standard",
   "canonical identity credential must be retained",
 );
+{
+  const claims = first.wouldAdmit[0].claims;
+  assert(claims.length === 2, "every verified edge must carry one route claim");
+  assert(
+    new Set(claims.map((claim) => claim.semanticRouteKey)).size === 2,
+    "deposit and redeem routes must have distinct semantic keys",
+  );
+  assert(
+    claims.every((claim) =>
+      claim.producerAdapterId === erc4626Adapter.id &&
+      claim.authorityFingerprint.startsWith("erc4626-standard|") &&
+      claim.executionFingerprint.startsWith(`${claim.edgeAdapterId}|`) &&
+      claim.semanticRouteKey.includes(VAULT.toLowerCase()) &&
+      !claim.semanticRouteKey.includes(claim.edgeAdapterId)
+    ),
+    "claims must bind identity root and execution shape without leaking selectors into semantics",
+  );
+}
 
 const addressCache = createProtocolDiscoveryEvidenceCache(1n);
 const addressBase = createContext();

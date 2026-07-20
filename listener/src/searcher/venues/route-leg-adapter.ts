@@ -116,6 +116,8 @@ export interface ProtocolDiscoveryContext {
   readonly blockNumber: number;
   readonly fromBlock: number;
   readonly toBlock: number;
+  /** Decimal chain id for semantic route keys; absent only in chain-agnostic fixtures. */
+  readonly chainId?: string;
   /** Complete graph domain used only for post-match loop-closability checks. */
   readonly graphTokens: readonly string[];
   /** Previously admitted instances are re-probed so upgrades and route removal replace atomically. */

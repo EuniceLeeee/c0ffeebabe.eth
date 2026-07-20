@@ -131,10 +131,33 @@ const ambiguous = await scanObservedProtocolTrace({
   receipt,
   trace: redeemTrace(),
 });
-assert(ambiguous.candidatesByAdapter.size === 0, "multiple full adapter matches must be quarantined");
+assert(
+  ambiguous.candidatesByAdapter.size === 0,
+  "duplicate registrations of one adapter id are invalid scanner input",
+);
 assert(
   ambiguous.unknownSelectors[0]?.reason === "protocol_like_flow_ambiguous_adapter",
   "ambiguous adapter match must be explicit",
+);
+
+// Cross-adapter full matches are forwarded per adapter: the coordinator owns
+// the post-probe adjudication, the observed scan never drops them early.
+const crossAdapter = await scanObservedProtocolTrace({
+  adapters: [erc4626Adapter, { ...erc4626Adapter, id: "protocol:erc4626-observed-alias" }],
+  context,
+  txHash: TX_HASH,
+  receipt,
+  trace: redeemTrace(),
+});
+assert(
+  crossAdapter.candidatesByAdapter.size === 2 &&
+    crossAdapter.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1 &&
+    crossAdapter.candidatesByAdapter.get("protocol:erc4626-observed-alias")?.length === 1,
+  "cross-adapter observed matches must all reach the coordinator",
+);
+assert(
+  crossAdapter.unknownSelectors[0]?.reason === "protocol_like_flow_ambiguous_adapter",
+  "cross-adapter observed match keeps its explicit diagnostic",
 );
 
 let logReads = 0;

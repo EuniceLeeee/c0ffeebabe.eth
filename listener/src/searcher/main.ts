@@ -1105,7 +1105,7 @@ async function main(): Promise<void> {
         .filter((item) => !staticPoolKeys.has(poolRegistryKey(item.instance.pool)))
         .map((item) => [
           protocolInstanceKey(item.adapterId, item.instance.pool.address),
-          { adapterId: item.adapterId, instance: item.instance, edges: [] },
+          { adapterId: item.adapterId, instance: item.instance, edges: [], claims: [] },
         ] as const),
     );
     protocolDiscoveryOwnership = {
@@ -1147,6 +1147,7 @@ async function main(): Promise<void> {
     adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
     identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
     protocolEdgesEnabled: config.enableProtocolEdges,
+    chainId: protocolDiscoveryChainId,
     currentOwnership: protocolDiscoveryOwnership,
     currentBackrunPools: strategyViews.backrun,
     currentBackrunGraph: graph,
@@ -1391,6 +1392,7 @@ async function main(): Promise<void> {
       adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: config.enableProtocolEdges,
+      chainId: protocolDiscoveryChainId,
       currentOwnership: protocolDiscoveryOwnership,
       currentBackrunPools: strategyViews.backrun,
       currentBackrunGraph: graph,
@@ -1467,6 +1469,7 @@ async function main(): Promise<void> {
       adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: config.enableProtocolEdges,
+      chainId: protocolDiscoveryChainId,
       currentOwnership: protocolDiscoveryOwnership,
       currentBackrunPools: strategyViews.backrun,
       currentBackrunGraph: graph,

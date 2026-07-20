@@ -469,8 +469,8 @@ async function scanAddressCandidates(input: {
     } else if (result.matches.length > 1) {
       ambiguous++;
       const adapterIds = [...new Set(result.matches.map((item) => item.adapterId))];
-      // Preserve distinct candidates for the coordinator's target-level
-      // quarantine, including any previously retained route. Duplicate
+      // Preserve distinct candidates for the coordinator's post-probe route
+      // arbitration, including any previously retained route. Duplicate
       // registrations of one adapter id remain scanner-local invalid input.
       if (adapterIds.length > 1) {
         for (const match of result.matches) {
@@ -543,6 +543,15 @@ export async function scanObservedProtocolTrace(input: {
     if (matches.length === 1) {
       pushCandidate(candidatesByAdapter, matches[0].adapterId, matches[0].candidate);
       continue;
+    }
+    const distinctAdapterIds = new Set(matches.map((match) => match.adapterId));
+    if (matches.length > 1 && distinctAdapterIds.size > 1) {
+      // Cross-adapter full matches all reach the coordinator, which verifies
+      // each candidate independently and adjudicates post-probe. Same-id
+      // duplicate registrations remain scanner-local invalid input.
+      for (const match of matches) {
+        pushCandidate(candidatesByAdapter, match.adapterId, match.candidate);
+      }
     }
     if (
       protocolLike &&

@@ -32,6 +32,7 @@ export interface ProtocolDiscoveryRuntimeInput {
   readonly adapters: readonly ProtocolConversionAdapter[];
   readonly identityRegistry: IdentityResolverRegistry;
   readonly protocolEdgesEnabled: boolean;
+  readonly chainId?: bigint | number | string;
   readonly currentOwnership: ProtocolDiscoveryOwnership;
   readonly currentBackrunPools: readonly PoolEntry[];
   readonly currentBackrunGraph: readonly TokenEdge[];
@@ -108,6 +109,7 @@ export async function prepareActiveProtocolDiscoveryPass(
     provider: input.provider,
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
+    ...(input.chainId === undefined ? {} : { chainId: input.chainId }),
     graphTokens: input.graphTokens,
     retainedInstances,
   });
@@ -184,6 +186,7 @@ export async function prepareObservedProtocolDiscoveryPass(
     provider: input.provider,
     blockNumber: input.blockNumber,
     fromBlock: input.blockNumber,
+    ...(input.chainId === undefined ? {} : { chainId: input.chainId }),
     graphTokens: input.graphTokens,
     retainedInstances: [],
   });
