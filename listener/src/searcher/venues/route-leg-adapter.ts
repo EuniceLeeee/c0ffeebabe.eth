@@ -139,6 +139,12 @@ export interface AttestedProtocolInstance {
   /** Candidate classification remains address+selector; instance admission aggregates by address. */
   readonly selectors: readonly string[];
   readonly evidence: readonly unknown[];
+  /**
+   * Family adapter that verified this instance. A retained instance re-enters
+   * ONLY its owner's candidate set, so one family's prior admission can never
+   * seed a sibling family that shares the same pool adapter kind.
+   */
+  readonly ownerAdapterId?: string;
 }
 
 /**

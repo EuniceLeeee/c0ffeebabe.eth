@@ -388,7 +388,9 @@ export async function runProtocolDiscovery(input: {
 
     const rawCandidates: ProtocolCandidate[] = (input.includeRetained ?? true)
       ? input.context.retainedInstances
-        .filter((instance) => adapter.poolAdapters.includes(instance.pool.adapter))
+        .filter((instance) => instance.ownerAdapterId === undefined
+          ? adapter.poolAdapters.includes(instance.pool.adapter)
+          : instance.ownerAdapterId === adapter.id)
         .map(candidateFromRetained)
       : [];
     rawCandidates.push(...(input.candidatesByAdapter?.get(adapter.id) ?? []));
@@ -561,6 +563,12 @@ export interface ProtocolDiscoveryProjection {
   readonly flashTokens: string[];
   readonly knownPoolKeys: Set<string>;
   readonly knownPoolAddresses: Set<string>;
+  /**
+   * Verified claims suppressed because a static/declared pool already owns the
+   * address. The static venue enters the adjudication as the standing
+   * authority and wins explicitly; suppression is reported, never silent.
+   */
+  readonly staticSuppressed: readonly VerifiedProtocolAdmission[];
 }
 
 /**
@@ -613,6 +621,9 @@ export function prepareProtocolDiscoveryProjection(input: {
       .map(poolRegistryKey)
       .filter((key) => !previousPoolKeys.has(key)),
   );
+  const staticSuppressed = input.result.wouldAdmit.filter(
+    (item) => staticPoolKeys.has(poolRegistryKey(item.instance.pool)),
+  );
   const effectiveResult: ProtocolDiscoveryResult = {
     ...input.result,
     wouldAdmit: input.result.wouldAdmit.filter(
@@ -663,6 +674,7 @@ export function prepareProtocolDiscoveryProjection(input: {
     flashTokens: [...tokenIndex.keys()],
     knownPoolKeys,
     knownPoolAddresses: new Set(strategyViews.backrun.map((pool) => pool.address.toLowerCase())),
+    staticSuppressed,
   };
 }
 
@@ -775,6 +787,7 @@ function normalizeAttestedInstance(
     sources: aggregate.sources,
     selectors: aggregate.selectors,
     evidence: aggregate.evidence,
+    ownerAdapterId: adapter.id,
   };
 }
 

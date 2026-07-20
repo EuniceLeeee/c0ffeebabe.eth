@@ -343,6 +343,7 @@ function cloneInstance(instance: AttestedProtocolInstance): AttestedProtocolInst
     sources: [...instance.sources],
     selectors: [...instance.selectors],
     evidence: [...instance.evidence],
+    ...(instance.ownerAdapterId === undefined ? {} : { ownerAdapterId: instance.ownerAdapterId }),
   };
 }
 
@@ -372,6 +373,7 @@ function normalizeInstance(value: unknown): AttestedProtocolInstance | null {
     sources?: unknown;
     selectors?: unknown;
     evidence?: unknown;
+    ownerAdapterId?: unknown;
   };
   if (!item.pool || typeof item.pool !== "object") return null;
   const pool = item.pool as Record<string, unknown>;
@@ -394,6 +396,7 @@ function normalizeInstance(value: unknown): AttestedProtocolInstance | null {
     sources,
     selectors: selectors.map((selector) => selector.toLowerCase()),
     evidence: Array.isArray(item.evidence) ? [...item.evidence] : [],
+    ...(typeof item.ownerAdapterId === "string" ? { ownerAdapterId: item.ownerAdapterId } : {}),
   };
 }
 

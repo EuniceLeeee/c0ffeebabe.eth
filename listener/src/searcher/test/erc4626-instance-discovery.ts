@@ -555,6 +555,29 @@ const ambiguousResult = await runProtocolDiscovery({
 });
 assert(ambiguousResult.wouldAdmit.length === 0, "cross-adapter target ambiguity must admit no edge");
 
+// Core 5: a retained instance re-enters ONLY its owning family's candidate
+// set. A sibling family sharing the pool adapter kind must not inherit it.
+const siblingAdapter = {
+  ...erc4626Adapter,
+  id: "protocol:erc4626-test-sibling",
+} satisfies ProtocolConversionAdapter;
+const ownerScopedRetained = await runProtocolDiscovery({
+  adapters: [erc4626Adapter, siblingAdapter],
+  context: {
+    ...addressContext,
+    retainedInstances: [
+      { ...addressOnly.wouldAdmit[0].instance, ownerAdapterId: erc4626Adapter.id },
+    ],
+  },
+  protocolEdgesEnabled: true,
+  attestIdentity: attester,
+});
+assert(
+  ownerScopedRetained.wouldAdmit.length === 1 &&
+    ownerScopedRetained.wouldAdmit[0].adapterId === erc4626Adapter.id,
+  "owner-scoped retained instance must re-verify under its own family only",
+);
+
 const timeoutAdapter = {
   ...erc4626Adapter,
   id: "protocol:erc4626-test-timeout",
@@ -773,6 +796,11 @@ assert(
   fallbackProjection.backrunGraph.length === 2,
   "discovery must not replace or duplicate a same-address compatibility route",
 );
+assert(
+  fallbackProjection.staticSuppressed.length === 1 &&
+    fallbackProjection.staticSuppressed[0].adapterId === erc4626Adapter.id,
+  "static venue winning the adjudication must be reported, never silent",
+);
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   result: first,
@@ -830,5 +858,49 @@ const removed = prepareProtocolDiscoveryProjection({
 assert(removed.ownership.admissions.size === 0, "lifecycle must remove invalid discovery ownership");
 assert(removed.backrunGraph.length === 1, "lifecycle removal must leave static graph edge intact");
 assert(removed.backrunGraph[0].target === STATIC_TARGET, "declared/static edge must never be removed");
+
+// Acceptance 9 (retention half): a TRANSIENT identity/probe failure keeps the
+// prior admission and its edges through the projection; only deterministic
+// failures revoke (covered by the lifecycle removal above).
+const transientBase = createContext();
+const transientRetainedContext: ProtocolDiscoveryContext = {
+  ...transientBase,
+  retainedInstances: [...projection.ownership.admissions.values()]
+    .map((item) => ({ ...item.instance, ownerAdapterId: item.adapterId })),
+  backend: {
+    ...transientBase.backend,
+    async getLogs() { return []; },
+    async call() {
+      throw Object.assign(new Error("local reth timed out"), { code: "TIMEOUT" });
+    },
+  },
+};
+const transientResult = await runProtocolDiscovery({
+  adapters: [erc4626Adapter],
+  context: transientRetainedContext,
+  protocolEdgesEnabled: true,
+  attestIdentity: attester,
+});
+assert(
+  !transientResult.evaluationComplete && transientResult.wouldAdmit.length === 0,
+  "transient retained re-verification must stay incomplete",
+);
+const transientProjection = prepareProtocolDiscoveryProjection({
+  currentOwnership: projection.ownership,
+  result: transientResult,
+  currentBackrunPools: projection.strategyViews.backrun,
+  currentBackrunGraph: projection.backrunGraph,
+  currentBlockscanGraph: projection.blockscanGraph,
+  currentKnownPoolKeys: projection.knownPoolKeys,
+  buildStrategyViews: buildViews,
+});
+assert(
+  transientProjection.ownership.admissions.size === 1,
+  "transient failure must retain prior route ownership",
+);
+assert(
+  transientProjection.backrunGraph.length === 3,
+  "transient failure must not revoke previously verified edges",
+);
 
 console.log("erc4626-instance-discovery PASS");

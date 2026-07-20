@@ -1135,6 +1135,30 @@ async function main(): Promise<void> {
   // One memo across the live observed lane and the range scanner: a landed tx
   // is debug_traced at most once no matter which entrance sees it first.
   const protocolTraceMemo = createProtocolTraceMemo();
+  // A static/declared venue entering adjudication wins explicitly; report each
+  // suppressed verified claim instead of dropping it silently.
+  const emitStaticSuppressedEvents = (
+    projection: ProtocolDiscoveryProjection | null,
+    mode: "shadow" | "active" | "observed",
+    blockNumber: number,
+  ): void => {
+    if (!projection || projection.staticSuppressed.length === 0) return;
+    emitProtocolDiscoveryEvents(
+      projection.staticSuppressed.map((admission) => ({
+        event: "protocol_discovery" as const,
+        adapterId: admission.adapterId,
+        target: admission.instance.pool.address,
+        selectors: [...admission.instance.selectors],
+        sources: [...admission.instance.sources],
+        verdict: "rejected" as const,
+        stage: "arbitration" as const,
+        reason: "static_declared_venue_owns_address",
+        wouldAdmitEdges: 0,
+      })),
+      mode,
+      blockNumber,
+    );
+  };
   console.log(
     `[searcher/live] protocol discovery cache: address=${protocolDiscoveryCache.addressEntries.size} ` +
       `verified=${protocolDiscoveryCache.verifiedCandidates.size} ` +
@@ -1164,6 +1188,11 @@ async function main(): Promise<void> {
   });
   emitProtocolDiscoveryEvents(
     initialProtocolDiscovery.result.events,
+    protocolDiscoveryShadow ? "shadow" : "active",
+    discoveryToBlock,
+  );
+  emitStaticSuppressedEvents(
+    initialProtocolDiscovery.projection,
     protocolDiscoveryShadow ? "shadow" : "active",
     discoveryToBlock,
   );
@@ -1415,6 +1444,11 @@ async function main(): Promise<void> {
       protocolDiscoveryShadow ? "shadow" : "active",
       latestProtocolBlock,
     );
+    emitStaticSuppressedEvents(
+      pass.projection,
+      protocolDiscoveryShadow ? "shadow" : "active",
+      latestProtocolBlock,
+    );
     console.log(
       `[searcher/live] protocol address scan: addresses=${pass.scanner.addressStats.addresses} ` +
         `code_reads=${pass.scanner.addressStats.codeReads} ` +
@@ -1483,6 +1517,7 @@ async function main(): Promise<void> {
       graphTokens: protocolDexDomain,
     });
     emitProtocolDiscoveryEvents(pass.result.events, "observed", input.blockNumber);
+    emitStaticSuppressedEvents(pass.projection, "observed", input.blockNumber);
     for (const diagnostic of pass.unknownSelectors) {
       const key = `${diagnostic.target.toLowerCase()}|${diagnostic.selector}`;
       const last = unknownProtocolSelectorLastBlock.get(key) ?? -Infinity;

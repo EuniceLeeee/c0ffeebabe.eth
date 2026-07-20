@@ -104,7 +104,8 @@ export async function prepareActiveProtocolDiscoveryPass(
   projection: ProtocolDiscoveryProjection | null;
   scanner: ProtocolDiscoveryRangeResult;
 }> {
-  const retainedInstances = [...input.currentOwnership.admissions.values()].map((item) => item.instance);
+  const retainedInstances = [...input.currentOwnership.admissions.values()]
+    .map((item) => ({ ...item.instance, ownerAdapterId: item.adapterId }));
   const context = createPinnedProtocolDiscoveryContext({
     provider: input.provider,
     blockNumber: input.blockNumber,
@@ -182,7 +183,7 @@ export async function prepareObservedProtocolDiscoveryPass(
   projection: ProtocolDiscoveryProjection;
   unknownSelectors: Awaited<ReturnType<typeof scanObservedProtocolTrace>>["unknownSelectors"];
 }> {
-  const context = createPinnedProtocolDiscoveryContext({
+  const scanContext = createPinnedProtocolDiscoveryContext({
     provider: input.provider,
     blockNumber: input.blockNumber,
     fromBlock: input.blockNumber,
@@ -193,12 +194,28 @@ export async function prepareObservedProtocolDiscoveryPass(
   const observed = input.protocolEdgesEnabled
     ? await scanObservedProtocolTrace({
       adapters: input.adapters,
-      context,
+      context: scanContext,
       txHash: input.txHash,
       receipt: input.receipt,
       trace: input.trace,
     })
     : { candidatesByAdapter: new Map(), unknownSelectors: [] };
+  // Cross-pass ownership: prior claims for the SAME targets re-enter this
+  // pass as retained candidates, so an earlier family's admission and a new
+  // observed claim are adjudicated together instead of being invisible to
+  // each other. Unrelated retained instances are not re-probed per tx.
+  const observedTargets = new Set(
+    [...observed.candidatesByAdapter.values()]
+      .flat()
+      .map((candidate) => candidate.pool.address.toLowerCase()),
+  );
+  const retainedForTargets = [...input.currentOwnership.admissions.values()]
+    .filter((item) => observedTargets.has(item.instance.pool.address.toLowerCase()))
+    .map((item) => ({ ...item.instance, ownerAdapterId: item.adapterId }));
+  const context: typeof scanContext = {
+    ...scanContext,
+    retainedInstances: retainedForTargets,
+  };
   const result = await runProtocolDiscovery({
     adapters: input.adapters,
     context,
@@ -207,7 +224,6 @@ export async function prepareObservedProtocolDiscoveryPass(
       identityRegistry: input.identityRegistry,
     }),
     candidatesByAdapter: observed.candidatesByAdapter,
-    includeRetained: false,
   });
   const projection = prepareProtocolDiscoveryProjection({
     currentOwnership: input.currentOwnership,
