@@ -587,12 +587,15 @@ stop_unit_verified() {
 }
 
 stop_b() {
-  local stopped=0
+  local stopped=0 effective_cpus
   stop_unit_verified "$UNIT" && stopped=1
   systemctl reset-failed "$UNIT" >/dev/null 2>&1 || true
-  cpu_layout
-  systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$ALL_CPUS" >/dev/null
-  [ "$stopped" = "1" ]
+  cpu_layout || return 1
+  systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$ALL_CPUS" >/dev/null \
+    || return 1
+  effective_cpus=$(systemctl show -p AllowedCPUs --value "$A_UNIT" 2>/dev/null) \
+    || return 1
+  [ "$stopped" = "1" ] && [ "$effective_cpus" = "$ALL_CPUS" ]
 }
 
 safety_abort() {
@@ -1941,25 +1944,29 @@ renew() {
 }
 
 cancel_pending() {
-  local expected_b=$1 status a_pid_before a_pid_after b_pid actual_b
+  local expected_b=$1 status a_pid_before a_pid_after a_restarts_before a_restarts_after b_pid actual_b
   [[ "$expected_b" =~ ^[a-f0-9]{40}$ ]] || die "pending challenger commit must be a full SHA"
   status=$(state_field status)
   [ "$status" != "running" ] && [ "$status" != "paused" ] \
     || die "journaled experiment must use pause/close, not cancel-pending"
   a_pid_before=$(systemctl show -p MainPID --value "$A_UNIT" 2>/dev/null || echo 0)
+  a_restarts_before=$(unit_restarts "$A_UNIT")
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] \
     && [[ "$a_pid_before" =~ ^[1-9][0-9]*$ ]] \
     || die "champion must be active before pending challenger cleanup"
   b_pid=$(systemctl show -p MainPID --value "$UNIT" 2>/dev/null || echo 0)
   if [[ "$b_pid" =~ ^[1-9][0-9]*$ ]]; then
-    actual_b=$(process_env_get "$b_pid" SEARCHER_RUNTIME_COMMIT)
+    actual_b=$(process_env_get "$b_pid" SEARCHER_RUNTIME_COMMIT || true)
+    [ -n "$actual_b" ] || actual_b=$(file_env_get "$B_PROCESS_ENV" SEARCHER_RUNTIME_COMMIT)
     [ "$actual_b" = "$expected_b" ] \
       || die "pending challenger runtime commit mismatch: expected $expected_b got ${actual_b:-unavailable}"
   fi
   stop_b || die "pending challenger stop verification failed"
   a_pid_after=$(systemctl show -p MainPID --value "$A_UNIT" 2>/dev/null || echo 0)
+  a_restarts_after=$(unit_restarts "$A_UNIT")
   [ "$(systemctl is-active "$A_UNIT" 2>/dev/null || true)" = "active" ] \
     && [ "$a_pid_after" = "$a_pid_before" ] \
+    && [ "$a_restarts_after" = "$a_restarts_before" ] \
     || die "champion changed during pending challenger cleanup"
   echo "cancelled pending challenger commit=$expected_b; champion pid=$a_pid_after unchanged"
 }

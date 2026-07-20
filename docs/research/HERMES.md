@@ -359,10 +359,12 @@ advances rather than stalling ten future rounds.
 The hourly opening `reap` also reconciles runtime liveness: `state=running` with an inactive B unit closes
 immediately as `crashed_needs_escalation`, restores A's CPUs, preserves the branch/evidence, and advances to
 the next problem. It never waits for the nominal lease to expire.
-**Traps (codified 2026-07-08/12):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Startup
-full warm has its own one-time `SEARCHER_BLOCKSCAN_STARTUP_WARM_BUDGET_MS` (default 30000); regular passes
-remain 11000. The B wrapper refuses readiness until one complete `scannedPairs=` pass, preventing the old
-`lastWarmedBlock=null` / `warm=full` death spiral from masquerading as a healthy deploy. • stableswap-NG `stored_rate` refreshes OFF-event →
+**Traps (codified 2026-07-08/12/20):** SSM runs `sh` not bash → `bash <(…)` fails, use `… | bash`. • Every
+full warm (startup/range/interval/reorg/log fallback) is an atomic pinned-block cache transition with its
+own `SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS` hard deadline (default 600000); incremental passes remain
+11000. The warm cursor advances only after V2/V3/V4 metadata and Curve state complete. The B wrapper refuses
+readiness until one complete `scannedPairs=` pass, preventing a `lastWarmedBlock=null` / `warm=full` restart
+from masquerading as a healthy deploy. • stableswap-NG `stored_rate` refreshes OFF-event →
 getLogs-changed incremental MISSES it → always re-warm `kind==="ng"`, only plain-curve is event-incremental.
 • A fork-gate revert can be a FIXTURE artifact (take pinned to a realized amount on a post-tx fork →
 CurrencyNotSettled), not a live bug (live re-quotes via `propagateAmountsWithRawOutputs`) — separate

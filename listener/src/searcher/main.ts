@@ -57,10 +57,10 @@ import {
 } from "./profit-token-valuation.js";
 import {
   BlockScanWarmCoordinator,
+  blockScanWarmPassBudgetMs,
   blockScanMutableQuoteRequests,
   blockScanV4PoolId,
   formatBlockScanWarmPlan,
-  shouldStopBlockScanV2V3Warm,
   type BlockScanWarmPlan,
 } from "./blockscan-warm-coordinator.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
@@ -620,8 +620,8 @@ async function main(): Promise<void> {
   let blockScanSolver: AnvilSolver | undefined;
   let blockScanSimulator: BotVMSimulator | undefined;
   const blockScanPassBudgetMs = Number(process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
-  const blockScanStartupWarmBudgetMs = Number(
-    process.env.SEARCHER_BLOCKSCAN_STARTUP_WARM_BUDGET_MS ?? "30000",
+  const blockScanFullWarmBudgetMs = Number(
+    process.env.SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS ?? "600000",
   );
   const blockScanSolveConcurrencyRaw = Number(process.env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
@@ -1264,10 +1264,12 @@ async function main(): Promise<void> {
           }
 
           console.log(`[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)}`);
-          if (warmPlan.kind === "full" && warmPlan.reason === "startup") {
-            activePassBudgetMs = Math.max(blockScanPassBudgetMs, blockScanStartupWarmBudgetMs);
-            passDeadlineAtMs = passStarted + activePassBudgetMs;
-          }
+          activePassBudgetMs = blockScanWarmPassBudgetMs(
+            warmPlan,
+            blockScanPassBudgetMs,
+            blockScanFullWarmBudgetMs,
+          );
+          passDeadlineAtMs = passStarted + activePassBudgetMs;
           if (warmPlan.kind === "full") {
             blockScanCacheForPass.clear();
           } else {
@@ -1286,10 +1288,7 @@ async function main(): Promise<void> {
             blockScanUpdaterForPass,
             blockNumber,
             warmHops,
-            () => shouldStopBlockScanV2V3Warm(
-              warmPlan,
-              () => passBudgetExceeded("warm_v2v3"),
-            ),
+            () => passBudgetExceeded("warm_v2v3"),
           );
           segMark("warm_v2v3");
           if (!v2v3WarmComplete) {
@@ -1315,7 +1314,6 @@ async function main(): Promise<void> {
               }
             }
           }
-          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(blockNumber, warmPlan);
           const v3TickMeta = await seedBlockScanV3TickMetadata(
             provider,
             blockScanCacheForPass,
@@ -1360,6 +1358,10 @@ async function main(): Promise<void> {
               return;
             }
           }
+          // Advance the warm cursor only after every cache family cleared or
+          // invalidated by this plan is complete. Otherwise a deadline between
+          // V2/V3 and Curve warming can strand unchanged pools cold forever.
+          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(blockNumber, warmPlan);
           const protocolMids = await buildBlockScanProtocolMids(
             provider,
             blockScanStateForPass,
