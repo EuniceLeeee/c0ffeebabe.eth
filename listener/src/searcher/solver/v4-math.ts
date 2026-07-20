@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
+import { isStateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 import {
@@ -222,7 +223,8 @@ class V4PoolStateReader {
       if (!raw || raw === "0x") throw new Error("empty StateView response");
       this.stateViewAvailable = true;
       return stateViewIface.decodeFunctionResult(method, raw);
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       this.stateViewAvailable = false;
       return null;
     }

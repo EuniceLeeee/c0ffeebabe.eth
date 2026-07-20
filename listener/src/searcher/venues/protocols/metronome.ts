@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../../shared/constants/addresses.js";
+import { isStateCallAbortedError } from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type {
@@ -135,7 +136,8 @@ export const metronomeHgusdcAdapter = Object.freeze({
         frxUsdOut = await ctx.cache.quoteCurve(
           ctx.state, ADDR.CURVE_MSUSD_FRXUSD, ADDR.MSUSD, ADDR.FRXUSD, ctx.amountIn,
         );
-      } catch {
+      } catch (error) {
+        if (isStateCallAbortedError(error)) throw error;
         frxUsdOut = await quoteCurvePlain(
           ctx.state, ADDR.CURVE_MSUSD_FRXUSD, ADDR.MSUSD, ADDR.FRXUSD, ctx.amountIn,
         );

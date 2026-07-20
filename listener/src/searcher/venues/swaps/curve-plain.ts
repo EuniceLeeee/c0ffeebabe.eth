@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { isStateCallAbortedError } from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type {
@@ -136,7 +137,8 @@ async function quoteCurvePlainExact(ctx: ExactQuoteContext): Promise<bigint> {
   if (cache) {
     try {
       return await cache.quoteCurve(state, target, tokenIn, tokenOut, amountIn);
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       // Pools outside the warmed local-math domain retain the get_dy fallback.
     }
   }

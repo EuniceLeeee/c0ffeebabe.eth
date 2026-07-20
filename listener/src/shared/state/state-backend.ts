@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { ethers } from "ethers";
+import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
 
 // Anvil forks mainnet, so its chainId is always 1. Pinning a static network
 // stops ethers from running its background "detect network" retry loop, which
@@ -23,10 +23,61 @@ export interface StateBackend {
   ): Promise<string[]>;
   snapshot(): Promise<string>;
   revert(snapshotId: string): Promise<void>;
-  call(req: { to: string; data: string; from?: string }): Promise<string>;
+  call(
+    req: { to: string; data: string; from?: string },
+    control?: StateCallControl,
+  ): Promise<string>;
   send(req: { from: string; to: string; data: string; gas?: string }): Promise<string>;
   getGasUsed(txHash: string): Promise<bigint>;
   getTokenBalance(token: string, account: string): Promise<bigint>;
+}
+
+export interface StateCallControl {
+  /** Absolute wall-clock deadline. A past deadline must not start an RPC. */
+  deadlineAtMs?: number;
+  /** Cancels the underlying transport, rather than only rejecting a wrapper promise. */
+  signal?: AbortSignal;
+}
+
+export class StateCallAbortedError extends Error {
+  readonly code = "STATE_CALL_ABORTED";
+
+  constructor(
+    message: string,
+    readonly kind: "deadline" | "signal" | "timeout",
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "StateCallAbortedError";
+  }
+}
+
+export function isStateCallAbortedError(error: unknown): error is StateCallAbortedError {
+  return error instanceof StateCallAbortedError || (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "STATE_CALL_ABORTED"
+  );
+}
+
+/**
+ * A view that injects the same absolute deadline/signal into every nested
+ * adapter call without changing every protocol helper signature.
+ */
+export function withStateCallControl(
+  state: StateBackend,
+  control: StateCallControl,
+): StateBackend {
+  const call = state.call.bind(state);
+  return Object.assign(Object.create(state) as StateBackend, {
+    call: (
+      req: { to: string; data: string; from?: string },
+      nested?: StateCallControl,
+    ) => call(req, {
+      deadlineAtMs: earliestDeadline(control.deadlineAtMs, nested?.deadlineAtMs),
+      signal: nested?.signal ?? control.signal,
+    }),
+  });
 }
 
 export interface VictimStateParams {
@@ -425,8 +476,80 @@ export class AnvilStateBackend implements StateBackend {
     return this.baselineSnapshot !== null;
   }
 
-  async call(req: { to: string; data: string; from?: string }): Promise<string> {
-    return withTimeout(this.provider.call(req), 30_000, `eth_call ${req.to}`);
+  async call(
+    req: { to: string; data: string; from?: string },
+    control?: StateCallControl,
+  ): Promise<string> {
+    // Keep the existing ethers batching path for unbounded warm/solver reads.
+    // Deadline-bound refinement calls use a dedicated request because ethers
+    // does not expose a per-call AbortSignal and cancelling its wrapper leaves
+    // the underlying HTTP request alive.
+    if (control?.deadlineAtMs === undefined && control?.signal === undefined) {
+      return withTimeout(this.provider.call(req), 30_000, `eth_call ${req.to}`);
+    }
+    return this.callWithControl(req, control);
+  }
+
+  private async callWithControl(
+    req: { to: string; data: string; from?: string },
+    control: StateCallControl,
+  ): Promise<string> {
+    const now = Date.now();
+    const transportDeadlineAtMs = now + 30_000;
+    const deadlineAtMs = earliestDeadline(transportDeadlineAtMs, control.deadlineAtMs)!;
+    const abortKind: StateCallAbortedError["kind"] =
+      control.deadlineAtMs !== undefined && control.deadlineAtMs <= transportDeadlineAtMs
+        ? "deadline"
+        : "timeout";
+    if (control.signal?.aborted) {
+      throw stateCallAbort(req.to, "signal", control.signal.reason);
+    }
+    if (deadlineAtMs <= now) {
+      throw stateCallAbort(req.to, abortKind);
+    }
+
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort(control.signal?.reason);
+    control.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    const timer = setTimeout(
+      () => controller.abort(stateCallAbort(req.to, abortKind)),
+      Math.max(1, deadlineAtMs - now),
+    );
+
+    try {
+      const payload: JsonRpcPayload = {
+        id: 1,
+        jsonrpc: "2.0",
+        method: "eth_call",
+        params: [this.provider.getRpcTransaction(req), "latest"],
+      };
+      const response = await fetch(this.anvilUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`eth_call ${req.to} HTTP ${response.status} ${response.statusText}`);
+      }
+      const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
+      if (body.error) {
+        throw this.provider.getRpcError(payload, body as JsonRpcError);
+      }
+      if (typeof body.result !== "string") {
+        throw new Error(`eth_call ${req.to} returned a non-string result`);
+      }
+      return body.result;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const kind = control.signal?.aborted ? "signal" : abortKind;
+        throw stateCallAbort(req.to, kind, controller.signal.reason ?? error);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      control.signal?.removeEventListener("abort", abortFromCaller);
+    }
   }
 
   async send(req: { from: string; to: string; data: string; gas?: string }): Promise<string> {
@@ -633,4 +756,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       },
     );
   });
+}
+
+function earliestDeadline(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Math.min(a, b);
+}
+
+function stateCallAbort(
+  target: string,
+  kind: StateCallAbortedError["kind"],
+  cause?: unknown,
+): StateCallAbortedError {
+  const reason = kind === "deadline"
+    ? "absolute deadline reached"
+    : kind === "timeout"
+      ? "30-second transport timeout reached"
+      : "caller signal aborted";
+  return new StateCallAbortedError(
+    `eth_call ${target} aborted: ${reason}`,
+    kind,
+    cause === undefined ? undefined : { cause },
+  );
 }

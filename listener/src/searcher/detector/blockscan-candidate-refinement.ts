@@ -1,4 +1,9 @@
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import { setMaxListeners } from "node:events";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+  withStateCallControl,
+} from "../../shared/state/state-backend.js";
 import { quote } from "../solver/quoter.js";
 import type { BlockScanOpportunity } from "./detector.js";
 
@@ -50,9 +55,29 @@ export async function refineBlockScanCandidates(
   let failed = 0;
   let next = 0;
   let deadlineHit = false;
+  const workerCount = Math.max(1, Math.min(concurrency, opportunities.length));
+  const deadlineController = new AbortController();
+  // One shared signal owns every in-flight worker call. Each call removes its
+  // listener in finally; lift EventTarget's warning threshold for this bounded
+  // fan-out so 24 legitimate workers do not emit a false leak warning.
+  setMaxListeners(workerCount * 2 + 1, deadlineController.signal);
+  const deadlineDelayMs = deadlineAtMs - Date.now();
+  if (deadlineDelayMs <= 0) {
+    deadlineController.abort(new ProbeDeadlineError("exact probe deadline reached"));
+  }
+  const deadlineTimer = deadlineDelayMs > 0
+    ? setTimeout(
+        () => deadlineController.abort(new ProbeDeadlineError("exact probe deadline reached")),
+        deadlineDelayMs,
+      )
+    : undefined;
+  const controlledState = withStateCallControl(state, {
+    deadlineAtMs,
+    signal: deadlineController.signal,
+  });
 
   const workers = Array.from(
-    { length: Math.max(1, Math.min(concurrency, opportunities.length)) },
+    { length: workerCount },
     async () => {
       for (;;) {
         const index = next++;
@@ -66,8 +91,10 @@ export async function refineBlockScanCandidates(
         }
         attempted++;
         try {
-          const marginBps = await exactProbeMarginBps(state, opportunity, deadlineAtMs);
-          if (Date.now() >= deadlineAtMs) deadlineHit = true;
+          const marginBps = await exactProbeMarginBps(controlledState, opportunity, deadlineAtMs);
+          if (deadlineController.signal.aborted || Date.now() >= deadlineAtMs) {
+            throw new ProbeDeadlineError("exact probe deadline reached");
+          }
           if (marginBps > 0) {
             ranked.push({
               opportunity,
@@ -84,7 +111,11 @@ export async function refineBlockScanCandidates(
         } catch (error) {
           if (Date.now() >= deadlineAtMs) deadlineHit = true;
           fallback.push({ opportunity, index });
-          if (error instanceof ProbeDeadlineError) {
+          if (
+            error instanceof ProbeDeadlineError ||
+            deadlineController.signal.aborted ||
+            (isStateCallAbortedError(error) && error.kind !== "timeout")
+          ) {
             deadlineHit = true;
             onProbe?.({ index, status: "unprobed", marginBps: null });
           } else {
@@ -95,7 +126,11 @@ export async function refineBlockScanCandidates(
       }
     },
   );
-  await Promise.all(workers);
+  try {
+    await Promise.all(workers);
+  } finally {
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+  }
 
   ranked.sort((a, b) =>
     b.priority - a.priority || b.marginBps - a.marginBps || a.index - b.index

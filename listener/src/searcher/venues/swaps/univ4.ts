@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../../shared/constants/addresses.js";
+import { isStateCallAbortedError } from "../../../shared/state/state-backend.js";
 import type { ResolvedPlanNode } from "../../../shared/types/plan.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend, V4PoolKey } from "../../planner/token-graph.js";
@@ -174,7 +175,8 @@ async function quoteUniV4Exact(ctx: ExactQuoteContext): Promise<bigint> {
       const amountOut = await quoteV4ExactInLocal(state, key, tokenIn, tokenOut, amountIn);
       if (stats) stats.local++;
       return amountOut;
-    } catch {
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
       if (stats) stats.localFailures++;
     }
   } else if (stats) {
