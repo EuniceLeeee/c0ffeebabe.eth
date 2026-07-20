@@ -16,7 +16,6 @@ export const wstethAdapter = Object.freeze({
   declaredVenues: [{
     address: ADDR.WSTETH,
     adapter: "wsteth",
-    graphOrder: 2,
   }],
   undeclaredVenueReason: null,
   edgeAdapterIds: ["wsteth-wrap", "wsteth-unwrap"],

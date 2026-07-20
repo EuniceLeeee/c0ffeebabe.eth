@@ -21,7 +21,6 @@ export const rocksolidAdapter = Object.freeze({
     fixedTokenIn: ADDR.RETH,
     fixedSlotKind: "protocol",
     fixedProtocolAction: "wrap",
-    graphOrder: 3,
   }],
   undeclaredVenueReason: null,
   edgeAdapterIds: ["rocksolid-sync-deposit"],

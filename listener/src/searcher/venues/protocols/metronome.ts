@@ -32,7 +32,6 @@ export const metronomeSynthAdapter = Object.freeze({
   declaredVenues: [{
     address: ADDR.METRONOME_SYNTH_POOL,
     adapter: "metronome-synth",
-    graphOrder: 4,
   }],
   undeclaredVenueReason: null,
   edgeAdapterIds: ["metronome-synth-swap"],
@@ -109,7 +108,6 @@ export const metronomeHgusdcAdapter = Object.freeze({
     fixedTokenOut: ADDR.USDC,
     fixedSlotKind: "protocol",
     fixedProtocolAction: "redeem",
-    graphOrder: 13,
   }],
   undeclaredVenueReason: null,
   edgeAdapterIds: ["metronome-hgusdc-exit"],

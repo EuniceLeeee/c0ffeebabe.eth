@@ -29,7 +29,6 @@ export const psmAdapter = Object.freeze({
     fixedTokenOut: ADDR.DAI,
     fixedSlotKind: "protocol",
     fixedProtocolAction: "convert",
-    graphOrder: 1,
   }],
   undeclaredVenueReason: null,
   edgeAdapterIds: ["psm"],

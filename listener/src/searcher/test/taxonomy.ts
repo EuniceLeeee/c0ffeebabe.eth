@@ -139,10 +139,22 @@ async function testTokenGraphEdges(): Promise<void> {
     "psm PoolEntry edge kind should agree with the edge-level derivation",
   );
 
-  const erc4626Entry = POOL_REGISTRY.find((entry) =>
-    entry.adapter === "erc4626" && entry.address.toLowerCase() === ADDR.SUSDS.toLowerCase()
+  // Standard ERC4626 vaults are migrated off the static registry to discovery.
+  // buildEdges now emits exactly the probe-verified routes, so exercise the
+  // taxonomy through a discovery-shaped pool carrying verifiedRoutes.
+  assert(
+    !POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
+    "standard ERC4626 static seeds must be fully migrated to discovery",
   );
-  assert(erc4626Entry !== undefined, "POOL_REGISTRY sUSDS ERC4626 entry missing");
+  const erc4626Entry: PoolEntry = {
+    address: ADDR.SUSDS,
+    adapter: "erc4626",
+    fixedTokenIn: ADDR.USDS,
+    verifiedRoutes: [
+      { edgeAdapterId: "erc4626-deposit", tokenIn: ADDR.USDS, tokenOut: ADDR.SUSDS, slotKind: "protocol", protocolAction: "wrap" },
+      { edgeAdapterId: "erc4626-redeem", tokenIn: ADDR.SUSDS, tokenOut: ADDR.USDS, slotKind: "protocol", protocolAction: "redeem" },
+    ],
+  };
   const erc4626Edges = await buildTokenGraph(attestedBackend, [erc4626Entry]);
   assert(erc4626Edges.length === 2, `erc4626 edge count ${erc4626Edges.length}`);
   const depositEdge = erc4626Edges.find((edge) => edge.adapterId === "erc4626-deposit");

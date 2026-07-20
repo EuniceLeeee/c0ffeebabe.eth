@@ -29,7 +29,6 @@ export const erc4626Adapter = Object.freeze({
   warm: { kind: "protocol-mid", priority: 2 },
   prepared: null,
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
-    if (!pool.fixedTokenIn) throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
     if (pool.nonStandardRedeem) {
       // fixedTokenIn feeds no edge here and silo payout semantics are verified
       // at the fork-receipt level, so no asset() attestation on this branch.
@@ -41,8 +40,33 @@ export const erc4626Adapter = Object.freeze({
         ...deriveEdgeTaxonomy("protocol", "redeem"),
       }];
     }
-    // previewDeposit/previewRedeem quotes are denominated in asset(); a vault
-    // whose asset drifts from the registry pin must fail edge build.
+    // Discovery-owned instance: emit EXACTLY the probe-verified routes. The
+    // generic builder can no longer regrow a leg the probe rejected, and the
+    // asset() pin is re-attested for every emitted leg.
+    if (pool.verifiedRoutes) {
+      const raw = await backend.call({ to: pool.address, data: erc4626Iface.encodeFunctionData("asset") });
+      const reported = String(erc4626Iface.decodeFunctionResult("asset", raw)[0]).toLowerCase();
+      return pool.verifiedRoutes.map((route) => {
+        const asset = route.protocolAction === "wrap" ? route.tokenIn : route.tokenOut;
+        if (asset.toLowerCase() !== reported) {
+          throw new Error(
+            `erc4626 verified route asset drift: ${pool.address} reports ${reported}, route asset ${asset}`,
+          );
+        }
+        return {
+          adapterId: route.edgeAdapterId, target: pool.address,
+          tokenIn: route.tokenIn, tokenOut: route.tokenOut,
+          slotKind: route.slotKind, score: pool.score,
+          ...(route.protocolAction === undefined ? {} : { protocolAction: route.protocolAction }),
+          ...deriveEdgeTaxonomy(route.slotKind, route.protocolAction),
+        };
+      });
+    }
+    // Legacy compat path (no discovery evidence): only reachable by a
+    // non-discovery seed/harness. previewDeposit/previewRedeem quotes are
+    // denominated in asset(); a vault whose asset drifts from the registry pin
+    // must fail edge build.
+    if (!pool.fixedTokenIn) throw new Error(`erc4626 pool ${pool.address} missing fixedTokenIn`);
     const raw = await backend.call({ to: pool.address, data: erc4626Iface.encodeFunctionData("asset") });
     const reported = String(erc4626Iface.decodeFunctionResult("asset", raw)[0]);
     if (reported.toLowerCase() !== pool.fixedTokenIn.toLowerCase()) {

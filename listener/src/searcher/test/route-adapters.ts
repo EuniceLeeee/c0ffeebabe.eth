@@ -151,13 +151,26 @@ async function main(): Promise<void> {
     return protocolAdapter.declaredVenues;
   });
   assert(declaredVenues.length === 6, `declared static protocol venue count ${declaredVenues.length}`);
-  assert(POOL_REGISTRY.length === 29, `production pool registry count ${POOL_REGISTRY.length}`);
-  assert(POOL_REGISTRY[0].address === ADDR.GOLDX, "GOLDx graph order changed");
-  assert(POOL_REGISTRY[1].address === ADDR.SKY_PSM_LITE, "PSM graph order changed");
-  assert(POOL_REGISTRY[2].address === ADDR.WSTETH, "wstETH graph order changed");
-  assert(POOL_REGISTRY[3].address === ADDR.ROCKSOLID_RETH, "RockSolid graph order changed");
-  assert(POOL_REGISTRY[4].address === ADDR.METRONOME_SYNTH_POOL, "Metronome synth graph order changed");
-  assert(POOL_REGISTRY[13].address === ADDR.METRONOME_HGUSDC_ROUTER, "Metronome exit graph order changed");
+  // Standard ERC4626 vault seeds are fully migrated to discovery; only the
+  // srUSDe non-standard exception plus the Fluid compat rows remain external.
+  assert(POOL_REGISTRY.length === 9, `production pool registry count ${POOL_REGISTRY.length}`);
+  assert(
+    !POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
+    "standard ERC4626 static seeds must be fully migrated to discovery",
+  );
+  const registryAddresses = new Set(POOL_REGISTRY.map((entry) => entry.address.toLowerCase()));
+  for (
+    const [address, label] of [
+      [ADDR.GOLDX, "GOLDx"],
+      [ADDR.SKY_PSM_LITE, "PSM"],
+      [ADDR.WSTETH, "wstETH"],
+      [ADDR.ROCKSOLID_RETH, "RockSolid"],
+      [ADDR.METRONOME_SYNTH_POOL, "Metronome synth"],
+      [ADDR.METRONOME_HGUSDC_ROUTER, "Metronome exit"],
+    ] as const
+  ) {
+    assert(registryAddresses.has(address.toLowerCase()), `${label} declared venue missing from registry`);
+  }
   const syntheticMerge = mergeDeclaredProtocolVenues(
     [{ address: pair, adapter: "erc4626" }],
     [

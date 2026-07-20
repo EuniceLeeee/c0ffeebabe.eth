@@ -51,11 +51,11 @@ function candidate(target: string, selector?: string): ProtocolCandidate {
 
 function edge(
   target: string,
-  adapterId: "shadow-wrap" | "shadow-redeem",
+  adapterId: "shadow-wrap" | "shadow-redeem" | "rival-wrap" | "rival-redeem",
   tokenIn: string,
   tokenOut: string,
 ): TokenEdge {
-  const protocolAction = adapterId === "shadow-wrap" ? "wrap" : "redeem";
+  const protocolAction = adapterId.endsWith("wrap") ? "wrap" : "redeem";
   return {
     adapterId,
     target,
@@ -259,29 +259,83 @@ const incomplete = await runProtocolDiscoveryShadow({
 });
 assert(!incomplete.sourceComplete, "candidate-source failure must prevent scan cursor advancement");
 
+// Post-probe arbitration replaces the old pre-probe target quarantine: each
+// candidate is verified first, then adjudicated per semantic route. Identical
+// cross-adapter claims (same execution fingerprint) are equivalent and both
+// stay verified, deduplicating at the edge merge.
 const competingAdapter: ProtocolConversionAdapter = {
   ...successAdapter,
   id: "protocol:shadow-test-competing",
 };
-const ambiguousAcrossSources = await runProtocolDiscoveryShadow({
+const equivalentAcrossSources = await runProtocolDiscoveryShadow({
   adapters: [successAdapter, competingAdapter],
   context,
   protocolEdgesEnabled: true,
-  async attestIdentity() { throw new Error("ambiguous target must not reach identity"); },
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
   candidatesByAdapter: new Map([
     [successAdapter.id, [candidate(TARGET_C)]],
     [competingAdapter.id, [{ ...candidate(TARGET_C), source: "second-source" }]],
   ]),
 });
 assert(
-  ambiguousAcrossSources.wouldAdmit.length === 0,
-  "one target classified by different adapters across sources must be quarantined",
+  equivalentAcrossSources.wouldAdmit.length === 2,
+  "identical cross-adapter claims on one target must both stay verified",
 );
 assert(
-  ambiguousAcrossSources.events.length === 2 &&
-    ambiguousAcrossSources.events.every((item) => item.reason?.startsWith("ambiguous target adapters:")),
-  "cross-source adapter ambiguity must be explicit for both ownership keys",
+  equivalentAcrossSources.events.some((item) =>
+    item.stage === "arbitration" && item.verdict === "would_admit" &&
+    /equivalent_route_claims/.test(item.reason ?? "")),
+  "equivalent cross-source claims must be reported as an explicit arbitration outcome",
 );
+
+// A genuinely different execution of the SAME semantic route (different edge
+// adapter) is non-equivalent: at least one adapter admitted a contract it
+// should not have, so the contested route is isolated for every claimant and
+// alerted rather than tie-broken.
+const rivalAdapter: ProtocolConversionAdapter = {
+  ...successAdapter,
+  id: "protocol:shadow-test-rival",
+  edgeAdapterIds: ["rival-wrap", "rival-redeem"],
+  discovery: {
+    eventTopics: [],
+    callSelectors: [],
+    async probeCandidate(instance) {
+      return [
+        edge(instance.pool.address, "rival-wrap", ASSET_A, instance.pool.address),
+        edge(instance.pool.address, "rival-redeem", instance.pool.address, ASSET_A),
+        edge(instance.pool.address, "rival-wrap", ASSET_B, instance.pool.address),
+        edge(instance.pool.address, "rival-redeem", instance.pool.address, ASSET_B),
+      ];
+    },
+  },
+};
+const nonEquivalentAcrossSources = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter, rivalAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([
+    [successAdapter.id, [candidate(TARGET_C)]],
+    [rivalAdapter.id, [{ ...candidate(TARGET_C), source: "second-source" }]],
+  ]),
+});
+assert(
+  nonEquivalentAcrossSources.wouldAdmit.length === 0,
+  "non-equivalent execution of one semantic route must isolate the route for every claimant",
+);
+{
+  const alertedAdapters = new Set(
+    nonEquivalentAcrossSources.events
+      .filter((item) =>
+        item.stage === "arbitration" && item.verdict === "rejected" &&
+        /non_equivalent_execution_fingerprints/.test(item.reason ?? ""))
+      .map((item) => item.adapterId),
+  );
+  assert(
+    alertedAdapters.has(successAdapter.id) && alertedAdapters.has(rivalAdapter.id),
+    "non-equivalent cross-source claims must alert for both adapters",
+  );
+}
 
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,

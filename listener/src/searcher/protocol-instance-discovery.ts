@@ -794,7 +794,12 @@ export function prepareProtocolDiscoveryProjection(input: {
   const admissions = [...ownership.admissions.values()];
   const backrunPools = mergePoolRegistries(
     [...basePools],
-    admissions.map((item) => ({ ...item.instance.pool })),
+    // Stamp the exact verified routes onto the projected pool so a later
+    // buildTokenGraph rebuild emits only what the probe accepted.
+    admissions.map((item) => ({
+      ...item.instance.pool,
+      verifiedRoutes: item.edges.map(edgeToVerifiedRouteSpec),
+    })),
   );
   const strategyViews = input.buildStrategyViews(backrunPools);
   const backrunGraph = mergeEdges(baseGraph, admissions.flatMap((item) => [...item.edges]));
@@ -843,6 +848,16 @@ export function protocolInstanceKey(
 /** Address-level prefix of an instance key (adapterId|address). */
 export function protocolInstanceAddressKey(instanceKey: string): string {
   return instanceKey.split("|").slice(0, 2).join("|");
+}
+
+function edgeToVerifiedRouteSpec(edge: TokenEdge): import("./planner/token-graph.js").VerifiedRouteSpec {
+  return {
+    edgeAdapterId: edge.adapterId,
+    tokenIn: edge.tokenIn,
+    tokenOut: edge.tokenOut,
+    slotKind: edge.slotKind,
+    ...(edge.protocolAction === undefined ? {} : { protocolAction: edge.protocolAction }),
+  };
 }
 
 export function protocolEdgeKey(edge: TokenEdge): string {

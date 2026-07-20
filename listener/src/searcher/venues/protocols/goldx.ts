@@ -26,7 +26,6 @@ export const goldxAdapter = Object.freeze({
     fixedTokenOut: ADDR.GOLDX,
     fixedSlotKind: "protocol",
     fixedProtocolAction: "convert",
-    graphOrder: 0,
   }],
   undeclaredVenueReason: null,
   edgeAdapterIds: ["goldx-mint"],
