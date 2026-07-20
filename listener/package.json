@@ -68,6 +68,7 @@
     "searcher:submission-coordinator": "node --import tsx src/searcher/test/submission-coordinator.ts",
     "searcher:blockscan-contract": "node --import tsx src/searcher/test/blockscan-contract.ts",
     "searcher:blockscan-candidate-refinement": "node --import tsx src/searcher/test/blockscan-candidate-refinement.ts",
+    "searcher:state-call-deadline": "node --import tsx src/searcher/test/state-backend-call-deadline.ts",
     "searcher:blockscan-scanner": "node --import tsx src/searcher/test/blockscan-scanner.ts",
     "searcher:blockscan-metronome-mid": "node --import tsx src/searcher/test/blockscan-metronome-mid.ts",
     "searcher:blockscan-warm-coordinator": "node --import tsx src/searcher/test/blockscan-warm-coordinator.ts",
