@@ -1,6 +1,10 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { ethers } from "ethers";
+import {
+  protocolInstanceAddressKey,
+  protocolInstanceKey,
+} from "./protocol-instance-discovery.js";
 import type {
   AttestedProtocolInstance,
   ProtocolCandidate,
@@ -93,10 +97,13 @@ export function recordVerifiedProtocolCandidates(
 ): void {
   for (const admission of admissions) {
     const address = ethers.getAddress(admission.instance.pool.address);
-    cache.verifiedCandidates.set(protocolAddressCacheKey(admission.adapterId, address), {
+    const pool = { ...admission.instance.pool, address };
+    // Instance-aware key: two logical instances at one address persist as two
+    // verified candidates instead of overwriting each other.
+    cache.verifiedCandidates.set(protocolInstanceKey(admission.adapterId, pool), {
       adapterId: admission.adapterId,
       candidate: {
-        pool: { ...admission.instance.pool, address },
+        pool,
         source: "persisted-verified-evidence",
         ...(admission.instance.selectors[0] === undefined
           ? {}
@@ -118,18 +125,17 @@ export function reconcileProtocolDiscoveryEvidenceCache(
   },
 ): void {
   const admitted = new Set(
-    result.wouldAdmit.map((item) => protocolAddressCacheKey(
-      item.adapterId,
-      item.instance.pool.address,
-    )),
+    result.wouldAdmit.map((item) => protocolInstanceKey(item.adapterId, item.instance.pool)),
   );
   for (const key of result.evaluatedInstanceKeys) {
     if (admitted.has(key)) continue;
     cache.verifiedCandidates.delete(key);
-    const addressEntry = cache.addressEntries.get(key);
+    // Address evidence is keyed per address; strip any logical-instance suffix.
+    const addressKey = protocolInstanceAddressKey(key);
+    const addressEntry = cache.addressEntries.get(addressKey);
     // A failed current-state identity/probe invalidates positive evidence so a
     // proxy implementation change is re-matched even when runtime code is stable.
-    if (addressEntry?.candidate) cache.addressEntries.delete(key);
+    if (addressEntry?.candidate) cache.addressEntries.delete(addressKey);
   }
   recordVerifiedProtocolCandidates(cache, result.wouldAdmit);
 }
@@ -193,7 +199,7 @@ export function loadProtocolDiscoveryEvidenceCache(
       const candidate = normalizeCandidate(item.candidate);
       if (!candidate) continue;
       cache.verifiedCandidates.set(
-        protocolAddressCacheKey(item.adapterId, candidate.pool.address),
+        protocolInstanceKey(item.adapterId, candidate.pool),
         { adapterId: item.adapterId, candidate },
       );
     }
@@ -235,8 +241,8 @@ export function saveProtocolDiscoveryEvidenceCache(
         .localeCompare(protocolAddressCacheKey(b.adapterId, b.address)))
       .map((entry) => ({ ...entry, candidate: entry.candidate && cloneCandidate(entry.candidate) })),
     verified_candidates: [...cache.verifiedCandidates.values()]
-      .sort((a, b) => protocolAddressCacheKey(a.adapterId, a.candidate.pool.address)
-        .localeCompare(protocolAddressCacheKey(b.adapterId, b.candidate.pool.address)))
+      .sort((a, b) => protocolInstanceKey(a.adapterId, a.candidate.pool)
+        .localeCompare(protocolInstanceKey(b.adapterId, b.candidate.pool)))
       .map((entry) => ({ adapterId: entry.adapterId, candidate: cloneCandidate(entry.candidate) })),
     observed_cursor: cache.runtime.observedCursor,
     recent_processed_txs: [...cache.runtime.recentProcessedTxs.entries()]

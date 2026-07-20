@@ -104,6 +104,13 @@ export interface PoolEntry {
   redeemTokenOut?: string;
   /** Activity proxy from discovery (swap-event count). undefined = curated backbone (pinned). */
   score?: number;
+  /**
+   * Distinguishes multiple logical protocol instances living at ONE address
+   * (e.g. a multi-pair wrapper). Enters poolRegistryKey and the discovery
+   * instance key so a second logical instance is never swallowed by
+   * address-level dedup. Absent for ordinary one-instance-per-address pools.
+   */
+  logicalInstanceId?: string;
 }
 
 export interface V4PoolKey {

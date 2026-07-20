@@ -348,7 +348,14 @@ function unorderedTokenPairKey(pool: Pick<PoolEntry, "token0" | "token1">): stri
 }
 
 export function poolRegistryKey(pool: PoolEntry): string {
-  if (pool.adapter !== "univ4") return pool.address.toLowerCase();
+  if (pool.adapter !== "univ4") {
+    const address = pool.address.toLowerCase();
+    // Composite key: a second logical instance at the same address stays a
+    // distinct registry row instead of being swallowed by address dedup.
+    return pool.logicalInstanceId === undefined
+      ? address
+      : `${address}:${pool.logicalInstanceId}`;
+  }
   return [
     pool.address.toLowerCase(),
     pool.poolId?.toLowerCase() ?? "",

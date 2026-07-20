@@ -8,6 +8,7 @@ import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   prepareProtocolDiscoveryProjection,
   protocolEdgeKey,
+  protocolInstanceKey,
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
@@ -26,6 +27,8 @@ import {
   protocolCandidateAddressesFromDexGraph,
   protocolCandidateAddressesFromDexUniverse,
 } from "../protocol-discovery-runtime.js";
+import { mergePoolRegistries } from "../active-pool-discovery.js";
+import { poolRegistryKey } from "../pool-universe.js";
 import { buildTokenPaths, POOL_REGISTRY, type TokenEdge } from "../planner/token-graph.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -262,6 +265,38 @@ assert(
       !claim.semanticRouteKey.includes(claim.edgeAdapterId)
     ),
     "claims must bind identity root and execution shape without leaking selectors into semantics",
+  );
+}
+
+// Composite projection key (core 7): a second logical instance at one address
+// keeps its own registry row, ownership key, and cache slot.
+{
+  const plain = { address: VAULT, adapter: "erc4626" as const, fixedTokenIn: ASSET };
+  const secondPair = {
+    address: VAULT,
+    adapter: "erc4626" as const,
+    fixedTokenIn: RECEIVER,
+    logicalInstanceId: "pair-b",
+  };
+  assert(
+    poolRegistryKey(plain) === VAULT.toLowerCase() &&
+      poolRegistryKey(secondPair) === `${VAULT.toLowerCase()}:pair-b`,
+    "logical instance id must extend the registry key without changing plain pools",
+  );
+  const mergedSameAddress = mergePoolRegistries([plain], [secondPair]);
+  assert(
+    mergedSameAddress.length === 2,
+    "a second logical instance at one address must survive registry dedup",
+  );
+  assert(
+    protocolInstanceKey(erc4626Adapter.id, plain) !==
+      protocolInstanceKey(erc4626Adapter.id, secondPair),
+    "discovery ownership keys must separate logical instances at one address",
+  );
+  assert(
+    protocolInstanceKey(erc4626Adapter.id, VAULT) ===
+      protocolInstanceKey(erc4626Adapter.id, plain),
+    "plain pools keep the address-level instance key",
   );
 }
 

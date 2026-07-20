@@ -405,7 +405,7 @@ export async function runProtocolDiscovery(input: {
         events.push(eventFor(adapter.id, rawCandidate, "rejected", "candidate", safeError(error), 0));
         continue;
       }
-      const key = protocolInstanceKey(adapter.id, candidate.pool.address);
+      const key = protocolInstanceKey(adapter.id, candidate.pool);
       if (quarantinedKeys.has(key)) continue;
       const current = grouped.get(key);
       try {
@@ -640,7 +640,7 @@ export function replaceProtocolDiscoveryOwnership(
   const admissions = new Map(current.admissions);
   for (const key of result.evaluatedInstanceKeys) admissions.delete(key);
   for (const admission of result.wouldAdmit) {
-    admissions.set(protocolInstanceKey(admission.adapterId, admission.instance.pool.address), admission);
+    admissions.set(protocolInstanceKey(admission.adapterId, admission.instance.pool), admission);
   }
   return {
     version: result.evaluatedInstanceKeys.size > 0 ? current.version + 1 : current.version,
@@ -774,8 +774,19 @@ export function prepareProtocolDiscoveryProjection(input: {
   };
 }
 
-export function protocolInstanceKey(adapterId: string, target: string): string {
-  return `${adapterId}|${ethers.getAddress(target).toLowerCase()}`;
+export function protocolInstanceKey(
+  adapterId: string,
+  pool: string | { readonly address: string; readonly logicalInstanceId?: string },
+): string {
+  const address = typeof pool === "string" ? pool : pool.address;
+  const logicalInstanceId = typeof pool === "string" ? undefined : pool.logicalInstanceId;
+  const base = `${adapterId}|${ethers.getAddress(address).toLowerCase()}`;
+  return logicalInstanceId === undefined ? base : `${base}|${logicalInstanceId}`;
+}
+
+/** Address-level prefix of an instance key (adapterId|address). */
+export function protocolInstanceAddressKey(instanceKey: string): string {
+  return instanceKey.split("|").slice(0, 2).join("|");
 }
 
 export function protocolEdgeKey(edge: TokenEdge): string {
@@ -834,6 +845,7 @@ function poolShapeKey(pool: PoolEntry): string {
   return JSON.stringify({
     address: pool.address.toLowerCase(),
     adapter: pool.adapter,
+    logicalInstanceId: pool.logicalInstanceId,
     fixedTokenIn: pool.fixedTokenIn?.toLowerCase(),
     fixedTokenOut: pool.fixedTokenOut?.toLowerCase(),
     fixedSlotKind: pool.fixedSlotKind,

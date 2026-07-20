@@ -1104,7 +1104,7 @@ async function main(): Promise<void> {
       protocolDiscoveryCache.routeOwnership.admissions
         .filter((item) => !staticPoolKeys.has(poolRegistryKey(item.instance.pool)))
         .map((item) => [
-          protocolInstanceKey(item.adapterId, item.instance.pool.address),
+          protocolInstanceKey(item.adapterId, item.instance.pool),
           { adapterId: item.adapterId, instance: item.instance, edges: [], claims: [] },
         ] as const),
     );
