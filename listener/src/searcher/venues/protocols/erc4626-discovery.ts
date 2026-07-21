@@ -299,6 +299,32 @@ async function discoverShareBalanceSlot(
     if (await probeSlot(memoized)) return memoized;
     shareBalanceSlotMemo.delete(memoKey);
   }
+  // Layout-agnostic path: ask the node which storage slots balanceOf actually
+  // reads, then verify each via the override probe. This finds ERC-7201
+  // namespaced / diamond balance slots that the linear scan below cannot reach
+  // (e.g. waEthUSDT/waEthUSDC/USD3/vvUSDC read a hashed-namespace slot, not
+  // keccak(holder, 0..31)). The linear scan remains the fallback.
+  const createAccessList = ctx.backend.createAccessList?.bind(ctx.backend);
+  if (createAccessList) {
+    try {
+      const accessList = await createAccessList({
+        from: ERC4626_FORK_PROBE_HOLDER,
+        to: target,
+        data: balanceOfData,
+      });
+      for (const entry of accessList) {
+        if (entry.address.toLowerCase() !== target.toLowerCase()) continue;
+        for (const slotKey of entry.storageKeys) {
+          if (await probeSlot(slotKey)) {
+            shareBalanceSlotMemo.set(memoKey, slotKey);
+            return slotKey;
+          }
+        }
+      }
+    } catch {
+      // Access-list unsupported/failed for this call; fall through to the scan.
+    }
+  }
   const abi = ethers.AbiCoder.defaultAbiCoder();
   for (let slot = 0; slot < SHARE_BALANCE_SLOT_CANDIDATES; slot++) {
     for (const layout of ["solidity", "vyper"] as const) {

@@ -128,6 +128,17 @@ export interface ProtocolDiscoveryReadBackend {
       readonly stateDiff?: Readonly<Record<string, string>>;
     }>>;
   }): Promise<readonly ProtocolDiscoverySimulatedCallResult[]>;
+  /**
+   * Optional eth_createAccessList: reveals the exact storage slots a call
+   * reads. Used to locate a share-balance mapping slot regardless of layout
+   * (solidity low-slot, vyper, ERC-7201 namespaced, diamond); absence falls
+   * back to the linear slot scan.
+   */
+  createAccessList?(req: {
+    readonly from: string;
+    readonly to: string;
+    readonly data: string;
+  }): Promise<readonly { readonly address: string; readonly storageKeys: readonly string[] }[]>;
 }
 
 export interface ProtocolDiscoveryContext {

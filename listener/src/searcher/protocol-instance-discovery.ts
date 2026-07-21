@@ -170,6 +170,24 @@ export function createPinnedProtocolDiscoveryContext(input: {
           };
         });
       },
+      createAccessList: async (req) => {
+        const raw = await sendProtocolDiscoveryRpc<{ accessList?: unknown }>(
+          input.provider,
+          "eth_createAccessList",
+          [{ from: req.from, to: req.to, data: req.data }, blockTag],
+          rpcTimeoutMs,
+          "eth_createAccessList",
+        );
+        const list = raw && Array.isArray(raw.accessList) ? raw.accessList : [];
+        return list.flatMap((entry) => {
+          const item = entry as { address?: unknown; storageKeys?: unknown };
+          if (typeof item.address !== "string" || !Array.isArray(item.storageKeys)) return [];
+          return [{
+            address: item.address,
+            storageKeys: item.storageKeys.filter((key): key is string => typeof key === "string"),
+          }];
+        });
+      },
     },
   };
 }
