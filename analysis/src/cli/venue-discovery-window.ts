@@ -3,10 +3,11 @@ import { pathToFileURL } from "node:url";
 import { aggregateVenueCandidates } from "../discovery/venue-aggregate.js";
 import { extractVenueCandidates, type VenueCandidate, type VenueScanInput } from "../discovery/venue-evidence.js";
 import { RpcClient, toQuantity } from "../rpc/client.js";
-import { parseArgs, writeText } from "../util.js";
+import { parseArgs, resolveRpcUrl, writeText } from "../util.js";
 
 const DEFAULT_MAX_BLOCKS = 20_000;
-const USAGE = `Usage: npm run venue-discovery-window -- --watch <addr[,addr]> --from-block <n> --to-block <n> --rpc <url> [--max-blocks <n=20000>] [--out <venues.json>]`;
+const USAGE = `Usage: npm run venue-discovery-window -- --watch <addr[,addr]> --from-block <n> --to-block <n> [--rpc <loopback-url>] [--max-blocks <n=20000>] [--out <venues.json>]
+RPC defaults to READONLY_RPC_URL, MAINNET_RPC_URL, then SEARCHER_LIVE_RPC_URL; remote credentials must not be passed in argv.`;
 
 interface BlockWindow {
   from: number;
@@ -26,7 +27,8 @@ async function main(): Promise<void> {
   const fromBlock = integerArg(args, "from-block");
   const toBlock = integerArg(args, "to-block");
   const maxBlocks = integerArg(args, "max-blocks", DEFAULT_MAX_BLOCKS);
-  const rpcUrl = stringArg(args, "rpc");
+  const rpcUrl = resolveRpcUrl(args);
+  if (!rpcUrl) usage();
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";
   validateWindow({ from: fromBlock, to: toBlock }, maxBlocks);
 

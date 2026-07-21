@@ -13,8 +13,19 @@ import {
   resolveInputPaths,
   type InputLocations,
 } from "../cli/redact-live-run.js";
+import { resolveRpcUrl } from "../util.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+
+test("read-only tools prefer explicit loopback RPC and otherwise use standard secret env", () => {
+  assert.equal(resolveRpcUrl({ rpc: "http://127.0.0.1:8545" }, {}), "http://127.0.0.1:8545");
+  assert.equal(
+    resolveRpcUrl({}, { READONLY_RPC_URL: "https://readonly.example/secret", MAINNET_RPC_URL: "fallback" }),
+    "https://readonly.example/secret",
+  );
+  assert.equal(resolveRpcUrl({}, { MAINNET_RPC_URL: "https://mainnet.example/secret" }), "https://mainnet.example/secret");
+  assert.equal(resolveRpcUrl({}, {}), "");
+});
 
 test("live-run defaults name the current node artifacts", () => {
   assert.equal(DEFAULT_INPUT_LOCATIONS.currentLog, "/var/log/mev-live.log");
@@ -93,6 +104,9 @@ test("census-gap defaults to the runtime block-scan pool view", async () => {
   assert.match(script, /--blockscan-log "\$BLOCKSCAN_INPUT"/);
   assert.match(script, /WATCH_CONFIG=\$\{WATCH_CONFIG:-\$ANALYSIS_ROOT\/analysis\/config\/live-competitors\.json\}/);
   assert.match(script, /WATCH_ARGS=\(--watch-config "\$WATCH_CONFIG"\)/);
+  assert.match(script, /READONLY_RPC_URL=\$\{READONLY_RPC_URL:-\$\{RPC:-http:\/\/127\.0\.0\.1:8545\}\}/);
+  assert.match(script, /export READONLY_RPC_URL/);
+  assert.doesNotMatch(script, /--rpc "\$RPC"/);
   assert.doesNotMatch(script, /0xae2fc483527b8ef99eb5d9b44875f005ba1fae13/i);
 });
 
@@ -187,7 +201,7 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /systemctl kill --kill-who=all --signal=KILL mev-searcher/);
   assert.match(script, /mempool startup banner does not match marker-controlled posture/);
   assert.ok(
-    searcher.indexOf("await validateLiveEnvelope(") < searcher.indexOf("new ProductionBundleRouter("),
+    searcher.indexOf("await validateLiveEnvelope(") < searcher.indexOf("createBundleRouter({"),
     "effective live envelope must be validated before the production router exists",
   );
 });

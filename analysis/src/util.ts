@@ -17,6 +17,20 @@ export function parseArgs(argv: string[]): Record<string, string | boolean> {
   return out;
 }
 
+/** Resolve read-only RPC without requiring credentials in process argv. */
+export function resolveRpcUrl(
+  args: Readonly<Record<string, string | boolean>>,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const explicit = args.rpc;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+  for (const name of ["READONLY_RPC_URL", "MAINNET_RPC_URL", "SEARCHER_LIVE_RPC_URL"] as const) {
+    const value = env[name];
+    if (value?.trim()) return value.trim();
+  }
+  return "";
+}
+
 export async function writeText(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);

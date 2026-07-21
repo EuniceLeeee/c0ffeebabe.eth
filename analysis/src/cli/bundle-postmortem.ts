@@ -22,7 +22,7 @@ import { decodeAnySwapLog, v4SwapFillFromLog } from "../pnl/swap-log-registry.js
 import { ADDR, lower, TOKEN_META, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
 import type { TokenDelta } from "../types.js";
-import { parseArgs, uniq, writeText } from "../util.js";
+import { parseArgs, resolveRpcUrl, uniq, writeText } from "../util.js";
 import type { EdgeKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -304,7 +304,8 @@ export interface WinnerStyleAnalysis {
   non_arb_signals?: NonArbSignals;
 }
 
-const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) --rpc <url> [--watch-config <live-competitors.json>] [--graph <runtime-graph-pools.json>] [--blockscan-log <mev-live.log>] [--out <report.json>]
+const USAGE = `Usage: npm run bundle-postmortem -- --events <jsonl> (--tx <hash-or-prefix> | --opportunity <id>) [--rpc <loopback-url>] [--watch-config <live-competitors.json>] [--graph <runtime-graph-pools.json>] [--blockscan-log <mev-live.log>] [--out <report.json>]
+  RPC defaults to READONLY_RPC_URL, MAINNET_RPC_URL, then SEARCHER_LIVE_RPC_URL; remote credentials must not be passed in argv.
   --tx with a FULL hash that matches no bundle_submitted falls back to any-tx competitor mode:
   PnL + winner_style (incl. keeper_claim/rfq_fill signals) + venues incl. non-univ lineages +
   same-block prior movers + our-events venue overlap.`;
@@ -316,7 +317,7 @@ async function main(): Promise<void> {
   const eventsPath = stringArg(args, "events");
   const txQuery = stringArg(args, "tx", false);
   const opportunityQuery = stringArg(args, "opportunity", false);
-  const rpcUrl = stringArg(args, "rpc");
+  const rpcUrl = resolveRpcUrl(args);
   const graphPath = args.graph ? resolveCliPath(String(args.graph)) : DEFAULT_GRAPH_PATH;
   const blockScanLogPath = args["blockscan-log"] ? resolveCliPath(String(args["blockscan-log"])) : "";
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";

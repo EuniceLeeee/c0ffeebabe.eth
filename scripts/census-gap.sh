@@ -23,7 +23,8 @@ elif [ -n "${5:-}" ]; then
   echo "unknown argument: ${5}" >&2
   exit 2
 fi
-RPC=${RPC:-http://127.0.0.1:8545}
+READONLY_RPC_URL=${READONLY_RPC_URL:-${RPC:-http://127.0.0.1:8545}}
+export READONLY_RPC_URL
 EVENTS=${EVENTS:-}
 ANALYSIS_ROOT=${MEV_ANALYSIS_ROOT:-/opt/MEV}
 WATCH_CONFIG=${WATCH_CONFIG:-$ANALYSIS_ROOT/analysis/config/live-competitors.json}
@@ -67,7 +68,7 @@ if [ -r "$BLOCKSCAN_LOG" ]; then
 fi
 
 npm run -s census-report -- "${WATCH_ARGS[@]}" --from-block "$FROM" --to-block "$TO" \
-  --rpc "$RPC" --graph "$GRAPH" --out "$OUT/census.json" >/dev/null 2>"$OUT/census.err" \
+  --graph "$GRAPH" --out "$OUT/census.json" >/dev/null 2>"$OUT/census.err" \
   || { echo "census failed:"; tail -3 "$OUT/census.err"; exit 1; }
 jq -e '
   (.summary | type == "object")
@@ -89,7 +90,7 @@ PM_FILES=()
 PM_FAILURES=0
 for h in $HASHES; do
   pm="$OUT/pm-$h.json"
-  if npm run -s bundle-postmortem -- --events "$EVENTS" --tx "$h" --rpc "$RPC" --graph "$GRAPH" \
+  if npm run -s bundle-postmortem -- --events "$EVENTS" --tx "$h" --graph "$GRAPH" \
     --blockscan-log "$BLOCKSCAN_INPUT" --out "$pm" >/dev/null 2>&1; then
     PM_FILES+=("$pm")
   else

@@ -5,7 +5,7 @@ import { decodeAnySwapLog } from "../pnl/swap-log-registry.js";
 import { classifyTxShape, type RawLog, type TxShapeResult } from "../pnl/tx-shape.js";
 import { lower, TOPICS } from "../registry/protocols.js";
 import { hexToBigInt, RpcClient, toQuantity } from "../rpc/client.js";
-import { parseArgs, writeText } from "../util.js";
+import { parseArgs, resolveRpcUrl, writeText } from "../util.js";
 import { strategyKindFromTxShape, type StrategyKind } from "../../../listener/src/searcher/strategy-taxonomy.js";
 import {
   competitorScanAddresses,
@@ -46,7 +46,8 @@ const TX_SHAPE_SWAP_TOPICS = [
   TOPICS.balancerV2Swap,
 ].map(lower);
 
-const USAGE = `Usage: npm run census-report -- [--watch <addr[,addr]> | --watch-config <live-competitors.json>] --from-block <n> --to-block <n> --rpc <url> [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]`;
+const USAGE = `Usage: npm run census-report -- [--watch <addr[,addr]> | --watch-config <live-competitors.json>] --from-block <n> --to-block <n> [--rpc <loopback-url>] [--graph <runtime-graph-pools.json>] [--min-profit-usd <n=0.1>] [--max-blocks <n=1000>] [--out <report.json>]
+RPC defaults to READONLY_RPC_URL, MAINNET_RPC_URL, then SEARCHER_LIVE_RPC_URL; remote credentials must not be passed in argv.`;
 
 interface BlockWindow {
   from: number;
@@ -209,7 +210,8 @@ async function main(): Promise<void> {
     : competitorScanAddresses(watchProfile!);
   const fromBlock = integerArg(args, "from-block");
   const toBlock = integerArg(args, "to-block");
-  const rpcUrl = stringArg(args, "rpc");
+  const rpcUrl = resolveRpcUrl(args);
+  if (!rpcUrl) usage();
   const minProfitUsd = numberArg(args, "min-profit-usd", DEFAULT_MIN_PROFIT_USD);
   const maxBlocks = integerArg(args, "max-blocks", DEFAULT_MAX_BLOCKS);
   const outPath = args.out ? resolveCliPath(String(args.out)) : "";

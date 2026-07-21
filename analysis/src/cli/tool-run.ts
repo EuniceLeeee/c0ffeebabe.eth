@@ -10,6 +10,11 @@ import {
   type ToolExecutionManifest,
   type ToolExecutionReceipt,
 } from "../tool-index.js";
+import {
+  assertNoSecretBearingToolArgs,
+  redactToolArgv,
+  redactToolOutput,
+} from "../tool-run-security.js";
 
 const args = process.argv.slice(2);
 const separator = args.indexOf("--");
@@ -24,6 +29,7 @@ if (!manifestPath || !toolId) {
   throw new Error("usage: tool-run --manifest <selection.json> --tool <indexed-id> [--window from..to] -- <tool args>");
 }
 const requestedToolArgs = separator >= 0 ? args.slice(separator + 1) : [];
+assertNoSecretBearingToolArgs(requestedToolArgs);
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as ToolExecutionManifest;
 if (manifest.schema_version !== 2) throw new Error("tool-run requires a schema-v2 tool-index manifest");
 const repoRoot = fs.realpathSync(manifest.repo_root);
@@ -70,11 +76,6 @@ if (tool.package === "analysis" || tool.package === "listener") {
   cwd = repoRoot;
 }
 
-const redact = (input: string[], offset = 0): string[] => input.map((entry, index) => {
-  const previous = input[index - 1]?.toLowerCase() ?? "";
-  if (index > offset && /(?:key|token|secret|rpc|url)/.test(previous)) return "<redacted>";
-  return entry.replace(/(https?:\/\/)[^/@\s]+@/g, "$1<redacted>@");
-});
 const startedAt = new Date().toISOString();
 const result = spawnSync(executable, childArgs, {
   cwd,
@@ -85,8 +86,8 @@ const result = spawnSync(executable, childArgs, {
 const finishedAt = new Date().toISOString();
 const stdout = result.stdout ?? "";
 const stderr = result.stderr ?? "";
-if (stdout) process.stdout.write(stdout);
-if (stderr) process.stderr.write(stderr);
+if (stdout) process.stdout.write(redactToolOutput(stdout));
+if (stderr) process.stderr.write(redactToolOutput(stderr));
 const exitCode = result.error ? 127 : (result.status ?? 128);
 const exactArgv = [executable, ...childArgs];
 const receipt: ToolExecutionReceipt = {
@@ -98,7 +99,7 @@ const receipt: ToolExecutionReceipt = {
   exit_code: exitCode,
   cwd: path.relative(repoRoot, cwd) || ".",
   argv_sha256: createHash("sha256").update(JSON.stringify(exactArgv)).digest("hex"),
-  argv_redacted: redact(exactArgv),
+  argv_redacted: redactToolArgv(exactArgv),
   ...(window ? { window } : {}),
   stdout_sha256: createHash("sha256").update(stdout).digest("hex"),
   stderr_sha256: createHash("sha256").update(stderr).digest("hex"),

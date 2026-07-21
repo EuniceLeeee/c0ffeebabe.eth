@@ -46,7 +46,8 @@ cd analysis
 npm run tool-index -- --check
 npm run tool-index -- --select single-transaction,competitor-loss,causality --out /tmp/event-tools.json --json
 # Inspect recommended_tools + related_tools, then execute each chosen current tool through the runner:
-npm run tool-run -- --manifest /tmp/event-tools.json --tool <indexed-id> -- <event/tx/report/RPC args>
+npm run tool-run -- --manifest /tmp/event-tools.json --tool <indexed-id> -- <event/tx/report args>
+# Supply RPC credentials only through the tool's documented environment variable, restricted file, or FD.
 # Reconcile the results and archive the manifest path + SHA-256 with the report.
 ```
 Events + local reth live on the NODE (run via SSM); the events path is the running process's `SEARCHER_EVENTS_PATH` (read `/proc/<pid>/environ`). Postmortem tree: one-shot validity (a mempool-route bundle pins ONE target block; "not included after the swap landed" is EXPECTED) → builder reach (Flashbots relay auto-shares to BuilderNet ⇒ `flashbots: ACCEPTED` ⇒ BuilderNet saw it) → auction outcome (`outbid` = winner payment > our bid; `route_gap_decisive` = winner payment > our FULL sim gross ⇒ coverage gap, no bid could have won) → gap class vs `runtime-graph-pools.json`. **force-include is the band-aid**; same-class force-include ≥3 → fix the SCORER (arb-relevance scoring epic, `project-pool-scoring-arb-relevance-epic`), stop pinning. Auto-deploy is sanctioned in this chain (decision-log D-002) with mode-preservation verify + debounce (≤1 deploy/window). Dated closed instances (e.g. the native-ETH v4 pool gap `0xa32b646c`) live in `docs/decision-log.md`.
@@ -178,7 +179,9 @@ decision, or promotion critical path.
    entrypoint, proposes a coverage set, and exposes all related alternatives. Run additional related tools
    whenever the first set is partial or contradictory. Every selected tool runs through `tool-run`, whose
    machine receipt binds its current descriptor, argv/output hashes, real exit code, timestamps, and exact
-   live window. The gate judges successful receipt capability union, not a hardcoded tool list or self-reported
+   live window. `tool-run` rejects secret-bearing argv before spawning npm and redacts remote URLs plus known
+   secret environment values before forwarding child output; RPC credentials must use environment/file/FD
+   injection. The gate judges successful receipt capability union, not a hardcoded tool list or self-reported
    command. A route-stage/equivalence hypothesis additionally records its real tx/block/net +EV sample,
    baseline→challenger funnel stage, passing replay, and a self-contained `resolution_replay` command and expected
    transition that a later route-resolution claim cannot replace. Scanner, universe, distribution, and
