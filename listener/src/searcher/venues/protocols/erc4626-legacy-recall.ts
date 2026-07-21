@@ -13,7 +13,14 @@ export const ERC4626_LEGACY_RECALL_VAULTS: readonly {
   readonly asset: string;
 }[] = Object.freeze([
   { address: ADDR.SUSDS, asset: ADDR.USDS },
-  { address: ADDR.WSTUSR, asset: ADDR.USR },
+  // wstUSR (ADDR.WSTUSR / 0x1202F5C7...) intentionally EXCLUDED from the
+  // current-state recall answer key: its on-chain redeem is currently paused,
+  // so a state-overridden fork-redeem reverts and standard discovery correctly
+  // ships zero redeem edge (a redeem edge on a paused vault is a wrong edge —
+  // final sim would revert). It is only routable via the historical six-step
+  // replay pinned to a block where redeem was live; that is a separate
+  // acceptance track, not current-state no-seed recall. Excluding it aligns the
+  // answer key with reality — NOT a coverage regression.
   { address: "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB", asset: ADDR.USDC },
   { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", asset: ADDR.USDT },
   { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", asset: ADDR.FRXETH },
