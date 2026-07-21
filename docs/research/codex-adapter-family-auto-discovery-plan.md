@@ -6,8 +6,42 @@
 >
 > 基线：`origin/main @ 7f8b8595f2e6100d41cc34dcdee90fae676fb013`
 >
-> 目标：让所有生产 `ProtocolConversionAdapter` family 像 ERC4626 一样，通过一套共享的
-> candidate → identity → probe → ownership → graph projection 管道自动发现实例；family 只实现协议差异。
+> 目标：让所有生产 `ProtocolFamilyAdapter` 像 ERC4626 一样，通过一套共享的
+> candidate → identity → probe → ownership → graph projection 管道自动发现实例；**一个高阶 adapter
+> 就是一个 execution family，也是唯一注册单元**，family 只实现协议差异。
+
+## 0. 术语和一对一约束（本计划的硬定义）
+
+本计划采用下面的严格关系：
+
+```text
+1 ProtocolFamilyAdapter = 1 ExecutionFamilyId = 1 种完整执行语义
+1 ProtocolFamilyAdapter -> N 个自动发现的 ProtocolInstance
+1 ProtocolFamilyAdapter -> N 个可验证 route/direction
+1 ProtocolFamilyAdapter -> 复用 N 个低阶 ActionAdapter
+```
+
+- `ProtocolFamilyAdapter` 是 searcher 的高阶 route-leg adapter。新建一个这种 adapter，就是新增一个
+  adapter family；不存在“先建 adapter、再另外建 family”的第二步。
+- `ProtocolInstance` 是该 family 在链上的具体合约/pool/vault。新增一个同语义实例只应被共享 discovery
+  自动收入，**不新增 adapter、不改 main、不增加 registry instance row**。
+- `ActionAdapter` 仍只是 BotVM 的低阶编码器，例如 `erc20-transfer`、`weth-deposit-value`。它不是这里所说
+  的 adapter family；多个 family 可以复用同一个 ActionAdapter。
+- family 的边界由完整执行语义决定，不由协议品牌或合约地址决定。quote、rounding、calldata、资产流和
+  状态变化完全相同才属于同一 family；任一执行语义不同就新增另一个 `ProtocolFamilyAdapter`。
+
+因此 gap 名称也必须固定：
+
+| 现象 | 正确分类 | 修法 |
+|---|---|---|
+| 没有任何 family 能证明并执行这类语义 | **adapter gap / missing family** | 新增一个 `ProtocolFamilyAdapter` |
+| family 已存在，但某实例未进入候选或 identity 失败 | instance discovery / identity gap | 修共享 source 或该 family matcher/probe，不新建 adapter |
+| family 已存在，但漏了同语义 direction/selector | family coverage gap | 补当前 family；若语义不同则拆新 family |
+| 高阶 plan 正确，但缺 BotVM 编码动作 | action encoding gap | 补/复用低阶 `ActionAdapter`，不把实例做成 family |
+
+以后报告中的 **adapter gap** 只表示“缺一个 execution family”。像 MRETH 这种现有 family 无法覆盖的
+执行语义，补 `protocol:cashiva-native-wrapped`；以后另一个 Cashiva 实例若通过同一套 family 证据，
+只自动进图，不再出现 `protocol:that-token`。
 
 ## 1. 先给结论
 
@@ -202,25 +236,31 @@ interface ProtocolDiscoveryCapability {
 `enumerateFromRoot` 只允许做协议专属的 bounded calls/decoding；range、deadline、cache、重试和生命周期仍由
 shared scanner 控制。没有可信 registry 的 family 不填这一项，不能伪造一个 root。
 
-第二，把 route adapter 和 identity descriptor 绑定在同一个注册入口，消除当前
+第二，让高阶 adapter 对象本身就是完整 family 和唯一注册单元，消除当前
 “adapter 已注册、discovery identity registry 仍是 trusted seed”的漏接状态：
 
 ```ts
-interface ProtocolFamilyRegistration {
-  readonly adapter: ProtocolConversionAdapter;
+interface ProtocolFamilyAdapter extends ProtocolConversionAdapter {
+  /** id 本身就是 ExecutionFamilyId；一个 id 只对应一种完整执行语义。 */
+  readonly id: ProtocolExecutionFamilyId;
+  /** production family 必须自带自动实例发现能力。 */
+  readonly discovery: ProtocolDiscoveryCapability;
+  /** 与 execution 分层，但和 family 在同一个对象、同一次注册中交付。 */
   readonly discoveryIdentity: IdentityResolverDescriptor;
 }
 ```
 
-`PRODUCTION_ROUTE_ADAPTERS.protocols` 和
-`PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS` 都从这组 registration 派生。Identity 与 Execution
-仍是两层接口，只是注册时必须成对，不能再维护两张容易漂移的手工表。
+`PRODUCTION_PROTOCOL_FAMILIES: readonly ProtocolFamilyAdapter[]` 是唯一真相源；
+`PRODUCTION_ROUTE_ADAPTERS.protocols`、`PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS`、candidate
+topic/selector union、mempool/graph target projection 都从它派生。Identity 与 Execution 仍是两层能力，
+但它们由同一个 family adapter 一次性交付、一次注册，不能再维护两张容易漂移的手工表或要求调用方
+“注册 adapter 后再注册 family”。
 
 ### 4.4 两个必须先补的共享安全缺口
 
 1. **dynamic identity 不能只给 ERC4626 特判。** 当前 discovery identity registry 只有 ERC4626
    被替换成 on-chain resolver；其他 family 即便添加 matcher，仍会因 discovery 的 `seedEntries=[]`
-   在 identity 阶段被 `untrusted_seed` 拒绝。必须由 `ProtocolFamilyRegistration` 为每个 dynamic family
+   在 identity 阶段被 `untrusted_seed` 拒绝。必须由每个 `ProtocolFamilyAdapter.discoveryIdentity` 为自己
    提供 resolver。
 2. **`verifiedRoutes` 必须由 RouteLegRegistry 通用强制。** 当前 `PoolEntry` 注释声称 discovery pool
    只重建 probe 通过的 route，但真正的限制只写在 ERC4626 `buildEdges` 内。迁移其他 family 后，普通
@@ -272,7 +312,8 @@ declared-only”的暂缓项：用户现在明确要求它们接入自动 discov
 
 ### Slice 0 — 共享骨架补强
 
-- 增加 `ProtocolFamilyRegistration`，从一份注册派生 route registry 与 discovery identity registry；
+- 增加 `ProtocolFamilyAdapter`，以 `PRODUCTION_PROTOCOL_FAMILIES` 为唯一注册表，从 adapter 自身派生
+  route registry、discovery identity registry、candidate filters 和 graph/mempool projection；
 - 增加 `candidateSources` 和共享 canonical-root 调度入口；
 - 在 `RouteLegRegistry` 通用强制 `verifiedRoutes` exact-set；
 - conformance：每个 production protocol family 必须有 discovery，或有带 owner/期限的 migration exemption；
@@ -367,9 +408,12 @@ scan wall time、admitted/negative/ambiguous、graph edge delta。目标不是�
 
 只有同时满足以下条件，本计划才完成：
 
-- 7 个现有 production protocol family + Cashiva 均注册 discovery capability 和 dynamic identity resolver；
+- 7 个现有 production protocol family + Cashiva 各自只有一个 `ProtocolFamilyAdapter` 注册项，且 adapter
+  自带 discovery capability 和 dynamic identity resolver；
 - scanner/cache/cursor/arbitration/lifecycle/projection 仍只有一套；
-- 新增 family 不需要修改 `main.ts` 的 protocol switch 或手写 mempool target；
+- 新增 family 只新增一个 adapter module 并加入唯一 family registry；不修改 `main.ts` protocol switch、
+  不追加 identity 手工表、不手写 mempool target；
+- 新增同 family 实例不改任何注册代码，由共享管道自动发现；
 - 每个 family 至少一个 Production Replay 自发走完六步；
 - 所有可替代的 executable `declaredVenues` 已在各自 replay 后删除，保留项都有明确的 identity-root 理由；
 - ERC4626 现有 admitted graph 无回归；系统性 Hermes A/B 资源与 warm 后性能无实质回退；
