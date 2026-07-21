@@ -657,3 +657,48 @@ scan wall time、admitted/negative/ambiguous、graph edge delta。目标不是�
   variant；这些只存在于测试/研究证据；
 - tx43 由 `self-burn-native` 自发枚举并 final-sim success 后，才允许从
   `implemented_not_validated` 升级状态。
+
+## 13. 多方对抗审查（Codex 1 设计 · Claude 1 评审）
+
+统一称呼：
+- **Codex 1**：本计划（§0–§12）作者。
+- **Claude 1（我）= 评审人**：以 `bcc7a42` 文档 + `origin/main @ 7f8b859` 源码为唯一裁准。
+
+三条 load-bearing 代码断言已核（均属实）：`simulateCalls` 当前 `traceTransfers:false` 只返回
+`{status,returnData,logs}`、无 native delta（§3.4 大致成立，但见 C-5）；`psm.ts` 确为
+`requiresProtocolEdgesFlag:false`（§5 准）；`staticSuppressed` 机制在 `main.ts:1145` /
+`protocol-instance-discovery.ts:741,794` 真实存在（§6 有依据）。
+
+总评：方向正确、纪律吸收到位；`self-burn-native` 正确地补上了第二个 dynamic family，解决了此前
+"单 adapter 下多-family 仲裁不可测"的问题。以下为 Claude 1 独立发现，Codex 1 未在文中覆盖。
+
+### 13.1 分歧与发现表
+
+| # | 议题 | Codex 1 原设计 | Claude 1 对抗发现 / 裁决 | 级别 |
+|---|---|---|---|---|
+| C-1 | 行为探测起始 state | funded-caller override 铸 candidate token 后执行 `transfer(self)`（§3.3/§3.4） | **override 会破坏 payout 不变量**：payout 常是 `nativeReserve×amount/totalSupply` 类读不变量公式，裸铸余额若不同步 totalSupply→比率错，同步→稀释错；`totalSupplyDelta===-tokenInSpent` 只抓 burn 侧、抓不到起始 state 不一致。**修法：同一 sim 内按 §3.1 真实路径从 DEX 池买入 candidate（USDT→MRETH 走真 UniV3 池），不用裸 override。** | **P1** |
+| C-2 | gap 分类形态 | §0 固定 4 类 gap 对照表（按现象查表） | **分类是经验判定程序,不是查表**：新 family vs coverage gap 肉眼判不了,只能"跑遍现有 family probe→全 fail 且语义确新→新 family"。应改写成**决策程序**,否则会把"某 family 漏一个 direction"误判成新 family。 | **P1** |
+| C-3 | family 粒度 | "1 family=1 execution semantics;任一语义不同就新增"（§0） | **边界不可判、要么爆炸要么含糊**：带提现费的 4626 算同 family 还是新 family?字面规则会让每个 fee/rounding 变体炸成新 family。**补一条线:family=相同 call-shape+相同 state-delta 类型;per-instance 量级(费率/汇率/rounding)是 probe 测的参数,非 family 边界。** | **P1** |
+| C-4 | shadow family 仲裁 | LP/credit 在 shadow 跑 discovery/identity/probe/ownership,projector fail-closed（§4.4.3） | **shadow claim 必须与生产仲裁隔离**:`staticSuppressed`（已确认存在）+ 跨-family 仲裁下,一个不投影的 shadow LP/credit claim 可能在同 target 抑制掉真会投影的 conversion claim。须显式把 shadow claim 排除出影响生产投影的 ownership/仲裁。 | **P2** |
+| C-5 | quote 时 sim 成本 | 每个 amount 取对应 `simulateValueDelta` 结果、按 amount 缓存（§9/§3.4） | **quote 的 amount 搜索变 sim-bound**:solver 对 amount 做 grid/GSS 时每个候选=一次完整 fork sim,不像 AMM 闭式报价;资源节只担心 candidate I/O、没提这个。**须补:此类 family 用更粗 amount 搜索或廉价本地模型,否则烧 solver 预算。** | **P2** |
+| C-6 | self-burn-native 证据 | tx43+3 历史样本为正 corpus（§3.4/§1.3） | **正样本全是单品牌(Cashiva)**:主网"self-transfer→burn→native"真实实例可能就只有 Cashiva → "generic"当前不可证伪;真正挣来通用性的是**负样本(§9 lookalike fail)**而非正样本。应明说 family 是 behavior-defined 但**单品牌验证**。 | **P3** |
+| C-7 | 立项依据 | 未引用 EV/频次 | **北极星 EV 门缺位**:按本项目入场门(频次/累计 EV),4 笔观测 arb+共享 simulateValueDelta backend 可能是 dust 级机器。**诚实定位:self-burn-native 的价值在"第二个 dynamic family 给仲裁提供可测性",不该靠自身 arb 价值立项**——这没问题,但要写明。 | **P3** |
+| C-8 | simulateValueDelta 定位 | 表述为"唯一新增基础设施"、新 interface（§3.4） | 更准确:它是**现有 `eth_simulateV1` 路径的扩展**(打开 `traceTransfers`+解析 balanceChanges),不是全新 interface;framing 上认掉即可,不影响设计。 | 备注 |
+
+### 13.2 最重要的实际分歧（三个 P1，Slice 1 前必须解决）
+
+1. **funded-caller override 的 state 一致性（C-1）** 是唯一的真 soundness 洞：它会让 payout 探测在
+   读不变量的 wrapper 上系统性失真,而 §8 六步的 final sim 只在**完整路线**层复核、未必能把"probe 起始
+   state 不一致导致的 quote 偏差"和"真实执行"区分开(因为两者用同一个错误 override)。换成"同 sim 内走真
+   DEX 腿买入"后,probe state 与真 arb 同源,这个洞消失。
+2. **gap 分类程序化（C-2）+ family 粒度判据（C-3）** 是这份文档对外承诺的"固定分类"能否被低阶执行者
+   正确套用的前提。缺这两条,分类会退化成"看着像新协议就建新 family",正是文档自己反对的品牌分支问题的
+   变体。
+
+### 13.3 最终裁决（Claude 1）
+
+> 保留总体架构与 §7 实施顺序。**三个 P1(C-1 override 换真 DEX 腿买入、C-2 分类改决策程序、C-3 补
+> parametric/categorical 粒度线)必须在 Slice 1 前落进文档并实现**;C-4 shadow 仲裁隔离、C-5 quote-sim
+> 延迟、C-6 单品牌 corpus、C-7 EV 门定位须在文中显式认掉。三条代码断言 Claude 1 已核属实,C-8 仅
+> framing 修正。P0 none(fork/dry-run + final sim fail-closed + 蜜罐仅假阳性)。当前维持
+> `implemented_not_validated`,升 fixed 仍以 §8 六步 + Production Replay 自发枚举为准。
