@@ -13,6 +13,7 @@
  */
 
 import { execFile } from "node:child_process";
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -22,7 +23,9 @@ import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import { get as getActionAdapter } from "../../adapters/registry.js";
 import { findFlashProviderDescriptor } from "../../adapters/flash-providers.js";
+import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
 import {
   DEFAULT_SEARCHER_EXECUTOR,
@@ -529,6 +532,71 @@ interface TraceCall {
   readonly calls?: readonly TraceCall[];
 }
 
+interface FlattenedTraceCall {
+  readonly target: string;
+  readonly selector: string;
+  readonly input: string;
+}
+
+interface ReferenceObservedImpact {
+  readonly familyId: ExecutionFamilyId;
+  readonly logIndex: number;
+  readonly matchedAdapterId: string;
+  readonly pool: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly poolId?: string;
+}
+
+const PROTOCOL_LEG_DESCRIPTOR_BY_ID = new Map(
+  PROTOCOL_LEG_DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor] as const),
+);
+const PSM_SELL_GEM_SELECTOR = ethers.id("sellGem(address,uint256)").slice(0, 10).toLowerCase();
+const PSM_BUY_GEM_SELECTOR = ethers.id("buyGem(address,uint256)").slice(0, 10).toLowerCase();
+
+function expectedReferenceTarget(leg: AdapterReplayLeg, familyId: ExecutionFamilyId): string {
+  // Balancer V3 separates logical pool identity from its singleton execution
+  // target. The receipt observation below proves the exact logical pool.
+  return familyId === "balancer-v3"
+    ? ADDR.BALANCER_V3_VAULT.toLowerCase()
+    : leg.pool.address.toLowerCase();
+}
+
+function traceCallMatchesLegSemantics(
+  leg: AdapterReplayLeg,
+  call: FlattenedTraceCall,
+): boolean {
+  if (leg.edgeAdapterId === "psm") {
+    const tokenIn = leg.tokenIn.toLowerCase();
+    const tokenOut = leg.tokenOut.toLowerCase();
+    const usdc = ADDR.USDC.toLowerCase();
+    if (tokenIn === usdc) return call.selector === PSM_SELL_GEM_SELECTOR;
+    if (tokenOut === usdc) return call.selector === PSM_BUY_GEM_SELECTOR;
+    return false;
+  }
+
+  const descriptor = PROTOCOL_LEG_DESCRIPTOR_BY_ID.get(leg.edgeAdapterId);
+  if (!descriptor || (descriptor.tokenInArg === undefined && descriptor.tokenOutArg === undefined)) {
+    return true;
+  }
+  try {
+    const iface = new ethers.Interface([`function ${descriptor.signature}`]);
+    const fnName = descriptor.signature.slice(0, descriptor.signature.indexOf("("));
+    const decoded = iface.decodeFunctionData(fnName, call.input);
+    if (descriptor.tokenInArg !== undefined &&
+        String(decoded[descriptor.tokenInArg]).toLowerCase() !== leg.tokenIn.toLowerCase()) {
+      return false;
+    }
+    if (descriptor.tokenOutArg !== undefined &&
+        String(decoded[descriptor.tokenOutArg]).toLowerCase() !== leg.tokenOut.toLowerCase()) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function validateReferenceRoute(
   provider: ethers.JsonRpcProvider,
   fixture: AdapterReplayFixture,
@@ -537,17 +605,20 @@ async function validateReferenceRoute(
     fixture.referenceTx,
     { tracer: "callTracer", tracerConfig: { onlyTopCall: false } },
   ]) as TraceCall;
-  const calls: Array<{ target: string; selector: string }> = [];
+  const calls: FlattenedTraceCall[] = [];
   flattenSuccessfulCalls(trace, calls);
-  const matched: Array<{ target: string; selector: string; edgeAdapterId: string }> = [];
+  const matched: Array<FlattenedTraceCall & { edgeAdapterId: string }> = [];
   let cursor = 0;
   for (const leg of fixture.route) {
+    const familyId = familyForLeg(leg, fixture.id);
     const action = getActionAdapter(leg.edgeAdapterId);
+    const expectedTarget = expectedReferenceTarget(leg, familyId);
     let found = -1;
     for (let index = cursor; index < calls.length; index++) {
       const call = calls[index];
-      if (call.target !== leg.pool.address.toLowerCase()) continue;
+      if (call.target !== expectedTarget) continue;
       if (!action.matchTrace(call.target, call.selector)) continue;
+      if (!traceCallMatchesLegSemantics(leg, call)) continue;
       found = index;
       matched.push({ ...call, edgeAdapterId: leg.edgeAdapterId });
       break;
@@ -583,13 +654,7 @@ async function validateReferenceSwapImpacts(
     edgesByTarget.set(key, current);
   }
 
-  const observed = [] as Array<{
-    matchedAdapterId: string;
-    pool: string;
-    tokenIn: string;
-    tokenOut: string;
-    poolId?: string;
-  }>;
+  const observed: ReferenceObservedImpact[] = [];
   const swapFamilies = [...new Set(fixture.route
     .map((leg) => PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily(familyForLeg(leg, fixture.id)))
     .filter((adapter) => adapter.kind === "swap")
@@ -602,7 +667,9 @@ async function validateReferenceSwapImpacts(
       edgesByTarget,
       tokenQuery: null,
     });
-    observed.push(...impacts.map(({ impact }) => ({
+    observed.push(...impacts.map(({ logIndex, impact }) => ({
+      familyId,
+      logIndex,
       matchedAdapterId: impact.matchedAdapterId,
       pool: impact.pool,
       tokenIn: impact.tokenIn,
@@ -611,37 +678,211 @@ async function validateReferenceSwapImpacts(
     })));
   }
 
-  const matched = fixture.route.flatMap((leg, index) => {
+  const matched = matchReferenceSwapImpacts(fixture, edges, logs, observed);
+  return sha256(JSON.stringify(matched));
+}
+
+function matchReferenceSwapImpacts(
+  fixture: AdapterReplayFixture,
+  edges: readonly TokenEdge[],
+  logs: readonly { address: string; topics: readonly string[]; data: string }[],
+  observed: readonly ReferenceObservedImpact[],
+): Array<{ seq: number } & ReferenceObservedImpact> {
+  const consumed = new Set<number>();
+  let previousLogIndex = -1;
+  return fixture.route.flatMap((leg, index) => {
     const family = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily(familyForLeg(leg, fixture.id));
     if (family.kind !== "swap") return [];
     const edge = edges[index];
-    const impact = observed.find((candidate) =>
+    const observedIndex = observed.findIndex((candidate, candidateIndex) =>
+      !consumed.has(candidateIndex) &&
+      candidate.logIndex > previousLogIndex &&
+      candidate.familyId === family.id &&
       candidate.matchedAdapterId === leg.edgeAdapterId &&
       candidate.pool.toLowerCase() === edge.target.toLowerCase() &&
       candidate.tokenIn.toLowerCase() === leg.tokenIn.toLowerCase() &&
       candidate.tokenOut.toLowerCase() === leg.tokenOut.toLowerCase() &&
       (!edge.poolId || candidate.poolId?.toLowerCase() === edge.poolId.toLowerCase())
     );
-    if (!impact) {
+    if (observedIndex < 0) {
       throw new Error(
         `reference receipt has no exact swap impact for leg ${leg.seq} ` +
           `${leg.edgeAdapterId}:${leg.tokenIn}->${leg.tokenOut}`,
       );
     }
+    const impact = observed[observedIndex];
+    if (family.id === "curve-plain" || family.id === "curve-underlying") {
+      validateExactCurveIds(logs, impact.logIndex, edge, leg.seq);
+    }
+    consumed.add(observedIndex);
+    previousLogIndex = impact.logIndex;
     return [{ seq: leg.seq, ...impact }];
   });
-  return sha256(JSON.stringify(matched));
+}
+
+function validateExactCurveIds(
+  logs: readonly { address: string; topics: readonly string[]; data: string }[],
+  logIndex: number,
+  edge: TokenEdge,
+  legSeq: number,
+): void {
+  const log = logs[logIndex];
+  if (!log || edge.curveI === undefined || edge.curveJ === undefined) {
+    throw new Error(`reference Curve leg ${legSeq} lacks exact coin-index evidence`);
+  }
+  try {
+    const [soldId, , boughtId] = ethers.AbiCoder.defaultAbiCoder().decode(
+      ["uint256", "uint256", "uint256", "uint256"],
+      log.data,
+    );
+    if (BigInt(edge.curveI) !== BigInt(soldId) || BigInt(edge.curveJ) !== BigInt(boughtId)) {
+      throw new Error(
+        `reference Curve leg ${legSeq} coin ids do not match edge ` +
+          `${edge.curveI}->${edge.curveJ}`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("reference Curve leg")) throw error;
+    throw new Error(`reference Curve leg ${legSeq} has undecodable coin ids`);
+  }
 }
 
 function flattenSuccessfulCalls(
   call: TraceCall,
-  output: Array<{ target: string; selector: string }>,
+  output: FlattenedTraceCall[],
 ): void {
   if (call.error) return;
   if (typeof call.to === "string" && typeof call.input === "string" && call.input.length >= 10) {
-    output.push({ target: call.to.toLowerCase(), selector: call.input.slice(0, 10).toLowerCase() });
+    output.push({
+      target: call.to.toLowerCase(),
+      selector: call.input.slice(0, 10).toLowerCase(),
+      input: call.input.toLowerCase(),
+    });
   }
   for (const child of call.calls ?? []) flattenSuccessfulCalls(child, output);
+}
+
+function runReferenceMatcherSelfTests(): void {
+  const tokenA = "0x0000000000000000000000000000000000000001";
+  const tokenB = "0x0000000000000000000000000000000000000002";
+  const tokenC = "0x0000000000000000000000000000000000000003";
+  const target = "0x0000000000000000000000000000000000000010";
+
+  const psmSellLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: { adapter: "psm", address: target },
+    edgeAdapterId: "psm",
+    tokenIn: ADDR.USDC,
+    tokenOut: tokenB,
+  };
+  assert(traceCallMatchesLegSemantics(psmSellLeg, {
+    target,
+    selector: PSM_SELL_GEM_SELECTOR,
+    input: PSM_SELL_GEM_SELECTOR,
+  }));
+  assert(!traceCallMatchesLegSemantics(psmSellLeg, {
+    target,
+    selector: PSM_BUY_GEM_SELECTOR,
+    input: PSM_BUY_GEM_SELECTOR,
+  }));
+
+  const synthIface = new ethers.Interface(["function swap(address,address,uint256)"]);
+  const synthLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: { adapter: "metronome-synth", address: target },
+    edgeAdapterId: "metronome-synth-swap",
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  };
+  const synthSelector = synthIface.getFunction("swap")!.selector.toLowerCase();
+  assert(traceCallMatchesLegSemantics(synthLeg, {
+    target,
+    selector: synthSelector,
+    input: synthIface.encodeFunctionData("swap", [tokenA, tokenB, 1n]),
+  }));
+  assert(!traceCallMatchesLegSemantics(synthLeg, {
+    target,
+    selector: synthSelector,
+    input: synthIface.encodeFunctionData("swap", [tokenA, tokenC, 1n]),
+  }));
+
+  const siloIface = new ethers.Interface(["function redeem(address,uint256,address,address)"]);
+  const siloLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: { adapter: "erc4626", address: target },
+    edgeAdapterId: "erc4626-redeem-silo",
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  };
+  const siloSelector = siloIface.getFunction("redeem")!.selector.toLowerCase();
+  assert(traceCallMatchesLegSemantics(siloLeg, {
+    target,
+    selector: siloSelector,
+    input: siloIface.encodeFunctionData("redeem", [tokenB, 1n, target, target]),
+  }));
+  assert(!traceCallMatchesLegSemantics(siloLeg, {
+    target,
+    selector: siloSelector,
+    input: siloIface.encodeFunctionData("redeem", [tokenC, 1n, target, target]),
+  }));
+
+  const balancerLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: { adapter: "balancer-v3", address: target },
+    edgeAdapterId: "balancer-v3-unlock",
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  };
+  assert.equal(expectedReferenceTarget(balancerLeg, "balancer-v3"), ADDR.BALANCER_V3_VAULT.toLowerCase());
+
+  const curveEdge = {
+    adapterId: "curve-exchange-underlying",
+    target,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+    curveI: 1,
+    curveJ: 2,
+  } as TokenEdge;
+  const curveLog = (soldId: bigint, boughtId: bigint) => ({
+    address: target,
+    topics: [],
+    data: ethers.AbiCoder.defaultAbiCoder().encode(
+      ["uint256", "uint256", "uint256", "uint256"],
+      [soldId, 10n, boughtId, 9n],
+    ),
+  });
+  assert.doesNotThrow(() => validateExactCurveIds([curveLog(1n, 2n)], 0, curveEdge, 1));
+  assert.throws(() => validateExactCurveIds([curveLog(0n, 1n)], 0, curveEdge, 1), /coin ids do not match/);
+
+  const repeatedLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: { adapter: "univ2", address: target },
+    edgeAdapterId: "univ2-swap",
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  };
+  const repeatedFixture = {
+    id: "reference-matcher-self-test",
+    route: [repeatedLeg, { ...repeatedLeg, seq: 2 }],
+  } as AdapterReplayFixture;
+  const repeatedEdge = {
+    adapterId: "univ2-swap",
+    target,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  } as TokenEdge;
+  const oneImpact: ReferenceObservedImpact = {
+    familyId: "univ2-standard",
+    logIndex: 0,
+    matchedAdapterId: "univ2-swap",
+    pool: target,
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  };
+  assert.throws(
+    () => matchReferenceSwapImpacts(repeatedFixture, [repeatedEdge, repeatedEdge], [], [oneImpact]),
+    /leg 2/,
+  );
 }
 
 async function buildPinnedRoute(
@@ -963,6 +1204,8 @@ async function main(): Promise<void> {
     .filter((id, index, all) => all.indexOf(id) !== index);
   if (duplicateIds.length > 0) throw new Error(`duplicate fixture id(s): ${[...new Set(duplicateIds)].join(",")}`);
   if (args.validateOnly) {
+    runReferenceMatcherSelfTests();
+    console.log("adapter-family reference matcher regressions: PASS");
     for (const { path, fixture } of fixtures) {
       console.log(`adapter-family-fixture PASS id=${fixture.id} family=${fixture.executionFamilyId} path=${safeRelativeFixture(path)}`);
     }
