@@ -28,8 +28,13 @@
   自动收入，**不新增 adapter、不改 main、不增加 registry instance row**。
 - `ActionAdapter` 仍只是 BotVM 的低阶编码器，例如 `erc20-transfer`、`weth-deposit-value`。它不是这里所说
   的 adapter family；多个 family 可以复用同一个 ActionAdapter。
-- family 的边界由完整执行语义决定，不由协议品牌或合约地址决定。quote、rounding、calldata、资产流和
-  状态变化完全相同才属于同一 family；任一执行语义不同就新增另一个 `RouteFamilyAdapter`。
+- family 的边界由**编译路径**决定，不由协议品牌、合约地址或 fee 数值决定。一条编译路径 = solver 把
+  该 leg 编译成 `PlanFragment` 时调用的构造函数加上 ActionAdapter 节点序列形态；一个 family 拥有一组
+  显式声明并各自过验收的编译路径（通常一到两个方向）。实例归属只看编译：实例的边能由 family 已声明的
+  编译路径**仅替换数据参数**（地址、金额、由模拟测得的 quote）产出，就属于该 family。fee 数值、汇率与
+  rounding 结果是链上状态，由 probe/模拟测得、不进入编译，因此不拆 family；需要新的编译函数、不同的
+  节点序列或不同的调用图，才是 family 还未拥有的执行语义。（这就是 §13 C-3 要求的 parametric/
+  categorical 粒度线：categorical = 编译路径，parametric = 模拟测得的数值。）
 - adapter 内禁止维护 `variants = { wsteth, mreth, ... }` 这类协议枚举。ABI/状态行为相同的实例天然落入
   同一个 behavior family；行为不同就属于不同 family，而不是在一个 family 里加品牌分支。
 
@@ -39,8 +44,13 @@
 |---|---|---|
 | 没有任何 family 能证明并执行这类语义 | **adapter gap / missing family** | 新增一个 `RouteFamilyAdapter` |
 | family 已存在，但某实例未进入候选或 identity 失败 | instance discovery / identity gap | 修共享 source 或该 family matcher/probe，不新建 adapter |
-| family 已存在，但漏了同语义 direction/selector | family coverage gap | 补当前 family；若语义不同则拆新 family |
+| family 已存在，但缺一条新的 direction/selector 编译路径 | family coverage gap | 给当前 family 显式新增该编译路径并单独验收；identity/实例集合不同则拆新 family |
 | 高阶 plan 正确，但缺 BotVM 编码动作 | action encoding gap | 补/复用低阶 `ActionAdapter`，不把实例做成 family |
+
+分类程序是机械的，主要看编译调用的函数（这就是 §13 C-2 要求的决策程序）：用现有每个 family 已声明的
+编译路径尝试重现 landed leg 的 calldata 形态（数据参数除外）。某个 family 能编译出该形态 → 不是
+adapter gap，按上表第 2/3 行处理；没有任何 family 能编译 → adapter gap；高阶形态可编译、只缺一个低阶
+编码动作 → action encoding gap。
 
 以后报告中的 **adapter gap** 只表示“缺一个 execution family”。像 tx43 这种现有 family 无法覆盖的
 执行语义，补 `protocol:self-burn-native`；以后任何 token 若通过同一套行为证据，只自动进图，
@@ -180,7 +190,9 @@ family 不能只检查 `transfer(address,uint256)`，所有 ERC20 都有这个 s
 6. scanner 生成的完整 route 仍必须通过独立 final fork sim，任何 probe/quote/sim 不一致都 fail closed。
 
 v1 只发被上述行为证明的 `candidate token → WETH` 路线。某个实例即使还有 payable `wrap()`，也不会因此
-自动获得反向边；反向是另一套 calldata/state semantics，必须单独证明，必要时成为另一个 behavior family。
+自动获得反向边；按 §0 的分类程序，`wrap()` 是一条尚未声明的编译路径（value-bearing call、不同节点
+序列）——默认作为本 family 的 coverage gap 显式新增并单独验收；若其 identity/实例集合与本 family 不同，
+才拆成另一个 behavior family。
 
 ### 3.4 唯一新增的通用 quote 基础设施
 
@@ -702,3 +714,40 @@ scan wall time、admitted/negative/ambiguous、graph edge delta。目标不是�
 > 延迟、C-6 单品牌 corpus、C-7 EV 门定位须在文中显式认掉。三条代码断言 Claude 1 已核属实,C-8 仅
 > framing 修正。P0 none(fork/dry-run + final sim fail-closed + 蜜罐仅假阳性)。当前维持
 > `implemented_not_validated`,升 fixed 仍以 §8 六步 + Production Replay 自发枚举为准。
+
+## 14. Fable 对抗审查（三路 Codex fan-out + 手工核对，2026-07-21）
+
+方法：三个独立 read-only Codex 审查（事实核对 / 设计对抗 / 实现可行性）+ Fable 手工核对全部
+load-bearing 引用。文档可核查硬事实**基本全部属实**（21 条 fallback 行、6 个 static family、§3.2
+语义表、`StateBackend.call` 仅 returndata、verifiedRoutes 仅 ERC4626、PSM 唯一 flag=false、
+`staticSuppressed`、§10 路径）。与 §13 重叠处：C-2/C-3 已由用户裁定“family 边界 = 编译路径”落进
+§0（categorical = 编译路径，parametric = 模拟测得数值）；C-5 即下表 F-2 的量化版。
+
+### 14.1 §13 未覆盖的发现
+
+| # | 发现 | 证据 | 级别 |
+|---|---|---|---|
+| F-1 | `simulateValueDelta` 在**任何** live backend 都不存在完整能力：Anvil 无 funded-ERC20 override API；`eth_simulateV1` 只回 status/returndata/logs（未开 traceTransfers）；prepared Revm 只回 profit/gas、无 native/totalSupply delta、超时不杀 daemon。默认 RPC live 模式下本 family **零 quote 可发**，文档未认领这点 | `state-backend.ts:26`、`protocol-instance-discovery.ts:117`、`revm-sim/src/main.rs:124-133` | P0 |
+| F-2 | 逐 amount 精确模拟塞不进 solver 预算：7 格点 + ≤12 GSS + phase-2 ≈ **19–22 次有状态 sim**/机会 vs 5s TTL；缓存键含 amount → 单次求解内**必然全 miss**；无 skip-lane fallback | `amount-bounds.ts:11`（halfWidth=3→7 点）、`solver.ts:67`（GSS cap 12） | P0 |
+| F-3 | tx43 腿级金额在仓库（含 main）**无任何 trace/fixture/分析出处**；已有 Cashiva 报告是另外三笔交易。奠基样本的物理事实链未落库，§8 却拿 tx43 当验收 gate | 全仓 grep `43f37bd6` 仅本文档自引 | P1 |
+| F-4 | PSM 双轨不可表达：`requiresProtocolEdgesFlag` 是 adapter 级属性，live 过滤对该 adapter 全部 pool 一视同仁；“static grandfathered + dynamic gated”需要 source-scoped 准入 | `psm.ts:36`、`route-adapter-registry.ts:39`、`main.ts:5551` | P1 |
+| F-5 | static→dynamic 迁移有撤边窗口：`staticSuppressed` 阻止 dynamic ownership；删 static row 后持久化 admission 重启时边被剥离，要等下一轮 pass（~5min）重 attest。需两阶段 CAS + 重启引导上次已验证 projection | `protocol-instance-discovery.ts:789`、`main.ts:1097,1307` | P1 |
+| F-6 | registry 级 `verifiedRoutes` exact-set 会误伤 ERC4626 合法的 drift 重验（合理子集被拒），且与 §9“transient 保留旧 route”在同一卡点冲突。应放 claim registry、只和本次成功 probe 比对 | `route-leg-registry.ts:44`、`erc4626.ts:46` | P1 |
+| F-7 | Production Replay harness **不存在**：Adapter Replay 自声明不是它；blockscan-hunt 六步靠 env 注入期望 route，证不了 source-unseeded 自发发现。这是计划默默假设的新 harness，需单独排期 | `test/adapter-replay.ts:11,95`、`test/blockscan-hunt.ts:783` | P1 |
+| F-8 | Slice 0“逐位不变”承诺当前证不了：`hashTokenGraph` 只哈希边身份，不覆盖 PoolEntry metadata/ownership/admission。先建有序快照 harness 再动注册结构 | `strategy-views.ts:91` | P1 |
+| F-9 | BotVM 两节点余额语义未证明：`weth-deposit-value` 包装**精确 `node.amount`** 而非全部余额；现有 protocol plan 只生成单节点。第二节点 amount 必须来自同一次模拟的 `nativeOut`，需 fork replay 逐 wei 验证 | `adapters/wrap.ts:29`、`protocol-plan.ts:6` | P1 |
+| F-10 | codeHash/implWord 指纹盖不住 storage-config 漂移（fee 调满、pause 开关不改 codeHash）；正/负/retryable 三类缓存都缺数字化 cadence（当前 pass 间隔 ~5min，路由在间隔中持续存在） | `observed-protocol-discovery.ts:384`、`main.ts:893` | P1 |
+| F-11 | ~6000 token probe 的资源门只有形容词：现仅并发 24/8，无 per-family cap、EVM gas cap、trace 上限、quarantine；恶意 token 可用深调用耗尽本地 Revm。“bounded/per-family cap”必须变成具体配置和测试 | `observed-protocol-discovery.ts:25` | P1 |
+| F-12 | “token 合约必须向 caller 直接付款”会拒掉合法 vault-mediated payout 协议：作为 v1 安全边界合理，但必须显式命名为 direct-payer 边界并把 mediated 列为未来独立编译路径，否则是披着安全外衣的 coverage bug | §3.3 步骤 4 | P1 |
+| F-13 | 若 PSM/Metronome 的 “canonical root” 就是可执行实例地址，那是换名的 instance pin，不是 registry；无 on-chain 枚举/反向 attestation 的 family 应诚实标 `observed-after-first-use`（Metronome 现有硬编码 `SYNTH_TOKENS`） | `metronome.ts:22`、`production-registry.ts:99` | P1 |
+| F-14b | §10 漏了真正要动的层：solver（`quoter.ts`/`amount-propagation.ts`）、两层 Revm（`revm-sim-client.ts`/`main.rs`）、`live-backends/revm-live-backend.ts`、`main.ts`、event schema 与 deploy env allowlist | `deploy-node.sh:193`、`events.ts:70` | P2 |
+
+### 14.2 Fable 裁决
+
+> 架构方向与 §7 顺序保留。**Slice 0 改为“兼容 + 测量”切片**：冻结 wiring、dependency-neutral family
+> manifest 零语义派生现有数组、有序快照 harness（F-8）、`simulateValueDelta` 只在 prepared Revm 实现且
+> 默认关闭（F-1）、单 fixture 走真实 solver 实测 19+ sims vs TTL 并实现 skip-lane fallback（F-2）。
+> generic claim registry（F-6）、source-scoped PSM（F-4）、static row 删除（F-5）全部推后到证据齐备。
+> Slice 1 前置：tx43 按 tx-gap 格式落库（F-3）+ BotVM 两节点 fork replay（F-9）+ C-1 真 DEX 腿买入。
+> F-1/F-2 与 §13 “P0 none” 不矛盾：§13 评的是安全性（fail-closed 成立），F-1/F-2 评的是**可交付性**
+> ——不改则 live lane 零覆盖、solver 预算烧穿，计划完成定义（§12）达不成。
