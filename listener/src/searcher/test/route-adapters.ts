@@ -151,12 +151,12 @@ async function main(): Promise<void> {
     return protocolAdapter.declaredVenues;
   });
   assert(declaredVenues.length === 6, `declared static protocol venue count ${declaredVenues.length}`);
-  // Standard ERC4626 vault seeds are fully migrated to discovery; only the
-  // srUSDe non-standard exception plus the Fluid compat rows remain external.
-  assert(POOL_REGISTRY.length === 9, `production pool registry count ${POOL_REGISTRY.length}`);
+  // Dynamic ERC4626 discovery is additive until the real source-derived
+  // Production Replay reaches every compatibility vault.
+  assert(POOL_REGISTRY.length === 29, `production pool registry count ${POOL_REGISTRY.length}`);
   assert(
-    !POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
-    "standard ERC4626 static seeds must be fully migrated to discovery",
+    POOL_REGISTRY.filter((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem).length === 20,
+    "standard ERC4626 compatibility fallback count",
   );
   const registryAddresses = new Set(POOL_REGISTRY.map((entry) => entry.address.toLowerCase()));
   for (

@@ -76,6 +76,7 @@ competitiveness** — never conflate ([[feedback-validate-live-not-backtest]]).
 | latency / full pipeline | `npm run searcher:replay-live-fixtures` | per-stage `stageMs` p50/p95 (incl. preSolver) + revm profit equivalence (1 wei). Record live first with `SEARCHER_RECORD_LIVE_FIXTURES=1`. |
 | quote / math equivalence | `npm run searcher:finaloverlayequiv` / `:curvemath` / `:balanceslots` | local-quote vs on-chain quoter bit-exactness. |
 | final verify / bundle safety | `npm run searcher:finalverifygate` / `:bundle-router-safety` | terminal balance-assert flash-repay guard; standing-position rejection. |
+| execution-family Adapter Replay (independent; never deploy-blocking) | `npm run searcher:adapter-family-replay -- --fixture <fixture>` | trace-bound route is emitted by one registered `ExecutionFamilyId`; production planner/solver/quote/encode/fork sim/repayment/conservation/EV all pass without fixture amounts or calldata. Emits `adapter_replay_pass`, not `adapter_fixed`. |
 | reference arb (Foundry fork) | `forge test --match-test testReplayArbitrage --fork-url $MAINNET_RPC_URL --fork-block-number 24710787` | the wstUSR replay (see `test/WstUSRArb.t.sol`, `test/BotVM.t.sol`). |
 
 ## Correctness properties — MUST be test assertions, not prose (the #4 migration)

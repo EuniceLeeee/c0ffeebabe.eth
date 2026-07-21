@@ -1,12 +1,10 @@
 import { ADDR } from "../../../shared/constants/addresses.js";
 
 /**
- * The former hardcoded standard-ERC4626 vault seeds, retained ONLY as the
- * expected-recall answer key for the no-seed replay acceptance. This list is
- * NEVER a discovery candidate source (that would be circular self-seeding);
- * discovery must independently re-enumerate each address from DEX/event flow
- * plus the evidence cache. A discovered set that is a strict superset of this
- * list is the recall pass; a missing entry is a recall failure.
+ * Standard-ERC4626 compatibility corpus. The same addresses remain in the
+ * production fallback registry until source-derived Production Replay proves
+ * complete recall. This list is NEVER a discovery candidate source (that would
+ * be circular self-seeding); it is only an audit/probe comparison corpus.
  */
 export const ERC4626_LEGACY_RECALL_VAULTS: readonly {
   readonly address: string;

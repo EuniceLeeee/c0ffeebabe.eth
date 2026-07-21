@@ -35,7 +35,7 @@ into separate success verdicts.
 
 | Validation level | Supplied by the fixture | Must be produced by production code | Verdict |
 |---|---|---|---|
-| **Adapter Replay** | The complete ordered route recovered from the landed trace: adapter identity, target or pool id, token direction and lane-correct state anchor. | Planner output, solver-selected input amount, every quote, adapter encoding, fork final simulation, flash repayment, token conservation and a positive decision from the production EV evaluator. | `adapter_fixed` |
+| **Adapter Replay** | The subject `ExecutionFamilyId` plus the complete ordered route recovered from the landed trace: route-leg adapter identity, target or pool id, token direction and lane-correct state anchor. | Registry-validated family edges, planner output, solver-selected input amount, every quote, adapter encoding, fork final simulation, flash repayment, token conservation and a positive decision from the pinned production EV policy. | runner: `adapter_replay_pass`; trusted promotion: `adapter_fixed` |
 | **Production Replay** | Only the historical transaction and its lane-correct state anchor; no route and no amount. | Universe membership, scanner or backrun-detector discovery, planner output, solver sizing, quotes, encoding, fork final simulation, repayment, conservation and positive production EV. | `production_fixed` |
 
 Adapter Replay deliberately bypasses active-pool admission and scanner/backrun discovery so one deterministic
@@ -47,10 +47,19 @@ amount is forced, the Adapter Replay fails.
 
 Use the parent block state for a standing block-scan sample. Use the exact trigger-only or full-prefix state for a
 backrun sample. A successful Adapter Replay does not claim that production can discover the transaction; only
-Production Replay may make that claim.
+Production Replay may make that claim. For backrun fixtures the trigger hash must also be present in the
+hash-bound classification evidence; Adapter Replay verifies execution at that post-trigger anchor, while
+counterfactual trigger causality remains a Production Replay responsibility.
+
+The validation unit is an execution family, not a protocol brand. Multiple protocols or pool instances may
+share one family when their quote and execution semantics are identical; registering a new instance does not
+create a new adapter verdict. Conversely, a protocol with two execution semantics needs two family fixtures.
+The standalone command is `npm run searcher:adapter-family-replay -- --fixture <fixture>`; it is diagnostic
+evidence and is never a deployment hook or an A/B start condition.
 
 Every successful Adapter Replay writes a compact, redacted receipt containing the transaction hash, ordered
-route hash, state block and state root, base and adapter commit, adapter source hash, shared adapter API hash,
+route hash, reference-trace route hash, state block and state root, base and adapter commit, execution-family
+source hash, runtime-source hash, shared adapter API hash, compiled BotVM artifact/runtime hash,
 solver-selected amount, final-sim gross profit, production-EV result, harness hash and replay command. Raw RPC
 logs remain gitignored. A later Production Replay may inherit the `adapter_fixed` finding when the adapter
 commit is an ancestor and all recorded code/input hashes still match, but it still re-executes the complete

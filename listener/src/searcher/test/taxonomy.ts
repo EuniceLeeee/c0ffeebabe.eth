@@ -139,12 +139,12 @@ async function testTokenGraphEdges(): Promise<void> {
     "psm PoolEntry edge kind should agree with the edge-level derivation",
   );
 
-  // Standard ERC4626 vaults are migrated off the static registry to discovery.
-  // buildEdges now emits exactly the probe-verified routes, so exercise the
-  // taxonomy through a discovery-shaped pool carrying verifiedRoutes.
+  // Discovery-owned ERC4626 instances emit exactly probe-verified routes.
+  // Compatibility seeds remain until Production Replay proves full recall, so
+  // exercise the dynamic taxonomy with an explicit discovery-shaped pool.
   assert(
-    !POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
-    "standard ERC4626 static seeds must be fully migrated to discovery",
+    POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
+    "standard ERC4626 compatibility fallbacks must remain before the deletion gate",
   );
   const erc4626Entry: PoolEntry = {
     address: ADDR.SUSDS,

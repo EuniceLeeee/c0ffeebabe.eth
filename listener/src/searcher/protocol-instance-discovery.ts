@@ -785,7 +785,7 @@ export function prepareProtocolDiscoveryProjection(input: {
   // A compatibility/declared pool with the same address predates discovery and
   // must never become discovery-owned merely because the scanner independently
   // attested it. Such entries keep their existing graph edges until a separate
-  // no-seed migration removes the fallback explicitly.
+  // separately validated migration removes the fallback explicitly.
   const staticPoolKeys = new Set(
     input.currentBackrunPools
       .map(poolRegistryKey)
@@ -1095,4 +1095,3 @@ function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
   return /timed?\s*out|network|socket|connection (?:closed|reset|refused)|temporarily unavailable|\b(?:429|502|503|504)\b/i
     .test(message);
 }
-

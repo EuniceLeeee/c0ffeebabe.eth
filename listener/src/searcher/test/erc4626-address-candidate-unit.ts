@@ -9,40 +9,26 @@ import {
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
 import { buildStrategyViews } from "../strategy-views.js";
-import { buildTokenPaths, POOL_REGISTRY, type PoolEntry } from "../planner/token-graph.js";
+import { buildTokenPaths, type PoolEntry } from "../planner/token-graph.js";
 import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
-import { ERC4626_LEGACY_RECALL_VAULTS } from "../venues/protocols/erc4626-legacy-recall.js";
 import type { ProtocolDiscoveryContext } from "../venues/route-leg-adapter.js";
 
 /**
- * No-seed replay — deterministic half (impl spec §四 acceptance 11).
+ * ERC4626 execution-family address-candidate unit.
  *
- * With every standard ERC4626 static seed physically removed from
- * POOL_REGISTRY, a legacy-recall vault must be REDISCOVERED purely from the DEX
- * address source: scanner self-enumerate -> identity attest -> route probe ->
- * loop-closable edge in graph -> path_found. The final_sim_success half of
- * acceptance 11 additionally requires a mainnet fork and runs in the
- * blockscan-hunt no-seed mode (SEARCHER_NO_SEED_REPLAY=1); this test proves the
- * archive-free discovery chain the fork replay depends on, against a pinned
- * mock backend.
+ * A synthetic address that is already supplied as a candidate must pass the
+ * shared matcher -> identity -> route-probe -> projection chain. This is a
+ * family capability unit only: it deliberately does not prove that production
+ * DEX-universe or observed-flow discovery can source the address.
  */
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
 }
 
-// 1) Physical removal is real: no standard ERC4626 seed remains.
-assert(
-  !POOL_REGISTRY.some((pool) => pool.adapter === "erc4626" && !pool.nonStandardRedeem),
-  "no-seed precondition: standard ERC4626 seeds must be absent from POOL_REGISTRY",
-);
-assert(ERC4626_LEGACY_RECALL_VAULTS.length > 0, "recall answer key must be non-empty");
-
-// 2) The recall answer key is NOT a candidate source: it only supplies the
-//    address to probe; discovery must independently reverse-verify identity.
-const VAULT = ethers.getAddress(ERC4626_LEGACY_RECALL_VAULTS[0].address);
-const ASSET = ethers.getAddress(ERC4626_LEGACY_RECALL_VAULTS[0].asset);
+const VAULT = ethers.getAddress("0x1111111111111111111111111111111111111111");
+const ASSET = ethers.getAddress("0x2222222222222222222222222222222222222222");
 const CODE = "0x60006000";
 const ZERO_WORD = `0x${"0".repeat(64)}`;
 const ERC4626 = new ethers.Interface([
@@ -57,7 +43,7 @@ const ERC4626 = new ethers.Interface([
   "function redeem(uint256,address,address) returns (uint256)",
 ]);
 
-// A pinned mock of the fork state: the recall vault answers the ERC4626 ABI
+// A pinned mock state: the candidate vault answers the ERC4626 ABI
 // consistently, its asset() resolves to a token already in the graph, and the
 // redeem execution surface accepts the zero-amount probe.
 const context: ProtocolDiscoveryContext = {
@@ -70,7 +56,7 @@ const context: ProtocolDiscoveryContext = {
   backend: {
     async call(req) {
       if (req.to.toLowerCase() !== VAULT.toLowerCase()) {
-        throw Object.assign(new Error("not the recall vault"), { code: "CALL_EXCEPTION" });
+        throw Object.assign(new Error("not the candidate vault"), { code: "CALL_EXCEPTION" });
       }
       const selector = req.data.slice(0, 10);
       if (selector === ERC4626.getFunction("asset")!.selector) {
@@ -109,13 +95,13 @@ const context: ProtocolDiscoveryContext = {
     },
     async getStorageAt() { return ZERO_WORD; },
     async getLogs() { return []; },
-    async getTransactionReceipt() { throw new Error("no-seed recall must not need a receipt"); },
-    async traceTransaction() { throw new Error("no-seed recall must not need a trace"); },
+    async getTransactionReceipt() { throw new Error("address-candidate unit must not need a receipt"); },
+    async traceTransaction() { throw new Error("address-candidate unit must not need a trace"); },
   },
 };
 
-// 3) DEX address source only (no Withdraw event, no seed): the scanner probes
-//    the recall address as a graph token and self-enumerates the vault.
+// The candidate source is intentionally outside this unit. Once supplied, the
+// shared scanner dispatches it to the execution-family matcher.
 const evidenceCache = createProtocolDiscoveryEvidenceCache(1n);
 const scan = await scanProtocolDiscoveryRange({
   adapters: [erc4626Adapter],
@@ -123,10 +109,10 @@ const scan = await scanProtocolDiscoveryRange({
   candidateAddresses: [VAULT],
   evidenceCache,
 });
-assert(scan.sourceComplete, "no-seed DEX address scan must complete");
+assert(scan.sourceComplete, "address-candidate scan must complete");
 assert(
   scan.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1,
-  "scanner must self-enumerate the recall vault from the DEX address source",
+  "scanner must dispatch the supplied address to the ERC4626 family",
 );
 
 // 4) Full admission chain: identity attest -> route probe -> verified edges.
@@ -141,15 +127,15 @@ const result = await runProtocolDiscovery({
   sourceComplete: scan.sourceComplete,
   sourceErrors: scan.sourceErrors,
 });
-assert(result.wouldAdmit.length === 1, "no-seed discovery must admit the recall vault");
+assert(result.wouldAdmit.length === 1, "family discovery must admit the supplied candidate vault");
 assert(
   result.wouldAdmit[0].instance.pool.identitySource === "erc4626-standard",
-  "recall admission must carry a reverse-verified identity credential, not a seed",
+  "admission must carry a reverse-verified identity credential",
 );
-assert(result.wouldAdmit[0].edges.length === 2, "recall vault must emit deposit+redeem edges");
+assert(result.wouldAdmit[0].edges.length === 2, "candidate vault must emit deposit+redeem edges");
 
-// 5) Edge in graph -> path_found: the projected graph exposes a routable loop
-//    leg through the rediscovered vault.
+// The projected graph exposes both verified family directions. This is not a
+// production path-discovery assertion because the candidate was supplied.
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   result,
@@ -163,11 +149,11 @@ const projection = prepareProtocolDiscoveryProjection({
 });
 assert(
   buildTokenPaths(projection.backrunGraph, ASSET, VAULT, { maxHops: 2 }).length > 0,
-  "path_found: rediscovered vault must be routable asset -> vault",
+  "projected vault must be routable asset -> vault",
 );
 assert(
   buildTokenPaths(projection.backrunGraph, VAULT, ASSET, { maxHops: 2 }).length > 0,
-  "path_found: rediscovered vault must be routable vault -> asset",
+  "projected vault must be routable vault -> asset",
 );
 
 // 6) The projected pool carries verifiedRoutes, so a graph rebuild cannot
@@ -180,8 +166,5 @@ assert(
   "rediscovered vault must carry its verified routes for fail-closed rebuilds",
 );
 
-console.log(
-  `protocol-no-seed-recall PASS (recall vault ${VAULT} rediscovered seedless; ` +
-    "final_sim_success requires the blockscan-hunt no-seed fork mode)",
-);
+console.log(`erc4626-address-candidate-unit PASS (family matcher/probe projected ${VAULT})`);
 export {};

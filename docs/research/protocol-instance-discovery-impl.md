@@ -1,7 +1,8 @@
 # Protocol Instance Discovery — 终审 + 实现规格(自包含,供手机 Fable 执行)
 
 > **实现基线**:`codex/protocol-instance-discovery @ 1810309`(评审时的 tip)。
-> **状态**:`implemented_not_validated`(未 fixed)。P0 none。
+> **状态**:`implemented_not_validated`(未 fixed)。P0 none。当前验收单位已统一为
+> `ExecutionFamilyId`，不是协议品牌；instance discovery 与 family 执行验收分开。
 > **文档性质**:三方评审(Codex 1 / Codex 2 / Codex 3)+ Claude 1 终裁 + 可执行实现清单,合并为一份。
 > 姊妹文档:[protocol-instance-discovery-plan.md](protocol-instance-discovery-plan.md)(架构总纲)。本文件是它的落地规格。
 
@@ -21,7 +22,7 @@
 
 **当前(`1810309`)已实现**(逐条核实):
 ```
-adapter 声明 eventTopics/callSelectors
+execution-family adapter 声明 eventTopics/callSelectors
 → 通用 scanner 收集 DEX address / observed trace 候选
 → attestIdentity → probeCandidate → assertVerifiedEdges → graph projection
 ```
@@ -43,8 +44,8 @@ adapter 声明 eventTopics/callSelectors
 | 6 | 全局 route 裁决 | `protocol-instance-discovery.ts` | `semanticRouteKey = chainId + target + logicalInstanceId/poolId + tokenIn + tokenOut + slotKind + protocolAction`;等价 fingerprint **去重** + 显式 authority **选主(禁按注册顺序/字符串排序)**;observed selector **不进** semantic key,执行 selector 进 executionFingerprint |
 | 7 | 复合 projection key | `pool-universe.ts`(`poolRegistryKey` 现非 v4 = 裸地址)、`token-graph.ts`(`poolAddressMap`) | 同址第二逻辑实例会被吞;改复合 key **或**把 protocol route ownership 与单值 `poolAddressMap` 解耦 |
 | 8 | C2 非零 fork/revm redeem 第二证据 | `erc4626-discovery.ts`(新 evidence producer) | 现 C2 仅 `asset/convertTo*/preview*/deposit(0)/redeem(0)` view 调用;补本地 fork/revm 真跑非零 deposit+redeem、解码收据(实付 token/量 vs preview 一致)。**verified-routes-only + 删 legacy 的前置** |
-| 9 | legacy 全迁移 | `token-graph.ts`(`EXTERNAL_AND_LEGACY_POOL_REGISTRY`)、`erc4626.ts`(`buildEdges`) | 标准 erc4626 static seed 全删;srUSDe 类(`nonStandardRedeem`)进专用 adapter/verified route;`buildEdges` **只为 `verifiedRoutes[]` 发边**(否则通用 builder 凭 `fixedTokenIn` 重新长出 probe 拒过的 redeem);static 不再覆盖动态验证失败 |
-| 10 | 验收(见 §四) | 测试目录 | 含第二-adapter fixture + no-seed recall + scanner 自发枚举→final sim |
+| 9 | legacy 迁移门（尚未通过） | `token-graph.ts`、`erc4626.ts` | `buildEdges` 已支持 discovery-owned `verifiedRoutes[]`；但实链只 admission `6/20`，所以 20 个兼容 seed 保留且不作为 discovery 候选。只有 Production Replay 全覆盖后才能另行删除。 |
+| 10 | 两层验收(见 §四) | 测试目录 | Adapter Replay 按 `ExecutionFamilyId` 验 quote/plan/encode/final sim；Production Replay 另验 scanner 自发枚举。前者不能替代后者。 |
 
 **`VerifiedRouteClaim` 结构**:
 ```ts
@@ -131,8 +132,8 @@ retry 主判据是结构化 `.code`(CALL_EXCEPTION/BAD_DATA/INVALID_ARGUMENT),�
 7. 同 semantic route、不同 execution fingerprint → **隔离 + 告警**;
 8. **第二 dynamic adapter fixture**(§三.4)驱动 5/6/7 —— 无此 fixture 核心 5/6/7 记 untested;
 9. retryable 失败**不撤边**、确定性失败**撤边**;
-10. C2 非零 fork/revm redeem 第二证据;
-11. 无 ERC4626 static seed(legacy 全删)后,**no-seed replay**:物理移除 legacy/`POOL_REGISTRY` seed → scanner 自发枚举 → identity/probe → edge 入图 → `path_found` → `final_sim_success`;
+10. C2 非零 fork/revm redeem 第二证据 + `protocol:erc4626` execution-family Adapter Replay；
+11. 在隔离输入中排除 ERC4626 static fallback 后做 **Production Replay**：真实 DEX/event source → scanner 自发枚举 → identity/probe → edge 入图 → `path_found` → `final_sim_success`；不得把 legacy 答案地址直接作为 `candidateAddresses`；
 12. flag off + 有效 discovery = graph hash 不变。
 
 **第 11 项翻转前,一律 `implemented_not_validated`。**
@@ -141,7 +142,8 @@ retry 主判据是结构化 `.code`(CALL_EXCEPTION/BAD_DATA/INVALID_ARGUMENT),�
 
 ## 最终裁决(Claude 1)
 
-保留总体架构。九项核心作为单一交付一次做完:独立调度+持久 cursor、跨入口 trace memo、每候选独立验证去 target-quarantine、evidence 同块优先级+漂移复检、post-probe 跨-pass ownership、全局 route 裁决、复合 projection、C2 非零 redeem 证据、legacy 全迁移。
+保留总体架构。scanner/identity/probe 骨架已经落地；执行正确性按 execution family 验收，instance
+来源按 Production Replay 验收。legacy 全迁移尚未满足 20/20 source-derived recall，兼容 fallback 因此恢复。
 
 Codex 2 未推翻架构;Codex 3 补出 cadence/cursor/跨入口 trace/C2 四个真缺口,但"无 adapter 派生 filter""双 cache 没落盘"两项与 `1810309` 不符(错拿 final3 判);Codex 2 retry-正则表述更正为 `.code` 主判据。
 

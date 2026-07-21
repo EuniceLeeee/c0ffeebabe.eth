@@ -1,6 +1,6 @@
 # Protocol Instance Discovery — 分相实施计划
 
-> 目标:protocol adapter 注册后,实例**自动**发现、probe、建边、热更新进图 —— 消灭 per-instance
+> 目标:带 discovery capability 的 execution-family adapter 注册后,实例**自动**发现、probe、建边、热更新进图 —— 消灭 per-instance
 > 手写名单(erc4626 vault 类),保留经证明的身份根 pin(registry/factory/singleton)。
 > 实现基线:`origin/main 445c523`；候选实现提交:`5f9defb`(节点证据完成后再补最终文档提交)。
 
@@ -82,8 +82,9 @@ adapter，tx `0x14026eed…f4fd53` 另有 uCR/WETH cold DEX pool admission 缺�
   `53 → 55`，新增 deposit/redeem 两边。tool-run exit 0；manifest SHA-256
   `c26c4b9ef350e0d62c8949014321652a478035bac82f270e78b0962d488b5ee9`，elapsed `PT2.517S`。
 - legacy 标准 ERC4626 的候选召回 `11/20`、最终 admission `6/20`。因此节点 smoke 证明“adapter 注册后
-  可由 DEX source 自动入图”已经实现，但也实证 C2 的 legacy 删除门**未通过**；其余 14 个不得靠
-  静态答案卷反喂候选。此证据只支持 `implemented_not_validated`，不支持 `fixed`。
+  可由 DEX source 自动入图”已经实现，但也实证 C2 的 legacy 删除门**未通过**；20 个兼容 seed 已恢复，
+  且不会反喂 discovery。其余实例仍须由真实 DEX/event source 产生候选。此证据只支持
+  `implemented_not_validated`，不支持 `fixed`。
 
 ## 0. 已完成(不在本计划内)
 
@@ -239,9 +240,10 @@ interface ProtocolDiscoveryCapability {
      休眠 vault 靠主动枚举 + 证据 cache 必须能召回。
   2. **无 seed replay(强制)**:完全移除目标 legacy/`POOL_REGISTRY` seed 后重放,必须走通
      `scanner 自发枚举 → identity/probe 通过 → edge 入图 → path_found → final_sim_success`;
-     challenger **不得修改 trusted harness**；应由独立 no-seed harness 先产 scanner graph，再把同一
-     样本交给未改动的 trusted final-sim 出口。当前只有 graph 前后 smoke，没有合格 final-sim receipt，
-     故只记 `implemented_not_validated`,不得记 fixed(gates.md bucket-transition)。
+     challenger **不得修改 trusted harness**；应由独立 Production Replay 从真实 source 产 scanner graph，
+     再把同一样本交给未改动的 trusted final-sim 出口。当前只有 address-candidate unit、known-address
+     probe 与 graph smoke；它们均不证明 source discovery，也没有合格 final-sim receipt，故只记
+     `implemented_not_validated`,不得记 fixed(gates.md bucket-transition)。
   3. 新增 vault 边计数与 probe 拒绝计数入 journal;live 窗口漏斗无回归。
 - 上述全过后:删除 `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 的 erc4626 段(计划的核心交付物)。
   **C2 之前不得删。**

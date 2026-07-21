@@ -37,17 +37,6 @@ import {
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
-import {
-  prepareActiveProtocolDiscoveryPass,
-  protocolCandidateAddressesFromDexGraph,
-  protocolCandidateAddressesFromDexUniverse,
-} from "../protocol-discovery-runtime.js";
-import { EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP } from "../protocol-instance-discovery.js";
-import { buildStrategyViews } from "../strategy-views.js";
-import {
-  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
-} from "../venues/production-registry.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
   buildTokenGraph,
@@ -361,58 +350,6 @@ async function main(): Promise<void> {
     const pools = mergePoolRegistries(protocolPools, universePools);
     const rawEdges = await buildTokenGraph(graphBackend, pools);
     const edges = rawEdges.map(lowerEdge);
-
-    // No-seed replay (impl spec §四 acceptance 11): with the standard ERC4626
-    // seeds physically removed from POOL_REGISTRY, self-enumerate protocol
-    // instances from the DEX universe on the fork and merge the rediscovered
-    // edges before scanning. The final path_found -> final_sim_success then
-    // exercises a route that no seed provided. Default off = zero change.
-    if (process.env.SEARCHER_NO_SEED_REPLAY === "1") {
-      await check("no-seed replay: standard ERC4626 seeds physically absent", () =>
-        !POOL_REGISTRY.some((pool) => pool.adapter === "erc4626" && !pool.nonStandardRedeem),
-      );
-      const dexPoolAdapters = new Set(
-        PRODUCTION_ROUTE_ADAPTERS.swaps.flatMap((adapter) => [...adapter.poolAdapters]),
-      );
-      const graphTokens = [...new Set([
-        ...protocolCandidateAddressesFromDexUniverse(universePools, dexPoolAdapters),
-        ...protocolCandidateAddressesFromDexGraph(edges),
-      ])];
-      const noSeedDiscovery = await prepareActiveProtocolDiscoveryPass({
-        provider,
-        adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
-        identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-        protocolEdgesEnabled: true,
-        chainId: (await provider.getNetwork()).chainId,
-        currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
-        currentBackrunPools: pools,
-        currentBackrunGraph: edges,
-        buildStrategyViews: (viewPools) => buildStrategyViews(viewPools, [], [], {
-          blockscanMaxPools: cfg.maxPools,
-          poolUniverseGeneratedAt: "no-seed-replay",
-        }),
-        blockNumber: cfg.blockNumber,
-        fromBlock: cfg.blockNumber,
-        graphTokens,
-        candidateAddresses: graphTokens,
-        shadow: false,
-      });
-      const rediscovered = noSeedDiscovery.projection?.backrunGraph
-        .filter((edge) => edge.slotKind === "protocol") ?? [];
-      console.log(
-        `[blockscan-hunt] no-seed replay: address_probes=${noSeedDiscovery.scanner.addressStats.probes} ` +
-          `matches=${noSeedDiscovery.scanner.addressStats.matches} ` +
-          `rediscovered_protocol_edges=${rediscovered.length}`,
-      );
-      await check("no-seed replay: discovery self-enumerated protocol edges", () =>
-        rediscovered.length > 0,
-      );
-      if (noSeedDiscovery.projection) {
-        edges.length = 0;
-        edges.push(...noSeedDiscovery.projection.backrunGraph.map(lowerEdge));
-      }
-    }
-
     const protocolEdges = edges.filter((edge) => edge.slotKind === "protocol");
 
     await check("graph has swap edges and protocol edges", () =>

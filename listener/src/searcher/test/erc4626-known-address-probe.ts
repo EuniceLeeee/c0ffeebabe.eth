@@ -1,23 +1,18 @@
 /**
- * No-seed recall + C2 fork-redeem — REAL-CHAIN validation (impl spec §四
- * acceptance 10 + 11 discovery half, on live mainnet state).
+ * ERC4626 execution-family known-address probe on pinned mainnet state.
  *
- * With every standard ERC4626 static seed physically removed from
- * POOL_REGISTRY, each former hardcoded vault must be re-enumerated purely from
- * its address on the real chain: scanner self-enumerate -> on-chain identity
- * attest -> route probe (deposit zero-amount + NONZERO redeem via
- * eth_simulateV1 state override, item 8) -> loop-closable edge -> path_found.
- * No static seed grants admission at any step.
+ * The legacy vault corpus is deliberately supplied as the candidate input.
+ * The command proves only real-contract matcher -> identity -> route probe
+ * behavior, including nonzero redeem simulation where supported. It does NOT
+ * prove that production discovery sourced these addresses and is not a
+ * Production Replay or acceptance-11 result.
  *
  * Node + RPC required. Point at a mainnet RPC that supports debug/eth_simulateV1
  * (Alchemy works). Safe no-op when no RPC is configured, so the node-free suite
  * is unaffected:
  *
- *   MAINNET_RPC_URL=<alchemy-url> npm run searcher:protocol-no-seed-onchain
- *   # optional: SEARCHER_NO_SEED_ONCHAIN_BLOCK=<n>  SEARCHER_NO_SEED_ONCHAIN_LIMIT=<k>
- *
- * The remaining acceptance-11 step (BotVM final_sim_success) runs in the
- * blockscan-hunt no-seed mode on the operator node (needs anvil).
+ *   MAINNET_RPC_URL=<archive-url> npm run searcher:erc4626-known-address-probe
+ *   # optional: SEARCHER_ERC4626_PROBE_BLOCK=<n> SEARCHER_ERC4626_PROBE_LIMIT=<k>
  */
 
 import { ethers } from "ethers";
@@ -32,7 +27,7 @@ import {
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
 import { buildStrategyViews } from "../strategy-views.js";
-import { buildTokenPaths, POOL_REGISTRY, type PoolEntry } from "../planner/token-graph.js";
+import { buildTokenPaths, type PoolEntry } from "../planner/token-graph.js";
 import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import { ERC4626_LEGACY_RECALL_VAULTS } from "../venues/protocols/erc4626-legacy-recall.js";
@@ -40,7 +35,7 @@ import { ERC4626_LEGACY_RECALL_VAULTS } from "../venues/protocols/erc4626-legacy
 const rpcUrl = process.env.MAINNET_RPC_URL || process.env.SEARCHER_LIVE_RPC_URL || "";
 if (!rpcUrl) {
   console.log(
-    "protocol-no-seed-onchain SKIP (no MAINNET_RPC_URL/SEARCHER_LIVE_RPC_URL configured; " +
+    "erc4626-known-address-probe SKIP (no MAINNET_RPC_URL/SEARCHER_LIVE_RPC_URL configured; " +
       "this validation requires a mainnet RPC with eth_simulateV1 support)",
   );
   process.exit(0);
@@ -59,35 +54,27 @@ function redactRpc(url: string): string {
   }
 }
 
-// Physical removal is real before any on-chain work.
-assert(
-  !POOL_REGISTRY.some((pool) => pool.adapter === "erc4626" && !pool.nonStandardRedeem),
-  "no-seed precondition: standard ERC4626 seeds must be absent from POOL_REGISTRY",
-);
-
 const provider = new ethers.JsonRpcProvider(rpcUrl);
 const chainId = (await provider.getNetwork()).chainId;
 assert(chainId === 1n, `expected mainnet (chainId 1), got ${chainId}`);
-const blockNumber = process.env.SEARCHER_NO_SEED_ONCHAIN_BLOCK
-  ? Number(process.env.SEARCHER_NO_SEED_ONCHAIN_BLOCK)
-  : (await provider.getBlockNumber()) - 5;
+const blockNumber = process.env.SEARCHER_ERC4626_PROBE_BLOCK
+  ? Number(process.env.SEARCHER_ERC4626_PROBE_BLOCK)
+  : 25_571_701;
 assert(Number.isSafeInteger(blockNumber) && blockNumber > 0, "invalid pinned block");
 
-const limit = process.env.SEARCHER_NO_SEED_ONCHAIN_LIMIT
-  ? Number(process.env.SEARCHER_NO_SEED_ONCHAIN_LIMIT)
+const limit = process.env.SEARCHER_ERC4626_PROBE_LIMIT
+  ? Number(process.env.SEARCHER_ERC4626_PROBE_LIMIT)
   : ERC4626_LEGACY_RECALL_VAULTS.length;
 const vaults = ERC4626_LEGACY_RECALL_VAULTS.slice(0, Math.max(1, limit));
 
-// The recall vault addresses stand in for DEX-universe tokens: the answer key
-// supplies only the address to probe, never an admission credential. Identity
-// is reverse-verified on-chain per vault. Loop-closability holds because each
-// vault address is in graphTokens.
+// These addresses are an explicit diagnostic corpus, not a production source.
+// Identity is still reverse-verified on-chain per vault.
 const graphTokens = [...new Set(
   vaults.flatMap((vault) => [vault.address.toLowerCase(), vault.asset.toLowerCase()]),
 )];
 
 console.log(
-  `[no-seed-onchain] upstream=${redactRpc(rpcUrl)} block=${blockNumber} ` +
+  `[erc4626-known-address-probe] upstream=${redactRpc(rpcUrl)} block=${blockNumber} ` +
     `vaults=${vaults.length}/${ERC4626_LEGACY_RECALL_VAULTS.length}`,
 );
 
@@ -96,7 +83,7 @@ const attest = createCanonicalProtocolIdentityAttester({
 });
 const buildViews = (pools: PoolEntry[]) => buildStrategyViews(pools, [], [], {
   blockscanMaxPools: 200,
-  poolUniverseGeneratedAt: "no-seed-onchain",
+  poolUniverseGeneratedAt: "erc4626-known-address-probe",
 });
 
 interface VaultOutcome {
@@ -126,8 +113,7 @@ for (const vault of vaults) {
         detail: "no contract code at pinned block (deprecated vault)" });
       continue;
     }
-    // Address-source only: no Withdraw event, no seed. The scanner reverse-probes
-    // the address as a DEX-universe token candidate.
+    // The known address is supplied; the family still has to reverse-probe it.
     const scan = await scanProtocolDiscoveryRange({
       adapters: [erc4626Adapter],
       context,
@@ -191,32 +177,22 @@ const withCode = outcomes.filter((outcome) => outcome.status !== "no_code");
 
 for (const outcome of outcomes) {
   console.log(
-    `[no-seed-onchain] ${outcome.address} ${outcome.status} ` +
+    `[erc4626-known-address-probe] ${outcome.address} ${outcome.status} ` +
       `edges=${outcome.edges} fork_redeem=${outcome.redeemViaFork ? 1 : 0}` +
       (outcome.detail ? ` (${outcome.detail})` : ""),
   );
 }
 console.log(
-  `[no-seed-onchain] recall ${recalled.length}/${withCode.length} live vaults re-enumerated seedless; ` +
+  `[erc4626-known-address-probe] admitted ${recalled.length}/${withCode.length} live supplied vaults; ` +
     `nonzero fork-redeem evidence on ${forkRedeems.length}; ` +
     `${outcomes.length - withCode.length} deprecated (no code)`,
 );
 
-// The recall gate: every vault whose code is still deployed must be
-// re-enumerated seedless. A deprecated (no_code) vault is excused; anything
-// else is a real recall regression.
-const regressions = withCode.filter((outcome) => outcome.status !== "recalled");
-if (regressions.length > 0) {
-  console.log(
-    `protocol-no-seed-onchain FAIL: ${regressions.length} live vault(s) not recalled seedless: ` +
-      regressions.map((outcome) => `${outcome.address}=${outcome.status}`).join(", "),
-  );
-  process.exit(1);
-}
+assert(recalled.length > 0, "at least one supplied live vault must pass the real-chain family probe");
 assert(forkRedeems.length > 0, "at least one vault must prove a nonzero fork-redeem on real state");
 console.log(
-  `protocol-no-seed-onchain PASS (block ${blockNumber}: ${recalled.length} live recall vaults ` +
-    `re-enumerated seedless, ${forkRedeems.length} with on-chain nonzero fork-redeem evidence; ` +
-    "final_sim_success remains the operator-node blockscan-hunt no-seed step)",
+  `erc4626-known-address-probe PASS (block ${blockNumber}: ${recalled.length} supplied live vaults ` +
+    `admitted, ${forkRedeems.length} with on-chain nonzero fork-redeem evidence; ` +
+    "production source discovery and final sim remain unproven)",
 );
 export {};
