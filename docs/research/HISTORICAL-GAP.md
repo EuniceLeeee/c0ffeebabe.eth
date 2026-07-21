@@ -35,7 +35,7 @@ into separate success verdicts.
 
 | Validation level | Supplied by the fixture | Must be produced by production code | Verdict |
 |---|---|---|---|
-| **Adapter Replay** | The subject `ExecutionFamilyId` plus the complete ordered route recovered from the landed trace: route-leg adapter identity, target or pool id, token direction and lane-correct state anchor. | Registry-validated family edges, planner output, solver-selected input amount, every quote, adapter encoding, fork final simulation, flash repayment, token conservation and a positive decision from the pinned production EV policy. | runner: `adapter_replay_pass`; trusted promotion: `adapter_fixed` |
+| **Adapter Replay** | The subject `ExecutionFamilyId` plus the complete ordered route recovered from the landed trace: route-leg adapter identity, target or pool id, token direction and lane-correct state anchor. | Registry-validated family edges, planner output, solver-selected input amount, every quote, adapter encoding, fork final simulation, flash repayment, token conservation (no pre-existing intermediate inventory consumed; positive execution surplus is recorded but excluded from EV) and a positive decision from the pinned production EV policy. | runner: `adapter_replay_pass`; trusted promotion: `adapter_fixed` |
 | **Production Replay** | Only the historical transaction and its lane-correct state anchor; no route and no amount. | Universe membership, scanner or backrun-detector discovery, planner output, solver sizing, quotes, encoding, fork final simulation, repayment, conservation and positive production EV. | `production_fixed` |
 
 Adapter Replay deliberately bypasses active-pool admission and scanner/backrun discovery so one deterministic
@@ -54,8 +54,24 @@ counterfactual trigger causality remains a Production Replay responsibility.
 The validation unit is an execution family, not a protocol brand. Multiple protocols or pool instances may
 share one family when their quote and execution semantics are identical; registering a new instance does not
 create a new adapter verdict. Conversely, a protocol with two execution semantics needs two family fixtures.
+That verdict proves execution conformance only. Automatic instance intake additionally requires the
+family-appropriate identity contract: dynamic protocols declare candidate/evidence matchers plus identity and
+probe; swaps provide observation and an identity resolver over the DEX universe; infrastructure singletons use
+attested `declaredVenues`. A compat adapter supplies none of those promises. Registering quote/plan code alone
+therefore never means that new pools will be discovered automatically.
 The standalone command is `npm run searcher:adapter-family-replay -- --fixture <fixture>`; it is diagnostic
 evidence and is never a deployment hook or an A/B start condition.
+
+Adapter Replay is always route-pinned equivalence evidence; it makes no claim about production candidate rank,
+top-K admission or scanner stage advance. Those claims require Production Replay with no expected route fed to
+discovery or ranking. The fixture schema has no rounding/tolerance override: token rounding remains adapter-owned.
+Fluid DEX is still the explicit legacy execution switch and is absent from family coverage until a Fluid-specific
+fixture passes; moving that switch into a family would not, by itself, discover any additional Fluid instance.
+An Adapter Replay failure may be manually triaged as a gate/harness defect and the branch retained while that
+defect is repaired, but it cannot be promoted as an adapter fix or relabelled `adapter_replay_pass`. Because the
+failed check is directly relevant to an adapter claim, the harness regression and replay must pass before that
+claim closes. This is distinct from an unrelated systemic scanner A/B, whose bounded-live deployment does not
+depend on this optional checker.
 
 Every successful Adapter Replay writes a compact, redacted receipt containing the transaction hash, ordered
 route hash, reference-trace route hash, state block and state root, base and adapter commit, execution-family

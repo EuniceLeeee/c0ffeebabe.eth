@@ -76,7 +76,7 @@ competitiveness** — never conflate ([[feedback-validate-live-not-backtest]]).
 | latency / full pipeline | `npm run searcher:replay-live-fixtures` | per-stage `stageMs` p50/p95 (incl. preSolver) + revm profit equivalence (1 wei). Record live first with `SEARCHER_RECORD_LIVE_FIXTURES=1`. |
 | quote / math equivalence | `npm run searcher:finaloverlayequiv` / `:curvemath` / `:balanceslots` | local-quote vs on-chain quoter bit-exactness. |
 | final verify / bundle safety | `npm run searcher:finalverifygate` / `:bundle-router-safety` | terminal balance-assert flash-repay guard; standing-position rejection. |
-| execution-family Adapter Replay (independent; never deploy-blocking) | `npm run searcher:adapter-family-replay -- --fixture <fixture>` | trace-bound route is emitted by one registered `ExecutionFamilyId`; production planner/solver/quote/encode/fork sim/repayment/conservation/EV all pass without fixture amounts or calldata. Emits `adapter_replay_pass`, not `adapter_fixed`. |
+| execution-family Adapter Replay (route-pinned equivalence; independent; never deploy-blocking) | `npm run searcher:adapter-family-replay -- --fixture <fixture>` | trace-bound route is emitted by one registered `ExecutionFamilyId`; production planner/solver/quote/encode/fork sim/repayment/conservation/EV all pass without fixture amounts, tolerance or calldata. Conservation forbids consuming pre-existing intermediate inventory; positive safety-margin surplus is recorded and conservatively excluded from EV. It does not prove discovery, candidate rank or stage advance. Emits `adapter_replay_pass`, not `adapter_fixed`. |
 | reference arb (Foundry fork) | `forge test --match-test testReplayArbitrage --fork-url $MAINNET_RPC_URL --fork-block-number 24710787` | the wstUSR replay (see `test/WstUSRArb.t.sol`, `test/BotVM.t.sol`). |
 
 ## Correctness properties — MUST be test assertions, not prose (the #4 migration)
@@ -203,6 +203,14 @@ refactors. It defaults to `true` when absent. An explicitly reviewed report may 
 disables only the `challenger_stage > baseline_stage` assertion in that check. It is read only when
 `acceptance <id>` runs and cannot block deployment. Wallet, port, runtime, lane and posture protections are
 independent hard boundaries.
+
+The optional six-step checker is diagnostic and cannot block starting a bounded-live B or an unrelated systemic
+cohort/A-B decision. A nonzero result remains recorded with its exact failed stage and logs; manual review may
+classify it as irrelevant to the declared change or as a gate/harness bug and continue the dry-run/diagnosis.
+Never rewrite a failed machine result to `pass`. If the claimed fix itself is a deterministic route/adapter
+change, Rule 12 still applies: repair the harness, add its regression, review it, and rerun before promotion or a
+`fixed` verdict. Wallet/signing/broadcast posture, target SHA, port/process stability, shared-input fairness and
+the other hard safety boundaries remain non-overridable.
 
 Only this explicit `require_stage_advance=false` equivalence replay receives the closed-loop search budget:
 the already-frozen A/B universe is reused, at most 20,000 pools are loaded, 512 coarse candidates may be

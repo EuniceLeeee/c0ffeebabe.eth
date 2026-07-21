@@ -883,6 +883,17 @@ function runReferenceMatcherSelfTests(): void {
     () => matchReferenceSwapImpacts(repeatedFixture, [repeatedEdge, repeatedEdge], [], [oneImpact]),
     /leg 2/,
   );
+
+  assert.doesNotThrow(() => assertIntermediateBalanceConserved(tokenA, tokenB, 1n));
+  assert.throws(
+    () => assertIntermediateBalanceConserved(tokenA, tokenB, -1n),
+    /consumed pre-existing intermediate token balance/,
+  );
+  assert.doesNotThrow(() => assertNoPreexistingRouteInventory(new Map([[tokenA, 0n]])));
+  assert.throws(
+    () => assertNoPreexistingRouteInventory(new Map([[tokenA, 1n]])),
+    /pre-existing route-token inventory/,
+  );
 }
 
 async function buildPinnedRoute(
@@ -953,6 +964,24 @@ function routeHash(edges: TokenEdge[]): string {
   }))));
 }
 
+function assertIntermediateBalanceConserved(
+  token: string,
+  profitToken: string,
+  delta: bigint,
+): void {
+  if (token.toLowerCase() !== profitToken.toLowerCase() && delta < 0n) {
+    throw new Error(`conservation replay consumed pre-existing intermediate token balance ${token}: ${delta}`);
+  }
+}
+
+function assertNoPreexistingRouteInventory(balances: ReadonlyMap<string, bigint>): void {
+  for (const [token, balance] of balances) {
+    if (balance !== 0n) {
+      throw new Error(`conservation replay executor has pre-existing route-token inventory ${token}: ${balance}`);
+    }
+  }
+}
+
 function opportunity(
   fixture: AdapterReplayFixture,
   edges: TokenEdge[],
@@ -988,6 +1017,7 @@ async function proveConservation(
   try {
     const executorBefore = new Map<string, bigint>();
     for (const token of tokens) executorBefore.set(token, await state.getTokenBalance(token, DEFAULT_SEARCHER_EXECUTOR));
+    assertNoPreexistingRouteInventory(executorBefore);
     const lenderBalanceBefore = await state.getTokenBalance(solved.profitToken, lender);
     const calldata = buildExecuteCalldata(compilePlan(solved.root, DEFAULT_SEARCHER_EXECUTOR));
     if (calldata.toLowerCase() !== expectedCalldata.toLowerCase()) {
@@ -1007,7 +1037,7 @@ async function proveConservation(
       const delta = after - executorBefore.get(token)!;
       executorDeltas[token] = delta.toString();
       if (token.toLowerCase() === solved.profitToken.toLowerCase()) grossProfit = delta;
-      else if (delta !== 0n) throw new Error(`intermediate token residue ${token}: ${delta}`);
+      else assertIntermediateBalanceConserved(token, solved.profitToken, delta);
     }
     if (grossProfit <= 0n) throw new Error("conservation replay produced no positive profit-token delta");
     const lenderBalanceAfter = await state.getTokenBalance(solved.profitToken, lender);
