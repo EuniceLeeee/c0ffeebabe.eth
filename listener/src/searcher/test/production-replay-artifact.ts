@@ -30,7 +30,7 @@ export interface ProductionReplayDiscoveryArtifact {
   readonly sourceComplete: true;
   readonly evaluationComplete: true;
   readonly discoveredPoolKeys: readonly string[];
-  /** Complete projected view; only discoveredPoolKeys are injected by the preload. */
+  /** Exact discovered subset; static/legacy pools stay in the ordinary universe. */
   readonly pools: readonly PoolEntry[];
 }
 
@@ -87,13 +87,6 @@ export function loadProductionReplayDiscoveredPools(
     throw new Error("production replay source universe does not end at the discovery source block");
   }
 
-  const pools = raw.pools.map((item, index) => parseProjectedPool(item, index));
-  const poolByKey = new Map<string, PoolEntry>();
-  for (const pool of pools) {
-    const key = poolRegistryKey(pool);
-    if (poolByKey.has(key)) throw new Error(`duplicate projected pool key ${key}`);
-    poolByKey.set(key, pool);
-  }
   const keys = raw.discoveredPoolKeys.map((value, index) => {
     if (typeof value !== "string" || !value) {
       throw new Error(`discoveredPoolKeys[${index}] must be a non-empty string`);
@@ -103,7 +96,27 @@ export function loadProductionReplayDiscoveredPools(
   if (new Set(keys).size !== keys.length) {
     throw new Error("production replay discovery artifact repeats a discovered pool key");
   }
-  return keys.map((key) => {
+  if (raw.pools.length !== keys.length) {
+    throw new Error("production replay artifact pools must exactly match discoveredPoolKeys");
+  }
+  const pools = raw.pools.map((item, index) => parseProjectedPool(item, index));
+  return selectProductionReplayDiscoveredPools(pools, keys);
+}
+
+export function selectProductionReplayDiscoveredPools(
+  projectedPools: readonly PoolEntry[],
+  discoveredPoolKeys: readonly string[],
+): PoolEntry[] {
+  if (new Set(discoveredPoolKeys).size !== discoveredPoolKeys.length) {
+    throw new Error("production replay discovery repeats a discovered pool key");
+  }
+  const poolByKey = new Map<string, PoolEntry>();
+  for (const pool of projectedPools) {
+    const key = poolRegistryKey(pool);
+    if (poolByKey.has(key)) throw new Error(`duplicate projected pool key ${key}`);
+    poolByKey.set(key, pool);
+  }
+  return discoveredPoolKeys.map((key) => {
     const pool = poolByKey.get(key);
     if (!pool) throw new Error(`discovered pool key ${key} is absent from projected pools`);
     if (!pool.verifiedRoutes || pool.verifiedRoutes.length === 0) {

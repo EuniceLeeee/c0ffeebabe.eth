@@ -79,6 +79,7 @@ import {
 import {
   PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
   PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
+  selectProductionReplayDiscoveredPools,
   type ProductionReplayUniverseEvidence,
   writeProductionReplayDiscoveryArtifact,
 } from "./production-replay-artifact.js";
@@ -431,6 +432,10 @@ async function main(): Promise<void> {
     const discoveredPoolKeys = [...pass.projection.ownership.admissions.values()]
       .map((item) => poolRegistryKey(item.instance.pool))
       .sort();
+    const discoveredPools = selectProductionReplayDiscoveredPools(
+      pass.projection.strategyViews.blockscan,
+      discoveredPoolKeys,
+    );
     const artifactPath = resolve(tempRoot, "verified-universe.json");
     const artifactSha256 = writeProductionReplayDiscoveryArtifact(artifactPath, {
       schemaVersion: PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
@@ -442,7 +447,7 @@ async function main(): Promise<void> {
       sourceComplete: sourceComplete as true,
       evaluationComplete: evaluationComplete as true,
       discoveredPoolKeys,
-      pools: pass.projection.strategyViews.blockscan,
+      pools: discoveredPools,
     });
     report = emptyReport(
       cfg,
