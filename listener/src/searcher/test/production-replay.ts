@@ -266,6 +266,7 @@ const LISTENER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..
 const REPO_ROOT = resolve(LISTENER_ROOT, "..");
 const HUNT_PATH = resolve(LISTENER_ROOT, "src/searcher/test/blockscan-hunt.ts");
 const PRELOAD_PATH = resolve(LISTENER_ROOT, "src/searcher/test/production-replay-preload.ts");
+const TSX_IMPORT_URL = import.meta.resolve("tsx");
 
 async function main(): Promise<void> {
   loadRpcEnv();
@@ -880,7 +881,7 @@ async function runHunt(input: {
     PRODUCTION_REPLAY_UNIVERSE_SHA256: input.universeSha256,
   });
   const args = [
-    "--import", "tsx",
+    "--import", TSX_IMPORT_URL,
     "--import", pathToFileURL(PRELOAD_PATH).href,
     HUNT_PATH,
   ];
