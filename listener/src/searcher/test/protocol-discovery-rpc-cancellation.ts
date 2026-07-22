@@ -6,8 +6,12 @@ import { createPinnedProtocolDiscoveryContext } from "../protocol-instance-disco
 const HANG_DATA = "0x12345678";
 const REVERT_DATA = "0xdeadbeef";
 const TX_HASH = `0x${"ab".repeat(32)}`;
+const RATE_LIMIT_TX_HASH = `0x${"cd".repeat(32)}`;
+const NETWORK_RETRY_TX_HASH = `0x${"ef".repeat(32)}`;
 let activeResponses = 0;
 let abortedResponses = 0;
+let rateLimitedReceiptAttempts = 0;
+let networkReceiptAttempts = 0;
 
 const rawLog = {
   address: "0x0000000000000000000000000000000000000001",
@@ -33,6 +37,18 @@ const server = createServer((request, response) => {
       return;
     }
     if (parsed.method === "eth_getTransactionReceipt") {
+      if (parsed.params[0] === NETWORK_RETRY_TX_HASH && networkReceiptAttempts++ === 0) {
+        response.destroy();
+        return;
+      }
+      if (parsed.params[0] === RATE_LIMIT_TX_HASH && rateLimitedReceiptAttempts++ < 2) {
+        response.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "0",
+        });
+        response.end(JSON.stringify({ error: "rate limited" }));
+        return;
+      }
       respond(response, {
         jsonrpc: "2.0",
         id: parsed.id,
@@ -101,6 +117,12 @@ try {
   const receipt = await context.backend.getTransactionReceipt(TX_HASH);
   assert.equal(receipt?.status, 1, "raw receipt status quantity must normalize to a number");
   assert.equal(receipt?.logs[0]?.blockNumber, 1, "receipt logs must use the same normalization");
+  const retriedReceipt = await context.backend.getTransactionReceipt(RATE_LIMIT_TX_HASH);
+  assert.equal(retriedReceipt?.status, 1, "HTTP 429 must retry to the successful receipt response");
+  assert.equal(rateLimitedReceiptAttempts, 3, "HTTP 429 retry count must stay bounded");
+  const networkRetriedReceipt = await context.backend.getTransactionReceipt(NETWORK_RETRY_TX_HASH);
+  assert.equal(networkRetriedReceipt?.status, 1, "nested fetch failure must retry successfully");
+  assert.equal(networkReceiptAttempts, 2, "network retry count must stay bounded");
 } finally {
   provider.destroy();
   server.closeAllConnections();

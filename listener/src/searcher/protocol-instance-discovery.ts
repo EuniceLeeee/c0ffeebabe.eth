@@ -220,6 +220,9 @@ function normalizeProtocolDiscoveryLog(log: RawProtocolDiscoveryLog) {
 }
 
 let protocolDiscoveryRpcId = 0;
+const PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS = 3;
+const PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS = 500;
+const RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 
 async function sendProtocolDiscoveryRpc<T>(
   provider: ethers.JsonRpcProvider,
@@ -228,51 +231,95 @@ async function sendProtocolDiscoveryRpc<T>(
   timeoutMs: number,
   label: string,
 ): Promise<T> {
-  const payload: JsonRpcPayload = {
-    id: ++protocolDiscoveryRpcId,
-    jsonrpc: "2.0",
-    method,
-    params,
-  };
   // Ethers does not expose an AbortSignal per provider.send call. Reuse its
   // connection URL and resolved auth headers, but issue this deadline-bound
   // request through fetch so AbortController closes the actual transport.
   const connection = provider._getConnection();
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  try {
-    const response = await fetch(connection.url, {
-      method: "POST",
-      headers: { ...connection.headers, "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(
-        `protocol discovery ${label} HTTP ${response.status} ${response.statusText}`,
-      );
+  for (let attempt = 1; attempt <= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS; attempt++) {
+    const payload: JsonRpcPayload = {
+      id: ++protocolDiscoveryRpcId,
+      jsonrpc: "2.0",
+      method,
+      params,
+    };
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    try {
+      const response = await fetch(connection.url, {
+        method: "POST",
+        headers: { ...connection.headers, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const error = Object.assign(
+          new Error(`protocol discovery ${label} HTTP ${response.status} ${response.statusText}`),
+          {
+            status: response.status,
+            retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
+          },
+        );
+        throw error;
+      }
+      const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
+      if (body.error) throw provider.getRpcError(payload, body as JsonRpcError);
+      if (!("result" in body)) {
+        throw new Error(`protocol discovery ${label} returned no result`);
+      }
+      return body.result as T;
+    } catch (error) {
+      if (timedOut) {
+        throw new Error(
+          `protocol discovery ${label} timed out after ${timeoutMs}ms`,
+          { cause: error },
+        );
+      }
+      if (
+        attempt >= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS ||
+        !isRetryableProtocolDiscoveryRpcTransportFailure(error)
+      ) throw error;
+      clearTimeout(timer);
+      await delay(protocolDiscoveryRetryDelayMs(error, attempt));
+    } finally {
+      clearTimeout(timer);
     }
-    const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
-    if (body.error) throw provider.getRpcError(payload, body as JsonRpcError);
-    if (!("result" in body)) {
-      throw new Error(`protocol discovery ${label} returned no result`);
-    }
-    return body.result as T;
-  } catch (error) {
-    if (timedOut) {
-      throw new Error(
-        `protocol discovery ${label} timed out after ${timeoutMs}ms`,
-        { cause: error },
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
   }
+  throw new Error(`protocol discovery ${label} exhausted RPC attempts`);
+}
+
+function isRetryableProtocolDiscoveryRpcTransportFailure(error: unknown): boolean {
+  const status = error && typeof error === "object" && "status" in error
+    ? Number((error as { status?: unknown }).status)
+    : NaN;
+  if (RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES.has(status)) return true;
+  return isRetryableProtocolDiscoveryFailure(error);
+}
+
+function protocolDiscoveryRetryDelayMs(error: unknown, attempt: number): number {
+  const retryAfterMs = error && typeof error === "object" && "retryAfterMs" in error
+    ? Number((error as { retryAfterMs?: unknown }).retryAfterMs)
+    : NaN;
+  if (Number.isFinite(retryAfterMs) && retryAfterMs >= 0) {
+    return Math.min(5_000, retryAfterMs);
+  }
+  return PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS * attempt;
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, timestamp - Date.now());
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export type ProtocolDiscoveryStage =
@@ -1106,21 +1153,54 @@ class RetryableProtocolDiscoveryError extends Error {
 }
 
 function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
-  if (value instanceof RetryableProtocolDiscoveryError) return true;
-  const code = value && typeof value === "object" && "code" in value
-    ? String((value as { code?: unknown }).code).toUpperCase()
-    : "";
-  if (new Set([
+  const retryableCodes = new Set([
     "NETWORK_ERROR",
     "SERVER_ERROR",
     "TIMEOUT",
     "ETIMEDOUT",
-    "ECONNRESET",
-    "ECONNREFUSED",
+    "EAI_AGAIN",
+    "ENETUNREACH",
+    "EHOSTUNREACH",
+    "ENOTFOUND",
     "EPIPE",
-    "UND_ERR_CONNECT_TIMEOUT",
-  ]).has(code)) return true;
-  const message = value instanceof Error ? value.message : String(value);
-  return /timed?\s*out|network|socket|connection (?:closed|reset|refused)|temporarily unavailable|\b(?:429|502|503|504)\b/i
-    .test(message);
+  ]);
+  for (const item of protocolDiscoveryErrorChain(value)) {
+    if (item instanceof RetryableProtocolDiscoveryError) return true;
+    const code = item && typeof item === "object" && "code" in item
+      ? String((item as { code?: unknown }).code).toUpperCase()
+      : "";
+    if (
+      retryableCodes.has(code) ||
+      code.startsWith("ECONN") ||
+      code.startsWith("UND_ERR_")
+    ) return true;
+    const message = item instanceof Error ? item.message : String(item);
+    if (
+      /timed?\s*out|rate.?limit|too many requests|fetch failed|network|socket|connection (?:closed|reset|refused)|temporar(?:y|ily) unavailable|\b(?:429|502|503|504)\b/i
+        .test(message)
+    ) return true;
+  }
+  return false;
+}
+
+function protocolDiscoveryErrorChain(error: unknown): unknown[] {
+  const values: unknown[] = [];
+  const pending: Array<{ readonly value: unknown; readonly depth: number }> = [
+    { value: error, depth: 0 },
+  ];
+  const seen = new Set<object>();
+  while (pending.length > 0 && values.length < 16) {
+    const next = pending.shift()!;
+    values.push(next.value);
+    if (!next.value || typeof next.value !== "object" || next.depth >= 4) continue;
+    if (seen.has(next.value)) continue;
+    seen.add(next.value);
+    const record = next.value as Record<string, unknown>;
+    for (const key of ["cause", "error", "response"] as const) {
+      if (record[key] !== undefined) {
+        pending.push({ value: record[key], depth: next.depth + 1 });
+      }
+    }
+  }
+  return values;
 }
