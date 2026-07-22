@@ -8,10 +8,13 @@ const REVERT_DATA = "0xdeadbeef";
 const TX_HASH = `0x${"ab".repeat(32)}`;
 const RATE_LIMIT_TX_HASH = `0x${"cd".repeat(32)}`;
 const NETWORK_RETRY_TX_HASH = `0x${"ef".repeat(32)}`;
+const DEADLINE_TX_HASH = `0x${"12".repeat(32)}`;
 let activeResponses = 0;
 let abortedResponses = 0;
 let rateLimitedReceiptAttempts = 0;
 let networkReceiptAttempts = 0;
+let deadlineReceiptAttempts = 0;
+let revertAttempts = 0;
 
 const rawLog = {
   address: "0x0000000000000000000000000000000000000001",
@@ -37,6 +40,11 @@ const server = createServer((request, response) => {
       return;
     }
     if (parsed.method === "eth_getTransactionReceipt") {
+      if (parsed.params[0] === DEADLINE_TX_HASH) {
+        deadlineReceiptAttempts++;
+        setTimeout(() => response.destroy(), 60).unref();
+        return;
+      }
       if (parsed.params[0] === NETWORK_RETRY_TX_HASH && networkReceiptAttempts++ === 0) {
         response.destroy();
         return;
@@ -57,10 +65,11 @@ const server = createServer((request, response) => {
       return;
     }
     if (parsed.params[0]?.data === REVERT_DATA) {
+      revertAttempts++;
       respond(response, {
         jsonrpc: "2.0",
         id: parsed.id,
-        error: { code: 3, message: "execution reverted", data: REVERT_DATA },
+        error: { code: 3, message: "execution reverted: network 429", data: REVERT_DATA },
       });
       return;
     }
@@ -87,6 +96,20 @@ const context = createPinnedProtocolDiscoveryContext({
   rpcTimeoutMs: 60,
   graphTokens: [],
 });
+const retryContext = createPinnedProtocolDiscoveryContext({
+  provider,
+  blockNumber: 1,
+  fromBlock: 1,
+  rpcTimeoutMs: 1_500,
+  graphTokens: [],
+});
+const deadlineContext = createPinnedProtocolDiscoveryContext({
+  provider,
+  blockNumber: 1,
+  fromBlock: 1,
+  rpcTimeoutMs: 80,
+  graphTokens: [],
+});
 
 try {
   const startedAt = Date.now();
@@ -111,18 +134,27 @@ try {
     },
     "cancellable discovery transport must preserve JSON-RPC revert data",
   );
+  assert.equal(revertAttempts, 1, "deterministic JSON-RPC revert must not be retried by message text");
 
   const logs = await context.backend.getLogs({ topics: [], fromBlock: 1, toBlock: 1 });
   assert.equal(logs[0]?.blockNumber, 1, "raw log block quantity must normalize to a number");
   const receipt = await context.backend.getTransactionReceipt(TX_HASH);
   assert.equal(receipt?.status, 1, "raw receipt status quantity must normalize to a number");
   assert.equal(receipt?.logs[0]?.blockNumber, 1, "receipt logs must use the same normalization");
-  const retriedReceipt = await context.backend.getTransactionReceipt(RATE_LIMIT_TX_HASH);
+  const retriedReceipt = await retryContext.backend.getTransactionReceipt(RATE_LIMIT_TX_HASH);
   assert.equal(retriedReceipt?.status, 1, "HTTP 429 must retry to the successful receipt response");
   assert.equal(rateLimitedReceiptAttempts, 3, "HTTP 429 retry count must stay bounded");
-  const networkRetriedReceipt = await context.backend.getTransactionReceipt(NETWORK_RETRY_TX_HASH);
+  const networkRetriedReceipt = await retryContext.backend.getTransactionReceipt(NETWORK_RETRY_TX_HASH);
   assert.equal(networkRetriedReceipt?.status, 1, "nested fetch failure must retry successfully");
   assert.equal(networkReceiptAttempts, 2, "network retry count must stay bounded");
+
+  const deadlineStartedAt = Date.now();
+  await assert.rejects(
+    deadlineContext.backend.getTransactionReceipt(DEADLINE_TX_HASH),
+    /protocol discovery eth_getTransactionReceipt timed out after 80ms/,
+  );
+  assert(Date.now() - deadlineStartedAt < 250, "transport retries must share one absolute deadline");
+  assert.equal(deadlineReceiptAttempts, 1, "retry backoff must not overrun the absolute deadline");
 } finally {
   provider.destroy();
   server.closeAllConnections();

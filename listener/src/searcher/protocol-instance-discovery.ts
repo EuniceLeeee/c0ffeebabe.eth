@@ -235,7 +235,10 @@ async function sendProtocolDiscoveryRpc<T>(
   // connection URL and resolved auth headers, but issue this deadline-bound
   // request through fetch so AbortController closes the actual transport.
   const connection = provider._getConnection();
+  const deadlineAtMs = Date.now() + timeoutMs;
   for (let attempt = 1; attempt <= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS; attempt++) {
+    const remainingMs = deadlineAtMs - Date.now();
+    if (remainingMs <= 0) throw protocolDiscoveryRpcTimeout(label, timeoutMs);
     const payload: JsonRpcPayload = {
       id: ++protocolDiscoveryRpcId,
       jsonrpc: "2.0",
@@ -247,7 +250,7 @@ async function sendProtocolDiscoveryRpc<T>(
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, timeoutMs);
+    }, remainingMs);
     try {
       const response = await fetch(connection.url, {
         method: "POST",
@@ -273,17 +276,18 @@ async function sendProtocolDiscoveryRpc<T>(
       return body.result as T;
     } catch (error) {
       if (timedOut) {
-        throw new Error(
-          `protocol discovery ${label} timed out after ${timeoutMs}ms`,
-          { cause: error },
-        );
+        throw protocolDiscoveryRpcTimeout(label, timeoutMs, error);
       }
       if (
         attempt >= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS ||
         !isRetryableProtocolDiscoveryRpcTransportFailure(error)
       ) throw error;
       clearTimeout(timer);
-      await delay(protocolDiscoveryRetryDelayMs(error, attempt));
+      const retryDelayMs = protocolDiscoveryRetryDelayMs(error, attempt);
+      if (retryDelayMs >= deadlineAtMs - Date.now()) {
+        throw protocolDiscoveryRpcTimeout(label, timeoutMs, error);
+      }
+      await delay(retryDelayMs);
     } finally {
       clearTimeout(timer);
     }
@@ -292,11 +296,27 @@ async function sendProtocolDiscoveryRpc<T>(
 }
 
 function isRetryableProtocolDiscoveryRpcTransportFailure(error: unknown): boolean {
-  const status = error && typeof error === "object" && "status" in error
-    ? Number((error as { status?: unknown }).status)
-    : NaN;
-  if (RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES.has(status)) return true;
-  return isRetryableProtocolDiscoveryFailure(error);
+  for (const item of protocolDiscoveryErrorChain(error)) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const status = Number(record.status ?? record.statusCode);
+    if (RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES.has(status)) return true;
+    const code = String(record.code ?? "").toUpperCase();
+    if (
+      code.startsWith("ECONN") ||
+      code.startsWith("UND_ERR_") ||
+      new Set([
+        "ETIMEDOUT",
+        "EAI_AGAIN",
+        "ENETUNREACH",
+        "EHOSTUNREACH",
+        "ENOTFOUND",
+        "EPIPE",
+      ]).has(code)
+    ) return true;
+    if (item instanceof TypeError && /fetch failed/i.test(item.message)) return true;
+  }
+  return false;
 }
 
 function protocolDiscoveryRetryDelayMs(error: unknown, attempt: number): number {
@@ -320,6 +340,17 @@ function parseRetryAfterMs(value: string | null): number | null {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function protocolDiscoveryRpcTimeout(
+  label: string,
+  timeoutMs: number,
+  cause?: unknown,
+): Error {
+  return new Error(
+    `protocol discovery ${label} timed out after ${timeoutMs}ms`,
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 export type ProtocolDiscoveryStage =
@@ -1153,6 +1184,8 @@ class RetryableProtocolDiscoveryError extends Error {
 }
 
 function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
+  const chain = protocolDiscoveryErrorChain(value);
+  if (chain.some(isDeterministicProtocolRpcFailure)) return false;
   const retryableCodes = new Set([
     "NETWORK_ERROR",
     "SERVER_ERROR",
@@ -1164,7 +1197,7 @@ function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
     "ENOTFOUND",
     "EPIPE",
   ]);
-  for (const item of protocolDiscoveryErrorChain(value)) {
+  for (const item of chain) {
     if (item instanceof RetryableProtocolDiscoveryError) return true;
     const code = item && typeof item === "object" && "code" in item
       ? String((item as { code?: unknown }).code).toUpperCase()
@@ -1181,6 +1214,15 @@ function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
     ) return true;
   }
   return false;
+}
+
+function isDeterministicProtocolRpcFailure(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  const code = String(record.code ?? "").toUpperCase();
+  if (code === "CALL_EXCEPTION" || Number(record.code) === 3) return true;
+  const message = value instanceof Error ? value.message : String(record.message ?? "");
+  return /execution reverted|call exception/i.test(message) && record.data !== undefined;
 }
 
 function protocolDiscoveryErrorChain(error: unknown): unknown[] {
