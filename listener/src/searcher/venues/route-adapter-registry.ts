@@ -41,6 +41,61 @@ function assertProtocolVenueDeclarations(
         `route adapter registry: ${adapter.id} discovery must remain behind protocol edge admission`,
       );
     }
+    if (Boolean(adapter.discovery) !== Boolean(adapter.discoveryIdentityResolver)) {
+      throw new Error(
+        `route adapter registry: ${adapter.id} discovery and dynamic identity must ship together`,
+      );
+    }
+    if (adapter.discovery) {
+      const sources = new Set(adapter.discovery.candidateSources);
+      if (sources.size === 0) {
+        throw new Error(`route adapter registry: ${adapter.id} discovery declares no candidate source`);
+      }
+      if (sources.size !== adapter.discovery.candidateSources.length) {
+        throw new Error(`route adapter registry: ${adapter.id} repeats a candidate source`);
+      }
+      if (adapter.discovery.candidateFromAddress && !sources.has("dex-token-domain")) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} address matcher must declare dex-token-domain`,
+        );
+      }
+      if (sources.has("dex-token-domain") && !adapter.discovery.candidateFromAddress) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} declares dex-token-domain without a matcher`,
+        );
+      }
+      if (adapter.discovery.candidateFromObservedCall && !sources.has("observed-interaction")) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} call matcher must declare observed-interaction`,
+        );
+      }
+      if (sources.has("observed-interaction") && !adapter.discovery.candidateFromObservedCall) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} declares observed-interaction without a matcher`,
+        );
+      }
+      if (
+        adapter.discovery.candidateFromObservedCall &&
+        !adapter.discovery.observedMatcherVersion?.trim()
+      ) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} observed matcher must declare a version`,
+        );
+      }
+      if (
+        adapter.discovery.observedMatcherVersion &&
+        !adapter.discovery.candidateFromObservedCall
+      ) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} declares an observed matcher version without a matcher`,
+        );
+      }
+      if (sources.has("canonical-registry")) {
+        throw new Error(
+          `route adapter registry: ${adapter.id} canonical registry source has no shared enumerator yet`,
+        );
+      }
+    }
     if (
       adapter.discovery?.candidateFromAddress &&
       !adapter.discovery.addressMatcherVersion?.trim()

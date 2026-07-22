@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import {
   createProtocolTraceMemo,
+  protocolObservedSourceFingerprint,
   scanObservedProtocolTrace,
   scanProtocolDiscoveryRange,
   shouldTraceForProtocolDiscovery,
@@ -100,6 +101,45 @@ const known = await scanObservedProtocolTrace({
 });
 assert(known.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1, "known address+selector candidate");
 assert(known.unknownSelectors.length === 0, "known protocol call must keep unknown diagnostics clean");
+
+const observedFingerprint = protocolObservedSourceFingerprint([erc4626Adapter]);
+const observedAlias = {
+  ...erc4626Adapter,
+  id: "protocol:erc4626-observed-fingerprint-fixture" as const,
+  discovery: {
+    ...erc4626Adapter.discovery!,
+    observedMatcherVersion: "erc4626-observed-fixture-v1",
+  },
+};
+const addressOnlyAlias = {
+  ...erc4626Adapter,
+  id: "protocol:erc4626-address-fingerprint-fixture" as const,
+  discovery: {
+    ...erc4626Adapter.discovery!,
+    candidateSources: ["dex-token-domain"] as const,
+    eventTopics: [],
+    callSelectors: [],
+    observedMatcherVersion: undefined,
+    candidateFromObservedCall: undefined,
+  },
+};
+assert(
+  observedFingerprint === protocolObservedSourceFingerprint([erc4626Adapter]),
+  "observed-source fingerprint must be deterministic",
+);
+assert(
+  observedFingerprint !== protocolObservedSourceFingerprint([erc4626Adapter, observedAlias]),
+  "adding an observed family must change the shared cursor fingerprint",
+);
+assert(
+  observedFingerprint !== protocolObservedSourceFingerprint([erc4626Adapter, addressOnlyAlias]),
+  "adding an address-only family must invalidate persisted discovery ownership",
+);
+assert(
+  protocolObservedSourceFingerprint([erc4626Adapter, observedAlias]) ===
+    protocolObservedSourceFingerprint([observedAlias, erc4626Adapter]),
+  "observed-source fingerprint must not depend on registration order",
+);
 
 const siblingPayout = await scanObservedProtocolTrace({
   adapters: [erc4626Adapter],

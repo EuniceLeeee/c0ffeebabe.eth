@@ -27,6 +27,10 @@ export interface ProtocolAddressCacheEntry {
 export interface ProtocolDiscoveryRuntimeState {
   /** Highest block whose protocol event window fully completed. null = never scanned. */
   observedCursor: number | null;
+  /** Hash of the observed family/topic/selector/matcher registry behind the cursor. */
+  observedSourceFingerprint: string | null;
+  /** Per-family matcher fingerprints for targeted ownership invalidation. */
+  readonly discoverySourceFingerprints: Map<string, string>;
   /** Recently processed observed txs (lowercase txHash -> blockNumber). */
   readonly recentProcessedTxs: Map<string, number>;
 }
@@ -64,7 +68,12 @@ export function createProtocolDiscoveryEvidenceCache(
     chainId: chainId === undefined ? null : requireChainId(chainId),
     addressEntries: new Map(),
     verifiedCandidates: new Map(),
-    runtime: { observedCursor: null, recentProcessedTxs: new Map() },
+    runtime: {
+      observedCursor: null,
+      observedSourceFingerprint: null,
+      discoverySourceFingerprints: new Map(),
+      recentProcessedTxs: new Map(),
+    },
     routeOwnership: { version: 0, admissions: [] },
   };
 }
@@ -168,6 +177,8 @@ export function loadProtocolDiscoveryEvidenceCache(
     address_entries?: unknown;
     verified_candidates?: unknown;
     observed_cursor?: unknown;
+    observed_source_fingerprint?: unknown;
+    discovery_source_fingerprints?: unknown;
     recent_processed_txs?: unknown;
     route_ownership?: unknown;
   };
@@ -210,6 +221,26 @@ export function loadProtocolDiscoveryEvidenceCache(
   ) {
     cache.runtime.observedCursor = Number(snapshot.observed_cursor);
   }
+  if (
+    typeof snapshot.observed_source_fingerprint === "string" &&
+    /^0x[0-9a-fA-F]{64}$/.test(snapshot.observed_source_fingerprint)
+  ) {
+    cache.runtime.observedSourceFingerprint = snapshot.observed_source_fingerprint.toLowerCase();
+  }
+  if (Array.isArray(snapshot.discovery_source_fingerprints)) {
+    for (const raw of snapshot.discovery_source_fingerprints) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as { adapterId?: unknown; fingerprint?: unknown };
+      if (
+        typeof item.adapterId !== "string" || item.adapterId.length === 0 ||
+        typeof item.fingerprint !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(item.fingerprint)
+      ) continue;
+      cache.runtime.discoverySourceFingerprints.set(
+        item.adapterId,
+        item.fingerprint.toLowerCase(),
+      );
+    }
+  }
   if (Array.isArray(snapshot.recent_processed_txs)) {
     for (const raw of snapshot.recent_processed_txs) {
       if (!raw || typeof raw !== "object") continue;
@@ -245,6 +276,10 @@ export function saveProtocolDiscoveryEvidenceCache(
         .localeCompare(protocolInstanceKey(b.adapterId, b.candidate.pool)))
       .map((entry) => ({ adapterId: entry.adapterId, candidate: cloneCandidate(entry.candidate) })),
     observed_cursor: cache.runtime.observedCursor,
+    observed_source_fingerprint: cache.runtime.observedSourceFingerprint,
+    discovery_source_fingerprints: [...cache.runtime.discoverySourceFingerprints]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([adapterId, fingerprint]) => ({ adapterId, fingerprint })),
     recent_processed_txs: [...cache.runtime.recentProcessedTxs.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([txHash, blockNumber]) => ({ txHash, blockNumber })),
@@ -437,6 +472,80 @@ export function pruneRecentProcessedProtocolTxs(
   for (const [txHash, block] of cache.runtime.recentProcessedTxs) {
     if (currentBlock - block >= maxAgeBlocks) cache.runtime.recentProcessedTxs.delete(txHash);
   }
+}
+
+/**
+ * Reconcile the registry behind the shared observed cursor. Matcher evidence
+ * is meaningful only for the exact family fingerprint that produced it, so a
+ * change rewinds the shared cursor but invalidates ownership only for families
+ * that were added, removed or changed. Unchanged observed-only families stay
+ * routed while the recent backfill discovers the new semantics.
+ */
+export function updateProtocolObservedSourceFingerprint(
+  cache: ProtocolDiscoveryEvidenceCache,
+  fingerprint: string,
+  sourceFingerprints?: ReadonlyMap<string, string>,
+): boolean {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(fingerprint)) {
+    throw new Error("protocol observed-source fingerprint must be 32 bytes");
+  }
+  const normalized = fingerprint.toLowerCase();
+  const normalizedSources = sourceFingerprints === undefined
+    ? null
+    : new Map([...sourceFingerprints].map(([adapterId, value]) => {
+      if (!adapterId || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+        throw new Error("protocol discovery family fingerprint must be 32 bytes");
+      }
+      return [adapterId, value.toLowerCase()] as const;
+    }));
+  const sourcesUnchanged = normalizedSources === null || mapsEqual(
+    cache.runtime.discoverySourceFingerprints,
+    normalizedSources,
+  );
+  if (cache.runtime.observedSourceFingerprint === normalized && sourcesUnchanged) return false;
+
+  const changedAdapters = new Set<string>();
+  if (normalizedSources === null) {
+    for (const { adapterId } of cache.verifiedCandidates.values()) changedAdapters.add(adapterId);
+    for (const { adapterId } of cache.routeOwnership.admissions) changedAdapters.add(adapterId);
+  } else {
+    for (const adapterId of new Set([
+      ...cache.runtime.discoverySourceFingerprints.keys(),
+      ...normalizedSources.keys(),
+    ])) {
+      if (
+        cache.runtime.discoverySourceFingerprints.get(adapterId) !== normalizedSources.get(adapterId)
+      ) changedAdapters.add(adapterId);
+    }
+  }
+  cache.runtime.observedSourceFingerprint = normalized;
+  cache.runtime.observedCursor = null;
+  cache.runtime.recentProcessedTxs.clear();
+  for (const [key, value] of cache.verifiedCandidates) {
+    if (changedAdapters.has(value.adapterId)) cache.verifiedCandidates.delete(key);
+  }
+  cache.routeOwnership = {
+    version: cache.routeOwnership.version,
+    admissions: cache.routeOwnership.admissions.filter(
+      ({ adapterId }) => !changedAdapters.has(adapterId),
+    ),
+  };
+  if (normalizedSources !== null) {
+    cache.runtime.discoverySourceFingerprints.clear();
+    for (const [adapterId, value] of normalizedSources) {
+      cache.runtime.discoverySourceFingerprints.set(adapterId, value);
+    }
+  }
+  return true;
+}
+
+function mapsEqual(
+  left: ReadonlyMap<string, string>,
+  right: ReadonlyMap<string, string>,
+): boolean {
+  if (left.size !== right.size) return false;
+  for (const [key, value] of left) if (right.get(key) !== value) return false;
+  return true;
 }
 
 function bigintReplacer(_key: string, value: unknown): unknown {

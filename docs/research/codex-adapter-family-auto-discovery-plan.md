@@ -1,10 +1,10 @@
 # Codex — Route Adapter Family 自动实例发现统一管道计划
 
-> 状态：设计稿，供 Fable 对抗审查；**没有实现，也没有把 tx43 标成 fixed**。
+> 状态：第一版兼容切片已实现；当前为 **implemented_not_validated**，没有把 tx43、tx4cca 或整个自动发现计划标成 fixed。
 >
 > 分支：`codex/adapter-family-auto-discovery`
 >
-> 基线：`origin/main @ 7f8b8595f2e6100d41cc34dcdee90fae676fb013`
+> 实现基线：`origin/main @ b396d6f67a278f6b14bfa80ed201eed915b0f4cb`
 >
 > 目标：让所有生产 `RouteFamilyAdapter` 像 ERC4626 一样，通过一套共享的
 > candidate → identity → probe → ownership → category projection 管道自动发现实例；**一个高阶 adapter
@@ -293,9 +293,10 @@ authority rank，不能成为 allowlist，也不能决定 candidate 属于哪个
 - nonzero semantic probe 和 `VerifiedRouteClaim`；
 - edge derivation、quote、plan fragment、底层 action adapter 列表。
 
-family id 也必须描述执行语义。`wsteth-compatible`、`self-burn-native` 这类 ABI/状态行为名是目标；
-`mrethVariant`、`cashiva-*` 或地址/implementation 派生 id 禁止进入 production registry。已有以协议品牌命名
-的 legacy family 在迁移时先证明其真正行为边界，再决定重命名或拆分，不能只做字符串替换。
+family id 必须唯一指向一条完整编译路径。只有 call shape、quote/rounding 与 state-delta 判定都相同时，才适合
+用 `wsteth-compatible`、`self-burn-native` 这类跨协议 behavior family；只有“asset → receipt”这一层相同则只能
+抽 framework，不能合并注册 family。Eigenpie 的 `depositAsset/getMLRTAmountToMint/AssetDeposit` 因此保留
+`protocol:eigenpie` 独立 ID；`mrethVariant`、地址或 implementation 派生 id 仍禁止进入 production registry。
 
 ### 4.3 最小接口改造
 
@@ -715,7 +716,153 @@ scan wall time、admitted/negative/ambiguous、graph edge delta。目标不是�
 > framing 修正。P0 none(fork/dry-run + final sim fail-closed + 蜜罐仅假阳性)。当前维持
 > `implemented_not_validated`,升 fixed 仍以 §8 六步 + Production Replay 自发枚举为准。
 
-## 14. Fable 对抗审查（三路 Codex fan-out + 手工核对，2026-07-21）
+## 14. 完成后的架构（第一版，2026-07-22）
+
+本次落地的是 Fable 裁决后的“兼容 + 测量”第一版，不是假装一次完成 §12 的全部终态。现有
+`ProtocolConversionAdapter` 继续充当可生产的高阶 execution family；没有新建第二套 scanner、cache、timer
+或 `main.ts` 分支，也没有为了形式统一提前把 credit/LP 压进单边 `TokenEdge`。这版新增一个由真实 gap 推导的
+独立 execution family：`protocol:eigenpie`。它覆盖
+`depositAsset(asset,amount,minRec,referral)` + `getMLRTAmountToMint(asset,amount)` + 精确 mint delta 这一条编译
+语义；准入仍不依赖 RED、mRED、target 地址或 implementation hash allowlist。
+
+这里必须区分 **execution family** 与 **共享 framework**。ERC4626 deposit、RockSolid syncDeposit 和
+Eigenpie deposit 都是 `asset → receipt`，但它们的 identity、quote ABI、calldata、事件与 rounding 不同，不能
+注册成一个 `protocol:receipt-deposit` 大 adapter。代码只新增无 registry 身份的 `ReceiptDepositFramework`，
+复用资产注入、approve、模拟事实、edge/plan invariant；`protocol:erc4626` 与 `protocol:eigenpie` 各自继续拥有
+唯一 pool/edge/action ID。RockSolid 本轮不迁，等独立 observation/probe fixture 齐备后再接同一 framework。
+
+当前真实数据流如下：
+
+```text
+PRODUCTION_ROUTE_ADAPTERS（唯一 family 注册源）
+        │
+        ├─ execution / quote / plan / ActionAdapter 声明
+        ├─ candidateSources 声明
+        └─ discoveryIdentityResolver（与 discovery 同次注册）
+                         │
+shared observed scanner │ 保存完整 input + from，一笔交易只取一次 receipt/trace
+                         ▼
+receipt + causal call subtree → pair-scoped candidate
+                         ▼
+shared identity attestation → pair-aware cache key
+                         ▼
+nonzero state-override behavior probe
+                         ▼
+exact verified route → existing ownership/arbitration/projection
+                         ▼
+existing token graph / planner / quoter / plan-builder / final sim
+```
+
+第一版形成了五个硬边界：
+
+1. **一个 adapter 就是一个 family。** `PRODUCTION_ROUTE_ADAPTERS` 仍是唯一可执行注册源；新增的
+   `route-family-manifest.ts` 只从真实 adapter 对象投影兼容清单，不允许维护第二份 family 表。
+2. **发现和身份必须一起交付。** registry conformance 强制 `discovery` 与
+   `discoveryIdentityResolver` 同时存在；source 声明与 matcher 也双向校验。注册一个动态 family 后，不再去
+   `production-registry.ts` 另抄一行 dynamic identity resolver。
+3. **调度仍然共享。** family 只能声明 `dex-token-domain` / `observed-interaction` /
+   `canonical-registry` 来源以及实现 matcher/probe。当前还没有共享 canonical enumerator，所以任何 family
+   声称 `canonical-registry` 会在启动 conformance 直接失败，而不是悄悄变成地址 pin。
+4. **同 target 的多 pair 是不同实例。** observed call 保留完整 calldata；candidate、identity cache、ownership
+   key 都带 `logicalInstanceId` 和 token pair，避免同一 deposit router 的第一个 pair 身份结果污染另一个 pair。
+5. **行为证据先于进图。** selector/topic 只提名 candidate。identity 复核 target/input/output code、零金额 quote
+   的返回 token 和逻辑 pair；随后 nonzero probe 同时核 input spend、target receive、output mint、totalSupply 和
+   receipt logs，最后才产生唯一方向的 verified edge。
+6. **Framework 永远不是 owner。** `ReceiptDepositFramework` 不进入 `PRODUCTION_ROUTE_ADAPTERS`，也不拥有
+   pool/edge/action ID。ERC4626 与 Eigenpie 的注册 ID、identity、quote 和 encoder 保持分离，防止 registry 把
+   两种不同 calldata 当成同一 execution claim。
+
+为避免每个 family 各写一套 storage override 猜测，本次还把 ERC20 `balanceOf(holder)` storage key 的
+access-list + Solidity/Vyper 有界扫描提取到 `protocol-discovery-erc20-state.ts`。每个候选 key 都必须在同一
+state override 下让真实 `balanceOf` 返回 probe value 才能使用。其上再由 `receipt-deposit-framework.ts` 统一
+执行 funded caller → approve → deposit → 余额/供应量/log facts 采集；Eigenpie 按自己的事件与 exact mint 规则
+判定，ERC4626 deposit 按 `previewDeposit/deposit/Deposit` 判定，redeem/silo 不进入该 framework。
+
+这版故意没有做三件事：
+
+- 没有迁移其余 6 个 static protocol family，也没有删除兼容 `declaredVenues`；
+- 没有实现 credit/liquidity projector 或 canonical-registry scheduler；manifest 只是冻结当前 wiring，防止后续
+  迁移产生第二真相源；
+- 没有实现 `self-burn-native`。Fable 指出的 acquisition-state、native delta 和 solver-sim 预算问题仍未解决，
+  而 tx4cca 的真实缺腿是另一种 quoted-deposit/mint 编译语义，不能硬套 self-burn family。
+
+因此当前架构的准确状态是：**共享 protocol conversion discovery 已能让第二个真实 behavior family 在不写实例
+地址的情况下完成 observed-after-first-use admission；“所有 protocol/credit/LP family 全自动”仍是后续目标。**
+
+## 15. 核心代码实现与 tx4cca 验收判断
+
+### 15.1 实现落点
+
+| 责任 | 核心实现 | 结果 |
+|---|---|---|
+| family/source 契约 | `venues/route-leg-adapter.ts`、`route-adapter-registry.ts` | 声明 candidate source；discovery 与 dynamic identity 原子注册并做 conformance |
+| 唯一注册派生 | `venues/production-registry.ts`、`route-family-manifest.ts` | dynamic resolver 与 manifest 都从 `PRODUCTION_ROUTE_ADAPTERS` 派生 |
+| shared observed source | `observed-protocol-discovery.ts` | 保留成功 call 的完整 calldata/from；按 target/from/input 去重，receipt/trace 仍由共享 scanner 获取 |
+| pair 身份隔离 | `venues/identity.ts`、`protocol-instance-discovery.ts` | resolver 接收完整 candidate；cache/instance key 包含 pair 与 logical instance |
+| shared ERC20 probe 工具 | `protocol-discovery-erc20-state.ts` | access-list 或有界布局扫描后逐 key 实际验证 |
+| shared receipt framework | `venues/protocols/receipt-deposit-framework.ts` | 只复用 asset→receipt edge、approve/plan 形状和非零模拟 facts；不注册 family、不判协议 ABI |
+| Eigenpie execution family | `venues/protocols/eigenpie*.ts` | candidate、identity、Eigenpie probe policy、exact/prepared quote、warm、plan |
+| ERC4626 execution family | `venues/protocols/erc4626*.ts` | deposit 复用 framework；identity/quote/Deposit rounding 与 redeem/silo 仍独立 |
+| Eigenpie 低阶编码 | `adapters/eigenpie-deposit.ts` | 编译 `depositAsset(tokenIn,amountIn,minAmountOut,zeroReferral)`；批准动作复用 `erc20-approve` |
+| 防回归 | `test/eigenpie-deposit.ts`、`test/erc4626-instance-discovery.ts`、`test/route-family-compatibility.ts` | 行为负例、delta、projection、quote/plan/encoding、pair-cache 与“framework 非 owner”快照 |
+
+新 family 的 admission 不是“看到 `0x2ebe07c8` 就套 adapter”，而是下面的交集：
+
+```text
+successful depositAsset call
+AND exact AssetDeposit event (isPreDeposit=false)
+AND exact tokenIn Transfer(depositor → target)
+AND one unique tokenOut mint (zero → depositor)
+AND the matched call subtree contains exact transferFrom + exact mint
+AND zero-amount quote reports the same tokenOut
+AND nonzero state-override execution reproduces exact balance/supply deltas and logs
+AND tokenIn/tokenOut both在当前 DEX graph domain
+```
+
+任何 output token 漂移、pair cache 串线、供应量多/少 1 wei、只有伪 topic/selector、mint 在 sibling subtree、
+`isPreDeposit=true` 或 backend 不支持 state-override simulation 都 fail closed。quote 每次调用
+`getMLRTAmountToMint(tokenIn,amountIn)` 并复核返回 token；plan 使用 solver 传入的 haircut 后 `amountOut` 作为
+`minRec`，不硬编码历史汇率或 fee。
+
+### 15.2 tx4cca 是否适合验收
+
+样本 `0x4cca0e665fa0d66181fd5aa89551d4e449c63fb987d87a2c4b7c8e305ae28be4` **适合做这个
+family 的主 Production Replay 样本，但不能单独作为整个统一管道已经 fixed 的证明**。理由是它正好覆盖
+Pancake V3 → Eigenpie deposit → Pancake V3 的三腿闭环，而且 live 使用的 top-20000 view 已包含两条 DEX
+腿；真正缺失的是中间 execution family。它的历史 trace/receipt 还能验证 pair、精确金额和因果子树，而不是
+靠协议名猜测。
+
+截至 2026-07-22，已取得的分阶段证据是：
+
+| 六步阶段 | 当前证据 | 状态 |
+|---|---|---|
+| 1 source / identity | 用 shared `scanProtocolDiscoveryRange` 扫 `[25570935,25585334]`，未注入 target/pair，真实 logs/receipts/callTracer 自发产出两条同 pair candidate（blocks `25571620`、`25582656`），`sourceComplete=true` 且无 source error | **pass（source-unseeded 腿级）** |
+| 2 claim / projection | 在 target parent block `25585334` 将扫描结果送入 production identity + nonzero state-override probe，聚合两份 evidence 并得到唯一 `eigenpie-deposit-asset` edge；target tx 另精确解出 `155167433355795378068 → 149640805284635957914` | **pass（历史 pinned state 腿级）** |
+| 3 enumeration | 还没有让 Production Replay 只拿 historical anchor、从更早 observation 自发形成完整三腿 route | **not run** |
+| 4 quote / solve | exact/prepared quote、pair drift 和 plan amount 的单测已过；完整 route sizing/逐 wei利润尚未 replay | **partial** |
+| 5 plan / final sim | ActionAdapter calldata 和 `minRec` 单测已过；整条历史 route 的 BotVM fork final sim 尚未过 | **partial** |
+| 6 EV decision | landed 交易是正净收益样本，但 production EV allow/reject 尚未由可信 replay 产出 | **not run** |
+
+所以该样本的正确使用方式是：冻结 target tx 之前的 source window，不能把 target、pair、edge、path 或 amount
+注入 runtime；shared observed scanner 必须从窗口内更早的成功 interaction（已确认至少有 block `25571620` 与
+`25582656` 两笔同 pair 事件）产生 candidate，再由上述 identity 和 nonzero probe 进图，随后让未改造
+planner/solver 自主枚举并 final-sim。若换一个样本的窗口内没有更早 supported interaction，则这个
+observed-after-first-use family 对该时点的冷启动召回应诚实判 fail，而不是退回实例地址 hardcode。
+
+### 15.3 已运行检查与发布门
+
+当前已通过：TypeScript build；新 family 5/5；route-adapter 14/14；route-family compatibility 4/4；protocol
+instance discovery；ERC4626 discovery；observed discovery；multi-adapter arbitration；venue identity；adapter
+descriptor/policy；protocol edge/leg；planner、taxonomy、blockscan contract；以及现有 adapter-family fixture 的
+validate-only conformance。真实 pre-target range 的 shared source scan、parent-block identity/nonzero probe 和 target
+tx matcher 也通过。
+
+当前没有声称 `fixed`：完整 source-unseeded Production Replay、三腿 solve/final sim/EV，以及系统性 Hermes A/B
+仍未完成。`npm run equivalence` 还需要外部生成的 `/tmp/ref_clean.txt` baseline artifact；`searcher:lint` 在
+未改动的 main 基线也会命中既有 hot-path token，因此两者都不能被伪报成此次代码通过。第一版可作为后续
+六步验收的实现候选，只有 §8 的 Production Replay 和 A/B 证据齐全后才允许升级状态。
+
+## 16. Fable 对抗审查（三路 Codex fan-out + 手工核对，2026-07-21）
 
 方法：三个独立 read-only Codex 审查（事实核对 / 设计对抗 / 实现可行性）+ Fable 手工核对全部
 load-bearing 引用。文档可核查硬事实**基本全部属实**（21 条 fallback 行、6 个 static family、§3.2
@@ -723,7 +870,7 @@ load-bearing 引用。文档可核查硬事实**基本全部属实**（21 条 fa
 `staticSuppressed`、§10 路径）。与 §13 重叠处：C-2/C-3 已由用户裁定“family 边界 = 编译路径”落进
 §0（categorical = 编译路径，parametric = 模拟测得数值）；C-5 即下表 F-2 的量化版。
 
-### 14.1 §13 未覆盖的发现
+### 16.1 §13 未覆盖的发现
 
 | # | 发现 | 证据 | 级别 |
 |---|---|---|---|
@@ -742,7 +889,7 @@ load-bearing 引用。文档可核查硬事实**基本全部属实**（21 条 fa
 | F-13 | 若 PSM/Metronome 的 “canonical root” 就是可执行实例地址，那是换名的 instance pin，不是 registry；无 on-chain 枚举/反向 attestation 的 family 应诚实标 `observed-after-first-use`（Metronome 现有硬编码 `SYNTH_TOKENS`） | `metronome.ts:22`、`production-registry.ts:99` | P1 |
 | F-14b | §10 漏了真正要动的层：solver（`quoter.ts`/`amount-propagation.ts`）、两层 Revm（`revm-sim-client.ts`/`main.rs`）、`live-backends/revm-live-backend.ts`、`main.ts`、event schema 与 deploy env allowlist | `deploy-node.sh:193`、`events.ts:70` | P2 |
 
-### 14.2 Fable 裁决
+### 16.2 Fable 裁决
 
 > 架构方向与 §7 顺序保留。**Slice 0 改为“兼容 + 测量”切片**：冻结 wiring、dependency-neutral family
 > manifest 零语义派生现有数组、有序快照 harness（F-8）、`simulateValueDelta` 只在 prepared Revm 实现且

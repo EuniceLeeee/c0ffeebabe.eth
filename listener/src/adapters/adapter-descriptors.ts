@@ -4,6 +4,7 @@ import { FLASH_PROVIDER_DESCRIPTORS } from "./flash-providers.js";
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
   | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
+  | "eigenpie"
   | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra";
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
@@ -299,6 +300,14 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     lineage: "erc4626",
     edgeKind: "protocol",
     action: "redeem",
+    canSendValue: false,
+    leavesStandingPositionDefault: false,
+  },
+  "eigenpie-deposit-asset": {
+    adapterId: "eigenpie-deposit-asset",
+    lineage: "eigenpie",
+    edgeKind: "protocol",
+    action: "deposit",
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },

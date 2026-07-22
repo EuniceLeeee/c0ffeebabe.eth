@@ -80,6 +80,7 @@ function fixtureAdapter(input: {
     declaredVenues: [],
     undeclaredVenueReason: "fixture instances require discovery",
     discovery: {
+      candidateSources: [],
       eventTopics: [],
       callSelectors: [],
       async probeCandidate(instance) {

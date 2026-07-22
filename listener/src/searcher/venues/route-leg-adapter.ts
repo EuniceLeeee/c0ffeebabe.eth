@@ -4,6 +4,7 @@ import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-g
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import type { ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
 import type { AttestedPoolEntry } from "./identity.js";
+import type { OnchainIdentityResolver } from "./identity.js";
 import type { RouteVenueMid, SyncMidReadContext } from "./mid-readers.js";
 import type { SwapObservationCapability } from "./swap-observation.js";
 
@@ -96,6 +97,11 @@ export interface ProtocolDiscoveryReceipt {
 
 export type ProtocolDiscoveryTopicFilter = string | readonly string[] | null;
 
+export type RouteCandidateSourceKind =
+  | "dex-token-domain"
+  | "observed-interaction"
+  | "canonical-registry";
+
 export interface ProtocolDiscoverySimulatedCallResult {
   /** 1 = success, 0 = revert. */
   readonly status: number;
@@ -150,6 +156,8 @@ export interface ProtocolDiscoveryContext {
   readonly chainId?: string;
   /** Complete graph domain used only for post-match loop-closability checks. */
   readonly graphTokens: readonly string[];
+  /** Production BotVM caller used by caller-sensitive active behavior probes. */
+  readonly probeExecutor?: string;
   /** Previously admitted instances are re-probed so upgrades and route removal replace atomically. */
   readonly retainedInstances: readonly AttestedProtocolInstance[];
 }
@@ -183,12 +191,19 @@ export interface AttestedProtocolInstance {
  * candidates. Identity and route probing remain shared admission gates.
  */
 export interface ProtocolDiscoveryCapability {
+  /** Declarative source ownership; the shared scanner remains the only scheduler. */
+  readonly candidateSources: readonly RouteCandidateSourceKind[];
   /** Topic-0 values that make a transaction worth receipt+trace inspection. */
   readonly eventTopics: readonly string[];
   /** Manually adapted on-chain calls that may establish this family's interaction. */
   readonly callSelectors: readonly string[];
   /** Bump when address matching semantics change so persisted negatives retry. */
   readonly addressMatcherVersion?: string;
+  /**
+   * Bump when receipt/trace classification semantics change. The shared
+   * cursor fingerprint uses this to schedule one bounded historical backfill.
+   */
+  readonly observedMatcherVersion?: string;
   /** Optional C2 matcher; the shared scanner owns DEX-token iteration and caching. */
   candidateFromAddress?(
     candidate: {
@@ -207,6 +222,10 @@ export interface ProtocolDiscoveryCapability {
     call: {
       readonly target: string;
       readonly selector: string;
+      /** Full successful call input. Required by multi-pair behavior families. */
+      readonly input: string;
+      /** Caller from callTracer when available; missing callers fail closed in families that need one. */
+      readonly from?: string;
       readonly txHash: string;
       readonly receipt: ProtocolDiscoveryReceipt;
       /** Full transaction trace fetched once by the shared scanner. */
@@ -308,6 +327,11 @@ export interface ProtocolConversionAdapter extends RouteLegAdapter {
   readonly undeclaredVenueReason: string | null;
   /** Optional active discovery path. Absence preserves declared-venue-only behavior. */
   readonly discovery?: ProtocolDiscoveryCapability;
+  /**
+   * Dynamic identity is delivered by the same execution-family registration.
+   * Static declared-only families intentionally omit it until their migration.
+   */
+  readonly discoveryIdentityResolver?: OnchainIdentityResolver;
 }
 
 export interface CompatRouteLegAdapter extends RouteLegAdapter {

@@ -38,6 +38,7 @@ import {
   balancerV3UnlockAdapter,
 } from "./balancer-v3.js";
 import { dodoV2ActionAdapter } from "./dodo-v2.js";
+import { eigenpieDepositActionAdapter } from "./eigenpie-deposit.js";
 
 // Flash
 for (const descriptor of [...FLASH_PROVIDER_DESCRIPTORS]
@@ -54,6 +55,7 @@ register(erc20TransferAdapter);
 for (const desc of PROTOCOL_LEG_DESCRIPTORS) {
   register(makeProtocolAdapter(desc));
 }
+register(eigenpieDepositActionAdapter);
 // Swaps
 register(psmAdapter);
 register(univ3Adapter);

@@ -120,6 +120,7 @@ const identity = await dodoV2IdentityResolver({
   backend,
   pool: ethers.getAddress(POOL),
   poolAdapter: "dodo-v2",
+  candidate: { address: ethers.getAddress(POOL), adapter: "dodo-v2" },
   admissionPolicy: STRICT_IDENTITY_ADMISSION,
   isPoolAdapterSupported: (candidate) => candidate === "dodo-v2",
 });

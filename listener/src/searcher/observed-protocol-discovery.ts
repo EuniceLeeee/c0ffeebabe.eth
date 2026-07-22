@@ -80,6 +80,41 @@ export interface ProtocolTraceMemoStats {
 }
 
 /**
+ * Stable fingerprint for the complete dynamic-discovery registry behind the
+ * shared cursor and persisted ownership. Adding/removing any family, or
+ * changing either matcher, must invalidate evidence admitted under the old
+ * semantics.
+ */
+export function protocolObservedSourceFingerprint(
+  adapters: readonly ProtocolConversionAdapter[],
+): string {
+  return ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(
+    [...protocolDiscoverySourceFingerprints(adapters)],
+  )));
+}
+
+/** Per-family fingerprints let a registry rollout invalidate only its owner. */
+export function protocolDiscoverySourceFingerprints(
+  adapters: readonly ProtocolConversionAdapter[],
+): ReadonlyMap<string, string> {
+  const sources = adapters
+    .filter((adapter) => adapter.discovery)
+    .map((adapter) => ({
+      adapterId: adapter.id,
+      candidateSources: [...adapter.discovery!.candidateSources].sort(),
+      addressMatcherVersion: adapter.discovery!.addressMatcherVersion ?? "",
+      observedMatcherVersion: adapter.discovery!.observedMatcherVersion ?? "",
+      eventTopics: [...adapter.discovery!.eventTopics].map((item) => item.toLowerCase()).sort(),
+      callSelectors: [...adapter.discovery!.callSelectors].map((item) => item.toLowerCase()).sort(),
+    }))
+    .sort((a, b) => a.adapterId.localeCompare(b.adapterId));
+  return new Map(sources.map((source) => [
+    source.adapterId,
+    ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(source))),
+  ]));
+}
+
+/**
  * Cross-entrance trace memo: the live observed lane and the range scanner
  * share it so one transaction is debug_traced at most once globally. Failed
  * fetches are never memoized, so transient trace errors stay retryable.
@@ -265,8 +300,8 @@ export async function scanProtocolDiscoveryRange(input: {
           target: null,
           reason: `${txHash}: ${safeError(error)}`,
           // A pruned local node cannot recover an old trace by retrying the
-          // same window. Skip that evidence fail-closed; current-state DEX
-          // address discovery remains the archive-free recovery path.
+          // same window. Skip that evidence fail-closed instead of pinning the
+          // global cursor forever; observed-only families wait for future use.
           retryable: !isPrunedHistoricalStateFailure(error),
         } satisfies ProtocolDiscoverySourceError,
       };
@@ -321,7 +356,10 @@ async function scanAddressCandidates(input: {
   issues: readonly ProtocolDiscoverySourceError[];
   stats: ProtocolAddressDiscoveryStats;
 }> {
-  const adapters = input.adapters.filter((adapter) => adapter.discovery?.candidateFromAddress);
+  const adapters = input.adapters.filter((adapter) =>
+    adapter.discovery?.candidateSources.includes("dex-token-domain") &&
+    adapter.discovery.candidateFromAddress
+  );
   const addresses = new Map<string, string>();
   if (adapters.length > 0) {
     for (const raw of input.candidateAddresses) {
@@ -525,7 +563,10 @@ export async function scanObservedProtocolTrace(input: {
     let selectorRecognized = false;
     for (const adapter of input.adapters) {
       const discovery = adapter.discovery;
-      if (!discovery?.candidateFromObservedCall) continue;
+      if (
+        !discovery?.candidateSources.includes("observed-interaction") ||
+        !discovery.candidateFromObservedCall
+      ) continue;
       const selectorMatches = discovery.callSelectors.some(
         (selector) => selector.toLowerCase() === call.selector,
       );
@@ -582,7 +623,11 @@ export async function scanObservedProtocolTrace(input: {
 
 function registeredEventTopics(adapters: readonly ProtocolConversionAdapter[]): Set<string> {
   return new Set(
-    adapters.flatMap((adapter) => adapter.discovery?.eventTopics ?? [])
+    adapters.flatMap((adapter) =>
+      adapter.discovery?.candidateSources.includes("observed-interaction")
+        ? adapter.discovery.eventTopics
+        : []
+    )
       .map((topic) => topic.toLowerCase()),
   );
 }
@@ -633,12 +678,17 @@ async function mapLimit<T, R>(
 interface ObservedCall {
   readonly target: string;
   readonly selector: string;
+  readonly input: string;
+  readonly from?: string;
 }
 
 function uniqueCalls(calls: readonly ObservedCall[]): ObservedCall[] {
   const unique = new Map<string, ObservedCall>();
   for (const call of calls) {
-    unique.set(`${call.target.toLowerCase()}|${call.selector}`, call);
+    unique.set(
+      `${call.target.toLowerCase()}|${call.from?.toLowerCase() ?? ""}|${call.input.toLowerCase()}`,
+      call,
+    );
   }
   return [...unique.values()];
 }
@@ -647,13 +697,27 @@ function successfulCalls(trace: unknown): ObservedCall[] {
   const result: ObservedCall[] = [];
   const visit = (node: unknown, ancestorFailed: boolean): void => {
     if (!node || typeof node !== "object") return;
-    const call = node as { to?: unknown; input?: unknown; error?: unknown; calls?: unknown };
+    const call = node as {
+      to?: unknown;
+      from?: unknown;
+      input?: unknown;
+      error?: unknown;
+      calls?: unknown;
+    };
     const failed = ancestorFailed || Boolean(call.error);
     if (!failed && typeof call.to === "string" && typeof call.input === "string") {
       const selector = call.input.slice(0, 10).toLowerCase();
       if (/^0x[0-9a-f]{8}$/.test(selector)) {
         try {
-          result.push({ target: ethers.getAddress(call.to), selector });
+          const from = typeof call.from === "string"
+            ? ethers.getAddress(call.from)
+            : undefined;
+          result.push({
+            target: ethers.getAddress(call.to),
+            selector,
+            input: call.input,
+            ...(from === undefined ? {} : { from }),
+          });
         } catch {
           // malformed trace target
         }

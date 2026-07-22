@@ -22,6 +22,7 @@ import {
   recordProtocolRouteOwnership,
   recordVerifiedProtocolCandidates,
   saveProtocolDiscoveryEvidenceCache,
+  updateProtocolObservedSourceFingerprint,
 } from "../protocol-discovery-cache.js";
 import {
   protocolCandidateAddressesFromDexGraph,
@@ -71,8 +72,14 @@ const ERC4626 = new ethers.Interface([
   "function previewRedeem(uint256) view returns (uint256)",
   "function deposit(uint256,address) returns (uint256)",
   "function redeem(uint256,address,address) returns (uint256)",
+  "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
 ]);
-const ERC20 = new ethers.Interface(["function transfer(address,uint256)"]);
+const DEPOSIT = ERC4626.getEvent("Deposit")!.topicHash.toLowerCase();
+const ERC20 = new ethers.Interface([
+  "function approve(address,uint256) returns (bool)",
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address,uint256)",
+]);
 const REDEEM = new ethers.Interface(["function redeem(uint256,address,address)"]);
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -395,6 +402,7 @@ assert(
     ["address", "uint256"],
     [ERC4626_FORK_PROBE_HOLDER, 0n],
   ));
+  const ASSET_HOLDER_SLOT0 = HOLDER_SLOT0;
   const addressOnlyInstance = (): AttestedProtocolInstance => ({
     pool: {
       address: VAULT,
@@ -426,20 +434,84 @@ assert(
       backend: {
         ...base.backend,
         async call(req) {
+          const selector = req.data.slice(0, 10);
+          if (
+            req.to.toLowerCase() === ASSET.toLowerCase() &&
+            selector === ERC20.getFunction("balanceOf")!.selector
+          ) {
+            return ERC20.encodeFunctionResult("balanceOf", [0n]);
+          }
           if (
             req.to.toLowerCase() === VAULT.toLowerCase() &&
-            req.data.slice(0, 10) === ERC4626.getFunction("totalSupply")!.selector
+            selector === ERC4626.getFunction("totalSupply")!.selector
           ) {
             return ERC4626.encodeFunctionResult("totalSupply", [totalSupply]);
+          }
+          if (
+            req.to.toLowerCase() === VAULT.toLowerCase() &&
+            selector === ERC4626.getFunction("balanceOf")!.selector
+          ) {
+            return ERC4626.encodeFunctionResult("balanceOf", [0n]);
           }
           return base.backend.call(req);
         },
         async simulateCalls(req) {
+          if (req.calls.length === 5) {
+            const holder = req.calls[0].from;
+            const [assets, receiver] = ERC4626.decodeFunctionData("deposit", req.calls[1].data);
+            const assetAmount = BigInt(assets);
+            const shares = assetAmount * 9n / 10n;
+            if (String(receiver).toLowerCase() !== holder.toLowerCase()) {
+              return req.calls.map(() => ({ status: 0, returnData: "0x", logs: [] }));
+            }
+            return [
+              { status: 1, returnData: ERC20.encodeFunctionResult("approve", [true]), logs: [] },
+              {
+                status: 1,
+                returnData: ERC4626.encodeFunctionResult("deposit", [shares]),
+                logs: [
+                  {
+                    address: ASSET,
+                    topics: [TRANSFER, topicAddress(holder), topicAddress(VAULT)],
+                    data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [assetAmount]),
+                    blockNumber: 123,
+                  },
+                  {
+                    address: VAULT,
+                    topics: [TRANSFER, ZERO_WORD, topicAddress(holder)],
+                    data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [shares]),
+                    blockNumber: 123,
+                  },
+                  {
+                    address: VAULT,
+                    topics: [DEPOSIT, topicAddress(holder), topicAddress(holder)],
+                    data: ethers.AbiCoder.defaultAbiCoder().encode(
+                      ["uint256", "uint256"],
+                      [assetAmount, shares],
+                    ),
+                    blockNumber: 123,
+                  },
+                ],
+              },
+              { status: 1, returnData: ERC20.encodeFunctionResult("balanceOf", [0n]), logs: [] },
+              { status: 1, returnData: ERC4626.encodeFunctionResult("balanceOf", [shares]), logs: [] },
+              {
+                status: 1,
+                returnData: ERC4626.encodeFunctionResult("totalSupply", [totalSupply + shares]),
+                logs: [],
+              },
+            ];
+          }
           const call = req.calls[0];
           const selector = call.data.slice(0, 10).toLowerCase();
-          const fundedRaw = req.stateOverrides?.[VAULT]?.stateDiff?.[HOLDER_SLOT0];
+          const fundedRaw = req.stateOverrides?.[call.to]?.stateDiff?.[
+            call.to.toLowerCase() === ASSET.toLowerCase() ? ASSET_HOLDER_SLOT0 : HOLDER_SLOT0
+          ];
           const funded = fundedRaw === undefined ? 0n : BigInt(fundedRaw);
-          if (selector === ERC4626.getFunction("balanceOf")!.selector) {
+          if (
+            selector === ERC4626.getFunction("balanceOf")!.selector ||
+            selector === ERC20.getFunction("balanceOf")!.selector
+          ) {
             counters.balanceOf++;
             return [{
               status: 1,
@@ -774,6 +846,7 @@ const execAdapter = {
   id: "protocol:erc4626-test-exec",
   edgeAdapterIds: ["test-exec-redeem"],
   discovery: {
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance: AttestedProtocolInstance) {
@@ -933,8 +1006,34 @@ assert(negativeExpired.addressStats.probes === 1, "negative evidence must expire
 assert(Number(nonVaultCalls) === 4, "expired negative must retry even when code fingerprints are stable");
 
 recordVerifiedProtocolCandidates(addressCache, addressOnly.wouldAdmit);
+const observedFingerprint = `0x${"12".repeat(32)}`;
+const observedFamilyFingerprints = new Map([[erc4626Adapter.id, `0x${"56".repeat(32)}`]]);
+assert(
+  updateProtocolObservedSourceFingerprint(
+    addressCache,
+    observedFingerprint,
+    observedFamilyFingerprints,
+  ),
+  "first observed-source fingerprint must invalidate the legacy cursor",
+);
+assert(
+  addressCache.verifiedCandidates.size === 0 &&
+    addressCache.routeOwnership.admissions.length === 0,
+  "a new matcher registry must invalidate evidence admitted under old semantics",
+);
+recordVerifiedProtocolCandidates(addressCache, addressOnly.wouldAdmit);
 addressCache.runtime.observedCursor = 123;
 addressCache.runtime.recentProcessedTxs.set(TX_HASH.toLowerCase(), 123);
+assert(
+  !updateProtocolObservedSourceFingerprint(
+    addressCache,
+    observedFingerprint,
+    observedFamilyFingerprints,
+  ) &&
+    addressCache.runtime.observedCursor === 123 &&
+    addressCache.runtime.recentProcessedTxs.size === 1,
+  "unchanged observed-source fingerprint must preserve cursor and tx dedupe",
+);
 recordProtocolRouteOwnership(addressCache, {
   version: 7,
   admissions: new Map([[
@@ -950,6 +1049,15 @@ try {
   assert(reloaded.addressEntries.size >= 2, "positive and negative address evidence must persist");
   assert(reloaded.verifiedCandidates.size === 1, "verified admission evidence must persist");
   assert(reloaded.runtime.observedCursor === 123, "observed event cursor must survive a restart");
+  assert(
+    reloaded.runtime.observedSourceFingerprint === observedFingerprint,
+    "observed-source fingerprint must survive a restart",
+  );
+  assert(
+    reloaded.runtime.discoverySourceFingerprints.get(erc4626Adapter.id) ===
+      observedFamilyFingerprints.get(erc4626Adapter.id),
+    "per-family discovery fingerprint must survive a restart",
+  );
   assert(
     reloaded.runtime.recentProcessedTxs.get(TX_HASH.toLowerCase()) === 123,
     "recently processed observed txs must survive a restart",
@@ -1012,6 +1120,19 @@ try {
   });
   assert(rejectedDisk.wouldAdmit.length === 0, "disk cache must never bypass identity attestation");
 
+  assert(
+    updateProtocolObservedSourceFingerprint(
+      reloaded,
+      `0x${"34".repeat(32)}`,
+      new Map([[erc4626Adapter.id, `0x${"78".repeat(32)}`]]),
+    ) &&
+      reloaded.runtime.observedCursor === null &&
+      reloaded.runtime.recentProcessedTxs.size === 0 &&
+      Number(reloaded.verifiedCandidates.size) === 0 &&
+      Number(reloaded.routeOwnership.admissions.length) === 0,
+    "changed observed-source fingerprint must drop stale verified ownership",
+  );
+
   const vaultKey = protocolAddressCacheKey(erc4626Adapter.id, VAULT);
   reconcileProtocolDiscoveryEvidenceCache(reloaded, {
     evaluatedInstanceKeys: new Set([vaultKey]),
@@ -1029,6 +1150,44 @@ try {
 } finally {
   rmSync(cacheDir, { recursive: true, force: true });
 }
+
+const targetedCache = createProtocolDiscoveryEvidenceCache(1n);
+const firstFamily = "protocol:first-dynamic";
+const unchangedFamily = "protocol:unchanged-dynamic";
+updateProtocolObservedSourceFingerprint(
+  targetedCache,
+  `0x${"90".repeat(32)}`,
+  new Map([
+    [firstFamily, `0x${"91".repeat(32)}`],
+    [unchangedFamily, `0x${"92".repeat(32)}`],
+  ]),
+);
+recordVerifiedProtocolCandidates(targetedCache, [
+  { adapterId: firstFamily, instance: addressOnly.wouldAdmit[0].instance },
+  { adapterId: unchangedFamily, instance: addressOnly.wouldAdmit[0].instance },
+]);
+recordProtocolRouteOwnership(targetedCache, {
+  version: 1,
+  admissions: new Map([
+    [firstFamily, { adapterId: firstFamily, instance: addressOnly.wouldAdmit[0].instance }],
+    [unchangedFamily, { adapterId: unchangedFamily, instance: addressOnly.wouldAdmit[0].instance }],
+  ]),
+});
+updateProtocolObservedSourceFingerprint(
+  targetedCache,
+  `0x${"93".repeat(32)}`,
+  new Map([
+    [firstFamily, `0x${"94".repeat(32)}`],
+    [unchangedFamily, `0x${"92".repeat(32)}`],
+  ]),
+);
+assert(
+  [...targetedCache.verifiedCandidates.values()].map(({ adapterId }) => adapterId)
+    .join(",") === unchangedFamily &&
+    targetedCache.routeOwnership.admissions.length === 1 &&
+    targetedCache.routeOwnership.admissions[0].adapterId === unchangedFamily,
+  "a matcher rollout must retain ownership for unchanged observed-only families",
+);
 
 const staticEdge: TokenEdge = {
   adapterId: "psm",
@@ -1063,6 +1222,29 @@ assert(
   fallbackProjection.staticSuppressed.length === 1 &&
     fallbackProjection.staticSuppressed[0].adapterId === erc4626Adapter.id,
   "static venue winning the adjudication must be reported, never silent",
+);
+const logicalClaim = {
+  ...first,
+  wouldAdmit: [{
+    ...first.wouldAdmit[0],
+    instance: {
+      ...first.wouldAdmit[0].instance,
+      pool: { ...first.wouldAdmit[0].instance.pool, logicalInstanceId: "pair-static" },
+    },
+  }],
+};
+const logicalFallbackProjection = prepareProtocolDiscoveryProjection({
+  currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  result: logicalClaim,
+  currentBackrunPools: [{ address: VAULT, adapter: "erc4626", fixedTokenIn: ASSET }],
+  currentBackrunGraph: [...first.wouldAdmit[0].edges],
+  currentKnownPoolKeys: new Set([VAULT.toLowerCase()]),
+  buildStrategyViews: buildViews,
+});
+assert(
+  logicalFallbackProjection.ownership.admissions.size === 0 &&
+    logicalFallbackProjection.staticSuppressed.length === 1,
+  "a logical pair must not bypass a same-address static owner",
 );
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,

@@ -41,9 +41,12 @@ import {
   reconcileProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
   saveProtocolDiscoveryEvidenceCache,
+  updateProtocolObservedSourceFingerprint,
 } from "./protocol-discovery-cache.js";
 import {
   createProtocolTraceMemo,
+  protocolDiscoverySourceFingerprints,
+  protocolObservedSourceFingerprint,
   shouldTraceForProtocolDiscovery,
 } from "./observed-protocol-discovery.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
@@ -467,6 +470,11 @@ function dumpRuntimeGraphPools(
       poolId: pool.poolId?.toLowerCase(),
       currency0: pool.currency0?.toLowerCase(),
       currency1: pool.currency1?.toLowerCase(),
+      logicalInstanceId: pool.logicalInstanceId,
+      fixedTokenIn: pool.fixedTokenIn?.toLowerCase(),
+      fixedTokenOut: pool.fixedTokenOut?.toLowerCase(),
+      fixedSlotKind: pool.fixedSlotKind,
+      fixedProtocolAction: pool.fixedProtocolAction,
       fee: pool.fee,
       tickSpacing: pool.tickSpacing,
       hooks: pool.hooks?.toLowerCase(),
@@ -1075,10 +1083,32 @@ async function main(): Promise<void> {
     protocolDiscoveryCachePath,
     protocolDiscoveryChainId,
   );
+  const observedSourceFingerprint = protocolObservedSourceFingerprint(
+    PRODUCTION_ROUTE_ADAPTERS.protocols,
+  );
+  const discoverySourceFingerprints = protocolDiscoverySourceFingerprints(
+    PRODUCTION_ROUTE_ADAPTERS.protocols,
+  );
+  const observedSourceChanged = updateProtocolObservedSourceFingerprint(
+    protocolDiscoveryCache,
+    observedSourceFingerprint,
+    discoverySourceFingerprints,
+  );
   // Resume the observed event cursor instead of rescanning the default window.
-  // A long outage is caught up bounded by the explicit catch-up cap, and the
-  // dropped range (if any) is logged rather than silently skipped.
-  if (protocolDiscoveryCache.runtime.observedCursor !== null) {
+  // A matcher-registry rollout scans only the normal recent window at startup;
+  // the larger catch-up cap is reserved for resuming an unchanged cursor after
+  // an outage and must not turn every code rollout into a blocking 50k scan.
+  if (observedSourceChanged) {
+    lastProtocolDiscoveryBlock = Math.max(
+      -1,
+      discoveryToBlock - protocolDiscoveryBlocks,
+    );
+    console.warn(
+      `[searcher/live] protocol observed-source registry changed; ` +
+        `startup_backfill=${lastProtocolDiscoveryBlock + 1}-${discoveryToBlock} ` +
+        `fingerprint=${observedSourceFingerprint}`,
+    );
+  } else if (protocolDiscoveryCache.runtime.observedCursor !== null) {
     const persistedCursor = Math.min(
       protocolDiscoveryCache.runtime.observedCursor,
       discoveryToBlock,
@@ -1166,19 +1196,24 @@ async function main(): Promise<void> {
       `ownership=${protocolDiscoveryCache.routeOwnership.admissions.length} ` +
       `path=${protocolDiscoveryCachePath}`,
   );
+  const initialProtocolDiscoveryFromBlock = Math.min(
+    discoveryToBlock,
+    Math.max(0, lastProtocolDiscoveryBlock + 1),
+  );
   const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
     provider,
     adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
     identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
     protocolEdgesEnabled: config.enableProtocolEdges,
     chainId: protocolDiscoveryChainId,
+    probeExecutor: config.botvmAddress,
     currentOwnership: protocolDiscoveryOwnership,
     currentBackrunPools: strategyViews.backrun,
     currentBackrunGraph: graph,
     currentBlockscanGraph: blockScanGraph,
     buildStrategyViews: rebuildStrategyViews,
     blockNumber: discoveryToBlock,
-    fromBlock: Math.min(discoveryToBlock, Math.max(0, lastProtocolDiscoveryBlock + 1)),
+    fromBlock: initialProtocolDiscoveryFromBlock,
     graphTokens: initialProtocolAddressCandidates,
     candidateAddresses: initialProtocolAddressCandidates,
     evidenceCache: protocolDiscoveryCache,
@@ -1228,7 +1263,7 @@ async function main(): Promise<void> {
       `added=${addedProtocolEdges.length} ` +
       `address_probe=${initialProtocolDiscovery.scanner.addressStats.probes} ` +
       `address_cache_hit=${initialProtocolDiscovery.scanner.addressStats.cacheHits} ` +
-      `range=${Math.max(0, discoveryToBlock - protocolDiscoveryBlocks + 1)}-${discoveryToBlock}`,
+      `range=${initialProtocolDiscoveryFromBlock}-${discoveryToBlock}`,
   );
   for (const edge of addedProtocolEdges) {
     console.log(
@@ -1422,6 +1457,7 @@ async function main(): Promise<void> {
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: config.enableProtocolEdges,
       chainId: protocolDiscoveryChainId,
+      probeExecutor: config.botvmAddress,
       currentOwnership: protocolDiscoveryOwnership,
       currentBackrunPools: strategyViews.backrun,
       currentBackrunGraph: graph,
@@ -1504,6 +1540,7 @@ async function main(): Promise<void> {
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: config.enableProtocolEdges,
       chainId: protocolDiscoveryChainId,
+      probeExecutor: config.botvmAddress,
       currentOwnership: protocolDiscoveryOwnership,
       currentBackrunPools: strategyViews.backrun,
       currentBackrunGraph: graph,

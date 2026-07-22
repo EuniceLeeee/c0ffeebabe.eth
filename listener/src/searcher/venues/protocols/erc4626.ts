@@ -6,6 +6,11 @@ import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg, quoteSiloRedeem } from "./protocol-quote.js";
 import { erc4626Discovery } from "./erc4626-discovery.js";
+import { erc4626IdentityResolver } from "../identity.js";
+import {
+  buildReceiptDepositEdge,
+  buildReceiptDepositPlanFragment,
+} from "./receipt-deposit-framework.js";
 
 const erc4626Iface = new ethers.Interface(["function asset() view returns (address)"]);
 
@@ -16,6 +21,7 @@ export const erc4626Adapter = Object.freeze({
   declaredVenues: [],
   undeclaredVenueReason: "ERC4626 instances require external discovery and per-vault probe admission",
   discovery: erc4626Discovery,
+  discoveryIdentityResolver: erc4626IdentityResolver,
   edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo"],
   allowedTaxonomy: [
     { slotKind: "protocol", protocolAction: "wrap" },
@@ -53,6 +59,15 @@ export const erc4626Adapter = Object.freeze({
             `erc4626 verified route asset drift: ${pool.address} reports ${reported}, route asset ${asset}`,
           );
         }
+        if (route.edgeAdapterId === "erc4626-deposit") {
+          return buildReceiptDepositEdge({
+            edgeAdapterId: route.edgeAdapterId,
+            target: pool.address,
+            asset: route.tokenIn,
+            receipt: route.tokenOut,
+            score: pool.score,
+          });
+        }
         return {
           adapterId: route.edgeAdapterId, target: pool.address,
           tokenIn: route.tokenIn, tokenOut: route.tokenOut,
@@ -75,12 +90,13 @@ export const erc4626Adapter = Object.freeze({
       );
     }
     return [
-      {
-        adapterId: "erc4626-deposit", target: pool.address,
-        tokenIn: pool.fixedTokenIn, tokenOut: pool.address,
-        slotKind: "protocol", protocolAction: "wrap", score: pool.score,
-        ...deriveEdgeTaxonomy("protocol", "wrap"),
-      },
+      buildReceiptDepositEdge({
+        edgeAdapterId: "erc4626-deposit",
+        target: pool.address,
+        asset: pool.fixedTokenIn,
+        receipt: pool.address,
+        score: pool.score,
+      }),
       {
         adapterId: "erc4626-redeem", target: pool.address,
         tokenIn: pool.address, tokenOut: pool.fixedTokenIn,
@@ -96,5 +112,12 @@ export const erc4626Adapter = Object.freeze({
     }
     return quoteProtocolLeg(ctx.state, ctx.target, ctx.edgeAdapterId, ctx.amountIn);
   },
-  buildPlanFragment: buildDescriptorProtocolPlan,
+  async buildPlanFragment(ctx) {
+    if (ctx.edge.adapterId === "erc4626-deposit") {
+      // Preserve the existing MAX_UINT allowance policy; the framework shares
+      // the approval/plan shape without owning family-specific allowance rules.
+      return buildReceiptDepositPlanFragment(ctx, { allowance: "max" });
+    }
+    return buildDescriptorProtocolPlan(ctx);
+  },
 } satisfies ProtocolConversionAdapter);

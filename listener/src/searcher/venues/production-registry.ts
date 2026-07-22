@@ -5,6 +5,7 @@ import { erc4626Adapter } from "./protocols/erc4626.js";
 import { goldxAdapter } from "./protocols/goldx.js";
 import { metronomeHgusdcAdapter, metronomeSynthAdapter } from "./protocols/metronome.js";
 import { psmAdapter } from "./protocols/psm.js";
+import { eigenpieAdapter } from "./protocols/eigenpie.js";
 import { rocksolidAdapter } from "./protocols/rocksolid.js";
 import { wstethAdapter } from "./protocols/wsteth.js";
 import { balancerV3Adapter } from "./swaps/balancer-v3.js";
@@ -19,7 +20,6 @@ import {
   balancerV3IdentityResolver,
   curveIdentityResolver,
   dodoV2IdentityResolver,
-  erc4626IdentityResolver,
   factoryIdentityResolver,
   IdentityResolverRegistry,
   type IdentityResolverDescriptor,
@@ -64,13 +64,14 @@ export const PRODUCTION_ROUTE_ADAPTERS = createRouteAdapterRegistry({
     metronomeSynthAdapter,
     metronomeHgusdcAdapter,
     psmAdapter,
+    eigenpieAdapter,
     rocksolidAdapter,
     wstethAdapter,
   ],
   compat: [fluidCreditCompatAdapter],
 });
 
-const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
+const CODE_OWNED_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
   { poolAdapter: "univ2", policy: "onchain-resolver", resolve: factoryIdentityResolver },
   { poolAdapter: "univ3", policy: "onchain-resolver", resolve: factoryIdentityResolver },
   { poolAdapter: "curve", policy: "onchain-resolver", resolve: curveIdentityResolver },
@@ -111,6 +112,38 @@ const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
   },
 ];
 
+const dynamicProtocolIdentityResolvers = new Map(
+  PRODUCTION_ROUTE_ADAPTERS.protocols.flatMap((adapter) => {
+    if (!adapter.discovery || !adapter.discoveryIdentityResolver) return [];
+    return adapter.poolAdapters.map((poolAdapter) => [
+      poolAdapter,
+      adapter.discoveryIdentityResolver!,
+    ] as const);
+  }),
+);
+
+const codeOwnedPoolAdapters = new Set(
+  CODE_OWNED_IDENTITY_POLICIES.map((descriptor) => descriptor.poolAdapter),
+);
+
+/**
+ * A discovery-capable family brings its own identity resolver in the same
+ * registration. Existing static families keep their code-owned seed policy;
+ * the discovery registry below swaps only their dynamic admission path.
+ */
+const PRODUCTION_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] = [
+  ...CODE_OWNED_IDENTITY_POLICIES,
+  // Discovery-only families must remain untrusted in ordinary file/factory
+  // intake. Their strong resolver is exposed only through the protocol
+  // discovery registry after source evidence + active probe have run.
+  ...[...dynamicProtocolIdentityResolvers]
+    .filter(([poolAdapter]) => !codeOwnedPoolAdapters.has(poolAdapter))
+    .map(([poolAdapter]) => ({
+      poolAdapter,
+      policy: "trusted-singleton-seed" as const,
+    })),
+];
+
 /**
  * Identity admission stays independent from execution, while startup-time
  * conformance makes a newly registered route pool impossible to omit silently.
@@ -121,15 +154,18 @@ export const PRODUCTION_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
 );
 
 const PROTOCOL_DISCOVERY_IDENTITY_POLICIES: readonly IdentityResolverDescriptor[] =
-  PRODUCTION_IDENTITY_POLICIES.map((descriptor) => descriptor.poolAdapter === "erc4626"
-    ? { poolAdapter: "erc4626", policy: "onchain-resolver", resolve: erc4626IdentityResolver }
-    : descriptor
-  );
+  PRODUCTION_IDENTITY_POLICIES.map((descriptor) => {
+    const resolve = dynamicProtocolIdentityResolvers.get(descriptor.poolAdapter);
+    return resolve
+      ? { poolAdapter: descriptor.poolAdapter, policy: "onchain-resolver", resolve }
+      : descriptor;
+  });
 
 /**
  * Canonical production identity registry for adapter-owned protocol discovery.
- * It differs only at ERC4626: candidate provenance is already constrained by
- * the discovery capability, and the mandatory payout probe follows identity.
+ * It differs for every discovery-capable protocol family: candidate provenance
+ * is constrained by that family's sources, and its mandatory behavior probe
+ * follows identity before any edge is projected.
  */
 export const PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS = new IdentityResolverRegistry(
   PROTOCOL_DISCOVERY_IDENTITY_POLICIES,

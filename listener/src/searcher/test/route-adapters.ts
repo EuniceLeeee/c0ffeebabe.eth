@@ -114,7 +114,7 @@ const curveUnderlyingBackend: TokenQueryBackend = {
 
 async function main(): Promise<void> {
   const adapters = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list();
-  assert(adapters.length === 15, `production route adapter count ${adapters.length}`);
+  assert(adapters.length === 16, `production route adapter count ${adapters.length}`);
   for (const routeAdapter of adapters) {
     for (const poolAdapter of routeAdapter.poolAdapters) {
       assert(PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);
@@ -218,6 +218,7 @@ async function main(): Promise<void> {
         ...grandfatheredProtocol,
         id: "protocol:ungated-discovery",
         discovery: {
+          candidateSources: [],
           eventTopics: [],
           callSelectors: [],
           async probeCandidate() { return []; },
@@ -235,6 +236,7 @@ async function main(): Promise<void> {
       protocols: [{
         ...PRODUCTION_ROUTE_ADAPTERS.protocols.find((item) => item.id === "protocol:erc4626")!,
         discovery: {
+          candidateSources: ["dex-token-domain"],
           eventTopics: [],
           callSelectors: [],
           async candidateFromAddress() { return null; },
@@ -575,6 +577,7 @@ async function main(): Promise<void> {
     "psm",
     "metronome-synth-swap",
     "goldx-mint",
+    "eigenpie-deposit-asset",
   ]);
   for (const routeAdapter of adapters) {
     assert("prepared" in routeAdapter, `${routeAdapter.id} must declare prepared capability`);

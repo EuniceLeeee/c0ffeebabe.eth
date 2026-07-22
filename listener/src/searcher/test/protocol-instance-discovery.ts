@@ -101,6 +101,7 @@ const originalGraphSnapshot = JSON.stringify(originalGraph);
 const calls = { identity: 0, probe: 0 };
 const callCount = (name: keyof typeof calls): number => calls[name];
 const successAdapter = adapter({
+  candidateSources: [],
   eventTopics: [],
   callSelectors: [],
   async probeCandidate(instance) {
@@ -147,8 +148,52 @@ assert(success.events[0]?.verdict === "would_admit", "verified instance must emi
 assert(success.events[0]?.wouldAdmitEdges === 4, "event must count verified routes");
 assert(JSON.stringify(originalGraph) === originalGraphSnapshot, "shadow discovery must not mutate graph");
 
+const witness = { kind: "test-observation", txHash: `0x${"12".repeat(32)}`, blockNumber: 123 };
+const evidenceOnce = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([[successAdapter.id, [{
+    ...candidate(TARGET_D),
+    evidence: [witness],
+  }]]]),
+});
+const evidenceRepeat = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter],
+  context: { ...context, retainedInstances: [evidenceOnce.wouldAdmit[0].instance] },
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([[successAdapter.id, [{
+    ...candidate(TARGET_D),
+    evidence: [witness],
+  }]]]),
+});
+assert(
+  evidenceRepeat.wouldAdmit[0].instance.evidence.length === 1,
+  "repeated retained/current witnesses must not grow discovery evidence",
+);
+const boundedEvidence = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([[successAdapter.id, [{
+    ...candidate(TARGET_D),
+    evidence: Array.from({ length: 70 }, (_, blockNumber) => ({
+      kind: "test-observation",
+      blockNumber,
+    })),
+  }]]]),
+});
+assert(
+  boundedEvidence.wouldAdmit[0].instance.evidence.length === 64,
+  "per-instance discovery evidence must remain bounded",
+);
+
 const changedRoute = await runProtocolDiscoveryShadow({
   adapters: [adapter({
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -173,6 +218,7 @@ assert(
 let rejectedProbeCalls = 0;
 const identityRejected = await runProtocolDiscoveryShadow({
   adapters: [adapter({
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate() {
@@ -197,6 +243,7 @@ assert(
 
 const probeRejected = await runProtocolDiscoveryShadow({
   adapters: [adapter({
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -219,6 +266,7 @@ assert(
 
 const malformedEdges = await runProtocolDiscoveryShadow({
   adapters: [adapter({
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -247,6 +295,7 @@ assert(ordinaryBuildEdgesCalls === 0, "shadow probe results must not be re-expan
 
 const incomplete = await runProtocolDiscoveryShadow({
   adapters: [adapter({
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate() { return []; },
@@ -297,6 +346,7 @@ const rivalAdapter: ProtocolConversionAdapter = {
   id: "protocol:shadow-test-rival",
   edgeAdapterIds: ["rival-wrap", "rival-redeem"],
   discovery: {
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -421,6 +471,7 @@ assert(
 
 const probeTimeout = await runProtocolDiscoveryShadow({
   adapters: [adapter({
+    candidateSources: [],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate() {

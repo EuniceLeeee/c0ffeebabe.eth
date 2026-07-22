@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { TokenEdge } from "../../planner/token-graph.js";
+import { discoverErc20BalanceStorageSlot } from "../../protocol-discovery-erc20-state.js";
 import type {
   AttestedProtocolInstance,
   ProtocolCandidate,
@@ -9,6 +10,11 @@ import type {
   ProtocolDiscoveryLog,
   ProtocolDiscoveryReceipt,
 } from "../route-leg-adapter.js";
+import {
+  buildReceiptDepositEdge,
+  exactReceiptDepositFactsMatch,
+  simulateReceiptDeposit,
+} from "./receipt-deposit-framework.js";
 
 const ERC4626 = new ethers.Interface([
   "function asset() view returns (address)",
@@ -20,8 +26,10 @@ const ERC4626 = new ethers.Interface([
   "function previewRedeem(uint256 shares) view returns (uint256)",
   "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
   "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+  "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
   "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)",
 ]);
+const DEPOSIT_TOPIC = ERC4626.getEvent("Deposit")!.topicHash.toLowerCase();
 const WITHDRAW_TOPIC = ERC4626.getEvent("Withdraw")!.topicHash.toLowerCase();
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)").toLowerCase();
 const TRANSFER_SELECTOR = ethers.id("transfer(address,uint256)").slice(0, 10).toLowerCase();
@@ -34,9 +42,6 @@ const ADDRESS_PROBE_AMOUNTS = [10n ** 6n, 10n ** 18n] as const;
 /** Synthetic accounts used only inside state-override simulations. */
 export const ERC4626_FORK_PROBE_HOLDER = ethers.getAddress(`0x${"00".repeat(18)}face`);
 export const ERC4626_FORK_PROBE_RECEIVER = ethers.getAddress(`0x${"00".repeat(18)}beef`);
-const SHARE_BALANCE_SLOT_CANDIDATES = 32;
-/** Process-lifetime memo keyed by target|codeHash so upgrades re-discover. */
-const shareBalanceSlotMemo = new Map<string, string>();
 
 export interface Erc4626PayoutEvidence {
   readonly kind: "erc4626-withdraw-payout";
@@ -78,9 +83,11 @@ export interface Erc4626ForkRedeemEvidence {
 }
 
 export const erc4626Discovery: ProtocolDiscoveryCapability = Object.freeze({
+  candidateSources: Object.freeze(["dex-token-domain", "observed-interaction"] as const),
   eventTopics: Object.freeze([WITHDRAW_TOPIC]),
   callSelectors: Object.freeze([REDEEM_SELECTOR, WITHDRAW_SELECTOR]),
   addressMatcherVersion: "erc4626-address-v2",
+  observedMatcherVersion: "erc4626-observed-v1",
 
   async candidateFromAddress(candidate, ctx) {
     const target = ethers.getAddress(candidate.target);
@@ -233,8 +240,48 @@ export async function probeErc4626Candidate(
   }
 
   const edges: TokenEdge[] = [];
-  if (await supportsZeroAmountCall(ctx, target, "deposit", [0n, target])) {
-    edges.push(protocolEdge("erc4626-deposit", target, asset, target, "wrap", instance.pool.score));
+  let depositVerified = false;
+  if (ctx.backend.simulateCalls) {
+    const facts = await simulateReceiptDeposit({
+      context: ctx,
+      target,
+      asset,
+      receipt: target,
+      amountIn: sampleAssets,
+      fallbackHolder: ERC4626_FORK_PROBE_HOLDER,
+      encodeDeposit: (holder) => ERC4626.encodeFunctionData("deposit", [sampleAssets, holder]),
+      // ERC4626 may forward assets into a strategy during deposit. The family
+      // still requires the exact holder spend + Transfer-to-vault log + share
+      // mint, but does not impose Eigenpie's target-balance retention rule.
+      assetRecipient: null,
+    });
+    depositVerified = facts !== null &&
+      exactReceiptDepositFactsMatch({
+        facts,
+        expectedAmountOut: previewDeposit,
+        assetRecipient: null,
+      }) &&
+      erc4626DepositResultMatches(facts.depositReturnData, previewDeposit) &&
+      erc4626DepositEventMatches(
+        facts.depositLogs,
+        target,
+        facts.holder,
+        sampleAssets,
+        previewDeposit,
+      );
+  } else {
+    // Read-only diagnostic backends preserve the legacy surface check. Live
+    // admission supplies simulateCalls and therefore requires the nonzero proof.
+    depositVerified = await supportsZeroAmountCall(ctx, target, "deposit", [0n, target]);
+  }
+  if (depositVerified) {
+    edges.push(buildReceiptDepositEdge({
+      edgeAdapterId: "erc4626-deposit",
+      target,
+      asset,
+      receipt: target,
+      score: instance.pool.score,
+    }));
   }
   let redeemVerified = payoutEvidence !== null;
   if (!redeemVerified) {
@@ -265,81 +312,6 @@ export async function probeErc4626Candidate(
   return edges;
 }
 
-/**
- * Discover the vault's share balance mapping slot for the synthetic holder by
- * probing solidity keccak(holder,slot) and vyper keccak(slot,holder) layouts
- * against balanceOf under a state override. Memoized per target|codeHash.
- */
-async function discoverShareBalanceSlot(
-  ctx: ProtocolDiscoveryContext,
-  target: string,
-  codeHash: string,
-  probeValue: bigint,
-): Promise<string | null> {
-  const simulate = ctx.backend.simulateCalls?.bind(ctx.backend);
-  if (!simulate) return null;
-  const memoKey = `${target.toLowerCase()}|${codeHash.toLowerCase()}`;
-  const memoized = shareBalanceSlotMemo.get(memoKey);
-  const balanceOfData = ERC4626.encodeFunctionData("balanceOf", [ERC4626_FORK_PROBE_HOLDER]);
-  const probeSlot = async (slotKey: string): Promise<boolean> => {
-    const [result] = await simulate({
-      calls: [{ from: ERC4626_FORK_PROBE_HOLDER, to: target, data: balanceOfData }],
-      stateOverrides: {
-        [target]: { stateDiff: { [slotKey]: ethers.toBeHex(probeValue, 32) } },
-      },
-    });
-    if (!result || result.status !== 1) return false;
-    try {
-      return BigInt(ERC4626.decodeFunctionResult("balanceOf", result.returnData)[0]) === probeValue;
-    } catch {
-      return false;
-    }
-  };
-  if (memoized !== undefined) {
-    if (await probeSlot(memoized)) return memoized;
-    shareBalanceSlotMemo.delete(memoKey);
-  }
-  // Layout-agnostic path: ask the node which storage slots balanceOf actually
-  // reads, then verify each via the override probe. This finds ERC-7201
-  // namespaced / diamond balance slots that the linear scan below cannot reach
-  // (e.g. waEthUSDT/waEthUSDC/USD3/vvUSDC read a hashed-namespace slot, not
-  // keccak(holder, 0..31)). The linear scan remains the fallback.
-  const createAccessList = ctx.backend.createAccessList?.bind(ctx.backend);
-  if (createAccessList) {
-    try {
-      const accessList = await createAccessList({
-        from: ERC4626_FORK_PROBE_HOLDER,
-        to: target,
-        data: balanceOfData,
-      });
-      for (const entry of accessList) {
-        if (entry.address.toLowerCase() !== target.toLowerCase()) continue;
-        for (const slotKey of entry.storageKeys) {
-          if (await probeSlot(slotKey)) {
-            shareBalanceSlotMemo.set(memoKey, slotKey);
-            return slotKey;
-          }
-        }
-      }
-    } catch {
-      // Access-list unsupported/failed for this call; fall through to the scan.
-    }
-  }
-  const abi = ethers.AbiCoder.defaultAbiCoder();
-  for (let slot = 0; slot < SHARE_BALANCE_SLOT_CANDIDATES; slot++) {
-    for (const layout of ["solidity", "vyper"] as const) {
-      const slotKey = ethers.keccak256(layout === "solidity"
-        ? abi.encode(["address", "uint256"], [ERC4626_FORK_PROBE_HOLDER, BigInt(slot)])
-        : abi.encode(["uint256", "address"], [BigInt(slot), ERC4626_FORK_PROBE_HOLDER]));
-      if (await probeSlot(slotKey)) {
-        shareBalanceSlotMemo.set(memoKey, slotKey);
-        return slotKey;
-      }
-    }
-  }
-  return null;
-}
-
 export async function buildForkRedeemEvidence(
   ctx: ProtocolDiscoveryContext,
   target: string,
@@ -359,7 +331,13 @@ export async function buildForkRedeemEvidence(
       ? desiredShares
       : totalSupply / 2n;
     if (cappedShares <= 0n) return null;
-    const slotKey = await discoverShareBalanceSlot(ctx, target, codeHash, cappedShares);
+    const slotKey = await discoverErc20BalanceStorageSlot({
+      context: ctx,
+      token: target,
+      holder: ERC4626_FORK_PROBE_HOLDER,
+      codeHash,
+      probeValue: cappedShares,
+    });
     if (!slotKey) return null;
     const previewAssets = await callUint(ctx, target, "previewRedeem", [cappedShares]);
     if (previewAssets <= 0n) return null;
@@ -610,6 +588,39 @@ async function supportsZeroAmountCall(
     if (isRetryableSourceFailure(error)) throw error;
     return false;
   }
+}
+
+function erc4626DepositResultMatches(returnData: string, expectedShares: bigint): boolean {
+  try {
+    return BigInt(ERC4626.decodeFunctionResult("deposit", returnData)[0]) === expectedShares;
+  } catch {
+    return false;
+  }
+}
+
+function erc4626DepositEventMatches(
+  logs: readonly ProtocolDiscoveryLog[],
+  target: string,
+  holder: string,
+  assets: bigint,
+  shares: bigint,
+): boolean {
+  return logs.some((log) => {
+    if (
+      log.address.toLowerCase() !== target.toLowerCase() ||
+      log.topics[0]?.toLowerCase() !== DEPOSIT_TOPIC
+    ) return false;
+    try {
+      const parsed = ERC4626.parseLog({ topics: [...log.topics], data: log.data });
+      return parsed !== null &&
+        ethers.getAddress(String(parsed.args.sender)).toLowerCase() === holder.toLowerCase() &&
+        ethers.getAddress(String(parsed.args.owner)).toLowerCase() === holder.toLowerCase() &&
+        BigInt(parsed.args.assets) === assets &&
+        BigInt(parsed.args.shares) === shares;
+    } catch {
+      return false;
+    }
+  });
 }
 
 function protocolEdge(

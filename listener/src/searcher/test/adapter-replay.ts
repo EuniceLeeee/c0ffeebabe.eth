@@ -40,6 +40,7 @@ import { TemplatePlanner } from "../planner/planner.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import { createProfitTokenValuation } from "../profit-token-valuation.js";
 import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
+import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { AnvilSolver, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
@@ -47,6 +48,10 @@ import type { ProtocolAction } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
 import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
 import type { ExecutionFamilyId, SwapAdapter } from "../venues/route-leg-adapter.js";
+import {
+  anchorHistoricalSenderNoncePrefix,
+  type HistoricalSenderNonceAnchorResult,
+} from "./historical-replay-anchor.js";
 
 interface ParentBlockAnchor {
   kind: "parent-block";
@@ -138,6 +143,15 @@ interface AdapterReplayReport {
   stateAnchor: StateAnchor;
   anchorBlockHash: string | null;
   anchorStateRoot: string | null;
+  anchorReconstruction:
+    | ({
+      kind: "canonical-parent-block";
+      blockNumber: number;
+      blockHash: string;
+      stateRoot: string;
+    })
+    | HistoricalSenderNonceAnchorResult
+    | null;
   baseCommit: string | null;
   adapterCommit: string | null;
   familySourceSha256: string;
@@ -196,8 +210,11 @@ interface CliArgs {
 
 const LISTENER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const REPO_ROOT = resolve(LISTENER_ROOT, "..");
-const HARNESS_PATH = fileURLToPath(import.meta.url);
 const BOTVM_ARTIFACT_PATH = resolve(REPO_ROOT, "out/BotVM.sol/BotVM.json");
+const HARNESS_SOURCE_FILES = [
+  "src/searcher/test/adapter-replay.ts",
+  "src/searcher/test/historical-replay-anchor.ts",
+];
 const ADDRESS_FIELDS = [
   "address", "token0", "token1", "currency0", "currency1", "hooks",
   "fixedTokenIn", "fixedTokenOut", "redeemTokenOut",
@@ -212,6 +229,12 @@ const FAMILY_SOURCE_FILES: Readonly<Partial<Record<ExecutionFamilyId, readonly s
   "balancer-v3": ["src/searcher/venues/swaps/balancer-v3.ts"],
   "custom-swap:dodo-v2": ["src/searcher/venues/swaps/dodo-v2.ts"],
   "protocol:erc4626": ["src/searcher/venues/protocols/erc4626.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
+  "protocol:eigenpie": [
+    "src/searcher/venues/protocols/eigenpie.ts",
+    "src/searcher/venues/protocols/eigenpie-discovery.ts",
+    "src/searcher/venues/protocols/receipt-deposit-framework.ts",
+    "src/adapters/eigenpie-deposit.ts",
+  ],
   "protocol:goldx": ["src/searcher/venues/protocols/goldx.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
   "protocol:metronome-synth": ["src/searcher/venues/protocols/metronome.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
   "protocol:metronome-hgusdc": ["src/searcher/venues/protocols/metronome.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
@@ -459,9 +482,25 @@ function familyForLeg(leg: AdapterReplayLeg, fixturePath: string): ExecutionFami
   return poolFamily.id;
 }
 
-async function anchorState(state: AnvilStateBackend, anchor: StateAnchor): Promise<void> {
-  if (anchor.kind === "parent-block") await state.forkAt(anchor.blockNumber);
-  else await state.forkAfterTx(anchor.triggerTxHash);
+async function anchorState(
+  state: AnvilStateBackend,
+  upstream: ethers.JsonRpcProvider,
+  fixture: AdapterReplayFixture,
+  winnerIndex: number,
+): Promise<HistoricalSenderNonceAnchorResult | null> {
+  const anchor = fixture.stateAnchor;
+  if (anchor.kind === "parent-block") {
+    await state.forkAt(anchor.blockNumber);
+    return null;
+  }
+  return anchorHistoricalSenderNoncePrefix({
+    state,
+    archiveProvider: upstream,
+    triggerTxHash: anchor.triggerTxHash,
+    expectedBlockNumber: anchor.blockNumber,
+    mustPrecedeIndex: winnerIndex,
+    mineLabel: `${fixture.id}-sender-nonce-prefix`,
+  });
 }
 
 async function allocateLoopbackPort(): Promise<number> {
@@ -484,7 +523,35 @@ async function validateLocalStateAnchor(
   local: ethers.JsonRpcProvider,
   upstream: ethers.JsonRpcProvider,
   anchor: StateAnchor,
-): Promise<{ hash: string; stateRoot: string }> {
+  senderPrefix: HistoricalSenderNonceAnchorResult | null,
+): Promise<AdapterReplayReport["anchorReconstruction"]> {
+  if (anchor.kind === "after-transaction") {
+    if (!senderPrefix) throw new Error("after-transaction anchor lacks sender nonce prefix evidence");
+    const [localBlock, localTrigger, localNextNonce] = await Promise.all([
+      local.getBlockNumber(),
+      local.getTransactionReceipt(anchor.triggerTxHash),
+      local.getTransactionCount(senderPrefix.sender, "latest"),
+    ]);
+    if (localBlock !== anchor.blockNumber) {
+      throw new Error(`sender nonce prefix block ${localBlock} != expected ${anchor.blockNumber}`);
+    }
+    if (
+      !localTrigger ||
+      localTrigger.status !== 1 ||
+      localTrigger.hash.toLowerCase() !== anchor.triggerTxHash.toLowerCase() ||
+      localTrigger.blockNumber !== anchor.blockNumber
+    ) {
+      throw new Error("local sender nonce prefix lacks the successful trigger receipt");
+    }
+    if (localNextNonce !== senderPrefix.lastNonce + 1) {
+      throw new Error(
+        `local trigger sender nonce ${localNextNonce} != expected ${senderPrefix.lastNonce + 1}`,
+      );
+    }
+    return senderPrefix;
+  }
+
+  if (senderPrefix) throw new Error("parent-block anchor unexpectedly has sender prefix evidence");
   const tag = ethers.toQuantity(anchor.blockNumber);
   const [localBlock, canonicalBlock] = await Promise.all([
     local.send("eth_getBlockByNumber", ["latest", false]) as Promise<Record<string, unknown>>,
@@ -502,20 +569,25 @@ async function validateLocalStateAnchor(
   if (!localRoot || !canonicalRoot || localRoot !== canonicalRoot) {
     throw new Error(`local fork state-root header differs at block ${anchor.blockNumber}`);
   }
-  return { hash: canonicalHash, stateRoot: canonicalRoot };
+  return {
+    kind: "canonical-parent-block",
+    blockNumber: anchor.blockNumber,
+    blockHash: canonicalHash,
+    stateRoot: canonicalRoot,
+  };
 }
 
 async function validateChainAnchor(
   provider: ethers.JsonRpcProvider,
   fixture: AdapterReplayFixture,
-): Promise<void> {
+): Promise<ethers.TransactionReceipt> {
   const winner = await provider.getTransactionReceipt(fixture.referenceTx);
   if (!winner || winner.status !== 1) throw new Error(`reference tx missing or reverted: ${fixture.referenceTx}`);
   if (fixture.stateAnchor.kind === "parent-block") {
     if (winner.blockNumber !== fixture.stateAnchor.blockNumber + 1) {
       throw new Error(`parent anchor ${fixture.stateAnchor.blockNumber} does not precede winner block ${winner.blockNumber}`);
     }
-    return;
+    return winner;
   }
   const trigger = await provider.getTransactionReceipt(fixture.stateAnchor.triggerTxHash);
   if (!trigger || trigger.status !== 1) throw new Error(`trigger tx missing or reverted: ${fixture.stateAnchor.triggerTxHash}`);
@@ -523,9 +595,11 @@ async function validateChainAnchor(
     throw new Error("backrun trigger/winner are not in the declared block");
   }
   if (trigger.index >= winner.index) throw new Error("backrun trigger must precede the winner");
+  return winner;
 }
 
 interface TraceCall {
+  readonly from?: string;
   readonly to?: string;
   readonly input?: string;
   readonly error?: string;
@@ -536,6 +610,13 @@ interface FlattenedTraceCall {
   readonly target: string;
   readonly selector: string;
   readonly input: string;
+  readonly from?: string;
+  readonly depth?: number;
+}
+
+interface ReferenceTraceSemanticEvidence {
+  readonly kind: string;
+  readonly [key: string]: unknown;
 }
 
 interface ReferenceObservedImpact {
@@ -553,6 +634,17 @@ const PROTOCOL_LEG_DESCRIPTOR_BY_ID = new Map(
 );
 const PSM_SELL_GEM_SELECTOR = ethers.id("sellGem(address,uint256)").slice(0, 10).toLowerCase();
 const PSM_BUY_GEM_SELECTOR = ethers.id("buyGem(address,uint256)").slice(0, 10).toLowerCase();
+const REFERENCE_EIGENPIE_DEPOSIT_IFACE = new ethers.Interface([
+  "function depositAsset(address asset,uint256 depositAmount,uint256 minRec,address referral)",
+]);
+const REFERENCE_ERC20_FLOW_IFACE = new ethers.Interface([
+  "function transferFrom(address from,address to,uint256 amount) returns (bool)",
+  "function mint(address to,uint256 amount)",
+]);
+const REFERENCE_TRANSFER_FROM_SELECTOR = REFERENCE_ERC20_FLOW_IFACE
+  .getFunction("transferFrom")!.selector.toLowerCase();
+const REFERENCE_MINT_SELECTOR = REFERENCE_ERC20_FLOW_IFACE
+  .getFunction("mint")!.selector.toLowerCase();
 
 function expectedReferenceTarget(leg: AdapterReplayLeg, familyId: ExecutionFamilyId): string {
   // Balancer V3 separates logical pool identity from its singleton execution
@@ -565,19 +657,36 @@ function expectedReferenceTarget(leg: AdapterReplayLeg, familyId: ExecutionFamil
 function traceCallMatchesLegSemantics(
   leg: AdapterReplayLeg,
   call: FlattenedTraceCall,
+  descendants: readonly FlattenedTraceCall[] = [],
 ): boolean {
+  return traceCallSemanticEvidence(leg, call, descendants) !== null;
+}
+
+function traceCallSemanticEvidence(
+  leg: AdapterReplayLeg,
+  call: FlattenedTraceCall,
+  descendants: readonly FlattenedTraceCall[] = [],
+): ReferenceTraceSemanticEvidence | null {
+  if (leg.edgeAdapterId === "eigenpie-deposit-asset") {
+    return eigenpieDepositTraceEvidence(leg, call, descendants);
+  }
+
   if (leg.edgeAdapterId === "psm") {
     const tokenIn = leg.tokenIn.toLowerCase();
     const tokenOut = leg.tokenOut.toLowerCase();
     const usdc = ADDR.USDC.toLowerCase();
-    if (tokenIn === usdc) return call.selector === PSM_SELL_GEM_SELECTOR;
-    if (tokenOut === usdc) return call.selector === PSM_BUY_GEM_SELECTOR;
-    return false;
+    if (tokenIn === usdc && call.selector === PSM_SELL_GEM_SELECTOR) {
+      return { kind: "psm-sell-gem", selector: call.selector };
+    }
+    if (tokenOut === usdc && call.selector === PSM_BUY_GEM_SELECTOR) {
+      return { kind: "psm-buy-gem", selector: call.selector };
+    }
+    return null;
   }
 
   const descriptor = PROTOCOL_LEG_DESCRIPTOR_BY_ID.get(leg.edgeAdapterId);
   if (!descriptor || (descriptor.tokenInArg === undefined && descriptor.tokenOutArg === undefined)) {
-    return true;
+    return { kind: "target-selector", selector: call.selector };
   }
   try {
     const iface = new ethers.Interface([`function ${descriptor.signature}`]);
@@ -585,16 +694,104 @@ function traceCallMatchesLegSemantics(
     const decoded = iface.decodeFunctionData(fnName, call.input);
     if (descriptor.tokenInArg !== undefined &&
         String(decoded[descriptor.tokenInArg]).toLowerCase() !== leg.tokenIn.toLowerCase()) {
-      return false;
+      return null;
     }
     if (descriptor.tokenOutArg !== undefined &&
         String(decoded[descriptor.tokenOutArg]).toLowerCase() !== leg.tokenOut.toLowerCase()) {
-      return false;
+      return null;
     }
-    return true;
+    return { kind: "protocol-token-args", input: call.input };
   } catch {
-    return false;
+    return null;
   }
+}
+
+function eigenpieDepositTraceEvidence(
+  leg: AdapterReplayLeg,
+  call: FlattenedTraceCall,
+  descendants: readonly FlattenedTraceCall[],
+): ReferenceTraceSemanticEvidence | null {
+  if (!call.from) return null;
+  try {
+    const depositor = ethers.getAddress(call.from);
+    const target = ethers.getAddress(leg.pool.address);
+    const tokenIn = ethers.getAddress(leg.tokenIn);
+    const tokenOut = ethers.getAddress(leg.tokenOut);
+    const decoded = REFERENCE_EIGENPIE_DEPOSIT_IFACE.decodeFunctionData("depositAsset", call.input);
+    const observedTokenIn = ethers.getAddress(String(decoded[0]));
+    const amountIn = BigInt(decoded[1]);
+    const minAmountOut = BigInt(decoded[2]);
+    if (observedTokenIn !== tokenIn || amountIn <= 0n) return null;
+
+    let transferFromWitness: FlattenedTraceCall | null = null;
+    let mintWitness: { call: FlattenedTraceCall; amount: bigint } | null = null;
+    for (const child of descendants) {
+      if (
+        transferFromWitness === null &&
+        child.target === tokenIn.toLowerCase() &&
+        child.selector === REFERENCE_TRANSFER_FROM_SELECTOR
+      ) {
+        try {
+          const args = REFERENCE_ERC20_FLOW_IFACE.decodeFunctionData("transferFrom", child.input);
+          if (
+            ethers.getAddress(String(args[0])) === depositor &&
+            ethers.getAddress(String(args[1])) === target &&
+            BigInt(args[2]) === amountIn
+          ) {
+            transferFromWitness = child;
+          }
+        } catch {
+          // A malformed child cannot establish input-token causality.
+        }
+      }
+      if (
+        mintWitness === null &&
+        child.target === tokenOut.toLowerCase() &&
+        child.selector === REFERENCE_MINT_SELECTOR
+      ) {
+        try {
+          const args = REFERENCE_ERC20_FLOW_IFACE.decodeFunctionData("mint", child.input);
+          const mintedAmount = BigInt(args[1]);
+          if (
+            ethers.getAddress(String(args[0])) === depositor &&
+            mintedAmount > 0n &&
+            mintedAmount >= minAmountOut
+          ) {
+            mintWitness = { call: child, amount: mintedAmount };
+          }
+        } catch {
+          // A malformed child cannot establish output-token causality.
+        }
+      }
+    }
+    if (!transferFromWitness || !mintWitness) return null;
+    return {
+      kind: "eigenpie-deposit-asset",
+      depositor: depositor.toLowerCase(),
+      tokenIn: tokenIn.toLowerCase(),
+      tokenOut: tokenOut.toLowerCase(),
+      amountIn: amountIn.toString(),
+      minAmountOut: minAmountOut.toString(),
+      mintedAmount: mintWitness.amount.toString(),
+      transferFromTarget: transferFromWitness.target,
+      transferFromInput: transferFromWitness.input,
+      mintTarget: mintWitness.call.target,
+      mintInput: mintWitness.call.input,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function descendantCalls(
+  calls: readonly FlattenedTraceCall[],
+  parentIndex: number,
+): readonly FlattenedTraceCall[] {
+  const parentDepth = calls[parentIndex]?.depth;
+  if (parentDepth === undefined) return [];
+  let end = parentIndex + 1;
+  while (end < calls.length && (calls[end].depth ?? 0) > parentDepth) end++;
+  return calls.slice(parentIndex + 1, end);
 }
 
 async function validateReferenceRoute(
@@ -607,7 +804,13 @@ async function validateReferenceRoute(
   ]) as TraceCall;
   const calls: FlattenedTraceCall[] = [];
   flattenSuccessfulCalls(trace, calls);
-  const matched: Array<FlattenedTraceCall & { edgeAdapterId: string }> = [];
+  const matched: Array<{
+    target: string;
+    selector: string;
+    input: string;
+    edgeAdapterId: string;
+    semanticEvidence: ReferenceTraceSemanticEvidence;
+  }> = [];
   let cursor = 0;
   for (const leg of fixture.route) {
     const familyId = familyForLeg(leg, fixture.id);
@@ -618,9 +821,20 @@ async function validateReferenceRoute(
       const call = calls[index];
       if (call.target !== expectedTarget) continue;
       if (!action.matchTrace(call.target, call.selector)) continue;
-      if (!traceCallMatchesLegSemantics(leg, call)) continue;
+      const semanticEvidence = traceCallSemanticEvidence(
+        leg,
+        call,
+        descendantCalls(calls, index),
+      );
+      if (semanticEvidence === null) continue;
       found = index;
-      matched.push({ ...call, edgeAdapterId: leg.edgeAdapterId });
+      matched.push({
+        target: call.target,
+        selector: call.selector,
+        input: call.input,
+        edgeAdapterId: leg.edgeAdapterId,
+        semanticEvidence,
+      });
       break;
     }
     if (found < 0) {
@@ -750,6 +964,7 @@ function validateExactCurveIds(
 function flattenSuccessfulCalls(
   call: TraceCall,
   output: FlattenedTraceCall[],
+  depth = 0,
 ): void {
   if (call.error) return;
   if (typeof call.to === "string" && typeof call.input === "string" && call.input.length >= 10) {
@@ -757,9 +972,11 @@ function flattenSuccessfulCalls(
       target: call.to.toLowerCase(),
       selector: call.input.slice(0, 10).toLowerCase(),
       input: call.input.toLowerCase(),
+      ...(typeof call.from === "string" ? { from: call.from.toLowerCase() } : {}),
+      depth,
     });
   }
-  for (const child of call.calls ?? []) flattenSuccessfulCalls(child, output);
+  for (const child of call.calls ?? []) flattenSuccessfulCalls(child, output, depth + 1);
 }
 
 function runReferenceMatcherSelfTests(): void {
@@ -825,6 +1042,100 @@ function runReferenceMatcherSelfTests(): void {
     selector: siloSelector,
     input: siloIface.encodeFunctionData("redeem", [tokenC, 1n, target, target]),
   }));
+
+  const quotedDepositor = "0x0000000000000000000000000000000000000020";
+  const quotedLeg: AdapterReplayLeg = {
+    seq: 1,
+    pool: { adapter: "eigenpie-deposit-router", address: target },
+    edgeAdapterId: "eigenpie-deposit-asset",
+    tokenIn: tokenA,
+    tokenOut: tokenB,
+  };
+  const quotedDepositInput = REFERENCE_EIGENPIE_DEPOSIT_IFACE.encodeFunctionData(
+    "depositAsset",
+    [tokenA, 10n, 9n, ethers.ZeroAddress],
+  );
+  const quotedParent: FlattenedTraceCall = {
+    target,
+    from: quotedDepositor,
+    selector: quotedDepositInput.slice(0, 10).toLowerCase(),
+    input: quotedDepositInput,
+    depth: 1,
+  };
+  const quotedTransferInput = REFERENCE_ERC20_FLOW_IFACE.encodeFunctionData(
+    "transferFrom",
+    [quotedDepositor, target, 10n],
+  );
+  const quotedTransfer: FlattenedTraceCall = {
+    target: tokenA,
+    selector: REFERENCE_TRANSFER_FROM_SELECTOR,
+    input: quotedTransferInput,
+    depth: 2,
+  };
+  const quotedMintInput = REFERENCE_ERC20_FLOW_IFACE.encodeFunctionData(
+    "mint",
+    [quotedDepositor, 9n],
+  );
+  const quotedMint: FlattenedTraceCall = {
+    target: tokenB,
+    selector: REFERENCE_MINT_SELECTOR,
+    input: quotedMintInput,
+    depth: 2,
+  };
+  const quotedEvidence = traceCallSemanticEvidence(
+    quotedLeg,
+    quotedParent,
+    [quotedTransfer, quotedMint],
+  );
+  assert(quotedEvidence);
+  assert.equal(quotedEvidence.tokenIn, tokenA);
+  assert.equal(quotedEvidence.tokenOut, tokenB);
+  assert(!traceCallMatchesLegSemantics(
+    { ...quotedLeg, tokenIn: tokenC },
+    quotedParent,
+    [quotedTransfer, quotedMint],
+  ));
+  assert(!traceCallMatchesLegSemantics(
+    quotedLeg,
+    quotedParent,
+    [quotedTransfer, { ...quotedMint, target: tokenC }],
+  ));
+  const siblingScoped = [
+    quotedParent,
+    quotedTransfer,
+    {
+      target: tokenC,
+      selector: "0x12345678",
+      input: "0x12345678",
+      depth: 1,
+    },
+    quotedMint,
+  ];
+  assert(!traceCallMatchesLegSemantics(
+    quotedLeg,
+    quotedParent,
+    descendantCalls(siblingScoped, 0),
+  ));
+
+  const materializedQuotedPool = materializeReplayPool(quotedLeg, "quoted-family-self-test");
+  assert.equal(
+    materializedQuotedPool.logicalInstanceId,
+    `${tokenA.toLowerCase()}>${tokenB.toLowerCase()}`,
+  );
+  assert.deepEqual(materializedQuotedPool.verifiedRoutes, [{
+    edgeAdapterId: "eigenpie-deposit-asset",
+    tokenIn: ethers.getAddress(tokenA),
+    tokenOut: ethers.getAddress(tokenB),
+    slotKind: "protocol",
+    protocolAction: "wrap",
+  }]);
+  assert.throws(
+    () => materializeReplayPool({
+      ...quotedLeg,
+      pool: { ...quotedLeg.pool, fixedTokenOut: tokenC },
+    }, "quoted-family-self-test"),
+    /fixedTokenOut disagrees/,
+  );
 
   const balancerLeg: AdapterReplayLeg = {
     seq: 1,
@@ -902,7 +1213,7 @@ async function buildPinnedRoute(
 ): Promise<TokenEdge[]> {
   const edges: TokenEdge[] = [];
   for (const leg of fixture.route) {
-    const pool: PoolEntry = { ...leg.pool };
+    const pool = materializeReplayPool(leg, fixture.id);
     if (pool.adapter === "univ4") {
       pool.fixedTokenIn = leg.tokenIn;
       pool.fixedTokenOut = leg.tokenOut;
@@ -921,6 +1232,51 @@ async function buildPinnedRoute(
     edges.push(matches[0]);
   }
   return edges;
+}
+
+function materializeReplayPool(
+  leg: AdapterReplayLeg,
+  fixtureId: string,
+): PoolEntry {
+  const pool: PoolEntry = { ...leg.pool };
+  if (familyForLeg(leg, fixtureId) !== "protocol:eigenpie") {
+    return pool;
+  }
+
+  const tokenIn = ethers.getAddress(leg.tokenIn);
+  const tokenOut = ethers.getAddress(leg.tokenOut);
+  if (
+    pool.fixedTokenIn !== undefined &&
+    ethers.getAddress(pool.fixedTokenIn) !== tokenIn
+  ) {
+    throw new Error(`route leg ${leg.seq} fixedTokenIn disagrees with trace route`);
+  }
+  if (
+    pool.fixedTokenOut !== undefined &&
+    ethers.getAddress(pool.fixedTokenOut) !== tokenOut
+  ) {
+    throw new Error(`route leg ${leg.seq} fixedTokenOut disagrees with trace route`);
+  }
+  if (pool.fixedSlotKind !== undefined && pool.fixedSlotKind !== "protocol") {
+    throw new Error(`route leg ${leg.seq} fixedSlotKind disagrees with Eigenpie deposit semantics`);
+  }
+  if (pool.fixedProtocolAction !== undefined && pool.fixedProtocolAction !== "wrap") {
+    throw new Error(`route leg ${leg.seq} fixedProtocolAction disagrees with Eigenpie deposit semantics`);
+  }
+
+  pool.fixedTokenIn = tokenIn;
+  pool.fixedTokenOut = tokenOut;
+  pool.fixedSlotKind = "protocol";
+  pool.fixedProtocolAction = "wrap";
+  pool.logicalInstanceId = `${tokenIn.toLowerCase()}>${tokenOut.toLowerCase()}`;
+  pool.verifiedRoutes = [{
+    edgeAdapterId: leg.edgeAdapterId,
+    tokenIn,
+    tokenOut,
+    slotKind: "protocol",
+    protocolAction: "wrap",
+  }];
+  return pool;
 }
 
 function assertClosedRoute(edges: TokenEdge[], flashToken: string): void {
@@ -1083,12 +1439,13 @@ async function replayFixture(
     stateAnchor: fixture.stateAnchor,
     anchorBlockHash: null,
     anchorStateRoot: null,
+    anchorReconstruction: null,
     baseCommit,
     adapterCommit,
     familySourceSha256: hashFiles(familySources),
     sharedApiSha256: hashFiles(SHARED_API_FILES),
     runtimeSourceSha256: hashRuntimeSources(),
-    harnessSha256: sha256(readFileSync(HARNESS_PATH)),
+    harnessSha256: hashFiles(HARNESS_SOURCE_FILES),
     botVmArtifactSha256: sha256(readFileSync(BOTVM_ARTIFACT_PATH)),
     executorRuntimeCodeHash: null,
     replayCommand: `npm run searcher:adapter-family-replay -- --fixture ${fixtureRelative}`,
@@ -1121,12 +1478,25 @@ async function replayFixture(
 
   const upstream = new ethers.JsonRpcProvider(rpcUrl);
   try {
-    await validateChainAnchor(upstream, fixture);
+    const winner = await validateChainAnchor(upstream, fixture);
     const referenceTraceHash = await validateReferenceRoute(upstream, fixture);
-    await anchorState(state, fixture.stateAnchor);
-    const verifiedAnchor = await validateLocalStateAnchor(state.provider, upstream, fixture.stateAnchor);
-    report.anchorBlockHash = verifiedAnchor.hash;
-    report.anchorStateRoot = verifiedAnchor.stateRoot;
+    const senderPrefix = await anchorState(
+      state,
+      upstream,
+      fixture,
+      Number(winner.index),
+    );
+    const verifiedAnchor = await validateLocalStateAnchor(
+      state.provider,
+      upstream,
+      fixture.stateAnchor,
+      senderPrefix,
+    );
+    report.anchorReconstruction = verifiedAnchor;
+    if (verifiedAnchor?.kind === "canonical-parent-block") {
+      report.anchorBlockHash = verifiedAnchor.blockHash;
+      report.anchorStateRoot = verifiedAnchor.stateRoot;
+    }
     report.stages.chainAnchor = true;
 
     const edges = await buildPinnedRoute(state, fixture);
@@ -1157,12 +1527,17 @@ async function replayFixture(
 
     const simulator = new BotVMSimulator(state, DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER);
     const solver = new AnvilSolver();
+    // Use the production local-math path for UniV3-compatible pools such as
+    // Pancake V3, whose execution semantics match but whose Quoter may not.
+    const cache = new PoolStateCache(upstream);
+    cache.setTickBlock(fixture.stateAnchor.blockNumber);
     const solved = await solver.solve(plans[0], state, simulator, {
       finalSimTopN: 5,
       gssMaxTries: 16,
       gridHalfWidth: sizing.gridHalfWidth,
       quoteProfitFloorBps: 0n,
       quoteSafetyBps: 9_999n,
+      cache,
     });
     report.solverSelectedAmount = solved.flashAmount.toString();
     report.stages.solver = true;

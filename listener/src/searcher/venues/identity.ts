@@ -32,6 +32,7 @@ export type VenueIdentitySource =
   | "balancer-v3-vault"
   | "dodo-factory-registry"
   | "erc4626-standard"
+  | "eigenpie-compatible-call-surface"
   | "seed";
 
 export interface VenueIdentityMetadata {
@@ -49,6 +50,11 @@ export interface OnchainIdentityResolverContext {
   backend: IdentityCallBackend;
   pool: string;
   poolAdapter: PoolEntry["adapter"];
+  /**
+   * Full candidate shape. Pair-aware behavior families must re-attest these
+   * values on-chain; they are probe inputs, never admission credentials.
+   */
+  candidate: Readonly<IdentityPoolEntry>;
   admissionPolicy: IdentityAdmissionPolicy;
   isPoolAdapterSupported: (poolAdapter: string) => boolean;
 }
@@ -141,11 +147,15 @@ export type PoolIdentityFailureReason =
   | "balancer_v3_unregistered"
   | "dodo_unregistered"
   | "erc4626_nonstandard"
+  | "behavior_mismatch"
   | "untrusted_seed";
 
 export interface IdentityPoolEntry extends VenueIdentityMetadata {
   address: string;
   adapter: string;
+  logicalInstanceId?: string;
+  fixedTokenIn?: string;
+  fixedTokenOut?: string;
 }
 
 export type AttestedPoolEntry<T extends IdentityPoolEntry> = Omit<
@@ -302,6 +312,7 @@ export async function resolvePoolIdentity(
       backend,
       pool,
       poolAdapter: descriptor.poolAdapter,
+      candidate: { address: pool, adapter: descriptor.poolAdapter },
       admissionPolicy: policy,
       isPoolAdapterSupported: (candidate) => options.identityRegistry.supportsRoutePool(candidate),
     });
@@ -374,7 +385,7 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
     const resolved = await cachedResolution(
       cache,
       backend,
-      pool.address,
+      pool,
       descriptor,
       options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
       options.identityRegistry,
@@ -410,28 +421,42 @@ function identityPoolKey(pool: IdentityPoolEntry): string {
 function cachedResolution(
   cache: PoolIdentityCache,
   backend: IdentityCallBackend,
-  address: string,
+  candidate: IdentityPoolEntry,
   descriptor: Extract<IdentityResolverDescriptor, { policy: "onchain-resolver" }>,
   admissionPolicy: IdentityAdmissionPolicy,
   identityRegistry: IdentityResolverRegistry,
 ): Promise<PoolIdentityResult> {
-  const provisionalFactories = allowProvisionalFactories(admissionPolicy);
-  const provisionalCurveUnderlying = allowProvisionalCurveUnderlying(admissionPolicy);
-  const key = `${address.toLowerCase()}:${descriptor.poolAdapter}:` +
-    `${provisionalFactories ? "factory-provisional" : "factory-strict"}:` +
-    `${provisionalCurveUnderlying ? "curve-provisional" : "curve-strict"}`;
+  const key = identityResolutionKey(candidate, descriptor, admissionPolicy);
   let pending = cache.resolutions.get(key);
   if (!pending) {
+    const pool = ethers.getAddress(candidate.address);
     pending = descriptor.resolve({
       backend,
-      pool: ethers.getAddress(address),
+      pool,
       poolAdapter: descriptor.poolAdapter,
+      candidate: { ...candidate, address: pool },
       admissionPolicy,
       isPoolAdapterSupported: (candidate) => identityRegistry.supportsRoutePool(candidate),
     });
     cache.resolutions.set(key, pending);
   }
   return pending;
+}
+
+function identityResolutionKey(
+  candidate: IdentityPoolEntry,
+  descriptor: Extract<IdentityResolverDescriptor, { policy: "onchain-resolver" }>,
+  admissionPolicy: IdentityAdmissionPolicy,
+): string {
+  return JSON.stringify([
+    ethers.getAddress(candidate.address).toLowerCase(),
+    descriptor.poolAdapter,
+    candidate.logicalInstanceId ?? null,
+    candidate.fixedTokenIn?.toLowerCase() ?? null,
+    candidate.fixedTokenOut?.toLowerCase() ?? null,
+    allowProvisionalFactories(admissionPolicy),
+    allowProvisionalCurveUnderlying(admissionPolicy),
+  ]);
 }
 
 function rejection(

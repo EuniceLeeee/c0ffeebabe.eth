@@ -30,6 +30,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
   toBlock?: number;
   rpcTimeoutMs?: number;
   chainId?: bigint | number | string;
+  probeExecutor?: string;
   graphTokens: readonly string[];
   retainedInstances?: readonly AttestedProtocolInstance[];
 }): ProtocolDiscoveryContext {
@@ -52,6 +53,9 @@ export function createPinnedProtocolDiscoveryContext(input: {
     fromBlock: input.fromBlock,
     toBlock,
     ...(input.chainId === undefined ? {} : { chainId: BigInt(input.chainId).toString() }),
+    ...(input.probeExecutor === undefined
+      ? {}
+      : { probeExecutor: ethers.getAddress(input.probeExecutor) }),
     graphTokens: unique(input.graphTokens.map((token) => token.toLowerCase())),
     retainedInstances: input.retainedInstances ?? [],
     backend: {
@@ -583,6 +587,7 @@ const AUTHORITY_RANKS: Readonly<Record<string, number>> = Object.freeze({
   "balancer-v3-vault": 3,
   "dodo-factory-registry": 3,
   "erc4626-standard": 3,
+  "eigenpie-compatible-call-surface": 3,
   "factory-event": 2,
   "factory-call-provisional": 1,
   "curve-underlying-provisional": 1,
@@ -786,18 +791,18 @@ export function prepareProtocolDiscoveryProjection(input: {
   // must never become discovery-owned merely because the scanner independently
   // attested it. Such entries keep their existing graph edges until a separate
   // separately validated migration removes the fallback explicitly.
-  const staticPoolKeys = new Set(
+  const staticPoolAddresses = new Set(
     input.currentBackrunPools
-      .map(poolRegistryKey)
-      .filter((key) => !previousPoolKeys.has(key)),
+      .filter((pool) => !previousPoolKeys.has(poolRegistryKey(pool)))
+      .map((pool) => pool.address.toLowerCase()),
   );
   const staticSuppressed = input.result.wouldAdmit.filter(
-    (item) => staticPoolKeys.has(poolRegistryKey(item.instance.pool)),
+    (item) => staticPoolAddresses.has(item.instance.pool.address.toLowerCase()),
   );
   const effectiveResult: ProtocolDiscoveryResult = {
     ...input.result,
     wouldAdmit: input.result.wouldAdmit.filter(
-      (item) => !staticPoolKeys.has(poolRegistryKey(item.instance.pool)),
+      (item) => !staticPoolAddresses.has(item.instance.pool.address.toLowerCase()),
     ),
   };
   const ownership = replaceProtocolDiscoveryOwnership(input.currentOwnership, effectiveResult);
@@ -897,6 +902,8 @@ interface CandidateAggregate {
   readonly evidence: readonly unknown[];
 }
 
+const MAX_PROTOCOL_EVIDENCE_PER_INSTANCE = 64;
+
 function candidateFromRetained(instance: AttestedProtocolInstance): ProtocolCandidate {
   return {
     pool: { ...instance.pool },
@@ -911,7 +918,7 @@ function aggregateCandidate(candidate: ProtocolCandidate): CandidateAggregate {
     candidate,
     sources: [candidate.source],
     selectors: candidate.selector === undefined ? [] : [candidate.selector],
-    evidence: [...(candidate.evidence ?? [])],
+    evidence: uniqueProtocolEvidence(candidate.evidence ?? []),
   };
 }
 
@@ -926,8 +933,30 @@ function mergeCandidate(current: CandidateAggregate, candidate: ProtocolCandidat
       ...current.selectors,
       ...(candidate.selector === undefined ? [] : [candidate.selector]),
     ]),
-    evidence: [...current.evidence, ...(candidate.evidence ?? [])],
+    evidence: uniqueProtocolEvidence([...current.evidence, ...(candidate.evidence ?? [])]),
   };
+}
+
+function uniqueProtocolEvidence(values: readonly unknown[]): unknown[] {
+  const byWitness = new Map<string, unknown>();
+  for (const value of values) {
+    const key = stableEvidenceKey(value);
+    // Reinsert duplicate witnesses so the retained order always prefers the
+    // freshest observation when the bounded evidence window is full.
+    byWitness.delete(key);
+    byWitness.set(key, value);
+  }
+  return [...byWitness.values()].slice(-MAX_PROTOCOL_EVIDENCE_PER_INSTANCE);
+}
+
+function stableEvidenceKey(value: unknown): string {
+  if (typeof value === "bigint") return `bigint:${value}`;
+  if (value === null || typeof value !== "object") return `${typeof value}:${String(value)}`;
+  if (Array.isArray(value)) return `[${value.map(stableEvidenceKey).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) =>
+    `${JSON.stringify(key)}:${stableEvidenceKey(record[key])}`
+  ).join(",")}}`;
 }
 
 function poolShapeKey(pool: PoolEntry): string {
