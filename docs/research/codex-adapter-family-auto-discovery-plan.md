@@ -827,10 +827,13 @@ AND tokenIn/tokenOut both在当前 DEX graph domain
 ### 15.2 tx4cca 是否适合验收
 
 样本 `0x4cca0e665fa0d66181fd5aa89551d4e449c63fb987d87a2c4b7c8e305ae28be4` **适合做这个
-family 的主 Production Replay 样本，但不能单独作为整个统一管道已经 fixed 的证明**。理由是它正好覆盖
+family 的 Adapter Replay 与 source-unseeded Production Replay 诊断样本，但当前不能作为 trusted
+Production Replay 正样本，也不能单独证明整个统一管道 fixed**。理由是它正好覆盖
 Pancake V3 → Eigenpie deposit → Pancake V3 的三腿闭环，而且 live 使用的 top-20000 view 已包含两条 DEX
-腿；真正缺失的是中间 execution family。它的历史 trace/receipt 还能验证 pair、精确金额和因果子树，而不是
-靠协议名猜测。
+腿；本分支修复的是中间 execution family，完整 winner replay 另外暴露了 canonical PancakeV3 首腿未进入
+最终 opportunity 集合的 enumeration gap。它的历史 trace/receipt 还能验证 pair、精确金额和因果子树，而不是
+靠协议名猜测。当前 harness 只重放 trigger sender nonce prefix，不是 boundary / trigger-only / canonical
+full-prefix backrun；production policy 对 independently solved route 也会因保守 gas/EV 参数拒绝。
 
 截至 2026-07-22，已取得的分阶段证据是：
 
@@ -838,10 +841,10 @@ Pancake V3 → Eigenpie deposit → Pancake V3 的三腿闭环，而且 live 使
 |---|---|---|
 | 1 source / identity | 用 shared `scanProtocolDiscoveryRange` 扫 `[25570935,25585334]`，未注入 target/pair，真实 logs/receipts/callTracer 自发产出两条同 pair candidate（blocks `25571620`、`25582656`），`sourceComplete=true` 且无 source error | **pass（source-unseeded 腿级）** |
 | 2 claim / projection | 在 target parent block `25585334` 将扫描结果送入 production identity + nonzero state-override probe，聚合两份 evidence 并得到唯一 `eigenpie-deposit-asset` edge；target tx 另精确解出 `155167433355795378068 → 149640805284635957914` | **pass（历史 pinned state 腿级）** |
-| 3 enumeration | 还没有让 Production Replay 只拿 historical anchor、从更早 observation 自发形成完整三腿 route | **not run** |
-| 4 quote / solve | exact/prepared quote、pair drift 和 plan amount 的单测已过；完整 route sizing/逐 wei利润尚未 replay | **partial** |
-| 5 plan / final sim | ActionAdapter calldata 和 `minRec` 单测已过；整条历史 route 的 BotVM fork final sim 尚未过 | **partial** |
-| 6 EV decision | landed 交易是正净收益样本，但 production EV allow/reject 尚未由可信 replay 产出 | **not run** |
+| 3 enumeration | source-unseeded scanner 输出 192 条 opportunity；rank 192 自发包含 Eigenpie 同 token 闭环，但首腿是替代 UniV4。winner 的 canonical PancakeV3 首腿未出现在完整 opportunity 集合 | **partial；strict exact-cycle fail** |
+| 4 quote / solve | 最终 SHA 的 fixed-path Adapter Replay 自主选 `8064831853923656 wei`，quote search 88 点、62 positive，quote profit `80412404346468 wei` | **pass（adapter 中层）** |
+| 5 plan / final sim | BotVM fork final sim success，gross `81227010232884 wei`，gas `599536`，calldata SHA-256 `8f3c00b9...2f3a`，flash lender before/after 相同 | **pass（adapter 中层）** |
+| 6 EV decision | production policy 得到 expected `64981608186307`、gas `74066157042752`、bid `32490804093153`，net EV `-41575352949598 wei` | **reject（全局策略 fail-closed）** |
 
 所以该样本的正确使用方式是：冻结 target tx 之前的 source window，不能把 target、pair、edge、path 或 amount
 注入 runtime；shared observed scanner 必须从窗口内更早的成功 interaction（已确认至少有 block `25571620` 与
@@ -851,14 +854,16 @@ observed-after-first-use family 对该时点的冷启动召回应诚实判 fail�
 
 ### 15.3 已运行检查与发布门
 
-当前已通过：TypeScript build；新 family 5/5；route-adapter 14/14；route-family compatibility 4/4；protocol
+当前已通过：TypeScript build；新 family 6/6；route-adapter 14/14；route-family compatibility 5/5；protocol
 instance discovery；ERC4626 discovery；observed discovery；multi-adapter arbitration；venue identity；adapter
 descriptor/policy；protocol edge/leg；planner、taxonomy、blockscan contract；以及现有 adapter-family fixture 的
 validate-only conformance。真实 pre-target range 的 shared source scan、parent-block identity/nonzero probe 和 target
-tx matcher 也通过。
+tx matcher 也通过。最终 SHA 的 fixed-path Adapter Replay 已通过 planner/solver/final-sim 与 repayment/conservation；
+完整机器证据见 `docs/research/reports/tx4cca-adapter-family-validation.md`。
 
-当前没有声称 `fixed`：完整 source-unseeded Production Replay、三腿 solve/final sim/EV，以及系统性 Hermes A/B
-仍未完成。`npm run equivalence` 还需要外部生成的 `/tmp/ref_clean.txt` baseline artifact；`searcher:lint` 在
+当前没有声称 `fixed`：source-unseeded Production Replay 没有命中 winner-bound exact cycle，production EV
+明确 reject，trusted causal replay 与系统性 Hermes A/B 仍未完成。`npm run equivalence` 还需要外部生成的
+`/tmp/ref_clean.txt` baseline artifact；`searcher:lint` 在
 未改动的 main 基线也会命中既有 hot-path token，因此两者都不能被伪报成此次代码通过。第一版可作为后续
 六步验收的实现候选，只有 §8 的 Production Replay 和 A/B 证据齐全后才允许升级状态。
 
