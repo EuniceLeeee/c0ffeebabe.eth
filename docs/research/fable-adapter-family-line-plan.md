@@ -37,9 +37,17 @@
 | fluid-credit | compat | — | — | — | 孤岛候选（§6）|
 | balancer-flash / morpho-flash | **registry 外** | 描述符表 + **动态链上 borrowability**（`balanceOf(token, holder)`，非 allowlist，[flash-liquidity.ts](../../listener/src/searcher/solver/flash-liquidity.ts)）| **已是每块一个 Multicall batch** ✅ | n/a | 入册 + conformance（§4）|
 
-共享路径的按-adapter 特判**只有一处**（[main.ts:4749](../../listener/src/searcher/main.ts:4749)
-`edge.adapterId === "fluid-dex-swap"`）；plan-builder / token-graph / exact-route 零特判（已 grep 验证）。
-所以框架工程量集中在 WarmSpec 四桶 switch 的收敛，不是大扫除。
+共享路径的按-adapter 特判清单（**v2 修正**——初稿声称"仅一处/plan-builder 零特判"是错的：grep 模式
+`adapterId === "` 漏掉了 switch/case 形式，交叉阅读 canonical 版 §2.2 后当场复核纠正）：
+
+1. [main.ts:4749](../../listener/src/searcher/main.ts:4749) `edge.adapterId === "fluid-dex-swap"`；
+2. [plan-builder.ts:179](../../listener/src/searcher/solver/plan-builder.ts:179)
+   `switch (edge.adapterId)` + `case "fluid-dex-swap"`——plan 编译级的按-adapter 分支；
+3. `LEGACY_PRODUCTION_ROUTE_EDGES`（[path-template.ts:4](../../listener/src/searcher/templates/path-template.ts:4)）
+   ——registry 外的 legacy edge 描述符表，被 path templates 消费，是结构性旁路而非单行特判。
+
+token-graph / exact-route 仍未发现特判。框架工程量 = WarmSpec 四桶收敛 + 上述三处 fluid/legacy 旁路
+清理,比初稿估计的多一层(plan 编译面),但仍不是大扫除。
 
 ## 2. 框架的五个部件
 
@@ -225,6 +233,8 @@ probe/solve/final sim ≤3.2s、余量 0.5s → **p95 head_seen→scanner_done <
 |---|---|---|---|
 | `fluid-dex-swap` 特判（main.ts:4749） | 共享代码唯一按-adapter 分支 | 特判移出；fluid-dex 若不在本轮实现 `blockScanState`，其边不再进 block-scan | fluid-dex 的 block-scan 覆盖暂停，列入迁移队列；backrun 不受影响 |
 | `fluid-credit` compat adapter | `kind: "compat"` 整类 | 保留文件，线不引用；compat 谱系随 auto-discovery plan Slice 6 清退 | credit 本就在目标范围外（CLAUDE.md §3），无生产覆盖损失 |
+| plan-builder `case "fluid-dex-swap"`（plan-builder.ts:179，v2 补） | plan 编译级按-adapter 分支 | fluid-dex 补齐 family 契约（含 `buildPlanFragment` 自有编码）后删除；否则随 fluid-dex 孤岛化一并移出 | 同 fluid-dex 行 |
+| `LEGACY_PRODUCTION_ROUTE_EDGES`（path-template.ts，v2 补） | registry 外 legacy edge 描述符表 | 逐条迁入 family 声明或随孤岛化清退；终态不允许 registry 外第二 edge 源 | 每条 legacy edge 的去留在 activation delta 中显式列出 |
 | `WarmSpec` 四桶 | 状态层旧协议 | 由 capability 投影为兼容 shim，F5 清退 | 无——投影期逐 wei 等价 |
 
 **红线**：任何因孤岛化产生的生产覆盖变化必须出现在上表和部署说明里；静默丢覆盖就是自己制造 pool gap。
