@@ -834,6 +834,56 @@ universal registry。
 它是可运行的诊断与交易级验收，不是部署开关。checker bug 可以人工判为与性能假设无关，但机器失败结果不能改写成
 pass；deterministic family fix 仍需修正可信 harness 后重新通过才能标 fixed。
 
+### 8.5 定锚交易验收：tx055f 六步 + 秒级时限（用户指定，2026-07-23）
+
+样本：`0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b`（landed block `25585381`，
+source block **`25585380`** = live 被 `skipped=busy` 跳过的那块，§1.1）。本计划的交易级验收标准 =
+**这笔交易的六步验收在秒级时限内完成**。两面缺一不可：六步全链路证明"主动发现 → 显式处置"，时限证明
+"下次这类块不再整轮跳过"。
+
+冻结事实（本轮会话已核，来源见 §1.1 凭据）：核心闭环
+`WBTC → WETH（UniV3 0xe6ff…）→ USDC（UniV3 0xe055…）→ WBTC（UniV4 poolId 0x3ea74c…）`；
+WBTC/USDT 借还是资金外壳，残余 WETH unwrap 是利润退出，均不属核心闭环。mine-time 经济：gross ring
+≈`1.635e-6 ETH`，gas `405,716 × 0.0576 gwei ≈ 2.34e-5 ETH`，net ≈ **−$0.04**（canonical
+bundle-postmortem 一致）；隔离估算 spread ≈`9.36bps` < live `minSpread 10bps`。
+**因此这不是 +EV 样本：验收目标是诚实的显式处置，不是提交 bundle。** 为让它变 submit 而调低
+minSpread/EV 参数 = 验收造假，直接 fail。
+
+六步逐条通过定义（全部在 source block `25585380` 的 pinned state 上，universe/graph 用截止
+`25585380` 的窗口按标准生产流程构建，无 look-ahead）：
+
+| 步 | 通过定义 | 证据形态 |
+|---|---|---|
+| 1 discovery/identity/graph/state | 三个池由标准 admission **自发**进图（frozen universe manifest 可查），当块状态由统一 coordinator 按 lane 流程解析，无 unresolved 遮蔽 | universe manifest + in_graph + state coverage 记录 |
+| 2 planner/path | scanner **自发枚举**出该 3-hop 闭环（candidate 集含其 route fingerprint），非 Adapter Replay 固定路径 | candidate 列表 + route fingerprint |
+| 3 quote/sizing | solver 自主定尺寸，quote 出有符号 spread（复现数字入档，量级应与 ≈9.36bps 对得上；显著偏离即状态或数学缺陷，先修再验） | quote/solve 结构化事件 |
+| 4 plan/fork final sim | 若进入 refine/final-sim 集：fork sim 跑通（ring 真实，毛利为正、含 gas 为负）；若被 ranking/threshold 先行 drop：该 drop 必须是步 5 的显式记录，不允许静默消失 | final-sim 结果或显式 drop 事件 |
+| 5 EV | funnel 记录显式 terminal 决定（预期：threshold/EV reject，含 spread、阈值、route、pools 的结构化事件）——**诚实 reject 就是通过** | terminal 事件（route 级可追溯） |
+| 6 replay/equivalence | 步 1–5 在可信 harness 上确定性复现，且与改造后生产形态在同一 active manifest 下满足 §8.1 等价合同 | replay 记录 + 等价报告 |
+
+秒级时限（本样本的性能面，绑定 §8.2 冻结口径）：
+
+- 同一 active-family manifest 的完整图（`29,220` 边量级，**不减边**），`head_seen → scanner_done`
+  满足预冻结的 `<10s` 统计口径；
+- paired window 内 `25585379 → 25585380` 型连续重块的 busy-source coverage 达标——即该 pass **真的
+  运行了**，不是推导它会运行。
+
+不允许的通过方式（检测到任意一条即整案 fail，对应 §0.2 已否决项）：
+
+- **hardcode/注入**：注入 target tx、pair、pool、poolId、route、amount；force-include；为该路线加
+  allowlist、seed 或 `main.ts` 特判（§9 已明确非目标）；
+- **减图**：降 top-N、缩 universe、移除/跳过 slow family 或 lane、把该块换成更小的图；用
+  `activation_delta` 挪走慢边再声称达标（违反 §0.1.1）；
+- **参数硬凑**：调低 minSpread/EV gate 制造 submit；缩小 pass 预算让 scanner 带着 incomplete state
+  提前进场（违反 §8.3.7）；
+- **时钟/状态作弊**：事后放宽 warm 排除口径；预灌 `25585380` 的状态 cache（动态状态必须按当块 `N`
+  流程获得，§0.1.6）；
+- **以 Adapter Replay 冒充步 2 的自发枚举**（§0.2 已否决）。
+
+证据边界（与 §1.1 一致）：本案通过 = busy/latency transition 完成 + "主动发现、主动放弃、有记录"链路
+建成。它**不**证明 +EV 能力，**不**替代 tx4cca 的 family 验收，两条证据链不得互引为因果。在 paired
+live A/B 出结果前，本案状态最多写 `implemented_not_validated`。
+
 ## 9. 非目标
 
 本计划不顺手扩大到：
@@ -883,6 +933,7 @@ final-sim/accounting assertions
 8. 一个 family runtime coordinator；route-price 只有 swap/protocol 两 lane，flash 作为 typed funding product；
 9. active-family 完整 graph paired live 达到预先冻结的 `<10s` 统计口径；
 10. busy-source coverage 达到预先冻结的 paired-window 门；
-11. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
+11. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过；
+12. §8.5 定锚交易验收（tx055f 六步 + 秒级时限）通过，且未触发其任何禁止通过方式。
 
 在此之前，准确状态只能是计划或 `implemented_not_validated`，不能写 busy fixed，也不能写 live performance 已验收。
