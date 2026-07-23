@@ -1110,16 +1110,19 @@ final-sim/accounting assertions
 6. **初稿"共享路径仅一处特判"**：Fable 版自身的事实错误(grep 模式漏 switch/case),已在该文 v2 修正,
    本文 §2.2 的 legacy 清单为准。
 
-### 11.3 旧线冻结粒度——已裁决关闭（2026-07-23）
+### 11.3 旧线冻结粒度——终裁：完全冻结（用户 2026-07-23）
 
-原分歧：旧线构建期是否允许"bit-identical 窄域修复"先行。裁决依据两条：
-(a) 用户规则——任何生产 consumer、state scheduling、root flip 或 busy 行为变化必须 Hermes A/B；
-(b) 对向审计（Fable 版 §10 P1-3）——所谓等价的状态层提速本身会改变 deadline 内可完成的扫描集合与
-候选集，**"bit-identical 旧线优化"这一前提在 coarse-mid/调度语境下不成立**。
+原分歧：新线构建期，旧线（正在 live 跑的 searcher）允不允许先打"看似无害"的小补丁止血
+（busy 每天丢覆盖 vs 冻结基线不漂移）。
 
-结论：旧线修复不被禁止，但不存在"等价例外"通道——一律作为独立 challenger 走现行 Hermes A/B 分流；
-promotion 改变 champion 后重钉 §7.2 frozen baseline SHA 并重跑 parity 基线。生产入口维持 §7.7 一次
-root-import 翻转。分歧关闭，无遗留。
+裁决链：
+(a) 对向审计（Fable 版 §10 P1-3）先否定了前提——状态层提速本身改变 deadline 内可完成的扫描集合，
+"bit-identical 旧线优化"不存在；
+(b) 用户终裁——**旧线完全冻结，构建期不打任何补丁**。理由：本次实施预计一天量级，流血窗口可忽略；
+且新线建成后要与旧线做 A/B，旧线一动不动，对比基线才最干净。
+
+若构建窗口显著超出预期（验收失败迫使返工数天以上），冻结决定由用户重新裁决，不得自行放开。
+生产入口维持 §7.7 一次 root-import 翻转。分歧关闭，无遗留。
 
 ### 11.4 verdict
 
