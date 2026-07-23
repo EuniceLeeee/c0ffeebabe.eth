@@ -1,4 +1,4 @@
-# Codex — Universal AdapterFamily 生产线与 Block-Scan 当前状态统一计划
+# Codex — Universal AdapterFamily Plugin 生产线与 Block-Scan 当前状态统一计划
 
 > 本文是当前 canonical 总纲；被它取代的分拆 state-lane 草稿不再作为设计依据。
 >
@@ -6,8 +6,9 @@
 >
 > 基线：`origin/main @ ad35790a8fa6aa5e4f9529d1099600a270a0d1ea`。
 >
-> 本文合并三项工作：已经进入 main 的 adapter-family 自动发现第一版、所有高阶执行语义收敛到唯一
-> production family registry，以及 live `skipped=busy` 暴露出的 block-scan 状态刷新问题。本文只把
+> 本文合并四项工作：已经进入 main 的 adapter-family 自动发现第一版、所有高阶执行语义收敛到唯一
+> family plugin catalog、错误 family 的逐插件故障隔离，以及 live `skipped=busy` 暴露出的 block-scan
+> 状态刷新问题。本文只把
 > 对话中已经裁定的事项写成硬边界；仍需 benchmark/A/B 才能决定的参数与实现选择单列，不再把讨论提议
 > 写成决定。
 
@@ -38,7 +39,7 @@
    Flash loan 仍是 family，但它提供 funding/liquidity capability，不伪装成价格 edge，也不进入 coarse-price
    lane。不为 Uni、Curve、DODO、ERC4626 或 flash provider 各造一套 scheduler/cache/timer。
 8. **family 声明语义，coordinator 负责调度。** Adapter 声明 state identity、所需 reads、decode 与本地数学；
-   coordinator 负责去重、batch、并发、deadline、取消、source pinning 和原子发布。
+   coordinator 负责去重、batch、并发、deadline、取消、source pinning 和逐 family 原子发布。
 9. **`main.ts` 不拥有 venue 语义。** 终态只调用 family-derived runtime views，不再判断具体协议或 flash provider。
 10. **公共 framework 只复用已经证明相同的 invariants。** Framework 不是 family、没有 registry ID；family
    只保留 identity、ABI、rounding、calldata 等真实差异，因此应该很轻。
@@ -50,6 +51,26 @@
    `<10,000ms`，每个物理阶段分别记录 wall/cumulative time。该样本是必要条件；系统性
    scanner/performance 仍必须同时通过完整 cohort、输出等价性和 paired live A/B，不能用单笔 replay 冒充
    live p95。
+13. **一个 family 是一个自包含 plugin module。** 默认一个 family 只有一个生产入口文件，在同一个 bundle
+    中组合协议 ABI、identity、discovery、state、quote、plan、observation 与 family-owned
+    `ActionAdapter`；禁止为了 capability 分层机械复制 discovery/state/route 子管道。测试/fixture 可独立，
+    真正通用的数学、ABI 或 framework 可复用，但新增 family 不得修改 `main.ts`、graph、planner、solver、
+    state coordinator、ActionAdapter bootstrap 或中央协议字符串 union。
+14. **唯一 catalog 不等于 production import 全部 plugin。** `families/*` 是唯一源码目录；确定性生成器输出
+    仅含 metadata/source hash 的 candidate catalog，以及只 import 已 promotion plugin 的 active production
+    catalog。candidate/quarantined 源码不得进入 production bundle/import closure；禁止 side-effect
+    registration。
+15. **promotion 不能由 plugin 自证。** Plugin 作者不能填写 `active`，也不能用随 plugin 提交的测试结果自行
+    promotion。可信工具根据源码、依赖、正负 fixture、conformance、replay、隔离与 reviewer receipt 生成
+    active manifest；任一绑定 hash 改变即退回 candidate。
+16. **运行时 fail-closed 的边界是 family，不是整个中央接口。** 一个 active family 在某 generation 的
+    discovery/state/quote/encode 失败，只撤销该 family 本代输出；其他 healthy families 继续发布自己的
+    current-N 结果。全局结果必须标 `degraded/incomplete`，不得声称完整图 `no opportunity`；只依赖
+    complete families 与 complete funding 的 route 可以继续 final sim/EV。strict replay、equivalence 与
+    performance acceptance 仍要求所有 active families complete。
+17. **错误必须结构化归因。** 每层返回 `familyId + stage + generation + sourceBlock/hash + verdict`；matcher、
+    probe、decode、derive、plan 或 encoder 的 throw/timeout 不得穿透 supervisor，也不得使 sibling family
+    丢候选、复用旧状态或被新 candidate 抢走 ownership。
 
 ### 0.2 已否决
 
@@ -68,13 +89,17 @@
 - 把 `ActionAdapter`、`erc20-approve`、`assert-balance` 这类低阶 BotVM 编码积木冒充高阶 family；
 - 用 Adapter Replay 代替 discovery/enumeration 或 live performance 验收；
 - 把六步 checker 恢复成部署强制开关。
+- production eager-import candidate/quarantined plugin 后再靠状态字段过滤；
+- 允许 plugin 自行声明 `active` 或自行签发 promotion 证据；
+- 因一个 family 的错误拒绝发布全部 healthy-family current-N 结果；
+- 用闭合 `PoolEntry.adapter`/venue/action 字符串 union 迫使新增 family 修改中央消费者；
+- 运行时扫描目录并依赖模块顶层副作用自动注册 plugin。
 
 ### 0.3 尚待实测，不在本文伪装成决定
 
 - 每个 lane 的 batch 大小与 concurrency；
 - Multicall 与 JSON-RPC batch 的具体分配；
 - 新 head 到来时是立即取消旧 pass，还是让不可取消的短任务 settle 后只运行最新 pending head；
-- state read 失败时，是停止整个完整图扫描，还是继续诊断已解决 edges 并把本轮标成 incomplete；
 - 每个 family 内部 read/batch/concurrency 如何分配；§8.4 只冻结完整六阶段总预算，分段耗时先如实记录，
   不预设可被针对性优化的硬配额；
 - graph discovery 的刷新 cadence、base snapshot 大小与 current-block delta 的实现；
@@ -246,9 +271,9 @@ DODO”，而是一次建立完整 production-family 主线：
 
 ## 3. 目标架构
 
-### 3.1 一个 universal family registry
+### 3.1 一个 universal family plugin catalog
 
-终态唯一高阶真相源：
+终态的作者交付单位不是一行中央 descriptor，而是一个显式导出的 family plugin：
 
 ```ts
 type AdapterFamily =
@@ -258,19 +283,24 @@ type AdapterFamily =
   | CreditAdapterFamily
   | LiquidityAdapterFamily;
 
-const PRODUCTION_ADAPTER_FAMILIES: AdapterFamilyRegistry = createAdapterFamilyRegistry([
-  // every production execution family exactly once
-]);
+interface AdapterFamilyPlugin<Family extends AdapterFamily = AdapterFamily> {
+  readonly family: Family;
+  readonly ownedActionAdapters: readonly ActionAdapter[];
+  readonly requiredInfraActionAdapterIds: readonly InfraActionAdapterId[];
+}
 ```
 
-共同 base 只放所有类别都真正共有的字段：
+一个 plugin 默认就是 `families/<family-id>.ts`：一个入口文件、一个显式 bundle、一个故障与 promotion
+边界。Capability 是该对象内部的强类型字段，不要求拆成 `discovery.ts/state.ts/route.ts`。测试与 fixture
+可放在测试目录；真正跨 family 共用的 framework/math/ABI helper 可以外置，但 family-specific orchestration
+不能散落到中央或多个平行注册源。新增同 family 实例仍由 discovery 自动收入，不新增 plugin。
+
+共同 family base 只放所有类别都真正共有的字段：
 
 ```ts
 interface AdapterFamilyBase<Kind extends AdapterFamilyKind> {
   readonly id: ExecutionFamilyId;
   readonly kind: Kind;
-  readonly ownedActionAdapterIds: readonly string[];
-  readonly requiredInfraActionAdapterIds: readonly string[];
 }
 ```
 
@@ -299,7 +329,45 @@ Credit/liquidity 使用自己的 typed claim、accounting 与 policy capability�
 swap-like `TokenEdge`。`kind` 只是 capability discriminator，不再选择不同 registry 或生命周期。
 `compat` 不能成为 production family kind。
 
-Registry constructor 是激活门，不接受半成品：
+源码目录、候选验证与生产 import closure 必须分开：
+
+```text
+families/*                                  唯一 plugin 源码目录
+    ↓ deterministic generator
+candidate-family-catalog.json               metadata、source-tree hash、schema version；
+                                            不被 production import
+    ↓ trusted isolated validation/promotion
+active-family-catalog.generated.ts          只 import promotion receipt 仍有效的 plugin
+    ↓
+PRODUCTION_ADAPTER_FAMILIES                 active catalog 的 typed runtime view
+```
+
+生成器按规范化相对路径稳定排序，拒绝 symlink/重复 ID/未声明入口，输出内容可重现；generated artifact 必须
+提交，CI 运行 `--check`，手改或漏生成都失败。Candidate 验证在独立进程执行，不能取得 production secrets、
+全局 ActionAdapter registry、active cache 或 live backend；它使用独立 backend proxy/cache namespace，并有
+外部硬 CPU/memory/output/deadline/kill 边界。不能依赖错误 plugin 配合 `AbortSignal`。
+
+`active-family-catalog.generated.ts` 是 production 唯一允许 import 的 plugin closure。它绝不能先 import
+candidate 再按 `stage` 过滤，因为 ESM 顶层代码在过滤前已经执行。Family 模块禁止顶层注册、timer、后台任务、
+env 读取或全局 mutation，只能显式导出 bundle。
+
+Promotion 由 trusted tooling 生成，receipt 至少绑定：
+
+```text
+familyId
+plugin source-tree hash
+capability schema version
+catalog generator SHA/version
+base commit + dependency lock hash
+positive/negative fixture hashes
+conformance/replay/isolation/resource receipts
+review decision
+```
+
+任一绑定改变后，该 plugin 不再出现在 regenerated active catalog。`candidate` / `quarantined` / `active` 是从
+唯一 catalog 与可信 receipt 派生的状态，不是三个手工 registry，也不是 plugin 作者可选择的字段。
+
+Active registry constructor 仍是 production 激活门，不接受半成品：
 
 ```text
 swap/protocol family:
@@ -337,9 +405,17 @@ typed category projectors
 `LEGACY_PRODUCTION_ROUTE_EDGES`。否则 facade/表仍能成为第二入口。
 
 低阶 `ActionAdapter` 仍是 BotVM encoder，例如 `erc20-approve`、`assert-balance`、`balancer-flash` callback
-encoder。它不是高阶 family。family-owned encoder 必须唯一 owner；`approve`、`transfer`、balance guard 等
-共享 infra encoder 可被多个 family 引用。conformance 分别检查两类 ID、descriptor 与 encoder，不能把共享
-infra 错判成 ownership 冲突。
+encoder。它不是高阶 family；family-owned encoder 的实现必须由 plugin bundle 显式携带，shared infra 的
+实现只存在于可信基础设施 catalog，plugin 只引用其 ID。Candidate 的 encoder 永不注册进全局 ActionAdapter
+registry；promotion 先验证 owned ID 唯一、shared infra 只引用显式基础设施集合、每个 plan fragment 只使用
+`owned ∪ requiredInfra`，再从 active catalog 派生 production bootstrap exact closure。
+`approve`、`transfer`、balance guard 等 shared infra 可被多个 family 引用，不能用“出现两次就算 infra”的
+引用次数推断，否则会把双 owner bug 洗成合法。
+
+为了新增 plugin 不改中央协议清单，pool/venue/family/action identity 使用经 runtime registry 校验的 branded
+ID；中央只保留 `swap/protocol-conversion/flash-loan/credit/liquidity` 等稳定领域 taxonomy，不能保留
+`fluid-vault` 这类按 adapter 名称判断的规则。Identity source 也由 capability descriptor 表达，不再要求每个
+新协议扩展中央字符串 union。
 
 旧 adapter 文件允许留在仓库，但必须满足两条可机器检查的孤岛规则：
 
@@ -420,9 +496,11 @@ source-pinned VerifiedGraphView(N)
        ├─ refreshSwapLane()
        └─ refreshProtocolLane()
              ↓
- current-N state snapshot
+ per-family current-N outcomes
+       ├─ complete family snapshots
+       └─ incomplete family diagnostics
              ↓
- scanner
+ dependency-scoped scanner
 ```
 
 公共 coordinator 负责：
@@ -434,7 +512,7 @@ source-pinned VerifiedGraphView(N)
 - 选择 Multicall/RPC batch transport；
 - concurrency、deadline、AbortSignal 与 backpressure；
 - generation fencing；
-- 原子发布 state snapshot；
+- 以 `(familyId, generation, sourceBlockHash)` 为原子单元发布 family snapshot；
 - unresolved/resource-limited/aborted 分类；
 - 稳定结果顺序与 telemetry。
 
@@ -472,6 +550,48 @@ Fable 对照稿在这一层给出了比本文初稿更可执行的微观护栏�
 5. duplicate-key arbitration、edge 顺序和 snapshot publication 必须确定性；相同输入产生相同 coverage/hash；
 6. 任一 required key unresolved 时只能输出 incomplete/degraded diagnostic，不能把缺失 mid 变成
    `no opportunity`，也不能取得 strict full-profile timing pass。
+
+一个 family 的 failure 不得回滚或阻止 sibling family 已完成的 current-N publication。Composite runtime
+显式携带 `completeFamilyIds`、`incompleteFamilyIds` 与逐 family coverage/hash：
+
+- failed family 本 generation 的 edges/mids/funding 不进入可执行视图，也不能沿用前一块旧值；
+- 只依赖 complete family snapshots 与 complete funding providers 的 route 可以继续
+  enumeration/exact quote/final sim/EV；
+- 任一依赖 incomplete family 的 route 在进入 quote 前 fail closed；
+- 存在 incomplete active family 时，全局状态只能是 `degraded/incomplete`，无候选不能解释为完整生产图
+  `no opportunity`；
+- strict blind、语义等价、完整 coverage、性能与 paired live 验收仍要求全部 active family complete。
+
+这种隔离不能靠 family 自己 catch。Supervisor 必须在 load、discovery、identity/probe、graph projection、
+state、quote、plan、ActionAdapter encode、observation/victim decode 每一层建立 family boundary，把
+throw/timeout/超量输出转换成带 `familyId/stage/generation/sourceBlock/hash` 的结构化 verdict；candidate
+matcher 的失败或冲突只能 quarantine candidate，不能改变已有 active owner。
+
+动态 snapshot/result identity 至少包含：
+
+```text
+chainId
+activeManifestHash
+familyId
+capabilitySchemaVersion
+plugin source-tree hash
+sourceBlockNumber + sourceBlockHash
+family stateKey
+```
+
+静态 schema/read-plan cache 使用：
+
+```text
+chainId
+familyId
+capabilitySchemaVersion
+plugin source-tree hash
+family stateKey
+```
+
+它不绑定 source block，因此可跨块复用；动态结果必须绑定 source block/hash。Candidate 与 active 使用不同
+cache namespace/目录；promotion 后不能复用 candidate 动态 cache。静态 schema 仍绑定 source-tree
+hash/schema version，避免升级后的 decoder 读取旧 schema。
 
 纯度测试不是只看签名：先构造合法 snapshot，再断开网络并把所有 provider/backend/call 入口替换为计数后
 抛错的 poison backend；调用每个 active family 的 `deriveMids` 后断言调用计数为零。任何隐式 singleton、
@@ -611,7 +731,7 @@ Curve warm 是为了取得 coarse scanner 本地报价所需的池状态，不�
 1. graph/schema 更新时编译 coins/kind/decimals/read plan；
 2. source block N 只读取真正动态的 fields；
 3. 多个 batch 有界并行；
-4. 全部结果完成后按稳定 state key 原子发布；
+4. 该 Curve family 的全部 required 结果完成后按稳定 state key 原子发布；
 5. 一份 pool snapshot 派生所有方向 mids。
 
 因此 Curve 与 Uni 具有相同的 current-source freshness contract，但保留不同的状态数学。
@@ -719,6 +839,8 @@ execution semantic
 baseline_active?
 current owner(s)
 required family kind/capabilities
+plugin package path + normalized source-tree hash
+capability schema version
 identity/discovery source
 block-scan state lane + stateKey shape
 prepared/exact quote support
@@ -727,6 +849,7 @@ static instance/descriptor/observation rows + owner
 new family complete?
 cutover disposition = active_family | legacy_island
 activation_delta reason/reviewer (additions only)
+promotion receipt + generator/dependency/fixture hashes
 separate_deactivation_change_id (baseline-active only)
 ```
 
@@ -747,18 +870,24 @@ Fable 的逐 adapter 矩阵直接作为这份 inventory 的**盘点种子**，�
 生成器必须从当前 production closure 回填并纠正它漏掉的 consumer、prepared capability 与真实 flash
 cadence，然后由 reviewer 对 seed-vs-generated diff 逐项签字。最终真相是生成式 inventory，不是手工表。
 
-### 7.3 建 universal family kernel
+### 7.3 建 universal family plugin kernel
 
 一次建立：
 
 - `AdapterFamily` discriminated union；
-- `AdapterFamilyRegistry` 与 `PRODUCTION_ADAPTER_FAMILIES`；
+- self-contained `AdapterFamilyPlugin` bundle contract；
+- deterministic catalog generator、metadata-only candidate catalog 与 active-only generated import catalog；
+- trusted promotion receipt schema 与 source/dependency/fixture/review hash 重算；
+- 独立进程 candidate validator/quarantine runner，production import closure 不含 candidate code；
+- `AdapterFamilyRegistry` 与从 active catalog 派生的 `PRODUCTION_ADAPTER_FAMILIES`；
 - 每种 kind 的 required-capability validator；
 - registry 原生 `.routes()`、`.pricing(lane)`、`.funding()`、`.actionIds()` 等 typed views；
-- family ID、kind、ActionAdapter IDs、claim ownership 和 derived-view 唯一性 conformance；
+- family ID、kind、ActionAdapter 实现/IDs、claim ownership 和 derived-view 唯一性 conformance；
 - production import-closure 检查，禁止 legacy island 被 live consumer 触达。
 
 这里不写 Uni/DODO/Fluid/Balancer 的协议分支。类别只影响 required capabilities，不产生第二个 registry。
+生产加载器只接收 active generated imports；candidate/quarantine 工具即使失效也不能成为 production startup
+dependency。
 
 ### 7.4 建共享 framework 与 runtime coordinator
 
@@ -768,9 +897,12 @@ cadence，然后由 reviewer 对 seed-vs-generated diff 逐项签字。最终真
   repayment/conservation、profit floor 与 lender final-sim assertions；
 - 建 `AdapterRuntimeCoordinator`，从 registry capability views 一次准备：
   - `VerifiedGraphView(N)`；
-  - swap/protocol current-N pricing state；
+  - swap/protocol 逐 family current-N pricing state；
   - current-N flash funding state；
+  - complete/incomplete family map；
   - generation/deadline/AbortSignal/telemetry。
+- 所有 plugin 调用都经 family supervisor；单 family failure 只撤销自己的本代输出，healthy family 独立发布，
+  composite runtime 标 `degraded/incomplete`。
 - 内部 block-scan price scheduler 仍只有 swap/protocol 两 lane；flash funding 不伪造 price edge。
 
 Framework 和 coordinator 都不能拥有协议名/address switch、family ID 或独立注册表。
@@ -800,8 +932,9 @@ ABI、state reads、math、rounding、calldata 和 identity：
 - receipt-deposit family 复用已经存在的 framework；
 - flash family 复用 funding framework。
 
-任何 route/funding state read 失败都发布 `unresolved/incomplete`，不能归零或 skip 后解释成没有价格、没有机会或
-不可借。
+任何 route/funding state read 失败都发布带 owner 的 `unresolved/incomplete`，不能归零、复用旧态或 skip 后
+解释成没有价格、没有机会或不可借。失败 family 的 route 本代 fail closed；不依赖它的 complete-family route
+继续运行，但整轮不能取得完整图负结论或 strict acceptance pass。
 
 Fable 的 F0–F5 切片保留为**开发/审查 work packages**：kernel/conformance、framework、state coordinator、
 flash ownership、legacy isolation、scheduler cleanup 可以分提交和分测；但每片只能在 shadow/test 中前进，
@@ -976,6 +1109,19 @@ target-specific prewarm 不允许。没有严格 tx replay 与 paired live A/B �
     before/after LOC 与重复逻辑报告；LOC 本身不决定 pass。
 13. plan/quote ABI、approve requirement、landed-event、victim-model 与 pool-impact 若保留正交表，必须由
     registry 派生 exact coverage；新增 active family 但任何一面缺 owner 就 fail。
+14. Production import closure 只能触达 active generated catalog；candidate/quarantined plugin module 即使含
+    top-level throw/side effect 也不得被求值。Candidate runner 必须用外部 deadline/kill 证明无限循环或
+    超量输出只能生成 quarantine receipt。
+15. Promotion receipt 的 family/source/schema/generator/base/dependency/fixture/review hashes 必须从源码重算；
+    plugin 自声明、手改 generated catalog、stale receipt 或 source hash 漂移全部 fail。
+16. 注入 matcher throw/timeout、错误 identity、重复 edge、错误 mid、ActionAdapter 冲突与模块顶层副作用的
+    bad candidate 后，active manifest/import closure、healthy-family graph/mids、route/rank/calldata hash、
+    ActionAdapter closure 与 production startup/result 必须和“不存在该 candidate”的冻结基线 exact 相同。
+17. Active runtime 的 family outcome map 必须证明 failed family 本代不可用、healthy families 继续 current-N；
+    degraded run 不能输出完整图 `no opportunity`，依赖 incomplete family 的 route 不能进入 quote，而只依赖
+    complete families 的 route 能自然走到 final sim/EV。Strict acceptance 另断言全部 active family complete。
+18. Candidate/active cache namespace 必须绑定 chain、active manifest、family、capability schema、plugin source
+    hash 与 source block/hash；candidate 动态 cache 不得在 promotion 后复用。
 
 每个 active family 都要有 interface/conformance 测试；每种共享 framework 至少要有两个真实 family 的正例和
 负例；高风险 ABI/repayment/rounding 必须有 known-good fork fixture。单个 DODO/Eigenpie fixture 不能代表整个
@@ -1140,6 +1286,8 @@ known-good fork fixtures 与 paired live coverage 证明，不能拿一个 ERC46
 
 本计划不顺手扩大到：
 
+- 批量交易 corpus 的 missing-family 自动分类、execution-fingerprint 聚类或自动生成 adapter；本轮只交付
+  plugin authoring/隔离/promotion/runtime 边界，为以后工具保留 capability 入口；
 - `self-burn-native` 与 amount-dependent `simulateValueDelta`；
 - 为当前尚未生产化的 credit/liquidity 行为发明新 projector 或经济策略；若它们进入生产，仍必须走
   `AdapterFamily`；
@@ -1152,7 +1300,7 @@ known-good fork fixtures 与 paired live coverage 证明，不能拿一个 ERC46
 
 ## 10. 完成定义
 
-完成后，一个新 production execution family 按自己的 kind 同时交付完整纵向合同：
+完成后，一个新 production execution family 以一个自包含 plugin module 按自己的 kind 同时交付完整纵向合同：
 
 ```text
 identity/discovery
@@ -1163,11 +1311,12 @@ plan/callback + owned/required ActionAdapters
 final-sim/accounting assertions
 ```
 
-注册进 `PRODUCTION_ADAPTER_FAMILIES` 后：
+通过 trusted promotion、进入 generated active catalog 后：
 
 - route family 自动进入共享 discovery/graph 与 swap/protocol pricing lane；
 - flash family 自动进入 funding selection/liquidity/repayment；
-- `main.ts` 零 venue 编辑；
+- 新增 family 的人工业务修改只发生在一个 plugin 入口文件；catalog/receipt 是工具生成物；
+- `main.ts`、graph、planner、solver、state coordinator、ActionAdapter bootstrap 与中央 ID union 零 venue 编辑；
 - current-block state 由统一 coordinator 调度；
 - family 只拥有链上语义，不拥有 scheduler/cache/timer。
 
@@ -1175,7 +1324,8 @@ final-sim/accounting assertions
 
 1. 所有 baseline-active 高阶 execution semantics 都是 complete family；任何退出已先作为独立
    `approved_deactivation` 变更完成，且不计入本轮等价/性能 verdict；
-2. 唯一 `PRODUCTION_ADAPTER_FAMILIES` 是所有生产消费者的真相源；
+2. `families/*` + trusted promotion receipts 是唯一 lifecycle catalog；production import closure 只含其
+   generated active view，candidate/quarantine code 不被求值；
 3. `PRODUCTION_ROUTE_ADAPTERS`、`FLASH_PROVIDER_DESCRIPTORS`、`LEGACY_PRODUCTION_ROUTE_EDGES`、
    production `compat` 和 legacy fallback 全部不存在；
 4. legacy island 的 production reachability 为零；
@@ -1183,13 +1333,16 @@ final-sim/accounting assertions
 6. 动态 swap/protocol/flash funding state 全部绑定 source N；
 7. `main.ts`、graph、planner、quoter、solver、plan-builder、live backend 不含 venue/provider-specific
    production 分支；
-8. 一个 family runtime coordinator；route-price 只有 swap/protocol 两 lane，flash 作为 typed funding product；
+8. 一个 family runtime supervisor/coordinator；route-price 只有 swap/protocol 两 lane，flash 作为 typed
+   funding product；单 family failure 只关闭其本代输出，healthy family 继续运行且全局显式 degraded；
 9. tx055 strict blind 六步全部执行、post-hoc 匹配、steady-process/fresh-source-state p95 `<10s`，且反作弊断言全绿；
 10. conversion 更新块 blind sentinel 通过 commit-reveal、因果反事实与同输入 A/B 证明真实 N-1→N
     rate/mid/candidate delta，且无 oracle 泄露；
 11. active-family 完整 graph paired live 达到预先冻结的 `<10s` 统计口径；
 12. busy-source coverage 达到预先冻结的 paired-window 门；
-13. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
+13. bad-plugin 零污染、trusted promotion、active-only import closure、cache namespace 与逐-family failure
+    conformance 全部通过；
+14. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
 
 在此之前，准确状态只能是计划或 `implemented_not_validated`，不能写 busy fixed，也不能写 live performance 已验收。
 
@@ -1280,3 +1433,38 @@ observation owner。
 同时直接修正四项小问题：held-out eligible cardinality 下限、Eigenpie 压测与 `>200 LOC` 解耦、
 `source_head_seen` 事件名统一，以及 Fable 历史稿的 tx055 交叉引用。该复核只证明计划/gate 文本闭合，
 不把任何实现、历史 gap 或 `<10s` 性能标成已完成。
+
+## 12. Plugin 方向对抗审计与终裁（用户 2026-07-23）
+
+用户将目标进一步收敛为：family 内可以容纳完整协议复杂度，中央接口只调度 typed capabilities；一个 family
+适配错误时，错误必须精确归因于该 family，不能阻止其他 healthy family 正常 current-N、enumeration、
+final sim 与 EV。批量交易 corpus 的 missing-family 分类本轮明确不做。
+
+独立非作者对抗审计最初给出 **3 个 P0、4 个 P1**。本文已把全部阻断项转成 §§0、3、7、8、10 的硬合同，
+因此设计层 verdict 为 **approved_to_implement**，不是代码或验收通过：
+
+| 审计发现 | 终裁 |
+|---|---|
+| ESM eager import 在状态过滤前已执行 candidate 顶层代码 | candidate catalog 只含 metadata/hash；production generated catalog 只 import active plugin；candidate 在独立受限进程验证 |
+| plugin 可自称 active 会绕过隔离 | trusted promotion receipt 绑定 source/schema/generator/base/dependency/fixture/review；hash 漂移自动退回 candidate |
+| 当前 whole-runtime atomic 与 family-local 隔离目标相反 | 改成逐 `(familyId,generation,sourceBlockHash)` publication；failed family 本代关闭，healthy family 继续，全局显式 degraded |
+| partial run 容易制造假 `no opportunity` | degraded run 禁止完整图负结论；route dependency closure 必须全部 complete；strict acceptance 要求全 active complete |
+| candidate matcher/claim 可影响 incumbent | candidate namespace 与 active ownership 隔离；冲突只 quarantine candidate；两个 active owner 冲突是 manifest 构建错误 |
+| ActionAdapter 仍可能是第二中央真相源 | plugin bundle 携带 family-owned 实现；candidate 不注册；active bootstrap 从 generated catalog exact closure 派生；shared infra 只按 ID 引用可信基础设施 catalog |
+| cache/source 升级可能交叉污染 | dynamic key 绑定 chain/manifest/family/schema/source-tree/source block+hash/stateKey；static key 去掉 block 但保留 family/schema/source-tree；candidate 与 active 隔离 |
+| “进程没崩”不足以证明零污染 | bad-plugin suite exact 比较 active manifest/import closure/graph/mids/routes/rank/calldata/actions/startup，并用外部 kill 覆盖资源 DoS |
+
+这轮也修正了“一个 family 要拆多个文件”的误表述：**默认一个 family 一个生产入口文件**，capability 是同一
+bundle 内的字段，不机械拆成 discovery/state/route 子文件。测试/fixture 与真正通用 framework 可独立；
+family-specific orchestration 不能因此回流中央。
+
+当前代码只有在下列事实全部成立后才能称 `plugin-complete`：
+
+1. 新增 family 的人工业务 diff 只包含一个 plugin 入口；其余变化只能是可重现 generated catalog/receipt；
+2. production import closure 对 candidate/quarantined plugin 为零；
+3. ActionAdapter、pool/venue/identity descriptor 与 capability 都从 plugin bundle 派生，不再修改中央协议表；
+4. load/discovery/state/quote/plan/encode/observation 的错误都由 family supervisor 隔离和归因；
+5. bad candidate exact-zero-impact suite 与 active family degraded-runtime suite 通过；
+6. 所有 active family complete 时，再执行 §§8.4–8.6、完整 cohort 与 paired live A/B。
+
+在此之前，当前分支最多是 `plugin_implemented_not_validated`，不能因为统一 registry 已存在就声称插件边界完成。
