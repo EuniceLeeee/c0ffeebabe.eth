@@ -1058,11 +1058,13 @@ final-sim/accounting assertions
 
 ### 11.1 并入增强点（Fable 版更强，与本文既有边界无冲突，视为本文一部分）
 
-1. **现状矩阵实例化 §7.2 inventory。** 本文 §7.2 定义了 inventory schema 但未实例化。Fable 版 §1 已给出
-   逐 adapter × 逐层（kind / identity 政策 / warm 分类 / prepared / 缺口→阶段映射）的核实矩阵，并把三处
-   fluid/legacy 旁路钉到行号（`main.ts:4749`、`plan-builder.ts:179` `case "fluid-dex-swap"`、
-   `path-template.ts` 的 `LEGACY_PRODUCTION_ROUTE_EDGES`）。收敛动作：§7.2 冻结 inventory 时以该矩阵为
-   种子，逐格转换成 manifest 行，不重新手工盘点。
+1. **现状矩阵只作盘点种子与交叉核对，不得直接冻结**（用户裁决 2026-07-23）。对向审计
+   （Fable 版 §10 P0-1/P0-3/P0-6、§10.3）已证实该矩阵漏了多处分派点——token-graph 静态实例表与
+   `ADAPTER_MAP`/`switch(pool.adapter)`、quoter/Revm/scanner 的 fluid fallback、跨 family 的
+   `PROTOCOL_LEG_DESCRIPTORS`、capability/landed-event/victim-model 三张表——且 prepared/flash cadence
+   有错（flash 实为 120s timer + 400-token 分块多 Multicall、无 blockTag，并非"每块一个 Multicall"）。
+   收敛动作：§7.2 冻结 inventory 必须按其原定义从真实 production import/registry/consumer closure
+   生成；矩阵仅用于对生成结果做人工交叉核对，两者不一致时以 closure 为准并追查矩阵为何漏。
 2. **"更新块跳变" freshness 验收样本。** §5.2 确立了"动态 mid 不用固定 TTL，因为 donation/harvest/oracle
    report 单块跳变"的原则，§8.5 也承认 tx055 只覆盖 UniV3/V4 关键路径、"不能代表 Curve、DODO、
    receipt-deposit、flash provider"。但全文没有任何验收项证明该原则被实现兑现。收敛动作：§8.2 性能合同
@@ -1073,13 +1075,22 @@ final-sim/accounting assertions
    conformance 无一断言 `deriveMids` 不触链。这是两 lane 设计不退化回逐 edge quote（11.6s 根因）的
    前提。收敛动作：§8.3 增补第 10 条——conformance harness 以断网/毒化 backend 调用每个 family 的
    `deriveMids`，任何 RPC/IO 触碰即 fail。
-4. **family"轻"的量化触发器。** §4.3 的提取规则是定性的，"很薄的 family modules"没有可检验的定义。
-   收敛动作：新迁移 family（不含测试）超过 200 行触发强制 review（review 触发器，非硬门——超限的合法
-   解释是"该协议真实差异就这么多"，非法解释是"框架缺共性被抄进了 family"）；并把"按新合同重写
-   Eigenpie 并对比行数"列为 framework 完成度的压力测试。
-5. **治理分流映射。** 本文各阶段未映射到仓库现有治理通道，实施时每片都会重新争论走哪条门。收敛动作：
-   §7.3/§7.4（kernel/framework，无生产行为变化）按 HISTORICAL-GAP 机械分流走 replay+smoke 直进 main；
-   §7.7 翻转与 §7.8 busy 属行为变化，走 Hermes A/B；§7.5 cohort 接线在 shadow 内完成，随 §7.7 一并 A/B。
+4. **family"轻"的量化触发器**（用户裁决：同意，为强制 review 触发器；对向审计校准了口径）。新迁移
+   family 的**核心声明文件**（不含测试）超过 200 行触发强制 review——永远不是 conformance 硬门。
+   口径依据实测（Fable 版 §10.2）：直接文件口径中位数 152 行、11/15 ≤200（偏松且可拆分规避）；
+   closure 口径 Eigenpie ≥672、ERC4626 ≥875（明显偏紧）——故取"核心声明文件"口径，拆分规避视同超限。
+   超限的合法解释是"该协议真实差异就这么多"，非法解释是"框架缺共性被抄进了 family"。"按新合同重写
+   Eigenpie 并对比行数"仍列为 framework 完成度的压力测试。
+5. **治理分流映射**（措辞已按 `HISTORICAL-GAP.md` Promotion Matrix 逐行核准，用户裁决 2026-07-23）：
+   - **只有 production-unreachable 的纯增量骨架可直进 main**——§7.3 kernel、§7.4 framework/coordinator
+     的 shadow 实现、§8.5 的 trusted runner/oracle/comparator 及 harness 通用修复，前提是 production
+     import closure 不可达；按 Promotion Matrix"analysis tool / classifier / gate"行执行：
+     build + regression + 非作者 review，直进 main，**永不作为 B 部署**；
+   - **任何生产 consumer 接线、state scheduling、root-import flip（§7.7）、busy 行为变化（§7.8）**属
+     "systemic scanner / graph / universe / performance"与"flow admission, latency, candidate ranking"
+     两行：预声明 cohort + 覆盖/输出合同 + 同输入公平性证据，然后**必须 Hermes A/B**；历史 replay
+     单独不能 promote；
+   - §7.5 cohort 接线在 shadow 内完成（不触生产），随 §7.7 翻转一并进 A/B。
 6. **§1.1 证据 provenance。** §1.1 的 `28.739s/9.629s/11.630s/29,220` 缺执行凭据。收敛动作：补记
    生产只读查询 SSM `4afc0b54`（根因日志）、`1732ec95`（block-activity，exit 0）、`fd518ba2`（事件切片）、
    生产 manifest SHA `90cd32d7…a08c9`，与 §8 的机器证据纪律对齐。
@@ -1099,18 +1110,21 @@ final-sim/accounting assertions
 6. **初稿"共享路径仅一处特判"**：Fable 版自身的事实错误(grep 模式漏 switch/case),已在该文 v2 修正,
    本文 §2.2 的 legacy 清单为准。
 
-### 11.3 唯一剩余真分歧（待用户 + 对向审计裁决）
+### 11.3 旧线冻结粒度——已裁决关闭（2026-07-23）
 
-**旧线冻结期间是否允许窄域等价修复先行。** 本文 §7.1 要求旧 production line 在整个构建期"保持冻结、
-只作 baseline"；Fable 立场：busy 正在每天丢失 block-scan 覆盖（§1.1），而新线构建量级不小,全程冻结的
-机会成本真实存在。建议的折中裁决：允许**严格受限**的旧线修复——仅限 bit-identical 等价重构
-（如 Curve 两轮合一轮、protocol-mid 按实例去重）,逐项走既有 replay+smoke 门,每次落地后重钉 §7.2 的
-frozen baseline SHA 并重跑 parity 基线；任何改变候选/排序/EV 输出的修复仍然禁止。反方论点（本文立场）：
-每次重钉基线都让 shadow parity 的对照面漂移,且"等价重构"与"行为变化"的边界在实践中容易被侵蚀。
-此分歧不阻塞 §7.3/§7.4 开工,但必须在 §7.5 cohort 接线开始前裁决。
+原分歧：旧线构建期是否允许"bit-identical 窄域修复"先行。裁决依据两条：
+(a) 用户规则——任何生产 consumer、state scheduling、root flip 或 busy 行为变化必须 Hermes A/B；
+(b) 对向审计（Fable 版 §10 P1-3）——所谓等价的状态层提速本身会改变 deadline 内可完成的扫描集合与
+候选集，**"bit-identical 旧线优化"这一前提在 coarse-mid/调度语境下不成立**。
+
+结论：旧线修复不被禁止，但不存在"等价例外"通道——一律作为独立 challenger 走现行 Hermes A/B 分流；
+promotion 改变 champion 后重钉 §7.2 frozen baseline SHA 并重跑 parity 基线。生产入口维持 §7.7 一次
+root-import 翻转。分歧关闭，无遗留。
 
 ### 11.4 verdict
 
 本文 @ `7bd6d40` 的架构核心（universal registry、watermark、双 lane coordinator、framework 提取规则、
-blind 验收与反作弊）全部成立,未发现 P0/P1;六个增强点(11.1)为可加性收敛,自本节起生效;
-唯一开放项是 11.3 的旧线冻结粒度。
+blind 验收与反作弊）全部成立，Fable 审计未发现 P0/P1；对向审计（Codex 5.6-sol ultra，全文见
+[fable-adapter-family-line-plan.md](fable-adapter-family-line-plan.md) §10）对 Fable 版录得 P0×6/P1×5，
+其结论与本节 11.1/11.2/11.3 的收敛一致。六个增强点（11.1，其中 1/4/5 按用户裁决与审计校准后措辞）
+自本节起生效；11.3 已关闭；除 §0.3 既有待实测项外无开放分歧。互评闭环。
