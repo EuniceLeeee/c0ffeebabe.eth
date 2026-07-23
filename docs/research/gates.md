@@ -284,7 +284,9 @@ and all production per-head backend preparation start after `source_head_seen`.
 The normalized config is the effective resolved-config dump captured from the current standard live A after
 all environment/config loaders, not source-code fallback defaults. Its capture hash binds universe top-N/view
 limits, candidate/refine/solve caps, deadlines, concurrency, active manifest and universe-builder inputs/hash.
-Baseline and challenger use byte-identical values except declared historical source/backend substitutions.
+Baseline and challenger use byte-identical values except declared historical source/backend substitutions and
+predeclared activation additions. The common baseline-active manifest remains byte-identical; the challenger
+addition manifest is separately sealed.
 Secret values never enter the report; bind only redacted provider class/endpoint identity and a
 secret-presence hash.
 
@@ -302,7 +304,8 @@ does not force submission. A `bypassed/not-run` stage is a correctness failure a
 
 Pure refactors require exact ordered edge identity, metadata/ownership, funding-provider, action-encoder and
 resolved-state coverage parity. A predeclared activation may add edges but may not delete baseline edges;
-activation deltas are reported separately and never credited as speedup. The trusted producer/comparator and
+semantic parity is evaluated on the common baseline-active manifest. Activation additions are reported
+separately, never credited as speedup, and their full runtime cost remains in challenger timing. The trusted producer/comparator and
 fixture must land on main before the challenger freezes and cannot appear in its diff. The challenger
 production-closure diff must add no sentinel tx/block hash/state root, target pools/poolId/tokens, landed
 amounts, calldata, `25585379/25585380/25585381`, tx index `271`, or encoded/derived fixture-metadata
@@ -313,12 +316,15 @@ fixture-metadata branching is a failure.
 
 An approved removal of a baseline-active semantic is a separate product/coverage deactivation change, not an
 activation delta inside this equivalence/performance gate. It cannot receive an equivalence verdict and its
-edge reduction cannot be credited as a resource or latency improvement. Any later refactor comparison uses
-the same non-reduced active manifest on both sides.
+edge reduction cannot be credited as a resource or latency improvement. Any later refactor comparison keeps
+the same non-reduced baseline-active manifest on both sides.
 
-Paired live uses the same complete graph and production policy. After warm/catch-up and before inspecting
-outcomes, the exact eligible paired-block hashes/range are frozen as the denominator. Every block must
-produce either `scanner_done(no_candidate)` or `block_ev_done(candidate)` within 10 seconds.
+Paired live uses the same production policy and exact-block denominator, but each side runs its own actually
+deployed complete manifest: baseline runs the baseline manifest; challenger runs baseline plus every declared
+addition. Addition costs remain in challenger latency/resource accounting while their output gains remain a
+separate activation delta. After warm/catch-up and before inspecting outcomes, the exact eligible paired-block
+hashes/range are frozen as the denominator. Every block must produce either `scanner_done(no_candidate)` or
+`block_ev_done(candidate)` within 10 seconds.
 `skipped_busy`, timeout, incomplete and missing terminal remain failed samples in that denominator;
 candidate/no-candidate classification cannot be decided by selecting only blocks that finished. The
 historical sentinel remains necessary but cannot substitute for this live timing evidence.
@@ -334,7 +340,7 @@ sentinel. This closes a gap that tx055 cannot cover: proving that current-block 
 observed instead of merely declaring that dynamic mids have no TTL.
 
 Before challenger freeze, the trusted runner publishes and seals the chain range, eligibility
-predicate/version, minimum eligible cardinality and deterministic selection algorithm. A root-only trusted
+predicate/version, `minEligibleCardinality >= 32` and deterministic selection algorithm. A root-only trusted
 oracle retains `secretSeed + salt` and publishes only
 `SHA256(secretSeed || salt || rangeHash || predicateHash)`. After freeze it reveals seed/salt, verifies the
 commitment and resolves one real ERC4626 donation/harvest/loss or wstETH oracle-report source block N under
@@ -349,8 +355,10 @@ fixed N state with only the conversion update reverted. Removing the conversion 
 mid/candidate delta. This oracle-only counterfactual remains hidden from the producer; the synthetic-state
 ban below applies to the tested producer, not to this independent causal proof.
 
-Baseline and challenger receive byte-identical real production entry, sealed N-1 base, source N, current
-live A normalized effective config, complete universe/active manifest, backend and output path. For each side,
+Baseline and challenger each wrap the real production-entry closure from their own frozen SHA. Byte identity
+applies to the sealed N-1 base, source N, current live A normalized effective config except declared activation
+additions, universe, common baseline-active manifest, backend and output schema; the challenger addition
+manifest is separately sealed and included in its complete graph. For each side,
 the N-1 control and N measured run use the same static-cache snapshot but independent generations/clean forks,
 with dynamic state/mid/refine/amount/plan/sim/EV caches reset. The N-1 control cannot become target-specific
 prewarming for N. Each side runs N delta and all current-N state reads inside the N timer and seals full-graph
@@ -373,8 +381,9 @@ asserts one coordinator scheduling identity per generation/stateKey. Registry-de
 checks cover shared orchestration/consumer surfaces rather than using a literal grep; registry-owned family
 modules and low-level ActionAdapters are excluded so their legitimate protocol IDs and ABIs are not
 misclassified as shared-code branches. A family production module over 200 LOC requires a recorded
-framework/duplication review and an Eigenpie before/after pressure-test report; LOC is a review trigger, never
-a correctness shortcut or standalone failure.
+framework/duplication review; LOC is a review trigger, never a correctness shortcut or standalone failure.
+Separately, this refactor requires one Eigenpie before/after pressure-test report as a one-time framework
+completion check, regardless of any individual module's LOC.
 
 The trusted deploy wrapper's fast binding checks the report against the requested experiment, branch, tested base, frozen
 challenger code SHA, input mode, runtime-view declaration, and cheap static bounded-live scope/posture fields.

@@ -224,7 +224,7 @@ fencing 阻止 late result 写回；final sim 前后、submit 前重校验 sourc
 ### 5.6 <10s 预算（目标，非结论）与禁用捷径
 
 原稿 `4.5/1.8/3.2/0.5s` 分段硬预算已经否决，旧 `29,220` 也只是历史图规模。唯一硬口径见 canonical
-§8.4：完整 active-family graph 的六阶段 `head_seen → EV decision`、steady-process/fresh-source-state
+§8.4：完整 active-family graph 的六阶段 `source_head_seen → EV decision`、steady-process/fresh-source-state
 p95 `<10s`；每阶段只如实记录。真实超时就 fail 并升级讨论，不能针对分段配额制造假快。
 
 | 禁用捷径 | 原因 |
@@ -290,7 +290,7 @@ p95 `<10s`；每阶段只如实记录。真实超时就 fail 并升级讨论，�
    完整六阶段 p95 `<10s`；预冻结 paired-block 分母中 busy/timeout/incomplete/missing terminal 全部算失败；
    §5.4 五条硬护栏断言。
 4. 孤岛表逐条落地，覆盖影响显式发布。
-5. 定锚交易验收：tx055f 六步 + 秒级时限（细则已并入 canonical 版 §8.5，两文共享同一标准，含
+5. 定锚交易验收：tx055 六步 + 秒级时限（细则见 canonical 版 §8.4–§8.5，两文共享同一标准，含
    时限不达标的"诚实 fail + 升级讨论"出口）。
 6. **conversion-lane freshness blind sentinel**：只采用 canonical §8.6 / `gates.md` 的 commit-reveal、
    root-only secret、因果反事实、baseline/challenger 同输入与独立 clean-generation 合同；本文旧版的公开

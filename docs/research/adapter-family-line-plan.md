@@ -694,7 +694,7 @@ head N
 
 ```text
 旧 production line                    新 family line
-每个实验冻结 exact baseline            在 shadow/test 中完整构建
+固定 exact SHA/manifest，不再打补丁      在 shadow/test 中完整构建
 没有 “new miss → legacy fallback”     没有生产副作用
                  ↓ parity + activation review
                        一次切换
@@ -704,13 +704,11 @@ head N
 
 这不是逐协议 strangler。允许保留旧源文件，不允许部署“部分新 registry + 部分旧 switch”的半成品。
 
-“冻结”只约束一次具体 shadow/parity/A-B 实验的 exact base SHA、manifest 与输入，不是长期冻结整个 `main`。
-构建期其他经正常 gate 验证的 bugfix/feature 可以继续进入旧 production line；新 family line 必须 rebase，
-重新生成 §7.2 inventory 并重跑受影响 parity，不能把旧证据沿用到新 base。进入最终 cohort wiring→A/B→cutover
-窗口后，对重叠的 production consumer closure 做一次短期 integration freeze，直到原子翻转完成。
-
-因此也不设“旧线 bit-identical 修复”特殊豁免：修复按自身真实 diff 走 §7.9/HISTORICAL-GAP/Hermes，不能因
-本计划周期长而降低门槛；但通过正常门的修复无需等本重构结束。
+本轮用户终裁：预计一天量级的构建窗口内，正在 live 的旧 production line **完全冻结**，不接受任何
+bugfix/feature/promotion，也不存在“bit-identical 小修”例外。旧线 exact SHA/manifest 是最终 A/B baseline；
+新 family line 在 shadow 中完成并一次 cutover。若构建/验收返工使窗口显著延长到数天以上，是否解除冻结
+必须由用户重新裁决，agent 不得自行放开。文档、production-unreachable shadow/tooling 可以按 §7.9 继续进入
+`main`，但不能改变旧 live production closure。
 
 ### 7.2 冻结 inventory 与 activation manifest
 
@@ -879,13 +877,15 @@ await solveFinalSimAndApplyGlobalEv(opportunities, {
 | 最终 production root flip | 只能使用通过全量 shadow parity 与 Hermes A/B 的 frozen SHA，一次原子翻转 |
 
 因此“kernel/framework 直进 main”只适用于尚未被 production import 的纯增量骨架；一旦接入现有生产消费者，
-就按实际 diff 重新分类，不能用先前文件名继承豁免。
+就按实际 diff 重新分类，不能用先前文件名继承豁免。§7.1 的本轮旧线冻结是更强的临时约束：即使一般治理
+允许某个 production 修复进入 Hermes，本构建窗口也不 promotion 到旧 live line。
 
 ## 8. 验收
 
 ### 8.1 语义等价
 
-同一 frozen inventory、active manifest、source block 和配置比较 baseline/challenger：
+同一 frozen inventory、共同 baseline-active manifest、source block 和配置比较 baseline/challenger；
+预声明 additions 作为 challenger-only superset 单列，不参与共同集合的语义等价结论：
 
 - production family/legacy inventory 与 activation delta；
 - ordered edge set；
@@ -906,14 +906,15 @@ await solveFinalSimAndApplyGlobalEv(opportunities, {
 
 ### 8.2 性能与覆盖
 
-必须使用同一个 active-family manifest 的完整 graph：
+语义等价使用双方共同、未删减的 baseline-active manifest；性能与 paired-live 则分别使用各自**实际部署的
+完整 manifest**。因此 challenger 若含预声明 additions，必须承担这些新增 edges/state keys 的全部成本：
 
-- `head_seen → state_ready` p50/p95；
-- `head_seen → scanner_done` p50/p95；
-- `head_seen → exact_refine_done` p50/p95；
-- `head_seen → planner_solver_done` p50/p95；
-- `head_seen → final_sim_done` p50/p95；
-- `head_seen → ev_decision` p50/p95；
+- `source_head_seen → state_ready` p50/p95；
+- `source_head_seen → scanner_done` p50/p95；
+- `source_head_seen → exact_refine_done` p50/p95；
+- `source_head_seen → planner_solver_done` p50/p95；
+- `source_head_seen → final_sim_done` p50/p95；
+- `source_head_seen → ev_decision` p50/p95；
 - swap/protocol lane wall time与 overlap；
 - unique state keys、calls、batches；
 - timeout/abort/late-result；
@@ -925,9 +926,10 @@ await solveFinalSimAndApplyGlobalEv(opportunities, {
 本轮性能合同：
 
 ```text
-同一 active-family manifest，性能比较不减边
+baseline 运行其完整 baseline manifest；challenger 运行 baseline ∪ declared additions 的完整 manifest
+AND 两边都不减 baseline-active edges，additions 的成本计入 challenger、收益不计入
 AND agreed warm paired window 的 busy-source coverage 达标
-AND tx055 严格 replay 的 head_seen → EV decision steady-process/fresh-source-state p95 < 10s
+AND tx055 严格 replay 的 source_head_seen → EV decision steady-process/fresh-source-state p95 < 10s
 AND 预先冻结的 paired-live eligible exact-block 分母中，每块都在 10s 内产生
     scanner_done(no_candidate) 或 block_ev_done(candidate)
 AND graph/candidate/final-sim 等价合同通过
@@ -986,14 +988,14 @@ universal registry。
 
 | # | 生产阶段 | tx055 通过条件 | 时间口径 |
 |---:|---|---|---|
-| 1 | graph/admission + current-N state | 以 watermark 到 N-1 的完整 production base 为起点，在计时区间内处理 N delta；`GraphView(25585380)` completeness 覆盖 N；完整 active-family graph 自然包含三条腿；由完整 universe+manifest 派生的 expected required state-key/edge exact-set 全部在 N resolved，coverage hash 相同 | `head_seen → state_ready`，记录 wall/cumulative ms |
+| 1 | graph/admission + current-N state | 以 watermark 到 N-1 的完整 production base 为起点，在计时区间内处理 N delta；`GraphView(25585380)` completeness 覆盖 N；完整 active-family graph 自然包含三条腿；由完整 universe+manifest 派生的 expected required state-key/edge exact-set 全部在 N resolved，coverage hash 相同 | `source_head_seen → state_ready`，记录 wall/cumulative ms |
 | 2 | route enumeration | 完整 ordered route 自然出现在 candidate set，记录自然 rank；不得 append | `state_ready → enumeration_done`，记录 wall/cumulative ms |
 | 3 | exact quote/refine | target 自然被 probe；逐腿 quote/rounding 绑定 N；amount 由 solver 搜索，不取 landed amount | `enumeration_done → exact_refine_done`，记录 wall/cumulative ms |
 | 4 | planner + solver | route 自然进入 solve set，plan count > 0，family/action ownership 正确 | `exact_refine_done → planner_solver_done`，记录 wall/cumulative ms |
 | 5 | resolved-plan clean-fork re-sim | production compiler 现编 calldata；sim success、还贷、无 standing position，记录逐 wei profit/gas | `planner_solver_done → final_sim_done`，记录 wall/cumulative ms |
 | 6 | production EV decision | unchanged production evaluator 必须执行；输出 `execution_status=pass` 与可复算的 `decision=allow|reject`、`decision_reason`。本样本允许正确 reject，禁止把结果写死 | `final_sim_done → ev_decision`，记录 wall/cumulative ms |
 
-唯一硬秒数门是全部六阶段 `head_seen → ev_decision` 的
+唯一硬秒数门是全部六阶段 `source_head_seen → ev_decision` 的
 steady-process/fresh-source-state p95 `<10,000ms`；每个阶段必须有边界与耗时，但本轮不人为分配
 `4.5s/1.8s/3.2s/0.5s` 等可被逐段做假的配额。历史已证明的只有旧 pass `28.739s` 及其阶段分解；
 第一次严格 full-graph 六步运行必须重新产出 baseline/challenger 秒数。如果总时间不通过，就保留真实
@@ -1021,7 +1023,7 @@ dynamic state 与全部六阶段都在计时区间内。若直接预装已经覆
 call-descriptor cache。每轮记录 fresh dynamic read/batch count，禁止预热目标三个池或复用上一轮 N 的
 state、quote、plan、sim、EV 结果。timer 外只允许清理并恢复 N-1 harness；任何 `forkAt(N)`、source-N
 snapshot/sync/pre-state materialization 或 production per-head backend preparation 都必须发生在
-`head_seen` 后并计时。任一阶段 `bypassed/not-run` 都是 correctness fail，不能从 p95 样本中删除。
+`source_head_seen` 后并计时。任一阶段 `bypassed/not-run` 都是 correctness fail，不能从 p95 样本中删除。
 
 “完整图”也约束状态覆盖，不只约束 edge 数：首轮前只封存 N-1 base 的 expected sets；producer 必须在
 timer 内吸收 N delta 并自行形成 `GraphView(N)`。trusted independent builder 可在 producer 看不到的
@@ -1105,7 +1107,7 @@ tx055 strict blind six-step 是本轮必要条件，不是充分条件。它覆�
 tx055 只能证明完整热路径和 busy/latency transition，不能证明“动态 conversion mid 不用 TTL”已经兑现。
 因此本轮再增加一个必要但不充分的 held-out sentinel：
 
-1. challenger freeze 前先公开并封存 chain range、eligibility predicate/version、最小 eligible cardinality
+1. challenger freeze 前先公开并封存 chain range、eligibility predicate/version、`minEligibleCardinality ≥ 32`
    和 selection algorithm；root-only trusted oracle 另持有 `secretSeed + salt`，只公开
    `SHA256(secretSeed || salt || rangeHash || predicateHash)` commitment。freeze 后才 reveal seed/salt 并
    验证 commitment，再按算法从真实链上解析一个 ERC4626 donation/harvest/loss 或 wstETH oracle-report
@@ -1115,9 +1117,11 @@ tx055 只能证明完整热路径和 busy/latency transition，不能证明“�
    active DEX/routes 的混杂更新；否则 oracle 必须提供固定边界 causal pair：同一 prefix 的 update 前/后，
    或在固定 N 状态只撤销该 conversion update，证明 target mid/candidate delta 随之消失。这个
    oracle-only counterfactual 不提供给 producer；“禁止 synthetic override”只约束被测 producer；
-3. baseline 与 challenger 接收 byte-identical 的通用 production entry、sealed N-1 base、source block N、
-   当前 live A normalized config、完整 universe/active manifest 与 backend；不得收到 tx hash、
-   协议/实例/token/route、预期 rate/mid、candidate fingerprint、amount 或 calldata；
+3. baseline/challenger 各自包装己方 frozen SHA 的真实 production entry closure；byte-identical 只约束
+   sealed N-1 base、source block N、当前 live A normalized config（除预声明 activation additions）、
+   universe、共同 baseline-active manifest、backend 与 output schema。challenger 的 addition manifest
+   另行封存且计入其完整图；两边都不得收到 tx hash、协议/实例/token/route、预期 rate/mid、
+   candidate fingerprint、amount 或 calldata；
 4. 两边的 N-1 control 与 N measured run 使用相同静态 cache snapshot，但各自从独立 generation/clean
    fork 启动，清空 dynamic state/mid/refine/amount/plan/sim/EV caches。N-1 不能紧邻 N 形成
    target-specific prewarm；topology delta 与全部 current-N dynamic reads 在 N timer 内执行；
@@ -1213,7 +1217,7 @@ final-sim/accounting assertions
 | Fable 提议 | 裁决 |
 |---|---|
 | topology 最多可用 `T-10` | 否决。固定滞后会漏掉 N 新实例；必须证明 `completenessWatermark >= N` |
-| `4.5/1.8/3.2/0.5s` 分段硬预算，且只到 `scanner_done` | 否决。唯一硬门是完整六阶段 `head_seen → EV decision`；分段只如实计时 |
+| `4.5/1.8/3.2/0.5s` 分段硬预算，且只到 `scanner_done` | 否决。唯一硬门是完整六阶段 `source_head_seen → EV decision`；分段只如实计时 |
 | Fluid DEX 未迁完就默认暂停 block-scan 覆盖 | 否决。baseline-active 不能在本轮 gate 中退出；产品若下线须先走独立 `approved_deactivation`，不能靠减图提速 |
 | 把 flash 放进 `PRODUCTION_ROUTE_ADAPTERS`/`RouteLegKind` | 否决。使用 universal discriminated registry 的 typed funding view；flash 不伪装成 route/price edge |
 | `lane` 仅含 swap/protocol，同时声称能协调 flash | 类型自相矛盾。universal coordinator 有 typed funding capability，但 price scheduler 仍只含 swap/protocol |
@@ -1259,6 +1263,20 @@ observation owner。
 - 本文是唯一架构与施工真相源；`gates.md` 是唯一验证合同；
 - Fable 文件保留为带批注的历史审计输入，不再保留待裁决架构分歧；
 - 已采纳内容只以本文上述接口、inventory、conformance 和 shadow work-package 形式生效；
-- 本轮预计一天量级的构建窗口内旧 live production line 完全冻结；若窗口显著延长，只能由用户重新裁决；
+- 本轮预计一天量级的构建窗口内旧 live production line 完全冻结；若窗口显著延长，只能由用户重新裁决，
+  不能由 agent 自行放开；
 - 任何后续实现若引用 Fable 中已否决的 `T-10`、硬分段预算、减覆盖、route 化 flash 或分片生产切换，
   视为偏离计划。
+
+### 11.6 Fable 5 最终非作者复核
+
+在远端两笔同主题提交完成 rebase、上述合同收敛后，使用 `claude-fable-5` 对基于 `329e352` 的最终工作树
+只读复核。结果为 **P0=0**；两项 P1 已在本版关闭：
+
+- A/B 各自使用己方 frozen SHA 的真实 production entry，byte-identical 只约束输入；
+- 语义 parity 使用共同 baseline-active manifest，但性能/paired-live 各跑实际完整 manifest，addition 成本
+  必须进入 challenger 计时。
+
+同时直接修正四项小问题：held-out eligible cardinality 下限、Eigenpie 压测与 `>200 LOC` 解耦、
+`source_head_seen` 事件名统一，以及 Fable 历史稿的 tx055 交叉引用。该复核只证明计划/gate 文本闭合，
+不把任何实现、历史 gap 或 `<10s` 性能标成已完成。
