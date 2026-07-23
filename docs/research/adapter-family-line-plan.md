@@ -1048,3 +1048,69 @@ final-sim/accounting assertions
 12. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
 
 在此之前，准确状态只能是计划或 `implemented_not_validated`，不能写 busy fixed，也不能写 live performance 已验收。
+
+## 11. Fable 对抗审计：增强点收敛与立场清算（2026-07-23）
+
+审计人：Fable 5。对象：本文全文 @ `7bd6d40`（§0–§10 逐节通读；§1/§2/§8 关键声明按
+`origin/main @ ad35790` 代码复核）。对向审计（Codex 5.6-sol ultra 审 Fable 独立版
+[fable-adapter-family-line-plan.md](fable-adapter-family-line-plan.md)）并行进行，其结论落该文 §10。
+本节先给"Fable 版更强、应并入本文"的点，再如实清算 Fable 撤回的立场，最后留下唯一真分歧待裁决。
+
+### 11.1 并入增强点（Fable 版更强，与本文既有边界无冲突，视为本文一部分）
+
+1. **现状矩阵实例化 §7.2 inventory。** 本文 §7.2 定义了 inventory schema 但未实例化。Fable 版 §1 已给出
+   逐 adapter × 逐层（kind / identity 政策 / warm 分类 / prepared / 缺口→阶段映射）的核实矩阵，并把三处
+   fluid/legacy 旁路钉到行号（`main.ts:4749`、`plan-builder.ts:179` `case "fluid-dex-swap"`、
+   `path-template.ts` 的 `LEGACY_PRODUCTION_ROUTE_EDGES`）。收敛动作：§7.2 冻结 inventory 时以该矩阵为
+   种子，逐格转换成 manifest 行，不重新手工盘点。
+2. **"更新块跳变" freshness 验收样本。** §5.2 确立了"动态 mid 不用固定 TTL，因为 donation/harvest/oracle
+   report 单块跳变"的原则，§8.5 也承认 tx055 只覆盖 UniV3/V4 关键路径、"不能代表 Curve、DODO、
+   receipt-deposit、flash provider"。但全文没有任何验收项证明该原则被实现兑现。收敛动作：§8.2 性能合同
+   增补一个 conversion-lane freshness 样本——选一个真实 ERC4626 donation/harvest 或 wstETH oracle-report
+   块，blind 重放证明该 family 的 mid 在块 N 当块变化并引起候选集变化；构造与反作弊约束沿用 §8.5 同一
+   套 producer/oracle 隔离，样本块由 trusted oracle 侧选定、producer 不可见。
+3. **`deriveMids` 纯度机器断言。** §3.3 禁止 adapter 拥有 timer/TTL/并发/cache commit，但 §8.3 的九条
+   conformance 无一断言 `deriveMids` 不触链。这是两 lane 设计不退化回逐 edge quote（11.6s 根因）的
+   前提。收敛动作：§8.3 增补第 10 条——conformance harness 以断网/毒化 backend 调用每个 family 的
+   `deriveMids`，任何 RPC/IO 触碰即 fail。
+4. **family"轻"的量化触发器。** §4.3 的提取规则是定性的，"很薄的 family modules"没有可检验的定义。
+   收敛动作：新迁移 family（不含测试）超过 200 行触发强制 review（review 触发器，非硬门——超限的合法
+   解释是"该协议真实差异就这么多"，非法解释是"框架缺共性被抄进了 family"）；并把"按新合同重写
+   Eigenpie 并对比行数"列为 framework 完成度的压力测试。
+5. **治理分流映射。** 本文各阶段未映射到仓库现有治理通道，实施时每片都会重新争论走哪条门。收敛动作：
+   §7.3/§7.4（kernel/framework，无生产行为变化）按 HISTORICAL-GAP 机械分流走 replay+smoke 直进 main；
+   §7.7 翻转与 §7.8 busy 属行为变化，走 Hermes A/B；§7.5 cohort 接线在 shadow 内完成，随 §7.7 一并 A/B。
+6. **§1.1 证据 provenance。** §1.1 的 `28.739s/9.629s/11.630s/29,220` 缺执行凭据。收敛动作：补记
+   生产只读查询 SSM `4afc0b54`（根因日志）、`1732ec95`（block-activity，exit 0）、`fd518ba2`（事件切片）、
+   生产 manifest SHA `90cd32d7…a08c9`，与 §8 的机器证据纪律对齐。
+
+### 11.2 Fable 撤回的立场（对向收敛，如实记录）
+
+1. **T-10 topology 许可**：撤回。本文 §3.2 的 watermark + `graph_incomplete` 降级已给出可实施的渐进
+   形态，且 §0.2 对固定 T-k 的否决成立（Fable 版 §5.3 的标注分歧就此关闭）。
+2. **抢占形态"可先定"之争**：实质已收敛——§6.2 推荐的 latest-head single-slot + generation fencing 就是
+   Fable 版 §5.5 的形态，仅"性能结论待实测"的定性不同，无需裁决。
+3. **分阶段预算表（4.5/1.8/3.2/0.5s）**：撤回。§8.4"不人为分配可被逐段做假的配额"是对的——唯一硬门是
+   端到端 p95，分段只留测量不留配额。
+4. **Fable 版 §5.4 capability 接口**：废弃,采用本文 §3.3 的 typed 版本(Schema/Snapshot 泛型、
+   `deriveMids` 批量形态更优)——叠加 11.1-3 的纯度断言。
+5. **孤岛表中 fluid-dex/DODO 的处置**：由本文 §7.2 更严的 baseline-active 规则取代（active 语义默认
+   同批补齐，退出必须显式 `activation_delta` 审查——比 Fable 版"暂停覆盖列队迁移"更硬,采纳）。
+6. **初稿"共享路径仅一处特判"**：Fable 版自身的事实错误(grep 模式漏 switch/case),已在该文 v2 修正,
+   本文 §2.2 的 legacy 清单为准。
+
+### 11.3 唯一剩余真分歧（待用户 + 对向审计裁决）
+
+**旧线冻结期间是否允许窄域等价修复先行。** 本文 §7.1 要求旧 production line 在整个构建期"保持冻结、
+只作 baseline"；Fable 立场：busy 正在每天丢失 block-scan 覆盖（§1.1），而新线构建量级不小,全程冻结的
+机会成本真实存在。建议的折中裁决：允许**严格受限**的旧线修复——仅限 bit-identical 等价重构
+（如 Curve 两轮合一轮、protocol-mid 按实例去重）,逐项走既有 replay+smoke 门,每次落地后重钉 §7.2 的
+frozen baseline SHA 并重跑 parity 基线；任何改变候选/排序/EV 输出的修复仍然禁止。反方论点（本文立场）：
+每次重钉基线都让 shadow parity 的对照面漂移,且"等价重构"与"行为变化"的边界在实践中容易被侵蚀。
+此分歧不阻塞 §7.3/§7.4 开工,但必须在 §7.5 cohort 接线开始前裁决。
+
+### 11.4 verdict
+
+本文 @ `7bd6d40` 的架构核心（universal registry、watermark、双 lane coordinator、framework 提取规则、
+blind 验收与反作弊）全部成立,未发现 P0/P1;六个增强点(11.1)为可加性收敛,自本节起生效;
+唯一开放项是 11.3 的旧线冻结粒度。
