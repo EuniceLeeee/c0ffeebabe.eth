@@ -61,6 +61,25 @@
   "coverage exhausted" was measured on ~1.4% of flow because this was off. Ingest+sim only — submission is
   separately gated (D-001). [[project-mevshare-flow-discarded]]
 
+### D-007 | 2026-07-24 | ✅ | 批量 Multicall 不是 local-reth 的 <10s 杠杆（实测证伪，重定向到去串行化+dedup）
+- **Finding:** 在 family 线实现中建了 `batched-multicall-transport.ts`（v2/v3 全池打进一个 aggregate3）。
+  节点实测（block 25596722，对 local reth）：正确性 PASS（11 池 mid 逐位一致），但**延迟 0.5x——批量
+  反而慢**：1 aggregate3（45 子调用）= 73.7ms vs 45 顺序 eth_call（Promise.all）= 38.6ms。
+- **Why:** 批量省的是**网络往返**；local reth 零延迟，往返本来就没有，而 Multicall3 合约执行 + 大 payload
+  编解码的固定开销反超并行小调用。批量是**远程 RPC** 优化，不是 local-reth 优化。
+- **Decision / 重定向:** block-scan pass 读 local reth，<10s 的杠杆**不是** Multicall 聚合廉价 v2/v3 读
+  （那些本就 ~40ms）。原 28.7s 两大头的真实成本与正确杠杆：
+  1. **Curve 9.6s** = 两轮**串行** Multicall（pool-state-cache.ts:985 chunk 顺序 await）→ 去串行化（并行
+     chunk + 合成一轮）；
+  2. **protocol 11.6s** = ~1,879 个**逐边 eth_call quote** @ 并发 24 → **dedup 到唯一实例** + 提高并行 +
+     可本地派生的本地派生。
+  即 local-reth 的 N→1 收益来自 coordinator 的 (familyId, stateKey) **dedup + 并行 + 去串行化**，不是
+  Multicall 聚合。批量 transport 保留为**远程-RPC 场景**工具，不作为 local-reth 主路径。
+- **Meta:** 又一次"实测证伪假定的 fix"（HERMES rule 16）：计划里"批量 Multicall transport"被当成 <10s 本体，
+  实测显示对 local reth 是负优化。任何人（含 Codex、未来的我）再提"把读打进一个 Multicall 提速"，先看这条 +
+  自己在 local reth 上测一遍 batched vs parallel。证据：`test/batched-transport-parity.ts`，分支
+  `fable/adapter-family-line`。
+
 ### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
 - **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
   依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？
