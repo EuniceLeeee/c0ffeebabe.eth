@@ -61,6 +61,28 @@
   "coverage exhausted" was measured on ~1.4% of flow because this was off. Ingest+sim only — submission is
   separately gated (D-001). [[project-mevshare-flow-discarded]]
 
+### D-006 | 2026-07-23 | ✅ | Family 解耦不需要跨 family victim 传播（"P0" 撤销，四刀盖棺）
+- **Question:** family 架构下（每 family 独立 `deriveMids`），backrun lane 的 victim swap 是否需要向
+  依赖同一底层状态的其他 family（如读 Curve 状态的 vault）做"跨 family 二阶传播"，否则粗扫漏枚举？
+  （Fable 起初判 P0；用户四轮反驳后撤销。）
+- **Decision:** 不需要。不建传播机制；`dependencies()` 维持"失效提示"定位不升格；不阻塞 family 线。
+- **Why（四条独立论据，任一即可杀）:**
+  1. **闭环经济学**：惰性/独立更新的 vault 汇率不因 victim 当块变化 → 无原子错位可闭环；追它 = 赌未来
+     收敛 = 方向性敞口，明确越界（CLAUDE.md §3 位置守恒闭环）。
+  2. **每块真值自洽**：所有 family 每块读真实当块状态 → 粗图在 N 天然自洽，standing 价差直接可见；
+     victim 制造的机会**锚定在被砸的 swap 池自己那条边上**（victim-patched），读现货的 wrapper 只是同一
+     错位的冗余路径，不是独立机会。
+  3. **实测空集**：8/8 protocol-conversion 家族的 quote 全读协议内部汇率（convertToAssets/getPooledEth/
+     tin-tout/getMLRTAmountToMint…），读 swap 现货（getReserves/slot0/get_dy）命中 0/8（grep 实测）。
+  4. **生态自选择 + 已有正确框架**：天真读现货 = 可被闪电贷操纵 = 活不长；幸存协议故意用 TWAP/延迟/
+     oracle（防操纵是设计目的），单笔 victim 冲击被衰减到噪音。依赖型汇率真跳变时走的是**自己的链上
+     交易**（oracle update/report）= 一等 victim 触发器 —— 即 coffee Chainlink→Metronome 类
+     （[[project-coffee-oracle-backrun-victim-gap]]，rate-venue victim 类已建），不是静默图传播。
+- **唯一守卫（将来才用）:** 若新增家族声明的 quote 实时读 swap 池现货，conformance 报警并要求显式
+  `spotDependent` 声明——"若出现才处理"，不预建。
+- **Meta:** 该结论由用户的领域反驳驱动（闭环经济学 > 架构模式直觉）；Fable 初判把"解耦模式的抽象风险"
+  当成了实际 gap，未先过经济学与汇率来源实测——先扫 0/8 再下结论才是对的顺序。
+
 ### D-005 | 2026-07-17 | ✅ | Declared-venue hardcode posture: pin the root, attest the pair, never derive at admission
 - **Decision:** singleton venue addresses stay pinned in `declaredVenues` (identity root, §2
   infrastructure-singleton carve-out); declared token pairs are demoted to **attested expectations** —
