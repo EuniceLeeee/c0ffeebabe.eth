@@ -1,9 +1,10 @@
 # Fable 独立版 — Adapter Family 全量框架计划（swap / protocol / flash 一律以 family 形式）
 
-> **角色**：本文是 Fable 5 独立起草的版本，与 Codex 独立起草的 canonical 版
-> [adapter-family-line-plan.md](adapter-family-line-plan.md) 构成**互评对**。两文各自保持独立立场原样；
-> 分歧在互评记录中逐条裁决，采纳结论只改 canonical 版。本文不是第二真相源，不驱动实施。
-> 基线：`origin/main @ ad35790`。所有行号锚点已按该 SHA 核实。
+> **角色**：本文是 Fable 5 独立起草、现经批注修正的历史对照稿。最终裁决见 canonical
+> [adapter-family-line-plan.md §11](adapter-family-line-plan.md#11-fable-对照审计与最终收敛)；本文不是第二
+> 真相源，不驱动实施，也不再保留“待裁决”分歧。正文中的“必须/步骤/验收”只记录原提案及审计上下文，
+> 不能单独作为实现或 gate 合同。
+> 原始基线：`origin/main @ ad35790`；Codex 于 `7bd6d40` 复核代码事实并完成收敛。
 > 状态：设计稿。未实现；不使任何历史 gap 变为 fixed。
 
 ## 0. 本轮定位（用户拍板，2026-07-23）
@@ -16,14 +17,16 @@
    上跑起来"而穿进共享代码的接线**切断**，退成孤岛文件（不再被线引用）。共享代码里不允许残留
    按-adapter 特判。
 4. **公共框架吃掉共性，family 变轻**。用户点名的六项公共职责（§3.2 Conversion 谱系）：
-   asset → receipt edge 构造；approve；exact-in quote 结果检查；receipt 余额增加；无 standing position；
+   asset → receipt edge 构造；按需 approve requirement；exact-in quote 结果检查；caller receipt-token
+   balance delta 增加；无 standing position；
    plan/final-sim 约束。
 
 ## 1. 现状矩阵（2026-07-23 按 `ad35790` 逐项核实，非记忆）
 
-执行层已经全部 family 化（16 个 adapter 都在 `PRODUCTION_ROUTE_ADAPTERS`，
-[production-registry.ts:53-69](../../listener/src/searcher/venues/production-registry.ts:53)）；缺口在
-**状态层**、**flash 入册**和**孤岛接线**：
+已有 16 个 route adapter 注册在 `PRODUCTION_ROUTE_ADAPTERS`
+（[production-registry.ts:53-69](../../listener/src/searcher/venues/production-registry.ts:53)），但不能据此
+说 production execution ownership 已全量 family 化：Fluid DEX 仍是 legacy，flash 在 registry 外，
+fluid-dex-liquidate 仍只是低阶 ActionAdapter。缺口横跨状态层、flash 入册和孤岛接线：
 
 | adapter | kind | identity 政策 | 状态层（`warm`） | prepared | 缺什么 |
 |---|---|---|---|---|---|
@@ -33,12 +36,12 @@
 | balancer-v3 | swap | onchain-resolver | **`external-mid` 逐边** | ❌ null | 状态层（S2）+ prepared |
 | dodo-v2 | swap | onchain-resolver | **`external-mid` 逐边** | ✅ | 状态层（S2）——**"DODO 没 family 化"的真实含义就是这一格** |
 | fluid-dex | swap | singleton-seed | external-mid + **main.ts:4749 特判** | — | 孤岛候选（§6）|
-| erc4626 / goldx / metronome×2 / psm / eigenpie / rocksolid / wsteth | protocol-conversion | singleton-seed；erc4626/eigenpie 另有 discovery+identity | **`protocol-mid` 逐边 quote** → 11.6s | null | 状态层（S3）|
-| fluid-credit | compat | — | — | — | 孤岛候选（§6）|
-| balancer-flash / morpho-flash | **registry 外** | 描述符表 + **动态链上 borrowability**（`balanceOf(token, holder)`，非 allowlist，[flash-liquidity.ts](../../listener/src/searcher/solver/flash-liquidity.ts)）| **已是每块一个 Multicall batch** ✅ | n/a | 入册 + conformance（§4）|
+| erc4626 / goldx / metronome×2 / psm / eigenpie / rocksolid / wsteth | protocol-conversion | singleton-seed；erc4626/eigenpie 另有 discovery+identity | **`protocol-mid` 逐边 quote** → 旧样本 11.6s | mixed：PSM/Eigenpie/Goldx/Metronome synth 有；其余 null | 状态层（S3）|
+| fluid-credit | compat | trusted-singleton-seed | — | partial（quote null + unsupported reason）| 孤岛候选（§6）|
+| balancer-flash / morpho-flash | **registry 外** | 描述符表 + **动态链上 borrowability**（`balanceOf(token, holder)`，非 allowlist，[flash-liquidity.ts](../../listener/src/searcher/solver/flash-liquidity.ts)）| 默认约 120s refresh；每 400 tokens 分 chunk，可能多个 Multicall | n/a | 入册 + source-N funding（§4）|
 
-共享路径的按-adapter 特判清单（**v2 修正**——初稿声称"仅一处/plan-builder 零特判"是错的：grep 模式
-`adapterId === "` 漏掉了 switch/case 形式，交叉阅读 canonical 版 §2.2 后当场复核纠正）：
+以下只是最先发现的三处代表性旁路，**不是穷举**。初稿的 grep 模式
+`adapterId === "` 不仅漏掉 switch/case，也漏 venue-key map、fallback 与 direct import：
 
 1. [main.ts:4749](../../listener/src/searcher/main.ts:4749) `edge.adapterId === "fluid-dex-swap"`；
 2. [plan-builder.ts:179](../../listener/src/searcher/solver/plan-builder.ts:179)
@@ -46,74 +49,82 @@
 3. `LEGACY_PRODUCTION_ROUTE_EDGES`（[path-template.ts:4](../../listener/src/searcher/templates/path-template.ts:4)）
    ——registry 外的 legacy edge 描述符表，被 path templates 消费，是结构性旁路而非单行特判。
 
-token-graph / exact-route 仍未发现特判。框架工程量 = WarmSpec 四桶收敛 + 上述三处 fluid/legacy 旁路
-清理,比初稿估计的多一层(plan 编译面),但仍不是大扫除。
+后续审计又在 token-graph、quoter、blockscan-scanner、revm-live-backend、pool-state-updater、
+amount-propagation/solver 与 victim 路径发现 family-specific 分发。完整清单必须由 production
+consumer/import closure 生成；三处手工表只能做 inventory 种子，不能宣称冻结完成。
 
 ## 2. 框架的五个部件
 
 ```
                         ┌──────────────────────────────────────────────┐
-                        │  PRODUCTION_ROUTE_ADAPTERS（唯一注册源，全 kind）│
+                        │ PRODUCTION_ADAPTER_FAMILIES（唯一高阶注册源） │
                         └──────┬───────────────────────────────────────┘
              ┌─────────────────┼──────────────────────┬────────────────┐
-       kind: "swap"    kind: "protocol-conversion"  kind: "flash-liquidity"（新）
+       kind: "swap"    kind: "protocol-conversion"  kind: "flash-loan"
              │                 │                      │
    ┌─────────┴─────────┐ ┌─────┴──────────────┐ ┌─────┴──────────────┐
-   │ Swap 谱系框架      │ │ Conversion 谱系框架 │ │ Flash 谱系框架      │   ← §3 谱系框架层
+   │ Swap 共性候选      │ │ Conversion 谱系框架 │ │ Flash 谱系框架      │   ← §3 可证共性层
    └─────────┬─────────┘ └─────┬──────────────┘ └─────┬──────────────┘
              └─────────────────┴──────────────────────┘
                                │
-              BlockScanStateCoordinator（双 lane 状态协调器,§5）
+              AdapterRuntimeCoordinator（price 双 lane + typed funding）
                                │
-              conformance 门（启动断言 + 共享代码零特判 grep 门）
+              conformance 门（启动断言 + AST/import-closure 零特判）
 ```
 
-1. **唯一注册源**：`PRODUCTION_ROUTE_ADAPTERS` 扩成全 kind——新增 `RouteLegKind`"flash-liquidity"。
-   继续执行 auto-discovery plan §14 边界：一个 adapter 就是一个 family；发现与身份同次交付；
-   framework 永远不是 owner。
-2. **谱系框架层**（§3）：三个谱系框架吃掉共性，family 只剩差异声明。
+1. **唯一注册源**：使用 universal discriminated `PRODUCTION_ADAPTER_FAMILIES`；route、protocol 与 flash
+   从同一 registry 派生 typed views，但 flash 不塞进 `RouteLegKind`、也不伪装成 price edge。继续执行
+   auto-discovery plan §14 边界：一个 adapter 就是一个 family；发现与身份同次交付；framework 永远不是 owner。
+2. **谱系框架层**（§3）：只把至少两个真实 family 已证明相同的 invariant 下沉；ReceiptDeposit 与
+   FlashLoan 已有明确对象，Swap 只列共性候选，不预设必须造一个 umbrella framework。
 3. **状态协调器**（§5）：双 lane 时效层——这是当前最大的延迟债（28.7s pass → `skipped=busy`）。
 4. **conformance 门**：启动断言（family 契约完整性、discovery+identity 同交付、§5.4 硬护栏）+
-   **共享代码零特判门**——CI grep 断言共享路径文件不含 `adapterId === "` 字面量分支（孤岛目录白名单）。
+   **共享代码零特判门**——family IDs 从 registry 派生，AST/import-closure 检查 equality、switch/case、
+   venue-key map、fallback 与 direct import；字面 grep 不算证据。
 5. **孤岛区**（§6）：未迁移 adapter 的保命接线的唯一去处。
 
-## 3. 谱系框架层：共性下沉，family 变轻
+## 3. 可证共性层：共性下沉，family 变轻
 
 ### 3.1 framework ≠ family（沿用 §14 边界 6）
 
 ERC4626 deposit、Eigenpie deposit 的 identity、quote ABI、calldata、事件、rounding 各不相同——谱系框架
 **不注册、不拥有 pool/edge/action ID**，只提供共享执行骨架。已存的 `ReceiptDepositFramework` 就是这个
-形态的第一个实例；本文把它推广成三谱系，不是发明新概念。
+形态的第一个实例。是否继续抽取 FlashLoan 或 Swap 共性，必须满足“至少两个真实 family + 共同机器
+assertion”，不能为追求三类对称而预造框架。
 
-### 3.2 三个谱系框架各吃什么
+### 3.2 已确认框架与候选共性
 
 | 谱系 | 吃掉的公共职责 | family 剩下什么 |
 |---|---|---|
-| **Conversion**（deposit/mint/wrap/redeem 类） | 用户点名的六项：asset→receipt edge 构造；approve；exact-in quote 结果检查；receipt 余额增加断言；无 standing position；plan/final-sim 约束。加上：funded-caller state-override probe、ERC20 storage-key 提取（已在 `protocol-discovery-erc20-state.ts`） | identity 根（singleton/registry 调用）、quote ABI、calldata 编码、事件/rounding 断言、`deriveMid` 数学 |
-| **Swap**（池对池） | pair edge 构造；池 identity 反查（factory/registry）；quote 结果符号与 taxonomy 检查；plan fragment 不变量（输入耗尽/输出入账）；无 standing position；final-sim 约束 | 池数学（reserve/slot0/A/PMM）、tick/rate 元数据 schema、`deriveMid`、prepared-lane quote |
-| **Flash**（借还同 tx） | 动态 borrowability（链上 balanceOf，非 allowlist——现有实现直接升格为框架职责）；borrow/repay 守恒；lender before/after 余额不变断言（final sim 已有，上收为框架断言）；repayment 形态（approve-pull / transfer）编排 | 描述符（target/holder/paramShape/priority）+ ActionAdapter 编码 |
+| **ReceiptDeposit**（单向 asset→receipt deposit） | edge 构造；按需 approve requirement；exact-in quote shape；caller receipt-token balance delta；共同 plan shape。standing taxonomy、route conservation 与 final sim 仍由全局 owner 负责 | identity 根、方向、quote ABI、approve/transfer 形态、calldata、rounding、token delta/event、`deriveMid`；redeem/unwrap/rebase/native 不被强塞进 base framework |
+| **Swap 候选**（池对池；不是预先批准的 framework） | pair edge 构造、quote 符号/taxonomy、plan/final-sim 中可被至少两个真实 family 共同断言的部分 | 池 identity、reserve/slot0/A/PMM 数学、tick/rate schema、`deriveMid`、prepared quote；不能为了共用而塞进协议 switch |
+| **Flash**（借还同 tx） | 动态 borrowability（链上 balanceOf，非 allowlist）；borrow/repay 守恒；按 provider fee/repayment 语义验证 lender 不减少；repayment 形态（approve-pull / transfer）编排 | 描述符（target/holder/paramShape/priority）+ ActionAdapter 编码 |
 
 ### 3.3 "轻"的可验收定义
 
-框架建成后，新增一个 family 只允许包含：**identity 解析 + 调用描述符（quote/execute ABI）+ 数学/断言
-差异 + capability 声明**。量化验收：新 family（不含测试）**≤ 200 行**；若超出，先怀疑框架缺了一块共性，
-而不是把共性写进 family。Eigenpie（当前形态）做基准回测：框架完成后按此契约重写应显著低于现在的行数。
+框架建成后，新增一个 family 只应包含：**identity 解析 + 调用描述符（quote/execute ABI）+ 数学/断言
+差异 + capability 声明**。原稿提出的 `≤200 行` 经审计降级为 code-review smell：超出时必须检查是否重复了
+orchestration/framework，但行数不能作为 correctness gate，避免通过挪文件或压缩代码做假。
 
 ## 4. Flash family 化（第三 kind 的具体形状）
 
-现状已达标的部分**原样保留**：`FLASH_PROVIDER_DESCRIPTORS` 描述符表
+现状可复用的部分是 `FLASH_PROVIDER_DESCRIPTORS` 的 provider 语义
 （[flash-providers.ts](../../listener/src/adapters/flash-providers.ts)，target/holder/repayment/paramShape/
-双 priority）、动态 borrowability、每块一个 Multicall 刷新。要改的只有归属：
+双 priority）和 chunked Multicall borrowability read。原稿“每块一个 Multicall、只改归属”经代码审计为错：
+当前默认约每 `120s` 刷新，且每 400 tokens 分 chunk，可能多个 Multicall；source-N funding state 是真实行为
+改造。收敛后的步骤：
 
-1. `balancer-flash` / `morpho-flash` 各注册为 `kind: "flash-liquidity"` 的 family（描述符即声明）；
+1. `balancer-flash` / `morpho-flash` 各注册为 `kind: "flash-loan"` 的 family（描述符即声明）；
 2. plan-builder 不再 import `DEFAULT_FLASH_ADAPTER_ID` 常量，改从 registry 取
    （[plan-builder.ts:42](../../listener/src/searcher/solver/plan-builder.ts:42) 的默认参数是最后一个
    registry 外接线）；
-3. `FlashLiquidityCache` 的刷新并入状态协调器（行为不变：每块、批量、动态）；
-4. conformance 新增：flash family 必须声明 liquidityHolder 且 final sim 断言 lender 余额 before==after。
+3. `FlashLiquidityCache` 的刷新并入状态协调器，改成 source-N typed funding capability；
+4. conformance 新增：flash family 必须声明 liquidityHolder，并按 provider fee/repayment 语义验证应还金额；
+   通用 lender 下界为 `after >= before`，不是 equality。
 
-注意：**这里没有"admission"问题**——flash provider 是基础设施 singleton（CLAUDE.md §2 允许 pin 的
-identity 源），不是实例 allowlist；borrowability 本来就动态。
+注意：这里没有**实例 discovery/allowlist** 问题——flash provider 是基础设施 singleton（CLAUDE.md §2
+允许 pin 的 identity 源），但仍须通过 family registration、code/chain 与 repayment conformance；
+borrowability 本来就动态。
 
 ## 5. 状态层：双 lane 时效架构（完整图 <10s）
 
@@ -142,13 +153,14 @@ busy 机制在代码里逐字可见：`blockScanBusy` 是**单个布尔**
 
 | 阶段（执行顺序） | 锚点 | 实际行为 |
 |---|---|---|
-| `warm_plan` → `warm_v2v3` | [main.ts:1956](../../listener/src/searcher/main.ts:1956) / :1962 | 专用批处理——**Uni 快的唯一原因** |
+| `warm_plan` → `warm_v2v3` | [main.ts:1956](../../listener/src/searcher/main.ts:1956) / :1962 | 专用批处理，是 Uni 较快的主要结构性原因之一 |
 | `warm_verify` / `v3_tick_meta` | :1987 / :2002 | 校验/元数据 |
 | `warm_curve` | :2012 `await` [warmBlockScanCurves:4908](../../listener/src/searcher/main.ts:4908) | 226 池 × 8 chunk × **两轮**；chunk 在 [pool-state-cache.ts:985](../../listener/src/searcher/solver/pool-state-cache.ts:985) **顺序 await** → 9.6s |
 | `protocol_mids` | :2085 `await` [buildBlockScanProtocolMids:4621](../../listener/src/searcher/main.ts:4621) | **逐 edge task**（签名收 `edges[]`+`concurrency`）：约 1,879 个 quote × 并发 24（[main.ts:732](../../listener/src/searcher/main.ts:732)）≈ 79 波 → 11.6s |
 | `curve_mids` → `scan` → `refine` | :2100 / :2138 / :2155 | 到这里预算已尽 |
 
-**Uni 快是因为独享批处理；Curve/protocol/external 慢是因为逐 edge + 串行，不是"每块刷新"本身。**
+**Uni 较快主要因为专用批处理、增量 changed-pool warm 与 metadata/cache 复用；Curve 是按池 chunk 的两轮
+串行，protocol/external 才是逐 edge 大头。问题不是“每块刷新”本身，而是调度与读放大。**
 
 ### 5.3 时效契约：按 lane 统一规则，**不是统一 TTL**
 
@@ -161,7 +173,7 @@ busy 机制在代码里逐字可见：`blockScanBusy` 是**单个布尔**
 
 | 数据 | 允许的块 | 责任方 |
 |---|---|---|
-| Graph topology | 允许滞后，最多 **T-10** 已验证 snapshot（分歧点：canonical 版要求 watermark 证明，见互评）| 后台 discovery，不在热路径 |
+| Graph topology | 原提案 `T-10` 已否决；完整负判定前必须证明 `completenessWatermark >= N` | base snapshot + current-block delta |
 | Swap 动态价格状态 | **source block N** | swap lane：有可靠事件的池只刷 changed；无可靠事件的每块读最小 sentinel |
 | Protocol 动态兑换状态 | **source block N** | protocol lane：每唯一实例批量读一次最小状态 |
 | Coarse mids | 从 N 的最小状态**本地推导** | 各 family 的 `deriveMid` |
@@ -194,23 +206,26 @@ interface BlockScanStateCapability {
 
 硬护栏（conformance 必须断言）：
 
-1. **`deriveMid` 禁止读链**——谁在里面调 quoteExact，谁就退回逐 edge = 回到 11.6s。
+1. **`deriveMid` 禁止读链**——签名不接 backend；conformance 在断网/毒化 backend 下调用并断言
+   provider/call counters 全为零，任何 I/O 即 fail。
 2. **一个 stateKey 只读一次**——N→1 收益的本体（1,879 task → 少数几个 batch）。
-3. **stale/unresolved mid 不得把路线判成 no-opportunity**——只能标"需 exact probe"。
+3. **stale/unresolved mid 不得把路线判成 no-opportunity**——发布 typed incomplete/degraded；strict
+   full-profile 直接 fail。是否另建受限 exact-probe diagnostic 必须显式设计，不能假设 missing mid 会自然进 refine。
 4. **无法本地派生的 family** 才走批量 quote fallback，必须合批，不逐 edge。
 5. **duplicate-key 胜出规则、edge 顺序、graph hash 不变。**
 
 ### 5.5 busy 调度：latest-head 单槽抢占
 
-`blockScanBusy` 布尔改为 latest-head single-slot：新 head **取消**进行中的 pass（AbortSignal 贯穿全程），
-只保留最新 pending source；被取消 pass 完全 settle 后才复用 Anvil/cache；final sim 前后、submit 前重校验
-source block hash；**不排队历史块**——解法是 <10s 让下一个不再错过。
-（分歧点：canonical 版将"立即取消 vs 让短任务 settle"列为尚待实测；本文立场是形态可先定、参数实测。）
+`blockScanBusy` 布尔应升级为 latest-head single-slot 候选实现，只保留最新 pending source，并用 generation
+fencing 阻止 late result 写回；final sim 前后、submit 前重校验 source block hash。新 head 是立即 abort，
+还是等待不可取消的短任务 settle，必须由 transport cancellation、共享 Anvil/cache 安全性和 benchmark
+裁决，不能在计划里先拍板。
 
 ### 5.6 <10s 预算（目标，非结论）与禁用捷径
 
-严格口径：29,220 边不减、所有 slow edge 仍读当块状态。预算：状态就绪 ≤4.5s、完整图 scanner ≤1.8s、
-probe/solve/final sim ≤3.2s、余量 0.5s → **p95 head_seen→scanner_done <10s**。
+原稿 `4.5/1.8/3.2/0.5s` 分段硬预算已经否决，旧 `29,220` 也只是历史图规模。唯一硬口径见 canonical
+§8.4：完整 active-family graph 的六阶段 `head_seen → EV decision`、steady-process/fresh-source-state
+p95 `<10s`；每阶段只如实记录。真实超时就 fail 并升级讨论，不能针对分段配额制造假快。
 
 | 禁用捷径 | 原因 |
 |---|---|
@@ -227,56 +242,70 @@ probe/solve/final sim ≤3.2s、余量 0.5s → **p95 head_seen→scanner_done <
 无人引用即成孤岛文件）；共享代码不 import 孤岛目录。每个孤岛文件头部必须写 (a) 属于哪个 adapter、
 (b) 缺哪块 family 契约、(c) 迁移或删除条件。
 
-当前孤岛候选（穷举，已核实）：
+当前孤岛候选（原稿手工表，**不是穷举**；完整 inventory 必须从 production closure 生成）：
 
 | 候选 | 现状 | 处置 | 覆盖影响（显式，不许静默） |
 |---|---|---|---|
-| `fluid-dex-swap` 特判（main.ts:4749） | 共享代码唯一按-adapter 分支 | 特判移出；fluid-dex 若不在本轮实现 `blockScanState`，其边不再进 block-scan | fluid-dex 的 block-scan 覆盖暂停，列入迁移队列；backrun 不受影响 |
-| `fluid-credit` compat adapter | `kind: "compat"` 整类 | 保留文件，线不引用；compat 谱系随 auto-discovery plan Slice 6 清退 | credit 本就在目标范围外（CLAUDE.md §3），无生产覆盖损失 |
+| `fluid-dex-swap` 特判（main.ts:4749） | 代表性旁路之一，非唯一分支 | baseline-active，必须补齐完整 family；若产品决定退出，先走独立 `approved_deactivation`，不属于本轮重构 gate | 不得默认暂停覆盖或把减图计为提速 |
+| `fluid-credit` compat adapter | `kind: "compat"`；已有 trusted-singleton identity，prepared 仅 partial | 保留文件；切断生产/诊断 planner 引用前必须先走独立 `approved_deactivation` | 即使 credit 不属于本轮提交目标，也不能宣称无生产覆盖损失 |
 | plan-builder `case "fluid-dex-swap"`（plan-builder.ts:179，v2 补） | plan 编译级按-adapter 分支 | fluid-dex 补齐 family 契约（含 `buildPlanFragment` 自有编码）后删除；否则随 fluid-dex 孤岛化一并移出 | 同 fluid-dex 行 |
-| `LEGACY_PRODUCTION_ROUTE_EDGES`（path-template.ts，v2 补） | registry 外 legacy edge 描述符表 | 逐条迁入 family 声明或随孤岛化清退；终态不允许 registry 外第二 edge 源 | 每条 legacy edge 的去留在 activation delta 中显式列出 |
+| `LEGACY_PRODUCTION_ROUTE_EDGES`（path-template.ts，v2 补） | registry 外 legacy edge 描述符表 | baseline-active edge 逐条迁入 family；未激活项才可孤岛化，终态不允许 registry 外第二 edge 源 | 已激活 edge 的退出必须先走独立 deactivation |
 | `WarmSpec` 四桶 | 状态层旧协议 | 由 capability 投影为兼容 shim，F5 清退 | 无——投影期逐 wei 等价 |
 
 **红线**：任何因孤岛化产生的生产覆盖变化必须出现在上表和部署说明里；静默丢覆盖就是自己制造 pool gap。
 
-## 7. 实施切片（框架先行，adapter 迁移是薄活）
+## 7. Shadow 实施切片（框架先行，生产一次翻转）
 
-strangler + 逐 wei 等价纪律（每片单独提交、单独验证，不等价即 fail）。
-（分歧点：canonical 版选"一次 cutover + shadow parity + 原子翻转"并否决中间态；本文立场见互评——
-在 bounded-live 正在运行的系统上，分片可审计的爆炸半径更小。）
+每片可以单独提交、单独验证，降低开发审查爆炸半径；但只能在 production-unreachable shadow/test
+中前进。不得逐片替换线上真相源；全 cohort parity 后 production root 一次原子翻转。
 
 | 片 | 内容 | 等价/验收 |
 |---|---|---|
-| **F0** | registry 扩全 kind（+flash-liquidity）；conformance 门（契约完整性 + 零特判 grep） | 纯增量，现有 conformance 全绿 |
-| **F1** | 谱系框架抽取：`ReceiptDepositFramework` 推广为 Conversion 框架；Swap/Flash 框架落地 | 现有 family 全部改挂框架，route-adapters/replay 套件 bit-identical |
-| **F2** | 状态协调器（§5）：S0 包装 V2/V3/V4 → S1 Curve 一轮批 → S2 清退 external-mid 桶（dodo/balancer/curve-underlying）→ S3 protocol 接入 | 每步 mid bit-identical；延迟见 §5.6 |
-| **F3** | flash 入册（§4 四步） | plan/final-sim 输出逐字节等价；lender 余额断言上收 |
-| **F4** | 孤岛化（§6 表全部执行） | 零特判门变绿；覆盖影响表随部署说明发布 |
+| **F0** | registry 扩全 kind（+`flash-loan`）；conformance 门（契约完整性 + shared consumer surface 的 registry-derived AST/import-closure） | 纯增量，现有 conformance 全绿 |
+| **F1** | 保留 `ReceiptDepositFramework`；提取有两-family 机器证据的 FlashLoan 共性；Swap 只审查候选 invariants | 相同输入下现有 family route-adapters/replay 套件 bit-identical |
+| **F2** | 状态协调器（§5）：S0 包装 V2/V3/V4 → S1 Curve 一轮批 → S2 清退 external-mid 桶（dodo/balancer/curve-underlying）→ S3 protocol 接入 | 相同 sealed successful snapshot 下 bigint/calldata exact；deadline 内 coverage/rank/scheduling 变化走 frozen cohort + Hermes A/B |
+| **F3** | flash ownership 入册；source-N funding 调度另列行为变更 | ownership 在 sealed identical liquidity snapshot 下做 plan/final-sim parity；120s→source-N 的 cadence/selection 走 Hermes resource/output A/B |
+| **F4** | 仅隔离 baseline-inactive partial 文件；baseline-active removal 必须先走独立 deactivation | shared-surface 结构门变绿；本轮性能比较不减 active manifest |
 | **F5** | `WarmSpec` shim + `buildBlockScanProtocolMids` / `warmBlockScanCurves` / busy 布尔删除，busy 换单槽抢占（§5.5） | 删除后全套 replay + A/B |
 
-行为可能变化的片（F2 延迟、F4 覆盖、F5 抢占）走 Hermes A/B；纯等价片（F0/F1/F3）deterministic 替换，
-走 replay+smoke 直进 main（HISTORICAL-GAP 机械分流）。
+治理分流按**是否触达 production closure/行为**固定，不按 F 编号猜：
+
+- production-unreachable 的 additive kernel/framework/shadow coordinator 走普通非生产实现 review，可分提交
+  进入 main，但不属于 HISTORICAL promotion；
+- conformance/tooling 只有落在 `HISTORICAL-GAP.md` 明列的 `analysis/src`、同名 tests/package script、
+  归档 artifact 或精确 trusted hunt harness 时，才走现有 direct-main；新增 listener runner 先独立扩门；
+- 单 family deterministic production wiring 只有满足 HISTORICAL-GAP 的 adapter replay/production replay
+  与 smoke 才能走其窄通道；
+- 任一 production consumer、graph/state scheduling、coverage、latency/ranking、root flip 或 busy 行为变化，
+  统一走 Hermes cohort + paired A/B。
 
 ## 8. 验收门（整线）
 
-1. conformance 全绿，含新三条：全 kind 注册、flash lender 断言、**共享代码零特判**（grep 门，孤岛目录白名单）。
-2. 新 family 契约压力测试：按 §3.3 重写一个现有 family（建议 Eigenpie），行数与内容符合"轻"定义。
+1. conformance 全绿：全 kind 注册；provider-specific flash repayment；shared orchestration/consumer
+   surface 的 registry-derived AST/import-closure 零特判（排除 family module/低阶 ActionAdapter）；
+   `deriveMids` 在断网/毒化 backend 下 provider/call counters 为零；每 stateKey 唯一调度。
+2. 新 family 契约压力测试：按 §3.3 用新合同重写 Eigenpie。family production module `>200 LOC` 触发强制
+   framework/重复 orchestration review，并报告重写前后 LOC；它是 review trigger，不是 pass/fail 数字。
 3. 状态层四门：同 graph snapshot 生产形态 A/B 逐项等价（route fingerprint/候选排序/probe 符号/final sim）；
-   **p95 <10s 且连续重块 `skipped=busy` 归零**；"更新块汇率跳变"样本当块即捕捉；§5.4 五条硬护栏断言。
+   完整六阶段 p95 `<10s`；预冻结 paired-block 分母中 busy/timeout/incomplete/missing terminal 全部算失败；
+   §5.4 五条硬护栏断言。
 4. 孤岛表逐条落地，覆盖影响显式发布。
 5. 定锚交易验收：tx055f 六步 + 秒级时限（细则已并入 canonical 版 §8.5，两文共享同一标准，含
    时限不达标的"诚实 fail + 升级讨论"出口）。
-6. 诚实边界：`tool-index --select latency,performance` 当前无工具覆盖——延迟结论要先补测量工具；
+6. **conversion-lane freshness blind sentinel**：只采用 canonical §8.6 / `gates.md` 的 commit-reveal、
+   root-only secret、因果反事实、baseline/challenger 同输入与独立 clean-generation 合同；本文旧版的公开
+   deterministic seed + 单 producer 描述已作废。
+7. 诚实边界：若开工时生成的 tool index 仍没有适用的 architecture/latency runner，就先补可信测量工具；
    本文完成 ≠ 任何历史 gap fixed，fixed 仍要 scanner 自发枚举 + final sim（gates.md）。
 
 ## 9. 与 canonical 版的关系
 
-- canonical（Codex）版 [adapter-family-line-plan.md](adapter-family-line-plan.md) 驱动实施；本文是独立
-  对照版，只用于互评与裁决记录。
+- canonical（Codex）版 [adapter-family-line-plan.md](adapter-family-line-plan.md) 驱动实施；本文冻结为
+  已审计的历史对照输入。
 - 两文重合的结论（双 lane、source-N 动态状态、deriveMid 本地化、stateKey 去重、flash 非价格 lane、
   禁 TTL/减图/参数硬凑）视为已收敛。
-- 分歧点在文中就地标注（§5.3 topology T-10 vs watermark、§5.5 抢占形态、§7 strangler vs 一次 cutover、
-  §3.3 200 行量化阈值），裁决走互评记录，采纳结论只改 canonical 版。
+- 原分歧均已裁决：topology 用 current-N watermark；抢占策略 benchmark 后定；开发可切片但 production
+  一次翻转；200 LOC 仅触发 review。不得从本文恢复被否决版本。
 
 ## 10. Codex(gpt-5.6-sol ultra)对抗审计(2026-07-23)
 
@@ -592,3 +621,27 @@ Fable 的 F0→F5 是按 registry/framework/state/flash/island/runtime 横向切
 ### 10.4 verdict
 
 Fable 的双 lane、source-N 动态状态、stateKey 去重、动态 flash borrowability、显式 activation delta 和“小提交用于 shadow 开发”应并入 canonical；固定 `T-10`、立即全程 abort、`≤200` 硬门、F0/F1/F3 横向直进 main、逐 wei 全局等价、Fluid backrun 无损及“每块一个 Multicall/final sim 已有 lender 相等断言”应放弃。
+
+其中“显式 activation delta”只适用于 additions；baseline-active removal 已进一步收紧为独立
+`approved_deactivation`，不属于 equivalence/performance gate，也不得把减边计为提速。
+
+## 11. 最终收敛索引（2026-07-23）
+
+完整逐项裁决位于 canonical
+[§11 Fable 对照审计与最终收敛](adapter-family-line-plan.md#11-fable-对照审计与最终收敛)。摘要：
+
+| 类别 | 结论 |
+|---|---|
+| Fable 更强并已采纳 | `deriveMids` 纯度/stateKey 唯一调度/batched fallback/event 仅提示；更细的历史串行证据；可执行 inventory schema；零 venue 特判机器门 |
+| 修正后采纳 | F0–F5 仅作为 shadow 开发 work packages；`>200 LOC` 只触发 review；手工现状矩阵只做生成式 inventory 的种子 |
+| 新增验收 | challenger 不可见的真实 conversion 更新块 blind sentinel，验证 N-1→N mid 与自然候选集同块变化 |
+| 明确否决 | `T-10`、硬分段预算、默认暂停 Fluid 覆盖、route 化 flash、立即取消、逐片 production cutover、lender equality |
+| 事实纠正 | Fluid/legacy 特判远多于三处；flash 不是每块一个 batch；protocol `prepared` 不是全 null；flash funding 不能由 swap/protocol-only lane 表达 |
+
+收敛后的唯一组合是：
+
+```text
+adapter-family-line-plan.md  = 架构、施工、inventory 与验收范围
+gates.md                     = 机器验证合同
+本文                         = 已完成审计的来源记录，不再参与决策
+```

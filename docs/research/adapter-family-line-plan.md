@@ -16,8 +16,8 @@
 ### 0.1 已决定
 
 1. **性能优化不能靠减边。** `<10s` 不能靠降低 top-N、删除一个已激活 family 的 routes、缩小候选 universe
-   或跳过 slow family 达成。统一 family cutover 若把不完整的 legacy adapter 退出生产，必须把它单独记成
-   `activation_delta`；它不能被包装成输出等价或性能提升。
+   或跳过 slow family 达成。baseline-active legacy adapter 不能在本轮 cutover 中顺手退出；产品若决定
+   下线，必须先作为独立 `approved_deactivation` 变更审计，且不能取得本轮输出等价或性能提升结论。
 2. **所有高阶生产执行语义都必须是 `AdapterFamily`。** 不再因类别不同维护 route adapter、flash descriptor、
    compat adapter 等平行真相源。Swap、protocol conversion、flash loan、credit，以及未来真正进入生产的
    liquidity 都是同一个 discriminated family union 的成员。
@@ -131,6 +131,11 @@ block=25585381 skipped=busy
 | 两者合计 | `21.259s` |
 | 完整 pass | `28.739s` |
 
+历史证据凭据由 Fable 对照稿补齐：耗时/skip 日志 receipt `SSM 4afc0b54`；block-activity 工具 receipt
+`SSM 1732ec95`（exit 0）；事件切片 receipt `SSM fd518ba2`；其 execution manifest 在现存文档中只保留了截断摘要
+`90cd32d7…a08c9`。这些标识用于追溯旧结论，不是本轮新实测；正式机器验收前必须从可信证据库恢复并绑定
+**完整** manifest SHA-256，截断摘要不能单独出具 pass。
+
 当时 graph 约 `29,220` edges。状态准备吃完了 refine/solve 预算，最终
 `exactRouteProbes=0`、`deadline=1`、solver 没有运行。
 
@@ -210,6 +215,11 @@ family 合同，而不是为每个协议复制新文件。
 - busy 时仍直接丢掉新 head；
 - graph/state 仍存在原位分阶段更新，缺少 pass-owned、source-pinned view；
 - missing/stale mid 可能被 `null/skip` 吞掉，无法区分无机会与状态不完整；
+- `EXTERNAL_AND_LEGACY_POOL_REGISTRY` 等静态实例 row 仍可绕过 discovery/identity/probe，必须逐 row 迁移或
+  作为独立 deactivation 审计，不能让 executable instance allowlist 成为第二 admission 源；
+- `PROTOCOL_LEG_DESCRIPTORS`、venue capability、landed-event、victim-model/pool-impact 等平行表仍拥有
+  ABI、approve、observation 或 victim-state 语义；终态必须由 family 投影，或由 registry-derived coverage
+  conformance 证明正交表没有漏 family；
 - 附件所述详细 busy phase、near-threshold route、生命周期事件只存在旧基线的本地脏 diff，尚未进入 main；
 - `<10s` 没有可信实测证据。
 
@@ -230,7 +240,8 @@ DODO”，而是一次建立完整 production-family 主线：
 
 - 已满足新合同的实现批量注册；
 - 当前生产活跃的实现必须在 cutover 前补齐合同；默认不允许靠静默减覆盖过门；
-- 原本就未生产化、或经明确 review 允许退出生产的旧 adapter，可以保留文件但成为零生产引用的孤岛；
+- 原本就未生产化的旧 adapter 可以保留文件但成为零生产引用的孤岛；baseline-active 退出必须先走独立
+  `approved_deactivation`，不能混入本轮重构；
 - 任何孤岛都不能通过 legacy switch、fallback edge 或 descriptor table 偷跑。
 
 ## 3. 目标架构
@@ -315,6 +326,8 @@ swap/protocol pricing lanes
 flash planning order + default provider
 flash liquidity holders
 ActionAdapter descriptor coverage
+plan/quote ABI + approve requirements
+landed-event / victim-model / impact coverage
 typed category projectors
 ```
 
@@ -362,6 +375,8 @@ VerifiedGraphView(N)
 
 - selector/topic 只提名 candidate，不直接 admission；
 - identity 不能依赖 executable instance allowlist；
+- 静态协议实例 row 必须逐项由 discovery+identity+probe 替代；只有 Safety Rule 2 允许的 infrastructure
+  singleton 才能 pin，且仍须 code/chain/behavior conformance；
 - codeHash/implementation 只用于 cache invalidation；
 - shared framework 不拥有 execution family ID；
 - graph 只能包含已通过 claim/ownership 检查的 projection；
@@ -376,7 +391,14 @@ benchmark，但交给 scanner 的只读 view 至少携带：
 interface VerifiedGraphView {
   readonly id: string;
   readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
   readonly completenessWatermark: number;
+  readonly perSourceCoverage: readonly {
+    sourceId: string;
+    sourceFingerprint: string;
+    completeThroughBlock: number;
+    completeThroughHash: string;
+  }[];
   readonly orderedEdgeHash: string;
   readonly metadataHash: string;
   readonly ownershipHash: string;
@@ -439,6 +461,22 @@ interface BlockScanStateCapability<Schema, Snapshot> {
 Adapter 可以声明 call 是否需要固定 `from`、是否 Multicall-safe、是否有跨调用依赖，但不能拥有 timer、TTL、
 并发循环或 cache commit。
 
+Fable 对照稿在这一层给出了比本文初稿更可执行的微观护栏，收敛后成为机器 conformance：
+
+1. `deriveMids` 必须是同步、确定性的 snapshot→mid 纯计算，类型和测试都不能给它 chain/backend I/O；
+2. 同一 generation 内，每个 `(familyId, stateKey)` 的 current-N 动态读取只允许由 coordinator 编排一次；
+   chunk/retry 必须共享该 identity 并单独计数，不能退回逐 edge 重读；
+3. event dependency 只用于优先级/失效提示，不是 freshness proof；外部依赖无目标日志时仍必须取得 N 状态；
+4. 无法本地派生的 family 才能声明 view-quote fallback，而且必须进入公共 batch，不能在 family 内自建逐 edge
+   promise/concurrency loop；
+5. duplicate-key arbitration、edge 顺序和 snapshot publication 必须确定性；相同输入产生相同 coverage/hash；
+6. 任一 required key unresolved 时只能输出 incomplete/degraded diagnostic，不能把缺失 mid 变成
+   `no opportunity`，也不能取得 strict full-profile timing pass。
+
+纯度测试不是只看签名：先构造合法 snapshot，再断开网络并把所有 provider/backend/call 入口替换为计数后
+抛错的 poison backend；调用每个 active family 的 `deriveMids` 后断言调用计数为零。任何隐式 singleton、
+动态 import 或 fallback I/O 都使 conformance fail。
+
 lane 从现有 adapter `kind` 派生，不维护第二张手工映射：
 
 ```text
@@ -480,11 +518,15 @@ submit 边界复核；过期 generation 不得提交。
 - `asset → receipt` edge 构造；
 - approve requirement；
 - exact-in quote 结果检查；
-- receipt balance/supply 增加；
+- caller 的 receipt-token balance delta `> 0`，并与 family rounding 后的 quote 一致；
 - 无 standing position；
 - plan fragment 的共同形状；
 - nonzero behavior simulation facts；
-- final-sim 的余额、mint 与 conservation 约束。
+- final-sim 的 caller 余额与 conservation 约束。
+
+`totalSupply` 增加、mint event 或特定发行路径不是 framework base invariant；rebasing、库存转出等合法 family
+未必满足它们。需要这些证据的 family 必须在自己的 assertion 中声明。approve 也只是按需 requirement，
+不能让 framework 无条件插入。
 
 ERC4626、Eigenpie、RockSolid 等 family 只保留自己的：
 
@@ -522,6 +564,13 @@ Balancer 与 Morpho 当前重复散落在 provider descriptor、planner、liquid
 FlashLoanFramework 也没有 registry ID；Balancer 与 Morpho 仍是两个 family，因为 target、callback 和 repayment
 编译语义不同。
 
+这不只是所有权搬家：当前 flash liquidity 默认约每 `120s` 刷新，并按 token chunk 产生一个或多个
+Multicall；目标合同要求 source-N funding state，因此 cadence/调度会发生真实变化。迁移复用现有
+borrowability read 与 chunked Multicall transport，同时冻结 provider planning order、liquidity tie-break
+order、同 source 的 liquidity 结果和 repayment 结果；calls/batches 作为资源指标比较，不要求机械同数。
+lender 断言也不是 `after == before`：provider 可能收取 fee；每个 family 必须按自己的 fee/repayment 语义
+证明应还金额已到账，通用下界只能是 `after >= before`。
+
 ### 4.3 Framework 提取规则
 
 只有至少两个真实 family 共享、且能写成共同 assertion 的行为才进入 framework。禁止：
@@ -532,6 +581,11 @@ FlashLoanFramework 也没有 registry ID；Balancer 与 Morpho 仍是两个 fami
 - 用公共形状洗掉 family-specific rounding、state delta 或 safety policy。
 
 因此 universal family 不是“大 adapter”。它是一组很薄的 family modules，共享少量经过实证的 frameworks。
+
+为把“薄”从口号变成 review 触发器：新增或重写的单个 family production module 超过 `200 LOC` 时，必须
+提交一份 framework/重复 orchestration 审查；这不是 correctness fail，也不得靠挪文件或压缩代码过门。
+框架完成度压力测试固定选择 Eigenpie：在 shadow 中按新合同重写，报告重写前后 LOC、重复 orchestration
+项与最终 framework 提取结论。
 
 ## 5. Curve 和 protocol mids 到底是什么
 
@@ -640,7 +694,7 @@ head N
 
 ```text
 旧 production line                    新 family line
-保持冻结、只作 baseline               在 shadow/test 中完整构建
+每个实验冻结 exact baseline            在 shadow/test 中完整构建
 没有 “new miss → legacy fallback”     没有生产副作用
                  ↓ parity + activation review
                        一次切换
@@ -649,6 +703,14 @@ head N
 ```
 
 这不是逐协议 strangler。允许保留旧源文件，不允许部署“部分新 registry + 部分旧 switch”的半成品。
+
+“冻结”只约束一次具体 shadow/parity/A-B 实验的 exact base SHA、manifest 与输入，不是长期冻结整个 `main`。
+构建期其他经正常 gate 验证的 bugfix/feature 可以继续进入旧 production line；新 family line 必须 rebase，
+重新生成 §7.2 inventory 并重跑受影响 parity，不能把旧证据沿用到新 base。进入最终 cohort wiring→A/B→cutover
+窗口后，对重叠的 production consumer closure 做一次短期 integration freeze，直到原子翻转完成。
+
+因此也不设“旧线 bit-identical 修复”特殊豁免：修复按自身真实 diff 走 §7.9/HISTORICAL-GAP/Hermes，不能因
+本计划周期长而降低门槛；但通过正常门的修复无需等本重构结束。
 
 ### 7.2 冻结 inventory 与 activation manifest
 
@@ -659,20 +721,33 @@ execution semantic
 baseline_active?
 current owner(s)
 required family kind/capabilities
+identity/discovery source
+block-scan state lane + stateKey shape
+prepared/exact quote support
+current read/batch shape
+static instance/descriptor/observation rows + owner
 new family complete?
 cutover disposition = active_family | legacy_island
-activation_delta reason/reviewer
+activation_delta reason/reviewer (additions only)
+separate_deactivation_change_id (baseline-active only)
 ```
 
 默认规则：
 
 - baseline-active semantic 必须在同一批次补齐 family 后继续 active；
 - DODO 属于 baseline-active，因此要复用现有实现补 `pricingState`，不是新建第二个 adapter，也不能默认丢进孤岛；
-- 原本未接 production、或明确 review 同意退出的 partial adapter 才可成为 `legacy_island`；
-- activation manifest 有任何未审 `active → island` 就阻断 cutover。
+- 原本未接 production 的 partial adapter 可成为 `legacy_island`；
+- baseline-active semantic 在本轮 refactor/performance gate 中不得删除。若产品层决定退出，必须先拆成一个
+  独立 `approved_deactivation` 变更，单独审计覆盖与激活结果；它不能取得 equivalence verdict，也不能把
+  减边节省的时间计入本重构。重构比较只使用双方共同且未删减的 baseline-active manifest；
+- activation manifest 有任何未完成的 `active → island` 或未绑定的 deactivation change 就阻断 cutover。
 
 同时冻结 ordered graph、metadata、ownership、admission、flash provider order/default、template、calldata 与
 ActionAdapter coverage，作为 cutover 前后的机器对照。
+
+Fable 的逐 adapter 矩阵直接作为这份 inventory 的**盘点种子**，避免从空白重新列举；但不能原样冻结。
+生成器必须从当前 production closure 回填并纠正它漏掉的 consumer、prepared capability 与真实 flash
+cadence，然后由 reviewer 对 seed-vs-generated diff 逐项签字。最终真相是生成式 inventory，不是手工表。
 
 ### 7.3 建 universal family kernel
 
@@ -730,6 +805,10 @@ ABI、state reads、math、rounding、calldata 和 identity：
 任何 route/funding state read 失败都发布 `unresolved/incomplete`，不能归零或 skip 后解释成没有价格、没有机会或
 不可借。
 
+Fable 的 F0–F5 切片保留为**开发/审查 work packages**：kernel/conformance、framework、state coordinator、
+flash ownership、legacy isolation、scheduler cleanup 可以分提交和分测；但每片只能在 shadow/test 中前进，
+不能逐片替换 production 真相源。生产仍按 §7.7 在全 cohort parity 后一次原子翻转。
+
 ### 7.6 隔离 partial legacy，删除全部旁路
 
 对 `legacy_island`：
@@ -784,8 +863,23 @@ await solveFinalSimAndApplyGlobalEv(opportunities, {
 - 验证 transport abort、late-result fencing 和共享 backend settle；
 - 完整 active-family graph 下证明新 head 不再被上一轮无界占锁连续跳过。
 
-性能结果不得把 `legacy_island` 的 activation delta 算成优化收益；比较使用同一 active manifest，另报全量
-coverage delta。
+性能结果不得把任何 activation/deactivation delta 算成优化收益；比较使用同一、未减边的 active manifest，
+另报全量 coverage delta。
+
+### 7.9 治理分流固定映射
+
+分流按“是否进入 production closure、是否改变 live distribution”决定，不能按文件名或 F0–F5 编号临时争论：
+
+| 变更形态 | 固定去向 |
+|---|---|
+| production-unreachable 的 additive family types/registry kernel/framework/shadow coordinator | 走普通非生产实现 review；可分提交进入 main，但不属于 HISTORICAL promotion，也不得声称生产能力已改变 |
+| conformance / trusted measurement tool | 只有位于 `HISTORICAL-GAP.md` 已允许的 `analysis/src`、同名 tests/package script、归档 artifact 或精确 trusted hunt harness 时，才能走现有 direct-main；新增 listener runner 必须先单独扩 gate allowlist、跑 regression 并经 fresh 非作者 review |
+| 单 family 的 deterministic identity/quote/plan/encode，且没有 shared interface、universe、scanner、ranking、budget 或调度变化 | 只有满足 `HISTORICAL-GAP.md` 的 +EV cohort、trusted replay 与 smoke 时才走其窄 direct-main 通道 |
+| universal shared interface、production consumer/import closure、graph/universe、current-N state scheduling、coverage、latency/ranking、deadline/concurrency、root flip 或 busy policy | 一律进入 Hermes cohort + paired A/B；历史单笔不能 promotion |
+| 最终 production root flip | 只能使用通过全量 shadow parity 与 Hermes A/B 的 frozen SHA，一次原子翻转 |
+
+因此“kernel/framework 直进 main”只适用于尚未被 production import 的纯增量骨架；一旦接入现有生产消费者，
+就按实际 diff 重新分类，不能用先前文件名继承豁免。
 
 ## 8. 验收
 
@@ -807,8 +901,8 @@ coverage delta。
 - production ActionAdapter/encoder exact set；
 - EV allow/reject 与 reason。
 
-任何允许差异必须在运行前声明，不能看完结果再放宽。baseline-active semantic 若退出生产，必须作为
-`activation_delta` 独立 review；不得把它藏在 graph diff 里。
+任何允许差异必须在运行前声明，不能看完结果再放宽。baseline-active semantic 若退出生产，必须先走独立
+`approved_deactivation` 变更；它不属于本轮 equivalence/performance verdict，也不得藏在 graph diff 里。
 
 ### 8.2 性能与覆盖
 
@@ -838,7 +932,7 @@ AND 预先冻结的 paired-live eligible exact-block 分母中，每块都在 10
     scanner_done(no_candidate) 或 block_ev_done(candidate)
 AND graph/candidate/final-sim 等价合同通过
 AND 完整 active manifest 的 expected current-N state-key/edge coverage exact hash 全部 resolved
-AND activation_delta 单独审计、不计入提速
+AND activation additions 单独审计、不计入提速；本次比较不包含 baseline deactivation
 ```
 
 paired-live 分母必须在 warm/catch-up 完成后、查看 block outcome 前按 exact block hash/range 封存。
@@ -868,7 +962,18 @@ target-specific prewarm 不允许。没有严格 tx replay 与 paired live A/B �
 6. production import closure 不能触达 legacy island、compat、旧 descriptor 或 fallback；
 7. current-N route/funding read 失败只产生 `unresolved/incomplete`，不能变成零值或 no-opportunity；
 8. topology completeness watermark 未覆盖 source N 时不得输出完整负结论；
-9. frozen baseline-active semantic 不得在无 approved activation delta 时消失。
+9. frozen baseline-active semantic 在本轮 refactor/performance gate 中不得消失；deactivation 只能先走
+   独立产品/覆盖变更，不能由本门豁免；
+10. `deriveMids` 无 I/O、每 generation/stateKey 唯一调度、view fallback 必须 batch、event dependency
+    不作为 freshness proof；
+11. **shared orchestration/consumer surface** 的结构化零特判检查：family/edge/provider IDs 从 registry
+    派生，AST 检查 equality、switch/case、venue-key map 与 direct import。registry-owned family module
+    与低阶 ActionAdapter 明确排除，否则合法的 ABI/协议语义也会被误报；字面 grep 不能作为门，因为它会
+    漏掉 `case "fluid-dex-swap"` 这类分支；
+12. `>200 LOC` family 的 framework/重复 orchestration review receipt，以及 Eigenpie 新合同重写的
+    before/after LOC 与重复逻辑报告；LOC 本身不决定 pass。
+13. plan/quote ABI、approve requirement、landed-event、victim-model 与 pool-impact 若保留正交表，必须由
+    registry 派生 exact coverage；新增 active family 但任何一面缺 owner 就 fail。
 
 每个 active family 都要有 interface/conformance 测试；每种共享 framework 至少要有两个真实 family 的正例和
 负例；高风险 ABI/repayment/rounding 必须有 known-good fork fixture。单个 DODO/Eigenpie fixture 不能代表整个
@@ -995,6 +1100,38 @@ tx055 strict blind six-step 是本轮必要条件，不是充分条件。它覆�
 不能代表 Curve、DODO、receipt-deposit、flash provider 等全部 family；§8.1–8.3 的全量 conformance、cohort
 和 paired live A/B 仍是完成门。六步仍不是 deploy 启动开关，但用户已将它明确选为本次 merge/验收合同。
 
+### 8.6 Conversion 更新块 freshness blind sentinel
+
+tx055 只能证明完整热路径和 busy/latency transition，不能证明“动态 conversion mid 不用 TTL”已经兑现。
+因此本轮再增加一个必要但不充分的 held-out sentinel：
+
+1. challenger freeze 前先公开并封存 chain range、eligibility predicate/version、最小 eligible cardinality
+   和 selection algorithm；root-only trusted oracle 另持有 `secretSeed + salt`，只公开
+   `SHA256(secretSeed || salt || rangeHash || predicateHash)` commitment。freeze 后才 reveal seed/salt 并
+   验证 commitment，再按算法从真实链上解析一个 ERC4626 donation/harvest/loss 或 wstETH oracle-report
+   更新块 `N`。集合小于预声明 cardinality、或没有合格样本时直接记 `freshness_evidence=missing`，不能让
+   challenger 通过枚举小集合提前知道目标，也不能看输出后挑样本；
+2. eligibility 必须在 trusted reference 上预先要求自然候选能到达六个生产边界，并排除同时触碰目标
+   active DEX/routes 的混杂更新；否则 oracle 必须提供固定边界 causal pair：同一 prefix 的 update 前/后，
+   或在固定 N 状态只撤销该 conversion update，证明 target mid/candidate delta 随之消失。这个
+   oracle-only counterfactual 不提供给 producer；“禁止 synthetic override”只约束被测 producer；
+3. baseline 与 challenger 接收 byte-identical 的通用 production entry、sealed N-1 base、source block N、
+   当前 live A normalized config、完整 universe/active manifest 与 backend；不得收到 tx hash、
+   协议/实例/token/route、预期 rate/mid、candidate fingerprint、amount 或 calldata；
+4. 两边的 N-1 control 与 N measured run 使用相同静态 cache snapshot，但各自从独立 generation/clean
+   fork 启动，清空 dynamic state/mid/refine/amount/plan/sim/EV caches。N-1 不能紧邻 N 形成
+   target-specific prewarm；topology delta 与全部 current-N dynamic reads 在 N timer 内执行；
+5. baseline/challenger 分别封存 N-1/N 的 full-graph mids、candidate/rank、exact quote、
+   plan/final-sim/EV 原始输出后，trusted comparator 才 reveal oracle。pass 同时要求：自然 family admission、
+   N 的 stateKey fresh read、`deriveMids` 当块改变、causal candidate/rank delta 与 oracle 一致、自然候选走完
+   六阶段，以及双方同输入的输出/资源差异满足本轮 A/B 合同；
+6. producer 不能使用 synthetic state override、目标预热、route append、减图、TTL fallback 或
+   acceptance-only 参数；使用与 tx055 相同的 production-entry/config/universe provenance、计时与
+   held-out control 规则。无合格因果样本就如实缺证，不能用合成 fixture 或“原则上会更新”替代。
+
+该 sentinel 只覆盖 conversion lane。Curve/DODO/external swap 的 current-N 语义仍由 family cohort、
+known-good fork fixtures 与 paired live coverage 证明，不能拿一个 ERC4626/wstETH 样本代替全量 family。
+
 ## 9. 非目标
 
 本计划不顺手扩大到：
@@ -1032,7 +1169,8 @@ final-sim/accounting assertions
 
 只有以下条件全部成立，才能写本计划完成：
 
-1. 所有 baseline-active 高阶 execution semantics 都是 complete family，或有逐项批准的 activation delta；
+1. 所有 baseline-active 高阶 execution semantics 都是 complete family；任何退出已先作为独立
+   `approved_deactivation` 变更完成，且不计入本轮等价/性能 verdict；
 2. 唯一 `PRODUCTION_ADAPTER_FAMILIES` 是所有生产消费者的真相源；
 3. `PRODUCTION_ROUTE_ADAPTERS`、`FLASH_PROVIDER_DESCRIPTORS`、`LEGACY_PRODUCTION_ROUTE_EDGES`、
    production `compat` 和 legacy fallback 全部不存在；
@@ -1043,91 +1181,84 @@ final-sim/accounting assertions
    production 分支；
 8. 一个 family runtime coordinator；route-price 只有 swap/protocol 两 lane，flash 作为 typed funding product；
 9. tx055 strict blind 六步全部执行、post-hoc 匹配、steady-process/fresh-source-state p95 `<10s`，且反作弊断言全绿；
-10. active-family 完整 graph paired live 达到预先冻结的 `<10s` 统计口径；
-11. busy-source coverage 达到预先冻结的 paired-window 门；
-12. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
+10. conversion 更新块 blind sentinel 通过 commit-reveal、因果反事实与同输入 A/B 证明真实 N-1→N
+    rate/mid/candidate delta，且无 oracle 泄露；
+11. active-family 完整 graph paired live 达到预先冻结的 `<10s` 统计口径；
+12. busy-source coverage 达到预先冻结的 paired-window 门；
+13. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
 
 在此之前，准确状态只能是计划或 `implemented_not_validated`，不能写 busy fixed，也不能写 live performance 已验收。
 
-## 11. Fable 对抗审计：增强点收敛与立场清算（2026-07-23）
+## 11. Fable 对照审计与最终收敛
 
-审计人：Fable 5。对象：本文全文 @ `7bd6d40`（§0–§10 逐节通读；§1/§2/§8 关键声明按
-`origin/main @ ad35790` 代码复核）。对向审计（Codex 5.6-sol ultra 审 Fable 独立版
-[fable-adapter-family-line-plan.md](fable-adapter-family-line-plan.md)）并行进行，其结论落该文 §10。
-本节先给"Fable 版更强、应并入本文"的点，再如实清算 Fable 撤回的立场，最后留下唯一真分歧待裁决。
+审计对象是 [fable-adapter-family-line-plan.md](fable-adapter-family-line-plan.md)，其事实基线为
+`ad35790`；本轮在 `7bd6d40` 上重新对照当前代码与本文。结论不是“选一整份”：Fable 有若干实质优点，
+已修正后并入本文；其余分歧全部裁决，实施只看本文与 [gates.md](gates.md)。
 
-### 11.1 并入增强点（Fable 版更强，与本文既有边界无冲突，视为本文一部分）
+### 11.1 Fable 哪里更好，如何采纳
 
-1. **现状矩阵只作盘点种子与交叉核对，不得直接冻结**（用户裁决 2026-07-23）。对向审计
-   （Fable 版 §10 P0-1/P0-3/P0-6、§10.3）已证实该矩阵漏了多处分派点——token-graph 静态实例表与
-   `ADAPTER_MAP`/`switch(pool.adapter)`、quoter/Revm/scanner 的 fluid fallback、跨 family 的
-   `PROTOCOL_LEG_DESCRIPTORS`、capability/landed-event/victim-model 三张表——且 prepared/flash cadence
-   有错（flash 实为 120s timer + 400-token 分块多 Multicall、无 blockTag，并非"每块一个 Multicall"）。
-   收敛动作：§7.2 冻结 inventory 必须按其原定义从真实 production import/registry/consumer closure
-   生成；矩阵仅用于对生成结果做人工交叉核对，两者不一致时以 closure 为准并追查矩阵为何漏。
-2. **"更新块跳变" freshness 验收样本。** §5.2 确立了"动态 mid 不用固定 TTL，因为 donation/harvest/oracle
-   report 单块跳变"的原则，§8.5 也承认 tx055 只覆盖 UniV3/V4 关键路径、"不能代表 Curve、DODO、
-   receipt-deposit、flash provider"。但全文没有任何验收项证明该原则被实现兑现。收敛动作：§8.2 性能合同
-   增补一个 conversion-lane freshness 样本——选一个真实 ERC4626 donation/harvest 或 wstETH oracle-report
-   块，blind 重放证明该 family 的 mid 在块 N 当块变化并引起候选集变化；构造与反作弊约束沿用 §8.5 同一
-   套 producer/oracle 隔离，样本块由 trusted oracle 侧选定、producer 不可见。
-3. **`deriveMids` 纯度机器断言。** §3.3 禁止 adapter 拥有 timer/TTL/并发/cache commit，但 §8.3 的九条
-   conformance 无一断言 `deriveMids` 不触链。这是两 lane 设计不退化回逐 edge quote（11.6s 根因）的
-   前提。收敛动作：§8.3 增补第 10 条——conformance harness 以断网/毒化 backend 调用每个 family 的
-   `deriveMids`，任何 RPC/IO 触碰即 fail。
-4. **family"轻"的量化触发器**（用户裁决：同意，为强制 review 触发器；对向审计校准了口径）。新迁移
-   family 的**核心声明文件**（不含测试）超过 200 行触发强制 review——永远不是 conformance 硬门。
-   口径依据实测（Fable 版 §10.2）：直接文件口径中位数 152 行、11/15 ≤200（偏松且可拆分规避）；
-   closure 口径 Eigenpie ≥672、ERC4626 ≥875（明显偏紧）——故取"核心声明文件"口径，拆分规避视同超限。
-   超限的合法解释是"该协议真实差异就这么多"，非法解释是"框架缺共性被抄进了 family"。"按新合同重写
-   Eigenpie 并对比行数"仍列为 framework 完成度的压力测试。
-5. **治理分流映射**（措辞已按 `HISTORICAL-GAP.md` Promotion Matrix 逐行核准，用户裁决 2026-07-23）：
-   - **只有 production-unreachable 的纯增量骨架可直进 main**——§7.3 kernel、§7.4 framework/coordinator
-     的 shadow 实现、§8.5 的 trusted runner/oracle/comparator 及 harness 通用修复，前提是 production
-     import closure 不可达；按 Promotion Matrix"analysis tool / classifier / gate"行执行：
-     build + regression + 非作者 review，直进 main，**永不作为 B 部署**；
-   - **任何生产 consumer 接线、state scheduling、root-import flip（§7.7）、busy 行为变化（§7.8）**属
-     "systemic scanner / graph / universe / performance"与"flow admission, latency, candidate ranking"
-     两行：预声明 cohort + 覆盖/输出合同 + 同输入公平性证据，然后**必须 Hermes A/B**；历史 replay
-     单独不能 promote；
-   - §7.5 cohort 接线在 shadow 内完成（不触生产），随 §7.7 翻转一并进 A/B。
-6. **§1.1 证据 provenance。** §1.1 的 `28.739s/9.629s/11.630s/29,220` 缺执行凭据。收敛动作：补记
-   生产只读查询 SSM `4afc0b54`（根因日志）、`1732ec95`（block-activity，exit 0）、`fd518ba2`（事件切片）、
-   生产 manifest SHA `90cd32d7…a08c9`，与 §8 的机器证据纪律对齐。
+| Fable 的优势 | 审计结论 | 收敛位置 |
+|---|---|---|
+| §5.4 把 state capability 写成可检查的微观不变量 | 真优点；补足本文原先只有职责、缺少机器护栏的问题 | §3.3、§8.3：pure `deriveMids`、stateKey 唯一调度、batched fallback、event 仅提示、稳定 hash |
+| §5.1–5.2 把旧 live 耗时与串行 await 链串成完整证据 | 真优点，但 `29,220` edges、`1,879` tasks 等只属于旧基线，不能冒充当前值 | §1.1/§5 保留历史证据；开工时按 §7.2 重新生成 inventory |
+| §1 的 adapter×identity×warm×prepared×gap 矩阵更容易施工 | 真优点，但其 prepared/flash cadence 单元格有事实错误，手写表也会过时 | §7.2 把 identity、state lane/key、prepared 与 batch shape 加入生成式 inventory schema |
+| §2/§8 要求“共享生产代码零 venue 特判”成为 CI 门 | 目标正确；其 literal grep 已经漏过 switch/case，不能照搬 | §8.3 改为 registry-derived AST + production import-closure 检查 |
+| §7 的 F0–F5 切片便于 review，并显式区分 deterministic 与 live-distribution 工作 | 仅适合作为 shadow 开发 work packages，治理必须按真实 production reachability 分流 | §7.5/§7.9：允许分提交，production 仍一次 cutover |
+| §3.3 用行数检验 family 是否够轻 | 有价值的 code-review smell，不是 correctness gate；直接文件实测中位数 152 行、11/15 ≤200，说明它只能触发审查且需防拆文件规避 | §4.3/§8.3：核心声明文件 `>200 LOC` 触发强制 review，并用 Eigenpie before/after 压测 framework 完成度 |
+| §5.3/§8 要求真实“更新块跳变”样本 | 真优点；本文原先只声明动态 mid 不用 TTL，没有样本证明该原则 | §8.6 + `gates.md`：challenger freeze 后选择 conversion-lane blind sentinel |
+| §5.1 的 SSM/tool execution 凭据 | 让旧性能归因可追溯，但现存 manifest 只有截断摘要 | §1.1 记录 receipt；正式验收前恢复完整 SHA-256 |
 
-### 11.2 Fable 撤回的立场（对向收敛，如实记录）
+### 11.2 Canonical 更强、明确否决的点
 
-1. **T-10 topology 许可**：撤回。本文 §3.2 的 watermark + `graph_incomplete` 降级已给出可实施的渐进
-   形态，且 §0.2 对固定 T-k 的否决成立（Fable 版 §5.3 的标注分歧就此关闭）。
-2. **抢占形态"可先定"之争**：实质已收敛——§6.2 推荐的 latest-head single-slot + generation fencing 就是
-   Fable 版 §5.5 的形态，仅"性能结论待实测"的定性不同，无需裁决。
-3. **分阶段预算表（4.5/1.8/3.2/0.5s）**：撤回。§8.4"不人为分配可被逐段做假的配额"是对的——唯一硬门是
-   端到端 p95，分段只留测量不留配额。
-4. **Fable 版 §5.4 capability 接口**：废弃,采用本文 §3.3 的 typed 版本(Schema/Snapshot 泛型、
-   `deriveMids` 批量形态更优)——叠加 11.1-3 的纯度断言。
-5. **孤岛表中 fluid-dex/DODO 的处置**：由本文 §7.2 更严的 baseline-active 规则取代（active 语义默认
-   同批补齐，退出必须显式 `activation_delta` 审查——比 Fable 版"暂停覆盖列队迁移"更硬,采纳）。
-6. **初稿"共享路径仅一处特判"**：Fable 版自身的事实错误(grep 模式漏 switch/case),已在该文 v2 修正,
-   本文 §2.2 的 legacy 清单为准。
+| Fable 提议 | 裁决 |
+|---|---|
+| topology 最多可用 `T-10` | 否决。固定滞后会漏掉 N 新实例；必须证明 `completenessWatermark >= N` |
+| `4.5/1.8/3.2/0.5s` 分段硬预算，且只到 `scanner_done` | 否决。唯一硬门是完整六阶段 `head_seen → EV decision`；分段只如实计时 |
+| Fluid DEX 未迁完就默认暂停 block-scan 覆盖 | 否决。baseline-active 不能在本轮 gate 中退出；产品若下线须先走独立 `approved_deactivation`，不能靠减图提速 |
+| 把 flash 放进 `PRODUCTION_ROUTE_ADAPTERS`/`RouteLegKind` | 否决。使用 universal discriminated registry 的 typed funding view；flash 不伪装成 route/price edge |
+| `lane` 仅含 swap/protocol，同时声称能协调 flash | 类型自相矛盾。universal coordinator 有 typed funding capability，但 price scheduler 仍只含 swap/protocol |
+| flash 已“每块一个 Multicall”，迁移行为不变 | 事实错误。当前默认约 `120s` 刷新且每 400 tokens 分 chunk；source-N funding 是需验收的行为变化 |
+| 新 head 到来立即取消旧 pass | 未证明。保留 latest-head single-slot 候选，但是否 abort 由 transport cancellation、orphan settle 与 benchmark 裁决 |
+| strangler 每片替换 production | 否决。允许 shadow 分片开发，不允许半新 registry + 半旧旁路的生产中间态 |
+| lender `before == after` | 错误。flash fee 可使 lender 增加；按 provider repayment/fee 语义验证，通用下界是 `after >= before` |
+| unresolved mid 直接送 exact probe | 不作为通用生产策略。它可能放大候选并掩盖状态缺口；strict full-profile 必须 current-N 全覆盖 |
+| generic ActionAdapter 唯一 owner | 不成立。family-owned encoder 与 `approve/transfer/assert-balance` 等 shared infra 必须分开校验 |
 
-### 11.3 旧线冻结粒度——终裁：完全冻结（用户 2026-07-23）
+### 11.3 事实审计修正
 
-原分歧：新线构建期，旧线（正在 live 跑的 searcher）允不允许先打"看似无害"的小补丁止血
-（busy 每天丢覆盖 vs 冻结基线不漂移）。
+Fable §1 把三处 Fluid/legacy 接线称为接近穷举，仍不完整。Fluid route 旁路至少还存在：
 
-裁决链：
-(a) 对向审计（Fable 版 §10 P1-3）先否定了前提——状态层提速本身改变 deadline 内可完成的扫描集合，
-"bit-identical 旧线优化"不存在；
-(b) 用户终裁——**旧线完全冻结，构建期不打任何补丁**。理由：本次实施预计一天量级，流血窗口可忽略；
-且新线建成后要与旧线做 A/B，旧线一动不动，对比基线才最干净。
+- `quoter.ts` 的 `case "fluid-dex-swap"`；
+- `revm-live-backend.ts` 的 quote 与 allowance-spender 特判；
+- `blockscan-scanner.ts` 的 Fluid mid 特判；
+- `token-graph.ts` 的 adapter map、Fluid 分发与两条静态 Fluid edges；
+- plan-builder switch、`LEGACY_PRODUCTION_ROUTE_EDGES` 和 `main.ts` 特判。
 
-若构建窗口显著超出预期（验收失败迫使返工数天以上），冻结决定由用户重新裁决，不得自行放开。
-生产入口维持 §7.7 一次 root-import 翻转。分歧关闭，无遗留。
+更宽的 production-family inventory 还必须覆盖 `pool-state-updater.ts` 的 V2/V3/V4 state dispatch、
+`amount-propagation.ts`/`solver.ts` 的 fluid-credit 分支，以及 `main.ts`/`victim-apply.ts` 的 victim-state
+variant。Fable 的现状矩阵也误把 protocol `prepared` 整组写成 `null`：PSM、Eigenpie、Goldx、
+Metronome synth 已有 prepared capability，fluid-credit 也不是空；必须由代码生成 inventory 后逐项裁决。
+静态 ERC4626/legacy instance rows、`PROTOCOL_LEG_DESCRIPTORS`、capability、landed-event、victim-model 与
+pool-impact 表也必须进入同一 closure inventory，不能只迁 route registry 后留下第二套 admission/ABI/
+observation owner。
 
-### 11.4 verdict
+这也反证 literal grep 不能承担 conformance。开工 inventory 必须从 production import/consumer closure
+生成，不能继续维护一张声称“穷举”的手工清单。
 
-本文 @ `7bd6d40` 的架构核心（universal registry、watermark、双 lane coordinator、framework 提取规则、
-blind 验收与反作弊）全部成立，Fable 审计未发现 P0/P1；对向审计（Codex 5.6-sol ultra，全文见
-[fable-adapter-family-line-plan.md](fable-adapter-family-line-plan.md) §10）对 Fable 版录得 P0×6/P1×5，
-其结论与本节 11.1/11.2/11.3 的收敛一致。六个增强点（11.1，其中 1/4/5 按用户裁决与审计校准后措辞）
-自本节起生效；11.3 已关闭；除 §0.3 既有待实测项外无开放分歧。互评闭环。
+### 11.4 旧线冻结粒度——终裁：完全冻结（用户 2026-07-23）
+
+原分歧是新线构建期，正在 live 的旧 searcher 是否允许先打“看似无害”的补丁。对向审计先证明状态层提速
+本身会改变 deadline 内可完成的扫描集合，“bit-identical 旧线优化”并不存在；用户随后终裁：
+**旧线完全冻结，构建期不打任何补丁**。本次预计一天量级，且不动的旧线是最干净的 A/B baseline。
+
+若构建窗口因验收返工显著延长到数天以上，冻结决定由用户重新裁决，agent 不得自行放开。生产入口仍按
+§7.7 一次 root-import 翻转。
+
+### 11.5 唯一收敛结果
+
+- 本文是唯一架构与施工真相源；`gates.md` 是唯一验证合同；
+- Fable 文件保留为带批注的历史审计输入，不再保留待裁决架构分歧；
+- 已采纳内容只以本文上述接口、inventory、conformance 和 shadow work-package 形式生效；
+- 本轮预计一天量级的构建窗口内旧 live production line 完全冻结；若窗口显著延长，只能由用户重新裁决；
+- 任何后续实现若引用 Fable 中已否决的 `T-10`、硬分段预算、减覆盖、route 化 flash 或分片生产切换，
+  视为偏离计划。

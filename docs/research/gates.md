@@ -311,6 +311,11 @@ Fixture/force/static instance seeds cannot be the sole admission evidence for a 
 challenger freeze, the same trusted runner also executes undisclosed neighboring/held-out block controls;
 fixture-metadata branching is a failure.
 
+An approved removal of a baseline-active semantic is a separate product/coverage deactivation change, not an
+activation delta inside this equivalence/performance gate. It cannot receive an equivalence verdict and its
+edge reduction cannot be credited as a resource or latency improvement. Any later refactor comparison uses
+the same non-reduced active manifest on both sides.
+
 Paired live uses the same complete graph and production policy. After warm/catch-up and before inspecting
 outcomes, the exact eligible paired-block hashes/range are frozen as the denominator. Every block must
 produce either `scanner_done(no_candidate)` or `block_ev_done(candidate)` within 10 seconds.
@@ -321,6 +326,55 @@ historical sentinel remains necessary but cannot substitute for this live timing
 This sentinel is necessary, not sufficient: it covers a UniV3/V4 route and the critical path, not every
 Curve/DODO/receipt/flash family. Full-family conformance, positive/negative cohort output equivalence,
 same-input resource metrics and paired live A/B remain required for the systemic refactor.
+
+### Held-out conversion update-block freshness sentinel
+
+The universal AdapterFamily/state-coordinator refactor also requires one real conversion-lane update-block
+sentinel. This closes a gap that tx055 cannot cover: proving that current-block protocol rates are actually
+observed instead of merely declaring that dynamic mids have no TTL.
+
+Before challenger freeze, the trusted runner publishes and seals the chain range, eligibility
+predicate/version, minimum eligible cardinality and deterministic selection algorithm. A root-only trusted
+oracle retains `secretSeed + salt` and publishes only
+`SHA256(secretSeed || salt || rangeHash || predicateHash)`. After freeze it reveals seed/salt, verifies the
+commitment and resolves one real ERC4626 donation/harvest/loss or wstETH oracle-report source block N under
+the sealed algorithm. Too few eligible samples or no qualifying sample yields
+`freshness_evidence=missing`; the challenger must not be able to enumerate a tiny set or choose a sample after
+inspecting output.
+
+Eligibility requires the trusted reference's natural candidate to reach all six production boundaries and
+excludes updates that also touch the target active DEX/routes. If that exclusion cannot prove isolation, the
+trusted oracle supplies a fixed-boundary causal pair: the same prefix immediately before/after the update, or
+fixed N state with only the conversion update reverted. Removing the conversion update must remove the target
+mid/candidate delta. This oracle-only counterfactual remains hidden from the producer; the synthetic-state
+ban below applies to the tested producer, not to this independent causal proof.
+
+Baseline and challenger receive byte-identical real production entry, sealed N-1 base, source N, current
+live A normalized effective config, complete universe/active manifest, backend and output path. For each side,
+the N-1 control and N measured run use the same static-cache snapshot but independent generations/clean forks,
+with dynamic state/mid/refine/amount/plan/sim/EV caches reset. The N-1 control cannot become target-specific
+prewarming for N. Each side runs N delta and all current-N state reads inside the N timer and seals full-graph
+N-1/N mids, candidates/ranks, exact quotes, plan/final-sim and EV raw outputs before the trusted comparator
+reveals the oracle.
+
+A pass requires natural family admission, a fresh N stateKey read, same-block `deriveMids` change, the
+causally isolated oracle-predicted candidate/rank delta, all six physical production stages for that natural
+candidate, and same-input baseline/challenger output and resource differences within the declared A/B
+contract. Producer-side synthetic state overrides, target prewarming, fixture/route injection, candidate
+append, graph reduction, TTL fallback and acceptance-only policy changes invalidate the result. A synthetic
+fixture or a claim that the code "should refresh" cannot pass.
+
+This is a conversion-lane sentinel only. Curve/DODO/external-swap current-N behavior still requires its
+family cohort, fork fixtures and paired-live coverage.
+
+Full-family conformance separately invokes every active `deriveMids` with a valid sealed snapshot while all
+provider/backend/call entrances are poisoned to count and throw; any I/O or nonzero counter fails. It also
+asserts one coordinator scheduling identity per generation/stateKey. Registry-derived AST/import-closure
+checks cover shared orchestration/consumer surfaces rather than using a literal grep; registry-owned family
+modules and low-level ActionAdapters are excluded so their legitimate protocol IDs and ABIs are not
+misclassified as shared-code branches. A family production module over 200 LOC requires a recorded
+framework/duplication review and an Eigenpie before/after pressure-test report; LOC is a review trigger, never
+a correctness shortcut or standalone failure.
 
 The trusted deploy wrapper's fast binding checks the report against the requested experiment, branch, tested base, frozen
 challenger code SHA, input mode, runtime-view declaration, and cheap static bounded-live scope/posture fields.
