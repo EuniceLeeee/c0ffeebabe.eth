@@ -221,6 +221,107 @@ require byte-identical universe snapshots, and the report must declare the 3,600
 Standalone historical repair, ordinary stage-advance acceptance, and live searcher defaults keep their
 production-shaped limits. These widened values are acceptance-only and never change live searcher defaults.
 
+### Strict blind timing sentinel for the universal AdapterFamily refactor
+
+The universal AdapterFamily/block-scan-state refactor additionally pins
+`0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b` as a mandatory,
+target-blind six-stage timing sentinel. It is a task-specific merge/acceptance contract chosen by the user,
+not a deploy-start switch and not a substitute for the systemic cohort/paired A/B contract.
+
+Its producer receives only source block `25585380` (hash
+`0x6cf953cd24df65a1d0505aa661b8361b69178dbc74eb73085e3531df284c8f22`, state root
+`0x8bb7fd340dc4088cf2572be4915b861e5dc5fe4827da2ad56a7672fbbcae678e`), the complete
+content-addressed production universe/config/active-family manifest, the normal production policy, backend
+and output path. It must not receive the winner hash, expected route/pools/tokens/factory, amount, rank,
+search center or calldata. An independently sealed receipt/call-trace oracle is visible only to a trusted
+post-run comparator after producer output is immutable. The producer runs with repository `.env` loading
+disabled or from a clean working directory without that file; after every config loader completes, the
+normalized effective config is sealed and checked again. Clearing only the parent shell environment is not
+evidence of isolation.
+
+The current expected-route acceptance path does **not** satisfy this profile: `AB_EXPECTED_*`, expected-pool
+inputs, top-K target append, acceptance-only candidate/rank widening, forced probes/selections, fixture
+preload, target pin/force-include, target-specific warm or a reduced graph invalidate the result. The target
+must naturally enter production admission, enumeration, refinement and solve limits; failure to do so is a
+real failed stage, not permission to append it. An early threshold/rank drop cannot stand in for final sim
+and EV in this strict profile. The solver chooses amounts and the production compiler creates calldata.
+Acceptance-only changes to min-spread/EV, candidate/rank caps or deadlines are forbidden; a real production
+parameter change requires its own candidate-distribution, resource and paired A/B evidence.
+
+All six physical block-scan stages emit monotonic `stage_ms` and `cumulative_ms`, timed from
+`source_head_seen` before runtime preparation through the production EV decision. Their machine boundaries
+are `state_ready`, `enumeration_done`, `exact_refine_done`, `planner_solver_done`, `final_sim_done` and
+`ev_decision`. Every boundary is mandatory, but there are no target-tuned per-stage pass budgets. The only
+hard timing gate is steady-process/fresh-source-state p95 `<10,000ms` end to end. If it misses, retain the
+real breakdown and report `implemented_not_validated`; never reduce the graph, reuse target dynamic caches,
+force a candidate or loosen production policy to manufacture a pass.
+
+Semantic and timing verdicts are recorded independently, so `semantic_status=pass` with
+`timing_status=fail` is a valid honest intermediate result. After the profile freezes, do not select a
+favorable window/percentile, move timer boundaries, keep only the fastest warm blocks or discard slow
+"outliers". A human may approve a new target for a later run after reviewing the evidence; it never
+retroactively converts the failed run into a pass.
+
+At least 20 measured runs retain every result. Process startup and one-time historical data download are
+recorded but excluded from the hot-path timer. Before the first run, the manifest commits an exact
+`run_count >= 20`, seeded interleaved A/B order, nearest-rank
+`p95 = sorted[ceil(0.95*n)-1]` algorithm and timeout accounting. Every attempted run remains in the report;
+do not add fast runs after seeing the result. Additional runs form a new experiment. Static
+schema/decimals/codehash/call-descriptor caches may be warm, but each run restores the same sealed N-1
+input, clears or generation-bumps every N-dependent state/mid/refine/amount/plan/sim/EV cache, resets its
+clean fork and rechecks the pre-state root. Fresh current-N reads/batches and cache-generation counters are
+recorded on every run; target-specific prewarming and reuse of a prior run's N result are forbidden.
+
+For this sentinel, the production base topology completeness watermark is `25585379`; processing its
+current-block delta to source N=`25585380` is inside the timer. A universe already prebuilt through N can
+diagnose route/state behavior but cannot pass the strict full-pipeline timing profile. The runner wraps the
+actual production entry and deployment config resolver, rather than copying pipeline logic, and its manifest
+binds the production-entry SHA, generic universe-builder SHA/range/input hashes, independently rebuilt
+universe hash, normalized config, active manifest, backend, state root and outputs. Outside the timer the
+harness may only clean up and restore N-1; `forkAt(N)`, any source-N snapshot/sync/pre-state materialization
+and all production per-head backend preparation start after `source_head_seen`.
+
+The normalized config is the effective resolved-config dump captured from the current standard live A after
+all environment/config loaders, not source-code fallback defaults. Its capture hash binds universe top-N/view
+limits, candidate/refine/solve caps, deadlines, concurrency, active manifest and universe-builder inputs/hash.
+Baseline and challenger use byte-identical values except declared historical source/backend substitutions.
+Secret values never enter the report; bind only redacted provider class/endpoint identity and a
+secret-presence hash.
+
+Before timing, only the N-1 base expected sets are sealed. The producer consumes N delta inside the timer and
+builds `GraphView(N)` without an expected-N hint. A trusted independent builder may privately construct N's
+exact `expected_required_state_keys` and `expected_priced_edges` hashes, but the comparator reveals them only
+after producer output is immutable. `state_ready` is valid only after every production-required key in
+GraphView(N) is resolved at N and atomically published with the expected coverage hash.
+Timeout/unresolved/incomplete in any slow family remains a failed full-profile run; it may be reported as a
+degraded diagnostic but cannot make the effective pricing graph smaller and still pass.
+
+An EV `reject` may be the correct decision for this sample. A passing sixth-stage record is
+`execution_status=pass` plus independently reproduced `decision=allow|reject` and `decision_reason`; it
+does not force submission. A `bypassed/not-run` stage is a correctness failure and remains in the report.
+
+Pure refactors require exact ordered edge identity, metadata/ownership, funding-provider, action-encoder and
+resolved-state coverage parity. A predeclared activation may add edges but may not delete baseline edges;
+activation deltas are reported separately and never credited as speedup. The trusted producer/comparator and
+fixture must land on main before the challenger freezes and cannot appear in its diff. The challenger
+production-closure diff must add no sentinel tx/block hash/state root, target pools/poolId/tokens, landed
+amounts, calldata, `25585379/25585380/25585381`, tx index `271`, or encoded/derived fixture-metadata
+conditions. A pre-existing generic production pin may remain unchanged only after explicit review.
+Fixture/force/static instance seeds cannot be the sole admission evidence for a target venue. After
+challenger freeze, the same trusted runner also executes undisclosed neighboring/held-out block controls;
+fixture-metadata branching is a failure.
+
+Paired live uses the same complete graph and production policy. After warm/catch-up and before inspecting
+outcomes, the exact eligible paired-block hashes/range are frozen as the denominator. Every block must
+produce either `scanner_done(no_candidate)` or `block_ev_done(candidate)` within 10 seconds.
+`skipped_busy`, timeout, incomplete and missing terminal remain failed samples in that denominator;
+candidate/no-candidate classification cannot be decided by selecting only blocks that finished. The
+historical sentinel remains necessary but cannot substitute for this live timing evidence.
+
+This sentinel is necessary, not sufficient: it covers a UniV3/V4 route and the critical path, not every
+Curve/DODO/receipt/flash family. Full-family conformance, positive/negative cohort output equivalence,
+same-input resource metrics and paired live A/B remain required for the systemic refactor.
+
 The trusted deploy wrapper's fast binding checks the report against the requested experiment, branch, tested base, frozen
 challenger code SHA, input mode, runtime-view declaration, and cheap static bounded-live scope/posture fields.
 It performs no archive lookup, tool discovery, historical classification or replay. Candidate config deltas are forbidden. The

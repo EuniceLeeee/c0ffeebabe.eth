@@ -44,9 +44,12 @@
    只保留 identity、ABI、rounding、calldata 等真实差异，因此应该很轻。
 11. **live 当前/近期状态直接读本地 reth。** Anvil/Revm 用于需要状态变化的 exact solve/final sim；外部 archive
    RPC 只用于本地 pruned reth 无法回答的历史 replay。
-12. **性能目标是激活 family 完整图单轮进入 10 秒以内。** 具体 percentile、窗口和 warm 排除口径需在开工前预声明；
-   六步交易 replay 可诊断阶段，但系统性 scanner/performance 验收必须使用冻结 cohort、输出等价性和
-   paired live A/B。
+12. **性能目标是激活 family 完整图的六个生产阶段在 10 秒内完成。** 固定交易
+   `0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b` 是本轮严格交易级验收：
+   从 `source_head_seen` 到 production EV decision 的 steady-process/fresh-source-state p95 必须
+   `<10,000ms`，每个物理阶段分别记录 wall/cumulative time。该样本是必要条件；系统性
+   scanner/performance 仍必须同时通过完整 cohort、输出等价性和 paired live A/B，不能用单笔 replay 冒充
+   live p95。
 
 ### 0.2 已否决
 
@@ -72,16 +75,45 @@
 - Multicall 与 JSON-RPC batch 的具体分配；
 - 新 head 到来时是立即取消旧 pass，还是让不可取消的短任务 settle 后只运行最新 pending head；
 - state read 失败时，是停止整个完整图扫描，还是继续诊断已解决 edges 并把本轮标成 incomplete；
-- 各阶段内部预算如何分配。唯一已决定的总目标是完整图单轮进入 10 秒以内；
+- 每个 family 内部 read/batch/concurrency 如何分配；§8.4 只冻结完整六阶段总预算，分段耗时先如实记录，
+  不预设可被针对性优化的硬配额；
 - graph discovery 的刷新 cadence、base snapshot 大小与 current-block delta 的实现；
 - 如何证明 `GraphView(N)` 的 completeness watermark 已覆盖到 source block `N`；唯一已定边界是不能用固定
   `T-k` 许可替代这个证明；
-- `<10s` 使用 p95、其他 percentile 还是逐块上限，以及 measured window/warm 排除规则；
 - `skipped_busy=0` 是硬门还是 paired window 的覆盖指标。
 
 ## 1. 两笔证据不能混在一起
 
 ### 1.1 live busy 样本
+
+固定验收交易：
+
+```text
+tx=0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b
+landed_block=25585381
+tx_index=271
+blockscan_source=25585380
+source_hash=0x6cf953cd24df65a1d0505aa661b8361b69178dbc74eb73085e3531df284c8f22
+source_state_root=0x8bb7fd340dc4088cf2572be4915b861e5dc5fe4827da2ad56a7672fbbcae678e
+```
+
+核心本金闭环由 canonical receipt/call trace 独立得到；按 scanner 的 canonical rotation 表示为：
+
+```text
+WETH
+  → UniV3 0xe0554a476a092703abdb3ef35c80e0d76d32939f
+USDC
+  → UniV4 poolId 0x3ea74c37fbb79dfcd6d760870f0f4e00cf4c3960b3259d0d43f211c0547394c1
+WBTC
+  → UniV3 0xe6ff8b9a37b0fab776134636d9981aa778c4e718
+WETH
+```
+
+WBTC/USDT flash 借还是外围 funding shell；残余 WETH unwrap 是利润退出，不是第四条 swap edge。这个 route
+oracle 与 landed amounts 只供运行后的 trusted comparator 使用，不能传给被测 searcher 或 solver。
+在 parent state 对原始 calldata 的独立 replay 曾得到 `+20,602,902,877,952 wei`，所以它可以作为
+`source=25585380` 的 block-scan correctness/performance fixture；landed canonical net
+`-21,825,125,369,329 wei`，因此不能用它宣称“正收益历史交易已修复”。
 
 目标机会需要 source block `25585380`。生产 A 的上一轮 `25585379` 运行了 `28.739s`：
 
@@ -108,7 +140,10 @@ block=25585381 skipped=busy
 - 当前 `skipped=busy` 会整块丢失主动搜索机会；
 - 不能说该 route 被 spread、quote、sim 或 EV 主动拒绝。
 
-隔离估算的约 `9.36bps` 不是 live 拒绝证据。该样本也不是正收益修复样本；它用于验证 busy/latency transition。
+隔离估算的约 `9.36bps` 不是 live 拒绝证据。整笔 landed tx 扣 gas 后为负，因此交易级验收不强迫 EV
+`allow`；它要求搜索器在真实生产 policy 下自然走完六步并输出可复算的 `allow/reject + reason`。本轮把这个
+样本升级为架构等价与 busy/latency 的**必要验收样本**，但它仍不能单独证明系统性 live 性能。
+旧的 61-edge 隔离图、rank 1 和约 `2.548s` graph-only 结果全部排除：它们没有 solver/final-sim/EV，而且减了图。
 
 ### 1.2 tx4cca family 样本
 
@@ -781,6 +816,10 @@ coverage delta。
 
 - `head_seen → state_ready` p50/p95；
 - `head_seen → scanner_done` p50/p95；
+- `head_seen → exact_refine_done` p50/p95；
+- `head_seen → planner_solver_done` p50/p95；
+- `head_seen → final_sim_done` p50/p95；
+- `head_seen → ev_decision` p50/p95；
 - swap/protocol lane wall time与 overlap；
 - unique state keys、calls、batches；
 - timeout/abort/late-result；
@@ -789,18 +828,33 @@ coverage delta。
 - CPU/RSS/provider error；
 - final-sim false-positive。
 
-建议的性能验收草案如下；开工前必须确认 percentile、窗口和 warm 排除口径，届时再把它冻结成机器合同：
+本轮性能合同：
 
 ```text
 同一 active-family manifest，性能比较不减边
 AND agreed warm paired window 的 busy-source coverage 达标
-AND agreed head_seen → scanner_done statistic < 10s
+AND tx055 严格 replay 的 head_seen → EV decision steady-process/fresh-source-state p95 < 10s
+AND 预先冻结的 paired-live eligible exact-block 分母中，每块都在 10s 内产生
+    scanner_done(no_candidate) 或 block_ev_done(candidate)
 AND graph/candidate/final-sim 等价合同通过
-AND state coverage 不劣于 baseline
+AND 完整 active manifest 的 expected current-N state-key/edge coverage exact hash 全部 resolved
 AND activation_delta 单独审计、不计入提速
 ```
 
-没有 paired live A/B，只能写 `implemented_not_validated`。
+paired-live 分母必须在 warm/catch-up 完成后、查看 block outcome 前按 exact block hash/range 封存。
+`skipped_busy`、timeout、incomplete、missing terminal 仍留在分母并直接判该块失败；candidate/no-candidate
+类别只能由完整 production pipeline 的自然边界事件决定，不能用“最终跑完的才算 candidate”做后验筛选。
+
+交易 replay 使用 steady process，但只允许静态 schema、decimals、codehash 与 call descriptor cache
+预热。首轮开始前，manifest 必须封存 `run_count ≥ 20`、seeded A/B 交错顺序、nearest-rank
+`p95 = sorted[ceil(0.95*n)-1]` 算法及 timeout 记法；不得在看到结果后追加快轮拯救 p95，额外运行只能作为
+一轮新的 experiment。每一轮都恢复同一份已封存的 N-1 输入，换代或清空全部 N 相关
+state/mid/refine/amount/plan/sim/EV cache，并重置 clean fork 后复核 pre-state root。每轮必须重新发生
+current-N dynamic reads/batches，计数随原始 `stage_ms/cumulative_ms` 一起留存；不能删掉慢 run，也不能让
+前一轮的 N 结果给后一轮提速。所有 attempted runs 都进入报告，timeout 既保留其 elapsed 又是 correctness
+fail。process startup 与一次性历史数据下载不计入 live hot path，但必须在两边测量前完成且内容哈希相同；
+target-specific prewarm 不允许。没有严格 tx replay 与 paired live A/B 两类证据，只能写
+`implemented_not_validated`。
 
 ### 8.3 架构 conformance
 
@@ -820,82 +874,126 @@ AND activation_delta 单独审计、不计入提速
 负例；高风险 ABI/repayment/rounding 必须有 known-good fork fixture。单个 DODO/Eigenpie fixture 不能代表整个
 universal registry。
 
-### 8.4 六步的角色
+### 8.4 tx055 严格 blind 六步与秒数
 
-六步继续检查：
+本轮把六步统一成 `gates.md` 的 block-scan 物理阶段；A/B equivalence 是六步完成后的比较，不再冒充第六个
+生产阶段：
 
-1. discovery/identity/graph/state/enumeration；
-2. planner/path；
-3. quote/sizing；
-4. plan/fork final sim；
-5. EV；
-6. replay/equivalence。
+| # | 生产阶段 | tx055 通过条件 | 时间口径 |
+|---:|---|---|---|
+| 1 | graph/admission + current-N state | 以 watermark 到 N-1 的完整 production base 为起点，在计时区间内处理 N delta；`GraphView(25585380)` completeness 覆盖 N；完整 active-family graph 自然包含三条腿；由完整 universe+manifest 派生的 expected required state-key/edge exact-set 全部在 N resolved，coverage hash 相同 | `head_seen → state_ready`，记录 wall/cumulative ms |
+| 2 | route enumeration | 完整 ordered route 自然出现在 candidate set，记录自然 rank；不得 append | `state_ready → enumeration_done`，记录 wall/cumulative ms |
+| 3 | exact quote/refine | target 自然被 probe；逐腿 quote/rounding 绑定 N；amount 由 solver 搜索，不取 landed amount | `enumeration_done → exact_refine_done`，记录 wall/cumulative ms |
+| 4 | planner + solver | route 自然进入 solve set，plan count > 0，family/action ownership 正确 | `exact_refine_done → planner_solver_done`，记录 wall/cumulative ms |
+| 5 | resolved-plan clean-fork re-sim | production compiler 现编 calldata；sim success、还贷、无 standing position，记录逐 wei profit/gas | `planner_solver_done → final_sim_done`，记录 wall/cumulative ms |
+| 6 | production EV decision | unchanged production evaluator 必须执行；输出 `execution_status=pass` 与可复算的 `decision=allow|reject`、`decision_reason`。本样本允许正确 reject，禁止把结果写死 | `final_sim_done → ev_decision`，记录 wall/cumulative ms |
 
-它是可运行的诊断与交易级验收，不是部署开关。checker bug 可以人工判为与性能假设无关，但机器失败结果不能改写成
-pass；deterministic family fix 仍需修正可信 harness 后重新通过才能标 fixed。
+唯一硬秒数门是全部六阶段 `head_seen → ev_decision` 的
+steady-process/fresh-source-state p95 `<10,000ms`；每个阶段必须有边界与耗时，但本轮不人为分配
+`4.5s/1.8s/3.2s/0.5s` 等可被逐段做假的配额。历史已证明的只有旧 pass `28.739s` 及其阶段分解；
+第一次严格 full-graph 六步运行必须重新产出 baseline/challenger 秒数。如果总时间不通过，就保留真实
+stage breakdown、资源和错误证据，状态写 `implemented_not_validated` 并讨论工程取舍；不得靠减图、
+目标预热、缓存复用、强制候选或策略放宽制造通过。
 
-### 8.5 定锚交易验收：tx055f 六步 + 秒级时限（用户指定，2026-07-23）
+语义与时间分开记账：可以是 `semantic_status=pass`、`timing_status=fail`，不能把它们折成一个看似成功的
+总状态。冻结后也不得挑有利窗口/percentile、移动计时边界、只取最优 warm blocks 或删除“异常”慢样本。
+如果真实工程结果说明 `<10s` 不合理，只能带完整证据由人重新决定目标或交付边界；新口径从下一轮生效，
+不能追认本轮为 pass。
 
-样本：`0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b`（landed block `25585381`，
-source block **`25585380`** = live 被 `skipped=busy` 跳过的那块，§1.1）。本计划的交易级验收标准 =
-**这笔交易的六步验收在秒级时限内完成**。两面缺一不可：六步全链路证明"主动发现 → 显式处置"，时限证明
-"下次这类块不再整轮跳过"。
+计时使用 monotonic clock，从 production entry 接收 source head 开始，覆盖
+`runtime.prepare(N) → graph/state → enumeration → refine → planner/solver → final sim → EV`。不能在
+warm/mids 完成后才启动 timer，也不能把某个 slow family、graph delta 或 unresolved state 移到计时区间外。
+每次输出 `stage_started_at / stage_finished_at / stage_ms / cumulative_ms`；任何 `bypassed/not-run` 都是 fail。
 
-冻结事实（本轮会话已核，来源见 §1.1 凭据）：核心闭环
-`WBTC → WETH（UniV3 0xe6ff…）→ USDC（UniV3 0xe055…）→ WBTC（UniV4 poolId 0x3ea74c…）`；
-WBTC/USDT 借还是资金外壳，残余 WETH unwrap 是利润退出，均不属核心闭环。mine-time 经济：gross ring
-≈`1.635e-6 ETH`，gas `405,716 × 0.0576 gwei ≈ 2.34e-5 ETH`，net ≈ **−$0.04**（canonical
-bundle-postmortem 一致）；隔离估算 spread ≈`9.36bps` < live `minSpread 10bps`。
-**因此这不是 +EV 样本：验收目标是诚实的显式处置，不是提交 bundle。** 为让它变 submit 而调低
-minSpread/EV 参数 = 验收造假，直接 fail。
+历史数据下载和 process startup 可在 measured window 前完成，因为 live hot path 不执行这两项；但两边必须
+使用相同本地 reth/backend、相同内容寻址的 N-1 base 与相同静态 cache 起点。对该样本，base topology
+completeness watermark 必须是 `25585379`；从 N-1 推进到 `25585380` 的 topology delta、current-N
+dynamic state 与全部六阶段都在计时区间内。若直接预装已经覆盖 N 的 universe，只能作 route/state
+诊断，不能取得本严格 full-pipeline timing pass。
 
-六步逐条通过定义（全部在 source block `25585380` 的 pinned state 上，universe/graph 用截止
-`25585380` 的窗口按标准生产流程构建，无 look-ahead）：
+进程可以 steady，但测量状态必须 fresh：至少 20 轮中的每一轮都恢复同一 N-1 base、清空或 generation-bump
+所有 N 相关动态 cache、重置 clean fork 并复核 pre-state root；只允许复用静态 schema/decimals/codehash/
+call-descriptor cache。每轮记录 fresh dynamic read/batch count，禁止预热目标三个池或复用上一轮 N 的
+state、quote、plan、sim、EV 结果。timer 外只允许清理并恢复 N-1 harness；任何 `forkAt(N)`、source-N
+snapshot/sync/pre-state materialization 或 production per-head backend preparation 都必须发生在
+`head_seen` 后并计时。任一阶段 `bypassed/not-run` 都是 correctness fail，不能从 p95 样本中删除。
 
-| 步 | 通过定义 | 证据形态 |
-|---|---|---|
-| 1 discovery/identity/graph/state | 三个池由标准 admission **自发**进图（frozen universe manifest 可查），当块状态由统一 coordinator 按 lane 流程解析，无 unresolved 遮蔽 | universe manifest + in_graph + state coverage 记录 |
-| 2 planner/path | scanner **自发枚举**出该 3-hop 闭环（candidate 集含其 route fingerprint），非 Adapter Replay 固定路径 | candidate 列表 + route fingerprint |
-| 3 quote/sizing | solver 自主定尺寸，quote 出有符号 spread（复现数字入档，量级应与 ≈9.36bps 对得上；显著偏离即状态或数学缺陷，先修再验） | quote/solve 结构化事件 |
-| 4 plan/fork final sim | 若进入 refine/final-sim 集：fork sim 跑通（ring 真实，毛利为正、含 gas 为负）；若被 ranking/threshold 先行 drop：该 drop 必须是步 5 的显式记录，不允许静默消失 | final-sim 结果或显式 drop 事件 |
-| 5 EV | funnel 记录显式 terminal 决定（预期：threshold/EV reject，含 spread、阈值、route、pools 的结构化事件）——**诚实 reject 就是通过** | terminal 事件（route 级可追溯） |
-| 6 replay/equivalence | 步 1–5 在可信 harness 上确定性复现，且与改造后生产形态在同一 active manifest 下满足 §8.1 等价合同 | replay 记录 + 等价报告 |
+“完整图”也约束状态覆盖，不只约束 edge 数：首轮前只封存 N-1 base 的 expected sets；producer 必须在
+timer 内吸收 N delta 并自行形成 `GraphView(N)`。trusted independent builder 可在 producer 看不到的
+oracle 侧构建 N 的 `expected_required_state_keys`、`expected_priced_edges` 及 hashes，待输出封存后
+post-hoc exact compare。只有 GraphView(N) 的全部 required keys 成功 resolved 且原子发布后才允许发
+`state_ready`。任何 Curve/protocol/其他 slow family 的 timeout/unresolved/incomplete 都只能产生
+degraded diagnostic，不能取得 strict timing pass。
 
-秒级时限（本样本的性能面，绑定 §8.2 冻结口径）：
+### 8.5 Producer/oracle 隔离与反作弊
 
-- 同一 active-family manifest 的完整图（`29,220` 边量级，**不减边**），`head_seen → scanner_done`
-  满足预冻结的 `<10s` 统计口径；
-- paired window 内 `25585379 → 25585380` 型连续重块的 busy-source coverage 达标——即该 pass **真的
-  运行了**，不是推导它会运行。
+当前 `blockscan-hunt` / `ab-canary-gate` 会向 producer 传 `AB_EXPECTED_ROUTE_JSON/POOL_IDS`，并能把 top-K
+外的 expected route 强制 append 到 solve set；这条旧 checker 只能继续做诊断，**不能**为 tx055 严格标准出具
+pass。实施代码冻结前，先在 trusted main 落一个薄的 blind producer + post-hoc comparator；challenger 不得修改
+runner、oracle 或 comparator。
 
-不允许的通过方式（检测到任意一条即整案 fail，对应 §0.2 已否决项）：
+```text
+trusted oracle builder
+  receipt + call trace + source block
+  → sealed route oracle + oracle SHA
+                         ┐
+blind producer           │  producer 完成并封存 output 后
+  source block/hash/root │
+  full universe/config   ├→ trusted comparator post-hoc match
+  active manifest/backend│
+  → natural outputs      ┘
+```
 
-- **hardcode/注入**：注入 target tx、pair、pool、poolId、route、amount；force-include；为该路线加
-  allowlist、seed 或 `main.ts` 特判（§9 已明确非目标）；
-- **减图**：降 top-N、缩 universe、移除/跳过 slow family 或 lane、把该块换成更小的图；用
-  `activation_delta` 挪走慢边再声称达标（违反 §0.1.1）；
-- **参数硬凑**：调低 minSpread/EV gate 制造 submit；缩小 pass 预算让 scanner 带着 incomplete state
-  提前进场（违反 §8.3.7）；
-- **时钟/状态作弊**：事后放宽 warm 排除口径；预灌 `25585380` 的状态 cache（动态状态必须按当块 `N`
-  流程获得，§0.1.6）；
-- **以 Adapter Replay 冒充步 2 的自发枚举**（§0.2 已否决）。
+机器必须断言：
 
-时限不达标的正确处置（用户拍板，2026-07-23）：若诚实优化后 `<10s` 冻结口径仍不达标，唯一正确出口是
-**如实写 fail + 升级人工讨论**——附阶段耗时分解与瓶颈归因（哪个 lane、哪类 family、read/decode/derive
-各占多少），由人决定调整目标口径、换实现路线或分阶段交付。明确禁止两类反应：
+1. producer argv/env 不含 tx hash、winner hash、expected route/pools/tokens/factory、amount、search center、
+   rank、calldata、`AB_EXPECTED_*` 或同义字段；tx hash 只存在于外层 manifest/oracle/comparator。producer
+   使用隔离的 effective config：禁用仓库 `.env` 二次加载或运行在无该文件的干净 cwd，并在所有 config
+   loader 完成后再次封存/审计 normalized effective config，不能只清启动 shell 的 env；
+2. `selection_mode=production`、`forced_selection_count=0`；target 必须自然通过 production candidate/refine/solve
+   caps，top-K 外不得 append。若自然 rank 不够或在 final sim 前被 threshold 丢弃就是 fail，不能把 early
+   drop 冒充“六步完成”；
+3. 不使用 fixture edge/pool/route preload、force-include、target pin、target-specific warm、storage override、
+   中间 token balance 预置或只含三池的隔离 universe；
+4. runner 必须包装实际 production entry 的
+   `AdapterRuntimeCoordinator → scanner/refine → planner/solver → final sim → EV` import closure 与正式
+   deployment config resolver，不能复制一份“长得像 production”的验收管道；manifest 绑定 production
+   entry SHA、通用 universe builder SHA/range/input hashes、独立重建的 universe hash、normalized config、
+   active-family manifest、backend 与 source hash/root；
+5. `normalized config` 必须来自当前标准 live A 进程在全部 env/config loader 完成后的实际 resolved dump，
+   并绑定其 capture SHA；至少包括 universe top-N/view max、candidate/refine/solve caps、deadlines、
+   concurrency 与 active-family manifest。baseline/challenger 除预声明的 historical source/backend
+   substitutions 外逐字节相同；不能让两边一起退回较小的源码 fallback。secret value 不写入报告，
+   只绑定脱敏后的 provider class/endpoint identity 与 secret-presence hash；
+6. 通用 production discovery 先生成 completeness watermark 到 `25585379` 的 base；baseline/challenger
+   byte-identical，并在 timer 内处理 source N=`25585380` delta。实例只能由生产 discovery/identityProof
+   准入；fixture、force/static instance seed 不能成为某 route venue 的唯一来源（通用 infra singleton
+   仅可作为显式审查过的例外）；
+7. 不减图：纯重构要求 ordered edge identity exact-set 相同；若有预声明新激活，只允许
+   `baseline_edges ⊆ challenger_edges`，新增逐项列出，零删除；另比较 metadata/ownership、funding providers、
+   ActionAdapter closure 与完整 current-N resolved-state coverage exact hash，不能只比 edge count；
+8. solver 自选 route amount/flash amount，production compiler 现编 calldata；landed amounts/calldata 只能在
+   producer 输出封存后作 oracle；
+9. trusted comparator 从 raw output 重算 route match、sim balance delta 与 EV；challenger 自报的
+   `matched/pass` 不算证据；
+10. runner/oracle/comparator 必须先进入 trusted main 且不在 challenger diff；challenger production closure
+   的新增文本/常量扫描不得出现 sentinel tx、source hash/root、目标 poolId/address、token 序列、landed
+   amounts、calldata、`25585379/25585380/25585381`、`txIndex=271` 或其编码/派生条件。已有通用
+   production pin 只能保持原样并逐项审查，不能因本样本新增；challenger freeze 后，trusted runner 还要用
+   未提前披露的邻块/held-out block controls 检测 fixture-metadata 条件分支；
+11. 每轮报告 dynamic-cache generation/reset、fresh reads/batches、clean-fork id/pre-state root 与全部 output
+    hashes，证明测到的不是上一轮同一历史块的缓存命中。
 
-1. **强制压缩**——为过时限牺牲正确性或覆盖（减边、跳 lane、带 incomplete state 提前进场——即上表
-   禁止清单的任何一条以"性能优化"名义重现）；
-2. **工程化假通过**——用看起来严谨的手法制造达标假象：挑有利窗口或 percentile、事后改统计口径、把慢
-   阶段挪出计时段、只测 warm 后的最优块、选择性剔除"异常"样本。测量口径一旦按 §8.2 冻结，任何放宽都
-   必须人工批准并在报告里显式标注，不得静默。
+本样本不允许 acceptance-only 调低 `minSpread`/EV、提高 candidate/rank cap 或放宽 deadline。若某个通用参数确实
+需要修改，它必须成为真实 production diff，并独立通过候选分布、资源和 paired A/B；在此之前不能帮助本次 strict
+run 通过。
 
-六步语义面与时间面**分开评定、如实分开记录**：语义六步可以先 pass 而时间面 fail——这是合法的诚实
-中间态，好于任何一种假 pass。
+当前 harness 还缺逐阶段 elapsed，且 V4 matcher 没从 `v4PoolKey.currency0/currency1` 推导方向。这两项必须作为
+通用 trusted-harness 修复先进入 main：不能为该 poolId 写特判，也不能在 challenger 中顺手修改验收器。
 
-证据边界（与 §1.1 一致）：本案通过 = busy/latency transition 完成 + "主动发现、主动放弃、有记录"链路
-建成。它**不**证明 +EV 能力，**不**替代 tx4cca 的 family 验收，两条证据链不得互引为因果。在 paired
-live A/B 出结果前，本案状态最多写 `implemented_not_validated`。
+tx055 strict blind six-step 是本轮必要条件，不是充分条件。它覆盖 UniV3/V4 与完整 block-scan critical path，
+不能代表 Curve、DODO、receipt-deposit、flash provider 等全部 family；§8.1–8.3 的全量 conformance、cohort
+和 paired live A/B 仍是完成门。六步仍不是 deploy 启动开关，但用户已将它明确选为本次 merge/验收合同。
 
 ## 9. 非目标
 
@@ -944,9 +1042,9 @@ final-sim/accounting assertions
 7. `main.ts`、graph、planner、quoter、solver、plan-builder、live backend 不含 venue/provider-specific
    production 分支；
 8. 一个 family runtime coordinator；route-price 只有 swap/protocol 两 lane，flash 作为 typed funding product；
-9. active-family 完整 graph paired live 达到预先冻结的 `<10s` 统计口径；
-10. busy-source coverage 达到预先冻结的 paired-window 门；
-11. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过；
-12. §8.5 定锚交易验收（tx055f 六步 + 秒级时限）通过，且未触发其任何禁止通过方式。
+9. tx055 strict blind 六步全部执行、post-hoc 匹配、steady-process/fresh-source-state p95 `<10s`，且反作弊断言全绿；
+10. active-family 完整 graph paired live 达到预先冻结的 `<10s` 统计口径；
+11. busy-source coverage 达到预先冻结的 paired-window 门；
+12. registry conformance、语义等价、state coverage、资源与 reviewer verdict 全部通过。
 
 在此之前，准确状态只能是计划或 `implemented_not_validated`，不能写 busy fixed，也不能写 live performance 已验收。
