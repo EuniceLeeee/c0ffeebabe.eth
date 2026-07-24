@@ -300,50 +300,56 @@ export async function resolveV4InitsBackward(
     ? Math.max(1, Math.floor(chunkSize))
     : 100_000;
   let chunkEnd = Math.max(0, Math.floor(searchFromBlock));
-  while (
-    remainingBlocks > 0 &&
-    chunkEnd >= 0 &&
-    remainingById.size > 0
-  ) {
+  const ranges: Array<{ fromBlock: number; toBlock: number }> = [];
+  while (remainingBlocks > 0 && chunkEnd >= 0) {
     const blockCount = Math.min(
       normalizedChunkSize,
       remainingBlocks,
       chunkEnd + 1,
     );
     const chunkStart = chunkEnd - blockCount + 1;
-    for (const group of chunks([...remainingById], 64)) {
-      const indexedPoolIds: string | readonly string[] =
-        group.length === 1 ? group[0] : group;
+    ranges.push({ fromBlock: chunkStart, toBlock: chunkEnd });
+    remainingBlocks -= blockCount;
+    chunkEnd = chunkStart - 1;
+  }
+  const requests = ranges.flatMap((range) =>
+    chunks(requested, 64).map((poolIdGroup) => ({
+      ...range,
+      poolIdGroup,
+    }))
+  );
+  const historicalLogs = await mapLimit(requests, 8, async (request) => {
+      const indexedPoolIds: string | readonly string[] = request.poolIdGroup.length === 1
+        ? request.poolIdGroup[0]
+        : request.poolIdGroup;
       const filter = {
         address: poolManagerAddr,
         topics: [topic, indexedPoolIds],
-        fromBlock: chunkStart,
-        toBlock: chunkEnd,
+        fromBlock: request.fromBlock,
+        toBlock: request.toBlock,
       } as const;
-      let logs: readonly LandedPoolDiscoveryLog[];
       try {
-        logs = await backend.getLogs(filter, { signal });
+        return await backend.getLogs(filter, { signal });
       } catch (error) {
-        if (isPrunedHistoryError(error)) return resolved;
+        if (isPrunedHistoryError(error)) return [];
         try {
-          logs = await backend.getLogs(filter, { signal });
+          return await backend.getLogs(filter, { signal });
         } catch (retryError) {
-          if (isPrunedHistoryError(retryError)) return resolved;
+          if (isPrunedHistoryError(retryError)) return [];
           throw retryError;
         }
       }
-      for (const log of logs) {
-        const parsed = {
-          ...parseV4InitializeLog(log),
-          source: "v4-initialize-backfill" as const,
-        };
-        if (!remainingById.has(parsed.poolId)) continue;
-        resolved.set(parsed.poolId, parsed);
-        remainingById.delete(parsed.poolId);
-      }
+  });
+  for (const logs of historicalLogs) {
+    for (const log of logs) {
+      const parsed = {
+        ...parseV4InitializeLog(log),
+        source: "v4-initialize-backfill" as const,
+      };
+      if (!remainingById.has(parsed.poolId)) continue;
+      resolved.set(parsed.poolId, parsed);
+      remainingById.delete(parsed.poolId);
     }
-    remainingBlocks -= blockCount;
-    chunkEnd = chunkStart - 1;
   }
   return resolved;
 }

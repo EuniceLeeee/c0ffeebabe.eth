@@ -485,7 +485,8 @@ if [ "$REINDEX_HEAD" -gt 0 ] && [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
    && [ -s "$REINDEX_MANIFEST" ]; then
   say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, head=$REINDEX_HEAD, $((REINDEX_HEAD - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
 elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"; \
-   timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+   timeout 600 flock -w 30 /run/lock/mev-pooluniverse.lock \
+       env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
        POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS="$REINDEX_V4_BACKFILL" \

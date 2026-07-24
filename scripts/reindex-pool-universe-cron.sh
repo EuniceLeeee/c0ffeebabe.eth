@@ -10,6 +10,12 @@ OUT_MANIFEST="$OUT.manifest.json"
 TMP_MANIFEST="$TMP.manifest.json"
 RETAIN="${POOL_UNIVERSE_RETAIN_PATH:-$OUT}"
 LOG=/var/log/mev-pooluniverse-cron.log
+LOCK=/run/lock/mev-pooluniverse.lock
+exec 9>"$LOCK"
+if ! flock -n 9; then
+  echo "=== $(date -u +%FT%TZ) reindex skipped: another universe build owns $LOCK ===" >> "$LOG"
+  exit 0
+fi
 cd "$REPO/listener" || exit 0
 echo "=== $(date -u +%FT%TZ) reindex start ===" >> "$LOG"
 if timeout 540 env MAINNET_RPC_URL=http://127.0.0.1:8545 \

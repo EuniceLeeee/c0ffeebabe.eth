@@ -1249,7 +1249,8 @@ prepare_candidate_universes() {
   rm -f "$universe_tmp" "$universe_manifest_tmp"
   (
     cd "$WT/listener"
-    timeout 900 env -i \
+    timeout 900 flock -w 30 /run/lock/mev-pooluniverse.lock \
+      env -i \
       PATH="$PATH" HOME="${HOME:-/root}" \
       MAINNET_RPC_URL="$LOCAL_RPC" \
       POOL_UNIVERSE_FROM_BLOCK="$from_block" \
