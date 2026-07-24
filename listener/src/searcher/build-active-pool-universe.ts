@@ -134,21 +134,38 @@ async function main(): Promise<void> {
   const logProvider = logRpcUrl
     ? new ethers.JsonRpcProvider(logRpcUrl)
     : provider;
+  const historicalLogRpcUrl =
+    process.env.POOL_UNIVERSE_HISTORY_LOG_RPC_URL;
+  const historicalLogProvider = historicalLogRpcUrl
+    ? new ethers.JsonRpcProvider(
+        historicalLogRpcUrl,
+        undefined,
+        { batchMaxCount: 1 },
+      )
+    : logProvider;
 
   const latest = Number(process.env.POOL_UNIVERSE_TO_BLOCK ?? await provider.getBlockNumber());
-  const [initialStateHeader, initialLogHeader] = await Promise.all([
+  const [
+    initialStateHeader,
+    initialLogHeader,
+    initialHistoricalLogHeader,
+  ] = await Promise.all([
     provider.getBlock(latest),
     logProvider.getBlock(latest),
+    historicalLogProvider.getBlock(latest),
   ]);
   if (
     !initialStateHeader?.hash ||
     !initialStateHeader.stateRoot ||
     !initialLogHeader?.hash ||
+    !initialHistoricalLogHeader?.hash ||
     initialStateHeader.hash.toLowerCase() !==
-      initialLogHeader.hash.toLowerCase()
+      initialLogHeader.hash.toLowerCase() ||
+    initialStateHeader.hash.toLowerCase() !==
+      initialHistoricalLogHeader.hash.toLowerCase()
   ) {
     throw new Error(
-      "pool-universe state/log RPCs disagree at the frozen toBlock",
+      "pool-universe state/activity/history RPCs disagree at the frozen toBlock",
     );
   }
   const frozenBlockHash = initialStateHeader.hash;
@@ -221,7 +238,12 @@ async function main(): Promise<void> {
 
   const landed = await discoverLandedPools({
     registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
-    backend: ethersPoolDiscoveryBackend(stateProvider, logProvider),
+    backend: createSplitHorizonPoolDiscoveryBackend(
+      stateProvider,
+      logProvider,
+      historicalLogProvider,
+      fromBlock,
+    ),
     fromBlock,
     toBlock: latest,
     batchSize: logBatch,
@@ -390,16 +412,24 @@ async function main(): Promise<void> {
     pools: [...poolByKey.values()],
   };
 
-  const [finalStateHeader, finalLogHeader] = await Promise.all([
+  const [
+    finalStateHeader,
+    finalLogHeader,
+    finalHistoricalLogHeader,
+  ] = await Promise.all([
     provider.getBlock(latest),
     logProvider.getBlock(latest),
+    historicalLogProvider.getBlock(latest),
   ]);
   if (
     !finalStateHeader?.hash ||
     !finalStateHeader.stateRoot ||
     !finalLogHeader?.hash ||
+    !finalHistoricalLogHeader?.hash ||
     finalStateHeader.hash.toLowerCase() !== frozenBlockHash.toLowerCase() ||
     finalLogHeader.hash.toLowerCase() !== frozenBlockHash.toLowerCase() ||
+    finalHistoricalLogHeader.hash.toLowerCase() !==
+      frozenBlockHash.toLowerCase() ||
     finalStateHeader.stateRoot.toLowerCase() !== frozenStateRoot.toLowerCase()
   ) {
     throw new Error(
@@ -570,13 +600,19 @@ function pinnedRpcTransaction(
   return transaction;
 }
 
-function ethersPoolDiscoveryBackend(
-  stateProvider: ethers.JsonRpcProvider,
-  logProvider: ethers.JsonRpcProvider = stateProvider,
+export function createSplitHorizonPoolDiscoveryBackend(
+  stateProvider: Pick<ethers.JsonRpcProvider, "call" | "getCode" | "send">,
+  logProvider: Pick<ethers.JsonRpcProvider, "send"> = stateProvider,
+  historicalLogProvider: Pick<ethers.JsonRpcProvider, "send"> = logProvider,
+  historicalBeforeBlock = 0,
 ): LandedPoolDiscoveryReadBackend {
   return {
     getLogs(filter: LandedPoolDiscoveryLogFilter) {
-      return logProvider.send("eth_getLogs", [{
+      const selectedLogProvider =
+        filter.fromBlock < historicalBeforeBlock
+          ? historicalLogProvider
+          : logProvider;
+      return selectedLogProvider.send("eth_getLogs", [{
         ...(filter.address === undefined ? {} : { address: filter.address }),
         topics: [...filter.topics],
         fromBlock: ethers.toQuantity(filter.fromBlock),

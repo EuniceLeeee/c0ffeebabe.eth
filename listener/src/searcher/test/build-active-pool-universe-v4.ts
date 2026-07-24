@@ -21,6 +21,9 @@ import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import { univ4Adapter } from "../venues/swaps/univ4.js";
 import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "../venues/swaps/univ4-common.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
+import {
+  createSplitHorizonPoolDiscoveryBackend,
+} from "../build-active-pool-universe.js";
 
 const initIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
@@ -170,6 +173,50 @@ function assertInlineV4Fields(entry: PoolUniverseEntry): void {
 }
 
 async function main(): Promise<void> {
+  const activityLogCalls: LandedPoolDiscoveryLogFilter[] = [];
+  const historicalLogCalls: LandedPoolDiscoveryLogFilter[] = [];
+  const splitBackend = createSplitHorizonPoolDiscoveryBackend(
+    {
+      async call() {
+        return "0x";
+      },
+      async getCode() {
+        return "0x";
+      },
+      async send() {
+        throw new Error("state provider must not serve pool discovery logs");
+      },
+    } as unknown as ethers.JsonRpcProvider,
+    {
+      async send(_method: string, params: unknown[]) {
+        activityLogCalls.push(params[0] as LandedPoolDiscoveryLogFilter);
+        return [];
+      },
+    } as unknown as ethers.JsonRpcProvider,
+    {
+      async send(_method: string, params: unknown[]) {
+        historicalLogCalls.push(params[0] as LandedPoolDiscoveryLogFilter);
+        return [];
+      },
+    } as unknown as ethers.JsonRpcProvider,
+    100,
+  );
+  await splitBackend.getLogs({
+    topics: [initializeTopic],
+    fromBlock: 100,
+    toBlock: 110,
+  });
+  await splitBackend.getLogs({
+    topics: [initializeTopic],
+    fromBlock: 50,
+    toBlock: 99,
+  });
+  assert(
+    activityLogCalls.length === 1 && historicalLogCalls.length === 1,
+    "split-horizon backend should keep the activity window local and route only old logs to history",
+  );
+  console.log("[pool-universe-v4] split-horizon activity/history log routing: PASS");
+
   const aboveA = poolFixture(address(0x1001), address(0x1002), 500, 10, address(0));
   const below = poolFixture(address(0x2001), address(0x2002), 3000, 60, address(0x9999));
   const aboveB = poolFixture(address(0x3001), address(0x3002), 100, 1, address(0x7777));
@@ -479,7 +526,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (9/9)");
+  console.log("pool-universe-v4 PASS (10/10)");
 }
 
 main().catch((err) => {
