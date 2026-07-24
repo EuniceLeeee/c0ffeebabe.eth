@@ -794,6 +794,14 @@ async function main(): Promise<void> {
   const blockScanLargeGraphEdgeThreshold = Number.isFinite(blockScanLargeGraphEdgeThresholdRaw)
     ? Math.max(1, Math.floor(blockScanLargeGraphEdgeThresholdRaw))
     : 20_000;
+  const blockScanStartupWarmBudgetRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS ?? "120000",
+  );
+  const blockScanStartupWarmBudgetMs =
+    Number.isSafeInteger(blockScanStartupWarmBudgetRaw) &&
+      blockScanStartupWarmBudgetRaw > 0
+      ? blockScanStartupWarmBudgetRaw
+      : 120_000;
   const blockScanSolveReserveRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000",
   );
@@ -1931,6 +1939,8 @@ async function main(): Promise<void> {
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
+    startupWarmEnabled: enableBlockScan && !blindProductionAudit,
+    startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
     refineCandidates: blockScanRefineCandidates,
     solveReserveMs: blockScanSolveReserveMs,
     midConcurrency: blockScanMidConcurrency,
@@ -2283,6 +2293,10 @@ async function main(): Promise<void> {
       "block",
       (blockNumber: number) => blockScanRuntimeLoop.schedule(blockNumber),
     );
+    // Close the listener-registration race and warm from the current canonical
+    // head rather than the early startup discovery anchor. The runtime loop
+    // owns discovery/CAS and retries fail-closed without taking down backrun.
+    blockScanRuntimeLoop.schedule(await provider.getBlockNumber());
   }
 
   // Track the latest mined block from the WS newHeads stream so the per-hint hot

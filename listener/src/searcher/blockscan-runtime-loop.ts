@@ -183,6 +183,10 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
   readonly passBudgetMs: number;
+  /** Explicitly enabled only by the ordinary live runtime. */
+  readonly startupWarmEnabled: boolean;
+  /** One-time ordinary-live budget for the first current-head runtime snapshot. */
+  readonly startupWarmBudgetMs: number;
   readonly refineCandidates: number;
   readonly solveReserveMs: number;
   readonly midConcurrency: number;
@@ -218,11 +222,14 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
  */
 export class BlockScanRuntimeLoop<PreparedDiscovery> {
   private generation = 0;
+  private startupWarmPending: boolean;
   private readonly scheduler: LatestHeadScheduler;
 
   constructor(
     private readonly deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery>,
   ) {
+    this.startupWarmPending =
+      deps.startupWarmEnabled && !deps.blind.enabled;
     this.scheduler = new LatestHeadScheduler(
       this.runHead,
       (blockNumber, error) => {
@@ -247,6 +254,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
 
   currentGeneration(): number {
     return this.generation;
+  }
+
+  isStartupWarmPending(): boolean {
+    return this.startupWarmPending;
   }
 
   stopExecutionWorkers(): void {
@@ -282,19 +293,28 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     const passStarted = sourceHead.sourceHeadSeenAtMonotonicMs;
     const passStartedAtMs = sourceHead.sourceHeadSeenAtMs;
     const passWorkerStartedAtMs = Date.now();
+    const startupWarmAttempt =
+      this.startupWarmPending && !this.deps.blind.enabled;
     const passTimeline = new BlockScanPassTimeline(passStartedAtMs);
     const timing = passTimeline.timing;
     const stageBoundaries = passTimeline.boundaries;
     const beginStage = passTimeline.begin.bind(passTimeline);
     const finishStage = passTimeline.finish.bind(passTimeline);
     const mergeAtomicStage = passTimeline.mergeAtomic.bind(passTimeline);
-    const passDeadlineAtMs = passStartedAtMs + (
+    const hotPassDeadlineAtMs = passStartedAtMs + (
       blockScanGraph.length >= this.deps.largeGraphEdgeThreshold
         ? this.deps.largeGraphPassBudgetMs
         : this.deps.passBudgetMs
     );
+    const passDeadlineAtMs = startupWarmAttempt
+      ? Math.max(
+          hotPassDeadlineAtMs,
+          passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
+        )
+      : hotPassDeadlineAtMs;
     let outcome:
       | "ran"
+      | "startup_warm"
       | "degraded"
       | "skipped_busy"
       | "stale_state"
@@ -394,6 +414,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           ? "positive_quote_without_atomic_decision"
           : "no_positive_quote");
       const structuredFields = {
+        startup_warm: startupWarmAttempt,
         source_head_seen_at_ms: passStartedAtMs,
         scheduler_queue_ms: Math.max(
           0,
@@ -758,6 +779,25 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       runtimeSourceBlock = snapshot.sourceBlock;
       blockScanPlanner.setFlashLiquidity(snapshot.funding);
       this.deps.sharedPlanner.setFlashLiquidity(snapshot.funding);
+      if (startupWarmAttempt) {
+        // A current-head complete/degraded publication is a valid incremental
+        // predecessor for the healthy state keys. Do not enumerate this
+        // one-time, non-steady-state head; the latest-head scheduler retains
+        // any newer head that arrived while preparation was running.
+        this.startupWarmPending = false;
+        outcome = "startup_warm";
+        skippedReason = `startup_warm_${runtime.status}`;
+        console.log(
+          `[searcher/blockscan-startup-warm] ${JSON.stringify({
+            sourceBlock: snapshot.sourceBlock,
+            generation: snapshot.generation,
+            status: runtime.status,
+            wallMs: Math.max(0, Date.now() - passWorkerStartedAtMs),
+            issueCount: runtime.issues.length,
+          })}`,
+        );
+        return;
+      }
 
       beginStage("enumeration");
       const coarse = detectProductionBlockScanOpportunities({

@@ -635,6 +635,37 @@ assert.equal(
   "Swap-only current-N publication preserves the prior canonical tick cache",
 );
 
+// Ordinary-live startup may finish more than the bounded mutation window after
+// its early discovery anchor. That old snapshot is never treated as N-1: the
+// first current-head generation must use full direct reads, after which normal
+// incremental refresh can resume.
+coordinator.resetDynamicStateForReplay();
+backend.mutationMode = "unchanged";
+backend.physicalReads.length = 0;
+const staleStartupBase = await prepare(30, FIRST_BLOCK + 30, hash(30));
+assert.equal(staleStartupBase.status, "complete");
+assert.equal(backend.physicalReads.length, 4);
+backend.physicalReads.length = 0;
+backend.mutationFamilies.length = 0;
+const distantCurrentHead = await prepare(31, FIRST_BLOCK + 70, hash(31));
+assert.equal(distantCurrentHead.status, "complete");
+assert.equal(
+  backend.physicalReads.length,
+  4,
+  "a D+40 current head must full-refresh instead of carrying stale startup state",
+);
+assert.equal(
+  backend.mutationFamilies.length,
+  0,
+  "an ineligible mutation range must not be queried as if it were N-1",
+);
+assert(
+  distantCurrentHead.familyTelemetry?.every(
+    (family) => family.fullFallbackReason === "mutation-range-ineligible",
+  ),
+  "family telemetry must explain the D+40 full direct refresh",
+);
+
 console.log("v2-v3-incremental-state + backrun bridge PASS");
 
 async function prepare(
