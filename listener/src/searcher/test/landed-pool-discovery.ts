@@ -664,6 +664,48 @@ assert(
   "union and per-event discovery must publish identical ordered output",
 );
 
+let activeUnionSlices = 0;
+let maxActiveUnionSlices = 0;
+const parallelUnion = await discoverLandedPools({
+  registry: addressRegistry.landedPoolDiscovery(),
+  backend: {
+    async getLogs(filter) {
+      activeUnionSlices++;
+      maxActiveUnionSlices = Math.max(
+        maxActiveUnionSlices,
+        activeUnionSlices,
+      );
+      try {
+        await new Promise((resolveDelay) =>
+          setTimeout(resolveDelay, (103 - filter.fromBlock) * 5)
+        );
+        return [{
+          ...log(addressTopic, ethers.zeroPadValue(pool, 32)),
+          blockNumber: filter.fromBlock,
+        }];
+      } finally {
+        activeUnionSlices--;
+      }
+    },
+    async call() {
+      throw new Error("parallel generic discovery must not call");
+    },
+  },
+  fromBlock: 100,
+  toBlock: 103,
+  batchSize: 1,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  topicScanMode: "union",
+  strict: true,
+});
+assert(
+  maxActiveUnionSlices === 4 &&
+    parallelUnion.activity.get(pool.toLowerCase())?.count === 4 &&
+    parallelUnion.activity.get(pool.toLowerCase())?.lastSwapBlock === 103,
+  "union slices must read concurrently but fold deterministically in block order",
+);
+
 const mixedActivity = new Map<string, LandedPoolActivity>([
   ["v2-only", {
     address: pool,

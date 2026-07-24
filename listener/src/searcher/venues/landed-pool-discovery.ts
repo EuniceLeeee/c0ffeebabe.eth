@@ -516,43 +516,59 @@ async function discoverLandedPoolsByTopicUnion(input: {
   const unionIssues: string[] = [];
   let unionComplete = true;
   const topics = [...descriptorsByTopic.keys()].sort();
+  const ranges: Array<{ fromBlock: number; toBlock: number }> = [];
   for (
     let start = input.fromBlock;
     start <= input.toBlock;
     start += input.batchSize
   ) {
-    const end = Math.min(start + input.batchSize - 1, input.toBlock);
-    const slice = await scanFilterSlice(
-      input.backend,
-      {
-        topics: [topics],
-        fromBlock: start,
-        toBlock: end,
-      },
-      input.signal,
+    ranges.push({
+      fromBlock: start,
+      toBlock: Math.min(start + input.batchSize - 1, input.toBlock),
+    });
+  }
+  // Local reth traverses the same receipts/index range for every slice. Four
+  // independent range reads keep that work parallel without retaining the
+  // whole historical result in memory. Results are still folded in block
+  // order, preserving the previous deterministic insertion/tie behavior.
+  for (let groupStart = 0; groupStart < ranges.length; groupStart += 4) {
+    const slices = await Promise.all(
+      ranges.slice(groupStart, groupStart + 4).map((range) =>
+        scanFilterSlice(
+          input.backend,
+          {
+            topics: [topics],
+            fromBlock: range.fromBlock,
+            toBlock: range.toBlock,
+          },
+          input.signal,
+        )
+      ),
     );
-    unionComplete &&= slice.complete;
-    unionIssues.push(...slice.issues);
-    for (const log of slice.logs) {
-      const topic = log.topics[0]?.toLowerCase();
-      if (!topic) continue;
-      for (const descriptor of descriptorsByTopic.get(topic) ?? []) {
-        if (!landedEmitterMatches(descriptor.event, log)) continue;
-        logCountsByEventId.set(
-          descriptor.event.id,
-          (logCountsByEventId.get(descriptor.event.id) ?? 0) + 1,
-        );
-        if (descriptor.materializer) {
-          materializerLogs.get(descriptor.event.id)?.push(log);
-        } else if (!recordGenericActivity(
-          genericActivityByEventId.get(descriptor.event.id)!,
-          descriptor.event,
-          log,
-        )) {
-          unionComplete = false;
-          unionIssues.push(
-            `${descriptor.event.id}: landed event could not be materialized as an address`,
+    for (const slice of slices) {
+      unionComplete &&= slice.complete;
+      unionIssues.push(...slice.issues);
+      for (const log of slice.logs) {
+        const topic = log.topics[0]?.toLowerCase();
+        if (!topic) continue;
+        for (const descriptor of descriptorsByTopic.get(topic) ?? []) {
+          if (!landedEmitterMatches(descriptor.event, log)) continue;
+          logCountsByEventId.set(
+            descriptor.event.id,
+            (logCountsByEventId.get(descriptor.event.id) ?? 0) + 1,
           );
+          if (descriptor.materializer) {
+            materializerLogs.get(descriptor.event.id)?.push(log);
+          } else if (!recordGenericActivity(
+            genericActivityByEventId.get(descriptor.event.id)!,
+            descriptor.event,
+            log,
+          )) {
+            unionComplete = false;
+            unionIssues.push(
+              `${descriptor.event.id}: landed event could not be materialized as an address`,
+            );
+          }
         }
       }
     }
