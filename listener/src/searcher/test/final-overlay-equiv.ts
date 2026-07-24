@@ -12,7 +12,10 @@ import { resolveErc20BalanceSlot } from "../solver/balance-slots.js";
 import { PoolStateCache, type PostImpactSeed } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
 import { postImpactStateOverrides } from "../solver/post-impact-overrides.js";
-import { encodeUniV4QuoteExactInputSingle, uniV4QuoterIface } from "../solver/quoter.js";
+import {
+  encodeUniV4QuoteExactInputSingle,
+  uniV4QuoterIface,
+} from "../venues/swaps/univ4.js";
 import { applyVictimSwapLocally } from "../solver/victim-apply.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { QuoteRequest, QuoteResult } from "../live-state-backend.js";

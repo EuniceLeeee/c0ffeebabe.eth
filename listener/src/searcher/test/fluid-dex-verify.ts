@@ -15,7 +15,11 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
-import { fluidDexSwapIface, quote, FLUID_DEX_ADDRESS_DEAD } from "../solver/quoter.js";
+import { quote } from "../solver/quoter.js";
+import {
+  FLUID_DEX_ADDRESS_DEAD,
+  fluidDexSwapIface,
+} from "../venues/swaps/fluid-dex.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { DEFAULT_SEARCHER_EXECUTOR } from "../../shared/executor/botvm-executor.js";

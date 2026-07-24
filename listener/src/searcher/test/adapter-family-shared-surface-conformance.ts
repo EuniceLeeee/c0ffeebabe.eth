@@ -89,6 +89,11 @@ const LEGACY_BINDINGS = new Set([
   "PRODUCTION_ROUTE_ADAPTERS",
 ]);
 
+const SHARED_FAMILY_INFRA = new Set([
+  "src/searcher/venues/funding/funding-capability.ts",
+  "src/searcher/venues/funding/flash-loan-framework.ts",
+]);
+
 function loadProgram(): {
   readonly program: ts.Program;
   readonly checker: ts.TypeChecker;
@@ -600,26 +605,37 @@ function scanImports(
 ): Finding[] {
   const findings: Finding[] = [];
   for (const statement of source.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier)
-    ) {
-      continue;
-    }
-    const specifier = statement.moduleSpecifier.text;
+    const moduleSpecifier = ts.isImportDeclaration(statement)
+      ? statement.moduleSpecifier
+      : ts.isExportDeclaration(statement)
+        ? statement.moduleSpecifier
+        : undefined;
+    if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier)) continue;
+    const specifier = moduleSpecifier.text;
     const resolved = resolveTsImport(source.fileName, specifier);
-    if (resolved && familySources.has(resolved)) {
+    if (
+      resolved &&
+      (
+        familySources.has(resolved) ||
+        isFamilyOwnedImplementation(resolved)
+      )
+    ) {
       addFinding(
         findings,
         source,
         statement,
         "family-direct-import",
-        `direct family module import ${JSON.stringify(specifier)}`,
+        `direct family module import/export ${JSON.stringify(specifier)}`,
       );
     }
     if (
       LEGACY_MODULE_PATTERNS.some((pattern) => pattern.test(specifier)) ||
-      importedBindings(statement).some((binding) => LEGACY_BINDINGS.has(binding))
+      (
+        ts.isImportDeclaration(statement) &&
+        importedBindings(statement).some((binding) =>
+          LEGACY_BINDINGS.has(binding)
+        )
+      )
     ) {
       addFinding(
         findings,
@@ -631,6 +647,17 @@ function scanImports(
     }
   }
   return findings;
+}
+
+function isFamilyOwnedImplementation(path: string): boolean {
+  const relativePath = relative(LISTENER_ROOT, path).replaceAll("\\", "/");
+  if (SHARED_FAMILY_INFRA.has(relativePath)) return false;
+  return [
+    "src/searcher/venues/swaps/",
+    "src/searcher/venues/protocols/",
+    "src/searcher/venues/credit/",
+    "src/searcher/venues/funding/",
+  ].some((prefix) => relativePath.startsWith(prefix));
 }
 
 function productionVenueIds(): ReadonlySet<string> {

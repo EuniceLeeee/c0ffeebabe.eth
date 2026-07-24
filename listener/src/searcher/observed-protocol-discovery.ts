@@ -294,10 +294,7 @@ export async function scanProtocolDiscoveryRange(input: {
   const topics = [...registeredEventTopics(input.adapters)].sort();
   const eventLogs: ProtocolDiscoveryLog[] = [];
   const observedFamilyGuard = new ProtocolDiscoveryFamilyGuard(
-    mergeProtocolDiscoveryFamilyGuardOptions(
-      input.familyGuardOptions,
-      passControl,
-    ),
+    sourceAwareFamilyGuardOptions(input.familyGuardOptions, passControl),
   );
   if (topics.length > 0) {
     for (let start = input.context.fromBlock; start <= input.context.toBlock; start += LOG_BATCH) {
@@ -482,7 +479,7 @@ async function scanAddressCandidates(input: {
     }
   }
   const familyGuard = new ProtocolDiscoveryFamilyGuard(
-    input.familyGuardOptions,
+    sourceAwareFamilyGuardOptions(input.familyGuardOptions, input.control),
   );
   const reportedOpenCircuits = new Set<string>();
   const results = await mapLimit([...addresses.values()].sort(), ADDRESS_CONCURRENCY, async (target) => {
@@ -906,10 +903,7 @@ export async function scanObservedProtocolTrace(input: {
   const sourceErrors: ProtocolDiscoverySourceError[] = [];
   const familyGuard = input.familyGuard ??
     new ProtocolDiscoveryFamilyGuard(
-      mergeProtocolDiscoveryFamilyGuardOptions(
-        input.familyGuardOptions,
-        passControl,
-      ),
+      sourceAwareFamilyGuardOptions(input.familyGuardOptions, passControl),
     );
   const reportedOpenCircuits = new Set<string>();
   const calls = uniqueCalls(successfulCalls(input.trace));
@@ -1039,31 +1033,81 @@ function sourceErrorsPreservingFamilyCoverage(
   detailLimit = 32,
 ): readonly ProtocolDiscoverySourceError[] {
   if (errors.length <= detailLimit) return errors;
-  const detailed = errors.slice(0, detailLimit);
+  const selected: ProtocolDiscoverySourceError[] = [];
+  const selectedOriginals = new Set<ProtocolDiscoverySourceError>();
   const covered = new Set<string>();
-  for (const error of detailed) {
-    if (!error.retryable) continue;
-    for (const familyId of error.impactedFamilyIds) {
-      covered.add(`${error.sourceKind}\u001f${familyId}`);
-    }
-  }
-  const summaries = new Map<string, ProtocolDiscoverySourceError>();
-  for (const error of errors.slice(detailLimit)) {
+
+  // Preserve the first real retryable reason for every family/source before
+  // high-volume semantic diagnostics (for example ambiguous matches) consume
+  // the detail budget. Generic "omitted" summaries hide the actionable root.
+  for (const error of errors) {
     if (!error.retryable) continue;
     for (const familyId of error.impactedFamilyIds) {
       const key = `${error.sourceKind}\u001f${familyId}`;
-      if (covered.has(key) || summaries.has(key)) continue;
-      summaries.set(key, {
-        adapterId: familyId,
-        sourceKind: error.sourceKind,
-        impactedFamilyIds: [familyId],
-        target: null,
-        reason: `additional ${error.sourceKind} source failures omitted from diagnostics`,
-        retryable: true,
-      });
+      if (covered.has(key) || selected.length >= detailLimit) continue;
+      covered.add(key);
+      selected.push(Object.freeze({
+        ...error,
+        adapterId: error.adapterId ?? familyId,
+        impactedFamilyIds: Object.freeze([familyId]),
+      }));
+      selectedOriginals.add(error);
     }
   }
-  return Object.freeze([...detailed, ...summaries.values()]);
+  for (const error of errors) {
+    if (selected.length >= detailLimit) break;
+    if (selectedOriginals.has(error)) continue;
+    selected.push(error);
+  }
+  return Object.freeze(selected);
+}
+
+function sourceAwareFamilyGuardOptions(
+  options: ProtocolDiscoveryFamilyGuardOptions | undefined,
+  control: ProtocolDiscoveryReadControl | undefined,
+): ProtocolDiscoveryFamilyGuardOptions {
+  return {
+    ...mergeProtocolDiscoveryFamilyGuardOptions(options, control),
+    countsTowardCircuit: isRetryableDiscoverySourceFailure,
+  };
+}
+
+function isRetryableDiscoverySourceFailure(error: unknown): boolean {
+  if (error instanceof ProtocolDiscoveryFamilyCircuitOpen) return true;
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code).toUpperCase()
+    : "";
+  if (
+    new Set([
+      "CALL_EXCEPTION",
+      "BAD_DATA",
+      "INVALID_ARGUMENT",
+      "NUMERIC_FAULT",
+    ]).has(code)
+  ) return false;
+  if (
+    new Set([
+      "TIMEOUT",
+      "NETWORK_ERROR",
+      "SERVER_ERROR",
+      "ABORTED",
+      "ABORT_ERR",
+      "ETIMEDOUT",
+      "EAI_AGAIN",
+      "ENETUNREACH",
+      "EHOSTUNREACH",
+      "ENOTFOUND",
+      "EPIPE",
+    ]).has(code) ||
+    code.startsWith("ECONN") ||
+    code.startsWith("UND_ERR_")
+  ) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    /execution reverted|could not decode|invalid (?:result|data|address)|unsupported|behavior[_ -]?mismatch/i
+      .test(message)
+  ) return false;
+  return true;
 }
 
 function registeredEventTopics(adapters: readonly RouteLegAdapter[]): Set<string> {

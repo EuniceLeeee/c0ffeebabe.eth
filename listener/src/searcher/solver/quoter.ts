@@ -2,27 +2,8 @@ import { ethers } from "ethers";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
-export { quoteBalancerV3 } from "../venues/swaps/balancer-v3.js";
-export {
-  metronomeSynthPoolIface,
-  quoteGoldxMint,
-  quoteMetronomeSynthSwap,
-  quoteProtocolLeg,
-  quotePSM,
-  quoteSiloRedeem,
-} from "../venues/protocols/protocol-quote.js";
 import type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
 export type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
-export {
-  encodeUniV4QuoteExactInputSingle,
-  uniV4QuoterIface,
-} from "../venues/swaps/univ4.js";
-export {
-  FLUID_DEX_ADDRESS_DEAD,
-  fluidDexSwap0To1,
-  fluidDexSwapIface,
-  quoteFluidDex,
-} from "../venues/swaps/fluid-dex.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 
 /**

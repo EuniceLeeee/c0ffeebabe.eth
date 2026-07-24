@@ -1,7 +1,8 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import { metronomeSynthPoolIface, quote } from "../solver/quoter.js";
+import { quote } from "../solver/quoter.js";
+import { metronomeSynthPoolIface } from "../venues/protocols/protocol-quote.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);

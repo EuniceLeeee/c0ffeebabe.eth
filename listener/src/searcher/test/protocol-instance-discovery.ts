@@ -752,6 +752,45 @@ const probeTimeout = await runProtocolDiscoveryShadow({
 assert(!probeTimeout.evaluationComplete, "probe transport failure must leave evaluation retryable");
 assert(probeTimeout.evaluatedInstanceKeys.size === 0, "probe transport failure must preserve ownership");
 
+let semanticProbeCalls = 0;
+const semanticNegativeAdapter = adapter({
+  candidateSources: ["dex-token-domain"],
+  eventTopics: [],
+  callSelectors: [],
+  async probeCandidate(instance) {
+    semanticProbeCalls++;
+    if (instance.pool.address !== TARGET_C) {
+      throw new Error("behavior_mismatch");
+    }
+    return [
+      edge(instance.pool.address, "shadow-wrap", ASSET_A, instance.pool.address),
+    ];
+  },
+});
+const semanticNegatives = await runProtocolDiscoveryShadow({
+  adapters: [semanticNegativeAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) {
+    return { ...item.pool, identitySource: "seed" };
+  },
+  candidatesByAdapter: new Map([[
+    semanticNegativeAdapter.id,
+    [candidate(TARGET_A), candidate(TARGET_B), candidate(TARGET_C)],
+  ]]),
+  familyGuardOptions: { failureThreshold: 1 },
+});
+assert(
+  semanticProbeCalls === 3,
+  "deterministic probe negatives must not open the family circuit",
+);
+assert(
+  semanticNegatives.evaluationComplete &&
+    semanticNegatives.wouldAdmit.length === 1 &&
+    semanticNegatives.wouldAdmit[0].instance.pool.address === TARGET_C,
+  "a later valid instance must survive earlier semantic probe negatives",
+);
+
 let hangingIdentityCalls = 0;
 const hangingIdentityAdapter: ProtocolConversionAdapter = {
   ...successAdapter,

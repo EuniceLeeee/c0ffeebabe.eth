@@ -9,7 +9,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { buildTokenGraph, type PoolEntry, type TokenEdge } from "../planner/token-graph.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
-import { quoteBalancerV3 } from "../solver/quoter.js";
+import { quoteBalancerV3 } from "../venues/swaps/balancer-v3.js";
 
 const POOL = "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc";
 const EXECUTOR = "0xE08D97e151473A848C3d9CA3f323Cb720472D015";

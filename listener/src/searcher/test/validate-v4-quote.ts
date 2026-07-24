@@ -12,7 +12,7 @@
 // expected_transition: old quoteUniV4 mapped USDC/USDT to a V3 PROXY pool (wrong venue) and threw
 // for anything else; this harness reads the actual v4 pool AND classifies quote-vs-real divergence.
 import { ethers } from "ethers";
-import { encodeUniV4QuoteExactInputSingle } from "../solver/quoter.js";
+import { encodeUniV4QuoteExactInputSingle } from "../venues/swaps/univ4.js";
 
 const RPC = process.env.MAINNET_RPC_URL;
 if (!RPC) throw new Error("MAINNET_RPC_URL required");

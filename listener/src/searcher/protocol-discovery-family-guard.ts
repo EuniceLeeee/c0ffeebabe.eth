@@ -11,6 +11,15 @@ const DEFAULT_MAX_CONCURRENT_PER_FAMILY = 4;
 export interface ProtocolDiscoveryFamilyGuardOptions {
   readonly timeoutMs?: number;
   readonly failureThreshold?: number;
+  /**
+   * Only operational/retryable failures may consume the family circuit
+   * budget. Discovery semantic negatives are ordinary per-candidate
+   * rejections and must not disable later candidates.
+   *
+   * Direct guard users retain the conservative default (every thrown error).
+   * Production discovery supplies its source-aware retryability classifier.
+   */
+  readonly countsTowardCircuit?: (error: unknown) => boolean;
   /** Absolute pass deadline. A family-local timeout never aborts this owner. */
   readonly deadlineAtMs?: number;
   /** Parent pass cancellation. Child callbacks observe it but never own it. */
@@ -52,6 +61,7 @@ export class ProtocolDiscoveryFamilyGuard {
   private readonly parentSignal: AbortSignal | undefined;
   private readonly readRunner: ProtocolDiscoveryReadControl["run"];
   private readonly maxConcurrentPerFamily: number;
+  private readonly countsTowardCircuit: (error: unknown) => boolean;
   private readonly activeByFamily = new Map<string, number>();
   private readonly waitersByFamily = new Map<string, FamilyWaiter[]>();
 
@@ -80,6 +90,8 @@ export class ProtocolDiscoveryFamilyGuard {
         ),
       "protocol discovery family concurrency",
     );
+    this.countsTowardCircuit =
+      options.countsTowardCircuit ?? (() => true);
     if (
       options.deadlineAtMs !== undefined &&
       !Number.isFinite(options.deadlineAtMs)
@@ -132,11 +144,19 @@ export class ProtocolDiscoveryFamilyGuard {
         return value;
       } catch (error) {
         // Pass cancellation is not evidence that this family is broken.
-        if (this.parentCancellation() === null) {
+        if (
+          this.parentCancellation() === null &&
+          this.countsTowardCircuit(error)
+        ) {
           state.consecutiveFailures++;
           if (state.consecutiveFailures >= this.failureThreshold) {
             state.open = true;
           }
+        } else if (this.parentCancellation() === null) {
+          // A deterministic semantic rejection says nothing about the health
+          // of the next candidate. It also breaks a run of operational
+          // failures so the circuit remains strictly consecutive.
+          state.consecutiveFailures = 0;
         }
         throw error;
       }

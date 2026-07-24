@@ -729,10 +729,13 @@ export async function runProtocolDiscovery(input: {
     sourceIncompleteIssues.set(key, issues);
   };
   const familyGuard = new ProtocolDiscoveryFamilyGuard(
-    mergeProtocolDiscoveryFamilyGuardOptions(
-      input.familyGuardOptions,
-      passControl,
-    ),
+    {
+      ...mergeProtocolDiscoveryFamilyGuardOptions(
+        input.familyGuardOptions,
+        passControl,
+      ),
+      countsTowardCircuit: isRetryableProtocolDiscoveryFailure,
+    },
   );
 
   for (const error of input.sourceErrors ?? []) {

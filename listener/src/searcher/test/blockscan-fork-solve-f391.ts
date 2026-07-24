@@ -36,7 +36,9 @@ import {
   type TokenQueryBackend,
   type V4PoolKey,
 } from "../planner/token-graph.js";
-import { encodeUniV4QuoteExactInputSingle, quote, quoteSiloRedeem } from "../solver/quoter.js";
+import { quote } from "../solver/quoter.js";
+import { quoteSiloRedeem } from "../venues/protocols/protocol-quote.js";
+import { encodeUniV4QuoteExactInputSingle } from "../venues/swaps/univ4.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { deriveEdgeTaxonomy, pathLeavesStandingPosition } from "../strategy-taxonomy.js";
