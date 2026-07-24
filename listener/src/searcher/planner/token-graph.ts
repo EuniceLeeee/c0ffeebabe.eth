@@ -1,24 +1,46 @@
 import { ethers } from "ethers";
-import { ADDR } from "../../shared/constants/addresses.js";
-import { deriveEdgeTaxonomy, type EdgeKind, type ProtocolAction, type SlotKind } from "../strategy-taxonomy.js";
+import type { EdgeKind, ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
 import type { VenueId } from "../venues/capability.js";
 import type { VenueIdentitySource } from "../venues/identity.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import type { PoolAdapterId } from "../venues/registry-ids.js";
+import type { CanonicalEdgeId } from "../venues/blockscan-state-capability.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import type { DeclaredProtocolVenue } from "../venues/route-leg-adapter.js";
+import type { RouteEdgeBuildControl } from "../venues/route-leg-adapter.js";
+import {
+  edgeExecutionVariantKey,
+  edgeInstanceKey,
+  routeInstanceKey,
+} from "../venues/route-instance-identity.js";
 export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
-  call(req: { to: string; data: string; blockTag?: ethers.BlockTag }): Promise<string>;
+  call(
+    req: { to: string; data: string; blockTag?: ethers.BlockTag },
+    control?: { readonly deadlineAtMs?: number; readonly signal?: AbortSignal },
+  ): Promise<string>;
   getLogs?(req: {
     address: string;
     topics: string[];
     fromBlock: string;
     toBlock: string;
+  }, control?: {
+    readonly deadlineAtMs?: number;
+    readonly signal?: AbortSignal;
   }): Promise<Array<{ data: string; topics: string[] }>>;
 }
 
 export interface TokenEdge {
+  /**
+   * Assigned once by the verified graph builder. State, replay and A/B
+   * consumers reuse this ID instead of inventing local edge keys.
+   */
+  canonicalEdgeId?: CanonicalEdgeId;
+  /** Family-owned stable instance identity, bound by the route registry. */
+  instanceKey?: string;
+  /** Family-owned execution discriminator within one instance/direction. */
+  executionVariantKey?: string;
   adapterId: string;
   target: string;
   tokenIn: string;
@@ -34,6 +56,12 @@ export interface TokenEdge {
   curveJ?: number;
   poolToken0?: string;
   poolToken1?: string;
+  /** Identity-attested V2 fee rule; absent for non-V2 edges. */
+  v2FeeBps?: bigint;
+  /** Identity-attested V3 fee tier; immutable for one pool instance. */
+  v3Fee?: number;
+  /** Identity-attested immutable V3 tick spacing. */
+  v3TickSpacing?: number;
   /** Activity/liquidity proxy (swap-event count from discovery). undefined = curated backbone (pinned, never pruned). */
   score?: number;
   /** Uniswap v4 PoolKey. Required for univ4-unlock quotes. */
@@ -54,10 +82,7 @@ export interface TokenPath {
 
 export interface PoolEntry {
   address: string;
-  adapter: "curve" | "curve-nr" | "curve-underlying" | "univ3" | "univ2" | "univ4"
-    | "balancer-v3" | "dodo-v2" | "psm" | "fluid-vault" | "fluid-dex" | "wsteth" | "erc4626"
-    | "goldx" | "rocksolid" | "metronome-synth" | "metronome-hgusdc"
-    | "eigenpie-deposit-router";
+  adapter: PoolAdapterId;
   /** Contracts that emit the protocol action when execution goes through a different target. */
   receiptEmitters?: string[];
   /** Dynamic venue identity/provenance recorded before admission; may be explicitly provisional. */
@@ -86,21 +111,14 @@ export interface PoolEntry {
   /** For protocol-fixed pools: the conversion action (e.g. PSM convert). */
   fixedProtocolAction?: ProtocolAction;
   /**
-   * NON-STANDARD ERC4626: redeem/withdraw pays a DIFFERENT token than `asset()`, in a
-   * DIFFERENT quantity than `previewRedeem` returns (previewRedeem is the asset()-denominated
-   * VALUE, not the amount of the token actually transferred). Our erc4626 adapter models the
-   * redeem edge as share -> asset() with quantity previewRedeem, which is wrong on BOTH the
-   * output token and the routed amount, so the leg after it reverts on-chain. We cannot quote
-   * these with the single-call previewRedeem descriptor (correct output needs a second call on
-   * a different contract). Flagged vaults are EXCLUDED from the graph entirely — a wrong edge
-   * is worse than no edge (deposit alone can never close a loop anyway). Verified per-vault via
-   * a fork redeem receipt-decode; see docs. */
+   * @deprecated Replay-artifact compatibility only. Production discovery must
+   * classify non-standard redeem semantics through an independent family and
+   * active behavior proof; this flag can never admit an edge.
+   */
   nonStandardRedeem?: boolean;
   /**
-   * Receipt-verified out-token for a nonStandardRedeem vault (the token the silo actually pays,
-   * != asset()). Declaring it opts the flagged vault into the `erc4626-redeem-silo` edge (quoted
-   * via vault.previewRedeem -> outToken.previewWithdraw). A nonStandardRedeem vault WITHOUT this
-   * still emits ZERO edges (fail-closed — a wrong edge is worse than no edge).
+   * @deprecated Replay-artifact compatibility only. A declared payout token is
+   * candidate evidence at most; production graph admission ignores this field.
    */
   redeemTokenOut?: string;
   /** Activity proxy from discovery (swap-event count). undefined = curated backbone (pinned). */
@@ -112,6 +130,13 @@ export interface PoolEntry {
    * address-level dedup. Absent for ordinary one-instance-per-address pools.
    */
   logicalInstanceId?: string;
+  /**
+   * Runtime-only provenance for rows projected by protocol discovery. It is
+   * never an admission credential and never enters pool identity; projection
+   * uses it only to remove its own prior row without deleting an incumbent
+   * static row that happens to share the same address/key.
+   */
+  discoveryOwnerAdapterId?: string;
   /**
    * Discovery-verified routes. Present ⇒ buildEdges emits exactly these and
    * never regrows a leg the probe rejected. Absent ⇒ the legacy compat path
@@ -139,63 +164,15 @@ export interface VerifiedRouteSpec {
   tokenOut: string;
   slotKind: SlotKind;
   protocolAction?: ProtocolAction;
+  /** Execution-critical pool order retained by exact discovery projection. */
+  poolToken0?: string;
+  poolToken1?: string;
 }
 
 // DEX pools are discovered via scanActivePools / factory events. Static protocol
 // singletons come from their registered adapters; externally discovered families
 // and legacy compat venues stay here until they have a derived admission source.
-const EXTERNAL_AND_LEGACY_POOL_REGISTRY: PoolEntry[] = [
-  // Compatibility fallbacks remain until every address passes a real
-  // source-derived Production Replay. Discovery never receives these rows as
-  // candidate or identity evidence, so the dynamic path still has to prove
-  // itself independently. The family buildEdges path re-attests asset().
-  { address: ADDR.SUSDS, adapter: "erc4626", fixedTokenIn: ADDR.USDS },
-  { address: ADDR.WSTUSR, adapter: "erc4626", fixedTokenIn: ADDR.USR },
-  { address: "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
-  // Non-standard Strata srUSDe remains an explicit safety exception: Withdraw
-  // pays sUSDe rather than asset() and execution needs the four-argument exact-in
-  // selector plus a two-contract quote. Generic EIP-4626 discovery intentionally
-  // rejects it until those semantics are derivable from code-owned evidence.
-  {
-    address: "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
-    adapter: "erc4626",
-    fixedTokenIn: ADDR.USDE,
-    nonStandardRedeem: true,
-    redeemTokenOut: "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-  },
-  { address: "0xac3E018457B222d93114458476f3E3416Abbe38F", adapter: "erc4626", fixedTokenIn: ADDR.FRXETH },
-  { address: "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
-  { address: "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D", adapter: "erc4626", fixedTokenIn: ADDR.WETH },
-  { address: "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0xe3DA4B83C9dd4c4D185ecE42077462b3F35c454a", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367", adapter: "erc4626", fixedTokenIn: ADDR.CRVUSD },
-  { address: "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
-  { address: "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7", adapter: "erc4626", fixedTokenIn: "0x23238f20b894f29041f48D88eE91131C395Aaa71" },
-  { address: "0xC255910618158F48FA461874471Aa24AEfbDC23A", adapter: "erc4626", fixedTokenIn: "0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D5" },
-  { address: "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C", adapter: "erc4626", fixedTokenIn: "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" },
-  { address: "0x43680aBF18cf54898Be84C6eF78237CFBD441883", adapter: "erc4626", fixedTokenIn: "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0" },
-  { address: "0x4825eFF24F9B7b76EEAFA2ecc6A1D5dFCb3c1c3f", adapter: "erc4626", fixedTokenIn: ADDR.USDC },
-  { address: "0xB8280955aE7b5207AF4CDbdCd775135Bd38157fE", adapter: "erc4626", fixedTokenIn: ADDR.USDT },
-  {
-    // Fluid deployment registry: "Fluid Dex Pool - USDC-USDT-CONCENTRATED".
-    // Plain swapIn token order is USDC(token0) -> USDT(token1).
-    address: ADDR.FLUID_DEX_USDC_USDT,
-    adapter: "fluid-dex",
-    token0: ADDR.USDC,
-    token1: ADDR.USDT,
-  },
-  {
-    address: ADDR.FLUID_VAULT_WSTUSR_USDC,
-    adapter: "fluid-vault",
-    fixedTokenIn: ADDR.WSTUSR,
-    fixedTokenOut: ADDR.USDC,
-    fixedSlotKind: "lend",
-  },
-];
+const EXTERNAL_AND_LEGACY_POOL_REGISTRY: PoolEntry[] = [];
 
 /**
  * Merge adapter-owned static venues into the legacy registry without changing
@@ -234,36 +211,23 @@ export function mergeDeclaredProtocolVenues(
     throw new Error("declared graph ordering did not consume the external registry");
   }
   const result = [...merged, ...appended];
-  const addresses = new Set<string>();
+  const instanceKeys = new Set<string>();
   for (const pool of result) {
-    const address = pool.address.toLowerCase();
-    if (addresses.has(address)) throw new Error(`duplicate protocol registry venue ${address}`);
-    addresses.add(address);
+    const instanceKey = registeredRouteInstanceKey(pool);
+    if (instanceKeys.has(instanceKey)) {
+      throw new Error(`duplicate protocol registry route instance ${instanceKey}`);
+    }
+    instanceKeys.add(instanceKey);
   }
   return result;
 }
 
 export const POOL_REGISTRY: PoolEntry[] = mergeDeclaredProtocolVenues(
   EXTERNAL_AND_LEGACY_POOL_REGISTRY,
-  PRODUCTION_ROUTE_ADAPTERS.protocols.flatMap((adapter) => adapter.declaredVenues),
+  PRODUCTION_ADAPTER_FAMILIES.protocols().flatMap((adapter) => adapter.declaredVenues),
 );
 
 // ─── Auto-build graph from pool registry via eth_call ─────────
-
-
-const ADAPTER_MAP: Record<string, string> = {
-  "curve": "curve-exchange-plain",
-  "curve-nr": "curve-exchange-nr",
-  "curve-underlying": "curve-exchange-underlying",
-  "univ3": "univ3-swap",
-  "univ2": "univ2-swap",
-  "univ4": "univ4-unlock",
-  "balancer-v3": "balancer-v3-unlock",
-  "psm": "psm",
-  "fluid-vault": "fluid-vault",
-  "fluid-dex": "fluid-dex-swap",
-  "metronome-synth": "metronome-synth-swap",
-};
 
 /**
  * Build the token graph by querying each pool's tokens on-chain.
@@ -300,46 +264,182 @@ export interface TokenGraphBuildResult {
 export async function buildTokenGraphWithResults(
   backend: TokenQueryBackend,
   pools: PoolEntry[] = POOL_REGISTRY,
+  options: {
+    readonly quiet?: boolean;
+    readonly deadlineAtMs?: number;
+    /**
+     * Compatibility name retained for callers. The deadline is applied to one
+     * pool instance, not shared by every instance owned by the family.
+     */
+    readonly familyTimeoutMs?: number;
+    readonly signal?: AbortSignal;
+  } = {},
 ): Promise<TokenGraphBuildResult> {
   const edges: TokenEdge[] = [];
   const successful: PoolGraphBuildSuccess[] = [];
   const failed: PoolGraphBuildFailure[] = [];
+  const familyTimeoutMs = options.familyTimeoutMs ?? 30_000;
+  if (!Number.isFinite(familyTimeoutMs) || familyTimeoutMs <= 0) {
+    throw new Error("token-graph familyTimeoutMs must be positive");
+  }
+  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
+  const seenInstances = new Set<string>();
+  const described = pools.map((pool) => {
+    const family = routeRegistry.findForPool(pool.adapter);
+    let registrationFailure = family
+      ? null
+      : `route-leg registry: unsupported pool adapter ${pool.adapter}`;
+    if (family) {
+      try {
+        const instanceKey = routeInstanceKey(family, pool);
+        if (seenInstances.has(instanceKey)) {
+          registrationFailure =
+            `token-graph: duplicate route instance ${instanceKey}`;
+        } else {
+          seenInstances.add(instanceKey);
+        }
+      } catch (error) {
+        registrationFailure = errorMessage(error);
+      }
+    }
+    return Object.freeze({
+      pool,
+      familyId: family?.id ?? null,
+      registrationFailure,
+    });
+  });
+  const familyFailures = new Map<string, string>();
+  const outcomes: Array<{
+    readonly pool: PoolEntry;
+    readonly familyId: string | null;
+    readonly result: PromiseSettledResult<TokenEdge[]>;
+  }> = [];
+  let provisionalEdges = 0;
+  let provisionalFailures = 0;
 
   const BATCH = 50;
-  for (let i = 0; i < pools.length; i += BATCH) {
-    const batch = pools.slice(i, i + BATCH);
-    const results = await Promise.allSettled(
-      batch.map((pool) => queryPoolEdges(pool, backend)),
+  for (let i = 0; i < described.length; i += BATCH) {
+    const batch = described.slice(i, i + BATCH);
+    const controls = batch.map((item) =>
+      item.familyId === null || familyFailures.has(item.familyId)
+        ? null
+        : createPoolBuildControl(
+            item.pool,
+            item.familyId,
+            familyTimeoutMs,
+            options,
+          )
     );
-    for (let j = 0; j < results.length; j++) {
-      const pool = batch[j];
-      const result = results[j];
-      if (result.status === "fulfilled" && result.value.length > 0) {
-        edges.push(...result.value);
-        successful.push({ pool, edges: result.value });
-        continue;
+    const results = await Promise.allSettled(batch.map((item, index) => {
+      if (item.registrationFailure) {
+        return Promise.reject(new Error(item.registrationFailure));
       }
-      failed.push({
-        pool,
-        reason: result.status === "rejected"
-          ? errorMessage(result.reason)
-          : "pool produced no route edges",
+      const familyFailure = familyFailures.get(item.familyId!);
+      if (familyFailure) {
+        return Promise.reject(
+          new Error(`route family ${item.familyId} unavailable: ${familyFailure}`),
+        );
+      }
+      return queryPoolEdges(item.pool, backend, controls[index]!.control);
+    }));
+
+    for (let resultIndex = 0; resultIndex < results.length; resultIndex++) {
+      const result = results[resultIndex];
+      const item = batch[resultIndex];
+      const control = controls[resultIndex];
+      if (
+        result.status === "rejected" &&
+        isInstanceDeadlineFailure(result.reason) &&
+        control &&
+        !control.controller.signal.aborted
+      ) {
+        // The RouteLegRegistry deadline fence may win the race by a millisecond.
+        // Abort only this instance's transport; a sibling in the same family
+        // retains its independent controller and may still publish.
+        control.controller.abort(result.reason);
+      }
+      if (
+        result.status === "rejected" &&
+        item.familyId !== null &&
+        isFamilyRegistrationOrContractFailure(result.reason)
+      ) {
+        familyFailures.set(item.familyId, errorMessage(result.reason));
+      }
+      control?.dispose();
+      outcomes.push({
+        pool: item.pool,
+        familyId: item.familyId,
+        result,
       });
+      if (result.status === "fulfilled" && result.value.length > 0) {
+        provisionalEdges += result.value.length;
+      } else {
+        provisionalFailures++;
+      }
     }
-    if (pools.length > 200 && i % 500 === 0 && i > 0) {
-      console.log(`[token-graph] progress: ${i}/${pools.length} pools, ${edges.length} edges, ${failed.length} skipped`);
+    if (!options.quiet && pools.length > 200 && i % 500 === 0 && i > 0) {
+      console.log(
+        `[token-graph] progress: ${i}/${pools.length} pools, ` +
+          `${provisionalEdges} provisional edges, ${provisionalFailures} skipped`,
+      );
     }
   }
 
-  console.log(
-    `[token-graph] built ${edges.length} edges from ${pools.length} pools` +
-      (failed.length > 0 ? ` (${failed.length} skipped)` : ""),
-  );
+  for (const outcome of outcomes) {
+    const familyFailure = outcome.familyId === null
+      ? null
+      : familyFailures.get(outcome.familyId);
+    if (familyFailure) {
+      failed.push({
+        pool: outcome.pool,
+        reason: `route family ${outcome.familyId} unavailable: ${familyFailure}`,
+      });
+      continue;
+    }
+    const { pool, result } = outcome;
+    if (result.status === "fulfilled" && result.value.length > 0) {
+      edges.push(...result.value);
+      successful.push({ pool, edges: result.value });
+      continue;
+    }
+    failed.push({
+      pool,
+      reason: result.status === "rejected"
+        ? errorMessage(result.reason)
+        : "pool produced no route edges",
+    });
+  }
+
+  if (!options.quiet) {
+    console.log(
+      `[token-graph] built ${edges.length} edges from ${pools.length} pools` +
+        (failed.length > 0 ? ` (${failed.length} skipped)` : ""),
+    );
+  }
   return { edges, successful, failed };
 }
 
 function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
+}
+
+function isInstanceDeadlineFailure(value: unknown): boolean {
+  return /deadline exceeded|exceeded \d+ms/i.test(errorMessage(value));
+}
+
+/**
+ * Runtime call failures belong to one pool instance. Only registry/conformance
+ * failures describe a broken family contract and quarantine all of its
+ * instances for this graph generation.
+ */
+function isFamilyRegistrationOrContractFailure(value: unknown): boolean {
+  const message = errorMessage(value);
+  return message.startsWith("route-leg registry:") &&
+    (
+      message.includes("emitted undeclared edge adapter") ||
+      message.includes("emitted disallowed taxonomy") ||
+      message.includes("emitted inconsistent edge taxonomy")
+    );
 }
 
 /**
@@ -362,173 +462,73 @@ export function buildTokenIndex(edges: TokenEdge[]): Map<string, Set<string>> {
   return index;
 }
 
-async function queryPoolEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
-  if (PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pool.adapter)) {
-    return PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, backend);
-  }
-  const adapterId = ADAPTER_MAP[pool.adapter];
-  const edges: TokenEdge[] = [];
-
-  switch (pool.adapter) {
-    case "fluid-dex": {
-      if (!pool.token0 || !pool.token1) {
-        throw new Error(`fluid-dex pool ${pool.address} missing pinned token0/token1 metadata`);
-      }
-      const [t0, t1] = [ethers.getAddress(pool.token0), ethers.getAddress(pool.token1)];
-      edges.push(
-        { adapterId, target: pool.address, tokenIn: t0, tokenOut: t1, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-        { adapterId, target: pool.address, tokenIn: t1, tokenOut: t0, slotKind: "swap", poolToken0: t0, poolToken1: t1, ...deriveEdgeTaxonomy("swap") },
-      );
-      break;
-    }
-  }
-
-  // Propagate the discovery activity score onto every edge of this pool.
-  // undefined (curated POOL_REGISTRY / protocol pools) stays undefined → pinned.
-  for (const edge of edges) edge.score = pool.score;
-  return edges;
+async function queryPoolEdges(
+  pool: PoolEntry,
+  backend: TokenQueryBackend,
+  control?: RouteEdgeBuildControl,
+): Promise<TokenEdge[]> {
+  return PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
+    pool,
+    backend,
+    control,
+  );
 }
 
-// ─── On-chain queries ─────────────────────────────────────────
+function registeredRouteInstanceKey(pool: PoolEntry): string {
+  const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
+  return routeInstanceKey(
+    family ?? { id: `unregistered:${pool.adapter}` },
+    pool,
+  );
+}
 
-// ─── Sync fallback (used by AC-3 tests that don't want async init) ──
-
-/**
- * Hardcoded fallback — same pools, manually written edges.
- * Kept for AC-3 tests that run without a live Anvil for graph init.
- * Production should use buildTokenGraph(state) instead.
- */
-export function defaultTokenGraph(): TokenEdge[] {
-  return [
-    {
-      adapterId: "fluid-vault",
-      target: ADDR.FLUID_VAULT_WSTUSR_USDC,
-      tokenIn: ADDR.WSTUSR,
-      tokenOut: ADDR.USDC,
-      slotKind: "lend",
-      ...deriveEdgeTaxonomy("lend"),
+function createPoolBuildControl(
+  pool: PoolEntry,
+  familyId: string,
+  familyTimeoutMs: number,
+  options: {
+    readonly deadlineAtMs?: number;
+    readonly signal?: AbortSignal;
+  },
+): {
+  readonly controller: AbortController;
+  readonly control: RouteEdgeBuildControl;
+  readonly dispose: () => void;
+} {
+  const controller = new AbortController();
+  const localDeadlineAtMs = Date.now() + familyTimeoutMs;
+  const deadlineAtMs = Math.min(
+    options.deadlineAtMs ?? Number.POSITIVE_INFINITY,
+    localDeadlineAtMs,
+  );
+  const instanceLabel =
+    `${familyId}:${pool.address.toLowerCase()}` +
+    `${pool.logicalInstanceId ? `:${pool.logicalInstanceId}` : ""}` +
+    `${pool.poolId ? `:${pool.poolId.toLowerCase()}` : ""}`;
+  const abortFromParent = () =>
+    controller.abort(options.signal?.reason ?? new Error("token-graph aborted"));
+  options.signal?.addEventListener("abort", abortFromParent, { once: true });
+  if (options.signal?.aborted) abortFromParent();
+  const timer = setTimeout(() => {
+    const globalDeadlineWon =
+      options.deadlineAtMs !== undefined &&
+      options.deadlineAtMs < localDeadlineAtMs;
+    controller.abort(
+      globalDeadlineWon
+        ? new Error("token-graph deadline exceeded")
+        : new Error(
+            `route instance ${instanceLabel} exceeded ${familyTimeoutMs}ms`,
+          ),
+    );
+  }, Math.max(0, deadlineAtMs - Date.now() - 1));
+  return {
+    controller,
+    control: Object.freeze({ deadlineAtMs, signal: controller.signal }),
+    dispose() {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abortFromParent);
     },
-    {
-      adapterId: "psm",
-      target: ADDR.SKY_PSM_LITE,
-      tokenIn: ADDR.USDC,
-      tokenOut: ADDR.DAI,
-      slotKind: "protocol",
-      protocolAction: "convert",
-      ...deriveEdgeTaxonomy("protocol", "convert"),
-    },
-    {
-      adapterId: "univ4-unlock",
-      target: ADDR.UNISWAP_V4_POOL_MANAGER,
-      tokenIn: ADDR.DAI,
-      tokenOut: ADDR.USDT,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      v4PoolKey: {
-        currency0: ADDR.DAI,
-        currency1: ADDR.USDT,
-        fee: 68,
-        tickSpacing: 1,
-        hooks: ADDR.ZERO,
-      },
-    },
-    {
-      adapterId: "fluid-dex-swap",
-      target: ADDR.FLUID_DEX_USDC_USDT,
-      tokenIn: ADDR.USDC,
-      tokenOut: ADDR.USDT,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      poolToken0: ADDR.USDC,
-      poolToken1: ADDR.USDT,
-    },
-    {
-      adapterId: "fluid-dex-swap",
-      target: ADDR.FLUID_DEX_USDC_USDT,
-      tokenIn: ADDR.USDT,
-      tokenOut: ADDR.USDC,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      poolToken0: ADDR.USDC,
-      poolToken1: ADDR.USDT,
-    },
-    {
-      adapterId: "curve-exchange-plain",
-      target: ADDR.CURVE_3POOL,
-      tokenIn: ADDR.USDC,
-      tokenOut: ADDR.USDT,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      curveI: 1,
-      curveJ: 2,
-    },
-    {
-      adapterId: "curve-exchange-plain",
-      target: ADDR.CURVE_3POOL,
-      tokenIn: ADDR.USDC,
-      tokenOut: ADDR.DAI,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      curveI: 1,
-      curveJ: 0,
-    },
-    {
-      adapterId: "curve-exchange-plain",
-      target: ADDR.CURVE_3POOL,
-      tokenIn: ADDR.DAI,
-      tokenOut: ADDR.USDT,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      curveI: 0,
-      curveJ: 2,
-    },
-    {
-      adapterId: "univ3-swap",
-      target: ADDR.UNISWAP_V3_USDT_WETH,
-      tokenIn: ADDR.USDT,
-      tokenOut: ADDR.WETH,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      poolToken0: ADDR.WETH,
-      poolToken1: ADDR.USDT,
-    },
-    {
-      adapterId: "univ3-swap",
-      target: ADDR.UNISWAP_V3_USDT_WETH,
-      tokenIn: ADDR.WETH,
-      tokenOut: ADDR.USDT,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      poolToken0: ADDR.WETH,
-      poolToken1: ADDR.USDT,
-    },
-    {
-      adapterId: "curve-exchange",
-      target: ADDR.CURVE_SUSDS_USDT,
-      tokenIn: ADDR.USDT,
-      tokenOut: ADDR.SUSDS,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-    },
-    {
-      adapterId: "curve-exchange",
-      target: ADDR.CURVE_DOLA_SUSDS,
-      tokenIn: ADDR.SUSDS,
-      tokenOut: ADDR.DOLA,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-    },
-    {
-      adapterId: "curve-exchange-nr",
-      target: ADDR.CURVE_DOLA_WSTUSR,
-      tokenIn: ADDR.DOLA,
-      tokenOut: ADDR.WSTUSR,
-      slotKind: "swap",
-      ...deriveEdgeTaxonomy("swap"),
-      curveI: 0,
-      curveJ: 1,
-    },
-  ];
+  };
 }
 
 // ─── DFS path enumeration ─────────────────────────────────────
@@ -632,7 +632,9 @@ export function buildTokenPaths(
 }
 
 function sameDirectedEdge(a: TokenEdge, b: TokenEdge): boolean {
-  return a.adapterId === b.adapterId &&
+  return edgeInstanceKey(a) === edgeInstanceKey(b) &&
+    edgeExecutionVariantKey(a) === edgeExecutionVariantKey(b) &&
+    a.adapterId === b.adapterId &&
     a.target.toLowerCase() === b.target.toLowerCase() &&
     a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
     a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase() &&

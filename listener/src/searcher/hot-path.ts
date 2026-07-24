@@ -71,7 +71,10 @@ export class HotPathSearcher {
       this.cache.clear();
       this.cache.setTickBlock(event.blockNumber);
 
-      const opportunities = await this.detector.detect(event, this.state);
+      const opportunities = await this.detector.detect({
+        ...event,
+        victimState: "materialized",
+      }, this.state);
       console.log(`[searcher/ac3] detector: ${opportunities.length} opportunities`);
 
       let candidatesEnumerated = 0;

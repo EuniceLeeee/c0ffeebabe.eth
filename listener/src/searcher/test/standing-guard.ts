@@ -6,10 +6,8 @@ import {
   evaluateStandingGuard,
 } from "../standing-guard.js";
 import {
-  buildTokenGraph,
-  POOL_REGISTRY,
-  type TokenQueryBackend,
-} from "../planner/token-graph.js";
+  deriveEdgeTaxonomy,
+} from "../strategy-taxonomy.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -30,12 +28,6 @@ function assertStandingUnauthorized(
     `${label}: reason ${result.reason}`,
   );
 }
-
-const unusedBackend: TokenQueryBackend = {
-  call: async () => {
-    throw new Error("standing guard test backend should not be called");
-  },
-};
 
 function testAbsentMarkerRejectsStandingEdge(tmpDir: string): void {
   const markerPath = join(tmpDir, "absent-marker");
@@ -80,11 +72,9 @@ function testFinalGuardRederivesTaxonomy(tmpDir: string): void {
 }
 
 async function testFluidVaultEdgeFlowsThrough(tmpDir: string): Promise<void> {
-  const fluidEntry = POOL_REGISTRY.find((entry) => entry.adapter === "fluid-vault");
-  assert(fluidEntry !== undefined, "POOL_REGISTRY fluid-vault entry missing");
-  const edges = await buildTokenGraph(unusedBackend, [fluidEntry]);
-  assert(edges.length === 1, `fluid edge count ${edges.length}`);
-  assert(edges[0].leavesStandingPosition === true, "fluid edge should leave standing position");
+  // Fluid is dynamically admitted now; the final guard is deliberately
+  // independent of admission provenance and re-derives the same lend taxonomy.
+  const edges = [{ slotKind: "lend" as const, ...deriveEdgeTaxonomy("lend") }];
   const result = evaluateStandingGuard(edges, join(tmpDir, "absent-fluid-marker"));
   assertStandingUnauthorized(result, "fluid-vault edge without marker");
   console.log("[standing-guard] fluid-vault edge flows through: PASS");

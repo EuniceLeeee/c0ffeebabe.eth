@@ -1,10 +1,18 @@
 import { ethers } from "ethers";
+import type { AnvilStateBackend } from "../../shared/state/state-backend.js";
 import { detectImpactFromLogs } from "../detector/pool-impact.js";
 import { type TokenEdge, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { postImpactSupportsStateOverrides } from "../solver/post-impact-overrides.js";
 import type { PostImpactSeed } from "../solver/pool-state-cache.js";
-import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  buildVictimOverlay,
+  buildVictimOverlaySettled,
+  type VictimOverlay,
+} from "../live-backends/victim-overlay.js";
+import { replayVictimSwapOnAnvil } from "../live-backends/rpc-victim-replay.js";
+import type { PoolImpact } from "../detector/pool-impact.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -14,6 +22,7 @@ const POOL = "0x0000000000000000000000000000000000000c01";
 const POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
 const TOKEN0 = "0x00000000000000000000000000000000000000a0";
 const TOKEN1 = "0x00000000000000000000000000000000000000b1";
+const TOKEN2 = "0x00000000000000000000000000000000000000c2";
 const SENDER = "0x0000000000000000000000000000000000000aaa";
 const RECIPIENT = "0x0000000000000000000000000000000000000bbb";
 
@@ -26,6 +35,32 @@ const V3_IFACE = new ethers.Interface([
 ]);
 const V4_IFACE = new ethers.Interface([
   "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+]);
+const V3_POOL_IFACE = new ethers.Interface([
+  "function fee() view returns (uint24)",
+]);
+const V2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
+const V3_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
+const V2_ROUTER_IFACE = new ethers.Interface([
+  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
+]);
+const V3_ROUTER_IFACE = new ethers.Interface([
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)",
+]);
+const CURVE_EXCHANGE_IFACE = new ethers.Interface([
+  "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+]);
+const CURVE_EXCHANGE_RECEIVED_IFACE = new ethers.Interface([
+  "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy, address receiver)",
+]);
+const CURVE_EXCHANGE_RECEIVED_UINT_IFACE = new ethers.Interface([
+  "function exchange_received(uint256 i, uint256 j, uint256 dx, uint256 min_dy, address receiver)",
+]);
+const CURVE_EXCHANGE_RECEIVED_NR_IFACE = new ethers.Interface([
+  "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+]);
+const ERC20_TRANSFER_IFACE = new ethers.Interface([
+  "function transfer(address recipient, uint256 amount) returns (bool)",
 ]);
 
 const V4_KEY: V4PoolKey = {
@@ -45,16 +80,11 @@ const CURVE_DEFERRED = new Set([
 ]);
 
 function routedSwapVenues(): string[] {
-  const out = new Set<string>();
-  for (const template of [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY]) {
-    for (const slot of template.slots) {
-      if (slot.kind !== "swap") continue;
-      for (const adapter of slot.adapters) {
-        if (adapter !== "psm") out.add(adapter);
-      }
-    }
-  }
-  return [...out].sort();
+  return [...new Set(
+    PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((family) =>
+      family.edgeAdapterIds
+    ),
+  )].sort();
 }
 
 async function hasCaptureBranch(adapterId: string): Promise<boolean> {
@@ -115,8 +145,8 @@ async function hasCaptureBranch(adapterId: string): Promise<boolean> {
     const impacts = await detectImpactFromLogs([eventLog(V4_IFACE, "Swap", POOL_MANAGER, [
       V4_POOL_ID,
       SENDER,
-      10n,
-      -9n,
+      -10n,
+      9n,
       1n << 96n,
       123n,
       1,
@@ -177,12 +207,301 @@ function eventLog(iface: ethers.Interface, eventName: string, address: string, a
   };
 }
 
+function render(value: unknown): string {
+  return JSON.stringify(value, (_key, item) =>
+    typeof item === "bigint" ? `${item}n` : item
+  );
+}
+
+async function assertOverlayCallbackParity(
+  impact: PoolImpact,
+  graph: readonly TokenEdge[],
+  read: (req: { readonly to: string; readonly data: string }) => Promise<string>,
+): Promise<VictimOverlay> {
+  const callback = PRODUCTION_ADAPTER_FAMILIES
+    .victimModels()
+    .forEdge(impact.matchedAdapterId)
+    ?.runtime
+    ?.buildOverlay;
+  assert(callback !== null && callback !== undefined, `${impact.matchedAdapterId} overlay callback missing`);
+  const direct = await callback({
+    impact,
+    graph,
+    read,
+    control: {
+      deadlineAtMs: Date.now() + 30_000,
+      signal: new AbortController().signal,
+    },
+  });
+  const delegated = await buildVictimOverlay(impact, { graph, read });
+  assert(
+    render(direct) === render(delegated),
+    `${impact.matchedAdapterId} central/direct overlay parity`,
+  );
+  assert(delegated.preCalls.length === 2, `${impact.matchedAdapterId} approve+swap calls`);
+  return delegated;
+}
+
+async function testOverlayCallbackParity(): Promise<void> {
+  const originalNow = Date.now;
+  Date.now = () => 1_700_000_000_000;
+  try {
+    const noRead = async (): Promise<string> => {
+      throw new Error("unexpected overlay read");
+    };
+    const whale = ethers.getAddress(
+      "0x000000000000000000000000000000000000dEaD",
+    );
+    const v2 = await assertOverlayCallbackParity({
+      pool: POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: 123n,
+      matchedAdapterId: "univ2-swap",
+    }, [], noRead);
+    assert(v2.preCalls[1].to === V2_ROUTER, "univ2 overlay router parity");
+    assert(
+      v2.preCalls[1].calldata === V2_ROUTER_IFACE.encodeFunctionData(
+        "swapExactTokensForTokens",
+        [123n, 0, [TOKEN0, TOKEN1], whale, 1_700_003_600],
+      ),
+      "univ2 overlay calldata byte parity",
+    );
+
+    const v3 = await assertOverlayCallbackParity({
+      pool: POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: 456n,
+      matchedAdapterId: "univ3-swap",
+    }, [], async () => V3_POOL_IFACE.encodeFunctionResult("fee", [500]));
+    assert(v3.preCalls[1].to === V3_ROUTER, "univ3 overlay router parity");
+    assert(
+      v3.preCalls[1].calldata === V3_ROUTER_IFACE.encodeFunctionData(
+        "exactInputSingle",
+        [{
+          tokenIn: TOKEN0,
+          tokenOut: TOKEN1,
+          fee: 500,
+          recipient: whale,
+          amountIn: 456n,
+          amountOutMinimum: 0n,
+          sqrtPriceLimitX96: 0n,
+        }],
+      ),
+      "univ3 overlay calldata byte parity",
+    );
+
+    const curve = await assertOverlayCallbackParity({
+      pool: POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN2,
+      amountIn: 789n,
+      matchedAdapterId: "curve-exchange-plain",
+    }, [
+      {
+        adapterId: "curve-exchange-nr",
+        target: POOL,
+        tokenIn: TOKEN0,
+        tokenOut: TOKEN2,
+        curveI: 0,
+        curveJ: 9,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+      },
+      {
+        adapterId: "curve-exchange-plain",
+        target: POOL,
+        tokenIn: TOKEN0,
+        tokenOut: TOKEN1,
+        curveI: 0,
+        curveJ: 1,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+      },
+      {
+        adapterId: "curve-exchange-plain",
+        target: POOL,
+        tokenIn: TOKEN0,
+        tokenOut: TOKEN2,
+        curveI: 0,
+        curveJ: 2,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+      },
+    ], noRead);
+    assert(
+      curve.preCalls[1].to.toLowerCase() === POOL.toLowerCase(),
+      "curve overlay target parity",
+    );
+    assert(
+      curve.preCalls[1].calldata === CURVE_EXCHANGE_IFACE.encodeFunctionData(
+        "exchange",
+        [0, 2, 789n, 0],
+      ),
+      "curve overlay calldata byte parity for a non-first output coin",
+    );
+
+    const receivedCases = [
+      {
+        adapterId: "curve-exchange",
+        calldata: CURVE_EXCHANGE_RECEIVED_IFACE.encodeFunctionData(
+          "exchange_received",
+          [0, 2, 789n, 0, whale],
+        ),
+      },
+      {
+        adapterId: "curve-exchange-received-uint",
+        calldata: CURVE_EXCHANGE_RECEIVED_UINT_IFACE.encodeFunctionData(
+          "exchange_received",
+          [0, 2, 789n, 0, whale],
+        ),
+      },
+      {
+        adapterId: "curve-exchange-nr",
+        calldata: CURVE_EXCHANGE_RECEIVED_NR_IFACE.encodeFunctionData(
+          "exchange_received",
+          [0, 2, 789n, 0],
+        ),
+      },
+    ] as const;
+    for (const receivedCase of receivedCases) {
+      const received = await assertOverlayCallbackParity({
+        pool: POOL,
+        tokenIn: TOKEN0,
+        tokenOut: TOKEN2,
+        amountIn: 789n,
+        matchedAdapterId: receivedCase.adapterId,
+      }, [{
+        adapterId: receivedCase.adapterId,
+        target: POOL,
+        tokenIn: TOKEN0,
+        tokenOut: TOKEN2,
+        curveI: 0,
+        curveJ: 2,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+      }], noRead);
+      assert(
+        received.preCalls[0].to.toLowerCase() === TOKEN0.toLowerCase() &&
+          received.preCalls[0].calldata ===
+            ERC20_TRANSFER_IFACE.encodeFunctionData("transfer", [POOL, 789n]),
+        `${receivedCase.adapterId} must transfer exact input before exchange_received`,
+      );
+      assert(
+        received.preCalls[1].calldata === receivedCase.calldata,
+        `${receivedCase.adapterId} exchange_received calldata parity`,
+      );
+    }
+  } finally {
+    Date.now = originalNow;
+  }
+  console.log("[overlay-coverage] registry callback calldata parity: PASS");
+}
+
+async function testOverlayFailureIsFamilyLocal(): Promise<void> {
+  const badImpact: PoolImpact = {
+    pool: POOL,
+    tokenIn: TOKEN0,
+    tokenOut: TOKEN1,
+    amountIn: 1n,
+    matchedAdapterId: "univ3-swap",
+  };
+  const healthyImpact: PoolImpact = {
+    ...badImpact,
+    matchedAdapterId: "univ2-swap",
+  };
+  const [bad, healthy] = await Promise.all([
+    buildVictimOverlaySettled(badImpact, {
+      graph: [],
+      read: async () => {
+        throw new Error("injected V3 overlay read failure");
+      },
+    }, 100),
+    buildVictimOverlaySettled(healthyImpact, {
+      graph: [],
+      read: async () => {
+        throw new Error("V2 overlay must not read state");
+      },
+    }, 100),
+  ]);
+  assert(
+    !bad.ok &&
+      bad.familyId === "univ3-standard" &&
+      bad.stage === "overlay",
+    "bad overlay callback must settle against only its owner family",
+  );
+  assert(
+    healthy.ok &&
+      healthy.familyId === "univ2-standard" &&
+      healthy.value.preCalls.length === 2,
+    "healthy sibling overlay must publish despite a bad family callback",
+  );
+  console.log("[overlay-coverage] family-local callback failure isolation: PASS");
+}
+
+async function testRpcReplayRollsBackFamilyFailure(): Promise<void> {
+  const reverted: Array<string | number> = [];
+  let snapshot = 0;
+  let preCall = 0;
+  const state = {
+    provider: {
+      async send(): Promise<null> {
+        return null;
+      },
+    },
+    async call(): Promise<string> {
+      throw new Error("V2 overlay must not read state");
+    },
+    async snapshot(): Promise<number> {
+      return ++snapshot;
+    },
+    async revert(id: string | number): Promise<void> {
+      reverted.push(id);
+    },
+    async getTokenBalance(): Promise<bigint> {
+      return 1_000_000n;
+    },
+    async send(): Promise<void> {
+      preCall++;
+      if (preCall === 2) throw new Error("injected victim swap failure");
+    },
+  } as unknown as AnvilStateBackend;
+  let failed = false;
+  try {
+    await replayVictimSwapOnAnvil(state, {
+      pool: POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: 1n,
+      matchedAdapterId: "univ2-swap",
+    }, []);
+  } catch (error) {
+    failed =
+      error instanceof Error &&
+      error.message === "injected victim swap failure";
+  }
+  assert(failed, "injected victim swap failure must propagate");
+  assert(
+    reverted.includes(1),
+    "failed family replay must restore the outer pre-replay snapshot",
+  );
+  console.log("[overlay-coverage] RPC family failure rollback: PASS");
+}
+
 async function main(): Promise<void> {
   const venues = routedSwapVenues();
   assert(venues.length > 0, "no routed swap venues found in path templates");
 
   const deferred: string[] = [];
+  const detectOnly: string[] = [];
   for (const adapterId of venues) {
+    const victimModel = PRODUCTION_ADAPTER_FAMILIES.victimModels().forEdge(adapterId);
+    assert(victimModel !== null, `victim model missing for active swap edge ${adapterId}`);
+    if (victimModel.runtime === null) {
+      detectOnly.push(adapterId);
+      continue;
+    }
     if (CURVE_DEFERRED.has(adapterId)) {
       deferred.push(adapterId);
       continue;
@@ -191,8 +510,7 @@ async function main(): Promise<void> {
     const seed = seedForAdapter(adapterId);
     assert(
       seed !== null,
-      `overlay coverage missing exact-overlay seed for routed venue ${adapterId}; ` +
-        "add hash-only post-state capture plus postImpactStateOverrides support for this fidelity path",
+      `overlay coverage missing event post-state seed for replay-enabled venue ${adapterId}`,
     );
     assert(
       postImpactSupportsStateOverrides(seed),
@@ -202,13 +520,23 @@ async function main(): Promise<void> {
       await hasCaptureBranch(adapterId),
       `overlay coverage missing PoolImpact *PostState capture branch for routed venue ${adapterId}`,
     );
-    console.log(`[overlay-coverage] ${adapterId}: exact capture + override support PASS`);
+    console.log(`[overlay-coverage] ${adapterId}: event capture + override shape PASS`);
   }
 
+  for (const adapterId of detectOnly) {
+    console.log(`[overlay-coverage] ${adapterId}: explicit detect-only/fail-closed PASS`);
+  }
   for (const adapterId of deferred) {
     console.log(`[overlay-coverage] ${adapterId}: DEFERRED (curve balances storage layout not safely unified)`);
   }
-  console.log(`overlay-venue-coverage PASS (${venues.length - deferred.length} exact, ${deferred.length} deferred)`);
+  await testOverlayCallbackParity();
+  await testOverlayFailureIsFamilyLocal();
+  await testRpcReplayRollsBackFamilyFailure();
+  console.log(
+    `overlay-venue-coverage PASS (` +
+      `${venues.length - deferred.length - detectOnly.length} structural, ` +
+      `${detectOnly.length} detect-only, ${deferred.length} deferred)`,
+  );
 }
 
 main().catch((err) => {

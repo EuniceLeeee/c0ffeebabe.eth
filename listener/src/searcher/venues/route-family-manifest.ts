@@ -5,7 +5,7 @@ import type {
   RouteLegAdapter,
   RouteLegKind,
 } from "./route-leg-adapter.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "./production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "./production-registry.js";
 
 export type RouteFamilyCandidateSource = RouteCandidateSourceKind;
 
@@ -24,6 +24,9 @@ export interface RouteFamilyManifestEntry {
   readonly familyKind: RouteLegKind;
   readonly poolAdapters: readonly string[];
   readonly edgeAdapterIds: readonly string[];
+  readonly ownedActionAdapterIds: readonly string[];
+  readonly requiredInfraActionAdapterIds: readonly string[];
+  /** Compatibility projection for report consumers; never a registration source. */
   readonly actionAdapterIds: readonly string[];
   readonly declaredVenueCount: number;
   /** Current static/legacy wiring policy; kept separate from dynamic admission. */
@@ -62,7 +65,14 @@ export function deriveRouteFamilyManifest(
       familyKind: adapter.kind,
       poolAdapters: Object.freeze([...adapter.poolAdapters]),
       edgeAdapterIds: Object.freeze([...adapter.edgeAdapterIds]),
-      actionAdapterIds: Object.freeze([...adapter.actionAdapterIds]),
+      ownedActionAdapterIds: Object.freeze([...adapter.ownedActionAdapterIds]),
+      requiredInfraActionAdapterIds: Object.freeze([
+        ...adapter.requiredInfraActionAdapterIds,
+      ]),
+      actionAdapterIds: Object.freeze([
+        ...adapter.ownedActionAdapterIds,
+        ...adapter.requiredInfraActionAdapterIds,
+      ]),
       declaredVenueCount: protocolAdapter?.declaredVenues.length ?? 0,
       staticRequiresProtocolEdgesFlag: adapter.requiresProtocolEdgesFlag,
       dynamicAdmission,
@@ -71,5 +81,5 @@ export function deriveRouteFamilyManifest(
 }
 
 export const PRODUCTION_ROUTE_FAMILY_MANIFEST = deriveRouteFamilyManifest(
-  PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+  PRODUCTION_ADAPTER_FAMILIES.routes().list(),
 );

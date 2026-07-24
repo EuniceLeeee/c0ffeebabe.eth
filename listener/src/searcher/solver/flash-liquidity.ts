@@ -1,8 +1,5 @@
 import { ethers } from "ethers";
-import {
-  DEFAULT_FLASH_ADAPTER_ID,
-  FLASH_PROVIDER_DESCRIPTORS,
-} from "../../adapters/flash-providers.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 /**
  * Dynamic flash-loan borrowability, read from chain — NOT a hardcoded allowlist.
@@ -35,11 +32,11 @@ export interface FlashProvider {
 }
 
 export const DEFAULT_FLASH_PROVIDERS: readonly FlashProvider[] = Object.freeze(
-  [...FLASH_PROVIDER_DESCRIPTORS]
-    .sort((a, b) => a.liquidityPriority - b.liquidityPriority)
-    .map((descriptor) => Object.freeze({
-      adapterId: descriptor.adapterId,
-      holder: descriptor.liquidityHolder,
+  [...PRODUCTION_ADAPTER_FAMILIES.funding()]
+    .sort((a, b) => a.funding.liquidityPriority - b.funding.liquidityPriority)
+    .map((family) => Object.freeze({
+      adapterId: family.funding.actionAdapterId,
+      holder: family.funding.liquidityHolder,
     })),
 );
 
@@ -48,6 +45,8 @@ export interface FlashSource {
   amount: bigint;
   /** Flash adapter id of the deepest provider. */
   adapterId: string;
+  /** Present on registry-derived current-N snapshots. */
+  fundingId?: string;
 }
 
 export interface FlashLiquidityView {
@@ -109,6 +108,7 @@ export class FlashLiquidityCache {
       const ret = await this.provider.call({
         to: MULTICALL3,
         data: MULTICALL3_IFACE.encodeFunctionData("aggregate3", [calls]),
+        ...(blockNumber === undefined ? {} : { blockTag: blockNumber }),
       });
       const [results] = MULTICALL3_IFACE.decodeFunctionResult("aggregate3", ret) as unknown as [
         Array<{ success: boolean; returnData: string }>,
@@ -118,7 +118,8 @@ export class FlashLiquidityCache {
       for (const token of batch) {
         let best: FlashSource = {
           amount: 0n,
-          adapterId: this.providers[0]?.adapterId ?? DEFAULT_FLASH_ADAPTER_ID,
+          adapterId: this.providers[0]?.adapterId ??
+            PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId,
         };
         for (const p of this.providers) {
           const r = results[i++];

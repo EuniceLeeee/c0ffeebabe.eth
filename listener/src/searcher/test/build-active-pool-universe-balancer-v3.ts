@@ -1,10 +1,8 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
-import {
-  BALANCER_V3_SWAP_TOPIC,
-  buildBalancerV3PoolEntries,
-  type RawLog,
-} from "../build-active-pool-universe.js";
+import { BALANCER_V3_SWAP_TOPIC } from "../venues/landed-event-registry.js";
+import { buildBalancerV3PoolEntries } from "../venues/swaps/balancer-v3.js";
+import type { LandedPoolDiscoveryLog as RawLog } from "../venues/landed-pool-discovery.js";
 
 const POOL = "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc";
 

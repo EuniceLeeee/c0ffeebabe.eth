@@ -9,19 +9,54 @@ import type {
   PreparedRouteContext,
   ProtocolConversionAdapter,
 } from "../route-leg-adapter.js";
-import { readProtocolExternalMid } from "../mid-readers.js";
-import { quotePSM, quotePSMSellGemPrewarm } from "./protocol-quote.js";
+import { quotePSM } from "./protocol-quote.js";
+import { createProtocolQuoteStateCapability } from "./protocol-state-framework.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
+const PSM_WAD = 10n ** 18n;
+const PSM_TO_18 = 10n ** 12n;
 const litePsmIface = new ethers.Interface([
   "function gem() view returns (address)",
   "function dai() view returns (address)",
+  "function tin() view returns (uint256)",
+  "function tout() view returns (uint256)",
 ]);
+
+const psmPricingState = createProtocolQuoteStateCapability({
+  familyId: "protocol:psm",
+  edgeAdapterIds: ["psm"],
+  buildQuoteReads(edge) {
+    const functionName = psmDirection(edge.tokenIn, edge.tokenOut) === "sell"
+      ? "tin"
+      : "tout";
+    return [{
+      suffix: functionName,
+      to: edge.target,
+      data: litePsmIface.encodeFunctionData(functionName),
+    }];
+  },
+  deriveAmountOut(edge, amountIn, result) {
+    const direction = psmDirection(edge.tokenIn, edge.tokenOut);
+    const functionName = direction === "sell" ? "tin" : "tout";
+    const fee = BigInt(
+      litePsmIface.decodeFunctionResult(functionName, result(functionName))[0],
+    );
+    if (fee < 0n || fee > PSM_WAD) {
+      throw new Error(`PSM ${functionName} returned invalid fee ${fee}`);
+    }
+    if (direction === "sell") {
+      const gemAmount18 = amountIn * PSM_TO_18;
+      return gemAmount18 - gemAmount18 * fee / PSM_WAD;
+    }
+    return (amountIn * PSM_WAD / (PSM_WAD + fee)) / PSM_TO_18;
+  },
+});
 
 export const psmAdapter = Object.freeze({
   id: "protocol:psm",
   kind: "protocol-conversion",
   poolAdapters: ["psm"],
+  identityPolicies: [{ poolAdapter: "psm", policy: "trusted-singleton-seed" }],
   declaredVenues: [{
     address: ADDR.SKY_PSM_LITE,
     adapter: "psm",
@@ -34,18 +69,9 @@ export const psmAdapter = Object.freeze({
   edgeAdapterIds: ["psm"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   requiresProtocolEdgesFlag: false,
-  actionAdapterIds: ["psm", "erc20-approve"],
-  readMid: readProtocolExternalMid,
-  warm: {
-    kind: "protocol-mid",
-    priority: 0,
-    async quotePrewarm(ctx: ExactQuoteContext): Promise<bigint> {
-      if (!ctx.tokenIn || !ctx.tokenOut) throw new Error("psm prewarm requires tokenIn/tokenOut");
-      return quotePSMSellGemPrewarm(
-        ctx.state, ctx.target, ctx.tokenIn, ctx.tokenOut, ctx.amountIn,
-      );
-    },
-  },
+  ownedActionAdapterIds: ["psm"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  pricingState: psmPricingState,
   prepared: {
     quote: async (ctx: PreparedRouteContext) => ({
       amountOut: quotePreparedPSM(
@@ -110,5 +136,13 @@ function quotePreparedPSM(tokenIn: string, tokenOut: string, amountIn: bigint): 
   const tOut = tokenOut.toLowerCase();
   if (tIn === usdc && tOut === dai) return amountIn * 10n ** 12n;
   if (tIn === dai && tOut === usdc) return amountIn / 10n ** 12n;
+  throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
+}
+
+function psmDirection(tokenIn: string, tokenOut: string): "sell" | "buy" {
+  const tIn = tokenIn.toLowerCase();
+  const tOut = tokenOut.toLowerCase();
+  if (tIn === ADDR.USDC.toLowerCase() && tOut === ADDR.DAI.toLowerCase()) return "sell";
+  if (tIn === ADDR.DAI.toLowerCase() && tOut === ADDR.USDC.toLowerCase()) return "buy";
   throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
 }

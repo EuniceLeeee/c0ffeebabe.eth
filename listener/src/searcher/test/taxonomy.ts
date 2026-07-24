@@ -89,19 +89,10 @@ function testDeriveEdgeTaxonomy(): void {
 }
 
 async function testTokenGraphEdges(): Promise<void> {
-  const fluidEntry = POOL_REGISTRY.find((entry) => entry.adapter === "fluid-vault");
-  assert(fluidEntry !== undefined, "POOL_REGISTRY fluid-vault entry missing");
-  assert(fluidEntry.fixedSlotKind === "lend", `fluid fixedSlotKind ${fluidEntry.fixedSlotKind}`);
-
-  const fluidEdges = await buildTokenGraph(unusedBackend, [fluidEntry]);
-  assert(fluidEdges.length === 1, `fluid edge count ${fluidEdges.length}`);
-  assertTaxonomy(fluidEdges[0], "credit", true, "fluid-vault edge");
-
-  const fluidDexEntry = POOL_REGISTRY.find((entry) => entry.adapter === "fluid-dex");
-  assert(fluidDexEntry !== undefined, "POOL_REGISTRY fluid-dex entry missing");
-  const fluidDexEdges = await buildTokenGraph(unusedBackend, [fluidDexEntry]);
-  assert(fluidDexEdges.length === 2, `fluid-dex edge count ${fluidDexEdges.length}`);
-  assertTaxonomy(fluidDexEdges[0], "swap", false, "fluid-dex edge");
+  // Fluid instances now enter only through active family admission; this test
+  // exercises the taxonomy invariant without recreating a static admission row.
+  assertTaxonomy(deriveEdgeTaxonomy("lend"), "credit", true, "fluid-vault edge");
+  assertTaxonomy(deriveEdgeTaxonomy("swap"), "swap", false, "fluid-dex edge");
 
   const univ3Entry: PoolEntry = {
     address: ADDR.UNISWAP_V3_USDT_WETH,
@@ -140,11 +131,11 @@ async function testTokenGraphEdges(): Promise<void> {
   );
 
   // Discovery-owned ERC4626 instances emit exactly probe-verified routes.
-  // Compatibility seeds remain until Production Replay proves full recall, so
-  // exercise the dynamic taxonomy with an explicit discovery-shaped pool.
+  // Standard compatibility seeds have been removed, so exercise the dynamic
+  // taxonomy with an explicit discovery-shaped pool.
   assert(
-    POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
-    "standard ERC4626 compatibility fallbacks must remain before the deletion gate",
+    !POOL_REGISTRY.some((entry) => entry.adapter === "erc4626" && !entry.nonStandardRedeem),
+    "standard ERC4626 executable fallbacks must stay removed",
   );
   const erc4626Entry: PoolEntry = {
     address: ADDR.SUSDS,

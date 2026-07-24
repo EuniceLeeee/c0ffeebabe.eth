@@ -1,0 +1,456 @@
+import { ethers } from "ethers";
+import { ADDR } from "../../../shared/constants/addresses.js";
+import type { PoolEntry } from "../../planner/token-graph.js";
+import type { PoolUniverseEntry } from "../../pool-universe.js";
+import type {
+  LandedPoolDiscoveryLog,
+  LandedPoolDiscoveryReadBackend,
+  LandedPoolMaterializationCapability,
+  LandedPoolMaterializationResult,
+} from "../landed-pool-discovery.js";
+import { UNIV4_INITIALIZE_TOPIC } from "../landed-event-registry.js";
+
+const initializeIface = new ethers.Interface([
+  "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
+]);
+const V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = "0x86b6be7d";
+
+export type V4InitializeSource =
+  | "alchemy-v4-initialize"
+  | "v4-initialize-backfill"
+  | "v4-positionmanager-poolkeys";
+
+export interface ParsedV4Initialize {
+  poolId: string;
+  currency0: string;
+  currency1: string;
+  fee: number;
+  tickSpacing: number;
+  hooks: string;
+  source?: V4InitializeSource;
+}
+
+export interface UniV4PoolBuildResult {
+  readonly pools: readonly PoolUniverseEntry[];
+  readonly unresolvedPoolIds: readonly string[];
+}
+
+export const univ4PoolDiscovery = Object.freeze({
+  version: "univ4-poolkey-materializer-v1",
+  eventIds: ["univ4-swap"],
+  async materialize(context): Promise<LandedPoolMaterializationResult> {
+    const initScan = await context.scanLogs({
+      address: ADDR.UNISWAP_V4_POOL_MANAGER,
+      topics: [UNIV4_INITIALIZE_TOPIC],
+      fromBlock: context.fromBlock,
+      toBlock: context.toBlock,
+    });
+    const built = await buildUniV4PoolEntries(
+      initScan.logs,
+      context.logs,
+      context.minSwaps,
+      async (poolId) => {
+        const viaPositionManager = await resolveV4PoolKeyViaPositionManager(
+          context.backend,
+          ADDR.UNISWAP_V4_POSITION_MANAGER,
+          poolId,
+        );
+        if (viaPositionManager) {
+          return {
+            ...viaPositionManager,
+            source: "v4-positionmanager-poolkeys",
+          };
+        }
+        const historical = await resolveV4InitBackward(
+          context.backend,
+          ADDR.UNISWAP_V4_POOL_MANAGER,
+          UNIV4_INITIALIZE_TOPIC,
+          poolId,
+          context.fromBlock,
+        );
+        return historical
+          ? {
+              ...parseV4InitializeLog(historical),
+              source: "v4-initialize-backfill",
+            }
+          : null;
+      },
+    );
+    const issues = [
+      ...initScan.issues,
+      ...built.unresolvedPoolIds.map((poolId) =>
+        `unresolved PoolKey ${poolId}`
+      ),
+    ];
+    return {
+      pools: built.pools,
+      complete: initScan.complete && built.unresolvedPoolIds.length === 0,
+      issues,
+    };
+  },
+} satisfies LandedPoolMaterializationCapability);
+
+export async function buildUniV4PoolEntries(
+  initLogs: readonly LandedPoolDiscoveryLog[],
+  swapLogs: readonly LandedPoolDiscoveryLog[],
+  minSwaps: number,
+  resolveMissingInit?: (
+    poolId: string,
+  ) => Promise<ParsedV4Initialize | null>,
+): Promise<UniV4PoolBuildResult> {
+  const activity = new Map<string, { count: number; lastSwapBlock: number }>();
+  for (const log of swapLogs) {
+    const poolId = normalizeBytes32Topic(log.topics[1], "Swap.id");
+    const block = parseLogBlockNumber(log.blockNumber);
+    const item = activity.get(poolId) ?? { count: 0, lastSwapBlock: 0 };
+    item.count++;
+    item.lastSwapBlock = Math.max(item.lastSwapBlock, block);
+    activity.set(poolId, item);
+  }
+
+  const initByPoolId = new Map<string, ParsedV4Initialize>();
+  for (const log of initLogs) {
+    const parsed = parseV4InitializeLog(log);
+    initByPoolId.set(parsed.poolId, parsed);
+  }
+
+  const qualifying = [...activity.entries()]
+    .filter(([, item]) => item.count >= minSwaps);
+  const resolved = new Map<string, { parsed: ParsedV4Initialize; source: string }>();
+  for (const [poolId] of qualifying) {
+    const parsed = initByPoolId.get(poolId);
+    if (parsed) {
+      resolved.set(poolId, {
+        parsed,
+        source: parsed.source ?? "alchemy-v4-initialize",
+      });
+    }
+  }
+
+  if (resolveMissingInit) {
+    const missing = qualifying
+      .map(([poolId]) => poolId)
+      .filter((poolId) => !resolved.has(poolId));
+    const backfilled = await mapLimit(missing, 24, async (poolId) => {
+      const parsed = await resolveMissingInit(poolId);
+      return parsed ? { poolId, parsed } : null;
+    });
+    for (const item of backfilled) {
+      if (item) {
+        resolved.set(item.poolId, {
+          parsed: item.parsed,
+          source: item.parsed.source ?? "v4-initialize-backfill",
+        });
+      }
+    }
+  }
+
+  const pools: PoolUniverseEntry[] = [];
+  const unresolvedPoolIds: string[] = [];
+  for (const [poolId, item] of qualifying) {
+    const init = resolved.get(poolId);
+    if (!init) {
+      unresolvedPoolIds.push(poolId);
+      continue;
+    }
+    pools.push(v4PoolEntryFromInitialize(init.parsed, item, init.source));
+  }
+  pools.sort((a, b) =>
+    (b.score ?? 0) - (a.score ?? 0) ||
+    (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
+  );
+  return {
+    pools: Object.freeze(pools),
+    unresolvedPoolIds: Object.freeze(unresolvedPoolIds),
+  };
+}
+
+/** Compatibility helper for the existing focused fixture tests. */
+export async function buildV4PoolEntries(
+  initLogs: readonly LandedPoolDiscoveryLog[],
+  swapLogs: readonly LandedPoolDiscoveryLog[],
+  minSwaps: number,
+  resolveMissingInit?: (
+    poolId: string,
+  ) => Promise<ParsedV4Initialize | null>,
+): Promise<PoolUniverseEntry[]> {
+  return [
+    ...(await buildUniV4PoolEntries(
+      initLogs,
+      swapLogs,
+      minSwaps,
+      resolveMissingInit,
+    )).pools,
+  ];
+}
+
+export async function resolveV4PoolKeyViaPositionManager(
+  source:
+    | Pick<LandedPoolDiscoveryReadBackend, "call">
+    | ethers.JsonRpcProvider,
+  positionManagerAddr: string,
+  poolId: string,
+): Promise<ParsedV4Initialize | null> {
+  const backend = normalizeDiscoveryBackend(source);
+  const normalizedPoolId = normalizeBytes32Topic(poolId, "poolId");
+  const poolIdPrefix = normalizedPoolId.slice(2, 52);
+  const data = V4_POSITION_MANAGER_POOL_KEYS_SELECTOR +
+    poolIdPrefix.padEnd(64, "0");
+  try {
+    const result = await backend.call({
+      to: ethers.getAddress(positionManagerAddr),
+      data,
+    });
+    const [currency0, currency1, fee, tickSpacing, hooks] =
+      ethers.AbiCoder.defaultAbiCoder().decode(
+        ["address", "address", "uint24", "int24", "address"],
+        result,
+      );
+    const parsed: ParsedV4Initialize = {
+      poolId: normalizedPoolId,
+      currency0: ethers.getAddress(String(currency0)),
+      currency1: ethers.getAddress(String(currency1)),
+      fee: Number(fee),
+      tickSpacing: Number(tickSpacing),
+      hooks: ethers.getAddress(String(hooks)),
+    };
+    const recomputed = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["address", "address", "uint24", "int24", "address"],
+        [
+          parsed.currency0,
+          parsed.currency1,
+          parsed.fee,
+          parsed.tickSpacing,
+          parsed.hooks,
+        ],
+      ),
+    );
+    return recomputed.toLowerCase() === normalizedPoolId ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveV4InitBackward(
+  source:
+    | Pick<LandedPoolDiscoveryReadBackend, "getLogs">
+    | ethers.JsonRpcProvider,
+  poolManagerAddr: string,
+  topic: string,
+  poolId: string,
+  searchFromBlock: number,
+  chunkSize = 100_000,
+): Promise<LandedPoolDiscoveryLog | null> {
+  const backend = normalizeDiscoveryBackend(source);
+  const configuredLookback = Number(
+    process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ?? "2000000",
+  );
+  const maxLookbackBlocks = Number.isFinite(configuredLookback)
+    ? Math.max(0, Math.floor(configuredLookback))
+    : 2_000_000;
+  const normalizedChunkSize = Number.isFinite(chunkSize)
+    ? Math.max(1, Math.floor(chunkSize))
+    : 100_000;
+  let remaining = maxLookbackBlocks;
+  let chunkEnd = Math.max(0, Math.floor(searchFromBlock));
+  while (remaining > 0 && chunkEnd >= 0) {
+    const blockCount = Math.min(
+      normalizedChunkSize,
+      remaining,
+      chunkEnd + 1,
+    );
+    const chunkStart = chunkEnd - blockCount + 1;
+    try {
+      const logs = await backend.getLogs({
+        address: poolManagerAddr,
+        topics: [topic, poolId],
+        fromBlock: chunkStart,
+        toBlock: chunkEnd,
+      });
+      if (logs.length > 0) return logs[0];
+    } catch (error) {
+      if (isPrunedHistoryError(error)) return null;
+      try {
+        const logs = await backend.getLogs({
+          address: poolManagerAddr,
+          topics: [topic, poolId],
+          fromBlock: chunkStart,
+          toBlock: chunkEnd,
+        });
+        if (logs.length > 0) return logs[0];
+      } catch (retryError) {
+        if (isPrunedHistoryError(retryError)) return null;
+      }
+    }
+    remaining -= blockCount;
+    chunkEnd = chunkStart - 1;
+  }
+  return null;
+}
+
+export async function resolveV4InitViaPositionManagerThenBackward(
+  source: LandedPoolDiscoveryReadBackend | ethers.JsonRpcProvider,
+  positionManagerAddr: string,
+  poolManagerAddr: string,
+  topic: string,
+  poolId: string,
+  searchFromBlock: number,
+  chunkSize = 100_000,
+): Promise<ParsedV4Initialize | null> {
+  const backend = normalizeDiscoveryBackend(source);
+  const viaPositionManager = await resolveV4PoolKeyViaPositionManager(
+    backend,
+    positionManagerAddr,
+    poolId,
+  );
+  if (viaPositionManager) {
+    return {
+      ...viaPositionManager,
+      source: "v4-positionmanager-poolkeys",
+    };
+  }
+  const log = await resolveV4InitBackward(
+    backend,
+    poolManagerAddr,
+    topic,
+    poolId,
+    searchFromBlock,
+    chunkSize,
+  );
+  return log
+    ? {
+        ...parseV4InitializeLog(log),
+        source: "v4-initialize-backfill",
+      }
+    : null;
+}
+
+function parseV4InitializeLog(
+  log: LandedPoolDiscoveryLog,
+): ParsedV4Initialize {
+  const parsed = initializeIface.parseLog({
+    topics: [...log.topics],
+    data: log.data,
+  });
+  if (!parsed) throw new Error("failed to parse univ4 Initialize log");
+  return {
+    poolId: normalizeBytes32Topic(String(parsed.args.id), "Initialize.id"),
+    currency0: ethers.getAddress(String(parsed.args.currency0)),
+    currency1: ethers.getAddress(String(parsed.args.currency1)),
+    fee: Number(parsed.args.fee),
+    tickSpacing: Number(parsed.args.tickSpacing),
+    hooks: ethers.getAddress(String(parsed.args.hooks)),
+  };
+}
+
+function v4PoolEntryFromInitialize(
+  parsed: ParsedV4Initialize,
+  activity: { count: number; lastSwapBlock: number },
+  source: string,
+): PoolUniverseEntry {
+  return {
+    address: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
+    adapter: "univ4",
+    venueId: "univ4",
+    identitySource: "v4-manager",
+    poolId: parsed.poolId,
+    currency0: parsed.currency0,
+    currency1: parsed.currency1,
+    fee: parsed.fee,
+    tickSpacing: parsed.tickSpacing,
+    hooks: parsed.hooks,
+    fixedTokenIn: parsed.currency0,
+    fixedTokenOut: parsed.currency1,
+    score: activity.count,
+    swapCount30d: activity.count,
+    lastSwapBlock: activity.lastSwapBlock,
+    source,
+  };
+}
+
+function normalizeDiscoveryBackend(
+  source:
+    | Pick<LandedPoolDiscoveryReadBackend, "call">
+    | Pick<LandedPoolDiscoveryReadBackend, "getLogs">
+    | LandedPoolDiscoveryReadBackend
+    | ethers.JsonRpcProvider,
+): LandedPoolDiscoveryReadBackend {
+  if ("send" in source && typeof source.send === "function") {
+    const provider = source as ethers.JsonRpcProvider;
+    return {
+      getLogs(filter) {
+        return provider.send("eth_getLogs", [{
+          ...(filter.address === undefined ? {} : { address: filter.address }),
+          topics: [...filter.topics],
+          fromBlock: ethers.toQuantity(filter.fromBlock),
+          toBlock: ethers.toQuantity(filter.toBlock),
+        }]);
+      },
+      call(req) {
+        return provider.send("eth_call", [req, "latest"]);
+      },
+    };
+  }
+  const partial = source as Partial<LandedPoolDiscoveryReadBackend>;
+  return {
+    getLogs: partial.getLogs
+      ? partial.getLogs.bind(source)
+      : async () => {
+          throw new Error("univ4 discovery backend lacks getLogs");
+        },
+    call: partial.call
+      ? partial.call.bind(source)
+      : async () => {
+          throw new Error("univ4 discovery backend lacks call");
+        },
+  };
+}
+
+function normalizeBytes32Topic(
+  value: string | undefined,
+  field: string,
+): string {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`univ4 ${field} must be bytes32`);
+  }
+  return value.toLowerCase();
+}
+
+function parseLogBlockNumber(value: string | number): number {
+  const block = typeof value === "number"
+    ? value
+    : value.startsWith("0x")
+    ? parseInt(value, 16)
+    : Number(value);
+  if (!Number.isSafeInteger(block) || block < 0) {
+    throw new Error(`invalid log blockNumber: ${value}`);
+  }
+  return block;
+}
+
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor++;
+        results[index] = await fn(items[index]);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+function isPrunedHistoryError(error: unknown): boolean {
+  return /pruned|not available/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
+}

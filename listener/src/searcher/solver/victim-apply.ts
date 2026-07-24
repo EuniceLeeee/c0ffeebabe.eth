@@ -1,192 +1,65 @@
 import type { PoolImpact } from "../detector/pool-impact.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
-import {
-  type PoolStateCache,
-  type CurvePostImpactSeed,
-  type PostImpactSeed,
-  type V2PostImpactSeed,
-  type V3PostImpactSeed,
-  type V4PostImpactSeed,
-} from "./pool-state-cache.js";
-import { curveNgGetDy, curvePlainGetDy } from "./curve-math.js";
-import { v3SwapToState } from "./v3-math.js";
-import { quoteV2ExactInput } from "./v2-fee.js";
-import { PRODUCTION_VICTIM_MODELS } from "../venues/victim-model-registry.js";
+import type { PoolStateCache } from "./pool-state-cache.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import type {
+  LocalVictimApplyResult,
+  VictimRuntimeStageResult,
+} from "../venues/victim-runtime-capability.js";
+import { settleVictimRuntimeStage } from "../venues/victim-runtime-supervisor.js";
 
-export interface LocalVictimApplyResult {
-  postImpact: PostImpactSeed;
-  amountOut: bigint;
-}
+export type { LocalVictimApplyResult } from "../venues/victim-runtime-capability.js";
 
+/**
+ * Registry-only dispatch. Pool math and post-state construction belong to the
+ * owning family callback; an unknown or detect-only family fails closed.
+ */
 export async function applyVictimSwapLocally(
   cache: PoolStateCache,
   impact: PoolImpact,
   blockNumber: number,
   state?: StateBackend,
 ): Promise<LocalVictimApplyResult | null> {
-  const variant = PRODUCTION_VICTIM_MODELS.forEdge(impact.matchedAdapterId)?.localApplyVariant;
-  switch (variant) {
-    case "univ2":
-      return applyV2(cache, impact, blockNumber);
-    case "univ3":
-      return applyV3(cache, impact, blockNumber);
-    case "univ4":
-      return applyV4(impact, blockNumber);
-    case "curve":
-      return applyCurve(cache, impact, blockNumber, state);
-    default:
-      return null;
-  }
-}
-
-function applyV2(
-  cache: PoolStateCache,
-  impact: PoolImpact,
-  blockNumber: number,
-): LocalVictimApplyResult | null {
-  const pre = cache.snapshotV2(impact.pool, blockNumber);
-  if (!pre) return null;
-
-  const tokenIn = impact.tokenIn.toLowerCase();
-  const tokenOut = impact.tokenOut.toLowerCase();
-  const zeroForOne = tokenIn === pre.token0 && tokenOut === pre.token1;
-  const oneForZero = tokenIn === pre.token1 && tokenOut === pre.token0;
-  if (!zeroForOne && !oneForZero) return null;
-
-  const [reserveIn, reserveOut] = zeroForOne
-    ? [pre.reserve0, pre.reserve1]
-    : [pre.reserve1, pre.reserve0];
-  const amountOut = quoteV2ExactInput(reserveIn, reserveOut, impact.amountIn, pre.feeBps);
-  if (amountOut <= 0n || amountOut >= reserveOut) return null;
-
-  const post: V2PostImpactSeed = {
-    kind: "v2",
-    pool: impact.pool,
-    token0: pre.token0,
-    token1: pre.token1,
-    reserve0: zeroForOne ? pre.reserve0 + impact.amountIn : pre.reserve0 - amountOut,
-    reserve1: zeroForOne ? pre.reserve1 - amountOut : pre.reserve1 + impact.amountIn,
-    feeBps: pre.feeBps,
-    blockTimestampLast: pre.blockTimestampLast,
+  const settled = await applyVictimSwapLocallySettled(
+    cache,
+    impact,
     blockNumber,
-  };
-  return { postImpact: post, amountOut };
+    state,
+  );
+  return settled.ok ? settled.value : null;
 }
 
-function applyV3(
-  cache: PoolStateCache,
-  impact: PoolImpact,
-  blockNumber: number,
-): LocalVictimApplyResult | null {
-  const pre = cache.snapshotV3(impact.pool, blockNumber);
-  if (!pre) return null;
-
-  const tokenIn = impact.tokenIn.toLowerCase();
-  const tokenOut = impact.tokenOut.toLowerCase();
-  const zeroForOne = tokenIn === pre.token0 && tokenOut === pre.token1;
-  const oneForZero = tokenIn === pre.token1 && tokenOut === pre.token0;
-  if (!zeroForOne && !oneForZero) return null;
-
-  const result = v3SwapToState(pre.state, zeroForOne, impact.amountIn);
-  if (result.amountOut <= 0n) return null;
-
-  const post: V3PostImpactSeed = {
-    kind: "v3",
-    pool: impact.pool,
-    sqrtPriceX96: result.state.sqrtPriceX96,
-    tick: result.state.tick,
-    liquidity: result.state.liquidity,
-    observationIndex: result.state.observationIndex,
-    observationCardinality: result.state.observationCardinality,
-    observationCardinalityNext: result.state.observationCardinalityNext,
-    feeProtocol: result.state.feeProtocol,
-    unlocked: result.state.unlocked,
-    blockNumber,
-  };
-  return { postImpact: post, amountOut: result.amountOut };
-}
-
-// v4 is the simplest case: the PoolManager Swap event carries the EXACT post-swap state
-// (sqrtPrice/liquidity/tick) and the output delta, so — unlike v2/v3/curve — no swap math is
-// recomputed. We just re-package the detector's v4PostState into a seed. The seed is applied to
-// the anvil fork via v4PostImpactStateOverrides (post-impact-overrides.ts), and v4 quotes eth_call
-// that fork, so the overlay reaches both the quote search and the final sim without a local cache.
-function applyV4(
-  impact: PoolImpact,
-  blockNumber: number,
-): LocalVictimApplyResult | null {
-  const s = impact.v4PostState;
-  if (!s || impact.amountOut === undefined || impact.amountOut <= 0n) return null;
-
-  const post: V4PostImpactSeed = {
-    kind: "v4",
-    poolManager: impact.pool,
-    poolId: s.poolId,
-    sqrtPriceX96: s.sqrtPriceX96,
-    tick: s.tick,
-    liquidity: s.liquidity,
-    lpFee: s.lpFee,
-    blockNumber,
-  };
-  return { postImpact: post, amountOut: impact.amountOut };
-}
-
-async function applyCurve(
+export async function applyVictimSwapLocallySettled(
   cache: PoolStateCache,
   impact: PoolImpact,
   blockNumber: number,
   state?: StateBackend,
-): Promise<LocalVictimApplyResult | null> {
-  let pre = cache.snapshotCurve(impact.pool, blockNumber);
-  if (!pre && state) {
-    try {
-      await cache.quoteCurve(state, impact.pool, impact.tokenIn, impact.tokenOut, impact.amountIn);
-      pre = cache.snapshotCurve(impact.pool, blockNumber);
-    } catch {
-      return null;
-    }
+  timeoutMs?: number,
+): Promise<VictimRuntimeStageResult<LocalVictimApplyResult | null>> {
+  const family = PRODUCTION_ADAPTER_FAMILIES
+    .routes()
+    .findForEdge(impact.matchedAdapterId);
+  const callback = PRODUCTION_ADAPTER_FAMILIES
+    .victimModels()
+    .forEdge(impact.matchedAdapterId)
+    ?.runtime
+    ?.localApply
+    ?.apply;
+  const familyId = family?.id ?? impact.matchedAdapterId;
+  if (!callback) {
+    return Object.freeze({
+      ok: true,
+      familyId,
+      stage: "local-apply",
+      elapsedMs: 0,
+      value: null,
+    });
   }
-  if (!pre) return null;
-
-  const i = pre.coins.indexOf(impact.tokenIn.toLowerCase());
-  const j = pre.coins.indexOf(impact.tokenOut.toLowerCase());
-  if (i < 0 || j < 0) return null;
-
-  const amountOut = pre.kind === "plain"
-    ? curvePlainGetDy(pre.plain!, i, j, impact.amountIn)
-    : curveNgGetDy(pre.ng!, i, j, impact.amountIn);
-  if (amountOut <= 0n) return null;
-
-  const post: CurvePostImpactSeed = {
-    kind: "curve",
-    pool: impact.pool,
-    curveKind: pre.kind,
-    coins: [...pre.coins],
-    blockNumber,
-  };
-  if (pre.kind === "plain") {
-    const plain = {
-      A: pre.plain!.A,
-      fee: pre.plain!.fee,
-      balances: [...pre.plain!.balances],
-      rates: [...pre.plain!.rates],
-    };
-    if (amountOut >= plain.balances[j]) return null;
-    plain.balances[i] += impact.amountIn;
-    plain.balances[j] -= amountOut;
-    post.plain = plain;
-  } else {
-    const ng = {
-      A: pre.ng!.A,
-      fee: pre.ng!.fee,
-      offpegFeeMultiplier: pre.ng!.offpegFeeMultiplier,
-      balances: [...pre.ng!.balances],
-      rates: [...pre.ng!.rates],
-    };
-    if (amountOut >= ng.balances[j]) return null;
-    ng.balances[i] += impact.amountIn;
-    ng.balances[j] -= amountOut;
-    post.ng = ng;
-  }
-  return { postImpact: post, amountOut };
+  return await settleVictimRuntimeStage({
+    familyId,
+    stage: "local-apply",
+    timeoutMs,
+    work: (control) =>
+      callback({ cache, impact, blockNumber, state, control }),
+  });
 }

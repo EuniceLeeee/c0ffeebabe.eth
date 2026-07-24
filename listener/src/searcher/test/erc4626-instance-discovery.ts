@@ -5,7 +5,9 @@ import { join } from "node:path";
 import "../../shared/adapters/index.js";
 import {
   createCanonicalProtocolIdentityAttester,
+  deriveVerifiedRouteClaims,
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  prepareProtocolDiscoveryFamilyInvalidation,
   prepareProtocolDiscoveryProjection,
   protocolEdgeKey,
   protocolInstanceKey,
@@ -14,14 +16,18 @@ import {
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import {
   cachedProtocolCandidates,
+  cloneProtocolDiscoveryEvidenceCache,
   createProtocolDiscoveryEvidenceCache,
+  invalidateProtocolObservedHistory,
   loadProtocolDiscoveryEvidenceCache,
   protocolAddressCacheKey,
+  protocolObservedCursorAnchorMatches,
   pruneRecentProcessedProtocolTxs,
   reconcileProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
   recordVerifiedProtocolCandidates,
   saveProtocolDiscoveryEvidenceCache,
+  setProtocolObservedCursor,
   updateProtocolObservedSourceFingerprint,
 } from "../protocol-discovery-cache.js";
 import {
@@ -38,6 +44,7 @@ import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
+import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import {
   ERC4626_FORK_PROBE_HOLDER,
   ERC4626_FORK_PROBE_RECEIVER,
@@ -270,7 +277,9 @@ assert(
     claims.every((claim) =>
       claim.producerAdapterId === erc4626Adapter.id &&
       claim.authorityFingerprint.startsWith("erc4626-standard|") &&
-      claim.executionFingerprint.startsWith(`${claim.edgeAdapterId}|`) &&
+      claim.authorityClass === "canonical-onchain" &&
+      claim.authorityStrength === 300 &&
+      claim.executionFingerprint === claim.edge.executionVariantKey &&
       claim.semanticRouteKey.includes(VAULT.toLowerCase()) &&
       !claim.semanticRouteKey.includes(claim.edgeAdapterId)
     ),
@@ -838,6 +847,41 @@ assert(
   );
 }
 
+// Authority ordering is family-owned typed data. The shared arbitrator must
+// not recognize either the custom family id or an identity-source string.
+const lowerAuthorityAdapter = {
+  ...erc4626Adapter,
+  id: "protocol:test-custom-authority-low",
+  discoveryIdentityAuthority: { class: "provisional", strength: 17 },
+} satisfies ProtocolConversionAdapter;
+const higherAuthorityAdapter = {
+  ...erc4626Adapter,
+  id: "protocol:test-custom-authority-high",
+  discoveryIdentityAuthority: { class: "canonical-onchain", strength: 419 },
+} satisfies ProtocolConversionAdapter;
+new AdapterFamilyRegistry([lowerAuthorityAdapter]);
+new AdapterFamilyRegistry([higherAuthorityAdapter]);
+const authorityCandidates = addressScan.candidatesByAdapter.get(erc4626Adapter.id) ?? [];
+const customAuthorityResult = await runProtocolDiscovery({
+  adapters: [lowerAuthorityAdapter, higherAuthorityAdapter],
+  context: addressContext,
+  protocolEdgesEnabled: true,
+  attestIdentity: attester,
+  candidatesByAdapter: new Map([
+    [lowerAuthorityAdapter.id, authorityCandidates],
+    [higherAuthorityAdapter.id, authorityCandidates],
+  ]),
+});
+assert(
+  customAuthorityResult.events.some((event) =>
+    event.stage === "arbitration" &&
+    event.verdict === "would_admit" &&
+    event.adapterId === higherAuthorityAdapter.id &&
+    /equivalent_route_claims/.test(event.reason ?? "")
+  ),
+  "custom family authority strength must decide equivalence without a central protocol rank table",
+);
+
 // Non-equivalent execution fingerprints on ONE semantic route are a
 // verification-looseness red flag: the contested route is isolated for every
 // claimant (other routes keep flowing) and the alert is explicit.
@@ -921,7 +965,7 @@ const timeoutAdapter = {
     ...erc4626Adapter.discovery,
     addressMatcherVersion: "test-timeout-v1",
     async candidateFromAddress() {
-      throw Object.assign(new Error("matcher timed out"), { code: "TIMEOUT" });
+      return new Promise<never>(() => {});
     },
   },
 } satisfies ProtocolConversionAdapter;
@@ -930,11 +974,19 @@ const undecidedAddress = await scanProtocolDiscoveryRange({
   context: addressContext,
   candidateAddresses: [VAULT],
   evidenceCache: createProtocolDiscoveryEvidenceCache(),
+  familyGuardOptions: { timeoutMs: 5, failureThreshold: 1 },
 });
 assert(!undecidedAddress.addressSourceComplete, "matcher timeout must keep address source retryable");
 assert(
-  undecidedAddress.candidatesByAdapter.size === 0,
-  "one successful matcher must not admit while another family is undecided",
+  undecidedAddress.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1 &&
+    !undecidedAddress.candidatesByAdapter.has(timeoutAdapter.id),
+  "timed-out address matcher must not suppress a healthy sibling candidate",
+);
+assert(
+  undecidedAddress.sourceErrors.some((error) =>
+    error.adapterId === timeoutAdapter.id && error.retryable
+  ),
+  "timed-out address matcher must leave only its family source retryable",
 );
 
 let nonVaultCalls = 0;
@@ -965,7 +1017,7 @@ const negativeFirst = await scanProtocolDiscoveryRange({
   evidenceCache: addressCache,
 });
 assert(negativeFirst.sourceComplete, "ordinary non-vault is a semantic negative");
-assert(negativeFirst.addressStats.negatives === 1, "non-vault result must be negative-cached");
+assert(negativeFirst.addressStats.negatives === 1, "non-vault result must remain a semantic negative");
 assert(nonVaultCalls === 1, "first non-vault pass must call the family matcher once");
 const negativeSecond = await scanProtocolDiscoveryRange({
   adapters: [erc4626Adapter],
@@ -973,8 +1025,12 @@ const negativeSecond = await scanProtocolDiscoveryRange({
   candidateAddresses: [ASSET],
   evidenceCache: addressCache,
 });
-assert(negativeSecond.addressStats.cacheHits === 1, "same code hash must reuse negative cache");
-assert(nonVaultCalls === 1, "negative cache must suppress repeated asset() calls");
+assert(
+  negativeSecond.addressStats.cacheHits === 0 &&
+    negativeSecond.addressStats.probes === 1,
+  "same code hash alone must never authorize cross-block matcher reuse",
+);
+assert(Number(nonVaultCalls) === 2, "default cache policy must re-run mutable asset() behavior");
 nonVaultImplementation = `0x${"1".padStart(64, "0")}`;
 const negativeImplementationChanged = await scanProtocolDiscoveryRange({
   adapters: [erc4626Adapter],
@@ -984,9 +1040,9 @@ const negativeImplementationChanged = await scanProtocolDiscoveryRange({
 });
 assert(
   negativeImplementationChanged.addressStats.probes === 1,
-  "proxy implementation-word change must invalidate negative cache",
+  "proxy implementation-word change must still run the current matcher",
 );
-assert(Number(nonVaultCalls) === 2, "implementation change must re-run the family matcher");
+assert(Number(nonVaultCalls) === 3, "implementation change must re-run the family matcher");
 nonVaultCode = "0x60016001";
 const negativeChanged = await scanProtocolDiscoveryRange({
   adapters: [erc4626Adapter],
@@ -994,16 +1050,20 @@ const negativeChanged = await scanProtocolDiscoveryRange({
   candidateAddresses: [ASSET],
   evidenceCache: addressCache,
 });
-assert(negativeChanged.addressStats.probes === 1, "code-hash change must invalidate negative cache");
-assert(Number(nonVaultCalls) === 3, "changed code must re-run the family matcher");
-const negativeExpired = await scanProtocolDiscoveryRange({
+assert(negativeChanged.addressStats.probes === 1, "code-hash change must run the current matcher");
+assert(Number(nonVaultCalls) === 4, "changed code must re-run the family matcher");
+const negativeLaterBlock = await scanProtocolDiscoveryRange({
   adapters: [erc4626Adapter],
   context: { ...negativeContext, blockNumber: 7_324, toBlock: 7_324 },
   candidateAddresses: [ASSET],
   evidenceCache: addressCache,
 });
-assert(negativeExpired.addressStats.probes === 1, "negative evidence must expire after its block TTL");
-assert(Number(nonVaultCalls) === 4, "expired negative must retry even when code fingerprints are stable");
+assert(
+  negativeLaterBlock.addressStats.probes === 1 &&
+    negativeLaterBlock.addressStats.cacheHits === 0,
+  "block age/TTL must never be used as proof of matcher-output stability",
+);
+assert(Number(nonVaultCalls) === 5, "later-block negative must re-run without a family fingerprint");
 
 recordVerifiedProtocolCandidates(addressCache, addressOnly.wouldAdmit);
 const observedFingerprint = `0x${"12".repeat(32)}`;
@@ -1022,7 +1082,8 @@ assert(
   "a new matcher registry must invalidate evidence admitted under old semantics",
 );
 recordVerifiedProtocolCandidates(addressCache, addressOnly.wouldAdmit);
-addressCache.runtime.observedCursor = 123;
+const observedCursorHash = `0x${"ab".repeat(32)}`;
+setProtocolObservedCursor(addressCache, 123, observedCursorHash);
 addressCache.runtime.recentProcessedTxs.set(TX_HASH.toLowerCase(), 123);
 assert(
   !updateProtocolObservedSourceFingerprint(
@@ -1031,8 +1092,22 @@ assert(
     observedFamilyFingerprints,
   ) &&
     addressCache.runtime.observedCursor === 123 &&
+    addressCache.runtime.observedCursorHash === observedCursorHash &&
     addressCache.runtime.recentProcessedTxs.size === 1,
   "unchanged observed-source fingerprint must preserve cursor and tx dedupe",
+);
+const addressMatcherChangedCache =
+  cloneProtocolDiscoveryEvidenceCache(addressCache);
+assert(
+  !updateProtocolObservedSourceFingerprint(
+    addressMatcherChangedCache,
+    observedFingerprint,
+    new Map([[erc4626Adapter.id, `0x${"57".repeat(32)}`]]),
+  ) &&
+    addressMatcherChangedCache.runtime.observedCursor === 123 &&
+    addressMatcherChangedCache.runtime.observedCursorHash ===
+      observedCursorHash,
+  "an address/family fingerprint change must not erase unchanged observed-history authority",
 );
 recordProtocolRouteOwnership(addressCache, {
   version: 7,
@@ -1045,10 +1120,39 @@ const cacheDir = mkdtempSync(join(tmpdir(), "mev-protocol-cache-"));
 const cachePath = join(cacheDir, "cache.json");
 try {
   saveProtocolDiscoveryEvidenceCache(cachePath, addressCache);
+  const unanchored = cloneProtocolDiscoveryEvidenceCache(addressCache);
+  unanchored.runtime.observedCursorHash = null;
+  let unanchoredSaveRejected = false;
+  try {
+    saveProtocolDiscoveryEvidenceCache(`${cachePath}.unanchored`, unanchored);
+  } catch {
+    unanchoredSaveRejected = true;
+  }
+  assert(
+    unanchoredSaveRejected,
+    "cache persistence must reject a cursor whose canonical hash is missing",
+  );
   const reloaded = loadProtocolDiscoveryEvidenceCache(cachePath, 1n);
   assert(reloaded.addressEntries.size >= 2, "positive and negative address evidence must persist");
   assert(reloaded.verifiedCandidates.size === 1, "verified admission evidence must persist");
   assert(reloaded.runtime.observedCursor === 123, "observed event cursor must survive a restart");
+  assert(
+    reloaded.runtime.observedCursorHash === observedCursorHash,
+    "observed event cursor hash must survive a restart",
+  );
+  assert(
+    protocolObservedCursorAnchorMatches(
+      reloaded,
+      123,
+      observedCursorHash,
+    ) &&
+      !protocolObservedCursorAnchorMatches(
+        reloaded,
+        123,
+        `0x${"cd".repeat(32)}`,
+      ),
+    "restart cursor authority must be bound to the canonical block hash",
+  );
   assert(
     reloaded.runtime.observedSourceFingerprint === observedFingerprint,
     "observed-source fingerprint must survive a restart",
@@ -1119,6 +1223,20 @@ try {
     candidatesByAdapter: cachedProtocolCandidates(reloaded),
   });
   assert(rejectedDisk.wouldAdmit.length === 0, "disk cache must never bypass identity attestation");
+
+  const reorged = cloneProtocolDiscoveryEvidenceCache(reloaded);
+  invalidateProtocolObservedHistory(
+    reorged,
+    new Set([erc4626Adapter.id]),
+  );
+  assert(
+    reorged.runtime.observedCursor === null &&
+      reorged.runtime.observedCursorHash === null &&
+      reorged.runtime.recentProcessedTxs.size === 0 &&
+      reorged.verifiedCandidates.size === 0 &&
+      reorged.routeOwnership.admissions.length === 0,
+    "a cursor-anchor reorg must clear observed completeness and its derived ownership",
+  );
 
   assert(
     updateProtocolObservedSourceFingerprint(
@@ -1244,7 +1362,79 @@ const logicalFallbackProjection = prepareProtocolDiscoveryProjection({
 assert(
   logicalFallbackProjection.ownership.admissions.size === 0 &&
     logicalFallbackProjection.staticSuppressed.length === 1,
-  "a logical pair must not bypass a same-address static owner",
+  "an equivalent logical pair must preserve the verified incumbent route",
+);
+const distinctEdge: TokenEdge = {
+  ...first.wouldAdmit[0].edges[0],
+  tokenOut: RECEIVER,
+};
+const distinctAdmission = {
+  ...first.wouldAdmit[0],
+  edges: [distinctEdge],
+  claims: deriveVerifiedRouteClaims(
+    erc4626Adapter.id,
+    first.wouldAdmit[0].instance,
+    [distinctEdge],
+    firstContext.chainId,
+    erc4626Adapter.discoveryIdentityAuthority,
+  ),
+};
+const sameAddressDistinctRoute = prepareProtocolDiscoveryProjection({
+  currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  result: { ...first, wouldAdmit: [distinctAdmission] },
+  currentBackrunPools: [{ address: VAULT, adapter: "erc4626", fixedTokenIn: ASSET }],
+  currentBackrunGraph: [...first.wouldAdmit[0].edges],
+  currentKnownPoolKeys: new Set([VAULT.toLowerCase()]),
+  buildStrategyViews: buildViews,
+});
+assert(
+  sameAddressDistinctRoute.ownership.admissions.size === 1 &&
+    sameAddressDistinctRoute.backrunGraph.length === 3 &&
+    sameAddressDistinctRoute.staticSuppressed.length === 0,
+  "address equality must not suppress a separately verified semantic route",
+);
+const distinctRouteRemoved = prepareProtocolDiscoveryProjection({
+  currentOwnership: sameAddressDistinctRoute.ownership,
+  result: { ...first, wouldAdmit: [] },
+  currentBackrunPools: sameAddressDistinctRoute.strategyViews.backrun,
+  currentBackrunGraph: sameAddressDistinctRoute.backrunGraph,
+  currentKnownPoolKeys: sameAddressDistinctRoute.knownPoolKeys,
+  buildStrategyViews: buildViews,
+});
+assert(
+  distinctRouteRemoved.backrunGraph.length === 2 &&
+    distinctRouteRemoved.strategyViews.backrun.length === 1,
+  "revoking a same-address discovered route must preserve the incumbent pool and edges",
+);
+const conflictingEdge: TokenEdge = {
+  ...first.wouldAdmit[0].edges[0],
+  adapterId: "conflicting-erc4626-execution",
+  executionVariantKey: "conflicting-erc4626-execution",
+};
+const conflictingAdmission = {
+  ...first.wouldAdmit[0],
+  edges: [conflictingEdge],
+  claims: deriveVerifiedRouteClaims(
+    erc4626Adapter.id,
+    first.wouldAdmit[0].instance,
+    [conflictingEdge],
+    firstContext.chainId,
+    erc4626Adapter.discoveryIdentityAuthority,
+  ),
+};
+const sameRouteConflict = prepareProtocolDiscoveryProjection({
+  currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  result: { ...first, wouldAdmit: [conflictingAdmission] },
+  currentBackrunPools: [{ address: VAULT, adapter: "erc4626", fixedTokenIn: ASSET }],
+  currentBackrunGraph: [first.wouldAdmit[0].edges[0]],
+  currentKnownPoolKeys: new Set([VAULT.toLowerCase()]),
+  buildStrategyViews: buildViews,
+});
+assert(
+  sameRouteConflict.ownership.admissions.size === 0 &&
+    sameRouteConflict.backrunGraph.length === 0 &&
+    sameRouteConflict.staticConflicted.length === 1,
+  "non-equivalent execution claims for one semantic route must quarantine both sides",
 );
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
@@ -1346,6 +1536,115 @@ assert(
 assert(
   transientProjection.backrunGraph.length === 3,
   "transient failure must not revoke previously verified edges",
+);
+
+const healthyDynamicTarget = "0x5555555555555555555555555555555555555555";
+const healthyDynamicAdapterId = "protocol:healthy-dynamic";
+const observedAdmission = first.wouldAdmit[0];
+const healthyDynamicEdges = observedAdmission.edges.map((edge) => ({
+  ...edge,
+  target: healthyDynamicTarget,
+}));
+const healthyDynamicInstance = {
+  ...observedAdmission.instance,
+  ownerAdapterId: healthyDynamicAdapterId,
+  pool: {
+    ...observedAdmission.instance.pool,
+    address: healthyDynamicTarget,
+  },
+};
+const healthyDynamicAdmission = {
+  ...observedAdmission,
+  adapterId: healthyDynamicAdapterId,
+  instance: healthyDynamicInstance,
+  edges: healthyDynamicEdges,
+  claims: deriveVerifiedRouteClaims(
+    healthyDynamicAdapterId,
+    healthyDynamicInstance,
+    healthyDynamicEdges,
+    firstContext.chainId,
+    erc4626Adapter.discoveryIdentityAuthority,
+  ),
+};
+const mixedOwnership = {
+  version: 7,
+  admissions: new Map([
+    [
+      protocolInstanceKey(
+        observedAdmission.adapterId,
+        observedAdmission.instance.pool,
+      ),
+      observedAdmission,
+    ],
+    [
+      protocolInstanceKey(
+        healthyDynamicAdmission.adapterId,
+        healthyDynamicAdmission.instance.pool,
+      ),
+      healthyDynamicAdmission,
+    ],
+  ]),
+};
+const observedHistoryInvalidation =
+  prepareProtocolDiscoveryFamilyInvalidation({
+    currentOwnership: mixedOwnership,
+    invalidatedAdapterIds: new Set([observedAdmission.adapterId]),
+    currentBackrunPools: [
+      {
+        address: STATIC_TARGET,
+        adapter: "psm",
+        fixedTokenIn: ASSET,
+        fixedTokenOut: RECEIVER,
+        fixedSlotKind: "protocol",
+        fixedProtocolAction: "convert",
+      },
+      {
+        ...observedAdmission.instance.pool,
+        discoveryOwnerAdapterId: observedAdmission.adapterId,
+      },
+      {
+        ...healthyDynamicAdmission.instance.pool,
+        discoveryOwnerAdapterId: healthyDynamicAdmission.adapterId,
+      },
+    ],
+    currentBackrunGraph: [
+      staticEdge,
+      ...observedAdmission.edges,
+      ...healthyDynamicAdmission.edges,
+    ],
+    currentBlockscanGraph: [
+      staticEdge,
+      ...observedAdmission.edges,
+      ...healthyDynamicAdmission.edges,
+    ],
+    currentKnownPoolKeys: new Set([
+      STATIC_TARGET.toLowerCase(),
+      VAULT.toLowerCase(),
+      healthyDynamicTarget.toLowerCase(),
+    ]),
+    buildStrategyViews: buildViews,
+  });
+assert(
+  observedHistoryInvalidation.projection.ownership.admissions.size === 1 &&
+    [...observedHistoryInvalidation.projection.ownership.admissions.values()]
+      .every(({ adapterId }) => adapterId === healthyDynamicAdapterId),
+  "cursor reorg invalidation must revoke only the affected dynamic family",
+);
+assert(
+  observedHistoryInvalidation.projection.backrunGraph.length === 3 &&
+    observedHistoryInvalidation.projection.backrunGraph
+      .every((edge) => edge.target.toLowerCase() !== VAULT.toLowerCase()) &&
+    observedHistoryInvalidation.projection.backrunGraph
+      .some((edge) => edge.target.toLowerCase() === STATIC_TARGET.toLowerCase()) &&
+    observedHistoryInvalidation.projection.backrunGraph
+      .filter((edge) =>
+        edge.target.toLowerCase() === healthyDynamicTarget.toLowerCase()
+      ).length === 2,
+  "cursor reorg invalidation must remove stale edges while preserving static and healthy siblings",
+);
+assert(
+  observedHistoryInvalidation.projection.blockscanGraph?.length === 3,
+  "cursor reorg invalidation must update the block-scan graph in the same projection",
 );
 
 console.log("erc4626-instance-discovery PASS");

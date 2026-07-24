@@ -5,10 +5,7 @@ import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
 import type { ProfitTokenValuation } from "../profit-token-valuation.js";
-import {
-  DEFAULT_FLASH_ADAPTER_ID,
-  findFlashProviderDescriptor,
-} from "../../adapters/flash-providers.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   edgeMatchesVictimSelector,
   type OracleVictimEffect,
@@ -190,8 +187,9 @@ export class TemplatePlanner implements Planner {
         break;
       }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
-      const flashAdapters = flashSlot?.adapters ?? [DEFAULT_FLASH_ADAPTER_ID];
-      const preferredFlash = flashAdapters[0] ?? DEFAULT_FLASH_ADAPTER_ID;
+      const defaultFlash = PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId;
+      const flashAdapters = flashSlot?.adapters ?? [defaultFlash];
+      const preferredFlash = flashAdapters[0] ?? defaultFlash;
 
       // Full graph (template-adapter-filtered only). Relevance to the victim
       // impact is enforced at the PATH level by focusPathsOnImpact below — NOT by
@@ -352,11 +350,25 @@ export class TemplatePlanner implements Planner {
     const candidates: CandidatePlan[] = [];
     const tokenPath: TokenPath = { edges: [...opp.seedEdges] };
     const cycleTokens = collectCycleTokens(tokenPath);
+    const liveFlashSource = this.flashLiquidity?.source(opp.flashToken) ?? null;
+    if (this.flashLiquidity && (!liveFlashSource || liveFlashSource.amount <= 0n)) {
+      return candidates;
+    }
+    const maxFlashAmount = liveFlashSource
+      ? minBigint(opp.searchSeed.maxInput, liveFlashSource.amount)
+      : opp.searchSeed.maxInput;
+    if (maxFlashAmount <= 0n) return candidates;
+    const searchCenter = minBigint(opp.searchSeed.searchCenter, maxFlashAmount);
     const plannedOpportunity: BlockScanPlannedOpportunity = {
       ...opp,
+      searchSeed: {
+        ...opp.searchSeed,
+        searchCenter,
+        maxInput: maxFlashAmount,
+      },
       startToken: opp.flashToken,
       profitToken: opp.flashToken,
-      victimAmountIn: opp.searchSeed.searchCenter,
+      victimAmountIn: searchCenter,
       hints: {
         blockScan: {
           sourceBlock: opp.sourceBlock,
@@ -375,8 +387,12 @@ export class TemplatePlanner implements Planner {
         break;
       }
       const flashSlot = template.slots.find((s) => s.kind === "flash");
-      const flashAdapters = flashSlot?.adapters ?? [DEFAULT_FLASH_ADAPTER_ID];
-      const preferredFlash = flashAdapters[0] ?? DEFAULT_FLASH_ADAPTER_ID;
+      const defaultFlash = PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId;
+      const flashAdapters = flashSlot?.adapters ?? [defaultFlash];
+      const preferredFlash = liveFlashSource?.adapterId ?? flashAdapters[0] ?? defaultFlash;
+      if (liveFlashSource && !flashAdapters.includes(liveFlashSource.adapterId)) {
+        continue;
+      }
 
       if (!satisfiesRequiredSlots(tokenPath, template)) {
         continue;
@@ -395,13 +411,13 @@ export class TemplatePlanner implements Planner {
         root: buildAbstractRoot(tokenPath, plannedOpportunity, preferredFlash),
         opportunity: plannedOpportunity,
         tokenPath,
-        flashAdapterIds: [...flashAdapters],
+        flashAdapterIds: liveFlashSource ? [preferredFlash] : [...flashAdapters],
         flashAdapterId: preferredFlash,
-        maxFlashAmount: opp.searchSeed.maxInput,
+        maxFlashAmount,
         cycleTokens,
         borrowableTokens: [{
           token: opp.flashToken,
-          amount: opp.searchSeed.maxInput,
+          amount: maxFlashAmount,
           adapterId: preferredFlash,
         }],
       });
@@ -416,12 +432,16 @@ export class TemplatePlanner implements Planner {
   }
 }
 
+function minBigint(a: bigint, b: bigint): bigint {
+  return a < b ? a : b;
+}
+
 function buildAbstractRoot(path: TokenPath, opp: Pick<PlannedOpportunity, "startToken" | "profitToken">, flashAdapterId: string): PlanNode {
-  const flashProvider = findFlashProviderDescriptor(flashAdapterId);
-  if (!flashProvider) throw new Error(`unknown flash adapter: ${flashAdapterId}`);
+  const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flashAdapterId);
+  if (!flashFamily) throw new Error(`unknown flash adapter: ${flashAdapterId}`);
   return {
     adapterId: flashAdapterId,
-    target: flashProvider.target,
+    target: flashFamily.funding.target,
     tokenIn: opp.startToken,
     tokenOut: opp.startToken,
     amount: { kind: "balance-bps", token: opp.startToken, account: "executor", bps: 0 },

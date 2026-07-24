@@ -213,7 +213,7 @@ export type SearcherEvent =
       type: "block_scan_result";
       source_block: number;
       state_block: number | null;
-      outcome: "ran" | "skipped_busy" | "stale_state" | "budget_exceeded" | "disabled" | "breaker_open";
+      outcome: "ran" | "degraded" | "skipped_busy" | "stale_state" | "budget_exceeded" | "disabled" | "breaker_open";
       scanned_pairs: number;
       swap_touched_pools: number;
       candidates: number;

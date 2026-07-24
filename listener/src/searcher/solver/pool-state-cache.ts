@@ -22,11 +22,11 @@ import {
   type CurveNgState,
 } from "./curve-math.js";
 import { V3MissingBitmapWordError, v3SwapExactInput, type V3PoolState } from "./v3-math.js";
+import { quoteV2ExactInput, v2FeeBpsForFactory } from "./v2-fee.js";
 import {
-  DEFAULT_V2_FEE_BPS,
-  quoteV2ExactInput,
-  v2FeeBpsForFactory,
-} from "./v2-fee.js";
+  curveNativeRateMultiplier,
+  curveRateMultiplierFromDecimals,
+} from "../venues/curve-assets.js";
 
 const curveIface = new ethers.Interface([
   "function A() view returns (uint256)",
@@ -168,6 +168,31 @@ export interface V3LiveSeed {
   unlocked?: boolean;
   blockNumber: number;
 }
+
+/**
+ * Family-owned projection of already-read current-N state into the mature
+ * backrun cache. V3 tick words remain on their existing slow-changing/JIT
+ * lifecycle; this seed replaces only the duplicate slot0/liquidity read.
+ */
+export type BlockScanBackrunStateSeed =
+  | {
+      readonly kind: "v2";
+      readonly state: V2Seed;
+    }
+  | {
+      readonly kind: "v3-live";
+      readonly state: V3LiveSeed;
+    };
+
+/**
+ * Family-owned invalidation of a slow-changing backrun cache layer. These are
+ * emitted only from a canonical mutation classification; an unproven direct
+ * refresh remains conservatively invalidated by the publication bridge.
+ */
+export type BlockScanBackrunStateInvalidation = {
+  readonly kind: "v3-ticks";
+  readonly pool: string;
+};
 
 export interface V3TicksSeed {
   pool: string;
@@ -371,6 +396,14 @@ export class PoolStateCache {
       const key = pool.toLowerCase();
       this.v2.delete(key);
       this.v3Live.delete(key);
+      this.failed.delete(key);
+    }
+  }
+
+  invalidateBlockScanV3Ticks(pools: Iterable<string>): void {
+    for (const pool of pools) {
+      const key = pool.toLowerCase();
+      this.v3Ticks.delete(key);
       this.failed.delete(key);
     }
   }
@@ -774,14 +807,13 @@ export class PoolStateCache {
     const token0 = ethers.getAddress("0x" + t0Res.slice(-40)).toLowerCase();
     const token1 = ethers.getAddress("0x" + t1Res.slice(-40)).toLowerCase();
     const decoded = univ2Iface.decodeFunctionResult("getReserves", resvRes);
-    let feeBps = DEFAULT_V2_FEE_BPS;
-    if (factoryRes) {
-      try {
-        const factory = univ2Iface.decodeFunctionResult("factory", factoryRes)[0] as string;
-        feeBps = v2FeeBpsForFactory(factory);
-      } catch {
-        feeBps = DEFAULT_V2_FEE_BPS;
-      }
+    if (!factoryRes) {
+      throw new Error(`v2 ${pool.slice(0, 10)} factory read failed`);
+    }
+    const factory = univ2Iface.decodeFunctionResult("factory", factoryRes)[0] as string;
+    const feeBps = v2FeeBpsForFactory(factory);
+    if (feeBps === null) {
+      throw new Error(`v2 ${pool.slice(0, 10)} factory fee is not attested`);
     }
     return {
       token0,
@@ -880,6 +912,7 @@ export class PoolStateCache {
         });
       } else {
         for (let k = 0; k < item.coins.length; k++) {
+          if (curveNativeRateMultiplier(item.coins[k]) !== null) continue;
           round2Calls.push({
             target: item.coins[k],
             allowFailure: true,
@@ -920,8 +953,20 @@ export class PoolStateCache {
         } else {
           const rates: bigint[] = [];
           for (let k = 0; k < item.coins.length; k++) {
-            const dec = Number(BigInt(requireCurveBatchData(round2, `${item.key}:decimals:${k}`)));
-            rates.push(10n ** BigInt(36 - dec));
+            const nativeRate = curveNativeRateMultiplier(item.coins[k]);
+            if (nativeRate !== null) {
+              rates.push(nativeRate);
+              continue;
+            }
+            const dec = Number(
+              BigInt(
+                requireCurveBatchData(
+                  round2,
+                  `${item.key}:decimals:${k}`,
+                ),
+              ),
+            );
+            rates.push(curveRateMultiplierFromDecimals(dec));
           }
           const plain: CurvePlainState = { A: item.A, fee: item.fee, balances, rates };
           this.curve.set(item.key, {
@@ -1151,8 +1196,13 @@ export class PoolStateCache {
     // Old-style plain (e.g. 3pool): rate multiplier per coin = 10^(36 - decimals).
     const rates: bigint[] = [];
     for (const coin of coins) {
+      const nativeRate = curveNativeRateMultiplier(coin);
+      if (nativeRate !== null) {
+        rates.push(nativeRate);
+        continue;
+      }
       const dec = Number(await this.call(state, coin, erc20Iface.encodeFunctionData("decimals")));
-      rates.push(10n ** BigInt(36 - dec));
+      rates.push(curveRateMultiplierFromDecimals(dec));
     }
     const plain: CurvePlainState = { A, fee, balances, rates };
     return { kind: "plain", coins, plain, blockNumber: this.tickBlock, source: "lazy" };

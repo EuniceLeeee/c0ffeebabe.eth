@@ -46,6 +46,7 @@ const V2_IFACE = new ethers.Interface([
   "event Sync(uint112 reserve0,uint112 reserve1)",
   "event Swap(address indexed sender,uint256 amount0In,uint256 amount1In,uint256 amount0Out,uint256 amount1Out,address indexed to)",
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
 ]);
@@ -274,6 +275,11 @@ async function assertV2(): Promise<void> {
       if (data === V2_IFACE.encodeFunctionData("getReserves")) {
         return V2_IFACE.encodeFunctionResult("getReserves", [preReserve0, preReserve1, 123]);
       }
+      if (data === V2_IFACE.encodeFunctionData("factory")) {
+        return V2_IFACE.encodeFunctionResult("factory", [
+          "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+        ]);
+      }
       if (data === V2_IFACE.encodeFunctionData("token0")) {
         return V2_IFACE.encodeFunctionResult("token0", [TOKEN0]);
       }
@@ -286,6 +292,7 @@ async function assertV2(): Promise<void> {
   const fallbackImpacts = await detectImpactFromLogs([v2SwapLog()], V2_GRAPH, undefined, tokenQuery);
   assert(fallbackImpacts[0].v2PostState?.reserve0 === preReserve0 + 1_000n, "v2 reserve0 fallback mismatch");
   assert(fallbackImpacts[0].v2PostState?.reserve1 === preReserve1 - 900n, "v2 reserve1 fallback mismatch");
+  assert(fallbackImpacts[0].v2PostState?.feeBps === 30n, "v2 fee identity fallback mismatch");
   console.log("[overlay-fidelity] UniV2 no-Sync fallback from pre-reserves: PASS");
 
   const exactSeed = v2SeedFromEvent(impact.v2PostState.reserve0, impact.v2PostState.reserve1);

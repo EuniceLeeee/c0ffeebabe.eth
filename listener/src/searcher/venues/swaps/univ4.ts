@@ -4,7 +4,12 @@ import { isStateCallAbortedError } from "../../../shared/state/state-backend.js"
 import type { ResolvedPlanNode } from "../../../shared/types/plan.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend, V4PoolKey } from "../../planner/token-graph.js";
+import type { V4PostImpactSeed } from "../../solver/pool-state-cache.js";
 import { quoteV4ExactInLocal } from "../../solver/v4-math.js";
+import type {
+  BlockScanStateCapability,
+  StateReadResult,
+} from "../blockscan-state-capability.js";
 import type {
   ExactQuoteContext,
   PlanBuildContext,
@@ -14,9 +19,28 @@ import type {
   SwapAdapter,
   V4QuotePathStats,
 } from "../route-leg-adapter.js";
-import { readV4WarmMid } from "../mid-readers.js";
-import { createUniV4SwapObservation } from "../swap-observation.js";
-import { UNIV4_INITIALIZE_TOPIC } from "../landed-event-registry.js";
+import {
+  createUniV4SwapObservation,
+  type PoolImpact,
+} from "../swap-observation.js";
+import type {
+  LocalVictimApplyContext,
+  LocalVictimApplyResult,
+} from "../victim-runtime-capability.js";
+import {
+  defineSwapLandedEvents,
+  singletonIndexedBytes32Emitter,
+  UNIV4_INITIALIZE_TOPIC,
+  UNIV4_MODIFY_LIQUIDITY_TOPIC,
+  UNIV4_SWAP_TOPIC,
+} from "../landed-event-registry.js";
+import {
+  currentBlockRead,
+  directedPoolMid,
+  midsForDirectedEdges,
+  q96DirectedReserves,
+  requireRead,
+} from "./blockscan-state-shared.js";
 import {
   int24,
   normalizeV4Currency,
@@ -28,6 +52,7 @@ import {
   v4PoolId,
   validateV4CurrencyPair,
 } from "./univ4-common.js";
+import { univ4PoolDiscovery } from "./univ4-pool-discovery.js";
 
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
@@ -39,29 +64,200 @@ const initializeIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
 ]);
 const poolKeyCache = new Map<string, V4PoolKey>();
+const univ4Emitter = singletonIndexedBytes32Emitter(
+  ADDR.UNISWAP_V4_POOL_MANAGER,
+  1,
+);
+const univ4LandedEvents = defineSwapLandedEvents({
+  swaps: [{
+    id: "univ4-swap",
+    topic: UNIV4_SWAP_TOPIC,
+    emitter: univ4Emitter,
+    materialization: "family",
+    discovery: { poolAdapter: "univ4", label: "univ4" },
+    invalidatesWarmState: true,
+  }],
+  mutations: [{
+    id: "univ4-modify-liquidity",
+    topic: UNIV4_MODIFY_LIQUIDITY_TOPIC,
+    emitter: univ4Emitter,
+  }],
+});
 
 export const uniV4QuoterIface = new ethers.Interface([
   "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
 ]);
+const uniV4StateViewIface = new ethers.Interface([
+  "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
+]);
+
+interface UniV4StateSchema {
+  readonly pools: ReadonlyMap<string, {
+    readonly currency0: string;
+    readonly currency1: string;
+  }>;
+}
+
+interface UniV4CurrentState {
+  readonly poolId: string;
+  readonly currency0: string;
+  readonly currency1: string;
+  readonly sqrtPriceX96: bigint;
+  readonly liquidity: bigint;
+  readonly protocolFee: bigint;
+  readonly lpFee: bigint;
+}
+
+export const univ4BlockScanState = Object.freeze({
+  stateKey(edge) {
+    return statePoolId(edge);
+  },
+
+  compileStaticSchema({ edges }) {
+    const pools = new Map<string, { currency0: string; currency1: string }>();
+    for (const edge of edges) {
+      if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) {
+        throw new Error("univ4 block-scan edge is missing PoolKey");
+      }
+      const poolId = statePoolId(edge);
+      const currency0 = graphV4Currency(edge.v4PoolKey.currency0);
+      const currency1 = graphV4Currency(edge.v4PoolKey.currency1);
+      const existing = pools.get(poolId);
+      if (
+        existing &&
+        (existing.currency0 !== currency0 || existing.currency1 !== currency1)
+      ) {
+        throw new Error(`univ4 block-scan pool ${poolId} has inconsistent currencies`);
+      }
+      pools.set(poolId, Object.freeze({ currency0, currency1 }));
+    }
+    return Object.freeze({ pools });
+  },
+
+  buildCurrentBlockReads({ sourceBlock, sourceBlockHash, edges }) {
+    const poolId = assertV4Group(edges);
+    return Object.freeze([
+      currentBlockRead({
+        id: `slot0:${poolId}`,
+        sourceBlock,
+        sourceBlockHash,
+        to: ADDR.UNISWAP_V4_STATE_VIEW,
+        data: uniV4StateViewIface.encodeFunctionData("getSlot0", [poolId]),
+      }),
+      currentBlockRead({
+        id: `liquidity:${poolId}`,
+        sourceBlock,
+        sourceBlockHash,
+        to: ADDR.UNISWAP_V4_STATE_VIEW,
+        data: uniV4StateViewIface.encodeFunctionData("getLiquidity", [poolId]),
+      }),
+    ]);
+  },
+
+  decodeState(schema, results) {
+    const poolId = statePoolFromResults(results, "slot0:");
+    const metadata = schema.pools.get(poolId);
+    if (!metadata) throw new Error(`univ4 block-scan schema missing ${poolId}`);
+    const slot0 = uniV4StateViewIface.decodeFunctionResult(
+      "getSlot0",
+      requireRead(results, `slot0:${poolId}`).data,
+    );
+    const liquidity = uniV4StateViewIface.decodeFunctionResult(
+      "getLiquidity",
+      requireRead(results, `liquidity:${poolId}`).data,
+    );
+    const snapshot = {
+      poolId,
+      currency0: metadata.currency0,
+      currency1: metadata.currency1,
+      sqrtPriceX96: BigInt(slot0[0]),
+      liquidity: BigInt(liquidity[0]),
+      protocolFee: BigInt(slot0[2]),
+      lpFee: BigInt(slot0[3]),
+    };
+    if (snapshot.sqrtPriceX96 <= 0n || snapshot.liquidity <= 0n) {
+      throw new Error(`univ4 block-scan pool ${poolId} has inactive state`);
+    }
+    return Object.freeze(snapshot);
+  },
+
+  deriveMids(snapshot, edges) {
+    return midsForDirectedEdges(edges, (edge) => {
+      if (statePoolId(edge) !== snapshot.poolId) {
+        throw new Error(`univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`);
+      }
+      const directed = q96DirectedReserves({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.currency0,
+        token1: snapshot.currency1,
+        edge,
+      });
+      return directedPoolMid({
+        kind: "v4",
+        edge,
+        reserveIn: directed.reserveIn,
+        reserveOut: directed.reserveOut,
+        sqrtPriceX96: directed.sqrtPriceInOutX96,
+        liquidity: snapshot.liquidity,
+        feeBps: Number(snapshot.lpFee) / 100,
+      });
+    });
+  },
+
+  dependencies(edges) {
+    assertV4Group(edges);
+    return Object.freeze([
+      ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
+      ADDR.UNISWAP_V4_STATE_VIEW.toLowerCase(),
+    ]);
+  },
+} satisfies BlockScanStateCapability<UniV4StateSchema, UniV4CurrentState>);
 
 export const univ4Adapter = Object.freeze({
   id: "univ4",
   kind: "swap",
+  livePoolState: { kind: "singleton-v4" },
   poolAdapters: ["univ4"],
+  routeIdentity: {
+    instanceKey(pool: PoolEntry) {
+      if (!pool.poolId) throw new Error("univ4 route identity requires poolId");
+      return JSON.stringify([
+        pool.address.toLowerCase(),
+        pool.poolId.toLowerCase(),
+      ]);
+    },
+    executionVariantKey(edge: TokenEdge) {
+      if (!edge.poolId) throw new Error("univ4 execution identity requires poolId");
+      return JSON.stringify([edge.adapterId, edge.poolId.toLowerCase()]);
+    },
+  },
+  identityPolicies: [{
+    poolAdapter: "univ4",
+    policy: "trusted-singleton-seed",
+    canonicalAddress: ADDR.UNISWAP_V4_POOL_MANAGER,
+    canonicalVenueId: "univ4",
+    canonicalIdentitySource: "v4-manager",
+  }],
   edgeAdapterIds: ["univ4-unlock"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   requiresProtocolEdgesFlag: false,
-  actionAdapterIds: [
+  ownedActionAdapterIds: [
     "univ4-unlock",
     "univ4-swap",
     "univ4-take",
     "univ4-sync",
     "univ4-settle",
     "univ4-settle-value",
+  ],
+  requiredInfraActionAdapterIds: [
     "erc20-transfer",
     "weth-deposit-value",
     "weth-withdraw-amount",
   ],
+  landedEvents: univ4LandedEvents,
+  poolDiscovery: univ4PoolDiscovery,
   observation: createUniV4SwapObservation({
     adapterIds: ["univ4-unlock"],
     canonicalIntakeTargets: [
@@ -69,9 +265,22 @@ export const univ4Adapter = Object.freeze({
       UNISWAP_UNIVERSAL_ROUTER_V1,
       UNISWAP_UNIVERSAL_ROUTER_V2,
     ],
+    landedEvents: univ4LandedEvents.swaps,
   }),
-  readMid: readV4WarmMid,
-  warm: { kind: "mutable-pool", cache: "v4" },
+  victimModel: {
+    id: "pool-swap:univ4",
+    mode: "replay",
+    runtime: {
+      localApply: {
+        cacheBacked: false,
+        needsMutablePoolRefresh: false,
+        apply: applyUniV4Victim,
+      },
+      exactPostImpact: uniV4ExactPostImpact,
+      buildOverlay: null,
+    },
+  },
+  pricingState: univ4BlockScanState,
   prepared: {
     quote: quoteUniV4Prepared,
     quoteUnsupportedReason: null,
@@ -94,6 +303,37 @@ export const univ4Adapter = Object.freeze({
   quoteExact: quoteUniV4Exact,
   buildPlanFragment: buildUniV4PlanFragment,
 } satisfies SwapAdapter);
+
+function applyUniV4Victim(
+  ctx: LocalVictimApplyContext,
+): LocalVictimApplyResult | null {
+  const postImpact = uniV4ExactPostImpact(ctx.impact, ctx.blockNumber);
+  if (
+    !postImpact ||
+    ctx.impact.amountOut === undefined ||
+    ctx.impact.amountOut <= 0n
+  ) {
+    return null;
+  }
+  return { postImpact, amountOut: ctx.impact.amountOut };
+}
+
+function uniV4ExactPostImpact(
+  impact: PoolImpact,
+  blockNumber: number,
+): V4PostImpactSeed | null {
+  if (!impact.v4PostState) return null;
+  return {
+    kind: "v4",
+    poolManager: impact.pool,
+    poolId: impact.v4PostState.poolId,
+    sqrtPriceX96: impact.v4PostState.sqrtPriceX96,
+    tick: impact.v4PostState.tick,
+    liquidity: impact.v4PostState.liquidity,
+    lpFee: impact.v4PostState.lpFee,
+    blockNumber,
+  };
+}
 
 async function quoteUniV4Prepared(ctx: PreparedRouteContext): Promise<PreparedRouteQuoteResult> {
   const data = encodeUniV4QuoteExactInputSingle(
@@ -428,6 +668,45 @@ function validateGraphPair(pool: string, key: V4PoolKey, tokenIn: string, tokenO
         `${key.currency0}/${key.currency1}`,
     );
   }
+}
+
+function statePoolId(edge: TokenEdge): string {
+  if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) {
+    throw new Error(`univ4 block-scan edge ${edge.target} is missing PoolKey`);
+  }
+  const computed = v4PoolId(edge.v4PoolKey);
+  if (edge.poolId && edge.poolId.toLowerCase() !== computed) {
+    throw new Error(
+      `univ4 block-scan edge poolId ${edge.poolId} does not match ${computed}`,
+    );
+  }
+  return computed;
+}
+
+function assertV4Group(edges: readonly TokenEdge[]): string {
+  if (edges.length === 0) throw new Error("univ4 block-scan state group has no edges");
+  const poolId = statePoolId(edges[0]);
+  for (const edge of edges) {
+    if (statePoolId(edge) !== poolId) {
+      throw new Error(`mixed univ4 pools in state group ${poolId}`);
+    }
+  }
+  return poolId;
+}
+
+function graphV4Currency(currency: string): string {
+  return currency.toLowerCase() === ethers.ZeroAddress.toLowerCase()
+    ? ADDR.WETH.toLowerCase()
+    : ethers.getAddress(currency).toLowerCase();
+}
+
+function statePoolFromResults(
+  results: readonly StateReadResult[],
+  prefix: string,
+): string {
+  const read = results.find((candidate) => candidate.id.startsWith(prefix));
+  if (!read) throw new Error(`missing block-scan read prefix ${prefix}`);
+  return read.id.slice(prefix.length);
 }
 
 export type { V4QuotePathStats };

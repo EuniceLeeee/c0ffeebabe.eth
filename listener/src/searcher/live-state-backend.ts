@@ -26,6 +26,8 @@ export interface PrepareInput {
   /** Locally computed post-victim pool state. When available, revm can inject raw
    *  storage overrides instead of replaying the victim swap with debug_traceCall. */
   postImpact?: PostImpactSeed;
+  /** Absolute opportunity deadline; family-local preparation may not publish after it. */
+  deadlineAtMs?: number;
 }
 
 export interface PreparedState {

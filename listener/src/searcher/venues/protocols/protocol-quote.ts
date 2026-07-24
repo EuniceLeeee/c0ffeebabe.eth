@@ -152,7 +152,10 @@ async function readPSMFee(
     return BigInt(psmIface.decodeFunctionResult(fee, result)[0]);
   } catch (error) {
     if (isStateCallAbortedError(error)) throw error;
-    return 0n;
+    throw new Error(
+      `PSM ${fee} read failed for ${target}; current-block pricing is unresolved`,
+      { cause: error },
+    );
   }
 }
 

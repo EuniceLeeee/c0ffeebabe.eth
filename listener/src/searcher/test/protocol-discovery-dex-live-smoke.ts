@@ -9,7 +9,10 @@ import {
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
 import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
-import { protocolCandidateAddressesFromDexUniverse } from "../protocol-discovery-runtime.js";
+import {
+  protocolCandidateAddressesFromDexUniverse,
+  protocolDiscoveryCandidateAddressHints,
+} from "../protocol-discovery-runtime.js";
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import {
   buildTokenGraph,
@@ -21,7 +24,7 @@ import {
 import { buildStrategyViews } from "../strategy-views.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
+  PRODUCTION_ADAPTER_FAMILIES,
 } from "../venues/production-registry.js";
 
 interface UniversePool {
@@ -74,12 +77,19 @@ async function main(): Promise<void> {
     const blockNumber = await provider.getBlockNumber();
     const dexUniverse = universePools(universePath, maxPools);
     const dexPoolAdapters = new Set(
-      PRODUCTION_ROUTE_ADAPTERS.swaps.flatMap((adapter) => [...adapter.poolAdapters]),
+      PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
     );
-    const candidateAddresses = protocolCandidateAddressesFromDexUniverse(
+    const dexCandidateAddresses = protocolCandidateAddressesFromDexUniverse(
       dexUniverse,
       dexPoolAdapters,
     );
+    const candidateAddressHints = protocolDiscoveryCandidateAddressHints(
+      PRODUCTION_ADAPTER_FAMILIES.protocols(),
+    );
+    const candidateAddresses = [...new Set([
+      ...dexCandidateAddresses,
+      ...candidateAddressHints,
+    ])].sort();
     if (candidateAddresses.length === 0) throw new Error("DEX universe produced zero token candidates");
 
     // Remove the entire family by type, not selected addresses. The legacy rows
@@ -116,13 +126,13 @@ async function main(): Promise<void> {
     };
     const cache = createProtocolDiscoveryEvidenceCache();
     const firstScan = await scanProtocolDiscoveryRange({
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       context,
       candidateAddresses,
       evidenceCache: cache,
     });
     const result = await runProtocolDiscovery({
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       context,
       protocolEdgesEnabled: true,
       attestIdentity: createCanonicalProtocolIdentityAttester({
@@ -153,37 +163,37 @@ async function main(): Promise<void> {
     }
 
     const secondScan = await scanProtocolDiscoveryRange({
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       context,
       candidateAddresses,
       evidenceCache: cache,
     });
-    if (secondScan.addressStats.cacheHits === 0) {
-      throw new Error("second DEX pass did not reuse positive/negative address evidence");
+    if (
+      secondScan.addressStats.probes + secondScan.addressStats.cacheHits === 0 &&
+      candidateAddresses.length > 0
+    ) {
+      throw new Error("second DEX pass neither re-probed nor safely reused address evidence");
     }
-    const candidateSet = new Set(candidateAddresses.map((address) => address.toLowerCase()));
     const admittedSet = new Set(
       result.wouldAdmit.map((item) => item.instance.pool.address.toLowerCase()),
     );
-    const legacyStandard = POOL_REGISTRY.filter(
-      (pool) => pool.adapter === "erc4626" && !pool.nonStandardRedeem,
+    const dexCandidateSet = new Set(dexCandidateAddresses);
+    const legacyCandidates = candidateAddressHints.filter(
+      (address) => dexCandidateSet.has(address),
     );
-    const legacyCandidates = legacyStandard.filter(
-      (pool) => candidateSet.has(pool.address.toLowerCase()),
+    const legacyRecalled = candidateAddressHints.filter(
+      (address) => admittedSet.has(address),
     );
-    const legacyRecalled = legacyStandard.filter(
-      (pool) => admittedSet.has(pool.address.toLowerCase()),
-    );
-    const legacyMissing = legacyStandard.filter(
-      (pool) => !admittedSet.has(pool.address.toLowerCase()),
+    const legacyMissing = candidateAddressHints.filter(
+      (address) => !admittedSet.has(address),
     );
     if (
       process.env.SEARCHER_PROTOCOL_DISCOVERY_REQUIRE_LEGACY_RECALL === "1" &&
       legacyMissing.length > 0
     ) {
       throw new Error(
-        `legacy recall incomplete ${legacyRecalled.length}/${legacyStandard.length}: ` +
-          legacyMissing.map((pool) => pool.address).join(","),
+        `legacy recall incomplete ${legacyRecalled.length}/${candidateAddressHints.length}: ` +
+          legacyMissing.join(","),
       );
     }
     console.log(
@@ -192,14 +202,14 @@ async function main(): Promise<void> {
         `admissions=${result.wouldAdmit.length} protocolEdges=${baselineProtocol.length}->${afterProtocol.length} ` +
         `added=${added.length} firstProbes=${firstScan.addressStats.probes} ` +
         `secondProbes=${secondScan.addressStats.probes} secondCacheHits=${secondScan.addressStats.cacheHits} ` +
-        `legacyCandidateRecall=${legacyCandidates.length}/${legacyStandard.length} ` +
-        `legacyAdmissionRecall=${legacyRecalled.length}/${legacyStandard.length} ` +
+        `legacyCandidateRecall=${legacyCandidates.length}/${candidateAddressHints.length} ` +
+        `legacyAdmissionRecall=${legacyRecalled.length}/${candidateAddressHints.length} ` +
         `wallMs=${Date.now() - startedAt}`,
     );
     if (legacyMissing.length > 0) {
       console.log(
         `[protocol-discovery-dex-live-smoke] legacy-recall-incomplete ` +
-          `missing=${legacyMissing.map((pool) => pool.address).join(",")}`,
+          `missing=${legacyMissing.join(",")}`,
       );
     }
     for (const edge of added.slice(0, 12)) {

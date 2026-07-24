@@ -2,6 +2,17 @@ import { ethers } from "ethers";
 import { isStateCallAbortedError } from "../../../shared/state/state-backend.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
+import type { CurvePostImpactSeed } from "../../solver/pool-state-cache.js";
+import {
+  curveNgGetDy,
+  curvePlainGetDy,
+  type CurveNgState,
+  type CurvePlainState,
+} from "../../solver/curve-math.js";
+import type {
+  BlockScanStateCapability,
+  StateReadResult,
+} from "../blockscan-state-capability.js";
 import type {
   ExactQuoteContext,
   PlanBuildContext,
@@ -10,22 +21,398 @@ import type {
   PreparedRouteQuoteResult,
   SwapAdapter,
 } from "../route-leg-adapter.js";
-import { readCurveWarmMid } from "../mid-readers.js";
-import { curveSwapObservation } from "../swap-observation.js";
+import {
+  curveIdentityResolver,
+  isRetryablePoolIdentityFailure,
+} from "../identity.js";
+import { createAddressLandedPoolMaterializer } from "../landed-pool-discovery.js";
+import {
+  curveNativeRateMultiplier,
+  curveRateMultiplierFromDecimals,
+} from "../curve-assets.js";
+import {
+  createCurveSwapObservation,
+  type PoolImpact,
+} from "../swap-observation.js";
+import type {
+  LocalVictimApplyContext,
+  LocalVictimApplyResult,
+  VictimOverlayBuildContext,
+} from "../victim-runtime-capability.js";
+import {
+  buildApprovedSwapVictimOverlay,
+  buildTransferredInputSwapVictimOverlay,
+  VICTIM_REPLAY_WHALE,
+} from "../victim-runtime-shared.js";
 import { queryCurveCoins, quoteCurvePlain, resolveCurveIndices } from "./curve-shared.js";
+import { curvePlainLandedEvents } from "./curve-landed-events.js";
+import {
+  assertPoolGroup,
+  BLOCKSCAN_MULTICALL3,
+  blockScanErc20Iface,
+  canonicalPoolStateKey,
+  currentBlockRead,
+  decodeMulticall,
+  encodeMulticall,
+  midsForDirectedEdges,
+  optionalMulticallData,
+  quotedPoolMid,
+  requireMulticallData,
+  requireRead,
+  type MulticallItem,
+} from "./blockscan-state-shared.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
+const curvePlainSwapObservation = createCurveSwapObservation({
+  adapterIds: [
+    "curve-exchange",
+    "curve-exchange-nr",
+    "curve-exchange-plain",
+    "curve-exchange-received-uint",
+  ],
+  canonicalIntakeTargets: [
+    "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
+    "0x16c6521dff6bab339122a0fe25a9116693265353",
+  ],
+  landedEvents: curvePlainLandedEvents.swaps,
+});
 const curveIntIface = new ethers.Interface([
   "function get_dy(int128 i, int128 j, uint256 dx) view returns (uint256)",
 ]);
 const curveUintIface = new ethers.Interface([
   "function get_dy(uint256 i, uint256 j, uint256 dx) view returns (uint256)",
 ]);
+const curveExchangeIface = new ethers.Interface([
+  "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+]);
+const curveExchangeReceivedIface = new ethers.Interface([
+  "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy, address receiver)",
+]);
+const curveExchangeReceivedUintIface = new ethers.Interface([
+  "function exchange_received(uint256 i, uint256 j, uint256 dx, uint256 min_dy, address receiver)",
+]);
+const curveExchangeReceivedNoReceiverIface = new ethers.Interface([
+  "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+]);
+const curveStateIface = new ethers.Interface([
+  "function A() view returns (uint256)",
+  "function fee() view returns (uint256)",
+  "function offpeg_fee_multiplier() view returns (uint256)",
+  "function balances(uint256 i) view returns (uint256)",
+  "function stored_rates() view returns (uint256[])",
+]);
+
+interface CurveStateSchema {
+  readonly pools: ReadonlyMap<string, {
+    readonly coins: readonly string[];
+    readonly items: readonly MulticallItem[];
+    readonly plainRates: readonly bigint[];
+  }>;
+}
+
+type CurveCurrentState =
+  | {
+      readonly pool: string;
+      readonly coins: readonly string[];
+      readonly kind: "plain";
+      readonly state: CurvePlainState;
+    }
+  | {
+      readonly pool: string;
+      readonly coins: readonly string[];
+      readonly kind: "ng";
+      readonly state: CurveNgState;
+    };
+
+const CURVE_PLAIN_EDGE_IDS = new Set([
+  "curve-exchange",
+  "curve-exchange-nr",
+  "curve-exchange-plain",
+  "curve-exchange-received-uint",
+]);
+
+const curvePlainPoolDiscovery = createAddressLandedPoolMaterializer({
+  version: "curve-plain-address-metadata-v1",
+  eventIds: ["curve-exchange-i128", "curve-exchange-uint"],
+  async materializePool(candidate, context) {
+    const identity = await curveIdentityResolver({
+      backend: context.backend,
+      pool: candidate.address,
+      poolAdapter: "curve",
+      candidate: {
+        address: candidate.address,
+        adapter: "curve",
+      },
+      admissionPolicy: context.admissionPolicy,
+      isPoolAdapterSupported: (poolAdapter) =>
+        poolAdapter === "curve" || poolAdapter === "curve-nr",
+    });
+    if (!identity.ok) {
+      if (isRetryablePoolIdentityFailure(identity.reason)) {
+        throw new Error(`Curve identity read incomplete: ${identity.reason}`);
+      }
+      return null;
+    }
+    const coins = await queryCurveCoins(context.backend, candidate.address);
+    return {
+      address: candidate.address,
+      adapter: identity.adapter,
+      venueId: identity.venueId,
+      identitySource: identity.identitySource,
+      ...(identity.factory === undefined ? {} : { factory: identity.factory }),
+      underlyingCoins: coins,
+    };
+  },
+});
+
+export const curvePlainBlockScanState = Object.freeze({
+  stateKey: canonicalPoolStateKey,
+
+  compileStaticSchema({ edges }) {
+    const indexedCoins = new Map<string, Map<number, string>>();
+    for (const edge of edges) {
+      const pool = canonicalPoolStateKey(edge);
+      if (
+        !CURVE_PLAIN_EDGE_IDS.has(edge.adapterId) ||
+        edge.curveI === undefined ||
+        edge.curveJ === undefined
+      ) {
+        throw new Error(`curve block-scan edge ${pool} is missing graph indices`);
+      }
+      const indices = indexedCoins.get(pool) ?? new Map<number, string>();
+      addCurveCoin(indices, edge.curveI, edge.tokenIn, pool);
+      addCurveCoin(indices, edge.curveJ, edge.tokenOut, pool);
+      indexedCoins.set(pool, indices);
+    }
+
+    const pools = new Map<string, {
+      coins: readonly string[];
+      items: readonly MulticallItem[];
+      plainRates: readonly bigint[];
+    }>();
+    for (const [pool, indexed] of indexedCoins) {
+      const coins = contiguousCurveCoins(indexed, pool);
+      const items: MulticallItem[] = [
+        {
+          label: "A",
+          target: pool,
+          callData: curveStateIface.encodeFunctionData("A"),
+          allowFailure: true,
+        },
+        {
+          label: "fee",
+          target: pool,
+          callData: curveStateIface.encodeFunctionData("fee"),
+          allowFailure: true,
+        },
+        {
+          label: "offpeg",
+          target: pool,
+          callData: curveStateIface.encodeFunctionData("offpeg_fee_multiplier"),
+          allowFailure: true,
+        },
+        {
+          label: "stored-rates",
+          target: pool,
+          callData: curveStateIface.encodeFunctionData("stored_rates"),
+          allowFailure: true,
+        },
+      ];
+      for (let index = 0; index < coins.length; index++) {
+        items.push({
+          label: `balance:${index}`,
+          target: pool,
+          callData: curveStateIface.encodeFunctionData("balances", [index]),
+          allowFailure: true,
+        });
+      }
+      pools.set(pool, Object.freeze({
+        coins: Object.freeze(coins),
+        items: Object.freeze(items),
+        plainRates: Object.freeze([]),
+      }));
+    }
+    return Object.freeze({ pools });
+  },
+
+  buildStaticSchemaReads({ sourceBlock, sourceBlockHash, schema }) {
+    const tokens = [
+      ...new Set(
+        [...schema.pools.values()]
+          .flatMap((descriptor) => descriptor.coins)
+          .map((token) => ethers.getAddress(token).toLowerCase()),
+      ),
+    ]
+      .filter((token) => curveNativeRateMultiplier(token) === null)
+      .sort();
+    return Object.freeze(tokens.map((token) => currentBlockRead({
+      id: `curve-decimals:${token}`,
+      sourceBlock,
+      sourceBlockHash,
+      to: token,
+      data: blockScanErc20Iface.encodeFunctionData("decimals"),
+    })));
+  },
+
+  hydrateStaticSchema(schema, results) {
+    const byToken = new Map<string, bigint>();
+    for (const result of results) {
+      if (!result.ok || !result.id.startsWith("curve-decimals:")) {
+        throw new Error(`curve static decimals unresolved ${result.id}`);
+      }
+      const token = result.id.slice("curve-decimals:".length);
+      const decimals = Number(
+        blockScanErc20Iface.decodeFunctionResult("decimals", result.data)[0],
+      );
+      byToken.set(token, curveRateMultiplierFromDecimals(decimals));
+    }
+    const pools = new Map();
+    for (const [pool, descriptor] of schema.pools) {
+      const plainRates = descriptor.coins.map((coin) => {
+        const rate =
+          curveNativeRateMultiplier(coin) ??
+          byToken.get(coin.toLowerCase());
+        if (!rate) throw new Error(`curve static decimals missing ${coin}`);
+        return rate;
+      });
+      pools.set(pool, Object.freeze({
+        ...descriptor,
+        plainRates: Object.freeze(plainRates),
+      }));
+    }
+    return Object.freeze({ pools });
+  },
+
+  buildCurrentBlockReads({ sourceBlock, sourceBlockHash, schema, edges }) {
+    const pool = assertPoolGroup(edges, CURVE_PLAIN_EDGE_IDS);
+    const descriptor = schema.pools.get(pool);
+    if (!descriptor) throw new Error(`curve block-scan schema missing ${pool}`);
+    return Object.freeze([
+      currentBlockRead({
+        id: `curve:${pool}`,
+        sourceBlock,
+        sourceBlockHash,
+        to: BLOCKSCAN_MULTICALL3,
+        data: encodeMulticall(descriptor.items),
+        transport: "rpc-batch",
+      }),
+    ]);
+  },
+
+  decodeState(schema, results) {
+    const pool = statePoolFromResults(results, "curve:");
+    const descriptor = schema.pools.get(pool);
+    if (!descriptor) throw new Error(`curve block-scan schema missing ${pool}`);
+    const inner = decodeMulticall(
+      requireRead(results, `curve:${pool}`),
+      descriptor.items,
+    );
+    const A = BigInt(requireMulticallData(inner, "A"));
+    const fee = BigInt(requireMulticallData(inner, "fee"));
+    const balances = descriptor.coins.map((_, index) =>
+      BigInt(requireMulticallData(inner, `balance:${index}`))
+    );
+    if (balances.some((balance) => balance <= 0n)) {
+      throw new Error(`curve block-scan pool ${pool} has non-positive balance`);
+    }
+
+    const offpegData = optionalMulticallData(inner, "offpeg");
+    if (offpegData) {
+      const ratesData = requireMulticallData(inner, "stored-rates");
+      const rates = (
+        curveStateIface.decodeFunctionResult("stored_rates", ratesData)[0] as bigint[]
+      ).map(BigInt);
+      if (
+        rates.length !== descriptor.coins.length ||
+        rates.some((rate) => rate <= 0n)
+      ) {
+        throw new Error(`curve-ng block-scan pool ${pool} returned invalid rates`);
+      }
+      return Object.freeze({
+        pool,
+        coins: descriptor.coins,
+        kind: "ng" as const,
+        state: Object.freeze({
+          A,
+          fee,
+          offpegFeeMultiplier: BigInt(offpegData),
+          balances: Object.freeze(balances) as unknown as bigint[],
+          rates: Object.freeze(rates) as unknown as bigint[],
+        }),
+      });
+    }
+
+    const rates = descriptor.plainRates;
+    if (
+      rates.length !== descriptor.coins.length ||
+      rates.some((rate) => rate <= 0n)
+    ) {
+      throw new Error(`curve block-scan static rates unresolved for ${pool}`);
+    }
+    return Object.freeze({
+      pool,
+      coins: descriptor.coins,
+      kind: "plain" as const,
+      state: Object.freeze({
+        A,
+        fee,
+        balances: Object.freeze(balances) as unknown as bigint[],
+        rates: Object.freeze(rates) as unknown as bigint[],
+      }),
+    });
+  },
+
+  deriveMids(snapshot, edges) {
+    return midsForDirectedEdges(edges, (edge) => {
+      if (
+        canonicalPoolStateKey(edge) !== snapshot.pool ||
+        edge.curveI === undefined ||
+        edge.curveJ === undefined
+      ) {
+        throw new Error(`curve snapshot ${snapshot.pool} does not match edge`);
+      }
+      if (
+        snapshot.coins[edge.curveI]?.toLowerCase() !== edge.tokenIn.toLowerCase() ||
+        snapshot.coins[edge.curveJ]?.toLowerCase() !== edge.tokenOut.toLowerCase()
+      ) {
+        throw new Error(`curve edge indices do not match snapshot ${snapshot.pool}`);
+      }
+      const reserveIn = snapshot.state.balances[edge.curveI];
+      const reserveOut = snapshot.state.balances[edge.curveJ];
+      const amountIn = reserveIn / 1_000_000n > 0n
+        ? reserveIn / 1_000_000n
+        : 1n;
+      const amountOut = snapshot.kind === "plain"
+        ? curvePlainGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn)
+        : curveNgGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn);
+      return quotedPoolMid({
+        kind: "curve",
+        edge,
+        amountIn,
+        amountOut,
+        depthIn: reserveIn,
+        depthOut: reserveOut,
+      });
+    });
+  },
+
+  dependencies(edges) {
+    const pool = assertPoolGroup(edges, CURVE_PLAIN_EDGE_IDS);
+    return Object.freeze([
+      pool,
+      ...new Set(edges.flatMap((edge) => [edge.tokenIn, edge.tokenOut])),
+    ]);
+  },
+} satisfies BlockScanStateCapability<CurveStateSchema, CurveCurrentState>);
 
 export const curvePlainAdapter = Object.freeze({
   id: "curve-plain",
   kind: "swap",
   poolAdapters: ["curve", "curve-nr"],
+  identityPolicies: [
+    { poolAdapter: "curve", policy: "onchain-resolver", resolve: curveIdentityResolver },
+    { poolAdapter: "curve-nr", policy: "onchain-resolver", resolve: curveIdentityResolver },
+  ],
   edgeAdapterIds: [
     "curve-exchange",
     "curve-exchange-nr",
@@ -34,10 +421,25 @@ export const curvePlainAdapter = Object.freeze({
   ],
   allowedTaxonomy: [{ slotKind: "swap" }],
   requiresProtocolEdgesFlag: false,
-  actionAdapterIds: ["curve-exchange-plain", "erc20-approve"],
-  observation: curveSwapObservation,
-  readMid: readCurveWarmMid,
-  warm: { kind: "curve-pool" },
+  ownedActionAdapterIds: ["curve-exchange-plain"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  landedEvents: curvePlainLandedEvents,
+  poolDiscovery: curvePlainPoolDiscovery,
+  observation: curvePlainSwapObservation,
+  victimModel: {
+    id: "pool-swap:curve",
+    mode: "replay",
+    runtime: {
+      localApply: {
+        cacheBacked: true,
+        needsMutablePoolRefresh: false,
+        apply: applyCurveVictim,
+      },
+      exactPostImpact: null,
+      buildOverlay: buildCurveVictimOverlay,
+    },
+  },
+  pricingState: curvePlainBlockScanState,
   prepared: {
     quote: quoteCurvePlainPrepared,
     quoteUnsupportedReason: null,
@@ -67,6 +469,141 @@ export const curvePlainAdapter = Object.freeze({
   quoteExact: quoteCurvePlainExact,
   buildPlanFragment: buildCurvePlainPlanFragment,
 } satisfies SwapAdapter);
+
+async function applyCurveVictim(
+  ctx: LocalVictimApplyContext,
+): Promise<LocalVictimApplyResult | null> {
+  const { cache, impact, blockNumber, state } = ctx;
+  let pre = cache.snapshotCurve(impact.pool, blockNumber);
+  if (!pre && state) {
+    try {
+      await cache.quoteCurve(
+        state,
+        impact.pool,
+        impact.tokenIn,
+        impact.tokenOut,
+        impact.amountIn,
+      );
+      pre = cache.snapshotCurve(impact.pool, blockNumber);
+    } catch {
+      return null;
+    }
+  }
+  if (!pre) return null;
+
+  const i = pre.coins.indexOf(impact.tokenIn.toLowerCase());
+  const j = pre.coins.indexOf(impact.tokenOut.toLowerCase());
+  if (i < 0 || j < 0) return null;
+
+  const amountOut = pre.kind === "plain"
+    ? curvePlainGetDy(pre.plain!, i, j, impact.amountIn)
+    : curveNgGetDy(pre.ng!, i, j, impact.amountIn);
+  if (amountOut <= 0n) return null;
+
+  const postImpact: CurvePostImpactSeed = {
+    kind: "curve",
+    pool: impact.pool,
+    curveKind: pre.kind,
+    coins: [...pre.coins],
+    blockNumber,
+  };
+  if (pre.kind === "plain") {
+    const plain = {
+      A: pre.plain!.A,
+      fee: pre.plain!.fee,
+      balances: [...pre.plain!.balances],
+      rates: [...pre.plain!.rates],
+    };
+    if (amountOut >= plain.balances[j]) return null;
+    plain.balances[i] += impact.amountIn;
+    plain.balances[j] -= amountOut;
+    postImpact.plain = plain;
+  } else {
+    const ng = {
+      A: pre.ng!.A,
+      fee: pre.ng!.fee,
+      offpegFeeMultiplier: pre.ng!.offpegFeeMultiplier,
+      balances: [...pre.ng!.balances],
+      rates: [...pre.ng!.rates],
+    };
+    if (amountOut >= ng.balances[j]) return null;
+    ng.balances[i] += impact.amountIn;
+    ng.balances[j] -= amountOut;
+    postImpact.ng = ng;
+  }
+  return { postImpact, amountOut };
+}
+
+async function buildCurveVictimOverlay(
+  ctx: VictimOverlayBuildContext,
+) {
+  const edge = ctx.graph.find(
+    (candidate) =>
+      candidate.adapterId === ctx.impact.matchedAdapterId &&
+      candidate.target.toLowerCase() === ctx.impact.pool.toLowerCase() &&
+      candidate.tokenIn.toLowerCase() === ctx.impact.tokenIn.toLowerCase() &&
+      candidate.tokenOut.toLowerCase() === ctx.impact.tokenOut.toLowerCase() &&
+      candidate.curveI !== undefined,
+  );
+  if (!edge || edge.curveI === undefined || edge.curveJ === undefined) {
+    throw new Error(`overlay: no curve edge for ${ctx.impact.pool}`);
+  }
+  const pool = ethers.getAddress(ctx.impact.pool);
+  const args = [edge.curveI, edge.curveJ, ctx.impact.amountIn, 0] as const;
+  if (ctx.impact.matchedAdapterId === "curve-exchange") {
+    return buildTransferredInputSwapVictimOverlay({
+      impact: ctx.impact,
+      inputRecipient: pool,
+      swapTarget: pool,
+      swapCalldata: curveExchangeReceivedIface.encodeFunctionData(
+        "exchange_received",
+        [...args, VICTIM_REPLAY_WHALE],
+      ),
+      gasLimit: 0x1000000,
+    });
+  }
+  if (ctx.impact.matchedAdapterId === "curve-exchange-received-uint") {
+    return buildTransferredInputSwapVictimOverlay({
+      impact: ctx.impact,
+      inputRecipient: pool,
+      swapTarget: pool,
+      swapCalldata: curveExchangeReceivedUintIface.encodeFunctionData(
+        "exchange_received",
+        [...args, VICTIM_REPLAY_WHALE],
+      ),
+      gasLimit: 0x1000000,
+    });
+  }
+  if (ctx.impact.matchedAdapterId === "curve-exchange-nr") {
+    return buildTransferredInputSwapVictimOverlay({
+      impact: ctx.impact,
+      inputRecipient: pool,
+      swapTarget: pool,
+      swapCalldata: curveExchangeReceivedNoReceiverIface.encodeFunctionData(
+        "exchange_received",
+        args,
+      ),
+      gasLimit: 0x1000000,
+    });
+  }
+  if (ctx.impact.matchedAdapterId !== "curve-exchange-plain") {
+    throw new Error(
+      `overlay: unsupported Curve adapter ${ctx.impact.matchedAdapterId}`,
+    );
+  }
+  return buildApprovedSwapVictimOverlay({
+    impact: ctx.impact,
+    approveTarget: pool,
+    swapTarget: pool,
+    swapCalldata: curveExchangeIface.encodeFunctionData("exchange", [
+      edge.curveI,
+      edge.curveJ,
+      ctx.impact.amountIn,
+      0,
+    ]),
+    gasLimit: 0x1000000,
+  });
+}
 
 async function quoteCurvePlainPrepared(
   ctx: PreparedRouteContext,
@@ -165,4 +702,44 @@ async function buildCurvePlainPlanFragment(ctx: PlanBuildContext): Promise<PlanF
       children: [],
     }],
   };
+}
+
+function addCurveCoin(
+  indexed: Map<number, string>,
+  index: number,
+  token: string,
+  pool: string,
+): void {
+  if (!Number.isInteger(index) || index < 0) {
+    throw new Error(`curve block-scan pool ${pool} has invalid coin index ${index}`);
+  }
+  const normalized = ethers.getAddress(token);
+  const existing = indexed.get(index);
+  if (existing && existing !== normalized) {
+    throw new Error(`curve block-scan pool ${pool} has conflicting coin ${index}`);
+  }
+  indexed.set(index, normalized);
+}
+
+function contiguousCurveCoins(
+  indexed: ReadonlyMap<number, string>,
+  pool: string,
+): string[] {
+  const indices = [...indexed.keys()].sort((a, b) => a - b);
+  if (
+    indices.length < 2 ||
+    indices.some((index, position) => index !== position)
+  ) {
+    throw new Error(`curve block-scan pool ${pool} has non-contiguous coin indices`);
+  }
+  return indices.map((index) => indexed.get(index)!);
+}
+
+function statePoolFromResults(
+  results: readonly StateReadResult[],
+  prefix: string,
+): string {
+  const read = results.find((candidate) => candidate.id.startsWith(prefix));
+  if (!read) throw new Error(`missing block-scan read prefix ${prefix}`);
+  return read.id.slice(prefix.length);
 }

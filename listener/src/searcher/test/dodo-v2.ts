@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import type { TokenQueryBackend } from "../planner/token-graph.js";
 import { STRICT_IDENTITY_ADMISSION } from "../venues/admission.js";
 import { dodoV2IdentityResolver } from "../venues/identity.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import { dodoV2PoolIface } from "../venues/swaps/dodo-v2.js";
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -68,8 +68,8 @@ class Backend implements TokenQueryBackend {
 }
 
 const backend = new Backend();
-const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily("custom-swap:dodo-v2");
-const edges = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(
+const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily("custom-swap:dodo-v2");
+const edges = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(
   { address: POOL, adapter: "dodo-v2", score: 9 },
   backend,
 );

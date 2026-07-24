@@ -7,8 +7,13 @@ import {
   scanProtocolDiscoveryRange,
   shouldTraceForProtocolDiscovery,
 } from "../observed-protocol-discovery.js";
+import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
-import type { ProtocolDiscoveryContext, ProtocolDiscoveryReceipt } from "../venues/route-leg-adapter.js";
+import type {
+  ProtocolDiscoveryContext,
+  ProtocolDiscoveryReadControl,
+  ProtocolDiscoveryReceipt,
+} from "../venues/route-leg-adapter.js";
 
 const VAULT = "0x1111111111111111111111111111111111111111";
 const ASSET = "0x2222222222222222222222222222222222222222";
@@ -102,6 +107,43 @@ const known = await scanObservedProtocolTrace({
 assert(known.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1, "known address+selector candidate");
 assert(known.unknownSelectors.length === 0, "known protocol call must keep unknown diagnostics clean");
 
+let hangingObservedMatcherCalls = 0;
+const hangingObservedAdapter = {
+  ...erc4626Adapter,
+  id: "protocol:erc4626-hanging-observed-matcher" as const,
+  discovery: {
+    ...erc4626Adapter.discovery!,
+    observedMatcherVersion: "erc4626-hanging-observed-v1",
+    async candidateFromObservedCall() {
+      hangingObservedMatcherCalls++;
+      return new Promise<never>(() => {});
+    },
+  },
+};
+const familySettledObserved = await scanObservedProtocolTrace({
+  adapters: [hangingObservedAdapter, erc4626Adapter],
+  context,
+  txHash: TX_HASH,
+  receipt,
+  trace: redeemTrace(),
+  familyGuardOptions: { timeoutMs: 5, failureThreshold: 1 },
+});
+assert(
+  familySettledObserved.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1,
+  "timed-out observed matcher must not suppress a healthy sibling candidate",
+);
+assert(
+  !familySettledObserved.candidatesByAdapter.has(hangingObservedAdapter.id) &&
+    hangingObservedMatcherCalls === 1,
+  "timed-out observed family must remain isolated",
+);
+assert(
+  familySettledObserved.sourceErrors.some((error) =>
+    error.adapterId === hangingObservedAdapter.id && error.retryable
+  ),
+  "timed-out observed matcher must leave its family source retryable",
+);
+
 const observedFingerprint = protocolObservedSourceFingerprint([erc4626Adapter]);
 const observedAlias = {
   ...erc4626Adapter,
@@ -123,6 +165,54 @@ const addressOnlyAlias = {
     candidateFromObservedCall: undefined,
   },
 };
+const observedOnlyAlias = {
+  ...observedAlias,
+  id: "protocol:erc4626-observed-only-fixture" as const,
+  discovery: {
+    ...observedAlias.discovery!,
+    candidateSources: ["observed-interaction"] as const,
+    candidateAddressHints: [],
+    addressMatcherVersion: undefined,
+    addressMatcherCachePolicy: undefined,
+    candidateFromAddress: undefined,
+  },
+};
+let cacheMatcherCalls = 0;
+let cacheFingerprintReads = 0;
+let currentDependencyFingerprint = `0x${"44".repeat(32)}`;
+const fingerprintCachedAlias = {
+  ...addressOnlyAlias,
+  id: "protocol:erc4626-fingerprint-cache-fixture" as const,
+  discovery: {
+    ...addressOnlyAlias.discovery!,
+    addressMatcherVersion: "fingerprint-cache-fixture-v1",
+    addressMatcherCachePolicy: {
+      kind: "current-block-dependency-fingerprint" as const,
+      invariant:
+        "matcher-output-immutable-while-code-implementation-and-dependencies-match" as const,
+      version: "fixture-dependencies-v1",
+      async currentDependencyFingerprint() {
+        cacheFingerprintReads++;
+        return currentDependencyFingerprint;
+      },
+    },
+    async candidateFromAddress(candidate: {
+      readonly target: string;
+      readonly codeHash: string;
+      readonly implementationWord: string;
+    }) {
+      cacheMatcherCalls++;
+      return {
+        pool: {
+          address: candidate.target,
+          adapter: "erc4626" as const,
+          fixedTokenIn: ASSET,
+        },
+        source: "fingerprint-cache-fixture",
+      };
+    },
+  },
+};
 assert(
   observedFingerprint === protocolObservedSourceFingerprint([erc4626Adapter]),
   "observed-source fingerprint must be deterministic",
@@ -132,14 +222,184 @@ assert(
   "adding an observed family must change the shared cursor fingerprint",
 );
 assert(
-  observedFingerprint !== protocolObservedSourceFingerprint([erc4626Adapter, addressOnlyAlias]),
-  "adding an address-only family must invalidate persisted discovery ownership",
+  observedFingerprint === protocolObservedSourceFingerprint([erc4626Adapter, addressOnlyAlias]),
+  "an address-only matcher change must not erase the independent observed-history cursor",
 );
 assert(
   protocolObservedSourceFingerprint([erc4626Adapter, observedAlias]) ===
     protocolObservedSourceFingerprint([observedAlias, erc4626Adapter]),
   "observed-source fingerprint must not depend on registration order",
 );
+
+{
+  const evidenceCache = createProtocolDiscoveryEvidenceCache(1);
+  const addressContextAt = (blockNumber: number): ProtocolDiscoveryContext => ({
+    ...context,
+    blockNumber,
+    fromBlock: blockNumber,
+    toBlock: blockNumber,
+    backend: {
+      ...context.backend,
+      async getLogs() { return []; },
+    },
+  });
+  const first = await scanProtocolDiscoveryRange({
+    adapters: [fingerprintCachedAlias],
+    context: addressContextAt(123),
+    candidateAddresses: [VAULT],
+    evidenceCache,
+  });
+  const unchanged = await scanProtocolDiscoveryRange({
+    adapters: [fingerprintCachedAlias],
+    context: addressContextAt(124),
+    candidateAddresses: [VAULT],
+    evidenceCache,
+  });
+  assert(
+    first.addressStats.probes === 1 &&
+      unchanged.addressStats.cacheHits === 1 &&
+      cacheMatcherCalls === 1 &&
+      cacheFingerprintReads === 2,
+    "cross-block reuse requires a family-owned fingerprint read at the current source block",
+  );
+  currentDependencyFingerprint = `0x${"55".repeat(32)}`;
+  const changed = await scanProtocolDiscoveryRange({
+    adapters: [fingerprintCachedAlias],
+    context: addressContextAt(125),
+    candidateAddresses: [VAULT],
+    evidenceCache,
+  });
+  assert(
+    changed.addressStats.cacheHits === 0 &&
+      changed.addressStats.probes === 1 &&
+      Number(cacheMatcherCalls) === 2,
+    "a current-block dependency change must force the family matcher even with stable code",
+  );
+}
+
+{
+  const lateFamilyId = "protocol:late-address-family";
+  const healthyFamilyId = "protocol:healthy-address-family";
+  let lateSignal: AbortSignal | undefined;
+  let lateBackendResolved = false;
+  let markLateBackendStarted!: () => void;
+  const lateBackendStarted = new Promise<void>((resolve) => {
+    markLateBackendStarted = resolve;
+  });
+  let healthyStartedBeforeLateAbort = false;
+  const lateAdapter = {
+    ...addressOnlyAlias,
+    id: "protocol:late-address-family" as const,
+    discovery: {
+      ...addressOnlyAlias.discovery!,
+      addressMatcherVersion: "late-address-family-v1",
+      async candidateFromAddress(surface: {
+        readonly target: string;
+        readonly codeHash: string;
+        readonly implementationWord: string;
+      }, matcherContext: ProtocolDiscoveryContext) {
+        await matcherContext.backend.call({
+          to: surface.target,
+          data: "0xfeed0001",
+        });
+        return {
+          pool: {
+            address: surface.target,
+            adapter: "erc4626" as const,
+            fixedTokenIn: ASSET,
+          },
+          source: "late-address-family",
+        };
+      },
+    },
+  };
+  const healthyAdapter = {
+    ...addressOnlyAlias,
+    id: "protocol:healthy-address-family" as const,
+    discovery: {
+      ...addressOnlyAlias.discovery!,
+      addressMatcherVersion: "healthy-address-family-v1",
+      async candidateFromAddress(surface: {
+        readonly target: string;
+        readonly codeHash: string;
+        readonly implementationWord: string;
+      }) {
+        await lateBackendStarted;
+        healthyStartedBeforeLateAbort = lateSignal?.aborted === false;
+        return {
+          pool: {
+            address: surface.target,
+            adapter: "erc4626" as const,
+            fixedTokenIn: ASSET,
+          },
+          source: "healthy-address-family",
+        };
+      },
+    },
+  };
+  const parent = new AbortController();
+  const evidenceCache = createProtocolDiscoveryEvidenceCache(1);
+  const concurrentContext: ProtocolDiscoveryContext = {
+    ...context,
+    backend: {
+      ...context.backend,
+      call(req, control) {
+        if (req.data !== "0xfeed0001") {
+          return context.backend.call(req, control);
+        }
+        lateSignal = control?.signal;
+        markLateBackendStarted();
+        return new Promise<string>((resolve) => {
+          setTimeout(() => {
+            lateBackendResolved = true;
+            resolve("0x");
+          }, 60);
+        });
+      },
+      async getLogs() {
+        return [];
+      },
+    },
+  };
+  const concurrent = await scanProtocolDiscoveryRange({
+    adapters: [lateAdapter, healthyAdapter],
+    context: concurrentContext,
+    candidateAddresses: [VAULT],
+    evidenceCache,
+    familyGuardOptions: {
+      timeoutMs: 20,
+      failureThreshold: 1,
+      deadlineAtMs: Date.now() + 1_000,
+      signal: parent.signal,
+      maxConcurrentPerFamily: 1,
+    },
+  });
+  assert(
+    healthyStartedBeforeLateAbort,
+    "address matchers from sibling families must execute concurrently",
+  );
+  assert(
+    concurrent.candidatesByAdapter.get(healthyFamilyId)?.length === 1 &&
+      !concurrent.candidatesByAdapter.has(lateFamilyId),
+    "a timed-out address family must not suppress its healthy sibling",
+  );
+  assert(lateSignal?.aborted === true, "matcher timeout must reach its backend child signal");
+  assert(!parent.signal.aborted, "matcher timeout must leave the parent signal live");
+  assert(
+    !evidenceCache.addressEntries.has(
+      `${lateFamilyId}|${VAULT.toLowerCase()}`,
+    ),
+    "timed-out matcher must not publish an address cache entry",
+  );
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  assert(lateBackendResolved, "fixture backend must prove a late result arrived");
+  assert(
+    !evidenceCache.addressEntries.has(
+      `${lateFamilyId}|${VAULT.toLowerCase()}`,
+    ),
+    "late matcher settlement must not mutate the evidence cache",
+  );
+}
 
 const siblingPayout = await scanObservedProtocolTrace({
   adapters: [erc4626Adapter],
@@ -232,6 +492,128 @@ assert(logReads === 1, "one block window must be scanned once outside the adapte
 assert(receiptReads === 1, "duplicate event logs must share one receipt read per tx");
 assert(traceReads === 1, "candidate parsing and evidence must share one trace read per tx");
 
+{
+  const parent = new AbortController();
+  const deadlineAtMs = Date.now() + 1_000;
+  const directControls = new Map<string, ProtocolDiscoveryReadControl | undefined>();
+  let matcherControl: ProtocolDiscoveryReadControl | undefined;
+  const waitForParentStop = (
+    control: ProtocolDiscoveryReadControl | undefined,
+  ): Promise<never> => new Promise((_resolve, reject) => {
+    if (!control?.signal) {
+      reject(new Error("fixture expected a propagated parent signal"));
+      return;
+    }
+    const stop = (): void =>
+      reject(control.signal!.reason ?? new Error("fixture parent stopped"));
+    if (control.signal.aborted) {
+      stop();
+      return;
+    }
+    control.signal.addEventListener("abort", stop, { once: true });
+  });
+  const parentControlledAddressAdapter = {
+    ...addressOnlyAlias,
+    id: "protocol:parent-controlled-address-fixture" as const,
+    discovery: {
+      ...addressOnlyAlias.discovery!,
+      addressMatcherVersion: "parent-controlled-address-v1",
+      async candidateFromAddress(
+        surface: {
+          readonly target: string;
+          readonly codeHash: string;
+          readonly implementationWord: string;
+        },
+        matcherContext: ProtocolDiscoveryContext,
+      ) {
+        await matcherContext.backend.call({
+          to: surface.target,
+          data: "0xfeed0002",
+        });
+        return null;
+      },
+    },
+  };
+  const controlledContext: ProtocolDiscoveryContext = {
+    ...context,
+    backend: {
+      ...context.backend,
+      call(req, control) {
+        if (req.data !== "0xfeed0002") {
+          return context.backend.call(req, control);
+        }
+        matcherControl = control;
+        return waitForParentStop(control);
+      },
+      async getCode(_address, control) {
+        directControls.set("getCode", control);
+        return "0x6000";
+      },
+      async getStorageAt(_address, _position, control) {
+        directControls.set("getStorageAt", control);
+        return ZERO_WORD;
+      },
+      async getLogs(_req, control) {
+        directControls.set("getLogs", control);
+        return [withdrawLog];
+      },
+      async getTransactionReceipt(_txHash, control) {
+        directControls.set("getTransactionReceipt", control);
+        return receipt;
+      },
+      traceTransaction(_txHash, control) {
+        directControls.set("traceTransaction", control);
+        return waitForParentStop(control);
+      },
+    },
+  };
+  const pending = scanProtocolDiscoveryRange({
+    adapters: [erc4626Adapter, parentControlledAddressAdapter],
+    context: controlledContext,
+    candidateAddresses: [VAULT],
+    control: { deadlineAtMs, signal: parent.signal },
+  });
+  const controlsReadyAt = Date.now() + 250;
+  while (
+    (
+      directControls.size < 5 ||
+      matcherControl === undefined
+    ) &&
+    Date.now() < controlsReadyAt
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert(
+    directControls.size === 5 && matcherControl !== undefined,
+    "range scanner must start every direct source read and its family matcher",
+  );
+  parent.abort(new Error("fixture background pass cancelled"));
+  let cancellation: unknown = null;
+  try {
+    await pending;
+  } catch (error) {
+    cancellation = error;
+  }
+  assert(
+    cancellation instanceof Error &&
+      /fixture background pass cancelled/.test(cancellation.message),
+    "parent cancellation must reject the range instead of becoming source-incomplete",
+  );
+  for (const [operation, control] of directControls) {
+    assert(
+      control?.deadlineAtMs === deadlineAtMs &&
+        control.signal === parent.signal &&
+        control.signal.aborted,
+      `${operation} must receive the exact parent deadline and signal`,
+    );
+  }
+  assert(
+    matcherControl.deadlineAtMs === deadlineAtMs &&
+      matcherControl.signal?.aborted === true,
+    "the same parent lifetime must reach family-scoped matcher reads",
+  );
+}
+
 // Acceptance 3: the live observed lane and the range scanner share one trace
 // memo, so a tx observed live is never debug_traced again by the range sweep.
 {
@@ -303,6 +685,93 @@ assert(
   "address-source failure must not discard a fully verified observed candidate",
 );
 
+{
+  const addressFailure = await scanProtocolDiscoveryRange({
+    adapters: [addressOnlyAlias, observedOnlyAlias],
+    context: {
+      ...context,
+      backend: {
+        ...context.backend,
+        async getCode() {
+          throw Object.assign(new Error("address backend unavailable"), { code: "TIMEOUT" });
+        },
+        async getLogs() { return []; },
+      },
+    },
+    candidateAddresses: [ASSET],
+  });
+  const addressIssue = addressFailure.sourceErrors.find((error) => error.retryable);
+  assert(
+    addressIssue?.sourceKind === "dex-token-domain" &&
+      addressIssue.impactedFamilyIds.length === 1 &&
+      addressIssue.impactedFamilyIds[0] === addressOnlyAlias.id,
+    "address source failure must name only dex-token-domain family owners",
+  );
+
+  const hintedOwner = {
+    ...addressOnlyAlias,
+    id: "protocol:hinted-code-read-owner" as const,
+    discovery: {
+      ...addressOnlyAlias.discovery!,
+      candidateAddressHints: [USER],
+    },
+  };
+  const unrelatedHintOwner = {
+    ...addressOnlyAlias,
+    id: "protocol:unrelated-hint-owner" as const,
+    discovery: {
+      ...addressOnlyAlias.discovery!,
+      candidateAddressHints: [
+        "0x4444444444444444444444444444444444444444",
+      ],
+    },
+  };
+  const hintedFailure = await scanProtocolDiscoveryRange({
+    adapters: [hintedOwner, unrelatedHintOwner],
+    context: {
+      ...context,
+      backend: {
+        ...context.backend,
+        async getCode() {
+          throw new Error("hint code unavailable");
+        },
+        async getLogs() {
+          return [];
+        },
+      },
+    },
+    candidateAddresses: [USER],
+  });
+  const hintedIssue = hintedFailure.sourceErrors.find((error) =>
+    error.sourceKind === "dex-token-domain"
+  );
+  assert(
+    hintedIssue?.impactedFamilyIds.length === 1 &&
+      hintedIssue.impactedFamilyIds[0] === hintedOwner.id,
+    "hint-only code-read failure must affect only the declaring family",
+  );
+
+  const observedFailure = await scanProtocolDiscoveryRange({
+    adapters: [addressOnlyAlias, observedOnlyAlias],
+    context: {
+      ...context,
+      backend: {
+        ...context.backend,
+        async getLogs() {
+          throw Object.assign(new Error("event backend unavailable"), { code: "TIMEOUT" });
+        },
+      },
+    },
+  });
+  const observedIssue = observedFailure.sourceErrors.find((error) => error.retryable);
+  assert(
+    observedIssue?.sourceKind === "observed-interaction" &&
+      observedIssue.impactedFamilyIds.length === 1 &&
+      observedIssue.impactedFamilyIds[0] === observedOnlyAlias.id,
+    "event/trace source failure must name only observed-interaction family owners",
+  );
+}
+
 const falseWithdrawContext: ProtocolDiscoveryContext = {
   ...context,
   backend: {
@@ -345,12 +814,16 @@ const prunedHistory = await scanProtocolDiscoveryRange({
   context: prunedHistoryContext,
 });
 assert(
-  prunedHistory.sourceComplete && prunedHistory.eventSourceComplete,
-  "local reth pruned-state evidence gap must not pin an otherwise complete event cursor",
+  !prunedHistory.sourceComplete && !prunedHistory.eventSourceComplete &&
+    prunedHistory.sourceErrors.some((error) =>
+      error.sourceKind === "observed-interaction" &&
+      error.retryable
+    ),
+  "pruned trace evidence must prevent the observed cursor from claiming completeness",
 );
 assert(
   prunedHistory.candidatesByAdapter.size === 0,
-  "pruned historical trace evidence must fail closed instead of using an archive fallback",
+  "pruned historical trace evidence must fail closed until an archive/materialized backend is used",
 );
 
 const mixed = await scanObservedProtocolTrace({

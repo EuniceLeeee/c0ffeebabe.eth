@@ -1,4 +1,8 @@
 import { ethers } from "ethers";
+import type {
+  ReceiptLogsCompleteness,
+  SwapEventLog,
+} from "../venues/swap-observation.js";
 
 export interface OrderflowEvent {
   txHash: string;
@@ -10,9 +14,21 @@ export interface OrderflowEvent {
   nonce: number;
   to: string | null;
   input: string;
-  logs: Array<{ address: string; topics: string[]; data: string }>;
+  logs: SwapEventLog[];
   minProfit?: bigint;
   preferSequentialPrefix?: boolean;
+  /** Canonical hash of blockNumber - 1, the pre-victim state generation. */
+  sourceBlockHash?: string;
+  /** Receipt identity used to bind complete logs to the pre-victim source. */
+  receiptBlockNumber?: number;
+  receiptBlockHash?: string;
+  receiptParentBlockHash?: string;
+  receiptTransactionHash?: string;
+  /** Whether logs contain the complete successful receipt or only a hint. */
+  logsCompleteness?: ReceiptLogsCompleteness;
+  /** State provenance at the detector boundary. `must-overlay` is fail-closed;
+   *  callers may claim `materialized` only after applying the full victim. */
+  victimState: "materialized" | "must-overlay";
 }
 
 export class ManualVictimSource {
@@ -50,6 +66,18 @@ export class ManualVictimSource {
     if (receipt.blockNumber !== blockNumber) {
       throw new Error(`victim block mismatch: expected ${blockNumber}, got ${receipt.blockNumber}`);
     }
+    const sourceBlock = await this.provider.getBlock(Math.max(0, blockNumber - 1));
+    if (!sourceBlock?.hash) {
+      throw new Error(`victim source block unavailable: ${Math.max(0, blockNumber - 1)}`);
+    }
+    const receiptBlock = await this.provider.getBlock(receipt.blockNumber);
+    if (
+      !receiptBlock?.hash ||
+      receiptBlock.hash.toLowerCase() !== receipt.blockHash.toLowerCase() ||
+      receiptBlock.parentHash.toLowerCase() !== sourceBlock.hash.toLowerCase()
+    ) {
+      throw new Error("victim receipt block is not a child of the source block");
+    }
 
     return {
       txHash,
@@ -65,9 +93,19 @@ export class ManualVictimSource {
         address: log.address,
         topics: [...log.topics],
         data: log.data,
+        blockNumber: log.blockNumber,
+        blockHash: log.blockHash,
+        transactionHash: log.transactionHash,
       })),
       minProfit,
       preferSequentialPrefix,
+      sourceBlockHash: sourceBlock.hash.toLowerCase(),
+      receiptBlockNumber: receipt.blockNumber,
+      receiptBlockHash: receipt.blockHash.toLowerCase(),
+      receiptParentBlockHash: receiptBlock.parentHash.toLowerCase(),
+      receiptTransactionHash: receipt.hash.toLowerCase(),
+      logsCompleteness: "complete-receipt",
+      victimState: "must-overlay",
     };
   }
 

@@ -1,6 +1,11 @@
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
-import type { ExecutionFamilyId, RouteLegAdapter } from "./route-leg-adapter.js";
+import type {
+  ExecutionFamilyId,
+  RouteEdgeBuildControl,
+  RouteLegAdapter,
+} from "./route-leg-adapter.js";
+import { bindRouteInstanceIdentity } from "./route-instance-identity.js";
 
 export class RouteLegRegistry {
   private readonly byFamily = new Map<ExecutionFamilyId, RouteLegAdapter>();
@@ -41,9 +46,27 @@ export class RouteLegRegistry {
     return this.byEdgeAdapter.get(edgeAdapterId) ?? null;
   }
 
-  async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
+  async buildEdges(
+    pool: PoolEntry,
+    backend: TokenQueryBackend,
+    control: RouteEdgeBuildControl = {},
+  ): Promise<TokenEdge[]> {
     const adapter = this.forPool(pool.adapter);
-    const edges = await adapter.buildEdges(pool, backend);
+    assertBuildActive(adapter.id, control);
+    const controlledBackend = withBuildControl(backend, control);
+    const built = await raceBuildControl(
+      adapter.buildEdges(pool, controlledBackend, control),
+      adapter.id,
+      control,
+    );
+    // This check is the late-result fence: even if a transport ignored abort,
+    // its eventual result can never enter graph publication.
+    assertBuildActive(adapter.id, control);
+    const edges = bindRouteInstanceIdentity(
+      adapter,
+      pool,
+      built,
+    );
     for (const edge of edges) this.assertEdge(adapter, edge);
     return edges;
   }
@@ -90,4 +113,165 @@ export class RouteLegRegistry {
       throw new Error(`route-leg registry: ${adapter.id} emitted inconsistent edge taxonomy`);
     }
   }
+}
+
+function withBuildControl(
+  backend: TokenQueryBackend,
+  control: RouteEdgeBuildControl,
+): TokenQueryBackend {
+  return {
+    call(req, nested) {
+      const deadlineAtMs = earliestDeadline(
+        control.deadlineAtMs,
+        nested?.deadlineAtMs,
+      );
+      const merged = mergeAbortSignals(control.signal, nested?.signal);
+      try {
+        assertBuildActive("backend", { deadlineAtMs, signal: merged.signal });
+        return raceBuildControl(
+          backend.call(req, { deadlineAtMs, signal: merged.signal }),
+          "backend",
+          { deadlineAtMs, signal: merged.signal },
+        ).finally(merged.detach);
+      } catch (error) {
+        merged.detach();
+        throw error;
+      }
+    },
+    ...(backend.getLogs === undefined
+      ? {}
+      : {
+          getLogs(req, nested) {
+            const deadlineAtMs = earliestDeadline(
+              control.deadlineAtMs,
+              nested?.deadlineAtMs,
+            );
+            const merged = mergeAbortSignals(control.signal, nested?.signal);
+            try {
+              assertBuildActive("backend", {
+                deadlineAtMs,
+                signal: merged.signal,
+              });
+              return raceBuildControl(
+                backend.getLogs!(req, {
+                  deadlineAtMs,
+                  signal: merged.signal,
+                }),
+                "backend",
+                { deadlineAtMs, signal: merged.signal },
+              ).finally(merged.detach);
+            } catch (error) {
+              merged.detach();
+              throw error;
+            }
+          },
+        }),
+  };
+}
+
+function mergeAbortSignals(
+  parent: AbortSignal | undefined,
+  nested: AbortSignal | undefined,
+): {
+  readonly signal: AbortSignal | undefined;
+  readonly detach: () => void;
+} {
+  if (!parent || parent === nested) {
+    return Object.freeze({ signal: nested ?? parent, detach: () => {} });
+  }
+  if (!nested) {
+    return Object.freeze({ signal: parent, detach: () => {} });
+  }
+  const controller = new AbortController();
+  const abortFromParent = () => {
+    if (!controller.signal.aborted) controller.abort(parent.reason);
+  };
+  const abortFromNested = () => {
+    if (!controller.signal.aborted) controller.abort(nested.reason);
+  };
+  if (parent.aborted) abortFromParent();
+  else if (nested.aborted) abortFromNested();
+  else {
+    parent.addEventListener("abort", abortFromParent, { once: true });
+    nested.addEventListener("abort", abortFromNested, { once: true });
+  }
+  return Object.freeze({
+    signal: controller.signal,
+    detach() {
+      parent.removeEventListener("abort", abortFromParent);
+      nested.removeEventListener("abort", abortFromNested);
+    },
+  });
+}
+
+function raceBuildControl<T>(
+  promise: Promise<T>,
+  familyId: string,
+  control: RouteEdgeBuildControl,
+): Promise<T> {
+  if (control.deadlineAtMs === undefined && control.signal === undefined) {
+    return promise;
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      control.signal?.removeEventListener("abort", abort);
+      fn();
+    };
+    const abort = () =>
+      finish(() =>
+        reject(
+          new Error(`route family ${familyId} aborted`, {
+            cause: control.signal?.reason,
+          }),
+        )
+      );
+    const timer = control.deadlineAtMs === undefined
+      ? undefined
+      : setTimeout(
+          () =>
+            finish(() =>
+              reject(new Error(`route family ${familyId} deadline exceeded`))
+            ),
+          Math.max(0, control.deadlineAtMs - Date.now()),
+        );
+    control.signal?.addEventListener("abort", abort, { once: true });
+    if (control.signal?.aborted) {
+      abort();
+      return;
+    }
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
+function assertBuildActive(
+  familyId: string,
+  control: RouteEdgeBuildControl,
+): void {
+  if (control.signal?.aborted) {
+    throw new Error(`route family ${familyId} aborted`, {
+      cause: control.signal.reason,
+    });
+  }
+  if (
+    control.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) {
+    throw new Error(`route family ${familyId} deadline exceeded`);
+  }
+}
+
+function earliestDeadline(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  return Math.min(left, right);
 }

@@ -2,50 +2,82 @@ import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
-import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
-import { quoteProtocolLeg, quoteSiloRedeem } from "./protocol-quote.js";
+import { quoteProtocolLeg } from "./protocol-quote.js";
 import { erc4626Discovery } from "./erc4626-discovery.js";
 import { erc4626IdentityResolver } from "../identity.js";
 import {
   buildReceiptDepositEdge,
   buildReceiptDepositPlanFragment,
 } from "./receipt-deposit-framework.js";
+import {
+  createProtocolQuoteStateCapability,
+  decodeUintResult,
+} from "./protocol-state-framework.js";
 
-const erc4626Iface = new ethers.Interface(["function asset() view returns (address)"]);
+const erc4626Iface = new ethers.Interface([
+  "function asset() view returns (address)",
+  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
+  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
+]);
+
+const erc4626PricingState = createProtocolQuoteStateCapability({
+  familyId: "protocol:erc4626",
+  edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem"],
+  buildQuoteReads(edge, amountIn) {
+    if (edge.adapterId === "erc4626-deposit") {
+      return [{
+        suffix: "deposit",
+        to: edge.target,
+        data: erc4626Iface.encodeFunctionData("previewDeposit", [amountIn]),
+      }];
+    }
+    if (edge.adapterId === "erc4626-redeem") {
+      return [{
+        suffix: "redeem",
+        to: edge.target,
+        data: erc4626Iface.encodeFunctionData("previewRedeem", [amountIn]),
+      }];
+    }
+    throw new Error(`protocol:erc4626 received foreign edge ${edge.adapterId}`);
+  },
+  deriveAmountOut(edge, _amountIn, result) {
+    if (edge.adapterId === "erc4626-deposit") {
+      return decodeUintResult(erc4626Iface, "previewDeposit", result("deposit"));
+    }
+    if (edge.adapterId === "erc4626-redeem") {
+      return decodeUintResult(erc4626Iface, "previewRedeem", result("redeem"));
+    }
+    throw new Error(`protocol:erc4626 received foreign edge ${edge.adapterId}`);
+  },
+});
 
 export const erc4626Adapter = Object.freeze({
   id: "protocol:erc4626",
   kind: "protocol-conversion",
   poolAdapters: ["erc4626"],
+  identityPolicies: [{ poolAdapter: "erc4626", policy: "trusted-singleton-seed" }],
   declaredVenues: [],
   undeclaredVenueReason: "ERC4626 instances require external discovery and per-vault probe admission",
   discovery: erc4626Discovery,
   discoveryIdentityResolver: erc4626IdentityResolver,
-  edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo"],
+  discoveryIdentityAuthority: { class: "canonical-onchain", strength: 300 },
+  edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem"],
   allowedTaxonomy: [
     { slotKind: "protocol", protocolAction: "wrap" },
     { slotKind: "protocol", protocolAction: "redeem" },
   ],
   requiresProtocolEdgesFlag: true,
-  actionAdapterIds: [
-    "erc4626-deposit", "erc4626-redeem", "erc4626-redeem-silo", "erc20-approve",
-  ],
-  readMid: readProtocolExternalMid,
-  warm: { kind: "protocol-mid", priority: 2 },
+  ownedActionAdapterIds: ["erc4626-deposit", "erc4626-redeem"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  pricingState: erc4626PricingState,
   prepared: null,
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
-    if (pool.nonStandardRedeem) {
-      // fixedTokenIn feeds no edge here and silo payout semantics are verified
-      // at the fork-receipt level, so no asset() attestation on this branch.
-      if (!pool.redeemTokenOut) return [];
-      return [{
-        adapterId: "erc4626-redeem-silo", target: pool.address,
-        tokenIn: pool.address, tokenOut: pool.redeemTokenOut,
-        slotKind: "protocol", protocolAction: "redeem", score: pool.score,
-        ...deriveEdgeTaxonomy("protocol", "redeem"),
-      }];
-    }
+    // Compatibility quarantine only: legacy non-standard rows must never
+    // silently regrow standard ERC4626 routes. Their execution semantics are
+    // owned exclusively by protocol:erc4626-silo-redeem.
+    if (pool.nonStandardRedeem) return [];
     // Discovery-owned instance: emit EXACTLY the probe-verified routes. The
     // generic builder can no longer regrow a leg the probe rejected, and the
     // asset() pin is re-attested for every emitted leg.
@@ -106,10 +138,6 @@ export const erc4626Adapter = Object.freeze({
     ];
   },
   async quoteExact(ctx: ExactQuoteContext): Promise<bigint> {
-    if (ctx.edgeAdapterId === "erc4626-redeem-silo") {
-      if (!ctx.tokenOut) throw new Error("erc4626 silo quote requires tokenOut");
-      return quoteSiloRedeem(ctx.state, ctx.target, ctx.tokenOut, ctx.amountIn);
-    }
     return quoteProtocolLeg(ctx.state, ctx.target, ctx.edgeAdapterId, ctx.amountIn);
   },
   async buildPlanFragment(ctx) {

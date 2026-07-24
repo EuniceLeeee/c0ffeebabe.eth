@@ -1,26 +1,6 @@
-import { V2_LINEAGES, type V2LineageVenueId } from "./v2-lineage.js";
-
-export type VenueId =
-  | V2LineageVenueId
-  | "unknown"
-  | "univ3"
-  | "pancake-v3"
-  | "univ3-fork-075c"
-  | "panoramaswap-v1"
-  | "univ4"
-  | "balancer-v3"
-  | "dodo-v2"
-  | "erc4626"
-  | "curve"
-  | "curve-nr"
-  | "goldx"
-  | "psm"
-  | "fluid"
-  | "smardex"
-  | "ousd"
-  | "enzyme"
-  | "rigelswap"
-  | "difx";
+import { V2_LINEAGES } from "./v2-lineage.js";
+import type { VenueId } from "./registry-ids.js";
+export type { VenueId } from "./registry-ids.js";
 
 export type VenueDiscovery =
   | { mode: "factory"; factories: readonly string[] }
@@ -43,7 +23,7 @@ export interface VenueCapability {
 // - quoter.ts supports curve*, univ2-swap, univ3-swap, univ4-unlock, psm, fluid-dex-swap, fluid-vault.
 // - plan-builder.ts supports those same swap/lend adapter ids.
 // - ActionAdapter registry registers univ2/univ3/univ4/curve/psm/fluid adapters.
-// - path-template.ts derives trade-leg edge ids from PRODUCTION_ROUTE_ADAPTERS,
+// - path-template.ts derives trade-leg edge ids from PRODUCTION_ADAPTER_FAMILIES,
 //   plus an explicit fixture-blocked legacy descriptor for Fluid DEX.
 export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
   ...V2_LINEAGES.map((descriptor): VenueCapability => ({
@@ -152,7 +132,7 @@ export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
       mode: "seed",
       seeds: [
         "0xee327311D8640156E87eC33ea55FcbF2309e0ce6", // vault wstUSR/USDC
-        "0xea734B615888c669667038D11950f44b177F15C0", // DEX USDC/USDT
+        "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9", // DEX USDC/USDT
       ],
     },
     discoverable: true,

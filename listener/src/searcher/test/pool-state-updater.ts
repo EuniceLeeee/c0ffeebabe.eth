@@ -97,12 +97,18 @@ async function main(): Promise<void> {
     maxPools: 8,
     maxV3TickPoolsPerBlock: 1,
     awaitTickRefreshForTest: true,
+    resolveLivePoolStateKind: (edgeAdapterId) => {
+      if (edgeAdapterId === "fixture-v2") return "constant-product-v2";
+      if (edgeAdapterId === "fixture-v3") return "concentrated-v3";
+      if (edgeAdapterId === "fixture-v4") return "singleton-v4";
+      return null;
+    },
   });
   await updater.update(123, [
-    { adapterId: "univ2-swap", target: V2_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
-    { adapterId: "univ3-swap", target: V3_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
+    { adapterId: "fixture-v2", target: V2_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
+    { adapterId: "fixture-v3", target: V3_POOL, tokenIn: TOKEN0, tokenOut: TOKEN1, amountIn: 10_000n },
     {
-      adapterId: "univ4-unlock",
+      adapterId: "fixture-v4",
       target: ADDR.UNISWAP_V4_POOL_MANAGER,
       tokenIn: TOKEN0,
       tokenOut: TOKEN1,

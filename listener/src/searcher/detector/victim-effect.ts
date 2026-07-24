@@ -1,8 +1,10 @@
 import { ethers } from "ethers";
-import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
-import type { PoolImpact } from "./pool-impact.js";
+import type {
+  PoolImpact,
+  PoolImpactTransition,
+} from "./pool-impact.js";
 
 export interface VictimEdgeSelector {
   adapterId: string;
@@ -14,6 +16,7 @@ export interface VictimEdgeSelector {
 export interface SwapVictimEffect {
   kind: "swap";
   impact: PoolImpact;
+  transition?: PoolImpactTransition;
 }
 
 export interface OracleVictimEffect {
@@ -36,74 +39,45 @@ export interface OraclePriceChange extends VictimEdgeSelector {
 
 export type VictimEffect = SwapVictimEffect | OracleVictimEffect;
 
-interface DirectCallMatcher {
-  kind: "direct";
-  target: string;
-  selectors: string[];
+export interface DirectCallMatcher {
+  readonly kind: "direct";
+  readonly target: string;
+  readonly selectors: readonly string[];
 }
 
-interface ForwardedCallMatcher {
-  kind: "forwarded";
-  forwarder: string;
-  signature: string;
-  targetArg: number;
-  dataArg: number;
-  target: string;
-  selectors: string[];
+export interface ForwardedCallMatcher {
+  readonly kind: "forwarded";
+  readonly forwarder: string;
+  readonly signature: string;
+  readonly targetArg: number;
+  readonly dataArg: number;
+  readonly target: string;
+  readonly selectors: readonly string[];
 }
 
-type VictimCallMatcher = DirectCallMatcher | ForwardedCallMatcher;
+export type VictimCallMatcher = DirectCallMatcher | ForwardedCallMatcher;
 
-interface OracleVictimDescriptor {
-  id: string;
-  matcher: VictimCallMatcher;
-  affectedEdges: VictimEdgeSelector[];
-  priceProbe: OracleEdgePriceProbe;
-  maxSearchHops: number;
+export interface OracleVictimDescriptor {
+  readonly id: string;
+  readonly modelId: string;
+  readonly matcher: VictimCallMatcher;
+  readonly affectedEdges: readonly VictimEdgeSelector[];
+  readonly priceProbe: OracleEdgePriceProbe;
+  readonly maxSearchHops: number;
 }
 
-interface OracleEdgePriceProbe {
-  signature: string;
-  functionName: string;
-  amountIn: bigint;
-  outputIndex: number;
+export interface OracleEdgePriceProbe {
+  readonly signature: string;
+  readonly functionName: string;
+  readonly amountIn: bigint;
+  readonly outputIndex: number;
 }
 
-/**
- * Protocol trigger facts live here as data. Detector, planner, and solver only
- * understand the generic oracle effect and never encode a protocol route or
- * amount. Adding another oracle is a descriptor entry, not a new pipeline.
- */
-const ORACLE_VICTIM_DESCRIPTORS: readonly OracleVictimDescriptor[] = [
-  {
-    id: "metronome-eth-usd",
-    matcher: {
-      kind: "forwarded",
-      forwarder: ADDR.METRONOME_ORACLE_FORWARDER,
-      signature: "forward(address target, bytes data)",
-      targetArg: 0,
-      dataArg: 1,
-      target: ADDR.METRONOME_ORACLE,
-      selectors: ["0xb1dc65a4"],
-    },
-    affectedEdges: [
-      { adapterId: "metronome-synth-swap", target: ADDR.METRONOME_SYNTH_POOL },
-    ],
-    priceProbe: {
-      signature:
-        "quoteSwapOut(address syntheticTokenIn, address syntheticTokenOut, uint256 amountIn) " +
-        "view returns (uint256 amountOut, uint256 fee)",
-      functionName: "quoteSwapOut",
-      amountIn: 10n ** 18n,
-      outputIndex: 0,
-    },
-    maxSearchHops: 8,
-  },
-];
-
-export function oracleVictimWatchTargets(): string[] {
+export function oracleVictimWatchTargets(
+  descriptors: readonly OracleVictimDescriptor[],
+): string[] {
   return uniqueAddresses(
-    ORACLE_VICTIM_DESCRIPTORS.map((descriptor) =>
+    descriptors.map((descriptor) =>
       descriptor.matcher.kind === "direct"
         ? descriptor.matcher.target
         : descriptor.matcher.forwarder,
@@ -118,8 +92,9 @@ export async function matchOracleVictimEffect(
   before: TokenQueryBackend | null,
   beforeBlock: number,
   after: Pick<StateBackend, "call">,
+  descriptors: readonly OracleVictimDescriptor[],
 ): Promise<OracleVictimEffect | null> {
-  const descriptor = ORACLE_VICTIM_DESCRIPTORS.find((candidate) =>
+  const descriptor = descriptors.find((candidate) =>
     matchesCall(candidate.matcher, to, input),
   );
   if (!descriptor || !before) return null;
@@ -197,7 +172,7 @@ function matchesCall(matcher: VictimCallMatcher, to: string | null, input: strin
   }
 }
 
-function selectorMatches(input: string, selectors: string[]): boolean {
+function selectorMatches(input: string, selectors: readonly string[]): boolean {
   const selector = input.slice(0, 10).toLowerCase();
   return selectors.some((candidate) => candidate.toLowerCase() === selector);
 }

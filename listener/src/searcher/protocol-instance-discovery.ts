@@ -8,6 +8,11 @@ import {
 import { poolRegistryKey } from "./pool-universe.js";
 import { hashTokenGraph, type StrategyViews } from "./strategy-views.js";
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
+import {
+  ProtocolDiscoveryFamilyGuard,
+  type ProtocolDiscoveryFamilyGuardOptions,
+  withProtocolDiscoveryFamilyContext,
+} from "./protocol-discovery-family-guard.js";
 import { STRICT_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
   attestPoolIdentities,
@@ -18,10 +23,19 @@ import {
 } from "./venues/identity.js";
 import type {
   AttestedProtocolInstance,
+  ExecutionFamilyId,
+  IdentityAuthority,
   ProtocolCandidate,
-  ProtocolConversionAdapter,
   ProtocolDiscoveryContext,
+  ProtocolDiscoveryReadControl,
+  RouteCandidateSourceKind,
+  RouteLegAdapter,
 } from "./venues/route-leg-adapter.js";
+import {
+  bindRouteInstanceIdentity,
+  edgeExecutionVariantKey,
+  edgeInstanceKey,
+} from "./venues/route-instance-identity.js";
 
 export function createPinnedProtocolDiscoveryContext(input: {
   provider: ethers.JsonRpcProvider;
@@ -33,6 +47,8 @@ export function createPinnedProtocolDiscoveryContext(input: {
   probeExecutor?: string;
   graphTokens: readonly string[];
   retainedInstances?: readonly AttestedProtocolInstance[];
+  /** Parent pass lifetime; every backend operation also merges its local control. */
+  control?: ProtocolDiscoveryReadControl;
 }): ProtocolDiscoveryContext {
   const toBlock = input.toBlock ?? input.blockNumber;
   const rpcTimeoutMs = input.rpcTimeoutMs ?? Math.max(
@@ -59,28 +75,31 @@ export function createPinnedProtocolDiscoveryContext(input: {
     graphTokens: unique(input.graphTokens.map((token) => token.toLowerCase())),
     retainedInstances: input.retainedInstances ?? [],
     backend: {
-      call: (req) => sendProtocolDiscoveryRpc<string>(
+      call: (req, control) => sendProtocolDiscoveryRpc<string>(
         input.provider,
         "eth_call",
         [input.provider.getRpcTransaction(req), blockTag],
         rpcTimeoutMs,
         "eth_call",
+        mergeProtocolDiscoveryReadControls(input.control, control),
       ),
-      getCode: (address) => sendProtocolDiscoveryRpc<string>(
+      getCode: (address, control) => sendProtocolDiscoveryRpc<string>(
         input.provider,
         "eth_getCode",
         [address, blockTag],
         rpcTimeoutMs,
         "eth_getCode",
+        mergeProtocolDiscoveryReadControls(input.control, control),
       ),
-      getStorageAt: (address, position) => sendProtocolDiscoveryRpc<string>(
+      getStorageAt: (address, position, control) => sendProtocolDiscoveryRpc<string>(
         input.provider,
         "eth_getStorageAt",
         [address, ethers.toQuantity(position), blockTag],
         rpcTimeoutMs,
         "eth_getStorageAt",
+        mergeProtocolDiscoveryReadControls(input.control, control),
       ),
-      getLogs: async (req) => {
+      getLogs: async (req, control) => {
         const logs = await sendProtocolDiscoveryRpc<RawProtocolDiscoveryLog[]>(
           input.provider,
           "eth_getLogs",
@@ -94,16 +113,18 @@ export function createPinnedProtocolDiscoveryContext(input: {
           }],
           rpcTimeoutMs,
           "eth_getLogs",
+          mergeProtocolDiscoveryReadControls(input.control, control),
         );
         return logs.map(normalizeProtocolDiscoveryLog);
       },
-      getTransactionReceipt: async (txHash) => {
+      getTransactionReceipt: async (txHash, control) => {
         const receipt = await sendProtocolDiscoveryRpc<RawProtocolDiscoveryReceipt | null>(
           input.provider,
           "eth_getTransactionReceipt",
           [txHash],
           rpcTimeoutMs,
           "eth_getTransactionReceipt",
+          mergeProtocolDiscoveryReadControls(input.control, control),
         );
         if (!receipt) return null;
         return {
@@ -111,14 +132,15 @@ export function createPinnedProtocolDiscoveryContext(input: {
           logs: receipt.logs.map(normalizeProtocolDiscoveryLog),
         };
       },
-      traceTransaction: (txHash) => sendProtocolDiscoveryRpc<unknown>(
+      traceTransaction: (txHash, control) => sendProtocolDiscoveryRpc<unknown>(
         input.provider,
         "debug_traceTransaction",
         [txHash, { tracer: "callTracer" }],
         rpcTimeoutMs,
         "debug_traceTransaction",
+        mergeProtocolDiscoveryReadControls(input.control, control),
       ),
-      simulateCalls: async (req) => {
+      simulateCalls: async (req, control) => {
         const raw = await sendProtocolDiscoveryRpc<unknown>(
           input.provider,
           "eth_simulateV1",
@@ -136,6 +158,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
           }, blockTag],
           rpcTimeoutMs,
           "eth_simulateV1",
+          mergeProtocolDiscoveryReadControls(input.control, control),
         );
         const firstBlock = Array.isArray(raw) ? raw[0] as { calls?: unknown } : null;
         const calls = firstBlock && Array.isArray(firstBlock.calls) ? firstBlock.calls : [];
@@ -174,13 +197,14 @@ export function createPinnedProtocolDiscoveryContext(input: {
           };
         });
       },
-      createAccessList: async (req) => {
+      createAccessList: async (req, control) => {
         const raw = await sendProtocolDiscoveryRpc<{ accessList?: unknown }>(
           input.provider,
           "eth_createAccessList",
           [{ from: req.from, to: req.to, data: req.data }, blockTag],
           rpcTimeoutMs,
           "eth_createAccessList",
+          mergeProtocolDiscoveryReadControls(input.control, control),
         );
         const list = raw && Array.isArray(raw.accessList) ? raw.accessList : [];
         return list.flatMap((entry) => {
@@ -222,7 +246,9 @@ function normalizeProtocolDiscoveryLog(log: RawProtocolDiscoveryLog) {
 let protocolDiscoveryRpcId = 0;
 const PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS = 3;
 const PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS = 500;
+const PROTOCOL_DISCOVERY_FAMILY_CONCURRENCY = 8;
 const RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES = new Set([429, 502, 503, 504]);
+const NEVER_ABORTED_PROTOCOL_DISCOVERY_SIGNAL = new AbortController().signal;
 
 async function sendProtocolDiscoveryRpc<T>(
   provider: ethers.JsonRpcProvider,
@@ -230,13 +256,18 @@ async function sendProtocolDiscoveryRpc<T>(
   params: unknown[],
   timeoutMs: number,
   label: string,
+  control: ProtocolDiscoveryReadControl = {},
 ): Promise<T> {
   // Ethers does not expose an AbortSignal per provider.send call. Reuse its
   // connection URL and resolved auth headers, but issue this deadline-bound
   // request through fetch so AbortController closes the actual transport.
   const connection = provider._getConnection();
-  const deadlineAtMs = Date.now() + timeoutMs;
+  const deadlineAtMs = Math.min(
+    Date.now() + timeoutMs,
+    control.deadlineAtMs ?? Number.POSITIVE_INFINITY,
+  );
   for (let attempt = 1; attempt <= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS; attempt++) {
+    throwIfProtocolDiscoveryRpcAborted(control.signal);
     const remainingMs = deadlineAtMs - Date.now();
     if (remainingMs <= 0) throw protocolDiscoveryRpcTimeout(label, timeoutMs);
     const payload: JsonRpcPayload = {
@@ -245,54 +276,125 @@ async function sendProtocolDiscoveryRpc<T>(
       method,
       params,
     };
-    const controller = new AbortController();
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, remainingMs);
     try {
-      const response = await fetch(connection.url, {
-        method: "POST",
-        headers: { ...connection.headers, "content-type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        const error = Object.assign(
-          new Error(`protocol discovery ${label} HTTP ${response.status} ${response.statusText}`),
-          {
-            status: response.status,
-            retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
-          },
-        );
-        throw error;
-      }
-      const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
-      if (body.error) throw provider.getRpcError(payload, body as JsonRpcError);
-      if (!("result" in body)) {
-        throw new Error(`protocol discovery ${label} returned no result`);
-      }
-      return body.result as T;
+      return await runProtocolDiscoveryReadBudget(
+        control,
+        async (budgetSignal) => {
+          throwIfProtocolDiscoveryRpcAborted(control.signal);
+          throwIfProtocolDiscoveryRpcAborted(budgetSignal);
+          const attemptRemainingMs = deadlineAtMs - Date.now();
+          if (attemptRemainingMs <= 0) {
+            throw protocolDiscoveryRpcTimeout(label, timeoutMs);
+          }
+          const controller = new AbortController();
+          let timedOut = false;
+          const detachParent = control.signal
+            ? linkProtocolDiscoveryRpcAbort(control.signal, controller)
+            : () => {};
+          const detachBudget =
+            budgetSignal === control.signal
+              ? () => {}
+              : linkProtocolDiscoveryRpcAbort(budgetSignal, controller);
+          const timer = setTimeout(() => {
+            timedOut = true;
+            controller.abort(protocolDiscoveryRpcTimeout(label, timeoutMs));
+          }, attemptRemainingMs);
+          try {
+            const response = await fetch(connection.url, {
+              method: "POST",
+              headers: { ...connection.headers, "content-type": "application/json" },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            });
+            throwIfProtocolDiscoveryRpcAborted(control.signal);
+            throwIfProtocolDiscoveryRpcAborted(budgetSignal);
+            if (Date.now() >= deadlineAtMs) {
+              const error = protocolDiscoveryRpcTimeout(label, timeoutMs);
+              controller.abort(error);
+              throw error;
+            }
+            if (!response.ok) {
+              throw Object.assign(
+                new Error(
+                  `protocol discovery ${label} HTTP ` +
+                    `${response.status} ${response.statusText}`,
+                ),
+                {
+                  status: response.status,
+                  retryAfterMs: parseRetryAfterMs(
+                    response.headers.get("retry-after"),
+                  ),
+                },
+              );
+            }
+            const body = await response.json() as Partial<JsonRpcError> & {
+              result?: unknown;
+            };
+            throwIfProtocolDiscoveryRpcAborted(control.signal);
+            throwIfProtocolDiscoveryRpcAborted(budgetSignal);
+            if (Date.now() >= deadlineAtMs) {
+              throw protocolDiscoveryRpcTimeout(label, timeoutMs);
+            }
+            if (body.error) {
+              throw provider.getRpcError(payload, body as JsonRpcError);
+            }
+            if (!("result" in body)) {
+              throw new Error(
+                `protocol discovery ${label} returned no result`,
+              );
+            }
+            return body.result as T;
+          } catch (error) {
+            if (control.signal?.aborted) {
+              throw control.signal.reason ??
+                protocolDiscoveryRpcAborted(label, error);
+            }
+            if (budgetSignal.aborted) {
+              throw budgetSignal.reason ??
+                protocolDiscoveryRpcAborted(label, error);
+            }
+            if (timedOut) {
+              throw protocolDiscoveryRpcTimeout(label, timeoutMs, error);
+            }
+            throw error;
+          } finally {
+            clearTimeout(timer);
+            detachBudget();
+            detachParent();
+          }
+        },
+      );
     } catch (error) {
-      if (timedOut) {
-        throw protocolDiscoveryRpcTimeout(label, timeoutMs, error);
+      if (control.signal?.aborted) {
+        throw control.signal.reason ?? protocolDiscoveryRpcAborted(label, error);
       }
       if (
         attempt >= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS ||
         !isRetryableProtocolDiscoveryRpcTransportFailure(error)
       ) throw error;
-      clearTimeout(timer);
       const retryDelayMs = protocolDiscoveryRetryDelayMs(error, attempt);
       if (retryDelayMs >= deadlineAtMs - Date.now()) {
         throw protocolDiscoveryRpcTimeout(label, timeoutMs, error);
       }
-      await delay(retryDelayMs);
-    } finally {
-      clearTimeout(timer);
+      await protocolDiscoveryRpcDelay(
+        retryDelayMs,
+        deadlineAtMs,
+        control.signal,
+        label,
+        timeoutMs,
+      );
     }
   }
   throw new Error(`protocol discovery ${label} exhausted RPC attempts`);
+}
+
+function runProtocolDiscoveryReadBudget<T>(
+  control: ProtocolDiscoveryReadControl,
+  work: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  return control.run
+    ? control.run(work)
+    : work(control.signal ?? NEVER_ABORTED_PROTOCOL_DISCOVERY_SIGNAL);
 }
 
 function isRetryableProtocolDiscoveryRpcTransportFailure(error: unknown): boolean {
@@ -338,8 +440,75 @@ function parseRetryAfterMs(value: string | null): number | null {
   return Math.max(0, timestamp - Date.now());
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function protocolDiscoveryRpcDelay(
+  delayMs: number,
+  deadlineAtMs: number,
+  signal: AbortSignal | undefined,
+  label: string,
+  timeoutMs: number,
+): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(
+      signal.reason ?? protocolDiscoveryRpcAborted(label),
+    );
+  }
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) {
+    return Promise.reject(protocolDiscoveryRpcTimeout(label, timeoutMs));
+  }
+  return new Promise<void>((resolve, reject) => {
+    let detachAbort = (): void => {};
+    const timer = setTimeout(() => {
+      detachAbort();
+      if (Date.now() >= deadlineAtMs) {
+        reject(protocolDiscoveryRpcTimeout(label, timeoutMs));
+      } else {
+        resolve();
+      }
+    }, Math.min(delayMs, remainingMs));
+    if (signal) {
+      const abort = (): void => {
+        clearTimeout(timer);
+        detachAbort();
+        reject(signal.reason ?? protocolDiscoveryRpcAborted(label));
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      detachAbort = () => signal.removeEventListener("abort", abort);
+    }
+  });
+}
+
+function throwIfProtocolDiscoveryRpcAborted(
+  signal: AbortSignal | undefined,
+): void {
+  if (!signal?.aborted) return;
+  throw signal.reason ?? protocolDiscoveryRpcAborted("RPC");
+}
+
+function linkProtocolDiscoveryRpcAbort(
+  source: AbortSignal,
+  target: AbortController,
+): () => void {
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+  const abort = (): void => target.abort(source.reason);
+  source.addEventListener("abort", abort, { once: true });
+  return () => source.removeEventListener("abort", abort);
+}
+
+function protocolDiscoveryRpcAborted(
+  label: string,
+  cause?: unknown,
+): Error {
+  return Object.assign(
+    new Error(
+      `protocol discovery ${label} aborted`,
+      cause === undefined ? undefined : { cause },
+    ),
+    { code: "ABORTED" },
+  );
 }
 
 function protocolDiscoveryRpcTimeout(
@@ -347,9 +516,12 @@ function protocolDiscoveryRpcTimeout(
   timeoutMs: number,
   cause?: unknown,
 ): Error {
-  return new Error(
-    `protocol discovery ${label} timed out after ${timeoutMs}ms`,
-    cause === undefined ? undefined : { cause },
+  return Object.assign(
+    new Error(
+      `protocol discovery ${label} timed out after ${timeoutMs}ms`,
+      cause === undefined ? undefined : { cause },
+    ),
+    { code: "TIMEOUT" },
   );
 }
 
@@ -383,6 +555,8 @@ export interface VerifiedRouteClaim {
   readonly edgeAdapterId: string;
   /** Identity root that admitted the instance (identitySource|venueId|factory). */
   readonly authorityFingerprint: string;
+  readonly authorityClass: IdentityAuthority["class"];
+  readonly authorityStrength: number;
   /** Execution surface shape (edge adapter + execution-relevant edge fields). */
   readonly executionFingerprint: string;
   readonly edge: TokenEdge;
@@ -398,8 +572,8 @@ export interface VerifiedProtocolAdmission {
 export function semanticRouteKey(chainId: string | undefined, edge: TokenEdge): string {
   return [
     chainId ?? "0",
+    edgeInstanceKey(edge),
     edge.target.toLowerCase(),
-    edge.poolId?.toLowerCase() ?? "",
     edge.tokenIn.toLowerCase(),
     edge.tokenOut.toLowerCase(),
     edge.slotKind,
@@ -408,19 +582,7 @@ export function semanticRouteKey(chainId: string | undefined, edge: TokenEdge): 
 }
 
 export function executionFingerprint(edge: TokenEdge): string {
-  return [
-    edge.adapterId,
-    edge.curveI === undefined ? "" : String(edge.curveI),
-    edge.curveJ === undefined ? "" : String(edge.curveJ),
-    edge.poolId?.toLowerCase() ?? "",
-    edge.v4PoolKey === undefined ? "" : [
-      edge.v4PoolKey.currency0.toLowerCase(),
-      edge.v4PoolKey.currency1.toLowerCase(),
-      String(edge.v4PoolKey.fee),
-      String(edge.v4PoolKey.tickSpacing),
-      edge.v4PoolKey.hooks.toLowerCase(),
-    ].join(":"),
-  ].join("|");
+  return edgeExecutionVariantKey(edge);
 }
 
 export function authorityFingerprint(instance: AttestedProtocolInstance): string {
@@ -436,13 +598,16 @@ export function deriveVerifiedRouteClaims(
   instance: AttestedProtocolInstance,
   edges: readonly TokenEdge[],
   chainId: string | undefined,
+  authority: IdentityAuthority,
 ): VerifiedRouteClaim[] {
-  const authority = authorityFingerprint(instance);
+  const authorityFingerprintValue = authorityFingerprint(instance);
   return edges.map((edge) => ({
     semanticRouteKey: semanticRouteKey(chainId, edge),
     producerAdapterId,
     edgeAdapterId: edge.adapterId,
-    authorityFingerprint: authority,
+    authorityFingerprint: authorityFingerprintValue,
+    authorityClass: authority.class,
+    authorityStrength: authority.strength,
     executionFingerprint: executionFingerprint(edge),
     edge,
   }));
@@ -453,14 +618,27 @@ export interface ProtocolDiscoveryResult {
   readonly wouldAdmit: readonly VerifiedProtocolAdmission[];
   /** Instance keys evaluated this pass. Lifecycle replacement may only touch these keys. */
   readonly evaluatedInstanceKeys: ReadonlySet<string>;
+  /**
+   * Candidate-source + identity/probe completeness owned by each enabled
+   * family. This is the graph-coverage source of truth; the aggregate booleans
+   * below remain compatibility summaries only.
+   */
+  readonly familySourceCoverage: readonly ProtocolDiscoveryFamilySourceCoverage[];
   /** False means identity/probe hit a retryable read failure. */
   readonly evaluationComplete: boolean;
   /** False means a candidate source or identity/probe read failed. */
   readonly sourceComplete: boolean;
 }
 
+export interface ProtocolDiscoveryFamilySourceCoverage {
+  readonly familyId: ExecutionFamilyId;
+  readonly sourceId: RouteCandidateSourceKind;
+  readonly complete: boolean;
+  readonly issues: readonly string[];
+}
+
 export type ProtocolIdentityAttester = (
-  adapter: ProtocolConversionAdapter,
+  adapter: RouteLegAdapter,
   candidate: ProtocolCandidate,
   context: ProtocolDiscoveryContext,
 ) => Promise<AttestedPoolEntry<PoolEntry> | null>;
@@ -499,7 +677,7 @@ export function createCanonicalProtocolIdentityAttester(input: {
  * atomically project the verified result with prepareProtocolDiscoveryProjection.
  */
 export async function runProtocolDiscovery(input: {
-  adapters: readonly ProtocolConversionAdapter[];
+  adapters: readonly RouteLegAdapter[];
   context: ProtocolDiscoveryContext;
   protocolEdgesEnabled: boolean;
   attestIdentity: ProtocolIdentityAttester;
@@ -507,17 +685,55 @@ export async function runProtocolDiscovery(input: {
   sourceComplete?: boolean;
   sourceErrors?: readonly {
     readonly adapterId: string | null;
+    readonly sourceKind: RouteCandidateSourceKind;
+    readonly impactedFamilyIds: readonly ExecutionFamilyId[];
     readonly target: string | null;
     readonly reason: string;
     readonly retryable?: boolean;
   }[];
   includeRetained?: boolean;
+  familyGuardOptions?: ProtocolDiscoveryFamilyGuardOptions;
+  /** Parent pass lifetime shared by identity/probe family callbacks. */
+  control?: ProtocolDiscoveryReadControl;
 }): Promise<ProtocolDiscoveryResult> {
+  const passControl = mergeProtocolDiscoveryReadControls(
+    protocolDiscoveryReadControlFromFamilyOptions(input.familyGuardOptions),
+    input.control,
+  );
+  throwIfProtocolDiscoveryParentStopped(passControl);
   const events: ProtocolDiscoveryEvent[] = [];
   const wouldAdmit: VerifiedProtocolAdmission[] = [];
   const evaluatedInstanceKeys = new Set<string>();
   const candidateSourceComplete = input.sourceComplete ?? true;
-  let evaluationComplete = true;
+  let evaluationComplete = candidateSourceComplete;
+  const enabledAdapters = input.adapters.filter((adapter) =>
+    adapter.discovery !== undefined &&
+    (!adapter.requiresProtocolEdgesFlag || input.protocolEdgesEnabled)
+  );
+  const incompleteIssues = new Map<string, string[]>(
+    enabledAdapters.map((adapter) => [adapter.id, []]),
+  );
+  const sourceIncompleteIssues = new Map<string, string[]>();
+  const markFamilyIncomplete = (adapterId: string, reason: string): void => {
+    const issues = incompleteIssues.get(adapterId);
+    if (issues && !issues.includes(reason)) issues.push(reason);
+  };
+  const markFamilySourceIncomplete = (
+    adapterId: string,
+    sourceId: RouteCandidateSourceKind,
+    reason: string,
+  ): void => {
+    const key = `${adapterId}\u001f${sourceId}`;
+    const issues = sourceIncompleteIssues.get(key) ?? [];
+    if (!issues.includes(reason)) issues.push(reason);
+    sourceIncompleteIssues.set(key, issues);
+  };
+  const familyGuard = new ProtocolDiscoveryFamilyGuard(
+    mergeProtocolDiscoveryFamilyGuardOptions(
+      input.familyGuardOptions,
+      passControl,
+    ),
+  );
 
   for (const error of input.sourceErrors ?? []) {
     events.push({
@@ -531,111 +747,280 @@ export async function runProtocolDiscovery(input: {
       reason: error.reason,
       wouldAdmitEdges: 0,
     });
+    if (error.retryable) {
+      for (const familyId of new Set(error.impactedFamilyIds)) {
+        markFamilySourceIncomplete(
+          familyId,
+          error.sourceKind,
+          error.reason,
+        );
+      }
+    }
+  }
+  if (
+    !candidateSourceComplete &&
+    !(input.sourceErrors ?? []).some((error) => error.retryable)
+  ) {
+    for (const adapter of enabledAdapters) {
+      markFamilyIncomplete(adapter.id, "candidate source reported incomplete");
+    }
   }
 
-  for (const adapter of input.adapters) {
-    const discovery = adapter.discovery;
-    if (!discovery) continue;
-
-    if (!input.protocolEdgesEnabled) {
-      events.push(eventFor(adapter.id, null, "rejected", "feature_flag", "protocol_edges_disabled", 0));
-      continue;
-    }
-
-    const rawCandidates: ProtocolCandidate[] = (input.includeRetained ?? true)
-      ? input.context.retainedInstances
-        .filter((instance) => instance.ownerAdapterId === undefined
-          ? adapter.poolAdapters.includes(instance.pool.adapter)
-          : instance.ownerAdapterId === adapter.id)
-        .map(candidateFromRetained)
-      : [];
-    rawCandidates.push(...(input.candidatesByAdapter?.get(adapter.id) ?? []));
-
-    const grouped = new Map<string, CandidateAggregate>();
-    const quarantinedKeys = new Set<string>();
-    for (const rawCandidate of rawCandidates) {
-      let candidate: ProtocolCandidate;
-      try {
-        candidate = normalizeCandidate(adapter, rawCandidate);
-      } catch (error) {
-        events.push(eventFor(adapter.id, rawCandidate, "rejected", "candidate", safeError(error), 0));
-        continue;
-      }
-      const key = protocolInstanceKey(adapter.id, candidate.pool);
-      if (quarantinedKeys.has(key)) continue;
-      const current = grouped.get(key);
-      try {
-        if (
-          current &&
-          poolShapeKey(current.candidate.pool) !== poolShapeKey(candidate.pool) &&
-          current.sources.every((source) => source === "retained-instance") &&
-          candidate.source !== "retained-instance"
-        ) {
-          // Current chain-derived metadata supersedes the prior snapshot. This
-          // is the route-replace path for asset()/configuration changes.
-          grouped.set(key, aggregateCandidate(candidate));
-        } else {
-          grouped.set(key, current ? mergeCandidate(current, candidate) : aggregateCandidate(candidate));
+  const familyResults = await mapLimitDeterministic(
+    input.adapters,
+    PROTOCOL_DISCOVERY_FAMILY_CONCURRENCY,
+    async (adapter) => {
+      const familyEvents: ProtocolDiscoveryEvent[] = [];
+      const familyWouldAdmit: VerifiedProtocolAdmission[] = [];
+      const familyEvaluatedInstanceKeys = new Set<string>();
+      const familyIncompleteIssues: string[] = [];
+      let familyEvaluationComplete = true;
+      const markIncomplete = (reason: string): void => {
+        familyEvaluationComplete = false;
+        if (!familyIncompleteIssues.includes(reason)) {
+          familyIncompleteIssues.push(reason);
         }
-      } catch (error) {
-        grouped.delete(key);
-        quarantinedKeys.add(key);
-        evaluatedInstanceKeys.add(key);
-        events.push(eventFor(adapter.id, candidate, "rejected", "candidate", safeError(error), 0));
-      }
-    }
-
-    for (const [key, aggregate] of grouped) {
-      const candidate = aggregate.candidate;
-      let attestedPool: AttestedPoolEntry<PoolEntry> | null;
-      try {
-        attestedPool = await input.attestIdentity(adapter, candidate, input.context);
-      } catch (error) {
-        if (isRetryableProtocolDiscoveryFailure(error)) {
-          evaluationComplete = false;
-        } else {
-          evaluatedInstanceKeys.add(key);
-        }
-        events.push(eventFor(adapter.id, aggregate, "rejected", "identity", safeError(error), 0));
-        continue;
-      }
-      if (!attestedPool) {
-        evaluatedInstanceKeys.add(key);
-        events.push(eventFor(adapter.id, aggregate, "rejected", "identity", "identity_not_attested", 0));
-        continue;
-      }
-
-      let instance: AttestedProtocolInstance;
-      try {
-        instance = normalizeAttestedInstance(adapter, aggregate, attestedPool);
-      } catch (error) {
-        evaluatedInstanceKeys.add(key);
-        events.push(eventFor(adapter.id, aggregate, "rejected", "identity", safeError(error), 0));
-        continue;
-      }
-
-      let edges: readonly TokenEdge[];
-      try {
-        edges = await discovery.probeCandidate(instance, input.context);
-        assertVerifiedEdges(adapter, instance, edges);
-      } catch (error) {
-        if (isRetryableProtocolDiscoveryFailure(error)) {
-          evaluationComplete = false;
-        } else {
-          evaluatedInstanceKeys.add(key);
-        }
-        events.push(eventFor(adapter.id, aggregate, "rejected", "probe", safeError(error), 0));
-        continue;
-      }
-
-      evaluatedInstanceKeys.add(key);
-      wouldAdmit.push({
+      };
+      const result = () => ({
         adapterId: adapter.id,
-        instance,
-        edges: [...edges],
-        claims: deriveVerifiedRouteClaims(adapter.id, instance, edges, input.context.chainId),
+        events: familyEvents,
+        wouldAdmit: familyWouldAdmit,
+        evaluatedInstanceKeys: familyEvaluatedInstanceKeys,
+        incompleteIssues: familyIncompleteIssues,
+        evaluationComplete: familyEvaluationComplete,
       });
-      events.push(eventFor(adapter.id, aggregate, "would_admit", "probe", null, edges.length));
+      const discovery = adapter.discovery;
+      if (!discovery) return result();
+
+      if (adapter.requiresProtocolEdgesFlag && !input.protocolEdgesEnabled) {
+        familyEvents.push(
+          eventFor(
+            adapter.id,
+            null,
+            "rejected",
+            "feature_flag",
+            "protocol_edges_disabled",
+            0,
+          ),
+        );
+        return result();
+      }
+
+      const rawCandidates: ProtocolCandidate[] = (input.includeRetained ?? true)
+        ? input.context.retainedInstances
+          .filter((instance) => instance.ownerAdapterId === undefined
+            ? adapter.poolAdapters.includes(instance.pool.adapter)
+            : instance.ownerAdapterId === adapter.id)
+          .map(candidateFromRetained)
+        : [];
+      rawCandidates.push(...(input.candidatesByAdapter?.get(adapter.id) ?? []));
+
+      const grouped = new Map<string, CandidateAggregate>();
+      const quarantinedKeys = new Set<string>();
+      for (const rawCandidate of rawCandidates) {
+        let candidate: ProtocolCandidate;
+        try {
+          candidate = normalizeCandidate(adapter, rawCandidate);
+        } catch (error) {
+          familyEvents.push(
+            eventFor(
+              adapter.id,
+              rawCandidate,
+              "rejected",
+              "candidate",
+              safeError(error),
+              0,
+            ),
+          );
+          continue;
+        }
+        const key = protocolInstanceKey(adapter.id, candidate.pool);
+        if (quarantinedKeys.has(key)) continue;
+        const current = grouped.get(key);
+        try {
+          if (
+            current &&
+            poolShapeKey(current.candidate.pool) !==
+              poolShapeKey(candidate.pool) &&
+            current.sources.every((source) => source === "retained-instance") &&
+            candidate.source !== "retained-instance"
+          ) {
+            // Current chain-derived metadata supersedes the prior snapshot.
+            grouped.set(key, aggregateCandidate(candidate));
+          } else {
+            grouped.set(
+              key,
+              current
+                ? mergeCandidate(current, candidate)
+                : aggregateCandidate(candidate),
+            );
+          }
+        } catch (error) {
+          grouped.delete(key);
+          quarantinedKeys.add(key);
+          familyEvaluatedInstanceKeys.add(key);
+          familyEvents.push(
+            eventFor(
+              adapter.id,
+              candidate,
+              "rejected",
+              "candidate",
+              safeError(error),
+              0,
+            ),
+          );
+        }
+      }
+
+      // Candidate order remains serial within one family; sibling families run
+      // in parallel and merge below in registration order.
+      for (const [key, aggregate] of grouped) {
+        const candidate = aggregate.candidate;
+        let attestedPool: AttestedPoolEntry<PoolEntry> | null;
+        try {
+          attestedPool = await familyGuard.run(
+            adapter.id,
+            "identity",
+            (control) =>
+              input.attestIdentity(
+                adapter,
+                candidate,
+                withProtocolDiscoveryFamilyContext(input.context, control),
+              ),
+          );
+        } catch (error) {
+          throwIfProtocolDiscoveryParentStopped(passControl);
+          if (isRetryableProtocolDiscoveryFailure(error)) {
+            markIncomplete(safeError(error));
+          } else {
+            familyEvaluatedInstanceKeys.add(key);
+          }
+          familyEvents.push(
+            eventFor(
+              adapter.id,
+              aggregate,
+              "rejected",
+              "identity",
+              safeError(error),
+              0,
+            ),
+          );
+          continue;
+        }
+        if (!attestedPool) {
+          familyEvaluatedInstanceKeys.add(key);
+          familyEvents.push(
+            eventFor(
+              adapter.id,
+              aggregate,
+              "rejected",
+              "identity",
+              "identity_not_attested",
+              0,
+            ),
+          );
+          continue;
+        }
+
+        let instance: AttestedProtocolInstance;
+        try {
+          instance = normalizeAttestedInstance(
+            adapter,
+            aggregate,
+            attestedPool,
+          );
+        } catch (error) {
+          familyEvaluatedInstanceKeys.add(key);
+          familyEvents.push(
+            eventFor(
+              adapter.id,
+              aggregate,
+              "rejected",
+              "identity",
+              safeError(error),
+              0,
+            ),
+          );
+          continue;
+        }
+
+        let edges: readonly TokenEdge[];
+        try {
+          edges = await familyGuard.run(
+            adapter.id,
+            "probe",
+            async (control) => {
+              const familyContext = withProtocolDiscoveryFamilyContext(
+                input.context,
+                control,
+              );
+              const verified = bindRouteInstanceIdentity(
+                adapter,
+                instance.pool,
+                await discovery.probeCandidate(instance, familyContext),
+              );
+              assertVerifiedEdges(adapter, instance, verified);
+              return verified;
+            },
+          );
+        } catch (error) {
+          throwIfProtocolDiscoveryParentStopped(passControl);
+          if (isRetryableProtocolDiscoveryFailure(error)) {
+            markIncomplete(safeError(error));
+          } else {
+            familyEvaluatedInstanceKeys.add(key);
+          }
+          familyEvents.push(
+            eventFor(
+              adapter.id,
+              aggregate,
+              "rejected",
+              "probe",
+              safeError(error),
+              0,
+            ),
+          );
+          continue;
+        }
+
+        familyEvaluatedInstanceKeys.add(key);
+        familyWouldAdmit.push({
+          adapterId: adapter.id,
+          instance,
+          edges: [...edges],
+          claims: deriveVerifiedRouteClaims(
+            adapter.id,
+            instance,
+            edges,
+            input.context.chainId,
+            adapter.discoveryIdentityAuthority ??
+              failMissingDiscoveryAuthority(adapter.id),
+          ),
+        });
+        familyEvents.push(
+          eventFor(
+            adapter.id,
+            aggregate,
+            "would_admit",
+            "probe",
+            null,
+            edges.length,
+          ),
+        );
+      }
+      return result();
+    },
+  );
+  throwIfProtocolDiscoveryParentStopped(passControl);
+  for (const family of familyResults) {
+    events.push(...family.events);
+    wouldAdmit.push(...family.wouldAdmit);
+    for (const key of family.evaluatedInstanceKeys) {
+      evaluatedInstanceKeys.add(key);
+    }
+    if (!family.evaluationComplete) evaluationComplete = false;
+    for (const reason of family.incompleteIssues) {
+      markFamilyIncomplete(family.adapterId, reason);
     }
   }
 
@@ -644,36 +1029,43 @@ export async function runProtocolDiscovery(input: {
   // evidence-backed. Same semantic route + same execution fingerprint =
   // equivalent claims that deduplicate at edge merge; same semantic route +
   // DIFFERENT execution fingerprints means at least one adapter admitted a
-  // contract it should not have -> isolate the route and alert. Different
-  // token pairs on one target are distinct semantic routes and coexist.
+  // contract it should not have: retain a sole re-attested incumbent and
+  // quarantine challengers, or isolate every claimant when no incumbent is
+  // unique. Different token pairs on one target are distinct semantic routes.
   const arbitration = arbitrateRouteClaims(wouldAdmit, events);
+  const familySourceCoverage = Object.freeze(enabledAdapters
+    .flatMap((adapter): ProtocolDiscoveryFamilySourceCoverage[] =>
+      [...new Set(adapter.discovery!.candidateSources)].map((sourceId) => {
+        const issues = Object.freeze([
+          ...(incompleteIssues.get(adapter.id) ?? []),
+          ...(sourceIncompleteIssues.get(
+            `${adapter.id}\u001f${sourceId}`,
+          ) ?? []),
+        ]);
+        return Object.freeze({
+          familyId: adapter.id,
+          sourceId,
+          complete: issues.length === 0,
+          issues,
+        });
+      })
+    )
+    .sort((a, b) =>
+      a.familyId.localeCompare(b.familyId) ||
+      a.sourceId.localeCompare(b.sourceId)
+    ));
 
   return {
     events,
     wouldAdmit: arbitration,
     evaluatedInstanceKeys,
+    familySourceCoverage,
     evaluationComplete,
-    sourceComplete: candidateSourceComplete && evaluationComplete,
+    sourceComplete:
+      candidateSourceComplete &&
+      evaluationComplete &&
+      familySourceCoverage.every((coverage) => coverage.complete),
   };
-}
-
-const AUTHORITY_RANKS: Readonly<Record<string, number>> = Object.freeze({
-  "factory-call": 3,
-  "curve-metaregistry": 3,
-  "curve-metaregistry-underlying": 3,
-  "v4-manager": 3,
-  "balancer-v3-vault": 3,
-  "dodo-factory-registry": 3,
-  "erc4626-standard": 3,
-  "eigenpie-compatible-call-surface": 3,
-  "factory-event": 2,
-  "factory-call-provisional": 1,
-  "curve-underlying-provisional": 1,
-  "seed": 0,
-});
-
-function authorityRankOf(fingerprint: string): number {
-  return AUTHORITY_RANKS[fingerprint.split("|")[0] ?? ""] ?? 0;
 }
 
 function arbitrateRouteClaims(
@@ -693,7 +1085,12 @@ function arbitrateRouteClaims(
     }
   });
 
-  const quarantinedRouteKeys = new Set<string>();
+  const quarantinedRouteKeysByAdmission = new Map<number, Set<string>>();
+  const quarantine = (admissionIndex: number, routeKey: string): void => {
+    const routes = quarantinedRouteKeysByAdmission.get(admissionIndex) ?? new Set<string>();
+    routes.add(routeKey);
+    quarantinedRouteKeysByAdmission.set(admissionIndex, routes);
+  };
   for (const [routeKey, claimants] of claimsByRoute) {
     const claimantAdapterIds = unique(
       claimants.map((item) => wouldAdmit[item.admissionIndex].adapterId),
@@ -708,7 +1105,7 @@ function arbitrateRouteClaims(
       // Registration order and lexical order never decide.
       const rankedClaimants = claimants.map((item) => ({
         adapterId: wouldAdmit[item.admissionIndex].adapterId,
-        rank: authorityRankOf(item.claim.authorityFingerprint),
+        rank: item.claim.authorityStrength,
         incumbent: wouldAdmit[item.admissionIndex].instance.sources.includes("retained-instance"),
       }));
       const maxRank = Math.max(...rankedClaimants.map((item) => item.rank));
@@ -732,11 +1129,47 @@ function arbitrateRouteClaims(
       });
       continue;
     }
-    // Non-equivalent full verifications of one semantic route are a
-    // verification-looseness red flag, not a tie to break: isolate the route
-    // for every claimant and alert so the loose gate gets tightened.
-    quarantinedRouteKeys.add(routeKey);
-    for (const adapterId of claimantAdapterIds) {
+    // A newly verified claim can never displace the sole active owner. Preserve
+    // that re-attested incumbent and quarantine only challengers. With no
+    // unique incumbent, fail closed for every claimant.
+    const incumbentAdmissionIndexes = unique(
+      claimants
+        .filter((item) =>
+          wouldAdmit[item.admissionIndex].instance.sources.includes("retained-instance")
+        )
+        .map((item) => item.admissionIndex),
+    );
+    const protectedIncumbent = incumbentAdmissionIndexes.length === 1
+      ? incumbentAdmissionIndexes[0]
+      : null;
+    if (protectedIncumbent !== null) {
+      const incumbent = wouldAdmit[protectedIncumbent];
+      events.push({
+        event: "protocol_discovery",
+        adapterId: incumbent.adapterId,
+        target,
+        selectors: [],
+        sources: ["route-arbitration"],
+        verdict: "would_admit",
+        stage: "arbitration",
+        reason: `incumbent_route_preserved challengers=${
+          claimantAdapterIds
+            .filter((adapterId) => adapterId !== incumbent.adapterId)
+            .sort()
+            .join(",")
+        }`,
+        wouldAdmitEdges: 1,
+      });
+    }
+    const rejectedAdapterIds = new Set<string>();
+    for (const claimant of claimants) {
+      if (claimant.admissionIndex === protectedIncumbent) continue;
+      quarantine(claimant.admissionIndex, routeKey);
+      rejectedAdapterIds.add(
+        wouldAdmit[claimant.admissionIndex].adapterId,
+      );
+    }
+    for (const adapterId of rejectedAdapterIds) {
       events.push({
         event: "protocol_discovery",
         adapterId,
@@ -752,10 +1185,15 @@ function arbitrateRouteClaims(
       });
     }
   }
-  if (quarantinedRouteKeys.size === 0) return [...wouldAdmit];
+  if (quarantinedRouteKeysByAdmission.size === 0) return [...wouldAdmit];
 
   const arbitrated: VerifiedProtocolAdmission[] = [];
-  for (const admission of wouldAdmit) {
+  for (const [admissionIndex, admission] of wouldAdmit.entries()) {
+    const quarantinedRouteKeys = quarantinedRouteKeysByAdmission.get(admissionIndex);
+    if (!quarantinedRouteKeys) {
+      arbitrated.push(admission);
+      continue;
+    }
     const keptClaims = admission.claims.filter(
       (claim) => !quarantinedRouteKeys.has(claim.semanticRouteKey),
     );
@@ -763,9 +1201,9 @@ function arbitrateRouteClaims(
       arbitrated.push(admission);
       continue;
     }
-    // A quarantined route strips its edge from every claimant; an admission
-    // left with zero verified routes is dropped (and, being evaluated, any
-    // prior ownership for it is revoked).
+    // A quarantined route strips only the challenged admission's edge. An
+    // admission left with zero verified routes is dropped; a protected
+    // incumbent never enters this branch.
     if (keptClaims.length === 0) continue;
     const keptEdgeKeys = new Set(keptClaims.map((claim) => protocolEdgeKey(claim.edge)));
     arbitrated.push({
@@ -817,11 +1255,16 @@ export interface ProtocolDiscoveryProjection {
   readonly knownPoolKeys: Set<string>;
   readonly knownPoolAddresses: Set<string>;
   /**
-   * Verified claims suppressed because a static/declared pool already owns the
-   * address. The static venue enters the adjudication as the standing
-   * authority and wins explicitly; suppression is reported, never silent.
+   * Verified claims suppressed because an already-built incumbent edge owns
+   * the same semantic route with the same execution fingerprint. Incumbency
+   * is route-scoped, never an address-wide admission credential.
    */
   readonly staticSuppressed: readonly VerifiedProtocolAdmission[];
+  /**
+   * Non-equivalent claims for an incumbent semantic route. Both the incumbent
+   * edge and challenger claim are quarantined for this projection.
+   */
+  readonly staticConflicted: readonly VerifiedProtocolAdmission[];
 }
 
 /**
@@ -862,35 +1305,86 @@ export function prepareProtocolDiscoveryProjection(input: {
   currentKnownPoolKeys?: ReadonlySet<string>;
   buildStrategyViews: (pools: PoolEntry[]) => StrategyViews;
 }): ProtocolDiscoveryProjection {
-  const previousPoolKeys = new Set(
-    [...input.currentOwnership.admissions.values()].map((item) => poolRegistryKey(item.instance.pool)),
+  const previousEdgeKeys = new Set(
+    [...input.currentOwnership.admissions.values()].flatMap(
+      (item) => item.edges.map(protocolEdgeKey),
+    ),
   );
-  // A compatibility/declared pool with the same address predates discovery and
-  // must never become discovery-owned merely because the scanner independently
-  // attested it. Such entries keep their existing graph edges until a separate
-  // separately validated migration removes the fallback explicitly.
-  const staticPoolAddresses = new Set(
-    input.currentBackrunPools
-      .filter((pool) => !previousPoolKeys.has(poolRegistryKey(pool)))
-      .map((pool) => pool.address.toLowerCase()),
+  // Incumbent graph edges were already re-attested by buildEdges at this
+  // source. They enter arbitration as route claims. The target address alone
+  // is never an identity/admission credential: another verified semantic route
+  // at the same singleton may coexist.
+  const incumbentEdges = input.currentBackrunGraph.filter(
+    (edge) => !previousEdgeKeys.has(protocolEdgeKey(edge)),
   );
-  const staticSuppressed = input.result.wouldAdmit.filter(
-    (item) => staticPoolAddresses.has(item.instance.pool.address.toLowerCase()),
-  );
+  const quarantinedIncumbentEdgeKeys = new Set<string>();
+  const staticSuppressed: VerifiedProtocolAdmission[] = [];
+  const staticConflicted: VerifiedProtocolAdmission[] = [];
+  const projectedAdmissions: VerifiedProtocolAdmission[] = [];
+  for (const admission of input.result.wouldAdmit) {
+    const keptClaims: VerifiedRouteClaim[] = [];
+    const equivalentClaims: VerifiedRouteClaim[] = [];
+    const conflictedClaims: VerifiedRouteClaim[] = [];
+    for (const claim of admission.claims) {
+      const incumbents = incumbentEdges.filter((edge) =>
+        sameSemanticRoute(edge, claim.edge)
+      );
+      if (incumbents.length === 0) {
+        keptClaims.push(claim);
+        continue;
+      }
+      if (
+        incumbents.every(
+          (edge) => executionFingerprint(edge) === claim.executionFingerprint,
+        )
+      ) {
+        equivalentClaims.push(claim);
+        continue;
+      }
+      conflictedClaims.push(claim);
+      for (const edge of incumbents) {
+        quarantinedIncumbentEdgeKeys.add(protocolEdgeKey(edge));
+      }
+    }
+    const sliceAdmission = (
+      claims: readonly VerifiedRouteClaim[],
+    ): VerifiedProtocolAdmission => {
+      const edgeKeys = new Set(claims.map((claim) => protocolEdgeKey(claim.edge)));
+      return {
+        ...admission,
+        claims: [...claims],
+        edges: admission.edges.filter((edge) => edgeKeys.has(protocolEdgeKey(edge))),
+      };
+    };
+    if (equivalentClaims.length > 0) {
+      staticSuppressed.push(sliceAdmission(equivalentClaims));
+    }
+    if (conflictedClaims.length > 0) {
+      staticConflicted.push(sliceAdmission(conflictedClaims));
+    }
+    if (keptClaims.length > 0) {
+      projectedAdmissions.push(sliceAdmission(keptClaims));
+    }
+  }
   const effectiveResult: ProtocolDiscoveryResult = {
     ...input.result,
-    wouldAdmit: input.result.wouldAdmit.filter(
-      (item) => !staticPoolAddresses.has(item.instance.pool.address.toLowerCase()),
-    ),
+    wouldAdmit: projectedAdmissions,
   };
   const ownership = replaceProtocolDiscoveryOwnership(input.currentOwnership, effectiveResult);
-  const previousEdgeKeys = new Set(
-    [...input.currentOwnership.admissions.values()].flatMap((item) => item.edges.map(protocolEdgeKey)),
+  const priorDiscoveryPools = input.currentBackrunPools.filter(
+    (pool) => pool.discoveryOwnerAdapterId !== undefined,
   );
-  const basePools = input.currentBackrunPools.filter((pool) => !previousPoolKeys.has(poolRegistryKey(pool)));
-  const baseGraph = input.currentBackrunGraph.filter((edge) => !previousEdgeKeys.has(protocolEdgeKey(edge)));
+  const basePools = input.currentBackrunPools.filter(
+    (pool) => pool.discoveryOwnerAdapterId === undefined,
+  );
+  const baseGraph = input.currentBackrunGraph.filter((edge) =>
+    !previousEdgeKeys.has(protocolEdgeKey(edge)) &&
+    !quarantinedIncumbentEdgeKeys.has(protocolEdgeKey(edge))
+  );
   const baseBlockscanGraph = input.currentBlockscanGraph?.filter(
-    (edge) => !previousEdgeKeys.has(protocolEdgeKey(edge)),
+    (edge) =>
+      !previousEdgeKeys.has(protocolEdgeKey(edge)) &&
+      !quarantinedIncumbentEdgeKeys.has(protocolEdgeKey(edge)),
   );
   const admissions = [...ownership.admissions.values()];
   const backrunPools = mergePoolRegistries(
@@ -899,6 +1393,7 @@ export function prepareProtocolDiscoveryProjection(input: {
     // buildTokenGraph rebuild emits only what the probe accepted.
     admissions.map((item) => ({
       ...item.instance.pool,
+      discoveryOwnerAdapterId: item.adapterId,
       verifiedRoutes: item.edges.map(edgeToVerifiedRouteSpec),
     })),
   );
@@ -916,10 +1411,15 @@ export function prepareProtocolDiscoveryProjection(input: {
   for (const pool of strategyViews.backrun) {
     poolAddressMap.set(pool.address.toLowerCase(), pool.adapter);
   }
+  const basePoolKeys = new Set(basePools.map(poolRegistryKey));
   const knownPoolKeys = new Set(
-    input.currentKnownPoolKeys ?? basePools.map(poolRegistryKey),
+    input.currentKnownPoolKeys ?? basePoolKeys,
   );
-  for (const key of previousPoolKeys) knownPoolKeys.delete(key);
+  for (const pool of priorDiscoveryPools) {
+    const key = poolRegistryKey(pool);
+    if (!basePoolKeys.has(key)) knownPoolKeys.delete(key);
+  }
+  for (const key of basePoolKeys) knownPoolKeys.add(key);
   for (const admission of admissions) knownPoolKeys.add(poolRegistryKey(admission.instance.pool));
   return {
     baseOwnershipVersion: input.currentOwnership.version,
@@ -933,7 +1433,66 @@ export function prepareProtocolDiscoveryProjection(input: {
     knownPoolKeys,
     knownPoolAddresses: new Set(strategyViews.backrun.map((pool) => pool.address.toLowerCase())),
     staticSuppressed,
+    staticConflicted,
   };
+}
+
+/**
+ * Revoke a set of discovery families without treating unrelated dynamic
+ * ownership as part of the failure. A canonical observed-history anchor
+ * change must remove affected routes before another graph is published, while
+ * static routes and healthy discovery families remain projected.
+ */
+export function prepareProtocolDiscoveryFamilyInvalidation(input: {
+  currentOwnership: ProtocolDiscoveryOwnership;
+  invalidatedAdapterIds: ReadonlySet<string>;
+  currentBackrunPools: readonly PoolEntry[];
+  currentBackrunGraph: readonly TokenEdge[];
+  currentBlockscanGraph?: readonly TokenEdge[];
+  currentKnownPoolKeys?: ReadonlySet<string>;
+  buildStrategyViews: (pools: PoolEntry[]) => StrategyViews;
+}): {
+  readonly result: ProtocolDiscoveryResult;
+  readonly projection: ProtocolDiscoveryProjection;
+} {
+  const evaluatedInstanceKeys = new Set(
+    [...input.currentOwnership.admissions]
+      .filter(([, admission]) =>
+        input.invalidatedAdapterIds.has(admission.adapterId)
+      )
+      .map(([instanceKey]) => instanceKey),
+  );
+  const result: ProtocolDiscoveryResult = {
+    events: [],
+    wouldAdmit: [],
+    evaluatedInstanceKeys,
+    familySourceCoverage: [],
+    // Invalidation is a fail-closed lifecycle operation, not evidence that a
+    // replacement source scan completed.
+    evaluationComplete: false,
+    sourceComplete: false,
+  };
+  return {
+    result,
+    projection: prepareProtocolDiscoveryProjection({
+      currentOwnership: input.currentOwnership,
+      result,
+      currentBackrunPools: input.currentBackrunPools,
+      currentBackrunGraph: input.currentBackrunGraph,
+      currentBlockscanGraph: input.currentBlockscanGraph,
+      currentKnownPoolKeys: input.currentKnownPoolKeys,
+      buildStrategyViews: input.buildStrategyViews,
+    }),
+  };
+}
+
+function sameSemanticRoute(a: TokenEdge, b: TokenEdge): boolean {
+  return edgeInstanceKey(a) === edgeInstanceKey(b) &&
+    a.target.toLowerCase() === b.target.toLowerCase() &&
+    a.tokenIn.toLowerCase() === b.tokenIn.toLowerCase() &&
+    a.tokenOut.toLowerCase() === b.tokenOut.toLowerCase() &&
+    a.slotKind === b.slotKind &&
+    (a.protocolAction ?? "") === (b.protocolAction ?? "");
 }
 
 export function protocolInstanceKey(
@@ -958,18 +1517,20 @@ function edgeToVerifiedRouteSpec(edge: TokenEdge): import("./planner/token-graph
     tokenOut: edge.tokenOut,
     slotKind: edge.slotKind,
     ...(edge.protocolAction === undefined ? {} : { protocolAction: edge.protocolAction }),
+    ...(edge.poolToken0 === undefined ? {} : { poolToken0: edge.poolToken0 }),
+    ...(edge.poolToken1 === undefined ? {} : { poolToken1: edge.poolToken1 }),
   };
 }
 
 export function protocolEdgeKey(edge: TokenEdge): string {
   return [
-    edge.adapterId,
+    edgeInstanceKey(edge),
     edge.target.toLowerCase(),
     edge.tokenIn.toLowerCase(),
     edge.tokenOut.toLowerCase(),
     edge.slotKind,
     edge.protocolAction ?? "",
-    edge.poolId?.toLowerCase() ?? "",
+    edgeExecutionVariantKey(edge),
   ].join("|");
 }
 
@@ -1042,6 +1603,8 @@ function poolShapeKey(pool: PoolEntry): string {
     address: pool.address.toLowerCase(),
     adapter: pool.adapter,
     logicalInstanceId: pool.logicalInstanceId,
+    token0: pool.token0?.toLowerCase(),
+    token1: pool.token1?.toLowerCase(),
     fixedTokenIn: pool.fixedTokenIn?.toLowerCase(),
     fixedTokenOut: pool.fixedTokenOut?.toLowerCase(),
     fixedSlotKind: pool.fixedSlotKind,
@@ -1052,7 +1615,7 @@ function poolShapeKey(pool: PoolEntry): string {
 }
 
 function normalizeCandidate(
-  adapter: ProtocolConversionAdapter,
+  adapter: RouteLegAdapter,
   candidate: ProtocolCandidate,
 ): ProtocolCandidate {
   const address = ethers.getAddress(candidate.pool.address);
@@ -1074,7 +1637,7 @@ function normalizeCandidate(
 }
 
 function normalizeAttestedInstance(
-  adapter: ProtocolConversionAdapter,
+  adapter: RouteLegAdapter,
   aggregate: CandidateAggregate,
   pool: AttestedPoolEntry<PoolEntry>,
 ): AttestedProtocolInstance {
@@ -1096,7 +1659,7 @@ function normalizeAttestedInstance(
 }
 
 function assertVerifiedEdges(
-  adapter: ProtocolConversionAdapter,
+  adapter: RouteLegAdapter,
   instance: AttestedProtocolInstance,
   edges: readonly TokenEdge[],
 ): void {
@@ -1166,6 +1729,27 @@ function mergeEdges(current: readonly TokenEdge[], additions: readonly TokenEdge
   return merged;
 }
 
+async function mapLimitDeterministic<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  work: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      for (;;) {
+        const index = cursor++;
+        if (index >= values.length) return;
+        results[index] = await work(values[index]);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 function unique<T>(items: readonly T[]): T[] {
   return [...new Set(items)];
 }
@@ -1174,6 +1758,12 @@ function safeError(value: unknown): string {
   const message = (value instanceof Error ? value.message : String(value))
     .replace(/https?:\/\/\S+/g, "<redacted-url>");
   return message.slice(0, 240) || "unknown_error";
+}
+
+function failMissingDiscoveryAuthority(adapterId: string): never {
+  throw new Error(
+    `protocol discovery adapter ${adapterId} omitted typed identity authority`,
+  );
 }
 
 class RetryableProtocolDiscoveryError extends Error {
@@ -1190,6 +1780,9 @@ function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
     "NETWORK_ERROR",
     "SERVER_ERROR",
     "TIMEOUT",
+    "ABORTED",
+    "ABORT_ERR",
+    "FAMILY_CIRCUIT_OPEN",
     "ETIMEDOUT",
     "EAI_AGAIN",
     "ENETUNREACH",
@@ -1209,11 +1802,110 @@ function isRetryableProtocolDiscoveryFailure(value: unknown): boolean {
     ) return true;
     const message = item instanceof Error ? item.message : String(item);
     if (
-      /timed?\s*out|rate.?limit|too many requests|fetch failed|network|socket|connection (?:closed|reset|refused)|temporar(?:y|ily) unavailable|\b(?:429|502|503|504)\b/i
+      /abort(?:ed)?|timed?\s*out|rate.?limit|too many requests|fetch failed|network|socket|connection (?:closed|reset|refused)|temporar(?:y|ily) unavailable|\b(?:429|502|503|504)\b/i
         .test(message)
     ) return true;
   }
   return false;
+}
+
+function mergeProtocolDiscoveryReadControls(
+  parent: ProtocolDiscoveryReadControl | undefined,
+  operation: ProtocolDiscoveryReadControl | undefined,
+): ProtocolDiscoveryReadControl {
+  const deadlines = [parent?.deadlineAtMs, operation?.deadlineAtMs]
+    .filter((value): value is number => value !== undefined);
+  const deadlineAtMs = deadlines.length > 0 ? Math.min(...deadlines) : undefined;
+  const signals = [...new Set(
+    [parent?.signal, operation?.signal]
+      .filter((value): value is AbortSignal => value !== undefined),
+  )];
+  const signal = signals.length === 0
+    ? undefined
+    : signals.length === 1
+      ? signals[0]
+      : AbortSignal.any(signals);
+  const run = composeProtocolDiscoveryReadRunners(
+    parent?.run,
+    operation?.run,
+  );
+  return {
+    ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
+    ...(signal === undefined ? {} : { signal }),
+    ...(run === undefined ? {} : { run }),
+  };
+}
+
+function mergeProtocolDiscoveryFamilyGuardOptions(
+  options: ProtocolDiscoveryFamilyGuardOptions | undefined,
+  control: ProtocolDiscoveryReadControl | undefined,
+): ProtocolDiscoveryFamilyGuardOptions {
+  const merged = mergeProtocolDiscoveryReadControls(
+    {
+      ...(options?.deadlineAtMs === undefined
+        ? {}
+        : { deadlineAtMs: options.deadlineAtMs }),
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      ...(options?.run === undefined ? {} : { run: options.run }),
+    },
+    control,
+  );
+  return {
+    ...options,
+    ...merged,
+  };
+}
+
+function protocolDiscoveryReadControlFromFamilyOptions(
+  options: ProtocolDiscoveryFamilyGuardOptions | undefined,
+): ProtocolDiscoveryReadControl {
+  return {
+    ...(options?.deadlineAtMs === undefined
+      ? {}
+      : { deadlineAtMs: options.deadlineAtMs }),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+    ...(options?.run === undefined ? {} : { run: options.run }),
+  };
+}
+
+function composeProtocolDiscoveryReadRunners(
+  first: ProtocolDiscoveryReadControl["run"],
+  second: ProtocolDiscoveryReadControl["run"],
+): ProtocolDiscoveryReadControl["run"] {
+  if (!first) return second;
+  if (!second || first === second) return first;
+  return async <T>(
+    work: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> =>
+    first((firstSignal) =>
+      second((secondSignal) =>
+        work(
+          firstSignal === secondSignal
+            ? firstSignal
+            : AbortSignal.any([firstSignal, secondSignal]),
+        )
+      )
+    );
+}
+
+function throwIfProtocolDiscoveryParentStopped(
+  control: ProtocolDiscoveryReadControl | undefined,
+): void {
+  if (control?.signal?.aborted) {
+    throw control.signal.reason ?? Object.assign(
+      new Error("protocol discovery parent signal aborted"),
+      { code: "ABORTED" },
+    );
+  }
+  if (
+    control?.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) {
+    throw Object.assign(
+      new Error("protocol discovery parent deadline exceeded"),
+      { code: "TIMEOUT" },
+    );
+  }
 }
 
 function isDeterministicProtocolRpcFailure(value: unknown): boolean {

@@ -250,6 +250,7 @@ async function detectV4Impact(provider: ethers.JsonRpcProvider, c: V4EquivCase):
     input: "0x",
     logs: swapLogs,
     minProfit: 1n,
+    victimState: "materialized",
   };
   const impacts = (await detectPoolImpact(event, v4Graph(c)))
     .filter((impact) =>

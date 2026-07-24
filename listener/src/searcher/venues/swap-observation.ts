@@ -2,19 +2,18 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { v4PoolId } from "./swaps/univ4-common.js";
+import { findV2LineageByFactory } from "./v2-lineage.js";
 import {
   BALANCER_V3_SWAP_TOPIC,
   CURVE_TOKEN_EXCHANGE_TOPICS,
   DODO_V2_SWAP_TOPIC,
-  LANDED_SWAP_EVENTS,
   PANCAKE_V3_SWAP_TOPIC,
   UNIV2_SWAP_TOPIC,
   UNIV2_SYNC_TOPIC,
   UNIV3_SWAP_TOPIC,
   UNIV4_SWAP_TOPIC,
-  landedSwapEventsForFamily,
-  landedSwapTopicsForFamily,
   observedLandedPoolIdentity,
+  type LandedSwapEventDeclaration,
 } from "./landed-event-registry.js";
 export {
   BALANCER_V3_SWAP_TOPIC,
@@ -43,6 +42,7 @@ export interface PoolImpact {
   v2PostState?: {
     reserve0: bigint;
     reserve1: bigint;
+    feeBps?: bigint;
     blockTimestampLast?: number;
     token0?: string;
     token1?: string;
@@ -56,24 +56,88 @@ export interface PoolImpact {
   };
   poolToken0?: string;
   poolToken1?: string;
+  /** Receipt/state generation which admitted this impact. Hand-authored fixtures
+   *  may omit it; production detector output always carries it. */
+  sourceGeneration?: VictimSourceGeneration;
 }
 
 export interface SwapEventLog {
   address: string;
   topics: string[];
   data: string;
+  /** Receipt provenance carried by real RPC logs. Synthetic decoder fixtures may omit it. */
+  blockNumber?: number;
+  blockHash?: string;
+  transactionHash?: string;
 }
+
+export interface VictimSourceGeneration {
+  readonly id: string;
+  /** Pre-victim state block used by receipt enrichment reads. */
+  readonly sourceBlock: number | null;
+  readonly sourceBlockHash: string | null;
+  readonly receiptId: string;
+  /** Successful receipt identity. Null is permitted only for fragments or analysis-only fixtures. */
+  readonly receiptBlockNumber: number | null;
+  readonly receiptBlockHash: string | null;
+  readonly receiptParentBlockHash: string | null;
+  readonly receiptTransactionHash: string | null;
+  readonly logsCompleteness: ReceiptLogsCompleteness;
+}
+
+export type ReceiptLogsCompleteness = "complete-receipt" | "fragment";
 
 export interface SwapObservationContext {
   readonly logs: readonly SwapEventLog[];
   readonly graph: readonly TokenEdge[];
   readonly edgesByTarget: ReadonlyMap<string, readonly TokenEdge[]>;
   readonly tokenQuery?: TokenQueryBackend | null;
+  readonly sourceGeneration: VictimSourceGeneration;
+}
+
+export interface SwapDirectCallContext {
+  readonly target: string;
+  readonly input: string;
+  readonly graph: readonly TokenEdge[];
+  readonly edgesByTarget: ReadonlyMap<string, readonly TokenEdge[]>;
+  readonly sourceGeneration: VictimSourceGeneration;
 }
 
 export interface ObservedSwapImpact {
   readonly logIndex: number;
   readonly impact: PoolImpact;
+  readonly consumedTriggerIds: readonly string[];
+}
+
+interface CandidateSwapImpact {
+  readonly logIndex: number;
+  readonly impact: PoolImpact;
+}
+
+export interface OwnedReceiptTrigger {
+  readonly triggerId: string;
+  readonly logIndex: number;
+  readonly emitter: string;
+  readonly topic0: string;
+}
+
+export type NonEmptyReadonlyArray<T> = readonly [T, ...T[]];
+
+export type ReceiptImpactResult =
+  | { readonly status: "no-match" }
+  | {
+      readonly status: "resolved";
+      readonly impacts: NonEmptyReadonlyArray<ObservedSwapImpact>;
+      readonly consumedTriggerIds: NonEmptyReadonlyArray<string>;
+    }
+  | { readonly status: "unresolved"; readonly reason: string };
+
+export interface ReceiptSwapObservationContext extends SwapObservationContext {
+  readonly matchedOwnedTriggers: readonly OwnedReceiptTrigger[];
+  readonly control: {
+    readonly deadlineAtMs: number;
+    readonly signal: AbortSignal;
+  };
 }
 
 export interface SwapObservationCapability {
@@ -83,28 +147,215 @@ export interface SwapObservationCapability {
   readonly canonicalIntakeTargets: readonly string[];
   /** Logical pool identity for discovery; singleton emitters use an indexed id. */
   observedPoolIdentity(log: SwapEventLog): string | null;
-  /** Decode once per receipt so related events can be correlated. */
-  decodeSwapImpacts(ctx: SwapObservationContext): Promise<readonly ObservedSwapImpact[]>;
+  /**
+   * Decode once per receipt so related events can be correlated. A non-empty
+   * owned trigger set must be consumed exactly or the whole family result is
+   * unresolved; partial family impacts are never published.
+   */
+  decodeReceiptImpacts(
+    ctx: ReceiptSwapObservationContext,
+  ): Promise<ReceiptImpactResult>;
+  /** Optional family-owned decoder for direct calls whose receipt logs may be absent. */
+  readonly directCallSelectors?: readonly string[];
+  decodeDirectCallImpacts?(
+    ctx: SwapDirectCallContext,
+  ): Promise<readonly PoolImpact[]> | readonly PoolImpact[];
+}
+
+interface StrictSwapObservationInput {
+  readonly topics: readonly string[];
+  readonly canonicalIntakeTargets: readonly string[];
+  observedPoolIdentity(log: SwapEventLog): string | null;
+  decodeSwapImpacts(
+    ctx: ReceiptSwapObservationContext,
+  ): Promise<readonly CandidateSwapImpact[]>;
+  readonly directCallSelectors?: readonly string[];
+  decodeDirectCallImpacts?(
+    ctx: SwapDirectCallContext,
+  ): Promise<readonly PoolImpact[]> | readonly PoolImpact[];
+}
+
+/**
+ * Shared strict receipt wrapper. Families remain responsible only for event
+ * semantics; this boundary owns exact trigger consumption and turns any
+ * partial or ambiguous family decode into one fail-closed result.
+ */
+export function createStrictSwapObservation(
+  input: StrictSwapObservationInput,
+): SwapObservationCapability {
+  return Object.freeze({
+    topics: Object.freeze([...input.topics]),
+    canonicalIntakeTargets: Object.freeze([
+      ...input.canonicalIntakeTargets,
+    ]),
+    observedPoolIdentity: input.observedPoolIdentity,
+    async decodeReceiptImpacts(
+      ctx: ReceiptSwapObservationContext,
+    ): Promise<ReceiptImpactResult> {
+      const triggers = [...ctx.matchedOwnedTriggers].sort(
+        (left, right) => left.logIndex - right.logIndex,
+      );
+      if (triggers.length === 0) {
+        return Object.freeze({ status: "no-match" as const });
+      }
+      const byLogIndex = new Map<number, OwnedReceiptTrigger>();
+      const triggerIds = new Set<string>();
+      for (const trigger of triggers) {
+        if (
+          triggerIds.has(trigger.triggerId) ||
+          byLogIndex.has(trigger.logIndex) ||
+          trigger.logIndex < 0 ||
+          trigger.logIndex >= ctx.logs.length
+        ) {
+          return Object.freeze({
+            status: "unresolved" as const,
+            reason: "owned receipt trigger set is duplicate or out of range",
+          });
+        }
+        const log = ctx.logs[trigger.logIndex];
+        if (
+          log.address.toLowerCase() !== trigger.emitter.toLowerCase() ||
+          topic0(log) !== trigger.topic0.toLowerCase()
+        ) {
+          return Object.freeze({
+            status: "unresolved" as const,
+            reason: "owned receipt trigger does not match the supplied receipt",
+          });
+        }
+        triggerIds.add(trigger.triggerId);
+        byLogIndex.set(trigger.logIndex, trigger);
+      }
+
+      let candidates: readonly CandidateSwapImpact[];
+      try {
+        if (
+          ctx.control.signal.aborted ||
+          Date.now() >= ctx.control.deadlineAtMs
+        ) {
+          throw ctx.control.signal.reason ??
+            new Error("receipt decoder deadline reached");
+        }
+        candidates = await input.decodeSwapImpacts(ctx);
+        if (
+          ctx.control.signal.aborted ||
+          Date.now() >= ctx.control.deadlineAtMs
+        ) {
+          throw ctx.control.signal.reason ??
+            new Error("receipt decoder deadline reached");
+        }
+      } catch (error) {
+        return Object.freeze({
+          status: "unresolved" as const,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+      const consumedCounts = new Map<string, number>();
+      const impacts: ObservedSwapImpact[] = [];
+      for (const candidate of candidates) {
+        const trigger = byLogIndex.get(candidate.logIndex);
+        if (!trigger) {
+          return Object.freeze({
+            status: "unresolved" as const,
+            reason: "decoder produced an impact for an unknown trigger",
+          });
+        }
+        consumedCounts.set(
+          trigger.triggerId,
+          (consumedCounts.get(trigger.triggerId) ?? 0) + 1,
+        );
+        impacts.push(Object.freeze({
+          ...candidate,
+          consumedTriggerIds: Object.freeze([trigger.triggerId]),
+        }));
+      }
+      if (
+        impacts.length === 0 ||
+        triggers.some(
+          (trigger) => consumedCounts.get(trigger.triggerId) !== 1,
+        )
+      ) {
+        return Object.freeze({
+          status: "unresolved" as const,
+          reason: "decoder did not consume every owned trigger exactly once",
+        });
+      }
+      return Object.freeze({
+        status: "resolved" as const,
+        impacts: Object.freeze(impacts) as NonEmptyReadonlyArray<
+          ObservedSwapImpact
+        >,
+        consumedTriggerIds: Object.freeze(
+          triggers.map((trigger) => trigger.triggerId),
+        ) as NonEmptyReadonlyArray<string>,
+      });
+    },
+    ...(input.directCallSelectors
+      ? { directCallSelectors: Object.freeze([...input.directCallSelectors]) }
+      : {}),
+    ...(input.decodeDirectCallImpacts
+      ? { decodeDirectCallImpacts: input.decodeDirectCallImpacts }
+      : {}),
+  });
 }
 
 const univ2PairIface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
+]);
+
+const CURVE_DIRECT_IFACE = new ethers.Interface([
+  "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+  "function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy, address receiver)",
+  "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+  "function exchange_received(int128 i, int128 j, uint256 dx, uint256 min_dy, address receiver)",
+  "function exchange_received(uint256 i, uint256 j, uint256 dx, uint256 min_dy)",
+  "function exchange_received(uint256 i, uint256 j, uint256 dx, uint256 min_dy, address receiver)",
+  "function exchange_underlying(int128 i, int128 j, uint256 dx, uint256 min_dy)",
+  "function exchange_underlying(uint256 i, uint256 j, uint256 dx, uint256 min_dy)",
+]);
+
+const CURVE_DIRECT_SELECTORS = Object.freeze([
+  "0x3df02124",
+  "0xddc1f59d",
+  "0x7e3db030",
+  "0xafb43012",
+  "0x29b244bb",
+  "0x767691e7",
+  "0xa6417ed6",
+  "0x65b2489b",
+]);
+const CURVE_UNDERLYING_DIRECT_SELECTORS = new Set([
+  "0xa6417ed6",
+  "0x65b2489b",
 ]);
 
 export function createUniV2SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
+  landedEvents: readonly LandedSwapEventDeclaration[];
 }): SwapObservationCapability {
-  const topics = landedSwapTopicsForFamily("univ2-standard");
-  return Object.freeze({
+  const topics = topicsFromDeclarations(input.landedEvents);
+  return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity: addressEmitterPoolIdentity,
-    async decodeSwapImpacts(ctx: SwapObservationContext) {
-      const impacts: ObservedSwapImpact[] = [];
-      const finalPostStates = await collectUniV2PostStates(ctx.logs, ctx.tokenQuery);
+    async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
+      const impacts: CandidateSwapImpact[] = [];
+      const ownedPools = new Set(
+        ctx.matchedOwnedTriggers.map((trigger) =>
+          trigger.emitter.toLowerCase()
+        ),
+      );
+      const finalPostStates = await collectUniV2PostStates(
+        ctx.logs.filter((log) =>
+          ownedPools.has(log.address.toLowerCase())
+        ),
+        ctx.tokenQuery,
+        ctx.sourceGeneration.sourceBlock,
+        ctx.control,
+      );
       for (let index = 0; index < ctx.logs.length; index++) {
         const log = ctx.logs[index];
         if (topic0(log) !== UNIV2_SWAP_TOPIC) continue;
@@ -113,23 +364,35 @@ export function createUniV2SwapObservation(input: {
           if (edges.length === 0) continue;
 
           const swap = decodeUniV2SwapData(log.data);
+          const zeroForOne = swap.amount0In > 0n &&
+            swap.amount1In === 0n &&
+            swap.amount0Out === 0n &&
+            swap.amount1Out > 0n;
+          const oneForZero = swap.amount1In > 0n &&
+            swap.amount0In === 0n &&
+            swap.amount1Out === 0n &&
+            swap.amount0Out > 0n;
+          if (!zeroForOne && !oneForZero) continue;
           const sample = edges.find((edge) => edge.poolToken0 && edge.poolToken1);
           if (!sample?.poolToken0 || !sample.poolToken1) continue;
-          const tokenIn = swap.amount0In > 0n ? sample.poolToken0 : sample.poolToken1;
-          const tokenOut = swap.amount0In > 0n ? sample.poolToken1 : sample.poolToken0;
+          const tokenIn = zeroForOne ? sample.poolToken0 : sample.poolToken1;
+          const tokenOut = zeroForOne ? sample.poolToken1 : sample.poolToken0;
           const edge = edges.find((candidate) =>
             sameAddress(candidate.tokenIn, tokenIn) && sameAddress(candidate.tokenOut, tokenOut)
           );
           if (!edge) continue;
 
           const v2PostState = finalPostStates.get(log.address.toLowerCase()) ?? null;
+          if (v2PostState && sample.v2FeeBps !== undefined) {
+            v2PostState.feeBps = sample.v2FeeBps;
+          }
           impacts.push({
             logIndex: index,
             impact: {
               pool: edge.target,
               tokenIn: edge.tokenIn,
               tokenOut: edge.tokenOut,
-              amountIn: swap.amount0In > 0n ? swap.amount0In : swap.amount1In,
+              amountIn: zeroForOne ? swap.amount0In : swap.amount1In,
               matchedAdapterId: edge.adapterId,
               poolToken0: sample.poolToken0,
               poolToken1: sample.poolToken1,
@@ -148,14 +411,15 @@ export function createUniV2SwapObservation(input: {
 export function createUniV3SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
+  landedEvents: readonly LandedSwapEventDeclaration[];
 }): SwapObservationCapability {
-  const topics = landedSwapTopicsForFamily("univ3-standard");
-  return Object.freeze({
+  const topics = topicsFromDeclarations(input.landedEvents);
+  return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity: addressEmitterPoolIdentity,
-    async decodeSwapImpacts(ctx: SwapObservationContext) {
-      const impacts: ObservedSwapImpact[] = [];
+    async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
+      const impacts: CandidateSwapImpact[] = [];
       for (let index = 0; index < ctx.logs.length; index++) {
         const log = ctx.logs[index];
         if (!topics.includes(topic0(log))) continue;
@@ -163,10 +427,13 @@ export function createUniV3SwapObservation(input: {
           const edges = matchingTargetEdges(ctx, log.address, input.adapterIds);
           if (edges.length === 0) continue;
           const { amount0, amount1, v3PostState } = decodeUniV3SwapData(log.data);
+          const zeroForOne = amount0 > 0n && amount1 < 0n;
+          const oneForZero = amount1 > 0n && amount0 < 0n;
+          if (!zeroForOne && !oneForZero) continue;
           const sample = edges.find((edge) => edge.poolToken0 && edge.poolToken1);
           if (!sample?.poolToken0 || !sample.poolToken1) continue;
-          const tokenIn = amount0 > 0n ? sample.poolToken0 : sample.poolToken1;
-          const tokenOut = amount0 > 0n ? sample.poolToken1 : sample.poolToken0;
+          const tokenIn = zeroForOne ? sample.poolToken0 : sample.poolToken1;
+          const tokenOut = zeroForOne ? sample.poolToken1 : sample.poolToken0;
           const edge = edges.find((candidate) =>
             sameAddress(candidate.tokenIn, tokenIn) && sameAddress(candidate.tokenOut, tokenOut)
           );
@@ -177,7 +444,7 @@ export function createUniV3SwapObservation(input: {
               pool: edge.target,
               tokenIn: edge.tokenIn,
               tokenOut: edge.tokenOut,
-              amountIn: amount0 > 0n ? amount0 : amount1,
+              amountIn: zeroForOne ? amount0 : amount1,
               matchedAdapterId: edge.adapterId,
               v3PostState,
             },
@@ -194,20 +461,33 @@ export function createUniV3SwapObservation(input: {
 export function createCurveSwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
+  landedEvents: readonly LandedSwapEventDeclaration[];
 }): SwapObservationCapability {
-  const topics = landedSwapTopicsForFamily("curve-plain");
+  const topics = topicsFromDeclarations(input.landedEvents);
   const topicSet = new Set(topics);
-  return Object.freeze({
+  const directCallSelectors = CURVE_DIRECT_SELECTORS;
+  const plainAdapterIds = input.adapterIds.filter((adapterId) =>
+    adapterId !== "curve-exchange-underlying"
+  );
+  const underlyingAdapterIds = input.adapterIds.filter((adapterId) =>
+    adapterId === "curve-exchange-underlying"
+  );
+  return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity: addressEmitterPoolIdentity,
-    async decodeSwapImpacts(ctx: SwapObservationContext) {
-      const impacts: ObservedSwapImpact[] = [];
+    async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
+      const impacts: CandidateSwapImpact[] = [];
       for (let index = 0; index < ctx.logs.length; index++) {
         const log = ctx.logs[index];
         if (!topicSet.has(topic0(log))) continue;
         try {
-          const edges = matchingTargetEdges(ctx, log.address, input.adapterIds);
+          const eventTopic = topic0(log);
+          const adapterIds = eventTopic === CURVE_TOKEN_EXCHANGE_TOPICS[2] ||
+              eventTopic === CURVE_TOKEN_EXCHANGE_TOPICS[3]
+            ? underlyingAdapterIds
+            : plainAdapterIds;
+          const edges = matchingTargetEdges(ctx, log.address, adapterIds);
           if (edges.length === 0) continue;
           const [soldId, tokensSold, boughtId] = ethers.AbiCoder.defaultAbiCoder().decode(
             ["uint256", "uint256", "uint256", "uint256"],
@@ -225,36 +505,50 @@ export function createCurveSwapObservation(input: {
       }
       return impacts;
     },
+    directCallSelectors,
+    decodeDirectCallImpacts(ctx: SwapDirectCallContext) {
+      if (!directCallSelectors.includes(ctx.input.slice(0, 10).toLowerCase())) {
+        return [];
+      }
+      const selector = ctx.input.slice(0, 10).toLowerCase();
+      const edges = matchingTargetEdges(
+        ctx,
+        ctx.target,
+        CURVE_UNDERLYING_DIRECT_SELECTORS.has(selector)
+          ? underlyingAdapterIds
+          : plainAdapterIds,
+      );
+      if (edges.length === 0) return [];
+      try {
+        const parsed = CURVE_DIRECT_IFACE.parseTransaction({ data: ctx.input });
+        if (!parsed) return [];
+        return impactsFromCurveIds(
+          BigInt(parsed.args[0]),
+          BigInt(parsed.args[1]),
+          BigInt(parsed.args[2]),
+          edges,
+        );
+      } catch {
+        return [];
+      }
+    },
   });
 }
-
-export const curveSwapObservation = createCurveSwapObservation({
-  adapterIds: [
-    "curve-exchange",
-    "curve-exchange-nr",
-    "curve-exchange-plain",
-    "curve-exchange-received-uint",
-    "curve-exchange-underlying",
-  ],
-  canonicalIntakeTargets: [
-    "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
-    "0x16c6521dff6bab339122a0fe25a9116693265353",
-  ],
-});
 
 export function createUniV4SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
+  landedEvents: readonly LandedSwapEventDeclaration[];
 }): SwapObservationCapability {
-  const events = landedSwapEventsForFamily("univ4");
-  return Object.freeze({
-    topics: landedSwapTopicsForFamily("univ4"),
+  const events = input.landedEvents;
+  return createStrictSwapObservation({
+    topics: topicsFromDeclarations(events),
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity(log: SwapEventLog) {
       return observedFamilyPoolIdentity(events, log);
     },
-    async decodeSwapImpacts(ctx: SwapObservationContext) {
-      const impacts: ObservedSwapImpact[] = [];
+    async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
+      const impacts: CandidateSwapImpact[] = [];
       for (let index = 0; index < ctx.logs.length; index++) {
         const log = ctx.logs[index];
         if (topic0(log) !== UNIV4_SWAP_TOPIC) continue;
@@ -269,6 +563,9 @@ export function createUniV4SwapObservation(input: {
             );
           const a0 = BigInt(amount0);
           const a1 = BigInt(amount1);
+          const zeroForOne = a0 < 0n && a1 > 0n;
+          const oneForZero = a1 < 0n && a0 > 0n;
+          if (!zeroForOne && !oneForZero) continue;
           const matching = [...(ctx.edgesByTarget.get(ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase()) ?? [])]
             .filter((edge) =>
               input.adapterIds.includes(edge.adapterId) &&
@@ -281,10 +578,9 @@ export function createUniV4SwapObservation(input: {
             currency === ethers.ZeroAddress ? ADDR.WETH : currency;
           // PoolManager Swap publishes the swapper's BalanceDelta: the paid
           // currency is negative and the received currency is positive.
-          const tokenIn = aliasWeth(a0 < 0n ? key.currency0 : key.currency1);
-          const tokenOut = aliasWeth(a0 < 0n ? key.currency1 : key.currency0);
-          const amountIn = a0 < 0n ? -a0 : -a1;
-          if (amountIn <= 0n) continue;
+          const tokenIn = aliasWeth(zeroForOne ? key.currency0 : key.currency1);
+          const tokenOut = aliasWeth(zeroForOne ? key.currency1 : key.currency0);
+          const amountIn = zeroForOne ? -a0 : -a1;
           const edge = matching.find((candidate) =>
             sameAddress(candidate.tokenIn, tokenIn) && sameAddress(candidate.tokenOut, tokenOut)
           );
@@ -296,7 +592,7 @@ export function createUniV4SwapObservation(input: {
               tokenIn: edge.tokenIn,
               tokenOut: edge.tokenOut,
               amountIn,
-              amountOut: a0 < 0n ? a1 : a0,
+              amountOut: zeroForOne ? a1 : a0,
               matchedAdapterId: edge.adapterId,
               poolId,
               v4PostState: {
@@ -320,16 +616,17 @@ export function createUniV4SwapObservation(input: {
 export function createBalancerV3SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
+  landedEvents: readonly LandedSwapEventDeclaration[];
 }): SwapObservationCapability {
-  const events = landedSwapEventsForFamily("balancer-v3");
-  return Object.freeze({
-    topics: landedSwapTopicsForFamily("balancer-v3"),
+  const events = input.landedEvents;
+  return createStrictSwapObservation({
+    topics: topicsFromDeclarations(events),
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity(log: SwapEventLog) {
       return observedFamilyPoolIdentity(events, log);
     },
-    async decodeSwapImpacts(ctx: SwapObservationContext) {
-      const impacts: ObservedSwapImpact[] = [];
+    async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
+      const impacts: CandidateSwapImpact[] = [];
       for (let index = 0; index < ctx.logs.length; index++) {
         const log = ctx.logs[index];
         if (topic0(log) !== BALANCER_V3_SWAP_TOPIC) continue;
@@ -370,14 +667,15 @@ export function createBalancerV3SwapObservation(input: {
 export function createDodoV2SwapObservation(input: {
   adapterIds: readonly string[];
   canonicalIntakeTargets: readonly string[];
+  landedEvents: readonly LandedSwapEventDeclaration[];
 }): SwapObservationCapability {
-  const topics = landedSwapTopicsForFamily("custom-swap:dodo-v2");
-  return Object.freeze({
+  const topics = topicsFromDeclarations(input.landedEvents);
+  return createStrictSwapObservation({
     topics,
     canonicalIntakeTargets: normalizeAddresses(input.canonicalIntakeTargets),
     observedPoolIdentity: addressEmitterPoolIdentity,
-    async decodeSwapImpacts(ctx: SwapObservationContext) {
-      const impacts: ObservedSwapImpact[] = [];
+    async decodeSwapImpacts(ctx: ReceiptSwapObservationContext) {
+      const impacts: CandidateSwapImpact[] = [];
       for (let index = 0; index < ctx.logs.length; index++) {
         const log = ctx.logs[index];
         if (topic0(log) !== DODO_V2_SWAP_TOPIC) continue;
@@ -415,7 +713,7 @@ export function createDodoV2SwapObservation(input: {
 }
 
 function observedFamilyPoolIdentity(
-  events: readonly typeof LANDED_SWAP_EVENTS[number][],
+  events: readonly LandedSwapEventDeclaration[],
   log: SwapEventLog,
 ): string | null {
   for (const event of events) {
@@ -423,6 +721,14 @@ function observedFamilyPoolIdentity(
     if (identity !== null) return identity;
   }
   return null;
+}
+
+function topicsFromDeclarations(
+  events: readonly LandedSwapEventDeclaration[],
+): readonly string[] {
+  return Object.freeze([
+    ...new Set(events.map((event) => event.topic.toLowerCase())),
+  ]);
 }
 
 export function decodeUniV2SwapData(data: string): {
@@ -468,6 +774,11 @@ export function decodeUniV3SwapData(data: string): {
 export async function collectUniV2PostStates(
   logs: readonly SwapEventLog[],
   tokenQuery?: TokenQueryBackend | null,
+  sourceBlock: number | null = null,
+  control?: {
+    readonly deadlineAtMs?: number;
+    readonly signal?: AbortSignal;
+  },
 ): Promise<Map<string, NonNullable<PoolImpact["v2PostState"]>>> {
   const out = new Map<string, NonNullable<PoolImpact["v2PostState"]>>();
   const swapLogsByPool = new Map<string, SwapEventLog[]>();
@@ -501,6 +812,8 @@ export async function collectUniV2PostStates(
         pool,
         swaps,
         tokenQuery,
+        sourceBlock,
+        control,
       );
       if (postState) out.set(pool, postState);
     } catch {
@@ -529,26 +842,55 @@ export async function computeUniV2PostStateFromPreReserves(
   pool: string,
   swap: ReturnType<typeof decodeUniV2SwapData>,
   tokenQuery: TokenQueryBackend,
+  sourceBlock: number | null = null,
+  control?: {
+    readonly deadlineAtMs?: number;
+    readonly signal?: AbortSignal;
+  },
 ): Promise<NonNullable<PoolImpact["v2PostState"]> | null> {
-  return computeFinalUniV2PostStateFromPreReserves(pool, [swap], tokenQuery);
+  return computeFinalUniV2PostStateFromPreReserves(
+    pool,
+    [swap],
+    tokenQuery,
+    sourceBlock,
+    control,
+  );
 }
 
 async function computeFinalUniV2PostStateFromPreReserves(
   pool: string,
   swaps: readonly ReturnType<typeof decodeUniV2SwapData>[],
   tokenQuery: TokenQueryBackend,
+  sourceBlock: number | null,
+  control?: {
+    readonly deadlineAtMs?: number;
+    readonly signal?: AbortSignal;
+  },
 ): Promise<NonNullable<PoolImpact["v2PostState"]> | null> {
-  const [reservesRaw, token0Raw, token1Raw] = await Promise.all([
-    tokenQuery.call({ to: pool, data: univ2PairIface.encodeFunctionData("getReserves") }),
-    tokenQuery.call({ to: pool, data: univ2PairIface.encodeFunctionData("token0") }),
-    tokenQuery.call({ to: pool, data: univ2PairIface.encodeFunctionData("token1") }),
+  const call = (data: string): Promise<string> =>
+    tokenQuery.call({
+      to: pool,
+      data,
+      ...(sourceBlock === null ? {} : { blockTag: sourceBlock }),
+    }, control);
+  const [reservesRaw, factoryRaw, token0Raw, token1Raw] = await Promise.all([
+    call(univ2PairIface.encodeFunctionData("getReserves")),
+    call(univ2PairIface.encodeFunctionData("factory")),
+    call(univ2PairIface.encodeFunctionData("token0")),
+    call(univ2PairIface.encodeFunctionData("token1")),
   ]);
   if (
     !reservesRaw || reservesRaw === "0x" ||
+    !factoryRaw || factoryRaw === "0x" ||
     !token0Raw || token0Raw === "0x" ||
     !token1Raw || token1Raw === "0x"
   ) return null;
   const decoded = univ2PairIface.decodeFunctionResult("getReserves", reservesRaw);
+  const factory = ethers.getAddress(
+    String(univ2PairIface.decodeFunctionResult("factory", factoryRaw)[0]),
+  );
+  const feeBps = findV2LineageByFactory(factory)?.measuredFeeRule?.feeBps;
+  if (feeBps === undefined) return null;
   let reserve0 = BigInt(decoded[0]);
   let reserve1 = BigInt(decoded[1]);
   for (const swap of swaps) {
@@ -559,6 +901,7 @@ async function computeFinalUniV2PostStateFromPreReserves(
   return {
     reserve0,
     reserve1,
+    feeBps,
     blockTimestampLast: Number(decoded[2]),
     token0: ethers.getAddress(`0x${token0Raw.slice(-40)}`),
     token1: ethers.getAddress(`0x${token1Raw.slice(-40)}`),
@@ -579,6 +922,7 @@ function impactsFromCurveIds(
   amountIn: bigint,
   edges: readonly TokenEdge[],
 ): PoolImpact[] {
+  if (amountIn <= 0n || soldId === boughtId) return [];
   const impacts: PoolImpact[] = [];
   for (const edge of edges) {
     if (edge.curveI === undefined || edge.curveJ === undefined) continue;
@@ -590,30 +934,16 @@ function impactsFromCurveIds(
         amountIn,
         matchedAdapterId: edge.adapterId,
       });
-    } else if (BigInt(edge.curveI) === boughtId && BigInt(edge.curveJ) === soldId) {
-      impacts.push({
-        pool: edge.target,
-        tokenIn: edge.tokenOut,
-        tokenOut: edge.tokenIn,
-        amountIn,
-        matchedAdapterId: edge.adapterId,
-      });
     }
   }
   if (impacts.length > 0) return impacts;
-  if (edges.length !== 1) return [];
-  const edge = edges[0];
-  return [{
-    pool: edge.target,
-    tokenIn: edge.tokenIn,
-    tokenOut: edge.tokenOut,
-    amountIn,
-    matchedAdapterId: edge.adapterId,
-  }];
+  // A single edge is not proof of direction. Index mismatch remains
+  // unresolved instead of being coerced into the only available route.
+  return [];
 }
 
 function matchingTargetEdges(
-  ctx: SwapObservationContext,
+  ctx: Pick<SwapObservationContext, "edgesByTarget">,
   target: string,
   adapterIds: readonly string[],
 ): TokenEdge[] {

@@ -82,11 +82,43 @@ export interface Erc4626ForkRedeemEvidence {
   readonly implementationWord: string;
 }
 
+/**
+ * Provenance-only recall hints migrated from the former executable token-graph
+ * registry. The shared address matcher still derives asset(), identity and
+ * executable routes from current chain state; these addresses cannot admit an
+ * edge by themselves.
+ */
+export const ERC4626_CANDIDATE_ADDRESS_HINTS = Object.freeze([
+  "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+  "0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055",
+  "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB",
+  "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa",
+  "0xac3E018457B222d93114458476f3E3416Abbe38F",
+  "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8",
+  "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E",
+  "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48",
+  "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D",
+  "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc",
+  "0xe3DA4B83C9dd4c4D185ecE42077462b3F35c454a",
+  "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367",
+  "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc",
+  "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547",
+  "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+  "0xC255910618158F48FA461874471Aa24AEfbDC23A",
+  "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C",
+  "0x43680aBF18cf54898Be84C6eF78237CFBD441883",
+  "0x4825eFF24F9B7b76EEAFA2ecc6A1D5dFCb3c1c3f",
+  "0xB8280955aE7b5207AF4CDbdCd775135Bd38157fE",
+] as const);
+
 export const erc4626Discovery: ProtocolDiscoveryCapability = Object.freeze({
   candidateSources: Object.freeze(["dex-token-domain", "observed-interaction"] as const),
+  candidateAddressHints: ERC4626_CANDIDATE_ADDRESS_HINTS,
   eventTopics: Object.freeze([WITHDRAW_TOPIC]),
   callSelectors: Object.freeze([REDEEM_SELECTOR, WITHDRAW_SELECTOR]),
-  addressMatcherVersion: "erc4626-address-v2",
+  // The provenance-hint rollout must invalidate any persisted address
+  // negative produced before these clean-start candidates were enumerated.
+  addressMatcherVersion: "erc4626-address-v3-hints",
   observedMatcherVersion: "erc4626-observed-v1",
 
   async candidateFromAddress(candidate, ctx) {

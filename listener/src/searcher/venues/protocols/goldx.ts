@@ -7,16 +7,37 @@ import type {
   PreparedRouteContext,
   ProtocolConversionAdapter,
 } from "../route-leg-adapter.js";
-import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteGoldxMint } from "./protocol-quote.js";
+import {
+  createProtocolQuoteStateCapability,
+  decodeUintResult,
+} from "./protocol-state-framework.js";
 
 const goldxIface = new ethers.Interface(["function unit() view returns (uint256)"]);
+const GOLDX_WAD = 10n ** 18n;
+
+const goldxPricingState = createProtocolQuoteStateCapability({
+  familyId: "protocol:goldx",
+  edgeAdapterIds: ["goldx-mint"],
+  buildQuoteReads(edge) {
+    return [{
+      suffix: "unit",
+      to: edge.target,
+      data: goldxIface.encodeFunctionData("unit"),
+    }];
+  },
+  deriveAmountOut(_edge, amountIn, result) {
+    const unit = decodeUintResult(goldxIface, "unit", result("unit"));
+    return amountIn * unit / GOLDX_WAD;
+  },
+});
 
 export const goldxAdapter = Object.freeze({
   id: "protocol:goldx",
   kind: "protocol-conversion",
   poolAdapters: ["goldx"],
+  identityPolicies: [{ poolAdapter: "goldx", policy: "trusted-singleton-seed" }],
   declaredVenues: [{
     address: ADDR.GOLDX,
     adapter: "goldx",
@@ -31,9 +52,9 @@ export const goldxAdapter = Object.freeze({
   edgeAdapterIds: ["goldx-mint"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }],
   requiresProtocolEdgesFlag: true,
-  actionAdapterIds: ["goldx-mint", "erc20-approve"],
-  readMid: readProtocolExternalMid,
-  warm: { kind: "protocol-mid", priority: 0 },
+  ownedActionAdapterIds: ["goldx-mint"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  pricingState: goldxPricingState,
   prepared: {
     quote: async (ctx: PreparedRouteContext) => {
       const started = Date.now();

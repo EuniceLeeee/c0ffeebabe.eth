@@ -1,11 +1,19 @@
 # Codex — 轻量 Adapter Family 自动实例接入与 Block-Scan 状态统一计划
 
-> 状态：canonical 实施计划；尚未实施，尚未取得六步或 live 性能验收。
+> 状态：`implemented_not_validated`。架构实现已落地；严格 tx055、真实 conversion freshness 与
+> paired-live A/B 证据尚未取得。
 >
 > 本文取代同文件上一版 `Universal AdapterFamily Plugin` 设计。Git 历史保留旧稿，但旧稿中的动态 plugin
 > catalog、candidate/active/quarantine、promotion receipt、generated import 和独立插件进程不再是目标架构。
 >
-> 评审基线：`origin/main @ a6c28ccc4196b56e56901c89076ce1185cb660b2`。
+> 实施基线：`origin/main @ 8aece69787a77561a18f85908eb0142e337f53b3`。计划稿曾在
+> `a6c28ccc4196b56e56901c89076ce1185cb660b2` 上完成实施前审查；该 SHA 只用于审查历史，不是本轮
+> 实施基线。
+>
+> 干净实施历史：T0 `5945146` 冻结 trusted blind-run、stage artifact chain、tx055 contract 与
+> paired-live primitive；T1 `059f7c0` 给旧 main pipeline 增加 baseline 六阶段 instrumentation；F 是本
+> branch 的单个架构实现 commit。T1 专用 baseline runtime 在 F 树中删除是预期的 producer 翻转，不是能力
+> 回退。
 
 ## 0. 一句话目标
 
@@ -410,6 +418,7 @@ V2/V3 继续走现有成熟 discovery fast path。共享调度器消费其 admit
 
 ```ts
 interface VerifiedGraphView {
+  id: string;
   sourceBlock: number;
   sourceBlockHash: string;
   generation: number;
@@ -422,10 +431,14 @@ interface VerifiedGraphView {
     completeThroughHash: string;
   }[];
   orderedEdgeHash: string;
+  metadataHash: string;
   ownershipHash: string;
   edges: readonly TokenEdge[];
 }
 ```
+
+`VerifiedGraphView` 只能由 `createVerifiedGraphView()` 从 ordered edges 与 registry ownership 派生；
+`orderedEdgeHash`、`metadataHash`、`ownershipHash` 不是调用方可以任意填写的证明字段。
 
 全局 `completenessWatermark` 只能取全部 active discovery sources 在同一 canonical chain 上的最小
 `completeThroughBlock`。任一 source/family fingerprint 改变、hash 不在 canonical chain、或 coverage 未到
@@ -436,7 +449,32 @@ source block 时，对应 family 和全局都标 degraded；只能输出 `graph_
 
 ### 7.1 Family-owned state capability
 
-吸收 Fable state 拆分的优点，但用强类型 read plan，并修正 `calls[i]` 必须对应 `edges[i]` 的错误假设：
+实现采用现有强类型 family registration 闭包，不把 family 私有 schema/snapshot 放进共享
+`Record<string, unknown>`。当前 production 接口为：
+
+```ts
+interface BlockScanStateCapability<Schema, Snapshot> {
+  stateKey(edge: TokenEdge): string;
+  compileStaticSchema(input: CompileStaticSchemaInput): Schema | Promise<Schema>;
+  buildStaticSchemaReads?(input: BuildStaticSchemaReadsInput<Schema>): readonly StateRead[];
+  hydrateStaticSchema?(schema: Schema, results: readonly StateReadResult[]): Schema;
+  buildCurrentBlockReads(input: BuildCurrentBlockReadsInput<Schema>): readonly StateRead[];
+  buildDependentBlockReads?(input: BuildDependentBlockReadsInput<Schema>): readonly StateRead[];
+  decodeState(schema: Schema, results: readonly StateReadResult[]): Snapshot;
+  deriveMids(snapshot: Snapshot, edges: readonly TokenEdge[]): ReadonlyMap<string, RouteVenueMid>;
+  behaviorProvenUnavailableEdges?(
+    snapshot: Snapshot,
+    edges: readonly TokenEdge[],
+  ): ReadonlyMap<string, string>;
+  projectBackrunState?(snapshot: Snapshot, source: BlockSource): BlockScanBackrunStateSeed;
+  dependencies(edges: readonly TokenEdge[]): readonly string[];
+  incremental?: IncrementalStateCapability<Schema>;
+}
+```
+
+Family 只返回 decode 结果与纯 `deriveMids`；required-read coverage 与 authoritative freshness 由
+coordinator 根据 trusted transport result 生成，family 不能自报。下面的 source、mutation、transport、
+coverage 类型是该接口背后的语义模型；它们不是另一套待实现 API，也不假设 `calls[i]` 对应 `edges[i]`：
 
 ```ts
 interface BlockSource {
@@ -700,7 +738,7 @@ EIP-1898；不支持时只能使用已经核对 source hash 的 immutable fork�
 
 - 固定 graph version 和 `BlockSource`；
 - 按 `(familyId, stateKey, readKey)` 去重；
-- 选择现有 V2/V3 fast transport、Multicall 或 JSON-RPC batch；
+- 选择现有 V2/V3 fast transport 或去重后的 JSON-RPC batch；远程 RPC 才可按环境选择 Multicall；
 - 并发、deadline、AbortSignal、backpressure；
 - 每个 family 独立 settled result；
 - 跨 family 合批只允许使用能返回逐 call success/error 的 transport；若 transport 只能 aggregate throw，
@@ -721,6 +759,11 @@ Family 负责：
 - 本地数学；
 - instance dependencies。
 
+本轮遵循 D-007：local reth 默认使用并行 JSON-RPC batch，`aggregate3` 只保留为远程 RPC 可选 transport。
+同机实测 45 calls 时 `aggregate3=73.7ms`、并行 direct RPC `=38.6ms`。因此 `<10s` 的主要杠杆是
+`(familyId,stateKey)` 去重、并行、Curve 去串行化和 protocol instance-local derivation，不把 Multicall
+本身写成性能成果。
+
 ### 7.3 V2/V3 不复制实现
 
 Fable 的 V2/V3 shadow code只证明了公式切分形状，不是可直接接 live 的 transport：
@@ -733,8 +776,10 @@ Fable 的 V2/V3 shadow code只证明了公式切分形状，不是可直接接 l
 snapshot；required coverage 完整后由 capability wrapper 原子交换。Wrapper 是该 family 唯一 production
 publisher，也不能为了包一层 capability 再发第二轮链上 reads。
 
-每个方向的新 `deriveMids` 必须和现有 `readV2WarmMid/readV3WarmMid` 使用同一 snapshot 逐字段 exact
-对拍；迁移完成后抽取 canonical pure math，避免长期保留两份公式。
+每个方向的新 `deriveMids` 必须和现有 `readV2WarmMid/readV3WarmMid` 使用同一 snapshot 对拍：
+reserve、`sqrtPriceX96`、liquidity、fee、depth、edge/key、coverage 与 unresolved exact set 必须精确
+相同；IEEE `mid` 使用 relative tolerance `1e-12`。迁移完成后抽取 canonical pure math，避免长期保留
+两份公式。
 
 ### 7.4 Curve 与 protocol mids
 
@@ -749,7 +794,7 @@ Protocol mids 是 ERC4626、wstETH、PSM、Metronome、Eigenpie 等 conversion e
 ```text
 按唯一 instance/stateKey 生成 current-N reads
         ↓
-少数 batch
+去重后的并行 RPC batches / 按环境选择 transport
         ↓
 family decode
         ↓
@@ -975,6 +1020,60 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 
 不建立单独的 `FlashAdapterRegistry`，也不把 flash 塞进 coarse-price lane。
 
+## 9.5 实施结果与证据台账
+
+| 项目 | 当前事实 |
+|---|---|
+| typed family registry、current-N coordinator、原子发布、family-local failure isolation | 已实现 |
+| V2/V3 成熟 discovery/identity/fee 路径 | 保留并接入统一 family runtime，没有另起重复 scanner |
+| Curve、external swap、protocol conversion state | 已接入 family-owned state capability；中央逐 venue warm/mid switch 已移除 |
+| receipt-level victim 与 funding view | 已由同一静态 registry 派生；funding 保持独立类型，不建立 `FlashAdapterRegistry` |
+| T0 trusted 工具 | `5945146` 冻结；其 22 个非 package 源码/工具文件在 F 中 byte-identical |
+| T1 baseline instrumentation | `059f7c0`；build、baseline runtime、blind contract、production harness 与 scanner 回归已通过 |
+| T1/F blind evidence vocabulary | F 只在验收输出层投影 T1 冻结的 edge/family/state/graph 口径；production 继续使用 richer family/instance identity；跨版本冻结测试通过 |
+| F build/focused conformance | 本地 build 与 focused suite 已通过；详见下方记录 |
+| tx055 六步语义与 p95 `<10s` | 未实跑；没有语义或性能结论 |
+| conversion freshness | harness 已实现；真实冻结样本证据缺失 |
+| V2/V3 parity | local-reth + frozen production universe 连续块 artifact 已通过；forced-reorg/invalidation 由同一 artifact 绑定的 synthetic harness 覆盖 |
+| paired live | trusted primitive/unit test 已实现；真实 A/B window 未跑 |
+| 总状态 | `implemented_not_validated` |
+
+F0 的 activation continuity fixture 仍锚定 `040a9cc`；`040a9cc..8aece69` 的 `listener/` tree 无差异，
+所以它仍能证明该段 activation 语义连续。但它不是完整 F0 生产证据，不能替代当时 production universe、
+V2/V3 warm-state hash、stage timings、RPC/call/batch 分布或 tx055 raw artifact。
+
+2026-07-24 最终本地验证已通过 TypeScript build、boundary lint，并覆盖：
+
+- registry activation/shared-surface/route-adapter closure 与 Fluid token-order execution identity；
+- current-N state backend/coordinator/runtime、swap/protocol families、V2/V3 incremental + shadow parity；
+- discovery watermark/backfill/publication/reorg/cancellation、instance discovery 与 family isolation；
+- DODO、Fluid、Curve、Balancer、victim、funding、planner、scanner/refinement 与 replay fixtures；
+- T0 v2 artifact chain、challenger stage-boundary immutability、trusted blind harness/content-addressed
+  fail-closed、T1/F canonical compatibility、conversion freshness harness 和 paired-live primitive。
+
+这些是实现与合约测试，不提升下方其余真实证据的 `missing` 状态。
+
+节点近期真实 parity 证据：
+
+```text
+tested_runtime_commit=951f84bca8688ba8a49e8753b50e4f5eb47fc28b
+tested_listener_tree=bd52ac2cecbf61089dcfde733dae6baca1954be5
+local_reth_blocks=25599469..25599480
+production_universe_sha256=3307bc17bda3a4efa8e88dfbabb32657cc9a7405975feab955e8462e4eea3333
+production_universe_rows=12989
+selected_pools=4 (V2=2,V3=2)
+change_coverage=changed-and-unchanged
+failures=0
+artifact_sha256=740ac8337ed4a0bf4c0581e6b4db93980d4302f9ba847b63c786efec0e97f98c
+artifact_path=/opt/MEV-runtime/evidence/v2-v3-shadow-951f84bca8688ba8a49e8753b50e4f5eb47fc28b.json
+```
+
+这次直接验证最终实现的 `listener/` tree：只在临时 detached checkout 读取节点 local reth；没有重启
+A/B、改变 running universe 或触发 searcher warm，命令结束后临时 checkout 已自动清理，生产 A 仍运行
+原部署 commit。Artifact 还绑定 `v2-v3-incremental-state` 的 forced same-height reorg、V3
+Mint/Burn/tick invalidation 和 missing-log full-refresh 证据。最终文档收口 commit 只修改本文件；
+其 `listener/` tree 必须继续等于上面的 `tested_listener_tree`，否则这份 parity 证据失效。
+
 ## 10. 实施顺序
 
 ### F0 — 冻结基线
@@ -1103,6 +1202,10 @@ ERC4626 至少验证：
    proof/unresolved exact set。V3 另外注入 Mint/Burn/tick-word 变化，证明 cursor 能表达 sub-state/readKey
    invalidation，而不是只标一个粗粒度 pool changed。
 
+V2/V3 的整数状态、fee/depth、edge/key 与 coverage/unresolved exact set 精确比较；IEEE `mid` 的固定
+relative tolerance 是 `1e-12`。Synthetic changed/unchanged/reorg 测试只证明实现形状，不能替代使用
+local reth、production universe 的真实连续块 artifact。
+
 Fable 已证明 V2/V3“公式对拍”的测试形状可行，但其 shadow transport 是占位，不能替代上述真实 pipeline
 等价。
 
@@ -1163,15 +1266,16 @@ Secret 不写入报告，只记录脱敏 endpoint/provider identity 和 secret-p
 Strict timing 的 backend class 固定为完全本地、已物化的 clean state。Producer 在 timer 前只持有 N-1
 GraphView/static cache；trusted runner 另行准备以下两种可验 backend 之一：
 
-1. 持有 N state 的本地 archive reth/content-addressed state DB，并核对 N block hash/state root；
-2. 按已冻结的完整 production universe、全部 active adapter/funding state descriptors 和 execution
-   dependencies 均匀构建的离线 snapshot；任何未物化 state/cache miss 立即使该轮失败，不能在 timer 内
-   lazy-fetch archive。
+1. 持有 N state 的完整本地 archive reth/state DB，并核对 N block hash/state root；
+2. 与 N state root 对账、允许任意 EVM execution storage read 的完整 world-state snapshot/DB。
 
 若普通本地 reth 仍保留 N state，可直接作为第 1 类；已 prune 时可以在 timer 外用 verified archive 构建
-上述本地 DB/snapshot，但不能只按目标 route/pools 预取。`source_head_seen` 时，runner 才把 N head/log
-delta 和只读 N backend 原子暴露给 production entry；这对应 live 节点先执行完 block、再发 newHead，而
-不是把节点 import 时间算成 searcher 时间。
+上述完整本地 DB/snapshot，但不能只按目标 route/pools、access list 或 trace 预取。Content-addressed
+exact-call cache 可以均匀物化已知 graph/funding reads，却不能证明 arbitrary EVM final sim 所需的
+transitive storage 完整；exporter 对 `finalSimulation` requirement 返回 `unsupported`，strict prewarm
+必须 fail closed。Anvil lazy fork、target-derived access list 和 trace-derived exact-call cache 都不是合法
+替代。`source_head_seen` 时，runner 才把 N head/log delta 和只读 N backend 原子暴露给 production entry；
+这对应 live 节点先执行完 block、再发 newHead，而不是把节点 import 时间算成 searcher 时间。
 
 从 `source_head_seen` 到 terminal，state reads、scanner、quote、plan、sim 与 EV 全部只打本地 backend；
 网络出口关闭或由 trusted call counter 断言 `non_loopback_upstream_rpc_calls=0`；loopback 的本地
@@ -1230,6 +1334,21 @@ overall=implemented_not_validated
 
 保留真实阶段分解后再讨论，不制造假通过。
 
+当前仓库没有上述完整 historical source-N backend，因而尚未形成合法 20-run denominator。当前记录必须是：
+
+```text
+tx055_semantic_evidence=not_run
+tx055_timing_evidence=not_run
+blocker=full_historical_source_state_unavailable
+overall=implemented_not_validated
+```
+
+2026-07-24 对生产 A 的 local reth 做了只读实机复核：source block `25585380` 的 header hash/state root
+与本节冻结值一致，目标 raw tx 也仍可读取；但该高度的 `eth_getCode`、`eth_getStorageAt` 和目标 tx 的
+`debug_traceTransaction` 均返回 `state ... is pruned`。复核后 production A service 与部署 commit
+保持不变。因此这里不是 `timing_status=fail`：计时实验尚未在合法 backend 上开始，不能用能读 block/tx
+但不能执行任意历史 storage 的 pruned 节点制造 20-run 结果。
+
 ### 11.5 Conversion freshness
 
 tx055 不覆盖 conversion rate 单块跳变。Conversion sentinel 复用 blind harness：
@@ -1250,6 +1369,16 @@ tx055 不覆盖 conversion rate 单块跳变。Conversion sentinel 复用 blind 
 - 禁止 fixed TTL、synthetic producer override、目标预热或 route append。
 
 没有合格真实样本时如实写 `freshness_evidence=missing`，不能用合成 fixture 冒充链上时效验收。
+
+当前实现状态：
+
+```text
+freshness_harness=implemented
+freshness_evidence=missing
+```
+
+仓库内的 known fixture、synthetic RPC 测试和“代码每块刷新”均不替代 freeze 后由 trusted oracle 选择的
+真实链上更新块证据。
 
 ### 11.6 Paired live A/B
 
@@ -1299,6 +1428,10 @@ category 直接 fail。这个 95% 允许诚实的 live 抖动，但不能删除�
 六步检查不是部署开关；A/B 部署不能因历史样本 checker 不匹配而卡住，但最终合并判定必须有相应的独立
 六阶段证据。
 
+T0 已实现 hash-chained eligible-head journal、trusted clock、双侧 delivery/ack/terminal receipt、reorg
+generation、final canonical reconciliation、固定 denominator、10 秒与 95% 门；package 命令运行的是该
+primitive 的 unit test，不是一次真实节点实验。当前必须记录 `paired_live_evidence=missing`。
+
 ## 12. 非目标
 
 本轮不做：
@@ -1339,7 +1472,7 @@ category 直接 fail。这个 95% 允许诚实的 live 抖动，但不能删除�
 因此不直接 cherry-pick任何完整 Fable 模块；只把上述五个设计切片实现在现有 adapter、registry 和成熟
 V2/V3路径上。
 
-### 13.1 2026-07-23 双盲对抗审计
+### 13.1 2026-07-23 实施前计划稿双盲对抗审计
 
 审计对象是本文件在 `origin/main @ a6c28ccc4196b56e56901c89076ce1185cb660b2` 上的改写稿；审查者只读，
 没有修改 production code 或 trusted harness。
@@ -1362,7 +1495,37 @@ V2/V3路径上。
 6. live header journal、双侧 delivery receipt 和最终 canonical sequence reconciliation；
 7. challenger 前独立落入 main 的 blind runner/oracle/comparator。
 
-这里的 `P0=0/P1=0` 只表示计划合同没有已知阻断，不表示代码已经实施或通过六步/live 验收。
+这里的 `P0=0/P1=0` 只表示当时的计划合同没有已知阻断，不表示后来的实现已经通过六步/live 验收。
+
+### 13.2 2026-07-24 实现期三轮对抗审计
+
+按“文档/实现收口前最多三轮”的约束，本轮只做了三次实现期对抗审计，没有以重复审查代替施工：
+
+1. 第一轮发现 trusted harness 与 challenger 同分支生成，无法证明生产者不可见；因此重建为
+   T0 `5945146`（先冻结工具）→ T1 `059f7c0`（旧 main baseline instrumentation）→ F（实现）的干净
+   历史。
+2. 第二轮发现 historical/paired-live 证据仍缺少共同冻结输入、双侧 delivery/terminal receipt 与
+   canonical reconciliation；修复落在 T0 trusted tool layer，F 不得修改这些工具。F 中 22 个非 package
+   T0 文件继续 byte-identical。
+3. 第三轮 `P0=0/P1=1/P2=1`：P1 是 T1 与 F 使用不同的 blind canonical vocabulary，业务等价也会被
+   判成 artifact mismatch；P2 是 discovery 在 source-delta 建立前早退时只能由 runner timeout 记失败，
+   不会假通过但定位较慢。
+
+P1 的修复严格限制在 blind evidence compatibility projection：
+
+- edge ID、family ID、state key、graph metadata/ownership/source coverage 与 opportunity route 投影到 T1
+  冻结口径；
+- `protocol:erc4626-silo-redeem`、`credit:fluid`、`fluid-dex` 只在该证据桥中映射回 T1 的合并/compat/
+  legacy 表达，production registry 和执行身份不倒退；
+- active-family manifest 从当前 registry 机械派生后必须等于 T1 的 17-family fingerprint；inventory
+  增减会 fail closed，并要求未来另冻一代 T0，而不是静默隐藏；
+- 新增跨版本冻结测试，锁定 T1 manifest fingerprint、代表性 V2 edge ID、graph hashes、state coverage
+  与 route step；同时对齐六阶段 evidence 的 `not_evaluated`、`no_plans`、`planner_error`、
+  `non_positive_solved_quote`、`solver_error` 语义。
+
+这些修复已经通过 build、blind contract/freezer/production-harness/challenger-runtime 和
+`searcher:adapter-family-blind-t1-compatibility`。没有进行第四轮对抗审计。P2 不制造 pass，保留为非阻断
+诊断 follow-up；严格 tx055 和 paired-live 仍保持 `missing`，不能由上述单元/合约测试替代。
 
 ## 14. 完成定义
 
@@ -1384,3 +1547,16 @@ V2/V3路径上。
 14. trusted review 未发现中央 venue switch、第二实例 allowlist 或 legacy fallback。
 
 在这些条件完成前，准确状态只能是 `planned` 或 `implemented_not_validated`。
+
+本 branch 当前裁决：
+
+```text
+architecture_implementation=implemented
+strict_tx055=missing
+conversion_freshness=missing
+v2_v3_live_parity=pass
+paired_live=missing
+overall=implemented_not_validated
+```
+
+因此本文和 commit message 都不得写 `complete`、`fixed`、`<10s passed` 或 `live-equivalent`。

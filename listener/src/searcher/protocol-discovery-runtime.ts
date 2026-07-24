@@ -23,13 +23,14 @@ import type { StrategyViews } from "./strategy-views.js";
 import type { IdentityResolverRegistry } from "./venues/identity.js";
 import type {
   ProtocolCandidate,
-  ProtocolConversionAdapter,
+  ProtocolDiscoveryReadControl,
   ProtocolDiscoveryReceipt,
+  RouteLegAdapter,
 } from "./venues/route-leg-adapter.js";
 
 export interface ProtocolDiscoveryRuntimeInput {
   readonly provider: ethers.JsonRpcProvider;
-  readonly adapters: readonly ProtocolConversionAdapter[];
+  readonly adapters: readonly RouteLegAdapter[];
   readonly identityRegistry: IdentityResolverRegistry;
   readonly protocolEdgesEnabled: boolean;
   readonly chainId?: bigint | number | string;
@@ -40,6 +41,8 @@ export interface ProtocolDiscoveryRuntimeInput {
   readonly currentBlockscanGraph?: readonly TokenEdge[];
   readonly currentKnownPoolKeys?: ReadonlySet<string>;
   readonly buildStrategyViews: (pools: PoolEntry[]) => StrategyViews;
+  /** Parent background-pass lifetime; every discovery RPC inherits it. */
+  readonly control?: ProtocolDiscoveryReadControl;
 }
 
 /**
@@ -89,10 +92,30 @@ export function protocolCandidateAddressesFromDexUniverse(
   return [...addresses].sort();
 }
 
+/**
+ * Project provenance-only address hints from the registered protocol families.
+ * Hints join the address-matcher input only; they never become graph tokens,
+ * PoolEntries, identity evidence, or executable routes.
+ */
+export function protocolDiscoveryCandidateAddressHints(
+  adapters: readonly RouteLegAdapter[],
+): string[] {
+  const addresses = new Set<string>();
+  for (const adapter of adapters) {
+    for (const raw of adapter.discovery?.candidateAddressHints ?? []) {
+      const address = ethers.getAddress(raw);
+      if (address !== ethers.ZeroAddress) addresses.add(address.toLowerCase());
+    }
+  }
+  return [...addresses].sort();
+}
+
 export async function prepareActiveProtocolDiscoveryPass(
   input: ProtocolDiscoveryRuntimeInput & {
     readonly blockNumber: number;
     readonly fromBlock: number;
+    /** Historical observed-source range end; state/probes remain pinned to blockNumber. */
+    readonly toBlock?: number;
     readonly graphTokens: readonly string[];
     readonly candidateAddresses: readonly string[];
     readonly evidenceCache?: ProtocolDiscoveryEvidenceCache;
@@ -111,18 +134,25 @@ export async function prepareActiveProtocolDiscoveryPass(
     provider: input.provider,
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
+    ...(input.toBlock === undefined ? {} : { toBlock: input.toBlock }),
     ...(input.chainId === undefined ? {} : { chainId: input.chainId }),
     ...(input.probeExecutor === undefined ? {} : { probeExecutor: input.probeExecutor }),
     graphTokens: input.graphTokens,
     retainedInstances,
+    ...(input.control === undefined ? {} : { control: input.control }),
   });
-  const scanned = input.protocolEdgesEnabled
+  const enabledAdapters = enabledDiscoveryAdapters(
+    input.adapters,
+    input.protocolEdgesEnabled,
+  );
+  const scanned = enabledAdapters.length > 0
     ? await scanProtocolDiscoveryRange({
-      adapters: input.adapters,
+      adapters: enabledAdapters,
       context,
       candidateAddresses: input.candidateAddresses,
       evidenceCache: input.evidenceCache ?? createProtocolDiscoveryEvidenceCache(),
       ...(input.traceMemo === undefined ? {} : { traceMemo: input.traceMemo }),
+      ...(input.control === undefined ? {} : { control: input.control }),
     })
     : {
       candidatesByAdapter: new Map(),
@@ -154,6 +184,7 @@ export async function prepareActiveProtocolDiscoveryPass(
     ),
     sourceComplete: scanned.sourceComplete,
     sourceErrors: scanned.sourceErrors,
+    ...(input.control === undefined ? {} : { control: input.control }),
   });
   return {
     result,
@@ -193,16 +224,22 @@ export async function prepareObservedProtocolDiscoveryPass(
     ...(input.probeExecutor === undefined ? {} : { probeExecutor: input.probeExecutor }),
     graphTokens: input.graphTokens,
     retainedInstances: [],
+    ...(input.control === undefined ? {} : { control: input.control }),
   });
-  const observed = input.protocolEdgesEnabled
+  const enabledAdapters = enabledDiscoveryAdapters(
+    input.adapters,
+    input.protocolEdgesEnabled,
+  );
+  const observed = enabledAdapters.length > 0
     ? await scanObservedProtocolTrace({
-      adapters: input.adapters,
+      adapters: enabledAdapters,
       context: scanContext,
       txHash: input.txHash,
       receipt: input.receipt,
       trace: input.trace,
+      ...(input.control === undefined ? {} : { control: input.control }),
     })
-    : { candidatesByAdapter: new Map(), unknownSelectors: [] };
+    : { candidatesByAdapter: new Map(), unknownSelectors: [], sourceErrors: [] };
   // Cross-pass ownership: prior claims for the SAME targets re-enter this
   // pass as retained candidates, so an earlier family's admission and a new
   // observed claim are adjudicated together instead of being invisible to
@@ -227,6 +264,9 @@ export async function prepareObservedProtocolDiscoveryPass(
       identityRegistry: input.identityRegistry,
     }),
     candidatesByAdapter: observed.candidatesByAdapter,
+    sourceComplete: observed.sourceErrors.length === 0,
+    sourceErrors: observed.sourceErrors,
+    ...(input.control === undefined ? {} : { control: input.control }),
   });
   const projection = prepareProtocolDiscoveryProjection({
     currentOwnership: input.currentOwnership,
@@ -238,6 +278,16 @@ export async function prepareObservedProtocolDiscoveryPass(
     buildStrategyViews: input.buildStrategyViews,
   });
   return { result, projection, unknownSelectors: observed.unknownSelectors };
+}
+
+function enabledDiscoveryAdapters(
+  adapters: readonly RouteLegAdapter[],
+  protocolEdgesEnabled: boolean,
+): RouteLegAdapter[] {
+  return adapters.filter((adapter) =>
+    adapter.discovery !== undefined &&
+    (!adapter.requiresProtocolEdgesFlag || protocolEdgesEnabled)
+  );
 }
 
 function mergeCandidateMaps(

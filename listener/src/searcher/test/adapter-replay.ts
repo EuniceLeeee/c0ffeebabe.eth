@@ -22,7 +22,6 @@ import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import { get as getActionAdapter } from "../../adapters/registry.js";
-import { findFlashProviderDescriptor } from "../../adapters/flash-providers.js";
 import { PROTOCOL_LEG_DESCRIPTORS } from "../../adapters/protocol-legs.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -35,6 +34,10 @@ import {
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
+import {
+  createVictimSourceGeneration,
+  detectImpactTransitionFromLogs,
+} from "../detector/pool-impact.js";
 import { evaluateEv } from "../ev-evaluator.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
@@ -46,8 +49,8 @@ import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import type { ProtocolAction } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY, type PathTemplate } from "../templates/path-template.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
-import type { ExecutionFamilyId, SwapAdapter } from "../venues/route-leg-adapter.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import type { ExecutionFamilyId } from "../venues/route-leg-adapter.js";
 import {
   anchorHistoricalSenderNoncePrefix,
   type HistoricalSenderNonceAnchorResult,
@@ -227,8 +230,15 @@ const FAMILY_SOURCE_FILES: Readonly<Partial<Record<ExecutionFamilyId, readonly s
   "curve-plain": ["src/searcher/venues/swaps/curve-plain.ts", "src/searcher/venues/swaps/curve-shared.ts"],
   "curve-underlying": ["src/searcher/venues/swaps/curve-underlying.ts", "src/searcher/venues/curve-underlying.ts"],
   "balancer-v3": ["src/searcher/venues/swaps/balancer-v3.ts"],
+  "fluid-dex": ["src/searcher/venues/swaps/fluid-dex.ts"],
   "custom-swap:dodo-v2": ["src/searcher/venues/swaps/dodo-v2.ts"],
   "protocol:erc4626": ["src/searcher/venues/protocols/erc4626.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
+  "protocol:erc4626-silo-redeem": [
+    "src/searcher/venues/protocols/erc4626-silo-redeem.ts",
+    "src/searcher/venues/protocols/erc4626-silo-redeem-discovery.ts",
+    "src/searcher/venues/protocols/protocol-plan.ts",
+    "src/searcher/venues/protocols/protocol-quote.ts",
+  ],
   "protocol:eigenpie": [
     "src/searcher/venues/protocols/eigenpie.ts",
     "src/searcher/venues/protocols/eigenpie-discovery.ts",
@@ -241,13 +251,13 @@ const FAMILY_SOURCE_FILES: Readonly<Partial<Record<ExecutionFamilyId, readonly s
   "protocol:psm": ["src/searcher/venues/protocols/psm.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
   "protocol:rocksolid": ["src/searcher/venues/protocols/rocksolid.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
   "protocol:wsteth": ["src/searcher/venues/protocols/wsteth.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
-  "compat:fluid-credit": ["src/searcher/venues/compat/fluid-credit.ts"],
+  "credit:fluid": ["src/searcher/venues/credit/fluid.ts"],
 };
 
 const SHARED_API_FILES = [
   "src/searcher/venues/route-leg-adapter.ts",
   "src/searcher/venues/route-leg-registry.ts",
-  "src/searcher/venues/route-adapter-registry.ts",
+  "src/searcher/venues/adapter-family-registry.ts",
   "src/searcher/venues/production-registry.ts",
   "src/searcher/planner/planner.ts",
   "src/searcher/solver/solver.ts",
@@ -327,7 +337,7 @@ function loadFixture(path: string): AdapterReplayFixture {
   if (root.schemaVersion !== 2) throw new Error(`${path}: unsupported schemaVersion`);
   const id = fixtureId(root.id, `${path}.id`);
   const executionFamilyId = nonEmptyString(root.executionFamilyId, `${path}.executionFamilyId`) as ExecutionFamilyId;
-  PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily(executionFamilyId);
+  PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(executionFamilyId);
   const referenceTx = txHash(root.referenceTx, `${path}.referenceTx`);
   const lane = root.lane;
   if (lane !== "block-scan" && lane !== "backrun") throw new Error(`${path}.lane invalid`);
@@ -344,7 +354,7 @@ function loadFixture(path: string): AdapterReplayFixture {
     adapterId: nonEmptyString(flashRaw.adapterId, `${path}.flash.adapterId`),
     token: address(flashRaw.token, `${path}.flash.token`),
   };
-  if (!findFlashProviderDescriptor(flash.adapterId)) {
+  if (!PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flash.adapterId)) {
     throw new Error(`${path}: unknown flash adapter ${flash.adapterId}`);
   }
   if (!Array.isArray(root.route) || root.route.length < 2) throw new Error(`${path}.route must contain 2..8 legs`);
@@ -448,7 +458,7 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
     "redeemTokenOut", "receiptEmitters",
   ], field, ["adapter", "address"]);
   const adapter = nonEmptyString(value.adapter, `${field}.adapter`) as PoolEntry["adapter"];
-  PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(adapter);
+  PRODUCTION_ADAPTER_FAMILIES.routes().forPool(adapter);
   const pool: RoutePoolIdentity = { adapter, address: address(value.address, `${field}.address`) };
   for (const name of ADDRESS_FIELDS) {
     if (name === "address" || value[name] === undefined) continue;
@@ -472,8 +482,8 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
 }
 
 function familyForLeg(leg: AdapterReplayLeg, fixturePath: string): ExecutionFamilyId {
-  const poolFamily = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(leg.pool.adapter);
-  const edgeFamily = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge(leg.edgeAdapterId);
+  const poolFamily = PRODUCTION_ADAPTER_FAMILIES.routes().forPool(leg.pool.adapter);
+  const edgeFamily = PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(leg.edgeAdapterId);
   if (poolFamily.id !== edgeFamily.id) {
     throw new Error(
       `${fixturePath}: leg ${leg.seq} pool family ${poolFamily.id} disagrees with edge family ${edgeFamily.id}`,
@@ -860,37 +870,37 @@ async function validateReferenceSwapImpacts(
     topics: [...log.topics],
     data: log.data,
   }));
-  const edgesByTarget = new Map<string, TokenEdge[]>();
-  for (const edge of edges) {
-    const key = edge.target.toLowerCase();
-    const current = edgesByTarget.get(key) ?? [];
-    current.push(edge);
-    edgesByTarget.set(key, current);
-  }
-
   const observed: ReferenceObservedImpact[] = [];
   const swapFamilies = [...new Set(fixture.route
-    .map((leg) => PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily(familyForLeg(leg, fixture.id)))
+    .map((leg) => PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyForLeg(leg, fixture.id)))
     .filter((adapter) => adapter.kind === "swap")
     .map((adapter) => adapter.id))];
-  for (const familyId of swapFamilies) {
-    const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily(familyId) as SwapAdapter;
-    const impacts = await adapter.observation.decodeSwapImpacts({
-      logs,
-      graph: edges,
-      edgesByTarget,
-      tokenQuery: null,
-    });
-    observed.push(...impacts.map(({ logIndex, impact }) => ({
-      familyId,
-      logIndex,
+  const sourceGeneration = createVictimSourceGeneration({
+    sourceBlock: Math.max(0, receipt.blockNumber - 1),
+    sourceBlockHash: null,
+    receiptId: fixture.referenceTx,
+    logs,
+    logsCompleteness: "complete-receipt",
+  });
+  const transition = await detectImpactTransitionFromLogs(
+    logs,
+    [...edges],
+    sourceGeneration,
+  );
+  const swapFamilyById = new Map(
+    swapFamilies.map((familyId) => [String(familyId), familyId] as const),
+  );
+  observed.push(...transition.steps
+    .filter((step) => swapFamilyById.has(step.familyId))
+    .map(({ familyId, logIndex, impact }) => ({
+      familyId: swapFamilyById.get(familyId)!,
+      logIndex: logIndex!,
       matchedAdapterId: impact.matchedAdapterId,
       pool: impact.pool,
       tokenIn: impact.tokenIn,
       tokenOut: impact.tokenOut,
       ...(impact.poolId ? { poolId: impact.poolId } : {}),
     })));
-  }
 
   const matched = matchReferenceSwapImpacts(fixture, edges, logs, observed);
   return sha256(JSON.stringify(matched));
@@ -905,7 +915,7 @@ function matchReferenceSwapImpacts(
   const consumed = new Set<number>();
   let previousLogIndex = -1;
   return fixture.route.flatMap((leg, index) => {
-    const family = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forFamily(familyForLeg(leg, fixture.id));
+    const family = PRODUCTION_ADAPTER_FAMILIES.routes().forFamily(familyForLeg(leg, fixture.id));
     if (family.kind !== "swap") return [];
     const edge = edges[index];
     const observedIndex = observed.findIndex((candidate, candidateIndex) =>
@@ -1218,7 +1228,7 @@ async function buildPinnedRoute(
       pool.fixedTokenIn = leg.tokenIn;
       pool.fixedTokenOut = leg.tokenOut;
     }
-    const emitted = await PRODUCTION_ROUTE_ADAPTERS.routeLegs.buildEdges(pool, state);
+    const emitted = await PRODUCTION_ADAPTER_FAMILIES.routes().buildEdges(pool, state);
     const matches = emitted.filter((candidate) =>
       candidate.adapterId === leg.edgeAdapterId &&
       candidate.tokenIn.toLowerCase() === leg.tokenIn.toLowerCase() &&
@@ -1507,8 +1517,13 @@ async function replayFixture(
     report.referenceRouteHash = sha256(`${referenceTraceHash}:${referenceSwapImpactHash}`);
     report.stages.referenceRoute = true;
 
-    const flashProvider = findFlashProviderDescriptor(fixture.flash.adapterId)!;
-    const maxInput = await state.getTokenBalance(fixture.flash.token, flashProvider.liquidityHolder);
+    const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(
+      fixture.flash.adapterId,
+    )!;
+    const maxInput = await state.getTokenBalance(
+      fixture.flash.token,
+      flashFamily.funding.liquidityHolder,
+    );
     const sizing = fullDomainSearch(maxInput);
     report.maxFlashAmount = maxInput.toString();
 
@@ -1559,7 +1574,7 @@ async function replayFixture(
       state,
       solved,
       edges,
-      flashProvider.liquidityHolder,
+      flashFamily.funding.liquidityHolder,
       sim.calldata,
     );
     if (report.conservation.grossProfit !== sim.grossProfit.toString() ||
@@ -1645,7 +1660,7 @@ async function main(): Promise<void> {
 }
 
 function printFamilyCoverage(fixtures: readonly AdapterReplayFixture[]): void {
-  const coverage = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list().map((adapter) => {
+  const coverage = PRODUCTION_ADAPTER_FAMILIES.routes().list().map((adapter) => {
     const familyFixtures = fixtures
       .filter((fixture) => fixture.executionFamilyId === adapter.id)
       .map((fixture) => fixture.id)
@@ -1661,7 +1676,7 @@ function printFamilyCoverage(fixtures: readonly AdapterReplayFixture[]): void {
 }
 
 function assertFamilySourceCoverage(): void {
-  const missing = PRODUCTION_ROUTE_ADAPTERS.routeLegs.list()
+  const missing = PRODUCTION_ADAPTER_FAMILIES.routes().list()
     .map((adapter) => adapter.id)
     .filter((family) => !FAMILY_SOURCE_FILES[family]?.length);
   if (missing.length > 0) throw new Error(`missing execution-family source binding(s): ${missing.join(",")}`);

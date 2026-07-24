@@ -5,41 +5,52 @@ import type { TokenEdge } from "../planner/token-graph.js";
 import { buildVictimOverlay } from "./victim-overlay.js";
 
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
-const UNIV3_FEE_IFACE = new ethers.Interface(["function fee() view returns (uint24)"]);
 
 /** Replay the same registry-selected victim overlay on an Anvil fork. */
 export async function replayVictimSwapOnAnvil(
   state: AnvilStateBackend,
   impact: PoolImpact,
   graph: TokenEdge[],
+  timeoutMs?: number,
 ): Promise<void> {
   const overlay = await buildVictimOverlay(impact, {
     graph,
-    resolveUniv3Fee: async (pool) => {
-      const raw = await state.call({
-        to: pool,
-        data: UNIV3_FEE_IFACE.encodeFunctionData("fee", []),
-      });
-      return Number(BigInt(raw));
-    },
-  });
+    read: (req) => state.call(req),
+  }, timeoutMs);
 
-  await state.provider.send("anvil_setBalance", [overlay.whale, FORK_ETH_BALANCE]);
-  for (const deal of overlay.tokenDeals) {
-    await dealToken(state, deal.token, deal.to, BigInt(deal.amount));
-  }
-  await state.provider.send("anvil_impersonateAccount", [overlay.whale]);
+  const replaySnapshot = await state.snapshot();
   try {
-    for (const call of overlay.preCalls) {
-      await state.send({
-        from: call.from,
-        to: call.to,
-        data: call.calldata,
-        gas: call.gasLimit === undefined ? undefined : ethers.toBeHex(call.gasLimit),
-      });
+    await state.provider.send("anvil_setBalance", [overlay.whale, FORK_ETH_BALANCE]);
+    for (const deal of overlay.tokenDeals) {
+      await dealToken(state, deal.token, deal.to, BigInt(deal.amount));
     }
-  } finally {
-    await state.provider.send("anvil_stopImpersonatingAccount", [overlay.whale]);
+    await state.provider.send("anvil_impersonateAccount", [overlay.whale]);
+    try {
+      for (const call of overlay.preCalls) {
+        await state.send({
+          from: call.from,
+          to: call.to,
+          data: call.calldata,
+          gas: call.gasLimit === undefined ? undefined : ethers.toBeHex(call.gasLimit),
+        });
+      }
+    } finally {
+      await state.provider.send("anvil_stopImpersonatingAccount", [overlay.whale]);
+    }
+  } catch (error) {
+    try {
+      await state.revert(replaySnapshot);
+    } catch (rollbackError) {
+      throw new Error(
+        `victim replay failed and rollback failed: ${
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : String(rollbackError)
+        }`,
+        { cause: error },
+      );
+    }
+    throw error;
   }
 }
 

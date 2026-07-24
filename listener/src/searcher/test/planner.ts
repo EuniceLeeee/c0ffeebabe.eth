@@ -612,6 +612,42 @@ async function testBlockScanPlannerBinding(): Promise<void> {
     plans[0].opportunity.profitToken.toLowerCase() === REAL_WETH.toLowerCase(),
     `block-scan binding: profit token ${plans[0].opportunity.profitToken}`,
   );
+
+  const liveFundingPlanner = new TemplatePlanner();
+  liveFundingPlanner.setFlashLiquidity(fakeLiquidity([
+    [REAL_WETH, 1_234n, "morpho-flash"],
+  ]));
+  const fundedPlans = await liveFundingPlanner.planBlockScanFromSeedEdges(
+    opp,
+    [FLASH_SWAP_REPAY],
+  );
+  assert(fundedPlans.length >= 1, "block-scan binding: live funding should admit plan");
+  assert(
+    fundedPlans[0].flashAdapterId === "morpho-flash",
+    `block-scan binding: expected live provider, got ${fundedPlans[0].flashAdapterId}`,
+  );
+  assert(
+    fundedPlans[0].maxFlashAmount === 1_234n,
+    `block-scan binding: expected funding cap, got ${fundedPlans[0].maxFlashAmount}`,
+  );
+  const fundedOpportunity = fundedPlans[0].opportunity;
+  assert(
+    "searchSeed" in fundedOpportunity &&
+      fundedOpportunity.searchSeed.searchCenter === 1_234n &&
+      fundedOpportunity.searchSeed.maxInput === 1_234n,
+    "block-scan binding: solver domain must be capped to current-N funding",
+  );
+
+  const unfundedPlanner = new TemplatePlanner();
+  unfundedPlanner.setFlashLiquidity(fakeLiquidity([]));
+  const unfundedPlans = await unfundedPlanner.planBlockScanFromSeedEdges(
+    opp,
+    [FLASH_SWAP_REPAY],
+  );
+  assert(
+    unfundedPlans.length === 0,
+    "block-scan binding: missing current-N funding must fail closed",
+  );
   console.log("[planner] block-scan planner binding from pinned seedEdges: PASS");
 }
 
@@ -1044,6 +1080,7 @@ async function testCfgV4PoolClosesRoutingCycle(): Promise<void> {
     token0: REAL_WETH,
     token1: CFG,
     fee: 10000,
+    tickSpacing: 200,
     score: 100,
   };
   const v4Pool: PoolEntry = {

@@ -6,7 +6,7 @@ import {
 import type { TokenEdge } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 const BLOCK = 25_535_037;
 const UNIT = 10n ** 18n;
@@ -76,9 +76,14 @@ function scan(protocolMids?: ReadonlyMap<string, ProtocolMid>) {
   });
 }
 
-const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.forEdge("metronome-hgusdc-exit");
-assert(adapter.readMid !== null, "hGUSDC adapter must expose a sync prewarmed mid reader");
-assert(adapter.warm?.kind === "protocol-mid", "hGUSDC adapter must request protocol-mid prewarm");
+const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().forEdge("metronome-hgusdc-exit");
+const pricingAdapter = PRODUCTION_ADAPTER_FAMILIES.protocols().find(
+  (candidate) => candidate.id === adapter.id,
+);
+assert(
+  pricingAdapter?.pricingState !== null && pricingAdapter?.pricingState !== undefined,
+  "hGUSDC adapter must expose family-owned current-N pricing state",
+);
 
 const beforeWarm = scan();
 assert(

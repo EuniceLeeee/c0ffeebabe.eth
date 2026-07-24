@@ -20,10 +20,18 @@
  */
 
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import {
+  withStateCallControl,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
 import type { Opportunity } from "../detector/detector.js";
+import {
+  BlockScanFamilyAttributedError,
+  blockScanAttributedFailureFamilyId,
+} from "../detector/blockscan-family-budget.js";
 import type { CandidatePlan } from "../planner/planner.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
 import {
   propagateAmounts,
@@ -64,6 +72,12 @@ export interface SolveOptions {
    *  best-so-far is returned. Default Infinity (unbounded) for offline/regression
    *  use; live wires SEARCHER_SOLVER_DEADLINE_MS. (v7 AC-3a.3) */
   deadlineMs?: number;
+  /** Optional caller-owned absolute wall-clock deadline. When both deadline
+   *  forms are present, the earlier boundary wins. */
+  deadlineAtMs?: number;
+  /** Caller cancellation. The solver links it to the same signal used by every
+   *  nested state read and returns even when a family ignores cancellation. */
+  signal?: AbortSignal;
   /** GSS evaluation hard cap per fluidDebtBps. Default 12. (v7 AC-3a.1) */
   gssMaxTries?: number;
   /** Geometric grid doublings each side of the victim-anchored center. Default 3. */
@@ -86,6 +100,12 @@ export interface SolveOptions {
    *  Live local-victim-apply uses this to keep revm victim overlay out of the
    *  hot quote/search path; the caller must run final sim before submit. */
   deferPhase2Sim?: boolean;
+  /**
+   * Optional phase boundary for callers that must preserve the full top-N
+   * fallback set while running final simulation later. Without this callback,
+   * deferred mode retains its historical first-candidate return behavior.
+   */
+  onDeferredCandidates?: (candidates: readonly ResolvedPlan[]) => void;
   /** Optional per-call timing sink. Reset at solve entry and updated before
    *  returns or throws, so callers can account for rejected solver attempts. */
   timing?: SolverTiming;
@@ -107,6 +127,50 @@ interface QuoteCandidate {
   flashAmount: bigint;
   fluidDebtBps: bigint;
   quoteProfit: bigint;
+}
+
+interface FailureAttribution {
+  familyId: string | undefined;
+  ambiguous: boolean;
+  count: number;
+}
+
+function newFailureAttribution(): FailureAttribution {
+  return { familyId: undefined, ambiguous: false, count: 0 };
+}
+
+function recordFailureAttribution(
+  attribution: FailureAttribution,
+  error: unknown,
+): void {
+  attribution.count++;
+  const familyId = blockScanAttributedFailureFamilyId(error);
+  if (!familyId) {
+    attribution.ambiguous = true;
+    return;
+  }
+  if (attribution.familyId === undefined) {
+    attribution.familyId = familyId;
+  } else if (attribution.familyId !== familyId) {
+    attribution.ambiguous = true;
+  }
+}
+
+function terminalSolveError(
+  error: Error,
+  attribution: FailureAttribution,
+): Error {
+  return (
+      attribution.count > 0 &&
+      !attribution.ambiguous &&
+      attribution.familyId !== undefined
+    )
+    ? new BlockScanFamilyAttributedError(
+        attribution.familyId,
+        "solver",
+        error,
+      )
+    : error;
 }
 
 function newV4QuotePathStats(): V4QuotePathStats {
@@ -133,7 +197,12 @@ export class AnvilSolver implements Solver {
     probe: SolverProbe,
     opts: SolveOptions = {},
   ): Promise<ResolvedPlan> {
-    const deadlineMs = opts.deadlineMs ?? Infinity;
+    const startedAt = Date.now();
+    const solverControl = createSolverControl(startedAt, opts);
+    return solverControl.run(async () => {
+    const deadlineMs = solverControl.deadlineAtMs === Number.POSITIVE_INFINITY
+      ? Infinity
+      : Math.max(0, solverControl.deadlineAtMs - startedAt);
     const gssMaxTries = opts.gssMaxTries ?? 12;
     const gridHalfWidth = opts.gridHalfWidth ?? 3;
     const finalSimTopN = opts.finalSimTopN ?? 3;
@@ -143,21 +212,36 @@ export class AnvilSolver implements Solver {
       BigInt(process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (process.env.SEARCHER_DRY_RUN === "1" ? "20" : "0"));
     const deferPhase2Sim = opts.deferPhase2Sim ?? false;
     const debugQuotes = process.env.SEARCHER_SOLVER_DEBUG_QUOTES === "1";
-    const startedAt = Date.now();
-    const pastDeadline = (): boolean => Date.now() - startedAt >= deadlineMs;
+    const controlledState = solverControl.active
+      ? withStateCallControl(state, {
+          deadlineAtMs: Number.isFinite(solverControl.deadlineAtMs)
+            ? solverControl.deadlineAtMs
+            : undefined,
+          signal: solverControl.signal,
+        })
+      : state;
+    const controlledQuoteSource = opts.quoteSource && solverControl.active
+      ? controlledAmountQuoteSource(opts.quoteSource, solverControl)
+      : opts.quoteSource;
+    const pastDeadline = (): boolean =>
+      solverControl.signal.aborted ||
+      Date.now() >= solverControl.deadlineAtMs;
     const timing = opts.timing;
     if (timing) {
       timing.quoteMs = 0;
       timing.simMs = 0;
       if (timing.otherMs !== undefined) timing.otherMs = 0;
     }
-    const timed = async <T>(bucket: "quoteMs" | "simMs", fn: () => Promise<T>): Promise<T> => {
-      if (!timing) return fn();
+    const timed = async <T>(
+      bucket: "quoteMs" | "simMs",
+      label: string,
+      fn: () => Promise<T>,
+    ): Promise<T> => {
       const timingStarted = Date.now();
       try {
-        return await fn();
+        return await runSolverOperation(solverControl, label, fn);
       } finally {
-        timing[bucket] += Date.now() - timingStarted;
+        if (timing) timing[bucket] += Date.now() - timingStarted;
       }
     };
     const v4QuoteStats = debugQuotes ? newV4QuotePathStats() : undefined;
@@ -178,10 +262,10 @@ export class AnvilSolver implements Solver {
     // token. The detector stores victimAmountIn in the victim tokenIn units;
     // live opportunities often flash tokenOut (for example WETH), so using the
     // raw 6-decimal stable amount as wei would collapse the grid to dust.
-    const rawCenter = await timed("quoteMs", () =>
-      resolveSearchCenter(plan, flashToken, state, {
+    const rawCenter = await timed("quoteMs", "search-center quote", () =>
+      resolveSearchCenter(plan, flashToken, controlledState, {
         cache: opts.cache,
-        quoteSource: opts.quoteSource,
+        quoteSource: controlledQuoteSource,
         v4QuoteStats,
         shouldStop: pastDeadline,
       }),
@@ -202,6 +286,8 @@ export class AnvilSolver implements Solver {
     // profit is just (final amount back in flashToken) − flashAmount. Each
     // evaluation is a handful of eth_call quotes, cheap enough to search widely.
     const scored: QuoteCandidate[] = [];
+    const quoteFailures = newFailureAttribution();
+    let completedQuote = false;
     let quoteCount = 0;
     let lastFailure = "quotes completed but no profitable amount";
     let bestObserved: { flashAmount: bigint; fluidDebtBps: bigint; profit: bigint; amounts: bigint[] } | null = null;
@@ -212,20 +298,22 @@ export class AnvilSolver implements Solver {
       quoteCount++;
       let amounts: bigint[];
       try {
-        amounts = await timed("quoteMs", () =>
-          propagateAmounts(plan.tokenPath, flashAmount, state, {
+        amounts = await timed("quoteMs", "amount quote propagation", () =>
+          propagateAmounts(plan.tokenPath, flashAmount, controlledState, {
             fluidDebtBps,
             cache: opts.cache,
-            quoteSource: opts.quoteSource,
+            quoteSource: controlledQuoteSource,
             v4QuoteStats,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
         );
       } catch (err) {
+        recordFailureAttribution(quoteFailures, err);
         lastFailure = `quote failed: ${err instanceof Error ? err.message : String(err)}`;
         return FAIL_SCORE;
       }
+      completedQuote = true;
       const profit = amounts[amounts.length - 1] - flashAmount;
       if (!bestObserved || profit > bestObserved.profit) {
         bestObserved = { flashAmount, fluidDebtBps, profit, amounts };
@@ -236,7 +324,7 @@ export class AnvilSolver implements Solver {
       return profit;
     };
 
-    for (const fluidDebtBps of fluidDebtBpsCandidates(plan)) {
+    for (const fluidDebtBps of creditDebtBpsCandidates(plan)) {
       if (pastDeadline()) {
         lastFailure = `deadline ${deadlineMs}ms reached during quote search`;
         break;
@@ -280,9 +368,10 @@ export class AnvilSolver implements Solver {
         logBestObservedQuote(plan, bestObserved, center, quoteSafetyBps);
       }
       logV4QuoteStatsOnce("no-profitable");
-      throw new Error(
+      const error = new Error(
         `no profitable plan (quote search ${quoteCount} pts, center=${center}): ${lastFailure}`,
       );
+      throw completedQuote ? error : terminalSolveError(error, quoteFailures);
     }
 
     // ── Phase 2: full BotVM simulate on the top-N quote candidates ─
@@ -328,6 +417,8 @@ export class AnvilSolver implements Solver {
 
     let best: ResolvedPlan | null = null;
     let bestProfit = FAIL_SCORE;
+    const deferredCandidates: ResolvedPlan[] = [];
+    const phase2Failures = newFailureAttribution();
     for (const cand of ranked) {
       if (pastDeadline()) {
         lastFailure = `deadline ${deadlineMs}ms reached before sim`;
@@ -336,11 +427,11 @@ export class AnvilSolver implements Solver {
       let amounts: bigint[];
       let rawOutputs: bigint[];
       try {
-        const propagated = await timed("simMs", () =>
-          propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, state, {
+        const propagated = await timed("simMs", "final amount propagation", () =>
+          propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, controlledState, {
             fluidDebtBps: cand.fluidDebtBps,
             cache: opts.cache,
-            quoteSource: opts.quoteSource,
+            quoteSource: controlledQuoteSource,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
           }),
@@ -348,6 +439,7 @@ export class AnvilSolver implements Solver {
         amounts = propagated.amounts;
         rawOutputs = propagated.rawOutputs;
       } catch (err) {
+        recordFailureAttribution(phase2Failures, err);
         lastFailure = `propagation failed: ${err instanceof Error ? err.message : String(err)}`;
         console.log(`[searcher/ac3] solver:   propagation ${lastFailure.slice(0, 200)}`);
         continue;
@@ -366,20 +458,21 @@ export class AnvilSolver implements Solver {
 
         let resolvedNode: ResolvedPlanNode;
         try {
-          resolvedNode = await timed("simMs", () =>
+          resolvedNode = await timed("simMs", "family plan build", () =>
             buildResolvedPlanFromPath(
               plan.tokenPath,
               flashToken,
               cand.flashAmount,
               amounts,
               executor,
-              state,
+              controlledState,
               targetNetProfit,
               flashAdapterId,
               rawOutputs,
             ),
           );
         } catch (err) {
+          recordFailureAttribution(phase2Failures, err);
           lastFailure = `build failed: ${err instanceof Error ? err.message : String(err)}`;
           console.log(`[searcher/ac3] solver:   build ${lastFailure.slice(0, 200)}`);
           continue;
@@ -396,14 +489,24 @@ export class AnvilSolver implements Solver {
           console.log(
             `[searcher/ac3] solver:   deferred sim, quoteProfit=${cand.quoteProfit}`,
           );
-          return candidate;
+          if (!opts.onDeferredCandidates) return candidate;
+          deferredCandidates.push(candidate);
+          continue;
         }
         if (pastDeadline()) {
           lastFailure = `deadline ${deadlineMs}ms reached before sim`;
           break;
         }
-        const sim = await timed("simMs", () => probe.simulate(candidate));
+        const sim = await timed(
+          "simMs",
+          "final simulation",
+          () => probe.simulate(candidate),
+        );
         if (!sim.success) {
+          recordFailureAttribution(
+            phase2Failures,
+            new Error(sim.revertReason ?? "simulation failed"),
+          );
           lastFailure = sim.revertReason ?? "simulation failed";
           console.log(`[searcher/ac3] solver:   sim rejected: ${lastFailure.slice(0, 200)}`);
           continue;
@@ -418,13 +521,148 @@ export class AnvilSolver implements Solver {
       }
     }
 
+    if (deferPhase2Sim && deferredCandidates.length > 0) {
+      const frozen = Object.freeze([...deferredCandidates]);
+      opts.onDeferredCandidates?.(frozen);
+      return frozen[0];
+    }
     if (!best) {
-      throw new Error(
+      throw terminalSolveError(new Error(
         `no profitable plan (sim'd top-${ranked.length} amounts x ${adapters.length} flash): ${lastFailure}`,
-      );
+      ), phase2Failures);
     }
     return best;
+    });
   }
+}
+
+interface SolverControl {
+  readonly active: boolean;
+  readonly deadlineAtMs: number;
+  readonly signal: AbortSignal;
+  run<T>(work: () => Promise<T>): Promise<T>;
+}
+
+function createSolverControl(
+  startedAtMs: number,
+  opts: Pick<SolveOptions, "deadlineMs" | "deadlineAtMs" | "signal">,
+): SolverControl {
+  const relativeDeadlineAtMs = opts.deadlineMs === undefined ||
+      !Number.isFinite(opts.deadlineMs)
+    ? Number.POSITIVE_INFINITY
+    : startedAtMs + Math.max(0, opts.deadlineMs);
+  const requestedAbsoluteDeadline = opts.deadlineAtMs ?? Number.POSITIVE_INFINITY;
+  const deadlineAtMs = Math.min(relativeDeadlineAtMs, requestedAbsoluteDeadline);
+  const active = Number.isFinite(deadlineAtMs) || opts.signal !== undefined;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const abortFromCaller = (): void => {
+    if (!controller.signal.aborted) {
+      controller.abort(new SolverControlError("solver aborted by caller", {
+        cause: opts.signal?.reason,
+      }));
+    }
+  };
+  opts.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  if (opts.signal?.aborted) abortFromCaller();
+
+  if (Number.isFinite(deadlineAtMs) && !controller.signal.aborted) {
+    const remainingMs = deadlineAtMs - Date.now();
+    if (remainingMs <= 0) {
+      controller.abort(new SolverControlError("solver absolute deadline reached"));
+    } else {
+      timer = setTimeout(
+        () => controller.abort(
+          new SolverControlError("solver absolute deadline reached"),
+        ),
+        remainingMs,
+      );
+    }
+  }
+
+  return {
+    active,
+    deadlineAtMs,
+    signal: controller.signal,
+    async run<T>(work: () => Promise<T>): Promise<T> {
+      try {
+        if (this.signal.aborted) {
+          throw solverControlError(this.signal, "solve");
+        }
+        // Every asynchronous quote/build/sim boundary below is raced against
+        // this control. Await the orchestration itself so it fully unwinds
+        // before solve() returns; ignored late family results cannot mutate a
+        // caller that has already reused the worker.
+        return await work();
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        opts.signal?.removeEventListener("abort", abortFromCaller);
+      }
+    },
+  };
+}
+
+function controlledAmountQuoteSource(
+  source: AmountQuoteSource,
+  control: SolverControl,
+): AmountQuoteSource {
+  return {
+    quote: (request) =>
+      runSolverOperation(control, "prepared quote", () => source.quote(request)),
+  };
+}
+
+function runSolverOperation<T>(
+  control: SolverControl,
+  label: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  if (!control.active) return work();
+  if (control.signal.aborted) {
+    return Promise.reject(solverControlError(control.signal, label));
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (settle: () => void): void => {
+      if (settled) return;
+      settled = true;
+      control.signal.removeEventListener("abort", abort);
+      settle();
+    };
+    const abort = (): void =>
+      finish(() => reject(solverControlError(control.signal, label)));
+    control.signal.addEventListener("abort", abort, { once: true });
+    if (control.signal.aborted) {
+      abort();
+      return;
+    }
+    Promise.resolve()
+      .then(work)
+      .then(
+        (value) => finish(() => resolve(value)),
+        (error) => finish(() => reject(error)),
+      );
+  });
+}
+
+class SolverControlError extends Error {
+  readonly code = "SOLVER_CONTROL_ABORTED";
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "SolverControlError";
+  }
+}
+
+function solverControlError(
+  signal: AbortSignal,
+  label: string,
+): SolverControlError {
+  return new SolverControlError(
+    `${signal.reason instanceof Error ? signal.reason.message : "solver aborted"} during ${label}`,
+    { cause: signal.reason },
+  );
 }
 
 function flashAdapterIds(plan: CandidatePlan): string[] {
@@ -468,11 +706,15 @@ function capGrid(grid: bigint[], max: bigint | null): bigint[] {
   return out;
 }
 
-function fluidDebtBpsCandidates(
+function creditDebtBpsCandidates(
   plan: { tokenPath: { edges: { adapterId: string }[] } },
 ): bigint[] {
-  if (!plan.tokenPath.edges.some((edge) => edge.adapterId === "fluid-vault")) return [0n];
-  return [8500n, 9500n, 10000n, 10400n, 10800n, 11200n];
+  for (const family of PRODUCTION_ADAPTER_FAMILIES.credits()) {
+    if (plan.tokenPath.edges.some((edge) => family.edgeAdapterIds.includes(edge.adapterId))) {
+      return [...family.creditPolicy.debtBpsCandidates];
+    }
+  }
+  return [0n];
 }
 
 function pathSummary(path: { edges: { adapterId: string; tokenIn: string; tokenOut: string }[] }): string {
@@ -574,8 +816,12 @@ export async function resolveSearchCenter(
 }
 
 function prefixCanBeInverted(plan: CandidatePlan, reverseImpactIndex: number): boolean {
-  return !plan.tokenPath.edges.slice(0, reverseImpactIndex)
-    .some((edge) => edge.adapterId === "fluid-vault");
+  const prefix = plan.tokenPath.edges.slice(0, reverseImpactIndex);
+  return !PRODUCTION_ADAPTER_FAMILIES.credits().some(
+    (family) =>
+      family.creditPolicy.blocksPrefixInversion &&
+      prefix.some((edge) => family.edgeAdapterIds.includes(edge.adapterId)),
+  );
 }
 
 function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpact): number {
@@ -589,8 +835,8 @@ function findReverseImpactEdgeIndex(plan: CandidatePlan, impact: OpportunityImpa
 }
 
 function findImpactV4PoolKey(plan: CandidatePlan, impact: OpportunityImpact): V4PoolKey | undefined {
-  if (impact.matchedAdapterId !== "univ4-unlock") return undefined;
-  return plan.tokenPath.edges.find((edge) =>
+  if (!impact.poolId) return undefined;
+  return plan.tokenPath?.edges.find((edge) =>
     sameAddress(edge.target, impact.pool) &&
     edge.v4PoolKey !== undefined &&
     sameV4Pool(edge.poolId, impact.poolId) &&

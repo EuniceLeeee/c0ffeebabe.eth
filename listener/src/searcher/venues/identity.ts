@@ -19,21 +19,23 @@ import {
 } from "./admission.js";
 import type { PoolEntry } from "../planner/token-graph.js";
 import { findV2LineageByFactory } from "./v2-lineage.js";
+import {
+  isKnownVenueIdentitySource,
+  isKnownVenueId,
+  isNonemptyRegistryId,
+  VENUE_IDENTITY_SOURCES,
+  type KnownVenueIdentitySource,
+  type VenueIdentitySource,
+} from "./registry-ids.js";
 export { CURVE_METAREGISTRY } from "./curve-underlying.js";
+export {
+  VENUE_IDENTITY_SOURCES,
+  type VenueIdentitySource,
+} from "./registry-ids.js";
 
-export type VenueIdentitySource =
-  | "factory-call"
-  | "factory-call-provisional"
-  | "factory-event"
-  | "curve-metaregistry"
-  | "curve-metaregistry-underlying"
-  | "curve-underlying-provisional"
-  | "v4-manager"
-  | "balancer-v3-vault"
-  | "dodo-factory-registry"
-  | "erc4626-standard"
-  | "eigenpie-compatible-call-surface"
-  | "seed";
+export function isVenueIdentitySource(value: unknown): value is KnownVenueIdentitySource {
+  return isKnownVenueIdentitySource(value);
+}
 
 export interface VenueIdentityMetadata {
   venueId?: VenueId;
@@ -68,6 +70,9 @@ export type IdentityResolverDescriptor =
       readonly poolAdapter: PoolEntry["adapter"];
       readonly policy: "onchain-resolver";
       readonly resolve: OnchainIdentityResolver;
+      /** Custom IDs owned by this policy; known fast-path IDs need no redeclaration. */
+      readonly registeredVenueIds?: readonly VenueId[];
+      readonly registeredIdentitySources?: readonly VenueIdentitySource[];
       readonly legacyReason?: string;
     }
   | {
@@ -76,6 +81,9 @@ export type IdentityResolverDescriptor =
       readonly canonicalAddress?: string;
       readonly canonicalVenueId?: VenueId;
       readonly canonicalIdentitySource?: VenueIdentitySource;
+      /** Custom IDs owned by this policy; known fast-path IDs need no redeclaration. */
+      readonly registeredVenueIds?: readonly VenueId[];
+      readonly registeredIdentitySources?: readonly VenueIdentitySource[];
       readonly legacyReason?: string;
     };
 
@@ -88,7 +96,10 @@ export class IdentityResolverRegistry {
     isRoutePoolSupported: (poolAdapter: PoolEntry["adapter"]) => boolean,
   ) {
     this.isRoutePoolSupported = isRoutePoolSupported;
+    const registeredVenueIds = new Set<string>();
+    const registeredIdentitySources = new Set<string>();
     for (const descriptor of descriptors) {
+      assertDescriptorIds(descriptor, registeredVenueIds, registeredIdentitySources);
       if (this.byPoolAdapter.has(descriptor.poolAdapter)) {
         throw new Error(
           `identity resolver registry: duplicate identity policy ${descriptor.poolAdapter}`,
@@ -112,6 +123,147 @@ export class IdentityResolverRegistry {
 
   supportsRoutePool(poolAdapter: string): boolean {
     return this.isRoutePoolSupported(poolAdapter as PoolEntry["adapter"]);
+  }
+
+  async resolveOnchain(
+    descriptor: Extract<IdentityResolverDescriptor, { policy: "onchain-resolver" }>,
+    context: OnchainIdentityResolverContext,
+  ): Promise<PoolIdentityResult> {
+    return this.validateResolution(descriptor, await descriptor.resolve(context));
+  }
+
+  validateResolution(
+    descriptor: IdentityResolverDescriptor,
+    result: PoolIdentityResult,
+  ): PoolIdentityResult {
+    if (!result.ok) {
+      if (result.venueId !== undefined) {
+        this.validateMetadata(descriptor, result.venueId);
+      }
+      return result;
+    }
+    if (!this.supportsRoutePool(result.adapter)) {
+      throw new Error(
+        `identity resolver registry: ${descriptor.poolAdapter} emitted unregistered pool adapter ` +
+          result.adapter,
+      );
+    }
+    this.validateMetadata(descriptor, result.venueId, result.identitySource);
+    return result;
+  }
+
+  validateMetadata(
+    descriptor: IdentityResolverDescriptor,
+    venueId: VenueId,
+    identitySource?: VenueIdentitySource,
+  ): void {
+    assertOwnedIdentityId(
+      descriptor,
+      "venue",
+      venueId,
+      isKnownVenueId,
+      descriptor.registeredVenueIds ?? [],
+    );
+    if (identitySource === undefined) return;
+    assertOwnedIdentityId(
+      descriptor,
+      "identity source",
+      identitySource,
+      isKnownVenueIdentitySource,
+      descriptor.registeredIdentitySources ?? [],
+    );
+  }
+}
+
+function assertDescriptorIds(
+  descriptor: IdentityResolverDescriptor,
+  registeredVenueIds: Set<string>,
+  registeredIdentitySources: Set<string>,
+): void {
+  if (!isNonemptyRegistryId(descriptor.poolAdapter)) {
+    throw new Error("identity resolver registry: empty pool adapter id");
+  }
+  assertRegisteredIds(
+    descriptor,
+    "venue",
+    descriptor.registeredVenueIds ?? [],
+    isKnownVenueId,
+    registeredVenueIds,
+  );
+  assertRegisteredIds(
+    descriptor,
+    "identity source",
+    descriptor.registeredIdentitySources ?? [],
+    isKnownVenueIdentitySource,
+    registeredIdentitySources,
+  );
+  if (descriptor.policy !== "trusted-singleton-seed") return;
+  if (descriptor.canonicalVenueId !== undefined) {
+    assertOwnedIdentityId(
+      descriptor,
+      "venue",
+      descriptor.canonicalVenueId,
+      isKnownVenueId,
+      descriptor.registeredVenueIds ?? [],
+    );
+  }
+  if (descriptor.canonicalIdentitySource !== undefined) {
+    assertOwnedIdentityId(
+      descriptor,
+      "identity source",
+      descriptor.canonicalIdentitySource,
+      isKnownVenueIdentitySource,
+      descriptor.registeredIdentitySources ?? [],
+    );
+  }
+}
+
+function assertRegisteredIds(
+  descriptor: IdentityResolverDescriptor,
+  kind: string,
+  values: readonly string[],
+  isKnown: (value: unknown) => boolean,
+  global: Set<string>,
+): void {
+  const local = new Set<string>();
+  for (const value of values) {
+    if (!isNonemptyRegistryId(value)) {
+      throw new Error(
+        `identity resolver registry: ${descriptor.poolAdapter} has empty ${kind} id`,
+      );
+    }
+    if (isKnown(value)) {
+      throw new Error(
+        `identity resolver registry: ${descriptor.poolAdapter} redeclares known ${kind} ${value}`,
+      );
+    }
+    if (local.has(value) || global.has(value)) {
+      throw new Error(
+        `identity resolver registry: duplicate registered ${kind} ${value}`,
+      );
+    }
+    local.add(value);
+    global.add(value);
+  }
+}
+
+function assertOwnedIdentityId(
+  descriptor: IdentityResolverDescriptor,
+  kind: string,
+  value: string,
+  isKnown: (value: unknown) => boolean,
+  registered: readonly string[],
+): void {
+  if (!isNonemptyRegistryId(value)) {
+    throw new Error(
+      `identity resolver registry: ${descriptor.poolAdapter} emitted empty ${kind} id`,
+    );
+  }
+  if (!isKnown(value) && !registered.includes(value)) {
+    throw new Error(
+      `identity resolver registry: ${descriptor.poolAdapter} emitted unregistered ` +
+        `${kind} ${value}`,
+    );
   }
 }
 
@@ -150,10 +302,23 @@ export type PoolIdentityFailureReason =
   | "behavior_mismatch"
   | "untrusted_seed";
 
+/**
+ * Transport/read failures carry no negative identity proof and must remain
+ * retryable. Every other reason above is a completed, fail-closed identity
+ * decision for the current runtime configuration.
+ */
+export function isRetryablePoolIdentityFailure(
+  reason: PoolIdentityFailureReason,
+): boolean {
+  return reason === "identity_call_failed";
+}
+
 export interface IdentityPoolEntry extends VenueIdentityMetadata {
   address: string;
   adapter: string;
   logicalInstanceId?: string;
+  token0?: string;
+  token1?: string;
   fixedTokenIn?: string;
   fixedTokenOut?: string;
 }
@@ -308,7 +473,7 @@ export async function resolvePoolIdentity(
   const policy = options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION;
   const descriptor = options.identityRegistry.forPool(adapter);
   if (descriptor.policy === "onchain-resolver") {
-    return descriptor.resolve({
+    return options.identityRegistry.resolveOnchain(descriptor, {
       backend,
       pool,
       poolAdapter: descriptor.poolAdapter,
@@ -317,7 +482,10 @@ export async function resolvePoolIdentity(
       isPoolAdapterSupported: (candidate) => options.identityRegistry.supportsRoutePool(candidate),
     });
   }
-  return resolveTrustedSingleton(descriptor, pool);
+  return options.identityRegistry.validateResolution(
+    descriptor,
+    resolveTrustedSingleton(descriptor, pool),
+  );
 }
 
 export function createPoolIdentityCache(): PoolIdentityCache {
@@ -344,7 +512,10 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
     const descriptor = options.identityRegistry.forPool(pool.adapter);
     if (descriptor.policy === "trusted-singleton-seed") {
       if (descriptor.canonicalAddress !== undefined) {
-        const resolved = resolveTrustedSingleton(descriptor, pool.address);
+        const resolved = options.identityRegistry.validateResolution(
+          descriptor,
+          resolveTrustedSingleton(descriptor, pool.address),
+        );
         if (!resolved.ok) {
           return {
             accepted: null,
@@ -369,10 +540,14 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
         };
       }
       const capability = findVenueBySeed(seed.address);
+      const venueId = capability?.venue ?? seed.venueId;
+      if (venueId !== undefined) {
+        options.identityRegistry.validateMetadata(descriptor, venueId, "seed");
+      }
       return {
         accepted: {
           ...pool,
-          venueId: capability?.venue ?? seed.venueId,
+          venueId,
           identitySource: "seed" as VenueIdentitySource,
         },
         rejected: null,
@@ -430,7 +605,7 @@ function cachedResolution(
   let pending = cache.resolutions.get(key);
   if (!pending) {
     const pool = ethers.getAddress(candidate.address);
-    pending = descriptor.resolve({
+    pending = identityRegistry.resolveOnchain(descriptor, {
       backend,
       pool,
       poolAdapter: descriptor.poolAdapter,
@@ -452,6 +627,8 @@ function identityResolutionKey(
     ethers.getAddress(candidate.address).toLowerCase(),
     descriptor.poolAdapter,
     candidate.logicalInstanceId ?? null,
+    candidate.token0?.toLowerCase() ?? null,
+    candidate.token1?.toLowerCase() ?? null,
     candidate.fixedTokenIn?.toLowerCase() ?? null,
     candidate.fixedTokenOut?.toLowerCase() ?? null,
     allowProvisionalFactories(admissionPolicy),

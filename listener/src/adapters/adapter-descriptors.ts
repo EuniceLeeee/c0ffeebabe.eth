@@ -1,11 +1,13 @@
 import type { EdgeKind } from "../searcher/strategy-taxonomy.js";
-import { FLASH_PROVIDER_DESCRIPTORS } from "./flash-providers.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../searcher/venues/production-registry.js";
+import type { FundingLineageId } from "../searcher/venues/funding/funding-capability.js";
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"
   | "psm" | "erc4626" | "goldx" | "rocksolid" | "wsteth" | "metronome" | "weth"
   | "eigenpie"
-  | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra";
+  | "fluid-credit" | "fluid-dex" | "balancer-v3" | "dodo-v2" | "erc20-infra"
+  | FundingLineageId;
 
 /** Descriptor action vocabulary: superset covering all edge kinds. Do not reuse ProtocolAction. */
 export type AdapterAction =
@@ -22,9 +24,9 @@ export interface AdapterDescriptor {
 }
 
 const FLASH_ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = Object.fromEntries(
-  FLASH_PROVIDER_DESCRIPTORS.map((descriptor) => [descriptor.adapterId, {
-    adapterId: descriptor.adapterId,
-    lineage: descriptor.lineage,
+  PRODUCTION_ADAPTER_FAMILIES.funding().map((family) => [family.funding.actionAdapterId, {
+    adapterId: family.funding.actionAdapterId,
+    lineage: family.funding.lineage,
     edgeKind: "flash",
     action: "flash",
     canSendValue: false,
@@ -63,22 +65,6 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     leavesStandingPositionDefault: false,
   },
   ...FLASH_ADAPTER_DESCRIPTORS,
-  "curve-exchange": {
-    adapterId: "curve-exchange",
-    lineage: "curve",
-    edgeKind: "swap",
-    action: "swap",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
-  "curve-exchange-nr": {
-    adapterId: "curve-exchange-nr",
-    lineage: "curve",
-    edgeKind: "swap",
-    action: "swap",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
   "curve-exchange-plain": {
     adapterId: "curve-exchange-plain",
     lineage: "curve",
@@ -95,22 +81,6 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     canSendValue: false,
     leavesStandingPositionDefault: false,
   },
-  "curve-exchange-received-uint": {
-    adapterId: "curve-exchange-received-uint",
-    lineage: "curve",
-    edgeKind: "swap",
-    action: "swap",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
-  "curve-router-execute-path": {
-    adapterId: "curve-router-execute-path",
-    lineage: "curve",
-    edgeKind: "swap",
-    action: "swap",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
   "metronome-hgusdc-exit": {
     adapterId: "metronome-hgusdc-exit",
     lineage: "metronome",
@@ -121,22 +91,6 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
   },
   "univ2-swap": {
     adapterId: "univ2-swap",
-    lineage: "univ2",
-    edgeKind: "swap",
-    action: "swap",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
-  "univ2-router-swap-exact-in": {
-    adapterId: "univ2-router-swap-exact-in",
-    lineage: "univ2",
-    edgeKind: "swap",
-    action: "swap",
-    canSendValue: false,
-    leavesStandingPositionDefault: false,
-  },
-  "univ2-router-swap-exact-in-alt": {
-    adapterId: "univ2-router-swap-exact-in-alt",
     lineage: "univ2",
     edgeKind: "swap",
     action: "swap",
@@ -349,14 +303,6 @@ export const ADAPTER_DESCRIPTORS: Record<string, AdapterDescriptor> = {
     edgeKind: "protocol",
     action: "wrap",
     canSendValue: true,
-    leavesStandingPositionDefault: false,
-  },
-  "weth-withdraw": {
-    adapterId: "weth-withdraw",
-    lineage: "weth",
-    edgeKind: "protocol",
-    action: "unwrap",
-    canSendValue: false,
     leavesStandingPositionDefault: false,
   },
   "weth-withdraw-amount": {

@@ -1,0 +1,2347 @@
+import {
+  blockScanEdgeKey,
+  blockScanStateKey,
+  deterministicHash,
+  exactSetHash,
+  mutationQueryDescriptorFingerprint,
+  stateSchemaFingerprint,
+  verifiedGraphCompletenessIssueDetails,
+  type BlockSource,
+  type BlockScanPricingLane,
+  type CanonicalMutationRange,
+  type CompiledBlockScanStateFamily,
+  type FamilyMutationClassification,
+  type MutationQueryDescriptor,
+  type PublishedStateKey,
+  type RegisteredBlockScanStateFamily,
+  type StateFreshnessProof,
+  type StateKeyCoverage,
+  type StateRead,
+  type StateReadFailureKind,
+  type StateReadProvenance,
+  type StateReadResult,
+  type VerifiedGraphView,
+} from "./venues/blockscan-state-capability.js";
+import type { TokenEdge } from "./planner/token-graph.js";
+import type { RouteVenueMid } from "./venues/mid-readers.js";
+
+export interface BlockScanStateReadBackend {
+  readBatch(
+    lane: BlockScanPricingLane,
+    reads: readonly StateRead[],
+    control: {
+      readonly sourceBlock: number;
+      readonly sourceBlockHash: string;
+      readonly sourceGeneration: number;
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<readonly StateReadResult[]>;
+
+  verifyCanonicalSource(source: BlockSource, signal: AbortSignal): Promise<void>;
+
+  /**
+   * EIP-1898 is self-authenticating through requireCanonical. An immutable
+   * fork proof is backend-specific, so the coordinator accepts it only when
+   * the trusted backend explicitly verifies the fork lease.
+   */
+  verifyImmutableForkProvenance?(
+    provenance: Extract<
+      StateReadProvenance,
+      { readonly kind: "immutable-fork" }
+    >,
+    source: BlockSource,
+  ): boolean;
+
+  readCanonicalMutationRange?(
+    descriptor: MutationQueryDescriptor,
+    fromExclusive: BlockSource,
+    through: BlockSource,
+    control: {
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<CanonicalMutationRange>;
+}
+
+export interface BlockScanStateCoverage {
+  readonly expectedStateKeys: readonly string[];
+  readonly resolvedStateKeys: readonly string[];
+  readonly unresolvedStateKeys: readonly string[];
+  readonly expectedReadKeys: readonly string[];
+  readonly resolvedReadKeys: readonly string[];
+  readonly unresolvedReadKeys: readonly string[];
+  readonly expectedEdgeKeys: readonly string[];
+  readonly resolvedEdgeKeys: readonly string[];
+  readonly unavailableEdgeKeys: readonly string[];
+  readonly unresolvedEdgeKeys: readonly string[];
+  readonly expectedStateKeyHash: string;
+  readonly resolvedStateKeyHash: string;
+  readonly unresolvedStateKeyHash: string;
+  readonly expectedReadKeyHash: string;
+  readonly resolvedReadKeyHash: string;
+  readonly unresolvedReadKeyHash: string;
+  readonly expectedEdgeKeyHash: string;
+  readonly resolvedEdgeKeyHash: string;
+  readonly unavailableEdgeKeyHash: string;
+  readonly unresolvedEdgeKeyHash: string;
+}
+
+export type BlockScanStateIssueKind =
+  | "graph-incomplete"
+  | "edge-owner-missing"
+  | "edge-owner-ambiguous"
+  | "duplicate-family"
+  | "schema"
+  | "descriptor"
+  | "backend"
+  | "decode"
+  | "derive"
+  | "deadline"
+  | "aborted"
+  | "resource-limited"
+  | "stale-generation";
+
+export interface BlockScanStateIssue {
+  readonly kind: BlockScanStateIssueKind;
+  readonly lane?: BlockScanPricingLane;
+  readonly familyId?: string;
+  readonly sourceId?: string;
+  readonly stateKey?: string;
+  readonly edgeKey?: string;
+  readonly message: string;
+}
+
+export interface BlockScanLaneTelemetry {
+  readonly lane: BlockScanPricingLane;
+  readonly startedAtMs: number;
+  readonly finishedAtMs: number;
+  readonly wallMs: number;
+  readonly uniqueStateKeys: number;
+  readonly reads: number;
+  readonly batches: number;
+}
+
+export interface BlockScanStateSnapshot {
+  readonly generation: number;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly graph: VerifiedGraphView;
+  readonly mids: ReadonlyMap<string, RouteVenueMid>;
+  readonly coverageByReadKey: ReadonlyMap<string, StateKeyCoverage>;
+  readonly coverageByEdgeKey: ReadonlyMap<string, StateKeyCoverage>;
+  readonly freshnessByReadKey: ReadonlyMap<string, StateFreshnessProof>;
+  readonly stateByStateKey: ReadonlyMap<string, PublishedStateKey>;
+  readonly resolvedFamilyIds: readonly string[];
+  readonly incompleteFamilyIds: readonly string[];
+  readonly coverage: BlockScanStateCoverage;
+  readonly laneTelemetry: readonly BlockScanLaneTelemetry[];
+}
+
+interface PrepareResultBase {
+  readonly generation: number;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly coverage: BlockScanStateCoverage;
+  readonly issues: readonly BlockScanStateIssue[];
+  readonly laneTelemetry: readonly BlockScanLaneTelemetry[];
+}
+
+export interface CompleteBlockScanStateResult extends PrepareResultBase {
+  readonly status: "complete";
+  readonly snapshot: BlockScanStateSnapshot;
+}
+
+export interface DegradedBlockScanStateResult extends PrepareResultBase {
+  readonly status: "degraded";
+  readonly snapshot: BlockScanStateSnapshot;
+}
+
+export interface IncompleteBlockScanStateResult extends PrepareResultBase {
+  readonly status: "incomplete";
+  /** Partial mids are deliberately not published. */
+  readonly snapshot?: never;
+}
+
+export type BlockScanStatePrepareResult =
+  | CompleteBlockScanStateResult
+  | DegradedBlockScanStateResult
+  | IncompleteBlockScanStateResult;
+
+export interface PrepareBlockScanStateInput {
+  readonly graph: VerifiedGraphView;
+  readonly families: readonly RegisteredBlockScanStateFamily[];
+  /**
+   * Universal-registry-derived pricing projection. Credit/liquidity claims may
+   * coexist in the immutable graph without being forced into a price lane.
+   */
+  readonly requiresPricing?: (edge: TokenEdge) => boolean;
+  /**
+   * Absolute generation deadline. Each family is additionally bounded by the
+   * coordinator's shorter local timeout.
+   */
+  readonly deadlineAtMs: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface BlockScanStateCoordinatorOptions {
+  /**
+   * Hard wall-clock budget for one family across schema compilation,
+   * incremental proof reads and current-N reads. Families run concurrently;
+   * timing one out never aborts a sibling or the generation controller.
+   */
+  readonly familyTimeoutMs?: number;
+  readonly now?: () => number;
+}
+
+interface StateGroup {
+  readonly family: RegisteredBlockScanStateFamily;
+  readonly familyId: string;
+  readonly lane: BlockScanPricingLane;
+  readonly rawStateKey: string;
+  readonly stateKey: string;
+  readonly edges: readonly TokenEdge[];
+  readonly edgeKeys: readonly string[];
+}
+
+interface OwnershipPlan {
+  readonly groups: readonly StateGroup[];
+  readonly expectedStateKeys: readonly string[];
+  readonly expectedEdgeKeys: readonly string[];
+  readonly ownerIssues: readonly BlockScanStateIssue[];
+}
+
+interface LaneResult {
+  readonly lane: BlockScanPricingLane;
+  readonly resolvedStateKeys: readonly string[];
+  readonly expectedReadKeys: readonly string[];
+  readonly resolvedReadKeys: readonly string[];
+  readonly resolvedEdgeKeys: readonly string[];
+  readonly unavailableEdges: readonly BehaviorProvenUnavailableEdge[];
+  readonly mids: readonly [string, RouteVenueMid][];
+  readonly freshness: readonly [string, StateFreshnessProof][];
+  readonly states: readonly [string, PublishedStateKey][];
+  readonly issues: readonly BlockScanStateIssue[];
+  readonly telemetry: BlockScanLaneTelemetry;
+}
+
+interface BehaviorProvenUnavailableEdge {
+  readonly edgeKey: string;
+  readonly familyId: string;
+  readonly stateKey: string;
+  readonly reason: string;
+}
+
+interface FamilyLaneStaging {
+  readonly staticSchemas: Map<string, CompiledBlockScanStateFamily>;
+  readonly expectedReadKeys: Set<string>;
+  reads: number;
+  batches: number;
+}
+
+interface FamilyIncrementalPlan {
+  readonly familyId: string;
+  readonly range: CanonicalMutationRange;
+  readonly classification: FamilyMutationClassification;
+  readonly previousByStateKey: ReadonlyMap<string, PublishedStateKey>;
+}
+
+interface ActiveGeneration {
+  readonly generation: number;
+  readonly token: symbol;
+  readonly controller: AbortController;
+}
+
+const MAX_INCREMENTAL_RANGE_BLOCKS = 32;
+const DEFAULT_FAMILY_TIMEOUT_MS = 5_000;
+
+class DeadlineAbort extends Error {
+  constructor() {
+    super("block-scan state deadline reached");
+    this.name = "DeadlineAbort";
+  }
+}
+
+class SupersededAbort extends Error {
+  constructor(
+    readonly generation: number,
+    readonly supersededBy: number,
+  ) {
+    super(`generation ${generation} superseded by ${supersededBy}`);
+    this.name = "SupersededAbort";
+  }
+}
+
+class FamilyDeadlineAbort extends Error {
+  constructor(
+    readonly familyId: string,
+    readonly timeoutMs: number,
+  ) {
+    super(
+      `block-scan state family ${familyId} did not settle within ${timeoutMs}ms`,
+    );
+    this.name = "FamilyDeadlineAbort";
+  }
+}
+
+/**
+ * Shadow current-N state kernel. It owns scheduling/publication only and has
+ * no protocol switch or production side effect.
+ */
+export class BlockScanStateCoordinator {
+  private active: ActiveGeneration | null = null;
+  private published: BlockScanStateSnapshot | null = null;
+  private readonly staticSchemas = new Map<
+    string,
+    CompiledBlockScanStateFamily
+  >();
+  private readonly familyTimeoutMs: number;
+  private readonly now: () => number;
+
+  constructor(
+    private readonly backend: BlockScanStateReadBackend,
+    options: BlockScanStateCoordinatorOptions = {},
+  ) {
+    const familyTimeoutMs =
+      options.familyTimeoutMs ?? DEFAULT_FAMILY_TIMEOUT_MS;
+    if (!Number.isFinite(familyTimeoutMs) || familyTimeoutMs <= 0) {
+      throw new Error(
+        `invalid block-scan family timeout ${String(familyTimeoutMs)}`,
+      );
+    }
+    this.familyTimeoutMs = Math.max(1, Math.floor(familyTimeoutMs));
+    this.now = options.now ?? Date.now;
+  }
+
+  latestSnapshot(): BlockScanStateSnapshot | null {
+    return this.published;
+  }
+
+  /**
+   * Trusted historical blind-run hook. Dynamic source-N state is discarded
+   * between attempts while graph-fingerprint static schemas remain reusable.
+   * Production never calls this method.
+   */
+  resetDynamicStateForReplay(): void {
+    if (this.active) {
+      throw new Error("cannot reset block-scan state during an active generation");
+    }
+    this.published = null;
+  }
+
+  async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
+    const { graph } = input;
+    const ownership = buildOwnershipPlan(
+      graph,
+      input.families,
+      input.requiresPricing ?? (() => true),
+    );
+    const earlierPublished = this.published?.generation ?? -1;
+    if (graph.generation <= earlierPublished) {
+      return incompleteResult({
+        graph,
+        ownership,
+        issues: [{
+          kind: "stale-generation",
+          message: `generation ${graph.generation} is not newer than published ${earlierPublished}`,
+        }],
+      });
+    }
+    if (this.active) {
+      if (graph.generation <= this.active.generation) {
+        return incompleteResult({
+          graph,
+          ownership,
+          issues: [{
+            kind: "stale-generation",
+            message: `generation ${graph.generation} is not newer than active ${this.active.generation}`,
+          }],
+        });
+      }
+      this.active.controller.abort(
+        new SupersededAbort(this.active.generation, graph.generation),
+      );
+    }
+
+    const controller = new AbortController();
+    const token = Symbol(`blockscan-state-${graph.generation}`);
+    const active = { generation: graph.generation, token, controller };
+    this.active = active;
+    const detachExternal = linkAbortSignal(input.signal, controller);
+    const delay = input.deadlineAtMs - this.now();
+    const deadlineTimer = setTimeout(
+      () => controller.abort(new DeadlineAbort()),
+      Math.max(0, delay),
+    );
+
+    const graphIssues = verifiedGraphCompletenessIssueDetails(graph).map(
+      (issue): BlockScanStateIssue => ({
+        kind: "graph-incomplete",
+        ...(issue.familyId === undefined ? {} : { familyId: issue.familyId }),
+        ...(issue.sourceId === undefined ? {} : { sourceId: issue.sourceId }),
+        message: issue.message,
+      }),
+    );
+    const graphIncompleteFamilyIds = new Set(
+      graphIssues.flatMap((issue) =>
+        issue.familyId === undefined ? [] : [issue.familyId]
+      ),
+    );
+    try {
+      if (delay <= 0) controller.abort(new DeadlineAbort());
+      const laneGroups = {
+        swap: ownership.groups.filter(
+          (group) =>
+            group.lane === "swap" &&
+            !graphIncompleteFamilyIds.has(group.familyId),
+        ),
+        protocol: ownership.groups.filter(
+          (group) =>
+            group.lane === "protocol" &&
+            !graphIncompleteFamilyIds.has(group.familyId),
+        ),
+      } as const;
+      const [swap, protocol] = await Promise.all([
+        this.runLane(
+          "swap",
+          laneGroups.swap,
+          graph,
+          this.published,
+          input.deadlineAtMs,
+          controller.signal,
+        ),
+        this.runLane(
+          "protocol",
+          laneGroups.protocol,
+          graph,
+          this.published,
+          input.deadlineAtMs,
+          controller.signal,
+        ),
+      ]);
+      const lanes = [swap, protocol] as const;
+      let issues = [
+        ...ownership.ownerIssues,
+        ...graphIssues,
+        ...swap.issues,
+        ...protocol.issues,
+      ];
+      let resolvedStateKeys = lanes.flatMap((lane) => lane.resolvedStateKeys);
+      let resolvedReadKeys = lanes.flatMap((lane) => lane.resolvedReadKeys);
+      let resolvedEdgeKeys = lanes.flatMap((lane) => lane.resolvedEdgeKeys);
+      let unavailableEdges = lanes.flatMap((lane) => lane.unavailableEdges);
+      const expectedReadKeys = lanes.flatMap((lane) => lane.expectedReadKeys);
+      try {
+        await awaitWithAbort(
+          this.backend.verifyCanonicalSource(
+            Object.freeze({
+              number: graph.sourceBlock,
+              hash: graph.sourceBlockHash,
+              generation: graph.generation,
+            }),
+            controller.signal,
+          ),
+          controller.signal,
+        );
+      } catch (error) {
+        issues = [...issues, {
+          kind: issueKindFromError(error, "stale-generation"),
+          message: `publish-time canonical CAS failed: ${formatError(error)}`,
+        }];
+        resolvedStateKeys = [];
+        resolvedReadKeys = [];
+        resolvedEdgeKeys = [];
+        unavailableEdges = [];
+      }
+      const stillActive = this.active?.token === token && !controller.signal.aborted;
+      if (!stillActive) {
+        const abortIssue = issueFromAbort(controller.signal.reason, graph.generation);
+        issues = [...issues, abortIssue];
+        resolvedStateKeys = [];
+        resolvedReadKeys = [];
+        resolvedEdgeKeys = [];
+        unavailableEdges = [];
+      }
+      const availableFamilyIds = completePricingFamilyIds(
+        ownership.groups,
+        graphIncompleteFamilyIds,
+        {
+          expectedReadKeys,
+          resolvedStateKeys,
+          resolvedReadKeys,
+          resolvedEdgeKeys,
+          unavailableEdgeKeys: unavailableEdges.map((entry) => entry.edgeKey),
+        },
+      );
+      const availableStateKeys = new Set(
+        ownership.groups
+          .filter((group) => availableFamilyIds.has(group.familyId))
+          .map((group) => group.stateKey),
+      );
+      const availableEdgeKeys = new Set(
+        ownership.groups
+          .filter((group) => availableFamilyIds.has(group.familyId))
+          .flatMap((group) => group.edgeKeys),
+      );
+      resolvedStateKeys = resolvedStateKeys.filter(
+        (stateKey) => availableStateKeys.has(stateKey),
+      );
+      resolvedReadKeys = resolvedReadKeys.filter(
+        (readKey) => readKeyBelongsToFamilyIds(readKey, availableFamilyIds),
+      );
+      resolvedEdgeKeys = resolvedEdgeKeys.filter(
+        (edgeKey) => availableEdgeKeys.has(edgeKey),
+      );
+      unavailableEdges = unavailableEdges.filter(
+        (entry) => availableEdgeKeys.has(entry.edgeKey),
+      );
+      const coverage = createCoverage(
+        ownership.expectedStateKeys,
+        resolvedStateKeys,
+        expectedReadKeys,
+        resolvedReadKeys,
+        ownership.expectedEdgeKeys,
+        resolvedEdgeKeys,
+        unavailableEdges.map((entry) => entry.edgeKey),
+      );
+      const laneTelemetry = freezeLaneTelemetry(lanes.map((lane) => lane.telemetry));
+      const fatalIssues = issues.filter((issue) => issue.familyId === undefined);
+      if (!stillActive || fatalIssues.length > 0) {
+        return Object.freeze({
+          status: "incomplete",
+          generation: graph.generation,
+          sourceBlock: graph.sourceBlock,
+          sourceBlockHash: graph.sourceBlockHash,
+          coverage,
+          issues: freezeIssues(issues),
+          laneTelemetry,
+        });
+      }
+
+      const resolvedStateKeySet = new Set(coverage.resolvedStateKeys);
+      const resolvedReadKeySet = new Set(coverage.resolvedReadKeys);
+      const resolvedEdgeKeySet = new Set(coverage.resolvedEdgeKeys);
+      const unavailableReasonByEdgeKey = new Map(
+        unavailableEdges.map((entry) => [entry.edgeKey, entry.reason] as const),
+      );
+      const mids = new FrozenReadonlyMap(
+        lanes
+          .flatMap((lane) => lane.mids)
+          .filter(([edgeKey]) => resolvedEdgeKeySet.has(edgeKey))
+          .map(([key, mid]) => [key, freezeMid(mid)] as const)
+          .sort(([a], [b]) => a.localeCompare(b)),
+      );
+      const freshnessByReadKey = new FrozenReadonlyMap(
+        lanes
+          .flatMap((lane) => lane.freshness)
+          .filter(([readKey]) => resolvedReadKeySet.has(readKey))
+          .sort(([a], [b]) => a.localeCompare(b)),
+      );
+      const coverageByReadKey = new FrozenReadonlyMap(
+        coverage.expectedReadKeys.map((readKey) => [
+          readKey,
+          resolvedReadKeySet.has(readKey)
+            ? Object.freeze({ status: "resolved" as const })
+            : Object.freeze({
+                status: "unresolved" as const,
+                reason: "required current-block read did not reach family publication",
+              }),
+        ] as const),
+      );
+      const coverageByEdgeKey = new FrozenReadonlyMap(
+        coverage.expectedEdgeKeys.map((edgeKey) => {
+          const unavailableReason = unavailableReasonByEdgeKey.get(edgeKey);
+          return [
+            edgeKey,
+            resolvedEdgeKeySet.has(edgeKey)
+              ? Object.freeze({ status: "resolved" as const })
+              : unavailableReason
+              ? Object.freeze({
+                  status: "rejected" as const,
+                  reason: unavailableReason,
+                })
+              : Object.freeze({
+                  status: "unresolved" as const,
+                  reason:
+                    "required current-block edge did not reach family publication",
+                }),
+          ] as const;
+        }),
+      );
+      const stateByStateKey = new FrozenReadonlyMap(
+        lanes
+          .flatMap((lane) => lane.states)
+          .filter(([stateKey]) => resolvedStateKeySet.has(stateKey))
+          .sort(([a], [b]) => a.localeCompare(b)),
+      );
+      const familyIds = uniqueSorted([
+        ...ownership.groups.map((group) => group.familyId),
+        ...graphIncompleteFamilyIds,
+      ]);
+      const resolvedFamilyIds = Object.freeze(
+        familyIds.filter((familyId) =>
+          availableFamilyIds.has(familyId) &&
+          ownership.groups
+            .filter((group) => group.familyId === familyId)
+            .every((group) => resolvedStateKeySet.has(group.stateKey))
+        ),
+      );
+      const resolvedFamilySet = new Set(resolvedFamilyIds);
+      const incompleteFamilyIds = Object.freeze(
+        familyIds.filter((familyId) => !resolvedFamilySet.has(familyId)),
+      );
+      const snapshot: BlockScanStateSnapshot = Object.freeze({
+        generation: graph.generation,
+        sourceBlock: graph.sourceBlock,
+        sourceBlockHash: graph.sourceBlockHash,
+        graph,
+        mids,
+        coverageByReadKey,
+        coverageByEdgeKey,
+        freshnessByReadKey,
+        stateByStateKey,
+        resolvedFamilyIds,
+        incompleteFamilyIds,
+        coverage,
+        laneTelemetry,
+      });
+      if (this.active?.token !== token || controller.signal.aborted) {
+        return incompleteResult({
+          graph,
+          ownership,
+          issues: [issueFromAbort(controller.signal.reason, graph.generation)],
+          laneTelemetry,
+        });
+      }
+      this.published = snapshot;
+      const degraded =
+        incompleteFamilyIds.length > 0 ||
+        coverage.unresolvedStateKeys.length > 0 ||
+        coverage.unresolvedReadKeys.length > 0 ||
+        coverage.unresolvedEdgeKeys.length > 0 ||
+        issues.length > 0;
+      return Object.freeze({
+        status: degraded ? "degraded" as const : "complete" as const,
+        generation: graph.generation,
+        sourceBlock: graph.sourceBlock,
+        sourceBlockHash: graph.sourceBlockHash,
+        coverage,
+        issues: freezeIssues(issues),
+        laneTelemetry,
+        snapshot,
+      });
+    } finally {
+      clearTimeout(deadlineTimer);
+      detachExternal();
+      if (this.active?.token === token) this.active = null;
+    }
+  }
+
+  /**
+   * Incremental is an optimization, never a correctness dependency. Any
+   * missing/ambiguous proof returns no plan for that family, causing the normal
+   * direct current-N path to run for every one of its state keys.
+   */
+  private async prepareIncrementalPlans(
+    groups: readonly StateGroup[],
+    compiledFamilies: ReadonlyMap<string, CompiledBlockScanStateFamily>,
+    schemaChangedFamilies: ReadonlySet<string>,
+    previous: BlockScanStateSnapshot | null,
+    graph: VerifiedGraphView,
+    deadlineAtMs: number,
+    signal: AbortSignal,
+  ): Promise<Map<string, FamilyIncrementalPlan>> {
+    const readRange = this.backend.readCanonicalMutationRange;
+    if (!previous || !readRange) return new Map();
+    const previousSource: BlockSource = Object.freeze({
+      number: previous.sourceBlock,
+      hash: previous.sourceBlockHash,
+      generation: previous.generation,
+    });
+    const through: BlockSource = Object.freeze({
+      number: graph.sourceBlock,
+      hash: graph.sourceBlockHash,
+      generation: graph.generation,
+    });
+    const distance = through.number - previousSource.number;
+    if (
+      distance <= 0 ||
+      distance > MAX_INCREMENTAL_RANGE_BLOCKS ||
+      through.generation <= previousSource.generation
+    ) {
+      return new Map();
+    }
+    const plans = new Map<string, FamilyIncrementalPlan>();
+    await Promise.all(uniqueFamilies(groups).map(async (family) => {
+      const incremental = compiledFamilies.get(family.familyId)?.incremental;
+      if (
+        !incremental ||
+        schemaChangedFamilies.has(family.familyId) ||
+        signal.aborted
+      ) return;
+      const familyGroups = groups.filter(
+        (group) => group.familyId === family.familyId,
+      );
+      const previousByStateKey = new Map<string, PublishedStateKey>();
+      for (const group of familyGroups) {
+        const state = previous.stateByStateKey.get(group.stateKey);
+        if (
+          !state ||
+          state.familyId !== family.familyId ||
+          state.stateKey !== group.rawStateKey ||
+          !sameBlockSource(state.source, previousSource)
+        ) {
+          return;
+        }
+        previousByStateKey.set(group.stateKey, state);
+      }
+      try {
+        const edges = Object.freeze(
+          familyGroups.flatMap((group) => group.edges),
+        );
+        const descriptor = incremental.mutationQueryDescriptor(edges);
+        if (isThenable(descriptor)) {
+          throw new Error("mutationQueryDescriptor must return synchronously");
+        }
+        if (
+          descriptor.fingerprint !==
+          mutationQueryDescriptorFingerprint(descriptor)
+        ) {
+          throw new Error("mutation query descriptor fingerprint mismatch");
+        }
+        const range = await awaitWithAbort(
+          readRange.call(
+            this.backend,
+            descriptor,
+            previousSource,
+            through,
+            { deadlineAtMs, signal },
+          ),
+          signal,
+        );
+        validateCanonicalMutationRange(
+          range,
+          descriptor,
+          previousSource,
+          through,
+        );
+        const classification = incremental.classifyMutations({
+          edges,
+          range,
+        });
+        if (isThenable(classification)) {
+          throw new Error("classifyMutations must return synchronously");
+        }
+        validateMutationClassification(
+          classification,
+          range,
+          familyGroups,
+        );
+        plans.set(family.familyId, Object.freeze({
+          familyId: family.familyId,
+          range,
+          classification,
+          previousByStateKey,
+        }));
+      } catch {
+        // Fail closed to direct current-N reads for the entire family.
+      }
+    }));
+    return plans;
+  }
+
+  private async runLane(
+    lane: BlockScanPricingLane,
+    groups: readonly StateGroup[],
+    graph: VerifiedGraphView,
+    previous: BlockScanStateSnapshot | null,
+    deadlineAtMs: number,
+    signal: AbortSignal,
+  ): Promise<LaneResult> {
+    const startedAtMs = this.now();
+    if (groups.length === 0) {
+      return emptyLane(lane, startedAtMs, this.now());
+    }
+
+    const familyRuns = uniqueFamilies(groups).map(async (family) => {
+      const familyGroups = groups.filter(
+        (group) => group.familyId === family.familyId,
+      );
+      const familyStartedAtMs = this.now();
+      const familyController = new AbortController();
+      const detachParent = linkAbortSignal(signal, familyController);
+      const localBudgetMs = Math.min(
+        this.familyTimeoutMs,
+        Math.max(0, deadlineAtMs - familyStartedAtMs),
+      );
+      const familyDeadlineAtMs = Math.min(
+        deadlineAtMs,
+        familyStartedAtMs + localBudgetMs,
+      );
+      const familyDeadline = new FamilyDeadlineAbort(
+        family.familyId,
+        localBudgetMs,
+      );
+      const deadlineTimer = setTimeout(
+        () => familyController.abort(familyDeadline),
+        Math.max(0, familyDeadlineAtMs - this.now()),
+      );
+      if (familyDeadlineAtMs <= familyStartedAtMs) {
+        familyController.abort(
+          signal.aborted
+            ? signal.reason
+            : familyDeadline,
+        );
+      }
+
+      /*
+       * A family owns this staging map until its complete lane result wins the
+       * local deadline race. A late compile/read may finish in user/backend
+       * code, but it has no reference to sibling staging or publication.
+       */
+      const staging: FamilyLaneStaging = {
+        staticSchemas: new Map(),
+        expectedReadKeys: new Set(),
+        reads: 0,
+        batches: 0,
+      };
+      const familyRun = this.runFamilyLane(
+        lane,
+        familyGroups,
+        graph,
+        previous,
+        familyDeadlineAtMs,
+        familyController.signal,
+        staging,
+      );
+      try {
+        const result = await awaitWithAbort(
+          familyRun,
+          familyController.signal,
+        );
+        if (familyController.signal.aborted || signal.aborted) {
+          throw familyController.signal.reason ??
+            signal.reason ??
+            new Error(`block-scan state family ${family.familyId} aborted`);
+        }
+        for (const [familyId, schema] of staging.staticSchemas) {
+          this.staticSchemas.set(familyId, schema);
+        }
+        return result;
+      } catch (error) {
+        return failedFamilyLane(
+          lane,
+          family.familyId,
+          familyGroups.length,
+          familyStartedAtMs,
+          this.now(),
+          staging,
+          error,
+        );
+      } finally {
+        clearTimeout(deadlineTimer);
+        detachParent();
+        familyRun.catch(() => undefined);
+      }
+    });
+    const familyResults = await Promise.all(familyRuns);
+    const finishedAtMs = this.now();
+    return mergeFamilyLaneResults(
+      lane,
+      groups.length,
+      startedAtMs,
+      finishedAtMs,
+      familyResults,
+    );
+  }
+
+  private async runFamilyLane(
+    lane: BlockScanPricingLane,
+    groups: readonly StateGroup[],
+    graph: VerifiedGraphView,
+    previous: BlockScanStateSnapshot | null,
+    deadlineAtMs: number,
+    signal: AbortSignal,
+    staging: FamilyLaneStaging,
+  ): Promise<LaneResult> {
+    const startedAtMs = this.now();
+    if (groups.length === 0) {
+      return emptyLane(lane, startedAtMs, this.now());
+    }
+    const issues: BlockScanStateIssue[] = [];
+    const compiledFamilies = new Map<string, CompiledBlockScanStateFamily>();
+    const schemaChangedFamilies = new Set<string>();
+    let schemaPhysicalReads = 0;
+    let schemaBatches = 0;
+    const families = uniqueFamilies(groups);
+    try {
+      await Promise.all(families.map(async (family) => {
+        const familyEdges = groups
+          .filter((group) => group.familyId === family.familyId)
+          .flatMap((group) => group.edges);
+        const edgeFingerprint = stateSchemaFingerprint(familyEdges);
+        const cached = this.staticSchemas.get(family.familyId);
+        if (cached?.edgeFingerprint === edgeFingerprint) {
+          compiledFamilies.set(family.familyId, cached);
+          return;
+        }
+        schemaChangedFamilies.add(family.familyId);
+        try {
+          const compiled = await awaitWithAbort(
+            family.compile({
+              edges: Object.freeze(familyEdges),
+              deadlineAtMs,
+              signal,
+              sourceBlock: graph.sourceBlock,
+              sourceBlockHash: graph.sourceBlockHash,
+              readStatic: async (reads) => {
+                const seen = new Set<string>();
+                for (const read of reads) {
+                  validateRead(read, graph);
+                  if (!read.id || seen.has(read.id)) {
+                    throw new Error(`duplicate or empty static read id ${read.id}`);
+                  }
+                  seen.add(read.id);
+                }
+                schemaPhysicalReads += reads.length;
+                schemaBatches++;
+                staging.reads += reads.length;
+                staging.batches++;
+                const results = await awaitWithAbort(
+                  this.backend.readBatch(
+                    lane,
+                    reads,
+                    {
+                      sourceBlock: graph.sourceBlock,
+                      sourceBlockHash: graph.sourceBlockHash,
+                      sourceGeneration: graph.generation,
+                      deadlineAtMs,
+                      signal,
+                    },
+                  ),
+                  signal,
+                );
+                const byId = new Map<string, StateReadResult>();
+                for (const result of results) {
+                  if (!seen.has(result.id) || byId.has(result.id)) {
+                    throw new Error(
+                      "static backend result IDs did not exactly match reads",
+                    );
+                  }
+                  if (
+                    !stateReadResultMatchesSource(
+                      this.backend,
+                      result,
+                      graph,
+                    )
+                  ) {
+                    throw new Error("static read result lacks current source provenance");
+                  }
+                  if (!result.ok) {
+                    throw new Error(`static read ${result.id} failed: ${result.error}`);
+                  }
+                  byId.set(result.id, result);
+                }
+                if (byId.size !== seen.size) {
+                  throw new Error("static backend omitted one or more reads");
+                }
+                return Object.freeze([...byId.values()]);
+              },
+            }),
+            signal,
+          );
+          if (compiled.edgeFingerprint !== edgeFingerprint) {
+            throw new Error("compiled family schema fingerprint mismatch");
+          }
+          compiledFamilies.set(family.familyId, compiled);
+          staging.staticSchemas.set(family.familyId, compiled);
+        } catch (error) {
+          issues.push({
+            kind: issueKindFromError(error),
+            lane,
+            familyId: family.familyId,
+            message: formatError(error),
+          });
+        }
+      }));
+    } catch (error) {
+      issues.push({
+        kind: issueKindFromError(error),
+        lane,
+        message: formatError(error),
+      });
+    }
+    const incrementalPlans = await this.prepareIncrementalPlans(
+      groups,
+      compiledFamilies,
+      schemaChangedFamilies,
+      previous,
+      graph,
+      deadlineAtMs,
+      signal,
+    );
+
+    interface PlannedRead {
+      readonly group: StateGroup;
+      readonly localId: string;
+      readonly globalId: string;
+      readonly read: StateRead;
+    }
+    const planned: PlannedRead[] = [];
+    const resultsByGlobalId = new Map<string, StateReadResult>();
+    const localResultsByStateKey = new Map<string, StateReadResult[]>();
+    const seenLocalIdsByStateKey = new Map<string, Set<string>>();
+    const closedStateKeys = new Set<string>();
+    const carryForwardStateKeys = new Set<string>();
+    const badStateKeys = new Set<string>(
+      groups
+        .filter((group) => !compiledFamilies.has(group.familyId))
+        .map((group) => group.stateKey),
+    );
+    let physicalReads = schemaPhysicalReads;
+    let batches = schemaBatches;
+    // One initial batch plus at most three dependent batches. Reaching the
+    // bound is not evidence of closure: after the fourth batch, synchronously
+    // ask once more and reject the state key if another read would be needed.
+    const MAX_READ_ROUNDS = 4;
+    let completedReadRounds = 0;
+    for (let round = 0; round < MAX_READ_ROUNDS; round++) {
+      const roundPlanned: PlannedRead[] = [];
+      for (const group of groups) {
+        if (
+          badStateKeys.has(group.stateKey) ||
+          closedStateKeys.has(group.stateKey)
+        ) {
+          continue;
+        }
+        try {
+          const compiled = compiledFamilies.get(group.familyId);
+          if (!compiled) throw new Error("family static schema is unavailable");
+          const common = {
+            sourceBlock: graph.sourceBlock,
+            sourceBlockHash: graph.sourceBlockHash,
+            edges: group.edges,
+          };
+          const reads = round === 0
+            ? compiled.buildCurrentBlockReads(common)
+            : compiled.buildDependentBlockReads?.({
+                ...common,
+                completedRound: round - 1,
+                priorResults: Object.freeze([
+                  ...(localResultsByStateKey.get(group.stateKey) ?? []),
+                ]),
+              }) ?? [];
+          if (isThenable(reads)) {
+            throw new Error(
+              round === 0
+                ? "buildCurrentBlockReads must return synchronously"
+                : "buildDependentBlockReads must return synchronously",
+            );
+          }
+          if (round === 0 && reads.length === 0) {
+            throw new Error("current-N state key emitted no reads");
+          }
+          if (round > 0 && reads.length === 0) {
+            closedStateKeys.add(group.stateKey);
+            continue;
+          }
+          const seen = seenLocalIdsByStateKey.get(group.stateKey) ?? new Set<string>();
+          seenLocalIdsByStateKey.set(group.stateKey, seen);
+          for (const read of reads) {
+            validateRead(read, graph);
+            if (!read.id || seen.has(read.id)) {
+              throw new Error(`duplicate or empty local read id ${read.id}`);
+            }
+            seen.add(read.id);
+            const globalId = globalReadId(group.stateKey, read.id);
+            const item = {
+              group,
+              localId: read.id,
+              globalId,
+              read: Object.freeze({ ...read, id: globalId }),
+            };
+            planned.push(item);
+            staging.expectedReadKeys.add(globalId);
+            roundPlanned.push(item);
+          }
+        } catch (error) {
+          badStateKeys.add(group.stateKey);
+          issues.push({
+            kind: issueKindFromError(error, "descriptor"),
+            lane,
+            familyId: group.familyId,
+            stateKey: group.stateKey,
+            message: formatError(error),
+          });
+        }
+      }
+      if (round === 0) {
+        for (const [familyId, plan] of incrementalPlans) {
+          const familyGroups = groups.filter(
+            (group) => group.familyId === familyId,
+          );
+          let valid = familyGroups.every(
+            (group) => !badStateKeys.has(group.stateKey),
+          );
+          for (const group of familyGroups) {
+            const previousState = plan.previousByStateKey.get(group.stateKey);
+            const plannedLocalIds = new Set(
+              roundPlanned
+                .filter((item) => item.group.stateKey === group.stateKey)
+                .map((item) => item.localId),
+            );
+            const previousReadKeys = new Set(
+              previousState?.requiredReadKeys ?? [],
+            );
+            if (
+              !previousState ||
+              plannedLocalIds.size !== previousReadKeys.size ||
+              [...plannedLocalIds].some(
+                (readKey) => !previousReadKeys.has(readKey),
+              ) ||
+              [...previousReadKeys].some((readKey) => {
+                const proof = previousState.freshnessByReadKey.get(readKey);
+                return !proof || !sameBlockSource(proof.source, previousState.source);
+              })
+            ) {
+              valid = false;
+              break;
+            }
+            const changed = plan.classification.changedReadKeysByStateKey.get(
+              group.rawStateKey,
+            );
+            if (!changed) continue;
+            if (
+              changed.size === 0 ||
+              [...changed].some((readKey) => !plannedLocalIds.has(readKey))
+            ) {
+              valid = false;
+              break;
+            }
+          }
+          if (!valid) {
+            incrementalPlans.delete(familyId);
+            continue;
+          }
+          for (const group of familyGroups) {
+            if (
+              !plan.classification.changedReadKeysByStateKey.has(
+                group.rawStateKey,
+              )
+            ) {
+              carryForwardStateKeys.add(group.stateKey);
+              closedStateKeys.add(group.stateKey);
+            }
+          }
+        }
+      }
+      const runnable = roundPlanned.filter(
+        (item) =>
+          !badStateKeys.has(item.group.stateKey) &&
+          !carryForwardStateKeys.has(item.group.stateKey),
+      );
+      if (runnable.length === 0) break;
+      if (signal.aborted) {
+        for (const item of runnable) badStateKeys.add(item.group.stateKey);
+        issues.push(issueFromAbort(signal.reason, graph.generation, lane));
+        break;
+      }
+
+      const runnableByFamily = new Map<string, typeof runnable>();
+      for (const item of runnable) {
+        const current = runnableByFamily.get(item.group.familyId) ?? [];
+        runnableByFamily.set(item.group.familyId, [...current, item]);
+      }
+      const familyBatches = [...runnableByFamily.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([familyId, items]) => {
+          const descriptorGroups = deduplicatePlannedReads(items);
+          return {
+            familyId,
+            items,
+            descriptorGroups,
+            physical: descriptorGroups.map((entry) => entry.representative.read),
+          };
+        });
+      const roundPhysicalReads = familyBatches.reduce(
+        (sum, familyBatch) => sum + familyBatch.physical.length,
+        0,
+      );
+      physicalReads += roundPhysicalReads;
+      batches += familyBatches.length;
+      staging.reads += roundPhysicalReads;
+      staging.batches += familyBatches.length;
+      const settled = await Promise.all(familyBatches.map(async (familyBatch) => {
+        const rawResults = await awaitWithAbort(
+          this.backend.readBatch(
+            lane,
+            Object.freeze(familyBatch.physical),
+            {
+              sourceBlock: graph.sourceBlock,
+              sourceBlockHash: graph.sourceBlockHash,
+              sourceGeneration: graph.generation,
+              deadlineAtMs,
+              signal,
+            },
+          ),
+          signal,
+        );
+        const expectedIds = new Set(
+          familyBatch.physical.map((read) => read.id),
+        );
+        const rawById = new Map<string, StateReadResult>();
+        for (const result of rawResults) {
+          if (!expectedIds.has(result.id) || rawById.has(result.id)) {
+            throw new Error(
+              "backend result IDs did not exactly match scheduled reads",
+            );
+          }
+          rawById.set(result.id, result);
+        }
+        if (rawById.size !== expectedIds.size) {
+          throw new Error("backend omitted one or more scheduled reads");
+        }
+        return { ...familyBatch, rawById };
+      }).map((promise) => promise.then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason) => ({ status: "rejected" as const, reason }),
+      )));
+      for (let index = 0; index < settled.length; index++) {
+        const familyBatch = familyBatches[index];
+        const result = settled[index];
+        if (result.status === "rejected") {
+          for (const item of familyBatch.items) {
+            badStateKeys.add(item.group.stateKey);
+          }
+          issues.push({
+            kind: issueKindFromError(result.reason, "backend"),
+            lane,
+            familyId: familyBatch.familyId,
+            message: formatError(result.reason),
+          });
+          continue;
+        }
+        for (const descriptor of result.value.descriptorGroups) {
+          const raw = result.value.rawById.get(
+            descriptor.representative.globalId,
+          );
+          if (!raw) continue;
+          for (const item of descriptor.items) {
+            const local = Object.freeze({
+              ...raw,
+              id: item.localId,
+            }) as StateReadResult;
+            resultsByGlobalId.set(
+              item.globalId,
+              Object.freeze({ ...raw, id: item.globalId }),
+            );
+            const prior = localResultsByStateKey.get(item.group.stateKey) ?? [];
+            prior.push(local);
+            localResultsByStateKey.set(item.group.stateKey, prior);
+            if (!local.ok) {
+              badStateKeys.add(item.group.stateKey);
+              issues.push({
+                kind: mapReadFailureKind(local.kind),
+                lane,
+                familyId: item.group.familyId,
+                stateKey: item.group.stateKey,
+                message: local.error,
+              });
+            }
+          }
+        }
+      }
+      completedReadRounds = round + 1;
+    }
+
+    if (completedReadRounds === MAX_READ_ROUNDS) {
+      for (const group of groups) {
+        if (
+          badStateKeys.has(group.stateKey) ||
+          closedStateKeys.has(group.stateKey)
+        ) {
+          continue;
+        }
+        if (signal.aborted) {
+          badStateKeys.add(group.stateKey);
+          continue;
+        }
+        try {
+          const compiled = compiledFamilies.get(group.familyId);
+          if (!compiled) throw new Error("family static schema is unavailable");
+          const reads = compiled.buildDependentBlockReads?.({
+            sourceBlock: graph.sourceBlock,
+            sourceBlockHash: graph.sourceBlockHash,
+            edges: group.edges,
+            completedRound: MAX_READ_ROUNDS - 1,
+            priorResults: Object.freeze([
+              ...(localResultsByStateKey.get(group.stateKey) ?? []),
+            ]),
+          }) ?? [];
+          if (isThenable(reads)) {
+            throw new Error("buildDependentBlockReads must return synchronously");
+          }
+          if (reads.length === 0) {
+            closedStateKeys.add(group.stateKey);
+            continue;
+          }
+          badStateKeys.add(group.stateKey);
+          issues.push({
+            kind: "resource-limited",
+            lane,
+            familyId: group.familyId,
+            stateKey: group.stateKey,
+            message:
+              `dependent state reads did not close within ${MAX_READ_ROUNDS} read rounds`,
+          });
+        } catch (error) {
+          badStateKeys.add(group.stateKey);
+          issues.push({
+            kind: issueKindFromError(error, "descriptor"),
+            lane,
+            familyId: group.familyId,
+            stateKey: group.stateKey,
+            message: formatError(error),
+          });
+        }
+      }
+    }
+
+    const validPlanned = planned.filter(
+      (item) => !badStateKeys.has(item.group.stateKey),
+    );
+
+    const resolvedStateKeys: string[] = [];
+    const resolvedReadKeys: string[] = [];
+    const resolvedEdgeKeys: string[] = [];
+    const unavailableEdges: BehaviorProvenUnavailableEdge[] = [];
+    const mids: [string, RouteVenueMid][] = [];
+    const freshness: [string, StateFreshnessProof][] = [];
+    const states: [string, PublishedStateKey][] = [];
+    for (const group of groups) {
+      if (badStateKeys.has(group.stateKey)) continue;
+      const groupReads = validPlanned.filter(
+        (item) => item.group.stateKey === group.stateKey,
+      );
+      const carryForward = carryForwardStateKeys.has(group.stateKey);
+      const incrementalPlan = incrementalPlans.get(group.familyId);
+      const localResults: StateReadResult[] = [];
+      let resultFailure: StateReadResult | null = null;
+      for (const item of carryForward ? [] : groupReads) {
+        const result = resultsByGlobalId.get(item.globalId);
+        if (!result) {
+          resultFailure = {
+            id: item.localId,
+            ok: false,
+            sourceBlock: graph.sourceBlock,
+            sourceBlockHash: graph.sourceBlockHash,
+            kind: "rpc",
+            error: "missing backend result",
+          };
+          break;
+        }
+        const local = Object.freeze({ ...result, id: item.localId });
+        if (
+          !stateReadResultMatchesSource(
+            this.backend,
+            result,
+            graph,
+          )
+        ) {
+          resultFailure = {
+            id: item.localId,
+            ok: false,
+            sourceBlock: result.sourceBlock,
+            sourceBlockHash: result.sourceBlockHash,
+            kind: "rpc",
+            error: "backend result is not pinned to the requested source block/hash",
+          };
+          break;
+        }
+        if (!result.ok) {
+          resultFailure = local;
+          break;
+        }
+        localResults.push(local);
+      }
+      if (resultFailure) {
+        issues.push({
+          kind: resultFailure.ok ? "backend" : mapReadFailureKind(resultFailure.kind),
+          lane,
+          familyId: group.familyId,
+          stateKey: group.stateKey,
+          message: resultFailure.ok ? "unknown backend failure" : resultFailure.error,
+        });
+        continue;
+      }
+
+      let snapshot;
+      try {
+        if (carryForward) {
+          snapshot = incrementalPlan?.previousByStateKey.get(
+            group.stateKey,
+          )?.snapshot;
+          if (snapshot === undefined) {
+            throw new Error("incremental state is missing the previous snapshot");
+          }
+        } else {
+          const compiled = compiledFamilies.get(group.familyId);
+          if (!compiled) throw new Error("family static schema is unavailable");
+          snapshot = compiled.decodeState(Object.freeze(localResults));
+          if (isThenable(snapshot)) {
+            throw new Error("decodeState must return synchronously");
+          }
+        }
+      } catch (error) {
+        issues.push({
+          kind: "decode",
+          lane,
+          familyId: group.familyId,
+          stateKey: group.stateKey,
+          message: formatError(error),
+        });
+        continue;
+      }
+      try {
+        const unavailable = snapshot.behaviorProvenUnavailableEdges?.(
+          group.edges,
+        ) ?? new Map<string, string>();
+        if (isThenable(unavailable)) {
+          throw new Error(
+            "behaviorProvenUnavailableEdges must return synchronously",
+          );
+        }
+        const expectedEdges = new Set(group.edgeKeys);
+        for (const [edgeKey, reason] of unavailable) {
+          if (!expectedEdges.has(edgeKey)) {
+            throw new Error(
+              `behavior-proven unavailable classification returned unknown edge ${edgeKey}`,
+            );
+          }
+          if (typeof reason !== "string" || reason.trim().length === 0) {
+            throw new Error(
+              `behavior-proven unavailable edge ${edgeKey} has no reason`,
+            );
+          }
+        }
+        const derived = snapshot.deriveMids(group.edges);
+        if (isThenable(derived)) throw new Error("deriveMids must return synchronously");
+        const expectedPricedEdges = new Set(
+          group.edgeKeys.filter((edgeKey) => !unavailable.has(edgeKey)),
+        );
+        const derivedEdges = new Set(derived.keys());
+        if (
+          expectedPricedEdges.size !== derivedEdges.size ||
+          [...expectedPricedEdges].some((key) => !derivedEdges.has(key))
+        ) {
+          throw new Error(
+            "deriveMids did not return the exact behavior-available edge-key set",
+          );
+        }
+        resolvedStateKeys.push(group.stateKey);
+        const localFreshness = new Map<string, StateFreshnessProof>();
+        for (const item of groupReads) {
+          let proof: StateFreshnessProof;
+          if (carryForward) {
+            if (!incrementalPlan) {
+              throw new Error("carry-forward state lacks an incremental plan");
+            }
+            proof = Object.freeze({
+              kind: "carry-forward" as const,
+              source: Object.freeze({
+                number: graph.sourceBlock,
+                hash: graph.sourceBlockHash,
+                generation: graph.generation,
+              }),
+              previousSource: incrementalPlan.range.fromExclusive,
+              mutationRangeFingerprint: incrementalPlan.range.rangeFingerprint,
+              completeThroughBlock: incrementalPlan.range.through.number,
+              completeThroughHash: incrementalPlan.range.through.hash,
+            });
+          } else {
+            const result = resultsByGlobalId.get(item.globalId);
+            if (!result?.ok) {
+              throw new Error(`resolved state key lacks successful read ${item.globalId}`);
+            }
+            proof = Object.freeze({
+              kind: "direct-read" as const,
+              source: Object.freeze({
+                number: graph.sourceBlock,
+                hash: graph.sourceBlockHash,
+                generation: graph.generation,
+              }),
+              provenance: result.provenance,
+            });
+          }
+          resolvedReadKeys.push(item.globalId);
+          freshness.push([item.globalId, proof]);
+          localFreshness.set(item.localId, proof);
+        }
+        for (const [edgeKey, reason] of unavailable) {
+          unavailableEdges.push(Object.freeze({
+            edgeKey,
+            familyId: group.familyId,
+            stateKey: group.stateKey,
+            reason: reason.trim(),
+          }));
+        }
+        for (const edgeKey of group.edgeKeys) {
+          if (unavailable.has(edgeKey)) continue;
+          const mid = derived.get(edgeKey);
+          if (!mid) throw new Error(`deriveMids omitted ${edgeKey}`);
+          resolvedEdgeKeys.push(edgeKey);
+          mids.push([edgeKey, mid]);
+        }
+        states.push([
+          group.stateKey,
+          Object.freeze({
+            familyId: group.familyId,
+            stateKey: group.rawStateKey,
+            source: Object.freeze({
+              number: graph.sourceBlock,
+              hash: graph.sourceBlockHash,
+              generation: graph.generation,
+            }),
+            snapshot,
+            requiredReadKeys: Object.freeze(
+              groupReads.map((item) => item.localId).sort(),
+            ),
+            freshnessByReadKey: new FrozenReadonlyMap(
+              [...localFreshness.entries()].sort(([a], [b]) =>
+                a.localeCompare(b)
+              ),
+            ),
+            refreshMode: carryForward
+              ? "carry-forward"
+              : incrementalPlan?.classification.changedReadKeysByStateKey.has(
+                  group.rawStateKey,
+                )
+              ? "classified-direct"
+              : "unproven-direct",
+            backrunInvalidations: Object.freeze(
+              carryForward
+                ? []
+                : [
+                    ...(
+                      incrementalPlan?.classification
+                        .backrunInvalidationsByStateKey?.get(
+                          group.rawStateKey,
+                        ) ?? []
+                    ),
+                  ].map((invalidation) => Object.freeze({ ...invalidation })),
+            ),
+          }),
+        ]);
+      } catch (error) {
+        issues.push({
+          kind: "derive",
+          lane,
+          familyId: group.familyId,
+          stateKey: group.stateKey,
+          message: formatError(error),
+        });
+      }
+    }
+
+    const finishedAtMs = this.now();
+    return Object.freeze({
+      lane,
+      resolvedStateKeys: Object.freeze(resolvedStateKeys.sort()),
+      expectedReadKeys: Object.freeze(
+        [...new Set(planned.map((item) => item.globalId))].sort(),
+      ),
+      resolvedReadKeys: Object.freeze(resolvedReadKeys.sort()),
+      resolvedEdgeKeys: Object.freeze(resolvedEdgeKeys.sort()),
+      unavailableEdges: Object.freeze(
+        unavailableEdges.sort((a, b) => a.edgeKey.localeCompare(b.edgeKey)),
+      ),
+      mids: Object.freeze(mids.sort(([a], [b]) => a.localeCompare(b))),
+      freshness: Object.freeze(freshness.sort(([a], [b]) => a.localeCompare(b))),
+      states: Object.freeze(states.sort(([a], [b]) => a.localeCompare(b))),
+      issues: freezeIssues(issues),
+      telemetry: Object.freeze({
+        lane,
+        startedAtMs,
+        finishedAtMs,
+        wallMs: Math.max(0, finishedAtMs - startedAtMs),
+        uniqueStateKeys: groups.length,
+        reads: physicalReads,
+        batches,
+      }),
+    });
+  }
+}
+
+function deduplicatePlannedReads<
+  T extends { readonly globalId: string; readonly read: StateRead },
+>(
+  reads: readonly T[],
+): readonly {
+  readonly representative: T;
+  readonly items: readonly T[];
+}[] {
+  const groups = new Map<string, T[]>();
+  for (const item of reads) {
+    const key = [
+      item.read.sourceBlock,
+      item.read.sourceBlockHash.toLowerCase(),
+      item.read.to.toLowerCase(),
+      item.read.data.toLowerCase(),
+      item.read.from?.toLowerCase() ?? "",
+      item.read.transport,
+      item.read.acceptRevertData ? "accept-revert-data" : "strict-success",
+    ].join("\u001f");
+    const current = groups.get(key);
+    if (current) current.push(item);
+    else groups.set(key, [item]);
+  }
+  return Object.freeze(
+    [...groups.values()]
+      .map((items) => Object.freeze({
+        representative: items[0],
+        items: Object.freeze(items),
+      }))
+      .sort((a, b) =>
+        a.representative.globalId.localeCompare(b.representative.globalId)
+      ),
+  );
+}
+
+function validateCanonicalMutationRange(
+  range: CanonicalMutationRange,
+  descriptor: MutationQueryDescriptor,
+  fromExclusive: BlockSource,
+  through: BlockSource,
+): void {
+  if (
+    range.complete !== true ||
+    !sameBlockSource(range.fromExclusive, fromExclusive) ||
+    !sameBlockSource(range.through, through) ||
+    range.queryDescriptorFingerprint !== descriptor.fingerprint ||
+    !range.canonicalPathFingerprint
+  ) {
+    throw new Error("canonical mutation range proof does not match refresh source");
+  }
+  for (const event of range.events) {
+    if (
+      event.removed === true ||
+      event.blockNumber <= fromExclusive.number ||
+      event.blockNumber > through.number ||
+      !event.blockHash ||
+      !Number.isSafeInteger(event.transactionIndex) ||
+      !Number.isSafeInteger(event.logIndex)
+    ) {
+      throw new Error("canonical mutation range contains an invalid event");
+    }
+  }
+  const expectedRangeFingerprint = deterministicHash({
+    fromExclusive: range.fromExclusive,
+    through: range.through,
+    queryDescriptorFingerprint: range.queryDescriptorFingerprint,
+    canonicalPathFingerprint: range.canonicalPathFingerprint,
+    events: range.events,
+  });
+  if (range.rangeFingerprint !== expectedRangeFingerprint) {
+    throw new Error("canonical mutation range fingerprint mismatch");
+  }
+}
+
+function validateMutationClassification(
+  classification: FamilyMutationClassification,
+  range: CanonicalMutationRange,
+  groups: readonly StateGroup[],
+): void {
+  if (
+    classification.mutationRangeFingerprint !== range.rangeFingerprint ||
+    !classification.classifierFingerprint
+  ) {
+    throw new Error("family mutation classification is not bound to the proven range");
+  }
+  const knownStateKeys = new Set(groups.map((group) => group.rawStateKey));
+  for (const [stateKey, readKeys] of classification.changedReadKeysByStateKey) {
+    if (!knownStateKeys.has(stateKey) || !(readKeys instanceof Set)) {
+      throw new Error(`family mutation classification contains unknown state ${stateKey}`);
+    }
+    for (const readKey of readKeys) {
+      if (!readKey) {
+        throw new Error(`family mutation classification has an empty read key for ${stateKey}`);
+      }
+    }
+  }
+  for (
+    const [stateKey, invalidations] of
+    classification.backrunInvalidationsByStateKey ?? []
+  ) {
+    if (
+      !knownStateKeys.has(stateKey) ||
+      !classification.changedReadKeysByStateKey.has(stateKey) ||
+      !Array.isArray(invalidations)
+    ) {
+      throw new Error(
+        `family mutation classification contains invalid backrun state ${stateKey}`,
+      );
+    }
+    for (const invalidation of invalidations) {
+      if (
+        invalidation.kind !== "v3-ticks" ||
+        typeof invalidation.pool !== "string" ||
+        invalidation.pool.length === 0
+      ) {
+        throw new Error(
+          `family mutation classification has an invalid backrun invalidation for ${stateKey}`,
+        );
+      }
+    }
+  }
+}
+
+function sameBlockSource(a: BlockSource, b: BlockSource): boolean {
+  return (
+    a.number === b.number &&
+    a.hash.toLowerCase() === b.hash.toLowerCase() &&
+    a.generation === b.generation
+  );
+}
+
+function buildOwnershipPlan(
+  graph: VerifiedGraphView,
+  familiesInput: readonly RegisteredBlockScanStateFamily[],
+  requiresPricing: (edge: TokenEdge) => boolean,
+): OwnershipPlan {
+  const families = [...familiesInput].sort((a, b) => a.familyId.localeCompare(b.familyId));
+  const familyIds = new Set<string>();
+  const ownerIssues: BlockScanStateIssue[] = [];
+  for (const family of families) {
+    if (familyIds.has(family.familyId)) {
+      ownerIssues.push({
+        kind: "duplicate-family",
+        familyId: family.familyId,
+        message: `duplicate pricing family ${family.familyId}`,
+      });
+    }
+    familyIds.add(family.familyId);
+  }
+
+  const grouped = new Map<string, {
+    family: RegisteredBlockScanStateFamily;
+    rawStateKey: string;
+    edges: TokenEdge[];
+    edgeKeys: string[];
+  }>();
+  const expectedEdgeKeys: string[] = [];
+  const seenEdgeKeys = new Set<string>();
+  for (const edge of graph.edges) {
+    if (!requiresPricing(edge)) continue;
+    const edgeKey = blockScanEdgeKey(edge);
+    expectedEdgeKeys.push(edgeKey);
+    if (seenEdgeKeys.has(edgeKey)) {
+      ownerIssues.push({
+        kind: "descriptor",
+        edgeKey,
+        message: `duplicate edge identity ${edgeKey}`,
+      });
+      continue;
+    }
+    seenEdgeKeys.add(edgeKey);
+    const owners = families.filter((family) => family.ownsEdge(edge));
+    if (owners.length !== 1) {
+      ownerIssues.push({
+        kind: owners.length === 0 ? "edge-owner-missing" : "edge-owner-ambiguous",
+        edgeKey,
+        message: owners.length === 0
+          ? `no state family owns ${edgeKey}`
+          : `multiple state families own ${edgeKey}: ${owners.map((owner) => owner.familyId).join(",")}`,
+      });
+      continue;
+    }
+    const family = owners[0];
+    let rawStateKey: string;
+    try {
+      rawStateKey = family.stateKey(edge);
+      if (typeof rawStateKey !== "string") {
+        throw new Error("stateKey must return synchronously");
+      }
+    } catch (error) {
+      ownerIssues.push({
+        kind: "descriptor",
+        familyId: family.familyId,
+        edgeKey,
+        message: `stateKey failed: ${formatError(error)}`,
+      });
+      continue;
+    }
+    let identity: string;
+    try {
+      identity = blockScanStateKey(family.familyId, rawStateKey);
+    } catch (error) {
+      ownerIssues.push({
+        kind: "descriptor",
+        familyId: family.familyId,
+        edgeKey,
+        message: formatError(error),
+      });
+      continue;
+    }
+    const current = grouped.get(identity);
+    if (current) {
+      current.edges.push(edge);
+      current.edgeKeys.push(edgeKey);
+    } else {
+      grouped.set(identity, {
+        family,
+        rawStateKey,
+        edges: [edge],
+        edgeKeys: [edgeKey],
+      });
+    }
+  }
+  const groups = [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([stateKey, group]): StateGroup => Object.freeze({
+      family: group.family,
+      familyId: group.family.familyId,
+      lane: group.family.lane,
+      rawStateKey: group.rawStateKey,
+      stateKey,
+      edges: Object.freeze(group.edges),
+      edgeKeys: Object.freeze(group.edgeKeys),
+    }));
+  return Object.freeze({
+    groups: Object.freeze(groups),
+    expectedStateKeys: Object.freeze(groups.map((group) => group.stateKey).sort()),
+    expectedEdgeKeys: Object.freeze([...new Set(expectedEdgeKeys)].sort()),
+    ownerIssues: freezeIssues(ownerIssues),
+  });
+}
+
+function createCoverage(
+  expectedStateKeysInput: readonly string[],
+  resolvedStateKeysInput: readonly string[],
+  expectedReadKeysInput: readonly string[],
+  resolvedReadKeysInput: readonly string[],
+  expectedEdgeKeysInput: readonly string[],
+  resolvedEdgeKeysInput: readonly string[],
+  unavailableEdgeKeysInput: readonly string[],
+): BlockScanStateCoverage {
+  const expectedStateKeys = uniqueSorted(expectedStateKeysInput);
+  const expectedReadKeys = uniqueSorted(expectedReadKeysInput);
+  const expectedEdgeKeys = uniqueSorted(expectedEdgeKeysInput);
+  const expectedStateSet = new Set(expectedStateKeys);
+  const expectedReadSet = new Set(expectedReadKeys);
+  const expectedEdgeSet = new Set(expectedEdgeKeys);
+  const resolvedStateKeys = uniqueSorted(
+    resolvedStateKeysInput.filter((key) => expectedStateSet.has(key)),
+  );
+  const resolvedEdgeKeys = uniqueSorted(
+    resolvedEdgeKeysInput.filter((key) => expectedEdgeSet.has(key)),
+  );
+  const resolvedStateSet = new Set(resolvedStateKeys);
+  const resolvedReadKeys = uniqueSorted(
+    resolvedReadKeysInput.filter((key) => expectedReadSet.has(key)),
+  );
+  const resolvedReadSet = new Set(resolvedReadKeys);
+  const resolvedEdgeSet = new Set(resolvedEdgeKeys);
+  const unavailableEdgeKeys = uniqueSorted(
+    unavailableEdgeKeysInput.filter(
+      (key) => expectedEdgeSet.has(key) && !resolvedEdgeSet.has(key),
+    ),
+  );
+  const unavailableEdgeSet = new Set(unavailableEdgeKeys);
+  const unresolvedStateKeys = Object.freeze(
+    expectedStateKeys.filter((key) => !resolvedStateSet.has(key)),
+  );
+  const unresolvedEdgeKeys = Object.freeze(
+    expectedEdgeKeys.filter(
+      (key) => !resolvedEdgeSet.has(key) && !unavailableEdgeSet.has(key),
+    ),
+  );
+  const unresolvedReadKeys = Object.freeze(
+    expectedReadKeys.filter((key) => !resolvedReadSet.has(key)),
+  );
+  return Object.freeze({
+    expectedStateKeys,
+    resolvedStateKeys,
+    unresolvedStateKeys,
+    expectedReadKeys,
+    resolvedReadKeys,
+    unresolvedReadKeys,
+    expectedEdgeKeys,
+    resolvedEdgeKeys,
+    unavailableEdgeKeys,
+    unresolvedEdgeKeys,
+    expectedStateKeyHash: exactSetHash(expectedStateKeys),
+    resolvedStateKeyHash: exactSetHash(resolvedStateKeys),
+    unresolvedStateKeyHash: exactSetHash(unresolvedStateKeys),
+    expectedReadKeyHash: exactSetHash(expectedReadKeys),
+    resolvedReadKeyHash: exactSetHash(resolvedReadKeys),
+    unresolvedReadKeyHash: exactSetHash(unresolvedReadKeys),
+    expectedEdgeKeyHash: exactSetHash(expectedEdgeKeys),
+    resolvedEdgeKeyHash: exactSetHash(resolvedEdgeKeys),
+    unavailableEdgeKeyHash: exactSetHash(unavailableEdgeKeys),
+    unresolvedEdgeKeyHash: exactSetHash(unresolvedEdgeKeys),
+  });
+}
+
+/**
+ * Publication is atomic at the family boundary. A family is available only
+ * when every owned state, every required read for those states, and every
+ * edge reached either a priced or behavior-proven unavailable terminal state
+ * in this generation.
+ */
+function completePricingFamilyIds(
+  groups: readonly StateGroup[],
+  graphIncompleteFamilyIds: ReadonlySet<string>,
+  raw: {
+    readonly expectedReadKeys: readonly string[];
+    readonly resolvedStateKeys: readonly string[];
+    readonly resolvedReadKeys: readonly string[];
+    readonly resolvedEdgeKeys: readonly string[];
+    readonly unavailableEdgeKeys: readonly string[];
+  },
+): ReadonlySet<string> {
+  const resolvedStateKeys = new Set(raw.resolvedStateKeys);
+  const resolvedReadKeys = new Set(raw.resolvedReadKeys);
+  const resolvedEdgeKeys = new Set(raw.resolvedEdgeKeys);
+  const unavailableEdgeKeys = new Set(raw.unavailableEdgeKeys);
+  const groupsByFamily = new Map<string, StateGroup[]>();
+  for (const group of groups) {
+    const familyGroups = groupsByFamily.get(group.familyId);
+    if (familyGroups) familyGroups.push(group);
+    else groupsByFamily.set(group.familyId, [group]);
+  }
+
+  const complete = new Set<string>();
+  for (const [familyId, familyGroups] of groupsByFamily) {
+    if (graphIncompleteFamilyIds.has(familyId)) continue;
+    const familyReadKeys = raw.expectedReadKeys.filter((readKey) =>
+      readKey.startsWith(`${familyId}\u001f`)
+    );
+    if (
+      familyGroups.every((group) =>
+        resolvedStateKeys.has(group.stateKey) &&
+        group.edgeKeys.every((edgeKey) =>
+          resolvedEdgeKeys.has(edgeKey) || unavailableEdgeKeys.has(edgeKey)
+        )
+      ) &&
+      familyReadKeys.every((readKey) => resolvedReadKeys.has(readKey))
+    ) {
+      complete.add(familyId);
+    }
+  }
+  return complete;
+}
+
+function readKeyBelongsToFamilyIds(
+  readKey: string,
+  familyIds: ReadonlySet<string>,
+): boolean {
+  for (const familyId of familyIds) {
+    if (readKey.startsWith(`${familyId}\u001f`)) return true;
+  }
+  return false;
+}
+
+function incompleteResult(input: {
+  readonly graph: VerifiedGraphView;
+  readonly ownership: OwnershipPlan;
+  readonly issues: readonly BlockScanStateIssue[];
+  readonly laneTelemetry?: readonly BlockScanLaneTelemetry[];
+}): IncompleteBlockScanStateResult {
+  return Object.freeze({
+    status: "incomplete",
+    generation: input.graph.generation,
+    sourceBlock: input.graph.sourceBlock,
+    sourceBlockHash: input.graph.sourceBlockHash,
+    coverage: createCoverage(
+      input.ownership.expectedStateKeys,
+      [],
+      [],
+      [],
+      input.ownership.expectedEdgeKeys,
+      [],
+      [],
+    ),
+    issues: freezeIssues(input.issues),
+    laneTelemetry: freezeLaneTelemetry(input.laneTelemetry ?? []),
+  });
+}
+
+function emptyLane(
+  lane: BlockScanPricingLane,
+  startedAtMs: number,
+  finishedAtMs: number,
+): LaneResult {
+  return Object.freeze({
+    lane,
+    resolvedStateKeys: Object.freeze([]),
+    expectedReadKeys: Object.freeze([]),
+    resolvedReadKeys: Object.freeze([]),
+    resolvedEdgeKeys: Object.freeze([]),
+    unavailableEdges: Object.freeze([]),
+    mids: Object.freeze([]),
+    freshness: Object.freeze([]),
+    states: Object.freeze([]),
+    issues: Object.freeze([]),
+    telemetry: Object.freeze({
+      lane,
+      startedAtMs,
+      finishedAtMs,
+      wallMs: Math.max(0, finishedAtMs - startedAtMs),
+      uniqueStateKeys: 0,
+      reads: 0,
+      batches: 0,
+    }),
+  });
+}
+
+function failedFamilyLane(
+  lane: BlockScanPricingLane,
+  familyId: string,
+  uniqueStateKeys: number,
+  startedAtMs: number,
+  finishedAtMs: number,
+  staging: FamilyLaneStaging,
+  error: unknown,
+): LaneResult {
+  return Object.freeze({
+    lane,
+    resolvedStateKeys: Object.freeze([]),
+    expectedReadKeys: uniqueSorted([...staging.expectedReadKeys]),
+    resolvedReadKeys: Object.freeze([]),
+    resolvedEdgeKeys: Object.freeze([]),
+    unavailableEdges: Object.freeze([]),
+    mids: Object.freeze([]),
+    freshness: Object.freeze([]),
+    states: Object.freeze([]),
+    issues: freezeIssues([{
+      kind: issueKindFromError(error, "backend"),
+      lane,
+      familyId,
+      message: formatError(error),
+    }]),
+    telemetry: Object.freeze({
+      lane,
+      startedAtMs,
+      finishedAtMs,
+      wallMs: Math.max(0, finishedAtMs - startedAtMs),
+      uniqueStateKeys,
+      reads: staging.reads,
+      batches: staging.batches,
+    }),
+  });
+}
+
+function mergeFamilyLaneResults(
+  lane: BlockScanPricingLane,
+  uniqueStateKeys: number,
+  startedAtMs: number,
+  finishedAtMs: number,
+  results: readonly LaneResult[],
+): LaneResult {
+  return Object.freeze({
+    lane,
+    resolvedStateKeys: uniqueSorted(
+      results.flatMap((result) => result.resolvedStateKeys),
+    ),
+    expectedReadKeys: uniqueSorted(
+      results.flatMap((result) => result.expectedReadKeys),
+    ),
+    resolvedReadKeys: uniqueSorted(
+      results.flatMap((result) => result.resolvedReadKeys),
+    ),
+    resolvedEdgeKeys: uniqueSorted(
+      results.flatMap((result) => result.resolvedEdgeKeys),
+    ),
+    unavailableEdges: Object.freeze(
+      results
+        .flatMap((result) => result.unavailableEdges)
+        .sort((a, b) => a.edgeKey.localeCompare(b.edgeKey)),
+    ),
+    mids: Object.freeze(
+      results
+        .flatMap((result) => result.mids)
+        .sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    freshness: Object.freeze(
+      results
+        .flatMap((result) => result.freshness)
+        .sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    states: Object.freeze(
+      results
+        .flatMap((result) => result.states)
+        .sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    issues: freezeIssues(results.flatMap((result) => result.issues)),
+    telemetry: Object.freeze({
+      lane,
+      startedAtMs,
+      finishedAtMs,
+      wallMs: Math.max(0, finishedAtMs - startedAtMs),
+      uniqueStateKeys,
+      reads: results.reduce(
+        (total, result) => total + result.telemetry.reads,
+        0,
+      ),
+      batches: results.reduce(
+        (total, result) => total + result.telemetry.batches,
+        0,
+      ),
+    }),
+  });
+}
+
+function uniqueFamilies(
+  groups: readonly StateGroup[],
+): readonly RegisteredBlockScanStateFamily[] {
+  const byId = new Map<string, RegisteredBlockScanStateFamily>();
+  for (const group of groups) byId.set(group.familyId, group.family);
+  return Object.freeze([...byId.values()].sort((a, b) => a.familyId.localeCompare(b.familyId)));
+}
+
+function validateRead(read: StateRead, graph: VerifiedGraphView): void {
+  if (read.sourceBlock !== graph.sourceBlock) {
+    throw new Error(
+      `read ${read.id} requested block ${read.sourceBlock}, expected ${graph.sourceBlock}`,
+    );
+  }
+  if (read.sourceBlockHash.toLowerCase() !== graph.sourceBlockHash) {
+    throw new Error(`read ${read.id} requested a different source block hash`);
+  }
+  if (!read.to || !read.data || !read.transport) {
+    throw new Error(`read ${read.id} is missing a required descriptor field`);
+  }
+}
+
+function stateReadResultMatchesSource(
+  backend: BlockScanStateReadBackend,
+  result: StateReadResult,
+  graph: VerifiedGraphView,
+): boolean {
+  const source: BlockSource = Object.freeze({
+    number: graph.sourceBlock,
+    hash: graph.sourceBlockHash,
+    generation: graph.generation,
+  });
+  if (
+    result.sourceBlock !== source.number ||
+    result.sourceBlockHash.toLowerCase() !== source.hash.toLowerCase()
+  ) return false;
+  if (!result.ok) return true;
+  const provenance = result.provenance;
+  if (
+    provenance.source.number !== source.number ||
+    provenance.source.hash.toLowerCase() !==
+      source.hash.toLowerCase() ||
+    provenance.source.generation !== source.generation
+  ) return false;
+  if (provenance.kind === "eip1898") {
+    return provenance.requireCanonical === true;
+  }
+  return (
+    typeof provenance.forkId === "string" &&
+    provenance.forkId.length > 0 &&
+    backend.verifyImmutableForkProvenance?.(
+      provenance,
+      source,
+    ) === true
+  );
+}
+
+function globalReadId(stateKey: string, localId: string): string {
+  return `${stateKey}\u001f${localId}`;
+}
+
+function uniqueSorted(values: readonly string[]): readonly string[] {
+  return Object.freeze([...new Set(values)].sort());
+}
+
+function freezeMid(mid: RouteVenueMid): RouteVenueMid {
+  return Object.freeze({
+    ...mid,
+    edges: Object.freeze([...mid.edges]) as unknown as TokenEdge[],
+  });
+}
+
+function freezeIssues(
+  issues: readonly BlockScanStateIssue[],
+): readonly BlockScanStateIssue[] {
+  return Object.freeze(
+    [...issues]
+      .sort((a, b) =>
+        [
+          a.kind,
+          a.lane ?? "",
+          a.familyId ?? "",
+          a.stateKey ?? "",
+          a.edgeKey ?? "",
+          a.message,
+        ].join("\u001f").localeCompare([
+          b.kind,
+          b.lane ?? "",
+          b.familyId ?? "",
+          b.stateKey ?? "",
+          b.edgeKey ?? "",
+          b.message,
+        ].join("\u001f"))
+      )
+      .map((issue) => Object.freeze({ ...issue })),
+  );
+}
+
+function freezeLaneTelemetry(
+  lanes: readonly BlockScanLaneTelemetry[],
+): readonly BlockScanLaneTelemetry[] {
+  return Object.freeze(
+    [...lanes]
+      .sort((a, b) => a.lane.localeCompare(b.lane))
+      .map((lane) => Object.freeze({ ...lane })),
+  );
+}
+
+function issueFromAbort(
+  reason: unknown,
+  generation: number,
+  lane?: BlockScanPricingLane,
+): BlockScanStateIssue {
+  if (reason instanceof SupersededAbort) {
+    return {
+      kind: "stale-generation",
+      lane,
+      message: reason.message,
+    };
+  }
+  if (reason instanceof DeadlineAbort) {
+    return {
+      kind: "deadline",
+      lane,
+      message: reason.message,
+    };
+  }
+  return {
+    kind: "aborted",
+    lane,
+    message: reason instanceof Error
+      ? reason.message
+      : `generation ${generation} aborted`,
+  };
+}
+
+function issueKindFromError(
+  error: unknown,
+  fallback: BlockScanStateIssueKind = "schema",
+): BlockScanStateIssueKind {
+  if (
+    error instanceof DeadlineAbort ||
+    error instanceof FamilyDeadlineAbort
+  ) return "deadline";
+  if (error instanceof SupersededAbort) return "stale-generation";
+  if (isAbortError(error)) return "aborted";
+  return fallback;
+}
+
+function mapReadFailureKind(kind: StateReadFailureKind): BlockScanStateIssueKind {
+  if (kind === "deadline") return "deadline";
+  if (kind === "aborted") return "aborted";
+  if (kind === "resource-limited") return "resource-limited";
+  return "backend";
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.name === "AbortError" ||
+    error.message.toLowerCase().includes("abort")
+  );
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return Boolean(
+    value &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function",
+  );
+}
+
+async function awaitWithAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    promise.catch(() => undefined);
+    throw signal.reason ?? new Error("aborted");
+  }
+  let remove = (): void => {};
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason ?? new Error("aborted"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    remove = () => signal.removeEventListener("abort", onAbort);
+  });
+  try {
+    return await Promise.race([promise, aborted]);
+  } finally {
+    remove();
+    promise.catch(() => undefined);
+  }
+}
+
+function linkAbortSignal(
+  source: AbortSignal | undefined,
+  target: AbortController,
+): () => void {
+  if (!source) return () => {};
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+  const abort = (): void => target.abort(source.reason);
+  source.addEventListener("abort", abort, { once: true });
+  return () => source.removeEventListener("abort", abort);
+}
+
+class FrozenReadonlyMap<K, V> implements ReadonlyMap<K, V> {
+  readonly #map: Map<K, V>;
+
+  constructor(entries: readonly (readonly [K, V])[]) {
+    this.#map = new Map(entries);
+    Object.freeze(this);
+  }
+
+  get size(): number {
+    return this.#map.size;
+  }
+
+  get(key: K): V | undefined {
+    return this.#map.get(key);
+  }
+
+  has(key: K): boolean {
+    return this.#map.has(key);
+  }
+
+  forEach(
+    callbackfn: (value: V, key: K, map: ReadonlyMap<K, V>) => void,
+    thisArg?: unknown,
+  ): void {
+    this.#map.forEach((value, key) => callbackfn.call(thisArg, value, key, this));
+  }
+
+  entries(): MapIterator<[K, V]> {
+    return this.#map.entries();
+  }
+
+  keys(): MapIterator<K> {
+    return this.#map.keys();
+  }
+
+  values(): MapIterator<V> {
+    return this.#map.values();
+  }
+
+  [Symbol.iterator](): MapIterator<[K, V]> {
+    return this.#map[Symbol.iterator]();
+  }
+}

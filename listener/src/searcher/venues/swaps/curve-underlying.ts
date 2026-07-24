@@ -14,25 +14,138 @@ import type {
   PreparedRouteContext,
   SwapAdapter,
 } from "../route-leg-adapter.js";
-import { readCurveUnderlyingExternalMid } from "../mid-readers.js";
-import { curveSwapObservation } from "../swap-observation.js";
+import {
+  curveIdentityResolver,
+  isRetryablePoolIdentityFailure,
+} from "../identity.js";
+import { createAddressLandedPoolMaterializer } from "../landed-pool-discovery.js";
+import { createCurveSwapObservation } from "../swap-observation.js";
+import { currentBlockRead } from "./blockscan-state-shared.js";
+import { curveUnderlyingLandedEvents } from "./curve-landed-events.js";
+import {
+  createCurrentBlockViewQuoteCapability,
+  quoteReadId,
+} from "./view-quote-blockscan-state.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
+const curveUnderlyingSwapObservation = createCurveSwapObservation({
+  adapterIds: ["curve-exchange-underlying"],
+  canonicalIntakeTargets: [
+    "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
+    "0x16c6521dff6bab339122a0fe25a9116693265353",
+  ],
+  landedEvents: curveUnderlyingLandedEvents.swaps,
+});
 const curveUnderlyingIface = new ethers.Interface([
   "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
 ]);
+
+interface CurveUnderlyingStateSchema {
+  readonly pool: string;
+}
+
+const curveUnderlyingPoolDiscovery = createAddressLandedPoolMaterializer({
+  version: "curve-underlying-address-metadata-v1",
+  eventIds: ["curve-underlying-i128", "curve-underlying-uint"],
+  async materializePool(candidate, context) {
+    const identity = await curveIdentityResolver({
+      backend: context.backend,
+      pool: candidate.address,
+      poolAdapter: "curve-underlying",
+      candidate: {
+        address: candidate.address,
+        adapter: "curve-underlying",
+      },
+      admissionPolicy: context.admissionPolicy,
+      isPoolAdapterSupported: (poolAdapter) =>
+        poolAdapter === "curve-underlying",
+    });
+    if (!identity.ok) {
+      if (isRetryablePoolIdentityFailure(identity.reason)) {
+        throw new Error(
+          `Curve underlying identity read incomplete: ${identity.reason}`,
+        );
+      }
+      return null;
+    }
+    const metadata = await resolveCurveUnderlyingMetadata(
+      context.backend,
+      candidate.address,
+      { allowDirectPoolFallback: true },
+    );
+    return {
+      address: candidate.address,
+      adapter: identity.adapter,
+      venueId: identity.venueId,
+      identitySource: identity.identitySource,
+      ...(identity.factory === undefined ? {} : { factory: identity.factory }),
+      underlyingCoins: metadata.coins,
+    };
+  },
+});
+
+export const curveUnderlyingBlockScanState =
+  createCurrentBlockViewQuoteCapability<CurveUnderlyingStateSchema>({
+    kind: "curve-underlying",
+    edgeAdapterIds: new Set(["curve-exchange-underlying"]),
+    compileGroup(edges) {
+      const pool = ethers.getAddress(edges[0].target).toLowerCase();
+      for (const edge of edges) {
+        if (
+          ethers.getAddress(edge.target).toLowerCase() !== pool ||
+          edge.curveI === undefined ||
+          edge.curveJ === undefined
+        ) {
+          throw new Error(`curve-underlying block-scan edge ${pool} is incomplete`);
+        }
+      }
+      return Object.freeze({ pool });
+    },
+    quoteRead(ctx) {
+      if (ctx.edge.curveI === undefined || ctx.edge.curveJ === undefined) {
+        throw new Error("curve-underlying current-N quote is missing indices");
+      }
+      return currentBlockRead({
+        id: quoteReadId(ctx.stateKey, ctx.edge),
+        sourceBlock: ctx.sourceBlock,
+        sourceBlockHash: ctx.sourceBlockHash,
+        to: ctx.edge.target,
+        data: curveUnderlyingIface.encodeFunctionData("get_dy_underlying", [
+          BigInt(ctx.edge.curveI),
+          BigInt(ctx.edge.curveJ),
+          ctx.amountIn,
+        ]),
+      });
+    },
+    decodeQuote(_edge, data) {
+      return BigInt(
+        curveUnderlyingIface.decodeFunctionResult("get_dy_underlying", data)[0],
+      );
+    },
+  });
 
 export const curveUnderlyingAdapter = Object.freeze({
   id: "curve-underlying",
   kind: "swap",
   poolAdapters: ["curve-underlying"],
+  identityPolicies: [{
+    poolAdapter: "curve-underlying",
+    policy: "onchain-resolver",
+    resolve: curveIdentityResolver,
+  }],
   edgeAdapterIds: ["curve-exchange-underlying"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   requiresProtocolEdgesFlag: false,
-  actionAdapterIds: ["curve-exchange-underlying", "erc20-approve"],
-  observation: curveSwapObservation,
-  readMid: readCurveUnderlyingExternalMid,
-  warm: { kind: "external-mid" },
+  ownedActionAdapterIds: ["curve-exchange-underlying"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  landedEvents: curveUnderlyingLandedEvents,
+  poolDiscovery: curveUnderlyingPoolDiscovery,
+  observation: curveUnderlyingSwapObservation,
+  victimModel: {
+    id: "pool-swap:curve-underlying-detect-only",
+    mode: "detect-only",
+  },
+  pricingState: curveUnderlyingBlockScanState,
   prepared: {
     quote: async (ctx: PreparedRouteContext) => {
       const started = Date.now();

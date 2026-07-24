@@ -2,14 +2,24 @@ import { ethers } from "ethers";
 import {
   createProtocolDiscoveryEvidenceCache,
   protocolAddressCacheKey,
+  type ProtocolAddressCacheEntry,
   type ProtocolDiscoveryEvidenceCache,
 } from "./protocol-discovery-cache.js";
+import {
+  ProtocolDiscoveryFamilyCircuitOpen,
+  ProtocolDiscoveryFamilyGuard,
+  type ProtocolDiscoveryFamilyGuardOptions,
+  withProtocolDiscoveryFamilyContext,
+} from "./protocol-discovery-family-guard.js";
 import type {
+  ExecutionFamilyId,
   ProtocolCandidate,
-  ProtocolConversionAdapter,
+  RouteLegAdapter,
   ProtocolDiscoveryContext,
   ProtocolDiscoveryLog,
+  ProtocolDiscoveryReadControl,
   ProtocolDiscoveryReceipt,
+  RouteCandidateSourceKind,
 } from "./venues/route-leg-adapter.js";
 
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)").toLowerCase();
@@ -24,11 +34,11 @@ const ZERO_TOPIC = `0x${"0".repeat(64)}`;
 const LOG_BATCH = 2_000;
 const TRACE_CONCURRENCY = 8;
 const ADDRESS_CONCURRENCY = 24;
+const FAMILY_CALLBACK_CONCURRENCY = 8;
 const IMPLEMENTATION_SLOT = BigInt(
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
 );
 const ZERO_WORD = `0x${"0".repeat(64)}`;
-const NEGATIVE_CACHE_BLOCKS = 7_200;
 
 export interface UnknownProtocolSelectorDiagnostic {
   readonly target: string;
@@ -44,10 +54,15 @@ export interface UnknownProtocolSelectorDiagnostic {
 export interface ObservedProtocolDiscoveryResult {
   readonly candidatesByAdapter: ReadonlyMap<string, readonly ProtocolCandidate[]>;
   readonly unknownSelectors: readonly UnknownProtocolSelectorDiagnostic[];
+  readonly sourceErrors: readonly ProtocolDiscoverySourceError[];
 }
 
 export interface ProtocolDiscoverySourceError {
   readonly adapterId: string | null;
+  /** Candidate source whose coverage was interrupted. */
+  readonly sourceKind: RouteCandidateSourceKind;
+  /** Exact registered families that depend on this failed source operation. */
+  readonly impactedFamilyIds: readonly ExecutionFamilyId[];
   readonly target: string | null;
   readonly reason: string;
   /** Only retryable source failures prevent cursor/candidate-set advancement. */
@@ -86,23 +101,47 @@ export interface ProtocolTraceMemoStats {
  * semantics.
  */
 export function protocolObservedSourceFingerprint(
-  adapters: readonly ProtocolConversionAdapter[],
+  adapters: readonly RouteLegAdapter[],
 ): string {
-  return ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(
-    [...protocolDiscoverySourceFingerprints(adapters)],
-  )));
+  const observed = adapters
+    .filter((adapter) =>
+      adapter.discovery?.candidateSources.includes("observed-interaction")
+    )
+    .map((adapter) => ({
+      adapterId: adapter.id,
+      observedMatcherVersion:
+        adapter.discovery!.observedMatcherVersion ?? "",
+      eventTopics: [...adapter.discovery!.eventTopics]
+        .map((item) => item.toLowerCase())
+        .sort(),
+      callSelectors: [...adapter.discovery!.callSelectors]
+        .map((item) => item.toLowerCase())
+        .sort(),
+    }))
+    .sort((a, b) => a.adapterId.localeCompare(b.adapterId));
+  return ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(observed)));
 }
 
 /** Per-family fingerprints let a registry rollout invalidate only its owner. */
 export function protocolDiscoverySourceFingerprints(
-  adapters: readonly ProtocolConversionAdapter[],
+  adapters: readonly RouteLegAdapter[],
 ): ReadonlyMap<string, string> {
   const sources = adapters
     .filter((adapter) => adapter.discovery)
     .map((adapter) => ({
       adapterId: adapter.id,
       candidateSources: [...adapter.discovery!.candidateSources].sort(),
+      candidateAddressHints: [...(adapter.discovery!.candidateAddressHints ?? [])]
+        .map((item) => ethers.getAddress(item).toLowerCase())
+        .sort(),
       addressMatcherVersion: adapter.discovery!.addressMatcherVersion ?? "",
+      addressMatcherCachePolicy: adapter.discovery!.addressMatcherCachePolicy
+        ? {
+            kind: adapter.discovery!.addressMatcherCachePolicy.kind,
+            invariant: adapter.discovery!.addressMatcherCachePolicy.invariant,
+            version: adapter.discovery!.addressMatcherCachePolicy.version,
+          }
+        : null,
       observedMatcherVersion: adapter.discovery!.observedMatcherVersion ?? "",
       eventTopics: [...adapter.discovery!.eventTopics].map((item) => item.toLowerCase()).sort(),
       callSelectors: [...adapter.discovery!.callSelectors].map((item) => item.toLowerCase()).sort(),
@@ -171,7 +210,7 @@ export function createProtocolTraceMemo(
 /** Receipt-only, cheap gate for deciding whether a call trace can teach us a protocol route. */
 export function shouldTraceForProtocolDiscovery(
   logs: readonly ProtocolDiscoveryLog[],
-  adapters: readonly ProtocolConversionAdapter[],
+  adapters: readonly RouteLegAdapter[],
 ): boolean {
   const declaredTopics = registeredEventTopics(adapters);
   if (logs.some((log) => declaredTopics.has(log.topics[0]?.toLowerCase() ?? ""))) return true;
@@ -200,53 +239,82 @@ export function shouldTraceForProtocolDiscovery(
  * addresses and event-window -> receipt -> trace. Family adapters only parse.
  */
 export async function scanProtocolDiscoveryRange(input: {
-  adapters: readonly ProtocolConversionAdapter[];
+  adapters: readonly RouteLegAdapter[];
   context: ProtocolDiscoveryContext;
   candidateAddresses?: readonly string[];
   evidenceCache?: ProtocolDiscoveryEvidenceCache;
   traceMemo?: ProtocolTraceMemo;
+  familyGuardOptions?: ProtocolDiscoveryFamilyGuardOptions;
+  /** Parent pass lifetime shared by scanner reads and family callbacks. */
+  control?: ProtocolDiscoveryReadControl;
 }): Promise<ProtocolDiscoveryRangeResult> {
+  const passControl = mergeProtocolDiscoveryReadControls(
+    protocolDiscoveryReadControlFromFamilyOptions(input.familyGuardOptions),
+    input.control,
+  );
+  throwIfProtocolDiscoveryParentStopped(passControl);
   const candidatesByAdapter = new Map<string, ProtocolCandidate[]>();
   const unknownSelectors: UnknownProtocolSelectorDiagnostic[] = [];
   const eventSourceErrors: ProtocolDiscoverySourceError[] = [];
+  const addressFamilyIds = familyIdsForSource(input.adapters, "dex-token-domain");
+  const observedFamilyIds = familyIdsForSource(input.adapters, "observed-interaction");
   const addressScanPromise = scanAddressCandidates({
     adapters: input.adapters,
     context: input.context,
     candidateAddresses: input.candidateAddresses ?? [],
     evidenceCache: input.evidenceCache ?? createProtocolDiscoveryEvidenceCache(),
-  }).catch((error) => ({
-    candidatesByAdapter: new Map<string, readonly ProtocolCandidate[]>(),
-    issues: [{
-      adapterId: null,
-      target: null,
-      reason: `address scanner failed: ${safeError(error)}`,
-      retryable: true,
-    }] satisfies ProtocolDiscoverySourceError[],
-    stats: {
-      addresses: 0,
-      codeReads: 0,
-      cacheHits: 0,
-      probes: 0,
-      matches: 0,
-      negatives: 0,
-      ambiguous: 0,
-    },
-  }));
+    familyGuardOptions: mergeProtocolDiscoveryFamilyGuardOptions(
+      input.familyGuardOptions,
+      passControl,
+    ),
+    control: passControl,
+  }).catch((error) => {
+    return {
+      candidatesByAdapter: new Map<string, readonly ProtocolCandidate[]>(),
+      issues: [{
+        adapterId: null,
+        sourceKind: "dex-token-domain",
+        impactedFamilyIds: addressFamilyIds,
+        target: null,
+        reason: `address scanner failed: ${safeError(error)}`,
+        retryable: true,
+      }] satisfies ProtocolDiscoverySourceError[],
+      stats: {
+        addresses: 0,
+        codeReads: 0,
+        cacheHits: 0,
+        probes: 0,
+        matches: 0,
+        negatives: 0,
+        ambiguous: 0,
+      },
+    };
+  });
 
   const topics = [...registeredEventTopics(input.adapters)].sort();
   const eventLogs: ProtocolDiscoveryLog[] = [];
+  const observedFamilyGuard = new ProtocolDiscoveryFamilyGuard(
+    mergeProtocolDiscoveryFamilyGuardOptions(
+      input.familyGuardOptions,
+      passControl,
+    ),
+  );
   if (topics.length > 0) {
     for (let start = input.context.fromBlock; start <= input.context.toBlock; start += LOG_BATCH) {
+      throwIfProtocolDiscoveryParentStopped(passControl);
       const end = Math.min(input.context.toBlock, start + LOG_BATCH - 1);
       try {
         eventLogs.push(...await input.context.backend.getLogs({
           topics: [topics.length === 1 ? topics[0] : topics],
           fromBlock: start,
           toBlock: end,
-        }));
+        }, passControl));
       } catch (error) {
+        throwIfProtocolDiscoveryParentStopped(passControl);
         eventSourceErrors.push({
           adapterId: null,
+          sourceKind: "observed-interaction",
+          impactedFamilyIds: observedFamilyIds,
           target: null,
           reason: `event_window_${start}_${end}: ${safeError(error)}`,
           retryable: true,
@@ -267,6 +335,8 @@ export async function scanProtocolDiscoveryRange(input: {
     } else {
       eventSourceErrors.push({
         adapterId: null,
+        sourceKind: "observed-interaction",
+        impactedFamilyIds: observedFamilyIds,
         target: log.address,
         reason: "discovery event missing transaction hash",
         retryable: true,
@@ -274,35 +344,50 @@ export async function scanProtocolDiscoveryRange(input: {
     }
   }
   const traceResults = await mapLimit([...txHashes].sort(), TRACE_CONCURRENCY, async (txHash) => {
+    throwIfProtocolDiscoveryParentStopped(passControl);
     try {
-      const receipt = await input.context.backend.getTransactionReceipt(txHash);
+      const receipt = await input.context.backend.getTransactionReceipt(
+        txHash,
+        passControl,
+      );
       if (!receipt) throw new Error("receipt unavailable for discovery event");
-      const trace = input.traceMemo
-        ? await input.traceMemo.trace(
+      const tracePromise = input.traceMemo
+        ? input.traceMemo.trace(
           txHash,
           txBlocks.get(txHash) ?? input.context.toBlock,
-          () => input.context.backend.traceTransaction(txHash),
+          () => input.context.backend.traceTransaction(txHash, passControl),
         )
-        : await input.context.backend.traceTransaction(txHash);
+        : input.context.backend.traceTransaction(txHash, passControl);
+      const trace = await awaitWithProtocolDiscoveryControl(
+        tracePromise,
+        passControl,
+      );
       const observed = await scanObservedProtocolTrace({
         adapters: input.adapters,
         context: input.context,
         txHash,
         receipt,
         trace,
+        familyGuard: observedFamilyGuard,
+        control: passControl,
       });
       return { observed, error: null };
     } catch (error) {
+      throwIfProtocolDiscoveryParentStopped(passControl);
       return {
         observed: null,
         error: {
           adapterId: null,
+          sourceKind: "observed-interaction",
+          impactedFamilyIds: observedFamilyIds,
           target: null,
           reason: `${txHash}: ${safeError(error)}`,
-          // A pruned local node cannot recover an old trace by retrying the
-          // same window. Skip that evidence fail-closed instead of pinning the
-          // global cursor forever; observed-only families wait for future use.
-          retryable: !isPrunedHistoricalStateFailure(error),
+          // Receipt/trace evidence is part of this source's completeness
+          // contract. A pruned backend cannot recover it, but advancing the
+          // cursor would permanently erase the only candidate source for an
+          // observed-only family (for example Eigenpie). Keep the range
+          // incomplete and require an archive/materialized-history backend.
+          retryable: true,
         } satisfies ProtocolDiscoverySourceError,
       };
     }
@@ -314,6 +399,7 @@ export async function scanProtocolDiscoveryRange(input: {
       continue;
     }
     if (!result.observed) continue;
+    eventSourceErrors.push(...result.observed.sourceErrors);
     for (const [adapterId, candidates] of result.observed.candidatesByAdapter) {
       for (const candidate of candidates) pushCandidate(candidatesByAdapter, adapterId, candidate);
     }
@@ -326,6 +412,7 @@ export async function scanProtocolDiscoveryRange(input: {
   }
 
   const addressScan = await addressScanPromise;
+  throwIfProtocolDiscoveryParentStopped(passControl);
   for (const [adapterId, candidates] of addressScan.candidatesByAdapter) {
     for (const candidate of candidates) pushCandidate(candidatesByAdapter, adapterId, candidate);
   }
@@ -334,23 +421,28 @@ export async function scanProtocolDiscoveryRange(input: {
   }
   const addressSourceComplete = !addressScan.issues.some((issue) => issue.retryable);
   const eventSourceComplete = !eventSourceErrors.some((issue) => issue.retryable);
-  const sourceErrors = [...addressScan.issues, ...eventSourceErrors];
+  const sourceErrors = sourceErrorsPreservingFamilyCoverage([
+    ...addressScan.issues,
+    ...eventSourceErrors,
+  ]);
   return {
     candidatesByAdapter,
     unknownSelectors,
     sourceComplete: addressSourceComplete && eventSourceComplete,
     eventSourceComplete,
     addressSourceComplete,
-    sourceErrors: sourceErrors.slice(0, 32),
+    sourceErrors,
     addressStats: addressScan.stats,
   };
 }
 
 async function scanAddressCandidates(input: {
-  adapters: readonly ProtocolConversionAdapter[];
+  adapters: readonly RouteLegAdapter[];
   context: ProtocolDiscoveryContext;
   candidateAddresses: readonly string[];
   evidenceCache: ProtocolDiscoveryEvidenceCache;
+  familyGuardOptions?: ProtocolDiscoveryFamilyGuardOptions;
+  control?: ProtocolDiscoveryReadControl;
 }): Promise<{
   candidatesByAdapter: ReadonlyMap<string, readonly ProtocolCandidate[]>;
   issues: readonly ProtocolDiscoverySourceError[];
@@ -360,6 +452,24 @@ async function scanAddressCandidates(input: {
     adapter.discovery?.candidateSources.includes("dex-token-domain") &&
     adapter.discovery.candidateFromAddress
   );
+  const graphTokens = new Set(
+    input.context.graphTokens.flatMap((raw) => {
+      try {
+        return [ethers.getAddress(raw).toLowerCase()];
+      } catch {
+        return [];
+      }
+    }),
+  );
+  const hintOwners = new Map<string, Set<string>>();
+  for (const adapter of adapters) {
+    for (const raw of adapter.discovery?.candidateAddressHints ?? []) {
+      const address = ethers.getAddress(raw).toLowerCase();
+      const owners = hintOwners.get(address) ?? new Set<string>();
+      owners.add(adapter.id);
+      hintOwners.set(address, owners);
+    }
+  }
   const addresses = new Map<string, string>();
   if (adapters.length > 0) {
     for (const raw of input.candidateAddresses) {
@@ -371,114 +481,333 @@ async function scanAddressCandidates(input: {
       }
     }
   }
+  const familyGuard = new ProtocolDiscoveryFamilyGuard(
+    input.familyGuardOptions,
+  );
+  const reportedOpenCircuits = new Set<string>();
   const results = await mapLimit([...addresses.values()].sort(), ADDRESS_CONCURRENCY, async (target) => {
+    throwIfProtocolDiscoveryParentStopped(input.control);
+    const targetKey = target.toLowerCase();
+    const owners = hintOwners.get(targetKey);
+    const eligibleAdapters = owners !== undefined && !graphTokens.has(targetKey)
+      ? adapters.filter((adapter) => owners.has(adapter.id))
+      : adapters;
+    if (eligibleAdapters.length === 0) {
+      return {
+        matches: [] as Array<{ adapterId: string; candidate: ProtocolCandidate }>,
+        issues: [] as ProtocolDiscoverySourceError[],
+        matcherFailures: [] as Array<{
+          readonly adapterId: ExecutionFamilyId;
+          readonly target: string;
+          readonly error: unknown;
+        }>,
+        codeReads: 0,
+        cacheHits: 0,
+        probes: 0,
+        negatives: 0,
+      };
+    }
+    const impactedFamilyIds = Object.freeze(
+      eligibleAdapters.map((adapter) => adapter.id).sort(),
+    );
     let code: string;
     let implementationWord: string;
     try {
-      code = await input.context.backend.getCode(target);
+      code = await input.context.backend.getCode(target, input.control);
       implementationWord = code === "0x"
         ? ZERO_WORD
-        : (await input.context.backend.getStorageAt(target, IMPLEMENTATION_SLOT)).toLowerCase();
+        : (
+          await input.context.backend.getStorageAt(
+            target,
+            IMPLEMENTATION_SLOT,
+            input.control,
+          )
+        ).toLowerCase();
     } catch (error) {
+      throwIfProtocolDiscoveryParentStopped(input.control);
       return {
         matches: [] as Array<{ adapterId: string; candidate: ProtocolCandidate }>,
         issues: [{
           adapterId: null,
+          sourceKind: "dex-token-domain",
+          impactedFamilyIds,
           target,
           reason: `address code read failed: ${safeError(error)}`,
           retryable: true,
         }] satisfies ProtocolDiscoverySourceError[],
+        matcherFailures: [] as Array<{
+          readonly adapterId: ExecutionFamilyId;
+          readonly target: string;
+          readonly error: unknown;
+        }>,
         codeReads: 1,
         cacheHits: 0,
         probes: 0,
         negatives: 0,
-        matcherUndecided: true,
       };
     }
     const codeHash = ethers.keccak256(code).toLowerCase();
     const matches: Array<{ adapterId: string; candidate: ProtocolCandidate }> = [];
     const issues: ProtocolDiscoverySourceError[] = [];
+    const matcherFailures: Array<{
+      readonly adapterId: ExecutionFamilyId;
+      readonly target: string;
+      readonly error: unknown;
+    }> = [];
     let cacheHits = 0;
     let probes = 0;
     let negatives = 0;
-    let matcherUndecided = false;
-    for (const adapter of adapters) {
-      const matcher = adapter.discovery?.candidateFromAddress;
-      if (!matcher) continue;
-      const matcherVersion = adapter.discovery?.addressMatcherVersion?.trim();
-      if (!matcherVersion) {
-        matcherUndecided = true;
-        issues.push({
-          adapterId: adapter.id,
+    const adapterResults = await mapLimit(
+      eligibleAdapters,
+      FAMILY_CALLBACK_CONCURRENCY,
+      async (adapter) => {
+        const adapterIssues: ProtocolDiscoverySourceError[] = [];
+        let adapterCacheHits = 0;
+        let adapterProbes = 0;
+        let adapterNegatives = 0;
+        let matcherError: unknown | null = null;
+        let matchedCandidate: ProtocolCandidate | null = null;
+        let cacheEntry: {
+          readonly key: string;
+          readonly value: ProtocolAddressCacheEntry;
+        } | null = null;
+        // candidateAddressHints are owner-scoped provenance, not a global
+        // identity allowlist. A hint-only address enters only its declaring
+        // family. If independently present in the DEX domain, every matcher
+        // may still classify it.
+        if (
+          owners !== undefined &&
+          !graphTokens.has(targetKey) &&
+          !owners.has(adapter.id)
+        ) {
+          return {
+            adapter,
+            issues: adapterIssues,
+            cacheHits: adapterCacheHits,
+            probes: adapterProbes,
+            negatives: adapterNegatives,
+            matcherError,
+            matchedCandidate,
+            cacheEntry,
+          };
+        }
+        const matcher = adapter.discovery?.candidateFromAddress;
+        if (!matcher) {
+          return {
+            adapter,
+            issues: adapterIssues,
+            cacheHits: adapterCacheHits,
+            probes: adapterProbes,
+            negatives: adapterNegatives,
+            matcherError,
+            matchedCandidate,
+            cacheEntry,
+          };
+        }
+        const matcherVersion = adapter.discovery?.addressMatcherVersion?.trim();
+        if (!matcherVersion) {
+          adapterIssues.push({
+            adapterId: adapter.id,
+            sourceKind: "dex-token-domain",
+            impactedFamilyIds: [adapter.id],
+            target,
+            reason: "address matcher omitted addressMatcherVersion",
+            retryable: false,
+          });
+          return {
+            adapter,
+            issues: adapterIssues,
+            cacheHits: adapterCacheHits,
+            probes: adapterProbes,
+            negatives: adapterNegatives,
+            matcherError,
+            matchedCandidate,
+            cacheEntry,
+          };
+        }
+        const cachePolicy = adapter.discovery?.addressMatcherCachePolicy;
+        let dependencyFingerprint: string | null = null;
+        if (cachePolicy && code !== "0x") {
+          try {
+            const rawFingerprint = await familyGuard.run(
+              adapter.id,
+              "address-cache-fingerprint",
+              (control) =>
+                cachePolicy.currentDependencyFingerprint(
+                  { target, codeHash, implementationWord },
+                  withProtocolDiscoveryFamilyContext(input.context, control),
+                ),
+            );
+            if (!ethers.isHexString(rawFingerprint, 32)) {
+              throw new Error("dependency fingerprint must be 32-byte hex");
+            }
+            dependencyFingerprint = rawFingerprint.toLowerCase();
+          } catch (error) {
+            throwIfProtocolDiscoveryParentStopped(input.control);
+            // Cache evidence is optional. A failed fingerprint disables reuse;
+            // the current-N matcher below still establishes source truth.
+            adapterIssues.push({
+              adapterId: adapter.id,
+              sourceKind: "dex-token-domain",
+              impactedFamilyIds: [adapter.id],
+              target,
+              reason:
+                `address cache fingerprint unavailable; current matcher forced: ` +
+                safeError(error),
+              retryable: false,
+            });
+          }
+        }
+        const key = protocolAddressCacheKey(adapter.id, target);
+        const cached = input.evidenceCache.addressEntries.get(key);
+        const fingerprintMatches =
+          cached?.codeHash.toLowerCase() === codeHash &&
+          cached.implementationWord.toLowerCase() === implementationWord &&
+          cached.matcherVersion === matcherVersion;
+        const familyProvedReusable =
+          cachePolicy !== undefined &&
+          dependencyFingerprint !== null &&
+          cached?.dependencyPolicyVersion === cachePolicy.version &&
+          cached.dependencyFingerprint === dependencyFingerprint;
+        if (cached && fingerprintMatches && familyProvedReusable) {
+          adapterCacheHits++;
+          if (cached.candidate) matchedCandidate = cached.candidate;
+          else adapterNegatives++;
+          return {
+            adapter,
+            issues: adapterIssues,
+            cacheHits: adapterCacheHits,
+            probes: adapterProbes,
+            negatives: adapterNegatives,
+            matcherError,
+            matchedCandidate,
+            cacheEntry,
+          };
+        }
+        let candidate: ProtocolCandidate | null;
+        if (code === "0x") {
+          candidate = null;
+        } else {
+          try {
+            candidate = await familyGuard.run(
+              adapter.id,
+              "address-matcher",
+              (control) =>
+                matcher(
+                  { target, codeHash, implementationWord },
+                  withProtocolDiscoveryFamilyContext(input.context, control),
+                ),
+            );
+          } catch (error) {
+            throwIfProtocolDiscoveryParentStopped(input.control);
+            matcherError = error;
+            return {
+              adapter,
+              issues: adapterIssues,
+              cacheHits: adapterCacheHits,
+              probes: adapterProbes,
+              negatives: adapterNegatives,
+              matcherError,
+              matchedCandidate,
+              cacheEntry,
+            };
+          }
+        }
+        adapterProbes++;
+        if (candidate) {
+          let candidateTarget: string;
+          try {
+            candidateTarget = ethers.getAddress(candidate.pool.address);
+          } catch {
+            candidateTarget = ethers.ZeroAddress;
+          }
+          if (candidateTarget.toLowerCase() !== target.toLowerCase()) {
+            adapterIssues.push({
+              adapterId: adapter.id,
+              sourceKind: "dex-token-domain",
+              impactedFamilyIds: [adapter.id],
+              target,
+              reason: "address matcher changed candidate target",
+              retryable: false,
+            });
+            return {
+              adapter,
+              issues: adapterIssues,
+              cacheHits: adapterCacheHits,
+              probes: adapterProbes,
+              negatives: adapterNegatives,
+              matcherError,
+              matchedCandidate,
+              cacheEntry,
+            };
+          }
+          matchedCandidate = candidate;
+        } else {
+          adapterNegatives++;
+        }
+        cacheEntry = {
+          key,
+          value: {
+            adapterId: adapter.id,
+            address: target,
+            codeHash,
+            implementationWord,
+            matcherVersion,
+            dependencyPolicyVersion: cachePolicy?.version ?? null,
+            dependencyFingerprint,
+            checkedAtBlock: input.context.blockNumber,
+            candidate,
+          },
+        };
+        return {
+          adapter,
+          issues: adapterIssues,
+          cacheHits: adapterCacheHits,
+          probes: adapterProbes,
+          negatives: adapterNegatives,
+          matcherError,
+          matchedCandidate,
+          cacheEntry,
+        };
+      },
+    );
+    // Commit in registration order only after each guarded callback settled.
+    // A late result from a timed-out matcher has no cache entry to publish.
+    for (const result of adapterResults) {
+      issues.push(...result.issues);
+      cacheHits += result.cacheHits;
+      probes += result.probes;
+      negatives += result.negatives;
+      if (result.matcherError !== null) {
+        matcherFailures.push({
+          adapterId: result.adapter.id,
           target,
-          reason: "address matcher omitted addressMatcherVersion",
-          retryable: false,
+          error: result.matcherError,
         });
         continue;
       }
-      const key = protocolAddressCacheKey(adapter.id, target);
-      const cached = input.evidenceCache.addressEntries.get(key);
-      const cacheAge = cached ? input.context.blockNumber - cached.checkedAtBlock : Infinity;
-      const fingerprintMatches = cached?.codeHash.toLowerCase() === codeHash &&
-        cached.implementationWord.toLowerCase() === implementationWord &&
-        cached.matcherVersion === matcherVersion &&
-        cacheAge >= 0;
-      const negativeFresh = cached?.candidate !== null || cacheAge <= NEGATIVE_CACHE_BLOCKS;
-      if (cached && fingerprintMatches && negativeFresh) {
-        cacheHits++;
-        if (cached.candidate) matches.push({ adapterId: adapter.id, candidate: cached.candidate });
-        else negatives++;
-        continue;
+      if (result.cacheEntry) {
+        input.evidenceCache.addressEntries.set(
+          result.cacheEntry.key,
+          result.cacheEntry.value,
+        );
       }
-      let candidate: ProtocolCandidate | null;
-      if (code === "0x") {
-        candidate = null;
-      } else {
-        try {
-          candidate = await matcher({ target, codeHash, implementationWord }, input.context);
-        } catch (error) {
-          matcherUndecided = true;
-          issues.push({
-            adapterId: adapter.id,
-            target,
-            reason: `address match failed: ${safeError(error)}`,
-            retryable: true,
-          });
-          continue;
-        }
+      if (result.matchedCandidate) {
+        matches.push({
+          adapterId: result.adapter.id,
+          candidate: result.matchedCandidate,
+        });
       }
-      probes++;
-      if (candidate) {
-        let candidateTarget: string;
-        try {
-          candidateTarget = ethers.getAddress(candidate.pool.address);
-        } catch {
-          candidateTarget = ethers.ZeroAddress;
-        }
-        if (candidateTarget.toLowerCase() !== target.toLowerCase()) {
-          issues.push({
-            adapterId: adapter.id,
-            target,
-            reason: "address matcher changed candidate target",
-            retryable: false,
-          });
-          continue;
-        }
-        matches.push({ adapterId: adapter.id, candidate });
-      } else {
-        negatives++;
-      }
-      input.evidenceCache.addressEntries.set(key, {
-        adapterId: adapter.id,
-        address: target,
-        codeHash,
-        implementationWord,
-        matcherVersion,
-        checkedAtBlock: input.context.blockNumber,
-        candidate,
-      });
     }
-    return { matches, issues, matcherUndecided, codeReads: 1, cacheHits, probes, negatives };
+    return {
+      matches,
+      issues,
+      matcherFailures,
+      codeReads: 1,
+      cacheHits,
+      probes,
+      negatives,
+    };
   });
 
   const candidatesByAdapter = new Map<string, ProtocolCandidate[]>();
@@ -495,10 +824,22 @@ async function scanAddressCandidates(input: {
     probes += result.probes;
     negatives += result.negatives;
     issues.push(...result.issues);
-    if (result.matcherUndecided) {
-      // A successful family cannot be declared unique while another matching
-      // family's classifier is unavailable for the same target.
-      continue;
+    for (const failure of result.matcherFailures) {
+      if (
+        failure.error instanceof ProtocolDiscoveryFamilyCircuitOpen &&
+        reportedOpenCircuits.has(failure.adapterId)
+      ) {
+        continue;
+      }
+      reportedOpenCircuits.add(failure.adapterId);
+      issues.push({
+        adapterId: failure.adapterId,
+        sourceKind: "dex-token-domain",
+        impactedFamilyIds: [failure.adapterId],
+        target: failure.target,
+        reason: `address match failed: ${safeError(failure.error)}`,
+        retryable: true,
+      });
     }
     if (result.matches.length === 1) {
       const match = result.matches[0];
@@ -517,6 +858,8 @@ async function scanAddressCandidates(input: {
       }
       issues.push({
         adapterId: null,
+        sourceKind: "dex-token-domain",
+        impactedFamilyIds: adapterIds as ExecutionFamilyId[],
         target: result.matches[0].candidate.pool.address,
         reason: `ambiguous address adapters: ${result.matches.map((item) => item.adapterId).sort().join(",")}`,
         retryable: false,
@@ -544,14 +887,31 @@ async function scanAddressCandidates(input: {
  * and probe routes before any graph mutation.
  */
 export async function scanObservedProtocolTrace(input: {
-  adapters: readonly ProtocolConversionAdapter[];
+  adapters: readonly RouteLegAdapter[];
   context: ProtocolDiscoveryContext;
   txHash: string;
   receipt: ProtocolDiscoveryReceipt;
   trace: unknown;
+  familyGuard?: ProtocolDiscoveryFamilyGuard;
+  familyGuardOptions?: ProtocolDiscoveryFamilyGuardOptions;
+  control?: ProtocolDiscoveryReadControl;
 }): Promise<ObservedProtocolDiscoveryResult> {
+  const passControl = mergeProtocolDiscoveryReadControls(
+    protocolDiscoveryReadControlFromFamilyOptions(input.familyGuardOptions),
+    input.control,
+  );
+  throwIfProtocolDiscoveryParentStopped(passControl);
   const candidatesByAdapter = new Map<string, ProtocolCandidate[]>();
   const unknownSelectors: UnknownProtocolSelectorDiagnostic[] = [];
+  const sourceErrors: ProtocolDiscoverySourceError[] = [];
+  const familyGuard = input.familyGuard ??
+    new ProtocolDiscoveryFamilyGuard(
+      mergeProtocolDiscoveryFamilyGuardOptions(
+        input.familyGuardOptions,
+        passControl,
+      ),
+    );
+  const reportedOpenCircuits = new Set<string>();
   const calls = uniqueCalls(successfulCalls(input.trace));
   const protocolLike = shouldTraceForProtocolDiscovery(input.receipt.logs, input.adapters);
   const diagnosticTargets = protocolLike
@@ -560,24 +920,64 @@ export async function scanObservedProtocolTrace(input: {
 
   for (const call of calls) {
     const matches: Array<{ adapterId: string; candidate: ProtocolCandidate }> = [];
-    let selectorRecognized = false;
-    for (const adapter of input.adapters) {
+    const matchingAdapters = input.adapters.filter((adapter) => {
       const discovery = adapter.discovery;
       if (
         !discovery?.candidateSources.includes("observed-interaction") ||
         !discovery.candidateFromObservedCall
-      ) continue;
-      const selectorMatches = discovery.callSelectors.some(
+      ) return false;
+      return discovery.callSelectors.some(
         (selector) => selector.toLowerCase() === call.selector,
       );
-      if (!selectorMatches) continue;
-      selectorRecognized = true;
-      const candidate = await discovery.candidateFromObservedCall({
-        ...call,
-        txHash: input.txHash,
-        receipt: input.receipt,
-        trace: input.trace,
-      }, input.context);
+    });
+    const selectorRecognized = matchingAdapters.length > 0;
+    const matcherResults = await mapLimit(
+      matchingAdapters,
+      FAMILY_CALLBACK_CONCURRENCY,
+      async (adapter) => {
+        const discovery = adapter.discovery!;
+        try {
+          const candidate = await familyGuard.run(
+            adapter.id,
+            "observed-matcher",
+            (control) =>
+              discovery.candidateFromObservedCall!({
+                ...call,
+                txHash: input.txHash,
+                receipt: input.receipt,
+                trace: input.trace,
+              }, withProtocolDiscoveryFamilyContext(input.context, control)),
+          );
+          return { adapter, candidate, error: null };
+        } catch (error) {
+          throwIfProtocolDiscoveryParentStopped(passControl);
+          return { adapter, candidate: null, error };
+        }
+      },
+    );
+    // mapLimit preserves registration order, so diagnostics and arbitration
+    // remain deterministic even though sibling families execute concurrently.
+    for (const result of matcherResults) {
+      const adapter = result.adapter;
+      if (result.error !== null) {
+        const error = result.error;
+        if (
+          !(error instanceof ProtocolDiscoveryFamilyCircuitOpen) ||
+          !reportedOpenCircuits.has(adapter.id)
+        ) {
+          reportedOpenCircuits.add(adapter.id);
+          sourceErrors.push({
+            adapterId: adapter.id,
+            sourceKind: "observed-interaction",
+            impactedFamilyIds: [adapter.id],
+            target: call.target,
+            reason: `observed match failed: ${safeError(error)}`,
+            retryable: true,
+          });
+        }
+        continue;
+      }
+      const candidate = result.candidate;
       if (!candidate) continue;
       matches.push({ adapterId: adapter.id, candidate });
     }
@@ -618,10 +1018,55 @@ export async function scanObservedProtocolTrace(input: {
   // Diagnostics stay separate from graph admission. A transaction can contain
   // one verified route and a second unregistered protocol-like selector; the
   // verified edge remains clean while the unknown pair is still observable.
-  return { candidatesByAdapter, unknownSelectors };
+  return { candidatesByAdapter, unknownSelectors, sourceErrors };
 }
 
-function registeredEventTopics(adapters: readonly ProtocolConversionAdapter[]): Set<string> {
+function familyIdsForSource(
+  adapters: readonly RouteLegAdapter[],
+  sourceKind: RouteCandidateSourceKind,
+): readonly ExecutionFamilyId[] {
+  return Object.freeze(
+    [...new Set(
+      adapters
+        .filter((adapter) => adapter.discovery?.candidateSources.includes(sourceKind))
+        .map((adapter) => adapter.id),
+    )].sort(),
+  );
+}
+
+function sourceErrorsPreservingFamilyCoverage(
+  errors: readonly ProtocolDiscoverySourceError[],
+  detailLimit = 32,
+): readonly ProtocolDiscoverySourceError[] {
+  if (errors.length <= detailLimit) return errors;
+  const detailed = errors.slice(0, detailLimit);
+  const covered = new Set<string>();
+  for (const error of detailed) {
+    if (!error.retryable) continue;
+    for (const familyId of error.impactedFamilyIds) {
+      covered.add(`${error.sourceKind}\u001f${familyId}`);
+    }
+  }
+  const summaries = new Map<string, ProtocolDiscoverySourceError>();
+  for (const error of errors.slice(detailLimit)) {
+    if (!error.retryable) continue;
+    for (const familyId of error.impactedFamilyIds) {
+      const key = `${error.sourceKind}\u001f${familyId}`;
+      if (covered.has(key) || summaries.has(key)) continue;
+      summaries.set(key, {
+        adapterId: familyId,
+        sourceKind: error.sourceKind,
+        impactedFamilyIds: [familyId],
+        target: null,
+        reason: `additional ${error.sourceKind} source failures omitted from diagnostics`,
+        retryable: true,
+      });
+    }
+  }
+  return Object.freeze([...detailed, ...summaries.values()]);
+}
+
+function registeredEventTopics(adapters: readonly RouteLegAdapter[]): Set<string> {
   return new Set(
     adapters.flatMap((adapter) =>
       adapter.discovery?.candidateSources.includes("observed-interaction")
@@ -646,15 +1091,147 @@ function candidateSortKey(candidate: ProtocolCandidate): string {
   return `${candidate.pool.address.toLowerCase()}|${candidate.selector ?? ""}|${candidate.source}`;
 }
 
+function mergeProtocolDiscoveryReadControls(
+  parent: ProtocolDiscoveryReadControl | undefined,
+  operation: ProtocolDiscoveryReadControl | undefined,
+): ProtocolDiscoveryReadControl {
+  const deadlines = [parent?.deadlineAtMs, operation?.deadlineAtMs]
+    .filter((value): value is number => value !== undefined);
+  const deadlineAtMs = deadlines.length > 0 ? Math.min(...deadlines) : undefined;
+  const signals = [...new Set(
+    [parent?.signal, operation?.signal]
+      .filter((value): value is AbortSignal => value !== undefined),
+  )];
+  const signal = signals.length === 0
+    ? undefined
+    : signals.length === 1
+      ? signals[0]
+      : AbortSignal.any(signals);
+  const run = composeProtocolDiscoveryReadRunners(
+    parent?.run,
+    operation?.run,
+  );
+  return {
+    ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
+    ...(signal === undefined ? {} : { signal }),
+    ...(run === undefined ? {} : { run }),
+  };
+}
+
+function mergeProtocolDiscoveryFamilyGuardOptions(
+  options: ProtocolDiscoveryFamilyGuardOptions | undefined,
+  control: ProtocolDiscoveryReadControl | undefined,
+): ProtocolDiscoveryFamilyGuardOptions {
+  const merged = mergeProtocolDiscoveryReadControls(
+    {
+      ...(options?.deadlineAtMs === undefined
+        ? {}
+        : { deadlineAtMs: options.deadlineAtMs }),
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      ...(options?.run === undefined ? {} : { run: options.run }),
+    },
+    control,
+  );
+  return {
+    ...options,
+    ...merged,
+  };
+}
+
+function protocolDiscoveryReadControlFromFamilyOptions(
+  options: ProtocolDiscoveryFamilyGuardOptions | undefined,
+): ProtocolDiscoveryReadControl {
+  return {
+    ...(options?.deadlineAtMs === undefined
+      ? {}
+      : { deadlineAtMs: options.deadlineAtMs }),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+    ...(options?.run === undefined ? {} : { run: options.run }),
+  };
+}
+
+function composeProtocolDiscoveryReadRunners(
+  first: ProtocolDiscoveryReadControl["run"],
+  second: ProtocolDiscoveryReadControl["run"],
+): ProtocolDiscoveryReadControl["run"] {
+  if (!first) return second;
+  if (!second || first === second) return first;
+  return async <T>(
+    work: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> =>
+    first((firstSignal) =>
+      second((secondSignal) =>
+        work(
+          firstSignal === secondSignal
+            ? firstSignal
+            : AbortSignal.any([firstSignal, secondSignal]),
+        )
+      )
+    );
+}
+
+async function awaitWithProtocolDiscoveryControl<T>(
+  promise: Promise<T>,
+  control: ProtocolDiscoveryReadControl | undefined,
+): Promise<T> {
+  throwIfProtocolDiscoveryParentStopped(control);
+  if (control?.signal === undefined && control?.deadlineAtMs === undefined) {
+    return promise;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let detach = (): void => {};
+  const stopped = new Promise<never>((_resolve, reject) => {
+    const stop = (): void => {
+      try {
+        throwIfProtocolDiscoveryParentStopped(control);
+        reject(new Error("protocol discovery parent stopped"));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    if (control?.signal) {
+      control.signal.addEventListener("abort", stop, { once: true });
+      detach = () => control.signal?.removeEventListener("abort", stop);
+    }
+    if (control?.deadlineAtMs !== undefined) {
+      timer = setTimeout(
+        stop,
+        Math.max(0, control.deadlineAtMs - Date.now()),
+      );
+    }
+  });
+  try {
+    return await Promise.race([promise, stopped]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    detach();
+  }
+}
+
+function throwIfProtocolDiscoveryParentStopped(
+  control: ProtocolDiscoveryReadControl | undefined,
+): void {
+  if (control?.signal?.aborted) {
+    throw control.signal.reason ?? Object.assign(
+      new Error("protocol discovery parent signal aborted"),
+      { code: "ABORTED" },
+    );
+  }
+  if (
+    control?.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) {
+    throw Object.assign(
+      new Error("protocol discovery parent deadline exceeded"),
+      { code: "TIMEOUT" },
+    );
+  }
+}
+
 function safeError(error: unknown): string {
   return (error instanceof Error ? error.message : String(error))
     .replace(/https?:\/\/\S+/g, "<redacted-url>")
     .slice(0, 240);
-}
-
-function isPrunedHistoricalStateFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /prun(?:ed|ing)|historical state.*(?:unavailable|missing)|missing trie node/i.test(message);
 }
 
 async function mapLimit<T, R>(
@@ -739,7 +1316,7 @@ function successfulCalls(trace: unknown): ObservedCall[] {
 function likelyProtocolTargets(
   trace: unknown,
   logs: readonly ProtocolDiscoveryLog[],
-  adapters: readonly ProtocolConversionAdapter[],
+  adapters: readonly RouteLegAdapter[],
 ): Set<string> {
   const targets = new Set<string>();
   const declaredTopics = registeredEventTopics(adapters);

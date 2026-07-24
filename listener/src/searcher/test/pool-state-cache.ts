@@ -153,6 +153,7 @@ async function testBlockScanReorgClear(): Promise<void> {
 async function testV2LocalMath(): Promise<void> {
   const v2Iface = new ethers.Interface([
     "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+    "function factory() view returns (address)",
     "function token0() view returns (address)",
     "function token1() view returns (address)",
   ]);
@@ -161,6 +162,7 @@ async function testV2LocalMath(): Promise<void> {
   let token0Calls = 0;
   let token1Calls = 0;
   let reserveCalls = 0;
+  let factoryCalls = 0;
 
   const state = {
     async call(req: { to: string; data: string }): Promise<string> {
@@ -177,6 +179,12 @@ async function testV2LocalMath(): Promise<void> {
         reserveCalls++;
         return v2Iface.encodeFunctionResult("getReserves", [R0, R1, 0]);
       }
+      if (s === v2Iface.getFunction("factory")!.selector) {
+        factoryCalls++;
+        return v2Iface.encodeFunctionResult("factory", [
+          "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+        ]);
+      }
       throw new Error(`unexpected v2 state.call selector ${s}`);
     },
   } as unknown as StateBackend;
@@ -189,16 +197,16 @@ async function testV2LocalMath(): Promise<void> {
   const expected = (fee * R1) / (R0 * 1000n + fee);
   assert(out1 === expected, `v2 math: expected ${expected}, got ${out1}`);
   assert(
-    token0Calls === 1 && token1Calls === 1 && reserveCalls === 1,
-    `v2 warm once: t0=${token0Calls} t1=${token1Calls} r=${reserveCalls}`,
+    token0Calls === 1 && token1Calls === 1 && reserveCalls === 1 && factoryCalls === 1,
+    `v2 warm once: t0=${token0Calls} t1=${token1Calls} r=${reserveCalls} f=${factoryCalls}`,
   );
 
   // Same hint: cached, no new reads.
   const out2 = await cache.quoteV2(state, POOL, TOKEN0, TOKEN1, amt);
   assert(out2 === out1, `v2 requote same hint matches`);
   assert(
-    token0Calls === 1 && token1Calls === 1 && reserveCalls === 1,
-    `v2 no refetch same hint: t0=${token0Calls} t1=${token1Calls} r=${reserveCalls}`,
+    token0Calls === 1 && token1Calls === 1 && reserveCalls === 1 && factoryCalls === 1,
+    `v2 no refetch same hint: t0=${token0Calls} t1=${token1Calls} r=${reserveCalls} f=${factoryCalls}`,
   );
 
   // clear() drops reserves (shift per hint) → re-warm.
@@ -206,18 +214,21 @@ async function testV2LocalMath(): Promise<void> {
   await cache.quoteV2(state, POOL, TOKEN0, TOKEN1, amt);
   assert(token0Calls === 2 && token1Calls === 2, `v2 tokens re-read after clear()`);
   assert(reserveCalls === 2, `v2 reserves re-read after clear() (${reserveCalls})`);
+  assert(factoryCalls === 2, `v2 factory re-read after clear() (${factoryCalls})`);
   console.log("[poolcache] v2 local math warm-once + clear() re-warm: PASS");
 }
 
 async function testSeedFreshnessAndOverlayBypass(): Promise<void> {
   const v2Iface = new ethers.Interface([
     "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+    "function factory() view returns (address)",
     "function token0() view returns (address)",
     "function token1() view returns (address)",
   ]);
   let token0Calls = 0;
   let token1Calls = 0;
   let reserveCalls = 0;
+  let factoryCalls = 0;
   const state = {
     async call(req: { to: string; data: string }): Promise<string> {
       const s = req.data.slice(0, 10);
@@ -232,6 +243,12 @@ async function testSeedFreshnessAndOverlayBypass(): Promise<void> {
       if (s === v2Iface.getFunction("getReserves")!.selector) {
         reserveCalls++;
         return v2Iface.encodeFunctionResult("getReserves", [4_000_000n, 1_000_000n, 0]);
+      }
+      if (s === v2Iface.getFunction("factory")!.selector) {
+        factoryCalls++;
+        return v2Iface.encodeFunctionResult("factory", [
+          "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+        ]);
       }
       throw new Error(`unexpected v2 state.call selector ${s}`);
     },
@@ -250,14 +267,18 @@ async function testSeedFreshnessAndOverlayBypass(): Promise<void> {
   cache.beginHint(100);
   const fromSeed = await cache.quoteV2(state, POOL, TOKEN0, TOKEN1, 10_000n);
   assert(fromSeed > 0n, `seeded v2 quote should work`);
-  assert(token0Calls + token1Calls + reserveCalls === 0, `fresh seed should avoid state calls`);
+  assert(
+    token0Calls + token1Calls + reserveCalls + factoryCalls === 0,
+    `fresh seed should avoid state calls`,
+  );
 
   cache.beginHint(101);
   const fromState = await cache.quoteV2(state, POOL, TOKEN0, TOKEN1, 10_000n);
   assert(fromState > 0n, `stale seed should re-warm from state`);
   assert(
-    token0Calls === 1 && token1Calls === 1 && reserveCalls === 1,
-    `stale seed must re-read mutable state: t0=${token0Calls} t1=${token1Calls} r=${reserveCalls}`,
+    token0Calls === 1 && token1Calls === 1 && reserveCalls === 1 && factoryCalls === 1,
+    `stale seed must re-read mutable state: t0=${token0Calls} t1=${token1Calls} ` +
+      `r=${reserveCalls} f=${factoryCalls}`,
   );
 
   cache.seedV2({

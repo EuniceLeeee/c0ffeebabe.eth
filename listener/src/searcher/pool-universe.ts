@@ -1,12 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
-import { findVenueCapability, type VenueId } from "./venues/capability.js";
+import type { VenueId } from "./venues/capability.js";
 import type { VenueIdentitySource } from "./venues/identity.js";
-import { isProductionPoolAdapter } from "./venues/pool-adapter-policy.js";
+import {
+  isProductionPoolAdapter,
+  isProductionVenueId,
+  isProductionVenueIdentitySource,
+} from "./venues/pool-adapter-policy.js";
 
 export const DEFAULT_POOL_UNIVERSE_PATH = resolve("searcher", "pools", "active-pools.json");
+export const POOL_UNIVERSE_BUILD_MANIFEST_PROFILE =
+  "pool-universe-build-manifest-v1" as const;
 
 export interface PoolUniverseEntry extends PoolEntry {
   token0?: string;
@@ -25,7 +32,34 @@ export interface PoolUniverseFile {
   generatedAt?: string;
   fromBlock?: number;
   toBlock?: number;
+  registry?: {
+    sourceFingerprints?: string[];
+  };
   pools: PoolUniverseEntry[];
+}
+
+export interface PoolUniverseCoverageMetadata {
+  readonly fromBlock: number | null;
+  readonly toBlock: number | null;
+  readonly generatedAt: string;
+  readonly contentSha256: string;
+  readonly manifestPath: string;
+  readonly manifestSha256: string;
+  /**
+   * True only when the sidecar binds these exact universe bytes, range,
+   * registry semantics and source block identity.
+   */
+  readonly manifestVerified: boolean;
+  readonly source: {
+    readonly number: number;
+    readonly hash: string;
+    readonly stateRoot: string;
+  } | null;
+  /**
+   * Exact landed-discovery registry that generated this universe. null means
+   * an older/unverifiable artifact and cannot authorize current completeness.
+   */
+  readonly registrySourceFingerprints: readonly string[] | null;
 }
 
 export interface PoolUniverseLoadOptions {
@@ -35,6 +69,23 @@ export interface PoolUniverseLoadOptions {
   forceInclude?: string[];
   highSpreadPairQuota?: number;
   highSpreadMinFee?: number;
+}
+
+export function poolUniverseCanonicalAnchorMatches(
+  metadata: PoolUniverseCoverageMetadata,
+  block: {
+    readonly number?: number;
+    readonly hash?: string | null;
+    readonly stateRoot?: string | null;
+  } | null,
+): boolean {
+  const source = metadata.source;
+  return metadata.manifestVerified &&
+    source !== null &&
+    block !== null &&
+    block.number === source.number &&
+    block.hash?.toLowerCase() === source.hash &&
+    block.stateRoot?.toLowerCase() === source.stateRoot;
 }
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -87,6 +138,162 @@ export function loadPoolUniverseGeneratedAt(path = DEFAULT_POOL_UNIVERSE_PATH): 
   } catch {
     return "";
   }
+}
+
+export function loadPoolUniverseCoverageMetadata(
+  path = DEFAULT_POOL_UNIVERSE_PATH,
+  manifestPath = `${path}.manifest.json`,
+): PoolUniverseCoverageMetadata {
+  if (!existsSync(path)) {
+    return Object.freeze({
+      fromBlock: null,
+      toBlock: null,
+      generatedAt: "",
+      contentSha256: "",
+      manifestPath,
+      manifestSha256: "",
+      manifestVerified: false,
+      source: null,
+      registrySourceFingerprints: null,
+    });
+  }
+  const raw = readFileSync(path, "utf8");
+  const parsed = JSON.parse(raw) as unknown;
+  const record = isRecord(parsed) ? parsed : {};
+  const fromBlock = safeCoverageBlock(record.fromBlock);
+  const toBlock = safeCoverageBlock(record.toBlock);
+  const contentSha256 = createHash("sha256").update(raw).digest("hex");
+  const registrySourceFingerprints =
+    parseRegistrySourceFingerprints(record.registry);
+  const manifest = loadVerifiedUniverseManifest({
+    manifestPath,
+    contentSha256,
+    poolCount: Array.isArray(record.pools) ? record.pools.length : null,
+    fromBlock,
+    toBlock,
+    registrySourceFingerprints,
+  });
+  return Object.freeze({
+    fromBlock,
+    toBlock,
+    generatedAt: typeof record.generatedAt === "string" ? record.generatedAt : "",
+    contentSha256,
+    manifestPath,
+    manifestSha256: manifest.sha256,
+    manifestVerified: manifest.source !== null,
+    source: manifest.source,
+    registrySourceFingerprints,
+  });
+}
+
+function loadVerifiedUniverseManifest(input: {
+  readonly manifestPath: string;
+  readonly contentSha256: string;
+  readonly poolCount: number | null;
+  readonly fromBlock: number | null;
+  readonly toBlock: number | null;
+  readonly registrySourceFingerprints: readonly string[] | null;
+}): {
+  readonly sha256: string;
+  readonly source: PoolUniverseCoverageMetadata["source"];
+} {
+  if (!existsSync(input.manifestPath)) {
+    return { sha256: "", source: null };
+  }
+  let raw: string;
+  let parsed: unknown;
+  try {
+    raw = readFileSync(input.manifestPath, "utf8");
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return { sha256: "", source: null };
+  }
+  const sha256 = createHash("sha256").update(raw).digest("hex");
+  if (!isRecord(parsed)) return { sha256, source: null };
+  const source = isRecord(parsed.source) ? parsed.source : {};
+  const inputs = isRecord(parsed.inputs) ? parsed.inputs : {};
+  const output = isRecord(parsed.output) ? parsed.output : {};
+  const manifestRegistry = isRecord(parsed.registry) ? parsed.registry : {};
+  const manifestFingerprints = parseFingerprintArray(
+    manifestRegistry.sourceFingerprints,
+  );
+  const number = safeCoverageBlock(source.number);
+  const hash = normalizedHash(source.hash);
+  const stateRoot = normalizedHash(source.stateRoot);
+  const valid =
+    parsed.schemaVersion === 1 &&
+    parsed.profile === POOL_UNIVERSE_BUILD_MANIFEST_PROFILE &&
+    parsed.chainId === 1 &&
+    input.fromBlock !== null &&
+    input.toBlock !== null &&
+    input.poolCount !== null &&
+    input.registrySourceFingerprints !== null &&
+    number === input.toBlock &&
+    inputs.fromBlock === input.fromBlock &&
+    inputs.toBlock === input.toBlock &&
+    output.contentSha256 === input.contentSha256 &&
+    output.pools === input.poolCount &&
+    hash !== null &&
+    stateRoot !== null &&
+    manifestFingerprints !== null &&
+    sameStrings(manifestFingerprints, input.registrySourceFingerprints);
+  return {
+    sha256,
+    source: valid
+      ? Object.freeze({ number: number!, hash: hash!, stateRoot: stateRoot! })
+      : null,
+  };
+}
+
+function parseRegistrySourceFingerprints(
+  value: unknown,
+): readonly string[] | null {
+  if (!isRecord(value) || !Array.isArray(value.sourceFingerprints)) {
+    return null;
+  }
+  return parseFingerprintArray(value.sourceFingerprints);
+}
+
+function parseFingerprintArray(
+  value: unknown,
+): readonly string[] | null {
+  if (!Array.isArray(value)) return null;
+  const fingerprints = value;
+  if (
+    fingerprints.some((item) =>
+      typeof item !== "string" || item.length === 0
+    )
+  ) {
+    return null;
+  }
+  const canonical = [...fingerprints].sort();
+  if (
+    new Set(canonical).size !== canonical.length ||
+    canonical.some((item, index) => item !== fingerprints[index])
+  ) {
+    return null;
+  }
+  return Object.freeze(canonical);
+}
+
+function sameStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return left.length === right.length &&
+    left.every((item, index) => item === right[index]);
+}
+
+function normalizedHash(value: unknown): string | null {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function safeCoverageBlock(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
 }
 
 function selectRankedPools(
@@ -296,26 +503,15 @@ function venueIdField(value: unknown, field: string): VenueId | undefined {
     throw new Error(`${field} must be a registered venue id or unknown`);
   }
   const normalized = value.toLowerCase();
-  if (normalized !== "unknown" && findVenueCapability(normalized) === null) {
+  if (!isProductionVenueId(normalized)) {
     throw new Error(`${field} must be a registered venue id or unknown`);
   }
-  return normalized as VenueId;
+  return normalized;
 }
 
 function identitySourceField(value: unknown, field: string): VenueIdentitySource | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (
-    value !== "factory-call" &&
-    value !== "factory-call-provisional" &&
-    value !== "factory-event" &&
-    value !== "curve-metaregistry" &&
-    value !== "curve-metaregistry-underlying" &&
-    value !== "curve-underlying-provisional" &&
-    value !== "v4-manager" &&
-    value !== "balancer-v3-vault" &&
-    value !== "dodo-factory-registry" &&
-    value !== "seed"
-  ) {
+  if (!isProductionVenueIdentitySource(value)) {
     throw new Error(`${field} has unsupported identity source ${String(value)}`);
   }
   return value;

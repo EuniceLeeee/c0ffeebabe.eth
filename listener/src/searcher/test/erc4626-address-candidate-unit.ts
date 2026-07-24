@@ -6,13 +6,21 @@ import {
   prepareProtocolDiscoveryProjection,
   runProtocolDiscovery,
 } from "../protocol-instance-discovery.js";
+import { protocolDiscoveryCandidateAddressHints } from "../protocol-discovery-runtime.js";
 import { scanProtocolDiscoveryRange } from "../observed-protocol-discovery.js";
 import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
 import { buildStrategyViews } from "../strategy-views.js";
-import { buildTokenPaths, type PoolEntry } from "../planner/token-graph.js";
+import {
+  buildTokenPaths,
+  POOL_REGISTRY,
+  type PoolEntry,
+} from "../planner/token-graph.js";
 import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
-import type { ProtocolDiscoveryContext } from "../venues/route-leg-adapter.js";
+import type {
+  ProtocolConversionAdapter,
+  ProtocolDiscoveryContext,
+} from "../venues/route-leg-adapter.js";
 
 /**
  * ERC4626 execution-family address-candidate unit.
@@ -27,7 +35,29 @@ function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
 }
 
-const VAULT = ethers.getAddress("0x1111111111111111111111111111111111111111");
+const EXPECTED_HINTS = Object.freeze([
+  "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+  "0x1202F5C7b4B9E47a1A484E8B270be34dbbC75055",
+  "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB",
+  "0xbEef047a543E45807105E51A8BBEFCc5950fcfBa",
+  "0xac3E018457B222d93114458476f3E3416Abbe38F",
+  "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8",
+  "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E",
+  "0xc441d0Bd70DBcF711f4BbA19AeA3deff47ce1C48",
+  "0x395dA89bDb9431621A75DF4e2E3B993Acc2CaB3D",
+  "0x056B269Eb1f75477a8666ae8C7fE01b64dD55eCc",
+  "0xe3DA4B83C9dd4c4D185ecE42077462b3F35c454a",
+  "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367",
+  "0x6aD038cA6C04e885630851278ca0a856Ad9a66Cc",
+  "0x6d134cAAD0CA29Cd6ea145f6C0DC766076690547",
+  "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+  "0xC255910618158F48FA461874471Aa24AEfbDC23A",
+  "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C",
+  "0x43680aBF18cf54898Be84C6eF78237CFBD441883",
+  "0x4825eFF24F9B7b76EEAFA2ecc6A1D5dFCb3c1c3f",
+  "0xB8280955aE7b5207AF4CDbdCd775135Bd38157fE",
+] as const);
+const VAULT = ethers.getAddress(EXPECTED_HINTS[0]);
 const ASSET = ethers.getAddress("0x2222222222222222222222222222222222222222");
 const CODE = "0x60006000";
 const ZERO_WORD = `0x${"0".repeat(64)}`;
@@ -51,7 +81,9 @@ const context: ProtocolDiscoveryContext = {
   fromBlock: 1000,
   toBlock: 1000,
   chainId: "1",
-  graphTokens: [ASSET, VAULT],
+  // Provenance hints are deliberately absent: only an actually connected
+  // asset makes the verified route loop-closable.
+  graphTokens: [ASSET],
   retainedInstances: [],
   backend: {
     async call(req) {
@@ -100,33 +132,80 @@ const context: ProtocolDiscoveryContext = {
   },
 };
 
-// The candidate source is intentionally outside this unit. Once supplied, the
-// shared scanner dispatches it to the execution-family matcher.
+const expectedHints = [...EXPECTED_HINTS].map((address) => address.toLowerCase()).sort();
+const candidateAddressHints = protocolDiscoveryCandidateAddressHints([erc4626Adapter]);
+assert(
+  JSON.stringify(candidateAddressHints) === JSON.stringify(expectedHints),
+  "registry-owned ERC4626 provenance hint set must stay frozen at 20 addresses",
+);
+assert(
+  POOL_REGISTRY.filter(
+    (pool) => pool.adapter === "erc4626" && !pool.nonStandardRedeem,
+  ).length === 0,
+  "standard ERC4626 hints must not remain executable PoolEntries",
+);
+
+const baseDiscovery = erc4626Adapter.discovery;
+if (!baseDiscovery?.candidateFromAddress) {
+  throw new Error("FAIL: ERC4626 address matcher missing");
+}
+let matcherCalls = 0;
+let identityCalls = 0;
+let probeCalls = 0;
+const instrumentedAdapter = {
+  ...erc4626Adapter,
+  discovery: {
+    ...baseDiscovery,
+    async candidateFromAddress(candidate, candidateContext) {
+      matcherCalls++;
+      return baseDiscovery.candidateFromAddress!(candidate, candidateContext);
+    },
+    async probeCandidate(instance, candidateContext) {
+      probeCalls++;
+      return baseDiscovery.probeCandidate(instance, candidateContext);
+    },
+  },
+} satisfies ProtocolConversionAdapter;
+
+// The shared runtime contributes only addresses. The scanner must still call
+// the family matcher before any identity, probe, verified route, or edge exists.
 const evidenceCache = createProtocolDiscoveryEvidenceCache(1n);
 const scan = await scanProtocolDiscoveryRange({
-  adapters: [erc4626Adapter],
+  adapters: [instrumentedAdapter],
   context,
-  candidateAddresses: [VAULT],
+  candidateAddresses: candidateAddressHints,
   evidenceCache,
 });
 assert(scan.sourceComplete, "address-candidate scan must complete");
 assert(
-  scan.candidatesByAdapter.get(erc4626Adapter.id)?.length === 1,
-  "scanner must dispatch the supplied address to the ERC4626 family",
+  scan.candidatesByAdapter.get(instrumentedAdapter.id)?.length === 1,
+  "scanner must dispatch the hinted address to the ERC4626 family",
+);
+assert(matcherCalls === 1, `hint must enter candidateFromAddress exactly once, got ${matcherCalls}`);
+const matchedCandidate = scan.candidatesByAdapter.get(instrumentedAdapter.id)?.[0];
+assert(
+  matchedCandidate?.pool.verifiedRoutes === undefined,
+  "address hint/matcher output must not carry executable verified routes",
 );
 
 // 4) Full admission chain: identity attest -> route probe -> verified edges.
+const canonicalIdentity = createCanonicalProtocolIdentityAttester({
+  identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+});
 const result = await runProtocolDiscovery({
-  adapters: [erc4626Adapter],
+  adapters: [instrumentedAdapter],
   context,
   protocolEdgesEnabled: true,
-  attestIdentity: createCanonicalProtocolIdentityAttester({
-    identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  }),
+  attestIdentity: async (adapter, candidate, candidateContext) => {
+    identityCalls++;
+    return canonicalIdentity(adapter, candidate, candidateContext);
+  },
   candidatesByAdapter: scan.candidatesByAdapter,
   sourceComplete: scan.sourceComplete,
   sourceErrors: scan.sourceErrors,
 });
+assert(identityCalls === 1, `hint must pass identity exactly once, got ${identityCalls}`);
+assert(probeCalls === 1, `hint must pass behavior probe exactly once, got ${probeCalls}`);
 assert(result.wouldAdmit.length === 1, "family discovery must admit the supplied candidate vault");
 assert(
   result.wouldAdmit[0].instance.pool.identitySource === "erc4626-standard",
@@ -134,8 +213,8 @@ assert(
 );
 assert(result.wouldAdmit[0].edges.length === 2, "candidate vault must emit deposit+redeem edges");
 
-// The projected graph exposes both verified family directions. This is not a
-// production path-discovery assertion because the candidate was supplied.
+// Only after matcher + identity + probe may the projected graph expose both
+// verified family directions.
 const projection = prepareProtocolDiscoveryProjection({
   currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   result,
@@ -147,6 +226,10 @@ const projection = prepareProtocolDiscoveryProjection({
     poolUniverseGeneratedAt: "test",
   }),
 });
+assert(
+  projection.staticSuppressed.length === 0,
+  "migrated standard ERC4626 hint must not be blocked by static ownership",
+);
 assert(
   buildTokenPaths(projection.backrunGraph, ASSET, VAULT, { maxHops: 2 }).length > 0,
   "projected vault must be routable asset -> vault",

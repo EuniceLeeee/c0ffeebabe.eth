@@ -1,18 +1,14 @@
 import type { PoolEntry } from "../planner/token-graph.js";
-import {
-  LEGACY_PRODUCTION_ROUTE_EDGES,
-  PRODUCTION_ROUTE_ADAPTERS,
-} from "./production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "./production-registry.js";
+import type { VenueId, VenueIdentitySource } from "./registry-ids.js";
 
 /**
  * Runtime pool adapter ids accepted by file-backed production inputs.
- * Route Registry is the execution source of truth; legacy routes remain
- * explicit until their fixture-blocked migration is complete.
+ * The universal family registry is the execution source of truth.
  */
 export const PRODUCTION_POOL_ADAPTERS: readonly PoolEntry["adapter"][] = Object.freeze([
   ...new Set<PoolEntry["adapter"]>([
-    ...PRODUCTION_ROUTE_ADAPTERS.routeLegs.list().flatMap((adapter) => adapter.poolAdapters),
-    ...LEGACY_PRODUCTION_ROUTE_EDGES.flatMap((descriptor) => descriptor.poolAdapters),
+    ...PRODUCTION_ADAPTER_FAMILIES.routes().list().flatMap((adapter) => adapter.poolAdapters),
   ]),
 ]);
 
@@ -21,4 +17,14 @@ const PRODUCTION_POOL_ADAPTER_SET = new Set(PRODUCTION_POOL_ADAPTERS);
 export function isProductionPoolAdapter(value: unknown): value is PoolEntry["adapter"] {
   return typeof value === "string" &&
     PRODUCTION_POOL_ADAPTER_SET.has(value as PoolEntry["adapter"]);
+}
+
+export function isProductionVenueId(value: unknown): value is VenueId {
+  return PRODUCTION_ADAPTER_FAMILIES.isRegisteredVenueId(value);
+}
+
+export function isProductionVenueIdentitySource(
+  value: unknown,
+): value is VenueIdentitySource {
+  return PRODUCTION_ADAPTER_FAMILIES.isRegisteredIdentitySource(value);
 }

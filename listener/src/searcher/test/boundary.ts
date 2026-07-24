@@ -7,12 +7,11 @@ const SEARCHER_ROOT = resolve("src/searcher");
 const DISALLOWED_IMPORTS = [
   "../research",
   "../../research",
-  "classifier",
+  "../classifier",
+  "../../classifier",
   "solve-from-trace",
   "solveFromTrace",
   "NormalizedCallNode",
-  "debug_traceTransaction",
-  "debugTraceTransaction",
   "CaptureArbSim",
   "BASE_FLASH",
   "BASE_DEBT",
@@ -25,6 +24,17 @@ const DISALLOWED_IMPORTS = [
   "SEARCHER_MIN_PROFIT_WSTUSR",
   "minProfitWstUsr",
 ];
+
+const DISALLOWED_HOT_PATH_TOKENS = [
+  "debug_traceTransaction",
+  "debugTraceTransaction",
+];
+
+const BACKGROUND_TRACE_FILES = new Set([
+  // Discovery may use a bounded trace prefilter before the family-owned
+  // identity/behavior probes. It is not part of quote/plan/solve execution.
+  "src/searcher/protocol-instance-discovery.ts",
+]);
 
 const DISALLOWED_TX_HASH_BRANCH = /if\s*\([^)]*txHash[^)]*={2,3}\s*["']0x[0-9a-fA-F]{64}["']/;
 const DISALLOWED_FIXED_SPLIT = /(half|otherHalf)\s*=.*\/\s*2n/;
@@ -55,6 +65,16 @@ function main(): void {
     for (const needle of DISALLOWED_IMPORTS) {
       if (text.includes(needle)) {
         failures.push(`${rel}: contains disallowed hot-path token "${needle}"`);
+      }
+    }
+    if (
+      !rel.startsWith("src/searcher/test/") &&
+      !BACKGROUND_TRACE_FILES.has(rel)
+    ) {
+      for (const needle of DISALLOWED_HOT_PATH_TOKENS) {
+        if (text.includes(needle)) {
+          failures.push(`${rel}: contains disallowed hot-path token "${needle}"`);
+        }
       }
     }
     if (DISALLOWED_TX_HASH_BRANCH.test(text)) {

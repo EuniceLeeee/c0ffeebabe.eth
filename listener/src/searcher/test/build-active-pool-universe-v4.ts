@@ -7,8 +7,8 @@ import {
   resolveV4InitViaPositionManagerThenBackward,
   resolveV4PoolKeyViaPositionManager,
   type ParsedV4Initialize,
-  type RawLog,
-} from "../build-active-pool-universe.js";
+} from "../venues/swaps/univ4-pool-discovery.js";
+import type { LandedPoolDiscoveryLog as RawLog } from "../venues/landed-pool-discovery.js";
 import { loadPoolUniverse, type PoolUniverseEntry } from "../pool-universe.js";
 import { buildTokenGraph, type TokenQueryBackend, v4PoolId } from "../planner/token-graph.js";
 import { ADDR } from "../../shared/constants/addresses.js";

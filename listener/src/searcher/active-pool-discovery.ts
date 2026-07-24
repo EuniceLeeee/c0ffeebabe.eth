@@ -1,25 +1,29 @@
-import { ethers } from "ethers";
+import {
+  ethers,
+  type JsonRpcError,
+  type JsonRpcPayload,
+} from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
 import { poolRegistryKey } from "./pool-universe.js";
 import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
-import { attestPoolIdentities } from "./venues/identity.js";
-import type { IdentityAdmissionPolicy } from "./venues/admission.js";
+import {
+  attestPoolIdentities,
+  type IdentityCallBackend,
+} from "./venues/identity.js";
+import {
+  STRICT_IDENTITY_ADMISSION,
+  type IdentityAdmissionPolicy,
+} from "./venues/admission.js";
 import {
   PRODUCTION_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
+  PRODUCTION_ADAPTER_FAMILIES,
 } from "./venues/production-registry.js";
-import { ADDR } from "../shared/constants/addresses.js";
 import {
-  buildV4PoolEntries,
-  resolveV4PoolKeyViaPositionManager,
-  type RawLog,
-} from "./build-active-pool-universe.js";
-import {
-  BALANCER_V3_SWAP_TOPIC,
-  UNIV4_INITIALIZE_TOPIC,
-  UNIV4_SWAP_TOPIC,
-} from "./venues/landed-event-registry.js";
-import { scanAddressLandedSwapActivity } from "./venues/landed-event-scanner.js";
+  discoverLandedPools,
+  type LandedPoolDiscoveryCoverage,
+  type LandedPoolDiscoveryLogFilter,
+  type LandedPoolDiscoveryReadBackend,
+} from "./venues/landed-pool-discovery.js";
 
 // Factory event topics
 const UNIV2_PAIR_CREATED = ethers.id("PairCreated(address,address,address,uint256)");
@@ -28,6 +32,17 @@ const UNIV3_POOL_CREATED = ethers.id("PoolCreated(address,address,uint24,int24,a
 // ─── Factory-based full pool indexing ───────────────────────
 
 const FACTORY_LOG_BATCH = 5000;
+
+export interface DexDiscoveryReadControl {
+  /** Absolute wall-clock deadline shared by the enclosing discovery generation. */
+  readonly deadlineAtMs?: number;
+  /** Aborting this signal aborts the underlying HTTP request, not only its waiter. */
+  readonly signal?: AbortSignal;
+  /** Optional dedicated background-read semaphore (for DiscoveryBackfillLane). */
+  readonly run?: <T>(
+    work: (signal: AbortSignal) => Promise<T>,
+  ) => Promise<T>;
+}
 
 interface FactoryDef {
   address: string;
@@ -45,7 +60,7 @@ const FACTORIES: FactoryDef[] = VENUE_CAPABILITIES.flatMap((capability) => {
     !capability.discoverable ||
     !capability.quotable ||
     !capability.buildable ||
-    PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(capability.runtimeAdapter) === null
+    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(capability.runtimeAdapter) === null
   ) {
     return [];
   }
@@ -77,16 +92,39 @@ export async function indexFactoryPools(
   provider: ethers.JsonRpcProvider,
   blocksBack = 50000,
   toBlock?: number,
+  options: {
+    readonly strict?: boolean;
+    readonly control?: DexDiscoveryReadControl;
+  } = {},
 ): Promise<PoolEntry[]> {
-  const latest = toBlock ?? await provider.getBlockNumber();
+  const latest = toBlock ?? (
+    hasDexDiscoveryControl(options.control)
+      ? await readDexDiscoveryBlockNumber(provider, options.control)
+      : await provider.getBlockNumber()
+  );
   const fromBlock = Math.max(0, latest - blocksBack);
   const pools: PoolEntry[] = [];
 
   for (const factory of FACTORIES) {
+    throwIfDexDiscoveryCancelled(options.control);
     let count = 0;
     for (let start = fromBlock; start <= latest; start += FACTORY_LOG_BATCH) {
+      throwIfDexDiscoveryCancelled(options.control);
       const end = Math.min(start + FACTORY_LOG_BATCH - 1, latest);
-      const logs = await getFactoryLogs(provider, factory, start, end);
+      const logs = options.strict
+        ? await sendDexDiscoveryRpc<Array<{ data: string; topics: string[] }>>(
+            provider,
+            "eth_getLogs",
+            [factoryLogFilter(factory, start, end)],
+            options.control,
+          )
+        : await getFactoryLogs(
+            provider,
+            factory,
+            start,
+            end,
+            options.control,
+          );
       for (const log of logs) {
         try {
           // score 0: factory pools are prunable (not curated backbone), ranked
@@ -114,30 +152,53 @@ async function getFactoryLogs(
   factory: FactoryDef,
   from: number,
   to: number,
+  control?: DexDiscoveryReadControl,
 ): Promise<Array<{ data: string; topics: string[] }>> {
   try {
-    return await provider.send("eth_getLogs", [{
-      address: factory.address,
-      fromBlock: "0x" + from.toString(16),
-      toBlock: "0x" + to.toString(16),
-      topics: [factory.topic],
-    }]);
-  } catch {
+    return await sendDexDiscoveryRpc(
+      provider,
+      "eth_getLogs",
+      [factoryLogFilter(factory, from, to)],
+      control,
+    );
+  } catch (error) {
+    if (isDexDiscoveryCancellationError(error)) throw error;
+    throwIfDexDiscoveryCancelled(control, error);
     // Range too large — split into smaller chunks
     const results: Array<{ data: string; topics: string[] }> = [];
     for (let s = from; s <= to; s += 1000) {
+      throwIfDexDiscoveryCancelled(control);
       const e = Math.min(s + 999, to);
       try {
-        results.push(...await provider.send("eth_getLogs", [{
-          address: factory.address,
-          fromBlock: "0x" + s.toString(16),
-          toBlock: "0x" + e.toString(16),
-          topics: [factory.topic],
-        }]));
-      } catch { /* skip chunk */ }
+        results.push(...await sendDexDiscoveryRpc<
+          Array<{ data: string; topics: string[] }>
+        >(
+          provider,
+          "eth_getLogs",
+          [factoryLogFilter(factory, s, e)],
+          control,
+        ));
+      } catch (chunkError) {
+        if (isDexDiscoveryCancellationError(chunkError)) throw chunkError;
+        throwIfDexDiscoveryCancelled(control, chunkError);
+        // Non-strict discovery retains the legacy best-effort behavior.
+      }
     }
     return results;
   }
+}
+
+function factoryLogFilter(
+  factory: FactoryDef,
+  fromBlock: number,
+  toBlock: number,
+): Record<string, unknown> {
+  return {
+    address: factory.address,
+    fromBlock: ethers.toQuantity(fromBlock),
+    toBlock: ethers.toQuantity(toBlock),
+    topics: [factory.topic],
+  };
 }
 
 const LOG_BATCH = 50;
@@ -154,67 +215,75 @@ export async function scanActivePools(
   toBlock?: number,
   options: {
     admissionPolicy?: IdentityAdmissionPolicy;
+    /**
+     * Source-pinned identity/code reads for an unbounded legacy generation.
+     * A controlled generation deliberately uses the provider-backed abortable
+     * transport below so every in-flight identity RPC shares its cancellation.
+     */
+    identityBackend?: IdentityCallBackend;
+    /** Numeric source block used by family-owned singleton metadata reads. */
+    identityBlockTag?: ethers.BlockTag;
+    /**
+     * Completeness mode for source-pinned graph generations. Any missing log
+     * slice aborts the pass instead of returning a deceptively complete delta.
+     */
+    strict?: boolean;
+    control?: DexDiscoveryReadControl;
   } = {},
 ): Promise<PoolEntry[]> {
-  const latest = toBlock ?? await provider.getBlockNumber();
-  const fromBlock = Math.max(0, latest - blocksBack);
+  return [...(await scanActivePoolsDetailed(
+    provider,
+    blocksBack,
+    maxPools,
+    toBlock,
+    options,
+  )).pools];
+}
 
-  const addressScan = await scanAddressLandedSwapActivity({
+export interface ActivePoolDiscoveryResult {
+  readonly pools: readonly PoolEntry[];
+  readonly coverage: readonly LandedPoolDiscoveryCoverage[];
+  /** True when ranking omitted admitted positives; never completeness-safe. */
+  readonly truncated: boolean;
+}
+
+export async function scanActivePoolsDetailed(
+  provider: ethers.JsonRpcProvider,
+  blocksBack = 300,
+  maxPools = 100,
+  toBlock?: number,
+  options: {
+    admissionPolicy?: IdentityAdmissionPolicy;
+    identityBackend?: IdentityCallBackend;
+    identityBlockTag?: ethers.BlockTag;
+    strict?: boolean;
+    control?: DexDiscoveryReadControl;
+  } = {},
+): Promise<ActivePoolDiscoveryResult> {
+  const latest = toBlock ?? (
+    hasDexDiscoveryControl(options.control)
+      ? await readDexDiscoveryBlockNumber(provider, options.control)
+      : await provider.getBlockNumber()
+  );
+  const fromBlock = Math.max(0, latest - blocksBack);
+  const discoveryBackend = ethersPoolDiscoveryBackend(
+    provider,
+    options.identityBlockTag,
+    options.control,
+  );
+  const landed = await discoverLandedPools({
+    registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
+    backend: discoveryBackend,
     fromBlock,
     toBlock: latest,
     batchSize: LOG_BATCH,
-    getLogs: (event, start, end) => getLogsWithSplitRetry(provider, event.topic, start, end),
+    minSwaps: 1,
+    admissionPolicy:
+      options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
+    strict: options.strict,
+    signal: options.control?.signal,
   });
-  const poolCounts = addressScan.activity;
-
-  for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
-    const end = Math.min(start + LOG_BATCH - 1, latest);
-    const logs = await getBalancerV3LogsWithSplitRetry(provider, start, end);
-    for (const log of logs) {
-      const topic = log.topics?.[1];
-      if (!topic) continue;
-      try {
-        const addr = ethers.getAddress(`0x${topic.slice(-40)}`).toLowerCase();
-        const existing = poolCounts.get(addr);
-        if (existing) {
-          existing.count++;
-          existing.adapterCounts.set("balancer-v3", (existing.adapterCounts.get("balancer-v3") ?? 0) + 1);
-        } else {
-          poolCounts.set(addr, {
-            address: ethers.getAddress(addr),
-            adapterCounts: new Map([["balancer-v3", 1]]),
-            count: 1,
-            lastSwapBlock: 0,
-          });
-        }
-      } catch { /* malformed indexed pool */ }
-    }
-  }
-
-  const v4InitializeLogs: RawLog[] = [];
-  const v4SwapLogs: RawLog[] = [];
-  for (let start = fromBlock; start <= latest; start += LOG_BATCH) {
-    const end = Math.min(start + LOG_BATCH - 1, latest);
-    const [initialize, swaps] = await Promise.all([
-      getV4LogsWithSplitRetry(provider, UNIV4_INITIALIZE_TOPIC, start, end),
-      getV4LogsWithSplitRetry(provider, UNIV4_SWAP_TOPIC, start, end),
-    ]);
-    v4InitializeLogs.push(...initialize);
-    v4SwapLogs.push(...swaps);
-  }
-  const v4Pools = await buildV4PoolEntries(
-    v4InitializeLogs,
-    v4SwapLogs,
-    1,
-    async (poolId) => {
-      const resolved = await resolveV4PoolKeyViaPositionManager(
-        provider,
-        ADDR.UNISWAP_V4_POSITION_MANAGER,
-        poolId,
-      );
-      return resolved ? { ...resolved, source: "v4-positionmanager-poolkeys" } : null;
-    },
-  );
+  const poolCounts = landed.activity;
 
   const candidates: PoolEntry[] = [
     ...[...poolCounts.entries()]
@@ -224,13 +293,39 @@ export async function scanActivePools(
       adapter: bestAdapter(item.adapterCounts),
       score: item.count,
     })),
-    ...v4Pools,
+    ...landed.materializedPools,
   ].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  const { accepted, rejected } = await attestPoolIdentities(provider, candidates, {
+  throwIfDexDiscoveryCancelled(options.control);
+  const { accepted, rejected } = await attestPoolIdentities(
+    hasDexDiscoveryControl(options.control)
+      ? discoveryBackend
+      : options.identityBackend ?? provider,
+    candidates,
+    {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
     admissionPolicy: options.admissionPolicy,
-  });
-  const ranked = accepted.slice(0, maxPools);
+    },
+  );
+  throwIfDexDiscoveryCancelled(options.control);
+  if (
+    options.strict &&
+    rejected.some((item) => item.reason === "identity_call_failed")
+  ) {
+    throw new Error(
+      "strict active-pool discovery could not complete source-pinned identity reads",
+    );
+  }
+  const boundedMaxPools = Number.isFinite(maxPools)
+    ? Math.max(0, Math.floor(maxPools))
+    : accepted.length;
+  const truncated = accepted.length > boundedMaxPools;
+  if (options.strict && truncated) {
+    throw new Error(
+      "strict active-pool discovery cannot publish completeness after " +
+        `truncating ${accepted.length} admitted pools to ${boundedMaxPools}`,
+    );
+  }
+  const ranked = accepted.slice(0, boundedMaxPools);
   const provisional = accepted.filter(
     (pool) => pool.identitySource === "factory-call-provisional",
   ).length;
@@ -244,35 +339,312 @@ export async function scanActivePools(
     .join(",");
 
   console.log(
-    `[discovery] scanned ${blocksBack} blocks: ${poolCounts.size + v4Pools.length} candidates ` +
-      `(v4=${v4Pools.length}), ` +
+    `[discovery] scanned ${blocksBack} blocks: ` +
+      `${poolCounts.size + landed.materializedPools.length} candidates ` +
+      `(materialized=${landed.materializedPools.length}), ` +
       `${accepted.length} identity-admitted (provisional=${provisional}), taking top ${ranked.length}` +
       (rejectedSummary ? `, rejected(${rejectedSummary})` : ""),
   );
 
-  return ranked;
+  return {
+    pools: Object.freeze(ranked),
+    coverage: landed.coverage,
+    truncated,
+  };
 }
 
-async function getV4LogsWithSplitRetry(
+function ethersPoolDiscoveryBackend(
   provider: ethers.JsonRpcProvider,
-  topic: string,
-  fromBlock: number,
-  toBlock: number,
-): Promise<RawLog[]> {
+  blockTag?: ethers.BlockTag,
+  control?: DexDiscoveryReadControl,
+): LandedPoolDiscoveryReadBackend & IdentityCallBackend {
+  return {
+    getLogs(
+      filter: LandedPoolDiscoveryLogFilter,
+      nestedControl?: { readonly signal?: AbortSignal },
+    ) {
+      const mergedControl = mergeDexDiscoveryReadControls(
+        control,
+        nestedControl,
+      );
+      const params = [{
+        ...(filter.address === undefined ? {} : { address: filter.address }),
+        topics: [...filter.topics],
+        fromBlock: ethers.toQuantity(filter.fromBlock),
+        toBlock: ethers.toQuantity(filter.toBlock),
+      }];
+      return hasDexDiscoveryControl(mergedControl)
+        ? sendDexDiscoveryRpc(provider, "eth_getLogs", params, mergedControl)
+        : provider.send("eth_getLogs", params);
+    },
+    call(
+      req: { readonly to: string; readonly data: string },
+      nestedControl?: { readonly signal?: AbortSignal },
+    ) {
+      const mergedControl = mergeDexDiscoveryReadControls(
+        control,
+        nestedControl,
+      );
+      if (!hasDexDiscoveryControl(mergedControl)) {
+        return provider.call({
+          ...req,
+          ...(blockTag === undefined ? {} : { blockTag }),
+        });
+      }
+      return sendDexDiscoveryRpc<string>(
+        provider,
+        "eth_call",
+        [
+          provider.getRpcTransaction({ to: req.to, data: req.data }),
+          blockTag === undefined ? "latest" : normalizeDexDiscoveryBlockTag(blockTag),
+        ],
+        mergedControl,
+      );
+    },
+    getCode(address: string) {
+      if (!hasDexDiscoveryControl(control)) {
+        return provider.getCode(address, blockTag);
+      }
+      return sendDexDiscoveryRpc<string>(
+        provider,
+        "eth_getCode",
+        [
+          ethers.getAddress(address),
+          blockTag === undefined ? "latest" : normalizeDexDiscoveryBlockTag(blockTag),
+        ],
+        control,
+      );
+    },
+  };
+}
+
+let dexDiscoveryRpcId = 0;
+
+async function readDexDiscoveryBlockNumber(
+  provider: ethers.JsonRpcProvider,
+  control?: DexDiscoveryReadControl,
+): Promise<number> {
+  const raw = await sendDexDiscoveryRpc<string>(
+    provider,
+    "eth_blockNumber",
+    [],
+    control,
+  );
+  const value = Number(BigInt(raw));
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`invalid DEX discovery block number ${raw}`);
+  }
+  return value;
+}
+
+/**
+ * Ethers does not expose an AbortSignal for one provider request. Reuse the
+ * configured connection/auth, but send through fetch so cancellation closes
+ * the actual HTTP transport instead of only racing the caller's Promise.
+ */
+export async function sendDexDiscoveryRpc<T>(
+  provider: ethers.JsonRpcProvider,
+  method: string,
+  params: readonly unknown[],
+  control: DexDiscoveryReadControl = {},
+): Promise<T> {
+  validateDexDiscoveryControl(control);
+  if (!hasDexDiscoveryControl(control)) {
+    return provider.send(method, [...params]) as Promise<T>;
+  }
+  throwIfDexDiscoveryCancelled(control);
+  if (control.run) {
+    const { run, ...unbudgeted } = control;
+    return run((budgetSignal) =>
+      sendDexDiscoveryRpc<T>(provider, method, params, {
+        ...unbudgeted,
+        signal: mergeDexDiscoverySignals(
+          unbudgeted.signal,
+          budgetSignal,
+        ),
+      }));
+  }
+  const payload: JsonRpcPayload = {
+    id: ++dexDiscoveryRpcId,
+    jsonrpc: "2.0",
+    method,
+    params: [...params],
+  };
+  const connection = provider._getConnection();
+  const controller = new AbortController();
+  const detachParent = linkDexDiscoveryAbort(control.signal, controller);
+  let deadlineExpired = false;
+  const deadlineDelay = control.deadlineAtMs === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0, control.deadlineAtMs - Date.now());
+  const deadlineTimer = Number.isFinite(deadlineDelay)
+    ? setTimeout(() => {
+        deadlineExpired = true;
+        controller.abort(dexDiscoveryDeadlineError(control.deadlineAtMs!));
+      }, deadlineDelay)
+    : null;
   try {
-    return await provider.send("eth_getLogs", [{
-      address: ADDR.UNISWAP_V4_POOL_MANAGER,
-      fromBlock: "0x" + fromBlock.toString(16),
-      toBlock: "0x" + toBlock.toString(16),
-      topics: [topic],
-    }]);
+    const response = await fetch(connection.url, {
+      method: "POST",
+      headers: { ...connection.headers, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    throwIfDexDiscoveryCancelled(control);
+    if (!response.ok) {
+      throw new Error(
+        `DEX discovery ${method} HTTP ${response.status} ${response.statusText}`,
+      );
+    }
+    const body = await response.json() as Partial<JsonRpcError> & {
+      result?: unknown;
+    };
+    throwIfDexDiscoveryCancelled(control);
+    if (body.error) throw provider.getRpcError(payload, body as JsonRpcError);
+    if (!("result" in body)) {
+      throw new Error(`DEX discovery ${method} returned no result`);
+    }
+    return body.result as T;
+  } catch (error) {
+    if (control.signal?.aborted) {
+      throw control.signal.reason ?? dexDiscoveryAbortError(error);
+    }
+    if (
+      deadlineExpired ||
+      (
+        control.deadlineAtMs !== undefined &&
+        Date.now() >= control.deadlineAtMs
+      )
+    ) {
+      throw dexDiscoveryDeadlineError(control.deadlineAtMs!, error);
+    }
+    throw error;
+  } finally {
+    if (deadlineTimer !== null) clearTimeout(deadlineTimer);
+    detachParent();
+  }
+}
+
+function validateDexDiscoveryControl(control: DexDiscoveryReadControl): void {
+  if (
+    control.deadlineAtMs !== undefined &&
+    !Number.isFinite(control.deadlineAtMs)
+  ) {
+    throw new Error(
+      `invalid DEX discovery deadline ${String(control.deadlineAtMs)}`,
+    );
+  }
+}
+
+function hasDexDiscoveryControl(
+  control: DexDiscoveryReadControl | undefined,
+): boolean {
+  return control?.deadlineAtMs !== undefined ||
+    control?.signal !== undefined ||
+    control?.run !== undefined;
+}
+
+export function mergeDexDiscoveryReadControls(
+  parent: DexDiscoveryReadControl | undefined,
+  nested: DexDiscoveryReadControl | undefined,
+): DexDiscoveryReadControl {
+  const signals = [parent?.signal, nested?.signal].filter(
+    (signal): signal is AbortSignal => signal !== undefined,
+  );
+  const deadlines = [parent?.deadlineAtMs, nested?.deadlineAtMs].filter(
+    (deadline): deadline is number => deadline !== undefined,
+  );
+  return {
+    ...(deadlines.length === 0
+      ? {}
+      : { deadlineAtMs: Math.min(...deadlines) }),
+    ...(signals.length === 0
+      ? {}
+      : {
+          signal: mergeDexDiscoverySignals(...signals),
+        }),
+    ...((parent?.run ?? nested?.run) === undefined
+      ? {}
+      : { run: parent?.run ?? nested?.run }),
+  };
+}
+
+function mergeDexDiscoverySignals(
+  ...signals: Array<AbortSignal | undefined>
+): AbortSignal | undefined {
+  const present = signals.filter(
+    (signal): signal is AbortSignal => signal !== undefined,
+  );
+  if (present.length === 0) return undefined;
+  return present.length === 1 ? present[0] : AbortSignal.any(present);
+}
+
+function linkDexDiscoveryAbort(
+  source: AbortSignal | undefined,
+  target: AbortController,
+): () => void {
+  if (!source) return () => {};
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+  const abort = (): void => target.abort(source.reason);
+  source.addEventListener("abort", abort, { once: true });
+  return () => source.removeEventListener("abort", abort);
+}
+
+function throwIfDexDiscoveryCancelled(
+  control: DexDiscoveryReadControl | undefined,
+  cause?: unknown,
+): void {
+  if (control?.signal?.aborted) {
+    throw control.signal.reason ?? dexDiscoveryAbortError(cause);
+  }
+  if (
+    control?.deadlineAtMs !== undefined &&
+    Date.now() >= control.deadlineAtMs
+  ) {
+    throw dexDiscoveryDeadlineError(control.deadlineAtMs, cause);
+  }
+}
+
+function isDexDiscoveryCancellationError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  const code = String((error as { readonly code?: unknown }).code);
+  return code === "ABORTED" || code === "DEADLINE_EXCEEDED";
+}
+
+function dexDiscoveryAbortError(cause?: unknown): Error {
+  return Object.assign(
+    new Error(
+      "DEX discovery aborted",
+      cause === undefined ? undefined : { cause },
+    ),
+    { code: "ABORTED" },
+  );
+}
+
+function dexDiscoveryDeadlineError(
+  deadlineAtMs: number,
+  cause?: unknown,
+): Error {
+  return Object.assign(
+    new Error(
+      `DEX discovery deadline expired at ${deadlineAtMs}`,
+      cause === undefined ? undefined : { cause },
+    ),
+    { code: "DEADLINE_EXCEEDED" },
+  );
+}
+
+function normalizeDexDiscoveryBlockTag(blockTag: ethers.BlockTag): string {
+  try {
+    return ethers.toQuantity(blockTag);
   } catch {
-    if (fromBlock >= toBlock) return [];
-    const mid = Math.floor((fromBlock + toBlock) / 2);
-    return [
-      ...await getV4LogsWithSplitRetry(provider, topic, fromBlock, mid),
-      ...await getV4LogsWithSplitRetry(provider, topic, mid + 1, toBlock),
-    ];
+    if (blockTag === "latest") return blockTag;
+    throw new Error(
+      `DEX discovery requires a numeric block tag, received ${String(blockTag)}`,
+    );
   }
 }
 
@@ -280,64 +652,6 @@ function bestAdapter(
   adapterCounts: Map<PoolEntry["adapter"], number>,
 ): PoolEntry["adapter"] {
   return [...adapterCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-}
-
-async function getBalancerV3LogsWithSplitRetry(
-  provider: ethers.JsonRpcProvider,
-  fromBlock: number,
-  toBlock: number,
-): Promise<Array<{ topics: string[] }>> {
-  try {
-    return await provider.send("eth_getLogs", [{
-      address: ADDR.BALANCER_V3_VAULT,
-      fromBlock: "0x" + fromBlock.toString(16),
-      toBlock: "0x" + toBlock.toString(16),
-      topics: [BALANCER_V3_SWAP_TOPIC],
-    }]);
-  } catch {
-    if (fromBlock >= toBlock) return [];
-    const mid = Math.floor((fromBlock + toBlock) / 2);
-    return [
-      ...await getBalancerV3LogsWithSplitRetry(provider, fromBlock, mid),
-      ...await getBalancerV3LogsWithSplitRetry(provider, mid + 1, toBlock),
-    ];
-  }
-}
-
-async function getLogsWithSplitRetry(
-  provider: ethers.JsonRpcProvider,
-  topic: string,
-  fromBlock: number,
-  toBlock: number,
-): Promise<Array<{ address: string }>> {
-  try {
-    return await getLogs(provider, topic, fromBlock, toBlock);
-  } catch {
-    const logs: Array<{ address: string }> = [];
-    for (let start = fromBlock; start <= toBlock; start += RETRY_LOG_BATCH) {
-      const end = Math.min(start + RETRY_LOG_BATCH - 1, toBlock);
-      try {
-        logs.push(...await getLogs(provider, topic, start, end));
-      } catch {
-        // Keep scanning other chunks. A missed 10-block slice is less harmful
-        // than dropping the original 50-block batch.
-      }
-    }
-    return logs;
-  }
-}
-
-async function getLogs(
-  provider: ethers.JsonRpcProvider,
-  topic: string,
-  fromBlock: number,
-  toBlock: number,
-): Promise<Array<{ address: string }>> {
-  return provider.send("eth_getLogs", [{
-    fromBlock: "0x" + fromBlock.toString(16),
-    toBlock: "0x" + toBlock.toString(16),
-    topics: [topic],
-  }]);
 }
 
 export function mergePoolRegistries(base: PoolEntry[], extra: PoolEntry[]): PoolEntry[] {

@@ -280,6 +280,9 @@ async function main(): Promise<void> {
         data: log.data,
       })),
       minProfit: 1n,
+      sourceBlockHash: (await provider.getBlock(parentBlock))?.hash ?? undefined,
+      logsCompleteness: "complete-receipt" as const,
+      victimState: "materialized" as const,
     };
 
     const opportunities = await detector.detect(event, postState);

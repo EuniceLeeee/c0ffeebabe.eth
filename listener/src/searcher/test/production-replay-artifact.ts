@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { poolRegistryKey } from "../pool-universe.js";
 import type { PoolEntry, VerifiedRouteSpec } from "../planner/token-graph.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 2 as const;
 export const PRODUCTION_REPLAY_ARTIFACT_PRODUCER = "shared-protocol-discovery-v2" as const;
@@ -122,7 +122,7 @@ export function selectProductionReplayDiscoveredPools(
     if (!pool.verifiedRoutes || pool.verifiedRoutes.length === 0) {
       throw new Error(`discovered pool ${key} has no probe-verified route`);
     }
-    const family = PRODUCTION_ROUTE_ADAPTERS.protocols.find((adapter) =>
+    const family = PRODUCTION_ADAPTER_FAMILIES.protocols().find((adapter) =>
       adapter.poolAdapters.includes(pool.adapter));
     if (!family?.discovery) {
       throw new Error(`discovered pool ${key} is not owned by a dynamic protocol family`);
@@ -165,7 +165,7 @@ function parseUniverseEvidence(raw: unknown): ProductionReplayUniverseEvidence {
 function parseProjectedPool(raw: unknown, index: number): PoolEntry {
   if (!isRecord(raw)) throw new Error(`pools[${index}] must be an object`);
   const adapter = stringField(raw.adapter, `pools[${index}].adapter`) as PoolEntry["adapter"];
-  PRODUCTION_ROUTE_ADAPTERS.routeLegs.forPool(adapter);
+  PRODUCTION_ADAPTER_FAMILIES.routes().forPool(adapter);
   const pool: PoolEntry = {
     address: addressField(raw.address, `pools[${index}].address`),
     adapter,

@@ -49,6 +49,7 @@ import {
 import {
   protocolCandidateAddressesFromDexGraph,
   protocolCandidateAddressesFromDexUniverse,
+  protocolDiscoveryCandidateAddressHints,
   prepareActiveProtocolDiscoveryPass,
   prepareObservedProtocolDiscoveryPass,
 } from "../protocol-discovery-runtime.js";
@@ -74,7 +75,7 @@ import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
+  PRODUCTION_ADAPTER_FAMILIES,
 } from "../venues/production-registry.js";
 import {
   PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
@@ -335,16 +336,22 @@ async function main(): Promise<void> {
     const parentBackend = tokenBackend(provider, parentBlock);
     const baseGraph = (await buildTokenGraph(parentBackend, basePools)).map(lowerEdge);
     const dexAdapters = new Set(
-      PRODUCTION_ROUTE_ADAPTERS.swaps.flatMap((adapter) => [...adapter.poolAdapters]),
+      PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
     );
     const graphTokens = [...new Set([
       ...protocolCandidateAddressesFromDexUniverse(universe, dexAdapters),
       ...protocolCandidateAddressesFromDexGraph(baseGraph),
     ])].sort();
+    const candidateAddresses = [...new Set([
+      ...graphTokens,
+      ...protocolDiscoveryCandidateAddressHints(
+        PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      ),
+    ])].sort();
     const chainId = (await provider.getNetwork()).chainId;
     const pass = await prepareActiveProtocolDiscoveryPass({
       provider,
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: true,
       chainId,
@@ -360,7 +367,7 @@ async function main(): Promise<void> {
       blockNumber: parentBlock,
       fromBlock: cfg.sourceFromBlock,
       graphTokens,
-      candidateAddresses: graphTokens,
+      candidateAddresses,
       shadow: false,
     });
     if (!pass.projection) throw new Error("active protocol discovery produced no projection");
@@ -385,7 +392,7 @@ async function main(): Promise<void> {
     }
     const referencePass = await prepareObservedProtocolDiscoveryPass({
       provider,
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: true,
       chainId,

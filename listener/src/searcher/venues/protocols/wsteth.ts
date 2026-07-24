@@ -3,16 +3,45 @@ import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
-import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg } from "./protocol-quote.js";
+import {
+  createProtocolQuoteStateCapability,
+  decodeUintResult,
+} from "./protocol-state-framework.js";
 
-const wstethIface = new ethers.Interface(["function stETH() view returns (address)"]);
+const wstethIface = new ethers.Interface([
+  "function stETH() view returns (address)",
+  "function getWstETHByStETH(uint256 stETHAmount) view returns (uint256)",
+  "function getStETHByWstETH(uint256 wstETHAmount) view returns (uint256)",
+]);
+
+const wstethPricingState = createProtocolQuoteStateCapability({
+  familyId: "protocol:wsteth",
+  edgeAdapterIds: ["wsteth-wrap", "wsteth-unwrap"],
+  buildQuoteReads(edge, amountIn) {
+    const functionName = edge.adapterId === "wsteth-wrap"
+      ? "getWstETHByStETH"
+      : "getStETHByWstETH";
+    return [{
+      suffix: functionName,
+      to: edge.target,
+      data: wstethIface.encodeFunctionData(functionName, [amountIn]),
+    }];
+  },
+  deriveAmountOut(edge, _amountIn, result) {
+    const functionName = edge.adapterId === "wsteth-wrap"
+      ? "getWstETHByStETH"
+      : "getStETHByWstETH";
+    return decodeUintResult(wstethIface, functionName, result(functionName));
+  },
+});
 
 export const wstethAdapter = Object.freeze({
   id: "protocol:wsteth",
   kind: "protocol-conversion",
   poolAdapters: ["wsteth"],
+  identityPolicies: [{ poolAdapter: "wsteth", policy: "trusted-singleton-seed" }],
   declaredVenues: [{
     address: ADDR.WSTETH,
     adapter: "wsteth",
@@ -24,9 +53,9 @@ export const wstethAdapter = Object.freeze({
     { slotKind: "protocol", protocolAction: "unwrap" },
   ],
   requiresProtocolEdgesFlag: true,
-  actionAdapterIds: ["wsteth-wrap", "wsteth-unwrap", "erc20-approve"],
-  readMid: readProtocolExternalMid,
-  warm: { kind: "protocol-mid", priority: 1 },
+  ownedActionAdapterIds: ["wsteth-wrap", "wsteth-unwrap"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  pricingState: wstethPricingState,
   prepared: null,
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     // The declared singleton is a hypothesis until the venue's own interface

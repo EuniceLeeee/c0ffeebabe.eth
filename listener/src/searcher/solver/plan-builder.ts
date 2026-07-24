@@ -7,14 +7,19 @@
  * before lending/swaps, and inserting the assert-balance guard before flash repay.
  */
 
-import {
-  DEFAULT_FLASH_ADAPTER_ID,
-  findFlashProviderDescriptor,
-} from "../../adapters/flash-providers.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
-import type { StateBackend } from "../../shared/state/state-backend.js";
-import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
+import {
+  BlockScanFamilyAttributedError,
+  blockScanEdgeFamilyId,
+} from "../detector/blockscan-family-budget.js";
+import type { TokenPath } from "../planner/token-graph.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import { buildFlashLoanRoot } from "../venues/funding/flash-loan-framework.js";
+import type { PlanFragment } from "../venues/route-leg-adapter.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 
@@ -39,7 +44,8 @@ export async function buildResolvedPlanFromPath(
   executor: string,
   state: StateBackend,
   minProfit: bigint = 1n,
-  flashAdapterId: string = DEFAULT_FLASH_ADAPTER_ID,
+  flashAdapterId: string =
+    PRODUCTION_ADAPTER_FAMILIES.defaultFunding().funding.actionAdapterId,
   rawOutputs?: bigint[],
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
@@ -89,16 +95,32 @@ export async function buildResolvedPlanFromPath(
     const amtOut = amounts[i + 1];
     const rawOut = rawOutputs?.[i];
 
-    const routeAdapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
+    const routeAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(edge.adapterId);
     if (routeAdapter) {
-      const fragment = await routeAdapter.buildPlanFragment({
-        edge,
-        amountIn: amtIn,
-        amountOut: amtOut,
-        rawOut,
-        executor,
-        state,
-      });
+      let fragment: PlanFragment;
+      try {
+        fragment = await routeAdapter.buildPlanFragment({
+          edge,
+          amountIn: amtIn,
+          amountOut: amtOut,
+          rawOut,
+          executor,
+          state,
+        });
+      } catch (error) {
+        if (
+          error instanceof BlockScanFamilyAttributedError ||
+          isStateCallAbortedError(error) ||
+          isControlFailure(error)
+        ) {
+          throw error;
+        }
+        throw new BlockScanFamilyAttributedError(
+          blockScanEdgeFamilyId(edge),
+          "plan build",
+          error,
+        );
+      }
       for (const requirement of fragment.requirements) {
         if (requirement.kind === "approve") {
           ensureApprove(requirement.token, requirement.spender, requirement.amount);
@@ -110,106 +132,24 @@ export async function buildResolvedPlanFromPath(
       continue;
     }
 
-    const node = await buildEdgeNode(
-      edge,
-      amtIn,
-      amtOut,
-      rawOut,
-      executor,
-      state,
-      ensureApprove,
-      transferToPool,
+    throw new BlockScanFamilyAttributedError(
+      blockScanEdgeFamilyId(edge),
+      "plan build",
+      new Error(`plan-builder: no family owns adapter ${edge.adapterId}`),
     );
-    if (node) inner.push(node);
   }
 
-  // Guard before repay: balance(flashToken) >= flashAmount + minProfit
-  inner.push({
-    adapterId: "assert-balance",
-    target: flashToken,
-    tokenIn: flashToken,
-    tokenOut: flashToken,
-    amount: flashAmount + minProfit,
-    params: {},
-    children: [],
-  });
-
-  // Repay the flash. Morpho PULLS the repayment via transferFrom after the callback (needs an approve).
-  // Balancer does NOT pull — receiveFlashLoan must leave the borrowed amount back in the vault (it
-  // verifies its own balance is restored), so the repay must be a TRANSFER to the vault. An approve is a
-  // silent no-op for Balancer and the flashLoan then reverts. (Balancer protocol flash fee is 0, so we
-  // transfer exactly flashAmount.)
-  const flashProvider = findFlashProviderDescriptor(flashAdapterId);
-  if (!flashProvider) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
-  if (flashProvider.repayment === "transfer") {
-    transferToPool(flashToken, flashProvider.target, flashAmount);
-  } else {
-    ensureApprove(flashToken, flashProvider.target);
-  }
-
-  // Wrap entire sequence in flash loan
-  const flashParams: Record<string, string[] | bigint[]> =
-    flashProvider.paramShape === "tokens-and-amounts"
-      ? { tokens: [flashToken], amounts: [flashAmount] }
-      : {};
-
-  return {
-    adapterId: flashAdapterId,
-    target: flashProvider.target,
-    tokenIn: flashToken,
-    tokenOut: flashToken,
-    amount: flashAmount,
-    params: flashParams,
+  const flashFamily = PRODUCTION_ADAPTER_FAMILIES.findFundingByAction(flashAdapterId);
+  if (!flashFamily) throw new Error(`plan-builder: unknown flash adapter ${flashAdapterId}`);
+  return buildFlashLoanRoot(flashFamily, {
+    flashToken,
+    flashAmount,
+    minProfit,
     children: inner,
-  };
+  });
 }
 
-// ─── Per-adapter node builders ─────────────────────────────────
-
-async function buildEdgeNode(
-  edge: TokenEdge,
-  amtIn: bigint,
-  amtOut: bigint,
-  rawOut: bigint | undefined,
-  executor: string,
-  state: StateBackend,
-  ensureApprove: (token: string, spender: string) => void,
-  transferToPool: (token: string, pool: string, amount: bigint) => void,
-): Promise<ResolvedPlanNode | null> {
-  switch (edge.adapterId) {
-    case "fluid-dex-swap": {
-      ensureApprove(edge.tokenIn, edge.target);
-      if (!edge.poolToken0 || !edge.poolToken1) {
-        throw new Error(`fluid-dex edge missing poolToken0/poolToken1: ${edge.tokenIn} -> ${edge.tokenOut}`);
-      }
-      const inLower = edge.tokenIn.toLowerCase();
-      const outLower = edge.tokenOut.toLowerCase();
-      const t0 = edge.poolToken0.toLowerCase();
-      const t1 = edge.poolToken1.toLowerCase();
-      const swap0to1 =
-        inLower === t0 && outLower === t1
-          ? true
-          : inLower === t1 && outLower === t0
-            ? false
-            : null;
-      if (swap0to1 === null) {
-        throw new Error(
-          `fluid-dex tokens ${edge.tokenIn} -> ${edge.tokenOut} do not match pool ` +
-            `${edge.poolToken0} / ${edge.poolToken1}`,
-        );
-      }
-      return {
-        adapterId: "fluid-dex-swap",
-        target: edge.target,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amount: amtIn,
-        params: { swap0to1, amountOutMin: 0n },
-        children: [],
-      };
-    }
-
-    default:
-      throw new Error(`plan-builder: no handler for adapter ${edge.adapterId}`);
-  }
+function isControlFailure(error: unknown): boolean {
+  return error instanceof Error &&
+    /\b(?:abort(?:ed)?|deadline|timed?\s*out|timeout)\b/i.test(error.message);
 }

@@ -1,10 +1,11 @@
 import { ADDR } from "../../../shared/constants/addresses.js";
 
 /**
- * Standard-ERC4626 compatibility corpus. The same addresses remain in the
- * production fallback registry until source-derived Production Replay proves
- * complete recall. This list is NEVER a discovery candidate source (that would
- * be circular self-seeding); it is only an audit/probe comparison corpus.
+ * Frozen standard-ERC4626 recall hints migrated from the old executable pool
+ * table. An address here is provenance only: it must still pass the registered
+ * address matcher, current-N identity attestation and nonzero behavior probe
+ * before it can produce a verified route. No asset or route data from this
+ * corpus is supplied to the producer.
  */
 export const ERC4626_LEGACY_RECALL_VAULTS: readonly {
   readonly address: string;

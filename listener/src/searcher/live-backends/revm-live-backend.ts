@@ -1,6 +1,5 @@
 import { ethers } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
-import { ADDR } from "../../shared/constants/addresses.js";
 import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import type {
@@ -20,24 +19,19 @@ import {
 } from "../revm-sim-client.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { resolveErc20BalanceSlot, tokenAllowanceHint, tokenBalanceHint } from "../solver/balance-slots.js";
-import { quoteFluidDex } from "../solver/quoter.js";
 import {
   postImpactStateOverrides,
   postImpactSupportsStateOverrides,
 } from "../solver/post-impact-overrides.js";
 import type { ResolvedPlan } from "../solver/solver.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import type {
   PreparedRouteContext,
   PreparedRouteRequest,
 } from "../venues/route-leg-adapter.js";
 import { buildVictimOverlay, overlaySupportsAdapter } from "./victim-overlay.js";
 
-const UNIV3_FEE_IFACE = new ethers.Interface(["function fee() view returns (uint24)"]);
-const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
 const WHALE = "0x000000000000000000000000000000000000dEaD";
-const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-const UNIV2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 const BALANCE_OF_IFACE = new ethers.Interface([
   "function balanceOf(address) view returns (uint256)",
 ]);
@@ -57,7 +51,8 @@ const BALANCE_OF_IFACE = new ethers.Interface([
 export class RevmLiveBackend implements LiveStateBackend {
   readonly kind = "revm" as const;
   private preparedBlock: number | null = null;
-  private readonly feeCache = new Map<string, number>();
+  private victimOverlayReadBlock: number | null = null;
+  private readonly victimOverlayReadCache = new Map<string, string>();
 
   constructor(
     private readonly client: RevmSimClient,
@@ -109,8 +104,8 @@ export class RevmLiveBackend implements LiveStateBackend {
       ? null
       : await buildVictimOverlay(input.impact, {
           graph: this.graph,
-          resolveUniv3Fee: (pool) => this.resolveUniv3Fee(pool),
-        });
+          read: (req) => this.readVictimOverlayState(req, baseBlock),
+        }, remainingPrepareMs(input));
     const prewarmCalls = await this.buildPrewarmCalls(input, !usePostImpactOverrides);
     if (usePostImpactOverrides) {
       console.log(
@@ -150,27 +145,22 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (input.impact) push(input.impact.pool);
     push(this.executor);
     push(this.owner);
-    push(ADDR.MORPHO);
-    push(ADDR.BALANCER_VAULT);
-    push(ADDR.UNISWAP_V4_QUOTER);
+    for (const family of PRODUCTION_ADAPTER_FAMILIES.funding()) {
+      push(family.funding.target);
+      push(family.funding.liquidityHolder);
+    }
+    for (const hop of input.routeHops ?? []) {
+      push(hop.target);
+      const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
+      const request = this.preparedRequest(hop, input.impact?.amountIn ?? 0n);
+      for (const address of adapter?.prepared?.prewarmAddresses?.(request) ?? []) push(address);
+    }
 
     if (stateOverrideOnly) {
-      for (const hop of input.routeHops ?? []) {
-        push(hop.target);
-        const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId);
-        const request = this.preparedRequest(hop, input.impact?.amountIn ?? 0n);
-        for (const address of adapter?.prepared?.prewarmAddresses?.(request) ?? []) push(address);
-      }
       return [...prewarm.values()];
     }
 
     push(WHALE);
-    push(ADDR.SKY_PSM_LITE);
-    push(ADDR.FLUID_VAULT_WSTUSR_USDC);
-    push(UNIV2_ROUTER);
-    push(UNIV3_SWAP_ROUTER);
-    push(UNIV3_QUOTER_V2);
-    push(ADDR.UNISWAP_V4_QUOTER);
     return [...prewarm.values()];
   }
 
@@ -258,20 +248,31 @@ export class RevmLiveBackend implements LiveStateBackend {
           .map((token) => tokenBalanceHint(token, WHALE))
           .filter((hint) => warmUnknownStorage || hint.balanceSlot !== undefined)
       : [];
-    const prewarm = [
+    const prewarmByAddress = new Map<string, string>();
+    const pushPrewarm = (address: string): void => {
+      const normalized = ethers.getAddress(address);
+      prewarmByAddress.set(normalized.toLowerCase(), normalized);
+    };
+    for (const address of [
       ethers.ZeroAddress,
-      ethers.getAddress(this.owner),
-      ethers.getAddress(this.executor),
-      ethers.getAddress(WHALE),
-      ethers.getAddress(ADDR.MORPHO),
-      ethers.getAddress(ADDR.BALANCER_VAULT),
-      ethers.getAddress(ADDR.SKY_PSM_LITE),
-      ethers.getAddress(ADDR.FLUID_VAULT_WSTUSR_USDC),
-      UNIV2_ROUTER,
-      UNIV3_SWAP_ROUTER,
-      UNIV3_QUOTER_V2,
-      ADDR.UNISWAP_V4_QUOTER,
-    ];
+      this.owner,
+      this.executor,
+      WHALE,
+      ...calls.map((call) => call.to),
+    ]) pushPrewarm(address);
+    for (const family of PRODUCTION_ADAPTER_FAMILIES.funding()) {
+      pushPrewarm(family.funding.target);
+      pushPrewarm(family.funding.liquidityHolder);
+    }
+    for (const hop of hops) {
+      pushPrewarm(hop.target);
+      const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
+      const request = this.preparedRequest(hop, hop.amountIn);
+      for (const address of adapter?.prepared?.prewarmAddresses?.(request) ?? []) {
+        pushPrewarm(address);
+      }
+    }
+    const prewarm = [...prewarmByAddress.values()];
     await this.client.warm({
       blockNumber,
       rpcUrl: this.rpcUrl,
@@ -310,7 +311,7 @@ export class RevmLiveBackend implements LiveStateBackend {
     amountIn: bigint,
   ): Promise<OverlayPreCall[]> {
     try {
-      const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId);
+      const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
       const encode = adapter?.prepared?.encodeQuotePrewarm;
       if (!encode) return [];
       return [...await encode(this.preparedContext(hop, amountIn))];
@@ -336,15 +337,13 @@ export class RevmLiveBackend implements LiveStateBackend {
   }
 
   private async quoteByAdapter(req: QuoteRequest): Promise<QuoteResult> {
-    const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(req.adapterId);
+    const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(req.adapterId);
     if (adapter?.prepared?.quote) {
       return adapter.prepared.quote(this.preparedContext(req, req.amountIn));
     }
     if (adapter?.prepared?.quoteUnsupportedReason) {
       throw new Error(adapter.prepared.quoteUnsupportedReason);
     }
-    // Fluid DEX remains the one explicitly blocked legacy family in the plan.
-    if (req.adapterId === "fluid-dex-swap") return this.quoteFluidDex(req);
     throw new Error(`no revm quoter for adapter ${req.adapterId}`);
   }
 
@@ -392,17 +391,25 @@ export class RevmLiveBackend implements LiveStateBackend {
     };
   }
 
-  private async resolveUniv3Fee(pool: string): Promise<number> {
-    const key = pool.toLowerCase();
-    const cached = this.feeCache.get(key);
+  private async readVictimOverlayState(
+    req: { readonly to: string; readonly data: string },
+    blockNumber: number,
+  ): Promise<string> {
+    if (this.victimOverlayReadBlock !== blockNumber) {
+      this.victimOverlayReadCache.clear();
+      this.victimOverlayReadBlock = blockNumber;
+    }
+    const key =
+      `${blockNumber}:${req.to.toLowerCase()}:${req.data.toLowerCase()}`;
+    const cached = this.victimOverlayReadCache.get(key);
     if (cached !== undefined) return cached;
     const raw = await this.provider.call({
-      to: pool,
-      data: UNIV3_FEE_IFACE.encodeFunctionData("fee", []),
+      to: req.to,
+      data: req.data,
+      blockTag: blockNumber,
     });
-    const fee = Number(BigInt(raw));
-    this.feeCache.set(key, fee);
-    return fee;
+    this.victimOverlayReadCache.set(key, raw);
+    return raw;
   }
 
   private findEdge(req: QuoteRequest): TokenEdge | undefined {
@@ -445,21 +452,6 @@ export class RevmLiveBackend implements LiveStateBackend {
     return { output: resp.output, latencyMs: resp.latencyMs, cacheStats: resp.cacheStats };
   }
 
-  private async quoteFluidDex(req: QuoteRequest): Promise<QuoteResult> {
-    const started = Date.now();
-    const edge = this.findEdge(req);
-    const amountOut = await quoteFluidDex(
-      this,
-      req.target,
-      req.tokenIn,
-      req.tokenOut,
-      req.amountIn,
-      req.poolToken0 ?? edge?.poolToken0,
-      req.poolToken1 ?? edge?.poolToken1,
-    );
-    return { amountOut, latencyMs: Date.now() - started };
-  }
-
   private preparedRequest(hop: QuoteHop, amountIn: bigint): PreparedRouteRequest {
     return { ...hop, amountIn };
   }
@@ -475,9 +467,14 @@ export class RevmLiveBackend implements LiveStateBackend {
   }
 }
 
+function remainingPrepareMs(input: PrepareInput): number | undefined {
+  return input.deadlineAtMs === undefined
+    ? undefined
+    : Math.max(1, input.deadlineAtMs - Date.now());
+}
+
 function overlayApproveSpender(hop: QuoteHop | QuoteRequest): string | null {
-  if (hop.adapterId === "fluid-dex-swap") return ethers.getAddress(hop.target);
-  const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId);
+  const adapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(hop.adapterId);
   const request: PreparedRouteRequest = {
     ...hop,
     amountIn: "amountIn" in hop ? hop.amountIn : 0n,

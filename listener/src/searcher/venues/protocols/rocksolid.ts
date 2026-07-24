@@ -3,18 +3,37 @@ import { ADDR } from "../../../shared/constants/addresses.js";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import type { ExactQuoteContext, ProtocolConversionAdapter } from "../route-leg-adapter.js";
-import { readProtocolExternalMid } from "../mid-readers.js";
 import { buildDescriptorProtocolPlan } from "./protocol-plan.js";
 import { quoteProtocolLeg } from "./protocol-quote.js";
+import {
+  createProtocolQuoteStateCapability,
+  decodeUintResult,
+} from "./protocol-state-framework.js";
 
 const rocksolidIface = new ethers.Interface([
   "function convertToShares(uint256 assets) view returns (uint256 shares)",
 ]);
 
+const rocksolidPricingState = createProtocolQuoteStateCapability({
+  familyId: "protocol:rocksolid",
+  edgeAdapterIds: ["rocksolid-sync-deposit"],
+  buildQuoteReads(edge, amountIn) {
+    return [{
+      suffix: "shares",
+      to: edge.target,
+      data: rocksolidIface.encodeFunctionData("convertToShares", [amountIn]),
+    }];
+  },
+  deriveAmountOut(_edge, _amountIn, result) {
+    return decodeUintResult(rocksolidIface, "convertToShares", result("shares"));
+  },
+});
+
 export const rocksolidAdapter = Object.freeze({
   id: "protocol:rocksolid",
   kind: "protocol-conversion",
   poolAdapters: ["rocksolid"],
+  identityPolicies: [{ poolAdapter: "rocksolid", policy: "trusted-singleton-seed" }],
   declaredVenues: [{
     address: ADDR.ROCKSOLID_RETH,
     adapter: "rocksolid",
@@ -26,9 +45,9 @@ export const rocksolidAdapter = Object.freeze({
   edgeAdapterIds: ["rocksolid-sync-deposit"],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "wrap" }],
   requiresProtocolEdgesFlag: true,
-  actionAdapterIds: ["rocksolid-sync-deposit", "erc20-approve"],
-  readMid: readProtocolExternalMid,
-  warm: { kind: "protocol-mid", priority: 2 },
+  ownedActionAdapterIds: ["rocksolid-sync-deposit"],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
+  pricingState: rocksolidPricingState,
   prepared: null,
   async buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]> {
     if (!pool.fixedTokenIn) throw new Error(`rocksolid pool ${pool.address} missing fixedTokenIn`);

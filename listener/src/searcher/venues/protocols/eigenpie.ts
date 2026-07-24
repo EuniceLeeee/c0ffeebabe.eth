@@ -5,7 +5,6 @@ import type {
   PreparedRouteContext,
   ProtocolConversionAdapter,
 } from "../route-leg-adapter.js";
-import { readProtocolExternalMid } from "../mid-readers.js";
 import {
   pairInstanceId,
   EIGENPIE_DEPOSIT_EDGE_ADAPTER,
@@ -20,37 +19,59 @@ import {
   buildReceiptDepositPlanFragment,
   requireVerifiedReceiptDepositRoute,
 } from "./receipt-deposit-framework.js";
+import {
+  createProtocolQuoteStateCapability,
+  decodeUintResult,
+} from "./protocol-state-framework.js";
+
+const eigenpiePricingState = createProtocolQuoteStateCapability({
+  familyId: "protocol:eigenpie",
+  edgeAdapterIds: [EIGENPIE_DEPOSIT_EDGE_ADAPTER],
+  stateKey: (edge) =>
+    `${edge.target}:${edge.tokenIn}:${edge.tokenOut}`.toLowerCase(),
+  buildQuoteReads(edge, amountIn) {
+    return [{
+      suffix: "mint",
+      to: edge.target,
+      data: eigenpieIface.encodeFunctionData("getMLRTAmountToMint", [
+        edge.tokenIn,
+        amountIn,
+      ]),
+    }];
+  },
+  deriveAmountOut(edge, _amountIn, result) {
+    const raw = result("mint");
+    const decoded = eigenpieIface.decodeFunctionResult("getMLRTAmountToMint", raw);
+    const receipt = String(decoded[1]);
+    if (receipt.toLowerCase() !== edge.tokenOut.toLowerCase()) {
+      throw new Error(
+        `Eigenpie current-block receipt drift: ${receipt} != ${edge.tokenOut}`,
+      );
+    }
+    return decodeUintResult(eigenpieIface, "getMLRTAmountToMint", raw);
+  },
+});
 
 export const eigenpieAdapter = Object.freeze({
   id: "protocol:eigenpie",
   kind: "protocol-conversion",
   poolAdapters: [EIGENPIE_POOL_ADAPTER],
+  identityPolicies: [{
+    poolAdapter: EIGENPIE_POOL_ADAPTER,
+    policy: "trusted-singleton-seed",
+  }],
   declaredVenues: [],
   undeclaredVenueReason:
     "instances require observed interaction plus pair-scoped identity and nonzero simulation",
   discovery: eigenpieDiscovery,
   discoveryIdentityResolver: eigenpieIdentityResolver,
+  discoveryIdentityAuthority: { class: "canonical-onchain", strength: 300 },
   edgeAdapterIds: [EIGENPIE_DEPOSIT_EDGE_ADAPTER],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "wrap" }],
-  actionAdapterIds: [EIGENPIE_DEPOSIT_EDGE_ADAPTER, "erc20-approve"],
+  ownedActionAdapterIds: [EIGENPIE_DEPOSIT_EDGE_ADAPTER],
+  requiredInfraActionAdapterIds: ["erc20-approve"],
   requiresProtocolEdgesFlag: true,
-  readMid: readProtocolExternalMid,
-  warm: {
-    kind: "protocol-mid",
-    priority: 2,
-    async quotePrewarm(ctx: ExactQuoteContext): Promise<bigint> {
-      if (!ctx.tokenIn || !ctx.tokenOut) {
-        throw new Error("Eigenpie deposit prewarm requires tokenIn/tokenOut");
-      }
-      return quoteEigenpieDeposit(
-        ctx.state,
-        ctx.target,
-        ctx.tokenIn,
-        ctx.tokenOut,
-        ctx.amountIn,
-      );
-    },
-  },
+  pricingState: eigenpiePricingState,
   prepared: {
     quote: async (ctx: PreparedRouteContext) => {
       const started = Date.now();

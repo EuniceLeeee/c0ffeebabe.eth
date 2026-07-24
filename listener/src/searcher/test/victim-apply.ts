@@ -5,6 +5,7 @@ import { v3SwapExactInput, v3SwapToState, type V3PoolState } from "../solver/v3-
 import { quoteV2ExactInput, v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolImpact } from "../detector/pool-impact.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -23,6 +24,43 @@ const noState = {
     throw new Error("state.call should not be used");
   },
 } as unknown as StateBackend;
+
+function render(value: unknown): string {
+  return JSON.stringify(value, (_key, item) =>
+    typeof item === "bigint" ? `${item}n` : item
+  );
+}
+
+async function assertLocalCallbackParity(
+  cache: PoolStateCache,
+  impact: PoolImpact,
+  expected: Awaited<ReturnType<typeof applyVictimSwapLocally>>,
+  state?: StateBackend,
+): Promise<void> {
+  const callback = PRODUCTION_ADAPTER_FAMILIES
+    .victimModels()
+    .forEdge(impact.matchedAdapterId)
+    ?.runtime
+    ?.localApply
+    ?.apply;
+  if (!callback) {
+    throw new Error(`FAIL: ${impact.matchedAdapterId} local callback missing`);
+  }
+  const direct = await callback({
+    cache,
+    impact,
+    blockNumber: BLOCK,
+    state,
+    control: {
+      deadlineAtMs: Date.now() + 30_000,
+      signal: new AbortController().signal,
+    },
+  });
+  assert(
+    render(direct) === render(expected),
+    `${impact.matchedAdapterId} central/direct callback parity`,
+  );
+}
 
 function testV2FeeMath(): void {
   const reserveIn = 2_000_000n;
@@ -47,8 +85,8 @@ function testV2FeeTable(): void {
   assert(v2FeeBpsForFactory(SUSHI_FACTORY) === 30n, "SushiV2 fee bps should be 30");
   // Fork-swap-verified 0.25% fork (see v2-fee.ts proof); other tail forks stay 30.
   assert(v2FeeBpsForFactory(PANCAKE_V2_FACTORY) === 25n, "verified 0.25% fork should be 25");
-  assert(v2FeeBpsForFactory("0x000000000000000000000000000000000000dEaD") === 30n, "unknown factory default");
-  assert(v2FeeBpsForFactory(undefined) === 30n, "undefined factory default");
+  assert(v2FeeBpsForFactory("0x000000000000000000000000000000000000dEaD") === null, "unknown factory must fail closed");
+  assert(v2FeeBpsForFactory(undefined) === null, "missing factory must fail closed");
   console.log("[victim-apply] v2 fee table: PASS");
 }
 
@@ -76,6 +114,7 @@ async function testV2VictimApply(): Promise<void> {
 
   const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: v2 victim apply should succeed");
+  await assertLocalCallbackParity(cache, impact, applied);
   assert(applied.amountOut === expectedVictimOut, `v2 victim out ${applied.amountOut} != ${expectedVictimOut}`);
   if (applied.postImpact.kind !== "v2") throw new Error("FAIL: v2 apply should return v2 post-impact seed");
   assert(applied.postImpact.feeBps === 25n, `v2 post-impact feeBps ${applied.postImpact.feeBps} != 25`);
@@ -134,6 +173,7 @@ async function testV3VictimApply(): Promise<void> {
 
   const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: v3 victim apply should succeed");
+  await assertLocalCallbackParity(cache, impact, applied);
   assert(applied.amountOut === expected.amountOut, `v3 victim out ${applied.amountOut} != ${expected.amountOut}`);
 
   cache.beginHint(BLOCK, { postImpact: [applied.postImpact] });
@@ -173,6 +213,7 @@ async function testCurveVictimApply(): Promise<void> {
 
   const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: curve victim apply should succeed");
+  await assertLocalCallbackParity(cache, impact, applied);
   assert(
     applied.amountOut === expectedVictimOut,
     `curve victim out ${applied.amountOut} != ${expectedVictimOut}`,
@@ -216,6 +257,7 @@ async function testV4VictimApply(): Promise<void> {
 
   const applied = await applyVictimSwapLocally(cache, impact, BLOCK);
   if (!applied) throw new Error("FAIL: v4 victim apply should succeed");
+  await assertLocalCallbackParity(cache, impact, applied);
   assert(applied.amountOut === impact.amountOut, `v4 amountOut passthrough ${applied.amountOut}`);
   const post = applied.postImpact;
   assert(post.kind === "v4", `v4 seed kind ${post.kind}`);

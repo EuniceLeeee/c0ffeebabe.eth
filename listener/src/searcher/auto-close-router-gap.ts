@@ -8,9 +8,9 @@ import {
 } from "./force-include.js";
 import { buildMempoolToAddressFilter } from "./main.js";
 import {
-  landedSwapEventsForTopic,
   observedLandedPoolIdentity,
 } from "./venues/landed-event-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "./venues/production-registry.js";
 
 export type ResolveSourceSwapToFn = (
   txHash: string,
@@ -292,7 +292,7 @@ function swapPoolEmitters(logs: Iterable<{ address: string; topics: readonly str
   for (const log of logs) {
     const topic0 = log.topics[0];
     if (typeof topic0 !== "string") continue;
-    for (const event of landedSwapEventsForTopic(topic0)) {
+    for (const event of PRODUCTION_ADAPTER_FAMILIES.landedEvents().eventsForTopic(topic0)) {
       const identity = observedLandedPoolIdentity(event, log);
       if (identity) pools.add(identity);
     }

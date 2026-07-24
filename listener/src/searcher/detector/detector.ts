@@ -1,12 +1,14 @@
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
-import { detectPoolImpact } from "./pool-impact.js";
-import { defaultTokenGraph, type TokenEdge, type TokenQueryBackend } from "../planner/token-graph.js";
+import { detectPoolImpactTransition } from "./pool-impact.js";
+import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import {
   matchOracleVictimEffect,
   oracleAffectedGraphEdges,
+  type OracleVictimDescriptor,
   type VictimEffect,
 } from "./victim-effect.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 export interface Opportunity {
   kind: "backrun-arb";
@@ -51,32 +53,75 @@ export class BackrunDetector implements Detector {
   private poolAddrs: Map<string, string> | null = null;
   private tokenQuery: TokenQueryBackend | null = null;
 
-  /** Inject a pre-built graph (from buildTokenGraph). Falls back to hardcoded default. */
+  constructor(
+    private readonly oracleVictims: readonly OracleVictimDescriptor[] =
+      PRODUCTION_ADAPTER_FAMILIES.oracleVictims(),
+  ) {}
+
+  /** Inject a verified pre-built graph (from buildTokenGraph). */
   setGraph(graph: TokenEdge[]): void {
     this.graph = graph;
   }
 
-  /** Inject a broader set of known pool addresses for detection matching.
-   *  Map: lowercase pool address → adapter type (e.g. "univ2", "univ3", "curve").
-   *  Includes factory-indexed pools that aren't in the routing graph. */
+  /**
+   * Inject the broader discovery view carried by the live detector context.
+   * This map is not an identity/admission credential: actionable swap impacts
+   * are restricted to family-verified graph edges.
+   */
   setPoolAddressMap(addrs: Map<string, string>): void {
     this.poolAddrs = addrs;
   }
 
-  /** Inject a backend for on-chain token0/token1 queries (swap-only hint enrichment). */
+  /** Inject a backend for family-owned receipt-state enrichment. */
   setTokenQuery(backend: TokenQueryBackend): void {
     this.tokenQuery = backend;
   }
 
   async detect(event: OrderflowEvent, state: StateBackend): Promise<Opportunity[]> {
-    const graph = this.graph ?? defaultTokenGraph();
-    const impacts = await detectPoolImpact(event, graph, this.poolAddrs, this.tokenQuery);
+    const graph = this.graph;
+    if (!graph) {
+      throw new Error("backrun detector graph is not initialized");
+    }
+    const transition = await detectPoolImpactTransition(
+      event,
+      graph,
+      this.poolAddrs,
+      this.tokenQuery,
+    );
+    const reportedUnresolved = event.victimState === "must-overlay"
+      ? transition.unresolved
+      : transition.unresolved.filter((item) =>
+          item.reason !== "receipt-fragment" &&
+          item.reason !== "source-generation-unbound"
+        );
+    if (reportedUnresolved.length > 0) {
+      console.log(
+        `[searcher/detector] victim transition unresolved generation=${transition.sourceGeneration.id.slice(0, 10)} ` +
+          reportedUnresolved
+            .slice(0, 4)
+            .map((item) => `${item.reason}:${item.pool ?? "unknown"}`)
+            .join(","),
+      );
+    }
+    const impacts = event.victimState === "must-overlay" &&
+        !transition.hashOnlyReplayable
+      ? []
+      : transition.impacts;
 
     // Build set of tokens that exist in the routing graph
     const graphTokens = new Set(
       graph.flatMap((e) => [e.tokenIn.toLowerCase(), e.tokenOut.toLowerCase()]),
     );
 
+    const transitionPools = uniqueAddresses(
+      transition.impacts.map((impact) => impact.poolId ?? impact.pool),
+    );
+    const transitionTokens = uniqueAddresses(
+      transition.impacts.flatMap((impact) => [
+        impact.tokenIn,
+        impact.tokenOut,
+      ]),
+    );
     const opportunities: Opportunity[] = [];
     for (const impact of impacts) {
       // Pick startToken: prefer an impact token that's in the routing graph
@@ -88,14 +133,14 @@ export class BackrunDetector implements Detector {
         kind: "backrun-arb" as const,
         victimTxHash: event.txHash,
         blockNumber: event.blockNumber,
-        affectedPools: [impact.pool],
-        affectedTokens: uniqueAddresses([impact.tokenIn, impact.tokenOut]),
+        affectedPools: transitionPools,
+        affectedTokens: transitionTokens,
         startToken,
         profitToken: startToken,
         victimAmountIn: impact.amountIn,
-        victimEffect: { kind: "swap", impact },
+        victimEffect: { kind: "swap", impact, transition },
         targetNetProfit: event.minProfit,
-        hints: { impact },
+        hints: { impact, victimTransition: transition },
       });
     }
 
@@ -106,6 +151,7 @@ export class BackrunDetector implements Detector {
       this.tokenQuery,
       Math.max(0, event.blockNumber - 1),
       state,
+      this.oracleVictims,
     );
     if (oracleEffect) {
       const affectedEdges = oracleAffectedGraphEdges(graph, oracleEffect);

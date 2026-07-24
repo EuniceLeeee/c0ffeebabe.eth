@@ -8,6 +8,9 @@ import {
 } from "../detector/victim-effect.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+
+const ORACLE_VICTIMS = PRODUCTION_ADAPTER_FAMILIES.oracleVictims();
 
 const QUOTER = new ethers.Interface([
   "function quoteSwapOut(address syntheticTokenIn, address syntheticTokenOut, uint256 amountIn) " +
@@ -79,6 +82,7 @@ async function testOnlyChangedPairsBecomeVictimEdges(): Promise<void> {
     backend(pre, 100) as TokenQueryBackend,
     100,
     backend(post) as Pick<StateBackend, "call">,
+    ORACLE_VICTIMS,
   );
   assert(effect !== null, "changed oracle quote should admit");
   assert(effect?.priceChanges.length === 1, `changed pairs ${effect?.priceChanges.length}`);
@@ -103,13 +107,14 @@ async function testSelectorAloneDoesNotAdmit(): Promise<void> {
     backend(quotes, 100) as TokenQueryBackend,
     100,
     backend(quotes) as Pick<StateBackend, "call">,
+    ORACLE_VICTIMS,
   );
   assert(effect === null, "unchanged quotes must not admit");
 }
 
 async function main(): Promise<void> {
   assert(
-    oracleVictimWatchTargets().some((target) =>
+    oracleVictimWatchTargets(ORACLE_VICTIMS).some((target) =>
       target.toLowerCase() === ADDR.METRONOME_ORACLE_FORWARDER.toLowerCase(),
     ),
     "descriptor watch target",

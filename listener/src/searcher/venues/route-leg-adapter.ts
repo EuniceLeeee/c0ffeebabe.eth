@@ -4,9 +4,18 @@ import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-g
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import type { ProtocolAction, SlotKind } from "../strategy-taxonomy.js";
 import type { AttestedPoolEntry } from "./identity.js";
-import type { OnchainIdentityResolver } from "./identity.js";
-import type { RouteVenueMid, SyncMidReadContext } from "./mid-readers.js";
+import type {
+  IdentityResolverDescriptor,
+  OnchainIdentityResolver,
+} from "./identity.js";
 import type { SwapObservationCapability } from "./swap-observation.js";
+import type { BlockScanStateCapability } from "./blockscan-state-capability.js";
+import type { RegisteredFundingFamily } from "./funding/funding-capability.js";
+import type { RouteInstanceIdentityCapability } from "./route-instance-identity.js";
+import type { SwapLandedEventDeclaration } from "./landed-event-registry.js";
+import type { SwapVictimModelDeclaration } from "./victim-model-registry.js";
+import type { LandedPoolMaterializationCapability } from "./landed-pool-discovery.js";
+import type { OracleVictimDescriptor } from "../detector/victim-effect.js";
 
 export type SwapExecutionFamilyId =
   | "univ2-standard"
@@ -19,13 +28,53 @@ export type SwapExecutionFamilyId =
   | `custom-swap:${string}`;
 
 export type ProtocolExecutionFamilyId = `protocol:${string}`;
-export type CompatExecutionFamilyId = `compat:${string}`;
+export type FlashLoanExecutionFamilyId = `flash-loan:${string}`;
+export type CreditExecutionFamilyId = `credit:${string}`;
+export type LiquidityExecutionFamilyId = `liquidity:${string}`;
 export type ExecutionFamilyId =
   | SwapExecutionFamilyId
   | ProtocolExecutionFamilyId
-  | CompatExecutionFamilyId;
+  | FlashLoanExecutionFamilyId
+  | CreditExecutionFamilyId
+  | LiquidityExecutionFamilyId;
 
-export type RouteLegKind = "swap" | "protocol-conversion" | "compat";
+export type AdapterFamilyKind =
+  | "swap"
+  | "protocol-conversion"
+  | "flash-loan"
+  | "credit"
+  | "liquidity";
+export type RouteLegKind = Exclude<AdapterFamilyKind, "flash-loan">;
+
+export type IdentityAuthorityClass =
+  | "canonical-onchain"
+  | "observed-event"
+  | "provisional"
+  | "trusted-seed";
+
+export interface IdentityAuthority {
+  readonly class: IdentityAuthorityClass;
+  /** Higher wins; the kernel never maps protocol/source strings to a rank. */
+  readonly strength: number;
+}
+
+export interface RouteEdgeBuildControl {
+  /** Absolute deadline shared by every read in this family build. */
+  readonly deadlineAtMs?: number;
+  /** Family-scoped cancellation; adapters must not publish after abort. */
+  readonly signal?: AbortSignal;
+}
+
+export interface AdapterFamilyBase<
+  Kind extends AdapterFamilyKind = AdapterFamilyKind,
+> {
+  readonly id: ExecutionFamilyId;
+  readonly kind: Kind;
+  /** Encoders whose execution semantics are owned by exactly this family. */
+  readonly ownedActionAdapterIds: readonly string[];
+  /** Shared low-level BotVM building blocks required by this family. */
+  readonly requiredInfraActionAdapterIds: readonly string[];
+}
 
 export interface AllowedTaxonomy {
   slotKind: SlotKind;
@@ -57,6 +106,8 @@ export interface ExactQuoteContext {
   amountIn: bigint;
   tokenIn?: string;
   tokenOut?: string;
+  poolToken0?: string;
+  poolToken1?: string;
   edge?: TokenEdge;
   cache?: PoolStateCache;
   v4PoolKey?: TokenEdge["v4PoolKey"];
@@ -69,18 +120,6 @@ export interface V4QuotePathStats {
   localFailures: number;
   hookSkipped: number;
 }
-
-export type WarmSpec =
-  | { kind: "mutable-pool"; cache: "v2" | "v3" | "v4" }
-  | { kind: "curve-pool" }
-  | { kind: "external-mid" }
-  | {
-      kind: "protocol-mid";
-      priority: 0 | 1 | 2;
-      quotePrewarm?: (ctx: ExactQuoteContext) => Promise<bigint>;
-    };
-
-export type SyncMidReader = (ctx: SyncMidReadContext) => RouteVenueMid | null;
 
 export interface ProtocolDiscoveryLog {
   readonly address: string;
@@ -109,19 +148,49 @@ export interface ProtocolDiscoverySimulatedCallResult {
   readonly logs: readonly ProtocolDiscoveryLog[];
 }
 
+export interface ProtocolDiscoveryReadControl {
+  /** Absolute wall-clock deadline shared by every retry for this operation. */
+  readonly deadlineAtMs?: number;
+  /** Aborts the actual RPC transport; callers must not abort the parent signal. */
+  readonly signal?: AbortSignal;
+  /**
+   * Optional shared read budget. Each actual transport attempt enters this
+   * wrapper independently so retries cannot bypass the background semaphore.
+   */
+  readonly run?: <T>(
+    work: (signal: AbortSignal) => Promise<T>,
+  ) => Promise<T>;
+}
+
 /** All state reads are pinned to one current block on the configured node. */
 export interface ProtocolDiscoveryReadBackend {
-  call(req: { to: string; data: string; from?: string }): Promise<string>;
-  getCode(address: string): Promise<string>;
-  getStorageAt(address: string, position: bigint): Promise<string>;
+  call(
+    req: { to: string; data: string; from?: string },
+    control?: ProtocolDiscoveryReadControl,
+  ): Promise<string>;
+  getCode(
+    address: string,
+    control?: ProtocolDiscoveryReadControl,
+  ): Promise<string>;
+  getStorageAt(
+    address: string,
+    position: bigint,
+    control?: ProtocolDiscoveryReadControl,
+  ): Promise<string>;
   getLogs(req: {
     readonly address?: string;
     readonly topics: readonly ProtocolDiscoveryTopicFilter[];
     readonly fromBlock: number;
     readonly toBlock: number;
-  }): Promise<readonly ProtocolDiscoveryLog[]>;
-  getTransactionReceipt(txHash: string): Promise<ProtocolDiscoveryReceipt | null>;
-  traceTransaction(txHash: string): Promise<unknown>;
+  }, control?: ProtocolDiscoveryReadControl): Promise<readonly ProtocolDiscoveryLog[]>;
+  getTransactionReceipt(
+    txHash: string,
+    control?: ProtocolDiscoveryReadControl,
+  ): Promise<ProtocolDiscoveryReceipt | null>;
+  traceTransaction(
+    txHash: string,
+    control?: ProtocolDiscoveryReadControl,
+  ): Promise<unknown>;
   /**
    * Optional block-pinned execution simulation with state overrides
    * (eth_simulateV1 on a node or local fork). Enables nonzero execution
@@ -133,7 +202,7 @@ export interface ProtocolDiscoveryReadBackend {
     readonly stateOverrides?: Readonly<Record<string, {
       readonly stateDiff?: Readonly<Record<string, string>>;
     }>>;
-  }): Promise<readonly ProtocolDiscoverySimulatedCallResult[]>;
+  }, control?: ProtocolDiscoveryReadControl): Promise<readonly ProtocolDiscoverySimulatedCallResult[]>;
   /**
    * Optional eth_createAccessList: reveals the exact storage slots a call
    * reads. Used to locate a share-balance mapping slot regardless of layout
@@ -144,7 +213,9 @@ export interface ProtocolDiscoveryReadBackend {
     readonly from: string;
     readonly to: string;
     readonly data: string;
-  }): Promise<readonly { readonly address: string; readonly storageKeys: readonly string[] }[]>;
+  }, control?: ProtocolDiscoveryReadControl): Promise<
+    readonly { readonly address: string; readonly storageKeys: readonly string[] }[]
+  >;
 }
 
 export interface ProtocolDiscoveryContext {
@@ -171,6 +242,33 @@ export interface ProtocolCandidate {
   readonly evidence?: readonly unknown[];
 }
 
+export interface ProtocolAddressCandidateSurface {
+  readonly target: string;
+  readonly codeHash: string;
+  readonly implementationWord: string;
+}
+
+/**
+ * Cross-block matcher reuse is an opt-in family contract, never a TTL.
+ *
+ * The family reads every mutable value that can change candidateFromAddress
+ * output at the current source block and commits those values into one
+ * fingerprint. The registry validates the explicit immutability invariant;
+ * the scanner reuses an entry only when the matcher contract and this
+ * current-block dependency fingerprint are both unchanged.
+ */
+export interface ProtocolAddressMatcherCachePolicy {
+  readonly kind: "current-block-dependency-fingerprint";
+  readonly invariant:
+    "matcher-output-immutable-while-code-implementation-and-dependencies-match";
+  /** Bump whenever the dependency read or encoding contract changes. */
+  readonly version: string;
+  currentDependencyFingerprint(
+    candidate: ProtocolAddressCandidateSurface,
+    ctx: ProtocolDiscoveryContext,
+  ): Promise<string>;
+}
+
 export interface AttestedProtocolInstance {
   readonly pool: AttestedPoolEntry<PoolEntry>;
   readonly sources: readonly string[];
@@ -193,6 +291,12 @@ export interface AttestedProtocolInstance {
 export interface ProtocolDiscoveryCapability {
   /** Declarative source ownership; the shared scanner remains the only scheduler. */
   readonly candidateSources: readonly RouteCandidateSourceKind[];
+  /**
+   * Registry-owned provenance hints for clean-start recall. These are addresses
+   * only: they nominate contracts for candidateFromAddress, but carry no token,
+   * route, identity, or admission credential.
+   */
+  readonly candidateAddressHints?: readonly string[];
   /** Topic-0 values that make a transaction worth receipt+trace inspection. */
   readonly eventTopics: readonly string[];
   /** Manually adapted on-chain calls that may establish this family's interaction. */
@@ -200,17 +304,18 @@ export interface ProtocolDiscoveryCapability {
   /** Bump when address matching semantics change so persisted negatives retry. */
   readonly addressMatcherVersion?: string;
   /**
+   * Optional conformance-checked cross-block cache contract. Omission means
+   * candidateFromAddress executes again at every source block.
+   */
+  readonly addressMatcherCachePolicy?: ProtocolAddressMatcherCachePolicy;
+  /**
    * Bump when receipt/trace classification semantics change. The shared
    * cursor fingerprint uses this to schedule one bounded historical backfill.
    */
   readonly observedMatcherVersion?: string;
   /** Optional C2 matcher; the shared scanner owns DEX-token iteration and caching. */
   candidateFromAddress?(
-    candidate: {
-      readonly target: string;
-      readonly codeHash: string;
-      readonly implementationWord: string;
-    },
+    candidate: ProtocolAddressCandidateSurface,
     ctx: ProtocolDiscoveryContext,
   ): Promise<ProtocolCandidate | null>;
   probeCandidate(
@@ -285,30 +390,80 @@ export interface PreparedRouteCapability {
   readonly prewarmAddresses: ((request: PreparedRouteRequest) => readonly string[]) | null;
 }
 
-export interface RouteLegAdapter {
-  readonly id: ExecutionFamilyId;
-  readonly kind: RouteLegKind;
+export interface RouteLegAdapter<
+  Kind extends RouteLegKind = RouteLegKind,
+> extends AdapterFamilyBase<Kind> {
   readonly poolAdapters: readonly PoolEntry["adapter"][];
+  /**
+   * Optional projection into the mature low-latency PoolStateCache used by
+   * backrun/JIT lanes. The updater dispatches by this family declaration,
+   * never by a concrete action adapter id.
+   */
+  readonly livePoolState?: {
+    readonly kind: "constant-product-v2" | "concentrated-v3" | "singleton-v4";
+  };
+  /**
+   * Optional protocol-specific raw-transaction/oracle trigger declaration.
+   * Detection remains one generic pipeline; trigger/edge semantics stay with
+   * the family that owns the affected route.
+   */
+  readonly oracleVictim?: OracleVictimDescriptor;
+  /**
+   * Optional family override. Address/logicalInstanceId + edge adapter is the
+   * mature default; singleton managers declare their own opaque keys here.
+   */
+  readonly routeIdentity?: RouteInstanceIdentityCapability;
   readonly edgeAdapterIds: readonly string[];
   readonly allowedTaxonomy: readonly AllowedTaxonomy[];
-  readonly actionAdapterIds: readonly string[];
+  /**
+   * Ordinary file/factory admission policy owned by this family. Discovery
+   * may replace it with discoveryIdentityResolver only after source+probe.
+   */
+  readonly identityPolicies: readonly IdentityResolverDescriptor[];
   /** Admission metadata for the global SEARCHER_ENABLE_PROTOCOL_EDGES switch. */
   readonly requiresProtocolEdgesFlag: boolean;
-  /** Sync-only hot-path read over state published by the prewarm phase. */
-  readonly readMid: SyncMidReader | null;
-  /** Declarative prewarm class; the coordinator remains the sole scheduler/state owner. */
-  readonly warm: WarmSpec | null;
   /** Optional prepared-state/Revm lane capability; null means fail closed in that lane. */
   readonly prepared: PreparedRouteCapability | null;
+  /**
+   * Optional instance-admission capability shared by every route family.
+   * Candidate scheduling, identity, active probing, claim arbitration and
+   * projection remain one coordinator pipeline; the execution family only
+   * supplies its matchers and proof.
+   */
+  readonly discovery?: ProtocolDiscoveryCapability;
+  /**
+   * Dynamic identity ships with the same family registration as discovery.
+   * Address hints nominate candidates only and can never replace this resolver.
+   */
+  readonly discoveryIdentityResolver?: OnchainIdentityResolver;
+  /** Typed, protocol-agnostic evidence rank used only for route arbitration. */
+  readonly discoveryIdentityAuthority?: IdentityAuthority;
 
-  buildEdges(pool: PoolEntry, backend: TokenQueryBackend): Promise<TokenEdge[]>;
+  buildEdges(
+    pool: PoolEntry,
+    backend: TokenQueryBackend,
+    control?: RouteEdgeBuildControl,
+  ): Promise<TokenEdge[]>;
   quoteExact(ctx: ExactQuoteContext): Promise<bigint>;
   buildPlanFragment(ctx: PlanBuildContext): Promise<PlanFragment>;
 }
 
-export interface SwapAdapter extends RouteLegAdapter {
+export interface SwapAdapter extends RouteLegAdapter<"swap"> {
   readonly kind: "swap";
+  /**
+   * This family consumes the existing factory/active-pool/file-universe
+   * discovery fast path. The shared coordinator derives completeness from
+   * this declaration; main never recognizes concrete adapter IDs.
+   */
+  readonly matureDexUniverseDiscovery?: true;
+  /** Family-owned receipt/discovery/warm invalidation event contract. */
+  readonly landedEvents: SwapLandedEventDeclaration;
+  /** Optional family-owned landed-pool metadata/materialization contract. */
+  readonly poolDiscovery?: LandedPoolMaterializationCapability;
   readonly observation: SwapObservationCapability;
+  /** Family-owned victim reproduction policy; detect-only remains fail closed. */
+  readonly victimModel: SwapVictimModelDeclaration;
+  readonly pricingState: BlockScanStateCapability;
 }
 
 export type DeclaredProtocolVenue = Readonly<
@@ -320,20 +475,55 @@ export type DeclaredProtocolVenue = Readonly<
   }
 >;
 
-export interface ProtocolConversionAdapter extends RouteLegAdapter {
+export interface ProtocolConversionAdapter extends RouteLegAdapter<"protocol-conversion"> {
   readonly kind: "protocol-conversion";
+  readonly pricingState: BlockScanStateCapability;
   readonly declaredVenues: readonly DeclaredProtocolVenue[];
   /** Required only for families whose instances must come from discovery/probe admission. */
   readonly undeclaredVenueReason: string | null;
-  /** Optional active discovery path. Absence preserves declared-venue-only behavior. */
-  readonly discovery?: ProtocolDiscoveryCapability;
-  /**
-   * Dynamic identity is delivered by the same execution-family registration.
-   * Static declared-only families intentionally omit it until their migration.
-   */
-  readonly discoveryIdentityResolver?: OnchainIdentityResolver;
 }
 
-export interface CompatRouteLegAdapter extends RouteLegAdapter {
-  readonly kind: "compat";
+export type DiscoverableRouteLegAdapter = RouteLegAdapter & Required<
+  Pick<
+    RouteLegAdapter,
+    "discovery" | "discoveryIdentityResolver" | "discoveryIdentityAuthority"
+  >
+>;
+
+export interface CreditAdapterFamily extends RouteLegAdapter<"credit"> {
+  readonly kind: "credit";
+  /**
+   * Credit actions may include non-edge lifecycle actions (for example an
+   * in-transaction liquidation) that share the same accounting/position
+   * policy as the route-producing action.
+   */
+  readonly creditActionAdapterIds: readonly string[];
+  /** Solver/accounting policy owned by the credit execution family. */
+  readonly creditPolicy: {
+    /** Candidate debt ratios used by the generic sizing engine. */
+    readonly debtBpsCandidates: readonly bigint[];
+    /**
+     * Family-owned sizing semantics for a candidate debt ratio. The generic
+     * amount propagator must never recognize a concrete credit adapter ID.
+     */
+    quoteOutputByDebtBps(amountIn: bigint, debtBps: bigint): bigint;
+    /** A credit leg before a victim-impact reversal cannot be inverted safely. */
+    readonly blocksPrefixInversion: boolean;
+  };
 }
+
+export interface LiquidityAdapterFamily extends RouteLegAdapter<"liquidity"> {
+  readonly kind: "liquidity";
+}
+
+export interface FlashLoanAdapterFamily extends AdapterFamilyBase<"flash-loan"> {
+  readonly kind: "flash-loan";
+  readonly funding: RegisteredFundingFamily;
+}
+
+export type AdapterFamily =
+  | SwapAdapter
+  | ProtocolConversionAdapter
+  | FlashLoanAdapterFamily
+  | CreditAdapterFamily
+  | LiquidityAdapterFamily;

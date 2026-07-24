@@ -12,7 +12,8 @@ import {
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   PRODUCTION_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
 import { findVenueByFactory } from "../venues/capability.js";
 import { findV2LineageByFactory, V2_LINEAGES } from "../venues/v2-lineage.js";
@@ -26,6 +27,9 @@ function assert(condition: boolean, message: string): asserts condition {
 const factoryIface = new ethers.Interface(["function factory() view returns (address)"]);
 const curveMetaRegistryIface = new ethers.Interface([
   "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
+]);
+const curvePoolIface = new ethers.Interface([
+  "function coins(uint256 i) view returns (address)",
 ]);
 const balancerV3VaultIface = new ethers.Interface([
   "function isPoolRegistered(address pool) view returns (bool)",
@@ -52,6 +56,8 @@ const FAKE_PSM = address(0x109);
 const BALANCER_V3_POOL = address(0x10a);
 const FAKE_BALANCER_V3_POOL = address(0x10b);
 const PANCAKE_V2_PAIR = address(0x10c);
+const CURVE_TOKEN0 = address(0x10d);
+const CURVE_TOKEN1 = address(0x10e);
 
 const V2_SWAP_TOPIC = ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
@@ -82,7 +88,12 @@ class FakeProvider {
   async send(
     method: string,
     args: Array<{ address?: string; topics?: string[] }>,
-  ): Promise<Array<{ address: string; data?: string; topics?: string[] }>> {
+  ): Promise<Array<{
+    address: string;
+    data?: string;
+    topics?: string[];
+    blockNumber?: string;
+  }>> {
     assert(method === "eth_getLogs", `unexpected RPC method ${method}`);
     const requestAddress = args[0]?.address?.toLowerCase();
     const topic = args[0]?.topics?.[0]?.toLowerCase();
@@ -100,16 +111,40 @@ class FakeProvider {
     }
     if (topic === V2_SWAP_TOPIC.toLowerCase()) {
       return [UNI_PAIR, UNI_PAIR, SUSHI_PAIR, PANORAMA_POOL, UNKNOWN_PAIR]
-        .map((address) => ({ address }));
+        .map((address) => ({
+          address,
+          topics: [V2_SWAP_TOPIC],
+          data: "0x",
+          blockNumber: "0x3e8",
+        }));
     }
-    if (topic === V3_SWAP_TOPIC.toLowerCase()) return [{ address: V3_FORK_POOL }];
+    if (topic === V3_SWAP_TOPIC.toLowerCase()) {
+      return [{
+        address: V3_FORK_POOL,
+        topics: [V3_SWAP_TOPIC],
+        data: "0x",
+        blockNumber: "0x3e8",
+      }];
+    }
     if (topic === CURVE_SWAP_TOPIC.toLowerCase()) {
-      return [{ address: CURVE_POOL }, { address: UNREGISTERED_CURVE_POOL }];
+      return [CURVE_POOL, UNREGISTERED_CURVE_POOL].map((address) => ({
+        address,
+        topics: [CURVE_SWAP_TOPIC],
+        data: "0x",
+        blockNumber: "0x3e8",
+      }));
     }
     if (topic === BALANCER_V3_SWAP_TOPIC.toLowerCase()) {
       return [{
         address: ADDR.BALANCER_V3_VAULT,
-        topics: [BALANCER_V3_SWAP_TOPIC, ethers.zeroPadValue(BALANCER_V3_POOL, 32)],
+        topics: [
+          BALANCER_V3_SWAP_TOPIC,
+          ethers.zeroPadValue(BALANCER_V3_POOL, 32),
+          ethers.zeroPadValue(ADDR.ROCKSOLID_RETH, 32),
+          ethers.zeroPadValue(ADDR.RETH, 32),
+        ],
+        data: "0x",
+        blockNumber: "0x3e8",
       }];
     }
     return [];
@@ -117,6 +152,18 @@ class FakeProvider {
 
   async call(req: { to: string; data: string }): Promise<string> {
     const target = req.to.toLowerCase();
+    if (
+      target === CURVE_POOL.toLowerCase() &&
+      req.data.slice(0, 10).toLowerCase() ===
+        curvePoolIface.getFunction("coins")!.selector
+    ) {
+      const [index] = curvePoolIface.decodeFunctionData("coins", req.data);
+      if (BigInt(index) > 1n) throw new Error("curve coin index out of range");
+      return curvePoolIface.encodeFunctionResult(
+        "coins",
+        [BigInt(index) === 0n ? CURVE_TOKEN0 : CURVE_TOKEN1],
+      );
+    }
     if (target === CURVE_METAREGISTRY.toLowerCase()) {
       const decoded = curveMetaRegistryIface.decodeFunctionData(
         "get_registry_handlers_from_pool",
@@ -157,7 +204,7 @@ async function testV2LineageDescriptor(): Promise<void> {
       capability.runtimeAdapter === descriptor.runtimeAdapter,
       `${descriptor.venue} execution family projection`,
     );
-    const routeSupported = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(
+    const routeSupported = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(
       descriptor.runtimeAdapter,
     ) !== null;
     if (descriptor.discoverable && descriptor.quotable && descriptor.buildable && routeSupported) {
@@ -173,7 +220,7 @@ async function testV2LineageDescriptor(): Promise<void> {
   assert(pancake?.venue === "pancake-v2", "Pancake V2 lineage identity");
   assert(pancake.discoverable, "Pancake V2 factory discovery flag");
   assert(
-    PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pancake.runtimeAdapter) !== null,
+    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pancake.runtimeAdapter) !== null,
     "Pancake V2 execution support must come from the route registry",
   );
   assert(pancake.measuredFeeRule?.feeBps === 25n, "Pancake V2 measured fee");
@@ -374,13 +421,13 @@ async function testProtocolAdaptersRequireExactEnabledSeeds(): Promise<void> {
 
 function testIdentityRegistryConformance(): void {
   assertIdentityResolverCoverage(
-    PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+    PRODUCTION_ADAPTER_FAMILIES.routes().list(),
     PRODUCTION_IDENTITY_RESOLVERS,
   );
   let missingPolicyError = "";
   try {
     assertIdentityResolverCoverage([
-      ...PRODUCTION_ROUTE_ADAPTERS.routeLegs.list(),
+      ...PRODUCTION_ADAPTER_FAMILIES.routes().list(),
       { id: "compat:synthetic", poolAdapters: ["synthetic-pool-adapter"] },
     ], PRODUCTION_IDENTITY_RESOLVERS);
   } catch (error) {
@@ -390,12 +437,20 @@ function testIdentityRegistryConformance(): void {
     missingPolicyError.includes("missing=[synthetic-pool-adapter]"),
     "synthetic route adapter without identity policy must fail explicitly",
   );
-  const fluidLegacy = PRODUCTION_IDENTITY_RESOLVERS.list().find(
+  const fluidOrdinary = PRODUCTION_IDENTITY_RESOLVERS.list().find(
     (descriptor) => descriptor.poolAdapter === "fluid-dex",
   );
   assert(
-    fluidLegacy?.legacyReason?.includes("fixture-blocked") === true,
-    "legacy Fluid DEX identity admission must remain explicit",
+    fluidOrdinary?.policy === "trusted-singleton-seed" &&
+      fluidOrdinary.canonicalAddress === undefined,
+    "ordinary Fluid DEX intake must not bypass active family admission",
+  );
+  const fluidDiscovery = PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS.list().find(
+    (descriptor) => descriptor.poolAdapter === "fluid-dex",
+  );
+  assert(
+    fluidDiscovery?.policy === "onchain-resolver",
+    "Fluid DEX discovery must derive its family-owned dynamic resolver",
   );
   console.log("[venue-identity] route/identity registry conformance: PASS");
 }
@@ -403,8 +458,8 @@ function testIdentityRegistryConformance(): void {
 async function testRouteRegistryOwnsProductionSupport(): Promise<void> {
   assert(PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("univ2"), "registered route pool support");
   assert(
-    !PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("fluid-dex"),
-    "legacy identity policy must not imply route support",
+    PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("fluid-dex"),
+    "registered Fluid execution family must own route support",
   );
   assert(
     !PRODUCTION_IDENTITY_RESOLVERS.supportsRoutePool("synthetic-pool-adapter"),

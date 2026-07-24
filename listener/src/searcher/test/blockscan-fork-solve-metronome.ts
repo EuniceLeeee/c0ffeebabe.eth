@@ -137,6 +137,7 @@ async function main(): Promise<void> {
       input: trigger.data,
       logs: [],
       minProfit: 1n,
+      victimState: "must-overlay" as const,
     };
 
     const noChange = await detector.detect(event, state);
@@ -144,7 +145,10 @@ async function main(): Promise<void> {
 
     const applied = await state.applyRawTx(triggerRaw);
     await check("real oracle transaction applies to the N-1 fork", () => same(applied, TRIGGER_TX_HASH));
-    const opportunities = await detector.detect(event, state);
+    const opportunities = await detector.detect({
+      ...event,
+      victimState: "materialized",
+    }, state);
     const opportunity = opportunities.find((candidate) => candidate.victimEffect.kind === "oracle");
     await check("post-victim quote delta admits a generic oracle opportunity", () => opportunity !== undefined);
     if (!opportunity || opportunity.victimEffect.kind !== "oracle") {

@@ -1,9 +1,12 @@
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   prepareProtocolDiscoveryProjection,
+  protocolEdgeKey,
+  protocolInstanceKey,
   protocolDiscoveryProjectionChangesRouting,
   runProtocolDiscoveryShadow,
 } from "../protocol-instance-discovery.js";
+import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -12,6 +15,7 @@ import type {
   ProtocolConversionAdapter,
   ProtocolDiscoveryCapability,
   ProtocolDiscoveryContext,
+  ProtocolDiscoveryReadControl,
 } from "../venues/route-leg-adapter.js";
 
 const TARGET_A = "0x1111111111111111111111111111111111111111";
@@ -73,19 +77,28 @@ function adapter(discovery: ProtocolDiscoveryCapability): ProtocolConversionAdap
     id: "protocol:shadow-test",
     kind: "protocol-conversion",
     poolAdapters: ["erc4626"],
+    identityPolicies: [{ poolAdapter: "erc4626", policy: "trusted-singleton-seed" }],
     edgeAdapterIds: ["shadow-wrap", "shadow-redeem"],
     allowedTaxonomy: [
       { slotKind: "protocol", protocolAction: "wrap" },
       { slotKind: "protocol", protocolAction: "redeem" },
     ],
-    actionAdapterIds: [],
+    ownedActionAdapterIds: [],
+    requiredInfraActionAdapterIds: [],
     requiresProtocolEdgesFlag: true,
-    readMid: null,
-    warm: null,
+    pricingState: {
+      stateKey: (edge) => edge.target.toLowerCase(),
+      compileStaticSchema: () => null,
+      buildCurrentBlockReads: () => [],
+      decodeState: () => null,
+      deriveMids: () => new Map(),
+      dependencies: () => [],
+    },
     prepared: null,
     declaredVenues: [],
     undeclaredVenueReason: "test instances require discovery",
     discovery,
+    discoveryIdentityAuthority: { class: "trusted-seed", strength: 0 },
     async buildEdges() {
       ordinaryBuildEdgesCalls++;
       return [];
@@ -101,7 +114,7 @@ const originalGraphSnapshot = JSON.stringify(originalGraph);
 const calls = { identity: 0, probe: 0 };
 const callCount = (name: keyof typeof calls): number => calls[name];
 const successAdapter = adapter({
-  candidateSources: [],
+  candidateSources: ["dex-token-domain"],
   eventTopics: [],
   callSelectors: [],
   async probeCandidate(instance) {
@@ -148,6 +161,75 @@ assert(success.events[0]?.verdict === "would_admit", "verified instance must emi
 assert(success.events[0]?.wouldAdmitEdges === 4, "event must count verified routes");
 assert(JSON.stringify(originalGraph) === originalGraphSnapshot, "shadow discovery must not mutate graph");
 
+const sameDirectionLogicalAdapter = adapter({
+  candidateSources: ["dex-token-domain"],
+  eventTopics: [],
+  callSelectors: [],
+  async probeCandidate(instance) {
+    return [
+      edge(instance.pool.address, "shadow-wrap", ASSET_A, instance.pool.address),
+    ];
+  },
+});
+const sameDirectionLogical = await runProtocolDiscoveryShadow({
+  adapters: [sameDirectionLogicalAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) {
+    return { ...item.pool, identitySource: "seed" };
+  },
+  candidatesByAdapter: new Map([[sameDirectionLogicalAdapter.id, [
+    {
+      pool: {
+        address: TARGET_D,
+        adapter: "erc4626",
+        fixedTokenIn: ASSET_A,
+        logicalInstanceId: "logical-a",
+      },
+      source: "logical-a",
+    },
+    {
+      pool: {
+        address: TARGET_D,
+        adapter: "erc4626",
+        fixedTokenIn: ASSET_A,
+        logicalInstanceId: "logical-b",
+      },
+      source: "logical-b",
+    },
+  ]]]),
+});
+assert(
+  sameDirectionLogical.wouldAdmit.length === 2,
+  "same target/direction logical instances must both pass discovery",
+);
+const logicalEdges = sameDirectionLogical.wouldAdmit.map((item) => item.edges[0]);
+assert(
+  logicalEdges[0].instanceKey !== logicalEdges[1].instanceKey &&
+    protocolEdgeKey(logicalEdges[0]) !== protocolEdgeKey(logicalEdges[1]),
+  "family instance identity must prevent protocol edge-key collision",
+);
+assert(
+  canonicalEdgeId(sameDirectionLogicalAdapter.id, logicalEdges[0]) !==
+    canonicalEdgeId(sameDirectionLogicalAdapter.id, logicalEdges[1]),
+  "logical instances must receive distinct canonical edge ids",
+);
+const logicalProjection = prepareProtocolDiscoveryProjection({
+  currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  result: sameDirectionLogical,
+  currentBackrunPools: [],
+  currentBackrunGraph: [],
+  buildStrategyViews: (pools) => buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 0,
+    poolUniverseGeneratedAt: "logical-instance-test",
+  }),
+});
+assert(
+  logicalProjection.backrunGraph.length === 2 &&
+    logicalProjection.strategyViews.backrun.length === 2,
+  "same-address same-direction logical instances must coexist after graph merge",
+);
+
 const witness = { kind: "test-observation", txHash: `0x${"12".repeat(32)}`, blockNumber: 123 };
 const evidenceOnce = await runProtocolDiscoveryShadow({
   adapters: [successAdapter],
@@ -193,7 +275,7 @@ assert(
 
 const changedRoute = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -218,7 +300,7 @@ assert(
 let rejectedProbeCalls = 0;
 const identityRejected = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate() {
@@ -243,7 +325,7 @@ assert(
 
 const probeRejected = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -266,7 +348,7 @@ assert(
 
 const malformedEdges = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -295,7 +377,7 @@ assert(ordinaryBuildEdgesCalls === 0, "shadow probe results must not be re-expan
 
 const incomplete = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate() { return []; },
@@ -304,7 +386,14 @@ const incomplete = await runProtocolDiscoveryShadow({
   protocolEdgesEnabled: true,
   async attestIdentity() { return null; },
   sourceComplete: false,
-  sourceErrors: [{ adapterId: null, target: null, reason: "rpc range failed" }],
+  sourceErrors: [{
+    adapterId: null,
+    sourceKind: "observed-interaction",
+    impactedFamilyIds: ["protocol:shadow-test"],
+    target: null,
+    reason: "rpc range failed",
+    retryable: true,
+  }],
 });
 assert(!incomplete.sourceComplete, "candidate-source failure must prevent scan cursor advancement");
 
@@ -346,7 +435,7 @@ const rivalAdapter: ProtocolConversionAdapter = {
   id: "protocol:shadow-test-rival",
   edgeAdapterIds: ["rival-wrap", "rival-redeem"],
   discovery: {
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate(instance) {
@@ -401,6 +490,66 @@ const projection = prepareProtocolDiscoveryProjection({
 });
 assert(projection.baseOwnershipVersion === 0, "projection must carry its ownership CAS base");
 assert(projection.ownership.version === 1, "evaluated admission must advance ownership version");
+
+const incumbentConflict = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter, rivalAdapter],
+  context: {
+    ...context,
+    retainedInstances: [success.wouldAdmit[0].instance],
+  },
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([
+    [rivalAdapter.id, [{ ...candidate(TARGET_A), source: "new-rival-source" }]],
+  ]),
+});
+assert(
+  incumbentConflict.wouldAdmit.length === 1 &&
+    incumbentConflict.wouldAdmit[0].adapterId === successAdapter.id,
+  "non-equivalent newcomer must be quarantined without displacing the incumbent",
+);
+assert(
+  incumbentConflict.events.some((item) =>
+    item.adapterId === successAdapter.id &&
+    item.stage === "arbitration" &&
+    item.verdict === "would_admit" &&
+    /incumbent_route_preserved/.test(item.reason ?? "")
+  ) &&
+    incumbentConflict.events.some((item) =>
+      item.adapterId === rivalAdapter.id &&
+      item.stage === "arbitration" &&
+      item.verdict === "rejected" &&
+      /non_equivalent_execution_fingerprints/.test(item.reason ?? "")
+    ),
+  "ownership conflict must report incumbent preservation and newcomer quarantine",
+);
+const incumbentConflictProjection = prepareProtocolDiscoveryProjection({
+  currentOwnership: projection.ownership,
+  result: incumbentConflict,
+  currentBackrunPools: projection.strategyViews.backrun,
+  currentBackrunGraph: projection.backrunGraph,
+  currentBlockscanGraph: projection.blockscanGraph,
+  currentKnownPoolKeys: projection.knownPoolKeys,
+  buildStrategyViews: (pools) => buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 100,
+    poolUniverseGeneratedAt: "test",
+  }),
+});
+assert(
+  incumbentConflictProjection.ownership.admissions.has(
+    protocolInstanceKey(successAdapter.id, success.wouldAdmit[0].instance.pool),
+  ) &&
+    !incumbentConflictProjection.ownership.admissions.has(
+      protocolInstanceKey(rivalAdapter.id, success.wouldAdmit[0].instance.pool),
+    ),
+  "ownership replacement must retain only the incumbent claim",
+);
+assert(
+  hashTokenGraph(incumbentConflictProjection.backrunGraph) ===
+    hashTokenGraph(projection.backrunGraph),
+  "quarantined newcomer must leave incumbent graph routes unchanged",
+);
+
 assert(
   protocolDiscoveryProjectionChangesRouting({
     strategyViews: buildStrategyViews([], [], [], {
@@ -451,6 +600,124 @@ const identityTimeout = await runProtocolDiscoveryShadow({
 });
 assert(!identityTimeout.evaluationComplete, "identity timeout must leave evaluation retryable");
 assert(identityTimeout.evaluatedInstanceKeys.size === 0, "identity timeout must not mark ownership evaluated");
+assert(
+  identityTimeout.familySourceCoverage.some(
+    (coverage) =>
+      coverage.familyId === successAdapter.id &&
+      !coverage.complete &&
+      coverage.issues.length > 0,
+  ),
+  "a retryable identity failure must degrade its owning family source",
+);
+const familyLocalSourceGap = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter, rivalAdapter],
+  context: { ...context, retainedInstances: [] },
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) {
+    return { ...item.pool, identitySource: "seed" };
+  },
+  sourceComplete: false,
+  sourceErrors: [{
+    adapterId: successAdapter.id,
+    sourceKind: "dex-token-domain",
+    impactedFamilyIds: [successAdapter.id],
+    target: TARGET_A,
+    reason: "owner matcher timed out",
+    retryable: true,
+  }],
+  includeRetained: false,
+});
+const familyCoverage = new Map(
+  familyLocalSourceGap.familySourceCoverage.map((coverage) => [
+    coverage.familyId,
+    coverage,
+  ]),
+);
+assert(
+  familyCoverage.get(successAdapter.id)?.complete === false,
+  "an owner-tagged source failure must degrade its family",
+);
+assert(
+  familyCoverage.get(rivalAdapter.id)?.complete === true,
+  "an unrelated family source must remain complete",
+);
+const multiSourceAdapter: ProtocolConversionAdapter = {
+  ...successAdapter,
+  id: "protocol:shadow-test-multi-source",
+  discovery: {
+    ...successAdapter.discovery!,
+    candidateSources: ["dex-token-domain", "observed-interaction"],
+  },
+};
+const multiSourceGap = await runProtocolDiscoveryShadow({
+  adapters: [multiSourceAdapter],
+  context: { ...context, retainedInstances: [] },
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) {
+    return { ...item.pool, identitySource: "seed" };
+  },
+  sourceComplete: false,
+  sourceErrors: [{
+    adapterId: multiSourceAdapter.id,
+    sourceKind: "dex-token-domain",
+    impactedFamilyIds: [multiSourceAdapter.id],
+    target: TARGET_A,
+    reason: "address matcher timed out",
+    retryable: true,
+  }],
+  includeRetained: false,
+});
+const multiCoverage = new Map(
+  multiSourceGap.familySourceCoverage.map((coverage) => [
+    coverage.sourceId,
+    coverage,
+  ]),
+);
+assert(
+  multiCoverage.get("dex-token-domain")?.complete === false &&
+    multiCoverage.get("observed-interaction")?.complete === true,
+  "one candidate-source failure must not erase a sibling source cursor",
+);
+const observedRivalAdapter: ProtocolConversionAdapter = {
+  ...rivalAdapter,
+  id: "protocol:shadow-test-observed-rival",
+  discovery: {
+    ...rivalAdapter.discovery!,
+    candidateSources: ["observed-interaction"],
+  },
+};
+const observedFamilySourceGap = await runProtocolDiscoveryShadow({
+  adapters: [successAdapter, observedRivalAdapter],
+  context: { ...context, retainedInstances: [] },
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) {
+    return { ...item.pool, identitySource: "seed" };
+  },
+  sourceComplete: false,
+  sourceErrors: [{
+    adapterId: null,
+    sourceKind: "observed-interaction",
+    impactedFamilyIds: [observedRivalAdapter.id],
+    target: null,
+    reason: "event trace timed out",
+    retryable: true,
+  }],
+  includeRetained: false,
+});
+const observedFamilyCoverage = new Map(
+  observedFamilySourceGap.familySourceCoverage.map((coverage) => [
+    coverage.familyId,
+    coverage,
+  ]),
+);
+assert(
+  observedFamilyCoverage.get(observedRivalAdapter.id)?.complete === false,
+  "an observed-interaction failure must degrade its declared owner",
+);
+assert(
+  observedFamilyCoverage.get(successAdapter.id)?.complete === true,
+  "an observed-interaction failure must not degrade an address-source sibling",
+);
 const retainedAfterIdentityTimeout = prepareProtocolDiscoveryProjection({
   currentOwnership: projection.ownership,
   result: identityTimeout,
@@ -471,7 +738,7 @@ assert(
 
 const probeTimeout = await runProtocolDiscoveryShadow({
   adapters: [adapter({
-    candidateSources: [],
+    candidateSources: ["dex-token-domain"],
     eventTopics: [],
     callSelectors: [],
     async probeCandidate() {
@@ -484,6 +751,225 @@ const probeTimeout = await runProtocolDiscoveryShadow({
 });
 assert(!probeTimeout.evaluationComplete, "probe transport failure must leave evaluation retryable");
 assert(probeTimeout.evaluatedInstanceKeys.size === 0, "probe transport failure must preserve ownership");
+
+let hangingIdentityCalls = 0;
+const hangingIdentityAdapter: ProtocolConversionAdapter = {
+  ...successAdapter,
+  id: "protocol:shadow-test-hanging-identity",
+};
+const identityFamilySettled = await runProtocolDiscoveryShadow({
+  adapters: [hangingIdentityAdapter, successAdapter],
+  context,
+  protocolEdgesEnabled: true,
+  async attestIdentity(adapter, item) {
+    if (adapter.id === hangingIdentityAdapter.id) {
+      hangingIdentityCalls++;
+      return new Promise<never>(() => {});
+    }
+    return { ...item.pool, identitySource: "seed" };
+  },
+  candidatesByAdapter: new Map([
+    [hangingIdentityAdapter.id, [candidate(TARGET_A), candidate(TARGET_C)]],
+    [successAdapter.id, [candidate(TARGET_B)]],
+  ]),
+  familyGuardOptions: { timeoutMs: 5, failureThreshold: 1 },
+});
+assert(
+  hangingIdentityCalls === 1,
+  "identity circuit must stop invoking a family after its failure budget is exhausted",
+);
+assert(
+  identityFamilySettled.wouldAdmit.length === 1 &&
+    identityFamilySettled.wouldAdmit[0].adapterId === successAdapter.id,
+  "timed-out identity family must not suppress a healthy sibling admission",
+);
+assert(
+  !identityFamilySettled.evaluationComplete &&
+    identityFamilySettled.events.filter((item) =>
+      item.adapterId === hangingIdentityAdapter.id && item.stage === "identity"
+    ).length === 2,
+  "identity timeout and open circuit must leave only the failed family retryable",
+);
+
+let hangingProbeCalls = 0;
+let hangingProbeSignal: AbortSignal | undefined;
+let markHangingProbeStarted!: () => void;
+const hangingProbeStarted = new Promise<void>((resolve) => {
+  markHangingProbeStarted = resolve;
+});
+let healthyProbeStartedBeforeBadAbort = false;
+const hangingProbeAdapter: ProtocolConversionAdapter = {
+  ...successAdapter,
+  id: "protocol:shadow-test-hanging-probe",
+  discovery: {
+    ...successAdapter.discovery!,
+    async probeCandidate(_instance, familyContext) {
+      hangingProbeCalls++;
+      await familyContext.backend.call({
+        to: TARGET_A,
+        data: "0xfeed0002",
+      });
+      return [];
+    },
+  },
+};
+const parallelHealthyProbeAdapter: ProtocolConversionAdapter = {
+  ...successAdapter,
+  id: "protocol:shadow-test-parallel-healthy-probe",
+  discovery: {
+    ...successAdapter.discovery!,
+    async probeCandidate(instance) {
+      await hangingProbeStarted;
+      healthyProbeStartedBeforeBadAbort =
+        hangingProbeSignal?.aborted === false;
+      return [
+        edge(instance.pool.address, "shadow-wrap", ASSET_A, instance.pool.address),
+        edge(instance.pool.address, "shadow-redeem", instance.pool.address, ASSET_A),
+        edge(instance.pool.address, "shadow-wrap", ASSET_B, instance.pool.address),
+        edge(instance.pool.address, "shadow-redeem", instance.pool.address, ASSET_B),
+      ];
+    },
+  },
+};
+const probeParent = new AbortController();
+const controlledProbeContext: ProtocolDiscoveryContext = {
+  ...context,
+  backend: {
+    ...context.backend,
+    call(req, control) {
+      if (req.data !== "0xfeed0002") {
+        return context.backend.call(req, control);
+      }
+      hangingProbeSignal = control?.signal;
+      markHangingProbeStarted();
+      return new Promise<string>(() => {});
+    },
+  },
+};
+const probeFamilySettled = await runProtocolDiscoveryShadow({
+  adapters: [hangingProbeAdapter, parallelHealthyProbeAdapter],
+  context: controlledProbeContext,
+  protocolEdgesEnabled: true,
+  async attestIdentity(_adapter, item) { return { ...item.pool, identitySource: "seed" }; },
+  candidatesByAdapter: new Map([
+    [hangingProbeAdapter.id, [candidate(TARGET_A), candidate(TARGET_C)]],
+    [parallelHealthyProbeAdapter.id, [candidate(TARGET_B)]],
+  ]),
+  familyGuardOptions: {
+    timeoutMs: 20,
+    failureThreshold: 1,
+    deadlineAtMs: Date.now() + 1_000,
+    signal: probeParent.signal,
+    maxConcurrentPerFamily: 1,
+  },
+});
+assert(
+  hangingProbeCalls === 1,
+  "probe circuit must stop invoking a family after its failure budget is exhausted",
+);
+assert(
+  probeFamilySettled.wouldAdmit.length === 1 &&
+    probeFamilySettled.wouldAdmit[0].adapterId ===
+      parallelHealthyProbeAdapter.id,
+  "timed-out probe family must not suppress a healthy sibling admission",
+);
+assert(
+  healthyProbeStartedBeforeBadAbort,
+  "candidate probing must run sibling families concurrently",
+);
+assert(
+  hangingProbeSignal?.aborted === true && !probeParent.signal.aborted,
+  "probe timeout must abort only the child backend signal",
+);
+assert(
+  probeFamilySettled.events
+    .filter((item) => item.stage === "probe")
+    .map((item) => item.adapterId)
+    .join(",") ===
+      [
+        hangingProbeAdapter.id,
+        hangingProbeAdapter.id,
+        parallelHealthyProbeAdapter.id,
+      ].join(","),
+  "parallel family completion must merge events in deterministic registration/candidate order",
+);
+assert(
+  !probeFamilySettled.evaluationComplete &&
+    probeFamilySettled.events.filter((item) =>
+      item.adapterId === hangingProbeAdapter.id && item.stage === "probe"
+    ).length === 2,
+  "probe timeout and open circuit must leave only the failed family retryable",
+);
+
+{
+  const parent = new AbortController();
+  const deadlineAtMs = Date.now() + 1_000;
+  let identityReadControl: ProtocolDiscoveryReadControl | undefined;
+  const controlledContext: ProtocolDiscoveryContext = {
+    ...context,
+    backend: {
+      ...context.backend,
+      call(_req, control) {
+        identityReadControl = control;
+        return new Promise<string>((_resolve, reject) => {
+          if (!control?.signal) {
+            reject(new Error("fixture expected identity parent control"));
+            return;
+          }
+          const stop = (): void =>
+            reject(control.signal!.reason ?? new Error("identity parent stopped"));
+          if (control.signal.aborted) {
+            stop();
+            return;
+          }
+          control.signal.addEventListener("abort", stop, { once: true });
+        });
+      },
+    },
+  };
+  const pending = runProtocolDiscoveryShadow({
+    adapters: [successAdapter],
+    context: controlledContext,
+    protocolEdgesEnabled: true,
+    async attestIdentity(_adapter, item, identityContext) {
+      await identityContext.backend.call({
+        to: item.pool.address,
+        data: "0xfeed0003",
+      });
+      return { ...item.pool, identitySource: "seed" };
+    },
+    candidatesByAdapter: new Map([[
+      successAdapter.id,
+      [candidate(TARGET_A)],
+    ]]),
+    control: { deadlineAtMs, signal: parent.signal },
+  });
+  const controlReadyAt = Date.now() + 250;
+  while (identityReadControl === undefined && Date.now() < controlReadyAt) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert(
+    identityReadControl !== undefined &&
+      identityReadControl.deadlineAtMs === deadlineAtMs,
+    "runProtocolDiscovery must merge the pass deadline into identity reads",
+  );
+  parent.abort(new Error("fixture discovery coordinator cancelled"));
+  let cancellation: unknown = null;
+  try {
+    await pending;
+  } catch (error) {
+    cancellation = error;
+  }
+  assert(
+    cancellation instanceof Error &&
+      /fixture discovery coordinator cancelled/.test(cancellation.message),
+    "coordinator cancellation must reject instead of publishing a partial result",
+  );
+  assert(
+    identityReadControl.signal?.aborted === true,
+    "coordinator parent cancellation must abort the identity transport signal",
+  );
+}
 
 // Acceptance 12: flag OFF must leave the graph bit-identical even when the
 // candidate source would otherwise admit a verified instance.

@@ -87,6 +87,11 @@ try {
     },
     "raw cancellable transport must preserve JSON-RPC revert data",
   );
+  await assert.rejects(
+    backend.start(),
+    /already owned by another process/,
+    "backend startup must not attach to a foreign Anvil-compatible port",
+  );
 } finally {
   backend.provider.destroy();
   server.closeAllConnections();

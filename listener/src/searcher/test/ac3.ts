@@ -14,7 +14,7 @@ import { DryRunBundleRouter } from "../execution/bundle-router.js";
 import { HotPathSearcher } from "../hot-path.js";
 import { ManualVictimSource } from "../orderflow/manual-source.js";
 import { TemplatePlanner } from "../planner/planner.js";
-import { defaultTokenGraph } from "../planner/token-graph.js";
+import { defaultTokenGraphFixture } from "../fixtures/default-token-graph.js";
 import { AnvilSolver, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator, type SimulationResult } from "../simulator/botvm-simulator.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "../templates/path-template.js";
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
     // AC-3 runs offline on the small hand-written graph. Inject it explicitly
     // into BOTH detector and planner so the test never relies on hidden fallbacks
     // (the production main.ts injects a discovered graph the same way).
-    const graph = defaultTokenGraph();
+    const graph = defaultTokenGraphFixture();
     const detector = new BackrunDetector();
     detector.setGraph(graph);
     const planner = new TemplatePlanner();

@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { QuoteRequest } from "../live-state-backend.js";
 import { v4PoolId } from "../planner/token-graph.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   PoolStateCache,
   type V2Seed,
@@ -44,6 +45,13 @@ export interface PoolStateUpdaterOptions {
   maxPools?: number;
   maxV3TickPoolsPerBlock?: number;
   awaitTickRefreshForTest?: boolean;
+  /**
+   * Registry projection hook for isolated/conformance registries. Production
+   * defaults to the sole registered family set.
+   */
+  resolveLivePoolStateKind?: (
+    edgeAdapterId: string,
+  ) => LivePoolStateKind | null;
 }
 
 export interface PoolStateUpdateOptions {
@@ -70,10 +78,18 @@ interface BatchCall {
   label: string;
 }
 
+export type LivePoolStateKind =
+  | "constant-product-v2"
+  | "concentrated-v3"
+  | "singleton-v4";
+
 export class PoolStateUpdater {
   private readonly maxPools: number;
   private readonly maxV3TickPoolsPerBlock: number;
   private readonly awaitTickRefreshForTest: boolean;
+  private readonly resolveLivePoolStateKind: (
+    edgeAdapterId: string,
+  ) => LivePoolStateKind | null;
   private readonly v2Static = new Map<string, StaticV2>();
   private readonly v3Static = new Map<string, StaticV3>();
   private tickRefreshing = false;
@@ -87,6 +103,8 @@ export class PoolStateUpdater {
     this.maxV3TickPoolsPerBlock = opts.maxV3TickPoolsPerBlock ??
       Number(process.env.SEARCHER_STATE_V3_TICK_POOLS_PER_BLOCK ?? "1");
     this.awaitTickRefreshForTest = opts.awaitTickRefreshForTest ?? false;
+    this.resolveLivePoolStateKind =
+      opts.resolveLivePoolStateKind ?? productionLivePoolStateKind;
   }
 
   async update(blockNumber: number, hops: QuoteRequest[], opts: PoolStateUpdateOptions = {}): Promise<void> {
@@ -94,9 +112,21 @@ export class PoolStateUpdater {
     if (pools.length === 0) return;
 
     const started = Date.now();
-    const v2 = pools.filter((p) => p.adapterId === "univ2-swap");
-    const v3 = pools.filter((p) => p.adapterId === "univ3-swap");
-    const v4 = pools.filter((p) => p.adapterId === "univ4-unlock" && p.v4PoolKey);
+    const byKind = new Map<LivePoolStateKind, QuoteRequest[]>([
+      ["constant-product-v2", []],
+      ["concentrated-v3", []],
+      ["singleton-v4", []],
+    ]);
+    for (const pool of pools) {
+      const kind = this.resolveLivePoolStateKind(pool.adapterId);
+      if (kind === null || (kind === "singleton-v4" && !pool.v4PoolKey)) {
+        continue;
+      }
+      byKind.get(kind)!.push(pool);
+    }
+    const v2 = byKind.get("constant-product-v2")!;
+    const v3 = byKind.get("concentrated-v3")!;
+    const v4 = byKind.get("singleton-v4")!;
     const { v2Count, v3Count, v4Count, tickFetch } = await this.updateMutableState(blockNumber, v2, v3, v4);
     if (v2Count + v3Count + v4Count > 0) {
       const tickItems = tickFetch.slice(0, opts.maxTickPools ?? this.maxV3TickPoolsPerBlock);
@@ -123,8 +153,9 @@ export class PoolStateUpdater {
 
   hasStaticMetadata(adapterId: string, pool: string): boolean {
     const key = pool.toLowerCase();
-    if (adapterId === "univ2-swap") return this.v2Static.has(key);
-    if (adapterId === "univ3-swap") return this.v3Static.has(key);
+    const kind = this.resolveLivePoolStateKind(adapterId);
+    if (kind === "constant-product-v2") return this.v2Static.has(key);
+    if (kind === "concentrated-v3") return this.v3Static.has(key);
     return true;
   }
 
@@ -202,7 +233,9 @@ export class PoolStateUpdater {
         const token1 = decodeAddress(results.get(`${key}:token1`), "token1");
         if (!token0 || !token1) continue;
         const factory = decodeOptionalAddress(results.get(`${key}:factory`), "factory");
-        stat = { token0, token1, feeBps: v2FeeBpsForFactory(factory) };
+        const feeBps = v2FeeBpsForFactory(factory);
+        if (feeBps === null) continue;
+        stat = { token0, token1, feeBps };
         this.v2Static.set(key, stat);
       }
       const reservesData = results.get(`${key}:reserves`);
@@ -387,12 +420,19 @@ export class PoolStateUpdater {
 }
 
 function quoteV4PoolId(hop: QuoteRequest): string | null {
-  if (hop.adapterId !== "univ4-unlock" || !hop.v4PoolKey) return null;
+  if (!hop.v4PoolKey) return null;
   return v4PoolId(hop.v4PoolKey).toLowerCase();
 }
 
 function poolUpdateKey(hop: QuoteRequest): string {
   return `${hop.adapterId}:${quoteV4PoolId(hop) ?? hop.target.toLowerCase()}`;
+}
+
+function productionLivePoolStateKind(adapterId: string): LivePoolStateKind | null {
+  const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(adapterId);
+  return family?.kind === "swap"
+    ? family.livePoolState?.kind ?? null
+    : null;
 }
 
 function v3WordRange(tick: number, tickSpacing: number): number[] {

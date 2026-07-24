@@ -16,7 +16,8 @@ import { bytesToHex } from "../shared/compiler/encoder.js";
 import { buildExecuteCalldata, installForkBotVm } from "../shared/executor/botvm-executor.js";
 import { buildResolvedPlanFromPath } from "../searcher/solver/plan-builder.js";
 import { propagateAmounts } from "../searcher/solver/amount-propagation.js";
-import { defaultTokenGraph, type TokenEdge } from "../searcher/planner/token-graph.js";
+import type { TokenEdge } from "../searcher/planner/token-graph.js";
+import { defaultTokenGraphFixture } from "../searcher/fixtures/default-token-graph.js";
 import { deriveEdgeTaxonomy } from "../searcher/strategy-taxonomy.js";
 
 const RPC = process.env.MAINNET_RPC_URL!;
@@ -42,7 +43,7 @@ async function main() {
     // Build the same path from the log:
     // wstUSR->USDC@fluid-vault → USDC->WETH@univ3-swap → WETH->USDT@univ3-swap
     // → USDT->sUSDS@curve-exchange → sUSDS->DOLA@curve-exchange → DOLA->wstUSR@curve-exchange-nr
-    const graph = defaultTokenGraph();
+    const graph = defaultTokenGraphFixture();
     const path = {
       edges: [
         findEdge(graph, "fluid-vault", ADDR.WSTUSR, ADDR.USDC),

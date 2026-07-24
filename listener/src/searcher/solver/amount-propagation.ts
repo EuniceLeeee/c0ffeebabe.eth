@@ -1,8 +1,16 @@
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
+import {
+  BlockScanFamilyAttributedError,
+  blockScanEdgeFamilyId,
+} from "../detector/blockscan-family-budget.js";
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import { quote, type V4QuotePathStats } from "./quoter.js";
 import type { QuoteRequest, QuoteResult } from "../live-state-backend.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 export interface AmountQuoteSource {
   quote(req: QuoteRequest): Promise<QuoteResult>;
@@ -64,12 +72,35 @@ export async function propagateAmountsWithRawOutputs(
     if (options.shouldStop?.()) {
       throw new Error(`propagation aborted: deadline reached before edge ${edge.adapterId}`);
     }
-    const out = edge.adapterId === "fluid-vault" && options.fluidDebtBps !== undefined
-      ? quoteFluidDebtBySearchBps(cur, options.fluidDebtBps)
-      : await quoteEdge(edge, cur, state, options);
+    let out: bigint;
+    try {
+      const creditFamily = PRODUCTION_ADAPTER_FAMILIES.credits().find(
+        (family) => family.edgeAdapterIds.includes(edge.adapterId),
+      );
+      out = creditFamily && options.fluidDebtBps !== undefined
+        ? creditFamily.creditPolicy.quoteOutputByDebtBps(cur, options.fluidDebtBps)
+        : await quoteEdge(edge, cur, state, options);
+    } catch (error) {
+      if (
+        error instanceof BlockScanFamilyAttributedError ||
+        isStateCallAbortedError(error) ||
+        isControlFailure(error)
+      ) {
+        throw error;
+      }
+      throw new BlockScanFamilyAttributedError(
+        blockScanEdgeFamilyId(edge),
+        "amount propagation",
+        error,
+      );
+    }
     if (out <= 0n) {
-      throw new Error(
-        `propagation produced zero at edge ${edge.adapterId} ${edge.tokenIn}->${edge.tokenOut}`,
+      throw new BlockScanFamilyAttributedError(
+        blockScanEdgeFamilyId(edge),
+        "amount propagation",
+        new Error(
+          `propagation produced zero at edge ${edge.adapterId} ${edge.tokenIn}->${edge.tokenOut}`,
+        ),
       );
     }
     rawOutputs.push(out);
@@ -123,10 +154,11 @@ async function quoteEdge(
   }
 }
 
-function applySafetyBps(amount: bigint, safetyBps: bigint): bigint {
-  return (amount * safetyBps) / 10000n;
+function isControlFailure(error: unknown): boolean {
+  return error instanceof Error &&
+    /\b(?:abort(?:ed)?|deadline|timed?\s*out|timeout)\b/i.test(error.message);
 }
 
-function quoteFluidDebtBySearchBps(collateralAmount: bigint, debtBps: bigint): bigint {
-  return (collateralAmount * debtBps) / 10000n / 10n ** 12n;
+function applySafetyBps(amount: bigint, safetyBps: bigint): bigint {
+  return (amount * safetyBps) / 10000n;
 }

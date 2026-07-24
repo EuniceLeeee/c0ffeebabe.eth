@@ -658,7 +658,7 @@ async function detectRocksolidBalancerV3Opportunity(
   const cache = new PoolStateCache();
   let edges = expectedEdges;
   if (productionUniversePath) {
-    const universeTopN = Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "6000");
+    const universeTopN = Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "20000");
     const blockscanViewMaxPools = Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? "6000");
     const liveRegistry = filterLiveProtocolRegistry(POOL_REGISTRY, true);
     await check("Assertion C: production protocol admission includes RockSolid", () =>

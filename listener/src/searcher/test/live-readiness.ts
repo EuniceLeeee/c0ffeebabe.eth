@@ -128,6 +128,9 @@ async function recentSwapHints(
           input: "0x",
           logs: [],
           minProfit: 1n,
+          // This diagnostics-only harness reads already-landed receipt evidence
+          // and never executes a victim overlay.
+          victimState: "materialized",
         };
         byTx.set(tx, event);
       }

@@ -1,6 +1,10 @@
 import { ethers } from "ethers";
 import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
 import { poolRegistryKey } from "./pool-universe.js";
+import {
+  edgeExecutionVariantKey,
+  edgeInstanceKey,
+} from "./venues/route-instance-identity.js";
 
 /**
  * Strategy-scoped pool views plus attributable P1-5 view-version hashes.
@@ -90,6 +94,8 @@ function sortedPoolKeys(pools: PoolEntry[]): string[] {
 
 export function hashTokenGraph(edges: TokenEdge[]): string {
   const keys = edges.map((edge) => [
+    edgeInstanceKey(edge),
+    edgeExecutionVariantKey(edge),
     edge.adapterId,
     edge.target.toLowerCase(),
     edge.tokenIn.toLowerCase(),

@@ -65,6 +65,7 @@ async function main(): Promise<void> {
       input: "0x",
       logs: [],
       minProfit: 0n,
+      victimState: "materialized",
     },
     impact: null,
     baseBlock: block,

@@ -10,8 +10,9 @@ import type {
   ProtocolCandidate,
 } from "./venues/route-leg-adapter.js";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const BIGINT_TAG = "__mev_protocol_bigint__";
+const BLOCK_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 
 export interface ProtocolAddressCacheEntry {
   readonly adapterId: string;
@@ -19,6 +20,10 @@ export interface ProtocolAddressCacheEntry {
   readonly codeHash: string;
   readonly implementationWord: string;
   readonly matcherVersion: string;
+  /** Null means the owning family did not opt into cross-block reuse. */
+  readonly dependencyPolicyVersion: string | null;
+  /** Current-block commitment produced by the family-owned cache contract. */
+  readonly dependencyFingerprint: string | null;
   readonly checkedAtBlock: number;
   /** null is a cached semantic negative, not a source/RPC failure. */
   readonly candidate: ProtocolCandidate | null;
@@ -27,6 +32,8 @@ export interface ProtocolAddressCacheEntry {
 export interface ProtocolDiscoveryRuntimeState {
   /** Highest block whose protocol event window fully completed. null = never scanned. */
   observedCursor: number | null;
+  /** Canonical hash of observedCursor. A number without this anchor has no completeness authority. */
+  observedCursorHash: string | null;
   /** Hash of the observed family/topic/selector/matcher registry behind the cursor. */
   observedSourceFingerprint: string | null;
   /** Per-family matcher fingerprints for targeted ownership invalidation. */
@@ -70,11 +77,90 @@ export function createProtocolDiscoveryEvidenceCache(
     verifiedCandidates: new Map(),
     runtime: {
       observedCursor: null,
+      observedCursorHash: null,
       observedSourceFingerprint: null,
       discoverySourceFingerprints: new Map(),
       recentProcessedTxs: new Map(),
     },
     routeOwnership: { version: 0, admissions: [] },
+  };
+}
+
+export function cloneProtocolDiscoveryEvidenceCache(
+  source: ProtocolDiscoveryEvidenceCache,
+): ProtocolDiscoveryEvidenceCache {
+  return {
+    chainId: source.chainId,
+    addressEntries: new Map(
+      [...source.addressEntries].map(([key, entry]) => [
+        key,
+        {
+          ...entry,
+          candidate: entry.candidate ? cloneCandidate(entry.candidate) : null,
+        },
+      ]),
+    ),
+    verifiedCandidates: new Map(
+      [...source.verifiedCandidates].map(([key, entry]) => [
+        key,
+        { adapterId: entry.adapterId, candidate: cloneCandidate(entry.candidate) },
+      ]),
+    ),
+    runtime: {
+      observedCursor: source.runtime.observedCursor,
+      observedCursorHash: source.runtime.observedCursorHash,
+      observedSourceFingerprint: source.runtime.observedSourceFingerprint,
+      discoverySourceFingerprints: new Map(source.runtime.discoverySourceFingerprints),
+      recentProcessedTxs: new Map(source.runtime.recentProcessedTxs),
+    },
+    routeOwnership: {
+      version: source.routeOwnership.version,
+      admissions: source.routeOwnership.admissions.map((entry) => ({
+        adapterId: entry.adapterId,
+        instance: cloneInstance(entry.instance),
+      })),
+    },
+  };
+}
+
+export function replaceProtocolDiscoveryEvidenceCache(
+  target: ProtocolDiscoveryEvidenceCache,
+  source: ProtocolDiscoveryEvidenceCache,
+): void {
+  if (target.chainId !== source.chainId) {
+    throw new Error("cannot publish a protocol discovery cache from another chain");
+  }
+  target.addressEntries.clear();
+  for (const [key, entry] of source.addressEntries) {
+    target.addressEntries.set(key, {
+      ...entry,
+      candidate: entry.candidate ? cloneCandidate(entry.candidate) : null,
+    });
+  }
+  target.verifiedCandidates.clear();
+  for (const [key, entry] of source.verifiedCandidates) {
+    target.verifiedCandidates.set(key, {
+      adapterId: entry.adapterId,
+      candidate: cloneCandidate(entry.candidate),
+    });
+  }
+  target.runtime.observedCursor = source.runtime.observedCursor;
+  target.runtime.observedCursorHash = source.runtime.observedCursorHash;
+  target.runtime.observedSourceFingerprint = source.runtime.observedSourceFingerprint;
+  target.runtime.discoverySourceFingerprints.clear();
+  for (const [key, value] of source.runtime.discoverySourceFingerprints) {
+    target.runtime.discoverySourceFingerprints.set(key, value);
+  }
+  target.runtime.recentProcessedTxs.clear();
+  for (const [key, value] of source.runtime.recentProcessedTxs) {
+    target.runtime.recentProcessedTxs.set(key, value);
+  }
+  target.routeOwnership = {
+    version: source.routeOwnership.version,
+    admissions: source.routeOwnership.admissions.map((entry) => ({
+      adapterId: entry.adapterId,
+      instance: cloneInstance(entry.instance),
+    })),
   };
 }
 
@@ -177,6 +263,7 @@ export function loadProtocolDiscoveryEvidenceCache(
     address_entries?: unknown;
     verified_candidates?: unknown;
     observed_cursor?: unknown;
+    observed_cursor_hash?: unknown;
     observed_source_fingerprint?: unknown;
     discovery_source_fingerprints?: unknown;
     recent_processed_txs?: unknown;
@@ -217,9 +304,12 @@ export function loadProtocolDiscoveryEvidenceCache(
   }
   if (
     Number.isSafeInteger(snapshot.observed_cursor) &&
-    Number(snapshot.observed_cursor) >= 0
+    Number(snapshot.observed_cursor) >= 0 &&
+    typeof snapshot.observed_cursor_hash === "string" &&
+    BLOCK_HASH_RE.test(snapshot.observed_cursor_hash)
   ) {
     cache.runtime.observedCursor = Number(snapshot.observed_cursor);
+    cache.runtime.observedCursorHash = snapshot.observed_cursor_hash.toLowerCase();
   }
   if (
     typeof snapshot.observed_source_fingerprint === "string" &&
@@ -263,6 +353,20 @@ export function saveProtocolDiscoveryEvidenceCache(
   cache: ProtocolDiscoveryEvidenceCache,
 ): void {
   if (!cache.chainId) throw new Error("protocol discovery cache requires a chain id before save");
+  if (
+    (cache.runtime.observedCursor === null) !==
+      (cache.runtime.observedCursorHash === null) ||
+    (
+      cache.runtime.observedCursor !== null &&
+      !protocolObservedCursorAnchorMatches(
+        cache,
+        cache.runtime.observedCursor,
+        cache.runtime.observedCursorHash!,
+      )
+    )
+  ) {
+    throw new Error("protocol discovery cache refuses an unanchored observed cursor");
+  }
   const snapshot = {
     schema_version: SCHEMA_VERSION,
     chain_id: cache.chainId,
@@ -276,6 +380,7 @@ export function saveProtocolDiscoveryEvidenceCache(
         .localeCompare(protocolInstanceKey(b.adapterId, b.candidate.pool)))
       .map((entry) => ({ adapterId: entry.adapterId, candidate: cloneCandidate(entry.candidate) })),
     observed_cursor: cache.runtime.observedCursor,
+    observed_cursor_hash: cache.runtime.observedCursorHash,
     observed_source_fingerprint: cache.runtime.observedSourceFingerprint,
     discovery_source_fingerprints: [...cache.runtime.discoverySourceFingerprints]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -305,6 +410,8 @@ function normalizeAddressEntry(value: unknown): ProtocolAddressCacheEntry | null
     codeHash?: unknown;
     implementationWord?: unknown;
     matcherVersion?: unknown;
+    dependencyPolicyVersion?: unknown;
+    dependencyFingerprint?: unknown;
     checkedAtBlock?: unknown;
     candidate?: unknown;
   };
@@ -329,12 +436,24 @@ function normalizeAddressEntry(value: unknown): ProtocolAddressCacheEntry | null
   const candidate = item.candidate === null ? null : normalizeCandidate(item.candidate);
   if (item.candidate !== null && !candidate) return null;
   if (candidate && candidate.pool.address.toLowerCase() !== address.toLowerCase()) return null;
+  const dependencyPolicyVersion =
+    typeof item.dependencyPolicyVersion === "string" &&
+      item.dependencyPolicyVersion.length > 0
+      ? item.dependencyPolicyVersion
+      : null;
+  const dependencyFingerprint =
+    typeof item.dependencyFingerprint === "string" &&
+      /^0x[0-9a-fA-F]{64}$/.test(item.dependencyFingerprint)
+      ? item.dependencyFingerprint.toLowerCase()
+      : null;
   return {
     adapterId: item.adapterId,
     address,
     codeHash: item.codeHash.toLowerCase(),
     implementationWord: item.implementationWord.toLowerCase(),
     matcherVersion: item.matcherVersion,
+    dependencyPolicyVersion,
+    dependencyFingerprint,
     checkedAtBlock: Number(item.checkedAtBlock),
     candidate,
   };
@@ -477,9 +596,10 @@ export function pruneRecentProcessedProtocolTxs(
 /**
  * Reconcile the registry behind the shared observed cursor. Matcher evidence
  * is meaningful only for the exact family fingerprint that produced it, so a
- * change rewinds the shared cursor but invalidates ownership only for families
- * that were added, removed or changed. Unchanged observed-only families stay
- * routed while the recent backfill discovers the new semantics.
+ * An observed matcher/event-surface change rewinds the shared cursor.
+ * Address-only matcher changes invalidate only their family evidence and leave
+ * the independent observed-history cursor intact. Ownership is invalidated
+ * only for families that were added, removed or changed.
  */
 export function updateProtocolObservedSourceFingerprint(
   cache: ProtocolDiscoveryEvidenceCache,
@@ -498,11 +618,13 @@ export function updateProtocolObservedSourceFingerprint(
       }
       return [adapterId, value.toLowerCase()] as const;
     }));
+  const observedSourceChanged =
+    cache.runtime.observedSourceFingerprint !== normalized;
   const sourcesUnchanged = normalizedSources === null || mapsEqual(
     cache.runtime.discoverySourceFingerprints,
     normalizedSources,
   );
-  if (cache.runtime.observedSourceFingerprint === normalized && sourcesUnchanged) return false;
+  if (!observedSourceChanged && sourcesUnchanged) return false;
 
   const changedAdapters = new Set<string>();
   if (normalizedSources === null) {
@@ -519,8 +641,10 @@ export function updateProtocolObservedSourceFingerprint(
     }
   }
   cache.runtime.observedSourceFingerprint = normalized;
-  cache.runtime.observedCursor = null;
-  cache.runtime.recentProcessedTxs.clear();
+  if (observedSourceChanged) {
+    setProtocolObservedCursor(cache, null, null);
+    cache.runtime.recentProcessedTxs.clear();
+  }
   for (const [key, value] of cache.verifiedCandidates) {
     if (changedAdapters.has(value.adapterId)) cache.verifiedCandidates.delete(key);
   }
@@ -536,7 +660,72 @@ export function updateProtocolObservedSourceFingerprint(
       cache.runtime.discoverySourceFingerprints.set(adapterId, value);
     }
   }
-  return true;
+  return observedSourceChanged;
+}
+
+/**
+ * Publish or clear the only restart-survivable observed-history cursor. The
+ * number/hash pair is indivisible so a caller can never persist an unanchored
+ * completeness claim.
+ */
+export function setProtocolObservedCursor(
+  cache: ProtocolDiscoveryEvidenceCache,
+  blockNumber: number | null,
+  blockHash: string | null,
+): void {
+  if (blockNumber === null || blockHash === null) {
+    if (blockNumber !== null || blockHash !== null) {
+      throw new Error("protocol observed cursor number/hash must be set or cleared together");
+    }
+    cache.runtime.observedCursor = null;
+    cache.runtime.observedCursorHash = null;
+    return;
+  }
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+    throw new Error(`invalid protocol observed cursor ${blockNumber}`);
+  }
+  if (!BLOCK_HASH_RE.test(blockHash)) {
+    throw new Error("protocol observed cursor hash must be 32 bytes");
+  }
+  cache.runtime.observedCursor = blockNumber;
+  cache.runtime.observedCursorHash = blockHash.toLowerCase();
+}
+
+export function protocolObservedCursorAnchorMatches(
+  cache: ProtocolDiscoveryEvidenceCache,
+  blockNumber: number,
+  canonicalBlockHash: string,
+): boolean {
+  return Number.isSafeInteger(blockNumber) &&
+    blockNumber >= 0 &&
+    BLOCK_HASH_RE.test(canonicalBlockHash) &&
+    cache.runtime.observedCursor === blockNumber &&
+    cache.runtime.observedCursorHash === canonicalBlockHash.toLowerCase();
+}
+
+/**
+ * A cursor reorg invalidates observed-source candidates as well as the numeric
+ * watermark. Address-domain families are rediscovered from current state;
+ * observed-only families remain unavailable until canonical history is
+ * backfilled again.
+ */
+export function invalidateProtocolObservedHistory(
+  cache: ProtocolDiscoveryEvidenceCache,
+  observedFamilyIds: ReadonlySet<string>,
+): void {
+  setProtocolObservedCursor(cache, null, null);
+  cache.runtime.recentProcessedTxs.clear();
+  for (const [key, value] of cache.verifiedCandidates) {
+    if (observedFamilyIds.has(value.adapterId)) {
+      cache.verifiedCandidates.delete(key);
+    }
+  }
+  cache.routeOwnership = {
+    version: cache.routeOwnership.version,
+    admissions: cache.routeOwnership.admissions.filter(
+      ({ adapterId }) => !observedFamilyIds.has(adapterId),
+    ),
+  };
 }
 
 function mapsEqual(

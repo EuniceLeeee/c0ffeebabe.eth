@@ -6,7 +6,7 @@ import { ADDR } from "../shared/constants/addresses.js";
 import {
   resolveV4PoolKeyViaPositionManager,
   type ParsedV4Initialize,
-} from "./build-active-pool-universe.js";
+} from "./venues/swaps/univ4-pool-discovery.js";
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   type PoolUniverseEntry,

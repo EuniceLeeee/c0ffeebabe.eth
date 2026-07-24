@@ -8,40 +8,32 @@ import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import { oracleVictimWatchTargets } from "./detector/victim-effect.js";
+import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
 import {
-  detectBlockScanOpportunities,
-  type BlockScanConfig,
-  type ProtocolMid,
-} from "./detector/blockscan-scanner.js";
-import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refinement.js";
-import { runBlockScanMidBatch } from "./detector/blockscan-mid-batch.js";
-import { buildExactBlockScanCurveMids } from "./detector/blockscan-curve-mids.js";
+  awaitBlockScanDeadline,
+  BlockScanPassDeadlineError,
+} from "./blockscan-pass-deadline.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import {
   prepareActiveProtocolDiscoveryPass,
-  prepareObservedProtocolDiscoveryPass,
-  protocolCandidateAddressesFromDexGraph,
-  protocolCandidateAddressesFromDexUniverse,
 } from "./protocol-discovery-runtime.js";
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   protocolEdgeKey,
   protocolInstanceKey,
-  protocolDiscoveryProjectionChangesRouting,
-  type ProtocolDiscoveryEvent,
   type ProtocolDiscoveryOwnership,
-  type ProtocolDiscoveryProjection,
   type ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
 import {
   cachedProtocolCandidates,
-  createProtocolDiscoveryEvidenceCache,
+  invalidateProtocolObservedHistory,
   loadProtocolDiscoveryEvidenceCache,
-  pruneRecentProcessedProtocolTxs,
+  protocolObservedCursorAnchorMatches,
   reconcileProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
   saveProtocolDiscoveryEvidenceCache,
+  setProtocolObservedCursor,
   updateProtocolObservedSourceFingerprint,
 } from "./protocol-discovery-cache.js";
 import {
@@ -50,60 +42,71 @@ import {
   protocolObservedSourceFingerprint,
   shouldTraceForProtocolDiscovery,
 } from "./observed-protocol-discovery.js";
+import {
+  planDiscoveryStartup,
+} from "./discovery-source-watermark.js";
+import {
+  type LiveDiscoveryPublicationState,
+} from "./live-discovery-publication.js";
+import {
+  createLiveDiscoveryCoordinator,
+  readBlockHash,
+} from "./live-discovery-coordinator.js";
+import {
+  emitProtocolDiscoveryEvents,
+  emitStaticSuppressedProtocolEvents,
+  ProtocolDiscoveryCandidateDomain,
+  ProtocolDiscoveryCoverageCoordinator,
+} from "./protocol-discovery-coordinator.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
-import { TemplatePlanner, type CandidatePlan } from "./planner/planner.js";
+import { TemplatePlanner } from "./planner/planner.js";
 import {
   buildTokenGraphWithResults,
   buildTokenIndex,
   POOL_REGISTRY,
-  v4PoolId,
   type PoolEntry,
   type TokenEdge,
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
-import { scanActivePools, indexFactoryPools, mergePoolRegistries } from "./active-pool-discovery.js";
+import {
+  scanActivePoolsDetailed,
+  indexFactoryPools,
+  mergePoolRegistries,
+} from "./active-pool-discovery.js";
 import {
   attestPoolIdentities,
   createPoolIdentityCache,
+  isRetryablePoolIdentityFailure,
   type RejectedPoolIdentity,
 } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
-  LEGACY_PRODUCTION_ROUTE_EDGES,
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
+  PRODUCTION_ADAPTER_FAMILIES,
+  productionPoolUniverseSourceFingerprints,
 } from "./venues/production-registry.js";
-import type { ProtocolDiscoveryReceipt } from "./venues/route-leg-adapter.js";
-import { PRODUCTION_VICTIM_MODELS } from "./venues/victim-model-registry.js";
-import { isLandedSwapTopic } from "./venues/landed-event-registry.js";
+import type {
+  ProtocolDiscoveryReceipt,
+} from "./venues/route-leg-adapter.js";
 import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
-import { buildStrategyViews, hashTokenGraph } from "./strategy-views.js";
 import {
+  buildStrategyViews,
+  hashTokenGraph,
+} from "./strategy-views.js";
+import {
+  assertDexSourceHashStable,
+  createDexGraphCoverageState,
+  createPinnedDexReadBackend,
   MempoolIntakeRefreshSignal,
-  prepareRuntimePoolRefresh,
-  selectRefreshCandidates,
 } from "./runtime-pool-refresh.js";
 import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
 import {
   createProfitTokenValuation,
   type ProfitTokenValuation,
 } from "./profit-token-valuation.js";
-import {
-  BlockScanWarmCoordinator,
-  blockScanCurveRetriesAfterPass,
-  blockScanFullWarmSessionMatchesCanonical,
-  blockScanWarmCaughtUp,
-  blockScanWarmPassBudgetMs,
-  blockScanMutableQuoteRequests,
-  blockScanUnwarmedMutableQuoteRequests,
-  blockScanUnwarmedCurveEdges,
-  blockScanV4PoolId,
-  formatBlockScanWarmPlan,
-  type BlockScanWarmPlan,
-} from "./blockscan-warm-coordinator.js";
 import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
 import {
   DEFAULT_PINNED_WARM_POOLS_PATH,
@@ -119,30 +122,43 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
+  loadPoolUniverseCoverageMetadata,
   loadPoolUniverseGeneratedAt,
+  poolUniverseCanonicalAnchorMatches,
   poolRegistryKey,
   selectPairCompletionPools,
 } from "./pool-universe.js";
+import {
+  BlockScanStateCoordinator,
+} from "./blockscan-state-coordinator.js";
+import {
+  BlockScanBackrunStateBridge,
+  BufferedBlockScanBackrunStatePublisher,
+} from "./blockscan-backrun-state-bridge.js";
+import { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
+import { AdapterRuntimeCoordinator } from "./adapter-runtime-coordinator.js";
+import {
+  AdapterFamilyGraphViewCoordinator,
+} from "./adapter-family-graph-view-coordinator.js";
+import {
+  BlockScanRuntimeLoop,
+  type BlockScanAtomicResult,
+  type BlockScanRejectBlacklistEntry,
+  type BlockScanRejectBlacklistState,
+} from "./blockscan-runtime-loop.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
-import { FlashLiquidityCache } from "./solver/flash-liquidity.js";
-import { quoteFluidDex } from "./solver/quoter.js";
 import {
   PoolStateCache,
-  type CurveSnapshot,
   type PostImpactSeed,
-  type V2Seed,
-  type V2PostImpactSeed,
-  type V3LiveSeed,
-  type V3PostImpactSeed,
-  type V4PostImpactSeed,
-  type V4Seed,
 } from "./solver/pool-state-cache.js";
 import { PoolStateUpdater } from "./solver/pool-state-updater.js";
-import { DEFAULT_V2_FEE_BPS } from "./solver/v2-fee.js";
 import { postImpactStateOverrides } from "./solver/post-impact-overrides.js";
 import { resolveErc20BalanceSlot } from "./solver/balance-slots.js";
-import { applyVictimSwapLocally, type LocalVictimApplyResult } from "./solver/victim-apply.js";
+import {
+  applyVictimSwapLocallySettled,
+  type LocalVictimApplyResult,
+} from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "./templates/path-template.js";
 import {
@@ -158,50 +174,55 @@ import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
 import { replayVictimSwapOnAnvil } from "./live-backends/rpc-victim-replay.js";
+import {
+  eventPostImpactSeedForSettled,
+  hashOnlyImpactReplayAdmittedByPolicy,
+  postImpactSeedSummary,
+  victimNeedsMutablePoolRefresh,
+  victimUsesLocalCacheApply,
+} from "./venues/victim-runtime-policy.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
+import type { SwapEventLog } from "./venues/swap-observation.js";
 import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
-import { detectImpactFromLogs, type PoolImpact } from "./detector/pool-impact.js";
+import {
+  createVictimSourceGeneration,
+  detectImpactTransitionFromLogs,
+  type PoolImpact,
+  type PoolImpactTransition,
+} from "./detector/pool-impact.js";
 import type { ResolvedPlanNode } from "../shared/types/plan.js";
 import {
   DEFAULT_CREDIT_LIVE_MARKER_PATH,
   evaluateStandingGuard,
 } from "./standing-guard.js";
 import {
+  BLIND_PRODUCTION_RAW_PROFILE,
   BLIND_PRODUCTION_RAW_PREFIX,
   BLIND_PRODUCTION_READY_PREFIX,
   blindProductionAuditHash,
   blindProductionCalldataSha256,
   blindProductionCanonicalJson,
-  blindProductionDeepSeal,
-  type BlindProductionBlockAnchor,
   type BlindProductionOpportunityEvidence,
   type BlindProductionPrepareControl,
   type BlindProductionSourceHeadControl,
-  type BlindProductionStageEvidence,
-  type BlindProductionStageSealInput,
 } from "./blind-production-audit.js";
 import {
-  appendBlindBaselineStageEvidence,
-  collectBlindBaselinePricingCoverage,
-  completeBlindBaselineStageEvidence,
-  createBlindBaselinePassRecord,
-  createBlindBaselinePreparedArtifacts,
-  createBlindBaselineSemanticEvidence,
-  createBlindBaselineSourceDelta,
-  createBlindBaselineStaticArtifacts,
-  createBlindBaselineUnrunSelectionProvenance,
-  createMutableBlindOpportunityEvidence,
-  installBlindBaselineControlInput,
-  type BlindBaselinePreparedArtifacts,
-  type BlindBaselinePricingCoverage,
-  type BlindBaselineSelectionProvenance,
-  type BlindBaselineStageName,
-  type MutableBlindOpportunityEvidence,
-} from "./blind-production-baseline-runtime.js";
+  blindProductionArtifactReceipt,
+  createBlindProductionArtifact,
+  type BlindProductionArtifact,
+} from "./blind-production-artifacts.js";
 import {
+  blindCompatibilityCanonicalEdgeId,
+} from "./blind-production-compatibility.js";
+import {
+  blindGraphArtifactPayload,
   blindResolvedRuntimeEnvironment,
+  createBlindProductionPassRecord,
+  createBlindProductionStaticArtifacts,
+  installBlindProductionControlInput,
   normalizeBlindArtifactValue,
-} from "./blind-production-sanitize.js";
+  type PreparedBlindProductionArtifacts,
+} from "./blind-production-runtime.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
@@ -211,17 +232,12 @@ const DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH = resolve(
   "pools",
   "runtime-protocol-discovery-cache.json",
 );
+const PROTOCOL_CURSOR_SEMANTICS_VERSION =
+  "family-source-contiguous-v3-hash-anchored";
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
 
-const V3_META = new ethers.Interface([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-  "function fee() view returns (uint24)",
-  "function tickSpacing() view returns (int24)",
-]);
-const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
 interface HintLog {
   address: string;
   topics: string[];
@@ -283,6 +299,7 @@ interface LiveConfig {
   stateWatchMaxPools: number;
   pinnedWarmPoolPath: string;
   poolUniversePath: string;
+  poolUniverseManifestPath: string;
   poolUniverseTopN: number;
   poolUniverseMinScore: number;
   poolUniverseForceInclude: string[];
@@ -334,42 +351,11 @@ interface HintEnvelope {
   prefetched?: { tx: ethers.TransactionResponse; rawTx: string };
 }
 
-interface BlockScanRejectBlacklistEntry {
-  strikes: number;
-  expiryBlock: number | null;
-}
-
 type ActiveBlockScanRejectBlacklistEntry = BlockScanRejectBlacklistEntry & { expiryBlock: number };
-
-interface BlockScanRejectBlacklistState {
-  enabled: boolean;
-  after: number;
-  ttlBlocks: number;
-  entries: Map<string, BlockScanRejectBlacklistEntry>;
-}
-
-interface PlannedBlockScanSolve {
-  opp: BlockScanOpportunity;
-  ring: string;
-  protoRing: boolean;
-  plan: CandidatePlan;
-  planCount: number;
-  blindAudit?: MutableBlindOpportunityEvidence;
-}
-
-interface BlockScanAtomicAudit {
-  readonly simulation: BlindProductionOpportunityEvidence["simulation"];
-  readonly ev: BlindProductionOpportunityEvidence["ev"];
-}
-
-interface BlindBaselinePassCompletion {
-  stateReady: boolean;
-  error: Error | null;
-}
 
 export { computeBidEth, valueInEth };
 
-function buildBlockScanPricedTokens(): BlockScanConfig["pricedTokens"] {
+function buildBlockScanPricedTokens(): BlockScanCoreConfig["pricedTokens"] {
   return new Map([
     [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
     [ADDR.USDC.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
@@ -437,6 +423,20 @@ function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[])
   );
 }
 
+function retryableIdentityCandidates(
+  pools: readonly PoolEntry[],
+  rejected: readonly RejectedPoolIdentity[],
+): PoolEntry[] {
+  const retryable = new Set(
+    rejected
+      .filter((item) => isRetryablePoolIdentityFailure(item.reason))
+      .map((item) => `${item.address.toLowerCase()}:${item.adapter}`),
+  );
+  return pools.filter((pool) =>
+    retryable.has(`${pool.address.toLowerCase()}:${pool.adapter}`)
+  );
+}
+
 function logRuntimeRefreshFailures(
   failed: Array<{ pool: PoolEntry; reason: string }>,
   context = "refresh retryable",
@@ -449,28 +449,6 @@ function logRuntimeRefreshFailures(
   }
   if (failed.length > 5) {
     console.log(`[searcher/live] ${context} additional=${failed.length - 5}`);
-  }
-}
-
-function emitProtocolDiscoveryEvents(
-  events: readonly ProtocolDiscoveryEvent[],
-  mode: "shadow" | "active" | "observed",
-  blockNumber: number,
-): void {
-  for (const event of events) {
-    emitEvent({
-      type: "protocol_discovery",
-      adapter_id: event.adapterId,
-      ...(event.target === null ? {} : { target: event.target }),
-      selectors: [...event.selectors],
-      sources: [...event.sources],
-      verdict: event.verdict,
-      stage: event.stage,
-      ...(event.reason === null ? {} : { reason: event.reason }),
-      edge_count: event.wouldAdmitEdges,
-      mode,
-      block_number: blockNumber,
-    });
   }
 }
 
@@ -489,6 +467,7 @@ function replaceSet<T>(target: Set<T>, next: ReadonlySet<T>): void {
 }
 
 function loadEnv(): void {
+  if (process.env.SEARCHER_TEST_DISABLE_DOTENV === "1") return;
   const envPath = resolve("..", ".env");
   let text = "";
   try {
@@ -509,7 +488,6 @@ function dumpRuntimeGraphPools(
   pools: PoolEntry[],
   path = DEFAULT_RUNTIME_GRAPH_POOLS_PATH,
 ): void {
-  if (process.env.SEARCHER_BLIND_RAW_AUDIT === "1") return;
   try {
     const normalized = pools.map((pool) => ({
       address: pool.address.toLowerCase(),
@@ -593,6 +571,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const envForceInclude = parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE);
   const fileForceInclude = loadForceIncludePoolIds(forceIncludePoolIdsPath);
   const poolUniverseForceInclude = mergeForceIncludePoolIds(envForceInclude, fileForceInclude);
+  const poolUniversePath =
+    process.env.SEARCHER_POOL_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH;
 
   const wsUrl = liveWsUrl(rpcUrl);
 
@@ -643,8 +623,11 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     stateRecentK: Number(process.env.SEARCHER_STATE_RECENT_K ?? "24"),
     stateWatchMaxPools: Number(process.env.SEARCHER_STATE_WATCH_MAX_POOLS ?? "64"),
     pinnedWarmPoolPath: process.env.SEARCHER_PINNED_WARM_POOLS ?? DEFAULT_PINNED_WARM_POOLS_PATH,
-    poolUniversePath: process.env.SEARCHER_POOL_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH,
-    poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "6000"),
+    poolUniversePath,
+    poolUniverseManifestPath:
+      process.env.SEARCHER_POOL_UNIVERSE_MANIFEST_PATH ??
+      `${poolUniversePath}.manifest.json`,
+    poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "20000"),
     poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
     poolUniverseForceInclude,
     forceIncludePoolIdsPath,
@@ -673,14 +656,21 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
 }
 
 async function main(): Promise<void> {
-  const blindProductionAudit =
-    process.env.SEARCHER_BLIND_RAW_AUDIT === "1";
-  if (!blindProductionAudit) loadEnv();
+  loadEnv();
 
   const rpcUrl = liveRpcUrl();
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  const blindProductionAudit =
+    process.env.SEARCHER_BLIND_RAW_AUDIT === "1";
+  const blindPrepareBudgetRaw = Number(
+    process.env.SEARCHER_BLIND_PREPARE_BUDGET_MS ?? "120000",
+  );
+  const blindPrepareBudgetMs =
+    Number.isSafeInteger(blindPrepareBudgetRaw) && blindPrepareBudgetRaw > 0
+      ? blindPrepareBudgetRaw
+      : 120_000;
   if (blindProductionAudit && !config.dryRun) {
     throw new Error("blind production audit requires SEARCHER_DRY_RUN=1");
   }
@@ -728,16 +718,9 @@ async function main(): Promise<void> {
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
   const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
   if (blindProductionAudit && !enableBlockScan) {
-    throw new Error(
-      "blind production audit requires SEARCHER_ENABLE_BLOCK_SCAN=1",
-    );
+    throw new Error("blind production audit requires SEARCHER_ENABLE_BLOCK_SCAN=1");
   }
-  if (blindProductionAudit && !config.blockScanSubmit) {
-    throw new Error(
-      "blind production audit requires SEARCHER_BLOCKSCAN_SUBMIT=1",
-    );
-  }
-  const blockScanCfg: BlockScanConfig | undefined = enableBlockScan
+  const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
         maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
         minSpreadBps: Number(process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10"),
@@ -749,13 +732,17 @@ async function main(): Promise<void> {
   planner.setMaxHops(maxHops);
   planner.setMaxPoolsPerToken(maxPoolsPerToken);
   planner.setMaxRotationsPerPath(maxRotationsPerPath);
-  let blockScanState: AnvilStateBackend | undefined;
-  let blockScanCache: PoolStateCache | undefined;
-  let blockScanUpdater: PoolStateUpdater | undefined;
-  let blockScanWarmCoordinator: BlockScanWarmCoordinator | undefined;
   let blockScanPlanner: TemplatePlanner | undefined;
-  let blockScanSolver: AnvilSolver | undefined;
-  let blockScanSimulator: BotVMSimulator | undefined;
+  let adapterRuntimeCoordinator: AdapterRuntimeCoordinator | undefined;
+  let blockScanStateReadBackend:
+    JsonRpcBlockScanStateReadBackend | undefined;
+  const blockScanExecutionWorkers: Array<{
+    readonly state: AnvilStateBackend;
+    readonly solver: AnvilSolver;
+    readonly simulator: BotVMSimulator;
+  }> = [];
+  const blockScanRuntimeAbort = new AbortController();
+  let shuttingDown = false;
   const blockScanPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000",
   );
@@ -780,9 +767,6 @@ async function main(): Promise<void> {
   const blockScanSolveReserveMs = Number.isFinite(blockScanSolveReserveRaw)
     ? Math.max(0, Math.floor(blockScanSolveReserveRaw))
     : 8_000;
-  const blockScanFullWarmBudgetMs = Number(
-    process.env.SEARCHER_BLOCKSCAN_FULL_WARM_BUDGET_MS ?? "240000",
-  );
   const blockScanSolveConcurrencyRaw = Number(process.env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
@@ -799,8 +783,6 @@ async function main(): Promise<void> {
   const blockScanMidConcurrency = Number.isFinite(blockScanMidConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanMidConcurrencyRaw))
     : 24;
-  const blockScanFullRewarmBlocks = Number(process.env.SEARCHER_BLOCKSCAN_FULL_REWARM_BLOCKS ?? "600");
-  const blockScanWarmVerify = process.env.SEARCHER_BLOCKSCAN_WARM_VERIFY === "1";
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
     const isolatedState = new AnvilStateBackend(
@@ -808,31 +790,68 @@ async function main(): Promise<void> {
       `http://127.0.0.1:${blockScanAnvilPort}`,
       blockScanAnvilPort,
     );
-    const isolatedCache = new PoolStateCache(provider);
     const isolatedPlanner = new TemplatePlanner();
     isolatedPlanner.setProfitTokenValuation(profitTokenValuation);
     isolatedPlanner.setMaxCandidates(maxCandidates);
     isolatedPlanner.setMaxHops(maxHops);
     isolatedPlanner.setMaxPoolsPerToken(maxPoolsPerToken);
     isolatedPlanner.setMaxRotationsPerPath(maxRotationsPerPath);
-    blockScanState = isolatedState;
-    blockScanCache = isolatedCache;
-    blockScanUpdater = new PoolStateUpdater(provider, isolatedCache, {
-      maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
-    });
-    blockScanWarmCoordinator = new BlockScanWarmCoordinator(
-      provider,
-      isolatedCache,
-      blockScanUpdater,
-      blockScanFullRewarmBlocks,
-    );
     blockScanPlanner = isolatedPlanner;
-    blockScanSolver = new AnvilSolver();
-    blockScanSimulator = new BotVMSimulator(isolatedState, config.botvmAddress, config.wallet.address);
+    const isolatedSolver = new AnvilSolver();
+    const isolatedSimulator = new BotVMSimulator(
+      isolatedState,
+      config.botvmAddress,
+      config.wallet.address,
+    );
+    blockScanExecutionWorkers.push({
+      state: isolatedState,
+      solver: isolatedSolver,
+      simulator: isolatedSimulator,
+    });
+    for (let worker = 1; worker < blockScanSolveConcurrency; worker++) {
+      const port = blockScanAnvilPort + worker;
+      const workerState = new AnvilStateBackend(
+        config.rpcUrl,
+        `http://127.0.0.1:${port}`,
+        port,
+      );
+      blockScanExecutionWorkers.push({
+        state: workerState,
+        solver: new AnvilSolver(),
+        simulator: new BotVMSimulator(
+          workerState,
+          config.botvmAddress,
+          config.wallet.address,
+        ),
+      });
+    }
+    const familyStateReads = new JsonRpcBlockScanStateReadBackend(config.rpcUrl, {
+      maxBatchSize: Math.max(
+        1,
+        Number(process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE ?? "500"),
+      ),
+      maxConcurrentBatches: Math.max(
+        1,
+        Number(
+          process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4",
+        ),
+      ),
+      multicallMode:
+        process.env.SEARCHER_BLOCKSCAN_STATE_MULTICALL === "1"
+          ? "aggregate3"
+          : "rpc-batch",
+    });
+    blockScanStateReadBackend = familyStateReads;
+    adapterRuntimeCoordinator = new AdapterRuntimeCoordinator(
+      PRODUCTION_ADAPTER_FAMILIES,
+      new BlockScanStateCoordinator(familyStateReads),
+      familyStateReads,
+    );
   }
   const solver = new AnvilSolver();
   // Direct provider for v3 tick data — anvil-over-RPC is slow + wrong for TickLens.
   const poolStateCache = new PoolStateCache(provider);
+  const blockScanBackrunState = new BlockScanBackrunStateBridge(poolStateCache);
   const poolStateUpdater = new PoolStateUpdater(provider, poolStateCache, {
     maxPools: config.stateWatchMaxPools,
   });
@@ -865,9 +884,7 @@ async function main(): Promise<void> {
     config.enableMevShare,
   );
   if (blindProductionAudit && sourceMode !== "disabled") {
-    throw new Error(
-      "blind production audit requires the victim source to be disabled",
-    );
+    throw new Error("blind production audit requires the victim feed to be disabled");
   }
   const victimFeedHash = createHash("sha256").update(JSON.stringify({
     sourceMode,
@@ -965,6 +982,38 @@ async function main(): Promise<void> {
   if (!Number.isSafeInteger(discoveryToBlock) || discoveryToBlock < 0) {
     throw new Error("SEARCHER_DISCOVERY_TO_BLOCK must be a non-negative safe integer");
   }
+  const startupDexSourceBlockHash = await readBlockHash(provider, discoveryToBlock);
+  if (blockScanStateReadBackend) {
+    const controller = new AbortController();
+    const probeTimeoutMs = Math.max(
+      1_000,
+      Number(
+        process.env.SEARCHER_BLOCKSCAN_EIP1898_PROBE_TIMEOUT_MS ??
+          "15000",
+      ),
+    );
+    const timer = setTimeout(
+      () => controller.abort(
+        new Error(
+          `EIP-1898 startup probe exceeded ${probeTimeoutMs}ms`,
+        ),
+      ),
+      probeTimeoutMs,
+    );
+    try {
+      await blockScanStateReadBackend.probeEip1898(
+        {
+          number: discoveryToBlock,
+          hash: startupDexSourceBlockHash,
+          generation: 0,
+        },
+        controller.signal,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const startupDexBackend = createPinnedDexReadBackend(provider, discoveryToBlock);
   const refreshIntervalMs = Number(process.env.SEARCHER_REFRESH_INTERVAL_MS ?? "300000"); // 5 min
   // Protocol discovery runs on its own cadence, decoupled from the DEX refresh
   // timer. Both lanes still serialize through one mutation queue below.
@@ -999,27 +1048,82 @@ async function main(): Promise<void> {
     // share token that may expose a protocol conversion route.
     minScore: 0,
   });
+  const poolUniverseCoverage = loadPoolUniverseCoverageMetadata(
+    config.poolUniversePath,
+    config.poolUniverseManifestPath,
+  );
+  const currentDexUniverseSourceFingerprints =
+    productionPoolUniverseSourceFingerprints();
+  let universeCanonicalAnchorMatches = false;
+  if (poolUniverseCoverage.source !== null) {
+    try {
+      const anchor = await provider.getBlock(poolUniverseCoverage.source.number);
+      universeCanonicalAnchorMatches = poolUniverseCanonicalAnchorMatches(
+        poolUniverseCoverage,
+        anchor,
+      );
+    } catch {
+      universeCanonicalAnchorMatches = false;
+    }
+  }
+  const universeRegistryMatches =
+    poolUniverseCoverage.manifestVerified &&
+    universeCanonicalAnchorMatches &&
+    poolUniverseCoverage.toBlock !== null &&
+    poolUniverseCoverage.toBlock <= discoveryToBlock &&
+    poolUniverseCoverage.registrySourceFingerprints !== null &&
+    poolUniverseCoverage.registrySourceFingerprints.length ===
+      currentDexUniverseSourceFingerprints.length &&
+    poolUniverseCoverage.registrySourceFingerprints.every(
+      (fingerprint, index) =>
+        fingerprint === currentDexUniverseSourceFingerprints[index],
+    );
+  // The recent factory window cannot prove landed-event coverage for
+  // Curve/DODO/V4/Balancer. Only the actual landed scan may bridge the
+  // persisted universe cursor to this startup source.
+  const startupLandedDiscoveryFloor = Math.max(
+    0,
+    discoveryToBlock - discoveryBlocks,
+  );
+  const initialDexSourceCompleteThrough =
+    universeRegistryMatches &&
+      poolUniverseCoverage.toBlock !== null &&
+      poolUniverseCoverage.toBlock >= startupLandedDiscoveryFloor - 1
+      ? discoveryToBlock
+      : universeRegistryMatches
+        ? poolUniverseCoverage.toBlock ?? -1
+        : poolUniverseCoverage.fromBlock === null
+          ? -1
+          : Math.max(-1, poolUniverseCoverage.fromBlock - 1);
+  if (!universeRegistryMatches) {
+    console.warn(
+      "[searcher/live] pool universe provenance/registry/canonical anchor " +
+        "changed or is unverifiable; source completeness will be rebuilt " +
+        `from its fromBlock manifest=${config.poolUniverseManifestPath}`,
+    );
+  }
+  let protocolGraphCompleteThrough = -1;
   const rawBlockScanOverrides = loadBlockScanViewOverrides();
   const [pinnedIdentity, universeIdentity, blockscanIdentity, overrideIdentity] = await Promise.all([
-    attestPoolIdentities(provider, rawPinnedWarmPools, {
+    attestPoolIdentities(startupDexBackend, rawPinnedWarmPools, {
       identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
-    attestPoolIdentities(provider, rawUniversePools, {
+    attestPoolIdentities(startupDexBackend, rawUniversePools, {
       identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
-    attestPoolIdentities(provider, rawBlockscanUniverse, {
+    attestPoolIdentities(startupDexBackend, rawBlockscanUniverse, {
       identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
       admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
     }),
-    attestPoolIdentities(provider, rawBlockScanOverrides, {
+    attestPoolIdentities(startupDexBackend, rawBlockScanOverrides, {
       identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
       cache: identityCache,
       seedEntries: liveRegistry,
@@ -1034,13 +1138,46 @@ async function main(): Promise<void> {
   logIdentityRejections("universe", universeIdentity.rejected);
   logIdentityRejections("blockscan-universe", blockscanIdentity.rejected);
   logIdentityRejections("blockscan-overrides", overrideIdentity.rejected);
+  const startupRetryableIdentityPools = [
+    ...retryableIdentityCandidates(rawPinnedWarmPools, pinnedIdentity.rejected),
+    ...retryableIdentityCandidates(rawUniversePools, universeIdentity.rejected),
+    ...retryableIdentityCandidates(
+      rawBlockscanUniverse,
+      blockscanIdentity.rejected,
+    ),
+    ...retryableIdentityCandidates(
+      rawBlockScanOverrides,
+      overrideIdentity.rejected,
+    ),
+  ];
+  const retryableDexIdentityPools = new Map(
+    mergePoolRegistries([], startupRetryableIdentityPools).map((pool) => [
+      poolRegistryKey(pool),
+      pool,
+    ] as const),
+  );
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
-  const factoryPools = await indexFactoryPools(provider, factoryBlocks, discoveryToBlock);
+  const factoryPools = await indexFactoryPools(
+    provider,
+    factoryBlocks,
+    discoveryToBlock,
+    { strict: true },
+  );
   // Phase 2: Swap event discovery — find most active pools (may include Curve etc.)
-  const swapPools = await scanActivePools(provider, discoveryBlocks, discoveryTopN, discoveryToBlock, {
+  const startupActivePoolDiscovery = await scanActivePoolsDetailed(
+    provider,
+    discoveryBlocks,
+    Number.POSITIVE_INFINITY,
+    discoveryToBlock,
+    {
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-  });
+    identityBackend: startupDexBackend,
+    identityBlockTag: discoveryToBlock,
+    strict: true,
+    },
+  );
+  const swapPools = [...startupActivePoolDiscovery.pools];
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
   // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
@@ -1092,10 +1229,21 @@ async function main(): Promise<void> {
   let strategyViews = rebuildStrategyViews(allPools);
   let protocolDiscoveryOwnership: ProtocolDiscoveryOwnership =
     EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP;
-  let lastProtocolDiscoveryBlock = Math.max(
-    -1,
-    discoveryToBlock - protocolDiscoveryBlocks,
+  const enabledProtocolDiscoveryFamilies = PRODUCTION_ADAPTER_FAMILIES
+    .discoverableRoutes()
+    .filter((adapter) =>
+      !adapter.requiresProtocolEdgesFlag || config.enableProtocolEdges
+    );
+  // Family × candidate-source completeness is owned by the discovery
+  // coordinator. One current address-domain scan cannot make an observed-only
+  // sibling family complete.
+  const protocolDiscoveryCoverage =
+    new ProtocolDiscoveryCoverageCoordinator(enabledProtocolDiscoveryFamilies);
+  const adapterFamilyGraphViews = new AdapterFamilyGraphViewCoordinator(
+    PRODUCTION_ADAPTER_FAMILIES,
+    protocolDiscoveryCoverage,
   );
+  let lastProtocolDiscoveryBlock = -1;
   console.log(
     `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
       `blockscan=${strategyViews.blockscan.length} ` +
@@ -1103,8 +1251,13 @@ async function main(): Promise<void> {
       `blockscan_view_hash=${strategyViews.versions.blockscan_view_hash} ` +
       `discovery_to_block=${discoveryToBlock}`,
   );
-  dumpRuntimeGraphPools(strategyViews.backrun);
-  dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
+  if (!blindProductionAudit) {
+    dumpRuntimeGraphPools(strategyViews.backrun);
+    dumpRuntimeGraphPools(
+      strategyViews.blockscan,
+      DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
+    );
+  }
 
   // Build routing graph from all pools. File-backed universe entries can carry
   // token0/token1 metadata, so V2/V3 graph construction avoids per-pool token
@@ -1112,19 +1265,28 @@ async function main(): Promise<void> {
   // Factory pools are queried for token0/token1 in parallel batches.
   // This is ~1500 eth_call pairs at startup but gives full routing coverage.
   const backrunGraphBuild = await buildTokenGraphWithResults(
-    mainnetBackend,
+    startupDexBackend,
     strategyViews.backrun,
   );
   const graph = backrunGraphBuild.edges;
   logRuntimeRefreshFailures(backrunGraphBuild.failed, "graph build skipped");
+  const retryableDexGraphPools = new Map(
+    backrunGraphBuild.failed.map((failure) => [
+      poolRegistryKey(failure.pool),
+      failure.pool,
+    ] as const),
+  );
   let blockScanGraph: TokenEdge[] | undefined;
   if (enableBlockScan) {
     const blockscanGraphBuild = await buildTokenGraphWithResults(
-      mainnetBackend,
+      startupDexBackend,
       strategyViews.blockscan,
     );
     blockScanGraph = blockscanGraphBuild.edges;
     logRuntimeRefreshFailures(blockscanGraphBuild.failed, "blockscan graph build skipped");
+    for (const failure of blockscanGraphBuild.failed) {
+      retryableDexGraphPools.set(poolRegistryKey(failure.pool), failure.pool);
+    }
     blockScanPlanner?.setGraph(blockScanGraph);
     const blockscanGraphHash = hashTokenGraph(blockScanGraph);
     console.log(
@@ -1133,78 +1295,159 @@ async function main(): Promise<void> {
       `blockscan_graph_hash=${blockscanGraphHash}`,
     );
   }
-  const dexPoolAdapters = new Set(
-    PRODUCTION_ROUTE_ADAPTERS.swaps.flatMap((adapter) => [...adapter.poolAdapters]),
+  const startupDexCanonicalHash = await readBlockHash(provider, discoveryToBlock);
+  assertDexSourceHashStable(
+    discoveryToBlock,
+    startupDexSourceBlockHash,
+    startupDexCanonicalHash,
   );
-  const fullDexUniverseTokens = protocolCandidateAddressesFromDexUniverse(
-    rawBlockscanUniverse,
-    dexPoolAdapters,
+  let dexGraphCoverage = createDexGraphCoverageState({
+    sourceCompleteThrough: initialDexSourceCompleteThrough,
+    // A source-complete scan and executable projection are separate proofs.
+    // Failed pool projections stay retryable without erasing the source cursor.
+    graphCompleteThrough:
+      retryableDexGraphPools.size === 0 &&
+        retryableDexIdentityPools.size === 0
+      ? initialDexSourceCompleteThrough
+      : -1,
+  });
+  const protocolCandidateDomain = new ProtocolDiscoveryCandidateDomain({
+    registry: PRODUCTION_ADAPTER_FAMILIES,
+    dexUniverse: rawBlockscanUniverse,
+  });
+  const protocolDexDomainFor = (
+    backrunEdges: readonly TokenEdge[],
+    blockscanEdges: readonly TokenEdge[] | undefined,
+  ): string[] => protocolCandidateDomain.graphTokens(
+    backrunEdges,
+    blockscanEdges,
   );
-  const currentProtocolDexDomain = (): string[] => [...new Set([
-    ...fullDexUniverseTokens,
-    ...protocolCandidateAddressesFromDexGraph(graph, blockScanGraph),
-  ])];
+  const currentProtocolDexDomain = (): string[] =>
+    protocolDexDomainFor(graph, blockScanGraph);
+  const protocolAddressCandidatesFor = (
+    backrunEdges: readonly TokenEdge[],
+    blockscanEdges: readonly TokenEdge[] | undefined,
+  ): string[] => protocolCandidateDomain.addresses(
+    backrunEdges,
+    blockscanEdges,
+  );
+  const currentProtocolAddressCandidates = (): string[] =>
+    protocolAddressCandidatesFor(graph, blockScanGraph);
   const protocolGraphBefore = graph.filter((edge) => edge.slotKind === "protocol");
   const protocolEdgeKeysBefore = new Set(protocolGraphBefore.map(protocolEdgeKey));
   const protocolDiscoveryCachePath = process.env.SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH ??
     DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH;
   const protocolDiscoveryChainId = (await provider.getNetwork()).chainId;
-  const protocolDiscoveryCache = blindProductionAudit
-    ? createProtocolDiscoveryEvidenceCache(protocolDiscoveryChainId)
-    : loadProtocolDiscoveryEvidenceCache(
-        protocolDiscoveryCachePath,
-        protocolDiscoveryChainId,
-      );
-  const observedSourceFingerprint = protocolObservedSourceFingerprint(
-    PRODUCTION_ROUTE_ADAPTERS.protocols,
+  const protocolDiscoveryCache = loadProtocolDiscoveryEvidenceCache(
+    protocolDiscoveryCachePath,
+    protocolDiscoveryChainId,
   );
+  // Salt the registry fingerprint with cursor semantics so a cursor persisted
+  // by the former recent-window-as-complete implementation is invalidated once
+  // instead of being trusted as contiguous history after upgrade.
+  const observedSourceFingerprint = `0x${createHash("sha256")
+    .update(PROTOCOL_CURSOR_SEMANTICS_VERSION)
+    .update(":")
+    .update(protocolObservedSourceFingerprint(
+      enabledProtocolDiscoveryFamilies,
+    ))
+    .digest("hex")}`;
   const discoverySourceFingerprints = protocolDiscoverySourceFingerprints(
-    PRODUCTION_ROUTE_ADAPTERS.protocols,
+    enabledProtocolDiscoveryFamilies,
   );
-  const observedSourceChanged = updateProtocolObservedSourceFingerprint(
+  let observedSourceChanged = updateProtocolObservedSourceFingerprint(
     protocolDiscoveryCache,
     observedSourceFingerprint,
     discoverySourceFingerprints,
   );
-  // Resume the observed event cursor instead of rescanning the default window.
-  // A matcher-registry rollout scans only the normal recent window at startup;
-  // the larger catch-up cap is reserved for resuming an unchanged cursor after
-  // an outage and must not turn every code rollout into a blocking 50k scan.
+  const observedDiscoveryFamilyIds = new Set(
+    enabledProtocolDiscoveryFamilies
+      .filter((adapter) =>
+        adapter.discovery?.candidateSources.includes("observed-interaction")
+      )
+      .map((adapter) => adapter.id),
+  );
+  const persistedObservedCursor = protocolDiscoveryCache.runtime.observedCursor;
+  const persistedObservedCursorHash =
+    protocolDiscoveryCache.runtime.observedCursorHash;
+  if (persistedObservedCursor !== null) {
+    const canonicalCursorHash = persistedObservedCursor <= discoveryToBlock
+      ? await readBlockHash(provider, persistedObservedCursor)
+      : null;
+    if (
+      canonicalCursorHash === null ||
+      !protocolObservedCursorAnchorMatches(
+        protocolDiscoveryCache,
+        persistedObservedCursor,
+        canonicalCursorHash,
+      )
+    ) {
+      console.warn(
+        `[searcher/live] protocol observed cursor anchor invalid; ` +
+          `cursor=${persistedObservedCursor} cached_hash=` +
+          `${persistedObservedCursorHash ?? "missing"} canonical_hash=` +
+          `${canonicalCursorHash ?? "unavailable"}; rebuilding canonical history`,
+      );
+      invalidateProtocolObservedHistory(
+        protocolDiscoveryCache,
+        observedDiscoveryFamilyIds,
+      );
+      observedSourceChanged = true;
+    }
+  }
+  const protocolDiscoveryStartup = planDiscoveryStartup({
+    targetBlock: discoveryToBlock,
+    persistedCursor: protocolDiscoveryCache.runtime.observedCursor,
+    sourceRegistryChanged: observedSourceChanged,
+    recentBlocks: protocolDiscoveryBlocks,
+    maxCatchupBlocks: protocolDiscoveryMaxCatchupBlocks,
+    bootstrapMode: blindProductionAudit ? "contiguous" : "recent-positive",
+  });
+  const initialProtocolObservedCoverageAuthoritative =
+    protocolDiscoveryStartup.mode === "contiguous";
+  lastProtocolDiscoveryBlock = initialProtocolObservedCoverageAuthoritative
+    ? protocolDiscoveryStartup.cursorBefore
+    : -1;
+  let lastProtocolDiscoveryBlockHash =
+    initialProtocolObservedCoverageAuthoritative &&
+      lastProtocolDiscoveryBlock >= 0
+      ? protocolDiscoveryCache.runtime.observedCursorHash
+      : null;
+  if (
+    initialProtocolObservedCoverageAuthoritative &&
+    lastProtocolDiscoveryBlock >= 0
+  ) {
+    protocolDiscoveryCoverage.seedObserved(lastProtocolDiscoveryBlock);
+  }
   if (observedSourceChanged) {
-    lastProtocolDiscoveryBlock = Math.max(
-      -1,
-      discoveryToBlock - protocolDiscoveryBlocks,
-    );
     console.warn(
       `[searcher/live] protocol observed-source registry changed; ` +
-        `startup_backfill=${lastProtocolDiscoveryBlock + 1}-${discoveryToBlock} ` +
+        `startup_positive_only=${protocolDiscoveryStartup.range.fromBlock}-` +
+        `${protocolDiscoveryStartup.range.toBlock} ` +
         `fingerprint=${observedSourceFingerprint}`,
     );
-  } else if (protocolDiscoveryCache.runtime.observedCursor !== null) {
-    const persistedCursor = Math.min(
-      protocolDiscoveryCache.runtime.observedCursor,
-      discoveryToBlock,
+  } else if (!initialProtocolObservedCoverageAuthoritative) {
+    console.warn(
+      `[searcher/live] protocol discovery has no authoritative cursor; ` +
+        `startup_positive_only=${protocolDiscoveryStartup.range.fromBlock}-` +
+        `${protocolDiscoveryStartup.range.toBlock}`,
     );
-    const catchupFloor = discoveryToBlock - protocolDiscoveryMaxCatchupBlocks;
-    const resumedCursor = Math.max(persistedCursor, catchupFloor);
-    if (resumedCursor > persistedCursor) {
-      console.warn(
-        `[searcher/live] protocol discovery cursor catch-up clamped: ` +
-          `dropped_blocks=${persistedCursor + 1}-${resumedCursor} ` +
-          `cap=${protocolDiscoveryMaxCatchupBlocks}`,
-      );
-    }
-    lastProtocolDiscoveryBlock = resumedCursor;
+  } else if (protocolDiscoveryStartup.range.toBlock < discoveryToBlock) {
+    console.warn(
+      `[searcher/live] protocol discovery cursor catch-up chunk: ` +
+        `range=${protocolDiscoveryStartup.range.fromBlock}-` +
+        `${protocolDiscoveryStartup.range.toBlock} ` +
+        `remaining_through=${discoveryToBlock} ` +
+        `cap=${protocolDiscoveryMaxCatchupBlocks}`,
+    );
   }
   // Reload persisted route ownership as retained CANDIDATES only: edges were
   // stripped at save time, so nothing routes until this pass re-attests and
-  // re-probes each instance. Addresses that collide with a static/declared pool
-  // stay compatibility-owned, exactly as the projection would enforce.
+  // re-probes each instance. Incumbent static edges participate later in
+  // semantic-route arbitration; address equality is never an admission gate.
   if (protocolDiscoveryCache.routeOwnership.admissions.length > 0) {
-    const staticPoolKeys = new Set(strategyViews.backrun.map(poolRegistryKey));
     const reloadedAdmissions = new Map(
       protocolDiscoveryCache.routeOwnership.admissions
-        .filter((item) => !staticPoolKeys.has(poolRegistryKey(item.instance.pool)))
         .map((item) => [
           protocolInstanceKey(item.adapterId, item.instance.pool),
           { adapterId: item.adapterId, instance: item.instance, edges: [], claims: [] },
@@ -1216,18 +1459,15 @@ async function main(): Promise<void> {
     };
   }
   const persistProtocolDiscoveryEvidence = (result: ProtocolDiscoveryResult): void => {
-    if (
-      blindProductionAudit ||
-      protocolDiscoveryShadow ||
-      !config.enableProtocolEdges
-    ) return;
+    if (protocolDiscoveryShadow) return;
     // evaluatedInstanceKeys excludes retryable identity/probe failures, so
     // per-key reconciliation is safe even when an unrelated source read failed.
     reconcileProtocolDiscoveryEvidenceCache(protocolDiscoveryCache, result);
-    protocolDiscoveryCache.runtime.observedCursor = lastProtocolDiscoveryBlock >= 0
-      ? lastProtocolDiscoveryBlock
-      : null;
     recordProtocolRouteOwnership(protocolDiscoveryCache, protocolDiscoveryOwnership);
+    // A blind process restores one frozen N-1 in-memory base for every
+    // attempt. Writing N (or even a refreshed N-1 cursor) to a shared cache
+    // would leak state into the other side or a later attempt.
+    if (blindProductionAudit) return;
     try {
       saveProtocolDiscoveryEvidenceCache(protocolDiscoveryCachePath, protocolDiscoveryCache);
     } catch (error) {
@@ -1237,34 +1477,11 @@ async function main(): Promise<void> {
       );
     }
   };
-  const initialProtocolAddressCandidates = currentProtocolDexDomain();
+  const initialProtocolGraphTokens = currentProtocolDexDomain();
+  const initialProtocolAddressCandidates = currentProtocolAddressCandidates();
   // One memo across the live observed lane and the range scanner: a landed tx
   // is debug_traced at most once no matter which entrance sees it first.
-  const protocolTraceMemo = createProtocolTraceMemo();
-  // A static/declared venue entering adjudication wins explicitly; report each
-  // suppressed verified claim instead of dropping it silently.
-  const emitStaticSuppressedEvents = (
-    projection: ProtocolDiscoveryProjection | null,
-    mode: "shadow" | "active" | "observed",
-    blockNumber: number,
-  ): void => {
-    if (!projection || projection.staticSuppressed.length === 0) return;
-    emitProtocolDiscoveryEvents(
-      projection.staticSuppressed.map((admission) => ({
-        event: "protocol_discovery" as const,
-        adapterId: admission.adapterId,
-        target: admission.instance.pool.address,
-        selectors: [...admission.instance.selectors],
-        sources: [...admission.instance.sources],
-        verdict: "rejected" as const,
-        stage: "arbitration" as const,
-        reason: "static_declared_venue_owns_address",
-        wouldAdmitEdges: 0,
-      })),
-      mode,
-      blockNumber,
-    );
-  };
+  let protocolTraceMemo = createProtocolTraceMemo();
   console.log(
     `[searcher/live] protocol discovery cache: address=${protocolDiscoveryCache.addressEntries.size} ` +
       `verified=${protocolDiscoveryCache.verifiedCandidates.size} ` +
@@ -1272,13 +1489,14 @@ async function main(): Promise<void> {
       `ownership=${protocolDiscoveryCache.routeOwnership.admissions.length} ` +
       `path=${protocolDiscoveryCachePath}`,
   );
-  const initialProtocolDiscoveryFromBlock = Math.min(
-    discoveryToBlock,
-    Math.max(0, lastProtocolDiscoveryBlock + 1),
+  const initialProtocolDiscoveryRange = protocolDiscoveryStartup.range;
+  const initialProtocolRangeHashBefore = await readBlockHash(
+    provider,
+    initialProtocolDiscoveryRange.toBlock,
   );
   const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
     provider,
-    adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+    adapters: PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
     identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
     protocolEdgesEnabled: config.enableProtocolEdges,
     chainId: protocolDiscoveryChainId,
@@ -1289,23 +1507,33 @@ async function main(): Promise<void> {
     currentBlockscanGraph: blockScanGraph,
     buildStrategyViews: rebuildStrategyViews,
     blockNumber: discoveryToBlock,
-    fromBlock: initialProtocolDiscoveryFromBlock,
-    graphTokens: initialProtocolAddressCandidates,
+    fromBlock: initialProtocolDiscoveryRange.fromBlock,
+    toBlock: initialProtocolDiscoveryRange.toBlock,
+    graphTokens: initialProtocolGraphTokens,
     candidateAddresses: initialProtocolAddressCandidates,
     evidenceCache: protocolDiscoveryCache,
     bootstrapCandidates: cachedProtocolCandidates(protocolDiscoveryCache),
     traceMemo: protocolTraceMemo,
     shadow: protocolDiscoveryShadow,
   });
+  const initialProtocolRangeHashAfter = await readBlockHash(
+    provider,
+    initialProtocolDiscoveryRange.toBlock,
+  );
+  assertDexSourceHashStable(
+    initialProtocolDiscoveryRange.toBlock,
+    initialProtocolRangeHashBefore,
+    initialProtocolRangeHashAfter,
+  );
   emitProtocolDiscoveryEvents(
     initialProtocolDiscovery.result.events,
     protocolDiscoveryShadow ? "shadow" : "active",
-    discoveryToBlock,
+    initialProtocolDiscoveryRange.toBlock,
   );
-  emitStaticSuppressedEvents(
+  emitStaticSuppressedProtocolEvents(
     initialProtocolDiscovery.projection,
     protocolDiscoveryShadow ? "shadow" : "active",
-    discoveryToBlock,
+    initialProtocolDiscoveryRange.toBlock,
   );
   if (initialProtocolDiscovery.projection) {
     const projection = initialProtocolDiscovery.projection;
@@ -1316,14 +1544,48 @@ async function main(): Promise<void> {
       replaceArray(blockScanGraph, projection.blockscanGraph);
       blockScanPlanner?.setGraph(blockScanGraph);
     }
-    dumpRuntimeGraphPools(strategyViews.backrun);
-    dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
+    if (!blindProductionAudit) {
+      dumpRuntimeGraphPools(strategyViews.backrun);
+      dumpRuntimeGraphPools(
+        strategyViews.blockscan,
+        DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
+      );
+    }
   }
-  if (
-    initialProtocolDiscovery.scanner.eventSourceComplete &&
-    initialProtocolDiscovery.result.evaluationComplete
-  ) {
-    lastProtocolDiscoveryBlock = discoveryToBlock;
+  if (!protocolDiscoveryShadow) {
+    const advanced = protocolDiscoveryCoverage.advance({
+      range: initialProtocolDiscoveryRange,
+      scanner: initialProtocolDiscovery.scanner,
+      result: initialProtocolDiscovery.result,
+      positiveOnlyObserved: !initialProtocolObservedCoverageAuthoritative,
+      evaluationBlock: discoveryToBlock,
+    });
+    protocolDiscoveryCoverage.replace(advanced.watermarks);
+    const priorProtocolDiscoveryBlock = lastProtocolDiscoveryBlock;
+    lastProtocolDiscoveryBlock =
+      protocolDiscoveryCoverage.nextObservedCursor({
+        currentCursor: lastProtocolDiscoveryBlock,
+        range: initialProtocolDiscoveryRange,
+        watermarks: advanced.watermarks,
+        positiveOnlyObserved: !initialProtocolObservedCoverageAuthoritative,
+      });
+    if (lastProtocolDiscoveryBlock !== priorProtocolDiscoveryBlock) {
+      if (lastProtocolDiscoveryBlock !== initialProtocolDiscoveryRange.toBlock) {
+        throw new Error(
+          "protocol discovery advanced to an unanchored partial range",
+        );
+      }
+      lastProtocolDiscoveryBlockHash = initialProtocolRangeHashAfter;
+    }
+    setProtocolObservedCursor(
+      protocolDiscoveryCache,
+      lastProtocolDiscoveryBlock >= 0 ? lastProtocolDiscoveryBlock : null,
+      lastProtocolDiscoveryBlock >= 0
+        ? lastProtocolDiscoveryBlockHash
+        : null,
+    );
+    protocolGraphCompleteThrough =
+      protocolDiscoveryCoverage.graphCompleteThrough(advanced.watermarks);
   }
   // Persist after ownership/cursor advanced so the snapshot survives a restart.
   persistProtocolDiscoveryEvidence(initialProtocolDiscovery.result);
@@ -1339,7 +1601,9 @@ async function main(): Promise<void> {
       `added=${addedProtocolEdges.length} ` +
       `address_probe=${initialProtocolDiscovery.scanner.addressStats.probes} ` +
       `address_cache_hit=${initialProtocolDiscovery.scanner.addressStats.cacheHits} ` +
-      `range=${initialProtocolDiscoveryFromBlock}-${discoveryToBlock}`,
+      `range=${initialProtocolDiscoveryRange.fromBlock}-` +
+      `${initialProtocolDiscoveryRange.toBlock} ` +
+      `coverage_mode=${protocolDiscoveryStartup.mode}`,
   );
   for (const edge of addedProtocolEdges) {
     console.log(
@@ -1347,56 +1611,6 @@ async function main(): Promise<void> {
         `${edge.tokenIn}->${edge.tokenOut}`,
     );
   }
-  const blindStaticArtifacts = blindProductionAudit
-    ? (() => {
-        const {
-          rpcUrl: _rpcUrl,
-          wsUrl: _wsUrl,
-          mevShareSseUrl: _mevShareSseUrl,
-          wallet: blindWallet,
-          pinnedWarmPoolPath: _pinnedWarmPoolPath,
-          poolUniversePath: _poolUniversePath,
-          forceIncludePoolIdsPath: _forceIncludePoolIdsPath,
-          liveFixtureDir: _liveFixtureDir,
-          poolUniverseForceInclude: blindForceInclude,
-          ...blindPublicConfig
-        } = config;
-        const effectiveConfig = normalizeBlindArtifactValue({
-          config: blindPublicConfig,
-          executorAddress: blindWallet.address.toLowerCase(),
-          forceInclude: {
-            count: blindForceInclude.length,
-            contentSha256:
-              blindProductionAuditHash([...blindForceInclude].sort()),
-          },
-          runtimeEnvironment:
-            blindResolvedRuntimeEnvironment(process.env),
-          blockScan: {
-            core: blockScanCfg,
-            largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
-            largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
-            midConcurrency: blockScanMidConcurrency,
-            passBudgetMs: blockScanPassBudgetMs,
-            refineCandidates: blockScanRefineCandidates,
-            solveConcurrency: blockScanSolveConcurrency,
-            solveReserveMs: blockScanSolveReserveMs,
-          },
-        }) as Readonly<Record<string, unknown>>;
-        return createBlindBaselineStaticArtifacts({
-          effectiveConfig,
-          productionPools: strategyViews.blockscan,
-          configuredUniverseContentSha256: blindProductionAuditHash(
-            rawBlockscanUniverse.map(poolRegistryKey).sort(),
-          ),
-          universeGeneratedAt: strategyViewOptions.poolUniverseGeneratedAt,
-          selectedUniverse: blockscanUniverse,
-          strategyViewVersion:
-            strategyViews.versions.blockscan_view_hash,
-          registry: PRODUCTION_ROUTE_ADAPTERS,
-          legacyRouteEdges: LEGACY_PRODUCTION_ROUTE_EDGES,
-        });
-      })()
-    : null;
   const tokenIndex = buildTokenIndex(graph);
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
@@ -1409,31 +1623,10 @@ async function main(): Promise<void> {
   detector.setTokenQuery(mainnetBackend);
   planner.setGraph(graph);
 
-  // Dynamic flash-borrowability: rotate each backrun's start/flash token to one a
-  // provider actually holds (read from chain, no hardcoded allowlist). One batched
-  // refresh over all graph tokens; refreshed on a slow cadence below.
+  // Funding tokens are resolved together with graph pricing by the universal
+  // current-N runtime. Until that atomic snapshot publishes, planners fail
+  // closed instead of consuming a timer-refreshed, differently-aged cache.
   const flashTokens = [...tokenIndex.keys()];
-  const flashLiquidity = new FlashLiquidityCache(provider);
-  planner.setFlashLiquidity(flashLiquidity);
-  try {
-    await flashLiquidity.refresh(flashTokens);
-    const borrowableCount = flashTokens.filter((t) => flashLiquidity.borrowable(t) > 0n).length;
-    console.log(
-      `[searcher/live] flashLiquidity: ${borrowableCount}/${flashTokens.length} graph tokens borrowable`,
-    );
-  } catch (err) {
-    console.log(
-      `[searcher/live] flashLiquidity refresh failed (borrowability candidates will skip until refresh): ` +
-        `${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  const flashLiquidityTimer = blindProductionAudit
-    ? null
-    : setInterval(() => {
-        void flashLiquidity.refresh(flashTokens).catch(() => {
-          /* keep last good snapshot */
-        });
-      }, 120_000);
   console.log(
     `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
       `detection pool set: ${allPoolMap.size} addresses`,
@@ -1465,284 +1658,89 @@ async function main(): Promise<void> {
         .map((item) => poolRegistryKey(item.instance.pool)),
     ],
   );
+  for (const retryKey of retryableDexGraphPools.keys()) {
+    knownPoolKeys.delete(retryKey);
+  }
+  for (const retryKey of retryableDexIdentityPools.keys()) {
+    knownPoolKeys.delete(retryKey);
+  }
   const knownPoolAddrs = new Set(
     strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
   );
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
-  const commitProtocolProjection = (projection: ProtocolDiscoveryProjection): boolean => {
-    if (projection.baseOwnershipVersion !== protocolDiscoveryOwnership.version) {
-      throw new Error(
-        `stale protocol discovery projection base=${projection.baseOwnershipVersion} ` +
-        `current=${protocolDiscoveryOwnership.version}`,
-      );
-    }
-    const routingChanged = protocolDiscoveryProjectionChangesRouting({
-      strategyViews,
-      backrunGraph: graph,
-      blockscanGraph: blockScanGraph,
-    }, projection);
-    // Evidence and the CAS version still advance after a no-op re-attestation.
-    protocolDiscoveryOwnership = projection.ownership;
-    if (!routingChanged) return false;
-    // No await between mutations: every graph consumer advances as one projection.
-    replaceArray(graph, projection.backrunGraph);
-    replaceMap(tokenIndex, projection.tokenIndex);
-    replaceMap(allPoolMap, projection.poolAddressMap);
-    replaceArray(flashTokens, projection.flashTokens);
-    replaceSet(knownPoolKeys, projection.knownPoolKeys);
-    replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
-    strategyViews = projection.strategyViews;
-    if (blockScanGraph && projection.blockscanGraph) {
-      replaceArray(blockScanGraph, projection.blockscanGraph);
-      blockScanPlanner?.setGraph(blockScanGraph);
-    }
-    detector.setGraph(graph);
-    detector.setPoolAddressMap(allPoolMap);
-    planner.setGraph(graph);
-    mempoolIntakeRefresh.notify();
-    dumpRuntimeGraphPools(strategyViews.backrun);
-    dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
-    void flashLiquidity.refresh(flashTokens).catch(() => {
-      // The token projection is committed; the slow refresh retries RPC reads.
-    });
-    return true;
-  };
-  let protocolDiscoveryQueue: Promise<void> = Promise.resolve();
-  const enqueueProtocolDiscovery = (
-    label: "active" | "observed" | "dex-refresh",
-    work: () => Promise<void>,
-  ): Promise<void> => {
-    const run = protocolDiscoveryQueue.then(work);
-    protocolDiscoveryQueue = run.catch((error) => {
-      console.log(
-        `[searcher/live] protocol discovery ${label} error: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
-    return run;
-  };
-  const refreshTimer = blindProductionAudit ? null : setInterval(async () => {
-    try {
-      await enqueueProtocolDiscovery("dex-refresh", async () => {
-      const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
-        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-      });
-      const candidates = selectRefreshCandidates(liveRegistry, fresh, knownPoolKeys);
-      if (candidates.length > 0) {
-        const projection = await prepareRuntimePoolRefresh({
-          backend: mainnetBackend,
-          freshPools: candidates,
-          knownPoolKeys,
-          currentBackrunPools: strategyViews.backrun,
-          currentBackrunGraph: graph,
-          currentBlockscanGraph: blockScanGraph,
-          buildStrategyViews: rebuildStrategyViews,
-        });
-        logRuntimeRefreshFailures(projection.failedPools);
-        if (projection.admittedPools.length > 0) {
-          // Commit every consumer projection without an await between mutations.
-          replaceArray(graph, projection.backrunGraph);
-          replaceMap(tokenIndex, projection.tokenIndex);
-          replaceMap(allPoolMap, projection.poolAddressMap);
-          replaceArray(flashTokens, projection.flashTokens);
-          replaceSet(knownPoolKeys, projection.knownPoolKeys);
-          replaceSet(knownPoolAddrs, projection.knownPoolAddresses);
-          strategyViews = projection.strategyViews;
-          if (blockScanGraph && projection.blockscanGraph) {
-            replaceArray(blockScanGraph, projection.blockscanGraph);
-            blockScanPlanner?.setGraph(blockScanGraph);
-          }
-          detector.setGraph(graph);
-          detector.setPoolAddressMap(allPoolMap);
-          planner.setGraph(graph);
-          mempoolIntakeRefresh.notify();
-          dumpRuntimeGraphPools(strategyViews.backrun);
-          dumpRuntimeGraphPools(strategyViews.blockscan, DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH);
-          void flashLiquidity.refresh(flashTokens).catch(() => {
-            // The token projection is committed; the slow timer retries RPC reads.
-          });
-          console.log(
-            `[searcher/live] refresh: +${projection.admittedPools.length}/` +
-              `${projection.attemptedPools.length} pools, graph=${graph.length} edges ` +
-              `tokens=${tokenIndex.size} poolMap=${allPoolMap.size} flashTokens=${flashTokens.length} ` +
-              `blockscan=${blockScanGraph?.length ?? 0} ` +
-              `view_version=${strategyViews.versions.strategy_view_version}`,
-          );
-        }
-      }
-      });
-    } catch (err) {
-      console.log(
-        `[searcher/live] refresh error: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }, refreshIntervalMs);
-  const runActiveProtocolDiscoveryPass = async (): Promise<void> => {
-    const latestProtocolBlock = await provider.getBlockNumber();
-    if (latestProtocolBlock <= lastProtocolDiscoveryBlock) return;
-    const protocolDexDomain = currentProtocolDexDomain();
-    const pass = await prepareActiveProtocolDiscoveryPass({
-      provider,
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
-      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-      protocolEdgesEnabled: config.enableProtocolEdges,
-      chainId: protocolDiscoveryChainId,
-      probeExecutor: config.botvmAddress,
-      currentOwnership: protocolDiscoveryOwnership,
-      currentBackrunPools: strategyViews.backrun,
-      currentBackrunGraph: graph,
-      currentBlockscanGraph: blockScanGraph,
-      currentKnownPoolKeys: knownPoolKeys,
-      buildStrategyViews: rebuildStrategyViews,
-      blockNumber: latestProtocolBlock,
-      fromBlock: Math.max(
-        lastProtocolDiscoveryBlock + 1,
-        latestProtocolBlock - protocolDiscoveryMaxCatchupBlocks + 1,
-      ),
-      graphTokens: protocolDexDomain,
-      candidateAddresses: protocolDexDomain,
-      evidenceCache: protocolDiscoveryCache,
-      traceMemo: protocolTraceMemo,
-      shadow: protocolDiscoveryShadow,
-    });
-    emitProtocolDiscoveryEvents(
-      pass.result.events,
-      protocolDiscoveryShadow ? "shadow" : "active",
-      latestProtocolBlock,
-    );
-    emitStaticSuppressedEvents(
-      pass.projection,
-      protocolDiscoveryShadow ? "shadow" : "active",
-      latestProtocolBlock,
-    );
-    console.log(
-      `[searcher/live] protocol address scan: addresses=${pass.scanner.addressStats.addresses} ` +
-        `code_reads=${pass.scanner.addressStats.codeReads} ` +
-        `cache_hits=${pass.scanner.addressStats.cacheHits} probes=${pass.scanner.addressStats.probes} ` +
-        `matches=${pass.scanner.addressStats.matches} negatives=${pass.scanner.addressStats.negatives} ` +
-        `ambiguous=${pass.scanner.addressStats.ambiguous}`,
-    );
-    if (pass.projection) commitProtocolProjection(pass.projection);
-    if (pass.scanner.eventSourceComplete && pass.result.evaluationComplete) {
-      lastProtocolDiscoveryBlock = latestProtocolBlock;
-    }
-    persistProtocolDiscoveryEvidence(pass.result);
-  };
-  const protocolDiscoveryTimer = blindProductionAudit
-    ? null
-    : setInterval(() => {
-        void enqueueProtocolDiscovery("active", runActiveProtocolDiscoveryPass);
-      }, protocolDiscoveryIntervalMs);
-
-  // Observed-tx dedup state lives in the evidence cache so a restart resumes
-  // from persisted state instead of re-tracing the recent window.
-  const observedProtocolTxs = protocolDiscoveryCache.runtime.recentProcessedTxs;
-  const unknownProtocolSelectorLastBlock = new Map<string, number>();
-  const processObservedProtocolReceipt = async (input: {
-    txHash: string;
-    blockNumber: number;
-    receipt: ProtocolDiscoveryReceipt;
-  }): Promise<void> => {
-    if (
-      !config.enableProtocolEdges ||
-      protocolDiscoveryShadow ||
-      !shouldTraceForProtocolDiscovery(input.receipt.logs, PRODUCTION_ROUTE_ADAPTERS.protocols)
-    ) return;
-    const txKey = input.txHash.toLowerCase();
-    pruneRecentProcessedProtocolTxs(protocolDiscoveryCache, input.blockNumber, 100);
-    if (observedProtocolTxs.has(txKey)) return;
-    let trace: unknown;
-    try {
-      trace = await protocolTraceMemo.trace(txKey, input.blockNumber, () =>
-        provider.send("debug_traceTransaction", [
-          input.txHash,
-          { tracer: "callTracer" },
-        ]));
-    } catch (error) {
-      console.log(
-        `[searcher/live] protocol discovery trace unavailable tx=${input.txHash.slice(0, 10)} ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-      return;
-    }
-    const protocolDexDomain = currentProtocolDexDomain();
-    const pass = await prepareObservedProtocolDiscoveryPass({
-      provider,
-      adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
-      identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-      protocolEdgesEnabled: config.enableProtocolEdges,
-      chainId: protocolDiscoveryChainId,
-      probeExecutor: config.botvmAddress,
-      currentOwnership: protocolDiscoveryOwnership,
-      currentBackrunPools: strategyViews.backrun,
-      currentBackrunGraph: graph,
-      currentBlockscanGraph: blockScanGraph,
-      currentKnownPoolKeys: knownPoolKeys,
-      buildStrategyViews: rebuildStrategyViews,
-      blockNumber: input.blockNumber,
-      txHash: input.txHash,
-      receipt: input.receipt,
-      trace,
-      graphTokens: protocolDexDomain,
-    });
-    emitProtocolDiscoveryEvents(pass.result.events, "observed", input.blockNumber);
-    emitStaticSuppressedEvents(pass.projection, "observed", input.blockNumber);
-    for (const diagnostic of pass.unknownSelectors) {
-      const key = `${diagnostic.target.toLowerCase()}|${diagnostic.selector}`;
-      const last = unknownProtocolSelectorLastBlock.get(key) ?? -Infinity;
-      if (input.blockNumber - last < 100) continue;
-      unknownProtocolSelectorLastBlock.set(key, input.blockNumber);
-      emitEvent({
-        type: "protocol_discovery_unknown_selector",
-        target: diagnostic.target,
-        selector: diagnostic.selector,
-        reason: diagnostic.reason,
-        recommendation: diagnostic.recommendation,
-        ...(diagnostic.matchingAdapterIds === undefined
-          ? {}
-          : { matching_adapter_ids: [...diagnostic.matchingAdapterIds] }),
-        tx_hash: input.txHash,
-        block_number: input.blockNumber,
-      });
-    }
-    if (pass.result.evaluatedInstanceKeys.size > 0) commitProtocolProjection(pass.projection);
-    // Mark complete only after trace + identity/probe processing. A transient
-    // downstream failure stays retryable if the same landed tx is observed again.
-    if (pass.result.evaluationComplete) observedProtocolTxs.set(txKey, input.blockNumber);
-    persistProtocolDiscoveryEvidence(pass.result);
-  };
-  const observeProtocolReceipt = (input: {
-    txHash: string;
-    blockNumber: number;
-    receipt: ProtocolDiscoveryReceipt;
-  }): Promise<void> => enqueueProtocolDiscovery(
-    "observed",
-    () => processObservedProtocolReceipt(input),
-  );
-  const observeProtocolTxHash = (txHash: string): Promise<void> => enqueueProtocolDiscovery(
-    "observed",
-    async () => {
-      const receipt = await provider.getTransactionReceipt(txHash);
-      if (!receipt || receipt.status !== 1 || receipt.blockNumber === null) return;
-      await processObservedProtocolReceipt({
-        txHash,
-        blockNumber: receipt.blockNumber,
-        receipt: {
-          status: receipt.status,
-          logs: receipt.logs.map((log) => ({
-            address: log.address,
-            topics: [...log.topics],
-            data: log.data,
-            transactionHash: log.transactionHash,
-            blockNumber: log.blockNumber,
-          })),
-        },
-      });
+  const liveDiscovery = await createLiveDiscoveryCoordinator({
+    provider,
+    mainnetBackend,
+    liveRegistry,
+    config: {
+      poolUniverseTopN: config.poolUniverseTopN,
+      enableProtocolEdges: config.enableProtocolEdges,
+      botvmAddress: config.botvmAddress,
     },
-  );
+    discoveryToBlock,
+    discoveryTopN,
+    refreshIntervalMs,
+    protocolDiscoveryIntervalMs,
+    protocolDiscoveryMaxCatchupBlocks,
+    protocolDiscoveryShadow,
+    protocolDiscoveryChainId,
+    protocolDiscoveryCachePath,
+    protocolDiscoveryCache,
+    protocolDiscoveryCoverage,
+    startupActivePoolDiscovery,
+    startupDexSourceBlockHash,
+    initial: {
+      strategyViews,
+      protocolOwnership: protocolDiscoveryOwnership,
+      lastProtocolDiscoveryBlock,
+      lastProtocolDiscoveryBlockHash,
+      protocolGraphCompleteThrough,
+      dexGraphCoverage,
+      graph,
+      blockScanGraph,
+      tokenIndex,
+      poolAddressMap: allPoolMap,
+      flashTokens,
+      knownPoolKeys,
+      knownPoolAddresses: knownPoolAddrs,
+      retryableDexGraphPools,
+      retryableDexIdentityPools,
+    },
+    rebuildStrategyViews,
+    protocolDexDomainFor,
+    protocolAddressCandidatesFor,
+    blockScanPlanner,
+    detector,
+    planner,
+    blockScanRuntimeAbort,
+    blindProductionAudit,
+    mempoolIntakeRefresh,
+    getProtocolTraceMemo: () => protocolTraceMemo,
+    onPublicationApplied(next) {
+      strategyViews = next.strategyViews;
+      dexGraphCoverage = { ...next.dexGraphCoverage };
+    },
+    persistRuntimeGraphs(next) {
+      dumpRuntimeGraphPools(next.backrun);
+      dumpRuntimeGraphPools(
+        next.blockscan,
+        DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
+      );
+    },
+    logRuntimeRefreshFailures: (failures, label) =>
+      logRuntimeRefreshFailures([...failures], label),
+    onFatalReorg() {
+      shuttingDown = true;
+    },
+  });
+  liveDiscovery.start();
 
   let processedHints = 0;
   let busy = false;
+  const backrunStatePublisher = new BufferedBlockScanBackrunStatePublisher(
+    blockScanBackrunState,
+    () => busy,
+  );
   const seen = new Set<string>();
   const counters = createStageCounters();
   const victimSource = new VictimSourceTracker(config.victimSourceFilter);
@@ -1851,1122 +1849,90 @@ async function main(): Promise<void> {
     });
   }
 
-  // Block-level PoolStateUpdater: seed watched V2/V3 pools by Multicall so
-  // quote/search uses local math. This is deliberately separate from the revm
-  // trace warmer above; it does not touch the revm daemon.
-  // Isolation invariant: this lane is built only from the blockScan* stack below;
-  // no shared backrun objects are passed into scan, warm, plan, or solve.
-  let blockScanBusy = false;
-  // Immutable v3 pool metadata (token0/token1/fee/tickSpacing), read once per
-  // pool then reused across blocks — see seedBlockScanV3TickMetadata.
-  const blockScanV3Meta = new Map<string, V3PoolMeta>();
-  const blockScanDecimals = new Map<string, number>();
-  // A failed Curve batch is retried once on the next incremental pass. This
-  // preserves transient-failure coverage without letting a permanently bad
-  // pool monopolize every later block.
-  const blockScanCurveRetryPools = new Set<string>();
-  // A full warm may span several pass budgets. Keep it pinned to one block so
-  // completed batches can be reused safely instead of clearing and restarting
-  // from batch zero at every new head.
-  let blockScanFullWarmSession: {
-    blockNumber: number;
-    blockHash: string;
-    plan: Extract<BlockScanWarmPlan, { kind: "full" }>;
-  } | null = null;
-  let blockScanForceFullWarm = false;
   const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
     enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
-    after: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2")),
-    ttlBlocks: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_TTL_BLOCKS ?? "300")),
+    after: Math.max(
+      1,
+      Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2"),
+    ),
+    ttlBlocks: Math.max(
+      1,
+      Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_TTL_BLOCKS ?? "300"),
+    ),
     entries: new Map(),
   };
-  let blindPrepareControl: BlindProductionPrepareControl | null = null;
-  let blindPreparedArtifacts: BlindBaselinePreparedArtifacts | null = null;
-  let blindSourceControl: BlindProductionSourceHeadControl | null = null;
-  let blindPassMode: "prepare" | "source" | null = null;
-  let blindPassStartedAt = 0;
-  let blindPassStateReady = false;
-  let blindPassError: Error | null = null;
-  let blindPassStages: readonly BlindProductionStageEvidence[] = [];
-  let blindPassPricingCoverage: BlindBaselinePricingCoverage | null = null;
-  let blindPassOpportunities: MutableBlindOpportunityEvidence[] = [];
-  let blindLastStableSemanticEvidence:
-    BlindProductionStageSealInput | null = null;
-  let blindLastStableIncompleteFamilyIds: readonly string[] =
-    Object.freeze(["legacy-production"]);
-  let blindPassSelectionProvenance: BlindBaselineSelectionProvenance =
-    createBlindBaselineUnrunSelectionProvenance(
-      blockScanRefineCandidates,
-    );
-  let blindOpportunityByCandidate =
-    new Map<BlockScanOpportunity, MutableBlindOpportunityEvidence>();
-  let blindPassFreshReadCount = 0;
-  let blindPassBatchCount = 0;
-  let blindDynamicCacheGeneration = 0;
-  let blindDynamicCacheReset = false;
-  let blindPassWaiter: {
-    resolve: (completion: BlindBaselinePassCompletion) => void;
-  } | null = null;
-  const markBlindStage = (
-    name: BlindBaselineStageName,
-    status: "pass" | "fail",
-    semanticEvidence: BlindProductionStageSealInput,
-  ): void => {
-    if (!blindProductionAudit || blindPassMode !== "source") return;
-    const stableSemanticEvidence =
-      blindProductionDeepSeal(semanticEvidence);
-    blindPassStages = appendBlindBaselineStageEvidence({
-      stages: blindPassStages,
-      name,
-      status,
-      cumulativeMs: Math.max(0, Date.now() - blindPassStartedAt),
-      semanticEvidence: stableSemanticEvidence,
-    });
-    blindLastStableSemanticEvidence = stableSemanticEvidence;
-    blindLastStableIncompleteFamilyIds = Object.freeze([
-      ...(blindPassPricingCoverage?.incompleteFamilyIds ??
-        ["legacy-production"]),
-    ]);
-  };
-  const scheduleBlockScan = (blockNumber: number): void => {
-    if (!enableBlockScan) return;
-    const edges = blockScanGraph;
-    const cfg = blockScanCfg;
-    const blockScanStateForPass = blockScanState;
-    const blockScanCacheForPass = blockScanCache;
-    const blockScanUpdaterForPass = blockScanUpdater;
-    const blockScanWarmCoordinatorForPass = blockScanWarmCoordinator;
-    const blockScanPlannerForPass = blockScanPlanner;
-    const blockScanSolverForPass = blockScanSolver;
-    const blockScanSimulatorForPass = blockScanSimulator;
-    if (
-      !edges ||
-      !cfg ||
-      !blockScanStateForPass ||
-      !blockScanCacheForPass ||
-      !blockScanUpdaterForPass ||
-      !blockScanWarmCoordinatorForPass ||
-      !blockScanPlannerForPass ||
-      !blockScanSolverForPass ||
-      !blockScanSimulatorForPass
-    ) {
-      const error = new Error("blind block-scan dependencies are unavailable");
-      if (blindPassWaiter) {
-        const waiter = blindPassWaiter;
-        blindPassWaiter = null;
-        waiter.resolve({ stateReady: false, error });
-      }
-      return;
-    }
-    const currentBlindSemanticEvidence = ():
-      BlindProductionStageSealInput =>
-      createBlindBaselineSemanticEvidence({
-        graph: edges,
-        pricingCoverage: blindPassPricingCoverage ?? {
-          expectedStateKeys: [],
-          resolvedStateKeys: [],
-          expectedPricedEdgeIds: [],
-          resolvedPricedEdgeIds: [],
-          incompleteFamilyIds: ["legacy-production"],
-        },
-        opportunities: blindPassOpportunities,
+  let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
+  let preparedBlindBase: BlindProductionPrepareControl | null = null;
+  let preparedBlindDynamicResetNonce: string | null = null;
+  const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
+    enabled: enableBlockScan,
+    blockScanConfig: blockScanCfg,
+    executionWorkers: blockScanExecutionWorkers,
+    runtimeAbort: blockScanRuntimeAbort,
+    sharedPlanner: planner,
+    backrunStatePublisher,
+    discovery: liveDiscovery.blockScanHooks,
+    blind: {
+      enabled: blindProductionAudit,
+      activeSource: () => activeBlindSourceHead,
+      preparedBase: () => preparedBlindBase,
+      preparedArtifacts: () => preparedBlindArtifacts,
+      dynamicResetNonce: () => preparedBlindDynamicResetNonce,
+    },
+    largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
+    largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
+    passBudgetMs: blockScanPassBudgetMs,
+    refineCandidates: blockScanRefineCandidates,
+    solveReserveMs: blockScanSolveReserveMs,
+    midConcurrency: blockScanMidConcurrency,
+    isShuttingDown: () => shuttingDown,
+    blockScanGraph: () => blockScanGraph,
+    blockScanPlanner: () => blockScanPlanner,
+    adapterRuntimeCoordinator: () => adapterRuntimeCoordinator,
+    flashTokens: () => flashTokens,
+    buildGraphView(input) {
+      return adapterFamilyGraphViews.build({
+        ...input,
+        dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
+        retryablePools: [
+          ...retryableDexGraphPools.values(),
+          ...retryableDexIdentityPools.values(),
+        ],
+        dexUniverseFingerprint: poolUniverseCoverage.contentSha256,
+        strategyViewHash: strategyViews.versions.blockscan_view_hash,
+        protocolSourceFingerprints: discoverySourceFingerprints,
+        protocolEdgesEnabled: config.enableProtocolEdges,
       });
-    const discardFullWarmProgress = (): void => {
-      blockScanFullWarmSession = null;
-      blockScanForceFullWarm = true;
-      blockScanCacheForPass.clearBlockScanWarmProgress();
-      blockScanUpdaterForPass.clearStaticMetadata();
-      blockScanV3Meta.clear();
-      blockScanDecimals.clear();
-      blockScanCurveRetryPools.clear();
-    };
-    setImmediate(() => {
-      void (async () => {
-        if (blockScanBusy) {
-          console.log(`[searcher/blockscan] block=${blockNumber} skipped=busy`);
-          if (blindPassWaiter) {
-            const waiter = blindPassWaiter;
-            blindPassWaiter = null;
-            waiter.resolve({
-              stateReady: false,
-              error: new Error("blind block-scan pass skipped busy"),
-            });
-          }
-          return;
-        }
-        blockScanBusy = true;
-        const passStarted =
-          blindProductionAudit && blindPassMode === "source"
-            ? blindPassStartedAt
-            : Date.now();
-        let segPrev = passStarted;
-        const seg: Record<string, number> = {};
-        let solvePlannerMs = 0;
-        let solveSolverMs = 0;
-        let solveQuoteMs = 0;
-        let solveSimMs = 0;
-        let solveSubmitMs = 0;
-        const segMark = (k: string): void => {
-          const now = Date.now();
-          seg[k] = now - segPrev;
-          segPrev = now;
-        };
-        const segStr = (): string =>
-          `${Object.entries(seg).map(([k, v]) => `${k}=${v}ms`).join(" ")} ` +
-          `total=${Date.now() - passStarted}ms ` +
-          `solve_planner=${solvePlannerMs}ms solve_solver=${solveSolverMs}ms ` +
-          `solve_quote=${solveQuoteMs}ms solve_sim=${solveSimMs}ms ` +
-          `solve_submit=${solveSubmitMs}ms`;
-        let segLogged = false;
-        const logSeg = (): void => {
-          if (segLogged) return;
-          segLogged = true;
-          console.log(`[searcher/blockscan] block=${blockNumber} stage ${segStr()}`);
-        };
-        let activePassBudgetMs = blockScanPassBudgetMs;
-        let passDeadlineAtMs = passStarted + activePassBudgetMs;
-        let passBudgetLogged = false;
-        const passBudgetExceeded = (stage: string): boolean => {
-          if (Date.now() < passDeadlineAtMs) return false;
-          if (!passBudgetLogged) {
-            passBudgetLogged = true;
-            console.log(
-              `[searcher/blockscan] block=${blockNumber} pass_budget_exceeded ` +
-                `stage=${stage} ms=${Date.now() - passStarted} budgetMs=${activePassBudgetMs}`,
-            );
-          }
-          return true;
-        };
-        try {
-          const allHops = blockScanQuoteRequests(edges);
-          if (blockScanFullWarmSession) {
-            if (blockNumber < blockScanFullWarmSession.blockNumber) {
-              console.log(
-                `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
-                  `target=${blockScanFullWarmSession.blockNumber} reason=height_rollback`,
-              );
-              discardFullWarmProgress();
-            } else {
-              let canonicalHash: string;
-              try {
-                canonicalHash = await readBlockHash(
-                  provider,
-                  blockScanFullWarmSession.blockNumber,
-                );
-              } catch (err) {
-                console.log(
-                  `[searcher/blockscan] block=${blockNumber} warm_session_hash error=` +
-                    `${err instanceof Error ? err.message : String(err)}`,
-                );
-                return;
-              }
-              if (!blockScanFullWarmSessionMatchesCanonical(
-                blockScanFullWarmSession.blockNumber,
-                blockScanFullWarmSession.blockHash,
-                blockNumber,
-                canonicalHash,
-              )) {
-                console.log(
-                  `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
-                    `target=${blockScanFullWarmSession.blockNumber} reason=reorg`,
-                );
-                discardFullWarmProgress();
-              }
-            }
-          }
-          const stateBlockNumber = blockScanFullWarmSession?.blockNumber ?? blockNumber;
-          const continuingFullWarm = blockScanFullWarmSession !== null;
-          let warmPlan: BlockScanWarmPlan;
-          try {
-            await blockScanStateForPass.forkAt(stateBlockNumber);
-            blockScanCacheForPass.beginBlockScanPass(stateBlockNumber);
-            warmPlan = blockScanFullWarmSession?.plan ??
-              (blockScanForceFullWarm
-                ? { kind: "full", reason: "reorg" }
-                : await blockScanWarmCoordinatorForPass.plan(
-                    stateBlockNumber,
-                    allHops,
-                    edges,
-                  ));
-            if (continuingFullWarm) {
-              const session = blockScanFullWarmSession!;
-              const forkedBlockHash = await readBlockHash(
-                blockScanStateForPass.provider,
-                stateBlockNumber,
-              );
-              if (!blockScanFullWarmSessionMatchesCanonical(
-                session.blockNumber,
-                session.blockHash,
-                blockNumber,
-                forkedBlockHash,
-              )) {
-                console.log(
-                  `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
-                    `target=${stateBlockNumber} reason=fork_hash_mismatch`,
-                );
-                discardFullWarmProgress();
-                return;
-              }
-            }
-          } catch (err) {
-            console.log(
-              `[searcher/blockscan] block=${blockNumber} fork error: ` +
-                `${err instanceof Error ? err.message : String(err)}`,
-            );
-            return;
-          }
+    },
+    readBlockHash,
+    formatRouteKey: formatBlockScanRouteKey,
+    formatRing: formatBlockScanRing,
+    isRouteBlacklisted: (routeKey, currentBlock) =>
+      activeBlockScanRejectBlacklistEntry(
+        blockScanRejectBlacklist,
+        routeKey,
+        currentBlock,
+      ) !== null,
+    submitAtomic(input) {
+      return maybeSubmitBlockScanAtomic({
+        ...input,
+        config,
+        provider,
+        bundleRouter,
+        submissionCoordinator,
+        rejectBlacklist: blockScanRejectBlacklist,
+        strategyVersions: {
+          strategy_view_version:
+            strategyViews.versions.strategy_view_version,
+          blockscan_view_hash:
+            strategyViews.versions.blockscan_view_hash,
+        },
+        profitTokenValuation,
+        collectBlindAudit: blindProductionAudit,
+      });
+    },
+  });
 
-          console.log(
-            `[searcher/blockscan] block=${blockNumber} ${formatBlockScanWarmPlan(warmPlan)} ` +
-              `stateBlock=${stateBlockNumber}`,
-          );
-          const incrementalPassBudgetMs = edges.length >= blockScanLargeGraphEdgeThreshold
-            ? Math.max(blockScanPassBudgetMs, blockScanLargeGraphPassBudgetMs)
-            : blockScanPassBudgetMs;
-          activePassBudgetMs = blockScanWarmPassBudgetMs(
-            warmPlan,
-            incrementalPassBudgetMs,
-            blockScanFullWarmBudgetMs,
-          );
-          passDeadlineAtMs = passStarted + activePassBudgetMs;
-          if (warmPlan.kind === "full") {
-            if (!continuingFullWarm) {
-              // Once a full transition is selected, keep forcing it until a
-              // hash-bound session is established; an RPC error must not let
-              // the next block fall back to incremental state.
-              blockScanForceFullWarm = true;
-              if (warmPlan.reason === "reorg") discardFullWarmProgress();
-              const canonicalHash = await readBlockHash(provider, stateBlockNumber);
-              const forkedBlockHash = await readBlockHash(
-                blockScanStateForPass.provider,
-                stateBlockNumber,
-              );
-              if (!blockScanFullWarmSessionMatchesCanonical(
-                stateBlockNumber,
-                forkedBlockHash,
-                blockNumber,
-                canonicalHash,
-              )) {
-                console.log(
-                  `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
-                    `target=${stateBlockNumber} reason=fork_hash_mismatch`,
-                );
-                discardFullWarmProgress();
-                logSeg();
-                return;
-              }
-              blockScanFullWarmSession = {
-                blockNumber: stateBlockNumber,
-                blockHash: forkedBlockHash,
-                plan: warmPlan,
-              };
-              blockScanForceFullWarm = false;
-              blockScanCacheForPass.clear();
-            }
-          } else {
-            blockScanCacheForPass.invalidateBlockScanV2V3(warmPlan.changed.pools);
-            blockScanCacheForPass.invalidateBlockScanV4(warmPlan.changed.v4PoolIds);
-            blockScanCacheForPass.invalidateBlockScanCurve(warmPlan.changed.curvePools);
-          }
-          segMark("warm_plan");
-          if (passBudgetExceeded("warm_plan")) {
-            logSeg();
-            return;
-          }
-
-          const warmHops = warmPlan.kind === "full" ? allHops : warmPlan.changed.hops;
-          const v2v3WarmComplete = await warmBlockScanV2V3(
-            blockScanUpdaterForPass,
-            blockScanCacheForPass,
-            stateBlockNumber,
-            warmHops,
-            () => passBudgetExceeded("warm_v2v3"),
-          );
-          segMark("warm_v2v3");
-          if (!v2v3WarmComplete) {
-            logSeg();
-            return;
-          }
-          if (warmPlan.kind === "incremental") {
-            blockScanCacheForPass.restampBlockScanV2V3(blockNumber, warmPlan.changed.pools);
-            blockScanCacheForPass.restampBlockScanV4(blockNumber, warmPlan.changed.v4PoolIds);
-            if (blockScanWarmVerify) {
-              await verifyBlockScanIncrementalWarm(
-                provider,
-                blockNumber,
-                allHops,
-                blockScanCacheForPass,
-                warmPlan.changed.pools,
-                warmPlan.changed.v4PoolIds,
-              );
-              segMark("warm_verify");
-              if (passBudgetExceeded("warm_verify")) {
-                logSeg();
-                return;
-              }
-            }
-          }
-          const v3TickMeta = await seedBlockScanV3TickMetadata(
-            provider,
-            blockScanCacheForPass,
-            stateBlockNumber,
-            edges,
-            passDeadlineAtMs,
-            blockScanV3Meta,
-          );
-          segMark("v3_tick_meta");
-          if (passBudgetExceeded("v3_tick_meta")) {
-            logSeg();
-            return;
-          }
-          const priorCurveRetries = warmPlan.kind === "full"
-            ? new Set<string>()
-            : new Set(blockScanCurveRetryPools);
-          const curvePoolsForPass = warmPlan.kind === "full"
-            ? undefined
-            : new Set([...warmPlan.changed.curvePools, ...priorCurveRetries]);
-          const curveWarm = await warmBlockScanCurves(
-            blockScanStateForPass,
-            blockScanCacheForPass,
-            stateBlockNumber,
-            edges,
-            passDeadlineAtMs,
-            curvePoolsForPass,
-          );
-          blockScanCurveRetryPools.clear();
-          for (const pool of blockScanCurveRetriesAfterPass(
-            priorCurveRetries,
-            curveWarm.failedPools,
-            curveWarm.attemptedPools,
-          )) {
-            blockScanCurveRetryPools.add(pool);
-          }
-          segMark("warm_curve");
-          if (curvePoolsForPass) {
-            blockScanCacheForPass.restampBlockScanCurve(blockNumber, curvePoolsForPass);
-          }
-          if (passBudgetExceeded("warm_curve")) {
-            logSeg();
-            return;
-          }
-          if (warmPlan.kind === "incremental" && blockScanWarmVerify) {
-            await verifyBlockScanIncrementalCurveWarm(
-              blockScanStateForPass,
-              provider,
-              blockNumber,
-              edges,
-              blockScanCacheForPass,
-              curvePoolsForPass!,
-            );
-            segMark("warm_verify_curve");
-            if (passBudgetExceeded("warm_verify_curve")) {
-              logSeg();
-              return;
-            }
-          }
-          // Advance the warm cursor only after every cache family cleared or
-          // invalidated by this plan is complete. Otherwise a deadline between
-          // V2/V3 and Curve warming can strand unchanged pools cold forever.
-          const warmedThroughBlock = warmPlan.kind === "incremental"
-            ? warmPlan.changed.toBlock
-            : stateBlockNumber;
-          if (warmPlan.kind === "full") {
-            const session = blockScanFullWarmSession;
-            const canonicalHash = await readBlockHash(provider, stateBlockNumber);
-            if (!session || !blockScanFullWarmSessionMatchesCanonical(
-              session.blockNumber,
-              session.blockHash,
-              blockNumber,
-              canonicalHash,
-            )) {
-              console.log(
-                `[searcher/blockscan] block=${blockNumber} warm_session_reset ` +
-                  `target=${stateBlockNumber} reason=reorg_before_commit`,
-              );
-              discardFullWarmProgress();
-              logSeg();
-              return;
-            }
-          }
-          blockScanWarmCoordinatorForPass.markV2V3WarmComplete(warmedThroughBlock, warmPlan);
-          if (warmPlan.kind === "full") blockScanFullWarmSession = null;
-          if (!blockScanWarmCaughtUp(warmedThroughBlock, blockNumber)) {
-            console.log(
-              `[searcher/blockscan] block=${blockNumber} warm_catch_up ` +
-                `through=${warmedThroughBlock} target=${blockNumber}`,
-            );
-            logSeg();
-            return;
-          }
-          const protocolMidResult = await buildBlockScanProtocolMids(
-            provider,
-            blockScanStateForPass,
-            blockNumber,
-            edges,
-            passDeadlineAtMs,
-            blockScanDecimals,
-            blockScanMidConcurrency,
-          );
-          const protocolMids = protocolMidResult.mids;
-          segMark("protocol_mids");
-          if (protocolMidResult.deadlineHit || passBudgetExceeded("protocol_mids")) {
-            logSeg();
-            return;
-          }
-          const exactCurveMids = await buildExactBlockScanCurveMids(
-            provider,
-            blockNumber,
-            blockScanCacheForPass,
-            edges,
-            passDeadlineAtMs,
-          );
-          for (const [key, mid] of exactCurveMids.mids) protocolMids.set(key, mid);
-          segMark("curve_mids");
-          if (passBudgetExceeded("curve_mids")) {
-            logSeg();
-            return;
-          }
-          const warmedV2V3 = countBlockScanWarmedV2V3(blockScanCacheForPass, blockNumber, edges);
-          const warmedV4 = countBlockScanWarmedV4(blockScanCacheForPass, blockNumber, edges);
-          console.log(
-            `[searcher/blockscan] block=${blockNumber} warmedV2V3=${warmedV2V3} ` +
-              `warmedV4=${warmedV4} ` +
-              `warmedCurve=${curveWarm.warmed} v3TickMeta=${v3TickMeta} ` +
-              `protocolMids=${protocolMids.size} ` +
-              `exactCurveMids=${exactCurveMids.quoted}/${exactCurveMids.attempted} ` +
-              `exactCurveMidFailed=${exactCurveMids.failed}`,
-          );
-
-          const [sourceBlockHash, canonicalSourceBlockHash] = await Promise.all([
-            readBlockHash(blockScanStateForPass.provider, blockNumber),
-            readBlockHash(provider, blockNumber),
-          ]);
-          if (sourceBlockHash !== canonicalSourceBlockHash) {
-            console.log(
-              `[searcher/blockscan] block=${blockNumber} source_hash_mismatch ` +
-                `fork=${sourceBlockHash} canonical=${canonicalSourceBlockHash}`,
-            );
-            discardFullWarmProgress();
-            logSeg();
-            return;
-          }
-
-          if (blindProductionAudit && blindPassMode !== null) {
-            const coverage = collectBlindBaselinePricingCoverage({
-              edges,
-              blockNumber,
-              cache: blockScanCacheForPass,
-              protocolMids,
-              registry: PRODUCTION_ROUTE_ADAPTERS,
-            });
-            blindPassPricingCoverage = coverage;
-            blindPassStateReady =
-              coverage.expectedStateKeys.length ===
-                coverage.resolvedStateKeys.length &&
-              coverage.expectedPricedEdgeIds.length ===
-                coverage.resolvedPricedEdgeIds.length &&
-              coverage.incompleteFamilyIds.length === 0;
-            const mutableFreshReads = warmPlan.kind === "full"
-              ? warmedV2V3 + warmedV4
-              : warmPlan.changed.pools.size +
-                warmPlan.changed.v4PoolIds.size;
-            const curveFreshReads = curveWarm.attemptedPools.size;
-            blindPassFreshReadCount =
-              mutableFreshReads +
-              curveFreshReads +
-              protocolMids.size +
-              exactCurveMids.attempted;
-            blindPassBatchCount =
-              Math.ceil(mutableFreshReads / 500) +
-              Math.ceil(curveFreshReads / 31) +
-              protocolMids.size +
-              Math.ceil(exactCurveMids.attempted / 256) +
-              Math.ceil(exactCurveMids.failed / 256);
-            markBlindStage(
-              "state_ready",
-              blindPassStateReady ? "pass" : "fail",
-              currentBlindSemanticEvidence(),
-            );
-            if (blindPassMode === "prepare" || !blindPassStateReady) {
-              logSeg();
-              return;
-            }
-          }
-
-          if (passBudgetExceeded("scan")) {
-            logSeg();
-            return;
-          }
-          const coarseScan = detectBlockScanOpportunities({
-            edges,
-            cache: blockScanCacheForPass,
-            sourceBlock: blockNumber,
-            swapTouched: null,
-            cfg: {
-              ...cfg,
-              maxCandidates: blockScanRefineCandidates,
-              protocolMids,
-              pinnedOutsideBudget: true,
-            },
-          });
-          segMark("scan");
-          if (blindProductionAudit && blindPassMode === "source") {
-            const opportunityEvidence = coarseScan.opportunities.map(
-              (opportunity, index) =>
-                createMutableBlindOpportunityEvidence(
-                  opportunity,
-                  index + 1,
-                  PRODUCTION_ROUTE_ADAPTERS,
-                  false,
-                ),
-            );
-            const opportunityByCandidate = new Map(
-              coarseScan.opportunities.map((opportunity, index) => [
-                opportunity,
-                opportunityEvidence[index]!,
-              ]),
-            );
-            blindPassOpportunities = opportunityEvidence;
-            blindOpportunityByCandidate = opportunityByCandidate;
-          }
-          markBlindStage(
-            "enumeration_done",
-            coarseScan.outcome === "ran" ? "pass" : "fail",
-            currentBlindSemanticEvidence(),
-          );
-          if (blindProductionAudit && blindPassMode === "source") {
-            blindPassSelectionProvenance =
-              coarseScan.selectionProvenance;
-          }
-          if (passBudgetExceeded("refine")) {
-            logSeg();
-            return;
-          }
-          const refinementReserveMs = Math.min(
-            Math.max(0, blockScanSolveReserveMs),
-            Math.max(1, Math.floor(activePassBudgetMs / 3)),
-          );
-          const refinementDeadlineAtMs = Math.max(
-            Date.now(),
-            passDeadlineAtMs - refinementReserveMs,
-          );
-          const refinement = await refineBlockScanCandidates(
-            blockScanStateForPass,
-            coarseScan.opportunities,
-            cfg.maxCandidates,
-            refinementDeadlineAtMs,
-            cfg.pricedTokens,
-            blindProductionAudit && blindPassMode === "source"
-              ? (diagnostic) => {
-                  const evidence =
-                    blindPassOpportunities[diagnostic.index];
-                  if (!evidence) return;
-                  evidence.refined = diagnostic.status === "positive";
-                  if (diagnostic.status !== "positive") {
-                    evidence.ev.reason =
-                      `exact_refine_${diagnostic.status}`;
-                  }
-                }
-              : undefined,
-          );
-          const scan = { ...coarseScan, opportunities: refinement.opportunities };
-          segMark("refine");
-          console.log(
-            `[searcher/blockscan] block=${blockNumber} exactRouteProbes=${refinement.attempted} ` +
-              `positive=${refinement.positive} negative=${refinement.negative} ` +
-              `failed=${refinement.failed} deadline=${refinement.deadlineHit ? 1 : 0}`,
-          );
-          if (refinement.deadlineHit || passBudgetExceeded("refine")) {
-            markBlindStage(
-              "exact_refine_done",
-              "fail",
-              currentBlindSemanticEvidence(),
-            );
-            if (refinement.deadlineHit) {
-              console.log(
-                `[searcher/blockscan] block=${blockNumber} skip solve ` +
-                  `reason=refinement_deadline inFlightProbePromises=0`,
-              );
-            }
-            logSeg();
-            return;
-          }
-          markBlindStage(
-            "exact_refine_done",
-            "pass",
-            currentBlindSemanticEvidence(),
-          );
-          let quotePositive = 0;
-          let bestNet: bigint | null = null;
-          const blacklistSkipLogged = new Set<string>();
-          const candidateOpps: BlockScanOpportunity[] = [];
-          for (const opp of scan.opportunities) {
-            if (blockScanRejectBlacklist.enabled) {
-              const routeKey = formatBlockScanRouteKey(opp);
-              const blacklistEntry = activeBlockScanRejectBlacklistEntry(
-                blockScanRejectBlacklist,
-                routeKey,
-                blockNumber,
-              );
-              if (blacklistEntry) {
-                if (!blacklistSkipLogged.has(routeKey)) {
-                  blacklistSkipLogged.add(routeKey);
-                  const ring = formatBlockScanRing(opp);
-                  console.log(
-                    `[searcher/blockscan] block=${blockNumber} blacklist skip ring=${ring} ` +
-                      `strikes=${blacklistEntry.strikes} ` +
-                      `ttlRemaining=${blacklistEntry.expiryBlock - blockNumber}`,
-                  );
-                }
-                continue;
-              }
-            }
-            candidateOpps.push(opp);
-            if (candidateOpps.length >= cfg.maxCandidates) break;
-          }
-          const plannedSolves: PlannedBlockScanSolve[] = [];
-          for (const opp of candidateOpps) {
-            if (passBudgetExceeded("solve")) break;
-            const ring = formatBlockScanRing(opp);
-            const protoRing = opp.seedEdges.some((edge) => edge.slotKind === "protocol");
-            const blindAudit = blindOpportunityByCandidate.get(opp);
-            try {
-              blockScanPlannerForPass.setGraph(opp.seedEdges);
-              let plans: CandidatePlan[];
-              const plannerStarted = Date.now();
-              try {
-                plans = await blockScanPlannerForPass.planBlockScanFromSeedEdges(
-                  opp,
-                  [FLASH_SWAP_REPAY],
-                );
-              } finally {
-                solvePlannerMs += Date.now() - plannerStarted;
-              }
-              if (plans.length === 0) {
-                if (blindAudit) blindAudit.ev.reason = "no_plans";
-                console.log(
-                  `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null error=no_plans ` +
-                  `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
-                );
-                continue;
-              }
-              if (blindAudit) blindAudit.planCount = plans.length;
-              if (passBudgetExceeded("solve")) break;
-              plannedSolves.push({
-                opp,
-                ring,
-                protoRing,
-                plan: plans[0],
-                planCount: plans.length,
-                blindAudit,
-              });
-            } catch (err) {
-              if (blindAudit) {
-                blindAudit.ev.reason =
-                  `planner_error:${blockScanErrorMessage(err)}`;
-              }
-              console.log(
-                `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null ` +
-                  `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
-                  `protoRing=${protoRing}`,
-              );
-            }
-          }
-
-          let nextPlannedSolve = 0;
-          let stopSolves = false;
-          let submitQueue: Promise<void> = Promise.resolve();
-          const solvePlanned = async (planned: PlannedBlockScanSolve): Promise<void> => {
-            const { opp, ring, protoRing, plan, planCount, blindAudit } = planned;
-            try {
-              let solved: ResolvedPlan;
-              const solverStarted = Date.now();
-              const solverTiming = { quoteMs: 0, simMs: 0 };
-              try {
-                solved = await blockScanSolverForPass.solve(
-                  plan,
-                  blockScanStateForPass,
-                  blockScanSimulatorForPass,
-                  {
-                    deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
-                    deferPhase2Sim: true,
-                    cache: blockScanCacheForPass,
-                    finalSimTopN: 3,
-                    gssMaxTries: 8,
-                    quoteProfitFloorBps: 0n,
-                    quoteSafetyBps: 10000n,
-                    timing: solverTiming,
-                  },
-                );
-              } finally {
-                solveSolverMs += Date.now() - solverStarted;
-                solveQuoteMs += solverTiming.quoteMs;
-                solveSimMs += solverTiming.simMs;
-              }
-              if (solved.netProfit > 0n) quotePositive++;
-              if (bestNet === null || solved.netProfit > bestNet) bestNet = solved.netProfit;
-              console.log(
-                `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=${solved.netProfit} ` +
-                  `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
-              );
-              if (solved.netProfit > 0n) {
-                // A rejected submit must not poison the chain for later +EV submits
-                // (old serial loop caught per-candidate; keep that isolation).
-                submitQueue = submitQueue.catch(() => {}).then(async () => {
-                  if (config.blockScanSubmit && passBudgetExceeded("submit")) {
-                    stopSolves = true;
-                    return;
-                  }
-                  const submitStarted = Date.now();
-                  try {
-                    const atomicAudit = await maybeSubmitBlockScanAtomic({
-                      config,
-                      provider,
-                      simulator: blockScanSimulatorForPass,
-                      bundleRouter,
-                      submissionCoordinator,
-                      opp,
-                      resolved: solved,
-                      sourceBlock: blockNumber,
-                      ring,
-                      protoRing,
-                      plans: planCount,
-                      passDeadlineAtMs,
-                      rejectBlacklist: blockScanRejectBlacklist,
-                      strategyVersions: {
-                        strategy_view_version: strategyViews.versions.strategy_view_version,
-                        blockscan_view_hash: strategyViews.versions.blockscan_view_hash,
-                      },
-                      profitTokenValuation,
-                      sourceBlockHash,
-                      blindAudit: blindProductionAudit,
-                    });
-                    if (blindAudit && atomicAudit) {
-                      blindAudit.simulation = { ...atomicAudit.simulation };
-                      blindAudit.ev = { ...atomicAudit.ev };
-                    }
-                  } finally {
-                    solveSubmitMs += Date.now() - submitStarted;
-                  }
-                });
-                await submitQueue;
-              } else if (blindAudit) {
-                blindAudit.ev.reason = "non_positive_solved_quote";
-              }
-            } catch (err) {
-              if (blindAudit) {
-                blindAudit.ev.reason =
-                  `solver_error:${blockScanErrorMessage(err)}`;
-              }
-              console.log(
-                `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null ` +
-                  `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
-                  `protoRing=${protoRing}`,
-              );
-            }
-          };
-          const solveWorker = async (): Promise<void> => {
-            for (;;) {
-              if (stopSolves) return;
-              if (nextPlannedSolve >= plannedSolves.length) return;
-              if (passBudgetExceeded("solve")) {
-                stopSolves = true;
-                return;
-              }
-              const planned = plannedSolves[nextPlannedSolve++];
-              await solvePlanned(planned);
-            }
-          };
-          const workerCount = Math.min(blockScanSolveConcurrency, plannedSolves.length);
-          await Promise.all(Array.from({ length: workerCount }, () => solveWorker()));
-          await submitQueue.catch(() => {});
-          segMark("solve");
-          markBlindStage(
-            "planner_solver_done",
-            stopSolves || Date.now() > passDeadlineAtMs ? "fail" : "pass",
-            currentBlindSemanticEvidence(),
-          );
-          if (blindProductionAudit && blindPassMode === "source") {
-            const simulated = blindPassOpportunities.filter(
-              (opportunity) => opportunity.simulation.executed,
-            ).length;
-            const evEvaluated = blindPassOpportunities.filter(
-              (opportunity) => opportunity.ev.executionStatus === "pass",
-            ).length;
-            markBlindStage(
-              "final_sim_done",
-              quotePositive > 0 && simulated === quotePositive
-                ? "pass"
-                : "fail",
-              currentBlindSemanticEvidence(),
-            );
-            markBlindStage(
-              "ev_decision",
-              quotePositive > 0 && evEvaluated === quotePositive
-                ? "pass"
-                : "fail",
-              currentBlindSemanticEvidence(),
-            );
-          }
-          console.log(
-            `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
-              `candidates=${scan.opportunities.length} quotePositive=${quotePositive} ` +
-              `bestNet=${bestNet === null ? "null" : bestNet.toString()} warmedV2V3=${warmedV2V3} ` +
-              `protocolMids=${protocolMids.size} ` +
-              `skippedVenues=${scan.debug?.skippedVenues ?? 0} ms=${Date.now() - passStarted}`,
-          );
-          logSeg();
-        } catch (err) {
-          blindPassError =
-            err instanceof Error ? err : new Error(String(err));
-          console.log(
-            `[searcher/blockscan] block=${blockNumber} scan error: ` +
-              `${err instanceof Error ? err.message : String(err)}`,
-          );
-        } finally {
-          blockScanBusy = false;
-          const completion: BlindBaselinePassCompletion = {
-            stateReady: blindPassStateReady,
-            error: blindPassError,
-          };
-          if (
-            blindProductionAudit &&
-            blindPassMode === "source" &&
-            blindPrepareControl &&
-            blindPreparedArtifacts &&
-            blindSourceControl
-          ) {
-            try {
-              const sourceDeltaArtifact = createBlindBaselineSourceDelta({
-                source: blindSourceControl.source,
-                edges,
-                base: blindPreparedArtifacts,
-                registry: PRODUCTION_ROUTE_ADAPTERS,
-              });
-              const semanticEvidence =
-                blindLastStableSemanticEvidence ??
-                blindProductionDeepSeal(
-                  currentBlindSemanticEvidence(),
-                );
-              blindPassStages = completeBlindBaselineStageEvidence({
-                stages: blindPassStages,
-                cumulativeMs: Math.max(
-                  0,
-                  Date.now() - blindPassStartedAt,
-                ),
-                semanticEvidence,
-              });
-              const record = createBlindBaselinePassRecord({
-                source: blindSourceControl,
-                base: blindPrepareControl,
-                preparedArtifacts: blindPreparedArtifacts,
-                sourceDeltaArtifact,
-                semanticEvidence,
-                stages: blindPassStages,
-                selectionProvenance: blindPassSelectionProvenance,
-                dynamicCacheGeneration: blindDynamicCacheGeneration,
-                dynamicCacheReset: blindDynamicCacheReset,
-                // The legacy main branch does not apply a per-head topology
-                // delta. Preserve that limitation instead of manufacturing
-                // a source-N graph for the strict comparator.
-                sourceDeltaApplied: false,
-                freshReadCount: blindPassFreshReadCount,
-                batchCount: blindPassBatchCount,
-                incompleteFamilyIds:
-                  blindLastStableIncompleteFamilyIds,
-              });
-              process.stdout.write(
-                `${BLIND_PRODUCTION_RAW_PREFIX}` +
-                  `${blindProductionCanonicalJson(record)}\n`,
-              );
-            } catch (error) {
-              completion.error =
-                error instanceof Error ? error : new Error(String(error));
-              console.error(
-                `[searcher/blind-audit] raw record failed: ` +
-                  `${completion.error.message}`,
-              );
-            }
-          }
-          const waiter = blindPassWaiter;
-          blindPassWaiter = null;
-          if (blindPassMode === "source") {
-            blindSourceControl = null;
-            blindPrepareControl = null;
-            blindPreparedArtifacts = null;
-            blindLastStableSemanticEvidence = null;
-          }
-          blindPassMode = null;
-          if (waiter) waiter.resolve(completion);
-        }
-      })();
-    });
-  };
-  const runBlindScheduledPass = (
-    blockNumber: number,
-    mode: "prepare" | "source",
-  ): Promise<BlindBaselinePassCompletion> => {
-    if (!blindProductionAudit) {
-      throw new Error("blind baseline pass requested with audit mode disabled");
-    }
-    if (blockScanBusy || blindPassWaiter || blindPassMode !== null) {
-      throw new Error("blind baseline pass overlaps another block-scan pass");
-    }
-    blindPassMode = mode;
-    blindPassStateReady = false;
-    blindPassError = null;
-    blindPassPricingCoverage = null;
-    blindPassFreshReadCount = 0;
-    blindPassBatchCount = 0;
-    return new Promise<BlindBaselinePassCompletion>((resolve) => {
-      blindPassWaiter = { resolve };
-      scheduleBlockScan(blockNumber);
-    });
-  };
-  if (blindProductionAudit) {
-    if (
-      !blindStaticArtifacts ||
-      !blockScanGraph ||
-      !blockScanCache ||
-      !blockScanUpdater
-    ) {
-      throw new Error("blind production audit block-scan bootstrap incomplete");
-    }
-    installBlindBaselineControlInput({
-      stream: process.stdin,
-      prepare: async (control) => {
-        if (
-          blindPrepareControl ||
-          blindPreparedArtifacts ||
-          blindSourceControl ||
-          blindPassWaiter ||
-          blindPassMode !== null ||
-          blockScanBusy
-        ) {
-          throw new Error("blind production prepare overlaps an active attempt");
-        }
-        await assertBlindProductionAnchor(provider, control.base);
-        blockScanFullWarmSession = null;
-        blockScanForceFullWarm = true;
-        blockScanCache!.clearBlockScanWarmProgress();
-        blockScanUpdater!.clearStaticMetadata();
-        blockScanV3Meta.clear();
-        blockScanDecimals.clear();
-        blockScanCurveRetryPools.clear();
-        blockScanRejectBlacklist.entries.clear();
-        blockScanWarmCoordinator = new BlockScanWarmCoordinator(
-          provider,
-          blockScanCache!,
-          blockScanUpdater!,
-          blockScanFullRewarmBlocks,
-        );
-        blindDynamicCacheGeneration++;
-        blindDynamicCacheReset = true;
-        blindPrepareControl = control;
-        const prepareBudgetRaw = Number(
-          process.env.SEARCHER_BLIND_PREPARE_BUDGET_MS ?? "900000",
-        );
-        const prepareBudgetMs = Number.isFinite(prepareBudgetRaw)
-          ? Math.max(1, Math.floor(prepareBudgetRaw))
-          : 900_000;
-        const deadlineAtMs = Date.now() + prepareBudgetMs;
-        try {
-          for (;;) {
-            const completion = await runBlindScheduledPass(
-              control.base.number,
-              "prepare",
-            );
-            if (completion.error) throw completion.error;
-            if (completion.stateReady) break;
-            if (Date.now() >= deadlineAtMs) {
-              throw new Error(
-                `blind production prepare did not reach state_ready ` +
-                  `within ${prepareBudgetMs}ms`,
-              );
-            }
-          }
-          const prepared = createBlindBaselinePreparedArtifacts({
-            base: control.base,
-            edges: blockScanGraph!,
-            resolvedConfig: blindStaticArtifacts.resolvedConfig,
-            universe: blindStaticArtifacts.universe,
-            activeFamilyManifest:
-              blindStaticArtifacts.activeFamilyManifest,
-            registry: PRODUCTION_ROUTE_ADAPTERS,
-          });
-          blindPreparedArtifacts = prepared;
-          process.stdout.write(
-            `${BLIND_PRODUCTION_READY_PREFIX}` +
-              `${blindProductionCanonicalJson({
-                type: "ready",
-                profile: control.profile,
-                attemptNonce: control.attemptNonce,
-                base: control.base,
-                artifacts: prepared.receipts,
-                artifactDocuments: prepared.documents,
-              })}\n`,
-          );
-        } catch (error) {
-          blindPrepareControl = null;
-          blindPreparedArtifacts = null;
-          blindPassMode = null;
-          throw error;
-        }
-      },
-      sourceHead: async (control) => {
-        const prepared = blindPreparedArtifacts;
-        const prepare = blindPrepareControl;
-        if (
-          !prepared ||
-          !prepare ||
-          prepare.attemptNonce !== control.attemptNonce
-        ) {
-          throw new Error("blind production source has no matching prepare");
-        }
-        if (
-          blindSourceControl ||
-          blindPassWaiter ||
-          blindPassMode !== null ||
-          blockScanBusy
-        ) {
-          throw new Error("blind production source overlaps an active pass");
-        }
-        // The clock begins as soon as the opaque source-head control crosses
-        // the production-process boundary, before any source-state assertion.
-        blindPassStartedAt = Date.now();
-        blindPassStages = [];
-        blindPassPricingCoverage = null;
-        blindPassOpportunities = [];
-        blindPassSelectionProvenance =
-          createBlindBaselineUnrunSelectionProvenance(
-            blockScanRefineCandidates,
-          );
-        blindOpportunityByCandidate = new Map();
-        blindLastStableSemanticEvidence = blindProductionDeepSeal(
-          createBlindBaselineSemanticEvidence({
-            graph: blockScanGraph!,
-            pricingCoverage: {
-              expectedStateKeys: [],
-              resolvedStateKeys: [],
-              expectedPricedEdgeIds: [],
-              resolvedPricedEdgeIds: [],
-              incompleteFamilyIds: ["legacy-production"],
-            },
-            opportunities: [],
-          }),
-        );
-        blindLastStableIncompleteFamilyIds =
-          Object.freeze(["legacy-production"]);
-        blindSourceControl = control;
-        await assertBlindProductionAnchor(provider, control.source);
-        const completion = await runBlindScheduledPass(
-          control.source.number,
-          "source",
-        );
-        if (completion.error) throw completion.error;
-      },
-    });
-  }
   let stateUpdating = false;
   let pendingStateUpdateBlock: number | null = null;
   const runStateUpdate = (blockNumber: number, reason: "block" | "pending"): void => {
@@ -2977,10 +1943,7 @@ async function main(): Promise<void> {
     const pinned = topPinnedWarmHops(pinnedWarmHops, config.statePinnedK);
     const recent = recentWarmPools.top(config.stateRecentK, blockNumber, pinnedWarmTargets);
     const hops = [...recent, ...pinned].slice(0, config.stateWatchMaxPools);
-    if (hops.length === 0) {
-      scheduleBlockScan(blockNumber);
-      return;
-    }
+    if (hops.length === 0) return;
     stateUpdating = true;
     pendingStateUpdateBlock = null;
     console.log(
@@ -2994,7 +1957,6 @@ async function main(): Promise<void> {
       )
       .finally(() => {
         stateUpdating = false;
-        scheduleBlockScan(blockNumber);
         if (pendingStateUpdateBlock !== null) {
           const next = pendingStateUpdateBlock;
           pendingStateUpdateBlock = null;
@@ -3002,31 +1964,298 @@ async function main(): Promise<void> {
         }
       });
   };
-  if (!blindProductionAudit && config.stateUpdaterEnabled) {
+
+  const {
+    rpcUrl: _blindRpcUrl,
+    wsUrl: _blindWsUrl,
+    mevShareSseUrl: _blindMevShareSseUrl,
+    wallet: blindWallet,
+    pinnedWarmPoolPath: _blindPinnedWarmPoolPath,
+    poolUniversePath: _blindPoolUniversePath,
+    poolUniverseManifestPath: _blindPoolUniverseManifestPath,
+    forceIncludePoolIdsPath: _blindForceIncludePoolIdsPath,
+    liveFixtureDir: _blindLiveFixtureDir,
+    poolUniverseForceInclude: blindForceIncludePoolIds,
+    ...blindPublicConfig
+  } = config;
+  const blindEffectiveConfig = normalizeBlindArtifactValue({
+    config: blindPublicConfig,
+    executorAddress: blindWallet.address.toLowerCase(),
+    forceInclude: {
+      count: blindForceIncludePoolIds.length,
+      contentSha256: blindProductionAuditHash(
+        [...blindForceIncludePoolIds].sort(),
+      ),
+    },
+    runtimeEnvironment: blindProductionAudit
+      ? blindResolvedRuntimeEnvironment(process.env)
+      : { values: {}, redactedBindings: [] },
+    blockScan: {
+      core: blockScanCfg,
+      largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
+      largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
+      midConcurrency: blockScanMidConcurrency,
+      passBudgetMs: blockScanPassBudgetMs,
+      refineCandidates: blockScanRefineCandidates,
+      solveConcurrency: blockScanSolveConcurrency,
+      solveReserveMs: blockScanSolveReserveMs,
+    },
+  }) as Readonly<Record<string, unknown>>;
+  const blindStaticArtifacts = blindProductionAudit
+    ? createBlindProductionStaticArtifacts({
+        effectiveConfig: blindEffectiveConfig,
+        productionPools: strategyViews.blockscan,
+        configuredUniverseContentSha256: blindProductionAuditHash(
+          rawBlockscanUniverse.map(poolRegistryKey).sort(),
+        ),
+        universeGeneratedAt: strategyViewOptions.poolUniverseGeneratedAt,
+        selectedUniverse: blockscanUniverse,
+        strategyViewVersion: strategyViews.versions.blockscan_view_hash,
+        families: PRODUCTION_ADAPTER_FAMILIES.list(),
+      })
+    : null;
+
+  let blindSessionBase:
+    | {
+        readonly anchor: BlindProductionPrepareControl["base"];
+        readonly runtimeState: LiveDiscoveryPublicationState;
+      }
+    | null = null;
+  let preparedBlindArtifacts: PreparedBlindProductionArtifacts | null = null;
+  const captureBlindBaseRuntimeState =
+    (): LiveDiscoveryPublicationState =>
+      liveDiscovery.capture();
+
+  const restoreBlindBaseRuntimeState = (
+    base: LiveDiscoveryPublicationState,
+  ): void => {
+    liveDiscovery.publish(base);
+    protocolTraceMemo = createProtocolTraceMemo();
+    blockScanRejectBlacklist.entries.clear();
+  };
+
+  const assertBlindBackendAnchor = async (
+    expected: BlindProductionPrepareControl["base"],
+  ): Promise<void> => {
+    const actual = await readLatestBlockAnchor(provider);
+    if (
+      actual.number !== expected.number ||
+      actual.hash.toLowerCase() !== expected.hash.toLowerCase() ||
+      actual.stateRoot.toLowerCase() !== expected.stateRoot.toLowerCase()
+    ) {
+      throw new Error(
+        `blind backend anchor mismatch expected=${expected.number}:${expected.hash} ` +
+          `actual=${actual.number}:${actual.hash}`,
+      );
+    }
+  };
+
+  const prepareBlindProductionAttempt = async (
+    control: BlindProductionPrepareControl,
+  ): Promise<void> => {
+    const staticArtifacts = blindStaticArtifacts;
+    if (!staticArtifacts) {
+      throw new Error("blind production artifacts requested outside audit mode");
+    }
+    if (activeBlindSourceHead || preparedBlindBase) {
+      throw new Error("blind production attempt overlaps an active/prepared attempt");
+    }
+    await liveDiscovery.settled();
+    await assertBlindBackendAnchor(control.base);
+    if (!blindSessionBase) {
+      blindSessionBase = {
+        anchor: { ...control.base },
+        runtimeState: captureBlindBaseRuntimeState(),
+      };
+    } else {
+      if (
+        blindSessionBase.anchor.number !== control.base.number ||
+        blindSessionBase.anchor.hash.toLowerCase() !==
+          control.base.hash.toLowerCase() ||
+        blindSessionBase.anchor.stateRoot.toLowerCase() !==
+          control.base.stateRoot.toLowerCase()
+      ) {
+        throw new Error(
+          "blind production session cannot reuse runtime state across base anchors",
+        );
+      }
+      restoreBlindBaseRuntimeState(blindSessionBase.runtimeState);
+    }
+    // A blind attempt may target the same source N/hash as the previous
+    // attempt. Clear both dynamic publishers before rebuilding N-1: the
+    // coordinator will retain only this attempt's fresh N-1 predecessor, while
+    // the backrun bridge must not retain prior source-N live/tick cache state.
+    blockScanBackrunState.resetDynamicStateForReplay();
+    await adapterRuntimeCoordinator!.resetDynamicStateForReplay();
+    await Promise.all(blockScanExecutionWorkers.map(async (worker) => {
+      await worker.state.forkAt(control.base.number);
+      const forkHash = await readBlockHash(worker.state.provider, control.base.number);
+      if (forkHash.toLowerCase() !== control.base.hash.toLowerCase()) {
+        throw new Error(
+          `blind worker base hash mismatch ${forkHash} != ${control.base.hash}`,
+        );
+      }
+    }));
+    if (!blockScanGraph) {
+      throw new Error("blind production prepare has no block-scan graph");
+    }
+    if (
+      dexGraphCoverage.graphCompleteThrough < control.base.number ||
+      [...protocolDiscoveryCoverage.snapshot().values()].some(
+        (through) => through < control.base.number,
+      )
+    ) {
+      throw new Error("blind production base graph is not complete at N-1");
+    }
+    const baseGeneration = blockScanRuntimeLoop.nextGeneration();
+    const baseGraph = adapterFamilyGraphViews.build({
+      id: `blind-base:${hashTokenGraph([...blockScanGraph])}`,
+      generation: baseGeneration,
+      sourceBlock: control.base.number,
+      sourceBlockHash: control.base.hash,
+      edges: Object.freeze([...blockScanGraph]),
+      dexSourceCompleteThrough: dexGraphCoverage.sourceCompleteThrough,
+      retryablePools: [
+        ...retryableDexGraphPools.values(),
+        ...retryableDexIdentityPools.values(),
+      ],
+      dexUniverseFingerprint: poolUniverseCoverage.contentSha256,
+      strategyViewHash: strategyViews.versions.blockscan_view_hash,
+      landedCoverage: liveDiscovery.capture().landedCoverage,
+      protocolSourceFingerprints: discoverySourceFingerprints,
+      protocolEdgesEnabled: config.enableProtocolEdges,
+    });
+    const baseGraphArtifact = createBlindProductionArtifact(
+      "base-graph-view",
+      blindGraphArtifactPayload(baseGraph),
+    );
+    const baseRuntime = await adapterRuntimeCoordinator!.prepare({
+      graph: baseGraph,
+      fundingTokens: [...new Set([
+        ...flashTokens,
+        ...blockScanGraph.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
+      ])],
+      deadlineAtMs: Date.now() + blindPrepareBudgetMs,
+    });
+    if (baseRuntime.status !== "complete") {
+      throw new Error(
+        `blind production N-1 prewarm is ${baseRuntime.status}: ` +
+          `${baseRuntime.issues[0]?.message ?? "unknown"}`,
+      );
+    }
+    // Keep this attempt's freshly rebuilt N-1 publication as the sole
+    // incremental predecessor for source N. The reset at the beginning of the
+    // next attempt discards its prior source-N publication before rebuilding
+    // N-1, so no attempt can reuse another attempt's N while unchanged keys can
+    // still carry forward across the intended N-1 -> N boundary.
+    preparedBlindDynamicResetNonce = control.attemptNonce;
+    preparedBlindBase = control;
+    preparedBlindArtifacts = {
+      baseAnchor: Object.freeze({ ...control.base }),
+      baseGraph: baseGraphArtifact,
+      baseOrderedEdgeIds:
+        baseGraph.edges.map(blindCompatibilityCanonicalEdgeId),
+      receipts: {
+        resolvedConfig:
+          blindProductionArtifactReceipt(staticArtifacts.resolvedConfig),
+        universe: blindProductionArtifactReceipt(staticArtifacts.universe),
+        activeFamilyManifest:
+          blindProductionArtifactReceipt(staticArtifacts.activeFamilyManifest),
+        baseGraphView: blindProductionArtifactReceipt(baseGraphArtifact),
+      },
+      documents: {
+        resolvedConfig: staticArtifacts.resolvedConfig,
+        universe: staticArtifacts.universe,
+        activeFamilyManifest: staticArtifacts.activeFamilyManifest,
+        baseGraphView: baseGraphArtifact,
+      },
+    };
+    process.stdout.write(
+      `${BLIND_PRODUCTION_READY_PREFIX}${blindProductionCanonicalJson({
+        type: "ready",
+        profile: BLIND_PRODUCTION_RAW_PROFILE,
+        attemptNonce: control.attemptNonce,
+        base: control.base,
+        artifacts: preparedBlindArtifacts.receipts,
+        artifactDocuments: preparedBlindArtifacts.documents,
+      })}\n`,
+    );
+  };
+
+  const runBlindProductionSourceHead = async (
+    control: BlindProductionSourceHeadControl,
+  ): Promise<void> => {
+    const prepared = preparedBlindBase;
+    if (
+      !prepared ||
+      activeBlindSourceHead ||
+      prepared.attemptNonce !== control.attemptNonce ||
+      prepared.base.number + 1 !== control.source.number
+    ) {
+      throw new Error("blind source head does not match its prepared attempt");
+    }
+    const sourceHeadSeenAtMs = Date.now();
+    const sourceHeadSeenAtMonotonicMs = performance.now();
+    await assertBlindBackendAnchor(control.source);
+    submissionCoordinator.onBlock(control.source.number);
+    activeBlindSourceHead = control;
+    try {
+      await blockScanRuntimeLoop.runHead(control.source.number, {
+        sourceHeadSeenAtMs,
+        sourceHeadSeenAtMonotonicMs,
+      });
+    } finally {
+      activeBlindSourceHead = null;
+      preparedBlindBase = null;
+      preparedBlindDynamicResetNonce = null;
+      preparedBlindArtifacts = null;
+    }
+  };
+
+  if (blindProductionAudit) {
+    installBlindProductionControlInput({
+      stream: process.stdin,
+      prepare: prepareBlindProductionAttempt,
+      sourceHead: runBlindProductionSourceHead,
+    });
+  }
+
+  // The family snapshot is the sole block-level V2/V3 state publisher for the
+  // block-scan lane. Running the legacy watched-pool updater on the same head
+  // would issue a second set of reserve/slot reads for overlapping pools and create
+  // two independently published views of the same generation. Backrun-only
+  // deployments retain the mature updater unchanged; victim-specific JIT
+  // preparation remains scoped to the backrun lane.
+  if (config.stateUpdaterEnabled && !enableBlockScan) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
-  } else if (!blindProductionAudit && enableBlockScan) {
-    provider.on("block", (blockNumber: number) => scheduleBlockScan(blockNumber));
+  }
+  if (enableBlockScan && !blindProductionAudit) {
+    provider.on(
+      "block",
+      (blockNumber: number) => blockScanRuntimeLoop.schedule(blockNumber),
+    );
   }
 
   // Track the latest mined block from the WS newHeads stream so the per-hint hot
   // path doesn't issue a redundant eth_blockNumber on every hint — the number is
   // already being pushed to us. Seed once at startup; WS keeps it fresh.
   const blockTracker = { latest: await provider.getBlockNumber() };
-  provider.on("block", (blockNumber: number) => {
-    if (blockNumber > blockTracker.latest) blockTracker.latest = blockNumber;
-    submissionCoordinator.onBlock(blockNumber);
-  });
+  if (!blindProductionAudit) {
+    provider.on("block", (blockNumber: number) => {
+      if (blockNumber > blockTracker.latest) blockTracker.latest = blockNumber;
+      submissionCoordinator.onBlock(blockNumber);
+    });
+  }
 
   const shutdown = () => {
     console.log("\n[searcher/live] shutting down");
+    shuttingDown = true;
     logStageCounters(counters);
     cancelScheduledWarm();
-    if (refreshTimer) clearInterval(refreshTimer);
-    if (protocolDiscoveryTimer) clearInterval(protocolDiscoveryTimer);
-    if (flashLiquidityTimer) clearInterval(flashLiquidityTimer);
+    liveDiscovery.shutdown();
     provider.removeAllListeners("block");
     state.stop();
-    blockScanState?.stop();
+    blockScanRuntimeLoop.stopExecutionWorkers();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
@@ -3096,8 +2325,8 @@ async function main(): Promise<void> {
             recentWarmPools,
             pinnedWarmTargets,
             blockTracker,
-            observeProtocolReceipt,
-            observeProtocolTxHash,
+            observeProtocolReceipt: liveDiscovery.observeProtocolReceipt,
+            observeProtocolTxHash: liveDiscovery.observeProtocolTxHash,
           });
         } catch (err) {
           console.log(
@@ -3108,20 +2337,20 @@ async function main(): Promise<void> {
           console.log(`[searcher/live] ${txHash.slice(0, 10)} end-to-end ${Date.now() - tHint}ms`);
           logStageCounters(counters);
           busy = false;
+          backrunStatePublisher.flush();
           flushPendingWarm();
         }
       }
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
+    shuttingDown = true;
     logStageCounters(counters);
     cancelScheduledWarm();
-    if (refreshTimer) clearInterval(refreshTimer);
-    if (protocolDiscoveryTimer) clearInterval(protocolDiscoveryTimer);
-    if (flashLiquidityTimer) clearInterval(flashLiquidityTimer);
+    liveDiscovery.shutdown();
     provider.removeAllListeners("block");
     state.stop();
-    blockScanState?.stop();
+    blockScanRuntimeLoop.stopExecutionWorkers();
   }
 }
 
@@ -3167,10 +2396,10 @@ interface HandleCtx {
 /**
  * Process a single MEV-Share hint. Two paths:
  *
- * Path A (hint has logs):
- *   Parse Curve TokenExchange from hint logs → match graph pool
- *   → impersonate whale on Anvil → equivalent swap → pool state shifted
- *   → detect/plan/solve/simulate → mev_sendBundle (hash-only, no rawTx needed)
+ * Hint logs are fragmentary observation evidence. They can nominate pools and
+ * trigger a full-transaction fetch, but may not certify a complete victim
+ * transition. A future attested complete-receipt source may enter the exact
+ * hash-only overlay branch.
  *
  * Path B (fallback: can fetch full tx from RPC):
  *   getTransaction → rawTx → applyRawTx on Anvil (current V5 logic)
@@ -3220,7 +2449,7 @@ async function handleHint(
     segMark("fork"); // getBlockNumber + ensureFreshFork/refresh + cache reset
   };
 
-  // ── Try Path A: hint-log-based impersonate simulation ──
+  // Inspect fragmentary hint logs before attempting a full-transaction fetch.
   const hintLogs = extractLogs(hint.payload);
   if (hintLogs.length > 0 && hintLogs.length <= 5) {
     for (const l of hintLogs) {
@@ -3236,19 +2465,55 @@ async function handleHint(
   } else if (hintLogs.length > 5) {
     console.log(`[searcher/live] ${txHash.slice(0, 10)} hint has ${hintLogs.length} logs (batch)`);
   }
-  const hintImpact = await matchPoolImpactFromLogs(hintLogs, ctx.graph, ctx.poolAddrs, ctx.tokenQuery);
+  const hintTransition = await matchPoolImpactFromLogs(
+    hintLogs,
+    ctx.graph,
+    ctx.poolAddrs,
+    latestBlock,
+    null,
+    txHash,
+  );
+  const admittedHintImpacts = hintTransition.impacts.filter((impact) =>
+    hashOnlyImpactReplayAdmitted(impact.matchedAdapterId)
+  );
+  const hintImpact = hintTransition.hashOnlyReplayable &&
+      admittedHintImpacts.length === 1
+    ? admittedHintImpacts[0]
+    : null;
+  if (!hintTransition.complete) {
+    console.log(
+      `[searcher/live] ${txHash.slice(0, 10)} victim transition unresolved: ` +
+        hintTransition.unresolved
+          .slice(0, 4)
+          .map((item) => `${item.reason}:${item.pool ?? "unknown"}`)
+          .join(","),
+    );
+  } else if (hintTransition.impacts.length > 1) {
+    console.log(
+      `[searcher/live] ${txHash.slice(0, 10)} multi-pool victim transition ` +
+        `impacts=${hintTransition.impacts.length}; hash-only replay disabled`,
+    );
+  }
   segMark("match"); // pool-impact matching against the graph
 
   // Token-index check: does any hint Transfer involve a token we track?
-  const hintTokenHit = hintImpact ? true : hintLogsMatchTokenIndex(hintLogs, ctx.tokenIndex);
+  const hintTokenHit = hintTransition.impacts.length > 0 ||
+    hintLogsMatchTokenIndex(hintLogs, ctx.tokenIndex);
 
   let rawTx: string | undefined;
-  let eventLogs: Array<{ address: string; topics: string[]; data: string }> = [];
+  let eventLogs: SwapEventLog[] = [];
   let eventFrom = ethers.ZeroAddress;
   let eventNonce = 0;
   let eventTo: string | null = null;
   let eventInput = "0x";
   let eventBlockNumber = latestBlock + 1;
+  let eventSourceBlockHash: string | undefined;
+  let eventReceiptBlockNumber: number | undefined;
+  let eventReceiptBlockHash: string | undefined;
+  let eventReceiptParentBlockHash: string | undefined;
+  let eventReceiptTransactionHash: string | undefined;
+  let eventLogsCompleteness: NonNullable<OrderflowEvent["logsCompleteness"]> =
+    "fragment";
   let observedProtocolReceipt: ProtocolDiscoveryReceipt | null = null;
   let submissionMode: BundleSubmission["mode"] = "hash-only";
   let fixturePath: LiveFixturePath = "hash-only";
@@ -3324,13 +2589,37 @@ async function handleHint(
       address: log.address,
       topics: [...log.topics],
       data: log.data,
+      blockNumber: log.blockNumber,
+      blockHash: log.blockHash,
+      transactionHash: log.transactionHash,
     }));
+    eventReceiptBlockNumber = receipt.blockNumber;
+    eventReceiptBlockHash = receipt.blockHash;
+    eventReceiptTransactionHash = receipt.hash;
+    eventSourceBlockHash = await readBlockHash(ctx.provider, latestBlock);
+    const forkSourceBlockHash = await readBlockHash(ctx.state.provider, latestBlock);
+    if (forkSourceBlockHash !== eventSourceBlockHash) {
+      throw new Error(
+        `victim source fork hash mismatch ${forkSourceBlockHash} != ${eventSourceBlockHash}`,
+      );
+    }
+    const receiptBlock = await ctx.state.provider.getBlock(receipt.blockNumber);
+    if (
+      !receiptBlock?.hash ||
+      receiptBlock.hash.toLowerCase() !== receipt.blockHash.toLowerCase() ||
+      receiptBlock.parentHash.toLowerCase() !== forkSourceBlockHash
+    ) {
+      throw new Error("local victim receipt block is not a child of the source fork");
+    }
+    eventReceiptParentBlockHash = receiptBlock.parentHash;
+    eventLogsCompleteness = "complete-receipt";
   } else if (hintImpact) {
     ctx.counters.impacts++;
     countedHintImpact = true;
 
-    // Path A: hash-only — exact v3 event overlay when available, otherwise
-    // approximate simulation via impersonate swap.
+    // Attested-complete receipt path: exact event overlay when available,
+    // otherwise approximate simulation via impersonate swap. Raw MEV-Share
+    // hint fragments never enter this branch.
     if (!ctx.config.enableHashOnly) {
       throw new Error("hash-only hint (no rawTx); set SEARCHER_ENABLE_HASH_ONLY=1 to enable");
     }
@@ -3359,7 +2648,14 @@ async function handleHint(
       stage: "detect",
       reason: "no_matching_graph_pool",
     });
-    if (shouldTraceForProtocolDiscovery(hintLogs, PRODUCTION_ROUTE_ADAPTERS.protocols)) {
+    if (
+      shouldTraceForProtocolDiscovery(
+        hintLogs,
+        PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes().filter((adapter) =>
+          !adapter.requiresProtocolEdgesFlag || ctx.config.enableProtocolEdges
+        ),
+      )
+    ) {
       void ctx.observeProtocolTxHash(txHash);
     }
     throw new Error("no matching graph pool");
@@ -3367,7 +2663,25 @@ async function handleHint(
     // Token hit but no pool impact — try to fetch full tx from RPC
     console.log(`[searcher/live] ${txHash.slice(0, 10)} token-index hit, trying RPC fetch`);
     const tx = await ctx.provider.getTransaction(txHash);
-    if (!tx) throw new Error("tx not available from RPC (private MEV-Share tx)");
+    if (!tx) {
+      emitEvent({
+        type: "pipeline_dropped",
+        opportunity_id: makeOpportunityId({
+          targetBlock: eventBlockNumber,
+          victimHash: txHash,
+        }),
+        target_block: eventBlockNumber,
+        victim_hash: txHash,
+        victim_source: victimSource,
+        stage: "detect",
+        reason: hintTransition.unresolved.some((item) =>
+            item.reason === "receipt-fragment"
+          )
+          ? "receipt_fragment_full_tx_unavailable"
+          : "tx_not_available",
+      });
+      throw new Error("tx not available from RPC (private receipt fragment)");
+    }
 
     if (tx.blockNumber !== null) {
       // ── Path C: tx already mined — fork at that block, check for next-block arb ──
@@ -3377,6 +2691,10 @@ async function handleHint(
       submissionMode = "standalone";
       fixturePath = "mined";
       eventBlockNumber = tx.blockNumber;
+      eventSourceBlockHash = await readBlockHash(
+        ctx.provider,
+        Math.max(0, eventBlockNumber - 1),
+      );
 
       const receipt = await ctx.provider.getTransactionReceipt(txHash);
       if (!receipt || receipt.status !== 1) {
@@ -3390,7 +2708,23 @@ async function handleHint(
         address: log.address,
         topics: [...log.topics],
         data: log.data,
+        blockNumber: log.blockNumber,
+        blockHash: log.blockHash,
+        transactionHash: log.transactionHash,
       }));
+      eventReceiptBlockNumber = receipt.blockNumber;
+      eventReceiptBlockHash = receipt.blockHash;
+      eventReceiptTransactionHash = receipt.hash;
+      const receiptBlock = await ctx.provider.getBlock(receipt.blockNumber);
+      if (
+        !receiptBlock?.hash ||
+        receiptBlock.hash.toLowerCase() !== receipt.blockHash.toLowerCase() ||
+        receiptBlock.parentHash.toLowerCase() !== eventSourceBlockHash
+      ) {
+        throw new Error("on-chain receipt block is not a child of the source block");
+      }
+      eventReceiptParentBlockHash = receiptBlock.parentHash;
+      eventLogsCompleteness = "complete-receipt";
       observedProtocolReceipt = {
         status: receipt.status,
         logs: receipt.logs.map((log) => ({
@@ -3402,7 +2736,9 @@ async function handleHint(
         })),
       };
       // Debug: classify receipt log events
-      const swapCount = eventLogs.filter((log) => isLandedSwapTopic(log.topics[0])).length;
+      const swapCount = eventLogs.filter((log) =>
+        PRODUCTION_ADAPTER_FAMILIES.landedEvents().isSwapTopic(log.topics[0])
+      ).length;
       const xferCount = eventLogs.filter((l) => l.topics[0]?.toLowerCase() === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").length;
       console.log(
         `[searcher/live] ${txHash.slice(0, 10)} receipt: ${eventLogs.length} logs (${xferCount} Transfer, ${swapCount} Swap)`,
@@ -3435,7 +2771,30 @@ async function handleHint(
         address: log.address,
         topics: [...log.topics],
         data: log.data,
+        blockNumber: log.blockNumber,
+        blockHash: log.blockHash,
+        transactionHash: log.transactionHash,
       }));
+      eventReceiptBlockNumber = receipt.blockNumber;
+      eventReceiptBlockHash = receipt.blockHash;
+      eventReceiptTransactionHash = receipt.hash;
+      eventSourceBlockHash = await readBlockHash(ctx.provider, latestBlock);
+      const forkSourceBlockHash = await readBlockHash(ctx.state.provider, latestBlock);
+      if (forkSourceBlockHash !== eventSourceBlockHash) {
+        throw new Error(
+          `victim source fork hash mismatch ${forkSourceBlockHash} != ${eventSourceBlockHash}`,
+        );
+      }
+      const receiptBlock = await ctx.state.provider.getBlock(receipt.blockNumber);
+      if (
+        !receiptBlock?.hash ||
+        receiptBlock.hash.toLowerCase() !== receipt.blockHash.toLowerCase() ||
+        receiptBlock.parentHash.toLowerCase() !== forkSourceBlockHash
+      ) {
+        throw new Error("local victim receipt block is not a child of the source fork");
+      }
+      eventReceiptParentBlockHash = receiptBlock.parentHash;
+      eventLogsCompleteness = "complete-receipt";
     }
   }
 
@@ -3484,6 +2843,13 @@ async function handleHint(
     input: eventInput,
     logs: eventLogs,
     minProfit: ctx.config.minProfit,
+    sourceBlockHash: eventSourceBlockHash,
+    receiptBlockNumber: eventReceiptBlockNumber,
+    receiptBlockHash: eventReceiptBlockHash,
+    receiptParentBlockHash: eventReceiptParentBlockHash,
+    receiptTransactionHash: eventReceiptTransactionHash,
+    logsCompleteness: eventLogsCompleteness,
+    victimState: fixturePath === "hash-only" ? "must-overlay" : "materialized",
   };
 
   if (observedProtocolReceipt) {
@@ -3678,9 +3044,61 @@ async function processOpportunities(
     // before the solver gets a chance on real candidate plans.
     const oppImpact = poolImpactFromOpportunity(opp) ?? fixtureImpact;
     const prepareBaseBlock = fixturePath === "mined" ? sourceMeta.eventBlockNumber : latestBlock;
-    const exactPostImpact = fixturePath === "hash-only" && oppImpact
-      ? eventPostImpactSeed(oppImpact, prepareBaseBlock)
-      : null;
+    if (fixturePath === "hash-only" && opp.victimEffect.kind === "swap") {
+      const generation = oppImpact?.sourceGeneration;
+      const transitionGeneration = opp.victimEffect.transition?.sourceGeneration;
+      const expectedHash = event.sourceBlockHash?.toLowerCase() ?? null;
+      let generationError =
+        !generation || !transitionGeneration
+          ? "missing victim source generation"
+          : generation.id !== transitionGeneration.id
+            ? "impact/transition source generation mismatch"
+            : generation.logsCompleteness !== "complete-receipt"
+              ? "victim logs are not a complete receipt"
+              : generation.sourceBlock !== prepareBaseBlock
+                ? `source block ${generation.sourceBlock} != base block ${prepareBaseBlock}`
+                : generation.sourceBlockHash === null ||
+                    generation.sourceBlockHash !== expectedHash
+                  ? "victim source block hash mismatch"
+                  : null;
+      if (generationError === null) {
+        const canonicalHash = await readBlockHash(ctx.provider, prepareBaseBlock);
+        if (canonicalHash !== generation!.sourceBlockHash) {
+          generationError =
+            `canonical source hash ${canonicalHash} != ${generation!.sourceBlockHash}`;
+        }
+      }
+      if (generationError !== null) {
+        emitPipelineDropped(
+          "prepare",
+          "victim_source_generation_mismatch",
+          generationError,
+        );
+        continue;
+      }
+    }
+    let exactPostImpact: PostImpactSeed | null = null;
+    if (fixturePath === "hash-only" && oppImpact) {
+      const settled = await eventPostImpactSeedForSettled(
+        oppImpact,
+        prepareBaseBlock,
+        Math.max(1, oppDeadlineAtMs - Date.now()),
+      );
+      if (!settled.ok) {
+        lastTerminalState = "sim-revert";
+        lastTerminalError =
+          `victim runtime ${settled.familyId}/${settled.stage} failed: ${settled.reason}`;
+        emitPipelineDropped(
+          "overlay",
+          "victim_runtime_family_failed",
+          lastTerminalError,
+          { plans: plans.length },
+        );
+        deps.recordFinalState(lastTerminalState, lastTerminalError);
+        continue;
+      }
+      exactPostImpact = settled.value;
+    }
     const overlayExact = exactPostImpact !== null;
     const prepareInput = {
       event,
@@ -3689,11 +3107,12 @@ async function processOpportunities(
       path: fixturePath,
       routeHops: dedupeRouteHops(plans, ctx.config.revmPrewarmRouteHops),
       postImpact: exactPostImpact ?? undefined,
+      deadlineAtMs: oppDeadlineAtMs,
     };
-    if (overlayExact) {
+    if (exactPostImpact !== null) {
       console.log(
         `[searcher/live] hash-only exact ${exactPostImpact.kind} overlay seed ` +
-          postImpactSummary(exactPostImpact),
+          postImpactSeedSummary(exactPostImpact),
       );
     }
     // Feed the between-block warmer: these pools recur across hints, so record
@@ -3713,21 +3132,34 @@ async function processOpportunities(
     let jitWarmCurrent: Promise<void> | null = null;
     const supportsConfiguredBackend = ctx.config.liveBackend !== "rpc" &&
       (ctx.liveBackend.supportsPath?.(prepareInput) ?? true);
-    if (!overlayExact && supportsConfiguredBackend && oppImpact && isLocalVictimApplyAdapter(oppImpact.matchedAdapterId)) {
+    if (!overlayExact && supportsConfiguredBackend && oppImpact && victimUsesLocalCacheApply(oppImpact.matchedAdapterId)) {
       const applyStarted = Date.now();
       ctx.cache.beginHint(prepareInput.baseBlock);
       const localReadState = blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock);
-      localVictimApply = await applyVictimSwapLocally(
+      const settled = await applyVictimSwapLocallySettled(
         ctx.cache,
         oppImpact,
         prepareInput.baseBlock,
         localReadState,
+        Math.max(1, oppDeadlineAtMs - Date.now()),
       );
+      if (!settled.ok) {
+        lastTerminalState = "sim-revert";
+        lastTerminalError =
+          `victim runtime ${settled.familyId}/${settled.stage} failed: ${settled.reason}`;
+        emitPipelineDropped(
+          "overlay",
+          "victim_runtime_family_failed",
+          lastTerminalError,
+          { plans: plans.length },
+        );
+        deps.recordFinalState(lastTerminalState, lastTerminalError);
+        continue;
+      }
+      localVictimApply = settled.value;
       if (!localVictimApply) {
         try {
-          const victimVariant = PRODUCTION_VICTIM_MODELS
-            .forEdge(oppImpact.matchedAdapterId)?.localApplyVariant;
-          if (victimVariant === "univ2" || victimVariant === "univ3") {
+          if (victimNeedsMutablePoolRefresh(oppImpact.matchedAdapterId)) {
             await ctx.poolStateUpdater.update(prepareInput.baseBlock, [{
               adapterId: oppImpact.matchedAdapterId,
               target: oppImpact.pool,
@@ -3735,12 +3167,28 @@ async function processOpportunities(
               tokenOut: oppImpact.tokenOut,
               amountIn: oppImpact.amountIn,
             }], { awaitTicks: true, maxTickPools: 1 });
-            localVictimApply = await applyVictimSwapLocally(
+            const refreshed = await applyVictimSwapLocallySettled(
               ctx.cache,
               oppImpact,
               prepareInput.baseBlock,
               localReadState,
+              Math.max(1, oppDeadlineAtMs - Date.now()),
             );
+            if (!refreshed.ok) {
+              lastTerminalState = "sim-revert";
+              lastTerminalError =
+                `victim runtime ${refreshed.familyId}/${refreshed.stage} failed: ` +
+                refreshed.reason;
+              emitPipelineDropped(
+                "overlay",
+                "victim_runtime_family_failed",
+                lastTerminalError,
+                { plans: plans.length },
+              );
+              deps.recordFinalState(lastTerminalState, lastTerminalError);
+              continue;
+            }
+            localVictimApply = refreshed.value;
           }
         } catch (err) {
           console.log(
@@ -3823,17 +3271,41 @@ async function processOpportunities(
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "hash-only") {
       if (!oppImpact) throw new Error("hash-only fallback missing impact");
-      await ensureHintFork(latestBlock);
-      if (exactPostImpact) {
-        const overrides = await applyPostImpactOverridesToAnvil(ctx.state, exactPostImpact);
-        console.log(
-          `[searcher/live] anvil exact ${exactPostImpact.kind} post-state overlay ` +
-            `${postImpactSummary(exactPostImpact)} overrides=${overrides}`,
+      try {
+        await ensureHintFork(latestBlock);
+        if (exactPostImpact) {
+          const overrides = await applyPostImpactOverridesToAnvil(ctx.state, exactPostImpact);
+          console.log(
+            `[searcher/live] anvil exact ${exactPostImpact.kind} post-state overlay ` +
+              `${postImpactSeedSummary(exactPostImpact)} overrides=${overrides}`,
+          );
+        } else {
+          await replayVictimSwapOnAnvil(
+            ctx.state,
+            oppImpact,
+            ctx.graph,
+            Math.max(1, oppDeadlineAtMs - Date.now()),
+          );
+        }
+        await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+      } catch (err) {
+        const familyId = PRODUCTION_ADAPTER_FAMILIES
+          .routes()
+          .findForEdge(oppImpact.matchedAdapterId)
+          ?.id ?? oppImpact.matchedAdapterId;
+        const message = err instanceof Error ? err.message : String(err);
+        lastTerminalState = "sim-revert";
+        lastTerminalError =
+          `victim runtime ${familyId} failed: ${message}`;
+        emitPipelineDropped(
+          "overlay",
+          "victim_runtime_family_failed",
+          lastTerminalError,
+          { plans: plans.length },
         );
-      } else {
-        await replayVictimSwapOnAnvil(ctx.state, oppImpact, ctx.graph);
+        deps.recordFinalState(lastTerminalState, lastTerminalError);
+        continue;
       }
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
       deps.segMark(exactPostImpact ? "anvilExactOverlay" : "anvilOverlay");
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "mined") {
@@ -4304,14 +3776,10 @@ async function readUncachedLatestBlock(
   };
 }
 
-async function assertBlindProductionAnchor(
+async function readLatestBlockAnchor(
   provider: ethers.JsonRpcProvider,
-  expected: BlindProductionBlockAnchor,
-): Promise<void> {
-  const block = await provider.send(
-    "eth_getBlockByNumber",
-    ["latest", false],
-  ) as {
+): Promise<{ number: number; hash: string; stateRoot: string }> {
+  const block = await provider.send("eth_getBlockByNumber", ["latest", false]) as {
     number?: unknown;
     hash?: unknown;
     stateRoot?: unknown;
@@ -4323,36 +3791,20 @@ async function assertBlindProductionAnchor(
     !ethers.isHexString(block.hash, 32) ||
     !ethers.isHexString(block.stateRoot, 32)
   ) {
-    throw new Error("blind production latest block anchor is incomplete");
+    throw new Error("latest block response missing blind-run anchor fields");
   }
-  const actual: BlindProductionBlockAnchor = {
+  return {
     number: ethers.toNumber(block.number),
     hash: block.hash.toLowerCase(),
     stateRoot: block.stateRoot.toLowerCase(),
   };
-  const expectedHash = expected.hash.startsWith("0x")
-    ? expected.hash.toLowerCase()
-    : `0x${expected.hash.toLowerCase()}`;
-  const expectedStateRoot = expected.stateRoot.startsWith("0x")
-    ? expected.stateRoot.toLowerCase()
-    : `0x${expected.stateRoot.toLowerCase()}`;
-  if (
-    actual.number !== expected.number ||
-    actual.hash !== expectedHash ||
-    actual.stateRoot !== expectedStateRoot
-  ) {
-    throw new Error(
-      `blind production anchor mismatch ` +
-        `expected=${expected.number}/${expectedHash}/${expectedStateRoot} ` +
-        `actual=${actual.number}/${actual.hash}/${actual.stateRoot}`,
-    );
-  }
 }
 
 async function maybeSubmitBlockScanAtomic(params: {
   config: LiveConfig;
   provider: ethers.JsonRpcProvider;
   simulator: BotVMSimulator;
+  state: AnvilStateBackend;
   bundleRouter: BundleRouter;
   submissionCoordinator: SubmissionCoordinator;
   opp: BlockScanOpportunity;
@@ -4365,16 +3817,82 @@ async function maybeSubmitBlockScanAtomic(params: {
   rejectBlacklist: BlockScanRejectBlacklistState;
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
+  collectBlindAudit: boolean;
   strategyVersions: {
     strategy_view_version: string;
     blockscan_view_hash: string;
   };
-  blindAudit?: boolean;
-}): Promise<BlockScanAtomicAudit | undefined> {
+}): Promise<BlockScanAtomicResult> {
+  const timing = {
+    finalSimMs: 0,
+    evMs: 0,
+    finalSimStartedAtMs: null as number | null,
+    finalSimFinishedAtMs: null as number | null,
+    evStartedAtMs: null as number | null,
+    evFinishedAtMs: null as number | null,
+  };
+  let evStartedAt: number | null = null;
+  let workerReusable = true;
+  let finalSimStatus: BlockScanAtomicResult["finalSimStatus"] = "not-run";
+  let auditSimulation: BlindProductionOpportunityEvidence["simulation"] | null =
+    params.collectBlindAudit
+      ? {
+          executed: false,
+          success: false,
+          profitRaw: "0",
+          gasUsed: "0",
+          calldataSha256: blindProductionCalldataSha256("0x"),
+          standingPosition: params.opp.leavesStandingPosition,
+        }
+      : null;
+  let auditEv: BlindProductionOpportunityEvidence["ev"] | null =
+    params.collectBlindAudit
+      ? {
+          executionStatus: "not_run",
+          decision: "reject",
+          reason: "not_reached",
+        }
+      : null;
+  const recordAuditEv = (
+    value: BlindProductionOpportunityEvidence["ev"],
+  ): void => {
+    if (collectBlindAudit) auditEv = value;
+  };
+  const closeEvTiming = (): void => {
+    if (evStartedAt === null) return;
+    timing.evMs += Math.max(0, performance.now() - evStartedAt);
+    timing.evFinishedAtMs = Date.now();
+    evStartedAt = null;
+  };
+  const finish = (
+    decision: string,
+    submitted = false,
+    terminalForQuoteSet = true,
+  ): BlockScanAtomicResult => {
+    closeEvTiming();
+    const terminalAuditEv = auditEv?.reason === "not_reached"
+      ? { ...auditEv, reason: decision }
+      : auditEv;
+    return {
+      decision,
+      submitted,
+      terminalForQuoteSet,
+      finalSimStatus,
+      workerReusable,
+      audit: auditSimulation && terminalAuditEv
+        ? {
+            simulation: auditSimulation,
+            ev: terminalAuditEv,
+          }
+        : null,
+      timing: { ...timing },
+    };
+  };
   const {
     config,
     provider,
     simulator,
+    state,
     bundleRouter,
     submissionCoordinator,
     opp,
@@ -4387,31 +3905,9 @@ async function maybeSubmitBlockScanAtomic(params: {
     rejectBlacklist,
     profitTokenValuation,
     sourceBlockHash,
+    collectBlindAudit,
     strategyVersions,
-    blindAudit = false,
   } = params;
-  let simulation: BlindProductionOpportunityEvidence["simulation"] = {
-    executed: false,
-    success: false,
-    profitRaw: "0",
-    gasUsed: "0",
-    calldataSha256:
-      "e3b0c44298fc1c149afbf4c8996fb924" +
-      "27ae41e4649b934ca495991b7852b855",
-    standingPosition: opp.leavesStandingPosition,
-  };
-  let evEvaluated = false;
-  const auditResult = (
-    executionStatus: "pass" | "not_run",
-    decision: "allow" | "reject",
-    reason: string,
-  ): BlockScanAtomicAudit | undefined =>
-    blindAudit
-      ? {
-          simulation,
-          ev: { executionStatus, decision, reason },
-        }
-      : undefined;
   const route = resolvedRouteSummary(resolved.root);
   const opportunityId = makeBlockScanOpportunityId({
     sourceBlock,
@@ -4444,16 +3940,6 @@ async function maybeSubmitBlockScanAtomic(params: {
     });
   };
 
-  if (!config.blockScanSubmit) {
-    const reason = "SEARCHER_BLOCKSCAN_SUBMIT!=1";
-    console.log(
-      `[searcher/blockscan] block=${sourceBlock} submit gated-off ring=${ring} route=${route} ` +
-        `net=${resolved.netProfit} reason=${reason} protoRing=${protoRing}`,
-    );
-    drop(sourceBlock + 1, "submit_gate", "blockscan_submit_disabled", reason);
-    return auditResult("not_run", "reject", "blockscan_submit_disabled");
-  }
-
   if (!shouldRunFinalVerify(
     resolved.netProfit,
     resolved.flashAmount,
@@ -4464,12 +3950,16 @@ async function maybeSubmitBlockScanAtomic(params: {
       `${config.finalVerifyFloorBps}bps`;
     console.log(`[searcher/blockscan] block=${sourceBlock} final verify skipped ring=${ring}: ${error}`);
     drop(sourceBlock + 1, "final_verify", "below_final_verify_floor", error);
-    return auditResult("not_run", "reject", "below_final_verify_floor");
+    return finish("below_final_verify_floor");
   }
 
   let targetBlock = sourceBlock + 1;
   try {
-    const latestAtVerify = await readUncachedLatestBlock(provider);
+    const latestAtVerify = await awaitBlockScanDeadline(
+      readUncachedLatestBlock(provider),
+      passDeadlineAtMs,
+      "source-head verification",
+    );
     const currentHead = latestAtVerify.number;
     targetBlock = Math.max(sourceBlock, currentHead) + 1;
     const canonicalSourceBlockHash = latestAtVerify.hash;
@@ -4482,11 +3972,27 @@ async function maybeSubmitBlockScanAtomic(params: {
         `forkHash=${sourceBlockHash} canonicalHash=${canonicalSourceBlockHash ?? "missing"}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} stale source ring=${ring}: ${error}`);
       drop(targetBlock, "final_verify", "blockscan_stale_state", error);
-      return auditResult("not_run", "reject", "blockscan_stale_state");
+      return finish("blockscan_stale_state");
     }
-    const sim = await simulator.simulate(resolved);
-    if (blindAudit) {
-      simulation = {
+    timing.finalSimStartedAtMs = Date.now();
+    finalSimStatus = "failed";
+    const finalSimStarted = performance.now();
+    const sim = await awaitBlockScanDeadline(
+      simulator.simulate(resolved),
+      passDeadlineAtMs,
+      "final simulation",
+      () => {
+        workerReusable = false;
+        // Killing the fork terminates in-flight RPC. The next generation's
+        // forkAt waits stopBarrier before this worker can be reused.
+        state.stop();
+      },
+    ).finally(() => {
+        timing.finalSimMs += Math.max(0, performance.now() - finalSimStarted);
+        timing.finalSimFinishedAtMs = Date.now();
+      });
+    if (collectBlindAudit) {
+      auditSimulation = {
         executed: true,
         success: sim.success,
         profitRaw: sim.netProfit.toString(),
@@ -4495,6 +4001,7 @@ async function maybeSubmitBlockScanAtomic(params: {
         standingPosition: opp.leavesStandingPosition,
       };
     }
+    if (sim.success && sim.netProfit > 0n) finalSimStatus = "succeeded";
     emitEvent({
       type: "simulation_result",
       ...eventBase(targetBlock),
@@ -4507,20 +4014,30 @@ async function maybeSubmitBlockScanAtomic(params: {
 
     if (!sim.success) {
       const error = sim.revertReason ?? "no-positive-profit";
+      recordAuditEv({
+        executionStatus: "not_run",
+        decision: "reject",
+        reason: "sim_revert",
+      });
       recordBlockScanRejectStrike(rejectBlacklist, opp, sourceBlock);
       console.log(
         `[searcher/blockscan] block=${sourceBlock} final sim rejected ring=${ring} route=${route} ` +
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,
       );
       drop(targetBlock, "final_verify", "sim_revert", error);
-      return auditResult("not_run", "reject", "sim_revert");
+      return finish("sim_revert", false, false);
     }
     clearBlockScanRejectStrikes(rejectBlacklist, opp);
     if (sim.netProfit <= 0n) {
       const error = `non-positive final profit ${sim.netProfit}`;
+      recordAuditEv({
+        executionStatus: "not_run",
+        decision: "reject",
+        reason: "final_verify_failed",
+      });
       console.log(`[searcher/blockscan] block=${sourceBlock} final verify failed ring=${ring}: ${error}`);
       drop(targetBlock, "final_verify", "final_verify_failed", error);
-      return auditResult("not_run", "reject", "final_verify_failed");
+      return finish("final_verify_failed", false, false);
     }
 
     if (
@@ -4530,20 +4047,30 @@ async function maybeSubmitBlockScanAtomic(params: {
       const error =
         `phantom profit ${sim.netProfit} > ${config.maxProfitBpsOfFlash}bps of ` +
         `flash ${resolved.flashAmount} route=${route}`;
+      recordAuditEv({
+        executionStatus: "not_run",
+        decision: "reject",
+        reason: "phantom_profit",
+      });
       console.log(`[searcher/blockscan] block=${sourceBlock} reject phantom ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "phantom_profit", error);
-      return auditResult("not_run", "reject", "phantom_profit");
+      return finish("phantom_profit");
     }
 
-    const ev = await evaluateEv(
-      provider,
-      resolved.profitToken,
-      sim.netProfit,
-      sim.gasUsed,
-      config,
-      profitTokenValuation,
+    timing.evStartedAtMs = Date.now();
+    evStartedAt = performance.now();
+    const ev = await awaitBlockScanDeadline(
+      evaluateEv(
+        provider,
+        resolved.profitToken,
+        sim.netProfit,
+        sim.gasUsed,
+        config,
+        profitTokenValuation,
+      ),
+      passDeadlineAtMs,
+      "EV evaluation",
     );
-    evEvaluated = true;
     const {
       valuationAvailable,
       expectedProfitEth,
@@ -4552,12 +4079,22 @@ async function maybeSubmitBlockScanAtomic(params: {
       bidEth,
       netEvWei,
     } = ev;
+    recordAuditEv({
+      executionStatus: "pass",
+      decision: "allow",
+      reason: config.evGate ? "ev_gate_pass" : "ev_gate_disabled",
+    });
 
     if (config.evGate && !valuationAvailable) {
       const error = `unpriceable profit token ${resolved.profitToken}`;
+      recordAuditEv({
+        executionStatus: "pass",
+        decision: "reject",
+        reason: "unpriceable_profit_token",
+      });
       console.log(`[searcher/blockscan] block=${sourceBlock} skip unpriceable ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "unpriceable_profit_token", error);
-      return auditResult("pass", "reject", "unpriceable_profit_token");
+      return finish("unpriceable_profit_token");
     }
 
     const creditLiveMarkerPath =
@@ -4567,19 +4104,18 @@ async function maybeSubmitBlockScanAtomic(params: {
       creditLiveMarkerPath,
     );
     const containsStandingPosition = standingGuard.containsStandingPosition;
-    if (blindAudit) {
-      simulation = {
-        ...simulation,
-        standingPosition: containsStandingPosition,
-      };
-    }
     if (!standingGuard.allowed) {
       const error = standingGuard.reason === "edge_taxonomy_inconsistent"
         ? "standing guard: edge taxonomy inconsistent"
         : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
+      recordAuditEv({
+        executionStatus: "pass",
+        decision: "reject",
+        reason: standingGuard.reason,
+      });
       console.log(`[searcher/blockscan] block=${sourceBlock} reject standing-position ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", standingGuard.reason, error);
-      return auditResult("pass", "reject", standingGuard.reason);
+      return finish(standingGuard.reason);
     }
 
     if (config.evGate) {
@@ -4588,9 +4124,14 @@ async function maybeSubmitBlockScanAtomic(params: {
           `EV gate: net ${netEvWei} < ${config.minNetEth} ` +
           `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
           `token=${resolved.profitToken.slice(0, 10)})`;
+        recordAuditEv({
+          executionStatus: "pass",
+          decision: "reject",
+          reason: "below_ev_gate",
+        });
         console.log(`[searcher/blockscan] block=${sourceBlock} skip below-EV ring=${ring}: ${error}`);
         drop(targetBlock, "submit_gate", "below_ev_gate", error);
-        return auditResult("pass", "reject", "below_ev_gate");
+        return finish("below_ev_gate");
       }
       console.log(
         `[searcher/blockscan] block=${sourceBlock} EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
@@ -4599,7 +4140,23 @@ async function maybeSubmitBlockScanAtomic(params: {
       );
     }
 
-    const latestAtSubmit = await readUncachedLatestBlock(provider);
+    if (!config.blockScanSubmit) {
+      const reason = "SEARCHER_BLOCKSCAN_SUBMIT!=1";
+      console.log(
+        `[searcher/blockscan] block=${sourceBlock} EV decision complete; ` +
+          `submission gated-off ring=${ring} route=${route} ` +
+          `net=${sim.netProfit} reason=${reason} protoRing=${protoRing}`,
+      );
+      drop(targetBlock, "submit_gate", "blockscan_submit_disabled", reason);
+      return finish("blockscan_submit_disabled");
+    }
+
+    closeEvTiming();
+    const latestAtSubmit = await awaitBlockScanDeadline(
+      readUncachedLatestBlock(provider),
+      passDeadlineAtMs,
+      "pre-submit source-head verification",
+    );
     const submitHead = latestAtSubmit.number;
     const submitHeadHash = latestAtSubmit.hash;
     if (
@@ -4612,12 +4169,7 @@ async function maybeSubmitBlockScanAtomic(params: {
         `forkHash=${sourceBlockHash} canonicalHash=${submitHeadHash}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} stale before submit ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "blockscan_stale_state", error);
-      return auditResult("pass", "reject", "blockscan_stale_state");
-    }
-
-    const allowReason = config.evGate ? "ev_gate_allow" : "ev_gate_disabled";
-    if (blindAudit) {
-      return auditResult("pass", "allow", allowReason);
+      return finish("blockscan_stale_state");
     }
 
     const decision = submissionCoordinator.offer({
@@ -4633,7 +4185,7 @@ async function maybeSubmitBlockScanAtomic(params: {
           `reason=${decision.reason}`,
       );
       drop(targetBlock, "submit_gate", decision.reason);
-      return auditResult("pass", "reject", decision.reason);
+      return finish(decision.reason);
     }
 
     const results = await bundleRouter.submit({
@@ -4655,7 +4207,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       const error = results.find((r) => r.error)?.error ?? "missing backrun tx hash";
       console.log(`[searcher/blockscan] block=${sourceBlock} submit failed ring=${ring}: ${error}`);
       drop(targetBlock, "submit", "bundle_router_rejected", error);
-      return auditResult("pass", "allow", allowReason);
+      return finish("bundle_router_rejected");
     }
 
     console.log(
@@ -4687,16 +4239,29 @@ async function maybeSubmitBlockScanAtomic(params: {
         emit: emitEvent,
       });
     }
-    return auditResult("pass", "allow", allowReason);
+    return finish(
+      results.some((result) => result.accepted)
+        ? "bundle_submitted_accepted"
+        : "bundle_submitted_unaccepted",
+      true,
+    );
   } catch (err) {
+    if (err instanceof BlockScanPassDeadlineError) {
+      const reason = err.stage === "final simulation"
+        ? "final_sim_deadline"
+        : "ev_or_submit_deadline";
+      recordAuditEv({
+        executionStatus: "not_run",
+        decision: "reject",
+        reason,
+      });
+      drop(targetBlock, "deadline", reason, err.message);
+      return finish(reason);
+    }
     const error = err instanceof Error ? err.message : String(err);
     console.log(`[searcher/blockscan] block=${sourceBlock} submit error ring=${ring}: ${error}`);
     drop(targetBlock, "submit", "blockscan_submit_error", error);
-    return auditResult(
-      evEvaluated ? "pass" : "not_run",
-      "reject",
-      "blockscan_submit_error",
-    );
+    return finish("blockscan_submit_error");
   }
 }
 
@@ -4827,12 +4392,6 @@ function blockReadState(
         blockTag: blockNumber,
       }),
   });
-}
-
-function isLocalVictimApplyAdapter(adapterId: string): boolean {
-  const variant = PRODUCTION_VICTIM_MODELS.forEdge(adapterId)?.localApplyVariant;
-  // V4 local apply is event-post-state driven and enters through overlayExact.
-  return variant === "univ2" || variant === "univ3" || variant === "curve";
 }
 
 function opportunityIdFor(
@@ -5035,17 +4594,28 @@ async function matchPoolImpactFromLogs(
   logs: HintLog[],
   graph: TokenEdge[],
   broadPoolAddrs: Map<string, string> | undefined,
-  tokenQuery?: TokenQueryBackend,
-): Promise<PoolImpact | null> {
-  const impacts = await detectImpactFromLogs(logs, graph, broadPoolAddrs, tokenQuery);
-  return impacts.find((impact) => hashOnlyImpactReplayAdmitted(impact.matchedAdapterId)) ?? null;
+  sourceBlock: number,
+  sourceBlockHash: string | null,
+  receiptId: string,
+): Promise<PoolImpactTransition> {
+  const sourceGeneration = createVictimSourceGeneration({
+    sourceBlock,
+    sourceBlockHash,
+    receiptId,
+    logs,
+    logsCompleteness: "fragment",
+  });
+  return detectImpactTransitionFromLogs(
+    logs,
+    graph,
+    sourceGeneration,
+    broadPoolAddrs,
+    null,
+  );
 }
 
 export function hashOnlyImpactReplayAdmitted(adapterId: string): boolean {
-  const model = PRODUCTION_VICTIM_MODELS.forEdge(adapterId);
-  return Boolean(model && (
-    model.localApplyVariant !== null || model.overlayReplayVariant !== null
-  ));
+  return hashOnlyImpactReplayAdmittedByPolicy(adapterId);
 }
 
 const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -5062,638 +4632,6 @@ function hintLogsMatchTokenIndex(
   return false;
 }
 
-function blockScanQuoteRequests(edges: TokenEdge[]): QuoteRequest[] {
-  return edges
-    .filter((edge) => edge.slotKind === "swap")
-    .map((edge) => ({
-      adapterId: edge.adapterId,
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      amountIn: 0n,
-      poolToken0: edge.poolToken0,
-      poolToken1: edge.poolToken1,
-      ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
-    }));
-}
-
-async function warmBlockScanV2V3(
-  updater: PoolStateUpdater,
-  cache: PoolStateCache,
-  blockNumber: number,
-  hops: QuoteRequest[],
-  shouldStop: () => boolean = () => false,
-): Promise<boolean> {
-  const pending = blockScanUnwarmedMutableQuoteRequests(hops, cache, updater);
-  for (let i = 0; i < pending.length; i += 500) {
-    if (shouldStop()) return false;
-    await updater.update(blockNumber, pending.slice(i, i + 500), {
-      awaitTicks: false,
-      maxTickPools: 0,
-    });
-  }
-  return true;
-}
-
-async function verifyBlockScanIncrementalWarm(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  allHops: QuoteRequest[],
-  cache: PoolStateCache,
-  changedPools: ReadonlySet<string>,
-  changedV4PoolIds: ReadonlySet<string>,
-): Promise<void> {
-  const scratchCache = new PoolStateCache(provider);
-  const scratchUpdater = new PoolStateUpdater(provider, scratchCache, {
-    maxPools: Number(process.env.SEARCHER_BLOCKSCAN_STATE_MAX_POOLS ?? "8000"),
-  });
-  await warmBlockScanV2V3(scratchUpdater, scratchCache, blockNumber, allHops);
-
-  let checked = 0;
-  let mismatches = 0;
-  for (const hop of blockScanMutableQuoteRequests(allHops)) {
-    const pool = blockScanV4PoolId(hop) ?? hop.target.toLowerCase();
-    if (changedPools.has(pool) || changedV4PoolIds.has(pool)) continue;
-    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(hop.adapterId)?.warm;
-    if (warm?.kind === "mutable-pool" && warm.cache === "v2") {
-      const cached = cache.snapshotV2(hop.target, blockNumber);
-      const fresh = scratchCache.snapshotV2(hop.target, blockNumber);
-      if (!fresh) continue;
-      checked++;
-      if (!cached || !sameV2Seed(cached, fresh)) {
-        mismatches++;
-        console.log(
-          `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
-            `pool=${pool} field=reserves cached=${cached ? formatV2Seed(cached) : "missing"} ` +
-            `fresh=${formatV2Seed(fresh)}`,
-        );
-      }
-    } else if (warm?.kind === "mutable-pool" && warm.cache === "v3") {
-      const cached = cache.snapshotV3Live(hop.target, blockNumber);
-      const fresh = scratchCache.snapshotV3Live(hop.target, blockNumber);
-      if (!fresh) continue;
-      checked++;
-      if (!cached || !sameV3LiveSeed(cached, fresh)) {
-        mismatches++;
-        console.log(
-          `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
-            `pool=${pool} field=slot0 cached=${cached ? formatV3LiveSeed(cached) : "missing"} ` +
-          `fresh=${formatV3LiveSeed(fresh)}`,
-        );
-      }
-    } else if (warm?.kind === "mutable-pool" && warm.cache === "v4") {
-      const poolId = blockScanV4PoolId(hop);
-      if (!poolId) continue;
-      const cached = cache.snapshotV4(poolId, blockNumber);
-      const fresh = scratchCache.snapshotV4(poolId, blockNumber);
-      if (!fresh) continue;
-      checked++;
-      if (!cached || !sameV4Seed(cached, fresh)) {
-        mismatches++;
-        console.log(
-          `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
-            `pool=${poolId} field=v4slot0 cached=${cached ? formatV4Seed(cached) : "missing"} ` +
-            `fresh=${formatV4Seed(fresh)}`,
-        );
-      }
-    }
-  }
-  console.log(
-    `[searcher/blockscan] block=${blockNumber} warm_verify checked=${checked} mismatches=${mismatches}`,
-  );
-}
-
-async function verifyBlockScanIncrementalCurveWarm(
-  state: StateBackend,
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  edges: TokenEdge[],
-  cache: PoolStateCache,
-  changedCurvePools: ReadonlySet<string>,
-): Promise<void> {
-  const scratchCache = new PoolStateCache(provider);
-  await warmBlockScanCurves(state, scratchCache, blockNumber, edges, Number.POSITIVE_INFINITY);
-
-  let checked = 0;
-  let mismatches = 0;
-  for (const edge of uniqueBlockScanCurvePools(edges)) {
-    const pool = edge.target.toLowerCase();
-    if (changedCurvePools.has(pool)) continue;
-    const cached = cache.snapshotCurve(edge.target, blockNumber);
-    const fresh = scratchCache.snapshotCurve(edge.target, blockNumber);
-    if (!fresh) continue;
-    checked++;
-    if (!cached || !sameCurveSnapshot(cached, fresh)) {
-      mismatches++;
-      console.log(
-        `[searcher/blockscan] block=${blockNumber} warm_verify MISMATCH ` +
-          `pool=${pool} field=curve cached=${cached ? formatCurveSnapshot(cached) : "missing"} ` +
-          `fresh=${formatCurveSnapshot(fresh)}`,
-      );
-    }
-  }
-  console.log(
-    `[searcher/blockscan] block=${blockNumber} warm_verify_curve checked=${checked} ` +
-      `mismatches=${mismatches}`,
-  );
-}
-
-function sameV2Seed(a: V2Seed, b: V2Seed): boolean {
-  return a.token0.toLowerCase() === b.token0.toLowerCase() &&
-    a.token1.toLowerCase() === b.token1.toLowerCase() &&
-    a.reserve0 === b.reserve0 &&
-    a.reserve1 === b.reserve1 &&
-    a.feeBps === b.feeBps &&
-    a.blockTimestampLast === b.blockTimestampLast;
-}
-
-function sameV3LiveSeed(a: V3LiveSeed, b: V3LiveSeed): boolean {
-  return a.sqrtPriceX96 === b.sqrtPriceX96 &&
-    a.tick === b.tick &&
-    a.liquidity === b.liquidity &&
-    a.observationIndex === b.observationIndex &&
-    a.observationCardinality === b.observationCardinality &&
-    a.observationCardinalityNext === b.observationCardinalityNext &&
-    a.feeProtocol === b.feeProtocol &&
-    a.unlocked === b.unlocked;
-}
-
-function sameV4Seed(a: V4Seed, b: V4Seed): boolean {
-  return a.sqrtPriceX96 === b.sqrtPriceX96 &&
-    a.tick === b.tick &&
-    a.liquidity === b.liquidity &&
-    a.protocolFee === b.protocolFee &&
-    a.lpFee === b.lpFee;
-}
-
-function sameCurveSnapshot(a: CurveSnapshot, b: CurveSnapshot): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.coins.length !== b.coins.length) return false;
-  for (let i = 0; i < a.coins.length; i++) {
-    if (a.coins[i].toLowerCase() !== b.coins[i].toLowerCase()) return false;
-  }
-  if (a.kind === "plain") {
-    return a.plain !== undefined &&
-      b.plain !== undefined &&
-      a.plain.A === b.plain.A &&
-      a.plain.fee === b.plain.fee &&
-      sameBigintArray(a.plain.balances, b.plain.balances) &&
-      sameBigintArray(a.plain.rates, b.plain.rates);
-  }
-  return a.ng !== undefined &&
-    b.ng !== undefined &&
-    a.ng.A === b.ng.A &&
-    a.ng.fee === b.ng.fee &&
-    a.ng.offpegFeeMultiplier === b.ng.offpegFeeMultiplier &&
-    sameBigintArray(a.ng.balances, b.ng.balances) &&
-    sameBigintArray(a.ng.rates, b.ng.rates);
-}
-
-function sameBigintArray(a: bigint[], b: bigint[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-}
-
-function formatV2Seed(seed: V2Seed): string {
-  return `${seed.reserve0}/${seed.reserve1}/${seed.feeBps}/${seed.blockTimestampLast ?? "n/a"}`;
-}
-
-function formatV3LiveSeed(seed: V3LiveSeed): string {
-  return [
-    seed.sqrtPriceX96,
-    seed.tick,
-    seed.liquidity,
-    seed.observationIndex ?? "n/a",
-    seed.observationCardinality ?? "n/a",
-    seed.observationCardinalityNext ?? "n/a",
-    seed.feeProtocol ?? "n/a",
-    seed.unlocked ?? "n/a",
-  ].join("/");
-}
-
-function formatV4Seed(seed: V4Seed): string {
-  return `${seed.sqrtPriceX96}/${seed.tick}/${seed.liquidity}/${seed.protocolFee}/${seed.lpFee}`;
-}
-
-function formatCurveSnapshot(seed: CurveSnapshot): string {
-  if (seed.kind === "plain" && seed.plain) {
-    return [
-      "plain",
-      `coins=${seed.coins.join(",")}`,
-      `A=${seed.plain.A}`,
-      `fee=${seed.plain.fee}`,
-      `balances=${seed.plain.balances.join(",")}`,
-      `rates=${seed.plain.rates.join(",")}`,
-    ].join("/");
-  }
-  if (seed.kind === "ng" && seed.ng) {
-    return [
-      "ng",
-      `coins=${seed.coins.join(",")}`,
-      `A=${seed.ng.A}`,
-      `fee=${seed.ng.fee}`,
-      `offpeg=${seed.ng.offpegFeeMultiplier}`,
-      `balances=${seed.ng.balances.join(",")}`,
-      `rates=${seed.ng.rates.join(",")}`,
-    ].join("/");
-  }
-  return `${seed.kind}/coins=${seed.coins.join(",")}/missing-state`;
-}
-
-interface BlockScanProtocolMidResult {
-  mids: Map<string, ProtocolMid>;
-  deadlineHit: boolean;
-}
-
-type BlockScanMidReadResult =
-  | { kind: "mid"; key: string; value: ProtocolMid }
-  | { kind: "failed" }
-  | { kind: "skipped" };
-
-async function buildBlockScanProtocolMids(
-  provider: ethers.JsonRpcProvider,
-  state: StateBackend,
-  blockNumber: number,
-  edges: TokenEdge[],
-  deadlineAtMs: number,
-  decimalsCache: Map<string, number>,
-  concurrency: number,
-): Promise<BlockScanProtocolMidResult> {
-  const mids = new Map<string, ProtocolMid>();
-  let protocolFailed = 0;
-  let externalSwapFailed = 0;
-  let externalSwapMids = 0;
-  let deadlineHit = false;
-  const decimalsInFlight = new Map<string, Promise<number>>();
-  const readDecimals = (token: string): Promise<number> => {
-    const key = token.toLowerCase();
-    const cached = decimalsCache.get(key);
-    if (cached !== undefined) return Promise.resolve(cached);
-    const pending = decimalsInFlight.get(key);
-    if (pending) return pending;
-    const read = blockScanTokenDecimals(provider, blockNumber, token, decimalsCache)
-      .finally(() => decimalsInFlight.delete(key));
-    decimalsInFlight.set(key, read);
-    return read;
-  };
-
-  // External swap venues have no local cache fallback. Resolve them before
-  // the much larger ERC-4626 protocol set so a slow long-tail vault cannot
-  // consume the whole pass budget and make otherwise executable DEX routes
-  // disappear from the scanner.
-  const externalEdges = edges.filter(isBlockScanExternallyQuotedSwap);
-  const externalBatch = await runBlockScanMidBatch(
-    externalEdges,
-    concurrency,
-    deadlineAtMs,
-    async (edge): Promise<BlockScanMidReadResult> => {
-      try {
-        const tokenInDec = await readDecimals(edge.tokenIn);
-        if (Date.now() >= deadlineAtMs) return { kind: "skipped" };
-        const oneIn = 10n ** BigInt(tokenInDec);
-        const mid = await readBlockScanExternalSwapMid(state, edge, oneIn);
-        if (!Number.isFinite(mid) || mid <= 0) return { kind: "skipped" };
-        return {
-          kind: "mid",
-          key: blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut),
-          value: { mid, feeBps: 0, depthIn: oneIn * 10_000n },
-        };
-      } catch {
-        return { kind: "failed" };
-      }
-    },
-  );
-  deadlineHit = externalBatch.deadlineHit;
-  for (const result of externalBatch.results) {
-    if (result?.kind === "mid") {
-      mids.set(result.key, result.value);
-      externalSwapMids++;
-    } else if (result?.kind === "failed") {
-      externalSwapFailed++;
-    }
-  }
-
-  if (!deadlineHit) {
-    const protocolEdges = edges
-      .filter((edge) =>
-        PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm?.kind === "protocol-mid"
-      )
-      .sort((a, b) => protocolMidPriority(a) - protocolMidPriority(b));
-    const pinnedState = blockReadStateForProtocol(provider, blockNumber) as StateBackend;
-    const protocolBatch = await runBlockScanMidBatch(
-      protocolEdges,
-      concurrency,
-      deadlineAtMs,
-      async (edge): Promise<BlockScanMidReadResult> => {
-        const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
-        if (adapter?.warm?.kind !== "protocol-mid") return { kind: "skipped" };
-        try {
-          const tokenInDec = await readDecimals(edge.tokenIn);
-          if (Date.now() >= deadlineAtMs) return { kind: "skipped" };
-          const oneIn = 10n ** BigInt(tokenInDec);
-          const quoteCtx = {
-            state: pinnedState,
-            target: edge.target,
-            edgeAdapterId: edge.adapterId,
-            tokenIn: edge.tokenIn,
-            tokenOut: edge.tokenOut,
-            amountIn: oneIn,
-            edge,
-          };
-          const out = adapter.warm.quotePrewarm
-            ? await adapter.warm.quotePrewarm(quoteCtx)
-            : await adapter.quoteExact(quoteCtx);
-          const mid = Number(out) / Number(oneIn);
-          if (!Number.isFinite(mid) || mid <= 0) return { kind: "skipped" };
-          return {
-            kind: "mid",
-            key: blockScanProtocolKey(edge.target, edge.tokenIn, edge.tokenOut),
-            value: { mid, feeBps: 0, depthIn: oneIn * 10_000n },
-          };
-        } catch {
-          return { kind: "failed" };
-        }
-      },
-    );
-    deadlineHit = protocolBatch.deadlineHit;
-    for (const result of protocolBatch.results) {
-      if (result?.kind === "mid") {
-        mids.set(result.key, result.value);
-      } else if (result?.kind === "failed") {
-        protocolFailed++;
-      }
-    }
-  }
-
-  if (protocolFailed > 0 || externalSwapFailed > 0 || deadlineHit) {
-    console.log(
-      `[searcher/blockscan] block=${blockNumber} protocolMidFailed=${protocolFailed} ` +
-        `externalSwapMidFailed=${externalSwapFailed} protocolMidDeadline=${deadlineHit ? 1 : 0} ` +
-        `externalSwapMids=${externalSwapMids} protocolMids=${mids.size}`,
-    );
-  }
-  return { mids, deadlineHit };
-}
-
-function isBlockScanExternallyQuotedSwap(edge: TokenEdge): boolean {
-  if (edge.slotKind !== "swap") return false;
-  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-  return warm?.kind === "external-mid" || edge.adapterId === "fluid-dex-swap";
-}
-
-function protocolMidPriority(edge: TokenEdge): number {
-  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-  return warm?.kind === "protocol-mid" ? warm.priority : 2;
-}
-
-async function readBlockScanExternalSwapMid(
-  state: StateBackend,
-  edge: TokenEdge,
-  oneIn: bigint,
-): Promise<number> {
-  const adapter = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId);
-  const out = adapter?.warm?.kind === "external-mid"
-    ? await adapter.quoteExact({
-        state,
-        target: edge.target,
-        edgeAdapterId: edge.adapterId,
-        tokenIn: edge.tokenIn,
-        tokenOut: edge.tokenOut,
-        amountIn: oneIn,
-        edge,
-      })
-    : await quoteFluidDex(
-      state,
-      edge.target,
-      edge.tokenIn,
-      edge.tokenOut,
-      oneIn,
-      edge.poolToken0,
-      edge.poolToken1,
-    );
-  return Number(out) / Number(oneIn);
-}
-
-function blockReadStateForProtocol(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-): Pick<StateBackend, "call"> {
-  return {
-    call: (req) => provider.call({ ...req, blockTag: blockNumber }),
-  };
-}
-
-async function readBlockHash(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-): Promise<string> {
-  const block = await provider.getBlock(blockNumber);
-  if (!block?.hash) throw new Error(`missing canonical hash for block ${blockNumber}`);
-  return block.hash.toLowerCase();
-}
-
-async function blockScanTokenDecimals(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  token: string,
-  cache: Map<string, number>,
-): Promise<number> {
-  const key = token.toLowerCase();
-  const cached = cache.get(key);
-  if (cached !== undefined) return cached;
-  const data = await provider.call({
-    to: token,
-    data: ERC20.encodeFunctionData("decimals"),
-    blockTag: blockNumber,
-  });
-  const decimals = Number(ERC20.decodeFunctionResult("decimals", data)[0]);
-  cache.set(key, decimals);
-  return decimals;
-}
-
-function blockScanProtocolKey(target: string, tokenIn: string, tokenOut: string): string {
-  return `${target.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
-}
-
-interface V3PoolMeta {
-  token0: string;
-  token1: string;
-  fee: bigint;
-  tickSpacing: number;
-}
-
-async function seedBlockScanV3TickMetadata(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-  deadlineAtMs: number,
-  metaCache: Map<string, V3PoolMeta>,
-): Promise<number> {
-  const pools = new Set<string>();
-  for (const edge of edges) {
-    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-    if (edge.slotKind === "swap" && warm?.kind === "mutable-pool" && warm.cache === "v3") {
-      pools.add(edge.target.toLowerCase());
-    }
-  }
-
-  // token0/token1/fee/tickSpacing are IMMUTABLE — read once per pool (metaCache
-  // persists across blocks), then re-seed cheaply with the current block number
-  // (no RPC) to keep snapshotV3's freshness gate satisfied. Only NEW pools pay
-  // the eth_call cost, so after the first block this is near-instant.
-  const seedFromMeta = (pool: string, meta: V3PoolMeta): void => {
-    cache.seedV3Ticks({
-      pool,
-      token0: meta.token0,
-      token1: meta.token1,
-      fee: meta.fee,
-      tickSpacing: meta.tickSpacing,
-      tickBitmap: new Map<number, bigint>(),
-      ticks: new Map<number, bigint>(),
-      blockNumber,
-    });
-  };
-
-  let seeded = 0;
-  const unknown: string[] = [];
-  for (const pool of pools) {
-    const cached = metaCache.get(pool);
-    if (cached) {
-      seedFromMeta(pool, cached);
-      seeded++;
-    } else {
-      unknown.push(pool);
-    }
-  }
-
-  for (let i = 0; i < unknown.length; i += 50) {
-    if (Date.now() >= deadlineAtMs) break;
-    const results = await Promise.all(
-      unknown.slice(i, i + 50).map(async (pool) => {
-        try {
-          const [t0, t1, fee, tickSpacing] = await Promise.all([
-            provider.call({ to: pool, data: V3_META.encodeFunctionData("token0"), blockTag: blockNumber }),
-            provider.call({ to: pool, data: V3_META.encodeFunctionData("token1"), blockTag: blockNumber }),
-            provider.call({ to: pool, data: V3_META.encodeFunctionData("fee"), blockTag: blockNumber }),
-            provider.call({ to: pool, data: V3_META.encodeFunctionData("tickSpacing"), blockTag: blockNumber }),
-          ]);
-          const meta: V3PoolMeta = {
-            token0: String(V3_META.decodeFunctionResult("token0", t0)[0]),
-            token1: String(V3_META.decodeFunctionResult("token1", t1)[0]),
-            fee: BigInt(V3_META.decodeFunctionResult("fee", fee)[0]),
-            tickSpacing: Number(V3_META.decodeFunctionResult("tickSpacing", tickSpacing)[0]),
-          };
-          metaCache.set(pool, meta);
-          seedFromMeta(pool, meta);
-          return 1;
-        } catch {
-          return 0;
-        }
-      }),
-    );
-    seeded += results.reduce((sum: number, value) => sum + value, 0);
-  }
-  return seeded;
-}
-
-async function warmBlockScanCurves(
-  state: StateBackend,
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-  deadlineAtMs: number,
-  onlyPools?: ReadonlySet<string>,
-): Promise<{
-  warmed: number;
-  failed: number;
-  failedPools: ReadonlySet<string>;
-  attemptedPools: ReadonlySet<string>;
-}> {
-  // Warm curve pool state via Multicall3. 31 pools keeps worst-case 8-coin
-  // plain pools below 500 subcalls in round 2 (balances + token decimals).
-  let warmed = 0;
-  let failed = 0;
-  const failedPools = new Set<string>();
-  const attemptedPools = new Set<string>();
-  const pools = uniqueBlockScanCurvePools(edges).filter(
-    (edge) => onlyPools === undefined || onlyPools.has(edge.target.toLowerCase()),
-  );
-  const pendingPools = blockScanUnwarmedCurveEdges(pools, cache, blockNumber);
-  const CURVE_BATCH_POOLS = 31;
-  cache.setTickBlock(blockNumber);
-  for (let i = 0; i < pendingPools.length; i += CURVE_BATCH_POOLS) {
-    if (Date.now() >= deadlineAtMs) break;
-    const chunk = pendingPools.slice(i, i + CURVE_BATCH_POOLS);
-    for (const edge of chunk) attemptedPools.add(edge.target.toLowerCase());
-    try {
-      await cache.warmCurvesBatch(state, chunk.map((edge) => edge.target));
-    } catch {
-      // Count from snapshots below; a failed aggregate leaves the chunk cold.
-    }
-  }
-  for (const edge of pools) {
-    if (cache.snapshotCurve(edge.target, blockNumber)) {
-      warmed++;
-    } else {
-      failed++;
-      failedPools.add(edge.target.toLowerCase());
-    }
-  }
-  return { warmed, failed, failedPools, attemptedPools };
-}
-
-function uniqueBlockScanCurvePools(edges: TokenEdge[]): TokenEdge[] {
-  const seen = new Set<string>();
-  const out: TokenEdge[] = [];
-  for (const edge of edges) {
-    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-    if (edge.slotKind !== "swap" || warm?.kind !== "curve-pool") continue;
-    const key = edge.target.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(edge);
-  }
-  return out;
-}
-
-function countBlockScanWarmedV2V3(
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-): number {
-  const seen = new Set<string>();
-  let warmed = 0;
-  for (const edge of edges) {
-    if (edge.slotKind !== "swap") continue;
-    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-    if (warm?.kind !== "mutable-pool" || (warm.cache !== "v2" && warm.cache !== "v3")) continue;
-    const key = `${edge.adapterId}:${edge.target.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (warm.cache === "v2" && cache.snapshotV2(edge.target, blockNumber)) warmed++;
-    if (warm.cache === "v3" && cache.snapshotV3(edge.target, blockNumber)) warmed++;
-  }
-  return warmed;
-}
-
-function countBlockScanWarmedV4(
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-): number {
-  const seen = new Set<string>();
-  let warmed = 0;
-  for (const edge of edges) {
-    const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-    if (warm?.kind !== "mutable-pool" || warm.cache !== "v4" || !edge.v4PoolKey) continue;
-    const poolId = (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
-    if (seen.has(poolId)) continue;
-    seen.add(poolId);
-    if (cache.snapshotV4(poolId, blockNumber)) warmed++;
-  }
-  return warmed;
-}
-
 function formatBlockScanRing(opp: { affectedTokens?: string[]; seedEdges: TokenEdge[] }): string {
   return (opp.affectedTokens ?? opp.seedEdges.map((edge) => edge.tokenIn)).join("->");
 }
@@ -5703,11 +4641,7 @@ function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
 }
 
 function blockScanEdgeIdentity(edge: TokenEdge): string {
-  const warm = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edge.adapterId)?.warm;
-  if (warm?.kind === "mutable-pool" && warm.cache === "v4" && edge.v4PoolKey) {
-    return (edge.poolId ?? v4PoolId(edge.v4PoolKey)).toLowerCase();
-  }
-  return edge.target.toLowerCase();
+  return (edge.poolId ?? edge.target).toLowerCase();
 }
 
 function activeBlockScanRejectBlacklistEntry(
@@ -5746,74 +4680,6 @@ function clearBlockScanRejectStrikes(
 ): void {
   if (!state.enabled) return;
   state.entries.delete(formatBlockScanRouteKey(opp));
-}
-
-function blockScanErrorMessage(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200);
-}
-
-function eventPostImpactSeed(impact: PoolImpact, blockNumber: number): PostImpactSeed | null {
-  return v2EventPostImpactSeed(impact, blockNumber) ??
-    v3EventPostImpactSeed(impact, blockNumber) ??
-    v4EventPostImpactSeed(impact, blockNumber);
-}
-
-function v2EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V2PostImpactSeed | null {
-  if (impact.matchedAdapterId !== "univ2-swap" || !impact.v2PostState) return null;
-  const token0 = impact.poolToken0 ?? impact.v2PostState.token0;
-  const token1 = impact.poolToken1 ?? impact.v2PostState.token1;
-  if (!token0 || !token1) return null;
-  return {
-    kind: "v2",
-    pool: impact.pool,
-    token0,
-    token1,
-    reserve0: impact.v2PostState.reserve0,
-    reserve1: impact.v2PostState.reserve1,
-    feeBps: DEFAULT_V2_FEE_BPS,
-    blockTimestampLast: impact.v2PostState.blockTimestampLast,
-    blockNumber,
-  };
-}
-
-function v3EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V3PostImpactSeed | null {
-  if (impact.matchedAdapterId !== "univ3-swap" || !impact.v3PostState) return null;
-  return {
-    kind: "v3",
-    pool: impact.pool,
-    sqrtPriceX96: impact.v3PostState.sqrtPriceX96,
-    tick: impact.v3PostState.tick,
-    liquidity: impact.v3PostState.liquidity,
-    blockNumber,
-  };
-}
-
-function v4EventPostImpactSeed(impact: PoolImpact, blockNumber: number): V4PostImpactSeed | null {
-  if (impact.matchedAdapterId !== "univ4-unlock" || !impact.v4PostState) return null;
-  return {
-    kind: "v4",
-    poolManager: impact.pool,
-    poolId: impact.v4PostState.poolId,
-    sqrtPriceX96: impact.v4PostState.sqrtPriceX96,
-    tick: impact.v4PostState.tick,
-    liquidity: impact.v4PostState.liquidity,
-    lpFee: impact.v4PostState.lpFee,
-    blockNumber,
-  };
-}
-
-function postImpactSummary(postImpact: PostImpactSeed): string {
-  if (postImpact.kind === "v2") {
-    return `pool=${postImpact.pool.slice(0, 10)} reserve0=${postImpact.reserve0} reserve1=${postImpact.reserve1}`;
-  }
-  if (postImpact.kind === "v3") {
-    return `pool=${postImpact.pool.slice(0, 10)} sqrtPriceX96=${postImpact.sqrtPriceX96} tick=${postImpact.tick}`;
-  }
-  if (postImpact.kind === "v4") {
-    return `poolManager=${postImpact.poolManager.slice(0, 10)} poolId=${postImpact.poolId.slice(0, 10)} ` +
-      `sqrtPriceX96=${postImpact.sqrtPriceX96} tick=${postImpact.tick}`;
-  }
-  return `pool=${postImpact.pool.slice(0, 10)}`;
 }
 
 async function applyPostImpactOverridesToAnvil(
@@ -6279,7 +5145,7 @@ let wsRpcId = 1;
 export function filterLiveProtocolRegistry(pools: PoolEntry[], enabled: boolean): PoolEntry[] {
   if (enabled) return pools;
   return pools.filter((pool) =>
-    PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pool.adapter)?.requiresProtocolEdgesFlag !== true
+    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter)?.requiresProtocolEdgesFlag !== true
   );
 }
 
@@ -6308,9 +5174,11 @@ export function buildMempoolIntakeWithRouters(
   const maxAddresses = Number(process.env.SEARCHER_MEMPOOL_FILTER_MAX_ADDRESSES ?? "300");
   const intake = buildMempoolIntakePlan({
     pools,
-    swaps: PRODUCTION_ROUTE_ADAPTERS.swaps,
+    swaps: PRODUCTION_ADAPTER_FAMILIES.swaps(),
     dynamicRouterTargets: forceRouters,
-    additionalCanonicalTargets: oracleVictimWatchTargets(),
+    additionalCanonicalTargets: oracleVictimWatchTargets(
+      PRODUCTION_ADAPTER_FAMILIES.oracleVictims(),
+    ),
     options: { hotPoolTopN, filteredMaxAddresses: maxAddresses },
   });
   if (intake.filteredTargets.length === 0) {

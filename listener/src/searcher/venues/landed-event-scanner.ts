@@ -1,9 +1,6 @@
 import { ethers } from "ethers";
 import type { PoolEntry } from "../planner/token-graph.js";
-import {
-  LANDED_SWAP_EVENTS,
-  type LandedSwapEventDescriptor,
-} from "./landed-event-registry.js";
+import type { LandedSwapEventDescriptor } from "./landed-event-registry.js";
 
 export interface AddressLandedSwapLog {
   readonly address: string;
@@ -23,6 +20,7 @@ export interface AddressLandedSwapScanResult {
 }
 
 export async function scanAddressLandedSwapActivity(input: {
+  events: readonly LandedSwapEventDescriptor[];
   fromBlock: number;
   toBlock: number;
   batchSize: number;
@@ -34,7 +32,7 @@ export async function scanAddressLandedSwapActivity(input: {
 }): Promise<AddressLandedSwapScanResult> {
   const activity = new Map<string, AddressLandedSwapActivity>();
   const logCountsByEventId = new Map<string, number>();
-  const events = LANDED_SWAP_EVENTS.filter((event) => event.emitter.mode === "address");
+  const events = input.events.filter((event) => event.emitter.mode === "address");
 
   for (const event of events) {
     let eventLogs = 0;

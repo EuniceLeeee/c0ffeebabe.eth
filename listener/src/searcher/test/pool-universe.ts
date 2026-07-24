@@ -1,9 +1,21 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
-import { loadPoolUniverse, selectPairCompletionPools } from "../pool-universe.js";
+import {
+  loadPoolUniverse,
+  loadPoolUniverseCoverageMetadata,
+  POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
+  poolUniverseCanonicalAnchorMatches,
+  selectPairCompletionPools,
+} from "../pool-universe.js";
 import type { PoolEntry } from "../planner/token-graph.js";
+import {
+  poolUniverseSourceFingerprints,
+} from "../venues/production-registry.js";
+import type { IdentityResolverDescriptor } from "../venues/identity.js";
+import type { V2LineageDescriptor } from "../venues/v2-lineage.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -53,6 +65,119 @@ async function main(): Promise<void> {
     assert(pools[1].score === 4, `expected explicit score 4, got ${pools[1].score}`);
     assert(pools[1].swapCount30d === 99, "swapCount30d should be preserved");
     console.log("[pool-universe] load/filter/rank: PASS");
+
+    const legacyCoverage = loadPoolUniverseCoverageMetadata(file);
+    assert(
+      legacyCoverage.registrySourceFingerprints === null,
+      "legacy universe must not authorize discovery-registry completeness",
+    );
+    const coverageFile = join(dir, "coverage-pools.json");
+    const coveragePayload = JSON.stringify({
+      schemaVersion: 3,
+      fromBlock: 10,
+      toBlock: 20,
+      generatedAt: "2026-07-24T00:00:00.000Z",
+      registry: { sourceFingerprints: ["source-a", "source-b"] },
+      pools: [],
+    });
+    writeFileSync(coverageFile, coveragePayload);
+    writeFileSync(`${coverageFile}.manifest.json`, JSON.stringify({
+      schemaVersion: 1,
+      profile: POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
+      chainId: 1,
+      source: {
+        number: 20,
+        hash: `0x${"12".repeat(32)}`,
+        stateRoot: `0x${"34".repeat(32)}`,
+      },
+      inputs: { fromBlock: 10, toBlock: 20 },
+      registry: { sourceFingerprints: ["source-a", "source-b"] },
+      output: {
+        contentSha256: createHash("sha256")
+          .update(coveragePayload)
+          .digest("hex"),
+        pools: 0,
+      },
+    }));
+    const coverage = loadPoolUniverseCoverageMetadata(coverageFile);
+    assert(coverage.fromBlock === 10 && coverage.toBlock === 20, "coverage range");
+    assert(
+      coverage.registrySourceFingerprints?.join(",") === "source-a,source-b",
+      "exact sorted registry fingerprints must load",
+    );
+    assert(coverage.manifestVerified, "matching sidecar must verify");
+    assert(
+      poolUniverseCanonicalAnchorMatches(coverage, {
+        number: 20,
+        hash: `0x${"12".repeat(32)}`,
+        stateRoot: `0x${"34".repeat(32)}`,
+      }),
+      "manifest source must match its canonical header",
+    );
+    assert(
+      !poolUniverseCanonicalAnchorMatches(coverage, {
+        number: 20,
+        hash: `0x${"56".repeat(32)}`,
+        stateRoot: `0x${"34".repeat(32)}`,
+      }),
+      "orphaned manifest source must fail closed",
+    );
+    writeFileSync(coverageFile, JSON.stringify({
+      schemaVersion: 3,
+      fromBlock: 10,
+      toBlock: 20,
+      registry: { sourceFingerprints: ["source-b", "source-a"] },
+      pools: [],
+    }));
+    assert(
+      loadPoolUniverseCoverageMetadata(coverageFile)
+        .registrySourceFingerprints === null,
+      "reordered/unverifiable registry fingerprints must fail closed",
+    );
+    console.log("[pool-universe] discovery registry provenance: PASS");
+
+    const identityPolicies: readonly IdentityResolverDescriptor[] = [{
+      poolAdapter: "univ2",
+      policy: "trusted-singleton-seed",
+    }];
+    const lineage: V2LineageDescriptor = {
+      venue: "v2-factory:0x0000000000000000000000000000000000000123",
+      factory: poolAddress(0x123),
+      executionFamily: "univ2-standard",
+      runtimeAdapter: "univ2",
+      discoverable: true,
+      quotable: true,
+      buildable: true,
+      measuredFeeRule: {
+        kind: "constant-bps",
+        feeBps: 30n,
+        evidence: "fixture",
+      },
+    };
+    const provenance = (feeBps: bigint, unknownFactory: "probe" | "reject") =>
+      poolUniverseSourceFingerprints({
+        landedSourceFingerprints: ["landed-a"],
+        identityPolicies,
+        admissionPolicy: {
+          unknownFactory,
+          unregisteredCurveUnderlying: "probe",
+        },
+        v2Lineages: [{
+          ...lineage,
+          measuredFeeRule: { ...lineage.measuredFeeRule!, feeBps },
+        }],
+      });
+    assert(
+      provenance(30n, "probe").join(",") !==
+        provenance(25n, "probe").join(","),
+      "measured V2 fee changes must invalidate universe provenance",
+    );
+    assert(
+      provenance(30n, "probe").join(",") !==
+        provenance(30n, "reject").join(","),
+      "identity admission changes must invalidate universe provenance",
+    );
+    console.log("[pool-universe] discovery semantics fingerprint: PASS");
 
     const missing = loadPoolUniverse(join(dir, "missing.json"));
     assert(missing.length === 0, `missing universe should default to empty, got ${missing.length}`);
@@ -320,7 +445,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe PASS (10/10)");
+  console.log("pool-universe PASS (11/11)");
 }
 
 main().catch((err) => {

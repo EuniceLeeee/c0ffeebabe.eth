@@ -15,6 +15,7 @@ import type {
   AttestedProtocolInstance,
   ProtocolConversionAdapter,
   ProtocolDiscoveryContext,
+  RouteLegAdapter,
 } from "../venues/route-leg-adapter.js";
 
 /**
@@ -67,18 +68,27 @@ function fixtureAdapter(input: {
     id: input.id,
     kind: "protocol-conversion",
     poolAdapters: ["erc4626"],
+    identityPolicies: [{ poolAdapter: "erc4626", policy: "trusted-singleton-seed" }],
     edgeAdapterIds: [`${input.edgePrefix}-wrap`, `${input.edgePrefix}-redeem`],
     allowedTaxonomy: [
       { slotKind: "protocol", protocolAction: "wrap" },
       { slotKind: "protocol", protocolAction: "redeem" },
     ],
-    actionAdapterIds: [],
+    ownedActionAdapterIds: [],
+    requiredInfraActionAdapterIds: [],
     requiresProtocolEdgesFlag: true,
-    readMid: null,
-    warm: null,
+    pricingState: {
+      stateKey: (edge) => edge.target.toLowerCase(),
+      compileStaticSchema: () => null,
+      buildCurrentBlockReads: () => [],
+      decodeState: () => null,
+      deriveMids: () => new Map(),
+      dependencies: () => [],
+    },
     prepared: null,
     declaredVenues: [],
     undeclaredVenueReason: "fixture instances require discovery",
+    discoveryIdentityAuthority: { class: "canonical-onchain", strength: 300 },
     discovery: {
       candidateSources: [],
       eventTopics: [],
@@ -111,7 +121,7 @@ const context: ProtocolDiscoveryContext = {
 };
 
 const attest = async (
-  _adapter: ProtocolConversionAdapter,
+  _adapter: RouteLegAdapter,
   candidate: { pool: PoolEntry },
 ): Promise<PoolEntry & { identitySource: "erc4626-standard" }> => ({
   ...candidate.pool,

@@ -17,7 +17,7 @@ import {
 import { buildStrategyViews } from "../strategy-views.js";
 import {
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-  PRODUCTION_ROUTE_ADAPTERS,
+  PRODUCTION_ADAPTER_FAMILIES,
 } from "../venues/production-registry.js";
 
 const ERC4626 = new ethers.Interface([
@@ -98,11 +98,11 @@ async function main(): Promise<void> {
         graphTokens: baselineTokens,
       });
       const scanned = await scanProtocolDiscoveryRange({
-        adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+        adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
         context,
       });
       const result = await runProtocolDiscovery({
-        adapters: PRODUCTION_ROUTE_ADAPTERS.protocols,
+        adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
         context,
         protocolEdgesEnabled: true,
         attestIdentity: attester,

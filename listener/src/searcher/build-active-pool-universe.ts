@@ -1,30 +1,34 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
 import { selectArbRelevantPools, type RankablePool } from "./pool-universe-arb-relevance.js";
-import { DEFAULT_POOL_UNIVERSE_PATH, type PoolUniverseEntry, type PoolUniverseFile } from "./pool-universe.js";
-import { ADDR } from "../shared/constants/addresses.js";
+import {
+  DEFAULT_POOL_UNIVERSE_PATH,
+  poolRegistryKey,
+  type PoolUniverseEntry,
+  type PoolUniverseFile,
+} from "./pool-universe.js";
 import { resolvePoolIdentity } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
-import { PRODUCTION_IDENTITY_RESOLVERS } from "./venues/production-registry.js";
-import { resolveCurveUnderlyingMetadata } from "./venues/curve-underlying.js";
 import {
-  BALANCER_V3_SWAP_TOPIC,
-  LANDED_SWAP_EVENTS,
-  UNIV4_INITIALIZE_TOPIC,
-  UNIV4_SWAP_TOPIC,
-} from "./venues/landed-event-registry.js";
-export { BALANCER_V3_SWAP_TOPIC } from "./venues/landed-event-registry.js";
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_IDENTITY_RESOLVERS,
+  productionPoolUniverseSourceFingerprints,
+} from "./venues/production-registry.js";
 import {
-  scanAddressLandedSwapActivity,
-  type AddressLandedSwapActivity,
-} from "./venues/landed-event-scanner.js";
+  discoverLandedPools,
+  type LandedPoolActivity,
+  type LandedPoolDiscoveryLogFilter,
+  type LandedPoolDiscoveryReadBackend,
+} from "./venues/landed-pool-discovery.js";
 
 const BLOCKS_PER_DAY = 7200;
 export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
-
+export const POOL_UNIVERSE_BUILD_MANIFEST_PROFILE =
+  "pool-universe-build-manifest-v1" as const;
 const univ2Iface = new ethers.Interface([
   "function token0() view returns (address)",
   "function token1() view returns (address)",
@@ -36,14 +40,6 @@ const univ3Iface = new ethers.Interface([
   "function fee() view returns (uint24)",
   "function tickSpacing() view returns (int24)",
 ]);
-const dodoV2Iface = new ethers.Interface([
-  "function _BASE_TOKEN_() view returns (address)",
-  "function _QUOTE_TOKEN_() view returns (address)",
-]);
-const v4InitializeIface = new ethers.Interface([
-  "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
-]);
-const V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = "0x86b6be7d";
 
 interface DiscoveryQueueEntry {
   addr?: unknown;
@@ -71,75 +67,42 @@ type ProbedPoolShape =
       identitySource: PoolUniverseEntry["identitySource"];
     };
 
-export interface RawLog {
-  address: string;
-  topics: string[];
-  data: string;
-  blockNumber: string;
-}
-
-export function buildBalancerV3PoolEntries(
-  logs: RawLog[],
-  minSwaps: number,
-): PoolUniverseEntry[] {
-  const pools = new Map<string, PoolUniverseEntry>();
-  for (const log of logs) {
-    if (log.address.toLowerCase() !== ADDR.BALANCER_V3_VAULT.toLowerCase()) continue;
-    if (log.topics[0]?.toLowerCase() !== BALANCER_V3_SWAP_TOPIC.toLowerCase()) continue;
-    const poolTopic = log.topics[1];
-    const tokenInTopic = log.topics[2];
-    const tokenOutTopic = log.topics[3];
-    if (!poolTopic || !tokenInTopic || !tokenOutTopic) continue;
-    try {
-      const address = ethers.getAddress(`0x${poolTopic.slice(-40)}`);
-      const tokenIn = ethers.getAddress(`0x${tokenInTopic.slice(-40)}`);
-      const tokenOut = ethers.getAddress(`0x${tokenOutTopic.slice(-40)}`);
-      const key = address.toLowerCase();
-      const current = pools.get(key);
-      if (current) {
-        current.score = (current.score ?? 0) + 1;
-        current.swapCount30d = (current.swapCount30d ?? 0) + 1;
-        current.lastSwapBlock = Math.max(current.lastSwapBlock ?? 0, parseInt(log.blockNumber, 16));
-      } else {
-        pools.set(key, {
-          address,
-          adapter: "balancer-v3",
-          venueId: "balancer-v3",
-          identitySource: "balancer-v3-vault",
-          token0: tokenIn,
-          token1: tokenOut,
-          score: 1,
-          swapCount30d: 1,
-          lastSwapBlock: parseInt(log.blockNumber, 16),
-          source: "balancer-v3-vault-swap",
-        });
-      }
-    } catch { /* malformed indexed address */ }
-  }
-  return [...pools.values()]
-    .filter((pool) => (pool.swapCount30d ?? 0) >= minSwaps)
-    .sort((a, b) => (b.swapCount30d ?? 0) - (a.swapCount30d ?? 0));
-}
-
-type PoolActivity = AddressLandedSwapActivity;
+type PoolActivity = LandedPoolActivity;
 
 interface EnrichedRankablePool extends RankablePool {
   pool: PoolUniverseEntry;
 }
 
-export type V4InitializeSource =
-  | "alchemy-v4-initialize"
-  | "v4-initialize-backfill"
-  | "v4-positionmanager-poolkeys";
-
-export interface ParsedV4Initialize {
-  poolId: string;
-  currency0: string;
-  currency1: string;
-  fee: number;
-  tickSpacing: number;
-  hooks: string;
-  source?: V4InitializeSource;
+/**
+ * The shared activity/enrichment lane is deliberately limited to the mature
+ * V2/V3 fast path. Family-owned materializers publish through
+ * `materializedPools`; filtering here keeps a malformed mixed input from
+ * sending a non-mature family back through central enrichment.
+ */
+export function selectMatureDexActivity(
+  activity: ReadonlyMap<string, LandedPoolActivity>,
+  maturePoolAdapters: ReadonlySet<PoolEntry["adapter"]>,
+): Map<string, LandedPoolActivity> {
+  const selected = new Map<string, LandedPoolActivity>();
+  for (const [key, pool] of activity) {
+    const adapterCounts = new Map(
+      [...pool.adapterCounts].filter(([adapter]) =>
+        maturePoolAdapters.has(adapter)
+      ),
+    );
+    const count = [...adapterCounts.values()].reduce(
+      (sum, adapterCount) => sum + adapterCount,
+      0,
+    );
+    if (count === 0) continue;
+    selected.set(key, {
+      address: pool.address,
+      adapterCounts,
+      count,
+      lastSwapBlock: pool.lastSwapBlock,
+    });
+  }
+  return selected;
 }
 
 function loadEnv(): void {
@@ -164,9 +127,34 @@ async function main(): Promise<void> {
   const rpcUrl = process.env.MAINNET_RPC_URL;
   if (!rpcUrl) throw new Error("MAINNET_RPC_URL required");
   const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const logRpcUrl = process.env.POOL_UNIVERSE_LOG_RPC_URL;
+  const logProvider = logRpcUrl
+    ? new ethers.JsonRpcProvider(logRpcUrl)
+    : provider;
 
   const latest = Number(process.env.POOL_UNIVERSE_TO_BLOCK ?? await provider.getBlockNumber());
-  const stateProvider = pinProviderCallsToBlock(provider, latest);
+  const [initialStateHeader, initialLogHeader] = await Promise.all([
+    provider.getBlock(latest),
+    logProvider.getBlock(latest),
+  ]);
+  if (
+    !initialStateHeader?.hash ||
+    !initialStateHeader.stateRoot ||
+    !initialLogHeader?.hash ||
+    initialStateHeader.hash.toLowerCase() !==
+      initialLogHeader.hash.toLowerCase()
+  ) {
+    throw new Error(
+      "pool-universe state/log RPCs disagree at the frozen toBlock",
+    );
+  }
+  const frozenBlockHash = initialStateHeader.hash;
+  const frozenStateRoot = initialStateHeader.stateRoot;
+  const stateProvider = pinProviderCallsToBlock(
+    provider,
+    latest,
+    frozenBlockHash,
+  );
   const lookbackBlocks = Number(
     process.env.POOL_UNIVERSE_LOOKBACK_BLOCKS ??
       String(Number(process.env.POOL_UNIVERSE_LOOKBACK_DAYS ?? "30") * BLOCKS_PER_DAY),
@@ -180,82 +168,63 @@ async function main(): Promise<void> {
     process.env.POOL_UNIVERSE_MIN_SWAPS ?? String(DEFAULT_POOL_UNIVERSE_MIN_SWAPS),
   );
   const logBatch = Number(process.env.POOL_UNIVERSE_LOG_BATCH ?? "1000");
+  const topicScanMode =
+    process.env.POOL_UNIVERSE_TOPIC_SCAN_MODE === "per-event"
+      ? "per-event"
+      : "union";
   const metadataConcurrency = Number(process.env.POOL_UNIVERSE_METADATA_CONCURRENCY ?? "24");
   const arbRelevance = process.env.POOL_UNIVERSE_ARB_RELEVANCE !== "0";
   const relevanceOversampleRaw = Number(process.env.POOL_UNIVERSE_RELEVANCE_OVERSAMPLE ?? "2");
   const relevanceOversample = Number.isFinite(relevanceOversampleRaw)
     ? Math.max(1, Math.floor(relevanceOversampleRaw))
     : 1;
+  const v4BackfillLookbackBlocksRaw = Number(
+    process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ?? "2000000",
+  );
+  if (
+    !Number.isSafeInteger(v4BackfillLookbackBlocksRaw) ||
+    v4BackfillLookbackBlocksRaw < 0
+  ) {
+    throw new Error("POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS must be a non-negative integer");
+  }
+  const v4BackfillLookbackBlocks = v4BackfillLookbackBlocksRaw;
   const outPath = process.env.POOL_UNIVERSE_OUT ?? DEFAULT_POOL_UNIVERSE_PATH;
+  const manifestPath = process.env.POOL_UNIVERSE_MANIFEST_OUT ??
+    `${outPath}.manifest.json`;
 
   console.log(
     `[pool-universe] scanning active pools from ${fromBlock} to ${latest} ` +
       `(blocks=${latest - fromBlock}, batch=${logBatch})`,
   );
 
-  const addressScan = await scanAddressLandedSwapActivity({
+  const landed = await discoverLandedPools({
+    registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
+    backend: ethersPoolDiscoveryBackend(stateProvider, logProvider),
     fromBlock,
     toBlock: latest,
     batchSize: logBatch,
-    getLogs: (event, start, end) => getLogsWithSplitRetry(provider, event.topic, start, end),
+    minSwaps,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    topicScanMode,
+    strict: true,
   });
-  const activity: Map<string, PoolActivity> = addressScan.activity;
-  for (const event of LANDED_SWAP_EVENTS.filter((candidate) => candidate.emitter.mode === "address")) {
+  const maturePoolAdapters = new Set<PoolEntry["adapter"]>(
+    PRODUCTION_ADAPTER_FAMILIES.swaps()
+      .filter((family) => family.matureDexUniverseDiscovery === true)
+      .flatMap((family) => family.poolAdapters),
+  );
+  const activity: Map<string, PoolActivity> = selectMatureDexActivity(
+    landed.activity,
+    maturePoolAdapters,
+  );
+  for (const descriptor of PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery().list()) {
     console.log(
-      `[pool-universe] ${event.discovery.label}: ` +
-        `${addressScan.logCountsByEventId.get(event.id) ?? 0} swap logs`,
+      `[pool-universe] ${descriptor.event.discovery.label}: ` +
+        `${landed.logCountsByEventId.get(descriptor.event.id) ?? 0} swap logs`,
     );
   }
-
-  const v4InitLogs: RawLog[] = [];
-  for (let start = fromBlock; start <= latest; start += logBatch) {
-    const end = Math.min(start + logBatch - 1, latest);
-    v4InitLogs.push(...await getLogsWithSplitRetry(
-      stateProvider,
-      UNIV4_INITIALIZE_TOPIC,
-      start,
-      end,
-      ADDR.UNISWAP_V4_POOL_MANAGER,
-    ));
-  }
-  const v4SwapLogs: RawLog[] = [];
-  for (let start = fromBlock; start <= latest; start += logBatch) {
-    const end = Math.min(start + logBatch - 1, latest);
-    v4SwapLogs.push(...await getLogsWithSplitRetry(
-      provider,
-      UNIV4_SWAP_TOPIC,
-      start,
-      end,
-      ADDR.UNISWAP_V4_POOL_MANAGER,
-    ));
-  }
-  const v4Pools = await buildV4PoolEntries(v4InitLogs, v4SwapLogs, minSwaps, async (poolId) => {
-    return resolveV4InitViaPositionManagerThenBackward(
-      stateProvider,
-      ADDR.UNISWAP_V4_POSITION_MANAGER,
-      ADDR.UNISWAP_V4_POOL_MANAGER,
-      UNIV4_INITIALIZE_TOPIC,
-      poolId,
-      fromBlock,
-    );
-  });
-  console.log(`[pool-universe] univ4: ${v4InitLogs.length} Initialize events, ${v4Pools.length} above minSwaps`);
-
-  const balancerV3Logs: RawLog[] = [];
-  for (let start = fromBlock; start <= latest; start += logBatch) {
-    const end = Math.min(start + logBatch - 1, latest);
-    balancerV3Logs.push(...await getLogsWithSplitRetry(
-      provider,
-      BALANCER_V3_SWAP_TOPIC,
-      start,
-      end,
-      ADDR.BALANCER_V3_VAULT,
-    ));
-  }
-  const balancerV3Pools = buildBalancerV3PoolEntries(balancerV3Logs, minSwaps);
   console.log(
-    `[pool-universe] balancer-v3: ${balancerV3Logs.length} Swap events, ` +
-      `${balancerV3Pools.length} pools above minSwaps`,
+    `[pool-universe] family-materialized=${landed.materializedPools.length}`,
   );
 
   const countRanked = [...activity.values()]
@@ -291,11 +260,18 @@ async function main(): Promise<void> {
       pool,
     });
   }
-  const v4TokenPools = v4Pools.map(v4TokenPool);
+  const materializedTokenPools = landed.materializedPools.map(materializedTokenPool);
   const ranked = arbRelevance
-    ? selectArbRelevantPools(enrichedCandidates, v4TokenPools, { enabled: true, maxPools })
+    ? selectArbRelevantPools(enrichedCandidates, materializedTokenPools, {
+        enabled: true,
+        maxPools,
+      })
     : enrichedCandidates.slice(0, maxPools);
-  const loopCompleters = countLoopCompleters(ranked, enrichedCandidates, v4TokenPools);
+  const loopCompleters = countLoopCompleters(
+    ranked,
+    enrichedCandidates,
+    materializedTokenPools,
+  );
   console.log(
     `[pool-universe] arb-relevance: enabled=${arbRelevance} oversample=${relevanceOversample} ` +
       `loopCompleters=${loopCompleters}/${ranked.length}`,
@@ -307,22 +283,37 @@ async function main(): Promise<void> {
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
     for (const token of pool.underlyingCoins ?? []) tokenSet.add(token.toLowerCase());
   }
-  for (const pool of balancerV3Pools) {
+  for (const pool of landed.materializedPools) {
     if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
   }
-  const discoveryQueuePath = resolve("searcher", "pools", "discovery-queue.json");
-  const { included, blocked } = await consumeDiscoveryQueue(stateProvider, discoveryQueuePath, tokenSet);
-  const poolByAddress = new Map<string, PoolUniverseEntry>();
+  const discoveryQueuePath =
+    process.env.POOL_UNIVERSE_DISCOVERY_QUEUE_PATH ??
+    resolve("searcher", "pools", "discovery-queue.json");
+  const discoveryQueueExists = existsSync(discoveryQueuePath);
+  const discoveryQueueSnapshot = discoveryQueueExists
+    ? readFileSync(discoveryQueuePath, "utf8")
+    : "";
+  const discoveryQueueSha256 = createHash("sha256")
+    .update(discoveryQueueExists ? discoveryQueueSnapshot : "null")
+    .digest("hex");
+  const discoveryQueueEntries = discoveryQueueEntryCount(discoveryQueueSnapshot);
+  const { included, blocked } = await consumeDiscoveryQueue(
+    stateProvider,
+    discoveryQueuePath,
+    tokenSet,
+    discoveryQueueSnapshot,
+  );
+  const poolByKey = new Map<string, PoolUniverseEntry>();
   for (const pool of validPools) {
-    poolByAddress.set(pool.address.toLowerCase(), pool);
+    poolByKey.set(poolRegistryKey(pool), pool);
   }
-  for (const pool of balancerV3Pools) {
-    poolByAddress.set(pool.address.toLowerCase(), pool);
+  for (const pool of landed.materializedPools) {
+    poolByKey.set(poolRegistryKey(pool), pool);
   }
   for (const pool of included) {
-    const key = pool.address.toLowerCase();
-    if (!poolByAddress.has(key)) poolByAddress.set(key, pool);
+    const key = poolRegistryKey(pool);
+    if (!poolByKey.has(key)) poolByKey.set(key, pool);
   }
   if (existsSync(discoveryQueuePath)) {
     console.log(`[pool-universe] discovery-queue: +${included.length} included, ${blocked.length} blocked`);
@@ -330,17 +321,94 @@ async function main(): Promise<void> {
       console.log(`[pool-universe] discovery-queue blocked ${item.addr}: ${item.reason}`);
     }
   }
+  const registrySourceFingerprints =
+    productionPoolUniverseSourceFingerprints();
   const file: PoolUniverseFile = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     fromBlock,
     toBlock: latest,
-    pools: [...poolByAddress.values(), ...dedupeV4ByPoolId(v4Pools)],
+    registry: {
+      sourceFingerprints: [...registrySourceFingerprints],
+    },
+    pools: [...poolByKey.values()],
   };
 
+  const [finalStateHeader, finalLogHeader] = await Promise.all([
+    provider.getBlock(latest),
+    logProvider.getBlock(latest),
+  ]);
+  if (
+    !finalStateHeader?.hash ||
+    !finalStateHeader.stateRoot ||
+    !finalLogHeader?.hash ||
+    finalStateHeader.hash.toLowerCase() !== frozenBlockHash.toLowerCase() ||
+    finalLogHeader.hash.toLowerCase() !== frozenBlockHash.toLowerCase() ||
+    finalStateHeader.stateRoot.toLowerCase() !== frozenStateRoot.toLowerCase()
+  ) {
+    throw new Error(
+      "pool-universe frozen source changed before artifact publication",
+    );
+  }
+  const finalDiscoveryQueueExists = existsSync(discoveryQueuePath);
+  const finalDiscoveryQueueSnapshot = finalDiscoveryQueueExists
+    ? readFileSync(discoveryQueuePath, "utf8")
+    : "";
+  if (
+    finalDiscoveryQueueExists !== discoveryQueueExists ||
+    createHash("sha256")
+      .update(finalDiscoveryQueueExists ? finalDiscoveryQueueSnapshot : "null")
+      .digest("hex") !== discoveryQueueSha256
+  ) {
+    throw new Error(
+      "pool-universe discovery queue changed before artifact publication",
+    );
+  }
+  const output = `${JSON.stringify(file, null, 2)}\n`;
+  const outputSha256 = createHash("sha256").update(output).digest("hex");
+  const manifest = {
+    schemaVersion: 1,
+    profile: POOL_UNIVERSE_BUILD_MANIFEST_PROFILE,
+    chainId: 1,
+    source: {
+      number: latest,
+      hash: frozenBlockHash.toLowerCase(),
+      stateRoot: frozenStateRoot.toLowerCase(),
+    },
+    inputs: {
+      fromBlock,
+      toBlock: latest,
+      lookbackBlocks,
+      minSwaps,
+      maxPools: Number.isFinite(maxPools) ? maxPools : null,
+      logBatch,
+      topicScanMode,
+      arbRelevance,
+      relevanceOversample,
+      v4BackfillLookbackBlocks,
+      discoveryQueue: {
+        profile: "frozen-discovery-queue-v1",
+        exists: discoveryQueueExists,
+        contentSha256: discoveryQueueSha256,
+        entries: discoveryQueueEntries,
+      },
+    },
+    registry: {
+      sourceFingerprints: registrySourceFingerprints,
+    },
+    output: {
+      contentSha256: outputSha256,
+      pools: file.pools.length,
+    },
+  };
   mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, JSON.stringify(file, null, 2) + "\n");
+  mkdirSync(dirname(manifestPath), { recursive: true });
+  writeFileSync(outPath, output);
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`[pool-universe] wrote ${file.pools.length} pools to ${outPath}`);
+  console.log(
+    `[pool-universe] manifest ${outputSha256} -> ${manifestPath}`,
+  );
 }
 
 /**
@@ -352,18 +420,30 @@ async function main(): Promise<void> {
 export function pinProviderCallsToBlock(
   provider: ethers.JsonRpcProvider,
   blockNumber: number,
+  blockHash: string,
 ): ethers.JsonRpcProvider {
   if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
     throw new Error("pool-universe metadata block must be a non-negative safe integer");
   }
-  const blockTag = ethers.toQuantity(blockNumber);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(blockHash)) {
+    throw new Error("pool-universe metadata block hash must be bytes32");
+  }
+  const blockTag = Object.freeze({
+    blockHash: blockHash.toLowerCase(),
+    requireCanonical: true,
+  });
   return new Proxy(provider, {
     get(target, property) {
       if (property === "call") {
-        return (request: ethers.TransactionRequest) => target.call({
-          ...request,
-          blockTag,
-        });
+        return (request: ethers.TransactionRequest) =>
+          target.send("eth_call", [
+            pinnedRpcTransaction(request),
+            blockTag,
+          ]);
+      }
+      if (property === "getCode") {
+        return (address: string) =>
+          target.send("eth_getCode", [address, blockTag]);
       }
       if (property === "send") {
         return (method: string, params: unknown[]) => {
@@ -381,289 +461,60 @@ export function pinProviderCallsToBlock(
   });
 }
 
-async function getLogsWithSplitRetry(
-  provider: ethers.JsonRpcProvider,
-  topic: string,
-  fromBlock: number,
-  toBlock: number,
-  address?: string,
-): Promise<RawLog[]> {
-  try {
-    const filter: {
-      fromBlock: string;
-      toBlock: string;
-      topics: string[];
-      address?: string;
-    } = {
-      fromBlock: "0x" + fromBlock.toString(16),
-      toBlock: "0x" + toBlock.toString(16),
-      topics: [topic],
-    };
-    if (address) filter.address = address;
-    return await provider.send("eth_getLogs", [filter]);
-  } catch {
-    if (fromBlock >= toBlock) return [];
-    const mid = Math.floor((fromBlock + toBlock) / 2);
-    const left = await getLogsWithSplitRetry(provider, topic, fromBlock, mid, address);
-    const right = await getLogsWithSplitRetry(provider, topic, mid + 1, toBlock, address);
-    return [...left, ...right];
+function pinnedRpcTransaction(
+  request: ethers.TransactionRequest,
+): Record<string, string> {
+  const transaction: Record<string, string> = {};
+  if (request.to !== undefined && request.to !== null) {
+    transaction.to = String(request.to);
   }
+  if (request.from !== undefined && request.from !== null) {
+    transaction.from = String(request.from);
+  }
+  if (request.data !== undefined && request.data !== null) {
+    transaction.data = ethers.hexlify(request.data);
+  }
+  if (request.value !== undefined && request.value !== null) {
+    transaction.value = ethers.toQuantity(request.value);
+  }
+  if (request.gasLimit !== undefined && request.gasLimit !== null) {
+    transaction.gas = ethers.toQuantity(request.gasLimit);
+  }
+  if (request.gasPrice !== undefined && request.gasPrice !== null) {
+    transaction.gasPrice = ethers.toQuantity(request.gasPrice);
+  }
+  return transaction;
 }
 
-export async function resolveV4InitBackward(
-  provider: ethers.JsonRpcProvider,
-  poolManagerAddr: string,
-  topic: string,
-  poolId: string,
-  searchFromBlock: number,
-  chunkSize = 100_000,
-): Promise<RawLog | null> {
-  const configuredLookback = Number(process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ?? "2000000");
-  const maxLookbackBlocks = Number.isFinite(configuredLookback)
-    ? Math.max(0, Math.floor(configuredLookback))
-    : 2_000_000;
-  const normalizedChunkSize = Number.isFinite(chunkSize)
-    ? Math.max(1, Math.floor(chunkSize))
-    : 100_000;
-  let remaining = maxLookbackBlocks;
-  let chunkEnd = Math.max(0, Math.floor(searchFromBlock));
-
-  while (remaining > 0 && chunkEnd >= 0) {
-    const blockCount = Math.min(normalizedChunkSize, remaining, chunkEnd + 1);
-    const chunkStart = chunkEnd - blockCount + 1;
-    const filter = {
-      address: poolManagerAddr,
-      topics: [topic, poolId],
-      fromBlock: "0x" + chunkStart.toString(16),
-      toBlock: "0x" + chunkEnd.toString(16),
-    };
-
-    try {
-      const logs = await provider.send("eth_getLogs", [filter]);
-      if (Array.isArray(logs) && logs.length > 0) return logs[0] as RawLog;
-    } catch (err) {
-      if (isPrunedHistoryError(err)) return null;
-      try {
-        const logs = await provider.send("eth_getLogs", [filter]);
-        if (Array.isArray(logs) && logs.length > 0) return logs[0] as RawLog;
-      } catch (retryErr) {
-        if (isPrunedHistoryError(retryErr)) return null;
-        console.warn(
-          `[pool-universe] v4 initialize backfill failed for ${poolId} ` +
-            `blocks ${chunkStart}-${chunkEnd}: ${rpcErrorMessage(retryErr)}`,
-        );
-      }
-    }
-
-    remaining -= blockCount;
-    chunkEnd = chunkStart - 1;
-  }
-
-  return null;
-}
-
-export async function resolveV4PoolKeyViaPositionManager(
-  provider: ethers.JsonRpcProvider,
-  positionManagerAddr: string,
-  poolId: string,
-): Promise<ParsedV4Initialize | null> {
-  const normalizedPoolId = normalizeBytes32Topic(poolId, "poolId");
-  const poolIdPrefix = normalizedPoolId.slice(2, 52);
-  const data = V4_POSITION_MANAGER_POOL_KEYS_SELECTOR + poolIdPrefix.padEnd(64, "0");
-
-  try {
-    const result = await provider.send("eth_call", [
-      { to: ethers.getAddress(positionManagerAddr), data },
-      "latest",
-    ]);
-    const [decodedCurrency0, decodedCurrency1, decodedFee, decodedTickSpacing, decodedHooks] =
-      ethers.AbiCoder.defaultAbiCoder().decode(
-        ["address", "address", "uint24", "int24", "address"],
-        String(result),
-      );
-    const parsed: ParsedV4Initialize = {
-      poolId: normalizedPoolId,
-      currency0: ethers.getAddress(String(decodedCurrency0)),
-      currency1: ethers.getAddress(String(decodedCurrency1)),
-      fee: Number(decodedFee),
-      tickSpacing: Number(decodedTickSpacing),
-      hooks: ethers.getAddress(String(decodedHooks)),
-    };
-    const recomputed = ethers.keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        ["address", "address", "uint24", "int24", "address"],
-        [parsed.currency0, parsed.currency1, parsed.fee, parsed.tickSpacing, parsed.hooks],
-      ),
-    );
-    return recomputed.toLowerCase() === normalizedPoolId ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function resolveV4InitViaPositionManagerThenBackward(
-  provider: ethers.JsonRpcProvider,
-  positionManagerAddr: string,
-  poolManagerAddr: string,
-  topic: string,
-  poolId: string,
-  searchFromBlock: number,
-  chunkSize = 100_000,
-): Promise<ParsedV4Initialize | null> {
-  const viaPositionManager = await resolveV4PoolKeyViaPositionManager(provider, positionManagerAddr, poolId);
-  if (viaPositionManager) {
-    return { ...viaPositionManager, source: "v4-positionmanager-poolkeys" };
-  }
-
-  const log = await resolveV4InitBackward(provider, poolManagerAddr, topic, poolId, searchFromBlock, chunkSize);
-  return log ? { ...parseV4InitializeLog(log), source: "v4-initialize-backfill" } : null;
-}
-
-function isPrunedHistoryError(err: unknown): boolean {
-  return /pruned|not available/i.test(rpcErrorMessage(err));
-}
-
-function rpcErrorMessage(err: unknown): string {
-  if (typeof err === "string") return err;
-  if (err instanceof Error) {
-    const serialized = serializeRpcError(err);
-    return serialized ? `${err.message} ${serialized}` : err.message;
-  }
-  const serialized = serializeRpcError(err);
-  return serialized || String(err);
-}
-
-function serializeRpcError(err: unknown): string {
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return "";
-  }
-}
-
-export async function buildV4PoolEntries(
-  initLogs: RawLog[],
-  swapLogs: RawLog[],
-  minSwaps: number,
-  resolveMissingInit?: (poolId: string) => Promise<ParsedV4Initialize | null>,
-): Promise<PoolUniverseEntry[]> {
-  const activity = new Map<string, { count: number; lastSwapBlock: number }>();
-  for (const log of swapLogs) {
-    const poolId = normalizeBytes32Topic(log.topics[1], "Swap.id");
-    const block = parseLogBlockNumber(log.blockNumber);
-    const item = activity.get(poolId) ?? { count: 0, lastSwapBlock: 0 };
-    item.count++;
-    item.lastSwapBlock = Math.max(item.lastSwapBlock, block);
-    activity.set(poolId, item);
-  }
-
-  const initByPoolId = new Map<string, ParsedV4Initialize>();
-  for (const log of initLogs) {
-    const parsed = parseV4InitializeLog(log);
-    initByPoolId.set(parsed.poolId, parsed);
-  }
-
-  const qualifying = [...activity.entries()]
-    .filter(([, item]) => item.count >= minSwaps);
-  const resolved = new Map<string, { parsed: ParsedV4Initialize; source: string }>();
-  for (const [poolId] of qualifying) {
-    const parsed = initByPoolId.get(poolId);
-    if (parsed) resolved.set(poolId, { parsed, source: "alchemy-v4-initialize" });
-  }
-
-  if (resolveMissingInit) {
-    const missing = qualifying
-      .map(([poolId]) => poolId)
-      .filter((poolId) => !resolved.has(poolId));
-    const backfilled = await mapLimit(missing, 24, async (poolId) => {
-      const parsed = await resolveMissingInit(poolId);
-      return parsed ? { poolId, parsed } : null;
-    });
-    for (const item of backfilled) {
-      if (item) {
-        resolved.set(item.poolId, {
-          parsed: item.parsed,
-          source: item.parsed.source ?? "v4-initialize-backfill",
-        });
-      }
-    }
-  }
-
-  const entries: PoolUniverseEntry[] = [];
-  for (const [poolId, item] of qualifying) {
-    const init = resolved.get(poolId);
-    if (!init) continue;
-    entries.push(v4PoolEntryFromInitialize(init.parsed, item, init.source));
-  }
-
-  return entries.sort((a, b) =>
-    (b.score ?? 0) - (a.score ?? 0) ||
-    (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
-  );
-}
-
-function parseV4InitializeLog(log: RawLog): ParsedV4Initialize {
-  const parsed = v4InitializeIface.parseLog({ topics: log.topics, data: log.data });
-  if (!parsed) throw new Error("failed to parse univ4 Initialize log");
+function ethersPoolDiscoveryBackend(
+  stateProvider: ethers.JsonRpcProvider,
+  logProvider: ethers.JsonRpcProvider = stateProvider,
+): LandedPoolDiscoveryReadBackend {
   return {
-    poolId: normalizeBytes32Topic(String(parsed.args.id), "Initialize.id"),
-    currency0: ethers.getAddress(String(parsed.args.currency0)),
-    currency1: ethers.getAddress(String(parsed.args.currency1)),
-    fee: Number(parsed.args.fee),
-    tickSpacing: Number(parsed.args.tickSpacing),
-    hooks: ethers.getAddress(String(parsed.args.hooks)),
+    getLogs(filter: LandedPoolDiscoveryLogFilter) {
+      return logProvider.send("eth_getLogs", [{
+        ...(filter.address === undefined ? {} : { address: filter.address }),
+        topics: [...filter.topics],
+        fromBlock: ethers.toQuantity(filter.fromBlock),
+        toBlock: ethers.toQuantity(filter.toBlock),
+      }]);
+    },
+    call(req) {
+      return stateProvider.call(req);
+    },
+    getCode(address) {
+      return stateProvider.getCode(address);
+    },
   };
 }
 
-function v4PoolEntryFromInitialize(
-  parsed: ParsedV4Initialize,
-  activity: { count: number; lastSwapBlock: number },
-  source: string,
-): PoolUniverseEntry {
-  return {
-    address: ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER),
-    adapter: "univ4",
-    venueId: "univ4",
-    identitySource: "v4-manager",
-    poolId: parsed.poolId,
-    currency0: parsed.currency0,
-    currency1: parsed.currency1,
-    fee: parsed.fee,
-    tickSpacing: parsed.tickSpacing,
-    hooks: parsed.hooks,
-    fixedTokenIn: parsed.currency0,
-    fixedTokenOut: parsed.currency1,
-    score: activity.count,
-    swapCount30d: activity.count,
-    lastSwapBlock: activity.lastSwapBlock,
-    source,
-  };
-}
-
-function dedupeV4ByPoolId(pools: PoolUniverseEntry[]): PoolUniverseEntry[] {
-  const byPoolId = new Map<string, PoolUniverseEntry>();
-  for (const pool of pools) {
-    if (!pool.poolId) continue;
-    const key = pool.poolId.toLowerCase();
-    const existing = byPoolId.get(key);
-    if (
-      !existing ||
-      (pool.score ?? 0) > (existing.score ?? 0) ||
-      ((pool.score ?? 0) === (existing.score ?? 0) && (pool.lastSwapBlock ?? 0) > (existing.lastSwapBlock ?? 0))
-    ) {
-      byPoolId.set(key, pool);
-    }
-  }
-  return [...byPoolId.values()].sort((a, b) =>
-    (b.score ?? 0) - (a.score ?? 0) ||
-    (b.lastSwapBlock ?? 0) - (a.lastSwapBlock ?? 0)
-  );
-}
-
-function v4TokenPool(pool: PoolUniverseEntry): { token0?: string; token1?: string; tokens?: string[] } {
+function materializedTokenPool(
+  pool: PoolEntry,
+): { token0?: string; token1?: string; tokens?: string[] } {
   return {
     token0: pool.token0 ?? pool.currency0,
     token1: pool.token1 ?? pool.currency1,
+    tokens: pool.underlyingCoins,
   };
 }
 
@@ -707,55 +558,19 @@ function poolTokens(pool: { token0?: string; token1?: string; tokens?: string[] 
   return [...tokens];
 }
 
-function normalizeBytes32Topic(value: string | undefined, field: string): string {
-  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error(`univ4 ${field} must be bytes32`);
-  }
-  return value.toLowerCase();
-}
-
-function parseLogBlockNumber(blockNumber: string): number {
-  const block = blockNumber.startsWith("0x")
-    ? parseInt(blockNumber, 16)
-    : Number(blockNumber);
-  if (!Number.isSafeInteger(block) || block < 0) {
-    throw new Error(`invalid log blockNumber: ${blockNumber}`);
-  }
-  return block;
-}
-
 async function enrichPool(
   provider: ethers.JsonRpcProvider,
   pool: PoolActivity,
 ): Promise<PoolUniverseEntry | null> {
   const adapterHint = bestAdapter(pool.adapterCounts);
-  if (adapterHint === "curve-underlying") {
-    const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
-      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    });
-    if (!identity.ok) return null;
-    const metadata = await resolveCurveUnderlyingMetadata(provider, pool.address, {
-      allowDirectPoolFallback: true,
-    });
-    return {
-      address: pool.address,
-      adapter: "curve-underlying",
-      venueId: identity.venueId,
-      identitySource: identity.identitySource,
-      underlyingCoins: metadata.coins,
-      score: pool.count,
-      swapCount30d: pool.count,
-      lastSwapBlock: pool.lastSwapBlock,
-      source: "alchemy-swap-logs",
-    };
+  // The generic activity lane is intentionally the retained mature V2/V3
+  // fast path. Every other registered swap family must provide its own typed
+  // materializer and therefore arrives through landed.materializedPools.
+  if (adapterHint !== "univ2" && adapterHint !== "univ3") {
+    throw new Error(
+      `non-mature pool adapter ${adapterHint} escaped family materialization`,
+    );
   }
-  if (
-    adapterHint !== "univ2" &&
-    adapterHint !== "univ3" &&
-    adapterHint !== "dodo-v2" &&
-    adapterHint !== "curve"
-  ) return null;
   const identity = await resolvePoolIdentity(provider, pool.address, adapterHint, {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
@@ -788,13 +603,6 @@ async function enrichPool(
       const [token0, token1] = await Promise.all([
         callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token0")),
         callAddress(provider, pool.address, univ2Iface.encodeFunctionData("token1")),
-      ]);
-      return { ...base, token0, token1 };
-    }
-    if (adapter === "dodo-v2") {
-      const [token0, token1] = await Promise.all([
-        callAddress(provider, pool.address, dodoV2Iface.encodeFunctionData("_BASE_TOKEN_")),
-        callAddress(provider, pool.address, dodoV2Iface.encodeFunctionData("_QUOTE_TOKEN_")),
       ]);
       return { ...base, token0, token1 };
     }
@@ -860,13 +668,18 @@ export async function consumeDiscoveryQueue(
   provider: ethers.JsonRpcProvider,
   queuePath: string,
   tokenSet: Set<string>,
+  frozenContent?: string,
 ): Promise<{
   included: PoolUniverseEntry[];
   blocked: Array<{ addr: string; reason: string }>;
 }> {
-  if (!existsSync(queuePath)) return { included: [], blocked: [] };
+  if (frozenContent === undefined && !existsSync(queuePath)) {
+    return { included: [], blocked: [] };
+  }
 
-  const parsed = JSON.parse(readFileSync(queuePath, "utf8")) as unknown;
+  const content = frozenContent ?? readFileSync(queuePath, "utf8");
+  if (content.trim().length === 0) return { included: [], blocked: [] };
+  const parsed = JSON.parse(content) as unknown;
   const included: PoolUniverseEntry[] = [];
   const blocked: Array<{ addr: string; reason: string }> = [];
   const queue = isRecord(parsed) && Array.isArray(parsed.queue) ? parsed.queue : [];
@@ -913,6 +726,14 @@ export async function consumeDiscoveryQueue(
   }
 
   return { included, blocked };
+}
+
+function discoveryQueueEntryCount(content: string): number {
+  if (content.trim().length === 0) return 0;
+  const parsed = JSON.parse(content) as unknown;
+  return isRecord(parsed) && Array.isArray(parsed.queue)
+    ? parsed.queue.length
+    : 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

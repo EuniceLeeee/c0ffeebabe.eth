@@ -1,0 +1,520 @@
+import assert from "node:assert/strict";
+import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
+import type { TokenEdge } from "../planner/token-graph.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import {
+  assertPureSynchronousDeriveMids,
+  blockScanEdgeKey,
+  createAmbientIoPoisonHarness,
+  type BlockScanStateCapability,
+  type StateRead,
+  type StateReadResult,
+  type StateReadSuccess,
+} from "../venues/blockscan-state-capability.js";
+import {
+  balancerV3BlockScanState,
+  balancerV3Adapter,
+} from "../venues/swaps/balancer-v3.js";
+import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanErc20Iface,
+  blockScanMulticallIface,
+} from "../venues/swaps/blockscan-state-shared.js";
+import {
+  curvePlainBlockScanState,
+  curvePlainAdapter,
+} from "../venues/swaps/curve-plain.js";
+import {
+  curveUnderlyingBlockScanState,
+  curveUnderlyingAdapter,
+} from "../venues/swaps/curve-underlying.js";
+import {
+  dodoV2BlockScanState,
+  dodoV2PoolIface,
+  dodoV2Adapter,
+} from "../venues/swaps/dodo-v2.js";
+import {
+  fluidDexBlockScanState,
+  fluidDexSwapIface,
+  fluidDexAdapter,
+} from "../venues/swaps/fluid-dex.js";
+import {
+  univ2BlockScanState,
+  univ2StandardAdapter,
+} from "../venues/swaps/univ2-standard.js";
+import {
+  univ3BlockScanState,
+  univ3StandardAdapter,
+} from "../venues/swaps/univ3-standard.js";
+import {
+  univ4BlockScanState,
+  univ4Adapter,
+} from "../venues/swaps/univ4.js";
+import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import { TRUSTED_V2_LINEAGES } from "../venues/v2-lineage.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+
+const SOURCE_BLOCK = 22_000_000;
+const SOURCE_HASH = `0x${"ab".repeat(32)}`;
+const POOL = "0x1111111111111111111111111111111111111111";
+const TOKEN0 = "0x2222222222222222222222222222222222222222";
+const TOKEN1 = "0x3333333333333333333333333333333333333333";
+const Q96 = 1n << 96n;
+const UNIT = 10n ** 18n;
+const taxonomy = deriveEdgeTaxonomy("swap");
+
+const v2Iface = new ethers.Interface([
+  "function getReserves() view returns (uint112 reserve0,uint112 reserve1,uint32 blockTimestampLast)",
+  "function factory() view returns (address)",
+]);
+const v3Iface = new ethers.Interface([
+  "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  "function liquidity() view returns (uint128)",
+  "function fee() view returns (uint24)",
+]);
+const v4StateIface = new ethers.Interface([
+  "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
+]);
+const curveStateIface = new ethers.Interface([
+  "function A() view returns (uint256)",
+  "function fee() view returns (uint256)",
+  "function offpeg_fee_multiplier() view returns (uint256)",
+  "function balances(uint256 i) view returns (uint256)",
+  "function stored_rates() view returns (uint256[])",
+]);
+const curveUnderlyingIface = new ethers.Interface([
+  "function get_dy_underlying(int128 i,int128 j,uint256 dx) view returns (uint256)",
+]);
+const balancerIface = new ethers.Interface([
+  "function getPoolTokenInfo(address pool) view returns (address[] tokens,tuple(uint8 tokenType,address rateProvider,bool paysYieldFees)[] tokenInfo,uint256[] balancesRaw,uint256[] lastBalancesLiveScaled18)",
+  "function querySwapSingleTokenExactIn(address pool,address tokenIn,address tokenOut,uint256 exactAmountIn,address sender,bytes userData) returns (uint256 amountOut)",
+]);
+const dodoBalanceIface = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+]);
+const pureFixtureFamilyIds = new Set<string>();
+
+await runUniV2();
+await runUniV3();
+await runUniV4();
+await runCurvePlain();
+await runCurveUnderlying();
+await runBalancerV3();
+await runDodoV2();
+await runFluidDex();
+assert.deepEqual(
+  [...pureFixtureFamilyIds].sort(),
+  PRODUCTION_ADAPTER_FAMILIES.pricing("swap").map((family) => family.id).sort(),
+  "every production swap pricing family requires one passing purity fixture",
+);
+
+console.log("[swap-blockscan-state-capabilities] current-N + pure derive: PASS");
+
+async function runUniV2(): Promise<void> {
+  const edges = twoTokenEdges("univ2-swap");
+  const result = await execute(univ2StandardAdapter.id, univ2BlockScanState, edges, (read) => {
+    const selector = read.data.slice(0, 10);
+    if (selector === v2Iface.getFunction("getReserves")!.selector) {
+      return v2Iface.encodeFunctionResult("getReserves", [
+        1_000n * UNIT,
+        2_000n * UNIT,
+        1,
+      ]);
+    }
+    if (selector === v2Iface.getFunction("factory")!.selector) {
+      return v2Iface.encodeFunctionResult("factory", [
+        TRUSTED_V2_LINEAGES[0].factory,
+      ]);
+    }
+    throw new Error(`unexpected v2 read ${read.id}`);
+  });
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 2);
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.5);
+  assert.equal(result.initialReads.length, 1);
+  assert.equal(result.snapshot.blockTimestampLast, 1);
+}
+
+async function runUniV3(): Promise<void> {
+  const edges = twoTokenEdges("univ3-swap");
+  const result = await execute(univ3StandardAdapter.id, univ3BlockScanState, edges, (read) => {
+    const selector = read.data.slice(0, 10);
+    if (selector === v3Iface.getFunction("slot0")!.selector) {
+      return v3Iface.encodeFunctionResult("slot0", [
+        2n * Q96,
+        0,
+        0,
+        1,
+        1,
+        0,
+        true,
+      ]);
+    }
+    if (selector === v3Iface.getFunction("liquidity")!.selector) {
+      return v3Iface.encodeFunctionResult("liquidity", [1_000n * UNIT]);
+    }
+    if (selector === v3Iface.getFunction("fee")!.selector) {
+      return v3Iface.encodeFunctionResult("fee", [3_000]);
+    }
+    throw new Error(`unexpected v3 read ${read.id}`);
+  });
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
+  assert.equal(result.initialReads.length, 2);
+  assert.equal(result.snapshot.tickSpacing, 60);
+  assert.equal(result.snapshot.observationCardinality, 1);
+  assert.equal(result.snapshot.unlocked, true);
+}
+
+async function runUniV4(): Promise<void> {
+  const key = {
+    currency0: TOKEN0,
+    currency1: TOKEN1,
+    fee: 3_000,
+    tickSpacing: 60,
+    hooks: ethers.ZeroAddress,
+  };
+  const poolId = v4PoolId(key);
+  const edges = twoTokenEdges("univ4-unlock").map((edge) => ({
+    ...edge,
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    poolId,
+    v4PoolKey: key,
+  }));
+  const result = await execute(univ4Adapter.id, univ4BlockScanState, edges, (read) => {
+    const selector = read.data.slice(0, 10);
+    if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
+      return v4StateIface.encodeFunctionResult("getSlot0", [
+        2n * Q96,
+        0,
+        0,
+        3_000,
+      ]);
+    }
+    if (selector === v4StateIface.getFunction("getLiquidity")!.selector) {
+      return v4StateIface.encodeFunctionResult("getLiquidity", [1_000n * UNIT]);
+    }
+    throw new Error(`unexpected v4 read ${read.id}`);
+  });
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
+  assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
+  assert.equal(result.initialReads.length, 2);
+}
+
+async function runCurvePlain(): Promise<void> {
+  const edges = twoTokenEdges("curve-exchange-plain").map((edge, index) => ({
+    ...edge,
+    curveI: index,
+    curveJ: index === 0 ? 1 : 0,
+  }));
+  const result = await execute(curvePlainAdapter.id, curvePlainBlockScanState, edges, (read) => {
+    if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+      return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+    }
+    assert.equal(read.to.toLowerCase(), BLOCKSCAN_MULTICALL3.toLowerCase());
+    const calls = blockScanMulticallIface.decodeFunctionData(
+      "aggregate3",
+      read.data,
+    )[0] as readonly { target: string; callData: string }[];
+    const responses = calls.map(({ target, callData }) => {
+      const selector = callData.slice(0, 10);
+      if (selector === curveStateIface.getFunction("A")!.selector) {
+        return { success: true, returnData: curveStateIface.encodeFunctionResult("A", [2_000]) };
+      }
+      if (selector === curveStateIface.getFunction("fee")!.selector) {
+        return { success: true, returnData: curveStateIface.encodeFunctionResult("fee", [4_000_000]) };
+      }
+      if (selector === curveStateIface.getFunction("offpeg_fee_multiplier")!.selector) {
+        return { success: false, returnData: "0x" };
+      }
+      if (selector === curveStateIface.getFunction("stored_rates")!.selector) {
+        return { success: false, returnData: "0x" };
+      }
+      if (selector === curveStateIface.getFunction("balances")!.selector) {
+        const index = Number(
+          curveStateIface.decodeFunctionData("balances", callData)[0],
+        );
+        return {
+          success: true,
+          returnData: curveStateIface.encodeFunctionResult(
+            "balances",
+            [index === 0 ? 1_000_000n * UNIT : 1_000_000n * UNIT],
+          ),
+        };
+      }
+      throw new Error(`unexpected Curve inner call ${selector}`);
+    });
+    return blockScanMulticallIface.encodeFunctionResult("aggregate3", [responses]);
+  });
+  assert.equal(result.initialReads.length, 1);
+  for (const edge of edges) {
+    assert.ok((result.mids.get(blockScanEdgeKey(edge))?.mid ?? 0) > 0);
+  }
+}
+
+async function runCurveUnderlying(): Promise<void> {
+  const edges = twoTokenEdges("curve-exchange-underlying").map((edge, index) => ({
+    ...edge,
+    curveI: index,
+    curveJ: index === 0 ? 1 : 0,
+  }));
+  const result = await execute(
+    curveUnderlyingAdapter.id,
+    curveUnderlyingBlockScanState,
+    edges,
+    (read) => {
+    if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+      return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+    }
+    const decoded = curveUnderlyingIface.decodeFunctionData(
+      "get_dy_underlying",
+      read.data,
+    );
+    assert.equal(BigInt(decoded[2]), UNIT);
+    return curveUnderlyingIface.encodeFunctionResult(
+      "get_dy_underlying",
+      [decoded[0] === 0n ? 2n * UNIT : UNIT / 2n],
+    );
+    },
+  );
+  assert.equal(result.initialReads.length, 2);
+  assert.equal(result.dependentReads.length, 0);
+}
+
+async function runBalancerV3(): Promise<void> {
+  const edges = twoTokenEdges("balancer-v3-unlock");
+  const result = await execute(balancerV3Adapter.id, balancerV3BlockScanState, edges, (read) => {
+    if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+      return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+    }
+    if (
+      read.data.slice(0, 10) ===
+        balancerIface.getFunction("getPoolTokenInfo")!.selector
+    ) {
+      return balancerIface.encodeFunctionResult("getPoolTokenInfo", [
+        [TOKEN0, TOKEN1],
+        [
+          [0, ethers.ZeroAddress, false],
+          [0, ethers.ZeroAddress, false],
+        ],
+        [100n * UNIT, 100n * UNIT],
+        [100n * UNIT, 100n * UNIT],
+      ]);
+    }
+    const decoded = balancerIface.decodeFunctionData(
+      "querySwapSingleTokenExactIn",
+      read.data,
+    );
+    assert.equal(BigInt(decoded[3]), UNIT);
+    return balancerIface.encodeFunctionResult(
+      "querySwapSingleTokenExactIn",
+      [String(decoded[1]).toLowerCase() === TOKEN0.toLowerCase() ? 2n * UNIT : UNIT / 2n],
+    );
+  });
+  assert.equal(result.initialReads.length, 1);
+  assert.equal(result.dependentReads.length, 2);
+}
+
+async function runDodoV2(): Promise<void> {
+  const edges = twoTokenEdges("dodo-v2-swap");
+  const result = await execute(dodoV2Adapter.id, dodoV2BlockScanState, edges, (read) => {
+    const selector = read.data.slice(0, 10);
+    if (selector === blockScanErc20Iface.getFunction("decimals")!.selector) {
+      return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+    }
+    if (selector === dodoBalanceIface.getFunction("balanceOf")!.selector) {
+      return dodoBalanceIface.encodeFunctionResult("balanceOf", [100n * UNIT]);
+    }
+    for (const fn of ["_BASE_TOKEN_", "_QUOTE_TOKEN_"] as const) {
+      if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+        return dodoV2PoolIface.encodeFunctionResult(
+          fn,
+          [fn === "_BASE_TOKEN_" ? TOKEN0 : TOKEN1],
+        );
+      }
+    }
+    for (const fn of ["_BASE_RESERVE_", "_QUOTE_RESERVE_"] as const) {
+      if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+        return dodoV2PoolIface.encodeFunctionResult(fn, [100n * UNIT]);
+      }
+    }
+    if (
+      selector ===
+        dodoV2PoolIface.getFunction("getPMMStateForCall")!.selector
+    ) {
+      return dodoV2PoolIface.encodeFunctionResult("getPMMStateForCall", [
+        UNIT,
+        UNIT / 10n,
+        100n * UNIT,
+        100n * UNIT,
+        100n * UNIT,
+        100n * UNIT,
+        0,
+      ]);
+    }
+    for (const fn of ["querySellBase", "querySellQuote"] as const) {
+      if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+        const decoded = dodoV2PoolIface.decodeFunctionData(fn, read.data);
+        assert.equal(BigInt(decoded[1]), UNIT);
+        return dodoV2PoolIface.encodeFunctionResult(
+          fn,
+          [fn === "querySellBase" ? 2n * UNIT : UNIT / 2n],
+        );
+      }
+    }
+    throw new Error(`unexpected DODO read ${read.id}`);
+  });
+  assert.equal(result.dependentReads.length, 2);
+}
+
+async function runFluidDex(): Promise<void> {
+  const previous = process.env.FLUID_DEX_RESOLVER;
+  delete process.env.FLUID_DEX_RESOLVER;
+  try {
+    const edges = twoTokenEdges("fluid-dex-swap");
+    const result = await execute(fluidDexAdapter.id, fluidDexBlockScanState, edges, (read) => {
+      if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+        return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+      }
+      const decoded = fluidDexSwapIface.decodeFunctionData("swapIn", read.data);
+      assert.equal(BigInt(decoded[1]), UNIT);
+      return fluidDexSwapIface.encodeFunctionResult(
+        "swapIn",
+        [Boolean(decoded[0]) ? 2n * UNIT : UNIT / 2n],
+      );
+    });
+    assert.equal(result.dependentReads.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.FLUID_DEX_RESOLVER;
+    else process.env.FLUID_DEX_RESOLVER = previous;
+  }
+}
+
+async function execute<Schema, Snapshot>(
+  familyId: string,
+  capability: BlockScanStateCapability<Schema, Snapshot>,
+  edges: readonly TokenEdge[],
+  respond: (read: StateRead) => string,
+): Promise<{
+  readonly initialReads: readonly StateRead[];
+  readonly staticReads: readonly StateRead[];
+  readonly dependentReads: readonly StateRead[];
+  readonly snapshot: Snapshot;
+  readonly mids: ReturnType<typeof capability.deriveMids>;
+}> {
+  const controller = new AbortController();
+  let schema: Schema = await capability.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 10_000,
+    signal: controller.signal,
+  }) as Schema;
+  const staticInput = {
+    sourceBlock: SOURCE_BLOCK,
+    sourceBlockHash: SOURCE_HASH,
+    schema,
+    edges,
+  };
+  const staticReads = capability.buildStaticSchemaReads?.(staticInput) ?? [];
+  if (staticReads.length > 0) {
+    const staticResults = staticReads.map((read) => success(read, respond(read)));
+    schema = capability.hydrateStaticSchema!(schema, staticResults);
+  }
+  const input = {
+    sourceBlock: SOURCE_BLOCK,
+    sourceBlockHash: SOURCE_HASH,
+    schema,
+    edges,
+  };
+  const initialReads = capability.buildCurrentBlockReads(input);
+  const initialResults = initialReads.map((read) => success(read, respond(read)));
+  const dependentReads = capability.buildDependentBlockReads?.({
+    ...input,
+    completedRound: 0,
+    priorResults: initialResults,
+  }) ?? [];
+  const dependentResults = dependentReads.map((read) => success(read, respond(read)));
+  const allResults = Object.freeze([...initialResults, ...dependentResults]);
+  const noMore = capability.buildDependentBlockReads?.({
+    ...input,
+    completedRound: 1,
+    priorResults: allResults,
+  }) ?? [];
+  assert.equal(noMore.length, 0, "view quote must close after one dependent round");
+  const snapshot = capability.decodeState(schema, allResults);
+  const mids = capability.deriveMids(snapshot, edges);
+  assert.deepEqual([...mids.keys()].sort(), edges.map(blockScanEdgeKey).sort());
+  const harness = createAmbientIoPoisonHarness();
+  assertPureSynchronousDeriveMids({ capability, snapshot, edges, harness });
+  const production = PRODUCTION_ADAPTER_FAMILIES
+    .pricing("swap")
+    .find((family) => family.id === familyId);
+  assert(production, `non-production swap purity fixture ${familyId}`);
+  assert.equal(
+    production.pricingState,
+    capability,
+    `${familyId}: fixture tests the wrong pricingState capability`,
+  );
+  assert(
+    !pureFixtureFamilyIds.has(familyId),
+    `duplicate swap purity fixture ${familyId}`,
+  );
+  pureFixtureFamilyIds.add(familyId);
+  for (const read of [...initialReads, ...dependentReads]) {
+    assert.equal(read.sourceBlock, SOURCE_BLOCK);
+    assert.equal(read.sourceBlockHash, SOURCE_HASH);
+  }
+  return { staticReads, initialReads, dependentReads, snapshot, mids };
+}
+
+function success(read: StateRead, data: string): StateReadSuccess {
+  return Object.freeze({
+    id: read.id,
+    ok: true,
+    sourceBlock: read.sourceBlock,
+    sourceBlockHash: read.sourceBlockHash,
+    provenance: Object.freeze({
+      kind: "eip1898" as const,
+      source: Object.freeze({
+        number: read.sourceBlock,
+        hash: read.sourceBlockHash,
+        generation: 1,
+      }),
+      requireCanonical: true as const,
+    }),
+    data,
+  });
+}
+
+function twoTokenEdges(adapterId: string): TokenEdge[] {
+  return [
+    {
+      adapterId,
+      target: POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      poolToken0: TOKEN0,
+      poolToken1: TOKEN1,
+      ...(adapterId === "univ2-swap" ? { v2FeeBps: 30n } : {}),
+      ...(adapterId === "univ3-swap" ? { v3Fee: 3_000 } : {}),
+      ...(adapterId === "univ3-swap" ? { v3TickSpacing: 60 } : {}),
+      slotKind: "swap",
+      ...taxonomy,
+    },
+    {
+      adapterId,
+      target: POOL,
+      tokenIn: TOKEN1,
+      tokenOut: TOKEN0,
+      poolToken0: TOKEN0,
+      poolToken1: TOKEN1,
+      ...(adapterId === "univ2-swap" ? { v2FeeBps: 30n } : {}),
+      ...(adapterId === "univ3-swap" ? { v3Fee: 3_000 } : {}),
+      ...(adapterId === "univ3-swap" ? { v3TickSpacing: 60 } : {}),
+      slotKind: "swap",
+      ...taxonomy,
+    },
+  ];
+}
+
+await import("./external-swap-liquidity-state.js");

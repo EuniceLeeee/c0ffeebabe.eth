@@ -85,13 +85,18 @@ async function testBuyGemAppliesTout(): Promise<void> {
   console.log("[psm-quote] tout buyGem fee applied: PASS");
 }
 
-async function testFeeReadFailureFallsBackToZero(): Promise<void> {
+async function testFeeReadFailureIsUnresolved(): Promise<void> {
   const { state } = mockState(123n, 456n, true);
   const usdcIn = 42_000_000n;
-  const out = await quotePsm(ADDR.USDC, ADDR.DAI, usdcIn, state);
-
-  assert(out === usdcIn * PSM_TO18, `fee-read fallback output ${out}`);
-  console.log("[psm-quote] fee read failure falls back to zero fee: PASS");
+  let rejected = false;
+  try {
+    await quotePsm(ADDR.USDC, ADDR.DAI, usdcIn, state);
+  } catch (error) {
+    rejected = error instanceof Error &&
+      error.message.includes("PSM fee unresolved");
+  }
+  assert(rejected, "fee read failure must fail closed, not assume zero fee");
+  console.log("[psm-quote] fee read failure is unresolved: PASS");
 }
 
 async function testRejectsNonPsmPair(): Promise<void> {
@@ -113,7 +118,7 @@ async function main(): Promise<void> {
     testZeroFeeMatchesOldScaling,
     testSellGemAppliesTin,
     testBuyGemAppliesTout,
-    testFeeReadFailureFallsBackToZero,
+    testFeeReadFailureIsUnresolved,
     testRejectsNonPsmPair,
   ];
   let passed = 0;

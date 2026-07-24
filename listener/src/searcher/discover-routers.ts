@@ -8,9 +8,9 @@ import {
 } from "./force-include.js";
 import { buildMempoolToAddressFilter } from "./main.js";
 import {
-  landedSwapEventsForTopic,
   observedLandedPoolIdentity,
 } from "./venues/landed-event-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "./venues/production-registry.js";
 
 export interface BlockData {
   number: number;
@@ -147,7 +147,7 @@ export async function discoverRouters(
 function observedSwapPoolIdentities(log: { address: string; topics: string[] }): string[] {
   const topic0 = log.topics[0];
   if (typeof topic0 !== "string") return [];
-  return [...new Set(landedSwapEventsForTopic(topic0)
+  return [...new Set(PRODUCTION_ADAPTER_FAMILIES.landedEvents().eventsForTopic(topic0)
     .map((event) => observedLandedPoolIdentity(event, log))
     .filter((identity): identity is string => identity !== null))];
 }

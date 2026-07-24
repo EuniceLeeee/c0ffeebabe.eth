@@ -3,10 +3,20 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { buildMempoolIntakeWithRouters } from "../main.js";
 import {
+  assertDexSourceHashStable,
+  completeDexGraphCoverageScan,
+  createDexGraphCoverageState,
+  createPinnedDexReadBackend,
   MempoolIntakeRefreshSignal,
+  planDexGraphCoverageScan,
   prepareRuntimePoolRefresh,
   selectRefreshCandidates,
 } from "../runtime-pool-refresh.js";
+import {
+  cloneProtocolDiscoveryEvidenceCache,
+  createProtocolDiscoveryEvidenceCache,
+  replaceProtocolDiscoveryEvidenceCache,
+} from "../protocol-discovery-cache.js";
 import { buildStrategyViews, type StrategyViews } from "../strategy-views.js";
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -43,6 +53,7 @@ const FRESH: PoolEntry = {
   adapter: "univ2",
   token0: address(0xb321),
   token1: address(0xc321),
+  factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
   score: 50,
 };
 const BASE_GRAPH = [
@@ -66,6 +77,107 @@ function includesAddress(values: readonly string[], wanted: string): boolean {
 }
 
 async function main(): Promise<void> {
+  const projectionGap = createDexGraphCoverageState({
+    sourceCompleteThrough: 100,
+    graphCompleteThrough: -1,
+  });
+  const catchup = planDexGraphCoverageScan(projectionGap, 120);
+  assert(
+    catchup.fromBlock === 101 && catchup.toBlock === 120 && catchup.blocksBack === 19,
+    "projection retry must not collapse missing source coverage to a current-only scan",
+  );
+  const stillRetrying = completeDexGraphCoverageScan(projectionGap, catchup, false);
+  assert(
+    stillRetrying.sourceCompleteThrough === 120 &&
+      stillRetrying.graphCompleteThrough === -1,
+    "source coverage should advance independently while graph projection remains incomplete",
+  );
+  const nextHead = planDexGraphCoverageScan(stillRetrying, 121);
+  assert(
+    nextHead.fromBlock === 121 && nextHead.blocksBack === 0,
+    "next strict pass should continue from the source cursor after retained retries",
+  );
+  const healedCoverage = completeDexGraphCoverageScan(stillRetrying, nextHead, true);
+  assert(
+    healedCoverage.sourceCompleteThrough === 121 &&
+      healedCoverage.graphCompleteThrough === 121,
+    "healed retries should advance graph coverage only after the contiguous source scan",
+  );
+  let rejectedCurrentOnlyGap = false;
+  try {
+    completeDexGraphCoverageScan(
+      projectionGap,
+      { fromBlock: 120, toBlock: 120, blocksBack: 0 },
+      true,
+    );
+  } catch {
+    rejectedCurrentOnlyGap = true;
+  }
+  assert(
+    rejectedCurrentOnlyGap,
+    "a current-only scan must not close an earlier source-coverage gap",
+  );
+  console.log("[runtime-refresh] source and executable graph coverage stay distinct: PASS");
+
+  const rpcCalls: Array<{ method: string; params: unknown[] }> = [];
+  const fakeProvider = {
+    getRpcTransaction: (req: unknown) => req,
+    send: async (method: string, params: unknown[]) => {
+      rpcCalls.push({ method, params });
+      return method === "eth_getCode" ? "0x6000" : "0x";
+    },
+  } as unknown as ethers.JsonRpcProvider;
+  const pinned = createPinnedDexReadBackend(fakeProvider, 123);
+  await pinned.call({ to: address(0xd001), data: "0x12345678" });
+  await pinned.getCode!(address(0xd002));
+  assert(
+    rpcCalls.every((item) => item.params.at(-1) === "0x7b"),
+    "strict DEX identity/code reads must use the exact numeric source block",
+  );
+  let rejectedMixedBlock = false;
+  try {
+    await pinned.call({
+      to: address(0xd003),
+      data: "0x12345678",
+      blockTag: 124,
+    });
+  } catch {
+    rejectedMixedBlock = true;
+  }
+  assert(rejectedMixedBlock, "pinned DEX backend must reject a different block tag");
+  const hashA = `0x${"11".repeat(32)}`;
+  assertDexSourceHashStable(123, hashA, hashA.toUpperCase().replace("0X", "0x"));
+  let rejectedHashDrift = false;
+  try {
+    assertDexSourceHashStable(123, hashA, `0x${"22".repeat(32)}`);
+  } catch {
+    rejectedHashDrift = true;
+  }
+  assert(rejectedHashDrift, "source hash drift must prohibit publication");
+  const liveEvidence = createProtocolDiscoveryEvidenceCache(1);
+  const stagedEvidence = cloneProtocolDiscoveryEvidenceCache(liveEvidence);
+  stagedEvidence.addressEntries.set("family|candidate", {
+    adapterId: "family",
+    address: address(0xd004),
+    codeHash: `0x${"33".repeat(32)}`,
+    implementationWord: `0x${"00".repeat(32)}`,
+    matcherVersion: "v1",
+    dependencyPolicyVersion: null,
+    dependencyFingerprint: null,
+    checkedAtBlock: 123,
+    candidate: null,
+  });
+  assert(
+    liveEvidence.addressEntries.size === 0,
+    "source-hash fence must keep staged matcher evidence out of the live cache",
+  );
+  replaceProtocolDiscoveryEvidenceCache(liveEvidence, stagedEvidence);
+  assert(
+    [...liveEvidence.addressEntries].length === 1,
+    "staged matcher evidence should publish only after the source-hash fence",
+  );
+  console.log("[runtime-refresh] current-N DEX reads and source hash are fail-closed: PASS");
+
   let backendHealthy = false;
   const backend: TokenQueryBackend = {
     call: async () => {
@@ -256,7 +368,7 @@ async function main(): Promise<void> {
   );
   console.log("[runtime-refresh] boot-failed protocol venue retries to admission: PASS");
 
-  console.log("runtime-pool-refresh PASS (6/6)");
+  console.log("runtime-pool-refresh PASS (8/8)");
 }
 
 await main();

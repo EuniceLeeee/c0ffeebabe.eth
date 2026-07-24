@@ -9,9 +9,16 @@
 import { geometricGrid, goldenSectionMaximize, bidAmount } from "../solver/amount-bounds.js";
 import { AnvilSolver, resolveSearchCenter } from "../solver/solver.js";
 import { propagateAmounts } from "../solver/amount-propagation.js";
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import type {
+  StateBackend,
+  StateCallControl,
+} from "../../shared/state/state-backend.js";
 import type { CandidatePlan } from "../planner/planner.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import {
+  BlockScanFamilyAttributedError,
+} from "../detector/blockscan-family-budget.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -729,6 +736,316 @@ async function testQuoteProfitFloorAdmitsNearMiss(): Promise<void> {
   console.log("[amtsearch] quote profit floor admission: PASS");
 }
 
+async function testDeferredPhasePreservesTopNFallbacks(): Promise<void> {
+  const tokenA = "0x00000000000000000000000000000000000000c1";
+  const tokenB = "0x00000000000000000000000000000000000000c2";
+  const pool = "0x00000000000000000000000000000000000000c3";
+  const plan: CandidatePlan = {
+    templateName: "flash-swap-repay",
+    root: {} as CandidatePlan["root"],
+    opportunity: {
+      kind: "backrun-arb",
+      victimTxHash: "0xdeferred-topn",
+      blockNumber: 1,
+      affectedPools: [pool],
+      affectedTokens: [tokenA, tokenB],
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1_000n,
+      victimEffect: {
+        kind: "swap",
+        impact: {
+          pool,
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          amountIn: 1_000n,
+          matchedAdapterId: "univ2-swap",
+        },
+      },
+      targetNetProfit: 1n,
+      hints: {},
+    },
+    tokenPath: {
+      edges: [{
+        adapterId: "univ2-swap",
+        target: pool,
+        tokenIn: tokenA,
+        tokenOut: tokenB,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+      }],
+    },
+    flashAdapterIds: ["morpho-flash"],
+    flashAdapterId: "morpho-flash",
+  };
+  let simulateCalls = 0;
+  let deferred: readonly Awaited<ReturnType<AnvilSolver["solve"]>>[] = [];
+  const returned = await new AnvilSolver().solve(
+    plan,
+    {} as StateBackend,
+    {
+      executor: "0x00000000000000000000000000000000000000ee",
+      simulate: async () => {
+        simulateCalls++;
+        return { success: false, netProfit: 0n };
+      },
+    },
+    {
+      deferPhase2Sim: true,
+      finalSimTopN: 3,
+      gridHalfWidth: 2,
+      gssMaxTries: 3,
+      quoteSafetyBps: 10000n,
+      quoteSource: {
+        quote: async (req) => ({
+          amountOut: req.amountIn * 2n,
+          latencyMs: 0,
+        }),
+      },
+      onDeferredCandidates: (candidates) => {
+        deferred = candidates;
+      },
+    },
+  );
+
+  assert(simulateCalls === 0, "deferred phase must not run final sim");
+  assert(deferred.length === 3, `deferred phase must preserve top-3, got ${deferred.length}`);
+  assert(
+    new Set(deferred.map((candidate) => candidate.flashAmount.toString())).size === 3,
+    "deferred phase must preserve distinct fallback amounts",
+  );
+  assert(returned === deferred[0], "deferred return must retain ranked candidate zero");
+  console.log("[amtsearch] deferred phase preserves top-N final-sim fallbacks: PASS");
+}
+
+async function testSolverPreservesTypedLegOwner(): Promise<void> {
+  const tokenA = "0x0000000000000000000000000000000000000a01";
+  const tokenB = "0x0000000000000000000000000000000000000a02";
+  const badFamily = "bad-family-edge";
+  const plan = {
+    templateName: "flash-swap-repay",
+    root: {},
+    opportunity: {
+      kind: "block-scan-arb",
+      sourceBlock: 1,
+      stateBlock: 1,
+      cycleId: "typed-owner",
+      cycleFingerprint: "typed-owner",
+      seedEdges: [],
+      flashToken: tokenA,
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1_024n,
+      searchSeed: {
+        startToken: tokenA,
+        searchCenter: 1_024n,
+        maxInput: 1_024n,
+      },
+      leavesStandingPosition: false,
+      hints: {},
+      affectedPools: [],
+      affectedTokens: [tokenA, tokenB],
+    },
+    tokenPath: {
+      edges: [{
+        adapterId: badFamily,
+        target: "0x0000000000000000000000000000000000000b01",
+        tokenIn: tokenA,
+        tokenOut: tokenB,
+        slotKind: "swap",
+        ...deriveEdgeTaxonomy("swap"),
+      }],
+    },
+    flashAdapterIds: ["morpho-flash"],
+    flashAdapterId: "morpho-flash",
+  } as unknown as CandidatePlan;
+  let caught: unknown;
+  try {
+    await new AnvilSolver().solve(
+      plan,
+      {} as StateBackend,
+      {
+        executor: "0x00000000000000000000000000000000000000ee",
+        simulate: async () => ({ success: false, netProfit: 0n }),
+      },
+      {
+        gridHalfWidth: 1,
+        gssMaxTries: 1,
+        quoteSafetyBps: 10000n,
+      },
+    );
+  } catch (error) {
+    caught = error;
+  }
+  assert(
+    caught instanceof BlockScanFamilyAttributedError &&
+      caught.familyId === badFamily,
+    "solver terminal error must preserve a consistently failing leg owner",
+  );
+  console.log("[amtsearch] solver preserves typed per-leg family owner: PASS");
+}
+
+async function testSolverAbsoluteDeadlineAbortsNeverSettlingStateQuote(): Promise<void> {
+  const plan = deadlineRegressionPlan("never-state");
+  let observedControl: StateCallControl | undefined;
+  const state = {
+    call(
+      _req: { to: string; data: string; from?: string },
+      control?: StateCallControl,
+    ): Promise<string> {
+      observedControl = control;
+      return new Promise(() => undefined);
+    },
+  } as unknown as StateBackend;
+  const startedAt = Date.now();
+  let message = "";
+  try {
+    await new AnvilSolver().solve(
+      plan,
+      state,
+      {
+        executor: "0x00000000000000000000000000000000000000ee",
+        simulate: async () => ({ success: false, netProfit: 0n }),
+      },
+      {
+        deadlineAtMs: startedAt + 60,
+        gridHalfWidth: 0,
+        gssMaxTries: 1,
+        quoteSafetyBps: 10000n,
+      },
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  const elapsedMs = Date.now() - startedAt;
+  assert(/absolute deadline reached/.test(message), `absolute deadline error: ${message}`);
+  assert(elapsedMs < 500, `never-settling state quote held solver for ${elapsedMs}ms`);
+  assert(observedControl?.deadlineAtMs === startedAt + 60, "state call did not receive absolute deadline");
+  assert(observedControl?.signal?.aborted === true, "state call did not receive the aborted solver signal");
+  console.log("[amtsearch] absolute deadline aborts never-settling state quote: PASS");
+}
+
+async function testSolverCallerAbortStopsNeverSettlingFamilyPlan(): Promise<void> {
+  const routeRegistry = PRODUCTION_ADAPTER_FAMILIES.routes();
+  const edgeOwners = (
+    routeRegistry as unknown as {
+      byEdgeAdapter: Map<string, ReturnType<typeof routeRegistry.forEdge>>;
+    }
+  ).byEdgeAdapter;
+  const original = edgeOwners.get("univ2-swap");
+  assert(original !== undefined, "missing univ2 family for deadline regression");
+  let quoteCalls = 0;
+  let planBuildStarted = false;
+  edgeOwners.set("univ2-swap", {
+    ...original!,
+    quoteExact: async (ctx) => {
+      quoteCalls++;
+      return ctx.amountIn * 2n;
+    },
+    buildPlanFragment: async () => {
+      planBuildStarted = true;
+      return new Promise(() => undefined);
+    },
+  });
+
+  const controller = new AbortController();
+  const abortTimer = setTimeout(
+    () => controller.abort(new Error("focused solver cancellation")),
+    200,
+  );
+  const startedAt = Date.now();
+  let message = "";
+  try {
+    await new AnvilSolver().solve(
+      deadlineRegressionPlan("never-plan"),
+      {
+        call: async () => {
+          throw new Error("family quote unexpectedly touched state");
+        },
+      } as unknown as StateBackend,
+      {
+        executor: "0x00000000000000000000000000000000000000ee",
+        simulate: async () => ({ success: false, netProfit: 0n }),
+      },
+      {
+        signal: controller.signal,
+        gridHalfWidth: 0,
+        gssMaxTries: 1,
+        finalSimTopN: 1,
+        quoteSafetyBps: 10000n,
+      },
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  } finally {
+    clearTimeout(abortTimer);
+    edgeOwners.set("univ2-swap", original!);
+  }
+
+  const elapsedMs = Date.now() - startedAt;
+  assert(
+    planBuildStarted,
+    `never-settling family plan promise was not reached ` +
+      `(quotes=${quoteCalls}, error=${message})`,
+  );
+  assert(/aborted by caller/.test(message), `caller abort error: ${message}`);
+  assert(elapsedMs < 1_000, `never-settling family plan held solver for ${elapsedMs}ms`);
+  console.log("[amtsearch] caller abort stops never-settling family plan: PASS");
+}
+
+function deadlineRegressionPlan(cycleId: string): CandidatePlan {
+  const tokenA = "0x0000000000000000000000000000000000000d01";
+  const tokenB = "0x0000000000000000000000000000000000000d02";
+  return {
+    templateName: "flash-swap-repay",
+    root: {} as CandidatePlan["root"],
+    opportunity: {
+      kind: "block-scan-arb",
+      sourceBlock: 1,
+      stateBlock: 1,
+      cycleId,
+      cycleFingerprint: cycleId,
+      seedEdges: [],
+      flashToken: tokenA,
+      startToken: tokenA,
+      profitToken: tokenA,
+      victimAmountIn: 1_024n,
+      searchSeed: {
+        startToken: tokenA,
+        searchCenter: 1_024n,
+        maxInput: 1_024n,
+      },
+      leavesStandingPosition: false,
+      hints: {},
+      affectedPools: [],
+      affectedTokens: [tokenA, tokenB],
+    },
+    tokenPath: {
+      edges: [
+        {
+          adapterId: "univ2-swap",
+          target: "0x0000000000000000000000000000000000000e01",
+          tokenIn: tokenA,
+          tokenOut: tokenB,
+          slotKind: "swap",
+          ...deriveEdgeTaxonomy("swap"),
+        },
+        {
+          adapterId: "univ2-swap",
+          target: "0x0000000000000000000000000000000000000e02",
+          tokenIn: tokenB,
+          tokenOut: tokenA,
+          slotKind: "swap",
+          ...deriveEdgeTaxonomy("swap"),
+        },
+      ],
+    },
+    flashAdapterIds: ["morpho-flash"],
+    flashAdapterId: "morpho-flash",
+  };
+}
+
 async function main(): Promise<void> {
   testGrid();
   await testGss();
@@ -746,7 +1063,11 @@ async function main(): Promise<void> {
   await testDefaultSafetyHasNoHaircut();
   await testSolverUsesUnifiedDefaultSafety();
   await testQuoteProfitFloorAdmitsNearMiss();
-  console.log("amount-search PASS (16/16)");
+  await testDeferredPhasePreservesTopNFallbacks();
+  await testSolverPreservesTypedLegOwner();
+  await testSolverAbsoluteDeadlineAbortsNeverSettlingStateQuote();
+  await testSolverCallerAbortStopsNeverSettlingFamilyPlan();
+  console.log("amount-search PASS (20/20)");
 }
 
 main().catch((err) => {

@@ -25,7 +25,7 @@ export interface V2LineageDescriptor {
   readonly discoverable: boolean;
   readonly quotable: boolean;
   readonly buildable: boolean;
-  /** Absent means the factory is not fee-verified and retains the legacy fallback. */
+  /** Absent means the factory is not fee-verified and cannot be priced. */
   readonly measuredFeeRule: V2MeasuredFeeRule | null;
 }
 

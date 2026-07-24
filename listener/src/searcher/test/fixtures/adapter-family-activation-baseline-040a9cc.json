@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "040a9ccdc190c7d0b4eb31fa9ae192079920d1f6",
+  "staticDeclaredVenueCount": 6,
+  "fundingPlanningOrder": [
+    "flash-loan:morpho",
+    "flash-loan:balancer-v2"
+  ],
+  "fundingLiquidityOrder": [
+    "flash-loan:balancer-v2",
+    "flash-loan:morpho"
+  ],
+  "defaultFundingFamilyId": "flash-loan:morpho",
+  "defaultFundingActionAdapterId": "morpho-flash",
+  "declaredAdditionFamilyIds": [],
+  "declaredDiscoveryMigrations": {
+    "fluid-dex": ["dex-token-domain"],
+    "credit:fluid": ["dex-token-domain"]
+  },
+  "baselineActive": [
+    {
+      "baselineSemanticId": "univ2-standard",
+      "baselineSurface": "route-registry",
+      "familyId": "univ2-standard",
+      "kind": "swap",
+      "ownedActionAdapterIds": ["univ2-swap"],
+      "requiredInfraActionAdapterIds": ["erc20-transfer"],
+      "poolAdapters": ["univ2"],
+      "edgeAdapterIds": ["univ2-swap"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "univ3-standard",
+      "baselineSurface": "route-registry",
+      "familyId": "univ3-standard",
+      "kind": "swap",
+      "ownedActionAdapterIds": ["univ3-swap"],
+      "requiredInfraActionAdapterIds": ["erc20-transfer"],
+      "poolAdapters": ["univ3"],
+      "edgeAdapterIds": ["univ3-swap"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "curve-plain",
+      "baselineSurface": "route-registry",
+      "familyId": "curve-plain",
+      "kind": "swap",
+      "ownedActionAdapterIds": ["curve-exchange-plain"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["curve", "curve-nr"],
+      "edgeAdapterIds": [
+        "curve-exchange",
+        "curve-exchange-nr",
+        "curve-exchange-plain",
+        "curve-exchange-received-uint"
+      ],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "curve-underlying",
+      "baselineSurface": "route-registry",
+      "familyId": "curve-underlying",
+      "kind": "swap",
+      "ownedActionAdapterIds": ["curve-exchange-underlying"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["curve-underlying"],
+      "edgeAdapterIds": ["curve-exchange-underlying"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "balancer-v3",
+      "baselineSurface": "route-registry",
+      "familyId": "balancer-v3",
+      "kind": "swap",
+      "ownedActionAdapterIds": [
+        "balancer-v3-unlock",
+        "balancer-v3-settle",
+        "balancer-v3-swap",
+        "balancer-v3-send-to"
+      ],
+      "requiredInfraActionAdapterIds": ["erc20-transfer"],
+      "poolAdapters": ["balancer-v3"],
+      "edgeAdapterIds": ["balancer-v3-unlock"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "univ4",
+      "baselineSurface": "route-registry",
+      "familyId": "univ4",
+      "kind": "swap",
+      "ownedActionAdapterIds": [
+        "univ4-unlock",
+        "univ4-swap",
+        "univ4-take",
+        "univ4-sync",
+        "univ4-settle",
+        "univ4-settle-value"
+      ],
+      "requiredInfraActionAdapterIds": [
+        "erc20-transfer",
+        "weth-deposit-value",
+        "weth-withdraw-amount"
+      ],
+      "poolAdapters": ["univ4"],
+      "edgeAdapterIds": ["univ4-unlock"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "custom-swap:dodo-v2",
+      "baselineSurface": "route-registry",
+      "familyId": "custom-swap:dodo-v2",
+      "kind": "swap",
+      "ownedActionAdapterIds": ["dodo-v2-swap"],
+      "requiredInfraActionAdapterIds": ["erc20-transfer"],
+      "poolAdapters": ["dodo-v2"],
+      "edgeAdapterIds": ["dodo-v2-swap"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "legacy:fluid-dex-swap",
+      "baselineSurface": "legacy-route-edge",
+      "familyId": "fluid-dex",
+      "kind": "swap",
+      "ownedActionAdapterIds": ["fluid-dex-swap"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["fluid-dex"],
+      "edgeAdapterIds": ["fluid-dex-swap"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:erc4626",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:erc4626",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": [
+        "erc4626-deposit",
+        "erc4626-redeem"
+      ],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["erc4626"],
+      "edgeAdapterIds": [
+        "erc4626-deposit",
+        "erc4626-redeem"
+      ],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [
+        "dex-token-domain",
+        "observed-interaction"
+      ],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "legacy:erc4626-redeem-silo",
+      "baselineSurface": "legacy-route-edge",
+      "familyId": "protocol:erc4626-silo-redeem",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": [
+        "erc4626-redeem-silo"
+      ],
+      "requiredInfraActionAdapterIds": [],
+      "poolAdapters": [
+        "erc4626-silo-redeem"
+      ],
+      "edgeAdapterIds": [
+        "erc4626-redeem-silo"
+      ],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [
+        "dex-token-domain",
+        "observed-interaction"
+      ],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:goldx",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:goldx",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["goldx-mint"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["goldx"],
+      "edgeAdapterIds": ["goldx-mint"],
+      "staticDeclaredVenueCount": 1,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:metronome-synth",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:metronome-synth",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["metronome-synth-swap"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["metronome-synth"],
+      "edgeAdapterIds": ["metronome-synth-swap"],
+      "staticDeclaredVenueCount": 1,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:metronome-hgusdc",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:metronome-hgusdc",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["metronome-hgusdc-exit"],
+      "requiredInfraActionAdapterIds": ["erc20-transfer"],
+      "poolAdapters": ["metronome-hgusdc"],
+      "edgeAdapterIds": ["metronome-hgusdc-exit"],
+      "staticDeclaredVenueCount": 1,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:psm",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:psm",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["psm"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["psm"],
+      "edgeAdapterIds": ["psm"],
+      "staticDeclaredVenueCount": 1,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:eigenpie",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:eigenpie",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["eigenpie-deposit-asset"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["eigenpie-deposit-router"],
+      "edgeAdapterIds": ["eigenpie-deposit-asset"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": ["observed-interaction"],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:rocksolid",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:rocksolid",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["rocksolid-sync-deposit"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["rocksolid"],
+      "edgeAdapterIds": ["rocksolid-sync-deposit"],
+      "staticDeclaredVenueCount": 1,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "protocol:wsteth",
+      "baselineSurface": "route-registry",
+      "familyId": "protocol:wsteth",
+      "kind": "protocol-conversion",
+      "ownedActionAdapterIds": ["wsteth-wrap", "wsteth-unwrap"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["wsteth"],
+      "edgeAdapterIds": ["wsteth-wrap", "wsteth-unwrap"],
+      "staticDeclaredVenueCount": 1,
+      "discoveryCandidateSources": [],
+      "pricingRequired": true,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "compat:fluid-credit",
+      "baselineSurface": "compat-route",
+      "familyId": "credit:fluid",
+      "kind": "credit",
+      "ownedActionAdapterIds": ["fluid-vault", "fluid-dex-liquidate"],
+      "requiredInfraActionAdapterIds": ["erc20-approve"],
+      "poolAdapters": ["fluid-vault"],
+      "edgeAdapterIds": ["fluid-vault"],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": false,
+      "funding": null
+    },
+    {
+      "baselineSemanticId": "flash:balancer",
+      "baselineSurface": "flash-provider-descriptor",
+      "familyId": "flash-loan:balancer-v2",
+      "kind": "flash-loan",
+      "ownedActionAdapterIds": ["balancer-flash"],
+      "requiredInfraActionAdapterIds": [
+        "assert-balance",
+        "erc20-transfer"
+      ],
+      "poolAdapters": [],
+      "edgeAdapterIds": [],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": false,
+      "funding": {
+        "actionAdapterId": "balancer-flash",
+        "lineage": "balancer-flash",
+        "target": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+        "liquidityHolder": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+        "repayment": "transfer",
+        "paramShape": "tokens-and-amounts",
+        "planningPriority": 1,
+        "liquidityPriority": 0
+      }
+    },
+    {
+      "baselineSemanticId": "flash:morpho",
+      "baselineSurface": "flash-provider-descriptor",
+      "familyId": "flash-loan:morpho",
+      "kind": "flash-loan",
+      "ownedActionAdapterIds": ["morpho-flash"],
+      "requiredInfraActionAdapterIds": [
+        "assert-balance",
+        "erc20-approve"
+      ],
+      "poolAdapters": [],
+      "edgeAdapterIds": [],
+      "staticDeclaredVenueCount": 0,
+      "discoveryCandidateSources": [],
+      "pricingRequired": false,
+      "funding": {
+        "actionAdapterId": "morpho-flash",
+        "lineage": "morpho-flash",
+        "target": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+        "liquidityHolder": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+        "repayment": "approve-pull",
+        "paramShape": "none",
+        "planningPriority": 0,
+        "liquidityPriority": 1
+      }
+    }
+  ]
+}

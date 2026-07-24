@@ -1,6 +1,6 @@
 import { filterLiveProtocolRegistry } from "../main.js";
 import { POOL_REGISTRY } from "../planner/token-graph.js";
-import { PRODUCTION_ROUTE_ADAPTERS } from "../venues/production-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -8,7 +8,7 @@ function assert(condition: boolean, message: string): asserts condition {
 
 const disabled = filterLiveProtocolRegistry(POOL_REGISTRY, false);
 const gatedPoolAdapters = new Set(
-  PRODUCTION_ROUTE_ADAPTERS.routeLegs.list()
+  PRODUCTION_ADAPTER_FAMILIES.routes().list()
     .filter((adapter) => adapter.requiresProtocolEdgesFlag)
     .flatMap((adapter) => adapter.poolAdapters),
 );
@@ -17,11 +17,23 @@ for (const adapter of gatedPoolAdapters) {
   assert(!disabled.some((pool) => pool.adapter === adapter), `${adapter} must be disabled`);
 }
 assert(disabled.some((pool) => pool.adapter === "psm"), "grandfathered PSM must remain admitted");
-assert(disabled.some((pool) => pool.adapter === "fluid-vault"), "grandfathered Fluid credit must remain admitted");
+assert(
+  PRODUCTION_ADAPTER_FAMILIES.credits().some(
+    (adapter) =>
+      adapter.id === "credit:fluid" &&
+      adapter.discovery !== undefined &&
+      !adapter.requiresProtocolEdgesFlag,
+  ),
+  "Fluid credit discovery must remain independent of the protocol-edge flag",
+);
+assert(
+  !POOL_REGISTRY.some((pool) => pool.adapter === "fluid-vault"),
+  "Fluid credit must not retain a static executable row",
+);
 assert(gatedPoolAdapters.has("goldx"), "GoldX must be covered by descriptor metadata");
 
 for (const pool of POOL_REGISTRY) {
-  const descriptor = PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForPool(pool.adapter);
+  const descriptor = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
   if (!descriptor) continue;
   assert(
     disabled.includes(pool) === !descriptor.requiresProtocolEdgesFlag,
