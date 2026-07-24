@@ -421,7 +421,10 @@ function normalizeProtocolDiscoveryLog(log: RawProtocolDiscoveryLog) {
 let protocolDiscoveryRpcId = 0;
 const PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS = 3;
 const PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS = 500;
-const PROTOCOL_DISCOVERY_ARCHIVE_TRACE_MIN_INTERVAL_MS = 1_000;
+// A modest steady-state pace avoids bursty shared-quota traffic. A real 429
+// holds the serialized queue inside the stronger 1/2/4/8s retry backoff below,
+// so every successful request does not need a one-second tax.
+const PROTOCOL_DISCOVERY_ARCHIVE_TRACE_MIN_INTERVAL_MS = 100;
 const PROTOCOL_DISCOVERY_FAMILY_CONCURRENCY = 8;
 const RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 const NEVER_ABORTED_PROTOCOL_DISCOVERY_SIGNAL = new AbortController().signal;
