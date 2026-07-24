@@ -374,6 +374,38 @@ function huntUniverseEvidence(
   };
 }
 
+function huntGraphView(input: {
+  readonly edges: readonly TokenEdge[];
+  readonly generation: number;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+}) {
+  return createVerifiedGraphView({
+    id:
+      `blockscan-hunt:${canonicalSetSha256(
+        input.edges.map(canonicalEdgeIdentity),
+      )}`,
+    generation: input.generation,
+    sourceBlock: input.sourceBlock,
+    sourceBlockHash: input.sourceBlockHash,
+    completenessWatermark: input.sourceBlock,
+    perSourceCoverage: PRODUCTION_ADAPTER_FAMILIES
+      .blockScanStateFamilies()
+      .map((family) => ({
+        familyId: family.familyId,
+        sourceId: "frozen-hunt-inputs",
+        sourceFingerprint: canonicalSetSha256(
+          input.edges.filter(family.ownsEdge).map(canonicalEdgeIdentity),
+        ),
+        completeThroughBlock: input.sourceBlock,
+        completeThroughHash: input.sourceBlockHash,
+      })),
+    edges: input.edges,
+    familyIdForEdge: (edge) =>
+      PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+  });
+}
+
 async function check(name: string, run: () => boolean | Promise<boolean>): Promise<void> {
   checks += 1;
   let ok = false;
@@ -672,41 +704,70 @@ async function main(): Promise<void> {
       if (missingEdges.length > 0) return;
     }
 
-    const passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
-    console.log(
-      `[blockscan-hunt] budgets scan=${cfg.scanBudgetMs}ms pass=${cfg.passBudgetMs}ms`,
-    );
-    const sourceBlock = await provider.getBlock(cfg.blockNumber);
+    const [baseBlock, sourceBlock] = await Promise.all([
+      provider.getBlock(cfg.blockNumber - 1),
+      provider.getBlock(cfg.blockNumber),
+    ]);
+    if (!baseBlock?.hash) {
+      throw new Error(
+        `cannot resolve canonical prewarm hash for ${cfg.blockNumber - 1}`,
+      );
+    }
     if (!sourceBlock?.hash) {
       throw new Error(`cannot resolve canonical source hash for ${cfg.blockNumber}`);
     }
-    const graphView = createVerifiedGraphView({
-      id: `blockscan-hunt:${canonicalSetSha256(edges.map(canonicalEdgeIdentity))}`,
-      generation: 1,
-      sourceBlock: cfg.blockNumber,
-      sourceBlockHash: sourceBlock.hash,
-      completenessWatermark: cfg.blockNumber,
-      perSourceCoverage: PRODUCTION_ADAPTER_FAMILIES
-        .blockScanStateFamilies()
-        .map((family) => ({
-          familyId: family.familyId,
-          sourceId: "frozen-hunt-inputs",
-          sourceFingerprint: canonicalSetSha256(
-            edges.filter(family.ownsEdge).map(canonicalEdgeIdentity),
-          ),
-          completeThroughBlock: cfg.blockNumber,
-          completeThroughHash: sourceBlock.hash!,
-        })),
-      edges,
-      familyIdForEdge: (edge) =>
-        PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
-    });
     const stateBackend = new JsonRpcBlockScanStateReadBackend(cfg.rpcUrl, {
       maxBatchSize: 500,
       maxConcurrentBatches: 4,
     });
+    const stateCoordinator = new BlockScanStateCoordinator(stateBackend, {
+      familyTimeoutMs: envInt("HUNT_STATE_FAMILY_TIMEOUT_MS", 120_000),
+    });
+    const prewarmBudgetMs = envInt("HUNT_PREWARM_BUDGET_MS", 120_000);
+    const prewarmStartedAtMs = Date.now();
+    const prewarm = await stateCoordinator.prepare({
+      graph: huntGraphView({
+        edges,
+        generation: 1,
+        sourceBlock: cfg.blockNumber - 1,
+        sourceBlockHash: baseBlock.hash,
+      }),
+      families: PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies(),
+      requiresPricing: (edge) =>
+        PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge),
+      deadlineAtMs: prewarmStartedAtMs + prewarmBudgetMs,
+    });
+    console.log(
+      `ADAPTER_FAMILY_PREWARM_TELEMETRY=${JSON.stringify({
+        block: cfg.blockNumber - 1,
+        generation: prewarm.generation,
+        status: prewarm.status,
+        wallMs: Date.now() - prewarmStartedAtMs,
+        issueCount: prewarm.issues.length,
+        families: prewarm.familyTelemetry ?? [],
+        lanes: prewarm.laneTelemetry,
+      })}`,
+    );
+    if (prewarm.status === "incomplete") {
+      throw new Error(
+        `adapter-family N-1 prewarm incomplete: ` +
+          `${prewarm.issues[0]?.message ?? "unknown"}`,
+      );
+    }
+
+    const passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
+    console.log(
+      `[blockscan-hunt] budgets prewarm=${prewarmBudgetMs}ms ` +
+        `scan=${cfg.scanBudgetMs}ms pass=${cfg.passBudgetMs}ms`,
+    );
+    const graphView = huntGraphView({
+      edges,
+      generation: 2,
+      sourceBlock: cfg.blockNumber,
+      sourceBlockHash: sourceBlock.hash,
+    });
     const stateStartedAtMs = Date.now();
-    const preparedState = await new BlockScanStateCoordinator(stateBackend).prepare({
+    const preparedState = await stateCoordinator.prepare({
       graph: graphView,
       families: PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies(),
       requiresPricing: (edge) =>

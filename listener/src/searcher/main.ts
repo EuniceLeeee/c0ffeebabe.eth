@@ -877,7 +877,17 @@ async function main(): Promise<void> {
     blockScanStateReadBackend = familyStateReads;
     adapterRuntimeCoordinator = new AdapterRuntimeCoordinator(
       PRODUCTION_ADAPTER_FAMILIES,
-      new BlockScanStateCoordinator(familyStateReads),
+      new BlockScanStateCoordinator(familyStateReads, {
+        // Cold N-1 preparation may legitimately take longer than one live
+        // pass. Source-N work is still hard-bounded by the enclosing absolute
+        // pass deadline, which is always the tighter limit in the hot loop.
+        familyTimeoutMs: Math.max(
+          1,
+          Number(
+            process.env.SEARCHER_BLOCKSCAN_STATE_FAMILY_TIMEOUT_MS ?? "120000",
+          ),
+        ),
+      }),
       familyStateReads,
     );
   }
