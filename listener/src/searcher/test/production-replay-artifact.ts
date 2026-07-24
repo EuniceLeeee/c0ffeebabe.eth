@@ -122,10 +122,9 @@ export function selectProductionReplayDiscoveredPools(
     if (!pool.verifiedRoutes || pool.verifiedRoutes.length === 0) {
       throw new Error(`discovered pool ${key} has no probe-verified route`);
     }
-    const family = PRODUCTION_ADAPTER_FAMILIES.protocols().find((adapter) =>
-      adapter.poolAdapters.includes(pool.adapter));
+    const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
     if (!family?.discovery) {
-      throw new Error(`discovered pool ${key} is not owned by a dynamic protocol family`);
+      throw new Error(`discovered pool ${key} is not owned by a dynamic route family`);
     }
     return pool;
   });

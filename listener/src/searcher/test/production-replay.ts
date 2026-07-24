@@ -47,6 +47,7 @@ import {
   poolRegistryKey,
 } from "../pool-universe.js";
 import {
+  enabledDiscoveryAdapters,
   protocolCandidateAddressesFromDexGraph,
   protocolCandidateAddressesFromDexUniverse,
   protocolDiscoveryCandidateAddressHints,
@@ -338,6 +339,11 @@ async function main(): Promise<void> {
     const dexAdapters = new Set(
       PRODUCTION_ADAPTER_FAMILIES.swaps().flatMap((adapter) => [...adapter.poolAdapters]),
     );
+    const protocolEdgesEnabled = true;
+    const discoveryAdapters = enabledDiscoveryAdapters(
+      PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
+      protocolEdgesEnabled,
+    );
     const graphTokens = [...new Set([
       ...protocolCandidateAddressesFromDexUniverse(universe, dexAdapters),
       ...protocolCandidateAddressesFromDexGraph(baseGraph),
@@ -345,15 +351,15 @@ async function main(): Promise<void> {
     const candidateAddresses = [...new Set([
       ...graphTokens,
       ...protocolDiscoveryCandidateAddressHints(
-        PRODUCTION_ADAPTER_FAMILIES.protocols(),
+        discoveryAdapters,
       ),
     ])].sort();
     const chainId = (await provider.getNetwork()).chainId;
     const pass = await prepareActiveProtocolDiscoveryPass({
       provider,
-      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      adapters: discoveryAdapters,
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-      protocolEdgesEnabled: true,
+      protocolEdgesEnabled,
       chainId,
       probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
       currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
@@ -392,9 +398,9 @@ async function main(): Promise<void> {
     }
     const referencePass = await prepareObservedProtocolDiscoveryPass({
       provider,
-      adapters: PRODUCTION_ADAPTER_FAMILIES.protocols(),
+      adapters: discoveryAdapters,
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
-      protocolEdgesEnabled: true,
+      protocolEdgesEnabled,
       chainId,
       probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
       currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,

@@ -291,7 +291,7 @@ export async function prepareObservedProtocolDiscoveryPass(
   return { result, projection, unknownSelectors: observed.unknownSelectors };
 }
 
-function enabledDiscoveryAdapters(
+export function enabledDiscoveryAdapters(
   adapters: readonly RouteLegAdapter[],
   protocolEdgesEnabled: boolean,
 ): RouteLegAdapter[] {
