@@ -66,6 +66,43 @@ async function main(): Promise<void> {
     assert(pools[1].swapCount30d === 99, "swapCount30d should be preserved");
     console.log("[pool-universe] load/filter/rank: PASS");
 
+    const retainedFile = join(dir, "retained-family-pools.json");
+    const retainedCurve = poolAddress(0x44);
+    writeFileSync(retainedFile, JSON.stringify({
+      pools: [
+        {
+          address: poolAddress(0x41),
+          adapter: "univ3",
+          score: 10,
+        },
+        {
+          address: poolAddress(0x42),
+          adapter: "univ3",
+          score: 9,
+        },
+        {
+          address: retainedCurve,
+          adapter: "curve-underlying",
+          score: 0,
+          swapCount30d: 0,
+          topologyRetained: true,
+        },
+      ],
+    }));
+    const withRetainedTopology = loadPoolUniverse(retainedFile, {
+      maxPools: 1,
+      minScore: 5,
+    });
+    assert(
+      withRetainedTopology.length === 2 &&
+        withRetainedTopology[0].address === poolAddress(0x41) &&
+        withRetainedTopology[1].address === retainedCurve &&
+        withRetainedTopology[1].score === 0 &&
+        withRetainedTopology[1].topologyRetained === true,
+      "verified family topology must survive activity minScore/top-N without a fake score",
+    );
+    console.log("[pool-universe] retained family topology bypasses activity ranking: PASS");
+
     const legacyCoverage = loadPoolUniverseCoverageMetadata(file);
     assert(
       legacyCoverage.registrySourceFingerprints === null,
@@ -445,7 +482,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe PASS (11/11)");
+  console.log("pool-universe PASS (12/12)");
 }
 
 main().catch((err) => {

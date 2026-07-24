@@ -25,6 +25,12 @@ export interface PoolUniverseEntry extends PoolEntry {
   swapCount30d?: number;
   lastSwapBlock?: number;
   source?: string;
+  /**
+   * A family-owned instance that was already admitted on-chain but had no
+   * swap in the latest rolling activity window. This is topology inventory,
+   * not an activity score, so it survives minScore/top-N selection at score 0.
+   */
+  topologyRetained?: true;
 }
 
 export interface PoolUniverseFile {
@@ -100,15 +106,23 @@ export function loadPoolUniverse(
     if (missingOk) return [];
     throw new Error(`pool universe file not found: ${path}`);
   }
+  return parsePoolUniverseJson(readFileSync(path, "utf8"), path, opts);
+}
 
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+/** Parse one already-frozen universe snapshot without re-reading a mutable path. */
+export function parsePoolUniverseJson(
+  raw: string,
+  label: string,
+  opts: PoolUniverseLoadOptions = {},
+): PoolUniverseEntry[] {
+  const parsed = JSON.parse(raw) as unknown;
   const rawPools = Array.isArray(parsed)
     ? parsed
     : isRecord(parsed) && Array.isArray(parsed.pools)
       ? parsed.pools
       : null;
   if (!rawPools) {
-    throw new Error(`pool universe file ${path} must be an array or { pools: [...] }`);
+    throw new Error(`pool universe file ${label} must be an array or { pools: [...] }`);
   }
 
   const minScore = opts.minScore ?? 0;
@@ -116,13 +130,30 @@ export function loadPoolUniverse(
   const highSpreadPairQuota = Math.max(0, Math.floor(opts.highSpreadPairQuota ?? 0));
   const highSpreadMinFee = Math.max(0, Math.floor(opts.highSpreadMinFee ?? 10_000));
   const parsedPools = rawPools
-    .map((raw, i) => parsePoolUniverseEntry(raw, `${path}.pools[${i}]`));
-  const pools = parsedPools
+    .map((entry, i) => parsePoolUniverseEntry(entry, `${label}.pools[${i}]`));
+  const activePools = parsedPools
+    .filter((pool) => pool.topologyRetained !== true)
     .filter((pool) => (pool.score ?? 0) >= minScore)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const topologyInventory = parsedPools
+    .filter((pool) => pool.topologyRetained === true)
+    .sort((a, b) => poolRegistryKey(a).localeCompare(poolRegistryKey(b)));
+  const selected = selectRankedPools(
+    activePools,
+    maxPools,
+    highSpreadPairQuota,
+    highSpreadMinFee,
+  );
+  const selectedKeys = new Set(selected.map(poolRegistryKey));
+  for (const pool of topologyInventory) {
+    const key = poolRegistryKey(pool);
+    if (selectedKeys.has(key)) continue;
+    selected.push(pool);
+    selectedKeys.add(key);
+  }
 
   return appendForceIncluded(
-    selectRankedPools(pools, maxPools, highSpreadPairQuota, highSpreadMinFee),
+    selected,
     parsedPools,
     opts.forceInclude ?? [],
   );
@@ -472,7 +503,17 @@ function parsePoolUniverseEntry(raw: unknown, field: string): PoolUniverseEntry 
     swapCount30d: numberField(raw.swapCount30d, `${field}.swapCount30d`),
     lastSwapBlock: numberField(raw.lastSwapBlock, `${field}.lastSwapBlock`),
     source: typeof raw.source === "string" ? raw.source : undefined,
+    topologyRetained: trueField(
+      raw.topologyRetained,
+      `${field}.topologyRetained`,
+    ),
   };
+}
+
+function trueField(value: unknown, field: string): true | undefined {
+  if (value === undefined || value === null || value === false) return undefined;
+  if (value !== true) throw new Error(`${field} must be true when present`);
+  return true;
 }
 
 function checksumField(value: unknown, field: string): string {

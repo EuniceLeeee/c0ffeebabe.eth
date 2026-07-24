@@ -7,6 +7,7 @@ import type { PoolEntry } from "./planner/token-graph.js";
 import { selectArbRelevantPools, type RankablePool } from "./pool-universe-arb-relevance.js";
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
+  parsePoolUniverseJson,
   poolRegistryKey,
   type PoolUniverseEntry,
   type PoolUniverseFile,
@@ -24,6 +25,7 @@ import {
   type LandedPoolDiscoveryLogFilter,
   type LandedPoolDiscoveryReadBackend,
 } from "./venues/landed-pool-discovery.js";
+import { retainVerifiedSwapFamilyInstances } from "./venues/swap-family-inventory.js";
 
 const BLOCKS_PER_DAY = 7200;
 export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
@@ -191,6 +193,24 @@ async function main(): Promise<void> {
   const outPath = process.env.POOL_UNIVERSE_OUT ?? DEFAULT_POOL_UNIVERSE_PATH;
   const manifestPath = process.env.POOL_UNIVERSE_MANIFEST_OUT ??
     `${outPath}.manifest.json`;
+  const retainedUniversePath =
+    process.env.POOL_UNIVERSE_RETAIN_PATH ??
+    (existsSync(outPath) ? outPath : "");
+  const retainedUniverseExists =
+    retainedUniversePath.length > 0 && existsSync(retainedUniversePath);
+  const retainedUniverseSnapshot = retainedUniverseExists
+    ? readFileSync(retainedUniversePath, "utf8")
+    : "";
+  const retainedUniverseSha256 = createHash("sha256")
+    .update(retainedUniverseExists ? retainedUniverseSnapshot : "null")
+    .digest("hex");
+  const priorUniversePools = retainedUniverseExists
+    ? parsePoolUniverseJson(
+        retainedUniverseSnapshot,
+        retainedUniversePath,
+        { minScore: 0 },
+      )
+    : [];
 
   console.log(
     `[pool-universe] scanning active pools from ${fromBlock} to ${latest} ` +
@@ -226,6 +246,26 @@ async function main(): Promise<void> {
   console.log(
     `[pool-universe] family-materialized=${landed.materializedPools.length}`,
   );
+  const retainedFamilyInventory = await retainVerifiedSwapFamilyInstances({
+    families: PRODUCTION_ADAPTER_FAMILIES.swaps(),
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    backend: stateProvider,
+    priorPools: priorUniversePools,
+    freshPools: landed.materializedPools,
+  });
+  console.log(
+    `[pool-universe] family-inventory: prior=${priorUniversePools.length} ` +
+      `candidates=${retainedFamilyInventory.candidates} ` +
+      `retained=${retainedFamilyInventory.pools.length} ` +
+      `removed=${retainedFamilyInventory.rejected.length}`,
+  );
+  for (const rejected of retainedFamilyInventory.rejected) {
+    console.log(
+      `[pool-universe] family-inventory removed ${rejected.adapter}:` +
+        `${rejected.address} reason=${rejected.reason}`,
+    );
+  }
 
   const countRanked = [...activity.values()]
     .filter((pool) => pool.count >= minSwaps)
@@ -260,7 +300,10 @@ async function main(): Promise<void> {
       pool,
     });
   }
-  const materializedTokenPools = landed.materializedPools.map(materializedTokenPool);
+  const materializedTokenPools = [
+    ...landed.materializedPools,
+    ...retainedFamilyInventory.pools,
+  ].map(materializedTokenPool);
   const ranked = arbRelevance
     ? selectArbRelevantPools(enrichedCandidates, materializedTokenPools, {
         enabled: true,
@@ -287,6 +330,13 @@ async function main(): Promise<void> {
     if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
     if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
   }
+  for (const pool of retainedFamilyInventory.pools) {
+    if (pool.token0) tokenSet.add(pool.token0.toLowerCase());
+    if (pool.token1) tokenSet.add(pool.token1.toLowerCase());
+    for (const token of pool.underlyingCoins ?? []) {
+      tokenSet.add(token.toLowerCase());
+    }
+  }
   const discoveryQueuePath =
     process.env.POOL_UNIVERSE_DISCOVERY_QUEUE_PATH ??
     resolve("searcher", "pools", "discovery-queue.json");
@@ -306,6 +356,9 @@ async function main(): Promise<void> {
   );
   const poolByKey = new Map<string, PoolUniverseEntry>();
   for (const pool of validPools) {
+    poolByKey.set(poolRegistryKey(pool), pool);
+  }
+  for (const pool of retainedFamilyInventory.pools) {
     poolByKey.set(poolRegistryKey(pool), pool);
   }
   for (const pool of landed.materializedPools) {
@@ -364,6 +417,25 @@ async function main(): Promise<void> {
       "pool-universe discovery queue changed before artifact publication",
     );
   }
+  const finalRetainedUniverseExists =
+    retainedUniversePath.length > 0 && existsSync(retainedUniversePath);
+  const finalRetainedUniverseSnapshot = finalRetainedUniverseExists
+    ? readFileSync(retainedUniversePath, "utf8")
+    : "";
+  if (
+    finalRetainedUniverseExists !== retainedUniverseExists ||
+    createHash("sha256")
+      .update(
+        finalRetainedUniverseExists
+          ? finalRetainedUniverseSnapshot
+          : "null",
+      )
+      .digest("hex") !== retainedUniverseSha256
+  ) {
+    throw new Error(
+      "pool-universe retained family inventory changed before artifact publication",
+    );
+  }
   const output = `${JSON.stringify(file, null, 2)}\n`;
   const outputSha256 = createHash("sha256").update(output).digest("hex");
   const manifest = {
@@ -386,6 +458,15 @@ async function main(): Promise<void> {
       arbRelevance,
       relevanceOversample,
       v4BackfillLookbackBlocks,
+      retainedUniverse: {
+        profile: "verified-swap-family-inventory-v1",
+        exists: retainedUniverseExists,
+        contentSha256: retainedUniverseSha256,
+        entries: priorUniversePools.length,
+        candidates: retainedFamilyInventory.candidates,
+        retained: retainedFamilyInventory.pools.length,
+        removed: retainedFamilyInventory.rejected.length,
+      },
       discoveryQueue: {
         profile: "frozen-discovery-queue-v1",
         exists: discoveryQueueExists,

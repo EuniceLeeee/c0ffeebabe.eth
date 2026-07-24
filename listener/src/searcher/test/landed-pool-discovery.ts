@@ -14,7 +14,10 @@ import {
   type LandedPoolMaterializationCapability,
 } from "../venues/landed-pool-discovery.js";
 import { selectMatureDexActivity } from "../build-active-pool-universe.js";
-import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
+import {
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_IDENTITY_RESOLVERS,
+} from "../venues/production-registry.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import { poolAdapterId } from "../venues/registry-ids.js";
 import type { PoolEntry } from "../planner/token-graph.js";
@@ -24,6 +27,9 @@ import {
   fluidDexAdapter,
 } from "../venues/swaps/fluid-dex.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { retainVerifiedSwapFamilyInstances } from "../venues/swap-family-inventory.js";
+import { curveUnderlyingAdapter } from "../venues/swaps/curve-underlying.js";
+import { CURVE_METAREGISTRY } from "../venues/curve-underlying.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -695,7 +701,95 @@ assert(
   "central enrichment must retain only mature V2/V3 activity even for a malformed mixed input",
 );
 
-console.log("landed-pool-discovery PASS (11/11)");
+const retainedCurvePool = ethers.getAddress(
+  "0x000000000000000000000000000000000000C100",
+);
+const retainedCurveToken0 = ethers.getAddress(
+  "0x000000000000000000000000000000000000C101",
+);
+const retainedCurveToken1 = ethers.getAddress(
+  "0x000000000000000000000000000000000000C102",
+);
+const retainedCurveMetaIface = new ethers.Interface([
+  "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
+]);
+const retainedCurvePoolIface = new ethers.Interface([
+  "function underlying_coins(int128 i) view returns (address)",
+]);
+let retainedCurveReads = 0;
+const retainedCurveBackend = {
+  async call(req: { to: string; data: string }): Promise<string> {
+    retainedCurveReads++;
+    const target = ethers.getAddress(req.to);
+    if (target === ethers.getAddress(CURVE_METAREGISTRY)) {
+      return retainedCurveMetaIface.encodeFunctionResult(
+        "get_registry_handlers_from_pool",
+        [Array.from({ length: 10 }, () => ethers.ZeroAddress)],
+      );
+    }
+    if (target !== retainedCurvePool) {
+      throw new Error(`unexpected retained Curve target ${target}`);
+    }
+    const [index] = retainedCurvePoolIface.decodeFunctionData(
+      "underlying_coins",
+      req.data,
+    );
+    if (index === 0n || index === 1n) {
+      return retainedCurvePoolIface.encodeFunctionResult(
+        "underlying_coins",
+        [index === 0n ? retainedCurveToken0 : retainedCurveToken1],
+      );
+    }
+    throw new Error("curve coin index out of range");
+  },
+};
+const retainedCurve = await retainVerifiedSwapFamilyInstances({
+  families: [curveUnderlyingAdapter],
+  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  backend: retainedCurveBackend,
+  priorPools: [{
+    address: retainedCurvePool,
+    adapter: "curve-underlying",
+    underlyingCoins: [retainedCurveToken0, retainedCurveToken1],
+    score: 1,
+    swapCount30d: 1,
+    lastSwapBlock: 90,
+  }],
+  freshPools: [],
+});
+assert(
+  retainedCurve.candidates === 1 &&
+    retainedCurve.pools.length === 1 &&
+    retainedCurve.pools[0].address === retainedCurvePool &&
+    retainedCurve.pools[0].score === 0 &&
+    retainedCurve.pools[0].swapCount30d === 0 &&
+    retainedCurve.pools[0].topologyRetained === true &&
+    retainedCurve.pools[0].identitySource ===
+      "curve-underlying-provisional",
+  "a current-N re-attested low-frequency Curve family instance must remain topology without a fake activity score",
+);
+const readsAfterRetention = retainedCurveReads;
+const freshlyObservedCurve = await retainVerifiedSwapFamilyInstances({
+  families: [curveUnderlyingAdapter],
+  identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  backend: retainedCurveBackend,
+  priorPools: retainedCurve.pools,
+  freshPools: [{
+    address: retainedCurvePool,
+    adapter: "curve-underlying",
+    score: 2,
+  }],
+});
+assert(
+  freshlyObservedCurve.candidates === 0 &&
+    freshlyObservedCurve.pools.length === 0 &&
+    retainedCurveReads === readsAfterRetention,
+  "fresh family activity must replace inventory without a duplicate identity read",
+);
+
+console.log("landed-pool-discovery PASS (12/12)");
 
 function discoverySummary(result: Awaited<ReturnType<typeof discoverLandedPools>>) {
   return {

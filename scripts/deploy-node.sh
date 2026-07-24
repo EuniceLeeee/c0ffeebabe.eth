@@ -468,6 +468,9 @@ REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
 REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-0}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
+REINDEX_MANIFEST="$REINDEX_OUT.manifest.json"
+REINDEX_TMP_MANIFEST="$REINDEX_TMP.manifest.json"
+REINDEX_RETAIN="${POOL_UNIVERSE_RETAIN_PATH:-$REINDEX_OUT}"
 UNIVERSE_SNAPSHOT_DIR=/opt/MEV-runtime/universe
 # Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
 # universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of chain head (~7200 = ~1 day).
@@ -479,25 +482,30 @@ REINDEX_HEAD=$(curl -s http://127.0.0.1:8545 -H 'content-type: application/json'
   | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["result"],16))' 2>/dev/null || echo 0)
 REINDEX_CUR_TOBLOCK=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(int(str(d.get("toBlock",0))))' "$REINDEX_OUT" 2>/dev/null || echo 0)
 if [ "$REINDEX_HEAD" -gt 0 ] && [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
-   && [ "$((REINDEX_HEAD - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ]; then
+   && [ "$((REINDEX_HEAD - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ] \
+   && [ -s "$REINDEX_MANIFEST" ]; then
   say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, head=$REINDEX_HEAD, $((REINDEX_HEAD - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
 elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"; \
    timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
        POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS="$REINDEX_V4_BACKFILL" \
+       POOL_UNIVERSE_RETAIN_PATH="$REINDEX_RETAIN" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \
+       POOL_UNIVERSE_MANIFEST_OUT="$REINDEX_TMP_MANIFEST" \
        sh -c 'cd "$0/listener" && npx tsx src/searcher/build-active-pool-universe.ts' "$REPO" \
        >/tmp/deploy-reindex.log 2>&1 \
-   && [ -s "$REINDEX_TMP" ] \
+   && [ -s "$REINDEX_TMP" ] && [ -s "$REINDEX_TMP_MANIFEST" ] \
    && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; sys.exit(0 if len(p)>0 else 1)' "$REINDEX_TMP"; then
   POOLS=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; print(len(p))' "$REINDEX_TMP")
   cp -a "$REINDEX_OUT" "${REINDEX_OUT}.bak-$(date +%s)" 2>/dev/null || true
+  cp -a "$REINDEX_MANIFEST" "${REINDEX_MANIFEST}.bak-$(date +%s)" 2>/dev/null || true
   mv "$REINDEX_TMP" "$REINDEX_OUT"
+  mv "$REINDEX_TMP_MANIFEST" "$REINDEX_MANIFEST"
   say "pool universe re-indexed: $POOLS pools (toBlock=head)."
 else
   say "WARNING: pool-universe re-index failed/timed out — keeping existing active-pools.json (deploy continues)."
-  rm -f "$REINDEX_TMP" 2>/dev/null || true
+  rm -f "$REINDEX_TMP" "$REINDEX_TMP_MANIFEST" 2>/dev/null || true
 fi
 
 # Pin the running process to an immutable, content-addressed universe. The 30-minute indexer may replace
@@ -513,6 +521,7 @@ esac
 mkdir -p "$UNIVERSE_SNAPSHOT_DIR" \
   || abort_runtime "could not create $UNIVERSE_SNAPSHOT_DIR"
 UNIVERSE_SNAPSHOT="$UNIVERSE_SNAPSHOT_DIR/active-pools-$UNIVERSE_HASH.json"
+UNIVERSE_MANIFEST_SNAPSHOT="$UNIVERSE_SNAPSHOT.manifest.json"
 if [ ! -f "$UNIVERSE_SNAPSHOT" ]; then
   SNAPSHOT_TMP="$UNIVERSE_SNAPSHOT.tmp.$$"
   cp "$REINDEX_OUT" "$SNAPSHOT_TMP" \
@@ -522,9 +531,19 @@ if [ ! -f "$UNIVERSE_SNAPSHOT" ]; then
 fi
 [ "$(sha256sum "$UNIVERSE_SNAPSHOT" | awk '{print $1}')" = "$UNIVERSE_HASH" ] \
   || abort_runtime "content-addressed universe snapshot failed verification"
+if [ -s "$REINDEX_MANIFEST" ] && [ ! -f "$UNIVERSE_MANIFEST_SNAPSHOT" ]; then
+  MANIFEST_SNAPSHOT_TMP="$UNIVERSE_MANIFEST_SNAPSHOT.tmp.$$"
+  cp "$REINDEX_MANIFEST" "$MANIFEST_SNAPSHOT_TMP" \
+    || abort_runtime "could not snapshot pool universe manifest"
+  chmod 444 "$MANIFEST_SNAPSHOT_TMP"
+  mv "$MANIFEST_SNAPSHOT_TMP" "$UNIVERSE_MANIFEST_SNAPSHOT"
+fi
 tmp=$(mktemp)
-grep -v '^SEARCHER_POOL_UNIVERSE_PATH=' "$ENVF" > "$tmp" || true
+grep -Ev '^SEARCHER_POOL_UNIVERSE_(PATH|MANIFEST_PATH)=' "$ENVF" > "$tmp" || true
 echo "SEARCHER_POOL_UNIVERSE_PATH=$UNIVERSE_SNAPSHOT" >> "$tmp"
+if [ -s "$UNIVERSE_MANIFEST_SNAPSHOT" ]; then
+  echo "SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=$UNIVERSE_MANIFEST_SNAPSHOT" >> "$tmp"
+fi
 cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
 say "pool universe pinned: hash=$UNIVERSE_HASH snapshot=$UNIVERSE_SNAPSHOT"
 
