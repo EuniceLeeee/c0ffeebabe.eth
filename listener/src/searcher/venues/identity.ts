@@ -906,7 +906,12 @@ function provisionalBehaviorCallFailureReason(
   const code = error && typeof error === "object" && "code" in error
     ? String((error as { code?: unknown }).code).toUpperCase()
     : "";
-  return code === "CALL_EXCEPTION"
+  return new Set([
+      "CALL_EXCEPTION",
+      "BAD_DATA",
+      "INVALID_ARGUMENT",
+      "NUMERIC_FAULT",
+    ]).has(code)
     ? "behavior_mismatch"
     : "identity_call_failed";
 }

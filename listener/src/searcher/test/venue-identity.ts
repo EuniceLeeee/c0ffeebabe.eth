@@ -302,6 +302,31 @@ async function testV2LineageDescriptor(): Promise<void> {
 
 async function testResolverRejectsSelectorLookalikes(): Promise<void> {
   const provider = new FakeProvider();
+  const malformedFactory = await resolvePoolIdentity(
+    { call: async () => "0x" },
+    address(0x112),
+    "univ2",
+    { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
+  );
+  assert(
+    !malformedFactory.ok && malformedFactory.reason === "behavior_mismatch",
+    "successful factory call with malformed return is permanent negative proof",
+  );
+  const transportFailure = await resolvePoolIdentity(
+    {
+      call: async () => {
+        throw new Error("transport unavailable");
+      },
+    },
+    address(0x113),
+    "univ2",
+    { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
+  );
+  assert(
+    !transportFailure.ok &&
+      transportFailure.reason === "identity_call_failed",
+    "transport failure remains retryable",
+  );
   const panorama = await resolvePoolIdentity(provider, PANORAMA_POOL, "univ2", {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
   });
