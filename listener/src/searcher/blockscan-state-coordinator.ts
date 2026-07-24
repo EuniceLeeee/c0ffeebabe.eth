@@ -141,6 +141,15 @@ export interface BlockScanFamilyTelemetry {
   readonly batches: number;
   readonly status: BlockScanFamilyTelemetryStatus;
   readonly issueCount: number;
+  /** Optional so persisted evidence from before stateKey-local refresh remains readable. */
+  readonly carryStateKeys?: number;
+  readonly directStateKeys?: number;
+  readonly missingPreviousStateKeys?: number;
+  /**
+   * Set only when a family that could otherwise refresh incrementally had to
+   * fall back to direct current-N reads for every stateKey.
+   */
+  readonly fullFallbackReason?: string;
 }
 
 export interface BlockScanStateSnapshot {
@@ -258,6 +267,10 @@ interface FamilyExecutionTelemetry {
   readonly uniqueStateKeys: number;
   readonly reads: number;
   readonly batches: number;
+  readonly carryStateKeys?: number;
+  readonly directStateKeys?: number;
+  readonly missingPreviousStateKeys?: number;
+  readonly fullFallbackReason?: string;
 }
 
 interface BehaviorProvenUnavailableEdge {
@@ -272,6 +285,10 @@ interface FamilyLaneStaging {
   readonly expectedReadKeys: Set<string>;
   reads: number;
   batches: number;
+  carryStateKeys?: number;
+  directStateKeys?: number;
+  missingPreviousStateKeys?: number;
+  fullFallbackReason?: string;
 }
 
 interface FamilyIncrementalPlan {
@@ -279,6 +296,13 @@ interface FamilyIncrementalPlan {
   readonly range: CanonicalMutationRange;
   readonly classification: FamilyMutationClassification;
   readonly previousByStateKey: ReadonlyMap<string, PublishedStateKey>;
+  readonly schemaCompatibleStateKeys: ReadonlySet<string>;
+}
+
+interface IncrementalPreparation {
+  readonly plans: Map<string, FamilyIncrementalPlan>;
+  readonly missingPreviousStateKeysByFamily: ReadonlyMap<string, number>;
+  readonly fullFallbackReasonByFamily: Map<string, string>;
 }
 
 interface ActiveGeneration {
@@ -671,14 +695,59 @@ export class BlockScanStateCoordinator {
   private async prepareIncrementalPlans(
     groups: readonly StateGroup[],
     compiledFamilies: ReadonlyMap<string, CompiledBlockScanStateFamily>,
-    schemaChangedFamilies: ReadonlySet<string>,
     previous: BlockScanStateSnapshot | null,
     graph: VerifiedGraphView,
     deadlineAtMs: number,
     signal: AbortSignal,
-  ): Promise<Map<string, FamilyIncrementalPlan>> {
+  ): Promise<IncrementalPreparation> {
+    const plans = new Map<string, FamilyIncrementalPlan>();
+    const missingPreviousStateKeysByFamily = new Map<string, number>();
+    const fullFallbackReasonByFamily = new Map<string, string>();
     const readRange = this.backend.readCanonicalMutationRange;
-    if (!previous || !readRange) return new Map();
+    const families = uniqueFamilies(groups);
+    for (const family of families) {
+      const familyGroups = groups.filter(
+        (group) => group.familyId === family.familyId,
+      );
+      missingPreviousStateKeysByFamily.set(
+        family.familyId,
+        previous
+          ? familyGroups.filter((group) =>
+              !previousStateForGroup(previous, group)
+            ).length
+          : familyGroups.length,
+      );
+    }
+    if (!previous) {
+      for (const family of families) {
+        if (compiledFamilies.get(family.familyId)?.incremental) {
+          fullFallbackReasonByFamily.set(
+            family.familyId,
+            "previous-snapshot-unavailable",
+          );
+        }
+      }
+      return {
+        plans,
+        missingPreviousStateKeysByFamily,
+        fullFallbackReasonByFamily,
+      };
+    }
+    if (!readRange) {
+      for (const family of families) {
+        if (compiledFamilies.get(family.familyId)?.incremental) {
+          fullFallbackReasonByFamily.set(
+            family.familyId,
+            "mutation-range-reader-unavailable",
+          );
+        }
+      }
+      return {
+        plans,
+        missingPreviousStateKeysByFamily,
+        fullFallbackReasonByFamily,
+      };
+    }
     const previousSource: BlockSource = Object.freeze({
       number: previous.sourceBlock,
       hash: previous.sourceBlockHash,
@@ -695,32 +764,45 @@ export class BlockScanStateCoordinator {
       distance > MAX_INCREMENTAL_RANGE_BLOCKS ||
       through.generation <= previousSource.generation
     ) {
-      return new Map();
+      for (const family of families) {
+        if (compiledFamilies.get(family.familyId)?.incremental) {
+          fullFallbackReasonByFamily.set(
+            family.familyId,
+            "mutation-range-ineligible",
+          );
+        }
+      }
+      return {
+        plans,
+        missingPreviousStateKeysByFamily,
+        fullFallbackReasonByFamily,
+      };
     }
-    const plans = new Map<string, FamilyIncrementalPlan>();
-    await Promise.all(uniqueFamilies(groups).map(async (family) => {
+    await Promise.all(families.map(async (family) => {
       const incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (
-        !incremental ||
-        schemaChangedFamilies.has(family.familyId) ||
-        signal.aborted
-      ) return;
+      if (!incremental || signal.aborted) return;
       const familyGroups = groups.filter(
         (group) => group.familyId === family.familyId,
       );
       const previousByStateKey = new Map<string, PublishedStateKey>();
+      const schemaCompatibleStateKeys = new Set<string>();
+      const previousSchemaByRawStateKey =
+        previousStateSchemaFingerprints(previous, family);
       for (const group of familyGroups) {
-        const state = previous.stateByStateKey.get(group.stateKey);
-        if (
-          !state ||
-          state.familyId !== family.familyId ||
-          state.stateKey !== group.rawStateKey ||
-          !sameBlockSource(state.source, previousSource)
-        ) {
-          return;
-        }
+        const state = previousStateForGroup(previous, group);
+        if (!state) continue;
         previousByStateKey.set(group.stateKey, state);
+        if (
+          previousSchemaByRawStateKey.get(group.rawStateKey) ===
+            stateSchemaFingerprint(group.edges)
+        ) {
+          schemaCompatibleStateKeys.add(group.stateKey);
+        }
       }
+      let phase:
+        | "mutation-descriptor-failed"
+        | "mutation-range-failed"
+        | "mutation-classifier-failed" = "mutation-descriptor-failed";
       try {
         const edges = Object.freeze(
           familyGroups.flatMap((group) => group.edges),
@@ -735,6 +817,7 @@ export class BlockScanStateCoordinator {
         ) {
           throw new Error("mutation query descriptor fingerprint mismatch");
         }
+        phase = "mutation-range-failed";
         const range = await awaitWithAbort(
           readRange.call(
             this.backend,
@@ -751,6 +834,7 @@ export class BlockScanStateCoordinator {
           previousSource,
           through,
         );
+        phase = "mutation-classifier-failed";
         const classification = incremental.classifyMutations({
           edges,
           range,
@@ -768,12 +852,19 @@ export class BlockScanStateCoordinator {
           range,
           classification,
           previousByStateKey,
+          schemaCompatibleStateKeys,
         }));
       } catch {
-        // Fail closed to direct current-N reads for the entire family.
+        // Incremental proof/classification is an optimization. Its failure
+        // forces direct current-N reads for this family, never unresolved state.
+        fullFallbackReasonByFamily.set(family.familyId, phase);
       }
     }));
-    return plans;
+    return {
+      plans,
+      missingPreviousStateKeysByFamily,
+      fullFallbackReasonByFamily,
+    };
   }
 
   private async runLane(
@@ -788,7 +879,6 @@ export class BlockScanStateCoordinator {
     if (groups.length === 0) {
       return emptyLane(lane, startedAtMs, this.now());
     }
-
     const familyRuns = uniqueFamilies(groups).map(async (family) => {
       const familyGroups = groups.filter(
         (group) => group.familyId === family.familyId,
@@ -830,6 +920,13 @@ export class BlockScanStateCoordinator {
         expectedReadKeys: new Set(),
         reads: 0,
         batches: 0,
+        carryStateKeys: 0,
+        directStateKeys: familyGroups.length,
+        missingPreviousStateKeys: previous
+          ? familyGroups.filter((group) =>
+              !previousStateForGroup(previous, group)
+            ).length
+          : familyGroups.length,
       };
       const familyRun = this.runFamilyLane(
         lane,
@@ -894,9 +991,12 @@ export class BlockScanStateCoordinator {
     if (groups.length === 0) {
       return emptyLane(lane, startedAtMs, this.now());
     }
+    const familyId = groups[0]?.familyId;
+    if (!familyId) {
+      throw new Error("non-empty family lane has no familyId");
+    }
     const issues: BlockScanStateIssue[] = [];
     const compiledFamilies = new Map<string, CompiledBlockScanStateFamily>();
-    const schemaChangedFamilies = new Set<string>();
     let schemaPhysicalReads = 0;
     let schemaBatches = 0;
     const families = uniqueFamilies(groups);
@@ -911,7 +1011,6 @@ export class BlockScanStateCoordinator {
           compiledFamilies.set(family.familyId, cached);
           return;
         }
-        schemaChangedFamilies.add(family.familyId);
         try {
           const compiled = await awaitWithAbort(
             family.compile({
@@ -997,15 +1096,26 @@ export class BlockScanStateCoordinator {
         message: formatError(error),
       });
     }
-    const incrementalPlans = await this.prepareIncrementalPlans(
+    const incrementalPreparation = await this.prepareIncrementalPlans(
       groups,
       compiledFamilies,
-      schemaChangedFamilies,
       previous,
       graph,
       deadlineAtMs,
       signal,
     );
+    const incrementalPlans = incrementalPreparation.plans;
+    let fullFallbackReason =
+      incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
+    const missingPreviousStateKeys =
+      incrementalPreparation.missingPreviousStateKeysByFamily.get(familyId) ??
+        groups.length;
+    let carryStateKeys = 0;
+    let directStateKeys = groups.length;
+    staging.carryStateKeys = carryStateKeys;
+    staging.directStateKeys = directStateKeys;
+    staging.missingPreviousStateKeys = missingPreviousStateKeys;
+    staging.fullFallbackReason = fullFallbackReason;
 
     interface PlannedRead {
       readonly group: StateGroup;
@@ -1019,6 +1129,7 @@ export class BlockScanStateCoordinator {
     const seenLocalIdsByStateKey = new Map<string, Set<string>>();
     const closedStateKeys = new Set<string>();
     const carryForwardStateKeys = new Set<string>();
+    const classifiedDirectStateKeys = new Set<string>();
     const badStateKeys = new Set<string>(
       groups
         .filter((group) => !compiledFamilies.has(group.familyId))
@@ -1102,14 +1213,19 @@ export class BlockScanStateCoordinator {
         }
       }
       if (round === 0) {
-        for (const [familyId, plan] of incrementalPlans) {
+        for (const [plannedFamilyId, plan] of incrementalPlans) {
           const familyGroups = groups.filter(
-            (group) => group.familyId === familyId,
+            (group) => group.familyId === plannedFamilyId,
           );
-          let valid = familyGroups.every(
-            (group) => !badStateKeys.has(group.stateKey),
-          );
+          const carryEligibleStateKeys = new Set<string>();
+          let classificationReadSetMismatch = false;
           for (const group of familyGroups) {
+            if (
+              badStateKeys.has(group.stateKey) ||
+              !plan.schemaCompatibleStateKeys.has(group.stateKey)
+            ) {
+              continue;
+            }
             const previousState = plan.previousByStateKey.get(group.stateKey);
             const plannedLocalIds = new Set(
               roundPlanned
@@ -1130,36 +1246,44 @@ export class BlockScanStateCoordinator {
                 return !proof || !sameBlockSource(proof.source, previousState.source);
               })
             ) {
-              valid = false;
-              break;
+              continue;
             }
             const changed = plan.classification.changedReadKeysByStateKey.get(
               group.rawStateKey,
             );
-            if (!changed) continue;
+            if (!changed) {
+              carryEligibleStateKeys.add(group.stateKey);
+              continue;
+            }
             if (
               changed.size === 0 ||
               [...changed].some((readKey) => !plannedLocalIds.has(readKey))
             ) {
-              valid = false;
+              classificationReadSetMismatch = true;
               break;
             }
+            classifiedDirectStateKeys.add(group.stateKey);
           }
-          if (!valid) {
-            incrementalPlans.delete(familyId);
+          if (classificationReadSetMismatch) {
+            incrementalPlans.delete(plannedFamilyId);
+            classifiedDirectStateKeys.clear();
+            fullFallbackReason = "mutation-classifier-read-set-mismatch";
+            incrementalPreparation.fullFallbackReasonByFamily.set(
+              plannedFamilyId,
+              fullFallbackReason,
+            );
             continue;
           }
-          for (const group of familyGroups) {
-            if (
-              !plan.classification.changedReadKeysByStateKey.has(
-                group.rawStateKey,
-              )
-            ) {
-              carryForwardStateKeys.add(group.stateKey);
-              closedStateKeys.add(group.stateKey);
-            }
+          for (const stateKey of carryEligibleStateKeys) {
+            carryForwardStateKeys.add(stateKey);
+            closedStateKeys.add(stateKey);
           }
         }
+        carryStateKeys = carryForwardStateKeys.size;
+        directStateKeys = groups.length - carryStateKeys;
+        staging.carryStateKeys = carryStateKeys;
+        staging.directStateKeys = directStateKeys;
+        staging.fullFallbackReason = fullFallbackReason;
       }
       const runnable = roundPlanned.filter(
         (item) =>
@@ -1539,13 +1663,11 @@ export class BlockScanStateCoordinator {
             ),
             refreshMode: carryForward
               ? "carry-forward"
-              : incrementalPlan?.classification.changedReadKeysByStateKey.has(
-                  group.rawStateKey,
-                )
+              : classifiedDirectStateKeys.has(group.stateKey)
               ? "classified-direct"
               : "unproven-direct",
             backrunInvalidations: Object.freeze(
-              carryForward
+              carryForward || !classifiedDirectStateKeys.has(group.stateKey)
                 ? []
                 : [
                     ...(
@@ -1570,10 +1692,6 @@ export class BlockScanStateCoordinator {
     }
 
     const finishedAtMs = this.now();
-    const familyId = groups[0]?.familyId;
-    if (!familyId) {
-      throw new Error("non-empty family lane has no familyId");
-    }
     const familyExecution = Object.freeze({
       familyId,
       lane,
@@ -1581,6 +1699,12 @@ export class BlockScanStateCoordinator {
       uniqueStateKeys: groups.length,
       reads: physicalReads,
       batches,
+      carryStateKeys,
+      directStateKeys,
+      missingPreviousStateKeys,
+      ...(fullFallbackReason === undefined
+        ? {}
+        : { fullFallbackReason }),
     });
     return Object.freeze({
       lane,
@@ -1739,6 +1863,64 @@ function sameBlockSource(a: BlockSource, b: BlockSource): boolean {
     a.number === b.number &&
     a.hash.toLowerCase() === b.hash.toLowerCase() &&
     a.generation === b.generation
+  );
+}
+
+function previousStateForGroup(
+  previous: BlockScanStateSnapshot,
+  group: StateGroup,
+): PublishedStateKey | undefined {
+  const state = previous.stateByStateKey.get(group.stateKey);
+  if (
+    !state ||
+    state.familyId !== group.familyId ||
+    state.stateKey !== group.rawStateKey ||
+    !sameBlockSource(state.source, {
+      number: previous.sourceBlock,
+      hash: previous.sourceBlockHash,
+      generation: previous.generation,
+    })
+  ) {
+    return undefined;
+  }
+  return state;
+}
+
+/**
+ * Reconstruct the prior stateKey's edge schema from the immutable published
+ * graph. PublishedStateKey intentionally stays family-value opaque, so schema
+ * compatibility is proven here without widening that cross-family contract.
+ */
+function previousStateSchemaFingerprints(
+  previous: BlockScanStateSnapshot,
+  family: RegisteredBlockScanStateFamily,
+): ReadonlyMap<string, string> {
+  const expectedEdgeKeys = new Set(previous.coverage.expectedEdgeKeys);
+  const priorEdgesByRawStateKey = new Map<string, TokenEdge[]>();
+  try {
+    for (const edge of previous.graph.edges) {
+      if (
+        !expectedEdgeKeys.has(blockScanEdgeKey(edge)) ||
+        !family.ownsEdge(edge)
+      ) {
+        continue;
+      }
+      const rawStateKey = family.stateKey(edge);
+      if (typeof rawStateKey !== "string" || rawStateKey.length === 0) {
+        return new Map();
+      }
+      const priorEdges = priorEdgesByRawStateKey.get(rawStateKey);
+      if (priorEdges) priorEdges.push(edge);
+      else priorEdgesByRawStateKey.set(rawStateKey, [edge]);
+    }
+  } catch {
+    return new Map();
+  }
+  return new Map(
+    [...priorEdgesByRawStateKey].map(([rawStateKey, priorEdges]) => [
+      rawStateKey,
+      stateSchemaFingerprint(priorEdges),
+    ]),
   );
 }
 
@@ -2039,6 +2221,21 @@ function createFamilyTelemetry(input: {
       batches: execution?.batches ?? 0,
       status,
       issueCount,
+      ...(execution?.carryStateKeys === undefined
+        ? {}
+        : { carryStateKeys: execution.carryStateKeys }),
+      ...(execution?.directStateKeys === undefined
+        ? {}
+        : { directStateKeys: execution.directStateKeys }),
+      ...(execution?.missingPreviousStateKeys === undefined
+        ? {}
+        : {
+            missingPreviousStateKeys:
+              execution.missingPreviousStateKeys,
+          }),
+      ...(execution?.fullFallbackReason === undefined
+        ? {}
+        : { fullFallbackReason: execution.fullFallbackReason }),
     })];
   }));
 }
@@ -2140,6 +2337,18 @@ function failedFamilyLane(
       uniqueStateKeys,
       reads: staging.reads,
       batches: staging.batches,
+      ...(staging.carryStateKeys === undefined
+        ? {}
+        : { carryStateKeys: staging.carryStateKeys }),
+      ...(staging.directStateKeys === undefined
+        ? {}
+        : { directStateKeys: staging.directStateKeys }),
+      ...(staging.missingPreviousStateKeys === undefined
+        ? {}
+        : { missingPreviousStateKeys: staging.missingPreviousStateKeys }),
+      ...(staging.fullFallbackReason === undefined
+        ? {}
+        : { fullFallbackReason: staging.fullFallbackReason }),
     })]),
   });
 }

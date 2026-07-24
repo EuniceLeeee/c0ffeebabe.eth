@@ -465,8 +465,12 @@ const staticMetadataChanged = await prepare(
 assert.equal(staticMetadataChanged.status, "complete");
 assert.equal(
   backend.physicalReads.length,
-  2,
-  "a changed V2 fee/schema fingerprint forces the whole family to direct-read",
+  1,
+  "a changed V2 fee/schema fingerprint directs only that stateKey",
+);
+assert(
+  backend.physicalReads[0]?.includes(V2_POOL.toLowerCase()),
+  "the schema-changed pool, not its healthy sibling, must be reread",
 );
 assert(backend.physicalReads.every((readKey) => readKey.includes("reserves:")));
 backrunBridge.publish(staticMetadataChanged.snapshot);

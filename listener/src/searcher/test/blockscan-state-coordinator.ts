@@ -8,10 +8,16 @@ import type { TokenEdge } from "../planner/token-graph.js";
 import {
   assertPureSynchronousDeriveMids,
   blockScanEdgeKey,
+  createMutationQueryDescriptor,
   createVerifiedGraphView,
+  deterministicHash,
   registerBlockScanStateFamily,
+  type BlockSource,
   type BlockScanPricingLane,
   type BlockScanStateCapability,
+  type CanonicalMutationRange,
+  type ChainLog,
+  type MutationQueryDescriptor,
   type RegisteredBlockScanStateFamily,
   type StateRead,
   type StateReadResult,
@@ -23,8 +29,10 @@ const SOURCE_HASH = `0x${"ab".repeat(32)}`;
 const TOKEN_A = "0x0000000000000000000000000000000000000001";
 const TOKEN_B = "0x0000000000000000000000000000000000000002";
 const TOKEN_C = "0x0000000000000000000000000000000000000003";
+const TOKEN_D = "0x0000000000000000000000000000000000000004";
 const SWAP_POOL = "0x0000000000000000000000000000000000000011";
 const SWAP_POOL_B = "0x0000000000000000000000000000000000000033";
+const SWAP_POOL_C = "0x0000000000000000000000000000000000000044";
 const PROTOCOL_POOL = "0x0000000000000000000000000000000000000022";
 
 interface FakeSnapshot {
@@ -36,6 +44,8 @@ const swapForward = edge("swap-action", SWAP_POOL, TOKEN_A, TOKEN_B);
 const swapReverse = edge("swap-action", SWAP_POOL, TOKEN_B, TOKEN_A);
 const swapBForward = edge("swap-action", SWAP_POOL_B, TOKEN_A, TOKEN_C);
 const swapBReverse = edge("swap-action", SWAP_POOL_B, TOKEN_C, TOKEN_A);
+const swapCForward = edge("swap-action", SWAP_POOL_C, TOKEN_A, TOKEN_D);
+const swapCReverse = edge("swap-action", SWAP_POOL_C, TOKEN_D, TOKEN_A);
 const protocol = edge("protocol-action", PROTOCOL_POOL, TOKEN_B, TOKEN_C, "protocol");
 
 function edge(
@@ -150,6 +160,154 @@ function families() {
   return { list, swapCalls, protocolCalls };
 }
 
+const FIXTURE_MUTATION_TOPIC = `0x${"cd".repeat(32)}`;
+
+function incrementalFakeCapability(): BlockScanStateCapability<
+  { readonly name: string },
+  FakeSnapshot
+> {
+  return {
+    stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
+    compileStaticSchema: () => ({ name: "incremental-swap" }),
+    buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => [{
+      id: "state",
+      sourceBlock,
+      sourceBlockHash,
+      to: edges[0]?.target ?? SWAP_POOL,
+      data: "0x12345678",
+      transport: "multicall-safe",
+    }],
+    decodeState: (_schema, results) => {
+      assert.equal(results.length, 1);
+      assert.equal(results[0]?.ok, true);
+      return { numerator: 2n, denominator: 1n };
+    },
+    deriveMids: (snapshot, edges) =>
+      new Map(edges.map((edgeValue) => [
+        blockScanEdgeKey(edgeValue),
+        mid(
+          edgeValue,
+          Number(snapshot.numerator) / Number(snapshot.denominator),
+        ),
+      ])),
+    dependencies: (edges) => edges.map((edgeValue) => edgeValue.target),
+    incremental: {
+      mutationQueryDescriptor: ({ edges }) =>
+        createMutationQueryDescriptor({
+          addresses: edges.map((edgeValue) => edgeValue.target),
+          topics: [[FIXTURE_MUTATION_TOPIC]],
+        }),
+      classifyMutations: ({ range }) => {
+        const changedReadKeysByStateKey = new Map<
+          string,
+          ReadonlySet<string>
+        >();
+        for (const event of range.events) {
+          changedReadKeysByStateKey.set(
+            event.address.toLowerCase(),
+            new Set(["state"]),
+          );
+        }
+        return Object.freeze({
+          mutationRangeFingerprint: range.rangeFingerprint,
+          classifierFingerprint: deterministicHash(
+            "fixture-state-key-local-classifier-v1",
+          ),
+          changedReadKeysByStateKey,
+        });
+      },
+    },
+  };
+}
+
+function incrementalGraph(
+  generation: number,
+  edges: readonly TokenEdge[],
+) {
+  const sourceBlock = SOURCE_BLOCK + generation;
+  const sourceBlockHash =
+    `0x${generation.toString(16).padStart(64, "0")}`;
+  return createVerifiedGraphView({
+    id: `incremental-graph-${generation}`,
+    generation,
+    sourceBlock,
+    sourceBlockHash,
+    completenessWatermark: sourceBlock,
+    perSourceCoverage: [{
+      familyId: "univ2-standard",
+      sourceId: "incremental-fixture",
+      sourceFingerprint: "incremental-fixture-v1",
+      completeThroughBlock: sourceBlock,
+      completeThroughHash: sourceBlockHash,
+    }],
+    edges,
+  });
+}
+
+class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
+  readonly readTargets: string[] = [];
+  readonly failTargets = new Set<string>();
+  rangeFailure = false;
+
+  async readBatch(
+    _lane: BlockScanPricingLane,
+    reads: readonly StateRead[],
+    control: {
+      sourceGeneration: number;
+    },
+  ): Promise<readonly StateReadResult[]> {
+    return reads.map((read) => {
+      const target = read.to.toLowerCase();
+      this.readTargets.push(target);
+      if (this.failTargets.has(target)) {
+        return Object.freeze({
+          id: read.id,
+          ok: false as const,
+          sourceBlock: read.sourceBlock,
+          sourceBlockHash: read.sourceBlockHash,
+          kind: "rpc" as const,
+          error: "injected previous-state failure",
+        });
+      }
+      return successfulRead(read, control.sourceGeneration);
+    });
+  }
+
+  async verifyCanonicalSource(): Promise<void> {
+    return;
+  }
+
+  async readCanonicalMutationRange(
+    descriptor: MutationQueryDescriptor,
+    fromExclusive: BlockSource,
+    through: BlockSource,
+  ): Promise<CanonicalMutationRange> {
+    if (this.rangeFailure) {
+      throw new Error("injected mutation range failure");
+    }
+    const events: readonly ChainLog[] = Object.freeze([]);
+    const canonicalPathFingerprint = deterministicHash({
+      fromExclusive,
+      through,
+    });
+    return Object.freeze({
+      fromExclusive,
+      through,
+      events,
+      complete: true,
+      queryDescriptorFingerprint: descriptor.fingerprint,
+      canonicalPathFingerprint,
+      rangeFingerprint: deterministicHash({
+        fromExclusive,
+        through,
+        queryDescriptorFingerprint: descriptor.fingerprint,
+        canonicalPathFingerprint,
+        events,
+      }),
+    });
+  }
+}
+
 class BarrierBackend implements BlockScanStateReadBackend {
   readonly laneCalls: BlockScanPricingLane[] = [];
   private releaseBarrier: (() => void) | null = null;
@@ -205,7 +363,14 @@ async function completeAndDeterministic(): Promise<void> {
   assert.equal(result.coverage.expectedEdgeKeyHash, result.coverage.resolvedEdgeKeyHash);
   assert.equal(result.snapshot.mids.size, 3);
   assert.deepEqual(
-    result.familyTelemetry?.map(({ wallMs: _wallMs, ...telemetry }) => telemetry),
+    result.familyTelemetry?.map(({
+      wallMs: _wallMs,
+      carryStateKeys: _carryStateKeys,
+      directStateKeys: _directStateKeys,
+      missingPreviousStateKeys: _missingPreviousStateKeys,
+      fullFallbackReason: _fullFallbackReason,
+      ...telemetry
+    }) => telemetry),
     [
       {
         familyId: "protocol:fixture",
@@ -356,7 +521,14 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
   assert.equal(result.coverage.resolvedEdgeKeys.length, 2);
   assert.equal(result.coverage.unresolvedEdgeKeys.length, 1);
   assert.deepEqual(
-    result.familyTelemetry?.map(({ wallMs: _wallMs, ...telemetry }) => telemetry),
+    result.familyTelemetry?.map(({
+      wallMs: _wallMs,
+      carryStateKeys: _carryStateKeys,
+      directStateKeys: _directStateKeys,
+      missingPreviousStateKeys: _missingPreviousStateKeys,
+      fullFallbackReason: _fullFallbackReason,
+      ...telemetry
+    }) => telemetry),
     [
       {
         familyId: "protocol:fixture",
@@ -406,7 +578,14 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
   );
   assert.deepEqual(
     graphIncomplete.familyTelemetry?.map(
-      ({ wallMs: _wallMs, ...telemetry }) => telemetry,
+      ({
+        wallMs: _wallMs,
+        carryStateKeys: _carryStateKeys,
+        directStateKeys: _directStateKeys,
+        missingPreviousStateKeys: _missingPreviousStateKeys,
+        fullFallbackReason: _fullFallbackReason,
+        ...telemetry
+      }) => telemetry,
     ),
     [
       {
@@ -488,7 +667,14 @@ async function oneFailedStateKeyPreservesHealthySiblingInstance(): Promise<void>
   assert.equal(result.coverage.resolvedEdgeKeys.length, 3);
   assert.equal(result.coverage.unresolvedEdgeKeys.length, 2);
   assert.deepEqual(
-    result.familyTelemetry?.map(({ wallMs: _wallMs, ...telemetry }) => telemetry),
+    result.familyTelemetry?.map(({
+      wallMs: _wallMs,
+      carryStateKeys: _carryStateKeys,
+      directStateKeys: _directStateKeys,
+      missingPreviousStateKeys: _missingPreviousStateKeys,
+      fullFallbackReason: _fullFallbackReason,
+      ...telemetry
+    }) => telemetry),
     [
       {
         familyId: "protocol:fixture",
@@ -544,6 +730,150 @@ async function oneFailedStateKeyPreservesHealthySiblingInstance(): Promise<void>
       issue.stateKey?.includes(SWAP_POOL_B.toLowerCase()) &&
       issue.message.includes("injected sibling state failure")
     ),
+  );
+}
+
+async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const family = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const prepare = (generation: number, edges: readonly TokenEdge[]) =>
+    coordinator.prepare({
+      graph: incrementalGraph(generation, edges),
+      families: [family],
+      deadlineAtMs: Date.now() + 2_000,
+    });
+  const familyTelemetry = (
+    result: Awaited<ReturnType<typeof coordinator.prepare>>,
+  ) => {
+    const telemetry = result.familyTelemetry?.find(
+      (entry) => entry.familyId === "univ2-standard",
+    );
+    assert(telemetry, "incremental fixture must emit family telemetry");
+    return telemetry;
+  };
+
+  backend.failTargets.add(SWAP_POOL_B.toLowerCase());
+  const first = await prepare(1, [
+    swapForward,
+    swapReverse,
+    swapBForward,
+    swapBReverse,
+  ]);
+  assert.equal(first.status, "degraded");
+  if (first.status !== "degraded") throw new Error("expected degraded base");
+  assert.equal(first.snapshot.stateByStateKey.size, 1);
+
+  backend.failTargets.clear();
+  backend.readTargets.length = 0;
+  const recoveredAndNew = await prepare(2, [
+    swapForward,
+    swapReverse,
+    swapBForward,
+    swapBReverse,
+    swapCForward,
+    swapCReverse,
+  ]);
+  assert.equal(recoveredAndNew.status, "complete");
+  if (recoveredAndNew.status !== "complete") {
+    throw new Error("expected complete stateKey-local refresh");
+  }
+  assert.deepEqual(
+    [...backend.readTargets].sort(),
+    [SWAP_POOL_B, SWAP_POOL_C].map((value) => value.toLowerCase()).sort(),
+    "a healthy prior sibling carries while the failed and new stateKeys read N",
+  );
+  assert.equal(
+    recoveredAndNew.snapshot.stateByStateKey.get(
+      `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
+    )?.refreshMode,
+    "carry-forward",
+  );
+  assert.equal(
+    recoveredAndNew.snapshot.stateByStateKey.get(
+      `univ2-standard\u001f${SWAP_POOL_B.toLowerCase()}`,
+    )?.refreshMode,
+    "unproven-direct",
+  );
+  assert.deepEqual(
+    {
+      carry: familyTelemetry(recoveredAndNew).carryStateKeys,
+      direct: familyTelemetry(recoveredAndNew).directStateKeys,
+      missing: familyTelemetry(recoveredAndNew).missingPreviousStateKeys,
+      fallback: familyTelemetry(recoveredAndNew).fullFallbackReason,
+    },
+    { carry: 1, direct: 2, missing: 2, fallback: undefined },
+  );
+
+  const changedBForward = Object.freeze({
+    ...swapBForward,
+    v2FeeBps: 31n,
+  });
+  const changedBReverse = Object.freeze({
+    ...swapBReverse,
+    v2FeeBps: 31n,
+  });
+  const changedSchemaEdges = [
+    swapForward,
+    swapReverse,
+    changedBForward,
+    changedBReverse,
+    swapCForward,
+    swapCReverse,
+  ];
+  backend.readTargets.length = 0;
+  const localSchemaChange = await prepare(3, changedSchemaEdges);
+  assert.equal(localSchemaChange.status, "complete");
+  if (localSchemaChange.status !== "complete") {
+    throw new Error("expected schema-local direct refresh");
+  }
+  assert.deepEqual(
+    backend.readTargets,
+    [SWAP_POOL_B.toLowerCase()],
+    "a schema change directs only that stateKey",
+  );
+  assert.deepEqual(
+    {
+      carry: familyTelemetry(localSchemaChange).carryStateKeys,
+      direct: familyTelemetry(localSchemaChange).directStateKeys,
+      missing: familyTelemetry(localSchemaChange).missingPreviousStateKeys,
+      fallback: familyTelemetry(localSchemaChange).fullFallbackReason,
+    },
+    { carry: 2, direct: 1, missing: 0, fallback: undefined },
+  );
+
+  backend.rangeFailure = true;
+  backend.readTargets.length = 0;
+  const fullFallback = await prepare(4, changedSchemaEdges);
+  assert.equal(fullFallback.status, "complete");
+  if (fullFallback.status !== "complete") {
+    throw new Error("expected direct-read fallback to remain complete");
+  }
+  assert.deepEqual(
+    [...backend.readTargets].sort(),
+    [SWAP_POOL, SWAP_POOL_B, SWAP_POOL_C]
+      .map((value) => value.toLowerCase())
+      .sort(),
+    "a mutation range failure falls back to direct reads for the full family",
+  );
+  assert.deepEqual(
+    {
+      carry: familyTelemetry(fullFallback).carryStateKeys,
+      direct: familyTelemetry(fullFallback).directStateKeys,
+      missing: familyTelemetry(fullFallback).missingPreviousStateKeys,
+      fallback: familyTelemetry(fullFallback).fullFallbackReason,
+    },
+    {
+      carry: 0,
+      direct: 3,
+      missing: 0,
+      fallback: "mutation-range-failed",
+    },
   );
 }
 
@@ -1148,6 +1478,7 @@ await completeAndDeterministic();
 await replayResetDropsOnlyDynamicPublication();
 await failedFamilyPublishesHealthyFamiliesAsDegraded();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
+await incrementalRefreshIsStateKeyLocal();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();
 await familyLocalReadDeadlineFencesLateBackendResult();
 await deadlineAndExternalAbort();
