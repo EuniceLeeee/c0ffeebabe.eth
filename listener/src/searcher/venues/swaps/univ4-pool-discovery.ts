@@ -4,6 +4,7 @@ import type { PoolEntry } from "../../planner/token-graph.js";
 import type { PoolUniverseEntry } from "../../pool-universe.js";
 import type {
   LandedPoolDiscoveryLog,
+  LandedPoolDiscoveryLogFilter,
   LandedPoolDiscoveryReadBackend,
   LandedPoolMaterializationCapability,
   LandedPoolMaterializationResult,
@@ -314,25 +315,17 @@ export async function resolveV4InitsBackward(
     remainingBlocks -= blockCount;
     chunkEnd = chunkStart - 1;
   }
-  const historicalLogs = await mapLimit(ranges, 8, async (range) => {
-      const filter = {
+  const historicalLogs = await mapLimit(
+    ranges,
+    8,
+    (range) =>
+      getLogsWithAdaptiveRange(backend, {
         address: poolManagerAddr,
         topics: [topic],
         fromBlock: range.fromBlock,
         toBlock: range.toBlock,
-      } as const;
-      try {
-        return await backend.getLogs(filter, { signal });
-      } catch (error) {
-        if (isPrunedHistoryError(error)) return [];
-        try {
-          return await backend.getLogs(filter, { signal });
-        } catch (retryError) {
-          if (isPrunedHistoryError(retryError)) return [];
-          throw retryError;
-        }
-      }
-  });
+      }, signal),
+  );
   for (const logs of historicalLogs) {
     for (const log of logs) {
       const parsed = {
@@ -352,25 +345,13 @@ export async function resolveV4InitsBackward(
     const exactResults = await mapLimit(
       [...remainingById],
       4,
-      async (poolId) => {
-        const filter = {
+      (poolId) =>
+        getLogsWithAdaptiveRange(backend, {
           address: poolManagerAddr,
           topics: [topic, poolId],
           fromBlock: exactFromBlock,
           toBlock: Math.max(0, Math.floor(searchFromBlock)),
-        } as const;
-        try {
-          return await backend.getLogs(filter, { signal });
-        } catch (error) {
-          if (isPrunedHistoryError(error)) return [];
-          try {
-            return await backend.getLogs(filter, { signal });
-          } catch (retryError) {
-            if (isPrunedHistoryError(retryError)) return [];
-            throw retryError;
-          }
-        }
-      },
+        }, signal),
     );
     for (const logs of exactResults) {
       for (const log of logs) {
@@ -385,6 +366,47 @@ export async function resolveV4InitsBackward(
     }
   }
   return resolved;
+}
+
+/**
+ * Archive providers impose different eth_getLogs span/result limits. Split a
+ * failed non-pruned range into stable, disjoint halves until it succeeds.
+ * A one-block failure remains an error so callers cannot publish an omitted
+ * identity as a completed historical scan.
+ */
+async function getLogsWithAdaptiveRange(
+  backend: Pick<LandedPoolDiscoveryReadBackend, "getLogs">,
+  filter: LandedPoolDiscoveryLogFilter,
+  signal?: AbortSignal,
+): Promise<readonly LandedPoolDiscoveryLog[]> {
+  throwIfAborted(signal);
+  try {
+    return await backend.getLogs(filter, { signal });
+  } catch (error) {
+    throwIfAborted(signal, error);
+    if (isAbortError(error)) throw error;
+    if (isPrunedHistoryError(error)) return [];
+    if (filter.fromBlock >= filter.toBlock) throw error;
+
+    const midpoint = Math.floor((filter.fromBlock + filter.toBlock) / 2);
+    const lower = await getLogsWithAdaptiveRange(
+      backend,
+      {
+        ...filter,
+        toBlock: midpoint,
+      },
+      signal,
+    );
+    const upper = await getLogsWithAdaptiveRange(
+      backend,
+      {
+        ...filter,
+        fromBlock: midpoint + 1,
+      },
+      signal,
+    );
+    return [...lower, ...upper];
+  }
 }
 
 export async function resolveV4PoolKeyViaPositionManager(
@@ -678,4 +700,15 @@ function isPrunedHistoryError(error: unknown): boolean {
   return /pruned|not available/i.test(
     error instanceof Error ? error.message : String(error),
   );
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function throwIfAborted(signal?: AbortSignal, cause?: unknown): void {
+  if (!signal?.aborted) return;
+  throw signal.reason ??
+    cause ??
+    new DOMException("Aborted", "AbortError");
 }

@@ -319,6 +319,126 @@ async function main(): Promise<void> {
   );
   console.log("[pool-universe-v4] batched Initialize family-topic backfill: PASS");
 
+  const adaptiveFromBlock = UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK;
+  const adaptiveToBlock = adaptiveFromBlock + 99;
+  const adaptivePoolABlock = adaptiveFromBlock + 10;
+  const adaptivePoolBBlock = adaptiveFromBlock + 90;
+  const adaptiveRanges: Array<{ fromBlock: number; toBlock: number }> = [];
+  const adaptiveResolved = await resolveV4InitsBackward(
+    {
+      async getLogs(filter: LandedPoolDiscoveryLogFilter) {
+        adaptiveRanges.push({
+          fromBlock: filter.fromBlock,
+          toBlock: filter.toBlock,
+        });
+        const blockCount = filter.toBlock - filter.fromBlock + 1;
+        if (blockCount > 25) {
+          throw new Error("provider getLogs range exceeds response limit");
+        }
+        return [
+          ...(filter.fromBlock <= adaptivePoolABlock &&
+              filter.toBlock >= adaptivePoolABlock
+            ? [initLog(batchPoolA, adaptivePoolABlock)]
+            : []),
+          ...(filter.fromBlock <= adaptivePoolBBlock &&
+              filter.toBlock >= adaptivePoolBBlock
+            ? [initLog(batchPoolB, adaptivePoolBBlock)]
+            : []),
+        ];
+      },
+    },
+    poolManager,
+    initializeTopic,
+    [batchPoolA.poolId, batchPoolA.poolId, batchPoolB.poolId],
+    adaptiveToBlock,
+    100,
+    100,
+  );
+  const successfulAdaptiveRanges = adaptiveRanges.filter(
+    (range) => range.toBlock - range.fromBlock + 1 <= 25,
+  );
+  assert(
+    adaptiveRanges.length === 7 && successfulAdaptiveRanges.length === 4,
+    "provider range errors should recursively split into four disjoint successful leaves",
+  );
+  assert(
+    successfulAdaptiveRanges.every((range, index) =>
+      range.fromBlock === adaptiveFromBlock + index * 25 &&
+      range.toBlock === adaptiveFromBlock + (index + 1) * 25 - 1
+    ),
+    "adaptive range leaves should preserve chronological order without overlap or gaps",
+  );
+  assert(
+    adaptiveResolved.size === 2 &&
+      [...adaptiveResolved.keys()].join(",") ===
+        [batchPoolA.poolId, batchPoolB.poolId].join(","),
+    "adaptive split should preserve PoolKey ordering and de-duplicate requested identities",
+  );
+  console.log("[pool-universe-v4] adaptive historical range split: PASS");
+
+  let terminalFailureCalls = 0;
+  let terminalFailure: unknown;
+  try {
+    await resolveV4InitsBackward(
+      {
+        async getLogs() {
+          terminalFailureCalls++;
+          throw new Error("provider rejects even one block");
+        },
+      },
+      poolManager,
+      initializeTopic,
+      [batchPoolA.poolId],
+      adaptiveFromBlock,
+      1,
+      1,
+    );
+  } catch (error) {
+    terminalFailure = error;
+  }
+  assert(
+    terminalFailureCalls === 1 &&
+      terminalFailure instanceof Error &&
+      terminalFailure.message === "provider rejects even one block",
+    "an unsplittable non-pruned range must fail closed instead of omitting Initialize logs",
+  );
+  console.log("[pool-universe-v4] unsplittable historical range fails closed: PASS");
+
+  const abortController = new AbortController();
+  const abortReason = new Error("historical scan cancelled");
+  abortReason.name = "AbortError";
+  let abortedCalls = 0;
+  let observedAbort: unknown;
+  try {
+    await resolveV4InitsBackward(
+      {
+        async getLogs(_filter, control) {
+          abortedCalls++;
+          assert(
+            control?.signal === abortController.signal,
+            "adaptive historical reads must forward the caller AbortSignal",
+          );
+          abortController.abort(abortReason);
+          throw new Error("provider request interrupted");
+        },
+      },
+      poolManager,
+      initializeTopic,
+      [batchPoolA.poolId],
+      adaptiveToBlock,
+      100,
+      100,
+      abortController.signal,
+    );
+  } catch (error) {
+    observedAbort = error;
+  }
+  assert(
+    abortedCalls === 1 && observedAbort === abortReason,
+    "aborted historical reads must propagate the abort reason without recursive retries",
+  );
+  console.log("[pool-universe-v4] adaptive historical range cancellation: PASS");
+
   let broadBackfillCalls = 0;
   let exactBackfillCalls = 0;
   const truncatedBroadResolved = await resolveV4InitsBackward(
