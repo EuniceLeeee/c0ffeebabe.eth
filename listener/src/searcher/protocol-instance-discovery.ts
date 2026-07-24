@@ -39,6 +39,11 @@ import {
 
 export function createPinnedProtocolDiscoveryContext(input: {
   provider: ethers.JsonRpcProvider;
+  /**
+   * Optional fallback for a trace that the current node explicitly reports as
+   * pruned. Logs, receipts, current-state reads and probes stay on `provider`.
+   */
+  observedHistoryProvider?: ethers.JsonRpcProvider;
   blockNumber: number;
   fromBlock: number;
   toBlock?: number;
@@ -51,6 +56,8 @@ export function createPinnedProtocolDiscoveryContext(input: {
   control?: ProtocolDiscoveryReadControl;
 }): ProtocolDiscoveryContext {
   const toBlock = input.toBlock ?? input.blockNumber;
+  const observedHistoryProvider =
+    input.observedHistoryProvider ?? input.provider;
   const rpcTimeoutMs = input.rpcTimeoutMs ?? Math.max(
     1_000,
     Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_RPC_TIMEOUT_MS ?? "15000"),
@@ -63,6 +70,40 @@ export function createPinnedProtocolDiscoveryContext(input: {
   ) {
     throw new Error("invalid protocol discovery block range or RPC timeout");
   }
+  let observedHistoryAlignment: Promise<void> | undefined;
+  let observedHistoryTraceTail = Promise.resolve();
+  const ensureObservedHistoryAligned = (
+    control: ProtocolDiscoveryReadControl,
+  ): Promise<void> => {
+    observedHistoryAlignment ??=
+      assertProtocolDiscoveryObservationProviderAligned({
+        provider: input.provider,
+        observedHistoryProvider,
+        blockNumber: toBlock,
+        rpcTimeoutMs,
+        control,
+      });
+    return observedHistoryAlignment;
+  };
+  const runObservedHistoryTrace = async <T>(
+    work: () => Promise<T>,
+  ): Promise<T> => {
+    const previous = observedHistoryTraceTail;
+    let release!: () => void;
+    const turn = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    observedHistoryTraceTail = previous.then(
+      () => turn,
+      () => turn,
+    );
+    await previous.catch(() => {});
+    try {
+      return await work();
+    } finally {
+      release();
+    }
+  };
   const blockTag = ethers.toQuantity(input.blockNumber);
   return {
     blockNumber: input.blockNumber,
@@ -132,14 +173,36 @@ export function createPinnedProtocolDiscoveryContext(input: {
           logs: receipt.logs.map(normalizeProtocolDiscoveryLog),
         };
       },
-      traceTransaction: (txHash, control) => sendProtocolDiscoveryRpc<unknown>(
-        input.provider,
-        "debug_traceTransaction",
-        [txHash, { tracer: "callTracer" }],
-        rpcTimeoutMs,
-        "debug_traceTransaction",
-        mergeProtocolDiscoveryReadControls(input.control, control),
-      ),
+      traceTransaction: async (txHash, control) => {
+        const mergedControl =
+          mergeProtocolDiscoveryReadControls(input.control, control);
+        try {
+          return await sendProtocolDiscoveryRpc<unknown>(
+            input.provider,
+            "debug_traceTransaction",
+            [txHash, { tracer: "callTracer" }],
+            rpcTimeoutMs,
+            "debug_traceTransaction",
+            mergedControl,
+          );
+        } catch (error) {
+          if (
+            observedHistoryProvider === input.provider ||
+            !isProtocolDiscoveryHistoricalStateUnavailable(error)
+          ) throw error;
+          await ensureObservedHistoryAligned(mergedControl);
+          return runObservedHistoryTrace(() =>
+            sendProtocolDiscoveryRpc<unknown>(
+              observedHistoryProvider,
+              "debug_traceTransaction",
+              [txHash, { tracer: "callTracer" }],
+              rpcTimeoutMs,
+              "archive debug_traceTransaction",
+              mergedControl,
+            )
+          );
+        }
+      },
       simulateCalls: async (req, control) => {
         const raw = await sendProtocolDiscoveryRpc<unknown>(
           input.provider,
@@ -218,6 +281,72 @@ export function createPinnedProtocolDiscoveryContext(input: {
       },
     },
   };
+}
+
+interface RawProtocolDiscoveryBlockHeader {
+  readonly number: string;
+  readonly hash: string;
+}
+
+/**
+ * A separate evidence provider is trusted only after it proves the same
+ * canonical block as the current-state provider. The block hash commits the
+ * state root and chain history without exposing either endpoint.
+ */
+export async function assertProtocolDiscoveryObservationProviderAligned(input: {
+  provider: ethers.JsonRpcProvider;
+  observedHistoryProvider?: ethers.JsonRpcProvider;
+  blockNumber: number;
+  rpcTimeoutMs?: number;
+  control?: ProtocolDiscoveryReadControl;
+}): Promise<void> {
+  const observedHistoryProvider = input.observedHistoryProvider;
+  if (!observedHistoryProvider || observedHistoryProvider === input.provider) {
+    return;
+  }
+  if (!Number.isSafeInteger(input.blockNumber) || input.blockNumber < 0) {
+    throw new Error("invalid protocol discovery provider alignment block");
+  }
+  const rpcTimeoutMs = input.rpcTimeoutMs ?? Math.max(
+    1_000,
+    Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_RPC_TIMEOUT_MS ?? "15000"),
+  );
+  if (!Number.isFinite(rpcTimeoutMs) || rpcTimeoutMs < 1) {
+    throw new Error("invalid protocol discovery provider alignment timeout");
+  }
+  const blockTag = ethers.toQuantity(input.blockNumber);
+  const [stateHeader, observedHeader] = await Promise.all([
+    sendProtocolDiscoveryRpc<RawProtocolDiscoveryBlockHeader | null>(
+      input.provider,
+      "eth_getBlockByNumber",
+      [blockTag, false],
+      rpcTimeoutMs,
+      "current-state block header",
+      input.control,
+    ),
+    sendProtocolDiscoveryRpc<RawProtocolDiscoveryBlockHeader | null>(
+      observedHistoryProvider,
+      "eth_getBlockByNumber",
+      [blockTag, false],
+      rpcTimeoutMs,
+      "observed-history block header",
+      input.control,
+    ),
+  ]);
+  if (
+    !stateHeader?.hash ||
+    !observedHeader?.hash ||
+    typeof stateHeader.number !== "string" ||
+    typeof observedHeader.number !== "string" ||
+    Number(BigInt(stateHeader.number)) !== input.blockNumber ||
+    Number(BigInt(observedHeader.number)) !== input.blockNumber ||
+    stateHeader.hash.toLowerCase() !== observedHeader.hash.toLowerCase()
+  ) {
+    throw new Error(
+      `protocol discovery observed-history provider is not aligned at block ` +
+        `${input.blockNumber}`,
+    );
+  }
 }
 
 interface RawProtocolDiscoveryLog {
@@ -419,6 +548,22 @@ function isRetryableProtocolDiscoveryRpcTransportFailure(error: unknown): boolea
     if (item instanceof TypeError && /fetch failed/i.test(item.message)) return true;
   }
   return false;
+}
+
+function isProtocolDiscoveryHistoricalStateUnavailable(error: unknown): boolean {
+  return protocolDiscoveryErrorChain(error).some((item) => {
+    const message = item instanceof Error
+      ? item.message
+      : item && typeof item === "object" && "message" in item
+        ? String((item as { message?: unknown }).message ?? "")
+        : "";
+    return (
+      /state at block .* pruned/i.test(message) ||
+      /historical state.*(?:unavailable|pruned|missing)/i.test(message) ||
+      /missing trie node/i.test(message) ||
+      /state .* not available/i.test(message)
+    );
+  });
 }
 
 function protocolDiscoveryRetryDelayMs(error: unknown, attempt: number): number {

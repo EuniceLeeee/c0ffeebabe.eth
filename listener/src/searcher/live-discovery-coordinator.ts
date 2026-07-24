@@ -123,6 +123,8 @@ interface RuntimeDetector extends RuntimeGraphConsumer {
 
 export interface LiveDiscoveryCoordinatorDeps {
   readonly provider: ethers.JsonRpcProvider;
+  /** Historical range evidence only; live state and probes stay on provider. */
+  readonly observedHistoryProvider?: ethers.JsonRpcProvider;
   readonly mainnetBackend: TokenQueryBackend;
   readonly liveRegistry: PoolEntry[];
   readonly config: LiveDiscoveryConfig;
@@ -180,6 +182,7 @@ export async function createLiveDiscoveryCoordinator(
 ) {
   const {
     provider,
+    observedHistoryProvider,
     mainnetBackend,
     liveRegistry,
     config,
@@ -693,6 +696,9 @@ export async function createLiveDiscoveryCoordinator(
     );
     const pass = await prepareActiveProtocolDiscoveryPass({
       provider,
+      ...(observedHistoryProvider === undefined
+        ? {}
+        : { observedHistoryProvider }),
       adapters: PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
       identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
       protocolEdgesEnabled: config.enableProtocolEdges,

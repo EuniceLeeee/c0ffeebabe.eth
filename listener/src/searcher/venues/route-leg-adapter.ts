@@ -162,7 +162,12 @@ export interface ProtocolDiscoveryReadControl {
   ) => Promise<T>;
 }
 
-/** All state reads are pinned to one current block on the configured node. */
+/**
+ * Current-state methods are pinned to one block on the state provider.
+ * Logs and receipts stay there too. A trace may use a separately aligned
+ * historical provider only after the state provider explicitly reports that
+ * the required historical state was pruned.
+ */
 export interface ProtocolDiscoveryReadBackend {
   call(
     req: { to: string; data: string; from?: string },

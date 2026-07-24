@@ -327,8 +327,22 @@ async function main(): Promise<void> {
   if (!rpcUrl) {
     throw new Error("SEARCHER_LIVE_RPC_URL or MAINNET_RPC_URL required for block-scan hunt.");
   }
+  const observedHistoryRpcUrl =
+    process.env.HUNT_PROTOCOL_HISTORY_RPC_URL ??
+    process.env.SEARCHER_PROTOCOL_DISCOVERY_ARCHIVE_RPC_URL ??
+    (process.env.SEARCHER_LIVE_RPC_URL
+      ? process.env.MAINNET_RPC_URL
+      : undefined);
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const observedHistoryProvider =
+    observedHistoryRpcUrl && observedHistoryRpcUrl !== rpcUrl
+      ? new ethers.JsonRpcProvider(
+          observedHistoryRpcUrl,
+          undefined,
+          { batchMaxCount: 1 },
+        )
+      : undefined;
   const state = new AnvilStateBackend(
     rpcUrl,
     `http://127.0.0.1:${envInt("SEARCHER_BLOCKSCAN_HUNT_ANVIL_PORT", 8566)}`,
@@ -349,7 +363,8 @@ async function main(): Promise<void> {
     const cfg = readConfig(rpcUrl, blockNumber);
     console.log(
       `[blockscan-hunt] upstream=${redactRpcUrl(rpcUrl)} block=${cfg.blockNumber} ` +
-        `universe=${cfg.universePath} maxPools=${cfg.maxPools} maxHops=${cfg.maxHops}`,
+        `universe=${cfg.universePath} maxPools=${cfg.maxPools} maxHops=${cfg.maxHops} ` +
+        `observedHistory=${observedHistoryProvider ? "separate-aligned" : "primary"}`,
     );
 
     const callBackend = new PinnedCallBackend(provider, cfg.blockNumber);
@@ -394,6 +409,9 @@ async function main(): Promise<void> {
       );
       const protocolDiscovery = await prepareActiveProtocolDiscoveryPass({
         provider,
+        ...(observedHistoryProvider === undefined
+          ? {}
+          : { observedHistoryProvider }),
         adapters: discoverableFamilies,
         identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
         protocolEdgesEnabled: true,
@@ -860,6 +878,7 @@ async function main(): Promise<void> {
     );
   } finally {
     state.stop();
+    observedHistoryProvider?.destroy();
     provider.destroy();
   }
 }

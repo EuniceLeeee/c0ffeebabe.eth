@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
 import { ethers } from "ethers";
 import {
+  assertProtocolDiscoveryObservationProviderAligned,
   createPinnedProtocolDiscoveryContext,
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
 } from "../protocol-instance-discovery.js";
@@ -22,6 +23,11 @@ const RATE_LIMIT_TX_HASH = `0x${"cd".repeat(32)}`;
 const NETWORK_RETRY_TX_HASH = `0x${"ef".repeat(32)}`;
 const DEADLINE_TX_HASH = `0x${"12".repeat(32)}`;
 const BUDGET_RETRY_TX_HASH = `0x${"34".repeat(32)}`;
+const PRUNED_TRACE_TX_HASH = `0x${"35".repeat(32)}`;
+const SECOND_PRUNED_TRACE_TX_HASH = `0x${"37".repeat(32)}`;
+const NON_PRUNED_TRACE_ERROR_TX_HASH = `0x${"36".repeat(32)}`;
+const HEADER_HASH = `0x${"56".repeat(32)}`;
+const MISMATCHED_HEADER_HASH = `0x${"78".repeat(32)}`;
 let activeResponses = 0;
 let peakActiveResponses = 0;
 let abortedResponses = 0;
@@ -30,6 +36,11 @@ let networkReceiptAttempts = 0;
 let deadlineReceiptAttempts = 0;
 let budgetRetryReceiptAttempts = 0;
 let revertAttempts = 0;
+const primaryMethods: string[] = [];
+const observedHistoryMethods: string[] = [];
+let observedHistoryBlockHash = HEADER_HASH;
+let activeObservedHistoryTraces = 0;
+let peakObservedHistoryTraces = 0;
 
 const rawLog = {
   address: "0x0000000000000000000000000000000000000001",
@@ -51,6 +62,15 @@ const server = createServer((request, response) => {
       method: string;
       params: Array<{ data?: string }>;
     };
+    primaryMethods.push(parsed.method);
+    if (parsed.method === "eth_getBlockByNumber") {
+      respond(response, {
+        jsonrpc: "2.0",
+        id: parsed.id,
+        result: { number: "0x1", hash: HEADER_HASH },
+      });
+      return;
+    }
     if (parsed.method === "eth_getLogs") {
       respond(response, { jsonrpc: "2.0", id: parsed.id, result: [rawLog] });
       return;
@@ -91,6 +111,37 @@ const server = createServer((request, response) => {
       });
       return;
     }
+    if (
+      parsed.method === "debug_traceTransaction" &&
+      (
+        parsed.params[0] === PRUNED_TRACE_TX_HASH ||
+        parsed.params[0] === SECOND_PRUNED_TRACE_TX_HASH
+      )
+    ) {
+      respond(response, {
+        jsonrpc: "2.0",
+        id: parsed.id,
+        error: {
+          code: -32000,
+          message: "state at block #1 is pruned",
+        },
+      });
+      return;
+    }
+    if (
+      parsed.method === "debug_traceTransaction" &&
+      parsed.params[0] === NON_PRUNED_TRACE_ERROR_TX_HASH
+    ) {
+      respond(response, {
+        jsonrpc: "2.0",
+        id: parsed.id,
+        error: {
+          code: -32000,
+          message: "trace unavailable for fixture",
+        },
+      });
+      return;
+    }
     if (parsed.params[0]?.data === REVERT_DATA) {
       revertAttempts++;
       respond(response, {
@@ -112,10 +163,56 @@ const server = createServer((request, response) => {
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const address = server.address();
 assert(address && typeof address === "object");
+const observedHistoryServer = createServer((request, response) => {
+  activeResponses++;
+  peakActiveResponses = Math.max(peakActiveResponses, activeResponses);
+  trackResponse(response);
+  const chunks: Buffer[] = [];
+  request.on("data", (chunk: Buffer) => chunks.push(chunk));
+  request.on("end", () => {
+    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+      id: number;
+      method: string;
+    };
+    observedHistoryMethods.push(parsed.method);
+    const result = parsed.method === "eth_getBlockByNumber"
+      ? { number: "0x1", hash: observedHistoryBlockHash }
+      : parsed.method === "eth_getLogs"
+        ? [rawLog]
+        : parsed.method === "eth_getTransactionReceipt"
+          ? { status: "0x1", logs: [rawLog] }
+          : parsed.method === "debug_traceTransaction"
+            ? { type: "CALL", calls: [] }
+            : "0x";
+    if (parsed.method === "debug_traceTransaction") {
+      activeObservedHistoryTraces++;
+      peakObservedHistoryTraces = Math.max(
+        peakObservedHistoryTraces,
+        activeObservedHistoryTraces,
+      );
+      setTimeout(() => {
+        activeObservedHistoryTraces--;
+        respond(response, { jsonrpc: "2.0", id: parsed.id, result });
+      }, 20).unref();
+      return;
+    }
+    respond(response, { jsonrpc: "2.0", id: parsed.id, result });
+  });
+});
+await new Promise<void>((resolve) =>
+  observedHistoryServer.listen(0, "127.0.0.1", resolve)
+);
+const observedHistoryAddress = observedHistoryServer.address();
+assert(observedHistoryAddress && typeof observedHistoryAddress === "object");
 const network = ethers.Network.from(1);
 const provider = new ethers.JsonRpcProvider(`http://127.0.0.1:${address.port}`, network, {
   staticNetwork: network,
 });
+const observedHistoryProvider = new ethers.JsonRpcProvider(
+  `http://127.0.0.1:${observedHistoryAddress.port}`,
+  network,
+  { staticNetwork: network },
+);
 const context = createPinnedProtocolDiscoveryContext({
   provider,
   blockNumber: 1,
@@ -139,6 +236,89 @@ const deadlineContext = createPinnedProtocolDiscoveryContext({
 });
 
 try {
+  await assertProtocolDiscoveryObservationProviderAligned({
+    provider,
+    observedHistoryProvider,
+    blockNumber: 1,
+    rpcTimeoutMs: 1_500,
+  });
+  const splitContext = createPinnedProtocolDiscoveryContext({
+    provider,
+    observedHistoryProvider,
+    blockNumber: 1,
+    fromBlock: 1,
+    rpcTimeoutMs: 1_500,
+    graphTokens: [],
+  });
+  const primaryStart = primaryMethods.length;
+  const observedHistoryStart = observedHistoryMethods.length;
+  await Promise.all([
+    splitContext.backend.call({
+      to: "0x0000000000000000000000000000000000000001",
+      data: "0xabcdef03",
+    }),
+    splitContext.backend.getCode(
+      "0x0000000000000000000000000000000000000001",
+    ),
+    splitContext.backend.getStorageAt(
+      "0x0000000000000000000000000000000000000001",
+      0n,
+    ),
+  ]);
+  await splitContext.backend.getLogs({ topics: [], fromBlock: 1, toBlock: 1 });
+  await splitContext.backend.getTransactionReceipt(TX_HASH);
+  await Promise.all([
+    splitContext.backend.traceTransaction(PRUNED_TRACE_TX_HASH),
+    splitContext.backend.traceTransaction(SECOND_PRUNED_TRACE_TX_HASH),
+  ]);
+  assert.deepEqual(
+    new Set(primaryMethods.slice(primaryStart)),
+    new Set([
+      "eth_call",
+      "eth_getCode",
+      "eth_getStorageAt",
+      "eth_getLogs",
+      "eth_getTransactionReceipt",
+      "debug_traceTransaction",
+      "eth_getBlockByNumber",
+    ]),
+    "current-state and locally available evidence must stay on the primary provider",
+  );
+  assert.deepEqual(
+    new Set(observedHistoryMethods.slice(observedHistoryStart)),
+    new Set([
+      "eth_getBlockByNumber",
+      "debug_traceTransaction",
+    ]),
+    "the history provider must receive only alignment and the pruned trace fallback",
+  );
+  assert.equal(
+    peakObservedHistoryTraces,
+    1,
+    "pruned archive traces must be serialized without slowing local traces",
+  );
+  const historyCallsBeforeNonPrunedError = observedHistoryMethods.length;
+  await assert.rejects(
+    splitContext.backend.traceTransaction(NON_PRUNED_TRACE_ERROR_TX_HASH),
+    /trace unavailable for fixture/,
+  );
+  assert.equal(
+    observedHistoryMethods.length,
+    historyCallsBeforeNonPrunedError,
+    "non-pruning trace failures must not fall through to the archive provider",
+  );
+  observedHistoryBlockHash = MISMATCHED_HEADER_HASH;
+  await assert.rejects(
+    assertProtocolDiscoveryObservationProviderAligned({
+      provider,
+      observedHistoryProvider,
+      blockNumber: 1,
+      rpcTimeoutMs: 1_500,
+    }),
+    /observed-history provider is not aligned at block 1/,
+  );
+  observedHistoryBlockHash = HEADER_HASH;
+
   const startedAt = Date.now();
   await assert.rejects(
     context.backend.call({
@@ -434,8 +614,13 @@ try {
   assert(Date.now() - deadlineStartedAt < 250, "transport retries must share one absolute deadline");
   assert.equal(deadlineReceiptAttempts, 1, "retry backoff must not overrun the absolute deadline");
 } finally {
+  observedHistoryProvider.destroy();
   provider.destroy();
+  observedHistoryServer.closeAllConnections();
   server.closeAllConnections();
+  await new Promise<void>((resolve, reject) => {
+    observedHistoryServer.close((error) => error ? reject(error) : resolve());
+  });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });

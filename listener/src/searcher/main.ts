@@ -532,6 +532,15 @@ function liveRpcUrl(): string {
   return url;
 }
 
+function protocolDiscoveryArchiveRpcUrl(liveUrl: string): string | undefined {
+  const explicit = process.env.SEARCHER_PROTOCOL_DISCOVERY_ARCHIVE_RPC_URL;
+  if (explicit) return explicit === liveUrl ? undefined : explicit;
+  const archive = process.env.SEARCHER_LIVE_RPC_URL
+    ? process.env.MAINNET_RPC_URL
+    : undefined;
+  return archive && archive !== liveUrl ? archive : undefined;
+}
+
 function liveWsUrl(rpcUrl: string): string {
   return (
     process.env.SEARCHER_LIVE_WS_URL ??
@@ -663,6 +672,28 @@ async function main(): Promise<void> {
   const rpcUrl = liveRpcUrl();
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const protocolDiscoveryArchiveUrl =
+    protocolDiscoveryArchiveRpcUrl(rpcUrl);
+  const protocolDiscoveryHistoryProvider = protocolDiscoveryArchiveUrl
+    ? new ethers.JsonRpcProvider(
+        protocolDiscoveryArchiveUrl,
+        undefined,
+        { batchMaxCount: 1 },
+      )
+    : undefined;
+  let protocolDiscoveryHistoryProviderDestroyed = false;
+  const destroyProtocolDiscoveryHistoryProvider = (): void => {
+    if (
+      !protocolDiscoveryHistoryProvider ||
+      protocolDiscoveryHistoryProviderDestroyed
+    ) return;
+    protocolDiscoveryHistoryProviderDestroyed = true;
+    protocolDiscoveryHistoryProvider.destroy();
+  };
+  console.log(
+    `[searcher/live] protocol discovery observed-history=` +
+      `${protocolDiscoveryHistoryProvider ? "separate-aligned" : "local"}`,
+  );
   const config = buildConfig(provider);
   const blindProductionAudit =
     process.env.SEARCHER_BLIND_RAW_AUDIT === "1";
@@ -1498,6 +1529,9 @@ async function main(): Promise<void> {
   );
   const initialProtocolDiscovery = await prepareActiveProtocolDiscoveryPass({
     provider,
+    ...(protocolDiscoveryHistoryProvider === undefined
+      ? {}
+      : { observedHistoryProvider: protocolDiscoveryHistoryProvider }),
     adapters: PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes(),
     identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
     protocolEdgesEnabled: config.enableProtocolEdges,
@@ -1672,6 +1706,9 @@ async function main(): Promise<void> {
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
   const liveDiscovery = await createLiveDiscoveryCoordinator({
     provider,
+    ...(protocolDiscoveryHistoryProvider === undefined
+      ? {}
+      : { observedHistoryProvider: protocolDiscoveryHistoryProvider }),
     mainnetBackend,
     liveRegistry,
     config: {
@@ -2256,6 +2293,7 @@ async function main(): Promise<void> {
     cancelScheduledWarm();
     liveDiscovery.shutdown();
     provider.removeAllListeners("block");
+    destroyProtocolDiscoveryHistoryProvider();
     state.stop();
     blockScanRuntimeLoop.stopExecutionWorkers();
     process.exit(0);
@@ -2351,6 +2389,7 @@ async function main(): Promise<void> {
     cancelScheduledWarm();
     liveDiscovery.shutdown();
     provider.removeAllListeners("block");
+    destroyProtocolDiscoveryHistoryProvider();
     state.stop();
     blockScanRuntimeLoop.stopExecutionWorkers();
   }

@@ -30,6 +30,11 @@ import type {
 
 export interface ProtocolDiscoveryRuntimeInput {
   readonly provider: ethers.JsonRpcProvider;
+  /**
+   * Optional archive fallback for explicitly pruned historical traces. All
+   * other reads remain pinned to `provider`.
+   */
+  readonly observedHistoryProvider?: ethers.JsonRpcProvider;
   readonly adapters: readonly RouteLegAdapter[];
   readonly identityRegistry: IdentityResolverRegistry;
   readonly protocolEdgesEnabled: boolean;
@@ -132,6 +137,9 @@ export async function prepareActiveProtocolDiscoveryPass(
     .map((item) => ({ ...item.instance, ownerAdapterId: item.adapterId }));
   const context = createPinnedProtocolDiscoveryContext({
     provider: input.provider,
+    ...(input.observedHistoryProvider === undefined
+      ? {}
+      : { observedHistoryProvider: input.observedHistoryProvider }),
     blockNumber: input.blockNumber,
     fromBlock: input.fromBlock,
     ...(input.toBlock === undefined ? {} : { toBlock: input.toBlock }),
@@ -218,6 +226,9 @@ export async function prepareObservedProtocolDiscoveryPass(
 }> {
   const scanContext = createPinnedProtocolDiscoveryContext({
     provider: input.provider,
+    ...(input.observedHistoryProvider === undefined
+      ? {}
+      : { observedHistoryProvider: input.observedHistoryProvider }),
     blockNumber: input.blockNumber,
     fromBlock: input.blockNumber,
     ...(input.chainId === undefined ? {} : { chainId: input.chainId }),
