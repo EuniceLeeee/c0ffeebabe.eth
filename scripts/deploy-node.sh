@@ -461,10 +461,6 @@ fi
 
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
 REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
-# V4 Initialize history is scanned once per block chunk with all unresolved
-# poolIds in a topic-OR filter. Keep the full default lookback so strict
-# discovery does not trade completeness for deployment speed.
-REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-2000000}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
 REINDEX_MANIFEST="$REINDEX_OUT.manifest.json"
@@ -484,12 +480,11 @@ if [ "$REINDEX_HEAD" -gt 0 ] && [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
    && [ "$((REINDEX_HEAD - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ] \
    && [ -s "$REINDEX_MANIFEST" ]; then
   say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, head=$REINDEX_HEAD, $((REINDEX_HEAD - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
-elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, v4-backfill=${REINDEX_V4_BACKFILL})…"; \
+elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, V4 from deployment)…"; \
    timeout 600 flock -w 30 /run/lock/mev-pooluniverse.lock \
        env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
-       POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS="$REINDEX_V4_BACKFILL" \
        POOL_UNIVERSE_RETAIN_PATH="$REINDEX_RETAIN" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \
        POOL_UNIVERSE_MANIFEST_OUT="$REINDEX_TMP_MANIFEST" \

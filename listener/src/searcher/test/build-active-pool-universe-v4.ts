@@ -19,6 +19,7 @@ import { buildTokenGraph, type TokenQueryBackend, v4PoolId } from "../planner/to
 import { ADDR } from "../../shared/constants/addresses.js";
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import { univ4Adapter } from "../venues/swaps/univ4.js";
+import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "../venues/swaps/univ4-common.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 
 const initIface = new ethers.Interface([
@@ -230,27 +231,38 @@ async function main(): Promise<void> {
   console.log("[pool-universe-v4] expected_transition old v4 Initialize backfill: PASS");
 
   let batchLogCalls = 0;
-  const batchResolved = await resolveV4InitsBackward(
-    {
-      async getLogs(filter: LandedPoolDiscoveryLogFilter) {
-        batchLogCalls++;
-        assert(
-          Array.isArray(filter.topics[1]) &&
-            filter.topics[1].length === 2,
-          "batch backfill should OR unresolved PoolKeys in one indexed topic",
-        );
-        return filter.fromBlock <= 20 && filter.toBlock >= 20
-          ? [initLog(batchPoolA, 20), initLog(batchPoolB, 20)]
-          : [];
+  const priorV4Lookback = process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS;
+  delete process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS;
+  let batchResolved: ReadonlyMap<string, ParsedV4Initialize>;
+  try {
+    const initializeBlock = UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 20;
+    batchResolved = await resolveV4InitsBackward(
+      {
+        async getLogs(filter: LandedPoolDiscoveryLogFilter) {
+          batchLogCalls++;
+          assert(
+            filter.topics.length === 1 &&
+              filter.topics[0] === initializeTopic,
+            "batch backfill should scan the family Initialize topic once per chunk",
+          );
+          return filter.fromBlock <= initializeBlock && filter.toBlock >= initializeBlock
+            ? [initLog(batchPoolA, initializeBlock), initLog(batchPoolB, initializeBlock)]
+            : [];
+        },
       },
-    },
-    poolManager,
-    initializeTopic,
-    [batchPoolA.poolId, batchPoolB.poolId],
-    100,
-    50,
-    100,
-  );
+      poolManager,
+      initializeTopic,
+      [batchPoolA.poolId, batchPoolB.poolId],
+      UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 99,
+      50,
+    );
+  } finally {
+    if (priorV4Lookback === undefined) {
+      delete process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS;
+    } else {
+      process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS = priorV4Lookback;
+    }
+  }
   assert(batchLogCalls === 2, `expected one call per historical chunk, got ${batchLogCalls}`);
   assert(batchResolved.size === 2, `expected two batched PoolKeys, got ${batchResolved.size}`);
   assert(
@@ -258,7 +270,7 @@ async function main(): Promise<void> {
       batchResolved.get(batchPoolB.poolId)?.source === "v4-initialize-backfill",
     "batched Initialize results should retain backfill provenance",
   );
-  console.log("[pool-universe-v4] batched Initialize topic-OR backfill: PASS");
+  console.log("[pool-universe-v4] batched Initialize family-topic backfill: PASS");
 
   let batchResolverCalls = 0;
   const batchEntries = await buildV4PoolEntries(
@@ -412,6 +424,7 @@ async function main(): Promise<void> {
       initializeTopic,
       poolId,
       59,
+      100,
       100,
     ),
   );

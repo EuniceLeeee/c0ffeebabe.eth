@@ -6,6 +6,10 @@ const V4_POOLKEY_TUPLE =
   "tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)";
 const V4_SWAP_HOOK_MASK = 0xccn;
 
+// Ethereum deployment of ADDR.UNISWAP_V4_POOL_MANAGER.
+// Creation tx: 0x747e0e02b7590eed32cface28e83260884e0b80675f5ae223c6888053aa68528
+export const UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK = 21_688_329;
+
 export function v4PoolId(key: V4PoolKey): string {
   return ethers.keccak256(
     ethers.AbiCoder.defaultAbiCoder().encode(

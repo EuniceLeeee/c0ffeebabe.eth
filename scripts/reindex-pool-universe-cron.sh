@@ -20,7 +20,6 @@ cd "$REPO/listener" || exit 0
 echo "=== $(date -u +%FT%TZ) reindex start ===" >> "$LOG"
 if timeout 540 env MAINNET_RPC_URL=http://127.0.0.1:8545 \
       POOL_UNIVERSE_LOOKBACK_DAYS=2 \
-      POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=2000000 \
       POOL_UNIVERSE_RETAIN_PATH="$RETAIN" \
       POOL_UNIVERSE_OUT="$TMP" \
       POOL_UNIVERSE_MANIFEST_OUT="$TMP_MANIFEST" \

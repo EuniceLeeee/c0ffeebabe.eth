@@ -47,6 +47,7 @@ import {
   normalizeV4PoolKey,
   realV4Currency,
   rejectNativeWethV4Pool,
+  UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
   uint24,
   v4HooksAffectSwap,
   v4PoolId,
@@ -57,7 +58,6 @@ import { univ4PoolDiscovery } from "./univ4-pool-discovery.js";
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 const MAX_UINT128 = (1n << 128n) - 1n;
-const V4_POOL_MANAGER_DEPLOY_BLOCK = "0x0";
 const UNISWAP_UNIVERSAL_ROUTER_V1 = "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad";
 const UNISWAP_UNIVERSAL_ROUTER_V2 = "0x66a9893cc07d91d95644aedd05d03f95e1dba8af";
 const initializeIface = new ethers.Interface([
@@ -606,7 +606,7 @@ async function resolveV4PoolKey(pool: PoolEntry, backend: TokenQueryBackend): Pr
     const logs = await backend.getLogs({
       address: ADDR.UNISWAP_V4_POOL_MANAGER,
       topics: [UNIV4_INITIALIZE_TOPIC, normalizeBytes32(pool.poolId, "poolId")],
-      fromBlock: V4_POOL_MANAGER_DEPLOY_BLOCK,
+      fromBlock: ethers.toQuantity(UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK),
       toBlock: "latest",
     });
     const first = logs[0];

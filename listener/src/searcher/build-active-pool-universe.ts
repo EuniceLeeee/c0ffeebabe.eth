@@ -26,6 +26,7 @@ import {
   type LandedPoolDiscoveryReadBackend,
 } from "./venues/landed-pool-discovery.js";
 import { retainVerifiedSwapFamilyInstances } from "./venues/swap-family-inventory.js";
+import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "./venues/swaps/univ4-common.js";
 
 const BLOCKS_PER_DAY = 7200;
 export const DEFAULT_POOL_UNIVERSE_MIN_SWAPS = 1;
@@ -181,7 +182,8 @@ async function main(): Promise<void> {
     ? Math.max(1, Math.floor(relevanceOversampleRaw))
     : 1;
   const v4BackfillLookbackBlocksRaw = Number(
-    process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ?? "2000000",
+    process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ??
+      String(Math.max(0, fromBlock - UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 1)),
   );
   if (
     !Number.isSafeInteger(v4BackfillLookbackBlocksRaw) ||
