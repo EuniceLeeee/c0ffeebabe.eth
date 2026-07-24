@@ -377,6 +377,67 @@ Startup conformance 至少检查：
 - registry-derived views 不漏 active family；
 - 任何生产 edge 都能反查唯一 family、instance 和 identity proof。
 
+### 5.1 静态与硬编码的允许边界
+
+“代码里出现 family 名称”本身不是 bug，判断标准是出现位置和用途：
+
+| 位置 | 是否允许知道具体 family/adapter | 规则 |
+|---|---:|---|
+| `production-registry.ts` | 是 | 唯一显式 composition root；只负责启用 registration |
+| family 自己的 identity/discovery/state/quote/plan/victim 文件 | 是 | ABI、selector、数学、canonical singleton 与行为 probe 本来就是协议语义 |
+| 低层 `ActionAdapter`/BotVM compiler | 是 | 编译具体 action 必须知道 selector 与 calldata |
+| frozen trusted evidence compatibility | 是 | 只允许冻结旧证据词汇，不能进入 production dispatch |
+| `main/runtime/scanner/planner/quoter/graph/victim/funding` 共享编排 | 否 | 不得按具体 family、pool adapter 或 edge adapter 做 equality/switch/static map/direct import |
+
+当前 production registry 共 20 个 family：
+
+- 17 个 current-block pricing family：8 个 swap、9 个 protocol conversion；
+- 1 个 credit family：`credit:fluid`；
+- 2 个 typed funding family：`flash-loan:balancer-v2`、`flash-loan:morpho`。
+
+“全部 family quote > 0”的机器门只适用于前 17 个 pricing family。Credit 与 funding 不伪造 mid：
+credit 走自己的 standing-position/risk 合同，funding 走 `FundingStateCapability` 的
+borrow/repayment/coverage 合同。
+
+当前仍有 6 个 family-local `declaredVenues`：
+
+| family | owner-local address | 当前身份形态 | 本轮准确结论 |
+|---|---|---|---|
+| `protocol:goldx` | `0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0` | canonical singleton | 静态 seed；不是自动实例发现 |
+| `protocol:metronome-synth` | `0x3364f53cb866762aef66deef2a6b1a17c1f17f46` | canonical singleton | 静态 seed；不是自动实例发现 |
+| `protocol:metronome-hgusdc` | `0x365084b05fa7d5028346bd21d842ed0601bab5b8` | canonical singleton | 静态 seed；不是自动实例发现 |
+| `protocol:psm` | `0xf6e72Db5454dd049d0788e411b06CfAF16853042` | canonical singleton | 静态 seed；不是自动实例发现 |
+| `protocol:rocksolid` | `0x936facdf10c8c36294e7b9d28345255539d81bc7` | canonical singleton | 静态 seed；不是自动实例发现 |
+| `protocol:wsteth` | `0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0` | canonical Lido singleton | 静态 seed；当前不是通用 `wsteth-compatible` 自动发现 |
+
+这些地址只能存在于 owner family 的 registration/identity 证明中，中央消费者必须通过 registry 获得。
+如果未来要接受同语义的第二实例，必须给该 family 增加候选来源与行为 probe；不能把第二地址继续塞进
+`main.ts` 或另一张 allowlist。尤其本文中的 `wsteth-compatible` 是可扩展方向，不得把当前
+`protocol:wsteth` 的单例实现误报为已经完成该方向。
+
+当前动态实例来源：
+
+- `protocol:erc4626`：`dex-token-domain + observed-interaction`；
+- `protocol:erc4626-silo-redeem`：`dex-token-domain + observed-interaction`；
+- `protocol:eigenpie`：`observed-interaction`；
+- `fluid-dex`、`credit:fluid`：`dex-token-domain`；
+- V2/V3：继续使用成熟 factory/log/active-pool fast path。
+
+`candidateAddressHints` 只增加 clean-start recall。Hint 仍必须经过同一 current-block identity 与行为
+probe，不能携带 token、route、quote 或准入结论，因此不等于实例 allowlist。
+
+机器防回归由 `searcher:adapter-family-shared-surface` 承担。它从 production registry AST/runtime
+机械取得所有 family/pool/edge/provider ID，然后在共享 live surface 拒绝：
+
+- `if (edge.adapterId === "...")`；
+- `switch (family.id)`；
+- 以具体 ID 为 key 的中央静态 Map/Object；
+- 中央文件直接 import 某个 family module；
+- 已废弃 descriptor/parallel registry 的 import。
+
+检测器包含 synthetic bad/good self-test；新增 family 后不需要手工把新 ID 加进 checker。新增中央 live
+consumer 时必须同时纳入 shared surface。Family-owned 文件不进入该检查，否则会错误禁止必要的协议语义。
+
 ## 6. 自动发现与 Graph
 
 ### 6.1 一个共享候选入口
@@ -1036,6 +1097,9 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 | conversion freshness | harness 已实现；真实冻结样本证据缺失 |
 | V2/V3 parity | local-reth + frozen production universe 连续块 artifact 已通过；forced-reorg/invalidation 由同一 artifact 绑定的 synthetic harness 覆盖 |
 | paired live | trusted primitive/unit test 已实现；真实 A/B window 未跑 |
+| 中央 family hardcode | 本地 AST conformance 已覆盖 21 个共享 live 文件、20 个 registry family；当前无具体 family ID dispatch |
+| hunt quote coverage | 已改为从 registry 枚举全部 17 个 pricing family；不再手列 ERC4626/wstETH/PSM/Metronome 四类 |
+| family-local 静态实例 | 仍有 6 个 `declaredVenues`；见 §5.1，不能误报为自动发现 |
 | 总状态 | `implemented_not_validated` |
 
 F0 的 activation continuity fixture 仍锚定 `040a9cc`；`040a9cc..8aece69` 的 `listener/` tree 无差异，
@@ -1201,6 +1265,12 @@ ERC4626 至少验证：
    changed/unchanged stateKey、日志缺口 fail-closed 和一次强制 reorg，逐块比较 snapshot/mid/freshness
    proof/unresolved exact set。V3 另外注入 Mint/Burn/tick-word 变化，证明 cursor 能表达 sub-state/readKey
    invalidation，而不是只标一个粗粒度 pool changed。
+
+生产 hunt 另外输出结构化 `ADAPTER_FAMILY_QUOTE_COVERAGE`。它必须由 registry 自动枚举全部 pricing
+families，并逐 family 记录 `graphEdges / positiveQuotes / unavailableEdges / unresolvedEdges / wallMs`。
+当前合同要求每个 pricing family 在验收 frozen graph 中至少有一条正 current-block quote，且
+`unresolvedEdges=0`；不能再用“ERC4626、wstETH、PSM、Metronome 计数都非零”代替完整覆盖。若 frozen
+graph 本身缺某个 active pricing family，验收输入不完整，应 fail closed，而不是删掉该 family 的断言。
 
 V2/V3 的整数状态、fee/depth、edge/key 与 coverage/unresolved exact set 精确比较；IEEE `mid` 的固定
 relative tolerance 是 `1e-12`。Synthetic changed/unchanged/reorg 测试只证明实现形状，不能替代使用

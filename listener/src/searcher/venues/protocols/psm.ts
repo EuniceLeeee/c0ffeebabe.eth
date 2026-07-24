@@ -73,16 +73,34 @@ export const psmAdapter = Object.freeze({
   requiredInfraActionAdapterIds: ["erc20-approve"],
   pricingState: psmPricingState,
   prepared: {
-    quote: async (ctx: PreparedRouteContext) => ({
-      amountOut: quotePreparedPSM(
+    quote: async (ctx: PreparedRouteContext) => {
+      const started = Date.now();
+      const amountOut = await quotePSM(
+        {
+          call: async ({ to, data }) =>
+            (await ctx.callPrepared(to, data)).output,
+        },
+        ctx.request.target,
         ctx.request.tokenIn,
         ctx.request.tokenOut,
         ctx.request.amountIn,
-      ),
-      latencyMs: 0,
-    }),
+      );
+      return { amountOut, latencyMs: Date.now() - started };
+    },
     quoteUnsupportedReason: null,
-    encodeQuotePrewarm: async () => [],
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
+      const direction = psmDirection(
+        ctx.request.tokenIn,
+        ctx.request.tokenOut,
+      );
+      const functionName = direction === "sell" ? "tin" : "tout";
+      return [{
+        from: ethers.ZeroAddress,
+        to: ctx.request.target,
+        calldata: litePsmIface.encodeFunctionData(functionName),
+        gasLimit: 300_000,
+      }];
+    },
     allowanceSpender: () => null,
     prewarmAddresses: () => [ADDR.SKY_PSM_LITE],
   },
@@ -128,16 +146,6 @@ export const psmAdapter = Object.freeze({
     };
   },
 } satisfies ProtocolConversionAdapter);
-
-function quotePreparedPSM(tokenIn: string, tokenOut: string, amountIn: bigint): bigint {
-  const usdc = ADDR.USDC.toLowerCase();
-  const dai = ADDR.DAI.toLowerCase();
-  const tIn = tokenIn.toLowerCase();
-  const tOut = tokenOut.toLowerCase();
-  if (tIn === usdc && tOut === dai) return amountIn * 10n ** 12n;
-  if (tIn === dai && tOut === usdc) return amountIn / 10n ** 12n;
-  throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
-}
 
 function psmDirection(tokenIn: string, tokenOut: string): "sell" | "buy" {
   const tIn = tokenIn.toLowerCase();

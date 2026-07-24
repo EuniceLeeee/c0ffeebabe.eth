@@ -34,6 +34,10 @@ const IMPLEMENTATION_SLOT = BigInt(
 );
 const DEFAULT_SAMPLE_SHARES = 10n ** 18n;
 const PAYOUT_SCAN_CONCURRENCY = 24;
+const payoutAssetIndexByContext = new WeakMap<
+  object,
+  Promise<ReadonlyMap<string, readonly string[]>>
+>();
 
 export const ERC4626_SILO_REDEEM_CANDIDATE_ADDRESS_HINTS = Object.freeze([
   // Provenance only. No payout token, quote, route, or identity is encoded
@@ -127,7 +131,7 @@ export const erc4626SiloRedeemDiscovery: ProtocolDiscoveryCapability = Object.fr
   candidateAddressHints: ERC4626_SILO_REDEEM_CANDIDATE_ADDRESS_HINTS,
   eventTopics: Object.freeze([WITHDRAW_TOPIC]),
   callSelectors: Object.freeze([REDEEM_SELECTOR, WITHDRAW_SELECTOR]),
-  addressMatcherVersion: "erc4626-silo-redeem-address-v1",
+  addressMatcherVersion: "erc4626-silo-redeem-address-v2-payout-index",
   observedMatcherVersion: "erc4626-silo-redeem-observed-v1",
 
   async candidateFromAddress(candidate, ctx) {
@@ -505,15 +509,14 @@ async function derivePayoutCandidates(
   underlyingAsset: string,
   assets: bigint,
 ): Promise<string[]> {
-  const domain = uniqueAddresses(ctx.graphTokens).filter((token) =>
+  const domain = [
+    ...((await payoutAssetIndex(ctx)).get(underlyingAsset.toLowerCase()) ?? []),
+  ].filter((token) =>
     token.toLowerCase() !== target.toLowerCase() &&
     token.toLowerCase() !== underlyingAsset.toLowerCase()
   );
   const matches = await mapLimit(domain, PAYOUT_SCAN_CONCURRENCY, async (token) => {
     try {
-      if (await ctx.backend.getCode(token) === "0x") return null;
-      const asset = await callAddress(ctx, token, PAYOUT, "asset");
-      if (asset.toLowerCase() !== underlyingAsset.toLowerCase()) return null;
       const out = await callUint(ctx, token, PAYOUT, "previewWithdraw", [assets]);
       return out > 0n ? token : null;
     } catch (error) {
@@ -522,6 +525,64 @@ async function derivePayoutCandidates(
     }
   });
   return matches.flatMap((token) => token === null ? [] : [token]);
+}
+
+/**
+ * Silo payout wrappers expose asset(), but the Silo target does not enumerate
+ * them. Build that inverse relation once per pinned discovery context and
+ * reuse it across every candidate target. This preserves permissionless
+ * DEX-token-domain discovery without the old candidates × graphTokens RPC
+ * cross-product.
+ */
+function payoutAssetIndex(
+  ctx: ProtocolDiscoveryContext,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const scope = ctx.runCacheScope ?? ctx;
+  const cached = payoutAssetIndexByContext.get(scope);
+  if (cached) return cached;
+  const pending = buildPayoutAssetIndex(ctx);
+  payoutAssetIndexByContext.set(scope, pending);
+  return pending;
+}
+
+async function buildPayoutAssetIndex(
+  ctx: ProtocolDiscoveryContext,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const relations = await mapLimit(
+    uniqueAddresses(ctx.graphTokens),
+    PAYOUT_SCAN_CONCURRENCY,
+    async (token) => {
+      try {
+        if (await ctx.backend.getCode(token) === "0x") return null;
+        const asset = await callAddress(ctx, token, PAYOUT, "asset");
+        if (
+          asset === ethers.ZeroAddress ||
+          asset.toLowerCase() === token.toLowerCase()
+        ) return null;
+        return { token, asset: asset.toLowerCase() };
+      } catch (error) {
+        if (isRetryableSourceFailure(error)) throw error;
+        return null;
+      }
+    },
+  );
+  const byAsset = new Map<string, string[]>();
+  for (const relation of relations) {
+    if (!relation) continue;
+    const tokens = byAsset.get(relation.asset) ?? [];
+    tokens.push(relation.token);
+    byAsset.set(relation.asset, tokens);
+  }
+  return new Map(
+    [...byAsset.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([asset, tokens]) => [
+        asset,
+        Object.freeze([...tokens].sort((left, right) =>
+          left.toLowerCase().localeCompare(right.toLowerCase())
+        )),
+      ]),
+  );
 }
 
 function candidateFor(

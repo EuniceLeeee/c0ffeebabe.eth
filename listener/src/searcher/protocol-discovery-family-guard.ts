@@ -379,7 +379,14 @@ export function withProtocolDiscoveryFamilyContext(
         }
       : {}),
   };
-  return Object.freeze({ ...context, backend: Object.freeze(backend) });
+  return Object.freeze({
+    ...context,
+    // A matcher receives a fresh controlled backend wrapper on every call.
+    // Preserve the base run identity so family-local deduplication is real in
+    // production rather than accidentally scoped to one wrapper invocation.
+    runCacheScope: context.runCacheScope ?? context,
+    backend: Object.freeze(backend),
+  });
 }
 
 async function withReadControl<T>(

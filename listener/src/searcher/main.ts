@@ -254,9 +254,11 @@ interface LiveConfig {
   enableMempool: boolean;
   /** Subscribe to MEV-Share as a victim source. */
   enableMevShare: boolean;
-  /** A6 live-enable: admit NEW protocol-conversion edges (wsteth/ERC4626) into the live
-   *  graph. Default OFF until the operator's fork-sim + dry-run window; the pre-existing PSM
-   *  entry is grandfathered (D4-style) and unaffected. */
+  /**
+   * Global admission switch for route families that declare
+   * requiresProtocolEdgesFlag. The kernel never names individual families;
+   * each registration owns whether this switch applies.
+   */
   enableProtocolEdges: boolean;
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
@@ -1179,8 +1181,8 @@ async function main(): Promise<void> {
   );
   const swapPools = [...startupActivePoolDiscovery.pools];
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
-  // A6 gate: NEW protocol-conversion entries (wsteth/ERC4626) stay out of the live graph until
-  // SEARCHER_ENABLE_PROTOCOL_EDGES=1 (operator fork-sim + dry-run window). PSM is grandfathered.
+  // Apply the registry-declared family admission switch. No venue identity is
+  // interpreted here; families that do not require the switch remain active.
   const basePools = mergePoolRegistries(
     mergePoolRegistries(
       mergePoolRegistries(

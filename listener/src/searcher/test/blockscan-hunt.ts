@@ -19,15 +19,21 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import {
-  detectBlockScanOpportunities,
-  estimateBlockScanRingSpreadBps,
-  type ProtocolMid,
-} from "../detector/blockscan-scanner.js";
-import { buildExactBlockScanCurveMids } from "../detector/blockscan-curve-mids.js";
+  estimateResolvedRingSpreadBps,
+  scanBlockStateFromResolvedMids,
+  type ResolvedBlockScanMid,
+} from "../detector/blockscan-scanner-core.js";
 import {
   refineBlockScanCandidates,
   type BlockScanProbeDiagnostic,
 } from "../detector/blockscan-candidate-refinement.js";
+import {
+  BlockScanStateCoordinator,
+  type BlockScanStateSnapshot,
+} from "../blockscan-state-coordinator.js";
+import {
+  JsonRpcBlockScanStateReadBackend,
+} from "../blockscan-state-read-backend.js";
 import {
   blockScanPassBudgetExceeded,
   resolveBlockScanHuntBudgets,
@@ -35,7 +41,6 @@ import {
   solveForOpportunityIndex,
 } from "./blockscan-hunt-selection.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
-import type { QuoteRequest } from "../live-state-backend.js";
 import { mergePoolRegistries } from "../active-pool-discovery.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
@@ -57,9 +62,6 @@ import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
 } from "../protocol-instance-discovery.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
-import { PoolStateCache } from "../solver/pool-state-cache.js";
-import { PoolStateUpdater } from "../solver/pool-state-updater.js";
-import { metronomeSynthPoolIface, quote } from "../solver/quoter.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { evaluateEv } from "../ev-evaluator.js";
@@ -70,29 +72,10 @@ import {
   PRODUCTION_ADAPTER_FAMILIES,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
-
-const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
-const ERC4626 = new ethers.Interface([
-  "function previewDeposit(uint256 assets) view returns (uint256 shares)",
-  "function previewRedeem(uint256 shares) view returns (uint256 assets)",
-  "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
-]);
-const WSTETH = new ethers.Interface([
-  "function getWstETHByStETH(uint256 _stETHAmount) view returns (uint256)",
-  "function getStETHByWstETH(uint256 _wstETHAmount) view returns (uint256)",
-]);
-const PSM = new ethers.Interface(["function tin() view returns (uint256)"]);
-const V3META = new ethers.Interface([
-  "function token0() view returns (address)",
-  "function token1() view returns (address)",
-  "function fee() view returns (uint24)",
-  "function tickSpacing() view returns (int24)",
-]);
-
-const WAD = 10n ** 18n;
-const PSM_TO18 = 10n ** 12n;
-
-type ProtocolClass = "erc4626" | "wsteth" | "psm" | "metronome" | "other";
+import {
+  blockScanEdgeKey,
+  createVerifiedGraphView,
+} from "../venues/blockscan-state-capability.js";
 
 type DiagnosticStopAfter = "graph" | "enumeration" | "refine" | "solve" | "sim" | "ev";
 
@@ -120,24 +103,14 @@ interface HuntConfig {
   topK: number;
   outPath: string;
   anvilPort: number;
-  stateChunk: number;
 }
 
-interface WarmCounts {
-  chunks: number;
-  swapHops: number;
-  v2v3Hops: number;
-}
-
-interface CurveWarmCounts {
-  curveWarmed: number;
-  curveFailed: number;
-}
-
-interface ProtocolMidResult {
-  mids: Map<string, ProtocolMid>;
-  classCounts: Map<ProtocolClass, number>;
-  deadlineHit: boolean;
+interface AdapterFamilyQuoteCoverage {
+  familyId: string;
+  graphEdges: number;
+  positiveQuotes: number;
+  unavailableEdges: number;
+  unresolvedEdges: number;
 }
 
 interface OpportunityReport {
@@ -379,8 +352,6 @@ async function main(): Promise<void> {
         `universe=${cfg.universePath} maxPools=${cfg.maxPools} maxHops=${cfg.maxHops}`,
     );
 
-    const cache = new PoolStateCache(provider);
-    cache.setTickBlock(cfg.blockNumber);
     const callBackend = new PinnedCallBackend(provider, cfg.blockNumber);
     const graphBackend = tokenBackend(provider, cfg.blockNumber);
 
@@ -538,51 +509,87 @@ async function main(): Promise<void> {
       if (missingEdges.length > 0) return;
     }
 
-    const warmCounts = await warmSwapState(provider, cache, cfg, edges);
-    await check("v2/v3 state warm completed", () =>
-      warmCounts.swapHops === 0 || warmCounts.chunks > 0,
-    );
-
-    const curveCounts = await warmCurves(callBackend, cache, cfg.blockNumber, edges);
-    await check("curve warm pass accounted for every curve pool", () =>
-      curveCounts.curveWarmed + curveCounts.curveFailed === uniqueCurvePools(edges).size,
-    );
-
     const passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
     console.log(
       `[blockscan-hunt] budgets scan=${cfg.scanBudgetMs}ms pass=${cfg.passBudgetMs}ms`,
     );
-
-    const protocolMidResult = await buildProtocolMids(
-      provider,
-      callBackend,
-      cfg.blockNumber,
+    const sourceBlock = await provider.getBlock(cfg.blockNumber);
+    if (!sourceBlock?.hash) {
+      throw new Error(`cannot resolve canonical source hash for ${cfg.blockNumber}`);
+    }
+    const graphView = createVerifiedGraphView({
+      id: `blockscan-hunt:${canonicalSetSha256(edges.map(canonicalEdgeIdentity))}`,
+      generation: 1,
+      sourceBlock: cfg.blockNumber,
+      sourceBlockHash: sourceBlock.hash,
+      completenessWatermark: cfg.blockNumber,
+      perSourceCoverage: PRODUCTION_ADAPTER_FAMILIES
+        .blockScanStateFamilies()
+        .map((family) => ({
+          familyId: family.familyId,
+          sourceId: "frozen-hunt-inputs",
+          sourceFingerprint: canonicalSetSha256(
+            edges.filter(family.ownsEdge).map(canonicalEdgeIdentity),
+          ),
+          completeThroughBlock: cfg.blockNumber,
+          completeThroughHash: sourceBlock.hash!,
+        })),
       edges,
-      passDeadlineAtMs,
-    );
-    requirePassBudget("protocol_mids", passDeadlineAtMs, protocolMidResult.deadlineHit);
-    const exactCurveMidResult = await buildExactBlockScanCurveMids(
-      provider,
-      cfg.blockNumber,
-      cache,
-      edges,
-      passDeadlineAtMs,
-    );
-    requirePassBudget("curve_mids", passDeadlineAtMs, exactCurveMidResult.deadlineHit);
-    const protocolMids = new Map([
-      ...protocolMidResult.mids,
-      ...exactCurveMidResult.mids,
-    ]);
+      familyIdForEdge: (edge) =>
+        PRODUCTION_ADAPTER_FAMILIES.routes().forEdge(edge.adapterId).id,
+    });
+    const stateBackend = new JsonRpcBlockScanStateReadBackend(cfg.rpcUrl, {
+      maxBatchSize: 500,
+      maxConcurrentBatches: 4,
+    });
+    const stateStartedAtMs = Date.now();
+    const preparedState = await new BlockScanStateCoordinator(stateBackend).prepare({
+      graph: graphView,
+      families: PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies(),
+      requiresPricing: (edge) =>
+        PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge),
+      deadlineAtMs: passDeadlineAtMs,
+    });
+    const stateWallMs = Date.now() - stateStartedAtMs;
+    requirePassBudget("adapter_family_state", passDeadlineAtMs);
+    if (preparedState.status === "incomplete") {
+      throw new Error(
+        `adapter-family state incomplete: ` +
+          `${preparedState.issues[0]?.message ?? "unknown"}`,
+      );
+    }
+    const pricing = preparedState.snapshot;
+    const familyQuoteCoverage = summarizeAdapterFamilyQuotes(pricing);
     console.log(
-      `[blockscan-hunt] exact curve mids attempted=${exactCurveMidResult.attempted} ` +
-        `quoted=${exactCurveMidResult.quoted} failed=${exactCurveMidResult.failed} ` +
-        `deadline=${exactCurveMidResult.deadlineHit ? 1 : 0}`,
+      `ADAPTER_FAMILY_QUOTE_COVERAGE=${JSON.stringify({
+        registeredFamilies: PRODUCTION_ADAPTER_FAMILIES.list().length,
+        pricedFamilies:
+          PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().length,
+        creditFamilies: PRODUCTION_ADAPTER_FAMILIES.credits().length,
+        fundingFamilies:
+          PRODUCTION_ADAPTER_FAMILIES.fundingStateFamilies().length,
+        status: preparedState.status,
+        wallMs: stateWallMs,
+        families: familyQuoteCoverage,
+        incompleteFamilyIds: pricing.incompleteFamilyIds,
+        unresolvedEdgeKeys: pricing.coverage.unresolvedEdgeKeys.length,
+      })}`,
     );
-    await check("protocol mids cover erc4626, wsteth, psm, and metronome", () =>
-      (protocolMidResult.classCounts.get("erc4626") ?? 0) > 0 &&
-      (protocolMidResult.classCounts.get("wsteth") ?? 0) > 0 &&
-      (protocolMidResult.classCounts.get("psm") ?? 0) > 0 &&
-      (protocolMidResult.classCounts.get("metronome") ?? 0) > 0,
+    await check(
+      "all registered block-scan adapter families have a positive current-block quote",
+      () =>
+        familyQuoteCoverage.length ===
+          PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().length &&
+        familyQuoteCoverage.every((family) =>
+          family.graphEdges > 0 &&
+          family.positiveQuotes > 0 &&
+          family.unresolvedEdges === 0
+        ),
+    );
+    const resolvedEdgeKeys = new Set(pricing.coverage.resolvedEdgeKeys);
+    const scanEdges = graphView.edges.filter((edge) =>
+      !PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge) ||
+      resolvedEdgeKeys.has(blockScanEdgeKey(edge))
     );
 
     // Production treats code-owned protocol edges as admission guarantees outside
@@ -595,24 +602,23 @@ async function main(): Promise<void> {
       maxCandidates: cfg.maxCandidates,
       budgetMs: cfg.scanBudgetMs,
       pricedTokens: pricedTokenLimits,
-      protocolMids,
       pinnedOutsideBudget: true,
     };
     const coarseMaxCandidates = Math.max(
       cfg.maxCandidates,
       envInt("HUNT_REFINE_CANDIDATES", 512),
     );
-    const coarseScan = detectBlockScanOpportunities({
-      edges,
-      cache,
+    const coarseScan = scanBlockStateFromResolvedMids({
+      edges: [...scanEdges],
       sourceBlock: cfg.blockNumber,
       swapTouched: null,
       cfg: { ...scanCfg, maxCandidates: coarseMaxCandidates },
+      mids: pricing.mids,
     });
     let diagnosticCoarseTarget: ExpectedReplayTarget | null = null;
     if (DIAGNOSTIC.enabled) {
       const coarseReports = coarseScan.opportunities.map((opp, index) =>
-        describeOpportunity(index + 1, opp, cache, cfg.blockNumber, protocolMids),
+        describeOpportunity(index + 1, opp, pricing.mids),
       );
       const ringIdentities = coarseScan.opportunities.map((opp) =>
         canonicalRingIdentity(opp.seedEdges),
@@ -673,7 +679,7 @@ async function main(): Promise<void> {
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
     if (DIAGNOSTIC.enabled) {
       const refinedReports = scan.opportunities.map((opp, index) =>
-        describeOpportunity(index + 1, opp, cache, cfg.blockNumber, protocolMids),
+        describeOpportunity(index + 1, opp, pricing.mids),
       );
       const refinedTarget = readExpectedReplayTarget(refinedReports);
       const refinedRank = (refinedTarget?.opportunityIndex ?? -1) >= 0
@@ -731,7 +737,7 @@ async function main(): Promise<void> {
     );
 
     const opportunityReports = scan.opportunities.map((opp, i) =>
-      describeOpportunity(i + 1, opp, cache, cfg.blockNumber, protocolMids),
+      describeOpportunity(i + 1, opp, pricing.mids),
     );
     for (const opp of opportunityReports) {
       console.log(
@@ -754,10 +760,9 @@ async function main(): Promise<void> {
     );
     const solvedReports = await solveSelected(
       state,
-      cache,
       cfg,
       scan.opportunities,
-      protocolMids,
+      pricing.mids,
       solveIndexes,
     );
     await check("fork-solve top candidates recorded", () =>
@@ -828,12 +833,18 @@ async function main(): Promise<void> {
       edges: edges.length,
       maxHops: cfg.maxHops,
       protocolEdges: protocolEdges.length,
-      protocolMids: protocolMids.size,
+      protocolMids: pricing.mids.size,
+      adapterFamilyQuoteCoverage: familyQuoteCoverage,
+      adapterFamilyState: {
+        status: preparedState.status,
+        wallMs: stateWallMs,
+        resolvedEdges: pricing.coverage.resolvedEdgeKeys.length,
+        unavailableEdges: pricing.coverage.unavailableEdgeKeys.length,
+        unresolvedEdges: pricing.coverage.unresolvedEdgeKeys.length,
+        laneTelemetry: pricing.laneTelemetry,
+      },
       scannedPairs: scan.scannedPairs,
       swapVenuesSkipped: scan.debug?.skippedVenues ?? 0,
-      stateWarm: warmCounts,
-      curveWarmed: curveCounts.curveWarmed,
-      curveFailed: curveCounts.curveFailed,
       opportunities: opportunityReports,
       solved: solvedReports,
       verdict,
@@ -966,7 +977,6 @@ function readConfig(rpcUrl: string, blockNumber: number): HuntConfig {
     topK: DIAGNOSTIC.topK ?? envInt("HUNT_TOP_K", 3),
     outPath: process.env.HUNT_OUT ?? `/tmp/blockscan-hunt-${blockNumber}.json`,
     anvilPort,
-    stateChunk: envInt("HUNT_STATE_CHUNK", 250),
   };
 }
 
@@ -1003,349 +1013,6 @@ function tokenBackend(provider: ethers.JsonRpcProvider, blockNumber: number): To
   };
 }
 
-async function warmSwapState(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  cfg: HuntConfig,
-  edges: TokenEdge[],
-): Promise<WarmCounts> {
-  const swapHops = quoteHops(edges.filter((edge) => edge.slotKind === "swap"));
-  const v2v3Hops = swapHops.filter((hop) =>
-    hop.adapterId === "univ2-swap" || hop.adapterId === "univ3-swap",
-  );
-  let chunks = 0;
-  for (let i = 0; i < swapHops.length; i += cfg.stateChunk) {
-    const chunk = swapHops.slice(i, i + cfg.stateChunk);
-    const updater = new PoolStateUpdater(provider, cache, {
-      maxPools: cfg.stateChunk,
-      maxV3TickPoolsPerBlock: 0,
-    });
-    await updater.update(cfg.blockNumber, chunk, { awaitTicks: false, maxTickPools: 0 });
-    chunks++;
-  }
-  // snapshotV3 returns null unless the ticks layer is seeded (token0/token1/fee live there),
-  // and the scanner's mid only needs sqrtPriceX96/liquidity/fee — NOT the tick arrays. So seed
-  // v3 ticks metadata-only (empty bitmap/ticks) to make every v3 venue priceable for DETECTION
-  // without the slow TickLens walk. Exact quoting happens in the solver against the fork.
-  const v3Seeded = await seedV3TickMetadata(provider, cache, cfg.blockNumber, edges);
-  console.log(
-    `[blockscan-hunt] state warm block=${cfg.blockNumber} ` +
-      `swapHops=${swapHops.length} v2v3Hops=${v2v3Hops.length} chunks=${chunks} v3TickMeta=${v3Seeded}`,
-  );
-  return { chunks, swapHops: swapHops.length, v2v3Hops: v2v3Hops.length };
-}
-
-async function seedV3TickMetadata(
-  provider: ethers.JsonRpcProvider,
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-): Promise<number> {
-  const pools = new Set<string>();
-  for (const edge of edges) {
-    if (edge.slotKind === "swap" && edge.adapterId === "univ3-swap") pools.add(edge.target.toLowerCase());
-  }
-  let seeded = 0;
-  await Promise.all(
-    [...pools].map(async (pool) => {
-      try {
-        const [t0, t1, fee, ts] = await Promise.all([
-          provider.call({ to: pool, data: V3META.encodeFunctionData("token0"), blockTag: blockNumber }),
-          provider.call({ to: pool, data: V3META.encodeFunctionData("token1"), blockTag: blockNumber }),
-          provider.call({ to: pool, data: V3META.encodeFunctionData("fee"), blockTag: blockNumber }),
-          provider.call({ to: pool, data: V3META.encodeFunctionData("tickSpacing"), blockTag: blockNumber }),
-        ]);
-        cache.seedV3Ticks({
-          pool,
-          token0: String(V3META.decodeFunctionResult("token0", t0)[0]),
-          token1: String(V3META.decodeFunctionResult("token1", t1)[0]),
-          fee: BigInt(V3META.decodeFunctionResult("fee", fee)[0] as bigint),
-          tickSpacing: Number(V3META.decodeFunctionResult("tickSpacing", ts)[0]),
-          tickBitmap: new Map<number, bigint>(),
-          ticks: new Map<number, bigint>(),
-          blockNumber,
-        });
-        seeded++;
-      } catch {
-        // Not a v3 pool (or read failure) — leave unseeded; the scanner skips it.
-      }
-    }),
-  );
-  return seeded;
-}
-
-function quoteHops(edges: TokenEdge[]): QuoteRequest[] {
-  return edges.map((edge) => ({
-    adapterId: edge.adapterId,
-    target: edge.target,
-    tokenIn: edge.tokenIn,
-    tokenOut: edge.tokenOut,
-    amountIn: 0n,
-    poolToken0: edge.poolToken0,
-    poolToken1: edge.poolToken1,
-    ...(edge.v4PoolKey ? { v4PoolKey: edge.v4PoolKey } : {}),
-  }));
-}
-
-async function warmCurves(
-  state: StateBackend,
-  cache: PoolStateCache,
-  blockNumber: number,
-  edges: TokenEdge[],
-): Promise<CurveWarmCounts> {
-  let curveWarmed = 0;
-  let curveFailed = 0;
-  for (const edge of uniqueCurvePools(edges).values()) {
-    try {
-      await cache.quoteCurve(state, edge.target, edge.tokenIn, edge.tokenOut, 1n);
-      if (cache.snapshotCurve(edge.target, blockNumber)) curveWarmed++;
-      else curveFailed++;
-    } catch (err) {
-      curveFailed++;
-      console.log(
-        `[blockscan-hunt] curve warm failed pool=${edge.target} ` +
-          `${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-  console.log(`[blockscan-hunt] curve warm warmed=${curveWarmed} failed=${curveFailed}`);
-  return { curveWarmed, curveFailed };
-}
-
-function uniqueCurvePools(edges: TokenEdge[]): Map<string, TokenEdge> {
-  const out = new Map<string, TokenEdge>();
-  for (const edge of edges) {
-    if (edge.slotKind !== "swap" || !isLocallyModelledCurve(edge.adapterId)) continue;
-    const key = edge.target.toLowerCase();
-    if (!out.has(key)) out.set(key, edge);
-  }
-  return out;
-}
-
-async function buildProtocolMids(
-  provider: ethers.JsonRpcProvider,
-  state: StateBackend,
-  blockNumber: number,
-  edges: TokenEdge[],
-  deadlineAtMs: number,
-): Promise<ProtocolMidResult> {
-  const mids = new Map<string, ProtocolMid>();
-  const classCounts = new Map<ProtocolClass, number>();
-  const decimals = new Map<string, number>();
-  let externalSwapFailed = 0;
-  let externalSwapMids = 0;
-  let deadlineHit = false;
-
-  // Externally quoted swap edges have no local-cache fallback. Price them
-  // before the larger protocol set so a valid route is not hidden by harness
-  // iteration order. Dispatch remains production-owned through quote().
-  for (const edge of edges) {
-    if (Date.now() >= deadlineAtMs) {
-      deadlineHit = true;
-      break;
-    }
-    if (!isExternallyQuotedSwap(edge)) continue;
-    try {
-      const tokenInDec = await tokenDecimals(provider, blockNumber, edge.tokenIn, decimals);
-      const oneIn = 10n ** BigInt(tokenInDec);
-      const mid = await readDispatchedMid(state, edge, oneIn);
-      if (!Number.isFinite(mid) || mid <= 0) continue;
-      mids.set(protocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
-        mid,
-        feeBps: 0,
-        depthIn: oneIn * 10_000n,
-      });
-      externalSwapMids++;
-    } catch (err) {
-      externalSwapFailed++;
-      console.log(
-        `[blockscan-hunt] external swap mid failed adapter=${edge.adapterId} target=${edge.target} ` +
-          `${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  if (!deadlineHit) {
-    const protocolEdges = edges
-      .filter((edge) => classifyProtocol(edge) !== null)
-      .sort((a, b) => protocolMidPriority(a) - protocolMidPriority(b));
-    for (const edge of protocolEdges) {
-      if (Date.now() >= deadlineAtMs) {
-        deadlineHit = true;
-        break;
-      }
-      const protocolClass = classifyProtocol(edge);
-      if (!protocolClass) continue;
-      try {
-        const tokenInDec = await tokenDecimals(provider, blockNumber, edge.tokenIn, decimals);
-        const oneIn = 10n ** BigInt(tokenInDec);
-        const mid = await readProtocolMid(provider, state, blockNumber, edge, oneIn);
-        if (!Number.isFinite(mid) || mid <= 0) continue;
-        // Crude rank/size proxy only. The fork solver truth-checks executable
-        // sizes, so this depth value is not load-bearing.
-        mids.set(protocolKey(edge.target, edge.tokenIn, edge.tokenOut), {
-          mid,
-          feeBps: 0,
-          depthIn: oneIn * 10_000n,
-        });
-        classCounts.set(protocolClass, (classCounts.get(protocolClass) ?? 0) + 1);
-      } catch (err) {
-        console.log(
-          `[blockscan-hunt] protocol mid failed adapter=${edge.adapterId} target=${edge.target} ` +
-            `${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-  }
-
-  console.log(
-    `[blockscan-hunt] protocol mids total=${mids.size} ` +
-      `erc4626=${classCounts.get("erc4626") ?? 0} ` +
-      `wsteth=${classCounts.get("wsteth") ?? 0} psm=${classCounts.get("psm") ?? 0} ` +
-      `metronome=${classCounts.get("metronome") ?? 0} ` +
-      `other=${classCounts.get("other") ?? 0} ` +
-      `externalSwap=${externalSwapMids} externalSwapFailed=${externalSwapFailed} ` +
-      `deadline=${deadlineHit ? 1 : 0}`,
-  );
-  return { mids, classCounts, deadlineHit };
-}
-
-function isExternallyQuotedSwap(edge: TokenEdge): boolean {
-  return edge.slotKind === "swap" && edge.adapterId !== "univ2-swap"
-    && edge.adapterId !== "univ3-swap" && edge.adapterId !== "univ4-unlock"
-    && !isLocallyModelledCurve(edge.adapterId);
-}
-
-function isLocallyModelledCurve(adapterId: string): boolean {
-  return adapterId === "curve-exchange" || adapterId === "curve-exchange-nr"
-    || adapterId === "curve-exchange-plain" || adapterId === "curve-exchange-received-uint";
-}
-
-function classifyProtocol(edge: TokenEdge): ProtocolClass | null {
-  if (edge.adapterId === "psm") return "psm";
-  if (edge.adapterId === "metronome-synth-swap") return "metronome";
-  if (edge.adapterId === "wsteth-wrap" || edge.adapterId === "wsteth-unwrap") return "wsteth";
-  if (
-    edge.adapterId === "erc4626-deposit" ||
-    edge.adapterId === "erc4626-redeem" ||
-    edge.adapterId === "erc4626-redeem-silo"
-  ) {
-    return "erc4626";
-  }
-  return edge.slotKind === "protocol" ? "other" : null;
-}
-
-function protocolMidPriority(edge: TokenEdge): number {
-  const kind = classifyProtocol(edge);
-  if (kind === "other" || kind === "psm") return 0;
-  if (kind === "metronome" || kind === "wsteth") return 1;
-  return 2;
-}
-
-async function readProtocolMid(
-  provider: ethers.JsonRpcProvider,
-  state: StateBackend,
-  blockNumber: number,
-  edge: TokenEdge,
-  oneIn: bigint,
-): Promise<number> {
-  if (edge.adapterId === "erc4626-deposit") {
-    const out = await callUint(provider, blockNumber, edge.target, ERC4626.encodeFunctionData("previewDeposit", [oneIn]), "previewDeposit");
-    return Number(out) / Number(oneIn);
-  }
-  if (edge.adapterId === "erc4626-redeem") {
-    const out = await callUint(provider, blockNumber, edge.target, ERC4626.encodeFunctionData("previewRedeem", [oneIn]), "previewRedeem");
-    return Number(out) / Number(oneIn);
-  }
-  if (edge.adapterId === "erc4626-redeem-silo") {
-    const value = await callUint(provider, blockNumber, edge.target, ERC4626.encodeFunctionData("previewRedeem", [oneIn]), "previewRedeem");
-    const out = await callUint(provider, blockNumber, edge.tokenOut, ERC4626.encodeFunctionData("previewWithdraw", [value]), "previewWithdraw");
-    return Number(out) / Number(oneIn);
-  }
-  if (edge.adapterId === "wsteth-wrap") {
-    const out = await callUint(provider, blockNumber, edge.target, WSTETH.encodeFunctionData("getWstETHByStETH", [oneIn]), "getWstETHByStETH");
-    return Number(out) / Number(oneIn);
-  }
-  if (edge.adapterId === "wsteth-unwrap") {
-    const out = await callUint(provider, blockNumber, edge.target, WSTETH.encodeFunctionData("getStETHByWstETH", [oneIn]), "getStETHByWstETH");
-    return Number(out) / Number(oneIn);
-  }
-  if (edge.adapterId === "psm") {
-    let tin = 0n;
-    try {
-      tin = await callUint(provider, blockNumber, edge.target, PSM.encodeFunctionData("tin"), "tin");
-    } catch {
-      tin = 0n;
-    }
-    return Number(PSM_TO18 * (WAD - tin)) / Number(WAD);
-  }
-  if (edge.adapterId === "metronome-synth-swap") {
-    const result = await provider.call({
-      to: edge.target,
-      data: metronomeSynthPoolIface.encodeFunctionData("quoteSwapOut", [
-        edge.tokenIn,
-        edge.tokenOut,
-        oneIn,
-      ]),
-      blockTag: blockNumber,
-    });
-    const decoded = metronomeSynthPoolIface.decodeFunctionResult("quoteSwapOut", result);
-    return Number(decoded[0]) / Number(oneIn);
-  }
-  return readDispatchedMid(state, edge, oneIn);
-}
-
-async function readDispatchedMid(
-  state: StateBackend,
-  edge: TokenEdge,
-  oneIn: bigint,
-): Promise<number> {
-  const out = await quote(
-    edge.adapterId,
-    edge.target,
-    edge.tokenIn,
-    edge.tokenOut,
-    oneIn,
-    state,
-    undefined,
-    edge.v4PoolKey,
-    edge.poolToken0,
-    edge.poolToken1,
-  );
-  return Number(out) / Number(oneIn);
-}
-
-async function tokenDecimals(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  token: string,
-  cache: Map<string, number>,
-): Promise<number> {
-  const key = token.toLowerCase();
-  const cached = cache.get(key);
-  if (cached !== undefined) return cached;
-  const data = await provider.call({
-    to: token,
-    data: ERC20.encodeFunctionData("decimals"),
-    blockTag: blockNumber,
-  });
-  const dec = Number(ERC20.decodeFunctionResult("decimals", data)[0]);
-  cache.set(key, dec);
-  return dec;
-}
-
-async function callUint(
-  provider: ethers.JsonRpcProvider,
-  blockNumber: number,
-  target: string,
-  data: string,
-  fnName: string,
-): Promise<bigint> {
-  const result = await provider.call({ to: target, data, blockTag: blockNumber });
-  const iface = fnName === "tin" ? PSM : fnName.startsWith("get") ? WSTETH : ERC4626;
-  return BigInt(iface.decodeFunctionResult(fnName, result)[0]);
-}
-
 function pricedTokens(): Map<string, { maxBorrow: bigint }> {
   return new Map([
     [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
@@ -1355,12 +1022,54 @@ function pricedTokens(): Map<string, { maxBorrow: bigint }> {
   ]);
 }
 
+function summarizeAdapterFamilyQuotes(
+  snapshot: BlockScanStateSnapshot,
+): AdapterFamilyQuoteCoverage[] {
+  return PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().map((family) => {
+    const ownedEdges = snapshot.graph.edges.filter((edge) =>
+      PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge) &&
+      family.ownsEdge(edge)
+    );
+    let positiveQuotes = 0;
+    let unavailableEdges = 0;
+    let unresolvedEdges = 0;
+    for (const edge of ownedEdges) {
+      const edgeKey = blockScanEdgeKey(edge);
+      const coverage = snapshot.coverageByEdgeKey.get(edgeKey);
+      if (coverage?.status === "resolved") {
+        const mid = snapshot.mids.get(edgeKey);
+        if (
+          mid &&
+          Number.isFinite(mid.mid) &&
+          mid.mid > 0 &&
+          Number.isFinite(mid.depthProxy) &&
+          mid.depthProxy > 0
+        ) {
+          positiveQuotes++;
+        } else {
+          unresolvedEdges++;
+        }
+      } else if (coverage?.status === "rejected") {
+        unavailableEdges++;
+      } else {
+        unresolvedEdges++;
+      }
+    }
+    return {
+      familyId: family.familyId,
+      graphEdges: ownedEdges.length,
+      positiveQuotes,
+      unavailableEdges,
+      unresolvedEdges,
+    };
+  });
+}
+
 async function solveSelected(
   state: AnvilStateBackend,
-  cache: PoolStateCache,
   cfg: HuntConfig,
   opportunities: BlockScanOpportunity[],
-  protocolMids: ReadonlyMap<string, ProtocolMid>,
+  mids: ReadonlyMap<string, ResolvedBlockScanMid>,
   opportunityIndexes: readonly number[],
 ): Promise<SolveReport[]> {
   if (opportunityIndexes.length === 0) return [];
@@ -1379,12 +1088,7 @@ async function solveSelected(
 
   for (const opportunityIndex of opportunityIndexes) {
     const opp = opportunities[opportunityIndex];
-    const spreadBps = estimateBlockScanRingSpreadBps(
-      cache,
-      cfg.blockNumber,
-      opp.seedEdges,
-      protocolMids,
-    );
+    const spreadBps = estimateResolvedRingSpreadBps(opp.seedEdges, mids);
     let planCount = 0;
     let solved: ResolvedPlan | null = null;
     let solvedTokenPath: TokenPath | null = null;
@@ -1507,9 +1211,7 @@ async function solveSelected(
 function describeOpportunity(
   rank: number,
   opp: BlockScanOpportunity,
-  cache: PoolStateCache,
-  blockNumber: number,
-  protocolMids: ReadonlyMap<string, ProtocolMid>,
+  mids: ReadonlyMap<string, ResolvedBlockScanMid>,
 ): OpportunityReport {
   return {
     rank,
@@ -1517,7 +1219,7 @@ function describeOpportunity(
     pools: uniqueStrings(opp.seedEdges.map(edgePoolIdentity)),
     poolIds: uniqueStrings(opp.seedEdges.map((edge) => edge.poolId?.toLowerCase()).filter(isString)),
     adapterIds: opp.seedEdges.map((edge) => edge.adapterId),
-    spreadBps: estimateBlockScanRingSpreadBps(cache, blockNumber, opp.seedEdges, protocolMids),
+    spreadBps: estimateResolvedRingSpreadBps(opp.seedEdges, mids),
     searchCenter: opp.searchSeed.searchCenter.toString(),
     maxInput: opp.searchSeed.maxInput.toString(),
     hasProtocolEdge: opp.seedEdges.some((edge) => edge.slotKind === "protocol"),

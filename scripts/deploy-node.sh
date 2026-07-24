@@ -219,9 +219,9 @@ if [ -n "$PID" ] && [ "$PID" != "0" ] && [ -r "/proc/$PID/environ" ]; then
   # a single durable source that survives the recover-from-process rebuild. Does NOT touch the
   # DRY_RUN broadcast guard; only sizes the bribe (net stays ≥0 by the EV gate).
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
-  # protocol-edges (A6) is marker-controlled ($REPO/.protocol-edges), like .bribe-all-above-gas —
-  # admits the NEW wsteth wrap/unwrap protocol edges into the live graph. Full-value conversions
-  # (leavesStandingPosition=false); still bounded by the EV gate + wallet cap. Remove the marker → off.
+  # protocol-edges is marker-controlled ($REPO/.protocol-edges), like .bribe-all-above-gas —
+  # admits every registered family that declares requiresProtocolEdgesFlag. Family identity and
+  # execution semantics remain registry-owned; the deploy script names none. Remove the marker → off.
   [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"
   # block-scan (BS-lane Pass A) is marker-controlled ($REPO/.block-scan). LOG-ONLY: runs the block-scan
   # scanner per block and prints candidates — NO plan/sim/submit, NO broadcast impact. Safe to enable in
@@ -262,7 +262,7 @@ else
   echo "SEARCHER_LIVE_WS_URL=$LOCAL_WS" >> "$tmp"
   echo "SEARCHER_DRY_RUN=$DRY_VAL" >> "$tmp"
   [ -f "$REPO/.bribe-all-above-gas" ] && echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1" >> "$tmp"
-  [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"  # A6 marker-gated (wsteth)
+  [ -f "$REPO/.protocol-edges" ] && echo "SEARCHER_ENABLE_PROTOCOL_EDGES=1" >> "$tmp"  # registry-declared family gate
   [ -f "$REPO/.block-scan" ] && echo "SEARCHER_ENABLE_BLOCK_SCAN=1" >> "$tmp"  # BS-lane Pass A log-only, marker-gated
   [ -f "$REPO/.blockscan-submit" ] && echo "SEARCHER_BLOCKSCAN_SUBMIT=1" >> "$tmp"  # BS-lane Pass B atomic submit, marker-gated
   [ -f "$REPO/.hash-only" ] && echo "SEARCHER_ENABLE_HASH_ONLY=1" >> "$tmp"  # MEV-Share consumption marker-gated, DEFAULT OFF (2026-07-07 ghost flow)

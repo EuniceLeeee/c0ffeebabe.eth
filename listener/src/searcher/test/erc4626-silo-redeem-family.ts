@@ -7,6 +7,9 @@ import {
   scanObservedProtocolTrace,
   scanProtocolDiscoveryRange,
 } from "../observed-protocol-discovery.js";
+import {
+  withProtocolDiscoveryFamilyContext,
+} from "../protocol-discovery-family-guard.js";
 import { POOL_REGISTRY } from "../planner/token-graph.js";
 import { PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS } from "../venues/production-registry.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
@@ -63,6 +66,7 @@ function context(input: {
   readonly simulation?: boolean;
   readonly includeVaultInGraph?: boolean;
   readonly onActiveSimulation?: () => void;
+  readonly onPayoutAssetRead?: () => void;
 } = {}): ProtocolDiscoveryContext {
   const payoutTokens = (input.payoutTokens ?? [PAYOUT]).map((token) =>
     ethers.getAddress(token)
@@ -87,6 +91,7 @@ function context(input: {
       }
       if (payoutTokens.some((token) => token.toLowerCase() === target.toLowerCase())) {
         if (selector === RECEIPT.getFunction("asset")!.selector.toLowerCase()) {
+          input.onPayoutAssetRead?.();
           return RECEIPT.encodeFunctionResult("asset", [UNDERLYING]);
         }
         if (selector === RECEIPT.getFunction("previewWithdraw")!.selector.toLowerCase()) {
@@ -296,6 +301,32 @@ assert(
 assert(
   ownerScoped.candidatesByAdapter.get(erc4626SiloRedeemAdapter.id)?.length === 1,
   "the Strata provenance hint must reach its owner family",
+);
+
+let payoutAssetReads = 0;
+const indexedContext = context({
+  onPayoutAssetRead: () => payoutAssetReads++,
+});
+const familyControl = {
+  deadlineAtMs: Date.now() + 60_000,
+  signal: new AbortController().signal,
+};
+const addressSurface = {
+  target: VAULT,
+  codeHash: ethers.keccak256(CODE),
+  implementationWord: ZERO_WORD,
+};
+await erc4626SiloRedeemDiscovery.candidateFromAddress!(
+  addressSurface,
+  withProtocolDiscoveryFamilyContext(indexedContext, familyControl),
+);
+await erc4626SiloRedeemDiscovery.candidateFromAddress!(
+  addressSurface,
+  withProtocolDiscoveryFamilyContext(indexedContext, familyControl),
+);
+assert(
+  payoutAssetReads === 1,
+  "payout-token asset relation must be indexed once across live family guard wrappers",
 );
 
 const valid = await discover(context());

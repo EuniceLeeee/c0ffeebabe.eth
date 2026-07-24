@@ -187,7 +187,7 @@ export class RevmLiveBackend implements LiveStateBackend {
   /**
    * One representative quote view-call per deduped route hop, traced during
    * prepare so the solver's first quotes hit warm state. Best-effort: hops we
-   * cannot encode (psm/fluid local math, missing graph edge) are skipped.
+   * cannot encode (family has no prepared prewarm, missing graph edge) are skipped.
    */
   private async buildPrewarmCalls(
     input: PrepareInput,

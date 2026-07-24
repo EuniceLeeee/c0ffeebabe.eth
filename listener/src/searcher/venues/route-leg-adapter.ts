@@ -223,6 +223,12 @@ export interface ProtocolDiscoveryContext {
   readonly blockNumber: number;
   readonly fromBlock: number;
   readonly toBlock: number;
+  /**
+   * Stable object identity for family-local memoization during one discovery
+   * run. Guard wrappers preserve this scope while replacing backend controls;
+   * it carries no evidence across source blocks or discovery generations.
+   */
+  readonly runCacheScope?: object;
   /** Decimal chain id for semantic route keys; absent only in chain-agnostic fixtures. */
   readonly chainId?: string;
   /** Complete graph domain used only for post-match loop-closability checks. */

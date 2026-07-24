@@ -45,7 +45,7 @@ export async function quoteGoldxMint(
 }
 
 export async function quotePSM(
-  state: StateBackend,
+  state: CallBackend,
   target: string,
   tokenIn: string,
   tokenOut: string,
@@ -58,14 +58,12 @@ export async function quotePSM(
   if (!sellsGem && !buysGem) {
     throw new Error(`PSM only supports USDC<->DAI, got ${tokenIn} -> ${tokenOut}`);
   }
-  const [tin, tout] = await Promise.all([
-    readPSMFee(state, target, "tin"),
-    readPSMFee(state, target, "tout"),
-  ]);
   if (sellsGem) {
+    const tin = await readPSMFee(state, target, "tin");
     const gemAmt18 = amountIn * PSM_TO18;
     return gemAmt18 - gemAmt18 * tin / WAD;
   }
+  const tout = await readPSMFee(state, target, "tout");
   return (amountIn * WAD / (WAD + tout)) / PSM_TO18;
 }
 
@@ -143,7 +141,7 @@ export async function quoteMetronomeSynthSwap(
 }
 
 async function readPSMFee(
-  state: StateBackend,
+  state: CallBackend,
   target: string,
   fee: "tin" | "tout",
 ): Promise<bigint> {
@@ -153,7 +151,7 @@ async function readPSMFee(
   } catch (error) {
     if (isStateCallAbortedError(error)) throw error;
     throw new Error(
-      `PSM ${fee} read failed for ${target}; current-block pricing is unresolved`,
+      `PSM fee unresolved: ${fee} read failed for ${target}; current-block pricing is unresolved`,
       { cause: error },
     );
   }

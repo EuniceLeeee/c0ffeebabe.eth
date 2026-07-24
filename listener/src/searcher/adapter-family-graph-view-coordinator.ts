@@ -51,7 +51,7 @@ export class AdapterFamilyGraphViewCoordinator {
           !retryableFamilyIds.has(family.id);
         return Object.freeze({
           familyId: family.id,
-          sourceId: "dex-universe-v2-v3-factory-and-static-registry",
+          sourceId: "dex-universe-and-family-registry",
           sourceFingerprint:
             `${family.id}:${input.dexUniverseFingerprint}:` +
             input.strategyViewHash,

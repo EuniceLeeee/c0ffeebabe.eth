@@ -2,6 +2,8 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { quote } from "../solver/quoter.js";
+import { psmAdapter } from "../venues/protocols/psm.js";
+import type { PreparedRouteContext } from "../venues/route-leg-adapter.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -99,6 +101,47 @@ async function testFeeReadFailureIsUnresolved(): Promise<void> {
   console.log("[psm-quote] fee read failure is unresolved: PASS");
 }
 
+async function testPreparedQuoteReadsCurrentFee(): Promise<void> {
+  const tin = 5n * 10n ** 15n;
+  const amountIn = 2_000_000n;
+  const scaled = amountIn * PSM_TO18;
+  const expected = scaled - scaled * tin / WAD;
+  const calls: string[] = [];
+  const context = {
+    request: {
+      adapterId: "psm",
+      target: ADDR.SKY_PSM_LITE,
+      tokenIn: ADDR.USDC,
+      tokenOut: ADDR.DAI,
+      amountIn,
+    },
+    async callPrepared(to: string, data: string) {
+      assert(
+        to.toLowerCase() === ADDR.SKY_PSM_LITE.toLowerCase(),
+        `prepared PSM target ${to}`,
+      );
+      calls.push(data);
+      if (data !== psmIface.encodeFunctionData("tin")) {
+        throw new Error(`unexpected prepared PSM calldata ${data}`);
+      }
+      return {
+        output: psmIface.encodeFunctionResult("tin", [tin]),
+        latencyMs: 1,
+      };
+    },
+  } as unknown as PreparedRouteContext;
+  const result = await psmAdapter.prepared!.quote!(context);
+  const prewarm = await psmAdapter.prepared!.encodeQuotePrewarm!(context);
+  assert(result.amountOut === expected, `prepared current fee expected ${expected}, got ${result.amountOut}`);
+  assert(calls.length === 1, `prepared PSM quote should read one directional fee, got ${calls.length}`);
+  assert(
+    prewarm.length === 1 &&
+      prewarm[0].calldata === psmIface.encodeFunctionData("tin"),
+    "prepared PSM prewarm must cover the current directional fee read",
+  );
+  console.log("[psm-quote] prepared quote reads current directional fee: PASS");
+}
+
 async function testRejectsNonPsmPair(): Promise<void> {
   const { state, calls } = mockState(0n, 0n);
   let threw = false;
@@ -119,6 +162,7 @@ async function main(): Promise<void> {
     testSellGemAppliesTin,
     testBuyGemAppliesTout,
     testFeeReadFailureIsUnresolved,
+    testPreparedQuoteReadsCurrentFee,
     testRejectsNonPsmPair,
   ];
   let passed = 0;

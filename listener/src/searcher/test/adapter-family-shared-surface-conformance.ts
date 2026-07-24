@@ -42,6 +42,12 @@ const PRODUCTION_REGISTRY = resolve(
 const SHARED_SURFACE = Object.freeze([
   "src/searcher/main.ts",
   "src/searcher/latest-head-scheduler.ts",
+  "src/searcher/mempool-intake.ts",
+  "src/searcher/live-discovery-coordinator.ts",
+  "src/searcher/protocol-discovery-runtime.ts",
+  "src/searcher/observed-protocol-discovery.ts",
+  "src/searcher/protocol-instance-discovery.ts",
+  "src/searcher/adapter-family-graph-view-coordinator.ts",
   "src/searcher/blockscan-state-read-backend.ts",
   "src/searcher/blockscan-state-coordinator.ts",
   "src/searcher/detector/pool-impact.ts",
@@ -50,9 +56,11 @@ const SHARED_SURFACE = Object.freeze([
   "src/searcher/adapter-runtime-coordinator.ts",
   "src/searcher/planner/planner.ts",
   "src/searcher/solver/quoter.ts",
+  "src/searcher/solver/amount-propagation.ts",
   "src/searcher/solver/solver.ts",
   "src/searcher/solver/plan-builder.ts",
   "src/searcher/live-backends/revm-live-backend.ts",
+  "src/searcher/live-backends/victim-overlay.ts",
 ] as const);
 
 const ID_FIELD_NAMES = new Set([
