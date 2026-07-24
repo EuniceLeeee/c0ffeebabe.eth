@@ -344,6 +344,46 @@ export async function resolveV4InitsBackward(
       remainingById.delete(parsed.poolId);
     }
   }
+  // Some archive/indexer RPCs silently cap a broad family-topic result set.
+  // Preserve the efficient broad scan, then prove every still-missing identity
+  // with its indexed poolId instead of weakening strict materialization.
+  if (remainingById.size > 0 && ranges.length > 0) {
+    const exactFromBlock = ranges[ranges.length - 1].fromBlock;
+    const exactResults = await mapLimit(
+      [...remainingById],
+      4,
+      async (poolId) => {
+        const filter = {
+          address: poolManagerAddr,
+          topics: [topic, poolId],
+          fromBlock: exactFromBlock,
+          toBlock: Math.max(0, Math.floor(searchFromBlock)),
+        } as const;
+        try {
+          return await backend.getLogs(filter, { signal });
+        } catch (error) {
+          if (isPrunedHistoryError(error)) return [];
+          try {
+            return await backend.getLogs(filter, { signal });
+          } catch (retryError) {
+            if (isPrunedHistoryError(retryError)) return [];
+            throw retryError;
+          }
+        }
+      },
+    );
+    for (const logs of exactResults) {
+      for (const log of logs) {
+        const parsed = {
+          ...parseV4InitializeLog(log),
+          source: "v4-initialize-backfill" as const,
+        };
+        if (!remainingById.has(parsed.poolId)) continue;
+        resolved.set(parsed.poolId, parsed);
+        remainingById.delete(parsed.poolId);
+      }
+    }
+  }
   return resolved;
 }
 

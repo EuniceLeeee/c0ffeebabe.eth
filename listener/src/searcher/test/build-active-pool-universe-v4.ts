@@ -319,6 +319,49 @@ async function main(): Promise<void> {
   );
   console.log("[pool-universe-v4] batched Initialize family-topic backfill: PASS");
 
+  let broadBackfillCalls = 0;
+  let exactBackfillCalls = 0;
+  const truncatedBroadResolved = await resolveV4InitsBackward(
+    {
+      async getLogs(filter: LandedPoolDiscoveryLogFilter) {
+        if (filter.topics.length === 1) {
+          broadBackfillCalls++;
+          return [
+            initLog(
+              batchPoolA,
+              UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 20,
+            ),
+          ];
+        }
+        exactBackfillCalls++;
+        assert(
+          filter.topics[1] === batchPoolB.poolId,
+          "exact fallback should query only the PoolKey omitted by the broad result",
+        );
+        return [
+          initLog(
+            batchPoolB,
+            UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 30,
+          ),
+        ];
+      },
+    },
+    poolManager,
+    initializeTopic,
+    [batchPoolA.poolId, batchPoolB.poolId],
+    UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 99,
+    100,
+  );
+  assert(
+    broadBackfillCalls === 1 && exactBackfillCalls === 1,
+    "truncated broad scan should trigger one indexed PoolKey fallback",
+  );
+  assert(
+    truncatedBroadResolved.size === 2,
+    "indexed PoolKey fallback should restore complete strict identity materialization",
+  );
+  console.log("[pool-universe-v4] truncated broad scan indexed fallback: PASS");
+
   let batchResolverCalls = 0;
   const batchEntries = await buildV4PoolEntries(
     [],
@@ -526,7 +569,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (10/10)");
+  console.log("pool-universe-v4 PASS (11/11)");
 }
 
 main().catch((err) => {
