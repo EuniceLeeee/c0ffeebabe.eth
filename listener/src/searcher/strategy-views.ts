@@ -1,6 +1,8 @@
 import { ethers } from "ethers";
 import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
-import { poolRegistryKey } from "./pool-universe.js";
+import {
+  poolProjectionRowKey,
+} from "./pool-universe.js";
 import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
@@ -67,7 +69,7 @@ export function buildStrategyViews(
 }
 
 function appendUnique(out: PoolEntry[], seen: Set<string>, pool: PoolEntry): boolean {
-  const key = poolRegistryKey(pool);
+  const key = poolProjectionRowKey(pool);
   if (seen.has(key)) return false;
   seen.add(key);
   out.push(pool);
@@ -77,7 +79,7 @@ function appendUnique(out: PoolEntry[], seen: Set<string>, pool: PoolEntry): boo
 function compareUniversePools(a: PoolEntry, b: PoolEntry): number {
   const scoreDiff = scoreForSort(b) - scoreForSort(a);
   if (scoreDiff !== 0) return scoreDiff;
-  return poolRegistryKey(a).localeCompare(poolRegistryKey(b));
+  return poolProjectionRowKey(a).localeCompare(poolProjectionRowKey(b));
 }
 
 function scoreForSort(pool: PoolEntry): number {
@@ -89,7 +91,7 @@ function hashPoolList(pools: PoolEntry[]): string {
 }
 
 function sortedPoolKeys(pools: PoolEntry[]): string[] {
-  return pools.map(poolRegistryKey).sort();
+  return pools.map(poolProjectionRowKey).sort();
 }
 
 export function hashTokenGraph(edges: TokenEdge[]): string {

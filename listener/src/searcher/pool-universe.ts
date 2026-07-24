@@ -604,6 +604,29 @@ export function poolRegistryKey(pool: PoolEntry): string {
   ].join(":");
 }
 
+/**
+ * Collection-only identity for runtime rows projected by protocol discovery.
+ *
+ * poolRegistryKey intentionally remains the physical-pool key used by the DEX
+ * universe. A behavior-probed contract may, however, expose two independently
+ * verified route families at one address. Qualifying only those discovery
+ * rows by their owner keeps both projections without teaching the ordinary DEX
+ * path to accept two conflicting adapter classifications for one pool.
+ *
+ * This key must never replace routeInstanceKey/semanticRouteKey: family-neutral
+ * route identity is what lets global route arbitration quarantine conflicting
+ * execution claims.
+ */
+export function poolProjectionRowKey(pool: PoolEntry): string {
+  const physicalKey = poolRegistryKey(pool);
+  const owner = pool.discoveryOwnerAdapterId;
+  if (owner === undefined) return physicalKey;
+  if (!owner || owner !== owner.trim() || /[\u0000-\u001f\u007f]/.test(owner)) {
+    throw new Error("discovery projection owner must be a stable non-empty id");
+  }
+  return JSON.stringify([owner, physicalKey]);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

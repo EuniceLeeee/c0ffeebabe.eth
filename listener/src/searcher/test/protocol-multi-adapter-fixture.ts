@@ -9,7 +9,10 @@ import {
 } from "../protocol-instance-discovery.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import { poolRegistryKey } from "../pool-universe.js";
+import {
+  poolProjectionRowKey,
+  poolRegistryKey,
+} from "../pool-universe.js";
 import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import type {
   AttestedProtocolInstance,
@@ -210,6 +213,16 @@ assert(equivalent.wouldAdmit.length === 2, "equivalent claims both stay verified
   assert(
     projection.backrunGraph.length === 2,
     "equivalent claims must deduplicate to one edge pair at the merge",
+  );
+  assert(
+    projection.strategyViews.backrun.length === 2 &&
+      new Set(
+        projection.strategyViews.backrun.map(poolProjectionRowKey),
+      ).size === 2 &&
+      new Set(
+        projection.strategyViews.backrun.map(poolRegistryKey),
+      ).size === 1,
+    "co-owned families must keep separate projection rows without changing physical identity",
   );
 }
 assert(

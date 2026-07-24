@@ -1,11 +1,14 @@
 import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
-import { mergePoolRegistries } from "./active-pool-discovery.js";
+import { mergePoolProjectionRows } from "./active-pool-discovery.js";
 import {
   buildTokenIndex,
   type PoolEntry,
   type TokenEdge,
 } from "./planner/token-graph.js";
-import { poolRegistryKey } from "./pool-universe.js";
+import {
+  poolProjectionRowKey,
+  poolRegistryKey,
+} from "./pool-universe.js";
 import { hashTokenGraph, type StrategyViews } from "./strategy-views.js";
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
 import {
@@ -855,6 +858,27 @@ export interface VerifiedProtocolAdmission {
   readonly claims: readonly VerifiedRouteClaim[];
 }
 
+/**
+ * Materialize the exact discovery-owned pool row used by strategy views,
+ * graph rebuilds and replay artifacts. The owner qualifier is collection
+ * provenance only; route identity remains family-neutral on the edges.
+ */
+export function projectVerifiedProtocolPool(
+  admission: VerifiedProtocolAdmission,
+): PoolEntry {
+  if (admission.instance.ownerAdapterId !== admission.adapterId) {
+    throw new Error(
+      `protocol projection owner mismatch ${admission.adapterId}/` +
+        `${admission.instance.ownerAdapterId ?? "missing"}`,
+    );
+  }
+  return {
+    ...admission.instance.pool,
+    discoveryOwnerAdapterId: admission.adapterId,
+    verifiedRoutes: admission.edges.map(edgeToVerifiedRouteSpec),
+  };
+}
+
 export function semanticRouteKey(chainId: string | undefined, edge: TokenEdge): string {
   return [
     chainId ?? "0",
@@ -1676,21 +1700,20 @@ export function prepareProtocolDiscoveryProjection(input: {
       !quarantinedIncumbentEdgeKeys.has(protocolEdgeKey(edge)),
   );
   const admissions = [...ownership.admissions.values()];
-  const backrunPools = mergePoolRegistries(
+  const projectedAdmissionPools = admissions.map(projectVerifiedProtocolPool);
+  const backrunPools = mergePoolProjectionRows(
     [...basePools],
-    // Stamp the exact verified routes onto the projected pool so a later
-    // buildTokenGraph rebuild emits only what the probe accepted.
-    admissions.map((item) => ({
-      ...item.instance.pool,
-      discoveryOwnerAdapterId: item.adapterId,
-      verifiedRoutes: item.edges.map(edgeToVerifiedRouteSpec),
-    })),
+    projectedAdmissionPools,
   );
   const strategyViews = input.buildStrategyViews(backrunPools);
   const backrunGraph = mergeEdges(baseGraph, admissions.flatMap((item) => [...item.edges]));
-  const blockscanKeys = new Set(strategyViews.blockscan.map(poolRegistryKey));
-  const blockscanAdditions = admissions.flatMap((item) =>
-    blockscanKeys.has(poolRegistryKey(item.instance.pool)) ? [...item.edges] : []
+  const blockscanKeys = new Set(
+    strategyViews.blockscan.map(poolProjectionRowKey),
+  );
+  const blockscanAdditions = admissions.flatMap((item, index) =>
+    blockscanKeys.has(poolProjectionRowKey(projectedAdmissionPools[index]))
+      ? [...item.edges]
+      : []
   );
   const blockscanGraph = baseBlockscanGraph === undefined
     ? undefined
@@ -1700,16 +1723,22 @@ export function prepareProtocolDiscoveryProjection(input: {
   for (const pool of strategyViews.backrun) {
     poolAddressMap.set(pool.address.toLowerCase(), pool.adapter);
   }
-  const basePoolKeys = new Set(basePools.map(poolRegistryKey));
+  const basePoolKeys = new Set(basePools.map(poolProjectionRowKey));
   const knownPoolKeys = new Set(
     input.currentKnownPoolKeys ?? basePoolKeys,
   );
   for (const pool of priorDiscoveryPools) {
-    const key = poolRegistryKey(pool);
+    const key = poolProjectionRowKey(pool);
     if (!basePoolKeys.has(key)) knownPoolKeys.delete(key);
+    const legacyPhysicalKey = poolRegistryKey(pool);
+    if (!basePoolKeys.has(legacyPhysicalKey)) {
+      knownPoolKeys.delete(legacyPhysicalKey);
+    }
   }
   for (const key of basePoolKeys) knownPoolKeys.add(key);
-  for (const admission of admissions) knownPoolKeys.add(poolRegistryKey(admission.instance.pool));
+  for (const pool of projectedAdmissionPools) {
+    knownPoolKeys.add(poolProjectionRowKey(pool));
+  }
   return {
     baseOwnershipVersion: input.currentOwnership.version,
     ownership,

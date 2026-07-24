@@ -4,7 +4,10 @@ import {
   type JsonRpcPayload,
 } from "ethers";
 import type { PoolEntry } from "./planner/token-graph.js";
-import { poolRegistryKey } from "./pool-universe.js";
+import {
+  poolProjectionRowKey,
+  poolRegistryKey,
+} from "./pool-universe.js";
 import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
 import {
   attestPoolIdentities,
@@ -663,6 +666,26 @@ export function mergePoolRegistries(base: PoolEntry[], extra: PoolEntry[]): Pool
       merged.push(p);
       seen.add(key);
     }
+  }
+  return merged;
+}
+
+/**
+ * Merge rows that may already have a behavior-probed protocol owner. Ordinary
+ * DEX entries remain physical-keyed because their projection key is identical
+ * to poolRegistryKey.
+ */
+export function mergePoolProjectionRows(
+  base: readonly PoolEntry[],
+  extra: readonly PoolEntry[],
+): PoolEntry[] {
+  const seen = new Set(base.map(poolProjectionRowKey));
+  const merged = [...base];
+  for (const pool of extra) {
+    const key = poolProjectionRowKey(pool);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(pool);
   }
   return merged;
 }

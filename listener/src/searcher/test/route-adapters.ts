@@ -24,6 +24,7 @@ import {
 } from "../templates/path-template.js";
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import { RouteLegRegistry } from "../venues/route-leg-registry.js";
+import { routeGraphCollectionKey } from "../venues/route-instance-identity.js";
 import type { SwapAdapter } from "../venues/route-leg-adapter.js";
 import {
   IdentityResolverRegistry,
@@ -680,6 +681,39 @@ async function main(): Promise<void> {
       duplicateLogicalGraph.failed.length === 1 &&
       duplicateLogicalGraph.failed[0].reason.includes("duplicate route instance"),
     "token graph must reject a true duplicate route instance",
+  );
+  const neutralPool = {
+    address: pair,
+    adapter: "erc4626" as const,
+  };
+  assert(
+    routeGraphCollectionKey({ id: "protocol:a" }, neutralPool) ===
+      routeGraphCollectionKey({ id: "protocol:b" }, neutralPool),
+    "unowned cross-family rows must retain fail-closed neutral graph identity",
+  );
+  assert(
+    routeGraphCollectionKey(
+      { id: "protocol:a" },
+      { ...neutralPool, discoveryOwnerAdapterId: "protocol:a" },
+    ) !==
+      routeGraphCollectionKey(
+        { id: "protocol:b" },
+        { ...neutralPool, discoveryOwnerAdapterId: "protocol:b" },
+      ),
+    "arbitrated discovery owners must isolate graph collection rows",
+  );
+  let mismatchedProjectionOwnerRejected = false;
+  try {
+    routeGraphCollectionKey(
+      { id: "protocol:a" },
+      { ...neutralPool, discoveryOwnerAdapterId: "protocol:b" },
+    );
+  } catch {
+    mismatchedProjectionOwnerRejected = true;
+  }
+  assert(
+    mismatchedProjectionOwnerRejected,
+    "graph collection must reject a discovery owner/family mismatch",
   );
   let missingDeclarationRejected = false;
   try {

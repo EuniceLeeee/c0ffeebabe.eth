@@ -41,7 +41,10 @@ import {
   solveForOpportunityIndex,
 } from "./blockscan-hunt-selection.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import {
+  mergePoolProjectionRows,
+  mergePoolRegistries,
+} from "../active-pool-discovery.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
   buildTokenGraph,
@@ -54,7 +57,7 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
-  poolRegistryKey,
+  poolProjectionRowKey,
 } from "../pool-universe.js";
 import {
   protocolCandidateAddressesFromDexGraph,
@@ -64,6 +67,7 @@ import {
 } from "../protocol-discovery-runtime.js";
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  projectVerifiedProtocolPool,
 } from "../protocol-instance-discovery.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
@@ -612,12 +616,12 @@ async function main(): Promise<void> {
       }
       const discoveredProtocolPools = [
         ...protocolDiscovery.projection.ownership.admissions.values(),
-      ].map((item) => lowerPoolEntry(item.instance.pool));
+      ].map((item) => lowerPoolEntry(projectVerifiedProtocolPool(item)));
       const discoveryArtifactOut =
         process.env.HUNT_DISCOVERY_ARTIFACT_OUT?.trim();
       if (discoveryArtifactOut) {
         const discoveredPoolKeys = discoveredProtocolPools
-          .map(poolRegistryKey)
+          .map(poolProjectionRowKey)
           .sort();
         const artifactPools = selectProductionReplayDiscoveredPools(
           protocolDiscovery.projection.strategyViews.blockscan,
@@ -650,7 +654,7 @@ async function main(): Promise<void> {
           })}`,
         );
       }
-      protocolPools = mergePoolRegistries(
+      protocolPools = mergePoolProjectionRows(
         staticProtocolPools,
         discoveredProtocolPools,
       );

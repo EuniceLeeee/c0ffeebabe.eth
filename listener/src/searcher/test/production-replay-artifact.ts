@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { ethers } from "ethers";
-import { poolRegistryKey } from "../pool-universe.js";
+import { poolProjectionRowKey } from "../pool-universe.js";
 import type { PoolEntry, VerifiedRouteSpec } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 
-export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 2 as const;
-export const PRODUCTION_REPLAY_ARTIFACT_PRODUCER = "shared-protocol-discovery-v2" as const;
+export const PRODUCTION_REPLAY_ARTIFACT_SCHEMA = 3 as const;
+export const PRODUCTION_REPLAY_ARTIFACT_PRODUCER = "shared-protocol-discovery-v3" as const;
 
 export interface ProductionReplayUniverseEvidence {
   readonly sha256: string;
@@ -38,6 +38,21 @@ export function writeProductionReplayDiscoveryArtifact(
   path: string,
   artifact: ProductionReplayDiscoveryArtifact,
 ): string {
+  if (
+    artifact.schemaVersion !== PRODUCTION_REPLAY_ARTIFACT_SCHEMA ||
+    artifact.producer !== PRODUCTION_REPLAY_ARTIFACT_PRODUCER ||
+    artifact.sourceComplete !== true ||
+    artifact.evaluationComplete !== true ||
+    artifact.sourceFromBlock > artifact.sourceToBlock ||
+    artifact.sourceToBlock > artifact.identityBlock ||
+    artifact.pools.length !== artifact.discoveredPoolKeys.length
+  ) {
+    throw new Error("production replay discovery artifact is incomplete or unsupported");
+  }
+  selectProductionReplayDiscoveredPools(
+    artifact.pools,
+    artifact.discoveredPoolKeys,
+  );
   const bytes = `${JSON.stringify(artifact, null, 2)}\n`;
   writeFileSync(path, bytes, { encoding: "utf8", mode: 0o600 });
   return sha256(bytes);
@@ -112,7 +127,7 @@ export function selectProductionReplayDiscoveredPools(
   }
   const poolByKey = new Map<string, PoolEntry>();
   for (const pool of projectedPools) {
-    const key = poolRegistryKey(pool);
+    const key = poolProjectionRowKey(pool);
     if (poolByKey.has(key)) throw new Error(`duplicate projected pool key ${key}`);
     poolByKey.set(key, pool);
   }
@@ -125,6 +140,14 @@ export function selectProductionReplayDiscoveredPools(
     const family = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pool.adapter);
     if (!family?.discovery) {
       throw new Error(`discovered pool ${key} is not owned by a dynamic route family`);
+    }
+    if (
+      !pool.discoveryOwnerAdapterId ||
+      pool.discoveryOwnerAdapterId !== family.id
+    ) {
+      throw new Error(
+        `discovered pool ${key} has a missing or mismatched projection owner`,
+      );
     }
     return pool;
   });
@@ -188,6 +211,12 @@ function parseProjectedPool(raw: unknown, index: number): PoolEntry {
   if (raw.fixedSlotKind !== undefined) pool.fixedSlotKind = stringField(raw.fixedSlotKind, `pools[${index}].fixedSlotKind`) as PoolEntry["fixedSlotKind"];
   if (raw.fixedProtocolAction !== undefined) pool.fixedProtocolAction = stringField(raw.fixedProtocolAction, `pools[${index}].fixedProtocolAction`) as PoolEntry["fixedProtocolAction"];
   if (raw.logicalInstanceId !== undefined) pool.logicalInstanceId = stringField(raw.logicalInstanceId, `pools[${index}].logicalInstanceId`);
+  if (raw.discoveryOwnerAdapterId !== undefined) {
+    pool.discoveryOwnerAdapterId = stringField(
+      raw.discoveryOwnerAdapterId,
+      `pools[${index}].discoveryOwnerAdapterId`,
+    );
+  }
   for (const field of ["fee", "tickSpacing", "score"] as const) {
     if (raw[field] !== undefined) pool[field] = finiteNumber(raw[field], `pools[${index}].${field}`);
   }
@@ -211,7 +240,7 @@ function parseVerifiedRoute(raw: unknown, field: string): VerifiedRouteSpec {
   if (slotKind !== "swap" && slotKind !== "protocol" && slotKind !== "lend") {
     throw new Error(`${field}.slotKind is invalid`);
   }
-  return {
+  const parsed: VerifiedRouteSpec = {
     edgeAdapterId: stringField(raw.edgeAdapterId, `${field}.edgeAdapterId`),
     tokenIn: addressField(raw.tokenIn, `${field}.tokenIn`),
     tokenOut: addressField(raw.tokenOut, `${field}.tokenOut`),
@@ -220,6 +249,13 @@ function parseVerifiedRoute(raw: unknown, field: string): VerifiedRouteSpec {
       ? {}
       : { protocolAction: stringField(raw.protocolAction, `${field}.protocolAction`) as VerifiedRouteSpec["protocolAction"] }),
   };
+  if (raw.poolToken0 !== undefined) {
+    parsed.poolToken0 = addressField(raw.poolToken0, `${field}.poolToken0`);
+  }
+  if (raw.poolToken1 !== undefined) {
+    parsed.poolToken1 = addressField(raw.poolToken1, `${field}.poolToken1`);
+  }
+  return parsed;
 }
 
 function copyOptionalAddress(

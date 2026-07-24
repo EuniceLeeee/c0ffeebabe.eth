@@ -18,6 +18,7 @@ import {
   replaceProtocolDiscoveryEvidenceCache,
 } from "../protocol-discovery-cache.js";
 import { buildStrategyViews, type StrategyViews } from "../strategy-views.js";
+import { poolProjectionRowKey } from "../pool-universe.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -251,6 +252,37 @@ async function main(): Promise<void> {
   assert(third.backrunGraph.length === second.backrunGraph.length, "refresh must not duplicate edges");
   console.log("[runtime-refresh] successful admission is idempotent: PASS");
 
+  const ownedProtocolAtFreshAddress: PoolEntry = {
+    address: FRESH.address,
+    adapter: "erc4626",
+    discoveryOwnerAdapterId: "protocol:erc4626",
+    verifiedRoutes: [{
+      edgeAdapterId: "erc4626-deposit",
+      tokenIn: FRESH.token0!,
+      tokenOut: FRESH.address,
+      slotKind: "protocol",
+      protocolAction: "wrap",
+    }],
+  };
+  const coLocatedDex = await prepareRuntimePoolRefresh({
+    backend,
+    freshPools: [FRESH],
+    knownPoolKeys: new Set([
+      poolProjectionRowKey(ownedProtocolAtFreshAddress),
+    ]),
+    currentBackrunPools: [ownedProtocolAtFreshAddress],
+    currentBackrunGraph: [],
+    currentBlockscanGraph: [],
+    buildStrategyViews: views,
+  });
+  assert(
+    coLocatedDex.strategyViews.backrun.filter(
+      (pool) => pool.address.toLowerCase() === FRESH.address.toLowerCase(),
+    ).length === 2,
+    "an owned protocol row must not swallow a newly verified DEX at the same address",
+  );
+  console.log("[runtime-refresh] owner-qualified protocol row isolates a co-located DEX: PASS");
+
   const blockscanRejectsFresh = (backrunPools: PoolEntry[]): StrategyViews => {
     const built = views(backrunPools);
     return {
@@ -368,7 +400,7 @@ async function main(): Promise<void> {
   );
   console.log("[runtime-refresh] boot-failed protocol venue retries to admission: PASS");
 
-  console.log("runtime-pool-refresh PASS (8/8)");
+  console.log("runtime-pool-refresh PASS (9/9)");
 }
 
 await main();

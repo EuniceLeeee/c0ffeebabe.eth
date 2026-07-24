@@ -20,6 +20,7 @@ import {
 } from "./protocol-discovery-runtime.js";
 import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  projectVerifiedProtocolPool,
   protocolEdgeKey,
   protocolInstanceKey,
   type ProtocolDiscoveryOwnership,
@@ -125,6 +126,7 @@ import {
   loadPoolUniverseCoverageMetadata,
   loadPoolUniverseGeneratedAt,
   poolUniverseCanonicalAnchorMatches,
+  poolProjectionRowKey,
   poolRegistryKey,
   selectPairCompletionPools,
 } from "./pool-universe.js";
@@ -1709,7 +1711,9 @@ async function main(): Promise<void> {
     [
       ...backrunGraphBuild.successful.map((item) => poolRegistryKey(item.pool)),
       ...[...protocolDiscoveryOwnership.admissions.values()]
-        .map((item) => poolRegistryKey(item.instance.pool)),
+        .map((item) =>
+          poolProjectionRowKey(projectVerifiedProtocolPool(item))
+        ),
     ],
   );
   for (const retryKey of retryableDexGraphPools.keys()) {

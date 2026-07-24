@@ -10,6 +10,7 @@ import type { RouteEdgeBuildControl } from "../venues/route-leg-adapter.js";
 import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
+  routeGraphCollectionKey,
   routeInstanceKey,
 } from "../venues/route-instance-identity.js";
 export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
@@ -291,7 +292,7 @@ export async function buildTokenGraphWithResults(
       : `route-leg registry: unsupported pool adapter ${pool.adapter}`;
     if (family) {
       try {
-        const instanceKey = routeInstanceKey(family, pool);
+        const instanceKey = routeGraphCollectionKey(family, pool);
         if (seenInstances.has(instanceKey)) {
           registrationFailure =
             `token-graph: duplicate route instance ${instanceKey}`;

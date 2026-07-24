@@ -1,4 +1,4 @@
-import { poolRegistryKey } from "../pool-universe.js";
+import { poolProjectionRowKey } from "../pool-universe.js";
 import { POOL_REGISTRY } from "../planner/token-graph.js";
 import { loadProductionReplayDiscoveredPools } from "./production-replay-artifact.js";
 
@@ -9,9 +9,9 @@ if (!artifactPath || !artifactSha256) {
 }
 
 const discovered = loadProductionReplayDiscoveredPools(artifactPath, artifactSha256);
-const existing = new Set(POOL_REGISTRY.map(poolRegistryKey));
+const existing = new Set(POOL_REGISTRY.map(poolProjectionRowKey));
 for (const pool of discovered) {
-  const key = poolRegistryKey(pool);
+  const key = poolProjectionRowKey(pool);
   if (existing.has(key)) {
     throw new Error(`production replay discovered pool collides with registry key ${key}`);
   }

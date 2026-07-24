@@ -7,11 +7,14 @@ import {
 } from "./planner/token-graph.js";
 import {
   mergeDexDiscoveryReadControls,
-  mergePoolRegistries,
+  mergePoolProjectionRows,
   sendDexDiscoveryRpc,
   type DexDiscoveryReadControl,
 } from "./active-pool-discovery.js";
-import { poolRegistryKey } from "./pool-universe.js";
+import {
+  poolProjectionRowKey,
+  poolRegistryKey,
+} from "./pool-universe.js";
 import type { StrategyViews } from "./strategy-views.js";
 import {
   edgeExecutionVariantKey,
@@ -233,18 +236,23 @@ export async function prepareRuntimePoolRefresh(
   input: RuntimePoolRefreshInput,
 ): Promise<RuntimePoolRefreshProjection> {
   const currentKeys = input.knownPoolKeys ??
-    new Set(input.currentBackrunPools.map(poolRegistryKey));
+    new Set(input.currentBackrunPools.map(poolProjectionRowKey));
   const attemptedPools = uniquePools(input.freshPools)
     .filter((pool) => !currentKeys.has(poolRegistryKey(pool)));
   const built = await buildTokenGraphWithResults(input.backend, attemptedPools);
   const admittedPools = built.successful.map((item) => item.pool);
-  const nextBackrunPools = mergePoolRegistries(input.currentBackrunPools, admittedPools);
+  const nextBackrunPools = mergePoolProjectionRows(
+    input.currentBackrunPools,
+    admittedPools,
+  );
   const strategyViews = input.buildStrategyViews(nextBackrunPools);
 
   const backrunGraph = mergeEdges(input.currentBackrunGraph, built.edges);
-  const blockscanPoolKeys = new Set(strategyViews.blockscan.map(poolRegistryKey));
+  const blockscanPoolKeys = new Set(
+    strategyViews.blockscan.map(poolProjectionRowKey),
+  );
   const blockscanAdditions = built.successful.flatMap((item) =>
-    blockscanPoolKeys.has(poolRegistryKey(item.pool)) ? item.edges : []
+    blockscanPoolKeys.has(poolProjectionRowKey(item.pool)) ? item.edges : []
   );
   const blockscanGraph = input.currentBlockscanGraph === undefined
     ? undefined
@@ -256,7 +264,9 @@ export async function prepareRuntimePoolRefresh(
   }
 
   const knownPoolKeys = new Set(currentKeys);
-  for (const pool of admittedPools) knownPoolKeys.add(poolRegistryKey(pool));
+  for (const pool of admittedPools) {
+    knownPoolKeys.add(poolProjectionRowKey(pool));
+  }
 
   return {
     attemptedPools,

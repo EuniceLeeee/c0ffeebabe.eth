@@ -27,7 +27,9 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import { AnvilStateBackend } from "../../shared/state/state-backend.js";
-import { mergePoolRegistries } from "../active-pool-discovery.js";
+import {
+  mergePoolRegistries,
+} from "../active-pool-discovery.js";
 import { canonicalTokenRing, cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { detectImpactFromLogs, type PoolImpact } from "../detector/pool-impact.js";
@@ -44,7 +46,7 @@ import {
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
-  poolRegistryKey,
+  poolProjectionRowKey,
 } from "../pool-universe.js";
 import {
   enabledDiscoveryAdapters,
@@ -57,6 +59,7 @@ import {
 import {
   createPinnedProtocolDiscoveryContext,
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+  projectVerifiedProtocolPool,
 } from "../protocol-instance-discovery.js";
 import { createProfitTokenValuation } from "../profit-token-valuation.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
@@ -442,8 +445,11 @@ async function main(): Promise<void> {
     const referenceCycle = referenceCycles.length === 1 ? referenceCycles[0] : [];
     const sourceComplete = pass.scanner.sourceComplete && pass.result.sourceComplete;
     const evaluationComplete = pass.result.evaluationComplete;
-    const discoveredPoolKeys = [...pass.projection.ownership.admissions.values()]
-      .map((item) => poolRegistryKey(item.instance.pool))
+    const discoveredProtocolPools = [
+      ...pass.projection.ownership.admissions.values(),
+    ].map((item) => lowerPoolEntry(projectVerifiedProtocolPool(item)));
+    const discoveredPoolKeys = discoveredProtocolPools
+      .map(poolProjectionRowKey)
       .sort();
     const discoveredPools = selectProductionReplayDiscoveredPools(
       pass.projection.strategyViews.blockscan,

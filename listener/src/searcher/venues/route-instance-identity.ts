@@ -57,6 +57,33 @@ export function routeInstanceKey(
   return instanceKey;
 }
 
+/**
+ * Graph-build collection key. Only a discovery-owned projection may qualify
+ * the family-neutral instance key by owner. Unowned/static rows retain the
+ * strict historical collision behavior, so an unarbitrated cross-family
+ * overlap still fails closed.
+ *
+ * This key must never be written onto an edge or used as semantic route
+ * identity.
+ */
+export function routeGraphCollectionKey(
+  family: {
+    readonly id: string;
+    readonly routeIdentity?: RouteInstanceIdentityCapability;
+  },
+  pool: PoolEntry,
+): string {
+  const instanceKey = routeInstanceKey(family, pool);
+  const owner = pool.discoveryOwnerAdapterId;
+  if (owner === undefined) return instanceKey;
+  if (owner !== family.id) {
+    throw new Error(
+      `${family.id} cannot build discovery row owned by ${owner}`,
+    );
+  }
+  return JSON.stringify([owner, instanceKey]);
+}
+
 export function bindRouteInstanceIdentity(
   family: {
     readonly id: string;
