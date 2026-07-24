@@ -721,8 +721,18 @@ async function main(): Promise<void> {
       throw new Error(`cannot resolve canonical source hash for ${cfg.blockNumber}`);
     }
     const stateBackend = new JsonRpcBlockScanStateReadBackend(cfg.rpcUrl, {
-      maxBatchSize: 500,
-      maxConcurrentBatches: 4,
+      maxBatchSize: envInt(
+        "SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE",
+        500,
+      ),
+      maxConcurrentBatches: envInt(
+        "SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY",
+        4,
+      ),
+      multicallMode:
+        process.env.SEARCHER_BLOCKSCAN_STATE_MULTICALL === "1"
+          ? "aggregate3"
+          : "rpc-batch",
     });
     const stateCoordinator = new BlockScanStateCoordinator(stateBackend, {
       familyTimeoutMs: envInt("HUNT_STATE_FAMILY_TIMEOUT_MS", 120_000),
