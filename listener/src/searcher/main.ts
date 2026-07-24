@@ -36,6 +36,7 @@ import {
 } from "./protocol-instance-discovery.js";
 import {
   cachedProtocolCandidates,
+  createProtocolDiscoveryEvidenceCache,
   loadProtocolDiscoveryEvidenceCache,
   pruneRecentProcessedProtocolTxs,
   reconcileProtocolDiscoveryEvidenceCache,
@@ -70,6 +71,7 @@ import {
 } from "./venues/identity.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
 import {
+  LEGACY_PRODUCTION_ROUTE_EDGES,
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
   PRODUCTION_ROUTE_ADAPTERS,
@@ -164,6 +166,42 @@ import {
   DEFAULT_CREDIT_LIVE_MARKER_PATH,
   evaluateStandingGuard,
 } from "./standing-guard.js";
+import {
+  BLIND_PRODUCTION_RAW_PREFIX,
+  BLIND_PRODUCTION_READY_PREFIX,
+  blindProductionAuditHash,
+  blindProductionCalldataSha256,
+  blindProductionCanonicalJson,
+  blindProductionDeepSeal,
+  type BlindProductionBlockAnchor,
+  type BlindProductionOpportunityEvidence,
+  type BlindProductionPrepareControl,
+  type BlindProductionSourceHeadControl,
+  type BlindProductionStageEvidence,
+  type BlindProductionStageSealInput,
+} from "./blind-production-audit.js";
+import {
+  appendBlindBaselineStageEvidence,
+  collectBlindBaselinePricingCoverage,
+  completeBlindBaselineStageEvidence,
+  createBlindBaselinePassRecord,
+  createBlindBaselinePreparedArtifacts,
+  createBlindBaselineSemanticEvidence,
+  createBlindBaselineSourceDelta,
+  createBlindBaselineStaticArtifacts,
+  createBlindBaselineUnrunSelectionProvenance,
+  createMutableBlindOpportunityEvidence,
+  installBlindBaselineControlInput,
+  type BlindBaselinePreparedArtifacts,
+  type BlindBaselinePricingCoverage,
+  type BlindBaselineSelectionProvenance,
+  type BlindBaselineStageName,
+  type MutableBlindOpportunityEvidence,
+} from "./blind-production-baseline-runtime.js";
+import {
+  blindResolvedRuntimeEnvironment,
+  normalizeBlindArtifactValue,
+} from "./blind-production-sanitize.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_RUNTIME_GRAPH_POOLS_PATH = resolve("searcher", "pools", "runtime-graph-pools.json");
@@ -316,6 +354,17 @@ interface PlannedBlockScanSolve {
   protoRing: boolean;
   plan: CandidatePlan;
   planCount: number;
+  blindAudit?: MutableBlindOpportunityEvidence;
+}
+
+interface BlockScanAtomicAudit {
+  readonly simulation: BlindProductionOpportunityEvidence["simulation"];
+  readonly ev: BlindProductionOpportunityEvidence["ev"];
+}
+
+interface BlindBaselinePassCompletion {
+  stateReady: boolean;
+  error: Error | null;
 }
 
 export { computeBidEth, valueInEth };
@@ -460,6 +509,7 @@ function dumpRuntimeGraphPools(
   pools: PoolEntry[],
   path = DEFAULT_RUNTIME_GRAPH_POOLS_PATH,
 ): void {
+  if (process.env.SEARCHER_BLIND_RAW_AUDIT === "1") return;
   try {
     const normalized = pools.map((pool) => ({
       address: pool.address.toLowerCase(),
@@ -623,12 +673,17 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
 }
 
 async function main(): Promise<void> {
-  loadEnv();
+  const blindProductionAudit =
+    process.env.SEARCHER_BLIND_RAW_AUDIT === "1";
+  if (!blindProductionAudit) loadEnv();
 
   const rpcUrl = liveRpcUrl();
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  if (blindProductionAudit && !config.dryRun) {
+    throw new Error("blind production audit requires SEARCHER_DRY_RUN=1");
+  }
   await validateLiveEnvelope(
     {
       dryRun: config.dryRun,
@@ -672,6 +727,16 @@ async function main(): Promise<void> {
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
   const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
+  if (blindProductionAudit && !enableBlockScan) {
+    throw new Error(
+      "blind production audit requires SEARCHER_ENABLE_BLOCK_SCAN=1",
+    );
+  }
+  if (blindProductionAudit && !config.blockScanSubmit) {
+    throw new Error(
+      "blind production audit requires SEARCHER_BLOCKSCAN_SUBMIT=1",
+    );
+  }
   const blockScanCfg: BlockScanConfig | undefined = enableBlockScan
     ? {
         maxHops: Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "4"),
@@ -799,6 +864,11 @@ async function main(): Promise<void> {
     config.enableMempool,
     config.enableMevShare,
   );
+  if (blindProductionAudit && sourceMode !== "disabled") {
+    throw new Error(
+      "blind production audit requires the victim source to be disabled",
+    );
+  }
   const victimFeedHash = createHash("sha256").update(JSON.stringify({
     sourceMode,
     mempool: config.enableMempool ? config.wsUrl : null,
@@ -1079,10 +1149,12 @@ async function main(): Promise<void> {
   const protocolDiscoveryCachePath = process.env.SEARCHER_PROTOCOL_DISCOVERY_CACHE_PATH ??
     DEFAULT_PROTOCOL_DISCOVERY_CACHE_PATH;
   const protocolDiscoveryChainId = (await provider.getNetwork()).chainId;
-  const protocolDiscoveryCache = loadProtocolDiscoveryEvidenceCache(
-    protocolDiscoveryCachePath,
-    protocolDiscoveryChainId,
-  );
+  const protocolDiscoveryCache = blindProductionAudit
+    ? createProtocolDiscoveryEvidenceCache(protocolDiscoveryChainId)
+    : loadProtocolDiscoveryEvidenceCache(
+        protocolDiscoveryCachePath,
+        protocolDiscoveryChainId,
+      );
   const observedSourceFingerprint = protocolObservedSourceFingerprint(
     PRODUCTION_ROUTE_ADAPTERS.protocols,
   );
@@ -1144,7 +1216,11 @@ async function main(): Promise<void> {
     };
   }
   const persistProtocolDiscoveryEvidence = (result: ProtocolDiscoveryResult): void => {
-    if (protocolDiscoveryShadow || !config.enableProtocolEdges) return;
+    if (
+      blindProductionAudit ||
+      protocolDiscoveryShadow ||
+      !config.enableProtocolEdges
+    ) return;
     // evaluatedInstanceKeys excludes retryable identity/probe failures, so
     // per-key reconciliation is safe even when an unrelated source read failed.
     reconcileProtocolDiscoveryEvidenceCache(protocolDiscoveryCache, result);
@@ -1271,6 +1347,56 @@ async function main(): Promise<void> {
         `${edge.tokenIn}->${edge.tokenOut}`,
     );
   }
+  const blindStaticArtifacts = blindProductionAudit
+    ? (() => {
+        const {
+          rpcUrl: _rpcUrl,
+          wsUrl: _wsUrl,
+          mevShareSseUrl: _mevShareSseUrl,
+          wallet: blindWallet,
+          pinnedWarmPoolPath: _pinnedWarmPoolPath,
+          poolUniversePath: _poolUniversePath,
+          forceIncludePoolIdsPath: _forceIncludePoolIdsPath,
+          liveFixtureDir: _liveFixtureDir,
+          poolUniverseForceInclude: blindForceInclude,
+          ...blindPublicConfig
+        } = config;
+        const effectiveConfig = normalizeBlindArtifactValue({
+          config: blindPublicConfig,
+          executorAddress: blindWallet.address.toLowerCase(),
+          forceInclude: {
+            count: blindForceInclude.length,
+            contentSha256:
+              blindProductionAuditHash([...blindForceInclude].sort()),
+          },
+          runtimeEnvironment:
+            blindResolvedRuntimeEnvironment(process.env),
+          blockScan: {
+            core: blockScanCfg,
+            largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
+            largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
+            midConcurrency: blockScanMidConcurrency,
+            passBudgetMs: blockScanPassBudgetMs,
+            refineCandidates: blockScanRefineCandidates,
+            solveConcurrency: blockScanSolveConcurrency,
+            solveReserveMs: blockScanSolveReserveMs,
+          },
+        }) as Readonly<Record<string, unknown>>;
+        return createBlindBaselineStaticArtifacts({
+          effectiveConfig,
+          productionPools: strategyViews.blockscan,
+          configuredUniverseContentSha256: blindProductionAuditHash(
+            rawBlockscanUniverse.map(poolRegistryKey).sort(),
+          ),
+          universeGeneratedAt: strategyViewOptions.poolUniverseGeneratedAt,
+          selectedUniverse: blockscanUniverse,
+          strategyViewVersion:
+            strategyViews.versions.blockscan_view_hash,
+          registry: PRODUCTION_ROUTE_ADAPTERS,
+          legacyRouteEdges: LEGACY_PRODUCTION_ROUTE_EDGES,
+        });
+      })()
+    : null;
   const tokenIndex = buildTokenIndex(graph);
 
   // Detection uses ALL known pool addresses (factory + swap + hardcoded)
@@ -1301,9 +1427,13 @@ async function main(): Promise<void> {
         `${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  const flashLiquidityTimer = setInterval(() => {
-    void flashLiquidity.refresh(flashTokens).catch(() => {/* keep last good snapshot */});
-  }, 120_000);
+  const flashLiquidityTimer = blindProductionAudit
+    ? null
+    : setInterval(() => {
+        void flashLiquidity.refresh(flashTokens).catch(() => {
+          /* keep last good snapshot */
+        });
+      }, 120_000);
   console.log(
     `[searcher/live] routing graph: ${graph.length} edges, ${tokenIndex.size} tokens | ` +
       `detection pool set: ${allPoolMap.size} addresses`,
@@ -1391,7 +1521,7 @@ async function main(): Promise<void> {
     });
     return run;
   };
-  const refreshTimer = setInterval(async () => {
+  const refreshTimer = blindProductionAudit ? null : setInterval(async () => {
     try {
       await enqueueProtocolDiscovery("dex-refresh", async () => {
       const fresh = await scanActivePools(provider, 25, discoveryTopN * 2, undefined, {
@@ -1498,9 +1628,11 @@ async function main(): Promise<void> {
     }
     persistProtocolDiscoveryEvidence(pass.result);
   };
-  const protocolDiscoveryTimer = setInterval(() => {
-    void enqueueProtocolDiscovery("active", runActiveProtocolDiscoveryPass);
-  }, protocolDiscoveryIntervalMs);
+  const protocolDiscoveryTimer = blindProductionAudit
+    ? null
+    : setInterval(() => {
+        void enqueueProtocolDiscovery("active", runActiveProtocolDiscoveryPass);
+      }, protocolDiscoveryIntervalMs);
 
   // Observed-tx dedup state lives in the evidence cache so a restart resumes
   // from persisted state instead of re-tracing the recent window.
@@ -1704,7 +1836,11 @@ async function main(): Promise<void> {
     pendingWarmBlock = null;
     scheduleWarm(blockNumber, reason);
   };
-  if ((warmPinnedK > 0 || warmRecentK > 0) && liveBackend.warmHotPools) {
+  if (
+    !blindProductionAudit &&
+    (warmPinnedK > 0 || warmRecentK > 0) &&
+    liveBackend.warmHotPools
+  ) {
     provider.on("block", (blockNumber: number) => {
       if (busy || warming) {
         pendingWarmBlock = blockNumber;
@@ -1744,6 +1880,54 @@ async function main(): Promise<void> {
     ttlBlocks: Math.max(1, Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_TTL_BLOCKS ?? "300")),
     entries: new Map(),
   };
+  let blindPrepareControl: BlindProductionPrepareControl | null = null;
+  let blindPreparedArtifacts: BlindBaselinePreparedArtifacts | null = null;
+  let blindSourceControl: BlindProductionSourceHeadControl | null = null;
+  let blindPassMode: "prepare" | "source" | null = null;
+  let blindPassStartedAt = 0;
+  let blindPassStateReady = false;
+  let blindPassError: Error | null = null;
+  let blindPassStages: readonly BlindProductionStageEvidence[] = [];
+  let blindPassPricingCoverage: BlindBaselinePricingCoverage | null = null;
+  let blindPassOpportunities: MutableBlindOpportunityEvidence[] = [];
+  let blindLastStableSemanticEvidence:
+    BlindProductionStageSealInput | null = null;
+  let blindLastStableIncompleteFamilyIds: readonly string[] =
+    Object.freeze(["legacy-production"]);
+  let blindPassSelectionProvenance: BlindBaselineSelectionProvenance =
+    createBlindBaselineUnrunSelectionProvenance(
+      blockScanRefineCandidates,
+    );
+  let blindOpportunityByCandidate =
+    new Map<BlockScanOpportunity, MutableBlindOpportunityEvidence>();
+  let blindPassFreshReadCount = 0;
+  let blindPassBatchCount = 0;
+  let blindDynamicCacheGeneration = 0;
+  let blindDynamicCacheReset = false;
+  let blindPassWaiter: {
+    resolve: (completion: BlindBaselinePassCompletion) => void;
+  } | null = null;
+  const markBlindStage = (
+    name: BlindBaselineStageName,
+    status: "pass" | "fail",
+    semanticEvidence: BlindProductionStageSealInput,
+  ): void => {
+    if (!blindProductionAudit || blindPassMode !== "source") return;
+    const stableSemanticEvidence =
+      blindProductionDeepSeal(semanticEvidence);
+    blindPassStages = appendBlindBaselineStageEvidence({
+      stages: blindPassStages,
+      name,
+      status,
+      cumulativeMs: Math.max(0, Date.now() - blindPassStartedAt),
+      semanticEvidence: stableSemanticEvidence,
+    });
+    blindLastStableSemanticEvidence = stableSemanticEvidence;
+    blindLastStableIncompleteFamilyIds = Object.freeze([
+      ...(blindPassPricingCoverage?.incompleteFamilyIds ??
+        ["legacy-production"]),
+    ]);
+  };
   const scheduleBlockScan = (blockNumber: number): void => {
     if (!enableBlockScan) return;
     const edges = blockScanGraph;
@@ -1765,7 +1949,28 @@ async function main(): Promise<void> {
       !blockScanPlannerForPass ||
       !blockScanSolverForPass ||
       !blockScanSimulatorForPass
-    ) return;
+    ) {
+      const error = new Error("blind block-scan dependencies are unavailable");
+      if (blindPassWaiter) {
+        const waiter = blindPassWaiter;
+        blindPassWaiter = null;
+        waiter.resolve({ stateReady: false, error });
+      }
+      return;
+    }
+    const currentBlindSemanticEvidence = ():
+      BlindProductionStageSealInput =>
+      createBlindBaselineSemanticEvidence({
+        graph: edges,
+        pricingCoverage: blindPassPricingCoverage ?? {
+          expectedStateKeys: [],
+          resolvedStateKeys: [],
+          expectedPricedEdgeIds: [],
+          resolvedPricedEdgeIds: [],
+          incompleteFamilyIds: ["legacy-production"],
+        },
+        opportunities: blindPassOpportunities,
+      });
     const discardFullWarmProgress = (): void => {
       blockScanFullWarmSession = null;
       blockScanForceFullWarm = true;
@@ -1779,10 +1984,21 @@ async function main(): Promise<void> {
       void (async () => {
         if (blockScanBusy) {
           console.log(`[searcher/blockscan] block=${blockNumber} skipped=busy`);
+          if (blindPassWaiter) {
+            const waiter = blindPassWaiter;
+            blindPassWaiter = null;
+            waiter.resolve({
+              stateReady: false,
+              error: new Error("blind block-scan pass skipped busy"),
+            });
+          }
           return;
         }
         blockScanBusy = true;
-        const passStarted = Date.now();
+        const passStarted =
+          blindProductionAudit && blindPassMode === "source"
+            ? blindPassStartedAt
+            : Date.now();
         let segPrev = passStarted;
         const seg: Record<string, number> = {};
         let solvePlannerMs = 0;
@@ -2135,6 +2351,48 @@ async function main(): Promise<void> {
             return;
           }
 
+          if (blindProductionAudit && blindPassMode !== null) {
+            const coverage = collectBlindBaselinePricingCoverage({
+              edges,
+              blockNumber,
+              cache: blockScanCacheForPass,
+              protocolMids,
+              registry: PRODUCTION_ROUTE_ADAPTERS,
+            });
+            blindPassPricingCoverage = coverage;
+            blindPassStateReady =
+              coverage.expectedStateKeys.length ===
+                coverage.resolvedStateKeys.length &&
+              coverage.expectedPricedEdgeIds.length ===
+                coverage.resolvedPricedEdgeIds.length &&
+              coverage.incompleteFamilyIds.length === 0;
+            const mutableFreshReads = warmPlan.kind === "full"
+              ? warmedV2V3 + warmedV4
+              : warmPlan.changed.pools.size +
+                warmPlan.changed.v4PoolIds.size;
+            const curveFreshReads = curveWarm.attemptedPools.size;
+            blindPassFreshReadCount =
+              mutableFreshReads +
+              curveFreshReads +
+              protocolMids.size +
+              exactCurveMids.attempted;
+            blindPassBatchCount =
+              Math.ceil(mutableFreshReads / 500) +
+              Math.ceil(curveFreshReads / 31) +
+              protocolMids.size +
+              Math.ceil(exactCurveMids.attempted / 256) +
+              Math.ceil(exactCurveMids.failed / 256);
+            markBlindStage(
+              "state_ready",
+              blindPassStateReady ? "pass" : "fail",
+              currentBlindSemanticEvidence(),
+            );
+            if (blindPassMode === "prepare" || !blindPassStateReady) {
+              logSeg();
+              return;
+            }
+          }
+
           if (passBudgetExceeded("scan")) {
             logSeg();
             return;
@@ -2152,6 +2410,34 @@ async function main(): Promise<void> {
             },
           });
           segMark("scan");
+          if (blindProductionAudit && blindPassMode === "source") {
+            const opportunityEvidence = coarseScan.opportunities.map(
+              (opportunity, index) =>
+                createMutableBlindOpportunityEvidence(
+                  opportunity,
+                  index + 1,
+                  PRODUCTION_ROUTE_ADAPTERS,
+                  false,
+                ),
+            );
+            const opportunityByCandidate = new Map(
+              coarseScan.opportunities.map((opportunity, index) => [
+                opportunity,
+                opportunityEvidence[index]!,
+              ]),
+            );
+            blindPassOpportunities = opportunityEvidence;
+            blindOpportunityByCandidate = opportunityByCandidate;
+          }
+          markBlindStage(
+            "enumeration_done",
+            coarseScan.outcome === "ran" ? "pass" : "fail",
+            currentBlindSemanticEvidence(),
+          );
+          if (blindProductionAudit && blindPassMode === "source") {
+            blindPassSelectionProvenance =
+              coarseScan.selectionProvenance;
+          }
           if (passBudgetExceeded("refine")) {
             logSeg();
             return;
@@ -2170,6 +2456,18 @@ async function main(): Promise<void> {
             cfg.maxCandidates,
             refinementDeadlineAtMs,
             cfg.pricedTokens,
+            blindProductionAudit && blindPassMode === "source"
+              ? (diagnostic) => {
+                  const evidence =
+                    blindPassOpportunities[diagnostic.index];
+                  if (!evidence) return;
+                  evidence.refined = diagnostic.status === "positive";
+                  if (diagnostic.status !== "positive") {
+                    evidence.ev.reason =
+                      `exact_refine_${diagnostic.status}`;
+                  }
+                }
+              : undefined,
           );
           const scan = { ...coarseScan, opportunities: refinement.opportunities };
           segMark("refine");
@@ -2179,6 +2477,11 @@ async function main(): Promise<void> {
               `failed=${refinement.failed} deadline=${refinement.deadlineHit ? 1 : 0}`,
           );
           if (refinement.deadlineHit || passBudgetExceeded("refine")) {
+            markBlindStage(
+              "exact_refine_done",
+              "fail",
+              currentBlindSemanticEvidence(),
+            );
             if (refinement.deadlineHit) {
               console.log(
                 `[searcher/blockscan] block=${blockNumber} skip solve ` +
@@ -2188,6 +2491,11 @@ async function main(): Promise<void> {
             logSeg();
             return;
           }
+          markBlindStage(
+            "exact_refine_done",
+            "pass",
+            currentBlindSemanticEvidence(),
+          );
           let quotePositive = 0;
           let bestNet: bigint | null = null;
           const blacklistSkipLogged = new Set<string>();
@@ -2221,6 +2529,7 @@ async function main(): Promise<void> {
             if (passBudgetExceeded("solve")) break;
             const ring = formatBlockScanRing(opp);
             const protoRing = opp.seedEdges.some((edge) => edge.slotKind === "protocol");
+            const blindAudit = blindOpportunityByCandidate.get(opp);
             try {
               blockScanPlannerForPass.setGraph(opp.seedEdges);
               let plans: CandidatePlan[];
@@ -2234,12 +2543,14 @@ async function main(): Promise<void> {
                 solvePlannerMs += Date.now() - plannerStarted;
               }
               if (plans.length === 0) {
+                if (blindAudit) blindAudit.ev.reason = "no_plans";
                 console.log(
                   `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null error=no_plans ` +
                   `standing=${opp.leavesStandingPosition} protoRing=${protoRing}`,
                 );
                 continue;
               }
+              if (blindAudit) blindAudit.planCount = plans.length;
               if (passBudgetExceeded("solve")) break;
               plannedSolves.push({
                 opp,
@@ -2247,8 +2558,13 @@ async function main(): Promise<void> {
                 protoRing,
                 plan: plans[0],
                 planCount: plans.length,
+                blindAudit,
               });
             } catch (err) {
+              if (blindAudit) {
+                blindAudit.ev.reason =
+                  `planner_error:${blockScanErrorMessage(err)}`;
+              }
               console.log(
                 `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null ` +
                   `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
@@ -2261,7 +2577,7 @@ async function main(): Promise<void> {
           let stopSolves = false;
           let submitQueue: Promise<void> = Promise.resolve();
           const solvePlanned = async (planned: PlannedBlockScanSolve): Promise<void> => {
-            const { opp, ring, protoRing, plan, planCount } = planned;
+            const { opp, ring, protoRing, plan, planCount, blindAudit } = planned;
             try {
               let solved: ResolvedPlan;
               const solverStarted = Date.now();
@@ -2303,7 +2619,7 @@ async function main(): Promise<void> {
                   }
                   const submitStarted = Date.now();
                   try {
-                    await maybeSubmitBlockScanAtomic({
+                    const atomicAudit = await maybeSubmitBlockScanAtomic({
                       config,
                       provider,
                       simulator: blockScanSimulatorForPass,
@@ -2323,14 +2639,25 @@ async function main(): Promise<void> {
                       },
                       profitTokenValuation,
                       sourceBlockHash,
+                      blindAudit: blindProductionAudit,
                     });
+                    if (blindAudit && atomicAudit) {
+                      blindAudit.simulation = { ...atomicAudit.simulation };
+                      blindAudit.ev = { ...atomicAudit.ev };
+                    }
                   } finally {
                     solveSubmitMs += Date.now() - submitStarted;
                   }
                 });
                 await submitQueue;
+              } else if (blindAudit) {
+                blindAudit.ev.reason = "non_positive_solved_quote";
               }
             } catch (err) {
+              if (blindAudit) {
+                blindAudit.ev.reason =
+                  `solver_error:${blockScanErrorMessage(err)}`;
+              }
               console.log(
                 `[searcher/blockscan] block=${blockNumber} solve ring=${ring} net=null ` +
                   `error=${blockScanErrorMessage(err)} standing=${opp.leavesStandingPosition} ` +
@@ -2354,6 +2681,33 @@ async function main(): Promise<void> {
           await Promise.all(Array.from({ length: workerCount }, () => solveWorker()));
           await submitQueue.catch(() => {});
           segMark("solve");
+          markBlindStage(
+            "planner_solver_done",
+            stopSolves || Date.now() > passDeadlineAtMs ? "fail" : "pass",
+            currentBlindSemanticEvidence(),
+          );
+          if (blindProductionAudit && blindPassMode === "source") {
+            const simulated = blindPassOpportunities.filter(
+              (opportunity) => opportunity.simulation.executed,
+            ).length;
+            const evEvaluated = blindPassOpportunities.filter(
+              (opportunity) => opportunity.ev.executionStatus === "pass",
+            ).length;
+            markBlindStage(
+              "final_sim_done",
+              quotePositive > 0 && simulated === quotePositive
+                ? "pass"
+                : "fail",
+              currentBlindSemanticEvidence(),
+            );
+            markBlindStage(
+              "ev_decision",
+              quotePositive > 0 && evEvaluated === quotePositive
+                ? "pass"
+                : "fail",
+              currentBlindSemanticEvidence(),
+            );
+          }
           console.log(
             `[searcher/blockscan] block=${blockNumber} scannedPairs=${scan.scannedPairs} ` +
               `candidates=${scan.opportunities.length} quotePositive=${quotePositive} ` +
@@ -2363,16 +2717,256 @@ async function main(): Promise<void> {
           );
           logSeg();
         } catch (err) {
+          blindPassError =
+            err instanceof Error ? err : new Error(String(err));
           console.log(
             `[searcher/blockscan] block=${blockNumber} scan error: ` +
               `${err instanceof Error ? err.message : String(err)}`,
           );
         } finally {
           blockScanBusy = false;
+          const completion: BlindBaselinePassCompletion = {
+            stateReady: blindPassStateReady,
+            error: blindPassError,
+          };
+          if (
+            blindProductionAudit &&
+            blindPassMode === "source" &&
+            blindPrepareControl &&
+            blindPreparedArtifacts &&
+            blindSourceControl
+          ) {
+            try {
+              const sourceDeltaArtifact = createBlindBaselineSourceDelta({
+                source: blindSourceControl.source,
+                edges,
+                base: blindPreparedArtifacts,
+                registry: PRODUCTION_ROUTE_ADAPTERS,
+              });
+              const semanticEvidence =
+                blindLastStableSemanticEvidence ??
+                blindProductionDeepSeal(
+                  currentBlindSemanticEvidence(),
+                );
+              blindPassStages = completeBlindBaselineStageEvidence({
+                stages: blindPassStages,
+                cumulativeMs: Math.max(
+                  0,
+                  Date.now() - blindPassStartedAt,
+                ),
+                semanticEvidence,
+              });
+              const record = createBlindBaselinePassRecord({
+                source: blindSourceControl,
+                base: blindPrepareControl,
+                preparedArtifacts: blindPreparedArtifacts,
+                sourceDeltaArtifact,
+                semanticEvidence,
+                stages: blindPassStages,
+                selectionProvenance: blindPassSelectionProvenance,
+                dynamicCacheGeneration: blindDynamicCacheGeneration,
+                dynamicCacheReset: blindDynamicCacheReset,
+                // The legacy main branch does not apply a per-head topology
+                // delta. Preserve that limitation instead of manufacturing
+                // a source-N graph for the strict comparator.
+                sourceDeltaApplied: false,
+                freshReadCount: blindPassFreshReadCount,
+                batchCount: blindPassBatchCount,
+                incompleteFamilyIds:
+                  blindLastStableIncompleteFamilyIds,
+              });
+              process.stdout.write(
+                `${BLIND_PRODUCTION_RAW_PREFIX}` +
+                  `${blindProductionCanonicalJson(record)}\n`,
+              );
+            } catch (error) {
+              completion.error =
+                error instanceof Error ? error : new Error(String(error));
+              console.error(
+                `[searcher/blind-audit] raw record failed: ` +
+                  `${completion.error.message}`,
+              );
+            }
+          }
+          const waiter = blindPassWaiter;
+          blindPassWaiter = null;
+          if (blindPassMode === "source") {
+            blindSourceControl = null;
+            blindPrepareControl = null;
+            blindPreparedArtifacts = null;
+            blindLastStableSemanticEvidence = null;
+          }
+          blindPassMode = null;
+          if (waiter) waiter.resolve(completion);
         }
       })();
     });
   };
+  const runBlindScheduledPass = (
+    blockNumber: number,
+    mode: "prepare" | "source",
+  ): Promise<BlindBaselinePassCompletion> => {
+    if (!blindProductionAudit) {
+      throw new Error("blind baseline pass requested with audit mode disabled");
+    }
+    if (blockScanBusy || blindPassWaiter || blindPassMode !== null) {
+      throw new Error("blind baseline pass overlaps another block-scan pass");
+    }
+    blindPassMode = mode;
+    blindPassStateReady = false;
+    blindPassError = null;
+    blindPassPricingCoverage = null;
+    blindPassFreshReadCount = 0;
+    blindPassBatchCount = 0;
+    return new Promise<BlindBaselinePassCompletion>((resolve) => {
+      blindPassWaiter = { resolve };
+      scheduleBlockScan(blockNumber);
+    });
+  };
+  if (blindProductionAudit) {
+    if (
+      !blindStaticArtifacts ||
+      !blockScanGraph ||
+      !blockScanCache ||
+      !blockScanUpdater
+    ) {
+      throw new Error("blind production audit block-scan bootstrap incomplete");
+    }
+    installBlindBaselineControlInput({
+      stream: process.stdin,
+      prepare: async (control) => {
+        if (
+          blindPrepareControl ||
+          blindPreparedArtifacts ||
+          blindSourceControl ||
+          blindPassWaiter ||
+          blindPassMode !== null ||
+          blockScanBusy
+        ) {
+          throw new Error("blind production prepare overlaps an active attempt");
+        }
+        await assertBlindProductionAnchor(provider, control.base);
+        blockScanFullWarmSession = null;
+        blockScanForceFullWarm = true;
+        blockScanCache!.clearBlockScanWarmProgress();
+        blockScanUpdater!.clearStaticMetadata();
+        blockScanV3Meta.clear();
+        blockScanDecimals.clear();
+        blockScanCurveRetryPools.clear();
+        blockScanRejectBlacklist.entries.clear();
+        blockScanWarmCoordinator = new BlockScanWarmCoordinator(
+          provider,
+          blockScanCache!,
+          blockScanUpdater!,
+          blockScanFullRewarmBlocks,
+        );
+        blindDynamicCacheGeneration++;
+        blindDynamicCacheReset = true;
+        blindPrepareControl = control;
+        const prepareBudgetRaw = Number(
+          process.env.SEARCHER_BLIND_PREPARE_BUDGET_MS ?? "900000",
+        );
+        const prepareBudgetMs = Number.isFinite(prepareBudgetRaw)
+          ? Math.max(1, Math.floor(prepareBudgetRaw))
+          : 900_000;
+        const deadlineAtMs = Date.now() + prepareBudgetMs;
+        try {
+          for (;;) {
+            const completion = await runBlindScheduledPass(
+              control.base.number,
+              "prepare",
+            );
+            if (completion.error) throw completion.error;
+            if (completion.stateReady) break;
+            if (Date.now() >= deadlineAtMs) {
+              throw new Error(
+                `blind production prepare did not reach state_ready ` +
+                  `within ${prepareBudgetMs}ms`,
+              );
+            }
+          }
+          const prepared = createBlindBaselinePreparedArtifacts({
+            base: control.base,
+            edges: blockScanGraph!,
+            resolvedConfig: blindStaticArtifacts.resolvedConfig,
+            universe: blindStaticArtifacts.universe,
+            activeFamilyManifest:
+              blindStaticArtifacts.activeFamilyManifest,
+            registry: PRODUCTION_ROUTE_ADAPTERS,
+          });
+          blindPreparedArtifacts = prepared;
+          process.stdout.write(
+            `${BLIND_PRODUCTION_READY_PREFIX}` +
+              `${blindProductionCanonicalJson({
+                type: "ready",
+                profile: control.profile,
+                attemptNonce: control.attemptNonce,
+                base: control.base,
+                artifacts: prepared.receipts,
+                artifactDocuments: prepared.documents,
+              })}\n`,
+          );
+        } catch (error) {
+          blindPrepareControl = null;
+          blindPreparedArtifacts = null;
+          blindPassMode = null;
+          throw error;
+        }
+      },
+      sourceHead: async (control) => {
+        const prepared = blindPreparedArtifacts;
+        const prepare = blindPrepareControl;
+        if (
+          !prepared ||
+          !prepare ||
+          prepare.attemptNonce !== control.attemptNonce
+        ) {
+          throw new Error("blind production source has no matching prepare");
+        }
+        if (
+          blindSourceControl ||
+          blindPassWaiter ||
+          blindPassMode !== null ||
+          blockScanBusy
+        ) {
+          throw new Error("blind production source overlaps an active pass");
+        }
+        // The clock begins as soon as the opaque source-head control crosses
+        // the production-process boundary, before any source-state assertion.
+        blindPassStartedAt = Date.now();
+        blindPassStages = [];
+        blindPassPricingCoverage = null;
+        blindPassOpportunities = [];
+        blindPassSelectionProvenance =
+          createBlindBaselineUnrunSelectionProvenance(
+            blockScanRefineCandidates,
+          );
+        blindOpportunityByCandidate = new Map();
+        blindLastStableSemanticEvidence = blindProductionDeepSeal(
+          createBlindBaselineSemanticEvidence({
+            graph: blockScanGraph!,
+            pricingCoverage: {
+              expectedStateKeys: [],
+              resolvedStateKeys: [],
+              expectedPricedEdgeIds: [],
+              resolvedPricedEdgeIds: [],
+              incompleteFamilyIds: ["legacy-production"],
+            },
+            opportunities: [],
+          }),
+        );
+        blindLastStableIncompleteFamilyIds =
+          Object.freeze(["legacy-production"]);
+        blindSourceControl = control;
+        await assertBlindProductionAnchor(provider, control.source);
+        const completion = await runBlindScheduledPass(
+          control.source.number,
+          "source",
+        );
+        if (completion.error) throw completion.error;
+      },
+    });
+  }
   let stateUpdating = false;
   let pendingStateUpdateBlock: number | null = null;
   const runStateUpdate = (blockNumber: number, reason: "block" | "pending"): void => {
@@ -2408,9 +3002,9 @@ async function main(): Promise<void> {
         }
       });
   };
-  if (config.stateUpdaterEnabled) {
+  if (!blindProductionAudit && config.stateUpdaterEnabled) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
-  } else if (enableBlockScan) {
+  } else if (!blindProductionAudit && enableBlockScan) {
     provider.on("block", (blockNumber: number) => scheduleBlockScan(blockNumber));
   }
 
@@ -2427,9 +3021,9 @@ async function main(): Promise<void> {
     console.log("\n[searcher/live] shutting down");
     logStageCounters(counters);
     cancelScheduledWarm();
-    clearInterval(refreshTimer);
-    clearInterval(protocolDiscoveryTimer);
-    clearInterval(flashLiquidityTimer);
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (protocolDiscoveryTimer) clearInterval(protocolDiscoveryTimer);
+    if (flashLiquidityTimer) clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();
     blockScanState?.stop();
@@ -2522,9 +3116,9 @@ async function main(): Promise<void> {
   } finally {
     logStageCounters(counters);
     cancelScheduledWarm();
-    clearInterval(refreshTimer);
-    clearInterval(protocolDiscoveryTimer);
-    clearInterval(flashLiquidityTimer);
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (protocolDiscoveryTimer) clearInterval(protocolDiscoveryTimer);
+    if (flashLiquidityTimer) clearInterval(flashLiquidityTimer);
     provider.removeAllListeners("block");
     state.stop();
     blockScanState?.stop();
@@ -3710,6 +4304,51 @@ async function readUncachedLatestBlock(
   };
 }
 
+async function assertBlindProductionAnchor(
+  provider: ethers.JsonRpcProvider,
+  expected: BlindProductionBlockAnchor,
+): Promise<void> {
+  const block = await provider.send(
+    "eth_getBlockByNumber",
+    ["latest", false],
+  ) as {
+    number?: unknown;
+    hash?: unknown;
+    stateRoot?: unknown;
+  } | null;
+  if (
+    typeof block?.number !== "string" ||
+    typeof block.hash !== "string" ||
+    typeof block.stateRoot !== "string" ||
+    !ethers.isHexString(block.hash, 32) ||
+    !ethers.isHexString(block.stateRoot, 32)
+  ) {
+    throw new Error("blind production latest block anchor is incomplete");
+  }
+  const actual: BlindProductionBlockAnchor = {
+    number: ethers.toNumber(block.number),
+    hash: block.hash.toLowerCase(),
+    stateRoot: block.stateRoot.toLowerCase(),
+  };
+  const expectedHash = expected.hash.startsWith("0x")
+    ? expected.hash.toLowerCase()
+    : `0x${expected.hash.toLowerCase()}`;
+  const expectedStateRoot = expected.stateRoot.startsWith("0x")
+    ? expected.stateRoot.toLowerCase()
+    : `0x${expected.stateRoot.toLowerCase()}`;
+  if (
+    actual.number !== expected.number ||
+    actual.hash !== expectedHash ||
+    actual.stateRoot !== expectedStateRoot
+  ) {
+    throw new Error(
+      `blind production anchor mismatch ` +
+        `expected=${expected.number}/${expectedHash}/${expectedStateRoot} ` +
+        `actual=${actual.number}/${actual.hash}/${actual.stateRoot}`,
+    );
+  }
+}
+
 async function maybeSubmitBlockScanAtomic(params: {
   config: LiveConfig;
   provider: ethers.JsonRpcProvider;
@@ -3730,7 +4369,8 @@ async function maybeSubmitBlockScanAtomic(params: {
     strategy_view_version: string;
     blockscan_view_hash: string;
   };
-}): Promise<void> {
+  blindAudit?: boolean;
+}): Promise<BlockScanAtomicAudit | undefined> {
   const {
     config,
     provider,
@@ -3748,7 +4388,30 @@ async function maybeSubmitBlockScanAtomic(params: {
     profitTokenValuation,
     sourceBlockHash,
     strategyVersions,
+    blindAudit = false,
   } = params;
+  let simulation: BlindProductionOpportunityEvidence["simulation"] = {
+    executed: false,
+    success: false,
+    profitRaw: "0",
+    gasUsed: "0",
+    calldataSha256:
+      "e3b0c44298fc1c149afbf4c8996fb924" +
+      "27ae41e4649b934ca495991b7852b855",
+    standingPosition: opp.leavesStandingPosition,
+  };
+  let evEvaluated = false;
+  const auditResult = (
+    executionStatus: "pass" | "not_run",
+    decision: "allow" | "reject",
+    reason: string,
+  ): BlockScanAtomicAudit | undefined =>
+    blindAudit
+      ? {
+          simulation,
+          ev: { executionStatus, decision, reason },
+        }
+      : undefined;
   const route = resolvedRouteSummary(resolved.root);
   const opportunityId = makeBlockScanOpportunityId({
     sourceBlock,
@@ -3788,7 +4451,7 @@ async function maybeSubmitBlockScanAtomic(params: {
         `net=${resolved.netProfit} reason=${reason} protoRing=${protoRing}`,
     );
     drop(sourceBlock + 1, "submit_gate", "blockscan_submit_disabled", reason);
-    return;
+    return auditResult("not_run", "reject", "blockscan_submit_disabled");
   }
 
   if (!shouldRunFinalVerify(
@@ -3801,7 +4464,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       `${config.finalVerifyFloorBps}bps`;
     console.log(`[searcher/blockscan] block=${sourceBlock} final verify skipped ring=${ring}: ${error}`);
     drop(sourceBlock + 1, "final_verify", "below_final_verify_floor", error);
-    return;
+    return auditResult("not_run", "reject", "below_final_verify_floor");
   }
 
   let targetBlock = sourceBlock + 1;
@@ -3819,9 +4482,19 @@ async function maybeSubmitBlockScanAtomic(params: {
         `forkHash=${sourceBlockHash} canonicalHash=${canonicalSourceBlockHash ?? "missing"}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} stale source ring=${ring}: ${error}`);
       drop(targetBlock, "final_verify", "blockscan_stale_state", error);
-      return;
+      return auditResult("not_run", "reject", "blockscan_stale_state");
     }
     const sim = await simulator.simulate(resolved);
+    if (blindAudit) {
+      simulation = {
+        executed: true,
+        success: sim.success,
+        profitRaw: sim.netProfit.toString(),
+        gasUsed: sim.gasUsed.toString(),
+        calldataSha256: blindProductionCalldataSha256(sim.calldata),
+        standingPosition: opp.leavesStandingPosition,
+      };
+    }
     emitEvent({
       type: "simulation_result",
       ...eventBase(targetBlock),
@@ -3840,14 +4513,14 @@ async function maybeSubmitBlockScanAtomic(params: {
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,
       );
       drop(targetBlock, "final_verify", "sim_revert", error);
-      return;
+      return auditResult("not_run", "reject", "sim_revert");
     }
     clearBlockScanRejectStrikes(rejectBlacklist, opp);
     if (sim.netProfit <= 0n) {
       const error = `non-positive final profit ${sim.netProfit}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} final verify failed ring=${ring}: ${error}`);
       drop(targetBlock, "final_verify", "final_verify_failed", error);
-      return;
+      return auditResult("not_run", "reject", "final_verify_failed");
     }
 
     if (
@@ -3859,7 +4532,7 @@ async function maybeSubmitBlockScanAtomic(params: {
         `flash ${resolved.flashAmount} route=${route}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} reject phantom ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "phantom_profit", error);
-      return;
+      return auditResult("not_run", "reject", "phantom_profit");
     }
 
     const ev = await evaluateEv(
@@ -3870,6 +4543,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       config,
       profitTokenValuation,
     );
+    evEvaluated = true;
     const {
       valuationAvailable,
       expectedProfitEth,
@@ -3883,7 +4557,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       const error = `unpriceable profit token ${resolved.profitToken}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} skip unpriceable ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "unpriceable_profit_token", error);
-      return;
+      return auditResult("pass", "reject", "unpriceable_profit_token");
     }
 
     const creditLiveMarkerPath =
@@ -3893,13 +4567,19 @@ async function maybeSubmitBlockScanAtomic(params: {
       creditLiveMarkerPath,
     );
     const containsStandingPosition = standingGuard.containsStandingPosition;
+    if (blindAudit) {
+      simulation = {
+        ...simulation,
+        standingPosition: containsStandingPosition,
+      };
+    }
     if (!standingGuard.allowed) {
       const error = standingGuard.reason === "edge_taxonomy_inconsistent"
         ? "standing guard: edge taxonomy inconsistent"
         : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} reject standing-position ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", standingGuard.reason, error);
-      return;
+      return auditResult("pass", "reject", standingGuard.reason);
     }
 
     if (config.evGate) {
@@ -3910,7 +4590,7 @@ async function maybeSubmitBlockScanAtomic(params: {
           `token=${resolved.profitToken.slice(0, 10)})`;
         console.log(`[searcher/blockscan] block=${sourceBlock} skip below-EV ring=${ring}: ${error}`);
         drop(targetBlock, "submit_gate", "below_ev_gate", error);
-        return;
+        return auditResult("pass", "reject", "below_ev_gate");
       }
       console.log(
         `[searcher/blockscan] block=${sourceBlock} EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
@@ -3932,7 +4612,12 @@ async function maybeSubmitBlockScanAtomic(params: {
         `forkHash=${sourceBlockHash} canonicalHash=${submitHeadHash}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} stale before submit ring=${ring}: ${error}`);
       drop(targetBlock, "submit_gate", "blockscan_stale_state", error);
-      return;
+      return auditResult("pass", "reject", "blockscan_stale_state");
+    }
+
+    const allowReason = config.evGate ? "ev_gate_allow" : "ev_gate_disabled";
+    if (blindAudit) {
+      return auditResult("pass", "allow", allowReason);
     }
 
     const decision = submissionCoordinator.offer({
@@ -3948,7 +4633,7 @@ async function maybeSubmitBlockScanAtomic(params: {
           `reason=${decision.reason}`,
       );
       drop(targetBlock, "submit_gate", decision.reason);
-      return;
+      return auditResult("pass", "reject", decision.reason);
     }
 
     const results = await bundleRouter.submit({
@@ -3970,7 +4655,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       const error = results.find((r) => r.error)?.error ?? "missing backrun tx hash";
       console.log(`[searcher/blockscan] block=${sourceBlock} submit failed ring=${ring}: ${error}`);
       drop(targetBlock, "submit", "bundle_router_rejected", error);
-      return;
+      return auditResult("pass", "allow", allowReason);
     }
 
     console.log(
@@ -4002,10 +4687,16 @@ async function maybeSubmitBlockScanAtomic(params: {
         emit: emitEvent,
       });
     }
+    return auditResult("pass", "allow", allowReason);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     console.log(`[searcher/blockscan] block=${sourceBlock} submit error ring=${ring}: ${error}`);
     drop(targetBlock, "submit", "blockscan_submit_error", error);
+    return auditResult(
+      evEvaluated ? "pass" : "not_run",
+      "reject",
+      "blockscan_submit_error",
+    );
   }
 }
 

@@ -25,12 +25,22 @@ export interface BlockScanConfig {
 
 export interface ProtocolMid extends ExternalMidQuote {}
 
+export interface NaturalBlockScanSelectionProvenance {
+  readonly kind: "natural_coarse_ranked";
+  readonly selectionMode: "production";
+  readonly forcedSelectionCount: number;
+  readonly eligibleCandidateCount: number;
+  readonly selectedCandidateCount: number;
+  readonly maxCandidates: number;
+}
+
 export interface BlockScanOutcome {
   outcome: "ran" | "budget_exceeded";
   stateBlock: number | null;
   scannedPairs: number;
   swapTouchedPools: number;
   opportunities: BlockScanOpportunity[];
+  selectionProvenance: NaturalBlockScanSelectionProvenance;
   debug?: { skippedVenues: number };
 }
 
@@ -45,6 +55,25 @@ type VenueMid = RouteVenueMid;
 interface RankedOpportunity {
   opportunity: BlockScanOpportunity;
   rank: number;
+}
+
+export function naturalBlockScanSelectionProvenance<T>(input: {
+  readonly naturallyEnumerated: readonly T[];
+  readonly selected: readonly T[];
+  readonly maxCandidates: number;
+}): NaturalBlockScanSelectionProvenance {
+  const naturalEntries = new Set(input.naturallyEnumerated);
+  return Object.freeze({
+    kind: "natural_coarse_ranked",
+    selectionMode: "production",
+    forcedSelectionCount: input.selected.reduce(
+      (count, entry) => count + (naturalEntries.has(entry) ? 0 : 1),
+      0,
+    ),
+    eligibleCandidateCount: input.naturallyEnumerated.length,
+    selectedCandidateCount: input.selected.length,
+    maxCandidates: input.maxCandidates,
+  });
 }
 
 const Q96 = 1n << 96n;
@@ -78,12 +107,19 @@ export function detectBlockScanOpportunities(input: {
       seenRoutes.add(route);
       deduped.push(entry);
     }
+    const selected = deduped.slice(0, input.cfg.maxCandidates);
+    const opportunities = selected.map((entry) => entry.opportunity);
     return {
       outcome,
       stateBlock: input.sourceBlock,
       scannedPairs,
       swapTouchedPools: touched?.size ?? 0,
-      opportunities: deduped.slice(0, input.cfg.maxCandidates).map((entry) => entry.opportunity),
+      opportunities,
+      selectionProvenance: naturalBlockScanSelectionProvenance({
+        naturallyEnumerated: deduped,
+        selected,
+        maxCandidates: input.cfg.maxCandidates,
+      }),
       debug: { skippedVenues },
     };
   };
