@@ -57,6 +57,7 @@ const fluidDexLandedEvents = defineSwapLandedEvents({
 
 export const fluidDexSwapIface = new ethers.Interface([
   "function swapIn(bool swap0to1_, uint256 amountIn_, uint256 amountOutMin_, address to_) payable returns (uint256 amountOut_)",
+  "error FluidDexSwapResult(uint256 amountOut)",
 ]);
 
 const fluidDexIdentityIface = new ethers.Interface([
@@ -300,10 +301,12 @@ export const fluidDexBlockScanState =
       });
     },
     decodeQuote(_edge, data) {
-      if (!/^0x[0-9a-fA-F]{64,}$/.test(data)) {
-        throw new Error("fluid-dex current-N quote returned malformed data");
-      }
-      return BigInt(`0x${data.slice(2, 66)}`);
+      return decodeFluidDexQuoteResult(
+        data,
+        configuredFluidDexResolver() === null
+          ? "address-dead-revert"
+          : "resolver-return",
+      );
     },
     dependencies(group) {
       const resolver = configuredFluidDexResolver();
@@ -572,22 +575,16 @@ export async function quoteFluidDex(
   const swap0to1 = fluidDexSwap0To1(tokenIn, tokenOut, poolToken0, poolToken1);
   const resolver = configuredFluidDexResolver();
   if (resolver) {
-    try {
-      const result = await state.call({
-        to: resolver,
-        data: fluidDexResolverIface.encodeFunctionData("estimateSwapIn", [
-          pool,
-          swap0to1,
-          amountIn,
-          0n,
-        ]),
-      });
-      return BigInt(
-        fluidDexResolverIface.decodeFunctionResult("estimateSwapIn", result)[0],
-      );
-    } catch (error) {
-      if (isStateCallAbortedError(error)) throw error;
-    }
+    const result = await state.call({
+      to: resolver,
+      data: fluidDexResolverIface.encodeFunctionData("estimateSwapIn", [
+        pool,
+        swap0to1,
+        amountIn,
+        0n,
+      ]),
+    });
+    return decodeFluidDexQuoteResult(result, "resolver-return");
   }
   return quoteFluidDexViaPoolEstimate(state, pool, swap0to1, amountIn);
 }
@@ -616,9 +613,12 @@ async function quoteFluidDexViaPoolEstimate(
     FLUID_DEX_ADDRESS_DEAD,
   ]);
   try {
-    const result = await state.call({ to: pool, data });
-    return BigInt(fluidDexSwapIface.decodeFunctionResult("swapIn", result)[0]);
+    await state.call({ to: pool, data });
+    throw new Error(
+      "fluid-dex ADDRESS_DEAD estimate returned without FluidDexSwapResult",
+    );
   } catch (error) {
+    if (isStateCallAbortedError(error)) throw error;
     const decoded = decodeFluidDexEstimateRevert(extractRevertData(error));
     if (decoded !== null) return decoded;
     throw error;
@@ -645,19 +645,55 @@ function extractRevertData(error: unknown): string | null {
 }
 
 function decodeFluidDexEstimateRevert(data: string | null): bigint | null {
-  if (!data || data === "0x") return null;
+  if (!data) return null;
   try {
-    return BigInt(fluidDexSwapIface.decodeFunctionResult("swapIn", data)[0]);
-  } catch {
-    // ADDRESS_DEAD estimates are intentionally surfaced through revert data.
-  }
-  const raw = data.startsWith("0x") ? data.slice(2) : data;
-  if (raw.length < 64) return null;
-  try {
-    return BigInt(`0x${raw.slice(raw.length - 64)}`);
+    return decodeFluidDexQuoteResult(data, "address-dead-revert");
   } catch {
     return null;
   }
+}
+
+type FluidDexQuoteResultEncoding =
+  | "resolver-return"
+  | "address-dead-revert";
+
+/**
+ * Decode only the two quote shapes owned by Fluid DEX:
+ * - the resolver's ordinary ABI `uint256` return;
+ * - the pool's exact `FluidDexSwapResult(uint256)` custom error when
+ *   `swapIn(..., ADDRESS_DEAD)` is used.
+ *
+ * The exact lengths are deliberate. A generic revert payload (including a
+ * different custom error with a trailing uint256) is not quote evidence.
+ */
+function decodeFluidDexQuoteResult(
+  data: string,
+  encoding: FluidDexQuoteResultEncoding,
+): bigint {
+  if (encoding === "resolver-return") {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(data)) {
+      throw new Error("fluid-dex resolver quote returned malformed ABI data");
+    }
+    return BigInt(
+      fluidDexResolverIface.decodeFunctionResult("estimateSwapIn", data)[0],
+    );
+  }
+
+  if (!/^0x[0-9a-fA-F]{72}$/.test(data)) {
+    throw new Error(
+      "fluid-dex ADDRESS_DEAD estimate returned malformed revert data",
+    );
+  }
+  const expectedSelector =
+    fluidDexSwapIface.getError("FluidDexSwapResult")!.selector.toLowerCase();
+  if (data.slice(0, 10).toLowerCase() !== expectedSelector) {
+    throw new Error(
+      "fluid-dex ADDRESS_DEAD estimate returned an unknown custom error",
+    );
+  }
+  return BigInt(
+    fluidDexSwapIface.decodeErrorResult("FluidDexSwapResult", data)[0],
+  );
 }
 
 async function readFluidDexConstants(

@@ -36,8 +36,10 @@ import {
 } from "../venues/swaps/dodo-v2.js";
 import {
   fluidDexBlockScanState,
+  fluidDexResolverIface,
   fluidDexSwapIface,
   fluidDexAdapter,
+  quoteFluidDex,
 } from "../venues/swaps/fluid-dex.js";
 import {
   univ2BlockScanState,
@@ -506,21 +508,187 @@ async function runDodoV2(): Promise<void> {
 
 async function runFluidDex(): Promise<void> {
   const previous = process.env.FLUID_DEX_RESOLVER;
-  delete process.env.FLUID_DEX_RESOLVER;
+  const resolver = "0x4444444444444444444444444444444444444444";
+  const edges = twoTokenEdges("fluid-dex-swap");
+  const quoteForDirection = (swap0to1: boolean): bigint =>
+    swap0to1 ? 2n * UNIT : UNIT / 2n;
+  const unknownError = new ethers.Interface([
+    "error UnknownFluidError(uint256 value)",
+  ]);
   try {
-    const edges = twoTokenEdges("fluid-dex-swap");
-    const result = await execute(fluidDexAdapter.id, fluidDexBlockScanState, edges, (read) => {
-      if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
-        return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
-      }
-      const decoded = fluidDexSwapIface.decodeFunctionData("swapIn", read.data);
-      assert.equal(BigInt(decoded[1]), UNIT);
-      return fluidDexSwapIface.encodeFunctionResult(
-        "swapIn",
-        [Boolean(decoded[0]) ? 2n * UNIT : UNIT / 2n],
-      );
-    });
-    assert.equal(result.dependentReads.length, 0);
+    process.env.FLUID_DEX_RESOLVER = resolver;
+    const resolverResult = await execute(
+      fluidDexAdapter.id,
+      fluidDexBlockScanState,
+      edges,
+      (read) => {
+        if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+          return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+        }
+        const decoded = fluidDexResolverIface.decodeFunctionData(
+          "estimateSwapIn",
+          read.data,
+        );
+        assert.equal(BigInt(decoded[2]), UNIT);
+        return fluidDexResolverIface.encodeFunctionResult(
+          "estimateSwapIn",
+          [quoteForDirection(Boolean(decoded[1]))],
+        );
+      },
+    );
+    assert.equal(resolverResult.mids.get(blockScanEdgeKey(edges[0]))?.mid, 2);
+    assert.equal(resolverResult.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.5);
+    assert(
+      resolverResult.initialReads.every(
+        (read) =>
+          read.to.toLowerCase() === resolver.toLowerCase() &&
+          read.acceptRevertData !== true,
+      ),
+      "Fluid resolver reads must require ordinary successful ABI returns",
+    );
+
+    delete process.env.FLUID_DEX_RESOLVER;
+    const estimateResult = await execute(
+      fluidDexAdapter.id,
+      fluidDexBlockScanState,
+      edges,
+      (read) => {
+        if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+          return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+        }
+        const decoded = fluidDexSwapIface.decodeFunctionData("swapIn", read.data);
+        assert.equal(BigInt(decoded[1]), UNIT);
+        return fluidDexSwapIface.encodeErrorResult(
+          "FluidDexSwapResult",
+          [quoteForDirection(Boolean(decoded[0]))],
+        );
+      },
+      { recordProductionFixture: false },
+    );
+    assert.equal(estimateResult.mids.get(blockScanEdgeKey(edges[0]))?.mid, 2);
+    assert.equal(estimateResult.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.5);
+    assert(
+      estimateResult.initialReads.every(
+        (read) =>
+          read.to.toLowerCase() === POOL.toLowerCase() &&
+          read.acceptRevertData === true,
+      ),
+      "Fluid ADDRESS_DEAD reads must explicitly accept proven revert data",
+    );
+
+    await assert.rejects(
+      execute(
+        fluidDexAdapter.id,
+        fluidDexBlockScanState,
+        edges,
+        (read) => {
+          if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+            return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+          }
+          return fluidDexSwapIface.encodeFunctionResult("swapIn", [UNIT]);
+        },
+        { recordProductionFixture: false },
+      ),
+      /malformed revert data/,
+      "a generic 32-byte word is not a Fluid ADDRESS_DEAD estimate",
+    );
+    await assert.rejects(
+      execute(
+        fluidDexAdapter.id,
+        fluidDexBlockScanState,
+        edges,
+        (read) => {
+          if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+            return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+          }
+          return unknownError.encodeErrorResult("UnknownFluidError", [UNIT]);
+        },
+        { recordProductionFixture: false },
+      ),
+      /unknown custom error/,
+      "a same-width custom error is not Fluid quote evidence",
+    );
+    await assert.rejects(
+      execute(
+        fluidDexAdapter.id,
+        fluidDexBlockScanState,
+        edges,
+        (read) => {
+          if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
+            return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+          }
+          return "0x1234";
+        },
+        { recordProductionFixture: false },
+      ),
+      /malformed revert data/,
+    );
+
+    process.env.FLUID_DEX_RESOLVER = resolver;
+    const exactResolverQuote = await quoteFluidDex(
+      {
+        call: async ({ to, data }) => {
+          assert.equal(to.toLowerCase(), resolver.toLowerCase());
+          const decoded = fluidDexResolverIface.decodeFunctionData(
+            "estimateSwapIn",
+            data,
+          );
+          return fluidDexResolverIface.encodeFunctionResult(
+            "estimateSwapIn",
+            [quoteForDirection(Boolean(decoded[1]))],
+          );
+        },
+      },
+      POOL,
+      TOKEN0,
+      TOKEN1,
+      UNIT,
+      TOKEN0,
+      TOKEN1,
+    );
+    assert.equal(exactResolverQuote, 2n * UNIT);
+
+    delete process.env.FLUID_DEX_RESOLVER;
+    const exactEstimateQuote = await quoteFluidDex(
+      {
+        call: async ({ data }) => {
+          const decoded = fluidDexSwapIface.decodeFunctionData("swapIn", data);
+          throw Object.assign(new Error("execution reverted"), {
+            data: fluidDexSwapIface.encodeErrorResult(
+              "FluidDexSwapResult",
+              [quoteForDirection(Boolean(decoded[0]))],
+            ),
+          });
+        },
+      },
+      POOL,
+      TOKEN1,
+      TOKEN0,
+      UNIT,
+      TOKEN0,
+      TOKEN1,
+    );
+    assert.equal(exactEstimateQuote, UNIT / 2n);
+
+    await assert.rejects(
+      quoteFluidDex(
+        {
+          call: async () => {
+            throw Object.assign(new Error("execution reverted"), {
+              data: unknownError.encodeErrorResult("UnknownFluidError", [UNIT]),
+            });
+          },
+        },
+        POOL,
+        TOKEN0,
+        TOKEN1,
+        UNIT,
+        TOKEN0,
+        TOKEN1,
+      ),
+      /execution reverted/,
+      "unknown custom reverts must remain unresolved in exact quoting",
+    );
   } finally {
     if (previous === undefined) delete process.env.FLUID_DEX_RESOLVER;
     else process.env.FLUID_DEX_RESOLVER = previous;
