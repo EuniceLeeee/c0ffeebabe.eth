@@ -2,13 +2,18 @@ import {
   blindCompatibilityActiveFamilyManifestPayload,
   blindCompatibilityCanonicalEdgeId,
   blindCompatibilityGraphArtifactPayload,
+  blindCompatibilityPoolIdentity,
   blindCompatibilityPricingCoverage,
   blindCompatibilityRouteStep,
 } from "../blind-production-compatibility.js";
 import {
+  blindProductionAuditHash,
   blindProductionCanonicalJson,
 } from "../blind-production-audit.js";
-import type { TokenEdge } from "../planner/token-graph.js";
+import type {
+  PoolEntry,
+  TokenEdge,
+} from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
   createVerifiedGraphView,
@@ -123,6 +128,53 @@ function main(): void {
   assert(
     manifest.registryFingerprint === T1_REGISTRY_FINGERPRINT,
     "challenger family manifest is byte-semantic compatible with T1",
+  );
+
+  const richerPool = {
+    address: POOL,
+    adapter: "erc4626",
+    fixedTokenIn: TOKEN_A,
+    fixedTokenOut: TOKEN_B,
+    discoveryOwnerAdapterId: "protocol:erc4626",
+    topologyRetained: true,
+    verifiedRoutes: [{
+      edgeAdapterId: "erc4626-deposit",
+      tokenIn: TOKEN_A,
+      tokenOut: TOKEN_B,
+      slotKind: "protocol",
+      protocolAction: "convert",
+      poolToken0: TOKEN_A,
+      poolToken1: TOKEN_B,
+    }],
+  } satisfies PoolEntry & { readonly topologyRetained: true };
+  const projectedPool = blindCompatibilityPoolIdentity(richerPool);
+  assert(
+    blindProductionCanonicalJson(projectedPool) ===
+      blindProductionCanonicalJson({
+        adapter: "erc4626",
+        address: POOL,
+        currency0: null,
+        currency1: null,
+        fixedTokenIn: TOKEN_A,
+        fixedTokenOut: TOKEN_B,
+        receiptEmitters: [],
+        token0: null,
+        token1: null,
+        underlyingCoins: [],
+        verifiedRoutes: [{
+          edgeAdapterId: "erc4626-deposit",
+          protocolAction: "convert",
+          slotKind: "protocol",
+          tokenIn: TOKEN_A,
+          tokenOut: TOKEN_B,
+        }],
+      }),
+    "post-T1 discovery and execution-order fields stay out of the frozen universe vocabulary",
+  );
+  assert(
+    blindProductionAuditHash([projectedPool]) ===
+      "e1a809f854e5d4a973c8765cf75052f65e87312f9571671f506ee0043ef22436",
+    "challenger universe content hash matches the independently frozen T1 producer",
   );
 
   console.log("blind production T1 compatibility tests passed");

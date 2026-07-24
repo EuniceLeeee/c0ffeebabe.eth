@@ -1,4 +1,7 @@
-import type { TokenEdge } from "./planner/token-graph.js";
+import type {
+  PoolEntry,
+  TokenEdge,
+} from "./planner/token-graph.js";
 import {
   blindProductionAuditHash,
   type BlindProductionOpportunityEvidence,
@@ -145,6 +148,57 @@ export function blindCompatibilityCanonicalEdgeId(edge: TokenEdge): string {
         }
       : null,
   })}`;
+}
+
+/**
+ * Project the richer family-line pool row into the exact PoolEntry vocabulary
+ * frozen by T1. Production keeps discovery ownership, retained-topology and
+ * execution-order metadata; the trusted cross-commit evidence must not treat
+ * those post-T1 fields as a semantic universe change.
+ */
+export function blindCompatibilityPoolIdentity(pool: PoolEntry): unknown {
+  const legacyUniverseFields = pool as PoolEntry & {
+    readonly swapCount30d?: number;
+    readonly lastSwapBlock?: number;
+    readonly source?: string;
+  };
+  return normalizeBlindArtifactValue({
+    address: pool.address.toLowerCase(),
+    adapter: pool.adapter,
+    receiptEmitters:
+      pool.receiptEmitters?.map((address) => address.toLowerCase()) ?? [],
+    venueId: pool.venueId,
+    factory: pool.factory,
+    identitySource: pool.identitySource,
+    token0: pool.token0?.toLowerCase() ?? null,
+    token1: pool.token1?.toLowerCase() ?? null,
+    underlyingCoins:
+      pool.underlyingCoins?.map((address) => address.toLowerCase()) ?? [],
+    poolId: pool.poolId,
+    currency0: pool.currency0?.toLowerCase() ?? null,
+    currency1: pool.currency1?.toLowerCase() ?? null,
+    fee: pool.fee,
+    tickSpacing: pool.tickSpacing,
+    hooks: pool.hooks,
+    fixedTokenIn: pool.fixedTokenIn?.toLowerCase() ?? null,
+    fixedTokenOut: pool.fixedTokenOut?.toLowerCase() ?? null,
+    fixedSlotKind: pool.fixedSlotKind,
+    fixedProtocolAction: pool.fixedProtocolAction,
+    nonStandardRedeem: pool.nonStandardRedeem,
+    redeemTokenOut: pool.redeemTokenOut,
+    score: pool.score,
+    logicalInstanceId: pool.logicalInstanceId,
+    verifiedRoutes: pool.verifiedRoutes?.map((route) => ({
+      edgeAdapterId: route.edgeAdapterId,
+      tokenIn: route.tokenIn,
+      tokenOut: route.tokenOut,
+      slotKind: route.slotKind,
+      protocolAction: route.protocolAction,
+    })),
+    swapCount30d: legacyUniverseFields.swapCount30d,
+    lastSwapBlock: legacyUniverseFields.lastSwapBlock,
+    source: legacyUniverseFields.source,
+  });
 }
 
 export function blindCompatibilityFamilyId(edge: TokenEdge): string {

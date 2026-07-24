@@ -35,6 +35,7 @@ import {
   blindCompatibilityActiveFamilyManifestPayload,
   blindCompatibilityCanonicalEdgeId,
   blindCompatibilityGraphArtifactPayload,
+  blindCompatibilityPoolIdentity,
   blindCompatibilityPricingCoverage,
 } from "./blind-production-compatibility.js";
 
@@ -54,22 +55,7 @@ export function blindGraphArtifactPayload(
 }
 
 export function normalizeBlindPoolIdentity(pool: PoolEntry): unknown {
-  return normalizeBlindArtifactValue({
-    ...pool,
-    address: pool.address.toLowerCase(),
-    token0: pool.token0?.toLowerCase() ?? null,
-    token1: pool.token1?.toLowerCase() ?? null,
-    fixedTokenIn: pool.fixedTokenIn?.toLowerCase() ?? null,
-    fixedTokenOut: pool.fixedTokenOut?.toLowerCase() ?? null,
-    currency0: pool.currency0?.toLowerCase() ?? null,
-    currency1: pool.currency1?.toLowerCase() ?? null,
-    receiptEmitters: pool.receiptEmitters?.map((address) =>
-      address.toLowerCase()
-    ) ?? [],
-    underlyingCoins: pool.underlyingCoins?.map((address) =>
-      address.toLowerCase()
-    ) ?? [],
-  });
+  return blindCompatibilityPoolIdentity(pool);
 }
 
 export function blindResolvedRuntimeEnvironment(
