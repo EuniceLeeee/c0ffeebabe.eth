@@ -14,7 +14,9 @@
    `证据不足`，不能用当前状态代替历史状态。
 2. 读取完整 block、transaction、receipt、logs、call trace/state diff 和 token/native balance delta，人工重建
    `(target, selector, tokenIn, tokenOut, amount, identity evidence)` 的有序事实链。mint/burn、wrap/unwrap、
-   protocol conversion 必须同时核对调用与资产变化，不能只看 event 名。
+   protocol conversion 必须同时核对调用与资产变化，不能只看 event 名。**venue 取"顶层直接调用锚"，
+   proxy 的 impl（delegatecall）和 venue 内部子调用（如 Curve 池内部调 cToken/借贷组件）都是实现、不是
+   route venue（判定见 §4）。**
 3. **固定做 sender/同块关联审计：**记录 parent-state 与目标块末态的 `from` code hash；若两者不同，必须用
    winner 前 `full-prefix`/state diff 确定执行前 code，取不到就标 `unknown`，不能拿块末态冒充 tx 前态。读取带
    完整交易体的目标块，枚举同一 sender 的全部交易并按 `transactionIndex` 排序，nonce 只作连续性核对。
@@ -136,6 +138,19 @@ block 就不能填写 `跨交易依赖=none`。
 tx 时刻 pin，**当前状态**用 §1 审计基线 SHA。当前状态词表：
 `已支持/已覆盖`（adapter+准入都在）、`可闭合`（能力路径已定但未建/未准入，写明缺哪半）、
 `仍然缺失`（结构性缺口，写明层）。两列结论不一致时（修复落地或活动窗口闪烁）不得合并成单一判定。
+
+**Venue = 顶层调用锚，不是 trace 深处的实现合约（call-hierarchy 边界，硬规则）。** 每腿 `Venue / target`
+必须是 bot/router 用 swap/exchange/deposit selector **直接调用**、且身份可**反向验证**（factory/registry/
+`coins`/池 view）的地址。以下都**不是** route venue，禁止填进 Venue 列——把它们当 venue 会误报缺口、诱发
+“为一个内部实现新建 family”的错：
+
+- **proxy 的 implementation**（`delegatecall` 目标）：proxy 地址才是 venue，impl 是同一逻辑合约的实现层；
+- **venue 内部子调用**：如 Curve underlying 池执行 `exchange_underlying(i,j,dx)` 时内部调 cToken、cToken 再调
+  借贷组件（dForce/Compound 内部），这些都是**该 Curve 池的实现**——route venue 是 bot 直接调的那个 Curve
+  池地址，不是 trace 深处的 cToken/借贷合约。
+- **判定测试**：沿 token continuity（Transfer 日志）找到搬运本环 token 的地址 ∩ bot/router 用 swap-selector
+  **直接**调用的地址 = venue；只在 callTracer 里作为**子调用/delegatecall**出现的更深地址是实现，不是 venue。
+  身份也在 venue 地址上验（`coins()`/factory/registry），不在实现地址上验。
 
 表格之后必须给出一行汇总读数（§7 裁决在路线层的直接投影）：
 
