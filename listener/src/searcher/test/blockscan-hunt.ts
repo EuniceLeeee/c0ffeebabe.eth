@@ -51,7 +51,11 @@ import {
   type TokenPath,
   type TokenQueryBackend,
 } from "../planner/token-graph.js";
-import { DEFAULT_POOL_UNIVERSE_PATH, loadPoolUniverse } from "../pool-universe.js";
+import {
+  DEFAULT_POOL_UNIVERSE_PATH,
+  loadPoolUniverse,
+  poolRegistryKey,
+} from "../pool-universe.js";
 import {
   protocolCandidateAddressesFromDexGraph,
   protocolCandidateAddressesFromDexUniverse,
@@ -76,6 +80,13 @@ import {
   blockScanEdgeKey,
   createVerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
+import {
+  PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
+  PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
+  selectProductionReplayDiscoveredPools,
+  writeProductionReplayDiscoveryArtifact,
+  type ProductionReplayUniverseEvidence,
+} from "./production-replay-artifact.js";
 
 type DiagnosticStopAfter = "graph" | "enumeration" | "refine" | "solve" | "sim" | "ev";
 
@@ -303,6 +314,59 @@ function universeDiscoveryFromBlock(
   return resolved;
 }
 
+function huntUniverseEvidence(
+  universePath: string,
+  maxPools: number,
+  selectedPoolCount: number,
+): ProductionReplayUniverseEvidence {
+  const bytes = readFileSync(universePath);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString("utf8")) as unknown;
+  } catch {
+    throw new Error(`pool universe file ${universePath} is not valid JSON`);
+  }
+  const record =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  const rawPools = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(record?.pools)
+      ? record.pools
+      : null;
+  if (!rawPools) {
+    throw new Error(`pool universe file ${universePath} omits pools`);
+  }
+  const optionalInteger = (value: unknown, field: string): number | null => {
+    if (value === undefined || value === null) return null;
+    const parsedValue = Number(value);
+    if (!Number.isSafeInteger(parsedValue) || parsedValue < 0) {
+      throw new Error(`${field} must be a non-negative safe integer`);
+    }
+    return parsedValue;
+  };
+  const optionalText = (value: unknown, field: string): string | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string") throw new Error(`${field} must be a string`);
+    return value;
+  };
+  return {
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    schemaVersion: optionalInteger(
+      record?.schemaVersion,
+      "universe.schemaVersion",
+    ),
+    generatedAt: optionalText(record?.generatedAt, "universe.generatedAt"),
+    fromBlock: optionalInteger(record?.fromBlock, "universe.fromBlock"),
+    toBlock: optionalInteger(record?.toBlock, "universe.toBlock"),
+    rawPoolCount: rawPools.length,
+    selectedPoolCount,
+    maxPools,
+    minScore: 1,
+  };
+}
+
 async function check(name: string, run: () => boolean | Promise<boolean>): Promise<void> {
   checks += 1;
   let ok = false;
@@ -473,6 +537,43 @@ async function main(): Promise<void> {
       const discoveredProtocolPools = [
         ...protocolDiscovery.projection.ownership.admissions.values(),
       ].map((item) => lowerPoolEntry(item.instance.pool));
+      const discoveryArtifactOut =
+        process.env.HUNT_DISCOVERY_ARTIFACT_OUT?.trim();
+      if (discoveryArtifactOut) {
+        const discoveredPoolKeys = discoveredProtocolPools
+          .map(poolRegistryKey)
+          .sort();
+        const artifactPools = selectProductionReplayDiscoveredPools(
+          protocolDiscovery.projection.strategyViews.blockscan,
+          discoveredPoolKeys,
+        );
+        const artifactSha256 = writeProductionReplayDiscoveryArtifact(
+          discoveryArtifactOut,
+          {
+            schemaVersion: PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
+            producer: PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
+            sourceFromBlock: discoveryFromBlock,
+            sourceToBlock: cfg.blockNumber,
+            identityBlock: cfg.blockNumber,
+            sourceUniverse: huntUniverseEvidence(
+              cfg.universePath,
+              cfg.maxPools,
+              universePools.length,
+            ),
+            sourceComplete: true,
+            evaluationComplete: true,
+            discoveredPoolKeys,
+            pools: artifactPools,
+          },
+        );
+        console.log(
+          `PRODUCTION_REPLAY_DISCOVERY_ARTIFACT=${JSON.stringify({
+            path: discoveryArtifactOut,
+            sha256: artifactSha256,
+            pools: artifactPools.length,
+          })}`,
+        );
+      }
       protocolPools = mergePoolRegistries(
         staticProtocolPools,
         discoveredProtocolPools,
@@ -591,6 +692,17 @@ async function main(): Promise<void> {
         families: familyQuoteCoverage,
         incompleteFamilyIds: pricing.incompleteFamilyIds,
         unresolvedEdgeKeys: pricing.coverage.unresolvedEdgeKeys.length,
+        issues: preparedState.issues.slice(0, 64).map((issue) => ({
+          kind: issue.kind,
+          lane: issue.lane,
+          familyId: issue.familyId,
+          sourceId: issue.sourceId,
+          stateKey: issue.stateKey,
+          edgeKey: issue.edgeKey,
+          message: issue.message,
+        })),
+        issueCount: preparedState.issues.length,
+        laneTelemetry: preparedState.laneTelemetry,
       })}`,
     );
     await check(
