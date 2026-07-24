@@ -18,7 +18,8 @@ const V4_POSITION_MANAGER_POOL_KEYS_SELECTOR = "0x86b6be7d";
 export type V4InitializeSource =
   | "alchemy-v4-initialize"
   | "v4-initialize-backfill"
-  | "v4-positionmanager-poolkeys";
+  | "v4-positionmanager-poolkeys"
+  | "retained-family-inventory";
 
 export interface ParsedV4Initialize {
   poolId: string;
@@ -39,6 +40,12 @@ export const univ4PoolDiscovery = Object.freeze({
   version: "univ4-poolkey-materializer-v1",
   eventIds: ["univ4-swap"],
   async materialize(context): Promise<LandedPoolMaterializationResult> {
+    const retainedByPoolId = new Map(
+      context.retainedPools.flatMap((pool) => {
+        const parsed = retainedV4PoolKey(pool);
+        return parsed ? [[parsed.poolId, parsed] as const] : [];
+      }),
+    );
     const initScan = await context.scanLogs({
       address: ADDR.UNISWAP_V4_POOL_MANAGER,
       topics: [UNIV4_INITIALIZE_TOPIC],
@@ -50,6 +57,8 @@ export const univ4PoolDiscovery = Object.freeze({
       context.logs,
       context.minSwaps,
       async (poolId) => {
+        const retained = retainedByPoolId.get(poolId);
+        if (retained) return retained;
         const viaPositionManager = await resolveV4PoolKeyViaPositionManager(
           context.backend,
           ADDR.UNISWAP_V4_POSITION_MANAGER,
@@ -89,6 +98,42 @@ export const univ4PoolDiscovery = Object.freeze({
     };
   },
 } satisfies LandedPoolMaterializationCapability);
+
+function retainedV4PoolKey(pool: PoolEntry): ParsedV4Initialize | null {
+  if (
+    pool.adapter !== "univ4" ||
+    !pool.poolId ||
+    !pool.currency0 ||
+    !pool.currency1 ||
+    pool.fee === undefined ||
+    pool.tickSpacing === undefined ||
+    !pool.hooks
+  ) {
+    return null;
+  }
+  const parsed: ParsedV4Initialize = {
+    poolId: normalizeBytes32Topic(pool.poolId, "retained poolId"),
+    currency0: ethers.getAddress(pool.currency0),
+    currency1: ethers.getAddress(pool.currency1),
+    fee: pool.fee,
+    tickSpacing: pool.tickSpacing,
+    hooks: ethers.getAddress(pool.hooks),
+    source: "retained-family-inventory",
+  };
+  const recomputed = ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "uint24", "int24", "address"],
+      [
+        parsed.currency0,
+        parsed.currency1,
+        parsed.fee,
+        parsed.tickSpacing,
+        parsed.hooks,
+      ],
+    ),
+  );
+  return recomputed.toLowerCase() === parsed.poolId ? parsed : null;
+}
 
 export async function buildUniV4PoolEntries(
   initLogs: readonly LandedPoolDiscoveryLog[],

@@ -50,6 +50,12 @@ export interface LandedPoolMaterializationContext {
   readonly familyId: ExecutionFamilyId;
   readonly event: LandedSwapEventDescriptor;
   readonly logs: readonly LandedPoolDiscoveryLog[];
+  /**
+   * Previously admitted family instances from the frozen input inventory.
+   * They may resolve opaque landed identities (for example a V4 poolId), but
+   * must be re-attested by the current build before publication.
+   */
+  readonly retainedPools: readonly PoolEntry[];
   readonly fromBlock: number;
   readonly toBlock: number;
   readonly minSwaps: number;
@@ -353,6 +359,7 @@ export async function discoverLandedPools(input: {
   readonly batchSize: number;
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
+  readonly retainedPools?: readonly PoolEntry[];
   readonly topicScanMode?: "per-event" | "union";
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
@@ -394,6 +401,7 @@ export async function discoverLandedPools(input: {
             descriptor.event.executionFamilies[0] as ExecutionFamilyId,
           event: descriptor.event,
           logs: eventScan.logs,
+          retainedPools: input.retainedPools ?? [],
           fromBlock: input.fromBlock,
           toBlock: input.toBlock,
           minSwaps: input.minSwaps,
@@ -480,6 +488,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
   readonly batchSize: number;
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
+  readonly retainedPools?: readonly PoolEntry[];
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
 }): Promise<LandedPoolDiscoveryResult> {
@@ -575,6 +584,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
             descriptor.event.executionFamilies[0] as ExecutionFamilyId,
           event: descriptor.event,
           logs: materializerLogs.get(descriptor.event.id) ?? [],
+          retainedPools: input.retainedPools ?? [],
           fromBlock: input.fromBlock,
           toBlock: input.toBlock,
           minSwaps: input.minSwaps,

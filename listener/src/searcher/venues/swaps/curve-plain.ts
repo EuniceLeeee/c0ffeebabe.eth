@@ -153,7 +153,18 @@ const curvePlainPoolDiscovery = createAddressLandedPoolMaterializer({
       }
       return null;
     }
-    const coins = await queryCurveCoins(context.backend, candidate.address);
+    let coins: string[];
+    try {
+      coins = await queryCurveCoins(context.backend, candidate.address);
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
+      if (/exposed no coins/i.test(
+        error instanceof Error ? error.message : String(error),
+      )) {
+        return null;
+      }
+      throw error;
+    }
     return {
       address: candidate.address,
       adapter: identity.adapter,

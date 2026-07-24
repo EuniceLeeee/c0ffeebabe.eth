@@ -225,6 +225,7 @@ async function main(): Promise<void> {
     batchSize: logBatch,
     minSwaps,
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    retainedPools: priorUniversePools,
     topicScanMode,
     strict: true,
   });

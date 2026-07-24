@@ -757,10 +757,25 @@ export const curveIdentityResolver: OnchainIdentityResolver = async ({
       venueId: "curve",
       identitySource: "curve-metaregistry",
     };
-  } catch {
-    return { ok: false, reason: "identity_call_failed", venueId: "curve" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: isCurveRegistryMiss(error)
+        ? "curve_unregistered"
+        : "identity_call_failed",
+      venueId: "curve",
+    };
   }
 };
+
+function isCurveRegistryMiss(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code).toUpperCase()
+    : "";
+  if (code === "CALL_EXCEPTION") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /execution reverted(?:: no registry)?|\\bno registry\\b/i.test(message);
+}
 
 export const balancerV3IdentityResolver: OnchainIdentityResolver = async ({
   backend,

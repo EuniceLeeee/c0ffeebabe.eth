@@ -8,10 +8,16 @@ import {
   resolveV4PoolKeyViaPositionManager,
   type ParsedV4Initialize,
 } from "../venues/swaps/univ4-pool-discovery.js";
-import type { LandedPoolDiscoveryLog as RawLog } from "../venues/landed-pool-discovery.js";
+import {
+  discoverLandedPools,
+  type LandedPoolDiscoveryLog as RawLog,
+} from "../venues/landed-pool-discovery.js";
 import { loadPoolUniverse, type PoolUniverseEntry } from "../pool-universe.js";
 import { buildTokenGraph, type TokenQueryBackend, v4PoolId } from "../planner/token-graph.js";
 import { ADDR } from "../../shared/constants/addresses.js";
+import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
+import { univ4Adapter } from "../venues/swaps/univ4.js";
+import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 
 const initIface = new ethers.Interface([
   "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
@@ -219,6 +225,58 @@ async function main(): Promise<void> {
   assertEntry(backfilledByPoolId.get(oldPool.poolId), oldPool, 2, 41, "v4-initialize-backfill");
   console.log("[pool-universe-v4] expected_transition old v4 Initialize backfill: PASS");
 
+  let retainedResolverCalls = 0;
+  const retainedDiscovery = await discoverLandedPools({
+    registry: new AdapterFamilyRegistry([univ4Adapter]).landedPoolDiscovery(),
+    backend: {
+      async getLogs(filter) {
+        const topic = filter.topics[0];
+        if (topic === initializeTopic) return [];
+        return [
+          swapLog(oldPool.poolId, 40),
+          swapLog(oldPool.poolId, 41),
+        ];
+      },
+      async call() {
+        retainedResolverCalls++;
+        throw new Error("retained PoolKey must resolve before fallback RPC");
+      },
+    },
+    fromBlock: 40,
+    toBlock: 41,
+    batchSize: 10,
+    minSwaps,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    retainedPools: [{
+      address: poolManager,
+      adapter: "univ4",
+      poolId: oldPool.poolId,
+      currency0: oldPool.currency0,
+      currency1: oldPool.currency1,
+      fee: oldPool.fee,
+      tickSpacing: oldPool.tickSpacing,
+      hooks: oldPool.hooks,
+      fixedTokenIn: oldPool.currency0,
+      fixedTokenOut: oldPool.currency1,
+      score: 0,
+      topologyRetained: true,
+    } as PoolUniverseEntry],
+    strict: true,
+  });
+  assert(
+    retainedResolverCalls === 0 &&
+      retainedDiscovery.materializedPools.length === 1,
+    "retained V4 PoolKey must make strict landed discovery complete without historical RPC",
+  );
+  assertEntry(
+    retainedDiscovery.materializedPools[0],
+    oldPool,
+    2,
+    41,
+    "retained-family-inventory",
+  );
+  console.log("[pool-universe-v4] retained PoolKey resolves strict discovery: PASS");
+
   const poolKeysCalls: Array<{ to: string; data: string; blockTag: string }> = [];
   const positionManagerProvider = {
     async send(method: string, params: unknown[]) {
@@ -349,7 +407,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (6/6)");
+  console.log("pool-universe-v4 PASS (7/7)");
 }
 
 main().catch((err) => {
