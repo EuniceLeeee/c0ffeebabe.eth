@@ -44,6 +44,11 @@ export function createPinnedProtocolDiscoveryContext(input: {
    * pruned. Logs, receipts, current-state reads and probes stay on `provider`.
    */
   observedHistoryProvider?: ethers.JsonRpcProvider;
+  /**
+   * Minimum spacing between separately queued archive trace requests. The
+   * production default protects shared archive quotas; tests may lower it.
+   */
+  observedHistoryTraceMinIntervalMs?: number;
   blockNumber: number;
   fromBlock: number;
   toBlock?: number;
@@ -62,16 +67,22 @@ export function createPinnedProtocolDiscoveryContext(input: {
     1_000,
     Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_RPC_TIMEOUT_MS ?? "15000"),
   );
+  const observedHistoryTraceMinIntervalMs =
+    input.observedHistoryTraceMinIntervalMs ??
+    PROTOCOL_DISCOVERY_ARCHIVE_TRACE_MIN_INTERVAL_MS;
   if (
     !Number.isSafeInteger(input.blockNumber) || input.blockNumber < 0 ||
     !Number.isSafeInteger(input.fromBlock) || input.fromBlock < 0 ||
     !Number.isSafeInteger(toBlock) || toBlock < input.fromBlock || toBlock > input.blockNumber ||
-    !Number.isFinite(rpcTimeoutMs) || rpcTimeoutMs < 1
+    !Number.isFinite(rpcTimeoutMs) || rpcTimeoutMs < 1 ||
+    !Number.isFinite(observedHistoryTraceMinIntervalMs) ||
+    observedHistoryTraceMinIntervalMs < 0
   ) {
     throw new Error("invalid protocol discovery block range or RPC timeout");
   }
   let observedHistoryAlignment: Promise<void> | undefined;
   let observedHistoryTraceTail = Promise.resolve();
+  let observedHistoryTraceStartedAtMs = Number.NEGATIVE_INFINITY;
   const ensureObservedHistoryAligned = (
     control: ProtocolDiscoveryReadControl,
   ): Promise<void> => {
@@ -87,6 +98,7 @@ export function createPinnedProtocolDiscoveryContext(input: {
   };
   const runObservedHistoryTrace = async <T>(
     work: () => Promise<T>,
+    control: ProtocolDiscoveryReadControl,
   ): Promise<T> => {
     const previous = observedHistoryTraceTail;
     let release!: () => void;
@@ -97,8 +109,33 @@ export function createPinnedProtocolDiscoveryContext(input: {
       () => turn,
       () => turn,
     );
-    await previous.catch(() => {});
+    const deadlineAtMs = Math.min(
+      Date.now() + rpcTimeoutMs,
+      control.deadlineAtMs ?? Number.POSITIVE_INFINITY,
+    );
     try {
+      await waitForProtocolDiscoveryTraceTurn(
+        previous,
+        deadlineAtMs,
+        control.signal,
+        rpcTimeoutMs,
+      );
+      const spacingMs = Math.max(
+        0,
+        observedHistoryTraceStartedAtMs +
+          observedHistoryTraceMinIntervalMs -
+          Date.now(),
+      );
+      if (spacingMs > 0) {
+        await protocolDiscoveryRpcDelay(
+          spacingMs,
+          deadlineAtMs,
+          control.signal,
+          "archive debug_traceTransaction queue",
+          rpcTimeoutMs,
+        );
+      }
+      observedHistoryTraceStartedAtMs = Date.now();
       return await work();
     } finally {
       release();
@@ -190,7 +227,14 @@ export function createPinnedProtocolDiscoveryContext(input: {
             observedHistoryProvider === input.provider ||
             !isProtocolDiscoveryHistoricalStateUnavailable(error)
           ) throw error;
-          await ensureObservedHistoryAligned(mergedControl);
+          const historyControl = {
+            ...mergedControl,
+            deadlineAtMs: Math.min(
+              Date.now() + rpcTimeoutMs,
+              mergedControl.deadlineAtMs ?? Number.POSITIVE_INFINITY,
+            ),
+          };
+          await ensureObservedHistoryAligned(historyControl);
           return runObservedHistoryTrace(() =>
             sendProtocolDiscoveryRpc<unknown>(
               observedHistoryProvider,
@@ -198,8 +242,10 @@ export function createPinnedProtocolDiscoveryContext(input: {
               [txHash, { tracer: "callTracer" }],
               rpcTimeoutMs,
               "archive debug_traceTransaction",
-              mergedControl,
-            )
+              historyControl,
+              PROTOCOL_DISCOVERY_ARCHIVE_TRACE_RETRY_POLICY,
+            ),
+            historyControl,
           );
         }
       },
@@ -375,9 +421,30 @@ function normalizeProtocolDiscoveryLog(log: RawProtocolDiscoveryLog) {
 let protocolDiscoveryRpcId = 0;
 const PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS = 3;
 const PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS = 500;
+const PROTOCOL_DISCOVERY_ARCHIVE_TRACE_MIN_INTERVAL_MS = 1_000;
 const PROTOCOL_DISCOVERY_FAMILY_CONCURRENCY = 8;
 const RETRYABLE_PROTOCOL_DISCOVERY_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 const NEVER_ABORTED_PROTOCOL_DISCOVERY_SIGNAL = new AbortController().signal;
+
+interface ProtocolDiscoveryRpcRetryPolicy {
+  readonly maxAttempts: number;
+  readonly baseDelayMs: number;
+  readonly backoff: "linear" | "exponential";
+}
+
+const PROTOCOL_DISCOVERY_DEFAULT_RETRY_POLICY:
+  ProtocolDiscoveryRpcRetryPolicy = Object.freeze({
+    maxAttempts: PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS,
+    baseDelayMs: PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS,
+    backoff: "linear",
+  });
+
+const PROTOCOL_DISCOVERY_ARCHIVE_TRACE_RETRY_POLICY:
+  ProtocolDiscoveryRpcRetryPolicy = Object.freeze({
+    maxAttempts: 5,
+    baseDelayMs: 1_000,
+    backoff: "exponential",
+  });
 
 async function sendProtocolDiscoveryRpc<T>(
   provider: ethers.JsonRpcProvider,
@@ -386,6 +453,8 @@ async function sendProtocolDiscoveryRpc<T>(
   timeoutMs: number,
   label: string,
   control: ProtocolDiscoveryReadControl = {},
+  retryPolicy: ProtocolDiscoveryRpcRetryPolicy =
+    PROTOCOL_DISCOVERY_DEFAULT_RETRY_POLICY,
 ): Promise<T> {
   // Ethers does not expose an AbortSignal per provider.send call. Reuse its
   // connection URL and resolved auth headers, but issue this deadline-bound
@@ -395,7 +464,7 @@ async function sendProtocolDiscoveryRpc<T>(
     Date.now() + timeoutMs,
     control.deadlineAtMs ?? Number.POSITIVE_INFINITY,
   );
-  for (let attempt = 1; attempt <= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= retryPolicy.maxAttempts; attempt++) {
     throwIfProtocolDiscoveryRpcAborted(control.signal);
     const remainingMs = deadlineAtMs - Date.now();
     if (remainingMs <= 0) throw protocolDiscoveryRpcTimeout(label, timeoutMs);
@@ -498,10 +567,14 @@ async function sendProtocolDiscoveryRpc<T>(
         throw control.signal.reason ?? protocolDiscoveryRpcAborted(label, error);
       }
       if (
-        attempt >= PROTOCOL_DISCOVERY_RPC_MAX_ATTEMPTS ||
+        attempt >= retryPolicy.maxAttempts ||
         !isRetryableProtocolDiscoveryRpcTransportFailure(error)
       ) throw error;
-      const retryDelayMs = protocolDiscoveryRetryDelayMs(error, attempt);
+      const retryDelayMs = protocolDiscoveryRetryDelayMs(
+        error,
+        attempt,
+        retryPolicy,
+      );
       if (retryDelayMs >= deadlineAtMs - Date.now()) {
         throw protocolDiscoveryRpcTimeout(label, timeoutMs, error);
       }
@@ -566,14 +639,24 @@ function isProtocolDiscoveryHistoricalStateUnavailable(error: unknown): boolean 
   });
 }
 
-function protocolDiscoveryRetryDelayMs(error: unknown, attempt: number): number {
-  const retryAfterMs = error && typeof error === "object" && "retryAfterMs" in error
-    ? Number((error as { retryAfterMs?: unknown }).retryAfterMs)
-    : NaN;
-  if (Number.isFinite(retryAfterMs) && retryAfterMs >= 0) {
-    return Math.min(5_000, retryAfterMs);
-  }
-  return PROTOCOL_DISCOVERY_RPC_RETRY_BASE_MS * attempt;
+function protocolDiscoveryRetryDelayMs(
+  error: unknown,
+  attempt: number,
+  retryPolicy: ProtocolDiscoveryRpcRetryPolicy,
+): number {
+  const retryAfterMs = protocolDiscoveryErrorChain(error)
+    .map((item) =>
+      item && typeof item === "object" && "retryAfterMs" in item
+        ? Number((item as { retryAfterMs?: unknown }).retryAfterMs)
+        : NaN
+    )
+    .find((value) => Number.isFinite(value) && value >= 0);
+  const policyDelayMs = retryPolicy.backoff === "exponential"
+    ? retryPolicy.baseDelayMs * 2 ** Math.max(0, attempt - 1)
+    : retryPolicy.baseDelayMs * attempt;
+  return retryAfterMs !== undefined
+    ? Math.max(policyDelayMs, retryAfterMs)
+    : policyDelayMs;
 }
 
 function parseRetryAfterMs(value: string | null): number | null {
@@ -620,6 +703,61 @@ function protocolDiscoveryRpcDelay(
       signal.addEventListener("abort", abort, { once: true });
       detachAbort = () => signal.removeEventListener("abort", abort);
     }
+  });
+}
+
+function waitForProtocolDiscoveryTraceTurn(
+  previous: Promise<void>,
+  deadlineAtMs: number,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(
+      signal.reason ?? protocolDiscoveryRpcAborted(
+        "archive debug_traceTransaction queue",
+      ),
+    );
+  }
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) {
+    return Promise.reject(
+      protocolDiscoveryRpcTimeout(
+        "archive debug_traceTransaction queue",
+        timeoutMs,
+      ),
+    );
+  }
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const abort = (): void => finish(
+      signal?.reason ??
+        protocolDiscoveryRpcAborted(
+          "archive debug_traceTransaction queue",
+        ),
+    );
+    const timer = setTimeout(
+      () => finish(
+        protocolDiscoveryRpcTimeout(
+          "archive debug_traceTransaction queue",
+          timeoutMs,
+        ),
+      ),
+      remainingMs,
+    );
+    signal?.addEventListener("abort", abort, { once: true });
+    previous.then(
+      () => finish(),
+      () => finish(),
+    );
   });
 }
 

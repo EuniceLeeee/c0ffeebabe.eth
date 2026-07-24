@@ -25,6 +25,8 @@ const DEADLINE_TX_HASH = `0x${"12".repeat(32)}`;
 const BUDGET_RETRY_TX_HASH = `0x${"34".repeat(32)}`;
 const PRUNED_TRACE_TX_HASH = `0x${"35".repeat(32)}`;
 const SECOND_PRUNED_TRACE_TX_HASH = `0x${"37".repeat(32)}`;
+const RATE_LIMITED_PRUNED_TRACE_TX_HASH = `0x${"38".repeat(32)}`;
+const DEADLINE_PRUNED_TRACE_TX_HASH = `0x${"39".repeat(32)}`;
 const NON_PRUNED_TRACE_ERROR_TX_HASH = `0x${"36".repeat(32)}`;
 const HEADER_HASH = `0x${"56".repeat(32)}`;
 const MISMATCHED_HEADER_HASH = `0x${"78".repeat(32)}`;
@@ -41,6 +43,9 @@ const observedHistoryMethods: string[] = [];
 let observedHistoryBlockHash = HEADER_HASH;
 let activeObservedHistoryTraces = 0;
 let peakObservedHistoryTraces = 0;
+let rateLimitedObservedHistoryTraceAttempts = 0;
+let deadlineObservedHistoryTraceAttempts = 0;
+const observedHistoryTraceStartedAtMs: number[] = [];
 
 const rawLog = {
   address: "0x0000000000000000000000000000000000000001",
@@ -115,7 +120,9 @@ const server = createServer((request, response) => {
       parsed.method === "debug_traceTransaction" &&
       (
         parsed.params[0] === PRUNED_TRACE_TX_HASH ||
-        parsed.params[0] === SECOND_PRUNED_TRACE_TX_HASH
+        parsed.params[0] === SECOND_PRUNED_TRACE_TX_HASH ||
+        parsed.params[0] === RATE_LIMITED_PRUNED_TRACE_TX_HASH ||
+        parsed.params[0] === DEADLINE_PRUNED_TRACE_TX_HASH
       )
     ) {
       respond(response, {
@@ -173,6 +180,7 @@ const observedHistoryServer = createServer((request, response) => {
     const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
       id: number;
       method: string;
+      params: unknown[];
     };
     observedHistoryMethods.push(parsed.method);
     const result = parsed.method === "eth_getBlockByNumber"
@@ -185,6 +193,27 @@ const observedHistoryServer = createServer((request, response) => {
             ? { type: "CALL", calls: [] }
             : "0x";
     if (parsed.method === "debug_traceTransaction") {
+      observedHistoryTraceStartedAtMs.push(Date.now());
+      if (
+        parsed.params[0] === RATE_LIMITED_PRUNED_TRACE_TX_HASH &&
+        rateLimitedObservedHistoryTraceAttempts++ === 0
+      ) {
+        response.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "0",
+        });
+        response.end(JSON.stringify({ error: "rate limited" }));
+        return;
+      }
+      if (parsed.params[0] === DEADLINE_PRUNED_TRACE_TX_HASH) {
+        deadlineObservedHistoryTraceAttempts++;
+        response.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "30",
+        });
+        response.end(JSON.stringify({ error: "rate limited" }));
+        return;
+      }
       activeObservedHistoryTraces++;
       peakObservedHistoryTraces = Math.max(
         peakObservedHistoryTraces,
@@ -224,7 +253,7 @@ const retryContext = createPinnedProtocolDiscoveryContext({
   provider,
   blockNumber: 1,
   fromBlock: 1,
-  rpcTimeoutMs: 1_500,
+  rpcTimeoutMs: 3_000,
   graphTokens: [],
 });
 const deadlineContext = createPinnedProtocolDiscoveryContext({
@@ -248,6 +277,7 @@ try {
     blockNumber: 1,
     fromBlock: 1,
     rpcTimeoutMs: 1_500,
+    observedHistoryTraceMinIntervalMs: 20,
     graphTokens: [],
   });
   const primaryStart = primaryMethods.length;
@@ -296,6 +326,46 @@ try {
     peakObservedHistoryTraces,
     1,
     "pruned archive traces must be serialized without slowing local traces",
+  );
+  assert(
+    observedHistoryTraceStartedAtMs[1]! -
+        observedHistoryTraceStartedAtMs[0]! >=
+      15,
+    "separately queued archive traces must respect their minimum start interval",
+  );
+  const rateLimitedTrace = await splitContext.backend.traceTransaction(
+    RATE_LIMITED_PRUNED_TRACE_TX_HASH,
+  );
+  assert.deepEqual(
+    rateLimitedTrace,
+    { type: "CALL", calls: [] },
+    "a transient archive 429 must recover inside the bounded archive-only retry policy",
+  );
+  assert.equal(
+    rateLimitedObservedHistoryTraceAttempts,
+    2,
+    "archive traces must retry a transient 429",
+  );
+  const deadlineArchiveContext = createPinnedProtocolDiscoveryContext({
+    provider,
+    observedHistoryProvider,
+    blockNumber: 1,
+    fromBlock: 1,
+    rpcTimeoutMs: 80,
+    observedHistoryTraceMinIntervalMs: 0,
+    graphTokens: [],
+  });
+  await assert.rejects(
+    deadlineArchiveContext.backend.traceTransaction(
+      DEADLINE_PRUNED_TRACE_TX_HASH,
+    ),
+    /archive debug_traceTransaction timed out after 80ms/,
+    "Retry-After must remain bounded by the operation's absolute deadline",
+  );
+  assert.equal(
+    deadlineObservedHistoryTraceAttempts,
+    1,
+    "a retry delay beyond the absolute deadline must not issue another request",
   );
   const historyCallsBeforeNonPrunedError = observedHistoryMethods.length;
   await assert.rejects(
