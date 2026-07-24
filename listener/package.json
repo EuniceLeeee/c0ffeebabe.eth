@@ -133,6 +133,7 @@
     "searcher:adapter-family-blind-production-harness-test": "node --import tsx src/searcher/test/adapter-family-blind-production-harness-test.ts",
     "searcher:adapter-family-blind-oracle": "node --import tsx src/searcher/test/adapter-family-blind-oracle.ts",
     "searcher:adapter-family-blind-compare": "node --import tsx src/searcher/test/adapter-family-blind-comparator.ts",
+    "searcher:blind-baseline-runtime": "node --import tsx src/searcher/test/blind-production-baseline-runtime.ts",
     "searcher:conversion-sentinel-commitment": "node --import tsx src/searcher/test/conversion-sentinel-commitment.ts",
     "searcher:adapter-family-paired-live": "node --import tsx src/searcher/test/adapter-family-paired-live-test.ts",
     "searcher:eigenpie-deposit": "node --import tsx src/searcher/test/eigenpie-deposit.ts",
