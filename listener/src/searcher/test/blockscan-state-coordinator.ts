@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   BlockScanStateCoordinator,
+  type BlockScanFamilyTelemetry,
   type BlockScanStateReadBackend,
 } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
@@ -203,6 +204,58 @@ async function completeAndDeterministic(): Promise<void> {
   assert.equal(result.coverage.expectedStateKeyHash, result.coverage.resolvedStateKeyHash);
   assert.equal(result.coverage.expectedEdgeKeyHash, result.coverage.resolvedEdgeKeyHash);
   assert.equal(result.snapshot.mids.size, 3);
+  assert.deepEqual(
+    result.familyTelemetry?.map(({ wallMs: _wallMs, ...telemetry }) => telemetry),
+    [
+      {
+        familyId: "protocol:fixture",
+        lane: "protocol",
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "complete",
+        issueCount: 0,
+      },
+      {
+        familyId: "univ2-standard",
+        lane: "swap",
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "complete",
+        issueCount: 0,
+      },
+    ],
+    "per-family telemetry is stable, sorted, and keeps lane aggregates separate",
+  );
+  assert.equal(
+    result.snapshot.familyTelemetry,
+    result.familyTelemetry,
+    "the result and published snapshot share the same frozen family evidence",
+  );
+  assert(
+    result.familyTelemetry?.every((family) =>
+      family.wallMs >= 0 && Object.isFrozen(family)
+    ),
+  );
+  for (const lane of result.laneTelemetry) {
+    const familyRows: readonly BlockScanFamilyTelemetry[] =
+      (result.familyTelemetry ?? []).filter(
+        (family) => family.lane === lane.lane,
+      );
+    assert.equal(
+      lane.uniqueStateKeys,
+      familyRows.reduce((sum, family) => sum + family.uniqueStateKeys, 0),
+    );
+    assert.equal(
+      lane.reads,
+      familyRows.reduce((sum, family) => sum + family.reads, 0),
+    );
+    assert.equal(
+      lane.batches,
+      familyRows.reduce((sum, family) => sum + family.batches, 0),
+    );
+  }
   assert.equal(coordinator.latestSnapshot(), result.snapshot);
   assert(Object.isFrozen(view));
   assert(Object.isFrozen(view.edges));
@@ -302,6 +355,29 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
   assert.equal(result.coverage.unresolvedStateKeys.length, 1);
   assert.equal(result.coverage.resolvedEdgeKeys.length, 2);
   assert.equal(result.coverage.unresolvedEdgeKeys.length, 1);
+  assert.deepEqual(
+    result.familyTelemetry?.map(({ wallMs: _wallMs, ...telemetry }) => telemetry),
+    [
+      {
+        familyId: "protocol:fixture",
+        lane: "protocol",
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "incomplete",
+        issueCount: 1,
+      },
+      {
+        familyId: "univ2-standard",
+        lane: "swap",
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "complete",
+        issueCount: 0,
+      },
+    ],
+  );
   assert.equal(coordinator.latestSnapshot(), result.snapshot);
 
   const graphIncomplete = await new BlockScanStateCoordinator(backend).prepare({
@@ -327,6 +403,32 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
     graphIncomplete.snapshot.mids.size,
     2,
     "an incomplete family must contribute no priced edges",
+  );
+  assert.deepEqual(
+    graphIncomplete.familyTelemetry?.map(
+      ({ wallMs: _wallMs, ...telemetry }) => telemetry,
+    ),
+    [
+      {
+        familyId: "protocol:fixture",
+        lane: "protocol",
+        uniqueStateKeys: 1,
+        reads: 0,
+        batches: 0,
+        status: "incomplete",
+        issueCount: 1,
+      },
+      {
+        familyId: "univ2-standard",
+        lane: "swap",
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "complete",
+        issueCount: 0,
+      },
+    ],
+    "graph-incomplete families are visible even though their lane never ran",
   );
   assert(
     graphIncomplete.issues.some((issue) =>
@@ -385,6 +487,30 @@ async function oneFailedStateKeyPreservesHealthySiblingInstance(): Promise<void>
   assert.equal(result.coverage.expectedEdgeKeys.length, 5);
   assert.equal(result.coverage.resolvedEdgeKeys.length, 3);
   assert.equal(result.coverage.unresolvedEdgeKeys.length, 2);
+  assert.deepEqual(
+    result.familyTelemetry?.map(({ wallMs: _wallMs, ...telemetry }) => telemetry),
+    [
+      {
+        familyId: "protocol:fixture",
+        lane: "protocol",
+        uniqueStateKeys: 1,
+        reads: 1,
+        batches: 1,
+        status: "complete",
+        issueCount: 0,
+      },
+      {
+        familyId: "univ2-standard",
+        lane: "swap",
+        uniqueStateKeys: 2,
+        reads: 2,
+        batches: 1,
+        status: "degraded",
+        issueCount: 1,
+      },
+    ],
+    "a failed instance degrades only its family and retains exact work counts",
+  );
   assert.equal(
     result.snapshot.mids.size,
     3,

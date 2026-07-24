@@ -670,6 +670,17 @@ async function main(): Promise<void> {
       deadlineAtMs: passDeadlineAtMs,
     });
     const stateWallMs = Date.now() - stateStartedAtMs;
+    console.log(
+      `ADAPTER_FAMILY_STATE_TELEMETRY=${JSON.stringify({
+        block: cfg.blockNumber,
+        generation: preparedState.generation,
+        status: preparedState.status,
+        wallMs: stateWallMs,
+        issueCount: preparedState.issues.length,
+        families: preparedState.familyTelemetry ?? [],
+        lanes: preparedState.laneTelemetry,
+      })}`,
+    );
     requirePassBudget("adapter_family_state", passDeadlineAtMs);
     if (preparedState.status === "incomplete") {
       throw new Error(
@@ -703,6 +714,7 @@ async function main(): Promise<void> {
         })),
         issueCount: preparedState.issues.length,
         laneTelemetry: preparedState.laneTelemetry,
+        familyTelemetry: preparedState.familyTelemetry ?? [],
       })}`,
     );
     await check(
@@ -972,6 +984,7 @@ async function main(): Promise<void> {
         unavailableEdges: pricing.coverage.unavailableEdgeKeys.length,
         unresolvedEdges: pricing.coverage.unresolvedEdgeKeys.length,
         laneTelemetry: pricing.laneTelemetry,
+        familyTelemetry: pricing.familyTelemetry ?? [],
       },
       scannedPairs: scan.scannedPairs,
       swapVenuesSkipped: scan.debug?.skippedVenues ?? 0,

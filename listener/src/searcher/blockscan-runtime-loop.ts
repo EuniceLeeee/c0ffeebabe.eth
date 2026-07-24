@@ -710,6 +710,17 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         auditPricingCoverage = runtime.pricing.coverage;
         sealAuditBoundary("state_ready", "state");
       }
+      console.log(
+        `[searcher/blockscan-family-telemetry] ${JSON.stringify({
+          block: blockNumber,
+          sourceBlock: runtime.pricing.sourceBlock,
+          generation: runtime.pricing.generation,
+          status: runtime.pricing.status,
+          issueCount: runtime.pricing.issues.length,
+          families: runtime.pricing.familyTelemetry ?? [],
+          lanes: runtime.pricing.laneTelemetry,
+        })}`,
+      );
       if (runtime.status === "incomplete") {
         outcome = Date.now() >= passDeadlineAtMs
           ? "budget_exceeded"

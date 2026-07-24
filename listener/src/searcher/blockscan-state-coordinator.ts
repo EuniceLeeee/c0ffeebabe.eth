@@ -122,6 +122,27 @@ export interface BlockScanLaneTelemetry {
   readonly batches: number;
 }
 
+export type BlockScanFamilyTelemetryStatus =
+  | "complete"
+  | "degraded"
+  | "incomplete";
+
+/**
+ * Per-family execution evidence for one source generation. Lane telemetry
+ * remains the aggregate scheduling view; these rows identify the family that
+ * consumed the work or failed to reach a terminal publication.
+ */
+export interface BlockScanFamilyTelemetry {
+  readonly familyId: string;
+  readonly lane: BlockScanPricingLane;
+  readonly wallMs: number;
+  readonly uniqueStateKeys: number;
+  readonly reads: number;
+  readonly batches: number;
+  readonly status: BlockScanFamilyTelemetryStatus;
+  readonly issueCount: number;
+}
+
 export interface BlockScanStateSnapshot {
   readonly generation: number;
   readonly sourceBlock: number;
@@ -136,6 +157,8 @@ export interface BlockScanStateSnapshot {
   readonly incompleteFamilyIds: readonly string[];
   readonly coverage: BlockScanStateCoverage;
   readonly laneTelemetry: readonly BlockScanLaneTelemetry[];
+  /** Optional for compatibility with persisted snapshots created before this field. */
+  readonly familyTelemetry?: readonly BlockScanFamilyTelemetry[];
 }
 
 interface PrepareResultBase {
@@ -145,6 +168,8 @@ interface PrepareResultBase {
   readonly coverage: BlockScanStateCoverage;
   readonly issues: readonly BlockScanStateIssue[];
   readonly laneTelemetry: readonly BlockScanLaneTelemetry[];
+  /** Coordinator results always populate this; optional preserves old consumers. */
+  readonly familyTelemetry?: readonly BlockScanFamilyTelemetry[];
 }
 
 export interface CompleteBlockScanStateResult extends PrepareResultBase {
@@ -223,6 +248,16 @@ interface LaneResult {
   readonly states: readonly [string, PublishedStateKey][];
   readonly issues: readonly BlockScanStateIssue[];
   readonly telemetry: BlockScanLaneTelemetry;
+  readonly familyTelemetry: readonly FamilyExecutionTelemetry[];
+}
+
+interface FamilyExecutionTelemetry {
+  readonly familyId: string;
+  readonly lane: BlockScanPricingLane;
+  readonly wallMs: number;
+  readonly uniqueStateKeys: number;
+  readonly reads: number;
+  readonly batches: number;
 }
 
 interface BehaviorProvenUnavailableEdge {
@@ -483,6 +518,15 @@ export class BlockScanStateCoordinator {
         unavailableEdges.map((entry) => entry.edgeKey),
       );
       const laneTelemetry = freezeLaneTelemetry(lanes.map((lane) => lane.telemetry));
+      const familyTelemetry = createFamilyTelemetry({
+        groups: ownership.groups,
+        registeredFamilies: input.families,
+        execution: lanes.flatMap((lane) => lane.familyTelemetry),
+        coverage,
+        terminalFamilyIds,
+        graphIncompleteFamilyIds,
+        issues,
+      });
       const fatalIssues = issues.filter((issue) => issue.familyId === undefined);
       if (!stillActive || fatalIssues.length > 0) {
         return Object.freeze({
@@ -493,6 +537,7 @@ export class BlockScanStateCoordinator {
           coverage,
           issues: freezeIssues(issues),
           laneTelemetry,
+          familyTelemetry,
         });
       }
 
@@ -582,6 +627,7 @@ export class BlockScanStateCoordinator {
         incompleteFamilyIds,
         coverage,
         laneTelemetry,
+        familyTelemetry,
       });
       if (this.active?.token !== token || controller.signal.aborted) {
         return incompleteResult({
@@ -589,6 +635,7 @@ export class BlockScanStateCoordinator {
           ownership,
           issues: [issueFromAbort(controller.signal.reason, graph.generation)],
           laneTelemetry,
+          familyTelemetry,
         });
       }
       this.published = snapshot;
@@ -606,6 +653,7 @@ export class BlockScanStateCoordinator {
         coverage,
         issues: freezeIssues(issues),
         laneTelemetry,
+        familyTelemetry,
         snapshot,
       });
     } finally {
@@ -1522,6 +1570,18 @@ export class BlockScanStateCoordinator {
     }
 
     const finishedAtMs = this.now();
+    const familyId = groups[0]?.familyId;
+    if (!familyId) {
+      throw new Error("non-empty family lane has no familyId");
+    }
+    const familyExecution = Object.freeze({
+      familyId,
+      lane,
+      wallMs: Math.max(0, finishedAtMs - startedAtMs),
+      uniqueStateKeys: groups.length,
+      reads: physicalReads,
+      batches,
+    });
     return Object.freeze({
       lane,
       resolvedStateKeys: Object.freeze(resolvedStateKeys.sort()),
@@ -1546,6 +1606,7 @@ export class BlockScanStateCoordinator {
         reads: physicalReads,
         batches,
       }),
+      familyTelemetry: Object.freeze([familyExecution]),
     });
   }
 }
@@ -1910,11 +1971,84 @@ function completePricingFamilyIds(
   return complete;
 }
 
+function createFamilyTelemetry(input: {
+  readonly groups: readonly StateGroup[];
+  readonly registeredFamilies: readonly RegisteredBlockScanStateFamily[];
+  readonly execution: readonly FamilyExecutionTelemetry[];
+  readonly coverage: BlockScanStateCoverage;
+  readonly terminalFamilyIds: ReadonlySet<string>;
+  readonly graphIncompleteFamilyIds: ReadonlySet<string>;
+  readonly issues: readonly BlockScanStateIssue[];
+}): readonly BlockScanFamilyTelemetry[] {
+  const executionByFamilyId = new Map(
+    input.execution.map((entry) => [entry.familyId, entry] as const),
+  );
+  const registeredByFamilyId = new Map(
+    input.registeredFamilies.map((family) => [family.familyId, family] as const),
+  );
+  const groupsByFamilyId = new Map<string, StateGroup[]>();
+  for (const group of input.groups) {
+    const current = groupsByFamilyId.get(group.familyId);
+    if (current) current.push(group);
+    else groupsByFamilyId.set(group.familyId, [group]);
+  }
+  const resolvedStateKeys = new Set(input.coverage.resolvedStateKeys);
+  const resolvedReadKeys = new Set(input.coverage.resolvedReadKeys);
+  const resolvedEdgeKeys = new Set(input.coverage.resolvedEdgeKeys);
+  const unavailableEdgeKeys = new Set(input.coverage.unavailableEdgeKeys);
+  const familyIds = uniqueSorted([
+    ...groupsByFamilyId.keys(),
+    ...input.execution.map((entry) => entry.familyId),
+    ...[...input.graphIncompleteFamilyIds].filter((familyId) =>
+      registeredByFamilyId.has(familyId)
+    ),
+  ]);
+
+  return freezeFamilyTelemetry(familyIds.flatMap((familyId) => {
+    const execution = executionByFamilyId.get(familyId);
+    const groups = groupsByFamilyId.get(familyId) ?? [];
+    const lane = execution?.lane ??
+      groups[0]?.lane ??
+      registeredByFamilyId.get(familyId)?.lane;
+    if (!lane) return [];
+    const madeProgress =
+      groups.some((group) => resolvedStateKeys.has(group.stateKey)) ||
+      [...resolvedReadKeys].some((readKey) =>
+        readKey.startsWith(`${familyId}\u001f`)
+      ) ||
+      groups.some((group) =>
+        group.edgeKeys.some((edgeKey) =>
+          resolvedEdgeKeys.has(edgeKey) || unavailableEdgeKeys.has(edgeKey)
+        )
+      );
+    const issueCount = input.issues.filter(
+      (issue) => issue.familyId === familyId,
+    ).length;
+    const status: BlockScanFamilyTelemetryStatus =
+      input.terminalFamilyIds.has(familyId) && issueCount === 0
+        ? "complete"
+        : madeProgress
+        ? "degraded"
+        : "incomplete";
+    return [Object.freeze({
+      familyId,
+      lane,
+      wallMs: execution?.wallMs ?? 0,
+      uniqueStateKeys: groups.length,
+      reads: execution?.reads ?? 0,
+      batches: execution?.batches ?? 0,
+      status,
+      issueCount,
+    })];
+  }));
+}
+
 function incompleteResult(input: {
   readonly graph: VerifiedGraphView;
   readonly ownership: OwnershipPlan;
   readonly issues: readonly BlockScanStateIssue[];
   readonly laneTelemetry?: readonly BlockScanLaneTelemetry[];
+  readonly familyTelemetry?: readonly BlockScanFamilyTelemetry[];
 }): IncompleteBlockScanStateResult {
   return Object.freeze({
     status: "incomplete",
@@ -1932,6 +2066,7 @@ function incompleteResult(input: {
     ),
     issues: freezeIssues(input.issues),
     laneTelemetry: freezeLaneTelemetry(input.laneTelemetry ?? []),
+    familyTelemetry: freezeFamilyTelemetry(input.familyTelemetry ?? []),
   });
 }
 
@@ -1960,6 +2095,7 @@ function emptyLane(
       reads: 0,
       batches: 0,
     }),
+    familyTelemetry: Object.freeze([]),
   });
 }
 
@@ -1997,6 +2133,14 @@ function failedFamilyLane(
       reads: staging.reads,
       batches: staging.batches,
     }),
+    familyTelemetry: Object.freeze([Object.freeze({
+      familyId,
+      lane,
+      wallMs: Math.max(0, finishedAtMs - startedAtMs),
+      uniqueStateKeys,
+      reads: staging.reads,
+      batches: staging.batches,
+    })]),
   });
 }
 
@@ -2057,6 +2201,11 @@ function mergeFamilyLaneResults(
         0,
       ),
     }),
+    familyTelemetry: Object.freeze(
+      results
+        .flatMap((result) => result.familyTelemetry)
+        .sort((a, b) => a.familyId.localeCompare(b.familyId)),
+    ),
   });
 }
 
@@ -2165,6 +2314,16 @@ function freezeLaneTelemetry(
     [...lanes]
       .sort((a, b) => a.lane.localeCompare(b.lane))
       .map((lane) => Object.freeze({ ...lane })),
+  );
+}
+
+function freezeFamilyTelemetry(
+  families: readonly BlockScanFamilyTelemetry[],
+): readonly BlockScanFamilyTelemetry[] {
+  return Object.freeze(
+    [...families]
+      .sort((a, b) => a.familyId.localeCompare(b.familyId))
+      .map((family) => Object.freeze({ ...family })),
   );
 }
 
