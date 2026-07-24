@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import type { RouteVenueMid } from "../venues/mid-readers.js";
 import {
   assertPureSynchronousDeriveMids,
   blockScanEdgeKey,
@@ -29,6 +30,7 @@ import {
   curveUnderlyingBlockScanState,
   curveUnderlyingAdapter,
 } from "../venues/swaps/curve-underlying.js";
+import { CURVE_METAREGISTRY } from "../venues/curve-underlying.js";
 import {
   dodoV2BlockScanState,
   dodoV2PoolIface,
@@ -86,8 +88,15 @@ const curveStateIface = new ethers.Interface([
   "function balances(uint256 i) view returns (uint256)",
   "function stored_rates() view returns (uint256[])",
 ]);
+const curveIntBalanceIface = new ethers.Interface([
+  "function balances(int128 i) view returns (uint256)",
+]);
 const curveUnderlyingIface = new ethers.Interface([
   "function get_dy_underlying(int128 i,int128 j,uint256 dx) view returns (uint256)",
+]);
+const curveMetaRegistryStateIface = new ethers.Interface([
+  "function get_underlying_decimals(address pool) view returns (uint256[8])",
+  "function get_underlying_balances(address pool) view returns (uint256[8])",
 ]);
 const balancerIface = new ethers.Interface([
   "function getPoolTokenInfo(address pool) view returns (address[] tokens,tuple(uint8 tokenType,address rateProvider,bool paysYieldFees)[] tokenInfo,uint256[] balancesRaw,uint256[] lastBalancesLiveScaled18)",
@@ -362,12 +371,15 @@ async function runCurvePlain(): Promise<void> {
         return { success: false, returnData: "0x" };
       }
       if (selector === curveStateIface.getFunction("balances")!.selector) {
+        return { success: false, returnData: "0x" };
+      }
+      if (selector === curveIntBalanceIface.getFunction("balances")!.selector) {
         const index = Number(
-          curveStateIface.decodeFunctionData("balances", callData)[0],
+          curveIntBalanceIface.decodeFunctionData("balances", callData)[0],
         );
         return {
           success: true,
-          returnData: curveStateIface.encodeFunctionResult(
+          returnData: curveIntBalanceIface.encodeFunctionResult(
             "balances",
             [index === 0 ? 1_000_000n * UNIT : 1_000_000n * UNIT],
           ),
@@ -394,28 +406,65 @@ async function runCurveUnderlying(): Promise<void> {
     curveUnderlyingBlockScanState,
     edges,
     (read) => {
-    if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
-      return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
-    }
-    const decoded = curveUnderlyingIface.decodeFunctionData(
-      "get_dy_underlying",
-      read.data,
-    );
-    assert.equal(BigInt(decoded[2]), UNIT);
-    return curveUnderlyingIface.encodeFunctionResult(
-      "get_dy_underlying",
-      [decoded[0] === 0n ? 2n * UNIT : UNIT / 2n],
-    );
+      return respondAggregate(read, ({ target, callData }) => {
+        const selector = callData.slice(0, 10);
+        if (
+          target.toLowerCase() === CURVE_METAREGISTRY.toLowerCase() &&
+          selector ===
+            curveMetaRegistryStateIface.getFunction(
+              "get_underlying_decimals",
+            )!.selector
+        ) {
+          return successInner(
+            curveMetaRegistryStateIface.encodeFunctionResult(
+              "get_underlying_decimals",
+              [[18, 18, 0, 0, 0, 0, 0, 0]],
+            ),
+          );
+        }
+        if (
+          target.toLowerCase() === CURVE_METAREGISTRY.toLowerCase() &&
+          selector ===
+            curveMetaRegistryStateIface.getFunction(
+              "get_underlying_balances",
+            )!.selector
+        ) {
+          return successInner(
+            curveMetaRegistryStateIface.encodeFunctionResult(
+              "get_underlying_balances",
+              [[1_000n * UNIT, 1_000n * UNIT, 0, 0, 0, 0, 0, 0]],
+            ),
+          );
+        }
+        if (
+          selector ===
+            blockScanErc20Iface.getFunction("decimals")!.selector
+        ) {
+          return successInner(
+            blockScanErc20Iface.encodeFunctionResult("decimals", [18]),
+          );
+        }
+        const decoded = curveUnderlyingIface.decodeFunctionData(
+          "get_dy_underlying",
+          callData,
+        );
+        const amountIn = BigInt(decoded[2]);
+        return successInner(
+          curveUnderlyingIface.encodeFunctionResult(
+            "get_dy_underlying",
+            [decoded[0] === 0n ? amountIn * 2n : amountIn / 2n],
+          ),
+        );
+      });
     },
   );
   assert.equal(result.staticReads.length, 0);
-  assert.equal(result.initialReads.length, 2);
+  assert.equal(result.initialReads.length, 4);
   assert(
     result.initialReads.every((read) =>
-      read.data.slice(0, 10) ===
-        blockScanErc20Iface.getFunction("decimals")!.selector
+      read.to.toLowerCase() === BLOCKSCAN_MULTICALL3.toLowerCase()
     ),
-    "Curve-underlying decimals stay within the owning current-N state key",
+    "Curve-underlying scale probes stay in fail-isolated current-N multicalls",
   );
   assert.equal(result.dependentReads.length, 2);
 }
@@ -423,9 +472,6 @@ async function runCurveUnderlying(): Promise<void> {
 async function runBalancerV3(): Promise<void> {
   const edges = twoTokenEdges("balancer-v3-unlock");
   const result = await execute(balancerV3Adapter.id, balancerV3BlockScanState, edges, (read) => {
-    if (read.data.slice(0, 10) === blockScanErc20Iface.getFunction("decimals")!.selector) {
-      return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
-    }
     if (
       read.data.slice(0, 10) ===
         balancerIface.getFunction("getPoolTokenInfo")!.selector
@@ -440,29 +486,47 @@ async function runBalancerV3(): Promise<void> {
         [100n * UNIT, 100n * UNIT],
       ]);
     }
-    const decoded = balancerIface.decodeFunctionData(
-      "querySwapSingleTokenExactIn",
-      read.data,
-    );
-    assert.equal(BigInt(decoded[3]), UNIT);
-    return balancerIface.encodeFunctionResult(
-      "querySwapSingleTokenExactIn",
-      [String(decoded[1]).toLowerCase() === TOKEN0.toLowerCase() ? 2n * UNIT : UNIT / 2n],
-    );
+    return respondAggregate(read, ({ callData }) => {
+      const selector = callData.slice(0, 10);
+      if (
+        selector === blockScanErc20Iface.getFunction("decimals")!.selector
+      ) {
+        return successInner(
+          blockScanErc20Iface.encodeFunctionResult("decimals", [18]),
+        );
+      }
+      const decoded = balancerIface.decodeFunctionData(
+        "querySwapSingleTokenExactIn",
+        callData,
+      );
+      const amountIn = BigInt(decoded[3]);
+      return successInner(
+        balancerIface.encodeFunctionResult(
+          "querySwapSingleTokenExactIn",
+          [
+            String(decoded[1]).toLowerCase() === TOKEN0.toLowerCase()
+              ? amountIn * 2n
+              : amountIn / 2n,
+          ],
+        ),
+      );
+    });
   });
-  assert.equal(result.initialReads.length, 1);
+  assert.equal(result.initialReads.length, 4);
   assert.equal(result.dependentReads.length, 2);
 }
 
 async function runDodoV2(): Promise<void> {
   const edges = twoTokenEdges("dodo-v2-swap");
+  const reserve = 1_000_000_000n * UNIT;
+  const precisionSafeProbe = reserve / 1_000_000n;
   const result = await execute(dodoV2Adapter.id, dodoV2BlockScanState, edges, (read) => {
     const selector = read.data.slice(0, 10);
     if (selector === blockScanErc20Iface.getFunction("decimals")!.selector) {
       return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
     }
     if (selector === dodoBalanceIface.getFunction("balanceOf")!.selector) {
-      return dodoBalanceIface.encodeFunctionResult("balanceOf", [100n * UNIT]);
+      return dodoBalanceIface.encodeFunctionResult("balanceOf", [reserve]);
     }
     for (const fn of ["_BASE_TOKEN_", "_QUOTE_TOKEN_"] as const) {
       if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
@@ -472,10 +536,11 @@ async function runDodoV2(): Promise<void> {
         );
       }
     }
-    for (const fn of ["_BASE_RESERVE_", "_QUOTE_RESERVE_"] as const) {
-      if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
-        return dodoV2PoolIface.encodeFunctionResult(fn, [100n * UNIT]);
-      }
+    if (
+      selector === dodoV2PoolIface.getFunction("_BASE_RESERVE_")!.selector ||
+      selector === dodoV2PoolIface.getFunction("_QUOTE_RESERVE_")!.selector
+    ) {
+      throw new Error("block-scan must reuse reserves already returned by PMM state");
     }
     if (
       selector ===
@@ -484,17 +549,21 @@ async function runDodoV2(): Promise<void> {
       return dodoV2PoolIface.encodeFunctionResult("getPMMStateForCall", [
         UNIT,
         UNIT / 10n,
-        100n * UNIT,
-        100n * UNIT,
-        100n * UNIT,
-        100n * UNIT,
+        reserve,
+        reserve,
+        reserve,
+        reserve,
         0,
       ]);
     }
     for (const fn of ["querySellBase", "querySellQuote"] as const) {
       if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
         const decoded = dodoV2PoolIface.decodeFunctionData(fn, read.data);
-        assert.equal(BigInt(decoded[1]), UNIT);
+        assert.equal(
+          BigInt(decoded[1]),
+          precisionSafeProbe,
+          "DODO current-N probe must rise above one-token integer-rounding dust",
+        );
         return dodoV2PoolIface.encodeFunctionResult(
           fn,
           [fn === "querySellBase" ? 2n * UNIT : UNIT / 2n],
@@ -503,6 +572,7 @@ async function runDodoV2(): Promise<void> {
     }
     throw new Error(`unexpected DODO read ${read.id}`);
   });
+  assert.equal(result.initialReads.length, 5);
   assert.equal(result.dependentReads.length, 2);
 }
 
@@ -732,27 +802,60 @@ async function execute<Schema, Snapshot>(
     sourceBlock: SOURCE_BLOCK,
     sourceBlockHash: SOURCE_HASH,
     schema,
-    edges,
   };
-  const initialReads = capability.buildCurrentBlockReads(input);
-  const initialResults = initialReads.map((read) => success(read, respond(read)));
-  const dependentReads = capability.buildDependentBlockReads?.({
-    ...input,
-    completedRound: 0,
-    priorResults: initialResults,
-  }) ?? [];
-  const dependentResults = dependentReads.map((read) => success(read, respond(read)));
-  const allResults = Object.freeze([...initialResults, ...dependentResults]);
-  const noMore = capability.buildDependentBlockReads?.({
-    ...input,
-    completedRound: 1,
-    priorResults: allResults,
-  }) ?? [];
-  assert.equal(noMore.length, 0, "view quote must close after one dependent round");
-  const snapshot = capability.decodeState(schema, allResults);
-  const unavailable =
-    capability.behaviorProvenUnavailableEdges?.(snapshot, edges) ?? new Map();
-  const mids = capability.deriveMids(snapshot, edges);
+  const grouped = new Map<string, TokenEdge[]>();
+  for (const edge of edges) {
+    const key = capability.stateKey(edge);
+    const group = grouped.get(key) ?? [];
+    group.push(edge);
+    grouped.set(key, group);
+  }
+  const initialReads: StateRead[] = [];
+  const dependentReads: StateRead[] = [];
+  const snapshots: { readonly snapshot: Snapshot; readonly edges: readonly TokenEdge[] }[] = [];
+  const unavailable = new Map<string, string>();
+  const mids = new Map<string, RouteVenueMid>();
+  for (const groupEdges of grouped.values()) {
+    const groupInput = { ...input, edges: Object.freeze([...groupEdges]) };
+    const groupInitialReads = capability.buildCurrentBlockReads(groupInput);
+    const initialResults = groupInitialReads.map((read) =>
+      success(read, respond(read))
+    );
+    const groupDependentReads = capability.buildDependentBlockReads?.({
+      ...groupInput,
+      completedRound: 0,
+      priorResults: initialResults,
+    }) ?? [];
+    const dependentResults = groupDependentReads.map((read) =>
+      success(read, respond(read))
+    );
+    const allResults = Object.freeze([...initialResults, ...dependentResults]);
+    const noMore = capability.buildDependentBlockReads?.({
+      ...groupInput,
+      completedRound: 1,
+      priorResults: allResults,
+    }) ?? [];
+    assert.equal(noMore.length, 0, "view quote must close after one dependent round");
+    const snapshot = capability.decodeState(schema, allResults);
+    snapshots.push({ snapshot, edges: groupInput.edges });
+    for (const [edgeKey, reason] of
+      capability.behaviorProvenUnavailableEdges?.(
+        snapshot,
+        groupInput.edges,
+      ) ?? new Map()) {
+      unavailable.set(edgeKey, reason);
+    }
+    for (const [edgeKey, mid] of capability.deriveMids(
+      snapshot,
+      groupInput.edges,
+    )) {
+      mids.set(edgeKey, mid);
+    }
+    initialReads.push(...groupInitialReads);
+    dependentReads.push(...groupDependentReads);
+  }
+  const snapshot = snapshots[0]?.snapshot;
+  if (!snapshot) throw new Error("swap block-scan fixture produced no snapshot");
   assert.deepEqual(
     [...mids.keys()].sort(),
     edges
@@ -760,8 +863,15 @@ async function execute<Schema, Snapshot>(
       .filter((edgeKey) => !unavailable.has(edgeKey))
       .sort(),
   );
-  const harness = createAmbientIoPoisonHarness();
-  assertPureSynchronousDeriveMids({ capability, snapshot, edges, harness });
+  for (const group of snapshots) {
+    const harness = createAmbientIoPoisonHarness();
+    assertPureSynchronousDeriveMids({
+      capability,
+      snapshot: group.snapshot,
+      edges: group.edges,
+      harness,
+    });
+  }
   if (options.recordProductionFixture !== false) {
     const production = PRODUCTION_ADAPTER_FAMILIES
       .pricing("swap")
@@ -790,6 +900,31 @@ async function execute<Schema, Snapshot>(
     mids,
     unavailable,
   };
+}
+
+function respondAggregate(
+  read: StateRead,
+  respond: (call: {
+    readonly target: string;
+    readonly callData: string;
+  }) => { readonly success: boolean; readonly returnData: string },
+): string {
+  assert.equal(read.to.toLowerCase(), BLOCKSCAN_MULTICALL3.toLowerCase());
+  const calls = blockScanMulticallIface.decodeFunctionData(
+    "aggregate3",
+    read.data,
+  )[0] as readonly { target: string; callData: string }[];
+  return blockScanMulticallIface.encodeFunctionResult(
+    "aggregate3",
+    [calls.map(respond)],
+  );
+}
+
+function successInner(returnData: string): {
+  readonly success: true;
+  readonly returnData: string;
+} {
+  return Object.freeze({ success: true, returnData });
 }
 
 function success(read: StateRead, data: string): StateReadSuccess {

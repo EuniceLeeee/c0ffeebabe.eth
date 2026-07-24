@@ -12,14 +12,19 @@ import {
   singletonIndexedAddressEmitter,
 } from "../landed-event-registry.js";
 import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanErc20Iface,
   currentBlockRead,
+  decodeMulticall,
+  encodeMulticall,
+  optionalMulticallData,
   requireRead,
+  type MulticallItem,
 } from "./blockscan-state-shared.js";
 import {
-  behaviorProvenUnavailableViewQuote,
-  createCurrentBlockViewQuoteCapability,
-  quoteReadId,
-} from "./view-quote-blockscan-state.js";
+  createAdaptiveCurrentBlockViewQuoteCapability,
+  type AdaptiveViewQuoteContext,
+} from "./adaptive-view-quote-blockscan-state.js";
 import type {
   LandedPoolDiscoveryLog,
   LandedPoolMaterializationCapability,
@@ -114,18 +119,11 @@ interface BalancerV3StateSchema {
 }
 
 export const balancerV3BlockScanState =
-  createCurrentBlockViewQuoteCapability<BalancerV3StateSchema>({
+  createAdaptiveCurrentBlockViewQuoteCapability<BalancerV3StateSchema>({
     kind: "external-swap",
     edgeAdapterIds: new Set(["balancer-v3-unlock"]),
-    compileGroup(edges) {
-      const pool = ethers.getAddress(edges[0].target).toLowerCase();
-      if (
-        edges.some((edge) =>
-          ethers.getAddress(edge.target).toLowerCase() !== pool
-        )
-      ) {
-        throw new Error(`balancer-v3 block-scan group mixed pool ${pool}`);
-      }
+    compileDirection(edge) {
+      const pool = ethers.getAddress(edge.target).toLowerCase();
       return Object.freeze({ pool });
     },
     initialReads(ctx) {
@@ -139,68 +137,30 @@ export const balancerV3BlockScanState =
             ctx.static.pool,
           ]),
         }),
+        currentBlockRead({
+          id: balancerTokenDecimalsReadId(ctx.edge.tokenIn),
+          sourceBlock: ctx.sourceBlock,
+          sourceBlockHash: ctx.sourceBlockHash,
+          to: BLOCKSCAN_MULTICALL3,
+          data: encodeMulticall(balancerTokenDecimalsItems(ctx.edge.tokenIn)),
+          transport: "rpc-batch",
+        }),
       ]);
     },
-    quoteAmountIn(ctx) {
-      const poolInfo = requireRead(
-        ctx.priorResults,
-        balancerPoolInfoReadId(ctx.stateKey),
-      );
-      const decoded = vaultIface.decodeFunctionResult(
-        "getPoolTokenInfo",
-        poolInfo.data,
-      );
-      const tokens = (decoded[0] as string[]).map((token) =>
-        ethers.getAddress(token)
-      );
-      const balancesRaw = (decoded[2] as bigint[]).map((balance) =>
-        BigInt(balance)
-      );
-      if (tokens.length !== balancesRaw.length) {
-        throw new Error(
-          `balancer-v3 pool ${ctx.static.pool} returned inconsistent token balances`,
-        );
-      }
-      const tokenIndex = tokens.findIndex((token) =>
-        token.toLowerCase() === ctx.edge.tokenIn.toLowerCase()
-      );
-      if (tokenIndex < 0) {
-        throw new Error(
-          `balancer-v3 pool ${ctx.static.pool} omitted input token ${ctx.edge.tokenIn}`,
-        );
-      }
-      const balance = balancesRaw[tokenIndex];
-      // Probe at most one percent of raw pool liquidity. For balances below
-      // 100 atomic units, one quarter is the largest integer probe that
-      // remains below WeightedMath's 30% max-in bound.
-      const liquidityProbe = balance >= 100n
-        ? balance / 100n
-        : balance / 4n;
-      if (liquidityProbe <= 0n) {
-        return behaviorProvenUnavailableViewQuote(
-          `balancer-v3 pool ${ctx.static.pool} has no behavior-safe input ` +
-            `for ${ctx.edge.tokenIn} at the pinned source`,
-        );
-      }
-      return liquidityProbe < ctx.amountIn
-        ? liquidityProbe
-        : ctx.amountIn;
+    quoteCandidates(ctx) {
+      return balancerQuoteCandidates(ctx);
     },
-    quoteRead(ctx) {
-      return currentBlockRead({
-        id: quoteReadId(ctx.stateKey, ctx.edge),
-        sourceBlock: ctx.sourceBlock,
-        sourceBlockHash: ctx.sourceBlockHash,
-        to: ADDR.BALANCER_V3_ROUTER,
+    quoteCall(ctx, amountIn) {
+      return Object.freeze({
+        target: ADDR.BALANCER_V3_ROUTER,
         data: routerIface.encodeFunctionData("querySwapSingleTokenExactIn", [
           ctx.edge.target,
           ctx.edge.tokenIn,
           ctx.edge.tokenOut,
-          ctx.amountIn,
+          amountIn,
           ethers.ZeroAddress,
           "0x",
         ]),
-        transport: "rpc-batch",
       });
     },
     decodeQuote(_edge, data) {
@@ -210,11 +170,99 @@ export const balancerV3BlockScanState =
     },
     dependencies() {
       return Object.freeze([
-        ADDR.BALANCER_V3_ROUTER.toLowerCase(),
-        ADDR.BALANCER_V3_VAULT.toLowerCase(),
+        ADDR.BALANCER_V3_ROUTER,
+        ADDR.BALANCER_V3_VAULT,
       ]);
     },
   });
+
+function balancerQuoteCandidates(
+  ctx: AdaptiveViewQuoteContext<BalancerV3StateSchema>,
+): readonly bigint[] {
+  const poolInfo = requireRead(
+    ctx.priorResults,
+    balancerPoolInfoReadId(ctx.stateKey),
+  );
+  const decoded = vaultIface.decodeFunctionResult(
+    "getPoolTokenInfo",
+    poolInfo.data,
+  );
+  const tokens = (decoded[0] as string[]).map((token) =>
+    ethers.getAddress(token)
+  );
+  const balancesRaw = (decoded[2] as bigint[]).map((balance) =>
+    BigInt(balance)
+  );
+  if (tokens.length !== balancesRaw.length) {
+    throw new Error(
+      `balancer-v3 pool ${ctx.static.pool} returned inconsistent token balances`,
+    );
+  }
+  const inputIndex = tokens.findIndex((token) =>
+    token.toLowerCase() === ctx.edge.tokenIn.toLowerCase()
+  );
+  const outputIndex = tokens.findIndex((token) =>
+    token.toLowerCase() === ctx.edge.tokenOut.toLowerCase()
+  );
+  if (inputIndex < 0 || outputIndex < 0 || inputIndex === outputIndex) {
+    throw new Error(
+      `balancer-v3 pool ${ctx.static.pool} omitted quoted token direction`,
+    );
+  }
+  const decimalsItems = balancerTokenDecimalsItems(ctx.edge.tokenIn);
+  const decimalsResults = decodeMulticall(
+    requireRead(
+      ctx.priorResults,
+      balancerTokenDecimalsReadId(ctx.edge.tokenIn),
+    ),
+    decimalsItems,
+  );
+  const decimalsData = optionalMulticallData(
+    decimalsResults,
+    "token-decimals",
+  );
+  if (!decimalsData) {
+    throw new Error(
+      `balancer-v3 input token ${ctx.edge.tokenIn} has no decimals scale`,
+    );
+  }
+  const decimals = Number(
+    blockScanErc20Iface.decodeFunctionResult("decimals", decimalsData)[0],
+  );
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+    throw new Error(
+      `balancer-v3 input token ${ctx.edge.tokenIn} returned invalid decimals`,
+    );
+  }
+  const unit = 10n ** BigInt(decimals);
+  const balance = balancesRaw[inputIndex];
+  const liquidityProbe = balance >= 100n
+    ? balance / 100n
+    : balance > 0n
+    ? balance / 4n
+    : 0n;
+  const candidates: bigint[] = [];
+  if (liquidityProbe > 0n) {
+    candidates.push(liquidityProbe < unit ? liquidityProbe : unit);
+  }
+  for (let exponent = 0; exponent <= decimals + 6; exponent += 3) {
+    candidates.push(10n ** BigInt(exponent));
+  }
+  return Object.freeze(candidates);
+}
+
+function balancerTokenDecimalsReadId(token: string): string {
+  return `balancer-v3:token-decimals:${ethers.getAddress(token).toLowerCase()}`;
+}
+
+function balancerTokenDecimalsItems(token: string): readonly MulticallItem[] {
+  return Object.freeze([{
+    label: "token-decimals",
+    target: token,
+    callData: blockScanErc20Iface.encodeFunctionData("decimals"),
+    allowFailure: true,
+  }]);
+}
 
 export const balancerV3Adapter = Object.freeze({
   id: "balancer-v3",

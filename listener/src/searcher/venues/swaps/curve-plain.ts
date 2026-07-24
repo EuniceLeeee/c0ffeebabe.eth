@@ -101,12 +101,18 @@ const curveStateIface = new ethers.Interface([
   "function balances(uint256 i) view returns (uint256)",
   "function stored_rates() view returns (uint256[])",
 ]);
+const curveIntBalanceIface = new ethers.Interface([
+  "function balances(int128 i) view returns (uint256)",
+]);
+
+type CurveBalanceAbi = "uint256" | "int128";
 
 interface CurveStateSchema {
   readonly pools: ReadonlyMap<string, {
     readonly coins: readonly string[];
     readonly items: readonly MulticallItem[];
     readonly plainRates: readonly bigint[];
+    readonly balanceAbi: CurveBalanceAbi | null;
   }>;
 }
 
@@ -200,6 +206,7 @@ export const curvePlainBlockScanState = Object.freeze({
       coins: readonly string[];
       items: readonly MulticallItem[];
       plainRates: readonly bigint[];
+      balanceAbi: CurveBalanceAbi | null;
     }>();
     for (const [pool, indexed] of indexedCoins) {
       const coins = contiguousCurveCoins(indexed, pool);
@@ -229,18 +236,11 @@ export const curvePlainBlockScanState = Object.freeze({
           allowFailure: true,
         },
       ];
-      for (let index = 0; index < coins.length; index++) {
-        items.push({
-          label: `balance:${index}`,
-          target: pool,
-          callData: curveStateIface.encodeFunctionData("balances", [index]),
-          allowFailure: true,
-        });
-      }
       pools.set(pool, Object.freeze({
         coins: Object.freeze(coins),
         items: Object.freeze(items),
         plainRates: Object.freeze([]),
+        balanceAbi: null,
       }));
     }
     return Object.freeze({ pools });
@@ -256,19 +256,31 @@ export const curvePlainBlockScanState = Object.freeze({
     ]
       .filter((token) => curveNativeRateMultiplier(token) === null)
       .sort();
-    return Object.freeze(tokens.map((token) => currentBlockRead({
+    const decimalsReads = tokens.map((token) => currentBlockRead({
       id: `curve-decimals:${token}`,
       sourceBlock,
       sourceBlockHash,
       to: token,
       data: blockScanErc20Iface.encodeFunctionData("decimals"),
-    })));
+    }));
+    const balanceAbiReads = [...schema.pools.keys()].map((pool) =>
+      currentBlockRead({
+        id: curveBalanceAbiReadId(pool),
+        sourceBlock,
+        sourceBlockHash,
+        to: BLOCKSCAN_MULTICALL3,
+        data: encodeMulticall(curveBalanceAbiProbeItems(pool)),
+        transport: "rpc-batch",
+      })
+    );
+    return Object.freeze([...decimalsReads, ...balanceAbiReads]);
   },
 
   hydrateStaticSchema(schema, results) {
     const byToken = new Map<string, bigint>();
     for (const result of results) {
-      if (!result.ok || !result.id.startsWith("curve-decimals:")) {
+      if (!result.id.startsWith("curve-decimals:")) continue;
+      if (!result.ok) {
         throw new Error(`curve static decimals unresolved ${result.id}`);
       }
       const token = result.id.slice("curve-decimals:".length);
@@ -279,6 +291,19 @@ export const curvePlainBlockScanState = Object.freeze({
     }
     const pools = new Map();
     for (const [pool, descriptor] of schema.pools) {
+      const balanceAbi = decodeCurveBalanceAbi(pool, results);
+      const balanceIface = balanceAbi === "int128"
+        ? curveIntBalanceIface
+        : curveStateIface;
+      const items = [
+        ...descriptor.items,
+        ...descriptor.coins.map((_, index) => ({
+          label: `balance:${index}`,
+          target: pool,
+          callData: balanceIface.encodeFunctionData("balances", [index]),
+          allowFailure: true,
+        })),
+      ];
       const plainRates = descriptor.coins.map((coin) => {
         const rate =
           curveNativeRateMultiplier(coin) ??
@@ -288,7 +313,9 @@ export const curvePlainBlockScanState = Object.freeze({
       });
       pools.set(pool, Object.freeze({
         ...descriptor,
+        items: Object.freeze(items),
         plainRates: Object.freeze(plainRates),
+        balanceAbi,
       }));
     }
     return Object.freeze({ pools });
@@ -390,12 +417,25 @@ export const curvePlainBlockScanState = Object.freeze({
       }
       const reserveIn = snapshot.state.balances[edge.curveI];
       const reserveOut = snapshot.state.balances[edge.curveJ];
-      const amountIn = reserveIn / 1_000_000n > 0n
+      let amountIn = reserveIn / 1_000_000n > 0n
         ? reserveIn / 1_000_000n
         : 1n;
-      const amountOut = snapshot.kind === "plain"
-        ? curvePlainGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn)
-        : curveNgGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn);
+      const maxProbe = reserveIn / 100n > 0n ? reserveIn / 100n : reserveIn;
+      let amountOut = 0n;
+      while (amountIn > 0n && amountIn <= maxProbe) {
+        amountOut = snapshot.kind === "plain"
+          ? curvePlainGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn)
+          : curveNgGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn);
+        if (amountOut > 0n) break;
+        const next = amountIn * 10n;
+        amountIn = next > maxProbe ? maxProbe : next;
+        if (amountIn === maxProbe && amountOut === 0n) {
+          amountOut = snapshot.kind === "plain"
+            ? curvePlainGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn)
+            : curveNgGetDy(snapshot.state, edge.curveI, edge.curveJ, amountIn);
+          break;
+        }
+      }
       return quotedPoolMid({
         kind: "curve",
         edge,
@@ -415,6 +455,47 @@ export const curvePlainBlockScanState = Object.freeze({
     ]);
   },
 } satisfies BlockScanStateCapability<CurveStateSchema, CurveCurrentState>);
+
+function curveBalanceAbiReadId(pool: string): string {
+  return `curve-balance-abi:${ethers.getAddress(pool).toLowerCase()}`;
+}
+
+function curveBalanceAbiProbeItems(pool: string): readonly MulticallItem[] {
+  return Object.freeze([
+    {
+      label: "uint256",
+      target: pool,
+      callData: curveStateIface.encodeFunctionData("balances", [0]),
+      allowFailure: true,
+    },
+    {
+      label: "int128",
+      target: pool,
+      callData: curveIntBalanceIface.encodeFunctionData("balances", [0]),
+      allowFailure: true,
+    },
+  ]);
+}
+
+function decodeCurveBalanceAbi(
+  pool: string,
+  results: readonly StateReadResult[],
+): CurveBalanceAbi {
+  const items = curveBalanceAbiProbeItems(pool);
+  const decoded = decodeMulticall(
+    requireRead(results, curveBalanceAbiReadId(pool)),
+    items,
+  );
+  const uintData = optionalMulticallData(decoded, "uint256");
+  const intData = optionalMulticallData(decoded, "int128");
+  if (!uintData && !intData) {
+    throw new Error(`curve pool ${pool} exposes no supported balances getter`);
+  }
+  if (uintData && intData && BigInt(uintData) !== BigInt(intData)) {
+    throw new Error(`curve pool ${pool} returned ambiguous balance getters`);
+  }
+  return uintData ? "uint256" : "int128";
+}
 
 export const curvePlainAdapter = Object.freeze({
   id: "curve-plain",

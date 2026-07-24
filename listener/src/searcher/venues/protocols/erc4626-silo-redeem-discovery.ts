@@ -350,23 +350,28 @@ async function proveExactInPayout(input: {
       "asset",
     );
     if (payoutAsset.toLowerCase() !== input.underlyingAsset.toLowerCase()) return null;
-    const assets = await callUint(
-      input.ctx,
-      input.target,
+    const simulate = input.ctx.backend.simulateCalls!;
+    const [preview] = await simulate({
+      calls: [{
+        from: ERC4626_SILO_PROBE_HOLDER,
+        to: input.target,
+        data: SILO.encodeFunctionData("previewRedeem", [input.sampleShares]),
+      }],
+    });
+    if (!preview || preview.status !== 1) return null;
+    const simulatedAssets = decodeUint(
       SILO,
       "previewRedeem",
-      [input.sampleShares],
+      preview.returnData,
     );
-    const expectedOut = await callUint(
-      input.ctx,
+    if (simulatedAssets <= 0n) return null;
+    const redeemData = SILO.encodeFunctionData("redeem", [
       input.payoutToken,
-      PAYOUT,
-      "previewWithdraw",
-      [assets],
-    );
-    if (assets <= 0n || expectedOut <= 0n) return null;
+      input.sampleShares,
+      ERC4626_SILO_PROBE_RECEIVER,
+      ERC4626_SILO_PROBE_HOLDER,
+    ]);
 
-    const simulate = input.ctx.backend.simulateCalls!;
     const results = await simulate({
       calls: [
         {
@@ -387,12 +392,32 @@ async function proveExactInPayout(input: {
         {
           from: ERC4626_SILO_PROBE_HOLDER,
           to: input.target,
-          data: SILO.encodeFunctionData("redeem", [
-            input.payoutToken,
-            input.sampleShares,
-            ERC4626_SILO_PROBE_RECEIVER,
-            ERC4626_SILO_PROBE_HOLDER,
-          ]),
+          data: SILO.encodeFunctionData("previewRedeem", [input.sampleShares]),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.payoutToken,
+          data: PAYOUT.encodeFunctionData("previewWithdraw", [simulatedAssets]),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.target,
+          data: SILO.encodeFunctionData("balanceOf", [ERC4626_SILO_PROBE_HOLDER]),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.target,
+          data: SILO.encodeFunctionData("totalSupply"),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.payoutToken,
+          data: PAYOUT.encodeFunctionData("balanceOf", [ERC4626_SILO_PROBE_RECEIVER]),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.target,
+          data: redeemData,
         },
         {
           from: ERC4626_SILO_PROBE_HOLDER,
@@ -418,52 +443,123 @@ async function proveExactInPayout(input: {
         },
       },
     });
-    if (results.length !== 7 || results.some((result) => result.status !== 1)) return null;
+    if (results.length !== 12 || results.some((result) => result.status !== 1)) return null;
     const shareBefore = decodeUint(SILO, "balanceOf", results[0].returnData);
     const supplyBefore = decodeUint(SILO, "totalSupply", results[1].returnData);
     const payoutBefore = decodeUint(PAYOUT, "balanceOf", results[2].returnData);
-    const returnedOut = decodeUint(SILO, "redeem", results[3].returnData);
-    const shareAfter = decodeUint(SILO, "balanceOf", results[4].returnData);
-    const supplyAfter = decodeUint(SILO, "totalSupply", results[5].returnData);
-    const payoutAfter = decodeUint(PAYOUT, "balanceOf", results[6].returnData);
+    const assets = decodeUint(SILO, "previewRedeem", results[3].returnData);
+    const expectedOut = decodeUint(PAYOUT, "previewWithdraw", results[4].returnData);
+    const shareMid = decodeUint(SILO, "balanceOf", results[5].returnData);
+    const supplyMid = decodeUint(SILO, "totalSupply", results[6].returnData);
+    const payoutMid = decodeUint(PAYOUT, "balanceOf", results[7].returnData);
+    const returnedOut = decodeUint(SILO, "redeem", results[8].returnData);
+    const shareAfter = decodeUint(SILO, "balanceOf", results[9].returnData);
+    const supplyAfter = decodeUint(SILO, "totalSupply", results[10].returnData);
+    const payoutAfter = decodeUint(PAYOUT, "balanceOf", results[11].returnData);
     if (
+      assets !== simulatedAssets ||
+      expectedOut <= 0n ||
+      results[3].logs.length !== 0 ||
+      results[4].logs.length !== 0 ||
       shareBefore !== input.sampleShares ||
+      shareMid !== shareBefore ||
+      supplyMid !== supplyBefore ||
+      payoutMid !== payoutBefore ||
       shareAfter !== 0n ||
-      supplyBefore !== input.totalSupply ||
+      supplyBefore < input.sampleShares ||
       supplyAfter + input.sampleShares !== supplyBefore ||
       returnedOut !== expectedOut ||
       payoutAfter - payoutBefore !== expectedOut
     ) return null;
     if (!exactBurnTransfer(
-      results[3].logs,
+      results[8].logs,
       input.target,
       ERC4626_SILO_PROBE_HOLDER,
       input.sampleShares,
     )) return null;
     if (!exactReceiverTransfer(
-      results[3].logs,
+      results[8].logs,
       input.payoutToken,
       ERC4626_SILO_PROBE_RECEIVER,
       expectedOut,
     )) return null;
     if (hasForeignReceiverPayout(
-      results[3].logs,
+      results[8].logs,
       input.payoutToken,
       ERC4626_SILO_PROBE_RECEIVER,
     )) return null;
     if (!exactWithdrawEvent(
-      results[3].logs,
+      results[8].logs,
       input.target,
       ERC4626_SILO_PROBE_HOLDER,
       ERC4626_SILO_PROBE_RECEIVER,
       assets,
       input.sampleShares,
     )) return null;
+
+    const directResults = await simulate({
+      calls: [
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.target,
+          data: redeemData,
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.target,
+          data: SILO.encodeFunctionData("balanceOf", [
+            ERC4626_SILO_PROBE_HOLDER,
+          ]),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.target,
+          data: SILO.encodeFunctionData("totalSupply"),
+        },
+        {
+          from: ERC4626_SILO_PROBE_HOLDER,
+          to: input.payoutToken,
+          data: PAYOUT.encodeFunctionData("balanceOf", [
+            ERC4626_SILO_PROBE_RECEIVER,
+          ]),
+        },
+      ],
+      stateOverrides: {
+        [input.target]: {
+          stateDiff: {
+            [input.shareBalanceSlot]: ethers.toBeHex(input.sampleShares, 32),
+          },
+        },
+      },
+    });
+    const direct = directResults[0];
+    if (
+      directResults.length !== 4 ||
+      directResults.some((result) => result.status !== 1) ||
+      !direct ||
+      direct.returnData.toLowerCase() !== results[8].returnData.toLowerCase() ||
+      normalizedSimulationLogs(direct.logs) !==
+        normalizedSimulationLogs(results[8].logs) ||
+      decodeUint(SILO, "balanceOf", directResults[1].returnData) !==
+        shareAfter ||
+      decodeUint(SILO, "totalSupply", directResults[2].returnData) !==
+        supplyAfter ||
+      decodeUint(PAYOUT, "balanceOf", directResults[3].returnData) !==
+        payoutAfter
+    ) return null;
     return expectedOut;
   } catch (error) {
     if (isRetryableSourceFailure(error)) throw error;
     return null;
   }
+}
+
+function normalizedSimulationLogs(logs: readonly ProtocolDiscoveryLog[]): string {
+  return JSON.stringify(logs.map((log) => ({
+    address: log.address.toLowerCase(),
+    topics: log.topics.map((topic) => topic.toLowerCase()),
+    data: log.data.toLowerCase(),
+  })));
 }
 
 async function readTargetSurface(

@@ -110,6 +110,12 @@ export interface FamilyMutationClassification {
 }
 
 export interface IncrementalStateCapability<Schema> {
+  /**
+   * For a schema-compatible state key, local StateRead IDs are part of the
+   * incremental proof contract and must remain stable across generations.
+   * The coordinator can then partition proven carry-forward keys before
+   * constructing current-N descriptors.
+   */
   mutationQueryDescriptor(input: {
     readonly schema: Schema;
     readonly edges: readonly TokenEdge[];

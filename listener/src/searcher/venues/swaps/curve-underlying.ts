@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../../planner/token-graph.js";
 import {
+  CURVE_METAREGISTRY,
   probeCurveUnderlyingQuote,
   quoteCurveUnderlyingByIndex,
   resolveCurveUnderlyingMetadata,
@@ -20,12 +21,21 @@ import {
 } from "../identity.js";
 import { createAddressLandedPoolMaterializer } from "../landed-pool-discovery.js";
 import { createCurveSwapObservation } from "../swap-observation.js";
-import { currentBlockRead } from "./blockscan-state-shared.js";
+import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanErc20Iface,
+  currentBlockRead,
+  decodeMulticall,
+  encodeMulticall,
+  optionalMulticallData,
+  requireRead,
+  type MulticallItem,
+} from "./blockscan-state-shared.js";
 import { curveUnderlyingLandedEvents } from "./curve-landed-events.js";
 import {
-  createCurrentBlockViewQuoteCapability,
-  quoteReadId,
-} from "./view-quote-blockscan-state.js";
+  createAdaptiveCurrentBlockViewQuoteCapability,
+  type AdaptiveViewQuoteContext,
+} from "./adaptive-view-quote-blockscan-state.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 const curveUnderlyingSwapObservation = createCurveSwapObservation({
@@ -38,6 +48,10 @@ const curveUnderlyingSwapObservation = createCurveSwapObservation({
 });
 const curveUnderlyingIface = new ethers.Interface([
   "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
+]);
+const curveMetaRegistryStateIface = new ethers.Interface([
+  "function get_underlying_decimals(address pool) view returns (uint256[8])",
+  "function get_underlying_balances(address pool) view returns (uint256[8])",
 ]);
 
 interface CurveUnderlyingStateSchema {
@@ -85,39 +99,61 @@ const curveUnderlyingPoolDiscovery = createAddressLandedPoolMaterializer({
 });
 
 export const curveUnderlyingBlockScanState =
-  createCurrentBlockViewQuoteCapability<CurveUnderlyingStateSchema>({
+  createAdaptiveCurrentBlockViewQuoteCapability<CurveUnderlyingStateSchema>({
     kind: "curve-underlying",
     edgeAdapterIds: new Set(["curve-exchange-underlying"]),
-    // Underlying pools can expose non-standard token contracts. Keep their
-    // decimals reads inside each pool state key so one bad token cannot abort
-    // static-schema compilation for every healthy Curve-underlying instance.
-    decimalsReadScope: "state-key-current",
-    compileGroup(edges) {
-      const pool = ethers.getAddress(edges[0].target).toLowerCase();
-      for (const edge of edges) {
-        if (
-          ethers.getAddress(edge.target).toLowerCase() !== pool ||
-          edge.curveI === undefined ||
-          edge.curveJ === undefined
-        ) {
-          throw new Error(`curve-underlying block-scan edge ${pool} is incomplete`);
-        }
+    compileDirection(edge) {
+      const pool = ethers.getAddress(edge.target).toLowerCase();
+      if (
+        edge.curveI === undefined ||
+        edge.curveJ === undefined ||
+        edge.curveI < 0 ||
+        edge.curveI >= 8 ||
+        edge.curveJ < 0 ||
+        edge.curveJ >= 8 ||
+        edge.curveI === edge.curveJ
+      ) {
+        throw new Error(`curve-underlying block-scan edge ${pool} is incomplete`);
       }
       return Object.freeze({ pool });
     },
-    quoteRead(ctx) {
+    initialReads(ctx) {
+      return Object.freeze([
+        currentBlockRead({
+          id: curveUnderlyingRegistryScaleReadId(ctx.static.pool),
+          sourceBlock: ctx.sourceBlock,
+          sourceBlockHash: ctx.sourceBlockHash,
+          to: BLOCKSCAN_MULTICALL3,
+          data: encodeMulticall(curveUnderlyingRegistryScaleItems(
+            ctx.static.pool,
+          )),
+          transport: "rpc-batch",
+        }),
+        currentBlockRead({
+          id: curveUnderlyingTokenDecimalsReadId(ctx.edge.tokenIn),
+          sourceBlock: ctx.sourceBlock,
+          sourceBlockHash: ctx.sourceBlockHash,
+          to: BLOCKSCAN_MULTICALL3,
+          data: encodeMulticall(curveUnderlyingTokenDecimalsItems(
+            ctx.edge.tokenIn,
+          )),
+          transport: "rpc-batch",
+        }),
+      ]);
+    },
+    quoteCandidates(ctx) {
+      return curveUnderlyingQuoteCandidates(ctx);
+    },
+    quoteCall(ctx, amountIn) {
       if (ctx.edge.curveI === undefined || ctx.edge.curveJ === undefined) {
         throw new Error("curve-underlying current-N quote is missing indices");
       }
-      return currentBlockRead({
-        id: quoteReadId(ctx.stateKey, ctx.edge),
-        sourceBlock: ctx.sourceBlock,
-        sourceBlockHash: ctx.sourceBlockHash,
-        to: ctx.edge.target,
+      return Object.freeze({
+        target: ctx.edge.target,
         data: curveUnderlyingIface.encodeFunctionData("get_dy_underlying", [
           BigInt(ctx.edge.curveI),
           BigInt(ctx.edge.curveJ),
-          ctx.amountIn,
+          amountIn,
         ]),
       });
     },
@@ -126,7 +162,150 @@ export const curveUnderlyingBlockScanState =
         curveUnderlyingIface.decodeFunctionResult("get_dy_underlying", data)[0],
       );
     },
+    dependencies() {
+      return Object.freeze([CURVE_METAREGISTRY]);
+    },
   });
+
+function curveUnderlyingQuoteCandidates(
+  ctx: AdaptiveViewQuoteContext<CurveUnderlyingStateSchema>,
+): readonly bigint[] {
+  const index = ctx.edge.curveI;
+  if (index === undefined) {
+    throw new Error("curve-underlying scale lookup is missing input index");
+  }
+  const registryItems = curveUnderlyingRegistryScaleItems(ctx.static.pool);
+  const registryResults = decodeMulticall(
+    requireRead(
+      ctx.priorResults,
+      curveUnderlyingRegistryScaleReadId(ctx.static.pool),
+    ),
+    registryItems,
+  );
+  const decimalsData = optionalMulticallData(
+    registryResults,
+    "underlying-decimals",
+  );
+  const balancesData = optionalMulticallData(
+    registryResults,
+    "underlying-balances",
+  );
+  let unit: bigint | null = null;
+  let reserve: bigint | null = null;
+  if (decimalsData) {
+    const decimals = Array.from(
+      curveMetaRegistryStateIface.decodeFunctionResult(
+        "get_underlying_decimals",
+        decimalsData,
+      )[0] as readonly bigint[],
+    ).map(BigInt);
+    const value = decimals[index];
+    if (value !== undefined && value >= 0n && value <= 36n) {
+      unit = 10n ** value;
+    }
+  }
+  if (balancesData) {
+    const balances = Array.from(
+      curveMetaRegistryStateIface.decodeFunctionResult(
+        "get_underlying_balances",
+        balancesData,
+      )[0] as readonly bigint[],
+    ).map(BigInt);
+    const value = balances[index];
+    if (value !== undefined && value > 0n) reserve = value;
+  }
+  if (unit === null) {
+    const tokenItems = curveUnderlyingTokenDecimalsItems(ctx.edge.tokenIn);
+    const tokenResults = decodeMulticall(
+      requireRead(
+        ctx.priorResults,
+        curveUnderlyingTokenDecimalsReadId(ctx.edge.tokenIn),
+      ),
+      tokenItems,
+    );
+    const tokenData = optionalMulticallData(tokenResults, "token-decimals");
+    if (tokenData) {
+      const decimals = Number(
+        blockScanErc20Iface.decodeFunctionResult("decimals", tokenData)[0],
+      );
+      if (Number.isInteger(decimals) && decimals >= 0 && decimals <= 36) {
+        unit = 10n ** BigInt(decimals);
+      }
+    }
+  }
+  if (unit === null && reserve === null) {
+    throw new Error(
+      `curve-underlying ${ctx.static.pool} has no behavior-proven input scale`,
+    );
+  }
+
+  const candidates: bigint[] = [];
+  if (unit !== null) candidates.push(unit);
+  if (reserve !== null) {
+    const cap = reserve / 100n > 0n ? reserve / 100n : reserve;
+    let probe = reserve / 1_000_000n > 0n
+      ? reserve / 1_000_000n
+      : 1n;
+    candidates.push(probe);
+    while (probe < cap) {
+      const next = probe * 10n;
+      probe = next > cap ? cap : next;
+      candidates.push(probe);
+    }
+  } else if (unit !== null) {
+    candidates.push(
+      unit / 1_000_000n,
+      unit / 1_000n,
+      unit * 1_000n,
+      unit * 1_000_000n,
+    );
+  }
+  return Object.freeze(candidates);
+}
+
+function curveUnderlyingRegistryScaleReadId(pool: string): string {
+  return `curve-underlying:registry-scale:${ethers.getAddress(pool).toLowerCase()}`;
+}
+
+function curveUnderlyingRegistryScaleItems(
+  pool: string,
+): readonly MulticallItem[] {
+  return Object.freeze([
+    {
+      label: "underlying-decimals",
+      target: CURVE_METAREGISTRY,
+      callData: curveMetaRegistryStateIface.encodeFunctionData(
+        "get_underlying_decimals",
+        [pool],
+      ),
+      allowFailure: true,
+    },
+    {
+      label: "underlying-balances",
+      target: CURVE_METAREGISTRY,
+      callData: curveMetaRegistryStateIface.encodeFunctionData(
+        "get_underlying_balances",
+        [pool],
+      ),
+      allowFailure: true,
+    },
+  ]);
+}
+
+function curveUnderlyingTokenDecimalsReadId(token: string): string {
+  return `curve-underlying:token-decimals:${ethers.getAddress(token).toLowerCase()}`;
+}
+
+function curveUnderlyingTokenDecimalsItems(
+  token: string,
+): readonly MulticallItem[] {
+  return Object.freeze([{
+    label: "token-decimals",
+    target: token,
+    callData: blockScanErc20Iface.encodeFunctionData("decimals"),
+    allowFailure: true,
+  }]);
+}
 
 export const curveUnderlyingAdapter = Object.freeze({
   id: "curve-underlying",

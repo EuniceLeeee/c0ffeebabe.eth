@@ -1123,18 +1123,102 @@ export class BlockScanStateCoordinator {
       readonly globalId: string;
       readonly read: StateRead;
     }
-    const planned: PlannedRead[] = [];
+    const plannedByStateKey = new Map<string, PlannedRead[]>();
     const resultsByGlobalId = new Map<string, StateReadResult>();
     const localResultsByStateKey = new Map<string, StateReadResult[]>();
     const seenLocalIdsByStateKey = new Map<string, Set<string>>();
     const closedStateKeys = new Set<string>();
     const carryForwardStateKeys = new Set<string>();
+    const carryReadKeysByStateKey = new Map<string, readonly string[]>();
     const classifiedDirectStateKeys = new Set<string>();
     const badStateKeys = new Set<string>(
       groups
         .filter((group) => !compiledFamilies.has(group.familyId))
         .map((group) => group.stateKey),
     );
+
+    /*
+     * Partition before building descriptors. Incremental families promise
+     * stable local read IDs for a schema-compatible state key; the previous
+     * requiredReadKeys therefore are the exact read set being proven through
+     * the canonical mutation range. If the classifier names an unknown key,
+     * fail closed to direct current-N reads for the whole family.
+     */
+    for (const [plannedFamilyId, plan] of incrementalPlans) {
+      const familyGroups = groups.filter(
+        (group) => group.familyId === plannedFamilyId,
+      );
+      const provisionalCarry = new Map<string, readonly string[]>();
+      const provisionalDirect = new Set<string>();
+      let classificationReadSetMismatch = false;
+      for (const group of familyGroups) {
+        if (
+          badStateKeys.has(group.stateKey) ||
+          !plan.schemaCompatibleStateKeys.has(group.stateKey)
+        ) {
+          continue;
+        }
+        const previousState = plan.previousByStateKey.get(group.stateKey);
+        const previousReadKeys = previousState?.requiredReadKeys ?? [];
+        const uniquePreviousReadKeys = new Set(previousReadKeys);
+        if (
+          !previousState ||
+          previousReadKeys.length === 0 ||
+          uniquePreviousReadKeys.size !== previousReadKeys.length ||
+          previousReadKeys.some((readKey) => {
+            const proof = previousState.freshnessByReadKey.get(readKey);
+            return !proof ||
+              !sameBlockSource(proof.source, previousState.source);
+          })
+        ) {
+          continue;
+        }
+        const changed = plan.classification.changedReadKeysByStateKey.get(
+          group.rawStateKey,
+        );
+        if (!changed) {
+          provisionalCarry.set(
+            group.stateKey,
+            Object.freeze([...previousReadKeys].sort()),
+          );
+          continue;
+        }
+        if (
+          changed.size === 0 ||
+          [...changed].some((readKey) => !uniquePreviousReadKeys.has(readKey))
+        ) {
+          classificationReadSetMismatch = true;
+          break;
+        }
+        provisionalDirect.add(group.stateKey);
+      }
+      if (classificationReadSetMismatch) {
+        incrementalPlans.delete(plannedFamilyId);
+        fullFallbackReason = "mutation-classifier-read-set-mismatch";
+        incrementalPreparation.fullFallbackReasonByFamily.set(
+          plannedFamilyId,
+          fullFallbackReason,
+        );
+        continue;
+      }
+      for (const [stateKey, readKeys] of provisionalCarry) {
+        carryForwardStateKeys.add(stateKey);
+        carryReadKeysByStateKey.set(stateKey, readKeys);
+        closedStateKeys.add(stateKey);
+        for (const readKey of readKeys) {
+          staging.expectedReadKeys.add(globalReadId(stateKey, readKey));
+        }
+      }
+      for (const stateKey of provisionalDirect) {
+        classifiedDirectStateKeys.add(stateKey);
+      }
+    }
+    carryStateKeys = carryForwardStateKeys.size;
+    directStateKeys = groups.length - carryStateKeys;
+    staging.carryStateKeys = carryStateKeys;
+    staging.directStateKeys = directStateKeys;
+    staging.fullFallbackReason = fullFallbackReason;
+
     let physicalReads = schemaPhysicalReads;
     let batches = schemaBatches;
     // One initial batch plus at most three dependent batches. Reaching the
@@ -1197,7 +1281,10 @@ export class BlockScanStateCoordinator {
               globalId,
               read: Object.freeze({ ...read, id: globalId }),
             };
-            planned.push(item);
+            const statePlanned =
+              plannedByStateKey.get(group.stateKey) ?? [];
+            statePlanned.push(item);
+            plannedByStateKey.set(group.stateKey, statePlanned);
             staging.expectedReadKeys.add(globalId);
             roundPlanned.push(item);
           }
@@ -1211,79 +1298,6 @@ export class BlockScanStateCoordinator {
             message: formatError(error),
           });
         }
-      }
-      if (round === 0) {
-        for (const [plannedFamilyId, plan] of incrementalPlans) {
-          const familyGroups = groups.filter(
-            (group) => group.familyId === plannedFamilyId,
-          );
-          const carryEligibleStateKeys = new Set<string>();
-          let classificationReadSetMismatch = false;
-          for (const group of familyGroups) {
-            if (
-              badStateKeys.has(group.stateKey) ||
-              !plan.schemaCompatibleStateKeys.has(group.stateKey)
-            ) {
-              continue;
-            }
-            const previousState = plan.previousByStateKey.get(group.stateKey);
-            const plannedLocalIds = new Set(
-              roundPlanned
-                .filter((item) => item.group.stateKey === group.stateKey)
-                .map((item) => item.localId),
-            );
-            const previousReadKeys = new Set(
-              previousState?.requiredReadKeys ?? [],
-            );
-            if (
-              !previousState ||
-              plannedLocalIds.size !== previousReadKeys.size ||
-              [...plannedLocalIds].some(
-                (readKey) => !previousReadKeys.has(readKey),
-              ) ||
-              [...previousReadKeys].some((readKey) => {
-                const proof = previousState.freshnessByReadKey.get(readKey);
-                return !proof || !sameBlockSource(proof.source, previousState.source);
-              })
-            ) {
-              continue;
-            }
-            const changed = plan.classification.changedReadKeysByStateKey.get(
-              group.rawStateKey,
-            );
-            if (!changed) {
-              carryEligibleStateKeys.add(group.stateKey);
-              continue;
-            }
-            if (
-              changed.size === 0 ||
-              [...changed].some((readKey) => !plannedLocalIds.has(readKey))
-            ) {
-              classificationReadSetMismatch = true;
-              break;
-            }
-            classifiedDirectStateKeys.add(group.stateKey);
-          }
-          if (classificationReadSetMismatch) {
-            incrementalPlans.delete(plannedFamilyId);
-            classifiedDirectStateKeys.clear();
-            fullFallbackReason = "mutation-classifier-read-set-mismatch";
-            incrementalPreparation.fullFallbackReasonByFamily.set(
-              plannedFamilyId,
-              fullFallbackReason,
-            );
-            continue;
-          }
-          for (const stateKey of carryEligibleStateKeys) {
-            carryForwardStateKeys.add(stateKey);
-            closedStateKeys.add(stateKey);
-          }
-        }
-        carryStateKeys = carryForwardStateKeys.size;
-        directStateKeys = groups.length - carryStateKeys;
-        staging.carryStateKeys = carryStateKeys;
-        staging.directStateKeys = directStateKeys;
-        staging.fullFallbackReason = fullFallbackReason;
       }
       const runnable = roundPlanned.filter(
         (item) =>
@@ -1457,10 +1471,6 @@ export class BlockScanStateCoordinator {
       }
     }
 
-    const validPlanned = planned.filter(
-      (item) => !badStateKeys.has(item.group.stateKey),
-    );
-
     const resolvedStateKeys: string[] = [];
     const resolvedReadKeys: string[] = [];
     const resolvedEdgeKeys: string[] = [];
@@ -1470,10 +1480,11 @@ export class BlockScanStateCoordinator {
     const states: [string, PublishedStateKey][] = [];
     for (const group of groups) {
       if (badStateKeys.has(group.stateKey)) continue;
-      const groupReads = validPlanned.filter(
-        (item) => item.group.stateKey === group.stateKey,
-      );
+      const groupReads = plannedByStateKey.get(group.stateKey) ?? [];
       const carryForward = carryForwardStateKeys.has(group.stateKey);
+      const requiredLocalIds = carryForward
+        ? carryReadKeysByStateKey.get(group.stateKey) ?? []
+        : groupReads.map((item) => item.localId);
       const incrementalPlan = incrementalPlans.get(group.familyId);
       const localResults: StateReadResult[] = [];
       let resultFailure: StateReadResult | null = null;
@@ -1590,7 +1601,8 @@ export class BlockScanStateCoordinator {
         }
         resolvedStateKeys.push(group.stateKey);
         const localFreshness = new Map<string, StateFreshnessProof>();
-        for (const item of groupReads) {
+        for (const localId of requiredLocalIds) {
+          const globalId = globalReadId(group.stateKey, localId);
           let proof: StateFreshnessProof;
           if (carryForward) {
             if (!incrementalPlan) {
@@ -1609,9 +1621,9 @@ export class BlockScanStateCoordinator {
               completeThroughHash: incrementalPlan.range.through.hash,
             });
           } else {
-            const result = resultsByGlobalId.get(item.globalId);
+            const result = resultsByGlobalId.get(globalId);
             if (!result?.ok) {
-              throw new Error(`resolved state key lacks successful read ${item.globalId}`);
+              throw new Error(`resolved state key lacks successful read ${globalId}`);
             }
             proof = Object.freeze({
               kind: "direct-read" as const,
@@ -1623,9 +1635,9 @@ export class BlockScanStateCoordinator {
               provenance: result.provenance,
             });
           }
-          resolvedReadKeys.push(item.globalId);
-          freshness.push([item.globalId, proof]);
-          localFreshness.set(item.localId, proof);
+          resolvedReadKeys.push(globalId);
+          freshness.push([globalId, proof]);
+          localFreshness.set(localId, proof);
         }
         for (const [edgeKey, reason] of unavailable) {
           unavailableEdges.push(Object.freeze({
@@ -1654,7 +1666,7 @@ export class BlockScanStateCoordinator {
             }),
             snapshot,
             requiredReadKeys: Object.freeze(
-              groupReads.map((item) => item.localId).sort(),
+              [...requiredLocalIds].sort(),
             ),
             freshnessByReadKey: new FrozenReadonlyMap(
               [...localFreshness.entries()].sort(([a], [b]) =>
@@ -1709,9 +1721,7 @@ export class BlockScanStateCoordinator {
     return Object.freeze({
       lane,
       resolvedStateKeys: Object.freeze(resolvedStateKeys.sort()),
-      expectedReadKeys: Object.freeze(
-        [...new Set(planned.map((item) => item.globalId))].sort(),
-      ),
+      expectedReadKeys: Object.freeze([...staging.expectedReadKeys].sort()),
       resolvedReadKeys: Object.freeze(resolvedReadKeys.sort()),
       resolvedEdgeKeys: Object.freeze(resolvedEdgeKeys.sort()),
       unavailableEdges: Object.freeze(

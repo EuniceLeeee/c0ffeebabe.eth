@@ -58,7 +58,15 @@ const RECEIPT = new ethers.Interface([
 ]);
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
 
-type SimulationMode = "valid" | "wrong-return" | "extra-payout";
+type SimulationMode =
+  | "valid"
+  | "time-drift"
+  | "preflight-drift"
+  | "preview-side-effect"
+  | "control-drift"
+  | "control-state-drift"
+  | "wrong-return"
+  | "extra-payout";
 
 function context(input: {
   readonly payoutTokens?: readonly string[];
@@ -119,6 +127,45 @@ function context(input: {
   if (input.simulation !== false) {
     backend.simulateCalls = async (req) => {
       if (req.calls.length === 1) {
+        const call = req.calls[0];
+        const selector = call.data.slice(0, 10).toLowerCase();
+        if (
+          ethers.getAddress(call.to).toLowerCase() === VAULT.toLowerCase() &&
+          selector === SILO.getFunction("redeem")!.selector.toLowerCase()
+        ) {
+          const decoded = SILO.decodeFunctionData("redeem", call.data);
+          const payoutToken = ethers.getAddress(String(decoded[0]));
+          const shares = BigInt(decoded[1]);
+          const receiver = ethers.getAddress(String(decoded[2]));
+          const holder = ethers.getAddress(String(decoded[3]));
+          const assets = mode === "time-drift" ? ASSETS + 5n : ASSETS;
+          const amountOut = assets * 4n / 5n;
+          return [{
+            status: 1,
+            returnData: SILO.encodeFunctionResult("redeem", [
+              mode === "control-drift" ? amountOut - 1n : amountOut,
+            ]),
+            logs: [
+              transferLog(VAULT, holder, ethers.ZeroAddress, shares),
+              transferLog(payoutToken, PAYOUT_SOURCE, receiver, amountOut),
+              withdrawLog(holder, receiver, holder, assets, shares),
+            ],
+          }];
+        }
+        if (
+          ethers.getAddress(call.to).toLowerCase() === VAULT.toLowerCase() &&
+          selector ===
+            SILO.getFunction("previewRedeem")!.selector.toLowerCase()
+        ) {
+          const simulatedAssets = mode === "time-drift" ? ASSETS + 5n : ASSETS;
+          return [{
+            status: 1,
+            returnData: SILO.encodeFunctionResult("previewRedeem", [
+              simulatedAssets,
+            ]),
+            logs: [],
+          }];
+        }
         const overridden = Object.values(
           req.stateOverrides?.[VAULT]?.stateDiff ?? {},
         )[0];
@@ -130,9 +177,47 @@ function context(input: {
           logs: [],
         }];
       }
-      assert(req.calls.length === 7, "active proof must use the bounded seven-call sequence");
+      if (req.calls.length === 4) {
+        const redeemCall = req.calls[0];
+        const decoded = SILO.decodeFunctionData("redeem", redeemCall.data);
+        const payoutToken = ethers.getAddress(String(decoded[0]));
+        const shares = BigInt(decoded[1]);
+        const receiver = ethers.getAddress(String(decoded[2]));
+        const holder = ethers.getAddress(String(decoded[3]));
+        const assets = mode === "time-drift" ? ASSETS + 5n : ASSETS;
+        const amountOut = assets * 4n / 5n;
+        return [
+          {
+            status: 1,
+            returnData: SILO.encodeFunctionResult("redeem", [
+              mode === "control-drift" ? amountOut - 1n : amountOut,
+            ]),
+            logs: [
+              transferLog(VAULT, holder, ethers.ZeroAddress, shares),
+              transferLog(payoutToken, PAYOUT_SOURCE, receiver, amountOut),
+              withdrawLog(holder, receiver, holder, assets, shares),
+            ],
+          },
+          result(
+            SILO,
+            "balanceOf",
+            mode === "control-state-drift" ? 1n : 0n,
+          ),
+          result(SILO, "totalSupply", SUPPLY - shares),
+          result(RECEIPT, "balanceOf", amountOut),
+        ];
+      }
+      assert(req.calls.length === 12, "active proof must use the bounded twelve-call sequence");
       input.onActiveSimulation?.();
-      const redeemCall = req.calls[3];
+      const simulatedAssets = mode === "time-drift" ? ASSETS + 5n : ASSETS;
+      const previewAssets = BigInt(
+        RECEIPT.decodeFunctionData("previewWithdraw", req.calls[4].data)[0],
+      );
+      assert(
+        previewAssets === simulatedAssets,
+        "active proof must bind payout preview to the simulated-block asset amount",
+      );
+      const redeemCall = req.calls[8];
       const decoded = SILO.decodeFunctionData("redeem", redeemCall.data);
       const payoutToken = ethers.getAddress(String(decoded[0]));
       const shares = BigInt(decoded[1]);
@@ -147,7 +232,7 @@ function context(input: {
           logs: [],
         }));
       }
-      const assets = shares * 5n / 4n;
+      const assets = simulatedAssets;
       const amountOut = assets * 4n / 5n;
       const logs: ProtocolDiscoveryLog[] = [
         transferLog(VAULT, holder, ethers.ZeroAddress, shares),
@@ -158,6 +243,20 @@ function context(input: {
         logs.push(transferLog(UNDERLYING, PAYOUT_SOURCE, receiver, 1n));
       }
       return [
+        result(SILO, "balanceOf", shares),
+        result(SILO, "totalSupply", SUPPLY),
+        result(RECEIPT, "balanceOf", 0n),
+        {
+          ...result(
+            SILO,
+            "previewRedeem",
+            mode === "preflight-drift" ? assets + 1n : assets,
+          ),
+          logs: mode === "preview-side-effect"
+            ? [transferLog(UNDERLYING, PAYOUT_SOURCE, ERC4626_SILO_PROBE_RECEIVER, 1n)]
+            : [],
+        },
+        result(RECEIPT, "previewWithdraw", amountOut),
         result(SILO, "balanceOf", shares),
         result(SILO, "totalSupply", SUPPLY),
         result(RECEIPT, "balanceOf", 0n),
@@ -454,13 +553,28 @@ assert(
   "absence of nonzero simulation must fail closed",
 );
 
-for (const simulationMode of ["wrong-return", "extra-payout"] as const) {
+for (
+  const simulationMode of [
+    "preflight-drift",
+    "preview-side-effect",
+    "control-drift",
+    "control-state-drift",
+    "wrong-return",
+    "extra-payout",
+  ] as const
+) {
   const rejected = await discover(context({ simulationMode }));
   assert(
     rejected.result.wouldAdmit.length === 0,
     `${simulationMode} proof must fail closed`,
   );
 }
+
+const timeDrift = await discover(context({ simulationMode: "time-drift" }));
+assert(
+  timeDrift.result.wouldAdmit.length === 1,
+  "simulated-block previews must bind exact execution despite source-call time drift",
+);
 
 const ambiguous = await discover(context({
   payoutTokens: [PAYOUT, PAYOUT_2],

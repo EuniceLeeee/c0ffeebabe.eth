@@ -162,21 +162,28 @@ function families() {
 
 const FIXTURE_MUTATION_TOPIC = `0x${"cd".repeat(32)}`;
 
-function incrementalFakeCapability(): BlockScanStateCapability<
+function incrementalFakeCapability(options: {
+  readonly buildTargets?: string[];
+  readonly classifiedReadKey?: () => string;
+} = {}): BlockScanStateCapability<
   { readonly name: string },
   FakeSnapshot
 > {
   return {
     stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
     compileStaticSchema: () => ({ name: "incremental-swap" }),
-    buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => [{
-      id: "state",
-      sourceBlock,
-      sourceBlockHash,
-      to: edges[0]?.target ?? SWAP_POOL,
-      data: "0x12345678",
-      transport: "multicall-safe",
-    }],
+    buildCurrentBlockReads: ({ sourceBlock, sourceBlockHash, edges }) => {
+      const target = edges[0]?.target ?? SWAP_POOL;
+      options.buildTargets?.push(target.toLowerCase());
+      return [{
+        id: "state",
+        sourceBlock,
+        sourceBlockHash,
+        to: target,
+        data: "0x12345678",
+        transport: "multicall-safe",
+      }];
+    },
     decodeState: (_schema, results) => {
       assert.equal(results.length, 1);
       assert.equal(results[0]?.ok, true);
@@ -205,7 +212,7 @@ function incrementalFakeCapability(): BlockScanStateCapability<
         for (const event of range.events) {
           changedReadKeysByStateKey.set(
             event.address.toLowerCase(),
-            new Set(["state"]),
+            new Set([options.classifiedReadKey?.() ?? "state"]),
           );
         }
         return Object.freeze({
@@ -247,6 +254,7 @@ function incrementalGraph(
 class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
   readonly readTargets: string[] = [];
   readonly failTargets = new Set<string>();
+  readonly mutationTargets = new Set<string>();
   rangeFailure = false;
 
   async readBatch(
@@ -285,7 +293,20 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
     if (this.rangeFailure) {
       throw new Error("injected mutation range failure");
     }
-    const events: readonly ChainLog[] = Object.freeze([]);
+    const events: readonly ChainLog[] = Object.freeze(
+      [...this.mutationTargets]
+        .sort()
+        .map((address, logIndex) => Object.freeze({
+          blockNumber: through.number,
+          blockHash: through.hash,
+          transactionIndex: 0,
+          logIndex,
+          address,
+          topics: Object.freeze([FIXTURE_MUTATION_TOPIC]),
+          data: "0x",
+          removed: false,
+        })),
+    );
     const canonicalPathFingerprint = deterministicHash({
       fromExclusive,
       through,
@@ -736,10 +757,15 @@ async function oneFailedStateKeyPreservesHealthySiblingInstance(): Promise<void>
 async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
   const backend = new StateKeyIncrementalBackend();
   const coordinator = new BlockScanStateCoordinator(backend);
+  const buildTargets: string[] = [];
+  let classifiedReadKey = "state";
   const family = registerBlockScanStateFamily({
     familyId: "univ2-standard",
     lane: "swap",
-    capability: incrementalFakeCapability(),
+    capability: incrementalFakeCapability({
+      buildTargets,
+      classifiedReadKey: () => classifiedReadKey,
+    }),
     ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
   });
   const prepare = (generation: number, edges: readonly TokenEdge[]) =>
@@ -771,6 +797,7 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
 
   backend.failTargets.clear();
   backend.readTargets.length = 0;
+  buildTargets.length = 0;
   const recoveredAndNew = await prepare(2, [
     swapForward,
     swapReverse,
@@ -787,6 +814,16 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
     [...backend.readTargets].sort(),
     [SWAP_POOL_B, SWAP_POOL_C].map((value) => value.toLowerCase()).sort(),
     "a healthy prior sibling carries while the failed and new stateKeys read N",
+  );
+  assert.deepEqual(
+    [...buildTargets].sort(),
+    [SWAP_POOL_B, SWAP_POOL_C].map((value) => value.toLowerCase()).sort(),
+    "descriptor construction is skipped for a proven carry-forward stateKey",
+  );
+  assert.deepEqual(
+    recoveredAndNew.coverage.expectedReadKeys,
+    recoveredAndNew.coverage.resolvedReadKeys,
+    "carry-forward preserves the exact expected and resolved read-key set",
   );
   assert.equal(
     recoveredAndNew.snapshot.stateByStateKey.get(
@@ -827,6 +864,7 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
     swapCReverse,
   ];
   backend.readTargets.length = 0;
+  buildTargets.length = 0;
   const localSchemaChange = await prepare(3, changedSchemaEdges);
   assert.equal(localSchemaChange.status, "complete");
   if (localSchemaChange.status !== "complete") {
@@ -838,6 +876,11 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
     "a schema change directs only that stateKey",
   );
   assert.deepEqual(
+    buildTargets,
+    [SWAP_POOL_B.toLowerCase()],
+    "schema-compatible siblings do not build current-N descriptors",
+  );
+  assert.deepEqual(
     {
       carry: familyTelemetry(localSchemaChange).carryStateKeys,
       direct: familyTelemetry(localSchemaChange).directStateKeys,
@@ -847,9 +890,59 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
     { carry: 2, direct: 1, missing: 0, fallback: undefined },
   );
 
+  backend.mutationTargets.add(SWAP_POOL_C.toLowerCase());
+  backend.readTargets.length = 0;
+  buildTargets.length = 0;
+  const mutationChanged = await prepare(4, changedSchemaEdges);
+  assert.equal(mutationChanged.status, "complete");
+  assert.deepEqual(
+    backend.readTargets,
+    [SWAP_POOL_C.toLowerCase()],
+    "only the stateKey named by a valid mutation classification reads N",
+  );
+  assert.deepEqual(
+    buildTargets,
+    [SWAP_POOL_C.toLowerCase()],
+    "only the classified-direct stateKey builds current-N descriptors",
+  );
+  assert.equal(
+    mutationChanged.snapshot.stateByStateKey.get(
+      `univ2-standard\u001f${SWAP_POOL_C.toLowerCase()}`,
+    )?.refreshMode,
+    "classified-direct",
+  );
+
+  backend.mutationTargets.clear();
+  backend.mutationTargets.add(SWAP_POOL_B.toLowerCase());
+  classifiedReadKey = "unknown-state";
+  backend.readTargets.length = 0;
+  buildTargets.length = 0;
+  const classifierMismatch = await prepare(5, changedSchemaEdges);
+  assert.equal(classifierMismatch.status, "complete");
+  assert.deepEqual(
+    [...backend.readTargets].sort(),
+    [SWAP_POOL, SWAP_POOL_B, SWAP_POOL_C]
+      .map((value) => value.toLowerCase())
+      .sort(),
+    "an unknown classifier read key forces full-family direct reads",
+  );
+  assert.deepEqual(
+    [...buildTargets].sort(),
+    [SWAP_POOL, SWAP_POOL_B, SWAP_POOL_C]
+      .map((value) => value.toLowerCase())
+      .sort(),
+  );
+  assert.equal(
+    familyTelemetry(classifierMismatch).fullFallbackReason,
+    "mutation-classifier-read-set-mismatch",
+  );
+
+  backend.mutationTargets.clear();
+  classifiedReadKey = "state";
   backend.rangeFailure = true;
   backend.readTargets.length = 0;
-  const fullFallback = await prepare(4, changedSchemaEdges);
+  buildTargets.length = 0;
+  const fullFallback = await prepare(6, changedSchemaEdges);
   assert.equal(fullFallback.status, "complete");
   if (fullFallback.status !== "complete") {
     throw new Error("expected direct-read fallback to remain complete");

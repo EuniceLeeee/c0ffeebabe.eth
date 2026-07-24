@@ -16,7 +16,9 @@ import {
 } from "../venues/blockscan-state-capability.js";
 import { balancerV3BlockScanState } from "../venues/swaps/balancer-v3.js";
 import {
+  BLOCKSCAN_MULTICALL3,
   blockScanErc20Iface,
+  blockScanMulticallIface,
 } from "../venues/swaps/blockscan-state-shared.js";
 import {
   dodoV2BlockScanState,
@@ -121,7 +123,7 @@ async function representativePoolsResolve(): Promise<void> {
   );
 }
 
-async function behaviorProvenInactivePoolDoesNotPoisonFamily(): Promise<void> {
+async function unquotablePoolDoesNotPoisonSiblingDirections(): Promise<void> {
   const healthyBalancer = poolEdges(
     "balancer-v3-unlock",
     BALANCER_POOL,
@@ -150,35 +152,29 @@ async function behaviorProvenInactivePoolDoesNotPoisonFamily(): Promise<void> {
 
   assert.equal(
     result.status,
-    "complete",
-    `behavior-proven unavailability is complete coverage, not degradation: ${
-      JSON.stringify(result.issues)
-    }`,
+    "degraded",
+    "failed adaptive quotes remain unresolved rather than fabricated unavailable",
   );
   assert.equal(result.snapshot.graph.edges.length, 6, "graph remains unchanged");
   assert.equal(result.coverage.expectedEdgeKeys.length, 6);
   assert.equal(result.coverage.resolvedEdgeKeys.length, 4);
-  assert.equal(result.coverage.unavailableEdgeKeys.length, 2);
-  assert.equal(result.coverage.unresolvedEdgeKeys.length, 0);
+  assert.equal(result.coverage.unavailableEdgeKeys.length, 0);
+  assert.equal(result.coverage.unresolvedEdgeKeys.length, 2);
   assert.equal(result.snapshot.mids.size, 4);
-  assert.deepEqual(result.snapshot.incompleteFamilyIds, []);
+  assert.deepEqual(result.snapshot.incompleteFamilyIds, ["balancer-v3"]);
   assert.deepEqual(
     result.snapshot.resolvedFamilyIds,
-    ["balancer-v3", "custom-swap:dodo-v2"],
+    ["custom-swap:dodo-v2"],
   );
 
   const inactiveGraphEdges = result.snapshot.graph.edges.filter((edge) =>
     same(edge.target, INACTIVE_BALANCER_POOL)
   );
   const inactiveKeys = inactiveGraphEdges.map(blockScanEdgeKey).sort();
-  assert.deepEqual([...result.coverage.unavailableEdgeKeys].sort(), inactiveKeys);
+  assert.deepEqual([...result.coverage.unresolvedEdgeKeys].sort(), inactiveKeys);
   for (const edgeKey of inactiveKeys) {
     const coverage = result.snapshot.coverageByEdgeKey.get(edgeKey);
-    assert.equal(coverage?.status, "rejected");
-    if (coverage?.status !== "rejected") {
-      throw new Error(`missing unavailable reason for ${edgeKey}`);
-    }
-    assert.match(coverage.reason, /no behavior-safe input/);
+    assert.equal(coverage?.status, "unresolved");
     assert.equal(result.snapshot.mids.has(edgeKey), false);
   }
   for (const edge of result.snapshot.graph.edges.filter((edge) =>
@@ -218,7 +214,7 @@ async function quoteFailureRemainsUnresolved(): Promise<void> {
   assert(
     result.issues.some((issue) =>
       issue.familyId === "balancer-v3" &&
-      issue.message.includes("injected unknown quote failure")
+      issue.message.includes("returned no positive result")
     ),
     "a quote failure must remain explicit unresolved coverage",
   );
@@ -240,14 +236,11 @@ class SourceBlockBackend implements BlockScanStateReadBackend {
     assert.equal(control.sourceBlockHash, SOURCE_HASH);
     return reads.map((read): StateReadResult => {
       try {
-        if (
-          this.failBalancerQuotes &&
-          read.data.slice(0, 10) ===
-            balancerIface.getFunction("querySwapSingleTokenExactIn")!.selector
-        ) {
-          throw new Error("injected unknown quote failure");
-        }
-        return success(read, control.sourceGeneration, respond(read));
+        return success(
+          read,
+          control.sourceGeneration,
+          respond(read, this.failBalancerQuotes),
+        );
       } catch (error) {
         return Object.freeze({
           id: read.id,
@@ -270,17 +263,52 @@ class SourceBlockBackend implements BlockScanStateReadBackend {
   }
 }
 
-function respond(read: StateRead): string {
+function respond(read: StateRead, failBalancerQuotes = false): string {
   const selector = read.data.slice(0, 10);
+  if (
+    read.to.toLowerCase() === BLOCKSCAN_MULTICALL3.toLowerCase() &&
+    selector === blockScanMulticallIface.getFunction("aggregate3")!.selector
+  ) {
+    const calls = blockScanMulticallIface.decodeFunctionData(
+      "aggregate3",
+      read.data,
+    )[0] as readonly { target: string; callData: string }[];
+    const responses = calls.map(({ target, callData }) => {
+      if (
+        failBalancerQuotes &&
+        callData.slice(0, 10) ===
+          balancerIface.getFunction("querySwapSingleTokenExactIn")!.selector
+      ) {
+        return { success: false, returnData: "0x" };
+      }
+      try {
+        return {
+          success: true,
+          returnData: respondCall(target, callData),
+        };
+      } catch {
+        return { success: false, returnData: "0x" };
+      }
+    });
+    return blockScanMulticallIface.encodeFunctionResult(
+      "aggregate3",
+      [responses],
+    );
+  }
+  return respondCall(read.to, read.data);
+}
+
+function respondCall(target: string, data: string): string {
+  const selector = data.slice(0, 10);
   if (selector === blockScanErc20Iface.getFunction("decimals")!.selector) {
-    const decimals = same(read.to, WBTC) ? 8 : 18;
+    const decimals = same(target, WBTC) ? 8 : 18;
     return blockScanErc20Iface.encodeFunctionResult("decimals", [decimals]);
   }
   if (
     selector === balancerIface.getFunction("getPoolTokenInfo")!.selector
   ) {
     const pool = String(
-      balancerIface.decodeFunctionData("getPoolTokenInfo", read.data)[0],
+      balancerIface.decodeFunctionData("getPoolTokenInfo", data)[0],
     );
     const balances = same(pool, INACTIVE_BALANCER_POOL)
       ? balancerBalances.map(() => 0n)
@@ -298,7 +326,7 @@ function respond(read: StateRead): string {
   ) {
     const decoded = balancerIface.decodeFunctionData(
       "querySwapSingleTokenExactIn",
-      read.data,
+      data,
     );
     const pool = String(decoded[0]);
     const tokenIn = String(decoded[1]);
@@ -311,10 +339,10 @@ function respond(read: StateRead): string {
   }
   if (selector === erc20BalanceIface.getFunction("balanceOf")!.selector) {
     const account = String(
-      erc20BalanceIface.decodeFunctionData("balanceOf", read.data)[0],
+      erc20BalanceIface.decodeFunctionData("balanceOf", data)[0],
     );
     assert.equal(same(account, DODO_POOL), true);
-    const balance = same(read.to, DODO_BASE) ? dodoPmm.B : dodoPmm.Q;
+    const balance = same(target, DODO_BASE) ? dodoPmm.B : dodoPmm.Q;
     return erc20BalanceIface.encodeFunctionResult("balanceOf", [balance]);
   }
   for (const fn of ["_BASE_TOKEN_", "_QUOTE_TOKEN_"] as const) {
@@ -324,12 +352,11 @@ function respond(read: StateRead): string {
       ]);
     }
   }
-  for (const fn of ["_BASE_RESERVE_", "_QUOTE_RESERVE_"] as const) {
-    if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
-      return dodoV2PoolIface.encodeFunctionResult(fn, [
-        fn === "_BASE_RESERVE_" ? dodoPmm.B : dodoPmm.Q,
-      ]);
-    }
+  if (
+    selector === dodoV2PoolIface.getFunction("_BASE_RESERVE_")!.selector ||
+    selector === dodoV2PoolIface.getFunction("_QUOTE_RESERVE_")!.selector
+  ) {
+    throw new Error("block-scan must reuse reserves already returned by PMM state");
   }
   if (
     selector ===
@@ -348,14 +375,16 @@ function respond(read: StateRead): string {
   for (const fn of ["querySellBase", "querySellQuote"] as const) {
     if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
       const amountIn = BigInt(
-        dodoV2PoolIface.decodeFunctionData(fn, read.data)[1],
+        dodoV2PoolIface.decodeFunctionData(fn, data)[1],
       );
       return dodoV2PoolIface.encodeFunctionResult(fn, [
         dodoAmountOut(fn, amountIn),
       ]);
     }
   }
-  throw new Error(`unexpected source-block read ${read.id}`);
+  throw new Error(
+    `unexpected source-block call ${target}:${data.slice(0, 10)}`,
+  );
 }
 
 function balancerAmountOut(tokenIn: string, amountIn: bigint): bigint {
@@ -515,7 +544,7 @@ function same(left: string, right: string): boolean {
 
 await representativePoolsResolve();
 await quoteFailureRemainsUnresolved();
-await behaviorProvenInactivePoolDoesNotPoisonFamily();
+await unquotablePoolDoesNotPoisonSiblingDirections();
 
 console.log(
   "[external-swap-liquidity-state] source-sized probes + unavailable isolation: PASS",

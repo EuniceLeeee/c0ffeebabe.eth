@@ -163,20 +163,6 @@ export const dodoV2BlockScanState =
           data: dodoV2PoolIface.encodeFunctionData("_QUOTE_TOKEN_"),
         }),
         currentBlockRead({
-          id: dodoStateReadId(ctx.stateKey, "base-reserve"),
-          sourceBlock: ctx.sourceBlock,
-          sourceBlockHash: ctx.sourceBlockHash,
-          to: ctx.static.pool,
-          data: dodoV2PoolIface.encodeFunctionData("_BASE_RESERVE_"),
-        }),
-        currentBlockRead({
-          id: dodoStateReadId(ctx.stateKey, "quote-reserve"),
-          sourceBlock: ctx.sourceBlock,
-          sourceBlockHash: ctx.sourceBlockHash,
-          to: ctx.static.pool,
-          data: dodoV2PoolIface.encodeFunctionData("_QUOTE_RESERVE_"),
-        }),
-        currentBlockRead({
           id: dodoStateReadId(ctx.stateKey, "pmm-state"),
           sourceBlock: ctx.sourceBlock,
           sourceBlockHash: ctx.sourceBlockHash,
@@ -196,17 +182,6 @@ export const dodoV2BlockScanState =
     },
     quoteAmountIn(ctx) {
       const sellBase = sameAddress(ctx.edge.tokenIn, ctx.static.baseToken);
-      const reserveFunction = sellBase ? "_BASE_RESERVE_" : "_QUOTE_RESERVE_";
-      const reserveLabel = sellBase ? "base-reserve" : "quote-reserve";
-      const reserve = BigInt(
-        dodoV2PoolIface.decodeFunctionResult(
-          reserveFunction,
-          requireRead(
-            ctx.priorResults,
-            dodoStateReadId(ctx.stateKey, reserveLabel),
-          ).data,
-        )[0],
-      );
       const balance = BigInt(
         erc20Iface.decodeFunctionResult(
           "balanceOf",
@@ -222,12 +197,7 @@ export const dodoV2BlockScanState =
           dodoStateReadId(ctx.stateKey, "pmm-state"),
         ).data,
       );
-      const expectedReserve = sellBase ? pmm.B : pmm.Q;
-      if (reserve !== expectedReserve) {
-        throw new Error(
-          `dodo-v2 pool ${ctx.static.pool} returned inconsistent PMM reserve`,
-        );
-      }
+      const reserve = sellBase ? pmm.B : pmm.Q;
       return selectDodoProbeInput({
         oneToken: ctx.amountIn,
         balance,
@@ -263,8 +233,6 @@ export const dodoV2BlockScanState =
         throw new Error(`dodo-v2 pool ${ctx.static.pool} token identity changed`);
       }
       const sellBase = sameAddress(ctx.edge.tokenIn, ctx.static.baseToken);
-      const reserveFunction = sellBase ? "_BASE_RESERVE_" : "_QUOTE_RESERVE_";
-      const reserveLabel = sellBase ? "base-reserve" : "quote-reserve";
       const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
       const balance = BigInt(
         erc20Iface.decodeFunctionResult(
@@ -275,15 +243,13 @@ export const dodoV2BlockScanState =
           ).data,
         )[0],
       );
-      const reserve = BigInt(
-        dodoV2PoolIface.decodeFunctionResult(
-          reserveFunction,
-          requireRead(
-            ctx.priorResults,
-            dodoStateReadId(ctx.stateKey, reserveLabel),
-          ).data,
-        )[0],
+      const pmm = decodeDodoPmmState(
+        requireRead(
+          ctx.priorResults,
+          dodoStateReadId(ctx.stateKey, "pmm-state"),
+        ).data,
       );
+      const reserve = sellBase ? pmm.B : pmm.Q;
       const effectiveInput = effectiveDodoInput(
         balance,
         reserve,
@@ -644,9 +610,15 @@ function selectDodoProbeInput(input: {
       `dodo-v2 pool ${pool} has no behavior-safe atomic probe at the pinned source`,
     );
   }
-  let effectiveProbe = liquidityProbe < oneToken
+  const precisionFloor = reserve / 1_000_000n > 0n
+    ? reserve / 1_000_000n
+    : 1n;
+  const desiredProbe = oneToken > precisionFloor
+    ? oneToken
+    : precisionFloor;
+  let effectiveProbe = liquidityProbe < desiredProbe
     ? liquidityProbe
-    : oneToken;
+    : desiredProbe;
   const crossingCap = dodoZeroTargetCrossingCap(pmm, sellBase);
   const surplus = balance > reserve ? balance - reserve : 0n;
   if (crossingCap !== null) {

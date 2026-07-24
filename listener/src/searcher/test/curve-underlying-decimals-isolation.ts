@@ -7,33 +7,52 @@ import {
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
-  blockScanEdgeKey,
   createVerifiedGraphView,
   registerBlockScanStateFamily,
   type StateRead,
   type StateReadResult,
   type StateReadSuccess,
 } from "../venues/blockscan-state-capability.js";
-import { blockScanErc20Iface } from "../venues/swaps/blockscan-state-shared.js";
+import { CURVE_METAREGISTRY } from "../venues/curve-underlying.js";
+import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanErc20Iface,
+  blockScanMulticallIface,
+} from "../venues/swaps/blockscan-state-shared.js";
 import { curveUnderlyingBlockScanState } from "../venues/swaps/curve-underlying.js";
 
 const SOURCE_BLOCK = 25_599_790;
 const SOURCE_HASH = `0x${"cd".repeat(32)}`;
-const HEALTHY_POOL = "0x1111111111111111111111111111111111111111";
-const BROKEN_POOL = "0x2222222222222222222222222222222222222222";
-const HEALTHY_TOKEN_6 = "0x3333333333333333333333333333333333333333";
-const HEALTHY_TOKEN_18 = "0x4444444444444444444444444444444444444444";
-const BROKEN_TOKEN = "0x5555555555555555555555555555555555555555";
-const BROKEN_POOL_PEER =
-  "0x6666666666666666666666666666666666666666";
+const POOL = "0x2222222222222222222222222222222222222222";
+const TOKENS = Object.freeze([
+  "0x5555555555555555555555555555555555555555",
+  "0x6666666666666666666666666666666666666666",
+  "0x7777777777777777777777777777777777777777",
+  "0x8888888888888888888888888888888888888888",
+]);
+const DECIMALS = Object.freeze([18n, 18n, 6n, 6n]);
+const BALANCES = Object.freeze([
+  76n * 10n ** 18n,
+  13n * 10n ** 18n,
+  13_700_000n,
+  50_000_000n,
+]);
 const taxonomy = deriveEdgeTaxonomy("swap");
 const curveUnderlyingIface = new ethers.Interface([
   "function get_dy_underlying(int128 i,int128 j,uint256 dx) view returns (uint256)",
 ]);
+const curveMetaRegistryStateIface = new ethers.Interface([
+  "function get_underlying_decimals(address pool) view returns (uint256[8])",
+  "function get_underlying_balances(address pool) view returns (uint256[8])",
+]);
 
 class CurveUnderlyingBackend implements BlockScanStateReadBackend {
-  readonly quoteTargets: string[] = [];
-  readonly decimalsTargets: string[] = [];
+  registryPhysicalReads = 0;
+  brokenDecimalsCalls = 0;
+
+  constructor(
+    private readonly failedDirection: readonly [number, number] | null = null,
+  ) {}
 
   async readBatch(
     _lane: "swap" | "protocol",
@@ -46,63 +65,13 @@ class CurveUnderlyingBackend implements BlockScanStateReadBackend {
   ): Promise<readonly StateReadResult[]> {
     assert.equal(control.sourceBlock, SOURCE_BLOCK);
     assert.equal(control.sourceBlockHash, SOURCE_HASH);
-    return reads.map((read): StateReadResult => {
-      const selector = read.data.slice(0, 10);
-      if (
-        selector === blockScanErc20Iface.getFunction("decimals")!.selector
-      ) {
-        this.decimalsTargets.push(read.to.toLowerCase());
-        if (same(read.to, BROKEN_TOKEN)) {
-          return Object.freeze({
-            id: read.id,
-            ok: false as const,
-            sourceBlock: read.sourceBlock,
-            sourceBlockHash: read.sourceBlockHash,
-            kind: "rpc" as const,
-            error: "non-standard token decimals() reverted",
-          });
-        }
-        const decimals = same(read.to, HEALTHY_TOKEN_6) ? 6 : 18;
-        return success(
-          read,
-          control.sourceGeneration,
-          blockScanErc20Iface.encodeFunctionResult("decimals", [decimals]),
-        );
-      }
-      if (
-        selector ===
-          curveUnderlyingIface.getFunction("get_dy_underlying")!.selector
-      ) {
-        this.quoteTargets.push(read.to.toLowerCase());
-        assert.equal(
-          same(read.to, HEALTHY_POOL),
-          true,
-          "a state key with unresolved decimals must not schedule quotes",
-        );
-        const decoded = curveUnderlyingIface.decodeFunctionData(
-          "get_dy_underlying",
-          read.data,
-        );
-        const amountIn = BigInt(decoded[2]);
-        const expectedAmount = decoded[0] === 0n
-          ? 10n ** 6n
-          : 10n ** 18n;
-        assert.equal(
-          amountIn,
-          expectedAmount,
-          "Curve-underlying must use the successfully decoded token decimals",
-        );
-        return success(
-          read,
-          control.sourceGeneration,
-          curveUnderlyingIface.encodeFunctionResult(
-            "get_dy_underlying",
-            [amountIn * 2n],
-          ),
-        );
-      }
-      throw new Error(`unexpected Curve-underlying read ${read.id}`);
-    });
+    return reads.map((read) =>
+      success(
+        read,
+        control.sourceGeneration,
+        this.respondMulticall(read),
+      )
+    );
   }
 
   async verifyCanonicalSource(source: {
@@ -112,128 +81,205 @@ class CurveUnderlyingBackend implements BlockScanStateReadBackend {
     assert.equal(source.number, SOURCE_BLOCK);
     assert.equal(source.hash, SOURCE_HASH);
   }
+
+  private respondMulticall(read: StateRead): string {
+    assert.equal(read.to.toLowerCase(), BLOCKSCAN_MULTICALL3.toLowerCase());
+    const calls = blockScanMulticallIface.decodeFunctionData(
+      "aggregate3",
+      read.data,
+    )[0] as readonly { target: string; callData: string }[];
+    if (calls.some(({ callData }) =>
+      callData.slice(0, 10) ===
+        curveMetaRegistryStateIface.getFunction(
+          "get_underlying_decimals",
+        )!.selector
+    )) {
+      this.registryPhysicalReads++;
+    }
+    const responses = calls.map(({ target, callData }) => {
+      const selector = callData.slice(0, 10);
+      if (
+        target.toLowerCase() === CURVE_METAREGISTRY.toLowerCase() &&
+        selector ===
+          curveMetaRegistryStateIface.getFunction(
+            "get_underlying_decimals",
+          )!.selector
+      ) {
+        return ok(
+          curveMetaRegistryStateIface.encodeFunctionResult(
+            "get_underlying_decimals",
+            [[...DECIMALS, 0, 0, 0, 0]],
+          ),
+        );
+      }
+      if (
+        target.toLowerCase() === CURVE_METAREGISTRY.toLowerCase() &&
+        selector ===
+          curveMetaRegistryStateIface.getFunction(
+            "get_underlying_balances",
+          )!.selector
+      ) {
+        return ok(
+          curveMetaRegistryStateIface.encodeFunctionResult(
+            "get_underlying_balances",
+            [[...BALANCES, 0, 0, 0, 0]],
+          ),
+        );
+      }
+      if (
+        selector === blockScanErc20Iface.getFunction("decimals")!.selector
+      ) {
+        const tokenIndex = TOKENS.findIndex((token) =>
+          token.toLowerCase() === target.toLowerCase()
+        );
+        assert(tokenIndex >= 0);
+        if (tokenIndex === 0) {
+          this.brokenDecimalsCalls++;
+          return { success: false, returnData: "0x" };
+        }
+        return ok(
+          blockScanErc20Iface.encodeFunctionResult(
+            "decimals",
+            [DECIMALS[tokenIndex]],
+          ),
+        );
+      }
+      if (
+        selector ===
+          curveUnderlyingIface.getFunction("get_dy_underlying")!.selector
+      ) {
+        const decoded = curveUnderlyingIface.decodeFunctionData(
+          "get_dy_underlying",
+          callData,
+        );
+        const i = Number(decoded[0]);
+        const j = Number(decoded[1]);
+        const amountIn = BigInt(decoded[2]);
+        if (
+          this.failedDirection?.[0] === i &&
+          this.failedDirection[1] === j
+        ) {
+          return { success: false, returnData: "0x" };
+        }
+        return ok(
+          curveUnderlyingIface.encodeFunctionResult(
+            "get_dy_underlying",
+            [amountIn * 2n],
+          ),
+        );
+      }
+      throw new Error(`unexpected Curve-underlying inner call ${selector}`);
+    });
+    return blockScanMulticallIface.encodeFunctionResult(
+      "aggregate3",
+      [responses],
+    );
+  }
 }
 
-const healthyEdges = curveEdges(
-  HEALTHY_POOL,
-  HEALTHY_TOKEN_6,
-  HEALTHY_TOKEN_18,
+const edges = Object.freeze(curveEdges());
+const healthyBackend = new CurveUnderlyingBackend();
+const healthy = await prepare(healthyBackend, 1);
+assert.equal(healthy.status, "complete", JSON.stringify(healthy.issues));
+assert.equal(healthy.snapshot.graph.edges.length, 12, "graph is not reduced");
+assert.equal(healthy.snapshot.mids.size, 12);
+assert.equal(healthy.coverage.resolvedEdgeKeys.length, 12);
+assert.equal(healthy.coverage.unresolvedEdgeKeys.length, 0);
+assert.equal(healthy.coverage.unavailableEdgeKeys.length, 0);
+assert.equal(
+  healthyBackend.registryPhysicalReads,
+  1,
+  "identical MetaRegistry scale probes are physically deduplicated per pool",
 );
-const brokenEdges = curveEdges(BROKEN_POOL, BROKEN_TOKEN, BROKEN_POOL_PEER);
-const edges = Object.freeze([...healthyEdges, ...brokenEdges]);
-const backend = new CurveUnderlyingBackend();
-const result = await new BlockScanStateCoordinator(backend).prepare({
-  graph: createVerifiedGraphView({
-    id: "curve-underlying-decimals-isolation",
-    generation: 1,
-    sourceBlock: SOURCE_BLOCK,
-    sourceBlockHash: SOURCE_HASH,
-    completenessWatermark: SOURCE_BLOCK,
-    perSourceCoverage: [{
-      familyId: "curve-underlying",
-      sourceId: "curve-underlying-decimals-isolation",
-      sourceFingerprint: "curve-underlying-decimals-isolation-v1",
-      completeThroughBlock: SOURCE_BLOCK,
-      completeThroughHash: SOURCE_HASH,
-    }],
-    edges,
-    familyIdForEdge: () => "curve-underlying",
-  }),
-  families: [registerBlockScanStateFamily({
-    familyId: "curve-underlying",
-    lane: "swap",
-    capability: curveUnderlyingBlockScanState,
-    ownsEdge: (edge) => edge.adapterId === "curve-exchange-underlying",
-  })],
-  deadlineAtMs: Date.now() + 2_000,
-});
+assert(
+  healthyBackend.brokenDecimalsCalls > 0,
+  "the non-standard token fallback is exercised",
+);
 
-assert.equal(result.status, "degraded");
-assert.equal(result.snapshot.graph.edges.length, 4, "graph is not reduced");
-assert.equal(result.snapshot.mids.size, 2, "healthy pool mids remain published");
-const healthyGraphEdges = result.snapshot.graph.edges.filter((edge) =>
-  same(edge.target, HEALTHY_POOL)
-);
-const brokenGraphEdges = result.snapshot.graph.edges.filter((edge) =>
-  same(edge.target, BROKEN_POOL)
-);
-assert.deepEqual(
-  [...result.coverage.resolvedEdgeKeys].sort(),
-  healthyGraphEdges.map(blockScanEdgeKey).sort(),
-);
-assert.deepEqual(
-  [...result.coverage.unresolvedEdgeKeys].sort(),
-  brokenGraphEdges.map(blockScanEdgeKey).sort(),
-);
-assert.equal(result.coverage.unavailableEdgeKeys.length, 0);
-assert.deepEqual(result.snapshot.incompleteFamilyIds, ["curve-underlying"]);
-for (const edge of healthyGraphEdges) {
-  const key = blockScanEdgeKey(edge);
-  assert.equal(result.snapshot.coverageByEdgeKey.get(key)?.status, "resolved");
-  assert.equal(result.snapshot.mids.has(key), true);
-}
-for (const edge of brokenGraphEdges) {
-  const key = blockScanEdgeKey(edge);
-  assert.equal(result.snapshot.coverageByEdgeKey.get(key)?.status, "unresolved");
-  assert.equal(result.snapshot.mids.has(key), false);
-}
-assert.equal(backend.quoteTargets.length, 2);
+const failedBackend = new CurveUnderlyingBackend([0, 1]);
+const partial = await prepare(failedBackend, 2);
+assert.equal(partial.status, "degraded");
+assert.equal(partial.snapshot.graph.edges.length, 12, "graph remains unchanged");
+assert.equal(partial.snapshot.mids.size, 11);
+assert.equal(partial.coverage.resolvedEdgeKeys.length, 11);
+assert.equal(partial.coverage.unresolvedEdgeKeys.length, 1);
+assert.equal(partial.coverage.unavailableEdgeKeys.length, 0);
 assert(
-  backend.quoteTargets.every((target) => same(target, HEALTHY_POOL)),
-  "only the healthy state key reaches current-N quote",
+  partial.coverage.unresolvedEdgeKeys[0].includes(
+    `${TOKENS[0].toLowerCase()}>${TOKENS[1].toLowerCase()}`,
+  ),
+  "the unresolved edge is exactly the injected 0->1 direction",
 );
-assert(backend.decimalsTargets.some((target) => same(target, BROKEN_TOKEN)));
 assert(
-  result.issues.some((issue) =>
+  partial.issues.some((issue) =>
     issue.familyId === "curve-underlying" &&
-    issue.stateKey?.includes(BROKEN_POOL.toLowerCase()) &&
-    issue.message.includes("non-standard token decimals() reverted")
+    issue.stateKey?.includes(POOL.toLowerCase()) &&
+    issue.stateKey.includes("\u001f0\u001f1\u001f") &&
+    issue.message.includes("returned no positive result")
   ),
-  "the decimals failure remains attributed to its owning state key",
-);
-assert(
-  result.issues.every((issue) =>
-    !issue.message.includes("static schema") &&
-    !issue.message.includes("static read")
-  ),
-  "one token failure must not become a family compile failure",
+  "one failed direction remains attributable without poisoning siblings",
 );
 
 console.log(
-  "[curve-underlying-decimals-isolation] bad token is state-key local: PASS",
+  "[curve-underlying-decimals-isolation] registry scale + direction isolation: PASS",
 );
 
-function curveEdges(
-  pool: string,
-  token0: string,
-  token1: string,
-): TokenEdge[] {
-  return [
-    {
-      adapterId: "curve-exchange-underlying",
-      target: pool,
-      tokenIn: token0,
-      tokenOut: token1,
-      poolToken0: token0,
-      poolToken1: token1,
-      curveI: 0,
-      curveJ: 1,
-      slotKind: "swap",
-      ...taxonomy,
-    },
-    {
-      adapterId: "curve-exchange-underlying",
-      target: pool,
-      tokenIn: token1,
-      tokenOut: token0,
-      poolToken0: token0,
-      poolToken1: token1,
-      curveI: 1,
-      curveJ: 0,
-      slotKind: "swap",
-      ...taxonomy,
-    },
-  ];
+async function prepare(
+  backend: CurveUnderlyingBackend,
+  generation: number,
+) {
+  return new BlockScanStateCoordinator(backend).prepare({
+    graph: createVerifiedGraphView({
+      id: `curve-underlying-decimals-isolation-${generation}`,
+      generation,
+      sourceBlock: SOURCE_BLOCK,
+      sourceBlockHash: SOURCE_HASH,
+      completenessWatermark: SOURCE_BLOCK,
+      perSourceCoverage: [{
+        familyId: "curve-underlying",
+        sourceId: "curve-underlying-decimals-isolation",
+        sourceFingerprint: "curve-underlying-decimals-isolation-v2",
+        completeThroughBlock: SOURCE_BLOCK,
+        completeThroughHash: SOURCE_HASH,
+      }],
+      edges,
+      familyIdForEdge: () => "curve-underlying",
+    }),
+    families: [registerBlockScanStateFamily({
+      familyId: "curve-underlying",
+      lane: "swap",
+      capability: curveUnderlyingBlockScanState,
+      ownsEdge: (edge) => edge.adapterId === "curve-exchange-underlying",
+    })],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+}
+
+function curveEdges(): TokenEdge[] {
+  const out: TokenEdge[] = [];
+  for (let i = 0; i < TOKENS.length; i++) {
+    for (let j = 0; j < TOKENS.length; j++) {
+      if (i === j) continue;
+      out.push({
+        adapterId: "curve-exchange-underlying",
+        target: POOL,
+        tokenIn: TOKENS[i],
+        tokenOut: TOKENS[j],
+        curveI: i,
+        curveJ: j,
+        slotKind: "swap",
+        ...taxonomy,
+      });
+    }
+  }
+  return out;
+}
+
+function ok(returnData: string): {
+  readonly success: true;
+  readonly returnData: string;
+} {
+  return Object.freeze({ success: true, returnData });
 }
 
 function success(
@@ -257,8 +303,4 @@ function success(
     }),
     data,
   });
-}
-
-function same(left: string, right: string): boolean {
-  return left.toLowerCase() === right.toLowerCase();
 }
