@@ -158,6 +158,7 @@
     "searcher:latest-head-scheduler": "node --import tsx src/searcher/test/latest-head-scheduler.ts",
     "searcher:swap-blockscan-state": "node --import tsx src/searcher/test/swap-blockscan-state-capabilities.ts",
     "searcher:v2-v3-incremental-state": "node --import tsx src/searcher/test/v2-v3-incremental-state.ts",
+    "searcher:univ4-incremental-state": "node --import tsx src/searcher/test/univ4-incremental-state.ts",
     "searcher:v2-v3-shadow-parity": "node --import tsx src/searcher/test/v2-v3-shadow-parity.ts",
     "searcher:v2-v3-shadow-parity-test": "node --import tsx src/searcher/test/v2-v3-shadow-parity-test.ts",
     "searcher:protocol-blockscan-state": "node --import tsx src/searcher/test/protocol-blockscan-state.ts",

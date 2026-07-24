@@ -10,7 +10,11 @@ import type {
   BlockScanStateCapability,
   StateReadResult,
 } from "../blockscan-state-capability.js";
-import { blockScanEdgeKey } from "../blockscan-state-capability.js";
+import {
+  blockScanEdgeKey,
+  createMutationQueryDescriptor,
+  deterministicHash,
+} from "../blockscan-state-capability.js";
 import type {
   ExactQuoteContext,
   PlanBuildContext,
@@ -59,6 +63,7 @@ import { univ4PoolDiscovery } from "./univ4-pool-discovery.js";
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 const MAX_UINT128 = (1n << 128n) - 1n;
+const DYNAMIC_FEE_FLAG = 0x800000;
 const UNISWAP_UNIVERSAL_ROUTER_V1 = "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad";
 const UNISWAP_UNIVERSAL_ROUTER_V2 = "0x66a9893cc07d91d95644aedd05d03f95e1dba8af";
 const initializeIface = new ethers.Interface([
@@ -92,11 +97,28 @@ const uniV4StateViewIface = new ethers.Interface([
   "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
   "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
 ]);
+const UNIV4_MUTATION_TOPICS = Object.freeze([
+  UNIV4_INITIALIZE_TOPIC.toLowerCase(),
+  UNIV4_MODIFY_LIQUIDITY_TOPIC.toLowerCase(),
+  UNIV4_SWAP_TOPIC.toLowerCase(),
+]);
+const UNIV4_MUTATION_TOPIC_SET = new Set(UNIV4_MUTATION_TOPICS);
+const UNIV4_MUTATION_QUERY = createMutationQueryDescriptor({
+  addresses: [ADDR.UNISWAP_V4_POOL_MANAGER],
+  topics: [UNIV4_MUTATION_TOPICS],
+});
+const UNIV4_CLASSIFIER_FINGERPRINT = deterministicHash({
+  family: "univ4",
+  version: 1,
+  semantics:
+    "Initialize/ModifyLiquidity/Swap invalidate slot0+liquidity; dynamic-fee pools always direct-read",
+});
 
 interface UniV4StateSchema {
   readonly pools: ReadonlyMap<string, {
     readonly currency0: string;
     readonly currency1: string;
+    readonly fee: number;
   }>;
 }
 
@@ -117,7 +139,11 @@ export const univ4BlockScanState = Object.freeze({
   },
 
   compileStaticSchema({ edges }) {
-    const pools = new Map<string, { currency0: string; currency1: string }>();
+    const pools = new Map<string, {
+      currency0: string;
+      currency1: string;
+      fee: number;
+    }>();
     for (const edge of edges) {
       if (edge.adapterId !== "univ4-unlock" || !edge.v4PoolKey) {
         throw new Error("univ4 block-scan edge is missing PoolKey");
@@ -125,14 +151,23 @@ export const univ4BlockScanState = Object.freeze({
       const poolId = statePoolId(edge);
       const currency0 = graphV4Currency(edge.v4PoolKey.currency0);
       const currency1 = graphV4Currency(edge.v4PoolKey.currency1);
+      const fee = uint24(
+        edge.v4PoolKey.fee,
+        "fee",
+        "univ4 block-scan PoolKey",
+      );
       const existing = pools.get(poolId);
       if (
         existing &&
-        (existing.currency0 !== currency0 || existing.currency1 !== currency1)
+        (
+          existing.currency0 !== currency0 ||
+          existing.currency1 !== currency1 ||
+          existing.fee !== fee
+        )
       ) {
-        throw new Error(`univ4 block-scan pool ${poolId} has inconsistent currencies`);
+        throw new Error(`univ4 block-scan pool ${poolId} has inconsistent PoolKey`);
       }
-      pools.set(poolId, Object.freeze({ currency0, currency1 }));
+      pools.set(poolId, Object.freeze({ currency0, currency1, fee }));
     }
     return Object.freeze({ pools });
   },
@@ -246,6 +281,52 @@ export const univ4BlockScanState = Object.freeze({
       ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase(),
       ADDR.UNISWAP_V4_STATE_VIEW.toLowerCase(),
     ]);
+  },
+
+  incremental: {
+    mutationQueryDescriptor() {
+      return UNIV4_MUTATION_QUERY;
+    },
+
+    classifyMutations({ schema, range }) {
+      const changed = new Map<string, ReadonlySet<string>>();
+      for (const [poolId, metadata] of schema.pools) {
+        // PoolManager.updateDynamicLPFee has no mutation event. Dynamic-fee
+        // pools therefore cannot use an unchanged-log proof.
+        if ((metadata.fee & DYNAMIC_FEE_FLAG) !== 0) {
+          changed.set(
+            poolId,
+            new Set([`slot0:${poolId}`, `liquidity:${poolId}`]),
+          );
+        }
+      }
+      for (const event of range.events) {
+        const topic = event.topics[0]?.toLowerCase() ?? "";
+        if (
+          event.address.toLowerCase() !==
+            ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase() ||
+          !UNIV4_MUTATION_TOPIC_SET.has(topic)
+        ) {
+          throw new Error(
+            "univ4 mutation range contains an unknown emitter or event",
+          );
+        }
+        const poolId = event.topics[1]?.toLowerCase();
+        if (!poolId || !ethers.isHexString(poolId, 32)) {
+          throw new Error("univ4 mutation event is missing indexed poolId");
+        }
+        if (!schema.pools.has(poolId)) continue;
+        changed.set(
+          poolId,
+          new Set([`slot0:${poolId}`, `liquidity:${poolId}`]),
+        );
+      }
+      return Object.freeze({
+        mutationRangeFingerprint: range.rangeFingerprint,
+        classifierFingerprint: UNIV4_CLASSIFIER_FINGERPRINT,
+        changedReadKeysByStateKey: changed,
+      });
+    },
   },
 } satisfies BlockScanStateCapability<UniV4StateSchema, UniV4CurrentState>);
 
