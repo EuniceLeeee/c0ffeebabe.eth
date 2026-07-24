@@ -1257,7 +1257,7 @@ prepare_candidate_universes() {
       POOL_UNIVERSE_RETAIN_PATH="$A_UNIVERSE" \
       POOL_UNIVERSE_OUT="$universe_tmp" \
       POOL_UNIVERSE_MANIFEST_OUT="$universe_manifest_tmp" \
-      POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0 \
+      POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=2000000 \
       npx tsx src/searcher/build-active-pool-universe.ts
   ) >"$generator_log" 2>&1 \
     || die "challenger universe generation failed (see $generator_log)"

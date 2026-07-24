@@ -461,11 +461,10 @@ fi
 
 # ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
 REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
-# V4 backfill (per-poolId backward Initialize search, default 2M blocks) is the scan's perf killer:
-# hundreds of poolKeys-unresolvable v4 pools × a wide getLogs each pushes the scan >15min. Disable it
-# (=0) so the scan completes in a few min — poolKeys()-resolvable v4 pools + in-window Initialize are
-# still kept; only deep-history/unresolvable v4 is skipped (the census→auto-close bridge backfills those).
-REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-0}"
+# V4 Initialize history is scanned once per block chunk with all unresolved
+# poolIds in a topic-OR filter. Keep the full default lookback so strict
+# discovery does not trade completeness for deployment speed.
+REINDEX_V4_BACKFILL="${POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS:-2000000}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
 REINDEX_MANIFEST="$REINDEX_OUT.manifest.json"

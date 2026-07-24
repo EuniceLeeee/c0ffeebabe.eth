@@ -56,33 +56,48 @@ export const univ4PoolDiscovery = Object.freeze({
       initScan.logs,
       context.logs,
       context.minSwaps,
-      async (poolId) => {
-        const retained = retainedByPoolId.get(poolId);
-        if (retained) return retained;
-        const viaPositionManager = await resolveV4PoolKeyViaPositionManager(
-          context.backend,
-          ADDR.UNISWAP_V4_POSITION_MANAGER,
-          poolId,
+      undefined,
+      async (poolIds) => {
+        const resolved = new Map<string, ParsedV4Initialize>();
+        const unresolved: string[] = [];
+        const positionManagerResults = await mapLimit(
+          poolIds,
+          24,
+          async (poolId) => {
+            const retained = retainedByPoolId.get(poolId);
+            if (retained) return retained;
+            const viaPositionManager = await resolveV4PoolKeyViaPositionManager(
+              context.backend,
+              ADDR.UNISWAP_V4_POSITION_MANAGER,
+              poolId,
+            );
+            return viaPositionManager
+              ? {
+                  ...viaPositionManager,
+                  source: "v4-positionmanager-poolkeys" as const,
+                }
+              : null;
+          },
         );
-        if (viaPositionManager) {
-          return {
-            ...viaPositionManager,
-            source: "v4-positionmanager-poolkeys",
-          };
+        for (let index = 0; index < poolIds.length; index++) {
+          const parsed = positionManagerResults[index];
+          if (parsed) resolved.set(parsed.poolId, parsed);
+          else unresolved.push(poolIds[index]);
         }
-        const historical = await resolveV4InitBackward(
+        const historical = await resolveV4InitsBackward(
           context.backend,
           ADDR.UNISWAP_V4_POOL_MANAGER,
           UNIV4_INITIALIZE_TOPIC,
-          poolId,
+          unresolved,
           context.fromBlock,
+          100_000,
+          undefined,
+          context.signal,
         );
-        return historical
-          ? {
-              ...parseV4InitializeLog(historical),
-              source: "v4-initialize-backfill",
-            }
-          : null;
+        for (const parsed of historical.values()) {
+          resolved.set(parsed.poolId, parsed);
+        }
+        return [...resolved.values()];
       },
     );
     const issues = [
@@ -142,6 +157,9 @@ export async function buildUniV4PoolEntries(
   resolveMissingInit?: (
     poolId: string,
   ) => Promise<ParsedV4Initialize | null>,
+  resolveMissingInits?: (
+    poolIds: readonly string[],
+  ) => Promise<readonly ParsedV4Initialize[]>,
 ): Promise<UniV4PoolBuildResult> {
   const activity = new Map<string, { count: number; lastSwapBlock: number }>();
   for (const log of swapLogs) {
@@ -172,10 +190,26 @@ export async function buildUniV4PoolEntries(
     }
   }
 
-  if (resolveMissingInit) {
-    const missing = qualifying
-      .map(([poolId]) => poolId)
-      .filter((poolId) => !resolved.has(poolId));
+  let missing = qualifying
+    .map(([poolId]) => poolId)
+    .filter((poolId) => !resolved.has(poolId));
+  if (resolveMissingInits && missing.length > 0) {
+    const requested = new Set(missing);
+    const backfilled = await resolveMissingInits(missing);
+    for (const parsed of backfilled) {
+      const poolId = normalizeBytes32Topic(parsed.poolId, "batch resolver poolId");
+      if (!requested.has(poolId)) {
+        throw new Error(`univ4 batch resolver returned unrequested PoolKey ${poolId}`);
+      }
+      resolved.set(poolId, {
+        parsed,
+        source: parsed.source ?? "v4-initialize-backfill",
+      });
+    }
+    missing = missing.filter((poolId) => !resolved.has(poolId));
+  }
+
+  if (resolveMissingInit && missing.length > 0) {
     const backfilled = await mapLimit(missing, 24, async (poolId) => {
       const parsed = await resolveMissingInit(poolId);
       return parsed ? { poolId, parsed } : null;
@@ -218,6 +252,9 @@ export async function buildV4PoolEntries(
   resolveMissingInit?: (
     poolId: string,
   ) => Promise<ParsedV4Initialize | null>,
+  resolveMissingInits?: (
+    poolIds: readonly string[],
+  ) => Promise<readonly ParsedV4Initialize[]>,
 ): Promise<PoolUniverseEntry[]> {
   return [
     ...(await buildUniV4PoolEntries(
@@ -225,8 +262,90 @@ export async function buildV4PoolEntries(
       swapLogs,
       minSwaps,
       resolveMissingInit,
+      resolveMissingInits,
     )).pools,
   ];
+}
+
+/**
+ * Resolve many opaque V4 pool ids with one historical Initialize scan per
+ * block chunk. The pool ids occupy the same indexed topic, so JSON-RPC's topic
+ * OR filter avoids the former pools × chunks request fan-out.
+ */
+export async function resolveV4InitsBackward(
+  source:
+    | Pick<LandedPoolDiscoveryReadBackend, "getLogs">
+    | ethers.JsonRpcProvider,
+  poolManagerAddr: string,
+  topic: string,
+  poolIds: readonly string[],
+  searchFromBlock: number,
+  chunkSize = 100_000,
+  maxLookbackBlocks?: number,
+  signal?: AbortSignal,
+): Promise<ReadonlyMap<string, ParsedV4Initialize>> {
+  const backend = normalizeDiscoveryBackend(source);
+  const requested = [...new Set(
+    poolIds.map((poolId) => normalizeBytes32Topic(poolId, "poolId")),
+  )];
+  const configuredLookback = maxLookbackBlocks ?? Number(
+    process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS ?? "2000000",
+  );
+  const remainingById = new Set(requested);
+  const resolved = new Map<string, ParsedV4Initialize>();
+  let remainingBlocks = Number.isFinite(configuredLookback)
+    ? Math.max(0, Math.floor(configuredLookback))
+    : 2_000_000;
+  const normalizedChunkSize = Number.isFinite(chunkSize)
+    ? Math.max(1, Math.floor(chunkSize))
+    : 100_000;
+  let chunkEnd = Math.max(0, Math.floor(searchFromBlock));
+  while (
+    remainingBlocks > 0 &&
+    chunkEnd >= 0 &&
+    remainingById.size > 0
+  ) {
+    const blockCount = Math.min(
+      normalizedChunkSize,
+      remainingBlocks,
+      chunkEnd + 1,
+    );
+    const chunkStart = chunkEnd - blockCount + 1;
+    for (const group of chunks([...remainingById], 64)) {
+      const indexedPoolIds: string | readonly string[] =
+        group.length === 1 ? group[0] : group;
+      const filter = {
+        address: poolManagerAddr,
+        topics: [topic, indexedPoolIds],
+        fromBlock: chunkStart,
+        toBlock: chunkEnd,
+      } as const;
+      let logs: readonly LandedPoolDiscoveryLog[];
+      try {
+        logs = await backend.getLogs(filter, { signal });
+      } catch (error) {
+        if (isPrunedHistoryError(error)) return resolved;
+        try {
+          logs = await backend.getLogs(filter, { signal });
+        } catch (retryError) {
+          if (isPrunedHistoryError(retryError)) return resolved;
+          throw retryError;
+        }
+      }
+      for (const log of logs) {
+        const parsed = {
+          ...parseV4InitializeLog(log),
+          source: "v4-initialize-backfill" as const,
+        };
+        if (!remainingById.has(parsed.poolId)) continue;
+        resolved.set(parsed.poolId, parsed);
+        remainingById.delete(parsed.poolId);
+      }
+    }
+    remainingBlocks -= blockCount;
+    chunkEnd = chunkStart - 1;
+  }
+  return resolved;
 }
 
 export async function resolveV4PoolKeyViaPositionManager(
@@ -492,6 +611,14 @@ async function mapLimit<T, R>(
   );
   await Promise.all(workers);
   return results;
+}
+
+function chunks<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    out.push(items.slice(index, index + size));
+  }
+  return out;
 }
 
 function isPrunedHistoryError(error: unknown): boolean {

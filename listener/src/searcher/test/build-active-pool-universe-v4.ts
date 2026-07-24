@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { ethers } from "ethers";
 import {
   buildV4PoolEntries,
+  resolveV4InitsBackward,
   resolveV4InitViaPositionManagerThenBackward,
   resolveV4PoolKeyViaPositionManager,
   type ParsedV4Initialize,
 } from "../venues/swaps/univ4-pool-discovery.js";
 import {
   discoverLandedPools,
+  type LandedPoolDiscoveryLogFilter,
   type LandedPoolDiscoveryLog as RawLog,
 } from "../venues/landed-pool-discovery.js";
 import { loadPoolUniverse, type PoolUniverseEntry } from "../pool-universe.js";
@@ -174,6 +176,8 @@ async function main(): Promise<void> {
   const positionManagerPool = poolFixture(address(0x5001), address(0x5002), 5, 1, address(0));
   const fallbackPool = poolFixture(address(0x6001), address(0x6002), 5, 1, address(0));
   const garbagePoolKey = poolFixture(address(0x7001), address(0x7002), 500, 10, address(0x777));
+  const batchPoolA = poolFixture(address(0x8001), address(0x8002), 500, 10, address(0));
+  const batchPoolB = poolFixture(address(0x9001), address(0x9002), 3000, 60, address(0));
   const minSwaps = 2;
 
   const initLogs = [
@@ -224,6 +228,61 @@ async function main(): Promise<void> {
   assert(!backfilledByPoolId.has(below.poolId), "pool below minSwaps should remain excluded");
   assertEntry(backfilledByPoolId.get(oldPool.poolId), oldPool, 2, 41, "v4-initialize-backfill");
   console.log("[pool-universe-v4] expected_transition old v4 Initialize backfill: PASS");
+
+  let batchLogCalls = 0;
+  const batchResolved = await resolveV4InitsBackward(
+    {
+      async getLogs(filter: LandedPoolDiscoveryLogFilter) {
+        batchLogCalls++;
+        assert(
+          Array.isArray(filter.topics[1]) &&
+            filter.topics[1].length === 2,
+          "batch backfill should OR unresolved PoolKeys in one indexed topic",
+        );
+        return filter.fromBlock <= 20 && filter.toBlock >= 20
+          ? [initLog(batchPoolA, 20), initLog(batchPoolB, 20)]
+          : [];
+      },
+    },
+    poolManager,
+    initializeTopic,
+    [batchPoolA.poolId, batchPoolB.poolId],
+    100,
+    50,
+    100,
+  );
+  assert(batchLogCalls === 2, `expected one call per historical chunk, got ${batchLogCalls}`);
+  assert(batchResolved.size === 2, `expected two batched PoolKeys, got ${batchResolved.size}`);
+  assert(
+    batchResolved.get(batchPoolA.poolId)?.source === "v4-initialize-backfill" &&
+      batchResolved.get(batchPoolB.poolId)?.source === "v4-initialize-backfill",
+    "batched Initialize results should retain backfill provenance",
+  );
+  console.log("[pool-universe-v4] batched Initialize topic-OR backfill: PASS");
+
+  let batchResolverCalls = 0;
+  const batchEntries = await buildV4PoolEntries(
+    [],
+    [
+      swapLog(batchPoolA.poolId, 90),
+      swapLog(batchPoolA.poolId, 91),
+      swapLog(batchPoolB.poolId, 90),
+      swapLog(batchPoolB.poolId, 91),
+    ],
+    minSwaps,
+    undefined,
+    async (poolIds) => {
+      batchResolverCalls++;
+      assert(poolIds.length === 2, "batch resolver should receive every qualifying missing PoolKey");
+      return [
+        parsedInitialize(batchPoolA, "v4-initialize-backfill"),
+        parsedInitialize(batchPoolB, "v4-initialize-backfill"),
+      ];
+    },
+  );
+  assert(batchResolverCalls === 1, `expected one batch resolver call, got ${batchResolverCalls}`);
+  assert(batchEntries.length === 2, `expected two batch-resolved entries, got ${batchEntries.length}`);
+  console.log("[pool-universe-v4] materializer consumes batch PoolKey resolver: PASS");
 
   let retainedResolverCalls = 0;
   const retainedDiscovery = await discoverLandedPools({
@@ -407,7 +466,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (7/7)");
+  console.log("pool-universe-v4 PASS (9/9)");
 }
 
 main().catch((err) => {
