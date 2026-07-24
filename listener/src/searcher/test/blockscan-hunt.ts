@@ -74,8 +74,15 @@ import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
 import { buildStrategyViews } from "../strategy-views.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
+import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
+import {
+  attestPoolIdentities,
+  isRetryablePoolIdentityFailure,
+} from "../venues/identity.js";
+import { createPinnedDexReadBackend } from "../runtime-pool-refresh.js";
 import {
   blockScanEdgeKey,
   createVerifiedGraphView,
@@ -434,13 +441,50 @@ async function main(): Promise<void> {
     const callBackend = new PinnedCallBackend(provider, cfg.blockNumber);
     const graphBackend = tokenBackend(provider, cfg.blockNumber);
 
-    const universePools = loadPoolUniverse(cfg.universePath, {
+    const rawUniversePools = loadPoolUniverse(cfg.universePath, {
       maxPools: cfg.maxPools,
       minScore: 1,
     }).map(lowerPoolEntry);
     const staticProtocolPools = POOL_REGISTRY
       .filter((pool) => pool.adapter !== "fluid-vault")
       .map(lowerPoolEntry);
+    const universeIdentity = await attestPoolIdentities(
+      createPinnedDexReadBackend(provider, cfg.blockNumber),
+      rawUniversePools,
+      {
+        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+        seedEntries: staticProtocolPools,
+      },
+    );
+    const retryableIdentityRejections = universeIdentity.rejected.filter(
+      (rejection) => isRetryablePoolIdentityFailure(rejection.reason),
+    );
+    console.log(
+      `DEX_IDENTITY_ATTESTATION=${JSON.stringify({
+        sourceBlock: cfg.blockNumber,
+        candidates: rawUniversePools.length,
+        accepted: universeIdentity.accepted.length,
+        rejected: universeIdentity.rejected.length,
+        retryable: retryableIdentityRejections.length,
+        reasons: Object.fromEntries(
+          [...new Set(universeIdentity.rejected.map((item) => item.reason))]
+            .sort()
+            .map((reason) => [
+              reason,
+              universeIdentity.rejected.filter((item) => item.reason === reason)
+                .length,
+            ]),
+        ),
+      })}`,
+    );
+    if (retryableIdentityRejections.length > 0) {
+      throw new Error(
+        "source-pinned DEX identity attestation incomplete: " +
+          `${retryableIdentityRejections.length} retryable candidates`,
+      );
+    }
+    const universePools = universeIdentity.accepted.map(lowerPoolEntry);
     // Production starts from code-owned protocol seeds, then admits the
     // file-backed universe. Keep the same precedence so stale file metadata
     // cannot replace a newer exact adapter classification in the replay.

@@ -25,6 +25,14 @@ function assert(condition: boolean, message: string): asserts condition {
 }
 
 const factoryIface = new ethers.Interface(["function factory() view returns (address)"]);
+const v3IdentityIface = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function fee() view returns (uint24)",
+  "function tickSpacing() view returns (int24)",
+  "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  "function liquidity() view returns (uint128)",
+]);
 const curveMetaRegistryIface = new ethers.Interface([
   "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
 ]);
@@ -58,6 +66,9 @@ const FAKE_BALANCER_V3_POOL = address(0x10b);
 const PANCAKE_V2_PAIR = address(0x10c);
 const CURVE_TOKEN0 = address(0x10d);
 const CURVE_TOKEN1 = address(0x10e);
+const FAKE_V3_POOL = address(0x10f);
+const PROVISIONAL_V3_TOKEN0 = address(0x110);
+const PROVISIONAL_V3_TOKEN1 = address(0x111);
 
 const V2_SWAP_TOPIC = ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
@@ -78,6 +89,7 @@ class FakeProvider {
     [PANORAMA_POOL.toLowerCase(), PANORAMA_FACTORY],
     [UNKNOWN_PAIR.toLowerCase(), UNKNOWN_FACTORY],
     [PANCAKE_V2_PAIR.toLowerCase(), PANCAKE_V2_FACTORY],
+    [FAKE_V3_POOL.toLowerCase(), UNKNOWN_FACTORY],
   ]);
   readonly registeredCurvePools = new Set([CURVE_POOL.toLowerCase()]);
 
@@ -152,9 +164,50 @@ class FakeProvider {
 
   async call(req: { to: string; data: string }): Promise<string> {
     const target = req.to.toLowerCase();
+    const selector = req.data.slice(0, 10).toLowerCase();
+    if (
+      target === UNKNOWN_PAIR.toLowerCase() ||
+      target === FAKE_V3_POOL.toLowerCase()
+    ) {
+      if (selector === v3IdentityIface.getFunction("token0")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("token0", [
+          PROVISIONAL_V3_TOKEN0,
+        ]);
+      }
+      if (selector === v3IdentityIface.getFunction("token1")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("token1", [
+          PROVISIONAL_V3_TOKEN1,
+        ]);
+      }
+      if (selector === v3IdentityIface.getFunction("fee")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("fee", [3_000]);
+      }
+      if (selector === v3IdentityIface.getFunction("tickSpacing")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("tickSpacing", [60]);
+      }
+      if (selector === v3IdentityIface.getFunction("slot0")!.selector) {
+        if (target === FAKE_V3_POOL.toLowerCase()) {
+          throw Object.assign(new Error("slot0 execution reverted"), {
+            code: "CALL_EXCEPTION",
+          });
+        }
+        return v3IdentityIface.encodeFunctionResult("slot0", [
+          0n,
+          0,
+          0,
+          0,
+          0,
+          0,
+          true,
+        ]);
+      }
+      if (selector === v3IdentityIface.getFunction("liquidity")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("liquidity", [0n]);
+      }
+    }
     if (
       target === CURVE_POOL.toLowerCase() &&
-      req.data.slice(0, 10).toLowerCase() ===
+      selector ===
         curvePoolIface.getFunction("coins")!.selector
     ) {
       const [index] = curvePoolIface.decodeFunctionData("coins", req.data);
@@ -281,7 +334,15 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
   });
   assert(
     provisionalV3.ok && provisionalV3.identitySource === "factory-call-provisional",
-    "V3 provisional policy must remain independent from V2 fee admission",
+    "standard-shape V3 must pass provisional behavior proof",
+  );
+  const fakeV3 = await resolvePoolIdentity(provider, FAKE_V3_POOL, "univ3", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  });
+  assert(
+    !fakeV3.ok && fakeV3.reason === "behavior_mismatch",
+    "canonical slot0 revert is permanent negative proof for provisional V3",
   );
   console.log("[venue-identity] selector lookalikes fail closed: PASS");
 }

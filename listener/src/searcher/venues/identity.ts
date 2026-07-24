@@ -364,6 +364,19 @@ export type PoolIdentityResult =
 const factoryIface = new ethers.Interface([
   "function factory() view returns (address)",
 ]);
+const v2IdentityIface = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function getReserves() view returns (uint112 reserve0,uint112 reserve1,uint32 blockTimestampLast)",
+]);
+const v3IdentityIface = new ethers.Interface([
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function fee() view returns (uint24)",
+  "function tickSpacing() view returns (int24)",
+  "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  "function liquidity() view returns (uint128)",
+]);
 const curveMetaRegistryIface = new ethers.Interface([
   "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
 ]);
@@ -649,12 +662,14 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
   backend,
   pool,
   poolAdapter,
+  candidate,
   admissionPolicy,
   isPoolAdapterSupported,
 }) => {
   if (poolAdapter !== "univ2" && poolAdapter !== "univ3") {
     throw new Error(`factory identity resolver: unsupported pool adapter ${poolAdapter}`);
   }
+  const standardPoolAdapter = poolAdapter === "univ2" ? "univ2" : "univ3";
   let factory: string;
   try {
     const raw = await backend.call({
@@ -663,8 +678,11 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
     });
     const decoded = factoryIface.decodeFunctionResult("factory", raw);
     factory = ethers.getAddress(String(decoded[0]));
-  } catch {
-    return { ok: false, reason: "identity_call_failed" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: provisionalBehaviorCallFailureReason(error),
+    };
   }
 
   const capability = findVenueByFactory(factory);
@@ -689,8 +707,23 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
         factory,
       };
     }
-    // Factory is provenance, not a hard admission gate. Keep the observed V2/V3
-    // shape explicit; token-graph ABI checks and mandatory final sim remain fail-closed.
+    const behaviorProof = await proveProvisionalFactoryPoolBehavior(
+      backend,
+      pool,
+      standardPoolAdapter,
+      candidate,
+    );
+    if (!behaviorProof.ok) {
+      return {
+        ok: false,
+        reason: behaviorProof.reason,
+        venueId: capability?.venue,
+        factory,
+      };
+    }
+    // Factory is provenance, not a hard admission gate. Unknown factories must
+    // nevertheless prove the complete standard V2/V3 read surface before they
+    // can reuse one of those execution families.
     return {
       ok: true,
       adapter: capability?.runtimeAdapter ?? poolAdapter,
@@ -708,6 +741,200 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
     identitySource: "factory-call",
   };
 };
+
+type ProvisionalFactoryBehaviorProof =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: Extract<
+        PoolIdentityFailureReason,
+        "identity_call_failed" | "behavior_mismatch"
+      >;
+    };
+
+async function proveProvisionalFactoryPoolBehavior(
+  backend: IdentityCallBackend,
+  pool: string,
+  poolAdapter: "univ2" | "univ3",
+  candidate: Readonly<IdentityPoolEntry>,
+): Promise<ProvisionalFactoryBehaviorProof> {
+  return poolAdapter === "univ2"
+    ? proveProvisionalV2Behavior(backend, pool, candidate)
+    : proveProvisionalV3Behavior(backend, pool, candidate);
+}
+
+async function proveProvisionalV2Behavior(
+  backend: IdentityCallBackend,
+  pool: string,
+  candidate: Readonly<IdentityPoolEntry>,
+): Promise<ProvisionalFactoryBehaviorProof> {
+  let raw: readonly [string, string, string];
+  try {
+    raw = await Promise.all([
+      backend.call({
+        to: pool,
+        data: v2IdentityIface.encodeFunctionData("token0"),
+      }),
+      backend.call({
+        to: pool,
+        data: v2IdentityIface.encodeFunctionData("token1"),
+      }),
+      backend.call({
+        to: pool,
+        data: v2IdentityIface.encodeFunctionData("getReserves"),
+      }),
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: provisionalBehaviorCallFailureReason(error),
+    };
+  }
+  if (
+    !hasExactStaticReturnShape(raw[0], 1) ||
+    !hasExactStaticReturnShape(raw[1], 1) ||
+    !hasExactStaticReturnShape(raw[2], 3)
+  ) {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+  try {
+    const token0 = ethers.getAddress(String(
+      v2IdentityIface.decodeFunctionResult("token0", raw[0])[0],
+    ));
+    const token1 = ethers.getAddress(String(
+      v2IdentityIface.decodeFunctionResult("token1", raw[1])[0],
+    ));
+    v2IdentityIface.decodeFunctionResult("getReserves", raw[2]);
+    return tokensProveCandidatePair(token0, token1, candidate)
+      ? { ok: true }
+      : { ok: false, reason: "behavior_mismatch" };
+  } catch {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+}
+
+async function proveProvisionalV3Behavior(
+  backend: IdentityCallBackend,
+  pool: string,
+  candidate: Readonly<IdentityPoolEntry>,
+): Promise<ProvisionalFactoryBehaviorProof> {
+  let raw: readonly [string, string, string, string, string, string];
+  try {
+    raw = await Promise.all([
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("token0"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("token1"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("fee"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("tickSpacing"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("slot0"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("liquidity"),
+      }),
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: provisionalBehaviorCallFailureReason(error),
+    };
+  }
+  if (
+    !hasExactStaticReturnShape(raw[0], 1) ||
+    !hasExactStaticReturnShape(raw[1], 1) ||
+    !hasExactStaticReturnShape(raw[2], 1) ||
+    !hasExactStaticReturnShape(raw[3], 1) ||
+    !hasExactStaticReturnShape(raw[4], 7) ||
+    !hasExactStaticReturnShape(raw[5], 1)
+  ) {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+  try {
+    const token0 = ethers.getAddress(String(
+      v3IdentityIface.decodeFunctionResult("token0", raw[0])[0],
+    ));
+    const token1 = ethers.getAddress(String(
+      v3IdentityIface.decodeFunctionResult("token1", raw[1])[0],
+    ));
+    v3IdentityIface.decodeFunctionResult("fee", raw[2]);
+    const tickSpacing = BigInt(
+      v3IdentityIface.decodeFunctionResult("tickSpacing", raw[3])[0],
+    );
+    // sqrtPriceX96 may legitimately be zero before initialization. Requiring
+    // exact successful decoding, rather than a positive value, distinguishes
+    // that state from a selector lookalike or a reverting fake pool.
+    v3IdentityIface.decodeFunctionResult("slot0", raw[4]);
+    v3IdentityIface.decodeFunctionResult("liquidity", raw[5]);
+    return tickSpacing > 0n && tokensProveCandidatePair(token0, token1, candidate)
+      ? { ok: true }
+      : { ok: false, reason: "behavior_mismatch" };
+  } catch {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+}
+
+function hasExactStaticReturnShape(raw: string, words: number): boolean {
+  try {
+    return ethers.isHexString(raw) && ethers.dataLength(raw) === words * 32;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A canonical eth_call revert at the pinned identity block is negative
+ * behavior evidence: a standard V2/V3 pool must expose these view methods.
+ * Transport, deadline, and provider failures remain retryable. Do not infer
+ * this distinction from error text.
+ */
+function provisionalBehaviorCallFailureReason(
+  error: unknown,
+): "identity_call_failed" | "behavior_mismatch" {
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code).toUpperCase()
+    : "";
+  return code === "CALL_EXCEPTION"
+    ? "behavior_mismatch"
+    : "identity_call_failed";
+}
+
+function tokensProveCandidatePair(
+  token0: string,
+  token1: string,
+  candidate: Readonly<IdentityPoolEntry>,
+): boolean {
+  if (token0.toLowerCase() === token1.toLowerCase()) return false;
+  try {
+    if (
+      candidate.token0 !== undefined &&
+      token0 !== ethers.getAddress(candidate.token0)
+    ) {
+      return false;
+    }
+    if (
+      candidate.token1 !== undefined &&
+      token1 !== ethers.getAddress(candidate.token1)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const curveIdentityResolver: OnchainIdentityResolver = async ({
   backend,
