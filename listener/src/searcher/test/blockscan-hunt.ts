@@ -441,9 +441,37 @@ async function main(): Promise<void> {
         fromBlock: discoveryFromBlock,
         toBlock: cfg.blockNumber,
         graphTokens,
-        candidateAddresses,
-        shadow: false,
-      });
+      candidateAddresses,
+      shadow: false,
+    });
+      const incompleteFamilySources =
+        protocolDiscovery.result.familySourceCoverage
+          .filter((item) => !item.complete)
+          .map((item) => ({
+            familyId: item.familyId,
+            sourceId: item.sourceId,
+            issues: item.issues,
+          }));
+      console.log(
+        `PROTOCOL_DISCOVERY_DIAGNOSTIC=${JSON.stringify({
+          scannerSourceComplete: protocolDiscovery.scanner.sourceComplete,
+          eventSourceComplete:
+            protocolDiscovery.scanner.eventSourceComplete,
+          addressSourceComplete:
+            protocolDiscovery.scanner.addressSourceComplete,
+          resultSourceComplete: protocolDiscovery.result.sourceComplete,
+          evaluationComplete:
+            protocolDiscovery.result.evaluationComplete,
+          projection: protocolDiscovery.projection !== null,
+          addressStats: protocolDiscovery.scanner.addressStats,
+          sourceErrors: protocolDiscovery.scanner.sourceErrors,
+          incompleteFamilySources,
+          candidates: [
+            ...protocolDiscovery.scanner.candidatesByAdapter.values(),
+          ].reduce((sum, items) => sum + items.length, 0),
+          wouldAdmit: protocolDiscovery.result.wouldAdmit.length,
+        })}`,
+      );
       await check("active protocol discovery completed", () =>
         protocolDiscovery.scanner.sourceComplete &&
         protocolDiscovery.result.sourceComplete &&
