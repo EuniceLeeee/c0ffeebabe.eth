@@ -99,6 +99,8 @@ const pureFixtureFamilyIds = new Set<string>();
 await runUniV2();
 await runUniV3();
 await runUniV4();
+await runInactiveUniPools();
+await runMalformedUniState();
 await runCurvePlain();
 await runCurveUnderlying();
 await runBalancerV3();
@@ -202,6 +204,132 @@ async function runUniV4(): Promise<void> {
   assert.equal(result.initialReads.length, 2);
 }
 
+async function runInactiveUniPools(): Promise<void> {
+  const v2Edges = twoTokenEdges("univ2-swap");
+  const inactiveV2 = await execute(
+    univ2StandardAdapter.id,
+    univ2BlockScanState,
+    v2Edges,
+    (read) => {
+      assert.equal(
+        read.data.slice(0, 10),
+        v2Iface.getFunction("getReserves")!.selector,
+      );
+      return v2Iface.encodeFunctionResult("getReserves", [0n, UNIT, 1]);
+    },
+    { recordProductionFixture: false },
+  );
+  assertInactiveEdges(inactiveV2, v2Edges, /zero reserve/);
+
+  for (const zeroField of ["sqrtPriceX96", "liquidity"] as const) {
+    const v3Edges = twoTokenEdges("univ3-swap");
+    const inactiveV3 = await execute(
+      univ3StandardAdapter.id,
+      univ3BlockScanState,
+      v3Edges,
+      (read) => {
+        const selector = read.data.slice(0, 10);
+        if (selector === v3Iface.getFunction("slot0")!.selector) {
+          return v3Iface.encodeFunctionResult("slot0", [
+            zeroField === "sqrtPriceX96" ? 0n : Q96,
+            0,
+            0,
+            1,
+            1,
+            0,
+            true,
+          ]);
+        }
+        if (selector === v3Iface.getFunction("liquidity")!.selector) {
+          return v3Iface.encodeFunctionResult(
+            "liquidity",
+            [zeroField === "liquidity" ? 0n : UNIT],
+          );
+        }
+        throw new Error(`unexpected inactive v3 read ${read.id}`);
+      },
+      { recordProductionFixture: false },
+    );
+    assertInactiveEdges(inactiveV3, v3Edges, new RegExp(`zero ${zeroField}`));
+  }
+
+  const key = {
+    currency0: TOKEN0,
+    currency1: TOKEN1,
+    fee: 3_000,
+    tickSpacing: 60,
+    hooks: ethers.ZeroAddress,
+  };
+  const poolId = v4PoolId(key);
+  for (const zeroField of ["sqrtPriceX96", "liquidity"] as const) {
+    const v4Edges = twoTokenEdges("univ4-unlock").map((edge) => ({
+      ...edge,
+      target: ADDR.UNISWAP_V4_POOL_MANAGER,
+      poolId,
+      v4PoolKey: key,
+    }));
+    const inactiveV4 = await execute(
+      univ4Adapter.id,
+      univ4BlockScanState,
+      v4Edges,
+      (read) => {
+        const selector = read.data.slice(0, 10);
+        if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
+          return v4StateIface.encodeFunctionResult("getSlot0", [
+            zeroField === "sqrtPriceX96" ? 0n : Q96,
+            0,
+            0,
+            3_000,
+          ]);
+        }
+        if (selector === v4StateIface.getFunction("getLiquidity")!.selector) {
+          return v4StateIface.encodeFunctionResult(
+            "getLiquidity",
+            [zeroField === "liquidity" ? 0n : UNIT],
+          );
+        }
+        throw new Error(`unexpected inactive v4 read ${read.id}`);
+      },
+      { recordProductionFixture: false },
+    );
+    assertInactiveEdges(inactiveV4, v4Edges, new RegExp(`zero ${zeroField}`));
+  }
+}
+
+async function runMalformedUniState(): Promise<void> {
+  await assert.rejects(
+    () =>
+      execute(
+        univ3StandardAdapter.id,
+        univ3BlockScanState,
+        twoTokenEdges("univ3-swap"),
+        () => "0x",
+        { recordProductionFixture: false },
+      ),
+    /decode result data|BAD_DATA/i,
+    "an unknown decode failure must remain unresolved, not terminal unavailable",
+  );
+}
+
+function assertInactiveEdges(
+  result: {
+    readonly mids: ReadonlyMap<string, unknown>;
+    readonly unavailable: ReadonlyMap<string, string>;
+  },
+  edges: readonly TokenEdge[],
+  reason: RegExp,
+): void {
+  assert.equal(result.mids.size, 0);
+  assert.deepEqual(
+    [...result.unavailable.keys()].sort(),
+    edges.map(blockScanEdgeKey).sort(),
+  );
+  for (const unavailableReason of result.unavailable.values()) {
+    assert.match(unavailableReason, reason);
+    assert.match(unavailableReason, /current source/);
+  }
+}
+
 async function runCurvePlain(): Promise<void> {
   const edges = twoTokenEdges("curve-exchange-plain").map((edge, index) => ({
     ...edge,
@@ -278,8 +406,16 @@ async function runCurveUnderlying(): Promise<void> {
     );
     },
   );
+  assert.equal(result.staticReads.length, 0);
   assert.equal(result.initialReads.length, 2);
-  assert.equal(result.dependentReads.length, 0);
+  assert(
+    result.initialReads.every((read) =>
+      read.data.slice(0, 10) ===
+        blockScanErc20Iface.getFunction("decimals")!.selector
+    ),
+    "Curve-underlying decimals stay within the owning current-N state key",
+  );
+  assert.equal(result.dependentReads.length, 2);
 }
 
 async function runBalancerV3(): Promise<void> {
@@ -396,12 +532,16 @@ async function execute<Schema, Snapshot>(
   capability: BlockScanStateCapability<Schema, Snapshot>,
   edges: readonly TokenEdge[],
   respond: (read: StateRead) => string,
+  options: {
+    readonly recordProductionFixture?: boolean;
+  } = {},
 ): Promise<{
   readonly initialReads: readonly StateRead[];
   readonly staticReads: readonly StateRead[];
   readonly dependentReads: readonly StateRead[];
   readonly snapshot: Snapshot;
   readonly mids: ReturnType<typeof capability.deriveMids>;
+  readonly unavailable: ReadonlyMap<string, string>;
 }> {
   const controller = new AbortController();
   let schema: Schema = await capability.compileStaticSchema({
@@ -442,29 +582,46 @@ async function execute<Schema, Snapshot>(
   }) ?? [];
   assert.equal(noMore.length, 0, "view quote must close after one dependent round");
   const snapshot = capability.decodeState(schema, allResults);
+  const unavailable =
+    capability.behaviorProvenUnavailableEdges?.(snapshot, edges) ?? new Map();
   const mids = capability.deriveMids(snapshot, edges);
-  assert.deepEqual([...mids.keys()].sort(), edges.map(blockScanEdgeKey).sort());
+  assert.deepEqual(
+    [...mids.keys()].sort(),
+    edges
+      .map(blockScanEdgeKey)
+      .filter((edgeKey) => !unavailable.has(edgeKey))
+      .sort(),
+  );
   const harness = createAmbientIoPoisonHarness();
   assertPureSynchronousDeriveMids({ capability, snapshot, edges, harness });
-  const production = PRODUCTION_ADAPTER_FAMILIES
-    .pricing("swap")
-    .find((family) => family.id === familyId);
-  assert(production, `non-production swap purity fixture ${familyId}`);
-  assert.equal(
-    production.pricingState,
-    capability,
-    `${familyId}: fixture tests the wrong pricingState capability`,
-  );
-  assert(
-    !pureFixtureFamilyIds.has(familyId),
-    `duplicate swap purity fixture ${familyId}`,
-  );
-  pureFixtureFamilyIds.add(familyId);
+  if (options.recordProductionFixture !== false) {
+    const production = PRODUCTION_ADAPTER_FAMILIES
+      .pricing("swap")
+      .find((family) => family.id === familyId);
+    assert(production, `non-production swap purity fixture ${familyId}`);
+    assert.equal(
+      production.pricingState,
+      capability,
+      `${familyId}: fixture tests the wrong pricingState capability`,
+    );
+    assert(
+      !pureFixtureFamilyIds.has(familyId),
+      `duplicate swap purity fixture ${familyId}`,
+    );
+    pureFixtureFamilyIds.add(familyId);
+  }
   for (const read of [...initialReads, ...dependentReads]) {
     assert.equal(read.sourceBlock, SOURCE_BLOCK);
     assert.equal(read.sourceBlockHash, SOURCE_HASH);
   }
-  return { staticReads, initialReads, dependentReads, snapshot, mids };
+  return {
+    staticReads,
+    initialReads,
+    dependentReads,
+    snapshot,
+    mids,
+    unavailable,
+  };
 }
 
 function success(read: StateRead, data: string): StateReadSuccess {
@@ -518,3 +675,4 @@ function twoTokenEdges(adapterId: string): TokenEdge[] {
 }
 
 await import("./external-swap-liquidity-state.js");
+await import("./curve-underlying-decimals-isolation.js");

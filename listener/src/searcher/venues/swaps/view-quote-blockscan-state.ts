@@ -60,6 +60,14 @@ export interface CurrentBlockViewQuoteConfig<Static> {
     "curve-underlying" | "external-swap"
   >;
   readonly edgeAdapterIds: ReadonlySet<string>;
+  /**
+   * Family-static decimals are cheaper, but one failed metadata read prevents
+   * the coordinator from compiling that whole family. Families admitting
+   * non-standard tokens can instead read decimals in each state key's first
+   * current-N round. The coordinator then isolates a failure to only the
+   * state keys that actually depend on that token.
+   */
+  readonly decimalsReadScope?: "family-static" | "state-key-current";
   readonly stateKey?: (edge: TokenEdge) => string;
   compileGroup(edges: readonly TokenEdge[]): Static;
   initialReads?(ctx: ViewQuoteReadContext<Static>): readonly StateRead[];
@@ -142,6 +150,9 @@ export function createCurrentBlockViewQuoteCapability<Static>(
     buildStaticSchemaReads(
       input: BuildCurrentBlockReadsInput<ViewQuoteSchema<Static>>,
     ) {
+      if (config.decimalsReadScope === "state-key-current") {
+        return Object.freeze([]);
+      }
       return Object.freeze(uniqueTokenIns(input.edges).map((token) =>
         currentBlockRead({
           id: staticDecimalsReadId(token),
@@ -154,6 +165,14 @@ export function createCurrentBlockViewQuoteCapability<Static>(
     },
 
     hydrateStaticSchema(schema, results) {
+      if (config.decimalsReadScope === "state-key-current") {
+        if (results.length !== 0) {
+          throw new Error(
+            "state-key current decimals received unexpected static results",
+          );
+        }
+        return schema;
+      }
       const decimalsByToken = new Map<string, bigint>();
       for (const result of results) {
         if (!result.ok || !result.id.startsWith("static-decimals:")) {
@@ -180,6 +199,9 @@ export function createCurrentBlockViewQuoteCapability<Static>(
       input: BuildCurrentBlockReadsInput<ViewQuoteSchema<Static>>,
     ) {
       const group = requireGroup(input, stateKey);
+      const decimals = config.decimalsReadScope === "state-key-current"
+        ? buildCurrentDecimalsReads(input, group)
+        : [];
       const custom = config.initialReads?.({
         sourceBlock: input.sourceBlock,
         sourceBlockHash: input.sourceBlockHash,
@@ -187,6 +209,9 @@ export function createCurrentBlockViewQuoteCapability<Static>(
         edges: group.edges,
         static: group.static,
       }) ?? [];
+      if (decimals.length > 0) {
+        return Object.freeze([...decimals, ...custom]);
+      }
       if (custom.length > 0) return Object.freeze([...custom]);
       return buildViewQuoteReads(config, input, group, []);
     },
@@ -203,7 +228,12 @@ export function createCurrentBlockViewQuoteCapability<Static>(
         edges: group.edges,
         static: group.static,
       }) ?? [];
-      if (initial.length === 0) return Object.freeze([]);
+      if (
+        initial.length === 0 &&
+        config.decimalsReadScope !== "state-key-current"
+      ) {
+        return Object.freeze([]);
+      }
       return buildViewQuoteReads(config, input, group, input.priorResults);
     },
 
@@ -229,7 +259,7 @@ export function createCurrentBlockViewQuoteCapability<Static>(
         const result = requireQuoteRead(results, group.stateKey, edge);
         const amountIn =
           quoteAmountFromReadId(result.id, group.stateKey, edge) ??
-          group.amountInByToken.get(edge.tokenIn.toLowerCase());
+          selection;
         if (!amountIn || amountIn <= 0n) {
           throw new Error(`quote amount missing ${edge.tokenIn}`);
         }
@@ -363,6 +393,24 @@ function buildViewQuoteReads<Static>(
   }));
 }
 
+function buildCurrentDecimalsReads<Static>(
+  input: Pick<
+    BuildCurrentBlockReadsInput<ViewQuoteSchema<Static>>,
+    "sourceBlock" | "sourceBlockHash"
+  >,
+  group: ViewQuoteGroup<Static>,
+): readonly StateRead[] {
+  return Object.freeze(uniqueTokenIns(group.edges).map((token) =>
+    currentBlockRead({
+      id: decimalsReadId(group.stateKey, token),
+      sourceBlock: input.sourceBlock,
+      sourceBlockHash: input.sourceBlockHash,
+      to: token,
+      data: blockScanErc20Iface.encodeFunctionData("decimals"),
+    })
+  ));
+}
+
 export function quoteReadId(
   stateKey: string,
   edge: TokenEdge,
@@ -445,10 +493,12 @@ function selectQuoteAmount<Static>(
   edge: TokenEdge,
   priorResults: readonly StateReadResult[],
 ): bigint | BehaviorProvenUnavailableViewQuote {
-  const defaultAmountIn = group.amountInByToken.get(
-    edge.tokenIn.toLowerCase(),
+  const defaultAmountIn = resolveTokenUnit(
+    config,
+    group,
+    edge.tokenIn,
+    priorResults,
   );
-  if (!defaultAmountIn) throw new Error(`static amount missing ${edge.tokenIn}`);
   const selection = config.quoteAmountIn?.({
     sourceBlock: source.sourceBlock,
     sourceBlockHash: source.sourceBlockHash,
@@ -477,6 +527,33 @@ function selectQuoteAmount<Static>(
     );
   }
   return selection;
+}
+
+function resolveTokenUnit<Static>(
+  config: CurrentBlockViewQuoteConfig<Static>,
+  group: ViewQuoteGroup<Static>,
+  token: string,
+  priorResults: readonly StateReadResult[],
+): bigint {
+  if (config.decimalsReadScope !== "state-key-current") {
+    const amount = group.amountInByToken.get(token.toLowerCase());
+    if (!amount) throw new Error(`static amount missing ${token}`);
+    return amount;
+  }
+  const expectedId = decimalsReadId(group.stateKey, token);
+  const matches = priorResults.filter((result) => result.id === expectedId);
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected one current-N decimals read ${expectedId}, got ${matches.length}`,
+    );
+  }
+  const result = matches[0];
+  if (!result.ok) {
+    throw new Error(
+      `current-N decimals read ${expectedId} failed: ${result.error}`,
+    );
+  }
+  return 10n ** BigInt(decodeDecimals(result.data, token));
 }
 
 function sourceFromResults(

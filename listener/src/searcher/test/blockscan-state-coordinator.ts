@@ -338,7 +338,7 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
   );
 }
 
-async function oneFailedStateKeyWithdrawsItsWholeFamily(): Promise<void> {
+async function oneFailedStateKeyPreservesHealthySiblingInstance(): Promise<void> {
   const registered = families();
   const backend: BlockScanStateReadBackend = {
     async readBatch(_lane, reads, control) {
@@ -373,29 +373,44 @@ async function oneFailedStateKeyWithdrawsItsWholeFamily(): Promise<void> {
   assert.deepEqual(
     result.snapshot.resolvedFamilyIds,
     ["protocol:fixture"],
-    "one failed swap stateKey withdraws every stateKey in that family",
+    "a family remains degraded until all of its stateKeys are terminal",
   );
   assert.deepEqual(result.snapshot.incompleteFamilyIds, ["univ2-standard"]);
   assert.equal(result.coverage.expectedStateKeys.length, 3);
-  assert.equal(result.coverage.resolvedStateKeys.length, 1);
+  assert.equal(result.coverage.resolvedStateKeys.length, 2);
+  assert.equal(result.coverage.unresolvedStateKeys.length, 1);
   assert.equal(result.coverage.expectedReadKeys.length, 3);
-  assert.equal(result.coverage.resolvedReadKeys.length, 1);
+  assert.equal(result.coverage.resolvedReadKeys.length, 2);
+  assert.equal(result.coverage.unresolvedReadKeys.length, 1);
   assert.equal(result.coverage.expectedEdgeKeys.length, 5);
-  assert.equal(result.coverage.resolvedEdgeKeys.length, 1);
+  assert.equal(result.coverage.resolvedEdgeKeys.length, 3);
+  assert.equal(result.coverage.unresolvedEdgeKeys.length, 2);
   assert.equal(
     result.snapshot.mids.size,
-    1,
-    "the successful sibling pool may not leak a mid from an incomplete family",
+    3,
+    "healthy stateKeys publish even while a sibling instance is unresolved",
   );
-  assert.equal(
-    [...result.snapshot.mids.values()][0]?.pool.toLowerCase(),
-    PROTOCOL_POOL.toLowerCase(),
+  assert.deepEqual(
+    [...result.snapshot.mids.values()]
+      .map((value) => value.pool.toLowerCase())
+      .sort(),
+    [
+      PROTOCOL_POOL.toLowerCase(),
+      SWAP_POOL.toLowerCase(),
+      SWAP_POOL.toLowerCase(),
+    ].sort(),
   );
   assert(
     [...result.snapshot.mids.values()].every(
-      (value) => value.pool.toLowerCase() !== SWAP_POOL.toLowerCase(),
+      (value) => value.pool.toLowerCase() !== SWAP_POOL_B.toLowerCase(),
     ),
-    "already-derived mids are filtered at family publication",
+    "the failed stateKey may not publish a mid",
+  );
+  assert(
+    result.coverage.unresolvedEdgeKeys.every((edgeKey) =>
+      edgeKey.includes(SWAP_POOL_B.toLowerCase())
+    ),
+    "only the failed instance's two directed edges stay unresolved",
   );
   assert(
     result.issues.some((issue) =>
@@ -1006,7 +1021,7 @@ function successfulRead(
 await completeAndDeterministic();
 await replayResetDropsOnlyDynamicPublication();
 await failedFamilyPublishesHealthyFamiliesAsDegraded();
-await oneFailedStateKeyWithdrawsItsWholeFamily();
+await oneFailedStateKeyPreservesHealthySiblingInstance();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();
 await familyLocalReadDeadlineFencesLateBackendResult();
 await deadlineAndExternalAbort();

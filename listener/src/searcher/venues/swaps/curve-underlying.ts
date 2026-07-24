@@ -88,6 +88,10 @@ export const curveUnderlyingBlockScanState =
   createCurrentBlockViewQuoteCapability<CurveUnderlyingStateSchema>({
     kind: "curve-underlying",
     edgeAdapterIds: new Set(["curve-exchange-underlying"]),
+    // Underlying pools can expose non-standard token contracts. Keep their
+    // decimals reads inside each pool state key so one bad token cannot abort
+    // static-schema compilation for every healthy Curve-underlying instance.
+    decimalsReadScope: "state-key-current",
     compileGroup(edges) {
       const pool = ethers.getAddress(edges[0].target).toLowerCase();
       for (const edge of edges) {

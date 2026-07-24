@@ -462,7 +462,7 @@ export class BlockScanStateCoordinator {
         resolvedEdgeKeys = [];
         unavailableEdges = [];
       }
-      const availableFamilyIds = completePricingFamilyIds(
+      const terminalFamilyIds = completePricingFamilyIds(
         ownership.groups,
         graphIncompleteFamilyIds,
         {
@@ -472,28 +472,6 @@ export class BlockScanStateCoordinator {
           resolvedEdgeKeys,
           unavailableEdgeKeys: unavailableEdges.map((entry) => entry.edgeKey),
         },
-      );
-      const availableStateKeys = new Set(
-        ownership.groups
-          .filter((group) => availableFamilyIds.has(group.familyId))
-          .map((group) => group.stateKey),
-      );
-      const availableEdgeKeys = new Set(
-        ownership.groups
-          .filter((group) => availableFamilyIds.has(group.familyId))
-          .flatMap((group) => group.edgeKeys),
-      );
-      resolvedStateKeys = resolvedStateKeys.filter(
-        (stateKey) => availableStateKeys.has(stateKey),
-      );
-      resolvedReadKeys = resolvedReadKeys.filter(
-        (readKey) => readKeyBelongsToFamilyIds(readKey, availableFamilyIds),
-      );
-      resolvedEdgeKeys = resolvedEdgeKeys.filter(
-        (edgeKey) => availableEdgeKeys.has(edgeKey),
-      );
-      unavailableEdges = unavailableEdges.filter(
-        (entry) => availableEdgeKeys.has(entry.edgeKey),
       );
       const coverage = createCoverage(
         ownership.expectedStateKeys,
@@ -544,7 +522,7 @@ export class BlockScanStateCoordinator {
             ? Object.freeze({ status: "resolved" as const })
             : Object.freeze({
                 status: "unresolved" as const,
-                reason: "required current-block read did not reach family publication",
+                reason: "required current-block read did not resolve for its stateKey",
               }),
         ] as const),
       );
@@ -563,7 +541,7 @@ export class BlockScanStateCoordinator {
               : Object.freeze({
                   status: "unresolved" as const,
                   reason:
-                    "required current-block edge did not reach family publication",
+                    "required current-block edge did not resolve for its stateKey",
                 }),
           ] as const;
         }),
@@ -580,7 +558,7 @@ export class BlockScanStateCoordinator {
       ]);
       const resolvedFamilyIds = Object.freeze(
         familyIds.filter((familyId) =>
-          availableFamilyIds.has(familyId) &&
+          terminalFamilyIds.has(familyId) &&
           ownership.groups
             .filter((group) => group.familyId === familyId)
             .every((group) => resolvedStateKeySet.has(group.stateKey))
@@ -1883,10 +1861,11 @@ function createCoverage(
 }
 
 /**
- * Publication is atomic at the family boundary. A family is available only
- * when every owned state, every required read for those states, and every
- * edge reached either a priced or behavior-proven unavailable terminal state
- * in this generation.
+ * Family completeness is classification metadata, not a publication boundary.
+ * Successful stateKeys publish independently; a failed sibling remains
+ * unresolved without erasing healthy current-generation state. A family is
+ * terminal only when every owned state, required read, and edge reached either
+ * a priced or behavior-proven unavailable terminal state in this generation.
  */
 function completePricingFamilyIds(
   groups: readonly StateGroup[],
@@ -1929,16 +1908,6 @@ function completePricingFamilyIds(
     }
   }
   return complete;
-}
-
-function readKeyBelongsToFamilyIds(
-  readKey: string,
-  familyIds: ReadonlySet<string>,
-): boolean {
-  for (const familyId of familyIds) {
-    if (readKey.startsWith(`${familyId}\u001f`)) return true;
-  }
-  return false;
 }
 
 function incompleteResult(input: {

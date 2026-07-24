@@ -10,6 +10,7 @@ import type {
   BlockScanStateCapability,
   StateReadResult,
 } from "../blockscan-state-capability.js";
+import { blockScanEdgeKey } from "../blockscan-state-capability.js";
 import type {
   ExactQuoteContext,
   PlanBuildContext,
@@ -107,6 +108,7 @@ interface UniV4CurrentState {
   readonly liquidity: bigint;
   readonly protocolFee: bigint;
   readonly lpFee: bigint;
+  readonly inactiveReason: string | null;
 }
 
 export const univ4BlockScanState = Object.freeze({
@@ -167,22 +169,40 @@ export const univ4BlockScanState = Object.freeze({
       "getLiquidity",
       requireRead(results, `liquidity:${poolId}`).data,
     );
+    const sqrtPriceX96 = BigInt(slot0[0]);
+    const activeLiquidity = BigInt(liquidity[0]);
+    const inactiveFields = [
+      sqrtPriceX96 === 0n ? "sqrtPriceX96" : null,
+      activeLiquidity === 0n ? "liquidity" : null,
+    ].filter((field): field is string => field !== null);
     const snapshot = {
       poolId,
       currency0: metadata.currency0,
       currency1: metadata.currency1,
-      sqrtPriceX96: BigInt(slot0[0]),
-      liquidity: BigInt(liquidity[0]),
+      sqrtPriceX96,
+      liquidity: activeLiquidity,
       protocolFee: BigInt(slot0[2]),
       lpFee: BigInt(slot0[3]),
+      inactiveReason:
+        inactiveFields.length > 0
+          ? `univ4 pool ${poolId} has zero ${inactiveFields.join(" and ")} ` +
+            `at the current source`
+          : null,
     };
-    if (snapshot.sqrtPriceX96 <= 0n || snapshot.liquidity <= 0n) {
-      throw new Error(`univ4 block-scan pool ${poolId} has inactive state`);
-    }
     return Object.freeze(snapshot);
   },
 
   deriveMids(snapshot, edges) {
+    if (snapshot.inactiveReason) {
+      for (const edge of edges) {
+        if (statePoolId(edge) !== snapshot.poolId) {
+          throw new Error(
+            `univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`,
+          );
+        }
+      }
+      return new Map();
+    }
     return midsForDirectedEdges(edges, (edge) => {
       if (statePoolId(edge) !== snapshot.poolId) {
         throw new Error(`univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`);
@@ -204,6 +224,20 @@ export const univ4BlockScanState = Object.freeze({
         feeBps: Number(snapshot.lpFee) / 100,
       });
     });
+  },
+
+  behaviorProvenUnavailableEdges(snapshot, edges) {
+    if (!snapshot.inactiveReason) return new Map();
+    const unavailable = new Map<string, string>();
+    for (const edge of edges) {
+      if (statePoolId(edge) !== snapshot.poolId) {
+        throw new Error(
+          `univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`,
+        );
+      }
+      unavailable.set(blockScanEdgeKey(edge), snapshot.inactiveReason);
+    }
+    return unavailable;
   },
 
   dependencies(edges) {

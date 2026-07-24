@@ -15,6 +15,7 @@ import type {
   StateReadResult,
 } from "../blockscan-state-capability.js";
 import {
+  blockScanEdgeKey,
   createMutationQueryDescriptor,
   deterministicHash,
 } from "../blockscan-state-capability.js";
@@ -90,6 +91,7 @@ interface UniV2CurrentState {
   readonly reserve1: bigint;
   readonly feeBps: bigint;
   readonly blockTimestampLast: number;
+  readonly inactiveReason: string | null;
 }
 
 const UNIV2_EDGE_IDS = new Set(["univ2-swap"]);
@@ -167,18 +169,34 @@ export const univ2BlockScanState = Object.freeze({
       "getReserves",
       requireRead(results, `reserves:${pool}`).data,
     );
+    const reserve0 = BigInt(reserves[0]);
+    const reserve1 = BigInt(reserves[1]);
     return Object.freeze({
       pool,
       token0: metadata.token0,
       token1: metadata.token1,
-      reserve0: BigInt(reserves[0]),
-      reserve1: BigInt(reserves[1]),
+      reserve0,
+      reserve1,
       feeBps: metadata.feeBps,
       blockTimestampLast: Number(reserves[2]),
+      inactiveReason:
+        reserve0 === 0n || reserve1 === 0n
+          ? `univ2 pool ${pool} has zero reserve at the current source`
+          : null,
     });
   },
 
   deriveMids(snapshot, edges) {
+    if (snapshot.inactiveReason) {
+      for (const edge of edges) {
+        if (canonicalPoolStateKey(edge) !== snapshot.pool) {
+          throw new Error(
+            `univ2 snapshot ${snapshot.pool} used for ${edge.target}`,
+          );
+        }
+      }
+      return new Map();
+    }
     return midsForDirectedEdges(edges, (edge) => {
       if (canonicalPoolStateKey(edge) !== snapshot.pool) {
         throw new Error(`univ2 snapshot ${snapshot.pool} used for ${edge.target}`);
@@ -202,6 +220,20 @@ export const univ2BlockScanState = Object.freeze({
         feeBps: Number(snapshot.feeBps),
       });
     });
+  },
+
+  behaviorProvenUnavailableEdges(snapshot, edges) {
+    if (!snapshot.inactiveReason) return new Map();
+    const unavailable = new Map<string, string>();
+    for (const edge of edges) {
+      if (canonicalPoolStateKey(edge) !== snapshot.pool) {
+        throw new Error(
+          `univ2 snapshot ${snapshot.pool} used for ${edge.target}`,
+        );
+      }
+      unavailable.set(blockScanEdgeKey(edge), snapshot.inactiveReason);
+    }
+    return unavailable;
   },
 
   projectBackrunState(snapshot, source) {

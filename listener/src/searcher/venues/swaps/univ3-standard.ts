@@ -13,6 +13,7 @@ import type {
   StateReadResult,
 } from "../blockscan-state-capability.js";
 import {
+  blockScanEdgeKey,
   createMutationQueryDescriptor,
   deterministicHash,
 } from "../blockscan-state-capability.js";
@@ -120,6 +121,7 @@ interface UniV3CurrentState {
   readonly observationCardinalityNext: number;
   readonly feeProtocol: number;
   readonly unlocked: boolean;
+  readonly inactiveReason: string | null;
 }
 
 const UNIV3_EDGE_IDS = new Set(["univ3-swap"]);
@@ -241,13 +243,19 @@ export const univ3BlockScanState = Object.freeze({
       "liquidity",
       requireRead(results, `liquidity:${pool}`).data,
     );
+    const sqrtPriceX96 = BigInt(slot0[0]);
+    const activeLiquidity = BigInt(liquidity[0]);
+    const inactiveFields = [
+      sqrtPriceX96 === 0n ? "sqrtPriceX96" : null,
+      activeLiquidity === 0n ? "liquidity" : null,
+    ].filter((field): field is string => field !== null);
     const snapshot = {
       pool,
       token0: metadata.token0,
       token1: metadata.token1,
-      sqrtPriceX96: BigInt(slot0[0]),
+      sqrtPriceX96,
       tick: Number(slot0[1]),
-      liquidity: BigInt(liquidity[0]),
+      liquidity: activeLiquidity,
       fee: metadata.fee,
       tickSpacing: metadata.tickSpacing,
       observationIndex: Number(slot0[2]),
@@ -255,14 +263,26 @@ export const univ3BlockScanState = Object.freeze({
       observationCardinalityNext: Number(slot0[4]),
       feeProtocol: Number(slot0[5]),
       unlocked: Boolean(slot0[6]),
+      inactiveReason:
+        inactiveFields.length > 0
+          ? `univ3 pool ${pool} has zero ${inactiveFields.join(" and ")} ` +
+            `at the current source`
+          : null,
     };
-    if (snapshot.sqrtPriceX96 <= 0n || snapshot.liquidity <= 0n) {
-      throw new Error(`univ3 block-scan pool ${pool} has inactive state`);
-    }
     return Object.freeze(snapshot);
   },
 
   deriveMids(snapshot, edges) {
+    if (snapshot.inactiveReason) {
+      for (const edge of edges) {
+        if (canonicalPoolStateKey(edge) !== snapshot.pool) {
+          throw new Error(
+            `univ3 snapshot ${snapshot.pool} used for ${edge.target}`,
+          );
+        }
+      }
+      return new Map();
+    }
     return midsForDirectedEdges(edges, (edge) => {
       if (canonicalPoolStateKey(edge) !== snapshot.pool) {
         throw new Error(`univ3 snapshot ${snapshot.pool} used for ${edge.target}`);
@@ -284,6 +304,20 @@ export const univ3BlockScanState = Object.freeze({
         feeBps: Number(snapshot.fee) / 100,
       });
     });
+  },
+
+  behaviorProvenUnavailableEdges(snapshot, edges) {
+    if (!snapshot.inactiveReason) return new Map();
+    const unavailable = new Map<string, string>();
+    for (const edge of edges) {
+      if (canonicalPoolStateKey(edge) !== snapshot.pool) {
+        throw new Error(
+          `univ3 snapshot ${snapshot.pool} used for ${edge.target}`,
+        );
+      }
+      unavailable.set(blockScanEdgeKey(edge), snapshot.inactiveReason);
+    }
+    return unavailable;
   },
 
   projectBackrunState(snapshot, source) {
