@@ -47,6 +47,15 @@ import {
   type TokenQueryBackend,
 } from "../planner/token-graph.js";
 import { DEFAULT_POOL_UNIVERSE_PATH, loadPoolUniverse } from "../pool-universe.js";
+import {
+  protocolCandidateAddressesFromDexGraph,
+  protocolCandidateAddressesFromDexUniverse,
+  protocolDiscoveryCandidateAddressHints,
+  prepareActiveProtocolDiscoveryPass,
+} from "../protocol-discovery-runtime.js";
+import {
+  EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+} from "../protocol-instance-discovery.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { PoolStateUpdater } from "../solver/pool-state-updater.js";
@@ -56,6 +65,11 @@ import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { evaluateEv } from "../ev-evaluator.js";
 import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 import { FLASH_SWAP_REPAY } from "../templates/path-template.js";
+import { buildStrategyViews } from "../strategy-views.js";
+import {
+  PRODUCTION_ADAPTER_FAMILIES,
+  PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+} from "../venues/production-registry.js";
 
 const ERC20 = new ethers.Interface(["function decimals() view returns (uint8)"]);
 const ERC4626 = new ethers.Interface([
@@ -283,6 +297,39 @@ function loadEnv(): void {
   }
 }
 
+function universeDiscoveryFromBlock(
+  universePath: string,
+  sourceBlock: number,
+): number {
+  let fromBlock: unknown;
+  try {
+    const parsed = JSON.parse(readFileSync(universePath, "utf8")) as unknown;
+    if (typeof parsed === "object" && parsed !== null) {
+      fromBlock = (parsed as Record<string, unknown>).fromBlock;
+    }
+  } catch (error) {
+    throw new Error(
+      `cannot read protocol discovery range from ${universePath}: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const fallback = Math.max(
+    0,
+    sourceBlock - envInt("HUNT_PROTOCOL_DISCOVERY_BLOCKS", 14_400),
+  );
+  const resolved = fromBlock === undefined ? fallback : Number(fromBlock);
+  if (
+    !Number.isSafeInteger(resolved) ||
+    resolved < 0 ||
+    resolved > sourceBlock
+  ) {
+    throw new Error(
+      `invalid protocol discovery range ${String(fromBlock)}..${sourceBlock}`,
+    );
+  }
+  return resolved;
+}
+
 async function check(name: string, run: () => boolean | Promise<boolean>): Promise<void> {
   checks += 1;
   let ok = false;
@@ -341,16 +388,99 @@ async function main(): Promise<void> {
       maxPools: cfg.maxPools,
       minScore: 1,
     }).map(lowerPoolEntry);
-    const protocolPools = POOL_REGISTRY
+    const staticProtocolPools = POOL_REGISTRY
       .filter((pool) => pool.adapter !== "fluid-vault")
       .map(lowerPoolEntry);
     // Production starts from code-owned protocol seeds, then admits the
     // file-backed universe. Keep the same precedence so stale file metadata
     // cannot replace a newer exact adapter classification in the replay.
-    const pools = mergePoolRegistries(protocolPools, universePools);
-    const rawEdges = await buildTokenGraph(graphBackend, pools);
+    const basePools = mergePoolRegistries(staticProtocolPools, universePools);
+    const baseGraph = await buildTokenGraph(graphBackend, basePools);
+    let protocolPools = staticProtocolPools;
+    let pools = basePools;
+    let rawEdges = baseGraph;
+    if (!process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT) {
+      const discoverableFamilies =
+        PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes();
+      const dexPoolAdapters = new Set(
+        PRODUCTION_ADAPTER_FAMILIES.swaps()
+          .flatMap((family) => [...family.poolAdapters]),
+      );
+      const graphTokens = [...new Set([
+        ...protocolCandidateAddressesFromDexUniverse(
+          universePools,
+          dexPoolAdapters,
+        ),
+        ...protocolCandidateAddressesFromDexGraph(baseGraph),
+      ])].sort();
+      const candidateAddresses = [...new Set([
+        ...graphTokens,
+        ...protocolDiscoveryCandidateAddressHints(discoverableFamilies),
+      ])].sort();
+      const discoveryFromBlock = universeDiscoveryFromBlock(
+        cfg.universePath,
+        cfg.blockNumber,
+      );
+      const protocolDiscovery = await prepareActiveProtocolDiscoveryPass({
+        provider,
+        adapters: discoverableFamilies,
+        identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
+        protocolEdgesEnabled: true,
+        chainId: (await provider.getNetwork()).chainId,
+        probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
+        currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+        currentBackrunPools: basePools,
+        currentBackrunGraph: baseGraph,
+        currentBlockscanGraph: baseGraph,
+        buildStrategyViews: (viewPools) =>
+          buildStrategyViews(viewPools, [], [], {
+            blockscanMaxPools: 0,
+            poolUniverseGeneratedAt: `blockscan-hunt:${cfg.blockNumber}`,
+          }),
+        blockNumber: cfg.blockNumber,
+        fromBlock: discoveryFromBlock,
+        toBlock: cfg.blockNumber,
+        graphTokens,
+        candidateAddresses,
+        shadow: false,
+      });
+      await check("active protocol discovery completed", () =>
+        protocolDiscovery.scanner.sourceComplete &&
+        protocolDiscovery.result.sourceComplete &&
+        protocolDiscovery.result.evaluationComplete &&
+        protocolDiscovery.projection !== null,
+      );
+      if (!protocolDiscovery.projection) {
+        throw new Error("active protocol discovery produced no graph projection");
+      }
+      const discoveredProtocolPools = [
+        ...protocolDiscovery.projection.ownership.admissions.values(),
+      ].map((item) => lowerPoolEntry(item.instance.pool));
+      protocolPools = mergePoolRegistries(
+        staticProtocolPools,
+        discoveredProtocolPools,
+      );
+      pools = protocolDiscovery.projection.strategyViews.blockscan;
+      rawEdges =
+        protocolDiscovery.projection.blockscanGraph ??
+        protocolDiscovery.projection.backrunGraph;
+      console.log(
+        `[blockscan-hunt] protocol discovery candidates=` +
+          `${[...protocolDiscovery.scanner.candidatesByAdapter.values()]
+            .reduce((sum, items) => sum + items.length, 0)} ` +
+          `admitted=${protocolDiscovery.projection.ownership.admissions.size}`,
+      );
+    } else {
+      console.log(
+        "[blockscan-hunt] active protocol discovery supplied by verified replay preload",
+      );
+    }
     const edges = rawEdges.map(lowerEdge);
     const protocolEdges = edges.filter((edge) => edge.slotKind === "protocol");
+    console.log(
+      `[blockscan-hunt] protocol graph pools=${protocolPools.length} ` +
+        `edges=${protocolEdges.length}`,
+    );
 
     await check("graph has swap edges and protocol edges", () =>
       edges.length > 0 && protocolEdges.length > 0,
