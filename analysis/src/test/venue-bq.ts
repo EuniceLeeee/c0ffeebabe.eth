@@ -90,9 +90,9 @@ test("receipt-log coverage separates protocol gaps from unknown emitters and req
       addr: ADDR.FLUID_DEX_USDC_USDT.toLowerCase(),
       family: "fluid",
       topic0s: [TOPICS.fluidDexSwap.toLowerCase()],
-      productionRoutability: "routable",
-      reason: "routing_attested",
-      in_graph: true,
+      productionRoutability: "unassessed",
+      reason: "emitter_or_routing_graph_not_attested",
+      in_graph: null,
     },
   ]);
   assert.deepEqual(result.swapRouteGaps, []);

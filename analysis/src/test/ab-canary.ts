@@ -41,8 +41,28 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   assert.match(wrapper, /prepare_candidate_universes "\$experiment" "\$requested_input_mode"/);
   assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
   assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
-  assert.match(wrapper, /timeout 900 env -i/);
-  assert.match(wrapper, /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/);
+  const universeBuildStart = wrapper.indexOf("timeout 900");
+  const universeBuildEnd = wrapper.indexOf(
+    "npx tsx src/searcher/build-active-pool-universe.ts",
+    universeBuildStart,
+  );
+  assert.ok(universeBuildStart >= 0, "candidate universe build must retain its timeout");
+  assert.ok(universeBuildEnd > universeBuildStart, "candidate universe builder invocation is missing");
+  const universeBuild = wrapper.slice(universeBuildStart, universeBuildEnd);
+  const flockIndex = universeBuild.indexOf("flock -w 30 /run/lock/mev-pooluniverse.lock");
+  const cleanEnvIndex = universeBuild.indexOf("env -i");
+  const pathIndex = universeBuild.indexOf("PATH=");
+  assert.ok(flockIndex >= 0, "candidate universe builds must share the pool-universe lock");
+  assert.ok(cleanEnvIndex > flockIndex, "the clean environment must execute under the shared lock");
+  assert.ok(pathIndex > cleanEnvIndex, "builder environment assignments must follow env -i");
+  assert.match(universeBuild, /POOL_UNIVERSE_RETAIN_PATH="\$A_UNIVERSE"/);
+  assert.match(universeBuild, /POOL_UNIVERSE_MANIFEST_OUT="\$universe_manifest_tmp"/);
+  assert.doesNotMatch(
+    universeBuild,
+    /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/,
+    "the challenger must not disable registered-family topology recovery",
+  );
+  assert.match(wrapper, /\.schemaVersion == 3/);
   assert.match(wrapper, /active-pools-\$universe_hash\.json/);
   assert.match(wrapper, /baseline_replay_universe_path "\$A_REPLAY_UNIVERSE"/);
   assert.match(wrapper, /--baseline-universe "\$baseline_universe"/);

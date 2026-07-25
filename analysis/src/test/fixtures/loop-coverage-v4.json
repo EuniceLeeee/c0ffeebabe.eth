@@ -221,18 +221,71 @@
   "fullCorpusEvidence": {
     "generatedAt": "2026-07-15T05:08:00.000Z",
     "sourceSha256": "156930644045a3769306424660a7eaf87ad0c9190e556b7894d2282be89f415e",
-    "canonicalOutputSha256": "b9f0104ff0cb5bb8daecb2354ec0ceaf02565c7c6c31703d7868ff9840a583b6",
+    "canonicalOutputSha256": "dfb6234a3b8a8fa12a5b1794c3c2084d44103808786c8253f7f5eb0895a92e33",
     "corpus": {
       "transactionCount": 857,
       "receiptLogRowCount": 18541
+    },
+    "dynamicAdmissionBoundary": {
+      "scope": "receipt_only_without_attested_runtime_universe",
+      "formerlyStaticErc4626Addresses": [
+        "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+        "0x4825eff24f9b7b76eeafa2ecc6a1d5dfcb3c1c3f",
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "0xb8280955ae7b5207af4cdbdcd775135bd38157fe",
+        "0xbeef01735c132ada46aa9aa4c54623caa92a64cb",
+        "0xbeef047a543e45807105e51a8bbefcc5950fcfba"
+      ],
+      "erc4626GapTxs": [
+        "0x01544ac92f200759658ec4a47b64ab798e19fe3fa13bf38e27de3a6699fb2aa5",
+        "0x0627b82ebb141a27718d21571346930e6db49a809af42699276d8c7f01f7642a",
+        "0x090415f6f675b5ef3bd3ff96ff4a5fa46fe87f962a1e1ee3009ff8eb2327a039",
+        "0x175f7024e178f064c5a50b971a2ac60706a3279f0c98fb7848c002c9b99288aa",
+        "0x17f767fda9db5e4ad7ddb325c9b125436f2262df8ed09e97cb497fe6f0e2ce7d",
+        "0x1c2999d6422e16cea36973416e16dd8e84410f7cf5adf78f5531f4d160d5eaf2",
+        "0x1cc4cd4f91a24624ac76b58db3f2ff7f37895161ce8137b357c3058c5454d123",
+        "0x294d326bc58cf7aea2a108a18526cc351881de159da872d464c5735b5cc8cef8",
+        "0x2f00f76a2a6bb89d3d5793bee83b11ff5a7e205cb6bfa80548c0eceed375b339",
+        "0x47219a33ae580dea56b404eceb51318c9b47520d1571bc2bb585f86efa99a8ec",
+        "0x4f9599715b3869a2169d9deb21bd4c1423f274deed4514f315629d91a284a7da",
+        "0x5a379d651cff988d12c4342afe9f65c6c2779685ff7c45164d4ada49649df42c",
+        "0x5abf93d2382b0e91b1b08ecacb99a711e5f8c83fcebf311e7114a0d46c555842",
+        "0x676d31e0557c2f9cf2bb6521f66553ffd192e0bcb9a4f3a1489db8f1fee4f38d",
+        "0x69075e9e45ed3840f6bf46c37552b62b66e5537aab1369475a57027750b68c70",
+        "0x806d9ff87e91b2109b5642cd6fd0ea6d0f577328a5b07c74ca4f60a5eb92495d",
+        "0x868d2dc5d4f60d73ea755015dfe9b668618c72228e442cf7381cdb5e1aa64ea4",
+        "0x8b56e5d54f3be0a13cfb6f837291c81c416ef79b4269927e4a1c2b1b6e9a8a63",
+        "0x95805790d8c893aab0bbcf29b2c3b373d65ac662d74f2cd37252d934d8fb9bec",
+        "0x9be73297e0fd8b0ff9760356480b372e3f78b12ce6bc6dc9bb83888d1314b862",
+        "0x9d5156cb01a7dfbcaed31ecb028132089d59517472901da130d95e5e4b3020be",
+        "0xa82dafbae5f82a016736fc35dea9ed8d9b154b8692b243d074d07c62f0738e85",
+        "0xa9a1b428a78a084de71cf63681ad78e8eedf1a02e38ddd7cec09b4a0a1e14087",
+        "0xba5a95362281d11b1b132c99c6cdc220d076da240e5741bf392a445a134c4a26",
+        "0xbf21b24f059b1d3e6eea9cdf54112ca4746be9595faba02e384d2a7c155bbc9b",
+        "0xca9cc811eb496e9b99e6be8eddc5d58bd5e0127edfff7e40821f1a5c85b028bd",
+        "0xec08ec0068abec74bc8a02717a7563cf89fa5b36a1ec4a1450360be039b8da48",
+        "0xf2130409bfe9636c5cb6e7b85c523b07a0e20c209508f43a6e375607da3a4527",
+        "0xfd2b659a996feb6b252a48d7449571c9521973d0ce0a61c35d62a495a2aa5a5f"
+      ],
+      "fluidUnassessedTxs": [
+        "0x175f7024e178f064c5a50b971a2ac60706a3279f0c98fb7848c002c9b99288aa",
+        "0x47219a33ae580dea56b404eceb51318c9b47520d1571bc2bb585f86efa99a8ec",
+        "0x484919a55f7d316b10fae53da052a25d8bd0036a641fcc7ab41d5719867e42aa",
+        "0x4f9599715b3869a2169d9deb21bd4c1423f274deed4514f315629d91a284a7da",
+        "0x5510422fc8dde642946ab0ef22ff96a3c139e676668249ed0c19e302962e53e9",
+        "0x75029b3fb2454e0808e23e291649abb536f7d5a530ad81ae0918e71a2c7afee3",
+        "0x806d9ff87e91b2109b5642cd6fd0ea6d0f577328a5b07c74ca4f60a5eb92495d",
+        "0x9be73297e0fd8b0ff9760356480b372e3f78b12ce6bc6dc9bb83888d1314b862"
+      ],
+      "changedTxCount": 32
     },
     "summary": {
       "schema_version": 4,
       "coverage_scope": "receipt_log_emitters_only",
       "routability_scope": "production_listener_descriptors_receipt_only",
       "transactionCount": 857,
-      "txsWithVaultLeg": 29,
-      "txsWithProtocolLeg": 54,
+      "txsWithVaultLeg": 0,
+      "txsWithProtocolLeg": 33,
       "txsWithNamedProtocolEvidence": 78,
       "txsWithObservedSwaps": 741,
       "observedSwapVenueCount": 1967,
@@ -240,15 +293,15 @@
       "swapRouteGapTxs": 19,
       "swapRouteGapCount": 19,
       "unassessedSwapTxs": 740,
-      "unassessedSwapVenueCount": 1940,
+      "unassessedSwapVenueCount": 1948,
       "observedFundingVenueCount": 550,
       "fundingIdentityGapTxs": 7,
       "fundingIdentityGapCount": 7,
       "fundingRouteGapTxs": 0,
       "fundingRouteGapCount": 0,
-      "protocolAdapterCandidateTxCount": 53,
+      "protocolAdapterCandidateTxCount": 24,
       "requiresTraceTxCount": 857,
-      "knownProtocolGapTxs": 25,
+      "knownProtocolGapTxs": 54,
       "unclassifiedEmitterTxs": 702,
       "removed_v4_fields": [
         "perTx[].swapVenues",
@@ -269,7 +322,7 @@
         "summary.requiresTrace"
       ],
       "receiptRouteCoverageCompleteTxCount": 0,
-      "singleProtocolVenueGapWithProtocolLegTxCount": 1
+      "singleProtocolVenueGapWithProtocolLegTxCount": 6
     },
     "eventTxs": {
       "balancerFlashLoan": [

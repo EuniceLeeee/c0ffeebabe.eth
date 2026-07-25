@@ -40,6 +40,13 @@ interface ExactFixture {
       balancerPoolBalanceChanged: string[];
       dodoObserved: string[];
     };
+    dynamicAdmissionBoundary: {
+      scope: "receipt_only_without_attested_runtime_universe";
+      formerlyStaticErc4626Addresses: string[];
+      erc4626GapTxs: string[];
+      fluidUnassessedTxs: string[];
+      changedTxCount: number;
+    };
   };
 }
 
@@ -90,6 +97,7 @@ test("full-corpus evidence binds exact event buckets to the canonical output", (
   const output = buildLoopCoverageOutput(decoded.map((tx) => classifyTxLoopCoverage(tx)));
   assert.equal(sha256(`${JSON.stringify(output, null, 2)}\n`), evidence.canonicalOutputSha256);
   assert.deepEqual(output.summary, evidence.summary);
+  assertDynamicAdmissionBoundary(output.perTx, evidence.dynamicAdmissionBoundary);
 
   const derivedEventTxs = {
     balancerFlashLoan: observedTxs(decoded, BALANCER_VAULT, TOPICS.balancerV2FlashLoan),
@@ -204,17 +212,27 @@ test("both exact Coffee PoolBalanceChanged rows are liquidity, never swap or fun
   }
 });
 
-test("only the registered Fluid singleton is routing-attested from its exact swap event", () => {
+test("a Fluid discovery candidate stays unassessed without an attested runtime universe", () => {
   const fluidAddress = ADDR.FLUID_DEX_USDC_USDT.toLowerCase();
   const fluidEntry = POOL_REGISTRY.find((entry) => entry.address.toLowerCase() === fluidAddress);
-  assert.equal(fluidEntry?.adapter, "fluid-dex");
+  assert.equal(
+    fluidEntry,
+    undefined,
+    "candidate hints and family registration are not runtime instance admission",
+  );
 
-  const registered = classifyTxLoopCoverage({
-    txHash: "0xregistered-fluid",
+  const candidate = classifyTxLoopCoverage({
+    txHash: "0xfluid-candidate-without-runtime-proof",
     receiptLogs: [{ address: fluidAddress, topics: [TOPICS.fluidDexSwap] }],
   });
-  assert.deepEqual(swapAssessments(registered), [
-    [fluidAddress, "fluid", "routable", "routing_attested", true],
+  assert.deepEqual(swapAssessments(candidate), [
+    [
+      fluidAddress,
+      "fluid",
+      "unassessed",
+      "emitter_or_routing_graph_not_attested",
+      null,
+    ],
   ]);
 
   const arbitraryFluid = classifyTxLoopCoverage({
@@ -371,7 +389,7 @@ test("PSM support is event-specific and preserves multiple Liquity gaps on the s
   assert.equal(forward.receiptRouteCoverageComplete, false);
 });
 
-test("ERC4626 support matches only Deposit/Withdraw and exposes another named topic as a gap", () => {
+test("an ERC4626 candidate hint is not admission without an attested runtime universe", () => {
   const vaultAddress = ADDR.SUSDS.toLowerCase();
   const result = classifyTxLoopCoverage({
     txHash: "0xerc4626-mixed",
@@ -381,11 +399,12 @@ test("ERC4626 support matches only Deposit/Withdraw and exposes another named to
     ],
   });
 
-  assert.deepEqual(result.vaults, [vaultAddress]);
-  assert.deepEqual(result.protocolVenues, [vaultAddress]);
+  assert.deepEqual(result.vaults, []);
+  assert.deepEqual(result.protocolVenues, []);
   assert.deepEqual(result.protocolVenueGaps, [
+    { addr: vaultAddress, topic0: TOPICS.erc4626Deposit.toLowerCase() },
     { addr: vaultAddress, topic0: TOPICS.psmBuyGem.toLowerCase() },
-  ]);
+  ].sort(compareGap));
   assert.deepEqual(result.unclassifiedEmitters, []);
   assert.equal(result.protocolAdapterCandidate, false);
   assert.equal(result.receiptRouteCoverageComplete, false);
@@ -574,6 +593,63 @@ function assertEvidenceTxs(txs: string[], expected: number): void {
   assert.equal(new Set(txs).size, expected);
   assert.deepEqual(txs, [...txs].sort());
   for (const tx of txs) assert.match(tx, /^0x[a-f0-9]{64}$/);
+}
+
+function assertDynamicAdmissionBoundary(
+  perTx: TxLoopCoverage[],
+  boundary: ExactFixture["fullCorpusEvidence"]["dynamicAdmissionBoundary"],
+): void {
+  assert.equal(boundary.scope, "receipt_only_without_attested_runtime_universe");
+  assert.deepEqual(
+    boundary.formerlyStaticErc4626Addresses,
+    [...boundary.formerlyStaticErc4626Addresses].sort(),
+  );
+  assert.equal(new Set(boundary.formerlyStaticErc4626Addresses).size, 6);
+  for (const address of boundary.formerlyStaticErc4626Addresses) {
+    assert.match(address, /^0x[a-f0-9]{40}$/);
+  }
+  assertEvidenceTxs(boundary.erc4626GapTxs, 29);
+  assertEvidenceTxs(boundary.fluidUnassessedTxs, 8);
+  assert.equal(
+    new Set([...boundary.erc4626GapTxs, ...boundary.fluidUnassessedTxs]).size,
+    boundary.changedTxCount,
+  );
+  assert.equal(boundary.changedTxCount, 32);
+
+  const formerlyStaticVaults = new Set(boundary.formerlyStaticErc4626Addresses);
+  const erc4626Topics = new Set([
+    TOPICS.erc4626Deposit.toLowerCase(),
+    TOPICS.erc4626Withdraw.toLowerCase(),
+  ]);
+  const derivedErc4626GapTxs = perTx
+    .filter((tx) => tx.protocolVenueGaps.some((gap) =>
+      formerlyStaticVaults.has(gap.addr) && erc4626Topics.has(gap.topic0)
+    ))
+    .map((tx) => tx.tx)
+    .sort();
+  assert.deepEqual(derivedErc4626GapTxs, boundary.erc4626GapTxs);
+  for (const txHash of boundary.erc4626GapTxs) {
+    const tx = perTx.find((candidate) => candidate.tx === txHash);
+    assert.ok(tx, `missing ERC4626 boundary transaction ${txHash}`);
+    assert.equal(
+      tx.vaults.some((address) => formerlyStaticVaults.has(address)),
+      false,
+      `${txHash} must not promote a formerly static vault without runtime admission`,
+    );
+  }
+
+  const fluidAddress = ADDR.FLUID_DEX_USDC_USDT.toLowerCase();
+  const derivedFluidUnassessedTxs = perTx
+    .filter((tx) => tx.observedSwapVenues.some((venue) =>
+      venue.addr === fluidAddress &&
+      venue.family === "fluid" &&
+      venue.productionRoutability === "unassessed" &&
+      venue.reason === "emitter_or_routing_graph_not_attested" &&
+      venue.in_graph === null
+    ))
+    .map((tx) => tx.tx)
+    .sort();
+  assert.deepEqual(derivedFluidUnassessedTxs, boundary.fluidUnassessedTxs);
 }
 
 function decodeCanonicalInput(
