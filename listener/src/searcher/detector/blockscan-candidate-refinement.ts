@@ -33,6 +33,22 @@ export interface BlockScanProbeDiagnostic {
   index: number;
   status: "positive" | "negative" | "failed" | "unprobed";
   marginBps: number | null;
+  attempted: boolean;
+  failure: BlockScanProbeFailureDiagnostic | null;
+}
+
+export interface BlockScanProbeFailureDiagnostic {
+  readonly reason:
+    | "family_circuit_open"
+    | "family_timeout"
+    | "global_deadline"
+    | "quote_error";
+  readonly familyIds: readonly string[];
+  readonly attributedFamilyId: string | null;
+  readonly stage: string | null;
+  readonly causeName: string | null;
+  readonly causeCode: string | null;
+  readonly causeKind: string | null;
 }
 
 export interface BlockScanRefinementOptions {
@@ -128,7 +144,16 @@ export async function refineBlockScanCandidates(
       if (stageBudget.blocks(item.opportunity.seedEdges)) {
         pending.splice(index, 1);
         failed++;
-        onProbe?.({ index: item.index, status: "failed", marginBps: null });
+        onProbe?.({
+          index: item.index,
+          status: "failed",
+          marginBps: null,
+          attempted: false,
+          failure: probeFailureDiagnostic(
+            "family_circuit_open",
+            routeFamilies(item.opportunity),
+          ),
+        });
         continue;
       }
       const familyIds = routeFamilies(item.opportunity);
@@ -214,10 +239,22 @@ export async function refineBlockScanCandidates(
           priority: exactProbePriority(opportunity, marginBps, pricedTokens),
           index,
         });
-        onProbe?.({ index, status: "positive", marginBps });
+        onProbe?.({
+          index,
+          status: "positive",
+          marginBps,
+          attempted: true,
+          failure: null,
+        });
       } else {
         negative++;
-        onProbe?.({ index, status: "negative", marginBps });
+        onProbe?.({
+          index,
+          status: "negative",
+          marginBps,
+          attempted: true,
+          failure: null,
+        });
       }
       stageBudget.recordSuccess(opportunity.seedEdges);
     } catch (error) {
@@ -246,7 +283,17 @@ export async function refineBlockScanCandidates(
       ) {
         deadlineHit = true;
         fallback.push({ opportunity, index });
-        onProbe?.({ index, status: "unprobed", marginBps: null });
+        onProbe?.({
+          index,
+          status: "unprobed",
+          marginBps: null,
+          attempted: true,
+          failure: probeFailureDiagnostic(
+            "global_deadline",
+            familyIds,
+            error,
+          ),
+        });
       } else {
         failed++;
         const budgetError =
@@ -260,7 +307,17 @@ export async function refineBlockScanCandidates(
               )
             : error;
         stageBudget.recordFailure(opportunity.seedEdges, budgetError);
-        onProbe?.({ index, status: "failed", marginBps: null });
+        onProbe?.({
+          index,
+          status: "failed",
+          marginBps: null,
+          attempted: true,
+          failure: probeFailureDiagnostic(
+            localTimedOut ? "family_timeout" : "quote_error",
+            familyIds,
+            budgetError,
+          ),
+        });
       }
     } finally {
       if (familyTimer !== undefined) clearTimeout(familyTimer);
@@ -280,6 +337,11 @@ export async function refineBlockScanCandidates(
             index: item.index,
             status: "unprobed",
             marginBps: null,
+            attempted: false,
+            failure: probeFailureDiagnostic(
+              "global_deadline",
+              routeFamilies(item.opportunity),
+            ),
           });
         }
       }
@@ -410,6 +472,40 @@ function minBigint(a: bigint, b: bigint): bigint {
 
 function maxBigint(a: bigint, b: bigint): bigint {
   return a > b ? a : b;
+}
+
+function probeFailureDiagnostic(
+  reason: BlockScanProbeFailureDiagnostic["reason"],
+  familyIds: readonly string[],
+  error?: unknown,
+): BlockScanProbeFailureDiagnostic {
+  const attributed = error instanceof BlockScanFamilyAttributedError
+    ? error
+    : null;
+  const cause = attributed?.failureCause ?? error;
+  const record = typeof cause === "object" && cause !== null
+    ? cause as {
+        name?: unknown;
+        code?: unknown;
+        kind?: unknown;
+      }
+    : null;
+  return Object.freeze({
+    reason,
+    familyIds: Object.freeze([...familyIds]),
+    attributedFamilyId: attributed?.familyId ?? null,
+    stage: attributed?.stage ?? null,
+    causeName: cause instanceof Error
+      ? cause.name
+      : typeof record?.name === "string"
+        ? record.name
+        : null,
+    causeCode: typeof record?.code === "string" ||
+        typeof record?.code === "number"
+      ? String(record.code)
+      : null,
+    causeKind: typeof record?.kind === "string" ? record.kind : null,
+  });
 }
 
 function positiveInteger(value: number, label: string): number {

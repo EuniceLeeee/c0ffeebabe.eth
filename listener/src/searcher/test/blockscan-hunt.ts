@@ -1028,6 +1028,8 @@ async function main(): Promise<void> {
           refinedRank,
           probeStatus,
           probeMarginBps: targetProbe?.marginBps ?? null,
+          probeAttempted: targetProbe?.attempted ?? false,
+          probeFailure: targetProbe?.failure ?? null,
           retainedAsFallback: refinedRank !== null && probeStatus === "failed",
           reason: probeStatus === "positive" && refinedRank === null
             ? "positive_but_below_candidate_cap"
@@ -1044,6 +1046,7 @@ async function main(): Promise<void> {
           negative: refinement.negative,
           failed: refinement.failed,
           deadlineHit: refinement.deadlineHit,
+          openFamilyIds: refinement.openFamilyIds,
           passBudgetExceeded,
         },
       );

@@ -4,6 +4,7 @@ import type { StateBackend } from "../../shared/state/state-backend.js";
 import {
   exactProbePriority,
   refineBlockScanCandidates,
+  type BlockScanProbeDiagnostic,
 } from "../detector/blockscan-candidate-refinement.js";
 import { selectFamilyFairExpansionEdges } from "../detector/blockscan-scanner-core.js";
 import {
@@ -119,7 +120,7 @@ const delayedOpportunity: BlockScanOpportunity = {
     leavesStandingPosition: false,
   }],
 };
-const diagnostics: string[] = [];
+const diagnostics: BlockScanProbeDiagnostic[] = [];
 const deadlineAtMs = Date.now() + 80;
 const refinement = refineBlockScanCandidates(
   state,
@@ -127,7 +128,7 @@ const refinement = refineBlockScanCandidates(
   1,
   deadlineAtMs,
   pricedTokens,
-  (diagnostic) => diagnostics.push(diagnostic.status),
+  (diagnostic) => diagnostics.push(diagnostic),
   1,
 );
 let watchdogTimer: ReturnType<typeof setTimeout>;
@@ -147,7 +148,15 @@ assert.equal(delayedResult.deadlineHit, true, "an aborted deadline quote must st
 assert.equal(delayedResult.attempted, 1);
 assert.equal(delayedResult.failed, 0, "deadline is not a quote failure");
 assert.equal(token0Calls, 1, "deadline must prevent the next route hop from starting");
-assert.deepEqual(diagnostics, ["unprobed"], "deadline cancellation must remain an unprobed route");
+assert.deepEqual(
+  diagnostics.map(({ status }) => status),
+  ["unprobed"],
+  "deadline cancellation must remain an unprobed route",
+);
+assert.equal(diagnostics[0]?.attempted, true);
+assert.equal(diagnostics[0]?.failure?.reason, "global_deadline");
+assert.equal(diagnostics[0]?.failure?.attributedFamilyId, null);
+assert.equal(diagnostics[0]?.failure?.stage, null);
 
 familyFairAdmissionAndCircuit();
 badFamilyHighScoreFloodCannotConsumeExpansionCap();
@@ -324,18 +333,36 @@ async function failingFamilyCannotConsumeRefinementCap(): Promise<void> {
       throw new Error(`unexpected exact quote selector ${selector}`);
     },
   } as StateBackend;
+  const probeDiagnostics: BlockScanProbeDiagnostic[] = [];
   const result = await refineBlockScanCandidates(
     exactState,
     [...bad, healthy],
     4,
     Date.now() + 2_000,
     pricedTokens,
-    undefined,
+    (diagnostic) => probeDiagnostics.push(diagnostic),
     1,
   );
   assert.equal(result.deadlineHit, false);
   assert.equal(result.attempted, 4, "the breaker stops new bad-family quote probes");
   assert.deepEqual(result.openFamilyIds, ["bad-family"]);
+  assert(
+    probeDiagnostics.some(({ attempted, failure }) =>
+      attempted &&
+      failure?.reason === "quote_error" &&
+      failure.attributedFamilyId === "bad-family" &&
+      failure.stage === "exact quote"
+    ),
+    "direct adapter quote failures must carry their family and stage",
+  );
+  assert(
+    probeDiagnostics.some(({ attempted, failure }) =>
+      !attempted &&
+      failure?.reason === "family_circuit_open" &&
+      failure.familyIds.includes("bad-family")
+    ),
+    "circuit-skipped routes must be distinguishable from attempted quote failures",
+  );
   assert.deepEqual(
     result.opportunities.map((item) => item.cycleId),
     ["healthy"],
