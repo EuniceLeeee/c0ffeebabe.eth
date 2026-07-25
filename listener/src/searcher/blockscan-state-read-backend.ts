@@ -117,7 +117,13 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<readonly StateReadResult[]> {
-    return this.readPinned(reads, control);
+    /*
+     * Pricing publication owns the generation-wide canonical CAS. Every call
+     * below is still pinned with EIP-1898 blockHash + requireCanonical; repeating
+     * number->hash header reads around every family batch only serializes the
+     * shared RPC queue without strengthening the final publication boundary.
+     */
+    return this.readAtPinnedHash(reads, control, false);
   }
 
   async readPinned(
@@ -130,6 +136,25 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<readonly StateReadResult[]> {
+    /*
+     * Standalone consumers such as funding do not own the pricing
+     * coordinator's publish-time CAS, so preserve their pre/post canonical
+     * fence exactly.
+     */
+    return this.readAtPinnedHash(reads, control, true);
+  }
+
+  private async readAtPinnedHash(
+    reads: readonly StateRead[],
+    control: {
+      readonly sourceBlock: number;
+      readonly sourceBlockHash: string;
+      readonly sourceGeneration: number;
+      readonly deadlineAtMs: number;
+      readonly signal: AbortSignal;
+    },
+    selfFenceCanonicality: boolean,
+  ): Promise<readonly StateReadResult[]> {
     if (reads.length === 0) return Object.freeze([]);
     const controller = new AbortController();
     const detach = linkAbort(control.signal, controller);
@@ -141,7 +166,9 @@ export class JsonRpcBlockScanStateReadBackend
     try {
       if (remainingMs <= 0) controller.abort(new Error("deadline reached"));
       assertPinnedReadSet(reads, control);
-      await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
+      if (selfFenceCanonicality) {
+        await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
+      }
       const results: Array<StateReadResult | undefined> =
         Array.from({ length: reads.length });
       const multicallReads: IndexedStateRead[] = [];
@@ -196,7 +223,9 @@ export class JsonRpcBlockScanStateReadBackend
         });
       }
       await runWithConcurrency(tasks, this.maxConcurrentBatches);
-      await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
+      if (selfFenceCanonicality) {
+        await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
+      }
       if (results.some((result) => result === undefined)) {
         throw new Error("block-scan state backend omitted a read result");
       }

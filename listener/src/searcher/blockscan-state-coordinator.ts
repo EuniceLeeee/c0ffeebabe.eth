@@ -26,6 +26,11 @@ import type { TokenEdge } from "./planner/token-graph.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 
 export interface BlockScanStateReadBackend {
+  /**
+   * Pricing-only read. Successful results must carry exact source provenance
+   * (EIP-1898 live, or a backend-attested immutable fork); this coordinator,
+   * not each family batch, owns the canonical publication CAS.
+   */
   readBatch(
     lane: BlockScanPricingLane,
     reads: readonly StateRead[],
@@ -247,6 +252,10 @@ interface OwnershipPlan {
 
 interface LaneResult {
   readonly lane: BlockScanPricingLane;
+  readonly stagedStaticSchemas: readonly (readonly [
+    string,
+    CompiledBlockScanStateFamily,
+  ])[];
   readonly resolvedStateKeys: readonly string[];
   readonly expectedReadKeys: readonly string[];
   readonly resolvedReadKeys: readonly string[];
@@ -662,6 +671,17 @@ export class BlockScanStateCoordinator {
           familyTelemetry,
         });
       }
+      /*
+       * Static schemas may contain chain-derived metadata (decimals and ABI
+       * probes). Commit them only after the same canonical CAS and generation
+       * fence as the snapshot. A failed or superseded generation must not
+       * donate orphan-fork schema state to its successor.
+       */
+      for (const [familyId, schema] of lanes.flatMap(
+        (lane) => lane.stagedStaticSchemas,
+      )) {
+        this.staticSchemas.set(familyId, schema);
+      }
       this.published = snapshot;
       const degraded =
         incompleteFamilyIds.length > 0 ||
@@ -946,9 +966,6 @@ export class BlockScanStateCoordinator {
           throw familyController.signal.reason ??
             signal.reason ??
             new Error(`block-scan state family ${family.familyId} aborted`);
-        }
-        for (const [familyId, schema] of staging.staticSchemas) {
-          this.staticSchemas.set(familyId, schema);
         }
         return result;
       } catch (error) {
@@ -1722,6 +1739,13 @@ export class BlockScanStateCoordinator {
     });
     return Object.freeze({
       lane,
+      stagedStaticSchemas: Object.freeze(
+        [...staging.staticSchemas.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([familyId, schema]) =>
+            Object.freeze([familyId, schema] as const)
+          ),
+      ),
       resolvedStateKeys: Object.freeze(resolvedStateKeys.sort()),
       expectedReadKeys: Object.freeze([...staging.expectedReadKeys].sort()),
       resolvedReadKeys: Object.freeze(resolvedReadKeys.sort()),
@@ -2286,6 +2310,7 @@ function emptyLane(
 ): LaneResult {
   return Object.freeze({
     lane,
+    stagedStaticSchemas: Object.freeze([]),
     resolvedStateKeys: Object.freeze([]),
     expectedReadKeys: Object.freeze([]),
     resolvedReadKeys: Object.freeze([]),
@@ -2319,6 +2344,7 @@ function failedFamilyLane(
 ): LaneResult {
   return Object.freeze({
     lane,
+    stagedStaticSchemas: Object.freeze([]),
     resolvedStateKeys: Object.freeze([]),
     expectedReadKeys: uniqueSorted([...staging.expectedReadKeys]),
     resolvedReadKeys: Object.freeze([]),
@@ -2374,6 +2400,14 @@ function mergeFamilyLaneResults(
 ): LaneResult {
   return Object.freeze({
     lane,
+    stagedStaticSchemas: Object.freeze(
+      results
+        .flatMap((result) => result.stagedStaticSchemas)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([familyId, schema]) =>
+          Object.freeze([familyId, schema] as const)
+        ),
+    ),
     resolvedStateKeys: uniqueSorted(
       results.flatMap((result) => result.resolvedStateKeys),
     ),

@@ -24,6 +24,9 @@ const targetAddress = "0x0000000000000000000000000000000000000001";
 const callerAddress = "0x0000000000000000000000000000000000000002";
 
 await testEip1898StartupProbe();
+await testPricingBatchUsesCoordinatorCanonicalFence();
+await testPricingBatchCanonicalFailure();
+await testPricingBatchAbort();
 await testPinnedBatch();
 await testLocalDefaultAvoidsMulticall();
 await testMixedTransports();
@@ -84,6 +87,81 @@ async function testEip1898StartupProbe(): Promise<void> {
     /EIP-1898 startup probe failed/,
   );
   console.log("[state-read-backend] EIP-1898 startup probe: PASS");
+}
+
+async function testPricingBatchUsesCoordinatorCanonicalFence(): Promise<void> {
+  const calls: RpcRequest[][] = [];
+  const backend = backendWith(async (body) => {
+    calls.push(body);
+    return body.map((request) =>
+      success(request.id, `0x${request.params[0].data.slice(2).padEnd(64, "0")}`)
+    );
+  }, 2);
+  const reads = [1, 2, 3, 4, 5].map((value) => read(
+    `pricing-${value}`,
+    `0x${value.toString(16).padStart(2, "0")}`,
+  ));
+  const results = await backend.readBatch("swap", reads, control());
+
+  assert.equal(calls.length, 3, "pricing uses only three bounded eth_call batches");
+  assert.deepEqual(
+    calls.map((batch) => batch.map((request) => request.method)),
+    [
+      ["eth_call", "eth_call"],
+      ["eth_call", "eth_call"],
+      ["eth_call"],
+    ],
+    "pricing must not spend shared RPC slots on per-batch header reads",
+  );
+  for (const request of calls.flat()) {
+    assert.deepEqual(request.params.at(-1), {
+      blockHash: sourceBlockHash,
+      requireCanonical: true,
+    });
+  }
+  assert(results.every((result) =>
+    result.ok &&
+    result.provenance.kind === "eip1898" &&
+    result.provenance.requireCanonical
+  ));
+  console.log("[state-read-backend] pricing delegates one canonical CAS: PASS");
+}
+
+async function testPricingBatchCanonicalFailure(): Promise<void> {
+  const backend = backendWith(async (body) => body.map((request) =>
+    failure(request.id, "header not found or not canonical")
+  ));
+  const results = await backend.readBatch(
+    "protocol",
+    [read("pricing-reorg", "0x01")],
+    control(),
+  );
+  assertFailure(results[0], "rpc", /not canonical/);
+  console.log("[state-read-backend] EIP-1898 pricing reorg fails closed: PASS");
+}
+
+async function testPricingBatchAbort(): Promise<void> {
+  let fetches = 0;
+  const backend = backendWith(async (body, signal) => {
+    fetches++;
+    assert(body.every((request) => request.method === "eth_call"));
+    if (!signal) throw new Error("pricing batch missing AbortSignal");
+    return await rejectWhenAborted(signal);
+  });
+  const controller = new AbortController();
+  const pending = backend.readBatch(
+    "swap",
+    [read("pricing-abort", "0x01")],
+    control({ signal: controller.signal }),
+  );
+  setTimeout(
+    () => controller.abort(new Error("pricing generation superseded")),
+    10,
+  );
+  const results = await pending;
+  assert.equal(fetches, 1, "pricing abort reaches the in-flight eth_call directly");
+  assertFailure(results[0], "aborted", /generation superseded/);
+  console.log("[state-read-backend] pricing abort propagation: PASS");
 }
 
 async function testPinnedBatch(): Promise<void> {

@@ -140,6 +140,70 @@ function fakeCapability(
   };
 }
 
+function staticSchemaFixtureCapability(
+  calls: { compiles: number },
+): BlockScanStateCapability<{ readonly hydrated: boolean }, FakeSnapshot> {
+  return {
+    stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
+    compileStaticSchema() {
+      calls.compiles++;
+      return { hydrated: false };
+    },
+    buildStaticSchemaReads({ sourceBlock, sourceBlockHash }) {
+      return [{
+        id: "metadata",
+        sourceBlock,
+        sourceBlockHash,
+        to: SWAP_POOL,
+        data: "0x01",
+        transport: "rpc-batch",
+      }];
+    },
+    hydrateStaticSchema(_schema, results) {
+      assert.equal(results.length, 1);
+      assert.equal(results[0]?.ok, true);
+      return { hydrated: true };
+    },
+    buildCurrentBlockReads({ sourceBlock, sourceBlockHash, schema }) {
+      assert.equal(schema.hydrated, true);
+      return [{
+        id: "state",
+        sourceBlock,
+        sourceBlockHash,
+        to: SWAP_POOL,
+        data: "0x02",
+        transport: "rpc-batch",
+      }];
+    },
+    decodeState(_schema, results) {
+      assert.equal(results.length, 1);
+      assert.equal(results[0]?.ok, true);
+      return { numerator: 2n, denominator: 1n };
+    },
+    deriveMids(snapshot, edges) {
+      return new Map(edges.map((edgeValue) => [
+        blockScanEdgeKey(edgeValue),
+        mid(
+          edgeValue,
+          Number(snapshot.numerator) / Number(snapshot.denominator),
+        ),
+      ]));
+    },
+    dependencies: (edges) => edges.map((edgeValue) => edgeValue.target),
+  };
+}
+
+function staticSchemaFixtureFamily(
+  calls: { compiles: number },
+): RegisteredBlockScanStateFamily {
+  return registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: staticSchemaFixtureCapability(calls),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+}
+
 function families() {
   const swapCalls = { schema: 0, reads: 0, derives: 0 };
   const protocolCalls = { schema: 0, reads: 0, derives: 0 };
@@ -1421,6 +1485,123 @@ async function staticSchemaReadsAreCachedAndDynamicReadsStayCurrent(): Promise<v
   assert.equal(dynamicReads, 2, "dynamic state is still current-N every generation");
 }
 
+async function publishCasFailureDoesNotCommitStaticSchema(): Promise<void> {
+  const calls = { compiles: 0, staticReads: 0, dynamicReads: 0, verifies: 0 };
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      for (const read of reads) {
+        if (read.id === "metadata") calls.staticReads++;
+        if (read.id.includes("state")) calls.dynamicReads++;
+      }
+      return reads.map((read) =>
+        successfulRead(read, control.sourceGeneration)
+      );
+    },
+    async verifyCanonicalSource() {
+      calls.verifies++;
+      if (calls.verifies === 1) {
+        throw new Error("injected publish-time source hash mismatch");
+      }
+    },
+  };
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const family = staticSchemaFixtureFamily(calls);
+  const first = await coordinator.prepare({
+    graph: graph(1, true, [swapForward, swapReverse]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(first.status, "incomplete");
+  assert.equal(coordinator.latestSnapshot(), null);
+  assert.equal(first.coverage.resolvedStateKeys.length, 0);
+  assert(
+    first.issues.some((issue) =>
+      issue.kind === "stale-generation" &&
+      issue.message.includes("publish-time canonical CAS failed")
+    ),
+  );
+
+  const second = await coordinator.prepare({
+    graph: graph(2, true, [swapForward, swapReverse]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(second.status, "complete");
+  assert.equal(
+    calls.compiles,
+    2,
+    "a generation rejected by canonical CAS may not populate schema cache",
+  );
+  assert.equal(calls.staticReads, 2, "orphan-fork static metadata must be reread");
+
+  const third = await coordinator.prepare({
+    graph: graph(3, true, [swapForward, swapReverse]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(third.status, "complete");
+  assert.equal(calls.compiles, 2, "a published canonical schema remains reusable");
+  assert.equal(calls.staticReads, 2, "published static metadata remains cached");
+  assert.equal(calls.dynamicReads, 3, "dynamic state remains current each generation");
+  assert.equal(
+    calls.verifies,
+    3,
+    "canonical verification is exactly once per pricing generation",
+  );
+}
+
+async function supersededGenerationCannotDonateStaticSchema(): Promise<void> {
+  const calls = { compiles: 0, staticReads: 0 };
+  let firstCasStarted: (() => void) | undefined;
+  const firstCasReady = new Promise<void>((resolve) => {
+    firstCasStarted = resolve;
+  });
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      for (const read of reads) {
+        if (read.id === "metadata") calls.staticReads++;
+      }
+      return reads.map((read) =>
+        successfulRead(read, control.sourceGeneration)
+      );
+    },
+    async verifyCanonicalSource(source, signal) {
+      if (source.generation !== 1) return;
+      firstCasStarted?.();
+      await new Promise<void>((_resolve, reject) => {
+        const rejectAborted = () =>
+          reject(signal.reason ?? new Error("generation superseded"));
+        if (signal.aborted) rejectAborted();
+        else signal.addEventListener("abort", rejectAborted, { once: true });
+      });
+    },
+  };
+  const coordinator = new BlockScanStateCoordinator(backend);
+  const family = staticSchemaFixtureFamily(calls);
+  const firstPending = coordinator.prepare({
+    graph: graph(1, true, [swapForward, swapReverse]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  await firstCasReady;
+  const secondPending = coordinator.prepare({
+    graph: graph(2, true, [swapForward, swapReverse]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  const [first, second] = await Promise.all([firstPending, secondPending]);
+  assert.equal(first.status, "incomplete");
+  assert(first.issues.some((issue) => issue.kind === "stale-generation"));
+  assert.equal(second.status, "complete");
+  assert.equal(coordinator.latestSnapshot()?.generation, 2);
+  assert.equal(
+    calls.compiles,
+    2,
+    "a superseded generation may not donate its staged schema",
+  );
+  assert.equal(calls.staticReads, 2, "successor rereads its own static metadata");
+}
+
 async function immutableForkNeedsBackendAttestation(): Promise<void> {
   const calls = { schema: 0, reads: 0, derives: 0 };
   const capability = fakeCapability("swap", calls);
@@ -1579,6 +1760,8 @@ await deadlineAndExternalAbort();
 await generationFence();
 await dependentReadClosureIsExplicit();
 await staticSchemaReadsAreCachedAndDynamicReadsStayCurrent();
+await publishCasFailureDoesNotCommitStaticSchema();
+await supersededGenerationCannotDonateStaticSchema();
 await immutableForkNeedsBackendAttestation();
 purityHook();
 console.log("blockscan-state-coordinator PASS");
