@@ -37,9 +37,8 @@ export async function submitBundle(params: {
   botvmAddress: string;
   provider: ethers.JsonRpcProvider;
   targetBlock: number;
-  expectedProfitEth?: bigint;
-  bribeBps?: number;
-  bribeWei?: bigint;
+  bribeWei: bigint;
+  maxBaseFeePerGas: bigint;
 }): Promise<SubmitResult[]> {
   const {
     victimRawTx,
@@ -49,9 +48,8 @@ export async function submitBundle(params: {
     botvmAddress,
     provider,
     targetBlock,
-    expectedProfitEth,
-    bribeBps,
     bribeWei,
+    maxBaseFeePerGas,
   } = params;
 
   // 1. Build backrun tx
@@ -61,9 +59,8 @@ export async function submitBundle(params: {
     wallet,
     botvmAddress,
     provider,
-    expectedProfitEth,
-    bribeBps,
     bribeWei,
+    maxBaseFeePerGas,
   });
 
   const ts = new Date().toISOString();
@@ -112,9 +109,8 @@ export async function submitMevShareBundle(params: {
   botvmAddress: string;
   provider: ethers.JsonRpcProvider;
   targetBlock: number;
-  expectedProfitEth?: bigint;
-  bribeBps?: number;
-  bribeWei?: bigint;
+  bribeWei: bigint;
+  maxBaseFeePerGas: bigint;
 }): Promise<SubmitResult> {
   const {
     victimHash,
@@ -124,9 +120,8 @@ export async function submitMevShareBundle(params: {
     botvmAddress,
     provider,
     targetBlock,
-    expectedProfitEth,
-    bribeBps,
     bribeWei,
+    maxBaseFeePerGas,
   } = params;
 
   // Build + sign backrun tx (same logic as submitBundle)
@@ -136,17 +131,13 @@ export async function submitMevShareBundle(params: {
     wallet,
     botvmAddress,
     provider,
-    expectedProfitEth,
-    bribeBps,
     bribeWei,
+    maxBaseFeePerGas,
   });
 
   const bundleParams = {
     version: "v0.1",
-    inclusion: {
-      block: `0x${targetBlock.toString(16)}`,
-      maxBlock: `0x${(targetBlock + 5).toString(16)}`,
-    },
+    inclusion: mevShareInclusion(targetBlock),
     body: [
       { hash: victimHash },
       { tx: signedBackrunTx, canRevert: false },
@@ -196,6 +187,19 @@ export async function submitMevShareBundle(params: {
   };
 }
 
+export function mevShareInclusion(targetBlock: number): {
+  block: string;
+  maxBlock: string;
+} {
+  if (!Number.isSafeInteger(targetBlock) || targetBlock <= 0) {
+    throw new Error("MEV-Share target block must be a positive safe integer");
+  }
+  const block = `0x${targetBlock.toString(16)}`;
+  // The source hash, Chainlink mark and exact base fee are valid only for
+  // parent+1. Never let a bundle drift into a later block under stale EV.
+  return { block, maxBlock: block };
+}
+
 // ─── Standalone Backrun Bundle (mined victim / next block) ─────
 
 /**
@@ -211,9 +215,8 @@ export async function submitStandaloneBundle(params: {
   botvmAddress: string;
   provider: ethers.JsonRpcProvider;
   targetBlock: number;
-  expectedProfitEth?: bigint;
-  bribeBps?: number;
-  bribeWei?: bigint;
+  bribeWei: bigint;
+  maxBaseFeePerGas: bigint;
 }): Promise<SubmitResult[]> {
   const {
     calldataHex,
@@ -222,9 +225,8 @@ export async function submitStandaloneBundle(params: {
     botvmAddress,
     provider,
     targetBlock,
-    expectedProfitEth,
-    bribeBps,
     bribeWei,
+    maxBaseFeePerGas,
   } = params;
 
   const { signedBackrunTx, backrunTxHash, gasLimit, nonce } = await buildSignedBackrunTx({
@@ -233,9 +235,8 @@ export async function submitStandaloneBundle(params: {
     wallet,
     botvmAddress,
     provider,
-    expectedProfitEth,
-    bribeBps,
     bribeWei,
+    maxBaseFeePerGas,
   });
 
   const ts = new Date().toISOString();
@@ -268,66 +269,53 @@ export async function submitStandaloneBundle(params: {
 /** Gas-cost ETH kept in reserve so the bribe never starves the base fee. */
 const BRIBE_WALLET_RESERVE = ethers.parseUnits("0.0005", "ether");
 
-export function computeBribeTargetWei(params: {
-  expectedProfitEth?: bigint;
-  bribeBps?: number;
-  bribeWei?: bigint;
-}): bigint | undefined {
-  if (params.bribeWei !== undefined && params.bribeWei >= 0n) return params.bribeWei;
-  if (params.expectedProfitEth && params.expectedProfitEth > 0n && params.bribeBps && params.bribeBps > 0) {
-    return (params.expectedProfitEth * BigInt(params.bribeBps)) / 10000n;
-  }
-  return undefined;
-}
-
 export async function buildSignedBackrunTx(params: {
   calldataHex: string;
   gasUsed: number;
   wallet: ethers.Wallet;
   botvmAddress: string;
   provider: ethers.JsonRpcProvider;
-  /** Expected profit in ETH wei; with bribeBps, raises priority fee to bribe. */
-  expectedProfitEth?: bigint;
-  bribeBps?: number;
-  /** Absolute priority-fee bribe in wei; overrides expectedProfitEth×bribeBps. */
-  bribeWei?: bigint;
+  /** Maximum total priority-fee budget in wei, computed by the EV gate. */
+  bribeWei: bigint;
+  /** Exact EIP-1559 base fee for the target child block, computed by the EV gate. */
+  maxBaseFeePerGas: bigint;
 }): Promise<{ signedBackrunTx: string; backrunTxHash: string; gasLimit: bigint; nonce: number }> {
-  const { calldataHex, gasUsed, wallet, botvmAddress, provider, expectedProfitEth, bribeBps, bribeWei } = params;
+  const {
+    calldataHex,
+    gasUsed,
+    wallet,
+    botvmAddress,
+    provider,
+    bribeWei,
+    maxBaseFeePerGas,
+  } = params;
+  if (!Number.isSafeInteger(gasUsed) || gasUsed <= 0) {
+    throw new Error("measured gas used must be a positive safe integer");
+  }
+  if (bribeWei < 0n) {
+    throw new Error("absolute bribe budget must be non-negative");
+  }
+  if (maxBaseFeePerGas <= 0n) {
+    throw new Error("target block base fee unavailable");
+  }
   const nonce = await wallet.getNonce("pending");
-  const feeData = await provider.getFeeData();
   const gasLimit = BigInt(Math.ceil(gasUsed * 1.3)); // 30% buffer
 
-  // Read the real base fee from the latest block. Bug #1 fix: cap maxFeePerGas at
-  // worstBaseFee = baseFee × gasBufferMult so the tx can NEVER land in a block
-  // whose base fee exceeds what the EV gate assumed (the gate uses the same
-  // multiplier). Off-peak mainnet base fee is sub-gwei but spikes to gwei in busy
-  // blocks; without this cap a "+EV at 0.1 gwei" bundle lands at 1.7 gwei and loses.
-  const latest = await provider.getBlock("latest");
-  const baseFee = latest?.baseFeePerGas ?? feeData.maxPriorityFeePerGas ?? ethers.parseUnits("1", "gwei");
-  const bufferX10 = BigInt(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20");
-  const worstBaseFee = (baseFee * bufferX10) / 10n;
-  const defaultPriority = feeData.maxPriorityFeePerGas ?? ethers.parseUnits("1", "gwei");
+  // The EV gate and signer share this exact target-block base fee. Production
+  // callers may not substitute a latest-block read or a static multiplier here.
+  const targetBaseFee = maxBaseFeePerGas;
 
-  // Bribe the proposer via priority fee: priorityFee × gasLimit ≈ bribe ETH.
-  // An absolute bribeWei from the searcher economics gate wins; otherwise derive
-  // the target from bribeBps×profit. Capped at the wallet balance minus the
-  // WORST-case base-fee cost + reserve so the tx stays sendable even if it lands
-  // at worstBaseFee.
-  let priorityFee = defaultPriority;
-  const target = computeBribeTargetWei({ expectedProfitEth, bribeBps, bribeWei });
-  if (target !== undefined) {
-    const walletBal = await provider.getBalance(wallet.address);
-    const worstGasCost = worstBaseFee * gasLimit;
-    const headroom =
-      walletBal > worstGasCost + BRIBE_WALLET_RESERVE
-        ? walletBal - worstGasCost - BRIBE_WALLET_RESERVE
-        : 0n;
-    const bribe = target < headroom ? target : headroom;
-    // Tiny floor (0.05 gwei) so the tx is non-zero priority but not over-bribed.
-    const minPriority = ethers.parseUnits("0.05", "gwei");
-    priorityFee = bribe / gasLimit;
-    if (priorityFee < minPriority) priorityFee = minPriority;
-  }
+  // bribeWei is a maximum budget, not a promise to spend every wei. Divide by
+  // gasLimit (not measured gas) and round down, so priorityFee*actualGasUsed can
+  // never exceed the EV-approved budget for any successful execution.
+  const walletBal = await provider.getBalance(wallet.address);
+  const worstGasCost = targetBaseFee * gasLimit;
+  const headroom =
+    walletBal > worstGasCost + BRIBE_WALLET_RESERVE
+      ? walletBal - worstGasCost - BRIBE_WALLET_RESERVE
+      : 0n;
+  const bribeBudget = bribeWei < headroom ? bribeWei : headroom;
+  const priorityFee = bribeBudget / gasLimit;
 
   const backrunTx: ethers.TransactionLike = {
     to: botvmAddress,
@@ -336,7 +324,7 @@ export async function buildSignedBackrunTx(params: {
     chainId: 1,
     type: 2,
     gasLimit,
-    maxFeePerGas: worstBaseFee + priorityFee,
+    maxFeePerGas: targetBaseFee + priorityFee,
     maxPriorityFeePerGas: priorityFee,
     value: 0,
   };

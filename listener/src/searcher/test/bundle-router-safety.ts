@@ -1,6 +1,7 @@
 import {
   createBundleRouter,
   DryRunBundleRouter,
+  productionEconomicsSafetyReject,
   standingPositionSafetyReject,
   type BundleSubmission,
 } from "../execution/bundle-router.js";
@@ -56,6 +57,43 @@ test("pure helper allows absent, non-standing, and authorized safety", () => {
       authorized: true,
     })) === null,
     "authorized standing-position safety should not reject",
+  );
+});
+
+test("production economics boundary requires pinned EV inputs", () => {
+  const missing = minimalBundle();
+  assert(
+    productionEconomicsSafetyReject(missing)?.error === "missing_measured_gas",
+    "missing measured gas must reject",
+  );
+  const withGas = { ...missing, gasUsed: 100n };
+  assert(
+    productionEconomicsSafetyReject(withGas)?.error === "missing_target_base_fee",
+    "missing target base fee must reject",
+  );
+  const withFee = { ...withGas, maxBaseFeePerGas: 20n };
+  assert(
+    productionEconomicsSafetyReject(withFee)?.error === "missing_absolute_bribe_budget",
+    "missing absolute bribe budget must reject",
+  );
+  const withBid = { ...withFee, bribeWei: 0n };
+  assert(
+    productionEconomicsSafetyReject(withBid)?.error === "missing_expected_profit_eth",
+    "missing expected profit must reject",
+  );
+  assert(
+    productionEconomicsSafetyReject({
+      ...withBid,
+      expectedProfitEth: 2_000n,
+    })?.error === "non_positive_ev_budget",
+    "zero retained EV must reject",
+  );
+  assert(
+    productionEconomicsSafetyReject({
+      ...withBid,
+      expectedProfitEth: 2_001n,
+    }) === null,
+    "complete positive pinned economics must pass",
   );
 });
 

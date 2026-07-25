@@ -111,7 +111,7 @@ async function main(): Promise<void> {
   const provider = {
     async getBlock(_tag: "latest") {
       baseFeeReads++;
-      return { baseFeePerGas: 20n };
+      return { baseFeePerGas: 20n, gasUsed: 100n, gasLimit: 200n };
     },
   };
   const ev = await evaluateEv(
@@ -120,10 +120,7 @@ async function main(): Promise<void> {
     100_000_000n,
     100n,
     {
-      ethUsd: 3_500,
       profitHaircutBps: 0,
-      defaultGasUsed: 100,
-      gasBufferMultX10: 10,
       evGate: true,
       bribeAllAboveGas: false,
       bribeBps: 5_000,

@@ -173,15 +173,22 @@ interface AdapterReplayReport {
   conservation: ConservationResult | null;
   productionEv: {
     valuationAvailable: boolean;
+    gasMeasurementAvailable: boolean;
+    feeStateAvailable: boolean;
+    sourceBlockHash: string | null;
+    decisionParentBlock: number;
+    targetBlock: number;
+    ethUsd: number | null;
+    ethUsdRoundId: string | null;
+    ethUsdUpdatedAt: string | null;
     netEvWei: string;
     expectedProfitEth: string;
+    maxBaseFeePerGas: string;
     gasCostEth: string;
     bidEth: string;
   } | null;
   evPolicy: {
-    ethUsd: number;
     profitHaircutBps: number;
-    gasBufferMultX10: number;
     bribeAllAboveGas: boolean;
     bribeBps: number;
     minNetEth: string;
@@ -258,10 +265,7 @@ const SHARED_API_FILES = [
 ];
 
 const ADAPTER_REPLAY_EV_POLICY = Object.freeze({
-  ethUsd: 3_500,
   profitHaircutBps: 2_000,
-  defaultGasUsed: 12_000_000,
-  gasBufferMultX10: 20,
   evGate: true,
   bribeAllAboveGas: false,
   bribeBps: DEFAULT_BRIBE_BPS,
@@ -1455,9 +1459,7 @@ async function replayFixture(
     conservation: null,
     productionEv: null,
     evPolicy: {
-      ethUsd: ADAPTER_REPLAY_EV_POLICY.ethUsd,
       profitHaircutBps: ADAPTER_REPLAY_EV_POLICY.profitHaircutBps,
-      gasBufferMultX10: ADAPTER_REPLAY_EV_POLICY.gasBufferMultX10,
       bribeAllAboveGas: ADAPTER_REPLAY_EV_POLICY.bribeAllAboveGas,
       bribeBps: ADAPTER_REPLAY_EV_POLICY.bribeBps,
       minNetEth: ADAPTER_REPLAY_EV_POLICY.minNetEth.toString(),
@@ -1568,23 +1570,51 @@ async function replayFixture(
     }
     report.stages.repaymentAndConservation = true;
 
+    const decisionParentBlock = fixture.lane === "backrun"
+      ? fixture.stateAnchor.blockNumber - 1
+      : fixture.stateAnchor.blockNumber;
     const ev = await evaluateEv(
-      state.provider,
+      upstream,
       sim.profitToken,
       sim.netProfit,
       sim.gasUsed,
       ADAPTER_REPLAY_EV_POLICY,
       createProfitTokenValuation(),
+      decisionParentBlock,
     );
+    const targetHeader = await upstream.getBlock(Number(winner.blockNumber));
+    if (
+      ev.feeStateAvailable &&
+      targetHeader?.baseFeePerGas !== ev.maxBaseFeePerGas
+    ) {
+      throw new Error(
+        `production EV fee anchor mismatch parent=${decisionParentBlock} ` +
+        `target=${winner.blockNumber} predicted=${ev.maxBaseFeePerGas} ` +
+        `actual=${targetHeader?.baseFeePerGas ?? "missing"}`,
+      );
+    }
     report.productionEv = {
       valuationAvailable: ev.valuationAvailable,
+      gasMeasurementAvailable: ev.gasMeasurementAvailable,
+      feeStateAvailable: ev.feeStateAvailable,
+      sourceBlockHash: ev.sourceBlockHash,
+      decisionParentBlock,
+      targetBlock: Number(winner.blockNumber),
+      ethUsd: ev.ethUsd,
+      ethUsdRoundId: ev.ethUsdRoundId?.toString() ?? null,
+      ethUsdUpdatedAt: ev.ethUsdUpdatedAt?.toString() ?? null,
       netEvWei: ev.netEvWei.toString(),
       expectedProfitEth: ev.expectedProfitEth.toString(),
+      maxBaseFeePerGas: ev.maxBaseFeePerGas.toString(),
       gasCostEth: ev.gasCostEth.toString(),
       bidEth: ev.bidEth.toString(),
     };
     if (!ev.valuationAvailable) throw new Error(`production EV cannot value ${sim.profitToken}`);
-    if (ev.netEvWei <= 0n || ev.netEvWei < ADAPTER_REPLAY_EV_POLICY.minNetEth) {
+    if (!ev.gasMeasurementAvailable) throw new Error("production EV missing measured gas");
+    if (!ev.feeStateAvailable) {
+      throw new Error(`production EV missing fee state at ${fixture.stateAnchor.blockNumber}`);
+    }
+    if (ev.netEvWei <= ADAPTER_REPLAY_EV_POLICY.minNetEth) {
       throw new Error(
         `production EV decision rejected: net=${ev.netEvWei} min=${ADAPTER_REPLAY_EV_POLICY.minNetEth}`,
       );

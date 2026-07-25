@@ -297,19 +297,14 @@ interface LiveConfig {
   /** Phantom-profit guard: reject final profit > this many bps of the flash
    *  notional. Real backruns are basis points; 100%+ means a bad overlay. */
   maxProfitBpsOfFlash: bigint;
-  /** Fraction of expected profit to bribe the proposer via priority fee. */
+  /** Fraction of expected profit remaining after gas to pay as priority fee. */
   bribeBps: number;
   /** Pay all expected profit above gas as the priority-fee bribe. */
   bribeAllAboveGas: boolean;
-  /** ETH/USD price for valuing stablecoin profit as an ETH bribe. */
-  ethUsd: number;
-  /** Only submit when profitETH − gas − bribe ≥ minNetEth (net +EV gate). */
+  /** Only submit when profitETH − gas − bribe > minNetEth (net +EV gate). */
   evGate: boolean;
   /** Minimum kept profit (ETH wei) after gas + bribe, for the EV gate. */
   minNetEth: bigint;
-  /** Worst-case base-fee multiplier (×10) for the EV gate gas estimate AND the
-   *  submitter's maxFeePerGas cap. 20 = 2.0× current base fee. */
-  gasBufferMultX10: number;
   /** Discount applied to simulated profit before the EV gate AND bribe sizing,
    *  in bps. Scale-invariant margin for sim-vs-real error; calibrate from the
    *  reconciliation of landed txs. 2000 = trust 80% of sim profit. */
@@ -658,10 +653,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
     bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
     bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
-    ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
     evGate: process.env.SEARCHER_EV_GATE === "1",
     minNetEth: BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0"),
-    gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
     profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
     allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
     allowHashOnlyMevShareSubmit: process.env.SEARCHER_SUBMIT_HASHONLY_MEVSHARE === "1",
@@ -694,6 +687,8 @@ async function main(): Promise<void> {
       evGate: config.evGate,
       bribeBps: config.bribeBps,
       bribeAllAboveGas: config.bribeAllAboveGas,
+      minNetEth: config.minNetEth,
+      profitHaircutBps: config.profitHaircutBps,
       walletAddress: config.wallet.address,
       botvmAddress: config.botvmAddress,
       configuredBotvmOwner: process.env.BOTVM_OWNER,
@@ -885,11 +880,12 @@ async function main(): Promise<void> {
   console.log(
     `[searcher/live] bribeBps=${config.bribeBps} ` +
       `bribeAllAboveGas=${config.bribeAllAboveGas ? "on" : "off"} ` +
-      `maxProfitBpsOfFlash=${config.maxProfitBpsOfFlash} ethUsd=${config.ethUsd}`,
+      `maxProfitBpsOfFlash=${config.maxProfitBpsOfFlash} ` +
+      `ethUsd=chainlink-canonical-parent`,
   );
   console.log(
     `[searcher/live] evGate=${config.evGate ? "on" : "off"} minNetEth=${config.minNetEth} ` +
-      `gasBufferMult=${(config.gasBufferMultX10 / 10).toFixed(1)}x ` +
+      `gasPrice=exact-next-block-eip1559 ` +
       `profitHaircut=${(config.profitHaircutBps / 100).toFixed(0)}% ` +
       `hashOnlyApproxSubmit=${config.allowHashOnlySubmit ? "on" : "off"} ` +
       `hashOnlyMevShareSubmit=${config.allowHashOnlyMevShareSubmit ? "on" : "off"}`,
@@ -3452,7 +3448,23 @@ async function handleHint(
     stage: string,
     reason: string,
     error?: string,
-    extra?: { sender?: string },
+    extra?: {
+      sender?: string;
+      pathId?: string;
+      templateId?: string;
+      plans?: number;
+      ev?: {
+        expected_profit_eth: string;
+        gas_cost_eth: string;
+        bid_eth: string;
+        net_ev_wei: string;
+        eth_usd: number | null;
+        eth_usd_round_id: string | null;
+        eth_usd_updated_at: string | null;
+        max_base_fee_per_gas: string;
+        decision_parent_hash: string | null;
+      };
+    },
   ): void => {
     const ev = {
       type: "pipeline_dropped" as const,
@@ -3464,8 +3476,12 @@ async function handleHint(
       reason,
       error: error ? error.slice(0, 240) : undefined,
       sender: extra?.sender,
+      path_id: extra?.pathId,
+      template_id: extra?.templateId,
+      plans: extra?.plans,
+      ...extra?.ev,
     };
-    emitEvent(ev as Parameters<typeof emitEvent>[0]);
+    emitEvent(ev);
   };
   if (
     eventFrom !== ethers.ZeroAddress &&
@@ -3636,6 +3652,17 @@ async function processOpportunities(
         templateId?: string;
         plans?: number;
         noCandidateDiagnostic?: unknown;
+        ev?: {
+          expected_profit_eth: string;
+          gas_cost_eth: string;
+          bid_eth: string;
+          net_ev_wei: string;
+          eth_usd: number | null;
+          eth_usd_round_id: string | null;
+          eth_usd_updated_at: string | null;
+          max_base_fee_per_gas: string;
+          decision_parent_hash: string | null;
+        };
       },
     ): void => {
       emitEvent({
@@ -3653,6 +3680,7 @@ async function processOpportunities(
         template_id: extra?.templateId,
         plans: extra?.plans,
         no_candidate_diagnostic: extra?.noCandidateDiagnostic,
+        ...extra?.ev,
       });
     };
     const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY], {
@@ -3686,6 +3714,7 @@ async function processOpportunities(
     // before the solver gets a chance on real candidate plans.
     const oppImpact = poolImpactFromOpportunity(opp) ?? fixtureImpact;
     const prepareBaseBlock = fixturePath === "mined" ? sourceMeta.eventBlockNumber : latestBlock;
+    const prepareBaseBlockHash = await readBlockHash(ctx.provider, prepareBaseBlock);
     const exactPostImpact = fixturePath === "hash-only" && oppImpact
       ? eventPostImpactSeed(oppImpact, prepareBaseBlock)
       : null;
@@ -3694,6 +3723,7 @@ async function processOpportunities(
       event,
       impact: oppImpact,
       baseBlock: prepareBaseBlock,
+      baseBlockHash: prepareBaseBlockHash,
       path: fixturePath,
       routeHops: dedupeRouteHops(plans, ctx.config.revmPrewarmRouteHops),
       postImpact: exactPostImpact ?? undefined,
@@ -3798,10 +3828,12 @@ async function processOpportunities(
         });
     }
 
+    let preparedSourceBlockHash: string | null = null;
     let useConfiguredBackend = ctx.config.liveBackend === "rpc" || localVictimApply !== null;
     if (!localVictimApply && ctx.config.liveBackend !== "rpc" && supportsConfiguredBackend) {
       try {
-        await ctx.liveBackend.prepareVictimState(prepareInput);
+        const prepared = await ctx.liveBackend.prepareVictimState(prepareInput);
+        preparedSourceBlockHash = prepared.blockHash ?? null;
         deps.segMark("overlay");
         useConfiguredBackend = true;
       } catch (err) {
@@ -3968,10 +4000,11 @@ async function processOpportunities(
               const waited = Date.now() - waitStarted;
               if (waited > 50) console.log(`[searcher/live] jit warm wait ${waited}ms`);
             }
-            await ctx.liveBackend.prepareVictimState({
+            const prepared = await ctx.liveBackend.prepareVictimState({
               ...prepareInput,
               postImpact: localVictimApply.postImpact,
             });
+            preparedSourceBlockHash = prepared.blockHash ?? null;
             deps.segMark("finalOverlay");
           } catch (err) {
             ctx.counters.revmErrors++;
@@ -4119,15 +4152,63 @@ async function processOpportunities(
           sim.gasUsed,
           ctx.config,
           ctx.profitTokenValuation,
+          prepareInput.baseBlock,
         );
         const {
           valuationAvailable,
+          gasMeasurementAvailable,
+          feeStateAvailable,
+          sourceBlockHash,
+          ethUsd,
+          ethUsdRoundId,
+          ethUsdUpdatedAt,
           expectedProfitEth,
           gasUnits,
+          maxBaseFeePerGas,
           gasCostEth,
           bidEth,
           netEvWei,
         } = ev;
+        const evEvent = {
+          expected_profit_eth: expectedProfitEth.toString(),
+          gas_cost_eth: gasCostEth.toString(),
+          bid_eth: bidEth.toString(),
+          net_ev_wei: netEvWei.toString(),
+          eth_usd: ethUsd,
+          eth_usd_round_id: ethUsdRoundId?.toString() ?? null,
+          eth_usd_updated_at: ethUsdUpdatedAt?.toString() ?? null,
+          max_base_fee_per_gas: maxBaseFeePerGas.toString(),
+          decision_parent_hash: ctx.config.evGate
+            ? sourceBlockHash
+            : prepareBaseBlockHash,
+        };
+
+        if (
+          ctx.config.evGate &&
+          (
+            ev.sourceBlockHash === null ||
+            ev.sourceBlockHash !== prepareBaseBlockHash ||
+            (
+              preparedSourceBlockHash !== null &&
+              preparedSourceBlockHash !== ev.sourceBlockHash
+            )
+          )
+        ) {
+          ctx.counters.finalVerifySkipped++;
+          lastTerminalState = "no-profitable-quote";
+          lastTerminalError =
+            `EV/simulation source hash mismatch expected=${prepareBaseBlockHash} ` +
+            `prepared=${preparedSourceBlockHash ?? "unreported"} ` +
+            `ev=${ev.sourceBlockHash ?? "missing"}`;
+          emitPipelineDropped("submit_gate", "stale_ev_state", lastTerminalError, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+            ev: evEvent,
+          });
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
 
         if (ctx.config.evGate && !valuationAvailable) {
           ctx.counters.finalVerifySkipped++;
@@ -4138,6 +4219,33 @@ async function processOpportunities(
             pathId: resolvedRouteSummary(resolved.root),
             templateId: candidate.templateName,
             plans: plans.length,
+            ev: evEvent,
+          });
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
+        if (ctx.config.evGate && !gasMeasurementAvailable) {
+          ctx.counters.finalVerifySkipped++;
+          lastTerminalState = "no-profitable-quote";
+          lastTerminalError = "EV gate: final simulation did not measure gas";
+          emitPipelineDropped("submit_gate", "missing_gas_estimate", lastTerminalError, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+            ev: evEvent,
+          });
+          deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
+          continue;
+        }
+        if (ctx.config.evGate && !feeStateAvailable) {
+          ctx.counters.finalVerifySkipped++;
+          lastTerminalState = "no-profitable-quote";
+          lastTerminalError = `EV gate: source block ${prepareInput.baseBlock} fee state unavailable`;
+          emitPipelineDropped("submit_gate", "missing_fee_state", lastTerminalError, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+            ev: evEvent,
           });
           deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
           continue;
@@ -4166,21 +4274,14 @@ async function processOpportunities(
           continue;
         }
 
-        // Net-EV gate: only go on-chain when profit ETH exceeds gas + bribe by
-        // minNetEth. Skips dust whose costs would exceed it. Unpriceable assets
-        // are rejected explicitly above and never masquerade as below_ev_gate.
-        //
-        // Bug #1 fix: base fee is volatile (sub-gwei off-peak → gwei in busy
-        // blocks). The tx pays base fee AT LANDING, not at gate time, up to its
-        // capped maxFeePerGas. Estimate gas at the WORST case the tx can pay
-        // (baseFee × gasBufferMult, matching the submitter's maxFee cap) so a
-        // bundle that's only +EV at the current low base fee can't land at a loss.
+        // Net-EV gate and signer share the exact EIP-1559 fee derived from the
+        // source block. Zero retained profit is not +EV.
         if (ctx.config.evGate) {
-          if (netEvWei < ctx.config.minNetEth) {
+          if (netEvWei <= ctx.config.minNetEth) {
             ctx.counters.finalVerifySkipped++;
             lastTerminalState = "no-profitable-quote";
             lastTerminalError =
-              `EV gate: net ${netEvWei} < ${ctx.config.minNetEth} ` +
+              `EV gate: net ${netEvWei} <= ${ctx.config.minNetEth} ` +
               `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
               `token=${resolved.profitToken.slice(0, 10)})`;
 	            console.log(`[searcher/live] skip below-EV: ${lastTerminalError}`);
@@ -4188,6 +4289,7 @@ async function processOpportunities(
 	              pathId: resolvedRouteSummary(resolved.root),
 	              templateId: candidate.templateName,
 	              plans: plans.length,
+	              ev: evEvent,
 	            });
 	            deps.recordFinalState(lastTerminalState, lastTerminalError, sim);
 	            continue;
@@ -4195,11 +4297,34 @@ async function processOpportunities(
           console.log(
             `[searcher/live] EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
               `profitEth=${ethers.formatEther(expectedProfitEth)} gas=${ethers.formatEther(gasCostEth)} ` +
-              `bribe=${ethers.formatEther(bidEth)}`,
+              `bribe=${ethers.formatEther(bidEth)} ethUsd=${ethUsd ?? "n/a"} ` +
+              `targetBaseFee=${maxBaseFeePerGas}`,
           );
         }
 
-        const targetBlock = (ctx.blockTracker.latest || (await ctx.provider.getBlockNumber())) + 1;
+        const latestAtSubmit = await readUncachedLatestBlock(ctx.provider);
+        if (
+          latestAtSubmit.number !== prepareInput.baseBlock ||
+          latestAtSubmit.hash !== prepareBaseBlockHash ||
+          (
+            ctx.config.evGate &&
+            sourceBlockHash !== prepareBaseBlockHash
+          )
+        ) {
+          const error =
+            `EV source block ${prepareInput.baseBlock} is stale at ` +
+            `head=${latestAtSubmit.number} expectedHash=${prepareBaseBlockHash} ` +
+            `evHash=${sourceBlockHash ?? "not-required"} canonicalHash=${latestAtSubmit.hash}`;
+          emitPipelineDropped("submit_gate", "stale_ev_state", error, {
+            pathId: resolvedRouteSummary(resolved.root),
+            templateId: candidate.templateName,
+            plans: plans.length,
+            ev: evEvent,
+          });
+          deps.recordFinalState("no-profitable-quote", error, sim);
+          continue;
+        }
+        const targetBlock = prepareInput.baseBlock + 1;
         const decision = ctx.submissionCoordinator.offer({
           strategy: "backrun",
           opportunityId,
@@ -4227,6 +4352,7 @@ async function processOpportunities(
           expectedProfitEth,
           bribeBps: ctx.config.bribeBps,
           bribeWei: bidEth,
+          maxBaseFeePerGas,
           gasUsed: gasUnits,
           safety: { leavesStandingPosition: containsStandingPosition, authorized: standingGuard.allowed },
         });
@@ -4254,6 +4380,15 @@ async function processOpportunities(
             simulated_profit: sim.netProfit.toString(),
             simulated_profit_eth: expectedProfitEth.toString(),
             bid: bidEth.toString(),
+            gas_cost_eth: gasCostEth.toString(),
+            net_ev_wei: netEvWei.toString(),
+            eth_usd: ethUsd,
+            eth_usd_round_id: ethUsdRoundId?.toString() ?? null,
+            eth_usd_updated_at: ethUsdUpdatedAt?.toString() ?? null,
+            max_base_fee_per_gas: maxBaseFeePerGas.toString(),
+            decision_parent_hash: ctx.config.evGate
+              ? sourceBlockHash
+              : prepareBaseBlockHash,
             tx_hash: backrunTxHash,
             calldata_hash: ethers.keccak256(sim.calldata),
             builders_sent: results.map((r) => r.builder),
@@ -4441,7 +4576,23 @@ async function maybeSubmitBlockScanAtomic(params: {
     path_id: route,
     template_id: resolved.templateName,
   });
-  const drop = (targetBlock: number, stage: string, reason: string, error?: string): void => {
+  const drop = (
+    targetBlock: number,
+    stage: string,
+    reason: string,
+    error?: string,
+    ev?: {
+      expected_profit_eth: string;
+      gas_cost_eth: string;
+      bid_eth: string;
+      net_ev_wei: string;
+      eth_usd: number | null;
+      eth_usd_round_id: string | null;
+      eth_usd_updated_at: string | null;
+      max_base_fee_per_gas: string;
+      decision_parent_hash: string | null;
+    },
+  ): void => {
     emitEvent({
       type: "pipeline_dropped",
       ...eventBase(targetBlock),
@@ -4449,6 +4600,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       reason,
       error,
       plans,
+      ...ev,
     });
   };
 
@@ -4550,22 +4702,64 @@ async function maybeSubmitBlockScanAtomic(params: {
       sim.gasUsed,
       config,
       profitTokenValuation,
+      sourceBlock,
     );
     evEvaluated = true;
     const {
       valuationAvailable,
+      gasMeasurementAvailable,
+      feeStateAvailable,
+      sourceBlockHash: evSourceBlockHash,
+      ethUsd,
+      ethUsdRoundId,
+      ethUsdUpdatedAt,
       expectedProfitEth,
       gasUnits,
+      maxBaseFeePerGas,
       gasCostEth,
       bidEth,
       netEvWei,
     } = ev;
+    const evEvent = {
+      expected_profit_eth: expectedProfitEth.toString(),
+      gas_cost_eth: gasCostEth.toString(),
+      bid_eth: bidEth.toString(),
+      net_ev_wei: netEvWei.toString(),
+      eth_usd: ethUsd,
+      eth_usd_round_id: ethUsdRoundId?.toString() ?? null,
+      eth_usd_updated_at: ethUsdUpdatedAt?.toString() ?? null,
+      max_base_fee_per_gas: maxBaseFeePerGas.toString(),
+      decision_parent_hash: evSourceBlockHash,
+    };
 
     if (config.evGate && !valuationAvailable) {
       const error = `unpriceable profit token ${resolved.profitToken}`;
       console.log(`[searcher/blockscan] block=${sourceBlock} skip unpriceable ring=${ring}: ${error}`);
-      drop(targetBlock, "submit_gate", "unpriceable_profit_token", error);
+      drop(targetBlock, "submit_gate", "unpriceable_profit_token", error, evEvent);
       return auditResult("pass", "reject", "unpriceable_profit_token");
+    }
+    if (config.evGate && !gasMeasurementAvailable) {
+      const error = "EV gate: final simulation did not measure gas";
+      drop(targetBlock, "submit_gate", "missing_gas_estimate", error, evEvent);
+      return auditResult("pass", "reject", "missing_gas_estimate");
+    }
+    if (config.evGate && !feeStateAvailable) {
+      const error = `EV gate: source block ${sourceBlock} fee state unavailable`;
+      drop(targetBlock, "submit_gate", "stale_ev_state", error, evEvent);
+      return auditResult("pass", "reject", "stale_ev_state");
+    }
+    if (
+      config.evGate &&
+      (
+        evSourceBlockHash === null ||
+        evSourceBlockHash !== sourceBlockHash.toLowerCase()
+      )
+    ) {
+      const error =
+        `EV gate: source block ${sourceBlock} hash changed during evaluation ` +
+        `forkHash=${sourceBlockHash} evHash=${evSourceBlockHash ?? "missing"}`;
+      drop(targetBlock, "submit_gate", "missing_fee_state", error, evEvent);
+      return auditResult("pass", "reject", "missing_fee_state");
     }
 
     const creditLiveMarkerPath =
@@ -4591,19 +4785,20 @@ async function maybeSubmitBlockScanAtomic(params: {
     }
 
     if (config.evGate) {
-      if (netEvWei < config.minNetEth) {
+      if (netEvWei <= config.minNetEth) {
         const error =
-          `EV gate: net ${netEvWei} < ${config.minNetEth} ` +
+          `EV gate: net ${netEvWei} <= ${config.minNetEth} ` +
           `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
           `token=${resolved.profitToken.slice(0, 10)})`;
         console.log(`[searcher/blockscan] block=${sourceBlock} skip below-EV ring=${ring}: ${error}`);
-        drop(targetBlock, "submit_gate", "below_ev_gate", error);
+        drop(targetBlock, "submit_gate", "below_ev_gate", error, evEvent);
         return auditResult("pass", "reject", "below_ev_gate");
       }
       console.log(
         `[searcher/blockscan] block=${sourceBlock} EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
           `profitEth=${ethers.formatEther(expectedProfitEth)} ` +
-          `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)}`,
+          `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)} ` +
+          `ethUsd=${ethUsd ?? "n/a"} targetBaseFee=${maxBaseFeePerGas}`,
       );
     }
 
@@ -4653,6 +4848,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       expectedProfitEth,
       bribeBps: config.bribeBps,
       bribeWei: bidEth,
+      maxBaseFeePerGas,
       gasUsed: gasUnits,
       safety: { leavesStandingPosition: containsStandingPosition, authorized: standingGuard.allowed },
     });
@@ -4679,6 +4875,13 @@ async function maybeSubmitBlockScanAtomic(params: {
       simulated_profit: sim.netProfit.toString(),
       simulated_profit_eth: expectedProfitEth.toString(),
       bid: bidEth.toString(),
+      gas_cost_eth: gasCostEth.toString(),
+      net_ev_wei: netEvWei.toString(),
+      eth_usd: ethUsd,
+      eth_usd_round_id: ethUsdRoundId?.toString() ?? null,
+      eth_usd_updated_at: ethUsdUpdatedAt?.toString() ?? null,
+      max_base_fee_per_gas: maxBaseFeePerGas.toString(),
+      decision_parent_hash: evSourceBlockHash,
       tx_hash: backrunTxHash,
       calldata_hash: ethers.keccak256(sim.calldata),
       builders_sent: results.map((r) => r.builder),

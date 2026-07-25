@@ -17,17 +17,51 @@ assert(packageJson.scripts["legacy:start"] === "node dist/index.js", "legacy sta
 assert(packageJson.scripts["legacy:dev"] === "tsx src/index.ts", "legacy dev is not explicit");
 console.log("[runtime-defaults] start/dev target the production searcher: PASS");
 
+const deployNode = readFileSync(
+  new URL("../../../../scripts/deploy-node.sh", import.meta.url),
+  "utf8",
+);
+assert(
+  deployNode.includes("obsolete .bribe-all-above-gas marker"),
+  "deploy must fail fast on obsolete all-above-gas marker",
+);
+assert(
+  !deployNode.includes('echo "SEARCHER_BRIBE_ALL_ABOVE_GAS=1"'),
+  "deploy must not re-enable all-above-gas from a marker",
+);
+for (const retiredKey of [
+  "SEARCHER_BRIBE_ALL_ABOVE_GAS",
+  "SEARCHER_ETH_USD",
+  "SEARCHER_GAS_BUFFER_MULT_X10",
+]) {
+  const occurrences = deployNode.match(new RegExp(retiredKey, "g"))?.length ?? 0;
+  assert(occurrences >= 2, `deploy does not strip retired key ${retiredKey}`);
+}
+console.log("[runtime-defaults] deploy rejects/strips retired EV controls: PASS");
+
+const deployAb = readFileSync(
+  new URL("../../../../scripts/deploy-ab-challenger.sh", import.meta.url),
+  "utf8",
+);
+assert(
+  deployAb.includes("champion SEARCHER_BRIBE_ALL_ABOVE_GAS is obsolete and forbidden") &&
+    deployAb.includes("challenger SEARCHER_BRIBE_ALL_ABOVE_GAS is obsolete and forbidden"),
+  "A/B preflight must reject all-above-gas on both nodes",
+);
+console.log("[runtime-defaults] A/B preflight rejects all-above-gas: PASS");
+
 assert(DEFAULT_BRIBE_BPS === 5_000, `default bribe ${DEFAULT_BRIBE_BPS}`);
 const ev = await evaluateEv(
-  { async getBlock() { return { baseFeePerGas: 20n }; } },
+  {
+    async getBlock() {
+      return { baseFeePerGas: 20n, gasUsed: 100n, gasLimit: 200n };
+    },
+  },
   WETH,
   100_000n,
   100n,
   {
-    ethUsd: 3_500,
     profitHaircutBps: 0,
-    defaultGasUsed: 100,
-    gasBufferMultX10: 10,
     evGate: true,
     bribeAllAboveGas: false,
     bribeBps: DEFAULT_BRIBE_BPS,
@@ -35,8 +69,8 @@ const ev = await evaluateEv(
 );
 assert(ev.expectedProfitEth === 100_000n, `expected profit ${ev.expectedProfitEth}`);
 assert(ev.gasCostEth === 2_000n, `gas ${ev.gasCostEth}`);
-assert(ev.bidEth === 50_000n, `bid ${ev.bidEth}`);
-assert(ev.netEvWei === 48_000n, `net EV ${ev.netEvWei}`);
+assert(ev.bidEth === 49_000n, `bid ${ev.bidEth}`);
+assert(ev.netEvWei === 49_000n, `net EV ${ev.netEvWei}`);
 console.log("[runtime-defaults] production defaults retain positive EV: PASS");
 
-console.log("runtime-defaults PASS (2/2)");
+console.log("runtime-defaults PASS (4/4)");
