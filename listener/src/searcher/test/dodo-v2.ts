@@ -11,6 +11,7 @@ import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   dodoV2BlockScanState,
   dodoV2PoolIface,
+  selectDodoBlockScanProbeInput,
 } from "../venues/swaps/dodo-v2.js";
 import {
   BLOCKSCAN_MULTICALL3,
@@ -252,6 +253,70 @@ assert(edges.length === 2, `edge count ${edges.length}`);
 assert(edges[0].tokenIn === ethers.getAddress(BASE), "base direction");
 assert(edges[1].tokenIn === ethers.getAddress(QUOTE), "quote direction");
 assert(edges.every((edge) => edge.score === 9), "score propagation");
+
+for (const proofBoundary of [
+  {
+    label: "sell-base zero reserve only",
+    sellBase: true,
+    pmm: [100n, 0n, 100n, 0n, 100n, 100n, 0] as const,
+  },
+  {
+    label: "sell-base zero target only",
+    sellBase: true,
+    pmm: [100n, 0n, 100n, 100n, 100n, 0n, 0] as const,
+  },
+  {
+    label: "sell-quote zero reserve only",
+    sellBase: false,
+    pmm: [100n, 0n, 0n, 100n, 100n, 100n, 0] as const,
+  },
+  {
+    label: "sell-quote zero target only",
+    sellBase: false,
+    pmm: [100n, 0n, 100n, 100n, 0n, 100n, 0] as const,
+  },
+]) {
+  const [i, K, B, Q, B0, Q0, R] = proofBoundary.pmm;
+  const selected = selectDodoBlockScanProbeInput({
+    oneToken: 1n,
+    currentInput: 0n,
+    reserve: proofBoundary.sellBase ? B : Q,
+    pmm: { i, K, B, Q, B0, Q0, R },
+    sellBase: proofBoundary.sellBase,
+    pool: POOL,
+  });
+  assert(
+    typeof selected === "bigint" ||
+      selected.kind !== "provably-unavailable",
+    `${proofBoundary.label} is not a whole-domain proof`,
+  );
+}
+
+for (const R of [0, 1, 2] as const) {
+  for (const sellBase of [true, false]) {
+    const selected = selectDodoBlockScanProbeInput({
+      oneToken: 1n,
+      currentInput: 0n,
+      reserve: 0n,
+      pmm: {
+        i: 10n ** 18n,
+        K: 10n ** 18n / 2n,
+        B: 0n,
+        Q: 0n,
+        B0: 0n,
+        Q0: 0n,
+        R,
+      },
+      sellBase,
+      pool: POOL,
+    });
+    assert(
+      typeof selected !== "bigint" &&
+        selected.kind === "provably-unavailable",
+      `R=${R} ${sellBase ? "sell-base" : "sell-quote"} double-zero output proof`,
+    );
+  }
+}
 
 const amountOut = await adapter.quoteExact({
   state: backend as never,
@@ -571,6 +636,108 @@ for (const failure of [
     `${failure.label} bounded probes remain unresolved instead of deleting the edge`,
   );
 }
+
+const zeroOutputDomainBackend = new Backend({
+  baseBalance: 0n,
+  quoteBalance: 0n,
+  baseReserve: 0n,
+  quoteReserve: 0n,
+  pmm: [
+    10n ** 17n,
+    10n ** 18n,
+    0n,
+    0n,
+    0n,
+    0n,
+    0,
+  ],
+});
+const zeroOutputDomainResults = await readState(
+  currentReads,
+  zeroOutputDomainBackend,
+);
+assert(
+  dodoV2BlockScanState.buildDependentBlockReads({
+    sourceBlock,
+    sourceBlockHash,
+    schema,
+    edges,
+    completedRound: 0,
+    priorResults: zeroOutputDomainResults,
+  }).length === 0,
+  "zero output reserve+target needs no heuristic quote proof",
+);
+const zeroOutputDomainSnapshot = dodoV2BlockScanState.decodeState(
+  schema,
+  zeroOutputDomainResults,
+);
+assert(
+  dodoV2BlockScanState.deriveMids(
+    zeroOutputDomainSnapshot,
+    edges,
+  ).size === 0,
+  "zero output reserve+target publishes no false mid",
+);
+assert(
+  dodoV2BlockScanState.behaviorProvenUnavailableEdges(
+    zeroOutputDomainSnapshot,
+    edges,
+  ).size === 2,
+  "zero output reserve+target proves both directions unavailable",
+);
+
+const oneSidedOutputDomainBackend = new Backend({
+  baseBalance: 100n,
+  quoteBalance: 0n,
+  baseReserve: 100n,
+  quoteReserve: 0n,
+  pmm: [
+    10n ** 18n,
+    0n,
+    100n,
+    0n,
+    100n,
+    0n,
+    0,
+  ],
+});
+const oneSidedOutputResults = await readState(
+  currentReads,
+  oneSidedOutputDomainBackend,
+);
+const oneSidedOutputDependent =
+  dodoV2BlockScanState.buildDependentBlockReads({
+    sourceBlock,
+    sourceBlockHash,
+    schema,
+    edges,
+    completedRound: 0,
+    priorResults: oneSidedOutputResults,
+  });
+const oneSidedOutputSnapshot = dodoV2BlockScanState.decodeState(
+  schema,
+  Object.freeze([
+    ...oneSidedOutputResults,
+    ...await readState(
+      oneSidedOutputDependent,
+      oneSidedOutputDomainBackend,
+    ),
+  ]),
+);
+assert(
+  dodoV2BlockScanState.behaviorProvenUnavailableEdges(
+    oneSidedOutputSnapshot,
+    edges,
+  ).size === 1,
+  "one-sided zero output domain isolates one unavailable edge",
+);
+assert(
+  dodoV2BlockScanState.deriveMids(
+    oneSidedOutputSnapshot,
+    edges,
+  ).has(blockScanEdgeKey(edges[1])),
+  "opposite DODO direction remains resolved",
+);
 
 const deficitCurrentResults = await readState(currentReads, legacyDeficitBackend);
 const deficitDependent = dodoV2BlockScanState.buildDependentBlockReads({

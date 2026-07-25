@@ -10,13 +10,14 @@ import type {
   PreparedRouteQuoteResult,
   SwapAdapter,
 } from "../route-leg-adapter.js";
-import type {
-  BlockScanStateCapability,
-  BuildCurrentBlockReadsInput,
-  BuildDependentBlockReadsInput,
-  CompileStaticSchemaInput,
-  StateRead,
-  StateReadResult,
+import {
+  blockScanEdgeKey,
+  type BlockScanStateCapability,
+  type BuildCurrentBlockReadsInput,
+  type BuildDependentBlockReadsInput,
+  type CompileStaticSchemaInput,
+  type StateRead,
+  type StateReadResult,
 } from "../blockscan-state-capability.js";
 import {
   dodoV2IdentityResolver,
@@ -155,6 +156,7 @@ interface DodoV2Snapshot {
     readonly amountIn: bigint;
     readonly amountOut: bigint;
   }>;
+  readonly unavailable: ReadonlyMap<string, string>;
 }
 
 interface DodoDecodedCurrentState {
@@ -179,6 +181,11 @@ export interface DodoBoundedProbePlan {
   readonly kind: "bounded-onchain-probe";
   readonly reason: string;
   readonly candidates: readonly DodoProbeCandidate[];
+}
+
+export interface DodoProvablyUnavailable {
+  readonly kind: "provably-unavailable";
+  readonly reason: string;
 }
 
 export interface DodoProbeQuote {
@@ -333,7 +340,10 @@ export const dodoV2BlockScanState = Object.freeze({
         current,
         edge,
       );
-      if (typeof selection !== "bigint") {
+      if (
+        typeof selection !== "bigint" &&
+        selection.kind === "bounded-onchain-probe"
+      ) {
         dependentReads.push(dodoBoundedProbeRead(
           input,
           group,
@@ -355,9 +365,14 @@ export const dodoV2BlockScanState = Object.freeze({
       readonly amountIn: bigint;
       readonly amountOut: bigint;
     }>();
+    const unavailable = new Map<string, string>();
     for (const edge of group.edges) {
       const selection = selectDodoCurrentQuote(group, current, edge);
       if (typeof selection !== "bigint") {
+        if (selection.kind === "provably-unavailable") {
+          unavailable.set(dodoRouteKey(edge), selection.reason);
+          continue;
+        }
         const quote = decodeDodoBoundedProbeCall(
           requireRead(
             results,
@@ -415,6 +430,7 @@ export const dodoV2BlockScanState = Object.freeze({
       stateKey: group.stateKey,
       pmm: current.pmm,
       quotes,
+      unavailable,
     });
   },
 
@@ -422,7 +438,10 @@ export const dodoV2BlockScanState = Object.freeze({
     snapshot: DodoV2Snapshot,
     edges: readonly TokenEdge[],
   ) {
-    return midsForDirectedEdges(edges, (edge) => {
+    const availableEdges = edges.filter(
+      (edge) => !snapshot.unavailable.has(dodoRouteKey(edge)),
+    );
+    return midsForDirectedEdges(availableEdges, (edge) => {
       if (canonicalPoolStateKey(edge) !== snapshot.stateKey) {
         throw new Error(
           `dodo-v2 snapshot ${snapshot.stateKey} used for ` +
@@ -442,6 +461,24 @@ export const dodoV2BlockScanState = Object.freeze({
         depthOut: quote.amountOut * 10_000n,
       });
     });
+  },
+
+  behaviorProvenUnavailableEdges(
+    snapshot: DodoV2Snapshot,
+    edges: readonly TokenEdge[],
+  ) {
+    const out = new Map<string, string>();
+    for (const edge of edges) {
+      if (canonicalPoolStateKey(edge) !== snapshot.stateKey) {
+        throw new Error(
+          `dodo-v2 snapshot ${snapshot.stateKey} used for ` +
+            `${canonicalPoolStateKey(edge)}`,
+        );
+      }
+      const reason = snapshot.unavailable.get(dodoRouteKey(edge));
+      if (reason) out.set(blockScanEdgeKey(edge), reason);
+    }
+    return out;
   },
 
   dependencies(edges: readonly TokenEdge[]): readonly string[] {
@@ -752,7 +789,7 @@ export function selectDodoBlockScanProbeInput(input: {
   readonly pool: string;
   readonly lpFeeRate?: bigint;
   readonly mtFeeRate?: bigint;
-}): bigint | DodoBoundedProbePlan {
+}): bigint | DodoBoundedProbePlan | DodoProvablyUnavailable {
   const {
     oneToken,
     currentInput,
@@ -770,6 +807,8 @@ export function selectDodoBlockScanProbeInput(input: {
   if (currentInput > 0n && inputDeficit > 0n) {
     throw new Error(`dodo-v2 pool ${pool} returned both input surplus and deficit`);
   }
+  const unavailable = dodoOutputDomainUnavailable(pmm, sellBase, pool);
+  if (unavailable) return unavailable;
   if (reserve <= 0n) {
     return buildDodoBoundedProbePlan(
       input,
@@ -841,6 +880,22 @@ export function selectDodoBlockScanProbeInput(input: {
         errorMessage(error),
     );
   }
+}
+
+function dodoOutputDomainUnavailable(
+  pmm: DodoPmmState,
+  sellBase: boolean,
+  pool: string,
+): DodoProvablyUnavailable | null {
+  const outputReserve = sellBase ? pmm.Q : pmm.B;
+  const outputTarget = sellBase ? pmm.Q0 : pmm.B0;
+  if (outputReserve !== 0n || outputTarget !== 0n) return null;
+  return Object.freeze({
+    kind: "provably-unavailable",
+    reason:
+      `dodo-v2 pool ${pool} has zero current and target output liquidity ` +
+      `for ${sellBase ? "sell-base" : "sell-quote"}`,
+  });
 }
 
 function dodoActiveMathTargetIssue(
@@ -1475,7 +1530,7 @@ function selectDodoCurrentQuote(
   group: DodoV2StateGroup,
   current: DodoDecodedCurrentState,
   edge: TokenEdge,
-): bigint | DodoBoundedProbePlan {
+): bigint | DodoBoundedProbePlan | DodoProvablyUnavailable {
   const sellBase = sameAddress(edge.tokenIn, group.baseToken);
   const oneToken = group.amountInByToken.get(
     ethers.getAddress(edge.tokenIn).toLowerCase(),

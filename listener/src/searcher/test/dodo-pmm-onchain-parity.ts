@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { ethers } from "ethers";
 import {
   applyDodoTransferToInput,
+  buildDodoBoundedProbePlan,
   decodeDodoBoundedProbeCall,
   decodeDodoInputSemanticsCall,
   encodeDodoBoundedProbeCall,
@@ -311,7 +312,17 @@ interface BoundedProbeDirection {
   readonly sellBase: boolean;
   readonly plan: DodoBoundedProbePlan;
 }
-type Direction = LocalDirection | BoundedProbeDirection;
+interface UnavailableDirection {
+  readonly classification: "provably-unavailable";
+  readonly pool: string;
+  readonly sellBase: boolean;
+  readonly reason: string;
+  readonly counterexamplePlan: DodoBoundedProbePlan;
+}
+type Direction =
+  | LocalDirection
+  | BoundedProbeDirection
+  | UnavailableDirection;
 const directions: Direction[] = [];
 const queryCalls: RpcEthCall[] = [];
 for (const pool of pools) {
@@ -320,7 +331,7 @@ for (const pool of pools) {
     const token = sellBase ? state.baseToken : state.quoteToken;
     const reserve = sellBase ? state.pmm.B : state.pmm.Q;
     const inputPosition = sellBase ? state.baseInput : state.quoteInput;
-    const selected = selectDodoBlockScanProbeInput({
+    const probeInput = {
       oneToken: oneToken.get(token.toLowerCase())!,
       currentInput: inputPosition.surplus,
       inputDeficit: inputPosition.deficit,
@@ -330,14 +341,26 @@ for (const pool of pools) {
       pool,
       lpFeeRate: state.lpFeeRate,
       mtFeeRate: state.mtFeeRate,
-    });
+    };
+    const selected = selectDodoBlockScanProbeInput(probeInput);
     if (typeof selected !== "bigint") {
-      const direction = Object.freeze({
-        classification: "bounded-probe" as const,
-        pool,
-        sellBase,
-        plan: selected,
-      });
+      const direction = selected.kind === "bounded-onchain-probe"
+        ? Object.freeze({
+          classification: "bounded-probe" as const,
+          pool,
+          sellBase,
+          plan: selected,
+        })
+        : Object.freeze({
+          classification: "provably-unavailable" as const,
+          pool,
+          sellBase,
+          reason: selected.reason,
+          counterexamplePlan: buildDodoBoundedProbePlan(
+            probeInput,
+            selected.reason,
+          ),
+        });
       directions.push(direction);
     } else {
       const transferAmount = selected;
@@ -369,11 +392,13 @@ for (const pool of pools) {
       }));
     }
     const direction = directions[directions.length - 1];
-    if (direction.classification === "bounded-probe") {
+    if (direction.classification !== "local") {
       const encoded = encodeDodoBoundedProbeCall(
         pool,
         sellBase,
-        direction.plan,
+        direction.classification === "bounded-probe"
+          ? direction.plan
+          : direction.counterexamplePlan,
         quoteActor,
       );
       queryCalls.push({
@@ -405,6 +430,8 @@ const queries = await rpcEthCallBatch(
 );
 let exact = 0;
 let delegated = 0;
+let behaviorUnavailable = 0;
+const behaviorUnavailableReasons = new Map<string, number>();
 const delegatedByReason = new Map<string, number>();
 const failures: string[] = [];
 for (const direction of directions) {
@@ -437,6 +464,35 @@ for (const direction of directions) {
         `${queryKey(direction)} bounded probe found no positive quote`,
       );
     }
+    continue;
+  }
+  if (direction.classification === "provably-unavailable") {
+    if (!result.ok) {
+      failures.push(
+        `${queryKey(direction)} unavailable countercheck infrastructure failure: ` +
+          result.error,
+      );
+      continue;
+    }
+    const counterexample = decodeDodoBoundedProbeCall(
+      result.data,
+      direction.pool,
+      direction.sellBase,
+      direction.counterexamplePlan,
+    );
+    if (counterexample) {
+      failures.push(
+        `${queryKey(direction)} mathematical unavailable proof was disproved ` +
+          `by amountIn=${counterexample.effectiveInput} ` +
+          `amountOut=${counterexample.amountOut}`,
+      );
+      continue;
+    }
+    behaviorUnavailable++;
+    behaviorUnavailableReasons.set(
+      direction.reason,
+      (behaviorUnavailableReasons.get(direction.reason) ?? 0) + 1,
+    );
     continue;
   }
   if (!result.ok) {
@@ -472,10 +528,9 @@ if (failures.length > 0) {
       failures.slice(0, 20).join("; "),
   );
 }
-const behaviorUnavailable = 0;
-if (exact + delegated !== expectedPools * 2) {
+if (exact + delegated + behaviorUnavailable !== expectedPools * 2) {
   throw new Error(
-    `DODO parity classified ${exact + delegated}/` +
+    `DODO parity classified ${exact + delegated + behaviorUnavailable}/` +
       `${expectedPools * 2} directions`,
   );
 }
@@ -506,6 +561,9 @@ console.log(JSON.stringify({
     [...delegatedByReason].sort(([a], [b]) => a.localeCompare(b)),
   ),
   behaviorUnavailable,
+  behaviorUnavailableReasons: Object.fromEntries(
+    [...behaviorUnavailableReasons].sort(([a], [b]) => a.localeCompare(b)),
+  ),
 }));
 
 interface RpcEthCall {
