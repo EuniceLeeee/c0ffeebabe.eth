@@ -1,11 +1,11 @@
 ---
 divergence_id: bundle-postmortem-production-route-registry-unavailable
-status: open_frozen
+status: resolved
 tool: analysis:bundle-postmortem@a699009a8aad5112522a9f37f1627896359bb869
 capability: classification,pnl,flow,graph,causality
 root_cause: The analyzer still expects the pre-AdapterFamily production route/action registry export and aborts before analysis when run against the universal AdapterFamily branch.
-deferred_reason: analysis-tool freeze
-fixed_by: null
+deferred_reason: null
+fixed_by: 669e03d269d97eeda78fd6c010c417589cbc4102
 ---
 
 # Bundle postmortem production route registry unavailable
@@ -53,5 +53,24 @@ Node-local evidence is retained outside Git under
 - pre-existing non-active universe diagnostic:
   `5ebdb21d97a4941a3a611ddba99ae612abc6b609fc4631779a3ce32e3f17ee6e`.
 
-This record does not repair the analyzer and does not count as production progress. The transaction analysis
-remains grounded in the raw chain/fork evidence while the task-scoped analysis-tool freeze is active.
+## Resolution
+
+Commit `669e03d269d97eeda78fd6c010c417589cbc4102` removed the obsolete production-registry
+assumption. After making the independent chain/fork judgment above, the current tool inventory was queried
+again for `single-transaction,causality`; it selected `analysis:bundle-postmortem`, which completed
+successfully against the same transaction from the adapter-family validation checkout.
+
+- tested searcher SHA: `54fe13d58bbd27033897348d7e7d9bf8adea9d9e`;
+- indexed tool count: `236`;
+- current selection manifest SHA-256:
+  `ef0a25ae99d6effb9ada5a9a36b4dff88ef8b7b4e464e2c0da3c305807825b24`;
+- postmortem output SHA-256:
+  `cd0f1016f7f1575c9ada7ca6e51c8fa80519964397e4bd2296da11851b5b8fee`;
+- node evidence:
+  `/opt/MEV-runtime/evidence/adapter-family-024562f/tx02-tool-manifest-54fe13d.json` and
+  `/opt/MEV-runtime/evidence/adapter-family-024562f/tx02-bundle-postmortem-54fe13d.json`.
+
+The repaired analyzer classifies the transaction as `atomic_loop` /
+`standing_state_take` from logs plus call trace. It still marks the non-swap protocol ordering for manual
+resolution; that is an analysis taxonomy limitation, not the former registry-loading crash. The frozen
+full-graph six-step artifact independently proves the GoldX protocol edge and the complete four-leg route.
