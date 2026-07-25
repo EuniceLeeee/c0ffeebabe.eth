@@ -14,6 +14,10 @@ import { fileURLToPath } from "node:url";
 import {
   BLIND_PROFILE,
   BLIND_SCHEMA_VERSION,
+  BLIND_TX02_BASE_ANCHOR,
+  BLIND_TX02_SOURCE_ANCHOR,
+  BLIND_TX02_STRICT_PROFILE,
+  BLIND_TX02_TRANSACTION_ID,
   BLIND_TX055_BASE_ANCHOR,
   BLIND_TX055_SOURCE_ANCHOR,
   BLIND_TX055_STRICT_PROFILE,
@@ -702,6 +706,59 @@ try {
     }),
     /timingLimitMs must equal 10000/,
     "tx055 strict profile must pin the ten-second threshold",
+  );
+  const tx02StrictManifest: BlindRunManifest = {
+    ...manifest,
+    profile: BLIND_TX02_STRICT_PROFILE,
+    base: BLIND_TX02_BASE_ANCHOR,
+    source: BLIND_TX02_SOURCE_ANCHOR,
+    timingLimitMs: 10_000,
+  };
+  validateBlindRunManifest(tx02StrictManifest);
+  sealBlindOracle({
+    ...oracle,
+    profile: BLIND_TX02_STRICT_PROFILE,
+    source: BLIND_TX02_SOURCE_ANCHOR,
+    transactionId: BLIND_TX02_TRANSACTION_ID,
+  }, "tx02-strict-oracle-salt");
+  assert.throws(
+    () => sealBlindOracle({
+      ...oracle,
+      profile: BLIND_TX02_STRICT_PROFILE,
+      source: BLIND_TX02_SOURCE_ANCHOR,
+    }, "tx02-wrong-oracle-salt"),
+    /tx02 strict oracle transaction/,
+    "tx02 strict profile must pin the target transaction",
+  );
+  assert.throws(
+    () => validateBlindRunManifest({
+      ...tx02StrictManifest,
+      base: {
+        ...BLIND_TX02_BASE_ANCHOR,
+        stateRoot: hash("wrong-tx02-base-root"),
+      },
+    }),
+    /tx02 strict profile base anchor/,
+    "tx02 strict profile must pin the base block hash and state root",
+  );
+  assert.throws(
+    () => validateBlindRunManifest({
+      ...tx02StrictManifest,
+      source: {
+        ...BLIND_TX02_SOURCE_ANCHOR,
+        hash: hash("wrong-tx02-source-hash"),
+      },
+    }),
+    /tx02 strict profile source anchor/,
+    "tx02 strict profile must pin the source block hash and state root",
+  );
+  assert.throws(
+    () => validateBlindRunManifest({
+      ...tx02StrictManifest,
+      timingLimitMs: 9_999,
+    }),
+    /tx02 strict profile timingLimitMs must equal 10000/,
+    "tx02 strict profile must pin the ten-second threshold",
   );
   assert.throws(
     () => validateBlindRunManifest({

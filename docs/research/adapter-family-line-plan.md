@@ -1312,7 +1312,10 @@ Fable 已证明 V2/V3“公式对拍”的测试形状可行，但其 shadow tra
 
 ```text
 tx=0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af
-base/source_block=25599789
+base_block=25599788
+base_hash=0xc55be4805bc2482d7ae99aa693e2c7b6c63925a60b78cd717efff6cc0736ff41
+base_state_root=0x9a8233914ed7931e0c8d8154711cb50fcc18295b6e348e42bf34c8e97eeca343
+source_block=25599789
 source_hash=0xbdaf5f6640f784373f4e6d644e27dd447f0914db43affbe2f9bc16f7e5bb062a
 source_state_root=0xdffdabeabb966c54a3023f332531c0d384d884034a5569318723e621cdf1808e
 landed_block=25599790
@@ -1382,7 +1385,7 @@ forced_selection_count=0
 Producer 禁止在 `source_head_seen` 前预装 `GraphView(N)`、读取或缓存 N dynamic state，或从 oracle
 反推出 target-specific condition。Trusted runner 可以按上一段均匀物化完整 N backend，但在 timer 前不得
 向 producer 暴露其 handle、state 或 target metadata。冻结后还要用未提前披露的邻块/held-out block 控制，
-检测 `25585380`、目标地址或等价元数据分支。
+检测 `25599789`、目标地址或等价元数据分支。
 
 从 `source_head_seen` 到 `ev_decision`：
 

@@ -1,4 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import {
+  request as requestHttp,
+  type ClientRequest,
+  type IncomingMessage,
+} from "node:http";
+import { request as requestHttps } from "node:https";
 import { createServer as createNetServer } from "node:net";
 import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
 
@@ -573,16 +579,17 @@ export class AnvilStateBackend implements StateBackend {
         method: "eth_call",
         params: [this.provider.getRpcTransaction(req), "latest"],
       };
-      const response = await fetch(this.anvilUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`eth_call ${req.to} HTTP ${response.status} ${response.statusText}`);
+      const response = await postJsonRpc(
+        this.anvilUrl,
+        payload,
+        controller.signal,
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(
+          `eth_call ${req.to} HTTP ${response.statusCode} ${response.statusMessage}`,
+        );
       }
-      const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
+      const body = response.body as Partial<JsonRpcError> & { result?: unknown };
       if (body.error) {
         throw this.provider.getRpcError(payload, body as JsonRpcError);
       }
@@ -797,14 +804,121 @@ function waitForChildExit(proc: ChildProcess): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
+    let forceTimer: NodeJS.Timeout;
+    let releaseTimer: NodeJS.Timeout;
     const settled = (): void => {
+      clearTimeout(forceTimer);
+      clearTimeout(releaseTimer);
       proc.removeListener("exit", settled);
       proc.removeListener("error", settled);
       resolve();
     };
+    forceTimer = setTimeout(() => {
+      if (proc.exitCode === null && proc.signalCode === null) {
+        proc.kill("SIGKILL");
+      }
+    }, 2_000);
+    releaseTimer = setTimeout(settled, 5_000);
+    forceTimer.unref();
+    releaseTimer.unref();
     proc.once("exit", settled);
     proc.once("error", settled);
   });
+}
+
+interface JsonRpcHttpResponse {
+  statusCode: number;
+  statusMessage: string;
+  body: unknown;
+}
+
+/**
+ * Send one JSON-RPC request on a transport whose socket we own. Node's fetch
+ * may reject an aborted Promise while retaining/draining the underlying
+ * keep-alive request. Refinement deadlines require the RPC itself to stop, so
+ * explicitly destroy both request and response when the signal fires.
+ */
+function postJsonRpc(
+  endpoint: string,
+  payload: JsonRpcPayload,
+  signal: AbortSignal,
+): Promise<JsonRpcHttpResponse> {
+  if (signal.aborted) {
+    return Promise.reject(abortReason(signal));
+  }
+
+  const url = new URL(endpoint);
+  const requestFn = url.protocol === "https:"
+    ? requestHttps
+    : url.protocol === "http:"
+      ? requestHttp
+      : null;
+  if (requestFn === null) {
+    return Promise.reject(new Error(`unsupported JSON-RPC protocol ${url.protocol}`));
+  }
+  const encoded = Buffer.from(JSON.stringify(payload));
+
+  return new Promise<JsonRpcHttpResponse>((resolve, reject) => {
+    let settled = false;
+    let response: IncomingMessage | null = null;
+    let request: ClientRequest;
+
+    const cleanup = (): void => {
+      signal.removeEventListener("abort", onAbort);
+    };
+    const rejectOnce = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = (): void => {
+      const reason = abortReason(signal);
+      response?.destroy(reason);
+      request.destroy(reason);
+      rejectOnce(reason);
+    };
+
+    request = requestFn(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(encoded.length),
+        connection: "close",
+      },
+    }, (incoming) => {
+      response = incoming;
+      const chunks: Buffer[] = [];
+      incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+      incoming.once("aborted", () => rejectOnce(abortReason(signal)));
+      incoming.once("error", rejectOnce);
+      incoming.once("end", () => {
+        if (settled) return;
+        try {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          const body = JSON.parse(raw) as unknown;
+          settled = true;
+          cleanup();
+          resolve({
+            statusCode: incoming.statusCode ?? 0,
+            statusMessage: incoming.statusMessage ?? "",
+            body,
+          });
+        } catch (error) {
+          rejectOnce(error);
+        }
+      });
+    });
+    request.once("error", rejectOnce);
+    signal.addEventListener("abort", onAbort, { once: true });
+    request.end(encoded);
+  });
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("JSON-RPC request aborted", { cause: signal.reason });
 }
 
 async function assertLoopbackPortAvailable(port: number): Promise<void> {

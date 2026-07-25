@@ -25,9 +25,12 @@ export const BLIND_GENERIC_PROFILE = "adapter-family-strict-blind-v1" as const;
 export const BLIND_PROFILE = BLIND_GENERIC_PROFILE;
 export const BLIND_TX055_STRICT_PROFILE =
   "adapter-family-tx055-strict-blind-v1" as const;
+export const BLIND_TX02_STRICT_PROFILE =
+  "adapter-family-tx02-strict-blind-v1" as const;
 export type BlindRunProfile =
   | typeof BLIND_GENERIC_PROFILE
-  | typeof BLIND_TX055_STRICT_PROFILE;
+  | typeof BLIND_TX055_STRICT_PROFILE
+  | typeof BLIND_TX02_STRICT_PROFILE;
 export const BLIND_TX055_TRANSACTION_ID =
   "0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b" as const;
 export const BLIND_TX055_BASE_ANCHOR = Object.freeze({
@@ -41,6 +44,20 @@ export const BLIND_TX055_SOURCE_ANCHOR = Object.freeze({
   hash: "0x6cf953cd24df65a1d0505aa661b8361b69178dbc74eb73085e3531df284c8f22",
   stateRoot:
     "0x8bb7fd340dc4088cf2572be4915b861e5dc5fe4827da2ad56a7672fbbcae678e",
+});
+export const BLIND_TX02_TRANSACTION_ID =
+  "0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af" as const;
+export const BLIND_TX02_BASE_ANCHOR = Object.freeze({
+  number: 25_599_788,
+  hash: "0xc55be4805bc2482d7ae99aa693e2c7b6c63925a60b78cd717efff6cc0736ff41",
+  stateRoot:
+    "0x9a8233914ed7931e0c8d8154711cb50fcc18295b6e348e42bf34c8e97eeca343",
+});
+export const BLIND_TX02_SOURCE_ANCHOR = Object.freeze({
+  number: 25_599_789,
+  hash: "0xbdaf5f6640f784373f4e6d644e27dd447f0914db43affbe2f9bc16f7e5bb062a",
+  stateRoot:
+    "0xdffdabeabb966c54a3023f332531c0d384d884034a5569318723e621cdf1808e",
 });
 export const BLIND_SCHEMA_VERSION = 1 as const;
 export const BLIND_STAGE_NAMES = BLIND_PRODUCTION_STAGE_NAMES;
@@ -463,6 +480,20 @@ export function validateBlindRunManifest(manifest: BlindRunManifest): void {
       "tx055 strict profile timingLimitMs must equal 10000",
     );
   }
+  if (manifest.profile === BLIND_TX02_STRICT_PROFILE) {
+    assert(
+      sameAnchor(manifest.base, BLIND_TX02_BASE_ANCHOR),
+      "tx02 strict profile base anchor",
+    );
+    assert(
+      sameAnchor(manifest.source, BLIND_TX02_SOURCE_ANCHOR),
+      "tx02 strict profile source anchor",
+    );
+    assert(
+      manifest.timingLimitMs === 10_000,
+      "tx02 strict profile timingLimitMs must equal 10000",
+    );
+  }
   assert(
     Number.isSafeInteger(manifest.responseTimeoutMs) &&
       manifest.responseTimeoutMs >= manifest.timingLimitMs,
@@ -792,6 +823,13 @@ export function compareBlindRun(
   ) {
     failures.push("tx055 strict profile transaction mismatch");
   }
+  if (
+    manifest.profile === BLIND_TX02_STRICT_PROFILE &&
+    reveal.oracle.transactionId.toLowerCase() !==
+      BLIND_TX02_TRANSACTION_ID.toLowerCase()
+  ) {
+    failures.push("tx02 strict profile transaction mismatch");
+  }
   if (!sameAnchor(reveal.oracle.source, manifest.source)) {
     failures.push("oracle source mismatch");
   }
@@ -1074,6 +1112,17 @@ function validateBlindOracle(oracle: BlindOracle): void {
       oracle.transactionId.toLowerCase() ===
         BLIND_TX055_TRANSACTION_ID.toLowerCase(),
       "tx055 strict oracle transaction",
+    );
+  }
+  if (oracle.profile === BLIND_TX02_STRICT_PROFILE) {
+    assert(
+      sameAnchor(oracle.source, BLIND_TX02_SOURCE_ANCHOR),
+      "tx02 strict oracle source anchor",
+    );
+    assert(
+      oracle.transactionId.toLowerCase() ===
+        BLIND_TX02_TRANSACTION_ID.toLowerCase(),
+      "tx02 strict oracle transaction",
     );
   }
   assert(oracle.targetRoute.length > 0, "oracle target route");
@@ -1826,7 +1875,8 @@ function producerSessions(
 
 export function isBlindRunProfile(value: unknown): value is BlindRunProfile {
   return value === BLIND_GENERIC_PROFILE ||
-    value === BLIND_TX055_STRICT_PROFILE;
+    value === BLIND_TX055_STRICT_PROFILE ||
+    value === BLIND_TX02_STRICT_PROFILE;
 }
 
 function validateAnchor(label: string, anchor: BlindBlockAnchor): void {

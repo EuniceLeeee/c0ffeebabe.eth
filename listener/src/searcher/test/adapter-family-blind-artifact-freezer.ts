@@ -22,6 +22,9 @@ import type {
   BlindProductionArtifactDocuments,
 } from "../blind-production-artifacts.js";
 import {
+  BLIND_TX02_BASE_ANCHOR,
+  BLIND_TX02_SOURCE_ANCHOR,
+  BLIND_TX02_STRICT_PROFILE,
   BLIND_TX055_BASE_ANCHOR,
   BLIND_TX055_SOURCE_ANCHOR,
   BLIND_TX055_STRICT_PROFILE,
@@ -544,6 +547,14 @@ function validateFreezerSpec(spec: BlindArtifactFreezerSpec): void {
       !sameAnchor(spec.primary.source, BLIND_TX055_SOURCE_ANCHOR)
     ) {
       throw new Error("tx055 freezer profile anchor mismatch");
+    }
+  }
+  if (spec.runProfile === BLIND_TX02_STRICT_PROFILE) {
+    if (
+      !sameAnchor(spec.primary.base, BLIND_TX02_BASE_ANCHOR) ||
+      !sameAnchor(spec.primary.source, BLIND_TX02_SOURCE_ANCHOR)
+    ) {
+      throw new Error("tx02 freezer profile anchor mismatch");
     }
   }
   const controllerUrls = new Set<string>();
