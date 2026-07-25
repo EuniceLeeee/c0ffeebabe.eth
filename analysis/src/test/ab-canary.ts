@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -90,8 +91,40 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   assert.match(wrapper, /prepare_candidate_universes "\$experiment" "\$requested_input_mode"/);
   assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
   assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
-  assert.match(wrapper, /timeout 900 env -i/);
-  assert.match(wrapper, /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/);
+  const universeBuildStart = wrapper.indexOf("timeout 900");
+  const universeBuildEnd = wrapper.indexOf(
+    "npx tsx src/searcher/build-active-pool-universe.ts",
+    universeBuildStart,
+  );
+  assert.ok(universeBuildStart >= 0, "candidate universe build must retain its timeout");
+  assert.ok(universeBuildEnd > universeBuildStart, "candidate universe builder invocation is missing");
+  const universeBuild = wrapper.slice(universeBuildStart, universeBuildEnd);
+  const flockIndex = universeBuild.indexOf("flock -w 30 /run/lock/mev-pooluniverse.lock");
+  const cleanEnvIndex = universeBuild.indexOf("env -i");
+  const pathIndex = universeBuild.indexOf("PATH=");
+  assert.ok(flockIndex >= 0, "candidate universe builds must share the pool-universe lock");
+  assert.ok(cleanEnvIndex > flockIndex, "the clean environment must execute under the shared lock");
+  assert.ok(pathIndex > cleanEnvIndex, "builder environment assignments must follow env -i");
+  assert.match(universeBuild, /POOL_UNIVERSE_RETAIN_PATH="\$A_UNIVERSE"/);
+  assert.match(universeBuild, /POOL_UNIVERSE_MANIFEST_OUT="\$universe_manifest_tmp"/);
+  assert.doesNotMatch(
+    universeBuild,
+    /POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0/,
+    "the challenger must not disable registered-family topology recovery",
+  );
+  assert.match(wrapper, /\.schemaVersion == 2 or \.schemaVersion == 3/);
+  assert.match(wrapper, /schema-v3 challenger universe generator produced no manifest/);
+  assert.match(wrapper, /schema-v3 champion universe has no manifest/);
+  assert.match(wrapper, /pool-universe-build-manifest-v1/);
+  assert.match(wrapper, /\.output\.contentSha256 == \$universe_hash/);
+  assert.match(wrapper, /\.source\.number == \$to_block/);
+  assert.match(wrapper, /a_universe_manifest_hash/);
+  assert.match(wrapper, /b_universe_manifest_hash/);
+  assert.match(wrapper, /B_UNIVERSE_MANIFEST="\$universe_snapshot\.manifest\.json"/);
+  assert.match(
+    wrapper,
+    /SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=\$B_UNIVERSE_MANIFEST/,
+  );
   assert.match(wrapper, /active-pools-\$universe_hash\.json/);
   assert.match(wrapper, /baseline_replay_universe_path "\$A_REPLAY_UNIVERSE"/);
   assert.match(wrapper, /--baseline-universe "\$baseline_universe"/);
@@ -106,6 +139,69 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   assert.match(gate, /"challenger", challengerRoot, 8569, challengerUniverse/);
   assert.match(gate, /shared equivalence replay universes must be byte-identical/);
   assert.match(gate, /sha256File\(baselineUniverse\) !== sha256File\(challengerUniverse\)/);
+});
+
+test("deploy validates a schema-v3 universe manifest against exact output bytes and window", () => {
+  const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+  const repoRoot = path.resolve(analysisRoot, "..");
+  const wrapper = fs.readFileSync(path.join(repoRoot, "scripts/deploy-ab-challenger.sh"), "utf8");
+  const functionStart = wrapper.indexOf("validate_universe_manifest() {");
+  const functionEnd = wrapper.indexOf("\n}\n\nhash_or_unavailable()", functionStart);
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+  const functionSource = wrapper.slice(functionStart, functionEnd + 3);
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "ab-universe-manifest-"));
+  const universePath = path.join(temp, "universe.json");
+  const manifestPath = path.join(temp, "universe.manifest.json");
+  const universe = `${JSON.stringify({
+    schemaVersion: 3,
+    fromBlock: 100,
+    toBlock: 200,
+    pools: [{ address: "0x1" }, { address: "0x2" }],
+  }, null, 2)}\n`;
+  fs.writeFileSync(universePath, universe);
+  const universeHash = createHash("sha256").update(universe).digest("hex");
+  const manifest = {
+    schemaVersion: 1,
+    profile: "pool-universe-build-manifest-v1",
+    chainId: 1,
+    source: {
+      number: 200,
+      hash: `0x${"11".repeat(32)}`,
+      stateRoot: `0x${"22".repeat(32)}`,
+    },
+    inputs: { fromBlock: 100, toBlock: 200 },
+    output: { contentSha256: universeHash, pools: 2 },
+  };
+  const runValidation = (value: unknown) => {
+    fs.writeFileSync(manifestPath, `${JSON.stringify(value, null, 2)}\n`);
+    return spawnSync("bash", [
+      "-c",
+      [
+        "set -Eeuo pipefail",
+        "die() { echo \"$*\" >&2; exit 9; }",
+        "hash_file() { sha256sum \"$1\" | awk '{print $1}'; }",
+        functionSource,
+        "validate_universe_manifest \"$1\" \"$2\"",
+      ].join("\n"),
+      "manifest-test",
+      manifestPath,
+      universePath,
+    ], { encoding: "utf8" });
+  };
+
+  try {
+    assert.equal(runValidation(manifest).status, 0);
+    assert.notEqual(runValidation({
+      ...manifest,
+      output: { ...manifest.output, contentSha256: "00".repeat(32) },
+    }).status, 0, "manifest must bind exact universe bytes");
+    assert.notEqual(runValidation({
+      ...manifest,
+      source: { ...manifest.source, number: 199 },
+    }).status, 0, "manifest source must match the universe window");
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 test("acceptance preserves production replay and emits explicit six-step equivalence evidence", () => {

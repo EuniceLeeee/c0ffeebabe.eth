@@ -1,4 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import {
+  request as requestHttp,
+  type ClientRequest,
+  type IncomingMessage,
+} from "node:http";
+import { request as requestHttps } from "node:https";
+import { createServer as createNetServer } from "node:net";
 import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
 
 // Anvil forks mainnet, so its chainId is always 1. Pinning a static network
@@ -75,7 +82,7 @@ export function withStateCallControl(
       nested?: StateCallControl,
     ) => call(req, {
       deadlineAtMs: earliestDeadline(control.deadlineAtMs, nested?.deadlineAtMs),
-      signal: nested?.signal ?? control.signal,
+      signal: combineAbortSignals(control.signal, nested?.signal),
     }),
   });
 }
@@ -105,6 +112,7 @@ const LOCAL_FORK_GAS_BALANCE_FLOOR = 10_000n * 10n ** 18n;
 export class AnvilStateBackend implements StateBackend {
   provider: ethers.JsonRpcProvider;
   private proc: ChildProcess | null = null;
+  private stopBarrier: Promise<void> = Promise.resolve();
   /** Fork-reuse state (see refreshFork / resetToBaseline / ensureFreshFork). */
   private baselineSnapshot: string | null = null;
   private forkedBlock = 0;
@@ -119,37 +127,61 @@ export class AnvilStateBackend implements StateBackend {
 
   async start(): Promise<void> {
     if (this.proc) return;
+    await this.stopBarrier;
+    await assertLoopbackPortAvailable(this.port);
     this.resetProvider();
-    this.proc = spawn("anvil", [
+    const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--port", String(this.port),
       "--silent",
       "--no-mining",
       "--order", "fifo",
     ], { stdio: "ignore" });
-    this.proc.on("exit", () => { this.proc = null; });
+    this.proc = proc;
+    proc.on("exit", () => {
+      if (this.proc === proc) this.proc = null;
+    });
 
-    for (let i = 0; i < 30; i++) {
-      try {
-        await withTimeout(this.provider.send("eth_chainId", []), 2_000, "anvil readiness");
-        return;
-      } catch {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-      }
+    try {
+      await waitForOwnedAnvil(
+        this.provider,
+        proc,
+        30,
+        400,
+        "anvil readiness",
+      );
+    } catch (error) {
+      if (this.proc === proc) await this.stopAndWait();
+      throw error;
     }
-    throw new Error("anvil did not start");
   }
 
   stop(): void {
-    if (!this.proc) return;
-    this.proc.kill();
+    const proc = this.proc;
+    if (!proc) return;
     this.proc = null;
+    const exited = waitForChildExit(proc);
+    this.stopBarrier = Promise.all([this.stopBarrier, exited]).then(() => undefined);
+    proc.kill();
     this.provider.destroy();
+    this.baselineSnapshot = null;
+    this.forkedBlock = 0;
+  }
+
+  /**
+   * Kill the current fork and wait until the OS has reaped it. Callers that
+   * intend to reuse this backend/port must await this barrier; `stop()` alone
+   * remains the synchronous process-shutdown convenience used at exit.
+   */
+  async stopAndWait(): Promise<void> {
+    this.stop();
+    await this.stopBarrier;
   }
 
   async forkAt(blockNumber: number): Promise<void> {
     if (this.proc) {
       try {
+        const proc = this.proc;
         await withTimeout(
           this.provider.send("anvil_reset", [{
             forking: { jsonRpcUrl: this.rpcUrl, blockNumber },
@@ -157,10 +189,18 @@ export class AnvilStateBackend implements StateBackend {
           60_000,
           `anvil_reset block ${blockNumber}`,
         );
+        await waitForOwnedAnvil(
+          this.provider,
+          proc,
+          3,
+          50,
+          `anvil reset block ${blockNumber} readiness`,
+          blockNumber,
+        );
         return;
       } catch {
         // anvil_reset failed — fall through to kill/spawn
-        this.stop();
+        await this.stopAndWait();
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
     }
@@ -169,14 +209,16 @@ export class AnvilStateBackend implements StateBackend {
   }
 
   private async restartForkAt(blockNumber: number): Promise<void> {
-    this.stop();
+    await this.stopAndWait();
     await new Promise((resolve) => setTimeout(resolve, 250));
     await this.spawnForkAt(blockNumber);
   }
 
   private async spawnForkAt(blockNumber: number): Promise<void> {
+    await this.stopBarrier;
+    await assertLoopbackPortAvailable(this.port);
     this.resetProvider();
-    this.proc = spawn("anvil", [
+    const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--fork-block-number", String(blockNumber),
       "--port", String(this.port),
@@ -184,17 +226,24 @@ export class AnvilStateBackend implements StateBackend {
       "--no-mining",
       "--order", "fifo",
     ], { stdio: "ignore" });
-    this.proc.on("exit", () => { this.proc = null; });
+    this.proc = proc;
+    proc.on("exit", () => {
+      if (this.proc === proc) this.proc = null;
+    });
 
-    for (let i = 0; i < 60; i++) {
-      try {
-        await withTimeout(this.provider.send("eth_chainId", []), 2_000, "anvil block readiness");
-        return;
-      } catch {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+    try {
+      await waitForOwnedAnvil(
+        this.provider,
+        proc,
+        60,
+        500,
+        `anvil block ${blockNumber} readiness`,
+        blockNumber,
+      );
+    } catch (error) {
+      if (this.proc === proc) await this.stopAndWait();
+      throw error;
     }
-    throw new Error(`anvil did not start at block ${blockNumber}`);
   }
 
   /**
@@ -204,11 +253,12 @@ export class AnvilStateBackend implements StateBackend {
    * later tx's pre-state.
    */
   async forkAfterTx(txHash: string): Promise<void> {
-    this.stop();
+    await this.stopAndWait();
     await new Promise((resolve) => setTimeout(resolve, 250)); // let port release
 
+    await assertLoopbackPortAvailable(this.port);
     this.resetProvider();
-    this.proc = spawn("anvil", [
+    const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
       "--fork-transaction-hash", txHash,
       "--port", String(this.port),
@@ -216,17 +266,23 @@ export class AnvilStateBackend implements StateBackend {
       "--no-mining",
       "--order", "fifo",
     ], { stdio: "ignore" });
-    this.proc.on("exit", () => { this.proc = null; });
+    this.proc = proc;
+    proc.on("exit", () => {
+      if (this.proc === proc) this.proc = null;
+    });
 
-    for (let i = 0; i < 60; i++) {
-      try {
-        await withTimeout(this.provider.send("eth_chainId", []), 2_000, "anvil tx-hash readiness");
-        return;
-      } catch {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+    try {
+      await waitForOwnedAnvil(
+        this.provider,
+        proc,
+        60,
+        500,
+        `anvil tx-hash ${txHash} readiness`,
+      );
+    } catch (error) {
+      if (this.proc === proc) await this.stopAndWait();
+      throw error;
     }
-    throw new Error(`anvil did not start with --fork-transaction-hash ${txHash}`);
   }
 
   private resetProvider(): void {
@@ -523,16 +579,17 @@ export class AnvilStateBackend implements StateBackend {
         method: "eth_call",
         params: [this.provider.getRpcTransaction(req), "latest"],
       };
-      const response = await fetch(this.anvilUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`eth_call ${req.to} HTTP ${response.status} ${response.statusText}`);
+      const response = await postJsonRpc(
+        this.anvilUrl,
+        payload,
+        controller.signal,
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(
+          `eth_call ${req.to} HTTP ${response.statusCode} ${response.statusMessage}`,
+        );
       }
-      const body = await response.json() as Partial<JsonRpcError> & { result?: unknown };
+      const body = response.body as Partial<JsonRpcError> & { result?: unknown };
       if (body.error) {
         throw this.provider.getRpcError(payload, body as JsonRpcError);
       }
@@ -742,6 +799,214 @@ function getReceipt(
   );
 }
 
+function waitForChildExit(proc: ChildProcess): Promise<void> {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let forceTimer: NodeJS.Timeout;
+    let releaseTimer: NodeJS.Timeout;
+    const settled = (): void => {
+      clearTimeout(forceTimer);
+      clearTimeout(releaseTimer);
+      proc.removeListener("exit", settled);
+      proc.removeListener("error", settled);
+      resolve();
+    };
+    forceTimer = setTimeout(() => {
+      if (proc.exitCode === null && proc.signalCode === null) {
+        proc.kill("SIGKILL");
+      }
+    }, 2_000);
+    releaseTimer = setTimeout(settled, 5_000);
+    forceTimer.unref();
+    releaseTimer.unref();
+    proc.once("exit", settled);
+    proc.once("error", settled);
+  });
+}
+
+interface JsonRpcHttpResponse {
+  statusCode: number;
+  statusMessage: string;
+  body: unknown;
+}
+
+/**
+ * Send one JSON-RPC request on a transport whose socket we own. Node's fetch
+ * may reject an aborted Promise while retaining/draining the underlying
+ * keep-alive request. Refinement deadlines require the RPC itself to stop, so
+ * explicitly destroy both request and response when the signal fires.
+ */
+function postJsonRpc(
+  endpoint: string,
+  payload: JsonRpcPayload,
+  signal: AbortSignal,
+): Promise<JsonRpcHttpResponse> {
+  if (signal.aborted) {
+    return Promise.reject(abortReason(signal));
+  }
+
+  const url = new URL(endpoint);
+  const requestFn = url.protocol === "https:"
+    ? requestHttps
+    : url.protocol === "http:"
+      ? requestHttp
+      : null;
+  if (requestFn === null) {
+    return Promise.reject(new Error(`unsupported JSON-RPC protocol ${url.protocol}`));
+  }
+  const encoded = Buffer.from(JSON.stringify(payload));
+
+  return new Promise<JsonRpcHttpResponse>((resolve, reject) => {
+    let settled = false;
+    let response: IncomingMessage | null = null;
+    let request: ClientRequest;
+
+    const cleanup = (): void => {
+      signal.removeEventListener("abort", onAbort);
+    };
+    const rejectOnce = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = (): void => {
+      const reason = abortReason(signal);
+      response?.destroy(reason);
+      request.destroy(reason);
+      rejectOnce(reason);
+    };
+
+    request = requestFn(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(encoded.length),
+        connection: "close",
+      },
+    }, (incoming) => {
+      response = incoming;
+      const chunks: Buffer[] = [];
+      incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+      incoming.once("aborted", () => rejectOnce(abortReason(signal)));
+      incoming.once("error", rejectOnce);
+      incoming.once("end", () => {
+        if (settled) return;
+        try {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          const body = JSON.parse(raw) as unknown;
+          settled = true;
+          cleanup();
+          resolve({
+            statusCode: incoming.statusCode ?? 0,
+            statusMessage: incoming.statusMessage ?? "",
+            body,
+          });
+        } catch (error) {
+          rejectOnce(error);
+        }
+      });
+    });
+    request.once("error", rejectOnce);
+    signal.addEventListener("abort", onAbort, { once: true });
+    request.end(encoded);
+  });
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("JSON-RPC request aborted", { cause: signal.reason });
+}
+
+async function assertLoopbackPortAvailable(port: number): Promise<void> {
+  if (!Number.isSafeInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error(`invalid anvil port ${port}`);
+  }
+  const server = createNetServer();
+  try {
+    await new Promise<void>((resolveListen, rejectListen) => {
+      const onError = (error: Error): void => rejectListen(error);
+      server.once("error", onError);
+      server.listen(
+        { host: "127.0.0.1", port, exclusive: true },
+        () => {
+          server.removeListener("error", onError);
+          resolveListen();
+        },
+      );
+    });
+  } catch (error) {
+    throw new Error(
+      `anvil port ${port} is already owned by another process`,
+      { cause: error },
+    );
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    }
+  }
+}
+
+async function waitForOwnedAnvil(
+  provider: ethers.JsonRpcProvider,
+  proc: ChildProcess,
+  attempts: number,
+  retryMs: number,
+  label: string,
+  expectedBlock?: number,
+): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (proc.exitCode !== null || proc.signalCode !== null) {
+      throw new Error(`${label}: spawned process exited before readiness`);
+    }
+    try {
+      await withTimeout(provider.send("eth_chainId", []), 2_000, label);
+      const clientVersion = await withTimeout(
+        provider.send("web3_clientVersion", []),
+        2_000,
+        `${label} client ownership`,
+      );
+      if (
+        typeof clientVersion !== "string" ||
+        !clientVersion.toLowerCase().includes("anvil")
+      ) {
+        throw new Error(`${label}: endpoint is not the spawned Anvil`);
+      }
+      if (expectedBlock !== undefined) {
+        const blockNumber = await withTimeout(
+          provider.send("eth_blockNumber", []),
+          2_000,
+          `${label} block anchor`,
+        );
+        if (
+          typeof blockNumber !== "string" ||
+          Number(BigInt(blockNumber)) !== expectedBlock
+        ) {
+          throw new Error(
+            `${label}: endpoint block ${String(blockNumber)} != ${expectedBlock}`,
+          );
+        }
+      }
+      await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        throw new Error(`${label}: spawned process does not own the endpoint`);
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, retryMs));
+    }
+  }
+  throw new Error(
+    `${label} failed after ${attempts} attempts`,
+    lastError === null ? undefined : { cause: lastError },
+  );
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
@@ -762,6 +1027,15 @@ function earliestDeadline(a: number | undefined, b: number | undefined): number 
   if (a === undefined) return b;
   if (b === undefined) return a;
   return Math.min(a, b);
+}
+
+function combineAbortSignals(
+  parent: AbortSignal | undefined,
+  nested: AbortSignal | undefined,
+): AbortSignal | undefined {
+  if (parent === undefined) return nested;
+  if (nested === undefined || nested === parent) return parent;
+  return AbortSignal.any([parent, nested]);
 }
 
 function stateCallAbort(

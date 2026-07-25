@@ -224,13 +224,13 @@ production-shaped limits. These widened values are acceptance-only and never cha
 ### Strict blind timing sentinel for the universal AdapterFamily refactor
 
 The universal AdapterFamily/block-scan-state refactor additionally pins
-`0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b` as a mandatory,
+`0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af` as a mandatory,
 target-blind six-stage timing sentinel. It is a task-specific merge/acceptance contract chosen by the user,
 not a deploy-start switch and not a substitute for the systemic cohort/paired A/B contract.
 
-Its producer receives only source block `25585380` (hash
-`0x6cf953cd24df65a1d0505aa661b8361b69178dbc74eb73085e3531df284c8f22`, state root
-`0x8bb7fd340dc4088cf2572be4915b861e5dc5fe4827da2ad56a7672fbbcae678e`), the complete
+Its producer receives only source block `25599789` (hash
+`0xbdaf5f6640f784373f4e6d644e27dd447f0914db43affbe2f9bc16f7e5bb062a`, state root
+`0xdffdabeabb966c54a3023f332531c0d384d884034a5569318723e621cdf1808e`), the complete
 content-addressed production universe/config/active-family manifest, the normal production policy, backend
 and output path. It must not receive the winner hash, expected route/pools/tokens/factory, amount, rank,
 search center or calldata. An independently sealed receipt/call-trace oracle is visible only to a trusted
@@ -272,8 +272,8 @@ input, clears or generation-bumps every N-dependent state/mid/refine/amount/plan
 clean fork and rechecks the pre-state root. Fresh current-N reads/batches and cache-generation counters are
 recorded on every run; target-specific prewarming and reuse of a prior run's N result are forbidden.
 
-For this sentinel, the production base topology completeness watermark is `25585379`; processing its
-current-block delta to source N=`25585380` is inside the timer. A universe already prebuilt through N can
+For this sentinel, the production base topology completeness watermark is `25599788`; processing its
+current-block delta to source N=`25599789` is inside the timer. A universe already prebuilt through N can
 diagnose route/state behavior but cannot pass the strict full-pipeline timing profile. The runner wraps the
 actual production entry and deployment config resolver, rather than copying pipeline logic, and its manifest
 binds the production-entry SHA, generic universe-builder SHA/range/input hashes, independently rebuilt
@@ -308,7 +308,7 @@ semantic parity is evaluated on the common baseline-active manifest. Activation 
 separately, never credited as speedup, and their full runtime cost remains in challenger timing. The trusted producer/comparator and
 fixture must land on main before the challenger freezes and cannot appear in its diff. The challenger
 production-closure diff must add no sentinel tx/block hash/state root, target pools/poolId/tokens, landed
-amounts, calldata, `25585379/25585380/25585381`, tx index `271`, or encoded/derived fixture-metadata
+amounts, calldata, `25599788/25599789/25599790`, landed tx index `68`, or encoded/derived fixture-metadata
 conditions. A pre-existing generic production pin may remain unchanged only after explicit review.
 Fixture/force/static instance seeds cannot be the sole admission evidence for a target venue. After
 challenger freeze, the same trusted runner also executes undisclosed neighboring/held-out block controls;
@@ -336,7 +336,7 @@ same-input resource metrics and paired live A/B remain required for the systemic
 ### Held-out conversion update-block freshness sentinel
 
 The universal AdapterFamily/state-coordinator refactor also requires one real conversion-lane update-block
-sentinel. This closes a gap that tx055 cannot cover: proving that current-block protocol rates are actually
+sentinel. This closes a gap that tx02 cannot cover: proving that current-block protocol rates are actually
 observed instead of merely declaring that dynamic mids have no TTL.
 
 Before challenger freeze, the trusted runner publishes and seals the chain range, eligibility

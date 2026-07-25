@@ -114,7 +114,7 @@ Family 是语义和故障边界，不是文件边界。
 六阶段证据人工裁决 checker，不允许把未运行的生产阶段人工写成通过。
 
 固定交易
-`0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b`
+`0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af`
 用于本轮 full-graph 六步与耗时验收；禁止把 tx、pool、route、amount 或 calldata 写入被测 production
 closure。
 
@@ -981,7 +981,7 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 
 - 从当前 production registry 自动生成 active family/instance/edge/action/funding inventory；
 - 封存 V2/V3 discovered pool set、identity、fee、ordered graph 和 warm-state hashes；
-- 封存 tx055 与代表性 family fixtures；
+- 封存 tx02 与代表性 family fixtures；
 - 记录当前 full-graph stage timings、RPC/call/batch 数和 incomplete 分布。
 
 不手写第二张 inventory。
@@ -1132,16 +1132,18 @@ Fable 已证明 V2/V3“公式对拍”的测试形状可行，但其 shadow tra
 - aggregate throw 的 family-scoped retry/settle 后，其他 family 的 snapshot 与冻结 healthy-only
   baseline exact 相同。
 
-### 11.4 tx055 严格六步与秒数
+### 11.4 tx02 严格六步与秒数
 
 固定证据：
 
 ```text
-tx=0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b
-base_block=25585379
-source_block=25585380
-source_hash=0x6cf953cd24df65a1d0505aa661b8361b69178dbc74eb73085e3531df284c8f22
-source_state_root=0x8bb7fd340dc4088cf2572be4915b861e5dc5fe4827da2ad56a7672fbbcae678e
+tx=0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af
+base_block=25599788
+base_hash=0xc55be4805bc2482d7ae99aa693e2c7b6c63925a60b78cd717efff6cc0736ff41
+base_state_root=0x9a8233914ed7931e0c8d8154711cb50fcc18295b6e348e42bf34c8e97eeca343
+source_block=25599789
+source_hash=0xbdaf5f6640f784373f4e6d644e27dd447f0914db43affbe2f9bc16f7e5bb062a
+source_state_root=0xdffdabeabb966c54a3023f332531c0d384d884034a5569318723e621cdf1808e
 ```
 
 目标 tx/route/pools/tokens/amount/calldata 只存在于 trusted oracle/comparator，不能传入被测 searcher。
@@ -1205,7 +1207,7 @@ forced_selection_count=0
 Producer 禁止在 `source_head_seen` 前预装 `GraphView(N)`、读取或缓存 N dynamic state，或从 oracle
 反推出 target-specific condition。Trusted runner 可以按上一段均匀物化完整 N backend，但在 timer 前不得
 向 producer 暴露其 handle、state 或 target metadata。冻结后还要用未提前披露的邻块/held-out block 控制，
-检测 `25585380`、目标地址或等价元数据分支。
+检测 `25599789`、目标地址或等价元数据分支。
 
 从 `source_head_seen` 到 `ev_decision`：
 
@@ -1232,7 +1234,7 @@ overall=implemented_not_validated
 
 ### 11.5 Conversion freshness
 
-tx055 不覆盖 conversion rate 单块跳变。Conversion sentinel 复用 blind harness：
+tx02 不覆盖 conversion rate 单块跳变。Conversion sentinel 复用 blind harness：
 
 - challenger freeze 前只封存 eligibility range、predicate/version、最小样本数量、selection algorithm
   以及 trusted seed/salt commitment；
@@ -1377,7 +1379,7 @@ V2/V3路径上。
 7. Curve/protocol mids 不再逐 edge 串行读取；
 8. 单 family failure 不回滚 healthy family，且全局正确标记 degraded；
 9. 旧/新 reader、quote、plan、final sim 等价；
-10. tx055 六步全部自然执行且 p95 `<10s`；
+10. tx02 六步全部自然执行且 p95 `<10s`；
 11. conversion freshness 证据成立；
 12. paired live A/B 满足 exact semantic contract 与至少 95% 覆盖/吞吐门；
 13. 无 hardcode、减图、目标预热、强制候选或策略放宽；
