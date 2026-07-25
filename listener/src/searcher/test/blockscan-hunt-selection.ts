@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
+import type { TokenEdge } from "../planner/token-graph.js";
+import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
 
 export interface BlockScanHuntBudgets {
   scanBudgetMs: number;
@@ -59,6 +61,26 @@ export function solveForOpportunityIndex<T extends { opportunityIndex: number }>
   return solved.find((entry) => entry.opportunityIndex === opportunityIndex) ?? null;
 }
 
+/**
+ * `createVerifiedGraphView` preserves graph order while attaching canonical
+ * edge ids. Diagnostics resolve their route against the raw graph first, so
+ * they must use the corresponding verified objects for coverage/mid lookups.
+ */
+export function remapExpectedRouteToVerifiedGraph(
+  rawGraph: readonly TokenEdge[],
+  verifiedGraph: readonly TokenEdge[],
+  expectedRoute: readonly TokenEdge[],
+): TokenEdge[] | null {
+  if (rawGraph.length !== verifiedGraph.length) return null;
+  const remapped: TokenEdge[] = [];
+  for (const edge of expectedRoute) {
+    const index = rawGraph.indexOf(edge);
+    if (index < 0) return null;
+    remapped.push(verifiedGraph[index]);
+  }
+  return remapped;
+}
+
 function runTests(): void {
   assert.deepEqual(resolveBlockScanHuntBudgets({}), {
     scanBudgetMs: 1_500,
@@ -93,6 +115,31 @@ function runTests(): void {
     4,
   );
   assert.equal(solveForOpportunityIndex([{ opportunityIndex: 0 }], 4), null);
+  const rawEdge: TokenEdge = {
+    adapterId: "fixture-swap",
+    target: "0x1111111111111111111111111111111111111111",
+    tokenIn: "0x2222222222222222222222222222222222222222",
+    tokenOut: "0x3333333333333333333333333333333333333333",
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+  };
+  const verifiedEdge: TokenEdge = {
+    ...rawEdge,
+    canonicalEdgeId: canonicalEdgeId("fixture-family", rawEdge),
+  };
+  assert.deepEqual(
+    remapExpectedRouteToVerifiedGraph(
+      [rawEdge],
+      [verifiedEdge],
+      [rawEdge],
+    ),
+    [verifiedEdge],
+  );
+  assert.equal(
+    remapExpectedRouteToVerifiedGraph([], [verifiedEdge], [rawEdge]),
+    null,
+  );
   console.log("blockscan-hunt-selection PASS");
 }
 

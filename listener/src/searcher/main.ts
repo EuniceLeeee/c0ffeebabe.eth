@@ -1657,6 +1657,7 @@ async function main(): Promise<void> {
       `added=${addedProtocolEdges.length} ` +
       `address_probe=${initialProtocolDiscovery.scanner.addressStats.probes} ` +
       `address_cache_hit=${initialProtocolDiscovery.scanner.addressStats.cacheHits} ` +
+      `address_overlap=${initialProtocolDiscovery.scanner.addressStats.overlapAddresses} ` +
       `range=${initialProtocolDiscoveryRange.fromBlock}-` +
       `${initialProtocolDiscoveryRange.toBlock} ` +
       `coverage_mode=${protocolDiscoveryStartup.mode}`,

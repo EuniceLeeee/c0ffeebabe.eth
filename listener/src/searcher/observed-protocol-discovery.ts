@@ -74,9 +74,11 @@ export interface ProtocolAddressDiscoveryStats {
   readonly codeReads: number;
   readonly cacheHits: number;
   readonly probes: number;
+  /** Addresses that produced at least one family candidate. */
   readonly matches: number;
   readonly negatives: number;
-  readonly ambiguous: number;
+  /** Addresses shortlisted by more than one distinct family before probing. */
+  readonly overlapAddresses: number;
 }
 
 export interface ProtocolDiscoveryRangeResult extends ObservedProtocolDiscoveryResult {
@@ -286,7 +288,7 @@ export async function scanProtocolDiscoveryRange(input: {
         probes: 0,
         matches: 0,
         negatives: 0,
-        ambiguous: 0,
+        overlapAddresses: 0,
       },
     };
   });
@@ -814,7 +816,7 @@ async function scanAddressCandidates(input: {
   let probes = 0;
   let matches = 0;
   let negatives = 0;
-  let ambiguous = 0;
+  let overlapAddresses = 0;
   for (const result of results) {
     codeReads += result.codeReads;
     cacheHits += result.cacheHits;
@@ -843,24 +845,26 @@ async function scanAddressCandidates(input: {
       pushCandidate(candidatesByAdapter, match.adapterId, match.candidate);
       matches++;
     } else if (result.matches.length > 1) {
-      ambiguous++;
       const adapterIds = [...new Set(result.matches.map((item) => item.adapterId))];
       // Preserve distinct candidates for the coordinator's post-probe route
       // arbitration, including any previously retained route. Duplicate
       // registrations of one adapter id remain scanner-local invalid input.
       if (adapterIds.length > 1) {
+        matches++;
+        overlapAddresses++;
         for (const match of result.matches) {
           pushCandidate(candidatesByAdapter, match.adapterId, match.candidate);
         }
+      } else {
+        issues.push({
+          adapterId: adapterIds[0] ?? null,
+          sourceKind: "dex-token-domain",
+          impactedFamilyIds: adapterIds as ExecutionFamilyId[],
+          target: result.matches[0].candidate.pool.address,
+          reason: `duplicate address adapter registration: ${adapterIds[0] ?? "unknown"}`,
+          retryable: false,
+        });
       }
-      issues.push({
-        adapterId: null,
-        sourceKind: "dex-token-domain",
-        impactedFamilyIds: adapterIds as ExecutionFamilyId[],
-        target: result.matches[0].candidate.pool.address,
-        reason: `ambiguous address adapters: ${result.matches.map((item) => item.adapterId).sort().join(",")}`,
-        retryable: false,
-      });
     }
   }
   return {
@@ -873,7 +877,7 @@ async function scanAddressCandidates(input: {
       probes,
       matches,
       negatives,
-      ambiguous,
+      overlapAddresses,
     },
   };
 }

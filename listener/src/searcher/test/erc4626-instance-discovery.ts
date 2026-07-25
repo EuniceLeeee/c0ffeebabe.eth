@@ -799,26 +799,34 @@ const aliasAdapter = {
   ...erc4626Adapter,
   id: "protocol:erc4626-test-alias",
 } satisfies ProtocolConversionAdapter;
-const ambiguousAddress = await scanProtocolDiscoveryRange({
+const overlappingAddress = await scanProtocolDiscoveryRange({
   adapters: [erc4626Adapter, aliasAdapter],
   context: addressContext,
   candidateAddresses: [VAULT],
   evidenceCache: createProtocolDiscoveryEvidenceCache(),
 });
-assert(ambiguousAddress.sourceComplete, "deterministic ambiguity must not pin the source cursor");
+assert(overlappingAddress.sourceComplete, "deterministic overlap must not pin the source cursor");
 assert(
-  ambiguousAddress.candidatesByAdapter.size === 2,
-  "scanner must preserve distinct matches for coordinator-level target quarantine",
+  overlappingAddress.candidatesByAdapter.size === 2,
+  "scanner must preserve distinct matches for coordinator-level route arbitration",
 );
-assert(ambiguousAddress.addressStats.ambiguous === 1, "address ambiguity must be explicit");
+assert(
+  overlappingAddress.addressStats.matches === 1 &&
+    overlappingAddress.addressStats.overlapAddresses === 1,
+  "cross-family shortlist overlap must be counted once without becoming a source error",
+);
+assert(
+  overlappingAddress.sourceErrors.length === 0,
+  "cross-family shortlist overlap must defer conflict decisions to post-probe arbitration",
+);
 const ambiguousResult = await runProtocolDiscovery({
   adapters: [erc4626Adapter, aliasAdapter],
   context: addressContext,
   protocolEdgesEnabled: true,
   attestIdentity: attester,
-  candidatesByAdapter: ambiguousAddress.candidatesByAdapter,
-  sourceComplete: ambiguousAddress.sourceComplete,
-  sourceErrors: ambiguousAddress.sourceErrors,
+  candidatesByAdapter: overlappingAddress.candidatesByAdapter,
+  sourceComplete: overlappingAddress.sourceComplete,
+  sourceErrors: overlappingAddress.sourceErrors,
 });
 // Equivalent full verifications (same semantic routes, same execution
 // fingerprints) deduplicate instead of killing the target: both claimants stay

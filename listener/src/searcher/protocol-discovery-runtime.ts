@@ -176,7 +176,7 @@ export async function prepareActiveProtocolDiscoveryPass(
         probes: 0,
         matches: 0,
         negatives: 0,
-        ambiguous: 0,
+        overlapAddresses: 0,
       },
     };
   const result = await runProtocolDiscovery({

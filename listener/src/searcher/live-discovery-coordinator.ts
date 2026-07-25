@@ -1213,6 +1213,7 @@ export async function createLiveDiscoveryCoordinator(
           `cache_hits=${protocol.pass.scanner.addressStats.cacheHits} ` +
           `probes=${protocol.pass.scanner.addressStats.probes} ` +
           `matches=${protocol.pass.scanner.addressStats.matches} ` +
+          `overlaps=${protocol.pass.scanner.addressStats.overlapAddresses} ` +
           `range=${protocol.scanRange.fromBlock}-` +
           `${protocol.scanRange.toBlock} ` +
           `target=${protocol.latestProtocolBlock}`,

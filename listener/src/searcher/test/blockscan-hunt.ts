@@ -39,6 +39,7 @@ import {
 } from "../blockscan-state-read-backend.js";
 import {
   blockScanPassBudgetExceeded,
+  remapExpectedRouteToVerifiedGraph,
   resolveBlockScanHuntBudgets,
   selectedReplayOpportunityIndexes,
   solveForOpportunityIndex,
@@ -810,6 +811,18 @@ async function main(): Promise<void> {
       sourceBlock: cfg.blockNumber,
       sourceBlockHash: sourceBlock.hash,
     });
+    const verifiedDiagnosticExpectedEdges = diagnosticExpectedEdges
+      ? remapExpectedRouteToVerifiedGraph(
+          edges,
+          graphView.edges,
+          diagnosticExpectedEdges,
+        )
+      : null;
+    if (diagnosticExpectedEdges && !verifiedDiagnosticExpectedEdges) {
+      throw new Error(
+        "diagnostic expected route could not be remapped to verified graph",
+      );
+    }
     const stateStartedAtMs = Date.now();
     const preparedState = await stateCoordinator.prepare({
       graph: graphView,
@@ -900,10 +913,10 @@ async function main(): Promise<void> {
       envInt("HUNT_REFINE_CANDIDATES", 512),
     );
     const expectedRouteDiagnosis =
-      DIAGNOSTIC.enabled && diagnosticExpectedEdges
+      DIAGNOSTIC.enabled && verifiedDiagnosticExpectedEdges
         ? diagnoseExpectedRouteEnumeration({
             edges: scanEdges,
-            route: diagnosticExpectedEdges,
+            route: verifiedDiagnosticExpectedEdges,
             maxHops: scanCfg.maxHops,
             minSpreadBps: scanCfg.minSpreadBps,
             pinnedOutsideBudget: scanCfg.pinnedOutsideBudget === true,
