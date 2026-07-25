@@ -34,6 +34,14 @@
    原始 receipt/trace/fork 事实，不修工具、不扩工具、不为工具补 fixture。
 4. 钉每腿 `(target, selector, tokenIn, tokenOut, amount, venue identity)`；身份读取优先级为真实调用、
    事件、factory/registry 反查。铸赎腿同时检查 mint/burn Transfer 与资产流。
+   **venue 只取顶层调用锚（call-hierarchy 边界，硬规则）：** 每腿的 venue 必须是 bot/router 用
+   swap/exchange/deposit selector **直接调用**、且身份可**反向验证**（factory/registry/`coins`/池 view）
+   的地址。**proxy 的 implementation（`delegatecall` 目标）与 venue 的内部子调用都是实现、不是 venue**——
+   例如 Curve underlying 池执行 `exchange_underlying(i,j,dx)` 时内部调 cToken、cToken 再调借贷组件
+   （dForce/Compound 内部），route venue 是 bot 直接调的那个 **Curve 池**，不是 trace 深处的 cToken/借贷
+   合约。判定测试：沿 token continuity（Transfer 日志）搬运本环 token 的地址 ∩ bot/router 用 swap-selector
+   **直接**调用的地址 = venue；只作为**子调用/delegatecall**出现的更深地址是实现。身份验在 venue 地址上，
+   不在实现地址上。把内部组件当 venue 会误报缺口、诱发“为一个内部实现新建 family”的错。
 5. 排除未扫描目标块、错误 parent/prefix、hop limit、TTL、graph 不一致等替代解释，再定位生产 gap。
 6. 把 gap 定位到生产阶段和具体 `listener/**` 文件/函数：discovery -> universe -> identity ->
    capability -> graph -> scanner/detector -> planner -> quote -> plan build -> execution -> EV gate。
