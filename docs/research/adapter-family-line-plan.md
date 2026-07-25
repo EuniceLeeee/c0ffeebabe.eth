@@ -1430,8 +1430,8 @@ profit_token=USDT
 net_profit_raw=499624
 gas_used=1664930
 calldata_sha256=13540775224ff4ce9c984636354d25eab1e8cad323d008386dc76dbe0857c252
-ev_decision=below_ev_gate
-ev_reason=correct_reject_under_frozen_policy
+ev_decision=stale_pre_fix_reject
+ev_reason=obsolete_static_valuation_and_fee_buffer
 state_wall_ms_single_run=9910
 log_sha256=17361a04df2c9d8853f3f99607ec9e4ab5dcf9aa28608673bbf9350981364ffb
 output_sha256=ba0e742d8c8041b826f0fbd13569e4fc851eca14b8111d82121bdf4f6b091e24
@@ -1443,10 +1443,42 @@ overall=implemented_not_validated
 
 真实 landed tx 与上述 final sim 的执行偏差已单独核对：solver 的 start amount 比 landed tx 高
 `0.343543%`，最终毛利润只多 `1` 个 USDT 最小单位，sim gas 比 landed gas 少 `0.131244%`。因此 Step
-6 reject 不是 adapter、quote、sizing 或 sim 偏差；冻结 policy 使用 `ETH_USD=3500`、`20%` profit
-haircut 和 `2x` gas buffer，而 landed block 的 ETH/USD 约为 `1869.11261`，真实 builder payment 也只有
-扣真实 gas 后剩余利润的约 `9.9%`。即使用历史 ETH/USD，只要保留 `20% haircut + 2x gas` 仍应 reject。
-验收要求 A/B 的 unchanged EV policy 给出同一 reject/reason，不要求把真实 winner 强行判为 allow。
+6 的旧 reject 不是 adapter、quote、sizing 或 sim 偏差，而是已经删除的生产 policy 错误：静态
+`ETH_USD=3500` 与 `2x` gas buffer 把一笔真实正收益压成负数；`BRIBE_ALL_ABOVE_GAS=1` 则会把 gas
+后的全部 surplus 交给 builder，本身不保留正 EV。
+
+生产 EV 现在必须固定到与 bundle 相同的 canonical parent：
+
+- stablecoin 利润使用 source block 的 Chainlink ETH/USD；本样本为 `1869.11261`，不是把另一个静态
+  常量改成 `1900`；
+- target fee 使用 EIP-1559 由 canonical parent 精确推导的 next-block base fee；
+- gas 只使用 final sim 的 measured gas，不再乘静态 `2x`；
+- `20%` profit haircut 保留为安全折扣；
+- bribe 是扣 gas 后 surplus 的比例，且 production/live envelope 与 A/B deploy 均拒绝
+  `BRIBE_ALL_ABOVE_GAS=1` 或 `BRIBE_BPS=10000`；
+- Chainlink、parent hash、fee 或 measured gas 任一不可用时 fail closed；bundle 只允许投
+  `parent+1`，不能把旧价格或旧 base fee 带到后续块。
+
+同一 final-sim 结果按新 policy 的可复算结果为：
+
+```text
+source_block=25599789
+eth_usd=1869.11261
+target_base_fee_wei=74190952
+net_profit_raw_usdt=499624
+measured_gas=1664930
+haircut_profit_wei=213742887700534
+gas_cost_wei=123522741713360
+post_gas_surplus_wei=90220145987174
+bribe_bps=5000
+bribe_wei=45110072993587
+retained_net_ev_wei=45110072993587
+ev_decision=allow
+```
+
+这只修正经济量纲与目标块一致性，不放宽 graph、rank、quote、sim 或 standing-position 门。当前
+strict tx02 仍因 production natural selection 未进入 512 个 coarse candidates 而不完整；不能用上述
+独立 EV flip 冒充六步整体通过。
 
 ### 11.5 Conversion freshness
 

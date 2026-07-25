@@ -137,9 +137,12 @@ export function blockScanFailureCircuitAttribution(
  * Stable least-served scheduling across individual family dependencies.
  *
  * Economic order is unchanged within an exact dependency set. Among those
- * bucket heads, the least-served individual family wins and the original rank
- * breaks ties. Counting each dependency separately prevents a bad family from
- * evading its local budget by combining itself with many different siblings.
+ * bucket heads, a route containing the least-served individual family wins.
+ * The dominant-family count, total dependency count, and original rank break
+ * ties in that order. Counting every dependency after selection prevents a bad
+ * family from evading its local budget by combining itself with many different
+ * siblings, while the minimum makes a genuinely under-served family visible
+ * even when its route also depends on common families.
  */
 export function orderByBlockScanFamily<T>(
   items: readonly T[],
@@ -173,23 +176,30 @@ export function orderByBlockScanFamily<T>(
       | { readonly entries: typeof work; next: number }
       | undefined;
     let selected: typeof work[number] | undefined;
+    let selectedMinServed = Number.POSITIVE_INFINITY;
     let selectedMaxServed = Number.POSITIVE_INFINITY;
     let selectedTotalServed = Number.POSITIVE_INFINITY;
     for (const bucket of buckets.values()) {
       const entry = bucket.entries[bucket.next];
       if (!entry) continue;
       const counts = entry.familyIds.map((familyId) => served.get(familyId) ?? 0);
+      const minServed = Math.min(...counts);
       const maxServed = Math.max(...counts);
       const totalServed = counts.reduce((sum, count) => sum + count, 0);
       if (
-        maxServed < selectedMaxServed ||
-        maxServed === selectedMaxServed && totalServed < selectedTotalServed ||
-        maxServed === selectedMaxServed &&
+        minServed < selectedMinServed ||
+        minServed === selectedMinServed && maxServed < selectedMaxServed ||
+        minServed === selectedMinServed &&
+          maxServed === selectedMaxServed &&
+          totalServed < selectedTotalServed ||
+        minServed === selectedMinServed &&
+          maxServed === selectedMaxServed &&
           totalServed === selectedTotalServed &&
           entry.index < (selected?.index ?? Number.POSITIVE_INFINITY)
       ) {
         selectedBucket = bucket;
         selected = entry;
+        selectedMinServed = minServed;
         selectedMaxServed = maxServed;
         selectedTotalServed = totalServed;
       }

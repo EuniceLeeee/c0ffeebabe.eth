@@ -249,6 +249,113 @@ function familyFairAdmissionAndCircuit(): void {
     ["bad-and-healthy-0", "healthy-route"],
     "a mixed bad route cannot hide the healthy-only route behind shared-family rank",
   );
+  const commonFlood = Array.from({ length: 600 }, (_, index) => ({
+    id: `common-${index}`,
+    edges: [familyEdge("common-family", 400 + index)],
+  }));
+  const rareMixed = Array.from({ length: 3 }, (_, index) => ({
+    id: `rare-mixed-${index}`,
+    edges: [
+      familyEdge("common-family", 1_100 + index * 2),
+      familyEdge("rare-family", 1_101 + index * 2),
+    ],
+  }));
+  const selectedFromFlood = selectByBlockScanFamily(
+    [...commonFlood, ...rareMixed],
+    512,
+    (item) => blockScanRouteFamilyIds(item.edges),
+  );
+  assert.deepEqual(
+    selectedFromFlood
+      .filter(({ id }) => id.startsWith("rare-mixed-"))
+      .map(({ id }) => id),
+    ["rare-mixed-0", "rare-mixed-1", "rare-mixed-2"],
+    "an under-served family must retain multiple economically ordered routes inside the global cap",
+  );
+  assert.equal(
+    new Set(selectedFromFlood.map(({ id }) => id)).size,
+    selectedFromFlood.length,
+    "family-fair admission must not duplicate a route",
+  );
+  assert.deepEqual(
+    selectByBlockScanFamily(
+      [...commonFlood, ...rareMixed],
+      512,
+      (item) => blockScanRouteFamilyIds(item.edges),
+    ).map(({ id }) => id),
+    selectedFromFlood.map(({ id }) => id),
+    "family-fair admission must be deterministic",
+  );
+  const rareAcrossCompositions = [
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `rare-a-${index}`,
+      edges: [
+        familyEdge("common-family", 1_800 + index * 3),
+        familyEdge("rare-family", 1_801 + index * 3),
+      ],
+    })),
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `rare-b-${index}`,
+      edges: [
+        familyEdge("common-family", 1_900 + index * 3),
+        familyEdge("rare-family", 1_901 + index * 3),
+        familyEdge("finite-sibling-a", 1_902 + index * 3),
+      ],
+    })),
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `rare-c-${index}`,
+      edges: [
+        familyEdge("common-family", 2_000 + index * 3),
+        familyEdge("rare-family", 2_001 + index * 3),
+        familyEdge("finite-sibling-b", 2_002 + index * 3),
+      ],
+    })),
+  ];
+  const refinementSizedSelection = selectByBlockScanFamily(
+    [...commonFlood, ...rareAcrossCompositions],
+    100,
+    (item) => blockScanRouteFamilyIds(item.edges),
+  );
+  assert(
+    refinementSizedSelection.some(({ id }) => id === "rare-a-2"),
+    "the refinement-sized cap must retain the third route in an under-served mixed-family bucket",
+  );
+  assert.equal(
+    refinementSizedSelection.filter(({ id }) => id.startsWith("rare-")).length,
+    rareAcrossCompositions.length,
+    "finite family compositions must not hide a small rare-family cohort",
+  );
+
+  const finiteSiblingVariants = [
+    ...Array.from({ length: 200 }, (_, index) => ({
+      id: `bad-sibling-${index}`,
+      edges: [
+        familyEdge("bad-family", 1_200 + index * 2),
+        familyEdge("sibling-family", 1_201 + index * 2),
+      ],
+    })),
+    ...Array.from({ length: 4 }, (_, index) => ({
+      id: `healthy-repeat-${index}`,
+      edges: [familyEdge("healthy-family", 1_700 + index)],
+    })),
+  ];
+  const finiteSiblingSelection = selectByBlockScanFamily(
+    finiteSiblingVariants,
+    8,
+    (item) => blockScanRouteFamilyIds(item.edges),
+  );
+  assert.deepEqual(
+    finiteSiblingSelection
+      .filter(({ id }) => id.startsWith("healthy-repeat-"))
+      .map(({ id }) => id),
+    [
+      "healthy-repeat-0",
+      "healthy-repeat-1",
+      "healthy-repeat-2",
+      "healthy-repeat-3",
+    ],
+    "repeating one dependency composition cannot mint new fairness identities",
+  );
 
   const mixedFailureBudget = new BlockScanFamilyStageBudget(3);
   const mixedEdges = [
