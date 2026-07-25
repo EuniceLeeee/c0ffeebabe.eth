@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:live": "tsc -p tsconfig.live.json --noEmit",
     "start": "node dist/searcher/main.js",
     "dev": "tsx src/searcher/main.ts",
     "legacy:start": "node dist/index.js",

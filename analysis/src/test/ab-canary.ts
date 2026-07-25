@@ -86,9 +86,21 @@ test("deploy freezes immutable universes for independent acceptance", () => {
   const repoRoot = path.resolve(analysisRoot, "..");
   const wrapper = fs.readFileSync(path.join(repoRoot, "scripts/deploy-ab-challenger.sh"), "utf8");
   const gate = fs.readFileSync(path.join(analysisRoot, "src/cli/ab-canary-gate.ts"), "utf8");
+  const liveTsconfig = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "listener/tsconfig.live.json"), "utf8"),
+  ) as { include?: unknown };
 
   assert.doesNotMatch(wrapper, /B_UNIVERSE="\$WT\/listener\/searcher\/pools\/active-pools\.json"/);
   assert.match(wrapper, /prepare_candidate_universes "\$experiment" "\$requested_input_mode"/);
+  assert.match(
+    wrapper,
+    /\(cd "\$WT\/listener" && npm run build:live/,
+    "challenger preflight must typecheck the live entry closure without trusting challenger tests",
+  );
+  assert.deepEqual(liveTsconfig.include, [
+    "src/searcher/main.ts",
+    "src/searcher/build-active-pool-universe.ts",
+  ], "trusted live typecheck must include both entries executed by the A/B wrapper");
   assert.match(wrapper, /POOL_UNIVERSE_FROM_BLOCK="\$from_block"/);
   assert.match(wrapper, /POOL_UNIVERSE_TO_BLOCK="\$to_block"/);
   const universeBuildStart = wrapper.indexOf("timeout 900");
