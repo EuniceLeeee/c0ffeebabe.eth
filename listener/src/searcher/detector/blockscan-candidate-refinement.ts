@@ -143,18 +143,11 @@ export async function refineBlockScanCandidates(
     for (let index = 0; index < pending.length;) {
       const item = pending[index];
       if (stageBudget.blocks(item.opportunity.seedEdges)) {
-        pending.splice(index, 1);
-        failed++;
-        onProbe?.({
-          index: item.index,
-          status: "failed",
-          marginBps: null,
-          attempted: false,
-          failure: probeFailureDiagnostic(
-            "family_circuit_open",
-            routeFamilies(item.opportunity),
-          ),
-        });
+        // A success already in flight for the same dependency set may clear a
+        // circuit opened by earlier siblings. Keep the candidate pending until
+        // every active probe settles; otherwise scheduling order permanently
+        // drops a healthy route even though the final circuit is closed.
+        index++;
         continue;
       }
       const familyIds = routeFamilies(item.opportunity);
@@ -177,6 +170,30 @@ export async function refineBlockScanCandidates(
       index++;
     }
     return null;
+  };
+  const dropBlockedWithoutRecoveryPath = (): number => {
+    let dropped = 0;
+    for (let index = 0; index < pending.length;) {
+      const item = pending[index];
+      if (!stageBudget.blocks(item.opportunity.seedEdges)) {
+        index++;
+        continue;
+      }
+      pending.splice(index, 1);
+      failed++;
+      dropped++;
+      onProbe?.({
+        index: item.index,
+        status: "failed",
+        marginBps: null,
+        attempted: false,
+        failure: probeFailureDiagnostic(
+          "family_circuit_open",
+          routeFamilies(item.opportunity),
+        ),
+      });
+    }
+    return dropped;
   };
   const probeOne = async (
     item: typeof work[number],
@@ -364,7 +381,11 @@ export async function refineBlockScanCandidates(
       if (active.size > 0) {
         await Promise.race(active);
       } else if (pending.length > 0) {
-        throw new Error("block-scan family refinement scheduler deadlocked");
+        // With no active probe left, no future success can close a circuit.
+        // Only now is a blocked pending route definitively unavailable.
+        if (dropBlockedWithoutRecoveryPath() === 0) {
+          throw new Error("block-scan family refinement scheduler deadlocked");
+        }
       }
     }
   } finally {

@@ -163,6 +163,7 @@ badFamilyHighScoreFloodCannotConsumeExpansionCap();
 await failingFamilyCannotConsumeRefinementCap();
 await neverSettlingFamilyUsesLocalBudget();
 await mixedRouteTimeoutIsAttributedToCurrentLeg();
+await transientCircuitWaitsForInflightRecovery();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -556,6 +557,132 @@ async function mixedRouteTimeoutIsAttributedToCurrentLeg(): Promise<void> {
   assert.equal(diagnostics[0]?.failure?.reason, "family_timeout");
   assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "bad-family");
   assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
+}
+
+async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
+  const pools = Array.from(
+    { length: 6 },
+    (_, index) =>
+      `0x${(0x180 + index).toString(16).padStart(40, "0")}`,
+  );
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  const starts = pools.map(() => deferred<void>());
+  const calls = pools.map(() => deferred<void>());
+  const poolIndexes = new Map(
+    pools.map((pool, index) => [pool.toLowerCase(), index]),
+  );
+  const started = new Set<number>();
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      const pool = req.to.toLowerCase();
+      const index = poolIndexes.get(pool);
+      assert.notEqual(index, undefined, `unexpected transient-circuit pool ${pool}`);
+      const selector = req.data.slice(0, 10);
+      if (
+        selector === pair.getFunction("token0")!.selector &&
+        !started.has(index!)
+      ) {
+        started.add(index!);
+        starts[index!].resolve();
+        await calls[index!].promise;
+      }
+      if (selector === pair.getFunction("token0")!.selector) {
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult("getReserves", [1_000_000n, 2_000_000n, 0]);
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected transient-circuit selector ${selector}`);
+    },
+  } as StateBackend;
+  const opportunities = pools.map((pool, index): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: `transient-${index}`,
+    cycleFingerprint: `transient-${index}`,
+    seedEdges: [familyEdge("transient-family", 340 + index, {
+      adapterId: "univ2-swap",
+      target: pool,
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+    })],
+  }));
+  const diagnostics = new Map<number, BlockScanProbeDiagnostic>();
+  const refinement = refineBlockScanCandidates(
+    state,
+    opportunities,
+    opportunities.length,
+    Date.now() + 2_000,
+    pricedTokens,
+    (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
+    3,
+    {
+      familyTimeoutMs: 500,
+      maxConcurrentPerFamily: 3,
+    },
+  );
+  await Promise.all(starts.slice(0, 3).map(({ promise }) => promise));
+  calls[0].reject(new Error("injected sibling failure A"));
+  await starts[3].promise;
+  calls[1].reject(new Error("injected sibling failure B"));
+  await starts[4].promise;
+  calls[2].reject(new Error("injected sibling failure C"));
+  await waitUntil(
+    () => diagnostics.get(2)?.status === "failed",
+    "third sibling failure did not open the transient circuit",
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(
+    started.has(5),
+    false,
+    "the pending target must wait while its family circuit is open",
+  );
+  calls[3].resolve();
+  await starts[5].promise;
+  calls[4].resolve();
+  calls[5].resolve();
+  const result = await refinement;
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.deepEqual(result.openCompositeKeys, []);
+  assert.equal(diagnostics.get(5)?.status, "positive");
+  assert.equal(diagnostics.get(5)?.attempted, true);
+  assert(
+    result.opportunities.some((item) =>
+      item.seedEdges[0]?.target.toLowerCase() === pools[5].toLowerCase()
+    ),
+    "a pending route must run after an in-flight success closes its transient circuit",
+  );
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve(value?: T): void;
+  reject(error: unknown): void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return {
+    promise,
+    resolve: (value?: T) => resolve(value as T),
+    reject,
+  };
+}
+
+async function waitUntil(
+  predicate: () => boolean,
+  message: string,
+): Promise<void> {
+  const deadlineAtMs = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadlineAtMs) throw new Error(message);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
 }
 
 function familyEdge(
