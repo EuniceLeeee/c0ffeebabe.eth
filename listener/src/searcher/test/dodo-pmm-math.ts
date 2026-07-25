@@ -78,6 +78,26 @@ assert(
   "R=ABOVE_ONE sell-quote direction",
 );
 
+for (const K of [0n, DODO_DECIMAL_ONE / 2n, DODO_DECIMAL_ONE]) {
+  const zeroBaseAboveOne: DodoPmmState = Object.freeze({
+    i: DODO_DECIMAL_ONE,
+    K,
+    B: 0n,
+    Q: 200n,
+    B0: 100n,
+    Q0: 100n,
+    R: 1,
+  });
+  assert(
+    amount({
+      state: zeroBaseAboveOne,
+      sellBase: true,
+      payAmount: 100n,
+    }) === 100n,
+    `zero input-side reserve remains executable at crossing K=${K}`,
+  );
+}
+
 const rBelowK0: DodoPmmState = Object.freeze({
   i: 2n * DODO_DECIMAL_ONE,
   K: 0n,

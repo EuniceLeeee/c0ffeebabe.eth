@@ -2,7 +2,14 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { ethers } from "ethers";
 import {
+  applyDodoTransferToInput,
+  decodeDodoBoundedProbeCall,
+  decodeDodoInputSemanticsCall,
+  encodeDodoBoundedProbeCall,
+  type DodoBoundedProbePlan,
+  type DodoInputPosition,
   dodoV2PoolIface,
+  encodeDodoInputSemanticsCall,
   selectDodoBlockScanProbeInput,
 } from "../venues/swaps/dodo-v2.js";
 import {
@@ -14,6 +21,10 @@ const rpcUrl = process.env.DODO_PMM_PARITY_RPC_URL?.trim();
 const universePath = process.env.DODO_PMM_PARITY_UNIVERSE?.trim();
 const sourceBlockRaw = process.env.DODO_PMM_PARITY_SOURCE_BLOCK?.trim();
 const expectedPoolsRaw = process.env.DODO_PMM_PARITY_EXPECT_POOLS?.trim();
+const expectedBlockHashRaw =
+  process.env.DODO_PMM_PARITY_EXPECT_BLOCK_HASH?.trim();
+const expectedUniverseSha256Raw =
+  process.env.DODO_PMM_PARITY_EXPECT_UNIVERSE_SHA256?.trim();
 const quoteActorRaw = process.env.DODO_PMM_PARITY_QUOTE_ACTOR?.trim();
 const expectedExactRaw = process.env.DODO_PMM_PARITY_EXPECT_EXACT?.trim();
 const expectedDelegatedRaw =
@@ -27,6 +38,8 @@ const missingConfiguration = [
   ["DODO_PMM_PARITY_UNIVERSE", universePath],
   ["DODO_PMM_PARITY_SOURCE_BLOCK", sourceBlockRaw],
   ["DODO_PMM_PARITY_EXPECT_POOLS", expectedPoolsRaw],
+  ["DODO_PMM_PARITY_EXPECT_BLOCK_HASH", expectedBlockHashRaw],
+  ["DODO_PMM_PARITY_EXPECT_UNIVERSE_SHA256", expectedUniverseSha256Raw],
   ["DODO_PMM_PARITY_QUOTE_ACTOR", quoteActorRaw],
   ["DODO_PMM_PARITY_EXPECT_EXACT", expectedExactRaw],
   ["DODO_PMM_PARITY_EXPECT_DELEGATED", expectedDelegatedRaw],
@@ -49,6 +62,14 @@ if (missingConfiguration.length > 0) {
 
 const sourceBlock = parsePositiveInteger(sourceBlockRaw!, "source block");
 const expectedPools = parsePositiveInteger(expectedPoolsRaw!, "expected pools");
+const expectedBlockHash = parseHash(
+  expectedBlockHashRaw!,
+  "expected block hash",
+);
+const expectedUniverseSha256 = parseSha256(
+  expectedUniverseSha256Raw!,
+  "expected universe sha256",
+);
 const quoteActor = ethers.getAddress(quoteActorRaw!);
 const expectedExact = parseNonNegativeInteger(
   expectedExactRaw!,
@@ -74,6 +95,11 @@ if (
 }
 const universeBytes = await readFile(universePath!);
 const universeHash = createHash("sha256").update(universeBytes).digest("hex");
+if (universeHash !== expectedUniverseSha256) {
+  throw new Error(
+    `DODO parity universe hash mismatch ${universeHash}/${expectedUniverseSha256}`,
+  );
+}
 const universe = JSON.parse(universeBytes.toString("utf8")) as {
   readonly pools?: readonly {
     readonly address?: string;
@@ -114,6 +140,11 @@ if (
   throw new Error(`DODO parity source block mismatch ${block.number}/${block.hash}`);
 }
 const sourceBlockHash = block.hash;
+if (sourceBlockHash.toLowerCase() !== expectedBlockHash) {
+  throw new Error(
+    `DODO parity block hash mismatch ${sourceBlockHash}/${expectedBlockHash}`,
+  );
+}
 const blockSpecifier = Object.freeze({
   blockHash: sourceBlockHash,
   requireCanonical: true,
@@ -137,8 +168,6 @@ for (const pool of pools) {
         ]),
       },
     },
-    poolCall(pool, "base-input", "getBaseInput"),
-    poolCall(pool, "quote-input", "getQuoteInput"),
   );
 }
 const initial = await rpcEthCallBatch(
@@ -148,14 +177,12 @@ const initial = await rpcEthCallBatch(
 );
 
 const tokenSet = new Map<string, string>();
-const staticByPool = new Map<string, {
+const baseStateByPool = new Map<string, {
   readonly baseToken: string;
   readonly quoteToken: string;
   readonly pmm: DodoPmmState;
   readonly lpFeeRate: bigint;
   readonly mtFeeRate: bigint;
-  readonly baseInput: bigint;
-  readonly quoteInput: bigint;
 }>();
 for (const pool of pools) {
   const baseToken = decodeAddress(
@@ -184,7 +211,7 @@ for (const pool of pools) {
     "getUserFeeRate",
     requireRpc(initial, key(pool, "user-fee-rate")),
   );
-  staticByPool.set(pool.toLowerCase(), Object.freeze({
+  baseStateByPool.set(pool.toLowerCase(), Object.freeze({
     baseToken,
     quoteToken,
     pmm: Object.freeze({
@@ -198,16 +225,46 @@ for (const pool of pools) {
     }),
     lpFeeRate: BigInt(fee[0]),
     mtFeeRate: BigInt(fee[1]),
-    baseInput: decodeUint(
-      dodoV2PoolIface,
-      "getBaseInput",
-      requireRpc(initial, key(pool, "base-input")),
-    ),
-    quoteInput: decodeUint(
-      dodoV2PoolIface,
-      "getQuoteInput",
-      requireRpc(initial, key(pool, "quote-input")),
-    ),
+  }));
+}
+
+const inputSemanticsCalls = pools.map((pool) => {
+  const state = baseStateByPool.get(pool.toLowerCase())!;
+  const call = encodeDodoInputSemanticsCall(
+    pool,
+    state.baseToken,
+    state.quoteToken,
+  );
+  return {
+    key: key(pool, "input-semantics"),
+    request: call,
+  };
+});
+const inputSemanticsResults = await rpcEthCallBatch(
+  rpcUrl!,
+  inputSemanticsCalls,
+  blockSpecifier,
+);
+const staticByPool = new Map<string, {
+  readonly baseToken: string;
+  readonly quoteToken: string;
+  readonly pmm: DodoPmmState;
+  readonly lpFeeRate: bigint;
+  readonly mtFeeRate: bigint;
+  readonly baseInput: DodoInputPosition;
+  readonly quoteInput: DodoInputPosition;
+}>();
+for (const pool of pools) {
+  const base = baseStateByPool.get(pool.toLowerCase())!;
+  const inputs = decodeDodoInputSemanticsCall(
+    requireRpc(inputSemanticsResults, key(pool, "input-semantics")),
+    pool,
+    base.baseToken,
+    base.quoteToken,
+  );
+  staticByPool.set(pool.toLowerCase(), Object.freeze({
+    ...base,
+    ...inputs,
   }));
 }
 
@@ -235,58 +292,60 @@ for (const token of tokenSet.values()) {
   oneToken.set(token.toLowerCase(), 10n ** BigInt(decimals));
 }
 
+type DodoLocalQuote = Extract<
+  ReturnType<typeof quoteDodoPmmExactInput>,
+  { readonly status: "quote" }
+>;
+
 interface LocalDirection {
   readonly classification: "local";
   readonly pool: string;
   readonly sellBase: boolean;
   readonly transferAmount: bigint;
   readonly effectiveInput: bigint;
-  readonly local: ReturnType<typeof quoteDodoPmmExactInput>;
+  readonly local: DodoLocalQuote;
 }
-interface UnavailableDirection {
-  readonly classification: "behavior-unavailable";
+interface BoundedProbeDirection {
+  readonly classification: "bounded-probe";
   readonly pool: string;
   readonly sellBase: boolean;
-  readonly transferAmount: bigint;
-  readonly effectiveInput: bigint;
-  readonly reason: string;
+  readonly plan: DodoBoundedProbePlan;
 }
-type Direction = LocalDirection | UnavailableDirection;
+type Direction = LocalDirection | BoundedProbeDirection;
 const directions: Direction[] = [];
 const queryCalls: RpcEthCall[] = [];
-let behaviorUnavailable = 0;
-const behaviorUnavailableReasons = new Map<string, number>();
 for (const pool of pools) {
   const state = staticByPool.get(pool.toLowerCase())!;
   for (const sellBase of [true, false]) {
     const token = sellBase ? state.baseToken : state.quoteToken;
     const reserve = sellBase ? state.pmm.B : state.pmm.Q;
-    const currentInput = sellBase ? state.baseInput : state.quoteInput;
+    const inputPosition = sellBase ? state.baseInput : state.quoteInput;
     const selected = selectDodoBlockScanProbeInput({
       oneToken: oneToken.get(token.toLowerCase())!,
-      currentInput,
+      currentInput: inputPosition.surplus,
+      inputDeficit: inputPosition.deficit,
       reserve,
       pmm: state.pmm,
       sellBase,
       pool,
+      lpFeeRate: state.lpFeeRate,
+      mtFeeRate: state.mtFeeRate,
     });
     if (typeof selected !== "bigint") {
-      const transferAmount = selectUnavailableTransferAmount({
-        oneToken: oneToken.get(token.toLowerCase())!,
-        reserve,
-      });
       const direction = Object.freeze({
-        classification: "behavior-unavailable" as const,
+        classification: "bounded-probe" as const,
         pool,
         sellBase,
-        transferAmount,
-        effectiveInput: checkedAdd(currentInput, transferAmount),
-        reason: selected.reason,
+        plan: selected,
       });
       directions.push(direction);
     } else {
       const transferAmount = selected;
-      const effectiveInput = checkedAdd(currentInput, transferAmount);
+      const effectiveInput = applyDodoTransferToInput(
+        inputPosition,
+        transferAmount,
+        pool,
+      );
       const local = quoteDodoPmmExactInput({
         state: state.pmm,
         sellBase,
@@ -294,6 +353,12 @@ for (const pool of pools) {
         lpFeeRate: state.lpFeeRate,
         mtFeeRate: state.mtFeeRate,
       });
+      if (local.status !== "quote" || local.amountOut <= 0n) {
+        throw new Error(
+          `DODO parity selector returned a non-local probe for ${pool} ` +
+            `${sellBase ? "sell-base" : "sell-quote"}`,
+        );
+      }
       directions.push(Object.freeze({
         classification: "local" as const,
         pool,
@@ -304,18 +369,31 @@ for (const pool of pools) {
       }));
     }
     const direction = directions[directions.length - 1];
-    const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
-    queryCalls.push({
-      key: queryKey(direction),
-      request: {
-        from: quoteActor,
-        to: pool,
-        data: dodoV2PoolIface.encodeFunctionData(queryFunction, [
-          quoteActor,
-          direction.effectiveInput,
-        ]),
-      },
-    });
+    if (direction.classification === "bounded-probe") {
+      const encoded = encodeDodoBoundedProbeCall(
+        pool,
+        sellBase,
+        direction.plan,
+        quoteActor,
+      );
+      queryCalls.push({
+        key: queryKey(direction),
+        request: encoded,
+      });
+    } else {
+      const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
+      queryCalls.push({
+        key: queryKey(direction),
+        request: {
+          from: quoteActor,
+          to: pool,
+          data: dodoV2PoolIface.encodeFunctionData(queryFunction, [
+            quoteActor,
+            direction.effectiveInput,
+          ]),
+        },
+      });
+    }
   }
 }
 
@@ -327,7 +405,6 @@ const queries = await rpcEthCallBatch(
 );
 let exact = 0;
 let delegated = 0;
-let delegatedReverts = 0;
 const delegatedByReason = new Map<string, number>();
 const failures: string[] = [];
 for (const direction of directions) {
@@ -336,39 +413,28 @@ for (const direction of directions) {
     failures.push(`${queryKey(direction)} missing RPC result`);
     continue;
   }
-  if (direction.classification === "behavior-unavailable") {
-    if (result.ok) {
+  if (direction.classification === "bounded-probe") {
+    delegated++;
+    delegatedByReason.set(
+      direction.plan.reason,
+      (delegatedByReason.get(direction.plan.reason) ?? 0) + 1,
+    );
+    if (!result.ok) {
       failures.push(
-        `${queryKey(direction)} was marked unavailable but query succeeded`,
-      );
-      continue;
-    }
-    if (!isExecutionRevert(result.error)) {
-      failures.push(
-        `${queryKey(direction)} unavailable proof had infrastructure failure: ` +
+        `${queryKey(direction)} bounded probe infrastructure failure: ` +
           result.error,
       );
       continue;
     }
-    behaviorUnavailable++;
-    behaviorUnavailableReasons.set(
-      direction.reason,
-      (behaviorUnavailableReasons.get(direction.reason) ?? 0) + 1,
+    const quote = decodeDodoBoundedProbeCall(
+      result.data,
+      direction.pool,
+      direction.sellBase,
+      direction.plan,
     );
-    continue;
-  }
-  if (direction.local.status === "needs-onchain-quote") {
-    delegated++;
-    delegatedByReason.set(
-      direction.local.reason,
-      (delegatedByReason.get(direction.local.reason) ?? 0) + 1,
-    );
-    if (!result.ok) {
-      if (isExecutionRevert(result.error)) {
-        delegatedReverts++;
-      }
+    if (!quote) {
       failures.push(
-        `${queryKey(direction)} delegated query failed: ${result.error}`,
+        `${queryKey(direction)} bounded probe found no positive quote`,
       );
     }
     continue;
@@ -381,6 +447,10 @@ for (const direction of directions) {
     continue;
   }
   const onchain = decodeFirstWord(result.data);
+  if (onchain <= 0n) {
+    failures.push(`${queryKey(direction)} exact query returned zero`);
+    continue;
+  }
   if (onchain !== direction.local.amountOut) {
     failures.push(
       `${queryKey(direction)} local=${direction.local.amountOut} chain=${onchain}`,
@@ -402,9 +472,10 @@ if (failures.length > 0) {
       failures.slice(0, 20).join("; "),
   );
 }
-if (exact + delegated + behaviorUnavailable !== expectedPools * 2) {
+const behaviorUnavailable = 0;
+if (exact + delegated !== expectedPools * 2) {
   throw new Error(
-    `DODO parity classified ${exact + delegated + behaviorUnavailable}/` +
+    `DODO parity classified ${exact + delegated}/` +
       `${expectedPools * 2} directions`,
   );
 }
@@ -434,11 +505,7 @@ console.log(JSON.stringify({
   delegatedByReason: Object.fromEntries(
     [...delegatedByReason].sort(([a], [b]) => a.localeCompare(b)),
   ),
-  delegatedReverts,
   behaviorUnavailable,
-  behaviorUnavailableReasons: Object.fromEntries(
-    [...behaviorUnavailableReasons].sort(([a], [b]) => a.localeCompare(b)),
-  ),
 }));
 
 interface RpcEthCall {
@@ -460,9 +527,7 @@ function poolCall(
   functionName:
     | "_BASE_TOKEN_"
     | "_QUOTE_TOKEN_"
-    | "getPMMStateForCall"
-    | "getBaseInput"
-    | "getQuoteInput",
+    | "getPMMStateForCall",
 ): RpcEthCall {
   return {
     key: key(pool, field),
@@ -598,14 +663,6 @@ function requireRpc(
   return result.data;
 }
 
-function decodeUint(
-  iface: ethers.Interface,
-  functionName: string,
-  data: string,
-): bigint {
-  return BigInt(iface.decodeFunctionResult(functionName, data)[0]);
-}
-
 function decodeAddress(value: unknown): string {
   return ethers.getAddress(String(value));
 }
@@ -615,34 +672,6 @@ function decodeFirstWord(data: string): bigint {
     throw new Error("DODO parity query returned malformed data");
   }
   return BigInt(`0x${data.slice(2, 66)}`);
-}
-
-function isExecutionRevert(error: string): boolean {
-  if (/timeout|timed out|rate|limit|busy|429|unavailable|connection/i.test(error)) {
-    return false;
-  }
-  return /revert|execution error|invalid opcode|panic|arithmetic/i.test(error);
-}
-
-function checkedAdd(a: bigint, b: bigint): bigint {
-  const result = a + b;
-  if (a < 0n || b < 0n || result >= 1n << 256n) {
-    throw new Error("DODO parity effective input overflow");
-  }
-  return result;
-}
-
-function selectUnavailableTransferAmount(input: {
-  readonly oneToken: bigint;
-  readonly reserve: bigint;
-}): bigint {
-  const reserveProbe = input.reserve > 0n
-    ? (input.reserve >= 100n ? input.reserve / 100n : 1n)
-    : 1n;
-  const amount = input.oneToken > 0n && input.oneToken < reserveProbe
-    ? input.oneToken
-    : reserveProbe;
-  return amount > 0n ? amount : 1n;
 }
 
 function key(pool: string, field: string): string {
@@ -674,6 +703,20 @@ function parseNonNegativeInteger(value: string, label: string): number {
     throw new Error(`invalid DODO parity ${label}: ${value}`);
   }
   return parsed;
+}
+
+function parseHash(value: string, label: string): string {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`invalid DODO parity ${label}: ${value}`);
+  }
+  return value.toLowerCase();
+}
+
+function parseSha256(value: string, label: string): string {
+  if (!/^[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`invalid DODO parity ${label}: ${value}`);
+  }
+  return value.toLowerCase();
 }
 
 function parseOptionalPositiveInteger(

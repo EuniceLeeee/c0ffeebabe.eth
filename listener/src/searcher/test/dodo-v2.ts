@@ -4,6 +4,7 @@ import type {
   StateRead,
   StateReadResult,
 } from "../venues/blockscan-state-capability.js";
+import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { STRICT_IDENTITY_ADMISSION } from "../venues/admission.js";
 import { dodoV2IdentityResolver } from "../venues/identity.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
@@ -36,10 +37,16 @@ const factoryIface = new ethers.Interface([
 interface BackendOptions {
   readonly baseBalance?: bigint;
   readonly quoteBalance?: bigint;
+  readonly baseReserve?: bigint;
+  readonly quoteReserve?: bigint;
   readonly baseInput?: bigint;
   readonly quoteInput?: bigint;
   readonly baseInputReverts?: boolean;
   readonly quoteInputReverts?: boolean;
+  readonly queryReverts?: boolean;
+  readonly exactQueryInput?: bigint;
+  readonly queryAmountOut?: bigint;
+  readonly queryReturnsZero?: boolean;
   readonly mtFeeTotal?: readonly [bigint, bigint];
   readonly pmm?: readonly [bigint, bigint, bigint, bigint, bigint, bigint, number];
 }
@@ -95,10 +102,16 @@ class Backend implements TokenQueryBackend {
         return dodoV2PoolIface.encodeFunctionResult("_QUOTE_TOKEN_", [QUOTE]);
       }
       if (selector === dodoV2PoolIface.getFunction("_BASE_RESERVE_")!.selector) {
-        return dodoV2PoolIface.encodeFunctionResult("_BASE_RESERVE_", [1_000n]);
+        return dodoV2PoolIface.encodeFunctionResult(
+          "_BASE_RESERVE_",
+          [this.options.baseReserve ?? 1_000n],
+        );
       }
       if (selector === dodoV2PoolIface.getFunction("_QUOTE_RESERVE_")!.selector) {
-        return dodoV2PoolIface.encodeFunctionResult("_QUOTE_RESERVE_", [2_000n]);
+        return dodoV2PoolIface.encodeFunctionResult(
+          "_QUOTE_RESERVE_",
+          [this.options.quoteReserve ?? 2_000n],
+        );
       }
       if (selector === dodoV2PoolIface.getFunction("getPMMStateForCall")!.selector) {
         return dodoV2PoolIface.encodeFunctionResult(
@@ -147,22 +160,52 @@ class Backend implements TokenQueryBackend {
       if (selector === dodoV2PoolIface.getFunction("querySellBase")!.selector) {
         const decoded = dodoV2PoolIface.decodeFunctionData("querySellBase", req.data);
         const amount = BigInt(decoded[1]);
+        if (
+          this.options.queryReverts ||
+          (
+            this.options.exactQueryInput !== undefined &&
+            amount !== this.options.exactQueryInput
+          )
+        ) {
+          throw new Error("execution reverted: no positive DODO probe");
+        }
         this.lastQueryActor = ethers.getAddress(String(decoded[0]));
         this.queryCalls++;
         this.lastBaseQueryInput = amount;
         return ethers.AbiCoder.defaultAbiCoder().encode(
           ["uint256", "uint256"],
-          [amount * 2n, 0n],
+          [
+            this.options.queryReturnsZero
+              ? 0n
+              : this.options.queryAmountOut ?? amount * 2n,
+            0n,
+          ],
         );
       }
       if (selector === dodoV2PoolIface.getFunction("querySellQuote")!.selector) {
         const decoded = dodoV2PoolIface.decodeFunctionData("querySellQuote", req.data);
         const amount = BigInt(decoded[1]);
+        if (
+          this.options.queryReverts ||
+          (
+            this.options.exactQueryInput !== undefined &&
+            amount !== this.options.exactQueryInput
+          )
+        ) {
+          throw new Error("execution reverted: no positive DODO probe");
+        }
         this.lastQueryActor = ethers.getAddress(String(decoded[0]));
         this.queryCalls++;
         return ethers.AbiCoder.defaultAbiCoder().encode(
           ["uint256", "uint256", "uint256", "uint256"],
-          [amount / 2n, 0n, 0n, 0n],
+          [
+            this.options.queryReturnsZero
+              ? 0n
+              : this.options.queryAmountOut ?? amount / 2n,
+            0n,
+            0n,
+            0n,
+          ],
         );
       }
     }
@@ -419,6 +462,115 @@ assert(
   dodoV2BlockScanState.deriveMids(ambiguitySnapshot, edges).size === 2,
   "bytecode-dependent PMM branches decode real query fallbacks",
 );
+
+const zeroInputAboveOneBackend = new Backend({
+  baseBalance: 0n,
+  quoteBalance: 200n,
+  baseReserve: 0n,
+  quoteReserve: 200n,
+  exactQueryInput: 100n,
+  queryAmountOut: 100n,
+  pmm: [
+    10n ** 18n,
+    10n ** 18n / 2n,
+    0n,
+    200n,
+    100n,
+    100n,
+    1,
+  ],
+});
+const zeroInputResults = await readState(
+  currentReads,
+  zeroInputAboveOneBackend,
+);
+const zeroInputDependent = dodoV2BlockScanState.buildDependentBlockReads({
+  sourceBlock,
+  sourceBlockHash,
+  schema,
+  edges,
+  completedRound: 0,
+  priorResults: zeroInputResults,
+});
+const zeroInputSnapshot = dodoV2BlockScanState.decodeState(
+  schema,
+  Object.freeze([
+    ...zeroInputResults,
+    ...await readState(zeroInputDependent, zeroInputAboveOneBackend),
+  ]),
+);
+const zeroInputMids = dodoV2BlockScanState.deriveMids(
+  zeroInputSnapshot,
+  edges,
+);
+assert(
+  zeroInputMids.has(blockScanEdgeKey(edges[0])),
+  "zero input-side reserve remains a positively quoted sell-base edge",
+);
+const zeroInputBaseMid = zeroInputMids.get(blockScanEdgeKey(edges[0]))!;
+assert(
+  zeroInputAboveOneBackend.lastBaseQueryInput === 100n,
+  "bounded probe reaches the exact PMM crossing after smaller candidates revert",
+);
+assert(
+  zeroInputBaseMid.reserveA === 1_000_000n &&
+    zeroInputBaseMid.reserveB === 1_000_000n,
+  "bounded probe publishes the crossing transfer/output pair",
+);
+
+for (const failure of [
+  { label: "revert", options: { queryReverts: true } },
+  { label: "zero", options: { queryReturnsZero: true } },
+] as const) {
+  const unresolvedZeroInputBackend = new Backend({
+    ...failure.options,
+    baseBalance: 0n,
+    quoteBalance: 200n,
+    baseReserve: 0n,
+    quoteReserve: 200n,
+    pmm: [
+      10n ** 18n,
+      10n ** 18n / 2n,
+      0n,
+      200n,
+      100n,
+      100n,
+      1,
+    ],
+  });
+  const unresolvedZeroInputResults = await readState(
+    currentReads,
+    unresolvedZeroInputBackend,
+  );
+  const unresolvedZeroInputDependent =
+    dodoV2BlockScanState.buildDependentBlockReads({
+      sourceBlock,
+      sourceBlockHash,
+      schema,
+      edges,
+      completedRound: 0,
+      priorResults: unresolvedZeroInputResults,
+    });
+  let unresolvedProbeRejected = false;
+  try {
+    dodoV2BlockScanState.decodeState(
+      schema,
+      Object.freeze([
+        ...unresolvedZeroInputResults,
+        ...await readState(
+          unresolvedZeroInputDependent,
+          unresolvedZeroInputBackend,
+        ),
+      ]),
+    );
+  } catch (error) {
+    unresolvedProbeRejected = /found no positive quote/.test(String(error));
+  }
+  assert(
+    unresolvedProbeRejected,
+    `${failure.label} bounded probes remain unresolved instead of deleting the edge`,
+  );
+}
 
 const deficitCurrentResults = await readState(currentReads, legacyDeficitBackend);
 const deficitDependent = dodoV2BlockScanState.buildDependentBlockReads({
