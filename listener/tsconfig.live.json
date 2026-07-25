@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "sourceMap": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/searcher/main.ts",
+    "src/searcher/build-active-pool-universe.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
