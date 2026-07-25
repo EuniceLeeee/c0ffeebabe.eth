@@ -1,7 +1,7 @@
 # Codex — 轻量 Adapter Family 自动实例接入与 Block-Scan 状态统一计划
 
-> 状态：`implemented_not_validated`。架构实现已落地；严格 tx02、真实 conversion freshness 与
-> paired-live A/B 证据尚未取得。
+> 状态：`implemented_not_validated`。架构实现与 tx02 自然选择语义诊断已落地；严格 sealed-blind
+> tx02、20 轮性能、真实 conversion freshness 与 paired-live A/B 证据尚未取得。
 >
 > 本文取代同文件上一版 `Universal AdapterFamily Plugin` 设计。Git 历史保留旧稿，但旧稿中的动态 plugin
 > catalog、candidate/active/quarantine、promotion receipt、generated import 和独立插件进程不再是目标架构。
@@ -11,9 +11,9 @@
 > 实施基线。
 >
 > 干净实施历史：T0 `5945146` 冻结 trusted blind-run、stage artifact chain、历史样本 contract 与
-> paired-live primitive；T1 `059f7c0` 给旧 main pipeline 增加 baseline 六阶段 instrumentation；F 是本
-> branch 的单个架构实现 commit。T1 专用 baseline runtime 在 F 树中删除是预期的 producer 翻转，不是能力
-> 回退。
+> paired-live primitive；T1 `059f7c0` 给旧 main pipeline 增加 baseline 六阶段 instrumentation；F
+> 表示本 branch 的架构实现序列，而不是一个 commit。T1 专用 baseline runtime 在 F 树中删除是预期的
+> producer 翻转，不是能力回退。
 
 ## 0. 一句话目标
 
@@ -1094,7 +1094,7 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 | T1 baseline instrumentation | `059f7c0`；build、baseline runtime、blind contract、production harness 与 scanner 回归已通过 |
 | T1/F blind evidence vocabulary | F 只在验收输出层投影 T1 冻结的 edge/family/state/graph 口径；production 继续使用 richer family/instance identity；跨版本冻结测试通过 |
 | F build/focused conformance | 本地 build 与 focused suite 已通过；详见下方记录 |
-| tx02 六步语义与 p95 `<10s` | 冻结 full-graph diagnostic 已到 final sim 且 EV 正确 reject；该次仍用了 forced probe，只是定位证据，不是 strict natural-selection pass；20 轮 p95 未跑 |
+| tx02 六步语义与 p95 `<10s` | full-graph natural diagnostic 六步已到 EV `allow`，`forced_selection_count=0`；但 producer 进程仍可见 comparator metadata，故不是 sealed-blind pass；20 轮 p95 未跑 |
 | conversion freshness | harness 已实现；真实冻结样本证据缺失 |
 | V2/V3 parity | local-reth + frozen production universe 连续块 artifact 已通过；forced-reorg/invalidation 由同一 artifact 绑定的 synthetic harness 覆盖 |
 | paired live | trusted primitive/unit test 已实现；真实 A/B window 未跑 |
@@ -1407,39 +1407,88 @@ overall=implemented_not_validated
 
 保留真实阶段分解后再讨论，不制造假通过。
 
-当前冻结 full-graph diagnostic 证明四腿
-`USDT -> PAXG -> GOLDx -> USDx -> USDT` 可以从 production universe 建图、枚举、精确报价、编译并
-在 clean fork 成功执行。该次证据不能升级为 strict pass，因为 diagnostic harness 将自然 refine rank
-`719` 的目标作为 forced probe 送入 solver；这违反本节 `forced_selection_count=0`。它只能证明
-downstream capability，不能证明 production 自然选择。
+早期定位运行证明四腿
+`USDT -> PAXG -> GOLDx -> USDx -> USDT` 可以从 production universe 建图、精确报价、编译并在 clean
+fork 成功执行，但当时目标的 natural refined rank 是 `719`，只能靠 forced probe 进入 solver。随后修复
+的不是 tx、GOLDx 或某个 route 的特判，而是候选公平性：旧调度按 family 的 `maxServed` 优先，稀有 family
+会被同一路线中的高频 Uni/Curve family 拖累；新调度按
+`minServed -> maxServed -> totalServed -> original economic rank` 选择。每条依赖仍计数，exact family
+组合只维持组内经济顺序，不拥有独立 quota，避免组合 sybil。
 
-已取得的定位证据：
+在 `562e7563da41cb1df1797d9ccdb44003d655670c` 上重新执行完整 production universe 后，目标不再强制
+插入：
 
 ```text
-tested_runtime=bbaa9dad8777345e9eea5009b84af86ebbe46499
-universe_sha256=80c4b8d940d1f029ada3abfdd1825553a88301458cc2599b1337de2b65eba13b
 graph_edges=22655
-edge_set_sha256=e0e5c79d86c257777fcbaabc7cfc03f8c16a2cb4f5fe46751251af49bf47d00f
-coarse_rank=1174/1875
-refined_rank=719
+step_1_graph=pass
+step_2_enumeration=pass
+coarse_rank=57/512
+forced_selection_count=0
+step_3_exact_quote_refine=pass
+refined_rank=46/100
 probe_margin_bps=156.46869459736865
-selection_mode=forced_probe
+step_4_plan=pass
+selected_by_top_k=true
 plan_count=1
-final_sim=success
+step_5_final_sim=pass
 profit_token=USDT
 net_profit_raw=499624
 gas_used=1664930
 calldata_sha256=13540775224ff4ce9c984636354d25eab1e8cad323d008386dc76dbe0857c252
-ev_decision=stale_pre_fix_reject
-ev_reason=obsolete_static_valuation_and_fee_buffer
-state_wall_ms_single_run=9910
-log_sha256=17361a04df2c9d8853f3f99607ec9e4ab5dcf9aa28608673bbf9350981364ffb
-output_sha256=ba0e742d8c8041b826f0fbd13569e4fc851eca14b8111d82121bdf4f6b091e24
-strict_tx02_semantic_evidence=missing
-tx02_timing_evidence=missing
-blocker=production_natural_selection_and_20_run_denominator_not_yet_run
+step_6_ev=pass
+ev_decision=allow
+retained_net_ev_wei=45110072993587
+ring_set_sha256=78efd4271534d70f08dba1525026bfc9837d3940851df09f9572fa94b313a692
+log_sha256=1c1b378b71f9050921f6eab4aa925feb1f41818a9708f9738ab07ca35636b26e
+output_sha256=0ad942f7989302e3760c144ec404a146467573008ae4b135abfcdd43a4728bd5
+elapsed_seconds=286.61
+semantic_status=pass_natural_diagnostic
+strict_blind_status=missing
+timing_p95_status=missing
+paired_live_status=missing
 overall=implemented_not_validated
 ```
+
+这次 `286.61s` 是诊断 harness 顺序 solve 100 个候选的总耗时，不是 production runtime：生产
+`blockscan-runtime-loop` 使用 4 个 solver worker 与 deadline，`blockscan-hunt` 则为取证顺序 solve。
+因此这个数字既不能判 production 性能通过，也不能判其失败。该运行的 target metadata 只用于诊断
+comparator，没有参与 graph、候选排序或 top-K 选择；但 metadata 仍存在于同一 producer 进程，所以证据
+只能记为 `pass_natural_diagnostic`，不能冒充本节要求的 sealed-blind pass。
+
+最终实现 SHA `885ecc14f979c03ce9d8d734f9969638430b68e3` 又执行了一次无目标 metadata 的
+state/enumeration 运行。17 个 pricing families 全部有正覆盖、`unresolved=0`，候选
+`ring_set_sha256` 与上面成功运行完全相同，证明 canonical-fence 优化没有改变自然选择集合。该旧
+diagnostic 输出里的 Step 2 `fail` 只是因为 comparator 没收到 expected route、无法命名目标，并不是
+生产枚举回归；在 target-free census/sealed comparator 落地前仍不得把这次 hash 对账升级为 strict pass。
+
+```text
+tested_runtime=885ecc14f979c03ce9d8d734f9969638430b68e3
+state_wall_ms_single_run=9667
+pricing_families_positive=17
+pricing_families_unresolved=0
+ring_set_sha256=78efd4271534d70f08dba1525026bfc9837d3940851df09f9572fa94b313a692
+log_sha256=2668411d55cf3399a835772cdbb40f75dfe7634d7366f05c751cb2e8c4b4aef7
+strict_tx02_semantic_evidence=missing
+tx02_timing_evidence=missing
+blocker=sealed_blind_run_and_20_run_fixed_denominator_not_yet_run
+overall=implemented_not_validated
+```
+
+同一冻结图上的 state 参数扫描没有支持“加并发就会更快”：
+
+| RPC batch / concurrency | state wall |
+|---|---:|
+| `500 / 4` | `9652ms` |
+| `128 / 4` | `9612ms` |
+| `128 / 6` | `10027ms` |
+| `128 / 8` | `10378ms` |
+
+节点只有 4 个物理核且 reth 已承载其他工作；6/8 并发反而退化，因此 production 保持 `500/4`。
+`885ecc1` 合并 per-family pricing canonical fences 后，protocol lane 约由 `6389ms` 降到 `4303ms`，
+swap lane 约由 `8019ms` 降到 `7917ms`；总 state wall 仍在 10 秒边缘并有方差。优化保留每个 state call
+的 EIP-1898 `blockHash + requireCanonical` 与 publish-time canonical CAS；funding 前后 fence 不变，
+static schema 也只在 CAS 和 generation fence 成功后提交。没有 20 轮固定 denominator 前，不能宣称
+p95 `<10s`。
 
 真实 landed tx 与上述 final sim 的执行偏差已单独核对：solver 的 start amount 比 landed tx 高
 `0.343543%`，最终毛利润只多 `1` 个 USDT 最小单位，sim gas 比 landed gas 少 `0.131244%`。因此 Step
@@ -1477,8 +1526,9 @@ ev_decision=allow
 ```
 
 这只修正经济量纲与目标块一致性，不放宽 graph、rank、quote、sim 或 standing-position 门。当前
-strict tx02 仍因 production natural selection 未进入 512 个 coarse candidates 而不完整；不能用上述
-独立 EV flip 冒充六步整体通过。
+production natural selection 已进入 512 个 coarse candidates；strict tx02 仍缺的是 sealed-blind
+producer/comparator 证据和 20 轮性能 denominator，不能用一次 natural diagnostic 与独立 EV flip
+冒充整体完成。
 
 ### 11.5 Conversion freshness
 
@@ -1655,8 +1705,9 @@ P1 的修复严格限制在 blind evidence compatibility projection：
   `non_positive_solved_quote`、`solver_error` 语义。
 
 这些修复已经通过 build、blind contract/freezer/production-harness/challenger-runtime 和
-`searcher:adapter-family-blind-t1-compatibility`。没有进行第四轮对抗审计。P2 不制造 pass，保留为非阻断
-诊断 follow-up；严格 tx02 和 paired-live 仍保持 `missing`，不能由上述单元/合约测试替代。
+`searcher:adapter-family-blind-t1-compatibility`。后续候选公平性与 canonical-fence 两轮 focused
+对抗审查均为 `P0=0/P1=0`；这不是一轮新的全系统完成审计。P2 不制造 pass，保留为非阻断诊断
+follow-up；严格 sealed-blind tx02 和 paired-live 仍保持 `missing`，不能由上述单元/合约测试替代。
 
 ## 14. 完成定义
 
@@ -1671,7 +1722,7 @@ P1 的修复严格限制在 blind evidence compatibility projection：
 7. Curve/protocol mids 不再逐 edge 串行读取；
 8. 单 family failure 不回滚 healthy family，且全局正确标记 degraded；
 9. 旧/新 reader、quote、plan、final sim 等价；
-10. tx02 六步全部自然执行且 p95 `<10s`；
+10. tx02 在 sealed-blind producer/comparator 中六步全部自然执行且 p95 `<10s`；
 11. conversion freshness 证据成立；
 12. paired live A/B 满足 exact semantic contract 与至少 95% 覆盖/吞吐门；
 13. 无 hardcode、减图、目标预热、强制候选或策略放宽；
@@ -1683,7 +1734,9 @@ P1 的修复严格限制在 blind evidence compatibility projection：
 
 ```text
 architecture_implementation=implemented
-strict_tx02=missing
+tx02_natural_diagnostic=pass
+strict_tx02_sealed_blind=missing
+tx02_timing_p95=missing
 conversion_freshness=missing
 v2_v3_live_parity=pass
 paired_live=missing
