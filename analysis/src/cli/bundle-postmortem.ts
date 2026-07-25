@@ -1577,14 +1577,32 @@ export async function resolveLandedTouchedVenues(
 
 async function runtimeVenueByFactory(factory: string): Promise<{
   venue: string;
-  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3" | "dodo-v2";
+  runtimeAdapter?: "univ2" | "univ3";
 } | null> {
   try {
     // Dynamic on purpose: Hermes lifecycle tests replay old repository commits
     // that predate the production venue registry. Current checkouts reuse the
     // production fact source; old checkouts degrade honestly to unknown.
-    const registry = await import("../../../listener/src/searcher/venues/capability.js");
-    return registry.findVenueByFactory(factory);
+    const identityCatalog = await import(
+      "../../../listener/src/searcher/venues/capability.js"
+    );
+    const production = await import(
+      "../../../listener/src/searcher/venues/production-registry.js"
+    );
+    const identity = identityCatalog.findVenueByFactory(factory);
+    if (!identity) return null;
+    if (identity.compatibility === "incompatible") {
+      return { venue: identity.venue };
+    }
+    const sources = identityCatalog.factoryDiscoverySourcesForPoolAdapters(
+      production.PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
+    );
+    return {
+      venue: identity.venue,
+      runtimeAdapter: sources.includes(identity)
+        ? identity.poolAdapter
+        : undefined,
+    };
   } catch {
     return null;
   }

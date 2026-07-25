@@ -32,6 +32,10 @@ import {
   V2_LINEAGES,
   type V2LineageDescriptor,
 } from "./v2-lineage.js";
+import {
+  VENUE_IDENTITY_CATALOG,
+  type VenueIdentityCatalogEntry,
+} from "./capability.js";
 export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
     univ2StandardAdapter,
     univ3StandardAdapter,
@@ -152,6 +156,9 @@ export function productionPoolUniverseSourceFingerprints():
       .map((descriptor) => descriptor.sourceFingerprint),
     identityPolicies: PRODUCTION_IDENTITY_RESOLVERS.list(),
     admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    identityCatalog: VENUE_IDENTITY_CATALOG,
+    matureDexUniversePoolAdapters:
+      PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
     v2Lineages: V2_LINEAGES,
   });
 }
@@ -160,6 +167,8 @@ export function poolUniverseSourceFingerprints(input: {
   readonly landedSourceFingerprints: readonly string[];
   readonly identityPolicies: readonly IdentityResolverDescriptor[];
   readonly admissionPolicy: IdentityAdmissionPolicy;
+  readonly identityCatalog: readonly VenueIdentityCatalogEntry[];
+  readonly matureDexUniversePoolAdapters: readonly string[];
   readonly v2Lineages: readonly V2LineageDescriptor[];
 }): readonly string[] {
   const fingerprints = [
@@ -175,16 +184,36 @@ export function poolUniverseSourceFingerprints(input: {
         .sort((a, b) => a.poolAdapter.localeCompare(b.poolAdapter))
         .map(identityPolicyFingerprintInput),
     )}`,
+    `identity-catalog:${fingerprintJson(
+      input.identityCatalog.map((entry) => ({
+        venue: entry.venue,
+        compatibility: entry.compatibility,
+        poolAdapter:
+          entry.compatibility === "standard" ? entry.poolAdapter : null,
+        discovery: entry.discovery.mode === "factory"
+          ? {
+              mode: "factory",
+              factories: entry.discovery.factories
+                .map((address) => address.toLowerCase())
+                .sort(),
+            }
+          : {
+              mode: "pool-registry",
+              registries: entry.discovery.registries
+                .map((address) => address.toLowerCase())
+                .sort(),
+            },
+      })),
+    )}`,
+    `mature-dex-pool-adapters:${fingerprintJson(
+      [...new Set(input.matureDexUniversePoolAdapters)].sort(),
+    )}`,
     `v2-lineages:${fingerprintJson(
       [...input.v2Lineages]
         .map((lineage) => ({
           venue: lineage.venue,
           factory: lineage.factory.toLowerCase(),
           executionFamily: lineage.executionFamily,
-          runtimeAdapter: lineage.runtimeAdapter,
-          discoverable: lineage.discoverable,
-          quotable: lineage.quotable,
-          buildable: lineage.buildable,
           measuredFeeRule: lineage.measuredFeeRule === null
             ? null
             : {

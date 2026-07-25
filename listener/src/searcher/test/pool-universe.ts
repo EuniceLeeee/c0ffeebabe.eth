@@ -14,6 +14,7 @@ import type { PoolEntry } from "../planner/token-graph.js";
 import {
   poolUniverseSourceFingerprints,
 } from "../venues/production-registry.js";
+import { VENUE_IDENTITY_CATALOG } from "../venues/capability.js";
 import type { IdentityResolverDescriptor } from "../venues/identity.js";
 import type { V2LineageDescriptor } from "../venues/v2-lineage.js";
 
@@ -181,17 +182,18 @@ async function main(): Promise<void> {
       venue: "v2-factory:0x0000000000000000000000000000000000000123",
       factory: poolAddress(0x123),
       executionFamily: "univ2-standard",
-      runtimeAdapter: "univ2",
-      discoverable: true,
-      quotable: true,
-      buildable: true,
       measuredFeeRule: {
         kind: "constant-bps",
         feeBps: 30n,
         evidence: "fixture",
       },
     };
-    const provenance = (feeBps: bigint, unknownFactory: "probe" | "reject") =>
+    const provenance = (
+      feeBps: bigint,
+      unknownFactory: "probe" | "reject",
+      identityCatalog = VENUE_IDENTITY_CATALOG,
+      matureDexUniversePoolAdapters: readonly string[] = ["univ2", "univ3"],
+    ) =>
       poolUniverseSourceFingerprints({
         landedSourceFingerprints: ["landed-a"],
         identityPolicies,
@@ -199,6 +201,8 @@ async function main(): Promise<void> {
           unknownFactory,
           unregisteredCurveUnderlying: "probe",
         },
+        identityCatalog,
+        matureDexUniversePoolAdapters,
         v2Lineages: [{
           ...lineage,
           measuredFeeRule: { ...lineage.measuredFeeRule!, feeBps },
@@ -213,6 +217,21 @@ async function main(): Promise<void> {
       provenance(30n, "probe").join(",") !==
         provenance(30n, "reject").join(","),
       "identity admission changes must invalidate universe provenance",
+    );
+    assert(
+      provenance(30n, "probe").join(",") !==
+        provenance(30n, "probe", VENUE_IDENTITY_CATALOG.slice(1)).join(","),
+      "identity-root changes must invalidate universe provenance",
+    );
+    assert(
+      provenance(30n, "probe").join(",") !==
+        provenance(
+          30n,
+          "probe",
+          VENUE_IDENTITY_CATALOG,
+          ["univ3"],
+        ).join(","),
+      "mature DEX registry projection changes must invalidate universe provenance",
     );
     console.log("[pool-universe] discovery semantics fingerprint: PASS");
 

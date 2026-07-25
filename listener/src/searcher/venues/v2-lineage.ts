@@ -21,10 +21,6 @@ export interface V2LineageDescriptor {
   readonly venue: V2LineageVenueId;
   readonly factory: string;
   readonly executionFamily: "univ2-standard";
-  readonly runtimeAdapter: "univ2";
-  readonly discoverable: boolean;
-  readonly quotable: boolean;
-  readonly buildable: boolean;
   /** Absent means the factory is not fee-verified and cannot be priced. */
   readonly measuredFeeRule: V2MeasuredFeeRule | null;
 }
@@ -57,6 +53,11 @@ export interface V2LineageSnapshotRecord {
   readonly venue: V2LineageVenueId;
   readonly factory: string;
   readonly executionFamily: "univ2-standard";
+  /**
+   * Legacy wire fields retained so a freshly generated snapshot remains
+   * readable by the previous production binary during rollback. They are
+   * validated for shape but never participate in current runtime support.
+   */
   readonly runtimeAdapter: "univ2";
   readonly discoverable: boolean;
   readonly quotable: boolean;
@@ -142,17 +143,18 @@ export function parseV2LineageSnapshot(
     const discoverable = booleanField(raw.discoverable, `${field}.discoverable`);
     const quotable = booleanField(raw.quotable, `${field}.quotable`);
     const buildable = booleanField(raw.buildable, `${field}.buildable`);
-    if (discoverable && measuredFeeRule === null) {
-      throw new Error(`${field} cannot be discoverable without a measured fee rule`);
+    if (discoverable !== (measuredFeeRule !== null)) {
+      throw new Error(
+        `${field}.discoverable must equal whether measuredFeeRule is present`,
+      );
+    }
+    if (!quotable || !buildable) {
+      throw new Error(`${field}.quotable and buildable must both be true`);
     }
     return Object.freeze({
       venue: raw.venue as V2LineageVenueId,
       factory,
       executionFamily: "univ2-standard",
-      runtimeAdapter: "univ2",
-      discoverable,
-      quotable,
-      buildable,
       measuredFeeRule,
     });
   });
@@ -224,10 +226,6 @@ function trustedLineage(
     venue,
     factory: ethers.getAddress(factory),
     executionFamily: "univ2-standard",
-    runtimeAdapter: "univ2",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
     measuredFeeRule: Object.freeze({ kind: "constant-bps", feeBps, evidence }),
   });
 }

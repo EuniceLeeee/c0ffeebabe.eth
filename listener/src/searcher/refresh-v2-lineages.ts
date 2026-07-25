@@ -99,6 +99,7 @@ export function buildV2LineageSnapshot(
     const record = toSnapshotRecord(descriptor);
     byFactory.set(descriptor.factory.toLowerCase(), {
       ...record,
+      // Legacy rollback field mirrors the cleared fee below.
       discoverable: false,
       measuredFeeRule: null,
     });
@@ -153,8 +154,12 @@ async function refresh(input: {
   const trustedNamedFactories = new Set(TRUSTED_V2_LINEAGES.map((item) => item.factory.toLowerCase()));
   const eligible = probed.filter((item) => {
     if (trustedNamedFactories.has(item.factory.toLowerCase())) return false;
-    const capability = findVenueByFactory(item.factory);
-    return capability === null || capability.runtimeAdapter === "univ2";
+    const identity = findVenueByFactory(item.factory);
+    return identity === null ||
+      (
+        identity.compatibility === "standard" &&
+        identity.poolAdapter === "univ2"
+      );
   });
   const verified = consolidateVerifiedLineages(matchTrustedFingerprints(eligible, trusted));
   const snapshot = buildV2LineageSnapshot(V2_LINEAGES, verified, toBlock);
@@ -294,14 +299,16 @@ async function call(
 }
 
 function toSnapshotRecord(descriptor: V2LineageDescriptor): V2LineageSnapshotRecord {
+  const measured = descriptor.measuredFeeRule !== null;
   return {
     venue: descriptor.venue,
     factory: descriptor.factory,
     executionFamily: descriptor.executionFamily,
-    runtimeAdapter: descriptor.runtimeAdapter,
-    discoverable: descriptor.discoverable,
-    quotable: descriptor.quotable,
-    buildable: descriptor.buildable,
+    // Rollback compatibility only; current support is registry-derived.
+    runtimeAdapter: "univ2",
+    discoverable: measured,
+    quotable: true,
+    buildable: true,
     measuredFeeRule: descriptor.measuredFeeRule
       ? {
           kind: descriptor.measuredFeeRule.kind,

@@ -49,7 +49,7 @@ const fluidDexLandedEvents = defineSwapLandedEvents({
     topic: FLUID_DEX_SWAP_TOPIC,
     emitter: ADDRESS_LANDED_EVENT_EMITTER,
     materialization: "family",
-    discovery: { poolAdapter: "fluid-dex", label: "fluid-dex" },
+    discovery: { poolAdapter: "fluid-dex", label: "fluid" },
     invalidatesWarmState: true,
   }],
   mutations: [],

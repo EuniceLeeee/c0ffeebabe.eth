@@ -70,6 +70,7 @@ function testSnapshotLifecycle(): void {
       venue: canonical.venue,
       factory: "0x000000000000000000000000000000000000dEaD",
       executionFamily: "univ2-standard",
+      // Legacy rollback wire fields are not runtime support declarations.
       runtimeAdapter: "univ2",
       discoverable: true,
       quotable: true,
@@ -88,17 +89,68 @@ function testSnapshotLifecycle(): void {
   assert(measuredAfter?.venue === unmeasured.venue, "automatic proof must preserve a named lineage label");
   assert(measuredAfter?.measuredFeeRule?.feeBps === 30, "automatic proof must fill an unmeasured named lineage");
 
-  const unsafe = {
-    ...round1,
-    lineages: [{ ...round1.lineages[0], discoverable: true, measuredFeeRule: null }],
-  };
-  assertThrows(() => parseV2LineageSnapshot(unsafe), "discoverable lineage without fee must fail closed");
+  const measuredRecord = round1.lineages.find(
+    (item) => item.measuredFeeRule !== null,
+  )!;
+  const unmeasuredRecord = round1.lineages.find(
+    (item) => item.measuredFeeRule === null,
+  )!;
+  assertThrows(
+    () => parseV2LineageSnapshot({
+      ...round1,
+      lineages: [{ ...unmeasuredRecord, discoverable: true }],
+    }),
+    "discoverable=true without fee evidence must fail closed",
+  );
+  assertThrows(
+    () => parseV2LineageSnapshot({
+      ...round1,
+      lineages: [{ ...measuredRecord, discoverable: false }],
+    }),
+    "measured fee with discoverable=false must reject noncanonical legacy flags",
+  );
+  assertThrows(
+    () => parseV2LineageSnapshot({
+      ...round1,
+      lineages: [{ ...measuredRecord, quotable: false }],
+    }),
+    "quotable=false must reject noncanonical legacy flags",
+  );
+  assertThrows(
+    () => parseV2LineageSnapshot({
+      ...round1,
+      lineages: [{ ...measuredRecord, buildable: false }],
+    }),
+    "buildable=false must reject noncanonical legacy flags",
+  );
+  assert(
+    round1.lineages.every((item) =>
+      item.runtimeAdapter === "univ2" &&
+      item.discoverable === (item.measuredFeeRule !== null) &&
+      item.quotable &&
+      item.buildable
+    ),
+    "generated snapshots must retain the prior binary's rollback wire fields",
+  );
   console.log("[v2-lineage-refresh] snapshot expiry/immutability: PASS");
 }
 
 function testExplicitUnsupportedWins(): void {
   const panoramaFactory = "0x82Eeb5A22A25310ac15352197d92d6C17A49602e";
-  const snapshot = buildV2LineageSnapshot(V2_LINEAGES, [verified({ factory: panoramaFactory })], 1);
+  const smardexFactories = [
+    "0x7753F36E711B66a0350a753aba9F5651BAE76A1D",
+    "0xB878DC600550367e14220d4916Ff678fB284214F",
+  ];
+  const snapshot = buildV2LineageSnapshot(
+    V2_LINEAGES,
+    [panoramaFactory, ...smardexFactories].map((candidateFactory, index) =>
+      verified({
+        factory: candidateFactory,
+        pool: `0x${(0x3000 + index).toString(16).padStart(40, "0")}`,
+      })
+    ),
+    1,
+  );
   const dir = mkdtempSync(join(tmpdir(), "v2-lineage-test-"));
   const path = join(dir, "snapshot.json");
   writeFileSync(path, JSON.stringify(snapshot));
@@ -109,8 +161,14 @@ function testExplicitUnsupportedWins(): void {
       "--input-type=module",
       "-e",
       `const {findVenueByFactory}=await import('./src/searcher/venues/capability.ts');` +
-        `const c=findVenueByFactory('${panoramaFactory}');` +
-        `if(c?.venue!=='panoramaswap-v1'||c.discoverable||c.quotable||c.buildable)process.exit(1);`,
+        `const cases=${JSON.stringify([
+          [panoramaFactory, "panoramaswap-v1"],
+          ...smardexFactories.map((factory) => [factory, "smardex"]),
+        ])};` +
+        `for(const [factory,venue] of cases){` +
+          `const c=findVenueByFactory(factory);` +
+          `if(c?.venue!==venue||c.compatibility!=='incompatible')process.exit(1);` +
+        `}`,
     ], {
       cwd: process.cwd(),
       env: { ...process.env, SEARCHER_V2_LINEAGES_PATH: path },
@@ -120,7 +178,7 @@ function testExplicitUnsupportedWins(): void {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-  console.log("[v2-lineage-refresh] explicit unsupported factory precedence: PASS");
+  console.log("[v2-lineage-refresh] Panorama/Smardex negative factory precedence: PASS");
 }
 
 function assertThrows(fn: () => unknown, message: string): void {

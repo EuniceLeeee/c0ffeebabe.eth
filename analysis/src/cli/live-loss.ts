@@ -21,18 +21,29 @@ import {
 } from "./bundle-postmortem.js";
 import {
   findVenueByFactory,
-  findVenueBySeed,
-  findVenueCapability,
   type VenueId,
 } from "../../../listener/src/searcher/venues/capability.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../../../listener/src/searcher/venues/production-registry.js";
+import type { PoolEntry } from "../../../listener/src/searcher/planner/token-graph.js";
+import { findV2LineageByFactory } from "../../../listener/src/searcher/venues/v2-lineage.js";
+import type { AdapterFamilyRegistry } from "../../../listener/src/searcher/venues/adapter-family-registry.js";
+import type {
+  ProtocolConversionAdapter,
+  RouteLegAdapter,
+  SwapAdapter,
+} from "../../../listener/src/searcher/venues/route-leg-adapter.js";
+import {
+  observedLandedPoolIdentity,
+  type LandedEventRegistry,
+} from "../../../listener/src/searcher/venues/landed-event-registry.js";
+import { isKnownVenueId } from "../../../listener/src/searcher/venues/registry-ids.js";
 
-// Declared before the top-level `await main()` (below) so they are initialized when the
-// CLI entrypoint runs — a const in the temporal dead zone would ReferenceError at runtime.
+// Module state is initialized before the executable guard at the end of this
+// file. Keep the guard last so every main()-reachable const is outside the TDZ.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_POOLS_DIR = resolve(REPO_ROOT, "listener/searcher/pools");
 const DEFAULT_BLOCKSCAN_LOG = "/var/log/mev-live.log";
 const UNIV4_POOL_MANAGER = lower(ADDR.UNIV4_POOL_MANAGER);
-const UNIV4_SWAP_TOPIC = lower(TOPICS.univ4Swap);
 
 let args: Record<string, string | boolean> = {};
 let eventsPath = "";
@@ -110,10 +121,6 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-// LP action topic sets — MUST be declared before the top-level `await main()` entrypoint below:
-// top-level await pauses module evaluation, so any const declared after it stays in the TDZ when the
-// watch path (classifyLpAction) runs inside main() → ReferenceError. (Regression from 6ff3d4d, which
-// placed these after the entrypoint; keep every main()-reachable const above the guard.)
 const LP_MINT_TOPICS = new Set([
   lower(TOPICS.univ2Mint),
   lower(TOPICS.univ3Mint),
@@ -123,10 +130,6 @@ const LP_BURN_TOPICS = new Set([
   lower(TOPICS.univ3Burn),
 ]);
 const LP_ACTION_TOPICS = new Set([...LP_MINT_TOPICS, ...LP_BURN_TOPICS]);
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
-}
 
 export type WatchPrimaryReason =
   | "not_seen"
@@ -217,6 +220,7 @@ export interface VenueGap {
   pool: string;
   venue: VenueId | "unknown";
   factory: string | null;
+  pool_adapter: PoolEntry["adapter"] | null;
   gap_type: VenueGapType;
   pool_in_routing_graph: boolean | null;
   discoverable: boolean | null;
@@ -229,6 +233,7 @@ export interface VenueIdentityFixture {
   address: string;
   venue: VenueId | "unknown";
   factory?: string | null;
+  poolAdapter?: PoolEntry["adapter"];
 }
 
 export interface SeenSet {
@@ -241,6 +246,7 @@ export interface PoolIdentity {
   pool: string;
   venue?: VenueId | "unknown";
   factory?: string | null;
+  poolAdapter?: PoolEntry["adapter"];
 }
 
 export interface NonceCheckResult {
@@ -808,9 +814,15 @@ export function classifyVenueGapsFromFixtures(
   fixtures: VenueIdentityFixture[],
   graphPools: Set<string> | null,
   v4PoolIds: Set<string> = new Set(),
+  registry: AdapterFamilyRegistry = PRODUCTION_ADAPTER_FAMILIES,
 ): VenueGap[] {
   return fixtures.map((fixture) =>
-    classifyResolvedVenue(fixture.address, fixture.venue, fixture.factory ?? null, graphPools, v4PoolIds),
+    classifyResolvedVenue(
+      resolveFixtureIdentity(fixture, registry),
+      graphPools,
+      v4PoolIds,
+      registry,
+    ),
   );
 }
 
@@ -818,9 +830,26 @@ export function classifyVenueGapsFromLogFixtures(
   logs: any[],
   graphPools: Set<string> | null,
   v4PoolIds: Set<string> = new Set(),
+  registry: AdapterFamilyRegistry = PRODUCTION_ADAPTER_FAMILIES,
+  landedEvents: LandedEventRegistry =
+    PRODUCTION_ADAPTER_FAMILIES.landedEvents(),
 ): VenueGap[] {
-  return extractPoolIdentities({ logs }).map((identity) =>
-    classifyResolvedVenue(identity.pool, identity.venue ?? "unknown", identity.factory ?? null, graphPools, v4PoolIds),
+  return extractPoolIdentities({ logs }, landedEvents).map((identity) =>
+    classifyResolvedVenue(
+      // This pure helper has no RPC backend. A V2/V3 Swap descriptor is only
+      // an execution-shape hint, so it must stay unsupported until a fixture
+      // supplies factory evidence or the async CLI proves factory/fee identity.
+      identity.poolAdapter === "univ2" || identity.poolAdapter === "univ3"
+        ? venueOnlyIdentity(
+            identity.pool,
+            identity.venue ?? "unknown",
+            identity.factory ?? null,
+          )
+        : resolveKnownPoolIdentity(identity),
+      graphPools,
+      v4PoolIds,
+      registry,
+    ),
   );
 }
 
@@ -830,30 +859,79 @@ async function classifyVenueGapsForIdentities(
   v4PoolIds: Set<string>,
 ): Promise<VenueGap[]> {
   return mapLimit(identities, 8, async (identity) => {
-    if (identity.venue) {
-      return classifyResolvedVenue(identity.pool, identity.venue, identity.factory ?? null, graphPools, v4PoolIds);
+    // A V2/V3 Swap topic identifies a candidate execution shape, not the
+    // venue. Preserve the descriptor's adapter hint for extraction, but make
+    // the async CLI path prove factory identity (and V2 fee evidence) before
+    // reporting production support. Family-specific events such as Fluid use
+    // their unique registered descriptor directly.
+    const factoryBackedEventHint =
+      identity.poolAdapter === "univ2" ||
+      identity.poolAdapter === "univ3";
+    if (identity.poolAdapter && !factoryBackedEventHint) {
+      return classifyResolvedVenue(
+        resolveKnownPoolIdentity(identity),
+        graphPools,
+        v4PoolIds,
+        PRODUCTION_ADAPTER_FAMILIES,
+      );
     }
     if (!isAddress(identity.pool)) {
-      return classifyResolvedVenue(identity.pool, "unknown", null, graphPools, v4PoolIds);
+      return classifyResolvedVenue(
+        venueOnlyIdentity(identity.pool, identity.venue ?? "unknown", null),
+        graphPools,
+        v4PoolIds,
+        PRODUCTION_ADAPTER_FAMILIES,
+      );
     }
-    const resolved = await resolveVenueForAddress(identity.pool);
-    return classifyResolvedVenue(identity.pool, resolved.venue, resolved.factory, graphPools, v4PoolIds);
+    const resolved = await resolveVenueForAddress(
+      identity.pool,
+      PRODUCTION_ADAPTER_FAMILIES,
+    );
+    return classifyResolvedVenue(
+      resolved,
+      graphPools,
+      v4PoolIds,
+      PRODUCTION_ADAPTER_FAMILIES,
+    );
   });
 }
 
-async function resolveVenueForAddress(address: string): Promise<{ venue: VenueId | "unknown"; factory: string | null }> {
-  const seeded = findVenueBySeed(address);
-  if (seeded) return { venue: seeded.venue, factory: null };
+type ResolvedIdentityStatus =
+  | "resolved"
+  | "incompatible"
+  | "unmeasured-v2-fee"
+  | "venue-only";
+
+interface ResolvedVenueIdentity {
+  readonly pool: string;
+  readonly venue: VenueId | "unknown";
+  readonly factory: string | null;
+  readonly poolAdapter: PoolEntry["adapter"] | null;
+  readonly status: ResolvedIdentityStatus;
+  readonly source: "factory" | "declared-venue" | "event" | "explicit" | "bytecode";
+}
+
+async function resolveVenueForAddress(
+  address: string,
+  registry: AdapterFamilyRegistry,
+): Promise<ResolvedVenueIdentity> {
+  const declared = declaredProtocolIdentity(address, registry);
+  if (declared) return declared;
 
   const factory = await probeFactory(address);
   if (factory) {
-    const byFactory = findVenueByFactory(factory);
-    if (byFactory) return { venue: byFactory.venue, factory };
-    return { venue: "unknown", factory };
+    return factoryVenueIdentity(address, factory);
   }
 
   const signatureVenue = await resolveVenueByBytecode(address);
-  return { venue: signatureVenue ?? "unknown", factory: null };
+  return {
+    pool: address,
+    venue: signatureVenue ?? "unknown",
+    factory: null,
+    poolAdapter: null,
+    status: "venue-only",
+    source: "bytecode",
+  };
 }
 
 async function probeFactory(address: string): Promise<string | null> {
@@ -880,22 +958,36 @@ async function resolveVenueByBytecode(address: string): Promise<VenueId | null> 
 }
 
 function classifyResolvedVenue(
-  pool: string,
-  venue: VenueId | "unknown",
-  factory: string | null,
+  identity: ResolvedVenueIdentity,
   graphPools: Set<string> | null,
   v4PoolIds: Set<string>,
+  registry: AdapterFamilyRegistry,
 ): VenueGap {
-  const normalizedPool = lower(pool);
-  const poolInRoutingGraph = venue === "univ4"
+  const normalizedPool = lower(identity.pool);
+  const poolInRoutingGraph = identity.poolAdapter === "univ4"
     ? v4PoolIds.has(normalizedPool)
     : graphPools ? graphPools.has(normalizedPool) : null;
-  const capability = venue === "unknown" ? null : findVenueCapability(venue);
-  if (!capability) {
+  if (identity.status === "incompatible" || identity.status === "unmeasured-v2-fee") {
     return {
       pool: normalizedPool,
-      venue: "unknown",
-      factory,
+      venue: identity.venue,
+      factory: identity.factory,
+      pool_adapter: identity.poolAdapter,
+      gap_type: "venue_class_gap",
+      pool_in_routing_graph: poolInRoutingGraph,
+      discoverable: false,
+      quotable: false,
+      buildable: false,
+      supported_in_prod: false,
+    };
+  }
+
+  if (identity.poolAdapter === null) {
+    return {
+      pool: normalizedPool,
+      venue: identity.venue,
+      factory: identity.factory,
+      pool_adapter: null,
       gap_type: "unknown",
       pool_in_routing_graph: poolInRoutingGraph,
       discoverable: null,
@@ -905,31 +997,178 @@ function classifyResolvedVenue(
     };
   }
 
-  const supportedInProd = capability.discoverable && capability.quotable && capability.buildable;
-  let gapType: VenueGapType;
-  if (!supportedInProd || !capability.discoverable) {
-    gapType = capability.discoverable && (!capability.quotable || !capability.buildable)
-      ? "execution_adapter_gap"
-      : "venue_class_gap";
-  } else if (!capability.quotable || !capability.buildable) {
-    gapType = "execution_adapter_gap";
-  } else if (poolInRoutingGraph === null) {
-    gapType = "unknown";
-  } else {
-    gapType = poolInRoutingGraph ? "detection_gap" : "pool_gap";
+  const family = registry.routes().findForPool(identity.poolAdapter);
+  if (!family) {
+    return {
+      pool: normalizedPool,
+      venue: identity.venue,
+      factory: identity.factory,
+      pool_adapter: identity.poolAdapter,
+      gap_type: "execution_adapter_gap",
+      pool_in_routing_graph: poolInRoutingGraph,
+      discoverable: true,
+      quotable: false,
+      buildable: false,
+      supported_in_prod: false,
+    };
   }
+
+  const discoverable = familySupportsIdentityDiscovery(family, identity);
+  const quotable = typeof family.quoteExact === "function";
+  const buildable = typeof family.buildPlanFragment === "function";
+  const supportedInProd = discoverable && quotable && buildable;
+  const gapType: VenueGapType = !quotable || !buildable
+    ? "execution_adapter_gap"
+    : !discoverable
+    ? "venue_class_gap"
+    : poolInRoutingGraph === null
+    ? "unknown"
+    : poolInRoutingGraph
+    ? "detection_gap"
+    : "pool_gap";
 
   return {
     pool: normalizedPool,
-    venue: capability.venue,
-    factory,
+    venue: identity.venue,
+    factory: identity.factory,
+    pool_adapter: identity.poolAdapter,
     gap_type: gapType,
     pool_in_routing_graph: poolInRoutingGraph,
-    discoverable: capability.discoverable,
-    quotable: capability.quotable,
-    buildable: capability.buildable,
+    discoverable,
+    quotable,
+    buildable,
     supported_in_prod: supportedInProd,
   };
+}
+
+function resolveFixtureIdentity(
+  fixture: VenueIdentityFixture,
+  registry: AdapterFamilyRegistry,
+): ResolvedVenueIdentity {
+  if (fixture.factory) {
+    return factoryVenueIdentity(fixture.address, fixture.factory);
+  }
+  if (fixture.poolAdapter) {
+    return {
+      pool: fixture.address,
+      venue: fixture.venue,
+      factory: null,
+      poolAdapter: fixture.poolAdapter,
+      status: "resolved",
+      source: "explicit",
+    };
+  }
+  return declaredProtocolIdentity(fixture.address, registry) ??
+    venueOnlyIdentity(fixture.address, fixture.venue, null);
+}
+
+function resolveKnownPoolIdentity(identity: PoolIdentity): ResolvedVenueIdentity {
+  if (identity.factory) return factoryVenueIdentity(identity.pool, identity.factory);
+  if (identity.poolAdapter) {
+    return {
+      pool: identity.pool,
+      venue: identity.venue ?? "unknown",
+      factory: null,
+      poolAdapter: identity.poolAdapter,
+      status: "resolved",
+      source: "event",
+    };
+  }
+  return venueOnlyIdentity(
+    identity.pool,
+    identity.venue ?? "unknown",
+    identity.factory ?? null,
+  );
+}
+
+function factoryVenueIdentity(
+  pool: string,
+  factory: string,
+): ResolvedVenueIdentity {
+  const identity = findVenueByFactory(factory);
+  if (!identity) return venueOnlyIdentity(pool, "unknown", factory);
+  if (identity.compatibility === "incompatible") {
+    return {
+      pool,
+      venue: identity.venue,
+      factory,
+      poolAdapter: null,
+      status: "incompatible",
+      source: "factory",
+    };
+  }
+  const unmeasuredV2 =
+    identity.poolAdapter === "univ2" &&
+    findV2LineageByFactory(factory)?.measuredFeeRule == null;
+  return {
+    pool,
+    venue: identity.venue,
+    factory,
+    poolAdapter: identity.poolAdapter,
+    status: unmeasuredV2 ? "unmeasured-v2-fee" : "resolved",
+    source: "factory",
+  };
+}
+
+function declaredProtocolIdentity(
+  address: string,
+  registry: AdapterFamilyRegistry,
+): ResolvedVenueIdentity | null {
+  if (!isAddress(address)) return null;
+  const normalized = lower(address);
+  const matches = registry.protocols().flatMap((family) =>
+    family.declaredVenues
+      .filter((venue) => lower(venue.address) === normalized)
+      .map((venue) => ({ family, venue }))
+  );
+  if (matches.length !== 1) return null;
+  const [{ venue }] = matches;
+  return {
+    pool: address,
+    venue: venue.venueId ?? "unknown",
+    factory: null,
+    poolAdapter: venue.adapter,
+    status: "resolved",
+    source: "declared-venue",
+  };
+}
+
+function venueOnlyIdentity(
+  pool: string,
+  venue: VenueId | "unknown",
+  factory: string | null,
+): ResolvedVenueIdentity {
+  return {
+    pool,
+    venue,
+    factory,
+    poolAdapter: null,
+    status: "venue-only",
+    source: "bytecode",
+  };
+}
+
+function familySupportsIdentityDiscovery(
+  family: RouteLegAdapter,
+  identity: ResolvedVenueIdentity,
+): boolean {
+  if (identity.source === "factory") {
+    return family.kind === "swap" &&
+      (family as SwapAdapter).matureDexUniverseDiscovery === true;
+  }
+  if (identity.source === "declared-venue") return true;
+  if (family.discovery !== undefined) return true;
+  if (family.kind === "protocol-conversion") {
+    return (family as ProtocolConversionAdapter).declaredVenues.some((venue) =>
+      lower(venue.address) === lower(identity.pool) &&
+      venue.adapter === identity.poolAdapter
+    );
+  }
+  return family.kind === "swap" &&
+    (
+      (family as SwapAdapter).matureDexUniverseDiscovery === true ||
+      (family as SwapAdapter).poolDiscovery !== undefined
+    );
 }
 
 function summarizeVenueGapType(gaps: VenueGap[]): VenueGapType | null {
@@ -940,23 +1179,100 @@ function summarizeVenueGapType(gaps: VenueGap[]): VenueGapType | null {
   return "unknown";
 }
 
-export function extractPoolIdentities(receipt: any): PoolIdentity[] {
-  const pools = new Map<string, PoolIdentity>();
+export function extractPoolIdentities(
+  receipt: any,
+  landedEvents: LandedEventRegistry =
+    PRODUCTION_ADAPTER_FAMILIES.landedEvents(),
+): PoolIdentity[] {
+  const pools = new Map<string, {
+    readonly pool: string;
+    readonly adapters: Set<PoolEntry["adapter"]>;
+    readonly venues: Set<VenueId>;
+    ambiguous: boolean;
+  }>();
+
+  const observe = (
+    pool: string,
+    poolAdapter?: PoolEntry["adapter"],
+    venue?: VenueId,
+    ambiguous = false,
+  ): void => {
+    const normalized = lower(pool);
+    const current = pools.get(normalized) ?? {
+      pool: normalized,
+      adapters: new Set<PoolEntry["adapter"]>(),
+      venues: new Set<VenueId>(),
+      ambiguous: false,
+    };
+    if (poolAdapter) current.adapters.add(poolAdapter);
+    if (venue) current.venues.add(venue);
+    current.ambiguous ||= ambiguous;
+    pools.set(normalized, current);
+  };
+
   for (const log of receipt.logs ?? []) {
     const topic0 = lower(String(log?.topics?.[0] ?? ""));
-    if (topic0 === UNIV4_SWAP_TOPIC) {
-      const poolId = lower(String(log?.topics?.[1] ?? ""));
-      if (isBytes32(poolId)) {
-        pools.set(`univ4:${poolId}`, { pool: poolId, venue: "univ4", factory: null });
+    const observations = landedEvents.eventsForTopic(topic0).flatMap((event) => {
+      const pool = observedLandedPoolIdentity(event, {
+        address: String(log?.address ?? ""),
+        topics: Array.isArray(log?.topics)
+          ? log.topics.map((topic: unknown) => String(topic))
+          : [],
+      });
+      return pool === null
+        ? []
+        : [{
+            pool,
+            poolAdapter: event.discovery.poolAdapter,
+            venue: isKnownVenueId(event.discovery.label)
+              ? event.discovery.label
+              : undefined,
+          }];
+    });
+    if (observations.length > 0) {
+      const unique = new Map(
+        observations.map((observation) => [
+          `${lower(observation.pool)}|${observation.poolAdapter}`,
+          observation,
+        ]),
+      );
+      if (unique.size === 1) {
+        const [observation] = unique.values();
+        observe(
+          observation.pool,
+          observation.poolAdapter,
+          observation.venue,
+        );
+      } else {
+        // The topic/emitter surface cannot establish one execution identity.
+        // Preserve every candidate pool for manual diagnosis, but never guess
+        // an adapter from descriptor ordering.
+        for (const pool of new Set(observations.map((item) => item.pool))) {
+          observe(pool, undefined, undefined, true);
+        }
       }
       continue;
     }
 
     const address = lower(log?.address);
     if (!isAddress(address) || address === UNIV4_POOL_MANAGER) continue;
-    pools.set(address, { pool: address });
+    observe(address);
   }
-  return [...pools.values()];
+  return [...pools.values()].map((pool): PoolIdentity => {
+    const poolAdapter =
+      !pool.ambiguous && pool.adapters.size === 1
+        ? [...pool.adapters][0]
+        : undefined;
+    const venue =
+      !pool.ambiguous && pool.venues.size === 1
+        ? [...pool.venues][0]
+        : undefined;
+    return {
+      pool: pool.pool,
+      ...(poolAdapter ? { poolAdapter } : {}),
+      ...(venue ? { venue } : {}),
+    };
+  });
 }
 
 function summarizePoolMembership(
@@ -1133,4 +1449,12 @@ function competitorEdges(seq: string[]): string[] {
 
 function jsonReplacer(_key: string, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
+}
+
+// Keep the executable guard last. main() reaches constants throughout this
+// module (including factoryIface and BYTECODE_SIGNATURES); invoking it before
+// module initialization finishes would turn their TDZ ReferenceErrors into
+// misleading "unknown venue" results through the fail-closed RPC fallbacks.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }

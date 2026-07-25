@@ -1,203 +1,214 @@
-import { V2_LINEAGES } from "./v2-lineage.js";
+import { findV2LineageByFactory, V2_LINEAGES } from "./v2-lineage.js";
 import type { VenueId } from "./registry-ids.js";
 export type { VenueId } from "./registry-ids.js";
 
-export type VenueDiscovery =
-  | { mode: "factory"; factories: readonly string[] }
-  | { mode: "pool-registry"; registries: readonly string[] }
-  | { mode: "seed"; seeds?: readonly string[] }
-  | { mode: "custom"; seeds?: readonly string[] };
+export type FactoryIdentityPoolAdapter = "univ2" | "univ3";
 
-export interface VenueCapability {
-  venue: VenueId;
-  discovery: VenueDiscovery;
-  /** Proven adapter for this factory lineage; provisional admission may retain the event-derived shape. */
-  runtimeAdapter?: "univ2" | "univ3" | "balancer-v3" | "dodo-v2";
-  discoverable: boolean;
-  quotable: boolean;
-  buildable: boolean;
-}
+export type VenueIdentityCatalogEntry =
+  | {
+      readonly venue: VenueId;
+      readonly discovery: {
+        readonly mode: "factory";
+        readonly factories: readonly string[];
+      };
+      /**
+       * Pool shape attested by this identity source. Runtime support is not
+       * declared here; consumers must project it from AdapterFamilyRegistry.
+       */
+      readonly poolAdapter: FactoryIdentityPoolAdapter;
+      readonly compatibility: "standard";
+    }
+  | {
+      readonly venue: VenueId;
+      readonly discovery: {
+        readonly mode: "factory";
+        readonly factories: readonly string[];
+      };
+      /** Known factory whose execution semantics must not reuse a standard family. */
+      readonly compatibility: "incompatible";
+    }
+  | {
+      readonly venue: VenueId;
+      readonly discovery: {
+        readonly mode: "pool-registry";
+        readonly registries: readonly string[];
+      };
+      readonly poolAdapter: "dodo-v2";
+      readonly compatibility: "standard";
+    };
 
-// Source-of-truth cross-check:
-// - token-graph ADAPTER_MAP supports curve, curve-nr, univ2, univ3, univ4, psm, fluid-vault, fluid-dex.
-// - quoter.ts supports curve*, univ2-swap, univ3-swap, univ4-unlock, psm, fluid-dex-swap, fluid-vault.
-// - plan-builder.ts supports those same swap/lend adapter ids.
-// - ActionAdapter registry registers univ2/univ3/univ4/curve/psm/fluid adapters.
-// - path-template.ts derives trade-leg edge ids from PRODUCTION_ADAPTER_FAMILIES,
-//   plus an explicit fixture-blocked legacy descriptor for Fluid DEX.
-export const VENUE_CAPABILITIES: readonly VenueCapability[] = [
-  ...V2_LINEAGES.map((descriptor): VenueCapability => ({
-    venue: descriptor.venue,
-    discovery: { mode: "factory", factories: [descriptor.factory] },
-    runtimeAdapter: descriptor.runtimeAdapter,
-    discoverable: descriptor.discoverable,
-    quotable: descriptor.quotable,
-    buildable: descriptor.buildable,
-  })),
-  {
-    venue: "univ3",
-    discovery: { mode: "factory", factories: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"] },
-    runtimeAdapter: "univ3",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    // Pancake V3 remains a distinct venue even though its approved runtime adapter is V3-compatible.
-    venue: "pancake-v3",
-    discovery: { mode: "factory", factories: ["0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"] },
-    runtimeAdapter: "univ3",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    // Coffee fixture 20260702: exact factory verified and the missing graph leg has a pinned fixture.
-    venue: "univ3-fork-075c",
-    discovery: { mode: "factory", factories: ["0x075C42cD233a1c723c0F18f6dd575c8d679FEA85"] },
-    runtimeAdapter: "univ3",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    // Standard-looking V2 events are insufficient: this venue needs its own invariant replay.
-    venue: "panoramaswap-v1",
-    discovery: { mode: "factory", factories: ["0x82Eeb5A22A25310ac15352197d92d6C17A49602e"] },
-    discoverable: false,
-    quotable: false,
-    buildable: false,
-  },
-  {
-    venue: "univ4",
-    discovery: { mode: "custom", seeds: ["0x000000000004444c5dc75cB358380D2e3dE08A90"] },
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "balancer-v3",
-    discovery: { mode: "custom", seeds: ["0xbA1333333333a1BA1108E8412f11850A5C319bA9"] },
-    runtimeAdapter: "balancer-v3",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "dodo-v2",
-    discovery: {
-      mode: "pool-registry",
-      registries: [
-        "0x72d220cE168C4f361dD4deE5D826a01AD8598f6C",
-        "0x5336edE8F971339F6c0e304c66ba16F1296A2Fbe",
-        "0x6fdDB76c93299D985f4d3FC7ac468F9A168577A4",
-      ],
+/**
+ * Identity roots only.
+ *
+ * This catalog deliberately contains no runtime readiness booleans and no
+ * protocol/singleton instance seeds. Execution support comes from the sole
+ * AdapterFamilyRegistry; protocol instances come from each registered
+ * family's declared venues or behavior discovery. V2 fee evidence remains in
+ * V2_LINEAGES and is checked separately before admission/discovery.
+ */
+export const VENUE_IDENTITY_CATALOG: readonly VenueIdentityCatalogEntry[] =
+  Object.freeze([
+    // Explicit incompatibilities precede generated V2 lineages and also win
+    // in findVenueByFactory. A refreshed lineage can never relabel them.
+    {
+      venue: "panoramaswap-v1",
+      discovery: {
+        mode: "factory",
+        factories: ["0x82Eeb5A22A25310ac15352197d92d6C17A49602e"],
+      },
+      compatibility: "incompatible",
     },
-    runtimeAdapter: "dodo-v2",
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "curve",
-    discovery: { mode: "custom" },
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "goldx",
-    discovery: { mode: "seed", seeds: ["0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0"] },
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "curve-nr",
-    discovery: { mode: "custom" },
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "psm",
-    discovery: { mode: "seed", seeds: ["0xf6e72Db5454dd049d0788e411b06CfAF16853042"] },
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    venue: "fluid",
-    discovery: {
-      mode: "seed",
-      seeds: [
-        "0xee327311D8640156E87eC33ea55FcbF2309e0ce6", // vault wstUSR/USDC
-        "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9", // DEX USDC/USDT
-      ],
+    {
+      venue: "smardex",
+      discovery: {
+        mode: "factory",
+        factories: [
+          "0x7753F36E711B66a0350a753aba9F5651BAE76A1D",
+          "0xB878DC600550367e14220d4916Ff678fB284214F",
+        ],
+      },
+      compatibility: "incompatible",
     },
-    discoverable: true,
-    quotable: true,
-    buildable: true,
-  },
-  {
-    // factories resolved on-chain from tx 0x4db34b5c…d4b606 pools 0xf3a4…0179 / 0xae26…97e4.
-    venue: "smardex",
-    discovery: { mode: "factory", factories: ["0x7753F36E711B66a0350a753aba9F5651BAE76A1D", "0xB878DC600550367e14220d4916Ff678fB284214F"] },
-    discoverable: false,
-    quotable: false,
-    buildable: false,
-  },
-  {
-    // OUSD has no factory() — seeds are the specific AMM pools seen on-chain (bytecode-signature fallback also covers it).
-    venue: "ousd",
-    discovery: { mode: "seed", seeds: ["0x1791bbfa950f7db0b52ecb0729584bad886665f5", "0x6d18e1a7faeb1f0467a77c0d293872ab685426dc"] },
-    discoverable: false,
-    quotable: false,
-    buildable: false,
-  },
-  {
-    // Enzyme redeemSharesInKind vault (non-AMM); seed is the vault seen on-chain.
-    venue: "enzyme",
-    discovery: { mode: "seed", seeds: ["0x4d54abd78590bf94c8406d019aff724dab659a84"] },
-    discoverable: false,
-    quotable: false,
-    buildable: false,
-  },
-];
+    ...V2_LINEAGES.map((descriptor): VenueIdentityCatalogEntry => ({
+      venue: descriptor.venue,
+      discovery: { mode: "factory", factories: [descriptor.factory] },
+      poolAdapter: "univ2",
+      compatibility: "standard",
+    })),
+    {
+      venue: "univ3",
+      discovery: {
+        mode: "factory",
+        factories: ["0x1F98431c8aD98523631AE4a59f267346ea31F984"],
+      },
+      poolAdapter: "univ3",
+      compatibility: "standard",
+    },
+    {
+      // Pancake V3 is a distinct identity with standard V3 execution shape.
+      venue: "pancake-v3",
+      discovery: {
+        mode: "factory",
+        factories: ["0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"],
+      },
+      poolAdapter: "univ3",
+      compatibility: "standard",
+    },
+    {
+      venue: "univ3-fork-075c",
+      discovery: {
+        mode: "factory",
+        factories: ["0x075C42cD233a1c723c0F18f6dd575c8d679FEA85"],
+      },
+      poolAdapter: "univ3",
+      compatibility: "standard",
+    },
+    {
+      venue: "dodo-v2",
+      discovery: {
+        mode: "pool-registry",
+        registries: [
+          "0x72d220cE168C4f361dD4deE5D826a01AD8598f6C",
+          "0x5336edE8F971339F6c0e304c66ba16F1296A2Fbe",
+          "0x6fdDB76c93299D985f4d3FC7ac468F9A168577A4",
+        ],
+      },
+      poolAdapter: "dodo-v2",
+      compatibility: "standard",
+    },
+  ]);
 
-export function findVenueCapability(venue: string | null | undefined): VenueCapability | null {
+export type FactoryIdentityCatalogEntry = Extract<
+  VenueIdentityCatalogEntry,
+  { readonly discovery: { readonly mode: "factory" } }
+>;
+
+export type StandardFactoryIdentityCatalogEntry = Extract<
+  FactoryIdentityCatalogEntry,
+  { readonly compatibility: "standard" }
+>;
+
+export function findVenueIdentity(
+  venue: string | null | undefined,
+): VenueIdentityCatalogEntry | null {
   const key = (venue ?? "").toLowerCase();
-  return VENUE_CAPABILITIES.find((entry) => entry.venue === key) ?? null;
+  return VENUE_IDENTITY_CATALOG.find((entry) => entry.venue === key) ?? null;
 }
 
-export function findVenueByFactory(factory: string | null | undefined): VenueCapability | null {
+export function findVenueByFactory(
+  factory: string | null | undefined,
+): FactoryIdentityCatalogEntry | null {
   if (!factory) return null;
-  const matches = VENUE_CAPABILITIES.filter((entry) =>
-    entry.discovery.mode === "factory" &&
-    entry.discovery.factories.some((pattern) => addressPatternMatches(pattern, factory)),
+  const matches = VENUE_IDENTITY_CATALOG.filter(
+    (entry): entry is FactoryIdentityCatalogEntry =>
+      entry.discovery.mode === "factory" &&
+      entry.discovery.factories.some((pattern) =>
+        addressPatternMatches(pattern, factory)
+      ),
   );
-  // An explicit unsupported identity must win over an auto-generated V2 clone.
-  // Otherwise a dynamic snapshot entry could shadow PanoramaSwap/other known
-  // non-standard factories simply because V2 lineages are projected first.
-  return matches.find((entry) =>
-    !entry.runtimeAdapter || !entry.discoverable || !entry.quotable || !entry.buildable
-  ) ?? matches[0] ?? null;
+  return matches.find((entry) => entry.compatibility === "incompatible") ??
+    matches[0] ??
+    null;
 }
 
-export function findVenueByPoolRegistry(registry: string | null | undefined): VenueCapability | null {
+export function findVenueByPoolRegistry(
+  registry: string | null | undefined,
+): Extract<
+  VenueIdentityCatalogEntry,
+  { readonly discovery: { readonly mode: "pool-registry" } }
+> | null {
   if (!registry) return null;
-  return VENUE_CAPABILITIES.find((entry) =>
-    entry.discovery.mode === "pool-registry" &&
-    entry.discovery.registries.some((pattern) => addressPatternMatches(pattern, registry)),
+  return VENUE_IDENTITY_CATALOG.find(
+    (entry): entry is Extract<
+      VenueIdentityCatalogEntry,
+      { readonly discovery: { readonly mode: "pool-registry" } }
+    > =>
+      entry.discovery.mode === "pool-registry" &&
+      entry.discovery.registries.some((pattern) =>
+        addressPatternMatches(pattern, registry)
+      ),
   ) ?? null;
 }
 
-export function findVenueBySeed(address: string | null | undefined): VenueCapability | null {
-  if (!address) return null;
-  return VENUE_CAPABILITIES.find((entry) =>
-    "seeds" in entry.discovery &&
-    (entry.discovery.seeds ?? []).some((pattern) => addressPatternMatches(pattern, address)),
-  ) ?? null;
+/**
+ * Join identity roots with the registry-derived mature DEX projection.
+ * Removing a family registration therefore removes all of its factory sources
+ * without editing this catalog. Unmeasured V2 lineages always fail closed.
+ */
+export function factoryDiscoverySourcesForPoolAdapters(
+  registeredPoolAdapters: readonly string[],
+): readonly StandardFactoryIdentityCatalogEntry[] {
+  const registered = new Set(registeredPoolAdapters);
+  const selected: StandardFactoryIdentityCatalogEntry[] = [];
+  for (const entry of VENUE_IDENTITY_CATALOG) {
+    if (
+      !isStandardFactoryIdentity(entry) ||
+      !registered.has(entry.poolAdapter)
+    ) {
+      continue;
+    }
+    const isSelectedIdentity = entry.discovery.factories.every(
+      (factory) => findVenueByFactory(factory) === entry,
+    );
+    if (!isSelectedIdentity) continue;
+    if (
+      entry.poolAdapter === "univ2" &&
+      entry.discovery.factories.some(
+        (factory) => findV2LineageByFactory(factory)?.measuredFeeRule == null,
+      )
+    ) {
+      continue;
+    }
+    selected.push(entry);
+  }
+  return Object.freeze(selected);
+}
+
+function isStandardFactoryIdentity(
+  entry: VenueIdentityCatalogEntry,
+): entry is StandardFactoryIdentityCatalogEntry {
+  return entry.discovery.mode === "factory" &&
+    entry.compatibility === "standard";
 }
 
 export function addressPatternMatches(pattern: string, value: string): boolean {

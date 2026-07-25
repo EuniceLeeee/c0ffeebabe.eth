@@ -60,6 +60,8 @@ export const psmAdapter = Object.freeze({
   declaredVenues: [{
     address: ADDR.SKY_PSM_LITE,
     adapter: "psm",
+    venueId: "psm",
+    identitySource: "seed",
     fixedTokenIn: ADDR.USDC,
     fixedTokenOut: ADDR.DAI,
     fixedSlotKind: "protocol",

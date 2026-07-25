@@ -8,7 +8,10 @@ import {
   poolProjectionRowKey,
   poolRegistryKey,
 } from "./pool-universe.js";
-import { VENUE_CAPABILITIES, type VenueId } from "./venues/capability.js";
+import {
+  factoryDiscoverySourcesForPoolAdapters,
+  type VenueId,
+} from "./venues/capability.js";
 import {
   attestPoolIdentities,
   type IdentityCallBackend,
@@ -55,23 +58,14 @@ interface FactoryDef {
   parsePool: (log: { data: string; topics: string[] }) => string;
 }
 
-const FACTORIES: FactoryDef[] = VENUE_CAPABILITIES.flatMap((capability) => {
-  if (
-    capability.discovery.mode !== "factory" ||
-    !capability.runtimeAdapter ||
-    (capability.runtimeAdapter !== "univ2" && capability.runtimeAdapter !== "univ3") ||
-    !capability.discoverable ||
-    !capability.quotable ||
-    !capability.buildable ||
-    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(capability.runtimeAdapter) === null
-  ) {
-    return [];
-  }
-  const adapter = capability.runtimeAdapter;
-  return capability.discovery.factories.map((address) => ({
+const FACTORIES: FactoryDef[] = factoryDiscoverySourcesForPoolAdapters(
+  PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
+).flatMap((identity) => {
+  const adapter = identity.poolAdapter;
+  return identity.discovery.factories.map((address) => ({
     address,
     adapter,
-    venueId: capability.venue,
+    venueId: identity.venue,
     topic: adapter === "univ2" ? UNIV2_PAIR_CREATED : UNIV3_POOL_CREATED,
     parsePool: adapter === "univ2"
       // PairCreated data: pair address in first 32 bytes, then uint256.

@@ -3,8 +3,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import {
   findVenueByFactory,
   findVenueByPoolRegistry,
-  findVenueBySeed,
-  VENUE_CAPABILITIES,
+  findVenueIdentity,
   type VenueId,
 } from "./capability.js";
 import {
@@ -552,8 +551,7 @@ export async function attestPoolIdentities<T extends IdentityPoolEntry>(
           rejected: rejection(pool, "untrusted_seed"),
         };
       }
-      const capability = findVenueBySeed(seed.address);
-      const venueId = capability?.venue ?? seed.venueId;
+      const venueId = seed.venueId;
       if (venueId !== undefined) {
         options.identityRegistry.validateMetadata(descriptor, venueId, "seed");
       }
@@ -685,60 +683,76 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
     };
   }
 
-  const capability = findVenueByFactory(factory);
-  if (
-    !capability ||
-    !capability.runtimeAdapter ||
-    !capability.discoverable ||
-    !capability.quotable ||
-    !capability.buildable ||
-    !isPoolAdapterSupported(capability.runtimeAdapter)
-  ) {
-    if (!allowProvisionalFactories(admissionPolicy)) {
-      return capability
-        ? { ok: false, reason: "unsupported_venue", venueId: capability.venue, factory }
-        : { ok: false, reason: "unknown_factory", factory };
-    }
-    if (poolAdapter === "univ2" && !findV2LineageByFactory(factory)?.measuredFeeRule) {
+  const identity = findVenueByFactory(factory);
+  if (identity?.compatibility === "incompatible") {
+    return {
+      ok: false,
+      reason: "unsupported_venue",
+      venueId: identity.venue,
+      factory,
+    };
+  }
+  if (identity?.compatibility === "standard") {
+    if (
+      identity.poolAdapter === "univ2" &&
+      !findV2LineageByFactory(factory)?.measuredFeeRule
+    ) {
       return {
         ok: false,
         reason: "unmeasured_v2_fee",
-        venueId: capability?.venue,
+        venueId: identity.venue,
         factory,
       };
     }
-    const behaviorProof = await proveProvisionalFactoryPoolBehavior(
-      backend,
-      pool,
-      standardPoolAdapter,
-      candidate,
-    );
-    if (!behaviorProof.ok) {
+    if (!isPoolAdapterSupported(identity.poolAdapter)) {
       return {
         ok: false,
-        reason: behaviorProof.reason,
-        venueId: capability?.venue,
+        reason: "unsupported_venue",
+        venueId: identity.venue,
         factory,
       };
     }
-    // Factory is provenance, not a hard admission gate. Unknown factories must
-    // nevertheless prove the complete standard V2/V3 read surface before they
-    // can reuse one of those execution families.
     return {
       ok: true,
-      adapter: capability?.runtimeAdapter ?? poolAdapter,
-      venueId: capability?.venue ?? "unknown",
+      adapter: identity.poolAdapter,
+      venueId: identity.venue,
       factory,
-      identitySource: "factory-call-provisional",
+      identitySource: "factory-call",
     };
   }
 
+  if (!allowProvisionalFactories(admissionPolicy)) {
+    return { ok: false, reason: "unknown_factory", factory };
+  }
+  if (poolAdapter === "univ2" && !findV2LineageByFactory(factory)?.measuredFeeRule) {
+    return {
+      ok: false,
+      reason: "unmeasured_v2_fee",
+      factory,
+    };
+  }
+  const behaviorProof = await proveProvisionalFactoryPoolBehavior(
+    backend,
+    pool,
+    standardPoolAdapter,
+    candidate,
+  );
+  if (!behaviorProof.ok) {
+    return {
+      ok: false,
+      reason: behaviorProof.reason,
+      factory,
+    };
+  }
+  // Factory is provenance, not a hard admission gate. Unknown factories must
+  // nevertheless prove the complete standard V2/V3 read surface before they
+  // can reuse one of those execution families.
   return {
     ok: true,
-    adapter: capability.runtimeAdapter,
-    venueId: capability.venue,
+    adapter: poolAdapter,
+    venueId: "unknown",
     factory,
-    identitySource: "factory-call",
+    identitySource: "factory-call-provisional",
   };
 };
 
@@ -1043,6 +1057,7 @@ export const dodoV2IdentityResolver: OnchainIdentityResolver = async ({
   backend,
   pool,
   poolAdapter,
+  isPoolAdapterSupported,
 }) => {
   if (poolAdapter !== "dodo-v2") {
     throw new Error(`DODO V2 identity resolver: unsupported pool adapter ${poolAdapter}`);
@@ -1072,11 +1087,16 @@ export const dodoV2IdentityResolver: OnchainIdentityResolver = async ({
     return { ok: false, reason: "identity_call_failed", venueId: "dodo-v2" };
   }
 
-  const registries = VENUE_CAPABILITIES.flatMap((capability) =>
-    capability.venue === "dodo-v2" && capability.discovery.mode === "pool-registry"
-      ? capability.discovery.registries
-      : [],
-  );
+  const identity = findVenueIdentity("dodo-v2");
+  if (
+    identity?.discovery.mode !== "pool-registry" ||
+    identity.compatibility !== "standard" ||
+    identity.poolAdapter !== "dodo-v2" ||
+    !isPoolAdapterSupported(identity.poolAdapter)
+  ) {
+    return { ok: false, reason: "unsupported_venue", venueId: "dodo-v2" };
+  }
+  const registries = identity.discovery.registries;
   let successfulCalls = 0;
   for (const registry of registries) {
     try {
@@ -1094,10 +1114,9 @@ export const dodoV2IdentityResolver: OnchainIdentityResolver = async ({
       const capability = findVenueByPoolRegistry(factory);
       if (
         !capability ||
-        capability.runtimeAdapter !== "dodo-v2" ||
-        !capability.discoverable ||
-        !capability.quotable ||
-        !capability.buildable
+        capability.compatibility !== "standard" ||
+        capability.poolAdapter !== "dodo-v2" ||
+        !isPoolAdapterSupported(capability.poolAdapter)
       ) {
         return { ok: false, reason: "unsupported_venue", venueId: "dodo-v2", factory };
       }

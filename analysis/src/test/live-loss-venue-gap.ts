@@ -7,12 +7,21 @@ import {
   classifyVenueGapsFromFixtures,
   classifyVenueGapsFromLogFixtures,
   defaultGraphPoolsPath,
+  extractPoolIdentities,
   readActiveV4PoolIds,
   readRoutingGraphPools,
   type VenueGapType,
   type VenueIdentityFixture,
 } from "../cli/live-loss.js";
 import { ADDR, TOPICS } from "../registry/protocols.js";
+import { AdapterFamilyRegistry } from "../../../listener/src/searcher/venues/adapter-family-registry.js";
+import { PRODUCTION_ADAPTER_FAMILIES } from "../../../listener/src/searcher/venues/production-registry.js";
+import {
+  ADDRESS_LANDED_EVENT_EMITTER,
+  defineSwapLandedEvents,
+  FLUID_DEX_SWAP_TOPIC,
+  LandedEventRegistry,
+} from "../../../listener/src/searcher/venues/landed-event-registry.js";
 
 // Real on-chain addresses from tx 0x4db34b5c…d4b606 (block 25448858), factories resolved via factory() on the node.
 const pools: VenueIdentityFixture[] = [
@@ -39,9 +48,9 @@ const expected = new Map<string, VenueGapType>([
   ["0xf3a4b8efe3e3049f6bc71b47ccb7ce6665420179", "venue_class_gap"],
   ["0xae26dd8a376baf03304e6877e3692044f4c597e4", "venue_class_gap"],
   ["0xc034dc1816707ae1616bb5a848652aae7495bf0d", "venue_class_gap"],
-  ["0x1791bbfa950f7db0b52ecb0729584bad886665f5", "venue_class_gap"],
-  ["0x6d18e1a7faeb1f0467a77c0d293872ab685426dc", "venue_class_gap"],
-  ["0x4d54abd78590bf94c8406d019aff724dab659a84", "venue_class_gap"],
+  ["0x1791bbfa950f7db0b52ecb0729584bad886665f5", "unknown"],
+  ["0x6d18e1a7faeb1f0467a77c0d293872ab685426dc", "unknown"],
+  ["0x4d54abd78590bf94c8406d019aff724dab659a84", "unknown"],
 ]);
 
 const gaps = classifyVenueGapsFromFixtures(pools, graphPools);
@@ -55,6 +64,135 @@ assert.deepEqual(
   new Map(gaps.map((gap) => [gap.pool, gap.gap_type])),
   expected,
 );
+for (const address of [
+  "0x1791bbfa950f7db0b52ecb0729584bad886665f5",
+  "0x6d18e1a7faeb1f0467a77c0d293872ab685426dc",
+  "0x4d54abd78590bf94c8406d019aff724dab659a84",
+]) {
+  const venueOnly = gaps.find((gap) => gap.pool === address)!;
+  assert.equal(venueOnly.pool_adapter, null);
+  assert.equal(venueOnly.supported_in_prod, null);
+}
+for (const address of [
+  "0xf3a4b8efe3e3049f6bc71b47ccb7ce6665420179",
+  "0xae26dd8a376baf03304e6877e3692044f4c597e4",
+]) {
+  const incompatible = gaps.find((gap) => gap.pool === address)!;
+  assert.equal(incompatible.venue, "smardex");
+  assert.equal(incompatible.pool_adapter, null);
+  assert.equal(incompatible.gap_type, "venue_class_gap");
+  assert.equal(incompatible.supported_in_prod, false);
+}
+
+const declaredProtocolGraph = new Set([
+  ADDR.SKY_PSM_LITE.toLowerCase(),
+  ADDR.GOLDX.toLowerCase(),
+]);
+const declaredProtocolGaps = classifyVenueGapsFromFixtures([
+  { address: ADDR.SKY_PSM_LITE, venue: "unknown" },
+  { address: ADDR.GOLDX, venue: "unknown" },
+], declaredProtocolGraph);
+assert.deepEqual(
+  declaredProtocolGaps.map((gap) => [
+    gap.venue,
+    gap.pool_adapter,
+    gap.gap_type,
+    gap.discoverable,
+    gap.quotable,
+    gap.buildable,
+  ]),
+  [
+    ["psm", "psm", "detection_gap", true, true, true],
+    ["goldx", "goldx", "detection_gap", true, true, true],
+  ],
+  "static protocol identities must derive from family declaredVenues",
+);
+
+const fluidSwapLog = {
+  address: ADDR.FLUID_DEX_USDC_USDT,
+  topics: [FLUID_DEX_SWAP_TOPIC],
+  data: "0x",
+};
+const fluidGraph = new Set([ADDR.FLUID_DEX_USDC_USDT.toLowerCase()]);
+const fluidGap = classifyVenueGapsFromLogFixtures(
+  [fluidSwapLog],
+  fluidGraph,
+)[0];
+assert.deepEqual(
+  [
+    fluidGap.venue,
+    fluidGap.pool_adapter,
+    fluidGap.gap_type,
+    fluidGap.discoverable,
+    fluidGap.quotable,
+    fluidGap.buildable,
+  ],
+  ["fluid", "fluid-dex", "detection_gap", true, true, true],
+  "the family-owned Fluid landed-event descriptor must resolve its pool adapter",
+);
+
+const registryWithoutFluidDex = new AdapterFamilyRegistry(
+  PRODUCTION_ADAPTER_FAMILIES.list().filter(
+    (family) => family.id !== "fluid-dex",
+  ),
+);
+const missingFluidFamily = classifyVenueGapsFromLogFixtures(
+  [fluidSwapLog],
+  fluidGraph,
+  new Set(),
+  registryWithoutFluidDex,
+)[0];
+assert.deepEqual(
+  [
+    missingFluidFamily.gap_type,
+    missingFluidFamily.discoverable,
+    missingFluidFamily.quotable,
+    missingFluidFamily.buildable,
+  ],
+  ["execution_adapter_gap", true, false, false],
+  "a landed-event identity whose family is unregistered must be an execution adapter gap",
+);
+
+const ambiguousLandedEvents = new LandedEventRegistry([
+  ambiguousEventOwner("ambiguous-a", "univ2"),
+  ambiguousEventOwner("ambiguous-b", "univ3"),
+]);
+const ambiguousFluidIdentity = extractPoolIdentities(
+  { logs: [fluidSwapLog] },
+  ambiguousLandedEvents,
+)[0];
+assert.equal(
+  ambiguousFluidIdentity.poolAdapter,
+  undefined,
+  "conflicting landed-event descriptors must fail closed without choosing an adapter",
+);
+
+const rawFactoryEventHints = classifyVenueGapsFromLogFixtures(
+  [
+    {
+      address: "0x0de0fa91b6dbab8c8503aaa2d1dfa91a192cb149",
+      topics: [TOPICS.univ2Swap],
+      data: "0x",
+    },
+    {
+      address: "0x9a772018fbd77fcd2d25657e5c547baff3fd7d16",
+      topics: [TOPICS.univ3Swap],
+      data: "0x",
+    },
+  ],
+  graphPools,
+);
+assert.equal(rawFactoryEventHints.length, 2);
+for (const hint of rawFactoryEventHints) {
+  assert.equal(
+    hint.pool_adapter,
+    null,
+    "raw V2/V3 Swap hints must not become verified pool adapters",
+  );
+  assert.equal(hint.gap_type, "unknown");
+  assert.notEqual(hint.gap_type, "detection_gap");
+  assert.notEqual(hint.supported_in_prod, true);
+}
 
 for (const gap of gaps) {
   console.log(`${abbr(gap.pool)} ${gap.venue} -> ${gap.gap_type}`);
@@ -126,6 +264,27 @@ function v4SwapLog(poolId: string): any {
   return {
     address: ADDR.UNIV4_POOL_MANAGER,
     topics: [TOPICS.univ4Swap, poolId],
+  };
+}
+
+function ambiguousEventOwner(
+  id: string,
+  poolAdapter: "univ2" | "univ3",
+) {
+  return {
+    id,
+    poolAdapters: [poolAdapter],
+    observation: { topics: [FLUID_DEX_SWAP_TOPIC] },
+    landedEvents: defineSwapLandedEvents({
+      swaps: [{
+        id: `${id}-swap`,
+        topic: FLUID_DEX_SWAP_TOPIC,
+        emitter: ADDRESS_LANDED_EVENT_EMITTER,
+        discovery: { poolAdapter, label: id },
+        invalidatesWarmState: true,
+      }],
+      mutations: [],
+    }),
   };
 }
 

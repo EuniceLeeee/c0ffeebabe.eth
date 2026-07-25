@@ -181,6 +181,21 @@ export class AdapterFamilyRegistry {
     ]);
   }
 
+  /**
+   * Pool adapters owned by the existing factory/active-pool discovery lane.
+   * Factory roots remain identity evidence; this projection is the only
+   * runtime-support half of that join.
+   */
+  matureDexUniversePoolAdapters(): readonly PoolEntry["adapter"][] {
+    return Object.freeze([
+      ...new Set(
+        this.swapFamilies
+          .filter((family) => family.matureDexUniverseDiscovery === true)
+          .flatMap((family) => family.poolAdapters),
+      ),
+    ]);
+  }
+
   credits(): readonly CreditAdapterFamily[] {
     return this.creditFamilies;
   }

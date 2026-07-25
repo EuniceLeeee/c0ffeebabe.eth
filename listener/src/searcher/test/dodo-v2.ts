@@ -781,6 +781,18 @@ const identity = await dodoV2IdentityResolver({
 });
 assert(identity.ok, "canonical registry identity");
 assert(identity.ok && identity.factory === ethers.getAddress(REGISTRY), "registry provenance");
+const unsupportedIdentity = await dodoV2IdentityResolver({
+  backend,
+  pool: ethers.getAddress(POOL),
+  poolAdapter: "dodo-v2",
+  candidate: { address: ethers.getAddress(POOL), adapter: "dodo-v2" },
+  admissionPolicy: STRICT_IDENTITY_ADMISSION,
+  isPoolAdapterSupported: () => false,
+});
+assert(
+  !unsupportedIdentity.ok && unsupportedIdentity.reason === "unsupported_venue",
+  "DODO registry identity must not imply runtime family support",
+);
 
 if (previousQuoteActor === undefined) {
   delete process.env.BOTVM_OWNER;

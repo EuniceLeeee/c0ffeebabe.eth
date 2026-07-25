@@ -15,10 +15,15 @@ import {
   PRODUCTION_ADAPTER_FAMILIES,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
-import { findVenueByFactory } from "../venues/capability.js";
+import {
+  factoryDiscoverySourcesForPoolAdapters,
+  findVenueByFactory,
+  VENUE_IDENTITY_CATALOG,
+} from "../venues/capability.js";
 import { findV2LineageByFactory, V2_LINEAGES } from "../venues/v2-lineage.js";
 import { v2FeeBpsForFactory } from "../solver/v2-fee.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
+import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -48,6 +53,9 @@ const SUSHI_V2_FACTORY = "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac";
 const REPLAYED_V3_FORK_FACTORY = "0x075C42cD233a1c723c0F18f6dd575c8d679FEA85";
 const PANORAMA_FACTORY = "0x82Eeb5A22A25310ac15352197d92d6C17A49602e";
 const PANCAKE_V2_FACTORY = "0x1097053fd2ea711dad45caccc45eff7548fcb362";
+const UNMEASURED_V2_LINEAGE = V2_LINEAGES.find(
+  (descriptor) => descriptor.measuredFeeRule === null,
+)!;
 const UNKNOWN_FACTORY = address(0xfac7);
 const CURVE_HANDLER = address(0xc0de);
 
@@ -69,6 +77,7 @@ const CURVE_TOKEN1 = address(0x10e);
 const FAKE_V3_POOL = address(0x10f);
 const PROVISIONAL_V3_TOKEN0 = address(0x110);
 const PROVISIONAL_V3_TOKEN1 = address(0x111);
+const UNMEASURED_V2_PAIR = address(0x112);
 
 const V2_SWAP_TOPIC = ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)");
 const V3_SWAP_TOPIC = ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)");
@@ -89,6 +98,7 @@ class FakeProvider {
     [PANORAMA_POOL.toLowerCase(), PANORAMA_FACTORY],
     [UNKNOWN_PAIR.toLowerCase(), UNKNOWN_FACTORY],
     [PANCAKE_V2_PAIR.toLowerCase(), PANCAKE_V2_FACTORY],
+    [UNMEASURED_V2_PAIR.toLowerCase(), UNMEASURED_V2_LINEAGE.factory],
     [FAKE_V3_POOL.toLowerCase(), UNKNOWN_FACTORY],
   ]);
   readonly registeredCurvePools = new Set([CURVE_POOL.toLowerCase()]);
@@ -251,16 +261,17 @@ async function testV2LineageDescriptor(): Promise<void> {
   const factories = V2_LINEAGES.map((descriptor) => descriptor.factory.toLowerCase());
   assert(new Set(factories).size === factories.length, "V2 lineage factories must be unique");
   for (const descriptor of V2_LINEAGES) {
-    const capability = findVenueByFactory(descriptor.factory);
-    assert(capability?.venue === descriptor.venue, `${descriptor.venue} capability provenance`);
+    const identity = findVenueByFactory(descriptor.factory);
+    assert(identity?.venue === descriptor.venue, `${descriptor.venue} identity provenance`);
     assert(
-      capability.runtimeAdapter === descriptor.runtimeAdapter,
-      `${descriptor.venue} execution family projection`,
+      identity.compatibility === "standard" &&
+        identity.poolAdapter === "univ2",
+      `${descriptor.venue} V2 pool-shape identity`,
     );
     const routeSupported = PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(
-      descriptor.runtimeAdapter,
+      "univ2",
     ) !== null;
-    if (descriptor.discoverable && descriptor.quotable && descriptor.buildable && routeSupported) {
+    if (descriptor.measuredFeeRule && routeSupported) {
       assert(descriptor.measuredFeeRule !== null, `${descriptor.venue} production fee must be measured`);
       assert(
         v2FeeBpsForFactory(descriptor.factory) === descriptor.measuredFeeRule.feeBps,
@@ -271,12 +282,43 @@ async function testV2LineageDescriptor(): Promise<void> {
 
   const pancake = findV2LineageByFactory(PANCAKE_V2_FACTORY);
   assert(pancake?.venue === "pancake-v2", "Pancake V2 lineage identity");
-  assert(pancake.discoverable, "Pancake V2 factory discovery flag");
   assert(
-    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool(pancake.runtimeAdapter) !== null,
+    PRODUCTION_ADAPTER_FAMILIES.routes().findForPool("univ2") !== null,
     "Pancake V2 execution support must come from the route registry",
   );
   assert(pancake.measuredFeeRule?.feeBps === 25n, "Pancake V2 measured fee");
+  const productionFactorySources = factoryDiscoverySourcesForPoolAdapters(
+    PRODUCTION_ADAPTER_FAMILIES.matureDexUniversePoolAdapters(),
+  );
+  assert(
+    productionFactorySources.some((source) =>
+      source.discovery.factories.some(
+        (factory) => factory.toLowerCase() === PANCAKE_V2_FACTORY.toLowerCase(),
+      )
+    ),
+    "measured V2 identity must join the registered mature family",
+  );
+  assert(
+    !productionFactorySources.some((source) =>
+      source.discovery.factories.some(
+        (factory) =>
+          factory.toLowerCase() === UNMEASURED_V2_LINEAGE.factory.toLowerCase(),
+      )
+    ),
+    "unmeasured V2 identity must not become a factory discovery source",
+  );
+  const registryWithoutV2 = new AdapterFamilyRegistry(
+    PRODUCTION_ADAPTER_FAMILIES.list().filter(
+      (family) => family.id !== "univ2-standard",
+    ),
+  );
+  const withoutV2Family = factoryDiscoverySourcesForPoolAdapters(
+    registryWithoutV2.matureDexUniversePoolAdapters(),
+  );
+  assert(
+    withoutV2Family.every((source) => source.poolAdapter !== "univ2"),
+    "an unregistered mature family must contribute no factory sources",
+  );
 
   const provider = new FakeProvider();
   const identity = await resolvePoolIdentity(provider, PANCAKE_V2_PAIR, "univ2", {
@@ -296,6 +338,16 @@ async function testV2LineageDescriptor(): Promise<void> {
   assert(
     provider.factoryIndexCalls.includes(PANCAKE_V2_FACTORY.toLowerCase()),
     "Pancake V2 factory must enter factory indexing",
+  );
+  const unmeasured = await resolvePoolIdentity(
+    provider,
+    UNMEASURED_V2_PAIR,
+    "univ2",
+    { identityRegistry: PRODUCTION_IDENTITY_RESOLVERS },
+  );
+  assert(
+    !unmeasured.ok && unmeasured.reason === "unmeasured_v2_fee",
+    "known V2 lineage without a measured fee must fail closed",
   );
   console.log("[venue-identity] V2 lineage identity/discovery/fee projection: PASS");
 }
@@ -495,14 +547,22 @@ async function testProtocolAdaptersRequireExactEnabledSeeds(): Promise<void> {
   ];
   const result = await attestPoolIdentities(provider, candidates, {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-    seedEntries: [{ address: PSM_SEED, adapter: "psm" }],
+    seedEntries: [{ address: PSM_SEED, adapter: "psm", venueId: "psm" }],
   });
   assert(result.accepted.length === 1, "exact enabled protocol seed should be admitted");
   assert(result.accepted[0]?.address === PSM_SEED, "wrong protocol seed admitted");
+  assert(result.accepted[0]?.venueId === "psm", "family-owned seed venue metadata missing");
   assert(result.accepted[0]?.identitySource === "seed", "protocol seed provenance missing");
   assert(result.rejected[0]?.address === FAKE_PSM, "arbitrary protocol target must be rejected");
   assert(result.rejected[0]?.reason === "untrusted_seed", "protocol rejection reason");
-  console.log("[venue-identity] protocol exact-seed gate: PASS");
+  assert(
+    VENUE_IDENTITY_CATALOG.every((entry) =>
+      entry.discovery.mode === "factory" ||
+      entry.discovery.mode === "pool-registry"
+    ),
+    "protocol families must not depend on a central singleton seed catalog",
+  );
+  console.log("[venue-identity] protocol family works without central seed catalog: PASS");
 }
 
 function testIdentityRegistryConformance(): void {
