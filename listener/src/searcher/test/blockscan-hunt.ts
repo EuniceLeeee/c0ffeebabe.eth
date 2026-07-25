@@ -12,7 +12,11 @@ import { dirname, resolve } from "node:path";
 import { ethers } from "ethers";
 import "../../shared/adapters/index.js";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { AnvilStateBackend, type StateBackend } from "../../shared/state/state-backend.js";
+import {
+  AnvilStateBackend,
+  type StateBackend,
+  type StateCallControl,
+} from "../../shared/state/state-backend.js";
 import {
   DEFAULT_SEARCHER_EXECUTOR,
   DEFAULT_SEARCHER_OWNER,
@@ -2061,18 +2065,20 @@ async function withTimeout<T>(
 }
 
 class PinnedCallBackend implements StateBackend {
-  constructor(
-    private readonly provider: ethers.JsonRpcProvider,
-    private readonly blockNumber: number,
-  ) {}
+  private readonly backend: ReturnType<typeof createPinnedDexReadBackend>;
 
-  async call(req: { to: string; data: string; from?: string }): Promise<string> {
-    return this.provider.call({
-      to: req.to,
-      data: req.data,
-      from: req.from,
-      blockTag: this.blockNumber,
-    });
+  constructor(
+    provider: ethers.JsonRpcProvider,
+    blockNumber: number,
+  ) {
+    this.backend = createPinnedDexReadBackend(provider, blockNumber);
+  }
+
+  async call(
+    req: { to: string; data: string; from?: string },
+    control?: StateCallControl,
+  ): Promise<string> {
+    return this.backend.call(req, control);
   }
 
   async forkAt(): Promise<void> {

@@ -216,15 +216,13 @@ export async function refineBlockScanCandidates(
         controlledState,
         opportunity,
         familyDeadlineAtMs,
+        familyController.signal,
         () =>
           familyDeadlineAtMs < deadlineAtMs
             ? new FamilyProbeDeadlineError(familyIds, localBudgetMs)
             : new ProbeDeadlineError("exact probe deadline reached"),
       );
-      const marginBps = await awaitWithAbort(
-        probe,
-        familyController.signal,
-      );
+      const marginBps = await probe;
       if (deadlineController.signal.aborted || Date.now() >= deadlineAtMs) {
         throw new ProbeDeadlineError("exact probe deadline reached");
       }
@@ -430,6 +428,7 @@ async function exactProbeMarginBps(
   state: StateBackend,
   opportunity: BlockScanOpportunity,
   deadlineAtMs: number,
+  signal: AbortSignal,
   deadlineError: () => Error = () =>
     new ProbeDeadlineError("exact probe deadline reached"),
 ): Promise<number> {
@@ -442,17 +441,20 @@ async function exactProbeMarginBps(
       throw deadlineError();
     }
     try {
-      amount = await quote(
-        edge.adapterId,
-        edge.target,
-        edge.tokenIn,
-        edge.tokenOut,
-        amount,
-        state,
-        undefined,
-        edge.v4PoolKey,
-        edge.poolToken0,
-        edge.poolToken1,
+      amount = await awaitWithAbort(
+        quote(
+          edge.adapterId,
+          edge.target,
+          edge.tokenIn,
+          edge.tokenOut,
+          amount,
+          state,
+          undefined,
+          edge.v4PoolKey,
+          edge.poolToken0,
+          edge.poolToken1,
+        ),
+        signal,
       );
     } catch (error) {
       throw new BlockScanFamilyAttributedError(

@@ -155,13 +155,14 @@ assert.deepEqual(
 );
 assert.equal(diagnostics[0]?.attempted, true);
 assert.equal(diagnostics[0]?.failure?.reason, "global_deadline");
-assert.equal(diagnostics[0]?.failure?.attributedFamilyId, null);
-assert.equal(diagnostics[0]?.failure?.stage, null);
+assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "univ2-swap");
+assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
 
 familyFairAdmissionAndCircuit();
 badFamilyHighScoreFloodCannotConsumeExpansionCap();
 await failingFamilyCannotConsumeRefinementCap();
 await neverSettlingFamilyUsesLocalBudget();
+await mixedRouteTimeoutIsAttributedToCurrentLeg();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -511,6 +512,50 @@ async function neverSettlingFamilyUsesLocalBudget(): Promise<void> {
     ["healthy-after-never"],
     "a non-cooperative bad family cannot suppress the healthy candidate",
   );
+}
+
+async function mixedRouteTimeoutIsAttributedToCurrentLeg(): Promise<void> {
+  const diagnostics: BlockScanProbeDiagnostic[] = [];
+  const neverSettlingState = {
+    call(_req: { to: string; data: string }): Promise<string> {
+      return new Promise<string>(() => {});
+    },
+  } as StateBackend;
+  const mixed = {
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: "mixed-timeout",
+    cycleFingerprint: "mixed-timeout",
+    seedEdges: [
+      familyEdge("bad-family", 320, {
+        adapterId: "univ2-swap",
+        tokenIn: TOKEN_6,
+        tokenOut: TOKEN_18,
+      }),
+      familyEdge("healthy-family", 321, {
+        adapterId: "univ2-swap",
+        tokenIn: TOKEN_18,
+        tokenOut: TOKEN_6,
+      }),
+    ],
+  } satisfies BlockScanOpportunity;
+  const result = await refineBlockScanCandidates(
+    neverSettlingState,
+    [mixed],
+    1,
+    Date.now() + 2_000,
+    pricedTokens,
+    (diagnostic) => diagnostics.push(diagnostic),
+    1,
+    {
+      familyTimeoutMs: 25,
+      maxConcurrentPerFamily: 1,
+    },
+  );
+  assert.equal(result.deadlineHit, false);
+  assert.deepEqual(result.openCompositeKeys, []);
+  assert.equal(diagnostics[0]?.failure?.reason, "family_timeout");
+  assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "bad-family");
+  assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
 }
 
 function familyEdge(
