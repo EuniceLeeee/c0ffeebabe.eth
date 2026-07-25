@@ -17,6 +17,51 @@ export interface ProductionRouteCallRegistry {
   ): boolean;
 }
 
+interface RouteFamilyFact {
+  readonly kind: string;
+  readonly poolAdapters: readonly string[];
+  readonly edgeAdapterIds: readonly string[];
+}
+
+interface RouteFamilyRegistryFact {
+  list(): readonly RouteFamilyFact[];
+  findForEdge(edgeAdapterId: string): RouteFamilyFact | null;
+}
+
+interface ProductionRegistryModule {
+  readonly PRODUCTION_ADAPTER_FAMILIES?: {
+    routes(): RouteFamilyRegistryFact;
+  };
+  readonly PRODUCTION_ROUTE_ADAPTERS?: {
+    readonly routeLegs: RouteFamilyRegistryFact;
+  };
+  readonly LEGACY_PRODUCTION_ROUTE_EDGES?: readonly {
+    readonly edgeAdapterId: string;
+  }[];
+}
+
+function resolveProductionRouteFacts(production: ProductionRegistryModule): {
+  readonly routes: RouteFamilyRegistryFact;
+  readonly legacyEdgeAdapterIds: ReadonlySet<string>;
+} {
+  const familyRoutes = production.PRODUCTION_ADAPTER_FAMILIES?.routes();
+  if (familyRoutes) {
+    return Object.freeze({
+      routes: familyRoutes,
+      legacyEdgeAdapterIds: new Set<string>(),
+    });
+  }
+  const legacyRoutes = production.PRODUCTION_ROUTE_ADAPTERS?.routeLegs;
+  if (!legacyRoutes) throw new Error("production route registry unavailable");
+  return Object.freeze({
+    routes: legacyRoutes,
+    legacyEdgeAdapterIds: new Set(
+      (production.LEGACY_PRODUCTION_ROUTE_EDGES ?? [])
+        .map((entry) => entry.edgeAdapterId),
+    ),
+  });
+}
+
 let cachedRegistry: Promise<ProductionRouteCallRegistry | null> | null = null;
 
 /**
@@ -44,7 +89,11 @@ async function loadRegistry(): Promise<ProductionRouteCallRegistry | null> {
       import("../../../listener/src/searcher/venues/production-registry.js"),
       import("../../../listener/src/searcher/planner/token-graph.js"),
     ]);
-    const routeFamilies = production.PRODUCTION_ADAPTER_FAMILIES.routes();
+    const productionRegistry = production as unknown as ProductionRegistryModule;
+    const {
+      routes: routeFamilies,
+      legacyEdgeAdapterIds,
+    } = resolveProductionRouteFacts(productionRegistry);
     const routeFamilyByPoolAdapter = new Map(
       routeFamilies.list().flatMap((family) =>
         family.poolAdapters.map((poolAdapter) => [String(poolAdapter), family] as const)
@@ -53,7 +102,9 @@ async function loadRegistry(): Promise<ProductionRouteCallRegistry | null> {
     const pools: readonly ProductionRoutePoolFact[] = tokenGraph.POOL_REGISTRY;
 
     function findRouteActionAdapter(edgeAdapterId: string): TraceActionMatcher | null {
-      if (routeFamilies.findForEdge(edgeAdapterId) === null) return null;
+      const registered = routeFamilies.findForEdge(edgeAdapterId) !== null ||
+        legacyEdgeAdapterIds.has(edgeAdapterId);
+      if (!registered) return null;
       try {
         return getActionAdapter(edgeAdapterId);
       } catch {
