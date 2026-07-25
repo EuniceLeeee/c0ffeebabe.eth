@@ -42,6 +42,7 @@ import {
   JsonRpcBlockScanStateReadBackend,
 } from "../blockscan-state-read-backend.js";
 import {
+  adapterFamilyQuoteCoverageIsComplete,
   blockScanPassBudgetExceeded,
   remapExpectedRouteToVerifiedGraph,
   resolveBlockScanHuntBudgets,
@@ -49,6 +50,7 @@ import {
   routeStepMatchesExpected,
   selectedReplayOpportunityIndexes,
   solveForOpportunityIndex,
+  type AdapterFamilyQuoteCoverageSummary,
 } from "./blockscan-hunt-selection.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import {
@@ -137,14 +139,6 @@ interface HuntConfig {
   topK: number;
   outPath: string;
   anvilPort: number;
-}
-
-interface AdapterFamilyQuoteCoverage {
-  familyId: string;
-  graphEdges: number;
-  positiveQuotes: number;
-  unavailableEdges: number;
-  unresolvedEdges: number;
 }
 
 interface OpportunityReport {
@@ -899,14 +893,13 @@ async function main(): Promise<void> {
       })}`,
     );
     await check(
-      "all registered block-scan adapter families have a positive current-block quote",
+      "all graph-present block-scan families have complete positive/unavailable current-block coverage",
       () =>
-        familyQuoteCoverage.length ===
-          PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().length &&
-        familyQuoteCoverage.every((family) =>
-          family.graphEdges > 0 &&
-          family.positiveQuotes > 0 &&
-          family.unresolvedEdges === 0
+        adapterFamilyQuoteCoverageIsComplete(
+          familyQuoteCoverage,
+          PRODUCTION_ADAPTER_FAMILIES
+            .blockScanStateFamilies()
+            .map((family) => family.familyId),
         ),
     );
     const resolvedEdgeKeys = new Set(pricing.coverage.resolvedEdgeKeys);
@@ -1426,7 +1419,7 @@ function pricedTokens(): Map<string, { maxBorrow: bigint }> {
 
 function summarizeAdapterFamilyQuotes(
   snapshot: BlockScanStateSnapshot,
-): AdapterFamilyQuoteCoverage[] {
+): AdapterFamilyQuoteCoverageSummary[] {
   return PRODUCTION_ADAPTER_FAMILIES.blockScanStateFamilies().map((family) => {
     const ownedEdges = snapshot.graph.edges.filter((edge) =>
       PRODUCTION_ADAPTER_FAMILIES.isBlockScanPricedEdge(edge) &&

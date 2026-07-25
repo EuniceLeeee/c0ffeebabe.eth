@@ -8,6 +8,14 @@ export interface BlockScanHuntBudgets {
   passBudgetMs: number;
 }
 
+export interface AdapterFamilyQuoteCoverageSummary {
+  readonly familyId: string;
+  readonly graphEdges: number;
+  readonly positiveQuotes: number;
+  readonly unavailableEdges: number;
+  readonly unresolvedEdges: number;
+}
+
 export interface ExpectedRouteStep {
   readonly adapterId: string;
   readonly slotKind: "swap" | "protocol";
@@ -70,6 +78,54 @@ export function solveForOpportunityIndex<T extends { opportunityIndex: number }>
   opportunityIndex: number,
 ): T | null {
   return solved.find((entry) => entry.opportunityIndex === opportunityIndex) ?? null;
+}
+
+/**
+ * A production family may legitimately own no instances in one source-aligned
+ * graph (for example an observed-interaction-only protocol with no events in
+ * the frozen window). Every family must still be represented in telemetry,
+ * and every graph-present edge must be partitioned exactly into a positive
+ * quote or a behavior-proven unavailable edge. Unknown/unresolved edges remain
+ * a hard failure.
+ */
+export function adapterFamilyQuoteCoverageIsComplete(
+  coverage: readonly AdapterFamilyQuoteCoverageSummary[],
+  expectedFamilyIds: readonly string[],
+): boolean {
+  const expected = [...expectedFamilyIds].sort();
+  const actual = coverage.map((family) => family.familyId).sort();
+  if (
+    new Set(expected).size !== expected.length ||
+    new Set(actual).size !== actual.length ||
+    expected.length !== actual.length ||
+    expected.some((familyId, index) => familyId !== actual[index])
+  ) {
+    return false;
+  }
+  return coverage.every((family) => {
+    const counts = [
+      family.graphEdges,
+      family.positiveQuotes,
+      family.unavailableEdges,
+      family.unresolvedEdges,
+    ];
+    if (counts.some((count) => !Number.isSafeInteger(count) || count < 0)) {
+      return false;
+    }
+    if (
+      family.graphEdges !==
+        family.positiveQuotes +
+          family.unavailableEdges +
+          family.unresolvedEdges ||
+      family.unresolvedEdges !== 0
+    ) {
+      return false;
+    }
+    if (family.graphEdges === 0) {
+      return family.positiveQuotes === 0 && family.unavailableEdges === 0;
+    }
+    return family.positiveQuotes > 0;
+  });
 }
 
 /**
@@ -155,6 +211,65 @@ function runTests(): void {
     4,
   );
   assert.equal(solveForOpportunityIndex([{ opportunityIndex: 0 }], 4), null);
+  const completeCoverage: AdapterFamilyQuoteCoverageSummary[] = [
+    {
+      familyId: "observed-only",
+      graphEdges: 0,
+      positiveQuotes: 0,
+      unavailableEdges: 0,
+      unresolvedEdges: 0,
+    },
+    {
+      familyId: "swap",
+      graphEdges: 3,
+      positiveQuotes: 2,
+      unavailableEdges: 1,
+      unresolvedEdges: 0,
+    },
+  ];
+  assert.equal(
+    adapterFamilyQuoteCoverageIsComplete(
+      completeCoverage,
+      ["swap", "observed-only"],
+    ),
+    true,
+  );
+  assert.equal(
+    adapterFamilyQuoteCoverageIsComplete(
+      completeCoverage,
+      ["swap", "observed-only", "missing"],
+    ),
+    false,
+  );
+  assert.equal(
+    adapterFamilyQuoteCoverageIsComplete(
+      [...completeCoverage, completeCoverage[0]],
+      ["swap", "observed-only"],
+    ),
+    false,
+  );
+  assert.equal(
+    adapterFamilyQuoteCoverageIsComplete(
+      completeCoverage.map((family) =>
+        family.familyId === "swap"
+          ? { ...family, unavailableEdges: 0, unresolvedEdges: 1 }
+          : family
+      ),
+      ["swap", "observed-only"],
+    ),
+    false,
+  );
+  assert.equal(
+    adapterFamilyQuoteCoverageIsComplete(
+      completeCoverage.map((family) =>
+        family.familyId === "swap"
+          ? { ...family, positiveQuotes: 0, unavailableEdges: 3 }
+          : family
+      ),
+      ["swap", "observed-only"],
+    ),
+    false,
+  );
   const expectedRoute: ExpectedRouteStep[] = [{
     adapterId: "fixture-swap",
     slotKind: "swap",
