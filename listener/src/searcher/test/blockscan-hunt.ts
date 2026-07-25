@@ -987,7 +987,26 @@ async function main(): Promise<void> {
     }
     requirePassBudget("scan", passDeadlineAtMs);
     const probeDiagnostics = new Map<number, BlockScanProbeDiagnostic>();
+    const probeFailureCounts = new Map<string, {
+      reason: NonNullable<BlockScanProbeDiagnostic["failure"]>["reason"];
+      familyIds: readonly string[];
+      attributedFamilyId: string | null;
+      stage: string | null;
+      causeName: string | null;
+      causeCode: string | null;
+      causeKind: string | null;
+      count: number;
+    }>();
     const diagnosticTargetIndex = diagnosticCoarseTarget?.opportunityIndex ?? -1;
+    const refineConcurrency = envInt("HUNT_REFINE_CONCURRENCY", 24);
+    const refineFamilyTimeoutMs = envInt(
+      "HUNT_REFINE_FAMILY_TIMEOUT_MS",
+      1_000,
+    );
+    const refineMaxConcurrentPerFamily = envInt(
+      "HUNT_REFINE_MAX_CONCURRENT_PER_FAMILY",
+      3,
+    );
     const refinement = await refineBlockScanCandidates(
       callBackend,
       coarseScan.opportunities,
@@ -996,9 +1015,29 @@ async function main(): Promise<void> {
       pricedTokenLimits,
       DIAGNOSTIC.enabled && diagnosticTargetIndex >= 0
         ? (probe) => {
+            if (probe.failure) {
+              const failureKey = JSON.stringify([
+                probe.failure.reason,
+                probe.failure.familyIds,
+                probe.failure.attributedFamilyId,
+                probe.failure.stage,
+                probe.failure.causeName,
+                probe.failure.causeCode,
+                probe.failure.causeKind,
+              ]);
+              const previous = probeFailureCounts.get(failureKey);
+              probeFailureCounts.set(failureKey, previous
+                ? { ...previous, count: previous.count + 1 }
+                : { ...probe.failure, count: 1 });
+            }
             if (probe.index === diagnosticTargetIndex) probeDiagnostics.set(probe.index, probe);
           }
         : undefined,
+      refineConcurrency,
+      {
+        familyTimeoutMs: refineFamilyTimeoutMs,
+        maxConcurrentPerFamily: refineMaxConcurrentPerFamily,
+      },
     );
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
     if (DIAGNOSTIC.enabled) {
@@ -1030,11 +1069,21 @@ async function main(): Promise<void> {
           probeMarginBps: targetProbe?.marginBps ?? null,
           probeAttempted: targetProbe?.attempted ?? false,
           probeFailure: targetProbe?.failure ?? null,
+          probeFailureSummary: [...probeFailureCounts.values()].sort(
+            (left, right) =>
+              right.count - left.count ||
+              JSON.stringify(left).localeCompare(JSON.stringify(right)),
+          ),
+          refinementConfig: {
+            concurrency: refineConcurrency,
+            familyTimeoutMs: refineFamilyTimeoutMs,
+            maxConcurrentPerFamily: refineMaxConcurrentPerFamily,
+          },
           retainedAsFallback: refinedRank !== null && probeStatus === "failed",
           reason: probeStatus === "positive" && refinedRank === null
             ? "positive_but_below_candidate_cap"
             : probeStatus === "failed"
-              ? "exact_quote_failed"
+              ? targetProbe?.failure?.reason ?? "exact_quote_failed"
               : probeStatus === "negative"
                 ? "exact_quote_non_positive"
                 : probeStatus === "not_enumerated"
@@ -1047,6 +1096,7 @@ async function main(): Promise<void> {
           failed: refinement.failed,
           deadlineHit: refinement.deadlineHit,
           openFamilyIds: refinement.openFamilyIds,
+          openCompositeKeys: refinement.openCompositeKeys,
           passBudgetExceeded,
         },
       );

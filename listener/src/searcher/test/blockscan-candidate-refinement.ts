@@ -250,6 +250,12 @@ function familyFairAdmissionAndCircuit(): void {
     mixedFailureBudget.recordFailure(mixedEdges);
   }
   assert.equal(mixedFailureBudget.blocks(mixedEdges), true);
+  assert.deepEqual(mixedFailureBudget.openFamilyIds(), []);
+  assert.equal(
+    mixedFailureBudget.openCompositeKeys().length,
+    1,
+    "an unattributed mixed-route failure must expose the exact dependency-set circuit",
+  );
   assert.equal(
     mixedFailureBudget.blocks(healthyEdges),
     false,

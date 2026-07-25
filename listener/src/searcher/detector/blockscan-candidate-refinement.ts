@@ -27,6 +27,7 @@ export interface BlockScanRefinementResult {
   failed: number;
   deadlineHit: boolean;
   openFamilyIds: readonly string[];
+  openCompositeKeys: readonly string[];
 }
 
 export interface BlockScanProbeDiagnostic {
@@ -378,6 +379,7 @@ export async function refineBlockScanCandidates(
   );
   fallback.sort((a, b) => a.index - b.index);
   const openFamilyIds = stageBudget.openFamilyIds();
+  const openCompositeKeys = stageBudget.openCompositeKeys();
   const eligibleRanked = ranked.filter((entry) =>
     !stageBudget.blocks(entry.opportunity.seedEdges)
   );
@@ -406,6 +408,7 @@ export async function refineBlockScanCandidates(
     failed,
     deadlineHit: deadlineHit || Date.now() >= deadlineAtMs,
     openFamilyIds,
+    openCompositeKeys,
   };
 }
 
