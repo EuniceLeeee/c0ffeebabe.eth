@@ -156,6 +156,7 @@ export type SearcherEvent =
 	      opportunity_id: string;
 	      target_block: number;
 	      victim_hash?: string;
+	      sender?: string;
 	      opportunity_kind?: "backrun-arb" | "block-scan-arb";
 	      source_block?: number;
 	      cycle_id?: string;
@@ -178,6 +179,15 @@ export type SearcherEvent =
 	      template_id?: string;
 	      plans?: number;
 	      no_candidate_diagnostic?: unknown;
+	      expected_profit_eth?: string;
+	      gas_cost_eth?: string;
+	      bid_eth?: string;
+	      net_ev_wei?: string;
+	      eth_usd?: number | null;
+	      eth_usd_round_id?: string | null;
+	      eth_usd_updated_at?: string | null;
+	      max_base_fee_per_gas?: string;
+	      decision_parent_hash?: string | null;
 	    }
 	  | {
 	      type: "bundle_submitted";
@@ -203,6 +213,13 @@ export type SearcherEvent =
       simulated_profit?: string;
       simulated_profit_eth?: string;
       bid?: string;
+      gas_cost_eth?: string;
+      net_ev_wei?: string;
+      eth_usd?: number | null;
+      eth_usd_round_id?: string | null;
+      eth_usd_updated_at?: string | null;
+      max_base_fee_per_gas?: string;
+      decision_parent_hash?: string | null;
       tx_hash: string;
       calldata_hash: string;
       builders_sent?: string[];

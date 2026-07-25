@@ -11,10 +11,12 @@ export interface BundleSubmission {
   expectedProfit: bigint;
   /** Expected profit valued in ETH wei (for sizing the proposer bribe). */
   expectedProfitEth?: bigint;
-  /** Fraction of expectedProfitEth to pay as priority-fee bribe, in bps. */
+  /** Fraction of post-gas expected surplus to pay as priority-fee bribe, in bps. */
   bribeBps?: number;
-  /** Absolute priority-fee bribe in wei, computed by the searcher economics gate. */
+  /** Maximum total priority-fee budget in wei, computed by the searcher economics gate. */
   bribeWei?: bigint;
+  /** Exact EIP-1559 base fee for targetBlock, shared with the EV calculation. */
+  maxBaseFeePerGas?: bigint;
   gasUsed?: bigint | number;
   /** Standing-position safety state, carried from the searcher's S2 guard. The router refuses to
    *  broadcast a standing-position bundle that is not authorized (defense-in-depth behind the
@@ -29,6 +31,35 @@ export interface BundleRouter {
 export function standingPositionSafetyReject(bundle: BundleSubmission): SubmitResult | null {
   if (bundle.safety && bundle.safety.leavesStandingPosition && !bundle.safety.authorized) {
     return { builder: "safety-reject", accepted: false, error: "standing_position_unauthorized" };
+  }
+  return null;
+}
+
+export function productionEconomicsSafetyReject(
+  bundle: BundleSubmission,
+): SubmitResult | null {
+  const gasUsed = typeof bundle.gasUsed === "bigint"
+    ? bundle.gasUsed
+    : Number.isSafeInteger(bundle.gasUsed) && Number(bundle.gasUsed) > 0
+      ? BigInt(bundle.gasUsed!)
+      : 0n;
+  if (gasUsed <= 0n || gasUsed > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return { builder: "economics-reject", accepted: false, error: "missing_measured_gas" };
+  }
+  if (bundle.maxBaseFeePerGas === undefined || bundle.maxBaseFeePerGas <= 0n) {
+    return { builder: "economics-reject", accepted: false, error: "missing_target_base_fee" };
+  }
+  if (bundle.bribeWei === undefined || bundle.bribeWei < 0n) {
+    return { builder: "economics-reject", accepted: false, error: "missing_absolute_bribe_budget" };
+  }
+  if (bundle.expectedProfitEth === undefined || bundle.expectedProfitEth <= 0n) {
+    return { builder: "economics-reject", accepted: false, error: "missing_expected_profit_eth" };
+  }
+  if (
+    bundle.expectedProfitEth <=
+      bundle.maxBaseFeePerGas * gasUsed + bundle.bribeWei
+  ) {
+    return { builder: "economics-reject", accepted: false, error: "non_positive_ev_budget" };
   }
   return null;
 }
@@ -75,6 +106,7 @@ export function dryRunSubmissionId(
     expectedProfitEth: bundle.expectedProfitEth?.toString() ?? null,
     bribeBps: bundle.bribeBps ?? null,
     bribeWei: bundle.bribeWei?.toString() ?? null,
+    maxBaseFeePerGas: bundle.maxBaseFeePerGas?.toString() ?? null,
     safety: bundle.safety ?? null,
   });
   return ethers.id(unsigned);
@@ -85,17 +117,17 @@ export class ProductionBundleRouter implements BundleRouter {
     private readonly wallet: ethers.Wallet,
     private readonly provider: ethers.JsonRpcProvider,
     private readonly botvmAddress: string,
-    private readonly defaultGasUsed = 12_000_000,
   ) {}
 
   async submit(bundle: BundleSubmission): Promise<SubmitResult[]> {
     const safetyReject = standingPositionSafetyReject(bundle);
     if (safetyReject) return [safetyReject];
-    const gasUsed = Number(bundle.gasUsed ?? this.defaultGasUsed);
+    const economicsReject = productionEconomicsSafetyReject(bundle);
+    if (economicsReject) return [economicsReject];
+    const gasUsed = Number(bundle.gasUsed);
     const bribe = {
-      expectedProfitEth: bundle.expectedProfitEth,
-      bribeBps: bundle.bribeBps,
-      bribeWei: bundle.bribeWei,
+      bribeWei: bundle.bribeWei!,
+      maxBaseFeePerGas: bundle.maxBaseFeePerGas!,
     };
     let results: SubmitResult[];
 
@@ -167,6 +199,5 @@ export function createBundleRouter(input: {
       input.wallet,
       input.provider,
       input.botvmAddress,
-      input.defaultGasUsed,
     );
 }

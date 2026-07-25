@@ -875,6 +875,8 @@ preflight() {
     [ "$(file_env_get "$A_PROCESS_ENV" "$key")" = "$expected" ] \
       || die "champion $key must equal $expected"
   done
+  [ "$(file_env_get "$A_PROCESS_ENV" SEARCHER_BRIBE_ALL_ABOVE_GAS)" != "1" ] \
+    || die "champion SEARCHER_BRIBE_ALL_ABOVE_GAS is obsolete and forbidden"
   [[ "$(file_env_get "$A_PROCESS_ENV" SEARCHER_DISCOVERY_TO_BLOCK)" =~ ^[0-9]+$ ]] \
     || die "champion SEARCHER_DISCOVERY_TO_BLOCK must be pinned by deploy-node.sh"
   a_rpc=$(file_env_get "$A_PROCESS_ENV" SEARCHER_LIVE_RPC_URL)
@@ -897,6 +899,8 @@ preflight() {
     local key=${pair%%=*} expected=${pair#*=}
     [ "$(env_get "$key")" = "$expected" ] || die "$key must equal $expected in $ENVF"
   done
+  [ "$(env_get SEARCHER_BRIBE_ALL_ABOVE_GAS)" != "1" ] \
+    || die "challenger SEARCHER_BRIBE_ALL_ABOVE_GAS is obsolete and forbidden"
   [ "$(env_get SEARCHER_EVENTS_PATH)" = "/var/log/mev/events/searcher-ab-b.jsonl" ] \
     || die "B requires its dedicated SEARCHER_EVENTS_PATH"
   check_wallet_envelope "$A_PROCESS_ENV" "$EXPECTED_A_WALLET" "$EXPECTED_A_BOTVM" champion "$ROOT/.a-start-balance-wei"
@@ -1828,8 +1832,8 @@ PY
   acceptance_args+=("${shakedown_arg[@]}")
 
   local acceptance_env=() key value
-  for key in SEARCHER_EV_GATE SEARCHER_MIN_NET_ETH SEARCHER_ETH_USD \
-    SEARCHER_PROFIT_HAIRCUT_BPS SEARCHER_BACKRUN_GAS_USED SEARCHER_GAS_BUFFER_MULT_X10 \
+  for key in SEARCHER_EV_GATE SEARCHER_MIN_NET_ETH \
+    SEARCHER_PROFIT_HAIRCUT_BPS SEARCHER_BACKRUN_GAS_USED \
     SEARCHER_BRIBE_ALL_ABOVE_GAS SEARCHER_BRIBE_BPS; do
     value=$(file_env_get "$A_PROCESS_ENV" "$key")
     [ -z "$value" ] || acceptance_env+=("$key=$value")

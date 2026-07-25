@@ -8,6 +8,8 @@ export interface LiveEnvelopeInput {
   evGate: boolean;
   bribeBps: number;
   bribeAllAboveGas: boolean;
+  minNetEth: bigint;
+  profitHaircutBps: number;
   walletAddress: string;
   botvmAddress: string;
   configuredBotvmOwner?: string;
@@ -29,10 +31,26 @@ export async function validateLiveEnvelope(
   if (!Number.isInteger(input.bribeBps) || input.bribeBps < 0 || input.bribeBps > 10_000) {
     throw new Error("bounded-live SEARCHER_BRIBE_BPS must be an integer between 0 and 10000");
   }
-  if (!input.bribeAllAboveGas && input.bribeBps >= 10_000) {
+  if (input.bribeAllAboveGas) {
     throw new Error(
-      "bounded-live SEARCHER_BRIBE_BPS must retain positive EV when " +
-        "SEARCHER_BRIBE_ALL_ABOVE_GAS is disabled",
+      "bounded-live SEARCHER_BRIBE_ALL_ABOVE_GAS must be disabled to retain positive EV",
+    );
+  }
+  if (input.bribeBps >= 10_000) {
+    throw new Error(
+      "bounded-live SEARCHER_BRIBE_BPS must retain positive EV",
+    );
+  }
+  if (input.minNetEth < 0n) {
+    throw new Error("bounded-live SEARCHER_MIN_NET_ETH must be non-negative");
+  }
+  if (
+    !Number.isInteger(input.profitHaircutBps) ||
+    input.profitHaircutBps < 0 ||
+    input.profitHaircutBps > 10_000
+  ) {
+    throw new Error(
+      "bounded-live SEARCHER_PROFIT_HAIRCUT_BPS must be an integer between 0 and 10000",
     );
   }
   if (!input.configuredBotvmOwner) throw new Error("bounded-live requires BOTVM_OWNER");

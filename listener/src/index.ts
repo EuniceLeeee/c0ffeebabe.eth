@@ -7,7 +7,6 @@ import {
   startAnvil,
   stopAnvil,
 } from "./simulator.js";
-import { submitBundle } from "./submitter.js";
 import type { ListenerConfig } from "./types.js";
 
 // Default known victim tx for backtest mode
@@ -91,11 +90,9 @@ async function runBacktest(config: ListenerConfig, victimTx: string) {
 async function runListener(
   config: ListenerConfig,
   duration: number,
-  live: boolean
 ) {
   const ts = new Date().toISOString();
-  const modeLabel = live ? "LIVE" : "DRY-RUN";
-  console.log(`\n[${ts}] === ${modeLabel} LISTENER MODE ===`);
+  console.log(`\n[${ts}] === DRY-RUN LISTENER MODE ===`);
   console.log(`[${ts}] RPC: ${config.rpcUrl.slice(0, 30)}...`);
   console.log(`[${ts}] WS:  ${config.wsUrl.slice(0, 30)}...`);
   console.log(
@@ -105,31 +102,6 @@ async function runListener(
     `[${ts}] Duration: ${duration > 0 ? `${duration}s` : "indefinite"}`
   );
 
-  // In live mode, require OWNER_PRIVATE_KEY + BOTVM_ADDRESS + BOTVM_OWNER
-  let wallet: ethers.Wallet | null = null;
-  let botvmAddress = "";
-  if (live) {
-    const pk = process.env.OWNER_PRIVATE_KEY;
-    botvmAddress = process.env.BOTVM_ADDRESS || "";
-    const botvmOwner = process.env.BOTVM_OWNER || ""; // # codex修改
-    if (!pk || !botvmAddress || !botvmOwner) { // # codex修改
-      console.error(
-        "Error: --live requires OWNER_PRIVATE_KEY, BOTVM_ADDRESS, and BOTVM_OWNER env vars" // # codex修改
-      );
-      process.exit(1);
-    }
-    const httpForWallet = new ethers.JsonRpcProvider(config.rpcUrl);
-    wallet = new ethers.Wallet(pk, httpForWallet);
-    if (wallet.address.toLowerCase() !== botvmOwner.toLowerCase()) { // # codex修改
-      console.error(
-        `Error: OWNER_PRIVATE_KEY wallet (${wallet.address}) must match BOTVM_OWNER (${botvmOwner})` // # codex修改
-      );
-      process.exit(1); // # codex修改
-    }
-    console.log(`[${ts}] Wallet:  ${wallet.address}`);
-    console.log(`[${ts}] BotVM:   ${botvmAddress}`);
-    console.log(`[${ts}] Owner:   ${botvmOwner}`); // # codex修改
-  }
   console.log();
 
   // Start anvil for local simulation
@@ -192,29 +164,7 @@ async function runListener(
         console.log(`  gasUsed:       ${result.gasUsed}`);
         console.log(`  calldataLen:   ${result.calldataLength}`);
 
-        if (live && wallet && result.calldataHex && result.victimRawTx) {
-          // LIVE: submit bundle to builders
-          const block = await httpProvider.getBlockNumber();
-          console.log(`[${nowSim}] Submitting bundle for block ${block + 1}...`);
-          const results = await submitBundle({
-            victimRawTx: result.victimRawTx,
-            calldataHex: result.calldataHex,
-            gasUsed: result.gasUsed,
-            wallet,
-            botvmAddress,
-            provider: httpProvider,
-            targetBlock: block + 1,
-          });
-          submitted++;
-          for (const r of results) {
-            const status = r.accepted ? "ACCEPTED" : "REJECTED";
-            console.log(
-              `  [${r.builder}] ${status}${r.bundleHash ? ` hash=${r.bundleHash}` : ""}${r.error ? ` err=${r.error}` : ""}`
-            );
-          }
-        } else {
-          console.log(`  DRY RUN -- would submit bundle but skipping`);
-        }
+        console.log(`  DRY RUN -- would submit bundle but skipping`);
       } else {
         console.log(
           `[${nowSim}] No opportunity (sim: ${result.wstUsrProfit} wstUSR)`
@@ -251,12 +201,17 @@ async function runListener(
 
 async function main() {
   const { mode, duration, victimTx } = parseArgs();
+  if (mode === "live") {
+    throw new Error(
+      "legacy --live is disabled; use the production searcher entrypoint with its EV envelope",
+    );
+  }
   const config = buildConfig();
 
   if (mode === "backtest") {
     await runBacktest(config, victimTx);
   } else {
-    await runListener(config, duration, mode === "live");
+    await runListener(config, duration);
   }
 }
 

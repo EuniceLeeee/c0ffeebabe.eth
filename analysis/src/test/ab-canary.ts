@@ -20,6 +20,10 @@ import {
   type AbExperiment,
   type AbSixStepDiagnostic,
 } from "../ab-canary.js";
+import {
+  isStrictPositiveBackrunEv,
+  type BackrunEvEvidence,
+} from "../backrun-ev-evidence.js";
 import { PRODUCTION_DECISION_CAPABILITIES } from "../tool-index.js";
 
 function log(totalBase: number, candidateOffset = 0): string {
@@ -30,6 +34,51 @@ function log(totalBase: number, candidateOffset = 0): string {
   }
   return lines.join("\n");
 }
+
+test("backrun EV evidence requires strict positive net above the production threshold", () => {
+  const evidence: BackrunEvEvidence = {
+    decision: "allow",
+    profitToken: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    gasUsed: "2",
+    calldataHash: "ab".repeat(32),
+    netEvWei: "1",
+    expectedProfitEth: "8",
+    gasCostEth: "4",
+    bidEth: "3",
+    minNetEth: "0",
+    decisionParentBlock: 100,
+    targetBlock: 101,
+    decisionParentHash: `0x${"cd".repeat(32)}`,
+    maxBaseFeePerGas: "2",
+    ethUsd: 1_900,
+    ethUsdRoundId: "123",
+    ethUsdUpdatedAt: "456",
+  };
+  assert.equal(isStrictPositiveBackrunEv(evidence), true);
+  assert.equal(isStrictPositiveBackrunEv({
+    ...evidence,
+    netEvWei: "0",
+    expectedProfitEth: "7",
+  }), false, "zero net must never be classified as production-positive");
+  assert.equal(isStrictPositiveBackrunEv({
+    ...evidence,
+    netEvWei: "1",
+    minNetEth: "1",
+  }), false, "net equal to the configured minimum must be rejected");
+  assert.equal(isStrictPositiveBackrunEv({
+    ...evidence,
+    ethUsd: null,
+    ethUsdRoundId: null,
+    ethUsdUpdatedAt: null,
+  }), false, "a stablecoin profit must carry pinned USD oracle provenance");
+  assert.equal(isStrictPositiveBackrunEv({
+    ...evidence,
+    profitToken: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    ethUsd: null,
+    ethUsdRoundId: null,
+    ethUsdUpdatedAt: null,
+  }), true, "WETH profit does not require a USD oracle round");
+});
 
 test("deploy freezes immutable universes for independent acceptance", () => {
   const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");

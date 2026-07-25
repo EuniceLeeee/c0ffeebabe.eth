@@ -57,6 +57,7 @@ const BALANCE_OF_IFACE = new ethers.Interface([
 export class RevmLiveBackend implements LiveStateBackend {
   readonly kind = "revm" as const;
   private preparedBlock: number | null = null;
+  private warmBlockAnchor: { number: number; hash: string } | null = null;
   private readonly feeCache = new Map<string, number>();
 
   constructor(
@@ -68,6 +69,63 @@ export class RevmLiveBackend implements LiveStateBackend {
     private readonly rpcUrl: string,
   ) {}
 
+  private async canonicalBlockHash(blockNumber: number): Promise<string> {
+    const block = await this.provider.send(
+      "eth_getBlockByNumber",
+      [ethers.toQuantity(blockNumber), false],
+    ) as { hash?: unknown } | null;
+    if (typeof block?.hash !== "string" || !ethers.isHexString(block.hash, 32)) {
+      throw new Error(`missing canonical hash for revm block ${blockNumber}`);
+    }
+    return block.hash.toLowerCase();
+  }
+
+  private async resetCanonicalState(): Promise<void> {
+    await this.client.reset();
+    this.warmBlockAnchor = null;
+    this.preparedBlock = null;
+  }
+
+  private async beginCanonicalBlock(
+    blockNumber: number,
+    expectedHash?: string,
+  ): Promise<string> {
+    const canonicalHash = await this.canonicalBlockHash(blockNumber);
+    if (
+      expectedHash !== undefined &&
+      canonicalHash !== expectedHash.toLowerCase()
+    ) {
+      await this.resetCanonicalState();
+      throw new Error(
+        `revm source block reorged before prepare block=${blockNumber} ` +
+        `expected=${expectedHash} canonical=${canonicalHash}`,
+      );
+    }
+    if (
+      this.warmBlockAnchor?.number === blockNumber &&
+      this.warmBlockAnchor.hash !== canonicalHash
+    ) {
+      await this.resetCanonicalState();
+    }
+    return canonicalHash;
+  }
+
+  private async commitCanonicalBlock(
+    blockNumber: number,
+    expectedHash: string,
+  ): Promise<string> {
+    const canonicalHash = await this.canonicalBlockHash(blockNumber);
+    if (canonicalHash !== expectedHash) {
+      await this.resetCanonicalState();
+      throw new Error(
+        `revm source block reorged during prepare block=${blockNumber} ` +
+        `before=${expectedHash} after=${canonicalHash}`,
+      );
+    }
+    this.warmBlockAnchor = { number: blockNumber, hash: canonicalHash };
+    return canonicalHash;
+  }
+
   supportsPath(input: PrepareInput): boolean {
     return (
       input.path === "hash-only" &&
@@ -77,6 +135,10 @@ export class RevmLiveBackend implements LiveStateBackend {
   }
 
   async prepareVictimState(input: PrepareInput): Promise<PreparedState> {
+    const blockHash = await this.beginCanonicalBlock(
+      input.baseBlock,
+      input.baseBlockHash,
+    );
     if (input.path === "mined") {
       // The victim is already included in the mined block's post-state, so read
       // chain state directly at that block with no overlay.
@@ -86,8 +148,9 @@ export class RevmLiveBackend implements LiveStateBackend {
         funded: [ethers.getAddress(this.owner)],
         prewarm: [ethers.getAddress(this.executor)],
       });
+      await this.commitCanonicalBlock(input.baseBlock, blockHash);
       this.preparedBlock = input.baseBlock;
-      return { blockNumber: input.baseBlock, mode: "mined" };
+      return { blockNumber: input.baseBlock, blockHash, mode: "mined" };
     }
 
     if (input.path !== "hash-only" || !input.impact) {
@@ -140,8 +203,9 @@ export class RevmLiveBackend implements LiveStateBackend {
           `(trace ${s.traceMs}ms, prepare total ${resp.latencyMs}ms)`,
       );
     }
+    await this.commitCanonicalBlock(input.baseBlock, blockHash);
     this.preparedBlock = input.baseBlock;
-    return { blockNumber: input.baseBlock, mode: "hash-only" };
+    return { blockNumber: input.baseBlock, blockHash, mode: "hash-only" };
   }
 
   private buildPreparePrewarm(input: PrepareInput, stateOverrideOnly: boolean): string[] {
@@ -226,6 +290,7 @@ export class RevmLiveBackend implements LiveStateBackend {
    * cold route-hop trace inside the TTL. Pure reads, no overlay.
    */
   async warmHotPools(blockNumber: number, hops: QuoteRequest[]): Promise<void> {
+    const blockHash = await this.beginCanonicalBlock(blockNumber);
     const calls: OverlayPreCall[] = [];
     const seenTargets = new Set<string>();
     const hotTokens = new Map<string, string>();
@@ -284,6 +349,7 @@ export class RevmLiveBackend implements LiveStateBackend {
         : [],
       prewarmCalls: calls,
     });
+    await this.commitCanonicalBlock(blockNumber, blockHash);
   }
 
   async warmPrepareState(input: PrepareInput): Promise<void> {
