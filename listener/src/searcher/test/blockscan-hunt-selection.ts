@@ -8,6 +8,17 @@ export interface BlockScanHuntBudgets {
   passBudgetMs: number;
 }
 
+export interface ExpectedRouteStep {
+  readonly adapterId: string;
+  readonly slotKind: "swap" | "protocol";
+  readonly target: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly edgeKind?: string;
+  readonly leavesStandingPosition?: boolean;
+  readonly poolId?: string;
+}
+
 export function resolveBlockScanHuntBudgets(
   env: Readonly<Record<string, string | undefined>>,
 ): BlockScanHuntBudgets {
@@ -59,6 +70,35 @@ export function solveForOpportunityIndex<T extends { opportunityIndex: number }>
   opportunityIndex: number,
 ): T | null {
   return solved.find((entry) => entry.opportunityIndex === opportunityIndex) ?? null;
+}
+
+/**
+ * Expected routes are partial predicates: edge taxonomy is optional in the
+ * operator-supplied fixture, while actual reports always carry it. Comparing
+ * the two objects with JSON.stringify therefore creates a false negative even
+ * when every required route identity field is equal.
+ */
+export function routeMatchesExpected(
+  actual: readonly ExpectedRouteStep[],
+  expected: readonly ExpectedRouteStep[],
+): boolean {
+  return actual.length === expected.length &&
+    actual.every((step, index) => routeStepMatchesExpected(step, expected[index]));
+}
+
+export function routeStepMatchesExpected(
+  actual: ExpectedRouteStep,
+  expected: ExpectedRouteStep,
+): boolean {
+  return actual.adapterId === expected.adapterId
+    && actual.slotKind === expected.slotKind
+    && actual.target === expected.target
+    && actual.tokenIn === expected.tokenIn
+    && actual.tokenOut === expected.tokenOut
+    && (expected.edgeKind === undefined || actual.edgeKind === expected.edgeKind)
+    && (expected.leavesStandingPosition === undefined
+      || actual.leavesStandingPosition === expected.leavesStandingPosition)
+    && (expected.poolId === undefined || actual.poolId === expected.poolId);
 }
 
 /**
@@ -115,6 +155,24 @@ function runTests(): void {
     4,
   );
   assert.equal(solveForOpportunityIndex([{ opportunityIndex: 0 }], 4), null);
+  const expectedRoute: ExpectedRouteStep[] = [{
+    adapterId: "fixture-swap",
+    slotKind: "swap",
+    target: "0x1111111111111111111111111111111111111111",
+    tokenIn: "0x2222222222222222222222222222222222222222",
+    tokenOut: "0x3333333333333333333333333333333333333333",
+  }];
+  const actualRoute: ExpectedRouteStep[] = [{
+    ...expectedRoute[0],
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+  }];
+  assert.equal(routeMatchesExpected(actualRoute, expectedRoute), true);
+  assert.equal(routeMatchesExpected(actualRoute, [{
+    ...expectedRoute[0],
+    leavesStandingPosition: true,
+  }]), false);
+  assert.equal(routeMatchesExpected(actualRoute, []), false);
   const rawEdge: TokenEdge = {
     adapterId: "fixture-swap",
     target: "0x1111111111111111111111111111111111111111",

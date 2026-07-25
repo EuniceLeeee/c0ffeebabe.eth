@@ -41,6 +41,8 @@ import {
   blockScanPassBudgetExceeded,
   remapExpectedRouteToVerifiedGraph,
   resolveBlockScanHuntBudgets,
+  routeMatchesExpected,
+  routeStepMatchesExpected,
   selectedReplayOpportunityIndexes,
   solveForOpportunityIndex,
 } from "./blockscan-hunt-selection.js";
@@ -1279,7 +1281,7 @@ function readExpectedReplayTarget(
   const opportunityIndex = opportunities.findIndex((entry) =>
     entry.swapPath !== null
     && JSON.stringify(entry.swapPath) === JSON.stringify(expectedSwapPath)
-    && JSON.stringify(entry.route) === JSON.stringify(expectedRoute)
+    && routeMatchesExpected(entry.route, expectedRoute)
     && entry.hasProtocolEdge === expectedProtocol);
   return { expectedPools, expectedSwapPath, expectedRoute, opportunityIndex };
 }
@@ -1576,6 +1578,9 @@ function parseExpectedRoute(value: string): OpportunityReport["route"] {
       || typeof edge.target !== "string"
       || typeof edge.tokenIn !== "string"
       || typeof edge.tokenOut !== "string"
+      || (edge.edgeKind !== undefined && typeof edge.edgeKind !== "string")
+      || (edge.leavesStandingPosition !== undefined
+        && typeof edge.leavesStandingPosition !== "boolean")
       || (edge.poolId !== undefined && typeof edge.poolId !== "string");
   })) {
     throw new Error("AB_EXPECTED_ROUTE_JSON must contain 2..8 complete ordered route edges");
@@ -1588,6 +1593,10 @@ function parseExpectedRoute(value: string): OpportunityReport["route"] {
       target: edge.target.toLowerCase(),
       tokenIn: edge.tokenIn.toLowerCase(),
       tokenOut: edge.tokenOut.toLowerCase(),
+      ...(edge.edgeKind !== undefined ? { edgeKind: edge.edgeKind } : {}),
+      ...(edge.leavesStandingPosition !== undefined
+        ? { leavesStandingPosition: edge.leavesStandingPosition }
+        : {}),
       ...(edge.poolId ? { poolId: edge.poolId.toLowerCase() } : {}),
     };
   });
@@ -1811,15 +1820,7 @@ function sameRouteStep(
   actual: OpportunityReport["route"][number],
   expected: OpportunityReport["route"][number],
 ): boolean {
-  return actual.adapterId === expected.adapterId
-    && actual.slotKind === expected.slotKind
-    && actual.target === expected.target
-    && actual.tokenIn === expected.tokenIn
-    && actual.tokenOut === expected.tokenOut
-    && (expected.edgeKind === undefined || actual.edgeKind === expected.edgeKind)
-    && (expected.leavesStandingPosition === undefined
-      || actual.leavesStandingPosition === expected.leavesStandingPosition)
-    && (expected.poolId === undefined || actual.poolId === expected.poolId);
+  return routeStepMatchesExpected(actual, expected);
 }
 
 function parseExpectedSwapPath(value: string): Array<{ pool_id: string; direction: "0for1" | "1for0" }> {
