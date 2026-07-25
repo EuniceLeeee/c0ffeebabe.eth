@@ -1,6 +1,6 @@
 # Codex — 轻量 Adapter Family 自动实例接入与 Block-Scan 状态统一计划
 
-> 状态：`implemented_not_validated`。架构实现已落地；严格 tx055、真实 conversion freshness 与
+> 状态：`implemented_not_validated`。架构实现已落地；严格 tx02、真实 conversion freshness 与
 > paired-live A/B 证据尚未取得。
 >
 > 本文取代同文件上一版 `Universal AdapterFamily Plugin` 设计。Git 历史保留旧稿，但旧稿中的动态 plugin
@@ -10,7 +10,7 @@
 > `a6c28ccc4196b56e56901c89076ce1185cb660b2` 上完成实施前审查；该 SHA 只用于审查历史，不是本轮
 > 实施基线。
 >
-> 干净实施历史：T0 `5945146` 冻结 trusted blind-run、stage artifact chain、tx055 contract 与
+> 干净实施历史：T0 `5945146` 冻结 trusted blind-run、stage artifact chain、历史样本 contract 与
 > paired-live primitive；T1 `059f7c0` 给旧 main pipeline 增加 baseline 六阶段 instrumentation；F 是本
 > branch 的单个架构实现 commit。T1 专用 baseline runtime 在 F 树中删除是预期的 producer 翻转，不是能力
 > 回退。
@@ -122,9 +122,10 @@ Family 是语义和故障边界，不是文件边界。
 六阶段证据人工裁决 checker，不允许把未运行的生产阶段人工写成通过。
 
 固定交易
-`0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b`
-用于本轮 full-graph 六步与耗时验收；禁止把 tx、pool、route、amount 或 calldata 写入被测 production
-closure。
+`0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af`
+用于本轮 full-graph 六步与耗时验收。原 tx055 因本地 reth 对其 source state 已 prune，已由用户明确批准
+替换；不能继续拿只能读 header/tx、不能执行任意 storage 的节点冒充合法 backend。禁止把 tx、pool、
+route、amount 或 calldata 写入被测 production closure。
 
 ## 2. 概念与边界
 
@@ -1093,7 +1094,7 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 | T1 baseline instrumentation | `059f7c0`；build、baseline runtime、blind contract、production harness 与 scanner 回归已通过 |
 | T1/F blind evidence vocabulary | F 只在验收输出层投影 T1 冻结的 edge/family/state/graph 口径；production 继续使用 richer family/instance identity；跨版本冻结测试通过 |
 | F build/focused conformance | 本地 build 与 focused suite 已通过；详见下方记录 |
-| tx055 六步语义与 p95 `<10s` | 未实跑；没有语义或性能结论 |
+| tx02 六步语义与 p95 `<10s` | 冻结 full-graph diagnostic 已到 final sim 且 EV 正确 reject；该次仍用了 forced probe，只是定位证据，不是 strict natural-selection pass；20 轮 p95 未跑 |
 | conversion freshness | harness 已实现；真实冻结样本证据缺失 |
 | V2/V3 parity | local-reth + frozen production universe 连续块 artifact 已通过；forced-reorg/invalidation 由同一 artifact 绑定的 synthetic harness 覆盖 |
 | paired live | trusted primitive/unit test 已实现；真实 A/B window 未跑 |
@@ -1104,7 +1105,7 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 
 F0 的 activation continuity fixture 仍锚定 `040a9cc`；`040a9cc..8aece69` 的 `listener/` tree 无差异，
 所以它仍能证明该段 activation 语义连续。但它不是完整 F0 生产证据，不能替代当时 production universe、
-V2/V3 warm-state hash、stage timings、RPC/call/batch 分布或 tx055 raw artifact。
+V2/V3 warm-state hash、stage timings、RPC/call/batch 分布或 strict tx02 raw artifact。
 
 2026-07-24 最终本地验证已通过 TypeScript build、boundary lint，并覆盖：
 
@@ -1144,7 +1145,7 @@ Mint/Burn/tick invalidation 和 missing-log full-refresh 证据。最终文档�
 
 - 从当前 production registry 自动生成 active family/instance/edge/action/funding inventory；
 - 封存 V2/V3 discovered pool set、identity、fee、ordered graph 和 warm-state hashes；
-- 封存 tx055 与代表性 family fixtures；
+- 封存 tx02 与代表性 family fixtures；
 - 记录当前 full-graph stage timings、RPC/call/batch 数和 incomplete 分布。
 
 不手写第二张 inventory。
@@ -1305,16 +1306,18 @@ Fable 已证明 V2/V3“公式对拍”的测试形状可行，但其 shadow tra
 - aggregate throw 的 family-scoped retry/settle 后，其他 family 的 snapshot 与冻结 healthy-only
   baseline exact 相同。
 
-### 11.4 tx055 严格六步与秒数
+### 11.4 tx02 严格六步与秒数
 
 固定证据：
 
 ```text
-tx=0x055f5c5df75f4a1006d5af0fcff60218b3acb856c3ef988a5089147794908f4b
-base_block=25585379
-source_block=25585380
-source_hash=0x6cf953cd24df65a1d0505aa661b8361b69178dbc74eb73085e3531df284c8f22
-source_state_root=0x8bb7fd340dc4088cf2572be4915b861e5dc5fe4827da2ad56a7672fbbcae678e
+tx=0x02a8b803ed975ebc944d61a218c9438f5ae62615969434046a5d53ab4d1966af
+base/source_block=25599789
+source_hash=0xbdaf5f6640f784373f4e6d644e27dd447f0914db43affbe2f9bc16f7e5bb062a
+source_state_root=0xdffdabeabb966c54a3023f332531c0d384d884034a5569318723e621cdf1808e
+landed_block=25599790
+landed_hash=0x19252e62dcc5e10e53f71bb6948b01083943587622e5e0e170cc215f76b2eed4
+landed_state_root=0x5f497472793e3154fc9479accb1a8ec609d1f24fd688776f82614a1e96f737ab
 ```
 
 目标 tx/route/pools/tokens/amount/calldata 只存在于 trusted oracle/comparator，不能传入被测 searcher。
@@ -1404,24 +1407,50 @@ overall=implemented_not_validated
 
 保留真实阶段分解后再讨论，不制造假通过。
 
-当前仓库没有上述完整 historical source-N backend，因而尚未形成合法 20-run denominator。当前记录必须是：
+当前冻结 full-graph diagnostic 证明四腿
+`USDT -> PAXG -> GOLDx -> USDx -> USDT` 可以从 production universe 建图、枚举、精确报价、编译并
+在 clean fork 成功执行。该次证据不能升级为 strict pass，因为 diagnostic harness 将自然 refine rank
+`719` 的目标作为 forced probe 送入 solver；这违反本节 `forced_selection_count=0`。它只能证明
+downstream capability，不能证明 production 自然选择。
+
+已取得的定位证据：
 
 ```text
-tx055_semantic_evidence=not_run
-tx055_timing_evidence=not_run
-blocker=full_historical_source_state_unavailable
+tested_runtime=bbaa9dad8777345e9eea5009b84af86ebbe46499
+universe_sha256=80c4b8d940d1f029ada3abfdd1825553a88301458cc2599b1337de2b65eba13b
+graph_edges=22655
+edge_set_sha256=e0e5c79d86c257777fcbaabc7cfc03f8c16a2cb4f5fe46751251af49bf47d00f
+coarse_rank=1174/1875
+refined_rank=719
+probe_margin_bps=156.46869459736865
+selection_mode=forced_probe
+plan_count=1
+final_sim=success
+profit_token=USDT
+net_profit_raw=499624
+gas_used=1664930
+calldata_sha256=13540775224ff4ce9c984636354d25eab1e8cad323d008386dc76dbe0857c252
+ev_decision=below_ev_gate
+ev_reason=correct_reject_under_frozen_policy
+state_wall_ms_single_run=9910
+log_sha256=17361a04df2c9d8853f3f99607ec9e4ab5dcf9aa28608673bbf9350981364ffb
+output_sha256=ba0e742d8c8041b826f0fbd13569e4fc851eca14b8111d82121bdf4f6b091e24
+strict_tx02_semantic_evidence=missing
+tx02_timing_evidence=missing
+blocker=production_natural_selection_and_20_run_denominator_not_yet_run
 overall=implemented_not_validated
 ```
 
-2026-07-24 对生产 A 的 local reth 做了只读实机复核：source block `25585380` 的 header hash/state root
-与本节冻结值一致，目标 raw tx 也仍可读取；但该高度的 `eth_getCode`、`eth_getStorageAt` 和目标 tx 的
-`debug_traceTransaction` 均返回 `state ... is pruned`。复核后 production A service 与部署 commit
-保持不变。因此这里不是 `timing_status=fail`：计时实验尚未在合法 backend 上开始，不能用能读 block/tx
-但不能执行任意历史 storage 的 pruned 节点制造 20-run 结果。
+真实 landed tx 与上述 final sim 的执行偏差已单独核对：solver 的 start amount 比 landed tx 高
+`0.343543%`，最终毛利润只多 `1` 个 USDT 最小单位，sim gas 比 landed gas 少 `0.131244%`。因此 Step
+6 reject 不是 adapter、quote、sizing 或 sim 偏差；冻结 policy 使用 `ETH_USD=3500`、`20%` profit
+haircut 和 `2x` gas buffer，而 landed block 的 ETH/USD 约为 `1869.11261`，真实 builder payment 也只有
+扣真实 gas 后剩余利润的约 `9.9%`。即使用历史 ETH/USD，只要保留 `20% haircut + 2x gas` 仍应 reject。
+验收要求 A/B 的 unchanged EV policy 给出同一 reject/reason，不要求把真实 winner 强行判为 allow。
 
 ### 11.5 Conversion freshness
 
-tx055 不覆盖 conversion rate 单块跳变。Conversion sentinel 复用 blind harness：
+tx02 不覆盖 conversion rate 单块跳变。Conversion sentinel 复用 blind harness：
 
 - challenger freeze 前只封存 eligibility range、predicate/version、最小样本数量、selection algorithm
   以及 trusted seed/salt commitment；
@@ -1595,7 +1624,7 @@ P1 的修复严格限制在 blind evidence compatibility projection：
 
 这些修复已经通过 build、blind contract/freezer/production-harness/challenger-runtime 和
 `searcher:adapter-family-blind-t1-compatibility`。没有进行第四轮对抗审计。P2 不制造 pass，保留为非阻断
-诊断 follow-up；严格 tx055 和 paired-live 仍保持 `missing`，不能由上述单元/合约测试替代。
+诊断 follow-up；严格 tx02 和 paired-live 仍保持 `missing`，不能由上述单元/合约测试替代。
 
 ## 14. 完成定义
 
@@ -1610,7 +1639,7 @@ P1 的修复严格限制在 blind evidence compatibility projection：
 7. Curve/protocol mids 不再逐 edge 串行读取；
 8. 单 family failure 不回滚 healthy family，且全局正确标记 degraded；
 9. 旧/新 reader、quote、plan、final sim 等价；
-10. tx055 六步全部自然执行且 p95 `<10s`；
+10. tx02 六步全部自然执行且 p95 `<10s`；
 11. conversion freshness 证据成立；
 12. paired live A/B 满足 exact semantic contract 与至少 95% 覆盖/吞吐门；
 13. 无 hardcode、减图、目标预热、强制候选或策略放宽；
@@ -1622,7 +1651,7 @@ P1 的修复严格限制在 blind evidence compatibility projection：
 
 ```text
 architecture_implementation=implemented
-strict_tx055=missing
+strict_tx02=missing
 conversion_freshness=missing
 v2_v3_live_parity=pass
 paired_live=missing
