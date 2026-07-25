@@ -10,6 +10,15 @@ import type {
   PreparedRouteQuoteResult,
   SwapAdapter,
 } from "../route-leg-adapter.js";
+import type {
+  BlockScanStateCapability,
+  BuildCurrentBlockReadsInput,
+  BuildDependentBlockReadsInput,
+  CompileStaticSchemaInput,
+  StateRead,
+  StateReadResult,
+} from "../blockscan-state-capability.js";
+import { blockScanEdgeKey } from "../blockscan-state-capability.js";
 import {
   dodoV2IdentityResolver,
   isRetryablePoolIdentityFailure,
@@ -22,15 +31,29 @@ import {
 } from "../landed-event-registry.js";
 import { createAddressLandedPoolMaterializer } from "../landed-pool-discovery.js";
 import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanErc20Iface,
+  blockScanMulticallIface,
+  canonicalPoolStateKey,
   currentBlockRead,
+  decodeMulticall,
+  encodeMulticall,
+  midsForDirectedEdges,
+  optionalMulticallData,
+  quotedPoolMid,
+  requireMulticallData,
   requireRead,
+  type MulticallItem,
 } from "./blockscan-state-shared.js";
 import {
   behaviorProvenUnavailableViewQuote,
   type BehaviorProvenUnavailableViewQuote,
-  createCurrentBlockViewQuoteCapability,
-  quoteReadId,
 } from "./view-quote-blockscan-state.js";
+import {
+  checkedDodoInput,
+  type DodoPmmState,
+  quoteDodoPmmExactInput,
+} from "./dodo-pmm-math.js";
 
 const DODO_V2_PROXY = "0xa356867fDCEa8e71AEaF87805808803806231FdC";
 
@@ -40,10 +63,14 @@ export const dodoV2PoolIface = new ethers.Interface([
   "function _BASE_RESERVE_() view returns (uint256)",
   "function _QUOTE_RESERVE_() view returns (uint256)",
   "function getPMMStateForCall() view returns (uint256 i,uint256 K,uint256 B,uint256 Q,uint256 B0,uint256 Q0,uint256 R)",
+  "function getUserFeeRate(address user) view returns (uint256 lpFeeRate,uint256 mtFeeRate)",
+  "function getBaseInput() view returns (uint256 input)",
+  "function getQuoteInput() view returns (uint256 input)",
+  "function getMtFeeTotal() view returns (uint256 mtFeeBase,uint256 mtFeeQuote)",
   "function querySellBase(address trader,uint256 payBaseAmount) view returns (uint256 receiveQuoteAmount)",
   "function querySellQuote(address trader,uint256 payQuoteAmount) view returns (uint256 receiveBaseAmount)",
 ]);
-const erc20Iface = new ethers.Interface([
+const dodoErc20Iface = new ethers.Interface([
   "function balanceOf(address account) view returns (uint256)",
 ]);
 const dodoV2LandedEvents = defineSwapLandedEvents({
@@ -113,168 +140,342 @@ const dodoV2PoolDiscovery = createAddressLandedPoolMaterializer({
   },
 });
 
-interface DodoV2StateSchema {
+interface DodoV2StateGroup {
+  readonly stateKey: string;
   readonly pool: string;
   readonly baseToken: string;
   readonly quoteToken: string;
+  readonly edges: readonly TokenEdge[];
+  readonly amountInByToken: ReadonlyMap<string, bigint>;
 }
 
-export const dodoV2BlockScanState =
-  createCurrentBlockViewQuoteCapability<DodoV2StateSchema>({
-    kind: "external-swap",
-    edgeAdapterIds: new Set(["dodo-v2-swap"]),
-    compileGroup(edges) {
-      const pool = ethers.getAddress(edges[0].target).toLowerCase();
-      const first = edges[0];
+interface DodoV2StateSchema {
+  readonly groups: ReadonlyMap<string, DodoV2StateGroup>;
+}
+
+interface DodoV2Snapshot {
+  readonly stateKey: string;
+  readonly pmm: DodoPmmState;
+  readonly quotes: ReadonlyMap<string, {
+    readonly amountIn: bigint;
+    readonly amountOut: bigint;
+  }>;
+  readonly unavailable: ReadonlyMap<string, string>;
+}
+
+interface DodoDecodedCurrentState {
+  readonly pmm: DodoPmmState;
+  readonly lpFeeRate: bigint;
+  readonly mtFeeRate: bigint;
+  readonly baseInput: DodoInputPosition;
+  readonly quoteInput: DodoInputPosition;
+}
+
+interface DodoInputPosition {
+  readonly surplus: bigint;
+  readonly deficit: bigint;
+}
+
+export const dodoV2BlockScanState = Object.freeze({
+  stateKey: canonicalPoolStateKey,
+
+  compileStaticSchema({ edges }: CompileStaticSchemaInput): DodoV2StateSchema {
+    const grouped = new Map<string, TokenEdge[]>();
+    for (const edge of edges) {
+      if (edge.adapterId !== "dodo-v2-swap") {
+        throw new Error(`dodo-v2 block-scan family does not own ${edge.adapterId}`);
+      }
+      const key = canonicalPoolStateKey(edge);
+      const group = grouped.get(key) ?? [];
+      group.push(edge);
+      grouped.set(key, group);
+    }
+
+    const groups = new Map<string, DodoV2StateGroup>();
+    for (const [stateKey, unorderedEdges] of grouped) {
+      const orderedEdges = Object.freeze(
+        [...unorderedEdges].sort((a, b) =>
+          dodoRouteKey(a).localeCompare(dodoRouteKey(b))
+        ),
+      );
+      const first = orderedEdges[0];
       if (!first.poolToken0 || !first.poolToken1) {
-        throw new Error(`dodo-v2 block-scan pool ${pool} is missing token order`);
+        throw new Error(
+          `dodo-v2 block-scan pool ${stateKey} is missing token order`,
+        );
       }
       const baseToken = ethers.getAddress(first.poolToken0);
       const quoteToken = ethers.getAddress(first.poolToken1);
-      for (const edge of edges) {
+      for (const edge of orderedEdges) {
         if (
-          ethers.getAddress(edge.target).toLowerCase() !== pool ||
+          canonicalPoolStateKey(edge) !== stateKey ||
           !edge.poolToken0 ||
           !edge.poolToken1 ||
           ethers.getAddress(edge.poolToken0) !== baseToken ||
           ethers.getAddress(edge.poolToken1) !== quoteToken
         ) {
-          throw new Error(`dodo-v2 block-scan pool ${pool} has inconsistent metadata`);
+          throw new Error(
+            `dodo-v2 block-scan pool ${stateKey} has inconsistent metadata`,
+          );
         }
         assertEdgeTokens(edge.tokenIn, edge.tokenOut, baseToken, quoteToken);
       }
-      return Object.freeze({ pool, baseToken, quoteToken });
-    },
-    initialReads(ctx) {
-      const tokens = [ctx.static.baseToken, ctx.static.quoteToken];
-      return Object.freeze([
-        currentBlockRead({
-          id: dodoStateReadId(ctx.stateKey, "base-token"),
-          sourceBlock: ctx.sourceBlock,
-          sourceBlockHash: ctx.sourceBlockHash,
-          to: ctx.static.pool,
-          data: dodoV2PoolIface.encodeFunctionData("_BASE_TOKEN_"),
-        }),
-        currentBlockRead({
-          id: dodoStateReadId(ctx.stateKey, "quote-token"),
-          sourceBlock: ctx.sourceBlock,
-          sourceBlockHash: ctx.sourceBlockHash,
-          to: ctx.static.pool,
-          data: dodoV2PoolIface.encodeFunctionData("_QUOTE_TOKEN_"),
-        }),
-        currentBlockRead({
-          id: dodoStateReadId(ctx.stateKey, "pmm-state"),
-          sourceBlock: ctx.sourceBlock,
-          sourceBlockHash: ctx.sourceBlockHash,
-          to: ctx.static.pool,
-          data: dodoV2PoolIface.encodeFunctionData("getPMMStateForCall"),
-        }),
-        ...tokens.map((token) =>
-          currentBlockRead({
-            id: dodoBalanceReadId(ctx.stateKey, token),
-            sourceBlock: ctx.sourceBlock,
-            sourceBlockHash: ctx.sourceBlockHash,
-            to: token,
-            data: erc20Iface.encodeFunctionData("balanceOf", [ctx.static.pool]),
-          })
-        ),
-      ]);
-    },
-    quoteAmountIn(ctx) {
-      const sellBase = sameAddress(ctx.edge.tokenIn, ctx.static.baseToken);
-      const balance = BigInt(
-        erc20Iface.decodeFunctionResult(
-          "balanceOf",
-          requireRead(
-            ctx.priorResults,
-            dodoBalanceReadId(ctx.stateKey, ctx.edge.tokenIn),
-          ).data,
-        )[0],
-      );
-      const pmm = decodeDodoPmmState(
-        requireRead(
-          ctx.priorResults,
-          dodoStateReadId(ctx.stateKey, "pmm-state"),
-        ).data,
-      );
-      const reserve = sellBase ? pmm.B : pmm.Q;
-      return selectDodoProbeInput({
-        oneToken: ctx.amountIn,
-        balance,
-        reserve,
-        pmm,
-        sellBase,
-        pool: ctx.static.pool,
-      });
-    },
-    quoteRead(ctx) {
-      const onchainBase = ethers.getAddress(String(
-        dodoV2PoolIface.decodeFunctionResult(
-          "_BASE_TOKEN_",
-          requireRead(
-            ctx.priorResults,
-            dodoStateReadId(ctx.stateKey, "base-token"),
-          ).data,
-        )[0],
-      ));
-      const onchainQuote = ethers.getAddress(String(
-        dodoV2PoolIface.decodeFunctionResult(
-          "_QUOTE_TOKEN_",
-          requireRead(
-            ctx.priorResults,
-            dodoStateReadId(ctx.stateKey, "quote-token"),
-          ).data,
-        )[0],
-      ));
-      if (
-        onchainBase !== ctx.static.baseToken ||
-        onchainQuote !== ctx.static.quoteToken
-      ) {
-        throw new Error(`dodo-v2 pool ${ctx.static.pool} token identity changed`);
+      groups.set(stateKey, Object.freeze({
+        stateKey,
+        pool: ethers.getAddress(first.target),
+        baseToken,
+        quoteToken,
+        edges: orderedEdges,
+        amountInByToken: new Map<string, bigint>(),
+      }));
+    }
+    return Object.freeze({ groups });
+  },
+
+  buildStaticSchemaReads(
+    input: BuildCurrentBlockReadsInput<DodoV2StateSchema>,
+  ): readonly StateRead[] {
+    const tokens = uniqueDodoInputTokens(input.edges);
+    return Object.freeze(tokens.map((token) =>
+      currentBlockRead({
+        id: dodoStaticDecimalsReadId(token),
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        to: token,
+        data: blockScanErc20Iface.encodeFunctionData("decimals"),
+      })
+    ));
+  },
+
+  hydrateStaticSchema(
+    schema: DodoV2StateSchema,
+    results: readonly StateReadResult[],
+  ): DodoV2StateSchema {
+    const oneTokenByAddress = new Map<string, bigint>();
+    for (const result of results) {
+      if (!result.ok || !result.id.startsWith("dodo-static-decimals:")) {
+        throw new Error(`unresolved dodo-v2 static decimals read ${result.id}`);
       }
-      const sellBase = sameAddress(ctx.edge.tokenIn, ctx.static.baseToken);
+      const token = result.id.slice("dodo-static-decimals:".length);
+      const decimals = Number(
+        blockScanErc20Iface.decodeFunctionResult("decimals", result.data)[0],
+      );
+      if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+        throw new Error(`dodo-v2 token ${token} returned invalid decimals ${decimals}`);
+      }
+      oneTokenByAddress.set(token, 10n ** BigInt(decimals));
+    }
+
+    const groups = new Map<string, DodoV2StateGroup>();
+    for (const [stateKey, group] of schema.groups) {
+      const amountInByToken = new Map<string, bigint>();
+      for (const edge of group.edges) {
+        const token = ethers.getAddress(edge.tokenIn).toLowerCase();
+        const oneToken = oneTokenByAddress.get(token);
+        if (!oneToken) {
+          throw new Error(`dodo-v2 static decimals missing ${edge.tokenIn}`);
+        }
+        amountInByToken.set(token, oneToken);
+      }
+      groups.set(stateKey, Object.freeze({ ...group, amountInByToken }));
+    }
+    return Object.freeze({ groups });
+  },
+
+  buildCurrentBlockReads(
+    input: BuildCurrentBlockReadsInput<DodoV2StateSchema>,
+  ): readonly StateRead[] {
+    const group = requireDodoGroup(input.schema, input.edges);
+    return Object.freeze([
+      dodoCurrentRead(input, group, "base-token", "_BASE_TOKEN_"),
+      dodoCurrentRead(input, group, "quote-token", "_QUOTE_TOKEN_"),
+      dodoCurrentRead(input, group, "pmm-state", "getPMMStateForCall"),
+      currentBlockRead({
+        id: dodoStateReadId(group.stateKey, "user-fee-rate"),
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        to: group.pool,
+        data: dodoV2PoolIface.encodeFunctionData("getUserFeeRate", [
+          dodoQuoteActor(),
+        ]),
+      }),
+      currentBlockRead({
+        id: dodoStateReadId(group.stateKey, "input-semantics"),
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        to: BLOCKSCAN_MULTICALL3,
+        data: encodeMulticall(dodoInputSemanticsItems(group)),
+      }),
+    ]);
+  },
+
+  buildDependentBlockReads(
+    input: BuildDependentBlockReadsInput<DodoV2StateSchema>,
+  ): readonly StateRead[] {
+    if (input.completedRound > 0) return Object.freeze([]);
+    const group = requireDodoGroup(input.schema, input.edges);
+    const current = decodeDodoCurrentState(group, input.priorResults);
+    const fallbackReads: StateRead[] = [];
+    for (const edge of group.edges) {
+      const selection = selectDodoCurrentQuote(
+        group,
+        current,
+        edge,
+      );
+      if (typeof selection !== "bigint") continue;
+      const sellBase = sameAddress(edge.tokenIn, group.baseToken);
+      const inputPosition = sellBase ? current.baseInput : current.quoteInput;
+      const effectiveInput = applyDodoTransferToInput(
+        inputPosition,
+        selection,
+        group.pool,
+      );
+      const local = quoteDodoPmmExactInput({
+        state: current.pmm,
+        sellBase,
+        payAmount: effectiveInput,
+        lpFeeRate: current.lpFeeRate,
+        mtFeeRate: current.mtFeeRate,
+      });
+      if (local.status === "quote") continue;
       const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
-      const balance = BigInt(
-        erc20Iface.decodeFunctionResult(
-          "balanceOf",
-          requireRead(
-            ctx.priorResults,
-            dodoBalanceReadId(ctx.stateKey, ctx.edge.tokenIn),
-          ).data,
-        )[0],
-      );
-      const pmm = decodeDodoPmmState(
-        requireRead(
-          ctx.priorResults,
-          dodoStateReadId(ctx.stateKey, "pmm-state"),
-        ).data,
-      );
-      const reserve = sellBase ? pmm.B : pmm.Q;
-      const effectiveInput = effectiveDodoInput(
-        balance,
-        reserve,
-        ctx.amountIn,
-        ctx.static.pool,
-      );
-      return currentBlockRead({
-        id: quoteReadId(ctx.stateKey, ctx.edge),
-        sourceBlock: ctx.sourceBlock,
-        sourceBlockHash: ctx.sourceBlockHash,
-        to: ctx.static.pool,
+      fallbackReads.push(currentBlockRead({
+        id: dodoFallbackReadId(group.stateKey, edge, effectiveInput),
+        sourceBlock: input.sourceBlock,
+        sourceBlockHash: input.sourceBlockHash,
+        to: group.pool,
         data: dodoV2PoolIface.encodeFunctionData(queryFunction, [
-          DEFAULT_SEARCHER_OWNER,
+          dodoQuoteActor(),
           effectiveInput,
         ]),
-      });
-    },
-    decodeQuote(edge, data) {
-      const sellBase = sameAddress(edge.tokenIn, edge.poolToken0!);
-      const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
-      return BigInt(
-        dodoV2PoolIface.decodeFunctionResult(queryFunction, data)[0],
+      }));
+    }
+    return Object.freeze(fallbackReads);
+  },
+
+  decodeState(
+    schema: DodoV2StateSchema,
+    results: readonly StateReadResult[],
+  ): DodoV2Snapshot {
+    const group = findDodoResultGroup(schema, results);
+    const current = decodeDodoCurrentState(group, results);
+    const quotes = new Map<string, {
+      readonly amountIn: bigint;
+      readonly amountOut: bigint;
+    }>();
+    const unavailable = new Map<string, string>();
+    for (const edge of group.edges) {
+      const selection = selectDodoCurrentQuote(group, current, edge);
+      if (typeof selection !== "bigint") {
+        unavailable.set(dodoRouteKey(edge), selection.reason);
+        continue;
+      }
+      const sellBase = sameAddress(edge.tokenIn, group.baseToken);
+      const inputPosition = sellBase ? current.baseInput : current.quoteInput;
+      const effectiveInput = applyDodoTransferToInput(
+        inputPosition,
+        selection,
+        group.pool,
       );
-    },
-  });
+      const local = quoteDodoPmmExactInput({
+        state: current.pmm,
+        sellBase,
+        payAmount: effectiveInput,
+        lpFeeRate: current.lpFeeRate,
+        mtFeeRate: current.mtFeeRate,
+      });
+      let amountOut: bigint;
+      if (local.status === "quote") {
+        amountOut = local.amountOut;
+      } else {
+        const fallback = requireRead(
+          results,
+          dodoFallbackReadId(group.stateKey, edge, effectiveInput),
+        );
+        const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
+        amountOut = decodeFirstWord(
+          fallback.data,
+          `${queryFunction} ${group.pool}`,
+        );
+      }
+      if (amountOut <= 0n) {
+        throw new Error(
+          `dodo-v2 current-N quote returned zero for ` +
+            `${edge.tokenIn}->${edge.tokenOut}`,
+        );
+      }
+      quotes.set(dodoRouteKey(edge), Object.freeze({
+        amountIn: selection,
+        amountOut,
+      }));
+    }
+    return Object.freeze({
+      stateKey: group.stateKey,
+      pmm: current.pmm,
+      quotes,
+      unavailable,
+    });
+  },
+
+  deriveMids(
+    snapshot: DodoV2Snapshot,
+    edges: readonly TokenEdge[],
+  ) {
+    const availableEdges = edges.filter(
+      (edge) => !snapshot.unavailable.has(dodoRouteKey(edge)),
+    );
+    return midsForDirectedEdges(availableEdges, (edge) => {
+      if (canonicalPoolStateKey(edge) !== snapshot.stateKey) {
+        throw new Error(
+          `dodo-v2 snapshot ${snapshot.stateKey} used for ` +
+            `${canonicalPoolStateKey(edge)}`,
+        );
+      }
+      const quote = snapshot.quotes.get(dodoRouteKey(edge));
+      if (!quote) {
+        throw new Error(`missing dodo-v2 current-N quote for ${dodoRouteKey(edge)}`);
+      }
+      return quotedPoolMid({
+        kind: "external-swap",
+        edge,
+        amountIn: quote.amountIn,
+        amountOut: quote.amountOut,
+        depthIn: quote.amountIn * 10_000n,
+        depthOut: quote.amountOut * 10_000n,
+      });
+    });
+  },
+
+  behaviorProvenUnavailableEdges(
+    snapshot: DodoV2Snapshot,
+    edges: readonly TokenEdge[],
+  ) {
+    const out = new Map<string, string>();
+    for (const edge of edges) {
+      if (canonicalPoolStateKey(edge) !== snapshot.stateKey) {
+        throw new Error(
+          `dodo-v2 snapshot ${snapshot.stateKey} used for ` +
+            `${canonicalPoolStateKey(edge)}`,
+        );
+      }
+      const reason = snapshot.unavailable.get(dodoRouteKey(edge));
+      if (reason) out.set(blockScanEdgeKey(edge), reason);
+    }
+    return out;
+  },
+
+  dependencies(edges: readonly TokenEdge[]): readonly string[] {
+    return Object.freeze([
+      ...new Set(
+        edges.flatMap((edge) => [
+          ethers.getAddress(edge.target),
+          ethers.getAddress(edge.tokenIn),
+          ethers.getAddress(edge.tokenOut),
+        ]),
+      ),
+    ].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+  },
+} satisfies BlockScanStateCapability<DodoV2StateSchema, DodoV2Snapshot>);
 
 export const dodoV2Adapter = Object.freeze({
   id: "custom-swap:dodo-v2",
@@ -305,35 +506,38 @@ export const dodoV2Adapter = Object.freeze({
   prepared: {
     quote: quoteDodoV2Prepared,
     quoteUnsupportedReason: null,
-    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [
-      {
-        from: ethers.ZeroAddress,
-        to: ctx.request.target,
-        calldata: dodoV2PoolIface.encodeFunctionData("_BASE_TOKEN_"),
-      },
-      {
-        from: ethers.ZeroAddress,
-        to: ctx.request.target,
-        calldata: dodoV2PoolIface.encodeFunctionData("_QUOTE_TOKEN_"),
-      },
-      {
-        from: ethers.ZeroAddress,
-        to: ctx.request.target,
-        calldata: dodoV2PoolIface.encodeFunctionData("_BASE_RESERVE_"),
-      },
-      {
-        from: ethers.ZeroAddress,
-        to: ctx.request.target,
-        calldata: dodoV2PoolIface.encodeFunctionData("_QUOTE_RESERVE_"),
-      },
-      {
-        from: ethers.ZeroAddress,
-        to: ctx.request.tokenIn,
-        calldata: erc20Iface.encodeFunctionData("balanceOf", [ctx.request.target]),
-      },
-    ],
+    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
+      const baseToken = ctx.request.poolToken0 ?? ctx.request.tokenIn;
+      const quoteToken = ctx.request.poolToken1 ?? ctx.request.tokenOut;
+      return [
+        {
+          from: ethers.ZeroAddress,
+          to: ctx.request.target,
+          calldata: dodoV2PoolIface.encodeFunctionData("_BASE_TOKEN_"),
+        },
+        {
+          from: ethers.ZeroAddress,
+          to: ctx.request.target,
+          calldata: dodoV2PoolIface.encodeFunctionData("_QUOTE_TOKEN_"),
+        },
+        {
+          from: ethers.ZeroAddress,
+          to: BLOCKSCAN_MULTICALL3,
+          calldata: encodeMulticall(dodoInputSemanticsItemsFor(
+            ctx.request.target,
+            baseToken,
+            quoteToken,
+          )),
+        },
+      ];
+    },
     allowanceSpender: () => null,
-    prewarmAddresses: (request) => [request.target, request.tokenIn],
+    prewarmAddresses: (request) => [
+      request.target,
+      request.tokenIn,
+      request.tokenOut,
+      BLOCKSCAN_MULTICALL3,
+    ],
   },
   buildEdges: buildDodoV2Edges,
   quoteExact: quoteDodoV2Exact,
@@ -396,28 +600,28 @@ async function quoteDodoV2Exact(ctx: ExactQuoteContext): Promise<bigint> {
     throw new Error(`dodo-v2 pool ${ctx.target} token metadata does not match on-chain pair`);
   }
   const sellBase = sameAddress(ctx.tokenIn, baseToken);
-  const reserveFunction = sellBase ? "_BASE_RESERVE_" : "_QUOTE_RESERVE_";
   const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
-  const [balanceRaw, reserveRaw] = await Promise.all([
-    ctx.state.call({
-      to: ctx.tokenIn,
-      data: erc20Iface.encodeFunctionData("balanceOf", [ctx.target]),
-    }),
-    ctx.state.call({
-      to: ctx.target,
-      data: dodoV2PoolIface.encodeFunctionData(reserveFunction),
-    }),
-  ]);
-  const effectiveInput = effectiveDodoInput(
-    BigInt(erc20Iface.decodeFunctionResult("balanceOf", balanceRaw)[0]),
-    BigInt(dodoV2PoolIface.decodeFunctionResult(reserveFunction, reserveRaw)[0]),
+  const inputRaw = await ctx.state.call({
+    to: BLOCKSCAN_MULTICALL3,
+    data: encodeMulticall(
+      dodoInputSemanticsItemsFor(ctx.target, baseToken, quoteToken),
+    ),
+  });
+  const inputState = decodeDodoInputSemantics(
+    inputRaw,
+    ctx.target,
+    baseToken,
+    quoteToken,
+  );
+  const effectiveInput = applyDodoTransferToInput(
+    sellBase ? inputState.baseInput : inputState.quoteInput,
     ctx.amountIn,
     ctx.target,
   );
   const result = await ctx.state.call({
     to: ctx.target,
     data: dodoV2PoolIface.encodeFunctionData(queryFunction, [
-      DEFAULT_SEARCHER_OWNER,
+      dodoQuoteActor(),
       effectiveInput,
     ]),
   });
@@ -440,33 +644,36 @@ async function quoteDodoV2Prepared(
   ));
   assertEdgeTokens(request.tokenIn, request.tokenOut, baseToken, quoteToken);
   const sellBase = sameAddress(request.tokenIn, baseToken);
-  const reserveFunction = sellBase ? "_BASE_RESERVE_" : "_QUOTE_RESERVE_";
   const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
-  const [balanceCall, reserveCall] = await Promise.all([
-    ctx.callPrepared(
-      request.tokenIn,
-      erc20Iface.encodeFunctionData("balanceOf", [request.target]),
+  const inputCall = await ctx.callPrepared(
+    BLOCKSCAN_MULTICALL3,
+    encodeMulticall(
+      dodoInputSemanticsItemsFor(request.target, baseToken, quoteToken),
     ),
-    ctx.callPrepared(
-      request.target,
-      dodoV2PoolIface.encodeFunctionData(reserveFunction),
-    ),
-  ]);
-  const effectiveInput = effectiveDodoInput(
-    BigInt(erc20Iface.decodeFunctionResult("balanceOf", balanceCall.output)[0]),
-    BigInt(dodoV2PoolIface.decodeFunctionResult(reserveFunction, reserveCall.output)[0]),
+  );
+  const inputState = decodeDodoInputSemantics(
+    inputCall.output,
+    request.target,
+    baseToken,
+    quoteToken,
+  );
+  const effectiveInput = applyDodoTransferToInput(
+    sellBase ? inputState.baseInput : inputState.quoteInput,
     request.amountIn,
     request.target,
   );
   const quoteCall = await ctx.callPrepared(
     request.target,
-    dodoV2PoolIface.encodeFunctionData(queryFunction, [DEFAULT_SEARCHER_OWNER, effectiveInput]),
+    dodoV2PoolIface.encodeFunctionData(queryFunction, [
+      dodoQuoteActor(),
+      effectiveInput,
+    ]),
   );
   return {
     amountOut: decodeFirstWord(quoteCall.output, `${queryFunction} ${request.target}`),
     latencyMs: calls[0].latencyMs + calls[1].latencyMs +
-      balanceCall.latencyMs + reserveCall.latencyMs + quoteCall.latencyMs,
-    cacheStats: quoteCall.cacheStats ?? reserveCall.cacheStats ?? balanceCall.cacheStats,
+      inputCall.latencyMs + quoteCall.latencyMs,
+    cacheStats: quoteCall.cacheStats ?? inputCall.cacheStats,
   };
 }
 
@@ -535,27 +742,6 @@ function assertEdgeTokens(
   }
 }
 
-function effectiveDodoInput(
-  balance: bigint,
-  reserve: bigint,
-  amountIn: bigint,
-  pool: string,
-): bigint {
-  const postTransferBalance = balance + amountIn;
-  if (postTransferBalance <= reserve) {
-    throw new Error(`dodo-v2 input balance does not clear stored reserve for pool ${pool}`);
-  }
-  return postTransferBalance - reserve;
-}
-
-interface DodoPmmState {
-  readonly B: bigint;
-  readonly Q: bigint;
-  readonly B0: bigint;
-  readonly Q0: bigint;
-  readonly R: number;
-}
-
 function decodeDodoPmmState(data: string): DodoPmmState {
   const decoded = dodoV2PoolIface.decodeFunctionResult(
     "getPMMStateForCall",
@@ -566,17 +752,20 @@ function decodeDodoPmmState(data: string): DodoPmmState {
     throw new Error(`dodo-v2 returned invalid PMM R state ${R}`);
   }
   return Object.freeze({
+    i: BigInt(decoded[0]),
+    K: BigInt(decoded[1]),
     B: BigInt(decoded[2]),
     Q: BigInt(decoded[3]),
     B0: BigInt(decoded[4]),
     Q0: BigInt(decoded[5]),
-    R,
+    R: R as DodoPmmState["R"],
   });
 }
 
-function selectDodoProbeInput(input: {
+export function selectDodoBlockScanProbeInput(input: {
   readonly oneToken: bigint;
-  readonly balance: bigint;
+  readonly currentInput: bigint;
+  readonly inputDeficit?: bigint;
   readonly reserve: bigint;
   readonly pmm: DodoPmmState;
   readonly sellBase: boolean;
@@ -584,12 +773,19 @@ function selectDodoProbeInput(input: {
 }): bigint | BehaviorProvenUnavailableViewQuote {
   const {
     oneToken,
-    balance,
+    currentInput,
+    inputDeficit = 0n,
     reserve,
     pmm,
     sellBase,
     pool,
   } = input;
+  if (currentInput < 0n || inputDeficit < 0n) {
+    throw new Error(`dodo-v2 pool ${pool} returned a negative input position`);
+  }
+  if (currentInput > 0n && inputDeficit > 0n) {
+    throw new Error(`dodo-v2 pool ${pool} returned both input surplus and deficit`);
+  }
   if (reserve <= 0n) {
     return behaviorProvenUnavailableViewQuote(
       `dodo-v2 pool ${pool} has no behavior-safe input reserve at the pinned source`,
@@ -620,14 +816,13 @@ function selectDodoProbeInput(input: {
     ? liquidityProbe
     : desiredProbe;
   const crossingCap = dodoZeroTargetCrossingCap(pmm, sellBase);
-  const surplus = balance > reserve ? balance - reserve : 0n;
   if (crossingCap !== null) {
-    if (crossingCap <= 0n || surplus >= crossingCap) {
+    if (crossingCap <= 0n || currentInput >= crossingCap) {
       return behaviorProvenUnavailableViewQuote(
         `dodo-v2 pool ${pool} has no positive input before its zero-target branch`,
       );
     }
-    const remaining = crossingCap - surplus;
+    const remaining = crossingCap - currentInput;
     const branchProbe = remaining > 1n ? remaining / 2n : remaining;
     if (branchProbe < effectiveProbe) effectiveProbe = branchProbe;
   }
@@ -636,8 +831,7 @@ function selectDodoProbeInput(input: {
       `dodo-v2 pool ${pool} selected no positive behavior-safe probe`,
     );
   }
-  if (balance >= reserve) return effectiveProbe;
-  return reserve - balance + effectiveProbe;
+  return checkedDodoInput(inputDeficit, effectiveProbe, pool);
 }
 
 function dodoActiveMathTargetUnavailable(
@@ -676,6 +870,235 @@ function decodeFirstWord(result: string, label: string): bigint {
   return BigInt(`0x${result.slice(2, 66)}`);
 }
 
+function dodoQuoteActor(): string {
+  const configured = process.env.BOTVM_OWNER?.trim();
+  return ethers.getAddress(configured || DEFAULT_SEARCHER_OWNER);
+}
+
+function dodoInputSemanticsItems(
+  group: DodoV2StateGroup,
+): readonly MulticallItem[] {
+  return dodoInputSemanticsItemsFor(
+    group.pool,
+    group.baseToken,
+    group.quoteToken,
+  );
+}
+
+function dodoInputSemanticsItemsFor(
+  pool: string,
+  baseToken: string,
+  quoteToken: string,
+): readonly MulticallItem[] {
+  const target = ethers.getAddress(pool);
+  const base = ethers.getAddress(baseToken);
+  const quote = ethers.getAddress(quoteToken);
+  return Object.freeze([
+    {
+      label: "base-balance",
+      target: base,
+      callData: dodoErc20Iface.encodeFunctionData("balanceOf", [target]),
+      allowFailure: false,
+    },
+    {
+      label: "quote-balance",
+      target: quote,
+      callData: dodoErc20Iface.encodeFunctionData("balanceOf", [target]),
+      allowFailure: false,
+    },
+    {
+      label: "base-reserve",
+      target,
+      callData: dodoV2PoolIface.encodeFunctionData("_BASE_RESERVE_"),
+      allowFailure: false,
+    },
+    {
+      label: "quote-reserve",
+      target,
+      callData: dodoV2PoolIface.encodeFunctionData("_QUOTE_RESERVE_"),
+      allowFailure: false,
+    },
+    {
+      label: "base-input",
+      target,
+      callData: dodoV2PoolIface.encodeFunctionData("getBaseInput"),
+      allowFailure: true,
+    },
+    {
+      label: "quote-input",
+      target,
+      callData: dodoV2PoolIface.encodeFunctionData("getQuoteInput"),
+      allowFailure: true,
+    },
+    {
+      label: "mt-fee-total",
+      target,
+      callData: dodoV2PoolIface.encodeFunctionData("getMtFeeTotal"),
+      allowFailure: true,
+    },
+  ]);
+}
+
+function decodeDodoInputSemanticsRead(
+  read: Extract<StateReadResult, { readonly ok: true }>,
+  pool: string,
+  baseToken: string,
+  quoteToken: string,
+): {
+  readonly baseInput: DodoInputPosition;
+  readonly quoteInput: DodoInputPosition;
+} {
+  const items = dodoInputSemanticsItemsFor(pool, baseToken, quoteToken);
+  return resolveDodoInputSemantics(decodeMulticall(read, items), pool);
+}
+
+function decodeDodoInputSemantics(
+  data: string,
+  pool: string,
+  baseToken: string,
+  quoteToken: string,
+): {
+  readonly baseInput: DodoInputPosition;
+  readonly quoteInput: DodoInputPosition;
+} {
+  const items = dodoInputSemanticsItemsFor(pool, baseToken, quoteToken);
+  const decoded = blockScanMulticallIface.decodeFunctionResult(
+    "aggregate3",
+    data,
+  )[0] as readonly { readonly success: boolean; readonly returnData: string }[];
+  if (decoded.length !== items.length) {
+    throw new Error(
+      `dodo-v2 input semantics ${pool} returned ${decoded.length}/${items.length} results`,
+    );
+  }
+  const results = new Map<string, {
+    readonly success: boolean;
+    readonly returnData: string;
+  }>();
+  for (let index = 0; index < items.length; index++) {
+    results.set(items[index].label, Object.freeze({
+      success: Boolean(decoded[index].success),
+      returnData: String(decoded[index].returnData),
+    }));
+  }
+  return resolveDodoInputSemantics(results, pool);
+}
+
+function resolveDodoInputSemantics(
+  results: ReadonlyMap<string, {
+    readonly success: boolean;
+    readonly returnData: string;
+  }>,
+  pool: string,
+): {
+  readonly baseInput: DodoInputPosition;
+  readonly quoteInput: DodoInputPosition;
+} {
+  const baseBalance = decodeFirstWord(
+    requireMulticallData(results, "base-balance"),
+    `base balance ${pool}`,
+  );
+  const quoteBalance = decodeFirstWord(
+    requireMulticallData(results, "quote-balance"),
+    `quote balance ${pool}`,
+  );
+  const baseReserve = decodeFirstWord(
+    requireMulticallData(results, "base-reserve"),
+    `base reserve ${pool}`,
+  );
+  const quoteReserve = decodeFirstWord(
+    requireMulticallData(results, "quote-reserve"),
+    `quote reserve ${pool}`,
+  );
+  const mtFeeRaw = optionalMulticallData(results, "mt-fee-total");
+  const mtFees = mtFeeRaw === null
+    ? null
+    : dodoV2PoolIface.decodeFunctionResult("getMtFeeTotal", mtFeeRaw);
+  return Object.freeze({
+    baseInput: resolveDodoInputPosition({
+      pool,
+      side: "base",
+      balance: baseBalance,
+      reserve: baseReserve,
+      accumulatedMtFee: mtFees === null ? 0n : BigInt(mtFees[0]),
+      getterData: optionalMulticallData(results, "base-input"),
+      hasMtFeeLedger: mtFees !== null,
+    }),
+    quoteInput: resolveDodoInputPosition({
+      pool,
+      side: "quote",
+      balance: quoteBalance,
+      reserve: quoteReserve,
+      accumulatedMtFee: mtFees === null ? 0n : BigInt(mtFees[1]),
+      getterData: optionalMulticallData(results, "quote-input"),
+      hasMtFeeLedger: mtFees !== null,
+    }),
+  });
+}
+
+function resolveDodoInputPosition(input: {
+  readonly pool: string;
+  readonly side: "base" | "quote";
+  readonly balance: bigint;
+  readonly reserve: bigint;
+  readonly accumulatedMtFee: bigint;
+  readonly getterData: string | null;
+  readonly hasMtFeeLedger: boolean;
+}): DodoInputPosition {
+  const liability = checkedDodoInput(
+    input.reserve,
+    input.accumulatedMtFee,
+    input.pool,
+  );
+  if (input.getterData !== null) {
+    if (input.balance < liability) {
+      throw new Error(
+        `dodo-v2 ${input.side} input getter succeeded below its proven liability for pool ${input.pool}`,
+      );
+    }
+    const expected = input.balance - liability;
+    const getter = decodeFirstWord(
+      input.getterData,
+      `${input.side} input ${input.pool}`,
+    );
+    if (getter !== expected) {
+      throw new Error(
+        `dodo-v2 ${input.side} input semantics mismatch for pool ${input.pool}: ` +
+          `getter=${getter} balance=${input.balance} reserve=${input.reserve} ` +
+          `mtFee=${input.accumulatedMtFee}`,
+      );
+    }
+    return Object.freeze({ surplus: getter, deficit: 0n });
+  }
+  if (input.balance >= liability) {
+    throw new Error(
+      `dodo-v2 ${input.side} input getter reverted without a proven deficit ` +
+        `for ${input.hasMtFeeLedger ? "GSP" : "legacy"} pool ${input.pool}`,
+    );
+  }
+  return Object.freeze({
+    surplus: 0n,
+    deficit: liability - input.balance,
+  });
+}
+
+function applyDodoTransferToInput(
+  position: DodoInputPosition,
+  transferAmount: bigint,
+  pool: string,
+): bigint {
+  if (transferAmount <= position.deficit) {
+    throw new Error(
+      `dodo-v2 transfer does not clear input deficit for pool ${pool}`,
+    );
+  }
+  return checkedDodoInput(
+    position.surplus,
+    transferAmount - position.deficit,
+    pool,
+  );
+}
+
 function sameAddress(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
@@ -684,6 +1107,171 @@ function dodoStateReadId(stateKey: string, field: string): string {
   return `dodo:${stateKey}:${field}`;
 }
 
-function dodoBalanceReadId(stateKey: string, token: string): string {
-  return `dodo:${stateKey}:balance:${ethers.getAddress(token).toLowerCase()}`;
+function dodoStaticDecimalsReadId(token: string): string {
+  return `dodo-static-decimals:${ethers.getAddress(token).toLowerCase()}`;
+}
+
+function dodoFallbackReadId(
+  stateKey: string,
+  edge: TokenEdge,
+  effectiveInput: bigint,
+): string {
+  return `dodo:${stateKey}:fallback:${dodoRouteKey(edge)}:amount=${effectiveInput}`;
+}
+
+function dodoRouteKey(edge: TokenEdge): string {
+  return [
+    edge.adapterId,
+    ethers.getAddress(edge.tokenIn).toLowerCase(),
+    ethers.getAddress(edge.tokenOut).toLowerCase(),
+  ].join(":");
+}
+
+function uniqueDodoInputTokens(edges: readonly TokenEdge[]): string[] {
+  return [
+    ...new Map(edges.map((edge) => [
+      ethers.getAddress(edge.tokenIn).toLowerCase(),
+      ethers.getAddress(edge.tokenIn),
+    ])).values(),
+  ].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function requireDodoGroup(
+  schema: DodoV2StateSchema,
+  edges: readonly TokenEdge[],
+): DodoV2StateGroup {
+  if (edges.length === 0) throw new Error("dodo-v2 state group has no edges");
+  const stateKey = canonicalPoolStateKey(edges[0]);
+  if (edges.some((edge) => canonicalPoolStateKey(edge) !== stateKey)) {
+    throw new Error(`dodo-v2 state group ${stateKey} mixes pool targets`);
+  }
+  const group = schema.groups.get(stateKey);
+  if (!group) throw new Error(`missing dodo-v2 state schema ${stateKey}`);
+  return group;
+}
+
+function findDodoResultGroup(
+  schema: DodoV2StateSchema,
+  results: readonly StateReadResult[],
+): DodoV2StateGroup {
+  const matches = [...schema.groups.values()].filter((group) =>
+    results.some(
+      (result) =>
+        result.id === dodoStateReadId(group.stateKey, "pmm-state"),
+    )
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected one dodo-v2 result group, found ${matches.length}`,
+    );
+  }
+  return matches[0];
+}
+
+function dodoCurrentRead(
+  input: {
+    readonly sourceBlock: number;
+    readonly sourceBlockHash: string;
+  },
+  group: DodoV2StateGroup,
+  field: string,
+  functionName:
+    | "_BASE_TOKEN_"
+    | "_QUOTE_TOKEN_"
+    | "getPMMStateForCall"
+    | "getBaseInput"
+    | "getQuoteInput",
+): StateRead {
+  return currentBlockRead({
+    id: dodoStateReadId(group.stateKey, field),
+    sourceBlock: input.sourceBlock,
+    sourceBlockHash: input.sourceBlockHash,
+    to: group.pool,
+    data: dodoV2PoolIface.encodeFunctionData(functionName),
+  });
+}
+
+function decodeDodoCurrentState(
+  group: DodoV2StateGroup,
+  results: readonly StateReadResult[],
+): DodoDecodedCurrentState {
+  const onchainBase = ethers.getAddress(String(
+    dodoV2PoolIface.decodeFunctionResult(
+      "_BASE_TOKEN_",
+      requireRead(
+        results,
+        dodoStateReadId(group.stateKey, "base-token"),
+      ).data,
+    )[0],
+  ));
+  const onchainQuote = ethers.getAddress(String(
+    dodoV2PoolIface.decodeFunctionResult(
+      "_QUOTE_TOKEN_",
+      requireRead(
+        results,
+        dodoStateReadId(group.stateKey, "quote-token"),
+      ).data,
+    )[0],
+  ));
+  if (
+    onchainBase !== group.baseToken ||
+    onchainQuote !== group.quoteToken
+  ) {
+    throw new Error(`dodo-v2 pool ${group.pool} token identity changed`);
+  }
+  const fee = dodoV2PoolIface.decodeFunctionResult(
+    "getUserFeeRate",
+    requireRead(
+      results,
+      dodoStateReadId(group.stateKey, "user-fee-rate"),
+    ).data,
+  );
+  const inputSemantics = decodeDodoInputSemanticsRead(
+    requireRead(
+      results,
+      dodoStateReadId(group.stateKey, "input-semantics"),
+    ),
+    group.pool,
+    group.baseToken,
+    group.quoteToken,
+  );
+  return Object.freeze({
+    pmm: decodeDodoPmmState(
+      requireRead(
+        results,
+        dodoStateReadId(group.stateKey, "pmm-state"),
+      ).data,
+    ),
+    lpFeeRate: BigInt(fee[0]),
+    mtFeeRate: BigInt(fee[1]),
+    baseInput: inputSemantics.baseInput,
+    quoteInput: inputSemantics.quoteInput,
+  });
+}
+
+function selectDodoCurrentQuote(
+  group: DodoV2StateGroup,
+  current: DodoDecodedCurrentState,
+  edge: TokenEdge,
+): bigint | BehaviorProvenUnavailableViewQuote {
+  const sellBase = sameAddress(edge.tokenIn, group.baseToken);
+  const oneToken = group.amountInByToken.get(
+    ethers.getAddress(edge.tokenIn).toLowerCase(),
+  );
+  if (!oneToken) {
+    throw new Error(`dodo-v2 static amount missing ${edge.tokenIn}`);
+  }
+  return selectDodoBlockScanProbeInput({
+    oneToken,
+    currentInput: sellBase
+      ? current.baseInput.surplus
+      : current.quoteInput.surplus,
+    inputDeficit: sellBase
+      ? current.baseInput.deficit
+      : current.quoteInput.deficit,
+    reserve: sellBase ? current.pmm.B : current.pmm.Q,
+    pmm: current.pmm,
+    sellBase,
+    pool: group.pool,
+  });
 }

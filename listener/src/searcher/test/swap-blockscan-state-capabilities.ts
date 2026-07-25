@@ -520,10 +520,47 @@ async function runDodoV2(): Promise<void> {
   const edges = twoTokenEdges("dodo-v2-swap");
   const reserve = 1_000_000_000n * UNIT;
   const precisionSafeProbe = reserve / 1_000_000n;
+  let onchainQuoteReads = 0;
   const result = await execute(dodoV2Adapter.id, dodoV2BlockScanState, edges, (read) => {
     const selector = read.data.slice(0, 10);
     if (selector === blockScanErc20Iface.getFunction("decimals")!.selector) {
       return blockScanErc20Iface.encodeFunctionResult("decimals", [18]);
+    }
+    if (
+      selector === blockScanMulticallIface.getFunction("aggregate3")!.selector
+    ) {
+      return respondAggregate(read, ({ callData }) => {
+        const innerSelector = callData.slice(0, 10);
+        if (
+          innerSelector ===
+            dodoBalanceIface.getFunction("balanceOf")!.selector
+        ) {
+          return successInner(
+            dodoBalanceIface.encodeFunctionResult("balanceOf", [reserve]),
+          );
+        }
+        for (const fn of ["_BASE_RESERVE_", "_QUOTE_RESERVE_"] as const) {
+          if (innerSelector === dodoV2PoolIface.getFunction(fn)!.selector) {
+            return successInner(
+              dodoV2PoolIface.encodeFunctionResult(fn, [reserve]),
+            );
+          }
+        }
+        for (const fn of ["getBaseInput", "getQuoteInput"] as const) {
+          if (innerSelector === dodoV2PoolIface.getFunction(fn)!.selector) {
+            return successInner(
+              dodoV2PoolIface.encodeFunctionResult(fn, [0n]),
+            );
+          }
+        }
+        if (
+          innerSelector ===
+            dodoV2PoolIface.getFunction("getMtFeeTotal")!.selector
+        ) {
+          return Object.freeze({ success: false, returnData: "0x" });
+        }
+        throw new Error(`unexpected DODO aggregate selector ${innerSelector}`);
+      });
     }
     if (selector === dodoBalanceIface.getFunction("balanceOf")!.selector) {
       return dodoBalanceIface.encodeFunctionResult("balanceOf", [reserve]);
@@ -556,8 +593,23 @@ async function runDodoV2(): Promise<void> {
         0,
       ]);
     }
+    if (
+      selector ===
+        dodoV2PoolIface.getFunction("getUserFeeRate")!.selector
+    ) {
+      return dodoV2PoolIface.encodeFunctionResult(
+        "getUserFeeRate",
+        [3n * 10n ** 15n, 1n * 10n ** 15n],
+      );
+    }
+    for (const fn of ["getBaseInput", "getQuoteInput"] as const) {
+      if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+        return dodoV2PoolIface.encodeFunctionResult(fn, [0n]);
+      }
+    }
     for (const fn of ["querySellBase", "querySellQuote"] as const) {
       if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+        onchainQuoteReads += 1;
         const decoded = dodoV2PoolIface.decodeFunctionData(fn, read.data);
         assert.equal(
           BigInt(decoded[1]),
@@ -573,7 +625,12 @@ async function runDodoV2(): Promise<void> {
     throw new Error(`unexpected DODO read ${read.id}`);
   });
   assert.equal(result.initialReads.length, 5);
-  assert.equal(result.dependentReads.length, 2);
+  assert.equal(
+    result.dependentReads.length,
+    0,
+    "ordinary DODO current-N state must quote locally without querySell fallback reads",
+  );
+  assert.equal(onchainQuoteReads, 0);
 }
 
 async function runFluidDex(): Promise<void> {

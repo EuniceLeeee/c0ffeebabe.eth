@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import {
   BlockScanStateCoordinator,
   type BlockScanStateReadBackend,
@@ -31,6 +32,14 @@ const SOURCE_HASH =
 const BALANCER_POOL = "0x8523bcadcda4bd329435940dcc49a7c4c0a14d94";
 const INACTIVE_BALANCER_POOL =
   "0x4444444444444444444444444444444444444444";
+const BOUNDARY_BALANCER_POOL =
+  "0x5555555555555555555555555555555555555555";
+const BALANCER_EXACT_OUT_AMOUNT_IN = 12_345_678n;
+const BALANCER_MINIMUM_TRADE_AMOUNT = 1_000_000n;
+const BALANCER_NON_INTEGRAL_RATE = 10n ** 18n + 123n;
+const BALANCER_TRUE_MINIMUM_RAW_OUT = 999_999n;
+const BALANCER_V3_GYRO_ECLP_FACTORY =
+  "0xe9b0a3bc48178d7fe2f5453c8bc1415d73f966d0";
 const DODO_POOL = "0xeef85bc18b8cd15452ec787ffc26b9b5a9e220c1";
 const WBTC = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 const LINK = "0x514910771af9ca656af840dff83e8264ecf986ca";
@@ -40,7 +49,19 @@ const taxonomy = deriveEdgeTaxonomy("swap");
 
 const balancerIface = new ethers.Interface([
   "function getPoolTokenInfo(address pool) view returns (address[] tokens,tuple(uint8 tokenType,address rateProvider,bool paysYieldFees)[] tokenInfo,uint256[] balancesRaw,uint256[] lastBalancesLiveScaled18)",
+  "function getPoolTokenRates(address pool) view returns (uint256[] decimalScalingFactors,uint256[] tokenRates)",
+  "function getCurrentLiveBalances(address pool) view returns (uint256[] balancesLiveScaled18)",
+  "function getHooksConfig(address pool) view returns (tuple(bool enableHookAdjustedAmounts,bool shouldCallBeforeInitialize,bool shouldCallAfterInitialize,bool shouldCallComputeDynamicSwapFee,bool shouldCallBeforeSwap,bool shouldCallAfterSwap,bool shouldCallBeforeAddLiquidity,bool shouldCallAfterAddLiquidity,bool shouldCallBeforeRemoveLiquidity,bool shouldCallAfterRemoveLiquidity,address hooksContract) hooksConfig)",
+  "function getMinimumTradeAmount() view returns (uint256 minimumTradeAmount)",
   "function querySwapSingleTokenExactIn(address pool,address tokenIn,address tokenOut,uint256 exactAmountIn,address sender,bytes userData) returns (uint256 amountOut)",
+  "function querySwapSingleTokenExactOut(address pool,address tokenIn,address tokenOut,uint256 exactAmountOut,address sender,bytes userData) returns (uint256 amountIn)",
+]);
+const gyroEclpIface = new ethers.Interface([
+  "function getGyroECLPPoolDynamicData() view returns (tuple(uint256[] balancesLiveScaled18,uint256[] tokenRates,uint256 staticSwapFeePercentage,uint256 totalSupply,uint256 bptRate,bool isPoolInitialized,bool isPoolPaused,bool isPoolInRecoveryMode) data)",
+  "function getVault() view returns (address)",
+]);
+const balancerFactoryIface = new ethers.Interface([
+  "function isPoolFromFactory(address pool) view returns (bool)",
 ]);
 const erc20BalanceIface = new ethers.Interface([
   "function balanceOf(address account) view returns (uint256)",
@@ -62,6 +83,19 @@ const balancerBalances = Object.freeze([
   2_241_901_442n,
   523_827_529n,
 ]);
+const balancerScalingFactors = Object.freeze([
+  10n ** 10n,
+  1n,
+  1n,
+  1n,
+  10n ** 10n,
+  10n ** 10n,
+]);
+const balancerTokenRates = Object.freeze(
+  balancerTokens.map((token) =>
+    same(token, LINK) ? BALANCER_NON_INTEGRAL_RATE : 10n ** 18n
+  ),
+);
 const dodoPmm = Object.freeze({
   i: 35_553_152_933n,
   K: 50_000_000_000_000_000n,
@@ -88,9 +122,8 @@ async function representativePoolsResolve(): Promise<void> {
     ...poolEdges("balancer-v3-unlock", BALANCER_POOL, WBTC, LINK),
     ...poolEdges("dodo-v2-swap", DODO_POOL, DODO_BASE, WETH),
   ]);
-  const result = await new BlockScanStateCoordinator(
-    new SourceBlockBackend(),
-  ).prepare({
+  const backend = new SourceBlockBackend();
+  const result = await new BlockScanStateCoordinator(backend).prepare({
     graph: graph("representative", 1, edges),
     families: families(),
     deadlineAtMs: Date.now() + 2_000,
@@ -106,7 +139,10 @@ async function representativePoolsResolve(): Promise<void> {
   const dodoQuoteEdge = result.snapshot.graph.edges.find((edge) =>
     same(edge.target, DODO_POOL) && same(edge.tokenIn, WETH)
   );
-  assert(wbtcEdge && dodoQuoteEdge);
+  const dodoBaseEdge = result.snapshot.graph.edges.find((edge) =>
+    same(edge.target, DODO_POOL) && same(edge.tokenIn, DODO_BASE)
+  );
+  assert(wbtcEdge && dodoQuoteEdge && dodoBaseEdge);
   assert.equal(
     result.snapshot.mids.get(blockScanEdgeKey(wbtcEdge))?.reserveA,
     6_659n * 10_000n,
@@ -117,9 +153,33 @@ async function representativePoolsResolve(): Promise<void> {
     1_808_457_157_455n * 10_000n,
     "mid depth must retain the actual DODO probe, not one whole WETH",
   );
+  assert.equal(
+    result.snapshot.mids.get(blockScanEdgeKey(dodoQuoteEdge))?.reserveB,
+    90_715_723_995_015_914_014n * 10_000n,
+    "local DODO quote-side PMM math must match the pinned archive quote",
+  );
+  assert.equal(
+    result.snapshot.mids.get(blockScanEdgeKey(dodoBaseEdge))?.reserveA,
+    10n ** 18n * 10_000n,
+  );
+  assert.equal(
+    result.snapshot.mids.get(blockScanEdgeKey(dodoBaseEdge))?.reserveB,
+    16_063_243_913n * 10_000n,
+    "local DODO base-side PMM math must match the pinned archive quote",
+  );
   assert.deepEqual(
     result.snapshot.resolvedFamilyIds,
     ["balancer-v3", "custom-swap:dodo-v2"],
+  );
+  assert.equal(
+    backend.balancerProofReads,
+    0,
+    "healthy exact-in directions must never execute the ECLP proof",
+  );
+  assert.equal(
+    backend.dodoOnchainQuoteReads,
+    0,
+    "ordinary DODO state must not execute querySell fallback reads",
   );
 }
 
@@ -216,12 +276,141 @@ async function quoteFailureRemainsUnresolved(): Promise<void> {
       issue.familyId === "balancer-v3" &&
       issue.message.includes("returned no positive result")
     ),
-    "a quote failure must remain explicit unresolved coverage",
+    `a quote failure must remain explicit unresolved coverage: ${
+      JSON.stringify(result.issues)
+    }`,
   );
 }
 
+async function gyroBoundaryDirectionIsBehaviorUnavailable(): Promise<void> {
+  const boundary = poolEdges(
+    "balancer-v3-unlock",
+    BOUNDARY_BALANCER_POOL,
+    WBTC,
+    LINK,
+  );
+  const result = await new BlockScanStateCoordinator(
+    new SourceBlockBackend("eclp-boundary"),
+  ).prepare({
+    graph: graph("eclp-boundary", 4, boundary),
+    families: families().slice(0, 1),
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal(result.status, "complete", JSON.stringify(result.issues));
+  assert.equal(result.coverage.expectedEdgeKeys.length, 2);
+  assert.equal(result.coverage.resolvedEdgeKeys.length, 1);
+  assert.equal(result.coverage.unavailableEdgeKeys.length, 1);
+  assert.equal(result.coverage.unresolvedEdgeKeys.length, 0);
+  assert.equal(
+    result.snapshot.graph.edges.length,
+    2,
+    "behavior-unavailable is coverage metadata, never graph deletion",
+  );
+  assert.deepEqual(result.snapshot.resolvedFamilyIds, ["balancer-v3"]);
+  assert.deepEqual(result.snapshot.incompleteFamilyIds, []);
+
+  const blocked = result.snapshot.graph.edges.find(
+    (edge) => same(edge.tokenIn, WBTC),
+  );
+  const healthy = result.snapshot.graph.edges.find(
+    (edge) => same(edge.tokenIn, LINK),
+  );
+  assert(blocked && healthy);
+  const blockedKey = blockScanEdgeKey(blocked);
+  const healthyKey = blockScanEdgeKey(healthy);
+  const blockedCoverage =
+    result.snapshot.coverageByEdgeKey.get(blockedKey);
+  assert.equal(
+    blockedCoverage?.status,
+    "rejected",
+  );
+  assert(blockedCoverage?.status === "rejected");
+  assert.match(
+    blockedCoverage.reason,
+    /Gyro ECLP.*minimum exact-out.*asset bounds/,
+  );
+  assert.equal(
+    result.snapshot.coverageByEdgeKey.get(healthyKey)?.status,
+    "resolved",
+  );
+  assert.equal(result.snapshot.mids.has(blockedKey), false);
+  assert.equal(result.snapshot.mids.has(healthyKey), true);
+}
+
+async function gyroFallbackUsesSuccessfulExactOutQuote(): Promise<void> {
+  const boundary = poolEdges(
+    "balancer-v3-unlock",
+    BOUNDARY_BALANCER_POOL,
+    WBTC,
+    LINK,
+  );
+  const result = await new BlockScanStateCoordinator(
+    new SourceBlockBackend("eclp-exact-out"),
+  ).prepare({
+    graph: graph("eclp-exact-out", 5, boundary),
+    families: families().slice(0, 1),
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal(result.status, "complete", JSON.stringify(result.issues));
+  assert.equal(result.coverage.resolvedEdgeKeys.length, 2);
+  assert.equal(result.coverage.unavailableEdgeKeys.length, 0);
+  assert.equal(result.coverage.unresolvedEdgeKeys.length, 0);
+  const recovered = result.snapshot.graph.edges.find(
+    (edge) => same(edge.tokenIn, WBTC),
+  );
+  assert(recovered);
+  assert.equal(
+    result.snapshot.mids.get(blockScanEdgeKey(recovered))?.reserveA,
+    BALANCER_EXACT_OUT_AMOUNT_IN * 10_000n,
+  );
+  assert.equal(
+    result.snapshot.mids.get(blockScanEdgeKey(recovered))?.reserveB,
+    BALANCER_TRUE_MINIMUM_RAW_OUT * 10_000n,
+    "exact-out fallback must use Vault round-up scaling at a non-integral rate",
+  );
+}
+
+async function spoofedFactoryCannotProveUnavailable(): Promise<void> {
+  const boundary = poolEdges(
+    "balancer-v3-unlock",
+    BOUNDARY_BALANCER_POOL,
+    WBTC,
+    LINK,
+  );
+  const backend = new SourceBlockBackend("eclp-spoof");
+  const result = await new BlockScanStateCoordinator(backend).prepare({
+    graph: graph("eclp-spoof", 6, boundary),
+    families: families().slice(0, 1),
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal(result.status, "degraded");
+  assert.equal(result.snapshot.graph.edges.length, 2);
+  assert.equal(result.coverage.resolvedEdgeKeys.length, 1);
+  assert.equal(result.coverage.unavailableEdgeKeys.length, 0);
+  assert.equal(result.coverage.unresolvedEdgeKeys.length, 1);
+  assert.equal(
+    backend.balancerExactOutReads,
+    0,
+    "a pool not reverse-proven by the canonical factory must not reach exact-out classification",
+  );
+}
+
+type BalancerFailureMode =
+  | false
+  | true
+  | "eclp-boundary"
+  | "eclp-exact-out"
+  | "eclp-spoof";
+
 class SourceBlockBackend implements BlockScanStateReadBackend {
-  constructor(private readonly failBalancerQuotes = false) {}
+  balancerProofReads = 0;
+  balancerExactOutReads = 0;
+  dodoOnchainQuoteReads = 0;
+
+  constructor(private readonly failBalancerQuotes: BalancerFailureMode = false) {}
 
   async readBatch(
     _lane: "swap" | "protocol",
@@ -234,6 +423,22 @@ class SourceBlockBackend implements BlockScanStateReadBackend {
   ): Promise<readonly StateReadResult[]> {
     assert.equal(control.sourceBlock, SOURCE_BLOCK);
     assert.equal(control.sourceBlockHash, SOURCE_HASH);
+    for (const read of reads) {
+      const selectors = stateReadSelectors(read);
+      if (selectors.some(isBalancerProofSelector)) {
+        this.balancerProofReads += 1;
+      }
+      if (
+        selectors.includes(
+          balancerIface.getFunction("querySwapSingleTokenExactOut")!.selector,
+        )
+      ) {
+        this.balancerExactOutReads += 1;
+      }
+      if (selectors.some(isDodoOnchainQuoteSelector)) {
+        this.dodoOnchainQuoteReads += 1;
+      }
+    }
     return reads.map((read): StateReadResult => {
       try {
         return success(
@@ -263,7 +468,43 @@ class SourceBlockBackend implements BlockScanStateReadBackend {
   }
 }
 
-function respond(read: StateRead, failBalancerQuotes = false): string {
+function stateReadSelectors(read: StateRead): readonly string[] {
+  const selector = read.data.slice(0, 10);
+  if (
+    selector !== blockScanMulticallIface.getFunction("aggregate3")!.selector
+  ) {
+    return [selector];
+  }
+  const calls = blockScanMulticallIface.decodeFunctionData(
+    "aggregate3",
+    read.data,
+  )[0] as readonly { callData: string }[];
+  return calls.map((call) => call.callData.slice(0, 10));
+}
+
+function isBalancerProofSelector(selector: string): boolean {
+  return [
+    balancerIface.getFunction("getPoolTokenRates")!.selector,
+    balancerIface.getFunction("getCurrentLiveBalances")!.selector,
+    balancerIface.getFunction("getHooksConfig")!.selector,
+    gyroEclpIface.getFunction("getGyroECLPPoolDynamicData")!.selector,
+    gyroEclpIface.getFunction("getVault")!.selector,
+    balancerFactoryIface.getFunction("isPoolFromFactory")!.selector,
+    balancerIface.getFunction("getMinimumTradeAmount")!.selector,
+  ].includes(selector);
+}
+
+function isDodoOnchainQuoteSelector(selector: string): boolean {
+  return [
+    dodoV2PoolIface.getFunction("querySellBase")!.selector,
+    dodoV2PoolIface.getFunction("querySellQuote")!.selector,
+  ].includes(selector);
+}
+
+function respond(
+  read: StateRead,
+  failBalancerQuotes: BalancerFailureMode = false,
+): string {
   const selector = read.data.slice(0, 10);
   if (
     read.to.toLowerCase() === BLOCKSCAN_MULTICALL3.toLowerCase() &&
@@ -274,12 +515,87 @@ function respond(read: StateRead, failBalancerQuotes = false): string {
       read.data,
     )[0] as readonly { target: string; callData: string }[];
     const responses = calls.map(({ target, callData }) => {
+      const selector = callData.slice(0, 10);
       if (
-        failBalancerQuotes &&
-        callData.slice(0, 10) ===
+        failBalancerQuotes === "eclp-spoof" &&
+        selector ===
+          balancerFactoryIface.getFunction("isPoolFromFactory")!.selector
+      ) {
+        return {
+          success: true,
+          returnData: balancerFactoryIface.encodeFunctionResult(
+            "isPoolFromFactory",
+            [false],
+          ),
+        };
+      }
+      if (
+        selector ===
           balancerIface.getFunction("querySwapSingleTokenExactIn")!.selector
       ) {
-        return { success: false, returnData: "0x" };
+        const decoded = balancerIface.decodeFunctionData(
+          "querySwapSingleTokenExactIn",
+          callData,
+        );
+        if (
+          failBalancerQuotes === true ||
+          (
+            (
+              failBalancerQuotes === "eclp-boundary" ||
+              failBalancerQuotes === "eclp-exact-out" ||
+              failBalancerQuotes === "eclp-spoof"
+            ) &&
+            same(String(decoded[0]), BOUNDARY_BALANCER_POOL) &&
+            same(String(decoded[1]), WBTC)
+          )
+        ) {
+          return {
+            success: false,
+            returnData:
+              failBalancerQuotes === "eclp-boundary" ||
+                failBalancerQuotes === "eclp-spoof"
+                ? ethers.id("TradeAmountTooSmall()").slice(0, 10)
+                : "0x",
+          };
+        }
+      }
+      if (
+        (
+          failBalancerQuotes === "eclp-boundary" ||
+          failBalancerQuotes === "eclp-exact-out" ||
+          failBalancerQuotes === "eclp-spoof"
+        ) &&
+        selector ===
+          balancerIface.getFunction("querySwapSingleTokenExactOut")!.selector
+      ) {
+        const decoded = balancerIface.decodeFunctionData(
+          "querySwapSingleTokenExactOut",
+          callData,
+        );
+        if (
+          same(String(decoded[0]), BOUNDARY_BALANCER_POOL) &&
+          same(String(decoded[1]), WBTC)
+        ) {
+          const exactAmountOut = BigInt(decoded[3]);
+          assert.equal(
+            exactAmountOut,
+            BALANCER_TRUE_MINIMUM_RAW_OUT,
+            "exact-out request must reproduce Vault minimum scaling exactly",
+          );
+          if (failBalancerQuotes === "eclp-exact-out") {
+            return {
+              success: true,
+              returnData: balancerIface.encodeFunctionResult(
+                "querySwapSingleTokenExactOut",
+                [BALANCER_EXACT_OUT_AMOUNT_IN],
+              ),
+            };
+          }
+          return {
+            success: false,
+            returnData: ethers.id("AssetBoundsExceeded()").slice(0, 10),
+          };
+        }
       }
       try {
         return {
@@ -321,6 +637,109 @@ function respondCall(target: string, data: string): string {
     ]);
   }
   if (
+    selector === balancerIface.getFunction("getPoolTokenRates")!.selector
+  ) {
+    const pool = String(
+      balancerIface.decodeFunctionData("getPoolTokenRates", data)[0],
+    );
+    assert.equal(same(pool, BOUNDARY_BALANCER_POOL), true);
+    return balancerIface.encodeFunctionResult("getPoolTokenRates", [
+      balancerScalingFactors,
+      balancerTokenRates,
+    ]);
+  }
+  if (
+    selector === balancerIface.getFunction("getHooksConfig")!.selector
+  ) {
+    const pool = String(
+      balancerIface.decodeFunctionData("getHooksConfig", data)[0],
+    );
+    assert.equal(same(pool, BOUNDARY_BALANCER_POOL), true);
+    return balancerIface.encodeFunctionResult("getHooksConfig", [[
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      ethers.ZeroAddress,
+    ]]);
+  }
+  if (
+    selector ===
+      balancerIface.getFunction("getCurrentLiveBalances")!.selector
+  ) {
+    const pool = String(
+      balancerIface.decodeFunctionData(
+        "getCurrentLiveBalances",
+        data,
+      )[0],
+    );
+    assert.equal(same(pool, BOUNDARY_BALANCER_POOL), true);
+    return balancerIface.encodeFunctionResult(
+      "getCurrentLiveBalances",
+      [balancerBalances],
+    );
+  }
+  if (
+    selector ===
+      gyroEclpIface.getFunction("getGyroECLPPoolDynamicData")!.selector &&
+    same(target, BOUNDARY_BALANCER_POOL)
+  ) {
+    return gyroEclpIface.encodeFunctionResult(
+      "getGyroECLPPoolDynamicData",
+      [[
+        balancerBalances,
+        balancerTokenRates,
+        10n ** 15n,
+        10n ** 18n,
+        10n ** 18n,
+        true,
+        false,
+        false,
+      ]],
+    );
+  }
+  if (
+    selector === gyroEclpIface.getFunction("getVault")!.selector &&
+    same(target, BOUNDARY_BALANCER_POOL)
+  ) {
+    return gyroEclpIface.encodeFunctionResult(
+      "getVault",
+      [ADDR.BALANCER_V3_VAULT],
+    );
+  }
+  if (
+    selector ===
+      balancerFactoryIface.getFunction("isPoolFromFactory")!.selector &&
+    same(target, BALANCER_V3_GYRO_ECLP_FACTORY)
+  ) {
+    const pool = String(
+      balancerFactoryIface.decodeFunctionData(
+        "isPoolFromFactory",
+        data,
+      )[0],
+    );
+    assert.equal(same(pool, BOUNDARY_BALANCER_POOL), true);
+    return balancerFactoryIface.encodeFunctionResult(
+      "isPoolFromFactory",
+      [true],
+    );
+  }
+  if (
+    selector ===
+      balancerIface.getFunction("getMinimumTradeAmount")!.selector
+  ) {
+    return balancerIface.encodeFunctionResult(
+      "getMinimumTradeAmount",
+      [BALANCER_MINIMUM_TRADE_AMOUNT],
+    );
+  }
+  if (
     selector ===
       balancerIface.getFunction("querySwapSingleTokenExactIn")!.selector
   ) {
@@ -331,7 +750,10 @@ function respondCall(target: string, data: string): string {
     const pool = String(decoded[0]);
     const tokenIn = String(decoded[1]);
     const amountIn = BigInt(decoded[3]);
-    assert.equal(same(pool, BALANCER_POOL), true);
+    assert(
+      same(pool, BALANCER_POOL) ||
+        same(pool, BOUNDARY_BALANCER_POOL),
+    );
     return balancerIface.encodeFunctionResult(
       "querySwapSingleTokenExactIn",
       [balancerAmountOut(tokenIn, amountIn)],
@@ -352,11 +774,12 @@ function respondCall(target: string, data: string): string {
       ]);
     }
   }
-  if (
-    selector === dodoV2PoolIface.getFunction("_BASE_RESERVE_")!.selector ||
-    selector === dodoV2PoolIface.getFunction("_QUOTE_RESERVE_")!.selector
-  ) {
-    throw new Error("block-scan must reuse reserves already returned by PMM state");
+  for (const fn of ["_BASE_RESERVE_", "_QUOTE_RESERVE_"] as const) {
+    if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+      return dodoV2PoolIface.encodeFunctionResult(fn, [
+        fn === "_BASE_RESERVE_" ? dodoPmm.B : dodoPmm.Q,
+      ]);
+    }
   }
   if (
     selector ===
@@ -371,6 +794,20 @@ function respondCall(target: string, data: string): string {
       dodoPmm.Q0,
       dodoPmm.R,
     ]);
+  }
+  if (
+    selector ===
+      dodoV2PoolIface.getFunction("getUserFeeRate")!.selector
+  ) {
+    return dodoV2PoolIface.encodeFunctionResult(
+      "getUserFeeRate",
+      [10n ** 17n, 0n],
+    );
+  }
+  for (const fn of ["getBaseInput", "getQuoteInput"] as const) {
+    if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
+      return dodoV2PoolIface.encodeFunctionResult(fn, [0n]);
+    }
   }
   for (const fn of ["querySellBase", "querySellQuote"] as const) {
     if (selector === dodoV2PoolIface.getFunction(fn)!.selector) {
@@ -545,6 +982,9 @@ function same(left: string, right: string): boolean {
 await representativePoolsResolve();
 await quoteFailureRemainsUnresolved();
 await unquotablePoolDoesNotPoisonSiblingDirections();
+await gyroBoundaryDirectionIsBehaviorUnavailable();
+await gyroFallbackUsesSuccessfulExactOutQuote();
+await spoofedFactoryCannotProveUnavailable();
 
 console.log(
   "[external-swap-liquidity-state] source-sized probes + unavailable isolation: PASS",

@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import type { TokenEdge } from "../../planner/token-graph.js";
 import {
+  blockScanEdgeKey,
   type BlockScanStateCapability,
   type BuildCurrentBlockReadsInput,
   type StateRead,
@@ -34,6 +35,32 @@ export interface AdaptiveQuoteCall {
   readonly data: string;
 }
 
+export interface AdaptiveFallbackContext<Static>
+  extends AdaptiveViewQuoteContext<Static> {
+  readonly completedRound: number;
+  readonly candidates: readonly bigint[];
+}
+
+export type AdaptiveFallbackOutcome =
+  | {
+      readonly status: "quote";
+      readonly amountIn: bigint;
+      readonly amountOut: bigint;
+    }
+  | {
+      readonly status: "unavailable";
+      readonly reason: string;
+    };
+
+export interface AdaptiveViewQuoteFallback<Static> {
+  buildDependentReads(
+    ctx: AdaptiveFallbackContext<Static>,
+  ): readonly StateRead[];
+  decode(
+    ctx: Omit<AdaptiveFallbackContext<Static>, "completedRound">,
+  ): AdaptiveFallbackOutcome | null;
+}
+
 export interface AdaptiveViewQuoteConfig<Static> {
   readonly kind: Extract<
     RouteVenueMidKind,
@@ -51,6 +78,7 @@ export interface AdaptiveViewQuoteConfig<Static> {
     amountIn: bigint,
   ): AdaptiveQuoteCall;
   decodeQuote(edge: TokenEdge, data: string): bigint;
+  readonly fallback?: AdaptiveViewQuoteFallback<Static>;
   dependencies?(
     edge: TokenEdge,
     staticState: Static,
@@ -67,11 +95,18 @@ export interface AdaptiveViewQuoteSchema<Static> {
   readonly groups: ReadonlyMap<string, AdaptiveViewQuoteGroup<Static>>;
 }
 
-export interface AdaptiveViewQuoteSnapshot {
-  readonly stateKey: string;
-  readonly amountIn: bigint;
-  readonly amountOut: bigint;
-}
+export type AdaptiveViewQuoteSnapshot =
+  | {
+      readonly stateKey: string;
+      readonly status: "quote";
+      readonly amountIn: bigint;
+      readonly amountOut: bigint;
+    }
+  | {
+      readonly stateKey: string;
+      readonly status: "unavailable";
+      readonly reason: string;
+    };
 
 /**
  * Direction-local current-block quotes with a family-owned input ladder.
@@ -79,7 +114,9 @@ export interface AdaptiveViewQuoteSnapshot {
  * Families emit ordinary prerequisite reads in round 0. Round 1 executes all
  * candidate calls inside one allow-failure Multicall and publishes only a
  * genuinely successful positive quote. Reverts and zero outputs remain
- * unresolved; they are never converted into an unavailable edge.
+ * unresolved unless the family declares and proves a source-pinned,
+ * behavior-specific fallback. The shared helper never interprets a revert as
+ * unavailability on its own.
  */
 export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
   config: AdaptiveViewQuoteConfig<Static>,
@@ -138,7 +175,6 @@ export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
     },
 
     buildDependentBlockReads(input) {
-      if (input.completedRound > 0) return Object.freeze([]);
       const group = requireGroup(input, stateKey);
       const ctx = Object.freeze({
         sourceBlock: input.sourceBlock,
@@ -149,6 +185,18 @@ export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
         priorResults: input.priorResults,
       });
       const candidates = normalizeCandidates(config.quoteCandidates(ctx));
+      if (input.completedRound > 0) {
+        if (firstPositiveQuote(config, ctx, candidates)) {
+          return Object.freeze([]);
+        }
+        return Object.freeze([
+          ...(config.fallback?.buildDependentReads(Object.freeze({
+            ...ctx,
+            completedRound: input.completedRound,
+            candidates,
+          })) ?? []),
+        ]);
+      }
       const items = quoteItems(config, ctx, candidates);
       return Object.freeze([
         currentBlockRead({
@@ -175,20 +223,40 @@ export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
         priorResults: results,
       });
       const candidates = normalizeCandidates(config.quoteCandidates(ctx));
-      const items = quoteItems(config, ctx, candidates);
-      const decoded = decodeMulticall(
-        requireRead(results, adaptiveQuoteReadId(group.stateKey)),
-        items,
-      );
-      for (let index = 0; index < candidates.length; index++) {
-        const data = optionalMulticallData(decoded, quoteItemLabel(index));
-        if (!data) continue;
-        const amountOut = config.decodeQuote(group.edge, data);
-        if (amountOut <= 0n) continue;
+      const quote = firstPositiveQuote(config, ctx, candidates);
+      if (quote) {
         return Object.freeze({
           stateKey: group.stateKey,
-          amountIn: candidates[index],
-          amountOut,
+          status: "quote" as const,
+          ...quote,
+        });
+      }
+      const fallback = config.fallback?.decode(Object.freeze({
+        ...ctx,
+        candidates,
+      })) ?? null;
+      if (fallback?.status === "quote") {
+        if (fallback.amountIn <= 0n || fallback.amountOut <= 0n) {
+          throw new Error(
+            `adaptive fallback returned a non-positive quote for ${group.stateKey}`,
+          );
+        }
+        return Object.freeze({
+          stateKey: group.stateKey,
+          ...fallback,
+        });
+      }
+      if (fallback?.status === "unavailable") {
+        const reason = fallback.reason.trim();
+        if (!reason) {
+          throw new Error(
+            `adaptive fallback returned an empty unavailable reason for ${group.stateKey}`,
+          );
+        }
+        return Object.freeze({
+          stateKey: group.stateKey,
+          status: "unavailable" as const,
+          reason,
         });
       }
       throw new Error(
@@ -202,6 +270,7 @@ export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
           `adaptive view-quote snapshot ${snapshot.stateKey} used for a different direction`,
         );
       }
+      if (snapshot.status === "unavailable") return new Map();
       return midsForDirectedEdges(edges, (edge) =>
         quotedPoolMid({
           kind: config.kind,
@@ -212,6 +281,16 @@ export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
           depthOut: snapshot.amountOut * 10_000n,
         })
       );
+    },
+
+    behaviorProvenUnavailableEdges(snapshot, edges) {
+      if (snapshot.status !== "unavailable") return new Map();
+      if (edges.length !== 1 || stateKey(edges[0]) !== snapshot.stateKey) {
+        throw new Error(
+          `adaptive unavailable snapshot ${snapshot.stateKey} used for a different direction`,
+        );
+      }
+      return new Map([[blockScanEdgeKey(edges[0]), snapshot.reason]]);
     },
 
     dependencies(edges) {
@@ -285,6 +364,29 @@ function quoteItems<Static>(
       allowFailure: true,
     });
   }));
+}
+
+function firstPositiveQuote<Static>(
+  config: AdaptiveViewQuoteConfig<Static>,
+  ctx: AdaptiveViewQuoteContext<Static>,
+  candidates: readonly bigint[],
+): { readonly amountIn: bigint; readonly amountOut: bigint } | null {
+  const read = ctx.priorResults.find(
+    (result) => result.id === adaptiveQuoteReadId(ctx.stateKey),
+  );
+  if (!read) return null;
+  const decoded = decodeMulticall(
+    requireRead(ctx.priorResults, adaptiveQuoteReadId(ctx.stateKey)),
+    quoteItems(config, ctx, candidates),
+  );
+  for (let index = 0; index < candidates.length; index++) {
+    const data = optionalMulticallData(decoded, quoteItemLabel(index));
+    if (!data) continue;
+    const amountOut = config.decodeQuote(ctx.edge, data);
+    if (amountOut <= 0n) continue;
+    return Object.freeze({ amountIn: candidates[index], amountOut });
+  }
+  return null;
 }
 
 function normalizeCandidates(input: readonly bigint[]): readonly bigint[] {
