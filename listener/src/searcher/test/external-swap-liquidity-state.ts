@@ -177,9 +177,54 @@ async function representativePoolsResolve(): Promise<void> {
     "healthy exact-in directions must never execute the ECLP proof",
   );
   assert.equal(
+    backend.balancerExactInCalls,
+    2,
+    "healthy Balancer directions must execute only their preferred candidate",
+  );
+  assert.equal(
     backend.dodoOnchainQuoteReads,
     0,
     "ordinary DODO state must not execute querySell fallback reads",
+  );
+}
+
+async function laterCandidateRetainsCompleteQuoteLadder(): Promise<void> {
+  const edges = Object.freeze(
+    poolEdges("balancer-v3-unlock", BALANCER_POOL, WBTC, LINK),
+  );
+  const backend = new SourceBlockBackend("first-candidate-fails");
+  const result = await new BlockScanStateCoordinator(backend).prepare({
+    graph: graph("later-candidate", 7, edges),
+    families: families().slice(0, 1),
+    deadlineAtMs: Date.now() + 2_000,
+  });
+
+  assert.equal(result.status, "complete", JSON.stringify(result.issues));
+  assert.equal(result.coverage.resolvedEdgeKeys.length, 2);
+  assert.equal(result.coverage.unavailableEdgeKeys.length, 0);
+  assert.equal(result.coverage.unresolvedEdgeKeys.length, 0);
+  const recovered = result.snapshot.graph.edges.find(
+    (edge) => same(edge.tokenIn, WBTC),
+  );
+  assert(recovered);
+  assert.equal(
+    result.snapshot.mids.get(blockScanEdgeKey(recovered))?.reserveA,
+    10_000n,
+    "the first positive remaining candidate must retain its original input",
+  );
+  assert(
+    backend.balancerExactInCalls > 2,
+    "a failed preferred candidate must open the remaining candidate ladder",
+  );
+  assert.equal(
+    backend.balancerProofReads,
+    0,
+    "a later exact-in success must close before fallback proof reads",
+  );
+  assert.equal(
+    backend.balancerExactOutReads,
+    0,
+    "a later exact-in success must close before the exact-out fallback",
   );
 }
 
@@ -401,12 +446,14 @@ async function spoofedFactoryCannotProveUnavailable(): Promise<void> {
 type BalancerFailureMode =
   | false
   | true
+  | "first-candidate-fails"
   | "eclp-boundary"
   | "eclp-exact-out"
   | "eclp-spoof";
 
 class SourceBlockBackend implements BlockScanStateReadBackend {
   balancerProofReads = 0;
+  balancerExactInCalls = 0;
   balancerExactOutReads = 0;
   dodoOnchainQuoteReads = 0;
 
@@ -428,6 +475,10 @@ class SourceBlockBackend implements BlockScanStateReadBackend {
       if (selectors.some(isBalancerProofSelector)) {
         this.balancerProofReads += 1;
       }
+      this.balancerExactInCalls += selectors.filter((selector) =>
+        selector ===
+          balancerIface.getFunction("querySwapSingleTokenExactIn")!.selector
+      ).length;
       if (
         selectors.includes(
           balancerIface.getFunction("querySwapSingleTokenExactOut")!.selector,
@@ -538,6 +589,12 @@ function respond(
           callData,
         );
         if (
+          (
+            failBalancerQuotes === "first-candidate-fails" &&
+            same(String(decoded[0]), BALANCER_POOL) &&
+            same(String(decoded[1]), WBTC) &&
+            BigInt(decoded[3]) === balancerBalances[0] / 100n
+          ) ||
           failBalancerQuotes === true ||
           (
             (
@@ -556,6 +613,20 @@ function respond(
                 failBalancerQuotes === "eclp-spoof"
                 ? ethers.id("TradeAmountTooSmall()").slice(0, 10)
                 : "0x",
+          };
+        }
+        if (
+          failBalancerQuotes === "first-candidate-fails" &&
+          same(String(decoded[0]), BALANCER_POOL) &&
+          same(String(decoded[1]), WBTC) &&
+          BigInt(decoded[3]) === 1n
+        ) {
+          return {
+            success: true,
+            returnData: balancerIface.encodeFunctionResult(
+              "querySwapSingleTokenExactIn",
+              [10n],
+            ),
           };
         }
       }
@@ -980,6 +1051,7 @@ function same(left: string, right: string): boolean {
 }
 
 await representativePoolsResolve();
+await laterCandidateRetainsCompleteQuoteLadder();
 await quoteFailureRemainsUnresolved();
 await unquotablePoolDoesNotPoisonSiblingDirections();
 await gyroBoundaryDirectionIsBehaviorUnavailable();

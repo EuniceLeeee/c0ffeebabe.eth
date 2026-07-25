@@ -66,6 +66,48 @@ export interface ResolvedBlockScanMid {
   readonly depthProxy: number;
 }
 
+export type ResolvedRingScoreRejection =
+  | "empty_route"
+  | "not_closed_continuous"
+  | "missing_mid"
+  | "fee_out_of_range"
+  | "invalid_adjusted_mid"
+  | "missing_or_nonpositive_input_depth"
+  | "invalid_cumulative_mid"
+  | "invalid_start_depth"
+  | "nonpositive_log_return"
+  | "invalid_spread";
+
+export interface ResolvedRingEdgeScoreDiagnostic {
+  readonly edgeIndex: number;
+  readonly edgeKey: string;
+  readonly mid: number | null;
+  readonly feeBps: number | null;
+  readonly adjustedMid: number | null;
+  readonly reserveA: string | null;
+  readonly reserveB: string | null;
+  readonly liquidity: string | null;
+  readonly depthProxy: number | null;
+  readonly inputDepth: string | null;
+  readonly cumulativeMidBefore: number;
+  readonly startDepth: number | null;
+}
+
+export type ResolvedRingScoreDiagnosis =
+  | {
+      readonly status: "accepted";
+      readonly estSpreadBps: number;
+      readonly maxStartDepth: number;
+      readonly edges: readonly ResolvedRingEdgeScoreDiagnostic[];
+    }
+  | {
+      readonly status: "rejected";
+      readonly reason: ResolvedRingScoreRejection;
+      readonly edgeIndex: number | null;
+      readonly edgeKey: string | null;
+      readonly edges: readonly ResolvedRingEdgeScoreDiagnostic[];
+    };
+
 type VenueMid = ResolvedBlockScanMid;
 
 interface RankedOpportunity {
@@ -506,44 +548,142 @@ function edgeVenueIdentity(edge: TokenEdge): string {
   return edge.target.toLowerCase();
 }
 
-function edgeMidTimesOneMinusFee(
-  edge: TokenEdge,
-  mids: ReadonlyMap<string, ResolvedBlockScanMid>,
-): number | null {
-  const venue = readEdgeVenueMid(edge, mids);
-  if (!venue || venue.feeBps >= 10_000) return null;
-  const adjusted = venue.mid * (1 - venue.feeBps / 10_000);
-  return Number.isFinite(adjusted) && adjusted > 0 ? adjusted : null;
-}
-
 function scoreRing(
   edges: TokenEdge[],
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
+  trace?: MutableResolvedRingScoreTrace,
 ): { estSpreadBps: number; maxStartDepth: number } | null {
-  if (edges.length === 0 || !isClosedContinuousRing(edges)) return null;
+  if (edges.length === 0) {
+    if (trace) rejectResolvedRingScore(trace, "empty_route");
+    return null;
+  }
+  if (!isClosedContinuousRing(edges)) {
+    if (trace) rejectResolvedRingScore(trace, "not_closed_continuous");
+    return null;
+  }
   let logSum = 0;
   let cumulativeMid = 1;
   let maxStartDepth = Infinity;
-  for (const edge of edges) {
-    const adjustedMid = edgeMidTimesOneMinusFee(edge, mids);
-    if (adjustedMid === null) return null;
+  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+    const edge = edges[edgeIndex];
     const venue = readEdgeVenueMid(edge, mids);
-    if (!venue) return null;
+    if (!venue) {
+      if (trace) {
+        recordResolvedRingEdge(trace, edge, edgeIndex, cumulativeMid, null);
+        rejectResolvedRingScore(trace, "missing_mid", edge, edgeIndex);
+      }
+      return null;
+    }
+    if (venue.feeBps >= 10_000) {
+      if (trace) {
+        recordResolvedRingEdge(trace, edge, edgeIndex, cumulativeMid, venue);
+        rejectResolvedRingScore(trace, "fee_out_of_range", edge, edgeIndex);
+      }
+      return null;
+    }
+    const adjustedMid = venue.mid * (1 - venue.feeBps / 10_000);
+    if (!Number.isFinite(adjustedMid) || adjustedMid <= 0) {
+      if (trace) {
+        recordResolvedRingEdge(
+          trace,
+          edge,
+          edgeIndex,
+          cumulativeMid,
+          venue,
+          adjustedMid,
+        );
+        rejectResolvedRingScore(
+          trace,
+          "invalid_adjusted_mid",
+          edge,
+          edgeIndex,
+        );
+      }
+      return null;
+    }
     const inputDepth = venue.reserveA ?? venue.liquidity;
-    if (inputDepth === undefined || inputDepth <= 0n || !Number.isFinite(cumulativeMid) || cumulativeMid <= 0) {
+    if (inputDepth === undefined || inputDepth <= 0n) {
+      if (trace) {
+        recordResolvedRingEdge(
+          trace,
+          edge,
+          edgeIndex,
+          cumulativeMid,
+          venue,
+          adjustedMid,
+          inputDepth,
+        );
+        rejectResolvedRingScore(
+          trace,
+          "missing_or_nonpositive_input_depth",
+          edge,
+          edgeIndex,
+        );
+      }
+      return null;
+    }
+    if (!Number.isFinite(cumulativeMid) || cumulativeMid <= 0) {
+      if (trace) {
+        recordResolvedRingEdge(
+          trace,
+          edge,
+          edgeIndex,
+          cumulativeMid,
+          venue,
+          adjustedMid,
+          inputDepth,
+        );
+        rejectResolvedRingScore(
+          trace,
+          "invalid_cumulative_mid",
+          edge,
+          edgeIndex,
+        );
+      }
       return null;
     }
     const startDepth = Number(inputDepth) / cumulativeMid;
-    if (!Number.isFinite(startDepth) || startDepth <= 0) return null;
+    if (trace) {
+      recordResolvedRingEdge(
+        trace,
+        edge,
+        edgeIndex,
+        cumulativeMid,
+        venue,
+        adjustedMid,
+        inputDepth,
+        startDepth,
+      );
+    }
+    if (!Number.isFinite(startDepth) || startDepth <= 0) {
+      if (trace) {
+        rejectResolvedRingScore(
+          trace,
+          "invalid_start_depth",
+          edge,
+          edgeIndex,
+        );
+      }
+      return null;
+    }
     maxStartDepth = Math.min(maxStartDepth, startDepth);
     logSum += Math.log(adjustedMid);
     cumulativeMid *= adjustedMid;
   }
-  if (!Number.isFinite(logSum) || logSum <= 0 || !Number.isFinite(maxStartDepth)) return null;
+  if (!Number.isFinite(logSum) || logSum <= 0) {
+    if (trace) rejectResolvedRingScore(trace, "nonpositive_log_return");
+    return null;
+  }
+  if (!Number.isFinite(maxStartDepth)) {
+    if (trace) rejectResolvedRingScore(trace, "invalid_start_depth");
+    return null;
+  }
   const estSpreadBps = (Math.exp(logSum) - 1) * 10_000;
-  return Number.isFinite(estSpreadBps) && estSpreadBps > 0
-    ? { estSpreadBps, maxStartDepth }
-    : null;
+  if (!Number.isFinite(estSpreadBps) || estSpreadBps <= 0) {
+    if (trace) rejectResolvedRingScore(trace, "invalid_spread");
+    return null;
+  }
+  return { estSpreadBps, maxStartDepth };
 }
 
 /** Coarse spread estimate over one already-resolved state snapshot. */
@@ -552,6 +692,88 @@ export function estimateResolvedRingSpreadBps(
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
 ): number | null {
   return scoreRing(edges, mids)?.estSpreadBps ?? null;
+}
+
+/**
+ * Explain one already-resolved ring without changing scanner enumeration or
+ * selection. The production scorer and this diagnostic execute the same
+ * arithmetic; trace allocation occurs only for an explicit diagnostic call.
+ */
+export function diagnoseResolvedRingScore(
+  edges: TokenEdge[],
+  mids: ReadonlyMap<string, ResolvedBlockScanMid>,
+): ResolvedRingScoreDiagnosis {
+  const trace: MutableResolvedRingScoreTrace = { edges: [] };
+  const score = scoreRing(edges, mids, trace);
+  if (score) {
+    return Object.freeze({
+      status: "accepted" as const,
+      ...score,
+      edges: Object.freeze(trace.edges),
+    });
+  }
+  const rejection = trace.rejection ?? {
+    reason: "invalid_spread" as const,
+    edgeIndex: null,
+    edgeKey: null,
+  };
+  return Object.freeze({
+    status: "rejected" as const,
+    ...rejection,
+    edges: Object.freeze(trace.edges),
+  });
+}
+
+interface MutableResolvedRingScoreTrace {
+  readonly edges: ResolvedRingEdgeScoreDiagnostic[];
+  rejection?: {
+    readonly reason: ResolvedRingScoreRejection;
+    readonly edgeIndex: number | null;
+    readonly edgeKey: string | null;
+  };
+}
+
+function rejectResolvedRingScore(
+  trace: MutableResolvedRingScoreTrace | undefined,
+  reason: ResolvedRingScoreRejection,
+  edge?: TokenEdge,
+  edgeIndex?: number,
+): null {
+  if (trace) {
+    trace.rejection = Object.freeze({
+      reason,
+      edgeIndex: edgeIndex ?? null,
+      edgeKey: edge ? blockScanEdgeKey(edge) : null,
+    });
+  }
+  return null;
+}
+
+function recordResolvedRingEdge(
+  trace: MutableResolvedRingScoreTrace | undefined,
+  edge: TokenEdge,
+  edgeIndex: number,
+  cumulativeMidBefore: number,
+  venue: VenueMid | null,
+  adjustedMid: number | null = null,
+  inputDepth?: bigint,
+  startDepth: number | null = null,
+): void {
+  if (!trace) return;
+  trace.edges.push(Object.freeze({
+    edgeIndex,
+    edgeKey: blockScanEdgeKey(edge),
+    mid: venue?.mid ?? null,
+    feeBps: venue?.feeBps ?? null,
+    adjustedMid,
+    reserveA: venue?.reserveA?.toString() ?? null,
+    reserveB: venue?.reserveB?.toString() ?? null,
+    liquidity: venue?.liquidity?.toString() ?? null,
+    depthProxy: venue?.depthProxy ?? null,
+    inputDepth: inputDepth?.toString() ?? null,
+    cumulativeMidBefore,
+    startDepth,
+  }));
 }
 
 function isClosedContinuousRing(edges: TokenEdge[]): boolean {

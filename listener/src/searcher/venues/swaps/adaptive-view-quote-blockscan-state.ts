@@ -111,12 +111,15 @@ export type AdaptiveViewQuoteSnapshot =
 /**
  * Direction-local current-block quotes with a family-owned input ladder.
  *
- * Families emit ordinary prerequisite reads in round 0. Round 1 executes all
- * candidate calls inside one allow-failure Multicall and publishes only a
- * genuinely successful positive quote. Reverts and zero outputs remain
- * unresolved unless the family declares and proves a source-pinned,
- * behavior-specific fallback. The shared helper never interprets a revert as
- * unavailability on its own.
+ * Families emit ordinary prerequisite reads in round 0. Round 1 executes only
+ * the preferred candidate. A failure opens the remaining candidate ladder in
+ * round 2; only after that entire ladder fails may a family-specific fallback
+ * begin. This keeps the complete source-pinned ladder while avoiding eager
+ * execution of every view quote on the common healthy path, without letting an
+ * unused fallback read poison a successful quote. Reverts and zero outputs
+ * remain unresolved unless the family declares and proves a behavior-specific
+ * fallback. The shared helper never interprets a revert as unavailability on
+ * its own.
  */
 export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
   config: AdaptiveViewQuoteConfig<Static>,
@@ -185,29 +188,41 @@ export function createAdaptiveCurrentBlockViewQuoteCapability<Static>(
         priorResults: input.priorResults,
       });
       const candidates = normalizeCandidates(config.quoteCandidates(ctx));
-      if (input.completedRound > 0) {
-        if (firstPositiveQuote(config, ctx, candidates)) {
-          return Object.freeze([]);
-        }
+      if (input.completedRound === 0) {
         return Object.freeze([
-          ...(config.fallback?.buildDependentReads(Object.freeze({
-            ...ctx,
-            completedRound: input.completedRound,
+          quoteRead(
+            config,
+            ctx,
             candidates,
-          })) ?? []),
+            [0],
+            adaptiveQuoteReadId(group.stateKey),
+          ),
         ]);
       }
-      const items = quoteItems(config, ctx, candidates);
-      return Object.freeze([
-        currentBlockRead({
-          id: adaptiveQuoteReadId(group.stateKey),
-          sourceBlock: input.sourceBlock,
-          sourceBlockHash: input.sourceBlockHash,
-          to: BLOCKSCAN_MULTICALL3,
-          data: encodeMulticall(items),
-          transport: "rpc-batch",
-        }),
-      ]);
+      if (firstPositiveQuote(config, ctx, candidates)) {
+        return Object.freeze([]);
+      }
+      const reads: StateRead[] = [];
+      if (input.completedRound === 1 && candidates.length > 1) {
+        reads.push(quoteRead(
+          config,
+          ctx,
+          candidates,
+          candidates.slice(1).map((_candidate, index) => index + 1),
+          adaptiveRemainingQuoteReadId(group.stateKey),
+        ));
+        return Object.freeze(reads);
+      }
+      const fallbackCompletedRound =
+        input.completedRound - (candidates.length > 1 ? 1 : 0);
+      reads.push(
+        ...(config.fallback?.buildDependentReads(Object.freeze({
+          ...ctx,
+          completedRound: fallbackCompletedRound,
+          candidates,
+        })) ?? []),
+      );
+      return Object.freeze(reads);
     },
 
     decodeState(schema, results) {
@@ -342,7 +357,10 @@ function findResultGroup<Static>(
   results: readonly StateReadResult[],
 ): AdaptiveViewQuoteGroup<Static> {
   const matches = [...schema.groups.values()].filter((group) =>
-    results.some((result) => result.id === adaptiveQuoteReadId(group.stateKey))
+    results.some((result) =>
+      result.id === adaptiveQuoteReadId(group.stateKey) ||
+      result.id === adaptiveRemainingQuoteReadId(group.stateKey)
+    )
   );
   if (matches.length !== 1) {
     throw new Error(`adaptive view-quote results matched ${matches.length} state groups`);
@@ -354,8 +372,13 @@ function quoteItems<Static>(
   config: AdaptiveViewQuoteConfig<Static>,
   ctx: AdaptiveViewQuoteContext<Static>,
   candidates: readonly bigint[],
+  indexes: readonly number[],
 ): readonly MulticallItem[] {
-  return Object.freeze(candidates.map((amountIn, index) => {
+  return Object.freeze(indexes.map((index) => {
+    const amountIn = candidates[index];
+    if (amountIn === undefined) {
+      throw new Error(`adaptive quote candidate index ${index} is out of range`);
+    }
     const call = config.quoteCall(ctx, amountIn);
     return Object.freeze({
       label: quoteItemLabel(index),
@@ -366,25 +389,61 @@ function quoteItems<Static>(
   }));
 }
 
+function quoteRead<Static>(
+  config: AdaptiveViewQuoteConfig<Static>,
+  ctx: AdaptiveViewQuoteContext<Static>,
+  candidates: readonly bigint[],
+  indexes: readonly number[],
+  id: string,
+): StateRead {
+  if (indexes.length === 0) {
+    throw new Error(`adaptive quote read ${id} has no candidates`);
+  }
+  return currentBlockRead({
+    id,
+    sourceBlock: ctx.sourceBlock,
+    sourceBlockHash: ctx.sourceBlockHash,
+    to: BLOCKSCAN_MULTICALL3,
+    data: encodeMulticall(quoteItems(config, ctx, candidates, indexes)),
+    transport: "rpc-batch",
+  });
+}
+
 function firstPositiveQuote<Static>(
   config: AdaptiveViewQuoteConfig<Static>,
   ctx: AdaptiveViewQuoteContext<Static>,
   candidates: readonly bigint[],
 ): { readonly amountIn: bigint; readonly amountOut: bigint } | null {
-  const read = ctx.priorResults.find(
-    (result) => result.id === adaptiveQuoteReadId(ctx.stateKey),
-  );
-  if (!read) return null;
-  const decoded = decodeMulticall(
-    requireRead(ctx.priorResults, adaptiveQuoteReadId(ctx.stateKey)),
-    quoteItems(config, ctx, candidates),
-  );
-  for (let index = 0; index < candidates.length; index++) {
-    const data = optionalMulticallData(decoded, quoteItemLabel(index));
-    if (!data) continue;
-    const amountOut = config.decodeQuote(ctx.edge, data);
-    if (amountOut <= 0n) continue;
-    return Object.freeze({ amountIn: candidates[index], amountOut });
+  const batches = Object.freeze([
+    Object.freeze({
+      id: adaptiveQuoteReadId(ctx.stateKey),
+      indexes: Object.freeze([0]),
+    }),
+    Object.freeze({
+      id: adaptiveRemainingQuoteReadId(ctx.stateKey),
+      indexes: Object.freeze(
+        candidates.slice(1).map((_candidate, index) => index + 1),
+      ),
+    }),
+  ]);
+  for (const batch of batches) {
+    if (
+      batch.indexes.length === 0 ||
+      !ctx.priorResults.some((result) => result.id === batch.id)
+    ) {
+      continue;
+    }
+    const decoded = decodeMulticall(
+      requireRead(ctx.priorResults, batch.id),
+      quoteItems(config, ctx, candidates, batch.indexes),
+    );
+    for (const index of batch.indexes) {
+      const data = optionalMulticallData(decoded, quoteItemLabel(index));
+      if (!data) continue;
+      const amountOut = config.decodeQuote(ctx.edge, data);
+      if (amountOut <= 0n) continue;
+      return Object.freeze({ amountIn: candidates[index], amountOut });
+    }
   }
   return null;
 }
@@ -409,6 +468,10 @@ function normalizeCandidates(input: readonly bigint[]): readonly bigint[] {
 
 function adaptiveQuoteReadId(stateKey: string): string {
   return `adaptive-quote:${stateKey}`;
+}
+
+function adaptiveRemainingQuoteReadId(stateKey: string): string {
+  return `adaptive-quote-remaining:${stateKey}`;
 }
 
 function quoteItemLabel(index: number): string {

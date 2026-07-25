@@ -1221,10 +1221,12 @@ export class BlockScanStateCoordinator {
 
     let physicalReads = schemaPhysicalReads;
     let batches = schemaBatches;
-    // One initial batch plus at most three dependent batches. Reaching the
-    // bound is not evidence of closure: after the fourth batch, synchronously
+    // One initial batch plus at most four dependent batches. The fifth slot is
+    // required by the strict adaptive quote ladder:
+    // prerequisites -> preferred quote -> remaining quotes -> proof -> exact-out.
+    // Reaching the bound is not evidence of closure: after the fifth batch, synchronously
     // ask once more and reject the state key if another read would be needed.
-    const MAX_READ_ROUNDS = 4;
+    const MAX_READ_ROUNDS = 5;
     let completedReadRounds = 0;
     for (let round = 0; round < MAX_READ_ROUNDS; round++) {
       const roundPlanned: PlannedRead[] = [];

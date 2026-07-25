@@ -1254,7 +1254,7 @@ async function dependentReadClosureIsExplicit(): Promise<void> {
       sourceBlock,
       sourceBlockHash,
     }) => (
-      completedRound <= (overflow ? 3 : 2)
+      completedRound <= (overflow ? 4 : 3)
         ? [{
             id: `round-dependent-${completedRound}`,
             sourceBlock,
@@ -1266,7 +1266,7 @@ async function dependentReadClosureIsExplicit(): Promise<void> {
         : []
     ),
     decodeState: (_schema, results) => {
-      assert.equal(results.length, 4);
+      assert.equal(results.length, 5);
       return { numerator: 2n, denominator: 1n };
     },
     deriveMids: (snapshot, edges) => new Map(edges.map((edgeValue) => [
@@ -1311,8 +1311,9 @@ async function dependentReadClosureIsExplicit(): Promise<void> {
       "round-dependent-0",
       "round-dependent-1",
       "round-dependent-2",
+      "round-dependent-3",
     ],
-    "four executed read rounds must be followed by an empty closure probe",
+    "five executed read rounds must be followed by an empty closure probe",
   );
 
   backendCalls.length = 0;

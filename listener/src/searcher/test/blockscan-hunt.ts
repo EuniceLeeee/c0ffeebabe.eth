@@ -19,8 +19,11 @@ import {
   installForkBotVm,
 } from "../../shared/executor/botvm-executor.js";
 import {
+  diagnoseResolvedRingScore,
   estimateResolvedRingSpreadBps,
+  isAdmissibleBlockScanRingShape,
   scanBlockStateFromResolvedMids,
+  selectFamilyFairExpansionEdges,
   type ResolvedBlockScanMid,
 } from "../detector/blockscan-scanner-core.js";
 import {
@@ -47,6 +50,7 @@ import {
 } from "../active-pool-discovery.js";
 import { TemplatePlanner } from "../planner/planner.js";
 import {
+  buildTokenPaths,
   buildTokenGraph,
   POOL_REGISTRY,
   type PoolEntry,
@@ -54,6 +58,7 @@ import {
   type TokenPath,
   type TokenQueryBackend,
 } from "../planner/token-graph.js";
+import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import {
   DEFAULT_POOL_UNIVERSE_PATH,
   loadPoolUniverse,
@@ -684,28 +689,53 @@ async function main(): Promise<void> {
       edges.length > 0 && protocolEdges.length > 0,
     );
 
+    let diagnosticExpectedEdges: TokenEdge[] | null = null;
     if (DIAGNOSTIC.enabled) {
       const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
       const edgeIdentities = edges.map(canonicalEdgeIdentity);
-      const missingEdges = expectedRoute.filter((expected) =>
-        !edges.some((edge) => sameRouteStep(opportunityRoute([edge])[0], expected)),
-      );
+      const routeMatches = expectedRoute.map((expected) => ({
+        expected,
+        matches: edges.filter((edge) =>
+          sameRouteStep(opportunityRoute([edge])[0], expected)
+        ),
+      }));
+      const missingEdges = routeMatches
+        .filter(({ matches }) => matches.length === 0)
+        .map(({ expected }) => expected);
+      const ambiguousEdges = routeMatches
+        .filter(({ matches }) => matches.length > 1)
+        .map(({ expected, matches }) => ({
+          expected,
+          matchCount: matches.length,
+          matchKeys: matches.map(blockScanEdgeKey),
+        }));
+      if (missingEdges.length === 0 && ambiguousEdges.length === 0) {
+        diagnosticExpectedEdges = routeMatches.map(({ matches }) => matches[0]);
+      }
       const poolAdmission = describeExpectedPoolAdmission(
         expectedPoolIds(),
         universePools,
         protocolPools,
         edges,
       );
-      emitDiagnostic(1, "graph", missingEdges.length === 0 ? "pass" : "fail", {
+      emitDiagnostic(
+        1,
+        "graph",
+        missingEdges.length === 0 && ambiguousEdges.length === 0
+          ? "pass"
+          : "fail",
+        {
         graphEdges: edges.length,
         edgeSetSize: new Set(edgeIdentities).size,
         edgeSetSha256: canonicalSetSha256(edgeIdentities),
         expectedEdges: expectedRoute.length,
         missingEdges,
+        ambiguousEdges,
         poolAdmission,
-      });
+        },
+      );
       if (diagnosticStopsAfter("graph")) return;
-      if (missingEdges.length > 0) return;
+      if (missingEdges.length > 0 || ambiguousEdges.length > 0) return;
     }
 
     const [baseBlock, sourceBlock] = await Promise.all([
@@ -869,6 +899,18 @@ async function main(): Promise<void> {
       cfg.maxCandidates,
       envInt("HUNT_REFINE_CANDIDATES", 512),
     );
+    const expectedRouteDiagnosis =
+      DIAGNOSTIC.enabled && diagnosticExpectedEdges
+        ? diagnoseExpectedRouteEnumeration({
+            edges: scanEdges,
+            route: diagnosticExpectedEdges,
+            maxHops: scanCfg.maxHops,
+            minSpreadBps: scanCfg.minSpreadBps,
+            pinnedOutsideBudget: scanCfg.pinnedOutsideBudget === true,
+            pricedTokenLimits,
+            mids: pricing.mids,
+          })
+        : null;
     const coarseScan = scanBlockStateFromResolvedMids({
       edges: [...scanEdges],
       sourceBlock: cfg.blockNumber,
@@ -910,12 +952,18 @@ async function main(): Promise<void> {
           scannerOutcome: coarseScan.outcome,
           scannedPairs: coarseScan.scannedPairs,
           passBudgetExceeded,
+          expectedRouteDiagnosis,
           reason: passBudgetExceeded
             ? "pass_budget_exceeded"
             : !found && !rankComplete
               ? "scan_budget_exceeded_before_target"
               : !found
-                ? "target_not_in_ranked_candidate_cap"
+                ? expectedRouteDiagnosis?.status === "rejected"
+                  ? expectedRouteDiagnosis.reason
+                  : coarseScan.selection.enumeratedCount >
+                      coarseScan.selection.selectedCount
+                    ? "rank_or_family_cap"
+                    : "absent_after_post_score_checks"
                 : null,
         },
       );
@@ -1560,6 +1608,184 @@ function canonicalEdgeIdentity(edge: TokenEdge): string {
 
 function canonicalRingIdentity(edges: TokenEdge[]): string {
   return JSON.stringify(edges.map(canonicalEdgeIdentity));
+}
+
+interface ExpectedEnumerationAttempt {
+  protocolEdgeIndex: number | null;
+  missingExpansionEdgeKeys: string[];
+  enumeratedPathCount: number;
+  pathCapReached: boolean;
+  targetPathIndex: number | null;
+  routeOrderScore: ReturnType<typeof diagnoseResolvedRingScore>;
+  fundedOrderScore: ReturnType<typeof diagnoseResolvedRingScore> | null;
+  flashToken: string | null;
+  reason: string;
+}
+
+function diagnoseExpectedRouteEnumeration(input: {
+  edges: readonly TokenEdge[];
+  route: readonly TokenEdge[];
+  maxHops: number;
+  minSpreadBps: number;
+  pinnedOutsideBudget: boolean;
+  pricedTokenLimits: ReadonlyMap<string, { maxBorrow: bigint }>;
+  mids: ReadonlyMap<string, ResolvedBlockScanMid>;
+}): {
+  status: "rejected" | "post_score";
+  reason: string;
+  mode: "protocol-first" | "general";
+  attempts: ExpectedEnumerationAttempt[];
+} {
+  const route = [...input.route];
+  const protocolIndexes = route.flatMap((edge, index) =>
+    edge.slotKind === "protocol" ? [index] : []
+  );
+  const attempts = (protocolIndexes.length > 0 ? protocolIndexes : [null])
+    .map((protocolEdgeIndex): ExpectedEnumerationAttempt => {
+      const routeOrder = protocolEdgeIndex === null
+        ? route
+        : [
+            ...route.slice(protocolEdgeIndex),
+            ...route.slice(0, protocolEdgeIndex),
+          ];
+      const protocolEdge = protocolEdgeIndex === null
+        ? null
+        : routeOrder[0];
+      const expectedPath = protocolEdge ? routeOrder.slice(1) : routeOrder;
+      const expansionEdges = selectFamilyFairExpansionEdges({
+        edges: input.edges,
+        profitToken: protocolEdge?.tokenIn ?? "",
+        maxPoolsPerToken: 20,
+        pinnedOutsideBudget: input.pinnedOutsideBudget,
+        preferDirectClosure: protocolEdge !== null,
+      });
+      const expansionKeys = new Set(expansionEdges.map(blockScanEdgeKey));
+      const missingExpansionEdgeKeys = expectedPath
+        .map(blockScanEdgeKey)
+        .filter((edgeKey) => !expansionKeys.has(edgeKey));
+      const paths = buildTokenPaths(
+        [...expansionEdges],
+        protocolEdge?.tokenOut ?? routeOrder[0]?.tokenIn ?? "",
+        protocolEdge?.tokenIn ?? routeOrder[0]?.tokenIn ?? "",
+        {
+          maxHops: protocolEdge
+            ? Math.max(0, input.maxHops - 1)
+            : input.maxHops,
+          maxPoolsPerToken: Infinity,
+          maxPaths: 2000,
+        },
+      );
+      const targetPathIndex = paths.findIndex((path) =>
+        sameEdgeSequence(path.edges, expectedPath)
+      );
+      const routeOrderScore = diagnoseResolvedRingScore(
+        routeOrder,
+        input.mids,
+      );
+      const flashToken = expectedFlashToken(
+        routeOrder,
+        input.pricedTokenLimits,
+      );
+      const fundedOrder = flashToken
+        ? rotateExpectedRoute(routeOrder, flashToken)
+        : null;
+      const fundedOrderScore = fundedOrder
+        ? diagnoseResolvedRingScore(fundedOrder, input.mids)
+        : null;
+      const reason = missingExpansionEdgeKeys.length > 0
+        ? protocolEdge
+          ? "protocol_expansion_edge_pruned"
+          : "general_expansion_edge_pruned"
+        : targetPathIndex < 0
+          ? protocolEdge
+            ? "protocol_tail_not_retained"
+            : "general_path_not_retained"
+          : pathLeavesStandingPosition(routeOrder)
+            ? "standing_position"
+            : !isAdmissibleBlockScanRingShape(
+                routeOrder,
+                input.pricedTokenLimits,
+              )
+              ? "inadmissible_ring_shape"
+              : routeOrderScore.status === "rejected"
+                ? `coarse_score_${routeOrderScore.reason}`
+                : routeOrderScore.estSpreadBps <= input.minSpreadBps
+                  ? "below_min_spread"
+                  : !flashToken
+                    ? "no_priced_flash_token"
+                    : fundedOrderScore?.status === "rejected"
+                      ? `funded_score_${fundedOrderScore.reason}`
+                      : fundedOrderScore &&
+                          fundedOrderScore.estSpreadBps <= input.minSpreadBps
+                        ? "funded_below_min_spread"
+                        : "post_score_checks_passed";
+      return {
+        protocolEdgeIndex,
+        missingExpansionEdgeKeys,
+        enumeratedPathCount: paths.length,
+        pathCapReached: paths.length >= 2000,
+        targetPathIndex: targetPathIndex >= 0 ? targetPathIndex : null,
+        routeOrderScore,
+        fundedOrderScore,
+        flashToken,
+        reason,
+      };
+    });
+  const postScore = attempts.find(
+    (attempt) => attempt.reason === "post_score_checks_passed",
+  );
+  return {
+    status: postScore ? "post_score" : "rejected",
+    reason: postScore?.reason ?? bestExpectedAttemptReason(attempts),
+    mode: protocolIndexes.length > 0 ? "protocol-first" : "general",
+    attempts,
+  };
+}
+
+function bestExpectedAttemptReason(
+  attempts: readonly ExpectedEnumerationAttempt[],
+): string {
+  return attempts.find((attempt) =>
+    attempt.missingExpansionEdgeKeys.length === 0 &&
+    attempt.targetPathIndex !== null
+  )?.reason ??
+    attempts.find((attempt) =>
+      attempt.missingExpansionEdgeKeys.length === 0
+    )?.reason ??
+    attempts[0]?.reason ??
+    "empty_route";
+}
+
+function sameEdgeSequence(
+  left: readonly TokenEdge[],
+  right: readonly TokenEdge[],
+): boolean {
+  return left.length === right.length &&
+    left.every((edge, index) =>
+      blockScanEdgeKey(edge) === blockScanEdgeKey(right[index])
+    );
+}
+
+function expectedFlashToken(
+  route: readonly TokenEdge[],
+  pricedTokenLimits: ReadonlyMap<string, { maxBorrow: bigint }>,
+): string | null {
+  const tokens = route.map((edge) => edge.tokenIn.toLowerCase());
+  const weth = ADDR.WETH.toLowerCase();
+  if (tokens.includes(weth) && pricedTokenLimits.has(weth)) return weth;
+  return tokens.find((token) => pricedTokenLimits.has(token)) ?? null;
+}
+
+function rotateExpectedRoute(
+  route: readonly TokenEdge[],
+  startToken: string,
+): TokenEdge[] | null {
+  const wanted = startToken.toLowerCase();
+  const index = route.findIndex(
+    (edge) => edge.tokenIn.toLowerCase() === wanted,
+  );
+  if (index < 0) return null;
+  return [...route.slice(index), ...route.slice(0, index)];
 }
 
 function canonicalSetSha256(values: string[]): string {

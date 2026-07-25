@@ -11,10 +11,16 @@ import {
   type BlockScanConfig,
   type ProtocolMid,
 } from "../detector/blockscan-scanner.js";
+import {
+  diagnoseResolvedRingScore,
+  estimateResolvedRingSpreadBps,
+  type ResolvedBlockScanMid,
+} from "../detector/blockscan-scanner-core.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { type TokenEdge, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -320,7 +326,84 @@ function assertMainAnchor(opp: BlockScanOpportunity): void {
   assert(opp.searchSeed.maxInput >= opp.searchSeed.searchCenter, "max input covers search center");
 }
 
+function resolvedMids(
+  entries: readonly [
+    edge: TokenEdge,
+    mid: number,
+    depth?: bigint | null,
+  ][],
+): ReadonlyMap<string, ResolvedBlockScanMid> {
+  return new Map(entries.map(([edge, mid, depth = 1_000_000n * UNIT]) => [
+    blockScanEdgeKey(edge),
+    {
+      kind: "test",
+      pool: edge.target,
+      edges: [edge],
+      mid,
+      feeBps: 0,
+      ...(depth === null ? {} : { reserveA: depth, reserveB: depth }),
+      depthProxy: depth === null ? 1 : Number(depth),
+    },
+  ]));
+}
+
 const tests: TestCase[] = [
+  {
+    name: "resolved-ring diagnosis shares production score",
+    run: () => {
+      const token = tokenAt(100);
+      const route = [
+        swap(WETH, token, P1),
+        swap(token, WETH, P2),
+      ];
+      const mids = resolvedMids([
+        [route[0], 2],
+        [route[1], 0.6],
+      ]);
+      const diagnosis = diagnoseResolvedRingScore(route, mids);
+      assert(diagnosis.status === "accepted", "positive ring diagnosis should pass");
+      assert(
+        diagnosis.estSpreadBps === estimateResolvedRingSpreadBps(route, mids),
+        "diagnostic and production spread must be bit-identical",
+      );
+
+      const missing = diagnoseResolvedRingScore(
+        route,
+        resolvedMids([[route[0], 2]]),
+      );
+      assert(
+        missing.status === "rejected" &&
+          missing.reason === "missing_mid" &&
+          missing.edgeIndex === 1,
+        "missing mid must identify the exact rejected edge",
+      );
+      const missingDepth = diagnoseResolvedRingScore(
+        route,
+        resolvedMids([
+          [route[0], 2],
+          [route[1], 0.6, null],
+        ]),
+      );
+      assert(
+        missingDepth.status === "rejected" &&
+          missingDepth.reason === "missing_or_nonpositive_input_depth",
+        "missing depth must not be misreported as ranking",
+      );
+      const nonPositive = diagnoseResolvedRingScore(
+        route,
+        resolvedMids([
+          [route[0], 1],
+          [route[1], 0.9],
+        ]),
+      );
+      assert(
+        nonPositive.status === "rejected" &&
+          nonPositive.reason === "nonpositive_log_return",
+        "non-positive route return must be explicit",
+      );
+      console.log("[blockscan-scanner] resolved-ring diagnosis shares production score: PASS");
+    },
+  },
   {
     name: "v4 poolId venues admitted",
     run: () => {
