@@ -44,15 +44,16 @@ async function loadRegistry(): Promise<ProductionRouteCallRegistry | null> {
       import("../../../listener/src/searcher/venues/production-registry.js"),
       import("../../../listener/src/searcher/planner/token-graph.js"),
     ]);
-    const legacyEdgeAdapterIds = new Set(
-      production.LEGACY_PRODUCTION_ROUTE_EDGES.map((entry) => entry.edgeAdapterId),
+    const routeFamilies = production.PRODUCTION_ADAPTER_FAMILIES.routes();
+    const routeFamilyByPoolAdapter = new Map(
+      routeFamilies.list().flatMap((family) =>
+        family.poolAdapters.map((poolAdapter) => [String(poolAdapter), family] as const)
+      ),
     );
     const pools: readonly ProductionRoutePoolFact[] = tokenGraph.POOL_REGISTRY;
 
     function findRouteActionAdapter(edgeAdapterId: string): TraceActionMatcher | null {
-      const registered = production.PRODUCTION_ROUTE_ADAPTERS.routeLegs.findForEdge(edgeAdapterId) !== null
-        || legacyEdgeAdapterIds.has(edgeAdapterId);
-      if (!registered) return null;
+      if (routeFamilies.findForEdge(edgeAdapterId) === null) return null;
       try {
         return getActionAdapter(edgeAdapterId);
       } catch {
@@ -75,9 +76,7 @@ async function loadRegistry(): Promise<ProductionRouteCallRegistry | null> {
       // supplied by the attested universe.
       const matchesPool = (pool: ProductionRoutePoolFact): boolean => {
         if (pool.address.toLowerCase() !== normalizedTarget) return false;
-        const route = production.PRODUCTION_ROUTE_ADAPTERS.routeLegs.list().find((candidate) =>
-          candidate.poolAdapters.some((adapter) => adapter === pool.adapter)
-        );
+        const route = routeFamilyByPoolAdapter.get(pool.adapter);
         if (route?.kind !== "protocol-conversion") return false;
         return route.edgeAdapterIds.some((edgeAdapterId) =>
           findRouteActionAdapter(edgeAdapterId)?.matchTrace(
