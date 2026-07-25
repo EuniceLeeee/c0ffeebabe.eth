@@ -399,9 +399,11 @@ export async function refineBlockScanCandidates(
   fallback.sort((a, b) => a.index - b.index);
   const openFamilyIds = stageBudget.openFamilyIds();
   const openCompositeKeys = stageBudget.openCompositeKeys();
-  const eligibleRanked = ranked.filter((entry) =>
-    !stageBudget.blocks(entry.opportunity.seedEdges)
-  );
+  // A circuit limits future work; it does not invalidate an exact-positive
+  // route that already completed. Later failures can come from unrelated pool
+  // instances in the same family, so retroactively filtering ranked results
+  // would turn a resource guard into a semantic false negative.
+  const eligibleRanked = ranked;
   const eligibleFallback = fallback.filter(({ opportunity }) =>
     !stageBudget.blocks(opportunity.seedEdges)
   );

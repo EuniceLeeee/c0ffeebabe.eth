@@ -164,6 +164,7 @@ await failingFamilyCannotConsumeRefinementCap();
 await neverSettlingFamilyUsesLocalBudget();
 await mixedRouteTimeoutIsAttributedToCurrentLeg();
 await transientCircuitWaitsForInflightRecovery();
+await confirmedPositiveSurvivesLaterFamilyCircuit();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -653,6 +654,69 @@ async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
       item.seedEdges[0]?.target.toLowerCase() === pools[5].toLowerCase()
     ),
     "a pending route must run after an in-flight success closes its transient circuit",
+  );
+}
+
+async function confirmedPositiveSurvivesLaterFamilyCircuit(): Promise<void> {
+  const pools = Array.from(
+    { length: 4 },
+    (_, index) =>
+      `0x${(0x1a0 + index).toString(16).padStart(40, "0")}`,
+  );
+  const goodPool = pools[0].toLowerCase();
+  const badPools = new Set(pools.slice(1).map((pool) => pool.toLowerCase()));
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      const pool = req.to.toLowerCase();
+      if (badPools.has(pool)) throw new Error("injected later pool failure");
+      assert.equal(pool, goodPool);
+      const selector = req.data.slice(0, 10);
+      if (selector === pair.getFunction("token0")!.selector) {
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult(
+          "getReserves",
+          [1_000_000n, 2_000_000n, 0],
+        );
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected retained-positive selector ${selector}`);
+    },
+  } as StateBackend;
+  const opportunities = pools.map((pool, index): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: index === 0 ? "confirmed-positive" : `later-failure-${index}`,
+    cycleFingerprint: `retained-${index}`,
+    seedEdges: [familyEdge("shared-family", 380 + index, {
+      adapterId: "univ2-swap",
+      target: pool,
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+    })],
+  }));
+  const result = await refineBlockScanCandidates(
+    state,
+    opportunities,
+    opportunities.length,
+    Date.now() + 2_000,
+    pricedTokens,
+    undefined,
+    1,
+    {
+      familyTimeoutMs: 500,
+      maxConcurrentPerFamily: 1,
+    },
+  );
+  assert.deepEqual(result.openFamilyIds, ["shared-family"]);
+  assert.equal(result.positive, 1);
+  assert.deepEqual(
+    result.opportunities.map(({ cycleId }) => cycleId),
+    ["confirmed-positive"],
+    "later failures may stop future probes but cannot erase an exact-positive route",
   );
 }
 
