@@ -54,7 +54,8 @@ class RuleBackedProfitTokenValuation implements ProfitTokenValuation {
     }
     if (!Number.isFinite(ethUsd) || ethUsd <= 0) return null;
     return (amount * 10n ** 18n) /
-      (tokenUnit * BigInt(Math.round(ethUsd)));
+      // Round USD/ETH upward so USD-denominated profit is never overstated.
+      (tokenUnit * BigInt(Math.ceil(ethUsd)));
   }
 }
 

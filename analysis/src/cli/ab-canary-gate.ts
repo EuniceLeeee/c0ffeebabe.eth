@@ -27,6 +27,10 @@ import {
   type BackrunCausalReplayResult,
 } from "../backrun-causal-replay.js";
 import {
+  isStrictPositiveBackrunEv,
+  type BackrunEvEvidence,
+} from "../backrun-ev-evidence.js";
+import {
   discoverToolIndex,
   PRODUCTION_CANDIDATE_CAPABILITIES,
   PRODUCTION_DECISION_CAPABILITIES,
@@ -293,18 +297,6 @@ interface BackrunHuntResult extends HuntResult, BackrunCausalReplayResult {
   full_prefix_ev: BackrunEvEvidence | null;
   full_vs_trigger: "match" | "diverge" | "unverified";
   causal_replay_error: string | null;
-}
-
-interface BackrunEvEvidence {
-  decision: "allow" | "below_ev_gate" | "unpriceable_profit_token" | "disabled";
-  profitToken: string;
-  gasUsed: string;
-  calldataHash: string;
-  netEvWei: string;
-  expectedProfitEth: string;
-  gasCostEth: string;
-  bidEth: string;
-  minNetEth: string;
 }
 
 function runCandidateReplay(observation: ProductionSampleObservation): void {
@@ -639,8 +631,7 @@ function backrunSixStepDiagnostics(
     && /^[a-f0-9]{64}$/.test(result.trigger_ev.calldataHash);
   const evPass = simulationPass
     && result.trigger_ev_bucket === "positive"
-    && result.trigger_ev?.decision === "allow"
-    && BigInt(result.trigger_ev.netEvWei) >= BigInt(result.trigger_ev.minNetEth);
+    && isStrictPositiveBackrunEv(result.trigger_ev);
   const fullPrefixPass = evPass
     && result.full_prefix_execution_success === true
     && rawPositive(result.full_prefix_execution_net_raw)
@@ -648,8 +639,7 @@ function backrunSixStepDiagnostics(
     && result.trigger_route_signature !== null
     && result.trigger_route_signature === result.full_prefix_route_signature
     && result.full_prefix_ev_bucket === "positive"
-    && result.full_prefix_ev?.decision === "allow"
-    && BigInt(result.full_prefix_ev.netEvWei) >= BigInt(result.full_prefix_ev.minNetEth)
+    && isStrictPositiveBackrunEv(result.full_prefix_ev)
     && result.causal_replay_error === null;
   const conditions = [triggerPass, routePass, quotePass, simulationPass, evPass, fullPrefixPass];
   const stages = [

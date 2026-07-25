@@ -23,20 +23,45 @@ import {
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
+  blockScanSelectionProvenance,
   estimateResolvedRingSpreadBps,
   isAdmissibleBlockScanRingShape,
   scanBlockStateFromResolvedMids,
   type BlockScanCoreConfig,
-  type BlockScanOutcome,
+  type BlockScanOutcome as CoreBlockScanOutcome,
+  type NaturalBlockScanSelectionProvenance,
 } from "./blockscan-scanner-core.js";
 
-export type { BlockScanOutcome };
 export { isAdmissibleBlockScanRingShape };
+export type { NaturalBlockScanSelectionProvenance };
 
 export interface ProtocolMid extends ExternalMidQuote {}
 
 export interface BlockScanConfig extends BlockScanCoreConfig {
   protocolMids?: ReadonlyMap<string, ProtocolMid>;
+}
+
+export interface BlockScanOutcome extends CoreBlockScanOutcome {
+  readonly selectionProvenance: NaturalBlockScanSelectionProvenance;
+}
+
+export function naturalBlockScanSelectionProvenance<T>(input: {
+  readonly naturallyEnumerated: readonly T[];
+  readonly selected: readonly T[];
+  readonly maxCandidates: number;
+}): NaturalBlockScanSelectionProvenance {
+  const naturalEntries = new Set(input.naturallyEnumerated);
+  return Object.freeze({
+    kind: "natural_coarse_ranked",
+    selectionMode: "production",
+    forcedSelectionCount: input.selected.reduce(
+      (count, entry) => count + (naturalEntries.has(entry) ? 0 : 1),
+      0,
+    ),
+    eligibleCandidateCount: input.naturallyEnumerated.length,
+    selectedCandidateCount: input.selected.length,
+    maxCandidates: input.maxCandidates,
+  });
 }
 
 export function detectBlockScanOpportunities(input: {
@@ -47,7 +72,7 @@ export function detectBlockScanOpportunities(input: {
   cfg: BlockScanConfig;
 }): BlockScanOutcome {
   const { protocolMids, ...cfg } = input.cfg;
-  return scanBlockStateFromResolvedMids({
+  const outcome = scanBlockStateFromResolvedMids({
     edges: input.edges,
     sourceBlock: input.sourceBlock,
     swapTouched: input.swapTouched,
@@ -57,6 +82,13 @@ export function detectBlockScanOpportunities(input: {
       input.cache,
       input.sourceBlock,
       protocolMids,
+    ),
+  });
+  return Object.freeze({
+    ...outcome,
+    selectionProvenance: blockScanSelectionProvenance(
+      outcome,
+      input.cfg.maxCandidates,
     ),
   });
 }

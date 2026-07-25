@@ -18,6 +18,8 @@ export interface PrepareInput {
   impact: PoolImpact | null;
   /** Pre-victim block to read chain state at (latest mined block on hash-only). */
   baseBlock: number;
+  /** Canonical hash observed before preparation; backends reject a reorged/stale cache. */
+  baseBlockHash?: string;
   path: LiveFixturePath;
   /** Deduped route hops from the candidate plans. The revm backend traces a
    *  representative quote per hop during prepare so the solver's amount search
@@ -32,6 +34,7 @@ export interface PrepareInput {
 
 export interface PreparedState {
   blockNumber: number;
+  blockHash?: string;
   mode: "hash-only" | "rawTx" | "mined";
 }
 

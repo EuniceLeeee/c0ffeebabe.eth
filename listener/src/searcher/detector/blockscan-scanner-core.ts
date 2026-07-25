@@ -42,6 +42,29 @@ export interface BlockScanOutcome {
   debug?: { skippedVenues: number };
 }
 
+export interface NaturalBlockScanSelectionProvenance {
+  readonly kind: "natural_coarse_ranked";
+  readonly selectionMode: "production";
+  readonly forcedSelectionCount: number;
+  readonly eligibleCandidateCount: number;
+  readonly selectedCandidateCount: number;
+  readonly maxCandidates: number;
+}
+
+export function blockScanSelectionProvenance(
+  outcome: Pick<BlockScanOutcome, "selection">,
+  maxCandidates: number,
+): NaturalBlockScanSelectionProvenance {
+  return Object.freeze({
+    kind: "natural_coarse_ranked",
+    selectionMode: "production",
+    forcedSelectionCount: outcome.selection.forcedSelectionCount,
+    eligibleCandidateCount: outcome.selection.enumeratedCount,
+    selectedCandidateCount: outcome.selection.selectedCount,
+    maxCandidates,
+  });
+}
+
 interface PairGroup {
   a: string;
   b: string;

@@ -4,9 +4,11 @@ import {
   exactSetHash,
 } from "../venues/blockscan-state-capability.js";
 import {
+  blockScanSelectionProvenance,
   scanBlockStateFromResolvedMids,
   type BlockScanCoreConfig,
   type BlockScanOutcome,
+  type NaturalBlockScanSelectionProvenance,
 } from "./blockscan-scanner-core.js";
 
 export interface ProductionBlockScanInput {
@@ -24,6 +26,7 @@ export interface ProductionBlockScanOutcome extends BlockScanOutcome {
   readonly incompleteFamilyIds: readonly string[];
   readonly selectionMode: "production";
   readonly forcedSelectionCount: number;
+  readonly selectionProvenance: NaturalBlockScanSelectionProvenance;
 }
 
 /**
@@ -53,6 +56,10 @@ export function detectProductionBlockScanOpportunities(
     incompleteFamilyIds: input.runtime.pricing.incompleteFamilyIds,
     selectionMode: "production" as const,
     forcedSelectionCount: outcome.selection.forcedSelectionCount,
+    selectionProvenance: blockScanSelectionProvenance(
+      outcome,
+      input.cfg.maxCandidates,
+    ),
   });
 }
 

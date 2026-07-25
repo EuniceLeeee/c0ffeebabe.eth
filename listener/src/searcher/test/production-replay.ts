@@ -257,10 +257,19 @@ interface ReplayReport {
     calldataHash: string;
     ev: {
       valuationAvailable: boolean;
+      gasMeasurementAvailable: boolean;
+      feeStateAvailable: boolean;
+      sourceBlockHash: string | null;
+      decisionParentBlock: number;
+      targetBlock: number;
+      ethUsd: number | null;
+      ethUsdRoundId: string | null;
+      ethUsdUpdatedAt: string | null;
       rawProfitEth: string;
       netEvWei: string;
       expectedProfitEth: string;
       gasUnits: string;
+      maxBaseFeePerGas: string;
       gasCostEth: string;
       bidEth: string;
     };
@@ -702,13 +711,28 @@ async function main(): Promise<void> {
           );
         }
         const ev = await evaluateEv(
-          validationState.provider,
+          // A sender-prefix reconstruction has a synthetic block-N header.
+          // Economics for target N+1 must use the canonical block-N header and
+          // oracle state, never the synthetic Anvil gasUsed/hash.
+          cfg.triggerTx ? provider : validationState.provider,
           sim.profitToken,
           sim.netProfit,
           sim.gasUsed,
           validationPolicy.ev,
           createProfitTokenValuation(),
+          anchorBlock,
         );
+        const evTargetBlock = anchorBlock + 1;
+        const targetHeader = await provider.getBlock(evTargetBlock);
+        if (
+          ev.feeStateAvailable &&
+          targetHeader?.baseFeePerGas !== ev.maxBaseFeePerGas
+        ) {
+          throw new Error(
+            `EV fee anchor mismatch parent=${anchorBlock} target=${evTargetBlock} ` +
+            `predicted=${ev.maxBaseFeePerGas} actual=${targetHeader?.baseFeePerGas ?? "missing"}`,
+          );
+        }
         report.selected = {
           rank: selected.opportunity.rank,
           route: selected.opportunity.seedEdges,
@@ -723,10 +747,19 @@ async function main(): Promise<void> {
           calldataHash: createHash("sha256").update(sim.calldata).digest("hex"),
           ev: {
             valuationAvailable: ev.valuationAvailable,
+            gasMeasurementAvailable: ev.gasMeasurementAvailable,
+            feeStateAvailable: ev.feeStateAvailable,
+            sourceBlockHash: ev.sourceBlockHash,
+            decisionParentBlock: anchorBlock,
+            targetBlock: evTargetBlock,
+            ethUsd: ev.ethUsd,
+            ethUsdRoundId: ev.ethUsdRoundId?.toString() ?? null,
+            ethUsdUpdatedAt: ev.ethUsdUpdatedAt?.toString() ?? null,
             rawProfitEth: ev.rawProfitEth.toString(),
             netEvWei: ev.netEvWei.toString(),
             expectedProfitEth: ev.expectedProfitEth.toString(),
             gasUnits: ev.gasUnits.toString(),
+            maxBaseFeePerGas: ev.maxBaseFeePerGas.toString(),
             gasCostEth: ev.gasCostEth.toString(),
             bidEth: ev.bidEth.toString(),
           },
@@ -734,6 +767,14 @@ async function main(): Promise<void> {
         if (!ev.valuationAvailable) {
           report.stages.ev = "reject";
           throw new Error(`unpriceable_profit_token: ${sim.profitToken}`);
+        }
+        if (!ev.gasMeasurementAvailable) {
+          report.stages.ev = "reject";
+          throw new Error("missing_gas_estimate");
+        }
+        if (!ev.feeStateAvailable) {
+          report.stages.ev = "reject";
+          throw new Error(`missing_fee_state: block=${anchorBlock}`);
         }
         const standingGuard = evaluateStandingGuard(
           plans[0].tokenPath.edges,
@@ -749,7 +790,7 @@ async function main(): Promise<void> {
           report.stages.ev = "reject";
           throw new Error(`standing_guard: ${standingGuard.reason}`);
         }
-        if (ev.netEvWei < validationPolicy.minNetEth) {
+        if (ev.netEvWei <= validationPolicy.minNetEth) {
           report.stages.ev = "reject";
           throw new Error(
             `below_ev_gate: net=${ev.netEvWei} min=${validationPolicy.minNetEth}`,
@@ -1158,8 +1199,15 @@ function readValidationPolicy(cfg: CliConfig): ReplayValidationPolicy {
   );
   const profitHaircutBps = numberEnv("SEARCHER_PROFIT_HAIRCUT_BPS", 2_000);
   const bribeBps = numberEnv("SEARCHER_BRIBE_BPS", Number(DEFAULT_BRIBE_BPS));
-  if (profitHaircutBps > 10_000 || bribeBps > 10_000) {
-    throw new Error("profit haircut and bribe bps must not exceed 10000");
+  if (
+    !Number.isInteger(profitHaircutBps) ||
+    profitHaircutBps < 0 ||
+    profitHaircutBps > 10_000 ||
+    !Number.isInteger(bribeBps) ||
+    bribeBps < 0 ||
+    bribeBps > 10_000
+  ) {
+    throw new Error("profit haircut and bribe bps must be integers between 0 and 10000");
   }
   return {
     quoteSafetyBps,
@@ -1169,10 +1217,7 @@ function readValidationPolicy(cfg: CliConfig): ReplayValidationPolicy {
     standingMarkerPath:
       process.env.SEARCHER_CREDIT_LIVE_MARKER_PATH ?? DEFAULT_CREDIT_LIVE_MARKER_PATH,
     ev: {
-      ethUsd: numberEnv("SEARCHER_ETH_USD", 3_500),
       profitHaircutBps,
-      defaultGasUsed: numberEnv("SEARCHER_BACKRUN_GAS_USED", 12_000_000),
-      gasBufferMultX10: numberEnv("SEARCHER_GAS_BUFFER_MULT_X10", 20),
       // Six-step acceptance always executes the EV decision even when a live
       // deployment has temporarily disabled submission-side EV gating.
       evGate: true,

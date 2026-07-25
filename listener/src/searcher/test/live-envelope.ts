@@ -35,6 +35,8 @@ const live: LiveEnvelopeInput = {
   evGate: true,
   bribeBps: DEFAULT_BRIBE_BPS,
   bribeAllAboveGas: false,
+  minNetEth: 0n,
+  profitHaircutBps: 2_000,
   walletAddress: WALLET,
   botvmAddress: BOTVM,
   configuredBotvmOwner: WALLET,
@@ -48,10 +50,19 @@ await validateLiveEnvelope(live, {
 await expectReject({ ...live, evGate: false }, "SEARCHER_EV_GATE=1");
 await expectReject({ ...live, bribeBps: 10_000 }, "retain positive EV");
 await expectReject({ ...live, bribeBps: 10_001 }, "between 0 and 10000");
-await validateLiveEnvelope({ ...live, bribeBps: 10_000, bribeAllAboveGas: true }, {
-  walletBalance: async () => 1n,
-  botvmOwner: async () => WALLET,
-});
+await expectReject(
+  { ...live, bribeAllAboveGas: true },
+  "SEARCHER_BRIBE_ALL_ABOVE_GAS must be disabled",
+);
+await expectReject({ ...live, minNetEth: -1n }, "SEARCHER_MIN_NET_ETH must be non-negative");
+await expectReject(
+  { ...live, profitHaircutBps: -1 },
+  "SEARCHER_PROFIT_HAIRCUT_BPS",
+);
+await expectReject(
+  { ...live, profitHaircutBps: 10_001 },
+  "SEARCHER_PROFIT_HAIRCUT_BPS",
+);
 await expectReject({ ...live, configuredBotvmOwner: undefined }, "BOTVM_OWNER");
 await expectReject({ ...live, configuredBotvmOwner: OTHER }, "does not match BOTVM_OWNER");
 await expectReject({ ...live, maxWalletEth: "0.200000000000000001" }, "no greater than 0.2 ETH");
@@ -63,4 +74,4 @@ await validateLiveEnvelope({ ...live, dryRun: true, evGate: false }, {
   botvmOwner: async () => { throw new Error("dry-run must not probe owner"); },
 });
 
-console.log("live-envelope PASS (11/11)");
+console.log("live-envelope PASS (14/14)");

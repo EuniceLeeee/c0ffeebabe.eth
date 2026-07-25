@@ -209,13 +209,26 @@ interface SolveReport {
     revertReason: string | null;
   };
   diagnosticEv?: {
-    decision: "allow" | "below_ev_gate" | "unpriceable_profit_token" | "disabled";
+    decision:
+      | "allow"
+      | "below_ev_gate"
+      | "unpriceable_profit_token"
+      | "missing_gas_estimate"
+      | "missing_fee_state"
+      | "disabled";
     evGate: boolean;
     netEvWei: string;
     expectedProfitEth: string;
     gasCostEth: string;
     bidEth: string;
     minNetEth: string;
+    decisionParentBlock: number;
+    targetBlock: number;
+    decisionParentHash: string | null;
+    ethUsd: number | null;
+    ethUsdRoundId: string | null;
+    ethUsdUpdatedAt: string | null;
+    maxBaseFeePerGas: string;
   };
 }
 
@@ -1146,6 +1159,7 @@ async function main(): Promise<void> {
     );
     const solvedReports = await solveSelected(
       state,
+      provider,
       cfg,
       scan.opportunities,
       pricing.mids,
@@ -1455,6 +1469,7 @@ function summarizeAdapterFamilyQuotes(
 
 async function solveSelected(
   state: AnvilStateBackend,
+  canonicalProvider: ethers.JsonRpcProvider,
   cfg: HuntConfig,
   opportunities: BlockScanOpportunity[],
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
@@ -1542,34 +1557,55 @@ async function solveSelected(
         const minNetEth = BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0");
         const evGate = process.env.SEARCHER_EV_GATE === "1";
         const evaluation = await evaluateEv(
-          state.provider,
+          canonicalProvider,
           simulation.profitToken,
           simulation.netProfit,
           simulation.gasUsed,
           {
-            ethUsd: Number(process.env.SEARCHER_ETH_USD ?? "3500"),
             profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "2000"),
-            defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
-            gasBufferMultX10: Number(process.env.SEARCHER_GAS_BUFFER_MULT_X10 ?? "20"),
             evGate,
             bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
             bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
           },
+          undefined,
+          cfg.blockNumber,
         );
+        const targetBlock = cfg.blockNumber + 1;
+        const targetHeader = await canonicalProvider.getBlock(targetBlock);
+        if (
+          evaluation.feeStateAvailable &&
+          targetHeader?.baseFeePerGas !== evaluation.maxBaseFeePerGas
+        ) {
+          throw new Error(
+            `EV fee anchor mismatch parent=${cfg.blockNumber} target=${targetBlock} ` +
+            `predicted=${evaluation.maxBaseFeePerGas} actual=${targetHeader?.baseFeePerGas ?? "missing"}`,
+          );
+        }
         diagnosticEv = {
           decision: !evGate
             ? "disabled"
             : !evaluation.valuationAvailable
               ? "unpriceable_profit_token"
-              : evaluation.netEvWei < minNetEth
-                ? "below_ev_gate"
-                : "allow",
+              : !evaluation.gasMeasurementAvailable
+                ? "missing_gas_estimate"
+                : !evaluation.feeStateAvailable
+                  ? "missing_fee_state"
+                  : evaluation.netEvWei <= minNetEth
+                    ? "below_ev_gate"
+                    : "allow",
           evGate,
           netEvWei: evaluation.netEvWei.toString(),
           expectedProfitEth: evaluation.expectedProfitEth.toString(),
           gasCostEth: evaluation.gasCostEth.toString(),
           bidEth: evaluation.bidEth.toString(),
           minNetEth: minNetEth.toString(),
+          decisionParentBlock: cfg.blockNumber,
+          targetBlock,
+          decisionParentHash: evaluation.sourceBlockHash,
+          ethUsd: evaluation.ethUsd,
+          ethUsdRoundId: evaluation.ethUsdRoundId?.toString() ?? null,
+          ethUsdUpdatedAt: evaluation.ethUsdUpdatedAt?.toString() ?? null,
+          maxBaseFeePerGas: evaluation.maxBaseFeePerGas.toString(),
         };
       }
     }
