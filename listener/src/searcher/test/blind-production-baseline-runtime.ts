@@ -18,6 +18,8 @@ import {
   createBlindBaselineSourceDelta,
   createBlindBaselineStaticArtifacts,
   createMutableBlindOpportunityEvidence,
+  evaluateBlindAuditOnly,
+  resolveBlindProductionAuditMode,
 } from "../blind-production-baseline-runtime.js";
 import {
   naturalBlockScanSelectionProvenance,
@@ -62,6 +64,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 function main(): void {
+  auditModeResolutionIsFailClosedAndLazy();
   const edge = (
     tokenIn: string,
     tokenOut: string,
@@ -428,6 +431,67 @@ function main(): void {
     "stage timing is monotonic without inventing sequential old-main stages",
   );
   console.log("[blind-production-baseline-runtime] PASS");
+}
+
+function auditModeResolutionIsFailClosedAndLazy(): void {
+  const evidence = { calls: 0 };
+  const evidenceCallCount = (): number => evidence.calls;
+  const disabledEvidence = evaluateBlindAuditOnly(false, () => {
+    evidence.calls++;
+    throw new Error("audit-off evidence producer must not run");
+  });
+  assert(disabledEvidence === null, "audit-off evidence is absent");
+  assert(evidenceCallCount() === 0, "audit-off evidence producer remains lazy");
+  assert(
+    evaluateBlindAuditOnly(true, () => {
+      evidence.calls++;
+      return "sealed";
+    }) === "sealed" && evidenceCallCount() === 1,
+    "audit-on evidence producer runs exactly once",
+  );
+
+  let loaded = false;
+  const disabled = resolveBlindProductionAuditMode({
+    initialValue: undefined,
+    loadEnvironment: () => {
+      loaded = true;
+    },
+    effectiveValue: () => undefined,
+  });
+  assert(loaded && !disabled, "normal mode loads .env exactly once");
+
+  let dotenvValue: string | undefined;
+  let dotenvRejected = false;
+  try {
+    resolveBlindProductionAuditMode({
+      initialValue: undefined,
+      loadEnvironment: () => {
+        dotenvValue = "1";
+      },
+      effectiveValue: () => dotenvValue,
+    });
+  } catch (error) {
+    dotenvRejected =
+      error instanceof Error &&
+      error.message.includes("process environment, not .env");
+  }
+  assert(
+    dotenvRejected,
+    "a .env-only audit flag is rejected before a hybrid runtime can start",
+  );
+
+  let auditLoadAttempted = false;
+  const enabled = resolveBlindProductionAuditMode({
+    initialValue: "1",
+    loadEnvironment: () => {
+      auditLoadAttempted = true;
+    },
+    effectiveValue: () => "1",
+  });
+  assert(
+    enabled && !auditLoadAttempted,
+    "explicit audit mode never loads production .env secrets",
+  );
 }
 
 main();

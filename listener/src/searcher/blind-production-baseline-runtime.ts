@@ -40,6 +40,28 @@ import {
 export type BlindBaselineStageName =
   BlindProductionStageEvidence["name"];
 
+export function resolveBlindProductionAuditMode(input: {
+  readonly initialValue: string | undefined;
+  readonly loadEnvironment: () => void;
+  readonly effectiveValue: () => string | undefined;
+}): boolean {
+  if (input.initialValue === "1") return true;
+  input.loadEnvironment();
+  if (input.effectiveValue() === "1") {
+    throw new Error(
+      "SEARCHER_BLIND_RAW_AUDIT must be supplied by the process environment, not .env",
+    );
+  }
+  return false;
+}
+
+export function evaluateBlindAuditOnly<T>(
+  enabled: boolean,
+  produce: () => T,
+): T | null {
+  return enabled ? produce() : null;
+}
+
 export interface BlindBaselinePricingCoverage {
   readonly expectedStateKeys: readonly string[];
   readonly resolvedStateKeys: readonly string[];

@@ -191,7 +191,9 @@ import {
   createBlindBaselineStaticArtifacts,
   createBlindBaselineUnrunSelectionProvenance,
   createMutableBlindOpportunityEvidence,
+  evaluateBlindAuditOnly,
   installBlindBaselineControlInput,
+  resolveBlindProductionAuditMode,
   type BlindBaselinePreparedArtifacts,
   type BlindBaselinePricingCoverage,
   type BlindBaselineSelectionProvenance,
@@ -673,9 +675,11 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
 }
 
 async function main(): Promise<void> {
-  const blindProductionAudit =
-    process.env.SEARCHER_BLIND_RAW_AUDIT === "1";
-  if (!blindProductionAudit) loadEnv();
+  const blindProductionAudit = resolveBlindProductionAuditMode({
+    initialValue: process.env.SEARCHER_BLIND_RAW_AUDIT,
+    loadEnvironment: loadEnv,
+    effectiveValue: () => process.env.SEARCHER_BLIND_RAW_AUDIT,
+  });
 
   const rpcUrl = liveRpcUrl();
 
@@ -1910,11 +1914,15 @@ async function main(): Promise<void> {
   const markBlindStage = (
     name: BlindBaselineStageName,
     status: "pass" | "fail",
-    semanticEvidence: BlindProductionStageSealInput,
+    semanticEvidence: () => BlindProductionStageSealInput,
   ): void => {
-    if (!blindProductionAudit || blindPassMode !== "source") return;
+    const evidence = evaluateBlindAuditOnly(
+      blindProductionAudit && blindPassMode === "source",
+      semanticEvidence,
+    );
+    if (evidence === null) return;
     const stableSemanticEvidence =
-      blindProductionDeepSeal(semanticEvidence);
+      blindProductionDeepSeal(evidence);
     blindPassStages = appendBlindBaselineStageEvidence({
       stages: blindPassStages,
       name,
@@ -2385,7 +2393,7 @@ async function main(): Promise<void> {
             markBlindStage(
               "state_ready",
               blindPassStateReady ? "pass" : "fail",
-              currentBlindSemanticEvidence(),
+              () => currentBlindSemanticEvidence(),
             );
             if (blindPassMode === "prepare" || !blindPassStateReady) {
               logSeg();
@@ -2432,7 +2440,7 @@ async function main(): Promise<void> {
           markBlindStage(
             "enumeration_done",
             coarseScan.outcome === "ran" ? "pass" : "fail",
-            currentBlindSemanticEvidence(),
+            () => currentBlindSemanticEvidence(),
           );
           if (blindProductionAudit && blindPassMode === "source") {
             blindPassSelectionProvenance =
@@ -2480,7 +2488,7 @@ async function main(): Promise<void> {
             markBlindStage(
               "exact_refine_done",
               "fail",
-              currentBlindSemanticEvidence(),
+              () => currentBlindSemanticEvidence(),
             );
             if (refinement.deadlineHit) {
               console.log(
@@ -2494,7 +2502,7 @@ async function main(): Promise<void> {
           markBlindStage(
             "exact_refine_done",
             "pass",
-            currentBlindSemanticEvidence(),
+            () => currentBlindSemanticEvidence(),
           );
           let quotePositive = 0;
           let bestNet: bigint | null = null;
@@ -2684,7 +2692,7 @@ async function main(): Promise<void> {
           markBlindStage(
             "planner_solver_done",
             stopSolves || Date.now() > passDeadlineAtMs ? "fail" : "pass",
-            currentBlindSemanticEvidence(),
+            () => currentBlindSemanticEvidence(),
           );
           if (blindProductionAudit && blindPassMode === "source") {
             const simulated = blindPassOpportunities.filter(
@@ -2698,14 +2706,14 @@ async function main(): Promise<void> {
               quotePositive > 0 && simulated === quotePositive
                 ? "pass"
                 : "fail",
-              currentBlindSemanticEvidence(),
+              () => currentBlindSemanticEvidence(),
             );
             markBlindStage(
               "ev_decision",
               quotePositive > 0 && evEvaluated === quotePositive
                 ? "pass"
                 : "fail",
-              currentBlindSemanticEvidence(),
+              () => currentBlindSemanticEvidence(),
             );
           }
           console.log(
