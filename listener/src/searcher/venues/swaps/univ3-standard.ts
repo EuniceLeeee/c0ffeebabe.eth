@@ -299,6 +299,7 @@ export const univ3BlockScanState = Object.freeze({
         edge,
         reserveIn: directed.reserveIn,
         reserveOut: directed.reserveOut,
+        mid: directed.mid,
         sqrtPriceX96: directed.sqrtPriceInOutX96,
         liquidity: snapshot.liquidity,
         feeBps: Number(snapshot.fee) / 100,

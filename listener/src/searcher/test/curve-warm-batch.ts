@@ -24,7 +24,10 @@ function loadEnv(): void {
   }
 }
 
-const curveIface = new ethers.Interface(["function coins(uint256) view returns (address)"]);
+const curveIface = new ethers.Interface([
+  "function coins(uint256) view returns (address)",
+  "function get_dy(int128,int128,uint256) view returns (uint256)",
+]);
 const erc20Iface = new ethers.Interface(["function decimals() view returns (uint8)"]);
 
 interface CaseDef {
@@ -36,6 +39,10 @@ const CASES: CaseDef[] = [
   { name: "3pool plain", pool: ADDR.CURVE_3POOL },
   { name: "sUSDS/USDT ng", pool: ADDR.CURVE_SUSDS_USDT },
   { name: "DOLA/sUSDS ng", pool: ADDR.CURVE_DOLA_SUSDS },
+  {
+    name: "Aave dynamic-fee static-rates",
+    pool: "0xdebf20617708857ebe4f679508e7b7863a8a8eee",
+  },
 ];
 
 function fixedBlockState(provider: ethers.JsonRpcProvider, block: number): StateBackend {
@@ -114,9 +121,22 @@ async function runCase(
     `${c.name}: cached quote mismatch perPool=${perPoolOut} batch=${batchOut}`,
   );
   assert(batchOut > 0n, `${c.name}: cached quote should be positive`);
+  const onchainRaw = await provider.call({
+    to: c.pool,
+    data: curveIface.encodeFunctionData("get_dy", [0, 1, amountIn]),
+    blockTag: block,
+  });
+  const onchainOut = BigInt(onchainRaw);
+  const diff = batchOut > onchainOut
+    ? batchOut - onchainOut
+    : onchainOut - batchOut;
+  assert(
+    diff <= 2n,
+    `${c.name}: local/onchain mismatch local=${batchOut} onchain=${onchainOut} diff=${diff}`,
+  );
   console.log(
     `[curve-warm-batch] ${c.name} PASS kind=${batchSnap.kind} coins=${batchSnap.coins.length} ` +
-      `quote=${batchOut}`,
+      `quote=${batchOut} onchain=${onchainOut}`,
   );
 }
 
@@ -167,7 +187,13 @@ async function main(): Promise<void> {
   if (!rpc) throw new Error("MAINNET_RPC_URL required");
   const provider = new ethers.JsonRpcProvider(rpc);
   try {
-    const block = await provider.getBlockNumber();
+    const requested = process.env.SEARCHER_CURVE_EQUIV_BLOCK;
+    const block = requested === undefined
+      ? await provider.getBlockNumber()
+      : Number(requested);
+    if (!Number.isSafeInteger(block) || block <= 0) {
+      throw new Error(`invalid SEARCHER_CURVE_EQUIV_BLOCK ${requested}`);
+    }
     const state = fixedBlockState(provider, block);
     console.log(`[curve-warm-batch] pinned block ${block}`);
     for (const c of CASES) {

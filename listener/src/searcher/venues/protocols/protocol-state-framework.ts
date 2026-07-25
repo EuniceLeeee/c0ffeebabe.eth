@@ -53,6 +53,17 @@ export interface ProtocolQuoteStateConfig {
     amountIn: bigint,
     result: (suffix: string) => string,
   ) => bigint;
+  /**
+   * Family opt-in for view methods whose token metadata does not provide a
+   * sufficiently large quote probe. Each follow-up is still a current-block
+   * coordinator-owned read; the family declares the finite expansion bound.
+   */
+  readonly adaptiveProbe?: {
+    readonly stepMultiplier: bigint;
+    /** Initial quote plus at most four coordinator dependent rounds. */
+    readonly maxDependentRounds: number;
+    readonly minimumOutput: "one-token";
+  };
   readonly extraDependencies?: (edges: readonly TokenEdge[]) => readonly string[];
 }
 
@@ -78,6 +89,7 @@ export function createProtocolQuoteStateCapability(
   if (!config.familyId || allowed.size === 0) {
     throw new Error("protocol pricing capability requires a family and edge adapters");
   }
+  validateAdaptiveProbe(config);
   const capability: BlockScanStateCapability<
     ProtocolQuoteSchema,
     ProtocolQuoteSnapshot
@@ -100,7 +112,18 @@ export function createProtocolQuoteStateCapability(
 
     buildStaticSchemaReads(input): readonly StateRead[] {
       validateSchema(input.schema, config.familyId);
-      const tokens = [...new Set(input.edges.map((edge) => edge.tokenIn.toLowerCase()))].sort();
+      const tokens = [
+        ...new Set(
+          input.edges.flatMap((edge) =>
+            config.adaptiveProbe
+              ? [
+                  edge.tokenIn.toLowerCase(),
+                  edge.tokenOut.toLowerCase(),
+                ]
+              : [edge.tokenIn.toLowerCase()]
+          ),
+        ),
+      ].sort();
       return Object.freeze(tokens.map((token) => tokenDecimalsStateRead(input, token)));
     },
 
@@ -141,12 +164,24 @@ export function createProtocolQuoteStateCapability(
       const reads: StateRead[] = [];
       for (const edge of sortEdges(input.edges)) {
         const amountIn = schemaAmount(input.schema, edge.tokenIn);
-        const quoteReads = config.buildDependentQuoteReads?.(
-          edge,
-          amountIn,
-          input.completedRound + 1,
-          (suffix) => requiredResult(results, quoteReadId(edge, suffix)),
-        ) ?? [];
+        let quoteReads: readonly ProtocolQuoteRead[];
+        if (config.adaptiveProbe) {
+          quoteReads = buildAdaptiveQuoteReads(
+            config,
+            input.schema,
+            edge,
+            amountIn,
+            input.completedRound,
+            results,
+          );
+        } else {
+          quoteReads = config.buildDependentQuoteReads?.(
+            edge,
+            amountIn,
+            input.completedRound + 1,
+            (suffix) => requiredResult(results, quoteReadId(edge, suffix)),
+          ) ?? [];
+        }
         pushQuoteReads(reads, input, edge, quoteReads, config.familyId);
       }
       return Object.freeze(reads);
@@ -163,12 +198,18 @@ export function createProtocolQuoteStateCapability(
       const mids = new Map<string, RouteVenueMid>();
       for (const edge of sortEdges(edges)) {
         requireOwnedEdge(config.familyId, allowed, edge);
-        const amountIn = amountForToken(snapshot.amountInByToken, edge.tokenIn);
-        const amountOut = config.deriveAmountOut(
-          edge,
-          amountIn,
-          (suffix) => requiredResult(snapshot.results, quoteReadId(edge, suffix)),
-        );
+        const baseAmountIn = amountForToken(snapshot.amountInByToken, edge.tokenIn);
+        const { amountIn, amountOut } = config.adaptiveProbe
+          ? resolveAdaptiveQuote(config, snapshot, edge, baseAmountIn)
+          : {
+              amountIn: baseAmountIn,
+              amountOut: config.deriveAmountOut(
+                edge,
+                baseAmountIn,
+                (suffix) =>
+                  requiredResult(snapshot.results, quoteReadId(edge, suffix)),
+              ),
+            };
         mids.set(blockScanEdgeKey(edge), protocolMid(edge, amountIn, amountOut));
       }
       return mids;
@@ -348,10 +389,180 @@ export function decodeUintResult(
   return value;
 }
 
+export function decodeNonnegativeUintResult(
+  iface: ethers.Interface,
+  functionName: string,
+  raw: string,
+  outputIndex = 0,
+): bigint {
+  const value = BigInt(iface.decodeFunctionResult(functionName, raw)[outputIndex]);
+  if (value < 0n) {
+    throw new Error(`${functionName} current-block quote returned ${value}`);
+  }
+  return value;
+}
+
 function validateSchema(schema: ProtocolQuoteSchema, familyId: string): void {
   if (schema.familyId !== familyId) {
     throw new Error(`pricing schema family mismatch: ${schema.familyId} != ${familyId}`);
   }
+}
+
+function validateAdaptiveProbe(config: ProtocolQuoteStateConfig): void {
+  const adaptive = config.adaptiveProbe;
+  if (!adaptive) return;
+  if (config.buildDependentQuoteReads) {
+    throw new Error(
+      `${config.familyId} cannot combine adaptive and custom dependent quote reads`,
+    );
+  }
+  if (
+    adaptive.stepMultiplier <= 1n ||
+    !Number.isSafeInteger(adaptive.maxDependentRounds) ||
+    adaptive.maxDependentRounds < 1 ||
+    adaptive.maxDependentRounds > 4
+  ) {
+    throw new Error(`${config.familyId} declared invalid adaptive probe bounds`);
+  }
+}
+
+function buildAdaptiveQuoteReads(
+  config: ProtocolQuoteStateConfig,
+  schema: ProtocolQuoteSchema,
+  edge: TokenEdge,
+  baseAmountIn: bigint,
+  completedRound: number,
+  results: ReadonlyMap<string, string>,
+): readonly ProtocolQuoteRead[] {
+  const adaptive = config.adaptiveProbe;
+  if (!adaptive) return [];
+  let latestRound = -1;
+  for (
+    let round = 0;
+    round <= Math.min(completedRound, adaptive.maxDependentRounds);
+    round++
+  ) {
+    const amount = adaptiveProbeAmount(
+      baseAmountIn,
+      adaptive.stepMultiplier,
+      round,
+    );
+    const complete = config.buildQuoteReads(edge, amount).every((read) =>
+      results.has(
+        quoteReadId(edge, adaptiveQuoteSuffix(round, read.suffix)),
+      )
+    );
+    if (!complete) break;
+    latestRound = round;
+  }
+  if (latestRound < 0) {
+    throw new Error(`${config.familyId} adaptive quote lacks its initial result`);
+  }
+  const completedAmount = adaptiveProbeAmount(
+    baseAmountIn,
+    adaptive.stepMultiplier,
+    latestRound,
+  );
+  const completedOut = config.deriveAmountOut(
+    edge,
+    completedAmount,
+    adaptiveResultResolver(results, edge, latestRound),
+  );
+  const minimumOut = amountForToken(schema.amountInByToken, edge.tokenOut);
+  if (
+    completedOut >= minimumOut ||
+    latestRound >= adaptive.maxDependentRounds
+  ) {
+    return [];
+  }
+  if (latestRound < completedRound) {
+    throw new Error(
+      `${config.familyId} adaptive quote is missing round ${latestRound + 1}`,
+    );
+  }
+  const nextRound = latestRound + 1;
+  const nextAmount = adaptiveProbeAmount(
+    baseAmountIn,
+    adaptive.stepMultiplier,
+    nextRound,
+  );
+  return config.buildQuoteReads(edge, nextAmount).map((read) =>
+    Object.freeze({
+      ...read,
+      suffix: adaptiveQuoteSuffix(nextRound, read.suffix),
+    })
+  );
+}
+
+function resolveAdaptiveQuote(
+  config: ProtocolQuoteStateConfig,
+  snapshot: ProtocolQuoteSnapshot,
+  edge: TokenEdge,
+  baseAmountIn: bigint,
+): { readonly amountIn: bigint; readonly amountOut: bigint } {
+  const adaptive = config.adaptiveProbe;
+  if (!adaptive) throw new Error(`${config.familyId} has no adaptive probe`);
+  let selected: { readonly amountIn: bigint; readonly amountOut: bigint } | null =
+    null;
+  for (let round = 0; round <= adaptive.maxDependentRounds; round++) {
+    const amountIn = adaptiveProbeAmount(
+      baseAmountIn,
+      adaptive.stepMultiplier,
+      round,
+    );
+    const reads = config.buildQuoteReads(edge, amountIn);
+    if (
+      reads.some(
+        (read) =>
+          !snapshot.results.has(
+            quoteReadId(edge, adaptiveQuoteSuffix(round, read.suffix)),
+          ),
+      )
+    ) {
+      break;
+    }
+    const amountOut = config.deriveAmountOut(
+      edge,
+      amountIn,
+      adaptiveResultResolver(snapshot.results, edge, round),
+    );
+    selected = { amountIn, amountOut };
+  }
+  if (!selected || selected.amountOut <= 0n) {
+    throw new Error(
+      `${config.familyId} adaptive quote remained zero within its declared bound`,
+    );
+  }
+  return selected;
+}
+
+function adaptiveResultResolver(
+  results: ReadonlyMap<string, string>,
+  edge: TokenEdge,
+  round: number,
+): (suffix: string) => string {
+  return (suffix) =>
+    requiredResult(
+      results,
+      quoteReadId(edge, adaptiveQuoteSuffix(round, suffix)),
+    );
+}
+
+function adaptiveQuoteSuffix(round: number, suffix: string): string {
+  return round === 0 ? suffix : `adaptive-${round}:${suffix}`;
+}
+
+function adaptiveProbeAmount(
+  baseAmount: bigint,
+  stepMultiplier: bigint,
+  round: number,
+): bigint {
+  const amount = baseAmount * stepMultiplier ** BigInt(round);
+  const maxUint256 = (1n << 256n) - 1n;
+  if (amount <= 0n || amount > maxUint256) {
+    throw new Error("adaptive protocol quote amount exceeds uint256");
+  }
+  return amount;
 }
 
 function requireOwnedEdge(

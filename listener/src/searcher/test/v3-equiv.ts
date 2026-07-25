@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { v3SwapExactInput, type V3PoolState } from "../solver/v3-math.js";
+import type { TokenEdge } from "../planner/token-graph.js";
+import { q96DirectedReserves } from "../venues/swaps/blockscan-state-shared.js";
 
 function loadEnv(): void {
   try {
@@ -165,12 +167,125 @@ async function testPool(
   }
 }
 
+async function testExtremeSpotRepresentation(
+  provider: ethers.JsonRpcProvider,
+  block: number,
+): Promise<void> {
+  const pool = "0x616c5d79d8ffe6579a5ed63a84e7b3143557fe38";
+  const [
+    token0Raw,
+    token1Raw,
+    slot0Raw,
+    liquidityRaw,
+    feeRaw,
+  ] = await Promise.all([
+    callAt(provider, pool, poolIface.encodeFunctionData("token0"), block),
+    callAt(provider, pool, poolIface.encodeFunctionData("token1"), block),
+    callAt(provider, pool, poolIface.encodeFunctionData("slot0"), block),
+    callAt(provider, pool, poolIface.encodeFunctionData("liquidity"), block),
+    callAt(provider, pool, poolIface.encodeFunctionData("fee"), block),
+  ]);
+  const token0 = ethers.getAddress(`0x${token0Raw.slice(-40)}`);
+  const token1 = ethers.getAddress(`0x${token1Raw.slice(-40)}`);
+  const sqrtPriceX96 = BigInt(
+    poolIface.decodeFunctionResult("slot0", slot0Raw)[0],
+  );
+  const liquidity = BigInt(liquidityRaw);
+  const fee = BigInt(feeRaw);
+  const directEdge: TokenEdge = {
+    adapterId: "univ3-swap",
+    target: pool,
+    tokenIn: token0,
+    tokenOut: token1,
+    poolToken0: token0,
+    poolToken1: token1,
+    v3Fee: Number(fee),
+    slotKind: "swap",
+    edgeKind: "swap",
+    leavesStandingPosition: false,
+  };
+  const reverseEdge: TokenEdge = {
+    ...directEdge,
+    tokenIn: token1,
+    tokenOut: token0,
+  };
+  const direct = q96DirectedReserves({
+    sqrtPriceX96,
+    liquidity,
+    token0,
+    token1,
+    edge: directEdge,
+  });
+  const reverse = q96DirectedReserves({
+    sqrtPriceX96,
+    liquidity,
+    token0,
+    token1,
+    edge: reverseEdge,
+  });
+  if (
+    direct.reserveIn <= 0n ||
+    direct.reserveOut <= 0n ||
+    reverse.reserveIn <= 0n ||
+    reverse.reserveOut <= 0n ||
+    !Number.isFinite(direct.mid) ||
+    direct.mid <= 0 ||
+    !Number.isFinite(reverse.mid) ||
+    reverse.mid <= 0
+  ) {
+    throw new Error("extreme V3 spot representation is not finite and positive");
+  }
+  if (Math.abs(direct.mid * reverse.mid - 1) >= 1e-12) {
+    throw new Error("extreme V3 directed spots are not reciprocal");
+  }
+
+  const amountIn = 10n;
+  const quoteRaw = await callAt(
+    provider,
+    QUOTER_V2,
+    quoterIface.encodeFunctionData("quoteExactInputSingle", [{
+      tokenIn: token0,
+      tokenOut: token1,
+      amountIn,
+      fee,
+      sqrtPriceLimitX96: 0n,
+    }]),
+    block,
+  );
+  const amountOut = BigInt(
+    quoterIface.decodeFunctionResult("quoteExactInputSingle", quoteRaw)[0],
+  );
+  const averageExecutionPrice = Number(amountOut) / Number(amountIn);
+  if (
+    amountOut <= 0n ||
+    !Number.isFinite(averageExecutionPrice) ||
+    averageExecutionPrice <= 0 ||
+    averageExecutionPrice > direct.mid
+  ) {
+    throw new Error(
+      `extreme V3 onchain quote contradicts spot direction: ` +
+        `spot=${direct.mid} quote=${amountIn}->${amountOut}`,
+    );
+  }
+  console.log(
+    `[v3equiv] PASS extreme source spot: block=${block} ` +
+      `reserves=${direct.reserveIn}/${direct.reserveOut} ` +
+      `quote=${amountIn}->${amountOut}`,
+  );
+}
+
 async function main(): Promise<void> {
   loadEnv();
   const rpc = process.env.MAINNET_RPC_URL;
   if (!rpc) throw new Error("MAINNET_RPC_URL required");
   const provider = new ethers.JsonRpcProvider(rpc);
-  const block = await provider.getBlockNumber();
+  const requested = process.env.SEARCHER_V3_EQUIV_BLOCK;
+  const block = requested === undefined
+    ? await provider.getBlockNumber()
+    : Number(requested);
+  if (!Number.isSafeInteger(block) || block <= 0) {
+    throw new Error(`invalid SEARCHER_V3_EQUIV_BLOCK ${requested}`);
+  }
   console.log(`[v3equiv] pinned block ${block}`);
 
   const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -189,6 +304,7 @@ async function main(): Promise<void> {
     ],
     block,
   );
+  await testExtremeSpotRepresentation(provider, block);
 
   // WETH pools (volatile, tick far from 0) — these are what AC-3's path uses.
   // USDC/WETH 0.01% — token0=USDC, token1=WETH

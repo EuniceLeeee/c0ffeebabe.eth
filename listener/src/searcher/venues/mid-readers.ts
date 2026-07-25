@@ -9,6 +9,7 @@ import type {
   V4Snapshot,
 } from "../solver/pool-state-cache.js";
 import { curveNgGetDy, curvePlainGetDy } from "../solver/curve-math.js";
+import { bigintRatio } from "./swaps/blockscan-state-shared.js";
 
 export interface ExternalMidQuote {
   mid: number;
@@ -100,22 +101,37 @@ function readV3Mid(snapshot: V3Snapshot | null, ctx: SyncMidReadContext): RouteV
   if (!snapshot || snapshot.state.sqrtPriceX96 <= 0n || snapshot.state.liquidity <= 0n) return null;
   const token0 = snapshot.token0.toLowerCase();
   const token1 = snapshot.token1.toLowerCase();
-  const price0To1 = sqrtPriceToNumber(snapshot.state.sqrtPriceX96) ** 2;
+  const price0To1 = bigintRatio(
+    snapshot.state.sqrtPriceX96 * snapshot.state.sqrtPriceX96,
+    Q192,
+  );
   let mid: number;
   let sqrtABX96: bigint;
+  let reserveA: bigint;
+  let reserveB: bigint;
+  const reserve0Floor =
+    snapshot.state.liquidity * Q96 / snapshot.state.sqrtPriceX96;
+  const reserve1Floor =
+    snapshot.state.liquidity * snapshot.state.sqrtPriceX96 / Q96;
+  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
+  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
   if (token0 === ctx.a && token1 === ctx.b) {
     mid = price0To1;
     sqrtABX96 = snapshot.state.sqrtPriceX96;
+    reserveA = reserve0;
+    reserveB = reserve1;
   } else if (token0 === ctx.b && token1 === ctx.a) {
-    mid = 1 / price0To1;
+    mid = bigintRatio(
+      Q192,
+      snapshot.state.sqrtPriceX96 * snapshot.state.sqrtPriceX96,
+    );
     sqrtABX96 = Q192 / snapshot.state.sqrtPriceX96;
+    reserveA = reserve1;
+    reserveB = reserve0;
   } else {
     return null;
   }
   if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
-  const reserveA = snapshot.state.liquidity * Q96 / sqrtABX96;
-  const reserveB = snapshot.state.liquidity * sqrtABX96 / Q96;
-  if (reserveA <= 0n || reserveB <= 0n) return null;
   return {
     kind: "v3", pool: ctx.pool, edges: ctx.edges, mid,
     feeBps: Number(snapshot.state.fee) / 100,
@@ -129,22 +145,35 @@ function readV4Mid(snapshot: V4Snapshot | null, ctx: SyncMidReadContext): RouteV
   if (!snapshot || !key || snapshot.sqrtPriceX96 <= 0n || snapshot.liquidity <= 0n) return null;
   const token0 = normalizeV4GraphCurrency(key.currency0);
   const token1 = normalizeV4GraphCurrency(key.currency1);
-  const price0To1 = sqrtPriceToNumber(snapshot.sqrtPriceX96) ** 2;
+  const price0To1 = bigintRatio(
+    snapshot.sqrtPriceX96 * snapshot.sqrtPriceX96,
+    Q192,
+  );
   let mid: number;
   let sqrtABX96: bigint;
+  let reserveA: bigint;
+  let reserveB: bigint;
+  const reserve0Floor = snapshot.liquidity * Q96 / snapshot.sqrtPriceX96;
+  const reserve1Floor = snapshot.liquidity * snapshot.sqrtPriceX96 / Q96;
+  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
+  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
   if (token0 === ctx.a && token1 === ctx.b) {
     mid = price0To1;
     sqrtABX96 = snapshot.sqrtPriceX96;
+    reserveA = reserve0;
+    reserveB = reserve1;
   } else if (token0 === ctx.b && token1 === ctx.a) {
-    mid = 1 / price0To1;
+    mid = bigintRatio(
+      Q192,
+      snapshot.sqrtPriceX96 * snapshot.sqrtPriceX96,
+    );
     sqrtABX96 = Q192 / snapshot.sqrtPriceX96;
+    reserveA = reserve1;
+    reserveB = reserve0;
   } else {
     return null;
   }
   if (!Number.isFinite(mid) || mid <= 0 || sqrtABX96 <= 0n) return null;
-  const reserveA = snapshot.liquidity * Q96 / sqrtABX96;
-  const reserveB = snapshot.liquidity * sqrtABX96 / Q96;
-  if (reserveA <= 0n || reserveB <= 0n) return null;
   return {
     kind: "v4", pool: ctx.pool, edges: ctx.edges, mid,
     feeBps: Number(snapshot.lpFee) / 100,
@@ -221,10 +250,6 @@ function findEdge(edges: TokenEdge[], tokenIn: string, tokenOut: string): TokenE
   return edges.find((edge) =>
     edge.tokenIn.toLowerCase() === tokenIn && edge.tokenOut.toLowerCase() === tokenOut
   ) ?? null;
-}
-
-function sqrtPriceToNumber(sqrtPriceX96: bigint): number {
-  return Number(sqrtPriceX96) / Number(Q96);
 }
 
 function normalizeV4GraphCurrency(currency: string): string {

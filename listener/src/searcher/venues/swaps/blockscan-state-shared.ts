@@ -155,6 +155,8 @@ export function directedPoolMid(input: {
   readonly reserveIn: bigint;
   readonly reserveOut: bigint;
   readonly feeBps: number;
+  /** Exact family-owned spot ratio when reserve proxies require rounding. */
+  readonly mid?: number;
   readonly sqrtPriceX96?: bigint;
   readonly liquidity?: bigint;
 }): RouteVenueMid {
@@ -164,7 +166,7 @@ export function directedPoolMid(input: {
         `${input.reserveIn}/${input.reserveOut}`,
     );
   }
-  const mid = bigintRatio(input.reserveOut, input.reserveIn);
+  const mid = input.mid ?? bigintRatio(input.reserveOut, input.reserveIn);
   if (!Number.isFinite(mid) || mid <= 0) {
     throw new Error(`invalid ${input.kind} mid for ${input.edge.target}: ${mid}`);
   }
@@ -242,6 +244,7 @@ export function q96DirectedReserves(input: {
   readonly reserveIn: bigint;
   readonly reserveOut: bigint;
   readonly sqrtPriceInOutX96: bigint;
+  readonly mid: number;
 } {
   const Q96 = 1n << 96n;
   const Q192 = Q96 * Q96;
@@ -249,26 +252,49 @@ export function q96DirectedReserves(input: {
   const tokenOut = input.edge.tokenOut.toLowerCase();
   const token0 = input.token0.toLowerCase();
   const token1 = input.token1.toLowerCase();
+  if (input.sqrtPriceX96 <= 0n || input.liquidity <= 0n) {
+    throw new Error(`non-positive concentrated-liquidity state for ${input.edge.target}`);
+  }
+  const priceNumerator = input.sqrtPriceX96 * input.sqrtPriceX96;
+  const reserve0Floor =
+    input.liquidity * Q96 / input.sqrtPriceX96;
+  const reserve1Floor =
+    input.liquidity * input.sqrtPriceX96 / Q96;
+  // These are sizing proxies, not literal reserves. Preserve the historical
+  // floor for ordinary pools, but do not let a sub-base-unit virtual side
+  // erase an otherwise initialized concentrated-liquidity state.
+  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
+  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
   let sqrtPriceInOutX96: bigint;
+  let reserveIn: bigint;
+  let reserveOut: bigint;
+  let mid: number;
   if (tokenIn === token0 && tokenOut === token1) {
     sqrtPriceInOutX96 = input.sqrtPriceX96;
+    reserveIn = reserve0;
+    reserveOut = reserve1;
+    mid = bigintRatio(priceNumerator, Q192);
   } else if (tokenIn === token1 && tokenOut === token0) {
-    if (input.sqrtPriceX96 <= 0n) {
-      throw new Error(`cannot invert zero sqrt price for ${input.edge.target}`);
-    }
     sqrtPriceInOutX96 = Q192 / input.sqrtPriceX96;
+    reserveIn = reserve1;
+    reserveOut = reserve0;
+    mid = bigintRatio(Q192, priceNumerator);
   } else {
     throw new Error(
       `edge ${input.edge.tokenIn}->${input.edge.tokenOut} does not match ` +
         `${input.token0}/${input.token1}`,
     );
   }
-  if (sqrtPriceInOutX96 <= 0n || input.liquidity <= 0n) {
+  if (
+    sqrtPriceInOutX96 <= 0n ||
+    reserveIn <= 0n ||
+    reserveOut <= 0n ||
+    !Number.isFinite(mid) ||
+    mid <= 0
+  ) {
     throw new Error(`non-positive concentrated-liquidity state for ${input.edge.target}`);
   }
-  const reserveIn = input.liquidity * Q96 / sqrtPriceInOutX96;
-  const reserveOut = input.liquidity * sqrtPriceInOutX96 / Q96;
-  return { reserveIn, reserveOut, sqrtPriceInOutX96 };
+  return { reserveIn, reserveOut, sqrtPriceInOutX96, mid };
 }
 
 export function decodeAddressWord(data: string, label: string): string {

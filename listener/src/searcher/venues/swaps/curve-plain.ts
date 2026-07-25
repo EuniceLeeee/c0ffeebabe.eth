@@ -107,13 +107,15 @@ const curveIntBalanceIface = new ethers.Interface([
 
 type CurveBalanceAbi = "uint256" | "int128";
 
+interface CurvePoolStateSchema {
+  readonly coins: readonly string[];
+  readonly items: readonly MulticallItem[];
+  readonly plainRates: readonly bigint[];
+  readonly balanceAbi: CurveBalanceAbi | null;
+}
+
 interface CurveStateSchema {
-  readonly pools: ReadonlyMap<string, {
-    readonly coins: readonly string[];
-    readonly items: readonly MulticallItem[];
-    readonly plainRates: readonly bigint[];
-    readonly balanceAbi: CurveBalanceAbi | null;
-  }>;
+  readonly pools: ReadonlyMap<string, CurvePoolStateSchema>;
 }
 
 type CurveCurrentState =
@@ -337,6 +339,48 @@ export const curvePlainBlockScanState = Object.freeze({
     ]);
   },
 
+  buildDependentBlockReads({
+    sourceBlock,
+    sourceBlockHash,
+    schema,
+    edges,
+    priorResults,
+  }) {
+    const pool = assertPoolGroup(edges, CURVE_PLAIN_EDGE_IDS);
+    const descriptor = schema.pools.get(pool);
+    if (!descriptor) throw new Error(`curve block-scan schema missing ${pool}`);
+    const inner = decodeMulticall(
+      requireRead(priorResults, `curve:${pool}`),
+      descriptor.items,
+    );
+    if (
+      !optionalMulticallData(inner, "offpeg") ||
+      optionalMulticallData(inner, "stored-rates")
+    ) {
+      return Object.freeze([]);
+    }
+    if (
+      priorResults.some(
+        (result) => result.id === curveFallbackWitnessReadId(pool),
+      )
+    ) {
+      return Object.freeze([]);
+    }
+    const witnesses = curveFallbackWitnesses(descriptor.plainRates);
+    return Object.freeze([
+      currentBlockRead({
+        id: curveFallbackWitnessReadId(pool),
+        sourceBlock,
+        sourceBlockHash,
+        to: BLOCKSCAN_MULTICALL3,
+        data: encodeMulticall(
+          curveFallbackWitnessItems(pool, witnesses),
+        ),
+        transport: "rpc-batch",
+      }),
+    ]);
+  },
+
   decodeState(schema, results) {
     const pool = statePoolFromResults(results, "curve:");
     const descriptor = schema.pools.get(pool);
@@ -356,27 +400,35 @@ export const curvePlainBlockScanState = Object.freeze({
 
     const offpegData = optionalMulticallData(inner, "offpeg");
     if (offpegData) {
-      const ratesData = requireMulticallData(inner, "stored-rates");
-      const rates = (
-        curveStateIface.decodeFunctionResult("stored_rates", ratesData)[0] as bigint[]
-      ).map(BigInt);
+      const ratesData = optionalMulticallData(inner, "stored-rates");
+      const rates = ratesData
+        ? (
+            curveStateIface.decodeFunctionResult("stored_rates", ratesData)[0] as bigint[]
+          ).map(BigInt)
+        : descriptor.plainRates;
       if (
         rates.length !== descriptor.coins.length ||
         rates.some((rate) => rate <= 0n)
       ) {
-        throw new Error(`curve-ng block-scan pool ${pool} returned invalid rates`);
+        throw new Error(
+          `curve dynamic-fee block-scan pool ${pool} returned no usable rates`,
+        );
+      }
+      const state = Object.freeze({
+        A,
+        fee,
+        offpegFeeMultiplier: BigInt(offpegData),
+        balances: Object.freeze(balances) as unknown as bigint[],
+        rates: Object.freeze([...rates]) as unknown as bigint[],
+      });
+      if (!ratesData) {
+        assertCurveFallbackWitness(pool, state, descriptor, results);
       }
       return Object.freeze({
         pool,
         coins: descriptor.coins,
         kind: "ng" as const,
-        state: Object.freeze({
-          A,
-          fee,
-          offpegFeeMultiplier: BigInt(offpegData),
-          balances: Object.freeze(balances) as unknown as bigint[],
-          rates: Object.freeze(rates) as unknown as bigint[],
-        }),
+        state,
       });
     }
 
@@ -495,6 +547,111 @@ function decodeCurveBalanceAbi(
     throw new Error(`curve pool ${pool} returned ambiguous balance getters`);
   }
   return uintData ? "uint256" : "int128";
+}
+
+function curveFallbackWitnessReadId(pool: string): string {
+  return `curve-fallback-witness:${pool}`;
+}
+
+function curveFallbackProbeAmount(rate: bigint): bigint {
+  const scale = 10n ** 36n;
+  if (rate <= 0n || scale % rate !== 0n) {
+    throw new Error(`curve fallback rate ${rate} has no exact one-token probe`);
+  }
+  const amount = scale / rate;
+  if (amount <= 0n) throw new Error("curve fallback probe amount is zero");
+  return amount;
+}
+
+function curveFallbackWitnessItems(
+  pool: string,
+  witnesses: readonly CurveFallbackWitness[],
+): readonly MulticallItem[] {
+  return Object.freeze(witnesses.flatMap(({ i, j, amountIn }) => {
+    const args = [BigInt(i), BigInt(j), amountIn] as const;
+    return [
+      {
+        label: `int128:${i}:${j}`,
+        target: pool,
+        callData: curveIntIface.encodeFunctionData("get_dy", args),
+        allowFailure: true,
+      },
+      {
+        label: `uint256:${i}:${j}`,
+        target: pool,
+        callData: curveUintIface.encodeFunctionData("get_dy", args),
+        allowFailure: true,
+      },
+    ];
+  }));
+}
+
+function assertCurveFallbackWitness(
+  pool: string,
+  state: CurveNgState,
+  descriptor: CurvePoolStateSchema,
+  results: readonly StateReadResult[],
+): void {
+  if (descriptor.coins.length < 2) {
+    throw new Error(`curve fallback pool ${pool} has fewer than two coins`);
+  }
+  const witnesses = curveFallbackWitnesses(descriptor.plainRates);
+  const decoded = decodeMulticall(
+    requireRead(results, curveFallbackWitnessReadId(pool)),
+    curveFallbackWitnessItems(pool, witnesses),
+  );
+  for (const { i, j, amountIn } of witnesses) {
+    const intData = optionalMulticallData(decoded, `int128:${i}:${j}`);
+    const uintData = optionalMulticallData(decoded, `uint256:${i}:${j}`);
+    if (!intData && !uintData) {
+      throw new Error(
+        `curve fallback pool ${pool} has no executable get_dy ${i}->${j}`,
+      );
+    }
+    const intOut = intData
+      ? BigInt(curveIntIface.decodeFunctionResult("get_dy", intData)[0])
+      : null;
+    const uintOut = uintData
+      ? BigInt(curveUintIface.decodeFunctionResult("get_dy", uintData)[0])
+      : null;
+    if (intOut !== null && uintOut !== null && intOut !== uintOut) {
+      throw new Error(
+        `curve fallback pool ${pool} returned ambiguous get_dy ${i}->${j}`,
+      );
+    }
+    const onchain = intOut ?? uintOut!;
+    const local = curveNgGetDy(state, i, j, amountIn);
+    const difference = local > onchain ? local - onchain : onchain - local;
+    if (onchain <= 0n || local <= 0n || difference > 2n) {
+      throw new Error(
+        `curve fallback pool ${pool} failed local get_dy witness ${i}->${j}: ` +
+          `local=${local} onchain=${onchain} diff=${difference}`,
+      );
+    }
+  }
+}
+
+interface CurveFallbackWitness {
+  readonly i: number;
+  readonly j: number;
+  readonly amountIn: bigint;
+}
+
+function curveFallbackWitnesses(
+  rates: readonly bigint[],
+): readonly CurveFallbackWitness[] {
+  const witnesses: CurveFallbackWitness[] = [];
+  for (let i = 0; i < rates.length; i++) {
+    for (let j = 0; j < rates.length; j++) {
+      if (i === j) continue;
+      witnesses.push(Object.freeze({
+        i,
+        j,
+        amountIn: curveFallbackProbeAmount(rates[i]),
+      }));
+    }
+  }
+  return Object.freeze(witnesses);
 }
 
 export const curvePlainAdapter = Object.freeze({

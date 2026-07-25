@@ -79,10 +79,22 @@ const cases: readonly Case[] = [
     response(read) {
       if (selector(read) === selectorOf(decimalsIface, "decimals")) return uint8(18);
       if (selector(read) === selectorOf(erc4626Iface, "previewDeposit")) {
-        return erc4626Iface.encodeFunctionResult("previewDeposit", [1_050_000_000_000_000_000n]);
+        const amount = BigInt(
+          erc4626Iface.decodeFunctionData("previewDeposit", read.data)[0],
+        );
+        return erc4626Iface.encodeFunctionResult(
+          "previewDeposit",
+          [(amount * 105n) / 100n],
+        );
       }
       if (selector(read) === selectorOf(erc4626Iface, "previewRedeem")) {
-        return erc4626Iface.encodeFunctionResult("previewRedeem", [950_000_000_000_000_000n]);
+        const amount = BigInt(
+          erc4626Iface.decodeFunctionData("previewRedeem", read.data)[0],
+        );
+        return erc4626Iface.encodeFunctionResult(
+          "previewRedeem",
+          [(amount * 95n) / 100n],
+        );
       }
       if (selector(read) === selectorOf(erc4626Iface, "previewWithdraw")) {
         return erc4626Iface.encodeFunctionResult("previewWithdraw", [1_100_000_000_000_000_000n]);
@@ -398,6 +410,8 @@ assert.deepEqual(
   console.log("[protocol-blockscan-state] dynamic read failure is fail-closed: PASS");
 }
 
+await assertErc4626AdaptiveProbe();
+
 {
   const logicalA: TokenEdge = {
     ...edge("erc4626-deposit", vault, tokenA, tokenB, "wrap"),
@@ -419,6 +433,139 @@ assert.deepEqual(
     "block-scan edge identity must preserve logical instances",
   );
   console.log("[protocol-blockscan-state] logical instance state isolation: PASS");
+}
+
+async function assertErc4626AdaptiveProbe(): Promise<void> {
+  const asset = "0x00000000000000000000000000000000000000a6";
+  const adaptiveVault = "0x0000000000000000000000000000000000000462";
+  const adaptiveEdge = edge(
+    "erc4626-redeem",
+    adaptiveVault,
+    adaptiveVault,
+    asset,
+    "redeem",
+  );
+  const capability = erc4626Adapter.pricingState;
+  let schema = await capability.compileStaticSchema({
+    edges: [adaptiveEdge],
+    deadlineAtMs: Date.now() + 10_000,
+    signal: abort.signal,
+  });
+  const staticReads = capability.buildStaticSchemaReads!({
+    sourceBlock: block,
+    sourceBlockHash: blockHash,
+    schema,
+    edges: [adaptiveEdge],
+  });
+  assert.equal(staticReads.length, 2, "adaptive quote reads both input and output decimals");
+  schema = capability.hydrateStaticSchema!(
+    schema,
+    staticReads.map((read): StateReadResult => ({
+      id: read.id,
+      ok: true,
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      provenance: {
+        kind: "eip1898",
+        source: { number: block, hash: blockHash, generation: 1 },
+        requireCanonical: true,
+      },
+      data: uint8(6),
+    })),
+  );
+
+  const ladder = [
+    [1_000_000n, 0n],
+    [1_000_000_000n, 0n],
+    [1_000_000_000_000n, 1n],
+    [1_000_000_000_000_000n, 1_044n],
+    [1_000_000_000_000_000_000n, 1_044_020n],
+  ] as const;
+  const results: StateReadResult[] = [];
+  const observedAmounts: bigint[] = [];
+  for (let round = 0; round < ladder.length; round++) {
+    const reads = round === 0
+      ? capability.buildCurrentBlockReads({
+          sourceBlock: block,
+          sourceBlockHash: blockHash,
+          schema,
+          edges: [adaptiveEdge],
+        })
+      : capability.buildDependentBlockReads!({
+          sourceBlock: block,
+          sourceBlockHash: blockHash,
+          schema,
+          edges: [adaptiveEdge],
+          completedRound: round - 1,
+          priorResults: results,
+        });
+    assert.equal(reads.length, 1, `adaptive round ${round} emits one quote`);
+    const amount = BigInt(
+      erc4626Iface.decodeFunctionData("previewRedeem", reads[0].data)[0],
+    );
+    observedAmounts.push(amount);
+    assert.equal(amount, ladder[round][0], `adaptive round ${round} amount`);
+    results.push({
+      id: reads[0].id,
+      ok: true,
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      provenance: {
+        kind: "eip1898",
+        source: { number: block, hash: blockHash, generation: 1 },
+        requireCanonical: true,
+      },
+      data: erc4626Iface.encodeFunctionResult(
+        "previewRedeem",
+        [ladder[round][1]],
+      ),
+    });
+  }
+  assert.deepEqual(observedAmounts, ladder.map(([amount]) => amount));
+  assert.deepEqual(
+    capability.buildDependentBlockReads!({
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      schema,
+      edges: [adaptiveEdge],
+      completedRound: ladder.length - 1,
+      priorResults: results,
+    }),
+    [],
+    "adaptive quote closes at the family-declared bound",
+  );
+  const snapshot = capability.decodeState(schema, results);
+  const mid = capability.deriveMids(snapshot, [adaptiveEdge]).get(
+    blockScanEdgeKey(adaptiveEdge),
+  );
+  assert(mid, "adaptive quote publishes the bounded positive result");
+  assert.equal(
+    mid.reserveA,
+    ladder.at(-1)![0] * 10_000n,
+    "mid depth uses the actual large probe amount",
+  );
+  assert.equal(
+    mid.reserveB,
+    ladder.at(-1)![1] * 10_000n,
+    "mid depth preserves the matching large-probe output",
+  );
+  assert.equal(
+    mid.mid,
+    Number(ladder.at(-1)![1]) / Number(ladder.at(-1)![0]),
+    "mid ratio uses matching input/output units",
+  );
+
+  const zeroResults = results.map((result) => ({
+    ...result,
+    data: erc4626Iface.encodeFunctionResult("previewRedeem", [0n]),
+  }));
+  const zeroSnapshot = capability.decodeState(schema, zeroResults);
+  assert.throws(
+    () => capability.deriveMids(zeroSnapshot, [adaptiveEdge]),
+    /remained zero within its declared bound/,
+    "all-zero quote ladders fail closed instead of expanding without bound",
+  );
+  console.log("[protocol-blockscan-state] bounded ERC4626 adaptive quote: PASS");
 }
 
 function edge(

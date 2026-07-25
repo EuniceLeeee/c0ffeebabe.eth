@@ -12,7 +12,7 @@ import {
 } from "./receipt-deposit-framework.js";
 import {
   createProtocolQuoteStateCapability,
-  decodeUintResult,
+  decodeNonnegativeUintResult,
 } from "./protocol-state-framework.js";
 
 const erc4626Iface = new ethers.Interface([
@@ -25,6 +25,11 @@ const erc4626Iface = new ethers.Interface([
 const erc4626PricingState = createProtocolQuoteStateCapability({
   familyId: "protocol:erc4626",
   edgeAdapterIds: ["erc4626-deposit", "erc4626-redeem"],
+  adaptiveProbe: {
+    stepMultiplier: 1_000n,
+    maxDependentRounds: 4,
+    minimumOutput: "one-token",
+  },
   buildQuoteReads(edge, amountIn) {
     if (edge.adapterId === "erc4626-deposit") {
       return [{
@@ -44,10 +49,18 @@ const erc4626PricingState = createProtocolQuoteStateCapability({
   },
   deriveAmountOut(edge, _amountIn, result) {
     if (edge.adapterId === "erc4626-deposit") {
-      return decodeUintResult(erc4626Iface, "previewDeposit", result("deposit"));
+      return decodeNonnegativeUintResult(
+        erc4626Iface,
+        "previewDeposit",
+        result("deposit"),
+      );
     }
     if (edge.adapterId === "erc4626-redeem") {
-      return decodeUintResult(erc4626Iface, "previewRedeem", result("redeem"));
+      return decodeNonnegativeUintResult(
+        erc4626Iface,
+        "previewRedeem",
+        result("redeem"),
+      );
     }
     throw new Error(`protocol:erc4626 received foreign edge ${edge.adapterId}`);
   },

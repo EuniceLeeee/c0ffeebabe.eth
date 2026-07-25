@@ -14,7 +14,10 @@
  */
 
 import { ethers } from "ethers";
-import type { StateBackend } from "../../shared/state/state-backend.js";
+import {
+  isStateCallAbortedError,
+  type StateBackend,
+} from "../../shared/state/state-backend.js";
 import {
   curvePlainGetDy,
   curveNgGetDy,
@@ -924,6 +927,27 @@ export class PoolStateCache {
     }
 
     const round2 = await this.aggregateCurveCalls(state, round2Calls);
+    const staticRateFallbackCalls: CurveBatchCall[] = [];
+    for (const item of parsed) {
+      if (
+        item.offpeg === null ||
+        round2.has(`${item.key}:stored_rates`)
+      ) {
+        continue;
+      }
+      for (let k = 0; k < item.coins.length; k++) {
+        if (curveNativeRateMultiplier(item.coins[k]) !== null) continue;
+        staticRateFallbackCalls.push({
+          target: item.coins[k],
+          allowFailure: true,
+          callData: erc20Iface.encodeFunctionData("decimals"),
+          label: `${item.key}:decimals:${k}`,
+        });
+      }
+    }
+    const staticRateFallback = staticRateFallbackCalls.length > 0
+      ? await this.aggregateCurveCalls(state, staticRateFallbackCalls)
+      : new Map<string, string>();
     for (const item of parsed) {
       try {
         const balances: bigint[] = [];
@@ -932,10 +956,11 @@ export class PoolStateCache {
         }
 
         if (item.offpeg !== null) {
-          const ratesRes = requireCurveBatchData(round2, `${item.key}:stored_rates`);
-          const rates = (curveIface.decodeFunctionResult("stored_rates", ratesRes)[0] as bigint[]).map(
-            (r) => BigInt(r),
-          );
+          const storedRates = round2.get(`${item.key}:stored_rates`);
+          const rates = storedRates
+            ? decodeCurveStoredRates(storedRates)
+            : curveStaticRates(item.coins, staticRateFallback, item.key);
+          assertCurveRates(item.pool, item.coins, rates);
           const ng: CurveNgState = {
             A: item.A,
             fee: item.fee,
@@ -1182,13 +1207,18 @@ export class PoolStateCache {
     }
 
     if (offpeg !== null) {
-      const ratesRes = await state.call({
-        to: pool,
-        data: curveIface.encodeFunctionData("stored_rates"),
-      });
-      const rates = (curveIface.decodeFunctionResult("stored_rates", ratesRes)[0] as bigint[]).map(
-        (r) => BigInt(r),
-      );
+      let rates: bigint[];
+      try {
+        const ratesRes = await state.call({
+          to: pool,
+          data: curveIface.encodeFunctionData("stored_rates"),
+        });
+        rates = decodeCurveStoredRates(ratesRes);
+      } catch (error) {
+        if (isStateCallAbortedError(error)) throw error;
+        rates = await this.readCurveStaticRates(state, coins);
+      }
+      assertCurveRates(pool, coins, rates);
       const ng: CurveNgState = { A, fee, offpegFeeMultiplier: offpeg, balances, rates };
       return { kind: "ng", coins, ng, blockNumber: this.tickBlock, source: "lazy" };
     }
@@ -1206,6 +1236,29 @@ export class PoolStateCache {
     }
     const plain: CurvePlainState = { A, fee, balances, rates };
     return { kind: "plain", coins, plain, blockNumber: this.tickBlock, source: "lazy" };
+  }
+
+  private async readCurveStaticRates(
+    state: StateBackend,
+    coins: readonly string[],
+  ): Promise<bigint[]> {
+    const rates: bigint[] = [];
+    for (const coin of coins) {
+      const nativeRate = curveNativeRateMultiplier(coin);
+      if (nativeRate !== null) {
+        rates.push(nativeRate);
+        continue;
+      }
+      const decimals = Number(
+        await this.call(
+          state,
+          coin,
+          erc20Iface.encodeFunctionData("decimals"),
+        ),
+      );
+      rates.push(curveRateMultiplierFromDecimals(decimals));
+    }
+    return rates;
   }
 
   private async readCoins(state: StateBackend, pool: string): Promise<string[]> {
@@ -1250,6 +1303,42 @@ function cloneNg(state: CurveNgState): CurveNgState {
     balances: [...state.balances],
     rates: [...state.rates],
   };
+}
+
+function decodeCurveStoredRates(data: string): bigint[] {
+  return (
+    curveIface.decodeFunctionResult("stored_rates", data)[0] as bigint[]
+  ).map(BigInt);
+}
+
+function curveStaticRates(
+  coins: readonly string[],
+  results: Map<string, string>,
+  key: string,
+): bigint[] {
+  return coins.map((coin, index) => {
+    const nativeRate = curveNativeRateMultiplier(coin);
+    if (nativeRate !== null) return nativeRate;
+    const decimals = Number(
+      BigInt(
+        requireCurveBatchData(results, `${key}:decimals:${index}`),
+      ),
+    );
+    return curveRateMultiplierFromDecimals(decimals);
+  });
+}
+
+function assertCurveRates(
+  pool: string,
+  coins: readonly string[],
+  rates: readonly bigint[],
+): void {
+  if (
+    rates.length !== coins.length ||
+    rates.some((rate) => rate <= 0n)
+  ) {
+    throw new Error(`curve ${pool}: invalid rate vector`);
+  }
 }
 
 function requireCurveBatchData(results: Map<string, string>, label: string): string {

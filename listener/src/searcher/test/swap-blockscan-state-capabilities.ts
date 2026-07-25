@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { curveNgGetDy } from "../solver/curve-math.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import {
   assertPureSynchronousDeriveMids,
@@ -94,6 +95,12 @@ const curveIntBalanceIface = new ethers.Interface([
 const curveUnderlyingIface = new ethers.Interface([
   "function get_dy_underlying(int128 i,int128 j,uint256 dx) view returns (uint256)",
 ]);
+const curveIntQuoteIface = new ethers.Interface([
+  "function get_dy(int128 i,int128 j,uint256 dx) view returns (uint256)",
+]);
+const curveUintQuoteIface = new ethers.Interface([
+  "function get_dy(uint256 i,uint256 j,uint256 dx) view returns (uint256)",
+]);
 const curveMetaRegistryStateIface = new ethers.Interface([
   "function get_underlying_decimals(address pool) view returns (uint256[8])",
   "function get_underlying_balances(address pool) view returns (uint256[8])",
@@ -109,10 +116,12 @@ const pureFixtureFamilyIds = new Set<string>();
 
 await runUniV2();
 await runUniV3();
+await runUniV3ExtremePrice();
 await runUniV4();
 await runInactiveUniPools();
 await runMalformedUniState();
 await runCurvePlain();
+await runCurveOffpegStaticRates();
 await runCurveUnderlying();
 await runBalancerV3();
 await runDodoV2();
@@ -178,6 +187,57 @@ async function runUniV3(): Promise<void> {
   assert.equal(result.snapshot.tickSpacing, 60);
   assert.equal(result.snapshot.observationCardinality, 1);
   assert.equal(result.snapshot.unlocked, true);
+}
+
+async function runUniV3ExtremePrice(): Promise<void> {
+  // Mainnet 0x616c... at source block 25,610,261. The token0 virtual
+  // reserve is below one wei, so floor division used to erase both edges.
+  const sqrtPriceX96 =
+    104900925875096973426354586331491637011052178n;
+  const liquidity = 98_607n;
+  const edges = twoTokenEdges("univ3-swap");
+  const result = await execute(
+    univ3StandardAdapter.id,
+    univ3BlockScanState,
+    edges,
+    (read) => {
+      const selector = read.data.slice(0, 10);
+      if (selector === v3Iface.getFunction("slot0")!.selector) {
+        return v3Iface.encodeFunctionResult("slot0", [
+          sqrtPriceX96,
+          696_424,
+          0,
+          2,
+          2,
+          102,
+          true,
+        ]);
+      }
+      if (selector === v3Iface.getFunction("liquidity")!.selector) {
+        return v3Iface.encodeFunctionResult("liquidity", [liquidity]);
+      }
+      throw new Error(`unexpected extreme-v3 read ${read.id}`);
+    },
+    { recordProductionFixture: false },
+  );
+  const direct = result.mids.get(blockScanEdgeKey(edges[0]));
+  const reverse = result.mids.get(blockScanEdgeKey(edges[1]));
+  assert(direct && reverse, "extreme concentrated-liquidity mids remain available");
+  const reserve0Floor = liquidity * Q96 / sqrtPriceX96;
+  const reserve1Floor = liquidity * sqrtPriceX96 / Q96;
+  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
+  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
+  assert.equal(reserve0, 1n, "source fixture exercises sub-wei virtual reserve");
+  assert.equal(direct.reserveA, reserve0);
+  assert.equal(direct.reserveB, reserve1);
+  assert.equal(reverse.reserveA, reserve1);
+  assert.equal(reverse.reserveB, reserve0);
+  assert(Number.isFinite(direct.mid) && direct.mid > 0);
+  assert(Number.isFinite(reverse.mid) && reverse.mid > 0);
+  assert(
+    Math.abs(direct.mid * reverse.mid - 1) < 1e-12,
+    "directed spot prices remain reciprocal",
+  );
 }
 
 async function runUniV4(): Promise<void> {
@@ -390,6 +450,135 @@ async function runCurvePlain(): Promise<void> {
     return blockScanMulticallIface.encodeFunctionResult("aggregate3", [responses]);
   });
   assert.equal(result.initialReads.length, 1);
+  for (const edge of edges) {
+    assert.ok((result.mids.get(blockScanEdgeKey(edge))?.mid ?? 0) > 0);
+  }
+}
+
+async function runCurveOffpegStaticRates(): Promise<void> {
+  const edges = twoTokenEdges("curve-exchange-plain").map((edge, index) => ({
+    ...edge,
+    curveI: index,
+    curveJ: index === 0 ? 1 : 0,
+  }));
+  const result = await execute(
+    curvePlainAdapter.id,
+    curvePlainBlockScanState,
+    edges,
+    (read) => {
+      if (
+        read.data.slice(0, 10) ===
+        blockScanErc20Iface.getFunction("decimals")!.selector
+      ) {
+        const decimals = read.to.toLowerCase() === TOKEN0.toLowerCase()
+          ? 18
+          : 6;
+        return blockScanErc20Iface.encodeFunctionResult(
+          "decimals",
+          [decimals],
+        );
+      }
+      assert.equal(read.to.toLowerCase(), BLOCKSCAN_MULTICALL3.toLowerCase());
+      const calls = blockScanMulticallIface.decodeFunctionData(
+        "aggregate3",
+        read.data,
+      )[0] as readonly { target: string; callData: string }[];
+      const responses = calls.map(({ callData }) => {
+        const selector = callData.slice(0, 10);
+        if (selector === curveStateIface.getFunction("A")!.selector) {
+          return {
+            success: true,
+            returnData: curveStateIface.encodeFunctionResult("A", [2_000]),
+          };
+        }
+        if (selector === curveStateIface.getFunction("fee")!.selector) {
+          return {
+            success: true,
+            returnData: curveStateIface.encodeFunctionResult(
+              "fee",
+              [4_000_000],
+            ),
+          };
+        }
+        if (
+          selector ===
+          curveStateIface.getFunction("offpeg_fee_multiplier")!.selector
+        ) {
+          return {
+            success: true,
+            returnData: curveStateIface.encodeFunctionResult(
+              "offpeg_fee_multiplier",
+              [20_000_000_000n],
+            ),
+          };
+        }
+        if (selector === curveStateIface.getFunction("stored_rates")!.selector) {
+          return { success: false, returnData: "0x" };
+        }
+        if (selector === curveStateIface.getFunction("balances")!.selector) {
+          return { success: false, returnData: "0x" };
+        }
+        if (
+          selector ===
+          curveIntBalanceIface.getFunction("balances")!.selector
+        ) {
+          const index = Number(
+            curveIntBalanceIface.decodeFunctionData("balances", callData)[0],
+          );
+          return {
+            success: true,
+            returnData: curveIntBalanceIface.encodeFunctionResult(
+              "balances",
+              [index === 0 ? 1_000_000n * UNIT : 1_000_000n * 10n ** 6n],
+            ),
+          };
+        }
+        if (
+          selector ===
+            curveIntQuoteIface.getFunction("get_dy")!.selector ||
+          selector ===
+            curveUintQuoteIface.getFunction("get_dy")!.selector
+        ) {
+          const iface = selector ===
+              curveIntQuoteIface.getFunction("get_dy")!.selector
+            ? curveIntQuoteIface
+            : curveUintQuoteIface;
+          const decoded = iface.decodeFunctionData("get_dy", callData);
+          const amountOut = curveNgGetDy(
+            {
+              A: 2_000n,
+              fee: 4_000_000n,
+              offpegFeeMultiplier: 20_000_000_000n,
+              balances: [
+                1_000_000n * UNIT,
+                1_000_000n * 10n ** 6n,
+              ],
+              rates: [10n ** 18n, 10n ** 30n],
+            },
+            Number(decoded[0]),
+            Number(decoded[1]),
+            BigInt(decoded[2]),
+          );
+          return {
+            success: true,
+            returnData: iface.encodeFunctionResult("get_dy", [amountOut]),
+          };
+        }
+        throw new Error(`unexpected Curve dynamic-fee inner call ${selector}`);
+      });
+      return blockScanMulticallIface.encodeFunctionResult(
+        "aggregate3",
+        [responses],
+      );
+    },
+    { recordProductionFixture: false },
+  );
+  assert.equal(result.snapshot.kind, "ng");
+  assert.deepEqual(
+    result.snapshot.state.rates,
+    [10n ** 18n, 10n ** 30n],
+    "dynamic-fee Curve without stored_rates uses decimal-derived rates",
+  );
   for (const edge of edges) {
     assert.ok((result.mids.get(blockScanEdgeKey(edge))?.mid ?? 0) > 0);
   }
