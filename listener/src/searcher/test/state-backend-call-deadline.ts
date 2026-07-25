@@ -54,6 +54,20 @@ const controlledCall = backend.call.bind(backend) as (
 ) => Promise<string>;
 
 try {
+  const caller = new AbortController();
+  const inFlight = controlledCall(
+    { to: "0x0000000000000000000000000000000000000001", data: HANG_DATA },
+    { deadlineAtMs: Date.now() + 1_000, signal: caller.signal },
+  );
+  await waitUntil(() => requestsReceived === 1 && activeResponses === 1, 500);
+  caller.abort(new Error("test caller cancellation"));
+  await assert.rejects(
+    inFlight,
+    (error: unknown) => isCancellation(error, "signal"),
+    "caller cancellation must reject with a typed signal cancellation",
+  );
+  await waitUntil(() => abortedResponses === 1 && activeResponses === 0, 500);
+
   const startedAt = Date.now();
   await assert.rejects(
     controlledCall(
@@ -64,7 +78,7 @@ try {
     "deadline-bound eth_call must reject with a typed deadline cancellation",
   );
   assert(Date.now() - startedAt < 500, "deadline-bound eth_call must not wait for the late response");
-  await waitUntil(() => abortedResponses === 1 && activeResponses === 0, 500);
+  await waitUntil(() => activeResponses === 0, 500);
 
   const beforeExpired = requestsReceived;
   await assert.rejects(
@@ -86,6 +100,11 @@ try {
       return value.data === REVERT_DATA || value.info?.error?.data === REVERT_DATA;
     },
     "raw cancellable transport must preserve JSON-RPC revert data",
+  );
+  await assert.rejects(
+    backend.start(),
+    /already owned by another process/,
+    "backend startup must not attach to a foreign Anvil-compatible port",
   );
 } finally {
   backend.provider.destroy();
@@ -124,6 +143,13 @@ async function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<v
 }
 
 function isDeadlineCancellation(error: unknown): boolean {
+  return isCancellation(error, "deadline");
+}
+
+function isCancellation(
+  error: unknown,
+  kind: "deadline" | "signal",
+): boolean {
   const value = error as { code?: unknown; kind?: unknown };
-  return value?.code === "STATE_CALL_ABORTED" && value.kind === "deadline";
+  return value?.code === "STATE_CALL_ABORTED" && value.kind === kind;
 }

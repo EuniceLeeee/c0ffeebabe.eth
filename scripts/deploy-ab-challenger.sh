@@ -156,6 +156,35 @@ hash_file() {
   sha256sum "$1" | awk '{print $1}'
 }
 
+validate_universe_manifest() {
+  local manifest=$1 universe=$2 universe_hash universe_pools from_block to_block
+  [ -s "$manifest" ] || die "pool universe manifest is missing: $manifest"
+  universe_hash=$(hash_file "$universe")
+  universe_pools=$(jq -er '.pools | length' "$universe") \
+    || die "pool universe has no pool inventory: $universe"
+  from_block=$(jq -er '.fromBlock | select(type == "number" and floor == .)' "$universe") \
+    || die "pool universe fromBlock is invalid: $universe"
+  to_block=$(jq -er '.toBlock | select(type == "number" and floor == .)' "$universe") \
+    || die "pool universe toBlock is invalid: $universe"
+  jq -e \
+    --arg universe_hash "$universe_hash" \
+    --argjson universe_pools "$universe_pools" \
+    --argjson from_block "$from_block" \
+    --argjson to_block "$to_block" '
+      .schemaVersion == 1
+      and .profile == "pool-universe-build-manifest-v1"
+      and .chainId == 1
+      and .source.number == $to_block
+      and (.source.hash | type == "string" and test("^0x[0-9a-fA-F]{64}$"))
+      and (.source.stateRoot | type == "string" and test("^0x[0-9a-fA-F]{64}$"))
+      and .inputs.fromBlock == $from_block
+      and .inputs.toBlock == $to_block
+      and .output.contentSha256 == $universe_hash
+      and .output.pools == $universe_pools
+    ' "$manifest" >/dev/null \
+    || die "pool universe manifest does not bind its universe/window: $manifest"
+}
+
 hash_or_unavailable() {
   if [ -f "$1" ]; then sha256sum "$1" | awk '{print $1}'; else echo unavailable; fi
 }
@@ -1065,7 +1094,7 @@ build_runtime_env() {
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$a_common"
@@ -1108,6 +1137,9 @@ EOF
   [ -n "${B_UNIVERSE:-}" ] && [ -f "$B_UNIVERSE" ] \
     || die "prepared challenger pool universe missing"
   echo "SEARCHER_POOL_UNIVERSE_PATH=$B_UNIVERSE" >> "$runtime_env"
+  if [ -s "${B_UNIVERSE_MANIFEST:-}" ]; then
+    echo "SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=$B_UNIVERSE_MANIFEST" >> "$runtime_env"
+  fi
   python3 - "$a_common" "$runtime_env" <<'PY'
 import sys
 for path in sys.argv[1:]:
@@ -1124,7 +1156,7 @@ PY
   while IFS= read -r line; do
     local key=${line%%=*}
     case "$key" in
-      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH) continue ;;
+      SEARCHER_EVENTS_PATH|SEARCHER_ANVIL_PORT|SEARCHER_BLOCKSCAN_ANVIL_PORT|SEARCHER_LIVE_RPC_URL|SEARCHER_LIVE_WS_URL|SEARCHER_RUNTIME_COMMIT|SEARCHER_POOL_UNIVERSE_PATH|SEARCHER_POOL_UNIVERSE_MANIFEST_PATH) continue ;;
     esac
     if [[ "$allowed" == *",$key,"* ]]; then continue; fi
     echo "$line" >> "$b_common"
@@ -1253,7 +1285,7 @@ prepare_challenger_dependencies() {
 }
 
 resolve_a_universe() {
-  local a_pool_path
+  local a_pool_path a_manifest_path a_universe_schema
   a_pool_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_PATH)
   if [ -z "$a_pool_path" ]; then
     A_UNIVERSE="$MAIN_REPO/listener/searcher/pools/active-pools.json"
@@ -1263,10 +1295,32 @@ resolve_a_universe() {
     A_UNIVERSE="$MAIN_REPO/listener/$a_pool_path"
   fi
   [ -f "$A_UNIVERSE" ] || die "champion pool universe missing: $A_UNIVERSE"
+  a_manifest_path=$(file_env_get "$A_PROCESS_ENV" SEARCHER_POOL_UNIVERSE_MANIFEST_PATH)
+  if [ -z "$a_manifest_path" ]; then
+    A_UNIVERSE_MANIFEST="$A_UNIVERSE.manifest.json"
+  elif [[ "$a_manifest_path" = /* ]]; then
+    A_UNIVERSE_MANIFEST="$a_manifest_path"
+  else
+    A_UNIVERSE_MANIFEST="$MAIN_REPO/listener/$a_manifest_path"
+  fi
+  [ -s "$A_UNIVERSE_MANIFEST" ] || A_UNIVERSE_MANIFEST=
+  a_universe_schema=$(jq -er '.schemaVersion' "$A_UNIVERSE") \
+    || die "champion pool universe schema is missing"
+  case "$a_universe_schema" in
+    2) ;;
+    3)
+      [ -n "$A_UNIVERSE_MANIFEST" ] \
+        || die "schema-v3 champion universe has no manifest"
+      ;;
+    *) die "champion pool universe schema must be 2 or 3" ;;
+  esac
+  if [ -n "$A_UNIVERSE_MANIFEST" ]; then
+    validate_universe_manifest "$A_UNIVERSE_MANIFEST" "$A_UNIVERSE"
+  fi
 }
 
 prepare_candidate_universes() {
-  local experiment=$1 input_mode=$2 from_block to_block generator_log universe_tmp universe_hash universe_snapshot
+  local experiment=$1 input_mode=$2 from_block to_block generator_log universe_tmp universe_manifest_tmp universe_hash universe_snapshot universe_schema
   A_REPLAY_UNIVERSE="$ROOT/universe/$experiment-baseline-active-pools.json"
   cp -f "$A_UNIVERSE" "$A_REPLAY_UNIVERSE"
   [ "$(hash_file "$A_REPLAY_UNIVERSE")" = "$(hash_file "$A_UNIVERSE")" ] \
@@ -1275,6 +1329,12 @@ prepare_candidate_universes() {
   if [ "$input_mode" = "shared" ]; then
     B_UNIVERSE="$ROOT/universe/$experiment-challenger-active-pools.json"
     cp -f "$A_UNIVERSE" "$B_UNIVERSE"
+    B_UNIVERSE_MANIFEST=
+    if [ -n "${A_UNIVERSE_MANIFEST:-}" ]; then
+      B_UNIVERSE_MANIFEST="$B_UNIVERSE.manifest.json"
+      cp -f "$A_UNIVERSE_MANIFEST" "$B_UNIVERSE_MANIFEST"
+      validate_universe_manifest "$B_UNIVERSE_MANIFEST" "$B_UNIVERSE"
+    fi
     return
   fi
 
@@ -1284,23 +1344,32 @@ prepare_candidate_universes() {
     || die "champion universe has invalid toBlock"
   [ "$from_block" -le "$to_block" ] || die "champion universe block window is inverted"
   universe_tmp="$ROOT/universe/$experiment-challenger-active-pools.tmp.json"
+  universe_manifest_tmp="$universe_tmp.manifest.json"
   generator_log="$ROOT/candidate/$experiment-universe-build.log"
-  rm -f "$universe_tmp"
+  rm -f "$universe_tmp" "$universe_manifest_tmp"
   (
     cd "$WT/listener"
-    timeout 900 env -i \
+    timeout 900 flock -w 30 /run/lock/mev-pooluniverse.lock \
+      env -i \
       PATH="$PATH" HOME="${HOME:-/root}" \
       MAINNET_RPC_URL="$LOCAL_RPC" \
       POOL_UNIVERSE_FROM_BLOCK="$from_block" \
       POOL_UNIVERSE_TO_BLOCK="$to_block" \
+      POOL_UNIVERSE_RETAIN_PATH="$A_UNIVERSE" \
       POOL_UNIVERSE_OUT="$universe_tmp" \
-      POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS=0 \
+      POOL_UNIVERSE_MANIFEST_OUT="$universe_manifest_tmp" \
       npx tsx src/searcher/build-active-pool-universe.ts
   ) >"$generator_log" 2>&1 \
     || die "challenger universe generation failed (see $generator_log)"
-  [ -f "$universe_tmp" ] || die "challenger universe generator produced no file"
+  [ -f "$universe_tmp" ] \
+    || die "challenger universe generator produced no universe"
+  universe_schema=$(jq -r '.schemaVersion // 0' "$universe_tmp")
+  if [ "$universe_schema" = "3" ]; then
+    [ -f "$universe_manifest_tmp" ] \
+      || die "schema-v3 challenger universe generator produced no manifest"
+  fi
   jq -e --argjson from "$from_block" --argjson to "$to_block" '
-    .schemaVersion == 2
+    (.schemaVersion == 2 or .schemaVersion == 3)
     and .fromBlock == $from
     and .toBlock == $to
     and (.pools | type == "array" and length > 0)
@@ -1315,6 +1384,12 @@ prepare_candidate_universes() {
     rm -f "$universe_tmp"
   else
     mv "$universe_tmp" "$universe_snapshot"
+  fi
+  B_UNIVERSE_MANIFEST=
+  if [ -f "$universe_manifest_tmp" ]; then
+    B_UNIVERSE_MANIFEST="$universe_snapshot.manifest.json"
+    mv "$universe_manifest_tmp" "$B_UNIVERSE_MANIFEST"
+    validate_universe_manifest "$B_UNIVERSE_MANIFEST" "$universe_snapshot"
   fi
   B_UNIVERSE="$universe_snapshot"
 }
@@ -1580,12 +1655,21 @@ deploy() {
     || safety_abort router_admission_paths_differ
   router_hash=$(hash_file "$a_router_path")
   [[ "$router_hash" =~ ^[0-9a-f]{64}$ ]] || safety_abort router_admission_hash_unavailable
-  local a_universe_hash b_universe_hash a_universe_from a_universe_to b_universe_from b_universe_to
+  local a_universe_hash b_universe_hash a_universe_manifest_hash b_universe_manifest_hash
+  local a_universe_from a_universe_to b_universe_from b_universe_to
   local a_log a_view_hash b_view_hash a_graph_hash b_graph_hash
   local a_feed_hash b_feed_hash
   local discovery_to_block
   a_universe_hash=$(hash_file "$A_UNIVERSE")
   b_universe_hash=$(hash_file "$B_UNIVERSE")
+  a_universe_manifest_hash=unavailable
+  b_universe_manifest_hash=unavailable
+  if [ -n "${A_UNIVERSE_MANIFEST:-}" ]; then
+    a_universe_manifest_hash=$(hash_file "$A_UNIVERSE_MANIFEST")
+  fi
+  if [ -n "${B_UNIVERSE_MANIFEST:-}" ]; then
+    b_universe_manifest_hash=$(hash_file "$B_UNIVERSE_MANIFEST")
+  fi
   a_universe_from=$(jq -er '.fromBlock | select(type == "number" and floor == .)' "$A_UNIVERSE") \
     || safety_abort champion_universe_window_unavailable
   a_universe_to=$(jq -er '.toBlock | select(type == "number" and floor == .)' "$A_UNIVERSE") \
@@ -1630,6 +1714,10 @@ deploy() {
     a_revm_hash "$a_revm_hash" b_revm_hash "$b_revm_hash" \
     a_revm_hash_after "$a_revm_hash" b_revm_hash_after "$b_revm_hash" \
     a_universe_hash "$a_universe_hash" b_universe_hash "$b_universe_hash" \
+    a_universe_manifest_path "${A_UNIVERSE_MANIFEST:-}" \
+    b_universe_manifest_path "${B_UNIVERSE_MANIFEST:-}" \
+    a_universe_manifest_hash "$a_universe_manifest_hash" \
+    b_universe_manifest_hash "$b_universe_manifest_hash" \
     a_universe_from_block "$a_universe_from" a_universe_to_block "$a_universe_to" \
     b_universe_from_block "$b_universe_from" b_universe_to_block "$b_universe_to" \
     b_universe_generator_commit "$b_commit" \
