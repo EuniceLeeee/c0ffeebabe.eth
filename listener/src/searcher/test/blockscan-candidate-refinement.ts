@@ -10,7 +10,9 @@ import { selectFamilyFairExpansionEdges } from "../detector/blockscan-scanner-co
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
+  blockScanEdgeInstanceCircuitKey,
   blockScanEdgeFamilyId,
+  blockScanFailureCircuitAttribution,
   blockScanRouteFamilyIds,
   selectByBlockScanFamily,
 } from "../detector/blockscan-family-budget.js";
@@ -159,12 +161,17 @@ assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "univ2-swap");
 assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
 
 familyFairAdmissionAndCircuit();
+instanceAttributionCannotEscapeCurrentRoute();
+singletonManagerInstancesDoNotCollide();
 badFamilyHighScoreFloodCannotConsumeExpansionCap();
 await failingFamilyCannotConsumeRefinementCap();
+await differentInstanceFailuresDoNotOpenFamilyCircuit();
+await sameInstanceCircuitDoesNotBlockOppositeDirection();
 await neverSettlingFamilyUsesLocalBudget();
 await mixedRouteTimeoutIsAttributedToCurrentLeg();
+await earlyZeroDoesNotClearUnvisitedInstanceCircuit();
 await transientCircuitWaitsForInflightRecovery();
-await confirmedPositiveSurvivesLaterFamilyCircuit();
+await confirmedPositiveSurvivesLaterInstanceCircuit();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -291,6 +298,77 @@ function familyFairAdmissionAndCircuit(): void {
   );
 }
 
+function instanceAttributionCannotEscapeCurrentRoute(): void {
+  const edge = familyEdge("owned-family", 70);
+  const forged = familyEdge("owned-family", 71);
+  const forgedAttribution = blockScanFailureCircuitAttribution(
+    [edge],
+    new BlockScanFamilyAttributedError(
+      "owned-family",
+      "test",
+      new Error("forged"),
+      forged.canonicalEdgeId ?? null,
+    ),
+  );
+  assert.deepEqual(
+    forgedAttribution,
+    {
+      scope: "family",
+      key: "owned-family",
+      familyId: "owned-family",
+    },
+    "a canonical edge outside the current route cannot create an orphan instance circuit",
+  );
+
+  const wrongOwner = blockScanFailureCircuitAttribution(
+    [edge],
+    new BlockScanFamilyAttributedError(
+      "other-family",
+      "test",
+      new Error("wrong owner"),
+      edge.canonicalEdgeId ?? null,
+    ),
+  );
+  assert.equal(
+    wrongOwner.scope,
+    "composite",
+    "an attributed owner outside the current route must fail safe to the route composite",
+  );
+
+  const legacyEdge = {
+    ...edge,
+    canonicalEdgeId: undefined,
+  };
+  const legacy = blockScanFailureCircuitAttribution(
+    [legacyEdge],
+    new BlockScanFamilyAttributedError(
+      "owned-family",
+      "test",
+      new Error("legacy"),
+    ),
+  );
+  assert.equal(legacy.scope, "family");
+  assert.equal(legacy.key, "owned-family");
+}
+
+function singletonManagerInstancesDoNotCollide(): void {
+  const target = "0x0000000000000000000000000000000000000075";
+  const first = familyEdge("singleton-family", 75, {
+    target,
+    poolId: `0x${"01".padStart(64, "0")}`,
+  });
+  const second = familyEdge("singleton-family", 75, {
+    target,
+    poolId: `0x${"02".padStart(64, "0")}`,
+  });
+  assert.notEqual(first.canonicalEdgeId, second.canonicalEdgeId);
+  assert.notEqual(
+    blockScanEdgeInstanceCircuitKey(first),
+    blockScanEdgeInstanceCircuitKey(second),
+    "singleton-manager pools sharing one target must retain distinct instance circuits",
+  );
+}
+
 async function failingFamilyCannotConsumeRefinementCap(): Promise<void> {
   const poolA = "0x00000000000000000000000000000000000000b1";
   const poolB = "0x00000000000000000000000000000000000000b2";
@@ -355,11 +433,13 @@ async function failingFamilyCannotConsumeRefinementCap(): Promise<void> {
   assert.equal(result.deadlineHit, false);
   assert.equal(result.attempted, 4, "the breaker stops new bad-family quote probes");
   assert.deepEqual(result.openFamilyIds, ["bad-family"]);
+  assert.deepEqual(result.openInstanceCircuitKeys, []);
   assert(
     probeDiagnostics.some(({ attempted, failure }) =>
       attempted &&
       failure?.reason === "quote_error" &&
       failure.attributedFamilyId === "bad-family" &&
+      failure.blockingCircuitScope === "family" &&
       failure.stage === "exact quote"
     ),
     "direct adapter quote failures must carry their family and stage",
@@ -368,6 +448,7 @@ async function failingFamilyCannotConsumeRefinementCap(): Promise<void> {
     probeDiagnostics.some(({ attempted, failure }) =>
       !attempted &&
       failure?.reason === "family_circuit_open" &&
+      failure.blockingCircuitScope === "family" &&
       failure.familyIds.includes("bad-family")
     ),
     "circuit-skipped routes must be distinguishable from attempted quote failures",
@@ -376,6 +457,148 @@ async function failingFamilyCannotConsumeRefinementCap(): Promise<void> {
     result.opportunities.map((item) => item.cycleId),
     ["healthy"],
     "exact failures fail closed while the interleaved healthy family survives",
+  );
+}
+
+async function differentInstanceFailuresDoNotOpenFamilyCircuit(): Promise<void> {
+  const pools = Array.from(
+    { length: 4 },
+    (_, index) =>
+      `0x${(0x120 + index).toString(16).padStart(40, "0")}`,
+  );
+  const failingPools = new Set(pools.slice(0, 3).map((pool) => pool.toLowerCase()));
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      if (failingPools.has(req.to.toLowerCase())) {
+        throw new Error("injected unrelated instance failure");
+      }
+      assert.equal(req.to.toLowerCase(), pools[3]);
+      const selector = req.data.slice(0, 10);
+      if (selector === pair.getFunction("token0")!.selector) {
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult(
+          "getReserves",
+          [1_000_000n, 2_000_000n, 0],
+        );
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected different-instance selector ${selector}`);
+    },
+  } as StateBackend;
+  const opportunities = pools.map((pool, index): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: index === 3 ? "target-instance" : `unrelated-failure-${index}`,
+    cycleFingerprint: `different-instance-${index}`,
+    seedEdges: [familyEdge("univ2-standard", 400 + index, {
+      adapterId: "univ2-swap",
+      target: pool,
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+    })],
+  }));
+  const result = await refineBlockScanCandidates(
+    state,
+    opportunities,
+    opportunities.length,
+    Date.now() + 2_000,
+    pricedTokens,
+    undefined,
+    1,
+    {
+      familyTimeoutMs: 500,
+      maxConcurrentPerFamily: 1,
+    },
+  );
+  assert.equal(result.attempted, 4);
+  assert.equal(result.positive, 1);
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.deepEqual(result.openInstanceCircuitKeys, []);
+  assert.deepEqual(
+    result.opportunities.map(({ cycleId }) => cycleId),
+    ["target-instance"],
+    "three unrelated failures must not suppress the exact-positive target instance",
+  );
+}
+
+async function sameInstanceCircuitDoesNotBlockOppositeDirection(): Promise<void> {
+  const pool = "0x0000000000000000000000000000000000000150";
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  let token0Calls = 0;
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      assert.equal(req.to.toLowerCase(), pool);
+      const selector = req.data.slice(0, 10);
+      if (selector === pair.getFunction("token0")!.selector) {
+        if (token0Calls++ < 3) {
+          throw new Error("injected forward-instance failure");
+        }
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult(
+          "getReserves",
+          [2_000_000n, 1_000_000n, 0],
+        );
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected opposite-direction selector ${selector}`);
+    },
+  } as StateBackend;
+  const forward = (index: number): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: `forward-${index}`,
+    cycleFingerprint: `forward-${index}`,
+    seedEdges: [familyEdge("shared-direction-family", 430, {
+      adapterId: "univ2-swap",
+      target: pool,
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+    })],
+  });
+  const reverse: BlockScanOpportunity = {
+    ...opportunity(TOKEN_18, 1_024n),
+    cycleId: "reverse-target",
+    cycleFingerprint: "reverse-target",
+    seedEdges: [familyEdge("shared-direction-family", 430, {
+      adapterId: "univ2-swap",
+      target: pool,
+      tokenIn: TOKEN_18,
+      tokenOut: TOKEN_6,
+    })],
+  };
+  const diagnostics = new Map<number, BlockScanProbeDiagnostic>();
+  const result = await refineBlockScanCandidates(
+    state,
+    [forward(0), forward(1), forward(2), forward(3), reverse],
+    5,
+    Date.now() + 2_000,
+    pricedTokens,
+    (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
+    1,
+    {
+      familyTimeoutMs: 500,
+      maxConcurrentPerFamily: 1,
+    },
+  );
+  assert.equal(result.attempted, 4);
+  assert.equal(result.positive, 1);
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.equal(result.openInstanceCircuitKeys.length, 1);
+  assert.equal(diagnostics.get(3)?.attempted, false);
+  assert.equal(diagnostics.get(3)?.failure?.reason, "instance_circuit_open");
+  assert.equal(diagnostics.get(3)?.failure?.blockingCircuitScope, "instance");
+  assert.equal(diagnostics.get(4)?.status, "positive");
+  assert.deepEqual(
+    result.opportunities.map(({ cycleId }) => cycleId),
+    ["reverse-target"],
+    "a directed-edge circuit must not suppress the same pool in the opposite direction",
   );
 }
 
@@ -503,12 +726,13 @@ async function neverSettlingFamilyUsesLocalBudget(): Promise<void> {
   assert.equal(result.deadlineHit, false);
   assert.equal(
     result.attempted,
-    4,
-    "three timed-out bad probes open the family circuit before the fourth starts",
+    5,
+    "instance-local timeouts remain bounded without suppressing another family",
   );
-  assert.equal(badCalls, 3);
+  assert.equal(badCalls, 4);
   assert(healthyCalls > 0, "healthy family exact reads must still execute");
-  assert.deepEqual(result.openFamilyIds, ["bad-family"]);
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.deepEqual(result.openInstanceCircuitKeys, []);
   assert.deepEqual(
     result.opportunities.map((item) => item.cycleId),
     ["healthy-after-never"],
@@ -557,35 +781,114 @@ async function mixedRouteTimeoutIsAttributedToCurrentLeg(): Promise<void> {
   assert.deepEqual(result.openCompositeKeys, []);
   assert.equal(diagnostics[0]?.failure?.reason, "family_timeout");
   assert.equal(diagnostics[0]?.failure?.attributedFamilyId, "bad-family");
+  assert.equal(diagnostics[0]?.failure?.blockingCircuitScope, "instance");
+  assert.match(
+    diagnostics[0]?.failure?.attributedInstanceCircuitKey ?? "",
+    /^\u0000blockscan-edge:/,
+  );
   assert.equal(diagnostics[0]?.failure?.stage, "exact quote");
 }
 
-async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
-  const pools = Array.from(
-    { length: 6 },
-    (_, index) =>
-      `0x${(0x180 + index).toString(16).padStart(40, "0")}`,
-  );
+async function earlyZeroDoesNotClearUnvisitedInstanceCircuit(): Promise<void> {
+  const zeroPool = "0x0000000000000000000000000000000000000170";
+  const failedPool = "0x0000000000000000000000000000000000000171";
   const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
-  const starts = pools.map(() => deferred<void>());
-  const calls = pools.map(() => deferred<void>());
-  const poolIndexes = new Map(
-    pools.map((pool, index) => [pool.toLowerCase(), index]),
-  );
-  const started = new Set<number>();
+  const zeroStarted = deferred<void>();
+  const releaseZero = deferred<void>();
+  const diagnostics = new Map<number, BlockScanProbeDiagnostic>();
   const state = {
     async call(req: { to: string; data: string }): Promise<string> {
-      const pool = req.to.toLowerCase();
-      const index = poolIndexes.get(pool);
-      assert.notEqual(index, undefined, `unexpected transient-circuit pool ${pool}`);
       const selector = req.data.slice(0, 10);
-      if (
-        selector === pair.getFunction("token0")!.selector &&
-        !started.has(index!)
-      ) {
-        started.add(index!);
-        starts[index!].resolve();
-        await calls[index!].promise;
+      if (req.to.toLowerCase() === failedPool) {
+        throw new Error("injected unvisited-instance failure");
+      }
+      assert.equal(req.to.toLowerCase(), zeroPool);
+      if (selector === pair.getFunction("token0")!.selector) {
+        zeroStarted.resolve();
+        await releaseZero.promise;
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult("getReserves", [1_000_000n, 1n, 0]);
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected early-zero selector ${selector}`);
+    },
+  } as StateBackend;
+  const failedEdge = familyEdge("early-zero-family", 461, {
+    adapterId: "univ2-swap",
+    target: failedPool,
+    tokenIn: TOKEN_18,
+    tokenOut: TOKEN_6,
+  });
+  const earlyRoute: BlockScanOpportunity = {
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: "early-zero-route",
+    cycleFingerprint: "early-zero-route",
+    seedEdges: [
+      familyEdge("early-zero-family", 460, {
+        adapterId: "univ2-swap",
+        target: zeroPool,
+        tokenIn: TOKEN_6,
+        tokenOut: TOKEN_18,
+      }),
+      failedEdge,
+    ],
+  };
+  const failures = Array.from({ length: 3 }, (_, index): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_18, 1_024n),
+    cycleId: `unvisited-failure-${index}`,
+    cycleFingerprint: `unvisited-failure-${index}`,
+    seedEdges: [failedEdge],
+  }));
+  const refinement = refineBlockScanCandidates(
+    state,
+    [earlyRoute, ...failures],
+    4,
+    Date.now() + 2_000,
+    pricedTokens,
+    (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
+    4,
+    {
+      familyTimeoutMs: 1_000,
+      maxConcurrentPerFamily: 4,
+    },
+  );
+  await zeroStarted.promise;
+  await waitUntil(
+    () => diagnostics.get(3)?.status === "failed",
+    "three sibling failures did not open the unvisited instance circuit",
+  );
+  releaseZero.resolve();
+  const result = await refinement;
+  assert.equal(diagnostics.get(0)?.status, "negative");
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.deepEqual(
+    result.openInstanceCircuitKeys,
+    [blockScanEdgeInstanceCircuitKey(failedEdge)],
+    "an early-zero route may clear only the leg it actually quoted",
+  );
+}
+
+async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
+  const pool = "0x0000000000000000000000000000000000000180";
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  const starts = Array.from({ length: 6 }, () => deferred<void>());
+  const calls = Array.from({ length: 6 }, () => deferred<void>());
+  const started = new Set<number>();
+  let token0CallIndex = 0;
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      assert.equal(req.to.toLowerCase(), pool);
+      const selector = req.data.slice(0, 10);
+      if (selector === pair.getFunction("token0")!.selector) {
+        const index = token0CallIndex++;
+        assert(index < starts.length, "unexpected extra token0 probe");
+        started.add(index);
+        starts[index].resolve();
+        await calls[index].promise;
       }
       if (selector === pair.getFunction("token0")!.selector) {
         return pair.encodeFunctionResult("token0", [TOKEN_6]);
@@ -599,11 +902,11 @@ async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
       throw new Error(`unexpected transient-circuit selector ${selector}`);
     },
   } as StateBackend;
-  const opportunities = pools.map((pool, index): BlockScanOpportunity => ({
+  const opportunities = Array.from({ length: 6 }, (_, index): BlockScanOpportunity => ({
     ...opportunity(TOKEN_6, 1_024n),
     cycleId: `transient-${index}`,
     cycleFingerprint: `transient-${index}`,
-    seedEdges: [familyEdge("transient-family", 340 + index, {
+    seedEdges: [familyEdge("transient-family", 340, {
       adapterId: "univ2-swap",
       target: pool,
       tokenIn: TOKEN_6,
@@ -638,7 +941,7 @@ async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
   assert.equal(
     started.has(5),
     false,
-    "the pending target must wait while its family circuit is open",
+    "the pending target must wait while its instance circuit is open",
   );
   calls[3].resolve();
   await starts[5].promise;
@@ -646,33 +949,30 @@ async function transientCircuitWaitsForInflightRecovery(): Promise<void> {
   calls[5].resolve();
   const result = await refinement;
   assert.deepEqual(result.openFamilyIds, []);
+  assert.deepEqual(result.openInstanceCircuitKeys, []);
   assert.deepEqual(result.openCompositeKeys, []);
   assert.equal(diagnostics.get(5)?.status, "positive");
   assert.equal(diagnostics.get(5)?.attempted, true);
   assert(
     result.opportunities.some((item) =>
-      item.seedEdges[0]?.target.toLowerCase() === pools[5].toLowerCase()
+      item.cycleId === "transient-5"
     ),
     "a pending route must run after an in-flight success closes its transient circuit",
   );
 }
 
-async function confirmedPositiveSurvivesLaterFamilyCircuit(): Promise<void> {
-  const pools = Array.from(
-    { length: 4 },
-    (_, index) =>
-      `0x${(0x1a0 + index).toString(16).padStart(40, "0")}`,
-  );
-  const goodPool = pools[0].toLowerCase();
-  const badPools = new Set(pools.slice(1).map((pool) => pool.toLowerCase()));
+async function confirmedPositiveSurvivesLaterInstanceCircuit(): Promise<void> {
+  const pool = "0x00000000000000000000000000000000000001a0";
   const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  let token0Calls = 0;
   const state = {
     async call(req: { to: string; data: string }): Promise<string> {
-      const pool = req.to.toLowerCase();
-      if (badPools.has(pool)) throw new Error("injected later pool failure");
-      assert.equal(pool, goodPool);
+      assert.equal(req.to.toLowerCase(), pool);
       const selector = req.data.slice(0, 10);
       if (selector === pair.getFunction("token0")!.selector) {
+        if (token0Calls++ > 0) {
+          throw new Error("injected later instance failure");
+        }
         return pair.encodeFunctionResult("token0", [TOKEN_6]);
       }
       if (selector === pair.getFunction("getReserves")!.selector) {
@@ -687,11 +987,11 @@ async function confirmedPositiveSurvivesLaterFamilyCircuit(): Promise<void> {
       throw new Error(`unexpected retained-positive selector ${selector}`);
     },
   } as StateBackend;
-  const opportunities = pools.map((pool, index): BlockScanOpportunity => ({
+  const opportunities = Array.from({ length: 4 }, (_, index): BlockScanOpportunity => ({
     ...opportunity(TOKEN_6, 1_024n),
     cycleId: index === 0 ? "confirmed-positive" : `later-failure-${index}`,
     cycleFingerprint: `retained-${index}`,
-    seedEdges: [familyEdge("shared-family", 380 + index, {
+    seedEdges: [familyEdge("shared-family", 380, {
       adapterId: "univ2-swap",
       target: pool,
       tokenIn: TOKEN_6,
@@ -711,7 +1011,8 @@ async function confirmedPositiveSurvivesLaterFamilyCircuit(): Promise<void> {
       maxConcurrentPerFamily: 1,
     },
   );
-  assert.deepEqual(result.openFamilyIds, ["shared-family"]);
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.equal(result.openInstanceCircuitKeys.length, 1);
   assert.equal(result.positive, 1);
   assert.deepEqual(
     result.opportunities.map(({ cycleId }) => cycleId),

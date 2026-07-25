@@ -6,6 +6,13 @@ import type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
 export type { V4QuotePathStats } from "../venues/route-leg-adapter.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 
+export class MissingRouteQuoterError extends Error {
+  constructor(readonly adapterId: string) {
+    super(`no quoter for adapter ${adapterId}`);
+    this.name = "MissingRouteQuoterError";
+  }
+}
+
 /**
  * Quoter — per-protocol amountOut estimation on the current fork state.
  * Returns "what would amountIn give you if you swapped right now".
@@ -49,5 +56,5 @@ export async function quote(
       v4QuoteStats,
     });
   }
-  throw new Error(`no quoter for adapter ${adapterId}`);
+  throw new MissingRouteQuoterError(adapterId);
 }

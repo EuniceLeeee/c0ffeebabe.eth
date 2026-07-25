@@ -4,12 +4,17 @@ import {
   type StateBackend,
   withStateCallControl,
 } from "../../shared/state/state-backend.js";
-import { quote } from "../solver/quoter.js";
+import {
+  MissingRouteQuoterError,
+  quote,
+} from "../solver/quoter.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
+  type BlockScanCircuitAttribution,
   blockScanEdgeFamilyId,
+  blockScanFailureCircuitAttribution,
   blockScanRouteFamilyIds,
   orderByBlockScanFamily,
   selectByBlockScanFamily,
@@ -27,6 +32,7 @@ export interface BlockScanRefinementResult {
   failed: number;
   deadlineHit: boolean;
   openFamilyIds: readonly string[];
+  openInstanceCircuitKeys: readonly string[];
   openCompositeKeys: readonly string[];
 }
 
@@ -41,11 +47,17 @@ export interface BlockScanProbeDiagnostic {
 export interface BlockScanProbeFailureDiagnostic {
   readonly reason:
     | "family_circuit_open"
+    | "instance_circuit_open"
+    | "composite_circuit_open"
     | "family_timeout"
     | "global_deadline"
     | "quote_error";
   readonly familyIds: readonly string[];
   readonly attributedFamilyId: string | null;
+  readonly attributedInstanceCircuitKey: string | null;
+  readonly blockingCircuitScope:
+    | BlockScanCircuitAttribution["scope"]
+    | null;
   readonly stage: string | null;
   readonly causeName: string | null;
   readonly causeCode: string | null;
@@ -182,13 +194,19 @@ export async function refineBlockScanCandidates(
       pending.splice(index, 1);
       failed++;
       dropped++;
+      const blocking = stageBudget.blockingCircuit(
+        item.opportunity.seedEdges,
+      );
+      if (!blocking) {
+        throw new Error("block-scan circuit state changed while dropping work");
+      }
       onProbe?.({
         index: item.index,
         status: "failed",
         marginBps: null,
         attempted: false,
-        failure: probeFailureDiagnostic(
-          "family_circuit_open",
+        failure: probeCircuitDiagnostic(
+          blocking,
           routeFamilies(item.opportunity),
         ),
       });
@@ -238,6 +256,8 @@ export async function refineBlockScanCandidates(
           familyDeadlineAtMs < deadlineAtMs
             ? new FamilyProbeDeadlineError(familyIds, localBudgetMs)
             : new ProbeDeadlineError("exact probe deadline reached"),
+        (edge) => stageBudget.recordEdgeSuccess(edge),
+        () => stageBudget.recordRouteSuccess(opportunity.seedEdges),
       );
       const marginBps = await probe;
       if (deadlineController.signal.aborted || Date.now() >= deadlineAtMs) {
@@ -272,7 +292,6 @@ export async function refineBlockScanCandidates(
           failure: null,
         });
       }
-      stageBudget.recordSuccess(opportunity.seedEdges);
     } catch (error) {
       if (
         error instanceof FamilyProbeDeadlineError ||
@@ -332,6 +351,7 @@ export async function refineBlockScanCandidates(
             localTimedOut ? "family_timeout" : "quote_error",
             familyIds,
             budgetError,
+            opportunity.seedEdges,
           ),
         });
       }
@@ -398,6 +418,7 @@ export async function refineBlockScanCandidates(
   );
   fallback.sort((a, b) => a.index - b.index);
   const openFamilyIds = stageBudget.openFamilyIds();
+  const openInstanceCircuitKeys = stageBudget.openInstanceCircuitKeys();
   const openCompositeKeys = stageBudget.openCompositeKeys();
   // A circuit limits future work; it does not invalidate an exact-positive
   // route that already completed. Later failures can come from unrelated pool
@@ -429,6 +450,7 @@ export async function refineBlockScanCandidates(
     failed,
     deadlineHit: deadlineHit || Date.now() >= deadlineAtMs,
     openFamilyIds,
+    openInstanceCircuitKeys,
     openCompositeKeys,
   };
 }
@@ -454,6 +476,10 @@ async function exactProbeMarginBps(
   signal: AbortSignal,
   deadlineError: () => Error = () =>
     new ProbeDeadlineError("exact probe deadline reached"),
+  onEdgeSuccess: (
+    edge: BlockScanOpportunity["seedEdges"][number],
+  ) => void = () => {},
+  onRouteSuccess: () => void = () => {},
 ): Promise<number> {
   const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
   const amountIn = maxBigint(9n, ceiling / 1024n);
@@ -461,7 +487,12 @@ async function exactProbeMarginBps(
   let amount = amountIn;
   for (const edge of opportunity.seedEdges) {
     if (Date.now() >= deadlineAtMs) {
-      throw deadlineError();
+      throw new BlockScanFamilyAttributedError(
+        blockScanEdgeFamilyId(edge),
+        "exact quote",
+        deadlineError(),
+        edge.canonicalEdgeId ?? null,
+      );
     }
     try {
       amount = await awaitWithAbort(
@@ -484,10 +515,15 @@ async function exactProbeMarginBps(
         blockScanEdgeFamilyId(edge),
         "exact quote",
         error,
+        error instanceof MissingRouteQuoterError
+          ? null
+          : edge.canonicalEdgeId ?? null,
       );
     }
+    onEdgeSuccess(edge);
     if (amount <= 0n) return 0;
   }
+  onRouteSuccess();
   const profit = amount - amountIn;
   if (profit <= 0n) return 0;
   const marginBps = Number(profit) * 10_000 / Number(amountIn);
@@ -506,6 +542,7 @@ function probeFailureDiagnostic(
   reason: BlockScanProbeFailureDiagnostic["reason"],
   familyIds: readonly string[],
   error?: unknown,
+  edges?: readonly BlockScanOpportunity["seedEdges"][number][],
 ): BlockScanProbeFailureDiagnostic {
   const attributed = error instanceof BlockScanFamilyAttributedError
     ? error
@@ -518,10 +555,22 @@ function probeFailureDiagnostic(
         kind?: unknown;
       }
     : null;
+  const attribution = edges && error !== undefined
+    ? blockScanFailureCircuitAttribution(edges, error)
+    : null;
   return Object.freeze({
     reason,
     familyIds: Object.freeze([...familyIds]),
-    attributedFamilyId: attributed?.familyId ?? null,
+    attributedFamilyId:
+      edges && error !== undefined
+        ? attribution?.familyId ?? null
+        : attributed?.familyId ?? null,
+    attributedInstanceCircuitKey:
+      attribution?.scope === "instance" ? attribution.key : null,
+    blockingCircuitScope:
+      reason === "quote_error" || reason === "family_timeout"
+        ? attribution?.scope ?? null
+        : null,
     stage: attributed?.stage ?? null,
     causeName: cause instanceof Error
       ? cause.name
@@ -533,6 +582,28 @@ function probeFailureDiagnostic(
       ? String(record.code)
       : null,
     causeKind: typeof record?.kind === "string" ? record.kind : null,
+  });
+}
+
+function probeCircuitDiagnostic(
+  blocking: BlockScanCircuitAttribution,
+  familyIds: readonly string[],
+): BlockScanProbeFailureDiagnostic {
+  return Object.freeze({
+    reason: blocking.scope === "instance"
+      ? "instance_circuit_open"
+      : blocking.scope === "composite"
+        ? "composite_circuit_open"
+        : "family_circuit_open",
+    familyIds: Object.freeze([...familyIds]),
+    attributedFamilyId: blocking.familyId,
+    attributedInstanceCircuitKey:
+      blocking.scope === "instance" ? blocking.key : null,
+    blockingCircuitScope: blocking.scope,
+    stage: null,
+    causeName: null,
+    causeCode: null,
+    causeKind: null,
   });
 }
 

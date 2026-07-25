@@ -995,6 +995,8 @@ async function main(): Promise<void> {
       reason: NonNullable<BlockScanProbeDiagnostic["failure"]>["reason"];
       familyIds: readonly string[];
       attributedFamilyId: string | null;
+      attributedInstanceCircuitKey: string | null;
+      blockingCircuitScope: "family" | "instance" | "composite" | null;
       stage: string | null;
       causeName: string | null;
       causeCode: string | null;
@@ -1024,6 +1026,8 @@ async function main(): Promise<void> {
                 probe.failure.reason,
                 probe.failure.familyIds,
                 probe.failure.attributedFamilyId,
+                probe.failure.attributedInstanceCircuitKey,
+                probe.failure.blockingCircuitScope,
                 probe.failure.stage,
                 probe.failure.causeName,
                 probe.failure.causeCode,
@@ -1100,6 +1104,7 @@ async function main(): Promise<void> {
           failed: refinement.failed,
           deadlineHit: refinement.deadlineHit,
           openFamilyIds: refinement.openFamilyIds,
+          openInstanceCircuitKeys: refinement.openInstanceCircuitKeys,
           openCompositeKeys: refinement.openCompositeKeys,
           passBudgetExceeded,
         },

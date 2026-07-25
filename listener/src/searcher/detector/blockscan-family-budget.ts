@@ -2,8 +2,9 @@ import type { TokenEdge } from "../planner/token-graph.js";
 
 const EDGE_ID_SEPARATOR = "\u001f";
 const ROUTE_COMPOSITE_PREFIX = "\u0000blockscan-route:";
+const EDGE_INSTANCE_PREFIX = "\u0000blockscan-edge:";
 
-/** Three independent failures are enough to stop spending this generation on one family. */
+/** Three consecutive failures are enough to stop spending this generation on one isolation key. */
 export const BLOCKSCAN_FAMILY_FAILURE_LIMIT = 3;
 
 /**
@@ -36,11 +37,27 @@ export function blockScanRouteCompositeKey(
   )}`;
 }
 
+export function blockScanEdgeInstanceCircuitKey(
+  edge: TokenEdge,
+): string | null {
+  const canonicalEdgeId = edge.canonicalEdgeId;
+  if (!canonicalEdgeId) return null;
+  const separator = canonicalEdgeId.indexOf(EDGE_ID_SEPARATOR);
+  if (separator <= 0) return null;
+  const owner = canonicalEdgeId.slice(0, separator);
+  if (owner !== blockScanEdgeFamilyId(edge)) return null;
+  return `${EDGE_INSTANCE_PREFIX}${canonicalEdgeId}`;
+}
+
 export function blockScanRouteCircuitKeys(
   edges: readonly TokenEdge[],
 ): readonly string[] {
   return Object.freeze([
     ...blockScanRouteFamilyIds(edges),
+    ...edges.flatMap((edge) => {
+      const key = blockScanEdgeInstanceCircuitKey(edge);
+      return key ? [key] : [];
+    }),
     blockScanRouteCompositeKey(edges),
   ]);
 }
@@ -51,6 +68,7 @@ export class BlockScanFamilyAttributedError extends Error {
     readonly familyId: string,
     readonly stage: string,
     readonly failureCause: unknown,
+    readonly canonicalEdgeId: string | null = null,
   ) {
     // Preserve the legacy message contract for callers that classify a known
     // quote/build condition by text; ownership is carried in typed fields.
@@ -71,14 +89,48 @@ export function blockScanAttributedFailureFamilyId(
     : null;
 }
 
-function failureCircuitKeys(
+export type BlockScanCircuitScope = "family" | "instance" | "composite";
+
+export interface BlockScanCircuitAttribution {
+  readonly scope: BlockScanCircuitScope;
+  readonly key: string;
+  readonly familyId: string | null;
+}
+
+export function blockScanFailureCircuitAttribution(
   edges: readonly TokenEdge[],
   error?: unknown,
-): readonly string[] {
+): BlockScanCircuitAttribution {
   const familyId = blockScanAttributedFailureFamilyId(error);
-  return familyId
-    ? Object.freeze([familyId])
-    : Object.freeze([blockScanRouteCompositeKey(edges)]);
+  if (
+    familyId &&
+    blockScanRouteFamilyIds(edges).includes(familyId) &&
+    error instanceof BlockScanFamilyAttributedError
+  ) {
+    if (error.canonicalEdgeId) {
+      const failedEdge = edges.find(
+        (edge) =>
+          edge.canonicalEdgeId === error.canonicalEdgeId &&
+          blockScanEdgeFamilyId(edge) === familyId,
+      );
+      const instanceKey = failedEdge
+        ? blockScanEdgeInstanceCircuitKey(failedEdge)
+        : null;
+      if (instanceKey) {
+        return Object.freeze({
+          scope: "instance",
+          key: instanceKey,
+          familyId,
+        });
+      }
+    }
+    return Object.freeze({ scope: "family", key: familyId, familyId });
+  }
+  return Object.freeze({
+    scope: "composite",
+    key: blockScanRouteCompositeKey(edges),
+    familyId: null,
+  });
 }
 
 /**
@@ -182,6 +234,10 @@ export class BlockScanFamilyFailureCircuit {
     return familyIds.some((familyId) => this.open.has(familyId));
   }
 
+  blockingKey(keys: readonly string[]): string | null {
+    return keys.find((key) => this.open.has(key)) ?? null;
+  }
+
   recordSuccess(familyIds: readonly string[]): void {
     for (const familyId of new Set(familyIds)) {
       this.failures.delete(familyId);
@@ -204,7 +260,8 @@ export class BlockScanFamilyFailureCircuit {
 
 /**
  * One stage-local budget. Unattributed route failures strike only the exact
- * dependency-set composite. A typed per-leg failure strikes only its owner.
+ * dependency-set composite. A validated typed per-leg failure strikes its
+ * directed canonical edge; typed systemic/legacy failures fall back to family.
  */
 export class BlockScanFamilyStageBudget {
   private readonly circuit: BlockScanFamilyFailureCircuit;
@@ -227,21 +284,63 @@ export class BlockScanFamilyStageBudget {
     return this.circuit.blocks(blockScanRouteCircuitKeys(edges));
   }
 
-  recordSuccess(edges: readonly TokenEdge[]): void {
+  blockingCircuit(
+    edges: readonly TokenEdge[],
+  ): BlockScanCircuitAttribution | null {
+    const key = this.circuit.blockingKey(blockScanRouteCircuitKeys(edges));
+    if (!key) return null;
+    if (key.startsWith(EDGE_INSTANCE_PREFIX)) {
+      const canonicalEdgeId = key.slice(EDGE_INSTANCE_PREFIX.length);
+      const separator = canonicalEdgeId.indexOf(EDGE_ID_SEPARATOR);
+      return Object.freeze({
+        scope: "instance",
+        key,
+        familyId: separator > 0
+          ? canonicalEdgeId.slice(0, separator)
+          : null,
+      });
+    }
+    if (key.startsWith(ROUTE_COMPOSITE_PREFIX)) {
+      return Object.freeze({ scope: "composite", key, familyId: null });
+    }
+    return Object.freeze({ scope: "family", key, familyId: key });
+  }
+
+  recordEdgeSuccess(edge: TokenEdge): void {
+    const instanceKey = blockScanEdgeInstanceCircuitKey(edge);
+    if (instanceKey) this.circuit.recordSuccess([instanceKey]);
+  }
+
+  recordRouteSuccess(edges: readonly TokenEdge[]): void {
     this.circuit.recordSuccess(blockScanRouteCircuitKeys(edges));
+  }
+
+  recordSuccess(edges: readonly TokenEdge[]): void {
+    this.recordRouteSuccess(edges);
   }
 
   recordFailure(
     edges: readonly TokenEdge[],
     error?: unknown,
   ): void {
-    this.circuit.recordFailure(failureCircuitKeys(edges, error));
+    const attribution = blockScanFailureCircuitAttribution(edges, error);
+    this.circuit.recordFailure([attribution.key]);
   }
 
   openFamilyIds(): readonly string[] {
     return Object.freeze(
       this.circuit.openKeys().filter(
-        (key) => !key.startsWith(ROUTE_COMPOSITE_PREFIX),
+        (key) =>
+          !key.startsWith(ROUTE_COMPOSITE_PREFIX) &&
+          !key.startsWith(EDGE_INSTANCE_PREFIX),
+      ),
+    );
+  }
+
+  openInstanceCircuitKeys(): readonly string[] {
+    return Object.freeze(
+      this.circuit.openKeys().filter(
+        (key) => key.startsWith(EDGE_INSTANCE_PREFIX),
       ),
     );
   }
