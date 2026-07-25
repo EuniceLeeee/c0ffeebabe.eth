@@ -1521,7 +1521,8 @@ deploy() {
       || die "B challenger has no production searcher/contract behavior change"
   fi
   prepare_challenger_dependencies
-  (cd "$WT/listener" && npm run build >/tmp/mev-ab-build.log 2>&1) || die "challenger build failed (see /tmp/mev-ab-build.log)"
+  (cd "$WT/listener" && npm run build:live >/tmp/mev-ab-build.log 2>&1) \
+    || die "challenger live closure build failed (see /tmp/mev-ab-build.log)"
   prepare_candidate_universes "$experiment" "$requested_input_mode"
   run_preflight_safely
   local deploy_a_pid deploy_a_restarts deploy_a_commit replay_top_n
