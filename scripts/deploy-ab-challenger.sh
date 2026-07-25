@@ -504,6 +504,59 @@ current_generation_has() {
     'NR >= start && index($0, pattern) { found = 1 } END { exit(found ? 0 : 1) }' "$log"
 }
 
+current_generation_blockscan_ready() {
+  local log=$1 offset=$2
+  [ -f "$log" ] || return 1
+  [[ "$offset" =~ ^[0-9]+$ ]] || return 1
+  python3 - "$log" "$offset" <<'PY'
+import json
+import os
+import re
+import sys
+
+path, raw_offset = sys.argv[1:]
+offset = int(raw_offset)
+ready = False
+generation_started = False
+family_prefix = "[searcher/blockscan-family] "
+legacy = re.compile(r"\[searcher/blockscan\]\s+block=\d+\b.*\bscannedPairs=")
+
+with open(path, "rb") as log:
+    log.seek(0, os.SEEK_END)
+    if log.tell() < offset:
+        raise SystemExit(1)
+    log.seek(offset)
+    for raw_line in log:
+        line = raw_line.decode("utf-8", errors="replace").strip()
+        if "[searcher/live] starting V5 searcher" in line:
+            generation_started = True
+            ready = False
+            continue
+        if not generation_started:
+            continue
+        if legacy.search(line):
+            ready = True
+            continue
+        marker = line.find(family_prefix)
+        if marker < 0:
+            continue
+        try:
+            record = json.loads(line[marker + len(family_prefix):])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict) or record.get("type") != "block_scan_timing":
+            continue
+        if record.get("startup_warm") is True or record.get("outcome") == "startup_warm":
+            continue
+        stages = record.get("stages")
+        enumeration = stages.get("enumeration") if isinstance(stages, dict) else None
+        if isinstance(enumeration, dict) and enumeration.get("status") == "ran":
+            ready = True
+
+raise SystemExit(0 if ready else 1)
+PY
+}
+
 current_generation_hash() {
   local log=$1 key=$2 start_line
   [ -f "$log" ] || { echo unavailable; return; }
@@ -1414,6 +1467,9 @@ deploy() {
   a_pid_before=$deploy_a_pid
   systemctl set-property --runtime "$A_UNIT" AllowedCPUs="$A_CPUS" >/dev/null
   : > "$LOG"
+  local b_log_offset
+  b_log_offset=$(wc -c < "$LOG" 2>/dev/null || echo 0)
+  [[ "$b_log_offset" =~ ^[0-9]+$ ]] || safety_abort challenger_log_offset_unavailable
   now=$(date +%s); lease=$((now + LEASE_SECONDS))
   systemd-run --unit="$UNIT" --collect --service-type=simple \
     --property="WorkingDirectory=$WT/listener" \
@@ -1429,6 +1485,10 @@ deploy() {
   sleep 8
   [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] \
     || safety_abort challenger_failed_to_start
+  local b_started_pid
+  b_started_pid=$(systemctl show -p MainPID --value "$UNIT" 2>/dev/null || true)
+  [[ "$b_started_pid" =~ ^[1-9][0-9]*$ ]] \
+    || safety_abort challenger_main_pid_unavailable
   grep -q '\[searcher/live\] mode=live' "$LOG" || safety_abort challenger_live_banner_missing
   local mode sources expected_mev_share
   mode=$(lane_mode)
@@ -1455,7 +1515,11 @@ deploy() {
   fi
   local scan_ready=0
   for _ in $(seq 1 "$FIRST_SCAN_TIMEOUT_SECONDS"); do
-    if grep -q '\[searcher/blockscan\] block=.*scannedPairs=' "$LOG"; then
+    [ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = "active" ] \
+      || safety_abort challenger_exited_during_first_blockscan
+    [ "$(systemctl show -p MainPID --value "$UNIT" 2>/dev/null || true)" = "$b_started_pid" ] \
+      || safety_abort challenger_pid_changed_during_first_blockscan
+    if current_generation_blockscan_ready "$LOG" "$b_log_offset"; then
       scan_ready=1
       break
     fi
