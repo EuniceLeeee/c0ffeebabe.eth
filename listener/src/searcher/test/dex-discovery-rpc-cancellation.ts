@@ -36,7 +36,9 @@ async function main(): Promise<void> {
   await testPinnedCallParentAbortClosesTransport();
   await testPinnedGetCodeDeadlineClosesTransport();
   await testGraphControlAbortsPinnedTransport();
-  console.log("[dex-discovery-rpc-cancellation] PASS 6/6");
+  await testCurveGraphDeadlineDoesNotBecomeNoCoins();
+  await testCurveGraphRawAbortDoesNotBecomeNoCoins();
+  console.log("[dex-discovery-rpc-cancellation] PASS 8/8");
 }
 
 async function testFactoryParentAbortClosesTransport(): Promise<void> {
@@ -207,6 +209,83 @@ async function testGraphControlAbortsPinnedTransport(): Promise<void> {
   );
   await provider.destroy();
   await fixture.close();
+}
+
+async function testCurveGraphDeadlineDoesNotBecomeNoCoins(): Promise<void> {
+  const fixture = await createRpcFixture((request) =>
+    request.method === "eth_call" ? "pending" : "empty");
+  const provider = new ethers.JsonRpcProvider(fixture.url);
+  const pinned = createPinnedDexReadBackend(provider, 100, {
+    deadlineAtMs: Date.now() + 100,
+  });
+  const pending = buildTokenGraphWithResults(
+    pinned,
+    [{
+      address: TEST_POOL,
+      adapter: "curve",
+    }],
+    {
+      quiet: true,
+      deadlineAtMs: Date.now() + 5_000,
+      familyTimeoutMs: 5_000,
+    },
+  );
+  await fixture.waitForMethod("eth_call");
+  const result = await pending;
+  assert.equal(result.successful.length, 0);
+  assert.equal(result.failed.length, 1);
+  assert.match(result.failed[0].reason, /deadline|aborted/i);
+  assert.doesNotMatch(
+    result.failed[0].reason,
+    /exposed no coins/i,
+    "a controlled read interruption must not masquerade as a Curve ABI mismatch",
+  );
+  await fixture.waitForAbortedResponse("eth_call");
+  assert.equal(
+    fixture.methods.filter((method) => method === "eth_call").length,
+    1,
+    "an interrupted Curve selector read must not start its ABI fallback",
+  );
+  await provider.destroy();
+  await fixture.close();
+}
+
+async function testCurveGraphRawAbortDoesNotBecomeNoCoins(): Promise<void> {
+  let calls = 0;
+  const result = await buildTokenGraphWithResults(
+    {
+      async call() {
+        calls++;
+        const error = new Error("raw backend read aborted") as Error & {
+          code: string;
+        };
+        error.code = "ABORTED";
+        throw error;
+      },
+    },
+    [{
+      address: TEST_POOL,
+      adapter: "curve",
+    }],
+    {
+      quiet: true,
+      deadlineAtMs: Date.now() + 5_000,
+      familyTimeoutMs: 5_000,
+    },
+  );
+  assert.equal(result.successful.length, 0);
+  assert.equal(result.failed.length, 1);
+  assert.match(result.failed[0].reason, /raw backend read aborted|aborted/i);
+  assert.doesNotMatch(
+    result.failed[0].reason,
+    /exposed no coins/i,
+    "a raw backend abort must not masquerade as a Curve ABI mismatch",
+  );
+  assert.equal(
+    calls,
+    1,
+    "a raw backend abort must not start the alternate Curve selector",
+  );
 }
 
 function containsTopic(

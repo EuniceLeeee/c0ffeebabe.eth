@@ -1,5 +1,9 @@
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import {
+  isStateCallAbortedError,
+  StateCallAbortedError,
+} from "../../shared/state/state-backend.js";
 import type {
   ExecutionFamilyId,
   RouteEdgeBuildControl,
@@ -135,7 +139,7 @@ function withBuildControl(
         ).finally(merged.detach);
       } catch (error) {
         merged.detach();
-        throw error;
+        throw normalizeControlledReadError(error, "backend");
       }
     },
     ...(backend.getLogs === undefined
@@ -162,7 +166,7 @@ function withBuildControl(
               ).finally(merged.detach);
             } catch (error) {
               merged.detach();
-              throw error;
+              throw normalizeControlledReadError(error, "backend");
             }
           },
         }),
@@ -224,9 +228,11 @@ function raceBuildControl<T>(
     const abort = () =>
       finish(() =>
         reject(
-          new Error(`route family ${familyId} aborted`, {
-            cause: control.signal?.reason,
-          }),
+          buildControlError(
+            familyId,
+            abortKind(control.signal?.reason),
+            control.signal?.reason,
+          ),
         )
       );
     const timer = control.deadlineAtMs === undefined
@@ -234,19 +240,23 @@ function raceBuildControl<T>(
       : setTimeout(
           () =>
             finish(() =>
-              reject(new Error(`route family ${familyId} deadline exceeded`))
+              reject(buildControlError(familyId, "deadline"))
             ),
           Math.max(0, control.deadlineAtMs - Date.now()),
         );
     control.signal?.addEventListener("abort", abort, { once: true });
+    // Always attach the source handlers before observing an already-aborted
+    // signal. An adapter may synchronously abort while constructing `promise`;
+    // returning before `.then` would leave its eventual rejection unhandled.
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) =>
+        finish(() => reject(normalizeControlledReadError(error, familyId))),
+    );
     if (control.signal?.aborted) {
       abort();
       return;
     }
-    promise.then(
-      (value) => finish(() => resolve(value)),
-      (error) => finish(() => reject(error)),
-    );
   });
 }
 
@@ -255,16 +265,62 @@ function assertBuildActive(
   control: RouteEdgeBuildControl,
 ): void {
   if (control.signal?.aborted) {
-    throw new Error(`route family ${familyId} aborted`, {
-      cause: control.signal.reason,
-    });
+    throw buildControlError(
+      familyId,
+      abortKind(control.signal.reason),
+      control.signal.reason,
+    );
   }
   if (
     control.deadlineAtMs !== undefined &&
     Date.now() >= control.deadlineAtMs
   ) {
-    throw new Error(`route family ${familyId} deadline exceeded`);
+    throw buildControlError(familyId, "deadline");
   }
+}
+
+function normalizeControlledReadError(
+  error: unknown,
+  familyId: string,
+): unknown {
+  if (isStateCallAbortedError(error)) return error;
+  if (!error || typeof error !== "object" || !("code" in error)) return error;
+  const code = String((error as { readonly code?: unknown }).code);
+  if (code === "ABORTED") {
+    return buildControlError(familyId, "signal", error);
+  }
+  if (code === "DEADLINE_EXCEEDED") {
+    return buildControlError(familyId, "deadline", error);
+  }
+  return error;
+}
+
+function abortKind(reason: unknown): StateCallAbortedError["kind"] {
+  if (isStateCallAbortedError(reason)) return reason.kind;
+  if (
+    reason &&
+    typeof reason === "object" &&
+    "code" in reason &&
+    String((reason as { readonly code?: unknown }).code) ===
+      "DEADLINE_EXCEEDED"
+  ) {
+    return "deadline";
+  }
+  const message = reason instanceof Error ? reason.message : String(reason ?? "");
+  return /deadline|exceeded \d+ms/i.test(message) ? "deadline" : "signal";
+}
+
+function buildControlError(
+  familyId: string,
+  kind: StateCallAbortedError["kind"],
+  cause?: unknown,
+): StateCallAbortedError {
+  const action = kind === "deadline" ? "deadline exceeded" : "aborted";
+  return new StateCallAbortedError(
+    `route family ${familyId} ${action}`,
+    kind,
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 function earliestDeadline(

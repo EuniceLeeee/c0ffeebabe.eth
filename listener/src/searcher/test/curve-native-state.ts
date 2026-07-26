@@ -6,6 +6,7 @@ import {
   type BlockScanStateReadBackend,
 } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
+import { curvePlainGetDy } from "../solver/curve-math.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import {
@@ -17,6 +18,7 @@ import {
 import { CURVE_NATIVE_ASSET } from "../venues/curve-assets.js";
 import {
   BLOCKSCAN_MULTICALL3,
+  bigintRatio,
   blockScanErc20Iface,
   blockScanMulticallIface,
 } from "../venues/swaps/blockscan-state-shared.js";
@@ -104,10 +106,25 @@ assert.deepEqual(coordinated.snapshot.resolvedFamilyIds, ["curve-plain"]);
 assert.deepEqual(coordinated.snapshot.incompleteFamilyIds, []);
 assert.equal(coordinated.snapshot.coverage.unresolvedEdgeKeys.length, 0);
 assert.equal(coordinated.snapshot.mids.size, edges.length);
-assert(
-  [...coordinated.snapshot.mids.values()].every((mid) => mid.mid > 0),
-  "both real ETH/stETH pools must publish every directed mid",
-);
+for (const mid of coordinated.snapshot.mids.values()) {
+  const edge = mid.edges[0];
+  assert(edge, `current-N mid ${mid.pool} must retain its source edge`);
+  const expected = expectedCurveState(edge.target);
+  const i = edge.curveI;
+  const j = edge.curveJ;
+  assert(i !== undefined && j !== undefined, "Curve mid must retain graph indices");
+  const reserveIn = expected.balances[i];
+  const reserveOut = expected.balances[j];
+  assert.equal(mid.reserveA, reserveIn, `current-N ${mid.pool} reserveIn`);
+  assert.equal(mid.reserveB, reserveOut, `current-N ${mid.pool} reserveOut`);
+  const amountIn = reserveIn / 1_000_000n;
+  const amountOut = curvePlainGetDy(expected, i, j, amountIn);
+  assert.equal(
+    mid.mid,
+    bigintRatio(amountOut, amountIn),
+    `current-N ${mid.pool} A/fee-derived mid`,
+  );
+}
 assert.deepEqual(
   staticReadTargets,
   [STETH],
@@ -131,8 +148,7 @@ for (const pool of [LEGACY_STETH_POOL, FACTORY_STETH_POOL]) {
   );
   assert(amountOut > 0n, `legacy warm path must quote native Curve pool ${pool}`);
   const snapshot = cache.snapshotCurve(pool, SOURCE_BLOCK);
-  assert.equal(snapshot?.kind, "plain");
-  assert.deepEqual(snapshot?.plain?.rates, [UNIT, UNIT]);
+  assertExactCurveSnapshot(snapshot, pool, "lazy");
 }
 
 const batchCache = new PoolStateCache();
@@ -143,8 +159,7 @@ await batchCache.warmCurvesBatch(legacyState, [
 ]);
 for (const pool of [LEGACY_STETH_POOL, FACTORY_STETH_POOL]) {
   const snapshot = batchCache.snapshotCurve(pool, SOURCE_BLOCK);
-  assert.equal(snapshot?.kind, "plain");
-  assert.deepEqual(snapshot?.plain?.rates, [UNIT, UNIT]);
+  assertExactCurveSnapshot(snapshot, pool, "batch");
 }
 assert.equal(
   nativeDecimalsCalls,
@@ -238,31 +253,31 @@ function respondCurveCall(pool: string, data: string): string {
       curveStateIface.decodeFunctionData("coins", data)[0],
     );
     if (index > 1) throw new Error("coin index out of range");
-    return curveStateIface.encodeFunctionResult(
+    return tailedCurveResult(curveStateIface.encodeFunctionResult(
       "coins",
       [index === 0 ? CURVE_NATIVE_ASSET : STETH],
-    );
+    ));
   }
   if (selector === curveStateIface.getFunction("A")!.selector) {
-    return curveStateIface.encodeFunctionResult(
+    return tailedCurveResult(curveStateIface.encodeFunctionResult(
       "A",
       [target === LEGACY_STETH_POOL ? 900n : 1_500n],
-    );
+    ));
   }
   if (selector === curveStateIface.getFunction("fee")!.selector) {
-    return curveStateIface.encodeFunctionResult(
+    return tailedCurveResult(curveStateIface.encodeFunctionResult(
       "fee",
       [target === LEGACY_STETH_POOL ? 1_000_000n : 800_000n],
-    );
+    ));
   }
   if (selector === curveStateIface.getFunction("balances")!.selector) {
     const index = Number(
       curveStateIface.decodeFunctionData("balances", data)[0],
     );
-    return curveStateIface.encodeFunctionResult(
+    return tailedCurveResult(curveStateIface.encodeFunctionResult(
       "balances",
       [index === 0 ? 20_000n * UNIT : 22_000n * UNIT],
-    );
+    ));
   }
   if (
     selector ===
@@ -272,6 +287,46 @@ function respondCurveCall(pool: string, data: string): string {
     throw new Error("unsupported Curve ABI");
   }
   throw new Error(`unexpected Curve selector ${selector}`);
+}
+
+function tailedCurveResult(data: string): string {
+  // A short non-zero trailing word makes the old whole-buffer/tail decoders
+  // fail deterministically without feeding enormous integers into Curve math.
+  // Exact 4096-byte proxy returndata remains covered by
+  // token-graph-family-isolation.
+  return `${data}${"00".repeat(31)}01`;
+}
+
+function expectedCurveState(pool: string) {
+  const target = pool.toLowerCase();
+  assert(
+    target === LEGACY_STETH_POOL || target === FACTORY_STETH_POOL,
+    `unexpected Curve pool ${pool}`,
+  );
+  return {
+    A: target === LEGACY_STETH_POOL ? 900n : 1_500n,
+    fee: target === LEGACY_STETH_POOL ? 1_000_000n : 800_000n,
+    balances: [20_000n * UNIT, 22_000n * UNIT],
+    rates: [UNIT, UNIT],
+  };
+}
+
+function assertExactCurveSnapshot(
+  snapshot: ReturnType<PoolStateCache["snapshotCurve"]>,
+  pool: string,
+  path: "lazy" | "batch",
+): void {
+  assert(snapshot, `${path} ${pool} snapshot must exist`);
+  assert.equal(snapshot.kind, "plain", `${path} ${pool} kind`);
+  const expected = expectedCurveState(pool);
+  assert.equal(snapshot.plain?.A, expected.A, `${path} ${pool} A`);
+  assert.equal(snapshot.plain?.fee, expected.fee, `${path} ${pool} fee`);
+  assert.deepEqual(
+    snapshot.plain?.balances,
+    expected.balances,
+    `${path} ${pool} balances`,
+  );
+  assert.deepEqual(snapshot.plain?.rates, expected.rates, `${path} ${pool} rates`);
 }
 
 function successfulRead(

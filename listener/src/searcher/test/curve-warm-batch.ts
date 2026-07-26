@@ -86,7 +86,9 @@ async function readCoin(
     data: curveIface.encodeFunctionData("coins", [index]),
     blockTag: block,
   });
-  return ethers.getAddress("0x" + res.slice(-40)).toLowerCase();
+  return ethers.getAddress(
+    String(curveIface.decodeFunctionResult("coins", res)[0]),
+  ).toLowerCase();
 }
 
 async function sampleAmount(

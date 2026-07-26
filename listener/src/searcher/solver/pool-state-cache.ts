@@ -30,6 +30,10 @@ import {
   curveNativeRateMultiplier,
   curveRateMultiplierFromDecimals,
 } from "../venues/curve-assets.js";
+import {
+  decodeCurveAddressResult,
+  decodeCurveUint256Result,
+} from "../venues/swaps/curve-shared.js";
 
 const curveIface = new ethers.Interface([
   "function A() view returns (uint256)",
@@ -966,7 +970,12 @@ export class PoolStateCache {
       try {
         const balances: bigint[] = [];
         for (let k = 0; k < item.coins.length; k++) {
-          balances.push(BigInt(requireCurveBatchData(round2, `${item.key}:balances:${k}`)));
+          balances.push(
+            decodeCurveUint256Result(
+              requireCurveBatchData(round2, `${item.key}:balances:${k}`),
+              `curve ${item.pool} balance ${k}`,
+            ),
+          );
         }
 
         if (item.offpeg !== null) {
@@ -1007,11 +1016,12 @@ export class PoolStateCache {
               continue;
             }
             const dec = Number(
-              BigInt(
+              decodeCurveUint256Result(
                 requireCurveBatchData(
                   round2,
                   `${item.key}:decimals:${k}`,
                 ),
+                `curve ${item.pool} coin ${k} decimals`,
               ),
             );
             rates.push(curveRateMultiplierFromDecimals(dec));
@@ -1100,7 +1110,10 @@ export class PoolStateCache {
   }
 
   private async call(state: StateBackend, to: string, data: string): Promise<bigint> {
-    return BigInt(await state.call({ to, data }));
+    return decodeCurveUint256Result(
+      await state.call({ to, data }),
+      `scalar view ${to}`,
+    );
   }
 
   private async aggregateCurveCalls(state: StateBackend, calls: CurveBatchCall[]): Promise<Map<string, string>> {
@@ -1141,7 +1154,7 @@ export class PoolStateCache {
       if (!res || res === "0x") break;
       let addr: string;
       try {
-        addr = ethers.getAddress("0x" + res.slice(-40));
+        addr = decodeCurveAddressResult(res, `curve ${pool} coin ${i}`);
       } catch {
         break;
       }
@@ -1149,13 +1162,22 @@ export class PoolStateCache {
       coins.push(addr.toLowerCase());
     }
     if (coins.length === 0) throw new Error(`curve ${pool}: no coins`);
-    const A = BigInt(requireCurveBatchData(results, `${key}:A`));
-    const fee = BigInt(requireCurveBatchData(results, `${key}:fee`));
+    const A = decodeCurveUint256Result(
+      requireCurveBatchData(results, `${key}:A`),
+      `curve ${pool} A`,
+    );
+    const fee = decodeCurveUint256Result(
+      requireCurveBatchData(results, `${key}:fee`),
+      `curve ${pool} fee`,
+    );
     let offpeg: bigint | null = null;
     const offpegRes = results.get(`${key}:offpeg_fee_multiplier`);
     if (offpegRes) {
       try {
-        offpeg = BigInt(offpegRes);
+        offpeg = decodeCurveUint256Result(
+          offpegRes,
+          `curve ${pool} offpeg_fee_multiplier`,
+        );
       } catch {
         offpeg = null;
       }
@@ -1257,7 +1279,12 @@ export class PoolStateCache {
       curveIface.encodeFunctionData("offpeg_fee_multiplier"),
       `${pool.toLowerCase()}:offpeg_fee_multiplier`,
     );
-    const offpeg = offpegRaw === null ? null : BigInt(offpegRaw);
+    const offpeg = offpegRaw === null
+      ? null
+      : decodeCurveUint256Result(
+          offpegRaw,
+          `curve ${pool} offpeg_fee_multiplier`,
+        );
 
     const balances: bigint[] = [];
     for (let k = 0; k < coins.length; k++) {
@@ -1439,7 +1466,7 @@ export class PoolStateCache {
           data: curveIface.encodeFunctionData("coins", [i]),
         });
         if (!res || res === "0x") break;
-        const addr = ethers.getAddress("0x" + res.slice(-40));
+        const addr = decodeCurveAddressResult(res, `curve ${pool} coin ${i}`);
         if (addr === ethers.ZeroAddress) break;
         coins.push(addr.toLowerCase());
       } catch {
@@ -1489,8 +1516,9 @@ function curveStaticRates(
     const nativeRate = curveNativeRateMultiplier(coin);
     if (nativeRate !== null) return nativeRate;
     const decimals = Number(
-      BigInt(
+      decodeCurveUint256Result(
         requireCurveBatchData(results, `${key}:decimals:${index}`),
+        `curve coin ${coin} decimals`,
       ),
     );
     return curveRateMultiplierFromDecimals(decimals);

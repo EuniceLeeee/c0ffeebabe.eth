@@ -44,7 +44,12 @@ import {
   buildTransferredInputSwapVictimOverlay,
   VICTIM_REPLAY_WHALE,
 } from "../victim-runtime-shared.js";
-import { queryCurveCoins, quoteCurvePlain, resolveCurveIndices } from "./curve-shared.js";
+import {
+  decodeCurveUint256Result,
+  queryCurveCoins,
+  quoteCurvePlain,
+  resolveCurveIndices,
+} from "./curve-shared.js";
 import { curvePlainLandedEvents } from "./curve-landed-events.js";
 import {
   assertPoolGroup,
@@ -389,10 +394,19 @@ export const curvePlainBlockScanState = Object.freeze({
       requireRead(results, `curve:${pool}`),
       descriptor.items,
     );
-    const A = BigInt(requireMulticallData(inner, "A"));
-    const fee = BigInt(requireMulticallData(inner, "fee"));
+    const A = decodeCurveUint256Result(
+      requireMulticallData(inner, "A"),
+      `curve ${pool} A`,
+    );
+    const fee = decodeCurveUint256Result(
+      requireMulticallData(inner, "fee"),
+      `curve ${pool} fee`,
+    );
     const balances = descriptor.coins.map((_, index) =>
-      BigInt(requireMulticallData(inner, `balance:${index}`))
+      decodeCurveUint256Result(
+        requireMulticallData(inner, `balance:${index}`),
+        `curve ${pool} balance ${index}`,
+      )
     );
     if (balances.some((balance) => balance <= 0n)) {
       throw new Error(`curve block-scan pool ${pool} has non-positive balance`);
@@ -417,7 +431,10 @@ export const curvePlainBlockScanState = Object.freeze({
       const state = Object.freeze({
         A,
         fee,
-        offpegFeeMultiplier: BigInt(offpegData),
+        offpegFeeMultiplier: decodeCurveUint256Result(
+          offpegData,
+          `curve ${pool} offpeg_fee_multiplier`,
+        ),
         balances: Object.freeze(balances) as unknown as bigint[],
         rates: Object.freeze([...rates]) as unknown as bigint[],
       });
@@ -543,7 +560,12 @@ function decodeCurveBalanceAbi(
   if (!uintData && !intData) {
     throw new Error(`curve pool ${pool} exposes no supported balances getter`);
   }
-  if (uintData && intData && BigInt(uintData) !== BigInt(intData)) {
+  if (
+    uintData &&
+    intData &&
+    decodeCurveUint256Result(uintData, `curve ${pool} balances(uint256)`) !==
+      decodeCurveUint256Result(intData, `curve ${pool} balances(int128)`)
+  ) {
     throw new Error(`curve pool ${pool} returned ambiguous balance getters`);
   }
   return uintData ? "uint256" : "int128";
