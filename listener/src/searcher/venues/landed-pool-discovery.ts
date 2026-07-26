@@ -58,6 +58,12 @@ export interface LandedPoolMaterializationContext {
    */
   readonly retainedPools: readonly PoolEntry[];
   /**
+   * Previously observed instances whose family-owned identity/materialization
+   * read did not reach a terminal decision. They must be retried even when the
+   * original Swap log is no longer inside the next incremental block range.
+   */
+  readonly retryablePools: readonly PoolEntry[];
+  /**
    * True only for an instance already admitted into the frozen graph
    * generation. A materializer may reuse that exact metadata rather than
    * repeating identity RPC.
@@ -75,18 +81,31 @@ export interface LandedPoolMaterializationContext {
 export interface LandedPoolMaterializationResult {
   readonly pools: readonly PoolEntry[];
   /**
-   * True only when every qualifying event identity was converted into a
-   * source-pinned PoolEntry. Returning positives while false is allowed, but
-   * the family/source may not publish negative completeness.
+   * True only when every qualifying event identity reached a terminal
+   * source-pinned outcome: an admitted PoolEntry or a proven permanent
+   * negative. Returning positives while false is allowed, but the
+   * family/source may not publish negative completeness.
    */
   readonly complete: boolean;
   readonly issues?: readonly string[];
+  /**
+   * Present only when every unresolved materialization candidate is represented
+   * here and can therefore be retried without replaying the original log.
+   * Strict discovery may advance source coverage only for this typed deferred
+   * state; an incomplete result without this proof remains globally fail-closed.
+   */
+  readonly retryablePools?: readonly PoolEntry[];
 }
 
 export interface LandedPoolMaterializationCapability {
   readonly version: string;
   /** Landed swap declaration ids owned by this materializer. */
   readonly eventIds: readonly string[];
+  /**
+   * This materializer can reconstruct an address-emitter candidate from a
+   * persisted PoolEntry after the original log leaves the incremental range.
+   */
+  readonly consumesAddressRetries?: true;
   materialize(
     context: LandedPoolMaterializationContext,
   ): Promise<LandedPoolMaterializationResult>;
@@ -103,6 +122,12 @@ export interface AddressLandedPoolMaterializerOptions {
   readonly version: string;
   readonly eventIds: readonly string[];
   readonly concurrency?: number;
+  /**
+   * One untrusted emitter must not consume the whole block-scan deadline.
+   * Expiry keeps this family/source incomplete; sibling families remain
+   * eligible for the same source block.
+   */
+  readonly materializationTimeoutMs?: number;
   /**
    * Return null only for a completed, permanent negative identity decision.
    * Transport/incomplete reads must throw so source completeness stays false.
@@ -122,9 +147,17 @@ export function createAddressLandedPoolMaterializer(
   options: AddressLandedPoolMaterializerOptions,
 ): LandedPoolMaterializationCapability {
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? 24));
+  const materializationTimeoutMs = options.materializationTimeoutMs ?? 3_000;
+  if (
+    !Number.isFinite(materializationTimeoutMs) ||
+    materializationTimeoutMs <= 0
+  ) {
+    throw new Error("address materialization timeout must be positive");
+  }
   return Object.freeze({
     version: options.version,
     eventIds: Object.freeze([...options.eventIds]),
+    consumesAddressRetries: true,
     async materialize(
       context: LandedPoolMaterializationContext,
     ): Promise<LandedPoolMaterializationResult> {
@@ -156,14 +189,61 @@ export function createAddressLandedPoolMaterializer(
           retainedByAddress.has(key) ? null : pool,
         );
       }
-      const issues: string[] = [];
+      const sourceIssues: string[] = [];
+      for (const pool of context.retryablePools) {
+        const activity = pool as PoolEntry & {
+          readonly lastSwapBlock?: number;
+          readonly source?: string;
+        };
+        if (
+          pool.adapter !== context.event.discovery.poolAdapter ||
+          !materializerConsumesRetry(
+            pool,
+            context.event.id,
+            options.eventIds,
+          ) ||
+          context.isKnownPool(pool)
+        ) {
+          continue;
+        }
+        try {
+          const address = ethers.getAddress(pool.address);
+          const key = address.toLowerCase();
+          const count = Math.max(
+            context.minSwaps,
+            Math.floor(pool.score ?? context.minSwaps),
+          );
+          const candidate = candidates.get(key) ?? {
+            address,
+            count: 0,
+            lastSwapBlock: 0,
+          };
+          candidate.count = Math.max(candidate.count, count);
+          const lastSwapBlock =
+            Number.isSafeInteger(activity.lastSwapBlock) &&
+              (activity.lastSwapBlock ?? -1) >= 0
+              ? activity.lastSwapBlock!
+              : 0;
+          candidate.lastSwapBlock = Math.max(
+            candidate.lastSwapBlock,
+            lastSwapBlock,
+          );
+          candidates.set(key, candidate);
+        } catch {
+          sourceIssues.push(
+            `invalid retryable landed pool address ${pool.address}`,
+          );
+        }
+      }
       for (const log of context.logs) {
         const identity = observedLandedPoolIdentity(context.event, {
           address: log.address,
           topics: log.topics,
         });
         if (!identity) {
-          issues.push("landed event could not be materialized as an address");
+          sourceIssues.push(
+            "landed event could not be materialized as an address",
+          );
           continue;
         }
         try {
@@ -181,7 +261,7 @@ export function createAddressLandedPoolMaterializer(
           );
           candidates.set(key, candidate);
         } catch {
-          issues.push(`invalid landed pool address ${identity}`);
+          sourceIssues.push(`invalid landed pool address ${identity}`);
         }
       }
 
@@ -189,58 +269,136 @@ export function createAddressLandedPoolMaterializer(
         .filter((candidate) => candidate.count >= context.minSwaps);
       const resolvedPools = new Array<PoolEntry | null>(qualifying.length)
         .fill(null);
+      const retryablePools = new Array<PoolEntry | null>(qualifying.length)
+        .fill(null);
+      const states = new Array<
+        "pending" | "resolved" | "permanent" | "retryable"
+      >(qualifying.length).fill("pending");
       const materializationIssues = new Array<string | null>(
         qualifying.length,
       ).fill(null);
-      let next = 0;
-      const workers = Array.from(
-        { length: Math.min(concurrency, Math.max(1, qualifying.length)) },
-        async () => {
-          while (next < qualifying.length) {
-            throwIfAborted(context.signal);
-            const index = next++;
-            const candidate = qualifying[index];
-            const input = Object.freeze({
-              address: candidate.address,
-              poolAdapter: context.event.discovery.poolAdapter,
-              swapCount: candidate.count,
-              lastSwapBlock: candidate.lastSwapBlock,
-            });
-            try {
-              const retained = retainedByAddress.get(
-                candidate.address.toLowerCase(),
-              );
-              const pool = retained ??
-                await options.materializePool(input, context);
-              if (pool === null) continue;
-              if (
-                ethers.getAddress(pool.address).toLowerCase() !==
-                  candidate.address.toLowerCase() ||
-                pool.adapter !== context.event.discovery.poolAdapter
-              ) {
-                throw new Error(
-                  "family materializer returned a foreign pool identity",
-                );
-              }
-              resolvedPools[index] = Object.freeze({
-                ...pool,
-                score: candidate.count,
-                swapCount30d: candidate.count,
-                lastSwapBlock: candidate.lastSwapBlock,
-                source: `landed-event:${context.event.id}`,
-              }) as PoolEntry;
-            } catch (error) {
-              materializationIssues[index] =
-                `${candidate.address}: ${errorMessage(error)}`;
-            }
-          }
-        },
+      const controller = new AbortController();
+      const signal = context.signal === undefined
+        ? controller.signal
+        : AbortSignal.any([context.signal, controller.signal]);
+      const timeout = setTimeout(
+        () =>
+          controller.abort(
+            new Error(
+              `landed family ${context.familyId} materialization exceeded ` +
+                `${materializationTimeoutMs}ms`,
+            ),
+          ),
+        materializationTimeoutMs,
       );
-      await Promise.all(workers);
-      issues.push(
-        ...materializationIssues.filter(
-          (issue): issue is string => issue !== null,
-        ),
+      const scopedBackend: LandedPoolDiscoveryReadBackend = {
+        getLogs: (filter, control) =>
+          context.backend.getLogs(filter, {
+            signal: mergeAbortSignals(signal, control?.signal),
+          }),
+        call: (req, control) =>
+          context.backend.call(req, {
+            signal: mergeAbortSignals(signal, control?.signal),
+          }),
+        ...(context.backend.getCode === undefined
+          ? {}
+          : {
+              getCode: (address: string, control?: { readonly signal?: AbortSignal }) =>
+                context.backend.getCode!(address, {
+                  signal: mergeAbortSignals(signal, control?.signal),
+                }),
+            }),
+      };
+      const scopedContext: LandedPoolMaterializationContext = Object.freeze({
+        ...context,
+        signal,
+        backend: scopedBackend,
+      });
+      try {
+        let next = 0;
+        const workers = Array.from(
+          { length: Math.min(concurrency, Math.max(1, qualifying.length)) },
+          async () => {
+            while (next < qualifying.length) {
+              throwIfAborted(context.signal);
+              if (controller.signal.aborted) break;
+              const index = next++;
+              const candidate = qualifying[index];
+              const input = Object.freeze({
+                address: candidate.address,
+                poolAdapter: context.event.discovery.poolAdapter,
+                swapCount: candidate.count,
+                lastSwapBlock: candidate.lastSwapBlock,
+              });
+              try {
+                const retained = retainedByAddress.get(
+                  candidate.address.toLowerCase(),
+                );
+                const pool = retained ??
+                  await raceAbort(
+                    options.materializePool(input, scopedContext),
+                    signal,
+                  );
+                if (pool === null) {
+                  states[index] = "permanent";
+                  continue;
+                }
+                if (
+                  ethers.getAddress(pool.address).toLowerCase() !==
+                    candidate.address.toLowerCase() ||
+                  pool.adapter !== context.event.discovery.poolAdapter
+                ) {
+                  throw new Error(
+                    "family materializer returned a foreign pool identity",
+                  );
+                }
+                resolvedPools[index] = Object.freeze({
+                  ...pool,
+                  score: candidate.count,
+                  swapCount30d: candidate.count,
+                  lastSwapBlock: candidate.lastSwapBlock,
+                  source: `landed-event:${context.event.id}`,
+                }) as PoolEntry;
+                states[index] = "resolved";
+              } catch (error) {
+                if (context.signal?.aborted) throw error;
+                states[index] = "retryable";
+                retryablePools[index] = retryablePoolEntry(
+                  candidate,
+                  context.event,
+                );
+                materializationIssues[index] =
+                  `${candidate.address}: ${errorMessage(error)}`;
+              }
+            }
+          },
+        );
+        await Promise.all(workers);
+      } finally {
+        clearTimeout(timeout);
+      }
+      throwIfAborted(context.signal);
+      for (let index = 0; index < qualifying.length; index++) {
+        if (states[index] !== "pending") continue;
+        const candidate = qualifying[index];
+        states[index] = "retryable";
+        retryablePools[index] = retryablePoolEntry(
+          candidate,
+          context.event,
+        );
+        materializationIssues[index] =
+          `${candidate.address}: landed family ${context.familyId} ` +
+          `materialization exceeded ${materializationTimeoutMs}ms`;
+      }
+      const retryIssues = materializationIssues.filter(
+        (issue): issue is string => issue !== null,
+      );
+      const issues = [
+        ...sourceIssues,
+        ...retryIssues,
+      ];
+      const deferred = retryablePools.filter(
+        (pool): pool is PoolEntry => pool !== null,
       );
       return {
         pools: Object.freeze(
@@ -250,6 +408,9 @@ export function createAddressLandedPoolMaterializer(
         ...(issues.length === 0
           ? {}
           : { issues: Object.freeze(issues) }),
+        ...(sourceIssues.length === 0 && deferred.length > 0
+          ? { retryablePools: Object.freeze(deferred) }
+          : {}),
       };
     },
   });
@@ -283,6 +444,7 @@ export interface LandedPoolActivity {
 export interface LandedPoolDiscoveryResult {
   readonly activity: Map<string, LandedPoolActivity>;
   readonly materializedPools: readonly PoolEntry[];
+  readonly retryablePools: readonly PoolEntry[];
   readonly coverage: readonly LandedPoolDiscoveryCoverage[];
   readonly logCountsByEventId: ReadonlyMap<string, number>;
 }
@@ -295,6 +457,7 @@ export interface LandedPoolDiscoveryResult {
  */
 export class LandedPoolDiscoveryRegistry {
   private readonly descriptors: readonly LandedPoolDiscoveryDescriptor[];
+  private readonly addressRetryPoolAdapters: ReadonlySet<PoolEntry["adapter"]>;
 
   constructor(
     families: readonly SwapAdapter[],
@@ -371,10 +534,21 @@ export class LandedPoolDiscoveryRegistry {
       }
     }
     this.descriptors = Object.freeze(descriptors);
+    this.addressRetryPoolAdapters = new Set(
+      descriptors
+        .filter((descriptor) =>
+          descriptor.materializer?.consumesAddressRetries === true
+        )
+        .map((descriptor) => descriptor.event.discovery.poolAdapter),
+    );
   }
 
   list(): readonly LandedPoolDiscoveryDescriptor[] {
     return this.descriptors;
+  }
+
+  consumesAddressRetries(poolAdapter: PoolEntry["adapter"]): boolean {
+    return this.addressRetryPoolAdapters.has(poolAdapter);
   }
 }
 
@@ -387,6 +561,7 @@ export async function discoverLandedPools(input: {
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
   readonly retainedPools?: readonly PoolEntry[];
+  readonly retryablePools?: readonly PoolEntry[];
   readonly isKnownPool?: (pool: PoolEntry) => boolean;
   readonly topicScanMode?: "per-event" | "union";
   readonly strict?: boolean;
@@ -405,6 +580,7 @@ export async function discoverLandedPools(input: {
 
   const activity = new Map<string, LandedPoolActivity>();
   const materializedPools: PoolEntry[] = [];
+  const retryablePools: PoolEntry[] = [];
   const coverage: LandedPoolDiscoveryCoverage[] = [];
   const logCountsByEventId = new Map<string, number>();
   for (const descriptor of input.registry.list()) {
@@ -421,6 +597,12 @@ export async function discoverLandedPools(input: {
         input.signal,
       );
       logCountsByEventId.set(descriptor.event.id, eventScan.logs.length);
+      assertStrictSourceComplete(
+        input.strict,
+        descriptor.sourceId,
+        eventScan.complete,
+        eventScan.issues,
+      );
       complete &&= eventScan.complete;
       issues.push(...eventScan.issues);
       try {
@@ -430,6 +612,7 @@ export async function discoverLandedPools(input: {
           event: descriptor.event,
           logs: eventScan.logs,
           retainedPools: input.retainedPools ?? [],
+          retryablePools: input.retryablePools ?? [],
           isKnownPool: input.isKnownPool ?? (() => false),
           fromBlock: input.fromBlock,
           toBlock: input.toBlock,
@@ -446,9 +629,16 @@ export async function discoverLandedPools(input: {
             ),
         });
         materializedPools.push(...result.pools);
+        retryablePools.push(...(result.retryablePools ?? []));
         complete &&= result.complete;
         issues.push(...(result.issues ?? []));
+        assertStrictMaterializationDeferred(
+          input.strict,
+          descriptor.sourceId,
+          result,
+        );
       } catch (error) {
+        if (input.strict || input.signal?.aborted) throw error;
         complete = false;
         issues.push(errorMessage(error));
       }
@@ -463,6 +653,12 @@ export async function discoverLandedPools(input: {
         input.signal,
       );
       logCountsByEventId.set(descriptor.event.id, eventScan.logCount);
+      assertStrictSourceComplete(
+        input.strict,
+        descriptor.sourceId,
+        eventScan.complete,
+        eventScan.issues,
+      );
       complete &&= eventScan.complete;
       issues.push(...eventScan.issues);
     }
@@ -479,19 +675,10 @@ export async function discoverLandedPools(input: {
     }
   }
 
-  const incomplete = coverage.filter((item) => !item.complete);
-  if (input.strict && incomplete.length > 0) {
-    throw new Error(
-      "landed-pool discovery incomplete: " +
-        incomplete.map((item) =>
-          `${item.familyId}/${item.sourceId}` +
-          (item.issues.length > 0 ? `(${item.issues.join("; ")})` : "")
-        ).join(", "),
-    );
-  }
   return {
     activity,
     materializedPools: Object.freeze(materializedPools),
+    retryablePools: Object.freeze(retryablePools),
     coverage: Object.freeze(coverage),
     logCountsByEventId,
   };
@@ -518,6 +705,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
   readonly retainedPools?: readonly PoolEntry[];
+  readonly retryablePools?: readonly PoolEntry[];
   readonly isKnownPool?: (pool: PoolEntry) => boolean;
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
@@ -603,6 +791,12 @@ async function discoverLandedPoolsByTopicUnion(input: {
       }
     }
   }
+  assertStrictSourceComplete(
+    input.strict,
+    "landed-event-union",
+    unionComplete,
+    unionIssues,
+  );
 
   // Rebuild the public activity map in registry descriptor order. The legacy
   // path scans one complete event before the next; preserving that insertion
@@ -618,41 +812,89 @@ async function discoverLandedPoolsByTopicUnion(input: {
     }
   }
 
+  const materializationResults = new Map<string, {
+    readonly pools: readonly PoolEntry[];
+    readonly retryablePools: readonly PoolEntry[];
+    readonly complete: boolean;
+    readonly issues: readonly string[];
+  }>();
+  await Promise.all(
+    descriptors
+      .filter((descriptor) => descriptor.materializer !== null)
+      .map(async (descriptor) => {
+        let complete = unionComplete;
+        const issues = [...unionIssues];
+        const pools: PoolEntry[] = [];
+        try {
+          const result = await descriptor.materializer!.materialize({
+            familyId: descriptor.materializerFamilyId ??
+              descriptor.event.executionFamilies[0] as ExecutionFamilyId,
+            event: descriptor.event,
+            logs: materializerLogs.get(descriptor.event.id) ?? [],
+            retainedPools: input.retainedPools ?? [],
+            retryablePools: input.retryablePools ?? [],
+            isKnownPool: input.isKnownPool ?? (() => false),
+            fromBlock: input.fromBlock,
+            toBlock: input.toBlock,
+            minSwaps: input.minSwaps,
+            admissionPolicy: input.admissionPolicy,
+            ...(input.signal === undefined ? {} : { signal: input.signal }),
+            backend: input.backend,
+            scanLogs: (filter) =>
+              scanFilterRange(
+                input.backend,
+                filter,
+                input.batchSize,
+                input.signal,
+              ),
+          });
+          pools.push(...result.pools);
+          assertStrictMaterializationDeferred(
+            input.strict,
+            descriptor.sourceId,
+            result,
+          );
+          complete &&= result.complete;
+          issues.push(...(result.issues ?? []));
+          materializationResults.set(descriptor.event.id, {
+            pools: Object.freeze(pools),
+            retryablePools: Object.freeze([
+              ...(result.retryablePools ?? []),
+            ]),
+            complete,
+            issues: Object.freeze(issues),
+          });
+        } catch (error) {
+          if (input.strict || input.signal?.aborted) throw error;
+          complete = false;
+          issues.push(errorMessage(error));
+          materializationResults.set(descriptor.event.id, {
+            pools: Object.freeze(pools),
+            retryablePools: Object.freeze([]),
+            complete,
+            issues: Object.freeze(issues),
+          });
+        }
+      }),
+  );
+
   const materializedPools: PoolEntry[] = [];
+  const retryablePools: PoolEntry[] = [];
   const coverage: LandedPoolDiscoveryCoverage[] = [];
   for (const descriptor of descriptors) {
     let complete = unionComplete;
-    const issues = [...unionIssues];
+    let issues: readonly string[] = unionIssues;
     if (descriptor.materializer) {
-      try {
-        const result = await descriptor.materializer.materialize({
-          familyId: descriptor.materializerFamilyId ??
-            descriptor.event.executionFamilies[0] as ExecutionFamilyId,
-          event: descriptor.event,
-          logs: materializerLogs.get(descriptor.event.id) ?? [],
-          retainedPools: input.retainedPools ?? [],
-          isKnownPool: input.isKnownPool ?? (() => false),
-          fromBlock: input.fromBlock,
-          toBlock: input.toBlock,
-          minSwaps: input.minSwaps,
-          admissionPolicy: input.admissionPolicy,
-          ...(input.signal === undefined ? {} : { signal: input.signal }),
-          backend: input.backend,
-          scanLogs: (filter) =>
-            scanFilterRange(
-              input.backend,
-              filter,
-              input.batchSize,
-              input.signal,
-            ),
-        });
-        materializedPools.push(...result.pools);
-        complete &&= result.complete;
-        issues.push(...(result.issues ?? []));
-      } catch (error) {
-        complete = false;
-        issues.push(errorMessage(error));
+      const result = materializationResults.get(descriptor.event.id);
+      if (!result) {
+        throw new Error(
+          `missing landed materialization result for ${descriptor.event.id}`,
+        );
       }
+      materializedPools.push(...result.pools);
+      retryablePools.push(...result.retryablePools);
+      complete = result.complete;
+      issues = result.issues;
     }
     for (const familyId of descriptor.event.executionFamilies) {
       coverage.push(Object.freeze({
@@ -667,19 +909,10 @@ async function discoverLandedPoolsByTopicUnion(input: {
     }
   }
 
-  const incomplete = coverage.filter((item) => !item.complete);
-  if (input.strict && incomplete.length > 0) {
-    throw new Error(
-      "landed-pool discovery incomplete: " +
-        incomplete.map((item) =>
-          `${item.familyId}/${item.sourceId}` +
-          (item.issues.length > 0 ? `(${item.issues.join("; ")})` : "")
-        ).join(", "),
-    );
-  }
   return {
     activity,
     materializedPools: Object.freeze(materializedPools),
+    retryablePools: Object.freeze(retryablePools),
     coverage: Object.freeze(coverage),
     logCountsByEventId,
   };
@@ -849,6 +1082,9 @@ async function scanFilterSlice(
     );
     return { logs, complete: true, issues: [] };
   } catch (error) {
+    if (signal?.aborted || isDiscoveryCancellationError(error)) {
+      throw signal?.reason ?? error;
+    }
     if (filter.fromBlock < filter.toBlock) {
       const middle = Math.floor((filter.fromBlock + filter.toBlock) / 2);
       const [left, right] = await Promise.all([
@@ -955,6 +1191,115 @@ function parseBlockNumber(value: string | number): number {
     ? parseInt(value, 16)
     : Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function retryablePoolEntry(
+  candidate: {
+    readonly address: string;
+    readonly count: number;
+    readonly lastSwapBlock: number;
+  },
+  event: LandedSwapEventDescriptor,
+): PoolEntry {
+  return Object.freeze({
+    address: candidate.address,
+    adapter: event.discovery.poolAdapter,
+    score: candidate.count,
+    swapCount30d: candidate.count,
+    lastSwapBlock: candidate.lastSwapBlock,
+    source: `landed-event-retry:${event.id}`,
+  });
+}
+
+function materializerConsumesRetry(
+  pool: PoolEntry,
+  eventId: string,
+  materializerEventIds: readonly string[],
+): boolean {
+  const prefix = "landed-event-retry:";
+  const source = (pool as PoolEntry & { readonly source?: string }).source;
+  if (source?.startsWith(prefix)) {
+    return source.slice(prefix.length) === eventId;
+  }
+  return materializerEventIds[0] === eventId;
+}
+
+function assertStrictSourceComplete(
+  strict: boolean | undefined,
+  sourceId: string,
+  complete: boolean,
+  issues: readonly string[],
+): void {
+  if (!strict || complete) return;
+  throw new Error(
+    `landed-pool source incomplete: ${sourceId}` +
+      (issues.length === 0 ? "" : `(${issues.join("; ")})`),
+  );
+}
+
+function assertStrictMaterializationDeferred(
+  strict: boolean | undefined,
+  sourceId: string,
+  result: LandedPoolMaterializationResult,
+): void {
+  if (result.complete && (result.retryablePools?.length ?? 0) > 0) {
+    throw new Error(
+      `landed-pool materialization claimed complete with retries: ${sourceId}`,
+    );
+  }
+  if (!strict || result.complete) return;
+  if ((result.retryablePools?.length ?? 0) > 0) return;
+  throw new Error(
+    `landed-pool materialization incomplete without retry proof: ${sourceId}` +
+      ((result.issues?.length ?? 0) === 0
+        ? ""
+        : `(${result.issues!.join("; ")})`),
+  );
+}
+
+function isDiscoveryCancellationError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  const code = String((error as { readonly code?: unknown }).code);
+  return code === "ABORTED" || code === "DEADLINE_EXCEEDED";
+}
+
+function raceAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      fn();
+    };
+    const abort = () =>
+      finish(() =>
+        reject(
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error("landed-pool materialization aborted"),
+        )
+      );
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+    if (signal.aborted) abort();
+  });
+}
+
+function mergeAbortSignals(
+  ...signals: Array<AbortSignal | undefined>
+): AbortSignal {
+  const present = signals.filter(
+    (signal): signal is AbortSignal => signal !== undefined,
+  );
+  if (present.length === 0) return new AbortController().signal;
+  return present.length === 1 ? present[0] : AbortSignal.any(present);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

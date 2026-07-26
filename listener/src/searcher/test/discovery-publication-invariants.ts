@@ -21,6 +21,9 @@ import {
   type LiveDiscoveryPublicationState,
 } from "../live-discovery-publication.js";
 import {
+  planLiveDiscoveryBackfillLanes,
+} from "../live-discovery-coordinator.js";
+import {
   createProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
 } from "../protocol-discovery-cache.js";
@@ -71,10 +74,32 @@ hotDexRebaseRejectsGraphOnlyDexConflict();
 hotDexRebaseRejectsProtocolSemanticCollision();
 dexRoutingSliceIgnoresCoverageOnlyPublication();
 dexRoutingSliceDetectsTopologyChange();
+projectionRetryDoesNotPreemptProtocolBackfill();
 
 console.log(
-  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (10/10)",
+  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (11/11)",
 );
+
+function projectionRetryDoesNotPreemptProtocolBackfill(): void {
+  assert.deepEqual(
+    planLiveDiscoveryBackfillLanes({
+      dexSourceCompleteThrough: 99,
+      dexTargetThrough: 100,
+      hasDexProjectionRetry: true,
+    }),
+    { dex: "source", protocol: "preempt" },
+    "raw DEX source lag keeps priority over protocol history",
+  );
+  assert.deepEqual(
+    planLiveDiscoveryBackfillLanes({
+      dexSourceCompleteThrough: 100,
+      dexTargetThrough: 100,
+      hasDexProjectionRetry: true,
+    }),
+    { dex: "projection", protocol: "schedule" },
+    "family-local projection retry must not starve protocol history",
+  );
+}
 
 async function divergentCursorsAdvanceWithoutSkipping(): Promise<void> {
   const base = publicationAt({

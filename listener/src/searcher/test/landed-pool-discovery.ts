@@ -2,12 +2,14 @@ import { ethers } from "ethers";
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import {
   defineSwapLandedEvents,
+  LandedEventRegistry,
   singletonIndexedAddressEmitter,
   singletonIndexedBytes32Emitter,
 } from "../venues/landed-event-registry.js";
 import {
   createAddressLandedPoolMaterializer,
   discoverLandedPools,
+  LandedPoolDiscoveryRegistry,
   type LandedPoolActivity,
   type LandedPoolDiscoveryLog,
   type LandedPoolDiscoveryReadBackend,
@@ -265,6 +267,195 @@ assert(
     syntheticEdges[1].tokenIn === syntheticToken1,
   "the registered synthetic family must project its materialized pool into graph edges",
 );
+
+const slowAdapter = poolAdapterId("test-slow-landed-family");
+const healthyAdapter = poolAdapterId("test-healthy-landed-family");
+const slowTopic = ethers.id("SlowFamilySwap(address)");
+const slowAlternateTopic = ethers.id("SlowFamilyAlternateSwap(address)");
+const healthyTopic = ethers.id("HealthyFamilySwap(address)");
+let slowFamilyAborted = false;
+let healthyStartedBeforeSlowAbort = false;
+let slowFamilyShouldTimeout = true;
+let slowFamilyCalls = 0;
+const slowMaterializer = createAddressLandedPoolMaterializer({
+  version: "slow-family-timeout-v1",
+  eventIds: ["slow-family-swap", "slow-family-alternate-swap"],
+  materializationTimeoutMs: 30,
+  async materializePool(candidate, context) {
+    slowFamilyCalls++;
+    if (!slowFamilyShouldTimeout) {
+      return {
+        address: candidate.address,
+        adapter: candidate.poolAdapter,
+        token0: syntheticToken0,
+        token1: syntheticToken1,
+      };
+    }
+    return await new Promise<never>((_resolve, reject) => {
+      const onAbort = () => {
+        slowFamilyAborted = true;
+        reject(context.signal?.reason ?? new Error("slow family aborted"));
+      };
+      context.signal?.addEventListener("abort", onAbort, { once: true });
+      if (context.signal?.aborted) onAbort();
+    });
+  },
+});
+const healthyMaterializer = createAddressLandedPoolMaterializer({
+  version: "healthy-family-v1",
+  eventIds: ["healthy-family-swap"],
+  materializationTimeoutMs: 30,
+  async materializePool(candidate) {
+    healthyStartedBeforeSlowAbort = !slowFamilyAborted;
+    return {
+      address: candidate.address,
+      adapter: candidate.poolAdapter,
+      token0: syntheticToken0,
+      token1: syntheticToken1,
+    };
+  },
+});
+const slowFamilyBase = family({
+  id: "custom-swap:slow-landed-family",
+  poolAdapter: slowAdapter,
+  topic: slowTopic,
+  eventId: "slow-family-swap",
+  emitter: singletonIndexedAddressEmitter(singleton, 1),
+  materialization: "family",
+  poolDiscovery: slowMaterializer,
+});
+const slowFamily = {
+  ...slowFamilyBase,
+  landedEvents: defineSwapLandedEvents({
+    swaps: [
+      slowFamilyBase.landedEvents.swaps[0],
+      {
+        ...slowFamilyBase.landedEvents.swaps[0],
+        id: "slow-family-alternate-swap",
+        topic: slowAlternateTopic,
+      },
+    ],
+    mutations: [],
+  }),
+  observation: {
+    ...slowFamilyBase.observation,
+    topics: [slowTopic, slowAlternateTopic],
+  },
+} satisfies SwapAdapter;
+const healthyFamily = family({
+  id: "custom-swap:healthy-landed-family",
+  poolAdapter: healthyAdapter,
+  topic: healthyTopic,
+  eventId: "healthy-family-swap",
+  emitter: singletonIndexedAddressEmitter(singleton, 1),
+  materialization: "family",
+  poolDiscovery: healthyMaterializer,
+});
+const isolatedRegistry = new LandedPoolDiscoveryRegistry(
+  [slowFamily, healthyFamily],
+  new LandedEventRegistry([slowFamily, healthyFamily]),
+);
+const isolatedResult = await discoverLandedPools({
+  registry: isolatedRegistry,
+  backend: {
+    async getLogs() {
+      return [
+        log(slowTopic, ethers.zeroPadValue(pool, 32)),
+        log(healthyTopic, ethers.zeroPadValue(pool, 32)),
+      ];
+    },
+    async call() {
+      throw new Error("isolated materializers must not use the fallback backend");
+    },
+  },
+  fromBlock: 100,
+  toBlock: 100,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  topicScanMode: "union",
+  strict: true,
+});
+assert(
+  slowFamilyAborted &&
+    healthyStartedBeforeSlowAbort &&
+    isolatedResult.coverage.some((item) =>
+      item.familyId === slowFamily.id && !item.complete
+    ) &&
+    isolatedResult.coverage
+      .filter((item) => item.familyId === healthyFamily.id)
+      .every((item) => item.complete) &&
+    isolatedResult.retryablePools.length === 1 &&
+    isolatedResult.retryablePools[0].adapter === slowAdapter &&
+    isolatedResult.materializedPools.some((item) =>
+      item.adapter === healthyAdapter
+    ),
+  "a timed-out family must stay incomplete while a healthy sibling publishes",
+);
+slowFamilyShouldTimeout = false;
+const recoveredIsolatedResult = await discoverLandedPools({
+  registry: isolatedRegistry,
+  backend: {
+    async getLogs() {
+      return [];
+    },
+    async call() {
+      throw new Error("recovery must stay inside the family materializer");
+    },
+  },
+  fromBlock: 101,
+  toBlock: 101,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  retryablePools: isolatedResult.retryablePools,
+  topicScanMode: "union",
+  strict: true,
+});
+assert(
+  slowFamilyCalls === 2 &&
+    recoveredIsolatedResult.retryablePools.length === 0 &&
+    recoveredIsolatedResult.coverage.every((item) => item.complete) &&
+    recoveredIsolatedResult.materializedPools.some((item) =>
+      item.adapter === slowAdapter &&
+      (item as PoolEntry & { readonly lastSwapBlock?: number })
+        .lastSwapBlock === 100
+    ),
+  "an event-bound retry must recover once without fabricating current-block activity",
+);
+
+const materializerCallsBeforeRawFailure = slowFamilyCalls;
+let rawSourceFailureRejected = false;
+try {
+  await discoverLandedPools({
+    registry: isolatedRegistry,
+    backend: {
+      async getLogs() {
+        throw new Error("raw log transport unavailable");
+      },
+      async call() {
+        throw new Error("raw source failure must not reach materialization");
+      },
+    },
+    fromBlock: 102,
+    toBlock: 102,
+    batchSize: 10,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    topicScanMode: "union",
+    strict: true,
+  });
+} catch (error) {
+  rawSourceFailureRejected =
+    error instanceof Error &&
+    error.message.includes("landed-pool source incomplete");
+}
+assert(
+  rawSourceFailureRejected &&
+    slowFamilyCalls === materializerCallsBeforeRawFailure,
+  "strict raw landed-log failure must abort source publication before any family materializer",
+);
+
 const knownSyntheticPool = syntheticAddressResult.materializedPools[0];
 const unknownSyntheticPool = ethers.getAddress(
   "0x000000000000000000000000000000000000D203",
@@ -460,6 +651,34 @@ const incomplete = await discoverLandedPools({
 assert(
   incomplete.coverage[0]?.complete === false,
   "unresolved materialization must not silently publish source completeness",
+);
+let strictOpaqueRetryRejected = false;
+try {
+  await discoverLandedPools({
+    registry: incompleteRegistry.landedPoolDiscovery(),
+    backend: {
+      async getLogs() {
+        return [log(bytesTopic, poolId)];
+      },
+      async call() {
+        return "0x";
+      },
+    },
+    fromBlock: 100,
+    toBlock: 100,
+    batchSize: 10,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    strict: true,
+  });
+} catch (error) {
+  strictOpaqueRetryRejected =
+    error instanceof Error &&
+    error.message.includes("incomplete without retry proof");
+}
+assert(
+  strictOpaqueRetryRejected,
+  "strict opaque materialization may not advance without a typed retry proof",
 );
 
 const fluidPool = ethers.getAddress(
@@ -966,37 +1185,47 @@ assert(
   "a canonical non-underlying ABI rejection must not poison strict landed coverage",
 );
 
-let transportRejected = false;
-try {
-  await discoverLandedPools({
-    registry: curveUnderlyingRegistry.landedPoolDiscovery(),
-    backend: {
-      ...falseUnderlyingEventBackend,
-      async call() {
-        throw Object.assign(new Error("connection reset"), {
-          code: "NETWORK_ERROR",
-        });
-      },
+const transportIncomplete = await discoverLandedPools({
+  registry: curveUnderlyingRegistry.landedPoolDiscovery(),
+  backend: {
+    ...falseUnderlyingEventBackend,
+    async call() {
+      throw Object.assign(new Error("connection reset"), {
+        code: "NETWORK_ERROR",
+      });
     },
-    fromBlock: 100,
-    toBlock: 100,
-    batchSize: 10,
-    minSwaps: 1,
-    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    topicScanMode: "union",
-    strict: true,
-  });
-} catch (error) {
-  transportRejected =
-    error instanceof Error &&
-    error.message.includes("landed-pool discovery incomplete");
-}
+  },
+  fromBlock: 100,
+  toBlock: 100,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  topicScanMode: "union",
+  strict: true,
+});
 assert(
-  transportRejected,
-  "Curve-underlying transport failure must still fail strict landed coverage",
+  transportIncomplete.materializedPools.length === 0 &&
+    transportIncomplete.retryablePools.length === 1 &&
+    transportIncomplete.coverage.some((item) =>
+      !item.complete &&
+      item.issues.length > 0
+    ),
+  "transport failure must stay explicit and fail closed for its owning family",
 );
 
-console.log("landed-pool-discovery PASS (15/15)");
+const productionRetryRegistry =
+  PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
+assert(
+  productionRetryRegistry.consumesAddressRetries("curve") &&
+    productionRetryRegistry.consumesAddressRetries("curve-underlying") &&
+    productionRetryRegistry.consumesAddressRetries("dodo-v2") &&
+    productionRetryRegistry.consumesAddressRetries("fluid-dex") &&
+    !productionRetryRegistry.consumesAddressRetries("balancer-v3") &&
+    !productionRetryRegistry.consumesAddressRetries("univ4"),
+  "only materializers that reconstruct persisted address candidates may own address retries",
+);
+
+console.log("landed-pool-discovery PASS (20/20)");
 
 function discoverySummary(result: Awaited<ReturnType<typeof discoverLandedPools>>) {
   return {

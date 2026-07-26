@@ -1265,6 +1265,13 @@ async function main(): Promise<void> {
       pool,
     ] as const),
   );
+  const landedPoolDiscoveryRegistry =
+    PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
+  const startupFamilyMaterializationRetries = [
+    ...retryableDexIdentityPools.values(),
+  ].filter((pool) =>
+    landedPoolDiscoveryRegistry.consumesAddressRetries(pool.adapter)
+  );
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks
   const factoryPools = await indexFactoryPools(
@@ -1289,6 +1296,7 @@ async function main(): Promise<void> {
       // accepting it; genuinely new identities still take the normal on-chain
       // backfill path.
       retainedPools: blockscanUniverse,
+      retryablePools: startupFamilyMaterializationRetries,
       ...(protocolDiscoveryHistoryProvider === undefined
         ? {}
         : {
@@ -1302,6 +1310,12 @@ async function main(): Promise<void> {
       strict: true,
     },
   );
+  for (const pool of startupFamilyMaterializationRetries) {
+    retryableDexIdentityPools.delete(poolRegistryKey(pool));
+  }
+  for (const pool of startupActivePoolDiscovery.retryablePools) {
+    retryableDexIdentityPools.set(poolRegistryKey(pool), pool);
+  }
   const swapPools = [...startupActivePoolDiscovery.pools];
   // Merge: protocol contracts + pinned backbone + file-backed active universe + discovered pools.
   // Apply the registry-declared family admission switch. No venue identity is

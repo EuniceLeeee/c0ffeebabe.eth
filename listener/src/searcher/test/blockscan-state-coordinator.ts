@@ -833,6 +833,50 @@ async function oneFailedStateKeyPreservesHealthySiblingInstance(): Promise<void>
   );
 }
 
+async function graphIncompleteSwapFamilyPreservesHealthySibling(): Promise<void> {
+  const readTargets: string[] = [];
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      readTargets.push(...reads.map((read) => read.to.toLowerCase()));
+      return reads.map((read) =>
+        successfulRead(read, control.sourceGeneration)
+      );
+    },
+    async verifyCanonicalSource() {},
+  };
+  const incompleteSwapGraph = createVerifiedGraphView({
+    id: "graph-incomplete-swap-family",
+    generation: 1,
+    sourceBlock: SOURCE_BLOCK,
+    sourceBlockHash: SOURCE_HASH,
+    completenessWatermark: SOURCE_BLOCK - 1,
+    perSourceCoverage: [{
+      familyId: "univ2-standard",
+      sourceId: "landed-event:fixture",
+      sourceFingerprint: "fixture-swap-retry-v1",
+      completeThroughBlock: SOURCE_BLOCK - 1,
+      completeThroughHash: SOURCE_HASH,
+    }],
+    edges: [swapForward, swapReverse, protocol],
+  });
+  const result = await new BlockScanStateCoordinator(backend).prepare({
+    graph: incompleteSwapGraph,
+    families: families().list,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(result.status, "degraded");
+  if (result.status !== "degraded") {
+    throw new Error("expected family-local swap graph degradation");
+  }
+  assert.deepEqual(result.snapshot.resolvedFamilyIds, ["protocol:fixture"]);
+  assert.deepEqual(result.snapshot.incompleteFamilyIds, ["univ2-standard"]);
+  assert.equal(result.snapshot.mids.size, 1);
+  assert(
+    readTargets.every((target) => target === PROTOCOL_POOL.toLowerCase()),
+    "an incomplete swap family must issue no state reads while a healthy sibling remains current-N",
+  );
+}
+
 async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
   const backend = new StateKeyIncrementalBackend();
   const coordinator = new BlockScanStateCoordinator(backend);
@@ -1767,6 +1811,7 @@ function successfulRead(
 await completeAndDeterministic();
 await replayResetDropsOnlyDynamicPublication();
 await failedFamilyPublishesHealthyFamiliesAsDegraded();
+await graphIncompleteSwapFamilyPreservesHealthySibling();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();

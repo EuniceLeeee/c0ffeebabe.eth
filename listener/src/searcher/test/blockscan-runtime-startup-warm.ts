@@ -7,6 +7,7 @@ import {
 } from "../adapter-runtime-coordinator.js";
 import {
   BlockScanRuntimeLoop,
+  dexRuntimeAdmissionCompleteThrough,
   type BlockScanRuntimeLoopDependencies,
 } from "../blockscan-runtime-loop.js";
 import { CanonicalHeaderJournal } from "../canonical-header-journal.js";
@@ -56,6 +57,8 @@ await startupStateGetsAnIndependentPhaseBudget();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
 await protocolLagDoesNotBlockDexRuntime();
+await familyProjectionLagDoesNotBlockOrdinaryDexRuntime();
+blindModeStillRequiresExecutableDexGraph();
 await observedPublicationDoesNotInvalidateHotDexCommit();
 await shutdownInterruptsStartupBackfillWait();
 await shutdownDrainsActivePassAndDropsPendingHead();
@@ -63,7 +66,7 @@ blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (15/15)",
+    "PASS (17/17)",
 );
 
 async function distantStartupCatchesUpInSameHead(): Promise<void> {
@@ -288,6 +291,56 @@ async function protocolLagDoesNotBlockDexRuntime(): Promise<void> {
   );
 }
 
+async function familyProjectionLagDoesNotBlockOrdinaryDexRuntime(): Promise<void> {
+  const harness = createHarness(
+    599,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      preserveHotGraphGap: true,
+    },
+  );
+  await harness.run(600);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [600],
+    "source-complete ordinary live must run healthy families while one projection retries",
+  );
+  assert.deepEqual(
+    harness.backfillBlocks,
+    [600],
+    "an ordinary family projection gap must schedule immediate background healing",
+  );
+  assert.equal(
+    harness.publication.dexGraphCoverage.sourceCompleteThrough,
+    600,
+  );
+  assert.equal(
+    harness.publication.dexGraphCoverage.graphCompleteThrough,
+    599,
+  );
+}
+
+function blindModeStillRequiresExecutableDexGraph(): void {
+  const state: LiveDiscoveryPublicationState = {
+    ...publicationAt(650),
+    dexGraphCoverage: {
+      sourceCompleteThrough: 650,
+      graphCompleteThrough: 649,
+    },
+  };
+  assert.equal(
+    dexRuntimeAdmissionCompleteThrough(state, false),
+    650,
+    "ordinary live admission follows canonical source coverage",
+  );
+  assert.equal(
+    dexRuntimeAdmissionCompleteThrough(state, true),
+    649,
+    "blind/audit admission remains pinned to executable graph coverage",
+  );
+}
+
 async function observedPublicationDoesNotInvalidateHotDexCommit(): Promise<void> {
   const harness = createHarness(
     469,
@@ -408,6 +461,7 @@ function createHarness(
     readonly initialLaneReadyBlock?: number;
     readonly initialLanePublishedBlock?: number;
     readonly beforeDiscoveryPrepare?: () => Promise<void>;
+    readonly preserveHotGraphGap?: boolean;
   } = {},
 ) {
   let publication = publicationAt(
@@ -595,12 +649,19 @@ function createHarness(
             delta: prepared.delta,
             retryableDexGraphPools: current.retryableDexGraphPools,
             retryableDexIdentityPools: current.retryableDexIdentityPools,
+            // Ordinary live may publish a source-complete generation while one
+            // family projection remains retryable. Blind mode must still reject
+            // the same fixture before runtime preparation.
             dexGraphCoverage: {
               sourceCompleteThrough: prepared.block,
-              graphCompleteThrough: prepared.block,
+              graphCompleteThrough: options.preserveHotGraphGap
+                ? current.dexGraphCoverage.graphCompleteThrough
+                : prepared.block,
             },
             dexSourceAnchor: anchor(prepared.block),
-            dexGraphAnchor: anchor(prepared.block),
+            dexGraphAnchor: options.preserveHotGraphGap
+              ? current.dexGraphAnchor
+              : anchor(prepared.block),
             landedCoverage: current.landedCoverage,
           },
           buildStrategyViews: runtimeStrategyViews,

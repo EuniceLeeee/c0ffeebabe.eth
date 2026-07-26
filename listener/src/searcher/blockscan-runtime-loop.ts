@@ -75,6 +75,15 @@ const EMPTY_BLIND_PRICING_COVERAGE: BlindProductionPricingCoverageSource =
     resolvedEdgeKeys: Object.freeze([]),
   });
 
+export function dexRuntimeAdmissionCompleteThrough(
+  state: LiveDiscoveryPublicationState,
+  blindEnabled: boolean,
+): number {
+  return blindEnabled
+    ? state.dexGraphCoverage.graphCompleteThrough
+    : state.dexGraphCoverage.sourceCompleteThrough;
+}
+
 export interface BlockScanRejectBlacklistEntry {
   strikes: number;
   expiryBlock: number | null;
@@ -568,9 +577,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       const consumedPreparedSource = await consumePreparedBackfill();
 
       let base = discovery.capture();
+      const dexAdmissionCompleteThrough = (
+        state: LiveDiscoveryPublicationState,
+      ): number =>
+        dexRuntimeAdmissionCompleteThrough(
+          state,
+          this.deps.blind.enabled,
+        );
       const requiredPredecessor = Math.max(0, blockNumber - 1);
       if (
-        base.dexGraphCoverage.graphCompleteThrough < requiredPredecessor
+        dexAdmissionCompleteThrough(base) < requiredPredecessor
       ) {
         if (startupWarmAttempt) {
           // Startup has a separate bounded budget. Let the already-running
@@ -588,12 +604,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           await consumePreparedBackfill();
           base = discovery.capture();
           while (
-            base.dexGraphCoverage.graphCompleteThrough <
-              requiredPredecessor &&
+            dexAdmissionCompleteThrough(base) < requiredPredecessor &&
             Date.now() < passDeadlineAtMs
           ) {
             const previousCompleteThrough =
-              base.dexGraphCoverage.graphCompleteThrough;
+              dexAdmissionCompleteThrough(base);
             await waitForBackfillSettlement(
               Promise.resolve(
                 discovery.scheduleBackfill(blockNumber),
@@ -610,21 +625,18 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             base = discovery.capture();
             if (
               consumed === null ||
-              base.dexGraphCoverage.graphCompleteThrough <=
-                previousCompleteThrough
+              dexAdmissionCompleteThrough(base) <= previousCompleteThrough
             ) {
               break;
             }
           }
         }
         const predecessorStillBehind =
-          base.dexGraphCoverage.graphCompleteThrough <
-            requiredPredecessor;
+          dexAdmissionCompleteThrough(base) < requiredPredecessor;
         const canStrictlyCatchCurrentHead =
           !startupWarmAttempt &&
           consumedPreparedSource !== null &&
-          base.dexGraphCoverage.graphCompleteThrough >=
-            consumedPreparedSource;
+          dexAdmissionCompleteThrough(base) >= consumedPreparedSource;
         // A complete prepared generation can only be behind because heads
         // advanced while it was running. The existing hot transition may
         // strictly scan that elapsed suffix within the ordinary pass budget.
@@ -634,11 +646,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           (predecessorStillBehind && !canStrictlyCatchCurrentHead)
         ) {
           outcome = "degraded";
+          const admissionThrough = dexAdmissionCompleteThrough(base);
           skippedReason =
-            base.dexGraphCoverage.graphCompleteThrough <
-                requiredPredecessor
+            admissionThrough < requiredPredecessor
               ? `discovery_backfill_behind:` +
-                `${base.dexGraphCoverage.graphCompleteThrough}<` +
+                `${admissionThrough}<` +
                 `${requiredPredecessor}`
               : "startup_discovery_deadline";
           finishStage("state", "failed");
@@ -687,20 +699,26 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       discovery.finish(preparedDiscovery);
       const nextDescriptor =
         describeLiveDiscoveryPublicationState(nextDiscovery);
-      if (
-        nextDiscovery.dexGraphCoverage.graphCompleteThrough < blockNumber
-      ) {
+      const nextAdmissionThrough = dexAdmissionCompleteThrough(nextDiscovery);
+      if (nextAdmissionThrough < blockNumber) {
         outcome = "degraded";
         skippedReason =
           `discovery_current_incomplete:` +
-          `${nextDiscovery.dexGraphCoverage.graphCompleteThrough}<${blockNumber}`;
+          `${nextAdmissionThrough}<${blockNumber}`;
         finishStage("state", "failed");
         void discovery.scheduleBackfill(blockNumber);
         return;
       }
+      if (
+        nextDiscovery.dexGraphCoverage.graphCompleteThrough < blockNumber
+      ) {
+        // The source range is canonical and complete, but one or more family
+        // projections remain retryable. Keep healing in the background while
+        // GraphView excludes only those owning families from this live pass.
+        void discovery.scheduleBackfill(blockNumber);
+      }
       const discoveryPass = {
-        dexComplete:
-          nextDiscovery.dexGraphCoverage.graphCompleteThrough >= blockNumber,
+        dexComplete: nextAdmissionThrough >= blockNumber,
         protocolComplete:
           nextDescriptor.graphCompleteThrough >= blockNumber,
         sourceBlockHash: sourceHeader.hash,

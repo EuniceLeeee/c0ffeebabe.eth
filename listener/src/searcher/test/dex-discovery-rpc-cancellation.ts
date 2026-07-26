@@ -8,6 +8,7 @@ import {
 } from "../active-pool-discovery.js";
 import { buildTokenGraphWithResults } from "../planner/token-graph.js";
 import { createPinnedDexReadBackend } from "../runtime-pool-refresh.js";
+import { DODO_V2_SWAP_TOPIC } from "../venues/landed-event-registry.js";
 
 const UNIV2_SWAP_TOPIC = ethers.id(
   "Swap(address,uint256,uint256,uint256,uint256,address)",
@@ -33,6 +34,8 @@ interface RpcFixture {
 async function main(): Promise<void> {
   await testFactoryParentAbortClosesTransport();
   await testActivePoolDeadlineClosesTransport();
+  await testActivePoolIdentityTimeoutPersistsRetry();
+  await testFamilyMaterializationTimeoutClosesTransport();
   await testKnownPoolSkipsIdentityWithoutErasingCoverage();
   await testIdentityParentAbortClosesTransport();
   await testPinnedCallParentAbortClosesTransport();
@@ -40,7 +43,7 @@ async function main(): Promise<void> {
   await testGraphControlAbortsPinnedTransport();
   await testCurveGraphDeadlineDoesNotBecomeNoCoins();
   await testCurveGraphRawAbortDoesNotBecomeNoCoins();
-  console.log("[dex-discovery-rpc-cancellation] PASS 9/9");
+  console.log("[dex-discovery-rpc-cancellation] PASS 11/11");
 }
 
 async function testFactoryParentAbortClosesTransport(): Promise<void> {
@@ -81,6 +84,110 @@ async function testActivePoolDeadlineClosesTransport(): Promise<void> {
     fixture.methods.filter((method) => method === "eth_getLogs").length,
     1,
     "an expired active-pool deadline must not start more HTTP requests",
+  );
+  await provider.destroy();
+  await fixture.close();
+}
+
+async function testActivePoolIdentityTimeoutPersistsRetry(): Promise<void> {
+  const fixture = await createRpcFixture((request) => {
+    if (request.method === "eth_call") return "pending";
+    if (request.method !== "eth_getLogs") return "empty";
+    const filter = request.params[0] as {
+      readonly topics?: readonly unknown[];
+    };
+    return containsTopic(filter.topics, UNIV2_SWAP_TOPIC)
+      ? [{
+          address: TEST_POOL,
+          topics: [UNIV2_SWAP_TOPIC],
+          data: "0x",
+          blockNumber: "0x64",
+        }]
+      : [];
+  });
+  const provider = new ethers.JsonRpcProvider(fixture.url, 1, {
+    staticNetwork: true,
+  });
+  const result = await scanActivePoolsDetailed(provider, 0, 100, 100, {
+    strict: true,
+    identityBlockTag: 100,
+    identityTimeoutMs: 50,
+    topicScanMode: "per-event",
+    control: { signal: new AbortController().signal },
+  });
+  await fixture.waitForAbortedResponse("eth_call");
+  assert.equal(result.pools.length, 0);
+  assert.deepEqual(
+    result.retryablePools.map((pool) => [
+      pool.address.toLowerCase(),
+      pool.adapter,
+    ]),
+    [[TEST_POOL.toLowerCase(), "univ2"]],
+    "a bounded identity timeout must preserve the candidate for current-N retry",
+  );
+  assert.equal(
+    result.coverage.every((item) => item.complete),
+    true,
+    "identity retryability must not falsify the already-complete raw log scan",
+  );
+  await provider.destroy();
+  await fixture.close();
+}
+
+async function testFamilyMaterializationTimeoutClosesTransport(): Promise<void> {
+  const fixture = await createRpcFixture((request) => {
+    if (request.method === "eth_call") return "pending";
+    if (request.method !== "eth_getLogs") return "empty";
+    const filter = request.params[0] as {
+      readonly topics?: readonly unknown[];
+    };
+    return containsTopic(filter.topics, DODO_V2_SWAP_TOPIC)
+      ? [{
+          address: TEST_POOL,
+          topics: [DODO_V2_SWAP_TOPIC],
+          data: "0x",
+          blockNumber: "0x64",
+        }]
+      : [];
+  });
+  const provider = new ethers.JsonRpcProvider(fixture.url, 1, {
+    staticNetwork: true,
+  });
+  const result = await scanActivePoolsDetailed(provider, 0, 100, 100, {
+    strict: true,
+    identityBlockTag: 100,
+    topicScanMode: "per-event",
+    control: { signal: new AbortController().signal },
+  });
+  await fixture.waitForAbortedResponse("eth_call");
+  assert.equal(result.pools.length, 0);
+  assert.deepEqual(
+    result.retryablePools.map((pool) => [
+      pool.address.toLowerCase(),
+      pool.adapter,
+    ]),
+    [[TEST_POOL.toLowerCase(), "dodo-v2"]],
+    "a family-local materialization timeout must preserve its landed candidate",
+  );
+  const dodoCoverage = result.coverage.find(
+    (item) => item.eventId === "dodo-v2-swap",
+  );
+  assert.equal(
+    dodoCoverage?.complete,
+    false,
+    "a timed-out DODO materializer must degrade only its owning coverage",
+  );
+  assert.equal(
+    result.coverage
+      .filter((item) => item.eventId !== "dodo-v2-swap")
+      .every((item) => item.complete),
+    true,
+    "a family-local timeout must not falsify healthy landed sources",
+  );
+  assert.equal(
+    fixture.methods.filter((method) => method === "eth_call").length,
+    2,
+    "DODO identity starts exactly its base/quote reads before cancellation",
   );
   await provider.destroy();
   await fixture.close();

@@ -14,6 +14,7 @@ import {
 } from "./venues/capability.js";
 import {
   attestPoolIdentities,
+  isRetryablePoolIdentityFailure,
   type IdentityCallBackend,
 } from "./venues/identity.js";
 import {
@@ -226,6 +227,11 @@ export interface ActivePoolDiscoveryOptions {
    */
   retainedPools?: readonly PoolEntry[];
   /**
+   * Family-owned materialization candidates that must be retried even when the
+   * original landed event is outside this incremental source range.
+   */
+  retryablePools?: readonly PoolEntry[];
+  /**
    * Optional canonical archive used only when a family materializer asks for
    * logs older than the current discovery window. Recent logs, identity calls,
    * code and all current state remain pinned to the live provider.
@@ -247,10 +253,13 @@ export interface ActivePoolDiscoveryOptions {
    */
   topicScanMode?: "per-event" | "union";
   /**
-   * Completeness mode for source-pinned graph generations. Any missing log
-   * slice aborts the pass instead of returning a deceptively complete delta.
+   * Completeness mode for source-pinned graph generations. Missing reads stay
+   * explicit in per-family landed coverage, so the owning family is excluded
+   * without manufacturing completeness for it or blocking healthy siblings.
    */
   strict?: boolean;
+  /** Current-N budget for generic V2/V3 identity reads after log discovery. */
+  identityTimeoutMs?: number;
   control?: DexDiscoveryReadControl;
 }
 
@@ -277,6 +286,8 @@ export async function scanActivePools(
 export interface ActivePoolDiscoveryResult {
   readonly pools: readonly PoolEntry[];
   readonly coverage: readonly LandedPoolDiscoveryCoverage[];
+  /** Source-complete candidates whose current-N identity remains unresolved. */
+  readonly retryablePools: readonly PoolEntry[];
   /** True when ranking omitted admitted positives; never completeness-safe. */
   readonly truncated: boolean;
 }
@@ -314,6 +325,7 @@ export async function scanActivePoolsDetailed(
     admissionPolicy:
       options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
     retainedPools: options.retainedPools ?? [],
+    retryablePools: options.retryablePools ?? [],
     isKnownPool,
     topicScanMode: options.topicScanMode ?? "per-event",
     strict: options.strict,
@@ -321,50 +333,113 @@ export async function scanActivePoolsDetailed(
   });
   const poolCounts = landed.activity;
 
-  const candidates: PoolEntry[] = [
-    ...[...poolCounts.entries()]
+  const genericCandidates: PoolEntry[] = [...poolCounts.entries()]
     .sort((a, b) => b[1].count - a[1].count)
     .map(([addr, item]) => ({
       address: ethers.getAddress(addr),
       adapter: bestAdapter(item.adapterCounts),
       score: item.count,
-    })),
-    ...landed.materializedPools,
-  ].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  throwIfDexDiscoveryCancelled(options.control);
-  const identityCandidates = candidates.filter((pool) => !isKnownPool(pool));
-  const reusedKnown = candidates.length - identityCandidates.length;
-  const { accepted, rejected } = await attestPoolIdentities(
-    hasDexDiscoveryControl(options.control)
-      ? discoveryBackend
-      : options.identityBackend ?? provider,
-    identityCandidates,
-    {
-    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
-    admissionPolicy: options.admissionPolicy,
-    },
+    }));
+  const materializedCandidates = landed.materializedPools.filter(
+    (pool) => !isKnownPool(pool),
   );
   throwIfDexDiscoveryCancelled(options.control);
-  if (
-    options.strict &&
-    rejected.some((item) => item.reason === "identity_call_failed")
-  ) {
-    throw new Error(
-      "strict active-pool discovery could not complete source-pinned identity reads",
+  const identityCandidates = genericCandidates.filter(
+    (pool) => !isKnownPool(pool),
+  );
+  const reusedKnown =
+    genericCandidates.length - identityCandidates.length +
+    landed.materializedPools.length - materializedCandidates.length;
+  const identityTimeoutMs = normalizeIdentityTimeout(
+    options.identityTimeoutMs,
+  );
+  const identityController = hasDexDiscoveryControl(options.control) &&
+      identityCandidates.length > 0
+    ? new AbortController()
+    : null;
+  const identityTimer = identityController === null
+    ? null
+    : setTimeout(
+        () =>
+          identityController.abort(
+            new Error(
+              `active-pool identity reads exceeded ${identityTimeoutMs}ms`,
+            ),
+          ),
+        identityTimeoutMs,
+      );
+  const controlledIdentitySignal = mergeDexDiscoverySignals(
+    options.control?.signal,
+    identityController?.signal,
+  );
+  const identityBackend: IdentityCallBackend =
+    identityController === null
+      ? options.identityBackend ?? provider
+      : {
+          call: (req) =>
+            discoveryBackend.call(
+              req,
+              controlledIdentitySignal === undefined
+                ? undefined
+                : { signal: controlledIdentitySignal },
+            ),
+          ...(discoveryBackend.getCode === undefined
+            ? {}
+            : {
+                getCode: (address: string) =>
+                  discoveryBackend.getCode!(
+                    address,
+                    controlledIdentitySignal === undefined
+                      ? undefined
+                      : { signal: controlledIdentitySignal },
+                  ),
+              }),
+        };
+  let identityResult: Awaited<
+    ReturnType<typeof attestPoolIdentities<PoolEntry>>
+  >;
+  try {
+    identityResult = await attestPoolIdentities(
+      identityBackend,
+      identityCandidates,
+      {
+        identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+        admissionPolicy: options.admissionPolicy,
+      },
     );
+  } finally {
+    if (identityTimer !== null) clearTimeout(identityTimer);
   }
+  const { accepted, rejected } = identityResult;
+  throwIfDexDiscoveryCancelled(options.control);
+  const retryableIdentityKeys = new Set(
+    rejected
+      .filter((item) => isRetryablePoolIdentityFailure(item.reason))
+      .map((item) => identityCandidateKey(item)),
+  );
+  const retryableIdentityPools = identityCandidates.filter((pool) =>
+    retryableIdentityKeys.has(identityCandidateKey(pool))
+  );
+  const retryablePools = mergePoolRegistries(
+    [...landed.retryablePools],
+    retryableIdentityPools,
+  );
+  const admitted = mergePoolRegistries(
+    [...accepted],
+    materializedCandidates,
+  ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const boundedMaxPools = Number.isFinite(maxPools)
     ? Math.max(0, Math.floor(maxPools))
-    : accepted.length;
-  const truncated = accepted.length > boundedMaxPools;
+    : admitted.length;
+  const truncated = admitted.length > boundedMaxPools;
   if (options.strict && truncated) {
     throw new Error(
       "strict active-pool discovery cannot publish completeness after " +
-        `truncating ${accepted.length} admitted pools to ${boundedMaxPools}`,
+        `truncating ${admitted.length} admitted pools to ${boundedMaxPools}`,
     );
   }
-  const ranked = accepted.slice(0, boundedMaxPools);
-  const provisional = accepted.filter(
+  const ranked = admitted.slice(0, boundedMaxPools);
+  const provisional = admitted.filter(
     (pool) => pool.identitySource === "factory-call-provisional",
   ).length;
   const rejectedByReason = new Map<string, number>();
@@ -380,7 +455,7 @@ export async function scanActivePoolsDetailed(
     `[discovery] scanned ${blocksBack} blocks: ` +
       `${poolCounts.size + landed.materializedPools.length} candidates ` +
       `(materialized=${landed.materializedPools.length}), ` +
-      `${accepted.length} new identity-admitted ` +
+      `${admitted.length} new identity-admitted ` +
       `(provisional=${provisional}, reused-known=${reusedKnown}), ` +
       `taking top ${ranked.length} new` +
       (rejectedSummary ? `, rejected(${rejectedSummary})` : ""),
@@ -389,8 +464,23 @@ export async function scanActivePoolsDetailed(
   return {
     pools: Object.freeze(ranked),
     coverage: landed.coverage,
+    retryablePools: Object.freeze(retryablePools),
     truncated,
   };
+}
+
+function identityCandidateKey(
+  pool: { readonly address: string; readonly adapter: string },
+): string {
+  return `${pool.adapter}\u001f${pool.address.toLowerCase()}`;
+}
+
+function normalizeIdentityTimeout(value: number | undefined): number {
+  const timeout = value ?? 3_000;
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    throw new Error(`active-pool identity timeout must be positive`);
+  }
+  return Math.max(1, Math.floor(timeout));
 }
 
 /**
@@ -503,7 +593,10 @@ function ethersPoolDiscoveryBackend(
         control,
         nestedControl,
       );
-      if (!hasDexDiscoveryControl(mergedControl)) {
+      if (
+        !hasDexDiscoveryControl(mergedControl) ||
+        !supportsAbortableDexDiscoveryTransport(provider)
+      ) {
         return provider.call({
           ...req,
           ...(blockTag === undefined ? {} : { blockTag }),
@@ -519,8 +612,18 @@ function ethersPoolDiscoveryBackend(
         mergedControl,
       );
     },
-    getCode(address: string) {
-      if (!hasDexDiscoveryControl(control)) {
+    getCode(
+      address: string,
+      nestedControl?: { readonly signal?: AbortSignal },
+    ) {
+      const mergedControl = mergeDexDiscoveryReadControls(
+        control,
+        nestedControl,
+      );
+      if (
+        !hasDexDiscoveryControl(mergedControl) ||
+        !supportsAbortableDexDiscoveryTransport(provider)
+      ) {
         return provider.getCode(address, blockTag);
       }
       return sendDexDiscoveryRpc<string>(
@@ -530,13 +633,23 @@ function ethersPoolDiscoveryBackend(
           ethers.getAddress(address),
           blockTag === undefined ? "latest" : normalizeDexDiscoveryBlockTag(blockTag),
         ],
-        control,
+        mergedControl,
       );
     },
   };
 }
 
 let dexDiscoveryRpcId = 0;
+
+function supportsAbortableDexDiscoveryTransport(
+  provider: ethers.JsonRpcProvider,
+): boolean {
+  return typeof (
+    provider as ethers.JsonRpcProvider & {
+      readonly _getConnection?: unknown;
+    }
+  )._getConnection === "function";
+}
 
 async function readDexDiscoveryBlockNumber(
   provider: ethers.JsonRpcProvider,

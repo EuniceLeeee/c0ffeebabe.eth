@@ -891,6 +891,18 @@ async function testRuntimeScanUsesIdentity(): Promise<void> {
     provider.curveCalls.includes(UNREGISTERED_CURVE_POOL.toLowerCase()),
     "scanner must query Curve MetaRegistry",
   );
+  assert(
+    provider.curveCalls.filter(
+      (address) => address === CURVE_POOL.toLowerCase(),
+    ).length === 1,
+    "family materialization must own Curve identity without a second central attestation",
+  );
+  assert(
+    provider.curveCalls.filter(
+      (address) => address === UNREGISTERED_CURVE_POOL.toLowerCase(),
+    ).length === 1,
+    "a family-local permanent Curve rejection must not be centrally retried",
+  );
   console.log("[venue-identity] runtime scan identity gate: PASS");
 }
 

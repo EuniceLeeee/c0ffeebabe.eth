@@ -77,15 +77,23 @@ import {
   completeDexGraphCoverageScan,
   createDexGraphCoverageState,
   createPinnedDexReadBackend,
+  type PinnedDexReadBackend,
   type DexGraphCoverageScan,
   type DexGraphCoverageState,
   planDexGraphCoverageScan,
   prepareRuntimePoolRefresh,
   selectRefreshCandidates,
 } from "./runtime-pool-refresh.js";
-import { prepareStartupDexIdentityRetryStage } from "./startup-dex-identity-retry.js";
+import {
+  prepareStartupDexIdentityRetryStage,
+  type StartupDexIdentityRetryStage,
+} from "./startup-dex-identity-retry.js";
 import type { StrategyViews } from "./strategy-views.js";
-import { PRODUCTION_IDENTITY_ADMISSION } from "./venues/admission.js";
+import {
+  PRODUCTION_IDENTITY_ADMISSION,
+  type IdentityAdmissionPolicy,
+} from "./venues/admission.js";
+import type { IdentityResolverRegistry } from "./venues/identity.js";
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
@@ -128,6 +136,23 @@ interface RuntimeGraphConsumer {
 
 interface RuntimeDetector extends RuntimeGraphConsumer {
   setPoolAddressMap(poolAddressMap: Map<string, string>): void;
+}
+
+export function planLiveDiscoveryBackfillLanes(input: {
+  readonly dexSourceCompleteThrough: number;
+  readonly dexTargetThrough: number;
+  readonly hasDexProjectionRetry: boolean;
+}): Readonly<{
+  readonly dex: "source" | "projection" | "none";
+  readonly protocol: "preempt" | "schedule";
+}> {
+  if (input.dexSourceCompleteThrough < input.dexTargetThrough) {
+    return Object.freeze({ dex: "source", protocol: "preempt" });
+  }
+  return Object.freeze({
+    dex: input.hasDexProjectionRetry ? "projection" : "none",
+    protocol: "schedule",
+  });
 }
 
 export interface LiveDiscoveryCoordinatorDeps {
@@ -258,6 +283,8 @@ export async function createLiveDiscoveryCoordinator(
   let discoveryPublicationRevision = 0;
   let lastLandedCoverage: readonly LandedPoolDiscoveryCoverage[] =
     Object.freeze([...startupActivePoolDiscovery.coverage]);
+  const landedPoolDiscoveryRegistry =
+    PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery();
   const initialDexSourceAnchor = await discoveryCoverageAnchor(
     provider,
     dexGraphCoverage.sourceCompleteThrough,
@@ -431,6 +458,16 @@ export async function createLiveDiscoveryCoordinator(
       ? createPinnedDexReadBackend(provider, targetBlock, options.control)
       : null;
     const readBackend = pinnedReadBackend ?? mainnetBackend;
+    const familyMaterializationRetries = [
+      ...current.retryableIdentityPools.values(),
+    ].filter((pool) =>
+      landedPoolDiscoveryRegistry.consumesAddressRetries(pool.adapter)
+    );
+    const genericIdentityRetries = [
+      ...current.retryableIdentityPools.values(),
+    ].filter((pool) =>
+      !landedPoolDiscoveryRegistry.consumesAddressRetries(pool.adapter)
+    );
     const [
       swapDiscovery,
       factoryFresh,
@@ -452,6 +489,7 @@ export async function createLiveDiscoveryCoordinator(
               [...retainedDexUniverse],
               current.strategyViews.blockscan,
             ),
+            retryablePools: familyMaterializationRetries,
             knownPoolKeys: current.knownPoolKeys,
             ...(historicalLogAnchor === undefined
               ? {}
@@ -477,13 +515,10 @@ export async function createLiveDiscoveryCoordinator(
           ? buildTokenGraphWithResults(readBackend, liveRegistry, { quiet: true })
           : Promise.resolve(null),
         pinnedReadBackend
-          ? prepareStartupDexIdentityRetryStage({
+          ? prepareBoundedDexIdentityRetry({
               currentN: targetBlock,
               backend: pinnedReadBackend,
-              state: {
-                accepted: [],
-                remaining: [...current.retryableIdentityPools.values()],
-              },
+              remaining: genericIdentityRetries,
               identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
               seedEntries: liveRegistry,
               admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
@@ -507,13 +542,21 @@ export async function createLiveDiscoveryCoordinator(
     let projection: Awaited<ReturnType<typeof prepareRuntimePoolRefresh>> | null = null;
     const nextRetryableDexGraphPools = new Map(current.retryablePools);
     const nextRetryableDexIdentityPools = identityRetry === null
-      ? new Map(current.retryableIdentityPools)
+      ? new Map(
+          genericIdentityRetries.map((pool) => [
+            poolRegistryKey(pool),
+            pool,
+          ] as const),
+        )
       : new Map(
           identityRetry.remaining.map((pool) => [
             poolRegistryKey(pool),
             pool,
           ] as const),
         );
+    for (const pool of swapDiscovery.retryablePools) {
+      nextRetryableDexIdentityPools.set(poolRegistryKey(pool), pool);
+    }
     const staticFailures: Array<{
       pool: PoolEntry;
       reason: string;
@@ -1703,17 +1746,18 @@ export async function createLiveDiscoveryCoordinator(
         base.dexGraphCoverage.sourceCompleteThrough;
     const dexSourceThrough =
       base.dexGraphCoverage.sourceCompleteThrough;
-    if (dexSourceThrough < dexTargetThrough || hasProjectionRetry) {
+    const lanePlan = planLiveDiscoveryBackfillLanes({
+      dexSourceCompleteThrough: dexSourceThrough,
+      dexTargetThrough,
+      hasDexProjectionRetry: hasProjectionRetry,
+    });
+    if (lanePlan.protocol === "preempt") {
       protocolBackfillLane.invalidate("DEX backfill priority");
-      const fromBlock = dexSourceThrough < dexTargetThrough
-        ? dexSourceThrough + 1
-        : dexTargetThrough;
-      const toBlock = dexSourceThrough < dexTargetThrough
-        ? Math.min(
-            dexTargetThrough,
-            dexSourceThrough + discoveryBackfillMaxBlocks,
-          )
-        : dexTargetThrough;
+      const fromBlock = dexSourceThrough + 1;
+      const toBlock = Math.min(
+        dexTargetThrough,
+        dexSourceThrough + discoveryBackfillMaxBlocks,
+      );
       dexBackfillLane.schedule({
         id:
           `dex:${fromBlock}-${toBlock}@` +
@@ -1724,8 +1768,22 @@ export async function createLiveDiscoveryCoordinator(
       return;
     }
 
+    if (lanePlan.dex === "projection") {
+      dexBackfillLane.schedule({
+        id:
+          `dex:${dexTargetThrough}-${dexTargetThrough}@` +
+          `${source.number}:${source.hash}`,
+        range: {
+          fromBlock: dexTargetThrough,
+          toBlock: dexTargetThrough,
+        },
+        source: { number: source.number, hash: source.hash },
+      }, base);
+    }
+
     // Protocol history is a lower-priority worker. Its trace/probe deadline
-    // cannot occupy or erase the independent DEX recovery lane.
+    // cannot occupy or erase the independent DEX recovery lane. A family-local
+    // projection retry likewise cannot starve protocol history indefinitely.
     scheduleProtocolBackfill(source, base, protocolTargetThrough);
   };
   let refreshTimer: NodeJS.Timeout | null = null;
@@ -2071,6 +2129,67 @@ export async function createLiveDiscoveryCoordinator(
     settled: () => protocolDiscoveryQueue.settled(),
     blockScanHooks,
   });
+}
+
+const DEX_IDENTITY_RETRY_TIMEOUT_MS = 3_000;
+
+/**
+ * A retry generation must not inherit the enclosing pass's entire deadline.
+ * Keep unresolved identities explicit for the next block while cancelling the
+ * actual HTTP requests, so healthy adapter families can still reach pricing.
+ */
+async function prepareBoundedDexIdentityRetry(input: {
+  readonly currentN: number;
+  readonly backend: PinnedDexReadBackend;
+  readonly remaining: readonly PoolEntry[];
+  readonly identityRegistry: IdentityResolverRegistry;
+  readonly seedEntries: readonly PoolEntry[];
+  readonly admissionPolicy: IdentityAdmissionPolicy;
+}): Promise<StartupDexIdentityRetryStage<PoolEntry>> {
+  if (input.remaining.length === 0) {
+    return prepareStartupDexIdentityRetryStage({
+      currentN: input.currentN,
+      backend: input.backend,
+      state: { accepted: [], remaining: [] },
+      identityRegistry: input.identityRegistry,
+      seedEntries: input.seedEntries,
+      admissionPolicy: input.admissionPolicy,
+    });
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () =>
+      controller.abort(
+        new Error(
+          `DEX identity retry exceeded ${DEX_IDENTITY_RETRY_TIMEOUT_MS}ms`,
+        ),
+      ),
+    DEX_IDENTITY_RETRY_TIMEOUT_MS,
+  );
+  const backend: PinnedDexReadBackend = Object.freeze({
+    sourceBlock: input.backend.sourceBlock,
+    call: (request: {
+      readonly to: string;
+      readonly data: string;
+      readonly blockTag?: ethers.BlockTag;
+    }) =>
+      input.backend.call(request, { signal: controller.signal }),
+    getCode: (address: string) =>
+      input.backend.getCode(address, { signal: controller.signal }),
+  });
+  try {
+    return await prepareStartupDexIdentityRetryStage({
+      currentN: input.currentN,
+      backend,
+      state: { accepted: [], remaining: input.remaining },
+      identityRegistry: input.identityRegistry,
+      seedEntries: input.seedEntries,
+      admissionPolicy: input.admissionPolicy,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export type LiveDiscoveryCoordinator = Awaited<
