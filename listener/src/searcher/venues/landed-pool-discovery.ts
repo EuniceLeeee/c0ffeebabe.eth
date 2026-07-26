@@ -73,6 +73,12 @@ export interface LandedPoolMaterializationContext {
   readonly toBlock: number;
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
+  /**
+   * Hot current-head discovery must not perform an unbounded historical
+   * identity crawl. A bounded miss remains an explicit family-owned retry;
+   * detached/startup discovery may complete the historical proof.
+   */
+  readonly historicalResolution: "bounded" | "complete";
   readonly signal?: AbortSignal;
   readonly backend: LandedPoolDiscoveryReadBackend;
   scanLogs(filter: LandedPoolDiscoveryLogFilter): Promise<LandedPoolDiscoveryScanResult>;
@@ -106,6 +112,12 @@ export interface LandedPoolMaterializationCapability {
    * persisted PoolEntry after the original log leaves the incremental range.
    */
   readonly consumesAddressRetries?: true;
+  /**
+   * This materializer can reconstruct a non-address identity (for example a
+   * V4 poolId) from a persisted typed PoolEntry after the original log leaves
+   * the incremental range.
+   */
+  readonly consumesOpaqueRetries?: true;
   materialize(
     context: LandedPoolMaterializationContext,
   ): Promise<LandedPoolMaterializationResult>;
@@ -458,6 +470,8 @@ export interface LandedPoolDiscoveryResult {
 export class LandedPoolDiscoveryRegistry {
   private readonly descriptors: readonly LandedPoolDiscoveryDescriptor[];
   private readonly addressRetryPoolAdapters: ReadonlySet<PoolEntry["adapter"]>;
+  private readonly materializationRetryPoolAdapters:
+    ReadonlySet<PoolEntry["adapter"]>;
 
   constructor(
     families: readonly SwapAdapter[],
@@ -541,6 +555,14 @@ export class LandedPoolDiscoveryRegistry {
         )
         .map((descriptor) => descriptor.event.discovery.poolAdapter),
     );
+    this.materializationRetryPoolAdapters = new Set(
+      descriptors
+        .filter((descriptor) =>
+          descriptor.materializer?.consumesAddressRetries === true ||
+          descriptor.materializer?.consumesOpaqueRetries === true
+        )
+        .map((descriptor) => descriptor.event.discovery.poolAdapter),
+    );
   }
 
   list(): readonly LandedPoolDiscoveryDescriptor[] {
@@ -549,6 +571,12 @@ export class LandedPoolDiscoveryRegistry {
 
   consumesAddressRetries(poolAdapter: PoolEntry["adapter"]): boolean {
     return this.addressRetryPoolAdapters.has(poolAdapter);
+  }
+
+  consumesMaterializationRetries(
+    poolAdapter: PoolEntry["adapter"],
+  ): boolean {
+    return this.materializationRetryPoolAdapters.has(poolAdapter);
   }
 }
 
@@ -564,6 +592,7 @@ export async function discoverLandedPools(input: {
   readonly retryablePools?: readonly PoolEntry[];
   readonly isKnownPool?: (pool: PoolEntry) => boolean;
   readonly topicScanMode?: "per-event" | "union";
+  readonly historicalResolution?: "bounded" | "complete";
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
 }): Promise<LandedPoolDiscoveryResult> {
@@ -618,6 +647,7 @@ export async function discoverLandedPools(input: {
           toBlock: input.toBlock,
           minSwaps: input.minSwaps,
           admissionPolicy: input.admissionPolicy,
+          historicalResolution: input.historicalResolution ?? "complete",
           ...(input.signal === undefined ? {} : { signal: input.signal }),
           backend: input.backend,
           scanLogs: (filter) =>
@@ -707,6 +737,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
   readonly retainedPools?: readonly PoolEntry[];
   readonly retryablePools?: readonly PoolEntry[];
   readonly isKnownPool?: (pool: PoolEntry) => boolean;
+  readonly historicalResolution?: "bounded" | "complete";
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
 }): Promise<LandedPoolDiscoveryResult> {
@@ -838,6 +869,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
             toBlock: input.toBlock,
             minSwaps: input.minSwaps,
             admissionPolicy: input.admissionPolicy,
+            historicalResolution: input.historicalResolution ?? "complete",
             ...(input.signal === undefined ? {} : { signal: input.signal }),
             backend: input.backend,
             scanLogs: (filter) =>

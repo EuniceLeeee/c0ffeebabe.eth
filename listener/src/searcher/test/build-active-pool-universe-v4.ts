@@ -288,13 +288,21 @@ async function main(): Promise<void> {
         async getLogs(filter: LandedPoolDiscoveryLogFilter) {
           batchLogCalls++;
           assert(
-            filter.topics.length === 1 &&
-              filter.topics[0] === initializeTopic,
-            "batch backfill should scan the family Initialize topic once per chunk",
+            filter.topics.length === 2 &&
+              filter.topics[0] === initializeTopic &&
+              (
+                filter.topics[1] === batchPoolA.poolId ||
+                filter.topics[1] === batchPoolB.poolId
+              ),
+            "small backfill should use the indexed PoolId topic",
           );
-          return filter.fromBlock <= initializeBlock && filter.toBlock >= initializeBlock
-            ? [initLog(batchPoolA, initializeBlock), initLog(batchPoolB, initializeBlock)]
-            : [];
+          if (
+            filter.fromBlock > initializeBlock ||
+            filter.toBlock < initializeBlock
+          ) return [];
+          return filter.topics[1] === batchPoolA.poolId
+            ? [initLog(batchPoolA, initializeBlock)]
+            : [initLog(batchPoolB, initializeBlock)];
         },
       },
       poolManager,
@@ -310,14 +318,17 @@ async function main(): Promise<void> {
       process.env.POOL_UNIVERSE_V4_BACKFILL_LOOKBACK_BLOCKS = priorV4Lookback;
     }
   }
-  assert(batchLogCalls === 2, `expected one call per historical chunk, got ${batchLogCalls}`);
+  assert(
+    batchLogCalls === 4,
+    `expected newest-first indexed calls per PoolId, got ${batchLogCalls}`,
+  );
   assert(batchResolved.size === 2, `expected two batched PoolKeys, got ${batchResolved.size}`);
   assert(
     batchResolved.get(batchPoolA.poolId)?.source === "v4-initialize-backfill" &&
       batchResolved.get(batchPoolB.poolId)?.source === "v4-initialize-backfill",
     "batched Initialize results should retain backfill provenance",
   );
-  console.log("[pool-universe-v4] batched Initialize family-topic backfill: PASS");
+  console.log("[pool-universe-v4] indexed small-set Initialize backfill: PASS");
 
   const adaptiveFromBlock = UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK;
   const adaptiveToBlock = adaptiveFromBlock + 99;
@@ -335,16 +346,16 @@ async function main(): Promise<void> {
         if (blockCount > 25) {
           throw new Error("provider getLogs range exceeds response limit");
         }
-        return [
-          ...(filter.fromBlock <= adaptivePoolABlock &&
-              filter.toBlock >= adaptivePoolABlock
-            ? [initLog(batchPoolA, adaptivePoolABlock)]
-            : []),
-          ...(filter.fromBlock <= adaptivePoolBBlock &&
+        const poolId = filter.topics[1];
+        return poolId === batchPoolA.poolId &&
+            filter.fromBlock <= adaptivePoolABlock &&
+            filter.toBlock >= adaptivePoolABlock
+          ? [initLog(batchPoolA, adaptivePoolABlock)]
+          : poolId === batchPoolB.poolId &&
+              filter.fromBlock <= adaptivePoolBBlock &&
               filter.toBlock >= adaptivePoolBBlock
             ? [initLog(batchPoolB, adaptivePoolBBlock)]
-            : []),
-        ];
+            : [];
       },
     },
     poolManager,
@@ -358,15 +369,22 @@ async function main(): Promise<void> {
     (range) => range.toBlock - range.fromBlock + 1 <= 25,
   );
   assert(
-    adaptiveRanges.length === 7 && successfulAdaptiveRanges.length === 4,
-    "provider range errors should recursively split into four disjoint successful leaves",
+    adaptiveRanges.length === 14 && successfulAdaptiveRanges.length === 8,
+    "each indexed PoolId should recursively split into four successful leaves",
   );
+  const adaptiveLeafCounts = new Map<string, number>();
+  for (const range of successfulAdaptiveRanges) {
+    const key = `${range.fromBlock}-${range.toBlock}`;
+    adaptiveLeafCounts.set(key, (adaptiveLeafCounts.get(key) ?? 0) + 1);
+  }
   assert(
-    successfulAdaptiveRanges.every((range, index) =>
-      range.fromBlock === adaptiveFromBlock + index * 25 &&
-      range.toBlock === adaptiveFromBlock + (index + 1) * 25 - 1
-    ),
-    "adaptive range leaves should preserve chronological order without overlap or gaps",
+    Array.from({ length: 4 }, (_, leaf) =>
+      adaptiveLeafCounts.get(
+        `${adaptiveFromBlock + leaf * 25}-` +
+          `${adaptiveFromBlock + (leaf + 1) * 25 - 1}`,
+      ) === 2
+    ).every(Boolean),
+    "adaptive indexed leaves should cover each disjoint range per PoolId",
   );
   assert(
     adaptiveResolved.size === 2 &&
@@ -446,24 +464,18 @@ async function main(): Promise<void> {
       async getLogs(filter: LandedPoolDiscoveryLogFilter) {
         if (filter.topics.length === 1) {
           broadBackfillCalls++;
-          return [
-            initLog(
-              batchPoolA,
-              UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 20,
-            ),
-          ];
+          return [];
         }
         exactBackfillCalls++;
-        assert(
-          filter.topics[1] === batchPoolB.poolId,
-          "exact fallback should query only the PoolKey omitted by the broad result",
-        );
-        return [
-          initLog(
-            batchPoolB,
-            UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 30,
-          ),
-        ];
+        return filter.topics[1] === batchPoolA.poolId
+          ? [initLog(
+              batchPoolA,
+              UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 20,
+            )]
+          : [initLog(
+              batchPoolB,
+              UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 30,
+            )];
       },
     },
     poolManager,
@@ -473,14 +485,57 @@ async function main(): Promise<void> {
     100,
   );
   assert(
-    broadBackfillCalls === 1 && exactBackfillCalls === 1,
-    "truncated broad scan should trigger one indexed PoolKey fallback",
+    broadBackfillCalls === 0 && exactBackfillCalls === 2,
+    "small PoolId sets must skip broad history and query exact identities",
   );
   assert(
     truncatedBroadResolved.size === 2,
     "indexed PoolKey fallback should restore complete strict identity materialization",
   );
-  console.log("[pool-universe-v4] truncated broad scan indexed fallback: PASS");
+  console.log("[pool-universe-v4] small-set exact-first history: PASS");
+
+  const largeBackfillPools = Array.from({ length: 33 }, (_, index) =>
+    poolFixture(
+      address(0x1000 + index * 2),
+      address(0x1001 + index * 2),
+      500,
+      10,
+      ethers.ZeroAddress,
+    )
+  );
+  const largeInitializeBlock =
+    UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 950;
+  let largeBroadCalls = 0;
+  const largeResolved = await resolveV4InitsBackward(
+    {
+      async getLogs(filter: LandedPoolDiscoveryLogFilter) {
+        largeBroadCalls++;
+        assert(
+          filter.topics.length === 1 &&
+            filter.topics[0] === initializeTopic,
+          "large PoolId sets should amortize a broad family scan",
+        );
+        return filter.fromBlock <= largeInitializeBlock &&
+            filter.toBlock >= largeInitializeBlock
+          ? largeBackfillPools.map((pool) =>
+              initLog(pool, largeInitializeBlock)
+            )
+          : [];
+      },
+    },
+    poolManager,
+    initializeTopic,
+    largeBackfillPools.map((pool) => pool.poolId),
+    UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 999,
+    100,
+    1_000,
+  );
+  assert(
+    largeResolved.size === largeBackfillPools.length &&
+      largeBroadCalls === 8,
+    "large broad history should stop after the newest resolving wave",
+  );
+  console.log("[pool-universe-v4] large-set newest-first early stop: PASS");
 
   let batchResolverCalls = 0;
   const batchEntries = await buildV4PoolEntries(
@@ -506,9 +561,73 @@ async function main(): Promise<void> {
   assert(batchEntries.length === 2, `expected two batch-resolved entries, got ${batchEntries.length}`);
   console.log("[pool-universe-v4] materializer consumes batch PoolKey resolver: PASS");
 
+  const v4Registry =
+    new AdapterFamilyRegistry([univ4Adapter]).landedPoolDiscovery();
+  assert(
+    !v4Registry.consumesAddressRetries("univ4") &&
+      v4Registry.consumesMaterializationRetries("univ4"),
+    "V4 must own opaque PoolId retries without claiming address identity",
+  );
+  let retryPhase: "defer" | "resolve" = "defer";
+  const boundedRetryBackend = {
+    async getLogs(filter: LandedPoolDiscoveryLogFilter) {
+      if (filter.topics[0] === initializeTopic) return [];
+      return retryPhase === "defer"
+        ? [
+            swapLog(positionManagerPool.poolId, 70),
+            swapLog(positionManagerPool.poolId, 71),
+          ]
+        : [];
+    },
+    async call() {
+      return retryPhase === "defer"
+        ? positionManagerReturnData(garbagePoolKey)
+        : positionManagerReturnData(positionManagerPool);
+    },
+  };
+  const deferredV4 = await discoverLandedPools({
+    registry: v4Registry,
+    backend: boundedRetryBackend,
+    fromBlock: 70,
+    toBlock: 71,
+    batchSize: 10,
+    minSwaps,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    historicalResolution: "bounded",
+    strict: true,
+  });
+  assert(
+    deferredV4.materializedPools.length === 0 &&
+      deferredV4.retryablePools.length === 1 &&
+      deferredV4.retryablePools[0].poolId === positionManagerPool.poolId &&
+      deferredV4.coverage.every((item) => !item.complete),
+    "bounded V4 miss must advance only as a typed incomplete retry",
+  );
+  retryPhase = "resolve";
+  const healedV4 = await discoverLandedPools({
+    registry: v4Registry,
+    backend: boundedRetryBackend,
+    fromBlock: 72,
+    toBlock: 72,
+    batchSize: 10,
+    minSwaps,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    retryablePools: deferredV4.retryablePools,
+    historicalResolution: "bounded",
+    strict: true,
+  });
+  assert(
+    healedV4.retryablePools.length === 0 &&
+      healedV4.materializedPools.length === 1 &&
+      healedV4.materializedPools[0].poolId === positionManagerPool.poolId &&
+      healedV4.coverage.every((item) => item.complete),
+    "opaque V4 retry must heal without replaying the original Swap log",
+  );
+  console.log("[pool-universe-v4] bounded opaque retry heals next generation: PASS");
+
   let retainedResolverCalls = 0;
   const retainedDiscovery = await discoverLandedPools({
-    registry: new AdapterFamilyRegistry([univ4Adapter]).landedPoolDiscovery(),
+    registry: v4Registry,
     backend: {
       async getLogs(filter) {
         const topic = filter.topics[0];
@@ -689,7 +808,7 @@ async function main(): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log("pool-universe-v4 PASS (11/11)");
+  console.log("pool-universe-v4 PASS (16/16)");
 }
 
 main().catch((err) => {

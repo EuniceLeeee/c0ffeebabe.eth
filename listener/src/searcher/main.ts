@@ -1270,7 +1270,7 @@ async function main(): Promise<void> {
   const startupFamilyMaterializationRetries = [
     ...retryableDexIdentityPools.values(),
   ].filter((pool) =>
-    landedPoolDiscoveryRegistry.consumesAddressRetries(pool.adapter)
+    landedPoolDiscoveryRegistry.consumesMaterializationRetries(pool.adapter)
   );
 
   // Phase 1: Factory event indexing — discover ALL pools created in recent N blocks

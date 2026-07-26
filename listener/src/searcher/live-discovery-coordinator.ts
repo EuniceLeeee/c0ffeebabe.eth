@@ -406,6 +406,8 @@ export async function createLiveDiscoveryCoordinator(
       readonly control?: DexDiscoveryReadControl;
       /** Retry projection at current-N without moving an already-ahead cursor. */
       readonly advanceCoverage?: boolean;
+      /** Current-head work is bounded; detached work may finish history. */
+      readonly historicalResolution: "bounded" | "complete";
     },
   ) => {
     const current = options.current ?? captureDexDiscoveryBase();
@@ -461,12 +463,12 @@ export async function createLiveDiscoveryCoordinator(
     const familyMaterializationRetries = [
       ...current.retryableIdentityPools.values(),
     ].filter((pool) =>
-      landedPoolDiscoveryRegistry.consumesAddressRetries(pool.adapter)
+      landedPoolDiscoveryRegistry.consumesMaterializationRetries(pool.adapter)
     );
     const genericIdentityRetries = [
       ...current.retryableIdentityPools.values(),
     ].filter((pool) =>
-      !landedPoolDiscoveryRegistry.consumesAddressRetries(pool.adapter)
+      !landedPoolDiscoveryRegistry.consumesMaterializationRetries(pool.adapter)
     );
     const [
       swapDiscovery,
@@ -486,8 +488,11 @@ export async function createLiveDiscoveryCoordinator(
             identityBackend: readBackend,
             identityBlockTag: options.strict ? targetBlock : undefined,
             retainedPools: mergePoolRegistries(
-              [...retainedDexUniverse],
-              current.strategyViews.blockscan,
+              mergePoolRegistries(
+                [...retainedDexUniverse],
+                current.strategyViews.blockscan,
+              ),
+              [...current.retryablePools.values()],
             ),
             retryablePools: familyMaterializationRetries,
             knownPoolKeys: current.knownPoolKeys,
@@ -498,6 +503,7 @@ export async function createLiveDiscoveryCoordinator(
                   historicalLogAnchor,
                 }),
             topicScanMode: "union",
+            historicalResolution: options.historicalResolution,
             strict: options.strict,
             control: options.control,
           },
@@ -965,6 +971,8 @@ export async function createLiveDiscoveryCoordinator(
           scan: dexScan,
           control: rpcControl,
           advanceCoverage: dexNeedsSourceScan,
+          historicalResolution:
+            input.mode === "hot" ? "bounded" : "complete",
         });
 
     const stagedStrategyViews =

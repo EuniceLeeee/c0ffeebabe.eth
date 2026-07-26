@@ -1221,8 +1221,9 @@ assert(
     productionRetryRegistry.consumesAddressRetries("dodo-v2") &&
     productionRetryRegistry.consumesAddressRetries("fluid-dex") &&
     !productionRetryRegistry.consumesAddressRetries("balancer-v3") &&
-    !productionRetryRegistry.consumesAddressRetries("univ4"),
-  "only materializers that reconstruct persisted address candidates may own address retries",
+    !productionRetryRegistry.consumesAddressRetries("univ4") &&
+    productionRetryRegistry.consumesMaterializationRetries("univ4"),
+  "address and opaque materializers should own only their typed retry routing",
 );
 
 console.log("landed-pool-discovery PASS (20/20)");

@@ -28,6 +28,7 @@ import {
 import {
   discoverLandedPools,
   type LandedPoolDiscoveryCoverage,
+  type LandedPoolDiscoveryLog,
   type LandedPoolDiscoveryLogFilter,
   type LandedPoolDiscoveryReadBackend,
 } from "./venues/landed-pool-discovery.js";
@@ -253,6 +254,11 @@ export interface ActivePoolDiscoveryOptions {
    */
   topicScanMode?: "per-event" | "union";
   /**
+   * Bounded mode is used only by the current-head lane. Opaque identities
+   * unresolved inside that budget become typed retries for detached backfill.
+   */
+  historicalResolution?: "bounded" | "complete";
+  /**
    * Completeness mode for source-pinned graph generations. Missing reads stay
    * explicit in per-family landed coverage, so the owning family is excluded
    * without manufacturing completeness for it or blocking healthy siblings.
@@ -314,6 +320,7 @@ export async function scanActivePoolsDetailed(
     options.historicalLogProvider,
     fromBlock,
     options.historicalLogAnchor,
+    options.historicalResolution === "bounded",
   );
   const landed = await discoverLandedPools({
     registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
@@ -328,6 +335,7 @@ export async function scanActivePoolsDetailed(
     retryablePools: options.retryablePools ?? [],
     isKnownPool,
     topicScanMode: options.topicScanMode ?? "per-event",
+    historicalResolution: options.historicalResolution ?? "complete",
     strict: options.strict,
     signal: options.control?.signal,
   });
@@ -511,6 +519,7 @@ function ethersPoolDiscoveryBackend(
     readonly blockNumber: number;
     readonly blockHash: string;
   },
+  preferLiveHistoricalLogs = false,
 ): LandedPoolDiscoveryReadBackend & IdentityCallBackend {
   let historicalAlignment: Promise<void> | undefined;
   const assertHistoricalAlignment = (
@@ -567,23 +576,44 @@ function ethersPoolDiscoveryBackend(
           filter.fromBlock < historicalBeforeBlock
           ? historicalLogProvider
           : provider;
-      if (logProvider === historicalLogProvider) {
-        await assertHistoricalAlignment(mergedControl);
-      }
       const params = [{
         ...(filter.address === undefined ? {} : { address: filter.address }),
         topics: [...filter.topics],
         fromBlock: ethers.toQuantity(filter.fromBlock),
         toBlock: ethers.toQuantity(filter.toBlock),
       }];
-      return hasDexDiscoveryControl(mergedControl)
-        ? await sendDexDiscoveryRpc(
-            logProvider,
-            "eth_getLogs",
-            params,
-            mergedControl,
-          )
-        : await logProvider.send("eth_getLogs", params);
+      const readLogs = (
+        selectedProvider: ethers.JsonRpcProvider,
+      ): Promise<readonly LandedPoolDiscoveryLog[]> =>
+        hasDexDiscoveryControl(mergedControl)
+          ? sendDexDiscoveryRpc(
+              selectedProvider,
+              "eth_getLogs",
+              params,
+              mergedControl,
+            )
+          : selectedProvider.send("eth_getLogs", params);
+      if (
+        preferLiveHistoricalLogs &&
+        logProvider === historicalLogProvider
+      ) {
+        try {
+          return await readLogs(provider);
+        } catch (error) {
+          if (
+            mergedControl?.signal?.aborted ||
+            isDexDiscoveryCancellationError(error)
+          ) {
+            throw error;
+          }
+          // A pruned/range-limited local node is not completeness evidence.
+          // Fall back only to the canonical-hash-aligned historical provider.
+        }
+      }
+      if (logProvider === historicalLogProvider) {
+        await assertHistoricalAlignment(mergedControl);
+      }
+      return readLogs(logProvider);
     },
     call(
       req: { readonly to: string; readonly data: string },
