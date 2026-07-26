@@ -523,8 +523,15 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       // delta fold and one synchronous publication; no provider/trace/probe
       // I/O runs inside it.
       const sourceHeader = await discovery.observeHeader(blockNumber);
-      const ready = discovery.lane.readyDescriptor();
-      if (ready) {
+      const consumePreparedBackfill = async (): Promise<boolean> => {
+        const ready = discovery.lane.readyDescriptor();
+        if (!ready) return false;
+        if (ready.source.number > sourceHeader.number) {
+          // The latest-head scheduler already has (or will receive) the newer
+          // head. Preserve this generation for that pass; do not extend the
+          // current head's canonical journal into its future.
+          return false;
+        }
         const preparedHeader = await discovery.observeHeader(
           ready.source.number,
         );
@@ -554,21 +561,80 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         );
         if (taken.status !== "degraded") {
           discovery.finishPublished();
+          return true;
         }
-      }
+        return false;
+      };
+      await consumePreparedBackfill();
 
-      const base = discovery.capture();
+      let base = discovery.capture();
       const requiredPredecessor = Math.max(0, blockNumber - 1);
       if (
         base.dexGraphCoverage.graphCompleteThrough < requiredPredecessor
       ) {
-        outcome = "degraded";
-        skippedReason =
-          `discovery_backfill_behind:` +
-          `${base.dexGraphCoverage.graphCompleteThrough}<${requiredPredecessor}`;
-        finishStage("state", "failed");
-        void discovery.scheduleBackfill(blockNumber);
-        return;
+        if (startupWarmAttempt) {
+          // Startup has a separate bounded budget. Let the already-running
+          // historical lane finish and consume its canonical result
+          // immediately. If its bounded chunk predates N-1, keep advancing
+          // through the same background-concurrency lane. The hot transition
+          // below therefore remains a current-head transition, never an
+          // unbounded historical scan. Publication still happens only through
+          // the mutation queue; timeout/shutdown remains fail-closed.
+          await waitForBackfillSettlement(
+            discovery.lane.settled(),
+            passDeadlineAtMs,
+            this.deps.runtimeAbort.signal,
+          );
+          await consumePreparedBackfill();
+          base = discovery.capture();
+          while (
+            base.dexGraphCoverage.graphCompleteThrough <
+              requiredPredecessor &&
+            Date.now() < passDeadlineAtMs
+          ) {
+            const previousCompleteThrough =
+              base.dexGraphCoverage.graphCompleteThrough;
+            await waitForBackfillSettlement(
+              Promise.resolve(
+                discovery.scheduleBackfill(blockNumber),
+              ).then(() => undefined),
+              passDeadlineAtMs,
+              this.deps.runtimeAbort.signal,
+            );
+            await waitForBackfillSettlement(
+              discovery.lane.settled(),
+              passDeadlineAtMs,
+              this.deps.runtimeAbort.signal,
+            );
+            const consumed = await consumePreparedBackfill();
+            base = discovery.capture();
+            if (
+              !consumed ||
+              base.dexGraphCoverage.graphCompleteThrough <=
+                previousCompleteThrough
+            ) {
+              break;
+            }
+          }
+        }
+        if (
+          !startupWarmAttempt ||
+          base.dexGraphCoverage.graphCompleteThrough <
+            requiredPredecessor ||
+          Date.now() >= passDeadlineAtMs
+        ) {
+          outcome = "degraded";
+          skippedReason =
+            base.dexGraphCoverage.graphCompleteThrough <
+                requiredPredecessor
+              ? `discovery_backfill_behind:` +
+                `${base.dexGraphCoverage.graphCompleteThrough}<` +
+                `${requiredPredecessor}`
+              : "startup_discovery_deadline";
+          finishStage("state", "failed");
+          void discovery.scheduleBackfill(blockNumber);
+          return;
+        }
       }
 
       const hotControl: DiscoveryBackfillControl = {
@@ -1234,4 +1300,41 @@ function blockScanErrorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error))
     .replace(/\s+/g, " ")
     .slice(0, 200);
+}
+
+async function waitForBackfillSettlement(
+  settlement: Promise<void>,
+  deadlineAtMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) {
+    throw signal.reason ?? new Error("searcher shutdown");
+  }
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) {
+    throw new Error("startup discovery backfill wait deadline exceeded");
+  }
+  await new Promise<void>((resolve, reject) => {
+    let finished = false;
+    const finish = (error?: unknown): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const onAbort = (): void => {
+      finish(signal.reason ?? new Error("searcher shutdown"));
+    };
+    const timer = setTimeout(() => {
+      finish(new Error("startup discovery backfill wait deadline exceeded"));
+    }, remainingMs);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    void settlement.then(
+      () => finish(),
+      (error) => finish(error),
+    );
+  });
 }

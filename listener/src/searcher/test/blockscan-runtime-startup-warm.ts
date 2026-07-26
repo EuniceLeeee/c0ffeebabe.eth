@@ -45,36 +45,99 @@ interface PreparedDiscovery {
   readonly delta: RuntimePoolRefreshDelta;
 }
 
-await distantStartupWaitsForCurrentDiscovery();
+await distantStartupCatchesUpInSameHead();
+await activeBackfillSettlesBeforeHotCatchup();
+await failedBackfillDoesNotBecomeUnboundedHotScan();
+await steadyStateBehindRemainsFailClosed();
 await incompleteRetriesAndHotBudgetResumes();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
 await protocolLagDoesNotBlockDexRuntime();
 await observedPublicationDoesNotInvalidateHotDexCommit();
+await shutdownInterruptsStartupBackfillWait();
 await shutdownDrainsActivePassAndDropsPendingHead();
 blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (8/8)",
+    "PASS (12/12)",
 );
 
-async function distantStartupWaitsForCurrentDiscovery(): Promise<void> {
-  const harness = createHarness(100, ["complete"]);
+async function distantStartupCatchesUpInSameHead(): Promise<void> {
+  const harness = createHarness(
+    100,
+    ["complete"],
+    { laneReadyBlocksAfterSettlement: [140] },
+  );
   await harness.run(140);
   assert.deepEqual(
     harness.runtimeBlocks,
-    [],
-    "D+40 must not prepare runtime state before discovery reaches N-1",
+    [140],
+    "startup must strictly catch discovery up to the current head",
   );
-  assert.deepEqual(harness.backfillBlocks, [140]);
-  assert.equal(harness.loop.isStartupWarmPending(), true);
-
-  harness.setPublication(139);
-  await harness.run(140);
-  assert.deepEqual(harness.runtimeBlocks, [140]);
+  assert.deepEqual(harness.backfillBlocks, []);
   assert.equal(harness.loop.isStartupWarmPending(), false);
   assert.equal(harness.publishedPricing, 1);
+}
+
+async function activeBackfillSettlesBeforeHotCatchup(): Promise<void> {
+  const holdLane = deferred<void>();
+  const harness = createHarness(
+    100,
+    ["complete"],
+    {
+      laneReadyBlocksAfterSettlement: [130, 149],
+      beforeLaneSettled: async () => {
+        await holdLane.promise;
+      },
+    },
+  );
+  const run = harness.run(150);
+  await waitFor(() => harness.laneSettledCalls === 1);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [],
+    "startup must not race hot discovery against the active backfill lane",
+  );
+  holdLane.resolve();
+  await run;
+  assert.deepEqual(harness.runtimeBlocks, [150]);
+  assert.deepEqual(
+    harness.laneTakeBlocks,
+    [130, 149],
+    "bounded canonical chunks must publish in the same startup head",
+  );
+  assert.deepEqual(
+    harness.discoveryPrepareBases,
+    [149],
+    "strict current-head catch-up must start from the consumed watermark",
+  );
+  assert.equal(harness.loop.isStartupWarmPending(), false);
+}
+
+async function failedBackfillDoesNotBecomeUnboundedHotScan(): Promise<void> {
+  const harness = createHarness(100, ["complete"]);
+  await harness.run(180);
+  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(
+    harness.discoveryPrepareBases,
+    [],
+    "a failed historical lane must not move the entire gap to hot RPC",
+  );
+  assert.deepEqual(harness.backfillBlocks, [180, 180]);
+  assert.equal(harness.loop.isStartupWarmPending(), true);
+}
+
+async function steadyStateBehindRemainsFailClosed(): Promise<void> {
+  const harness = createHarness(
+    100,
+    ["complete"],
+    { startupWarmEnabled: false },
+  );
+  await harness.run(170);
+  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.deepEqual(harness.discoveryPrepareBases, []);
+  assert.deepEqual(harness.backfillBlocks, [170]);
 }
 
 async function incompleteRetriesAndHotBudgetResumes(): Promise<void> {
@@ -203,6 +266,26 @@ async function observedPublicationDoesNotInvalidateHotDexCommit(): Promise<void>
   );
 }
 
+async function shutdownInterruptsStartupBackfillWait(): Promise<void> {
+  const holdLane = deferred<void>();
+  const harness = createHarness(
+    100,
+    [],
+    {
+      beforeLaneSettled: async () => {
+        await holdLane.promise;
+      },
+    },
+  );
+  harness.loop.schedule(520);
+  await waitFor(() => harness.laneSettledCalls === 1);
+  await harness.loop.shutdown();
+  assert.deepEqual(harness.runtimeBlocks, []);
+  assert.equal(harness.loop.isStartupWarmPending(), true);
+  assert.equal(harness.runtimeAborted, true);
+  holdLane.resolve();
+}
+
 async function shutdownDrainsActivePassAndDropsPendingHead(): Promise<void> {
   const holdActive = deferred<void>();
   const harness = createHarness(
@@ -259,6 +342,9 @@ function createHarness(
     readonly blindEnabled?: boolean;
     readonly initialProtocolCompleteThrough?: number;
     readonly publishObservedDuringDiscoveryPrepare?: boolean;
+    readonly beforeLaneSettled?: () => Promise<void>;
+    readonly laneReadyBlocksAfterSettlement?: number[];
+    readonly startupWarmEnabled?: boolean;
   } = {},
 ) {
   let publication = publicationAt(
@@ -277,6 +363,13 @@ function createHarness(
   const journal = new CanonicalHeaderJournal();
   const runtimeAbort = new AbortController();
   let workerStops = 0;
+  let laneSettledCalls = 0;
+  let laneReadyBlock: number | null = null;
+  const laneReadyBlocksAfterSettlement = [
+    ...(options.laneReadyBlocksAfterSettlement ?? []),
+  ];
+  const laneTakeBlocks: number[] = [];
+  const discoveryPrepareBases: number[] = [];
 
   const runtimeCoordinator = {
     async prepare(
@@ -341,7 +434,37 @@ function createHarness(
     },
     discovery: {
       lane: {
-        readyDescriptor: () => null,
+        readyDescriptor: () =>
+          laneReadyBlock === null
+            ? null
+            : {
+                jobId: 1,
+                planId: `fixture:${laneReadyBlock}`,
+                source: {
+                  number: laneReadyBlock,
+                  hash: hash(laneReadyBlock),
+                },
+              },
+        settled: async () => {
+          laneSettledCalls++;
+          await options.beforeLaneSettled?.();
+          laneReadyBlock =
+            laneReadyBlocksAfterSettlement.shift() ?? null;
+        },
+        takeForHotHead: () => {
+          assert.notEqual(laneReadyBlock, null);
+          const block = laneReadyBlock!;
+          laneReadyBlock = null;
+          laneTakeBlocks.push(block);
+          return {
+            status: "ready_degraded",
+            state: publicationAt(block, publication.revision + 1),
+            planId: `fixture:${block}`,
+            jobId: 1,
+            graphCompleteThrough: block,
+            reason: "coverage_behind",
+          };
+        },
       },
       journal,
       queue,
@@ -358,6 +481,9 @@ function createHarness(
         base: LiveDiscoveryPublicationState,
         input: { readonly through: number },
       ) => {
+        discoveryPrepareBases.push(
+          base.dexGraphCoverage.graphCompleteThrough,
+        );
         const pool = runtimeDexPool(input.through);
         const delta: RuntimePoolRefreshDelta = {
           attemptedPools: [pool],
@@ -423,7 +549,9 @@ function createHarness(
     largeGraphEdgeThreshold: 20_000,
     largeGraphPassBudgetMs: 30_000,
     passBudgetMs: HOT_BUDGET_MS,
-    startupWarmEnabled: !(options.blindEnabled ?? false),
+    startupWarmEnabled:
+      (options.startupWarmEnabled ?? true) &&
+      !(options.blindEnabled ?? false),
     startupWarmBudgetMs: STARTUP_BUDGET_MS,
     refineCandidates: 1,
     solveReserveMs: 0,
@@ -468,6 +596,11 @@ function createHarness(
     get workerStops() {
       return workerStops;
     },
+    get laneSettledCalls() {
+      return laneSettledCalls;
+    },
+    laneTakeBlocks,
+    discoveryPrepareBases,
     get publication() {
       return cloneLiveDiscoveryPublicationState(publication);
     },

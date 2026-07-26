@@ -174,6 +174,8 @@ interface ActiveJob<State> {
   readonly reads: BackgroundReadBudget;
   readonly deadlineAtMs: number;
   readonly timer: ReturnType<typeof setTimeout>;
+  readonly settlement: Promise<void>;
+  readonly resolveSettlement: () => void;
   timedOut: boolean;
   invalidated: boolean;
 }
@@ -282,6 +284,10 @@ export class DiscoveryBackfillLane<State, Prepared> {
     );
     const deadlineAtMs = Date.now() + this.options.maxPreparationMs;
     const id = this.nextJobId++;
+    let resolveSettlement!: () => void;
+    const settlement = new Promise<void>((resolve) => {
+      resolveSettlement = resolve;
+    });
     const active: ActiveJob<State> = {
       id,
       plan,
@@ -301,6 +307,8 @@ export class DiscoveryBackfillLane<State, Prepared> {
           ),
         );
       }, this.options.maxPreparationMs),
+      settlement,
+      resolveSettlement,
       timedOut: false,
       invalidated: false,
     };
@@ -314,7 +322,8 @@ export class DiscoveryBackfillLane<State, Prepared> {
         run: (work) => reads.run(work),
       }))
       .then((prepared) => this.settleSuccess(active, prepared))
-      .catch((error) => this.settleFailure(active, error));
+      .catch((error) => this.settleFailure(active, error))
+      .finally(() => active.resolveSettlement());
     return { scheduled: true, jobId: id };
   }
 
@@ -360,11 +369,16 @@ export class DiscoveryBackfillLane<State, Prepared> {
     if (!ready) return this.notReady(current.graphCompleteThrough);
 
     if (ready.plan.source.number > target.number) {
-      return this.discard(
-        ready,
-        current.graphCompleteThrough,
-        "projection_from_future",
-      );
+      // A latest-head scheduler may already have coalesced a newer head while
+      // the current pass was waiting. Keep the canonical prepared generation
+      // for that pending head instead of destroying valid work here.
+      return {
+        status: "degraded",
+        graphCompleteThrough: current.graphCompleteThrough,
+        reason: "projection_from_future",
+        planId: ready.plan.id,
+        jobId: ready.id,
+      };
     }
     if (
       ready.plan.source.number === target.number &&
@@ -495,9 +509,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
 
   async settled(): Promise<void> {
     const active = this.active;
-    while (active && this.active === active) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
+    if (active) await active.settlement;
   }
 
   telemetry(): DiscoveryBackfillTelemetry {
@@ -648,7 +660,6 @@ export class DiscoveryBackfillLane<State, Prepared> {
     reason:
       | "stale_base"
       | "non_canonical_source"
-      | "projection_from_future"
       | "prepared_state_mutated",
   ): DiscoveryBackfillHotResult<State> {
     this.ready = null;

@@ -37,8 +37,9 @@ await exactCoverageTransitionCannotJumpHoles();
 await baseAndReadyMutationFailClosed();
 await laneAwareRebasePreservesIndependentState();
 await deadlineCancelsEveryBudgetedRead();
+await futureReadyWaitsForNewestHead();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (5/5)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (6/6)");
 
 async function preparationDoesNotHoldMutationQueue(): Promise<void> {
   const gate = deferred<RawBackfill>();
@@ -161,6 +162,36 @@ async function exactCoverageTransitionCannotJumpHoles(): Promise<void> {
   assert.equal(retry.state.dex.sourceCompleteThrough, 105);
   assert.equal(retry.state.dex.graphCompleteThrough, 100);
   assert.equal(retry.graphCompleteThrough, 100);
+}
+
+async function futureReadyWaitsForNewestHead(): Promise<void> {
+  const base = stateAt(100, 1);
+  const request = requestFor(101, 105, 105);
+  const lane = createLane(async () => rawFor(request));
+  lane.schedule(request, base);
+  await lane.settled();
+
+  const oldHead = lane.takeForHotHead({
+    targetSource: source(104),
+    currentState: base,
+    canonicalPreparedSource: proof(105, 4),
+    currentCanonicalRevision: 4,
+  });
+  assert.equal(reasonOf(oldHead), "projection_from_future");
+  assert.equal(
+    lane.readyDescriptor()?.source.number,
+    105,
+    "an older coalesced head must not destroy the newer prepared generation",
+  );
+
+  const newestHead = lane.takeForHotHead({
+    targetSource: source(105),
+    currentState: base,
+    canonicalPreparedSource: proof(105, 4),
+    currentCanonicalRevision: 4,
+  });
+  assert.equal(newestHead.status, "ready");
+  assert.equal(lane.readyDescriptor(), null);
 }
 
 async function baseAndReadyMutationFailClosed(): Promise<void> {
