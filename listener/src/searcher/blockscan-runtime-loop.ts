@@ -523,14 +523,14 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       // delta fold and one synchronous publication; no provider/trace/probe
       // I/O runs inside it.
       const sourceHeader = await discovery.observeHeader(blockNumber);
-      const consumePreparedBackfill = async (): Promise<boolean> => {
+      const consumePreparedBackfill = async (): Promise<number | null> => {
         const ready = discovery.lane.readyDescriptor();
-        if (!ready) return false;
+        if (!ready) return null;
         if (ready.source.number > sourceHeader.number) {
           // The latest-head scheduler already has (or will receive) the newer
           // head. Preserve this generation for that pass; do not extend the
           // current head's canonical journal into its future.
-          return false;
+          return null;
         }
         const preparedHeader = await discovery.observeHeader(
           ready.source.number,
@@ -561,11 +561,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         );
         if (taken.status !== "degraded") {
           discovery.finishPublished();
-          return true;
+          return ready.source.number;
         }
-        return false;
+        return null;
       };
-      await consumePreparedBackfill();
+      const consumedPreparedSource = await consumePreparedBackfill();
 
       let base = discovery.capture();
       const requiredPredecessor = Math.max(0, blockNumber - 1);
@@ -609,7 +609,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             const consumed = await consumePreparedBackfill();
             base = discovery.capture();
             if (
-              !consumed ||
+              consumed === null ||
               base.dexGraphCoverage.graphCompleteThrough <=
                 previousCompleteThrough
             ) {
@@ -617,11 +617,21 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             }
           }
         }
-        if (
-          !startupWarmAttempt ||
+        const predecessorStillBehind =
           base.dexGraphCoverage.graphCompleteThrough <
-            requiredPredecessor ||
-          Date.now() >= passDeadlineAtMs
+            requiredPredecessor;
+        const canStrictlyCatchCurrentHead =
+          !startupWarmAttempt &&
+          consumedPreparedSource !== null &&
+          base.dexGraphCoverage.graphCompleteThrough >=
+            consumedPreparedSource;
+        // A complete prepared generation can only be behind because heads
+        // advanced while it was running. The existing hot transition may
+        // strictly scan that elapsed suffix within the ordinary pass budget.
+        // An incomplete/failed historical generation never enters this path.
+        if (
+          Date.now() >= passDeadlineAtMs ||
+          (predecessorStillBehind && !canStrictlyCatchCurrentHead)
         ) {
           outcome = "degraded";
           skippedReason =

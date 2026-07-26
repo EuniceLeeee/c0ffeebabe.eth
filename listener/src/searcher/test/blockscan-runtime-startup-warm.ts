@@ -49,6 +49,8 @@ await distantStartupCatchesUpInSameHead();
 await activeBackfillSettlesBeforeHotCatchup();
 await failedBackfillDoesNotBecomeUnboundedHotScan();
 await steadyStateBehindRemainsFailClosed();
+await steadyStateCompleteReadyCatchesCurrentHead();
+await steadyStateIncompleteReadyRemainsFailClosed();
 await incompleteRetriesAndHotBudgetResumes();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
@@ -60,7 +62,7 @@ blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (12/12)",
+    "PASS (14/14)",
 );
 
 async function distantStartupCatchesUpInSameHead(): Promise<void> {
@@ -137,6 +139,44 @@ async function steadyStateBehindRemainsFailClosed(): Promise<void> {
   await harness.run(170);
   assert.deepEqual(harness.runtimeBlocks, []);
   assert.deepEqual(harness.discoveryPrepareBases, []);
+  assert.deepEqual(harness.backfillBlocks, [170]);
+}
+
+async function steadyStateCompleteReadyCatchesCurrentHead(): Promise<void> {
+  const harness = createHarness(
+    100,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      initialLaneReadyBlock: 165,
+    },
+  );
+  await harness.run(170);
+  assert.deepEqual(harness.laneTakeBlocks, [165]);
+  assert.deepEqual(harness.discoveryPrepareBases, [165]);
+  assert.deepEqual(harness.runtimeBlocks, [170]);
+  assert.deepEqual(harness.backfillBlocks, []);
+}
+
+async function steadyStateIncompleteReadyRemainsFailClosed(): Promise<void> {
+  const harness = createHarness(
+    100,
+    ["complete"],
+    {
+      startupWarmEnabled: false,
+      initialLaneReadyBlock: 165,
+      initialLanePublishedBlock: 160,
+    },
+  );
+  await harness.run(170);
+  assert.deepEqual(harness.laneTakeBlocks, [165]);
+  assert.deepEqual(
+    harness.discoveryPrepareBases,
+    [],
+    "a prepared generation incomplete at its own pinned source must not " +
+      "enter strict hot catch-up",
+  );
+  assert.deepEqual(harness.runtimeBlocks, []);
   assert.deepEqual(harness.backfillBlocks, [170]);
 }
 
@@ -345,6 +385,8 @@ function createHarness(
     readonly beforeLaneSettled?: () => Promise<void>;
     readonly laneReadyBlocksAfterSettlement?: number[];
     readonly startupWarmEnabled?: boolean;
+    readonly initialLaneReadyBlock?: number;
+    readonly initialLanePublishedBlock?: number;
   } = {},
 ) {
   let publication = publicationAt(
@@ -364,7 +406,8 @@ function createHarness(
   const runtimeAbort = new AbortController();
   let workerStops = 0;
   let laneSettledCalls = 0;
-  let laneReadyBlock: number | null = null;
+  let laneReadyBlock: number | null =
+    options.initialLaneReadyBlock ?? null;
   const laneReadyBlocksAfterSettlement = [
     ...(options.laneReadyBlocksAfterSettlement ?? []),
   ];
@@ -453,15 +496,20 @@ function createHarness(
         },
         takeForHotHead: () => {
           assert.notEqual(laneReadyBlock, null);
-          const block = laneReadyBlock!;
+          const sourceBlock = laneReadyBlock!;
+          const publishedBlock =
+            options.initialLanePublishedBlock ?? sourceBlock;
           laneReadyBlock = null;
-          laneTakeBlocks.push(block);
+          laneTakeBlocks.push(sourceBlock);
           return {
             status: "ready_degraded",
-            state: publicationAt(block, publication.revision + 1),
-            planId: `fixture:${block}`,
+            state: publicationAt(
+              publishedBlock,
+              publication.revision + 1,
+            ),
+            planId: `fixture:${sourceBlock}`,
             jobId: 1,
-            graphCompleteThrough: block,
+            graphCompleteThrough: publishedBlock,
             reason: "coverage_behind",
           };
         },
