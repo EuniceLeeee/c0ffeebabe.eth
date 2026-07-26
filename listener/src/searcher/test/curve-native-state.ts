@@ -290,11 +290,11 @@ function respondCurveCall(pool: string, data: string): string {
 }
 
 function tailedCurveResult(data: string): string {
-  // A short non-zero trailing word makes the old whole-buffer/tail decoders
+  // A short non-zero trailing byte makes the old whole-buffer/tail decoders
   // fail deterministically without feeding enormous integers into Curve math.
   // Exact 4096-byte proxy returndata remains covered by
   // token-graph-family-isolation.
-  return `${data}${"00".repeat(31)}01`;
+  return `${data}01`;
 }
 
 function expectedCurveState(pool: string) {

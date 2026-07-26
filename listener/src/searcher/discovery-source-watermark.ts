@@ -27,6 +27,23 @@ export interface DiscoveryRange {
   readonly toBlock: number;
 }
 
+/**
+ * A detached DEX generation is consumed by the next hot head, so it must
+ * include the source head itself to satisfy that next head's predecessor
+ * gate. Protocol history remains predecessor-pinned because it is not on the
+ * DEX admission gate.
+ */
+export function planLiveBackfillTargets(sourceBlock: number): {
+  readonly dexThrough: number;
+  readonly protocolThrough: number;
+} {
+  assertBlock(sourceBlock, "live discovery source block");
+  return {
+    dexThrough: sourceBlock,
+    protocolThrough: Math.max(0, sourceBlock - 1),
+  };
+}
+
 export function discoveryFamilySourceKey(
   familyId: string,
   sourceId: string,

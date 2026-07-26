@@ -13,6 +13,7 @@ const UNIV2_SWAP_TOPIC = ethers.id(
   "Swap(address,uint256,uint256,uint256,uint256,address)",
 );
 const TEST_POOL = ethers.getAddress("0x0000000000000000000000000000000000001234");
+const OTHER_POOL = ethers.getAddress("0x0000000000000000000000000000000000005678");
 
 interface RpcRequest {
   readonly id: number;
@@ -32,13 +33,14 @@ interface RpcFixture {
 async function main(): Promise<void> {
   await testFactoryParentAbortClosesTransport();
   await testActivePoolDeadlineClosesTransport();
+  await testKnownPoolSkipsIdentityWithoutErasingCoverage();
   await testIdentityParentAbortClosesTransport();
   await testPinnedCallParentAbortClosesTransport();
   await testPinnedGetCodeDeadlineClosesTransport();
   await testGraphControlAbortsPinnedTransport();
   await testCurveGraphDeadlineDoesNotBecomeNoCoins();
   await testCurveGraphRawAbortDoesNotBecomeNoCoins();
-  console.log("[dex-discovery-rpc-cancellation] PASS 8/8");
+  console.log("[dex-discovery-rpc-cancellation] PASS 9/9");
 }
 
 async function testFactoryParentAbortClosesTransport(): Promise<void> {
@@ -106,6 +108,7 @@ async function testIdentityParentAbortClosesTransport(): Promise<void> {
   const pending = scanActivePoolsDetailed(provider, 0, 100, 100, {
     strict: true,
     identityBlockTag: 100,
+    knownPoolKeys: new Set([OTHER_POOL.toLowerCase()]),
     identityBackend: {
       call: () => new Promise<string>(() => {
         throw new Error("controlled scan must not use an uncancellable identity backend");
@@ -126,8 +129,48 @@ async function testIdentityParentAbortClosesTransport(): Promise<void> {
   assert.equal(
     budgetedReads,
     fixture.methods.length,
-    "every active-pool HTTP request must enter the dedicated read budget",
+    "a candidate absent from knownPoolKeys must still attest through the dedicated read budget",
   );
+  await provider.destroy();
+  await fixture.close();
+}
+
+async function testKnownPoolSkipsIdentityWithoutErasingCoverage(): Promise<void> {
+  const fixture = await createRpcFixture((request) => {
+    if (request.method !== "eth_getLogs") return "empty";
+    const filter = request.params[0] as {
+      readonly topics?: readonly unknown[];
+    };
+    return containsTopic(filter.topics, UNIV2_SWAP_TOPIC)
+      ? [{
+          address: TEST_POOL,
+          topics: [UNIV2_SWAP_TOPIC],
+          data: "0x",
+          blockNumber: "0x64",
+        }]
+      : [];
+  });
+  const provider = new ethers.JsonRpcProvider(fixture.url, 1, {
+    staticNetwork: true,
+  });
+  const result = await scanActivePoolsDetailed(provider, 0, 100, 100, {
+    strict: true,
+    identityBlockTag: 100,
+    knownPoolKeys: new Set([TEST_POOL.toLowerCase()]),
+    topicScanMode: "per-event",
+  });
+  assert.equal(
+    fixture.methods.includes("eth_call"),
+    false,
+    "a known landed address must not repeat source-pinned identity calls",
+  );
+  assert.equal(
+    result.coverage.length > 0 &&
+      result.coverage.every((item) => item.complete),
+    true,
+    "known-pool filtering must preserve landed-event coverage",
+  );
+  assert.equal(result.truncated, false);
   await provider.destroy();
   await fixture.close();
 }

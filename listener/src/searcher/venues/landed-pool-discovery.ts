@@ -53,9 +53,16 @@ export interface LandedPoolMaterializationContext {
   /**
    * Previously admitted family instances from the frozen input inventory.
    * They may resolve opaque landed identities (for example a V4 poolId), but
-   * must be re-attested by the current build before publication.
+   * retryable/unpublished instances must still be re-attested before
+   * publication.
    */
   readonly retainedPools: readonly PoolEntry[];
+  /**
+   * True only for an instance already admitted into the frozen graph
+   * generation. A materializer may reuse that exact metadata rather than
+   * repeating identity RPC.
+   */
+  isKnownPool(pool: PoolEntry): boolean;
   readonly fromBlock: number;
   readonly toBlock: number;
   readonly minSwaps: number;
@@ -133,6 +140,22 @@ export function createAddressLandedPoolMaterializer(
         count: number;
         lastSwapBlock: number;
       }>();
+      const retainedByAddress = new Map<string, PoolEntry | null>();
+      for (const pool of context.retainedPools) {
+        if (
+          pool.adapter !== context.event.discovery.poolAdapter ||
+          !context.isKnownPool(pool)
+        ) {
+          continue;
+        }
+        const key = pool.address.toLowerCase();
+        // A bare address event cannot distinguish two logical instances.
+        // Re-run the family probe instead of choosing one arbitrarily.
+        retainedByAddress.set(
+          key,
+          retainedByAddress.has(key) ? null : pool,
+        );
+      }
       const issues: string[] = [];
       for (const log of context.logs) {
         const identity = observedLandedPoolIdentity(context.event, {
@@ -184,7 +207,11 @@ export function createAddressLandedPoolMaterializer(
               lastSwapBlock: candidate.lastSwapBlock,
             });
             try {
-              const pool = await options.materializePool(input, context);
+              const retained = retainedByAddress.get(
+                candidate.address.toLowerCase(),
+              );
+              const pool = retained ??
+                await options.materializePool(input, context);
               if (pool === null) continue;
               if (
                 ethers.getAddress(pool.address).toLowerCase() !==
@@ -360,6 +387,7 @@ export async function discoverLandedPools(input: {
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
   readonly retainedPools?: readonly PoolEntry[];
+  readonly isKnownPool?: (pool: PoolEntry) => boolean;
   readonly topicScanMode?: "per-event" | "union";
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
@@ -402,6 +430,7 @@ export async function discoverLandedPools(input: {
           event: descriptor.event,
           logs: eventScan.logs,
           retainedPools: input.retainedPools ?? [],
+          isKnownPool: input.isKnownPool ?? (() => false),
           fromBlock: input.fromBlock,
           toBlock: input.toBlock,
           minSwaps: input.minSwaps,
@@ -489,6 +518,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
   readonly minSwaps: number;
   readonly admissionPolicy: IdentityAdmissionPolicy;
   readonly retainedPools?: readonly PoolEntry[];
+  readonly isKnownPool?: (pool: PoolEntry) => boolean;
   readonly strict?: boolean;
   readonly signal?: AbortSignal;
 }): Promise<LandedPoolDiscoveryResult> {
@@ -601,6 +631,7 @@ async function discoverLandedPoolsByTopicUnion(input: {
           event: descriptor.event,
           logs: materializerLogs.get(descriptor.event.id) ?? [],
           retainedPools: input.retainedPools ?? [],
+          isKnownPool: input.isKnownPool ?? (() => false),
           fromBlock: input.fromBlock,
           toBlock: input.toBlock,
           minSwaps: input.minSwaps,

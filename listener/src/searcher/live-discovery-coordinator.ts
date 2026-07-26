@@ -20,6 +20,7 @@ import {
 } from "./discovery-backfill-lane.js";
 import {
   planContiguousDiscoveryChunk,
+  planLiveBackfillTargets,
   type DiscoveryRange,
 } from "./discovery-source-watermark.js";
 import { emitEvent } from "./events.js";
@@ -451,6 +452,7 @@ export async function createLiveDiscoveryCoordinator(
               [...retainedDexUniverse],
               current.strategyViews.blockscan,
             ),
+            knownPoolKeys: current.knownPoolKeys,
             ...(historicalLogAnchor === undefined
               ? {}
               : {
@@ -1690,7 +1692,10 @@ export async function createLiveDiscoveryCoordinator(
     const latest = targetBlock ?? await provider.getBlockNumber();
     const source = await observeLiveCanonicalHeader(latest);
     const base = captureLiveDiscoveryPublication();
-    const targetThrough = Math.max(0, source.number - 1);
+    const {
+      dexThrough: dexTargetThrough,
+      protocolThrough: protocolTargetThrough,
+    } = planLiveBackfillTargets(source.number);
     const hasProjectionRetry =
       base.retryableDexGraphPools.size > 0 ||
       base.retryableDexIdentityPools.size > 0 ||
@@ -1698,17 +1703,17 @@ export async function createLiveDiscoveryCoordinator(
         base.dexGraphCoverage.sourceCompleteThrough;
     const dexSourceThrough =
       base.dexGraphCoverage.sourceCompleteThrough;
-    if (dexSourceThrough < targetThrough || hasProjectionRetry) {
+    if (dexSourceThrough < dexTargetThrough || hasProjectionRetry) {
       protocolBackfillLane.invalidate("DEX backfill priority");
-      const fromBlock = dexSourceThrough < targetThrough
+      const fromBlock = dexSourceThrough < dexTargetThrough
         ? dexSourceThrough + 1
-        : targetThrough;
-      const toBlock = dexSourceThrough < targetThrough
+        : dexTargetThrough;
+      const toBlock = dexSourceThrough < dexTargetThrough
         ? Math.min(
-            targetThrough,
+            dexTargetThrough,
             dexSourceThrough + discoveryBackfillMaxBlocks,
           )
-        : targetThrough;
+        : dexTargetThrough;
       dexBackfillLane.schedule({
         id:
           `dex:${fromBlock}-${toBlock}@` +
@@ -1721,7 +1726,7 @@ export async function createLiveDiscoveryCoordinator(
 
     // Protocol history is a lower-priority worker. Its trace/probe deadline
     // cannot occupy or erase the independent DEX recovery lane.
-    scheduleProtocolBackfill(source, base, targetThrough);
+    scheduleProtocolBackfill(source, base, protocolTargetThrough);
   };
   let refreshTimer: NodeJS.Timeout | null = null;
   let protocolDiscoveryTimer: NodeJS.Timeout | null = null;

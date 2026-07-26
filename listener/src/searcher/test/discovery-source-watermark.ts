@@ -11,6 +11,7 @@ import {
   discoverySourceCompleteThrough,
   planContiguousDiscoveryChunk,
   planDiscoveryStartup,
+  planLiveBackfillTargets,
   seedDiscoverySourceWatermark,
   type DiscoveryFamilySources,
 } from "../discovery-source-watermark.js";
@@ -45,8 +46,9 @@ eigenpieObservedOnlyCannotBorrowSiblingCompleteness();
 positiveOnlyScanAdvancesOnlyOperationalCursor();
 operationalCursorOutrunsAuthorityAcrossRestart();
 hotLaneNeverRunsProtocolDiscovery();
+detachedDexBackfillCoversItsSourceHead();
 
-console.log("discovery-source-watermark PASS (10/10)");
+console.log("discovery-source-watermark PASS (11/11)");
 
 function restartGapNeverDropsBlocks(): void {
   const families: readonly DiscoveryFamilySources[] = [{
@@ -455,5 +457,24 @@ function hotLaneNeverRunsProtocolDiscovery(): void {
     }),
     { fromBlock: 10, toBlock: 11 },
     "background discovery retains the pending observed range",
+  );
+}
+
+function detachedDexBackfillCoversItsSourceHead(): void {
+  assert.deepEqual(
+    planLiveBackfillTargets(1_001),
+    {
+      dexThrough: 1_001,
+      protocolThrough: 1_000,
+    },
+    "H-prepared DEX state must satisfy H+1 predecessor admission",
+  );
+  assert.deepEqual(
+    planLiveBackfillTargets(0),
+    {
+      dexThrough: 0,
+      protocolThrough: 0,
+    },
+    "genesis targets must remain non-negative",
   );
 }

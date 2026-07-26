@@ -166,10 +166,12 @@ const syntheticToken0 = ethers.getAddress(
 const syntheticToken1 = ethers.getAddress(
   "0x000000000000000000000000000000000000D302",
 );
+let syntheticMaterializationCalls = 0;
 const syntheticAddressMaterializer = createAddressLandedPoolMaterializer({
   version: "synthetic-address-family-v1",
   eventIds: ["custom-family-address"],
   async materializePool(candidate) {
+    syntheticMaterializationCalls++;
     return {
       address: candidate.address,
       adapter: candidate.poolAdapter,
@@ -260,6 +262,44 @@ assert(
     syntheticEdges[0].tokenIn === syntheticToken0 &&
     syntheticEdges[1].tokenIn === syntheticToken1,
   "the registered synthetic family must project its materialized pool into graph edges",
+);
+const knownSyntheticPool = syntheticAddressResult.materializedPools[0];
+const unknownSyntheticPool = ethers.getAddress(
+  "0x000000000000000000000000000000000000D203",
+);
+const knownSyntheticResult = await discoverLandedPools({
+  registry: syntheticAddressRegistry.landedPoolDiscovery(),
+  backend: {
+    async getLogs() {
+      return [
+        log(addressTopic, ethers.zeroPadValue(pool, 32)),
+        log(addressTopic, ethers.zeroPadValue(unknownSyntheticPool, 32)),
+      ];
+    },
+    async call() {
+      throw new Error("known family instance must reuse admitted metadata");
+    },
+  },
+  fromBlock: 101,
+  toBlock: 101,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  retainedPools: [knownSyntheticPool],
+  isKnownPool: (candidate) => candidate === knownSyntheticPool,
+  strict: true,
+});
+assert(
+  syntheticMaterializationCalls === 2 &&
+    knownSyntheticResult.materializedPools.length === 2 &&
+    knownSyntheticResult.materializedPools.some((item) =>
+      item.address === pool
+    ) &&
+    knownSyntheticResult.materializedPools.some((item) =>
+      item.address === unknownSyntheticPool
+    ) &&
+    knownSyntheticResult.coverage.every((item) => item.complete),
+  "known family instances skip repeated probes while unknown siblings still materialize",
 );
 
 let missingAddressMaterializerRejected = false;

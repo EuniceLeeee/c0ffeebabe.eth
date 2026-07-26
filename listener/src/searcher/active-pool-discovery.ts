@@ -204,6 +204,13 @@ const RETRY_LOG_BATCH = 10;
 export interface ActivePoolDiscoveryOptions {
   admissionPolicy?: IdentityAdmissionPolicy;
   /**
+   * Pool identities already admitted into the current graph generation.
+   * Landed coverage still observes them, but address materialization and the
+   * final identity pass may skip their source-pinned identity reads. Pools
+   * that previously failed projection are deliberately absent and retry.
+   */
+  knownPoolKeys?: ReadonlySet<string>;
+  /**
    * Source-pinned identity/code reads for an unbounded legacy generation.
    * A controlled generation deliberately uses the provider-backed abortable
    * transport below so every in-flight identity RPC shares its cancellation.
@@ -281,6 +288,8 @@ export async function scanActivePoolsDetailed(
   toBlock?: number,
   options: ActivePoolDiscoveryOptions = {},
 ): Promise<ActivePoolDiscoveryResult> {
+  const isKnownPool = (pool: PoolEntry): boolean =>
+    options.knownPoolKeys?.has(poolRegistryKey(pool)) ?? false;
   const latest = toBlock ?? (
     hasDexDiscoveryControl(options.control)
       ? await readDexDiscoveryBlockNumber(provider, options.control)
@@ -305,6 +314,7 @@ export async function scanActivePoolsDetailed(
     admissionPolicy:
       options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
     retainedPools: options.retainedPools ?? [],
+    isKnownPool,
     topicScanMode: options.topicScanMode ?? "per-event",
     strict: options.strict,
     signal: options.control?.signal,
@@ -322,11 +332,13 @@ export async function scanActivePoolsDetailed(
     ...landed.materializedPools,
   ].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   throwIfDexDiscoveryCancelled(options.control);
+  const identityCandidates = candidates.filter((pool) => !isKnownPool(pool));
+  const reusedKnown = candidates.length - identityCandidates.length;
   const { accepted, rejected } = await attestPoolIdentities(
     hasDexDiscoveryControl(options.control)
       ? discoveryBackend
       : options.identityBackend ?? provider,
-    candidates,
+    identityCandidates,
     {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
     admissionPolicy: options.admissionPolicy,
@@ -368,7 +380,9 @@ export async function scanActivePoolsDetailed(
     `[discovery] scanned ${blocksBack} blocks: ` +
       `${poolCounts.size + landed.materializedPools.length} candidates ` +
       `(materialized=${landed.materializedPools.length}), ` +
-      `${accepted.length} identity-admitted (provisional=${provisional}), taking top ${ranked.length}` +
+      `${accepted.length} new identity-admitted ` +
+      `(provisional=${provisional}, reused-known=${reusedKnown}), ` +
+      `taking top ${ranked.length} new` +
       (rejectedSummary ? `, rejected(${rejectedSummary})` : ""),
   );
 
