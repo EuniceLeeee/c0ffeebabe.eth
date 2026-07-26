@@ -150,6 +150,17 @@ export interface DiscoveryBackfillLaneOptions<State, Prepared> {
     plan: DiscoveryBackfillPlan<State>,
     prepared: Prepared,
   ) => ValidatedDiscoveryBackfill<State>;
+  /**
+   * Optional lane-aware rebase used when an independent publication changed
+   * the aggregate after preparation. Returning null preserves fail-closed CAS
+   * semantics. The rebased state is validated against the current revision
+   * and the original canonical source before it can be taken.
+   */
+  readonly rebaseTransition?: (
+    plan: DiscoveryBackfillPlan<State>,
+    prepared: Prepared,
+    currentState: State,
+  ) => ValidatedDiscoveryBackfill<State> | null;
   readonly onError?: (
     plan: DiscoveryBackfillPlan<State>,
     error: unknown,
@@ -167,9 +178,10 @@ interface ActiveJob<State> {
   invalidated: boolean;
 }
 
-interface ReadyJob<State> {
+interface ReadyJob<State, Prepared> {
   readonly id: number;
   readonly plan: DiscoveryBackfillPlan<State>;
+  readonly prepared: Prepared;
   readonly nextState: State;
   readonly next: DiscoveryBackfillStateDescriptor;
 }
@@ -196,7 +208,7 @@ interface Failure {
  */
 export class DiscoveryBackfillLane<State, Prepared> {
   private active: ActiveJob<State> | null = null;
-  private ready: ReadyJob<State> | null = null;
+  private ready: ReadyJob<State, Prepared> | null = null;
   private failure: Failure | null = null;
   private nextJobId = 1;
   private peakReads = 0;
@@ -364,13 +376,6 @@ export class DiscoveryBackfillLane<State, Prepared> {
         "non_canonical_source",
       );
     }
-    if (!sameDescriptor(current, ready.plan.base)) {
-      return this.discard(
-        ready,
-        current.graphCompleteThrough,
-        "stale_base",
-      );
-    }
     const proof = input.canonicalPreparedSource;
     if (
       proof === null ||
@@ -395,15 +400,75 @@ export class DiscoveryBackfillLane<State, Prepared> {
       );
     }
 
+    let takenState = ready.nextState;
+    let takenDescriptor = ready.next;
+    if (!sameDescriptor(current, ready.plan.base)) {
+      const rebase = this.options.rebaseTransition;
+      if (!rebase) {
+        return this.discard(
+          ready,
+          current.graphCompleteThrough,
+          "stale_base",
+        );
+      }
+      let rebased: ValidatedDiscoveryBackfill<State> | null;
+      try {
+        rebased = rebase(
+          ready.plan,
+          ready.prepared,
+          input.currentState,
+        );
+      } catch {
+        rebased = null;
+      }
+      if (rebased === null) {
+        return this.discard(
+          ready,
+          current.graphCompleteThrough,
+          "stale_base",
+        );
+      }
+      const rebasedSource = validateSource(
+        rebased.source,
+        "rebased source",
+      );
+      if (
+        rebasedSource.number !== ready.plan.source.number ||
+        rebasedSource.hash !== ready.plan.source.hash
+      ) {
+        return this.discard(
+          ready,
+          current.graphCompleteThrough,
+          "non_canonical_source",
+        );
+      }
+      const descriptor = validateDescriptor(
+        this.options.describeState(rebased.state),
+      );
+      if (
+        descriptor.revision !== current.revision + 1 ||
+        descriptor.graphCompleteThrough < current.graphCompleteThrough ||
+        descriptor.graphCompleteThrough > target.number
+      ) {
+        return this.discard(
+          ready,
+          current.graphCompleteThrough,
+          "stale_base",
+        );
+      }
+      takenState = rebased.state;
+      takenDescriptor = descriptor;
+    }
+
     this.ready = null;
     this.counts.taken++;
     const common = {
-      state: ready.nextState,
+      state: takenState,
       planId: ready.plan.id,
       jobId: ready.id,
-      graphCompleteThrough: ready.next.graphCompleteThrough,
+      graphCompleteThrough: takenDescriptor.graphCompleteThrough,
     };
-    return ready.next.graphCompleteThrough < target.number
+    return takenDescriptor.graphCompleteThrough < target.number
       ? {
           status: "ready_degraded",
           ...common,
@@ -507,6 +572,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
       this.ready = Object.freeze({
         id: active.id,
         plan: active.plan,
+        prepared,
         nextState: validated.state,
         next,
       });
@@ -577,7 +643,7 @@ export class DiscoveryBackfillLane<State, Prepared> {
   }
 
   private discard(
-    ready: ReadyJob<State>,
+    ready: ReadyJob<State, Prepared>,
     graphCompleteThrough: number,
     reason:
       | "stale_base"

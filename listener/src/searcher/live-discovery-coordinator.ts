@@ -26,7 +26,9 @@ import { emitEvent } from "./events.js";
 import {
   cloneLiveDiscoveryPublicationState,
   describeDexPublicationSlice,
+  describeDexRoutingSlice,
   describeLiveDiscoveryPublicationState,
+  describeProtocolPublicationSlice,
   projectObservedProtocolPublication,
   rebaseHotDexPublication,
   type DiscoveryCoverageAnchor,
@@ -824,12 +826,18 @@ export async function createLiveDiscoveryCoordinator(
   type ActiveProtocolDiscoveryStage = Awaited<
     ReturnType<typeof prepareActiveProtocolDiscoveryStage>
   >;
+  type DiscoveryTransitionMode =
+    | "hot"
+    | "dex-backfill"
+    | "protocol-backfill";
   type CombinedDiscoveryPrepared = {
     readonly source: { readonly number: number; readonly hash: string };
     readonly through: number;
-    readonly mode: "hot" | "backfill";
+    readonly mode: DiscoveryTransitionMode;
     readonly canonicalEpoch: number;
-    readonly baseDexFingerprint: string;
+    readonly baseDexFingerprint: string | null;
+    readonly baseDexRoutingFingerprint: string | null;
+    readonly baseProtocolFingerprint: string | null;
     readonly dex: DexDiscoveryStage | null;
     readonly protocol: ActiveProtocolDiscoveryStage;
     readonly stagedProtocolCache: ProtocolDiscoveryEvidenceCache;
@@ -839,7 +847,7 @@ export async function createLiveDiscoveryCoordinator(
     input: {
       readonly source: { readonly number: number; readonly hash: string };
       readonly through: number;
-      readonly mode: "hot" | "backfill";
+      readonly mode: DiscoveryTransitionMode;
       readonly control?: DiscoveryBackfillControl;
     },
   ): Promise<CombinedDiscoveryPrepared> => {
@@ -877,25 +885,32 @@ export async function createLiveDiscoveryCoordinator(
       canonicalBefore,
     );
 
+    const dexEnabled = input.mode !== "protocol-backfill";
     const dexNeedsSourceScan =
+      dexEnabled &&
       base.dexGraphCoverage.sourceCompleteThrough <= input.through;
     const dexNeedsProjectionRetry =
-      base.retryableDexGraphPools.size > 0 ||
-      base.retryableDexIdentityPools.size > 0 ||
-      base.dexGraphCoverage.graphCompleteThrough <
-        base.dexGraphCoverage.sourceCompleteThrough;
-    const dexScan = dexNeedsSourceScan
-      ? planDexGraphCoverageScan(
-          base.dexGraphCoverage,
-          input.through,
-        )
-      : dexNeedsProjectionRetry
-        ? {
-            fromBlock: input.through,
-            toBlock: input.through,
-            blocksBack: 0,
-          }
-        : null;
+      dexEnabled &&
+      (
+        base.retryableDexGraphPools.size > 0 ||
+        base.retryableDexIdentityPools.size > 0 ||
+        base.dexGraphCoverage.graphCompleteThrough <
+          base.dexGraphCoverage.sourceCompleteThrough
+      );
+    const dexScan = !dexEnabled
+      ? null
+      : dexNeedsSourceScan
+        ? planDexGraphCoverageScan(
+            base.dexGraphCoverage,
+            input.through,
+          )
+        : dexNeedsProjectionRetry
+          ? {
+              fromBlock: input.through,
+              toBlock: input.through,
+              blocksBack: 0,
+            }
+          : null;
     const dex = dexScan === null
       ? null
       : await runDexDiscoveryPass(input.source.number, {
@@ -956,19 +971,21 @@ export async function createLiveDiscoveryCoordinator(
     const protocol = await prepareActiveProtocolDiscoveryStage(
       input.source.number,
       protocolBase,
-      {
-        scanRange: protocolDiscoveryRangeForLane({
-          mode: input.mode,
-          observedRange,
-          addressOnlyRetryRange,
-        }),
-        ...(input.mode === "hot"
-          ? {}
-          : {
-              control: rpcControl,
-              traceMemo: createProtocolTraceMemo(),
+      input.mode === "dex-backfill"
+        ? { scanRange: null }
+        : {
+            scanRange: protocolDiscoveryRangeForLane({
+              mode: input.mode === "hot" ? "hot" : "backfill",
+              observedRange,
+              addressOnlyRetryRange,
             }),
-      },
+            ...(input.mode === "hot"
+              ? {}
+              : {
+                  control: rpcControl,
+                  traceMemo: createProtocolTraceMemo(),
+                }),
+          },
     );
     const canonicalAfter = await readDexDiscoveryBlockHash(
       provider,
@@ -985,7 +1002,15 @@ export async function createLiveDiscoveryCoordinator(
       through: input.through,
       mode: input.mode,
       canonicalEpoch,
-      baseDexFingerprint: describeDexPublicationSlice(base),
+      baseDexFingerprint: input.mode === "protocol-backfill"
+        ? null
+        : describeDexPublicationSlice(base),
+      baseDexRoutingFingerprint: input.mode === "protocol-backfill"
+        ? describeDexRoutingSlice(base)
+        : null,
+      baseProtocolFingerprint: input.mode === "protocol-backfill"
+        ? describeProtocolPublicationSlice(base)
+        : null,
       dex,
       protocol,
       stagedProtocolCache,
@@ -1005,8 +1030,10 @@ export async function createLiveDiscoveryCoordinator(
           `${prepared.canonicalEpoch}->${discoveryCanonicalEpoch}`,
       );
     }
-    if (prepared.mode !== "backfill") {
-      throw new Error("combined discovery validator requires a backfill transition");
+    if (prepared.mode !== "protocol-backfill") {
+      throw new Error(
+        "combined discovery validator requires a protocol-backfill transition",
+      );
     }
     const dex = prepared.dex;
     const protocol = prepared.protocol;
@@ -1184,7 +1211,7 @@ export async function createLiveDiscoveryCoordinator(
       }),
     });
   };
-  const rebaseHotDexTransition = (
+  const rebasePreparedDexTransition = (
     current: LiveDiscoveryPublicationState,
     prepared: CombinedDiscoveryPrepared,
   ): LiveDiscoveryPublicationState | null => {
@@ -1194,8 +1221,15 @@ export async function createLiveDiscoveryCoordinator(
     ) {
       return null;
     }
-    if (prepared.mode !== "hot" || prepared.protocol.pass !== null) {
-      throw new Error("current-head DEX rebase requires a protocol-free hot delta");
+    if (
+      (prepared.mode !== "hot" &&
+        prepared.mode !== "dex-backfill") ||
+      prepared.protocol.pass !== null ||
+      prepared.baseDexFingerprint === null
+    ) {
+      throw new Error(
+        "DEX rebase requires a protocol-free hot or backfill delta",
+      );
     }
     const dex = prepared.dex;
     const nextDexCoverage = dex?.coverage ?? current.dexGraphCoverage;
@@ -1236,6 +1270,41 @@ export async function createLiveDiscoveryCoordinator(
         landedCoverage: dex?.landedCoverage ?? current.landedCoverage,
       },
       buildStrategyViews: rebuildStrategyViews,
+    });
+  };
+  const rebasePreparedProtocolTransition = (
+    current: LiveDiscoveryPublicationState,
+    prepared: CombinedDiscoveryPrepared,
+  ): LiveDiscoveryPublicationState | null => {
+    if (
+      discoveryUnsafeReason !== null ||
+      prepared.canonicalEpoch !== discoveryCanonicalEpoch
+    ) {
+      return null;
+    }
+    if (
+      prepared.mode !== "protocol-backfill" ||
+      prepared.dex !== null ||
+      prepared.baseDexRoutingFingerprint === null ||
+      prepared.baseProtocolFingerprint === null
+    ) {
+      throw new Error(
+        "protocol rebase requires a protocol-only backfill delta",
+      );
+    }
+    if (
+      describeProtocolPublicationSlice(current) !==
+        prepared.baseProtocolFingerprint ||
+      describeDexRoutingSlice(current) !==
+        prepared.baseDexRoutingFingerprint
+    ) {
+      return null;
+    }
+    return validateCombinedDiscoveryTransition(current, {
+      ...prepared,
+      stagedProtocolCache: cloneProtocolDiscoveryEvidenceCache(
+        current.protocolEvidenceCache,
+      ),
     });
   };
   const publishLiveDiscoveryState = (
@@ -1412,25 +1481,27 @@ export async function createLiveDiscoveryCoordinator(
         String(protocolDiscoveryMaxCatchupBlocks),
     ),
   );
-  const discoveryBackfillLane = new DiscoveryBackfillLane<
+  const discoveryBackfillBudgetMs = Math.max(
+    1_000,
+    Number(
+      process.env.SEARCHER_DISCOVERY_BACKFILL_BUDGET_MS ??
+        "120000",
+    ),
+  );
+  const discoveryBackfillConcurrency = Math.max(
+    1,
+    Number(
+      process.env.SEARCHER_DISCOVERY_BACKFILL_RPC_CONCURRENCY ??
+        "2",
+    ),
+  );
+  const dexBackfillLane = new DiscoveryBackfillLane<
     LiveDiscoveryPublicationState,
     CombinedDiscoveryPrepared
   >({
     maxBlocksPerJob: discoveryBackfillMaxBlocks,
-    maxPreparationMs: Math.max(
-      1_000,
-      Number(
-        process.env.SEARCHER_DISCOVERY_BACKFILL_BUDGET_MS ??
-          "120000",
-      ),
-    ),
-    maxConcurrency: Math.max(
-      1,
-      Number(
-        process.env.SEARCHER_DISCOVERY_BACKFILL_RPC_CONCURRENCY ??
-          "2",
-      ),
-    ),
+    maxPreparationMs: discoveryBackfillBudgetMs,
+    maxConcurrency: discoveryBackfillConcurrency,
     describeState: describeLiveDiscoveryPublicationState,
     prepare: (
       plan: DiscoveryBackfillPlan<LiveDiscoveryPublicationState>,
@@ -1438,7 +1509,49 @@ export async function createLiveDiscoveryCoordinator(
     ) => prepareCombinedDiscoveryTransition(plan.baseState, {
       source: plan.source,
       through: plan.range.toBlock,
-      mode: "backfill",
+      mode: "dex-backfill",
+      control,
+    }),
+    validateTransition: (plan, prepared) => {
+      const state = rebasePreparedDexTransition(
+        plan.baseState,
+        prepared,
+      );
+      if (state === null) {
+        throw new Error(
+          `DEX backfill ${plan.id} conflicted with its frozen base`,
+        );
+      }
+      return { state, source: prepared.source };
+    },
+    rebaseTransition: (_plan, prepared, current) => {
+      const state = rebasePreparedDexTransition(current, prepared);
+      return state === null
+        ? null
+        : { state, source: prepared.source };
+    },
+    onError: (plan, error) => {
+      console.warn(
+        `[searcher/live] DEX backfill failed plan=${plan.id}: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    },
+  });
+  const protocolBackfillLane = new DiscoveryBackfillLane<
+    LiveDiscoveryPublicationState,
+    CombinedDiscoveryPrepared
+  >({
+    maxBlocksPerJob: discoveryBackfillMaxBlocks,
+    maxPreparationMs: discoveryBackfillBudgetMs,
+    maxConcurrency: discoveryBackfillConcurrency,
+    describeState: describeLiveDiscoveryPublicationState,
+    prepare: (
+      plan: DiscoveryBackfillPlan<LiveDiscoveryPublicationState>,
+      control,
+    ) => prepareCombinedDiscoveryTransition(plan.baseState, {
+      source: plan.source,
+      through: plan.range.toBlock,
+      mode: "protocol-backfill",
       control,
     }),
     validateTransition: (plan, prepared) => ({
@@ -1448,9 +1561,18 @@ export async function createLiveDiscoveryCoordinator(
       ),
       source: prepared.source,
     }),
+    rebaseTransition: (_plan, prepared, current) => {
+      const state = rebasePreparedProtocolTransition(
+        current,
+        prepared,
+      );
+      return state === null
+        ? null
+        : { state, source: prepared.source };
+    },
     onError: (plan, error) => {
       console.warn(
-        `[searcher/live] discovery backfill failed plan=${plan.id}: ` +
+        `[searcher/live] protocol backfill failed plan=${plan.id}: ` +
           `${error instanceof Error ? error.message : String(error)}`,
       );
     },
@@ -1467,7 +1589,8 @@ export async function createLiveDiscoveryCoordinator(
       const reason =
         `canonical_reorg_from_${result.invalidatedFrom}_` +
         `revision_${result.revision}`;
-      discoveryBackfillLane.invalidate(reason);
+      dexBackfillLane.invalidate(reason);
+      protocolBackfillLane.invalidate(reason);
       if (discoveryUnsafeReason !== null) return;
       // The aggregate publication has no per-edge branch provenance yet.
       // Keeping it after any observed reorg could retain an orphan-only pool
@@ -1496,6 +1619,71 @@ export async function createLiveDiscoveryCoordinator(
       observedThrough,
     );
   };
+  const consumeProtocolBackfillReady = async (): Promise<void> => {
+    const ready = protocolBackfillLane.readyDescriptor();
+    if (ready === null || discoveryUnsafeReason !== null) return;
+    const latest = await provider.getBlockNumber();
+    const target = await observeLiveCanonicalHeader(latest);
+    const preparedHeader = await observeLiveCanonicalHeader(
+      ready.source.number,
+    );
+    const proof = canonicalHeaderJournal.proof(preparedHeader.number);
+    const taken = await protocolDiscoveryQueue.enqueue(
+      "active",
+      async () => {
+        const result = protocolBackfillLane.takeForHotHead({
+          targetSource: {
+            number: target.number,
+            hash: target.hash,
+          },
+          currentState: captureLiveDiscoveryPublication(),
+          canonicalPreparedSource: proof === null
+            ? null
+            : {
+                revision: proof.revision,
+                source: proof.source,
+              },
+          currentCanonicalRevision: canonicalHeaderJournal.revision,
+        });
+        if (result.status !== "degraded") {
+          publishLiveDiscoveryState(result.state);
+        }
+        return result;
+      },
+    );
+    if (taken.status !== "degraded") {
+      finishPublishedDiscoveryState();
+    }
+  };
+  const scheduleProtocolBackfill = (
+    source: CanonicalHeader,
+    base: LiveDiscoveryPublicationState,
+    targetThrough: number,
+  ): void => {
+    const completeThrough = operationalDiscoveryCompleteThrough(base);
+    if (completeThrough >= targetThrough) return;
+    const fromBlock = completeThrough + 1;
+    const toBlock = Math.min(
+      targetThrough,
+      completeThrough + discoveryBackfillMaxBlocks,
+    );
+    const scheduled = protocolBackfillLane.schedule({
+      id:
+        `protocol:${fromBlock}-${toBlock}@` +
+        `${source.number}:${source.hash}`,
+      range: { fromBlock, toBlock },
+      source: { number: source.number, hash: source.hash },
+    }, base);
+    if (!scheduled.scheduled) return;
+    void protocolBackfillLane.settled()
+      .then(consumeProtocolBackfillReady)
+      .catch((error) => {
+        console.warn(
+          `[searcher/live] protocol backfill publication failed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  };
   const scheduleDiscoveryBackfill = async (
     targetBlock?: number,
   ): Promise<void> => {
@@ -1503,32 +1691,37 @@ export async function createLiveDiscoveryCoordinator(
     const source = await observeLiveCanonicalHeader(latest);
     const base = captureLiveDiscoveryPublication();
     const targetThrough = Math.max(0, source.number - 1);
-    // Live scheduling follows the operational cursor seeded by the one
-    // bounded startup hydrate. Exhaustive topology authority is audit evidence,
-    // not a production reason to crawl from genesis on a pruned node.
-    const completeThrough = operationalDiscoveryCompleteThrough(base);
     const hasProjectionRetry =
       base.retryableDexGraphPools.size > 0 ||
       base.retryableDexIdentityPools.size > 0 ||
       base.dexGraphCoverage.graphCompleteThrough <
         base.dexGraphCoverage.sourceCompleteThrough;
-    if (completeThrough >= targetThrough && !hasProjectionRetry) return;
-    const fromBlock = completeThrough < targetThrough
-      ? completeThrough + 1
-      : targetThrough;
-    const toBlock = completeThrough < targetThrough
-      ? Math.min(
-          targetThrough,
-          completeThrough + discoveryBackfillMaxBlocks,
-        )
-      : targetThrough;
-    discoveryBackfillLane.schedule({
-      id:
-        `combined:${fromBlock}-${toBlock}@` +
-        `${source.number}:${source.hash}`,
-      range: { fromBlock, toBlock },
-      source: { number: source.number, hash: source.hash },
-    }, base);
+    const dexSourceThrough =
+      base.dexGraphCoverage.sourceCompleteThrough;
+    if (dexSourceThrough < targetThrough || hasProjectionRetry) {
+      protocolBackfillLane.invalidate("DEX backfill priority");
+      const fromBlock = dexSourceThrough < targetThrough
+        ? dexSourceThrough + 1
+        : targetThrough;
+      const toBlock = dexSourceThrough < targetThrough
+        ? Math.min(
+            targetThrough,
+            dexSourceThrough + discoveryBackfillMaxBlocks,
+          )
+        : targetThrough;
+      dexBackfillLane.schedule({
+        id:
+          `dex:${fromBlock}-${toBlock}@` +
+          `${source.number}:${source.hash}`,
+        range: { fromBlock, toBlock },
+        source: { number: source.number, hash: source.hash },
+      }, base);
+      return;
+    }
+
+    // Protocol history is a lower-priority worker. Its trace/probe deadline
+    // cannot occupy or erase the independent DEX recovery lane.
+    scheduleProtocolBackfill(source, base, targetThrough);
   };
   let refreshTimer: NodeJS.Timeout | null = null;
   let protocolDiscoveryTimer: NodeJS.Timeout | null = null;
@@ -1568,8 +1761,12 @@ export async function createLiveDiscoveryCoordinator(
     if (protocolDiscoveryTimer) clearInterval(protocolDiscoveryTimer);
     refreshTimer = null;
     protocolDiscoveryTimer = null;
-    discoveryBackfillLane.invalidate("searcher shutdown");
-    await discoveryBackfillLane.settled();
+    dexBackfillLane.invalidate("searcher shutdown");
+    protocolBackfillLane.invalidate("searcher shutdown");
+    await Promise.all([
+      dexBackfillLane.settled(),
+      protocolBackfillLane.settled(),
+    ]);
     // An observed preparation may enqueue a final atomic publication. Drain
     // it before the mutation queue, then schedule the latest published
     // revision so shutdown never flushes an older cache snapshot.
@@ -1831,7 +2028,7 @@ export async function createLiveDiscoveryCoordinator(
     );
 
   const blockScanHooks = {
-    lane: discoveryBackfillLane,
+    lane: dexBackfillLane,
     journal: canonicalHeaderJournal,
     queue: protocolDiscoveryQueue,
     observeHeader: observeLiveCanonicalHeader,
@@ -1854,7 +2051,7 @@ export async function createLiveDiscoveryCoordinator(
         ...input,
         mode: "hot",
       }),
-    validateHot: rebaseHotDexTransition,
+    validateHot: rebasePreparedDexTransition,
     finish: finishCombinedDiscoveryTransition,
   };
 

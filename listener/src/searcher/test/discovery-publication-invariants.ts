@@ -13,6 +13,7 @@ import type { DiscoveryRange } from "../discovery-source-watermark.js";
 import {
   cloneLiveDiscoveryPublicationState,
   describeDexPublicationSlice,
+  describeDexRoutingSlice,
   describeLiveDiscoveryPublicationState,
   describeProtocolPublicationSlice,
   rebaseHotDexPublication,
@@ -68,9 +69,11 @@ await slowTraceDoesNotBlockShortPublicationQueue();
 hotDexRebasePreservesReplacedProtocolPublication();
 hotDexRebaseRejectsGraphOnlyDexConflict();
 hotDexRebaseRejectsProtocolSemanticCollision();
+dexRoutingSliceIgnoresCoverageOnlyPublication();
+dexRoutingSliceDetectsTopologyChange();
 
 console.log(
-  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (8/8)",
+  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (10/10)",
 );
 
 async function divergentCursorsAdvanceWithoutSkipping(): Promise<void> {
@@ -526,6 +529,48 @@ function hotDexRebaseRejectsProtocolSemanticCollision(): void {
     }),
     null,
     "a prepared DEX edge may not overwrite a protocol-owned semantic route",
+  );
+}
+
+function dexRoutingSliceIgnoresCoverageOnlyPublication(): void {
+  const base = publicationAt({
+    dexSource: 630,
+    dexGraph: 630,
+    observed: 630,
+    address: 630,
+  });
+  const coverageOnly: LiveDiscoveryPublicationState = {
+    ...cloneLiveDiscoveryPublicationState(base),
+    revision: base.revision + 1,
+    dexGraphCoverage: {
+      sourceCompleteThrough: 631,
+      graphCompleteThrough: 631,
+    },
+    dexSourceAnchor: anchor(631),
+    dexGraphAnchor: anchor(631),
+  };
+  assert.equal(
+    describeDexRoutingSlice(coverageOnly),
+    describeDexRoutingSlice(base),
+    "protocol rebase must cross a DEX coverage-only publication",
+  );
+}
+
+function dexRoutingSliceDetectsTopologyChange(): void {
+  const base = publicationAt({
+    dexSource: 640,
+    dexGraph: 640,
+    observed: 640,
+    address: 640,
+  });
+  const topologyChanged = appendDexPublication(
+    base,
+    dexDelta(0x7c00, 0x7d00, 0x7e00),
+  );
+  assert.notEqual(
+    describeDexRoutingSlice(topologyChanged),
+    describeDexRoutingSlice(base),
+    "protocol rebase must reject a concurrent DEX routing change",
   );
 }
 

@@ -198,6 +198,39 @@ export function describeDexPublicationSlice(
 }
 
 /**
+ * DEX topology/projection fingerprint without source/graph watermarks.
+ * Protocol backfill may cross ordinary current-head DEX coverage commits, but
+ * it must be retried when the DEX routing universe itself changed because that
+ * changes its candidate domain and semantic-route incumbents.
+ */
+export function describeDexRoutingSlice(
+  state: LiveDiscoveryPublicationState,
+): string {
+  assertLiveDiscoveryPublicationState(state);
+  const protocolEdgeKeys = new Set(
+    [...state.protocolOwnership.admissions.values()].flatMap((admission) =>
+      admission.edges.map(protocolEdgeKey)
+    ),
+  );
+  const dexPools = (pools: readonly PoolEntry[]): readonly PoolEntry[] =>
+    pools.filter((pool) => pool.discoveryOwnerAdapterId === undefined);
+  const dexEdges = (
+    edges: readonly TokenEdge[] | undefined,
+  ): readonly TokenEdge[] | undefined =>
+    edges?.filter((edge) => !protocolEdgeKeys.has(protocolEdgeKey(edge)));
+  return canonicalSha256({
+    strategyViews: {
+      backrun: dexPools(state.strategyViews.backrun),
+      blockscan: dexPools(state.strategyViews.blockscan),
+    },
+    backrunGraph: dexEdges(state.backrunGraph),
+    blockscanGraph: dexEdges(state.blockscanGraph),
+    knownPoolKeys: state.knownPoolKeys,
+    knownPoolAddresses: state.knownPoolAddresses,
+  });
+}
+
+/**
  * Protocol-owned half of the aggregate publication. This assertion descriptor
  * is used after a hot DEX rebase to prove that the newer observed publication
  * was inherited rather than reconstructed from the stale prepare base.

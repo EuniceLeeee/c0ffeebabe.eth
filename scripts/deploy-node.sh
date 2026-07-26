@@ -458,7 +458,7 @@ if [ -n "$V2_LINEAGE_SNAPSHOT" ]; then
   say "V2 lineages pinned: hash=$V2_LINEAGE_HASH lineages=$V2_LINEAGE_COUNT"
 fi
 
-# ── Pool-universe re-index (best-effort; never blocks/aborts the deploy) ──
+# ── Pool-universe re-index (best-effort build; fail-closed selected input) ──
 REINDEX_DAYS="${POOL_UNIVERSE_LOOKBACK_DAYS:-2}"
 REINDEX_OUT="$REPO/listener/searcher/pools/active-pools.json"
 REINDEX_TMP="/tmp/active-pools.reindex.$$.json"
@@ -466,23 +466,76 @@ REINDEX_MANIFEST="$REINDEX_OUT.manifest.json"
 REINDEX_TMP_MANIFEST="$REINDEX_TMP.manifest.json"
 REINDEX_RETAIN="${POOL_UNIVERSE_RETAIN_PATH:-$REINDEX_OUT}"
 UNIVERSE_SNAPSHOT_DIR=/opt/MEV-runtime/universe
+UNIVERSE_LOCK=/run/lock/mev-pooluniverse.lock
+validate_pool_universe_selection() {
+  local universe_path=$1 manifest_path=$2 frozen_source=$3
+  (
+    cd "$REPO/listener" &&
+      node --input-type=module - \
+        "$universe_path" "$manifest_path" "$frozen_source" <<'JS'
+import {
+  loadPoolUniverse,
+  loadPoolUniverseCoverageMetadata,
+} from "./dist/searcher/pool-universe.js";
+
+const [universePath, manifestPath, frozenSourceRaw] =
+  process.argv.slice(2);
+const frozenSource = Number(frozenSourceRaw);
+const pools = loadPoolUniverse(universePath, {
+  missingOk: false,
+  maxPools: 0,
+  minScore: 0,
+});
+const metadata = loadPoolUniverseCoverageMetadata(
+  universePath,
+  manifestPath,
+);
+const toBlock = metadata.toBlock;
+if (
+  pools.length === 0 ||
+  !metadata.manifestVerified ||
+  !Number.isSafeInteger(toBlock) ||
+  toBlock <= 0 ||
+  !Number.isSafeInteger(frozenSource) ||
+  frozenSource <= 0 ||
+  toBlock > frozenSource ||
+  metadata.source?.number !== toBlock
+) {
+  process.exit(1);
+}
+process.stdout.write(String(toBlock));
+JS
+  )
+}
+# The cron writer owns the same lock across its build + atomic publication.
+# Deploy must own it from input selection through content-addressed snapshot
+# publication, otherwise cron can replace the canonical files between the
+# freshness check, validation and copy.
+exec 9>"$UNIVERSE_LOCK"
+flock -w 30 9 \
+  || abort_runtime "could not lock pool universe selection at $UNIVERSE_LOCK"
 # Debounce: with frequent dry-run on/off toggles, re-scanning on EVERY restart is wasteful. Skip if the
-# universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of chain head (~7200 = ~1 day).
+# universe is already fresh — its data toBlock is within MAX_STALE_BLOCKS of this deploy's frozen source
+# (~7200 = ~1 day) and is not from the future relative to that source.
 # (The 30-min cron keeps it far fresher, so this check usually skips; it only fires if the cron lapsed.)
 # Block-based, NOT mtime — mtime is a deceptive deploy re-save; toBlock is the real data freshness.
 REINDEX_MAX_STALE_BLOCKS="${POOL_UNIVERSE_MAX_STALE_BLOCKS:-7200}"
-REINDEX_HEAD=$(curl -s http://127.0.0.1:8545 -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
-  | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["result"],16))' 2>/dev/null || echo 0)
-REINDEX_CUR_TOBLOCK=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(int(str(d.get("toBlock",0))))' "$REINDEX_OUT" 2>/dev/null || echo 0)
-if [ "$REINDEX_HEAD" -gt 0 ] && [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
-   && [ "$((REINDEX_HEAD - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ] \
+if ! REINDEX_CUR_TOBLOCK=$(
+  validate_pool_universe_selection \
+    "$REINDEX_OUT" "$REINDEX_MANIFEST" "$DISCOVERY_TO_BLOCK" \
+    2>/dev/null
+); then
+  REINDEX_CUR_TOBLOCK=0
+fi
+if [ "$REINDEX_CUR_TOBLOCK" -gt 0 ] \
+   && [ "$REINDEX_CUR_TOBLOCK" -le "$DISCOVERY_TO_BLOCK" ] \
+   && [ "$((DISCOVERY_TO_BLOCK - REINDEX_CUR_TOBLOCK))" -lt "$REINDEX_MAX_STALE_BLOCKS" ] \
    && [ -s "$REINDEX_MANIFEST" ]; then
-  say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, head=$REINDEX_HEAD, $((REINDEX_HEAD - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
+  say "pool universe already fresh (toBlock=$REINDEX_CUR_TOBLOCK, source=$DISCOVERY_TO_BLOCK, $((DISCOVERY_TO_BLOCK - REINDEX_CUR_TOBLOCK)) < $REINDEX_MAX_STALE_BLOCKS blocks) — skipping re-index."
 elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, V4 from deployment)…"; \
-   timeout 600 flock -w 30 /run/lock/mev-pooluniverse.lock \
-       env MAINNET_RPC_URL="http://127.0.0.1:8545" \
+   timeout 600 env MAINNET_RPC_URL="http://127.0.0.1:8545" \
        SEARCHER_V2_LINEAGES_PATH="$(env_value SEARCHER_V2_LINEAGES_PATH "$ENVF")" \
+       POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK" \
        POOL_UNIVERSE_LOOKBACK_DAYS="$REINDEX_DAYS" \
        POOL_UNIVERSE_RETAIN_PATH="$REINDEX_RETAIN" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \
@@ -506,11 +559,22 @@ elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, V4 fro
   cp -a "$REINDEX_MANIFEST" "${REINDEX_MANIFEST}.bak-$(date +%s)" 2>/dev/null || true
   mv "$REINDEX_TMP" "$REINDEX_OUT"
   mv "$REINDEX_TMP_MANIFEST" "$REINDEX_MANIFEST"
-  say "pool universe re-indexed: $POOLS pools (toBlock=head)."
+  say "pool universe re-indexed: $POOLS pools (toBlock=$DISCOVERY_TO_BLOCK)."
 else
   say "WARNING: pool-universe re-index failed/timed out — keeping existing active-pools.json (deploy continues)."
   rm -f "$REINDEX_TMP" "$REINDEX_TMP_MANIFEST" 2>/dev/null || true
 fi
+
+# The selected canonical pair is a deploy input, not a best-effort hint.
+# Validate its exact frozen source and output digest while the cron writer is
+# excluded. A failed rebuild may keep an older valid snapshot, but a future,
+# malformed or mismatched pair must stop rather than start a permanently-behind
+# discovery generation.
+REINDEX_SELECTED_TOBLOCK=$(
+  validate_pool_universe_selection \
+    "$REINDEX_OUT" "$REINDEX_MANIFEST" "$DISCOVERY_TO_BLOCK"
+) || abort_runtime \
+  "selected pool universe/manifest does not match frozen source $DISCOVERY_TO_BLOCK"
 
 # Pin the running process to an immutable, content-addressed universe. The 30-minute indexer may replace
 # active-pools.json while an A/B window is running; that file update must become input to the NEXT deploy,
@@ -542,6 +606,13 @@ if [ -s "$REINDEX_MANIFEST" ] && [ ! -f "$UNIVERSE_MANIFEST_SNAPSHOT" ]; then
   chmod 444 "$MANIFEST_SNAPSHOT_TMP"
   mv "$MANIFEST_SNAPSHOT_TMP" "$UNIVERSE_MANIFEST_SNAPSHOT"
 fi
+[ -s "$UNIVERSE_MANIFEST_SNAPSHOT" ] \
+  || abort_runtime "content-addressed universe manifest snapshot is missing"
+[ "$(sha256sum "$UNIVERSE_MANIFEST_SNAPSHOT" | awk '{print $1}')" = \
+  "$(sha256sum "$REINDEX_MANIFEST" | awk '{print $1}')" ] \
+  || abort_runtime "content-addressed universe manifest snapshot failed verification"
+flock -u 9
+exec 9>&-
 tmp=$(mktemp)
 grep -Ev '^SEARCHER_POOL_UNIVERSE_(PATH|MANIFEST_PATH)=' "$ENVF" > "$tmp" || true
 echo "SEARCHER_POOL_UNIVERSE_PATH=$UNIVERSE_SNAPSHOT" >> "$tmp"
@@ -549,7 +620,7 @@ if [ -s "$UNIVERSE_MANIFEST_SNAPSHOT" ]; then
   echo "SEARCHER_POOL_UNIVERSE_MANIFEST_PATH=$UNIVERSE_MANIFEST_SNAPSHOT" >> "$tmp"
 fi
 cp -f "$tmp" "$ENVF"; chmod 600 "$ENVF"; rm -f "$tmp"
-say "pool universe pinned: hash=$UNIVERSE_HASH snapshot=$UNIVERSE_SNAPSHOT"
+say "pool universe pinned: hash=$UNIVERSE_HASH toBlock=$REINDEX_SELECTED_TOBLOCK snapshot=$UNIVERSE_SNAPSHOT"
 
 # ── Router allowlist auto-discovery (best-effort; never blocks/aborts the deploy) ──
 # Proactive flow-admission refresh: scan recent local-reth blocks for out-of-allowlist `to` contracts

@@ -39,6 +39,68 @@ for (const retiredKey of [
 }
 console.log("[runtime-defaults] deploy rejects/strips retired EV controls: PASS");
 
+assert(
+  deployNode.includes('POOL_UNIVERSE_TO_BLOCK="$DISCOVERY_TO_BLOCK"'),
+  "deploy must build the universe at the same frozen source as the searcher",
+);
+assert(
+  deployNode.includes(
+    '[ "$REINDEX_CUR_TOBLOCK" -le "$DISCOVERY_TO_BLOCK" ]',
+  ),
+  "deploy freshness check must reject a universe newer than its frozen source",
+);
+assert(
+  !deployNode.includes("REINDEX_HEAD="),
+  "deploy freshness must not compare against a later, independently-read head",
+);
+const universeLockAt = deployNode.indexOf('exec 9>"$UNIVERSE_LOCK"');
+const universeSelectionAt = deployNode.indexOf("REINDEX_CUR_TOBLOCK=");
+const universeSnapshotAt = deployNode.indexOf("UNIVERSE_HASH=");
+const universeUnlockAt = deployNode.indexOf("flock -u 9");
+assert(
+  universeLockAt >= 0 &&
+    universeLockAt < universeSelectionAt &&
+    universeSelectionAt < universeSnapshotAt &&
+    universeSnapshotAt < universeUnlockAt,
+  "deploy must hold the cron universe lock from selection through immutable snapshot",
+);
+assert(
+  deployNode.includes("loadPoolUniverseCoverageMetadata") &&
+    deployNode.includes("loadPoolUniverse") &&
+    deployNode.includes("!metadata.manifestVerified") &&
+    deployNode.includes("toBlock > frozenSource") &&
+    deployNode.includes("metadata.source?.number !== toBlock"),
+  "deploy must use the production universe/manifest validator before selection",
+);
+assert(
+  deployNode.includes(
+    'pool universe re-indexed: $POOLS pools (toBlock=$DISCOVERY_TO_BLOCK)',
+  ),
+  "deploy must report the exact frozen universe source",
+);
+console.log("[runtime-defaults] deploy pins universe and searcher to one source: PASS");
+
+const universeCron = readFileSync(
+  new URL(
+    "../../../../scripts/reindex-pool-universe-cron.sh",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const cronLockAt = universeCron.indexOf("flock -n 9");
+const cronUniversePublishAt = universeCron.indexOf('mv "$TMP" "$OUT"');
+const cronManifestPublishAt = universeCron.indexOf(
+  'mv "$TMP_MANIFEST" "$OUT_MANIFEST"',
+);
+assert(
+  cronLockAt >= 0 &&
+    cronLockAt < cronUniversePublishAt &&
+    cronUniversePublishAt < cronManifestPublishAt &&
+    !universeCron.includes("flock -u 9"),
+  "cron must hold the shared universe lock across both canonical publications",
+);
+console.log("[runtime-defaults] deploy/cron universe publication is serialized: PASS");
+
 const deployAb = readFileSync(
   new URL("../../../../scripts/deploy-ab-challenger.sh", import.meta.url),
   "utf8",
@@ -73,4 +135,4 @@ assert(ev.bidEth === 49_000n, `bid ${ev.bidEth}`);
 assert(ev.netEvWei === 49_000n, `net EV ${ev.netEvWei}`);
 console.log("[runtime-defaults] production defaults retain positive EV: PASS");
 
-console.log("runtime-defaults PASS (4/4)");
+console.log("runtime-defaults PASS (6/6)");

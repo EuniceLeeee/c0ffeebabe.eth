@@ -35,9 +35,10 @@ interface RawBackfill {
 await preparationDoesNotHoldMutationQueue();
 await exactCoverageTransitionCannotJumpHoles();
 await baseAndReadyMutationFailClosed();
+await laneAwareRebasePreservesIndependentState();
 await deadlineCancelsEveryBudgetedRead();
 
-console.log("[discovery-backfill-lane] bounded background publication: PASS (4/4)");
+console.log("[discovery-backfill-lane] bounded background publication: PASS (5/5)");
 
 async function preparationDoesNotHoldMutationQueue(): Promise<void> {
   const gate = deferred<RawBackfill>();
@@ -238,6 +239,92 @@ async function baseAndReadyMutationFailClosed(): Promise<void> {
       currentCanonicalRevision: 10,
     })),
     "non_canonical_source",
+  );
+}
+
+async function laneAwareRebasePreservesIndependentState(): Promise<void> {
+  const request = requestFor(101, 101, 101);
+  const base = stateAt(100, 4);
+  const lane = new DiscoveryBackfillLane<LiveDiscoveryState, RawBackfill>({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async () => rawFor(request, {
+      protocolComplete: {
+        [OBSERVED]: false,
+        [ADDRESS]: false,
+      },
+    }),
+    validateTransition,
+    rebaseTransition: (plan, raw, current) => {
+      if (current.graph.join(",") !== plan.baseState.graph.join(",")) {
+        return null;
+      }
+      const next = cloneState(current);
+      next.revision++;
+      next.graph.push(raw.edge);
+      next.dex.sourceCompleteThrough = raw.scannedThrough;
+      if (!raw.retryableDex) {
+        next.dex.graphCompleteThrough = raw.scannedThrough;
+      }
+      return { state: next, source: raw.source };
+    },
+  });
+  lane.schedule(request, base);
+  await waitFor(() => lane.readyDescriptor() !== null);
+
+  const protocolOnly = cloneState(base);
+  protocolOnly.revision++;
+  protocolOnly.evidenceVersion++;
+  protocolOnly.protocol[OBSERVED] = 101;
+  const rebased = lane.takeForHotHead({
+    targetSource: source(101),
+    currentState: protocolOnly,
+    canonicalPreparedSource: proof(101, 11),
+    currentCanonicalRevision: 11,
+  });
+  assert.notEqual(rebased.status, "degraded");
+  if (rebased.status === "degraded") throw new Error("expected rebased state");
+  assert.equal(rebased.state.revision, protocolOnly.revision + 1);
+  assert.equal(rebased.state.evidenceVersion, protocolOnly.evidenceVersion);
+  assert.equal(rebased.state.protocol[OBSERVED], 101);
+  assert.equal(rebased.state.dex.graphCompleteThrough, 101);
+  assert(rebased.state.graph.includes("edge-101"));
+
+  const conflictLane = new DiscoveryBackfillLane<
+    LiveDiscoveryState,
+    RawBackfill
+  >({
+    maxBlocksPerJob: 25,
+    maxPreparationMs: 5_000,
+    maxConcurrency: 2,
+    describeState: describe,
+    prepare: async () => rawFor(request),
+    validateTransition,
+    rebaseTransition: (plan, raw, current) => {
+      if (current.graph.join(",") !== plan.baseState.graph.join(",")) {
+        return null;
+      }
+      return validateTransition(
+        { ...plan, baseState: current },
+        raw,
+      );
+    },
+  });
+  conflictLane.schedule(request, base);
+  await waitFor(() => conflictLane.readyDescriptor() !== null);
+  const dexConflict = cloneState(base);
+  dexConflict.revision++;
+  dexConflict.graph.push("concurrent-dex-edge");
+  assert.equal(
+    reasonOf(conflictLane.takeForHotHead({
+      targetSource: source(101),
+      currentState: dexConflict,
+      canonicalPreparedSource: proof(101, 12),
+      currentCanonicalRevision: 12,
+    })),
+    "stale_base",
   );
 }
 
