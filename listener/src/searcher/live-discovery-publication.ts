@@ -8,12 +8,19 @@ import {
   recordProtocolRouteOwnership,
   type ProtocolDiscoveryEvidenceCache,
 } from "./protocol-discovery-cache.js";
-import type {
-  ProtocolDiscoveryOwnership,
-  ProtocolDiscoveryProjection,
-  ProtocolDiscoveryResult,
+import {
+  protocolEdgeKey,
+  semanticRouteKey,
+  type ProtocolDiscoveryOwnership,
+  type ProtocolDiscoveryProjection,
+  type ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
-import type { DexGraphCoverageState } from "./runtime-pool-refresh.js";
+import {
+  applyRuntimePoolRefreshDelta,
+  type DexGraphCoverageState,
+  type RuntimePoolRefreshDelta,
+  type RuntimeStrategyViewBuilder,
+} from "./runtime-pool-refresh.js";
 import type { StrategyViews } from "./strategy-views.js";
 import type { DiscoveryBackfillStateDescriptor } from "./discovery-backfill-lane.js";
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
@@ -33,9 +40,10 @@ export interface DiscoveryCoverageAnchor {
 }
 
 /**
- * One detached discovery publication. A producer prepares and validates this
- * value outside the hot mutation queue; the hot path swaps the whole value or
- * none of it.
+ * One detached discovery publication. Background producers prepare a complete
+ * value outside the mutation queue. Current-head DEX discovery prepares a
+ * source-pinned delta, folds it onto the newest protocol publication in the
+ * queue, then swaps the whole aggregate or none of it.
  *
  * There is intentionally no `protocolGraphCompleteThrough` scalar. Protocol
  * completeness is the minimum of the exact family×source anchors below, so a
@@ -150,6 +158,161 @@ export function describeLiveDiscoveryPublicationState(
     graphCompleteThrough:
       deriveLiveDiscoveryGraphCompleteThroughUnchecked(state),
   });
+}
+
+/**
+ * Content-address only the DEX-owned base used by a current-head refresh.
+ * Discovery-owned protocol pools/edges are excluded so one independently
+ * published observed receipt does not create a false DEX conflict. DEX
+ * coverage, retry state and landed-source evidence remain authoritative.
+ */
+export function describeDexPublicationSlice(
+  state: LiveDiscoveryPublicationState,
+): string {
+  assertLiveDiscoveryPublicationState(state);
+  const protocolEdgeKeys = new Set(
+    [...state.protocolOwnership.admissions.values()].flatMap((admission) =>
+      admission.edges.map(protocolEdgeKey)
+    ),
+  );
+  const dexPools = (pools: readonly PoolEntry[]): readonly PoolEntry[] =>
+    pools.filter((pool) => pool.discoveryOwnerAdapterId === undefined);
+  const dexEdges = (
+    edges: readonly TokenEdge[] | undefined,
+  ): readonly TokenEdge[] | undefined =>
+    edges?.filter((edge) => !protocolEdgeKeys.has(protocolEdgeKey(edge)));
+  return canonicalSha256({
+    strategyViews: {
+      backrun: dexPools(state.strategyViews.backrun),
+      blockscan: dexPools(state.strategyViews.blockscan),
+    },
+    backrunGraph: dexEdges(state.backrunGraph),
+    blockscanGraph: dexEdges(state.blockscanGraph),
+    retryableDexGraphPools: state.retryableDexGraphPools,
+    retryableDexIdentityPools: state.retryableDexIdentityPools,
+    dexGraphCoverage: state.dexGraphCoverage,
+    dexSourceAnchor: state.dexSourceAnchor,
+    dexGraphAnchor: state.dexGraphAnchor,
+    landedCoverage: state.landedCoverage,
+  });
+}
+
+/**
+ * Protocol-owned half of the aggregate publication. This assertion descriptor
+ * is used after a hot DEX rebase to prove that the newer observed publication
+ * was inherited rather than reconstructed from the stale prepare base.
+ */
+export function describeProtocolPublicationSlice(
+  state: LiveDiscoveryPublicationState,
+): string {
+  assertLiveDiscoveryPublicationState(state);
+  const protocolEdgeKeys = new Set(
+    [...state.protocolOwnership.admissions.values()].flatMap((admission) =>
+      admission.edges.map(protocolEdgeKey)
+    ),
+  );
+  const protocolPools = (pools: readonly PoolEntry[]): readonly PoolEntry[] =>
+    pools.filter((pool) => pool.discoveryOwnerAdapterId !== undefined);
+  const protocolEdges = (
+    edges: readonly TokenEdge[] | undefined,
+  ): readonly TokenEdge[] | undefined =>
+    edges?.filter((edge) => protocolEdgeKeys.has(protocolEdgeKey(edge)));
+  return canonicalSha256({
+    strategyViews: {
+      backrun: protocolPools(state.strategyViews.backrun),
+      blockscan: protocolPools(state.strategyViews.blockscan),
+    },
+    backrunGraph: protocolEdges(state.backrunGraph),
+    blockscanGraph: protocolEdges(state.blockscanGraph),
+    protocolOwnership: state.protocolOwnership,
+    protocolEvidenceCache: state.protocolEvidenceCache,
+    protocolFamilySourceCoverage: state.protocolFamilySourceCoverage,
+    protocolObservedCursor: state.protocolObservedCursor,
+  });
+}
+
+export interface HotDexPublicationPatch {
+  readonly baseDexFingerprint: string;
+  readonly chainId: string;
+  readonly delta: RuntimePoolRefreshDelta | null;
+  readonly retryableDexGraphPools: ReadonlyMap<string, PoolEntry>;
+  readonly retryableDexIdentityPools: ReadonlyMap<string, PoolEntry>;
+  readonly dexGraphCoverage: DexGraphCoverageState;
+  readonly dexSourceAnchor: DiscoveryCoverageAnchor;
+  readonly dexGraphAnchor: DiscoveryCoverageAnchor;
+  readonly landedCoverage: readonly LandedPoolDiscoveryCoverage[];
+}
+
+/**
+ * Replay one fully prepared DEX delta onto the latest aggregate publication.
+ * A protocol-only revision is mergeable; a changed DEX slice or semantic-route
+ * collision is delegated to the combined background lane.
+ */
+export function rebaseHotDexPublication(input: {
+  readonly current: LiveDiscoveryPublicationState;
+  readonly patch: HotDexPublicationPatch;
+  readonly buildStrategyViews: RuntimeStrategyViewBuilder;
+}): LiveDiscoveryPublicationState | null {
+  const { current, patch } = input;
+  if (describeDexPublicationSlice(current) !== patch.baseDexFingerprint) {
+    return null;
+  }
+  const claimedProtocolRoutes = new Set(
+    [...current.protocolOwnership.admissions.values()].flatMap((admission) =>
+      admission.claims.map((claim) => claim.semanticRouteKey)
+    ),
+  );
+  if (
+    patch.delta?.successfulBuilds.some((item) =>
+      item.edges.some((edge) =>
+        claimedProtocolRoutes.has(semanticRouteKey(patch.chainId, edge))
+      )
+    )
+  ) {
+    return null;
+  }
+  const projection = patch.delta === null
+    ? null
+    : applyRuntimePoolRefreshDelta({
+        delta: patch.delta,
+        currentBackrunPools: current.strategyViews.backrun,
+        currentBackrunGraph: current.backrunGraph,
+        ...(current.blockscanGraph === undefined
+          ? {}
+          : { currentBlockscanGraph: current.blockscanGraph }),
+        knownPoolKeys: current.knownPoolKeys,
+        buildStrategyViews: input.buildStrategyViews,
+      });
+  const next = cloneLiveDiscoveryPublicationState({
+    revision: current.revision + 1,
+    strategyViews: projection?.strategyViews ?? current.strategyViews,
+    backrunGraph: projection?.backrunGraph ?? current.backrunGraph,
+    ...((projection?.blockscanGraph ?? current.blockscanGraph) === undefined
+      ? {}
+      : {
+          blockscanGraph:
+            projection?.blockscanGraph ?? current.blockscanGraph!,
+        }),
+    tokenIndex: projection?.tokenIndex ?? current.tokenIndex,
+    poolAddressMap:
+      projection?.poolAddressMap ?? current.poolAddressMap,
+    flashTokens: projection?.flashTokens ?? current.flashTokens,
+    knownPoolKeys: projection?.knownPoolKeys ?? current.knownPoolKeys,
+    knownPoolAddresses:
+      projection?.knownPoolAddresses ?? current.knownPoolAddresses,
+    protocolOwnership: current.protocolOwnership,
+    protocolEvidenceCache: current.protocolEvidenceCache,
+    retryableDexGraphPools: patch.retryableDexGraphPools,
+    retryableDexIdentityPools: patch.retryableDexIdentityPools,
+    dexGraphCoverage: patch.dexGraphCoverage,
+    dexSourceAnchor: patch.dexSourceAnchor,
+    dexGraphAnchor: patch.dexGraphAnchor,
+    landedCoverage: patch.landedCoverage,
+    protocolFamilySourceCoverage:
+      current.protocolFamilySourceCoverage,
+    protocolObservedCursor: current.protocolObservedCursor,
+  });
+  return next;
 }
 
 /**

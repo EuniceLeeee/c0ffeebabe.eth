@@ -25,8 +25,10 @@ import {
 import { emitEvent } from "./events.js";
 import {
   cloneLiveDiscoveryPublicationState,
+  describeDexPublicationSlice,
   describeLiveDiscoveryPublicationState,
   projectObservedProtocolPublication,
+  rebaseHotDexPublication,
   type DiscoveryCoverageAnchor,
   type LiveDiscoveryPublicationState,
 } from "./live-discovery-publication.js";
@@ -799,7 +801,9 @@ export async function createLiveDiscoveryCoordinator(
   type CombinedDiscoveryPrepared = {
     readonly source: { readonly number: number; readonly hash: string };
     readonly through: number;
+    readonly mode: "hot" | "backfill";
     readonly canonicalEpoch: number;
+    readonly baseDexFingerprint: string;
     readonly dex: DexDiscoveryStage | null;
     readonly protocol: ActiveProtocolDiscoveryStage;
     readonly stagedProtocolCache: ProtocolDiscoveryEvidenceCache;
@@ -953,7 +957,9 @@ export async function createLiveDiscoveryCoordinator(
     return Object.freeze({
       source: Object.freeze({ ...input.source }),
       through: input.through,
+      mode: input.mode,
       canonicalEpoch,
+      baseDexFingerprint: describeDexPublicationSlice(base),
       dex,
       protocol,
       stagedProtocolCache,
@@ -972,6 +978,9 @@ export async function createLiveDiscoveryCoordinator(
         `discovery transition crossed canonical epoch ` +
           `${prepared.canonicalEpoch}->${discoveryCanonicalEpoch}`,
       );
+    }
+    if (prepared.mode !== "backfill") {
+      throw new Error("combined discovery validator requires a backfill transition");
     }
     const dex = prepared.dex;
     const protocol = prepared.protocol;
@@ -1041,7 +1050,7 @@ export async function createLiveDiscoveryCoordinator(
     );
     for (
       const [key, completeThrough] of
-        protocol.nextProtocolFamilyGraphCompleteThrough
+      protocol.nextProtocolFamilyGraphCompleteThrough
     ) {
       const prior = nextProtocolAnchors.get(key);
       if (prior?.completeThroughBlock === completeThrough) continue;
@@ -1147,6 +1156,60 @@ export async function createLiveDiscoveryCoordinator(
         completeThroughBlock: nextObservedBlock,
         completeThroughHash: nextObservedHash,
       }),
+    });
+  };
+  const rebaseHotDexTransition = (
+    current: LiveDiscoveryPublicationState,
+    prepared: CombinedDiscoveryPrepared,
+  ): LiveDiscoveryPublicationState | null => {
+    if (
+      discoveryUnsafeReason !== null ||
+      prepared.canonicalEpoch !== discoveryCanonicalEpoch
+    ) {
+      return null;
+    }
+    if (prepared.mode !== "hot" || prepared.protocol.pass !== null) {
+      throw new Error("current-head DEX rebase requires a protocol-free hot delta");
+    }
+    const dex = prepared.dex;
+    const nextDexCoverage = dex?.coverage ?? current.dexGraphCoverage;
+    const nextDexSourceAnchor =
+      nextDexCoverage.sourceCompleteThrough ===
+          current.dexGraphCoverage.sourceCompleteThrough
+        ? current.dexSourceAnchor
+        : coverageAnchorFromStage(
+            nextDexCoverage.sourceCompleteThrough,
+            dex?.scan.toBlock,
+            dex?.scanBlockHash,
+            "DEX source",
+          );
+    const nextDexGraphAnchor =
+      nextDexCoverage.graphCompleteThrough ===
+          current.dexGraphCoverage.graphCompleteThrough
+        ? current.dexGraphAnchor
+        : coverageAnchorFromStage(
+            nextDexCoverage.graphCompleteThrough,
+            dex?.scan.toBlock,
+            dex?.scanBlockHash,
+            "DEX graph",
+          );
+    return rebaseHotDexPublication({
+      current,
+      patch: {
+        baseDexFingerprint: prepared.baseDexFingerprint,
+        chainId: protocolDiscoveryChainId.toString(),
+        delta: dex?.projection?.delta ?? null,
+        retryableDexGraphPools:
+          dex?.retryablePools ?? current.retryableDexGraphPools,
+        retryableDexIdentityPools:
+          dex?.retryableIdentityPools ??
+          current.retryableDexIdentityPools,
+        dexGraphCoverage: nextDexCoverage,
+        dexSourceAnchor: nextDexSourceAnchor,
+        dexGraphAnchor: nextDexGraphAnchor,
+        landedCoverage: dex?.landedCoverage ?? current.landedCoverage,
+      },
+      buildStrategyViews: rebuildStrategyViews,
     });
   };
   const publishLiveDiscoveryState = (
@@ -1765,7 +1828,7 @@ export async function createLiveDiscoveryCoordinator(
         ...input,
         mode: "hot",
       }),
-    validate: validateCombinedDiscoveryTransition,
+    validateHot: rebaseHotDexTransition,
     finish: finishCombinedDiscoveryTransition,
   };
 

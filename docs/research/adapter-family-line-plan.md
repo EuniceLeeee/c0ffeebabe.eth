@@ -1782,6 +1782,13 @@ follow-up；严格 sealed-blind tx02 和 paired-live 仍保持 `missing`，不�
 3. 每块同步序列化/落盘两张全 universe 图与无界 address cache 会占用 `<10s` 热路径。现改为
    topology-change-only async graph write、coalesced protocol evidence writer、bounded address cache，
    shutdown 先 drain runtime/discovery publication 再 flush。
+4. DEX current-head prepare 与 observed protocol publication 虽已分 lane，过去仍以整个 aggregate 做
+   CAS；protocol 在 DEX RPC 期间先发布会令健康的 DEX pass 误判 stale。现将 DEX build 结果保留为
+   source-pinned pure delta，并以只覆盖 DEX pools/edges/retry/coverage/anchor 的 fingerprint 判冲突；
+   mutation queue 内把 delta 重放到最新 protocol publication。protocol-only revision 可合并，DEX slice
+   变化或 semantic route 冲突则 fail closed 并交给 combined backfill，queue 内仍无 RPC/trace/probe I/O。
+   回归同时覆盖非空 DEX delta + protocol pool/edge/ownership/cache/family coverage、旧 protocol route
+   不复活、graph-only DEX 冲突，以及 production Fluid DEX route identity 的真实 semantic collision。
 
 同轮还修复了：
 

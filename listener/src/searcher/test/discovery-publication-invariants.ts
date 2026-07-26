@@ -12,18 +12,46 @@ import {
 import type { DiscoveryRange } from "../discovery-source-watermark.js";
 import {
   cloneLiveDiscoveryPublicationState,
+  describeDexPublicationSlice,
   describeLiveDiscoveryPublicationState,
+  describeProtocolPublicationSlice,
+  rebaseHotDexPublication,
   type DiscoveryCoverageAnchor,
   type LiveDiscoveryPublicationState,
 } from "../live-discovery-publication.js";
 import {
   createProtocolDiscoveryEvidenceCache,
+  recordProtocolRouteOwnership,
 } from "../protocol-discovery-cache.js";
 import { ProtocolDiscoveryMutationQueue } from
   "../protocol-discovery-coordinator.js";
+import {
+  deriveVerifiedRouteClaims,
+  projectVerifiedProtocolPool,
+  protocolEdgeKey,
+  protocolInstanceKey,
+  semanticRouteKey,
+  type VerifiedProtocolAdmission,
+} from "../protocol-instance-discovery.js";
+import {
+  buildTokenIndex,
+  type PoolEntry,
+  type TokenEdge,
+} from "../planner/token-graph.js";
+import { poolProjectionRowKey } from "../pool-universe.js";
+import type { RuntimePoolRefreshDelta } from "../runtime-pool-refresh.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { buildStrategyViews } from "../strategy-views.js";
+import { bindRouteInstanceIdentity } from
+  "../venues/route-instance-identity.js";
+import type { AttestedProtocolInstance } from
+  "../venues/route-leg-adapter.js";
+import { fluidDexAdapter } from "../venues/swaps/fluid-dex.js";
 
-const OBSERVED = "protocol:fixture\u001fobserved-interaction";
-const ADDRESS = "protocol:fixture\u001fdex-token-domain";
+const PROTOCOL_FAMILY = "protocol:erc4626";
+const OBSERVED = `${PROTOCOL_FAMILY}\u001fobserved-interaction`;
+const ADDRESS = `${PROTOCOL_FAMILY}\u001fdex-token-domain`;
+const TEST_CHAIN_ID = "1";
 
 interface PreparedTransition {
   readonly dexRange: DiscoveryRange;
@@ -37,9 +65,12 @@ await observedPublicationRejectsPreparedBackgroundState();
 await sameHeightReorgRejectsOldPreparedState();
 await hotHeadAdvancesFromPreviousBlock();
 await slowTraceDoesNotBlockShortPublicationQueue();
+hotDexRebasePreservesReplacedProtocolPublication();
+hotDexRebaseRejectsGraphOnlyDexConflict();
+hotDexRebaseRejectsProtocolSemanticCollision();
 
 console.log(
-  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (5/5)",
+  "[discovery-publication-invariants] cursor/CAS/reorg/hot/queue: PASS (8/8)",
 );
 
 async function divergentCursorsAdvanceWithoutSkipping(): Promise<void> {
@@ -299,6 +330,458 @@ async function slowTraceDoesNotBlockShortPublicationQueue(): Promise<void> {
 
   trace.resolve();
   await waitFor(() => lane.readyDescriptor() !== null);
+}
+
+function hotDexRebasePreservesReplacedProtocolPublication(): void {
+  const empty = publicationAt({
+    dexSource: 600,
+    dexGraph: 600,
+    observed: 600,
+    address: 600,
+  });
+  const oldAdmission = protocolAdmission(0x7100, 0x7200);
+  const base = replaceProtocolPublication(empty, oldAdmission, 600);
+  const replacement = protocolAdmission(0x7101, 0x7201);
+  const current = replaceProtocolPublication(base, replacement, 601);
+  const currentClone = cloneLiveDiscoveryPublicationState(current);
+  currentClone.protocolEvidenceCache.runtime.recentProcessedTxs.set(
+    blockHash(0xbeef),
+    601,
+  );
+  const concurrent: LiveDiscoveryPublicationState = {
+    ...currentClone,
+    revision: currentClone.revision + 1,
+  };
+  assert.equal(
+    describeDexPublicationSlice(concurrent),
+    describeDexPublicationSlice(base),
+    "replacing only protocol ownership must leave the DEX CAS slice stable",
+  );
+  assert.notEqual(
+    describeProtocolPublicationSlice(concurrent),
+    describeProtocolPublicationSlice(base),
+    "the interleave fixture must contain a real protocol projection change",
+  );
+  const protocolBefore = describeProtocolPublicationSlice(concurrent);
+  const sourceAnchor = anchor(601);
+  const delta = dexDelta(0x7300, 0x7400, 0x7500);
+  const rebased = rebaseHotDexPublication({
+    current: concurrent,
+    patch: {
+      baseDexFingerprint: describeDexPublicationSlice(base),
+      chainId: TEST_CHAIN_ID,
+      delta,
+      retryableDexGraphPools: concurrent.retryableDexGraphPools,
+      retryableDexIdentityPools: concurrent.retryableDexIdentityPools,
+      dexGraphCoverage: {
+        sourceCompleteThrough: 601,
+        graphCompleteThrough: 601,
+      },
+      dexSourceAnchor: sourceAnchor,
+      dexGraphAnchor: sourceAnchor,
+      landedCoverage: concurrent.landedCoverage,
+    },
+    buildStrategyViews: fixtureStrategyViews,
+  });
+  assert(rebased);
+  assert.equal(rebased.revision, concurrent.revision + 1);
+  assert.equal(rebased.dexGraphCoverage.graphCompleteThrough, 601);
+  assert.equal(
+    describeProtocolPublicationSlice(rebased),
+    protocolBefore,
+    "a protocol-only concurrent publication must survive the DEX rebase",
+  );
+  assert(
+    rebased.backrunGraph.some((edge) =>
+      edge.target.toLowerCase() ===
+        delta.successfulBuilds[0]!.pool.address.toLowerCase()
+    ),
+    "the prepared non-empty DEX delta must enter the rebased graph",
+  );
+  assert(
+    rebased.strategyViews.backrun.some((pool) =>
+      pool.address.toLowerCase() === replacement.instance.pool.address.toLowerCase()
+    ),
+    "the replacement protocol pool must remain published",
+  );
+  assert(
+    !rebased.backrunGraph.some((edge) =>
+      protocolEdgeKey(edge) === protocolEdgeKey(oldAdmission.edges[0]!)
+    ),
+    "the DEX rebase must not resurrect the protocol route replaced concurrently",
+  );
+  assert.equal(
+    rebased.protocolFamilySourceCoverage.get(OBSERVED)?.completeThroughBlock,
+    601,
+    "the concurrent protocol family coverage sentinel must survive",
+  );
+  assert.equal(
+    rebased.protocolEvidenceCache.runtime.recentProcessedTxs.has(
+      blockHash(0xbeef),
+    ),
+    true,
+    "the concurrent protocol evidence-cache sentinel must survive",
+  );
+}
+
+function hotDexRebaseRejectsGraphOnlyDexConflict(): void {
+  const base = publicationAt({
+    dexSource: 610,
+    dexGraph: 610,
+    observed: 610,
+    address: 610,
+  });
+  const current = appendDexPublication(
+    base,
+    dexDelta(0x7600, 0x7700, 0x7800),
+  );
+  assert.notEqual(
+    describeDexPublicationSlice(current),
+    describeDexPublicationSlice(base),
+    "the negative control must change only the DEX graph slice",
+  );
+  assert.deepEqual(
+    current.dexGraphCoverage,
+    base.dexGraphCoverage,
+    "the graph-only negative control must not rely on coverage drift",
+  );
+  const sourceAnchor = anchor(611);
+  assert.equal(
+    rebaseHotDexPublication({
+      current,
+      patch: {
+        baseDexFingerprint: describeDexPublicationSlice(base),
+        chainId: TEST_CHAIN_ID,
+        delta: dexDelta(0x7601, 0x7701, 0x7801),
+        retryableDexGraphPools: current.retryableDexGraphPools,
+        retryableDexIdentityPools: current.retryableDexIdentityPools,
+        dexGraphCoverage: {
+          sourceCompleteThrough: 611,
+          graphCompleteThrough: 611,
+        },
+        dexSourceAnchor: sourceAnchor,
+        dexGraphAnchor: sourceAnchor,
+        landedCoverage: current.landedCoverage,
+      },
+      buildStrategyViews: fixtureStrategyViews,
+    }),
+    null,
+    "a graph-only concurrent DEX publication must remain a real CAS conflict",
+  );
+}
+
+function hotDexRebaseRejectsProtocolSemanticCollision(): void {
+  const base = publicationAt({
+    dexSource: 620,
+    dexGraph: 620,
+    observed: 620,
+    address: 620,
+  });
+  const admission = fluidDexAdmission(0x7900, 0x7a00, 0x7b00);
+  const current = replaceProtocolPublication(base, admission, 621);
+  const collisionPool: PoolEntry = {
+    ...admission.instance.pool,
+    discoveryOwnerAdapterId: undefined,
+    verifiedRoutes: undefined,
+  };
+  const collisionEdges = fluidDexEdges(collisionPool);
+  const collisionEdge = collisionEdges[0]!;
+  const collisionDelta: RuntimePoolRefreshDelta = {
+    attemptedPools: [collisionPool],
+    successfulBuilds: [{
+      pool: collisionPool,
+      edges: collisionEdges,
+    }],
+    failedPools: [],
+  };
+  assert.equal(
+    describeDexPublicationSlice(current),
+    describeDexPublicationSlice(base),
+    "a protocol-only publication must be eligible for lane-aware rebase",
+  );
+  assert.equal(
+    semanticRouteKey(TEST_CHAIN_ID, collisionEdge),
+    admission.claims[0]!.semanticRouteKey,
+    "the negative control must collide on the exact semantic route key",
+  );
+  const sourceAnchor = anchor(621);
+  assert.equal(
+    rebaseHotDexPublication({
+      current,
+      patch: {
+        baseDexFingerprint: describeDexPublicationSlice(base),
+        chainId: TEST_CHAIN_ID,
+        delta: collisionDelta,
+        retryableDexGraphPools: current.retryableDexGraphPools,
+        retryableDexIdentityPools: current.retryableDexIdentityPools,
+        dexGraphCoverage: {
+          sourceCompleteThrough: 621,
+          graphCompleteThrough: 621,
+        },
+        dexSourceAnchor: sourceAnchor,
+        dexGraphAnchor: sourceAnchor,
+        landedCoverage: current.landedCoverage,
+      },
+      buildStrategyViews: fixtureStrategyViews,
+    }),
+    null,
+    "a prepared DEX edge may not overwrite a protocol-owned semantic route",
+  );
+}
+
+function fluidDexAdmission(
+  poolAddress: number,
+  token0Address: number,
+  token1Address: number,
+): VerifiedProtocolAdmission {
+  const instance: AttestedProtocolInstance = {
+    pool: {
+      address: address(poolAddress),
+      adapter: "fluid-dex",
+      venueId: "fluid",
+      factory: address(0x7c00),
+      identitySource: "fluid-dex-factory-behavior",
+      token0: address(token0Address),
+      token1: address(token1Address),
+    },
+    sources: ["dex-token-domain"],
+    selectors: [],
+    evidence: [{ kind: "fluid-dex-constants", blockNumber: 620 }],
+    ownerAdapterId: fluidDexAdapter.id,
+  };
+  const edges = fluidDexEdges(instance.pool);
+  return {
+    adapterId: fluidDexAdapter.id,
+    instance,
+    edges,
+    claims: deriveVerifiedRouteClaims(
+      fluidDexAdapter.id,
+      instance,
+      edges,
+      TEST_CHAIN_ID,
+      fluidDexAdapter.discoveryIdentityAuthority,
+    ),
+  };
+}
+
+function fluidDexEdges(pool: PoolEntry): TokenEdge[] {
+  return bindRouteInstanceIdentity(fluidDexAdapter, pool, [
+    fluidDexEdge(pool, pool.token0!, pool.token1!),
+    fluidDexEdge(pool, pool.token1!, pool.token0!),
+  ]);
+}
+
+function fluidDexEdge(
+  pool: PoolEntry,
+  tokenIn: string,
+  tokenOut: string,
+): TokenEdge {
+  return {
+    adapterId: "fluid-dex-swap",
+    target: pool.address,
+    tokenIn,
+    tokenOut,
+    poolToken0: pool.token0,
+    poolToken1: pool.token1,
+    slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
+  };
+}
+
+function protocolAdmission(
+  poolAddress: number,
+  assetAddress: number,
+): VerifiedProtocolAdmission {
+  const pool = address(poolAddress);
+  const asset = address(assetAddress);
+  const instance: AttestedProtocolInstance = {
+    pool: {
+      address: pool,
+      adapter: "erc4626",
+      venueId: "erc4626",
+      identitySource: "erc4626-standard",
+      fixedTokenIn: asset,
+      fixedTokenOut: pool,
+      fixedSlotKind: "protocol",
+      fixedProtocolAction: "wrap",
+    },
+    sources: ["observed-interaction"],
+    selectors: ["0x12345678"],
+    evidence: [{ kind: "fixture", blockNumber: 600 }],
+    ownerAdapterId: PROTOCOL_FAMILY,
+  };
+  const edge: TokenEdge = {
+    adapterId: "erc4626-deposit",
+    target: pool,
+    tokenIn: asset,
+    tokenOut: pool,
+    slotKind: "protocol",
+    protocolAction: "wrap",
+    ...deriveEdgeTaxonomy("protocol", "wrap"),
+  };
+  return {
+    adapterId: PROTOCOL_FAMILY,
+    instance,
+    edges: [edge],
+    claims: deriveVerifiedRouteClaims(
+      PROTOCOL_FAMILY,
+      instance,
+      [edge],
+      TEST_CHAIN_ID,
+      { class: "canonical-onchain", strength: 100 },
+    ),
+  };
+}
+
+function replaceProtocolPublication(
+  source: LiveDiscoveryPublicationState,
+  admission: VerifiedProtocolAdmission,
+  through: number,
+): LiveDiscoveryPublicationState {
+  const next = cloneLiveDiscoveryPublicationState(source);
+  const priorEdgeKeys = new Set(
+    [...source.protocolOwnership.admissions.values()].flatMap((item) =>
+      item.edges.map(protocolEdgeKey)
+    ),
+  );
+  const basePools = source.strategyViews.backrun.filter(
+    (pool) => pool.discoveryOwnerAdapterId === undefined,
+  );
+  const baseBackrunGraph = source.backrunGraph.filter(
+    (edge) => !priorEdgeKeys.has(protocolEdgeKey(edge)),
+  );
+  const baseBlockscanGraph = source.blockscanGraph?.filter(
+    (edge) => !priorEdgeKeys.has(protocolEdgeKey(edge)),
+  );
+  const pool = projectVerifiedProtocolPool(admission);
+  const strategyViews = fixtureStrategyViews([...basePools, pool]);
+  const backrunGraph = [...baseBackrunGraph, ...admission.edges];
+  const blockscanGraph = baseBlockscanGraph === undefined
+    ? undefined
+    : [...baseBlockscanGraph, ...admission.edges];
+  const ownership = {
+    version: source.protocolOwnership.version + 1,
+    admissions: new Map([[
+      protocolInstanceKey(admission.adapterId, admission.instance.pool),
+      admission,
+    ]]),
+  };
+  recordProtocolRouteOwnership(next.protocolEvidenceCache, ownership);
+  next.protocolEvidenceCache.runtime.observedCursor = through;
+  next.protocolEvidenceCache.runtime.observedCursorHash = blockHash(through);
+  const sourceAnchor = anchor(through);
+  const pools = strategyViews.backrun;
+  const tokenIndex = buildTokenIndex([...backrunGraph]);
+  return {
+    ...next,
+    revision: source.revision + 1,
+    strategyViews,
+    backrunGraph,
+    ...(blockscanGraph === undefined ? {} : { blockscanGraph }),
+    tokenIndex,
+    poolAddressMap: new Map(
+      pools.map((item) => [item.address.toLowerCase(), item.adapter]),
+    ),
+    knownPoolKeys: new Set(pools.map(poolProjectionRowKey)),
+    knownPoolAddresses: new Set(
+      pools.map((item) => item.address.toLowerCase()),
+    ),
+    flashTokens: [...tokenIndex.keys()],
+    protocolOwnership: ownership,
+    protocolEvidenceCache: next.protocolEvidenceCache,
+    protocolFamilySourceCoverage: new Map([
+      [`${admission.adapterId}\u001fobserved-interaction`, sourceAnchor],
+      [`${admission.adapterId}\u001fdex-token-domain`, sourceAnchor],
+    ]),
+    protocolObservedCursor: sourceAnchor,
+  };
+}
+
+function dexDelta(
+  poolAddress: number,
+  token0Address: number,
+  token1Address: number,
+): RuntimePoolRefreshDelta {
+  const pool: PoolEntry = {
+    address: address(poolAddress),
+    adapter: "univ2",
+    token0: address(token0Address),
+    token1: address(token1Address),
+  };
+  const edges: TokenEdge[] = [
+    dexEdge(pool, pool.token0!, pool.token1!),
+    dexEdge(pool, pool.token1!, pool.token0!),
+  ];
+  return {
+    attemptedPools: [pool],
+    successfulBuilds: [{ pool, edges }],
+    failedPools: [],
+  };
+}
+
+function dexEdge(
+  pool: PoolEntry,
+  tokenIn: string,
+  tokenOut: string,
+): TokenEdge {
+  return {
+    adapterId: "univ2-swap",
+    target: pool.address,
+    tokenIn,
+    tokenOut,
+    poolToken0: pool.token0,
+    poolToken1: pool.token1,
+    slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
+  };
+}
+
+function appendDexPublication(
+  source: LiveDiscoveryPublicationState,
+  delta: RuntimePoolRefreshDelta,
+): LiveDiscoveryPublicationState {
+  const built = delta.successfulBuilds[0]!;
+  const strategyViews = fixtureStrategyViews([
+    ...source.strategyViews.backrun,
+    built.pool,
+  ]);
+  const backrunGraph = [...source.backrunGraph, ...built.edges];
+  const blockscanGraph = source.blockscanGraph === undefined
+    ? undefined
+    : [...source.blockscanGraph, ...built.edges];
+  const tokenIndex = buildTokenIndex([...backrunGraph]);
+  return {
+    ...cloneLiveDiscoveryPublicationState(source),
+    revision: source.revision + 1,
+    strategyViews,
+    backrunGraph,
+    ...(blockscanGraph === undefined ? {} : { blockscanGraph }),
+    tokenIndex,
+    poolAddressMap: new Map(
+      strategyViews.backrun.map((pool) => [
+        pool.address.toLowerCase(),
+        pool.adapter,
+      ]),
+    ),
+    knownPoolKeys: new Set(
+      strategyViews.backrun.map(poolProjectionRowKey),
+    ),
+    knownPoolAddresses: new Set(
+      strategyViews.backrun.map((pool) => pool.address.toLowerCase()),
+    ),
+    flashTokens: [...tokenIndex.keys()],
+  };
+}
+
+function fixtureStrategyViews(pools: PoolEntry[]) {
+  return buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 10_000,
+    poolUniverseGeneratedAt: "2026-07-26T00:00:00.000Z",
+  });
+}
+
+function address(value: number): string {
+  return `0x${value.toString(16).padStart(40, "0")}`;
 }
 
 function laneFor(

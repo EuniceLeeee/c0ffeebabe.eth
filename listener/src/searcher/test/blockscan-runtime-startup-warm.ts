@@ -12,13 +12,23 @@ import {
 import { CanonicalHeaderJournal } from "../canonical-header-journal.js";
 import {
   cloneLiveDiscoveryPublicationState,
+  describeDexPublicationSlice,
+  rebaseHotDexPublication,
   type DiscoveryCoverageAnchor,
   type LiveDiscoveryPublicationState,
 } from "../live-discovery-publication.js";
+import type {
+  PoolEntry,
+  TokenEdge,
+} from "../planner/token-graph.js";
 import { createProtocolDiscoveryEvidenceCache } from
   "../protocol-discovery-cache.js";
 import { ProtocolDiscoveryMutationQueue } from
   "../protocol-discovery-coordinator.js";
+import type { RuntimePoolRefreshDelta } from
+  "../runtime-pool-refresh.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { buildStrategyViews } from "../strategy-views.js";
 import {
   createVerifiedGraphView,
   exactSetHash,
@@ -29,17 +39,24 @@ const HOT_BUDGET_MS = 25;
 const STARTUP_BUDGET_MS = 500;
 const EMPTY_HASH = exactSetHash([]);
 
+interface PreparedDiscovery {
+  readonly block: number;
+  readonly baseDexFingerprint: string;
+  readonly delta: RuntimePoolRefreshDelta;
+}
+
 await distantStartupWaitsForCurrentDiscovery();
 await incompleteRetriesAndHotBudgetResumes();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
 await protocolLagDoesNotBlockDexRuntime();
+await observedPublicationDoesNotInvalidateHotDexCommit();
 await shutdownDrainsActivePassAndDropsPendingHead();
 blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (7/7)",
+    "PASS (8/8)",
 );
 
 async function distantStartupWaitsForCurrentDiscovery(): Promise<void> {
@@ -148,6 +165,44 @@ async function protocolLagDoesNotBlockDexRuntime(): Promise<void> {
   );
 }
 
+async function observedPublicationDoesNotInvalidateHotDexCommit(): Promise<void> {
+  const harness = createHarness(
+    469,
+    ["complete"],
+    { publishObservedDuringDiscoveryPrepare: true },
+  );
+  await harness.run(470);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [470],
+    "a protocol-only publication must not suppress the DEX runtime pass",
+  );
+  assert.equal(harness.publishedPricing, 1);
+  assert.deepEqual(
+    harness.backfillBlocks,
+    [],
+    "a successful hot rebase must not schedule stale-base backfill",
+  );
+  assert.equal(
+    harness.publication.dexGraphCoverage.graphCompleteThrough,
+    470,
+  );
+  assert.equal(
+    harness.publication.protocolEvidenceCache.runtime.recentProcessedTxs.has(
+      hash(0xbeef),
+    ),
+    true,
+    "the hot DEX commit must preserve the concurrent protocol cache update",
+  );
+  assert(
+    harness.publication.backrunGraph.some(
+      (edge) =>
+        edge.target.toLowerCase() === runtimeDexPool(470).address.toLowerCase(),
+    ),
+    "the runtime interleave must commit the prepared non-empty DEX delta",
+  );
+}
+
 async function shutdownDrainsActivePassAndDropsPendingHead(): Promise<void> {
   const holdActive = deferred<void>();
   const harness = createHarness(
@@ -203,6 +258,7 @@ function createHarness(
     readonly beforePrepareResult?: (call: number) => Promise<void>;
     readonly blindEnabled?: boolean;
     readonly initialProtocolCompleteThrough?: number;
+    readonly publishObservedDuringDiscoveryPrepare?: boolean;
   } = {},
 ) {
   let publication = publicationAt(
@@ -259,7 +315,7 @@ function createHarness(
     },
     async stopAndWait() {},
   };
-  const deps: BlockScanRuntimeLoopDependencies<{ readonly block: number }> = {
+  const deps: BlockScanRuntimeLoopDependencies<PreparedDiscovery> = {
     enabled: true,
     blockScanConfig: {
       maxHops: 3,
@@ -273,7 +329,7 @@ function createHarness(
       solver: {},
       simulator: {},
     }] as unknown) as BlockScanRuntimeLoopDependencies<
-      { readonly block: number }
+      PreparedDiscovery
     >["executionWorkers"],
     runtimeAbort,
     sharedPlanner: { setFlashLiquidity() {} },
@@ -299,21 +355,63 @@ function createHarness(
         backfillBlocks.push(blockNumber);
       },
       prepare: async (
-        _base: LiveDiscoveryPublicationState,
-        input: { readonly through: number },
-      ) => ({ block: input.through }),
-      validate: (
         base: LiveDiscoveryPublicationState,
-        prepared: { readonly block: number },
+        input: { readonly through: number },
+      ) => {
+        const pool = runtimeDexPool(input.through);
+        const delta: RuntimePoolRefreshDelta = {
+          attemptedPools: [pool],
+          successfulBuilds: [{
+            pool,
+            edges: runtimeDexEdges(pool),
+          }],
+          failedPools: [],
+        };
+        const prepared: PreparedDiscovery = {
+          block: input.through,
+          baseDexFingerprint: describeDexPublicationSlice(base),
+          delta,
+        };
+        if (options.publishObservedDuringDiscoveryPrepare) {
+          await queue.enqueue("observed", async () => {
+            const observed = cloneLiveDiscoveryPublicationState(publication);
+            observed.protocolEvidenceCache.runtime.recentProcessedTxs.set(
+              hash(0xbeef),
+              input.through,
+            );
+            publication = {
+              ...observed,
+              revision: observed.revision + 1,
+            };
+          });
+        }
+        return prepared;
+      },
+      validateHot: (
+        current: LiveDiscoveryPublicationState,
+        prepared: PreparedDiscovery,
       ) =>
-        publicationAt(
-          prepared.block,
-          base.revision + 1,
-          options.initialProtocolCompleteThrough,
-        ),
+        rebaseHotDexPublication({
+          current,
+          patch: {
+            baseDexFingerprint: prepared.baseDexFingerprint,
+            chainId: "1",
+            delta: prepared.delta,
+            retryableDexGraphPools: current.retryableDexGraphPools,
+            retryableDexIdentityPools: current.retryableDexIdentityPools,
+            dexGraphCoverage: {
+              sourceCompleteThrough: prepared.block,
+              graphCompleteThrough: prepared.block,
+            },
+            dexSourceAnchor: anchor(prepared.block),
+            dexGraphAnchor: anchor(prepared.block),
+            landedCoverage: current.landedCoverage,
+          },
+          buildStrategyViews: runtimeStrategyViews,
+        }),
       finish() {},
     } as unknown as BlockScanRuntimeLoopDependencies<
-      { readonly block: number }
+      PreparedDiscovery
     >["discovery"],
     blind: {
       enabled: options.blindEnabled ?? false,
@@ -334,7 +432,7 @@ function createHarness(
     blockScanGraph: () => [],
     blockScanPlanner: () =>
       blockScanPlanner as unknown as BlockScanRuntimeLoopDependencies<
-        { readonly block: number }
+        PreparedDiscovery
       >["blockScanPlanner"] extends () => infer T ? T : never,
     adapterRuntimeCoordinator: () => runtimeCoordinator,
     flashTokens: () => [],
@@ -369,6 +467,9 @@ function createHarness(
     },
     get workerStops() {
       return workerStops;
+    },
+    get publication() {
+      return cloneLiveDiscoveryPublicationState(publication);
     },
     setPublication(block: number) {
       publication = publicationAt(block, publication.revision + 1);
@@ -551,6 +652,50 @@ function publicationAt(
       completeThroughHash: null,
     },
   };
+}
+
+function runtimeDexPool(block: number): PoolEntry {
+  return {
+    address: address(0x8000 + block),
+    adapter: "univ2",
+    token0: address(0x9000 + block),
+    token1: address(0xa000 + block),
+  };
+}
+
+function runtimeDexEdges(pool: PoolEntry): TokenEdge[] {
+  return [
+    runtimeDexEdge(pool, pool.token0!, pool.token1!),
+    runtimeDexEdge(pool, pool.token1!, pool.token0!),
+  ];
+}
+
+function runtimeDexEdge(
+  pool: PoolEntry,
+  tokenIn: string,
+  tokenOut: string,
+): TokenEdge {
+  return {
+    adapterId: "univ2-swap",
+    target: pool.address,
+    tokenIn,
+    tokenOut,
+    poolToken0: pool.token0,
+    poolToken1: pool.token1,
+    slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
+  };
+}
+
+function runtimeStrategyViews(pools: PoolEntry[]) {
+  return buildStrategyViews(pools, [], [], {
+    blockscanMaxPools: 10_000,
+    poolUniverseGeneratedAt: "2026-07-26T00:00:00.000Z",
+  });
+}
+
+function address(value: number): string {
+  return `0x${value.toString(16).padStart(40, "0")}`;
 }
 
 function anchor(block: number): DiscoveryCoverageAnchor {

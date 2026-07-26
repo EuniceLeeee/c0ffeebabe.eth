@@ -153,10 +153,14 @@ interface BlockScanDiscoveryDependencies<PreparedDiscovery> {
       readonly control?: DiscoveryBackfillControl;
     },
   ): Promise<PreparedDiscovery>;
-  validate(
-    base: LiveDiscoveryPublicationState,
+  /**
+   * Pure current-head rebase. A null result means the DEX slice itself changed
+   * or route arbitration must be rerun by the combined background lane.
+   */
+  validateHot(
+    current: LiveDiscoveryPublicationState,
     prepared: PreparedDiscovery,
-  ): LiveDiscoveryPublicationState;
+  ): LiveDiscoveryPublicationState | null;
   finish(prepared: PreparedDiscovery): void;
 }
 
@@ -515,8 +519,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     try {
       const discovery = this.deps.discovery;
       // Historical discovery is prepared in a dedicated cancellable lane.
-      // The mutation queue only performs descriptor/hash CAS and one
-      // synchronous publication; no provider/trace/probe I/O runs inside it.
+      // The mutation queue performs only descriptor/hash checks, a pure DEX
+      // delta fold and one synchronous publication; no provider/trace/probe
+      // I/O runs inside it.
       const sourceHeader = await discovery.observeHeader(blockNumber);
       const ready = discovery.lane.readyDescriptor();
       if (ready) {
@@ -579,29 +584,26 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         through: blockNumber,
         control: hotControl,
       });
-      const nextDiscovery = discovery.validate(base, preparedDiscovery);
       const canonicalAfter = await discovery.observeHeader(blockNumber);
-      const committed = await discovery.queue.enqueue(
+      const nextDiscovery = await discovery.queue.enqueue(
         "dex-refresh",
         async () => {
-          const current = discovery.capture();
-          const expected = describeLiveDiscoveryPublicationState(base);
-          const actual = describeLiveDiscoveryPublicationState(current);
-          if (
-            expected.revision !== actual.revision ||
-            expected.baseFingerprint !== actual.baseFingerprint ||
-            expected.coverageFingerprint !== actual.coverageFingerprint ||
-            canonicalAfter.hash !== sourceHeader.hash
-          ) {
-            return false;
+          if (canonicalAfter.hash !== sourceHeader.hash) {
+            return null;
           }
-          discovery.publish(nextDiscovery);
-          return true;
+          const current = discovery.capture();
+          const rebased = discovery.validateHot(
+            current,
+            preparedDiscovery,
+          );
+          if (rebased === null) return null;
+          discovery.publish(rebased);
+          return rebased;
         },
       );
-      if (!committed) {
+      if (nextDiscovery === null) {
         outcome = "degraded";
-        skippedReason = "discovery_publication_stale_base";
+        skippedReason = "discovery_hot_rebase_conflict";
         finishStage("state", "failed");
         void discovery.scheduleBackfill(blockNumber);
         return;

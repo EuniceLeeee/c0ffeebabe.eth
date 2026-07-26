@@ -3,6 +3,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import type { PoolEntry, TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { buildMempoolIntakeWithRouters } from "../main.js";
 import {
+  applyRuntimePoolRefreshDelta,
   assertDexSourceHashStable,
   completeDexGraphCoverageScan,
   createDexGraphCoverageState,
@@ -238,6 +239,60 @@ async function main(): Promise<void> {
     "fresh hot pool should enter rebuilt filtered mempool subscription",
   );
   console.log("[runtime-refresh] all backrun and mempool projections advance together: PASS");
+
+  const concurrentProtocolPool: PoolEntry = {
+    address: address(0xa322),
+    adapter: "erc4626",
+    discoveryOwnerAdapterId: "protocol:erc4626",
+    verifiedRoutes: [{
+      edgeAdapterId: "erc4626-deposit",
+      tokenIn: address(0xb322),
+      tokenOut: address(0xa322),
+      slotKind: "protocol",
+      protocolAction: "wrap",
+    }],
+  };
+  const concurrentProtocolEdge: TokenEdge = {
+    adapterId: "erc4626-deposit",
+    target: concurrentProtocolPool.address,
+    tokenIn: address(0xb322),
+    tokenOut: concurrentProtocolPool.address,
+    slotKind: "protocol",
+    protocolAction: "wrap",
+    edgeKind: "protocol",
+    leavesStandingPosition: false,
+  };
+  const rebased = applyRuntimePoolRefreshDelta({
+    delta: second.delta,
+    currentBackrunPools: [BASE, concurrentProtocolPool],
+    currentBackrunGraph: [...BASE_GRAPH, concurrentProtocolEdge],
+    currentBlockscanGraph: [...BASE_GRAPH, concurrentProtocolEdge],
+    knownPoolKeys: new Set([
+      poolProjectionRowKey(BASE),
+      poolProjectionRowKey(concurrentProtocolPool),
+    ]),
+    buildStrategyViews: views,
+  });
+  assert(
+    rebased.backrunGraph.includes(concurrentProtocolEdge),
+    "replaying a DEX delta must preserve a newer protocol edge",
+  );
+  assert(
+    rebased.backrunGraph.some(
+      (item) => item.target.toLowerCase() === FRESH.address.toLowerCase(),
+    ),
+    "replaying a DEX delta must still admit the prepared DEX edges",
+  );
+  assert(
+    rebased.strategyViews.backrun.some(
+      (pool) =>
+        pool.discoveryOwnerAdapterId === "protocol:erc4626" &&
+        pool.address.toLowerCase() ===
+          concurrentProtocolPool.address.toLowerCase(),
+    ),
+    "replaying a DEX delta must preserve the newer protocol pool row",
+  );
+  console.log("[runtime-refresh] prepared DEX delta rebases over protocol publication: PASS");
 
   const third = await prepareRuntimePoolRefresh({
     backend,

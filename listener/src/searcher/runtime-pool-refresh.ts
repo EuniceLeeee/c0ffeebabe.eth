@@ -196,7 +196,25 @@ export interface RuntimePoolRefreshInput {
   buildStrategyViews: RuntimeStrategyViewBuilder;
 }
 
+export interface RuntimePoolRefreshSuccessfulBuild {
+  readonly pool: PoolEntry;
+  readonly edges: readonly TokenEdge[];
+}
+
+/**
+ * RPC-free output of one DEX discovery/build pass. Keeping the newly built
+ * edges separate from the aggregate projection lets the short publication
+ * boundary replay this delta onto a newer protocol-only publication without
+ * publishing the stale aggregate that existed when the reads began.
+ */
+export interface RuntimePoolRefreshDelta {
+  readonly attemptedPools: readonly PoolEntry[];
+  readonly successfulBuilds: readonly RuntimePoolRefreshSuccessfulBuild[];
+  readonly failedPools: readonly PoolGraphBuildFailure[];
+}
+
 export interface RuntimePoolRefreshProjection {
+  readonly delta: RuntimePoolRefreshDelta;
   attemptedPools: PoolEntry[];
   admittedPools: PoolEntry[];
   failedPools: PoolGraphBuildFailure[];
@@ -240,18 +258,56 @@ export async function prepareRuntimePoolRefresh(
   const attemptedPools = uniquePools(input.freshPools)
     .filter((pool) => !currentKeys.has(poolRegistryKey(pool)));
   const built = await buildTokenGraphWithResults(input.backend, attemptedPools);
-  const admittedPools = built.successful.map((item) => item.pool);
+  const delta: RuntimePoolRefreshDelta = Object.freeze({
+    attemptedPools: Object.freeze([...attemptedPools]),
+    successfulBuilds: Object.freeze(built.successful.map((item) =>
+      Object.freeze({
+        pool: item.pool,
+        edges: Object.freeze([...item.edges]),
+      })
+    )),
+    failedPools: Object.freeze([...built.failed]),
+  });
+  return applyRuntimePoolRefreshDelta({
+    delta,
+    currentBackrunPools: input.currentBackrunPools,
+    currentBackrunGraph: input.currentBackrunGraph,
+    ...(input.currentBlockscanGraph === undefined
+      ? {}
+      : { currentBlockscanGraph: input.currentBlockscanGraph }),
+    knownPoolKeys: currentKeys,
+    buildStrategyViews: input.buildStrategyViews,
+  });
+}
+
+/**
+ * Materialize a prepared DEX delta onto one aggregate publication. This is
+ * deliberately pure: no identity, graph-build or provider read may occur in
+ * the mutation queue.
+ */
+export function applyRuntimePoolRefreshDelta(input: {
+  readonly delta: RuntimePoolRefreshDelta;
+  readonly currentBackrunPools: readonly PoolEntry[];
+  readonly currentBackrunGraph: readonly TokenEdge[];
+  readonly currentBlockscanGraph?: readonly TokenEdge[];
+  readonly knownPoolKeys?: ReadonlySet<string>;
+  readonly buildStrategyViews: RuntimeStrategyViewBuilder;
+}): RuntimePoolRefreshProjection {
+  const admittedPools = input.delta.successfulBuilds.map((item) => item.pool);
   const nextBackrunPools = mergePoolProjectionRows(
     input.currentBackrunPools,
     admittedPools,
   );
   const strategyViews = input.buildStrategyViews(nextBackrunPools);
 
-  const backrunGraph = mergeEdges(input.currentBackrunGraph, built.edges);
+  const backrunGraph = mergeEdges(
+    input.currentBackrunGraph,
+    input.delta.successfulBuilds.flatMap((item) => [...item.edges]),
+  );
   const blockscanPoolKeys = new Set(
     strategyViews.blockscan.map(poolProjectionRowKey),
   );
-  const blockscanAdditions = built.successful.flatMap((item) =>
+  const blockscanAdditions = input.delta.successfulBuilds.flatMap((item) =>
     blockscanPoolKeys.has(poolProjectionRowKey(item.pool)) ? item.edges : []
   );
   const blockscanGraph = input.currentBlockscanGraph === undefined
@@ -263,15 +319,19 @@ export async function prepareRuntimePoolRefresh(
     poolAddressMap.set(pool.address.toLowerCase(), pool.adapter);
   }
 
-  const knownPoolKeys = new Set(currentKeys);
+  const knownPoolKeys = new Set(
+    input.knownPoolKeys ??
+      input.currentBackrunPools.map(poolProjectionRowKey),
+  );
   for (const pool of admittedPools) {
     knownPoolKeys.add(poolProjectionRowKey(pool));
   }
 
   return {
-    attemptedPools,
+    delta: input.delta,
+    attemptedPools: [...input.delta.attemptedPools],
     admittedPools,
-    failedPools: built.failed,
+    failedPools: [...input.delta.failedPools],
     strategyViews,
     backrunGraph,
     blockscanGraph,
@@ -299,7 +359,7 @@ export class MempoolIntakeRefreshSignal {
   }
 }
 
-function uniquePools(pools: PoolEntry[]): PoolEntry[] {
+function uniquePools(pools: readonly PoolEntry[]): PoolEntry[] {
   const seen = new Set<string>();
   const unique: PoolEntry[] = [];
   for (const pool of pools) {
@@ -311,7 +371,10 @@ function uniquePools(pools: PoolEntry[]): PoolEntry[] {
   return unique;
 }
 
-function mergeEdges(current: TokenEdge[], additions: TokenEdge[]): TokenEdge[] {
+function mergeEdges(
+  current: readonly TokenEdge[],
+  additions: readonly TokenEdge[],
+): TokenEdge[] {
   const merged = [...current];
   const seen = new Set(current.map(edgeKey));
   for (const edge of additions) {
