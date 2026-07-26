@@ -133,6 +133,8 @@ export interface LiveDiscoveryCoordinatorDeps {
   readonly observedHistoryProvider?: ethers.JsonRpcProvider;
   readonly mainnetBackend: TokenQueryBackend;
   readonly liveRegistry: PoolEntry[];
+  /** Full current-N admitted file-backed inventory; never strategy/top-N capped. */
+  readonly retainedDexUniverse: readonly PoolEntry[];
   readonly config: LiveDiscoveryConfig;
   readonly discoveryToBlock: number;
   readonly discoveryTopN: number;
@@ -193,6 +195,7 @@ export async function createLiveDiscoveryCoordinator(
     observedHistoryProvider,
     mainnetBackend,
     liveRegistry,
+    retainedDexUniverse,
     config,
     discoveryToBlock,
     discoveryTopN,
@@ -400,6 +403,18 @@ export async function createLiveDiscoveryCoordinator(
           options.control,
         )
       : null;
+    const historicalLogAnchor = observedHistoryProvider === undefined
+      ? undefined
+      : {
+          blockNumber: targetBlock,
+          blockHash:
+            strictSourceBlockHash ??
+            await readDexDiscoveryBlockHash(
+              provider,
+              targetBlock,
+              options.control,
+            ),
+        };
     const strictScanBlockHash = options.strict
       ? scan.toBlock === targetBlock
         ? strictSourceBlockHash
@@ -430,6 +445,17 @@ export async function createLiveDiscoveryCoordinator(
             admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
             identityBackend: readBackend,
             identityBlockTag: options.strict ? targetBlock : undefined,
+            retainedPools: mergePoolRegistries(
+              [...retainedDexUniverse],
+              current.strategyViews.blockscan,
+            ),
+            ...(historicalLogAnchor === undefined
+              ? {}
+              : {
+                  historicalLogProvider: observedHistoryProvider!,
+                  historicalLogAnchor,
+                }),
+            topicScanMode: "union",
             strict: options.strict,
             control: options.control,
           },

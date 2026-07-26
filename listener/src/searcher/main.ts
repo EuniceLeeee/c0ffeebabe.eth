@@ -1280,10 +1280,26 @@ async function main(): Promise<void> {
     Number.POSITIVE_INFINITY,
     discoveryToBlock,
     {
-    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-    identityBackend: startupDexBackend,
-    identityBlockTag: discoveryToBlock,
-    strict: true,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+      identityBackend: startupDexBackend,
+      identityBlockTag: discoveryToBlock,
+      // Reuse the current-N admitted, full file-backed family inventory when
+      // singleton events expose only opaque identities (for example a V4
+      // poolId). The family materializer validates the retained shape before
+      // accepting it; genuinely new identities still take the normal on-chain
+      // backfill path.
+      retainedPools: blockscanUniverse,
+      ...(protocolDiscoveryHistoryProvider === undefined
+        ? {}
+        : {
+            historicalLogProvider: protocolDiscoveryHistoryProvider,
+            historicalLogAnchor: {
+              blockNumber: discoveryToBlock,
+              blockHash: startupDexSourceBlockHash,
+            },
+          }),
+      topicScanMode: "union",
+      strict: true,
     },
   );
   const swapPools = [...startupActivePoolDiscovery.pools];
@@ -1870,6 +1886,7 @@ async function main(): Promise<void> {
       : { observedHistoryProvider: protocolDiscoveryHistoryProvider }),
     mainnetBackend,
     liveRegistry,
+    retainedDexUniverse: blockscanUniverse,
     config: {
       poolUniverseTopN: config.poolUniverseTopN,
       enableProtocolEdges: config.enableProtocolEdges,

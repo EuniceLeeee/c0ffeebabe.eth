@@ -178,6 +178,21 @@ test("node deploy installs and verifies production analysis tooling before resta
   assert.match(script, /SEARCHER_LIVE_WS_URL=\$LOCAL_WS/);
   assert.match(script, /SEARCHER_RUNTIME_COMMIT=\$DEPLOY_COMMIT/);
   assert.match(script, /SEARCHER_FORCE_INCLUDE_ROUTERS_PATH=\$ROUTER_SNAPSHOT/);
+  assert.match(
+    script,
+    /export POOL_UNIVERSE_HISTORY_LOG_RPC_URL="\$archive"/,
+    "pool-universe deploy refresh must use the configured archive only for historical logs",
+  );
+  assert.match(
+    script,
+    /searcher fatal before startup banner/,
+    "deploy must fail immediately when startup logs a fatal error",
+  );
+  assert.match(
+    script,
+    /CURRENT_PID.*NEWPID/s,
+    "deploy must reject a restarted/replaced process before the startup banner",
+  );
   assert.match(script, /router allowlist pinned: hash=\$ROUTER_HASH/);
   assert.match(script, /V2_LINEAGE_PINNED_PATH/);
   assert.match(script, /loadV2Lineages/);

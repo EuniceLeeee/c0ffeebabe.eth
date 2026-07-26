@@ -487,7 +487,17 @@ elif say "re-indexing pool universe (local reth, ${REINDEX_DAYS}d window, V4 fro
        POOL_UNIVERSE_RETAIN_PATH="$REINDEX_RETAIN" \
        POOL_UNIVERSE_OUT="$REINDEX_TMP" \
        POOL_UNIVERSE_MANIFEST_OUT="$REINDEX_TMP_MANIFEST" \
-       sh -c 'cd "$0/listener" && npx tsx src/searcher/build-active-pool-universe.ts' "$REPO" \
+       sh -c '
+         archive=$(sed -n "s/^SEARCHER_PROTOCOL_DISCOVERY_ARCHIVE_RPC_URL=//p" "$0/.env" | tail -1)
+         [ -n "$archive" ] ||
+           archive=$(sed -n "s/^MAINNET_RPC_URL=//p" "$0/.env" | tail -1)
+         if [ -n "$archive" ] && [ "$archive" != "$MAINNET_RPC_URL" ]; then
+           export POOL_UNIVERSE_HISTORY_LOG_RPC_URL="$archive"
+         fi
+         unset archive
+         cd "$0/listener" &&
+           npx tsx src/searcher/build-active-pool-universe.ts
+       ' "$REPO" \
        >/tmp/deploy-reindex.log 2>&1 \
    && [ -s "$REINDEX_TMP" ] && [ -s "$REINDEX_TMP_MANIFEST" ] \
    && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d["pools"] if isinstance(d,dict) else d; sys.exit(0 if len(p)>0 else 1)' "$REINDEX_TMP"; then
@@ -660,7 +670,20 @@ fi
 say "runtime universe verified: $PROCESS_UNIVERSE hash=$UNIVERSE_HASH"
 BANNER=""
 for _ in $(seq 1 "$STARTUP_BANNER_TIMEOUT_SECONDS"); do
-  BANNER=$(tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null | grep 'pool registry:' | tail -1)
+  STARTUP_LOG=$(tail -c "+$((LOG_OFFSET + 1))" "$LOGF" 2>/dev/null)
+  STARTUP_FATAL=$(printf '%s\n' "$STARTUP_LOG" \
+    | grep '\[searcher/live\] fatal:' | tail -1 | cut -c1-300)
+  [ -z "$STARTUP_FATAL" ] \
+    || abort_runtime "searcher fatal before startup banner: $STARTUP_FATAL"
+  CURRENT_ACTIVE=$(systemctl is-active mev-searcher 2>/dev/null || true)
+  CURRENT_PID=$(systemctl show -p MainPID --value mev-searcher 2>/dev/null || echo 0)
+  if [ "$CURRENT_ACTIVE" != "active" ] \
+    || [ "$CURRENT_PID" = "0" ] \
+    || [ "$CURRENT_PID" != "$NEWPID" ]; then
+    abort_runtime \
+      "searcher process changed before startup banner (active=$CURRENT_ACTIVE pid=$CURRENT_PID expected=$NEWPID)"
+  fi
+  BANNER=$(printf '%s\n' "$STARTUP_LOG" | grep 'pool registry:' | tail -1)
   [ -n "$BANNER" ] && break
   sleep 1
 done

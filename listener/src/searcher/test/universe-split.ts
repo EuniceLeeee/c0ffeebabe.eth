@@ -5,6 +5,9 @@ import { buildStrategyViews, hashTokenGraph } from "../strategy-views.js";
 import { poolRegistryKey } from "../pool-universe.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
+  UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
+} from "../venues/swaps/univ4-common.js";
+import {
   deriveEdgeTaxonomy,
   edgeKindFromPoolEntry,
   type EdgeKind,
@@ -356,7 +359,261 @@ async function testRuntimeV4DiscoveryKeepsPoolIds(): Promise<void> {
     new Set(v4.map(poolRegistryKey)).size === 2,
     "distinct v4 poolIds sharing PoolManager must retain distinct registry identities",
   );
-  console.log("[universe-split] runtime v4 poolId discovery/dedupe: PASS");
+
+  const retainedPools: PoolEntry[] = pools.map((pool) => ({
+    address: manager,
+    adapter: "univ4",
+    venueId: "univ4",
+    identitySource: "v4-manager",
+    poolId: pool.poolId,
+    currency0: pool.currency0,
+    currency1: pool.currency1,
+    fee: pool.fee,
+    tickSpacing: pool.tickSpacing,
+    hooks: pool.hooks,
+    fixedTokenIn: pool.currency0,
+    fixedTokenOut: pool.currency1,
+  }));
+  let historicalBackfills = 0;
+  let positionManagerReads = 0;
+  let retainedArchiveReads = 0;
+  const retainedSourceHash = ethers.keccak256(
+    ethers.toUtf8Bytes("retained-source"),
+  );
+  const retainedHistoricalProvider = {
+    async send(): Promise<never> {
+      retainedArchiveReads++;
+      throw new Error("retained PoolKey must not touch the archive");
+    },
+  };
+  const retainedProvider = {
+    getBlockNumber(): never {
+      throw new Error("pinned retained runtime discovery should not query latest");
+    },
+    async send(
+      method: string,
+      args: Array<{
+        address?: string;
+        topics?: string[];
+        fromBlock?: string;
+      }>,
+    ): Promise<unknown[]> {
+      assert(method === "eth_getLogs", `unexpected retained v4 method ${method}`);
+      const filter = args[0];
+      if (
+        filter.fromBlock !== undefined &&
+        parseInt(filter.fromBlock, 16) < 990
+      ) {
+        historicalBackfills++;
+        throw new Error("retained PoolKey must avoid historical Initialize backfill");
+      }
+      if (filter.address?.toLowerCase() !== manager.toLowerCase()) return [];
+      if (filter.topics?.[0] === initializeTopic) return [];
+      if (filter.topics?.[0] === swapTopic) return swapLogs;
+      return [];
+    },
+    async call(): Promise<string> {
+      positionManagerReads++;
+      throw new Error("retained PoolKey must avoid PositionManager lookup");
+    },
+  };
+  const retainedDiscovered = await scanActivePools(
+    retainedProvider as never,
+    10,
+    10,
+    1_000,
+    {
+      retainedPools,
+      historicalLogProvider: retainedHistoricalProvider as never,
+      historicalLogAnchor: {
+        blockNumber: 1_000,
+        blockHash: retainedSourceHash,
+      },
+    },
+  );
+  assert(
+    retainedDiscovered.filter((pool) => pool.adapter === "univ4").length === 2,
+    "retained family inventory should resolve both recent V4 poolIds",
+  );
+  assert(
+    historicalBackfills === 0 &&
+      positionManagerReads === 0 &&
+      retainedArchiveReads === 0,
+    "retained V4 identities should not repeat historical/on-chain PoolKey resolution or touch archive",
+  );
+  console.log(
+    "[universe-split] runtime v4 poolId discovery/dedupe/retained reuse: PASS",
+  );
+}
+
+async function testRuntimeV4DiscoveryUsesHistoricalLogLane(): Promise<void> {
+  const manager = ethers.getAddress(ADDR.UNISWAP_V4_POOL_MANAGER);
+  const sourceBlock = UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 1_000;
+  const initializeBlock = UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK + 100;
+  const currency0 = address(0x9100);
+  const currency1 = address(0x9101);
+  const fee = 500;
+  const tickSpacing = 10;
+  const hooks = address(0);
+  const poolId = v4PoolId({
+    currency0,
+    currency1,
+    fee,
+    tickSpacing,
+    hooks,
+  });
+  const initIface = new ethers.Interface([
+    "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)",
+  ]);
+  const swapIface = new ethers.Interface([
+    "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+  ]);
+  const initialize = initIface.encodeEventLog(
+    initIface.getEvent("Initialize")!,
+    [
+      poolId,
+      currency0,
+      currency1,
+      fee,
+      tickSpacing,
+      hooks,
+      1n << 96n,
+      0,
+    ],
+  );
+  const swap = swapIface.encodeEventLog(swapIface.getEvent("Swap")!, [
+    poolId,
+    address(0xdead),
+    1n,
+    -1n,
+    1n << 96n,
+    1_000n,
+    0,
+    fee,
+  ]);
+  const initializeTopic = initialize.topics[0];
+  const swapTopic = swap.topics[0];
+  const sourceBlockHash = ethers.keccak256(
+    ethers.toUtf8Bytes("split-horizon-source"),
+  );
+  let oldLogReadsOnCurrent = 0;
+  let historicalLogReads = 0;
+  const currentProvider = {
+    getBlockNumber(): never {
+      throw new Error("historical-lane fixture must stay source-pinned");
+    },
+    async send(
+      method: string,
+      args: Array<{
+        address?: string;
+        topics?: string[];
+        fromBlock?: string;
+      }>,
+    ): Promise<unknown[]> {
+      assert(method === "eth_getLogs", `unexpected current method ${method}`);
+      const filter = args[0];
+      if (
+        filter.fromBlock !== undefined &&
+        parseInt(filter.fromBlock, 16) < sourceBlock - 10
+      ) {
+        oldLogReadsOnCurrent++;
+        throw new Error("old V4 Initialize range must use historical lane");
+      }
+      if (filter.address?.toLowerCase() !== manager.toLowerCase()) return [];
+      if (filter.topics?.[0] === swapTopic) {
+        return [{
+          address: manager,
+          topics: swap.topics,
+          data: swap.data,
+          blockNumber: ethers.toQuantity(sourceBlock),
+        }];
+      }
+      return [];
+    },
+    async call(): Promise<string> {
+      throw new Error("fixture PoolKey is not in PositionManager");
+    },
+  };
+  const historicalLogProvider = {
+    async send(
+      method: string,
+      args: Array<{ topics?: string[] }>,
+    ): Promise<unknown> {
+      if (method === "eth_getBlockByNumber") {
+        return { hash: sourceBlockHash };
+      }
+      assert(method === "eth_getLogs", `unexpected historical method ${method}`);
+      historicalLogReads++;
+      return args[0].topics?.[0] === initializeTopic
+        ? [{
+            address: manager,
+            topics: initialize.topics,
+            data: initialize.data,
+            blockNumber: ethers.toQuantity(initializeBlock),
+          }]
+        : [];
+    },
+  };
+  const discovered = await scanActivePools(
+    currentProvider as never,
+    10,
+    10,
+    sourceBlock,
+    {
+      historicalLogProvider: historicalLogProvider as never,
+      historicalLogAnchor: {
+        blockNumber: sourceBlock,
+        blockHash: sourceBlockHash,
+      },
+    },
+  );
+  assert(
+    discovered.some((pool) =>
+      pool.adapter === "univ4" && pool.poolId === poolId
+    ),
+    "missing retained V4 PoolKey should resolve through the historical log lane",
+  );
+  assert(
+    oldLogReadsOnCurrent === 0 && historicalLogReads > 0,
+    "only historical Initialize reads may leave the current-state provider",
+  );
+  let misalignedLogReads = 0;
+  let rejectedMisalignment = false;
+  const misalignedHistoricalProvider = {
+    async send(method: string): Promise<unknown> {
+      if (method === "eth_getBlockByNumber") {
+        return {
+          hash: ethers.keccak256(ethers.toUtf8Bytes("wrong-source")),
+        };
+      }
+      misalignedLogReads++;
+      return [];
+    },
+  };
+  try {
+    await scanActivePools(
+      currentProvider as never,
+      10,
+      10,
+      sourceBlock,
+      {
+        historicalLogProvider: misalignedHistoricalProvider as never,
+        historicalLogAnchor: {
+          blockNumber: sourceBlock,
+          blockHash: sourceBlockHash,
+        },
+        strict: true,
+      },
+    );
+  } catch (err) {
+    rejectedMisalignment =
+      err instanceof Error && err.message.includes("not aligned");
+  }
+  assert(
+    rejectedMisalignment && misalignedLogReads === 0,
+    "historical lane must fail closed before reading logs when the source hash differs",
+  );
+  console.log("[universe-split] runtime v4 split-horizon history: PASS");
 }
 
 async function main(): Promise<void> {
@@ -370,7 +627,8 @@ async function main(): Promise<void> {
   testTokenGraphHash();
   await testPinnedDiscoveryCutoff();
   await testRuntimeV4DiscoveryKeepsPoolIds();
-  console.log("universe-split PASS (10/10)");
+  await testRuntimeV4DiscoveryUsesHistoricalLogLane();
+  console.log("universe-split PASS (11/11)");
 }
 
 await main();

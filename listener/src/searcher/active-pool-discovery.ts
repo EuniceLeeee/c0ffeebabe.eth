@@ -201,6 +201,52 @@ function factoryLogFilter(
 const LOG_BATCH = 50;
 const RETRY_LOG_BATCH = 10;
 
+export interface ActivePoolDiscoveryOptions {
+  admissionPolicy?: IdentityAdmissionPolicy;
+  /**
+   * Source-pinned identity/code reads for an unbounded legacy generation.
+   * A controlled generation deliberately uses the provider-backed abortable
+   * transport below so every in-flight identity RPC shares its cancellation.
+   */
+  identityBackend?: IdentityCallBackend;
+  /** Numeric source block used by family-owned singleton metadata reads. */
+  identityBlockTag?: ethers.BlockTag;
+  /**
+   * Previously verified family inventory. Singleton materializers use this to
+   * resolve opaque identities (for example a V4 poolId) before any historical
+   * backfill. The inventory remains subject to the materializer's typed shape
+   * checks and the normal identity/final-sim gates.
+   */
+  retainedPools?: readonly PoolEntry[];
+  /**
+   * Optional canonical archive used only when a family materializer asks for
+   * logs older than the current discovery window. Recent logs, identity calls,
+   * code and all current state remain pinned to the live provider.
+   */
+  historicalLogProvider?: ethers.JsonRpcProvider;
+  /**
+   * Locally observed canonical source used to authenticate the historical-log
+   * provider on first use. Ordinary recent discovery therefore never pays an
+   * archive RPC or inherits archive availability.
+   */
+  historicalLogAnchor?: {
+    readonly blockNumber: number;
+    readonly blockHash: string;
+  };
+  /**
+   * Read all registered swap topics once per block slice when set to union.
+   * The registry dispatcher preserves per-event ordering/output while
+   * avoiding one identical receipt traversal per adapter family.
+   */
+  topicScanMode?: "per-event" | "union";
+  /**
+   * Completeness mode for source-pinned graph generations. Any missing log
+   * slice aborts the pass instead of returning a deceptively complete delta.
+   */
+  strict?: boolean;
+  control?: DexDiscoveryReadControl;
+}
+
 /**
  * Scan recent blocks for swap events to discover active pools.
  * Returns PoolEntry[] ranked by activity (top maxPools).
@@ -210,23 +256,7 @@ export async function scanActivePools(
   blocksBack = 300,
   maxPools = 100,
   toBlock?: number,
-  options: {
-    admissionPolicy?: IdentityAdmissionPolicy;
-    /**
-     * Source-pinned identity/code reads for an unbounded legacy generation.
-     * A controlled generation deliberately uses the provider-backed abortable
-     * transport below so every in-flight identity RPC shares its cancellation.
-     */
-    identityBackend?: IdentityCallBackend;
-    /** Numeric source block used by family-owned singleton metadata reads. */
-    identityBlockTag?: ethers.BlockTag;
-    /**
-     * Completeness mode for source-pinned graph generations. Any missing log
-     * slice aborts the pass instead of returning a deceptively complete delta.
-     */
-    strict?: boolean;
-    control?: DexDiscoveryReadControl;
-  } = {},
+  options: ActivePoolDiscoveryOptions = {},
 ): Promise<PoolEntry[]> {
   return [...(await scanActivePoolsDetailed(
     provider,
@@ -249,13 +279,7 @@ export async function scanActivePoolsDetailed(
   blocksBack = 300,
   maxPools = 100,
   toBlock?: number,
-  options: {
-    admissionPolicy?: IdentityAdmissionPolicy;
-    identityBackend?: IdentityCallBackend;
-    identityBlockTag?: ethers.BlockTag;
-    strict?: boolean;
-    control?: DexDiscoveryReadControl;
-  } = {},
+  options: ActivePoolDiscoveryOptions = {},
 ): Promise<ActivePoolDiscoveryResult> {
   const latest = toBlock ?? (
     hasDexDiscoveryControl(options.control)
@@ -267,6 +291,9 @@ export async function scanActivePoolsDetailed(
     provider,
     options.identityBlockTag,
     options.control,
+    options.historicalLogProvider,
+    fromBlock,
+    options.historicalLogAnchor,
   );
   const landed = await discoverLandedPools({
     registry: PRODUCTION_ADAPTER_FAMILIES.landedPoolDiscovery(),
@@ -277,6 +304,8 @@ export async function scanActivePoolsDetailed(
     minSwaps: 1,
     admissionPolicy:
       options.admissionPolicy ?? STRICT_IDENTITY_ADMISSION,
+    retainedPools: options.retainedPools ?? [],
+    topicScanMode: options.topicScanMode ?? "per-event",
     strict: options.strict,
     signal: options.control?.signal,
   });
@@ -354,9 +383,56 @@ function ethersPoolDiscoveryBackend(
   provider: ethers.JsonRpcProvider,
   blockTag?: ethers.BlockTag,
   control?: DexDiscoveryReadControl,
+  historicalLogProvider?: ethers.JsonRpcProvider,
+  historicalBeforeBlock = 0,
+  historicalLogAnchor?: {
+    readonly blockNumber: number;
+    readonly blockHash: string;
+  },
 ): LandedPoolDiscoveryReadBackend & IdentityCallBackend {
+  let historicalAlignment: Promise<void> | undefined;
+  const assertHistoricalAlignment = (
+    readControl: DexDiscoveryReadControl | undefined,
+  ): Promise<void> => {
+    if (!historicalLogProvider) return Promise.resolve();
+    if (!historicalLogAnchor) {
+      return Promise.reject(
+        new Error("historical log provider requires a canonical source anchor"),
+      );
+    }
+    historicalAlignment ??= (async () => {
+      const params = [
+        ethers.toQuantity(historicalLogAnchor.blockNumber),
+        false,
+      ];
+      const header = hasDexDiscoveryControl(readControl)
+        ? await sendDexDiscoveryRpc<{
+            readonly hash?: string;
+          } | null>(
+            historicalLogProvider,
+            "eth_getBlockByNumber",
+            params,
+            readControl,
+          )
+        : await historicalLogProvider.send(
+            "eth_getBlockByNumber",
+            params,
+          ) as { readonly hash?: string } | null;
+      if (
+        !header?.hash ||
+        header.hash.toLowerCase() !==
+          historicalLogAnchor.blockHash.toLowerCase()
+      ) {
+        throw new Error(
+          "historical log provider is not aligned at block " +
+            historicalLogAnchor.blockNumber,
+        );
+      }
+    })();
+    return historicalAlignment;
+  };
   return {
-    getLogs(
+    async getLogs(
       filter: LandedPoolDiscoveryLogFilter,
       nestedControl?: { readonly signal?: AbortSignal },
     ) {
@@ -364,6 +440,14 @@ function ethersPoolDiscoveryBackend(
         control,
         nestedControl,
       );
+      const logProvider =
+        historicalLogProvider !== undefined &&
+          filter.fromBlock < historicalBeforeBlock
+          ? historicalLogProvider
+          : provider;
+      if (logProvider === historicalLogProvider) {
+        await assertHistoricalAlignment(mergedControl);
+      }
       const params = [{
         ...(filter.address === undefined ? {} : { address: filter.address }),
         topics: [...filter.topics],
@@ -371,8 +455,13 @@ function ethersPoolDiscoveryBackend(
         toBlock: ethers.toQuantity(filter.toBlock),
       }];
       return hasDexDiscoveryControl(mergedControl)
-        ? sendDexDiscoveryRpc(provider, "eth_getLogs", params, mergedControl)
-        : provider.send("eth_getLogs", params);
+        ? await sendDexDiscoveryRpc(
+            logProvider,
+            "eth_getLogs",
+            params,
+            mergedControl,
+          )
+        : await logProvider.send("eth_getLogs", params);
     },
     call(
       req: { readonly to: string; readonly data: string },
