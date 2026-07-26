@@ -147,7 +147,10 @@ export class AdapterRuntimeCoordinator {
   constructor(
     private readonly registry: AdapterFamilyRegistry,
     private readonly pricing: BlockScanStateCoordinator,
-    private readonly reads: Pick<JsonRpcBlockScanStateReadBackend, "readPinned">,
+    private readonly reads: Pick<
+      JsonRpcBlockScanStateReadBackend,
+      "readPinned" | "verifyCanonicalSource"
+    >,
   ) {}
 
   latestSnapshot(): AdapterRuntimeSnapshot | null {
@@ -193,6 +196,39 @@ export class AdapterRuntimeCoordinator {
           ? this.prepareExecution(input, controller.signal)
           : Promise.resolve(null),
       ]);
+      let finalCanonicalIssue: BlockScanStateIssue | null = null;
+      if (
+        pricing.status !== "incomplete" &&
+        funding.snapshot &&
+        !executionIssue &&
+        !controller.signal.aborted
+      ) {
+        try {
+          await awaitWithAbort(
+            this.reads.verifyCanonicalSource(
+              Object.freeze({
+                number: input.graph.sourceBlock,
+                hash: input.graph.sourceBlockHash,
+                generation: input.graph.generation,
+              }),
+              controller.signal,
+            ),
+            controller.signal,
+          );
+          if (
+            controller.signal.aborted ||
+            Date.now() >= input.deadlineAtMs
+          ) {
+            throw controller.signal.reason ?? new AdapterRuntimeDeadline();
+          }
+        } catch (error) {
+          finalCanonicalIssue = runtimeIssue(
+            "adapter runtime final canonical CAS failed",
+            error,
+            controller.signal,
+          );
+        }
+      }
       const runtimeAbortIssue = controller.signal.aborted
         ? runtimeIssue(
             "adapter runtime preparation failed",
@@ -204,12 +240,14 @@ export class AdapterRuntimeCoordinator {
         ...pricing.issues,
         ...funding.issues,
         ...(executionIssue ? [executionIssue] : []),
+        ...(finalCanonicalIssue ? [finalCanonicalIssue] : []),
         ...(runtimeAbortIssue ? [runtimeAbortIssue] : []),
       ]);
       if (
         pricing.status === "incomplete" ||
         !funding.snapshot ||
         executionIssue ||
+        finalCanonicalIssue ||
         runtimeAbortIssue
       ) {
         return Object.freeze({

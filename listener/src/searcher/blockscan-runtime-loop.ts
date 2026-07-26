@@ -760,13 +760,27 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           },
         );
       }
+      /*
+       * Startup discovery and the first current-N state snapshot are two
+       * independently bounded phases. A distant canonical catch-up may spend
+       * most of the discovery budget without making the 20k+ edge state read
+       * any less necessary. Reusing that depleted deadline makes every cold
+       * attempt abort before publication, so no incremental predecessor can
+       * ever exist. Hot passes retain the single end-to-end deadline.
+       */
+      const runtimeDeadlineAtMs = startupWarmAttempt
+        ? Math.max(
+            passDeadlineAtMs,
+            Date.now() + Math.max(1, this.deps.startupWarmBudgetMs),
+          )
+        : passDeadlineAtMs;
       const runtime = await adapterRuntimeCoordinator.prepare({
         graph: graphView,
         fundingTokens: [...new Set([
           ...this.deps.flashTokens(),
           ...graphEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
         ])],
-        deadlineAtMs: passDeadlineAtMs,
+        deadlineAtMs: runtimeDeadlineAtMs,
         signal: this.deps.runtimeAbort.signal,
         prepareExecution: async ({ sourceBlock, sourceBlockHash, signal }) => {
           const settled = await Promise.allSettled(

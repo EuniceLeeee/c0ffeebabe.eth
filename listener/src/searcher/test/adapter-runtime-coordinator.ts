@@ -10,6 +10,7 @@ import {
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
 import {
   createVerifiedGraphView,
+  type BlockSource,
   type StateRead,
   type StateReadResult,
 } from "../venues/blockscan-state-capability.js";
@@ -238,6 +239,45 @@ async function preparationRunsConcurrently(): Promise<void> {
   const result = await preparing;
   assert.equal(result.status, "complete");
   assert.notEqual(coordinator.latestSnapshot(), null);
+}
+
+async function finalCanonicalCasFailureDoesNotPublish(): Promise<void> {
+  const funding = new FundingReadBackend();
+  let rejectCanonicalSource = false;
+  const coordinator = runtimeCoordinator(fundingRegistry(), {
+    readPinned: funding.readPinned.bind(funding),
+    async verifyCanonicalSource(source) {
+      assert.equal(source.number, rejectCanonicalSource ? 242 : 241);
+      if (rejectCanonicalSource) {
+        throw new Error("fixture source was reorged before runtime publication");
+      }
+    },
+  });
+  const baseline = await coordinator.prepare({
+    graph: graph(1, 241, HASH_A),
+    fundingTokens: [TOKEN_A, TOKEN_B],
+    deadlineAtMs: Date.now() + 10_000,
+  });
+  assert.equal(baseline.status, "complete");
+  if (baseline.status !== "complete") throw new Error("expected baseline");
+  const published = baseline.snapshot;
+
+  rejectCanonicalSource = true;
+  const reorged = await coordinator.prepare({
+    graph: graph(2, 242, HASH_B),
+    fundingTokens: [TOKEN_A, TOKEN_B],
+    deadlineAtMs: Date.now() + 10_000,
+  });
+  assert.equal(reorged.status, "incomplete");
+  assert.equal(
+    coordinator.latestSnapshot(),
+    published,
+    "a final source-CAS failure must preserve the prior runtime generation",
+  );
+  assert.match(
+    reorged.issues.map((issue) => issue.message).join("\n"),
+    /final canonical CAS failed.*reorged/,
+  );
 }
 
 async function fundingFamilyFailuresAreIsolated(): Promise<void> {
@@ -720,6 +760,10 @@ function runtimeCoordinator(
         signal: AbortSignal;
       },
     ): Promise<readonly StateReadResult[]>;
+    verifyCanonicalSource?(
+      source: BlockSource,
+      signal: AbortSignal,
+    ): Promise<void>;
   },
 ): AdapterRuntimeCoordinator {
   const pricingBackend: BlockScanStateReadBackend = {
@@ -731,7 +775,11 @@ function runtimeCoordinator(
   return new AdapterRuntimeCoordinator(
     registry,
     new BlockScanStateCoordinator(pricingBackend),
-    reads,
+    {
+      readPinned: reads.readPinned.bind(reads),
+      verifyCanonicalSource:
+        reads.verifyCanonicalSource?.bind(reads) ?? (async () => {}),
+    },
   );
 }
 
@@ -846,6 +894,7 @@ async function waitUntil(predicate: () => boolean): Promise<void> {
 
 await exactFundingResultContract();
 await preparationRunsConcurrently();
+await finalCanonicalCasFailureDoesNotPublish();
 await fundingFamilyFailuresAreIsolated();
 await hungFundingPrepareIsDeadlineBoundAndLateFenced();
 await hungExecutionIsDeadlineBound();

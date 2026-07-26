@@ -52,6 +52,7 @@ await steadyStateBehindRemainsFailClosed();
 await steadyStateCompleteReadyCatchesCurrentHead();
 await steadyStateIncompleteReadyRemainsFailClosed();
 await incompleteRetriesAndHotBudgetResumes();
+await startupStateGetsAnIndependentPhaseBudget();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
 await protocolLagDoesNotBlockDexRuntime();
@@ -62,7 +63,7 @@ blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (14/14)",
+    "PASS (15/15)",
 );
 
 async function distantStartupCatchesUpInSameHead(): Promise<void> {
@@ -205,6 +206,25 @@ async function incompleteRetriesAndHotBudgetResumes(): Promise<void> {
     harness.deadlineRemainingMs[2]! <= HOT_BUDGET_MS + 20,
     "the first head after a published startup snapshot uses the hot deadline",
   );
+}
+
+async function startupStateGetsAnIndependentPhaseBudget(): Promise<void> {
+  const harness = createHarness(
+    249,
+    ["complete"],
+    {
+      beforeDiscoveryPrepare: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 300));
+      },
+    },
+  );
+  await harness.run(250);
+  assert(
+    harness.deadlineRemainingMs[0]! > STARTUP_BUDGET_MS - 100,
+    "startup state must receive a fresh bounded phase budget after slow discovery",
+  );
+  assert.equal(harness.loop.isStartupWarmPending(), false);
+  assert.equal(harness.publishedPricing, 1);
 }
 
 async function degradedSnapshotCompletesStartupWithoutScanning(): Promise<void> {
@@ -387,6 +407,7 @@ function createHarness(
     readonly startupWarmEnabled?: boolean;
     readonly initialLaneReadyBlock?: number;
     readonly initialLanePublishedBlock?: number;
+    readonly beforeDiscoveryPrepare?: () => Promise<void>;
   } = {},
 ) {
   let publication = publicationAt(
@@ -529,6 +550,7 @@ function createHarness(
         base: LiveDiscoveryPublicationState,
         input: { readonly through: number },
       ) => {
+        await options.beforeDiscoveryPrepare?.();
         discoveryPrepareBases.push(
           base.dexGraphCoverage.graphCompleteThrough,
         );
