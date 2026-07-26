@@ -289,7 +289,7 @@ export async function scanActivePoolsDetailed(
   options: ActivePoolDiscoveryOptions = {},
 ): Promise<ActivePoolDiscoveryResult> {
   const isKnownPool = (pool: PoolEntry): boolean =>
-    options.knownPoolKeys?.has(poolRegistryKey(pool)) ?? false;
+    isKnownDexPoolProjection(pool, options.knownPoolKeys);
   const latest = toBlock ?? (
     hasDexDiscoveryControl(options.control)
       ? await readDexDiscoveryBlockNumber(provider, options.control)
@@ -391,6 +391,24 @@ export async function scanActivePoolsDetailed(
     coverage: landed.coverage,
     truncated,
   };
+}
+
+/**
+ * DEX-universe rows use the physical pool key, while a behavior-probed swap
+ * family admitted through protocol discovery is collection-qualified by its
+ * owner. Both rows represent an already verified execution instance for
+ * landed-event reuse. Ignoring the projection key makes every owner-qualified
+ * Fluid/DODO/Curve row look new on every block and repeats its identity RPC.
+ */
+export function isKnownDexPoolProjection(
+  pool: PoolEntry,
+  knownPoolKeys: ReadonlySet<string> | undefined,
+): boolean {
+  if (!knownPoolKeys) return false;
+  return (
+    knownPoolKeys.has(poolRegistryKey(pool)) ||
+    knownPoolKeys.has(poolProjectionRowKey(pool))
+  );
 }
 
 function ethersPoolDiscoveryBackend(

@@ -13,7 +13,9 @@ import {
   type LandedPoolDiscoveryReadBackend,
   type LandedPoolMaterializationCapability,
 } from "../venues/landed-pool-discovery.js";
+import { isKnownDexPoolProjection } from "../active-pool-discovery.js";
 import { selectMatureDexActivity } from "../build-active-pool-universe.js";
+import { poolProjectionRowKey } from "../pool-universe.js";
 import {
   PRODUCTION_ADAPTER_FAMILIES,
   PRODUCTION_IDENTITY_RESOLVERS,
@@ -300,6 +302,44 @@ assert(
     ) &&
     knownSyntheticResult.coverage.every((item) => item.complete),
   "known family instances skip repeated probes while unknown siblings still materialize",
+);
+
+const ownerQualifiedKnownPool = Object.freeze({
+  ...knownSyntheticPool,
+  discoveryOwnerAdapterId: syntheticAddressFamily.id,
+});
+const ownerQualifiedKnownKeys = new Set([
+  poolProjectionRowKey(ownerQualifiedKnownPool),
+]);
+const ownerQualifiedKnownResult = await discoverLandedPools({
+  registry: syntheticAddressRegistry.landedPoolDiscovery(),
+  backend: {
+    async getLogs() {
+      return [log(addressTopic, ethers.zeroPadValue(pool, 32))];
+    },
+    async call() {
+      throw new Error(
+        "owner-qualified known family instance must not repeat identity RPC",
+      );
+    },
+  },
+  fromBlock: 102,
+  toBlock: 102,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  retainedPools: [ownerQualifiedKnownPool],
+  isKnownPool: (candidate) =>
+    isKnownDexPoolProjection(candidate, ownerQualifiedKnownKeys),
+  strict: true,
+});
+assert(
+  syntheticMaterializationCalls === 2 &&
+    ownerQualifiedKnownResult.materializedPools.length === 1 &&
+    ownerQualifiedKnownResult.materializedPools[0]
+      .discoveryOwnerAdapterId === syntheticAddressFamily.id &&
+    ownerQualifiedKnownResult.coverage.every((item) => item.complete),
+  "owner-qualified swap-family rows must reuse their verified projection key",
 );
 
 let missingAddressMaterializerRejected = false;
@@ -956,7 +996,7 @@ assert(
   "Curve-underlying transport failure must still fail strict landed coverage",
 );
 
-console.log("landed-pool-discovery PASS (14/14)");
+console.log("landed-pool-discovery PASS (15/15)");
 
 function discoverySummary(result: Awaited<ReturnType<typeof discoverLandedPools>>) {
   return {
