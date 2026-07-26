@@ -757,6 +757,7 @@ const retainedCurveMetaIface = new ethers.Interface([
 ]);
 const retainedCurvePoolIface = new ethers.Interface([
   "function underlying_coins(int128 i) view returns (address)",
+  "function get_dy_underlying(int128 i,int128 j,uint256 dx) view returns (uint256)",
 ]);
 let retainedCurveReads = 0;
 const retainedCurveBackend = {
@@ -772,6 +773,15 @@ const retainedCurveBackend = {
     if (target !== retainedCurvePool) {
       throw new Error(`unexpected retained Curve target ${target}`);
     }
+    if (
+      req.data.slice(0, 10) ===
+        retainedCurvePoolIface.getFunction("get_dy_underlying")!.selector
+    ) {
+      return retainedCurvePoolIface.encodeFunctionResult(
+        "get_dy_underlying",
+        [1n],
+      );
+    }
     const [index] = retainedCurvePoolIface.decodeFunctionData(
       "underlying_coins",
       req.data,
@@ -782,7 +792,9 @@ const retainedCurveBackend = {
         [index === 0n ? retainedCurveToken0 : retainedCurveToken1],
       );
     }
-    throw new Error("curve coin index out of range");
+    throw Object.assign(new Error("curve coin index out of range"), {
+      code: "CALL_EXCEPTION",
+    });
   },
 };
 const retainedCurve = await retainVerifiedSwapFamilyInstances({
@@ -831,7 +843,80 @@ assert(
   "fresh family activity must replace inventory without a duplicate identity read",
 );
 
-console.log("landed-pool-discovery PASS (12/12)");
+const nonUnderlyingCurveAddress = ethers.getAddress(
+  "0x000000000000000000000000000000000000C200",
+);
+const curveUnderlyingEvent = curveUnderlyingAdapter.landedEvents.swaps[0];
+const curveUnderlyingRegistry = new AdapterFamilyRegistry([
+  curveUnderlyingAdapter,
+]);
+const falseUnderlyingEventBackend: LandedPoolDiscoveryReadBackend = {
+  async getLogs(filter) {
+    const topic0 = filter.topics[0];
+    const accepted = new Set(Array.isArray(topic0) ? topic0 : [topic0]);
+    return accepted.has(curveUnderlyingEvent.topic)
+      ? [{
+          address: nonUnderlyingCurveAddress,
+          topics: [curveUnderlyingEvent.topic],
+          data: "0x",
+          blockNumber: 100,
+        }]
+      : [];
+  },
+  async call() {
+    throw Object.assign(new Error("execution reverted"), {
+      code: "CALL_EXCEPTION",
+    });
+  },
+};
+const falseUnderlyingEvent = await discoverLandedPools({
+  registry: curveUnderlyingRegistry.landedPoolDiscovery(),
+  backend: falseUnderlyingEventBackend,
+  fromBlock: 100,
+  toBlock: 100,
+  batchSize: 10,
+  minSwaps: 1,
+  admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+  topicScanMode: "union",
+  strict: true,
+});
+assert(
+  falseUnderlyingEvent.materializedPools.length === 0 &&
+    falseUnderlyingEvent.coverage.every((item) => item.complete),
+  "a canonical non-underlying ABI rejection must not poison strict landed coverage",
+);
+
+let transportRejected = false;
+try {
+  await discoverLandedPools({
+    registry: curveUnderlyingRegistry.landedPoolDiscovery(),
+    backend: {
+      ...falseUnderlyingEventBackend,
+      async call() {
+        throw Object.assign(new Error("connection reset"), {
+          code: "NETWORK_ERROR",
+        });
+      },
+    },
+    fromBlock: 100,
+    toBlock: 100,
+    batchSize: 10,
+    minSwaps: 1,
+    admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    topicScanMode: "union",
+    strict: true,
+  });
+} catch (error) {
+  transportRejected =
+    error instanceof Error &&
+    error.message.includes("landed-pool discovery incomplete");
+}
+assert(
+  transportRejected,
+  "Curve-underlying transport failure must still fail strict landed coverage",
+);
+
+console.log("landed-pool-discovery PASS (14/14)");
 
 function discoverySummary(result: Awaited<ReturnType<typeof discoverLandedPools>>) {
   return {

@@ -111,7 +111,11 @@ const curveUnderlyingBackend: TokenQueryBackend = {
     const selector = req.data.slice(0, 10);
     if (selector === curveUnderlyingIface.getFunction("underlying_coins")!.selector) {
       const index = Number(curveUnderlyingIface.decodeFunctionData("underlying_coins", req.data)[0]);
-      if (index > 1) throw new Error("underlying coin index out of range");
+      if (index > 1) {
+        throw Object.assign(new Error("underlying coin index out of range"), {
+          code: "CALL_EXCEPTION",
+        });
+      }
       return curveUnderlyingIface.encodeFunctionResult("underlying_coins", [index === 0 ? token0 : token1]);
     }
     if (selector === curveUnderlyingIface.getFunction("get_dy_underlying")!.selector) {
@@ -119,7 +123,10 @@ const curveUnderlyingBackend: TokenQueryBackend = {
       return curveUnderlyingIface.encodeFunctionResult("get_dy_underlying", [amountIn * 3n]);
     }
     // Force the explicitly allowed direct-pool fallback instead of fabricating MetaRegistry state.
-    throw new Error(`unexpected Curve underlying selector ${selector}`);
+    throw Object.assign(
+      new Error(`unexpected Curve underlying selector ${selector}`),
+      { code: "CALL_EXCEPTION" },
+    );
   },
 };
 
@@ -1083,6 +1090,37 @@ async function main(): Promise<void> {
     amountIn,
   });
   assert(underlyingQuote === amountIn * 3n, `curve underlying quote ${underlyingQuote}`);
+  const underlyingPreparedQuote = underlyingAdapter.prepared?.quote;
+  assert(
+    underlyingPreparedQuote !== null &&
+      underlyingPreparedQuote !== undefined,
+    "curve underlying prepared quote",
+  );
+  let preparedUnderlyingCallCount = 0;
+  const preparedUnderlyingQuote = await underlyingPreparedQuote({
+    request: {
+      adapterId: "curve-exchange-underlying",
+      target: curveUnderlyingPool,
+      tokenIn: token0,
+      tokenOut: token1,
+      amountIn,
+    },
+    edge: underlyingEdges[0],
+    async callPrepared(to: string, data: string) {
+      preparedUnderlyingCallCount++;
+      return {
+        output: await curveUnderlyingBackend.call({ to, data }),
+        latencyMs: 1,
+      };
+    },
+    readChain: (req: { to: string; data: string }) =>
+      curveUnderlyingBackend.call(req),
+  });
+  assert(
+    preparedUnderlyingQuote.amountOut === underlyingQuote &&
+      preparedUnderlyingCallCount === 1,
+    "prepared Curve-underlying quote must use edge indices in one physical call",
+  );
   const underlyingFragment = await underlyingAdapter.buildPlanFragment({
     edge: underlyingEdges[0], amountIn, amountOut: underlyingQuote,
     executor: ethers.ZeroAddress, state: curveUnderlyingBackend as never,

@@ -332,13 +332,27 @@ export const curveUnderlyingAdapter = Object.freeze({
   prepared: {
     quote: async (ctx: PreparedRouteContext) => {
       const started = Date.now();
-      const amountOut = await quoteCurveUnderlying(
-        { call: async ({ to, data }) => (await ctx.callPrepared(to, data)).output },
-        ctx.request.target,
-        ctx.request.tokenIn,
-        ctx.request.tokenOut,
-        ctx.request.amountIn,
-      );
+      const backend = {
+        call: async ({ to, data }: { to: string; data: string }) =>
+          (await ctx.callPrepared(to, data)).output,
+      };
+      const amountOut =
+        ctx.edge?.curveI !== undefined &&
+          ctx.edge.curveJ !== undefined
+        ? await quoteCurveUnderlyingByIndex(
+            backend,
+            ctx.request.target,
+            ctx.edge.curveI,
+            ctx.edge.curveJ,
+            ctx.request.amountIn,
+          )
+        : await quoteCurveUnderlying(
+            backend,
+            ctx.request.target,
+            ctx.request.tokenIn,
+            ctx.request.tokenOut,
+            ctx.request.amountIn,
+          );
       return { amountOut, latencyMs: Date.now() - started };
     },
     quoteUnsupportedReason: null,

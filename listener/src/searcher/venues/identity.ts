@@ -8,6 +8,7 @@ import {
 } from "./capability.js";
 import {
   CURVE_METAREGISTRY,
+  isCurveUnderlyingMetadataNotApplicableError,
   resolveCurveUnderlyingMetadata,
 } from "./curve-underlying.js";
 import {
@@ -1086,10 +1087,14 @@ export const curveIdentityResolver: OnchainIdentityResolver = async ({
         venueId: metadata.source === "curve-metaregistry-underlying" ? "curve" : "unknown",
         identitySource: metadata.source,
       };
-    } catch {
+    } catch (error) {
       return {
         ok: false,
-        reason: allowProvisional ? "identity_call_failed" : "curve_unregistered",
+        reason: isCurveUnderlyingMetadataNotApplicableError(error)
+          ? allowProvisional
+            ? "behavior_mismatch"
+            : "curve_unregistered"
+          : "identity_call_failed",
         venueId: "curve",
       };
     }

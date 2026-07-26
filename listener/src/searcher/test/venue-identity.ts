@@ -9,6 +9,7 @@ import {
   resolvePoolIdentity,
   type IdentityPoolEntry,
 } from "../venues/identity.js";
+import { resolveCurveUnderlyingMetadata } from "../venues/curve-underlying.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   PRODUCTION_IDENTITY_RESOLVERS,
@@ -43,9 +44,16 @@ const v3IdentityIface = new ethers.Interface([
 ]);
 const curveMetaRegistryIface = new ethers.Interface([
   "function get_registry_handlers_from_pool(address pool) view returns (address[10])",
+  "function get_pool_from_lp_token(address token) view returns (address)",
+  "function get_underlying_coins(address pool) view returns (address[8])",
+  "function get_coins(address pool) view returns (address[8])",
 ]);
 const curvePoolIface = new ethers.Interface([
   "function coins(uint256 i) view returns (address)",
+]);
+const curveUnderlyingPoolIface = new ethers.Interface([
+  "function underlying_coins(int128 i) view returns (address)",
+  "function get_dy_underlying(int128 i, int128 j, uint256 dx) view returns (uint256)",
 ]);
 const balancerV3VaultIface = new ethers.Interface([
   "function isPoolRegistered(address pool) view returns (bool)",
@@ -261,7 +269,11 @@ class FakeProvider {
         curvePoolIface.getFunction("coins")!.selector
     ) {
       const [index] = curvePoolIface.decodeFunctionData("coins", req.data);
-      if (BigInt(index) > 1n) throw new Error("curve coin index out of range");
+      if (BigInt(index) > 1n) {
+        throw Object.assign(new Error("curve coin index out of range"), {
+          code: "CALL_EXCEPTION",
+        });
+      }
       return curvePoolIface.encodeFunctionResult(
         "coins",
         [BigInt(index) === 0n ? CURVE_TOKEN0 : CURVE_TOKEN1],
@@ -418,6 +430,348 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
     !transportFailure.ok &&
       transportFailure.reason === "identity_call_failed",
     "transport failure remains retryable",
+  );
+  const nonUnderlyingCurve = await resolvePoolIdentity(
+    {
+      call: async () => {
+        throw Object.assign(new Error("execution reverted"), {
+          code: "CALL_EXCEPTION",
+        });
+      },
+    },
+    address(0x114),
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    !nonUnderlyingCurve.ok &&
+      nonUnderlyingCurve.reason === "behavior_mismatch",
+    "canonical underlying ABI rejection must be terminal negative evidence",
+  );
+  const metadataOnlyUnderlying = await resolvePoolIdentity(
+    {
+      async call(req: { to: string; data: string }): Promise<string> {
+        if (
+          ethers.getAddress(req.to) === ethers.getAddress(CURVE_METAREGISTRY)
+        ) {
+          return curveMetaRegistryIface.encodeFunctionResult(
+            "get_registry_handlers_from_pool",
+            [Array.from({ length: 10 }, () => ethers.ZeroAddress)],
+          );
+        }
+        if (
+          req.data.slice(0, 10) ===
+            curveUnderlyingPoolIface.getFunction("underlying_coins")!.selector
+        ) {
+          const [index] = curveUnderlyingPoolIface.decodeFunctionData(
+            "underlying_coins",
+            req.data,
+          );
+          if (BigInt(index) > 1n) {
+            throw Object.assign(new Error("coin index out of range"), {
+              code: "CALL_EXCEPTION",
+            });
+          }
+          return curveUnderlyingPoolIface.encodeFunctionResult(
+            "underlying_coins",
+            [BigInt(index) === 0n ? CURVE_TOKEN0 : CURVE_TOKEN1],
+          );
+        }
+        throw Object.assign(new Error("execution selector unavailable"), {
+          code: "CALL_EXCEPTION",
+        });
+      },
+    },
+    address(0x119),
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    !metadataOnlyUnderlying.ok &&
+      metadataOnlyUnderlying.reason === "behavior_mismatch",
+    "metadata without an executable underlying direction must be terminal",
+  );
+  const compatibleMetaPool = address(0x116);
+  const compatibleMetaCoin = address(0x201);
+  const compatibleBaseLp = address(0x202);
+  const compatibleBasePool = address(0x203);
+  const compatibleBaseCoins = [
+    address(0x204),
+    address(0x205),
+    address(0x206),
+  ];
+  const coinsBackedUnderlyingBackend = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      const selector = req.data.slice(0, 10);
+      if (
+        ethers.getAddress(req.to) === ethers.getAddress(CURVE_METAREGISTRY)
+      ) {
+        if (
+          selector === curveMetaRegistryIface.getFunction(
+            "get_registry_handlers_from_pool",
+          )!.selector
+        ) {
+          throw Object.assign(new Error("execution reverted"), {
+            code: "CALL_EXCEPTION",
+          });
+        }
+        if (
+          selector === curveMetaRegistryIface.getFunction(
+            "get_pool_from_lp_token",
+          )!.selector
+        ) {
+          const [token] = curveMetaRegistryIface.decodeFunctionData(
+            "get_pool_from_lp_token",
+            req.data,
+          );
+          return curveMetaRegistryIface.encodeFunctionResult(
+            "get_pool_from_lp_token",
+            [
+              ethers.getAddress(String(token)) === compatibleBaseLp
+                ? compatibleBasePool
+                : ethers.ZeroAddress,
+            ],
+          );
+        }
+        if (
+          selector === curveMetaRegistryIface.getFunction(
+            "get_underlying_coins",
+          )!.selector
+        ) {
+          const [pool] = curveMetaRegistryIface.decodeFunctionData(
+            "get_underlying_coins",
+            req.data,
+          );
+          if (ethers.getAddress(String(pool)) !== compatibleBasePool) {
+            throw Object.assign(new Error("no registry"), {
+              code: "CALL_EXCEPTION",
+            });
+          }
+          return curveMetaRegistryIface.encodeFunctionResult(
+            "get_underlying_coins",
+            [[
+              ...compatibleBaseCoins,
+              ...Array.from({ length: 5 }, () => ethers.ZeroAddress),
+            ]],
+          );
+        }
+        throw Object.assign(new Error(`unsupported registry selector ${selector}`), {
+          code: "CALL_EXCEPTION",
+        });
+      }
+      if (
+        selector ===
+          curveUnderlyingPoolIface.getFunction("underlying_coins")!.selector
+      ) {
+        throw Object.assign(new Error("execution reverted"), {
+          code: "CALL_EXCEPTION",
+        });
+      }
+      if (selector === curvePoolIface.getFunction("coins")!.selector) {
+        const [index] = curvePoolIface.decodeFunctionData(
+          "coins",
+          req.data,
+        );
+        if (BigInt(index) > 1n) {
+          throw Object.assign(new Error("coin index out of range"), {
+            code: "CALL_EXCEPTION",
+          });
+        }
+        return curvePoolIface.encodeFunctionResult(
+          "coins",
+          [
+            BigInt(index) === 0n
+              ? compatibleMetaCoin
+              : compatibleBaseLp,
+          ],
+        );
+      }
+      if (
+        selector ===
+          curveUnderlyingPoolIface.getFunction("get_dy_underlying")!.selector
+      ) {
+        const [i, j, amountIn] =
+          curveUnderlyingPoolIface.decodeFunctionData(
+            "get_dy_underlying",
+            req.data,
+          );
+        if (BigInt(i) > 3n || BigInt(j) > 3n) {
+          throw Object.assign(new Error("unsupported quote"), {
+            code: "CALL_EXCEPTION",
+          });
+        }
+        return curveUnderlyingPoolIface.encodeFunctionResult(
+          "get_dy_underlying",
+          [BigInt(amountIn) < 10n ** 18n ? 0n : 1n],
+        );
+      }
+      throw Object.assign(new Error(`unsupported selector ${selector}`), {
+        code: "CALL_EXCEPTION",
+      });
+    },
+  };
+  const expandedMetaPool = await resolveCurveUnderlyingMetadata(
+    coinsBackedUnderlyingBackend,
+    compatibleMetaPool,
+    { allowDirectPoolFallback: true },
+  );
+  assert(
+    JSON.stringify(expandedMetaPool.coins) === JSON.stringify([
+      compatibleMetaCoin,
+      ...compatibleBaseCoins,
+    ]),
+    "Curve metapool LP token must expand to the underlying index domain",
+  );
+  const coinsBackedUnderlyingCurve = await resolvePoolIdentity(
+    coinsBackedUnderlyingBackend,
+    compatibleMetaPool,
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    coinsBackedUnderlyingCurve.ok &&
+      coinsBackedUnderlyingCurve.adapter === "curve-underlying",
+    "coins + adaptive get_dy_underlying behavior must admit compatible venues",
+  );
+  const unprovenCoinsDomain = await resolvePoolIdentity(
+    {
+      async call(req: { to: string; data: string }): Promise<string> {
+        if (
+          ethers.getAddress(req.to) ===
+            ethers.getAddress(CURVE_METAREGISTRY) &&
+          req.data.slice(0, 10) ===
+            curveMetaRegistryIface.getFunction(
+              "get_pool_from_lp_token",
+            )!.selector
+        ) {
+          return curveMetaRegistryIface.encodeFunctionResult(
+            "get_pool_from_lp_token",
+            [ethers.ZeroAddress],
+          );
+        }
+        return coinsBackedUnderlyingBackend.call(req);
+      },
+    },
+    address(0x117),
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    !unprovenCoinsDomain.ok &&
+      unprovenCoinsDomain.reason === "behavior_mismatch",
+    "coins + quote without a uniquely proven base-LP slot must fail closed",
+  );
+  const ambiguousLpDomain = await resolvePoolIdentity(
+    {
+      async call(req: { to: string; data: string }): Promise<string> {
+        if (
+          ethers.getAddress(req.to) ===
+            ethers.getAddress(CURVE_METAREGISTRY) &&
+          req.data.slice(0, 10) ===
+            curveMetaRegistryIface.getFunction(
+              "get_pool_from_lp_token",
+            )!.selector
+        ) {
+          return curveMetaRegistryIface.encodeFunctionResult(
+            "get_pool_from_lp_token",
+            [compatibleBasePool],
+          );
+        }
+        return coinsBackedUnderlyingBackend.call(req);
+      },
+    },
+    address(0x118),
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    !ambiguousLpDomain.ok &&
+      ambiguousLpDomain.reason === "behavior_mismatch",
+    "multiple LP-token slots must not guess the underlying index layout",
+  );
+  let transientCurveAttempts = 0;
+  const transientThenHealthyCurveBackend = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      transientCurveAttempts++;
+      if (transientCurveAttempts === 1) {
+        throw Object.assign(new Error("connection reset"), {
+          code: "NETWORK_ERROR",
+        });
+      }
+      if (
+        ethers.getAddress(req.to) === ethers.getAddress(CURVE_METAREGISTRY)
+      ) {
+        return curveMetaRegistryIface.encodeFunctionResult(
+          "get_registry_handlers_from_pool",
+          [Array.from({ length: 10 }, () => ethers.ZeroAddress)],
+        );
+      }
+      if (
+        req.data.slice(0, 10) ===
+          curveUnderlyingPoolIface.getFunction("get_dy_underlying")!.selector
+      ) {
+        return curveUnderlyingPoolIface.encodeFunctionResult(
+          "get_dy_underlying",
+          [1n],
+        );
+      }
+      const [index] = curveUnderlyingPoolIface.decodeFunctionData(
+        "underlying_coins",
+        req.data,
+      );
+      if (BigInt(index) > 1n) {
+        throw Object.assign(new Error("curve coin index out of range"), {
+          code: "CALL_EXCEPTION",
+        });
+      }
+      return curveUnderlyingPoolIface.encodeFunctionResult(
+        "underlying_coins",
+        [BigInt(index) === 0n ? CURVE_TOKEN0 : CURVE_TOKEN1],
+      );
+    },
+  };
+  const transientCurve = await resolvePoolIdentity(
+    transientThenHealthyCurveBackend,
+    address(0x115),
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    !transientCurve.ok &&
+      transientCurve.reason === "identity_call_failed",
+    "Curve-underlying transport failure must remain retryable",
+  );
+  const recoveredCurve = await resolvePoolIdentity(
+    transientThenHealthyCurveBackend,
+    address(0x115),
+    "curve-underlying",
+    {
+      identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+      admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
+    },
+  );
+  assert(
+    recoveredCurve.ok &&
+      recoveredCurve.adapter === "curve-underlying",
+    "Curve-underlying transport rejection must not poison the backend cache",
   );
   const panorama = await resolvePoolIdentity(provider, PANORAMA_POOL, "univ2", {
     identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
