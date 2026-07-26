@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import {
   advanceDiscoveryFamilySourceWatermarks,
   createDiscoveryFamilySourceWatermarks,
@@ -11,6 +14,20 @@ import {
   seedDiscoverySourceWatermark,
   type DiscoveryFamilySources,
 } from "../discovery-source-watermark.js";
+import {
+  advanceProtocolObservedContiguousAuthority,
+  createProtocolDiscoveryEvidenceCache,
+  loadProtocolDiscoveryEvidenceCache,
+  saveProtocolDiscoveryEvidenceCache,
+  setProtocolObservedCursor,
+} from "../protocol-discovery-cache.js";
+import {
+  ProtocolDiscoveryCoverageCoordinator,
+  protocolDiscoveryRangeForLane,
+} from "../protocol-discovery-coordinator.js";
+import type {
+  DiscoverableRouteLegAdapter,
+} from "../venues/route-leg-adapter.js";
 
 const OBSERVED = "observed-interaction";
 const DEX_DOMAIN = "dex-token-domain";
@@ -25,8 +42,11 @@ registryChangeCanBeginAuthoritativeBackfill();
 recentPositiveThenContiguousBackfill();
 oneFamilySourceFailureDoesNotEraseSiblingProgress();
 eigenpieObservedOnlyCannotBorrowSiblingCompleteness();
+positiveOnlyScanAdvancesOnlyOperationalCursor();
+operationalCursorOutrunsAuthorityAcrossRestart();
+hotLaneNeverRunsProtocolDiscovery();
 
-console.log("discovery-source-watermark PASS (8/8)");
+console.log("discovery-source-watermark PASS (10/10)");
 
 function restartGapNeverDropsBlocks(): void {
   const families: readonly DiscoveryFamilySources[] = [{
@@ -297,5 +317,143 @@ function eigenpieObservedOnlyCannotBorrowSiblingCompleteness(): void {
     discoveryGraphCompleteThrough(families, watermarks),
     -1,
     "one current family number cannot make an observed-only family complete",
+  );
+}
+
+function operationalCursorOutrunsAuthorityAcrossRestart(): void {
+  const cache = createProtocolDiscoveryEvidenceCache(1);
+  const authorityHash = `0x${"11".repeat(32)}`;
+  const operationalHash = `0x${"22".repeat(32)}`;
+  const families: readonly DiscoveryFamilySources[] = [{
+    familyId: EIGENPIE,
+    sourceIds: [OBSERVED],
+  }];
+  const authority = advanceProtocolObservedContiguousAuthority({
+    cache,
+    families,
+    familySourceCoverage: [{
+      familyId: EIGENPIE,
+      sourceId: OBSERVED,
+      complete: true,
+    }],
+    fromBlock: 0,
+    toBlock: 10,
+    toBlockHash: authorityHash,
+    contiguousSourceIds: new Set([OBSERVED]),
+  });
+  assert.equal(authority?.completeThroughBlock, 10);
+
+  setProtocolObservedCursor(cache, 20, operationalHash);
+  assert.equal(
+    cache.runtime.observedCursor,
+    20,
+    "a bounded positive pass must advance operational ingestion",
+  );
+  assert.equal(
+    cache.runtime.observedContiguousAuthority?.completeThroughBlock,
+    10,
+    "newer positive evidence must not erase older contiguous authority",
+  );
+
+  const root = mkdtempSync(resolve(tmpdir(), "protocol-cursor-contract-"));
+  const path = resolve(root, "cache.json");
+  try {
+    saveProtocolDiscoveryEvidenceCache(path, cache);
+    const loaded = loadProtocolDiscoveryEvidenceCache(path, 1);
+    assert.equal(loaded.runtime.observedCursor, 20);
+    assert.equal(loaded.runtime.observedCursorHash, operationalHash);
+    assert.equal(
+      loaded.runtime.observedContiguousAuthority?.completeThroughBlock,
+      10,
+      "restart must preserve the independent, older authority watermark",
+    );
+    assert.equal(
+      loaded.runtime.observedContiguousAuthority?.completeThroughHash,
+      authorityHash,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function positiveOnlyScanAdvancesOnlyOperationalCursor(): void {
+  const fixture = {
+    id: EIGENPIE,
+    discovery: {
+      candidateSources: [OBSERVED],
+    },
+  } as unknown as DiscoverableRouteLegAdapter;
+  const coordinator = new ProtocolDiscoveryCoverageCoordinator([fixture]);
+  const watermarks = coordinator.snapshot();
+  assert.equal(coordinator.graphCompleteThrough(watermarks), -1);
+  assert.equal(
+    coordinator.nextObservedCursor({
+      currentCursor: -1,
+      range: { fromBlock: 701, toBlock: 1_000 },
+      watermarks,
+      positiveOnlyObserved: true,
+      eventSourceComplete: false,
+    }),
+    1_000,
+    "bounded startup scans advance hot-ingestion progress",
+  );
+  assert.equal(
+    coordinator.graphCompleteThrough(watermarks),
+    -1,
+    "bounded startup scans do not manufacture negative completeness",
+  );
+  assert.equal(
+    coordinator.nextObservedCursor({
+      currentCursor: 1_000,
+      range: { fromBlock: 1_001, toBlock: 1_001 },
+      watermarks,
+      positiveOnlyObserved: false,
+      eventSourceComplete: true,
+    }),
+    1_001,
+    "a hot scan advances ingestion even while historical authority remains behind",
+  );
+  assert.equal(
+    coordinator.nextObservedCursor({
+      currentCursor: 1_001,
+      range: { fromBlock: 0, toBlock: 99 },
+      watermarks,
+      positiveOnlyObserved: false,
+      eventSourceComplete: true,
+    }),
+    1_001,
+    "background backfill must never rewind the newer hot-ingestion cursor",
+  );
+  assert.equal(
+    coordinator.nextObservedCursor({
+      currentCursor: 1_001,
+      range: { fromBlock: 1_002, toBlock: 1_003 },
+      watermarks,
+      positiveOnlyObserved: false,
+      eventSourceComplete: false,
+    }),
+    1_001,
+    "retryable incremental trace failures must retain the failed range",
+  );
+}
+
+function hotLaneNeverRunsProtocolDiscovery(): void {
+  assert.equal(
+    protocolDiscoveryRangeForLane({
+      mode: "hot",
+      observedRange: { fromBlock: 10, toBlock: 11 },
+      addressOnlyRetryRange: { fromBlock: 11, toBlock: 11 },
+    }),
+    null,
+    "current-head DEX passes must never inherit protocol receipt/trace work",
+  );
+  assert.deepEqual(
+    protocolDiscoveryRangeForLane({
+      mode: "backfill",
+      observedRange: { fromBlock: 10, toBlock: 11 },
+      addressOnlyRetryRange: { fromBlock: 11, toBlock: 11 },
+    }),
+    { fromBlock: 10, toBlock: 11 },
+    "background discovery retains the pending observed range",
   );
 }

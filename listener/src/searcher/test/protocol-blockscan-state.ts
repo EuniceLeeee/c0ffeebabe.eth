@@ -457,7 +457,12 @@ async function assertErc4626AdaptiveProbe(): Promise<void> {
     schema,
     edges: [adaptiveEdge],
   });
-  assert.equal(staticReads.length, 2, "adaptive quote reads both input and output decimals");
+  assert.equal(staticReads.length, 1, "adaptive quote reads only input decimals");
+  assert.equal(
+    staticReads[0].to.toLowerCase(),
+    adaptiveVault.toLowerCase(),
+    "redeem probe amount is derived from its input share token",
+  );
   schema = capability.hydrateStaticSchema!(
     schema,
     staticReads.map((read): StateReadResult => ({
@@ -478,8 +483,6 @@ async function assertErc4626AdaptiveProbe(): Promise<void> {
     [1_000_000n, 0n],
     [1_000_000_000n, 0n],
     [1_000_000_000_000n, 1n],
-    [1_000_000_000_000_000n, 1_044n],
-    [1_000_000_000_000_000_000n, 1_044_020n],
   ] as const;
   const results: StateReadResult[] = [];
   const observedAmounts: bigint[] = [];
@@ -532,7 +535,7 @@ async function assertErc4626AdaptiveProbe(): Promise<void> {
       priorResults: results,
     }),
     [],
-    "adaptive quote closes at the family-declared bound",
+    "adaptive quote closes on the first positive raw output unit",
   );
   const snapshot = capability.decodeState(schema, results);
   const mid = capability.deriveMids(snapshot, [adaptiveEdge]).get(
@@ -542,12 +545,12 @@ async function assertErc4626AdaptiveProbe(): Promise<void> {
   assert.equal(
     mid.reserveA,
     ladder.at(-1)![0] * 10_000n,
-    "mid depth uses the actual large probe amount",
+    "mid depth uses the first positive probe amount",
   );
   assert.equal(
     mid.reserveB,
     ladder.at(-1)![1] * 10_000n,
-    "mid depth preserves the matching large-probe output",
+    "mid depth preserves the matching first-positive output",
   );
   assert.equal(
     mid.mid,
@@ -565,7 +568,96 @@ async function assertErc4626AdaptiveProbe(): Promise<void> {
     /remained zero within its declared bound/,
     "all-zero quote ladders fail closed instead of expanding without bound",
   );
+  await assertErc4626NoPositiveQuoteAmplification(capability);
   console.log("[protocol-blockscan-state] bounded ERC4626 adaptive quote: PASS");
+}
+
+async function assertErc4626NoPositiveQuoteAmplification(
+  capability: NonNullable<typeof erc4626Adapter.pricingState>,
+): Promise<void> {
+  const asset = "0x00000000000000000000000000000000000000a6";
+  const edges = Array.from({ length: 17 }, (_, index) => {
+    const vault = ethers.getAddress(
+      `0x${(0x5000 + index).toString(16).padStart(40, "0")}`,
+    );
+    return edge("erc4626-redeem", vault, vault, asset, "redeem");
+  });
+  let schema = await capability.compileStaticSchema({
+    edges,
+    deadlineAtMs: Date.now() + 10_000,
+    signal: abort.signal,
+  });
+  const staticReads = capability.buildStaticSchemaReads!({
+    sourceBlock: block,
+    sourceBlockHash: blockHash,
+    schema,
+    edges,
+  });
+  assert.equal(
+    staticReads.length,
+    edges.length,
+    "17 vault groups require 17 input-decimal reads, not 34 input/output reads",
+  );
+  assert(
+    staticReads.every((read) =>
+      edges.some((candidate) =>
+        candidate.tokenIn.toLowerCase() === read.to.toLowerCase()
+      )
+    ),
+    "adaptive metadata reads are input-token scoped",
+  );
+  schema = capability.hydrateStaticSchema!(
+    schema,
+    staticReads.map((read): StateReadResult => ({
+      id: read.id,
+      ok: true,
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      provenance: {
+        kind: "eip1898",
+        source: { number: block, hash: blockHash, generation: 1 },
+        requireCanonical: true,
+      },
+      data: uint8(18),
+    })),
+  );
+  let initialReadCount = 0;
+  let dependentReadCount = 0;
+  for (const candidate of edges) {
+    const initial = capability.buildCurrentBlockReads({
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      schema,
+      edges: [candidate],
+    });
+    initialReadCount += initial.length;
+    const positive = initial.map((read): StateReadResult => ({
+      id: read.id,
+      ok: true,
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      provenance: {
+        kind: "eip1898",
+        source: { number: block, hash: blockHash, generation: 1 },
+        requireCanonical: true,
+      },
+      data: erc4626Iface.encodeFunctionResult("previewRedeem", [1n]),
+    }));
+    dependentReadCount += capability.buildDependentBlockReads!({
+      sourceBlock: block,
+      sourceBlockHash: blockHash,
+      schema,
+      edges: [candidate],
+      completedRound: 0,
+      priorResults: positive,
+    }).length;
+  }
+  assert.equal(initialReadCount, 17);
+  assert.equal(
+    dependentReadCount,
+    0,
+    "positive one-token quotes do not amplify into sequential RPC rounds",
+  );
 }
 
 function edge(

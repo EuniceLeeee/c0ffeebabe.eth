@@ -49,6 +49,8 @@ const V3_B = "0x1000000000000000000000000000000000000004";
 const TOKEN0 = "0x2000000000000000000000000000000000000001";
 const TOKEN1 = "0x2000000000000000000000000000000000000002";
 const UNIV2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+const UNIV3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
+const PANCAKE_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865";
 const Q96 = 1n << 96n;
 const taxonomy = deriveEdgeTaxonomy("swap");
 
@@ -65,6 +67,9 @@ const v3Iface = new ethers.Interface([
   "function tickSpacing() view returns (int24)",
   "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
   "function liquidity() view returns (uint128)",
+]);
+const v3FactoryIface = new ethers.Interface([
+  "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
 ]);
 
 interface FakePoolState {
@@ -223,10 +228,15 @@ class FakeCoordinatorBackend implements BlockScanStateReadBackend {
           }),
           requireCanonical: true as const,
         }),
-        data: encodePoolCall(
-          this.chain.state(read.to, control.sourceBlock, true),
-          read.data,
-        ),
+        data:
+          read.to.toLowerCase() === UNIV3_FACTORY.toLowerCase()
+            ? v3FactoryIface.encodeFunctionResult("getPool", [V3_A])
+            : read.to.toLowerCase() === PANCAKE_V3_FACTORY.toLowerCase()
+              ? v3FactoryIface.encodeFunctionResult("getPool", [V3_B])
+              : encodePoolCall(
+                  this.chain.state(read.to, control.sourceBlock, true),
+                  read.data,
+                ),
       })),
     );
   }
@@ -339,6 +349,13 @@ function selectedPool(
     pool: Object.freeze({
       address: pool,
       adapter,
+      ...(familyId === "univ3-standard"
+        ? {
+            factory: pool.toLowerCase() === V3_A.toLowerCase()
+              ? UNIV3_FACTORY
+              : PANCAKE_V3_FACTORY,
+          }
+        : {}),
       score: 100 - rank,
       lastSwapBlock: 99,
     }),
@@ -367,7 +384,13 @@ function directedEdges(
     poolToken1: TOKEN1,
     ...(familyId === "univ2-standard"
       ? { v2FeeBps: 30n }
-      : { v3Fee: 3_000, v3TickSpacing: 60 }),
+      : {
+          v3Fee: 3_000,
+          v3TickSpacing: 60,
+          factory: pool.toLowerCase() === V3_A.toLowerCase()
+            ? UNIV3_FACTORY
+            : PANCAKE_V3_FACTORY,
+        }),
   }));
 }
 

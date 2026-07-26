@@ -267,6 +267,21 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     for (const worker of this.deps.executionWorkers) worker.state.stop();
   }
 
+  async shutdown(): Promise<void> {
+    // scheduler.shutdown() synchronously closes admission and drops the pending
+    // head before yielding on the active pass. Abort its I/O, then drain it so
+    // the caller can flush persistence only after publication has quiesced.
+    const drained = this.scheduler.shutdown();
+    let stopError: unknown;
+    try {
+      this.stopExecutionWorkers();
+    } catch (error) {
+      stopError = error;
+    }
+    await drained;
+    if (stopError !== undefined) throw stopError;
+  }
+
   readonly runHead = async (
     blockNumber: number,
     sourceHead: LatestHeadObservation,
@@ -540,14 +555,12 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       const base = discovery.capture();
       const requiredPredecessor = Math.max(0, blockNumber - 1);
       if (
-        describeLiveDiscoveryPublicationState(base)
-          .graphCompleteThrough < requiredPredecessor
+        base.dexGraphCoverage.graphCompleteThrough < requiredPredecessor
       ) {
         outcome = "degraded";
         skippedReason =
           `discovery_backfill_behind:` +
-          `${describeLiveDiscoveryPublicationState(base)
-            .graphCompleteThrough}<${requiredPredecessor}`;
+          `${base.dexGraphCoverage.graphCompleteThrough}<${requiredPredecessor}`;
         finishStage("state", "failed");
         void discovery.scheduleBackfill(blockNumber);
         return;
@@ -596,11 +609,13 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       discovery.finish(preparedDiscovery);
       const nextDescriptor =
         describeLiveDiscoveryPublicationState(nextDiscovery);
-      if (nextDescriptor.graphCompleteThrough < blockNumber) {
+      if (
+        nextDiscovery.dexGraphCoverage.graphCompleteThrough < blockNumber
+      ) {
         outcome = "degraded";
         skippedReason =
           `discovery_current_incomplete:` +
-          `${nextDescriptor.graphCompleteThrough}<${blockNumber}`;
+          `${nextDiscovery.dexGraphCoverage.graphCompleteThrough}<${blockNumber}`;
         finishStage("state", "failed");
         void discovery.scheduleBackfill(blockNumber);
         return;

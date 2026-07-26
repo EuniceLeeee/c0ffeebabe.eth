@@ -220,6 +220,10 @@ test("acceptance preserves production replay and emits explicit six-step equival
   const analysisRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
   const repoRoot = path.resolve(analysisRoot, "..");
   const gate = fs.readFileSync(path.join(analysisRoot, "src/cli/ab-canary-gate.ts"), "utf8");
+  const wrapper = fs.readFileSync(
+    path.join(repoRoot, "scripts/deploy-ab-challenger.sh"),
+    "utf8",
+  );
   const tx149 = fs.readFileSync(
     path.join(repoRoot, "listener/src/searcher/test/blockscan-hunt-tx149.ts"),
     "utf8",
@@ -249,6 +253,32 @@ test("acceptance preserves production replay and emits explicit six-step equival
   assert.equal((gate.match(/phase === "acceptance"/g) ?? []).length, 1,
     "candidate compatibility phase must execute the same diagnostics as acceptance");
   assert.match(gate, /if \(isAcceptancePhase\) \{[\s\S]*runHuntDiagnostics/);
+  assert.equal(
+    (gate.match(/const childEnv = isolatedBlockscanHuntEnv\(\);/g) ?? [])
+      .length,
+    2,
+    "both trusted blockscan hunt modes must use the isolated child environment",
+  );
+  for (const prefix of [
+    "HUNT_",
+    "AB_EXPECTED_",
+    "POOL_UNIVERSE_",
+    "SEARCHER_POOL_UNIVERSE_",
+    "SEARCHER_BLOCKSCAN_STATE_",
+    "SEARCHER_BLOCKSCAN_HUNT_ANVIL_",
+    "SEARCHER_PROTOCOL_DISCOVERY_",
+    "PRODUCTION_REPLAY_DISCOVERY_ARTIFACT",
+  ]) {
+    assert.match(gate, new RegExp(`"${prefix}"`));
+    assert.match(wrapper, new RegExp(prefix));
+  }
+  assert.match(gate, /childEnv\.SEARCHER_TEST_DISABLE_DOTENV = "1"/);
+  assert.match(wrapper, /SEARCHER_TEST_DISABLE_DOTENV=1/);
+  assert.match(
+    blockscan,
+    /function loadEnv\(\): void \{\s*if \(process\.env\.SEARCHER_TEST_DISABLE_DOTENV === "1"\) return;/,
+    "formal acceptance must suppress repo .env without changing direct local hunt defaults",
+  );
 
   // Only the explicit equivalence branch receives the closed-loop profile.
   assert.match(gate, /candidateContext\?\.requireStageAdvance === false/);

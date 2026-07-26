@@ -14,7 +14,10 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { v3SwapExactInput, type V3PoolState } from "../solver/v3-math.js";
 import type { TokenEdge } from "../planner/token-graph.js";
-import { q96DirectedReserves } from "../venues/swaps/blockscan-state-shared.js";
+import {
+  q96DirectedReserves,
+  q96PrecisionProbeAmount,
+} from "../venues/swaps/blockscan-state-shared.js";
 
 function loadEnv(): void {
   try {
@@ -209,12 +212,57 @@ async function testExtremeSpotRepresentation(
     tokenIn: token1,
     tokenOut: token0,
   };
+  const maxAmountIn = (1n << 255n) - 1n;
+  const directProbe = q96PrecisionProbeAmount({
+    sqrtPriceX96,
+    liquidity,
+    token0,
+    token1,
+    edge: directEdge,
+    maxAmountIn,
+  });
+  const reverseProbe = q96PrecisionProbeAmount({
+    sqrtPriceX96,
+    liquidity,
+    token0,
+    token1,
+    edge: reverseEdge,
+    maxAmountIn,
+  });
+  if (directProbe === null || reverseProbe === null) {
+    throw new Error("extreme V3 fixture did not require precision probes");
+  }
+  const quotePrecision = async (
+    edge: TokenEdge,
+    amountIn: bigint,
+  ): Promise<bigint> => {
+    const raw = await callAt(
+      provider,
+      QUOTER_V2,
+      quoterIface.encodeFunctionData("quoteExactInputSingle", [{
+        tokenIn: edge.tokenIn,
+        tokenOut: edge.tokenOut,
+        amountIn,
+        fee,
+        sqrtPriceLimitX96: 0n,
+      }]),
+      block,
+    );
+    return BigInt(
+      quoterIface.decodeFunctionResult("quoteExactInputSingle", raw)[0],
+    );
+  };
+  const [directOut, reverseOut] = await Promise.all([
+    quotePrecision(directEdge, directProbe),
+    quotePrecision(reverseEdge, reverseProbe),
+  ]);
   const direct = q96DirectedReserves({
     sqrtPriceX96,
     liquidity,
     token0,
     token1,
     edge: directEdge,
+    precisionQuote: { amountIn: directProbe, amountOut: directOut },
   });
   const reverse = q96DirectedReserves({
     sqrtPriceX96,
@@ -222,24 +270,24 @@ async function testExtremeSpotRepresentation(
     token0,
     token1,
     edge: reverseEdge,
+    precisionQuote: { amountIn: reverseProbe, amountOut: reverseOut },
   });
   if (
+    !direct ||
     direct.reserveIn <= 0n ||
     direct.reserveOut <= 0n ||
-    reverse.reserveIn <= 0n ||
-    reverse.reserveOut <= 0n ||
     !Number.isFinite(direct.mid) ||
-    direct.mid <= 0 ||
-    !Number.isFinite(reverse.mid) ||
-    reverse.mid <= 0
+    direct.mid <= 0
   ) {
-    throw new Error("extreme V3 spot representation is not finite and positive");
+    throw new Error("extreme V3 executable direction is not finite and positive");
   }
-  if (Math.abs(direct.mid * reverse.mid - 1) >= 1e-12) {
-    throw new Error("extreme V3 directed spots are not reciprocal");
+  if (reverse !== null || reverseOut !== 0n) {
+    throw new Error(
+      `extreme V3 reverse direction published without raw output: ${reverseOut}`,
+    );
   }
 
-  const amountIn = 10n;
+  const amountIn = directProbe;
   const quoteRaw = await callAt(
     provider,
     QUOTER_V2,
@@ -268,9 +316,9 @@ async function testExtremeSpotRepresentation(
     );
   }
   console.log(
-    `[v3equiv] PASS extreme source spot: block=${block} ` +
+    `[v3equiv] PASS extreme source precision: block=${block} ` +
       `reserves=${direct.reserveIn}/${direct.reserveOut} ` +
-      `quote=${amountIn}->${amountOut}`,
+      `direct=${amountIn}->${amountOut} reverse=${reverseProbe}->${reverseOut}`,
   );
 }
 

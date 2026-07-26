@@ -1,12 +1,14 @@
 # Codex — 轻量 Adapter Family 自动实例接入与 Block-Scan 状态统一计划
 
-> 状态：`implemented_not_validated`。架构实现与 tx02 自然选择语义诊断已落地；严格 sealed-blind
-> tx02、20 轮性能、真实 conversion freshness 与 paired-live A/B 证据尚未取得。
+> 状态：`implemented_not_validated`。架构实现、tx02 自然选择语义诊断，以及 discovery/state 热路径
+> 解耦已落地；严格 sealed-blind tx02、20 轮性能、真实 conversion freshness 与 paired-live A/B
+> 证据尚未取得。
 >
 > 本文取代同文件上一版 `Universal AdapterFamily Plugin` 设计。Git 历史保留旧稿，但旧稿中的动态 plugin
 > catalog、candidate/active/quarantine、promotion receipt、generated import 和独立插件进程不再是目标架构。
 >
-> 实施基线：`origin/main @ 8aece69787a77561a18f85908eb0142e337f53b3`。计划稿曾在
+> 当前收口基线：`origin/main @ 740ab6155c49e38b3b8d8a08880d2525dd00e5dd`。最初实施基线为
+> `8aece69787a77561a18f85908eb0142e337f53b3`；计划稿曾在
 > `a6c28ccc4196b56e56901c89076ce1185cb660b2` 上完成实施前审查；该 SHA 只用于审查历史，不是本轮
 > 实施基线。
 >
@@ -99,8 +101,12 @@ Family 是语义和故障边界，不是文件边界。
 
 ### 1.4 当前块与性能
 
-- 用于 graph 负判定的 discovery view 必须证明 completeness 覆盖 source block `N`，不存在固定 `T-10`
-  许可；
+- 用于全局 graph 负判定的 discovery view 必须证明 completeness 覆盖 source block `N`，不存在固定
+  `T-10` 许可；
+- topology completeness 是“没有漏掉其他实例”的负证据，不是已经准入实例的执行凭证。已通过 identity/
+  probe 准入且在 N 取得 required dynamic state 的 protocol edge 可以继续报价和执行；但 topology
+  completeness 未到 N 时只能输出正发现，不能输出全局 `no opportunity`。DEX/swap source 本身不完整时，
+  仍阻断该 source 派生的 concrete edge set；
 - 用于 pruning、ranking、quote sign、depth 或 funding borrowability 的动态状态必须绑定当前 source
   block number、hash 和 generation；
 - 静态 schema、decimals、ABI call descriptor、codehash 可以跨块缓存；
@@ -504,8 +510,52 @@ interface VerifiedGraphView {
 
 全局 `completenessWatermark` 只能取全部 active discovery sources 在同一 canonical chain 上的最小
 `completeThroughBlock`。任一 source/family fingerprint 改变、hash 不在 canonical chain、或 coverage 未到
-source block 时，对应 family 和全局都标 degraded；只能输出 `graph_incomplete` 与正发现，不能输出完整图
+source block 时，全局都标 degraded；只能输出 `graph_incomplete` 与正发现，不能输出完整图
 `no opportunity`。
+
+这里必须区分两种不完整：
+
+- DEX/swap source 不完整：其 concrete pool/edge set 本身未知，对应 family 不进入本代 pricing；
+- protocol topology 负证据不完整：已准入、已取得 current-N required state 的实例仍可 pricing/solve，
+  但不能据此声称没有其他实例或没有全局机会。
+
+### 6.4 启动、运行期与持久化节奏
+
+Protocol discovery 不参与 current-head DEX pass 的 deadline：
+
+```text
+current head N
+      ├─ DEX hot pass: logs/identity → GraphView(N) → state/scan
+      ├─ observed receipt lane: receipt/trace/probe → atomic publication
+      └─ bounded background lane: missed ranges/address retry → atomic publication
+```
+
+因此某个 observed-only family 的 trace、archive fallback 或 probe 滞后，不会跳过纯 DEX block-scan。
+Block-scan 的 predecessor/current hard gate 只读取 DEX completeness；protocol 的 family/source
+watermark 继续保留，用于 degraded 与全局负结论。
+
+启动时只执行一次：
+
+1. 载入持久化候选，但把它们当 nomination；
+2. 在当前 source N 重新执行 identity/probe；
+3. 扫描一个有界近期窗口；
+4. 对当前 N 仍无成功 admission、且声明 `observed-interaction` 的 family，按 registry event topics
+   从窗口前向后做一次有界、从新到旧的最近交易回查；
+5. 回查得到的 candidate 仍必须在当前 N 走同一 identity/probe/final-sim 安全链。
+
+缓存里“有一条旧 candidate”不等于 family 已覆盖；只有当前 N 真正 `wouldAdmit` 才能跳过第 4 步。
+运行期只处理新块/新 receipt 和失败 range 的有界重试，绝不每块查询“最近一笔交易”，也不把缺少
+历史负证据变成 genesis crawl。
+
+Operational cursor 与 topology authority 分离：
+
+- operational cursor 决定 live 从哪里继续增量摄取；
+- contiguous authority 只在同一 registry/source fingerprint、canonical hash 且无洞覆盖时前进；
+- 近期正扫描可以推进 operational cursor，但不能伪造 contiguous authority。
+
+持久化不再逐块同步写两张全图。Topology hash 变化时才异步重写 runtime graphs；protocol evidence
+采用 30 秒 debounce、单 active writer + latest pending coalescing，并在 shutdown drain 后 flush。
+Address evidence cache 有 cap、negative TTL 和有界 sweep；活跃 ownership 不会因 cap 被误删。
 
 ## 7. Block-Scan 当前状态能力
 
@@ -1089,6 +1139,10 @@ missing source/offer/coverage 自动 unresolved，不能进入 planner。`derive
 | typed family registry、current-N coordinator、原子发布、family-local failure isolation | 已实现 |
 | V2/V3 成熟 discovery/identity/fee 路径 | 保留并接入统一 family runtime，没有另起重复 scanner |
 | Curve、external swap、protocol conversion state | 已接入 family-owned state capability；中央逐 venue warm/mid switch 已移除 |
+| DEX/protocol discovery 调度 | DEX current-head hot pass 已与 protocol receipt/trace/probe 解耦；protocol 慢源不再跳过纯 DEX pass |
+| protocol topology 不完整 | 已准入且 current-N state 完整的 protocol edge 继续执行；全局负结论保持 fail-closed |
+| protocol 启动恢复 | nomination current-N 复检 + 有界近期窗口 + registry 驱动的一次性 observed-family 最近交易回查 |
+| discovery 持久化 | runtime graph 按 topology hash 异步写；protocol cache coalesced/debounced；address cache 有界 |
 | receipt-level victim 与 funding view | 已由同一静态 registry 派生；funding 保持独立类型，不建立 `FlashAdapterRegistry` |
 | T0 trusted 工具 | `5945146` 冻结；其 22 个非 package 源码/工具文件在 F 中 byte-identical |
 | T1 baseline instrumentation | `059f7c0`；build、baseline runtime、blind contract、production harness 与 scanner 回归已通过 |
@@ -1107,11 +1161,14 @@ F0 的 activation continuity fixture 仍锚定 `040a9cc`；`040a9cc..8aece69` �
 所以它仍能证明该段 activation 语义连续。但它不是完整 F0 生产证据，不能替代当时 production universe、
 V2/V3 warm-state hash、stage timings、RPC/call/batch 分布或 strict tx02 raw artifact。
 
-2026-07-24 最终本地验证已通过 TypeScript build、boundary lint，并覆盖：
+2026-07-26 当前收口本地验证已通过 listener/analysis TypeScript build、live build、
+`test:ab-canary` 62/62、shell syntax、diff check，并覆盖：
 
 - registry activation/shared-surface/route-adapter closure 与 Fluid token-order execution identity；
 - current-N state backend/coordinator/runtime、swap/protocol families、V2/V3 incremental + shadow parity；
 - discovery watermark/backfill/publication/reorg/cancellation、instance discovery 与 family isolation；
+- startup fallback 在 stale candidate 当前块复检失败时仍会触发、DEX hot gate 与 protocol authority
+  分离、async persistence coalescing、cache cap/prune 与 shutdown drain；
 - DODO、Fluid、Curve、Balancer、victim、funding、planner、scanner/refinement 与 replay fixtures；
 - T0 v2 artifact chain、challenger stage-boundary immutability、trusted blind harness/content-addressed
   fail-closed、T1/F canonical compatibility、conversion freshness harness 和 paired-live primitive。
@@ -1711,6 +1768,32 @@ P1 的修复严格限制在 blind evidence compatibility projection：
 `searcher:adapter-family-blind-t1-compatibility`。后续候选公平性与 canonical-fence 两轮 focused
 对抗审查均为 `P0=0/P1=0`；这不是一轮新的全系统完成审计。P2 不制造 pass，保留为非阻断诊断
 follow-up；严格 sealed-blind tx02 和 paired-live 仍保持 `missing`，不能由上述单元/合约测试替代。
+
+### 13.3 2026-07-26 收口审计与修复
+
+最后三轮实现审计发现的实质问题均已进入代码和回归，而不是只写进报告：
+
+1. blind-audit 使用陈旧 observed cursor 时可能因历史 trace 已 prune 永久不前进。正式 blind
+   producer 不再把 caller cache/`.env` 带入运行，启动采用 bounded recent-positive operational
+   hydrate；file-backed cache 只能提供 nomination，不能自铸 topology authority。
+2. 全局 `min(DEX, protocol families)` 曾把一个慢 observed-only family 变成纯 DEX block-scan 的硬门。
+   current-head pass 现只 gate DEX completeness，protocol receipt/trace/probe 移到独立 observed/background
+   lane；已准入 protocol edge 与全局负结论按 §6.3 分开处理。
+3. 每块同步序列化/落盘两张全 universe 图与无界 address cache 会占用 `<10s` 热路径。现改为
+   topology-change-only async graph write、coalesced protocol evidence writer、bounded address cache，
+   shutdown 先 drain runtime/discovery publication 再 flush。
+
+同轮还修复了：
+
+- formal A/B hunt 清除继承的 `HUNT_*`、universe/state/discovery/artifact env，并禁用 repository
+  `.env`，随后只注入 trusted gate 声明的输入；
+- family-fair candidate enumeration/refinement 被误删的回归，及 slow family 占满自身并发时
+  healthy sibling 被延迟的问题；
+- startup fallback 以 current-N 成功 admission 而不是“缓存里存在 candidate”判定 family 是否缺失；
+- caller-sealed protocol cache 的 nominations-only 合同与 source-N re-attestation 回归。
+
+上述只证明实现合同与局部行为；不替代 §11.4 的 sealed-blind 20 轮、§11.5 的真实 conversion
+update-block 或 §11.6 的 paired-live 证据。
 
 ## 14. 完成定义
 

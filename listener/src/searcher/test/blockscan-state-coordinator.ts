@@ -637,7 +637,17 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
   );
   assert.equal(coordinator.latestSnapshot(), result.snapshot);
 
-  const graphIncomplete = await new BlockScanStateCoordinator(backend).prepare({
+  const sourcePinnedBackend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      return reads.map((read) =>
+        successfulRead(read, control.sourceGeneration)
+      );
+    },
+    async verifyCanonicalSource() {},
+  };
+  const graphIncomplete = await new BlockScanStateCoordinator(
+    sourcePinnedBackend,
+  ).prepare({
     graph: graph(2, false),
     families: families().list,
     deadlineAtMs: Date.now() + 2_000,
@@ -648,18 +658,23 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
   }
   assert.deepEqual(
     graphIncomplete.snapshot.resolvedFamilyIds,
-    ["univ2-standard"],
-    "a complete sibling family must remain usable",
+    ["protocol:fixture", "univ2-standard"],
+    "source-N re-attested protocol edges remain usable without topology completeness",
   );
   assert.deepEqual(
     graphIncomplete.snapshot.incompleteFamilyIds,
-    ["protocol:fixture"],
-    "the graph issue must remain owned by its family",
+    [],
+    "negative topology incompleteness must not erase a positively proven protocol edge",
   );
   assert.equal(
     graphIncomplete.snapshot.mids.size,
-    2,
-    "an incomplete family must contribute no priced edges",
+    3,
+    "the proven protocol edge must still publish its current-block mid",
+  );
+  assert.equal(
+    graphIncomplete.snapshot.graph.completenessWatermark,
+    SOURCE_BLOCK - 1,
+    "using a proven edge must not manufacture global topology completeness",
   );
   assert.deepEqual(
     graphIncomplete.familyTelemetry?.map(
@@ -677,9 +692,9 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
         familyId: "protocol:fixture",
         lane: "protocol",
         uniqueStateKeys: 1,
-        reads: 0,
-        batches: 0,
-        status: "incomplete",
+        reads: 1,
+        batches: 1,
+        status: "degraded",
         issueCount: 1,
       },
       {
@@ -692,7 +707,7 @@ async function failedFamilyPublishesHealthyFamiliesAsDegraded(): Promise<void> {
         issueCount: 0,
       },
     ],
-    "graph-incomplete families are visible even though their lane never ran",
+    "topology incompleteness stays visible while the proven protocol lane runs",
   );
   assert(
     graphIncomplete.issues.some((issue) =>

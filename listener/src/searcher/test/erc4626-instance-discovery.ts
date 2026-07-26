@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import "../../shared/adapters/index.js";
@@ -1141,7 +1141,10 @@ try {
     "cache persistence must reject a cursor whose canonical hash is missing",
   );
   const reloaded = loadProtocolDiscoveryEvidenceCache(cachePath, 1n);
-  assert(reloaded.addressEntries.size >= 2, "positive and negative address evidence must persist");
+  assert(
+    reloaded.addressEntries.size === 0,
+    "a family without an explicit dependency policy must not persist unusable address evidence",
+  );
   assert(reloaded.verifiedCandidates.size === 1, "verified admission evidence must persist");
   assert(reloaded.runtime.observedCursor === 123, "observed event cursor must survive a restart");
   assert(
@@ -1205,6 +1208,167 @@ try {
     retainedRejected.wouldAdmit.length === 0,
     "reloaded ownership must never route without passing identity attestation",
   );
+
+  const legacyAdapterId = "protocol:eigenpie";
+  const legacyTarget = "0x2222222222222222222222222222222222222222";
+  const legacyTokenIn = "0x3333333333333333333333333333333333333333";
+  const legacyTokenOut = "0x4444444444444444444444444444444444444444";
+  const legacyPool = {
+    address: legacyTarget,
+    adapter: "eigenpie-deposit-router",
+    fixedTokenIn: legacyTokenIn,
+    fixedTokenOut: legacyTokenOut,
+    fixedSlotKind: "protocol",
+    fixedProtocolAction: "wrap",
+    logicalInstanceId: `${legacyTokenIn.toLowerCase()}>${legacyTokenOut.toLowerCase()}`,
+    venueId: "unknown",
+    identitySource: "eigenpie-compatible-call-surface",
+  };
+  const legacyEvidence = [{
+    kind: "eigenpie-deposit-observation",
+    txHash: `0x${"45".repeat(32)}`,
+    blockNumber: 100,
+    tokenIn: legacyTokenIn,
+    tokenOut: legacyTokenOut,
+    amountIn: { __mev_protocol_bigint__: "1000000000000000000" },
+    amountOut: { __mev_protocol_bigint__: "990000000000000000" },
+  }];
+  const savedSchemaFive = JSON.parse(
+    readFileSync(cachePath, "utf8"),
+  ) as Record<string, unknown>;
+  const legacyPath = join(cacheDir, "schema-4.json");
+  writeFileSync(
+    legacyPath,
+    `${JSON.stringify({
+      ...savedSchemaFive,
+      schema_version: 4,
+      address_entries: savedSchemaFive.address_entries,
+      verified_candidates: [{
+        adapterId: legacyAdapterId,
+        candidate: {
+          pool: legacyPool,
+          source: "persisted-verified-evidence",
+          selector: "0x2ebe07c8",
+          evidence: legacyEvidence,
+        },
+      }],
+      observed_cursor: 456,
+      observed_cursor_hash: null,
+      observed_source_fingerprint: `0x${"67".repeat(32)}`,
+      discovery_source_fingerprints: [{
+        adapterId: legacyAdapterId,
+        fingerprint: `0x${"68".repeat(32)}`,
+      }],
+      recent_processed_txs: [{
+        txHash: `0x${"69".repeat(32)}`,
+        blockNumber: 455,
+      }],
+      route_ownership: {
+        version: 9,
+        admissions: [{
+          adapterId: legacyAdapterId,
+          instance: {
+            pool: legacyPool,
+            sources: ["retained-instance", "observed-calltrace"],
+            selectors: ["0x2ebe07c8"],
+            evidence: legacyEvidence,
+            ownerAdapterId: legacyAdapterId,
+          },
+        }],
+      },
+    }, null, 2)}\n`,
+  );
+  const legacyReloaded = loadProtocolDiscoveryEvidenceCache(
+    legacyPath,
+    1n,
+  );
+  assert(
+    legacyReloaded.verifiedCandidates.size === 1 &&
+      legacyReloaded.routeOwnership.version === 9 &&
+      legacyReloaded.routeOwnership.admissions.length === 1 &&
+      cachedProtocolCandidates(legacyReloaded).get(legacyAdapterId)?.length === 1,
+    "schema-4 Eigenpie-like route records must survive only as retained candidates",
+  );
+  assert(
+    legacyReloaded.addressEntries.size === 0 &&
+      legacyReloaded.runtime.observedCursor === null &&
+      legacyReloaded.runtime.observedCursorHash === null &&
+      legacyReloaded.runtime.observedSourceFingerprint === null &&
+      legacyReloaded.runtime.discoverySourceFingerprints.size === 0 &&
+      legacyReloaded.runtime.recentProcessedTxs.size === 0 &&
+      legacyReloaded.runtime.observedContiguousAuthority === null,
+    "schema-4 address/cache/cursor authority must be discarded",
+  );
+  const migratedObservedFingerprint = `0x${"70".repeat(32)}`;
+  const migratedFamilyFingerprint = `0x${"71".repeat(32)}`;
+  assert(
+    updateProtocolObservedSourceFingerprint(
+      legacyReloaded,
+      migratedObservedFingerprint,
+      new Map([[legacyAdapterId, migratedFamilyFingerprint]]),
+    ) &&
+      legacyReloaded.verifiedCandidates.size === 1 &&
+      legacyReloaded.routeOwnership.admissions.length === 1,
+    "binding a schema-4 import to the current registry must preserve only re-attestation candidates",
+  );
+  const migratedPath = join(cacheDir, "schema-5-migrated.json");
+  saveProtocolDiscoveryEvidenceCache(migratedPath, legacyReloaded);
+  const migratedRaw = JSON.parse(
+    readFileSync(migratedPath, "utf8"),
+  ) as { schema_version?: unknown };
+  assert(
+    migratedRaw.schema_version === 5,
+    "saving a schema-4 retained-candidate import must emit schema 5",
+  );
+  const migratedReloaded = loadProtocolDiscoveryEvidenceCache(
+    migratedPath,
+    1n,
+  );
+  assert(
+    migratedReloaded.verifiedCandidates.size === 1 &&
+      migratedReloaded.routeOwnership.admissions.length === 1 &&
+      migratedReloaded.addressEntries.size === 0,
+    "schema-5 migration output must preserve only the retained route records",
+  );
+  const wrongChainLegacy = loadProtocolDiscoveryEvidenceCache(
+    legacyPath,
+    10n,
+  );
+  assert(
+    wrongChainLegacy.verifiedCandidates.size === 0 &&
+      wrongChainLegacy.routeOwnership.admissions.length === 0,
+    "schema-4 retained candidates must never cross chains",
+  );
+  const malformedLegacyPath = join(cacheDir, "schema-4-malformed.json");
+  writeFileSync(
+    malformedLegacyPath,
+    `${JSON.stringify({
+      schema_version: 4,
+      chain_id: "1",
+      verified_candidates: [{
+        adapterId: legacyAdapterId,
+        candidate: {
+          pool: { ...legacyPool, address: "not-an-address" },
+          source: "persisted-verified-evidence",
+          evidence: legacyEvidence,
+        },
+      }],
+      route_ownership: {
+        version: 1,
+        admissions: [],
+      },
+    })}\n`,
+  );
+  const malformedLegacy = loadProtocolDiscoveryEvidenceCache(
+    malformedLegacyPath,
+    1n,
+  );
+  assert(
+    malformedLegacy.verifiedCandidates.size === 0 &&
+      malformedLegacy.routeOwnership.admissions.length === 0,
+    "malformed schema-4 retained candidates must fail closed",
+  );
+
   pruneRecentProcessedProtocolTxs(reloaded, 300, 100);
   assert(
     reloaded.runtime.recentProcessedTxs.size === 0,

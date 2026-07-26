@@ -3,8 +3,9 @@ import { LatestHeadScheduler } from "../latest-head-scheduler.js";
 
 await coalescesToNewestWithOneWorker();
 await continuesAfterWorkerFailure();
+await shutdownDropsPendingAndDrainsActive();
 
-console.log("[latest-head-scheduler] newest-head single worker: PASS");
+console.log("[latest-head-scheduler] newest-head/draining shutdown: PASS");
 
 async function coalescesToNewestWithOneWorker(): Promise<void> {
   const gates = new Map<number, ReturnType<typeof deferred>>();
@@ -119,6 +120,42 @@ async function continuesAfterWorkerFailure(): Promise<void> {
   assert.deepEqual(runs, [200, 201]);
   assert.deepEqual(errors, [{ blockNumber: 200, message: "boom" }]);
   assert.equal(scheduler.telemetry().completed, 2);
+}
+
+async function shutdownDropsPendingAndDrainsActive(): Promise<void> {
+  const activeGate = deferred();
+  const runs: number[] = [];
+  const scheduler = new LatestHeadScheduler(async (blockNumber) => {
+    runs.push(blockNumber);
+    await activeGate.promise;
+  });
+  scheduler.schedule(300);
+  await waitFor(() => scheduler.telemetry().active === 300);
+  scheduler.schedule(301);
+
+  let settled = false;
+  const shutdown = scheduler.shutdown().then(() => {
+    settled = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "shutdown must wait for the active head");
+  assert.equal(
+    scheduler.telemetry().pending,
+    null,
+    "shutdown must discard a not-yet-started pending head",
+  );
+
+  scheduler.schedule(302);
+  activeGate.resolve();
+  await shutdown;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    runs,
+    [300],
+    "neither the pending nor a post-shutdown head may start",
+  );
+  assert.equal(scheduler.telemetry().active, null);
+  assert.equal(scheduler.telemetry().submitted, 2);
 }
 
 function deferred(): {

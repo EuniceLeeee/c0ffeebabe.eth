@@ -784,6 +784,7 @@ export function stateSchemaFingerprint(edges: readonly TokenEdge[]): string {
         v2FeeBps: edge.v2FeeBps?.toString() ?? null,
         v3Fee: edge.v3Fee ?? null,
         v3TickSpacing: edge.v3TickSpacing ?? null,
+        factory: edge.factory?.toLowerCase() ?? null,
         curveI: edge.curveI ?? null,
         curveJ: edge.curveJ ?? null,
         poolId: edge.poolId?.toLowerCase() ?? null,
@@ -929,6 +930,7 @@ function canonicalEdgeRecord(edge: TokenEdge): Record<string, unknown> {
     v2FeeBps: edge.v2FeeBps?.toString() ?? null,
     v3Fee: edge.v3Fee ?? null,
     v3TickSpacing: edge.v3TickSpacing ?? null,
+    factory: edge.factory ? normalizeAddressLike(edge.factory) : null,
     poolId: edge.poolId ? normalizeAddressLike(edge.poolId) : null,
     v4PoolKey: edge.v4PoolKey
       ? {

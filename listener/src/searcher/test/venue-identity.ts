@@ -29,7 +29,10 @@ function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
 }
 
-const factoryIface = new ethers.Interface(["function factory() view returns (address)"]);
+const factoryIface = new ethers.Interface([
+  "function factory() view returns (address)",
+  "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
+]);
 const v3IdentityIface = new ethers.Interface([
   "function token0() view returns (address)",
   "function token1() view returns (address)",
@@ -175,6 +178,43 @@ class FakeProvider {
   async call(req: { to: string; data: string }): Promise<string> {
     const target = req.to.toLowerCase();
     const selector = req.data.slice(0, 10).toLowerCase();
+    if (
+      target === REPLAYED_V3_FORK_FACTORY.toLowerCase() &&
+      selector === factoryIface.getFunction("getPool")!.selector
+    ) {
+      const [tokenA, tokenB, fee] = factoryIface.decodeFunctionData(
+        "getPool",
+        req.data,
+      );
+      const tokens = [String(tokenA).toLowerCase(), String(tokenB).toLowerCase()]
+        .sort();
+      const expected = [
+        PROVISIONAL_V3_TOKEN0.toLowerCase(),
+        PROVISIONAL_V3_TOKEN1.toLowerCase(),
+      ].sort();
+      return factoryIface.encodeFunctionResult("getPool", [
+        tokens[0] === expected[0] &&
+          tokens[1] === expected[1] &&
+          BigInt(fee) === 3_000n
+          ? V3_FORK_POOL
+          : ethers.ZeroAddress,
+      ]);
+    }
+    if (target === V3_FORK_POOL.toLowerCase()) {
+      if (selector === v3IdentityIface.getFunction("token0")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("token0", [
+          PROVISIONAL_V3_TOKEN0,
+        ]);
+      }
+      if (selector === v3IdentityIface.getFunction("token1")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("token1", [
+          PROVISIONAL_V3_TOKEN1,
+        ]);
+      }
+      if (selector === v3IdentityIface.getFunction("fee")!.selector) {
+        return v3IdentityIface.encodeFunctionResult("fee", [3_000]);
+      }
+    }
     if (
       target === UNKNOWN_PAIR.toLowerCase() ||
       target === FAKE_V3_POOL.toLowerCase()
@@ -420,6 +460,41 @@ async function testResolverRejectsSelectorLookalikes(): Promise<void> {
   assert(
     !fakeV3.ok && fakeV3.reason === "behavior_mismatch",
     "canonical slot0 revert is permanent negative proof for provisional V3",
+  );
+  const mismatchedV3Pool = address(0x120);
+  const otherV3Pool = address(0x121);
+  const canonicalV3Factory = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
+  const reverseMismatch = await resolvePoolIdentity({
+    call: async ({ to, data }) => {
+      const selector = data.slice(0, 10);
+      if (to.toLowerCase() === mismatchedV3Pool.toLowerCase()) {
+        if (selector === factoryIface.getFunction("factory")!.selector) {
+          return factoryIface.encodeFunctionResult("factory", [canonicalV3Factory]);
+        }
+        if (selector === v3IdentityIface.getFunction("token0")!.selector) {
+          return v3IdentityIface.encodeFunctionResult("token0", [PROVISIONAL_V3_TOKEN0]);
+        }
+        if (selector === v3IdentityIface.getFunction("token1")!.selector) {
+          return v3IdentityIface.encodeFunctionResult("token1", [PROVISIONAL_V3_TOKEN1]);
+        }
+        if (selector === v3IdentityIface.getFunction("fee")!.selector) {
+          return v3IdentityIface.encodeFunctionResult("fee", [3_000]);
+        }
+      }
+      if (
+        to.toLowerCase() === canonicalV3Factory.toLowerCase() &&
+        selector === factoryIface.getFunction("getPool")!.selector
+      ) {
+        return factoryIface.encodeFunctionResult("getPool", [otherV3Pool]);
+      }
+      throw new Error(`unexpected reverse-mismatch identity call ${to}:${selector}`);
+    },
+  }, mismatchedV3Pool, "univ3", {
+    identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
+  });
+  assert(
+    !reverseMismatch.ok && reverseMismatch.reason === "behavior_mismatch",
+    "known V3 factory must not admit a target that factory.getPool does not bind",
   );
   console.log("[venue-identity] selector lookalikes fail closed: PASS");
 }

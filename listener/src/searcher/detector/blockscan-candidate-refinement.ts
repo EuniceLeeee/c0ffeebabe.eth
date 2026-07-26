@@ -9,6 +9,7 @@ import {
   quote,
 } from "../solver/quoter.js";
 import type { BlockScanOpportunity } from "./detector.js";
+import { BLOCKSCAN_MIN_EXECUTABLE_INPUT } from "./blockscan-sizing-constants.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
@@ -482,7 +483,7 @@ async function exactProbeMarginBps(
   onRouteSuccess: () => void = () => {},
 ): Promise<number> {
   const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
-  const amountIn = maxBigint(9n, ceiling / 1024n);
+  const amountIn = maxBigint(BLOCKSCAN_MIN_EXECUTABLE_INPUT, ceiling / 1024n);
   if (amountIn > ceiling || amountIn <= 0n) return 0;
   let amount = amountIn;
   for (const edge of opportunity.seedEdges) {

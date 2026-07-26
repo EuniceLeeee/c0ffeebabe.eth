@@ -167,6 +167,7 @@ badFamilyHighScoreFloodCannotConsumeExpansionCap();
 await failingFamilyCannotConsumeRefinementCap();
 await differentInstanceFailuresDoNotOpenFamilyCircuit();
 await sameInstanceCircuitDoesNotBlockOppositeDirection();
+await saturatedFamilyDoesNotDelayHealthySibling();
 await neverSettlingFamilyUsesLocalBudget();
 await mixedRouteTimeoutIsAttributedToCurrentLeg();
 await earlyZeroDoesNotClearUnvisitedInstanceCircuit();
@@ -742,6 +743,86 @@ function badFamilyHighScoreFloodCannotConsumeExpansionCap(): void {
     ),
     "the lower-score healthy family must remain reachable by expensive DFS",
   );
+}
+
+async function saturatedFamilyDoesNotDelayHealthySibling(): Promise<void> {
+  const slowPoolA = "0x00000000000000000000000000000000000001b0";
+  const slowPoolB = "0x00000000000000000000000000000000000001b1";
+  const healthyPool = "0x00000000000000000000000000000000000001b2";
+  const factory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+  const releaseSlow = deferred<void>();
+  const firstSlowStarted = deferred<void>();
+  let healthyStarted = false;
+  const state = {
+    async call(req: { to: string; data: string }): Promise<string> {
+      const target = req.to.toLowerCase();
+      const selector = req.data.slice(0, 10);
+      if (selector === pair.getFunction("token0")!.selector) {
+        if (target === slowPoolA || target === slowPoolB) {
+          firstSlowStarted.resolve();
+          await releaseSlow.promise;
+        } else {
+          assert.equal(target, healthyPool);
+          healthyStarted = true;
+        }
+        return pair.encodeFunctionResult("token0", [TOKEN_6]);
+      }
+      if (selector === pair.getFunction("getReserves")!.selector) {
+        return pair.encodeFunctionResult(
+          "getReserves",
+          [1_000_000n, 2_000_000n, 0],
+        );
+      }
+      if (selector === pair.getFunction("factory")!.selector) {
+        return pair.encodeFunctionResult("factory", [factory]);
+      }
+      throw new Error(`unexpected saturated-family selector ${selector}`);
+    },
+  } as StateBackend;
+  const candidate = (
+    familyId: string,
+    pool: string,
+    index: number,
+  ): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: `${familyId}-${index}`,
+    cycleFingerprint: `${familyId}-${index}`,
+    seedEdges: [familyEdge(familyId, 500 + index, {
+      adapterId: "univ2-swap",
+      target: pool,
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+    })],
+  });
+  const refinement = refineBlockScanCandidates(
+    state,
+    [
+      candidate("slow-family", slowPoolA, 0),
+      candidate("slow-family", slowPoolB, 1),
+      candidate("healthy-family", healthyPool, 2),
+    ],
+    3,
+    Date.now() + 2_000,
+    pricedTokens,
+    undefined,
+    2,
+    {
+      familyTimeoutMs: 1_000,
+      maxConcurrentPerFamily: 1,
+    },
+  );
+  await firstSlowStarted.promise;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const healthyStartedWhileSlowFamilyWasSaturated = healthyStarted;
+  releaseSlow.resolve();
+  const result = await refinement;
+  assert.equal(
+    healthyStartedWhileSlowFamilyWasSaturated,
+    true,
+    "claimNext must inspect the adjacent healthy family while the first family is saturated",
+  );
+  assert.equal(result.deadlineHit, false);
+  assert.equal(result.attempted, 3);
 }
 
 async function neverSettlingFamilyUsesLocalBudget(): Promise<void> {

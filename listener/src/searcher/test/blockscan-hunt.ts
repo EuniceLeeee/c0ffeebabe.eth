@@ -27,7 +27,6 @@ import {
   estimateResolvedRingSpreadBps,
   isAdmissibleBlockScanRingShape,
   scanBlockStateFromResolvedMids,
-  selectFamilyFairExpansionEdges,
   type ResolvedBlockScanMid,
 } from "../detector/blockscan-scanner-core.js";
 import {
@@ -42,9 +41,10 @@ import {
   JsonRpcBlockScanStateReadBackend,
 } from "../blockscan-state-read-backend.js";
 import {
-  adapterFamilyQuoteCoverageIsComplete,
+  assessAdapterFamilyQuoteCoverage,
   blockScanPassBudgetExceeded,
   remapExpectedRouteToVerifiedGraph,
+  resolveBlockScanHuntVerdict,
   resolveBlockScanHuntBudgets,
   routeMatchesExpected,
   routeStepMatchesExpected,
@@ -83,6 +83,18 @@ import {
   EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
   projectVerifiedProtocolPool,
 } from "../protocol-instance-discovery.js";
+import {
+  advanceProtocolObservedContiguousAuthority,
+  createProtocolDiscoveryEvidenceCache,
+  reconcileProtocolDiscoveryEvidenceCache,
+  recordProtocolRouteOwnership,
+  saveProtocolDiscoveryEvidenceCache,
+  updateProtocolObservedSourceFingerprint,
+} from "../protocol-discovery-cache.js";
+import {
+  protocolDiscoverySourceFingerprints,
+  protocolObservedSourceFingerprint,
+} from "../observed-protocol-discovery.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { AnvilSolver, resolveSearchCenter, type ResolvedPlan } from "../solver/solver.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
@@ -95,6 +107,7 @@ import {
   PRODUCTION_IDENTITY_RESOLVERS,
   PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
 } from "../venues/production-registry.js";
+import type { ProtocolCandidate } from "../venues/route-leg-adapter.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import {
   attestPoolIdentities,
@@ -106,12 +119,17 @@ import {
   createVerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
 import {
+  loadProductionReplayDiscoveredPools,
   PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
   PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
   selectProductionReplayDiscoveredPools,
   writeProductionReplayDiscoveryArtifact,
   type ProductionReplayUniverseEvidence,
 } from "./production-replay-artifact.js";
+import {
+  loadTrustedHuntProtocolDiscoveryCache,
+  type VerifiedRetainedTopologyProof,
+} from "./blockscan-hunt-protocol-cache.js";
 
 type DiagnosticStopAfter = "graph" | "enumeration" | "refine" | "solve" | "sim" | "ev";
 
@@ -125,6 +143,8 @@ interface DiagnosticOptions {
 }
 
 const DIAGNOSTIC = parseDiagnosticArgs(process.argv.slice(2));
+const HUNT_PROTOCOL_CURSOR_SEMANTICS_VERSION =
+  "family-source-contiguous-v3-hash-anchored";
 
 interface HuntConfig {
   rpcUrl: string;
@@ -296,6 +316,7 @@ function diagnosticStopsAfter(stage: DiagnosticStopAfter): boolean {
 }
 
 function loadEnv(): void {
+  if (process.env.SEARCHER_TEST_DISABLE_DOTENV === "1") return;
   let text = "";
   try {
     text = readFileSync(resolve("..", ".env"), "utf8");
@@ -395,6 +416,96 @@ function huntUniverseEvidence(
     maxPools,
     minScore: 1,
   };
+}
+
+function assertProtocolCacheNominationBootstrapMatches(input: {
+  readonly artifactPath: string;
+  readonly artifactSha256: string;
+  readonly universePath: string;
+  readonly sourceFromBlock: number;
+  readonly sourceToBlock: number;
+  readonly discoveredProtocolPools: readonly PoolEntry[];
+}): void {
+  const universeBytes = readFileSync(input.universePath);
+  const universeSha256 = createHash("sha256")
+    .update(universeBytes)
+    .digest("hex");
+  const expectedUniverseSha256 =
+    process.env.PRODUCTION_REPLAY_UNIVERSE_SHA256?.trim().toLowerCase() ?? "";
+  if (
+    !/^[0-9a-f]{64}$/.test(expectedUniverseSha256) ||
+    expectedUniverseSha256 !== universeSha256
+  ) {
+    throw new Error(
+      "protocol cache nomination source universe is absent or mismatched",
+    );
+  }
+
+  const expectedPools = loadProductionReplayDiscoveredPools(
+    input.artifactPath,
+    input.artifactSha256.toLowerCase(),
+  );
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(readFileSync(input.artifactPath, "utf8"));
+  } catch {
+    throw new Error("protocol cache nomination artifact is not valid JSON");
+  }
+  if (
+    typeof envelope !== "object" ||
+    envelope === null ||
+    Array.isArray(envelope)
+  ) {
+    throw new Error("protocol cache nomination artifact must be an object");
+  }
+  const record = envelope as Record<string, unknown>;
+  const sourceFromBlock = Number(record.sourceFromBlock);
+  const sourceToBlock = Number(record.sourceToBlock);
+  const identityBlock = Number(record.identityBlock);
+  if (
+    !Number.isSafeInteger(sourceFromBlock) ||
+    !Number.isSafeInteger(sourceToBlock) ||
+    !Number.isSafeInteger(identityBlock) ||
+    sourceFromBlock !== input.sourceFromBlock ||
+    sourceToBlock !== input.sourceToBlock ||
+    identityBlock !== input.sourceToBlock
+  ) {
+    throw new Error(
+      "protocol cache nomination artifact does not bind the reconstructed range",
+    );
+  }
+
+  const expectedKeys = expectedPools.map(poolProjectionRowKey).sort();
+  const actualKeys = input.discoveredProtocolPools
+    .map(poolProjectionRowKey)
+    .sort();
+  const firstMismatch = expectedKeys.findIndex(
+    (key, index) => actualKeys[index] !== key,
+  );
+  if (
+    expectedKeys.length !== actualKeys.length ||
+    firstMismatch >= 0
+  ) {
+    const index = firstMismatch >= 0
+      ? firstMismatch
+      : Math.min(expectedKeys.length, actualKeys.length);
+    throw new Error(
+      "protocol cache nomination projection differs from the sealed artifact: " +
+        `expected=${expectedKeys.length} actual=${actualKeys.length} ` +
+        `first=${expectedKeys[index] ?? "<end>"}|${actualKeys[index] ?? "<end>"}`,
+    );
+  }
+  console.log(
+    `HUNT_PROTOCOL_DISCOVERY_NOMINATION_PROOF=${JSON.stringify({
+      artifactPath: input.artifactPath,
+      artifactSha256: input.artifactSha256.toLowerCase(),
+      universeSha256,
+      sourceFromBlock,
+      sourceToBlock,
+      instances: actualKeys.length,
+      projectionSha256: canonicalSetSha256(actualKeys),
+    })}`,
+  );
 }
 
 function huntGraphView(input: {
@@ -548,9 +659,27 @@ async function main(): Promise<void> {
     let protocolPools = staticProtocolPools;
     let pools = basePools;
     let rawEdges = baseGraph;
+    let retainedProtocolTopologyProof:
+      VerifiedRetainedTopologyProof | null = null;
+    if (
+      process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT &&
+      (
+        process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_PATH?.trim() ||
+        process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_SHA256?.trim() ||
+        process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_OUT?.trim()
+      )
+    ) {
+      throw new Error(
+        "verified replay preload and hunt protocol discovery cache modes cannot be combined",
+      );
+    }
     if (!process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT) {
       const discoverableFamilies =
         PRODUCTION_ADAPTER_FAMILIES.discoverableRoutes();
+      const discoveryFamilySources = discoverableFamilies.map((family) => ({
+        familyId: family.id,
+        sourceIds: [...new Set(family.discovery!.candidateSources)],
+      }));
       const dexPoolAdapters = new Set(
         PRODUCTION_ADAPTER_FAMILIES.swaps()
           .flatMap((family) => [...family.poolAdapters]),
@@ -566,10 +695,156 @@ async function main(): Promise<void> {
         ...graphTokens,
         ...protocolDiscoveryCandidateAddressHints(discoverableFamilies),
       ])].sort();
-      const discoveryFromBlock = universeDiscoveryFromBlock(
+      const protocolChainId = (await provider.getNetwork()).chainId;
+      const observedSourceFingerprint = `0x${createHash("sha256")
+        .update(HUNT_PROTOCOL_CURSOR_SEMANTICS_VERSION)
+        .update(":")
+        .update(protocolObservedSourceFingerprint(discoverableFamilies))
+        .digest("hex")}`;
+      const discoverySourceFingerprints =
+        protocolDiscoverySourceFingerprints(discoverableFamilies);
+      const cacheInputPath =
+        process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_PATH?.trim() || null;
+      const cacheInputSha256 =
+        process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_SHA256?.trim() || null;
+      const cacheOutputPath =
+        process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_OUT?.trim() || null;
+      const bootstrapArtifactPath =
+        process.env.HUNT_PROTOCOL_DISCOVERY_BOOTSTRAP_ARTIFACT?.trim() || null;
+      const bootstrapArtifactSha256 =
+        process.env.HUNT_PROTOCOL_DISCOVERY_BOOTSTRAP_ARTIFACT_SHA256?.trim() ||
+        null;
+      if ((cacheInputPath === null) !== (cacheInputSha256 === null)) {
+        throw new Error(
+          "HUNT_PROTOCOL_DISCOVERY_CACHE_PATH and " +
+            "HUNT_PROTOCOL_DISCOVERY_CACHE_SHA256 must be supplied together",
+        );
+      }
+      if (
+        (bootstrapArtifactPath === null) !==
+          (bootstrapArtifactSha256 === null)
+      ) {
+        throw new Error(
+          "HUNT_PROTOCOL_DISCOVERY_BOOTSTRAP_ARTIFACT and " +
+            "HUNT_PROTOCOL_DISCOVERY_BOOTSTRAP_ARTIFACT_SHA256 " +
+            "must be supplied together",
+        );
+      }
+      if (
+        cacheInputPath !== null &&
+        bootstrapArtifactPath !== null
+      ) {
+        throw new Error(
+          "a sealed cache delta cannot also consume a nomination bootstrap",
+        );
+      }
+      if (
+        cacheOutputPath !== null &&
+        cacheInputPath === null &&
+        bootstrapArtifactPath === null
+      ) {
+        throw new Error(
+          "a first protocol cache requires a sealed nomination artifact",
+        );
+      }
+      if (
+        cacheInputPath &&
+        process.env.HUNT_DISCOVERY_ARTIFACT_OUT?.trim()
+      ) {
+        throw new Error(
+          "a delta-seeded hunt cannot emit a discovery artifact with a false full-range claim",
+        );
+      }
+
+      let protocolDiscoveryCache =
+        createProtocolDiscoveryEvidenceCache(protocolChainId);
+      let currentOwnership = EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP;
+      let bootstrapCandidates:
+        | ReadonlyMap<
+            string,
+            readonly ProtocolCandidate[]
+          >
+        | undefined;
+      let discoveryFromBlock = universeDiscoveryFromBlock(
         cfg.universePath,
         cfg.blockNumber,
       );
+      let cacheProvenance: {
+        readonly mode: "history-reconstruction" | "sealed-cache-delta";
+        readonly inputSha256: string | null;
+        readonly cursor: number | null;
+        readonly cursorHash: string | null;
+        readonly retainedOwnership: number;
+        readonly cachedCandidates: number;
+      };
+      if (cacheInputPath && cacheInputSha256) {
+        const trusted = await loadTrustedHuntProtocolDiscoveryCache({
+          path: cacheInputPath,
+          expectedSha256: cacheInputSha256,
+          expectedChainId: protocolChainId,
+          maxCursor: cfg.blockNumber - 1,
+          expectedObservedSourceFingerprint: observedSourceFingerprint,
+          expectedDiscoverySourceFingerprints: discoverySourceFingerprints,
+          readCanonicalBlockHash: async (blockNumber) =>
+            (await provider.getBlock(blockNumber))?.hash?.toLowerCase() ?? null,
+        });
+        protocolDiscoveryCache = trusted.cache;
+        currentOwnership = trusted.ownership;
+        bootstrapCandidates = trusted.bootstrapCandidates;
+        discoveryFromBlock = trusted.cursor + 1;
+        retainedProtocolTopologyProof = trusted.topologyProof;
+        cacheProvenance = {
+          mode: "sealed-cache-delta",
+          inputSha256: trusted.contentSha256,
+          cursor: trusted.cursor,
+          cursorHash: trusted.cursorHash,
+          retainedOwnership: trusted.ownership.admissions.size,
+          cachedCandidates: trusted.cache.verifiedCandidates.size,
+        };
+        console.log(
+          `HUNT_PROTOCOL_RETAINED_TOPOLOGY=${JSON.stringify({
+            status:
+              trusted.topologyProof === null
+                ? "nominations_only"
+                : "contiguous",
+            cursor: trusted.cursor,
+            cursorHash: trusted.cursorHash,
+          })}`,
+        );
+      } else {
+        updateProtocolObservedSourceFingerprint(
+          protocolDiscoveryCache,
+          observedSourceFingerprint,
+          discoverySourceFingerprints,
+        );
+        cacheProvenance = {
+          mode: "history-reconstruction",
+          inputSha256: null,
+          cursor: null,
+          cursorHash: null,
+          retainedOwnership: 0,
+          cachedCandidates: 0,
+        };
+      }
+      console.log(
+        `HUNT_PROTOCOL_DISCOVERY_CACHE_PROVENANCE=${JSON.stringify({
+          ...cacheProvenance,
+          scanFromBlock: discoveryFromBlock,
+          scanToBlock: cfg.blockNumber,
+          observedSourceFingerprint,
+          discoverySourceFingerprints: [...discoverySourceFingerprints]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([familyId, fingerprint]) => ({ familyId, fingerprint })),
+        })}`,
+      );
+      const protocolSourceHeaderBefore = await provider.getBlock(
+        cfg.blockNumber,
+      );
+      if (!protocolSourceHeaderBefore?.hash) {
+        throw new Error(
+          `cannot resolve protocol discovery source ${cfg.blockNumber}`,
+        );
+      }
       const protocolDiscovery = await prepareActiveProtocolDiscoveryPass({
         provider,
         ...(observedHistoryProvider === undefined
@@ -578,9 +853,9 @@ async function main(): Promise<void> {
         adapters: discoverableFamilies,
         identityRegistry: PRODUCTION_PROTOCOL_DISCOVERY_IDENTITY_RESOLVERS,
         protocolEdgesEnabled: true,
-        chainId: (await provider.getNetwork()).chainId,
+        chainId: protocolChainId,
         probeExecutor: DEFAULT_SEARCHER_EXECUTOR,
-        currentOwnership: EMPTY_PROTOCOL_DISCOVERY_OWNERSHIP,
+        currentOwnership,
         currentBackrunPools: basePools,
         currentBackrunGraph: baseGraph,
         currentBlockscanGraph: baseGraph,
@@ -593,9 +868,13 @@ async function main(): Promise<void> {
         fromBlock: discoveryFromBlock,
         toBlock: cfg.blockNumber,
         graphTokens,
-      candidateAddresses,
-      shadow: false,
-    });
+        candidateAddresses,
+        evidenceCache: protocolDiscoveryCache,
+        ...(bootstrapCandidates === undefined
+          ? {}
+          : { bootstrapCandidates }),
+        shadow: false,
+      });
       const incompleteFamilySources =
         protocolDiscovery.result.familySourceCoverage
           .filter((item) => !item.complete)
@@ -633,9 +912,73 @@ async function main(): Promise<void> {
       if (!protocolDiscovery.projection) {
         throw new Error("active protocol discovery produced no graph projection");
       }
+      reconcileProtocolDiscoveryEvidenceCache(
+        protocolDiscoveryCache,
+        protocolDiscovery.result,
+      );
+      recordProtocolRouteOwnership(
+        protocolDiscoveryCache,
+        protocolDiscovery.projection.ownership,
+      );
       const discoveredProtocolPools = [
         ...protocolDiscovery.projection.ownership.admissions.values(),
       ].map((item) => lowerPoolEntry(projectVerifiedProtocolPool(item)));
+      if (bootstrapArtifactPath && bootstrapArtifactSha256) {
+        assertProtocolCacheNominationBootstrapMatches({
+          artifactPath: bootstrapArtifactPath,
+          artifactSha256: bootstrapArtifactSha256,
+          universePath: cfg.universePath,
+          sourceFromBlock: discoveryFromBlock,
+          sourceToBlock: cfg.blockNumber,
+          discoveredProtocolPools,
+        });
+      }
+      const protocolSourceHeader = await provider.getBlock(cfg.blockNumber);
+      if (
+        !protocolSourceHeader?.hash ||
+        protocolSourceHeader.hash.toLowerCase() !==
+          protocolSourceHeaderBefore.hash.toLowerCase()
+      ) {
+        throw new Error(
+          `protocol discovery source ${cfg.blockNumber} changed during the pass`,
+        );
+      }
+      const contiguousAuthority =
+        advanceProtocolObservedContiguousAuthority({
+          cache: protocolDiscoveryCache,
+          families: discoveryFamilySources,
+          familySourceCoverage:
+            protocolDiscovery.result.familySourceCoverage,
+          fromBlock: discoveryFromBlock,
+          toBlock: cfg.blockNumber,
+          toBlockHash: protocolSourceHeader.hash,
+          contiguousSourceIds: new Set(["observed-interaction"]),
+        });
+      if (cacheOutputPath) {
+        saveProtocolDiscoveryEvidenceCache(
+          cacheOutputPath,
+          protocolDiscoveryCache,
+        );
+        const outputSha256 = createHash("sha256")
+          .update(readFileSync(cacheOutputPath))
+          .digest("hex");
+        console.log(
+          `HUNT_PROTOCOL_DISCOVERY_CACHE_OUTPUT=${JSON.stringify({
+            path: cacheOutputPath,
+            sha256: outputSha256,
+            cursor: cfg.blockNumber,
+            cursorHash: protocolSourceHeader.hash.toLowerCase(),
+            ownership:
+              protocolDiscoveryCache.routeOwnership.admissions.length,
+            verifiedCandidates:
+              protocolDiscoveryCache.verifiedCandidates.size,
+            topologyAuthority:
+              contiguousAuthority === null
+                ? "positive-only"
+                : contiguousAuthority.profile,
+          })}`,
+        );
+      }
       const discoveryArtifactOut =
         process.env.HUNT_DISCOVERY_ARTIFACT_OUT?.trim();
       if (discoveryArtifactOut) {
@@ -702,10 +1045,22 @@ async function main(): Promise<void> {
     await check("graph has swap edges and protocol edges", () =>
       edges.length > 0 && protocolEdges.length > 0,
     );
-
     let diagnosticExpectedEdges: TokenEdge[] | null = null;
     if (DIAGNOSTIC.enabled) {
-      const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
+      const expectedRouteRaw =
+        process.env.AB_EXPECTED_ROUTE_JSON?.trim() ?? "";
+      const topologyOnly =
+        expectedRouteRaw.length === 0 &&
+        DIAGNOSTIC.stopAfter === "graph" &&
+        Boolean(process.env.HUNT_PROTOCOL_DISCOVERY_CACHE_OUT?.trim());
+      if (expectedRouteRaw.length === 0 && !topologyOnly) {
+        throw new Error(
+          "diagnostic route is required unless stop-after=graph is building a protocol cache",
+        );
+      }
+      const expectedRoute = topologyOnly
+        ? []
+        : parseExpectedRoute(expectedRouteRaw);
       const edgeIdentities = edges.map(canonicalEdgeIdentity);
       const routeMatches = expectedRoute.map((expected) => ({
         expected,
@@ -739,6 +1094,7 @@ async function main(): Promise<void> {
           ? "pass"
           : "fail",
         {
+        mode: topologyOnly ? "protocol_topology_cache" : "route",
         graphEdges: edges.length,
         edgeSetSize: new Set(edgeIdentities).size,
         edgeSetSha256: canonicalSetSha256(edgeIdentities),
@@ -812,7 +1168,6 @@ async function main(): Promise<void> {
           `${prewarm.issues[0]?.message ?? "unknown"}`,
       );
     }
-
     const passDeadlineAtMs = Date.now() + cfg.passBudgetMs;
     console.log(
       `[blockscan-hunt] budgets prewarm=${prewarmBudgetMs}ms ` +
@@ -865,6 +1220,14 @@ async function main(): Promise<void> {
     }
     const pricing = preparedState.snapshot;
     const familyQuoteCoverage = summarizeAdapterFamilyQuotes(pricing);
+    const pricedFamilyIds = PRODUCTION_ADAPTER_FAMILIES
+      .blockScanStateFamilies()
+      .map((family) => family.familyId);
+    const familyCoverageAssessment = assessAdapterFamilyQuoteCoverage(
+      familyQuoteCoverage,
+      pricedFamilyIds,
+      retainedProtocolTopologyProof,
+    );
     console.log(
       `ADAPTER_FAMILY_QUOTE_COVERAGE=${JSON.stringify({
         registeredFamilies: PRODUCTION_ADAPTER_FAMILIES.list().length,
@@ -890,17 +1253,21 @@ async function main(): Promise<void> {
         issueCount: preparedState.issues.length,
         laneTelemetry: preparedState.laneTelemetry,
         familyTelemetry: preparedState.familyTelemetry ?? [],
+        assessment: familyCoverageAssessment,
+        retainedTopologyProof:
+          retainedProtocolTopologyProof === null
+            ? null
+            : {
+                cursor: retainedProtocolTopologyProof.cursor,
+                cursorHash: retainedProtocolTopologyProof.cursorHash,
+                contentSha256:
+                  retainedProtocolTopologyProof.contentSha256,
+              },
       })}`,
     );
     await check(
-      "all graph-present block-scan families have complete positive/unavailable current-block coverage",
-      () =>
-        adapterFamilyQuoteCoverageIsComplete(
-          familyQuoteCoverage,
-          PRODUCTION_ADAPTER_FAMILIES
-            .blockScanStateFamilies()
-            .map((family) => family.familyId),
-        ),
+      "adapter-family coverage telemetry is registry-complete and well formed",
+      () => familyCoverageAssessment.structurallyValid,
     );
     const resolvedEdgeKeys = new Set(pricing.coverage.resolvedEdgeKeys);
     const scanEdges = graphView.edges.filter((edge) =>
@@ -1214,11 +1581,11 @@ async function main(): Promise<void> {
     }
 
     const bestNet = bestSolvedNet(solvedReports);
-    const verdict = scan.opportunities.length === 0
-      ? "no_candidates"
-      : bestNet !== null && bestNet > 0n
-        ? "ev_positive_found"
-        : "candidates_all_negative";
+    const verdict = resolveBlockScanHuntVerdict(
+      scan.opportunities.length,
+      bestNet,
+      familyCoverageAssessment.globallyComplete,
+    );
     const report = {
       stateBlock: cfg.blockNumber,
       universePools: universePools.length,
@@ -1228,6 +1595,11 @@ async function main(): Promise<void> {
       protocolEdges: protocolEdges.length,
       protocolMids: pricing.mids.size,
       adapterFamilyQuoteCoverage: familyQuoteCoverage,
+      adapterFamilyCoverageAssessment: familyCoverageAssessment,
+      verdictScope:
+        familyCoverageAssessment.globallyComplete ? "global" : "targeted",
+      verdictCompleteness:
+        familyCoverageAssessment.globallyComplete ? "complete" : "indeterminate",
       adapterFamilyState: {
         status: preparedState.status,
         wallMs: stateWallMs,
@@ -1250,6 +1622,8 @@ async function main(): Promise<void> {
 
     console.log(
       `blockscan-hunt verdict=${verdict} block=${cfg.blockNumber} ` +
+        `scope=${familyCoverageAssessment.globallyComplete ? "global" : "targeted"} ` +
+        `completeness=${familyCoverageAssessment.globallyComplete ? "complete" : "indeterminate"} ` +
         `opps=${scan.opportunities.length} bestNet=${bestNet === null ? "null" : bestNet.toString()}`,
     );
   } finally {
@@ -1765,29 +2139,26 @@ function diagnoseExpectedRouteEnumeration(input: {
         ? null
         : routeOrder[0];
       const expectedPath = protocolEdge ? routeOrder.slice(1) : routeOrder;
-      const expansionEdges = selectFamilyFairExpansionEdges({
-        edges: input.edges,
-        profitToken: protocolEdge?.tokenIn ?? "",
-        maxPoolsPerToken: 20,
-        pinnedOutsideBudget: input.pinnedOutsideBudget,
-        preferDirectClosure: protocolEdge !== null,
-      });
-      const expansionKeys = new Set(expansionEdges.map(blockScanEdgeKey));
-      const missingExpansionEdgeKeys = expectedPath
-        .map(blockScanEdgeKey)
-        .filter((edgeKey) => !expansionKeys.has(edgeKey));
       const paths = buildTokenPaths(
-        [...expansionEdges],
+        [...input.edges],
         protocolEdge?.tokenOut ?? routeOrder[0]?.tokenIn ?? "",
         protocolEdge?.tokenIn ?? routeOrder[0]?.tokenIn ?? "",
         {
           maxHops: protocolEdge
             ? Math.max(0, input.maxHops - 1)
             : input.maxHops,
-          maxPoolsPerToken: Infinity,
+          maxPoolsPerToken: 20,
+          pinnedOutsideBudget: input.pinnedOutsideBudget,
+          preferDirectClosure: protocolEdge !== null,
           maxPaths: 2000,
         },
       );
+      const retainedEdgeKeys = new Set(
+        paths.flatMap((path) => path.edges.map(blockScanEdgeKey)),
+      );
+      const missingExpansionEdgeKeys = expectedPath
+        .map(blockScanEdgeKey)
+        .filter((edgeKey) => !retainedEdgeKeys.has(edgeKey));
       const targetPathIndex = paths.findIndex((path) =>
         sameEdgeSequence(path.edges, expectedPath)
       );

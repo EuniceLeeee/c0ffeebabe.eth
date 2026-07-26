@@ -47,6 +47,16 @@ const CLOSED_LOOP_EQUIVALENCE_LIMITS = Object.freeze({
   passBudgetMs: 1_200_000,
   childTimeoutSeconds: 3_600,
 });
+const FORMAL_BLOCKSCAN_HUNT_INHERITED_ENV_PREFIXES = Object.freeze([
+  "HUNT_",
+  "AB_EXPECTED_",
+  "POOL_UNIVERSE_",
+  "SEARCHER_POOL_UNIVERSE_",
+  "SEARCHER_BLOCKSCAN_STATE_",
+  "SEARCHER_BLOCKSCAN_HUNT_ANVIL_",
+  "SEARCHER_PROTOCOL_DISCOVERY_",
+  "PRODUCTION_REPLAY_DISCOVERY_ARTIFACT",
+] as const);
 
 const args = process.argv.slice(2);
 const report = args[0];
@@ -915,10 +925,7 @@ function runHunt(
   maxPools: number,
 ): BlockscanHuntResult {
   const outDir = fs.mkdtempSync(path.join(gateTmpRoot, `mev-ab-${label}-`));
-  const childEnv = { ...process.env };
-  delete childEnv.NODE_OPTIONS;
-  delete childEnv.npm_config_script_shell;
-  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  const childEnv = isolatedBlockscanHuntEnv();
   const result = spawnSync(
     process.execPath,
     ["--import", "tsx", "src/searcher/test/blockscan-hunt.ts"],
@@ -990,10 +997,7 @@ function runHuntDiagnostics(
   maxPools: number,
 ): SixStepDiagnostic[] {
   const outDir = fs.mkdtempSync(path.join(gateTmpRoot, `mev-ab-${label}-diagnostic-`));
-  const childEnv = { ...process.env };
-  delete childEnv.NODE_OPTIONS;
-  delete childEnv.npm_config_script_shell;
-  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  const childEnv = isolatedBlockscanHuntEnv();
   const result = spawnSync(
     process.execPath,
     [
@@ -1044,6 +1048,27 @@ function runHuntDiagnostics(
     throw new Error(`${label} six-step diagnostic emitted no stage markers`);
   }
   return diagnostics;
+}
+
+function isolatedBlockscanHuntEnv(): NodeJS.ProcessEnv {
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.npm_config_script_shell;
+  delete childEnv.NPM_CONFIG_SCRIPT_SHELL;
+  for (const key of Object.keys(childEnv)) {
+    if (
+      FORMAL_BLOCKSCAN_HUNT_INHERITED_ENV_PREFIXES.some(
+        (prefix) => key.startsWith(prefix),
+      )
+    ) {
+      delete childEnv[key];
+    }
+  }
+  // Formal acceptance owns every replay input. A repository-local .env may
+  // still support direct operator diagnostics, but cannot reintroduce a
+  // retained topology/cache artifact after the trusted gate cleared it.
+  childEnv.SEARCHER_TEST_DISABLE_DOTENV = "1";
+  return childEnv;
 }
 
 function validateHuntResult(

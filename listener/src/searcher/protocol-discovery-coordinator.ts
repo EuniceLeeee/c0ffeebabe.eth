@@ -44,6 +44,21 @@ export interface ProtocolDiscoverySourceCoverage {
 }
 
 /**
+ * Protocol discovery never runs inside the current-head DEX pass. The hot lane
+ * publishes only DEX topology; observed/address work is prepared by the
+ * independent background lane and becomes visible atomically later.
+ */
+export function protocolDiscoveryRangeForLane(input: {
+  readonly mode: "hot" | "backfill";
+  readonly observedRange: DiscoveryRange | null;
+  readonly addressOnlyRetryRange: DiscoveryRange | null;
+}): DiscoveryRange | null {
+  return input.mode === "hot"
+    ? null
+    : input.observedRange ?? input.addressOnlyRetryRange;
+}
+
+/**
  * Owns family × source completeness. Runtime callers may stage a cloned
  * watermark map and publish it atomically, but they never need to know which
  * discovery sources a concrete family declares.
@@ -197,16 +212,22 @@ export class ProtocolDiscoveryCoverageCoordinator {
     readonly range: DiscoveryRange;
     readonly watermarks: ReadonlyMap<string, number>;
     readonly positiveOnlyObserved: boolean;
+    readonly eventSourceComplete: boolean;
   }): number {
-    if (input.positiveOnlyObserved || !this.hasObservedSource()) {
+    if (!this.hasObservedSource()) {
       return input.currentCursor;
     }
-    return discoverySourceCompleteThrough(
-      this.families,
-      input.watermarks,
-      "observed-interaction",
-      input.range.toBlock,
-    );
+    // This is operational ingestion progress, not negative/completeness
+    // authority. The one bounded positive-only startup scan advances to the
+    // live tip even when old traces were pruned; retained candidates are
+    // re-attested separately and production must not start a genesis chase.
+    // Incremental live scans, however, retain a failed range until every
+    // receipt/trace read completed so a one-off observed-only candidate is not
+    // silently skipped.
+    if (!input.positiveOnlyObserved && !input.eventSourceComplete) {
+      return input.currentCursor;
+    }
+    return Math.max(input.currentCursor, input.range.toBlock);
   }
 
   sourceCoverage(input: {

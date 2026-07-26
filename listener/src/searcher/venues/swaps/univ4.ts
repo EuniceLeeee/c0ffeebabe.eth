@@ -8,6 +8,7 @@ import type { V4PostImpactSeed } from "../../solver/pool-state-cache.js";
 import { quoteV4ExactInLocal } from "../../solver/v4-math.js";
 import type {
   BlockScanStateCapability,
+  StateRead,
   StateReadResult,
 } from "../blockscan-state-capability.js";
 import {
@@ -40,10 +41,13 @@ import {
   UNIV4_SWAP_TOPIC,
 } from "../landed-event-registry.js";
 import {
+  BLOCKSCAN_MULTICALL3,
+  blockScanMulticallIface,
   currentBlockRead,
   directedPoolMid,
-  midsForDirectedEdges,
+  encodeMulticall,
   q96DirectedReserves,
+  q96PrecisionProbeAmount,
   requireRead,
 } from "./blockscan-state-shared.js";
 import {
@@ -131,6 +135,8 @@ interface UniV4CurrentState {
   readonly protocolFee: bigint;
   readonly lpFee: bigint;
   readonly inactiveReason: string | null;
+  readonly precisionOutputs: ReadonlyMap<string, bigint>;
+  readonly precisionFailures: ReadonlyMap<string, string>;
 }
 
 export const univ4BlockScanState = Object.freeze({
@@ -192,39 +198,54 @@ export const univ4BlockScanState = Object.freeze({
     ]);
   },
 
+  buildDependentBlockReads({
+    sourceBlock,
+    sourceBlockHash,
+    schema,
+    edges,
+    completedRound,
+    priorResults,
+  }) {
+    if (completedRound > 0) return Object.freeze([]);
+    const snapshot = decodeUniV4State(schema, priorResults);
+    if (snapshot.inactiveReason) return Object.freeze([]);
+    const reads: StateRead[] = [];
+    for (const edge of edges) {
+      const amountIn = q96PrecisionProbeAmount({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.currency0,
+        token1: snapshot.currency1,
+        edge,
+        maxAmountIn: MAX_UINT128,
+      });
+      if (amountIn === null) continue;
+      const id = univ4PrecisionReadId(edge);
+      if (priorResults.some((result) => result.id === id)) continue;
+      reads.push(currentBlockRead({
+        id,
+        sourceBlock,
+        sourceBlockHash,
+        to: BLOCKSCAN_MULTICALL3,
+        data: encodeMulticall([{
+          label: id,
+          target: ADDR.UNISWAP_V4_QUOTER,
+          callData: encodeUniV4QuoteExactInputSingle(
+            edge.tokenIn,
+            edge.tokenOut,
+            amountIn,
+            edge.v4PoolKey,
+          ),
+          allowFailure: true,
+        }]),
+        transport: "rpc-batch",
+      }));
+    }
+    return Object.freeze(reads);
+  },
+
   decodeState(schema, results) {
-    const poolId = statePoolFromResults(results, "slot0:");
-    const metadata = schema.pools.get(poolId);
-    if (!metadata) throw new Error(`univ4 block-scan schema missing ${poolId}`);
-    const slot0 = uniV4StateViewIface.decodeFunctionResult(
-      "getSlot0",
-      requireRead(results, `slot0:${poolId}`).data,
-    );
-    const liquidity = uniV4StateViewIface.decodeFunctionResult(
-      "getLiquidity",
-      requireRead(results, `liquidity:${poolId}`).data,
-    );
-    const sqrtPriceX96 = BigInt(slot0[0]);
-    const activeLiquidity = BigInt(liquidity[0]);
-    const inactiveFields = [
-      sqrtPriceX96 === 0n ? "sqrtPriceX96" : null,
-      activeLiquidity === 0n ? "liquidity" : null,
-    ].filter((field): field is string => field !== null);
-    const snapshot = {
-      poolId,
-      currency0: metadata.currency0,
-      currency1: metadata.currency1,
-      sqrtPriceX96,
-      liquidity: activeLiquidity,
-      protocolFee: BigInt(slot0[2]),
-      lpFee: BigInt(slot0[3]),
-      inactiveReason:
-        inactiveFields.length > 0
-          ? `univ4 pool ${poolId} has zero ${inactiveFields.join(" and ")} ` +
-            `at the current source`
-          : null,
-    };
-    return Object.freeze(snapshot);
+    return decodeUniV4State(schema, results);
   },
 
   deriveMids(snapshot, edges) {
@@ -238,18 +259,36 @@ export const univ4BlockScanState = Object.freeze({
       }
       return new Map();
     }
-    return midsForDirectedEdges(edges, (edge) => {
+    const mids = new Map();
+    for (const edge of edges) {
       if (statePoolId(edge) !== snapshot.poolId) {
         throw new Error(`univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`);
       }
+      const amountIn = q96PrecisionProbeAmount({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.currency0,
+        token1: snapshot.currency1,
+        edge,
+        maxAmountIn: MAX_UINT128,
+      });
+      const precisionOutput = amountIn === null
+        ? undefined
+        : uniV4PrecisionOutput(snapshot, edge);
+      if (amountIn !== null && precisionOutput === undefined) continue;
+      const precisionQuote = amountIn === null || precisionOutput === undefined
+        ? undefined
+        : { amountIn, amountOut: precisionOutput };
       const directed = q96DirectedReserves({
         sqrtPriceX96: snapshot.sqrtPriceX96,
         liquidity: snapshot.liquidity,
         token0: snapshot.currency0,
         token1: snapshot.currency1,
         edge,
+        precisionQuote,
       });
-      return directedPoolMid({
+      if (!directed) continue;
+      mids.set(blockScanEdgeKey(edge), directedPoolMid({
         kind: "v4",
         edge,
         reserveIn: directed.reserveIn,
@@ -258,20 +297,59 @@ export const univ4BlockScanState = Object.freeze({
         sqrtPriceX96: directed.sqrtPriceInOutX96,
         liquidity: snapshot.liquidity,
         feeBps: Number(snapshot.lpFee) / 100,
-      });
-    });
+      }));
+    }
+    return mids;
   },
 
   behaviorProvenUnavailableEdges(snapshot, edges) {
-    if (!snapshot.inactiveReason) return new Map();
     const unavailable = new Map<string, string>();
+    if (snapshot.inactiveReason) {
+      for (const edge of edges) {
+        if (statePoolId(edge) !== snapshot.poolId) {
+          throw new Error(
+            `univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`,
+          );
+        }
+        unavailable.set(blockScanEdgeKey(edge), snapshot.inactiveReason);
+      }
+      return unavailable;
+    }
     for (const edge of edges) {
-      if (statePoolId(edge) !== snapshot.poolId) {
+      const amountIn = q96PrecisionProbeAmount({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.currency0,
+        token1: snapshot.currency1,
+        edge,
+        maxAmountIn: MAX_UINT128,
+      });
+      if (amountIn === null) continue;
+      const edgeKey = blockScanEdgeKey(edge);
+      const precisionOutput = snapshot.precisionOutputs.get(
+        univ4PrecisionReadId(edge),
+      );
+      const precisionFailure = snapshot.precisionFailures.get(
+        univ4PrecisionReadId(edge),
+      );
+      if (precisionFailure) {
+        unavailable.set(
+          edgeKey,
+          `univ4 direction ${edge.tokenIn}->${edge.tokenOut} ` +
+            `current-source precision witness failed: ${precisionFailure}`,
+        );
+      } else if (precisionOutput === undefined) {
         throw new Error(
-          `univ4 snapshot ${snapshot.poolId} used for ${statePoolId(edge)}`,
+          `univ4 current-source precision result missing ` +
+            `${univ4PrecisionReadId(edge)}`,
+        );
+      } else if (precisionOutput === 0n) {
+        unavailable.set(
+          edgeKey,
+          `univ4 direction ${edge.tokenIn}->${edge.tokenOut} returned zero ` +
+            `at its current-source scanner ceiling ${amountIn}`,
         );
       }
-      unavailable.set(blockScanEdgeKey(edge), snapshot.inactiveReason);
     }
     return unavailable;
   },
@@ -330,6 +408,96 @@ export const univ4BlockScanState = Object.freeze({
     },
   },
 } satisfies BlockScanStateCapability<UniV4StateSchema, UniV4CurrentState>);
+
+function decodeUniV4State(
+  schema: UniV4StateSchema,
+  results: readonly StateReadResult[],
+): UniV4CurrentState {
+  const poolId = statePoolFromResults(results, "slot0:");
+  const metadata = schema.pools.get(poolId);
+  if (!metadata) throw new Error(`univ4 block-scan schema missing ${poolId}`);
+  const slot0 = uniV4StateViewIface.decodeFunctionResult(
+    "getSlot0",
+    requireRead(results, `slot0:${poolId}`).data,
+  );
+  const liquidity = uniV4StateViewIface.decodeFunctionResult(
+    "getLiquidity",
+    requireRead(results, `liquidity:${poolId}`).data,
+  );
+  const sqrtPriceX96 = BigInt(slot0[0]);
+  const activeLiquidity = BigInt(liquidity[0]);
+  const inactiveFields = [
+    sqrtPriceX96 === 0n ? "sqrtPriceX96" : null,
+    activeLiquidity === 0n ? "liquidity" : null,
+  ].filter((field): field is string => field !== null);
+  const precisionOutputs = new Map<string, bigint>();
+  const precisionFailures = new Map<string, string>();
+  for (const result of results) {
+    if (!result.ok || !result.id.startsWith("v4-precision:")) continue;
+    try {
+      const aggregate = blockScanMulticallIface.decodeFunctionResult(
+        "aggregate3",
+        result.data,
+      )[0] as readonly { success: boolean; returnData: string }[];
+      if (aggregate.length !== 1) {
+        precisionFailures.set(
+          result.id,
+          `multicall returned ${aggregate.length}/1 results`,
+        );
+        continue;
+      }
+      if (!aggregate[0].success) {
+        precisionFailures.set(result.id, "quote call reverted");
+        continue;
+      }
+      precisionOutputs.set(
+        result.id,
+        BigInt(
+          uniV4QuoterIface.decodeFunctionResult(
+            "quoteExactInputSingle",
+            aggregate[0].returnData,
+          )[0],
+        ),
+      );
+    } catch (error) {
+      precisionFailures.set(
+        result.id,
+        `malformed quote result: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return Object.freeze({
+    poolId,
+    currency0: metadata.currency0,
+    currency1: metadata.currency1,
+    sqrtPriceX96,
+    liquidity: activeLiquidity,
+    protocolFee: BigInt(slot0[2]),
+    lpFee: BigInt(slot0[3]),
+    inactiveReason:
+      inactiveFields.length > 0
+        ? `univ4 pool ${poolId} has zero ${inactiveFields.join(" and ")} ` +
+          `at the current source`
+        : null,
+    precisionOutputs,
+    precisionFailures,
+  });
+}
+
+function univ4PrecisionReadId(edge: TokenEdge): string {
+  return `v4-precision:${blockScanEdgeKey(edge)}`;
+}
+
+function uniV4PrecisionOutput(
+  snapshot: UniV4CurrentState,
+  edge: TokenEdge,
+): bigint | undefined {
+  const id = univ4PrecisionReadId(edge);
+  if (snapshot.precisionFailures.has(id)) return undefined;
+  return snapshot.precisionOutputs.get(id);
+}
 
 export const univ4Adapter = Object.freeze({
   id: "univ4",

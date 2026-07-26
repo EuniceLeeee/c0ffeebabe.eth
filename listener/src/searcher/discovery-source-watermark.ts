@@ -75,10 +75,10 @@ export function planDiscoveryStartup(input: {
   readonly recentBlocks: number;
   readonly maxCatchupBlocks: number;
   /**
-   * Normal live startup first scans a recent window for positive evidence,
-   * then the runtime catches up contiguously from block zero in the
-   * background. Strict historical preparation may request the first
-   * contiguous chunk immediately.
+   * Normal live startup scans one recent window for positive evidence and
+   * seeds an operational cursor. Production then follows current blocks; it
+   * never turns missing negative authority into a genesis crawl. Strict
+   * offline/audit preparation may still request a contiguous chunk explicitly.
    */
   readonly bootstrapMode?: "recent-positive" | "contiguous";
 }): DiscoveryStartupPlan {

@@ -27,6 +27,8 @@ interface ScheduledHead extends LatestHeadObservation {
 export class LatestHeadScheduler {
   private active: ScheduledHead | null = null;
   private pending: ScheduledHead | null = null;
+  private accepting = true;
+  private drainTask: Promise<void> | null = null;
   private latestSubmitted: number | null = null;
   private submitted = 0;
   private started = 0;
@@ -58,6 +60,7 @@ export class LatestHeadScheduler {
     ) {
       throw new Error(`invalid source-head observation for ${blockNumber}`);
     }
+    if (!this.accepting) return;
     this.submitted++;
     if (this.latestSubmitted !== null && blockNumber <= this.latestSubmitted) {
       this.coalesced++;
@@ -71,7 +74,18 @@ export class LatestHeadScheduler {
       return;
     }
     this.active = scheduled;
-    void this.drain();
+    this.drainTask = this.drain();
+    void this.drainTask;
+  }
+
+  /**
+   * Stop accepting heads, discard the not-yet-started pending head and wait
+   * until the active pass has settled.
+   */
+  async shutdown(): Promise<void> {
+    this.accepting = false;
+    this.pending = null;
+    await this.drainTask;
   }
 
   telemetry(): LatestHeadSchedulerTelemetry {

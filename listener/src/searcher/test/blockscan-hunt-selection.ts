@@ -2,11 +2,21 @@ import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
+import {
+  isVerifiedRetainedTopologyProof,
+  type VerifiedRetainedTopologyProof,
+} from "./blockscan-hunt-protocol-cache.js";
 
 export interface BlockScanHuntBudgets {
   scanBudgetMs: number;
   passBudgetMs: number;
 }
+
+export type BlockScanHuntVerdict =
+  | "no_candidates"
+  | "ev_positive_found"
+  | "candidates_all_negative"
+  | "targeted_indeterminate";
 
 export interface AdapterFamilyQuoteCoverageSummary {
   readonly familyId: string;
@@ -14,6 +24,29 @@ export interface AdapterFamilyQuoteCoverageSummary {
   readonly positiveQuotes: number;
   readonly unavailableEdges: number;
   readonly unresolvedEdges: number;
+}
+
+export type AdapterFamilyCoverageState =
+  | "covered"
+  | "not_observed"
+  | "unresolved";
+
+export interface AdapterFamilyQuoteCoverageAssessment {
+  readonly structurallyValid: boolean;
+  /**
+   * A targeted hunt may continue through covered siblings. Route-specific
+   * diagnostics still fail closed if their own edges were unresolved.
+   */
+  readonly targetedHuntMayContinue: boolean;
+  /**
+   * Global completeness/no-opportunity claims need both a trusted-runner
+   * topology proof and current coverage for every registered family.
+   */
+  readonly globallyComplete: boolean;
+  readonly families: readonly {
+    readonly familyId: string;
+    readonly state: AdapterFamilyCoverageState;
+  }[];
 }
 
 export interface ExpectedRouteStep {
@@ -53,6 +86,18 @@ export function blockScanPassBudgetExceeded(
   return deadlineHit || nowMs >= deadlineAtMs;
 }
 
+export function resolveBlockScanHuntVerdict(
+  opportunityCount: number,
+  bestNet: bigint | null,
+  globallyComplete: boolean,
+): BlockScanHuntVerdict {
+  if (bestNet !== null && bestNet > 0n) return "ev_positive_found";
+  if (!globallyComplete) return "targeted_indeterminate";
+  return opportunityCount === 0
+    ? "no_candidates"
+    : "candidates_all_negative";
+}
+
 export function selectedReplayOpportunityIndexes(
   opportunityCount: number,
   topK: number,
@@ -81,17 +126,29 @@ export function solveForOpportunityIndex<T extends { opportunityIndex: number }>
 }
 
 /**
- * A production family may legitimately own no instances in one source-aligned
- * graph (for example an observed-interaction-only protocol with no events in
- * the frozen window). Every family must still be represented in telemetry,
- * and every graph-present edge must be partitioned exactly into a positive
- * quote or a behavior-proven unavailable edge. Unknown/unresolved edges remain
- * a hard failure.
+ * Global all-family completeness is stronger than one targeted hunt. A
+ * zero-edge family is `not_observed`, not a reason to stop covered siblings,
+ * and never evidence for a global no-opportunity claim. Only a trusted-runner
+ * topology proof plus current coverage for every family can produce
+ * `globallyComplete=true`.
  */
 export function adapterFamilyQuoteCoverageIsComplete(
   coverage: readonly AdapterFamilyQuoteCoverageSummary[],
   expectedFamilyIds: readonly string[],
+  retainedTopologyProof: VerifiedRetainedTopologyProof | null = null,
 ): boolean {
+  return assessAdapterFamilyQuoteCoverage(
+    coverage,
+    expectedFamilyIds,
+    retainedTopologyProof,
+  ).globallyComplete;
+}
+
+export function assessAdapterFamilyQuoteCoverage(
+  coverage: readonly AdapterFamilyQuoteCoverageSummary[],
+  expectedFamilyIds: readonly string[],
+  retainedTopologyProof: VerifiedRetainedTopologyProof | null = null,
+): AdapterFamilyQuoteCoverageAssessment {
   const expected = [...expectedFamilyIds].sort();
   const actual = coverage.map((family) => family.familyId).sort();
   if (
@@ -100,9 +157,15 @@ export function adapterFamilyQuoteCoverageIsComplete(
     expected.length !== actual.length ||
     expected.some((familyId, index) => familyId !== actual[index])
   ) {
-    return false;
+    return {
+      structurallyValid: false,
+      targetedHuntMayContinue: false,
+      globallyComplete: false,
+      families: [],
+    };
   }
-  return coverage.every((family) => {
+  let structurallyValid = true;
+  const families = coverage.map((family) => {
     const counts = [
       family.graphEdges,
       family.positiveQuotes,
@@ -110,22 +173,42 @@ export function adapterFamilyQuoteCoverageIsComplete(
       family.unresolvedEdges,
     ];
     if (counts.some((count) => !Number.isSafeInteger(count) || count < 0)) {
-      return false;
+      structurallyValid = false;
+      return { familyId: family.familyId, state: "unresolved" as const };
     }
     if (
       family.graphEdges !==
         family.positiveQuotes +
           family.unavailableEdges +
-          family.unresolvedEdges ||
-      family.unresolvedEdges !== 0
+          family.unresolvedEdges
     ) {
-      return false;
+      structurallyValid = false;
+      return { familyId: family.familyId, state: "unresolved" as const };
     }
     if (family.graphEdges === 0) {
-      return family.positiveQuotes === 0 && family.unavailableEdges === 0;
+      return {
+        familyId: family.familyId,
+        state: "not_observed" as const,
+      };
     }
-    return family.positiveQuotes > 0;
+    return {
+      familyId: family.familyId,
+      state:
+        family.unresolvedEdges > 0
+          ? "unresolved" as const
+          : "covered" as const,
+    };
   });
+  const globallyComplete =
+    structurallyValid &&
+    isVerifiedRetainedTopologyProof(retainedTopologyProof) &&
+    families.every((family) => family.state === "covered");
+  return {
+    structurallyValid,
+    targetedHuntMayContinue: structurallyValid,
+    globallyComplete,
+    families,
+  };
 }
 
 /**
@@ -201,6 +284,26 @@ function runTests(): void {
   assert.equal(blockScanPassBudgetExceeded(100, false, 99), false);
   assert.equal(blockScanPassBudgetExceeded(100, false, 100), true);
   assert.equal(blockScanPassBudgetExceeded(100, true, 1), true);
+  assert.equal(
+    resolveBlockScanHuntVerdict(0, null, false),
+    "targeted_indeterminate",
+    "incomplete family coverage cannot prove a global no-candidate result",
+  );
+  assert.equal(
+    resolveBlockScanHuntVerdict(2, 0n, false),
+    "targeted_indeterminate",
+    "incomplete family coverage cannot prove all candidates are non-positive",
+  );
+  assert.equal(
+    resolveBlockScanHuntVerdict(2, 1n, false),
+    "ev_positive_found",
+    "a positive route remains valid existential evidence",
+  );
+  assert.equal(resolveBlockScanHuntVerdict(0, null, true), "no_candidates");
+  assert.equal(
+    resolveBlockScanHuntVerdict(2, 0n, true),
+    "candidates_all_negative",
+  );
   assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, null), [0, 1, 2]);
   assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 1), [0, 1, 2]);
   assert.deepEqual(selectedReplayOpportunityIndexes(5, 3, 4), [0, 1, 2, 4]);
@@ -232,7 +335,23 @@ function runTests(): void {
       completeCoverage,
       ["swap", "observed-only"],
     ),
-    true,
+    false,
+  );
+  assert.deepEqual(
+    assessAdapterFamilyQuoteCoverage(
+      completeCoverage,
+      ["swap", "observed-only"],
+    ),
+    {
+      structurallyValid: true,
+      targetedHuntMayContinue: true,
+      globallyComplete: false,
+      families: [
+        { familyId: "observed-only", state: "not_observed" },
+        { familyId: "swap", state: "covered" },
+      ],
+    },
+    "not_observed siblings must not block one targeted hunt or become a global completeness claim",
   );
   assert.equal(
     adapterFamilyQuoteCoverageIsComplete(
@@ -258,6 +377,21 @@ function runTests(): void {
       ["swap", "observed-only"],
     ),
     false,
+  );
+  assert.deepEqual(
+    assessAdapterFamilyQuoteCoverage(
+      completeCoverage.map((family) =>
+        family.familyId === "swap"
+          ? { ...family, unavailableEdges: 0, unresolvedEdges: 1 }
+          : family
+      ),
+      ["swap", "observed-only"],
+    ).families,
+    [
+      { familyId: "observed-only", state: "not_observed" },
+      { familyId: "swap", state: "unresolved" },
+    ],
+    "an unresolved family must be isolated without changing sibling state",
   );
   assert.equal(
     adapterFamilyQuoteCoverageIsComplete(

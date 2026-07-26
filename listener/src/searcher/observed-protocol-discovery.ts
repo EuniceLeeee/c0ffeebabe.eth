@@ -744,20 +744,22 @@ async function scanAddressCandidates(input: {
         } else {
           adapterNegatives++;
         }
-        cacheEntry = {
-          key,
-          value: {
-            adapterId: adapter.id,
-            address: target,
-            codeHash,
-            implementationWord,
-            matcherVersion,
-            dependencyPolicyVersion: cachePolicy?.version ?? null,
-            dependencyFingerprint,
-            checkedAtBlock: input.context.blockNumber,
-            candidate,
-          },
-        };
+        if (cachePolicy && dependencyFingerprint !== null) {
+          cacheEntry = {
+            key,
+            value: {
+              adapterId: adapter.id,
+              address: target,
+              codeHash,
+              implementationWord,
+              matcherVersion,
+              dependencyPolicyVersion: cachePolicy.version,
+              dependencyFingerprint,
+              checkedAtBlock: input.context.blockNumber,
+              candidate,
+            },
+          };
+        }
         return {
           adapter,
           issues: adapterIssues,

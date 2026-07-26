@@ -39,6 +39,12 @@ const curveIface = new ethers.Interface([
   "function coins(uint256) view returns (address)",
   "function stored_rates() view returns (uint256[])",
 ]);
+const curveIntQuoteIface = new ethers.Interface([
+  "function get_dy(int128 i,int128 j,uint256 dx) view returns (uint256)",
+]);
+const curveUintQuoteIface = new ethers.Interface([
+  "function get_dy(uint256 i,uint256 j,uint256 dx) view returns (uint256)",
+]);
 const erc20Iface = new ethers.Interface(["function decimals() view returns (uint8)"]);
 const univ2Iface = new ethers.Interface([
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
@@ -146,6 +152,13 @@ interface CurveBatchRound1 {
   A: bigint;
   fee: bigint;
   offpeg: bigint | null;
+}
+
+interface CurveNgFallbackCandidate {
+  pool: string;
+  key: string;
+  coins: string[];
+  ng: CurveNgState;
 }
 
 export interface V2Seed {
@@ -948,6 +961,7 @@ export class PoolStateCache {
     const staticRateFallback = staticRateFallbackCalls.length > 0
       ? await this.aggregateCurveCalls(state, staticRateFallbackCalls)
       : new Map<string, string>();
+    const pendingNgFallbacks: CurveNgFallbackCandidate[] = [];
     for (const item of parsed) {
       try {
         const balances: bigint[] = [];
@@ -968,6 +982,15 @@ export class PoolStateCache {
             balances,
             rates,
           };
+          if (!storedRates) {
+            pendingNgFallbacks.push({
+              pool: item.pool,
+              key: item.key,
+              coins: item.coins,
+              ng,
+            });
+            continue;
+          }
           this.curve.set(item.key, {
             kind: "ng",
             coins: item.coins,
@@ -1005,6 +1028,38 @@ export class PoolStateCache {
       } catch {
         this.curve.delete(item.key);
         this.failed.add(item.key);
+      }
+    }
+    if (pendingNgFallbacks.length === 0) return;
+
+    let witnessResults: Map<string, string>;
+    try {
+      witnessResults = await this.aggregateCurveCalls(
+        state,
+        pendingNgFallbacks.flatMap((candidate) =>
+          this.curveNgStateWitnessCalls(candidate)
+        ),
+      );
+    } catch {
+      for (const candidate of pendingNgFallbacks) {
+        this.curve.delete(candidate.key);
+        this.failed.add(candidate.key);
+      }
+      return;
+    }
+    for (const candidate of pendingNgFallbacks) {
+      try {
+        this.verifyCurveNgStateWitness(candidate, witnessResults);
+        this.curve.set(candidate.key, {
+          kind: "ng",
+          coins: candidate.coins,
+          ng: candidate.ng,
+          blockNumber: this.tickBlock,
+          source: "lazy",
+        });
+      } catch {
+        this.curve.delete(candidate.key);
+        this.failed.add(candidate.key);
       }
     }
   }
@@ -1193,13 +1248,16 @@ export class PoolStateCache {
     const A = await this.call(state, pool, curveIface.encodeFunctionData("A"));
     const fee = await this.call(state, pool, curveIface.encodeFunctionData("fee"));
 
-    // ng pools expose offpeg_fee_multiplier(); plain (old-style) revert on it.
-    let offpeg: bigint | null = null;
-    try {
-      offpeg = await this.call(state, pool, curveIface.encodeFunctionData("offpeg_fee_multiplier"));
-    } catch {
-      offpeg = null;
-    }
+    // A direct transport failure must not masquerade as ABI absence. Confirm
+    // optional-view absence through an allowFailure Multicall at the same
+    // source before choosing a different math lineage.
+    const offpegRaw = await this.readOptionalCurveView(
+      state,
+      pool,
+      curveIface.encodeFunctionData("offpeg_fee_multiplier"),
+      `${pool.toLowerCase()}:offpeg_fee_multiplier`,
+    );
+    const offpeg = offpegRaw === null ? null : BigInt(offpegRaw);
 
     const balances: bigint[] = [];
     for (let k = 0; k < coins.length; k++) {
@@ -1207,19 +1265,20 @@ export class PoolStateCache {
     }
 
     if (offpeg !== null) {
-      let rates: bigint[];
-      try {
-        const ratesRes = await state.call({
-          to: pool,
-          data: curveIface.encodeFunctionData("stored_rates"),
-        });
-        rates = decodeCurveStoredRates(ratesRes);
-      } catch (error) {
-        if (isStateCallAbortedError(error)) throw error;
-        rates = await this.readCurveStaticRates(state, coins);
-      }
+      const storedRatesRaw = await this.readOptionalCurveView(
+        state,
+        pool,
+        curveIface.encodeFunctionData("stored_rates"),
+        `${pool.toLowerCase()}:stored_rates`,
+      );
+      const rates = storedRatesRaw === null
+        ? await this.readCurveStaticRates(state, coins)
+        : decodeCurveStoredRates(storedRatesRaw);
       assertCurveRates(pool, coins, rates);
       const ng: CurveNgState = { A, fee, offpegFeeMultiplier: offpeg, balances, rates };
+      if (storedRatesRaw === null) {
+        await this.assertCurveNgStateWitness(state, pool, coins, ng);
+      }
       return { kind: "ng", coins, ng, blockNumber: this.tickBlock, source: "lazy" };
     }
 
@@ -1259,6 +1318,116 @@ export class PoolStateCache {
       rates.push(curveRateMultiplierFromDecimals(decimals));
     }
     return rates;
+  }
+
+  private async readOptionalCurveView(
+    state: StateBackend,
+    target: string,
+    data: string,
+    label: string,
+  ): Promise<string | null> {
+    try {
+      return await state.call({ to: target, data });
+    } catch (error) {
+      if (isStateCallAbortedError(error)) throw error;
+      const confirmed = await this.aggregateCurveCalls(state, [{
+        target,
+        allowFailure: true,
+        callData: data,
+        label,
+      }]);
+      return confirmed.get(label) ?? null;
+    }
+  }
+
+  private async assertCurveNgStateWitness(
+    state: StateBackend,
+    pool: string,
+    coins: readonly string[],
+    ng: CurveNgState,
+  ): Promise<void> {
+    const candidate: CurveNgFallbackCandidate = {
+      pool,
+      key: pool.toLowerCase(),
+      coins: [...coins],
+      ng,
+    };
+    const observed = await this.aggregateCurveCalls(
+      state,
+      this.curveNgStateWitnessCalls(candidate),
+    );
+    this.verifyCurveNgStateWitness(candidate, observed);
+  }
+
+  private curveNgStateWitnessCalls(
+    candidate: CurveNgFallbackCandidate,
+  ): CurveBatchCall[] {
+    const calls: CurveBatchCall[] = [];
+    for (let i = 0; i < candidate.coins.length; i++) {
+      const amountIn = curveOneTokenProbe(candidate.ng.rates[i]);
+      for (let j = 0; j < candidate.coins.length; j++) {
+        if (i === j) continue;
+        const args = [BigInt(i), BigInt(j), amountIn] as const;
+        calls.push({
+          target: candidate.pool,
+          allowFailure: true,
+          callData: curveIntQuoteIface.encodeFunctionData("get_dy", args),
+          label: curveWitnessLabel(candidate.key, "int128", i, j),
+        });
+        calls.push({
+          target: candidate.pool,
+          allowFailure: true,
+          callData: curveUintQuoteIface.encodeFunctionData("get_dy", args),
+          label: curveWitnessLabel(candidate.key, "uint256", i, j),
+        });
+      }
+    }
+    return calls;
+  }
+
+  private verifyCurveNgStateWitness(
+    candidate: CurveNgFallbackCandidate,
+    observed: ReadonlyMap<string, string>,
+  ): void {
+    for (let i = 0; i < candidate.coins.length; i++) {
+      const amountIn = curveOneTokenProbe(candidate.ng.rates[i]);
+      for (let j = 0; j < candidate.coins.length; j++) {
+        if (i === j) continue;
+        const intData = observed.get(
+          curveWitnessLabel(candidate.key, "int128", i, j),
+        );
+        const uintData = observed.get(
+          curveWitnessLabel(candidate.key, "uint256", i, j),
+        );
+        if (!intData && !uintData) {
+          throw new Error(
+            `curve ${candidate.pool}: static-rate fallback lacks get_dy ` +
+              `${i}->${j} witness`,
+          );
+        }
+        const intOut = intData
+          ? BigInt(curveIntQuoteIface.decodeFunctionResult("get_dy", intData)[0])
+          : null;
+        const uintOut = uintData
+          ? BigInt(curveUintQuoteIface.decodeFunctionResult("get_dy", uintData)[0])
+          : null;
+        if (intOut !== null && uintOut !== null && intOut !== uintOut) {
+          throw new Error(
+            `curve ${candidate.pool}: ambiguous get_dy ${i}->${j} witness`,
+          );
+        }
+        const onchain = intOut ?? uintOut!;
+        const local = curveNgGetDy(candidate.ng, i, j, amountIn);
+        const difference = local > onchain ? local - onchain : onchain - local;
+        if (onchain <= 0n || local <= 0n || difference > 2n) {
+          throw new Error(
+            `curve ${candidate.pool}: static-rate get_dy witness mismatch ` +
+              `${i}->${j}: local=${local} onchain=${onchain} ` +
+              `diff=${difference}`,
+          );
+        }
+      }
+    }
   }
 
   private async readCoins(state: StateBackend, pool: string): Promise<string[]> {
@@ -1339,6 +1508,25 @@ function assertCurveRates(
   ) {
     throw new Error(`curve ${pool}: invalid rate vector`);
   }
+}
+
+function curveOneTokenProbe(rate: bigint): bigint {
+  const scale = 10n ** 36n;
+  if (rate <= 0n || scale % rate !== 0n) {
+    throw new Error(`curve fallback rate ${rate} has no exact one-token probe`);
+  }
+  const amount = scale / rate;
+  if (amount <= 0n) throw new Error("curve fallback one-token probe is zero");
+  return amount;
+}
+
+function curveWitnessLabel(
+  poolKey: string,
+  abi: "int128" | "uint256",
+  i: number,
+  j: number,
+): string {
+  return `${poolKey}:get_dy:${abi}:${i}:${j}`;
 }
 
 function requireCurveBatchData(results: Map<string, string>, label: string): string {

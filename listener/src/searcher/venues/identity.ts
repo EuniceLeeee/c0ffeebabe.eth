@@ -363,6 +363,9 @@ export type PoolIdentityResult =
 const factoryIface = new ethers.Interface([
   "function factory() view returns (address)",
 ]);
+const v3FactoryIface = new ethers.Interface([
+  "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
+]);
 const v2IdentityIface = new ethers.Interface([
   "function token0() view returns (address)",
   "function token1() view returns (address)",
@@ -712,6 +715,22 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
         factory,
       };
     }
+    if (identity.poolAdapter === "univ3") {
+      const binding = await proveCanonicalV3FactoryBinding(
+        backend,
+        pool,
+        factory,
+        candidate,
+      );
+      if (!binding.ok) {
+        return {
+          ok: false,
+          reason: binding.reason,
+          venueId: identity.venue,
+          factory,
+        };
+      }
+    }
     return {
       ok: true,
       adapter: identity.poolAdapter,
@@ -755,6 +774,91 @@ export const factoryIdentityResolver: OnchainIdentityResolver = async ({
     identitySource: "factory-call-provisional",
   };
 };
+
+async function proveCanonicalV3FactoryBinding(
+  backend: IdentityCallBackend,
+  pool: string,
+  factory: string,
+  candidate: Readonly<IdentityPoolEntry>,
+): Promise<ProvisionalFactoryBehaviorProof> {
+  let rawPool: readonly [string, string, string];
+  try {
+    rawPool = await Promise.all([
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("token0"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("token1"),
+      }),
+      backend.call({
+        to: pool,
+        data: v3IdentityIface.encodeFunctionData("fee"),
+      }),
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: provisionalBehaviorCallFailureReason(error),
+    };
+  }
+  if (
+    !hasExactStaticReturnShape(rawPool[0], 1) ||
+    !hasExactStaticReturnShape(rawPool[1], 1) ||
+    !hasExactStaticReturnShape(rawPool[2], 1)
+  ) {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+
+  let token0: string;
+  let token1: string;
+  let fee: bigint;
+  try {
+    token0 = ethers.getAddress(String(
+      v3IdentityIface.decodeFunctionResult("token0", rawPool[0])[0],
+    ));
+    token1 = ethers.getAddress(String(
+      v3IdentityIface.decodeFunctionResult("token1", rawPool[1])[0],
+    ));
+    fee = BigInt(v3IdentityIface.decodeFunctionResult("fee", rawPool[2])[0]);
+  } catch {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+  if (
+    fee < 0n ||
+    fee > 0xffffffn ||
+    !tokensProveCandidatePair(token0, token1, candidate)
+  ) {
+    return { ok: false, reason: "behavior_mismatch" };
+  }
+
+  const [tokenA, tokenB] = sortTokenPair(token0, token1);
+  try {
+    const rawBinding = await backend.call({
+      to: factory,
+      data: v3FactoryIface.encodeFunctionData("getPool", [
+        tokenA,
+        tokenB,
+        fee,
+      ]),
+    });
+    if (!hasExactStaticReturnShape(rawBinding, 1)) {
+      return { ok: false, reason: "behavior_mismatch" };
+    }
+    const boundPool = ethers.getAddress(String(
+      v3FactoryIface.decodeFunctionResult("getPool", rawBinding)[0],
+    ));
+    return boundPool === ethers.getAddress(pool)
+      ? { ok: true }
+      : { ok: false, reason: "behavior_mismatch" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: provisionalBehaviorCallFailureReason(error),
+    };
+  }
+}
 
 type ProvisionalFactoryBehaviorProof =
   | { readonly ok: true }
@@ -953,6 +1057,12 @@ function tokensProveCandidatePair(
   } catch {
     return false;
   }
+}
+
+function sortTokenPair(token0: string, token1: string): readonly [string, string] {
+  return BigInt(token0) < BigInt(token1)
+    ? [token0, token1]
+    : [token1, token0];
 }
 
 export const curveIdentityResolver: OnchainIdentityResolver = async ({

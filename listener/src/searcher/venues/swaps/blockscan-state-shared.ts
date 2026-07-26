@@ -1,4 +1,9 @@
 import { ethers } from "ethers";
+import {
+  BLOCKSCAN_MIN_EXECUTABLE_INPUT,
+  BLOCKSCAN_MIN_VENUE_RESERVE_IN,
+  BLOCKSCAN_VENUE_DEPTH_DIVISOR,
+} from "../../detector/blockscan-sizing-constants.js";
 import type { TokenEdge } from "../../planner/token-graph.js";
 import type { RouteVenueMid, RouteVenueMidKind } from "../mid-readers.js";
 import {
@@ -240,12 +245,20 @@ export function q96DirectedReserves(input: {
   readonly token0: string;
   readonly token1: string;
   readonly edge: TokenEdge;
+  /**
+   * Exact current-source quote used only when integer virtual reserves cannot
+   * provide the scanner's minimum executable direction.
+   */
+  readonly precisionQuote?: {
+    readonly amountIn: bigint;
+    readonly amountOut: bigint;
+  };
 }): {
   readonly reserveIn: bigint;
   readonly reserveOut: bigint;
   readonly sqrtPriceInOutX96: bigint;
   readonly mid: number;
-} {
+} | null {
   const Q96 = 1n << 96n;
   const Q192 = Q96 * Q96;
   const tokenIn = input.edge.tokenIn.toLowerCase();
@@ -260,24 +273,22 @@ export function q96DirectedReserves(input: {
     input.liquidity * Q96 / input.sqrtPriceX96;
   const reserve1Floor =
     input.liquidity * input.sqrtPriceX96 / Q96;
-  // These are sizing proxies, not literal reserves. Preserve the historical
-  // floor for ordinary pools, but do not let a sub-base-unit virtual side
-  // erase an otherwise initialized concentrated-liquidity state.
-  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
-  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
+  // These are sizing proxies, not literal reserves. An unscannable raw-unit
+  // side is not clamped: that would invent capacity. Its direction instead
+  // needs an exact current-source precision quote below.
   let sqrtPriceInOutX96: bigint;
   let reserveIn: bigint;
   let reserveOut: bigint;
   let mid: number;
   if (tokenIn === token0 && tokenOut === token1) {
     sqrtPriceInOutX96 = input.sqrtPriceX96;
-    reserveIn = reserve0;
-    reserveOut = reserve1;
+    reserveIn = reserve0Floor;
+    reserveOut = reserve1Floor;
     mid = bigintRatio(priceNumerator, Q192);
   } else if (tokenIn === token1 && tokenOut === token0) {
     sqrtPriceInOutX96 = Q192 / input.sqrtPriceX96;
-    reserveIn = reserve1;
-    reserveOut = reserve0;
+    reserveIn = reserve1Floor;
+    reserveOut = reserve0Floor;
     mid = bigintRatio(Q192, priceNumerator);
   } else {
     throw new Error(
@@ -285,16 +296,81 @@ export function q96DirectedReserves(input: {
         `${input.token0}/${input.token1}`,
     );
   }
-  if (
-    sqrtPriceInOutX96 <= 0n ||
-    reserveIn <= 0n ||
-    reserveOut <= 0n ||
-    !Number.isFinite(mid) ||
-    mid <= 0
-  ) {
+  if (sqrtPriceInOutX96 <= 0n || !Number.isFinite(mid) || mid <= 0) {
     throw new Error(`non-positive concentrated-liquidity state for ${input.edge.target}`);
   }
+  if (
+    reserveIn < BLOCKSCAN_MIN_VENUE_RESERVE_IN ||
+    reserveOut < BLOCKSCAN_MIN_VENUE_RESERVE_IN
+  ) {
+    const precision = input.precisionQuote;
+    if (!precision) {
+      throw new Error(
+        `concentrated-liquidity direction ${input.edge.tokenIn}->` +
+          `${input.edge.tokenOut} requires a current-source precision quote`,
+      );
+    }
+    if (precision.amountIn <= 0n || precision.amountOut <= 0n) return null;
+    // The scanner divides reserveIn by four. Publish exactly four times the
+    // witnessed input so its ceiling cannot exceed the amount proven to
+    // produce positive raw output at this source.
+    reserveIn = precision.amountIn * BLOCKSCAN_VENUE_DEPTH_DIVISOR;
+    reserveOut = precision.amountOut * BLOCKSCAN_VENUE_DEPTH_DIVISOR;
+  }
   return { reserveIn, reserveOut, sqrtPriceInOutX96, mid };
+}
+
+export function q96PrecisionProbeAmount(input: {
+  readonly sqrtPriceX96: bigint;
+  readonly liquidity: bigint;
+  readonly token0: string;
+  readonly token1: string;
+  readonly edge: TokenEdge;
+  readonly maxAmountIn: bigint;
+}): bigint | null {
+  const Q96 = 1n << 96n;
+  const tokenIn = input.edge.tokenIn.toLowerCase();
+  const tokenOut = input.edge.tokenOut.toLowerCase();
+  const token0 = input.token0.toLowerCase();
+  const token1 = input.token1.toLowerCase();
+  if (
+    input.sqrtPriceX96 <= 0n ||
+    input.liquidity <= 0n ||
+    input.maxAmountIn <= 0n
+  ) {
+    throw new Error(
+      `non-positive concentrated-liquidity precision state for ${input.edge.target}`,
+    );
+  }
+  const reserve0 =
+    input.liquidity * Q96 / input.sqrtPriceX96;
+  const reserve1 =
+    input.liquidity * input.sqrtPriceX96 / Q96;
+  let reserveIn: bigint;
+  let reserveOut: bigint;
+  if (tokenIn === token0 && tokenOut === token1) {
+    reserveIn = reserve0;
+    reserveOut = reserve1;
+  } else if (tokenIn === token1 && tokenOut === token0) {
+    reserveIn = reserve1;
+    reserveOut = reserve0;
+  } else {
+    throw new Error(
+      `edge ${input.edge.tokenIn}->${input.edge.tokenOut} does not match ` +
+        `${input.token0}/${input.token1}`,
+    );
+  }
+  if (
+    reserveIn >= BLOCKSCAN_MIN_VENUE_RESERVE_IN &&
+    reserveOut >= BLOCKSCAN_MIN_VENUE_RESERVE_IN
+  ) {
+    return null;
+  }
+  const normalCeiling = reserveIn / BLOCKSCAN_VENUE_DEPTH_DIVISOR;
+  const amountIn = normalCeiling > BLOCKSCAN_MIN_EXECUTABLE_INPUT
+    ? normalCeiling
+    : BLOCKSCAN_MIN_EXECUTABLE_INPUT;
+  return amountIn > input.maxAmountIn ? input.maxAmountIn : amountIn;
 }
 
 export function decodeAddressWord(data: string, label: string): string {

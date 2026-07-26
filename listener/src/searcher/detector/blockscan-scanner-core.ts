@@ -1,4 +1,8 @@
 import { ADDR } from "../../shared/constants/addresses.js";
+import {
+  BLOCKSCAN_MIN_EXECUTABLE_INPUT,
+  BLOCKSCAN_VENUE_DEPTH_DIVISOR,
+} from "./blockscan-sizing-constants.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { buildTokenPaths, type TokenEdge, v4PoolId } from "../planner/token-graph.js";
@@ -172,7 +176,6 @@ export function scanBlockStateFromResolvedMids(input: {
       seenRoutes.add(route);
       deduped.push(entry);
     }
-    const naturallyEnumerated = new Set(deduped);
     const selected = selectByBlockScanFamily(
       deduped,
       input.cfg.maxCandidates,
@@ -188,11 +191,7 @@ export function scanBlockStateFromResolvedMids(input: {
         mode: "natural_ranked" as const,
         enumeratedCount: deduped.length,
         selectedCount: selected.length,
-        forcedSelectionCount: selected.reduce(
-          (count, entry) =>
-            count + (naturallyEnumerated.has(entry) ? 0 : 1),
-          0,
-        ),
+        forcedSelectionCount: 0,
       }),
       debug: { skippedVenues },
     };
@@ -904,11 +903,14 @@ function estimateSizing(
   routeMaxInput?: bigint,
 ): { searchCenter: bigint; maxInput: bigint } | null {
   const reserveIn = reserveForToken(cheapVenue, flashToken, a, b);
-  const venueCeiling = minBigint(reserveIn / 4n, maxBorrow);
+  const venueCeiling = minBigint(
+    reserveIn / BLOCKSCAN_VENUE_DEPTH_DIVISOR,
+    maxBorrow,
+  );
   const ceiling = routeMaxInput === undefined
     ? venueCeiling
     : minBigint(venueCeiling, routeMaxInput);
-  if (ceiling <= 8n) return null;
+  if (ceiling < BLOCKSCAN_MIN_EXECUTABLE_INPUT) return null;
 
   let rawCenter: bigint;
   if (cheapVenue.kind === "v3" && cheapVenue.sqrtABX96 && cheapVenue.liquidity) {

@@ -63,6 +63,11 @@ export interface TokenEdge {
   v3Fee?: number;
   /** Identity-attested immutable V3 tick spacing. */
   v3TickSpacing?: number;
+  /**
+   * Reverse-attested pool factory. Pricing capabilities may use this only to
+   * select factory-bound infrastructure; it is provenance, not admission.
+   */
+  factory?: string;
   /** Activity/liquidity proxy (swap-event count from discovery). undefined = curated backbone (pinned, never pruned). */
   score?: number;
   /** Uniswap v4 PoolKey. Required for univ4-unlock quotes. */

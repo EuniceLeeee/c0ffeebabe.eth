@@ -2,13 +2,21 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge } from "../planner/token-graph.js";
+import {
+  diagnoseResolvedRingScore,
+  scanBlockStateFromResolvedMids,
+} from "../detector/blockscan-scanner-core.js";
+import {
+  BLOCKSCAN_MIN_EXECUTABLE_INPUT,
+  BLOCKSCAN_MIN_VENUE_RESERVE_IN,
+} from "../detector/blockscan-sizing-constants.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
-import { curveNgGetDy } from "../solver/curve-math.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import {
   assertPureSynchronousDeriveMids,
   blockScanEdgeKey,
   createAmbientIoPoisonHarness,
+  stateSchemaFingerprint,
   type BlockScanStateCapability,
   type StateRead,
   type StateReadResult,
@@ -22,6 +30,7 @@ import {
   BLOCKSCAN_MULTICALL3,
   blockScanErc20Iface,
   blockScanMulticallIface,
+  q96PrecisionProbeAmount,
 } from "../venues/swaps/blockscan-state-shared.js";
 import {
   curvePlainBlockScanState,
@@ -65,6 +74,12 @@ const SOURCE_HASH = `0x${"ab".repeat(32)}`;
 const POOL = "0x1111111111111111111111111111111111111111";
 const TOKEN0 = "0x2222222222222222222222222222222222222222";
 const TOKEN1 = "0x3333333333333333333333333333333333333333";
+const TOKEN2 = "0x4444444444444444444444444444444444444444";
+const UNIV3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
+const PANCAKE_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865";
+const UNKNOWN_V3_FACTORY = "0x6666666666666666666666666666666666666666";
+const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
+const PANCAKE_V3_QUOTER_V2 = "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997";
 const Q96 = 1n << 96n;
 const UNIT = 10n ** 18n;
 const taxonomy = deriveEdgeTaxonomy("swap");
@@ -74,13 +89,25 @@ const v2Iface = new ethers.Interface([
   "function factory() view returns (address)",
 ]);
 const v3Iface = new ethers.Interface([
+  "function factory() view returns (address)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
   "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
   "function liquidity() view returns (uint128)",
   "function fee() view returns (uint24)",
 ]);
+const v3FactoryIface = new ethers.Interface([
+  "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
+]);
+const v3QuoterIface = new ethers.Interface([
+  "function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96)) returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
+]);
 const v4StateIface = new ethers.Interface([
   "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
   "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)",
+]);
+const v4QuoterIface = new ethers.Interface([
+  "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
 ]);
 const curveStateIface = new ethers.Interface([
   "function A() view returns (uint256)",
@@ -115,9 +142,14 @@ const dodoBalanceIface = new ethers.Interface([
 const pureFixtureFamilyIds = new Set<string>();
 
 await runUniV2();
+runConcentratedLiquidityPrecisionBoundary();
 await runUniV3();
 await runUniV3ExtremePrice();
+await runUniV3FactoryBoundPrecision();
+await runUniV3FactoryBoundQuotes();
 await runUniV4();
+await runUniV4ExtremePrice();
+await runUniV4DirectionIsolation();
 await runInactiveUniPools();
 await runMalformedUniState();
 await runCurvePlain();
@@ -126,6 +158,59 @@ await runCurveUnderlying();
 await runBalancerV3();
 await runDodoV2();
 await runFluidDex();
+
+function runConcentratedLiquidityPrecisionBoundary(): void {
+  const edges = twoTokenEdges("univ3-swap").map((edge) => ({
+    ...edge,
+    factory: UNIV3_FACTORY,
+  }));
+  for (let reserve = 1n; reserve < BLOCKSCAN_MIN_VENUE_RESERVE_IN; reserve++) {
+    for (const edge of edges) {
+      assert.equal(
+        q96PrecisionProbeAmount({
+          sqrtPriceX96: Q96,
+          liquidity: reserve,
+          token0: TOKEN0,
+          token1: TOKEN1,
+          edge,
+          maxAmountIn: 1n << 255n,
+        }),
+        BLOCKSCAN_MIN_EXECUTABLE_INPUT,
+        `virtual reserve ${reserve} must use exact precision before scanner sizing`,
+      );
+    }
+  }
+  for (const edge of edges) {
+    assert.equal(
+      q96PrecisionProbeAmount({
+        sqrtPriceX96: Q96,
+        liquidity: BLOCKSCAN_MIN_VENUE_RESERVE_IN,
+        token0: TOKEN0,
+        token1: TOKEN1,
+        edge,
+        maxAmountIn: 1n << 255n,
+      }),
+      null,
+      "virtual reserve 36 has the scanner's first executable ordinary ceiling",
+    );
+  }
+  const asymmetricEdges = edges.map((edge) => ({ ...edge }));
+  const asymmetricAmounts = asymmetricEdges.map((edge) =>
+    q96PrecisionProbeAmount({
+      sqrtPriceX96: 36n * Q96,
+      liquidity: 36n,
+      token0: TOKEN0,
+      token1: TOKEN1,
+      edge,
+      maxAmountIn: 1n << 255n,
+    })
+  );
+  assert.deepEqual(
+    asymmetricAmounts,
+    [BLOCKSCAN_MIN_EXECUTABLE_INPUT, 324n],
+    "V3/V4 shared precision requires a witness when either directed side is 1..35",
+  );
+}
 assert.deepEqual(
   [...pureFixtureFamilyIds].sort(),
   PRODUCTION_ADAPTER_FAMILIES.pricing("swap").map((family) => family.id).sort(),
@@ -159,8 +244,33 @@ async function runUniV2(): Promise<void> {
 }
 
 async function runUniV3(): Promise<void> {
-  const edges = twoTokenEdges("univ3-swap");
+  const builtEdges = await univ3StandardAdapter.buildEdges(
+    {
+      address: POOL,
+      adapter: "univ3",
+      token0: TOKEN0,
+      token1: TOKEN1,
+      fee: 3_000,
+      tickSpacing: 60,
+      factory: UNIV3_FACTORY,
+    },
+    {
+      call: async () => {
+        throw new Error("fully attested V3 edge construction must not call");
+      },
+    },
+  );
+  assert(
+    builtEdges.every((edge) => edge.factory === UNIV3_FACTORY),
+    "V3 edges retain reverse-attested factory provenance for pricing",
+  );
+  const edges = twoTokenEdges("univ3-swap").map((edge) => ({
+    ...edge,
+    factory: UNIV3_FACTORY,
+  }));
   const result = await execute(univ3StandardAdapter.id, univ3BlockScanState, edges, (read) => {
+    const binding = maybeV3PoolBindingRead(read);
+    if (binding !== null) return binding;
     const selector = read.data.slice(0, 10);
     if (selector === v3Iface.getFunction("slot0")!.selector) {
       return v3Iface.encodeFunctionResult("slot0", [
@@ -183,6 +293,7 @@ async function runUniV3(): Promise<void> {
   });
   assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
   assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
+  assert.equal(result.staticReads.length, 1);
   assert.equal(result.initialReads.length, 2);
   assert.equal(result.snapshot.tickSpacing, 60);
   assert.equal(result.snapshot.observationCardinality, 1);
@@ -195,12 +306,17 @@ async function runUniV3ExtremePrice(): Promise<void> {
   const sqrtPriceX96 =
     104900925875096973426354586331491637011052178n;
   const liquidity = 98_607n;
-  const edges = twoTokenEdges("univ3-swap");
+  const edges = twoTokenEdges("univ3-swap").map((edge) => ({
+    ...edge,
+    factory: UNIV3_FACTORY,
+  }));
   const result = await execute(
     univ3StandardAdapter.id,
     univ3BlockScanState,
     edges,
     (read) => {
+      const binding = maybeV3PoolBindingRead(read);
+      if (binding !== null) return binding;
       const selector = read.data.slice(0, 10);
       if (selector === v3Iface.getFunction("slot0")!.selector) {
         return v3Iface.encodeFunctionResult("slot0", [
@@ -216,28 +332,547 @@ async function runUniV3ExtremePrice(): Promise<void> {
       if (selector === v3Iface.getFunction("liquidity")!.selector) {
         return v3Iface.encodeFunctionResult("liquidity", [liquidity]);
       }
+      if (selector === blockScanMulticallIface.getFunction("aggregate3")!.selector) {
+        return respondAggregate(read, ({ callData }) => {
+          const quote = v3QuoterIface.decodeFunctionData(
+            "quoteExactInputSingle",
+            callData,
+          )[0];
+          const direct =
+            String(quote.tokenIn).toLowerCase() === TOKEN0.toLowerCase();
+          assert.equal(
+            BigInt(quote.amountIn),
+            direct ? 9n : 32_639_800_260_113_778_162n,
+            `extreme V3 ${direct ? "direct" : "reverse"} scanner ceiling`,
+          );
+          return successInner(v3QuoterIface.encodeFunctionResult(
+            "quoteExactInputSingle",
+            [
+              direct ? 130_546_280_204_193_357_693n : 0n,
+              sqrtPriceX96,
+              0,
+              100_000,
+            ],
+          ));
+        });
+      }
       throw new Error(`unexpected extreme-v3 read ${read.id}`);
     },
     { recordProductionFixture: false },
   );
   const direct = result.mids.get(blockScanEdgeKey(edges[0]));
   const reverse = result.mids.get(blockScanEdgeKey(edges[1]));
-  assert(direct && reverse, "extreme concentrated-liquidity mids remain available");
+  assert(direct, "executable extreme V3 direction remains available");
+  assert.equal(
+    reverse,
+    undefined,
+    "zero-output extreme V3 direction does not publish a phantom mid",
+  );
+  assert.match(
+    result.unavailable.get(blockScanEdgeKey(edges[1])) ?? "",
+    /returned zero.*scanner ceiling/,
+  );
   const reserve0Floor = liquidity * Q96 / sqrtPriceX96;
   const reserve1Floor = liquidity * sqrtPriceX96 / Q96;
-  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
-  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
-  assert.equal(reserve0, 1n, "source fixture exercises sub-wei virtual reserve");
-  assert.equal(direct.reserveA, reserve0);
-  assert.equal(direct.reserveB, reserve1);
-  assert.equal(reverse.reserveA, reserve1);
-  assert.equal(reverse.reserveB, reserve0);
+  assert.equal(reserve0Floor, 0n, "source fixture exercises sub-wei virtual reserve");
+  assert.equal(direct.reserveA, 36n);
+  assert.equal(direct.reserveB, 522_185_120_816_773_430_772n);
   assert(Number.isFinite(direct.mid) && direct.mid > 0);
-  assert(Number.isFinite(reverse.mid) && reverse.mid > 0);
-  assert(
-    Math.abs(direct.mid * reverse.mid - 1) < 1e-12,
-    "directed spot prices remain reciprocal",
+  assert.equal(reserve1Floor, 130_559_201_040_455_112_650n);
+  assertExtremeDirectionScans(edges, result.mids, "v3");
+}
+
+async function runUniV3FactoryBoundPrecision(): Promise<void> {
+  const sqrtPriceX96 = 36n * Q96;
+  const liquidity = 36n;
+  const canonicalEdges = twoTokenEdges("univ3-swap").map((edge) => ({
+    ...edge,
+    factory: UNIV3_FACTORY,
+  }));
+  assert.notEqual(
+    stateSchemaFingerprint(canonicalEdges),
+    stateSchemaFingerprint(canonicalEdges.map((edge) => ({
+      ...edge,
+      factory: PANCAKE_V3_FACTORY,
+    }))),
+    "factory-bound precision metadata invalidates the static schema cache",
   );
+  const canonical = await execute(
+    univ3StandardAdapter.id,
+    univ3BlockScanState,
+    canonicalEdges,
+    (read) => {
+      const binding = maybeV3PoolBindingRead(read);
+      if (binding !== null) return binding;
+      const selector = read.data.slice(0, 10);
+      if (selector === v3Iface.getFunction("slot0")!.selector) {
+        return v3Iface.encodeFunctionResult("slot0", [
+          sqrtPriceX96,
+          0,
+          0,
+          1,
+          1,
+          0,
+          true,
+        ]);
+      }
+      if (selector === v3Iface.getFunction("liquidity")!.selector) {
+        return v3Iface.encodeFunctionResult("liquidity", [liquidity]);
+      }
+      if (selector === blockScanMulticallIface.getFunction("aggregate3")!.selector) {
+        return respondAggregate(read, ({ target, callData }) => {
+          assert.equal(
+            target.toLowerCase(),
+            UNIV3_QUOTER_V2.toLowerCase(),
+            "canonical V3 precision witness must use its factory-bound quoter",
+          );
+          const quote = v3QuoterIface.decodeFunctionData(
+            "quoteExactInputSingle",
+            callData,
+          )[0];
+          const direct =
+            String(quote.tokenIn).toLowerCase() === TOKEN0.toLowerCase();
+          assert.equal(
+            BigInt(quote.amountIn),
+            direct ? BLOCKSCAN_MIN_EXECUTABLE_INPUT : 324n,
+          );
+          return direct
+            ? successInner(v3QuoterIface.encodeFunctionResult(
+                "quoteExactInputSingle",
+                [100n, sqrtPriceX96, 0, 100_000],
+              ))
+            : Object.freeze({ success: false, returnData: "0x" });
+        });
+      }
+      throw new Error(`unexpected factory-bound V3 read ${read.id}`);
+    },
+    { recordProductionFixture: false },
+  );
+  assert(
+    canonical.mids.has(blockScanEdgeKey(canonicalEdges[0])),
+    "one successful precision direction remains published",
+  );
+  assert.equal(
+    canonical.mids.has(blockScanEdgeKey(canonicalEdges[1])),
+    false,
+    "a failed sibling precision direction remains fail-closed",
+  );
+  assert.match(
+    canonical.unavailable.get(blockScanEdgeKey(canonicalEdges[1])) ?? "",
+    /factory-bound.*quote call reverted/,
+  );
+
+  const pancakeEdges = twoTokenEdges("univ3-swap").map((edge) => ({
+    ...edge,
+    factory: PANCAKE_V3_FACTORY,
+  }));
+  const pancake = await execute(
+    univ3StandardAdapter.id,
+    univ3BlockScanState,
+    pancakeEdges,
+    (read) => {
+      const binding = maybeV3PoolBindingRead(read, {
+        factory: PANCAKE_V3_FACTORY,
+      });
+      if (binding !== null) return binding;
+      const selector = read.data.slice(0, 10);
+      if (selector === v3Iface.getFunction("slot0")!.selector) {
+        return v3Iface.encodeFunctionResult("slot0", [
+          sqrtPriceX96,
+          0,
+          0,
+          1,
+          1,
+          0,
+          true,
+        ]);
+      }
+      if (selector === v3Iface.getFunction("liquidity")!.selector) {
+        return v3Iface.encodeFunctionResult("liquidity", [liquidity]);
+      }
+      if (selector === blockScanMulticallIface.getFunction("aggregate3")!.selector) {
+        return respondAggregate(read, ({ target, callData }) => {
+          assert.equal(
+            target.toLowerCase(),
+            PANCAKE_V3_QUOTER_V2.toLowerCase(),
+            "Pancake precision must use the Pancake factory-bound quoter",
+          );
+          const quote = v3QuoterIface.decodeFunctionData(
+            "quoteExactInputSingle",
+            callData,
+          )[0];
+          const direct =
+            String(quote.tokenIn).toLowerCase() === TOKEN0.toLowerCase();
+          return successInner(v3QuoterIface.encodeFunctionResult(
+            "quoteExactInputSingle",
+            [direct ? 100n : 0n, sqrtPriceX96, 0, 100_000],
+          ));
+        });
+      }
+      throw new Error(`unexpected Pancake factory-bound V3 read ${read.id}`);
+    },
+    { recordProductionFixture: false },
+  );
+  assert.equal(pancake.dependentReads.length, 2);
+  assert(pancake.mids.has(blockScanEdgeKey(pancakeEdges[0])));
+  assert.equal(pancake.mids.has(blockScanEdgeKey(pancakeEdges[1])), false);
+
+  for (const factory of [UNKNOWN_V3_FACTORY]) {
+    const edges = twoTokenEdges("univ3-swap").map((edge) => ({
+      ...edge,
+      factory,
+    }));
+    const result = await execute(
+      univ3StandardAdapter.id,
+      univ3BlockScanState,
+      edges,
+      (read) => {
+        const selector = read.data.slice(0, 10);
+        if (selector === v3Iface.getFunction("slot0")!.selector) {
+          return v3Iface.encodeFunctionResult("slot0", [
+            sqrtPriceX96,
+            0,
+            0,
+            1,
+            1,
+            0,
+            true,
+          ]);
+        }
+        if (selector === v3Iface.getFunction("liquidity")!.selector) {
+          return v3Iface.encodeFunctionResult("liquidity", [liquidity]);
+        }
+        throw new Error(
+          `non-Uniswap factory must not schedule QuoterV2 read ${read.id}`,
+        );
+      },
+      { recordProductionFixture: false },
+    );
+    assert.equal(
+      result.dependentReads.length,
+      0,
+      `${factory} cannot reuse the Uniswap QuoterV2 precision witness`,
+    );
+    assert.equal(result.mids.size, 0);
+    assert.equal(result.unavailable.size, edges.length);
+    for (const reason of result.unavailable.values()) {
+      assert.match(reason, /has no registered witness/);
+    }
+
+    const ordinary = await execute(
+      univ3StandardAdapter.id,
+      univ3BlockScanState,
+      edges,
+      (read) => {
+        const selector = read.data.slice(0, 10);
+        if (selector === v3Iface.getFunction("slot0")!.selector) {
+          return v3Iface.encodeFunctionResult("slot0", [
+            Q96,
+            0,
+            0,
+            1,
+            1,
+            0,
+            true,
+          ]);
+        }
+        if (selector === v3Iface.getFunction("liquidity")!.selector) {
+          return v3Iface.encodeFunctionResult("liquidity", [UNIT]);
+        }
+        throw new Error(
+          `ordinary provisional V3 must not call a lineage Quoter ${read.id}`,
+        );
+      },
+      { recordProductionFixture: false },
+    );
+    assert.equal(
+      ordinary.mids.size,
+      edges.length,
+      "a behavior-admitted provisional pool keeps target-specific local mids",
+    );
+    assert.equal(ordinary.unavailable.size, 0);
+  }
+
+  const mismatched = await execute(
+    univ3StandardAdapter.id,
+    univ3BlockScanState,
+    canonicalEdges,
+    (read) => {
+      const binding = maybeV3PoolBindingRead(read, {
+        boundPool: "0x9999999999999999999999999999999999999999",
+      });
+      if (binding !== null) return binding;
+      const selector = read.data.slice(0, 10);
+      if (selector === v3Iface.getFunction("slot0")!.selector) {
+        return v3Iface.encodeFunctionResult("slot0", [
+          sqrtPriceX96,
+          0,
+          0,
+          1,
+          1,
+          0,
+          true,
+        ]);
+      }
+      if (selector === v3Iface.getFunction("liquidity")!.selector) {
+        return v3Iface.encodeFunctionResult("liquidity", [liquidity]);
+      }
+      throw new Error(
+        `reverse-mismatched V3 pool must not schedule precision read ${read.id}`,
+      );
+    },
+    { recordProductionFixture: false },
+  );
+  assert.equal(mismatched.dependentReads.length, 0);
+  assert.equal(mismatched.mids.size, 0);
+  assert.equal(mismatched.unavailable.size, canonicalEdges.length);
+  for (const reason of mismatched.unavailable.values()) {
+    assert.match(reason, /binds .* not target/);
+  }
+}
+
+async function runUniV3FactoryBoundQuotes(): Promise<void> {
+  const quoteResult = v3QuoterIface.encodeFunctionResult(
+    "quoteExactInputSingle",
+    [123n, Q96, 0, 100_000],
+  );
+  const exactCalls: string[] = [];
+  const exactAmount = await univ3StandardAdapter.quoteExact({
+    state: {
+      call: async ({ to, data }: { to: string; data: string }) => {
+        exactCalls.push(to.toLowerCase());
+        const binding = maybeV3PoolBindingRead({ to, data });
+        if (binding !== null) return binding;
+        const selector = data.slice(0, 10);
+        if (
+          to.toLowerCase() === UNIV3_QUOTER_V2.toLowerCase() &&
+          selector === v3QuoterIface.getFunction("quoteExactInputSingle")!.selector
+        ) {
+          return quoteResult;
+        }
+        throw new Error(`unexpected canonical exact V3 call ${to}:${selector}`);
+      },
+    } as never,
+    target: POOL,
+    edgeAdapterId: "univ3-swap",
+    tokenIn: TOKEN0,
+    tokenOut: TOKEN1,
+    amountIn: UNIT,
+  });
+  assert.equal(exactAmount, 123n);
+  assert(exactCalls.includes(UNIV3_QUOTER_V2.toLowerCase()));
+
+  const pancakePool = "0x7777777777777777777777777777777777777777";
+  let crossFactoryExactCall = false;
+  const pancakeExact = await univ3StandardAdapter.quoteExact({
+    state: {
+      call: async ({ to, data }: { to: string; data: string }) => {
+        const binding = maybeV3PoolBindingRead(
+          { to, data },
+          { pool: pancakePool, factory: PANCAKE_V3_FACTORY },
+        );
+        if (binding !== null) return binding;
+        const selector = data.slice(0, 10);
+        if (to.toLowerCase() === UNIV3_QUOTER_V2.toLowerCase()) {
+          crossFactoryExactCall = true;
+          throw new Error("cross-factory Uniswap quoter call");
+        }
+        if (to.toLowerCase() === PANCAKE_V3_QUOTER_V2.toLowerCase()) {
+          return quoteResult;
+        }
+        throw new Error(`unexpected Pancake exact V3 call ${to}:${selector}`);
+      },
+    } as never,
+    target: pancakePool,
+    edgeAdapterId: "univ3-swap",
+    tokenIn: TOKEN0,
+    tokenOut: TOKEN1,
+    amountIn: UNIT,
+  });
+  assert.equal(pancakeExact, 123n);
+  assert.equal(crossFactoryExactCall, false);
+
+  const unknownPool = "0x8888888888888888888888888888888888888888";
+  await assert.rejects(
+    univ3StandardAdapter.quoteExact({
+      state: {
+        call: async ({ to, data }: { to: string; data: string }) => {
+          assert.notEqual(to.toLowerCase(), UNIV3_QUOTER_V2.toLowerCase());
+          assert.notEqual(to.toLowerCase(), PANCAKE_V3_QUOTER_V2.toLowerCase());
+          const binding = maybeV3PoolBindingRead(
+            { to, data },
+            { pool: unknownPool, factory: UNKNOWN_V3_FACTORY },
+          );
+          if (binding !== null) return binding;
+          throw new Error(`unexpected unknown-factory exact call ${to}`);
+        },
+      } as never,
+      target: unknownPool,
+      edgeAdapterId: "univ3-swap",
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: UNIT,
+    }),
+    /no registered factory-bound quoter/,
+  );
+
+  const mismatchedPool = "0x9999999999999999999999999999999999999999";
+  let mismatchedQuoterCalled = false;
+  await assert.rejects(
+    univ3StandardAdapter.quoteExact({
+      state: {
+        call: async ({ to, data }: { to: string; data: string }) => {
+          const binding = maybeV3PoolBindingRead(
+            { to, data },
+            {
+              pool: mismatchedPool,
+              boundPool: POOL,
+            },
+          );
+          if (binding !== null) return binding;
+          if (to.toLowerCase() === UNIV3_QUOTER_V2.toLowerCase()) {
+            mismatchedQuoterCalled = true;
+          }
+          throw new Error(`unexpected reverse-mismatch exact call ${to}`);
+        },
+      } as never,
+      target: mismatchedPool,
+      edgeAdapterId: "univ3-swap",
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: UNIT,
+    }),
+    /binds .* not target/,
+  );
+  assert.equal(
+    mismatchedQuoterCalled,
+    false,
+    "reverse-mismatched V3 target must fail before canonical quoter use",
+  );
+
+  for (const target of [pancakePool, unknownPool]) {
+    const local = await univ3StandardAdapter.quoteExact({
+      state: {
+        call: async () => {
+          throw new Error("successful local V3 quote must not reverse-read factory");
+        },
+      } as never,
+      target,
+      edgeAdapterId: "univ3-swap",
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: UNIT,
+      cache: {
+        quoteV3: async () => 777n,
+      } as never,
+    });
+    assert.equal(local, 777n, "successful local quote remains factory-agnostic");
+  }
+
+  const prepared = univ3StandardAdapter.prepared;
+  const preparedContext = {
+    request: {
+      adapterId: "univ3-swap",
+      target: POOL,
+      tokenIn: TOKEN0,
+      tokenOut: TOKEN1,
+      amountIn: UNIT,
+    },
+    readChain: async ({ to, data }: { to: string; data: string }) => {
+      const binding = maybeV3PoolBindingRead({ to, data });
+      if (binding !== null) return binding;
+      throw new Error(`unexpected prepared V3 read ${to}:${data.slice(0, 10)}`);
+    },
+    callPrepared: async (to: string) => {
+      assert.equal(to.toLowerCase(), UNIV3_QUOTER_V2.toLowerCase());
+      return { output: quoteResult, latencyMs: 1 };
+    },
+  };
+  const prewarm = await prepared.encodeQuotePrewarm(preparedContext);
+  assert.equal(prewarm[0].to.toLowerCase(), UNIV3_QUOTER_V2.toLowerCase());
+  assert.equal((await prepared.quote(preparedContext)).amountOut, 123n);
+
+  const pancakePreparedContext = {
+    ...preparedContext,
+    request: { ...preparedContext.request, target: pancakePool },
+    readChain: async ({ to, data }: { to: string; data: string }) => {
+      const binding = maybeV3PoolBindingRead(
+        { to, data },
+        { pool: pancakePool, factory: PANCAKE_V3_FACTORY },
+      );
+      if (binding !== null) return binding;
+      throw new Error(`unexpected Pancake prepared read ${to}:${data.slice(0, 10)}`);
+    },
+    callPrepared: async (to: string) => {
+      assert.equal(to.toLowerCase(), PANCAKE_V3_QUOTER_V2.toLowerCase());
+      return { output: quoteResult, latencyMs: 1 };
+    },
+  };
+  const pancakePrewarm = await prepared.encodeQuotePrewarm(
+    pancakePreparedContext,
+  );
+  assert.equal(
+    pancakePrewarm[0].to.toLowerCase(),
+    PANCAKE_V3_QUOTER_V2.toLowerCase(),
+  );
+  assert.equal(
+    (await prepared.quote(pancakePreparedContext)).amountOut,
+    123n,
+  );
+
+  let unsupportedPreparedCall = false;
+  const unsupportedContext = {
+    ...preparedContext,
+    request: { ...preparedContext.request, target: unknownPool },
+    readChain: async ({ to, data }: { to: string; data: string }) => {
+      const binding = maybeV3PoolBindingRead(
+        { to, data },
+        { pool: unknownPool, factory: UNKNOWN_V3_FACTORY },
+      );
+      if (binding !== null) return binding;
+      throw new Error(`unexpected unsupported prepared read ${to}:${data.slice(0, 10)}`);
+    },
+    callPrepared: async () => {
+      unsupportedPreparedCall = true;
+      throw new Error("unsupported factory must not call a prepared quoter");
+    },
+  };
+  await assert.rejects(
+    prepared.quote(unsupportedContext),
+    /no registered factory-bound quoter/,
+  );
+  await assert.rejects(
+    prepared.encodeQuotePrewarm(unsupportedContext),
+    /no registered factory-bound quoter/,
+  );
+  assert.equal(unsupportedPreparedCall, false);
+
+  let mismatchedPreparedCall = false;
+  const mismatchedPreparedContext = {
+    ...preparedContext,
+    request: { ...preparedContext.request, target: mismatchedPool },
+    readChain: async ({ to, data }: { to: string; data: string }) => {
+      const binding = maybeV3PoolBindingRead(
+        { to, data },
+        { pool: mismatchedPool, boundPool: POOL },
+      );
+      if (binding !== null) return binding;
+      throw new Error(`unexpected reverse-mismatch prepared read ${to}`);
+    },
+    callPrepared: async () => {
+      mismatchedPreparedCall = true;
+      throw new Error("reverse-mismatched target must not call prepared quoter");
+    },
+  };
+  await assert.rejects(
+    prepared.quote(mismatchedPreparedContext),
+    /binds .* not target/,
+  );
+  await assert.rejects(
+    prepared.encodeQuotePrewarm(mismatchedPreparedContext),
+    /binds .* not target/,
+  );
+  assert.equal(mismatchedPreparedCall, false);
 }
 
 async function runUniV4(): Promise<void> {
@@ -275,6 +910,254 @@ async function runUniV4(): Promise<void> {
   assert.equal(result.initialReads.length, 2);
 }
 
+async function runUniV4ExtremePrice(): Promise<void> {
+  const sqrtPriceX96 =
+    104900925875096973426354586331491637011052178n;
+  const liquidity = 98_607n;
+  const key = {
+    currency0: TOKEN0,
+    currency1: TOKEN1,
+    fee: 10_000,
+    tickSpacing: 200,
+    hooks: ethers.ZeroAddress,
+  };
+  const poolId = v4PoolId(key);
+  const edges = twoTokenEdges("univ4-unlock").map((edge) => ({
+    ...edge,
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    poolId,
+    v4PoolKey: key,
+  }));
+  const result = await execute(
+    univ4Adapter.id,
+    univ4BlockScanState,
+    edges,
+    (read) => {
+      const selector = read.data.slice(0, 10);
+      if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
+        return v4StateIface.encodeFunctionResult("getSlot0", [
+          sqrtPriceX96,
+          696_424,
+          0,
+          10_000,
+        ]);
+      }
+      if (
+        selector === v4StateIface.getFunction("getLiquidity")!.selector
+      ) {
+        return v4StateIface.encodeFunctionResult(
+          "getLiquidity",
+          [liquidity],
+        );
+      }
+      if (selector === blockScanMulticallIface.getFunction("aggregate3")!.selector) {
+        return respondAggregate(read, ({ target, callData, allowFailure }) => {
+          assert.equal(target.toLowerCase(), ADDR.UNISWAP_V4_QUOTER.toLowerCase());
+          assert.equal(allowFailure, true);
+          const quote = v4QuoterIface.decodeFunctionData(
+            "quoteExactInputSingle",
+            callData,
+          )[0];
+          const direct = Boolean(quote.zeroForOne);
+          assert.equal(
+            BigInt(quote.exactAmount),
+            direct ? 9n : 32_639_800_260_113_778_162n,
+            `extreme V4 ${direct ? "direct" : "reverse"} scanner ceiling`,
+          );
+          return successInner(v4QuoterIface.encodeFunctionResult(
+            "quoteExactInputSingle",
+            [direct ? 130_546_280_204_193_357_693n : 0n, 100_000],
+          ));
+        });
+      }
+      throw new Error(`unexpected extreme-v4 read ${read.id}`);
+    },
+    { recordProductionFixture: false },
+  );
+  const direct = result.mids.get(blockScanEdgeKey(edges[0]));
+  assert(direct, "executable extreme V4 direction remains available");
+  assert.equal(
+    result.mids.get(blockScanEdgeKey(edges[1])),
+    undefined,
+    "zero-output extreme V4 direction does not publish a phantom mid",
+  );
+  assert.match(
+    result.unavailable.get(blockScanEdgeKey(edges[1])) ?? "",
+    /returned zero.*scanner ceiling/,
+  );
+  assert.equal(direct.reserveA, 36n);
+  assert.equal(direct.reserveB, 522_185_120_816_773_430_772n);
+  assertExtremeDirectionScans(edges, result.mids, "v4");
+}
+
+async function runUniV4DirectionIsolation(): Promise<void> {
+  const sqrtPriceX96 = 36n * Q96;
+  const liquidity = 36n;
+  const key = {
+    currency0: TOKEN0,
+    currency1: TOKEN1,
+    fee: 3_000,
+    tickSpacing: 60,
+    hooks: ethers.ZeroAddress,
+  };
+  const poolId = v4PoolId(key);
+  const edges = twoTokenEdges("univ4-unlock").map((edge) => ({
+    ...edge,
+    target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    poolId,
+    v4PoolKey: key,
+  }));
+  for (const failure of ["revert", "malformed"] as const) {
+    const result = await execute(
+      univ4Adapter.id,
+      univ4BlockScanState,
+      edges,
+      (read) => {
+        const selector = read.data.slice(0, 10);
+        if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
+          return v4StateIface.encodeFunctionResult("getSlot0", [
+            sqrtPriceX96,
+            0,
+            0,
+            3_000,
+          ]);
+        }
+        if (selector === v4StateIface.getFunction("getLiquidity")!.selector) {
+          return v4StateIface.encodeFunctionResult("getLiquidity", [liquidity]);
+        }
+        if (
+          selector ===
+            blockScanMulticallIface.getFunction("aggregate3")!.selector
+        ) {
+          return respondAggregate(
+            read,
+            ({ target, callData, allowFailure }) => {
+              assert.equal(
+                target.toLowerCase(),
+                ADDR.UNISWAP_V4_QUOTER.toLowerCase(),
+              );
+              assert.equal(
+                allowFailure,
+                true,
+                "each V4 direction must be independently revert-tolerant",
+              );
+              const quote = v4QuoterIface.decodeFunctionData(
+                "quoteExactInputSingle",
+                callData,
+              )[0];
+              if (Boolean(quote.zeroForOne)) {
+                return successInner(v4QuoterIface.encodeFunctionResult(
+                  "quoteExactInputSingle",
+                  [100n, 100_000],
+                ));
+              }
+              return failure === "revert"
+                ? Object.freeze({ success: false, returnData: "0x" })
+                : successInner("0x1234");
+            },
+          );
+        }
+        throw new Error(`unexpected V4 direction-isolation read ${read.id}`);
+      },
+      { recordProductionFixture: false },
+    );
+    assert.equal(result.dependentReads.length, 2);
+    assert(
+      result.dependentReads.every(
+        (read) => read.to.toLowerCase() === BLOCKSCAN_MULTICALL3.toLowerCase(),
+      ),
+      "V4 precision reads must preserve direction failures inside Multicall3",
+    );
+    assert(
+      result.mids.has(blockScanEdgeKey(edges[0])),
+      `healthy V4 direction remains published when sibling is ${failure}`,
+    );
+    assert.equal(
+      result.mids.has(blockScanEdgeKey(edges[1])),
+      false,
+      `failed V4 direction remains unavailable when sibling is ${failure}`,
+    );
+    assert.match(
+      result.unavailable.get(blockScanEdgeKey(edges[1])) ?? "",
+      failure === "revert"
+        ? /precision witness failed: quote call reverted/
+        : /precision witness failed: malformed quote result/,
+    );
+  }
+}
+
+function assertExtremeDirectionScans(
+  extremeEdges: readonly TokenEdge[],
+  extremeMids: ReadonlyMap<string, RouteVenueMid>,
+  family: "v3" | "v4",
+): void {
+  const returnPool = "0x5555555555555555555555555555555555555555";
+  const returnEdges = twoTokenEdges("univ2-swap").map((edge) => ({
+    ...edge,
+    target: returnPool,
+  }));
+  const direct = extremeMids.get(blockScanEdgeKey(extremeEdges[0]));
+  assert(direct, `${family} direct precision mid missing`);
+  const returnDirectMid = direct.mid / 2;
+  const returnReserve = 10n ** 60n;
+  const mids = new Map(extremeMids);
+  mids.set(blockScanEdgeKey(returnEdges[0]), {
+    kind: "v2",
+    pool: returnPool,
+    edges: [returnEdges[0]],
+    mid: returnDirectMid,
+    feeBps: 0,
+    reserveA: returnReserve,
+    reserveB: returnReserve,
+    depthProxy: Number(returnReserve),
+  });
+  mids.set(blockScanEdgeKey(returnEdges[1]), {
+    kind: "v2",
+    pool: returnPool,
+    edges: [returnEdges[1]],
+    mid: 1 / returnDirectMid,
+    feeBps: 0,
+    reserveA: returnReserve,
+    reserveB: returnReserve,
+    depthProxy: Number(returnReserve),
+  });
+  const scanned = scanBlockStateFromResolvedMids({
+    edges: [...extremeEdges, ...returnEdges],
+    sourceBlock: SOURCE_BLOCK,
+    swapTouched: null,
+    cfg: {
+      maxHops: 2,
+      minSpreadBps: 0,
+      maxCandidates: 10,
+      budgetMs: 1_000,
+      pricedTokens: new Map([
+        [TOKEN0.toLowerCase(), { maxBorrow: 10n ** 30n }],
+      ]),
+    },
+    mids,
+  });
+  const diagnosis = diagnoseResolvedRingScore(
+    [extremeEdges[0], returnEdges[1]],
+    mids,
+  );
+  assert.equal(
+    scanned.opportunities.length,
+    1,
+    `${family} precision route scans: outcome=${scanned.outcome} ` +
+      `diagnosis=${diagnosis.status}`,
+  );
+  assert.equal(
+    scanned.opportunities[0].searchSeed.searchCenter,
+    9n,
+    `${family} scanner sizes at the exact positive-output witness`,
+  );
+  assert.equal(
+    scanned.opportunities[0].searchSeed.maxInput,
+    9n,
+    `${family} scanner ceiling cannot exceed its precision witness`,
+  );
+}
+
 async function runInactiveUniPools(): Promise<void> {
   const v2Edges = twoTokenEdges("univ2-swap");
   const inactiveV2 = await execute(
@@ -299,6 +1182,8 @@ async function runInactiveUniPools(): Promise<void> {
       univ3BlockScanState,
       v3Edges,
       (read) => {
+        const binding = maybeV3PoolBindingRead(read);
+        if (binding !== null) return binding;
         const selector = read.data.slice(0, 10);
         if (selector === v3Iface.getFunction("slot0")!.selector) {
           return v3Iface.encodeFunctionResult("slot0", [
@@ -456,11 +1341,34 @@ async function runCurvePlain(): Promise<void> {
 }
 
 async function runCurveOffpegStaticRates(): Promise<void> {
-  const edges = twoTokenEdges("curve-exchange-plain").map((edge, index) => ({
-    ...edge,
-    curveI: index,
-    curveJ: index === 0 ? 1 : 0,
-  }));
+  // Independent source-block fixture from Curve Aave pool 0xdebf... at
+  // block 25,610,261. Literal get_dy outputs are onchain observations, not
+  // values generated by the local implementation under test.
+  const tokens = [TOKEN0, TOKEN1, TOKEN2] as const;
+  const pinnedOutputs = new Map([
+    ["0:1", 999_619n],
+    ["0:2", 998_870n],
+    ["1:0", 999_580_607_161_109_652n],
+    ["1:2", 998_848n],
+    ["2:0", 1_000_258_828_176_159_586n],
+    ["2:1", 1_000_275n],
+  ]);
+  const edges = tokens.flatMap((tokenIn, i) =>
+    tokens.flatMap((tokenOut, j) =>
+      i === j
+        ? []
+        : [{
+            adapterId: "curve-exchange-plain",
+            target: POOL,
+            tokenIn,
+            tokenOut,
+            slotKind: "swap" as const,
+            curveI: i,
+            curveJ: j,
+            ...taxonomy,
+          }]
+    )
+  );
   const result = await execute(
     curvePlainAdapter.id,
     curvePlainBlockScanState,
@@ -525,11 +1433,16 @@ async function runCurveOffpegStaticRates(): Promise<void> {
           const index = Number(
             curveIntBalanceIface.decodeFunctionData("balances", callData)[0],
           );
+          const balances = [
+            125_602_281_812_493_659_306_939n,
+            130_501_866_327n,
+            53_463_327_966n,
+          ] as const;
           return {
             success: true,
             returnData: curveIntBalanceIface.encodeFunctionResult(
               "balances",
-              [index === 0 ? 1_000_000n * UNIT : 1_000_000n * 10n ** 6n],
+              [balances[index]],
             ),
           };
         }
@@ -544,24 +1457,19 @@ async function runCurveOffpegStaticRates(): Promise<void> {
             ? curveIntQuoteIface
             : curveUintQuoteIface;
           const decoded = iface.decodeFunctionData("get_dy", callData);
-          const amountOut = curveNgGetDy(
-            {
-              A: 2_000n,
-              fee: 4_000_000n,
-              offpegFeeMultiplier: 20_000_000_000n,
-              balances: [
-                1_000_000n * UNIT,
-                1_000_000n * 10n ** 6n,
-              ],
-              rates: [10n ** 18n, 10n ** 30n],
-            },
-            Number(decoded[0]),
-            Number(decoded[1]),
+          const i = Number(decoded[0]);
+          const j = Number(decoded[1]);
+          const expectedAmount = i === 0 ? UNIT : 10n ** 6n;
+          assert.equal(
             BigInt(decoded[2]),
+            expectedAmount,
+            `pinned Curve witness amount ${i}->${j}`,
           );
+          const amountOut = pinnedOutputs.get(`${i}:${j}`);
+          assert.notEqual(amountOut, undefined, `pinned Curve witness ${i}->${j}`);
           return {
             success: true,
-            returnData: iface.encodeFunctionResult("get_dy", [amountOut]),
+            returnData: iface.encodeFunctionResult("get_dy", [amountOut!]),
           };
         }
         throw new Error(`unexpected Curve dynamic-fee inner call ${selector}`);
@@ -576,7 +1484,7 @@ async function runCurveOffpegStaticRates(): Promise<void> {
   assert.equal(result.snapshot.kind, "ng");
   assert.deepEqual(
     result.snapshot.state.rates,
-    [10n ** 18n, 10n ** 30n],
+    [10n ** 18n, 10n ** 30n, 10n ** 30n],
     "dynamic-fee Curve without stored_rates uses decimal-derived rates",
   );
   for (const edge of edges) {
@@ -1153,17 +2061,78 @@ function respondAggregate(
   respond: (call: {
     readonly target: string;
     readonly callData: string;
+    readonly allowFailure: boolean;
   }) => { readonly success: boolean; readonly returnData: string },
 ): string {
   assert.equal(read.to.toLowerCase(), BLOCKSCAN_MULTICALL3.toLowerCase());
   const calls = blockScanMulticallIface.decodeFunctionData(
     "aggregate3",
     read.data,
-  )[0] as readonly { target: string; callData: string }[];
+  )[0] as readonly {
+    target: string;
+    callData: string;
+    allowFailure: boolean;
+  }[];
   return blockScanMulticallIface.encodeFunctionResult(
     "aggregate3",
     [calls.map(respond)],
   );
+}
+
+function maybeV3PoolBindingRead(
+  read: Pick<StateRead, "to" | "data">,
+  input: {
+    readonly pool?: string;
+    readonly factory?: string;
+    readonly boundPool?: string;
+  } = {},
+): string | null {
+  const pool = input.pool ?? POOL;
+  const factory = input.factory ?? UNIV3_FACTORY;
+  const selector = read.data.slice(0, 10);
+  if (
+    read.to.toLowerCase() === pool.toLowerCase() &&
+    selector === v3Iface.getFunction("factory")!.selector
+  ) {
+    return v3Iface.encodeFunctionResult("factory", [factory]);
+  }
+  if (
+    read.to.toLowerCase() === pool.toLowerCase() &&
+    selector === v3Iface.getFunction("token0")!.selector
+  ) {
+    return v3Iface.encodeFunctionResult("token0", [TOKEN0]);
+  }
+  if (
+    read.to.toLowerCase() === pool.toLowerCase() &&
+    selector === v3Iface.getFunction("token1")!.selector
+  ) {
+    return v3Iface.encodeFunctionResult("token1", [TOKEN1]);
+  }
+  if (
+    read.to.toLowerCase() === pool.toLowerCase() &&
+    selector === v3Iface.getFunction("fee")!.selector
+  ) {
+    return v3Iface.encodeFunctionResult("fee", [3_000]);
+  }
+  if (
+    read.to.toLowerCase() === factory.toLowerCase() &&
+    selector === v3FactoryIface.getFunction("getPool")!.selector
+  ) {
+    const [tokenA, tokenB, fee] = v3FactoryIface.decodeFunctionData(
+      "getPool",
+      read.data,
+    );
+    assert.deepEqual(
+      [String(tokenA).toLowerCase(), String(tokenB).toLowerCase()],
+      [TOKEN0.toLowerCase(), TOKEN1.toLowerCase()].sort(),
+      "V3 reverse lookup must use sorted pool tokens",
+    );
+    assert.equal(BigInt(fee), 3_000n);
+    return v3FactoryIface.encodeFunctionResult("getPool", [
+      input.boundPool ?? pool,
+    ]);
+  }
+  return null;
 }
 
 function successInner(returnData: string): {
@@ -1204,6 +2173,7 @@ function twoTokenEdges(adapterId: string): TokenEdge[] {
       ...(adapterId === "univ2-swap" ? { v2FeeBps: 30n } : {}),
       ...(adapterId === "univ3-swap" ? { v3Fee: 3_000 } : {}),
       ...(adapterId === "univ3-swap" ? { v3TickSpacing: 60 } : {}),
+      ...(adapterId === "univ3-swap" ? { factory: UNIV3_FACTORY } : {}),
       slotKind: "swap",
       ...taxonomy,
     },
@@ -1217,6 +2187,7 @@ function twoTokenEdges(adapterId: string): TokenEdge[] {
       ...(adapterId === "univ2-swap" ? { v2FeeBps: 30n } : {}),
       ...(adapterId === "univ3-swap" ? { v3Fee: 3_000 } : {}),
       ...(adapterId === "univ3-swap" ? { v3TickSpacing: 60 } : {}),
+      ...(adapterId === "univ3-swap" ? { factory: UNIV3_FACTORY } : {}),
       slotKind: "swap",
       ...taxonomy,
     },

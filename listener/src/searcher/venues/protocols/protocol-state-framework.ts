@@ -62,7 +62,6 @@ export interface ProtocolQuoteStateConfig {
     readonly stepMultiplier: bigint;
     /** Initial quote plus at most four coordinator dependent rounds. */
     readonly maxDependentRounds: number;
-    readonly minimumOutput: "one-token";
   };
   readonly extraDependencies?: (edges: readonly TokenEdge[]) => readonly string[];
 }
@@ -113,16 +112,7 @@ export function createProtocolQuoteStateCapability(
     buildStaticSchemaReads(input): readonly StateRead[] {
       validateSchema(input.schema, config.familyId);
       const tokens = [
-        ...new Set(
-          input.edges.flatMap((edge) =>
-            config.adaptiveProbe
-              ? [
-                  edge.tokenIn.toLowerCase(),
-                  edge.tokenOut.toLowerCase(),
-                ]
-              : [edge.tokenIn.toLowerCase()]
-          ),
-        ),
+        ...new Set(input.edges.map((edge) => edge.tokenIn.toLowerCase())),
       ].sort();
       return Object.freeze(tokens.map((token) => tokenDecimalsStateRead(input, token)));
     },
@@ -168,7 +158,6 @@ export function createProtocolQuoteStateCapability(
         if (config.adaptiveProbe) {
           quoteReads = buildAdaptiveQuoteReads(
             config,
-            input.schema,
             edge,
             amountIn,
             input.completedRound,
@@ -428,7 +417,6 @@ function validateAdaptiveProbe(config: ProtocolQuoteStateConfig): void {
 
 function buildAdaptiveQuoteReads(
   config: ProtocolQuoteStateConfig,
-  schema: ProtocolQuoteSchema,
   edge: TokenEdge,
   baseAmountIn: bigint,
   completedRound: number,
@@ -468,9 +456,8 @@ function buildAdaptiveQuoteReads(
     completedAmount,
     adaptiveResultResolver(results, edge, latestRound),
   );
-  const minimumOut = amountForToken(schema.amountInByToken, edge.tokenOut);
   if (
-    completedOut >= minimumOut ||
+    completedOut > 0n ||
     latestRound >= adaptive.maxDependentRounds
   ) {
     return [];

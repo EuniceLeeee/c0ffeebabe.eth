@@ -144,6 +144,12 @@ async function main(): Promise<void> {
       )
     : logProvider;
 
+  const ownedProviders = new Set([
+    provider,
+    logProvider,
+    historicalLogProvider,
+  ]);
+  try {
   const latest = Number(process.env.POOL_UNIVERSE_TO_BLOCK ?? await provider.getBlockNumber());
   const [
     initialStateHeader,
@@ -523,6 +529,22 @@ async function main(): Promise<void> {
   console.log(
     `[pool-universe] manifest ${outputSha256} -> ${manifestPath}`,
   );
+  } finally {
+    const cleanup = await Promise.allSettled(
+      [...ownedProviders].map(async (ownedProvider) => {
+        ownedProvider.destroy();
+      }),
+    );
+    const failures = cleanup.filter(
+      (result): result is PromiseRejectedResult =>
+        result.status === "rejected",
+    );
+    if (failures.length > 0) {
+      console.warn(
+        `[pool-universe] provider cleanup failures=${failures.length}`,
+      );
+    }
+  }
 }
 
 /**

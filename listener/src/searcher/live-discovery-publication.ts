@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { PoolEntry, TokenEdge } from "./planner/token-graph.js";
 import {
   cloneProtocolDiscoveryEvidenceCache,
+  pruneProtocolDiscoveryAddressCache,
   pruneRecentProcessedProtocolTxs,
   reconcileProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
@@ -217,6 +218,9 @@ export function projectObservedProtocolPublication(input: {
   );
   reconcileProtocolDiscoveryEvidenceCache(nextCache, input.result);
   recordProtocolRouteOwnership(nextCache, input.projection.ownership);
+  pruneProtocolDiscoveryAddressCache(nextCache, {
+    currentBlock: input.blockNumber,
+  });
   if (input.result.evaluationComplete) {
     nextCache.runtime.recentProcessedTxs.set(
       txHash,

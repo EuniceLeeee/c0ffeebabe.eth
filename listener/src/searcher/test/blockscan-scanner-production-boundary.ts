@@ -22,7 +22,11 @@ import {
   createVerifiedGraphView,
   exactSetHash,
 } from "../venues/blockscan-state-capability.js";
-import { readV2WarmMid, type RouteVenueMid } from "../venues/mid-readers.js";
+import {
+  LegacyConcentratedLiquidityPrecisionUnsupportedError,
+  readV2WarmMid,
+  type RouteVenueMid,
+} from "../venues/mid-readers.js";
 
 const block = 100;
 const blockHash = `0x${"11".repeat(32)}`;
@@ -96,6 +100,55 @@ assert.deepEqual(
   "strict atomic wrapper must preserve the single scanner kernel output",
 );
 console.log("[blockscan-production-boundary] legacy/current-N kernel equivalence: PASS");
+
+{
+  const precisionPool = "0x00000000000000000000000000000000000000c1";
+  const precisionCache = new PoolStateCache();
+  precisionCache.seedV3Ticks({
+    pool: precisionPool,
+    token0: token,
+    token1: ADDR.WETH,
+    fee: 100n,
+    tickSpacing: 1,
+    tickBitmap: new Map(),
+    ticks: new Map(),
+    blockNumber: block,
+  });
+  precisionCache.seedV3Live({
+    pool: precisionPool,
+    sqrtPriceX96: 1n << 120n,
+    tick: 0,
+    liquidity: 1n,
+    blockNumber: block,
+  });
+  const precisionEdge: TokenEdge = {
+    adapterId: "univ3-swap",
+    target: precisionPool,
+    tokenIn: token,
+    tokenOut: ADDR.WETH,
+    poolToken0: token,
+    poolToken1: ADDR.WETH,
+    v3Fee: 100,
+    slotKind: "swap",
+    ...deriveEdgeTaxonomy("swap"),
+  };
+  assert.throws(
+    () =>
+      detectBlockScanOpportunities({
+        edges: [precisionEdge],
+        cache: precisionCache,
+        sourceBlock: block,
+        swapTouched: null,
+        cfg,
+      }),
+    (error) =>
+      error instanceof LegacyConcentratedLiquidityPrecisionUnsupportedError &&
+      error.code === "LEGACY_CONCENTRATED_LIQUIDITY_PRECISION_UNSUPPORTED" &&
+      /production pricing-state precision path/.test(error.message),
+    "trusted legacy caller must surface unsupported precision, not skip the venue",
+  );
+}
+console.log("[blockscan-production-boundary] legacy precision unsupported passthrough: PASS");
 
 assertRejectsRuntime(
   {

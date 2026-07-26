@@ -33,11 +33,13 @@ await distantStartupWaitsForCurrentDiscovery();
 await incompleteRetriesAndHotBudgetResumes();
 await degradedSnapshotCompletesStartupWithoutScanning();
 await latestHeadCoalescesDuringStartupWarm();
+await protocolLagDoesNotBlockDexRuntime();
+await shutdownDrainsActivePassAndDropsPendingHead();
 blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (5/5)",
+    "PASS (7/7)",
 );
 
 async function distantStartupWaitsForCurrentDiscovery(): Promise<void> {
@@ -127,6 +129,63 @@ async function latestHeadCoalescesDuringStartupWarm(): Promise<void> {
   );
 }
 
+async function protocolLagDoesNotBlockDexRuntime(): Promise<void> {
+  const harness = createHarness(
+    449,
+    ["degraded"],
+    { initialProtocolCompleteThrough: 448 },
+  );
+  await harness.run(450);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [450],
+    "a protocol-family discovery lag must not suppress the DEX runtime pass",
+  );
+  assert.equal(
+    harness.publishedPricing,
+    1,
+    "healthy DEX state must publish while the owning protocol family is degraded",
+  );
+}
+
+async function shutdownDrainsActivePassAndDropsPendingHead(): Promise<void> {
+  const holdActive = deferred<void>();
+  const harness = createHarness(
+    549,
+    ["complete"],
+    {
+      beforePrepareResult: async () => {
+        await holdActive.promise;
+      },
+    },
+  );
+  harness.loop.schedule(550);
+  await waitFor(() => harness.runtimeBlocks.length === 1);
+  harness.loop.schedule(551);
+
+  let settled = false;
+  const shutdown = harness.loop.shutdown().then(() => {
+    settled = true;
+  });
+  await waitFor(() => harness.runtimeAborted);
+  assert.equal(harness.workerStops, 1);
+  assert.equal(
+    settled,
+    false,
+    "runtime shutdown must drain the active head before persistence may flush",
+  );
+
+  holdActive.resolve();
+  await shutdown;
+  harness.loop.schedule(552);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [550],
+    "pending and post-shutdown heads must not enter discovery/runtime prepare",
+  );
+}
+
 function blindModeDoesNotEnterOrdinaryStartupWarm(): void {
   const harness = createHarness(499, [], { blindEnabled: true });
   assert.equal(
@@ -143,9 +202,14 @@ function createHarness(
     readonly stopAfterPrepareCall?: number;
     readonly beforePrepareResult?: (call: number) => Promise<void>;
     readonly blindEnabled?: boolean;
+    readonly initialProtocolCompleteThrough?: number;
   } = {},
 ) {
-  let publication = publicationAt(initialCompleteThrough);
+  let publication = publicationAt(
+    initialCompleteThrough,
+    0,
+    options.initialProtocolCompleteThrough,
+  );
   let shuttingDown = false;
   let prepareCalls = 0;
   let publishedPricing = 0;
@@ -155,6 +219,8 @@ function createHarness(
   const backfillBlocks: number[] = [];
   const queue = new ProtocolDiscoveryMutationQueue();
   const journal = new CanonicalHeaderJournal();
+  const runtimeAbort = new AbortController();
+  let workerStops = 0;
 
   const runtimeCoordinator = {
     async prepare(
@@ -188,7 +254,9 @@ function createHarness(
   const workerState = {
     provider: {},
     async forkAt() {},
-    stop() {},
+    stop() {
+      workerStops++;
+    },
     async stopAndWait() {},
   };
   const deps: BlockScanRuntimeLoopDependencies<{ readonly block: number }> = {
@@ -207,7 +275,7 @@ function createHarness(
     }] as unknown) as BlockScanRuntimeLoopDependencies<
       { readonly block: number }
     >["executionWorkers"],
-    runtimeAbort: new AbortController(),
+    runtimeAbort,
     sharedPlanner: { setFlashLiquidity() {} },
     backrunStatePublisher: {
       publish() {
@@ -238,7 +306,11 @@ function createHarness(
         base: LiveDiscoveryPublicationState,
         prepared: { readonly block: number },
       ) =>
-        publicationAt(prepared.block, base.revision + 1),
+        publicationAt(
+          prepared.block,
+          base.revision + 1,
+          options.initialProtocolCompleteThrough,
+        ),
       finish() {},
     } as unknown as BlockScanRuntimeLoopDependencies<
       { readonly block: number }
@@ -291,6 +363,12 @@ function createHarness(
     },
     get plannerGraphCalls() {
       return plannerGraphCalls;
+    },
+    get runtimeAborted() {
+      return runtimeAbort.signal.aborted;
+    },
+    get workerStops() {
+      return workerStops;
     },
     setPublication(block: number) {
       publication = publicationAt(block, publication.revision + 1);
@@ -428,6 +506,7 @@ function graphAt(
 function publicationAt(
   block: number,
   revision = 0,
+  protocolCompleteThrough?: number,
 ): LiveDiscoveryPublicationState {
   const evidence = createProtocolDiscoveryEvidenceCache(1);
   return {
@@ -461,7 +540,12 @@ function publicationAt(
     dexSourceAnchor: anchor(block),
     dexGraphAnchor: anchor(block),
     landedCoverage: [],
-    protocolFamilySourceCoverage: new Map(),
+    protocolFamilySourceCoverage: protocolCompleteThrough === undefined
+      ? new Map()
+      : new Map([[
+          "fixture-protocol\u001fobserved-interaction",
+          anchor(protocolCompleteThrough),
+        ]]),
     protocolObservedCursor: {
       completeThroughBlock: -1,
       completeThroughHash: null,

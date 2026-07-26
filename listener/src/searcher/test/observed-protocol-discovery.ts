@@ -8,6 +8,10 @@ import {
   shouldTraceForProtocolDiscovery,
 } from "../observed-protocol-discovery.js";
 import { createProtocolDiscoveryEvidenceCache } from "../protocol-discovery-cache.js";
+import {
+  discoverStartupObservedFallbackCandidates,
+  protocolFamiliesNeedingStartupObservedFallback,
+} from "../protocol-discovery-runtime.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import type {
   ProtocolDiscoveryContext,
@@ -177,6 +181,63 @@ const observedOnlyAlias = {
     candidateFromAddress: undefined,
   },
 };
+assert(
+  protocolFamiliesNeedingStartupObservedFallback(
+    [addressOnlyAlias, observedAlias, observedOnlyAlias],
+    new Set([observedAlias.id]),
+  ).map((adapter) => adapter.id).join(",") === observedOnlyAlias.id,
+  "startup fallback is registry-driven, skips admitted families, and never scans address-only families",
+);
+assert(
+  protocolFamiliesNeedingStartupObservedFallback(
+    [observedAlias],
+    new Set(),
+  )[0]?.id === observedAlias.id,
+  "a stale cached candidate does not suppress fallback unless current-N verification admitted it",
+);
+{
+  const searchedRanges: Array<{ fromBlock: number; toBlock: number }> = [];
+  const historicalLog = {
+    ...withdrawLog,
+    blockNumber: 110,
+  };
+  const fallback = await discoverStartupObservedFallbackCandidates({
+    adapters: [observedOnlyAlias],
+    context: {
+      ...context,
+      backend: {
+        ...context.backend,
+        async getLogs(req) {
+          searchedRanges.push({
+            fromBlock: req.fromBlock,
+            toBlock: req.toBlock,
+          });
+          return req.fromBlock <= 110 && req.toBlock >= 110
+            ? [historicalLog]
+            : [];
+        },
+      },
+    },
+    admittedFamilyIds: new Set(),
+    options: {
+      searchBeforeBlock: 122,
+      maxLookbackBlocks: 30,
+      logChunkBlocks: 5,
+      maxTransactionsPerFamily: 1,
+    },
+  });
+  assert(
+    fallback.recoveredFamilyIds.join(",") === observedOnlyAlias.id &&
+      fallback.inspectedTransactions === 1,
+    "one startup-only backwards search recovers the newest observed family candidate",
+  );
+  assert(
+    searchedRanges.length === 3 &&
+      searchedRanges[0].fromBlock === 118 &&
+      searchedRanges[2].fromBlock === 108,
+    "startup fallback searches bounded newest-first chunks without a genesis crawl",
+  );
+}
 let cacheMatcherCalls = 0;
 let cacheFingerprintReads = 0;
 let currentDependencyFingerprint = `0x${"44".repeat(32)}`;

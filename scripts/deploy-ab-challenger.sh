@@ -1920,13 +1920,25 @@ PY
   [ "$shakedown" = "0" ] || shakedown_arg=(--shakedown)
   acceptance_args+=("${shakedown_arg[@]}")
 
-  local acceptance_env=() key value
+  local acceptance_env=() acceptance_unset_env=() key value
   for key in SEARCHER_EV_GATE SEARCHER_MIN_NET_ETH \
     SEARCHER_PROFIT_HAIRCUT_BPS SEARCHER_BACKRUN_GAS_USED \
     SEARCHER_BRIBE_ALL_ABOVE_GAS SEARCHER_BRIBE_BPS; do
     value=$(file_env_get "$A_PROCESS_ENV" "$key")
     [ -z "$value" ] || acceptance_env+=("$key=$value")
   done
+  # The formal worker owns every replay input. Strip inherited hunt,
+  # discovery, universe and Anvil state before the trusted gate injects its
+  # declared values; direct operator diagnostics keep their ordinary env.
+  while IFS='=' read -r key _; do
+    case "$key" in
+      HUNT_*|AB_EXPECTED_*|POOL_UNIVERSE_*|SEARCHER_POOL_UNIVERSE_*|\
+      SEARCHER_BLOCKSCAN_STATE_*|SEARCHER_BLOCKSCAN_HUNT_ANVIL_*|\
+      SEARCHER_PROTOCOL_DISCOVERY_*|PRODUCTION_REPLAY_DISCOVERY_ARTIFACT*)
+        acceptance_unset_env+=(-u "$key")
+        ;;
+    esac
+  done < <(env)
   state_update six_step_acceptance_status running six_step_acceptance_failure "" \
     six_step_acceptance_started_at "$(date +%s)" six_step_acceptance_completed_at 0 \
     require_stage_advance "$require_stage_advance" \
@@ -1934,7 +1946,10 @@ PY
     six_step_acceptance_report_commit "$acceptance_report_commit" \
     six_step_acceptance_report_hash "$(hash_file "$candidate_report")"
   export -f run_six_step_acceptance_worker
-  printf '%s' "$evidence_rpc" | env "${acceptance_env[@]}" python3 -c '
+  printf '%s' "$evidence_rpc" | env \
+    "${acceptance_unset_env[@]}" \
+    SEARCHER_TEST_DISABLE_DOTENV=1 \
+    "${acceptance_env[@]}" python3 -c '
 import ctypes
 import os
 import signal

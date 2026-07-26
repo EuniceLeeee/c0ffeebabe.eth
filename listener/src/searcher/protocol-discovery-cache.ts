@@ -1,6 +1,17 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  mkdir as mkdirAsync,
+  rename as renameAsync,
+  writeFile as writeFileAsync,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 import { ethers } from "ethers";
+import {
+  advanceDiscoveryFamilySourceWatermarks,
+  createDiscoveryFamilySourceWatermarks,
+  discoveryGraphCompleteThrough,
+  type DiscoveryFamilySources,
+} from "./discovery-source-watermark.js";
 import {
   protocolInstanceAddressKey,
   protocolInstanceKey,
@@ -11,8 +22,18 @@ import type {
 } from "./venues/route-leg-adapter.js";
 
 const SCHEMA_VERSION = 5;
+const RETAINED_CANDIDATE_SCHEMA_VERSION = 4;
 const BIGINT_TAG = "__mev_protocol_bigint__";
 const BLOCK_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+const CONTIGUOUS_AUTHORITY_PROFILE =
+  "protocol-observed-contiguous-from-genesis-v1" as const;
+
+export interface ProtocolObservedContiguousAuthority {
+  readonly profile: typeof CONTIGUOUS_AUTHORITY_PROFILE;
+  readonly fromBlock: 0;
+  readonly completeThroughBlock: number;
+  readonly completeThroughHash: string;
+}
 
 export interface ProtocolAddressCacheEntry {
   readonly adapterId: string;
@@ -30,9 +51,13 @@ export interface ProtocolAddressCacheEntry {
 }
 
 export interface ProtocolDiscoveryRuntimeState {
-  /** Highest block whose protocol event window fully completed. null = never scanned. */
+  /**
+   * Highest completed positive-evidence window endpoint. It may advance after
+   * a bounded cold-start scan and therefore is not, by itself, negative
+   * completeness authority.
+   */
   observedCursor: number | null;
-  /** Canonical hash of observedCursor. A number without this anchor has no completeness authority. */
+  /** Canonical endpoint anchor; contiguous authority is recorded separately. */
   observedCursorHash: string | null;
   /** Hash of the observed family/topic/selector/matcher registry behind the cursor. */
   observedSourceFingerprint: string | null;
@@ -40,6 +65,13 @@ export interface ProtocolDiscoveryRuntimeState {
   readonly discoverySourceFingerprints: Map<string, string>;
   /** Recently processed observed txs (lowercase txHash -> blockNumber). */
   readonly recentProcessedTxs: Map<string, number>;
+  /**
+   * Negative/completeness authority is stronger than an observed positive
+   * cursor. It exists only when the exact family/source registry has advanced
+   * contiguously from genesis through completeThroughBlock. The operational
+   * observedCursor may be newer.
+   */
+  observedContiguousAuthority: ProtocolObservedContiguousAuthority | null;
 }
 
 /**
@@ -68,6 +100,17 @@ export interface ProtocolDiscoveryEvidenceCache {
   routeOwnership: PersistedProtocolRouteOwnership;
 }
 
+/**
+ * A schema-4 snapshot predates hash-anchored source completeness. Its positive
+ * route records are useful only as nominations for the next current-block
+ * identity+probe pass; none of its address cache or cursor state is trusted.
+ *
+ * Keep this migration marker process-local. Saving always emits schema 5, and
+ * a normal schema-5 load must retain its existing fingerprint invalidation
+ * semantics.
+ */
+const retainedCandidateImports = new WeakSet<ProtocolDiscoveryEvidenceCache>();
+
 export function createProtocolDiscoveryEvidenceCache(
   chainId?: bigint | number | string,
 ): ProtocolDiscoveryEvidenceCache {
@@ -81,6 +124,7 @@ export function createProtocolDiscoveryEvidenceCache(
       observedSourceFingerprint: null,
       discoverySourceFingerprints: new Map(),
       recentProcessedTxs: new Map(),
+      observedContiguousAuthority: null,
     },
     routeOwnership: { version: 0, admissions: [] },
   };
@@ -89,7 +133,7 @@ export function createProtocolDiscoveryEvidenceCache(
 export function cloneProtocolDiscoveryEvidenceCache(
   source: ProtocolDiscoveryEvidenceCache,
 ): ProtocolDiscoveryEvidenceCache {
-  return {
+  const clone: ProtocolDiscoveryEvidenceCache = {
     chainId: source.chainId,
     addressEntries: new Map(
       [...source.addressEntries].map(([key, entry]) => [
@@ -112,6 +156,10 @@ export function cloneProtocolDiscoveryEvidenceCache(
       observedSourceFingerprint: source.runtime.observedSourceFingerprint,
       discoverySourceFingerprints: new Map(source.runtime.discoverySourceFingerprints),
       recentProcessedTxs: new Map(source.runtime.recentProcessedTxs),
+      observedContiguousAuthority:
+        source.runtime.observedContiguousAuthority === null
+          ? null
+          : { ...source.runtime.observedContiguousAuthority },
     },
     routeOwnership: {
       version: source.routeOwnership.version,
@@ -121,6 +169,8 @@ export function cloneProtocolDiscoveryEvidenceCache(
       })),
     },
   };
+  if (retainedCandidateImports.has(source)) retainedCandidateImports.add(clone);
+  return clone;
 }
 
 export function replaceProtocolDiscoveryEvidenceCache(
@@ -155,6 +205,10 @@ export function replaceProtocolDiscoveryEvidenceCache(
   for (const [key, value] of source.runtime.recentProcessedTxs) {
     target.runtime.recentProcessedTxs.set(key, value);
   }
+  target.runtime.observedContiguousAuthority =
+    source.runtime.observedContiguousAuthority === null
+      ? null
+      : { ...source.runtime.observedContiguousAuthority };
   target.routeOwnership = {
     version: source.routeOwnership.version,
     admissions: source.routeOwnership.admissions.map((entry) => ({
@@ -162,6 +216,8 @@ export function replaceProtocolDiscoveryEvidenceCache(
       instance: cloneInstance(entry.instance),
     })),
   };
+  if (retainedCandidateImports.has(source)) retainedCandidateImports.add(target);
+  else retainedCandidateImports.delete(target);
 }
 
 export function protocolAddressCacheKey(adapterId: string, address: string): string {
@@ -235,6 +291,104 @@ export function reconcileProtocolDiscoveryEvidenceCache(
   recordVerifiedProtocolCandidates(cache, result.wouldAdmit);
 }
 
+export interface ProtocolAddressCachePruneResult {
+  readonly before: number;
+  readonly after: number;
+  readonly expiredNegatives: number;
+  readonly capacityEvictions: number;
+  readonly protectedOverflow: number;
+}
+
+/**
+ * Address evidence is a probe optimization, never admission authority. Bound
+ * semantic negatives by age and the complete cache by size so a long-running
+ * discovery process cannot grow one family×address record forever.
+ */
+export function pruneProtocolDiscoveryAddressCache(
+  cache: ProtocolDiscoveryEvidenceCache,
+  input: {
+    readonly currentBlock: number;
+    readonly maxEntries?: number;
+    readonly negativeTtlBlocks?: number;
+    readonly sweepIntervalBlocks?: number;
+  },
+): ProtocolAddressCachePruneResult {
+  if (!Number.isSafeInteger(input.currentBlock) || input.currentBlock < 0) {
+    throw new Error(`invalid protocol address-cache block ${input.currentBlock}`);
+  }
+  const maxEntries = input.maxEntries ?? 100_000;
+  const negativeTtlBlocks = input.negativeTtlBlocks ?? 7_200;
+  const sweepIntervalBlocks = input.sweepIntervalBlocks ?? 256;
+  for (const [label, value] of [
+    ["max entries", maxEntries],
+    ["negative TTL", negativeTtlBlocks],
+    ["sweep interval", sweepIntervalBlocks],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new Error(`invalid protocol address-cache ${label} ${value}`);
+    }
+  }
+
+  const before = cache.addressEntries.size;
+  let expiredNegatives = 0;
+  let capacityEvictions = 0;
+  const protectedKeys = new Set(
+    cache.routeOwnership.admissions.map((entry) =>
+      protocolAddressCacheKey(
+        entry.adapterId,
+        entry.instance.pool.address,
+      )
+    ),
+  );
+  const sweepExpired =
+    before > maxEntries ||
+    input.currentBlock % sweepIntervalBlocks === 0;
+  if (sweepExpired) {
+    const oldestAllowed = Math.max(
+      0,
+      input.currentBlock - negativeTtlBlocks,
+    );
+    for (const [key, entry] of cache.addressEntries) {
+      if (
+        !protectedKeys.has(key) &&
+        entry.candidate === null &&
+        entry.checkedAtBlock < oldestAllowed
+      ) {
+        cache.addressEntries.delete(key);
+        expiredNegatives++;
+      }
+    }
+  }
+
+  const protectedOverflow = Math.max(
+    0,
+    protectedKeys.size - maxEntries,
+  );
+  const targetSize = Math.max(maxEntries, protectedKeys.size);
+  if (cache.addressEntries.size > targetSize) {
+    const evictionOrder = [...cache.addressEntries.entries()]
+      .filter(([key]) => !protectedKeys.has(key))
+      .sort(
+      ([keyA, a], [keyB, b]) =>
+        Number(a.candidate !== null) - Number(b.candidate !== null) ||
+        a.checkedAtBlock - b.checkedAtBlock ||
+        keyA.localeCompare(keyB),
+      );
+    for (const [key] of evictionOrder) {
+      if (cache.addressEntries.size <= targetSize) break;
+      if (cache.addressEntries.delete(key)) capacityEvictions++;
+    }
+  }
+
+  return Object.freeze({
+    before,
+    after: cache.addressEntries.size,
+    expiredNegatives,
+    capacityEvictions,
+    protectedOverflow,
+  });
+}
+
 export function loadProtocolDiscoveryEvidenceCache(
   path: string,
   expectedChainId: bigint | number | string,
@@ -268,8 +422,14 @@ export function loadProtocolDiscoveryEvidenceCache(
     discovery_source_fingerprints?: unknown;
     recent_processed_txs?: unknown;
     route_ownership?: unknown;
+    observed_contiguous_authority?: unknown;
   };
-  if (snapshot.schema_version !== SCHEMA_VERSION) {
+  const retainedCandidateImport =
+    snapshot.schema_version === RETAINED_CANDIDATE_SCHEMA_VERSION;
+  if (
+    snapshot.schema_version !== SCHEMA_VERSION &&
+    !retainedCandidateImport
+  ) {
     console.warn(`[protocol-discovery-cache] ignored unsupported schema in ${path}`);
     return empty();
   }
@@ -282,6 +442,30 @@ export function loadProtocolDiscoveryEvidenceCache(
     return empty();
   }
   const cache = createProtocolDiscoveryEvidenceCache(chainId);
+  if (retainedCandidateImport) {
+    const verifiedCandidates = normalizeRetainedCandidateImport(
+      snapshot.verified_candidates,
+    );
+    const routeOwnership = normalizeRetainedRouteOwnership(
+      snapshot.route_ownership,
+    );
+    if (!verifiedCandidates || !routeOwnership) {
+      console.warn(
+        `[protocol-discovery-cache] ignored malformed schema-4 retained candidates in ${path}`,
+      );
+      return empty();
+    }
+    for (const [key, entry] of verifiedCandidates) {
+      cache.verifiedCandidates.set(key, entry);
+    }
+    cache.routeOwnership = routeOwnership;
+    retainedCandidateImports.add(cache);
+    console.warn(
+      `[protocol-discovery-cache] imported schema-4 route records as ` +
+        `untrusted retained candidates; current-block re-attestation required`,
+    );
+    return cache;
+  }
   if (Array.isArray(snapshot.address_entries)) {
     for (const raw of snapshot.address_entries) {
       const entry = normalizeAddressEntry(raw);
@@ -311,6 +495,12 @@ export function loadProtocolDiscoveryEvidenceCache(
     cache.runtime.observedCursor = Number(snapshot.observed_cursor);
     cache.runtime.observedCursorHash = snapshot.observed_cursor_hash.toLowerCase();
   }
+  cache.runtime.observedContiguousAuthority =
+    normalizeObservedContiguousAuthority(
+      snapshot.observed_contiguous_authority,
+      cache.runtime.observedCursor,
+      cache.runtime.observedCursorHash,
+    );
   if (
     typeof snapshot.observed_source_fingerprint === "string" &&
     /^0x[0-9a-fA-F]{64}$/.test(snapshot.observed_source_fingerprint)
@@ -352,6 +542,28 @@ export function saveProtocolDiscoveryEvidenceCache(
   path: string,
   cache: ProtocolDiscoveryEvidenceCache,
 ): void {
+  const serialized = serializeProtocolDiscoveryEvidenceCache(cache);
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, serialized, { mode: 0o600 });
+  renameSync(temporary, path);
+}
+
+export async function saveProtocolDiscoveryEvidenceCacheAsync(
+  path: string,
+  cache: ProtocolDiscoveryEvidenceCache,
+): Promise<void> {
+  const serialized = serializeProtocolDiscoveryEvidenceCache(cache);
+  await mkdirAsync(dirname(path), { recursive: true });
+  const temporary =
+    `${path}.${process.pid}.${Date.now().toString(36)}.tmp`;
+  await writeFileAsync(temporary, serialized, { mode: 0o600 });
+  await renameAsync(temporary, path);
+}
+
+function serializeProtocolDiscoveryEvidenceCache(
+  cache: ProtocolDiscoveryEvidenceCache,
+): string {
   if (!cache.chainId) throw new Error("protocol discovery cache requires a chain id before save");
   if (
     (cache.runtime.observedCursor === null) !==
@@ -366,6 +578,18 @@ export function saveProtocolDiscoveryEvidenceCache(
     )
   ) {
     throw new Error("protocol discovery cache refuses an unanchored observed cursor");
+  }
+  if (
+    cache.runtime.observedContiguousAuthority !== null &&
+    normalizeObservedContiguousAuthority(
+      cache.runtime.observedContiguousAuthority,
+      cache.runtime.observedCursor,
+      cache.runtime.observedCursorHash,
+    ) === null
+  ) {
+    throw new Error(
+      "protocol discovery cache refuses malformed contiguous authority",
+    );
   }
   const snapshot = {
     schema_version: SCHEMA_VERSION,
@@ -388,6 +612,10 @@ export function saveProtocolDiscoveryEvidenceCache(
     recent_processed_txs: [...cache.runtime.recentProcessedTxs.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([txHash, blockNumber]) => ({ txHash, blockNumber })),
+    observed_contiguous_authority:
+      cache.runtime.observedContiguousAuthority === null
+        ? null
+        : { ...cache.runtime.observedContiguousAuthority },
     route_ownership: {
       version: cache.routeOwnership.version,
       admissions: [...cache.routeOwnership.admissions]
@@ -396,10 +624,98 @@ export function saveProtocolDiscoveryEvidenceCache(
         .map((entry) => ({ adapterId: entry.adapterId, instance: cloneInstance(entry.instance) })),
     },
   };
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(snapshot, bigintReplacer, 2)}\n`, { mode: 0o600 });
-  renameSync(temporary, path);
+  return `${JSON.stringify(snapshot, bigintReplacer, 2)}\n`;
+}
+
+function normalizeRetainedCandidateImport(
+  value: unknown,
+): Map<string, {
+  readonly adapterId: string;
+  readonly candidate: ProtocolCandidate;
+}> | null {
+  if (!Array.isArray(value)) return null;
+  const candidates = new Map<string, {
+    readonly adapterId: string;
+    readonly candidate: ProtocolCandidate;
+  }>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") return null;
+    const item = raw as { adapterId?: unknown; candidate?: unknown };
+    if (typeof item.adapterId !== "string" || item.adapterId.length === 0) {
+      return null;
+    }
+    const candidate = normalizeCandidate(item.candidate);
+    if (!candidate) return null;
+    const key = protocolInstanceKey(item.adapterId, candidate.pool);
+    if (candidates.has(key)) return null;
+    candidates.set(key, { adapterId: item.adapterId, candidate });
+  }
+  return candidates;
+}
+
+function normalizeObservedContiguousAuthority(
+  value: unknown,
+  cursor: number | null,
+  cursorHash: string | null,
+): ProtocolObservedContiguousAuthority | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as {
+    profile?: unknown;
+    fromBlock?: unknown;
+    completeThroughBlock?: unknown;
+    completeThroughHash?: unknown;
+  };
+  if (
+    item.profile !== CONTIGUOUS_AUTHORITY_PROFILE ||
+    item.fromBlock !== 0 ||
+    !Number.isSafeInteger(item.completeThroughBlock) ||
+    Number(item.completeThroughBlock) < 0 ||
+    typeof item.completeThroughHash !== "string" ||
+    !BLOCK_HASH_RE.test(item.completeThroughHash) ||
+    cursor === null ||
+    cursorHash === null ||
+    Number(item.completeThroughBlock) > cursor ||
+    (
+      Number(item.completeThroughBlock) === cursor &&
+      cursorHash !== item.completeThroughHash.toLowerCase()
+    )
+  ) {
+    return null;
+  }
+  return {
+    profile: CONTIGUOUS_AUTHORITY_PROFILE,
+    fromBlock: 0,
+    completeThroughBlock: Number(item.completeThroughBlock),
+    completeThroughHash: item.completeThroughHash.toLowerCase(),
+  };
+}
+
+function normalizeRetainedRouteOwnership(
+  value: unknown,
+): PersistedProtocolRouteOwnership | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as { version?: unknown; admissions?: unknown };
+  if (
+    !Number.isSafeInteger(item.version) ||
+    Number(item.version) < 0 ||
+    !Array.isArray(item.admissions)
+  ) return null;
+  const admissions: PersistedProtocolRouteOwnership["admissions"][number][] = [];
+  const keys = new Set<string>();
+  for (const raw of item.admissions) {
+    if (!raw || typeof raw !== "object") return null;
+    const entry = raw as { adapterId?: unknown; instance?: unknown };
+    if (typeof entry.adapterId !== "string" || entry.adapterId.length === 0) {
+      return null;
+    }
+    const instance = normalizeInstance(entry.instance);
+    if (!instance) return null;
+    const key = protocolInstanceKey(entry.adapterId, instance.pool);
+    if (keys.has(key)) return null;
+    keys.add(key);
+    admissions.push({ adapterId: entry.adapterId, instance });
+  }
+  return { version: Number(item.version), admissions };
 }
 
 function normalizeAddressEntry(value: unknown): ProtocolAddressCacheEntry | null {
@@ -618,6 +934,32 @@ export function updateProtocolObservedSourceFingerprint(
       }
       return [adapterId, value.toLowerCase()] as const;
     }));
+  if (retainedCandidateImports.has(cache) && normalizedSources !== null) {
+    // Schema 4 had no hash-anchored registry/cursor authority. Bind the empty
+    // runtime state to the current registry, retain only families that still
+    // exist, and let the ordinary startup pass re-attest every nomination.
+    // Nothing here creates an edge or an address-cache hit.
+    cache.runtime.observedSourceFingerprint = normalized;
+    cache.runtime.discoverySourceFingerprints.clear();
+    for (const [adapterId, value] of normalizedSources) {
+      cache.runtime.discoverySourceFingerprints.set(adapterId, value);
+    }
+    setProtocolObservedCursor(cache, null, null);
+    cache.runtime.recentProcessedTxs.clear();
+    for (const [key, value] of cache.verifiedCandidates) {
+      if (!normalizedSources.has(value.adapterId)) {
+        cache.verifiedCandidates.delete(key);
+      }
+    }
+    cache.routeOwnership = {
+      version: cache.routeOwnership.version,
+      admissions: cache.routeOwnership.admissions.filter(
+        ({ adapterId }) => normalizedSources.has(adapterId),
+      ),
+    };
+    retainedCandidateImports.delete(cache);
+    return true;
+  }
   const observedSourceChanged =
     cache.runtime.observedSourceFingerprint !== normalized;
   const sourcesUnchanged = normalizedSources === null || mapsEqual(
@@ -664,9 +1006,9 @@ export function updateProtocolObservedSourceFingerprint(
 }
 
 /**
- * Publish or clear the only restart-survivable observed-history cursor. The
- * number/hash pair is indivisible so a caller can never persist an unanchored
- * completeness claim.
+ * Publish or clear the restart-survivable observed scan cursor. The pair says
+ * where incremental ingestion resumes; negative/completeness authority is the
+ * independent, possibly older observedContiguousAuthority watermark.
  */
 export function setProtocolObservedCursor(
   cache: ProtocolDiscoveryEvidenceCache,
@@ -679,6 +1021,7 @@ export function setProtocolObservedCursor(
     }
     cache.runtime.observedCursor = null;
     cache.runtime.observedCursorHash = null;
+    cache.runtime.observedContiguousAuthority = null;
     return;
   }
   if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
@@ -687,8 +1030,150 @@ export function setProtocolObservedCursor(
   if (!BLOCK_HASH_RE.test(blockHash)) {
     throw new Error("protocol observed cursor hash must be 32 bytes");
   }
+  const normalizedHash = blockHash.toLowerCase();
+  const authority = cache.runtime.observedContiguousAuthority;
+  const preservesAuthority =
+    authority !== null &&
+    (
+      authority.completeThroughBlock < blockNumber ||
+      (
+        authority.completeThroughBlock === blockNumber &&
+        authority.completeThroughHash === normalizedHash
+      )
+    );
   cache.runtime.observedCursor = blockNumber;
-  cache.runtime.observedCursorHash = blockHash.toLowerCase();
+  cache.runtime.observedCursorHash = normalizedHash;
+  if (!preservesAuthority) {
+    cache.runtime.observedContiguousAuthority = null;
+  }
+}
+
+/**
+ * Advance the stronger negative/completeness watermark through one verified
+ * family-source pass. A bounded positive scan may still move observedCursor,
+ * but it cannot create this authority unless every contiguous source covered
+ * block 0 with no gap.
+ */
+export function advanceProtocolObservedContiguousAuthority(input: {
+  readonly cache: ProtocolDiscoveryEvidenceCache;
+  readonly families: readonly DiscoveryFamilySources[];
+  readonly familySourceCoverage: readonly {
+    readonly familyId: string;
+    readonly sourceId: string;
+    readonly complete: boolean;
+  }[];
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly toBlockHash: string;
+  readonly contiguousSourceIds: ReadonlySet<string>;
+}): ProtocolObservedContiguousAuthority | null {
+  if (
+    !Number.isSafeInteger(input.fromBlock) ||
+    input.fromBlock < 0 ||
+    !Number.isSafeInteger(input.toBlock) ||
+    input.toBlock < input.fromBlock ||
+    !BLOCK_HASH_RE.test(input.toBlockHash)
+  ) {
+    throw new Error("invalid protocol observed completeness range");
+  }
+  const watermarks = createDiscoveryFamilySourceWatermarks(input.families);
+  const prior = input.cache.runtime.observedContiguousAuthority;
+  if (prior !== null) {
+    for (const key of watermarks.keys()) {
+      watermarks.set(key, prior.completeThroughBlock);
+    }
+  }
+  const expectedCoverageKeys = new Set(
+    input.families.flatMap((family) =>
+      [...new Set(family.sourceIds)].map(
+        (sourceId) => `${family.familyId}\u001f${sourceId}`,
+      )
+    ),
+  );
+  const actualCoverageKeys = input.familySourceCoverage.map(
+    (coverage) => `${coverage.familyId}\u001f${coverage.sourceId}`,
+  );
+  if (
+    new Set(actualCoverageKeys).size !== actualCoverageKeys.length ||
+    actualCoverageKeys.some((key) => !expectedCoverageKeys.has(key)) ||
+    expectedCoverageKeys.size !== actualCoverageKeys.length
+  ) {
+    throw new Error(
+      "protocol observed completeness coverage does not match the registry",
+    );
+  }
+  if (input.familySourceCoverage.some((coverage) => !coverage.complete)) {
+    return null;
+  }
+  const familySourceComplete = new Map(
+    input.familySourceCoverage.map((coverage) => [
+      `${coverage.familyId}\u001f${coverage.sourceId}`,
+      coverage.complete,
+    ]),
+  );
+  const familyComplete = new Map(
+    input.families.map((family) => [
+      family.familyId,
+      [...new Set(family.sourceIds)].every(
+        (sourceId) =>
+          familySourceComplete.get(
+            `${family.familyId}\u001f${sourceId}`,
+          ) === true,
+      ),
+    ]),
+  );
+  const sourceComplete = new Map<string, boolean>();
+  for (const sourceId of new Set(input.families.flatMap(
+    (family) => [...family.sourceIds],
+  ))) {
+    sourceComplete.set(
+      sourceId,
+      input.families
+        .filter((family) => family.sourceIds.includes(sourceId))
+        .every(
+          (family) =>
+            familySourceComplete.get(
+              `${family.familyId}\u001f${sourceId}`,
+            ) === true,
+        ),
+    );
+  }
+  const advanced = advanceDiscoveryFamilySourceWatermarks({
+    current: watermarks,
+    families: input.families,
+    range: {
+      fromBlock: input.fromBlock,
+      toBlock: input.toBlock,
+    },
+    familyComplete,
+    familySourceComplete,
+    sourceComplete,
+    sourceIssues: [],
+    contiguousSourceIds: input.contiguousSourceIds,
+  });
+  const completeThrough = discoveryGraphCompleteThrough(
+    input.families,
+    advanced.watermarks,
+  );
+  if (
+    input.cache.runtime.observedCursor === null ||
+    input.cache.runtime.observedCursor < input.toBlock
+  ) {
+    setProtocolObservedCursor(
+      input.cache,
+      input.toBlock,
+      input.toBlockHash,
+    );
+  }
+  if (completeThrough !== input.toBlock) return null;
+  const authority: ProtocolObservedContiguousAuthority = {
+    profile: CONTIGUOUS_AUTHORITY_PROFILE,
+    fromBlock: 0,
+    completeThroughBlock: input.toBlock,
+    completeThroughHash: input.toBlockHash.toLowerCase(),
+  };
+  input.cache.runtime.observedContiguousAuthority = authority;
+  return authority;
 }
 
 export function protocolObservedCursorAnchorMatches(

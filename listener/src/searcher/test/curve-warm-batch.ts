@@ -27,8 +27,18 @@ function loadEnv(): void {
 const curveIface = new ethers.Interface([
   "function coins(uint256) view returns (address)",
   "function get_dy(int128,int128,uint256) view returns (uint256)",
+  "function stored_rates() view returns (uint256[])",
+]);
+const curveUintIface = new ethers.Interface([
+  "function get_dy(uint256,uint256,uint256) view returns (uint256)",
 ]);
 const erc20Iface = new ethers.Interface(["function decimals() view returns (uint8)"]);
+const multicallIface = new ethers.Interface([
+  "function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[])",
+]);
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+const AAVE_POOL = "0xdebf20617708857ebe4f679508e7b7863a8a8eee";
+const SAAVE_POOL = "0xeb16ae0052ed37f479f7fe63849198df1765a733";
 
 interface CaseDef {
   name: string;
@@ -41,7 +51,11 @@ const CASES: CaseDef[] = [
   { name: "DOLA/sUSDS ng", pool: ADDR.CURVE_DOLA_SUSDS },
   {
     name: "Aave dynamic-fee static-rates",
-    pool: "0xdebf20617708857ebe4f679508e7b7863a8a8eee",
+    pool: AAVE_POOL,
+  },
+  {
+    name: "sAAVE dynamic-fee static-rates",
+    pool: SAAVE_POOL,
   },
 ];
 
@@ -140,6 +154,130 @@ async function runCase(
   );
 }
 
+async function assertTransientStoredRatesFailure(
+  provider: ethers.JsonRpcProvider,
+  block: number,
+): Promise<void> {
+  const pool = ADDR.CURVE_SUSDS_USDT;
+  const tokenIn = await readCoin(provider, pool, 0, block);
+  const tokenOut = await readCoin(provider, pool, 1, block);
+  const amountIn = await sampleAmount(provider, tokenIn, block);
+
+  const baseline = new PoolStateCache(provider);
+  baseline.setTickBlock(block);
+  const baselineOut = await baseline.quoteCurve(
+    fixedBlockState(provider, block),
+    pool,
+    tokenIn,
+    tokenOut,
+    amountIn,
+  );
+  const baselineSnapshot = baseline.snapshotCurve(pool, block);
+  if (!baselineSnapshot) throw new Error("FAIL: transient baseline snapshot missing");
+
+  let injected = false;
+  const transientState = {
+    async call(req: { to: string; data: string; from?: string }): Promise<string> {
+      if (
+        !injected &&
+        req.to.toLowerCase() === pool.toLowerCase() &&
+        req.data.slice(0, 10) ===
+          curveIface.getFunction("stored_rates")!.selector
+      ) {
+        injected = true;
+        throw new Error("synthetic transport reset before stored_rates response");
+      }
+      return provider.call({
+        to: req.to,
+        data: req.data,
+        from: req.from,
+        blockTag: block,
+      });
+    },
+  } as unknown as StateBackend;
+  const challenged = new PoolStateCache(provider);
+  challenged.setTickBlock(block);
+  const challengedOut = await challenged.quoteCurve(
+    transientState,
+    pool,
+    tokenIn,
+    tokenOut,
+    amountIn,
+  );
+  const challengedSnapshot = challenged.snapshotCurve(pool, block);
+  if (!challengedSnapshot) throw new Error("FAIL: transient challenged snapshot missing");
+
+  assert(injected, "stored_rates transport failure was not injected");
+  assertSameSnapshot(
+    "sUSDS/USDT transient stored_rates",
+    baselineSnapshot,
+    challengedSnapshot,
+  );
+  assert(
+    challengedOut === baselineOut,
+    `transient stored_rates changed quote baseline=${baselineOut} challenged=${challengedOut}`,
+  );
+  console.log(
+    `[curve-warm-batch] transient stored_rates PASS quote=${challengedOut}`,
+  );
+}
+
+async function assertFallbackWitnessesBatched(
+  provider: ethers.JsonRpcProvider,
+  block: number,
+): Promise<void> {
+  let witnessBatches = 0;
+  const witnessedPools = new Set<string>();
+  const state = {
+    async call(req: { to: string; data: string; from?: string }): Promise<string> {
+      if (
+        req.to.toLowerCase() === MULTICALL3.toLowerCase() &&
+        req.data.slice(0, 10) ===
+          multicallIface.getFunction("aggregate3")!.selector
+      ) {
+        const calls = multicallIface.decodeFunctionData(
+          "aggregate3",
+          req.data,
+        )[0] as readonly { target: string; callData: string }[];
+        const witnesses = calls.filter(({ callData }) => {
+          const selector = callData.slice(0, 10);
+          return selector === curveIface.getFunction("get_dy")!.selector ||
+            selector === curveUintIface.getFunction("get_dy")!.selector;
+        });
+        if (witnesses.length > 0) {
+          witnessBatches++;
+          for (const witness of witnesses) {
+            witnessedPools.add(witness.target.toLowerCase());
+          }
+        }
+      }
+      return provider.call({
+        to: req.to,
+        data: req.data,
+        from: req.from,
+        blockTag: block,
+      });
+    },
+  } as unknown as StateBackend;
+  const cache = new PoolStateCache(provider);
+  cache.setTickBlock(block);
+  await cache.warmCurvesBatch(state, [AAVE_POOL, SAAVE_POOL]);
+  assert(cache.snapshotCurve(AAVE_POOL, block) !== null, "Aave fallback snapshot missing");
+  assert(cache.snapshotCurve(SAAVE_POOL, block) !== null, "sAAVE fallback snapshot missing");
+  assert(
+    witnessBatches === 1,
+    `fallback witnesses must share one Multicall batch, got ${witnessBatches}`,
+  );
+  assert(
+    witnessedPools.has(AAVE_POOL) && witnessedPools.has(SAAVE_POOL),
+    `fallback witness batch omitted a pool: ${[...witnessedPools].join(",")}`,
+  );
+  console.log(
+    `[curve-warm-batch] merged static-rate witnesses PASS ` +
+      `batches=${witnessBatches} pools=${witnessedPools.size}`,
+  );
+}
+
 function assertSameSnapshot(name: string, a: CurveSnapshot, b: CurveSnapshot): void {
   assert(a.kind === b.kind, `${name}: kind mismatch ${a.kind} vs ${b.kind}`);
   assert(a.blockNumber === b.blockNumber, `${name}: block mismatch ${a.blockNumber} vs ${b.blockNumber}`);
@@ -199,6 +337,8 @@ async function main(): Promise<void> {
     for (const c of CASES) {
       await runCase(provider, state, block, c);
     }
+    await assertTransientStoredRatesFailure(provider, block);
+    await assertFallbackWitnessesBatched(provider, block);
     console.log(`curve-warm-batch PASS (${CASES.length}/${CASES.length})`);
   } finally {
     provider.destroy();

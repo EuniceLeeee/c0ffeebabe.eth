@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { CoalescingAsyncWriter } from "./coalescing-async-writer.js";
 import {
   indexFactoryPools,
   mergePoolRegistries,
@@ -40,11 +41,13 @@ import {
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
 import {
+  advanceProtocolObservedContiguousAuthority,
   cloneProtocolDiscoveryEvidenceCache,
+  pruneProtocolDiscoveryAddressCache,
   reconcileProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
   replaceProtocolDiscoveryEvidenceCache,
-  saveProtocolDiscoveryEvidenceCache,
+  saveProtocolDiscoveryEvidenceCacheAsync,
   setProtocolObservedCursor,
   type ProtocolDiscoveryEvidenceCache,
 } from "./protocol-discovery-cache.js";
@@ -53,6 +56,7 @@ import {
   emitStaticSuppressedProtocolEvents,
   ProtocolDiscoveryCoverageCoordinator,
   ProtocolDiscoveryMutationQueue,
+  protocolDiscoveryRangeForLane,
 } from "./protocol-discovery-coordinator.js";
 import {
   prepareActiveProtocolDiscoveryPass,
@@ -164,7 +168,9 @@ export interface LiveDiscoveryCoordinatorDeps {
     readonly strategyViews: StrategyViews;
     readonly dexGraphCoverage: DexGraphCoverageState;
   }) => void;
-  readonly persistRuntimeGraphs: (strategyViews: StrategyViews) => void;
+  readonly persistRuntimeGraphs: (
+    strategyViews: StrategyViews,
+  ) => Promise<void>;
   readonly logRuntimeRefreshFailures: (
     failures: readonly { readonly pool: PoolEntry; readonly reason: string }[],
     label?: string,
@@ -758,6 +764,7 @@ export async function createLiveDiscoveryCoordinator(
           range: scanRange,
           watermarks: advanced.watermarks,
           positiveOnlyObserved: false,
+          eventSourceComplete: pass.scanner.eventSourceComplete,
       });
       if (nextLastProtocolDiscoveryBlock !== current.lastObservedBlock) {
         if (nextLastProtocolDiscoveryBlock !== scanRange.toBlock) {
@@ -802,6 +809,7 @@ export async function createLiveDiscoveryCoordinator(
     input: {
       readonly source: { readonly number: number; readonly hash: string };
       readonly through: number;
+      readonly mode: "hot" | "backfill";
       readonly control?: DiscoveryBackfillControl;
     },
   ): Promise<CombinedDiscoveryPrepared> => {
@@ -880,7 +888,7 @@ export async function createLiveDiscoveryCoordinator(
     const stagedProtocolCache = cloneProtocolDiscoveryEvidenceCache(
       base.protocolEvidenceCache,
     );
-    const protocolBase = protocolDiscoveryBaseFromPublication(
+    const publicationProtocolBase = protocolDiscoveryBaseFromPublication(
       base,
       {
         strategyViews: stagedStrategyViews,
@@ -890,13 +898,14 @@ export async function createLiveDiscoveryCoordinator(
       },
       stagedProtocolCache,
     );
+    const protocolBase = publicationProtocolBase;
     const observedRange =
-      protocolDiscoveryCoverage.hasObservedSource() &&
-        protocolBase.lastObservedBlock < input.through
-        ? {
-            fromBlock: protocolBase.lastObservedBlock + 1,
-            toBlock: input.through,
-          }
+      protocolDiscoveryCoverage.hasObservedSource()
+        ? planContiguousDiscoveryChunk(
+            protocolBase.lastObservedBlock,
+            input.through,
+            protocolDiscoveryMaxCatchupBlocks,
+          )
         : null;
     const protocolSourceBehind = [
       ...base.protocolFamilySourceCoverage.values(),
@@ -910,13 +919,25 @@ export async function createLiveDiscoveryCoordinator(
             toBlock: Math.max(0, protocolBase.lastObservedBlock),
           }
         : null;
+    // Current-head DEX discovery is the block-scan hot gate. Protocol
+    // receipt/trace/address probing belongs to the independent background and
+    // observed-receipt lanes; awaiting it here lets one slow protocol family
+    // consume the entire DEX pass deadline.
     const protocol = await prepareActiveProtocolDiscoveryStage(
       input.source.number,
       protocolBase,
       {
-        scanRange: observedRange ?? addressOnlyRetryRange,
-        control: rpcControl,
-        traceMemo: createProtocolTraceMemo(),
+        scanRange: protocolDiscoveryRangeForLane({
+          mode: input.mode,
+          observedRange,
+          addressOnlyRetryRange,
+        }),
+        ...(input.mode === "hot"
+          ? {}
+          : {
+              control: rpcControl,
+              traceMemo: createProtocolTraceMemo(),
+            }),
       },
     );
     const canonicalAfter = await readDexDiscoveryBlockHash(
@@ -975,14 +996,22 @@ export async function createLiveDiscoveryCoordinator(
       );
     }
     recordProtocolRouteOwnership(nextCache, nextOwnership);
+    pruneProtocolDiscoveryAddressCache(nextCache, {
+      currentBlock: prepared.source.number,
+    });
+    const baseObservedBlock =
+      base.protocolObservedCursor.completeThroughBlock;
+    const nextObservedBlock = Math.max(
+      baseObservedBlock,
+      protocol.nextLastProtocolDiscoveryBlock,
+    );
+    const nextObservedHash = nextObservedBlock === baseObservedBlock
+      ? base.protocolObservedCursor.completeThroughHash
+      : protocol.nextLastProtocolDiscoveryBlockHash;
     setProtocolObservedCursor(
       nextCache,
-      protocol.nextLastProtocolDiscoveryBlock >= 0
-        ? protocol.nextLastProtocolDiscoveryBlock
-        : null,
-      protocol.nextLastProtocolDiscoveryBlock >= 0
-        ? protocol.nextLastProtocolDiscoveryBlockHash
-        : null,
+      nextObservedBlock >= 0 ? nextObservedBlock : null,
+      nextObservedBlock >= 0 ? nextObservedHash : null,
     );
 
     const nextDexCoverage = dex?.coverage ?? base.dexGraphCoverage;
@@ -1040,6 +1069,42 @@ export async function createLiveDiscoveryCoordinator(
         ),
       );
     }
+    if (
+      protocol.pass &&
+      protocol.scanRange &&
+      protocol.scanRangeHash
+    ) {
+      const observedFamilies = protocolDiscoveryCoverage.families
+        .filter((family) =>
+          family.sourceIds.includes("observed-interaction")
+        )
+        .map((family) => ({
+          familyId: family.familyId,
+          sourceIds: ["observed-interaction"],
+        }));
+      const observedCoverage = new Map<string, boolean>(
+        protocol.pass.result.familySourceCoverage
+          .filter((coverage) =>
+            coverage.sourceId === "observed-interaction"
+          )
+          .map((coverage) => [coverage.familyId, coverage.complete]),
+      );
+      if (observedFamilies.length > 0) {
+        advanceProtocolObservedContiguousAuthority({
+          cache: nextCache,
+          families: observedFamilies,
+          familySourceCoverage: observedFamilies.map((family) => ({
+            familyId: family.familyId,
+            sourceId: "observed-interaction",
+            complete: observedCoverage.get(family.familyId) === true,
+          })),
+          fromBlock: protocol.scanRange.fromBlock,
+          toBlock: protocol.scanRange.toBlock,
+          toBlockHash: protocol.scanRangeHash,
+          contiguousSourceIds: new Set(["observed-interaction"]),
+        });
+      }
+    }
 
     return cloneLiveDiscoveryPublicationState({
       revision: base.revision + 1,
@@ -1079,10 +1144,8 @@ export async function createLiveDiscoveryCoordinator(
       landedCoverage: dex?.landedCoverage ?? base.landedCoverage,
       protocolFamilySourceCoverage: nextProtocolAnchors,
       protocolObservedCursor: Object.freeze({
-        completeThroughBlock:
-          protocol.nextLastProtocolDiscoveryBlock,
-        completeThroughHash:
-          protocol.nextLastProtocolDiscoveryBlockHash,
+        completeThroughBlock: nextObservedBlock,
+        completeThroughHash: nextObservedHash,
       }),
     });
   };
@@ -1164,22 +1227,54 @@ export async function createLiveDiscoveryCoordinator(
     });
   };
 
+  const persistenceDelayRaw = Number(
+    process.env.SEARCHER_DISCOVERY_PERSIST_DEBOUNCE_MS ??
+      "30000",
+  );
+  const persistenceDelayMs = Number.isSafeInteger(persistenceDelayRaw) &&
+      persistenceDelayRaw >= 1_000
+    ? persistenceDelayRaw
+    : 30_000;
+  let lastPersistedGraphFingerprint =
+    `${strategyViews.versions.backrun_view_hash}:` +
+    strategyViews.versions.blockscan_view_hash;
+  const persistenceWriter = new CoalescingAsyncWriter<number>(
+    persistenceDelayMs,
+    async () => {
+      const graphFingerprint =
+        `${strategyViews.versions.backrun_view_hash}:` +
+        strategyViews.versions.blockscan_view_hash;
+      const graphChanged =
+        graphFingerprint !== lastPersistedGraphFingerprint;
+      const views = strategyViews;
+      const cacheSnapshot = cloneProtocolDiscoveryEvidenceCache(
+        protocolDiscoveryCache,
+      );
+      await Promise.all([
+        graphChanged
+          ? deps.persistRuntimeGraphs(views)
+          : Promise.resolve(),
+        saveProtocolDiscoveryEvidenceCacheAsync(
+          protocolDiscoveryCachePath,
+          cacheSnapshot,
+        ),
+      ]);
+      if (graphChanged) {
+        lastPersistedGraphFingerprint = graphFingerprint;
+      }
+    },
+    (error) => {
+      console.warn(
+        `[searcher/live] discovery persistence failed: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    },
+  );
   const finishPublishedDiscoveryState = (): void => {
     if (discoveryUnsafeReason !== null) return;
     if (blindProductionAudit) return;
     mempoolIntakeRefresh.notify();
-    deps.persistRuntimeGraphs(strategyViews);
-    try {
-      saveProtocolDiscoveryEvidenceCache(
-        protocolDiscoveryCachePath,
-        protocolDiscoveryCache,
-      );
-    } catch (error) {
-      console.warn(
-        `[searcher/live] protocol discovery cache write failed: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    persistenceWriter.schedule(discoveryPublicationRevision);
   };
   const finishCombinedDiscoveryTransition = (
     prepared: CombinedDiscoveryPrepared,
@@ -1254,6 +1349,7 @@ export async function createLiveDiscoveryCoordinator(
     ) => prepareCombinedDiscoveryTransition(plan.baseState, {
       source: plan.source,
       through: plan.range.toBlock,
+      mode: "backfill",
       control,
     }),
     validateTransition: (plan, prepared) => ({
@@ -1300,14 +1396,17 @@ export async function createLiveDiscoveryCoordinator(
       setImmediate(() => process.exit(1));
     },
   );
-  const historicalDiscoveryCompleteThrough = (
+  const operationalDiscoveryCompleteThrough = (
     state: LiveDiscoveryPublicationState,
-  ): number => Math.min(
-    state.dexGraphCoverage.sourceCompleteThrough,
-    protocolDiscoveryCoverage.hasObservedSource()
+  ): number => {
+    const observedThrough = protocolDiscoveryCoverage.hasObservedSource()
       ? state.protocolObservedCursor.completeThroughBlock
-      : state.dexGraphCoverage.sourceCompleteThrough,
-  );
+      : state.dexGraphCoverage.sourceCompleteThrough;
+    return Math.min(
+      state.dexGraphCoverage.sourceCompleteThrough,
+      observedThrough,
+    );
+  };
   const scheduleDiscoveryBackfill = async (
     targetBlock?: number,
   ): Promise<void> => {
@@ -1315,7 +1414,10 @@ export async function createLiveDiscoveryCoordinator(
     const source = await observeLiveCanonicalHeader(latest);
     const base = captureLiveDiscoveryPublication();
     const targetThrough = Math.max(0, source.number - 1);
-    const completeThrough = historicalDiscoveryCompleteThrough(base);
+    // Live scheduling follows the operational cursor seeded by the one
+    // bounded startup hydrate. Exhaustive topology authority is audit evidence,
+    // not a production reason to crawl from genesis on a pruned node.
+    const completeThrough = operationalDiscoveryCompleteThrough(base);
     const hasProjectionRetry =
       base.retryableDexGraphPools.size > 0 ||
       base.retryableDexIdentityPools.size > 0 ||
@@ -1370,7 +1472,7 @@ export async function createLiveDiscoveryCoordinator(
       );
     });
   };
-  const shutdown = (): void => {
+  const shutdown = async (): Promise<void> => {
     if (stopped) return;
     stopped = true;
     if (refreshTimer) clearInterval(refreshTimer);
@@ -1378,6 +1480,16 @@ export async function createLiveDiscoveryCoordinator(
     refreshTimer = null;
     protocolDiscoveryTimer = null;
     discoveryBackfillLane.invalidate("searcher shutdown");
+    await discoveryBackfillLane.settled();
+    // An observed preparation may enqueue a final atomic publication. Drain
+    // it before the mutation queue, then schedule the latest published
+    // revision so shutdown never flushes an older cache snapshot.
+    await observedProtocolPreparationTail;
+    await protocolDiscoveryQueue.settled();
+    if (!blindProductionAudit && discoveryUnsafeReason === null) {
+      persistenceWriter.schedule(discoveryPublicationRevision);
+    }
+    await persistenceWriter.flush();
   };
   const unknownProtocolSelectorLastBlock = new Map<string, number>();
   // Receipt/trace/probe preparation is serialized independently of the live
@@ -1638,7 +1750,21 @@ export async function createLiveDiscoveryCoordinator(
     publish: publishLiveDiscoveryState,
     finishPublished: finishPublishedDiscoveryState,
     scheduleBackfill: scheduleDiscoveryBackfill,
-    prepare: prepareCombinedDiscoveryTransition,
+    prepare: (
+      base: LiveDiscoveryPublicationState,
+      input: {
+        readonly source: {
+          readonly number: number;
+          readonly hash: string;
+        };
+        readonly through: number;
+        readonly control?: DiscoveryBackfillControl;
+      },
+    ) =>
+      prepareCombinedDiscoveryTransition(base, {
+        ...input,
+        mode: "hot",
+      }),
     validate: validateCombinedDiscoveryTransition,
     finish: finishCombinedDiscoveryTransition,
   };

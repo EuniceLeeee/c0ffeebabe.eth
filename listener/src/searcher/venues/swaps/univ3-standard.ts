@@ -10,6 +10,7 @@ import type { V3PostImpactSeed } from "../../solver/pool-state-cache.js";
 import { v3SwapToState } from "../../solver/v3-math.js";
 import type {
   BlockScanStateCapability,
+  StateRead,
   StateReadResult,
 } from "../blockscan-state-capability.js";
 import {
@@ -17,6 +18,7 @@ import {
   createMutationQueryDescriptor,
   deterministicHash,
 } from "../blockscan-state-capability.js";
+import { findVenueByFactory } from "../capability.js";
 import type {
   ExactQuoteContext,
   PlanBuildContext,
@@ -44,21 +46,27 @@ import {
   UNIV3_SWAP_TOPIC,
 } from "../landed-event-registry.js";
 import {
+  BLOCKSCAN_MULTICALL3,
   assertPoolGroup,
+  blockScanMulticallIface,
   canonicalPoolStateKey,
   currentBlockRead,
+  encodeMulticall,
   directedPoolMid,
-  midsForDirectedEdges,
   q96DirectedReserves,
+  q96PrecisionProbeAmount,
   requireRead,
 } from "./blockscan-state-shared.js";
 
 const UNIV3_QUOTER_V2 = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
+const PANCAKE_V3_QUOTER_V2 = "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997";
 const UNIV3_SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
 const UNIV3_SWAP_ROUTER_V1 = "0xe592427a0aece92de3edee1f18e0157c05861564";
 const MIN_SQRT_PRICE = 4295128740n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
+const MAX_V3_EXACT_INPUT = (1n << 255n) - 1n;
 const poolIface = new ethers.Interface([
+  "function factory() view returns (address)",
   "function fee() view returns (uint24)",
   "function tickSpacing() view returns (int24)",
   "function token0() view returns (address)",
@@ -68,6 +76,9 @@ const v3StateIface = new ethers.Interface([
   "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
   "function liquidity() view returns (uint128)",
 ]);
+const v3FactoryIface = new ethers.Interface([
+  "function getPool(address tokenA,address tokenB,uint24 fee) view returns (address)",
+]);
 const quoterV2Iface = new ethers.Interface([
   "function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96)) returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
 ]);
@@ -75,7 +86,10 @@ const univ3RouterIface = new ethers.Interface([
   "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)",
 ]);
 const poolTokensCache = new Map<string, [string, string]>();
-const preparedFeeCache = new Map<string, number>();
+const preparedBindingCache = new Map<
+  string,
+  Promise<{ readonly quoter: string; readonly fee: number }>
+>();
 const UNIV3_MUTATION_TOPICS = Object.freeze([
   ethers.id("Initialize(uint160,int24)").toLowerCase(),
   ethers.id(
@@ -98,13 +112,23 @@ const UNIV3_CLASSIFIER_FINGERPRINT = deterministicHash({
     "Initialize/Mint/Burn/UniV3-Swap/PancakeV3-Swap invalidate slot0+liquidity",
 });
 
+interface UniV3PoolSchema {
+  readonly token0: string;
+  readonly token1: string;
+  readonly fee: bigint;
+  readonly tickSpacing: number;
+  readonly factory: string | null;
+  readonly reverseBindingStatus:
+    | "pending"
+    | "verified"
+    | "unsupported"
+    | "rejected";
+  readonly reverseBindingFailure: string | null;
+  readonly precisionQuoterCandidate: string | null;
+}
+
 interface UniV3StateSchema {
-  readonly pools: ReadonlyMap<string, {
-    readonly token0: string;
-    readonly token1: string;
-    readonly fee: bigint;
-    readonly tickSpacing: number;
-  }>;
+  readonly pools: ReadonlyMap<string, UniV3PoolSchema>;
 }
 
 interface UniV3CurrentState {
@@ -122,6 +146,12 @@ interface UniV3CurrentState {
   readonly feeProtocol: number;
   readonly unlocked: boolean;
   readonly inactiveReason: string | null;
+  readonly factory: string | null;
+  readonly reverseBindingStatus: UniV3PoolSchema["reverseBindingStatus"];
+  readonly precisionQuoter: string | null;
+  readonly reverseBindingFailure: string | null;
+  readonly precisionOutputs: ReadonlyMap<string, bigint>;
+  readonly precisionFailures: ReadonlyMap<string, string>;
 }
 
 const UNIV3_EDGE_IDS = new Set(["univ3-swap"]);
@@ -165,12 +195,7 @@ export const univ3BlockScanState = Object.freeze({
   stateKey: canonicalPoolStateKey,
 
   compileStaticSchema({ edges }) {
-    const pools = new Map<string, {
-      token0: string;
-      token1: string;
-      fee: bigint;
-      tickSpacing: number;
-    }>();
+    const pools = new Map<string, UniV3PoolSchema>();
     for (const edge of edges) {
       const pool = canonicalPoolStateKey(edge);
       if (!edge.poolToken0 || !edge.poolToken1) {
@@ -194,6 +219,20 @@ export const univ3BlockScanState = Object.freeze({
         throw new Error(`univ3 block-scan edge ${pool} is missing attested tick spacing`);
       }
       const tickSpacing = edge.v3TickSpacing;
+      const factory = edge.factory === undefined
+        ? null
+        : ethers.getAddress(edge.factory);
+      const reverseBindingRequired = isRegisteredStandardUniV3Factory(factory);
+      const reverseBindingStatus = reverseBindingRequired
+        ? "pending"
+        : "unsupported";
+      const reverseBindingFailure = reverseBindingRequired
+        ? null
+        : factory === null
+          ? `univ3 pool ${pool} has no reverse-attested factory`
+          : `univ3 pool ${pool} factory ${factory} is not a registered ` +
+            "standard V3 reverse-binding factory";
+      const precisionQuoterCandidate = uniV3QuoterForFactory(factory);
       const existing = pools.get(pool);
       if (
         existing &&
@@ -201,19 +240,81 @@ export const univ3BlockScanState = Object.freeze({
           existing.token0 !== token0 ||
           existing.token1 !== token1 ||
           existing.fee !== fee ||
-          existing.tickSpacing !== tickSpacing
+          existing.tickSpacing !== tickSpacing ||
+          existing.factory !== factory ||
+          existing.reverseBindingStatus !== reverseBindingStatus ||
+          existing.reverseBindingFailure !== reverseBindingFailure ||
+          existing.precisionQuoterCandidate !== precisionQuoterCandidate
         )
       ) {
         throw new Error(`univ3 block-scan pool ${pool} has inconsistent metadata`);
       }
-      pools.set(pool, Object.freeze({ token0, token1, fee, tickSpacing }));
+      pools.set(pool, Object.freeze({
+        token0,
+        token1,
+        fee,
+        tickSpacing,
+        factory,
+        reverseBindingStatus,
+        reverseBindingFailure,
+        precisionQuoterCandidate,
+      }));
     }
     return Object.freeze({ pools });
   },
 
-  buildCurrentBlockReads({ sourceBlock, sourceBlockHash, edges }) {
+  buildStaticSchemaReads({ sourceBlock, sourceBlockHash, schema }) {
+    const reads: StateRead[] = [];
+    for (const [pool, metadata] of schema.pools) {
+      if (
+        metadata.reverseBindingStatus !== "pending" ||
+        metadata.factory === null
+      ) {
+        continue;
+      }
+      reads.push(v3FactoryBindingRead({
+        pool,
+        metadata,
+        sourceBlock,
+        sourceBlockHash,
+      }));
+    }
+    return Object.freeze(reads);
+  },
+
+  hydrateStaticSchema(schema, results) {
+    const pools = new Map<string, UniV3PoolSchema>();
+    for (const [pool, metadata] of schema.pools) {
+      if (metadata.reverseBindingStatus !== "pending") {
+        pools.set(pool, metadata);
+        continue;
+      }
+      const result = results.find(
+        (candidate) => candidate.id === v3FactoryBindingReadId(pool),
+      );
+      if (!result || !result.ok) {
+        // Transport/deadline failures carry no negative identity proof. The
+        // state-key-local current read below retries without poisoning peers.
+        pools.set(pool, metadata);
+        continue;
+      }
+      const failure = decodeV3FactoryBinding(metadata, pool, result.data);
+      pools.set(pool, Object.freeze({
+        ...metadata,
+        reverseBindingStatus: failure === null
+          ? "verified"
+          : "rejected",
+        reverseBindingFailure: failure,
+      }));
+    }
+    return Object.freeze({ pools });
+  },
+
+  buildCurrentBlockReads({ sourceBlock, sourceBlockHash, schema, edges }) {
     const pool = assertPoolGroup(edges, UNIV3_EDGE_IDS);
-    return Object.freeze([
+    const metadata = schema.pools.get(pool);
+    if (!metadata) throw new Error(`univ3 block-scan schema missing ${pool}`);
+    const reads: StateRead[] = [
       currentBlockRead({
         id: `slot0:${pool}`,
         sourceBlock,
@@ -228,52 +329,87 @@ export const univ3BlockScanState = Object.freeze({
         to: pool,
         data: v3StateIface.encodeFunctionData("liquidity"),
       }),
-    ]);
+    ];
+    if (
+      metadata.factory &&
+      metadata.reverseBindingStatus === "pending"
+    ) {
+      reads.push(v3FactoryBindingRead({
+        pool,
+        metadata,
+        sourceBlock,
+        sourceBlockHash,
+      }));
+    }
+    return Object.freeze(reads);
+  },
+
+  buildDependentBlockReads({
+    sourceBlock,
+    sourceBlockHash,
+    schema,
+    edges,
+    completedRound,
+    priorResults,
+  }) {
+    if (completedRound > 0) return Object.freeze([]);
+    const snapshot = decodeUniV3State(schema, priorResults);
+    if (
+      snapshot.inactiveReason ||
+      snapshot.reverseBindingStatus === "rejected"
+    ) {
+      return Object.freeze([]);
+    }
+    if (!snapshot.precisionQuoter) return Object.freeze([]);
+    const reads: StateRead[] = [];
+    for (const edge of edges) {
+      const amountIn = q96PrecisionProbeAmount({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.token0,
+        token1: snapshot.token1,
+        edge,
+        maxAmountIn: MAX_V3_EXACT_INPUT,
+      });
+      if (amountIn === null) continue;
+      const id = univ3PrecisionReadId(edge);
+      if (priorResults.some((result) => result.id === id)) continue;
+      const quoteCallData = quoterV2Iface.encodeFunctionData(
+        "quoteExactInputSingle",
+        [{
+          tokenIn: edge.tokenIn,
+          tokenOut: edge.tokenOut,
+          amountIn,
+          fee: snapshot.fee,
+          sqrtPriceLimitX96: 0n,
+        }],
+      );
+      reads.push(currentBlockRead({
+        id,
+        sourceBlock,
+        sourceBlockHash,
+        to: BLOCKSCAN_MULTICALL3,
+        data: encodeMulticall([{
+          label: id,
+          target: snapshot.precisionQuoter,
+          callData: quoteCallData,
+          allowFailure: true,
+        }]),
+        transport: "rpc-batch",
+      }));
+    }
+    return Object.freeze(reads);
   },
 
   decodeState(schema, results) {
-    const pool = statePoolFromResults(results, "slot0:");
-    const metadata = schema.pools.get(pool);
-    if (!metadata) throw new Error(`univ3 block-scan schema missing ${pool}`);
-    const slot0 = v3StateIface.decodeFunctionResult(
-      "slot0",
-      requireRead(results, `slot0:${pool}`).data,
-    );
-    const liquidity = v3StateIface.decodeFunctionResult(
-      "liquidity",
-      requireRead(results, `liquidity:${pool}`).data,
-    );
-    const sqrtPriceX96 = BigInt(slot0[0]);
-    const activeLiquidity = BigInt(liquidity[0]);
-    const inactiveFields = [
-      sqrtPriceX96 === 0n ? "sqrtPriceX96" : null,
-      activeLiquidity === 0n ? "liquidity" : null,
-    ].filter((field): field is string => field !== null);
-    const snapshot = {
-      pool,
-      token0: metadata.token0,
-      token1: metadata.token1,
-      sqrtPriceX96,
-      tick: Number(slot0[1]),
-      liquidity: activeLiquidity,
-      fee: metadata.fee,
-      tickSpacing: metadata.tickSpacing,
-      observationIndex: Number(slot0[2]),
-      observationCardinality: Number(slot0[3]),
-      observationCardinalityNext: Number(slot0[4]),
-      feeProtocol: Number(slot0[5]),
-      unlocked: Boolean(slot0[6]),
-      inactiveReason:
-        inactiveFields.length > 0
-          ? `univ3 pool ${pool} has zero ${inactiveFields.join(" and ")} ` +
-            `at the current source`
-          : null,
-    };
-    return Object.freeze(snapshot);
+    return decodeUniV3State(schema, results);
   },
 
   deriveMids(snapshot, edges) {
-    if (snapshot.inactiveReason) {
+    if (
+      snapshot.inactiveReason ||
+      snapshot.reverseBindingStatus === "rejected"
+    ) {
       for (const edge of edges) {
         if (canonicalPoolStateKey(edge) !== snapshot.pool) {
           throw new Error(
@@ -283,18 +419,36 @@ export const univ3BlockScanState = Object.freeze({
       }
       return new Map();
     }
-    return midsForDirectedEdges(edges, (edge) => {
+    const mids = new Map();
+    for (const edge of edges) {
       if (canonicalPoolStateKey(edge) !== snapshot.pool) {
         throw new Error(`univ3 snapshot ${snapshot.pool} used for ${edge.target}`);
       }
+      const amountIn = q96PrecisionProbeAmount({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.token0,
+        token1: snapshot.token1,
+        edge,
+        maxAmountIn: MAX_V3_EXACT_INPUT,
+      });
+      const precisionOutput = amountIn === null
+        ? undefined
+        : uniV3PrecisionOutput(snapshot, edge);
+      if (amountIn !== null && precisionOutput === undefined) continue;
+      const precisionQuote = amountIn === null || precisionOutput === undefined
+        ? undefined
+        : { amountIn, amountOut: precisionOutput };
       const directed = q96DirectedReserves({
         sqrtPriceX96: snapshot.sqrtPriceX96,
         liquidity: snapshot.liquidity,
         token0: snapshot.token0,
         token1: snapshot.token1,
         edge,
+        precisionQuote,
       });
-      return directedPoolMid({
+      if (!directed) continue;
+      mids.set(blockScanEdgeKey(edge), directedPoolMid({
         kind: "v3",
         edge,
         reserveIn: directed.reserveIn,
@@ -303,20 +457,71 @@ export const univ3BlockScanState = Object.freeze({
         sqrtPriceX96: directed.sqrtPriceInOutX96,
         liquidity: snapshot.liquidity,
         feeBps: Number(snapshot.fee) / 100,
-      });
-    });
+      }));
+    }
+    return mids;
   },
 
   behaviorProvenUnavailableEdges(snapshot, edges) {
-    if (!snapshot.inactiveReason) return new Map();
     const unavailable = new Map<string, string>();
+    if (
+      snapshot.inactiveReason ||
+      snapshot.reverseBindingStatus === "rejected"
+    ) {
+      const reason =
+        snapshot.inactiveReason ?? snapshot.reverseBindingFailure!;
+      for (const edge of edges) {
+        if (canonicalPoolStateKey(edge) !== snapshot.pool) {
+          throw new Error(
+            `univ3 snapshot ${snapshot.pool} used for ${edge.target}`,
+          );
+        }
+        unavailable.set(blockScanEdgeKey(edge), reason);
+      }
+      return unavailable;
+    }
     for (const edge of edges) {
-      if (canonicalPoolStateKey(edge) !== snapshot.pool) {
+      const amountIn = q96PrecisionProbeAmount({
+        sqrtPriceX96: snapshot.sqrtPriceX96,
+        liquidity: snapshot.liquidity,
+        token0: snapshot.token0,
+        token1: snapshot.token1,
+        edge,
+        maxAmountIn: MAX_V3_EXACT_INPUT,
+      });
+      if (amountIn === null) continue;
+      const edgeKey = blockScanEdgeKey(edge);
+      const precisionOutput = snapshot.precisionOutputs.get(
+        univ3PrecisionReadId(edge),
+      );
+      const precisionFailure = snapshot.precisionFailures.get(
+        univ3PrecisionReadId(edge),
+      );
+      if (!snapshot.precisionQuoter) {
+        unavailable.set(
+          edgeKey,
+          `univ3 direction ${edge.tokenIn}->${edge.tokenOut} requires a ` +
+            `factory-bound current-source precision witness, but factory ` +
+            `${snapshot.factory ?? "unknown"} has no registered witness`,
+        );
+      } else if (precisionFailure) {
+        unavailable.set(
+          edgeKey,
+          `univ3 direction ${edge.tokenIn}->${edge.tokenOut} factory-bound ` +
+            `current-source precision witness failed: ${precisionFailure}`,
+        );
+      } else if (precisionOutput === undefined) {
         throw new Error(
-          `univ3 snapshot ${snapshot.pool} used for ${edge.target}`,
+          `univ3 current-source precision result missing ` +
+            `${univ3PrecisionReadId(edge)}`,
+        );
+      } else if (precisionOutput === 0n) {
+        unavailable.set(
+          edgeKey,
+          `univ3 direction ${edge.tokenIn}->${edge.tokenOut} returned zero ` +
+            `at its current-source scanner ceiling ${amountIn}`,
         );
       }
-      unavailable.set(blockScanEdgeKey(edge), snapshot.inactiveReason);
     }
     return unavailable;
   },
@@ -394,6 +599,284 @@ export const univ3BlockScanState = Object.freeze({
   },
 } satisfies BlockScanStateCapability<UniV3StateSchema, UniV3CurrentState>);
 
+function decodeUniV3State(
+  schema: UniV3StateSchema,
+  results: readonly StateReadResult[],
+): UniV3CurrentState {
+  const pool = statePoolFromResults(results, "slot0:");
+  const metadata = schema.pools.get(pool);
+  if (!metadata) throw new Error(`univ3 block-scan schema missing ${pool}`);
+  const slot0 = v3StateIface.decodeFunctionResult(
+    "slot0",
+    requireRead(results, `slot0:${pool}`).data,
+  );
+  const liquidity = v3StateIface.decodeFunctionResult(
+    "liquidity",
+    requireRead(results, `liquidity:${pool}`).data,
+  );
+  const sqrtPriceX96 = BigInt(slot0[0]);
+  const activeLiquidity = BigInt(liquidity[0]);
+  const inactiveFields = [
+    sqrtPriceX96 === 0n ? "sqrtPriceX96" : null,
+    activeLiquidity === 0n ? "liquidity" : null,
+  ].filter((field): field is string => field !== null);
+  let precisionQuoter: string | null = null;
+  let reverseBindingFailure = metadata.reverseBindingFailure;
+  let reverseBindingStatus = metadata.reverseBindingStatus;
+  if (metadata.reverseBindingStatus === "verified") {
+    precisionQuoter = metadata.precisionQuoterCandidate;
+  } else if (metadata.reverseBindingStatus === "pending") {
+    const failure = decodeV3FactoryBinding(
+      metadata,
+      pool,
+      requireRead(results, v3FactoryBindingReadId(pool)).data,
+    );
+    if (failure === null) {
+      precisionQuoter = metadata.precisionQuoterCandidate;
+      reverseBindingFailure = null;
+      reverseBindingStatus = "verified";
+    } else {
+      reverseBindingFailure = failure;
+      reverseBindingStatus = "rejected";
+    }
+  }
+  const precisionOutputs = new Map<string, bigint>();
+  const precisionFailures = new Map<string, string>();
+  for (const result of results) {
+    if (!result.ok || !result.id.startsWith("v3-precision:")) continue;
+    try {
+      const aggregate = blockScanMulticallIface.decodeFunctionResult(
+        "aggregate3",
+        result.data,
+      )[0] as readonly { success: boolean; returnData: string }[];
+      if (aggregate.length !== 1) {
+        precisionFailures.set(
+          result.id,
+          `multicall returned ${aggregate.length}/1 results`,
+        );
+        continue;
+      }
+      if (!aggregate[0].success) {
+        precisionFailures.set(result.id, "quote call reverted");
+        continue;
+      }
+      precisionOutputs.set(result.id, BigInt(
+        quoterV2Iface.decodeFunctionResult(
+          "quoteExactInputSingle",
+          aggregate[0].returnData,
+        )[0],
+      ));
+    } catch (error) {
+      precisionFailures.set(
+        result.id,
+        `malformed quote result: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return Object.freeze({
+    pool,
+    token0: metadata.token0,
+    token1: metadata.token1,
+    sqrtPriceX96,
+    tick: Number(slot0[1]),
+    liquidity: activeLiquidity,
+    fee: metadata.fee,
+    tickSpacing: metadata.tickSpacing,
+    observationIndex: Number(slot0[2]),
+    observationCardinality: Number(slot0[3]),
+    observationCardinalityNext: Number(slot0[4]),
+    feeProtocol: Number(slot0[5]),
+    unlocked: Boolean(slot0[6]),
+    factory: metadata.factory,
+    reverseBindingStatus,
+    precisionQuoter,
+    reverseBindingFailure,
+    inactiveReason:
+      inactiveFields.length > 0
+        ? `univ3 pool ${pool} has zero ${inactiveFields.join(" and ")} ` +
+          `at the current source`
+        : null,
+    precisionOutputs,
+    precisionFailures,
+  });
+}
+
+function univ3PrecisionReadId(edge: TokenEdge): string {
+  return `v3-precision:${blockScanEdgeKey(edge)}`;
+}
+
+function v3FactoryBindingReadId(pool: string): string {
+  return `v3-factory-binding:${pool}`;
+}
+
+function v3FactoryBindingRead(input: {
+  readonly pool: string;
+  readonly metadata: UniV3PoolSchema;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+}): StateRead {
+  if (input.metadata.factory === null) {
+    throw new Error(`univ3 pool ${input.pool} has no factory for reverse binding`);
+  }
+  const [tokenA, tokenB] = sortUniV3TokenPair(
+    input.metadata.token0,
+    input.metadata.token1,
+  );
+  return currentBlockRead({
+    id: v3FactoryBindingReadId(input.pool),
+    sourceBlock: input.sourceBlock,
+    sourceBlockHash: input.sourceBlockHash,
+    to: input.metadata.factory,
+    data: v3FactoryIface.encodeFunctionData("getPool", [
+      tokenA,
+      tokenB,
+      input.metadata.fee,
+    ]),
+  });
+}
+
+function decodeV3FactoryBinding(
+  metadata: UniV3PoolSchema,
+  pool: string,
+  rawBinding: string,
+): string | null {
+  try {
+    const boundPool = ethers.getAddress(String(
+      v3FactoryIface.decodeFunctionResult("getPool", rawBinding)[0],
+    ));
+    return boundPool === ethers.getAddress(pool)
+      ? null
+      : `univ3 factory ${metadata.factory} binds ` +
+        `${metadata.token0}/${metadata.token1}/${metadata.fee} to ` +
+        `${boundPool}, not target ${pool}, at the current source`;
+  } catch (error) {
+    return `univ3 factory ${metadata.factory} returned malformed getPool ` +
+      `evidence for ${pool}: ` +
+      `${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+function uniV3PrecisionOutput(
+  snapshot: UniV3CurrentState,
+  edge: TokenEdge,
+): bigint | undefined {
+  const id = univ3PrecisionReadId(edge);
+  if (snapshot.precisionFailures.has(id)) return undefined;
+  return snapshot.precisionOutputs.get(id);
+}
+
+function uniV3QuoterForFactory(
+  factory: string | null,
+): string | null {
+  const identity = findVenueByFactory(factory);
+  // Each QuoterV2 deterministically routes through its own factory. Reusing
+  // one lineage's quoter for another can quote a different pool with the same
+  // token/fee tuple, so provisional factories remain fail-closed.
+  if (
+    identity?.compatibility !== "standard" ||
+    identity.poolAdapter !== "univ3"
+  ) {
+    return null;
+  }
+  if (identity.venue === "univ3") return UNIV3_QUOTER_V2;
+  if (identity.venue === "pancake-v3") return PANCAKE_V3_QUOTER_V2;
+  return null;
+}
+
+function isRegisteredStandardUniV3Factory(factory: string | null): boolean {
+  const identity = findVenueByFactory(factory);
+  return identity?.compatibility === "standard" &&
+    identity.poolAdapter === "univ3";
+}
+
+async function resolveUniV3FactoryBoundQuoter(
+  read: (req: { readonly to: string; readonly data: string }) => Promise<string>,
+  pool: string,
+  tokenIn: string,
+  tokenOut: string,
+): Promise<{ readonly quoter: string; readonly fee: number }> {
+  const [rawFactory, rawToken0, rawToken1, rawFee] = await Promise.all([
+    read({
+      to: pool,
+      data: poolIface.encodeFunctionData("factory"),
+    }),
+    read({
+      to: pool,
+      data: poolIface.encodeFunctionData("token0"),
+    }),
+    read({
+      to: pool,
+      data: poolIface.encodeFunctionData("token1"),
+    }),
+    read({
+      to: pool,
+      data: poolIface.encodeFunctionData("fee"),
+    }),
+  ]);
+  const factory = ethers.getAddress(
+    String(poolIface.decodeFunctionResult("factory", rawFactory)[0]),
+  );
+  const token0 = ethers.getAddress(
+    String(poolIface.decodeFunctionResult("token0", rawToken0)[0]),
+  );
+  const token1 = ethers.getAddress(
+    String(poolIface.decodeFunctionResult("token1", rawToken1)[0]),
+  );
+  const requested = new Set([
+    ethers.getAddress(tokenIn).toLowerCase(),
+    ethers.getAddress(tokenOut).toLowerCase(),
+  ]);
+  if (
+    requested.size !== 2 ||
+    !requested.has(token0.toLowerCase()) ||
+    !requested.has(token1.toLowerCase())
+  ) {
+    throw new Error(
+      `univ3 target ${pool} token pair ${token0}/${token1} does not match ` +
+        `requested ${tokenIn}/${tokenOut}`,
+    );
+  }
+  const feeBigInt = BigInt(poolIface.decodeFunctionResult("fee", rawFee)[0]);
+  if (feeBigInt < 0n || feeBigInt > 0xffffffn) {
+    throw new Error(`univ3 pool ${pool} returned invalid fee ${feeBigInt}`);
+  }
+  const quoter = uniV3QuoterForFactory(factory);
+  if (!quoter) {
+    throw new Error(
+      `univ3 pool ${pool} factory ${factory} has no registered ` +
+        "factory-bound quoter",
+    );
+  }
+  const [tokenA, tokenB] = sortUniV3TokenPair(token0, token1);
+  const rawBinding = await read({
+    to: factory,
+    data: v3FactoryIface.encodeFunctionData("getPool", [
+      tokenA,
+      tokenB,
+      feeBigInt,
+    ]),
+  });
+  const boundPool = ethers.getAddress(
+    String(v3FactoryIface.decodeFunctionResult("getPool", rawBinding)[0]),
+  );
+  if (boundPool !== ethers.getAddress(pool)) {
+    throw new Error(
+      `univ3 factory ${factory} binds ${tokenA}/${tokenB}/${feeBigInt} ` +
+        `to ${boundPool}, not target ${pool}`,
+    );
+  }
+  return Object.freeze({ quoter, fee: Number(feeBigInt) });
+}
+
+function sortUniV3TokenPair(
+  token0: string,
+  token1: string,
+): readonly [string, string] {
+  return BigInt(token0) < BigInt(token1)
+    ? [token0, token1]
+    : [token1, token0];
+}
+
 export const univ3StandardAdapter = Object.freeze({
   id: "univ3-standard",
   kind: "swap",
@@ -432,10 +915,10 @@ export const univ3StandardAdapter = Object.freeze({
     quote: quoteUniV3Prepared,
     quoteUnsupportedReason: null,
     encodeQuotePrewarm: async (ctx: PreparedRouteContext) => {
-      const fee = await resolvePreparedFee(ctx, ctx.request.target);
+      const { quoter, fee } = await resolvePreparedUniV3FactoryBoundQuoter(ctx);
       return [{
         from: ethers.ZeroAddress,
-        to: UNIV3_QUOTER_V2,
+        to: quoter,
         calldata: quoterV2Iface.encodeFunctionData("quoteExactInputSingle", [{
           tokenIn: ctx.request.tokenIn,
           tokenOut: ctx.request.tokenOut,
@@ -556,6 +1039,7 @@ async function buildUniV3Edges(
       poolToken1: token1,
       v3Fee: fee,
       v3TickSpacing: tickSpacing,
+      factory: pool.factory,
       score: pool.score,
       ...taxonomy,
     },
@@ -569,6 +1053,7 @@ async function buildUniV3Edges(
       poolToken1: token1,
       v3Fee: fee,
       v3TickSpacing: tickSpacing,
+      factory: pool.factory,
       score: pool.score,
       ...taxonomy,
     },
@@ -587,11 +1072,12 @@ async function quoteUniV3Exact(ctx: ExactQuoteContext): Promise<bigint> {
       // Crossed ticks outside the warm window fall back to QuoterV2.
     }
   }
-  const feeResult = await state.call({
-    to: target,
-    data: poolIface.encodeFunctionData("fee"),
-  });
-  const fee = Number(BigInt(feeResult));
+  const { quoter, fee } = await resolveUniV3FactoryBoundQuoter(
+    (request) => state.call(request),
+    target,
+    tokenIn,
+    tokenOut,
+  );
   const data = quoterV2Iface.encodeFunctionData("quoteExactInputSingle", [{
     tokenIn,
     tokenOut,
@@ -599,7 +1085,7 @@ async function quoteUniV3Exact(ctx: ExactQuoteContext): Promise<bigint> {
     fee,
     sqrtPriceLimitX96: 0n,
   }]);
-  const result = await state.call({ to: UNIV3_QUOTER_V2, data });
+  const result = await state.call({ to: quoter, data });
   return BigInt(quoterV2Iface.decodeFunctionResult("quoteExactInputSingle", result)[0]);
 }
 
@@ -637,7 +1123,7 @@ async function buildUniV3PlanFragment(ctx: PlanBuildContext): Promise<PlanFragme
 }
 
 async function quoteUniV3Prepared(ctx: PreparedRouteContext): Promise<PreparedRouteQuoteResult> {
-  const fee = await resolvePreparedFee(ctx, ctx.request.target);
+  const { quoter, fee } = await resolvePreparedUniV3FactoryBoundQuoter(ctx);
   const data = quoterV2Iface.encodeFunctionData("quoteExactInputSingle", [{
     tokenIn: ctx.request.tokenIn,
     tokenOut: ctx.request.tokenOut,
@@ -645,7 +1131,7 @@ async function quoteUniV3Prepared(ctx: PreparedRouteContext): Promise<PreparedRo
     fee,
     sqrtPriceLimitX96: 0n,
   }]);
-  const quoted = await ctx.callPrepared(UNIV3_QUOTER_V2, data, { gasLimit: 3_000_000 });
+  const quoted = await ctx.callPrepared(quoter, data, { gasLimit: 3_000_000 });
   const decoded = quoterV2Iface.decodeFunctionResult("quoteExactInputSingle", quoted.output);
   return {
     amountOut: BigInt(decoded[0]),
@@ -654,14 +1140,31 @@ async function quoteUniV3Prepared(ctx: PreparedRouteContext): Promise<PreparedRo
   };
 }
 
-async function resolvePreparedFee(ctx: PreparedRouteContext, pool: string): Promise<number> {
-  const key = pool.toLowerCase();
-  const cached = preparedFeeCache.get(key);
-  if (cached !== undefined) return cached;
-  const raw = await ctx.readChain({ to: pool, data: poolIface.encodeFunctionData("fee", []) });
-  const fee = Number(BigInt(raw));
-  preparedFeeCache.set(key, fee);
-  return fee;
+async function resolvePreparedUniV3FactoryBoundQuoter(
+  ctx: PreparedRouteContext,
+): Promise<{ readonly quoter: string; readonly fee: number }> {
+  const key = [
+    ctx.request.target,
+    ctx.request.tokenIn,
+    ctx.request.tokenOut,
+  ].map((value) => value.toLowerCase()).join(":");
+  const cached = preparedBindingCache.get(key);
+  if (cached) return cached;
+  const pending = resolveUniV3FactoryBoundQuoter(
+    ctx.readChain,
+    ctx.request.target,
+    ctx.request.tokenIn,
+    ctx.request.tokenOut,
+  );
+  preparedBindingCache.set(key, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    if (preparedBindingCache.get(key) === pending) {
+      preparedBindingCache.delete(key);
+    }
+    throw error;
+  }
 }
 
 async function queryPoolTokens(

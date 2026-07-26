@@ -9,6 +9,7 @@ import type {
   V4Snapshot,
 } from "../solver/pool-state-cache.js";
 import { curveNgGetDy, curvePlainGetDy } from "../solver/curve-math.js";
+import { BLOCKSCAN_MIN_VENUE_RESERVE_IN } from "../detector/blockscan-sizing-constants.js";
 import { bigintRatio } from "./swaps/blockscan-state-shared.js";
 
 export interface ExternalMidQuote {
@@ -52,6 +53,24 @@ export interface SyncMidReadContext {
 const Q96 = 1n << 96n;
 const Q192 = Q96 * Q96;
 const WETH = ADDR.WETH.toLowerCase();
+
+export class LegacyConcentratedLiquidityPrecisionUnsupportedError extends Error {
+  readonly code = "LEGACY_CONCENTRATED_LIQUIDITY_PRECISION_UNSUPPORTED";
+
+  constructor(
+    family: "univ3" | "univ4",
+    pool: string,
+    reserve0Floor: bigint,
+    reserve1Floor: bigint,
+  ) {
+    super(
+      `${family} legacy sync-mid cannot represent current-source precision for ${pool}: ` +
+        `virtualReserves=${reserve0Floor}/${reserve1Floor}; ` +
+        "use the production pricing-state precision path",
+    );
+    this.name = "LegacyConcentratedLiquidityPrecisionUnsupportedError";
+  }
+}
 
 export function readV2WarmMid(ctx: SyncMidReadContext): RouteVenueMid | null {
   return readV2Mid(ctx.cache.snapshotV2(ctx.pool, ctx.sourceBlock), ctx);
@@ -113,8 +132,19 @@ function readV3Mid(snapshot: V3Snapshot | null, ctx: SyncMidReadContext): RouteV
     snapshot.state.liquidity * Q96 / snapshot.state.sqrtPriceX96;
   const reserve1Floor =
     snapshot.state.liquidity * snapshot.state.sqrtPriceX96 / Q96;
-  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
-  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
+  if (
+    reserve0Floor < BLOCKSCAN_MIN_VENUE_RESERVE_IN ||
+    reserve1Floor < BLOCKSCAN_MIN_VENUE_RESERVE_IN
+  ) {
+    throw new LegacyConcentratedLiquidityPrecisionUnsupportedError(
+      "univ3",
+      ctx.pool,
+      reserve0Floor,
+      reserve1Floor,
+    );
+  }
+  const reserve0 = reserve0Floor;
+  const reserve1 = reserve1Floor;
   if (token0 === ctx.a && token1 === ctx.b) {
     mid = price0To1;
     sqrtABX96 = snapshot.state.sqrtPriceX96;
@@ -155,8 +185,19 @@ function readV4Mid(snapshot: V4Snapshot | null, ctx: SyncMidReadContext): RouteV
   let reserveB: bigint;
   const reserve0Floor = snapshot.liquidity * Q96 / snapshot.sqrtPriceX96;
   const reserve1Floor = snapshot.liquidity * snapshot.sqrtPriceX96 / Q96;
-  const reserve0 = reserve0Floor > 0n ? reserve0Floor : 1n;
-  const reserve1 = reserve1Floor > 0n ? reserve1Floor : 1n;
+  if (
+    reserve0Floor < BLOCKSCAN_MIN_VENUE_RESERVE_IN ||
+    reserve1Floor < BLOCKSCAN_MIN_VENUE_RESERVE_IN
+  ) {
+    throw new LegacyConcentratedLiquidityPrecisionUnsupportedError(
+      "univ4",
+      ctx.pool,
+      reserve0Floor,
+      reserve1Floor,
+    );
+  }
+  const reserve0 = reserve0Floor;
+  const reserve1 = reserve1Floor;
   if (token0 === ctx.a && token1 === ctx.b) {
     mid = price0To1;
     sqrtABX96 = snapshot.sqrtPriceX96;

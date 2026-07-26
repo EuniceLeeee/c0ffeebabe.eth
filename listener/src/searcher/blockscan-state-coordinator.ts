@@ -442,7 +442,8 @@ export class BlockScanStateCoordinator {
       Math.max(0, delay),
     );
 
-    const graphIssues = verifiedGraphCompletenessIssueDetails(graph).map(
+    const graphIssueDetails = verifiedGraphCompletenessIssueDetails(graph);
+    const graphIssues = graphIssueDetails.map(
       (issue): BlockScanStateIssue => ({
         kind: "graph-incomplete",
         ...(issue.familyId === undefined ? {} : { familyId: issue.familyId }),
@@ -450,9 +451,26 @@ export class BlockScanStateCoordinator {
         message: issue.message,
       }),
     );
+    const positiveProtocolFamilyIds = new Set(
+      ownership.groups
+        .filter((group) => group.lane === "protocol")
+        .map((group) => group.familyId),
+    );
+    /*
+     * Discovery topology completeness is negative evidence: it proves that no
+     * additional family instance was omitted. Every protocol edge already in
+     * this GraphView, however, was identity/probe re-attested at source N.
+     * Missing negative evidence must keep the generation globally degraded,
+     * but must not suppress those positively proven edges. Swap/DEX source
+     * gaps still block their owning family because their concrete edge set is
+     * itself derived from that source.
+     */
     const graphIncompleteFamilyIds = new Set(
-      graphIssues.flatMap((issue) =>
-        issue.familyId === undefined ? [] : [issue.familyId]
+      graphIssueDetails.flatMap((issue) =>
+        issue.familyId === undefined ||
+          positiveProtocolFamilyIds.has(issue.familyId)
+          ? []
+          : [issue.familyId]
       ),
     );
     try {

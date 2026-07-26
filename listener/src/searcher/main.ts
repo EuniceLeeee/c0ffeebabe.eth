@@ -1,4 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  mkdir as mkdirAsync,
+  rename as renameAsync,
+  writeFile as writeFileAsync,
+} from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -27,10 +32,12 @@ import {
   type ProtocolDiscoveryResult,
 } from "./protocol-instance-discovery.js";
 import {
+  advanceProtocolObservedContiguousAuthority,
   cachedProtocolCandidates,
   createProtocolDiscoveryEvidenceCache,
   invalidateProtocolObservedHistory,
   loadProtocolDiscoveryEvidenceCache,
+  pruneProtocolDiscoveryAddressCache,
   protocolObservedCursorAnchorMatches,
   reconcileProtocolDiscoveryEvidenceCache,
   recordProtocolRouteOwnership,
@@ -489,36 +496,59 @@ function dumpRuntimeGraphPools(
   path = DEFAULT_RUNTIME_GRAPH_POOLS_PATH,
 ): void {
   try {
-    const normalized = pools.map((pool) => ({
-      address: pool.address.toLowerCase(),
-      adapter: pool.adapter,
-      venueId: pool.venueId,
-      factory: pool.factory?.toLowerCase(),
-      identitySource: pool.identitySource,
-      poolId: pool.poolId?.toLowerCase(),
-      currency0: pool.currency0?.toLowerCase(),
-      currency1: pool.currency1?.toLowerCase(),
-      logicalInstanceId: pool.logicalInstanceId,
-      fixedTokenIn: pool.fixedTokenIn?.toLowerCase(),
-      fixedTokenOut: pool.fixedTokenOut?.toLowerCase(),
-      fixedSlotKind: pool.fixedSlotKind,
-      fixedProtocolAction: pool.fixedProtocolAction,
-      fee: pool.fee,
-      tickSpacing: pool.tickSpacing,
-      hooks: pool.hooks?.toLowerCase(),
-    }));
+    const serialized = serializeRuntimeGraphPools(pools);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify({
-      builtAt: new Date().toISOString(),
-      count: normalized.length,
-      pools: normalized,
-    }, null, 2)}\n`);
-    console.log(`[searcher/live] runtime graph pools dumped: ${path} count=${normalized.length}`);
+    writeFileSync(path, serialized);
+    console.log(
+      `[searcher/live] runtime graph pools dumped: ${path} count=${pools.length}`,
+    );
   } catch (err) {
     console.warn(
       `[searcher/live] warning: failed to dump runtime graph pools: ${(err as Error).message}`,
     );
   }
+}
+
+async function dumpRuntimeGraphPoolsAsync(
+  pools: readonly PoolEntry[],
+  path = DEFAULT_RUNTIME_GRAPH_POOLS_PATH,
+): Promise<void> {
+  const serialized = serializeRuntimeGraphPools(pools);
+  await mkdirAsync(dirname(path), { recursive: true });
+  const temporary =
+    `${path}.${process.pid}.${Date.now().toString(36)}.tmp`;
+  await writeFileAsync(temporary, serialized);
+  await renameAsync(temporary, path);
+  console.log(
+    `[searcher/live] runtime graph pools dumped: ${path} ` +
+      `count=${pools.length}`,
+  );
+}
+
+function serializeRuntimeGraphPools(pools: readonly PoolEntry[]): string {
+  const normalized = pools.map((pool) => ({
+    address: pool.address.toLowerCase(),
+    adapter: pool.adapter,
+    venueId: pool.venueId,
+    factory: pool.factory?.toLowerCase(),
+    identitySource: pool.identitySource,
+    poolId: pool.poolId?.toLowerCase(),
+    currency0: pool.currency0?.toLowerCase(),
+    currency1: pool.currency1?.toLowerCase(),
+    logicalInstanceId: pool.logicalInstanceId,
+    fixedTokenIn: pool.fixedTokenIn?.toLowerCase(),
+    fixedTokenOut: pool.fixedTokenOut?.toLowerCase(),
+    fixedSlotKind: pool.fixedSlotKind,
+    fixedProtocolAction: pool.fixedProtocolAction,
+    fee: pool.fee,
+    tickSpacing: pool.tickSpacing,
+    hooks: pool.hooks?.toLowerCase(),
+  }));
+  return `${JSON.stringify({
+    builtAt: new Date().toISOString(),
+    count: normalized.length,
+    pools: normalized,
+  }, null, 2)}\n`;
 }
 
 // Live hot path prefers a dedicated endpoint (e.g. a local reth on 127.0.0.1)
@@ -1092,6 +1122,18 @@ async function main(): Promise<void> {
     protocolDiscoveryBlocks,
     Number(process.env.SEARCHER_PROTOCOL_DISCOVERY_MAX_CATCHUP_BLOCKS ?? "50000"),
   );
+  const protocolDiscoveryStartupFallbackBlocks = Number(
+    process.env.SEARCHER_PROTOCOL_DISCOVERY_STARTUP_FALLBACK_BLOCKS ??
+      "10000",
+  );
+  if (
+    !Number.isSafeInteger(protocolDiscoveryStartupFallbackBlocks) ||
+    protocolDiscoveryStartupFallbackBlocks < 0
+  ) {
+    throw new Error(
+      "SEARCHER_PROTOCOL_DISCOVERY_STARTUP_FALLBACK_BLOCKS must be a non-negative integer",
+    );
+  }
   const mainnetBackend: TokenQueryBackend = {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
@@ -1464,29 +1506,50 @@ async function main(): Promise<void> {
       observedSourceChanged = true;
     }
   }
+  const persistedObservedAuthority =
+    protocolDiscoveryCache.runtime.observedContiguousAuthority;
+  if (persistedObservedAuthority !== null) {
+    const canonicalAuthorityHash = await readBlockHash(
+      provider,
+      persistedObservedAuthority.completeThroughBlock,
+    );
+    if (
+      canonicalAuthorityHash !==
+        persistedObservedAuthority.completeThroughHash
+    ) {
+      console.warn(
+        `[searcher/live] protocol contiguous authority invalid; ` +
+          `cursor=${persistedObservedAuthority.completeThroughBlock} ` +
+          `cached_hash=${persistedObservedAuthority.completeThroughHash} ` +
+          `canonical_hash=${canonicalAuthorityHash ?? "unavailable"}`,
+      );
+      protocolDiscoveryCache.runtime.observedContiguousAuthority = null;
+    }
+  }
   const protocolDiscoveryStartup = planDiscoveryStartup({
     targetBlock: discoveryToBlock,
     persistedCursor: protocolDiscoveryCache.runtime.observedCursor,
     sourceRegistryChanged: observedSourceChanged,
     recentBlocks: protocolDiscoveryBlocks,
     maxCatchupBlocks: protocolDiscoveryMaxCatchupBlocks,
-    bootstrapMode: blindProductionAudit ? "contiguous" : "recent-positive",
+    bootstrapMode: "recent-positive",
   });
+  const observedAuthority =
+    protocolDiscoveryCache.runtime.observedContiguousAuthority;
   const initialProtocolObservedCoverageAuthoritative =
-    protocolDiscoveryStartup.mode === "contiguous";
-  lastProtocolDiscoveryBlock = initialProtocolObservedCoverageAuthoritative
-    ? protocolDiscoveryStartup.cursorBefore
-    : -1;
+    protocolDiscoveryStartup.mode === "contiguous" &&
+    observedAuthority?.completeThroughBlock ===
+      protocolDiscoveryStartup.cursorBefore;
+  lastProtocolDiscoveryBlock =
+    protocolDiscoveryCache.runtime.observedCursor ?? -1;
   let lastProtocolDiscoveryBlockHash =
-    initialProtocolObservedCoverageAuthoritative &&
-      lastProtocolDiscoveryBlock >= 0
+    lastProtocolDiscoveryBlock >= 0
       ? protocolDiscoveryCache.runtime.observedCursorHash
       : null;
-  if (
-    initialProtocolObservedCoverageAuthoritative &&
-    lastProtocolDiscoveryBlock >= 0
-  ) {
-    protocolDiscoveryCoverage.seedObserved(lastProtocolDiscoveryBlock);
+  if (observedAuthority !== null) {
+    protocolDiscoveryCoverage.seedObserved(
+      observedAuthority.completeThroughBlock,
+    );
   }
   if (observedSourceChanged) {
     console.warn(
@@ -1533,6 +1596,11 @@ async function main(): Promise<void> {
     // per-key reconciliation is safe even when an unrelated source read failed.
     reconcileProtocolDiscoveryEvidenceCache(protocolDiscoveryCache, result);
     recordProtocolRouteOwnership(protocolDiscoveryCache, protocolDiscoveryOwnership);
+    // Ownership must be materialized before pruning: the capacity cap is an
+    // optimization and may never evict a newly admitted active instance.
+    pruneProtocolDiscoveryAddressCache(protocolDiscoveryCache, {
+      currentBlock: discoveryToBlock,
+    });
     try {
       saveProtocolDiscoveryEvidenceCache(protocolDiscoveryCachePath, protocolDiscoveryCache);
     } catch (error) {
@@ -1581,6 +1649,16 @@ async function main(): Promise<void> {
     candidateAddresses: initialProtocolAddressCandidates,
     evidenceCache: protocolDiscoveryCache,
     bootstrapCandidates: cachedProtocolCandidates(protocolDiscoveryCache),
+    ...(!blindProductionAudit &&
+        initialProtocolDiscoveryRange.fromBlock > 0 &&
+        protocolDiscoveryStartupFallbackBlocks > 0
+      ? {
+          startupFallback: {
+            searchBeforeBlock: initialProtocolDiscoveryRange.fromBlock - 1,
+            maxLookbackBlocks: protocolDiscoveryStartupFallbackBlocks,
+          },
+        }
+      : {}),
     traceMemo: protocolTraceMemo,
     shadow: protocolDiscoveryShadow,
   });
@@ -1603,6 +1681,18 @@ async function main(): Promise<void> {
     protocolDiscoveryShadow ? "shadow" : "active",
     initialProtocolDiscoveryRange.toBlock,
   );
+  if (
+    initialProtocolDiscovery.startupFallback.searchedFamilyIds.length > 0
+  ) {
+    console.log(
+      `[searcher/live] protocol startup fallback: searched=` +
+        `${initialProtocolDiscovery.startupFallback.searchedFamilyIds.length} ` +
+        `recovered=` +
+        `${initialProtocolDiscovery.startupFallback.recoveredFamilyIds.length} ` +
+        `txs=${initialProtocolDiscovery.startupFallback.inspectedTransactions} ` +
+        `errors=${initialProtocolDiscovery.startupFallback.errors.length}`,
+    );
+  }
   if (initialProtocolDiscovery.projection) {
     const projection = initialProtocolDiscovery.projection;
     replaceArray(graph, projection.backrunGraph);
@@ -1636,6 +1726,8 @@ async function main(): Promise<void> {
         range: initialProtocolDiscoveryRange,
         watermarks: advanced.watermarks,
         positiveOnlyObserved: !initialProtocolObservedCoverageAuthoritative,
+        eventSourceComplete:
+          initialProtocolDiscovery.scanner.eventSourceComplete,
       });
     if (lastProtocolDiscoveryBlock !== priorProtocolDiscoveryBlock) {
       if (lastProtocolDiscoveryBlock !== initialProtocolDiscoveryRange.toBlock) {
@@ -1652,6 +1744,38 @@ async function main(): Promise<void> {
         ? lastProtocolDiscoveryBlockHash
         : null,
     );
+    if (initialProtocolObservedCoverageAuthoritative) {
+      const observedFamilies = protocolDiscoveryCoverage.families
+        .filter((family) =>
+          family.sourceIds.includes("observed-interaction")
+        )
+        .map((family) => ({
+          familyId: family.familyId,
+          sourceIds: ["observed-interaction"],
+        }));
+      const observedCoverage = new Map<string, boolean>(
+        initialProtocolDiscovery.result.familySourceCoverage
+          .filter((coverage) =>
+            coverage.sourceId === "observed-interaction"
+          )
+          .map((coverage) => [coverage.familyId, coverage.complete]),
+      );
+      if (observedFamilies.length > 0) {
+        advanceProtocolObservedContiguousAuthority({
+          cache: protocolDiscoveryCache,
+          families: observedFamilies,
+          familySourceCoverage: observedFamilies.map((family) => ({
+            familyId: family.familyId,
+            sourceId: "observed-interaction",
+            complete: observedCoverage.get(family.familyId) === true,
+          })),
+          fromBlock: initialProtocolDiscoveryRange.fromBlock,
+          toBlock: initialProtocolDiscoveryRange.toBlock,
+          toBlockHash: initialProtocolRangeHashAfter!,
+          contiguousSourceIds: new Set(["observed-interaction"]),
+        });
+      }
+    }
     protocolGraphCompleteThrough =
       protocolDiscoveryCoverage.graphCompleteThrough(advanced.watermarks);
   }
@@ -1794,12 +1918,14 @@ async function main(): Promise<void> {
       strategyViews = next.strategyViews;
       dexGraphCoverage = { ...next.dexGraphCoverage };
     },
-    persistRuntimeGraphs(next) {
-      dumpRuntimeGraphPools(next.backrun);
-      dumpRuntimeGraphPools(
-        next.blockscan,
-        DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
-      );
+    async persistRuntimeGraphs(next) {
+      await Promise.all([
+        dumpRuntimeGraphPoolsAsync(next.backrun),
+        dumpRuntimeGraphPoolsAsync(
+          next.blockscan,
+          DEFAULT_RUNTIME_BLOCKSCAN_POOLS_PATH,
+        ),
+      ]);
     },
     logRuntimeRefreshFailures: (failures, label) =>
       logRuntimeRefreshFailures([...failures], label),
@@ -2175,13 +2301,10 @@ async function main(): Promise<void> {
     if (!blockScanGraph) {
       throw new Error("blind production prepare has no block-scan graph");
     }
-    if (
-      dexGraphCoverage.graphCompleteThrough < control.base.number ||
-      [...protocolDiscoveryCoverage.snapshot().values()].some(
-        (through) => through < control.base.number,
-      )
-    ) {
-      throw new Error("blind production base graph is not complete at N-1");
+    if (dexGraphCoverage.graphCompleteThrough < control.base.number) {
+      throw new Error(
+        "blind production DEX base graph is not complete at N-1",
+      );
     }
     const baseGeneration = blockScanRuntimeLoop.nextGeneration();
     const baseGraph = adapterFamilyGraphViews.build({
@@ -2213,7 +2336,7 @@ async function main(): Promise<void> {
       ])],
       deadlineAtMs: Date.now() + blindPrepareBudgetMs,
     });
-    if (baseRuntime.status !== "complete") {
+    if (baseRuntime.status === "incomplete") {
       throw new Error(
         `blind production N-1 prewarm is ${baseRuntime.status}: ` +
           `${baseRuntime.issues[0]?.message ?? "unknown"}`,
@@ -2327,17 +2450,38 @@ async function main(): Promise<void> {
     });
   }
 
-  const shutdown = () => {
-    console.log("\n[searcher/live] shutting down");
-    shuttingDown = true;
-    logStageCounters(counters);
-    cancelScheduledWarm();
-    liveDiscovery.shutdown();
-    provider.removeAllListeners("block");
-    destroyProtocolDiscoveryHistoryProvider();
-    state.stop();
-    blockScanRuntimeLoop.stopExecutionWorkers();
-    process.exit(0);
+  let stopRuntimePromise: Promise<void> | null = null;
+  const stopRuntime = (): Promise<void> => {
+    if (stopRuntimePromise) return stopRuntimePromise;
+    stopRuntimePromise = (async () => {
+      console.log("\n[searcher/live] shutting down");
+      shuttingDown = true;
+      logStageCounters(counters);
+      cancelScheduledWarm();
+      provider.removeAllListeners("block");
+      try {
+        await blockScanRuntimeLoop.shutdown();
+      } catch (error) {
+        console.warn(
+          `[searcher/live] block-scan shutdown failed: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      try {
+        await liveDiscovery.shutdown();
+      } catch (error) {
+        console.warn(
+          `[searcher/live] discovery persistence flush failed: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      destroyProtocolDiscoveryHistoryProvider();
+      state.stop();
+    })();
+    return stopRuntimePromise;
+  };
+  const shutdown = (): void => {
+    void stopRuntime().finally(() => process.exit(0));
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -2425,14 +2569,7 @@ async function main(): Promise<void> {
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
-    shuttingDown = true;
-    logStageCounters(counters);
-    cancelScheduledWarm();
-    liveDiscovery.shutdown();
-    provider.removeAllListeners("block");
-    destroyProtocolDiscoveryHistoryProvider();
-    state.stop();
-    blockScanRuntimeLoop.stopExecutionWorkers();
+    await stopRuntime();
   }
 }
 

@@ -28,7 +28,6 @@ const erc4626PricingState = createProtocolQuoteStateCapability({
   adaptiveProbe: {
     stepMultiplier: 1_000n,
     maxDependentRounds: 4,
-    minimumOutput: "one-token",
   },
   buildQuoteReads(edge, amountIn) {
     if (edge.adapterId === "erc4626-deposit") {
