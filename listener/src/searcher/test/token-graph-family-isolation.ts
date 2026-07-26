@@ -85,10 +85,20 @@ async function sameFamilyTimeoutDoesNotPoisonSibling(): Promise<void> {
   // earlier instance timeout is not remembered as a family-wide failure.
   const siblings = Array.from(
     { length: 50 },
-    (_, index): PoolEntry => ({
-      ...healthy,
-      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
-    }),
+    (_, index): PoolEntry => {
+      const siblingFee = fee + index + 1;
+      return {
+        ...healthy,
+        fee: siblingFee,
+        poolId: v4PoolId({
+          currency0,
+          currency1,
+          fee: siblingFee,
+          tickSpacing,
+          hooks,
+        }),
+      };
+    },
   );
   const lastSibling = siblings.at(-1)!;
   let slowSignal: AbortSignal | undefined;

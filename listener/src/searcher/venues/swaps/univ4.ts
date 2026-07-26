@@ -25,6 +25,7 @@ import type {
   SwapAdapter,
   V4QuotePathStats,
 } from "../route-leg-adapter.js";
+import { RouteInstanceNotApplicableError } from "../route-instance-availability.js";
 import {
   createUniV4SwapObservation,
   type PoolImpact,
@@ -662,11 +663,23 @@ async function buildUniV4Edges(
     throw new Error(`univ4 pool ${pool.address} requires fixedTokenIn/fixedTokenOut`);
   }
   const poolKey = await resolveV4PoolKey(pool, backend);
-  if (v4HooksAffectSwap(poolKey.hooks)) return [];
+  const poolId = v4PoolId(poolKey);
+  if (
+    !pool.poolId ||
+    normalizeBytes32(pool.poolId, "poolId") !== poolId
+  ) {
+    throw new Error(
+      `univ4 PoolKey does not match registered poolId ${pool.poolId ?? "missing"}`,
+    );
+  }
+  if (v4HooksAffectSwap(poolKey.hooks)) {
+    throw new RouteInstanceNotApplicableError(
+      `univ4-standard excludes swap-affecting hooks ${poolKey.hooks}`,
+    );
+  }
   const tIn = normalizeV4Currency(pool.fixedTokenIn, "fixedTokenIn", "univ4 PoolKey");
   const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut", "univ4 PoolKey");
   validateGraphPair(pool.address, poolKey, tIn, tOut);
-  const poolId = v4PoolId(poolKey);
   const graphIn = tIn === ethers.ZeroAddress ? ADDR.WETH : tIn;
   const graphOut = tOut === ethers.ZeroAddress ? ADDR.WETH : tOut;
   const nativeCurrency0 = poolKey.currency0 === ethers.ZeroAddress;

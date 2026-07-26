@@ -7,6 +7,7 @@ import type { CanonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import type { DeclaredProtocolVenue } from "../venues/route-leg-adapter.js";
 import type { RouteEdgeBuildControl } from "../venues/route-leg-adapter.js";
+import { isRouteInstanceNotApplicableError } from "../venues/route-instance-availability.js";
 import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
@@ -248,6 +249,7 @@ export async function buildTokenGraph(
 
 export interface PoolGraphBuildSuccess {
   pool: PoolEntry;
+  /** Empty only when the owning family made a typed terminal exclusion. */
   edges: TokenEdge[];
 }
 
@@ -403,6 +405,13 @@ export async function buildTokenGraphWithResults(
       continue;
     }
     const { pool, result } = outcome;
+    if (
+      result.status === "rejected" &&
+      isRouteInstanceNotApplicableError(result.reason)
+    ) {
+      successful.push({ pool, edges: [] });
+      continue;
+    }
     if (result.status === "fulfilled" && result.value.length > 0) {
       edges.push(...result.value);
       successful.push({ pool, edges: result.value });
