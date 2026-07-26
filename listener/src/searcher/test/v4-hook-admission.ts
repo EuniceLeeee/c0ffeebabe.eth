@@ -55,6 +55,25 @@ const hooklessNativePool: PoolEntry = {
   fixedTokenOut: "0xc8Fb80fCc03f699C70ff0CC08C09106288888888",
 };
 
+const nativeWethPool: PoolEntry = {
+  address: ADDR.UNISWAP_V4_POOL_MANAGER,
+  adapter: "univ4",
+  currency0: ADDR.ZERO,
+  currency1: ADDR.WETH,
+  fee: 500,
+  tickSpacing: 10,
+  hooks: ADDR.ZERO,
+  poolId: v4PoolId({
+    currency0: ADDR.ZERO,
+    currency1: ADDR.WETH,
+    fee: 500,
+    tickSpacing: 10,
+    hooks: ADDR.ZERO,
+  }),
+  fixedTokenIn: ADDR.ZERO,
+  fixedTokenOut: ADDR.WETH,
+};
+
 async function edgeCount(pool: PoolEntry): Promise<number> {
   return (await buildTokenGraph(stubBackend, [pool])).length;
 }
@@ -63,6 +82,10 @@ async function main(): Promise<void> {
   const hooked = await buildTokenGraphWithResults(stubBackend, [hookedPool]);
   const hooked_edges = hooked.edges.length;
   const hookless_native_edges = await edgeCount(hooklessNativePool);
+  const nativeWeth = await buildTokenGraphWithResults(
+    stubBackend,
+    [nativeWethPool],
+  );
   const mixed = await buildTokenGraphWithResults(
     stubBackend,
     [hookedPool, hooklessNativePool],
@@ -78,6 +101,12 @@ async function main(): Promise<void> {
     "typed hook exclusion must be terminal-known rather than retryable",
   );
   assert(hookless_native_edges === 2, `hookless native pool: expected 2 edges, got ${hookless_native_edges}`);
+  assert(
+    nativeWeth.edges.length === 0 &&
+      nativeWeth.successful.length === 1 &&
+      nativeWeth.failed.length === 0,
+    "native ETH/WETH alias self-edge must be terminal-known and absent",
+  );
   assert(
     mixed.edges.length === 2 &&
       mixed.successful.length === 2 &&

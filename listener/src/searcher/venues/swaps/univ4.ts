@@ -682,6 +682,11 @@ async function buildUniV4Edges(
   validateGraphPair(pool.address, poolKey, tIn, tOut);
   const graphIn = tIn === ethers.ZeroAddress ? ADDR.WETH : tIn;
   const graphOut = tOut === ethers.ZeroAddress ? ADDR.WETH : tOut;
+  if (graphIn.toLowerCase() === graphOut.toLowerCase()) {
+    throw new RouteInstanceNotApplicableError(
+      "univ4-standard excludes pools whose currencies collapse to one graph token",
+    );
+  }
   const nativeCurrency0 = poolKey.currency0 === ethers.ZeroAddress;
   const nativeCurrency1 = poolKey.currency1 === ethers.ZeroAddress;
   const taxonomy = deriveEdgeTaxonomy("swap");
