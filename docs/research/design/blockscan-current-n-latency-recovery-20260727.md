@@ -305,16 +305,19 @@ Systemic latency requires paired live evidence; one historical transaction canno
 
 ### 5.2 Factorial attribution
 
-Run independent variants where practical:
+Run dependency-ordered variants where practical:
 
 ```text
 A = current baseline
-B = declared-venue policy only, if D0 proves it material
-C = shared mutation proof/carry only
-D = B + C, only after B and C are independently attributable
+B = recovery-only state bases
+C = B + shared mutation-proof transport
+D = declared-venue policy only, if D0 proves it material
+E = C + D, only after C and D are independently attributable
 ```
 
-Runtime join and scanner-anchor work receive later independent experiments. Do not mix them into B/C/D.
+R1 is not tested without R2 because that arm knowingly retains the empty-published-snapshot deadlock. The
+B→C delta attributes transport recovery; it must not be reported as an undifferentiated
+“proof/carry” factor. Runtime join and scanner-anchor work receive later independent experiments.
 
 Each deterministic micro-benchmark uses at least 20 interleaved repetitions per fixed block/hash. p95 uses
 nearest-rank. Timeouts remain in the sample.
@@ -345,12 +348,21 @@ The immediate diagnostic passes only when one complete, non-startup/non-catch-up
 - `priced > 0` against the same expected total currently reported as `28235`;
 - enumeration runs instead of being marked `not-run` because the state stage failed;
 - the source block/hash remains current-N canonical;
+- every `SEARCHER_BLOCKSCAN_*_BUDGET_MS` value and all other runtime configuration are inherited unchanged
+  from A; increasing a deadline or pass budget cannot satisfy this gate;
+- per-lane and per-family `resolved/expected/direct/carry/unresolved` coverage is recorded, and no family
+  that passes deterministic current-N parity may be silently removed merely to make aggregate `priced`
+  positive;
 - no graph, universe, hop or candidate-cap reduction was used.
 
 If B continues to report `priced=0/28235`, this slice has not restored output. Use the new phase telemetry to
 locate the live failure, repair it on the same diagnostic branch, rerun deterministic controls, and redeploy
 B until the criterion above passes or a genuine external blocker is identified. A passing result earns only
 `blockscan_output_restored`; it does not establish the end-to-end latency or `fixed` gates below.
+
+R1 and R2 are one deployment unit for this diagnostic. R1 must not be deployed by itself: a failed live pass
+can publish an empty `stateByStateKey`, so transport recovery without the independent recovery-only
+`lastGoodByStateKey` base can still produce zero carry.
 
 ### 6.1 Restore-output gate
 
