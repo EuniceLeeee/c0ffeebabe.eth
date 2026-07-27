@@ -43,13 +43,17 @@ effectiveGasPrice `42119420` wei（0.0421 gwei）。
 | gas（`399701 × 42119420`） | `16834000000000` ≈ 0.0000168 ETH |
 | **净** | **`108075239488893`** ≈ **0.000108 ETH** |
 
-### ⚠️ 关键结构缺陷：USDT 侧闭环差 1 wei，需 dust 垫付
+### USDT 侧差 1 wei —— 需**注意**，但非否决项（用户 2026-07-27 澄清）
 
 - flash in `34701684` USDT；腿 3 仅产出 **`34701683`**；还款 `34701684`。
 - **USDT 维度净 −1 wei**，由 executor 自有 dust 补足；**利润全在 native ETH 维度**。
-- ⇒ 这是一条**跨币种、非自还**的闭环。我们的守恒断言要求「闭环自还且不消耗既有库存」，
-  **即使补齐 self-burn-native family，该样本仍会被 conservation 检查拒绝**。
-- 初版报告未识别此点（由用户指出）。
+- **用户裁定**：可以往 executor 充钱，1 wei 不是障碍；提出此点是要求**分析时必须注意到**。
+- **对我们的真实含义（设计问题，不是样本问题）**：守恒断言必须能区分两类形态——
+  1. **消耗既有库存作为利润来源** = inventory 策略，越界，必须拒；
+  2. **非利润币种上的有界 dust 垫付**（本例：USDT 维度 −1 wei，利润在 ETH 维度）= 可接受，
+     前提是 executor 已备资金且垫付额有上限。
+  若一刀切要求「每个币种都精确自还」，会误杀这一类真实 +EV 的跨币种闭环。
+- 初版报告把它写成硬阻断，**已更正**。
 
 > executor `0xE08D97e1` 的 WETH/ETH 余额在 parent 与 block 两处读数均为 `0`，利润未滞留该地址
 > ——**该项证据不足以定位最终收款地址**，不影响闭环判定。
@@ -163,6 +167,11 @@ buildEdges: … 断言 pool.stETH() === ADDR.STETH，否则 throw
 - `tool-reconciled: listener:searcher:venue-identity agrees KGETH 经 EIP-1967 impl slot 证实为 minimal proxy（impl 0xee1dbfc1…），与人工字节码读数（codesize 170、无 PUSH4 dispatcher）一致；venue lineage 投影仍 PASS 10/10`
 - `tool-reconciled: listener:searcher:pool-adapter-policy agrees 17 个 derived adapter 无任何「plain transfer 触发 native 回款」语义的 edge adapter，与人工 grep（self-burn 零命中）一致`
 
+第三轮（RUETH 同构核对 + 家族窗口扫描）再次实跑 `tool-index --select venue,pool` + `tool-run`：
+`listener:searcher:venue-identity` exit=0 PASS 10/10；`listener:searcher:pool-adapter-policy` exit=0 PASS。
+- `tool-reconciled: listener:searcher:venue-identity agrees RUETH/KGETH 同 proxy codehash、异 impl 的判定与 venue identity 的 code/lineage 语义一致；两者均非任何已注册 venue family`
+- `tool-reconciled: listener:searcher:pool-adapter-policy agrees 17 个 derived adapter 仍无 native-burn 语义，家族扫描出的 5 个实例无一可被现有 adapter 认领`
+
 **无 tool_divergence**：工具与人工链上事实一致。
 
 ## 4b. KGETH 触发机制（callTracer 逆向，决定 family 形态）
@@ -180,6 +189,56 @@ CALL from=0xe08d97e1 to=0x9b2c171a sel=0xa9059cbb        ← 普通 ERC20 transf
   codesize 170，字节码内无 PUSH4 dispatcher）。
 - ⇒ 语义 = **「transfer-to-self ⇒ native 回款」**，与现有全部 protocol family（ERC20↔ERC20 +
   显式函数调用：deposit/redeem/wrap/unwrap/mint）都不同构。
+
+## 4c. 家族确证：RUETH 同构 + 窗口内 5 个实例（2026-07-27 追加）
+
+用户追加样本 `0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7`
+（**同一块 25619948，idx 63；KGETH 那笔是 idx 62，背靠背**）。
+
+### RUETH 与 KGETH 逐项对照
+
+| | KGETH（idx 62） | RUETH（idx 63） |
+|---|---|---|
+| name | Kyrgyz Som Wrapped Ethereum | **Russian Ruble Wrapped Ethereum** |
+| codesize | 170 | 170 |
+| **proxy codehash** | `0xee8a105971995661…` | **完全相同** |
+| impl (EIP-1967) | `0xee1dbfc1…` | `0x898532ec…`（各自独立 impl） |
+| 事件签名 | `0xf934766b` + burn `0x5dd085b6070b4cae…` | **完全相同** |
+| 触发子 | `transfer(address,uint256)` → 自身 | **完全相同** |
+| 结构 | flash USDT → token(UniV3) → burn→native → WETH → USDT → repay | **完全相同** |
+| flash 自还 | 差 1 wei（`34701684` in / `34701683` out） | **精确自还**（`23416320` in / `23416320` out）✓ |
+| native 回款 | `18054176159874041` | `12183550765765354` |
+| 毛利 | `124909239488893` ≈ 0.000125 ETH | `85043819552686` ≈ 0.000085 ETH |
+| 腿 1 池 | `0x560ebd28`（UniV3 fee 3000） | `0x742bf097`（**在 runtime graph** ✓） |
+| 腿 3 池 | `0x11b815ef`（WETH/USDT fee 500） | **同一个池** |
+
+### 家族规模（local reth，窗口 `25613581..25621581` ≈ 8000 块 ≈ 27h）
+
+按 burn topic `0x5dd085b6070b4cae004f84daafd199fd55b0bdfa11c3a802baffe89c2419d8c2` 扫描：
+**5 个 burn 事件，5 个互不相同的 token**：
+
+```
+0xc6a9851def913016074ac089e194f65945343462
+0x9b2c171abb9c732ffa3789724d0aa653c9e0c428  (KGETH)
+0x292a477e521230fe230c13c93374adde8ddec1c1  (RUETH)
+0x66b145ebf6a409f63fdb39d4c4463d4363cfedfe
+0x3f69bb14860f7f3348ac8a5f0d445322143f7fee
+```
+
+⇒ 「X Wrapped Ethereum」是一个**持续出现的 token 系列**（同一 minimal-proxy 字节码、各自 impl、
+同一 burn 语义），**不是孤例**。27 小时内至少 5 个实例被 burn。
+
+### 结论：RUETH 能用，且是**更好的验收样本**
+
+- **能用**：语义、字节码、事件、结构与 KGETH 完全同构 ⇒ 同一 `self-burn-native` family 覆盖。
+- **更好**：flash 币种 **精确自还**（无 dust 垫付争议），腿 1 池已在 runtime graph，
+  与 KGETH 同块可做**双样本 cohort**。
+- **对 family 设计的直接影响**：
+  - proxy codehash 相同但 **impl 地址各异** ⇒ **不能用 impl 地址做准入**；
+    codehash 只能作 **provenance/候选提名**，准入必须是**行为证明**
+    （state-override 转账探针：native 增加 + 供应减少 + 无残留头寸）。
+  - burn haircut **逐实例不同**（KGETH ~0.97%），quote **必须实测，不得假设 1:1 或复用他实例数值**。
+  - 一次建 family ⇒ 5 个（及后续新增）实例自动进图，**这正是 adapter-family-line 的目标形态**。
 
 ## 5. 证据不足（明确声明，不以记忆补）
 
@@ -215,8 +274,12 @@ CALL from=0xe08d97e1 to=0x9b2c171a sel=0xa9059cbb        ← 普通 ERC20 transf
   - **final-sim**：断言 **native delta**（计划 §14 明列的未解决项之一）。
 - **为何不能复用现有 family**：全部 protocol family 均为 ERC20↔ERC20 且靠显式函数调用；
   `wsteth` 另有硬 pin 单例 + `stETH()` 身份断言，KGETH 必 throw。见 §2 延伸与 §4b。
-- **本样本不适合当该 family 的验收样本**：即使 family 建成，USDT 侧差 1 wei、需 dust 垫付的形态
-  仍会被守恒断言拒绝。立项验收应另找 **flash 币种自还为正** 的 self-burn-native 样本。
+- **验收样本建议（更新）**：用 **RUETH `0xb51c9e13…`（同块 idx 63）作代表样本**——flash 币种精确自还、
+  腿 1 池已在 runtime graph；**KGETH `0x2fbb82b5…`（idx 62）作同 cohort 第二样本**（含 1 wei dust 垫付形态，
+  正好用于验证守恒断言能否正确区分「dust 垫付」与「库存消耗」）。
+- **家族价值已量化**：27 小时窗口内 5 个不同实例（见 §4c）⇒ 一次建 family、多实例自动进图，
+  符合 adapter-family-line 的目标形态；不是为一个 dust 样本做专用 adapter。
 - 建议 cohort id：`self-burn-native-edge`。开工前按 §2 检查现有 branch/report/main 是否已有同 id 工作。
-- **本报告已按用户两次质疑更正**：(1) 初版误判 pool 覆盖 gap（查错 universe 文件）——已撤回；
-  (2) 初版未识别 USDT 侧 1 wei 缺口与 burn haircut——已补正并更正毛利数字。
+- **本报告已按用户三次质疑更正**：(1) 初版误判 pool 覆盖 gap（查错 universe 文件）——已撤回；
+  (2) 初版未识别 USDT 侧 1 wei 缺口与 burn haircut——已补正并更正毛利；
+  (3) 初版把 1 wei 写成硬阻断——按用户澄清更正为「需注意的守恒断言设计问题，非否决项」。
