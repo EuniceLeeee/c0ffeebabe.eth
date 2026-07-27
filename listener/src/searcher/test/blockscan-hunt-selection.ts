@@ -60,6 +60,11 @@ export interface ExpectedRouteStep {
   readonly poolId?: string;
 }
 
+export interface ExpectedSwapPathStep {
+  readonly pool_id: string;
+  readonly direction: "0for1" | "1for0";
+}
+
 export function resolveBlockScanHuntBudgets(
   env: Readonly<Record<string, string | undefined>>,
 ): BlockScanHuntBudgets {
@@ -229,6 +234,26 @@ export function routeMatchesExpected(
         expected[(index + offset) % expected.length],
       )
     )) return true;
+  }
+  return false;
+}
+
+/**
+ * A funded closed route may start at any flash token. The swap-only projection
+ * therefore has the same cyclic identity as the full route even when protocol
+ * legs between two swaps are omitted from this legacy diagnostic field.
+ */
+export function swapPathMatchesExpected(
+  actual: readonly ExpectedSwapPathStep[],
+  expected: readonly ExpectedSwapPathStep[],
+): boolean {
+  if (actual.length !== expected.length || actual.length === 0) return false;
+  for (let offset = 0; offset < expected.length; offset++) {
+    if (actual.every((step, index) => {
+      const wanted = expected[(index + offset) % expected.length];
+      return step.pool_id === wanted.pool_id
+        && step.direction === wanted.direction;
+    })) return true;
   }
   return false;
 }
@@ -446,6 +471,18 @@ function runTests(): void {
     [expectedCycle[2], expectedCycle[0], expectedCycle[1]],
     expectedCycle,
   ), true);
+  const expectedSwapPath: ExpectedSwapPathStep[] = [
+    { pool_id: "0x1111111111111111111111111111111111111111", direction: "0for1" },
+    { pool_id: "0x2222222222222222222222222222222222222222", direction: "1for0" },
+  ];
+  assert.equal(swapPathMatchesExpected(
+    [expectedSwapPath[1], expectedSwapPath[0]],
+    expectedSwapPath,
+  ), true);
+  assert.equal(swapPathMatchesExpected(
+    [{ ...expectedSwapPath[1], direction: "0for1" }, expectedSwapPath[0]],
+    expectedSwapPath,
+  ), false);
   assert.equal(routeMatchesExpected(actualRoute, [{
     ...expectedRoute[0],
     leavesStandingPosition: true,

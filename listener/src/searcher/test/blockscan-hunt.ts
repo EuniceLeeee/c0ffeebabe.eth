@@ -48,6 +48,7 @@ import {
   routeStepMatchesExpected,
   selectedReplayOpportunityIndexes,
   solveForOpportunityIndex,
+  swapPathMatchesExpected,
   type AdapterFamilyQuoteCoverageSummary,
 } from "./blockscan-hunt-selection.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
@@ -1732,7 +1733,7 @@ function readExpectedReplayTarget(
   const expectedProtocol = process.env.AB_EXPECTED_ROUTE_SCOPE === "dex-permissionless-protocol";
   const opportunityIndex = opportunities.findIndex((entry) =>
     entry.swapPath !== null
-    && JSON.stringify(entry.swapPath) === JSON.stringify(expectedSwapPath)
+    && swapPathMatchesExpected(entry.swapPath, expectedSwapPath)
     && routeMatchesExpected(entry.route, expectedRoute)
     && entry.hasProtocolEdge === expectedProtocol);
   return { expectedPools, expectedSwapPath, expectedRoute, opportunityIndex };
