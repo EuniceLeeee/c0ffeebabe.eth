@@ -43,8 +43,9 @@ evidence that an atomic opportunity can finish within 10 seconds.
   family settlement boundary.
 - The top-level `state` stage includes hot discovery, graph preparation, pricing, funding and execution
   preparation. Family-lane timings do not explain the whole stage.
-- Strict hot discovery currently calls `buildTokenGraphWithResults` over the incumbent registry; UniV2 edge
-  construction includes a `getReserves` attestation.
+- Strict hot discovery scans the current source delta and separately re-attests the six enabled declared
+  protocol venues. Known DEX pools are filtered by `knownPoolKeys` and are not rebuilt; UniV2
+  `getReserves` runs only for newly discovered or retryable candidates.
 - Coarse scanner enumeration consumes graph + pricing mids + configured `pricedTokens`; it does not consume
   the live funding snapshot. Exact refinement, planning and final simulation still require a correctly
   pinned execution/funding context.
@@ -202,31 +203,44 @@ state.
 - No freshness proof claims N without direct-N provenance or a complete range fingerprint.
 - Reorg and schema-change controls discard an incompatible recovery base.
 
-### R3 — hot discovery delta instead of incumbent full attestation
+### R3 — declared-venue topology re-attestation policy
 
-**Purpose:** stop paying static topology verification for every incumbent on every head while keeping the
-full graph.
+**Purpose:** measure and, only if material, remove redundant declared-venue topology re-attestation from the
+hot path for family-declared immutable topology.
+
+**Precondition:** D0 shows that the six declared-venue re-attestations are material after R1. Current
+evidence indicates roughly nine calls, not a full-universe rebuild.
 
 **Direction**
 
-- Hot path processes newly observed events/instances, factory deltas and retryable admissions.
-- Reuse previously verified static identity/schema only where the adapter declares the relevant metadata
-  immutable or supplies a complete invalidation source.
-- Families with mutable proxy/identity metadata keep explicit re-attestation.
-- Run bounded periodic/audit re-attestation outside the per-head critical path.
+- Default policy remains `current-block`.
+- An `admission-only` policy is allowed only where the family proves the relevant topology immutable; the
+  policy/version must enter the registry/source fingerprint and GraphView identity.
+- Metronome synth membership remains `current-block`.
+- Goldx, Rocksolid and PSM are the first admission-only review candidates. Evidence for hgUSDC and wstETH
+  is insufficient, so they remain `current-block`.
+- Newly observed events/instances, factory deltas and retryable admissions remain current-source work.
+- Periodic re-attestation may be diagnostic but cannot substitute for a complete current-block topology
+  proof for mutable families.
 - Dynamic reserve/rate/fee pricing remains in the source-N state coordinator.
 - A newly observed pool at N must be materialized for N; an old T-k topology is acceptable only when the
   complete delta k→N has been applied.
+- Mutable topology replacement must compare the exact edge set atomically. The current merge-only check can
+  remain degraded forever on an added edge and can incorrectly retain a removed stale edge.
+- The protocol-family positive-edge exception in `BlockScanStateCoordinator.prepare` may consume an
+  admission-only edge only when the immutable-topology proof is bound into GraphView provenance.
 
 **Deterministic gates**
 
-- No-change head performs zero incumbent topology calls and produces the identical graph/hash.
-- New-pool, retry, removal/reorg and mutable-identity fixtures produce the same result as a full rebuild.
+- No-change head performs zero graph-build calls for `admission-only` declared venues and preserves calls
+  for `current-block` venues.
+- New-pool, transient retry, exact-set replacement, removal/reorg and mutable-identity fixtures produce the
+  same result as the declared full-attestation oracle.
 - Positive and negative family controls prove no unsupported pool admission.
-- Full incumbent attestation remains available as an oracle/audit mode.
+- Full declared-venue attestation remains available as an oracle/audit mode.
 
-**Rollback:** switch hot preparation back to the full attestation path; retained cache format remains
-backward compatible.
+**Rollback:** restore every declared venue to `current-block`; retained cache format remains backward
+compatible.
 
 ### R4 — pricing-ready enumeration with exact downstream join
 
@@ -295,9 +309,9 @@ Run independent variants where practical:
 
 ```text
 A = current baseline
-B = discovery delta only
+B = declared-venue policy only, if D0 proves it material
 C = shared mutation proof/carry only
-D = B + C
+D = B + C, only after B and C are independently attributable
 ```
 
 Runtime join and scanner-anchor work receive later independent experiments. Do not mix them into B/C/D.
