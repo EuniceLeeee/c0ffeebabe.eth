@@ -352,7 +352,10 @@ function candidateFromObservedSelfBurn(call: {
   if (amountIn <= 0n) return null;
   const burnLog = call.receipt.logs.find((log) =>
     log.address.toLowerCase() === token.toLowerCase() &&
-    log.topics[0]?.toLowerCase() === SELF_BURN_NATIVE_EVENT_TOPIC
+    log.topics[0]?.toLowerCase() === TRANSFER_TOPIC &&
+    topicAddress(log.topics[1]) === token.toLowerCase() &&
+    topicAddress(log.topics[2]) === ethers.ZeroAddress.toLowerCase() &&
+    hexUintEquals(log.data, amountIn)
   );
   const blockNumber = burnLog?.blockNumber;
   if (
@@ -518,4 +521,12 @@ function descendantNativeValue(
 function topicAddress(topic: string | undefined): string {
   if (!topic || !ethers.isHexString(topic, 32)) return "";
   return `0x${topic.slice(-40)}`.toLowerCase();
+}
+
+function hexUintEquals(value: string, expected: bigint): boolean {
+  try {
+    return ethers.isHexString(value) && BigInt(value) === expected;
+  } catch {
+    return false;
+  }
 }

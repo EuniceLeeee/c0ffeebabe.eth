@@ -7,7 +7,6 @@ import type { PoolEntry, TokenEdge } from "../planner/token-graph.js";
 import { PRODUCTION_ADAPTER_FAMILIES } from "../venues/production-registry.js";
 import {
   SELF_BURN_NATIVE_EDGE_ADAPTER,
-  SELF_BURN_NATIVE_EVENT_TOPIC,
   SELF_BURN_NATIVE_POOL_ADAPTER,
   SYNTHETIC_NATIVE_TRANSFER_EMITTER,
   selfBurnNativeDiscovery,
@@ -83,8 +82,12 @@ for (const token of instances) {
       status: 1,
       logs: [{
         address: token,
-        topics: [SELF_BURN_NATIVE_EVENT_TOPIC],
-        data: "0x",
+        topics: [
+          ethers.id("Transfer(address,address,uint256)"),
+          ethers.zeroPadValue(token, 32),
+          ethers.ZeroHash,
+        ],
+        data: ethers.toBeHex(amountIn, 32),
         blockNumber: 123,
       }],
     },
