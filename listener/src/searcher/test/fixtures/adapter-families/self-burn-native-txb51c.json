@@ -3,10 +3,11 @@
   "id": "self-burn-native-txb51c",
   "executionFamilyId": "protocol:self-burn-native",
   "referenceTx": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
-  "lane": "block-scan",
+  "lane": "backrun",
   "stateAnchor": {
-    "kind": "parent-block",
-    "blockNumber": 25619947
+    "kind": "after-transaction",
+    "blockNumber": 25619948,
+    "triggerTxHash": "0x2fbb82b50a966e5080187f0ed7b488200f830f05eba5fe14cf8e17bd8c56bf36"
   },
   "flash": {
     "adapterId": "balancer-flash",
@@ -56,6 +57,6 @@
   "landedReference": {
     "canonicalNetProfitUsd": 0.12,
     "evidencePath": "docs/research/reports/txb51c-self-burn-native-evidence.md",
-    "evidenceSha256": "7ae766b21edd5ac2696f201e436907f13ee9b11eb681b504bed5958920f814bd"
+    "evidenceSha256": "d02e9169632f734e676313f5e5618a57a190ccd1463606cb62712c376e46793c"
   }
 }
