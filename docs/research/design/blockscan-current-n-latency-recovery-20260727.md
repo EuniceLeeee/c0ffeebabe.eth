@@ -1,6 +1,6 @@
 # Block-scan current-N latency recovery plan
 
-> Status: execution in progress
+> Status: D0/R1/R2 implemented and deterministically validated; paired live A/B and fixed gate pending
 > Branch: `codex/blockscan-current-n-latency-recovery`
 > Base: `origin/main@48fb88e9c0ac7705d1d89f60b060d6ede5c423c2`
 > Change class: systemic block-scan correctness/performance
@@ -379,13 +379,40 @@ Only then may the result be called `fixed`.
 
 | Slice | Status | Commit | Deterministic evidence | Live/A-B evidence |
 |---|---|---|---|---|
-| Plan | in progress | pending | document review | n/a |
-| D0 instrumentation | pending | pending | pending | n/a |
-| R1 mutation proof | pending | pending | pending | pending |
-| R2 recovery bases | pending | pending | pending | pending |
-| R3 discovery delta | pending | pending | pending | pending |
-| R4 runtime join | blocked on D0/R1/R3 timing | pending | pending | pending |
-| R5 scanner priority | blocked on post-R1/R3 timing | pending | pending | pending |
+| Plan | complete | `6aefbf0`, `b13ef45` | implementation contract frozen before behavior changes | n/a |
+| D0 instrumentation | implemented | `098e2cb` | backend/coordinator/runtime tests and TypeScript build pass | pending production timing sample |
+| R1 mutation proof | implemented, not live-validated | `a156cf5`, `e59cdd5` | canonical-path sharing, exact-descriptor dedupe, bounded concurrency, abort and reorg controls pass | concurrency 1/2/3 paired A/B pending; default remains 1 |
+| R2 recovery bases | implemented, not live-validated | `8f741b4` | degraded-N/healthy-N+1 recovery, sibling isolation, schema and reorg controls pass | pending |
+| R3 discovery policy | not started; precondition unmet | n/a | D0 code exists, but no live evidence that the six declared venues are material | pending D0 live attribution |
+| R4 runtime join | not started; precondition unmet | n/a | no code change | pending D0/R1 live attribution |
+| R5 scanner priority | not started; precondition unmet | n/a | scanner production-boundary control passes unchanged | pending post-R1/R3 live attribution |
+
+### 7.1 Implementation evidence
+
+`tool-index --check` passed with 244 indexed tools. A selection manifest was generated with nonce
+`14f8baf2-89d2-4e47-8fef-f2291872f8ef`; after execution its SHA-256 is
+`bf2d624b82dabd36fc7d2988ad55074b23e6d80081570b543172b3144e6eaa25`.
+
+The following commands were actually invoked through `tool-run`; every recorded receipt has `exit_code=0`:
+
+- `listener:searcher:blockscan-state-backend` (run again after restoring the production concurrency default);
+- `listener:searcher:blockscan-state-coordinator`;
+- `listener:searcher:v2-v3-incremental-state`;
+- `listener:searcher:univ4-incremental-state`;
+- `listener:searcher:adapter-runtime-coordinator`;
+- `listener:searcher:blockscan-runtime-startup-warm`;
+- `listener:searcher:protocol-blockscan-state`;
+- `listener:searcher:swap-blockscan-state`;
+- `listener:searcher:adapter-family-blind-challenger-runtime`;
+- `listener:searcher:blockscan-scanner-production-boundary`;
+- `listener:searcher:runtime-defaults`.
+
+The listener TypeScript build also passes.
+
+This evidence establishes **implemented and deterministic parity/recovery coverage only**. No paired live
+A/B cohort, natural positive scanner enumeration, production plan/solve, successful final simulation or
+end-to-end p95 below 10 seconds has been produced on this branch. Therefore the current verdict is
+`implemented_not_validated`, not `blockscan_output_restored` and not `fixed`.
 
 ## 8. Stop and rollback rules
 
