@@ -221,8 +221,16 @@ export function routeMatchesExpected(
   actual: readonly ExpectedRouteStep[],
   expected: readonly ExpectedRouteStep[],
 ): boolean {
-  return actual.length === expected.length &&
-    actual.every((step, index) => routeStepMatchesExpected(step, expected[index]));
+  if (actual.length !== expected.length || actual.length === 0) return false;
+  for (let offset = 0; offset < expected.length; offset++) {
+    if (actual.every((step, index) =>
+      routeStepMatchesExpected(
+        step,
+        expected[(index + offset) % expected.length],
+      )
+    )) return true;
+  }
+  return false;
 }
 
 export function routeStepMatchesExpected(
@@ -417,6 +425,27 @@ function runTests(): void {
     leavesStandingPosition: false,
   }];
   assert.equal(routeMatchesExpected(actualRoute, expectedRoute), true);
+  const expectedCycle: ExpectedRouteStep[] = [
+    expectedRoute[0],
+    {
+      adapterId: "fixture-protocol",
+      slotKind: "protocol",
+      target: "0x3333333333333333333333333333333333333333",
+      tokenIn: "0x3333333333333333333333333333333333333333",
+      tokenOut: "0x4444444444444444444444444444444444444444",
+    },
+    {
+      adapterId: "fixture-swap",
+      slotKind: "swap",
+      target: "0x5555555555555555555555555555555555555555",
+      tokenIn: "0x4444444444444444444444444444444444444444",
+      tokenOut: "0x2222222222222222222222222222222222222222",
+    },
+  ];
+  assert.equal(routeMatchesExpected(
+    [expectedCycle[2], expectedCycle[0], expectedCycle[1]],
+    expectedCycle,
+  ), true);
   assert.equal(routeMatchesExpected(actualRoute, [{
     ...expectedRoute[0],
     leavesStandingPosition: true,
