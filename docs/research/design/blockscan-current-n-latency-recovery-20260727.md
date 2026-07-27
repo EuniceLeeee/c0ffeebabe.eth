@@ -1,6 +1,6 @@
 # Block-scan current-N latency recovery plan
 
-> Status: D0/R1/R2 implemented; all three source-N live rounds failed; guarded R6 N−1 coarse fallback activated
+> Status: D0/R1/R2/R6 implemented; all three source-N live rounds failed; degraded N−1 pricing is live-nonzero but scanner consumption is not restored
 > Branch: `codex/blockscan-current-n-latency-recovery`
 > Base: `origin/main@48fb88e9c0ac7705d1d89f60b060d6ede5c423c2`
 > Change class: systemic block-scan correctness/performance
@@ -70,6 +70,28 @@ evidence that an atomic opportunity can finish within 10 seconds.
 - Coarse scanner enumeration consumes graph + pricing mids + configured `pricedTokens`; it does not consume
   the live funding snapshot. Exact refinement, planning and final simulation still require a correctly
   pinned execution/funding context.
+- The first R6 live attempts did not restore pricing. The original transport exceeded the fixed `20000ms`
+  N−1 state budget; compact raw-header transport still published `priced=0`; a `35000ms` diagnostic proved
+  that adding budget alone did not repair the publication path; and a publication-reserve repair still
+  discarded all family-local progress.
+- The family-local preservation repair at canonical `d685a1e` / diagnostic `d161cbb` proved that safe
+  state-key progress survives a sibling timeout and that an outer generation abort still fails closed.
+  With the predeclared `10000ms` family-settle allocation, however, the first six hot N−1 attempts remained
+  `priced=0`; mutation proofs reached `log-read`/`final-cas` but local family aborts still arrived too early.
+- A single-factor live allocation test kept the total N−1 state budget at `20000ms`, graph, denominator,
+  concurrency and every source/hash proof unchanged, and changed only family settlement from `10000ms` to
+  `12000ms`. The first two published hot sources were non-zero:
+  `25624260 = 14649/30979` in `15879ms` and
+  `25624261 = 14640/30981` in `17744ms`. The first source carried 7,327 UniV2 state keys through a complete
+  canonical mutation proof. This is evidence that degraded coarse pricing no longer dies as
+  `priced=0`; it is not evidence that the production scanner loop is restored.
+- The first two immediately adjacent consumers did not enumerate. At head `25624261`, exact
+  funding-context preparation was reached with roughly `211ms` left and failed
+  `adapter runtime preparation deadline reached`. At head `25624267`, it ran for `2370ms` and again failed
+  before enumeration while describing the full graph's flash-loan funding keys. Enumeration,
+  planner/solver and final simulation remained `not-run`. Other heads were not exact predecessor joins
+  because discovery/state production had fallen behind. No natural positive candidate or final-sim success
+  was observed.
 
 ### 2.2 Not yet proven
 
@@ -83,6 +105,10 @@ evidence that an atomic opportunity can finish within 10 seconds.
   on the current eight-core node without a separate state lifecycle.
 - That an N−1 coarse producer plus current-N whole-route reprice can produce a positive candidate and reach
   final simulation inside the usable window.
+- That the live N−1 producer can publish an exact predecessor view before every next head. The first
+  non-zero samples required `15.879–17.744s`, longer than a typical Ethereum block interval.
+- That the exact funding/execution context can be prepared early enough for an adjacent N−1 view to enter
+  enumeration. The first observed adjacent join failed before enumeration.
 
 No slice may present one of these hypotheses as a fact before its declared measurement.
 
@@ -489,6 +515,14 @@ R1 and R2 are one deployment unit for this diagnostic. R1 must not be deployed b
 can publish an empty `stateByStateKey`, so transport recovery without the independent recovery-only
 `lastGoodByStateKey` base can still produce zero carry.
 
+The activated R6 diagnostic has a separate, explicit budget allocation. Its total state budget remains
+frozen at `20000ms`; changing family settlement does not change that outer deadline. After six
+`10000ms`-settle samples remained zero, one predeclared `12000ms`-settle cohort was allowed because a proof
+had reached final CAS at `8969ms`. A move directly to `15000ms` was rejected: the observed abort-drain and
+publication tail was `4.4–6.1s`, so that allocation would leave insufficient outer/CAS reserve. The
+`12000ms` result may satisfy only the degraded N−1 pricing sub-goal. It cannot satisfy the source-N
+immediate diagnostic, §6.1 restore-output gate, §6.2 latency gate or §6.3 fixed gate.
+
 ### 6.1 Restore-output gate
 
 All are required:
@@ -537,11 +571,11 @@ Only then may the result be called `fixed`.
 | Plan | complete | `6aefbf0`, `b13ef45` | implementation contract frozen before behavior changes | n/a |
 | D0 instrumentation | implemented | `098e2cb` | backend/coordinator/runtime tests and TypeScript build pass | pending production timing sample |
 | R1 mutation proof | implemented, live-insufficient | `a156cf5`, `e59cdd5`, `df397c1` | completed exact-range header reuse, independent header/descriptor/final-CAS transports, bounded descriptor concurrency, off-path log/final-CAS rejection, abort and reorg controls pass | Round 3 still produced three hot source-N failures; proof calls reached `header-read:deadline` after discovery/queue time had already depleted the window |
-| R2 recovery bases | implemented, not live-validated | `8f741b4` | degraded-N/healthy-N+1 recovery, sibling isolation, schema and reorg controls pass | pending |
+| R2 recovery bases | implemented; live partial | `8f741b4`, `d685a1e` | degraded-N/healthy-N+1 recovery, sibling isolation, family-local partial publication, generation-abort, schema and reorg controls pass | UniV2 carried 7,327 and 7,324 state keys in the first two non-zero N−1 live publications |
 | R3 discovery policy | not started; precondition unmet | n/a | D0 code exists, but no live evidence that the six declared venues are material | pending D0 live attribution |
-| R4 runtime join | not started; precondition unmet | n/a | no code change | pending D0/R1 live attribution |
+| R4 runtime join | not started; live precondition met | n/a | no code change | adjacent N−1 consumption failed exact funding-context preparation with about `211ms` left, before enumeration |
 | R5 scanner priority | not started; precondition unmet | n/a | scanner production-boundary control passes unchanged | pending post-R1/R3 live attribution |
-| R6 N−1 coarse fallback | activated; implementation pending | n/a | required stale-price isolation gates declared in §3.2.1/R6 | activation precondition met by three failed source-N live rounds; must be deployed and measured as degraded mode |
+| R6 N−1 coarse fallback | implemented; pricing live-nonzero; consumer incomplete | `1b486aa`, `6297b4b`, `ef4caa0`, `d685a1e`, `9961b18` | stale coarse-envelope rejection, exact-source join, head/hash fence, compact header proof, publication reserve, family-local partial, outer-abort and live-validated default controls pass | `14649/30979` and `14640/30981` published under the fixed `20000ms` outer budget; adjacent enumeration/planner/final sim did not run |
 
 ### 7.1 Implementation evidence
 
@@ -572,10 +606,27 @@ The scoped Round-3 R1 repair was reconciled again through generated `tool-index`
 `univ4-incremental-state`, `adapter-runtime-coordinator`, `blockscan-runtime-startup-warm`) all have
 `exit_code=0`.
 
-This evidence establishes **implemented and deterministic parity/recovery coverage only**. No paired live
-A/B cohort, natural positive scanner enumeration, production plan/solve, successful final simulation or
-end-to-end p95 below 10 seconds has been produced on this branch. Therefore the current verdict is
-`implemented_not_validated`, not `blockscan_output_restored` and not `fixed`.
+The final family-local repair was reconciled through a newly generated manifest
+`/private/tmp/blockscan-nminus1-partial-family-tools.json`, nonce
+`d164c483-71dd-46ca-8603-24c0476bb021`, final SHA-256
+`cd59dd9213c44f970f73e989153f67fd863487d48ea4b68b05ba9c7382227d08`.
+Actual `tool-run` receipts for `blockscan-state-coordinator`, `blockscan-runtime-startup-warm`,
+`v2-v3-incremental-state`, `univ4-incremental-state`, `adapter-runtime-coordinator` and
+`runtime-defaults` all recorded `exit_code=0`; `tool-index --check` still reports 244 tools.
+
+After promoting the successful `12000ms` family allocation into the production default at `9961b18`, a
+fresh generated manifest `/private/tmp/blockscan-nminus1-family12-tools.json` requested
+`blockscan,state,runtime`, nonce `e10d40c8-2f03-4cb6-bf8e-17dc558329c6`, final SHA-256
+`51d95ffc859f3d5c0c62e523295a258239289443a6ca6c8a87a761c79bbb7e1e`.
+Actual `tool-run` receipts for `blockscan-runtime-startup-warm`, `blockscan-state-backend`,
+`blockscan-state-coordinator` and `runtime-defaults` all recorded `exit_code=0`; both listener TypeScript
+builds passed.
+
+This evidence establishes **implemented deterministic controls plus degraded N−1 non-zero pricing**. No
+paired live A/B cohort, natural positive scanner enumeration, production plan/solve, successful final
+simulation or end-to-end p95 below 10 seconds has been produced on this branch. Therefore the current
+verdict is `implemented_not_fixed`; the narrow N−1 pricing liveness sub-goal is restored, but
+`blockscan_output_restored` and `fixed` are both forbidden.
 
 ### 7.2 Independent-B source-N rounds
 
@@ -609,6 +660,43 @@ Round 3 closed that experiment:
   cannot replace them;
 - R6 is therefore activated exactly as the user-authorized degraded fallback. This does not waive the
   current-N exact-reprice, same-N join, final canonical fence or fixed-gate requirements.
+
+### 7.3 Independent-B N−1 fallback rounds
+
+All rows used the same full production universe (`active-pools-9dd1…be1.json`), all eight CPUs with A
+stopped, dry-run, submission/backrun/mempool disabled, and no graph/hop/candidate-cap reduction.
+
+| Frozen diagnostic runtime | Fixed N−1 allocation | First declared evidence | Verdict |
+|---|---|---|---|
+| `4bcf1d9` | total `20000ms` | source `25623860`: `priced=0/30645`, wall `27368ms` | failed outer deadline; compact canonical-header transport required |
+| `c55f614` | total `20000ms` | source `25623976`: `priced=0/30853`, wall `10366ms` | transport improved, publication still empty |
+| `c55f614` | diagnostic total `35000ms` | source `25624025`: `priced=0/30845`, wall `11244ms` | increasing budget did not repair the empty publication; this row cannot satisfy an acceptance gate |
+| `057669f` | total `20000ms`, publication reserve `1500ms` | source `25624139`: `priced=0/30911`, wall `22782ms` | family results settled after the boundary and were discarded |
+| `d161cbb` | total `20000ms`, family settle `10000ms` | first six hot attempts all `priced=0`; representative source `25624216`: `0/30933`, wall `14289ms` | safe partial mechanism implemented, but local proof/direct-read starvation remained |
+| `d161cbb` | total `20000ms`, family settle `12000ms` | sources `25624260`: `14649/30979` in `15879ms`; `25624261`: `14640/30981` in `17744ms`; later source `25624266`: `27717/30985` in `15829ms` with V2/V3/V4 carry | degraded N−1 pricing live-nonzero; two adjacent exact-context attempts failed before enumeration, so not output-restored/fixed |
+
+Immutable archived evidence:
+
+- pre-raw log/event SHA-256:
+  `5d863caca75035d3124c097b7e953fe3d187ef3ca7d08385ed71c6a390f9a5ea` /
+  `eddbc5aeaff667dd58cb785a14db9a6911e264ae887a4c8a081ec4455d19eba8`;
+- raw-20 log/event:
+  `4b635cace7a470f517aacd6e616a566920711bf2d1580c94671c6691d0c57dac` /
+  `98c1093e227128f6a603b4c7abb216d87e8ea37002952672acc1cf71c1760082`;
+- raw-35 log/event:
+  `1d688341b0fdd3c3b6ac25bc5fd786ab065541fb766572ec4da7d4a203974142` /
+  `e09b6d8547ce733dd075f2666e2822b2cd2de89c08fecf16bd476b2d8870d1f9`;
+- publication-reserve log/event:
+  `0d62337575749d892f955bea4b00b255fd4d424f6ed59ddd7e3fa97daf3b8e52` /
+  `e92570d9533a88eaa59c07cae91ebac17f948007876673e4408bbdda72d4df29`;
+- family-10 log/event:
+  `a625895752b8e9269917bc773323054bc0b9534c2ae8e8982f9ce4e83d5d5a5a` /
+  `9fe11c1c8cc2303db205893e4dc86c096e74810f4ed2e40b1753554f819c631a`;
+- successful family-12 log/event:
+  `d8e4b27a1508bb574ed28128935b9cb2841065f2bb6fe486d8c9cac601fef0ce` /
+  `0247a8991f9d43e528525b842e8b02c22542e625f82732c8fca9ac60135eda99`.
+
+Both A and diagnostic B were inactive when the successful family-12 evidence was sealed.
 
 ## 8. Stop and rollback rules
 
