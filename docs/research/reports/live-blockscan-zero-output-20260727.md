@@ -34,6 +34,33 @@ protocol:eigenpie, protocol:erc4626, protocol:erc4626-silo-redeem, protocol:gold
 protocol:metronome-hgusdc, protocol:metronome-synth, protocol:psm, protocol:rocksolid,
 protocol:wsteth, univ2-standard, univ3-standard, univ4` — `priced=0/N`。
 
+## 1-0. 【第二次更正 · 2026-07-27 深夜】§1 的「260/260 全在 state 失败」也过于绝对
+
+扩样到 638 个 `block_scan_timing` 事件后复测：
+
+| 指标 | 实测 |
+|---|---|
+| `stages.state.status` | `failed` **607** / **`ran` 46** |
+| `stages.enumeration.status` | `not-run` 608 / **`ran` 43** |
+| 那 43 次 enumeration 的结局 | **全部 `budget_exceeded`**，`candidates=0`、`planned=0` |
+| 它们的耗时 | state **28.6–29.2s** ＋ enumeration **4.4–5.9s** ≈ **34s** |
+| `priced` 覆盖 | 绝大多数 `0/29xxx`；**但出现过一次 `28383/28949`（98%）** |
+| `outcome` 全谱 | degraded 301 / budget_exceeded 249 / stale_state 102 / **startup_warm 1** |
+
+**两条结论性推论：**
+
+1. **定价不是"做不到"，是"来不及"**——存在过一次 98% 定价完成的 pass，说明工作量本身可完成，
+   失败是延迟性质而非能力性质。
+2. **即使 state 跑通，全图 enumeration 还要 4.4–5.9s**，叠加后必然爆预算 ⇒
+   仅把 state 压进预算**不足以**产出候选，端到端预算才是真门。
+
+⇒ §1 的「260/260 全部失败于 state」应修正为：**约 7%（46/638）的 pass 能把 state 跑到 `ran`，
+其中 43 次进入 enumeration，但全部因端到端超预算而在产出候选前终止。**
+`candidates=0` 因此**不能**解读为"图里没有机会"——它是"没跑到能判断的地方"。
+
+> 该更正由外部审计（Codex + fable5 非作者审计）指出方向后，由本人实测确认。
+> 报告此前两处过度断言（`previous` 恒 null、260/260 全失败）均源于**以代码推断代替数据实测**。
+
 ## 1a. 【更正 · 2026-07-27 晚】§1b 的机制已被实测证伪，勿再引用
 
 §1b（下节）由**代码阅读推断**得出「`previous` 恒为 null ⇒ 全局死亡螺旋」。
@@ -367,6 +394,7 @@ if (!previous) { /* 所有 family 一起全量回退 */ }
 | `listener:searcher:pool-adapter-policy` | 0 | PASS（17 derived adapters） |
 
 - `tool-reconciled: analysis:ab-canary-compare n/a 该工具是配对 A/B 日志比较器（`guard-ab-manual-first` 强制要求 --manual-verdict/--a-log/--b-log），本报告是单路 live 日志的根因分析，非 A/B 比较，执行不适用`
+- `tool-reconciled: listener:searcher:blockscan-contract agrees block-scan 契约套件 7/7 通过，与遥测字段（stages/outcome/priced/familyTelemetry）的结构一致，未发现契约层缺陷`
 - `tool-reconciled: analysis:test:venue-aggregate n/a 本事故分析不做链上 venue 聚合；结论来自生产自身的结构化遥测`
 - `tool-reconciled: listener:searcher:pool-adapter-policy agrees 17 个 derived adapter 的清单与遥测里 degraded 的 18 个 family 一致（含 credit:fluid），无遗漏 family`
 
