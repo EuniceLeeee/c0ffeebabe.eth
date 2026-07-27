@@ -435,7 +435,9 @@ The source-N cohort is fixed at no more than three live rounds beginning with fr
 
 The immediate diagnostic passes only when one complete, non-startup/non-catch-up B block-scan pass reports:
 
-- `priced > 0` against the same expected total currently reported as `28235`;
+- `priced > 0` against that generation's frozen expected-edge denominator. `0/28235` is the original
+  incident signature, not a license to force the denominator to 28235 as the live graph evolves; the exact
+  graph/view hash and denominator must be recorded and may not be reduced by the challenger;
 - enumeration runs instead of being marked `not-run` because the state stage failed;
 - the source block/hash remains current-N canonical;
 - every `SEARCHER_BLOCKSCAN_*_BUDGET_MS` value and all other runtime configuration are inherited unchanged
@@ -534,6 +536,20 @@ This evidence establishes **implemented and deterministic parity/recovery covera
 A/B cohort, natural positive scanner enumeration, production plan/solve, successful final simulation or
 end-to-end p95 below 10 seconds has been produced on this branch. Therefore the current verdict is
 `implemented_not_validated`, not `blockscan_output_restored` and not `fixed`.
+
+### 7.2 Independent-B source-N rounds
+
+| Round | Frozen runtime | Fixed inputs / first cohort | Result | Next action |
+|---|---|---|---|---|
+| 1 | `df4776b173948273ae7bbc0aa92c8d8873ce964d` | A configuration and budgets (`pass=11000ms`, `largeGraph=30000ms`), frozen universe `active-pools-9dd1…be1.json`; first state attempts at blocks `25623452`, `25623459`, `25623460` | failed before pricing: `state_block=null`, enumeration `not-run`; `canonical header 25620597 fell outside retained journal`. The first attempt spent `92220.97ms`; later attempts failed immediately against the same stale prepared source. | `8e3e32d`: invalidate an out-of-retention prepared DEX/protocol generation and reschedule from the current canonical head. Regression expands startup-warm control to 18/18. |
+| 2 | pending | reuse frozen budgets/universe and the stopped A's protocol discovery cache; first three eligible source-N attempts | pending | pending |
+| 3 | pending | same contract after one further scoped repair, if needed | pending | activate R6 N−1 coarse fallback if no source-N success |
+
+Round 1 used an empty diagnostic-worktree protocol cache while A's stopped cache contained 240 verified
+instances. That mismatch did not cause the observed pre-pricing canonical-journal failure, but Round 2 pins
+the stopped A cache so graph coverage is not silently reduced. A's denominator had evolved from the earlier
+`28235` incident value to approximately `29937–30007` immediately before shutdown; each round therefore
+records its exact graph identity and denominator instead of hardcoding an obsolete total.
 
 ## 8. Stop and rollback rules
 
