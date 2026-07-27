@@ -532,10 +532,13 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
     harness.coarsePricingFamilyDeadlineRemainingMs.every(
       (remainingMs, index) =>
         Math.abs(
-          remainingMs - harness.coarsePricingDeadlineRemainingMs[index]!,
+          (
+            harness.coarsePricingDeadlineRemainingMs[index]! -
+            remainingMs
+          ) - PUBLICATION_RESERVE_MS,
         ) <= 1,
     ),
-    "the degraded background producer must not inherit the 5s hot-family cutoff",
+    "the background producer must reserve time for family-local partial publication",
   );
   assert.equal(harness.publishedPricing, 1);
 }

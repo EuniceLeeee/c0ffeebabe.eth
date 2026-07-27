@@ -343,12 +343,25 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       1,
       this.deps.nMinusOneStateBudgetMs ?? 20_000,
     );
+    const publicationReserveMs = Math.min(
+      stateBudgetMs,
+      Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500),
+    );
     const deadlineAtMs = startedAtMs + stateBudgetMs;
+    const familySettleDeadlineAtMs = Math.max(
+      startedAtMs,
+      deadlineAtMs - publicationReserveMs,
+    );
     let result: BlockScanStatePrepareResult | null = null;
     const task = input.coordinator.prepareCoarsePricing({
       graph: input.graph,
       deadlineAtMs,
-      familySettleDeadlineAtMs: deadlineAtMs,
+      /*
+       * Family-local deadlines must settle before the generation deadline.
+       * Otherwise the outer abort wins the same instant as a slow family,
+       * erases healthy sibling results and leaves no time for canonical CAS.
+       */
+      familySettleDeadlineAtMs,
       signal: this.deps.runtimeAbort.signal,
     }).then((prepared) => {
       result = prepared;
@@ -373,6 +386,9 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           issueCount: prepared.issues.length,
           wallMs: Math.max(0, Date.now() - startedAtMs),
           budgetMs: stateBudgetMs,
+          publicationReserveMs,
+          families: prepared.familyTelemetry ?? [],
+          lanes: prepared.laneTelemetry,
         })}`,
       );
     }).catch((error) => {
