@@ -200,6 +200,17 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly startupWarmEnabled: boolean;
   /** One-time ordinary-live budget for the first current-head runtime snapshot. */
   readonly startupWarmBudgetMs: number;
+  /**
+   * Ordinary-live per-family pricing cutoff. This is deliberately shorter
+   * than the generation deadline so one slow family degrades locally instead
+   * of letting the outer deadline erase every healthy sibling.
+   */
+  readonly hotPricingFamilyBudgetMs?: number;
+  /**
+   * Time reserved for canonical CAS/publication after pricing, funding and
+   * execution preparation have all settled.
+   */
+  readonly runtimePublicationReserveMs?: number;
   readonly refineCandidates: number;
   readonly solveReserveMs: number;
   readonly midConcurrency: number;
@@ -792,6 +803,16 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             Date.now() + Math.max(1, this.deps.startupWarmBudgetMs),
           )
         : passDeadlineAtMs;
+      const preparationSettleDeadlineAtMs =
+        runtimeDeadlineAtMs -
+        Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500);
+      const pricingFamilySettleDeadlineAtMs = startupWarmAttempt
+        ? preparationSettleDeadlineAtMs
+        : Math.min(
+            preparationSettleDeadlineAtMs,
+            Date.now() +
+              Math.max(1, this.deps.hotPricingFamilyBudgetMs ?? 5_000),
+          );
       const runtime = await adapterRuntimeCoordinator.prepare({
         graph: graphView,
         fundingTokens: [...new Set([
@@ -799,6 +820,8 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           ...graphEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
         ])],
         deadlineAtMs: runtimeDeadlineAtMs,
+        preparationSettleDeadlineAtMs,
+        pricingFamilySettleDeadlineAtMs,
         signal: this.deps.runtimeAbort.signal,
         prepareExecution: async ({ sourceBlock, sourceBlockHash, signal }) => {
           const settled = await Promise.allSettled(

@@ -31,6 +31,8 @@ await testPinnedBatch();
 await testLocalDefaultAvoidsMulticall();
 await testMixedTransports();
 await testMulticallSubcallFailure();
+await testMulticallOuterFailureFallsBackPerChunk();
+await testMulticallFallbackFailureIsChunkLocal();
 await testPreReadHashMismatch();
 await testPostReadHashMismatch();
 await testAbort();
@@ -38,6 +40,9 @@ await testDeadline();
 await testMulticallAbortAndDeadline();
 await testStrictRevertData();
 await testGlobalConcurrencyAcrossPinnedReads();
+await testBatchFailureCancelsAndDrainsWorkers();
+await testMutationProofBypassesSaturatedStateSlots();
+await testMutationProofParentAbort();
 await testCanonicalMutationRange();
 await testMutationRangeRejectsReorgAndRemovedLog();
 
@@ -372,6 +377,182 @@ async function testMulticallSubcallFailure(): Promise<void> {
   console.log("[state-read-backend] exact subcall failure + revert exclusion: PASS");
 }
 
+async function testMulticallOuterFailureFallsBackPerChunk(): Promise<void> {
+  const calls: RpcRequest[][] = [];
+  let active = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 2,
+    maxConcurrentBatches: 1,
+    multicallMode: "aggregate3",
+    fetchImpl: (async (_url, init) => {
+      active++;
+      try {
+        const body = JSON.parse(String(init?.body)) as RpcRequest[];
+        calls.push(body);
+        if (body[0]?.method === "eth_getBlockByNumber") {
+          return fakeResponse(
+            body.map((request) =>
+              success(request.id, { hash: sourceBlockHash })
+            ),
+          );
+        }
+        const tx = body[0]?.params[0] as { to: string; data: string };
+        if (tx.to.toLowerCase() === BLOCKSCAN_MULTICALL3.toLowerCase()) {
+          const decoded = blockScanMulticallIface.decodeFunctionData(
+            "aggregate3",
+            tx.data,
+          )[0] as readonly { readonly callData: string }[];
+          if (decoded[0]?.callData === "0x11") {
+            return fakeResponse([
+              failure(body[0].id, "aggregate execution failed"),
+            ]);
+          }
+          return fakeResponse([
+            success(
+              body[0].id,
+              blockScanMulticallIface.encodeFunctionResult("aggregate3", [
+                decoded.map((item) => ({
+                  success: true,
+                  returnData: `0x${item.callData.slice(2).repeat(2)}`,
+                })),
+              ]),
+            ),
+          ]);
+        }
+        return fakeResponse(
+          body.map((request) =>
+            success(request.id, `0x${String(request.params[0].data).slice(2).repeat(2)}`)
+          ),
+        );
+      } finally {
+        active--;
+      }
+    }) as typeof fetch,
+  });
+  const reads = [
+    read("fallback-a", "0x11", { transport: "multicall-safe" }),
+    read("fallback-b", "0x12", { transport: "multicall-safe" }),
+    read("aggregate-a", "0x21", { transport: "multicall-safe" }),
+    read("aggregate-b", "0x22", { transport: "multicall-safe" }),
+  ];
+  const results = await backend.readPinned(reads, control());
+  assert.deepEqual(
+    results.map((result) => result.id),
+    reads.map((item) => item.id),
+    "fallback must preserve exact result identity and order",
+  );
+  assert.deepEqual(
+    results.map((result) => result.ok ? result.data : result.error),
+    ["0x1111", "0x1212", "0x2121", "0x2222"],
+  );
+  assert.equal(
+    calls.filter((batch) =>
+      batch[0]?.method === "eth_call" &&
+      String(batch[0].params[0].to).toLowerCase() ===
+        BLOCKSCAN_MULTICALL3.toLowerCase()
+    ).length,
+    2,
+    "only the failed aggregate chunk is retried",
+  );
+  const fallback = calls.find((batch) =>
+    batch.length === 2 &&
+    batch.every((request) =>
+      request.method === "eth_call" &&
+      String(request.params[0].to).toLowerCase() ===
+        targetAddress.toLowerCase()
+    )
+  );
+  assert(fallback, "failed aggregate chunk must use direct RPC fallback");
+  assert(fallback.every((request) =>
+    JSON.stringify(request.params[1]) === JSON.stringify({
+      blockHash: sourceBlockHash,
+      requireCanonical: true,
+    })
+  ), "fallback calls must retain the exact EIP-1898 source hash");
+  assert.equal(active, 0, "successful fallback must leave no orphan transport");
+  console.log("[state-read-backend] aggregate outer failure pinned fallback: PASS");
+}
+
+async function testMulticallFallbackFailureIsChunkLocal(): Promise<void> {
+  const started: string[] = [];
+  let active = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 2,
+    maxConcurrentBatches: 1,
+    multicallMode: "aggregate3",
+    fetchImpl: (async (_url, init) => {
+      active++;
+      try {
+        const body = JSON.parse(String(init?.body)) as RpcRequest[];
+        if (body[0]?.method === "eth_getBlockByNumber") {
+          return fakeResponse(
+            body.map((request) =>
+              success(request.id, { hash: sourceBlockHash })
+            ),
+          );
+        }
+        const tx = body[0]?.params[0] as { to: string; data: string };
+        if (tx.to.toLowerCase() !== BLOCKSCAN_MULTICALL3.toLowerCase()) {
+          started.push("fallback-failed");
+          throw new Error("fallback HTTP failed");
+        }
+        const decoded = blockScanMulticallIface.decodeFunctionData(
+          "aggregate3",
+          tx.data,
+        )[0] as readonly { readonly callData: string }[];
+        const first = decoded[0]?.callData ?? "";
+        started.push(first);
+        if (first === "0x31") {
+          throw new Error("aggregate HTTP failed");
+        }
+        return fakeResponse([
+          success(
+            body[0].id,
+            blockScanMulticallIface.encodeFunctionResult("aggregate3", [
+              decoded.map((item) => ({
+                success: true,
+                returnData: `0x${item.callData.slice(2).repeat(2)}`,
+              })),
+            ]),
+          ),
+        ]);
+      } finally {
+        active--;
+      }
+    }) as typeof fetch,
+  });
+  const reads = [
+    read("failed-a", "0x31", { transport: "multicall-safe" }),
+    read("failed-b", "0x32", { transport: "multicall-safe" }),
+    read("healthy-a", "0x41", { transport: "multicall-safe" }),
+    read("healthy-b", "0x42", { transport: "multicall-safe" }),
+  ];
+  const results = await backend.readPinned(reads, control());
+  assert.deepEqual(
+    results.map((result) => result.id),
+    reads.map((item) => item.id),
+  );
+  assertFailure(
+    results[0],
+    "rpc",
+    /aggregate HTTP failed.*fallback HTTP failed/,
+  );
+  assertFailure(
+    results[1],
+    "rpc",
+    /aggregate HTTP failed.*fallback HTTP failed/,
+  );
+  assert(results[2].ok && results[2].data === "0x4141");
+  assert(results[3].ok && results[3].data === "0x4242");
+  assert.deepEqual(
+    started,
+    ["0x31", "fallback-failed", "0x41"],
+    "fallback failure must not cancel the next independent chunk",
+  );
+  assert.equal(active, 0, "chunk-local failure must leave no orphan transport");
+  console.log("[state-read-backend] fallback failure remains chunk-local: PASS");
+}
+
 async function testPreReadHashMismatch(): Promise<void> {
   let ethCalls = 0;
   const backend = backendWith(async (body) => body.map((request) => {
@@ -607,6 +788,203 @@ async function testGlobalConcurrencyAcrossPinnedReads(): Promise<void> {
     "all concurrent pricing/funding-style readPinned calls share one absolute RPC cap",
   );
   console.log("[state-read-backend] shared global RPC semaphore: PASS");
+}
+
+async function testBatchFailureCancelsAndDrainsWorkers(): Promise<void> {
+  let active = 0;
+  let markSecondStarted!: () => void;
+  const secondStarted = new Promise<void>((resolve) => {
+    markSecondStarted = resolve;
+  });
+  const startedData: string[] = [];
+  let inFlightSignal: AbortSignal | undefined;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 1,
+    maxConcurrentBatches: 2,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      const data = String(body[0]?.params[0]?.data);
+      startedData.push(data);
+      active++;
+      try {
+        if (data === "0x01") {
+          await secondStarted;
+          throw new Error("first chunk exploded");
+        }
+        if (data === "0x02") {
+          const signal = init?.signal;
+          if (!signal) throw new Error("in-flight chunk missing AbortSignal");
+          inFlightSignal = signal;
+          markSecondStarted();
+          await rejectWhenAborted(signal);
+        }
+        throw new Error(`unexpected later chunk ${data}`);
+      } finally {
+        active--;
+      }
+    }) as typeof fetch,
+  });
+  const results = await backend.readBatch(
+    "swap",
+    [
+      read("fail-first", "0x01"),
+      read("cancel-in-flight", "0x02"),
+      read("must-not-start-1", "0x03"),
+      read("must-not-start-2", "0x04"),
+    ],
+    control(),
+  );
+  assert.deepEqual(
+    startedData.sort(),
+    ["0x01", "0x02"],
+    "the first chunk error must stop workers from claiming later chunks",
+  );
+  assert.equal(
+    inFlightSignal?.aborted,
+    true,
+    "the first chunk error must cancel already-started sibling transport",
+  );
+  assert.equal(
+    active,
+    0,
+    "readBatch must not return before every started worker settles",
+  );
+  for (const result of results) {
+    assertFailure(result, "rpc", /first chunk exploded/);
+  }
+  console.log("[state-read-backend] first-error cancellation + drain: PASS");
+}
+
+async function testMutationProofBypassesSaturatedStateSlots(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  let markNormalStarted!: () => void;
+  const normalStarted = new Promise<void>((resolve) => {
+    markNormalStarted = resolve;
+  });
+  let releaseNormal!: () => void;
+  const normalRelease = new Promise<void>((resolve) => {
+    releaseNormal = resolve;
+  });
+  let normalInFlight = false;
+  let proofRequestsWhileNormalInFlight = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 1,
+    maxConcurrentBatches: 1,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body.every((request) => request.method === "eth_call")) {
+        normalInFlight = true;
+        markNormalStarted();
+        try {
+          await normalRelease;
+          return fakeResponse(body.map((request) => success(request.id, "0x01")));
+        } finally {
+          normalInFlight = false;
+        }
+      }
+      if (normalInFlight) proofRequestsWhileNormalInFlight++;
+      return fakeResponse(body.map((request) => {
+        if (request.method === "eth_getLogs") {
+          return success(request.id, []);
+        }
+        assert.equal(request.method, "eth_getBlockByNumber");
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const normal = backend.readBatch(
+    "swap",
+    [read("saturated-normal-slot", "0x01")],
+    control(),
+  );
+  await normalStarted;
+
+  const range = await backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 250,
+      signal: new AbortController().signal,
+    },
+  ).finally(releaseNormal);
+  const normalResults = await normal;
+  assert.equal(range.complete, true);
+  assert.equal(range.events.length, 0);
+  assert.equal(
+    proofRequestsWhileNormalInFlight,
+    3,
+    "headers, logs and final canonical CAS must bypass the saturated bulk FIFO",
+  );
+  assert(normalResults.every((result) => result.ok));
+  console.log("[state-read-backend] mutation proof reserved RPC slot: PASS");
+}
+
+async function testMutationProofParentAbort(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  let markProofStarted!: () => void;
+  const proofStarted = new Promise<void>((resolve) => {
+    markProofStarted = resolve;
+  });
+  const observed: { proofSignal?: AbortSignal } = {};
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      assert(body.every((request) =>
+        request.method === "eth_getBlockByNumber"
+      ));
+      const proofSignal = init?.signal;
+      if (!proofSignal) throw new Error("mutation proof missing AbortSignal");
+      observed.proofSignal = proofSignal;
+      markProofStarted();
+      await rejectWhenAborted(proofSignal);
+      throw new Error("unreachable");
+    }) as typeof fetch,
+  });
+  const parent = new AbortController();
+  const pending = backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: parent.signal,
+    },
+  );
+  await proofStarted;
+  parent.abort(new Error("mutation proof parent cancelled"));
+  await assert.rejects(() => pending, /mutation proof parent cancelled/);
+  assert.equal(observed.proofSignal?.aborted, true);
+  console.log("[state-read-backend] mutation proof parent abort: PASS");
 }
 
 async function testCanonicalMutationRange(): Promise<void> {

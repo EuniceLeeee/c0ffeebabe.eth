@@ -1269,6 +1269,67 @@ async function familyLocalReadDeadlineFencesLateBackendResult(): Promise<void> {
   assert.equal(coordinator.latestSnapshot()?.mids.size, 2);
 }
 
+async function explicitFamilySettleDeadlinePreservesGeneration(): Promise<void> {
+  let releaseProtocol: (() => void) | undefined;
+  let protocolSignal: AbortSignal | undefined;
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(lane, reads, control) {
+      if (lane === "swap") {
+        return reads.map((read) =>
+          successfulRead(read, control.sourceGeneration)
+        );
+      }
+      protocolSignal = control.signal;
+      return await new Promise<readonly StateReadResult[]>((resolve) => {
+        releaseProtocol = () => resolve(
+          reads.map((read) =>
+            successfulRead(read, control.sourceGeneration)
+          ),
+        );
+      });
+    },
+    async verifyCanonicalSource(_source, signal) {
+      assert.equal(
+        signal.aborted,
+        false,
+        "the earlier family-settlement boundary must leave CAS alive",
+      );
+    },
+  };
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    // Production startup may allow a long cold-family budget. The hot input
+    // boundary must still be able to settle the family earlier.
+    familyTimeoutMs: 2_000,
+  });
+  const startedAtMs = Date.now();
+  const result = await coordinator.prepare({
+    graph: graph(1),
+    families: families().list,
+    familySettleDeadlineAtMs: Date.now() + 25,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(result.status, "degraded");
+  if (result.status !== "degraded") throw new Error("expected degraded state");
+  assert(
+    Date.now() - startedAtMs < 500,
+    "hot family settlement must not consume the outer generation deadline",
+  );
+  assert.deepEqual(result.snapshot.resolvedFamilyIds, ["univ2-standard"]);
+  assert.deepEqual(result.snapshot.incompleteFamilyIds, ["protocol:fixture"]);
+  assert.equal(result.snapshot.mids.size, 2);
+  assert.equal(protocolSignal?.aborted, true);
+  assert(
+    result.issues.some((issue) =>
+      issue.kind === "deadline" &&
+      issue.familyId === "protocol:fixture"
+    ),
+    "the isolated family timeout must stay structurally attributable",
+  );
+  releaseProtocol?.();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(coordinator.latestSnapshot()?.mids.size, 2);
+}
+
 async function deadlineAndExternalAbort(): Promise<void> {
   let observedAbort = false;
   const backend: BlockScanStateReadBackend = {
@@ -1816,6 +1877,7 @@ await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();
 await familyLocalReadDeadlineFencesLateBackendResult();
+await explicitFamilySettleDeadlinePreservesGeneration();
 await deadlineAndExternalAbort();
 await generationFence();
 await dependentReadClosureIsExplicit();

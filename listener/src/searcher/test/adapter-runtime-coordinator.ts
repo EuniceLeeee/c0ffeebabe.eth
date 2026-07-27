@@ -375,6 +375,7 @@ async function hungFundingPrepareIsDeadlineBoundAndLateFenced(): Promise<void> {
   );
   const backend = new FundingReadBackend();
   let healthySiblingRead = false;
+  let finalCasSawAbortedSignal = false;
   const reads = {
     async readPinned(
       pending: readonly StateRead[],
@@ -390,6 +391,12 @@ async function hungFundingPrepareIsDeadlineBoundAndLateFenced(): Promise<void> {
         healthySiblingRead = true;
       }
       return backend.readPinned(pending, control);
+    },
+    async verifyCanonicalSource(
+      _source: BlockSource,
+      signal: AbortSignal,
+    ): Promise<void> {
+      finalCasSawAbortedSignal = signal.aborted;
     },
   };
   const coordinator = runtimeCoordinator(
@@ -411,9 +418,13 @@ async function hungFundingPrepareIsDeadlineBoundAndLateFenced(): Promise<void> {
   const timedOut = await coordinator.prepare({
     graph: graph(2, 221, HASH_B),
     fundingTokens: [TOKEN_A],
-    deadlineAtMs: startedAt + 25,
+    preparationSettleDeadlineAtMs: startedAt + 25,
+    deadlineAtMs: startedAt + 500,
   });
-  assert.equal(timedOut.status, "incomplete");
+  assert.equal(timedOut.status, "degraded");
+  if (timedOut.status !== "degraded") {
+    throw new Error("expected family-local funding degradation");
+  }
   assert.equal(sawAbort, true, "hung family must receive runtime cancellation");
   assert.equal(
     healthySiblingRead,
@@ -422,13 +433,20 @@ async function hungFundingPrepareIsDeadlineBoundAndLateFenced(): Promise<void> {
   );
   assert.ok(
     Date.now() - startedAt < 1_000,
-    "hung family prepare must be hard-bounded by the runtime deadline",
+    "hung family prepare must be hard-bounded by the preparation deadline",
   );
   assert.equal(
-    coordinator.latestSnapshot(),
-    published,
-    "deadline failure must preserve the prior published generation",
+    timedOut.snapshot.funding.source(TOKEN_A)?.adapterId,
+    morphoFlashFamily.funding.actionAdapterId,
+    "the healthy current-N lender must publish",
   );
+  assert.equal(
+    finalCasSawAbortedSignal,
+    false,
+    "family settlement must leave the outer controller alive for final CAS",
+  );
+  assert.notEqual(coordinator.latestSnapshot(), published);
+  const degraded = timedOut.snapshot;
 
   release.resolve();
   await waitUntil(() => latePrepareSettled);
@@ -438,7 +456,7 @@ async function hungFundingPrepareIsDeadlineBoundAndLateFenced(): Promise<void> {
     0,
     "a prepare result arriving after abort must not enter decode/publication",
   );
-  assert.equal(coordinator.latestSnapshot(), published);
+  assert.equal(coordinator.latestSnapshot(), degraded);
 }
 
 async function hungExecutionIsDeadlineBound(): Promise<void> {
@@ -448,8 +466,10 @@ async function hungExecutionIsDeadlineBound(): Promise<void> {
   const result = await coordinator.prepare({
     graph: graph(1, 301, HASH_A),
     fundingTokens: [TOKEN_A],
-    deadlineAtMs: startedAt + 25,
-    prepareExecution: async ({ signal }) => {
+    preparationSettleDeadlineAtMs: startedAt + 25,
+    deadlineAtMs: startedAt + 500,
+    prepareExecution: async ({ deadlineAtMs, signal }) => {
+      assert.equal(deadlineAtMs, startedAt + 25);
       signal.addEventListener("abort", () => {
         executionSawAbort = true;
       }, { once: true });
@@ -482,7 +502,8 @@ async function timedOutGenerationCannotOverlapNextPreparation(): Promise<void> {
   const firstPreparing = coordinator.prepare({
     graph: graph(1, 401, HASH_A),
     fundingTokens: [TOKEN_A],
-    deadlineAtMs: Date.now() + 100,
+    preparationSettleDeadlineAtMs: Date.now() + 25,
+    deadlineAtMs: Date.now() + 1_000,
     prepareExecution: async ({ generation, signal }) => {
       assert.equal(generation, 1);
       assert.equal(resourceOwner, null);

@@ -79,6 +79,13 @@ export class JsonRpcBlockScanStateReadBackend
   private readonly maxConcurrentBatches: number;
   private readonly multicallMode: "rpc-batch" | "aggregate3";
   private readonly rpcSlots: AbortableSemaphore;
+  /**
+   * Mutation proofs are the prerequisite for carrying unchanged state into the
+   * current generation. Keep one bounded transport slot outside the bulk
+   * current/static/funding FIFO so a full state-read queue cannot force every
+   * incremental family back to a full current-N refresh.
+   */
+  private readonly mutationProofSlots: AbortableSemaphore;
   private readonly fetchImpl: typeof fetch;
   private nextId = 1;
 
@@ -103,6 +110,7 @@ export class JsonRpcBlockScanStateReadBackend
     this.maxConcurrentBatches = maxConcurrentBatches;
     this.multicallMode = options.multicallMode ?? "rpc-batch";
     this.rpcSlots = new AbortableSemaphore(maxConcurrentBatches);
+    this.mutationProofSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
@@ -196,7 +204,7 @@ export class JsonRpcBlockScanStateReadBackend
           if (controller.signal.aborted) {
             throw controller.signal.reason ?? new Error("state read aborted");
           }
-          const chunkResults = await this.readMulticallChunk(
+          const chunkResults = await this.readMulticallChunkWithPinnedFallback(
             chunk.map((item) => item.read),
             control,
             controller.signal,
@@ -222,7 +230,13 @@ export class JsonRpcBlockScanStateReadBackend
           }
         });
       }
-      await runWithConcurrency(tasks, this.maxConcurrentBatches);
+      await runWithConcurrency(
+        tasks,
+        this.maxConcurrentBatches,
+        (error) => {
+          if (!controller.signal.aborted) controller.abort(error);
+        },
+      );
       if (selfFenceCanonicality) {
         await this.verifyCanonicalSource(sourceFrom(control), controller.signal);
       }
@@ -256,8 +270,16 @@ export class JsonRpcBlockScanStateReadBackend
     source: BlockSource,
     signal: AbortSignal,
   ): Promise<void> {
+    return this.verifyCanonicalSourceWithSlots(source, signal, this.rpcSlots);
+  }
+
+  private async verifyCanonicalSourceWithSlots(
+    source: BlockSource,
+    signal: AbortSignal,
+    slots: AbortableSemaphore,
+  ): Promise<void> {
     const id = this.nextId++;
-    const response = await this.post([{
+    const response = await this.postWithSlots(slots, [{
       jsonrpc: "2.0",
       id,
       method: "eth_getBlockByNumber",
@@ -374,7 +396,8 @@ export class JsonRpcBlockScanStateReadBackend
           params: [toBlockTag(blockNumber), false],
         });
       }
-      const headerResponses = await this.post(
+      const headerResponses = await this.postWithSlots(
+        this.mutationProofSlots,
         headerRequests,
         controller.signal,
       );
@@ -436,7 +459,7 @@ export class JsonRpcBlockScanStateReadBackend
             }),
         topics: descriptor.topics,
       };
-      const logResponses = await this.post([{
+      const logResponses = await this.postWithSlots(this.mutationProofSlots, [{
         jsonrpc: "2.0",
         id: logId,
         method: "eth_getLogs",
@@ -478,7 +501,11 @@ export class JsonRpcBlockScanStateReadBackend
           throw new Error("eth_getLogs returned duplicate canonical log identity");
         }
       }
-      await this.verifyCanonicalSource(through, controller.signal);
+      await this.verifyCanonicalSourceWithSlots(
+        through,
+        controller.signal,
+        this.mutationProofSlots,
+      );
       const canonicalPathFingerprint = deterministicHash(headers);
       const rangeFingerprint = deterministicHash({
         fromExclusive,
@@ -559,6 +586,40 @@ export class JsonRpcBlockScanStateReadBackend
     }));
   }
 
+  private async readMulticallChunkWithPinnedFallback(
+    reads: readonly StateRead[],
+    control: PinnedReadControl & { readonly deadlineAtMs: number },
+    signal: AbortSignal,
+  ): Promise<readonly StateReadResult[]> {
+    try {
+      return await this.readMulticallChunk(reads, control, signal);
+    } catch (aggregateError) {
+      if (signal.aborted || Date.now() >= control.deadlineAtMs) {
+        throw aggregateError;
+      }
+      try {
+        /*
+         * Graph assets are untrusted contracts. One aggregate3 outer failure
+         * must not erase every other successfully pinned chunk in the family.
+         * Retry only this chunk as independent EIP-1898 eth_call requests.
+         */
+        return await this.readRpcChunk(reads, control, signal);
+      } catch (fallbackError) {
+        if (signal.aborted || Date.now() >= control.deadlineAtMs) {
+          throw fallbackError;
+        }
+        const message =
+          `Multicall3 chunk failed (${formatError(aggregateError)}); ` +
+          `source-pinned RPC fallback failed (${formatError(fallbackError)})`;
+        return Object.freeze(
+          reads.map((read) =>
+            readFailure(read, control, "rpc", message)
+          ),
+        );
+      }
+    }
+  }
+
   private async readRpcChunk(
     reads: readonly StateRead[],
     control: PinnedReadControl,
@@ -625,7 +686,15 @@ export class JsonRpcBlockScanStateReadBackend
     body: readonly object[],
     signal: AbortSignal,
   ): Promise<readonly JsonRpcResponse[]> {
-    return this.rpcSlots.run(signal, async () => {
+    return this.postWithSlots(this.rpcSlots, body, signal);
+  }
+
+  private async postWithSlots(
+    slots: AbortableSemaphore,
+    body: readonly object[],
+    signal: AbortSignal,
+  ): Promise<readonly JsonRpcResponse[]> {
+    return slots.run(signal, async () => {
       if (signal.aborted) {
         throw signal.reason ?? new DOMException("Aborted", "AbortError");
       }
@@ -952,17 +1021,28 @@ function formatError(error: unknown): string {
 async function runWithConcurrency(
   tasks: readonly (() => Promise<void>)[],
   concurrency: number,
+  onFirstError: (error: unknown) => void,
 ): Promise<void> {
   let next = 0;
+  const failures: unknown[] = [];
   const workers = Array.from(
     { length: Math.min(concurrency, tasks.length) },
     async () => {
-      while (true) {
+      while (failures.length === 0) {
         const index = next++;
         if (index >= tasks.length) return;
-        await tasks[index]();
+        try {
+          await tasks[index]();
+        } catch (error) {
+          if (failures.length === 0) {
+            failures.push(error);
+            onFirstError(error);
+          }
+          return;
+        }
       }
     },
   );
   await Promise.all(workers);
+  if (failures.length > 0) throw failures[0];
 }

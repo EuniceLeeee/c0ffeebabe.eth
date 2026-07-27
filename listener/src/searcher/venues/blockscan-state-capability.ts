@@ -298,6 +298,16 @@ export interface BlockScanStateCapability<Schema = unknown, Snapshot = unknown> 
   stateKey(edge: TokenEdge): string;
   compileStaticSchema(input: CompileStaticSchemaInput): Schema | Promise<Schema>;
   /**
+   * Optional incremental schema compiler. The previous schema is supplied
+   * only from a generation that crossed the coordinator's canonical CAS and
+   * publication fence. Families may reuse strong positive identity metadata,
+   * while new/changed instances still produce source-pinned static reads.
+   */
+  extendStaticSchema?(
+    previousSchema: Schema,
+    input: CompileStaticSchemaInput,
+  ): Schema | Promise<Schema>;
+  /**
    * Optional graph-fingerprint-scoped metadata reads (for example decimals).
    * These run only on schema cache miss and are still pinned by the trusted
    * transport. Both methods must be supplied together.
@@ -391,6 +401,20 @@ export interface CompiledBlockScanStateFamily {
   }): readonly StateRead[];
   decodeState(results: readonly StateReadResult[]): PublishedFamilyStateValue;
   readonly incremental?: CompiledIncrementalStateFamily;
+  /**
+   * Recompile a changed graph from this already-published schema. The
+   * coordinator never exposes an uncommitted generation through this hook.
+   */
+  recompile?(
+    input: RegisteredBlockScanStateFamilyCompileInput,
+  ): Promise<CompiledBlockScanStateFamily>;
+}
+
+export interface RegisteredBlockScanStateFamilyCompileInput
+  extends CompileStaticSchemaInput {
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readStatic(reads: readonly StateRead[]): Promise<readonly StateReadResult[]>;
 }
 
 export interface RegisteredBlockScanStateFamily {
@@ -398,11 +422,9 @@ export interface RegisteredBlockScanStateFamily {
   readonly lane: BlockScanPricingLane;
   stateKey(edge: TokenEdge): string;
   ownsEdge(edge: TokenEdge): boolean;
-  compile(input: CompileStaticSchemaInput & {
-    readonly sourceBlock: number;
-    readonly sourceBlockHash: string;
-    readStatic(reads: readonly StateRead[]): Promise<readonly StateReadResult[]>;
-  }): Promise<CompiledBlockScanStateFamily>;
+  compile(
+    input: RegisteredBlockScanStateFamilyCompileInput,
+  ): Promise<CompiledBlockScanStateFamily>;
 }
 
 /**
@@ -417,158 +439,163 @@ export function registerBlockScanStateFamily<Schema, Snapshot>(input: {
   ownsEdge(edge: TokenEdge): boolean;
 }): RegisteredBlockScanStateFamily {
   const { familyId, lane, capability } = input;
+  const compile = async (
+    compileInput: RegisteredBlockScanStateFamilyCompileInput,
+    previousSchema?: Schema,
+  ): Promise<CompiledBlockScanStateFamily> => {
+    if (compileInput.signal.aborted) {
+      throw compileInput.signal.reason;
+    }
+    if (Date.now() >= compileInput.deadlineAtMs) {
+      throw new Error(`family ${familyId} static schema deadline expired`);
+    }
+    const baseSchema = await resolveCapabilityValue(
+      previousSchema !== undefined && capability.extendStaticSchema
+        ? capability.extendStaticSchema(previousSchema, compileInput)
+        : capability.compileStaticSchema(compileInput),
+    );
+    const hasStaticReads = capability.buildStaticSchemaReads !== undefined;
+    if (hasStaticReads !== (capability.hydrateStaticSchema !== undefined)) {
+      throw new Error(
+        `family ${familyId} must pair static reads with schema hydration`,
+      );
+    }
+    let schema: Schema = baseSchema as Schema;
+    if (capability.buildStaticSchemaReads && capability.hydrateStaticSchema) {
+      const reads = capability.buildStaticSchemaReads({
+        sourceBlock: compileInput.sourceBlock,
+        sourceBlockHash: compileInput.sourceBlockHash,
+        schema: baseSchema,
+        edges: compileInput.edges,
+      });
+      if (isThenable(reads)) {
+        throw new Error("buildStaticSchemaReads must return synchronously");
+      }
+      const results = reads.length === 0
+        ? Object.freeze([]) as readonly StateReadResult[]
+        : await compileInput.readStatic(Object.freeze([...reads]));
+      schema = capability.hydrateStaticSchema(baseSchema, results);
+      if (isThenable(schema)) {
+        throw new Error("hydrateStaticSchema must return synchronously");
+      }
+    }
+    const edgeFingerprint = stateSchemaFingerprint(compileInput.edges);
+    const compiled: CompiledBlockScanStateFamily = {
+      familyId,
+      lane,
+      edgeFingerprint,
+      buildCurrentBlockReads(readInput) {
+        return capability.buildCurrentBlockReads({
+          ...readInput,
+          schema,
+        });
+      },
+      ...(capability.buildDependentBlockReads
+        ? {
+            buildDependentBlockReads(readInput: {
+              readonly sourceBlock: number;
+              readonly sourceBlockHash: string;
+              readonly edges: readonly TokenEdge[];
+              readonly completedRound: number;
+              readonly priorResults: readonly StateReadResult[];
+            }) {
+              return capability.buildDependentBlockReads!({
+                ...readInput,
+                schema,
+              });
+            },
+          }
+        : {}),
+      decodeState(results) {
+        const snapshot = capability.decodeState(schema, results);
+        if (isThenable(snapshot)) {
+          throw new Error("decodeState must return synchronously");
+        }
+        return Object.freeze({
+          familyId,
+          snapshotFingerprint: deterministicHash(snapshot),
+          deriveMids(edges: readonly TokenEdge[]) {
+            const mids = capability.deriveMids(snapshot, edges);
+            if (isThenable(mids)) {
+              throw new Error("deriveMids must return synchronously");
+            }
+            return mids;
+          },
+          ...(capability.behaviorProvenUnavailableEdges
+            ? {
+                behaviorProvenUnavailableEdges(
+                  edges: readonly TokenEdge[],
+                ) {
+                  const unavailable =
+                    capability.behaviorProvenUnavailableEdges!(
+                      snapshot,
+                      edges,
+                    );
+                  if (isThenable(unavailable)) {
+                    throw new Error(
+                      "behaviorProvenUnavailableEdges must return synchronously",
+                    );
+                  }
+                  return unavailable;
+                },
+              }
+            : {}),
+          ...(capability.projectBackrunState
+            ? {
+                projectBackrunState(source: BlockSource) {
+                  const seed = capability.projectBackrunState!(
+                    snapshot,
+                    source,
+                  );
+                  if (isThenable(seed)) {
+                    throw new Error(
+                      "projectBackrunState must return synchronously",
+                    );
+                  }
+                  return seed;
+                },
+              }
+            : {}),
+        });
+      },
+      ...(capability.incremental
+        ? {
+            incremental: Object.freeze({
+              mutationQueryDescriptor(edges: readonly TokenEdge[]) {
+                return capability.incremental!.mutationQueryDescriptor({
+                  schema,
+                  edges,
+                });
+              },
+              classifyMutations(classifyInput: {
+                readonly edges: readonly TokenEdge[];
+                readonly range: CanonicalMutationRange;
+              }) {
+                return capability.incremental!.classifyMutations({
+                  schema,
+                  edges: classifyInput.edges,
+                  range: classifyInput.range,
+                });
+              },
+            }),
+          }
+        : {}),
+      ...(capability.extendStaticSchema
+        ? {
+            recompile(nextInput: RegisteredBlockScanStateFamilyCompileInput) {
+              return compile(nextInput, schema);
+            },
+          }
+        : {}),
+    };
+    return Object.freeze(compiled);
+  };
   return Object.freeze({
     familyId,
     lane,
     stateKey: (edge: TokenEdge) => capability.stateKey(edge),
     ownsEdge: (edge: TokenEdge) => input.ownsEdge(edge),
-    async compile(
-      compileInput: CompileStaticSchemaInput & {
-        readonly sourceBlock: number;
-        readonly sourceBlockHash: string;
-        readStatic(
-          reads: readonly StateRead[],
-        ): Promise<readonly StateReadResult[]>;
-      },
-    ): Promise<CompiledBlockScanStateFamily> {
-      if (compileInput.signal.aborted) {
-        throw compileInput.signal.reason;
-      }
-      if (Date.now() >= compileInput.deadlineAtMs) {
-        throw new Error(`family ${familyId} static schema deadline expired`);
-      }
-      const baseSchema = await resolveCapabilityValue(
-        capability.compileStaticSchema(compileInput),
-      );
-      const hasStaticReads = capability.buildStaticSchemaReads !== undefined;
-      if (hasStaticReads !== (capability.hydrateStaticSchema !== undefined)) {
-        throw new Error(
-          `family ${familyId} must pair static reads with schema hydration`,
-        );
-      }
-      let schema: Schema = baseSchema as Schema;
-      if (capability.buildStaticSchemaReads && capability.hydrateStaticSchema) {
-        const reads = capability.buildStaticSchemaReads({
-          sourceBlock: compileInput.sourceBlock,
-          sourceBlockHash: compileInput.sourceBlockHash,
-          schema: baseSchema,
-          edges: compileInput.edges,
-        });
-        if (isThenable(reads)) {
-          throw new Error("buildStaticSchemaReads must return synchronously");
-        }
-        const results = reads.length === 0
-          ? Object.freeze([]) as readonly StateReadResult[]
-          : await compileInput.readStatic(Object.freeze([...reads]));
-        schema = capability.hydrateStaticSchema(baseSchema, results);
-        if (isThenable(schema)) {
-          throw new Error("hydrateStaticSchema must return synchronously");
-        }
-      }
-      const edgeFingerprint = stateSchemaFingerprint(compileInput.edges);
-      const compiled: CompiledBlockScanStateFamily = {
-        familyId,
-        lane,
-        edgeFingerprint,
-        buildCurrentBlockReads(readInput) {
-          return capability.buildCurrentBlockReads({
-            ...readInput,
-            schema,
-          });
-        },
-        ...(capability.buildDependentBlockReads
-          ? {
-              buildDependentBlockReads(readInput: {
-                readonly sourceBlock: number;
-                readonly sourceBlockHash: string;
-                readonly edges: readonly TokenEdge[];
-                readonly completedRound: number;
-                readonly priorResults: readonly StateReadResult[];
-              }) {
-                return capability.buildDependentBlockReads!({
-                  ...readInput,
-                  schema,
-                });
-              },
-            }
-          : {}),
-        decodeState(results) {
-          const snapshot = capability.decodeState(schema, results);
-          if (isThenable(snapshot)) {
-            throw new Error("decodeState must return synchronously");
-          }
-          return Object.freeze({
-            familyId,
-            snapshotFingerprint: deterministicHash(snapshot),
-            deriveMids(edges: readonly TokenEdge[]) {
-              const mids = capability.deriveMids(snapshot, edges);
-              if (isThenable(mids)) {
-                throw new Error("deriveMids must return synchronously");
-              }
-              return mids;
-            },
-            ...(capability.behaviorProvenUnavailableEdges
-              ? {
-                  behaviorProvenUnavailableEdges(
-                    edges: readonly TokenEdge[],
-                  ) {
-                    const unavailable =
-                      capability.behaviorProvenUnavailableEdges!(
-                        snapshot,
-                        edges,
-                      );
-                    if (isThenable(unavailable)) {
-                      throw new Error(
-                        "behaviorProvenUnavailableEdges must return synchronously",
-                      );
-                    }
-                    return unavailable;
-                  },
-                }
-              : {}),
-            ...(capability.projectBackrunState
-              ? {
-                  projectBackrunState(source: BlockSource) {
-                    const seed = capability.projectBackrunState!(
-                      snapshot,
-                      source,
-                    );
-                    if (isThenable(seed)) {
-                      throw new Error(
-                        "projectBackrunState must return synchronously",
-                      );
-                    }
-                    return seed;
-                  },
-                }
-              : {}),
-          });
-        },
-        ...(capability.incremental
-          ? {
-              incremental: Object.freeze({
-                mutationQueryDescriptor(edges: readonly TokenEdge[]) {
-                  return capability.incremental!.mutationQueryDescriptor({
-                    schema,
-                    edges,
-                  });
-                },
-                classifyMutations(classifyInput: {
-                  readonly edges: readonly TokenEdge[];
-                  readonly range: CanonicalMutationRange;
-                }) {
-                  return capability.incremental!.classifyMutations({
-                    schema,
-                    edges: classifyInput.edges,
-                    range: classifyInput.range,
-                  });
-                },
-              }),
-            }
-          : {}),
-      };
-      return Object.freeze(compiled);
-    },
+    compile,
   });
 }
 

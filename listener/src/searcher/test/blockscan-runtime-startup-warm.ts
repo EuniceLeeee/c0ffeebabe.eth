@@ -38,6 +38,8 @@ import {
 
 const HOT_BUDGET_MS = 25;
 const STARTUP_BUDGET_MS = 500;
+const HOT_FAMILY_BUDGET_MS = 10;
+const PUBLICATION_RESERVE_MS = 5;
 const EMPTY_HASH = exactSetHash([]);
 
 interface PreparedDiscovery {
@@ -208,6 +210,38 @@ async function incompleteRetriesAndHotBudgetResumes(): Promise<void> {
   assert(
     harness.deadlineRemainingMs[2]! <= HOT_BUDGET_MS + 20,
     "the first head after a published startup snapshot uses the hot deadline",
+  );
+  for (const call of [0, 1]) {
+    assert(
+      harness.preparationSettleRemainingMs[call] !== null &&
+        harness.pricingSettleRemainingMs[call] !== null,
+      "startup warm must reserve time for publication",
+    );
+    assert(
+      harness.deadlineRemainingMs[call]! -
+          harness.preparationSettleRemainingMs[call]! >=
+        PUBLICATION_RESERVE_MS - 2,
+      "startup preparation must settle before the outer publication deadline",
+    );
+    assert(
+      Math.abs(
+        harness.pricingSettleRemainingMs[call]! -
+          harness.preparationSettleRemainingMs[call]!,
+      ) <= 2,
+      "startup pricing may use the cold budget but not the publication reserve",
+    );
+  }
+  assert(
+    harness.pricingSettleRemainingMs[2] !== null &&
+      harness.pricingSettleRemainingMs[2]! <
+        harness.preparationSettleRemainingMs[2]!,
+    "ordinary live must settle pricing families before all preparation",
+  );
+  assert(
+    harness.deadlineRemainingMs[2]! -
+        harness.preparationSettleRemainingMs[2]! >=
+      PUBLICATION_RESERVE_MS - 2,
+    "ordinary live must retain the publication reserve",
   );
 }
 
@@ -475,6 +509,8 @@ function createHarness(
   let plannerGraphCalls = 0;
   const runtimeBlocks: number[] = [];
   const deadlineRemainingMs: number[] = [];
+  const pricingSettleRemainingMs: Array<number | null> = [];
+  const preparationSettleRemainingMs: Array<number | null> = [];
   const backfillBlocks: number[] = [];
   const queue = new ProtocolDiscoveryMutationQueue();
   const journal = new CanonicalHeaderJournal();
@@ -496,12 +532,23 @@ function createHarness(
       const call = ++prepareCalls;
       runtimeBlocks.push(input.graph.sourceBlock);
       deadlineRemainingMs.push(input.deadlineAtMs - Date.now());
+      preparationSettleRemainingMs.push(
+        input.preparationSettleDeadlineAtMs === undefined
+          ? null
+          : input.preparationSettleDeadlineAtMs - Date.now(),
+      );
+      pricingSettleRemainingMs.push(
+        input.pricingFamilySettleDeadlineAtMs === undefined
+          ? null
+          : input.pricingFamilySettleDeadlineAtMs - Date.now(),
+      );
       await options.beforePrepareResult?.(call);
       await input.prepareExecution?.({
         generation: input.graph.generation,
         sourceBlock: input.graph.sourceBlock,
         sourceBlockHash: input.graph.sourceBlockHash,
-        deadlineAtMs: input.deadlineAtMs,
+        deadlineAtMs:
+          input.preparationSettleDeadlineAtMs ?? input.deadlineAtMs,
         signal: input.signal ?? new AbortController().signal,
       });
       if (options.stopAfterPrepareCall === call) shuttingDown = true;
@@ -684,6 +731,8 @@ function createHarness(
       (options.startupWarmEnabled ?? true) &&
       !(options.blindEnabled ?? false),
     startupWarmBudgetMs: STARTUP_BUDGET_MS,
+    hotPricingFamilyBudgetMs: HOT_FAMILY_BUDGET_MS,
+    runtimePublicationReserveMs: PUBLICATION_RESERVE_MS,
     refineCandidates: 1,
     solveReserveMs: 0,
     midConcurrency: 1,
@@ -714,6 +763,8 @@ function createHarness(
     loop,
     runtimeBlocks,
     deadlineRemainingMs,
+    preparationSettleRemainingMs,
+    pricingSettleRemainingMs,
     backfillBlocks,
     get publishedPricing() {
       return publishedPricing;

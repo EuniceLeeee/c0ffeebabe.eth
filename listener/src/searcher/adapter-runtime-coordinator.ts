@@ -112,7 +112,21 @@ export type AdapterRuntimePrepareResult =
 export interface PrepareAdapterRuntimeInput {
   readonly graph: VerifiedGraphView;
   readonly fundingTokens: readonly string[];
+  /** Outer generation deadline retained for the final canonical CAS. */
   readonly deadlineAtMs: number;
+  /**
+   * Earlier boundary for pricing, funding and execution preparation. The
+   * outer controller remains live after this boundary so the final canonical
+   * publication fence cannot lose its reserved time.
+   */
+  readonly preparationSettleDeadlineAtMs?: number;
+  /**
+   * Earlier hot-path pricing cutoff. It leaves the generation controller alive
+   * for funding, execution preparation and the final canonical publication
+   * fence; timed-out pricing families remain explicit and current-source
+   * scoped.
+   */
+  readonly pricingFamilySettleDeadlineAtMs?: number;
   readonly signal?: AbortSignal;
   /**
    * Current-N exact/final-sim workers (for example isolated Anvil forks).
@@ -172,30 +186,75 @@ export class AdapterRuntimeCoordinator {
     const controller = new AbortController();
     const detach = linkAbort(input.signal, controller);
     const remainingMs = input.deadlineAtMs - Date.now();
+    const preparationSettleDeadlineAtMs = Math.min(
+      input.deadlineAtMs,
+      input.preparationSettleDeadlineAtMs ?? input.deadlineAtMs,
+    );
+    if (!Number.isFinite(preparationSettleDeadlineAtMs)) {
+      throw new Error(
+        `invalid adapter runtime preparation deadline ` +
+          `${String(input.preparationSettleDeadlineAtMs)}`,
+      );
+    }
     const deadlineTimer = setTimeout(
       () => controller.abort(new AdapterRuntimeDeadline()),
       Math.max(0, remainingMs),
     );
+    const preparationController = new AbortController();
+    const detachPreparation = linkAbort(
+      controller.signal,
+      preparationController,
+    );
+    const preparationTimer = setTimeout(
+      () =>
+        preparationController.abort(
+          new AdapterRuntimePreparationDeadline(),
+        ),
+      Math.max(0, preparationSettleDeadlineAtMs - Date.now()),
+    );
     try {
       if (remainingMs <= 0) controller.abort(new AdapterRuntimeDeadline());
+      if (preparationSettleDeadlineAtMs <= Date.now()) {
+        preparationController.abort(
+          controller.signal.aborted
+            ? controller.signal.reason
+            : new AdapterRuntimePreparationDeadline(),
+        );
+      }
       const [pricing, funding, executionIssue] = await Promise.all([
         this.pricing.prepare({
           graph: input.graph,
           families: this.registry.blockScanStateFamilies(),
           requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
           deadlineAtMs: input.deadlineAtMs,
+          familySettleDeadlineAtMs: Math.min(
+            preparationSettleDeadlineAtMs,
+            input.pricingFamilySettleDeadlineAtMs ??
+              preparationSettleDeadlineAtMs,
+          ),
+          // Pricing owns family-local settlement and still needs the outer
+          // generation signal for its canonical CAS. Aborting it at the
+          // preparation boundary would erase healthy sibling results.
           signal: controller.signal,
         }),
         this.prepareFunding(
           input.graph,
           input.fundingTokens,
+          preparationSettleDeadlineAtMs,
           input.deadlineAtMs,
+          preparationController.signal,
           controller.signal,
         ),
         input.prepareExecution
-          ? this.prepareExecution(input, controller.signal)
+          ? this.prepareExecution(
+              input,
+              preparationSettleDeadlineAtMs,
+              preparationController.signal,
+            )
           : Promise.resolve(null),
       ]);
+      clearTimeout(preparationTimer);
+      detachPreparation();
       let finalCanonicalIssue: BlockScanStateIssue | null = null;
       if (
         pricing.status !== "incomplete" &&
@@ -299,13 +358,16 @@ export class AdapterRuntimeCoordinator {
         issues,
       });
     } finally {
+      clearTimeout(preparationTimer);
+      detachPreparation();
       clearTimeout(deadlineTimer);
       detach();
     }
   }
 
-  private prepareExecution(
+  private async prepareExecution(
     input: PrepareAdapterRuntimeInput,
+    preparationSettleDeadlineAtMs: number,
     signal: AbortSignal,
   ): Promise<BlockScanStateIssue | null> {
     const previous = this.executionPreparationSettled;
@@ -315,7 +377,7 @@ export class AdapterRuntimeCoordinator {
         generation: input.graph.generation,
         sourceBlock: input.graph.sourceBlock,
         sourceBlockHash: input.graph.sourceBlockHash,
-        deadlineAtMs: input.deadlineAtMs,
+        deadlineAtMs: preparationSettleDeadlineAtMs,
         signal,
       });
     });
@@ -326,7 +388,7 @@ export class AdapterRuntimeCoordinator {
       () => undefined,
       () => undefined,
     );
-    return awaitWithAbort(preparation, signal).then(
+    return await awaitWithAbort(preparation, signal).then(
       () => null,
       (error): BlockScanStateIssue =>
         runtimeIssue("execution preparation failed", error, signal),
@@ -336,8 +398,10 @@ export class AdapterRuntimeCoordinator {
   private async prepareFunding(
     graph: VerifiedGraphView,
     tokensInput: readonly string[],
+    familySettleDeadlineAtMs: number,
     deadlineAtMs: number,
-    signal: AbortSignal,
+    preparationSignal: AbortSignal,
+    runtimeSignal: AbortSignal,
   ): Promise<{
     readonly status: "complete" | "degraded" | "incomplete";
     readonly coverage: FlashFundingCoverage;
@@ -354,9 +418,15 @@ export class AdapterRuntimeCoordinator {
     const fundingIssues: BlockScanStateIssue[] = [];
     const described = families.map((family) => {
       try {
-        assertFundingActive(signal, deadlineAtMs);
+        assertFundingActive(
+          preparationSignal,
+          familySettleDeadlineAtMs,
+        );
         const sources = Object.freeze([...family.describeSources(tokens)]);
-        assertFundingActive(signal, deadlineAtMs);
+        assertFundingActive(
+          preparationSignal,
+          familySettleDeadlineAtMs,
+        );
         return Object.freeze({
           family,
           sources,
@@ -364,7 +434,11 @@ export class AdapterRuntimeCoordinator {
         });
       } catch (error) {
         fundingIssues.push({
-          ...runtimeIssue("funding source description failed", error, signal),
+          ...runtimeIssue(
+            "funding source description failed",
+            error,
+            preparationSignal,
+          ),
           familyId: family.familyId,
         });
         return Object.freeze({
@@ -378,103 +452,151 @@ export class AdapterRuntimeCoordinator {
     const expectedKeys = Object.freeze(
       described.flatMap(({ sources }) => sources.map((item) => item.fundingId)).sort(),
     );
-    const outcomes = await Promise.allSettled(
+    const outcomes = await Promise.all(
       described.map(async ({
         family,
         sources,
         ...description
       }) => {
         if (description.descriptionFailed) {
-          return unresolvedFundingFamily(
-            family,
-            sources,
-            description.descriptionError instanceof Error
-              ? description.descriptionError.message
-              : String(description.descriptionError),
+          return Object.freeze({
+            settled: unresolvedFundingFamily(
+              family,
+              sources,
+              description.descriptionError instanceof Error
+                ? description.descriptionError.message
+                : String(description.descriptionError),
+            ),
+            issue: null,
+          });
+        }
+        const familyController = new AbortController();
+        const detachFamily = linkAbort(
+          preparationSignal,
+          familyController,
+        );
+        const familyDeadline = new AdapterRuntimePreparationDeadline(
+          family.familyId,
+        );
+        const familyTimer = setTimeout(
+          () => familyController.abort(familyDeadline),
+          Math.max(0, familySettleDeadlineAtMs - Date.now()),
+        );
+        if (familySettleDeadlineAtMs <= Date.now()) {
+          familyController.abort(
+            preparationSignal.aborted
+              ? preparationSignal.reason
+              : familyDeadline,
           );
         }
-        assertFundingActive(signal, deadlineAtMs);
-        const preparation = Promise.resolve().then(() => {
-          assertFundingActive(signal, deadlineAtMs);
-          return family.prepare({
-            assets: tokens,
-            source,
-            control: { deadlineAtMs, signal },
+        try {
+          const signal = familyController.signal;
+          assertFundingActive(signal, familySettleDeadlineAtMs);
+          const preparation = Promise.resolve().then(() => {
+            assertFundingActive(signal, familySettleDeadlineAtMs);
+            return family.prepare({
+              assets: tokens,
+              source,
+              control: {
+                deadlineAtMs: familySettleDeadlineAtMs,
+                signal,
+              },
+            });
           });
-        });
-        const prepared: PreparedFundingFamily = await awaitWithAbort(
-          preparation,
-          signal,
-        );
-        // A family may ignore AbortSignal internally. The waiter above returns
-        // promptly on abort; these checks fence a result that wins the promise
-        // race only after its deadline from reaching decode or publication.
-        assertFundingActive(signal, deadlineAtMs);
-        assertFundingSourcesExact(family, sources, prepared.sources);
-        const raw = prepared.reads.length === 0
-          ? []
-          : await awaitWithAbort(
-              Promise.resolve().then(() => {
-                assertFundingActive(signal, deadlineAtMs);
-                return this.reads.readPinned(prepared.reads, {
-                  sourceBlock: graph.sourceBlock,
-                  sourceBlockHash: graph.sourceBlockHash,
-                  sourceGeneration: graph.generation,
-                  deadlineAtMs,
-                  signal,
-                });
-              }),
-              signal,
+          const prepared: PreparedFundingFamily = await awaitWithAbort(
+            preparation,
+            signal,
+          );
+          // A family may ignore AbortSignal internally. The waiter above
+          // returns promptly on abort; these checks fence a result that wins
+          // the promise race only after its local deadline.
+          assertFundingActive(signal, familySettleDeadlineAtMs);
+          assertFundingSourcesExact(family, sources, prepared.sources);
+          const raw = prepared.reads.length === 0
+            ? []
+            : await awaitWithAbort(
+                Promise.resolve().then(() => {
+                  assertFundingActive(signal, familySettleDeadlineAtMs);
+                  return this.reads.readPinned(prepared.reads, {
+                    sourceBlock: graph.sourceBlock,
+                    sourceBlockHash: graph.sourceBlockHash,
+                    sourceGeneration: graph.generation,
+                    deadlineAtMs: familySettleDeadlineAtMs,
+                    signal,
+                  });
+                }),
+                signal,
+              );
+          assertFundingActive(signal, familySettleDeadlineAtMs);
+          const expected = prepared.reads.map((read) => read.id);
+          const exact = exactResults(
+            expected,
+            raw,
+            graph.sourceBlock,
+            graph.sourceBlockHash,
+            graph.generation,
+          );
+          if (!exact.exact) {
+            throw new Error(
+              "funding backend response IDs/provenance were not exact",
             );
-        assertFundingActive(signal, deadlineAtMs);
-        const expected = prepared.reads.map((read) => read.id);
-        const exact = exactResults(
-          expected,
-          raw,
-          graph.sourceBlock,
-          graph.sourceBlockHash,
-          graph.generation,
-        );
-        if (!exact.exact) {
-          throw new Error("funding backend response IDs/provenance were not exact");
+          }
+          const decoded = prepared.decodeAndDerive([...exact.byId.values()]);
+          assertFundingActive(signal, familySettleDeadlineAtMs);
+          assertFundingCoverageExact(sources, decoded.decodedCoverage);
+          assertFundingOffersExact(
+            sources,
+            decoded.derived.coverageByFundingId,
+          );
+          return Object.freeze({
+            settled: Object.freeze({
+              family,
+              sources,
+              prepared,
+              resultsById: exact.byId,
+              offers: decoded.derived.offers,
+              coverageByFundingId: decoded.derived.coverageByFundingId,
+              decodedCoverage: decoded.decodedCoverage,
+              failed: false as const,
+            }),
+            issue: null,
+          });
+        } catch (error) {
+          return Object.freeze({
+            settled: unresolvedFundingFamily(
+              family,
+              sources,
+              error instanceof Error ? error.message : String(error),
+            ),
+            issue: Object.freeze({
+              ...runtimeIssue(
+                "funding preparation failed",
+                error,
+                familyController.signal,
+              ),
+              familyId: family.familyId,
+            }),
+          });
+        } finally {
+          clearTimeout(familyTimer);
+          detachFamily();
         }
-        const decoded = prepared.decodeAndDerive([...exact.byId.values()]);
-        assertFundingActive(signal, deadlineAtMs);
-        assertFundingCoverageExact(sources, decoded.decodedCoverage);
-        assertFundingOffersExact(sources, decoded.derived.coverageByFundingId);
-        return Object.freeze({
-          family,
-          sources,
-          prepared,
-          resultsById: exact.byId,
-          offers: decoded.derived.offers,
-          coverageByFundingId: decoded.derived.coverageByFundingId,
-          decodedCoverage: decoded.decodedCoverage,
-          failed: false as const,
-        });
       }),
     );
-    const settled = outcomes.map((outcome, index) => {
-      if (outcome.status === "fulfilled") return outcome.value;
-      const { family, sources } = described[index];
-      const error = outcome.reason;
-      fundingIssues.push({
-        ...runtimeIssue("funding preparation failed", error, signal),
-        familyId: family.familyId,
-      });
-      return unresolvedFundingFamily(
-        family,
-        sources,
-        error instanceof Error ? error.message : String(error),
-      );
-    });
-    if (signal.aborted || Date.now() >= deadlineAtMs) {
-      if (!signal.aborted && !fundingIssues.some((issue) => issue.kind === "deadline")) {
+    for (const outcome of outcomes) {
+      if (outcome.issue) fundingIssues.push(outcome.issue);
+    }
+    const settled = outcomes.map((outcome) => outcome.settled);
+    if (runtimeSignal.aborted || Date.now() >= deadlineAtMs) {
+      if (
+        !runtimeSignal.aborted &&
+        !fundingIssues.some((issue) => issue.kind === "deadline")
+      ) {
         fundingIssues.push({
           ...runtimeIssue(
             "funding preparation failed",
             new AdapterRuntimeDeadline(),
-            signal,
+            runtimeSignal,
           ),
         });
       }
@@ -582,9 +704,20 @@ export class AdapterRuntimeCoordinator {
 }
 
 class AdapterRuntimeDeadline extends Error {
-  constructor() {
-    super("adapter runtime deadline reached");
+  constructor(message = "adapter runtime deadline reached") {
+    super(message);
     this.name = "AdapterRuntimeDeadline";
+  }
+}
+
+class AdapterRuntimePreparationDeadline extends AdapterRuntimeDeadline {
+  constructor(familyId?: string) {
+    super(
+      familyId
+        ? `funding family ${familyId} preparation deadline reached`
+        : "adapter runtime preparation deadline reached",
+    );
+    this.name = "AdapterRuntimePreparationDeadline";
   }
 }
 
@@ -609,7 +742,9 @@ function assertFundingActive(
   deadlineAtMs: number,
 ): void {
   if (signal.aborted) throw signal.reason;
-  if (Date.now() >= deadlineAtMs) throw new AdapterRuntimeDeadline();
+  if (Date.now() >= deadlineAtMs) {
+    throw new AdapterRuntimePreparationDeadline();
+  }
 }
 
 async function awaitWithAbort<T>(

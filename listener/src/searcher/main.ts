@@ -847,6 +847,22 @@ async function main(): Promise<void> {
       blockScanStartupWarmBudgetRaw > 0
       ? blockScanStartupWarmBudgetRaw
       : 120_000;
+  const blockScanHotPricingFamilyBudgetRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS ?? "5000",
+  );
+  const blockScanHotPricingFamilyBudgetMs =
+    Number.isFinite(blockScanHotPricingFamilyBudgetRaw) &&
+      blockScanHotPricingFamilyBudgetRaw > 0
+      ? Math.floor(blockScanHotPricingFamilyBudgetRaw)
+      : 5_000;
+  const blockScanRuntimePublicationReserveRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_RUNTIME_PUBLICATION_RESERVE_MS ?? "1500",
+  );
+  const blockScanRuntimePublicationReserveMs =
+    Number.isFinite(blockScanRuntimePublicationReserveRaw) &&
+      blockScanRuntimePublicationReserveRaw > 0
+      ? Math.floor(blockScanRuntimePublicationReserveRaw)
+      : 1_500;
   const blockScanSolveReserveRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000",
   );
@@ -927,6 +943,34 @@ async function main(): Promise<void> {
           ? "aggregate3"
           : "rpc-batch",
     });
+    /*
+     * Funding is intentionally isolated from pricing/proof transport. The two
+     * flash providers read every graph asset at current N; sharing the pricing
+     * backend's four FIFO slots allowed those balance reads to starve Uni
+     * mutation proofs and turned a family-local slowdown into a global miss.
+     * aggregate3 preserves exact source-hash pinning while collapsing the
+     * funding fan-out into bounded calls on the local node.
+     */
+    const fundingStateReads = new JsonRpcBlockScanStateReadBackend(
+      config.rpcUrl,
+      {
+        maxBatchSize: Math.max(
+          1,
+          Number(
+            process.env.SEARCHER_BLOCKSCAN_FUNDING_MULTICALL_BATCH_SIZE ??
+              "500",
+          ),
+        ),
+        maxConcurrentBatches: Math.max(
+          1,
+          Number(
+            process.env.SEARCHER_BLOCKSCAN_FUNDING_MULTICALL_CONCURRENCY ??
+              "4",
+          ),
+        ),
+        multicallMode: "aggregate3",
+      },
+    );
     blockScanStateReadBackend = familyStateReads;
     adapterRuntimeCoordinator = new AdapterRuntimeCoordinator(
       PRODUCTION_ADAPTER_FAMILIES,
@@ -941,7 +985,7 @@ async function main(): Promise<void> {
           ),
         ),
       }),
-      familyStateReads,
+      fundingStateReads,
     );
   }
   const solver = new AnvilSolver();
@@ -2115,6 +2159,8 @@ async function main(): Promise<void> {
     passBudgetMs: blockScanPassBudgetMs,
     startupWarmEnabled: enableBlockScan && !blindProductionAudit,
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
+    hotPricingFamilyBudgetMs: blockScanHotPricingFamilyBudgetMs,
+    runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
     refineCandidates: blockScanRefineCandidates,
     solveReserveMs: blockScanSolveReserveMs,
     midConcurrency: blockScanMidConcurrency,

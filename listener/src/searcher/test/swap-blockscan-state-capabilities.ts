@@ -593,13 +593,20 @@ async function runUniV3FactoryBoundPrecision(): Promise<void> {
     assert.equal(ordinary.unavailable.size, 0);
   }
 
+  const reverseMismatchedPool =
+    "0x9999999999999999999999999999999999999999";
+  const reverseMismatchedEdges = canonicalEdges.map((edge) => ({
+    ...edge,
+    target: reverseMismatchedPool,
+  }));
   const mismatched = await execute(
     univ3StandardAdapter.id,
     univ3BlockScanState,
-    canonicalEdges,
+    reverseMismatchedEdges,
     (read) => {
       const binding = maybeV3PoolBindingRead(read, {
-        boundPool: "0x9999999999999999999999999999999999999999",
+        pool: reverseMismatchedPool,
+        boundPool: POOL,
       });
       if (binding !== null) return binding;
       const selector = read.data.slice(0, 10);
@@ -625,7 +632,7 @@ async function runUniV3FactoryBoundPrecision(): Promise<void> {
   );
   assert.equal(mismatched.dependentReads.length, 0);
   assert.equal(mismatched.mids.size, 0);
-  assert.equal(mismatched.unavailable.size, canonicalEdges.length);
+  assert.equal(mismatched.unavailable.size, reverseMismatchedEdges.length);
   for (const reason of mismatched.unavailable.values()) {
     assert.match(reason, /binds .* not target/);
   }

@@ -220,6 +220,14 @@ export interface PrepareBlockScanStateInput {
    * coordinator's shorter local timeout.
    */
   readonly deadlineAtMs: number;
+  /**
+   * Optional earlier family-settlement boundary. Hot production passes use it
+   * to turn a slow family into an explicit degraded result while the
+   * generation controller still has time to perform its canonical CAS and
+   * publish healthy siblings. Startup/replay may omit it and use the full
+   * generation deadline.
+   */
+  readonly familySettleDeadlineAtMs?: number;
   readonly signal?: AbortSignal;
 }
 
@@ -399,6 +407,16 @@ export class BlockScanStateCoordinator {
 
   async prepare(input: PrepareBlockScanStateInput): Promise<BlockScanStatePrepareResult> {
     const { graph } = input;
+    const familySettleDeadlineAtMs = Math.min(
+      input.deadlineAtMs,
+      input.familySettleDeadlineAtMs ?? input.deadlineAtMs,
+    );
+    if (!Number.isFinite(familySettleDeadlineAtMs)) {
+      throw new Error(
+        `invalid block-scan family settle deadline ` +
+          `${String(input.familySettleDeadlineAtMs)}`,
+      );
+    }
     const ownership = buildOwnershipPlan(
       graph,
       input.families,
@@ -493,7 +511,7 @@ export class BlockScanStateCoordinator {
           laneGroups.swap,
           graph,
           this.published,
-          input.deadlineAtMs,
+          familySettleDeadlineAtMs,
           controller.signal,
         ),
         this.runLane(
@@ -501,7 +519,7 @@ export class BlockScanStateCoordinator {
           laneGroups.protocol,
           graph,
           this.published,
-          input.deadlineAtMs,
+          familySettleDeadlineAtMs,
           controller.signal,
         ),
       ]);
@@ -1048,7 +1066,7 @@ export class BlockScanStateCoordinator {
         }
         try {
           const compiled = await awaitWithAbort(
-            family.compile({
+            (cached?.recompile ?? family.compile)({
               edges: Object.freeze(familyEdges),
               deadlineAtMs,
               signal,
