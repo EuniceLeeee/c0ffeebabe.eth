@@ -9,6 +9,7 @@ import {
   type DexDiscoveryReadControl,
 } from "./active-pool-discovery.js";
 import {
+  CanonicalHeaderOutsideRetentionError,
   CanonicalHeaderJournal,
   type CanonicalHeader,
   type CanonicalHeaderIngestResult,
@@ -1730,9 +1731,22 @@ export async function createLiveDiscoveryCoordinator(
     if (ready === null || discoveryUnsafeReason !== null) return;
     const latest = await provider.getBlockNumber();
     const target = await observeLiveCanonicalHeader(latest);
-    const preparedHeader = await observeLiveCanonicalHeader(
-      ready.source.number,
-    );
+    let preparedHeader: CanonicalHeader;
+    try {
+      preparedHeader = await observeLiveCanonicalHeader(
+        ready.source.number,
+      );
+    } catch (error) {
+      if (!(error instanceof CanonicalHeaderOutsideRetentionError)) {
+        throw error;
+      }
+      protocolBackfillLane.invalidate(
+        `prepared source ${ready.source.number} fell outside ` +
+          `retained canonical journal at ${error.retainedHeadNumber}`,
+      );
+      await scheduleDiscoveryBackfill(latest);
+      return;
+    }
     const proof = canonicalHeaderJournal.proof(preparedHeader.number);
     const taken = await protocolDiscoveryQueue.enqueue(
       "active",
@@ -2336,8 +2350,9 @@ async function observeCanonicalHeader(
   ) {
     const distance = currentHead.number - blockNumber;
     if (distance >= 2_048) {
-      throw new Error(
-        `canonical header ${blockNumber} fell outside retained journal`,
+      throw new CanonicalHeaderOutsideRetentionError(
+        blockNumber,
+        currentHead.number,
       );
     }
     let child = currentHead;

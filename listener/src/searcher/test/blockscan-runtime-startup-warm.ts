@@ -10,7 +10,10 @@ import {
   dexRuntimeAdmissionCompleteThrough,
   type BlockScanRuntimeLoopDependencies,
 } from "../blockscan-runtime-loop.js";
-import { CanonicalHeaderJournal } from "../canonical-header-journal.js";
+import {
+  CanonicalHeaderJournal,
+  CanonicalHeaderOutsideRetentionError,
+} from "../canonical-header-journal.js";
 import {
   cloneLiveDiscoveryPublicationState,
   describeDexPublicationSlice,
@@ -49,6 +52,7 @@ interface PreparedDiscovery {
 }
 
 await distantStartupCatchesUpInSameHead();
+await stalePreparedSourceRestartsFromCurrentHead();
 await activeBackfillSettlesBeforeHotCatchup();
 await failedBackfillDoesNotBecomeUnboundedHotScan();
 await steadyStateBehindRemainsFailClosed();
@@ -68,7 +72,7 @@ blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (17/17)",
+    "PASS (18/18)",
 );
 
 async function distantStartupCatchesUpInSameHead(): Promise<void> {
@@ -86,6 +90,30 @@ async function distantStartupCatchesUpInSameHead(): Promise<void> {
   assert.deepEqual(harness.backfillBlocks, []);
   assert.equal(harness.loop.isStartupWarmPending(), false);
   assert.equal(harness.publishedPricing, 1);
+}
+
+async function stalePreparedSourceRestartsFromCurrentHead(): Promise<void> {
+  const harness = createHarness(
+    100,
+    ["complete"],
+    {
+      initialLaneReadyBlock: 100,
+      outsideRetainedReadyBlock: 100,
+      laneReadyBlocksAfterSettlement: [139],
+    },
+  );
+  await harness.run(140);
+  assert.equal(
+    harness.laneInvalidations,
+    1,
+    "a prepared source outside the retained journal must be discarded",
+  );
+  assert.deepEqual(
+    harness.laneTakeBlocks,
+    [139],
+    "startup must consume only the replacement current-branch generation",
+  );
+  assert.deepEqual(harness.runtimeBlocks, [140]);
 }
 
 async function activeBackfillSettlesBeforeHotCatchup(): Promise<void> {
@@ -493,6 +521,7 @@ function createHarness(
     readonly laneReadyBlocksAfterSettlement?: number[];
     readonly startupWarmEnabled?: boolean;
     readonly initialLaneReadyBlock?: number;
+    readonly outsideRetainedReadyBlock?: number;
     readonly initialLanePublishedBlock?: number;
     readonly beforeDiscoveryPrepare?: () => Promise<void>;
     readonly preserveHotGraphGap?: boolean;
@@ -517,6 +546,7 @@ function createHarness(
   const runtimeAbort = new AbortController();
   let workerStops = 0;
   let laneSettledCalls = 0;
+  let laneInvalidations = 0;
   let laneReadyBlock: number | null =
     options.initialLaneReadyBlock ?? null;
   const laneReadyBlocksAfterSettlement = [
@@ -635,10 +665,22 @@ function createHarness(
             reason: "coverage_behind",
           };
         },
+        invalidate: () => {
+          laneInvalidations++;
+          laneReadyBlock = null;
+        },
       },
       journal,
       queue,
-      observeHeader: async (blockNumber: number) => header(blockNumber),
+      observeHeader: async (blockNumber: number) => {
+        if (blockNumber === options.outsideRetainedReadyBlock) {
+          throw new CanonicalHeaderOutsideRetentionError(
+            blockNumber,
+            blockNumber + 2_048,
+          );
+        }
+        return header(blockNumber);
+      },
       capture: () => cloneLiveDiscoveryPublicationState(publication),
       publish: (next: LiveDiscoveryPublicationState) => {
         publication = cloneLiveDiscoveryPublicationState(next);
@@ -780,6 +822,9 @@ function createHarness(
     },
     get laneSettledCalls() {
       return laneSettledCalls;
+    },
+    get laneInvalidations() {
+      return laneInvalidations;
     },
     laneTakeBlocks,
     discoveryPrepareBases,

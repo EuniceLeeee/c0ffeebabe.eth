@@ -28,6 +28,20 @@ export interface CanonicalHeaderIngestResult {
   readonly sameHeightReplacement: boolean;
 }
 
+export class CanonicalHeaderOutsideRetentionError extends Error {
+  readonly blockNumber: number;
+  readonly retainedHeadNumber: number;
+
+  constructor(blockNumber: number, retainedHeadNumber: number) {
+    super(
+      `canonical header ${blockNumber} fell outside retained journal`,
+    );
+    this.name = "CanonicalHeaderOutsideRetentionError";
+    this.blockNumber = blockNumber;
+    this.retainedHeadNumber = retainedHeadNumber;
+  }
+}
+
 export interface CanonicalHeaderJournalOptions {
   /** Retained canonical window. Older ancestors become explicitly unknown. */
   readonly retentionDepth?: number;

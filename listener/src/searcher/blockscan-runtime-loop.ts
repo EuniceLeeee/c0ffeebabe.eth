@@ -27,7 +27,11 @@ import {
   type DiscoveryBackfillControl,
   DiscoveryBackfillLane,
 } from "./discovery-backfill-lane.js";
-import { CanonicalHeaderJournal, type CanonicalHeader } from "./canonical-header-journal.js";
+import {
+  CanonicalHeaderJournal,
+  CanonicalHeaderOutsideRetentionError,
+  type CanonicalHeader,
+} from "./canonical-header-journal.js";
 import {
   describeLiveDiscoveryPublicationState,
   type LiveDiscoveryPublicationState,
@@ -557,9 +561,22 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           // current head's canonical journal into its future.
           return null;
         }
-        const preparedHeader = await discovery.observeHeader(
-          ready.source.number,
-        );
+        let preparedHeader: CanonicalHeader;
+        try {
+          preparedHeader = await discovery.observeHeader(
+            ready.source.number,
+          );
+        } catch (error) {
+          if (!(error instanceof CanonicalHeaderOutsideRetentionError)) {
+            throw error;
+          }
+          discovery.lane.invalidate(
+            `prepared source ${ready.source.number} fell outside ` +
+              `retained canonical journal at ` +
+              `${error.retainedHeadNumber}`,
+          );
+          return null;
+        }
         const proof = discovery.journal.proof(preparedHeader.number);
         const taken = await discovery.queue.enqueue(
           "dex-refresh",
