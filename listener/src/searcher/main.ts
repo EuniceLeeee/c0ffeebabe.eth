@@ -957,6 +957,7 @@ async function main(): Promise<void> {
         process.env.SEARCHER_BLOCKSCAN_STATE_MULTICALL === "1"
           ? "aggregate3"
           : "rpc-batch",
+      mutationHeaderMode: "debug-raw-header-with-fallback",
       onMutationProofTelemetry: (telemetry) => {
         console.log(
           `[searcher/blockscan-mutation-proof] ${JSON.stringify(telemetry)}`,

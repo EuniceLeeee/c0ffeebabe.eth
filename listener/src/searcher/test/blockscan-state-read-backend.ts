@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { encodeRlp, keccak256 } from "ethers";
 import {
   JsonRpcBlockScanStateReadBackend,
 } from "../blockscan-state-read-backend.js";
@@ -43,6 +44,9 @@ await testGlobalConcurrencyAcrossPinnedReads();
 await testBatchFailureCancelsAndDrainsWorkers();
 await testMutationProofBypassesSaturatedStateSlots();
 await testMutationProofParentAbort();
+await testRawHeaderCanonicalMutationRange();
+await testRawHeaderRejectsParentDiscontinuity();
+await testRawHeaderUnavailableFallsBack();
 await testCanonicalMutationRange();
 await testMutationProofTelemetry();
 await testSharedMutationProofSessions();
@@ -994,6 +998,185 @@ async function testMutationProofParentAbort(): Promise<void> {
   console.log("[state-read-backend] mutation proof parent abort: PASS");
 }
 
+async function testRawHeaderCanonicalMutationRange(): Promise<void> {
+  const rawPrevious = rawHeader(sourceBlock - 1, `0x${"09".repeat(32)}`);
+  const previousHash = keccak256(rawPrevious).toLowerCase();
+  const rawThrough = rawHeader(sourceBlock, previousHash);
+  const throughHash = keccak256(rawThrough).toLowerCase();
+  const calls: RpcRequest[][] = [];
+  const telemetry: import("../blockscan-state-read-backend.js")
+    .MutationProofTransportTelemetry[] = [];
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationHeaderMode: "debug-raw-header-with-fallback",
+    onMutationProofTelemetry: (value) => telemetry.push(value),
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      calls.push(body);
+      return fakeResponse(body.map((request) => {
+        if (request.method === "eth_getLogs") return success(request.id, []);
+        assert.equal(request.method, "debug_getRawHeader");
+        const number = Number(BigInt(request.params[0]));
+        return success(
+          request.id,
+          number === sourceBlock - 1 ? rawPrevious : rawThrough,
+        );
+      }));
+    }) as typeof fetch,
+  });
+  const range = await backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: throughHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  assert.equal(range.complete, true);
+  assert.deepEqual(
+    calls.map((batch) => batch.map((request) => request.method)),
+    [
+      ["debug_getRawHeader", "debug_getRawHeader"],
+      ["eth_getLogs"],
+      ["debug_getRawHeader"],
+    ],
+  );
+  assert.equal(
+    calls.flat().some((request) => request.method === "eth_getBlockByNumber"),
+    false,
+  );
+  assert.equal(telemetry[0]?.phases.headers.transport, "debug-raw-header");
+  assert.equal(telemetry[0]?.phases.finalCas.transport, "debug-raw-header");
+  assert(
+    (telemetry[0]?.phases.headers.responseBytes ?? Number.POSITIVE_INFINITY) <
+      2_000,
+    "raw header proof must keep the two-header response compact",
+  );
+  console.log("[state-read-backend] raw canonical header proof: PASS");
+}
+
+async function testRawHeaderRejectsParentDiscontinuity(): Promise<void> {
+  const rawPrevious = rawHeader(sourceBlock - 1, `0x${"09".repeat(32)}`);
+  const previousHash = keccak256(rawPrevious).toLowerCase();
+  const rawThrough = rawHeader(sourceBlock, otherBlockHash);
+  const throughHash = keccak256(rawThrough).toLowerCase();
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationHeaderMode: "debug-raw-header-with-fallback",
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(
+          request.id,
+          number === sourceBlock - 1 ? rawPrevious : rawThrough,
+        );
+      }));
+    }) as typeof fetch,
+  });
+  await assert.rejects(
+    () => backend.readCanonicalMutationRange(
+      descriptor,
+      {
+        number: sourceBlock - 1,
+        hash: previousHash,
+        generation: sourceGeneration - 1,
+      },
+      {
+        number: sourceBlock,
+        hash: throughHash,
+        generation: sourceGeneration,
+      },
+      {
+        deadlineAtMs: Date.now() + 10_000,
+        signal: new AbortController().signal,
+      },
+    ),
+    /canonical path discontinuity/,
+  );
+  console.log("[state-read-backend] raw header reorg fail closed: PASS");
+}
+
+async function testRawHeaderUnavailableFallsBack(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const telemetry: import("../blockscan-state-read-backend.js")
+    .MutationProofTransportTelemetry[] = [];
+  let rawRequests = 0;
+  let ethBlockRequests = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    mutationHeaderMode: "debug-raw-header-with-fallback",
+    onMutationProofTelemetry: (value) => telemetry.push(value),
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return fakeResponse(body.map((request) => {
+        if (request.method === "debug_getRawHeader") {
+          rawRequests++;
+          return {
+            jsonrpc: "2.0",
+            id: request.id,
+            error: { code: -32601, message: "method not found" },
+          };
+        }
+        if (request.method === "eth_getLogs") return success(request.id, []);
+        ethBlockRequests++;
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const range = await backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  assert.equal(range.complete, true);
+  assert.equal(rawRequests, 3);
+  assert.equal(ethBlockRequests, 3);
+  assert.equal(
+    telemetry[0]?.phases.headers.transport,
+    "debug-raw-header+eth-block-fallback",
+  );
+  assert.equal(
+    telemetry[0]?.phases.finalCas.transport,
+    "debug-raw-header+eth-block-fallback",
+  );
+  console.log("[state-read-backend] raw header unavailable fallback: PASS");
+}
+
 async function testCanonicalMutationRange(): Promise<void> {
   const previousHash = `0x${"10".repeat(32)}`;
   const descriptor = createMutationQueryDescriptor({
@@ -1890,6 +2073,26 @@ function fakeResponse(payload: unknown): Response {
   } as Response;
 }
 
+function rawHeader(number: number, parentHash: string): string {
+  const numberHex = number === 0
+    ? "0x"
+    : `0x${number.toString(16).padStart(
+        Math.ceil(number.toString(16).length / 2) * 2,
+        "0",
+      )}`;
+  return encodeRlp([
+    parentHash,
+    "0x",
+    "0x",
+    "0x",
+    "0x",
+    "0x",
+    "0x",
+    "0x",
+    numberHex,
+  ]);
+}
+
 function read(
   id: string,
   data: string,
@@ -1977,6 +2180,10 @@ async function rejectWhenAborted(signal: AbortSignal): Promise<never> {
 interface RpcRequest {
   readonly jsonrpc: "2.0";
   readonly id: number;
-  readonly method: "eth_call" | "eth_getBlockByNumber" | "eth_getLogs";
+  readonly method:
+    | "debug_getRawHeader"
+    | "eth_call"
+    | "eth_getBlockByNumber"
+    | "eth_getLogs";
   readonly params: readonly any[];
 }
