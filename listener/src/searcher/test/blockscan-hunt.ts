@@ -14,8 +14,6 @@ import "../../shared/adapters/index.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   AnvilStateBackend,
-  type StateBackend,
-  type StateCallControl,
 } from "../../shared/state/state-backend.js";
 import {
   DEFAULT_SEARCHER_EXECUTOR,
@@ -604,7 +602,6 @@ async function main(): Promise<void> {
         `observedHistory=${observedHistoryProvider ? "separate-aligned" : "primary"}`,
     );
 
-    const callBackend = new PinnedCallBackend(provider, cfg.blockNumber);
     const graphBackend = tokenBackend(provider, cfg.blockNumber);
 
     // The production-replay wrapper passes a hash-frozen copy of the live
@@ -1393,8 +1390,12 @@ async function main(): Promise<void> {
       "HUNT_REFINE_MAX_CONCURRENT_PER_FAMILY",
       3,
     );
+    // Exact refinement must expose the same full StateBackend capability
+    // surface as live block-scan. A read-only eth_call wrapper silently drops
+    // families whose quote depends on caller-observable state deltas.
+    await state.forkAt(cfg.blockNumber);
     const refinement = await refineBlockScanCandidates(
-      callBackend,
+      state,
       coarseScan.opportunities,
       cfg.maxCandidates,
       passDeadlineAtMs,
@@ -2477,68 +2478,6 @@ async function withTimeout<T>(
     throw new Error(`${label} failed: ${redacted}`);
   } finally {
     if (timer) clearTimeout(timer);
-  }
-}
-
-class PinnedCallBackend implements StateBackend {
-  private readonly backend: ReturnType<typeof createPinnedDexReadBackend>;
-
-  constructor(
-    provider: ethers.JsonRpcProvider,
-    blockNumber: number,
-  ) {
-    this.backend = createPinnedDexReadBackend(provider, blockNumber);
-  }
-
-  async call(
-    req: { to: string; data: string; from?: string },
-    control?: StateCallControl,
-  ): Promise<string> {
-    return this.backend.call(req, control);
-  }
-
-  async forkAt(): Promise<void> {
-    this.unsupported("forkAt");
-  }
-
-  async forkAfterTx(): Promise<void> {
-    this.unsupported("forkAfterTx");
-  }
-
-  async prepareVictimPostState(): Promise<never> {
-    this.unsupported("prepareVictimPostState");
-  }
-
-  async applyRawTx(): Promise<never> {
-    this.unsupported("applyRawTx");
-  }
-
-  async queueHistoricalRawTransactions(): Promise<never> {
-    this.unsupported("queueHistoricalRawTransactions");
-  }
-
-  async snapshot(): Promise<never> {
-    this.unsupported("snapshot");
-  }
-
-  async revert(): Promise<void> {
-    this.unsupported("revert");
-  }
-
-  async send(): Promise<never> {
-    this.unsupported("send");
-  }
-
-  async getGasUsed(): Promise<never> {
-    this.unsupported("getGasUsed");
-  }
-
-  async getTokenBalance(): Promise<never> {
-    this.unsupported("getTokenBalance");
-  }
-
-  private unsupported(method: string): never {
-    throw new Error(`PinnedCallBackend.${method} unsupported`);
   }
 }
 
