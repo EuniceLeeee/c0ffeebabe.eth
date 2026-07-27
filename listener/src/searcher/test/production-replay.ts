@@ -104,6 +104,7 @@ interface CliConfig {
   topK: number;
   scanBudgetMs: number;
   passBudgetMs: number;
+  diagnosticReference: boolean;
   outPath: string | null;
 }
 
@@ -591,6 +592,21 @@ async function main(): Promise<void> {
       reconstruction: anchorReconstruction,
     };
 
+    if (cfg.diagnosticReference) {
+      const diagnosticPort = await allocatePort();
+      await runHunt({
+        upstreamRpc: anchorState.anvilUrl,
+        anchorBlock,
+        artifactPath,
+        artifactSha256,
+        huntOut: resolve(tempRoot, "hunt-reference-diagnostic.json"),
+        huntPort: diagnosticPort,
+        universeSnapshotPath: frozenUniverse.snapshotPath,
+        universeSha256: frozenUniverse.evidence.sha256,
+        cfg,
+        diagnosticRoute: referenceCycle,
+      });
+    }
     const huntOut = resolve(tempRoot, "hunt.json");
     const huntPort = await allocatePort();
     assertFileSha256(frozenUniverse.snapshotPath, frozenUniverse.evidence.sha256);
@@ -932,6 +948,8 @@ async function runHunt(input: {
   universeSnapshotPath: string;
   universeSha256: string;
   cfg: CliConfig;
+  /** Receipt-derived oracle used only by an explicit, non-accepting diagnosis. */
+  diagnosticRoute?: readonly TokenEdge[];
 }): Promise<void> {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
@@ -969,14 +987,30 @@ async function runHunt(input: {
     PRODUCTION_REPLAY_DISCOVERY_SHA256: input.artifactSha256,
     PRODUCTION_REPLAY_UNIVERSE_SHA256: input.universeSha256,
   });
+  if (input.diagnosticRoute) {
+    Object.assign(env, referenceDiagnosticEnvironment(input.diagnosticRoute));
+  }
   const args = [
     "--import", TSX_IMPORT_URL,
     "--import", pathToFileURL(PRELOAD_PATH).href,
     HUNT_PATH,
   ];
+  if (input.diagnosticRoute) {
+    args.push(
+      "--diagnostic",
+      "--max-candidates", String(input.cfg.maxCandidates),
+      "--scan-budget-ms", String(input.cfg.scanBudgetMs),
+      "--pass-budget-ms", String(input.cfg.passBudgetMs),
+      "--top-k", String(input.cfg.topK),
+      "--stop-after", "refine",
+    );
+  }
   const forwardedAudit = auditReplayInputs(args, env);
   if (
-    forwardedAudit.explicitRouteInputs.length > 0 ||
+    (
+      !input.diagnosticRoute &&
+      forwardedAudit.explicitRouteInputs.length > 0
+    ) ||
     forwardedAudit.explicitAmountInputs.length > 0
   ) {
     throw new Error("production replay child received an explicit route or amount input");
@@ -1001,6 +1035,40 @@ async function runHunt(input: {
       else reject(new Error(`blockscan-hunt exited code=${code} signal=${signal ?? "none"}: ${tail}`));
     });
   });
+}
+
+function referenceDiagnosticEnvironment(
+  cycle: readonly TokenEdge[],
+): Record<string, string> {
+  const swapPath = cycle
+    .filter((edge) => edge.slotKind === "swap")
+    .map((edge) => {
+      const tokenIn = edge.tokenIn.toLowerCase();
+      const token0 = edge.poolToken0?.toLowerCase();
+      const token1 = edge.poolToken1?.toLowerCase();
+      const direction = token0 === tokenIn
+        ? "0for1"
+        : token1 === tokenIn
+          ? "1for0"
+          : null;
+      if (direction === null) {
+        throw new Error(
+          `reference diagnostic cannot derive swap direction for ${edge.target}`,
+        );
+      }
+      return {
+        pool_id: (edge.poolId ?? edge.target).toLowerCase(),
+        direction,
+      };
+    });
+  return {
+    AB_EXPECTED_POOL_IDS: cycle
+      .map((edge) => (edge.poolId ?? edge.target).toLowerCase())
+      .join(","),
+    AB_EXPECTED_SWAP_PATH_JSON: JSON.stringify(swapPath),
+    AB_EXPECTED_ROUTE_JSON: JSON.stringify(cycle.map(toHuntEdge)),
+    AB_EXPECTED_ROUTE_SCOPE: "dex-permissionless-protocol",
+  };
 }
 
 function reconstructedOpportunity(
@@ -1360,9 +1428,17 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 function parseArgs(): CliConfig {
   const args = process.argv.slice(2);
   const values = new Map<string, string>();
-  for (let index = 0; index < args.length; index += 2) {
-    const name = args[index];
-    const value = args[index + 1];
+  let diagnosticReference = false;
+  for (let index = 0; index < args.length;) {
+    const name = args[index++];
+    if (name === "--diagnostic-reference") {
+      if (diagnosticReference) {
+        throw new Error("--diagnostic-reference may appear only once");
+      }
+      diagnosticReference = true;
+      continue;
+    }
+    const value = args[index++];
     if (!name?.startsWith("--") || !value || value.startsWith("--")) {
       throw new Error(`invalid production replay option near ${name ?? "<end>"}`);
     }
@@ -1393,6 +1469,7 @@ function parseArgs(): CliConfig {
     topK,
     scanBudgetMs: positiveInt(values.get("--scan-budget-ms") ?? "600000", "--scan-budget-ms"),
     passBudgetMs: positiveInt(values.get("--pass-budget-ms") ?? "1200000", "--pass-budget-ms"),
+    diagnosticReference,
     outPath: values.has("--out") ? resolve(values.get("--out")!) : null,
   };
 }
