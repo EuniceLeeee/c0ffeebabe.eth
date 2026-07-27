@@ -34,7 +34,73 @@ protocol:eigenpie, protocol:erc4626, protocol:erc4626-silo-redeem, protocol:gold
 protocol:metronome-hgusdc, protocol:metronome-synth, protocol:psm, protocol:rocksolid,
 protocol:wsteth, univ2-standard, univ3-standard, univ4` — `priced=0/N`。
 
-## 1b. 根因（最终版）：增量刷新依赖「上一块成功发布」，一次失败即进入不可恢复的死亡螺旋
+## 1a. 【更正 · 2026-07-27 晚】§1b 的机制已被实测证伪，勿再引用
+
+§1b（下节）由**代码阅读推断**得出「`previous` 恒为 null ⇒ 全局死亡螺旋」。
+经 Codex 反驳 + 本人实测，**该机制不成立**。保留原文仅为留痕，**结论以本节为准**。
+
+### 实测证据（live 遥测，最近 20000 行）
+
+```
+"fullFallbackReason":"mutation-range-failed"   × 357     ← 唯一取值
+"fullFallbackReason":"previous-snapshot-unavailable"  × 0  ← 从未出现
+```
+
+⇒ **`previous` 是存在的**，代码从未进入 §1b 引用的 `if (!previous)` 分支。
+
+### 逐条更正
+
+| 原断言（§1b/§2/§8） | 实测/代码事实 | 判定 |
+|---|---|---|
+| `previous` 恒为 null，构成自维持死亡螺旋 | 实测 fallback 原因恒为 `mutation-range-failed`；`previous` 存在 | **证伪** |
+| 单个 family 失败导致**全局**回退连坐 | 回退在 `families.map(async …)` **内部**按 family 设置：`fullFallbackReasonByFamily.set(family.familyId, phase)`（`:913`），本就是 per-family | **证伪** |
+| family 串行「先到先得」，前面吃光预算致 eigenpie 0ms | `await Promise.all(families.map(...))`（`:837/:1023/:1057/:1393`）——**并发**；0ms 源于**共享的绝对截止已过期**，非被前序占用 | **证伪** |
+| 缺少 family 级耗时遥测（§8 证据不足 #1） | `BlockScanFamilyTelemetry`（`:140-157`）已含 `wallMs / reads / batches / uniqueStateKeys / carryStateKeys / directStateKeys / missingPreviousStateKeys / fullFallbackReason` | **证伪** |
+
+### 修正后的机制
+
+```ts
+// blockscan-state-coordinator.ts:876-915
+phase = "mutation-range-failed";
+const range = await awaitWithAbort(
+  readRange.call(this.backend, descriptor, previousSource, through, { deadlineAtMs, signal }), signal);
+validateCanonicalMutationRange(range, descriptor, previousSource, through);
+…
+} catch {
+  // 注释原文：增量证明/分类只是优化，失败即令该 family 转为直接当块读，绝不产生 unresolved
+  fullFallbackReasonByFamily.set(family.familyId, phase);
+}
+```
+
+**链条：`readRange`（读 previous→N 的变更范围）对每个 family 均失败/超时
+⇒ 各 family 退回全量当块读 ⇒ 代价爆炸 ⇒ 撞 5 秒 family 截止 ⇒ `incomplete`。**
+
+关键常量（Codex 指出，已核实）：`DEFAULT_FAMILY_TIMEOUT_MS = 5_000`（`:332`）、
+`hotPricingFamilyBudgetMs ?? 5_000`（`blockscan-runtime-loop.ts:814`）。
+
+### 全量回退的实测代价（本轮新测，此前无人量化）
+
+```json
+{"familyId":"univ4","lane":"swap","wallMs":12052,"uniqueStateKeys":2889,"reads":5778,
+ "batches":1,"status":"incomplete","issueCount":5778,"carryStateKeys":0,
+ "directStateKeys":2889,"missingPreviousStateKeys":2889,
+ "fullFallbackReason":"mutation-range-failed"}
+{"lane":"swap","wallMs":14422,"uniqueStateKeys":15059,"reads":13940,"batches":7}
+{"lane":"protocol","wallMs":11979,"uniqueStateKeys":245,"reads":287,"batches":9}
+```
+
+- univ4 单家全量：**2889 stateKeys / 5778 reads / 12.05s**，对 5 秒截止**天然不可能**；
+- swap lane 合计 **14.4s**（15059 stateKeys / 13940 reads / 7 batches）；protocol lane **12.0s**；
+- **`issueCount` 5778 恰等于 `reads` 5778 —— 每一次读都带 issue**；
+- **`batches: 1`** —— 5778 次读挤在单个批次。
+
+### 新的根因前沿（尚未查清，必须先查）
+
+**为什么 `readRange` 对每一个 family 都失败？** 可能是共享 deadline 早已过期、
+log-range 读本身超时/报错，或 `validateCanonicalMutationRange` 校验失败。
+**在查清此点之前，不应把任何修法当作定案**——§5 的 F1 已因本节而失去其原始依据（见 §5 顶部批注）。
+
+## 1b.〔已证伪·留痕〕原根因推断：增量刷新依赖「上一块成功发布」
 
 > 本节是对 §2 的修正与深化。§2 描述的"29–34 秒"是**现象**；下面是**为什么每块都要 29–34 秒**。
 
@@ -179,7 +245,18 @@ state 准备 29–34s（> 12s 出块）
 
 ## 5. 修法
 
-> 顺序即优先级。**F1 是唯一能解开死亡螺旋的一刀**；不做 F1，其余全部只是让"必然失败"稍微晚一点发生。
+> **【2026-07-27 晚 · 重要批注】** 本节写于 §1b 的（已证伪）机制之上，**F1 的原始依据已不成立**：
+> 回退本就是 per-family，`previous` 也存在。见 §1a。
+>
+> 修正后的优先级：
+> 1. **先查清 `readRange` 为何对每个 family 都失败**（新的根因前沿，§1a 末）——未查清前不定案；
+> 2. **5 秒 family 截止 vs 全量回退 12–14 秒的结构性不匹配**（Codex 指出，已核实常量）——
+>    要么让增量真正生效（回到 1），要么让全量代价降到截止以内（F5），二者必居其一；
+> 3. F1 的 per-family/per-stateKey 结转**方向仍有价值**（`carryStateKeys` 实测恒为 0），
+>    但它**不是"唯一解"**，且必须与 1/2 组合；
+> 4. F2/F3/F4/F5/F6 相对次序不变。
+>
+> 以下 F1–F6 原文保留，读时请以本批注为准。
 
 ### F1（核心）— 结转粒度从全局降到 per-family / per-stateKey
 
