@@ -61,6 +61,25 @@ evidence that an atomic opportunity can finish within 10 seconds.
 
 No slice may present one of these hypotheses as a fact before its declared measurement.
 
+### 2.3 Adversarial-audit adjudication
+
+- **Confirmed:** a published `PricingView` contains only resolved state keys. A zero-priced publication can
+  therefore have an empty `stateByStateKey`; R1 transport recovery by itself cannot carry from that shell.
+- **Confirmed:** R2 was missing as an independent attribution factor. §5.2 now orders recovery-base
+  isolation before mutation-transport attribution.
+- **Confirmed:** the original restore-output wording could be satisfied by increasing budgets, selecting a
+  favorable window, or hiding unresolved families behind a positive aggregate count. §6.0 now freezes
+  configuration/budgets, fixes the live cohort, and requires family-local coverage reporting.
+- **Partially addressed, still a live risk:** `lastGoodByStateKey` is independent of the published shell and
+  preserves any state key that has succeeded in the current process. It is not a persistent independent
+  StateTracker: a cold process has no recovery base, and state production still settles inside `runHead`.
+  The three source-N live rounds must therefore include cold-start behavior.
+- **Retained:** complete M→N proofs, latest-target coalescing, scan debt, content-addressed state/funding/
+  execution joins, reorg CAS, and the declared UniV3 projected-state proof gap.
+- Numerical assertions such as the exact count of families without incremental capability, equality between
+  issue and read counts, and enumeration timing ranges remain evidence claims to verify against the frozen
+  runtime/log cohort. They are not promoted to design facts merely because they appeared in an audit.
+
 ## 3. Non-negotiable invariants
 
 ### 3.1 Coverage
@@ -387,9 +406,25 @@ nearest-rank. Timeouts remain in the sample.
 
 ### 6.0 Immediate independent-B live diagnostic
 
-Before the paired latency experiment, deploy the frozen production changes as one isolated B process while
-leaving the running A process, commit, PID and restart count unchanged. This is a restore-output diagnostic,
-not an A/B win decision and not the six-step fixed gate.
+Before the paired latency experiment, freeze A's exact runtime configuration, budgets and universe, then
+deploy the production changes as one isolated dry-run B process. The user has authorized stopping the
+currently non-producing A process so B can use all eight node CPUs; B must keep
+`SEARCHER_DRY_RUN=1` and `SEARCHER_BLOCKSCAN_SUBMIT=0`. This is a restore-output diagnostic, not an A/B win
+decision and not the six-step fixed gate.
+
+The source-N cohort is fixed at no more than three live rounds beginning with frozen runtime commit
+`df4776b173948273ae7bbc0aa92c8d8873ce964d`:
+
+- a round begins only after the B searcher initializes and starts a real source-N state attempt; checkout,
+  dependency, environment or process-start failures do not count;
+- each round records the first three eligible state attempts after startup, including timeouts and
+  `priced=0`; no later favorable window may replace them;
+- after a failed round, use the phase telemetry to make one scoped repair, rerun deterministic controls and
+  deploy the new frozen SHA for the next round;
+- one live source-N pass with `priced>0/28235` ends the immediate dead-output investigation, while the full
+  restore-output label still requires the broader §6.1 coverage checks;
+- if all three rounds fail to produce any source-N `priced>0/28235` pass, activate and implement the N−1
+  coarse fallback in §3.2.1/R6 and report the delivery explicitly as degraded N−1 coarse pricing.
 
 The immediate diagnostic passes only when one complete, non-startup/non-catch-up B block-scan pass reports:
 
