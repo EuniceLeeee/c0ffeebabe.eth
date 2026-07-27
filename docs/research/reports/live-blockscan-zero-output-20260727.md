@@ -177,21 +177,108 @@ state 准备 29–34s（> 12s 出块）
 | 状态准备（真正的病根） | `listener/src/searcher/blockscan-state-coordinator.ts`（family lane 编排、deadline 分配） | state 阶段 29–34s；family 预算耗尽（eigenpie 0ms） |
 | 每块持久化开销 | `live-discovery-coordinator.ts` `finishPublishedDiscoveryState` → `persistRuntimeGraphs`（`main.ts:511` **同步 `writeFileSync`** 全图，14418 池）+ 证据缓存序列化 | 每块同步写盘，直接计入热路径（此前对抗审查已标 P1，本事故坐实其代价） |
 
-## 5. 修复方向（按影响排序，本轮不实施）
+## 5. 修法
 
-1. **压 state 准备到出块间隔以内**——这是唯一能真正解开死锁的一步。
-   - 实例级去重 + 批量当块读 + 本地派生所有方向（Model-B）：把"每条 edge 一次 quote"变成
-     "每个实例一次状态读"。用户 2026-07-27 提出的「instance 没有缓存 quote」正指向此簇；
-     准确说法是**静态 schema/call-plan 按实例缓存，动态状态仍每块读**（不得缓存动态报价）。
-   - 已实测的确定性收益：Curve chunk 串行→有界并行 **1.6–3.2x**（逐位等价，此前已验证）。
-   - 把每块同步 `writeFileSync` 移出热路径（debounce/异步）。
-2. **解耦 discovery 完整性门**：DEX block-scan 只 gate 在 DEX 自身完整性上，不被 protocol family
-   anchor 的全局 `min` 拖累；或对 watermark 给 1–2 块容差。可让 124 次误毙立即消失，
-   但**若不做第 1 步，超时簇仍在**。
-3. **family 预算公平性**：当前先到先得，最后一个 family 可分到 0ms。需按 family 保底或轮转。
-4. univ3 provisional-fork witness（148 池、约 4.2% 覆盖）——**在 priced=0 的前提下不是瓶颈**，排最后。
+> 顺序即优先级。**F1 是唯一能解开死亡螺旋的一刀**；不做 F1，其余全部只是让"必然失败"稍微晚一点发生。
 
-## 6. 工具 reconcile
+### F1（核心）— 结转粒度从全局降到 per-family / per-stateKey
+
+**改什么**：把 `blockscan-state-coordinator.ts:777-790` 的全局前置条件
+
+```ts
+if (!previous) { /* 所有 family 一起全量回退 */ }
+```
+
+替换为**逐 family 判定**：某 family 有自己上次成功的 base ⇒ 它走增量；没有 ⇒ **只有它**全量。
+`this.published` 从"单个全局 snapshot"改为"**per-family（或 per-stateKey）的最近成功状态**"，
+使 `incompleteResult(...)` 路径**仍能提交成功 family 的结转基线**。
+
+**零件已在**：`carryStateKeys` / `directStateKeys` / `missingPreviousStateKeys`（`:150-153`）
+即为此设计，只是被全局 `previous` 卡住。
+
+**不可动摇的边界（防止把修复做成作弊）**：
+- 结转的是**增量的 base**，不是价格。carried state **必须仍按 source block N 做 delta 推进**
+  （沿用现有 `mutationQueryDescriptor` / `readRange`），**动态报价一律不得跨块复用**；
+- 任一 stateKey 无法推进到 N ⇒ 该 edge 仍 `unresolved`，**绝不产生零值或旧价**；
+- fail-closed 与 final sim 不变。
+
+### F2 — 解耦 discovery 完整性门
+
+`live-discovery-publication.ts:357-368` 的全局 `min(DEX, 每个 protocol family anchor)` 拆开：
+**DEX block-scan 只 gate 在 DEX 自身完整性**；protocol family 落后只影响其自身的边（标 unresolved），
+不毙整趟。或对 watermark 给 1–2 块容差。
+**预期**：消掉 124 次 `discovery_backfill_behind` 误毙。**但不做 F1，超时簇（136）仍在。**
+
+### F3 — family 预算公平性
+
+当前先到先得，实测出现 `protocol:eigenpie did not settle within 0ms`。
+改为**每 family 保底预算 + 轮转**，并在超时时只标记该 family（degraded），不升级为全局 incomplete。
+
+### F4 — 把每块同步落盘移出热路径
+
+`finishPublishedDiscoveryState` → `persistRuntimeGraphs`（`main.ts:511` 同步 `writeFileSync`
+全量 14418 池）+ 证据缓存序列化，改为 debounce/异步；`addressEntries` 加容量上限。
+
+### F5 — 已实测的确定性提速（可与 F1 并行）
+
+- Curve chunk 串行 → 有界并行：**实测 1.6–3.2×，逐位等价**（此前已验证）。
+- Model-B 实例级去重：每个协议实例**一次**当块状态读 → 本地派生所有方向，
+  替代"每条 edge 一次 quote"。（用户提出的「instance 没有缓存 quote」指向此项；
+  准确表述为**静态 schema/call-plan 按实例缓存，动态状态仍每块读**。）
+
+### F6（最后）— univ3 provisional-fork witness
+
+148 池 / 约 4.2% 覆盖。**在 `priced=0` 的前提下它不是瓶颈**，必须排在恢复产出之后。
+
+---
+
+## 6. 验收标准
+
+**基线（当前生产实测，作为对照）**：`published 0/260`、`priced 0/28235`、`candidates 0/260`、
+`state p50 29–34s`、`fullFallbackReason=previous-snapshot-unavailable` 每块出现。
+
+**验收全部使用已有的 `block_scan_timing` 结构化遥测**，无需新建 harness（这是现状的一个优点）。
+
+### A. 硬门（全部必须通过，任一不过即不合并）
+
+| # | 判据 | 阈值 | 取值来源 |
+|---|---|---|---|
+| A1 | **死亡螺旋已破**（F1 的直接验证） | 人为注入一次单 family 失败后，**下一块**即恢复增量：`fullFallbackReason` 要么不出现，要么**仅出现在被注入的那个 family** 上 | `familyTelemetry.fullFallbackReason` |
+| A2 | **发布率** | paired window 内 `published / passes` ≥ **80%** | coordinator 发布计数 |
+| A3 | **state 阶段耗时** | p50 **< 8s**、p95 **< 12s**（必须小于出块间隔，否则仍会积压） | `stage_timing_ms.state` |
+| A4 | **定价覆盖** | `priced / expected` ≥ **95%**，且 `expected ≥ 28235`（见 A6） | `priced=X/Y` |
+| A5 | **候选产出** | 窗口内 `candidates > 0` 的块比例 > 0，且 enumeration 阶段 `status != "not-run"` ≥ **80%** | `stages.enumeration.status` |
+| A6 | **不得靠减图达标** | `expectedEdgeKeys` **不低于基线 28235**；任何激活集变化须单列 `activation_delta` 并单独审查 | `coverage.expectedEdgeKeys` |
+| A7 | **新鲜度不倒退** | 每条已发布 mid 的 `freshnessByReadKey` 仍绑定 source block N；**零**跨块复用的动态报价 | `freshnessByReadKey` |
+| A8 | **公平性** | **无** family 分到 0ms；每 family 至少获得保底预算 | `familyTelemetry` |
+
+### B. 明确禁止的"通过方式"
+
+- 调大 deadline / pass 预算蒙混过关（若确需调整，必须单独声明并证明 A3/A7 仍成立）；
+- 缓存动态报价、或用上一块的 mid 顶替本块（违反 A7，且正是漏更新块的成因）；
+- 缩小 universe / top-N / 跳过 slow family 来把 state 压进预算（违反 A6）；
+- 只在"安静块"或 warm 之后取样（窗口须预先按块高冻结，见 C）；
+- 把 `incomplete` 改成 `degraded` 却不真正恢复增量（A1 会抓住：`fullFallbackReason` 仍全体出现）。
+
+### C. 验证方法
+
+1. **配对 A/B**：同一节点、同一 universe 文件与 config、**预先按块高冻结**的窗口（建议 ≥120 块），
+   baseline = 当前 `origin/main`，challenger = 修复分支；两侧读同一 `block_scan_timing` 遥测。
+2. **恢复性专项测试**（A1）：在 challenger 上人为使**单个** family 超时一次，
+   观察下一块是否只有该 family 全量、其余仍增量。这是与旧架构行为对齐的关键回归。
+3. **短 smoke**：启动、安全门（dry-run/EV-gate 不变）、CPU/RSS 无回归。
+
+### D. 阶段性目标（若一次做不到全绿）
+
+允许分两步合并，但**必须如实标注状态**：
+
+- **第一步（恢复产出）**：A1 + A2 + A5 通过，A3 放宽到 p50 < 12s ⇒ 状态可写
+  `blockscan_output_restored`。**此时不得声称性能达标。**
+- **第二步（达标 <10s）**：A3 全绿（p50<8s / p95<12s）+ A4 ⇒ 才可声称满足 state-lane 的 `<10s` 目标。
+
+**任何一步都不得在未通过 A6/A7 的情况下宣称通过**——那是用减覆盖或用旧价换来的速度。
+
+## 7. 工具 reconcile
 
 `cd analysis && npm run tool-index -- --select venue,pool,block-scan --out /tmp/mev-tool-selection.json`
 推荐集：`analysis:ab-canary-compare`（block-scan）、`analysis:test:venue-aggregate`（venue）、
@@ -208,7 +295,7 @@ state 准备 29–34s（> 12s 出块）
 
 **无 tool_divergence**。
 
-## 7. 证据不足（明确声明）
+## 8. 证据不足（明确声明）
 
 1. **未确定 state 阶段 29–34 秒的内部构成**：遥测只给 `stage_timing_ms.state` 总时长，
    **没有 family 级/阶段级细分**，因此**无法说出是哪个 family、哪类读取吃掉了时间**。
