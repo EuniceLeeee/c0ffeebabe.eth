@@ -954,6 +954,12 @@ async function runHunt(input: {
     HUNT_PASS_BUDGET_MS: String(input.cfg.passBudgetMs),
     HUNT_MAX_CANDIDATES: String(input.cfg.maxCandidates),
     HUNT_REFINE_CANDIDATES: String(input.cfg.maxCandidates),
+    // This runner proves deterministic route correctness, not live latency.
+    // Reusing blockscan-hunt's 1s hot-path family timeout makes a cold full
+    // graph replay reject exact-positive routes merely because other probes
+    // share the same local Anvil. The enclosing pass budget remains the hard
+    // bound; live block-scan keeps its independent production timeout.
+    HUNT_REFINE_FAMILY_TIMEOUT_MS: String(input.cfg.passBudgetMs),
     // This subprocess supplies production enumeration only. The wrapper owns
     // winner-bound exact solve/final-sim with the correct execution-family
     // cache, so avoid spending time solving unrelated ranked candidates here.
