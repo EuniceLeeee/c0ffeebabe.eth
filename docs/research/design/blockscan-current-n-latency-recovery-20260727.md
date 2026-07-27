@@ -46,6 +46,13 @@ evidence that an atomic opportunity can finish within 10 seconds.
 - Strict hot discovery scans the current source delta and separately re-attests the six enabled declared
   protocol venues. Known DEX pools are filtered by `knownPoolKeys` and are not rebuilt; UniV2
   `getReserves` runs only for newly discovered or retryable candidates.
+- In the frozen production venue tree, only UniV2-standard, UniV3-standard and UniV4 declare an
+  `incremental` block-scan state capability. The remaining registered pricing capabilities retain a
+  direct-current cost floor unless separately upgraded.
+- `BlockScanRuntimeLoop.runHead` checks the pass deadline only **after**
+  `detectProductionBlockScanOpportunities` returns. A state stage that consumes its budget can therefore
+  still enter the synchronous coarse enumeration and spend additional CPU before being classified
+  `scanner_deadline`.
 - Coarse scanner enumeration consumes graph + pricing mids + configured `pricedTokens`; it does not consume
   the live funding snapshot. Exact refinement, planning and final simulation still require a correctly
   pinned execution/funding context.
