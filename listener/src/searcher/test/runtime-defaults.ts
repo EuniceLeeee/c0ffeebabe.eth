@@ -151,6 +151,12 @@ assert(
   ),
   "N-1 background pricing must retain its declared 20s default",
 );
+assert(
+  mainSource.includes(
+    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "12000"',
+  ),
+  "N-1 family settlement must retain the live-validated 12s allocation",
+);
 console.log("[runtime-defaults] N-1 fallback remains explicit opt-in: PASS");
 
 const atomicStart = mainSource.indexOf(

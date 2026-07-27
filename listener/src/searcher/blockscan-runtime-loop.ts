@@ -357,7 +357,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       Math.max(
         1,
         this.deps.nMinusOneFamilySettleBudgetMs ??
-          Math.min(10_000, stateBudgetMs),
+          Math.min(12_000, stateBudgetMs),
       ),
     );
     const deadlineAtMs = startedAtMs + stateBudgetMs;

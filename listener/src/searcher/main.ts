@@ -837,13 +837,13 @@ async function main(): Promise<void> {
       ? Math.max(1, Math.floor(blockScanNMinusOneStateBudgetRaw))
       : 20_000;
   const blockScanNMinusOneFamilySettleRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "10000",
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "12000",
   );
   const blockScanNMinusOneFamilySettleMs =
     Number.isFinite(blockScanNMinusOneFamilySettleRaw) &&
       blockScanNMinusOneFamilySettleRaw > 0
       ? Math.floor(blockScanNMinusOneFamilySettleRaw)
-      : 10_000;
+      : 12_000;
   const blockScanLargeGraphPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
   );
