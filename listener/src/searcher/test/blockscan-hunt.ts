@@ -48,7 +48,6 @@ import {
   routeStepMatchesExpected,
   selectedReplayOpportunityIndexes,
   solveForOpportunityIndex,
-  swapPathMatchesExpected,
   type AdapterFamilyQuoteCoverageSummary,
 } from "./blockscan-hunt-selection.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
@@ -1732,9 +1731,11 @@ function readExpectedReplayTarget(
   const expectedRoute = parseExpectedRoute(process.env.AB_EXPECTED_ROUTE_JSON ?? "");
   const expectedProtocol = process.env.AB_EXPECTED_ROUTE_SCOPE === "dex-permissionless-protocol";
   const opportunityIndex = opportunities.findIndex((entry) =>
-    entry.swapPath !== null
-    && swapPathMatchesExpected(entry.swapPath, expectedSwapPath)
-    && routeMatchesExpected(entry.route, expectedRoute)
+    // The full route already carries adapter, venue/pool identity, direction,
+    // and slot kind for every leg. Requiring the legacy swap-only projection
+    // as a second identity source creates false negatives once protocol legs
+    // are omitted and the funded closed cycle is rotated.
+    routeMatchesExpected(entry.route, expectedRoute)
     && entry.hasProtocolEdge === expectedProtocol);
   return { expectedPools, expectedSwapPath, expectedRoute, opportunityIndex };
 }
