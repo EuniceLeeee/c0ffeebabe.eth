@@ -194,8 +194,7 @@ export class JsonRpcBlockScanStateReadBackend
     this.multicallMode = options.multicallMode ?? "rpc-batch";
     this.rpcSlots = new AbortableSemaphore(maxConcurrentBatches);
     const maxConcurrentMutationProofs =
-      options.maxConcurrentMutationProofs ??
-      Math.min(maxConcurrentBatches, 3);
+      options.maxConcurrentMutationProofs ?? 1;
     if (
       !Number.isSafeInteger(maxConcurrentMutationProofs) ||
       maxConcurrentMutationProofs <= 0
