@@ -34,7 +34,81 @@ protocol:eigenpie, protocol:erc4626, protocol:erc4626-silo-redeem, protocol:gold
 protocol:metronome-hgusdc, protocol:metronome-synth, protocol:psm, protocol:rocksolid,
 protocol:wsteth, univ2-standard, univ3-standard, univ4` — `priced=0/N`。
 
-## 2. 根因：state 准备耗时 29–34 秒，而出块间隔 12 秒
+## 1b. 根因（最终版）：增量刷新依赖「上一块成功发布」，一次失败即进入不可恢复的死亡螺旋
+
+> 本节是对 §2 的修正与深化。§2 描述的"29–34 秒"是**现象**；下面是**为什么每块都要 29–34 秒**。
+
+新 coordinator 的增量刷新以「上一代成功发布的 snapshot」为前提
+（`blockscan-state-coordinator.ts:777-790`）：
+
+```ts
+if (!previous) {                       // 没有上一代已发布 snapshot
+  for (const family of families) {
+    if (compiledFamilies.get(family.familyId)?.incremental) {
+      fullFallbackReasonByFamily.set(family.familyId, "previous-snapshot-unavailable");
+    }
+  }
+  return { plans, ... };               // ⇒ 全部 family 退化为「每个 stateKey 全量当块读」
+}
+```
+
+而 `previous` 就是 `this.published`（`:393`），`this.published = snapshot` **仅在成功发布时赋值**
+（`:721`）；失败或被取代的 generation **从不提交**。
+
+**闭环：**
+
+```
+任一趟 pass 失败（超时 / 被 discovery 门毙 / 瞬时 RPC 抖动 / reorg）
+   → 不发布 snapshot
+   → 下一趟 previous 不存在
+   → 全部 incremental family 退化为全量读（28235 条边规模的 stateKey）
+   → 29–34 秒，必然超预算
+   → 又不发布
+   → 永远回不去增量
+```
+
+**这是自维持故障态**：只要错过一块，系统再也不会自行恢复。它解释了三件事——
+为什么**每块**都 29–34 秒（永远在全量）、为什么 `priced=0`（从未完成）、
+以及为什么**重构前能出块、重构后不能**。
+
+### 连坐是两层的：发布粒度与回退粒度都是「全体」
+
+**层一 — 发布是全局 all-or-nothing。** `this.published` 是**单个 coordinator 级 snapshot**，不是 per-family。
+成功路径在 `:721` 赋值（注意它在 `degraded` 计算**之前**，所以 **degraded 快照是会发布的**，
+下一块仍可增量）；但 `incompleteResult(...)`（`:702` 等路径）**直接返回且从不赋值**。
+因此**任一** family 未结算（实测样本：`protocol:eigenpie did not settle within 0ms`）
+⇒ 整趟 `incomplete` ⇒ **全局不发布**。
+
+**层二 — 回退也是全局。** `if (!previous)` 分支里是
+`for (const family of families) { … fullFallbackReasonByFamily.set(…) }`——
+把**所有** incremental family 一起标记为全量回退，**包括上一块明明成功读到状态的 family**。
+
+实测：**260/260 趟均未发布**（124 趟在 coordinator 之前即被 discovery 门 `return`；136 趟 `incomplete`），
+故 `previous` 恒为 `null`，恒全量，恒超时。
+
+**代码内已有细粒度结转的痕迹但未生效**：`carryStateKeys` / `directStateKeys` /
+`missingPreviousStateKeys`（`:150-153`）表明设计上考虑过按 stateKey 结转，
+但被全局 `previous` 的 all-or-nothing 前置条件卡死。
+
+⇒ **正确形态应是 per-family（乃至 per-stateKey）结转**：各 family 各自保留上次成功状态，
+单个 family 失败只影响自身，不应令全体回到全量。
+
+### 与旧架构的结构性差异
+
+旧架构的增量 warm 由独立模块 `listener/src/searcher/blockscan-warm-coordinator.ts` 承担，
+**该文件已在本次重构中删除**（当前树中不存在，生产代码零引用）。它的关键性质是：
+**warm 缓存的存活与"某一趟 pass 是否成功"无关**——一趟失败不会清空已 warm 的池状态，
+下一趟仍可只读变化部分。因此旧构建每块只付增量代价，`protocolMidDeadline=0`（从未撞 deadline），
+稳定产出 `protocolMids=2013 / externalSwapMids=1023 / exactCurveMids=815/826`。
+
+新架构把「增量能力」与「发布成功」耦合在一起，于是**失败具有传染性**：
+一次失败 ⇒ 下一次必然更慢 ⇒ 必然再失败。
+
+> **注**：旧架构遇到 deadline **同样是 `return` 中止本趟**
+> （`7f8b859:listener/src/searcher/main.ts:2059-2062`），所以**失败策略不是差异**；
+> 差异只在**下一趟能否继续增量**。
+
+## 2. 现象：state 准备耗时 29–34 秒，而出块间隔 12 秒
 
 按 decision 分组的实测耗时（n=260）：
 
