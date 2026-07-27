@@ -65,6 +65,8 @@ export interface BlockScanStateReadBackend {
     control: {
       readonly deadlineAtMs: number;
       readonly signal: AbortSignal;
+      /** Generation owner; family-local aborts must not cancel shared proof work. */
+      readonly sharedSignal?: AbortSignal;
     },
   ): Promise<CanonicalMutationRange>;
 }
@@ -777,6 +779,7 @@ export class BlockScanStateCoordinator {
     graph: VerifiedGraphView,
     deadlineAtMs: number,
     signal: AbortSignal,
+    generationSignal: AbortSignal,
   ): Promise<IncrementalPreparation> {
     const plans = new Map<string, FamilyIncrementalPlan>();
     const missingPreviousStateKeysByFamily = new Map<string, number>();
@@ -946,7 +949,11 @@ export class BlockScanStateCoordinator {
               descriptor,
               previousSource,
               through,
-              { deadlineAtMs, signal },
+              {
+                deadlineAtMs,
+                signal,
+                sharedSignal: generationSignal,
+              },
             ),
             signal,
           );
@@ -1075,6 +1082,7 @@ export class BlockScanStateCoordinator {
         previous,
         familyDeadlineAtMs,
         familyController.signal,
+        signal,
         staging,
       );
       try {
@@ -1122,6 +1130,7 @@ export class BlockScanStateCoordinator {
     previous: BlockScanStateSnapshot | null,
     deadlineAtMs: number,
     signal: AbortSignal,
+    generationSignal: AbortSignal,
     staging: FamilyLaneStaging,
   ): Promise<LaneResult> {
     const startedAtMs = this.now();
@@ -1240,6 +1249,7 @@ export class BlockScanStateCoordinator {
       graph,
       deadlineAtMs,
       signal,
+      generationSignal,
     );
     const incrementalPlans = incrementalPreparation.plans;
     let fullFallbackReason =

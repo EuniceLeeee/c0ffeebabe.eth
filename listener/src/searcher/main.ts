@@ -938,6 +938,12 @@ async function main(): Promise<void> {
           process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4",
         ),
       ),
+      maxConcurrentMutationProofs: Math.max(
+        1,
+        Number(
+          process.env.SEARCHER_BLOCKSCAN_MUTATION_PROOF_CONCURRENCY ?? "3",
+        ),
+      ),
       multicallMode:
         process.env.SEARCHER_BLOCKSCAN_STATE_MULTICALL === "1"
           ? "aggregate3"
