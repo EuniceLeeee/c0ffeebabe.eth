@@ -119,9 +119,39 @@ factory `0x5e12F3bd…` 不在 `VENUE_IDENTITY_CATALOG` 的 standard/univ3 条�
 - **不得**把 `0x5e12F3bd…` 或该池地址写进任何 seed/allowlist —— 准入已由 `factory()` 反查完成，
   本项只补"如何给已准入的 provisional 池定价"。
 
-**残留风险（需在实现时验证）**：该 fork 的 Swap 事件 topic 为 `0x19b47279` 而非 UniV3 标准，
-说明它**不是逐字节的 UniV3 克隆**。必须先验证其 swap 数学与 UniV3 一致（fork 常见改动：fee 计费方式、
-protocol fee、tick 间距语义）。**本轮未验证**，见 §5。
+~~**残留风险（需在实现时验证）**：该 fork 的 Swap 事件 topic 为 `0x19b47279` 而非 UniV3 标准…~~
+→ **已用父块状态实测验证，见 §3b。结论：逐位等价，修法成立。**
+
+## 3b. 复现验证：本地 v3 数学在父块状态上逐位命中（2026-07-27 实测）
+
+用**生产代码路径** `PoolStateCache.quoteV3`（`listener/src/searcher/solver/pool-state-cache.ts:666`）
+在父块 `25619828` 的真实状态上重算腿 1，与链上成交对拍。不改仓库文件，只 import 生产模块，
+针对 local reth（零 CU）。
+
+```
+pool   = 0x0ec1828fcb385471752014fe668102b661622b55   parent = 25619828
+in     = 24170070 USDC
+actual out (chain) = 12530007608875379 WETH
+[poolcache] warmed univ3 ticks 0x0ec1828f (6 ticks, ±8 words, block 25619828)
+local v3 math out  = 12530007608875379
+diff   = 0 wei (0 bps)
+RESULT: BIT-EXACT MATCH ✓
+```
+
+**三项结论**（均有上述实测支撑，非推断）：
+
+1. **该 fork 的 swap 数学与 UniV3 逐位等价**——尽管其 Swap 事件 topic 非标准（`0x19b47279`），
+   tick 遍历、fee 计费与 sqrtPrice 更新与 UniV3 一致；§5 原第 2 条证据不足**已消除**。
+2. **本地 address-bound 数学无需任何外部 QuoterV2 即可精确定价该池**——`quoteV3` 只按池地址读
+   slot0/liquidity/tickBitmap/ticks（日志显示自动 warm 了 6 个 tick、±8 words），
+   完全不经 `(tokenA,tokenB,fee)` 元组路由，因此不存在"报到别的池"的风险。
+3. ⇒ **修法（把本地数学注册为 provisional fork 的 precision witness）在本样本上已被证据支持**：
+   我们**有能力**准确给这条边定价，挡住我们的只是"witness 必须来自 factory 注册的外部 Quoter"
+   这条策略本身。
+
+> 边界：本实测只证明**该池在该块**逐位等价，不构成对所有未知 factory 分叉的普遍结论。
+> 实现时仍应保留 fail-closed（本地解算失败 ⇒ edge `unavailable`）与 final sim 兜底，
+> 并对更多分叉样本做同样对拍。
 
 ## 4. 工具 reconcile（§1.2 强制，已实跑）
 
@@ -142,8 +172,8 @@ protocol fee、tick 间距语义）。**本轮未验证**，见 §5。
 1. **未做 production replay**：`blockscan-hunt` 的 worktree 副本缺 `searcher/pools/active-pools.json`
    （gitignored），上一轮诊断已实测该 harness 会以 `ENOENT` 失败并只建 12 edges。**本轮未跑**，
    故 baseline 失败阶段的*经验*证据缺失；§2 的定位来自**静态代码事实 + 图成员判定**。
-2. **未验证该 fork 的 swap 数学是否与 UniV3 等价**：其 Swap 事件 topic（`0x19b47279`）与标准不同，
-   不能假设 tick 数学逐位一致。修法落地前必须用该池真实状态与链上成交量做逐 wei 对拍。
+2. ~~未验证该 fork 的 swap 数学是否与 UniV3 等价~~ → **已消除**：§3b 用父块真实状态 +
+   生产 `quoteV3` 对拍，**0 wei 误差、逐位命中**。（仅限该池该块；普遍性仍需更多样本。）
 3. **未确证 `0x19b47279` 的事件语义**（未解 ABI），因此未能从事件独立复算腿 1 的成交量；
    腿 1 数量取自 ERC20 Transfer 对（可靠），但事件层证据不足。
 4. **未声明 fixed**：无 scanner 自发枚举、无 final sim。
@@ -154,8 +184,11 @@ protocol fee、tick 间距语义）。**本轮未验证**，见 §5。
 - **单一 gap = capability（定价 witness）**：池已由 `factory()` 反查以 provisional 身份进图，
   但 `uniV3QuoterForFactory` 只认 Uniswap/Pancake 两个 QuoterV2，provisional fork 得不到 precision
   witness ⇒ edge `unavailable` ⇒ 无 coarse mid ⇒ scanner 无法枚举。
-- **修法**：把已有的 **address-bound 本地 v3 tick 数学**注册为 provisional fork 的 witness
-  （规避元组路由风险），fail-closed 与 final sim 不变；**前提**是先验证该 fork 数学等价。
+- **修法（已获实测支撑）**：把已有的 **address-bound 本地 v3 tick 数学**注册为 provisional fork 的
+  witness（规避元组路由风险），fail-closed 与 final sim 不变。
+  **§3b 实测：生产 `quoteV3` 在父块状态上重算腿 1 得 `12530007608875379`，与链上 0 wei 误差、
+  逐位命中** ⇒ 该分叉数学与 UniV3 等价，且本地数学无需外部 Quoter 即可精确定价。
+  「我们没有能力算」被证伪——挡路的是 witness 策略，不是数学。
 - 建议 cohort id：`univ3-provisional-fork-pricing`。开工前按 §2 检查现有 branch/report/main
   是否已有同 id 工作（注：用户已知的「V3 精度 witness / Pancake·未知 factory」阻断项与本 gap 同源，
   可能已在 codex 分支处理中——**须先核对，避免重复修**）。
