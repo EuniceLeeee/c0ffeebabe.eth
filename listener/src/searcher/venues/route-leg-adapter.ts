@@ -101,6 +101,8 @@ export interface PlanFragment {
 
 export interface ExactQuoteContext {
   state: StateBackend;
+  /** Actual BotVM caller for caller-sensitive execution simulations. */
+  executor?: string;
   target: string;
   edgeAdapterId: string;
   amountIn: bigint;

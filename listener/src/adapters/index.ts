@@ -41,6 +41,7 @@ import {
 } from "./balancer-v3.js";
 import { dodoV2ActionAdapter } from "./dodo-v2.js";
 import { eigenpieDepositActionAdapter } from "./eigenpie-deposit.js";
+import { selfBurnNativeRedeemActionAdapter } from "./self-burn-native.js";
 
 const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
   [
@@ -53,6 +54,7 @@ const PRODUCTION_ACTION_CATALOG = new Map<string, ActionAdapter>(
     erc20TransferAdapter,
     ...PROTOCOL_LEG_DESCRIPTORS.map(makeProtocolAdapter),
     eigenpieDepositActionAdapter,
+    selfBurnNativeRedeemActionAdapter,
     psmAdapter,
     univ3Adapter,
     univ2Adapter,

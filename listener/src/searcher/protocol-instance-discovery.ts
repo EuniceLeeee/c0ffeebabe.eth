@@ -266,7 +266,10 @@ export function createPinnedProtocolDiscoveryContext(input: {
               })),
             }],
             validation: false,
-            traceTransfers: false,
+            // Behavior families may require causal native-value evidence.
+            // The shared transport exposes the synthetic transfer logs; each
+            // family still decides whether those logs prove its own semantics.
+            traceTransfers: true,
           }, blockTag],
           rpcTimeoutMs,
           "eth_simulateV1",

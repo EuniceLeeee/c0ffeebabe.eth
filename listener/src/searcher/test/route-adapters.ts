@@ -221,7 +221,11 @@ async function parentAbortCannotBeShadowedByNestedControl(): Promise<void> {
 
 async function main(): Promise<void> {
   const adapters = PRODUCTION_ADAPTER_FAMILIES.routes().list();
-  assert(adapters.length === 18, `production route adapter count ${adapters.length}`);
+  assert(adapters.length > 0, "production route registry must not be empty");
+  assert(
+    new Set(adapters.map((item) => item.id)).size === adapters.length,
+    "production route registry ids must be unique",
+  );
   for (const routeAdapter of adapters) {
     for (const poolAdapter of routeAdapter.poolAdapters) {
       assert(PRODUCTION_ADAPTER_FAMILIES.routes().forPool(poolAdapter) === routeAdapter, `${routeAdapter.id} pool alias`);

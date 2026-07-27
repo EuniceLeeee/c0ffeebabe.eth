@@ -36,6 +36,7 @@ export async function propagateAmounts(
   flashAmount: bigint,
   state: StateBackend,
   options: {
+    executor?: string;
     fluidDebtBps?: bigint;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
@@ -54,6 +55,7 @@ export async function propagateAmountsWithRawOutputs(
   flashAmount: bigint,
   state: StateBackend,
   options: {
+    executor?: string;
     fluidDebtBps?: bigint;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
@@ -123,7 +125,12 @@ async function quoteEdge(
   edge: TokenEdge,
   amountIn: bigint,
   state: StateBackend,
-  options: { cache?: PoolStateCache; quoteSource?: AmountQuoteSource; v4QuoteStats?: V4QuotePathStats },
+  options: {
+    executor?: string;
+    cache?: PoolStateCache;
+    quoteSource?: AmountQuoteSource;
+    v4QuoteStats?: V4QuotePathStats;
+  },
 ): Promise<bigint> {
   try {
     return await quote(
@@ -138,6 +145,7 @@ async function quoteEdge(
       edge.poolToken0,
       edge.poolToken1,
       options.v4QuoteStats,
+      options.executor,
     );
   } catch (err) {
     if (!options.quoteSource) throw err;

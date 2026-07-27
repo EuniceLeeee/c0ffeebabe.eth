@@ -12,6 +12,7 @@ import type {
   StateReadFailureKind,
   StateReadResult,
 } from "./venues/blockscan-state-capability.js";
+import { ethers } from "ethers";
 import {
   deterministicHash,
   mutationQueryDescriptorFingerprint,
@@ -184,7 +185,7 @@ export class JsonRpcBlockScanStateReadBackend
       for (let index = 0; index < reads.length; index++) {
         const read = reads[index];
         if (
-          read.transport === "rpc-batch" ||
+          read.transport !== "multicall-safe" ||
           this.multicallMode === "rpc-batch"
         ) {
           rpcReads.push({ index, read });
@@ -629,19 +630,7 @@ export class JsonRpcBlockScanStateReadBackend
     const body = reads.map((read) => {
       const id = this.nextId++;
       idToRead.set(id, read);
-      return {
-        jsonrpc: "2.0" as const,
-        id,
-        method: "eth_call",
-        params: [
-          {
-            to: read.to,
-            data: read.data,
-            ...(read.from ? { from: read.from } : {}),
-          },
-          eip1898BlockSpecifier(control.sourceBlockHash),
-        ],
-      };
+      return stateReadRpcPayload(read, id, control.sourceBlockHash);
     });
     const responses = await this.post(body, signal);
     const byId = new Map(responses.map((response) => [response.id, response]));
@@ -670,15 +659,16 @@ export class JsonRpcBlockScanStateReadBackend
             `JSON-RPC error ${response.error.code ?? "unknown"}`,
         );
       }
-      if (typeof response.result !== "string") {
+      const data = stateReadResultData(read, response.result);
+      if (data === null) {
         return readFailure(
           read,
           control,
           "rpc",
-          "eth_call returned a non-string result",
+          `${read.transport} returned an invalid result`,
         );
       }
-      return readSuccess(read, control, response.result);
+      return readSuccess(read, control, data);
     }));
   }
 
@@ -826,6 +816,82 @@ function invalidMulticallRead(
     );
   }
   return null;
+}
+
+function stateReadRpcPayload(
+  read: StateRead,
+  id: number,
+  sourceBlockHash: string,
+): {
+  readonly jsonrpc: "2.0";
+  readonly id: number;
+  readonly method: string;
+  readonly params: readonly unknown[];
+} {
+  const block = eip1898BlockSpecifier(sourceBlockHash);
+  const tx = {
+    to: read.to,
+    data: read.data,
+    ...(read.from ? { from: read.from } : {}),
+  };
+  if (read.transport === "eth-create-access-list") {
+    if (read.simulation !== undefined) {
+      throw new Error(`access-list read ${read.id} cannot carry simulation`);
+    }
+    return {
+      jsonrpc: "2.0",
+      id,
+      method: "eth_createAccessList",
+      params: [tx, block],
+    };
+  }
+  if (read.transport === "eth-simulate-v1") {
+    if (!read.simulation || read.simulation.calls.length === 0) {
+      throw new Error(`simulation read ${read.id} lacks calls`);
+    }
+    return {
+      jsonrpc: "2.0",
+      id,
+      method: "eth_simulateV1",
+      params: [{
+        blockStateCalls: [{
+          ...(read.simulation.stateOverrides === undefined
+            ? {}
+            : { stateOverrides: read.simulation.stateOverrides }),
+          calls: read.simulation.calls,
+        }],
+        validation: false,
+        traceTransfers: read.simulation.traceTransfers,
+      }, block],
+    };
+  }
+  if (read.simulation !== undefined) {
+    throw new Error(`ordinary state read ${read.id} cannot carry simulation`);
+  }
+  return {
+    jsonrpc: "2.0",
+    id,
+    method: "eth_call",
+    params: [tx, block],
+  };
+}
+
+function stateReadResultData(
+  read: StateRead,
+  result: unknown,
+): string | null {
+  if (
+    read.transport === "eth-create-access-list" ||
+    read.transport === "eth-simulate-v1"
+  ) {
+    if (result === undefined) return null;
+    try {
+      return ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(result)));
+    } catch {
+      return null;
+    }
+  }
+  return typeof result === "string" ? result : null;
 }
 
 function readSuccess(

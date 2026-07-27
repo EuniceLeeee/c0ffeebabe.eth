@@ -536,6 +536,80 @@ async function completeAndDeterministic(): Promise<void> {
   assert.equal(view.ownershipHash, second.ownershipHash);
 }
 
+async function simulationSemanticsParticipateInDedupIdentity(): Promise<void> {
+  let physicalReads = 0;
+  const capability: BlockScanStateCapability<null, FakeSnapshot> = {
+    stateKey: (edgeValue) => edgeValue.target.toLowerCase(),
+    compileStaticSchema: () => null,
+    buildCurrentBlockReads({ sourceBlock, sourceBlockHash, edges }) {
+      const target = edges[0]?.target ?? PROTOCOL_POOL;
+      return ["01", "02"].map((suffix, index) => ({
+        id: `simulation-${index}`,
+        sourceBlock,
+        sourceBlockHash,
+        to: target,
+        from: TOKEN_D,
+        data: "0x12345678",
+        transport: "eth-simulate-v1" as const,
+        simulation: {
+          calls: [{ from: TOKEN_D, to: target, data: "0x12345678" }],
+          stateOverrides: {
+            [target]: {
+              stateDiff: {
+                [`0x${"00".repeat(31)}${suffix}`]:
+                  `0x${"00".repeat(31)}${suffix}`,
+              },
+            },
+          },
+          traceTransfers: false,
+        },
+      }));
+    },
+    decodeState(_schema, results) {
+      assert.equal(results.length, 2);
+      return { numerator: 1n, denominator: 1n };
+    },
+    deriveMids(snapshot, edges) {
+      return new Map(edges.map((edgeValue) => [
+        blockScanEdgeKey(edgeValue),
+        mid(
+          edgeValue,
+          Number(snapshot.numerator) / Number(snapshot.denominator),
+        ),
+      ]));
+    },
+    dependencies: (edges) => edges.map((edgeValue) => edgeValue.target),
+  };
+  const family = registerBlockScanStateFamily({
+    familyId: "protocol:simulation-dedup",
+    lane: "protocol",
+    capability,
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "protocol-action",
+  });
+  const backend: BlockScanStateReadBackend = {
+    async readBatch(_lane, reads, control) {
+      physicalReads += reads.length;
+      return reads.map((read) =>
+        successfulRead(read, control.sourceGeneration)
+      );
+    },
+    async verifyCanonicalSource() {
+      return;
+    },
+  };
+  const result = await new BlockScanStateCoordinator(backend).prepare({
+    graph: graph(1, true, [protocol]),
+    families: [family],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(result.status, "complete");
+  assert.equal(
+    physicalReads,
+    2,
+    "different state overrides must not collapse into one physical read",
+  );
+}
+
 async function replayResetDropsOnlyDynamicPublication(): Promise<void> {
   const registered = families();
   const backend: BlockScanStateReadBackend = {
@@ -1870,6 +1944,7 @@ function successfulRead(
 }
 
 await completeAndDeterministic();
+await simulationSemanticsParticipateInDedupIdentity();
 await replayResetDropsOnlyDynamicPublication();
 await failedFamilyPublishesHealthyFamiliesAsDegraded();
 await graphIncompleteSwapFamilyPreservesHealthySibling();

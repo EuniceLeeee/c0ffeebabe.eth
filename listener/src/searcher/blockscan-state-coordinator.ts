@@ -1824,6 +1824,7 @@ function deduplicatePlannedReads<
       item.read.data.toLowerCase(),
       item.read.from?.toLowerCase() ?? "",
       item.read.transport,
+      deterministicHash(item.read.simulation ?? null),
       item.read.acceptRevertData ? "accept-revert-data" : "strict-success",
     ].join("\u001f");
     const current = groups.get(key);

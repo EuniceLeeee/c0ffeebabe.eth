@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "id": "self-burn-native-txb51c",
+  "executionFamilyId": "protocol:self-burn-native",
+  "referenceTx": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
+  "lane": "block-scan",
+  "stateAnchor": {
+    "kind": "parent-block",
+    "blockNumber": 25619947
+  },
+  "flash": {
+    "adapterId": "balancer-flash",
+    "token": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+  },
+  "route": [
+    {
+      "seq": 1,
+      "pool": {
+        "adapter": "univ3",
+        "address": "0x742bf09705426b49ff3b0d311e8b74307b55893c",
+        "token0": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+        "token1": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      },
+      "edgeAdapterId": "univ3-swap",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x292a477e521230fe230c13c93374adde8ddec1c1"
+    },
+    {
+      "seq": 2,
+      "pool": {
+        "adapter": "self-burn-native-token",
+        "address": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+        "fixedTokenIn": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+        "fixedTokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "fixedSlotKind": "protocol",
+        "fixedProtocolAction": "redeem",
+        "logicalInstanceId": "self-burn-native:0x292a477e521230fe230c13c93374adde8ddec1c1"
+      },
+      "edgeAdapterId": "self-burn-native-redeem",
+      "tokenIn": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    },
+    {
+      "seq": 3,
+      "pool": {
+        "adapter": "univ3",
+        "address": "0x11b815efb8f581194ae79006d24e0d814b7697f6",
+        "token0": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "token1": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      },
+      "edgeAdapterId": "univ3-swap",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    }
+  ],
+  "landedReference": {
+    "canonicalNetProfitUsd": 0.12,
+    "evidencePath": "docs/research/reports/txb51c-self-burn-native-evidence.md",
+    "evidenceSha256": "7ae766b21edd5ac2696f201e436907f13ee9b11eb681b504bed5958920f814bd"
+  }
+}

@@ -34,9 +34,33 @@ export interface StateBackend {
     req: { to: string; data: string; from?: string },
     control?: StateCallControl,
   ): Promise<string>;
+  /**
+   * Execute one caller-funded token conversion without mutating the fork and
+   * report only independently observed balance/supply/native deltas.
+   *
+   * Families without a view quoter use this capability instead of guessing a
+   * rate. Absence means the lane must fail closed.
+   */
+  simulateTokenToNativeDelta?(
+    req: TokenToNativeDeltaRequest,
+    control?: StateCallControl,
+  ): Promise<TokenToNativeDeltaResult>;
   send(req: { from: string; to: string; data: string; gas?: string }): Promise<string>;
   getGasUsed(txHash: string): Promise<bigint>;
   getTokenBalance(token: string, account: string): Promise<bigint>;
+}
+
+export interface TokenToNativeDeltaRequest {
+  readonly token: string;
+  readonly caller: string;
+  readonly amountIn: bigint;
+  readonly callData: string;
+}
+
+export interface TokenToNativeDeltaResult {
+  readonly tokenInSpent: bigint;
+  readonly totalSupplyBurned: bigint;
+  readonly nativeOut: bigint;
 }
 
 export interface StateCallControl {
@@ -76,6 +100,8 @@ export function withStateCallControl(
   control: StateCallControl,
 ): StateBackend {
   const call = state.call.bind(state);
+  const simulateTokenToNativeDelta =
+    state.simulateTokenToNativeDelta?.bind(state);
   return Object.assign(Object.create(state) as StateBackend, {
     call: (
       req: { to: string; data: string; from?: string },
@@ -84,6 +110,20 @@ export function withStateCallControl(
       deadlineAtMs: earliestDeadline(control.deadlineAtMs, nested?.deadlineAtMs),
       signal: combineAbortSignals(control.signal, nested?.signal),
     }),
+    ...(simulateTokenToNativeDelta === undefined
+      ? {}
+      : {
+          simulateTokenToNativeDelta: (
+            req: TokenToNativeDeltaRequest,
+            nested?: StateCallControl,
+          ) => simulateTokenToNativeDelta(req, {
+            deadlineAtMs: earliestDeadline(
+              control.deadlineAtMs,
+              nested?.deadlineAtMs,
+            ),
+            signal: combineAbortSignals(control.signal, nested?.signal),
+          }),
+        }),
   });
 }
 
@@ -106,7 +146,14 @@ export interface VictimStateResult {
   replayedPrefixCount: number;
 }
 
-const ERC20 = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
+const ERC20 = new ethers.Interface([
+  "function balanceOf(address) view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+]);
+const SYNTHETIC_NATIVE_TRANSFER_EMITTER =
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)").toLowerCase();
+const tokenBalanceSlotMemo = new Map<string, string>();
 const LOCAL_FORK_GAS_BALANCE_FLOOR = 10_000n * 10n ** 18n;
 
 export class AnvilStateBackend implements StateBackend {
@@ -609,6 +656,246 @@ export class AnvilStateBackend implements StateBackend {
     }
   }
 
+  async simulateTokenToNativeDelta(
+    req: TokenToNativeDeltaRequest,
+    control: StateCallControl = {},
+  ): Promise<TokenToNativeDeltaResult> {
+    if (req.amountIn <= 0n) {
+      return { tokenInSpent: 0n, totalSupplyBurned: 0n, nativeOut: 0n };
+    }
+    const token = ethers.getAddress(req.token);
+    const caller = ethers.getAddress(req.caller);
+    if (!ethers.isHexString(req.callData)) {
+      throw new Error("token-to-native simulation requires hex calldata");
+    }
+    const code = await this.callWithRpcControl(
+      "eth_getCode",
+      [token, "latest"],
+      token,
+      control,
+    );
+    if (typeof code !== "string" || code === "0x") {
+      throw new Error(`token-to-native simulation target ${token} has no code`);
+    }
+    const codeHash = ethers.keccak256(code);
+    const slot = await this.resolveTokenBalanceSlot(
+      token,
+      caller,
+      codeHash,
+      req.amountIn,
+      control,
+    );
+    if (slot === null) {
+      throw new Error(
+        `token-to-native simulation cannot prove balance storage for ${token}`,
+      );
+    }
+
+    const balanceData = ERC20.encodeFunctionData("balanceOf", [caller]);
+    const supplyData = ERC20.encodeFunctionData("totalSupply");
+    const raw = await this.callWithRpcControl(
+      "eth_simulateV1",
+      [{
+        blockStateCalls: [{
+          stateOverrides: {
+            [token]: {
+              stateDiff: {
+                [slot]: ethers.toBeHex(req.amountIn, 32),
+              },
+            },
+          },
+          calls: [
+            { from: caller, to: token, data: balanceData },
+            { from: caller, to: token, data: supplyData },
+            { from: caller, to: token, data: req.callData },
+            { from: caller, to: token, data: balanceData },
+            { from: caller, to: token, data: supplyData },
+          ],
+        }],
+        validation: false,
+        traceTransfers: true,
+      }, "latest"],
+      token,
+      control,
+    );
+    const calls = simulationCalls(raw);
+    if (calls.length !== 5 || calls.some((call) => call.status !== 1)) {
+      throw new Error(`token-to-native simulation failed for ${token}`);
+    }
+    const balanceBefore = decodeUintCall(calls[0].returnData, "balance before");
+    const supplyBefore = decodeUintCall(calls[1].returnData, "supply before");
+    const balanceAfter = decodeUintCall(calls[3].returnData, "balance after");
+    const supplyAfter = decodeUintCall(calls[4].returnData, "supply after");
+    if (balanceAfter > balanceBefore || supplyAfter > supplyBefore) {
+      throw new Error("token-to-native simulation observed increasing input state");
+    }
+    return {
+      tokenInSpent: balanceBefore - balanceAfter,
+      totalSupplyBurned: supplyBefore - supplyAfter,
+      nativeOut: nativeTransfersToCaller(calls[2].logs, token, caller),
+    };
+  }
+
+  private async resolveTokenBalanceSlot(
+    token: string,
+    caller: string,
+    codeHash: string,
+    probeValue: bigint,
+    control: StateCallControl,
+  ): Promise<string | null> {
+    const memoKey = `${token.toLowerCase()}|${caller.toLowerCase()}|${codeHash}`;
+    const memoized = tokenBalanceSlotMemo.get(memoKey);
+    if (
+      memoized !== undefined &&
+      await this.verifyTokenBalanceSlot(
+        token,
+        caller,
+        memoized,
+        probeValue,
+        control,
+      )
+    ) {
+      return memoized;
+    }
+    tokenBalanceSlotMemo.delete(memoKey);
+
+    const balanceData = ERC20.encodeFunctionData("balanceOf", [caller]);
+    const candidates = new Set<string>();
+    try {
+      const raw = await this.callWithRpcControl(
+        "eth_createAccessList",
+        [{ from: caller, to: token, data: balanceData }, "latest"],
+        token,
+        control,
+      ) as { accessList?: unknown };
+      const accessList = Array.isArray(raw?.accessList) ? raw.accessList : [];
+      for (const entry of accessList) {
+        const item = entry as { address?: unknown; storageKeys?: unknown };
+        if (
+          typeof item.address !== "string" ||
+          item.address.toLowerCase() !== token.toLowerCase() ||
+          !Array.isArray(item.storageKeys)
+        ) continue;
+        for (const key of item.storageKeys) {
+          if (typeof key === "string" && ethers.isHexString(key, 32)) {
+            candidates.add(key.toLowerCase());
+          }
+        }
+      }
+    } catch {
+      // A node may not implement eth_createAccessList. The verified bounded
+      // Solidity/Vyper layout scan below remains fail closed.
+    }
+    const abi = ethers.AbiCoder.defaultAbiCoder();
+    for (let slot = 0; slot < 32; slot++) {
+      candidates.add(ethers.keccak256(
+        abi.encode(["address", "uint256"], [caller, BigInt(slot)]),
+      ));
+      candidates.add(ethers.keccak256(
+        abi.encode(["uint256", "address"], [BigInt(slot), caller]),
+      ));
+    }
+    for (const candidate of [...candidates].slice(0, 128)) {
+      if (
+        await this.verifyTokenBalanceSlot(
+          token,
+          caller,
+          candidate,
+          probeValue,
+          control,
+        )
+      ) {
+        tokenBalanceSlotMemo.set(memoKey, candidate);
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private async verifyTokenBalanceSlot(
+    token: string,
+    caller: string,
+    slot: string,
+    probeValue: bigint,
+    control: StateCallControl,
+  ): Promise<boolean> {
+    const raw = await this.callWithRpcControl(
+      "eth_simulateV1",
+      [{
+        blockStateCalls: [{
+          stateOverrides: {
+            [token]: { stateDiff: { [slot]: ethers.toBeHex(probeValue, 32) } },
+          },
+          calls: [{
+            from: caller,
+            to: token,
+            data: ERC20.encodeFunctionData("balanceOf", [caller]),
+          }],
+        }],
+        validation: false,
+        traceTransfers: false,
+      }, "latest"],
+      token,
+      control,
+    );
+    const [call] = simulationCalls(raw);
+    if (!call || call.status !== 1) return false;
+    try {
+      return decodeUintCall(call.returnData, "balance slot") === probeValue;
+    } catch {
+      return false;
+    }
+  }
+
+  private async callWithRpcControl(
+    method: string,
+    params: readonly unknown[],
+    target: string,
+    control: StateCallControl,
+  ): Promise<unknown> {
+    const now = Date.now();
+    const transportDeadlineAtMs = now + 30_000;
+    const deadlineAtMs = earliestDeadline(
+      transportDeadlineAtMs,
+      control.deadlineAtMs,
+    )!;
+    if (control.signal?.aborted) {
+      throw stateCallAbort(target, "signal", control.signal.reason);
+    }
+    if (deadlineAtMs <= now) throw stateCallAbort(target, "deadline");
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort(control.signal?.reason);
+    control.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    const timer = setTimeout(
+      () => controller.abort(stateCallAbort(target, "timeout")),
+      Math.max(1, deadlineAtMs - now),
+    );
+    const payload: JsonRpcPayload = {
+      id: 1,
+      jsonrpc: "2.0",
+      method,
+      params: [...params],
+    };
+    try {
+      const response = await postJsonRpc(this.anvilUrl, payload, controller.signal);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`${method} HTTP ${response.statusCode}`);
+      }
+      const body = response.body as Partial<JsonRpcError> & { result?: unknown };
+      if (body.error) throw this.provider.getRpcError(payload, body as JsonRpcError);
+      return body.result;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const kind = control.signal?.aborted ? "signal" : "timeout";
+        throw stateCallAbort(target, kind, controller.signal.reason ?? error);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      control.signal?.removeEventListener("abort", abortFromCaller);
+    }
+  }
+
   async send(req: { from: string; to: string; data: string; gas?: string }): Promise<string> {
     const from = await prepareUnlockedSender(this.provider, req.from);
     const hash = await withTimeout(
@@ -1036,6 +1323,91 @@ function combineAbortSignals(
   if (parent === undefined) return nested;
   if (nested === undefined || nested === parent) return parent;
   return AbortSignal.any([parent, nested]);
+}
+
+interface SimulatedCallEvidence {
+  readonly status: number;
+  readonly returnData: string;
+  readonly logs: readonly {
+    readonly address: string;
+    readonly topics: readonly string[];
+    readonly data: string;
+  }[];
+}
+
+function simulationCalls(value: unknown): readonly SimulatedCallEvidence[] {
+  const block = Array.isArray(value) ? value[0] as { calls?: unknown } : null;
+  const calls = block && Array.isArray(block.calls) ? block.calls : [];
+  return calls.map((entry): SimulatedCallEvidence => {
+    const call = entry as {
+      status?: unknown;
+      returnData?: unknown;
+      logs?: unknown;
+    };
+    let status = 0;
+    try {
+      status = Number(BigInt(String(call.status ?? "0x0")));
+    } catch {
+      status = 0;
+    }
+    const logs = Array.isArray(call.logs)
+      ? call.logs.flatMap((entry) => {
+          const log = entry as {
+            address?: unknown;
+            topics?: unknown;
+            data?: unknown;
+          };
+          if (
+            typeof log.address !== "string" ||
+            !Array.isArray(log.topics) ||
+            typeof log.data !== "string"
+          ) return [];
+          return [{
+            address: log.address,
+            topics: log.topics.filter(
+              (topic): topic is string => typeof topic === "string",
+            ),
+            data: log.data,
+          }];
+        })
+      : [];
+    return {
+      status,
+      returnData:
+        typeof call.returnData === "string" ? call.returnData : "0x",
+      logs,
+    };
+  });
+}
+
+function decodeUintCall(data: string, label: string): bigint {
+  if (!ethers.isHexString(data) || ethers.dataLength(data) < 32) {
+    throw new Error(`token-to-native ${label} returned invalid data`);
+  }
+  return BigInt(data);
+}
+
+function nativeTransfersToCaller(
+  logs: readonly SimulatedCallEvidence["logs"][number][],
+  token: string,
+  caller: string,
+): bigint {
+  let total = 0n;
+  for (const log of logs) {
+    if (
+      log.address.toLowerCase() !== SYNTHETIC_NATIVE_TRANSFER_EMITTER ||
+      log.topics[0]?.toLowerCase() !== TRANSFER_TOPIC ||
+      topicAddress(log.topics[1]) !== token.toLowerCase() ||
+      topicAddress(log.topics[2]) !== caller.toLowerCase()
+    ) continue;
+    total += BigInt(log.data);
+  }
+  return total;
+}
+
+function topicAddress(topic: string | undefined): string {
+  if (!topic || !ethers.isHexString(topic, 32)) return "";
+  return `0x${topic.slice(-40)}`.toLowerCase();
 }
 
 function stateCallAbort(

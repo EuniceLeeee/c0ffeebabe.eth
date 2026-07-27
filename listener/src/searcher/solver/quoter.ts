@@ -38,12 +38,14 @@ export async function quote(
   poolToken0?: string,
   poolToken1?: string,
   v4QuoteStats?: V4QuotePathStats,
+  executor?: string,
 ): Promise<bigint> {
   if (amountIn <= 0n) return 0n;
   const routeAdapter = PRODUCTION_ADAPTER_FAMILIES.routes().findForEdge(adapterId);
   if (routeAdapter) {
     return routeAdapter.quoteExact({
       state,
+      executor,
       target,
       edgeAdapterId: adapterId,
       amountIn,

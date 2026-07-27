@@ -4902,6 +4902,9 @@ function revmReadState(base: StateBackend, backend: LiveStateBackend): StateBack
   const call = backend.call.bind(backend);
   return Object.assign(Object.create(base) as StateBackend, {
     call: (req: { to: string; data: string; from?: string }) => call(req),
+    // The prepared Revm API has no generic state-override value-delta
+    // operation yet. Never fall through to an unrelated/dead Anvil fork.
+    simulateTokenToNativeDelta: undefined,
   });
 }
 
@@ -4923,6 +4926,9 @@ function blockReadState(
         from: req.from,
         blockTag: blockNumber,
       }),
+    // This view is block-pinned for eth_call only; a base Anvil simulation
+    // would execute against a different source and must fail closed.
+    simulateTokenToNativeDelta: undefined,
   });
 }
 

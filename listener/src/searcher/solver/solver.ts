@@ -264,6 +264,7 @@ export class AnvilSolver implements Solver {
     // raw 6-decimal stable amount as wei would collapse the grid to dust.
     const rawCenter = await timed("quoteMs", "search-center quote", () =>
       resolveSearchCenter(plan, flashToken, controlledState, {
+        executor,
         cache: opts.cache,
         quoteSource: controlledQuoteSource,
         v4QuoteStats,
@@ -300,6 +301,7 @@ export class AnvilSolver implements Solver {
       try {
         amounts = await timed("quoteMs", "amount quote propagation", () =>
           propagateAmounts(plan.tokenPath, flashAmount, controlledState, {
+            executor,
             fluidDebtBps,
             cache: opts.cache,
             quoteSource: controlledQuoteSource,
@@ -429,6 +431,7 @@ export class AnvilSolver implements Solver {
       try {
         const propagated = await timed("simMs", "final amount propagation", () =>
           propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, controlledState, {
+            executor,
             fluidDebtBps: cand.fluidDebtBps,
             cache: opts.cache,
             quoteSource: controlledQuoteSource,
@@ -763,6 +766,7 @@ export async function resolveSearchCenter(
   flashToken: string,
   state: StateBackend,
   options: {
+    executor?: string;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
@@ -859,6 +863,7 @@ async function quoteImpactOutput(
   victimAmount: bigint,
   state: StateBackend,
   options: {
+    executor?: string;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
@@ -904,6 +909,7 @@ async function approximatePrefixInputForOutput(
   desiredOutput: bigint,
   state: StateBackend,
   options: {
+    executor?: string;
     cache?: PoolStateCache;
     quoteSource?: AmountQuoteSource;
     v4QuoteStats?: V4QuotePathStats;
@@ -920,6 +926,7 @@ async function approximatePrefixInputForOutput(
     if (options.shouldStop?.()) throw new Error("reverse-impact center aborted: deadline reached");
     try {
       const amounts = await propagateAmounts(prefix, flashAmount, state, {
+        executor: options.executor,
         cache: options.cache,
         quoteSource: options.quoteSource,
         v4QuoteStats: options.v4QuoteStats,

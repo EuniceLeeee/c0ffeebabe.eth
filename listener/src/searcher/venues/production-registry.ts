@@ -15,6 +15,7 @@ import { psmAdapter } from "./protocols/psm.js";
 import { eigenpieAdapter } from "./protocols/eigenpie.js";
 import { rocksolidAdapter } from "./protocols/rocksolid.js";
 import { wstethAdapter } from "./protocols/wsteth.js";
+import { selfBurnNativeAdapter } from "./protocols/self-burn-native.js";
 import { balancerV3Adapter } from "./swaps/balancer-v3.js";
 import { curvePlainAdapter } from "./swaps/curve-plain.js";
 import { curveUnderlyingAdapter } from "./swaps/curve-underlying.js";
@@ -54,6 +55,7 @@ export const PRODUCTION_ADAPTER_FAMILIES = new AdapterFamilyRegistry([
     eigenpieAdapter,
     rocksolidAdapter,
     wstethAdapter,
+    selfBurnNativeAdapter,
     fluidCreditAdapter,
     balancerFlashFamily,
     morphoFlashFamily,

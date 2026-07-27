@@ -89,6 +89,7 @@ interface RoutePoolIdentity {
   nonStandardRedeem?: boolean;
   redeemTokenOut?: string;
   receiptEmitters?: string[];
+  logicalInstanceId?: string;
 }
 
 interface AdapterReplayLeg {
@@ -258,6 +259,11 @@ const FAMILY_SOURCE_FILES: Readonly<Partial<Record<ExecutionFamilyId, readonly s
   "protocol:psm": ["src/searcher/venues/protocols/psm.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
   "protocol:rocksolid": ["src/searcher/venues/protocols/rocksolid.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
   "protocol:wsteth": ["src/searcher/venues/protocols/wsteth.ts", "src/searcher/venues/protocols/protocol-plan.ts", "src/searcher/venues/protocols/protocol-quote.ts"],
+  "protocol:self-burn-native": [
+    "src/searcher/venues/protocols/self-burn-native.ts",
+    "src/searcher/venues/protocols/self-burn-native-discovery.ts",
+    "src/adapters/self-burn-native.ts",
+  ],
   "credit:fluid": ["src/searcher/venues/credit/fluid.ts"],
 };
 
@@ -459,7 +465,7 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
     "adapter", "address", "poolId", "token0", "token1", "underlyingCoins",
     "currency0", "currency1", "fee", "tickSpacing", "hooks", "fixedTokenIn",
     "fixedTokenOut", "fixedSlotKind", "fixedProtocolAction", "nonStandardRedeem",
-    "redeemTokenOut", "receiptEmitters",
+    "redeemTokenOut", "receiptEmitters", "logicalInstanceId",
   ], field, ["adapter", "address"]);
   const adapter = nonEmptyString(value.adapter, `${field}.adapter`) as PoolEntry["adapter"];
   PRODUCTION_ADAPTER_FAMILIES.routes().forPool(adapter);
@@ -478,6 +484,12 @@ function parsePool(raw: unknown, field: string): RoutePoolIdentity {
     pool.fixedSlotKind = value.fixedSlotKind as RoutePoolIdentity["fixedSlotKind"];
   }
   if (value.fixedProtocolAction !== undefined) pool.fixedProtocolAction = protocolAction(value.fixedProtocolAction, `${field}.fixedProtocolAction`);
+  if (value.logicalInstanceId !== undefined) {
+    pool.logicalInstanceId = nonEmptyString(
+      value.logicalInstanceId,
+      `${field}.logicalInstanceId`,
+    );
+  }
   if (value.nonStandardRedeem !== undefined) {
     if (typeof value.nonStandardRedeem !== "boolean") throw new Error(`${field}.nonStandardRedeem must be boolean`);
     pool.nonStandardRedeem = value.nonStandardRedeem;
@@ -1253,6 +1265,30 @@ function materializeReplayPool(
   fixtureId: string,
 ): PoolEntry {
   const pool: PoolEntry = { ...leg.pool };
+  if (
+    pool.fixedTokenIn !== undefined &&
+    pool.fixedTokenOut !== undefined &&
+    pool.fixedSlotKind !== undefined
+  ) {
+    const tokenIn = ethers.getAddress(leg.tokenIn);
+    const tokenOut = ethers.getAddress(leg.tokenOut);
+    if (
+      ethers.getAddress(pool.fixedTokenIn) !== tokenIn ||
+      ethers.getAddress(pool.fixedTokenOut) !== tokenOut
+    ) {
+      throw new Error(
+        `route leg ${leg.seq} fixed token identity disagrees with trace route`,
+      );
+    }
+    pool.verifiedRoutes = [{
+      edgeAdapterId: leg.edgeAdapterId,
+      tokenIn,
+      tokenOut,
+      slotKind: pool.fixedSlotKind,
+      protocolAction: pool.fixedProtocolAction,
+    }];
+    return pool;
+  }
   if (familyForLeg(leg, fixtureId) !== "protocol:eigenpie") {
     return pool;
   }

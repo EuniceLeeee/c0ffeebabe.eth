@@ -607,9 +607,16 @@ async function main(): Promise<void> {
     const callBackend = new PinnedCallBackend(provider, cfg.blockNumber);
     const graphBackend = tokenBackend(provider, cfg.blockNumber);
 
+    // The production-replay wrapper passes a hash-frozen copy of the live
+    // runtime graph. Those rows are already admitted and intentionally omit
+    // historical activity scores; filtering them again at minScore=1 would
+    // erase the real live graph. Ordinary hunt inputs retain the scored
+    // universe contract.
+    const universeMinScore =
+      process.env.PRODUCTION_REPLAY_DISCOVERY_ARTIFACT ? 0 : 1;
     const rawUniversePools = loadPoolUniverse(cfg.universePath, {
       maxPools: cfg.maxPools,
-      minScore: 1,
+      minScore: universeMinScore,
     }).map(lowerPoolEntry);
     const staticProtocolPools = POOL_REGISTRY
       .filter((pool) => pool.adapter !== "fluid-vault")

@@ -11,7 +11,25 @@ import {
 } from "./route-instance-identity.js";
 
 export type BlockScanPricingLane = "swap" | "protocol";
-export type StateReadTransport = "multicall-safe" | "rpc-batch";
+export type StateReadTransport =
+  | "multicall-safe"
+  | "rpc-batch"
+  | "eth-create-access-list"
+  | "eth-simulate-v1";
+
+export interface StateSimulationCall {
+  readonly from: string;
+  readonly to: string;
+  readonly data: string;
+}
+
+export interface StateSimulationSpec {
+  readonly calls: readonly StateSimulationCall[];
+  readonly stateOverrides?: Readonly<Record<string, {
+    readonly stateDiff?: Readonly<Record<string, string>>;
+  }>>;
+  readonly traceTransfers: boolean;
+}
 
 export interface BlockSource {
   readonly number: number;
@@ -226,6 +244,8 @@ export interface StateRead {
   readonly data: string;
   readonly from?: string;
   readonly transport: StateReadTransport;
+  /** Present only for the narrow, coordinator-owned eth_simulateV1 transport. */
+  readonly simulation?: StateSimulationSpec;
   /** Contract intentionally returns a quote as revert bytes (for example Fluid). */
   readonly acceptRevertData?: boolean;
 }

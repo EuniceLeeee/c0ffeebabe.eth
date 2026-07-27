@@ -300,7 +300,11 @@ async function main(): Promise<void> {
       cfg.universePath,
       tempRoot,
       cfg.maxPools,
-      1,
+      // The supplied artifact may already be the exact live runtime graph.
+      // Re-applying active-pool scoring here turns its intentionally unscored
+      // admitted rows into a zero-pool universe and manufactures a false
+      // discovery failure. Top-N remains enforced by maxPools.
+      0,
     );
     const winner = await provider.getTransactionReceipt(cfg.winnerTx);
     if (!winner || winner.status !== 1) throw new Error("winner receipt missing or reverted");
@@ -465,18 +469,7 @@ async function main(): Promise<void> {
       discoveredPoolKeys,
     );
     const artifactPath = resolve(tempRoot, "verified-universe.json");
-    const artifactSha256 = writeProductionReplayDiscoveryArtifact(artifactPath, {
-      schemaVersion: PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
-      producer: PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
-      sourceFromBlock: cfg.sourceFromBlock,
-      sourceToBlock: parentBlock,
-      identityBlock: parentBlock,
-      sourceUniverse: frozenUniverse.evidence,
-      sourceComplete: sourceComplete as true,
-      evaluationComplete: evaluationComplete as true,
-      discoveredPoolKeys,
-      pools: discoveredPools,
-    });
+    let artifactSha256 = "";
     report = emptyReport(
       cfg,
       parentBlock,
@@ -502,10 +495,28 @@ async function main(): Promise<void> {
       exactCycleMatched: false,
     };
     if (!sourceComplete || !evaluationComplete || discoveredPoolKeys.length === 0) {
-      report.failure = "source discovery was incomplete or admitted no dynamic protocol instance";
+      report.failure =
+        "source discovery was incomplete or admitted no dynamic protocol instance; " +
+        summarizeDiscoveryRejections(
+          pass.result.events,
+          pass.result.familySourceCoverage,
+        );
       finish(report, cfg.outPath);
       return;
     }
+    artifactSha256 = writeProductionReplayDiscoveryArtifact(artifactPath, {
+      schemaVersion: PRODUCTION_REPLAY_ARTIFACT_SCHEMA,
+      producer: PRODUCTION_REPLAY_ARTIFACT_PRODUCER,
+      sourceFromBlock: cfg.sourceFromBlock,
+      sourceToBlock: parentBlock,
+      identityBlock: parentBlock,
+      sourceUniverse: frozenUniverse.evidence,
+      sourceComplete: true,
+      evaluationComplete: true,
+      discoveredPoolKeys,
+      pools: discoveredPools,
+    });
+    report.discovery.artifactSha256 = artifactSha256;
     const discoveredEdgeKeys = new Set(
       [...pass.projection.ownership.admissions.values()]
         .flatMap((item) => item.edges)
@@ -932,6 +943,9 @@ async function runHunt(input: {
     HUNT_MAX_POOLS: String(input.cfg.maxPools),
     HUNT_MAX_HOPS: String(input.cfg.maxHops),
     HUNT_MIN_SPREAD_BPS: "0",
+    // A content-addressed full live graph may need a cold, one-time state
+    // bootstrap. Keep this separate from the measured current-block pass.
+    HUNT_PREWARM_BUDGET_MS: String(input.cfg.scanBudgetMs),
     HUNT_SCAN_BUDGET_MS: String(input.cfg.scanBudgetMs),
     HUNT_PASS_BUDGET_MS: String(input.cfg.passBudgetMs),
     HUNT_MAX_CANDIDATES: String(input.cfg.maxCandidates),
@@ -1432,6 +1446,43 @@ function finish(report: ReplayReport, outPath: string | null): void {
   if (outPath) writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
   console.log(`PRODUCTION_REPLAY_RESULT=${JSON.stringify(report)}`);
   if (report.stages.ev !== "allow") process.exitCode = 1;
+}
+
+function summarizeDiscoveryRejections(
+  events: readonly {
+    readonly adapterId: string;
+    readonly target: string | null;
+    readonly verdict: "rejected" | "would_admit";
+    readonly stage: string;
+    readonly reason: string | null;
+  }[],
+  familySourceCoverage: readonly {
+    readonly familyId: string;
+    readonly sourceId: string;
+    readonly complete: boolean;
+    readonly issues: readonly string[];
+  }[],
+): string {
+  const incomplete = familySourceCoverage
+    .filter((item) => !item.complete)
+    .map((item) =>
+      `${item.familyId}/${item.sourceId}:` +
+      `${item.issues.join(",") || "incomplete_without_reason"}`
+    );
+  const rejected = events
+    .filter((event) => event.verdict === "rejected")
+    .slice(-32)
+    .map((event) =>
+      `${event.adapterId}@${event.target ?? "none"}:${event.stage}:` +
+      `${event.reason ?? "unspecified"}`
+    );
+  const details = [
+    ...incomplete.map((item) => `source=${item}`),
+    ...rejected,
+  ];
+  return details.length === 0
+    ? "no structured rejection was emitted"
+    : details.join(" | ");
 }
 
 function safeError(error: unknown): string {
