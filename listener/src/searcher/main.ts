@@ -941,7 +941,7 @@ async function main(): Promise<void> {
       maxConcurrentMutationProofs: Math.max(
         1,
         Number(
-          process.env.SEARCHER_BLOCKSCAN_MUTATION_PROOF_CONCURRENCY ?? "1",
+          process.env.SEARCHER_BLOCKSCAN_MUTATION_PROOF_CONCURRENCY ?? "3",
         ),
       ),
       multicallMode:

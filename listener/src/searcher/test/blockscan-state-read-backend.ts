@@ -46,6 +46,10 @@ await testMutationProofParentAbort();
 await testCanonicalMutationRange();
 await testMutationProofTelemetry();
 await testSharedMutationProofSessions();
+await testCompletedHeaderProofIsReusedByStaggeredDescriptors();
+await testCanonicalHeaderBypassesSaturatedDescriptorSlot();
+await testFinalCanonicalCasBypassesDescriptorQueue();
+await testCachedHeaderStillRejectsLogAndFinalCasReorg();
 await testFamilyAbortDoesNotCancelSharedHeader();
 await testMutationRangeRejectsReorgAndRemovedLog();
 
@@ -1142,13 +1146,17 @@ async function testSharedMutationProofSessions(): Promise<void> {
     addresses: [callerAddress],
     topics: [[`0x${"bb".repeat(32)}`]],
   });
+  const descriptorC = createMutationQueryDescriptor({
+    addresses: ["0x0000000000000000000000000000000000000003"],
+    topics: [[`0x${"cc".repeat(32)}`]],
+  });
   let headerBatches = 0;
   let logCalls = 0;
   let finalCasCalls = 0;
   let activeLogs = 0;
   let maxActiveLogs = 0;
   const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
-    maxConcurrentMutationProofs: 2,
+    maxConcurrentMutationProofs: 3,
     fetchImpl: (async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as RpcRequest[];
       if (body[0]?.method === "eth_getLogs") {
@@ -1192,7 +1200,7 @@ async function testSharedMutationProofSessions(): Promise<void> {
     deadlineAtMs: Date.now() + 10_000,
     signal: new AbortController().signal,
   };
-  const [rangeA, rangeB] = await Promise.all([
+  const [rangeA, rangeB, rangeC] = await Promise.all([
     backend.readCanonicalMutationRange(
       descriptorA,
       previous,
@@ -1205,17 +1213,29 @@ async function testSharedMutationProofSessions(): Promise<void> {
       through,
       control,
     ),
+    backend.readCanonicalMutationRange(
+      descriptorC,
+      previous,
+      through,
+      control,
+    ),
   ]);
   assert.equal(headerBatches, 1, "equal M→N callers share one header path");
-  assert.equal(logCalls, 2, "different descriptors retain exact log queries");
-  assert.equal(maxActiveLogs, 2, "different log descriptors use bounded concurrency");
-  assert.equal(finalCasCalls, 2, "each distinct descriptor retains a final CAS");
+  assert.equal(logCalls, 3, "different descriptors retain exact log queries");
+  assert.equal(maxActiveLogs, 3, "configured log descriptors run concurrently");
+  assert.equal(finalCasCalls, 3, "each distinct descriptor retains a final CAS");
   assert.equal(
     rangeA.canonicalPathFingerprint,
     rangeB.canonicalPathFingerprint,
   );
+  assert.equal(
+    rangeA.canonicalPathFingerprint,
+    rangeC.canonicalPathFingerprint,
+  );
   assert.notEqual(rangeA.queryDescriptorFingerprint, rangeB.queryDescriptorFingerprint);
+  assert.notEqual(rangeA.queryDescriptorFingerprint, rangeC.queryDescriptorFingerprint);
   assert.notEqual(rangeA.rangeFingerprint, rangeB.rangeFingerprint);
+  assert.notEqual(rangeA.rangeFingerprint, rangeC.rangeFingerprint);
 
   let identicalRequests = 0;
   const identicalBackend = new JsonRpcBlockScanStateReadBackend(
@@ -1266,6 +1286,423 @@ async function testSharedMutationProofSessions(): Promise<void> {
   );
   assert.equal(identicalA, identicalB);
   console.log("[state-read-backend] shared path + exact descriptor dedupe: PASS");
+}
+
+async function testCompletedHeaderProofIsReusedByStaggeredDescriptors(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptorA = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    addresses: [callerAddress],
+    topics: [[`0x${"bb".repeat(32)}`]],
+  });
+  let headerBatches = 0;
+  let markFirstLogStarted!: () => void;
+  const firstLogStarted = new Promise<void>((resolve) => {
+    markFirstLogStarted = resolve;
+  });
+  let releaseFirstLog!: () => void;
+  const firstLogRelease = new Promise<void>((resolve) => {
+    releaseFirstLog = resolve;
+  });
+  let markSecondLogStarted!: () => void;
+  const secondLogStarted = new Promise<void>((resolve) => {
+    markSecondLogStarted = resolve;
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxConcurrentMutationProofs: 2,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "eth_getLogs") {
+        const filter = body[0].params[0] as { readonly address?: unknown };
+        if (filter.address === targetAddress) {
+          markFirstLogStarted();
+          await firstLogRelease;
+        } else {
+          assert.equal(filter.address, callerAddress);
+          markSecondLogStarted();
+        }
+        return fakeResponse([success(body[0].id, [])]);
+      }
+      if (body.length === 1) {
+        return fakeResponse([
+          success(body[0].id, { hash: sourceBlockHash }),
+        ]);
+      }
+      headerBatches++;
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  const first = backend.readCanonicalMutationRange(
+    descriptorA,
+    previous,
+    through,
+    control,
+  );
+  await firstLogStarted;
+  const second = backend.readCanonicalMutationRange(
+    descriptorB,
+    previous,
+    through,
+    control,
+  );
+  await secondLogStarted;
+  releaseFirstLog();
+  const [rangeA, rangeB] = await Promise.all([first, second]);
+  assert.equal(
+    headerBatches,
+    1,
+    "a completed exact-range header proof must remain reusable",
+  );
+  assert.equal(
+    rangeA.canonicalPathFingerprint,
+    rangeB.canonicalPathFingerprint,
+  );
+  console.log("[state-read-backend] completed header proof reuse: PASS");
+}
+
+async function testCanonicalHeaderBypassesSaturatedDescriptorSlot(): Promise<void> {
+  const earlierPreviousHash = `0x${"0f".repeat(32)}`;
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptorA = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    addresses: [callerAddress],
+    topics: [[`0x${"bb".repeat(32)}`]],
+  });
+  let markFirstLogStarted!: () => void;
+  const firstLogStarted = new Promise<void>((resolve) => {
+    markFirstLogStarted = resolve;
+  });
+  let releaseFirstLog!: () => void;
+  const firstLogRelease = new Promise<void>((resolve) => {
+    releaseFirstLog = resolve;
+  });
+  let markSecondHeaderStarted!: () => void;
+  const secondHeaderStarted = new Promise<void>((resolve) => {
+    markSecondHeaderStarted = resolve;
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxConcurrentMutationProofs: 1,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "eth_getLogs") {
+        markFirstLogStarted();
+        await firstLogRelease;
+        return fakeResponse([success(body[0].id, [])]);
+      }
+      if (
+        body.some((request) =>
+          request.method === "eth_getBlockByNumber" &&
+          Number(BigInt(request.params[0])) === sourceBlock - 2
+        )
+      ) {
+        markSecondHeaderStarted();
+      }
+      if (body.length === 1) {
+        return fakeResponse([
+          success(body[0].id, { hash: sourceBlockHash }),
+        ]);
+      }
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 2
+            ? earlierPreviousHash
+            : number === sourceBlock - 1
+            ? previousHash
+            : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : number === sourceBlock - 1
+            ? earlierPreviousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const first = backend.readCanonicalMutationRange(
+    descriptorA,
+    previous,
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  await firstLogStarted;
+  const secondController = new AbortController();
+  const second = backend.readCanonicalMutationRange(
+    descriptorB,
+    {
+      number: sourceBlock - 2,
+      hash: earlierPreviousHash,
+      generation: sourceGeneration - 2,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: secondController.signal,
+    },
+  );
+  const headerStartedBeforeDescriptorRelease = await Promise.race([
+    secondHeaderStarted.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+  assert.equal(
+    headerStartedBeforeDescriptorRelease,
+    true,
+    "canonical headers must not queue behind a descriptor log",
+  );
+  secondController.abort(new Error("second family stopped after header proof"));
+  await assert.rejects(() => second, /second family stopped/);
+  releaseFirstLog();
+  await first;
+  console.log("[state-read-backend] header bypasses descriptor slot: PASS");
+}
+
+async function testFinalCanonicalCasBypassesDescriptorQueue(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptorA = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    addresses: [callerAddress],
+    topics: [[`0x${"bb".repeat(32)}`]],
+  });
+  let markSecondLogStarted!: () => void;
+  const secondLogStarted = new Promise<void>((resolve) => {
+    markSecondLogStarted = resolve;
+  });
+  let releaseSecondLog!: () => void;
+  const secondLogRelease = new Promise<void>((resolve) => {
+    releaseSecondLog = resolve;
+  });
+  let markFinalCasStarted!: () => void;
+  const finalCasStarted = new Promise<void>((resolve) => {
+    markFinalCasStarted = resolve;
+  });
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxConcurrentMutationProofs: 1,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "eth_getLogs") {
+        const filter = body[0].params[0] as { readonly address?: unknown };
+        if (filter.address === callerAddress) {
+          markSecondLogStarted();
+          await secondLogRelease;
+        } else {
+          assert.equal(filter.address, targetAddress);
+        }
+        return fakeResponse([success(body[0].id, [])]);
+      }
+      if (body.length === 1) {
+        markFinalCasStarted();
+        return fakeResponse([
+          success(body[0].id, { hash: sourceBlockHash }),
+        ]);
+      }
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  const [first, second] = [
+    backend.readCanonicalMutationRange(
+      descriptorA,
+      previous,
+      through,
+      control,
+    ),
+    backend.readCanonicalMutationRange(
+      descriptorB,
+      previous,
+      through,
+      control,
+    ),
+  ];
+  await secondLogStarted;
+  const casStartedBeforeDescriptorRelease = await Promise.race([
+    finalCasStarted.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+  assert.equal(
+    casStartedBeforeDescriptorRelease,
+    true,
+    "final canonical CAS must not queue behind another descriptor log",
+  );
+  releaseSecondLog();
+  await Promise.all([first, second]);
+  console.log("[state-read-backend] final CAS bypasses descriptor queue: PASS");
+}
+
+async function testCachedHeaderStillRejectsLogAndFinalCasReorg(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const thirdAddress = "0x0000000000000000000000000000000000000003";
+  const descriptorA = createMutationQueryDescriptor({
+    addresses: [targetAddress],
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const descriptorB = createMutationQueryDescriptor({
+    addresses: [callerAddress],
+    topics: [[`0x${"bb".repeat(32)}`]],
+  });
+  const descriptorC = createMutationQueryDescriptor({
+    addresses: [thirdAddress],
+    topics: [[`0x${"cc".repeat(32)}`]],
+  });
+  let headerBatches = 0;
+  let replaceFinalCas = false;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxConcurrentMutationProofs: 3,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      if (body[0]?.method === "eth_getLogs") {
+        const filter = body[0].params[0] as { readonly address?: unknown };
+        return fakeResponse([success(
+          body[0].id,
+          filter.address === callerAddress
+            ? [{
+                blockNumber: "0x64",
+                blockHash: otherBlockHash,
+                transactionIndex: "0x0",
+                logIndex: "0x0",
+                address: callerAddress,
+                topics: [`0x${"bb".repeat(32)}`],
+                data: "0x",
+                removed: false,
+              }]
+            : [],
+        )]);
+      }
+      if (body.length === 1) {
+        return fakeResponse([
+          success(body[0].id, {
+            hash: replaceFinalCas ? otherBlockHash : sourceBlockHash,
+          }),
+        ]);
+      }
+      headerBatches++;
+      return fakeResponse(body.map((request) => {
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const previous: BlockSource = {
+    number: sourceBlock - 1,
+    hash: previousHash,
+    generation: sourceGeneration - 1,
+  };
+  const through: BlockSource = {
+    number: sourceBlock,
+    hash: sourceBlockHash,
+    generation: sourceGeneration,
+  };
+  const control = {
+    deadlineAtMs: Date.now() + 10_000,
+    signal: new AbortController().signal,
+  };
+  await backend.readCanonicalMutationRange(
+    descriptorA,
+    previous,
+    through,
+    control,
+  );
+  await assert.rejects(
+    () => backend.readCanonicalMutationRange(
+      descriptorB,
+      previous,
+      through,
+      control,
+    ),
+    /block hash is not on canonical path/,
+  );
+  replaceFinalCas = true;
+  await assert.rejects(
+    () => backend.readCanonicalMutationRange(
+      descriptorC,
+      previous,
+      through,
+      control,
+    ),
+    /source block hash mismatch/,
+  );
+  assert.equal(
+    headerBatches,
+    1,
+    "cached header hits must still apply descriptor log and final CAS fences",
+  );
+  console.log("[state-read-backend] cached header reorg fences: PASS");
 }
 
 async function testFamilyAbortDoesNotCancelSharedHeader(): Promise<void> {

@@ -153,10 +153,16 @@ export class JsonRpcBlockScanStateReadBackend
    * Mutation proofs are the prerequisite for carrying unchanged state into the
    * current generation. Keep bounded transport slots outside the bulk
    * current/static/funding FIFO so a full state-read queue cannot force every
-   * incremental family back to a full current-N refresh. Equal ranges share
-   * one canonical header path; descriptor-specific log filters remain exact.
+   * incremental family back to a full current-N refresh. Header proofs use
+   * their own slot and remain reusable for the exact content-addressed range;
+   * one slow descriptor log therefore cannot force sibling families to repeat
+   * or time out before reading the same canonical path. Final canonical CAS
+   * likewise has an independent slot so completed logs do not wait behind
+   * later descriptor queries.
    */
-  private readonly mutationProofSlots: AbortableSemaphore;
+  private readonly mutationHeaderSlots: AbortableSemaphore;
+  private readonly mutationDescriptorSlots: AbortableSemaphore;
+  private readonly mutationFinalCasSlots: AbortableSemaphore;
   private readonly fetchImpl: typeof fetch;
   private readonly onMutationProofTelemetry:
     | ((telemetry: MutationProofTransportTelemetry) => void)
@@ -170,6 +176,7 @@ export class JsonRpcBlockScanStateReadBackend
     string,
     Promise<CanonicalHeaderProof>
   >();
+  private canonicalHeaderSessionScope: string | null = null;
   private nextId = 1;
 
   constructor(
@@ -203,9 +210,11 @@ export class JsonRpcBlockScanStateReadBackend
         `invalid mutation proof concurrency ${maxConcurrentMutationProofs}`,
       );
     }
-    this.mutationProofSlots = new AbortableSemaphore(
+    this.mutationHeaderSlots = new AbortableSemaphore(1);
+    this.mutationDescriptorSlots = new AbortableSemaphore(
       maxConcurrentMutationProofs,
     );
+    this.mutationFinalCasSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.onMutationProofTelemetry = options.onMutationProofTelemetry;
     this.now = options.now ?? (() => performance.now());
@@ -567,12 +576,16 @@ export class JsonRpcBlockScanStateReadBackend
             }),
         topics: descriptor.topics,
       };
-      const logRead = await this.postWithSlotsMeasured(this.mutationProofSlots, [{
+      const logRead = await this.postWithSlotsMeasured(
+        this.mutationDescriptorSlots,
+        [{
         jsonrpc: "2.0",
         id: logId,
         method: "eth_getLogs",
         params: [logFilter],
-      }], controller.signal);
+        }],
+        controller.signal,
+      );
       logTelemetry = logRead.telemetry;
       const logResponses = logRead.responses;
       phase = "log-validation";
@@ -618,7 +631,7 @@ export class JsonRpcBlockScanStateReadBackend
       finalCasTelemetry = await this.verifyCanonicalSourceWithSlotsMeasured(
         through,
         controller.signal,
-        this.mutationProofSlots,
+        this.mutationFinalCasSlots,
       );
       const canonicalPathFingerprint = headerProof.canonicalPathFingerprint;
       const rangeFingerprint = deterministicHash({
@@ -694,6 +707,15 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<CanonicalHeaderProof> {
+    const scope = [
+      through.number,
+      through.hash.toLowerCase(),
+      through.generation,
+    ].join("\u001f");
+    if (this.canonicalHeaderSessionScope !== scope) {
+      this.canonicalHeaderSessions.clear();
+      this.canonicalHeaderSessionScope = scope;
+    }
     const key = canonicalHeaderSessionKey(fromExclusive, through);
     let session = this.canonicalHeaderSessions.get(key);
     let shared = true;
@@ -704,21 +726,25 @@ export class JsonRpcBlockScanStateReadBackend
         through,
         control.signal,
       );
-      session = created.finally(() => {
+      session = created.catch((error) => {
         if (this.canonicalHeaderSessions.get(key) === session) {
           this.canonicalHeaderSessions.delete(key);
         }
+        throw error;
       });
       this.canonicalHeaderSessions.set(key, session);
     }
+    const sharedWaitStartedAtMs = this.now();
     const proof = await awaitWithSignal(session, control.signal);
     if (!shared) return proof;
     return Object.freeze({
       ...proof,
       telemetry: Object.freeze({
-        ...proof.telemetry,
+        ...emptyMutationProofPhaseTelemetry(),
+        wallMs: Math.max(0, this.now() - sharedWaitStartedAtMs),
         shared: true,
       }),
+      validationMs: 0,
     });
   }
 
@@ -746,7 +772,7 @@ export class JsonRpcBlockScanStateReadBackend
         });
       }
       const headerRead = await this.postWithSlotsMeasured(
-        this.mutationProofSlots,
+        this.mutationHeaderSlots,
         headerRequests,
         signal,
       );
