@@ -334,6 +334,24 @@ nearest-rank. Timeouts remain in the sample.
 
 ## 6. Acceptance
 
+### 6.0 Immediate independent-B live diagnostic
+
+Before the paired latency experiment, deploy the frozen production changes as one isolated B process while
+leaving the running A process, commit, PID and restart count unchanged. This is a restore-output diagnostic,
+not an A/B win decision and not the six-step fixed gate.
+
+The immediate diagnostic passes only when one complete, non-startup/non-catch-up B block-scan pass reports:
+
+- `priced > 0` against the same expected total currently reported as `28235`;
+- enumeration runs instead of being marked `not-run` because the state stage failed;
+- the source block/hash remains current-N canonical;
+- no graph, universe, hop or candidate-cap reduction was used.
+
+If B continues to report `priced=0/28235`, this slice has not restored output. Use the new phase telemetry to
+locate the live failure, repair it on the same diagnostic branch, rerun deterministic controls, and redeploy
+B until the criterion above passes or a genuine external blocker is identified. A passing result earns only
+`blockscan_output_restored`; it does not establish the end-to-end latency or `fixed` gates below.
+
 ### 6.1 Restore-output gate
 
 All are required:
