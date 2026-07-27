@@ -135,4 +135,45 @@ assert(ev.bidEth === 49_000n, `bid ${ev.bidEth}`);
 assert(ev.netEvWei === 49_000n, `net EV ${ev.netEvWei}`);
 console.log("[runtime-defaults] production defaults retain positive EV: PASS");
 
-console.log("runtime-defaults PASS (6/6)");
+const mainSource = readFileSync(
+  new URL("../main.ts", import.meta.url),
+  "utf8",
+);
+assert(
+  mainSource.includes(
+    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK === "1"',
+  ),
+  "N-1 degraded fallback must remain explicit opt-in",
+);
+assert(
+  mainSource.includes(
+    'process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "20000"',
+  ),
+  "N-1 background pricing must retain its declared 20s default",
+);
+console.log("[runtime-defaults] N-1 fallback remains explicit opt-in: PASS");
+
+const atomicStart = mainSource.indexOf(
+  "async function maybeSubmitBlockScanAtomic",
+);
+const atomicSource = mainSource.slice(atomicStart);
+const simulationAt = atomicSource.indexOf("simulator.simulate(resolved)");
+const postSimulationFenceAt = atomicSource.indexOf(
+  '"post-simulation source-head verification"',
+);
+const finalSimSucceededAt = atomicSource.indexOf(
+  'finalSimStatus = "succeeded"',
+);
+const evEvaluationAt = atomicSource.indexOf("evaluateEv(");
+assert(
+  atomicStart >= 0 &&
+    simulationAt >= 0 &&
+    simulationAt < postSimulationFenceAt &&
+    postSimulationFenceAt < finalSimSucceededAt &&
+    finalSimSucceededAt < evEvaluationAt &&
+    atomicSource.includes('"blockscan_stale_after_sim"'),
+  "post-simulation block/hash fence must precede success and EV evaluation",
+);
+console.log("[runtime-defaults] final-sim head/hash fence ordering: PASS");
+
+console.log("runtime-defaults PASS (8/8)");

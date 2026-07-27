@@ -790,6 +790,8 @@ async function main(): Promise<void> {
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
   const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
+  const blockScanNMinusOneFallback =
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK === "1";
   if (blindProductionAudit && !enableBlockScan) {
     throw new Error("blind production audit requires SEARCHER_ENABLE_BLOCK_SCAN=1");
   }
@@ -827,6 +829,13 @@ async function main(): Promise<void> {
   const blockScanPassBudgetMs = Number.isFinite(blockScanPassBudgetRaw)
     ? Math.max(1, Math.floor(blockScanPassBudgetRaw))
     : 11_000;
+  const blockScanNMinusOneStateBudgetRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "20000",
+  );
+  const blockScanNMinusOneStateBudgetMs =
+    Number.isFinite(blockScanNMinusOneStateBudgetRaw)
+      ? Math.max(1, Math.floor(blockScanNMinusOneStateBudgetRaw))
+      : 20_000;
   const blockScanLargeGraphPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
   );
@@ -1073,6 +1082,8 @@ async function main(): Promise<void> {
       `largeGraphBudgetMs=${blockScanLargeGraphPassBudgetMs} ` +
       `largeGraphEdges=${blockScanLargeGraphEdgeThreshold} ` +
       `solveReserveMs=${blockScanSolveReserveMs} ` +
+      `nMinusOneFallback=${blockScanNMinusOneFallback ? "on" : "off"} ` +
+      `nMinusOneStateBudgetMs=${blockScanNMinusOneStateBudgetMs} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -2170,6 +2181,8 @@ async function main(): Promise<void> {
     passBudgetMs: blockScanPassBudgetMs,
     startupWarmEnabled: enableBlockScan && !blindProductionAudit,
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
+    nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
+    nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
     hotPricingFamilyBudgetMs: blockScanHotPricingFamilyBudgetMs,
     runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
     refineCandidates: blockScanRefineCandidates,
@@ -2289,6 +2302,8 @@ async function main(): Promise<void> {
       refineCandidates: blockScanRefineCandidates,
       solveConcurrency: blockScanSolveConcurrency,
       solveReserveMs: blockScanSolveReserveMs,
+      nMinusOneFallback: blockScanNMinusOneFallback,
+      nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
     },
   }) as Readonly<Record<string, unknown>>;
   const blindStaticArtifacts = blindProductionAudit
@@ -4466,7 +4481,36 @@ async function maybeSubmitBlockScanAtomic(params: {
         standingPosition: opp.leavesStandingPosition,
       };
     }
-    if (sim.success && sim.netProfit > 0n) finalSimStatus = "succeeded";
+    if (sim.success && sim.netProfit > 0n) {
+      const latestAfterSim = await awaitBlockScanDeadline(
+        readUncachedLatestBlock(provider),
+        passDeadlineAtMs,
+        "post-simulation source-head verification",
+      );
+      if (
+        latestAfterSim.number !== sourceBlock ||
+        latestAfterSim.hash !== sourceBlockHash.toLowerCase()
+      ) {
+        targetBlock = Math.max(sourceBlock, latestAfterSim.number) + 1;
+        const error =
+          `source advanced during final simulation ` +
+          `${sourceBlock}/${sourceBlockHash} -> ` +
+          `${latestAfterSim.number}/${latestAfterSim.hash}`;
+        recordAuditEv({
+          executionStatus: "not_run",
+          decision: "reject",
+          reason: "blockscan_stale_after_sim",
+        });
+        drop(
+          targetBlock,
+          "final_verify",
+          "blockscan_stale_after_sim",
+          error,
+        );
+        return finish("blockscan_stale_after_sim");
+      }
+      finalSimStatus = "succeeded";
+    }
     emitEvent({
       type: "simulation_result",
       ...eventBase(targetBlock),

@@ -3,8 +3,13 @@ import {
   AdapterRuntimeCoordinator,
   FlashFundingSnapshot,
   type AdapterRuntimePrepareResult,
+  type CurrentNExactExecutionContextResult,
   type PrepareAdapterRuntimeInput,
 } from "../adapter-runtime-coordinator.js";
+import type {
+  BlockScanStatePrepareResult,
+  BlockScanStateSnapshot,
+} from "../blockscan-state-coordinator.js";
 import {
   BlockScanRuntimeLoop,
   dexRuntimeAdmissionCompleteThrough,
@@ -68,11 +73,13 @@ blindModeStillRequiresExecutableDexGraph();
 await observedPublicationDoesNotInvalidateHotDexCommit();
 await shutdownInterruptsStartupBackfillWait();
 await shutdownDrainsActivePassAndDropsPendingHead();
+await nMinusOneTrackerStaysOutsideNormalRuntimePublication();
+await nMinusOneWaitsForItsOnlyAdjacentProducer();
 blindModeDoesNotEnterOrdinaryStartupWarm();
 
 console.log(
   "[blockscan-runtime-startup-warm] current-head/retry/degraded/coalesce: " +
-    "PASS (18/18)",
+    "PASS (20/20)",
 );
 
 async function distantStartupCatchesUpInSameHead(): Promise<void> {
@@ -499,6 +506,68 @@ async function shutdownDrainsActivePassAndDropsPendingHead(): Promise<void> {
   );
 }
 
+async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<void> {
+  const harness = createHarness(699, ["complete"], {
+    nMinusOneFallbackEnabled: true,
+  });
+  await harness.run(700);
+  assert.equal(harness.publishedPricing, 1);
+  await harness.run(701);
+  await waitFor(() => harness.coarsePricingBlocks.includes(701));
+  await harness.run(702);
+  assert.deepEqual(
+    harness.runtimeBlocks,
+    [700],
+    "fallback heads must not invoke or publish a mixed-source normal runtime",
+  );
+  assert.deepEqual(harness.coarsePricingBlocks, [701, 702]);
+  assert.deepEqual(harness.exactContextBlocks, [701, 702]);
+  assert.ok(
+    harness.coarsePricingDeadlineRemainingMs.every(
+      (remainingMs) => remainingMs > 19_000 && remainingMs <= 20_000,
+    ),
+    "each queued predecessor must receive a fresh independent 20s budget",
+  );
+  assert.ok(
+    harness.coarsePricingFamilyDeadlineRemainingMs.every(
+      (remainingMs, index) =>
+        Math.abs(
+          remainingMs - harness.coarsePricingDeadlineRemainingMs[index]!,
+        ) <= 1,
+    ),
+    "the degraded background producer must not inherit the 5s hot-family cutoff",
+  );
+  assert.equal(harness.publishedPricing, 1);
+}
+
+async function nMinusOneWaitsForItsOnlyAdjacentProducer(): Promise<void> {
+  const hold701 = deferred<void>();
+  const harness = createHarness(699, ["complete"], {
+    nMinusOneFallbackEnabled: true,
+    beforeCoarsePricingResult: async (sourceBlock) => {
+      if (sourceBlock === 701) await hold701.promise;
+    },
+  });
+  await harness.run(700);
+  await harness.run(701);
+  let head702Finished = false;
+  const head702 = harness.run(702).then(() => {
+    head702Finished = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(
+    head702Finished,
+    false,
+    "N+1 must wait within its pass budget for the active N producer",
+  );
+  hold701.resolve();
+  await head702;
+  assert(
+    harness.exactContextBlocks.includes(702),
+    "the only adjacent completed predecessor must reach exact-N context",
+  );
+}
+
 function blindModeDoesNotEnterOrdinaryStartupWarm(): void {
   const harness = createHarness(499, [], { blindEnabled: true });
   assert.equal(
@@ -525,6 +594,10 @@ function createHarness(
     readonly initialLanePublishedBlock?: number;
     readonly beforeDiscoveryPrepare?: () => Promise<void>;
     readonly preserveHotGraphGap?: boolean;
+    readonly nMinusOneFallbackEnabled?: boolean;
+    readonly beforeCoarsePricingResult?: (
+      sourceBlock: number,
+    ) => Promise<void>;
   } = {},
 ) {
   let publication = publicationAt(
@@ -554,6 +627,11 @@ function createHarness(
   ];
   const laneTakeBlocks: number[] = [];
   const discoveryPrepareBases: number[] = [];
+  const coarsePricingBlocks: number[] = [];
+  const coarsePricingDeadlineRemainingMs: number[] = [];
+  const coarsePricingFamilyDeadlineRemainingMs: number[] = [];
+  const exactContextBlocks: number[] = [];
+  let latestPricing: BlockScanStateSnapshot | null = null;
 
   const runtimeCoordinator = {
     async prepare(
@@ -582,10 +660,85 @@ function createHarness(
         signal: input.signal ?? new AbortController().signal,
       });
       if (options.stopAfterPrepareCall === call) shuttingDown = true;
-      return runtimeResult(
+      const result = runtimeResult(
         statuses.shift() ?? "complete",
         input.graph,
       );
+      if (result.status !== "incomplete") {
+        latestPricing = result.snapshot.pricing;
+      }
+      return result;
+    },
+    latestPricingSnapshot(): BlockScanStateSnapshot | null {
+      return latestPricing;
+    },
+    async prepareCoarsePricing(input: {
+      readonly graph: VerifiedGraphView;
+      readonly deadlineAtMs: number;
+      readonly familySettleDeadlineAtMs?: number;
+    }): Promise<BlockScanStatePrepareResult> {
+      coarsePricingBlocks.push(input.graph.sourceBlock);
+      coarsePricingDeadlineRemainingMs.push(input.deadlineAtMs - Date.now());
+      coarsePricingFamilyDeadlineRemainingMs.push(
+        (input.familySettleDeadlineAtMs ?? input.deadlineAtMs) - Date.now(),
+      );
+      await options.beforeCoarsePricingResult?.(input.graph.sourceBlock);
+      const prepared = runtimeResult("complete", input.graph);
+      if (prepared.status === "incomplete") throw new Error("fixture bug");
+      latestPricing = prepared.snapshot.pricing;
+      return prepared.pricing;
+    },
+    async prepareCurrentNExactExecutionContext(input: {
+      readonly graph: VerifiedGraphView;
+      readonly prepareExecution?: PrepareAdapterRuntimeInput["prepareExecution"];
+      readonly deadlineAtMs: number;
+      readonly signal?: AbortSignal;
+    }): Promise<CurrentNExactExecutionContextResult> {
+      exactContextBlocks.push(input.graph.sourceBlock);
+      await input.prepareExecution?.({
+        generation: input.graph.generation,
+        sourceBlock: input.graph.sourceBlock,
+        sourceBlockHash: input.graph.sourceBlockHash,
+        deadlineAtMs: input.deadlineAtMs,
+        signal: input.signal ?? new AbortController().signal,
+      });
+      const fundingCoverage = {
+        expectedKeys: [],
+        resolvedKeys: [],
+        unresolvedKeys: [],
+        expectedHash: EMPTY_HASH,
+        resolvedHash: EMPTY_HASH,
+        unresolvedHash: EMPTY_HASH,
+      };
+      const funding = new FlashFundingSnapshot(
+        input.graph.generation,
+        input.graph.sourceBlock,
+        input.graph.sourceBlockHash,
+        fundingCoverage,
+        new Map(),
+        new Map(),
+        new Map(),
+      );
+      return {
+        status: "complete",
+        context: {
+          generation: input.graph.generation,
+          sourceBlock: input.graph.sourceBlock,
+          sourceBlockHash: input.graph.sourceBlockHash,
+          graph: input.graph,
+          funding,
+        },
+        fundingCoverage,
+        issues: [],
+        timing: {
+          startedAtMs: Date.now(),
+          finishedAtMs: Date.now(),
+          wallMs: 0,
+          fundingMs: 0,
+          executionMs: 0,
+          finalCanonicalCasMs: 0,
+        },
+      };
     },
   } as unknown as AdapterRuntimeCoordinator;
 
@@ -773,6 +926,7 @@ function createHarness(
       (options.startupWarmEnabled ?? true) &&
       !(options.blindEnabled ?? false),
     startupWarmBudgetMs: STARTUP_BUDGET_MS,
+    nMinusOneFallbackEnabled: options.nMinusOneFallbackEnabled,
     hotPricingFamilyBudgetMs: HOT_FAMILY_BUDGET_MS,
     runtimePublicationReserveMs: PUBLICATION_RESERVE_MS,
     refineCandidates: 1,
@@ -828,6 +982,10 @@ function createHarness(
     },
     laneTakeBlocks,
     discoveryPrepareBases,
+    coarsePricingBlocks,
+    coarsePricingDeadlineRemainingMs,
+    coarsePricingFamilyDeadlineRemainingMs,
+    exactContextBlocks,
     get publication() {
       return cloneLiveDiscoveryPublicationState(publication);
     },
