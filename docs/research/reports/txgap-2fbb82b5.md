@@ -171,6 +171,8 @@ buildEdges: … 断言 pool.stETH() === ADDR.STETH，否则 throw
 `listener:searcher:venue-identity` exit=0 PASS 10/10；`listener:searcher:pool-adapter-policy` exit=0 PASS。
 - `tool-reconciled: listener:searcher:venue-identity agrees RUETH/KGETH 同 proxy codehash、异 impl 的判定与 venue identity 的 code/lineage 语义一致；两者均非任何已注册 venue family`
 - `tool-reconciled: listener:searcher:pool-adapter-policy agrees 17 个 derived adapter 仍无 native-burn 语义，家族扫描出的 5 个实例无一可被现有 adapter 认领`
+- `tool-reconciled: listener:searcher:venue-identity n/a 家族窗口扫描（burn topic getLogs 计数 5 token）是链上事件枚举，索引工具集内无对应 capability；结论仅依赖原始 getLogs 输出`
+- `tool-reconciled: listener:searcher:pool-adapter-policy n/a RUETH/KGETH 的 proxy codehash 比对与 native 回款值取自 eth_getCode/callTracer 原始数据，非索引 pool 工具的产出`
 
 **无 tool_divergence**：工具与人工链上事实一致。
 
