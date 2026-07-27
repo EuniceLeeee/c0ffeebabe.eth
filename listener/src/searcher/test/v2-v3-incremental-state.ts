@@ -367,6 +367,32 @@ assert.equal(
   1_000n,
   "unchanged sibling keeps its value and receives current provenance",
 );
+{
+  const isolatedCache = new PoolStateCache();
+  const isolatedBridge = new BlockScanBackrunStateBridge(isolatedCache);
+  const healthyStates = new Map(
+    [...v2Changed.snapshot.stateByStateKey].filter(([stateKey]) =>
+      !stateKey.includes(V2_POOL.toLowerCase())
+    ),
+  );
+  const familyLocalDegraded = Object.freeze({
+    ...v2Changed.snapshot,
+    stateByStateKey: healthyStates,
+    resolvedFamilyIds: Object.freeze(["univ3-standard"]),
+    incompleteFamilyIds: Object.freeze(["univ2-standard"]),
+  });
+  const report = isolatedBridge.publish(familyLocalDegraded);
+  assert(
+    report.projectedStateKeys.some((stateKey) =>
+      stateKey.includes(V2_POOL_2.toLowerCase())
+    ),
+    "one failed sibling must not erase another source-N state in the same family",
+  );
+  assert.equal(
+    isolatedCache.snapshotV2(V2_POOL_2, FIRST_BLOCK + 2)?.reserve0,
+    1_000n,
+  );
+}
 
 backend.physicalReads.length = 0;
 backrunCache.seedV3Ticks({

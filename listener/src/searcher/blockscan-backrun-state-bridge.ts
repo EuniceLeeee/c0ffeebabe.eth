@@ -72,11 +72,10 @@ export class BlockScanBackrunStateBridge {
         );
       }
       if (
-        state.snapshot.familyId !== state.familyId ||
-        !snapshot.resolvedFamilyIds.includes(state.familyId)
+        state.snapshot.familyId !== state.familyId
       ) {
         throw new Error(
-          `backrun bridge state ${stateKey} lacks a resolved family owner`,
+          `backrun bridge state ${stateKey} lacks its family owner`,
         );
       }
       const project = state.snapshot.projectBackrunState;
