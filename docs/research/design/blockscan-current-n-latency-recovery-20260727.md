@@ -1,6 +1,6 @@
 # Block-scan current-N latency recovery plan
 
-> Status: D0/R2 implemented; Round-2 live evidence disproved the first R1 transport shape; scoped R1 repair and Round 3 pending
+> Status: D0/R1/R2 implemented; all three source-N live rounds failed; guarded R6 N−1 coarse fallback activated
 > Branch: `codex/blockscan-current-n-latency-recovery`
 > Base: `origin/main@48fb88e9c0ac7705d1d89f60b060d6ede5c423c2`
 > Change class: systemic block-scan correctness/performance
@@ -51,6 +51,18 @@ evidence that an atomic opportunity can finish within 10 seconds.
   direct-current cost floor unless separately upgraded.
 - The stopped A live telemetry registered 18 pricing families. Combined with the three verified incremental
   declarations above, 15 registered families retain that direct-current cost floor in this frozen runtime.
+- Round 3 deployed the separated mutation header/descriptor/final-CAS transports with the default descriptor
+  concurrency raised from one to three and no environment override. Its cold snapshot published
+  `priced=29907/30513`, proving that the recovery shell can be repopulated, but the snapshot took
+  `126545.06ms` and was startup-only.
+- Round 3's first three eligible hot source-N state attempts at `25623642`, `25623645` and `25623648`
+  all failed to produce usable pricing. Their state walls were `31564.98ms`, `28548.70ms` and
+  `28639.35ms`; the first two did not enumerate and the third enumerated a `priced=0/30521` degraded
+  view for `4469.20ms` before `scanner_deadline`.
+- The Round-3 mutation proofs still reported `header-read:deadline` with zero header RPCs. The separated
+  semaphore did not restore liveness because hot discovery/head queue time had already consumed most of
+  the source-N window before state preparation reached those proofs. Transport contention was real in
+  Round 2, but it is not the complete live root cause.
 - `BlockScanRuntimeLoop.runHead` checks the pass deadline only **after**
   `detectProductionBlockScanOpportunities` returns. A state stage that consumes its budget can therefore
   still enter the synchronous coarse enumeration and spend additional CPU before being classified
@@ -67,8 +79,10 @@ evidence that an atomic opportunity can finish within 10 seconds.
 - That one Anvil worker is faster than four under real contention.
 - That changed-edge-first enumeration is complete without scan-debt recovery.
 - That the solver and final simulation fit into the time left after state and enumeration.
-- That retaining a completed canonical header proof for the exact generation range and separating header
-  transport from bounded descriptor log/CAS transport is sufficient to restore a healthy hot source-N pass.
+- That a complete source-N state producer for all 18 registered families can fit before the scanner deadline
+  on the current eight-core node without a separate state lifecycle.
+- That an N−1 coarse producer plus current-N whole-route reprice can produce a positive candidate and reach
+  final simulation inside the usable window.
 
 No slice may present one of these hypotheses as a fact before its declared measurement.
 
@@ -355,16 +369,31 @@ phase failures. This is not the first-line repair.
 
 **Direction**
 
-- enumerate from the complete N−1 coarse graph;
+- retain a precompleted, immutable N−1 coarse view before head N arrives. Do not first await a failed N
+  state pass and then start fallback; by then the opportunity window is already consumed;
+- expose the current-N exact execution context independently from completion of the full source-N pricing
+  runtime. It must bind the N block/hash, current graph identity, funding view, worker leases and canonical
+  CAS without publishing an incomplete normal runtime;
+- enumerate from the complete N−1 coarse graph through a branded coarse-only envelope. It must not be
+  accepted by any API that consumes a normal source-N `AdapterRuntimeSnapshot`;
 - add current-N mutation anchors as described in §3.2.1;
 - bind every candidate to both its coarse source and required exact source;
-- require whole-route N repricing and same-N funding/execution join before any executable result.
+- require whole-route N repricing on the current graph and same-N funding/execution join before planner,
+  solver, EV or final simulation;
+- reject a route whose edge was removed or whose metadata/ownership identity changed at N;
+- repeat the head/hash fence after final simulation and before EV/success publication. Dry-run results are
+  subject to the same stale-head rejection as submission mode;
+- keep proof-unavailable/off-event families explicit in the fallback coverage report. Their recall loss is
+  not repaired by calling the N−1 view complete.
 
 **Deterministic gates**
 
 - no candidate can reach plan/solve/final sim with an N−1 mid;
 - an EV-sign flip between N−1 and N is rejected;
-- N mutation, skipped-head, reorg and head-advance fixtures cannot reuse the stale candidate;
+- N−2 input, N mutation, deleted/changed edges, skipped-head, reorg and head-advance fixtures cannot reuse
+  the stale candidate;
+- planner, funding, workers, final simulation and success publication consume only the exact N graph/hash;
+- a head advance after final simulation produces neither EV nor success output;
 - unchanged-block route recall matches the source-N coarse oracle;
 - changed/off-event recall losses are measured explicitly and never reported as full coverage.
 
@@ -507,12 +536,12 @@ Only then may the result be called `fixed`.
 |---|---|---|---|---|
 | Plan | complete | `6aefbf0`, `b13ef45` | implementation contract frozen before behavior changes | n/a |
 | D0 instrumentation | implemented | `098e2cb` | backend/coordinator/runtime tests and TypeScript build pass | pending production timing sample |
-| R1 mutation proof | implemented, live-disproved; scoped repair pending | `a156cf5`, `e59cdd5` | in-flight canonical-path sharing, exact-descriptor dedupe, abort and reorg controls pass | Round 2 proved completed headers are not retained and one slot still serializes headers/logs/CAS; UniV2/V4 fell back with `header-read:deadline` |
+| R1 mutation proof | implemented, live-insufficient | `a156cf5`, `e59cdd5`, `df397c1` | completed exact-range header reuse, independent header/descriptor/final-CAS transports, bounded descriptor concurrency, off-path log/final-CAS rejection, abort and reorg controls pass | Round 3 still produced three hot source-N failures; proof calls reached `header-read:deadline` after discovery/queue time had already depleted the window |
 | R2 recovery bases | implemented, not live-validated | `8f741b4` | degraded-N/healthy-N+1 recovery, sibling isolation, schema and reorg controls pass | pending |
 | R3 discovery policy | not started; precondition unmet | n/a | D0 code exists, but no live evidence that the six declared venues are material | pending D0 live attribution |
 | R4 runtime join | not started; precondition unmet | n/a | no code change | pending D0/R1 live attribution |
 | R5 scanner priority | not started; precondition unmet | n/a | scanner production-boundary control passes unchanged | pending post-R1/R3 live attribution |
-| R6 N−1 coarse fallback | conditional; not implemented | n/a | required stale-price isolation gates declared in §3.2.1/R6 | allowed only after source-N live attempts fail |
+| R6 N−1 coarse fallback | activated; implementation pending | n/a | required stale-price isolation gates declared in §3.2.1/R6 | activation precondition met by three failed source-N live rounds; must be deployed and measured as degraded mode |
 
 ### 7.1 Implementation evidence
 
@@ -536,6 +565,13 @@ The following commands were actually invoked through `tool-run`; every recorded 
 
 The listener TypeScript build also passes.
 
+The scoped Round-3 R1 repair was reconciled again through generated `tool-index`/`tool-run` manifest
+`/private/tmp/blockscan-round3-r1-tools.json`, SHA-256
+`09078222c842ebd5bbe95c9285a1a74cc8be09ae2a9d357f5f511938db53acf5`. Its six recorded receipts
+(`blockscan-state-backend`, `blockscan-state-coordinator`, `v2-v3-incremental-state`,
+`univ4-incremental-state`, `adapter-runtime-coordinator`, `blockscan-runtime-startup-warm`) all have
+`exit_code=0`.
+
 This evidence establishes **implemented and deterministic parity/recovery coverage only**. No paired live
 A/B cohort, natural positive scanner enumeration, production plan/solve, successful final simulation or
 end-to-end p95 below 10 seconds has been produced on this branch. Therefore the current verdict is
@@ -547,7 +583,7 @@ end-to-end p95 below 10 seconds has been produced on this branch. Therefore the 
 |---|---|---|---|---|
 | 1 | `df4776b173948273ae7bbc0aa92c8d8873ce964d` | A configuration and budgets (`pass=11000ms`, `largeGraph=30000ms`), frozen universe `active-pools-9dd1…be1.json`; first state attempts at blocks `25623452`, `25623459`, `25623460` | failed before pricing: `state_block=null`, enumeration `not-run`; `canonical header 25620597 fell outside retained journal`. The first attempt spent `92220.97ms`; later attempts failed immediately against the same stale prepared source. | `8e3e32d`: invalidate an out-of-retention prepared DEX/protocol generation and reschedule from the current canonical head. Regression expands startup-warm control to 18/18. |
 | 2 | `ea9f3e0f6df34e32a6ff3db4859da601106b1beb` | same budgets; universe SHA-256 `9dd1d403…39be1`; stopped A's 240-instance protocol cache; startup source-N snapshot `25623518`, then first three eligible hot attempts `25623530`, `25623533`, `25623536`; expected denominator `30407` | failed hot source-N output gate. Cold startup eventually published `priced=28893/30401`, but took `166212.74ms`, was already behind the head and intentionally did not enumerate. The first three eligible hot attempts all published `priced=0/30407`, enumeration `not-run`, with state wall `34247.03ms`, `34399.02ms`, and `35046.98ms`. UniV2/UniV4 reported `mutation-range-failed`, detail `header-read:deadline`; their proof telemetry showed zero header RPCs, consistent with waiting behind the shared single proof slot. | repair R1 so the exact `(fromSource, throughSource)` completed header proof remains reusable for the generation and header reads cannot queue behind descriptor log/CAS work; run deterministic controls, then deploy Round 3 with unchanged budgets/coverage |
-| 3 | pending | same contract after the scoped completed-header/separate-transport repair | pending | activate R6 N−1 coarse fallback if the first three eligible source-N attempts still have no non-zero pricing |
+| 3 | diagnostic `95339d99c624b2552b1b8c957fb5da633a48f5ee` from canonical repair `df397c1` | same budgets and full graph; A stopped; B used all eight CPUs; descriptor concurrency default `3` with no environment override; startup source `25623632`, then eligible hot attempts `25623642`, `25623645`, `25623648`; denominators `30515–30521` | failed source-N output gate. Startup published `priced=29907/30513` in `126545.06ms`. Hot attempts produced `priced=0` with state walls `31564.98ms`, `28548.70ms`, `28639.35ms`; the third enumerated for `4469.20ms` but hit `scanner_deadline`, with no exact refine/plan/final sim. Mutation proofs still failed `header-read:deadline` with zero header RPCs after discovery/queue depleted the deadline. Archived log SHA-256 `b23840a4…6f0f`, events SHA-256 `39c38fd7…aa8`. | activate R6 degraded N−1 coarse fallback; preserve full graph, require current-N whole-route exact reprice and same-N execution join |
 
 Round 1 used an empty diagnostic-worktree protocol cache while A's stopped cache contained 240 verified
 instances. That mismatch did not cause the observed pre-pricing canonical-journal failure, but Round 2 pins
@@ -564,6 +600,15 @@ Round 2 also exposed two distinct liveness facts that must not be conflated:
   after the first header settled can therefore enqueue a redundant header behind another family's
   `eth_getLogs`, exhaust its family deadline, and force a full current-N fallback. This is the scoped Round-3
   repair target; increasing a budget is forbidden.
+
+Round 3 closed that experiment:
+
+- the completed-header cache and separate transports are deterministic improvements, but they did not
+  restore live source-N output under the frozen budgets;
+- the first three eligible hot source-N attempts are the predeclared stopping point. Later favorable heads
+  cannot replace them;
+- R6 is therefore activated exactly as the user-authorized degraded fallback. This does not waive the
+  current-N exact-reprice, same-N join, final canonical fence or fixed-gate requirements.
 
 ## 8. Stop and rollback rules
 
