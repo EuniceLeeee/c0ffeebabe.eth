@@ -410,6 +410,26 @@ export async function createLiveDiscoveryCoordinator(
       readonly historicalResolution: "bounded" | "complete";
     },
   ) => {
+    const passStartedAtMs = performance.now();
+    const stageMs = {
+      swapScan: 0,
+      factoryIndex: 0,
+      incumbentAttestation: 0,
+      identityRetry: 0,
+      projection: 0,
+      canonicalFence: 0,
+    };
+    const measured = async <T>(
+      stage: keyof typeof stageMs,
+      operation: () => Promise<T>,
+    ): Promise<T> => {
+      const startedAtMs = performance.now();
+      try {
+        return await operation();
+      } finally {
+        stageMs[stage] = Math.max(0, performance.now() - startedAtMs);
+      }
+    };
     const current = options.current ?? captureDexDiscoveryBase();
     const scan = options.scan ?? (options.strict
       ? planDexGraphCoverageScan(current.coverage, targetBlock)
@@ -476,7 +496,7 @@ export async function createLiveDiscoveryCoordinator(
       staticAttestation,
       identityRetry,
     ] = await Promise.all([
-      scanActivePoolsDetailed(
+      measured("swapScan", () => scanActivePoolsDetailed(
           provider,
           scan.blocksBack,
           options.strict
@@ -507,8 +527,8 @@ export async function createLiveDiscoveryCoordinator(
             strict: options.strict,
             control: options.control,
           },
-        ),
-        indexFactoryPools(
+        )),
+        measured("factoryIndex", () => indexFactoryPools(
           provider,
           scan.blocksBack,
           scan.toBlock,
@@ -516,19 +536,26 @@ export async function createLiveDiscoveryCoordinator(
             strict: options.strict,
             control: options.control,
           },
-        ),
+        )),
         options.strict
-          ? buildTokenGraphWithResults(readBackend, liveRegistry, { quiet: true })
+          ? measured(
+              "incumbentAttestation",
+              () => buildTokenGraphWithResults(
+                readBackend,
+                liveRegistry,
+                { quiet: true },
+              ),
+            )
           : Promise.resolve(null),
         pinnedReadBackend
-          ? prepareBoundedDexIdentityRetry({
+          ? measured("identityRetry", () => prepareBoundedDexIdentityRetry({
               currentN: targetBlock,
               backend: pinnedReadBackend,
               remaining: genericIdentityRetries,
               identityRegistry: PRODUCTION_IDENTITY_RESOLVERS,
               seedEntries: liveRegistry,
               admissionPolicy: PRODUCTION_IDENTITY_ADMISSION,
-            })
+            }))
           : Promise.resolve(null),
     ]);
     const swapFresh = [...swapDiscovery.pools];
@@ -568,7 +595,7 @@ export async function createLiveDiscoveryCoordinator(
       reason: string;
     }> = [];
     if (candidates.length > 0) {
-      projection = await prepareRuntimePoolRefresh({
+      projection = await measured("projection", () => prepareRuntimePoolRefresh({
           backend: readBackend,
           freshPools: candidates,
           knownPoolKeys: current.knownPoolKeys,
@@ -578,7 +605,7 @@ export async function createLiveDiscoveryCoordinator(
             ? undefined
             : [...current.blockscanGraph],
           buildStrategyViews: rebuildStrategyViews,
-      });
+      }));
       for (const admitted of projection.admittedPools) {
         nextRetryableDexGraphPools.delete(poolRegistryKey(admitted));
       }
@@ -613,27 +640,33 @@ export async function createLiveDiscoveryCoordinator(
       nextRetryableDexGraphPools.size === 0 &&
       nextRetryableDexIdentityPools.size === 0;
     if (strictSourceBlockHash !== null) {
-      const canonicalAfter = await readDexDiscoveryBlockHash(
-        provider,
-        targetBlock,
-        options.control,
-      );
-      assertDexSourceHashStable(targetBlock, strictSourceBlockHash, canonicalAfter);
-      if (strictScanBlockHash === null) {
-        throw new Error("strict DEX discovery did not anchor its scan range");
-      }
-      const scanCanonicalAfter = scan.toBlock === targetBlock
-        ? canonicalAfter
-        : await readDexDiscoveryBlockHash(
+      await measured("canonicalFence", async () => {
+        const canonicalAfter = await readDexDiscoveryBlockHash(
             provider,
-            scan.toBlock,
+            targetBlock,
             options.control,
           );
-      assertDexSourceHashStable(
-        scan.toBlock,
-        strictScanBlockHash,
-        scanCanonicalAfter,
-      );
+        assertDexSourceHashStable(
+          targetBlock,
+          strictSourceBlockHash,
+          canonicalAfter,
+        );
+        if (strictScanBlockHash === null) {
+          throw new Error("strict DEX discovery did not anchor its scan range");
+        }
+        const scanCanonicalAfter = scan.toBlock === targetBlock
+          ? canonicalAfter
+          : await readDexDiscoveryBlockHash(
+              provider,
+              scan.toBlock,
+              options.control,
+            );
+        assertDexSourceHashStable(
+          scan.toBlock,
+          strictScanBlockHash,
+          scanCanonicalAfter,
+        );
+      });
     }
     const coverage = options.strict
       ? options.advanceCoverage === false
@@ -650,6 +683,25 @@ export async function createLiveDiscoveryCoordinator(
             projectionComplete,
           )
       : current.coverage;
+    const timing = Object.freeze({
+      ...stageMs,
+      wallMs: Math.max(0, performance.now() - passStartedAtMs),
+    });
+    console.log(
+      `[searcher/discovery-stage-telemetry] ${JSON.stringify({
+        targetBlock,
+        strict: options.strict,
+        scan,
+        timing,
+        swapPools: swapFresh.length,
+        factoryPools: factoryFresh.length,
+        candidates: candidates.length,
+        incumbentSuccesses: staticAttestation?.successful.length ?? 0,
+        incumbentFailures: staticAttestation?.failed.length ?? 0,
+        identityAccepted: identityRetry?.accepted.length ?? 0,
+        identityRemaining: identityRetry?.remaining.length ?? 0,
+      })}`,
+    );
     return {
       complete: coverage.graphCompleteThrough >= targetBlock,
       sourceBlockHash: strictSourceBlockHash,
@@ -661,6 +713,7 @@ export async function createLiveDiscoveryCoordinator(
       retryableIdentityPools: nextRetryableDexIdentityPools,
       coverage,
       landedCoverage: swapDiscovery.coverage,
+      timing,
     };
   };
   type DexDiscoveryStage = Awaited<ReturnType<typeof runDexDiscoveryPass>>;

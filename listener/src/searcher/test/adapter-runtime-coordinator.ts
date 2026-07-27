@@ -52,6 +52,17 @@ async function exactFundingResultContract(): Promise<void> {
   });
   assert.equal(first.status, "complete");
   if (first.status !== "complete") throw new Error("expected complete runtime");
+  assert(first.timing, "production coordinator must emit split preparation timing");
+  assert(
+    [
+      first.timing.wallMs,
+      first.timing.pricingMs,
+      first.timing.fundingMs,
+      first.timing.executionMs,
+      first.timing.finalCanonicalCasMs,
+    ].every((value) => Number.isFinite(value) && value >= 0),
+    "runtime preparation timings must be monotonic and non-negative",
+  );
   const published = first.snapshot;
   assert.equal(coordinator.latestSnapshot(), published);
   assert.equal(published.sourceBlock, 101);

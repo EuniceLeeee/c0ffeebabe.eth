@@ -49,6 +49,61 @@ export interface JsonRpcBlockScanStateReadBackendOptions {
    */
   readonly multicallMode?: "rpc-batch" | "aggregate3";
   readonly fetchImpl?: typeof fetch;
+  readonly onMutationProofTelemetry?: (
+    telemetry: MutationProofTransportTelemetry,
+  ) => void;
+  readonly now?: () => number;
+}
+
+export type MutationProofTransportPhase =
+  | "descriptor-validation"
+  | "header-read"
+  | "header-validation"
+  | "log-read"
+  | "log-validation"
+  | "final-cas";
+
+export type MutationProofFailureKind =
+  | "deadline"
+  | "aborted"
+  | "rpc"
+  | "validation"
+  | "unknown";
+
+export interface MutationProofPhaseTelemetry {
+  readonly queueWaitMs: number;
+  readonly wallMs: number;
+  readonly rpcRequests: number;
+  readonly rpcItems: number;
+  readonly responseBytes: number;
+}
+
+export interface MutationProofTransportTelemetry {
+  readonly descriptorFingerprint: string;
+  readonly fromBlock: number;
+  readonly throughBlock: number;
+  readonly status: "complete" | "failed";
+  readonly failurePhase?: MutationProofTransportPhase;
+  readonly failureKind?: MutationProofFailureKind;
+  readonly wallMs: number;
+  readonly validationMs: number;
+  readonly phases: Readonly<{
+    readonly headers: MutationProofPhaseTelemetry;
+    readonly logs: MutationProofPhaseTelemetry;
+    readonly finalCas: MutationProofPhaseTelemetry;
+  }>;
+}
+
+export class MutationRangeReadError extends Error {
+  constructor(
+    readonly phase: MutationProofTransportPhase,
+    readonly kind: MutationProofFailureKind,
+    message: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "MutationRangeReadError";
+  }
 }
 
 interface IndexedStateRead {
@@ -87,6 +142,10 @@ export class JsonRpcBlockScanStateReadBackend
    */
   private readonly mutationProofSlots: AbortableSemaphore;
   private readonly fetchImpl: typeof fetch;
+  private readonly onMutationProofTelemetry:
+    | ((telemetry: MutationProofTransportTelemetry) => void)
+    | undefined;
+  private readonly now: () => number;
   private nextId = 1;
 
   constructor(
@@ -112,6 +171,8 @@ export class JsonRpcBlockScanStateReadBackend
     this.rpcSlots = new AbortableSemaphore(maxConcurrentBatches);
     this.mutationProofSlots = new AbortableSemaphore(1);
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.onMutationProofTelemetry = options.onMutationProofTelemetry;
+    this.now = options.now ?? (() => performance.now());
   }
 
   async readBatch(
@@ -354,6 +415,12 @@ export class JsonRpcBlockScanStateReadBackend
       readonly signal: AbortSignal;
     },
   ): Promise<CanonicalMutationRange> {
+    const startedAtMs = this.now();
+    let phase: MutationProofTransportPhase = "descriptor-validation";
+    let validationMs = 0;
+    let headerTelemetry = emptyMutationProofPhaseTelemetry();
+    let logTelemetry = emptyMutationProofPhaseTelemetry();
+    let finalCasTelemetry = emptyMutationProofPhaseTelemetry();
     if (
       fromExclusive.number >= through.number ||
       fromExclusive.generation >= through.generation
@@ -376,10 +443,18 @@ export class JsonRpcBlockScanStateReadBackend
       () => controller.abort(new Error("mutation range deadline reached")),
       Math.max(0, remainingMs),
     );
+    let completed = false;
+    let failure:
+      | {
+          readonly phase: MutationProofTransportPhase;
+          readonly kind: MutationProofFailureKind;
+        }
+      | undefined;
     try {
       if (remainingMs <= 0) {
         controller.abort(new Error("mutation range deadline reached"));
       }
+      phase = "header-read";
       const headerRequests: object[] = [];
       const headerIds: number[] = [];
       for (
@@ -396,11 +471,15 @@ export class JsonRpcBlockScanStateReadBackend
           params: [toBlockTag(blockNumber), false],
         });
       }
-      const headerResponses = await this.postWithSlots(
+      const headerRead = await this.postWithSlotsMeasured(
         this.mutationProofSlots,
         headerRequests,
         controller.signal,
       );
+      headerTelemetry = headerRead.telemetry;
+      const headerResponses = headerRead.responses;
+      phase = "header-validation";
+      const headerValidationStartedAtMs = this.now();
       const headers = headerIds.map((id, index) => {
         const response = headerResponses.find((candidate) => candidate.id === id);
         if (!response || "error" in response) {
@@ -445,7 +524,9 @@ export class JsonRpcBlockScanStateReadBackend
           );
         }
       }
+      validationMs += Math.max(0, this.now() - headerValidationStartedAtMs);
 
+      phase = "log-read";
       const logId = this.nextId++;
       const logFilter = {
         fromBlock: toBlockTag(fromExclusive.number + 1),
@@ -459,12 +540,16 @@ export class JsonRpcBlockScanStateReadBackend
             }),
         topics: descriptor.topics,
       };
-      const logResponses = await this.postWithSlots(this.mutationProofSlots, [{
+      const logRead = await this.postWithSlotsMeasured(this.mutationProofSlots, [{
         jsonrpc: "2.0",
         id: logId,
         method: "eth_getLogs",
         params: [logFilter],
       }], controller.signal);
+      logTelemetry = logRead.telemetry;
+      const logResponses = logRead.responses;
+      phase = "log-validation";
+      const logValidationStartedAtMs = this.now();
       const logResponse = logResponses.find((candidate) => candidate.id === logId);
       if (!logResponse || "error" in logResponse) {
         throw new Error(
@@ -501,7 +586,9 @@ export class JsonRpcBlockScanStateReadBackend
           throw new Error("eth_getLogs returned duplicate canonical log identity");
         }
       }
-      await this.verifyCanonicalSourceWithSlots(
+      validationMs += Math.max(0, this.now() - logValidationStartedAtMs);
+      phase = "final-cas";
+      finalCasTelemetry = await this.verifyCanonicalSourceWithSlotsMeasured(
         through,
         controller.signal,
         this.mutationProofSlots,
@@ -514,7 +601,7 @@ export class JsonRpcBlockScanStateReadBackend
         canonicalPathFingerprint,
         events,
       });
-      return Object.freeze({
+      const range = Object.freeze({
         fromExclusive,
         through,
         events: Object.freeze(events),
@@ -523,10 +610,80 @@ export class JsonRpcBlockScanStateReadBackend
         canonicalPathFingerprint,
         rangeFingerprint,
       });
+      completed = true;
+      return range;
+    } catch (error) {
+      const classified = classifyMutationProofFailure(
+        error,
+        controller.signal,
+        phase,
+      );
+      failure = { phase, kind: classified };
+      if (error instanceof MutationRangeReadError) throw error;
+      throw new MutationRangeReadError(
+        phase,
+        classified,
+        formatError(error),
+        error,
+      );
     } finally {
       clearTimeout(timer);
       detach();
+      const telemetry = Object.freeze({
+        descriptorFingerprint: descriptor.fingerprint,
+        fromBlock: fromExclusive.number,
+        throughBlock: through.number,
+        status: completed ? "complete" as const : "failed" as const,
+        ...(failure === undefined
+          ? {}
+          : {
+              failurePhase: failure.phase,
+              failureKind: failure.kind,
+            }),
+        wallMs: Math.max(0, this.now() - startedAtMs),
+        validationMs,
+        phases: Object.freeze({
+          headers: headerTelemetry,
+          logs: logTelemetry,
+          finalCas: finalCasTelemetry,
+        }),
+      });
+      try {
+        this.onMutationProofTelemetry?.(telemetry);
+      } catch {
+        // Observability must never change proof transport behavior.
+      }
     }
+  }
+
+  private async verifyCanonicalSourceWithSlotsMeasured(
+    source: BlockSource,
+    signal: AbortSignal,
+    slots: AbortableSemaphore,
+  ): Promise<MutationProofPhaseTelemetry> {
+    const id = this.nextId++;
+    const measured = await this.postWithSlotsMeasured(slots, [{
+      jsonrpc: "2.0",
+      id,
+      method: "eth_getBlockByNumber",
+      params: [toBlockTag(source.number), false],
+    }], signal);
+    const item = measured.responses[0];
+    if (!item || "error" in item) {
+      throw new Error(
+        `cannot verify source block: ${item && "error" in item
+          ? item.error.message ?? item.error.code ?? "RPC error"
+          : "missing RPC response"}`,
+      );
+    }
+    const block = item.result as { readonly hash?: unknown } | null;
+    const hash = typeof block?.hash === "string" ? block.hash.toLowerCase() : null;
+    if (hash !== source.hash.toLowerCase()) {
+      throw new Error(
+        `source block hash mismatch: expected ${source.hash}, got ${hash ?? "null"}`,
+      );
+    }
+    return measured.telemetry;
   }
 
   private async readMulticallChunk(
@@ -712,6 +869,46 @@ export class JsonRpcBlockScanStateReadBackend
       return value as readonly JsonRpcResponse[];
     });
   }
+
+  private async postWithSlotsMeasured(
+    slots: AbortableSemaphore,
+    body: readonly object[],
+    signal: AbortSignal,
+  ): Promise<{
+    readonly responses: readonly JsonRpcResponse[];
+    readonly telemetry: MutationProofPhaseTelemetry;
+  }> {
+    const startedAtMs = this.now();
+    let queueWaitMs = 0;
+    const responses = await slots.run(signal, async (waitMs) => {
+      queueWaitMs = waitMs;
+      if (signal.aborted) {
+        throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
+      const response = await this.fetchImpl(this.rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(`JSON-RPC HTTP ${response.status} ${response.statusText}`);
+      }
+      const value: unknown = await response.json();
+      if (!Array.isArray(value)) throw new Error("JSON-RPC batch returned non-array");
+      return value as readonly JsonRpcResponse[];
+    }, this.now);
+    return Object.freeze({
+      responses,
+      telemetry: Object.freeze({
+        queueWaitMs,
+        wallMs: Math.max(0, this.now() - startedAtMs),
+        rpcRequests: 1,
+        rpcItems: body.length,
+        responseBytes: JSON.stringify(responses).length,
+      }),
+    });
+  }
 }
 
 interface SemaphoreWaiter {
@@ -728,10 +925,15 @@ class AbortableSemaphore {
 
   constructor(private readonly capacity: number) {}
 
-  async run<T>(signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+  async run<T>(
+    signal: AbortSignal,
+    task: (waitMs: number) => Promise<T>,
+    now: () => number = () => performance.now(),
+  ): Promise<T> {
+    const queuedAtMs = now();
     const release = await this.acquire(signal);
     try {
-      return await task();
+      return await task(Math.max(0, now() - queuedAtMs));
     } finally {
       release();
     }
@@ -784,6 +986,55 @@ class AbortableSemaphore {
       }
     };
   }
+}
+
+function emptyMutationProofPhaseTelemetry(): MutationProofPhaseTelemetry {
+  return Object.freeze({
+    queueWaitMs: 0,
+    wallMs: 0,
+    rpcRequests: 0,
+    rpcItems: 0,
+    responseBytes: 0,
+  });
+}
+
+function classifyMutationProofFailure(
+  error: unknown,
+  signal: AbortSignal,
+  phase: MutationProofTransportPhase,
+): MutationProofFailureKind {
+  const reason = signal.aborted ? signal.reason : error;
+  const message = formatError(reason).toLowerCase();
+  if (message.includes("deadline") || message.includes("timed out")) {
+    return "deadline";
+  }
+  if (
+    signal.aborted ||
+    (reason instanceof DOMException && reason.name === "AbortError") ||
+    message.includes("aborted") ||
+    message.includes("cancelled") ||
+    message.includes("superseded")
+  ) {
+    return "aborted";
+  }
+  if (
+    phase === "descriptor-validation" ||
+    phase === "header-validation" ||
+    phase === "log-validation"
+  ) {
+    return "validation";
+  }
+  if (
+    message.includes("rpc") ||
+    message.includes("http") ||
+    message.includes("json") ||
+    message.includes("fetch") ||
+    message.includes("logs") ||
+    message.includes("block")
+  ) {
+    return "rpc";
+  }
+  return "unknown";
 }
 
 function assertPinnedReadSet(

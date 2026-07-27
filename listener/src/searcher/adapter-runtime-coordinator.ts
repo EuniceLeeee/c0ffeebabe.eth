@@ -86,6 +86,16 @@ export interface AdapterRuntimeSnapshot {
   readonly funding: FlashFundingSnapshot;
 }
 
+export interface AdapterRuntimePrepareTiming {
+  readonly startedAtMs: number;
+  readonly finishedAtMs: number;
+  readonly wallMs: number;
+  readonly pricingMs: number;
+  readonly fundingMs: number;
+  readonly executionMs: number;
+  readonly finalCanonicalCasMs: number;
+}
+
 export type AdapterRuntimePrepareResult =
   | {
       readonly status: "complete";
@@ -93,6 +103,7 @@ export type AdapterRuntimePrepareResult =
       readonly pricing: BlockScanStatePrepareResult;
       readonly fundingCoverage: FlashFundingCoverage;
       readonly issues: readonly BlockScanStateIssue[];
+      readonly timing?: AdapterRuntimePrepareTiming;
     }
   | {
       readonly status: "degraded";
@@ -100,6 +111,7 @@ export type AdapterRuntimePrepareResult =
       readonly pricing: BlockScanStatePrepareResult;
       readonly fundingCoverage: FlashFundingCoverage;
       readonly issues: readonly BlockScanStateIssue[];
+      readonly timing?: AdapterRuntimePrepareTiming;
     }
   | {
       readonly status: "incomplete";
@@ -107,6 +119,7 @@ export type AdapterRuntimePrepareResult =
       readonly pricing: BlockScanStatePrepareResult;
       readonly fundingCoverage: FlashFundingCoverage;
       readonly issues: readonly BlockScanStateIssue[];
+      readonly timing?: AdapterRuntimePrepareTiming;
     };
 
 export interface PrepareAdapterRuntimeInput {
@@ -183,6 +196,23 @@ export class AdapterRuntimeCoordinator {
   }
 
   async prepare(input: PrepareAdapterRuntimeInput): Promise<AdapterRuntimePrepareResult> {
+    const startedAtMs = Date.now();
+    let pricingMs = 0;
+    let fundingMs = 0;
+    let executionMs = 0;
+    let finalCanonicalCasMs = 0;
+    const timing = (): AdapterRuntimePrepareTiming => {
+      const finishedAtMs = Date.now();
+      return Object.freeze({
+        startedAtMs,
+        finishedAtMs,
+        wallMs: Math.max(0, finishedAtMs - startedAtMs),
+        pricingMs,
+        fundingMs,
+        executionMs,
+        finalCanonicalCasMs,
+      });
+    };
     const controller = new AbortController();
     const detach = linkAbort(input.signal, controller);
     const remainingMs = input.deadlineAtMs - Date.now();
@@ -222,7 +252,7 @@ export class AdapterRuntimeCoordinator {
         );
       }
       const [pricing, funding, executionIssue] = await Promise.all([
-        this.pricing.prepare({
+        measureWallMs(() => this.pricing.prepare({
           graph: input.graph,
           families: this.registry.blockScanStateFamilies(),
           requiresPricing: (edge) => this.registry.isBlockScanPricedEdge(edge),
@@ -236,21 +266,27 @@ export class AdapterRuntimeCoordinator {
           // generation signal for its canonical CAS. Aborting it at the
           // preparation boundary would erase healthy sibling results.
           signal: controller.signal,
+        }), (wallMs) => {
+          pricingMs = wallMs;
         }),
-        this.prepareFunding(
+        measureWallMs(() => this.prepareFunding(
           input.graph,
           input.fundingTokens,
           preparationSettleDeadlineAtMs,
           input.deadlineAtMs,
           preparationController.signal,
           controller.signal,
-        ),
+        ), (wallMs) => {
+          fundingMs = wallMs;
+        }),
         input.prepareExecution
-          ? this.prepareExecution(
+          ? measureWallMs(() => this.prepareExecution(
               input,
               preparationSettleDeadlineAtMs,
               preparationController.signal,
-            )
+            ), (wallMs) => {
+              executionMs = wallMs;
+            })
           : Promise.resolve(null),
       ]);
       clearTimeout(preparationTimer);
@@ -262,6 +298,7 @@ export class AdapterRuntimeCoordinator {
         !executionIssue &&
         !controller.signal.aborted
       ) {
+        const finalCanonicalCasStartedAtMs = Date.now();
         try {
           await awaitWithAbort(
             this.reads.verifyCanonicalSource(
@@ -285,6 +322,11 @@ export class AdapterRuntimeCoordinator {
             "adapter runtime final canonical CAS failed",
             error,
             controller.signal,
+          );
+        } finally {
+          finalCanonicalCasMs = Math.max(
+            0,
+            Date.now() - finalCanonicalCasStartedAtMs,
           );
         }
       }
@@ -314,6 +356,7 @@ export class AdapterRuntimeCoordinator {
           pricing,
           fundingCoverage: funding.coverage,
           issues,
+          timing: timing(),
         });
       }
       const snapshot: AdapterRuntimeSnapshot = Object.freeze({
@@ -345,8 +388,9 @@ export class AdapterRuntimeCoordinator {
               message:
                 `runtime generation ${snapshot.generation} is not newer than ` +
                 previous.generation,
-            },
-          ]),
+              },
+            ]),
+          timing: timing(),
         });
       }
       this.published = snapshot;
@@ -356,6 +400,7 @@ export class AdapterRuntimeCoordinator {
         pricing,
         fundingCoverage: funding.coverage,
         issues,
+        timing: timing(),
       });
     } finally {
       clearTimeout(preparationTimer);
@@ -931,6 +976,18 @@ function linkAbort(
   if (parent.aborted) abort();
   else parent.addEventListener("abort", abort, { once: true });
   return () => parent.removeEventListener("abort", abort);
+}
+
+async function measureWallMs<T>(
+  operation: () => Promise<T>,
+  record: (wallMs: number) => void,
+): Promise<T> {
+  const startedAtMs = Date.now();
+  try {
+    return await operation();
+  } finally {
+    record(Math.max(0, Date.now() - startedAtMs));
+  }
 }
 
 class FrozenReadonlyMap<K, V> implements ReadonlyMap<K, V> {

@@ -368,6 +368,11 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
     let quotePositive = 0;
     let bestNet: bigint | null = null;
     const atomicResults: BlockScanAtomicResult[] = [];
+    const workerResetTimings: Array<{
+      readonly worker: number;
+      readonly wallMs: number;
+      readonly status: "complete" | "failed";
+    }> = [];
     let auditRuntime: AdapterRuntimeSnapshot | null = null;
     let auditGraphView: VerifiedGraphView | null = null;
     let auditPricingCoverage: BlindProductionPricingCoverageSource | null =
@@ -825,25 +830,36 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
         signal: this.deps.runtimeAbort.signal,
         prepareExecution: async ({ sourceBlock, sourceBlockHash, signal }) => {
           const settled = await Promise.allSettled(
-            blockScanExecutionWorkers.map(async (worker) => {
-              if (this.deps.isShuttingDown() || signal.aborted) {
-                throw signal.reason;
-              }
-              await worker.state.forkAt(sourceBlock);
-              if (this.deps.isShuttingDown() || signal.aborted) {
-                throw signal.reason;
-              }
-              const forkHash = await this.deps.readBlockHash(
-                worker.state.provider,
-                sourceBlock,
-              );
-              if (this.deps.isShuttingDown() || signal.aborted) {
-                throw signal.reason;
-              }
-              if (forkHash !== sourceBlockHash) {
-                throw new Error(
-                  `worker fork hash mismatch ${forkHash} != ${sourceBlockHash}`,
+            blockScanExecutionWorkers.map(async (worker, workerIndex) => {
+              const resetStartedAtMs = Date.now();
+              let status: "complete" | "failed" = "failed";
+              try {
+                if (this.deps.isShuttingDown() || signal.aborted) {
+                  throw signal.reason;
+                }
+                await worker.state.forkAt(sourceBlock);
+                if (this.deps.isShuttingDown() || signal.aborted) {
+                  throw signal.reason;
+                }
+                const forkHash = await this.deps.readBlockHash(
+                  worker.state.provider,
+                  sourceBlock,
                 );
+                if (this.deps.isShuttingDown() || signal.aborted) {
+                  throw signal.reason;
+                }
+                if (forkHash !== sourceBlockHash) {
+                  throw new Error(
+                    `worker fork hash mismatch ${forkHash} != ${sourceBlockHash}`,
+                  );
+                }
+                status = "complete";
+              } finally {
+                workerResetTimings.push(Object.freeze({
+                  worker: workerIndex,
+                  wallMs: Math.max(0, Date.now() - resetStartedAtMs),
+                  status,
+                }));
               }
             }),
           );
@@ -888,6 +904,10 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           issueCount: runtime.pricing.issues.length,
           families: runtime.pricing.familyTelemetry ?? [],
           lanes: runtime.pricing.laneTelemetry,
+          runtime: runtime.timing,
+          workerResets: [...workerResetTimings].sort(
+            (a, b) => a.worker - b.worker,
+          ),
         })}`,
       );
       if (runtime.status === "incomplete") {

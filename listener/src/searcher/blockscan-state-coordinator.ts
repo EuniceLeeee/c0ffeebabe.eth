@@ -155,6 +155,11 @@ export interface BlockScanFamilyTelemetry {
    * fall back to direct current-N reads for every stateKey.
    */
   readonly fullFallbackReason?: string;
+  /** Sanitized phase + failure class; raw RPC errors never enter telemetry. */
+  readonly fullFallbackDetail?: string;
+  readonly incrementalDescriptorMs?: number;
+  readonly incrementalRangeMs?: number;
+  readonly incrementalClassifierMs?: number;
 }
 
 export interface BlockScanStateSnapshot {
@@ -288,6 +293,10 @@ interface FamilyExecutionTelemetry {
   readonly directStateKeys?: number;
   readonly missingPreviousStateKeys?: number;
   readonly fullFallbackReason?: string;
+  readonly fullFallbackDetail?: string;
+  readonly incrementalDescriptorMs?: number;
+  readonly incrementalRangeMs?: number;
+  readonly incrementalClassifierMs?: number;
 }
 
 interface BehaviorProvenUnavailableEdge {
@@ -306,6 +315,10 @@ interface FamilyLaneStaging {
   directStateKeys?: number;
   missingPreviousStateKeys?: number;
   fullFallbackReason?: string;
+  fullFallbackDetail?: string;
+  incrementalDescriptorMs?: number;
+  incrementalRangeMs?: number;
+  incrementalClassifierMs?: number;
 }
 
 interface FamilyIncrementalPlan {
@@ -320,6 +333,15 @@ interface IncrementalPreparation {
   readonly plans: Map<string, FamilyIncrementalPlan>;
   readonly missingPreviousStateKeysByFamily: ReadonlyMap<string, number>;
   readonly fullFallbackReasonByFamily: Map<string, string>;
+  readonly fullFallbackDetailByFamily: Map<string, string>;
+  readonly phaseTimingByFamily: ReadonlyMap<
+    string,
+    Readonly<{
+      readonly descriptorMs: number;
+      readonly rangeMs: number;
+      readonly classifierMs: number;
+    }>
+  >;
 }
 
 interface ActiveGeneration {
@@ -759,6 +781,15 @@ export class BlockScanStateCoordinator {
     const plans = new Map<string, FamilyIncrementalPlan>();
     const missingPreviousStateKeysByFamily = new Map<string, number>();
     const fullFallbackReasonByFamily = new Map<string, string>();
+    const fullFallbackDetailByFamily = new Map<string, string>();
+    const phaseTimingByFamily = new Map<
+      string,
+      {
+        descriptorMs: number;
+        rangeMs: number;
+        classifierMs: number;
+      }
+    >();
     const readRange = this.backend.readCanonicalMutationRange;
     const families = uniqueFamilies(groups);
     for (const family of families) {
@@ -787,6 +818,8 @@ export class BlockScanStateCoordinator {
         plans,
         missingPreviousStateKeysByFamily,
         fullFallbackReasonByFamily,
+        fullFallbackDetailByFamily,
+        phaseTimingByFamily,
       };
     }
     if (!readRange) {
@@ -802,6 +835,8 @@ export class BlockScanStateCoordinator {
         plans,
         missingPreviousStateKeysByFamily,
         fullFallbackReasonByFamily,
+        fullFallbackDetailByFamily,
+        phaseTimingByFamily,
       };
     }
     const previousSource: BlockSource = Object.freeze({
@@ -832,11 +867,24 @@ export class BlockScanStateCoordinator {
         plans,
         missingPreviousStateKeysByFamily,
         fullFallbackReasonByFamily,
+        fullFallbackDetailByFamily,
+        phaseTimingByFamily,
       };
     }
     await Promise.all(families.map(async (family) => {
       const incremental = compiledFamilies.get(family.familyId)?.incremental;
-      if (!incremental || signal.aborted) return;
+      if (!incremental) return;
+      if (signal.aborted) {
+        fullFallbackReasonByFamily.set(
+          family.familyId,
+          "mutation-range-pre-aborted",
+        );
+        fullFallbackDetailByFamily.set(
+          family.familyId,
+          "preflight:aborted",
+        );
+        return;
+      }
       const familyGroups = groups.filter(
         (group) => group.familyId === family.familyId,
       );
@@ -859,11 +907,26 @@ export class BlockScanStateCoordinator {
         | "mutation-descriptor-failed"
         | "mutation-range-failed"
         | "mutation-classifier-failed" = "mutation-descriptor-failed";
+      const timing = {
+        descriptorMs: 0,
+        rangeMs: 0,
+        classifierMs: 0,
+      };
+      phaseTimingByFamily.set(family.familyId, timing);
       try {
         const edges = Object.freeze(
           familyGroups.flatMap((group) => group.edges),
         );
-        const descriptor = incremental.mutationQueryDescriptor(edges);
+        const descriptorStartedAtMs = this.now();
+        let descriptor: MutationQueryDescriptor;
+        try {
+          descriptor = incremental.mutationQueryDescriptor(edges);
+        } finally {
+          timing.descriptorMs = Math.max(
+            0,
+            this.now() - descriptorStartedAtMs,
+          );
+        }
         if (isThenable(descriptor)) {
           throw new Error("mutationQueryDescriptor must return synchronously");
         }
@@ -874,16 +937,22 @@ export class BlockScanStateCoordinator {
           throw new Error("mutation query descriptor fingerprint mismatch");
         }
         phase = "mutation-range-failed";
-        const range = await awaitWithAbort(
-          readRange.call(
-            this.backend,
-            descriptor,
-            previousSource,
-            through,
-            { deadlineAtMs, signal },
-          ),
-          signal,
-        );
+        const rangeStartedAtMs = this.now();
+        let range: CanonicalMutationRange;
+        try {
+          range = await awaitWithAbort(
+            readRange.call(
+              this.backend,
+              descriptor,
+              previousSource,
+              through,
+              { deadlineAtMs, signal },
+            ),
+            signal,
+          );
+        } finally {
+          timing.rangeMs = Math.max(0, this.now() - rangeStartedAtMs);
+        }
         validateCanonicalMutationRange(
           range,
           descriptor,
@@ -891,10 +960,19 @@ export class BlockScanStateCoordinator {
           through,
         );
         phase = "mutation-classifier-failed";
-        const classification = incremental.classifyMutations({
-          edges,
-          range,
-        });
+        const classifierStartedAtMs = this.now();
+        let classification: FamilyMutationClassification;
+        try {
+          classification = incremental.classifyMutations({
+            edges,
+            range,
+          });
+        } finally {
+          timing.classifierMs = Math.max(
+            0,
+            this.now() - classifierStartedAtMs,
+          );
+        }
         if (isThenable(classification)) {
           throw new Error("classifyMutations must return synchronously");
         }
@@ -910,16 +988,22 @@ export class BlockScanStateCoordinator {
           previousByStateKey,
           schemaCompatibleStateKeys,
         }));
-      } catch {
+      } catch (error) {
         // Incremental proof/classification is an optimization. Its failure
         // forces direct current-N reads for this family, never unresolved state.
         fullFallbackReasonByFamily.set(family.familyId, phase);
+        fullFallbackDetailByFamily.set(
+          family.familyId,
+          sanitizedIncrementalFailureDetail(phase, error, signal),
+        );
       }
     }));
     return {
       plans,
       missingPreviousStateKeysByFamily,
       fullFallbackReasonByFamily,
+      fullFallbackDetailByFamily,
+      phaseTimingByFamily,
     };
   }
 
@@ -1160,6 +1244,10 @@ export class BlockScanStateCoordinator {
     const incrementalPlans = incrementalPreparation.plans;
     let fullFallbackReason =
       incrementalPreparation.fullFallbackReasonByFamily.get(familyId);
+    let fullFallbackDetail =
+      incrementalPreparation.fullFallbackDetailByFamily.get(familyId);
+    const incrementalTiming =
+      incrementalPreparation.phaseTimingByFamily.get(familyId);
     const missingPreviousStateKeys =
       incrementalPreparation.missingPreviousStateKeysByFamily.get(familyId) ??
         groups.length;
@@ -1169,6 +1257,10 @@ export class BlockScanStateCoordinator {
     staging.directStateKeys = directStateKeys;
     staging.missingPreviousStateKeys = missingPreviousStateKeys;
     staging.fullFallbackReason = fullFallbackReason;
+    staging.fullFallbackDetail = fullFallbackDetail;
+    staging.incrementalDescriptorMs = incrementalTiming?.descriptorMs;
+    staging.incrementalRangeMs = incrementalTiming?.rangeMs;
+    staging.incrementalClassifierMs = incrementalTiming?.classifierMs;
 
     interface PlannedRead {
       readonly group: StateGroup;
@@ -1248,9 +1340,14 @@ export class BlockScanStateCoordinator {
       if (classificationReadSetMismatch) {
         incrementalPlans.delete(plannedFamilyId);
         fullFallbackReason = "mutation-classifier-read-set-mismatch";
+        fullFallbackDetail = "classifier:read-set-mismatch";
         incrementalPreparation.fullFallbackReasonByFamily.set(
           plannedFamilyId,
           fullFallbackReason,
+        );
+        incrementalPreparation.fullFallbackDetailByFamily.set(
+          plannedFamilyId,
+          fullFallbackDetail,
         );
         continue;
       }
@@ -1271,6 +1368,7 @@ export class BlockScanStateCoordinator {
     staging.carryStateKeys = carryStateKeys;
     staging.directStateKeys = directStateKeys;
     staging.fullFallbackReason = fullFallbackReason;
+    staging.fullFallbackDetail = fullFallbackDetail;
 
     let physicalReads = schemaPhysicalReads;
     let batches = schemaBatches;
@@ -1772,6 +1870,16 @@ export class BlockScanStateCoordinator {
       ...(fullFallbackReason === undefined
         ? {}
         : { fullFallbackReason }),
+      ...(fullFallbackDetail === undefined
+        ? {}
+        : { fullFallbackDetail }),
+      ...(incrementalTiming === undefined
+        ? {}
+        : {
+            incrementalDescriptorMs: incrementalTiming.descriptorMs,
+            incrementalRangeMs: incrementalTiming.rangeMs,
+            incrementalClassifierMs: incrementalTiming.classifierMs,
+          }),
     });
     return Object.freeze({
       lane,
@@ -2308,6 +2416,18 @@ function createFamilyTelemetry(input: {
       ...(execution?.fullFallbackReason === undefined
         ? {}
         : { fullFallbackReason: execution.fullFallbackReason }),
+      ...(execution?.fullFallbackDetail === undefined
+        ? {}
+        : { fullFallbackDetail: execution.fullFallbackDetail }),
+      ...(execution?.incrementalDescriptorMs === undefined
+        ? {}
+        : { incrementalDescriptorMs: execution.incrementalDescriptorMs }),
+      ...(execution?.incrementalRangeMs === undefined
+        ? {}
+        : { incrementalRangeMs: execution.incrementalRangeMs }),
+      ...(execution?.incrementalClassifierMs === undefined
+        ? {}
+        : { incrementalClassifierMs: execution.incrementalClassifierMs }),
     })];
   }));
 }
@@ -2423,6 +2543,18 @@ function failedFamilyLane(
       ...(staging.fullFallbackReason === undefined
         ? {}
         : { fullFallbackReason: staging.fullFallbackReason }),
+      ...(staging.fullFallbackDetail === undefined
+        ? {}
+        : { fullFallbackDetail: staging.fullFallbackDetail }),
+      ...(staging.incrementalDescriptorMs === undefined
+        ? {}
+        : { incrementalDescriptorMs: staging.incrementalDescriptorMs }),
+      ...(staging.incrementalRangeMs === undefined
+        ? {}
+        : { incrementalRangeMs: staging.incrementalRangeMs }),
+      ...(staging.incrementalClassifierMs === undefined
+        ? {}
+        : { incrementalClassifierMs: staging.incrementalClassifierMs }),
     })]),
   });
 }
@@ -2664,6 +2796,50 @@ function mapReadFailureKind(kind: StateReadFailureKind): BlockScanStateIssueKind
   if (kind === "aborted") return "aborted";
   if (kind === "resource-limited") return "resource-limited";
   return "backend";
+}
+
+function sanitizedIncrementalFailureDetail(
+  fallbackPhase:
+    | "mutation-descriptor-failed"
+    | "mutation-range-failed"
+    | "mutation-classifier-failed",
+  error: unknown,
+  signal: AbortSignal,
+): string {
+  const transported = error && typeof error === "object"
+    ? error as { readonly phase?: unknown; readonly kind?: unknown }
+    : null;
+  const phase = typeof transported?.phase === "string"
+    ? transported.phase
+    : fallbackPhase === "mutation-descriptor-failed"
+    ? "descriptor"
+    : fallbackPhase === "mutation-classifier-failed"
+    ? "classifier"
+    : "range";
+  const transportedKind = transported?.kind;
+  if (
+    transportedKind === "deadline" ||
+    transportedKind === "aborted" ||
+    transportedKind === "rpc" ||
+    transportedKind === "validation" ||
+    transportedKind === "unknown"
+  ) {
+    return `${phase}:${transportedKind}`;
+  }
+  const message = formatError(signal.aborted ? signal.reason : error)
+    .toLowerCase();
+  const kind = message.includes("deadline") || message.includes("timed out")
+    ? "deadline"
+    : signal.aborted ||
+        isAbortError(error) ||
+        message.includes("cancelled") ||
+        message.includes("superseded")
+    ? "aborted"
+    : fallbackPhase === "mutation-descriptor-failed" ||
+        fallbackPhase === "mutation-classifier-failed"
+    ? "validation"
+    : "unknown";
+  return `${phase}:${kind}`;
 }
 
 function formatError(error: unknown): string {

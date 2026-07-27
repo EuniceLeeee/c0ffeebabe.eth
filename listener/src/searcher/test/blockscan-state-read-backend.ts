@@ -44,6 +44,7 @@ await testBatchFailureCancelsAndDrainsWorkers();
 await testMutationProofBypassesSaturatedStateSlots();
 await testMutationProofParentAbort();
 await testCanonicalMutationRange();
+await testMutationProofTelemetry();
 await testMutationRangeRejectsReorgAndRemovedLog();
 
 console.log("blockscan-state-read-backend PASS");
@@ -1060,6 +1061,73 @@ async function testCanonicalMutationRange(): Promise<void> {
     ],
   );
   console.log("[state-read-backend] canonical mutation range proof: PASS");
+}
+
+async function testMutationProofTelemetry(): Promise<void> {
+  const previousHash = `0x${"10".repeat(32)}`;
+  const descriptor = createMutationQueryDescriptor({
+    topics: [[`0x${"aa".repeat(32)}`]],
+  });
+  const telemetry: import("../blockscan-state-read-backend.js")
+    .MutationProofTransportTelemetry[] = [];
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    onMutationProofTelemetry: (value) => telemetry.push(value),
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return fakeResponse(body.map((request) => {
+        if (request.method === "eth_getLogs") return success(request.id, []);
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0],
+          hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock
+            ? previousHash
+            : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  await backend.readCanonicalMutationRange(
+    descriptor,
+    {
+      number: sourceBlock - 1,
+      hash: previousHash,
+      generation: sourceGeneration - 1,
+    },
+    {
+      number: sourceBlock,
+      hash: sourceBlockHash,
+      generation: sourceGeneration,
+    },
+    {
+      deadlineAtMs: Date.now() + 10_000,
+      signal: new AbortController().signal,
+    },
+  );
+  assert.equal(telemetry.length, 1);
+  const proof = telemetry[0];
+  assert.equal(proof.status, "complete");
+  assert.equal(proof.descriptorFingerprint, descriptor.fingerprint);
+  assert.equal(proof.phases.headers.rpcRequests, 1);
+  assert.equal(proof.phases.headers.rpcItems, 2);
+  assert.equal(proof.phases.logs.rpcRequests, 1);
+  assert.equal(proof.phases.finalCas.rpcRequests, 1);
+  assert(
+    [
+      proof.wallMs,
+      proof.validationMs,
+      proof.phases.headers.queueWaitMs,
+      proof.phases.headers.wallMs,
+      proof.phases.logs.queueWaitMs,
+      proof.phases.logs.wallMs,
+      proof.phases.finalCas.queueWaitMs,
+      proof.phases.finalCas.wallMs,
+    ].every((value) => Number.isFinite(value) && value >= 0),
+    "mutation proof telemetry must contain monotonic non-negative timings",
+  );
+  assert(Object.isFrozen(proof));
+  assert(Object.isFrozen(proof.phases));
+  console.log("[state-read-backend] mutation proof phase telemetry: PASS");
 }
 
 async function testMutationRangeRejectsReorgAndRemovedLog(): Promise<void> {

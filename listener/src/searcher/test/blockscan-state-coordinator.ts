@@ -1091,6 +1091,17 @@ async function incrementalRefreshIsStateKeyLocal(): Promise<void> {
       fallback: "mutation-range-failed",
     },
   );
+  assert.equal(
+    familyTelemetry(fullFallback).fullFallbackDetail,
+    "range:unknown",
+    "range fallback preserves a sanitized failure class without raw backend text",
+  );
+  assert(
+    (familyTelemetry(fullFallback).incrementalDescriptorMs ?? -1) >= 0 &&
+      (familyTelemetry(fullFallback).incrementalRangeMs ?? -1) >= 0 &&
+      (familyTelemetry(fullFallback).incrementalClassifierMs ?? -1) >= 0,
+    "incremental phase telemetry must be monotonic and non-negative",
+  );
 }
 
 async function familyLocalCompileDeadlineDoesNotCacheLateSchema(): Promise<void> {
