@@ -47,6 +47,7 @@ import {
 const HOT_BUDGET_MS = 25;
 const STARTUP_BUDGET_MS = 500;
 const HOT_FAMILY_BUDGET_MS = 10;
+const N_MINUS_ONE_FAMILY_SETTLE_BUDGET_MS = 10;
 const PUBLICATION_RESERVE_MS = 5;
 const EMPTY_HASH = exactSetHash([]);
 
@@ -530,15 +531,20 @@ async function nMinusOneTrackerStaysOutsideNormalRuntimePublication(): Promise<v
   );
   assert.ok(
     harness.coarsePricingFamilyDeadlineRemainingMs.every(
-      (remainingMs, index) =>
-        Math.abs(
-          (
-            harness.coarsePricingDeadlineRemainingMs[index]! -
-            remainingMs
-          ) - PUBLICATION_RESERVE_MS,
-        ) <= 1,
+      (remainingMs) =>
+        remainingMs > 0 &&
+        remainingMs <= N_MINUS_ONE_FAMILY_SETTLE_BUDGET_MS,
     ),
-    "the background producer must reserve time for family-local partial publication",
+    "the background producer must cap family work before partial publication",
+  );
+  assert.ok(
+    harness.coarsePricingDeadlineRemainingMs.every(
+      (remainingMs, index) =>
+        remainingMs -
+          harness.coarsePricingFamilyDeadlineRemainingMs[index]! >
+        PUBLICATION_RESERVE_MS,
+    ),
+    "the background producer must leave a real abort-drain and CAS window",
   );
   assert.equal(harness.publishedPricing, 1);
 }
@@ -930,6 +936,8 @@ function createHarness(
       !(options.blindEnabled ?? false),
     startupWarmBudgetMs: STARTUP_BUDGET_MS,
     nMinusOneFallbackEnabled: options.nMinusOneFallbackEnabled,
+    nMinusOneFamilySettleBudgetMs:
+      N_MINUS_ONE_FAMILY_SETTLE_BUDGET_MS,
     hotPricingFamilyBudgetMs: HOT_FAMILY_BUDGET_MS,
     runtimePublicationReserveMs: PUBLICATION_RESERVE_MS,
     refineCandidates: 1,

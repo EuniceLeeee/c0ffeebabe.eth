@@ -836,6 +836,14 @@ async function main(): Promise<void> {
     Number.isFinite(blockScanNMinusOneStateBudgetRaw)
       ? Math.max(1, Math.floor(blockScanNMinusOneStateBudgetRaw))
       : 20_000;
+  const blockScanNMinusOneFamilySettleRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FAMILY_SETTLE_MS ?? "10000",
+  );
+  const blockScanNMinusOneFamilySettleMs =
+    Number.isFinite(blockScanNMinusOneFamilySettleRaw) &&
+      blockScanNMinusOneFamilySettleRaw > 0
+      ? Math.floor(blockScanNMinusOneFamilySettleRaw)
+      : 10_000;
   const blockScanLargeGraphPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
   );
@@ -1085,6 +1093,7 @@ async function main(): Promise<void> {
       `solveReserveMs=${blockScanSolveReserveMs} ` +
       `nMinusOneFallback=${blockScanNMinusOneFallback ? "on" : "off"} ` +
       `nMinusOneStateBudgetMs=${blockScanNMinusOneStateBudgetMs} ` +
+      `nMinusOneFamilySettleMs=${blockScanNMinusOneFamilySettleMs} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -2184,6 +2193,7 @@ async function main(): Promise<void> {
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
+    nMinusOneFamilySettleBudgetMs: blockScanNMinusOneFamilySettleMs,
     hotPricingFamilyBudgetMs: blockScanHotPricingFamilyBudgetMs,
     runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
     refineCandidates: blockScanRefineCandidates,

@@ -319,6 +319,7 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
   readonly readTargets: string[] = [];
   readonly rangeSources: BlockSource[] = [];
   readonly failTargets = new Set<string>();
+  readonly stallTargets = new Set<string>();
   readonly mutationTargets = new Set<string>();
   rangeFailure = false;
 
@@ -327,8 +328,19 @@ class StateKeyIncrementalBackend implements BlockScanStateReadBackend {
     reads: readonly StateRead[],
     control: {
       sourceGeneration: number;
+      signal: AbortSignal;
     },
   ): Promise<readonly StateReadResult[]> {
+    if (
+      reads.some((read) => this.stallTargets.has(read.to.toLowerCase()))
+    ) {
+      await new Promise<void>((resolve) => {
+        if (control.signal.aborted) resolve();
+        else control.signal.addEventListener("abort", () => resolve(), {
+          once: true,
+        });
+      });
+    }
     return reads.map((read) => {
       const target = read.to.toLowerCase();
       this.readTargets.push(target);
@@ -1175,6 +1187,144 @@ async function emptyPublishedSnapshotDoesNotEraseRecoveryBase(): Promise<void> {
   }
 }
 
+async function familyDeadlinePreservesProvenSiblingStateKey(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const registered = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    familyTimeoutMs: 30,
+  });
+  const edges = [
+    swapForward,
+    swapReverse,
+    swapBForward,
+    swapBReverse,
+  ];
+  const base = await coordinator.prepare({
+    graph: incrementalGraph(1, edges),
+    families: [registered],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(base.status, "complete");
+
+  backend.mutationTargets.add(SWAP_POOL_B.toLowerCase());
+  backend.stallTargets.add(SWAP_POOL_B.toLowerCase());
+  const refreshed = await coordinator.prepare({
+    graph: incrementalGraph(2, edges),
+    families: [registered],
+    familySettleDeadlineAtMs: Date.now() + 30,
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(refreshed.status, "degraded");
+  if (refreshed.status !== "degraded") {
+    throw new Error("expected stateKey-local deadline degradation");
+  }
+  assert.equal(
+    refreshed.snapshot.stateByStateKey.size,
+    1,
+    "a timed-out direct stateKey must not erase a proven sibling carry",
+  );
+  assert.equal(refreshed.snapshot.mids.size, 2);
+  assert(
+    [...refreshed.snapshot.mids.values()].every(
+      (value) => value.pool.toLowerCase() === SWAP_POOL.toLowerCase(),
+    ),
+  );
+  assert.equal(
+    refreshed.snapshot.stateByStateKey.get(
+      `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
+    )?.refreshMode,
+    "carry-forward",
+  );
+  const carryFreshness = refreshed.snapshot.stateByStateKey.get(
+    `univ2-standard\u001f${SWAP_POOL.toLowerCase()}`,
+  )?.freshnessByReadKey.get("state");
+  assert.equal(carryFreshness?.kind, "carry-forward");
+  assert.equal(carryFreshness?.source.number, SOURCE_BLOCK + 2);
+  assert(
+    refreshed.coverage.unresolvedStateKeys.includes(
+      `univ2-standard\u001f${SWAP_POOL_B.toLowerCase()}`,
+    ),
+    "the timed-out stateKey must remain explicit unresolved coverage",
+  );
+  assert(
+    refreshed.issues.some((issue) =>
+      issue.kind === "deadline" &&
+      issue.familyId === "univ2-standard"
+    ),
+    "the timed-out sibling must remain family-attributed",
+  );
+  assert.deepEqual(
+    refreshed.snapshot.resolvedFamilyIds,
+    [],
+    "partial stateKey coverage must not claim whole-family completeness",
+  );
+  assert.deepEqual(
+    refreshed.snapshot.incompleteFamilyIds,
+    ["univ2-standard"],
+  );
+  assert.equal(refreshed.familyTelemetry?.[0]?.status, "degraded");
+  const published = coordinator.latestSnapshot();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(
+    coordinator.latestSnapshot(),
+    published,
+    "a late direct read may not overwrite the partial family publication",
+  );
+}
+
+async function generationAbortStillErasesFamilyPartial(): Promise<void> {
+  const backend = new StateKeyIncrementalBackend();
+  const registered = registerBlockScanStateFamily({
+    familyId: "univ2-standard",
+    lane: "swap",
+    capability: incrementalFakeCapability(),
+    ownsEdge: (edgeValue) => edgeValue.adapterId === "swap-action",
+  });
+  const coordinator = new BlockScanStateCoordinator(backend, {
+    familyTimeoutMs: 2_000,
+  });
+  const edges = [
+    swapForward,
+    swapReverse,
+    swapBForward,
+    swapBReverse,
+  ];
+  const base = await coordinator.prepare({
+    graph: incrementalGraph(1, edges),
+    families: [registered],
+    deadlineAtMs: Date.now() + 2_000,
+  });
+  assert.equal(base.status, "complete");
+
+  backend.mutationTargets.add(SWAP_POOL_B.toLowerCase());
+  backend.stallTargets.add(SWAP_POOL_B.toLowerCase());
+  const outer = new AbortController();
+  const timer = setTimeout(
+    () => outer.abort(new Error("fixture generation abort")),
+    20,
+  );
+  const aborted = await coordinator.prepare({
+    graph: incrementalGraph(2, edges),
+    families: [registered],
+    familySettleDeadlineAtMs: Date.now() + 1_000,
+    deadlineAtMs: Date.now() + 2_000,
+    signal: outer.signal,
+  });
+  clearTimeout(timer);
+  assert.equal(aborted.status, "incomplete");
+  assert.equal(aborted.coverage.resolvedEdgeKeys.length, 0);
+  assert.equal(
+    coordinator.latestSnapshot(),
+    base.status === "complete" ? base.snapshot : null,
+    "generation abort must retain the last published snapshot and donate no partial state",
+  );
+}
+
 async function familyLocalCompileDeadlineDoesNotCacheLateSchema(): Promise<void> {
   const swapCalls = { schema: 0, reads: 0, derives: 0 };
   const protocolCalls = { schema: 0, reads: 0, derives: 0 };
@@ -1958,6 +2108,8 @@ await graphIncompleteSwapFamilyPreservesHealthySibling();
 await oneFailedStateKeyPreservesHealthySiblingInstance();
 await incrementalRefreshIsStateKeyLocal();
 await emptyPublishedSnapshotDoesNotEraseRecoveryBase();
+await familyDeadlinePreservesProvenSiblingStateKey();
+await generationAbortStillErasesFamilyPartial();
 await familyLocalCompileDeadlineDoesNotCacheLateSchema();
 await familyLocalReadDeadlineFencesLateBackendResult();
 await explicitFamilySettleDeadlinePreservesGeneration();

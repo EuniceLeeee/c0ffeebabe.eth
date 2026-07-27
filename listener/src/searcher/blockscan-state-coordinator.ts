@@ -1191,13 +1191,17 @@ export class BlockScanStateCoordinator {
         staging,
       );
       try {
-        const result = await awaitWithAbort(
-          familyRun,
-          familyController.signal,
-        );
-        if (familyController.signal.aborted || signal.aborted) {
-          throw familyController.signal.reason ??
-            signal.reason ??
+        /*
+         * Do not race the family result against its local deadline here.
+         * runFamilyLane owns abort-aware settlement of every compile/read and
+         * can still return stateKeys whose carry proof or direct read completed
+         * before a sibling stateKey timed out. Racing at this boundary erased
+         * that safe partial result and turned one late pool into a whole-family
+         * pricing loss. A generation-level abort remains fail-closed below.
+         */
+        const result = await awaitWithAbort(familyRun, signal);
+        if (signal.aborted) {
+          throw signal.reason ??
             new Error(`block-scan state family ${family.familyId} aborted`);
         }
         return result;
@@ -1579,7 +1583,10 @@ export class BlockScanStateCoordinator {
       if (runnable.length === 0) break;
       if (signal.aborted) {
         for (const item of runnable) badStateKeys.add(item.group.stateKey);
-        issues.push(issueFromAbort(signal.reason, graph.generation, lane));
+        issues.push(Object.freeze({
+          ...issueFromAbort(signal.reason, graph.generation, lane),
+          familyId,
+        }));
         break;
       }
 

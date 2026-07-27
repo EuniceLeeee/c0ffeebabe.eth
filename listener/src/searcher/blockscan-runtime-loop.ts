@@ -227,6 +227,11 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
    */
   readonly nMinusOneStateBudgetMs?: number;
   /**
+   * Family-local work window inside the N-1 producer. The remaining state
+   * budget is reserved for abort drain, partial aggregation and canonical CAS.
+   */
+  readonly nMinusOneFamilySettleBudgetMs?: number;
+  /**
    * Ordinary-live per-family pricing cutoff. This is deliberately shorter
    * than the generation deadline so one slow family degrades locally instead
    * of letting the outer deadline erase every healthy sibling.
@@ -347,10 +352,21 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
       stateBudgetMs,
       Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500),
     );
+    const familySettleBudgetMs = Math.min(
+      stateBudgetMs,
+      Math.max(
+        1,
+        this.deps.nMinusOneFamilySettleBudgetMs ??
+          Math.min(10_000, stateBudgetMs),
+      ),
+    );
     const deadlineAtMs = startedAtMs + stateBudgetMs;
-    const familySettleDeadlineAtMs = Math.max(
-      startedAtMs,
-      deadlineAtMs - publicationReserveMs,
+    const familySettleDeadlineAtMs = Math.min(
+      startedAtMs + familySettleBudgetMs,
+      Math.max(
+        startedAtMs,
+        deadlineAtMs - publicationReserveMs,
+      ),
     );
     let result: BlockScanStatePrepareResult | null = null;
     const task = input.coordinator.prepareCoarsePricing({
@@ -386,6 +402,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
           issueCount: prepared.issues.length,
           wallMs: Math.max(0, Date.now() - startedAtMs),
           budgetMs: stateBudgetMs,
+          familySettleBudgetMs,
           publicationReserveMs,
           families: prepared.familyTelemetry ?? [],
           lanes: prepared.laneTelemetry,
