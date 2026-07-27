@@ -81,6 +81,31 @@ No slice may present one of these hypotheses as a fact before its declared measu
 - Protocol conversions, Curve states with block-progressing/external dependencies, and UniV4 dynamic-fee
   pools remain direct-current by default unless a family supplies a complete proof contract.
 
+#### 3.2.1 Conditional N−1 coarse-pricing fallback
+
+Source-N remains the preferred production path. If the instrumented independent-B run shows that source-N
+still cannot produce usable pricing after R1+R2 and the declared concurrency/direct-read attempts, one
+completed predecessor snapshot may be used as a degraded liveness fallback for **coarse candidate
+enumeration only**:
+
+- the maximum age is exactly one completed predecessor block (`coarseSource=N−1`); N−2 or an unbounded stale
+  cache is forbidden;
+- it is labeled as N−1 provenance and is never inserted into a source-N `PricingView`;
+- mutations observed at N are accumulated as current-block anchors. An affected edge must receive a
+  current-N read before its anchor can be scored; the full graph remains available for closing the route;
+- adapters with off-event/external dependencies must declare that limitation. If they cannot supply an N
+  mutation proof or current read, the degraded lane has an explicit recall gap and cannot claim full
+  coverage;
+- every coarse candidate is fully repriced at N before exact refinement, planning, solving, EV evaluation or
+  submission. The candidate joins only same-block/hash funding and execution state and passes a final
+  canonical CAS;
+- if the N reprice/join cannot finish, disagrees in EV sign, or the head advances again, the candidate is
+  discarded. N−1 values never authorize a bundle or transaction.
+
+Activation is allowed only after a live diagnostic records the failed source-N attempts and their phase
+telemetry. It is a degraded availability mode, not proof that current-N output, full recall, end-to-end
+latency or `fixed` has been achieved.
+
 ### 3.3 Atomic join
 
 Scheduling may be decoupled; execution consistency may not.
@@ -290,6 +315,29 @@ that wait is material.
 - Candidate ordering changes are measured and reviewed; final-sim false positives do not increase beyond the
   predeclared bound.
 
+### R6 — one-block-lag coarse fallback
+
+**Purpose:** preserve scanner liveness when the complete source-N producer remains outside the usable
+window after R1+R2, without allowing stale prices into execution.
+
+**Precondition:** the independent B diagnostic has exercised the source-N recovery path and recorded its
+phase failures. This is not the first-line repair.
+
+**Direction**
+
+- enumerate from the complete N−1 coarse graph;
+- add current-N mutation anchors as described in §3.2.1;
+- bind every candidate to both its coarse source and required exact source;
+- require whole-route N repricing and same-N funding/execution join before any executable result.
+
+**Deterministic gates**
+
+- no candidate can reach plan/solve/final sim with an N−1 mid;
+- an EV-sign flip between N−1 and N is rejected;
+- N mutation, skipped-head, reorg and head-advance fixtures cannot reuse the stale candidate;
+- unchanged-block route recall matches the source-N coarse oracle;
+- changed/off-event recall losses are measured explicitly and never reported as full coverage.
+
 ## 5. Paired A/B contract
 
 Systemic latency requires paired live evidence; one historical transaction cannot prove it.
@@ -416,6 +464,7 @@ Only then may the result be called `fixed`.
 | R3 discovery policy | not started; precondition unmet | n/a | D0 code exists, but no live evidence that the six declared venues are material | pending D0 live attribution |
 | R4 runtime join | not started; precondition unmet | n/a | no code change | pending D0/R1 live attribution |
 | R5 scanner priority | not started; precondition unmet | n/a | scanner production-boundary control passes unchanged | pending post-R1/R3 live attribution |
+| R6 N−1 coarse fallback | conditional; not implemented | n/a | required stale-price isolation gates declared in §3.2.1/R6 | allowed only after source-N live attempts fail |
 
 ### 7.1 Implementation evidence
 
