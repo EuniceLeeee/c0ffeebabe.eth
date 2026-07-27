@@ -694,7 +694,11 @@ async function main(): Promise<void> {
           plans[0].tokenPath,
           solved.flashAmount,
           validationState,
-          { safetyBps: validationPolicy.quoteSafetyBps, cache },
+          {
+            executor: DEFAULT_SEARCHER_EXECUTOR,
+            safetyBps: validationPolicy.quoteSafetyBps,
+            cache,
+          },
         );
         const sim = await simulator.simulate(solved);
         if (!sim.success) {

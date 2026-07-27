@@ -1425,6 +1425,7 @@ async function main(): Promise<void> {
       {
         familyTimeoutMs: refineFamilyTimeoutMs,
         maxConcurrentPerFamily: refineMaxConcurrentPerFamily,
+        executor: DEFAULT_SEARCHER_EXECUTOR,
       },
     );
     const scan = { ...coarseScan, opportunities: refinement.opportunities };
@@ -1903,7 +1904,10 @@ async function solveSelected(
           solvedTokenPath,
           solved.flashAmount,
           state,
-          { safetyBps: 10000n },
+          {
+            executor: DEFAULT_SEARCHER_EXECUTOR,
+            safetyBps: 10000n,
+          },
         );
         diagnosticHopAmounts = opp.seedEdges.map((edge, index) => ({
           adapterId: edge.adapterId,

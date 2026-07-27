@@ -2164,6 +2164,7 @@ async function main(): Promise<void> {
     refineCandidates: blockScanRefineCandidates,
     solveReserveMs: blockScanSolveReserveMs,
     midConcurrency: blockScanMidConcurrency,
+    executorAddress: config.botvmAddress,
     isShuttingDown: () => shuttingDown,
     blockScanGraph: () => blockScanGraph,
     blockScanPlanner: () => blockScanPlanner,

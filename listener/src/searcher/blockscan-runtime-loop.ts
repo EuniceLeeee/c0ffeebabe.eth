@@ -214,6 +214,8 @@ export interface BlockScanRuntimeLoopDependencies<PreparedDiscovery> {
   readonly refineCandidates: number;
   readonly solveReserveMs: number;
   readonly midConcurrency: number;
+  /** BotVM execution contract supplied to generic route quote contexts. */
+  readonly executorAddress: string;
   isShuttingDown(): boolean;
   blockScanGraph(): readonly TokenEdge[] | undefined;
   blockScanPlanner(): TemplatePlanner | undefined;
@@ -1015,6 +1017,7 @@ export class BlockScanRuntimeLoop<PreparedDiscovery> {
             }
           : undefined,
         this.deps.midConcurrency,
+        { executor: this.deps.executorAddress },
       );
       finishStage(
         "exact_refine",

@@ -590,6 +590,7 @@ function createHarness(
       PreparedDiscovery
     >["executionWorkers"],
     runtimeAbort,
+    executorAddress: "0x0000000000000000000000000000000000000001",
     sharedPlanner: { setFlashLiquidity() {} },
     backrunStatePublisher: {
       publish() {

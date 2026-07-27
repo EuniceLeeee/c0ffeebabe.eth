@@ -68,6 +68,12 @@ export interface BlockScanProbeFailureDiagnostic {
 export interface BlockScanRefinementOptions {
   readonly familyTimeoutMs?: number;
   readonly maxConcurrentPerFamily?: number;
+  /**
+   * Production execution contract used by route families whose quote depends
+   * on caller-observable balance deltas. Other families ignore it through the
+   * shared QuoteContext.
+   */
+  readonly executor?: string;
 }
 
 interface RankedProbe {
@@ -253,6 +259,7 @@ export async function refineBlockScanCandidates(
         opportunity,
         familyDeadlineAtMs,
         familyController.signal,
+        options.executor,
         () =>
           familyDeadlineAtMs < deadlineAtMs
             ? new FamilyProbeDeadlineError(familyIds, localBudgetMs)
@@ -475,6 +482,7 @@ async function exactProbeMarginBps(
   opportunity: BlockScanOpportunity,
   deadlineAtMs: number,
   signal: AbortSignal,
+  executor?: string,
   deadlineError: () => Error = () =>
     new ProbeDeadlineError("exact probe deadline reached"),
   onEdgeSuccess: (
@@ -508,6 +516,8 @@ async function exactProbeMarginBps(
           edge.v4PoolKey,
           edge.poolToken0,
           edge.poolToken1,
+          undefined,
+          executor,
         ),
         signal,
       );

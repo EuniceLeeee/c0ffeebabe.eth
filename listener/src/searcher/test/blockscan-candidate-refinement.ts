@@ -173,6 +173,7 @@ await mixedRouteTimeoutIsAttributedToCurrentLeg();
 await earlyZeroDoesNotClearUnvisitedInstanceCircuit();
 await transientCircuitWaitsForInflightRecovery();
 await confirmedPositiveSurvivesLaterInstanceCircuit();
+await executorQuoteContextReachesFamily();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -1206,6 +1207,59 @@ async function confirmedPositiveSurvivesLaterInstanceCircuit(): Promise<void> {
     result.opportunities.map(({ cycleId }) => cycleId),
     ["confirmed-positive"],
     "later failures may stop future probes but cannot erase an exact-positive route",
+  );
+}
+
+async function executorQuoteContextReachesFamily(): Promise<void> {
+  const executor = "0x0000000000000000000000000000000000000e01";
+  let observedCaller: string | null = null;
+  const state = {
+    async call() {
+      throw new Error("executor-aware family probe must not fall back to call()");
+    },
+    async simulateTokenToNativeDelta(req: {
+      caller: string;
+      amountIn: bigint;
+    }) {
+      observedCaller = req.caller;
+      return {
+        tokenInSpent: req.amountIn,
+        totalSupplyBurned: req.amountIn,
+        nativeOut: req.amountIn + 1n,
+      };
+    },
+  } as unknown as StateBackend;
+  const selfBurnOpportunity: BlockScanOpportunity = {
+    ...opportunity(TOKEN_6, 10_240n),
+    cycleId: "executor-aware-quote",
+    cycleFingerprint: "executor-aware-quote",
+    seedEdges: [{
+      adapterId: "self-burn-native-redeem",
+      target: TOKEN_6,
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+      slotKind: "protocol",
+      protocolAction: "redeem",
+      edgeKind: "protocol",
+      leavesStandingPosition: false,
+    }],
+  };
+  const result = await refineBlockScanCandidates(
+    state,
+    [selfBurnOpportunity],
+    1,
+    Date.now() + 1_000,
+    pricedTokens,
+    undefined,
+    1,
+    { executor },
+  );
+  assert.equal(observedCaller, executor);
+  assert.equal(result.positive, 1);
+  assert.deepEqual(
+    result.opportunities.map(({ cycleId }) => cycleId),
+    ["executor-aware-quote"],
+    "executor-dependent families must survive generic exact refinement",
   );
 }
 
