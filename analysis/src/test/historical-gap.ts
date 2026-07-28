@@ -16,6 +16,7 @@ import {
   validateHistoricalBranchAuditCoverage,
   validateDirectMainPackageManifest,
   validateHistoricalDiffScope,
+  validateFamilyExecutionDiffCoverage,
   validateHistoricalArtifactCommit,
   validateHistoricalGap,
   validateHistoricalMergeTree,
@@ -26,6 +27,7 @@ import {
   trustedSsmTunnelReady,
   type HistoricalAuditInventory,
   type HistoricalGapRecord,
+  type HistoricalFamilyOwnershipManifest,
   type HistoricalProductionUniverseAttestation,
   type HistoricalUniverseProvenance,
 } from "../historical-gap.js";
@@ -710,6 +712,154 @@ test("family execution admits family-owned code plus thin registration but rejec
       file,
     ], "family-execution").some((error) => error.includes("family-owned")), file);
   }
+});
+
+function familyOwnershipManifest(
+  families: Array<{
+    id: string;
+    kind?: string;
+    source: string;
+    actionSource?: string;
+    activation?: string;
+  }>,
+  overrides: Partial<HistoricalFamilyOwnershipManifest> = {},
+): HistoricalFamilyOwnershipManifest {
+  return {
+    schema_version: 1,
+    registry_order: families.map((family) => family.id),
+    registry_skeleton_sha256: "1".repeat(64),
+    action_index_skeleton_sha256: "2".repeat(64),
+    families: families.map((family) => ({
+      id: family.id,
+      kind: family.kind ?? "protocol-conversion",
+      root_source: family.source,
+      root_export: `${family.id.replace(/[^A-Za-z0-9_$]/g, "_")}Adapter`,
+      source_files: [
+        family.source,
+        ...(family.actionSource ? [family.actionSource] : []),
+      ].sort(),
+      owned_action_adapter_ids: [`${family.id}:action`],
+      owned_action_bindings: [{
+        id: `${family.id}:action`,
+        binding: `${family.actionSource ?? family.source}#action`,
+      }],
+      required_action_adapter_ids: [],
+      required_action_bindings: [],
+      activation_sha256: family.activation ?? "3".repeat(64),
+    })),
+    ...overrides,
+  };
+}
+
+test("family diff coverage requires a fixture for every changed owner", () => {
+  const baseline = familyOwnershipManifest([
+    { id: "family:a", source: "src/searcher/venues/protocols/a.ts" },
+    { id: "family:b", source: "src/searcher/venues/protocols/b.ts" },
+  ]);
+  const challenger = familyOwnershipManifest([
+    {
+      id: "family:a",
+      source: "src/searcher/venues/protocols/a.ts",
+      activation: "4".repeat(64),
+    },
+    {
+      id: "family:b",
+      source: "src/searcher/venues/protocols/b.ts",
+      activation: "5".repeat(64),
+    },
+  ]);
+  const changed = [
+    "listener/src/searcher/venues/protocols/a.ts",
+    "listener/src/searcher/venues/protocols/b.ts",
+  ];
+  const missing = validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: changed,
+    baseline,
+    challenger,
+    subjectFamilyIds: ["family:a"],
+  });
+  assert.deepEqual(missing.affected_family_ids, ["family:a", "family:b"]);
+  assert.match(missing.errors.join("\n"), /do not cover.*family:b/);
+  assert.deepEqual(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: changed,
+    baseline,
+    challenger,
+    subjectFamilyIds: ["family:b", "family:a", "family:a"],
+  }).errors, []);
+});
+
+test("family diff coverage attributes shared implementation and action files", () => {
+  const shared = "src/searcher/venues/protocols/shared.ts";
+  const action = "src/adapters/shared-action.ts";
+  const baseline = familyOwnershipManifest([
+    { id: "family:a", source: shared, actionSource: action },
+    { id: "family:b", source: shared, actionSource: action },
+  ]);
+  const coverage = validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: [`listener/${action}`],
+    baseline,
+    challenger: baseline,
+    subjectFamilyIds: ["family:a"],
+  });
+  assert.deepEqual(coverage.affected_family_ids, ["family:a", "family:b"]);
+  assert.match(coverage.errors.join("\n"), /family:b/);
+});
+
+test("family diff coverage rejects orphan, central logic, reordering and funding-only changes", () => {
+  const baseline = familyOwnershipManifest([
+    { id: "family:a", source: "src/searcher/venues/protocols/a.ts" },
+    {
+      id: "flash-loan:test",
+      kind: "flash-loan",
+      source: "src/searcher/venues/funding/test.ts",
+    },
+  ]);
+  assert.match(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: ["listener/src/adapters/orphan.ts"],
+    baseline,
+    challenger: baseline,
+    subjectFamilyIds: [],
+  }).errors.join("\n"), /no registered family owner/);
+
+  assert.match(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: ["listener/src/searcher/venues/protocols/a.ts"],
+    baseline,
+    challenger: {
+      ...baseline,
+      registry_skeleton_sha256: "9".repeat(64),
+      registry_order: [...baseline.registry_order].reverse(),
+      families: [...baseline.families].reverse(),
+    },
+    subjectFamilyIds: ["family:a"],
+  }).errors.join("\n"), /central production-registry logic.*relative production registry order/s);
+
+  assert.match(validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: ["listener/src/searcher/venues/funding/test.ts"],
+    baseline,
+    challenger: baseline,
+    subjectFamilyIds: ["flash-loan:test"],
+  }).errors.join("\n"), /funding-only families/);
+});
+
+test("family diff coverage derives added and removed families without a name table", () => {
+  const baseline = familyOwnershipManifest([
+    { id: "family:old", source: "src/searcher/venues/protocols/old.ts" },
+  ]);
+  const challenger = familyOwnershipManifest([
+    { id: "family:new", source: "src/searcher/venues/protocols/new.ts" },
+  ]);
+  const coverage = validateFamilyExecutionDiffCoverage({
+    changedRepoPaths: [
+      "listener/src/searcher/venues/protocols/old.ts",
+      "listener/src/searcher/venues/protocols/new.ts",
+      "listener/src/searcher/venues/production-registry.ts",
+    ],
+    baseline,
+    challenger,
+    subjectFamilyIds: ["family:old", "family:new"],
+  });
+  assert.deepEqual(coverage.affected_family_ids, ["family:new", "family:old"]);
+  assert.deepEqual(coverage.errors, []);
 });
 
 test("runtime paths and semantic diff tokens force live-distribution changes to Hermes", () => {

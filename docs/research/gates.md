@@ -30,7 +30,7 @@ Every claim selects exactly one track before evidence is produced:
 
 | Track | Claim it may close | Decisive evidence |
 |---|---|---|
-| `family_execution` | One quote-bearing `RouteLeg` execution family can build its family-owned edges, quote, plan/size, encode and execute a trace-proven route safely. Funding-only families are not subjects of this track. | Trusted route-pinned Family/Adapter Replay, family conformance/isolation, fork final sim, repayment/conservation and production EV. Production discovery and route enumeration are `bypassed`; the verdict is `adapter_fixed`, never `production_fixed`. |
+| `family_execution` | Every registry-derived quote-bearing `RouteLeg` family affected by the diff can build its family-owned edges, quote, plan/size, encode and execute a trace-proven route safely. Funding-only families are not subjects of this track. | Exact changed-owner-family ↔ fixture-subject coverage, trusted route-pinned Family/Adapter Replay, family conformance/isolation, fork final sim, repayment/conservation and production EV. Production discovery and route enumeration are `bypassed`; the verdict is `adapter_fixed`, never `production_fixed`. |
 | `production_route_stage` | The production funnel can self-discover and advance a particular historical route. | Trusted Production Replay with no route or amount supplied to discovery, enumeration, pruning, ranking, solve selection or sizing. The expected route is an output-only oracle applied after production output is frozen. |
 | `systemic_live` | Intake, universe/admission, scanner/ranking, candidate distribution, shared hot-path latency, concurrency, deadlines or resource behavior improved without unacceptable regressions. | Predeclared positive/negative cohort, same-input coverage/output/resource evidence and Hermes paired A/B. A single-route six-step record is diagnostic only. |
 
@@ -95,6 +95,18 @@ the number of internal modules. Producers may move, split, merge or be registry-
 the evidence meaning. Unknown extension fields are preserved and ignored by semantic comparison; a missing
 required core field fails closed. Adding or changing a required core field requires a schema-version bump and
 a trusted verifier update independent of the challenger.
+
+Step 4 execution identity is derived from the solver-selected resolved subtree, not copied from the expected
+edge. Address-backed families use the resolved node target by default. A singleton vault or manager whose
+physical call target differs from its logical venue must declare a family-owned projection from that subtree;
+the trusted runner independently compares the projected logical target and optional opaque pool id with the
+graph edge. This keeps protocol semantics out of the central runner while preventing two pools behind one
+singleton from satisfying each other's witness.
+
+For step 5, only an explicit EVM/domain witness (for example a typed revert or `CALL_EXCEPTION`) may establish a
+stable family-owned failure. Timeout, abort, provider/network errors and structured errors with no recognized
+domain classification are non-promotable infrastructure evidence. Error prose alone can neither attribute a
+failure to a family nor establish a baseline-to-challenger flip.
 
 ### `fixed` vs `implemented` (the definition of "fixed")
 For a transaction-bound deterministic searcher change (path / pool / decoder / template / planner / adapter / graph):
@@ -486,7 +498,11 @@ the optional six-step checker.
   A separate non-injected identity/probe assertion is supporting evidence only; it does not upgrade the
   execution verdict into production instance intake, route discovery or enumeration. The signed promotion
   receipt binds the fixed trusted conformance-script inventory,
-  each script's frozen source SHA-256 and successful output SHA-256;
+  each script's frozen source SHA-256 and successful output SHA-256, both registry-derived ownership-manifest
+  hashes (including the exact retained bytes of central registry/catalog skeletons after only trusted
+  registration ranges are removed) and the exact affected/fixture subject family set. Every changed family-owned implementation must be
+  covered; shared files require every owner, while central registry/catalog logic, reordering, orphan files and
+  funding-only subjects fail closed;
 - `production_route_stage` behavior uses the canonical six-step check with an unchanged trusted Production
   Replay, no expected route/amount fed into the production producer, and >=10 minute process-liveness smoke;
 - systemic scanner/graph/universe work uses its predeclared cohort/coverage/equivalence contract and proceeds
@@ -504,11 +520,13 @@ from either scanner standing state or a real swap/oracle backrun trigger. Every 
 ordered route (`adapterId`, `slotKind`, `target`, `tokenIn`, `tokenOut`, optional `poolId`) to canonical
 on-chain swap order/direction, factory-backed V2/V3 venue identity, and one successful state-changing call
 trace that matches every DEX and protocol leg in the declared interleaved order. A hash-bound, finite
-reference-witness declaration supplies ABI signatures and relational token/call constraints; the trusted
+reference-witness declaration supplies ABI signatures, exact empty-calldata value calls and relational
+token/call constraints; the trusted
 interpreter rejects arbitrary code, family-name branches and bare `target+selector` protocol matches. Swap
 direction remains independently bound by receipt-level family observation. For every leg, the landed root
-selector must also equal the selector independently decoded from that leg's production `ActionAdapter.encode`
-output; a challenger-authored permissive `matchTrace` cannot create the binding. Protocol token flow and the exact
+selector must also equal the selector independently decoded from the solver-selected final resolved-plan
+subtree compiled with its real child bytes and selected amount; final-sim calldata must match that resolved
+plan byte-for-byte. A probe-time fragment or challenger-authored permissive `matchTrace` cannot create the binding. Protocol token flow and the exact
 trusted replay route are checked separately. A protocol target equal to
 the winner's private caller/executor is rejected; pool-set membership alone is insufficient. Build/test
 without sample replay is

@@ -23,7 +23,7 @@ the causal replay, not by the word `atomic` or by its bundle container.
 | Change | Required evidence | Destination |
 |---|---|---|
 | analysis tool, classifier, gate | build + regression tests + fresh non-author review | merge directly to `main`; never deploy as B |
-| `family_execution`: one quote-bearing `RouteLeg` execution family, family-owned identity/edge, quote, plan/size or execution semantic | every trace-proven family fixture passes trusted route-pinned Family/Adapter Replay, conformance/isolation and canonical stages 3–6; the replay itself independently proves positive production EV | merge exact frozen SHA as `adapter_fixed`; do not claim production discovery |
+| `family_execution`: quote-bearing `RouteLeg` family-owned identity/edge, quote, plan/size or execution semantics | a registry-derived ownership manifest proves that every changed family owner—and no unchanged family—is represented by a trace-proven fixture; every fixture passes trusted route-pinned Family/Adapter Replay, conformance/isolation and canonical stages 3–6; the replay itself independently proves positive production EV | merge exact frozen SHA as `adapter_fixed`; do not claim production discovery |
 | `production_route_stage`: a particular historical route should advance through the production funnel | trusted Production Replay emits the canonical six stages without receiving the expected route or amount as a production input; then the trusted gate itself runs a >=10 minute dual-lane dry-run smoke | merge exact frozen SHA as `production_fixed` after the claimed stage advances |
 | systemic protocol scanner, graph/universe construction, coverage or cross-opportunity distribution/performance | predeclared positive/negative cohort, coverage and output contract, then same-input fairness/resource evidence | route to `HERMES.md`; no per-sample candidate or single-route stage flip |
 | flow admission, latency, candidate ranking | pinned replay where applicable, then full Hermes A/B | route to `HERMES.md`; history alone cannot promote |
@@ -106,6 +106,12 @@ receipts live in the externally supplied report-only artifact descendant; they a
 challenger code tree. Changes to universe, scanner, detector, planner, solver, shared adapter interfaces,
 tests or trusted runners are a separate gap/framework change and cannot be hidden inside an `adapter_fixed`
 verdict.
+The trusted ownership manifest is derived independently in both frozen worktrees from
+`PRODUCTION_ADAPTER_FAMILIES`, the active ActionAdapter catalog, imported export bindings and their
+family-local source closures. The union of baseline/challenger owners for every changed implementation file
+must equal the de-duplicated fixture subject-family set exactly. Shared files therefore require fixtures for
+all owning families; an orphan file, hidden central registry/catalog logic change, registry reorder or
+funding-only family fails closed. No protocol-name ownership table is maintained.
 
 An unchanged identity/probe path may be exercised against a newly observed instance as supporting evidence, but
 `family_execution` still cannot close its production-intake claim because steps 1–2 are route-pinned and
@@ -194,10 +200,17 @@ admission is `flow-admission` and must go to Hermes A/B rather than using this h
    Adapter Replay fixture plus its independently produced landed evidence for every sample in the report-only
    artifact descendant; bind both by SHA-256 in the historical report. Every leg carries a finite
    reference-witness declaration interpreted by the trusted runner. The declaration may express ABI signatures,
-   parent/descendant call relations, token/caller/target equality, positive amounts and receipt transfers; it
+   exact empty-calldata value calls, parent/descendant call relations, token/caller/target equality, positive
+   amounts and receipt transfers; it
    cannot execute code, inject a replay amount, or fall back to a family-name-specific `target+selector` rule.
-   The root target/selector is additionally derived by decoding the production action encoder's BotVM output
-   and must equal the landed call; `matchTrace` alone is not an execution-semantic oracle.
+   The root target/selector is additionally derived from the solver-selected final resolved-plan subtree,
+   compiled with its real child bytes and selected amount, and must equal the landed call; a probe-time
+   fragment or `matchTrace` alone is not an execution-semantic oracle. The final simulator calldata must
+   byte-match the calldata compiled from that same resolved plan. Ordinary address-backed families bind the
+   final subtree through its resolved node target. Singleton vault/manager families declare their own
+   deterministic projection from the final subtree to the logical route target and optional pool id; the
+   trusted runner compares that projection with the graph edge without passing the expected edge into the
+   family callback.
    For `production_route_stage`, build one schema-v3 candidate report per sample. That
    report's `production_evidence` owns the on-chain
    classification and trusted replay declaration. Both block-scan and backrun samples must declare one complete,
@@ -220,10 +233,13 @@ admission is `flow-admission` and must go to Hermes A/B rather than using this h
 7. **Run the historical gate.** It recomputes scope, checks base/branch/ref inventory and actual diff class,
    then reruns repository gates. For `family_execution` it invokes the trusted route-pinned Family/Adapter Replay,
    verifies canonical steps 3–6 with steps 1–2 explicitly `bypassed`, and runs the fixed
-   adapter-descriptor/route-registry/token-graph-isolation/shared-surface conformance inventory. A registered
-   baseline failure is accepted only when a typed error attributes it to the subject family and a second
-   baseline run reproduces the same semantic failure fingerprint; raw error text, timings and extension fields
-   are excluded. For `production_route_stage` it invokes
+   adapter-descriptor/route-registry/token-graph-isolation/shared-surface/ownership conformance inventory.
+   The base/challenger ownership manifests, exact retained central-skeleton bytes and exact affected-family
+   set are bound into the promotion receipt.
+   A registered baseline failure is accepted only when a project-owned deterministic error supplies the exact
+   `{ownerFamilyId, stageId, code}` and a second baseline run reproduces the same semantic failure fingerprint;
+   timeout, abort, provider/network and unclassified errors are infrastructure evidence and cannot establish a
+   flip. Raw error prose, timings and extension fields are excluded. For `production_route_stage` it invokes
    the unchanged trusted Production Replay and verifies canonical steps 1–6 without exposing expected route or
    amount to the production producer. A challenger-authored success string cannot satisfy either track.
    Runtime-path and added/removed diff signals mechanically route intake, ranking,

@@ -170,6 +170,37 @@ export interface HistoricalSmokePlan {
   duration_seconds: number;
 }
 
+export interface HistoricalFamilyOwnedActionBinding {
+  id: string;
+  binding: string;
+}
+
+export interface HistoricalFamilyOwnershipManifestEntry {
+  id: string;
+  kind: string;
+  root_source: string;
+  root_export: string;
+  source_files: string[];
+  owned_action_adapter_ids: string[];
+  owned_action_bindings: HistoricalFamilyOwnedActionBinding[];
+  required_action_adapter_ids: string[];
+  required_action_bindings: HistoricalFamilyOwnedActionBinding[];
+  activation_sha256: string;
+}
+
+export interface HistoricalFamilyOwnershipManifest {
+  schema_version: 1;
+  registry_order: string[];
+  registry_skeleton_sha256: string;
+  action_index_skeleton_sha256: string;
+  families: HistoricalFamilyOwnershipManifestEntry[];
+}
+
+export interface HistoricalFamilyExecutionCoverage {
+  affected_family_ids: string[];
+  errors: string[];
+}
+
 const DIRECT_MAIN_COMPONENTS = new Set<HistoricalChangeComponent>([
   "analysis-tool", "classifier", "gate",
 ]);
@@ -572,6 +603,232 @@ export function validateHistoricalDiffScope(
     }
   }
   return errors;
+}
+
+/**
+ * Bind a family-execution replay cohort to the registry-derived implementation
+ * owners on both sides of the diff. This deliberately has no protocol-name
+ * table: a newly registered family is attributed by the same production
+ * registry and ActionAdapter catalog that activate it.
+ */
+export function validateFamilyExecutionDiffCoverage(input: {
+  changedRepoPaths: string[];
+  baseline: HistoricalFamilyOwnershipManifest;
+  challenger: HistoricalFamilyOwnershipManifest;
+  subjectFamilyIds: string[];
+}): HistoricalFamilyExecutionCoverage {
+  const errors = [
+    ...familyOwnershipManifestErrors(input.baseline, "baseline"),
+    ...familyOwnershipManifestErrors(input.challenger, "challenger"),
+  ];
+  if (errors.length > 0) {
+    return { affected_family_ids: [], errors };
+  }
+
+  if (
+    input.baseline.registry_skeleton_sha256 !==
+      input.challenger.registry_skeleton_sha256
+  ) {
+    errors.push(
+      "family execution changes central production-registry logic, not only thin registration",
+    );
+  }
+  if (
+    input.baseline.action_index_skeleton_sha256 !==
+      input.challenger.action_index_skeleton_sha256
+  ) {
+    errors.push(
+      "family execution changes central ActionAdapter catalog logic, not only thin registration",
+    );
+  }
+
+  const baselineById = new Map(
+    input.baseline.families.map((family) => [family.id, family]),
+  );
+  const challengerById = new Map(
+    input.challenger.families.map((family) => [family.id, family]),
+  );
+  const commonIds = new Set(
+    [...baselineById.keys()].filter((id) => challengerById.has(id)),
+  );
+  const baselineCommonOrder = input.baseline.registry_order
+    .filter((id) => commonIds.has(id));
+  const challengerCommonOrder = input.challenger.registry_order
+    .filter((id) => commonIds.has(id));
+  if (canonicalJson(baselineCommonOrder) !== canonicalJson(challengerCommonOrder)) {
+    errors.push("family execution changes the relative production registry order");
+  }
+
+  const ownersByRepoPath = new Map<string, Set<string>>();
+  const addOwners = (manifest: HistoricalFamilyOwnershipManifest): void => {
+    for (const family of manifest.families) {
+      for (const source of family.source_files) {
+        const repoPath = `listener/${source}`;
+        const owners = ownersByRepoPath.get(repoPath) ?? new Set<string>();
+        owners.add(family.id);
+        ownersByRepoPath.set(repoPath, owners);
+      }
+    }
+  };
+  addOwners(input.baseline);
+  addOwners(input.challenger);
+
+  const affected = new Set<string>();
+  const manifestDelta = new Set<string>();
+  for (const id of new Set([
+    ...baselineById.keys(),
+    ...challengerById.keys(),
+  ])) {
+    const baseline = baselineById.get(id);
+    const challenger = challengerById.get(id);
+    if (!baseline || !challenger || canonicalJson(baseline) !== canonicalJson(challenger)) {
+      affected.add(id);
+      manifestDelta.add(id);
+    }
+  }
+
+  for (const file of input.changedRepoPaths) {
+    if (FAMILY_EXECUTION_REGISTRATION_FILES.has(file)) continue;
+    const owners = ownersByRepoPath.get(file);
+    if (!owners || owners.size === 0) {
+      errors.push(`family execution changed file has no registered family owner: ${file}`);
+      continue;
+    }
+    owners.forEach((id) => affected.add(id));
+  }
+
+  if (
+    input.changedRepoPaths.some((file) =>
+      FAMILY_EXECUTION_REGISTRATION_FILES.has(file)
+    ) &&
+    manifestDelta.size === 0
+  ) {
+    errors.push(
+      "family execution changes thin registration without a registry-derived family delta",
+    );
+  }
+
+  const familyKind = (id: string): string | null =>
+    challengerById.get(id)?.kind ?? baselineById.get(id)?.kind ?? null;
+  const fundingOnly = [...affected].filter((id) => familyKind(id) === "flash-loan");
+  if (fundingOnly.length > 0) {
+    errors.push(
+      "funding-only families cannot use route-pinned family execution replay: " +
+        fundingOnly.sort().join(","),
+    );
+  }
+
+  const affectedIds = [...affected].sort();
+  const subjectIds = [...new Set(input.subjectFamilyIds)].sort();
+  const missing = affectedIds.filter((id) => !subjectIds.includes(id));
+  const extra = subjectIds.filter((id) => !affectedIds.includes(id));
+  if (missing.length > 0) {
+    errors.push(
+      `family execution fixtures do not cover changed owner families: ${missing.join(",")}`,
+    );
+  }
+  if (extra.length > 0) {
+    errors.push(
+      `family execution fixtures claim unchanged owner families: ${extra.join(",")}`,
+    );
+  }
+  return { affected_family_ids: affectedIds, errors };
+}
+
+function familyOwnershipManifestErrors(
+  manifest: HistoricalFamilyOwnershipManifest,
+  label: string,
+): string[] {
+  const errors: string[] = [];
+  if (!manifest || manifest.schema_version !== 1) {
+    return [`${label} family ownership manifest must use schema 1`];
+  }
+  if (
+    !SHA64_RE.test(manifest.registry_skeleton_sha256 ?? "") ||
+    !SHA64_RE.test(manifest.action_index_skeleton_sha256 ?? "") ||
+    !Array.isArray(manifest.registry_order) ||
+    !Array.isArray(manifest.families)
+  ) {
+    return [`${label} family ownership manifest is malformed`];
+  }
+  const ids = manifest.families.map((family) => family.id);
+  if (
+    ids.length === 0 ||
+    ids.some((id) => typeof id !== "string" || id.trim().length === 0) ||
+    manifest.registry_order.some((id) =>
+      typeof id !== "string" || id.trim().length === 0
+    ) ||
+    new Set(ids).size !== ids.length ||
+    canonicalJson(ids) !== canonicalJson(manifest.registry_order)
+  ) {
+    errors.push(`${label} family ownership manifest registry order is inconsistent`);
+  }
+  for (const family of manifest.families) {
+    const sources = family.source_files;
+    const actionIds = family.owned_action_adapter_ids;
+    const actionBindings = family.owned_action_bindings;
+    const requiredActionIds = family.required_action_adapter_ids;
+    const requiredActionBindings = family.required_action_bindings;
+    if (
+      typeof family.id !== "string" ||
+      family.id.trim().length === 0 ||
+      typeof family.kind !== "string" ||
+      family.kind.trim().length === 0 ||
+      !validFamilyOwnershipSource(family.root_source) ||
+      !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(family.root_export ?? "") ||
+      !Array.isArray(sources) ||
+      sources.length === 0 ||
+      new Set(sources).size !== sources.length ||
+      sources.some((source) => !validFamilyOwnershipSource(source)) ||
+      !sources.includes(family.root_source) ||
+      !Array.isArray(actionIds) ||
+      new Set(actionIds).size !== actionIds.length ||
+      actionIds.some((id) => typeof id !== "string" || id.trim().length === 0) ||
+      !Array.isArray(actionBindings) ||
+      actionBindings.length !== actionIds.length ||
+      new Set(actionBindings.map((binding) => binding.id)).size !==
+        actionBindings.length ||
+      canonicalJson(actionBindings.map((binding) => binding.id).sort()) !==
+        canonicalJson([...actionIds].sort()) ||
+      actionBindings.some((binding) =>
+        typeof binding.id !== "string" ||
+        binding.id.trim().length === 0 ||
+        typeof binding.binding !== "string" ||
+        binding.binding.trim().length === 0
+      ) ||
+      !Array.isArray(requiredActionIds) ||
+      new Set(requiredActionIds).size !== requiredActionIds.length ||
+      requiredActionIds.some((id) =>
+        typeof id !== "string" || id.trim().length === 0
+      ) ||
+      !Array.isArray(requiredActionBindings) ||
+      requiredActionBindings.length !== requiredActionIds.length ||
+      new Set(requiredActionBindings.map((binding) => binding.id)).size !==
+        requiredActionBindings.length ||
+      canonicalJson(
+        requiredActionBindings.map((binding) => binding.id).sort(),
+      ) !== canonicalJson([...requiredActionIds].sort()) ||
+      requiredActionBindings.some((binding) =>
+        typeof binding.id !== "string" ||
+        binding.id.trim().length === 0 ||
+        typeof binding.binding !== "string" ||
+        binding.binding.trim().length === 0
+      ) ||
+      !SHA64_RE.test(family.activation_sha256 ?? "")
+    ) {
+      errors.push(`${label} family ownership row is malformed: ${family.id ?? "<unknown>"}`);
+    }
+  }
+  return errors;
+}
+
+function validFamilyOwnershipSource(value: unknown): value is string {
+  return typeof value === "string" &&
+    value.startsWith("src/") &&
+    value.endsWith(".ts") &&
+    !value.includes("\\") &&
+    path.posix.normalize(value) === value &&
+    !value.split("/").includes("..");
 }
 
 export function inferLiveSensitiveDiff(changed: string[], patch: string): string[] {

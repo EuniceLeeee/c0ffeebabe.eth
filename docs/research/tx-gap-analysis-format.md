@@ -30,7 +30,9 @@
    token/ETH delta 独立复算；builder payment 同时检查 priority fee 和 trace 中的直接 coinbase transfer。
 6. 在声明根因前主动排除替代解释：错误 parent/prefix、同块前序状态、历史 state 不可读、universe/config 不同、
    hop/template 限制、coarse rank/exact refinement、candidate/top-N cap、deadline/TTL、warm/cache、profit-token
-   valuation 或 flash liquidity。第一个被生产证据证明失败的阶段才是 gap，后续未跑阶段写 `not_reached`。
+   valuation 或 flash liquidity。第一个被生产证据证明失败、拒绝或无法继续的阶段才是 gap；机器证据是从步骤 1
+   开始的有序前缀，并在该条 `fail | reject | not_reached` 记录后立即终止。人工六行展示若补齐余下行，只能把它们
+   标成展示用 `not_reached`，不得再发出额外 machine evidence。
 7. 如果分析器无法区分核心闭环与利润处置而输出 `MANUAL REQUIRED`，这是 fail-closed；用上述 token continuity、
    同块关系和可信 replay 消歧，不能把 touched venue 集合强行拼成路线。
 
@@ -185,19 +187,25 @@ tx 时刻 pin，**当前状态**用 §1 审计基线 SHA。当前状态词表：
 | 5 | `fork_final_sim`（fork 最终模拟） | `<status>` | `<编译 calldata/script hash；正确 parent/trigger/full-prefix 锚；success/revert；profit/gas；repayment/conservation/standing position>` |
 | 6 | `production_ev`（生产 EV） | `<status>` | `<估值与 policy 输入；gas/bid/haircut；allow/reject、reason、net EV>` |
 
-Gap 定位到第一个 `fail`；其后均为 `not_reached`。baseline→fix 的 stage advance 与重构等价性是对上述六条记录的比较，
-不是第七步。功能修复记录第一个失败阶段如何前进；等价重构比较所有受影响 fixture 的规范化核心字段。全局
+Gap 定位到有序证据前缀末尾的第一个 `fail | reject | not_reached`，并在该记录处终止；未执行的后续阶段不再生成
+machine evidence。人工六行报告可把余下行显示为 `not_reached`，但不得参与哈希、等价性或伪装成实际执行结果。
+baseline→fix 的 stage advance 与重构等价性是比较共同执行到的规范化领域证据，不是第七步。功能修复记录第一个失败
+阶段如何前进；等价重构比较所有受影响 fixture 的规范化核心字段。全局
 registry/state/planner/quoter 重构还必须有跨 family 正负 cohort；触及热路径、资源或分布就进入 `systemic_live`。
 
 Adapter Replay 用 trace-proven route，但不提供 amount、quote、plan 或 calldata；步骤 1–2 必须诚实写 `bypassed`，
 runner 通过只记 `adapter_replay_pass`，trusted promotion 后才记 `adapter_fixed`。它不证明 production discovery、
 candidate rank 或 stage advance。只有 Production Replay 不向生产 producer 提供 route/amount，并由生产入口自然完成
 适用阶段，才能记录 `production_fixed`。
+若 diff 同时影响多个 family，必须由 base/challenger production registry 与 active ActionAdapter catalog 自动派生
+所有 owner；去重后的 changed-owner 集合必须与 fixture subject 集合完全相等。共享实现文件不能只验一个 owner，
+也不能靠手工协议清单声明“其余不受影响”。baseline 的可翻转失败还必须具备稳定
+`{ownerFamilyId, stageId, code}`；timeout、abort、RPC/provider 和未分类错误只算基础设施失败。
 
 `expected_route` 只能是 verifier 的 output oracle：先让生产枚举、筛选、排序、候选保留、top-K、solve-set 选择和 sizing
 全部结束并冻结输出，再进行完整有序身份比较。不得把 expected route/pools/tokens、其 hash 或派生选择提示传入生产
 producer；不得把目标追加到 solve set、强制 probe 或因目标存在而扩大局部预算。若自然输出未包含目标，步骤 2
-`fail`；若包含但未自然进入后续选择，相应步骤为 `not_reached`。
+`fail`；若包含但未自然进入后续选择，在第一个无法继续的步骤记录 `not_reached` 并终止证据前缀。
 
 每个阶段可带 namespaced `extensions`，记录 wall time、rank、计数器、debug 文本、源码位置或实现特有中间值。
 extensions 保留用于诊断，但不参加语义等价。若本轮声明就是 latency/rank/resource，则这些字段属于

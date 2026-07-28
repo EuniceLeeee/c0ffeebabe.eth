@@ -31,6 +31,11 @@ export interface FamilyReplayFingerprintReport {
   stages: Record<string, boolean>;
   verdict: string;
   failureOwnerFamilyId: string | null;
+  failureIdentity: {
+    ownerFamilyId: string;
+    stageId: string;
+    code: string;
+  } | null;
   sixStepEvidence: readonly SemanticSixStepEvidence[];
 }
 
@@ -77,6 +82,7 @@ export function familyReplayFailureFingerprint(
     stages: report.stages,
     verdict: report.verdict,
     failure_owner_family_id: report.failureOwnerFamilyId,
+    failure_identity: report.failureIdentity,
     semantic_evidence: semanticEvidence,
   }));
 }

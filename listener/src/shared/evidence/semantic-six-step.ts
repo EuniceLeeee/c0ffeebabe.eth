@@ -274,34 +274,34 @@ const PASS_OUTPUT_REQUIREMENTS: Readonly<
   1: [
     ["source_block", isBlockNumber, "a non-negative integer block number"],
     ["edge_set_sha256", isSha256, "a lowercase SHA-256 digest"],
-    ["edge_set_size", isNonNegativeInteger, "a non-negative integer"],
-    ["target_membership", isTargetMembership, "present, missing, or ambiguous"],
+    ["edge_set_size", isPositiveInteger, "a positive integer"],
+    ["target_membership", isPresentMembership, "the string present"],
   ],
   2: [
     ["route_set_sha256", isSha256, "a lowercase SHA-256 digest"],
-    ["route_set_size", isNonNegativeInteger, "a non-negative integer"],
-    ["target_present", isBoolean, "a boolean"],
+    ["route_set_size", isPositiveInteger, "a positive integer"],
+    ["target_present", isTrue, "true"],
   ],
   3: [
     ["source_block", isBlockNumber, "a non-negative integer block number"],
     ["route_sha256", isSha256, "a lowercase SHA-256 digest"],
-    ["quote_status", isNonEmptyString, "a non-empty string"],
+    ["quote_status", isAvailableQuoteStatus, "available or positive"],
     ["probe_amount_in", isPositiveDecimalString, "a positive decimal integer string"],
-    ["quoted_amount_out", isNonNegativeDecimalString, "a non-negative decimal integer string"],
+    ["quoted_amount_out", isPositiveDecimalString, "a positive decimal integer string"],
     ["leg_quotes", isNonEmptyJsonArray, "a non-empty JSON array"],
   ],
   4: [
     ["route_sha256", isSha256, "a lowercase SHA-256 digest"],
-    ["selected_by_solve_policy", isBoolean, "a boolean"],
-    ["solve_succeeded", isBoolean, "a boolean"],
+    ["selected_by_solve_policy", isTrue, "true"],
+    ["solve_succeeded", isTrue, "true"],
     ["solver_selected_amount", isPositiveDecimalString, "a positive decimal integer string"],
     ["resolved_plan_sha256", isSha256, "a lowercase SHA-256 digest"],
     ["hop_amounts", isNonEmptyJsonArray, "a non-empty JSON array"],
   ],
   5: [
-    ["success", isBoolean, "a boolean"],
+    ["success", isTrue, "true"],
     ["profit_token", isNonEmptyString, "a non-empty string"],
-    ["gross_profit", isDecimalString, "a decimal integer string"],
+    ["gross_profit", isPositiveDecimalString, "a positive decimal integer string"],
     ["net_profit", isDecimalString, "a decimal integer string"],
     ["gas_used", isNonNegativeDecimalString, "a non-negative decimal integer string"],
     ["calldata_sha256", isSha256, "a lowercase SHA-256 digest"],
@@ -310,16 +310,16 @@ const PASS_OUTPUT_REQUIREMENTS: Readonly<
       isConservationResult,
       "true or the string pass",
     ],
-    ["leaves_standing_position", isBoolean, "a boolean"],
+    ["leaves_standing_position", isFalse, "false"],
   ],
   6: [
-    ["decision", isNonEmptyString, "a non-empty string"],
-    ["net_ev_wei", isDecimalString, "a decimal integer string"],
+    ["decision", isAllowDecision, "the string allow"],
+    ["net_ev_wei", isPositiveDecimalString, "a positive decimal integer string"],
     ["gas_cost_eth", isDecimalNumberString, "a decimal number string"],
     ["bid_eth", isDecimalNumberString, "a decimal number string"],
-    ["valuation_available", isBoolean, "a boolean"],
-    ["gas_measurement_available", isBoolean, "a boolean"],
-    ["fee_state_available", isBoolean, "a boolean"],
+    ["valuation_available", isTrue, "true"],
+    ["gas_measurement_available", isTrue, "true"],
+    ["fee_state_available", isTrue, "true"],
   ],
 });
 
@@ -327,12 +327,12 @@ const FAMILY_BYPASS_REQUIREMENTS: Readonly<
   Partial<Record<SemanticSixStepEvidence["step"], readonly OutputRequirement[]>>
 > = Object.freeze({
   1: [
-    ["mode", isNonEmptyString, "a non-empty string"],
+    ["mode", isRoutePinnedMode, "the string route_pinned"],
     ["state_anchor", isNonEmptyJsonObject, "a non-empty JSON object"],
     ["execution_family_id", isNonEmptyString, "a non-empty string"],
   ],
   2: [
-    ["mode", isNonEmptyString, "a non-empty string"],
+    ["mode", isRoutePinnedMode, "the string route_pinned"],
     ["fixture_route_sha256", isSha256, "a lowercase SHA-256 digest"],
     ["route_leg_count", isPositiveInteger, "a positive integer"],
   ],
@@ -362,11 +362,15 @@ function validateStatusOutput(
         "six-step bypassed is allowed only for family_execution steps 1 and 2",
       ];
     }
-    return validateOutputRequirements(
+    const errors = validateOutputRequirements(
       output,
       FAMILY_BYPASS_REQUIREMENTS[step] ?? [],
       `family_execution step ${step} bypassed`,
     );
+    if (reasonCode === null || reasonCode === undefined || reasonCode === "") {
+      errors.push("six-step bypassed reason_code must be non-null");
+    }
+    return errors;
   }
   const errors: string[] = [];
   if (Object.keys(output).length === 0) {
@@ -400,8 +404,12 @@ function isTerminalStatus(status: SemanticSixStepStatus): boolean {
   return status === "fail" || status === "reject" || status === "not_reached";
 }
 
-function isBoolean(value: SemanticJson): boolean {
-  return typeof value === "boolean";
+function isTrue(value: SemanticJson): boolean {
+  return value === true;
+}
+
+function isFalse(value: SemanticJson): boolean {
+  return value === false;
 }
 
 function isNonEmptyString(value: SemanticJson): boolean {
@@ -445,8 +453,20 @@ function isDecimalNumberString(value: SemanticJson): boolean {
   return typeof value === "string" && /^-?[0-9]+(?:\.[0-9]+)?$/.test(value);
 }
 
-function isTargetMembership(value: SemanticJson): boolean {
-  return value === "present" || value === "missing" || value === "ambiguous";
+function isPresentMembership(value: SemanticJson): boolean {
+  return value === "present";
+}
+
+function isAvailableQuoteStatus(value: SemanticJson): boolean {
+  return value === "available" || value === "positive";
+}
+
+function isAllowDecision(value: SemanticJson): boolean {
+  return value === "allow";
+}
+
+function isRoutePinnedMode(value: SemanticJson): boolean {
+  return value === "route_pinned";
 }
 
 function isNonEmptyJsonArray(value: SemanticJson): boolean {

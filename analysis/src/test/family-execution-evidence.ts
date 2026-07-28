@@ -16,7 +16,7 @@ function report(): FamilyReplayFingerprintReport & {
   telemetry: Record<string, unknown>;
 } {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     fixtureId: "fixture",
     fixturePath: "docs/research/reports/fixture.json",
     fixtureSha256: SHA_A,
@@ -47,6 +47,11 @@ function report(): FamilyReplayFingerprintReport & {
     },
     verdict: "implemented_not_validated",
     failureOwnerFamilyId: "protocol:subject",
+    failureIdentity: {
+      ownerFamilyId: "protocol:subject",
+      stageId: "exact_quote_refine",
+      code: "family_quote_domain_mismatch",
+    },
     sixStepEvidence: [
       createSemanticSixStepEvidence({
         profile: "family_execution",
@@ -74,7 +79,13 @@ function report(): FamilyReplayFingerprintReport & {
         profile: "family_execution",
         step: 3,
         status: "fail",
-        output: { completed: false },
+        output: {
+          completed: false,
+          failure_owner_family_id: "protocol:subject",
+          failure_stage_id: "exact_quote_refine",
+          failure_code: "family_quote_domain_mismatch",
+          failure_promotable: true,
+        },
         reasonCode: "adapter_replay_execution_error",
         metrics: { elapsed_ms: 1 },
         extensions: { error: "first" },
@@ -98,7 +109,13 @@ test("family failure fingerprint excludes telemetry and raw error prose", () => 
             profile: "family_execution",
             step: 3,
             status: "fail",
-            output: { completed: false },
+            output: {
+              completed: false,
+              failure_owner_family_id: "protocol:subject",
+              failure_stage_id: "exact_quote_refine",
+              failure_code: "family_quote_domain_mismatch",
+              failure_promotable: true,
+            },
             reasonCode: "adapter_replay_execution_error",
             metrics: { elapsed_ms: 999 },
             extensions: { error: "different" },
@@ -115,7 +132,28 @@ test("family failure fingerprint binds owner, anchor, route and semantic output"
   const baseline = report();
   const digest = familyReplayFailureFingerprint(baseline);
   for (const changed of [
-    { ...baseline, failureOwnerFamilyId: "univ3-standard" },
+    {
+      ...baseline,
+      failureOwnerFamilyId: "univ3-standard",
+      failureIdentity: {
+        ...baseline.failureIdentity!,
+        ownerFamilyId: "univ3-standard",
+      },
+    },
+    {
+      ...baseline,
+      failureIdentity: {
+        ...baseline.failureIdentity!,
+        stageId: "plan_and_size",
+      },
+    },
+    {
+      ...baseline,
+      failureIdentity: {
+        ...baseline.failureIdentity!,
+        code: "different_domain_failure",
+      },
+    },
     { ...baseline, anchorStateRoot: `0x${"9".repeat(64)}` },
     { ...baseline, routeHash: "9".repeat(64) },
     { ...baseline, stages: { ...baseline.stages, planner: true } },

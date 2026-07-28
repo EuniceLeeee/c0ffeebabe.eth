@@ -48,6 +48,7 @@ import {
   assessAdapterFamilyQuoteCoverage,
   blockScanPassBudgetExceeded,
   remapExpectedRouteToVerifiedGraph,
+  productionDiagnosticStageTerminates,
   resolveBlockScanHuntVerdict,
   resolveBlockScanHuntBudgets,
   routeMatchesExpected,
@@ -1743,44 +1744,44 @@ async function main(): Promise<void> {
               : !solveSucceeded
                 ? "plan_or_solver_failed"
                 : null;
-      emitDiagnostic(
-        4,
-        solveSucceeded && selectedByTopK ? "pass" : "fail",
-        {
-          output: {
-            route_sha256: expectedTarget && expectedTarget.opportunityIndex >= 0
-              ? createHash("sha256")
-                  .update(canonicalRingIdentity(
-                    scan.opportunities[expectedTarget.opportunityIndex].seedEdges,
-                  ))
-                  .digest("hex")
-              : createHash("sha256").update("route-not-selected").digest("hex"),
-            selected_by_solve_policy: selectedByTopK,
-            solve_succeeded: solveSucceeded,
-            solver_selected_amount: expectedSolve?.solvedAmount ?? null,
-            resolved_plan_sha256: expectedSolve?.resolvedPlanSha256 ?? null,
-            hop_amounts: expectedSolve?.diagnosticHopAmounts ?? [],
-          },
-          reasonCode: solveReason,
-          metrics: {
-            solve_set_size: solveIndexes.length,
-            configured_top_k: cfg.topK,
-            target_rank: expectedTarget && expectedTarget.opportunityIndex >= 0
-              ? expectedTarget.opportunityIndex + 1
-              : null,
-            plan_count: expectedSolve?.planCount ?? 0,
-          },
-          extensions: {
-            target_outside_solve_set: forcedProbe,
-            includes_internal_final_sim: true,
-            search_center: expectedSolve?.searchCenter ?? null,
-            error: expectedSolve?.solveError
-              ?? expectedSolve?.diagnosticAmountError
-              ?? null,
-          },
+      const solveStatus = solveSucceeded && selectedByTopK ? "pass" : "fail";
+      emitDiagnostic(4, solveStatus, {
+        output: {
+          route_sha256: expectedTarget && expectedTarget.opportunityIndex >= 0
+            ? createHash("sha256")
+                .update(canonicalRingIdentity(
+                  scan.opportunities[expectedTarget.opportunityIndex].seedEdges,
+                ))
+                .digest("hex")
+            : createHash("sha256").update("route-not-selected").digest("hex"),
+          selected_by_solve_policy: selectedByTopK,
+          solve_succeeded: solveSucceeded,
+          solver_selected_amount: expectedSolve?.solvedAmount ?? null,
+          resolved_plan_sha256: expectedSolve?.resolvedPlanSha256 ?? null,
+          hop_amounts: expectedSolve?.diagnosticHopAmounts ?? [],
         },
-      );
-      if (diagnosticStopsAfter("solve")) {
+        reasonCode: solveReason,
+        metrics: {
+          solve_set_size: solveIndexes.length,
+          configured_top_k: cfg.topK,
+          target_rank: expectedTarget && expectedTarget.opportunityIndex >= 0
+            ? expectedTarget.opportunityIndex + 1
+            : null,
+          plan_count: expectedSolve?.planCount ?? 0,
+        },
+        extensions: {
+          target_outside_solve_set: forcedProbe,
+          includes_internal_final_sim: true,
+          search_center: expectedSolve?.searchCenter ?? null,
+          error: expectedSolve?.solveError
+            ?? expectedSolve?.diagnosticAmountError
+            ?? null,
+        },
+      });
+      if (productionDiagnosticStageTerminates(
+        solveStatus,
+        diagnosticStopsAfter("solve"),
+      )) {
         emitProductionReplayResult(
           cfg,
           opportunityReports,
@@ -1793,7 +1794,8 @@ async function main(): Promise<void> {
       const terminalSafetyPass = simulation?.success === true &&
         expectedSolve?.repaymentAndConservation === true &&
         expectedSolve?.leavesStandingPosition === false;
-      emitDiagnostic(5, terminalSafetyPass ? "pass" : "fail", {
+      const finalSimStatus = terminalSafetyPass ? "pass" : "fail";
+      emitDiagnostic(5, finalSimStatus, {
         output: {
           success: simulation?.success ?? false,
           profit_token: simulation?.profitToken ?? null,
@@ -1822,7 +1824,10 @@ async function main(): Promise<void> {
             ?? null,
         },
       });
-      if (diagnosticStopsAfter("sim")) {
+      if (productionDiagnosticStageTerminates(
+        finalSimStatus,
+        diagnosticStopsAfter("sim"),
+      )) {
         emitProductionReplayResult(
           cfg,
           opportunityReports,

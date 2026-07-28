@@ -166,6 +166,31 @@ test("semantic six-step pass is fail-closed on empty or incomplete core output",
   assert.match(errors, /missing hop_amounts/);
 });
 
+test("semantic six-step pass rejects contradictory domain outcomes", () => {
+  const contradictions = [
+    [1, { ...productionPass(1).output, edge_set_size: 0 }, /edge_set_size must be a positive integer/],
+    [1, { ...productionPass(1).output, target_membership: "missing" }, /target_membership must be the string present/],
+    [2, { ...productionPass(2).output, target_present: false }, /target_present must be true/],
+    [3, { ...productionPass(3).output, quoted_amount_out: "0" }, /quoted_amount_out must be a positive/],
+    [4, { ...productionPass(4).output, solve_succeeded: false }, /solve_succeeded must be true/],
+    [5, { ...productionPass(5).output, success: false }, /success must be true/],
+    [5, { ...productionPass(5).output, leaves_standing_position: true }, /leaves_standing_position must be false/],
+    [6, { ...productionPass(6).output, decision: "reject" }, /decision must be the string allow/],
+    [6, { ...productionPass(6).output, net_ev_wei: "0" }, /net_ev_wei must be a positive/],
+    [6, { ...productionPass(6).output, valuation_available: false }, /valuation_available must be true/],
+  ] as const;
+
+  for (const [step, output, expected] of contradictions) {
+    const evidence = createSemanticSixStepEvidence({
+      profile: "production_route_stage",
+      step,
+      status: "pass",
+      output,
+    });
+    assert.match(validateSemanticSixStepEvidence(evidence).join("\n"), expected);
+  }
+});
+
 test("semantic six-step sequence terminates after fail, reject, or not_reached", () => {
   for (const status of ["fail", "reject", "not_reached"] as const) {
     const terminal = createSemanticSixStepEvidence({
@@ -241,4 +266,18 @@ test("only family execution may bypass discovery and enumeration", () => {
     validateSemanticSixStepEvidence(familyLateBypass).join("\n"),
     /allowed only for family_execution steps 1 and 2/,
   );
+
+  const vagueBypass = createSemanticSixStepEvidence({
+    profile: "family_execution",
+    step: 1,
+    status: "bypassed",
+    output: {
+      mode: "fixture",
+      state_anchor: { block_number: 100 },
+      execution_family_id: "self-burn-native",
+    },
+  });
+  const vagueErrors = validateSemanticSixStepEvidence(vagueBypass).join("\n");
+  assert.match(vagueErrors, /mode must be the string route_pinned/);
+  assert.match(vagueErrors, /bypassed reason_code must be non-null/);
 });

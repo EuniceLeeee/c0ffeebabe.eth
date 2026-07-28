@@ -447,6 +447,14 @@ function assertRouteIdentityDeclarations(
         `adapter-family registry: ${adapter.id} has invalid route identity capability`,
       );
     }
+    if (
+      adapter.planExecutionIdentity !== undefined &&
+      typeof adapter.planExecutionIdentity.resolve !== "function"
+    ) {
+      throw new Error(
+        `adapter-family registry: ${adapter.id} has invalid plan execution identity capability`,
+      );
+    }
     const localPoolAdapters = new Set<string>();
     for (const poolAdapter of adapter.poolAdapters) {
       if (!isNonemptyRegistryId(poolAdapter) || localPoolAdapters.has(poolAdapter)) {

@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { ethers } from "ethers";
 import {
+  SEMANTIC_SIX_STEP_STAGE_IDS,
   semanticSixStepSequenceError,
   type SemanticSixStepEvidence,
 } from "../../../listener/src/shared/evidence/semantic-six-step.js";
@@ -23,6 +24,7 @@ import {
   resolveHistoricalReportArtifactPath,
   validateHistoricalBranchAuditCoverage,
   validateDirectMainPackageManifest,
+  validateFamilyExecutionDiffCoverage,
   validateHistoricalDiffScope,
   validateHistoricalArtifactCommit,
   validateHistoricalGap,
@@ -34,6 +36,7 @@ import {
   trustedSsmTunnelReady,
   type HistoricalAuditInventory,
   type HistoricalGapRecord,
+  type HistoricalFamilyOwnershipManifest,
   type HistoricalGatePhase,
   type HistoricalProductionUniverseAttestation,
   type HistoricalUniverseProvenance,
@@ -102,6 +105,7 @@ interface HistoricalPromotionReceipt {
   }>;
   family_execution_artifacts?: HistoricalFamilyExecutionArtifact[];
   family_conformance?: HistoricalFamilyConformanceAttestation;
+  family_ownership?: HistoricalFamilyOwnershipAttestation;
   family_replay_environment?: {
     rpc_attestation_before: HistoricalRpcAttestation;
     rpc_attestation_after: HistoricalRpcAttestation;
@@ -155,7 +159,7 @@ interface AdapterFamilyRegistryProbe {
 }
 
 interface AdapterFamilyReplayResult {
-  schemaVersion: 2;
+  schemaVersion: 3;
   fixtureId: string;
   fixturePath: string;
   fixtureSha256: string;
@@ -182,6 +186,11 @@ interface AdapterFamilyReplayResult {
   sixStepEvidence: SemanticSixStepEvidence[];
   verdict: "adapter_replay_pass" | "implemented_not_validated";
   failureOwnerFamilyId: string | null;
+  failureIdentity: {
+    ownerFamilyId: string;
+    stageId: SemanticSixStepEvidence["stage_id"];
+    code: string;
+  } | null;
   failure: string | null;
   [key: string]: unknown;
 }
@@ -215,6 +224,19 @@ interface HistoricalFamilyConformanceAttestation {
     source_sha256: string;
     output_sha256: string;
   }>;
+}
+
+interface HistoricalFamilyOwnershipAttestation {
+  schema_version: 1;
+  manifest_script_sha256: string;
+  baseline_manifest_sha256: string;
+  challenger_manifest_sha256: string;
+  baseline_registry_skeleton_sha256: string;
+  challenger_registry_skeleton_sha256: string;
+  baseline_action_index_skeleton_sha256: string;
+  challenger_action_index_skeleton_sha256: string;
+  affected_execution_family_ids: string[];
+  subject_execution_family_ids: string[];
 }
 
 interface MaterializedFamilyExecutionSample {
@@ -365,6 +387,7 @@ async function main(): Promise<void> {
       assertFrozenWorktree(baselineRoot, record.base_commit, "read-only replay baseline", baselineInputs);
       let candidateArtifacts: HistoricalPromotionReceipt["candidate_artifacts"] = [];
       let familyExecutionArtifacts: HistoricalFamilyExecutionArtifact[] = [];
+      let familyOwnership: HistoricalFamilyOwnershipAttestation | undefined;
       let replayEnvironment: ValidatedReplayEnvironment | undefined;
       let familyReplayEnvironment: ValidatedFamilyReplayEnvironment | undefined;
       let smoke: SmokeResult | undefined;
@@ -388,6 +411,12 @@ async function main(): Promise<void> {
           await replayEnvironment.transport.close();
         }
       } else if (track === "family-execution") {
+        familyOwnership = prepareFamilyExecutionOwnership(
+          record,
+          artifactCommit!,
+          baselineRoot,
+          validationRoot,
+        );
         familyReplayEnvironment = await validateFamilyReplayEnvironment(record);
         try {
           familyExecutionArtifacts = runFamilyExecutionReplays(
@@ -420,6 +449,7 @@ async function main(): Promise<void> {
           candidateArtifacts,
           familyExecutionArtifacts,
           familyConformance,
+          familyOwnership,
           replayEnvironment,
           familyReplayEnvironment,
           smoke,
@@ -1728,6 +1758,7 @@ const FAMILY_CONFORMANCE_SCRIPTS = [
   "src/searcher/test/route-adapters.ts",
   "src/searcher/test/token-graph-family-isolation.ts",
   "src/searcher/test/adapter-family-shared-surface-conformance.ts",
+  "src/searcher/test/family-ownership-manifest.ts",
 ] as const;
 
 function runRepositoryGates(
@@ -1853,6 +1884,76 @@ function normalizeOutput(output: string): string {
     .join("\n");
 }
 
+function prepareFamilyExecutionOwnership(
+  record: HistoricalGapRecord,
+  artifactCommit: string,
+  baseRoot: string,
+  challengerRoot: string,
+): HistoricalFamilyOwnershipAttestation {
+  const artifactRoot = fs.realpathSync(
+    fs.mkdtempSync(path.join(candidateSandboxHome, "family-ownership-artifacts-")),
+  );
+  try {
+    const samples = record.samples.map((sample, index) =>
+      materializeFamilyExecutionSample(
+        sample,
+        index,
+        artifactCommit,
+        artifactRoot,
+        challengerRoot,
+      ));
+    const baseline = runFamilyOwnershipManifest(
+      baseRoot,
+      "baseline family ownership manifest",
+    );
+    const challenger = runFamilyOwnershipManifest(
+      challengerRoot,
+      "challenger family ownership manifest",
+    );
+    if (baseline.scriptSha256 !== challenger.scriptSha256) {
+      throw new Error(
+        "family ownership manifest script differs between frozen base and challenger",
+      );
+    }
+    const coverage = validateFamilyExecutionDiffCoverage({
+      changedRepoPaths: git([
+        "diff",
+        "--name-only",
+        record.base_commit,
+        record.challenger_commit,
+      ]).split(/\r?\n/).filter(Boolean),
+      baseline: baseline.manifest,
+      challenger: challenger.manifest,
+      subjectFamilyIds: samples.map((sample) => sample.executionFamilyId),
+    });
+    if (coverage.errors.length > 0) {
+      throw new Error(
+        "family execution ownership coverage failed:\n" +
+          coverage.errors.join("\n"),
+      );
+    }
+    return {
+      schema_version: 1,
+      manifest_script_sha256: baseline.scriptSha256,
+      baseline_manifest_sha256: baseline.manifestSha256,
+      challenger_manifest_sha256: challenger.manifestSha256,
+      baseline_registry_skeleton_sha256:
+        baseline.manifest.registry_skeleton_sha256,
+      challenger_registry_skeleton_sha256:
+        challenger.manifest.registry_skeleton_sha256,
+      baseline_action_index_skeleton_sha256:
+        baseline.manifest.action_index_skeleton_sha256,
+      challenger_action_index_skeleton_sha256:
+        challenger.manifest.action_index_skeleton_sha256,
+      affected_execution_family_ids: coverage.affected_family_ids,
+      subject_execution_family_ids:
+        [...new Set(samples.map((sample) => sample.executionFamilyId))].sort(),
+    };
+  } finally {
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
+  }
+}
+
 function runFamilyExecutionReplays(
   record: HistoricalGapRecord,
   artifactCommit: string,
@@ -1872,7 +1973,8 @@ function runFamilyExecutionReplays(
         artifactRoot,
         challengerRoot,
       ));
-    return samples.map((sample, index) => {
+    return samples.map(
+      (sample, index) => {
       const baselineProbe = runAdapterFamilyProbe(baseRoot, sample.executionFamilyId, `baseline family probe ${index}`);
       let baseline: HistoricalFamilyExecutionSideResult;
       if (!baselineProbe.probe.registered) {
@@ -1894,6 +1996,8 @@ function runFamilyExecutionReplays(
         if (replay.report.verdict !== "implemented_not_validated"
             || !replay.report.failure
             || replay.report.failureOwnerFamilyId !== sample.executionFamilyId
+            || replay.report.failureIdentity?.ownerFamilyId !== sample.executionFamilyId
+            || !familyFailureIdentityMatchesEvidence(replay.report)
             || replay.report.stages.chainAnchor !== true
             || replay.status === 0) {
           throw new Error(
@@ -1930,6 +2034,7 @@ function runFamilyExecutionReplays(
       if (challengerReplay.status !== 0
           || challengerReplay.report.verdict !== "adapter_replay_pass"
           || challengerReplay.report.failureOwnerFamilyId !== null
+          || challengerReplay.report.failureIdentity !== null
           || challengerReplay.report.failure !== null
           || Object.values(challengerReplay.report.stages).some((passed) => passed !== true)) {
         throw new Error(
@@ -1949,6 +2054,9 @@ function runFamilyExecutionReplays(
         if (confirmation.status === 0
             || confirmation.report.verdict !== "implemented_not_validated"
             || confirmation.report.failureOwnerFamilyId !== sample.executionFamilyId
+            || confirmation.report.failureIdentity?.ownerFamilyId
+              !== sample.executionFamilyId
+            || !familyFailureIdentityMatchesEvidence(confirmation.report)
             || confirmation.report.stages.chainAnchor !== true
             || confirmationFingerprint !== baseline.failure_fingerprint_sha256) {
           throw new Error(
@@ -1978,10 +2086,53 @@ function runFamilyExecutionReplays(
           output_sha256: sha256(`${challengerProbe.output}\0${challengerReplay.output}`),
         },
       };
-    });
+      },
+    );
   } finally {
     fs.rmSync(artifactRoot, { recursive: true, force: true });
   }
+}
+
+function runFamilyOwnershipManifest(
+  worktreeRoot: string,
+  label: string,
+): {
+  manifest: HistoricalFamilyOwnershipManifest;
+  manifestSha256: string;
+  scriptSha256: string;
+} {
+  const listenerRoot = path.join(worktreeRoot, "listener");
+  const scriptPath = "src/searcher/test/family-ownership-manifest.ts";
+  const sourcePath = path.join(listenerRoot, scriptPath);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`${label} script is missing`);
+  }
+  const result = capture(
+    process.execPath,
+    [
+      "--import",
+      packageModule(listenerRoot, "tsx"),
+      scriptPath,
+      "--json",
+    ],
+    listenerRoot,
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `${label} exited ${result.status ?? "signal"}:\n` +
+        result.output.slice(-4000),
+    );
+  }
+  const manifest = parseSingleStructuredMarker<HistoricalFamilyOwnershipManifest>(
+    result.output,
+    "ADAPTER_FAMILY_OWNERSHIP_MANIFEST",
+    label,
+  );
+  return {
+    manifest,
+    manifestSha256: sha256(JSON.stringify(manifest)),
+    scriptSha256: sha256(fs.readFileSync(sourcePath)),
+  };
 }
 
 function materializeFamilyExecutionSample(
@@ -2120,7 +2271,7 @@ function runAdapterFamilyReplay(
     "ADAPTER_FAMILY_REPLAY_RESULT",
     label,
   );
-  if (report.schemaVersion !== 2
+  if (report.schemaVersion !== 3
       || report.fixturePath !== sample.fixturePath
       || report.fixtureSha256 !== sample.fixtureSha256
       || report.referenceTx.toLowerCase() !== sample.referenceTx
@@ -2161,6 +2312,9 @@ function runAdapterFamilyReplay(
       || (report.verdict !== "adapter_replay_pass" && report.verdict !== "implemented_not_validated")
       || (report.failureOwnerFamilyId !== null
         && typeof report.failureOwnerFamilyId !== "string")
+      || !validFamilyFailureIdentity(report.failureIdentity)
+      || (report.failureIdentity !== null
+        && report.failureOwnerFamilyId !== report.failureIdentity.ownerFamilyId)
       || (report.failure !== null && typeof report.failure !== "string")) {
     throw new Error(`${label} emitted a malformed or mismatched structured replay result`);
   }
@@ -2530,6 +2684,7 @@ function buildPromotionReceipt(input: {
   candidateArtifacts: HistoricalPromotionReceipt["candidate_artifacts"];
   familyExecutionArtifacts: HistoricalFamilyExecutionArtifact[];
   familyConformance?: HistoricalFamilyConformanceAttestation;
+  familyOwnership?: HistoricalFamilyOwnershipAttestation;
   replayEnvironment?: ValidatedReplayEnvironment;
   familyReplayEnvironment?: ValidatedFamilyReplayEnvironment;
   smoke?: SmokeResult;
@@ -2570,6 +2725,7 @@ function buildPromotionReceipt(input: {
       ? input.familyExecutionArtifacts
       : undefined,
     family_conformance: input.familyConformance,
+    family_ownership: input.familyOwnership,
     family_replay_environment: familyReplay ? {
       rpc_attestation_before: familyReplay.rpcAttestationBefore,
       rpc_attestation_after: familyReplay.rpcAttestationAfter!,
@@ -2707,6 +2863,7 @@ function validatePromotionReceiptEvidence(
     if (receipt.candidate_artifacts.length !== 0
         || receipt.family_execution_artifacts
         || receipt.family_conformance
+        || receipt.family_ownership
         || receipt.family_replay_environment
         || receipt.replay_environment
         || receipt.smoke) {
@@ -2739,6 +2896,12 @@ function validatePromotionReceiptEvidence(
       }
     }
     validateStoredFamilyConformance(record, receipt.family_conformance, validationErrors);
+    validateStoredFamilyOwnership(
+      record,
+      receipt.family_ownership,
+      artifacts,
+      validationErrors,
+    );
     const familyEnvironment = receipt.family_replay_environment;
     if (!familyEnvironment
         || rpcAttestationIdentity(familyEnvironment.rpc_attestation_before)
@@ -2753,7 +2916,8 @@ function validatePromotionReceiptEvidence(
     validationErrors.push("only direct-main, family-execution, or historical-replay tracks may produce promotion receipts");
     return;
   }
-  if (receipt.family_execution_artifacts || receipt.family_conformance || receipt.family_replay_environment) {
+  if (receipt.family_execution_artifacts || receipt.family_conformance
+      || receipt.family_ownership || receipt.family_replay_environment) {
     validationErrors.push("historical replay receipt must not contain family-execution evidence");
   }
   const expectedReports = record.samples.map((sample) => sample.candidate_report).sort();
@@ -2840,6 +3004,57 @@ function validateStoredFamilyConformance(
   }
 }
 
+function validateStoredFamilyOwnership(
+  record: HistoricalGapRecord,
+  attestation: HistoricalFamilyOwnershipAttestation | undefined,
+  artifacts: HistoricalFamilyExecutionArtifact[],
+  validationErrors: string[],
+): void {
+  const scriptPath =
+    "listener/src/searcher/test/family-ownership-manifest.ts";
+  const baselineSource = safeGit(
+    ["show", `${record.base_commit}:${scriptPath}`],
+    false,
+  );
+  const challengerSource = safeGit(
+    ["show", `${record.challenger_commit}:${scriptPath}`],
+    false,
+  );
+  const subjects = [...new Set(
+    artifacts.map((artifact) => artifact.execution_family_id),
+  )].sort();
+  if (
+    !attestation ||
+    attestation.schema_version !== 1 ||
+    !baselineSource ||
+    !challengerSource ||
+    sha256(baselineSource) !== sha256(challengerSource) ||
+    attestation.manifest_script_sha256 !== sha256(baselineSource) ||
+    !SHA64_RE.test(attestation.baseline_manifest_sha256 ?? "") ||
+    !SHA64_RE.test(attestation.challenger_manifest_sha256 ?? "") ||
+    !SHA64_RE.test(attestation.baseline_registry_skeleton_sha256 ?? "") ||
+    attestation.baseline_registry_skeleton_sha256 !==
+      attestation.challenger_registry_skeleton_sha256 ||
+    !SHA64_RE.test(attestation.baseline_action_index_skeleton_sha256 ?? "") ||
+    attestation.baseline_action_index_skeleton_sha256 !==
+      attestation.challenger_action_index_skeleton_sha256 ||
+    !Array.isArray(attestation.affected_execution_family_ids) ||
+    !Array.isArray(attestation.subject_execution_family_ids) ||
+    new Set(attestation.affected_execution_family_ids).size !==
+      attestation.affected_execution_family_ids.length ||
+    new Set(attestation.subject_execution_family_ids).size !==
+      attestation.subject_execution_family_ids.length ||
+    JSON.stringify(attestation.affected_execution_family_ids) !==
+      JSON.stringify(subjects) ||
+    JSON.stringify(attestation.subject_execution_family_ids) !==
+      JSON.stringify(subjects)
+  ) {
+    validationErrors.push(
+      "family execution receipt is missing exact registry-derived family ownership coverage",
+    );
+  }
+}
+
 function validStoredFamilyBaseline(
   side: HistoricalFamilyExecutionSideResult,
   artifact: HistoricalFamilyExecutionArtifact,
@@ -2859,8 +3074,14 @@ function validStoredFamilyBaseline(
     && validStoredFamilyReplay(side.replay, artifact, "implemented_not_validated")
     && side.replay!.stages.chainAnchor === true
     && side.replay!.failureOwnerFamilyId === artifact.execution_family_id
+    && side.replay!.failureIdentity?.ownerFamilyId
+      === artifact.execution_family_id
+    && familyFailureIdentityMatchesEvidence(side.replay!)
     && side.failure_fingerprint_sha256 === familyReplayFailureFingerprint(side.replay!)
     && validStoredFamilyReplay(side.confirmation_replay ?? null, artifact, "implemented_not_validated")
+    && side.confirmation_replay!.failureIdentity?.ownerFamilyId
+      === artifact.execution_family_id
+    && familyFailureIdentityMatchesEvidence(side.confirmation_replay!)
     && side.confirmation_failure_fingerprint_sha256 === side.failure_fingerprint_sha256
     && side.confirmation_failure_fingerprint_sha256
       === familyReplayFailureFingerprint(side.confirmation_replay!)
@@ -2877,6 +3098,7 @@ function validStoredFamilyChallenger(
     && side.probe.registered === true
     && validStoredFamilyReplay(side.replay, artifact, "adapter_replay_pass")
     && side.replay!.failureOwnerFamilyId === null
+    && side.replay!.failureIdentity === null
     && Object.values(side.replay!.stages).every((passed) => passed === true)
     && side.failure_fingerprint_sha256 === undefined
     && side.confirmation_replay === undefined
@@ -2893,12 +3115,25 @@ function validStoredFamilyProbe(
     && typeof probe.registered === "boolean";
 }
 
+function validFamilyFailureIdentity(
+  identity: AdapterFamilyReplayResult["failureIdentity"],
+): boolean {
+  return identity === null || (
+    Boolean(identity) &&
+    typeof identity.ownerFamilyId === "string" &&
+    identity.ownerFamilyId.trim().length > 0 &&
+    SEMANTIC_SIX_STEP_STAGE_IDS.includes(identity.stageId) &&
+    typeof identity.code === "string" &&
+    /^[a-z][a-z0-9_]{0,95}$/.test(identity.code)
+  );
+}
+
 function validStoredFamilyReplay(
   replay: AdapterFamilyReplayResult | null,
   artifact: HistoricalFamilyExecutionArtifact,
   verdict: AdapterFamilyReplayResult["verdict"],
 ): boolean {
-  return replay?.schemaVersion === 2
+  return replay?.schemaVersion === 3
     && replay.fixturePath === artifact.fixture_path
     && replay.fixtureSha256 === artifact.fixture_sha256
     && replay.referenceTx.toLowerCase() === artifact.reference_tx
@@ -2911,6 +3146,9 @@ function validStoredFamilyReplay(
     && !Array.isArray(replay.stages)
     && Object.values(replay.stages).length > 0
     && Object.values(replay.stages).every((value) => typeof value === "boolean")
+    && validFamilyFailureIdentity(replay.failureIdentity)
+    && (replay.failureIdentity === null
+      || replay.failureOwnerFamilyId === replay.failureIdentity.ownerFamilyId)
     && validFamilySemanticEvidence(replay)
     && (verdict === "adapter_replay_pass"
       ? replay.failure === null
@@ -2939,6 +3177,20 @@ function validFamilySemanticEvidence(
     evidence.length <= 6 &&
     decisive !== undefined &&
     (decisive.status === "fail" || decisive.status === "reject");
+}
+
+function familyFailureIdentityMatchesEvidence(
+  replay: AdapterFamilyReplayResult,
+): boolean {
+  const identity = replay.failureIdentity;
+  const decisive = replay.sixStepEvidence.at(-1);
+  return identity !== null &&
+    decisive !== undefined &&
+    decisive.stage_id === identity.stageId &&
+    decisive.output.failure_owner_family_id === identity.ownerFamilyId &&
+    decisive.output.failure_stage_id === identity.stageId &&
+    decisive.output.failure_code === identity.code &&
+    decisive.output.failure_promotable === true;
 }
 
 function storedRpcAttestationMatchesRecord(

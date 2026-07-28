@@ -66,13 +66,14 @@
                 "op": "positive"
               }
             ]
-          },
-          {
-            "id": "wrap",
-            "target": "token-out",
-            "signature": "deposit()",
-            "value": "positive"
-          }
+        },
+        {
+          "id": "wrap",
+          "from": "call:root:from",
+          "target": "token-out",
+          "calldata": "empty",
+          "value": "positive"
+        }
         ]
       }
     },

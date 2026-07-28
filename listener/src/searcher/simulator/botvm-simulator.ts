@@ -15,8 +15,21 @@ export interface SimulationResult {
   gasUsed: bigint;
   netProfit: bigint;
   revertReason?: string;
+  /**
+   * The original structured failure is retained for in-process policy.
+   * `revertReason` is diagnostic prose only and must never be used to decide
+   * whether a failed simulation is a deterministic domain failure or an
+   * infrastructure failure.
+   */
+  failure?: SimulationFailure;
   calldata: string;
   scriptHex?: string;
+}
+
+export interface SimulationFailure {
+  readonly cause: unknown;
+  readonly kind: string | null;
+  readonly code: string | number | null;
 }
 
 export class BotVMSimulator {
@@ -69,7 +82,23 @@ export class BotVMSimulator {
         netProfit: 0n,
         calldata,
         revertReason: err instanceof Error ? err.message : String(err),
+        failure: simulationFailure(err),
       };
     }
   }
+}
+
+function simulationFailure(error: unknown): SimulationFailure {
+  const value = error !== null && typeof error === "object"
+    ? error as { readonly kind?: unknown; readonly code?: unknown }
+    : {};
+  return {
+    cause: error,
+    kind: typeof value.kind === "string" && value.kind.length > 0
+      ? value.kind
+      : null,
+    code: typeof value.code === "string" || typeof value.code === "number"
+      ? value.code
+      : null,
+  };
 }
